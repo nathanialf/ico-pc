@@ -793,6 +793,10 @@ static void checkOptions(const char *dir)
     CHECK(near(ico_video_wide_x(), 32.0f / 12.0f), "options: auto at 32:9 widens by 8/3");
     ico_video_set_window(1280, 1024);
     CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps at 4:3");
+    ico_video_set_window(2400, 1080);
+    CHECK(near(ico_video_aspect(), 20.0f / 9.0f), "options: auto fills a 2400x1080 phone (20:9)");
+    ico_video_set_window(2208, 1840);
+    CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps an unfolded 2208x1840 to 4:3");
     ico_video_set_window(0, 0);
 
     /* earlier builds' files: "original" (or no key) is the PS2 picture

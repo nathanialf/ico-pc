@@ -283,6 +283,15 @@ jobs:
           grep -q "minSdkVersion:'29'" badging.txt
           grep -q "targetSdkVersion:'35'" badging.txt
 
+          # full screen: resizable for folding phones, the cutout theme, and a
+          # configChanges list that keeps a density change from recreating
+          # the activity (SDL quits the game on recreation)
+          "$bt/aapt2" dump xmltree --file AndroidManifest.xml "$apk" > manifest.txt
+          grep -q 'resizeableActivity.*true' manifest.txt
+          if grep -q 'resizeableActivity.*false' manifest.txt; then echo "resizeableActivity is false"; exit 1; fi
+          grep -q 'android:theme' manifest.txt
+          grep -q 'density' android/app/src/main/AndroidManifest.xml
+
           # SDL_main is exported (SDL's Java glue calls it)
           # (nm's output goes to a file first: grep -q closing the pipe makes nm exit 74 where SIGPIPE is ignored)
           "$llvm/llvm-nm" -D "$so" > nm.txt

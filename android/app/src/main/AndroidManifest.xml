@@ -32,9 +32,9 @@
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:hardwareAccelerated="true"
-        android:resizeableActivity="false"
+        android:resizeableActivity="true"
         android:enableOnBackInvokedCallback="false"
-        android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        android:theme="@style/IcoTheme">
 
         <activity
             android:name=".IcoActivity"
@@ -43,9 +43,9 @@
             android:launchMode="singleTask"
             android:alwaysRetainTaskState="true"
             android:screenOrientation="sensorLandscape"
-            android:resizeableActivity="false"
+            android:resizeableActivity="true"
             android:preferMinimalPostProcessing="true"
-            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation">
+            android:configChanges="layoutDirection|locale|grammaticalGender|fontScale|fontWeightAdjustment|orientation|uiMode|screenLayout|screenSize|smallestScreenSize|keyboard|keyboardHidden|navigation|density|colorMode|touchscreen">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

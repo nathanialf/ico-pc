@@ -4,8 +4,8 @@
 
 > [!NOTE]
 > Android support is experimental in this version. It plays, but the
-> picture can be slow, the opening movie may glitch, folding phones may
-> not get the full screen, and the touch layout is a first draft. See
+> picture can be slow, the opening movie may glitch, and the touch layout
+> is a first draft. See
 > [Known limits](#known-limits).
 
 ## What you need
@@ -148,6 +148,20 @@ like any app.
    [issues page](https://github.com/nathanialf/ico-pc/issues), say which
    phone or tablet you have, and attach the file.
 
+## Screens of every shape
+
+The picture reaches into the notch or camera hole, and it fills a folding
+phone's screen when you open it. The game keeps running as you fold and
+unfold.
+
+Options > Display > Aspect ratio decides how the picture fits:
+
+- **Auto** fills a wide phone screen. The game shows more of the scene to
+  the sides instead of leaving bars.
+- The normal 4:3 setting shows bars at the sides, as on the PS2.
+- On a folding screen that is nearly square, the picture keeps its 4:3
+  shape with bars above and below. It is not cropped.
+
 ## Known limits
 
 - The game needs Vulkan 1.2 graphics. Older or cheaper devices may not
@@ -159,7 +173,6 @@ like any app.
   for the next version.
 - The opening movie shows picture glitches on some phones. The game itself
   is not affected.
-- On a folding phone the picture may not fill the whole open screen.
 - The on-screen buttons are a first layout. Their size and placement will
   change with feedback; Options > Controls lets you change the size now.
 
