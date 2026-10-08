@@ -637,13 +637,20 @@ static void testPrecache(void)
     CHECK(s_tc.installed[22] != 0 && strcmp(s_tc.tag[22], "user-n5-big") == 0 &&
               s_tc.levels[22] == 2 && stats().cached == 5,
           "past the limit: loaded on request, with its chain, not cached");
-    /* package AN-D: low memory holds the cache at what it has */
+    /* package AN-D: low memory lets go of the cached images (no copy is
+       being made of any) and holds the cache at what is left */
     const uint64_t held = texpack_LowMemory();
     s = stats();
-    CHECK(held == s.cacheBytes && s.cacheLimit == s.cacheBytes && s.cached == 5,
-          "low memory: the limit is the %llu bytes held (%llu), nothing dropped",
-          (unsigned long long)held, (unsigned long long)s.cacheLimit);
+    CHECK(held == 0 && s.cacheBytes == 0 && s.cacheLimit == 0 && s.cached == 0,
+          "low memory: the cache let go of everything (%llu bytes held, limit %llu, %u files)",
+          (unsigned long long)held, (unsigned long long)s.cacheLimit, s.cached);
+    CHECK(!texpack_EntryCached(entryOf(N6)), "N6 no longer cached");
     CHECK(texpack_LowMemory() == held && stats().cacheLimit == held, "again: the same");
+    /* a dropped file loads from disk on request and is not kept */
+    setCurrent(24, 1);
+    CHECK(texpack_Request(entryOf(N6), 24, 1, RDTEX_TEXA_REPLAY, 8, 8) == 0, "request (N6)");
+    WAIT_FOR(s_tc.installed[24] != 0);
+    CHECK(s_tc.installed[24] != 0 && stats().cached == 0, "after low memory: loaded, not kept");
     texpack_Shutdown();
 }
 

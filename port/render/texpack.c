@@ -8,7 +8,8 @@
  * thread, which touches only the request queue, the done list, the RAM
  * cache's entries (under s_tp.lock) and the files.  A cached image is
  * written once by the thread and read-only after (state CACHED), so the
- * game fiber copies it without holding the lock.  Without SDL (a build
+ * game fiber copies it without holding the lock; the entry is pinned
+ * meanwhile (pins), and texpack_LowMemory frees only unpinned ones.  Without SDL (a build
  * with no window library) the same work runs inside texpack_Pump, one
  * request a call.
  */
@@ -46,6 +47,7 @@ typedef struct PackEntry {
     uint8_t region;  /* a region name: kept, never in the table */
     uint8_t state;   /* ENTRY_*, under the lock */
     uint8_t refused; /* the graphics card refused it (game fiber): not offered again */
+    int pins;        /* copies of cache being made (under the lock): kept by texpack_LowMemory */
     char *path;
     TexpackImage cache; /* ENTRY_CACHED: the image as loaded */
 } PackEntry;
@@ -531,6 +533,9 @@ static int loaderStep(void)
         const int state = e->state;
         TexpackImage img;
         memset(&img, 0, sizeof(img));
+        if (state == ENTRY_CACHED) {
+            e->pins++;
+        }
         unlockTp();
         int ok;
         if (state == ENTRY_CACHED) {
@@ -539,6 +544,9 @@ static int loaderStep(void)
             ok = state != ENTRY_FAILED && loadEntry(e, &img) == 0;
         }
         lockTp();
+        if (state == ENTRY_CACHED) {
+            e->pins--;
+        }
         if (!ok && state != ENTRY_CACHED) {
             e->state = ENTRY_FAILED;
             s_tp.stats.loadFailed++;
@@ -546,6 +554,9 @@ static int loaderStep(void)
             /* kept for the next time the game loads this texture, as the
                file holds it; the request gets a copy with its levels */
             const int kept = s_tp.precache && cacheImage(e, &img);
+            if (kept) {
+                e->pins++;
+            }
             unlockTp();
             if (kept) {
                 ok = uploadCopy(&e->cache, &r->img) == 0;
@@ -554,6 +565,9 @@ static int loaderStep(void)
                 addMips(&r->img);
             }
             lockTp();
+            if (kept) {
+                e->pins--;
+            }
         }
         s_tp.busy = NULL;
         r->failed = !ok;
@@ -619,11 +633,26 @@ void texpack_GetStats(TexpackStats *out)
 uint64_t texpack_LowMemory(void)
 {
     uint64_t held;
+    uint64_t freed = 0;
+    uint32_t dropped = 0;
 
     if (!s_tp.inited) {
         return 0;
     }
     lockTp();
+    /* every cached image no copy is being made of goes: a texture the game
+       loads again is read from its file */
+    for (int i = 0; i < s_tp.n; i++) {
+        PackEntry *e = &s_tp.e[i];
+        if (e->state == ENTRY_CACHED && e->pins == 0) {
+            freed += e->cache.bytes;
+            dropped++;
+            s_tp.stats.cacheBytes -= e->cache.bytes;
+            s_tp.stats.cached--;
+            texpack_FreeImage(&e->cache);
+            e->state = ENTRY_NONE;
+        }
+    }
     held = s_tp.stats.cacheBytes;
     const int lowered = s_tp.cacheLimit > held;
     if (lowered) {
@@ -631,11 +660,11 @@ uint64_t texpack_LowMemory(void)
         s_tp.stats.cacheLimit = held;
     }
     unlockTp();
-    if (lowered) {
+    if (lowered || dropped > 0) {
         fprintf(stderr,
-                "textures: the system is low on memory; the texture pack's cache stays at %llu "
-                "MB and reads nothing more ahead\n",
-                (unsigned long long)(held >> 20));
+                "textures: the system is low on memory; %u replacements (%llu MB) let go, the "
+                "texture pack's cache stays at %llu MB and reads nothing more ahead\n",
+                dropped, (unsigned long long)(freed >> 20), (unsigned long long)(held >> 20));
     }
     return held;
 }
@@ -716,12 +745,20 @@ int texpack_Init(const TexpackConfig *cfg)
     s_tp.precache = cfg->precache != 0;
     /* the RAM cache's limit, apart from the graphics budget: the setting,
        else half the computer's memory (PCSX2 caches the whole pack; half
-       leaves the game and the system theirs) */
+       leaves the game and the system theirs); Android: an eighth, at most
+       512 MB (the system ends a background app that holds much) */
     s_tp.cacheLimit = (uint64_t)cfg->cacheMb << 20;
 #if ICO_TEXPACK_THREAD
     if (s_tp.cacheLimit == 0) {
         const int ramMb = SDL_GetSystemRAM();
+#ifdef __ANDROID__
+        s_tp.cacheLimit = ramMb > 0 ? (uint64_t)ramMb << 17 : (uint64_t)512 << 20;
+        if (s_tp.cacheLimit > (uint64_t)512 << 20) {
+            s_tp.cacheLimit = (uint64_t)512 << 20;
+        }
+#else
         s_tp.cacheLimit = ramMb > 0 ? (uint64_t)ramMb << 19 : UINT64_MAX;
+#endif
     }
 #endif
     if (s_tp.cacheLimit == 0) {
@@ -839,6 +876,12 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
                  inList(s_tp.doneHead, texId, gen, texa) ||
                  (s_tp.busy && s_tp.busy->texId == texId && s_tp.busy->gen == gen &&
                   s_tp.busy->texa == texa);
+    /* the cached image is copied below without the lock: pinned so that
+       texpack_LowMemory keeps it meanwhile */
+    const int pinned = state == ENTRY_CACHED && !queued;
+    if (pinned) {
+        e->pins++;
+    }
     unlockTp();
     if (state == ENTRY_FAILED) {
         return -1;
@@ -848,6 +891,11 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
     }
     PackReq *r = calloc(1, sizeof(*r));
     if (!r) {
+        if (pinned) {
+            lockTp();
+            e->pins--;
+            unlockTp();
+        }
         return -1;
     }
     r->entry = entry;
@@ -863,13 +911,17 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
            original never shows.  The upload still happens at replay, from
            the copy (the cached image is never written again, so it is
            copied without the lock, and stays for the next load). */
-        if (uploadCopy(&e->cache, &r->img) != 0) {
+        const int copied = uploadCopy(&e->cache, &r->img) == 0;
+        lockTp();
+        e->pins--;
+        if (copied) {
+            s_tp.stats.requested++;
+        }
+        unlockTp();
+        if (!copied) {
             free(r);
             return -1;
         }
-        lockTp();
-        s_tp.stats.requested++;
-        unlockTp();
         const uint32_t before = s_tp.stats.installed;
         install(r);
         const int done = s_tp.stats.installed != before;

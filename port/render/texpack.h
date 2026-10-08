@@ -24,7 +24,8 @@
  *             the thread also reads every indexed file into a RAM cache
  *             from startup, the PNGs first (the subtitles and menus), then
  *             the DDS files, up to video.texture_pack_cache_mb (0: half
- *             the computer's memory); a file that does not fit is skipped
+ *             the computer's memory; Android: an eighth, at most 512 MB);
+ *             a file that does not fit is skipped
  *             and the next one tried.  Requests jump the queue; a request
  *             for a cached file is installed at once, inside the hook, so
  *             a texture shown for one frame (the subtitles) is replaced
@@ -109,7 +110,7 @@ typedef struct TexpackConfig {
     const char *serial;      /* "SCES-50760" */
     uint32_t budgetMb;       /* video.texture_pack_budget_mb: graphics memory */
     uint32_t cacheMb;        /* video.texture_pack_cache_mb: the RAM cache (0: half the
-                               computer's memory) */
+                               computer's memory; Android: an eighth, at most 512 MB) */
     int precache;            /* video.texture_pack_precache */
     int bcSupported;         /* RhiLimits.bcTextures, so BC files are refused up front */
     uint32_t maxTextureSize; /* RhiLimits.maxTextureSize (0: none), texpack_SetMaxSide */
@@ -188,10 +189,11 @@ typedef struct TexpackStats {
 void texpack_GetStats(TexpackStats *out);
 
 /* Package AN-D, the system low on memory (Android's LOW_MEMORY): the RAM
-   cache's limit drops to what it holds now, so the precache reads nothing
-   more ahead and a loaded file is no longer kept (requests still load and
-   install); a line for the log.  Returns the bytes the cache holds.  Any
-   thread; nothing before texpack_Init. */
+   cache lets go of every image no copy is being made of at the moment,
+   and its limit drops to what it still holds, so the precache reads
+   nothing more ahead and a loaded file is no longer kept (requests still
+   load, from the file, and install); a line for the log.  Returns the
+   bytes the cache holds.  Any thread; nothing before texpack_Init. */
 uint64_t texpack_LowMemory(void);
 
 /* ---------------------------------------------------------- the budget

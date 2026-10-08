@@ -102,7 +102,8 @@ have them, add the line under `[video]` yourself.
   flash up for a moment before the pack's. Set it to `false` to read each
   texture only when the game first needs it, which uses less memory.
 - `texture_pack_cache_mb = 0` is how much of the computer's memory, in MB,
-  that reading ahead may use. `0` means up to half of it. On a computer
+  that reading ahead may use. `0` means up to half of it (on Android, an
+  eighth of the phone's memory and never more than 512 MB). On a computer
   with 16 GB that holds all of Sad Origami's pack (about 4 GB). On a
   smaller one it still holds the subtitles and menus, and the rest is read
   when the game needs it.
