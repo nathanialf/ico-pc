@@ -324,16 +324,26 @@ static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags n
 }
 
 /* package AN-F: the format behind RHI_FMT_D32F_S8.  The spec guarantees one
- * of D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT; D32 is preferred.
- * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests: rhi_vk_d24s8). */
+ * of D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
+ * preferred.  Either is taken only with the sampled and transfer uses too
+ * (the fog and the effects depth copy the scene's depth and sample the
+ * copy); when neither has them all, D32 unless only D24 is an attachment.  ICO_VK_FAKE_D24S8=1 takes D24 where the device has it
+ * (tests: rhi_vk_d24s8). */
 static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
 {
     const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    const VkFormatFeatureFlags all = ds | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                                     VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+                                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     const char *e = getenv("ICO_VK_FAKE_D24S8");
     *fake = e && e[0] && e[0] != '0';
-    const bool d24 = vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds);
-    const bool d32 = vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds);
+    const bool d24 = vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, all);
+    const bool d32 = vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, all);
     if (d24 && (*fake || !d32)) {
+        return VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+    if (!d32 && !d24 && !vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
+        vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds)) {
         return VK_FORMAT_D24_UNORM_S8_UINT;
     }
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
