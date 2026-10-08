@@ -58,13 +58,6 @@ extern "C" {
    field lines tall): about 18.7 y units, measured on the title frame of a
    run. 27 gives 18.6. */
 #define UI_MENU_TEXT_SIZE 27.0f
-/* package GHOST: atlas pixels per grid y unit of a glow (UI_ADDITIVE) in
-   overlay mode: the menu sheets' texel density (a 20-texel row is 40 y
-   units), the glyphs magnified to the output and sampled linearly.  The
-   game's glow is its row's sheet stretched (layout_texture.c
-   lt_glow_sprite), a soft picture; rasterised a texel a pixel like the
-   label, it is a sharp, stretched second copy of the letters around them */
-#define UI_GLOW_SCALE 0.5f
 
 /* the Z the layout draws its rows at (layout_texture.c) */
 #define UI_LAYOUT_Z 0xFFFFFF9Bu
@@ -83,10 +76,7 @@ enum {
     /* record only the texture, the sampler and the sprites: the blend, the
        tests and Z write stay as the caller left them (the layout hook, whose
        packet already holds the game's state) */
-    UI_KEEP_STATE = 32,
-    /* first a soft dark halo (eight offset copies, black, a quarter of the
-       alpha), as the game's menu textures carry one around their letters */
-    UI_HALO = 64
+    UI_KEEP_STATE = 32
 };
 
 /* Where the GS window is: the game's ScreenWidth, ScreenHeight, center_X,
@@ -164,9 +154,9 @@ uint64_t ui_SetDrawKey(uint64_t owner);
      ctx->boxScale until ui_EndOverlay; ui_SetScale meanwhile sets the
      scale restored after), so one atlas texel is one output pixel, and
      each glyph quad's top-left corner is rounded to a whole output pixel
-     with its size kept, so the glyphs are drawn texel for pixel; except
-     UI_ADDITIVE text (the glow), rasterised at UI_GLOW_SCALE and drawn
-     magnified, continuous (package GHOST);
+     with its size kept, so the glyphs are drawn texel for pixel (the
+     menus' text, menu_font.h, instead draws its 1x sheet strip magnified,
+     continuous);
    - rects have both corners rounded to whole pixels;
    - blend as ui_DrawText's (0x44, UI_ADDITIVE 0x48), no draw keys, the
      state flags (UI_KEEP_STATE) ignored; nothing is mirrored.
@@ -181,50 +171,21 @@ void ui_EndOverlay(void);
 int ui_OverlayActive(void);
 void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
 
-/* Package DEF: deferred text (port/render/rd.h rd_DeferredText).  ui_DrawTextDeferred draws as ui_DrawTextXf does (the glyph quads
-   into the current rd list, the halo included) and records, in place before
-   them, an item saying what was drawn: the string (at most 255 bytes, cut at
-   a code point), the anchor, size, flags (UI_ADDITIVE: the item is the
-   additive glow; give it when the caller's blend state is the glow's, as
-   with UI_KEEP_STATE), the colour and xf.  A present that draws deferred
-   text (the Enhanced preset with the renderer installed) skips the quads and
-   lays the item out on the output instead, at the output's resolution, in
-   the place font.h's overlay mode maps the grid to, clipped to the scissor
-   and folded through the fades, letterbox and brightness that follow it in
-   the lists; every other replay draws the quads.  Keyed like the quads (the
-   string, the alignment and the owner).  Outside ICO_RD or in overlay mode,
-   ui_DrawTextXf.  This is the entry point for any game text that should be
-   shown at the output's resolution: the port's text only (its layout rows,
-   layout_ext.c; its popups and pages); the game's own words are its
-   textures and are never deferred.
-   ui_InstallDeferredText(1) registers font.c's renderer with rd
-   (rd_SetDeferredTextFn; the window build's ui_host.c, the replay tool, the
-   tests); 0 removes it. */
-void ui_DrawTextDeferred(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                         unsigned flags, const UiXform *xf);
+/* v0.4.2 (package F-B): the UI defers no text any more; everything the
+   layout draws is recorded into the scene list at 1x (menu_font.h).  A
+   no-op kept only for the replay tool's call until package F-C3 removes
+   both. */
 void ui_InstallDeferredText(int on);
 
 /* ------------------------------------------- the faces (package GFONT) */
 
-/* The port's text has two faces; the game's
-   own words (its menu sprites, subtitles, staff roll) are never drawn with
-   either: they keep their textures and bitmap font.
-   - UI_FACE_GAME, the game's own lettering: the letters of the PAL menu
-     sheets, extracted on the player's machine from the player's disc
-     (game_font.h) into one atlas at the sheets' size (the menu rows' 13.5
-     texel em, 27 y units) with the sheets' rim; any other size is that
-     bitmap scaled, bilinearly (soft, as the game's own words scale on a
-     larger output; never re-rasterised).  Kerning and spacing are the
-     sheets', measured.  UI_HALO draws the glyphs' own rim (black, under
-     the letters) instead of the eight offset copies.
-   - UI_FACE_ARIMO, the embedded Arimo: the whole text when the game face is
-     not loaded (no disc to cut it from), and otherwise per character
-     for those the sheets never show, at the size that gives its capitals the
-     game glyphs' height; it keeps the halo, so a fallback letter sits in the
-     same dark rim.
-   The game face is used whenever it is loaded (ui_GameFaceLoad); with it,
-   ui_FontMetrics gives its capital height, and the line pitch stays
-   Arimo's. */
+/* The faces (package GFONT).  Since v0.4.2 (package F-B) every text is
+   Arimo's: the menus' in the sheets' look (menu_font.h), the rest through
+   ui_DrawText.  UI_FACE_GAME, the game's lettering cut from the player's
+   disc (game_font.h), is still parsed by ui_GameFaceLoad (a first start's
+   extraction keeps loading) but draws nothing; package F-C3 removes it and
+   this API.  ui_FontFaceOf answers UI_FACE_ARIMO or -1, ui_FontFallbackSeen
+   0. */
 typedef enum UiFace { UI_FACE_ARIMO = 0, UI_FACE_GAME = 1 } UiFace;
 
 /* the blob game_font.h describes (copied); false if it does not parse */

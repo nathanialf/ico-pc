@@ -12,6 +12,7 @@
 #endif
 
 #include "font.h"
+#include "menu_font.h"
 #include "strings.h"
 
 /* the panel, in the layout grid (font.h) */
@@ -139,10 +140,12 @@ static int panel(Panel *pn)
     }
     const Popup *p = &s_queue[s_head];
     float ta, td, ba, bd;
-    ui_FontMetrics(TITLE_SIZE, &ta, &td, NULL);
-    ui_FontMetrics(BODY_SIZE, &ba, &bd, NULL);
-    float w = ui_MeasureText(TITLE_SIZE, p->title);
-    float bw = ui_MeasureText(BODY_SIZE, p->body);
+    /* v0.4.2 (package F-B): the menus' text (menu_font.h), measured as its
+       strips lay it out */
+    ui_MenuFontMetrics(TITLE_SIZE, &ta, &td, NULL);
+    ui_MenuFontMetrics(BODY_SIZE, &ba, &bd, NULL);
+    float w = ui_MeasureMenuText(TITLE_SIZE, p->title);
+    float bw = ui_MeasureMenuText(BODY_SIZE, p->body);
     if (bw > w) {
         w = bw;
     }
@@ -213,11 +216,15 @@ void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
         ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y1, c);
         scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
         ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
+        /* v0.4.2 (package F-B): in the menus' look, the same 1x strip as
+           the scene's text magnified onto the output */
         scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
-        ui_DrawText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE);
+        ui_DrawMenuText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE,
+                        UI_INK_LIGHT, NULL);
         if (p->body[0]) {
             scaled(c, 0x66, 0x64, 0x5E, 0x80, pn.alpha);
-            ui_DrawText(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP);
+            ui_DrawMenuText(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP,
+                            UI_INK_LIGHT, NULL);
         }
     }
     ui_EndOverlay();

@@ -20,10 +20,11 @@
  * LT_PROP(i) under ICO_HOST, which are lt_ext_Layout(i) and lt_ext_Prop(i):
  * the game's row below the game's count, the port's row above it.  No
  * stage range reaches an extension index, so no texture is ever looked up
- * for a port row.  A port row draws its label with the port font where the
- * texture path would draw the texture (lt_ext_DrawRow, called from
+ * for a port row.  A port row draws its label in the menus' look where the
+ * texture path would draw the texture (lt_ext_DrawTextRow, called from
  * display_texture), with the colour, fade, dimming, cursor sparkle and glow
- * the game computes for any row.
+ * the game computes for any row; since v0.4.2 so does a game row of the
+ * menu text table (menu_text.h), its texture still transferred.
  *
  * Link fields (up/down/left/right, the item links, link) may name game or
  * port indices freely: they are only ever used as table indices.
@@ -83,11 +84,10 @@ float lt_ext_RowSize(int index);
    the menus), the texel rectangle that row's.  The face buttons are
    text/buttons.tm2's four (the save prompts' OK and Back, the key config
    screen's columns), L1, R1, L2 and R2 the key config screen's labels
-   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01),
-   Options the pause menu's word (row 294, menu_PAL_01: each language's
-   sheet its own word).  When the loaded tables are not the PAL ones (the
-   row's rectangle differs) the glyph draws nothing, or a word row's
-   label (lt_ext_AddWord). */
+   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01).
+   When the loaded tables are not the PAL ones (the row's rectangle
+   differs) the glyph draws nothing.  (The title's Options word is a text
+   row since v0.4.2: words are text, glyph rows are icons.) */
 typedef enum LtExtGlyph {
     LT_GLYPH_CROSS = 0,
     LT_GLYPH_CIRCLE,
@@ -99,7 +99,6 @@ typedef enum LtExtGlyph {
     LT_GLYPH_R2,
     LT_GLYPH_LEFT,
     LT_GLYPH_RIGHT,
-    LT_GLYPH_OPTIONS,
     LT_GLYPH_COUNT
 } LtExtGlyph;
 
@@ -107,14 +106,6 @@ typedef enum LtExtGlyph {
    the size it has beside a label of em `size` (the game's own pairs, a
    27-unit label: 32 x 30 for a face button); -1 when full. */
 int lt_ext_AddGlyph(int glyph, int x, int y, float size);
-/* Appends a word row: row (its box, links and flags as any port row) drawn
-   as glyph's texels, as a game row draws its rectangle; text the label it
-   draws instead when the glyph has no texture (tables not the PAL ones).
-   -1 when full. */
-int lt_ext_AddWord(int glyph, const LtProperty *row, const LtExtText *text);
-/* A word row's rectangle cut to its left texW texels (0 or more than the
-   glyph's width: all of it); -1 if index is not a glyph row. */
-int lt_ext_SetGlyphTexW(int index, int texW);
 /* The box (dispW pixels, dispH y units) of a glyph beside a label of em
    size, without adding it (layout). */
 void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);
@@ -149,19 +140,30 @@ int lt_ext_PropCount(void);
 /* drops every port row and layout (tests, a Settings rebuild) */
 void lt_ext_Reset(void);
 
-/* display_texture's hook: draws port row e's label into the open packet's
-   list with the state the game set (UI_KEEP_STATE).  box is the SprRect the
-   texture sprite would have had (x, y, w, h in 1/16 pixel / 1/16 field
-   line from the screen centre, after display_texture's inset), rgba the
-   sprite colour (GS, 0x80 = 1.0).  glow != 0 is lt_glow_sprite's stretched
-   copy: box is the stretched rectangle, mapped from the row's last plain
-   box. */
+/* Port row e's label into the open packet's list with the state the game
+   set (UI_KEEP_STATE), in the menus' look (menu_font.h ui_DrawMenuText,
+   light ink, into the scene list at 1x).  box is the SprRect the texture
+   sprite would have had (x, y, w, h in 1/16 pixel / 1/16 field line from
+   the screen centre, after display_texture's inset), rgba the sprite
+   colour (GS, 0x80 = 1.0).  glow != 0 is lt_glow_sprite's stretched copy:
+   box is the stretched rectangle, mapped from the row's last plain box. */
 void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
 
-/* Whether display_texture draws e as text: a port row (a glyph row only
-   when it has no texture: it then draws nothing).  The game's own rows are
-   never text: they draw their textures, the PS2's lettering. */
+/* Whether display_texture (and kanban.c's) draws e as text: a port row (a
+   glyph row only when it has no texture: it then draws nothing), or a game
+   row of the menu text table (menu_text.h ui_MenuTextItemOf: its rectangle
+   the PAL one).  Every other game row draws its texture. */
 int lt_ext_IsTextRow(const LtProperty *e);
+/* The text hook of display_texture, lt_glow_sprite and kanban.c's
+   display_texture, for a row lt_ext_IsTextRow says is text: a port row's
+   label (lt_ext_DrawRow) or a game row's words (menu_font.h
+   ui_MenuWordDraw, in the language the game shows), keyed by the row and
+   the pass ((e << 2) ^ (glow ? 2 : 1)).  box and uv are the sprite's
+   rectangle and texel rectangle (1/16 texel) as the caller would hand them
+   to gif_SpriteSensitiveOffset, rgba its colour, glow the glow sprite's
+   pass. */
+void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
+                        const unsigned char rgba[4], int glow);
 
 /* Q2: the pad bits that take
    the game menus' back action, where the game checks Triangle for it

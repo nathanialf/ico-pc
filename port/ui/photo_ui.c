@@ -11,6 +11,7 @@
 
 #include "font.h"
 #include "layout_ext.h"
+#include "menu_font.h"
 #include "photo_mode.h"
 #include "popup.h"
 #include "settings.h"
@@ -343,7 +344,7 @@ float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, 
                 iw += cw + (k > 0 ? GAP_ICON * size : 0.0f);
             }
             const float tw =
-                items[i].text && items[i].text[0] ? ui_MeasureText(size, items[i].text) : 0.0f;
+                items[i].text && items[i].text[0] ? ui_MeasureMenuText(size, items[i].text) : 0.0f;
             out[i].textW = tw;
             iw += tw + (items[i].nicon > 0 && tw > 0.0f ? GAP_WORD * size : 0.0f);
             w[i] = iw;
@@ -445,7 +446,7 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     xf.opacity = 1.0f;
     ui_GlyphBegin(&xf);
     float asc, desc, cap;
-    ui_FontMetrics(size, &asc, &desc, &cap);
+    ui_MenuFontMetrics(size, &asc, &desc, &cap);
     for (int i = 0; i < set.n; i++) {
         const UiHudItem *it = &set.item[i];
         const float mid = top + (float)it->line * HUD_PITCH + asc - cap * 0.5f;
@@ -458,8 +459,9 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
             }
         }
         if (it->text && it->text[0]) {
-            ui_DrawText(HUD_X + at[i].textX, mid, size, it->line == 0 ? titleCol : body, it->text,
-                        UI_VALIGN_MIDDLE);
+            /* v0.4.2 (package F-B): the menus' look, the 1x strip magnified */
+            ui_DrawMenuText(HUD_X + at[i].textX, mid, size, it->line == 0 ? titleCol : body,
+                            it->text, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
         }
     }
     ui_GlyphFlush();

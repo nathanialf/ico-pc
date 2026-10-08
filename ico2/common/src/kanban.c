@@ -48,6 +48,9 @@ extern void gif_SetAlpha(long long alpha, long long mode, long long fix);
 extern void gif_SetZTest(int on);
 extern void gif_SetZWrite(int on);
 
+/* PC port (v0.4.2): the menu text hook (port/ui/layout_ext.h) */
+#include "layout_ext.h"
+
 #ifdef ICO_RD
 
 /* PC port (package TXT): GifHost.h's key of the decoder's primitives, so
@@ -338,8 +341,15 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
         r[3] -= 8;
         uv[3] -= 8;
 
+        /* PC port (v0.4.2): a menu text row (the boot screens' prompts,
+           Yes / No, the language names) is drawn in the sheets' look where
+           the sprite would be, its texture transferred as before
+           (port/ui/menu_text.h) */
         KANBAN_HOST_KEY(e, 0);
-        gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
+        if (lt_ext_IsTextRow(e)) {
+            lt_ext_DrawTextRow(e, r, uv, (const unsigned char *)col->b, 0);
+        } else
+            gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
         KANBAN_HOST_KEY(0, 0);
         gif_SetZWrite(1);
         gif_EndPacket();

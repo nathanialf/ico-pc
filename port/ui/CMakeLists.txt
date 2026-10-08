@@ -29,6 +29,7 @@ set(_ui_sources
     game_font_build.c
     glyphs.c
     layout_ext.c
+    menu_font.c
     menu_text.c
     popup.c
     strings.c
@@ -42,9 +43,9 @@ set(_ui_sources
 # layout_ext.h includes the game's layout_texture.h (LtProp, LtProperty),
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
-set_source_files_properties(layout_ext.c menu_text.c settings.c ui_list.c ui_hint.c
-                            gallery.c photo_ui.c game_font_disc.c PROPERTIES COMPILE_OPTIONS
-                            "-Wno-strict-prototypes")
+set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
+                            ui_hint.c gallery.c photo_ui.c game_font_disc.c PROPERTIES
+                            COMPILE_OPTIONS "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
     add_library(${name} OBJECT ${_ui_sources} ${ARGN})
@@ -319,7 +320,9 @@ target_include_directories(ui_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_
 target_compile_definitions(ui_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(ui_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(ui_test PRIVATE ico_render ico_math)
+# v0.4.2 (package F-B): the menus' sheet strips checked against
+# font_sheet_ps's CPU reference (port/render/test/sheet_ref.h)
+target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref)
 
 # settings_render: settings_test.c with SETTINGS_RENDER, the Settings screens
 # through the real layout code and rd on a Vulkan device, each screen's SCENE

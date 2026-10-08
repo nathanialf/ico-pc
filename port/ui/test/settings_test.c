@@ -28,10 +28,9 @@
  * and each screen's SCENE written as a PNG beside the test for a look;
  * (settings_<screen>.png): no game data, the backdrop over a flat colour;
  * package DEF: then each screen presented at Enhanced 1920 x 1080
- * (settings_<screen>_1080.png), the port's rows deferred (RDC_OVERLAY_TEXT
- * items, drawn on the output) and the game's rows their texture sprites
- * (package TXT2: a screen of game rows alone, the save preview, records no
- * item).
+ * (settings_<screen>_1080.png); v0.4.2 (package F-B): the port's rows and
+ * the game's menu words are sheet strips in the scene list at 1x (no
+ * RDC_OVERLAY_TEXT item on any screen).
  */
 #include <math.h>
 #include <stdio.h>
@@ -517,6 +516,13 @@ static void fakeTables(void)
         texProperty[r].texH = uv[3];
         texProperty[r].texNo = g <= LT_GLYPH_TRIANGLE ? 1 : g <= LT_GLYPH_R2 ? 2 : 3;
     }
+    /* the pause menu's Options (294): its PAL rectangle on menu_PAL_01, a
+       row of the menu text table (drawn as text in the sheets' look) */
+    texProperty[294].texU = 384;
+    texProperty[294].texV = 120;
+    texProperty[294].texW = 128;
+    texProperty[294].texH = 20;
+    texProperty[294].texNo = 3;
 }
 
 /* ------------------------------------------------------- frames */
@@ -3097,7 +3103,6 @@ static void testGlyphSources(void)
         {LT_GLYPH_R2, 347, 380, 240, 40, 15, 40, 30},
         {LT_GLYPH_LEFT, 301, 490, 130, 20, 20, 20, 40},
         {LT_GLYPH_RIGHT, 302, 490, 150, 20, 20, 20, 40},
-        {LT_GLYPH_OPTIONS, 294, 384, 120, 128, 20, 128, 40},
     };
 
     CHECK(sizeof(k) / sizeof(k[0]) == LT_GLYPH_COUNT, "a source listed for every glyph");
@@ -3113,40 +3118,33 @@ static void testGlyphSources(void)
     }
 }
 
-/* The title's Options rows: the pause menu's word, row 294's texels (its
-   sheet, so each language's own word), drawn as a game row, centred and
-   cut to the word; with tables that are not the PAL ones, the label */
+/* The title's Options rows (v0.4.2, package F-B): a text row in the menus'
+   look with the sheets' own word (UI_STR_MT_OPTIONS, each language's),
+   centred in a game row's box height as Continue and New Game are; no
+   glyph row, no texture */
 static void testTitleOptionsWord(void)
 {
     const int mainL = enterMain(1);
     (void)mainL;
-    const LtProperty *src = &texProperty[294];
     for (int g = 12; g <= 13; g++) {
         const int row = ui_SettingsEntryRow(g);
         const LtProperty *e = lt_ext_Prop(row);
-        CHECK(row >= 0 && lt_ext_IsGlyphRow(e) && !lt_ext_IsTextRow(e) &&
-                  lt_ext_GlyphTexNo(e) == src->texNo && src->texNo >= 0,
-              "title %d: Options draws row 294's texture (%d, %d)", g, lt_ext_GlyphTexNo(e),
-              src->texNo);
-        CHECK(e->texU == src->texU && e->texV == src->texV && e->texH == src->texH && e->texW > 0 &&
-                  e->texW <= src->texW,
-              "title %d: row 294's rectangle (%d,%d %dx%d of %d,%d %dx%d)", g, e->texU, e->texV,
-              e->texW, e->texH, src->texU, src->texV, src->texW, src->texH);
-        CHECK(e->centerX && e->dispW == 0 && e->dispH == texProperty[50].dispH && e->selectable,
-              "title %d: a game row's box, centred (%d x %d)", g, e->dispW, e->dispH);
-        CHECK(strcmp(lt_ext_RowText(row), "Options") == 0, "title %d: its label Options (%s)", g,
-              lt_ext_RowText(row));
+        CHECK(row >= 0 && lt_ext_IsPortProp(e) && !lt_ext_IsGlyphRow(e) && lt_ext_IsTextRow(e),
+              "title %d: Options is a text row (%d)", g, row);
+        CHECK(e->centerX && e->dispH == texProperty[50].dispH && e->selectable,
+              "title %d: a game row's height, centred (%d x %d)", g, e->dispW, e->dispH);
+        CHECK(strcmp(lt_ext_RowText(row), ui_StrIn(UI_LANG_EN, UI_STR_MT_OPTIONS)) == 0 &&
+                  strcmp(lt_ext_RowText(row), "Options") == 0,
+              "title %d: its label the sheets' Options (%s)", g, lt_ext_RowText(row));
     }
-    /* the cut: 7 texels each side of the lettering (English: texels 7 to
-       84 of the rectangle), so the word's middle is the row's */
+    /* the label follows the language: German's word */
     const int row = ui_SettingsEntryRow(13);
-    CHECK(lt_ext_Prop(row)->texW == 92, "the cut: %d texels", lt_ext_Prop(row)->texW);
     ui_SetLanguage(UI_LANG_DE);
     NonLinearCameraMove = 4; /* German */
     lt_switch_layout(13);
     settle(13, 60);
-    CHECK(lt_ext_Prop(row)->texW == 105, "German: the cut follows the word (%d)",
-          lt_ext_Prop(row)->texW);
+    CHECK(strcmp(lt_ext_RowText(row), "Optionen") == 0, "German: the label %s (Optionen)",
+          lt_ext_RowText(row));
     NonLinearCameraMove = 2;
     ui_SetLanguage(UI_LANG_EN);
     settle(13, 60);
@@ -3160,10 +3158,6 @@ static void testTitleOptionsWord(void)
               "language %d: the menu is the game's word %s (%s)", i, kWord[i],
               ui_StrIn(kLangs[i], UI_STR_SETTINGS));
     }
-    /* not the PAL rectangle: the label in the port's lettering */
-    texProperty[294].texW = 100;
-    CHECK(lt_ext_IsTextRow(lt_ext_Prop(row)), "tables not PAL: the label instead");
-    texProperty[294].texW = 128;
 }
 
 static void testGallery(void)
@@ -3947,20 +3941,18 @@ static int textItems(void)
     return n;
 }
 
-/* package DEF: the screen presented at Enhanced 1920 x 1080 (16:9) to
-   name_1080.png: the port's rows deferred (drawn on the output at its
-   resolution), the game's rows their texture sprites.  wantItems: whether
-   the screen has port text (some RDC_OVERLAY_TEXT items) or game rows
-   alone (none: package TXT2, the game's words are never text) */
-static void snap1080(const char *name, int wantItems)
+/* the screen presented at Enhanced 1920 x 1080 (16:9) to name_1080.png.
+   v0.4.2 (package F-B): nothing is deferred any more, the port's rows and
+   the game's menu words alike are sheet strips in the scene list at 1x, so
+   the frame records no RDC_OVERLAY_TEXT item */
+static void snap1080(const char *name)
 {
     const uint32_t w = 1920, h = 1080;
     uint8_t *px = malloc((size_t)w * h * 4);
     char file[256], p[1400];
     frame(0);
     const int items = textItems();
-    CHECK(wantItems ? items > 0 : items == 0, "%s: %d deferred items (%s)", name, items,
-          wantItems ? "some" : "none");
+    CHECK(items == 0, "%s: %d deferred items (none)", name, items);
     uint32_t ow = 0, oh = 0;
     if (!px || !rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
         CHECK(0, "%s: the presented output", name);
@@ -3970,16 +3962,16 @@ static void snap1080(const char *name, int wantItems)
     snprintf(file, sizeof(file), "%s_1080.png", name);
     path(p, sizeof(p), file);
     rd_WritePng(p, px, w, h, w * 4, 0);
-    printf("settings_render: %s (%d items)\n", p, items);
+    printf("settings_render: %s\n", p);
     free(px);
 }
 
 /* the save screen's values: layout 14's
    slot numbers (files 1, 2 and 5 used, the others empty) and layout 15's
    play time "12:34:56", at the PAL rows' places, their texel rectangles the
-   menu text table's, everything else of the two layouts masked.  Package
-   TXT2: game rows, so their texture sprites and no text item (the fake
-   tables have no sheet for them: the shot shows nothing of the figures) */
+   menu text table's, everything else of the two layouts masked.  v0.4.2
+   (package F-B): rows of the menu text table, so sheet strips in their
+   inks (the fake tables need no sheet for them) */
 static void fakeSaveRows(void)
 {
     for (int r = 52; r < 176; r++) {
@@ -4029,30 +4021,6 @@ static void fakeSaveRows(void)
     setLayout(14, 52, 74, -1, 15);
     setLayout(15, 74, 176, -1, -1);
     texLayout[14].fadeInTime = texLayout[15].fadeInTime = 0.0f;
-}
-
-/* GFONT: the game face the font_coverage test built from the disc
-   (gamefont.bin beside the snapshots, fixture gamefont); without it the
-   port's text is Arimo alone, as without a disc */
-static void loadGameFace(void)
-{
-    char p[1100];
-    path(p, sizeof(p), "gamefont.bin");
-    FILE *f = fopen(p, "rb");
-    if (!f) {
-        printf("settings_render: no %s (no disc): the text is Arimo alone\n", p);
-        return;
-    }
-    fseek(f, 0, SEEK_END);
-    const long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint8_t *blob = n > 0 ? malloc((size_t)n) : NULL;
-    if (blob && fread(blob, 1, (size_t)n, f) == (size_t)n) {
-        CHECK(ui_GameFaceLoad(blob, (size_t)n), "the game face in %s loads", p);
-        printf("settings_render: the game face from %s\n", p);
-    }
-    free(blob);
-    fclose(f);
 }
 
 /* ------------------------------------------------ package PHOTO: the panel */
@@ -4244,7 +4212,6 @@ static int render(void)
         return 77;
     }
     ui_FontForgetTextures();
-    loadGameFace();
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
@@ -4360,8 +4327,8 @@ static int render(void)
     press(0x8000);
     frame(0);
     snap("settings_quit_screen.png");
-    /* the title (New Game only): Options, the pause menu's word centred
-       (the stand-in's framed bar), Quit to desktop under it */
+    /* the title (New Game only): Options (the sheets' word as text in the
+       menus' look, v0.4.2) centred, Quit to desktop under it */
     lt_switch_layout(13);
     CHECK(settle(13, 60), "the title");
     {
@@ -4439,7 +4406,7 @@ static int render(void)
         CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
         gallery_SetEngine(NULL);
     }
-    /* package DEF: every screen presented at Enhanced 1080p (snap1080) */
+    /* every screen presented at Enhanced 1080p (snap1080) */
     {
         RdSettings e = *rd_GetSettings();
         e.preset = RD_PRESET_ENHANCED;
@@ -4451,7 +4418,6 @@ static int render(void)
         e.outputHeight = 1080;
         rd_SetSettings(&e);
         ui_SetScale(ui_ScaleFor(1, e.outputHeight));
-        ui_InstallDeferredText(1);
         s_reduce = 1;
         int ml[16];
         ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
@@ -4459,7 +4425,7 @@ static int render(void)
         CHECK(settle(mainL, 60), "the menu at 1080p");
         lt_ext_Layout(mainL)->curItem = ml[5];
         frame(0);
-        snap1080("settings_main", 1);
+        snap1080("settings_main");
 
         static const struct {
             int row, downs;
@@ -4478,16 +4444,16 @@ static int render(void)
             for (int k = 0; k < pg[i].downs; k++) {
                 press(0x4000);
             }
-            snap1080(pg[i].name, 1);
+            snap1080(pg[i].name);
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
         }
         int mir = ui_NewGameScreenEnter();
         lt_switch_layout(mir);
         CHECK(settle(mir, 60), "the New Game screen at 1080p");
-        snap1080("settings_new_game_screen", 1);
+        snap1080("settings_new_game_screen");
         press(0x4000);
-        snap1080("settings_new_game_screen_ngp", 1);
+        snap1080("settings_new_game_screen_ngp");
         /* P6: the pause menu with the journey's lines on its right (a
            stage running, an assist on, New Game+ on), then in French (the
            longest labels) */
@@ -4515,10 +4481,10 @@ static int render(void)
             ico_opt_set_yorda_safe(1);
             lt_switch_layout(57);
             CHECK(settle(57, 60), "the pause menu at 1080p");
-            snap1080("settings_pause_stats", 1);
+            snap1080("settings_pause_stats");
             NonLinearCameraMove = 3;
             frame(0);
-            snap1080("settings_pause_stats_fr", 1);
+            snap1080("settings_pause_stats_fr");
             NonLinearCameraMove = 2;
             ico_opt_set_yorda_safe(0);
             gFlagGameClear = 0;
@@ -4530,7 +4496,7 @@ static int render(void)
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");
         press(0x8000);
-        snap1080("settings_quit_screen", 1);
+        snap1080("settings_quit_screen");
         /* the music gallery with a stream playing (the fake engine: 42 s
            of 4:25), its bar and transport; then the model viewer's rows
            and prompts */
@@ -4551,23 +4517,22 @@ static int render(void)
             int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
             CHECK(settle(galL, 60), "the gallery at 1080p");
             press(0x40);
-            snap1080("settings_music", 1);
+            snap1080("settings_music");
             press(0x10);
             CHECK(settle(exL, 60), "back to Extras at 1080p");
             gallery_SetEngine(NULL);
             int vl = viewerLayout();
             lt_switch_layout(vl);
             CHECK(settle(vl, 60), "the viewer's rows at 1080p");
-            snap1080("settings_viewer", 1);
+            snap1080("settings_viewer");
         }
         /* package TXT: the save screen's slot numbers and play time */
         fakeSaveRows();
         lt_switch_layout(14);
         CHECK(settle(14, 60), "the save screen at 1080p");
-        snap1080("settings_save_preview", 0);
+        snap1080("settings_save_preview");
         testPhotoPanel();
         s_reduce = 0;
-        ui_InstallDeferredText(0);
     }
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
     ui__SetRecordHook(NULL);

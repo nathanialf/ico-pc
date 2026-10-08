@@ -1,5 +1,5 @@
-/* menu_text_test.c: the game's menu words keep their texels; the port's
- * rows are text (packages P3, TXT2).
+/* menu_text_test.c: the game's menu words and the port's rows drawn as text
+ * in the sheets' look (packages P3, TXT2; v0.4.2 F-B).
  *
  * Without a device:
  *   - the table (the game face's source, menu_text.h): every row a
@@ -11,22 +11,21 @@
  *   - every string id exists in all five languages and is drawable;
  *   - the hook through the real layout_texture.c (GifPacket.c,
  *     DisplayList.c, DmaPacket.c as the window build has them, the rest of
- *     the game stubbed, rows shaped like the PAL title's): every game row,
- *     in the table or not, is its texture sprite and records no text item;
- *     every row's texture is transferred; the save screens' figures too;
+ *     the game stubbed, rows shaped like the PAL title's), v0.4.2 (package
+ *     F-B): every table row draws a sheet strip (menu_font.h) and no
+ *     texture sprite, a row outside the table (the copyright line) or with
+ *     another rectangle keeps its sprite, every row's texture is still
+ *     transferred; the port rows are strips too; the save screens' figures
+ *     are strips on the plain pages in their inks' colours;
  *   - a port row on a game row's box puts its capitals where the sheet's
  *     lettering has them;
- *   - package DEF: each port row records an RDC_OVERLAY_TEXT item before its
- *     glyph quads, which carry RD_SCREEN_TEXT_QUADS; the present's deferred
- *     renderer lays the items out at 1920 x 1080; a fade after the rows
- *     records an op after the items; a keep frame's rows before its KEEP
- *     give nothing; the game rows alone record neither items nor ops.
+ *   - no deferral: under the Enhanced preset the layout records no
+ *     RDC_OVERLAY_TEXT item or op and no tagged glyph quads, everything in
+ *     the scene list at 1x.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): a port row
  * "New Game" in the title's place through exec_layout_texture into SCENE:
  * the text covers pixels only inside the row's rectangle (with the rim's
- * margin), none elsewhere.  Writes menu_text_scene.png beside itself.  With
- * gamefont.bin beside it (font_coverage writes it from the disc; package
- * GFONT) the row is drawn in the game's own lettering.
+ * margin), none elsewhere.  Writes menu_text_scene.png beside itself.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU checks).
  */
@@ -51,6 +50,7 @@
 /* port/ui */
 #include "font.h"
 #include "layout_ext.h"
+#include "menu_font.h"
 #include "menu_text.h"
 #include "strings.h"
 #include "ui_internal.h"
@@ -499,79 +499,57 @@ static void buildTitleWithPortRows(int withCopyright)
     linkPortRows(a, b);
 }
 
-/* the text and the texture sprites of list 11, the backdrop left out */
-static void countSprites(int *text, int *texture)
+/* the sheet strips and the texture sprites of list 11, the backdrop left
+   out: a strip is a sprite batch from a menu text page (menu_font.h), a
+   texture row one sprite (two vertices) from anything else.  (The stubbed
+   tex_TransTexture sends no TEX0, so a texture sprite may record whatever
+   texture came before it.)  cols: the strips' vertex colours, in order */
+static void countSprites(int *strips, int *texture, uint8_t cols[][4], int maxCols)
 {
     const RdFrame *f = rd__LastFrame();
     Walk *w = calloc(1, sizeof(Walk));
     RdStateBlock s = f->startState;
     rd__Walk(f, 0, &s, collect, w);
-    *text = *texture = 0;
+    *strips = *texture = 0;
     for (int i = 0; i < w->n; i++) {
-        int atlas = 0;
-        for (int px = 1; px < 64 && !atlas; px++) {
-            for (int pg = 0; pg < 4 && !atlas; pg++) {
-                uint32_t t = ui_FontPageTex(px, pg);
-                atlas = t != 0 && w->st[i].tex == t;
+        const int page = w->st[i].ds.texEnabled && ui_MenuFontIsPage(w->st[i].tex);
+        if (page && w->cmd[i]->u[1] == 2) {
+            if (cols && *strips < maxCols) {
+                const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w->cmd[i]->u[0]);
+                memcpy(cols[*strips], v[1].rgba, 4);
             }
-        }
-        /* a texture row is one sprite (two vertices); a label one sprite a
-           glyph from an atlas page.  (The stubbed tex_TransTexture sends no
-           TEX0, so a texture sprite may record whatever texture came
-           before it.) */
-        if (atlas && w->cmd[i]->u[1] > 2) {
-            (*text)++;
-        } else if (w->cmd[i]->u[1] == 2 && w->cmd[i]->b[1] != RD_SPACE_FULLSCREEN) {
+            (*strips)++;
+        } else if (!page && w->cmd[i]->u[1] == 2 && w->cmd[i]->b[1] != RD_SPACE_FULLSCREEN) {
             (*texture)++;
         }
     }
     free(w);
 }
 
-/* ------------------------------------------- deferred text (package DEF) */
+/* ------------------------------------- no deferral (v0.4.2, package F-B) */
 
 typedef struct TextWalk {
-    int items, ops, tagged, taggedVerts, untaggedAtlas, opAfterItems;
-    int opKind;
-    RdTextItem item[8];
+    int items, ops, tagged, atlas;
 } TextWalk;
-
-static int isAtlas(uint32_t tex)
-{
-    for (int px = 1; px < 64; px++) {
-        for (int pg = 0; pg < 4; pg++) {
-            const uint32_t t = ui_FontPageTex(px, pg);
-            if (t != 0 && t == tex) {
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
 
 static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
 {
     TextWalk *w = user;
-    const RdFrame *f = rd__LastFrame();
     (void)index;
     if (list != 11) {
         return;
     }
     if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
-        if (w->items < 8) {
-            memcpy(&w->item[w->items], f->payload + c->u[1], sizeof(RdTextItem));
-        }
         w->items++;
     } else if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_OP) {
         w->ops++;
-        w->opKind = c->b[1];
-        w->opAfterItems = w->items;
-    } else if (c->type == RDC_SCREEN && s->ds.texEnabled && isAtlas(s->tex)) {
-        if (c->b[3] == RD_SCREEN_TEXT_QUADS) {
-            w->tagged++;
-            w->taggedVerts += (int)c->u[1];
-        } else {
-            w->untaggedAtlas++;
+    } else if (c->type == RDC_SCREEN) {
+        w->tagged += c->b[3] == RD_SCREEN_TEXT_QUADS;
+        for (int px = 1; px < 64; px++) {
+            for (int pg = 0; pg < 4; pg++) {
+                const uint32_t t = ui_FontPageTex(px, pg);
+                w->atlas += s->ds.texEnabled && t != 0 && t == s->tex;
+            }
         }
     }
 }
@@ -584,160 +562,54 @@ static void walkText(TextWalk *w)
     rd__Walk(f, f->keep, &s, textWalk, w);
 }
 
-/* the layout frame with a fade (alpha a) after it in list 11, as
-   gsb_PostEffect appends it; keep: KEEP after the rows and a keep frame */
-static void layoutFrameWithPosts(int fade, int keep)
+/* the layout frame with a fade after it in list 11, as gsb_PostEffect
+   appends it */
+static void layoutFrameWithFade(int fade)
 {
-    fbKeep = keep;
     dl_SetDLPriority(0);
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     exec_layout_texture();
     dl_SetDLPriority(11);
     RdPostParams pp;
-    if (keep) {
-        memset(&pp, 0, sizeof(pp));
-        rd_Post(RD_POST_KEEP, &pp);
-    }
-    if (fade) {
-        memset(&pp, 0, sizeof(pp));
-        pp.rgba[3] = (uint8_t)fade;
-        rd_Post(RD_POST_FADE, &pp);
-    }
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[3] = (uint8_t)fade;
+    rd_Post(RD_POST_FADE, &pp);
     dl_Swap();
-    fbKeep = 0;
 }
 
-static int s_sinkPrims;
-
-static void countSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
-{
-    (void)type;
-    (void)v;
-    (void)tex;
-    (void)blend;
-    s_sinkPrims += (int)n;
-}
-
-/* the prims the deferred renderer gives for the last frame at an Enhanced
-   1920 x 1080 present (rd__OverlayCollect, its callback into font.c's
-   overlay mode, the prims caught before rd_OverlayPrims) */
-static int collectPrimsCrt(int crt)
+/* Everything the layout draws is in the scene list at 1x in every preset:
+   under the Enhanced preset at 1920 x 1080 the title with its port rows
+   records no RDC_OVERLAY_TEXT item or op, no glyph quads tagged for a
+   present to skip and no Arimo atlas draw: the port rows and the game's
+   menu words are sheet strips (four), the copyright line its texture */
+static void testNoDeferral(void)
 {
     const RdSettings saved = g_rd.settings;
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.settings.outputWidth = 1920;
     g_rd.settings.outputHeight = 1080;
-    rd_CrtSettings(&g_rd.settings, crt ? RD_CRT_TRINITRON : RD_CRT_OFF, 1.0f);
-    s_sinkPrims = 0;
-    ui_InstallDeferredText(1);
-    ui__SetOverlaySink(countSink);
-    const RdFrame *f = rd__LastFrame();
-    rd__OverlayCollect(f, (int)f->keep);
-    const int active = rd_DeferredTextActive();
-    ui__SetOverlaySink(NULL);
-    ui_InstallDeferredText(0);
-    rd__OverlayCollect(NULL, 0); /* forget the batches */
-    g_rd.settings = saved;
-    return active ? s_sinkPrims : -1;
-}
-
-static int collectPrims(void)
-{
-    return collectPrimsCrt(0);
-}
-
-/* Package DEF: every port row records, in place before its glyph quads, an
-   RDC_OVERLAY_TEXT item with its string, anchor, size and colour, and its
-   quads carry RD_SCREEN_TEXT_QUADS (an Enhanced present skips them and
-   draws the item on the output); the game's rows record neither (package
-   TXT2: their textures); a fade after the rows records an op after the
-   items, and none without text; a keep frame's rows before its KEEP give
-   the present nothing, as their quads are drawn over */
-static void testDeferred(void)
-{
-    buildTitleWithPortRows(1); /* the copyright line, Continue, New Game; two port rows */
-    layoutFrame();
+    ui_SetScale(ui_ScaleFor(1, 1080));
+    buildTitleWithPortRows(1);
+    layoutFrameWithFade(0x40);
     TextWalk w;
     walkText(&w);
-    CHECK(w.items == 2, "two port rows: %d items (2)", w.items);
-    CHECK(w.tagged == 2 * 9 && w.untaggedAtlas == 0,
-          "every glyph batch is an item's quads: %d tagged, %d not (18, 0)", w.tagged,
-          w.untaggedAtlas);
-    CHECK(w.ops == 0, "no post pass, no op (%d)", w.ops);
-    int haveSet = 0, haveQuit = 0;
-    for (int i = 0; i < w.items && i < 8; i++) {
-        const RdTextItem *it = &w.item[i];
-        haveSet |= strcmp(it->utf8, "Settings") == 0;
-        haveQuit |= strcmp(it->utf8, "Quit to desktop") == 0;
-        CHECK((it->flags & UI_HALO) && (it->flags & UI_ALIGN_MASK) == UI_ALIGN_CENTER &&
-                  !it->additive && it->size > 1.0f && it->rgba[3] > 0,
-              "item %d (\"%s\"): halo, centred, lerp, size %.1f, alpha %u", i, it->utf8, it->size,
-              it->rgba[3]);
-    }
-    CHECK(haveSet && haveQuit, "the items are the port rows, not New Game or Continue");
-    const int prims = collectPrims();
-    /* the same glyphs (the eight halo copies and the letters, a sprite a
-       glyph) as the quads */
-    CHECK(prims == w.taggedVerts && prims > 0,
-          "the present lays both items out: %d vertices (the quads have %d)", prims, w.taggedVerts);
-    /* package CRT2: under the CRT filter nothing is deferred (the quads
-       draw into the scene and go through the filter) */
-    const int crtPrims = collectPrimsCrt(1);
-    CHECK(crtPrims == -1, "the CRT filter on: no deferred text (%d)", crtPrims);
-
-    /* a fade after the rows: an op after both items */
-    layoutFrameWithPosts(0x40, 0);
-    walkText(&w);
-    CHECK(w.ops == 1 && w.opKind == RD_POST_FADE && w.opAfterItems == 2,
-          "a fade after the rows: %d op(s) of kind %d after %d items (1, %d, 2)", w.ops, w.opKind,
-          w.opAfterItems, RD_POST_FADE);
-
-    /* a keep frame: the rows, then KEEP (gsb_PostEffect's order): the
-       present lays nothing out (the quads are drawn over too) */
-    layoutFrameWithPosts(0, 1);
-    walkText(&w);
-    CHECK(rd__LastFrame()->keep && w.items == 2 && w.ops == 1 && w.opKind == RD_POST_KEEP,
-          "a keep frame: %d items, then KEEP (%d ops, kind %d)", w.items, w.ops, w.opKind);
-    const int keptPrims = collectPrims();
-    CHECK(keptPrims == 0, "a keep frame's rows before its KEEP give no prims (%d)", keptPrims);
-
-    /* the game's rows alone: no items, no tagged quads, no ops */
-    lt_ext_Reset();
-    buildTitle(1);
-    layoutFrameWithPosts(0x40, 0);
-    walkText(&w);
-    CHECK(w.items == 0 && w.tagged == 0 && w.ops == 0,
-          "game rows alone: %d items, %d tagged batches, %d ops (0, 0, 0)", w.items, w.tagged,
-          w.ops);
-    printf("menu_text_test: deferred: 2 port items before 18 tagged batches, %d vertices laid out "
-           "at 1920x1080; fade op after the items; keep frame 0; game rows none\n",
-           prims);
+    int strips = 0, texture = 0;
+    countSprites(&strips, &texture, NULL, 0);
+    CHECK(w.items == 0 && w.ops == 0 && w.tagged == 0 && w.atlas == 0,
+          "Enhanced: %d text items, %d ops, %d tagged batches, %d atlas draws (0, 0, 0, 0)",
+          w.items, w.ops, w.tagged, w.atlas);
+    CHECK(strips == 4 && texture == 1,
+          "Enhanced: %d strips, %d texture sprites (4: two port rows, Continue, New Game; 1: the "
+          "copyright line)",
+          strips, texture);
+    printf("menu_text_test: no deferral: Enhanced 1080p records %d strips, %d texture sprite, "
+           "%d text items\n",
+           strips, texture, w.items);
+    ui_SetScale(1.0f);
+    g_rd.settings = saved;
 }
 
-/* ------------------------------------- the subtitles and the save figures */
-
-/* every RDC_OVERLAY_TEXT item of the last frame in list `list`, with its key */
-typedef struct ItemWalk {
-    int n;
-    RdTextItem item[8];
-    uint64_t key[8];
-} ItemWalk;
-
-static void itemWalk(ItemWalk *w, int list)
-{
-    memset(w, 0, sizeof(*w));
-    const RdFrame *f = rd__LastFrame();
-    for (uint32_t i = 0; f && i < f->lists[list].count; i++) {
-        const RdCmd *c = &f->lists[list].cmds[i];
-        if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
-            if (w->n < 8) {
-                memcpy(&w->item[w->n], f->payload + c->u[1], sizeof(RdTextItem));
-                w->key[w->n] = (uint64_t)c->keyLo | (uint64_t)c->keyHi << 32;
-            }
-            w->n++;
-        }
-    }
-}
+/* ------------------------------------------------- the save figures */
 
 /* the strings visitor reaches the menu words; the subtitles are not port
    strings (the game draws them as its pictures) */
@@ -750,9 +622,11 @@ static void visit(UiLang lang, const char *s, void *user)
     s_visitSub += lang == UI_LANG_IT && strcmp(s, "Prendi la spada") == 0;
 }
 
-/* the save screens' values (package TXT2): a play-time digit (row 76), an
-   empty file's slot number (52) and a used file's (62), all in the menu
-   text table, are their texture sprites and record no text item */
+/* the save screens' values: a play-time digit (row 76, plain ink), an
+   empty file's slot number (52, grey) and a used file's (62, dark), all in
+   the menu text table, are sheet strips on the plain pages (no rim), in
+   their inks' colours (the row's 0x7F: grey 151 / 255 of it, dark black,
+   plain as it is), their textures still transferred */
 static void testDigits(void)
 {
     lt_ext_Reset();
@@ -779,27 +653,35 @@ static void testDigits(void)
     current_layout_id = TITLE_LAYOUT;
     s_texTransfers = 0;
     layoutFrame();
-    ItemWalk w;
-    itemWalk(&w, 11);
-    int text = 0, texture = 0;
-    countSprites(&text, &texture);
+    int strips = 0, texture = 0;
+    uint8_t cols[3][4];
+    memset(cols, 0, sizeof(cols));
+    countSprites(&strips, &texture, cols, 3);
+    UiMenuStrip last;
     CHECK(itemOfRow(52) && itemOfRow(62) && itemOfRow(76), "the three rows are in the table");
-    CHECK(w.n == 0 && text == 0 && texture == 3 && s_texTransfers == 3,
-          "three digit rows: %d items, %d text batches, %d texture sprites, %d transfers "
-          "(0, 0, 3, 3)",
-          w.n, text, texture, s_texTransfers);
+    CHECK(strips == 3 && texture == 0 && s_texTransfers == 3,
+          "three digit rows: %d strips, %d texture sprites, %d transfers (3, 0, 3)", strips,
+          texture, s_texTransfers);
+    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 1 && last.w == 20 && last.h == 15,
+          "the digits on the plain pages, a strip the tile's 20 x 15 (%d, %d x %d)", last.cls,
+          last.w, last.h);
+    CHECK(cols[0][0] == 75 && cols[1][0] == 0 && cols[2][0] == 0x7F,
+          "the inks' colours: grey %u, dark %u, plain %u (75, 0, 127)", cols[0][0], cols[1][0],
+          cols[2][0]);
     for (int r = 52; r < 77; r++) {
         texProperty[r].masked = texProperty[r].defaultMask = 0;
     }
-    printf("menu_text_test: digits: %d texture sprites, %d items\n", texture, w.n);
+    printf("menu_text_test: digits: %d strips, %d texture sprites\n", strips, texture);
 }
 
 /* A port row placed on a game menu row's box, with the same label and
    size, puts its capitals where the sheet's lettering has them: OK (181, a
    20-texel row whose capitals sit at texel 9.0) and a port row "OK" at size
-   27 in the same 20-field-line box.  The game row is its texture; the
-   sheet's capital middle is mapped through the sprite's box and texels as
-   display_texture draws them */
+   27 in the same 20-field-line box.  The sheet's capital middle is mapped
+   through the sprite's box and texels as display_texture draws them; the
+   port row's anchor is snapped to whole texels (two y units), so within a
+   y unit.  OK itself, a table row, is a strip of its item's rectangle drawn
+   with the sprite's box */
 static void testPortRowAnchor(void)
 {
     memset(texLayout, 0, sizeof(texLayout));
@@ -814,11 +696,11 @@ static void testPortRowAnchor(void)
     const int port = addPortRow("OK", 270, 100, 100, 40, 0, UI_ALIGN_LEFT);
     linkPortRows(port, port);
     layoutFrame();
-    ItemWalk w;
-    itemWalk(&w, 11);
     const UiMenuTextItem *it = itemOfRow(181);
-    CHECK(w.n == 1 && it, "one item (the port row): %d", w.n);
-    if (w.n != 1 || !it) {
+    UiMenuStrip last;
+    const int drawn = ui_MenuFontLastStrip(&last);
+    CHECK(drawn && it, "the port row drawn last as a strip (%d)", drawn);
+    if (!drawn || !it) {
         lt_ext_Reset();
         return;
     }
@@ -830,9 +712,10 @@ static void testPortRowAnchor(void)
     const float sy = bh * 16.0f / (float)(e->texH * 16 - 16);
     const float oy = by - 8.0f / 16.0f * sy;
     const float gameY = oy + it->y[UI_LANG_EN] * sy;
-    CHECK(fabsf(w.item[0].y - gameY) < 0.01f && strcmp(w.item[0].utf8, "OK") == 0,
-          "the port row's capitals at y %.3f, the sheet's at %.3f", w.item[0].y, gameY);
-    printf("menu_text_test: port row vs the sheet: capitals at %.3f and %.3f\n", w.item[0].y,
+    CHECK(fabsf(last.anchorY - gameY) <= 1.0f && last.cls == 0,
+          "the port row's capitals at y %.3f, the sheet's at %.3f (light ink)", last.anchorY,
+          gameY);
+    printf("menu_text_test: port row vs the sheet: capitals at %.3f and %.3f\n", last.anchorY,
            gameY);
     lt_ext_Reset();
 }
@@ -854,30 +737,44 @@ static void testHook(void)
     pad[0].ana[2] = pad[0].ana[3] = 128;
     pad[0].flags = 0;
 
-    /* package TXT2: every game row is its texture, in the table or not */
+    /* v0.4.2 (package F-B): every table row is a sheet strip and no texture
+       sprite; the copyright line (not in the table) keeps its sprite; every
+       row's texture is still transferred */
     buildTitle(1);
-    CHECK(!lt_ext_IsTextRow(&texProperty[50]) && !lt_ext_IsTextRow(&texProperty[48]),
-          "New Game and the copyright line are not text rows");
+    CHECK(lt_ext_IsTextRow(&texProperty[50]) && lt_ext_IsTextRow(&texProperty[49]) &&
+              !lt_ext_IsTextRow(&texProperty[48]),
+          "New Game and Continue are text rows, the copyright line not");
+    CHECK(ui_MenuTextItemOf(&texProperty[50]) == itemOfRow(50) &&
+              ui_MenuTextItemOf(&texProperty[48]) == NULL,
+          "ui_MenuTextItemOf: New Game's item, none for the copyright line");
     s_texTransfers = 0;
     layoutFrame();
-    int text = 0, texture = 0;
-    countSprites(&text, &texture);
+    int strips = 0, texture = 0;
+    countSprites(&strips, &texture, NULL, 0);
     CHECK(s_texTransfers == 3, "every row's texture transferred (%d of 3)", s_texTransfers);
-    CHECK(text == 0 && texture == 3, "game rows: %d text batches, %d texture sprites (0, 3)", text,
+    CHECK(strips == 2 && texture == 1, "game rows: %d strips, %d texture sprites (2, 1)", strips,
           texture);
-    printf("menu_text_test: game rows: %d text batches, %d texture sprites, %d transfers\n", text,
+    UiMenuStrip last;
+    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 0 && last.w == 172 && last.h == 20,
+          "New Game: a strip of its item's 172 x 20 texels on the light pages (%d x %d, %d)",
+          last.w, last.h, last.cls);
+    printf("menu_text_test: game rows: %d strips, %d texture sprites, %d transfers\n", strips,
            texture, s_texTransfers);
 
-    /* with two port rows linked: those are text (per row eight halo copies
-       and the letters), the game rows still their textures */
+    /* not the PAL rectangle: the row is its texture again */
+    texProperty[50].texW = 171;
+    CHECK(!lt_ext_IsTextRow(&texProperty[50]), "a rectangle not the table's: the texture");
+    texProperty[50].texW = 172;
+
+    /* with two port rows linked: those are strips too */
     buildTitleWithPortRows(1);
     s_texTransfers = 0;
     layoutFrame();
-    countSprites(&text, &texture);
-    CHECK(s_texTransfers == 3 && text == 2 * 9 && texture == 3,
-          "with port rows: %d transfers, %d text batches, %d texture sprites (3, 18, 3)",
-          s_texTransfers, text, texture);
-    testDeferred();
+    countSprites(&strips, &texture, NULL, 0);
+    CHECK(s_texTransfers == 3 && strips == 4 && texture == 1,
+          "with port rows: %d transfers, %d strips, %d texture sprites (3, 4, 1)", s_texTransfers,
+          strips, texture);
+    testNoDeferral();
     testPortRowAnchor();
     testDigits();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
@@ -931,14 +828,13 @@ static void testPixels(void)
     }
     rd_WritePng("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
     /* the row's box (display_texture: centred, New Game's 172 texels
-       wide, 20 field lines from dispY 165), plus the rim's reach: Arimo's
-       halo 1.5 y units; the game face's rim (GFONT) its glow, 6 texels round
-       the letters (6 x units, 12 y units), as the sheet's own glow reaches
-       past the letters */
+       wide, 20 field lines from dispY 165), plus the reach of the sheet
+       strip's rim and its bilinear read: a texel each, 2 x units and 4 y
+       units, and a unit for the anchor's snap */
     const LtProperty *e = &texProperty[50];
     const float gx0 = UI_GRID_CX - (float)e->texW * 0.5f, gx1 = UI_GRID_CX + (float)e->texW * 0.5f;
     const float gy0 = (float)e->dispY * 2.0f, gy1 = gy0 + (float)e->dispH;
-    const float mx = ui_GameFaceLoaded() ? 7.0f : 2.0f, my = ui_GameFaceLoaded() ? 13.0f : 2.0f;
+    const float mx = 3.0f, my = 5.0f;
     const int x0 = toPixX(gx0 - mx), x1 = toPixX(gx1 + mx);
     const int y0 = toPixY(gy0 - my), y1 = toPixY(gy1 + my);
     int inside = 0, outside = 0, bright = 0;
@@ -967,25 +863,6 @@ static void testPixels(void)
     ui__SetRecordHook(NULL);
 }
 
-static void loadGameFace(const char *p)
-{
-    FILE *f = fopen(p, "rb");
-    if (!f) {
-        printf("menu_text_test: no %s (no disc): the pixels in Arimo\n", p);
-        return;
-    }
-    fseek(f, 0, SEEK_END);
-    const long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint8_t *blob = n > 0 ? malloc((size_t)n) : NULL;
-    if (blob && fread(blob, 1, (size_t)n, f) == (size_t)n) {
-        CHECK(ui_GameFaceLoad(blob, (size_t)n), "the game face in %s loads", p);
-        printf("menu_text_test: the pixels in the game face from %s\n", p);
-    }
-    free(blob);
-    fclose(f);
-}
-
 int main(int argc, char **argv)
 {
     ui_SetLanguage(UI_LANG_EN);
@@ -1012,10 +889,6 @@ int main(int argc, char **argv)
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
-    /* GFONT: the pixels in the game's lettering when font_coverage built it
-       from the disc (gamefont.bin, fixture gamefont); the CPU checks above
-       count Arimo's halo draws and ran without it */
-    loadGameFace("gamefont.bin");
     testPixels();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());

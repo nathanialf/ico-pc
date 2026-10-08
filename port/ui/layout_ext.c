@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "font.h"
+#include "menu_font.h"
+#include "menu_text.h"
 #include "strings.h"
 #include "ui_internal.h"
 
@@ -37,8 +39,7 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
-    int dim;      /* greyed (lt_ext_SetDim): the colour at half */
-    int wordText; /* ROW_GLYPH from lt_ext_AddWord: its label without the texture */
+    int dim; /* greyed (lt_ext_SetDim): the colour at half */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -198,23 +199,22 @@ float lt_ext_RowSize(int index)
    the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
    Triangle beside OK (181) and Back (183), 343 and 344 the key config
    screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2 labels, 301 and 302
-   the Options screen's value arrows, 294 the pause menu's Options) and the height each has beside the
+   the Options screen's value arrows) and the height each has beside the
    game's 27-unit labels (dispH, y units; the width is the rectangle's, a
    pixel a texel). */
 static const struct {
     short row, u, v, w, h, dispH;
 } kGlyph[LT_GLYPH_COUNT] = {
-    {182, 32, 30, 32, 30, 30},    /* Cross, text/buttons.tm2 */
-    {344, 0, 30, 32, 30, 30},     /* Circle */
-    {343, 32, 0, 32, 30, 30},     /* Square */
-    {184, 0, 0, 32, 30, 30},      /* Triangle */
-    {349, 420, 240, 40, 15, 30},  /* L1, menu_PAL_02 */
-    {346, 340, 240, 40, 15, 30},  /* R1 */
-    {348, 460, 240, 40, 15, 30},  /* L2 */
-    {347, 380, 240, 40, 15, 30},  /* R2 */
-    {301, 490, 130, 20, 20, 40},  /* Left, menu_PAL_01 */
-    {302, 490, 150, 20, 20, 40},  /* Right */
-    {294, 384, 120, 128, 20, 40}, /* Options, menu_PAL_01 (the pause menu's word) */
+    {182, 32, 30, 32, 30, 30},   /* Cross, text/buttons.tm2 */
+    {344, 0, 30, 32, 30, 30},    /* Circle */
+    {343, 32, 0, 32, 30, 30},    /* Square */
+    {184, 0, 0, 32, 30, 30},     /* Triangle */
+    {349, 420, 240, 40, 15, 30}, /* L1, menu_PAL_02 */
+    {346, 340, 240, 40, 15, 30}, /* R1 */
+    {348, 460, 240, 40, 15, 30}, /* L2 */
+    {347, 380, 240, 40, 15, 30}, /* R2 */
+    {301, 490, 130, 20, 20, 40}, /* Left, menu_PAL_01 */
+    {302, 490, 150, 20, 20, 40}, /* Right */
 };
 
 int lt_ext_GlyphSource(int glyph, int uvwh[4])
@@ -274,39 +274,6 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size)
         e->glyph = glyph;
     }
     return i;
-}
-
-int lt_ext_AddWord(int glyph, const LtProperty *row, const LtExtText *text)
-{
-    if (glyph < 0 || glyph >= LT_GLYPH_COUNT || !row) {
-        return -1;
-    }
-    LtProperty r = *row;
-    r.texU = kGlyph[glyph].u;
-    r.texV = kGlyph[glyph].v;
-    r.texW = kGlyph[glyph].w;
-    r.texH = kGlyph[glyph].h;
-    r.texFileNo = 0x7000 + s_propCount; /* as lt_ext_AddGlyph */
-    int i = lt_ext_AddProperty(&r, text);
-    if (i >= 0) {
-        ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
-        e->kind = ROW_GLYPH;
-        e->glyph = glyph;
-        e->wordText = text != NULL;
-    }
-    return i;
-}
-
-int lt_ext_SetGlyphTexW(int index, int texW)
-{
-    ExtRow *r = rowOf(index);
-    if (!r || r->kind != ROW_GLYPH) {
-        return -1;
-    }
-    LtProperty *p = &s_props[index - LT_GAME_PROPERTY_COUNT];
-    const int w = kGlyph[r->glyph].w;
-    p->texW = texW <= 0 || texW > w ? w : texW;
-    return 0;
 }
 
 int lt_ext_IsGlyphRow(const LtProperty *e)
@@ -465,7 +432,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     ui__Sync();
     ExtRow *r = &s_rows[e - s_props];
-    if (r->kind == ROW_GLYPH && !r->wordText) {
+    if (r->kind == ROW_GLYPH) {
         return; /* a glyph without its texture (tables not PAL): nothing */
     }
     if (r->kind == ROW_RECT) {
@@ -517,7 +484,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
        set smaller to fit, down to 60 %;
        the widest line of a multi-line label counts */
     if (bw > 0.0f) {
-        float w = ui_MeasureText(size, text);
+        float w = ui_MeasureMenuText(size, text);
         if (w > bw) {
             float k = bw / w;
             size *= k < 0.6f ? 0.6f : k;
@@ -527,10 +494,10 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
        the glow), so a row that moves or fades blends between ticks */
     const uint64_t owner =
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
-    /* package DEF: at the output's resolution where the present can
-       (font.h ui_DrawTextDeferred) */
+    /* v0.4.2 (package F-B): the menus' text in the sheets' look, light ink
+       (menu_font.h), into the scene list at 1x in every preset */
     if (!glow) {
-        ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_HALO, NULL);
+        ui_DrawMenuText(x, y, size, rgba, text, flags, UI_INK_LIGHT, NULL);
         ui_SetDrawKey(owner);
         return;
     }
@@ -543,7 +510,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
     /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
-    ui_DrawTextDeferred(x, y, size, rgba, text, flags | UI_ADDITIVE, &xf);
+    ui_DrawMenuText(x, y, size, rgba, text, flags | UI_ADDITIVE, UI_INK_LIGHT, &xf);
     ui_SetDrawKey(owner);
 }
 
@@ -552,7 +519,27 @@ int lt_ext_IsTextRow(const LtProperty *e)
     if (lt_ext_IsGlyphRow(e)) {
         return lt_ext_GlyphTexNo(e) < 0;
     }
-    return lt_ext_IsPortProp(e);
+    return lt_ext_IsPortProp(e) || ui_MenuTextItemOf(e) != NULL;
+}
+
+void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
+                        const unsigned char rgba[4], int glow)
+{
+    if (lt_ext_IsPortProp(e)) {
+        lt_ext_DrawRow(e, box, rgba, glow);
+        return;
+    }
+    const UiMenuTextItem *it = ui_MenuTextItemOf(e);
+    if (!it) {
+        return;
+    }
+    ui__Sync();
+    /* keyed by the row and the pass (the words, the glow), as the port's
+       rows are, so the presenter blends a row that moves or fades */
+    const uint64_t owner =
+        ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
+    ui_MenuWordDraw(it, (int)ui_GetLanguage(), box, uv, rgba, glow);
+    ui_SetDrawKey(owner);
 }
 
 int lt_ext_BackButtons(void)

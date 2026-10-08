@@ -1,10 +1,12 @@
 /*
  * port/ui/menu_text.c
  *
- * The table of the game's menu words (menu_text.h).  Nothing draws from it: the game's rows always
- * draw their textures.  It is the source the game face is cut from
- * (game_font_disc.c): each item names a word rectangle of the sheets, its
- * transcribed words and where the lettering sits in it.
+ * The table of the game's menu words (menu_text.h): each item names a
+ * word rectangle of the sheets, its transcribed words and where the
+ * lettering sits in it; the rows the layout draws from it are drawn as
+ * text in the sheets' look (v0.4.2, package F-B; menu_font.c).  The game
+ * face's builder (game_font_disc.c) still reads it until package F-C3
+ * removes the builder.
  *
  * Each item is one texel rectangle of a sheet that holds text; the rows
  * list every texProperty row that draws that rectangle (several rows share
@@ -28,8 +30,8 @@
  * A / B, 1 / 2 players; light with the rim).  Their em, anchor and capital
  * middle were measured the same way, per ink (UiMenuTextInk).
  *
- * Rows not in the table (no lettering to cut, or lettering in another
- * style), and why:
+ * Rows not in the table (they keep their texels: no lettering, or
+ * lettering in another style), and why:
  *   0..24      the stage's preload rows (layout 6, never drawn)
  *   25, 32     the LANGUAGE and TV headers: lettering inside the swash
  *              artwork
@@ -60,6 +62,8 @@
  *   434, 435   the subtitle rows jimaku.c writes
  */
 #include "menu_text.h"
+
+#include <stddef.h>
 
 #include "font.h"
 #include "strings.h"
@@ -416,3 +420,41 @@ const UiMenuTextRow ui_menu_text_rows[] = {
 };
 const int ui_menu_text_row_count = (int)(sizeof(ui_menu_text_rows) / sizeof(ui_menu_text_rows[0]));
 /* clang-format on */
+
+/* the row -> item map, built on first use: -1 for a row not in the table */
+#define MT_GAME_ROWS 436
+static short s_itemOf[MT_GAME_ROWS];
+static int s_mapBuilt;
+
+static void buildMap(void)
+{
+    for (int i = 0; i < MT_GAME_ROWS; i++) {
+        s_itemOf[i] = -1;
+    }
+    for (int i = 0; i < ui_menu_text_row_count; i++) {
+        const UiMenuTextRow *r = &ui_menu_text_rows[i];
+        if (r->row >= 0 && r->row < MT_GAME_ROWS) {
+            s_itemOf[r->row] = r->item;
+        }
+    }
+    s_mapBuilt = 1;
+}
+
+const UiMenuTextItem *ui_MenuTextItemOf(const LtProperty *e)
+{
+    if (!e || e < texProperty || e >= texProperty + MT_GAME_ROWS) {
+        return NULL;
+    }
+    if (!s_mapBuilt) {
+        buildMap();
+    }
+    const int i = s_itemOf[e - texProperty];
+    if (i < 0) {
+        return NULL;
+    }
+    const UiMenuTextItem *it = &ui_menu_text_items[i];
+    if (e->texU != it->u || e->texV != it->v || e->texW != it->w || e->texH != it->h) {
+        return NULL;
+    }
+    return it;
+}

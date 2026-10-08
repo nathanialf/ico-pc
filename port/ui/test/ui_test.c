@@ -10,28 +10,29 @@
  *   - the layout extension through the real layout_texture.c (with
  *     GifPacket.c, DisplayList.c, DmaPacket.c as the window build has them):
  *     the fall-through lookups, a port layout with two port rows run by
- *     exec_layout_texture, its labels recorded as atlas sprites in list 11
- *     with the colours the texture path would have used, no texture lookup
- *     for a port row, the glow (additive) after a cursor move and the
- *     sparkle on an unselectable selected row;
+ *     exec_layout_texture, its labels recorded as one sheet strip each
+ *     (v0.4.2, menu_font.h) in list 11 with the colours the texture path
+ *     would have used, no texture lookup for a port row, the glow
+ *     (additive) after a cursor move and the sparkle on an unselectable
+ *     selected row;
  *   - the popup queue's timing and panel;
  *   - package OV, overlay mode (ui_BeginOverlay): the grid mapped onto the
  *     4:3 picture of a 1080p and a 4K output (and of a 16:9 box), glyph
  *     quads on whole output pixels at the bitmap's size, rasterised at
  *     round(size * box.h / 448), rects snapped, the scale restored; a
- *     popup drawn on the overlay records nothing into the open frame's
- *     lists (list 12 included), sits at the 4:3 picture's right, and is
- *     the same with the mirror on;
- *   - the size sets (review finding 2): a synthetic game face loaded, 40
- *     sizes of "IHL" measured (no Arimo set made) and then drawn over five
- *     frames: each draw has the H's Arimo set at its exact size, the least
- *     recently drawn sets go, "the nearest" is never reused, and a text
- *     without a fallback letter makes no set.
+ *     popup drawn on the overlay (its text one magnified strip a line)
+ *     records nothing into the open frame's lists (list 12 included), sits
+ *     at the 4:3 picture's right, and is the same with the mirror on;
+ *   - the size sets (review finding 2): 40 sizes of "IHL" measured (no
+ *     set made) and then drawn over five frames: each draw has its own
+ *     set, the least recently drawn sets go, "the nearest" is never reused.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): "ICO" and
- * "Éléphant" drawn through rd into SCENE: coverage only inside the bounds
- * the glyph quads give, the acute above the capitals, and the blend of a
- * known colour over a known background (exact at alpha 0x80, the GS
- * formula within one step at 0x40).
+ * "Éléphant" drawn as sheet strips through rd into SCENE: coverage only
+ * inside the bounds the measure gives (with the rim), the acute above the
+ * capitals, and the blend of a known colour over a known background (exact
+ * at alpha 0x80, the GS formula within one step at 0x40); the menu rows at
+ * an Enhanced 4x scene against font_sheet_ps's CPU reference (sheet_ref.c),
+ * plain and light ink.
  *
  * Last, package OV: a popup on the presentation overlay of a 1920 x 1080
  * Original present: at the 4:3 picture's right, text pixels in the panel,
@@ -59,8 +60,9 @@
 #include "GifPacket.h"
 /* port/ui */
 #include "font.h"
-#include "game_font.h"
 #include "layout_ext.h"
+#include "menu_font.h"
+#include "sheet_ref.h"
 #include "popup.h"
 #include "strings.h"
 #include "ui_internal.h"
@@ -459,42 +461,42 @@ static void testLayoutExtension(void)
     memset(&w, 0, sizeof(w));
     RdStateBlock s = f->startState;
     rd__Walk(f, 0, &s, collect, &w);
-    /* the backdrop sprite, then per row its halo (eight black copies) and
-       its label */
-    CHECK(w.n == 1 + 2 * 9, "list 11 holds %d screen batches, expected 19", w.n);
-    const int px = (int)lrintf(UI_MENU_TEXT_SIZE);
-    const uint32_t atlas = ui_FontPageTex(px, 0);
-    CHECK(atlas != 0, "the %d px atlas is a texture", px);
-    int labels = 0, halos = 0;
+    /* the backdrop sprite, then per row its label: one sheet strip in the
+       menus' look (v0.4.2, package F-B: no halo copies) */
+    CHECK(w.n == 1 + 2, "list 11 holds %d screen batches, expected 3", w.n);
+    UiMenuStrip strip;
+    CHECK(ui_MenuFontLastStrip(&strip) && strip.tex != 0 && strip.cls == 0,
+          "the labels are strips of the light pages (class %d)", strip.cls);
+    const RdTexRec *page = rd__TexRec(strip.tex);
+    CHECK(page && page->format == RD_TEXEL_SHEET && page->sheet[0] == 1,
+          "the page is a sheet texture with the rim on");
+    int labels = 0;
     for (int i = 1; i < w.n; i++) {
         const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w.cmd[i]->u[0]);
         const RdStateBlock *st = &w.st[i];
         CHECK(w.cmd[i]->b[0] == RD_PRIM_SPRITES && w.cmd[i]->b[1] == RD_SPACE_UI &&
-                  w.cmd[i]->b[2] == RD_UV_FIXED_CONTINUOUS,
-              "batch %d: UI sprites with texel UVs, continuous (T1)", i);
-        CHECK(st->ds.texEnabled && st->tex == atlas && st->ds.texFn == RD_TEXFN_MODULATE &&
-                  st->ds.tcc == RD_TCC_RGBA,
-              "batch %d: the atlas, MODULATE, TCC RGBA", i);
+                  w.cmd[i]->b[2] == RD_UV_FIXED_CONTINUOUS && w.cmd[i]->u[1] == 2,
+              "batch %d: one UI sprite with texel UVs, continuous (T1)", i);
+        CHECK(st->ds.texEnabled && ui_MenuFontIsPage(st->tex) &&
+                  st->ds.texFn == RD_TEXFN_MODULATE && st->ds.tcc == RD_TCC_RGBA,
+              "batch %d: a menu text page, MODULATE, TCC RGBA", i);
         CHECK(st->ds.abe == 1 && st->ds.blend == RD_BLEND_LERP_AS, "batch %d: ALPHA 0x44", i);
         CHECK(st->ds.zwrite == RD_ZWRITE_OFF, "batch %d: Z write off (the game's packet)", i);
         CHECK(v[1].z == UI_LAYOUT_Z, "batch %d: the layout's Z", i);
-        if (v[1].rgba[0] == 0) {
-            CHECK(v[1].rgba[3] == 127 / 4, "halo alpha %u", v[1].rgba[3]);
-            halos++;
-            continue;
-        }
         /* display_texture's colour: ~reductionCol = 0x7F, the fade at 127;
            row A is selected, row B dimmed by half */
         uint8_t want = labels == 0 ? 0x7F : 0x3F;
         CHECK(v[1].rgba[0] == want && v[1].rgba[3] == 127, "row %d colour %u alpha %u", labels,
               v[1].rgba[0], v[1].rgba[3]);
         /* the label starts at the row's dispX: x = (dispX - 320) * 16 + 4 in 1/16 px, through
-           gif_SpriteSensitiveOffset's 512 / 640 */
+           gif_SpriteSensitiveOffset's 512 / 640; the strip starts its margin
+           (the glyphs' overhang and the rim, 6 texels at this size) before */
         int x0 = 0x8000 + ((200 - 320) * 16 + 4) * 512 / 640;
-        CHECK(abs(v[0].x - x0) < 16 * 6, "row %d starts at x %d (box %d)", labels, v[0].x, x0);
+        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 7, "row %d starts at x %d (box %d)", labels, v[0].x,
+              x0);
         labels++;
     }
-    CHECK(labels == 2 && halos == 16, "%d labels, %d halo copies", labels, halos);
+    CHECK(labels == 2, "%d labels", labels);
     /* the next frame: row B glows (Cs * As + Cd) */
     pad[0].flags = 0;
     layoutFrame();
@@ -504,7 +506,7 @@ static void testLayoutExtension(void)
     rd__Walk(f, 0, &s, collect, &w);
     int glow = 0;
     for (int i = 0; i < w.n; i++) {
-        glow += w.st[i].ds.blend == RD_BLEND_CS_AS_ADD_CD && w.st[i].tex == atlas;
+        glow += w.st[i].ds.blend == RD_BLEND_CS_AS_ADD_CD && ui_MenuFontIsPage(w.st[i].tex);
     }
     CHECK(glow == 1, "the glow is the label, additive (%d batches)", glow);
     /* unselectable rows: the cursor sparkle on the selected one */
@@ -701,9 +703,12 @@ static void checkOverlayPopup(void)
         ui_PopupDrawOverlay(&c);
         ui__SetOverlaySink(NULL);
         CHECK(!ui_OverlayActive(), "the popup ends overlay mode");
-        /* the panel, its hairline, the title and the body */
-        CHECK(s_cap.n >= 4 && s_cap.tex[0] == 0 && s_cap.count[0] == 2,
-              "the popup on the overlay: %d batches", s_cap.n);
+        /* the panel, its hairline, the title and the body (v0.4.2: one 1x
+           sheet strip each, magnified) */
+        CHECK(s_cap.n == 4 && s_cap.tex[0] == 0 && s_cap.count[0] == 2 &&
+                  ui_MenuFontIsPage(s_cap.tex[2]) && ui_MenuFontIsPage(s_cap.tex[3]) &&
+                  s_cap.count[2] == 2 && s_cap.count[3] == 2,
+              "the popup on the overlay: %d batches, the text on menu pages", s_cap.n);
         if (s_cap.n >= 1) {
             /* the panel at the 4:3 picture's right, 18 x units in */
             const int32_t right = (c.box.x + (int32_t)c.box.w) * 16;
@@ -923,7 +928,10 @@ static int toPixY(float gy)
            1792;
 }
 
-/* the drawn word's bounds: x from the measure, y from the line metrics */
+/* the drawn word's bounds: x from the measure, y from the line metrics
+   (the menus' text, menu_font.h), plus the strip's rim and its bilinear
+   read (a texel each: 2 x units, 4 y units) and the anchor's snap to whole
+   texels (an x unit, a y unit) */
 typedef struct Box {
     int x0, y0, x1, y1;
 } Box;
@@ -931,13 +939,13 @@ typedef struct Box {
 static Box wordBox(float x, float y, float size, const char *s)
 {
     float asc, desc;
-    ui_FontMetrics(size, &asc, &desc, NULL);
+    ui_MenuFontMetrics(size, &asc, &desc, NULL);
     Box b;
-    float w = ui_MeasureText(size, s);
-    b.x0 = toPixX(x - w * 0.5f) - 3;
-    b.x1 = toPixX(x + w * 0.5f) + 3;
-    b.y0 = toPixY(y) - 2;
-    b.y1 = toPixY(y + asc + desc) + 2;
+    float w = ui_MeasureMenuText(size, s);
+    b.x0 = toPixX(x - w * 0.5f - 3.0f) - 1;
+    b.x1 = toPixX(x + w * 0.5f + 3.0f) + 1;
+    b.y0 = toPixY(y - 5.0f) - 1;
+    b.y1 = toPixY(y + asc + desc + 5.0f) + 1;
     return b;
 }
 
@@ -953,11 +961,12 @@ static void drawFrame(const uint8_t col[4], const uint8_t colI[4])
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
     rd_SelectList(11);
-    ui_DrawText(160.0f, 60.0f, 60.0f, col, "ICO", UI_ALIGN_CENTER);
-    ui_DrawText(320.0f, 200.0f, 60.0f, col, "Éléphant", UI_ALIGN_CENTER);
+    /* v0.4.2 (package F-B): the menus' text, sheet strips in the light ink */
+    ui_DrawMenuText(160.0f, 60.0f, 60.0f, col, "ICO", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    ui_DrawMenuText(320.0f, 200.0f, 60.0f, col, "Éléphant", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
     /* a big I for the blend: alpha 0x80 left, 0x40 right */
-    ui_DrawText(480.0f, 40.0f, 150.0f, col, "I", UI_ALIGN_CENTER);
-    ui_DrawText(560.0f, 40.0f, 150.0f, colI, "I", UI_ALIGN_CENTER);
+    ui_DrawMenuText(480.0f, 40.0f, 150.0f, col, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    ui_DrawMenuText(560.0f, 40.0f, 150.0f, colI, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
     rd_EndFrame(0);
 }
 
@@ -979,10 +988,11 @@ static void testPixels(void)
     Box ele = wordBox(320.0f, 200.0f, 60.0f, "Éléphant");
     int inIco = 0, inEle = 0, outside = 0, above = 0;
     float asc, cap;
-    ui_FontMetrics(60.0f, &asc, NULL, &cap);
+    ui_MenuFontMetrics(60.0f, &asc, NULL, &cap);
     const int capTop = toPixY(200.0f + asc - cap);
-    /* the first letter's columns: only its acute rises above the capitals */
-    const int eAcuteX1 = ele.x0 + 3 + (toPixX(ui_MeasureText(60.0f, "É")) - toPixX(0.0f));
+    /* the first letter's columns: only its acute rises above the capitals
+       (the capitals' top less the snap and the rim, a few lines) */
+    const int eAcuteX1 = ele.x0 + 4 + (toPixX(ui_MeasureMenuText(60.0f, "É")) - toPixX(0.0f));
     Box iL = wordBox(480.0f, 40.0f, 150.0f, "I"), iR = wordBox(560.0f, 40.0f, 150.0f, "I");
     for (int y = 0; y < 512; y++) {
         for (int x = 0; x < 512; x++) {
@@ -996,7 +1006,7 @@ static void testPixels(void)
                     (x >= iR.x0 && x <= iR.x1 && y >= iR.y0 && y <= iR.y1);
             inIco += a;
             inEle += b;
-            above += b && x < eAcuteX1 && y < capTop - 1;
+            above += b && x < eAcuteX1 && y < capTop - 6;
             outside += !a && !b && !c;
         }
     }
@@ -1008,8 +1018,8 @@ static void testPixels(void)
            "above the capitals\n",
            ico.x0, ico.y0, ico.x1, ico.y1, inIco, ele.x0, ele.y0, ele.x1, ele.y1, inEle, above);
 
-    /* the blend in the stems of the two I: the texel is white at full
-       coverage (alpha 0x80), MODULATE gives (255 * c) >> 7 */
+    /* the blend in the stems of the two I: the sheet texel is the fill
+       (white) at full coverage (alpha 0x80), MODULATE gives (255 * c) >> 7 */
     int fullHits = 0, halfHits = 0, worst = 0;
     for (int side = 0; side < 2; side++) {
         const Box *bx = side ? &iR : &iL;
@@ -1058,24 +1068,25 @@ static void testPixels(void)
 /* ------------------------------------------------- pixels at 4x (T1)
  *
  * The Enhanced preset at 4x (SCENE 2048 x 2048 for the 512 x 512 GS frame),
- * full height, the atlas at an output's scale: the menu rows as the title
- * and the vibration screen draw them (size 27 and 22, the halo). Checked
- * against a CPU reference of the same quads: each SCENE texel whose centre
- * lies in a glyph quad samples the atlas bilinearly at its own centre
- * (the texel-centre convention) and blends as the GS does. A bleed line (a
- * neighbouring glyph or the shelf above/below sampled through a too-thin
- * gutter) and a clipped glyph edge (a quad moved or cut to whole GS pixels)
- * both show as texels that differ from the reference; painted texels
- * outside every quad are the bleed's lines past the glyph's rows. */
+ * full height: the menu rows as the title and the vibration screen draw
+ * them (size 27 and 22), v0.4.2 (package F-B) as sheet strips, the same 1x
+ * coverage whatever the output (menu_font.h).  Checked against the CPU
+ * reference of font_sheet_ps (port/render/test/sheet_ref.c): each SCENE
+ * texel whose centre lies in a strip's quad samples the page at its own
+ * position (the texel-centre convention), MODULATE with the vertex colour,
+ * blended as the GS does.  A bleed line (a neighbouring strip sampled
+ * through a too-thin gap) and a clipped edge (a quad moved or cut to whole
+ * GS pixels) both show as texels that differ from the reference; painted
+ * texels outside every quad are the bleed's lines past the strip. */
 
 #define S4 4
 #define W4 (512 * S4)
 
 typedef struct Q4 {
     float x0, y0, x1, y1; /* SCENE texels */
-    float u0, v0, u1, v1; /* atlas texels */
+    float u0, v0, u1, v1; /* page texels */
     uint32_t tex;
-    int a; /* vertex alpha, GS */
+    uint8_t rgba[4]; /* vertex colour, GS */
 } Q4;
 
 static void collectAll(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
@@ -1095,7 +1106,7 @@ static const float kRowY4[] = {165.0f * 2.0f, 175.0f * 2.0f, 185.0f * 2.0f,
                                60.0f * 2.0f,  80.0f * 2.0f,  100.0f * 2.0f};
 static const float kRowSize4[] = {27.0f, 22.0f, 22.0f, 27.0f, 27.0f, 27.0f};
 
-static void drawRows4(const uint8_t bg[4], const uint8_t col[4], unsigned flags)
+static void drawRows4(const uint8_t bg[4], const uint8_t col[4], int ink)
 {
     rd_BeginFrame();
     rd_SelectList(0);
@@ -1103,13 +1114,13 @@ static void drawRows4(const uint8_t bg[4], const uint8_t col[4], unsigned flags)
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
     rd_SelectList(11);
     for (unsigned i = 0; i < sizeof(kRows4) / sizeof(kRows4[0]); i++) {
-        ui_DrawText(320.0f, kRowY4[i], kRowSize4[i], col, kRows4[i],
-                    flags | UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        ui_DrawMenuText(320.0f, kRowY4[i], kRowSize4[i], col, kRows4[i],
+                        UI_ALIGN_CENTER | UI_VALIGN_MIDDLE, ink, NULL);
     }
     rd_EndFrame(0);
 }
 
-/* the frame's text quads in SCENE texels (XYOFFSET 2048 - 256) */
+/* the frame's strip quads in SCENE texels (XYOFFSET 2048 - 256) */
 static int textQuads4(Q4 *q, int max)
 {
     const RdFrame *f = rd__LastFrame();
@@ -1132,31 +1143,10 @@ static int textQuads4(Q4 *q, int max)
             o->u1 = v[k + 1].s / 16.0f;
             o->v1 = v[k + 1].t / 16.0f;
             o->tex = w.st[i].tex;
-            o->a = v[k + 1].rgba[3];
+            memcpy(o->rgba, v[k + 1].rgba, 4);
         }
     }
     return n;
-}
-
-/* the atlas texel's GS alpha (0..128), bilinear at (u, v) in texels with
- * texel centres at +0.5, clamped at the page's edges (the R8 page holds
- * GS alpha, rd_CreateTextureR8) */
-static float atlasAlpha(const RdTexRec *t, float u, float v)
-{
-    const float fu = u - 0.5f, fv = v - 0.5f;
-    const int iu = (int)floorf(fu), iv = (int)floorf(fv);
-    const float au = fu - (float)iu, av = fv - (float)iv;
-    float acc = 0.0f;
-    for (int j = 0; j < 2; j++) {
-        for (int i = 0; i < 2; i++) {
-            int x = iu + i, y = iv + j;
-            x = x < 0 ? 0 : (x >= (int)t->w ? (int)t->w - 1 : x);
-            y = y < 0 ? 0 : (y >= (int)t->h ? (int)t->h - 1 : y);
-            const float wgt = (i ? au : 1.0f - au) * (j ? av : 1.0f - av);
-            acc += wgt * (float)t->pixels[(size_t)y * t->w + (size_t)x];
-        }
-    }
-    return acc;
 }
 
 /* the rows' part of SCENE as a PNG beside the test */
@@ -1174,6 +1164,55 @@ static void writeCrop4(const char *name, const uint8_t *px)
     free(crop);
 }
 
+/* the reference of the frame drawRows4 drew over bg: per channel, each
+   quad's texels through sheetref_Sample with the page's style, MODULATE
+   ((texel * vertex) >> 7) and the 0x44 blend; in: inside some quad */
+static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int max)
+{
+    const int nq = textQuads4(q, max);
+    for (size_t i = 0; i < (size_t)W4 * W4; i++) {
+        for (int ch = 0; ch < 3; ch++) {
+            ref[i * 3 + (size_t)ch] = (float)bg[ch];
+        }
+        in[i] = 0;
+    }
+    for (int i = 0; i < nq; i++) {
+        const Q4 *g = &q[i];
+        const RdTexRec *t = rd__TexRec(g->tex);
+        if (!t || !t->pixels || t->format != RD_TEXEL_SHEET) {
+            CHECK(0, "4x: quad %d's sheet page", i);
+            continue;
+        }
+        const RdSheetStyle st = {t->sheet[0], t->sheet[1], t->sheet[2], t->sheet[3]};
+        for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
+            for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
+                /* rd's convention on a scaled target:
+                 * texel i of a GS pixel's block samples at GS
+                   p + (i mod s) / s, as the GS samples pixel p at p */
+                const float cx = (float)x, cy = (float)y;
+                if (x < 0 || y < 0 || x >= W4 || y >= W4 || cx < g->x0 || cx >= g->x1 ||
+                    cy < g->y0 || cy >= g->y1) {
+                    continue;
+                }
+                const float u = g->u0 + (cx - g->x0) / (g->x1 - g->x0) * (g->u1 - g->u0);
+                const float v = g->v0 + (cy - g->y0) / (g->y1 - g->y0) * (g->v1 - g->v0);
+                uint8_t texel[4];
+                sheetref_Sample(t->pixels, t->w, t->h, u / (float)t->w, v / (float)t->h, &st,
+                                texel);
+                const int as = (texel[3] * g->rgba[3]) >> 7;
+                float *d = &ref[((size_t)y * W4 + (size_t)x) * 3];
+                for (int ch = 0; ch < 3; ch++) {
+                    int cs = (texel[ch] * g->rgba[ch]) >> 7;
+                    cs = cs > 255 ? 255 : cs;
+                    d[ch] += ((float)cs - d[ch]) * (float)as / 128.0f;
+                }
+                in[(size_t)y * W4 + (size_t)x] = 1;
+            }
+        }
+    }
+    return nq;
+}
+
 static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs)
 {
     RdSettings e = *rd_GetSettings();
@@ -1187,113 +1226,62 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
     rd_SetSettings(&e);
     ui_SetScale(ui_ScaleFor(1, e.outputHeight));
 
-    /* 1: white letters, no halo, over black, against the reference */
-    const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {0x80, 0x80, 0x80, 0x80};
-    drawRows4(black, white, 0);
     uint8_t *px = malloc((size_t)W4 * W4 * 4);
-    float *ref = calloc((size_t)W4 * W4, sizeof(float));
+    float *ref = calloc((size_t)W4 * W4 * 3, sizeof(float));
     uint8_t *in = calloc((size_t)W4 * W4, 1);
     Q4 *q = malloc(sizeof(Q4) * 1024);
-    uint32_t w = 0, h = 0;
-    if (!px || !ref || !in || !q ||
-        !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h) || w != W4 ||
-        h != W4) {
-        CHECK(0, "4x SCENE readback (%ux%u)", w, h);
+    if (!px || !ref || !in || !q) {
+        CHECK(0, "4x: memory");
         goto done;
     }
-    const int nq = textQuads4(q, 1024);
-    CHECK(nq > 40, "4x: %d glyph quads", nq);
-    for (int i = 0; i < nq; i++) {
-        const Q4 *g = &q[i];
-        const RdTexRec *t = rd__TexRec(g->tex);
-        if (!t || !t->pixels) {
-            CHECK(0, "4x: quad %d's atlas page", i);
-            continue;
+    /* 1: white letters without the rim (the plain ink) over black, then
+       2: the menu look (the light ink: its rim) over a mid grey, each
+       against the reference */
+    static const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {0x80, 0x80, 0x80, 0x80};
+    static const uint8_t mid[4] = {96, 88, 76, 0x80}, light[4] = {0x70, 0x70, 0x70, 0x80};
+    for (int pass = 0; pass < 2; pass++) {
+        const uint8_t *bg = pass ? mid : black;
+        drawRows4(bg, pass ? light : white, pass ? UI_INK_LIGHT : UI_INK_PLAIN);
+        uint32_t w = 0, h = 0;
+        if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h) ||
+            w != W4 || h != W4) {
+            CHECK(0, "4x SCENE readback (%ux%u)", w, h);
+            goto done;
         }
-        for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
-            for (int x = (int)floorf(g->x0); x <= (int)ceilf(g->x1); x++) {
-                /* rd's convention on a scaled target:
-                 * texel i of a GS pixel's block samples at GS
-                   p + (i mod s) / s, as the GS samples pixel p at p */
-                const float cx = (float)x, cy = (float)y;
-                if (x < 0 || y < 0 || x >= W4 || y >= W4 || cx < g->x0 || cx >= g->x1 ||
-                    cy < g->y0 || cy >= g->y1) {
-                    continue;
-                }
-                const float u = g->u0 + (cx - g->x0) / (g->x1 - g->x0) * (g->u1 - g->u0);
-                const float v = g->v0 + (cy - g->y0) / (g->y1 - g->y0) * (g->v1 - g->v0);
-                const float as = floorf(atlasAlpha(t, u, v) + 0.5f) * (float)g->a / 128.0f;
-                float *d = &ref[(size_t)y * W4 + (size_t)x];
-                *d += (255.0f - *d) * as / 128.0f;
-                in[(size_t)y * W4 + (size_t)x] = 1;
-            }
-        }
-    }
-    int bad = 0, bleed = 0, worst = 0, inked = 0;
-    for (int y = 0; y < W4; y++) {
-        for (int x = 0; x < W4; x++) {
-            const int got = px[((size_t)y * W4 + (size_t)x) * 4];
-            const int want = (int)lrintf(ref[(size_t)y * W4 + (size_t)x]);
-            const int d = abs(got - want);
-            inked += want > 128;
-            if (!in[(size_t)y * W4 + (size_t)x]) {
-                bleed += got > 3;
-            } else if (d > 6) {
-                bad++;
-            }
-            if (d > worst) {
-                worst = d;
-            }
-        }
-    }
-    printf("ui_test: 4x (filter %d, output %u lines, atlas %g): %d quads, %d inked texels, %d off "
-           "the reference by more than 6 (worst %d), %d painted outside the quads\n",
-           (int)filter, outputHeight, (double)ui_GetScale(), nq, inked, bad, worst, bleed);
-    if (pngs) {
-        writeCrop4("ui_test_scene4x_plain.png", px);
-    }
-    CHECK(inked > 20000, "4x: %d inked texels", inked);
-    CHECK(bleed == 0, "4x: %d texels painted outside the glyph quads (bleed)", bleed);
-    CHECK(bad == 0, "4x: %d texels differ from the reference (clipped or shifted glyphs)", bad);
-
-    /* 2: the menu look (light letters, the halo) over a mid grey, for the eye:
-       a crop of the title rows, and nothing painted outside the rows' bounds
-       (the halo's margin included) */
-    const uint8_t mid[4] = {96, 88, 76, 0x80}, light[4] = {0x70, 0x70, 0x70, 0x80};
-    drawRows4(mid, light, UI_HALO);
-    if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
-        if (pngs) {
-            writeCrop4("ui_test_scene4x.png", px);
-        }
-        int outside = 0;
+        const int nq = reference4(bg, ref, in, q, 1024);
+        CHECK(nq == 6, "4x: %d strips (a row each: 6)", nq);
+        int bad = 0, bleed = 0, worst = 0, inked = 0;
         for (int y = 0; y < W4; y++) {
             for (int x = 0; x < W4; x++) {
-                const uint8_t *p = &px[((size_t)y * W4 + x) * 4];
-                if (p[0] == mid[0] && p[1] == mid[1] && p[2] == mid[2]) {
-                    continue;
+                const size_t i = (size_t)y * W4 + (size_t)x;
+                const uint8_t *p = &px[i * 4];
+                int d = 0;
+                for (int ch = 0; ch < 3; ch++) {
+                    const int want = (int)lrintf(ref[i * 3 + (size_t)ch]);
+                    const int dc = abs((int)p[ch] - want);
+                    d = dc > d ? dc : d;
                 }
-                int inside = 0;
-                for (unsigned i = 0; i < sizeof(kRows4) / sizeof(kRows4[0]) && !inside; i++) {
-                    float asc, desc, cap;
-                    ui_FontMetrics(kRowSize4[i], &asc, &desc, &cap);
-                    const float hw = ui_MeasureText(kRowSize4[i], kRows4[i]) * 0.5f;
-                    const float m = 1.5f * kRowSize4[i] / UI_MENU_TEXT_SIZE;
-                    const float base = kRowY4[i] + cap * 0.5f;
-                    const float gx0 = 320.0f - hw - m * UI_X_PER_Y - 2.0f;
-                    const float gx1 = 320.0f + hw + m * UI_X_PER_Y + 2.0f;
-                    const float gy0 = base - asc - m - 1.0f, gy1 = base + desc + m + 1.0f;
-                    /* grid to SCENE texels: x 512 / 640, y 512 / 448 GS pixels a unit */
-                    inside = x >= (int)floorf((gx0 - 320.0f) * 0.8f * S4) + W4 / 2 &&
-                             x <= (int)ceilf((gx1 - 320.0f) * 0.8f * S4) + W4 / 2 &&
-                             y >= (int)floorf((gy0 - 226.0f) * 512.0f / 448.0f * S4) + W4 / 2 &&
-                             y <= (int)ceilf((gy1 - 226.0f) * 512.0f / 448.0f * S4) + W4 / 2;
+                inked += abs((int)p[0] - (int)bg[0]) > 64;
+                if (!in[i]) {
+                    bleed += p[0] != bg[0] || p[1] != bg[1] || p[2] != bg[2];
+                } else if (d > 6) {
+                    bad++;
                 }
-                outside += !inside;
+                if (d > worst) {
+                    worst = d;
+                }
             }
         }
-        CHECK(outside == 0, "4x halo: %d texels painted outside the rows' bounds", outside);
-    } else {
-        CHECK(0, "4x SCENE readback (halo)");
+        printf("ui_test: 4x %s (filter %d, output %u lines): %d strips, %d inked texels, %d off "
+               "the reference by more than 6 (worst %d), %d painted outside the quads\n",
+               pass ? "light ink" : "plain ink", (int)filter, outputHeight, nq, inked, bad, worst,
+               bleed);
+        if (pngs) {
+            writeCrop4(pass ? "ui_test_scene4x.png" : "ui_test_scene4x_plain.png", px);
+        }
+        CHECK(inked > 20000, "4x: %d inked texels", inked);
+        CHECK(bleed == 0, "4x: %d texels painted outside the strips' quads (bleed)", bleed);
+        CHECK(bad == 0, "4x: %d texels differ from the reference (clipped or shifted strips)", bad);
     }
 done:
     free(px);
@@ -1302,49 +1290,11 @@ done:
     free(q);
 }
 
-/* a game face of two letters drawn on a sheet: I and L (font_edge_test's) */
-static int loadSyntheticFace(void)
-{
-    enum { W = 128, H = 20 };
-
-    static uint8_t sheet[W * H * 4];
-    memset(sheet, 0, sizeof(sheet));
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            uint8_t *p = sheet + ((size_t)y * W + (size_t)x) * 4;
-            p[0] = p[1] = p[2] = 255;
-            const int inI = x >= 10 && x < 12 && y >= 5 && y < 15;
-            const int inL =
-                (x >= 20 && x < 22 && y >= 5 && y < 15) || (x >= 20 && x < 26 && y >= 13 && y < 15);
-            p[3] = (inI || inL) ? 255 : 0;
-        }
-    }
-    UiGfBuilder *b = ui_GfBuilderNew();
-    if (!b) {
-        return 0;
-    }
-    UiGfSource src;
-    memset(&src, 0, sizeof(src));
-    src.rgba = sheet;
-    src.sheetW = W;
-    src.sheetH = H;
-    src.w = W;
-    src.h = H;
-    src.em = 13.5f;
-    src.capMid = 10.0f;
-    src.pitch = 15.5f;
-    src.text = "I L";
-    src.sheet = ui_GfBuilderSheet(b, "synthetic.tm2");
-    ui_GfBuilderAdd(b, &src);
-    uint8_t *blob = NULL;
-    size_t size = 0;
-    const int ok =
-        ui_GfBuilderFinish(b, 13.5f, &blob, &size, NULL) == 0 && ui_GameFaceLoad(blob, size);
-    free(blob);
-    ui_GfBuilderFree(b);
-    return ok;
-}
-
+/* The size sets (review finding 2): 40 sizes of "IHL" measured (no Arimo
+   set made) and then drawn over five frames: each draw has its own set at
+   its exact pixel size, the least recently drawn sets go and "the nearest"
+   is never reused.  (v0.4.2: the plain glyph path alone; the game face and
+   its fallback sizes are gone.) */
 static void testSizeSets(void)
 {
     enum { N = 40, PER_FRAME = 8 };
@@ -1358,14 +1308,11 @@ static void testSizeSets(void)
     const float before = ui_GetScale();
     ui_SetScale(1.0f);
     CHECK(ui_FontInit() && ui__FontSizeSets(NULL, 0) == 0, "no size set to start");
-    CHECK(loadSyntheticFace(), "the synthetic game face loads");
     float sizes[N];
     int pxs[N];
     for (int i = 0; i < N; i++) {
         sizes[i] = 8.0f + 2.0f * (float)i;
-        pxs[i] = ui__FontFallbackPx(sizes[i]);
-        CHECK(pxs[i] > 0 && (i == 0 || pxs[i] != pxs[i - 1]), "size %.0f: fallback %d px",
-              (double)sizes[i], pxs[i]);
+        pxs[i] = (int)lrintf(sizes[i]);
         CHECK(ui_MeasureText(sizes[i], "IHL") > 0.0f, "size %.0f measured", (double)sizes[i]);
     }
     CHECK(ui__FontSizeSets(NULL, 0) == 0, "measuring made %d size sets (none)",
@@ -1377,10 +1324,10 @@ static void testSizeSets(void)
         for (int k = 0; k < PER_FRAME; k++) {
             const int i = f * PER_FRAME + k;
             const float w = ui_MeasureText(sizes[i], "IHL");
-            ui_DrawText(100.0f, 100.0f, sizes[i], white, "IHL", UI_HALO);
+            ui_DrawText(100.0f, 100.0f, sizes[i], white, "IHL", 0);
             int w0 = 0, h0 = 0;
             CHECK(ui_FontPage(pxs[i], 0, &w0, &h0) != NULL && ui_FontPageTex(pxs[i], 0) != 0,
-                  "size %.0f: the H drawn from its own %d px set", (double)sizes[i], pxs[i]);
+                  "size %.0f: drawn from its own %d px set", (double)sizes[i], pxs[i]);
             CHECK(ui_MeasureText(sizes[i], "IHL") == w, "size %.0f: the measure unchanged",
                   (double)sizes[i]);
         }
@@ -1388,12 +1335,6 @@ static void testSizeSets(void)
     }
     const int live = ui__FontSizeSets(NULL, 0);
     CHECK(!ui__FontReusedNearest(), "no draw reused the nearest size (%d sets alive)", live);
-    rd_BeginFrame();
-    ui_DrawText(100.0f, 100.0f, 91.0f, white, "ILLI", UI_HALO);
-    rd_EndFrame(0);
-    CHECK(ui__FontSizeSets(NULL, 0) == live, "game letters alone made no size set (%d, %d)",
-          ui__FontSizeSets(NULL, 0), live);
-    ui_GameFaceUnload();
     ui_SetScale(before);
     rd_Shutdown();
     ui_FontForgetTextures();

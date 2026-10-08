@@ -1,19 +1,23 @@
 /*
  * port/ui/menu_text.h
  *
- * The table of the game's menu words (package P3, kept for package GFONT).
+ * The table of the game's menu words (package P3; drawn again since
+ * v0.4.2, package F-B).
  *
  * The PS2 game draws every menu word as a sprite from a pre-rendered sheet
  * (text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_0N.tm2, scei.tm2, title.tm2): a
  * texProperty row names the sheet and the texel rectangle, the layout code
- * (layout_texture.c, kanban.c) places it.  The port draws those sprites as
- * the game does, always.  This table knows, for each row whose rectangle
- * holds text, the string (strings.h, UI_STR_MT_*, the five sheets
- * transcribed) and where the lettering sits in the rectangle (the capitals'
- * size, the anchor, the line pitch), measured from the sheets: the game
- * face's builder (game_font_disc.c, game_font_build.c) cuts the letters of
- * the port's own text from those rectangles by matching them to the
- * strings.
+ * (layout_texture.c, kanban.c) places it.  This table knows, for each row
+ * whose rectangle holds text, the string (strings.h, UI_STR_MT_*, the five
+ * sheets transcribed) and where the lettering sits in the rectangle (the
+ * capitals' size, the anchor, the line pitch), measured from the sheets.
+ * The draw hooks (layout_ext.h lt_ext_DrawTextRow) draw such a row's words
+ * with Arimo in the sheets' look in place of the sprite (menu_font.h
+ * ui_MenuWordDraw), with the colour, fade, dimming and glow the game
+ * computed for the row; the texture is still transferred, so VRAM and the
+ * packets are the texture path's.  Rows the table leaves out (artwork,
+ * logos, the copyright, button glyphs, arrows, L1..R2, the subtitles) keep
+ * their texels.
  */
 #ifndef PORT_UI_MENU_TEXT_H
 #define PORT_UI_MENU_TEXT_H
@@ -26,9 +30,10 @@ extern "C" {
 
 /* The letters' fill on the sheet. */
 typedef enum UiMenuTextInk {
-    UI_INK_LIGHT = 0, /* light letters with the dark rim (the menu rows) */
+    UI_INK_LIGHT = 0, /* light letters with the dark rim (the menu rows): menu_font.c's
+                         rim and the language's levels (ui_MenuSheetInk) */
     UI_INK_DARK = 1,  /* black letters without a rim (the white panel's prompts, the
-                         save screens' slot numbers of a used file) */
+                         save screens' slot numbers of a used file); no glow */
     UI_INK_PLAIN = 2, /* white letters without a rim (the save preview's play time) */
     UI_INK_GREY = 3   /* grey letters without a rim, 151 / 255 of white (the slot
                          numbers of an empty file) */
@@ -59,6 +64,12 @@ extern const UiMenuTextItem ui_menu_text_items[];
 extern const int ui_menu_text_item_count;
 extern const UiMenuTextRow ui_menu_text_rows[];
 extern const int ui_menu_text_row_count;
+
+/* The item game row e is drawn from: NULL for a row not in the table (or
+   not a game row) and for a row whose texel rectangle is not the one the
+   table was measured on (tables that are not the PAL ones), which then
+   draws its texture. */
+const UiMenuTextItem *ui_MenuTextItemOf(const LtProperty *e);
 
 #ifdef __cplusplus
 }
