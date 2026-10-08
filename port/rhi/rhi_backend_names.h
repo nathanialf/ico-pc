@@ -76,6 +76,8 @@
 #define rhi_PresentMailbox      RHI__NAME(PresentMailbox)
 #define rhi_PresentModeName     RHI__NAME(PresentModeName)
 #define rhi_SetPipelineCachePath RHI__NAME(SetPipelineCachePath)
+#define rhi_InjectorName        RHI__NAME(InjectorName)
+#define rhi_OverlayName         RHI__NAME(OverlayName)
 /* clang-format on */
 
 #endif /* RHI_BACKEND_PREFIX */

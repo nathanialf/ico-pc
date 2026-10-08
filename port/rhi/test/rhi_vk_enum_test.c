@@ -6,9 +6,15 @@
  * Run time: each entry's `set` flag must be true, which catches an
  * enumerator added to rhi.h without a designated initializer here (C fills
  * the hole with zeroes, and zero is a valid Vulkan value for most enums).
- * Spot checks pin the mappings the GS emulation depends on. */
+ * Spot checks pin the mappings the GS emulation depends on.
+ *
+ * Package R0 (v0.5.0): rhi_backend.c's layer classifiers, compiled in with
+ * no backend linked: a table of instance layer names to the injector or
+ * overlay each is (or none), and rhi_LayerSwitchedOn over environments
+ * given as tables. */
 #include "../vk/vk_enums.h"
 #include <stdio.h>
+#include <string.h>
 
 #define COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -63,8 +69,126 @@ static int failures;
         }                                                                                          \
     } while (0)
 
+/* ------------------------------------------------ package R0's classifiers */
+static int strEq(const char *a, const char *b)
+{
+    return (a == NULL && b == NULL) || (a != NULL && b != NULL && strcmp(a, b) == 0);
+}
+
+/* the environment of one rhi_LayerSwitchedOn case: "NAME=value" pairs */
+static const char *const *s_env;
+
+static const char *tableEnv(const char *name)
+{
+    const size_t n = strlen(name);
+    for (const char *const *e = s_env; e && *e; e++) {
+        if (strncmp(*e, name, n) == 0 && (*e)[n] == '=') {
+            return *e + n + 1;
+        }
+    }
+    return NULL;
+}
+
+static void checkLayers(void)
+{
+    static const struct {
+        const char *layer, *injector, *overlay;
+    } names[] = {
+        {"VK_LAYER_reshade", "ReShade", NULL},
+        {"VK_LAYER_VKBASALT_post_processing", "vkBasalt", NULL},
+        {"VK_LAYER_VALVE_steam_overlay_64", NULL, "Steam overlay"},
+        {"VK_LAYER_VALVE_steam_overlay_32", NULL, "Steam overlay"},
+        {"VK_LAYER_VALVE_steam_overlay_", NULL, "Steam overlay"},
+        {"VK_LAYER_MESA_overlay", NULL, "Mesa overlay"},
+        /* everything else is none */
+        {"VK_LAYER_KHRONOS_validation", NULL, NULL},
+        {"VK_LAYER_MESA_device_select", NULL, NULL},
+        {"VK_LAYER_VALVE_steam_fossilize_64", NULL, NULL},
+        {"VK_LAYER_reshade_extra", NULL, NULL},
+        {"VK_LAYER_resha", NULL, NULL},
+        {"vk_layer_reshade", NULL, NULL},
+        {"VK_LAYER_MESA_overlay_x", NULL, NULL},
+        {"VK_LAYER_VALVE_steam_overla", NULL, NULL},
+        {"", NULL, NULL},
+        {NULL, NULL, NULL},
+    };
+
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        const char *inj = rhi_InjectorFromLayerName(names[i].layer);
+        const char *ov = rhi_OverlayFromLayerName(names[i].layer);
+        if (!strEq(inj, names[i].injector) || !strEq(ov, names[i].overlay)) {
+            printf("FAIL layer %s: injector %s overlay %s, expected %s and %s\n",
+                   names[i].layer ? names[i].layer : "(null)", inj ? inj : "none", ov ? ov : "none",
+                   names[i].injector ? names[i].injector : "none",
+                   names[i].overlay ? names[i].overlay : "none");
+            failures++;
+        }
+    }
+
+    static const char *const none[] = {NULL};
+    static const char *const basaltOn[] = {"ENABLE_VKBASALT=1", NULL};
+    static const char *const basaltZero[] = {"ENABLE_VKBASALT=0", NULL};
+    static const char *const loaderOn[] = {"VK_LOADER_LAYERS_ENABLE=*VKBASALT*", NULL};
+    static const char *const instance[] = {"VK_INSTANCE_LAYERS=VK_LAYER_A:VK_LAYER_MESA_overlay",
+                                           NULL};
+    static const char *const winInstance[] = {"VK_INSTANCE_LAYERS=VK_LAYER_MESA_overlay;x", NULL};
+    static const char *const allOn[] = {"VK_LOADER_LAYERS_ENABLE=~all~", NULL};
+    static const char *const explicitOn[] = {"VK_LOADER_LAYERS_ENABLE=x,~explicit~", NULL};
+    static const char *const offReshade[] = {"VK_LOADER_LAYERS_DISABLE=VK_LAYER_reshade", NULL};
+    static const char *const offImplicit[] = {"ENABLE_VKBASALT=1",
+                                              "VK_LOADER_LAYERS_DISABLE=~implicit~", NULL};
+    static const char *const offSteam[] = {"VK_LOADER_LAYERS_DISABLE=VK_LAYER_VALVE_*", NULL};
+
+    static const struct {
+        const char *layer;
+        const char *const *env;
+        bool on;
+    } envs[] = {
+        /* implicit without an enable variable: on unless disabled */
+        {"VK_LAYER_reshade", none, true},
+        {"VK_LAYER_reshade", offReshade, false},
+        {"VK_LAYER_reshade", offImplicit, false},
+        {"VK_LAYER_VALVE_steam_overlay_64", none, true},
+        {"VK_LAYER_VALVE_steam_overlay_64", offSteam, false},
+        {"VK_LAYER_VALVE_steam_overlay_64", offReshade, true},
+        /* vkBasalt: ENABLE_VKBASALT=1, or the loader's enable list */
+        {"VK_LAYER_VKBASALT_post_processing", none, false},
+        {"VK_LAYER_VKBASALT_post_processing", basaltZero, false},
+        {"VK_LAYER_VKBASALT_post_processing", basaltOn, true},
+        {"VK_LAYER_VKBASALT_post_processing", loaderOn, true},
+        {"VK_LAYER_VKBASALT_post_processing", allOn, true},
+        {"VK_LAYER_VKBASALT_post_processing", offImplicit, false},
+        /* the Mesa overlay is explicit: named in a list, or every explicit layer */
+        {"VK_LAYER_MESA_overlay", none, false},
+        {"VK_LAYER_MESA_overlay", basaltOn, false},
+        {"VK_LAYER_MESA_overlay", instance, true},
+        {"VK_LAYER_MESA_overlay", winInstance, true},
+        {"VK_LAYER_MESA_overlay", allOn, true},
+        {"VK_LAYER_MESA_overlay", explicitOn, true},
+        {"VK_LAYER_MESA_overlay", offImplicit, false},
+        /* an unknown layer is never reported */
+        {"VK_LAYER_KHRONOS_validation", allOn, false},
+        {NULL, none, false},
+    };
+
+    for (size_t i = 0; i < sizeof(envs) / sizeof(envs[0]); i++) {
+        s_env = envs[i].env;
+        if (rhi_LayerSwitchedOn(envs[i].layer, tableEnv) != envs[i].on) {
+            printf("FAIL rhi_LayerSwitchedOn(%s) case %zu: expected %s\n",
+                   envs[i].layer ? envs[i].layer : "(null)", i, envs[i].on ? "on" : "off");
+            failures++;
+        }
+    }
+    s_env = NULL;
+    if (rhi_LayerSwitchedOn("VK_LAYER_reshade", NULL)) {
+        printf("FAIL rhi_LayerSwitchedOn without an environment reader\n");
+        failures++;
+    }
+}
+
 int main(void)
 {
+    checkLayers();
     CHECK_SET(vkr_formatMap, RHI_FMT_COUNT);
     CHECK_SET(vkr_vertexFormatMap, RHI_VTX_COUNT);
     CHECK_SET(vkr_compareMap, RHI_CMP_COUNT);
@@ -137,6 +261,6 @@ int main(void)
         printf("rhi_vk_enum_test: %d failure(s)\n", failures);
         return 1;
     }
-    printf("rhi_vk_enum_test: all rhi.h enumerations map to Vulkan\n");
+    printf("rhi_vk_enum_test: all rhi.h enumerations map to Vulkan; the layer classifiers hold\n");
     return 0;
 }

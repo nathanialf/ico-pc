@@ -168,6 +168,8 @@ static void video_settings(RdSettings *rs, int w, int h)
     /* the dump is a Developer mode row: never in force without it (a
        config.toml saved with it on and Developer mode turned off by hand) */
     rs->dumpTextures = (uint8_t)(o.dumpTextures != 0 && ico_opt_developer_mode());
+    /* v0.5.0 (R1): the depth for an effects program (ReShade) */
+    rs->effectsDepth = (uint8_t)(o.effectsDepth != 0);
     /* R7b: rd presents between ticks, in both presets (F2) */
     {
         const char *e = getenv("ICO_RD_S2_LEGACY");
@@ -395,6 +397,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 rhi_Limits()->depthStencilFormatName);
         fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
+        /* v0.5.0 (R0): a program hooking the graphics API, once */
+        if (rhi_InjectorName() != NULL) {
+            fprintf(stderr,
+                    "window: an effects program is loaded (%s); see the ReShade notes in the "
+                    "docs\n",
+                    rhi_InjectorName());
+        }
+        if (rhi_OverlayName() != NULL) {
+            fprintf(stderr, "window: an overlay is loaded (%s)\n", rhi_OverlayName());
+        }
         /* v0.3.1 (P3): later changes are logged against this */
         s_videoLast = o;
     }

@@ -681,6 +681,35 @@ const char *rhi_PresentModeName(void);
  * copied.  D3D12: ignored (its drivers keep their own shader cache). */
 void rhi_SetPipelineCachePath(const char *path);
 
+/* Programs that hook the graphics API from outside (v0.5.0, package R0),
+ * for the logs and the pacing; valid after rhi_Init, NULL when none (and
+ * before rhi_Init).
+ * rhi_InjectorName: an effects program, "ReShade" or "vkBasalt".  Vulkan:
+ * an instance layer of the loader (rhi_InjectorFromLayerName) switched on
+ * (rhi_LayerSwitchedOn); ReShade's layer is implicit, loaded whenever it is
+ * installed, and ReShade itself decides whether it draws in this program.
+ * D3D12: a dxgi.dll or d3d12.dll loaded from outside the system directory
+ * (ReShade's dxgi.dll beside the program), "ReShade".
+ * rhi_OverlayName: an overlay layer, "Steam overlay" or "Mesa overlay"
+ * (Vulkan only; D3D12: NULL). */
+const char *rhi_InjectorName(void);
+const char *rhi_OverlayName(void);
+/* The classifiers behind them (pure, any backend, tests): an instance layer
+ * name to the injector or overlay it belongs to, NULL for any other layer:
+ * VK_LAYER_reshade (ReShade), VK_LAYER_VKBASALT_post_processing (vkBasalt);
+ * VK_LAYER_VALVE_steam_overlay_* (Steam overlay), VK_LAYER_MESA_overlay
+ * (Mesa overlay). */
+const char *rhi_InjectorFromLayerName(const char *layer);
+const char *rhi_OverlayFromLayerName(const char *layer);
+/* The loader lists every installed layer (implicit or explicit, switched on
+ * or not), so a listed layer is in this program only when the environment
+ * leaves it on: vkBasalt (implicit) needs ENABLE_VKBASALT=1, its manifest's
+ * enable_environment; the Mesa overlay (explicit) needs VK_INSTANCE_LAYERS
+ * or VK_LOADER_LAYERS_ENABLE to name it; VK_LOADER_LAYERS_DISABLE naming a
+ * layer switches it off.  The other layers above are implicit without an
+ * enable variable: on.  env reads a variable (getenv; a table in tests). */
+bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name));
+
 /* --------------------------------------------------- backend selection
  * (renderer wave 6, R6c.)  rhi_CreateBackend selects the backend every call
  * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the

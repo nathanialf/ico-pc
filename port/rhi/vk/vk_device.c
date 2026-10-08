@@ -156,6 +156,49 @@ static bool vkr_HasLayer(const char *name)
     return found;
 }
 
+/* v0.5.0 (package R0): the injector and the overlay among the instance
+ * layers (rhi.h rhi_InjectorName), found once after volk is up; kept out
+ * of g_vkr so rhi_Init's reset leaves them to this scan */
+static const char *s_vkrInjector, *s_vkrOverlay;
+
+static const char *vkr_Env(const char *name)
+{
+    return getenv(name);
+}
+
+static void vkr_ScanInjectors(void)
+{
+    s_vkrInjector = s_vkrOverlay = NULL;
+    uint32_t n = 0;
+    vkEnumerateInstanceLayerProperties(&n, NULL);
+    VkLayerProperties *props = calloc(n ? n : 1, sizeof(*props));
+    if (props && vkEnumerateInstanceLayerProperties(&n, props) == VK_SUCCESS) {
+        for (uint32_t i = 0; i < n; i++) {
+            const char *l = props[i].layerName;
+            if (!rhi_LayerSwitchedOn(l, vkr_Env)) {
+                continue;
+            }
+            if (!s_vkrInjector) {
+                s_vkrInjector = rhi_InjectorFromLayerName(l);
+            }
+            if (!s_vkrOverlay) {
+                s_vkrOverlay = rhi_OverlayFromLayerName(l);
+            }
+        }
+    }
+    free(props);
+}
+
+const char *rhi_InjectorName(void)
+{
+    return s_vkrInjector;
+}
+
+const char *rhi_OverlayName(void)
+{
+    return s_vkrOverlay;
+}
+
 static bool vkr_HasInstanceExt(const char *name)
 {
     uint32_t n = 0;
@@ -635,6 +678,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
         VKR_LOG("no Vulkan loader (libvulkan / vulkan-1.dll) found");
         return false;
     }
+    vkr_ScanInjectors(); /* package R0 */
     if (!vkr_CreateInstance(desc)) {
         rhi_Shutdown();
         return false;

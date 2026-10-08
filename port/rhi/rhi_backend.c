@@ -415,3 +415,122 @@ void rhi_SetPipelineCachePath(const char *path)
 {
     be()->SetPipelineCachePath(path);
 }
+
+/* v0.5.0 (package R0): the injector and the overlay, from the backend that
+ * rhi_Init brought up */
+const char *rhi_InjectorName(void)
+{
+    return s_up ? be()->InjectorName() : NULL;
+}
+
+const char *rhi_OverlayName(void)
+{
+    return s_up ? be()->OverlayName() : NULL;
+}
+
+/* ------------------------------------------- the layer classifiers (R0)
+ * The known layers: name (a trailing '*' matches any rest), the program,
+ * whether it is an overlay, whether the loader takes it as an explicit
+ * layer, and the variable an implicit one needs set to "1" (its manifest's
+ * enable_environment), NULL for none. */
+typedef struct RhiKnownLayer {
+    const char *layer, *program;
+    bool overlay, isExplicit;
+    const char *enableEnv;
+} RhiKnownLayer;
+
+static const RhiKnownLayer s_knownLayers[] = {
+    {"VK_LAYER_reshade", "ReShade", false, false, NULL},
+    {"VK_LAYER_VKBASALT_post_processing", "vkBasalt", false, false, "ENABLE_VKBASALT"},
+    {"VK_LAYER_VALVE_steam_overlay_*", "Steam overlay", true, false, NULL},
+    {"VK_LAYER_MESA_overlay", "Mesa overlay", true, true, NULL},
+};
+
+/* a glob with '*' (any run of characters) against s */
+static bool globMatch(const char *g, size_t gn, const char *s)
+{
+    while (gn && *g != '*') {
+        if (*s == '\0' || *s != *g) {
+            return false;
+        }
+        g++;
+        s++;
+        gn--;
+    }
+    if (gn == 0) {
+        return *s == '\0';
+    }
+    for (;; s++) { /* *g == '*' */
+        if (globMatch(g + 1, gn - 1, s)) {
+            return true;
+        }
+        if (*s == '\0') {
+            return false;
+        }
+    }
+}
+
+static const RhiKnownLayer *knownLayer(const char *layer)
+{
+    if (!layer) {
+        return NULL;
+    }
+    for (size_t i = 0; i < sizeof(s_knownLayers) / sizeof(s_knownLayers[0]); i++) {
+        const char *g = s_knownLayers[i].layer;
+        if (globMatch(g, strlen(g), layer)) {
+            return &s_knownLayers[i];
+        }
+    }
+    return NULL;
+}
+
+const char *rhi_InjectorFromLayerName(const char *layer)
+{
+    const RhiKnownLayer *k = knownLayer(layer);
+    return k && !k->overlay ? k->program : NULL;
+}
+
+const char *rhi_OverlayFromLayerName(const char *layer)
+{
+    const RhiKnownLayer *k = knownLayer(layer);
+    return k && k->overlay ? k->program : NULL;
+}
+
+/* list (the loader's layer list variables: separated by ',', ':' or ';')
+ * names layer: the name, a glob of it, "~all~", or "~explicit~" /
+ * "~implicit~" for its kind */
+static bool listNames(const char *list, const char *layer, bool isExplicit)
+{
+    while (list && *list) {
+        const size_t n = strcspn(list, ",:;");
+        if ((n == 5 && memcmp(list, "~all~", 5) == 0) ||
+            (n == 10 && memcmp(list, isExplicit ? "~explicit~" : "~implicit~", 10) == 0) ||
+            (n && globMatch(list, n, layer))) {
+            return true;
+        }
+        list += n;
+        list += *list != '\0';
+    }
+    return false;
+}
+
+bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name))
+{
+    const RhiKnownLayer *k = knownLayer(layer);
+    if (!k || !env) {
+        return false;
+    }
+    if (listNames(env("VK_LOADER_LAYERS_DISABLE"), layer, k->isExplicit)) {
+        return false;
+    }
+    if (k->isExplicit) {
+        return listNames(env("VK_INSTANCE_LAYERS"), layer, true) ||
+               listNames(env("VK_LOADER_LAYERS_ENABLE"), layer, true);
+    }
+    if (k->enableEnv) {
+        const char *v = env(k->enableEnv);
+        return (v && strcmp(v, "1") == 0) ||
+               listNames(env("VK_LOADER_LAYERS_ENABLE"), layer, false);
+    }
+    return true;
+}

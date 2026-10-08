@@ -216,7 +216,8 @@ if(_ico_have_vk)
     set(_ico_vk_test_env "")
     # Every rhi.h enumeration maps to a Vulkan value (static asserts plus a
     # run over the tables). Needs only the headers.
-    add_executable(rhi_vk_enum_test test/rhi_vk_enum_test.c)
+    # Package R0: with rhi_backend.c's layer classifiers (no backend linked).
+    add_executable(rhi_vk_enum_test test/rhi_vk_enum_test.c rhi_backend.c)
     target_include_directories(rhi_vk_enum_test PRIVATE "${ICO_VULKAN_INCLUDE_DIR}")
     target_compile_options(rhi_vk_enum_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 

@@ -154,6 +154,54 @@ static void dx_SetupInfoQueue(void)
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory2)(UINT, REFIID, void **);
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory1)(REFIID, void **);
 
+/* v0.5.0 (package R0): ReShade's Direct3D 12 install is a dxgi.dll (or
+ * d3d12.dll) beside the program, which LoadLibraryA finds before the
+ * system's (no SetDefaultDllDirectories).  A module whose file is outside
+ * the system directory (System32; SysWOW64 for a 32-bit program) is taken
+ * for it.  Kept outside g_dx: rhi_Shutdown keeps the modules loaded. */
+static const char *s_dxInjector;
+
+static bool dx_InSystemDir(HMODULE m)
+{
+    char file[MAX_PATH], dir[MAX_PATH];
+    const DWORD n = GetModuleFileNameA(m, file, (DWORD)sizeof(file));
+    if (n == 0 || n >= sizeof(file)) {
+        return true; /* unknown: not reported */
+    }
+    UINT(WINAPI *const dirs[2])(LPSTR, UINT) = {GetSystemDirectoryA, GetSystemWow64DirectoryA};
+    for (int i = 0; i < 2; i++) {
+        const UINT d = dirs[i](dir, (UINT)sizeof(dir));
+        if (d == 0 || d >= sizeof(dir)) {
+            continue;
+        }
+        /* the file is dir\name, case-insensitively */
+        if (n > d && _strnicmp(file, dir, d) == 0 && (file[d] == '\\' || file[d] == '/') &&
+            !strpbrk(file + d + 1, "\\/")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void dx_ScanInjector(void)
+{
+    s_dxInjector = NULL;
+    if ((g_dx.dxgiDll && !dx_InSystemDir(g_dx.dxgiDll)) ||
+        (g_dx.d3d12Dll && !dx_InSystemDir(g_dx.d3d12Dll))) {
+        s_dxInjector = "ReShade";
+    }
+}
+
+const char *rhi_InjectorName(void)
+{
+    return s_dxInjector;
+}
+
+const char *rhi_OverlayName(void)
+{
+    return NULL;
+}
+
 static bool dx_LoadRuntime(bool debug)
 {
     if (!g_dx.d3d12Dll) {
@@ -166,6 +214,7 @@ static bool dx_LoadRuntime(bool debug)
         DX_LOG("d3d12.dll or dxgi.dll not found (Windows 10 or later is required)");
         return false;
     }
+    dx_ScanInjector(); /* package R0 */
     g_dx.createDevice =
         (PFN_D3D12_CREATE_DEVICE)(void *)GetProcAddress(g_dx.d3d12Dll, "D3D12CreateDevice");
     g_dx.getDebugInterface = (PFN_D3D12_GET_DEBUG_INTERFACE)(void *)GetProcAddress(
