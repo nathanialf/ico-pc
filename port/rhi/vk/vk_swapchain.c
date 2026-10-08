@@ -300,16 +300,20 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     g_vkr.swapImageCount = n;
     g_vkr.swapAcquired = false;
     g_vkr.acquireWaitPending = false;
-    /* a line when the present mode or the image count differs from the
-       last swapchain (always the first); a window-edge drag recreates it
-       on every size without either changing */
+    /* a line when the present mode, the image count or the size differs
+       from the last swapchain (always the first); v0.4.2 N1: the size too,
+       so a log shows every rebuild the renderer's output then follows (a
+       window-edge drag prints a line per size) */
     static VkPresentModeKHR s_loggedMode;
-    static uint32_t s_loggedCount;
+    static uint32_t s_loggedCount, s_loggedW, s_loggedH;
     static bool s_logged;
-    if (!s_logged || s_loggedMode != ci.presentMode || s_loggedCount != n) {
+    if (!s_logged || s_loggedMode != ci.presentMode || s_loggedCount != n || s_loggedW != w ||
+        s_loggedH != h) {
         s_logged = true;
         s_loggedMode = ci.presentMode;
         s_loggedCount = n;
+        s_loggedW = w;
+        s_loggedH = h;
         VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
                 vkr_PresentModeName(ci.presentMode), vsync ? "on" : "off",
                 vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
@@ -478,6 +482,16 @@ RhiFormat rhi_SwapchainFormat(void)
      * released or lost, so the renderer goes on presenting to it (and
      * skips frames) rather than switching to its headless output */
     return g_vkr.surface || g_vkr.window ? g_vkr.swapRhiFormat : RHI_FMT_UNKNOWN;
+}
+
+bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+{
+    if (!g_vkr.swapchain || !g_vkr.swapWidth || !g_vkr.swapHeight) {
+        return false;
+    }
+    *w = g_vkr.swapWidth;
+    *h = g_vkr.swapHeight;
+    return true;
 }
 
 RhiTexture rhi_AcquireBackbuffer(void)

@@ -1225,6 +1225,10 @@ bool rd__ApplyDisplay(void);
  * named = its RdTargetId, -1 for a temporary target (rd_core.c). */
 void rd__TargetScaleOf(RdTargetRec *t, int named);
 bool rd__PresentAcquire(void);
+/* v0.4.2 N1: after a swapchain image is acquired (rd__PresentAcquire, the
+ * movie's acquireOut): the output size becomes the swapchain's when they
+ * differ (logged once per change; rd_OutputFollowed reports it) */
+void rd__OutputFollowSwapchain(void);
 void rd__PresentFinish(void);
 void rd__PresentShutdown(void);
 

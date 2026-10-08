@@ -309,6 +309,18 @@ static void video_apply(int force)
     }
     video_log_changes(&o);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
+    {
+        /* v0.4.2 N1: the output is the swapchain's image, which the
+           backend makes at the surface's size; where that differs from the
+           window's pixel size (Android, a resize not reported yet) the
+           swapchain's size wins, so this call never takes back what the
+           renderer followed (rd_OutputFollowed) */
+        uint32_t sw = 0, sh = 0;
+        if (rhi_SwapchainSize(&sw, &sh)) {
+            w = (int)sw;
+            h = (int)sh;
+        }
+    }
     const int mailbox = s_pres.mailbox;
     video_settings(&rs, w, h);
     rd_SetSettings(&rs);
@@ -878,7 +890,10 @@ int ico_window_pump(void)
             break;
         }
     }
-    video_apply(0); /* R7a: the Settings menu's changes */
+    /* R7a: the Settings menu's changes; v0.4.2 N1: forced when the
+       renderer's output followed a swapchain rebuilt at another size, so
+       aspect "auto" and resolution "window" follow it as on a resize */
+    video_apply(rd_OutputFollowed(NULL, NULL) ? 1 : 0);
     /* R7b: a hard camera cut or stage change the game signalled during the
        step that just ran: the frame it recorded is not blended from the
        one before (the step closes the previous frame before the game's

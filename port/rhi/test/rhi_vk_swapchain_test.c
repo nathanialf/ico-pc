@@ -10,7 +10,11 @@
  * present reporting suboptimal without a size change (a new swapchain on
  * the desktop, none on Android) and
  * one reporting the surface lost (a new surface and swapchain), through
- * the rhi_vk.h test hook.  Exit 77 when SDL has no offscreen Vulkan surface
+ * the rhi_vk.h test hook.  v0.4.2 N1: rhi_SwapchainSize reports the
+ * swapchain's size (none without a surface), and a window resized without
+ * rhi_ResizeSwapchain, then a present forced out of date, leaves a
+ * swapchain at the window's new size, which rhi_SwapchainSize reports and
+ * the next frame draws at.  Exit 77 when SDL has no offscreen Vulkan surface
  * or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
@@ -117,6 +121,13 @@ static int lifecycle(SDL_Window *win, RhiFormat fmt)
                (int)fmt);
         failures++;
     }
+    {
+        uint32_t sw = 0, sh = 0;
+        if (rhi_SwapchainSize(&sw, &sh)) {
+            printf("FAIL rhi_SwapchainSize reports %ux%u without a surface\n", sw, sh);
+            failures++;
+        }
+    }
     rhi_ReleaseSurface(); /* twice: nothing */
 
     /* the foreground: a surface and one swapchain, and frames as before */
@@ -152,6 +163,68 @@ static int lifecycle(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
+/* v0.4.2 N1: the window resized without rhi_ResizeSwapchain (an Android
+ * rotation or unfold whose size event the renderer has not seen); a present
+ * forced out of date rebuilds the swapchain at the window's size, and
+ * rhi_SwapchainSize reports it */
+static int followSize(SDL_Window *win, RhiFormat fmt)
+{
+    int failures = 0;
+    int pw = 0, ph = 0;
+    uint32_t sw = 0, sh = 0;
+    SDL_GetWindowSizeInPixels(win, &pw, &ph);
+    if (!rhi_SwapchainSize(&sw, &sh) || sw != (uint32_t)pw || sh != (uint32_t)ph) {
+        printf("FAIL rhi_SwapchainSize %ux%u, window %dx%d\n", sw, sh, pw, ph);
+        return failures + 1;
+    }
+    const uint32_t aw = sw, ah = sh, bw = 96, bh = 64;
+    SDL_SetWindowSize(win, (int)bw, (int)bh);
+    SDL_SyncWindow(win);
+    SDL_GetWindowSizeInPixels(win, &pw, &ph);
+    if ((uint32_t)pw != bw || (uint32_t)ph != bh) {
+        printf("FAIL the window is %dx%d, asked %ux%u\n", pw, ph, bw, bh);
+        return failures + 1;
+    }
+    /* a frame on the old swapchain (its own size), presented out of date */
+    rhi_WaitFrame();
+    RhiTexture bb = rhi_AcquireBackbuffer();
+    if (!bb.id) {
+        printf("FAIL no backbuffer on the old swapchain\n");
+        return failures + 1;
+    }
+    RhiCommandList cl = rhi_BeginCommands();
+    RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_CmdBarrier(cl, &b0, 1);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] = (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}};
+    rp.colorCount = 1;
+    rp.width = aw;
+    rp.height = ah;
+    rhi_CmdBeginRenderPass(cl, &rp);
+    rhi_CmdEndRenderPass(cl);
+    RhiTextureBarrier b1 = {bb, RHI_STATE_RENDER_TARGET, RHI_STATE_PRESENT};
+    rhi_CmdBarrier(cl, &b1, 1);
+    rhi_Submit(cl);
+    const uint32_t n0 = vkr_TestSwapchainCreations();
+    vkr_TestForcePresentResult(RHI_VK_TEST_OUT_OF_DATE);
+    rhi_Present();
+    if (vkr_TestSwapchainCreations() != n0 + 1) {
+        printf("FAIL out of date: %u swapchains made, expected 1\n",
+               vkr_TestSwapchainCreations() - n0);
+        failures++;
+    }
+    sw = sh = 0;
+    if (!rhi_SwapchainSize(&sw, &sh) || sw != bw || sh != bh) {
+        printf("FAIL rhi_SwapchainSize %ux%u after out of date, want %ux%u (was %ux%u)\n", sw, sh,
+               bw, bh, aw, ah);
+        failures++;
+    }
+    /* the next frames draw at the window's (and the swapchain's) size */
+    failures += frame(win, fmt, 20);
+    failures += frame(win, fmt, 21);
+    return failures;
+}
+
 static int run(SDL_Window *win)
 {
     RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test"};
@@ -180,6 +253,9 @@ static int run(SDL_Window *win)
     }
     if (!failures) {
         failures += lifecycle(win, fmt);
+    }
+    if (!failures) {
+        failures += followSize(win, fmt);
     }
     rhi_WaitIdle();
     rhi_Shutdown();

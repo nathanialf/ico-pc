@@ -112,6 +112,7 @@ static struct {
     Slot slots[ICO_MOVIE_SLOTS];
     int slotPut, slotShow;
     uint32_t decodedFrames;
+    int loggedPicture; /* the first picture's size logged */
     /* audio (mv_audiodec.c's AudioDec) */
     uint8_t hdr[ICO_PSS_AUDIO_HEADER_SIZE];
     int hdrBytes;
@@ -456,6 +457,12 @@ static void keep_frame(Slot *s, const IcoM2vFrame *f)
     size_t need = (size_t)f->w * f->h + 2 * (size_t)cw * ch;
     uint8_t *d;
 
+    if (!mv.loggedPicture) {
+        /* the decoded size beside movie_init's display area: a picture
+           larger than the area is fitted into it (rd_video.c drawPicture) */
+        mv.loggedPicture = 1;
+        ico_diag_log("fmv: picture %u x %u in a %d x %d area", f->w, f->h, mv.imageW, mv.imageH);
+    }
     if (s->cap < need) {
         uint8_t *np = realloc(s->planes, need);
         if (np == NULL) {

@@ -123,6 +123,16 @@ RhiFormat rhi_SwapchainFormat(void)
     return g_dx.swapchain ? RHI_FMT_BGRA8_UNORM : RHI_FMT_UNKNOWN;
 }
 
+bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+{
+    if (!g_dx.swapchain || g_dx.swapCount == 0 || !g_dx.swapWidth || !g_dx.swapHeight) {
+        return false;
+    }
+    *w = g_dx.swapWidth;
+    *h = g_dx.swapHeight;
+    return true;
+}
+
 RhiTexture rhi_AcquireBackbuffer(void)
 {
     RhiTexture out = {0};

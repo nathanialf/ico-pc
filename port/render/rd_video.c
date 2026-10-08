@@ -12,7 +12,9 @@
  *
  * Layout: the box is the PS2 display area (rd_VideoSetDisplay, 720 x 576 or
  * 480); a w x h picture sits in it at ((dispW - w) / 2, (dispH - h) / 2),
- * the offsets mv_videodec.c's dispSetTags used, scaled with the area.
+ * the offsets mv_videodec.c's dispSetTags used, scaled with the area.  A
+ * picture wider or taller than the area is fitted into the box on that side
+ * (drawPicture), never cut by it.
  *
  * Under the CRT filter (package C1) the films go through it as the game's
  * frames do: the picture is drawn into a target of the PS2 display area
@@ -193,6 +195,9 @@ static bool acquireOut(VideoOut *o)
                                 g_rd.settings.vsync != 0);
             o->tex = rhi_AcquireBackbuffer();
         }
+        if (o->tex.id) {
+            rd__OutputFollowSwapchain(); /* N1: the image's own size */
+        }
         o->localState = RHI_STATE_UNDEFINED;
         o->state = &o->localState;
         o->fmt = rhi_SwapchainFormat();
@@ -247,10 +252,16 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
     rhi_CmdBeginRenderPass(cl, &p);
     if (picture) {
         /* the picture's rectangle in the box, from its place in the PS2
-           display area (integer offsets as mv_videodec.c computed them) */
-        const int32_t ox = ((int32_t)s_v.dispW - (int32_t)w) >> 1;
-        const int32_t oy = ((int32_t)s_v.dispH - (int32_t)h) >> 1;
-        const float sx = (float)box->w / (float)s_v.dispW, sy = (float)box->h / (float)s_v.dispH;
+           display area (integer offsets as mv_videodec.c computed them).
+           A picture larger than the area (a 576-line film in a 480-line
+           area) is fitted: the area grows to the picture on that side, so
+           the whole picture fills the box instead of a 1.2x picture whose
+           top and bottom the box cuts. */
+        const uint32_t aw = w > s_v.dispW ? w : s_v.dispW;
+        const uint32_t ah = h > s_v.dispH ? h : s_v.dispH;
+        const int32_t ox = ((int32_t)aw - (int32_t)w) >> 1;
+        const int32_t oy = ((int32_t)ah - (int32_t)h) >> 1;
+        const float sx = (float)box->w / (float)aw, sy = (float)box->h / (float)ah;
         RhiViewport vp = {(float)box->x + (float)ox * sx,
                           (float)box->y + (float)oy * sy,
                           (float)w * sx,

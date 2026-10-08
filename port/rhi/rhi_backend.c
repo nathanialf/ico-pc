@@ -147,6 +147,11 @@ RhiFormat rhi_SwapchainFormat(void)
     return be()->SwapchainFormat();
 }
 
+bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+{
+    return be()->SwapchainSize(w, h);
+}
+
 RhiTexture rhi_AcquireBackbuffer(void)
 {
     return be()->AcquireBackbuffer();

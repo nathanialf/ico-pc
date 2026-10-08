@@ -1154,6 +1154,22 @@ static void checkBoxes(void)
     CHECK(b.w == 960 && b.h == 600 && b.y == 60, "boxes: 16:10 in 4:3");
     rd__PresentBox(960, 720, 4.0f / 3.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 960 && b.h == 720, "boxes: 4:3 in 4:3");
+    /* v0.4.2 N1: phone shapes (the movie's box is always 4:3) */
+    rd__PresentBox(2400, 1080, 4.0f / 3.0f, &b);
+    CHECK(b.x == 480 && b.y == 0 && b.w == 1440 && b.h == 1080,
+          "boxes: 4:3 in a 2400x1080 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
+    rd__PresentBox(2400, 1080, 2400.0f / 1080.0f, &b);
+    CHECK(b.x == 0 && b.y == 0 && b.w == 2400 && b.h == 1080,
+          "boxes: Auto fills a 2400x1080 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
+    rd__PresentBox(2316, 904, 2316.0f / 904.0f, &b);
+    CHECK(b.x == 0 && b.y == 0 && b.w == 2316 && b.h == 904,
+          "boxes: Auto fills a 2316x904 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
+    rd__PresentBox(2208, 1840, 4.0f / 3.0f, &b);
+    CHECK(b.x == 0 && b.y == 92 && b.w == 2208 && b.h == 1656,
+          "boxes: 4:3 in an unfolded 2208x1840 screen (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
+    rd__PresentBox(1080, 2400, 4.0f / 3.0f, &b);
+    CHECK(b.x == 0 && b.y == 795 && b.w == 1080 && b.h == 810,
+          "boxes: 4:3 in a 1080x2400 portrait phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
 }
 
 static void checkCoverage(void)

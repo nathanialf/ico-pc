@@ -235,6 +235,7 @@ bool rd__PresentAcquire(void)
         if (!s_backbuffer.id) {
             return false;
         }
+        rd__OutputFollowSwapchain(); /* N1: the image's own size */
         s_backbufferState = RHI_STATE_UNDEFINED;
         s_outFormat = rhi_SwapchainFormat();
         s_outW = g_rd.settings.outputWidth;
@@ -1318,11 +1319,10 @@ bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h)
     return rd__ReadPresent(dst, (size_t)g_rd.presentOutW * g_rd.presentOutH * 4, w, h);
 }
 
-void rd_ResizeOutput(uint32_t width, uint32_t height)
+/* the output size in the settings and the pending settings (both, so a
+ * pending rd_SetSettings does not take it back at the next rd_BeginFrame) */
+static void setOutputSize(uint32_t width, uint32_t height)
 {
-    if (!g_rd.inited || width == 0 || height == 0) {
-        return;
-    }
     g_rd.settings.outputWidth = width;
     g_rd.settings.outputHeight = height;
     if (!g_rd.settingsPending) {
@@ -1330,6 +1330,14 @@ void rd_ResizeOutput(uint32_t width, uint32_t height)
     }
     g_rd.pendingSettings.outputWidth = width;
     g_rd.pendingSettings.outputHeight = height;
+}
+
+void rd_ResizeOutput(uint32_t width, uint32_t height)
+{
+    if (!g_rd.inited || width == 0 || height == 0) {
+        return;
+    }
+    setOutputSize(width, height);
     if (g_rd.hasDevice && rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
         rhi_ResizeSwapchain(width, height, g_rd.settings.vsync != 0);
     }
@@ -1338,4 +1346,48 @@ void rd_ResizeOutput(uint32_t width, uint32_t height)
      * (rd__ApplyDisplay recreates the targets if their scale changed; a
      * fixed scale or size never changes) */
     g_rd.settingsPending = true;
+}
+
+/* v0.4.2 N1: the output follows the swapchain.  The backend rebuilds the
+ * swapchain at the surface's size on its own (rhi_SwapchainSize), and the
+ * window's size event may come later or never (Android); an output size
+ * other than the image's drew the picture and the movie's 4:3 box for the
+ * wrong size (offset, scaled, cropped).  Called with an image acquired, so
+ * the swapchain is not rebuilt again here (rd_ResizeOutput would wait for
+ * the GPU and destroy the image being drawn): only the settings change,
+ * and the scene's targets follow at the next rd_BeginFrame. */
+static bool s_followed;
+static uint32_t s_followW, s_followH;
+
+void rd__OutputFollowSwapchain(void)
+{
+    uint32_t sw = 0, sh = 0;
+    if (!g_rd.inited || !rhi_SwapchainSize(&sw, &sh) || !sw || !sh) {
+        return;
+    }
+    if (sw == g_rd.settings.outputWidth && sh == g_rd.settings.outputHeight) {
+        return;
+    }
+    fprintf(stderr, "render: output follows the swapchain %ux%u (was %ux%u)\n", sw, sh,
+            g_rd.settings.outputWidth, g_rd.settings.outputHeight);
+    setOutputSize(sw, sh);
+    g_rd.settingsPending = true;
+    s_followed = true;
+    s_followW = sw;
+    s_followH = sh;
+}
+
+bool rd_OutputFollowed(uint32_t *w, uint32_t *h)
+{
+    if (!s_followed) {
+        return false;
+    }
+    s_followed = false;
+    if (w) {
+        *w = s_followW;
+    }
+    if (h) {
+        *h = s_followH;
+    }
+    return true;
 }

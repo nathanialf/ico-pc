@@ -27,6 +27,7 @@
     X(DeviceLost)                                                                                  \
     X(ResizeSwapchain)                                                                             \
     X(SwapchainFormat)                                                                             \
+    X(SwapchainSize)                                                                               \
     X(AcquireBackbuffer)                                                                           \
     X(Present)                                                                                     \
     X(ReleaseSurface)                                                                              \

@@ -135,4 +135,28 @@ if(TARGET ico_render)
             set_tests_properties(rd_video PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
+    # v0.4.2 N1: rd on a window (SDL's offscreen driver): the output follows
+    # a swapchain the backend rebuilt at another size on its own
+    if(TARGET ico_rhi_vulkan AND TARGET SDL3::SDL3-shared)
+        add_executable(rd_video_window_test test/rd_video_window_test.c)
+        target_include_directories(rd_video_window_test PRIVATE "${CMAKE_SOURCE_DIR}/port/render"
+                                   "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/rhi")
+        target_compile_options(rd_video_window_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                               ${ICO_PORT_WARNINGS})
+        target_link_libraries(rd_video_window_test PRIVATE ico_render SDL3::SDL3-shared)
+        if(WIN32)
+            add_custom_command(TARGET rd_video_window_test POST_BUILD
+                               COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                                       "$<TARGET_FILE:SDL3::SDL3-shared>"
+                                       "$<TARGET_FILE_DIR:rd_video_window_test>"
+                               VERBATIM)
+        endif()
+        if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+            add_test(NAME rd_video_window COMMAND rd_video_window_test)
+            set_tests_properties(rd_video_window PROPERTIES SKIP_RETURN_CODE 77)
+            if(_env)
+                set_tests_properties(rd_video_window PROPERTIES ENVIRONMENT "${_env}")
+            endif()
+        endif()
+    endif()
 endif()

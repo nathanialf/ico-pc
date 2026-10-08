@@ -463,6 +463,14 @@ bool rd_FrameOpen(void);
  * swapchain and the presenter's output box at once.  Host loop only, never
  * from inside a frame's replay. */
 void rd_ResizeOutput(uint32_t width, uint32_t height);
+/* v0.4.2 N1: the backend rebuilt the swapchain at a size other than the
+ * output's (out of date, a lost or recreated surface, an Android rotation
+ * or unfold the window's events had not reported yet); the renderer's
+ * output followed it at an acquire (as rd_ResizeOutput, without a second
+ * rebuild).  True once per such change, with the new size in *w, *h (either
+ * may be NULL): the host loop then gives the size to the options that
+ * follow the window (aspect auto, resolution window). */
+bool rd_OutputFollowed(uint32_t *w, uint32_t *h);
 /* gsb_SetVSMatrix: the camera for this frame (used by Enhanced projection,
  * interpolation and the WORLD-space 2D conversion).
  * Wave 2 (R2c): called from gsb_MakeCommonMatrix, the point where the view

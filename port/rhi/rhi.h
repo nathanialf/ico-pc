@@ -509,6 +509,15 @@ bool rhi_DeviceLost(void);
 /* Swapchain.  Resize is driven by rd_present from SDL window events. */
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync);
 RhiFormat rhi_SwapchainFormat(void);
+/* The current swapchain's image size (v0.4.2 N1).  The backend rebuilds
+ * the swapchain on its own (Vulkan: out of date, an Android suboptimal
+ * present at another size, a lost or recreated surface; D3D12: a present
+ * after the window's size changed) at the surface's size, which can differ
+ * from the size the renderer last asked for; the renderer compares its
+ * output size with this one at each acquire and follows it.  False (and
+ * *w, *h left alone) when there is no swapchain (headless, the surface
+ * released). */
+bool rhi_SwapchainSize(uint32_t *w, uint32_t *h);
 /* Acquire the next backbuffer image for this frame; returns id 0 when the
  * swapchain must be recreated. */
 RhiTexture rhi_AcquireBackbuffer(void);

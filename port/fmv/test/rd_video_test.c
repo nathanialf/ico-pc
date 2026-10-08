@@ -18,6 +18,11 @@
  *            one CRT pass on the film's grid (512 triads, 288 field lines),
  *            the box shows the beam's lines, keeps the picture's light and
  *            stays black around it; off again, the plain picture
+ *   fit      (v0.4.2 N1) a 720 x 576 picture in a 720 x 480 display area
+ *            (a 576-line film under the 60 Hz video mode) at a 240 x 108
+ *            output: the picture is fitted into the 144 x 108 box, its top
+ *            band on the box's first rows and its bottom band on the last
+ *            (not the 1.2x picture the box used to cut), black around it
  *
  * Exit 77 without a device.
  */
@@ -292,6 +297,76 @@ static void testCrt(void)
     setCrt(RD_CRT_OFF, OW, OH);
 }
 
+/* ------------------------------- a picture taller than the area (N1) */
+
+#define FW 240
+#define FH 108
+
+static uint8_t s_fit[FW * FH * 4];
+
+static void testFit(void)
+{
+    enum { W = 720, H = 576, BAND = 16 };
+
+    static uint8_t y[W * H], u[(W / 2) * (H / 2)], v[(W / 2) * (H / 2)];
+    const uint32_t pitch[3] = {W, W / 2, W / 2};
+    /* three bands of luma by picture row: the top 16 rows, the middle, the
+       bottom 16 rows; neutral chroma */
+    for (int r = 0; r < H; r++) {
+        const uint8_t l = r < BAND ? 235 : r >= H - BAND ? 60 : 140;
+        memset(y + (size_t)r * W, l, W);
+    }
+    memset(u, 128, sizeof(u));
+    memset(v, 128, sizeof(v));
+    uint8_t top[3], mid[3], bot[3];
+    ipu_csc(235, 128, 128, top);
+    ipu_csc(140, 128, 128, mid);
+    ipu_csc(60, 128, 128, bot);
+
+    rd_VideoSetDisplay(720, 480);
+    setCrt(RD_CRT_OFF, FW, FH);
+    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "fit: frame");
+    uint32_t ow = 0, oh = 0;
+    if (!rd__ReadPresent(s_fit, sizeof(s_fit), &ow, &oh) || ow != FW || oh != FH) {
+        printf("FAIL: fit readback (%u x %u)\n", ow, oh);
+        failures++;
+    } else {
+        /* the box: 144 x 108 at x 48 (rd__PresentBox 4:3); the picture's
+           576 rows at 108/576 = 0.1875 output rows each: the top band on
+           rows 0-2, the middle on 3-104, the bottom band on 105-107 (at the
+           old 108/480 scale the top band sat above the box, cut away) */
+        int badTop = 0, badMid = 0, badBot = 0, badBar = 0;
+        for (int py = 0; py < FH; py++) {
+            const uint8_t *want = py < 3 ? top : py >= FH - 3 ? bot : mid;
+            for (int px = 0; px < FW; px++) {
+                const uint8_t *p = s_fit + (py * FW + px) * 4;
+                if (px < 48 || px >= 48 + 144) {
+                    badBar += (p[0] | p[1] | p[2]) != 0;
+                } else if (p[0] != want[0] || p[1] != want[1] || p[2] != want[2]) {
+                    if (py < 3) {
+                        badTop++;
+                    } else if (py >= FH - 3) {
+                        badBot++;
+                    } else {
+                        badMid++;
+                    }
+                }
+            }
+        }
+        const uint8_t *r0 = s_fit + (0 * FW + 120) * 4, *rl = s_fit + ((FH - 1) * FW + 120) * 4;
+        printf("fit: row 0 %u %u %u (want %u), row %d %u %u %u (want %u)\n", r0[0], r0[1], r0[2],
+               top[0], FH - 1, rl[0], rl[1], rl[2], bot[0]);
+        CHECK(badTop == 0, "fit: the picture's top rows are not on the box's first rows (%d px)",
+              badTop);
+        CHECK(badBot == 0, "fit: the picture's bottom rows are not on the box's last rows (%d px)",
+              badBot);
+        CHECK(badMid == 0, "fit: %d middle pixels differ (the picture is not scaled 108/576)",
+              badMid);
+        CHECK(badBar == 0, "fit: %d pixels lit outside the 4:3 box", badBar);
+    }
+    setCrt(RD_CRT_OFF, OW, OH);
+}
+
 int main(void)
 {
     RdSettings s;
@@ -309,6 +384,7 @@ int main(void)
     testRamp();
     testMirror();
     testCrt();
+    testFit();
     rd_VideoShutdown();
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%u validation errors", verr);
