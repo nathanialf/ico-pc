@@ -8,13 +8,14 @@
  * game draws from.  Triangle, Circle or Start go back to the pause menu
  * with the cursor on the row.  The help panel (the HUD) is drawn on the
  * presentation overlay, never in the game's frame, so a capture never shows
- * it.  It shows a button's picture beside each action (glyphs.h), or your
- * keys once a key or the mouse was the last thing you pressed.
+ * it.  Beside each action it shows the button's picture from the game's own
+ * button sheets (layout_ext.h's glyphs, the textures the menus draw them
+ * from) or, for a button the sheets have no picture of (the sticks, L3, R3,
+ * Up, Down, Select), its name; once a key or the mouse was the last thing
+ * you pressed, your keys' names in square brackets instead.
  */
 #ifndef PORT_UI_PHOTO_UI_H
 #define PORT_UI_PHOTO_UI_H
-
-#include "glyphs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,17 +49,19 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx);
 #define UI_PHOTO_HUD_ROOM (640.0f - 2.0f * UI_PHOTO_HUD_X)
 #define UI_HUD_LINES 5
 #define UI_HUD_ITEMS 24
-#define UI_HUD_ICONS 4
+#define UI_HUD_ICONS 2
 #define UI_HUD_KEYS 24
 
-/* One picture: a button's (key NULL) or a key cap naming the key. */
+/* One button: a picture from the game's sheets (glyph, an LtExtGlyph) or,
+   glyph -1, its name in the menu font (a button with no picture, or your
+   key in square brackets: "[Space]", "[W A S D]"). */
 typedef struct UiHudIcon {
-    UiBtnGlyph glyph;
-    const char *key;
+    int glyph;
+    const char *word;
 } UiHudIcon;
 
-/* Pictures, then a word: "[Up][Down] rise and sink".  A line's items run
-   left to right; a stick on the keyboard is four key caps. */
+/* Buttons, then the action: the L1 and R1 pictures, then "roll".  A
+   line's items run left to right. */
 typedef struct UiHudItem {
     int line;
     int nicon;
@@ -70,7 +73,7 @@ typedef struct UiHudSet {
     int n;
     int nkeys;
     UiHudItem item[UI_HUD_ITEMS];
-    char keys[UI_HUD_KEYS][24];
+    char keys[UI_HUD_KEYS][112];
 } UiHudSet;
 
 /* Where one item lies, in grid units from the panel's left edge. */
@@ -82,7 +85,7 @@ typedef struct UiHudPlaced {
 
 /* The items for the camera in use; keyboard names the keys from the live
    bindings (the first key, else the first mouse button, else the pad's
-   picture); title and fov are the first and last lines. */
+   button); title and fov are the first and last lines. */
 void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *title,
                        const char *fov);
 /* Places the items at the text size; gaps between a line's items squeeze

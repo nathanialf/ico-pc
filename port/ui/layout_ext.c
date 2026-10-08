@@ -286,7 +286,14 @@ int lt_ext_GlyphTexNo(const LtProperty *e)
     if (!lt_ext_IsGlyphRow(e)) {
         return -1;
     }
-    int g = s_rows[e - s_props].glyph;
+    return lt_ext_GlyphTexture(s_rows[e - s_props].glyph);
+}
+
+int lt_ext_GlyphTexture(int g)
+{
+    if (g < 0 || g >= LT_GLYPH_COUNT) {
+        return -1;
+    }
     const LtProperty *src = &texProperty[kGlyph[g].row];
     if (src->texU != kGlyph[g].u || src->texV != kGlyph[g].v || src->texW != kGlyph[g].w ||
         src->texH != kGlyph[g].h || src->texNo < 0) {

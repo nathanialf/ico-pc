@@ -95,9 +95,11 @@ Press L3 again to go back to the free camera. Select puts back only the
 camera you are using.
 
 The help panel at the bottom tells you which camera you are using and its
-speed, and shows a small picture of each button beside what it does. If you
-play on the keyboard, it shows your keys instead of the pictures (the
-panel changes as soon as you press a key or a mouse button). When you hide
+speed, and shows each button beside what it does: the game's own button
+pictures, and the names of the buttons it has no picture for (the sticks,
+L3, R3, Up, Down and Select). If you play on the keyboard, it shows the
+names of your keys instead, like [Space] (the panel changes as soon as
+you press a key or a mouse button). When you hide
 it with Square, the game remembers, and photo mode opens with the panel
 hidden next time too. Press Square again to show it.
 

@@ -113,6 +113,9 @@ void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);
    its game row), -1 when the tables are not the PAL ones */
 int lt_ext_IsGlyphRow(const LtProperty *e);
 int lt_ext_GlyphTexNo(const LtProperty *e);
+/* the same for a glyph by itself (the photo panel draws the glyphs on the
+   presentation overlay from that texture) */
+int lt_ext_GlyphTexture(int glyph);
 /* The PAL texProperty row a glyph is drawn from and its texel rectangle
    (u, v, w, h), for tests that build fake tables. */
 int lt_ext_GlyphSource(int glyph, int uvwh[4]);

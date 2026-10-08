@@ -21,6 +21,10 @@
 #ifdef ICO_RD
 #include "input.h"
 #include "rd.h"
+#include "ui_internal.h" /* ui__DrawTexQuads */
+
+/* seki/src/Texture.c: the rd texture of a texture table entry (0: none) */
+extern unsigned int tex_HostTextureId(int idx);
 #endif
 
 /* the game's side */
@@ -168,156 +172,174 @@ static void hudTitle(char *buf, size_t size, const IcoPhotoState *st)
 
 /* ---------------------------------------- the panel's items */
 
-/* the binding target a button picture stands for (the stick pictures
-   stand for four, up, left, down, right) */
-static int targetOf(UiBtnGlyph g)
-{
-    switch (g) {
-    case UI_BTN_UP:
-        return ICO_T_UP;
-    case UI_BTN_DOWN:
-        return ICO_T_DOWN;
-    case UI_BTN_LEFT:
-        return ICO_T_LEFT;
-    case UI_BTN_RIGHT:
-        return ICO_T_RIGHT;
-    case UI_BTN_CROSS:
-        return ICO_T_CROSS;
-    case UI_BTN_CIRCLE:
-        return ICO_T_CIRCLE;
-    case UI_BTN_SQUARE:
-        return ICO_T_SQUARE;
-    case UI_BTN_TRIANGLE:
-        return ICO_T_TRIANGLE;
-    case UI_BTN_L1:
-        return ICO_T_L1;
-    case UI_BTN_R1:
-        return ICO_T_R1;
-    case UI_BTN_L2:
-        return ICO_T_L2;
-    case UI_BTN_R2:
-        return ICO_T_R2;
-    case UI_BTN_L3:
-        return ICO_T_L3;
-    case UI_BTN_R3:
-        return ICO_T_R3;
-    case UI_BTN_SELECT:
-        return ICO_T_SELECT;
-    case UI_BTN_START:
-        return ICO_T_START;
-    default:
-        return -1;
-    }
-}
+/* the buttons the panel names */
+typedef enum HudBtn {
+    BTN_LSTICK,
+    BTN_RSTICK,
+    BTN_UP,
+    BTN_DOWN,
+    BTN_L1,
+    BTN_R1,
+    BTN_L2,
+    BTN_R2,
+    BTN_L3,
+    BTN_R3,
+    BTN_SELECT,
+    BTN_CROSS,
+    BTN_SQUARE,
+    BTN_TRIANGLE,
+    BTN_NONE
+} HudBtn;
+
+/* each button's picture on the game's sheets (-1: none), its name (a
+   string, else a literal: the sheets' L1 .. R2 say the same) for when it
+   has no picture or the loaded tables are not the PAL ones, and the
+   binding target it stands for (a stick: its up; the four follow) */
+static const struct {
+    int glyph;
+    int str;
+    const char *literal;
+    int target;
+} kBtn[BTN_NONE] = {
+    {-1, UI_STR_STICK_LEFT, NULL, ICO_T_LSTICK_UP},
+    {-1, UI_STR_STICK_RIGHT, NULL, ICO_T_RSTICK_UP},
+    {-1, UI_STR_PHOTO_UP, NULL, ICO_T_UP},
+    {-1, UI_STR_PHOTO_DOWN, NULL, ICO_T_DOWN},
+    {LT_GLYPH_L1, -1, "L1", ICO_T_L1},
+    {LT_GLYPH_R1, -1, "R1", ICO_T_R1},
+    {LT_GLYPH_L2, -1, "L2", ICO_T_L2},
+    {LT_GLYPH_R2, -1, "R2", ICO_T_R2},
+    {-1, -1, "L3", ICO_T_L3},
+    {-1, -1, "R3", ICO_T_R3},
+    {-1, UI_STR_BTN_SELECT, NULL, ICO_T_SELECT},
+    {LT_GLYPH_CROSS, UI_STR_BTN_CROSS, NULL, ICO_T_CROSS},
+    {LT_GLYPH_SQUARE, UI_STR_BTN_SQUARE, NULL, ICO_T_SQUARE},
+    {LT_GLYPH_TRIANGLE, UI_STR_BTN_TRIANGLE, NULL, ICO_T_TRIANGLE},
+};
 
 /* the name of the first key (or else the first mouse button) bound to
-   target, stored in the set; NULL when neither device has one */
-static const char *keyNameFor(UiHudSet *set, int target)
+   target, into out; 0 when neither device has one */
+static int keyName(int target, char *out, size_t size)
 {
     static const int kinds[2] = {ICO_SRC_KEY, ICO_SRC_MOUSE};
     char row[64];
 
-    for (int k = 0; k < 2 && target >= 0 && set->nkeys < UI_HUD_KEYS; k++) {
+    for (int k = 0; k < 2; k++) {
         const char *t = ico_bindings_row_text(ico_input_live_bindings(), kinds[k], target, row,
                                               (unsigned)sizeof(row));
         if (!t || t[0] == '\0' || strcmp(t, "none") == 0) {
             continue;
         }
-        char *dst = set->keys[set->nkeys];
         const char *comma = strchr(t, ',');
-        const size_t len = comma ? (size_t)(comma - t) : strlen(t);
+        const int len = (int)(comma ? (size_t)(comma - t) : strlen(t));
         if (k == 1) {
-            snprintf(dst, sizeof(set->keys[0]), "%s %.*s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX),
-                     (int)len, t);
+            snprintf(out, size, "%s %.*s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX), len, t);
         } else {
-            snprintf(dst, sizeof(set->keys[0]), "%.*s", (int)len, t);
+            snprintf(out, size, "%.*s", len, t);
         }
-        set->nkeys++;
-        return dst;
+        return 1;
     }
-    return NULL;
+    return 0;
 }
 
-static void addIcon(UiHudSet *set, UiHudItem *it, UiBtnGlyph g, int keyboard)
+/* your key for button b in square brackets, stored in the set ("[W A S D]"
+   for a stick: up, left, down, right); NULL when one is missing */
+static const char *keysFor(UiHudSet *set, HudBtn b)
+{
+    if (set->nkeys >= UI_HUD_KEYS) {
+        return NULL;
+    }
+    char *dst = set->keys[set->nkeys];
+    const size_t size = sizeof(set->keys[0]);
+    char name[4][24];
+    if (b == BTN_LSTICK || b == BTN_RSTICK) {
+        /* the targets run up, down, left, right */
+        static const int order[4] = {0, 2, 1, 3};
+        for (int i = 0; i < 4; i++) {
+            if (!keyName(kBtn[b].target + order[i], name[i], sizeof(name[i]))) {
+                return NULL;
+            }
+        }
+        snprintf(dst, size, "[%s %s %s %s]", name[0], name[1], name[2], name[3]);
+    } else {
+        if (!keyName(kBtn[b].target, name[0], sizeof(name[0]))) {
+            return NULL;
+        }
+        snprintf(dst, size, "[%s]", name[0]);
+    }
+    set->nkeys++;
+    return dst;
+}
+
+static void addIcon(UiHudSet *set, UiHudItem *it, HudBtn b, int keyboard)
 {
     if (it->nicon >= UI_HUD_ICONS) {
         return;
     }
-    if (keyboard && (g == UI_BTN_LSTICK || g == UI_BTN_RSTICK) && set->nkeys + 4 <= UI_HUD_KEYS &&
-        it->nicon + 4 <= UI_HUD_ICONS) {
-        /* four caps, up, left, down, right (W A S D) */
-        const int base = g == UI_BTN_LSTICK ? ICO_T_LSTICK_UP : ICO_T_RSTICK_UP;
-        const int order[4] = {0, 2, 1, 3}; /* the enum runs up, down, left, right */
-        const char *name[4];
-        const int mark = set->nkeys;
-        int ok = 1;
-        for (int i = 0; i < 4 && ok; i++) {
-            name[i] = keyNameFor(set, base + order[i]);
-            ok = name[i] != NULL;
-        }
-        if (ok) {
-            for (int i = 0; i < 4; i++) {
-                it->icon[it->nicon].glyph = g;
-                it->icon[it->nicon++].key = name[i];
-            }
-            return;
-        }
-        set->nkeys = mark;
-    } else if (keyboard && targetOf(g) >= 0) {
-        const char *name = keyNameFor(set, targetOf(g));
-        if (name) {
-            it->icon[it->nicon].glyph = g;
-            it->icon[it->nicon++].key = name;
-            return;
-        }
+    UiHudIcon *ic = &it->icon[it->nicon++];
+    ic->glyph = -1;
+    ic->word = keyboard ? keysFor(set, b) : NULL;
+    if (ic->word) {
+        return;
     }
-    it->icon[it->nicon].glyph = g;
-    it->icon[it->nicon++].key = NULL;
+    if (kBtn[b].glyph >= 0 && lt_ext_GlyphTexture(kBtn[b].glyph) >= 0) {
+        ic->glyph = kBtn[b].glyph;
+        return;
+    }
+    ic->word = kBtn[b].str >= 0 ? ui_Str((UiStrId)kBtn[b].str) : kBtn[b].literal;
 }
 
-static UiHudItem *addItem(UiHudSet *set, int line, UiStrId word, UiBtnGlyph a, UiBtnGlyph b,
-                          int keyboard)
+static void addItem(UiHudSet *set, int line, UiStrId word, HudBtn a, HudBtn b, int keyboard)
 {
     if (set->n >= UI_HUD_ITEMS) {
-        return NULL;
+        return;
     }
     UiHudItem *it = &set->item[set->n++];
     memset(it, 0, sizeof(*it));
     it->line = line;
     it->text = ui_Str(word);
     addIcon(set, it, a, keyboard);
-    if (b != UI_BTN_COUNT) {
+    if (b != BTN_NONE) {
         addIcon(set, it, b, keyboard);
     }
-    return it;
 }
 
 void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *title, const char *fov)
 {
-    const UiBtnGlyph none = UI_BTN_COUNT;
-
     memset(set, 0, sizeof(*set));
     set->item[set->n].line = 0;
     set->item[set->n++].text = title;
     if (freeCam) {
-        addItem(set, 1, UI_STR_PHOTO_ACT_MOVE, UI_BTN_LSTICK, none, keyboard);
-        addItem(set, 1, UI_STR_PHOTO_ACT_LOOK, UI_BTN_RSTICK, none, keyboard);
-        addItem(set, 1, UI_STR_PHOTO_ACT_RISE, UI_BTN_UP, UI_BTN_DOWN, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_MOVE, BTN_LSTICK, BTN_NONE, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_LOOK, BTN_RSTICK, BTN_NONE, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_RISE, BTN_UP, BTN_DOWN, keyboard);
     } else {
-        addItem(set, 1, UI_STR_PHOTO_ACT_CIRCLE, UI_BTN_LSTICK, none, keyboard);
-        addItem(set, 1, UI_STR_PHOTO_ACT_NEARFAR, UI_BTN_RSTICK, none, keyboard);
-        addItem(set, 1, UI_STR_PHOTO_ACT_ZOOM, UI_BTN_UP, UI_BTN_DOWN, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_CIRCLE, BTN_LSTICK, BTN_NONE, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_NEARFAR, BTN_RSTICK, BTN_NONE, keyboard);
+        addItem(set, 1, UI_STR_PHOTO_ACT_ZOOM, BTN_UP, BTN_DOWN, keyboard);
     }
-    addItem(set, 2, UI_STR_PHOTO_ACT_ROLL, UI_BTN_L1, UI_BTN_R1, keyboard);
-    addItem(set, 2, UI_STR_PHOTO_ACT_ZOOM, UI_BTN_L2, UI_BTN_R2, keyboard);
-    addItem(set, 2, UI_STR_PHOTO_ACT_SWITCH, UI_BTN_L3, none, keyboard);
-    addItem(set, 2, UI_STR_PHOTO_ACT_SPEED, UI_BTN_R3, none, keyboard);
-    addItem(set, 2, UI_STR_PHOTO_ACT_RESET, UI_BTN_SELECT, none, keyboard);
-    addItem(set, 3, UI_STR_PHOTO_ACT_SAVE, UI_BTN_CROSS, none, keyboard);
-    addItem(set, 3, UI_STR_PHOTO_ACT_HIDE, UI_BTN_SQUARE, none, keyboard);
-    addItem(set, 3, UI_STR_PHOTO_ACT_BACK, UI_BTN_TRIANGLE, none, keyboard);
+    addItem(set, 2, UI_STR_PHOTO_ACT_ROLL, BTN_L1, BTN_R1, keyboard);
+    addItem(set, 2, UI_STR_PHOTO_ACT_ZOOM, BTN_L2, BTN_R2, keyboard);
+    addItem(set, 2, UI_STR_PHOTO_ACT_SWITCH, BTN_L3, BTN_NONE, keyboard);
+    addItem(set, 2, UI_STR_PHOTO_ACT_SPEED, BTN_R3, BTN_NONE, keyboard);
+    addItem(set, 2, UI_STR_PHOTO_ACT_RESET, BTN_SELECT, BTN_NONE, keyboard);
+    addItem(set, 3, UI_STR_PHOTO_ACT_SAVE, BTN_CROSS, BTN_NONE, keyboard);
+    addItem(set, 3, UI_STR_PHOTO_ACT_HIDE, BTN_SQUARE, BTN_NONE, keyboard);
+    addItem(set, 3, UI_STR_PHOTO_ACT_BACK, BTN_TRIANGLE, BTN_NONE, keyboard);
     set->item[set->n].line = 4;
     set->item[set->n++].text = fov;
+}
+
+/* an icon's width at size: a picture's box beside a label of that em (the
+   game's own pairing, layout_ext.h lt_ext_GlyphBox), else its word's */
+static float iconWidth(const UiHudIcon *ic, float size)
+{
+    if (ic->glyph >= 0) {
+        int w = 0;
+        lt_ext_GlyphBox(ic->glyph, size, &w, NULL);
+        return (float)w;
+    }
+    return ic->word && ic->word[0] ? ui_MeasureMenuText(size, ic->word) : 0.0f;
 }
 
 /* the gaps, in sizes: between an item's pictures, picture to word, item to
@@ -343,8 +365,7 @@ float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, 
             }
             float iw = 0.0f;
             for (int k = 0; k < items[i].nicon; k++) {
-                const float cw = items[i].icon[k].key ? ui_KeyCapWidth(items[i].icon[k].key, size)
-                                                      : ui_GlyphWidth(items[i].icon[k].glyph, size);
+                const float cw = iconWidth(&items[i].icon[k], size);
                 out[i].iconW[k] = cw;
                 iw += cw + (k > 0 ? GAP_ICON * size : 0.0f);
             }
@@ -398,6 +419,34 @@ float ui__PhotoHudFit(const UiHudItem *items, int n, float *size, float room, Ui
     }
     return w;
 }
+
+/* one picture of the game's button sheets, its box's left edge at x and its
+   middle on mid (grid units): the texture the menus draw it from (the
+   table's texNo, layout_ext.h lt_ext_GlyphTexture) magnified onto the
+   output with bilinear filtering as the menus' text is, the texel
+   rectangle half a texel in on each side as display_texture samples it */
+static void hudGlyph(int glyph, float x, float mid, float size)
+{
+    const int no = lt_ext_GlyphTexture(glyph);
+    const unsigned tex = no >= 0 ? tex_HostTextureId(no) : 0u;
+    if (!tex) {
+        return;
+    }
+    int uvwh[4], w = 0, h = 0;
+    lt_ext_GlyphSource(glyph, uvwh);
+    lt_ext_GlyphBox(glyph, size, &w, &h);
+    UiTexQuad q;
+    q.x0 = x;
+    q.x1 = x + (float)w;
+    q.y0 = mid - (float)h * 0.5f;
+    q.y1 = q.y0 + (float)h;
+    q.u0 = (float)uvwh[0] + 0.5f;
+    q.v0 = (float)uvwh[1] + 0.5f;
+    q.u1 = (float)(uvwh[0] + uvwh[2]) - 0.5f;
+    q.v1 = (float)(uvwh[1] + uvwh[3]) - 0.5f;
+    static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
+    ui__DrawTexQuads(tex, &q, 1, grey, 0, NULL, 0);
+}
 #endif
 
 void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
@@ -419,7 +468,7 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     char title[160];
     hudTitle(title, sizeof(title), &st);
     /* your keys once a key or the mouse was the last thing pressed, the
-       pad's pictures before that */
+       pad's buttons before that */
     int kind = ICO_SRC_NONE;
     ico_input_last_press(&kind, NULL);
     static UiHudSet set;
@@ -437,30 +486,18 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     ui_DrawRect(HUD_X - 8.0f, top - 6.0f, HUD_X + w + 8.0f, HUD_BOTTOM + 4.0f, panel);
     static const uint8_t titleCol[4] = {0x80, 0x7C, 0x70, 0x80}, body[4] = {0x6A, 0x68, 0x62, 0x80},
                          pic[4] = {0x7A, 0x78, 0x70, 0x80};
-    /* the pictures in the overlay's grid, mapped to the output as the text is */
-    float ax, ay, bx, by;
-    ui_OverlayMap(0.0f, 0.0f, &ax, &ay);
-    ui_OverlayMap(1.0f, 1.0f, &bx, &by);
-    UiGlyphXf xf;
-    xf.kx = (bx - ax) / 16.0f;
-    xf.ky = (by - ay) / 16.0f;
-    xf.ox = ax / 16.0f;
-    xf.oy = ay / 16.0f;
-    xf.maxX = (float)(ctx->outW < 4095u ? ctx->outW : 4095u) * 16.0f;
-    xf.maxY = (float)(ctx->outH < 4095u ? ctx->outH : 4095u) * 16.0f;
-    xf.opacity = 1.0f;
-    ui_GlyphBegin(&xf);
     float asc, desc, cap;
     ui_MenuFontMetrics(size, &asc, &desc, &cap);
     for (int i = 0; i < set.n; i++) {
         const UiHudItem *it = &set.item[i];
         const float mid = top + (float)it->line * HUD_PITCH + asc - cap * 0.5f;
         for (int k = 0; k < it->nicon; k++) {
-            const float cx = HUD_X + at[i].iconX[k] + at[i].iconW[k] * 0.5f;
-            if (it->icon[k].key) {
-                ui_DrawKeyCap(it->icon[k].key, cx, mid, size, pic);
-            } else {
-                ui_DrawButtonGlyph(it->icon[k].glyph, cx, mid, size, pic);
+            const UiHudIcon *ic = &it->icon[k];
+            if (ic->glyph >= 0) {
+                hudGlyph(ic->glyph, HUD_X + at[i].iconX[k], mid, size);
+            } else if (ic->word && ic->word[0]) {
+                ui_DrawMenuText(HUD_X + at[i].iconX[k], mid, size, pic, ic->word, UI_VALIGN_MIDDLE,
+                                UI_INK_LIGHT, NULL);
             }
         }
         if (it->text && it->text[0]) {
@@ -469,7 +506,6 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
                             it->text, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
         }
     }
-    ui_GlyphFlush();
     ui_EndOverlay();
 #else
     (void)ctx;

@@ -3799,8 +3799,8 @@ static void snap4(const char *name)
 
 /* The button glyphs' sheets: no disc data here, so drawn stand-ins with the
    real sheets' layout (buttons.tm2's triangle, square, circle and cross in
-   32 x 30 cells; menu_PAL_01 / 02's L1, R1 and the value arrows at their
-   rectangles), bound by tex_TransTexture through a TEX0 the resolver maps:
+   32 x 30 cells; menu_PAL_01 / 02's L1, R1, L2, R2 and the value arrows at
+   their rectangles), bound by tex_TransTexture through a TEX0 the resolver maps:
    the snapshots show where and how large the glyphs are, the window build's
    dumps show the game's own. */
 #define FAKE_TBP 0x1000
@@ -3856,10 +3856,12 @@ static void makeSheets(void)
     }
     segment(b, 64, 38, 35, 58, 55, 3, blue);
     segment(b, 64, 58, 35, 38, 55, 3, blue);
-    /* L1 (420, 240) and R1 (340, 240), 40 x 15: the letters as strokes */
-    for (int k = 0; k < 2; k++) {
-        float x = k == 0 ? 428.0f : 348.0f;
-        if (k == 0) {
+    /* L1 (420, 240), R1 (340, 240), L2 (460, 240) and R2 (380, 240), 40 x 15:
+       the letters as strokes */
+    for (int k = 0; k < 4; k++) {
+        static const float xs[4] = {428.0f, 348.0f, 468.0f, 388.0f};
+        const float x = xs[k];
+        if (k == 0 || k == 2) {
             segment(m, 512, x, 242, x, 252, 2, white); /* L */
             segment(m, 512, x, 252, x + 7, 252, 2, white);
         } else {
@@ -3869,8 +3871,16 @@ static void makeSheets(void)
             segment(m, 512, x + 6, 247, x, 247, 2, white);
             segment(m, 512, x + 2, 247, x + 7, 252, 2, white);
         }
-        segment(m, 512, x + 14, 244, x + 17, 242, 2, white); /* 1 */
-        segment(m, 512, x + 17, 242, x + 17, 252, 2, white);
+        if (k < 2) {
+            segment(m, 512, x + 14, 244, x + 17, 242, 2, white); /* 1 */
+            segment(m, 512, x + 17, 242, x + 17, 252, 2, white);
+        } else {
+            segment(m, 512, x + 13, 242, x + 19, 242, 2, white); /* 2 */
+            segment(m, 512, x + 19, 242, x + 19, 247, 2, white);
+            segment(m, 512, x + 19, 247, x + 13, 247, 2, white);
+            segment(m, 512, x + 13, 247, x + 13, 252, 2, white);
+            segment(m, 512, x + 13, 252, x + 19, 252, 2, white);
+        }
     }
     /* the value arrows (490, 130) and (490, 150), 20 x 20 */
     segment(m, 512, 504, 133, 496, 140, 2, white);
@@ -3886,6 +3896,14 @@ static void makeSheets(void)
     segment(m, 512, 392, 124, 468, 136, 2, red);
     s_sheet[0] = rd_CreateTexture(64, 64, b, RD_TEXA_80_80, "settings_render buttons");
     s_sheet[1] = rd_CreateTexture(512, 256, m, RD_TEXA_80_80, "settings_render menu sheet");
+}
+
+/* seki/src/Texture.c (the photo panel's pictures, photo_ui.c): the fake
+   tables' texture numbers 1 (buttons.tm2) and 2, 3 (menu_PAL_02, 01) are
+   the stand-in sheets */
+unsigned int tex_HostTextureId(int idx)
+{
+    return idx == 1 ? s_sheet[0].id : idx == 2 || idx == 3 ? s_sheet[1].id : 0u;
 }
 
 static RdTex sheetResolve(unsigned long long tex0, int list)
@@ -4058,29 +4076,38 @@ static int menuTextDraws(void)
 }
 
 /* what the overlay is given while the panel draws: the sprites (the panel's
-   rectangle first, then the words) and the pictures' triangles */
+   rectangle first, then the words and the sheets' pictures), with each
+   vertex's texture */
 static RdScreenVtx s_pv[4096];
-static RdPrim s_pt[4096]; /* each vertex's primitive */
+static uint32_t s_ptex[4096];
 static uint32_t s_pn;
 
 static void panelSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
 {
-    (void)tex;
+    (void)type;
     (void)blend;
     for (uint32_t i = 0; i < n && s_pn < 4096; i++) {
-        s_pt[s_pn] = type;
+        s_ptex[s_pn] = tex.id;
         s_pv[s_pn++] = v[i];
     }
 }
 
-static void glyphSink(const RdScreenVtx *v, uint32_t n)
+/* the texture of a button picture in the panel: one of the stand-in sheets */
+static int isSheet(uint32_t tex)
 {
-    panelSink(RD_PRIM_TRIANGLES, v, n, (RdTex){0}, RD_BLEND_LERP_AS);
+    return tex != 0 && (tex == s_sheet[0].id || tex == s_sheet[1].id);
+}
+
+/* an icon's word, "" for a picture */
+static const char *iconWord(const UiHudIcon *ic)
+{
+    return ic->glyph >= 0 || !ic->word ? "" : ic->word;
 }
 
 /* one camera, one input device, one language: the items placed, no item
    over another, every part inside its item, the widest line within the
-   room after the shrink */
+   room after the shrink; on the pad no key names, on the keys every button
+   a key in square brackets (the default bindings name one for each) */
 static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *set)
 {
     static UiHudPlaced at[UI_HUD_ITEMS];
@@ -4109,25 +4136,33 @@ static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *s
         }
         float right = p->x0;
         for (int k = 0; k < it->nicon; k++) {
+            const UiHudIcon *ic = &it->icon[k];
             CHECK(p->iconX[k] >= right - 0.01f && p->iconW[k] > 0.0f,
-                  "%s: item %d picture %d at %.1f (free from %.1f)", what, i, k,
-                  (double)p->iconX[k], (double)right);
+                  "%s: item %d button %d at %.1f (free from %.1f)", what, i, k, (double)p->iconX[k],
+                  (double)right);
             right = p->iconX[k] + p->iconW[k];
+            CHECK(ic->glyph >= 0 ? ic->glyph < LT_GLYPH_COUNT : ic->word && ic->word[0],
+                  "%s: item %d button %d is neither a picture nor a word", what, i, k);
+            const int bracket = iconWord(ic)[0] == '[';
+            CHECK(keyboard ? bracket : !bracket, "%s: item %d button %d is \"%s\"", what, i, k,
+                  iconWord(ic));
         }
         if (it->text[0] && it->nicon > 0) {
-            CHECK(p->textX >= right, "%s: item %d word at %.1f over its picture (to %.1f)", what, i,
+            CHECK(p->textX >= right, "%s: item %d word at %.1f over its buttons (to %.1f)", what, i,
                   (double)p->textX, (double)right);
         }
         CHECK(p->textX + p->textW <= p->x1 + 0.01f, "%s: item %d word leaves its item", what, i);
-        if (!keyboard) {
-            for (int k = 0; k < it->nicon; k++) {
-                CHECK(it->icon[k].key == NULL, "%s: item %d shows a key on the pad", what, i);
-            }
-        }
     }
     for (int l = 0; l < UI_HUD_LINES; l++) {
         CHECK(lines[l] > 0, "%s: line %d is empty", what, l);
     }
+}
+
+/* the photo panel drawn through the overlay into the 1080p snapshot */
+static void photoOverlay(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    ui_PhotoDrawOverlay(ctx);
 }
 
 static void testPhotoPanel(void)
@@ -4135,6 +4170,12 @@ static void testPhotoPanel(void)
     static UiHudSet set;
     IcoBindings *b = ico_input_live_bindings();
 
+    /* the PAL tables' glyph rows (fakeTables): the sheets' pictures */
+    stage_no = 11;
+    ico_photo_reset();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    fakeTables();
     useConfig("version = 1\n");
     ico_input_reload_bindings(b);
     for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
@@ -4146,36 +4187,82 @@ static void testPhotoPanel(void)
     }
     ui_SetLanguage(UI_LANG_EN);
 
+    /* the pad: the game's pictures where its sheets have one, the names of
+       the rest */
+    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    CHECK(set.n == 13, "the free camera's panel: 13 items (%d)", set.n);
+
+    static const struct {
+        int item, glyph0, glyph1;
+        const char *word0, *word1;
+    } kPad[] = {
+        {1, -1, -1, "Left stick", NULL},
+        {2, -1, -1, "Right stick", NULL},
+        {3, -1, -1, "Up", "Down"},
+        {4, LT_GLYPH_L1, LT_GLYPH_R1, NULL, NULL},
+        {5, LT_GLYPH_L2, LT_GLYPH_R2, NULL, NULL},
+        {6, -1, -1, "L3", NULL},
+        {7, -1, -1, "R3", NULL},
+        {8, -1, -1, "Select", NULL},
+        {9, LT_GLYPH_CROSS, -1, NULL, NULL},
+        {10, LT_GLYPH_SQUARE, -1, NULL, NULL},
+        {11, LT_GLYPH_TRIANGLE, -1, NULL, NULL},
+    };
+
+    for (size_t i = 0; i < sizeof(kPad) / sizeof(kPad[0]); i++) {
+        const UiHudItem *it = &set.item[kPad[i].item];
+        const int want = kPad[i].glyph1 >= 0 || kPad[i].word1 ? 2 : 1;
+        int ok = it->nicon == want;
+        for (int k = 0; ok && k < want; k++) {
+            const int g = k ? kPad[i].glyph1 : kPad[i].glyph0;
+            const char *wd = k ? kPad[i].word1 : kPad[i].word0;
+            ok = it->icon[k].glyph == g &&
+                 (g >= 0 || (it->icon[k].word && strcmp(it->icon[k].word, wd) == 0));
+        }
+        CHECK(ok, "pad item %d (\"%s\"): %d buttons, the first %d \"%s\"", kPad[i].item, it->text,
+              it->nicon, it->icon[0].glyph, iconWord(&it->icon[0]));
+    }
+    ui_SetLanguage(UI_LANG_DE);
+    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    CHECK(strcmp(iconWord(&set.item[1].icon[0]), "Linker Stick") == 0 &&
+              strcmp(iconWord(&set.item[3].icon[1]), "Unten") == 0 &&
+              strcmp(iconWord(&set.item[6].icon[0]), "L3") == 0,
+          "German: \"%s\", \"%s\", \"%s\"", iconWord(&set.item[1].icon[0]),
+          iconWord(&set.item[3].icon[1]), iconWord(&set.item[6].icon[0]));
+    ui_SetLanguage(UI_LANG_EN);
+    /* tables that are not the PAL ones: a picture's name instead */
+    texProperty[182].texU++;
+    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    CHECK(set.item[9].icon[0].glyph == -1 && strcmp(iconWord(&set.item[9].icon[0]), "Cross") == 0,
+          "Cross without its PAL rectangle: the word (%s)", iconWord(&set.item[9].icon[0]));
+    texProperty[182].texU--;
+
     /* the keys: W A S D for the stick, the first of "Tab, Backquote" */
     ui__PhotoHudBuild(&set, 1, 1, "t", "f");
     const UiHudItem *move = &set.item[1], *roll = &set.item[4], *save = &set.item[9];
-    CHECK(move->nicon == 4 && strcmp(move->icon[0].key, "W") == 0 &&
-              strcmp(move->icon[1].key, "A") == 0 && strcmp(move->icon[2].key, "S") == 0 &&
-              strcmp(move->icon[3].key, "D") == 0,
-          "the left stick: four caps, W A S D");
-    CHECK(roll->nicon == 2 && strcmp(roll->icon[0].key, "Tab") == 0 &&
-              strcmp(roll->icon[1].key, "F") == 0,
-          "L1 R1: Tab, F");
-    CHECK(save->nicon == 1 && strcmp(save->icon[0].key, "Space") == 0, "Cross: Space");
+    CHECK(move->nicon == 1 && strcmp(iconWord(&move->icon[0]), "[W A S D]") == 0,
+          "the left stick: [W A S D] (%s)", iconWord(&move->icon[0]));
+    CHECK(roll->nicon == 2 && strcmp(iconWord(&roll->icon[0]), "[Tab]") == 0 &&
+              strcmp(iconWord(&roll->icon[1]), "[F]") == 0,
+          "L1 R1: [Tab] [F] (%s %s)", iconWord(&roll->icon[0]), iconWord(&roll->icon[1]));
+    CHECK(save->nicon == 1 && strcmp(iconWord(&save->icon[0]), "[Space]") == 0,
+          "Cross: [Space] (%s)", iconWord(&save->icon[0]));
     /* a key unbound: the mouse's button; neither: the pad's picture */
     memset(b->kb[ICO_T_CROSS], 0, sizeof(b->kb[ICO_T_CROSS]));
     ui__PhotoHudBuild(&set, 1, 1, "t", "f");
-    CHECK(set.item[9].icon[0].key && strcmp(set.item[9].icon[0].key, "Mouse left") == 0,
-          "Cross without a key: the mouse (%s)", set.item[9].icon[0].key);
+    CHECK(strcmp(iconWord(&set.item[9].icon[0]), "[Mouse left]") == 0,
+          "Cross without a key: the mouse (%s)", iconWord(&set.item[9].icon[0]));
     ico_bindings_clear(b, ICO_T_CROSS);
     ui__PhotoHudBuild(&set, 1, 1, "t", "f");
-    CHECK(set.item[9].icon[0].key == NULL && set.item[9].icon[0].glyph == UI_BTN_CROSS,
-          "Cross unbound: the pad's picture");
+    CHECK(set.item[9].icon[0].glyph == LT_GLYPH_CROSS, "Cross unbound: the pad's picture");
     memset(b->kb[ICO_T_LSTICK_DOWN], 0, sizeof(b->kb[ICO_T_LSTICK_DOWN]));
     ui__PhotoHudBuild(&set, 1, 1, "t", "f");
-    CHECK(set.item[1].nicon == 1 && set.item[1].icon[0].key == NULL &&
-              set.item[1].icon[0].glyph == UI_BTN_LSTICK,
-          "a stick with a key missing: its picture");
+    CHECK(set.item[1].nicon == 1 && strcmp(iconWord(&set.item[1].icon[0]), "Left stick") == 0,
+          "a stick with a key missing: its name (%s)", iconWord(&set.item[1].icon[0]));
     ico_input_reload_bindings(b);
 
     /* with the photo layout current the game's pause rows are not drawn
        (the deferred-text check needs the 1080p setup this runs inside) */
-    stage_no = 11;
     ico_photo_reset();
     lt_ext_Reset();
     ui_SettingsReset();
@@ -4198,7 +4285,8 @@ static void testPhotoPanel(void)
     frame(0);
     CHECK(menuTextDraws() == 0, "photo mode: the pause layout draws no rows (%d)", menuTextDraws());
 
-    /* the panel through the overlay sink: pad pictures, then your keys */
+    /* the panel through the overlay sink: the pad's buttons (seven
+       pictures from the sheets), then your keys (none) */
     RdOverlayCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     ctx.outW = 1920;
@@ -4207,7 +4295,6 @@ static void testPhotoPanel(void)
     ctx.box.h = 1080;
     ctx.boxScale = 1080.0f / 448.0f;
     ui__SetOverlaySink(panelSink);
-    ui__SetGlyphSink(glyphSink);
     for (int keys = 0; keys < 2; keys++) {
         if (keys) {
             ico_input_note_press(ICO_SRC_KEY, 4);
@@ -4230,16 +4317,30 @@ static void testPhotoPanel(void)
            the panel's size), so a word's quad may pass the panel by 16
            units (measured 6.4 above and 0.8 right); the pictures may not */
         const float textOver = 16.0f * ctx.boxScale;
-        int out = 0;
+        int out = 0, pictures = 0;
         for (uint32_t i = 2; i < s_pn; i++) {
             const float x = (float)s_pv[i].x / 16.0f, y = (float)s_pv[i].y / 16.0f;
-            const float m = s_pt[i] == RD_PRIM_SPRITES ? textOver : 0.0f;
+            const int sheet = isSheet(s_ptex[i]);
+            const float m = sheet ? 0.0f : textOver;
             out += x < x0 - m || x > x1 + m || y < y0 - m || y > y1 + m;
+            pictures += sheet;
         }
         CHECK(out == 0, "%s: %d vertices outside the panel", keys ? "keys" : "pad", out);
+        CHECK(pictures == (keys ? 0 : 2 * 7), "%s: %d picture vertices (%d)", keys ? "keys" : "pad",
+              pictures, keys ? 0 : 2 * 7);
     }
     ui__SetOverlaySink(NULL);
-    ui__SetGlyphSink(NULL);
+
+    /* the snapshots, the panel on the output as the window draws it (the
+       sheets are the stand-ins makeSheets draws) */
+    void *prevUser = NULL;
+    RdOverlayFn prev = rd_GetPresentOverlay(&prevUser);
+    rd_SetPresentOverlay(photoOverlay, NULL);
+    ico_input_note_press(ICO_SRC_PAD, 0);
+    snap1080("settings_photo");
+    ico_input_note_press(ICO_SRC_KEY, 4);
+    snap1080("settings_photo_keys");
+    rd_SetPresentOverlay(prev, prevUser);
     ico_photo_reset();
     stage_no = 0;
 }
