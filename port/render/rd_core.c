@@ -30,6 +30,7 @@
 #include <time.h>
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
+#include "modelpack.h" /* v0.5.0 (M4): the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "texpack.h"
@@ -1338,10 +1339,19 @@ void rd_BeginFrame(void)
         /* v0.4.0: the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_RevertReplacements) */
         const bool packOff = g_rd.settings.texturePack && !g_rd.pendingSettings.texturePack;
+        /* v0.5.0 (M4): the model pack's switch and its dump, on a change */
+        const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
+        const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
             rdtex_RevertReplacements();
+        }
+        if (modelsChanged) {
+            modelpack_SetEnabled(g_rd.settings.modelPack != 0);
+        }
+        if (dumpChanged) {
+            modelpack_SetDumpEnabled(g_rd.settings.dumpModels != 0);
         }
         /* wave 7 (R7a): the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next

@@ -105,7 +105,9 @@
 #include <SDL3/SDL.h>
 #include "options.h"
 #include "rhi.h"
-#include "texpack.h" /* v0.4.0: PCSX2 texture packs */
+#include "modelpack.h" /* v0.5.0: model packs */
+#include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
+#include "texpack.h"   /* v0.4.0: PCSX2 texture packs */
 #include "video_options.h"
 #include "window_host.h"
 
@@ -222,8 +224,9 @@ static int parse_rate(const char *s)
 static const char *exit_reason = "exit() from the game or the C library";
 
 /* The end-of-run steps, run last registered first: summary, then
-   ico_input_record_close, ico_window_close and texpack_Shutdown as they are
-   registered. Desktop: atexit, so an exit() from the game runs them too.
+   ico_input_record_close, ico_window_close, texpack_Shutdown and
+   modelpack_Shutdown as they are registered. Desktop: atexit, so an exit()
+   from the game runs them too.
    Android: SDL_main's return finishes the activity while the process may
    live on, so ico_host_main runs them itself (ico_host_shutdown) when it
    returns. */
@@ -1247,6 +1250,29 @@ static int host_main(int argc, char **argv)
         tc.developer = ico_opt_developer_mode();
         texpack_Init(&tc);
         at_shutdown(texpack_Shutdown);
+    }
+    /* v0.5.0 (M4): a model pack from the same folders, read and converted
+       now (before the game loads a model: the meshes made at load look
+       their parts up); the dump is a Developer mode row */
+    {
+        ModelpackConfig mc;
+        char user[ICO_PATH_MAX];
+        const int developer = ico_opt_developer_mode();
+
+        ico_host_pref_dir(user, sizeof(user));
+        memset(&mc, 0, sizeof(mc));
+        mc.userDir = user;
+        mc.programDir = exe_dir;
+        mc.serial = "SCES-50760";
+        mc.developer = developer;
+        mc.dumpEnabled = developer && ico_video_dump_models();
+        modelpack_Init(&mc);
+        modelpack_SetEnabled(ico_video_model_pack() != 0);
+        fprintf(stderr, "models: %d replacements, model pack %s, dump models %s\n",
+                modelpack_Count(), ico_video_model_pack() ? "on" : "off",
+                mc.dumpEnabled ? "on" : "off");
+        ui_SettingsSetModelPackCount(modelpack_Count);
+        at_shutdown(modelpack_Shutdown);
     }
 #endif
     {
