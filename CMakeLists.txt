@@ -1,4 +1,4 @@
-# The PC port's host build: compiles the game for Linux and Windows hosts. Presets
+# The port's host build: compiles the game for Linux, Windows and Android (libmain.so) hosts. Presets
 # are in CMakePresets.json; docs/BUILDING.md describes them. (The PS2 ELF build
 # is the decompilation's, not this repository's.)
 cmake_minimum_required(VERSION 3.25)
