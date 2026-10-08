@@ -596,7 +596,9 @@ static void test_video_auto(const char *dir)
     CHECK(o.resScale == ICO_RES_AUTO && o.aspect == ICO_ASPECT_AUTO &&
           o.filter == ICO_FILTER_ANISOTROPIC && o.fullHeight);
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
-    o.resScale = 0; /* "window" is Custom under these rules */
+    o.resScale = 0; /* a saved Enhanced with "window" stays Enhanced */
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    o.resScale = 2; /* any other resolution is Custom */
     CHECK(ico_video_preset(&o) == ICO_VIDEO_CUSTOM);
     ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
     CHECK(o.resScale == 1 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
@@ -618,6 +620,22 @@ static void test_video_auto(const char *dir)
     ico_video_get(&o);
     CHECK(o.resScale == ICO_RES_AUTO && o.framerate == 60 &&
           ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    /* a file from before v0.4.2: Enhanced with resolution "window" keeps
+       its preset name and its resolution; the shortcut then writes "auto" */
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[video]\npreset = \"enhanced\"\nresolution = \"window\"\naspect = "
+              "\"auto\"\ntexture_filter = \"anisotropic\"\nfull_height = true\n",
+              f);
+        fclose(f);
+    }
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.resW == 0 && o.resH == 0 &&
+          ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.resScale == ICO_RES_AUTO && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
     /* and no file at all: Original at 1x, 60 a second */
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_video_reload();

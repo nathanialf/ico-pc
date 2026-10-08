@@ -248,9 +248,12 @@ int ico_video_preset(const IcoVideoOptions *o)
         !o->fullHeight) {
         return ICO_VIDEO_ORIGINAL;
     }
-    /* Enhanced's resolution: the window's, "auto" on Android (N2) */
-    if (o->resScale == (s_android ? ICO_RES_AUTO : 0) && o->aspect == ICO_ASPECT_AUTO &&
-        o->filter == ICO_FILTER_ANISOTROPIC && o->fullHeight) {
+    /* Enhanced's resolution: the window's, "auto" on Android (N2); on
+       Android a saved Enhanced with "window" (from before v0.4.2) is still
+       Enhanced, so the player keeps the preset's name (the shortcut writes
+       "auto") */
+    if ((o->resScale == 0 || (s_android && o->resScale == ICO_RES_AUTO)) &&
+        o->aspect == ICO_ASPECT_AUTO && o->filter == ICO_FILTER_ANISOTROPIC && o->fullHeight) {
         return ICO_VIDEO_ENHANCED;
     }
     return ICO_VIDEO_CUSTOM;

@@ -52,8 +52,8 @@
  * written; anything else ("original", no key, a misspelling) puts them at
  * the PS2's values (1x, 4:3, original, half) whatever the file says.  The preset in force is derived from those four rows
  * (ico_video_preset): Original when all four are the PS2's, Enhanced when
- * they are window (on Android: resolution "auto"), aspect auto, anisotropic
- * and full, Custom otherwise; it is
+ * they are window (on Android also resolution "auto"), aspect auto,
+ * anisotropic and full, Custom otherwise; it is
  * saved back as "original" when Original, else "enhanced" with the rows.
  * fullscreen, vsync, framerate, the CRT keys, the texture pack keys and the
  * effect keys are not part of it.
@@ -241,7 +241,7 @@ const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);
 /* The preset the four rows add up to: ICO_VIDEO_ORIGINAL when resolution,
    aspect, texture filter and height are 1x, 4:3, original, half;
-   ICO_VIDEO_ENHANCED when window (auto on Android), auto, anisotropic,
+   ICO_VIDEO_ENHANCED when window (or auto on Android), auto, anisotropic,
    full; else
    ICO_VIDEO_CUSTOM. */
 int ico_video_preset(const IcoVideoOptions *o);
