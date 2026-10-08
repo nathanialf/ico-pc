@@ -32,9 +32,11 @@ void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
     g_vkr.memLiveBytes = g_vkr.memLiveBytes > size ? g_vkr.memLiveBytes - size : 0;
 }
 
-/* v0.4.2 (Android): the device's allocation limit holds (a phone GPU
-   allows 4096 allocations, VkPhysicalDeviceLimits.maxMemoryAllocationCount),
-   and each 1024 more alive than ever before is logged with the bytes */
+/* v0.4.2 (Android): past the device's allocation limit
+   (VkPhysicalDeviceLimits.maxMemoryAllocationCount; 4096 on phone GPUs and
+   some desktop drivers) a line says so once per time it is reached, and the
+   driver is still asked (it may allow more, as before); under
+   ICO_VK_FAKE_LIMITS the allocation is refused, as a strict driver would. */
 static bool vkr_MemoryRoom(VkDeviceSize size)
 {
     const uint32_t limit = g_vkr.props.limits.maxMemoryAllocationCount;
@@ -43,11 +45,13 @@ static bool vkr_MemoryRoom(VkDeviceSize size)
         if (!g_vkr.memLimitLogged) {
             g_vkr.memLimitLogged = true;
             VKR_LOG("%u device memory allocations alive (%.0f MB), the most the device allows "
-                    "(maxMemoryAllocationCount %u%s): a %.0f KB allocation is refused",
+                    "(maxMemoryAllocationCount %u): a %.0f KB allocation %s",
                     g_vkr.memLive, (double)g_vkr.memLiveBytes / 1048576.0, limit,
-                    g_vkr.fakeLimits ? ", ICO_VK_FAKE_LIMITS" : "", (double)size / 1024.0);
+                    (double)size / 1024.0,
+                    g_vkr.fakeLimits ? "is refused (ICO_VK_FAKE_LIMITS)"
+                                     : "goes past it (the driver may refuse it)");
         }
-        return false;
+        return g_vkr.fakeLimits == NULL;
     }
     return true;
 }
@@ -569,15 +573,18 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
     }
     const uint32_t samplerLimit = g_vkr.props.limits.maxSamplerAllocationCount;
     if (samplerLimit && g_vkr.samplersLive >= samplerLimit) {
+        /* as vkr_MemoryRoom: refused under ICO_VK_FAKE_LIMITS only */
         g_vkr.lastLimit = "maxSamplerAllocationCount";
         if (!g_vkr.samplerLimitLogged) {
             g_vkr.samplerLimitLogged = true;
             VKR_LOG("%u samplers alive, the most the device allows (maxSamplerAllocationCount "
-                    "%u%s): a new one is refused",
+                    "%u): a new one %s",
                     g_vkr.samplersLive, samplerLimit,
-                    g_vkr.fakeLimits ? ", ICO_VK_FAKE_LIMITS" : "");
+                    g_vkr.fakeLimits ? "is refused (ICO_VK_FAKE_LIMITS)" : "goes past it");
         }
-        return out;
+        if (g_vkr.fakeLimits) {
+            return out;
+        }
     }
     VkSampler *s = NULL;
     uint32_t id = vkr_PoolAlloc(&g_vkr.samplers, (void **)&s);

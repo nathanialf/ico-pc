@@ -297,8 +297,14 @@ phone GPU are tested on the Linux Vulkan device by forcing them: the
 blending such as Mali and PowerVR), `rhi_vk_nodual` with
 `ICO_VK_FAKE_NO_DUAL=1` (the feature cleared at device creation), and
 `rhi_vk_d24s8` with `ICO_VK_FAKE_D24S8=1` (the D24S8 depth fallback when
-D32F_S8 is missing). On a device, the log is mirrored to logcat:
-`adb logcat -s ico-pc`.
+D32F_S8 is missing), and the `*_mali` tests run the render tests (all but
+`rd_blur`), the shader, VU, movie and RHI tests again with
+`ICO_VK_FAKE_LIMITS=mali`, which clamps the
+device's limits to a Mali-G68's (four descriptor sets, 16 sampled images,
+samplers and storage buffers a stage, 256-byte storage offsets, 4096 memory
+allocations; `rhi_vk_mali` also checks that what goes past them is refused
+by the limit's name, and `rd_perf_mali` creates the whole reachable pipeline
+set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
 ## Continuous integration
 
@@ -337,6 +343,7 @@ structure; the game is not run:
 | `tools/fetch_android.sh` | NDK, platform, build-tools and SDL3 for arm64, in the runner's preinstalled SDK |
 | `tools/check_no_rom.sh` | the IP scan |
 | `./gradlew --no-daemon assembleDebug -PicoLabel=ci` | the debug APK |
+| `tools/check_android_flags.sh` | the game's semantics options reach the NDK clang for every `ico2/` and `port/` source; no game or `port/math` object holds a fused multiply-add; no object stores onto its stack protector's guard (`tools/check_stack_guard.py`: only the Android build has `-fstack-protector-strong`, so a write past a local array ends the run on a phone alone) |
 | APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; every `LOAD` segment of both libraries has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
 | artifact `ico-pc-android-debug` | the APK, the unstripped `libmain.so` and `ico_pc.map`, kept 14 days |
 

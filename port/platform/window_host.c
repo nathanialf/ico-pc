@@ -1318,15 +1318,24 @@ static void perf_log(void)
         RhiStats st;
         long rss = -1, peak = -1;
 
+        char gfx[160] = "graphics allocations not counted";
+
         rhi_GetStats(&st);
         ico_diag_process_memory(&rss, &peak);
-        fprintf(stderr,
-                "window: memory: %llu graphics allocations alive (most %llu; the device allows "
-                "%llu), %.0f MB (most %.0f MB); the process holds %ld MB (most %ld MB)\n",
-                (unsigned long long)st.memoryLive, (unsigned long long)st.memoryPeak,
-                (unsigned long long)st.memoryLimit, (double)st.memoryLiveBytes / 1048576.0,
-                (double)st.memoryPeakBytes / 1048576.0, rss >= 0 ? rss / 1024 : -1L,
-                peak >= 0 ? peak / 1024 : -1L);
+        if (st.memoryLimit != 0) { /* Vulkan counts them */
+            snprintf(gfx, sizeof(gfx),
+                     "%llu graphics allocations alive (most %llu; the device allows %llu), "
+                     "%.0f MB (most %.0f MB)",
+                     (unsigned long long)st.memoryLive, (unsigned long long)st.memoryPeak,
+                     (unsigned long long)st.memoryLimit, (double)st.memoryLiveBytes / 1048576.0,
+                     (double)st.memoryPeakBytes / 1048576.0);
+        }
+        if (rss >= 0) {
+            fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)\n", gfx,
+                    rss / 1024, (peak >= 0 ? peak : rss) / 1024);
+        } else {
+            fprintf(stderr, "window: memory: %s\n", gfx);
+        }
     }
     perf_reset();
 }

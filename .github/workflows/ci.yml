@@ -250,7 +250,9 @@ jobs:
         run: cd android && ./gradlew --no-daemon assembleDebug -PicoLabel=ci
 
       # the game's semantics options (cmake/IcoFlags.cmake) reach the NDK
-      # clang, and no game object holds a fused multiply-add (arm64 has them)
+      # clang, no game object holds a fused multiply-add (arm64 has them),
+      # and no object stores onto its stack protector's guard (only this
+      # build has -fstack-protector-strong)
       - name: Game compile options in the Android build
         run: tools/check_android_flags.sh
 

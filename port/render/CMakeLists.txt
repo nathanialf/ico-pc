@@ -650,13 +650,16 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage
     # offsets, 4096 memory allocations): a pipeline or an allocation the
-    # renderer needs past them would be refused and its draws missing
+    # renderer needs past them would be refused and its draws missing.
+    # rd_blur is left out (three and a half minutes on lavapipe): its
+    # pipelines are in the reachable set rd_perf_mali creates, on the same
+    # bind group layouts as every other draw's
     set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
     set(_ml "${CMAKE_CURRENT_BINARY_DIR}/mali")
     file(MAKE_DIRECTORY "${_ml}")
     set(_ico_mali_tests "")
-    foreach(t rd_layout rd_tex rd_gsbase rd_shadow rd_fog rd_blur rd_water rd_raw rd_interp
-              rd_mirror rd_perf)
+    foreach(t rd_layout rd_tex rd_gsbase rd_shadow rd_fog rd_water rd_raw rd_interp rd_mirror
+              rd_perf)
         add_test(NAME ${t}_mali COMMAND ${t}_test)
         list(APPEND _ico_mali_tests ${t}_mali)
     endforeach()
