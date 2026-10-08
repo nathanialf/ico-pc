@@ -24,6 +24,7 @@
 #include <string.h>
 #include "GifHost.h"
 #include "rd_mesh.h"
+#include "modelpack.h"
 
 /* ===================================================================== *
  * PC port (renderer wave 3, R3ab).
@@ -90,18 +91,67 @@ static int regKeyOrdinal(PacHeader *pk)
     return -1;
 }
 
+/* v0.5.0 (M4): the part a packet drawn now belongs to (Packet.h
+   PacHostIdent), from the walk's names; a packet outside the named part's
+   chains (n < 0) has no name, bone count or object */
+static void regHostIdent(PacHostIdent *id, int n)
+{
+    memset(id, 0, sizeof(*id));
+    id->part = -1;
+    id->ordinal = -1;
+    if (n < 0 || regKeyObj == 0) {
+        return;
+    }
+    id->model = regKeyObj->model != 0 ? regKeyObj->model->name : regKeyGrp->name;
+    id->part = regKeyIdx;
+    id->ordinal = n;
+    id->bones = regKeyObj->nodeNum;
+    id->obj = regKeyObj;
+}
+
+/* the skeleton of the object drawn (regKeyObj) for the dump of a skinned
+   part: bone i is node i, its inverse bind clusterMtx[i], its parent the
+   skeleton node's (-1 past the skeleton's records); NULL for an object
+   without cluster matrices */
+static const ModelpackSkeleton *regHostSkeleton(void)
+{
+    static ModelpackSkeleton sk;
+    const Sub15C *o = regKeyObj;
+    int i;
+
+    if (o == 0 || o->clusterMtx == 0 || o->nodeNum <= 0 || o->nodeNum > 60) {
+        return 0;
+    }
+    memset(&sk, 0, sizeof(sk));
+    sk.count = (uint32_t)o->nodeNum;
+    for (i = 0; i < o->nodeNum; i++) {
+        memcpy(sk.invBind[i], o->clusterMtx + i * 64, 64);
+        sk.parent[i] = o->skel != 0 && i < o->skelNodeNum ? o->skel[i].parent : -1;
+    }
+    return &sk;
+}
+
 static void regHostMesh(PacHeader *pk, int pass)
 {
     unsigned long long prim[2];
     unsigned long long tag;
+    PacHostIdent id;
     RdVuDraw d;
     RdMesh m;
     int n;
 
     (dl_OpenDma)(2, pk->data, pk->size >> 4); /* the chain as the PS2 has it */
-    m.id = pac_HostMesh(pk);
+    n = regKeyOrdinal(pk);
+    regHostIdent(&id, n);
+    m.id = pac_HostMeshFor(pk, &id);
     if (m.id == 0) {
         return;
+    }
+    /* v0.5.0 (M4): the model pack's dump, at every draw (meshes are made
+       lazily, and the one-shot dump wants each part of its object drawn) */
+    if (modelpack_DumpWanted(rd_VuMeshHash(m), id.obj)) {
+        id.skel = regHostSkeleton();
+        pac_HostDump(pk, &id);
     }
     /* the PRIM every batch's GIF tag (PRE) writes: strip, IIP, TME, ABE */
     memcpy(&tag, pk->data + 0x10, 8);
@@ -109,7 +159,6 @@ static void regHostMesh(PacHeader *pk, int pass)
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
     if (rd_VuDrawFromState(&d)) {
-        n = regKeyOrdinal(pk);
         rd_DrawVuMesh(m, &d,
                       n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
                              : RD_KEY(pk, rd_CurrentList(), d.code));
@@ -266,9 +315,18 @@ static void reg_setShape(Sub15C *o, int idx, int flag, PacHeader *pkt, PObjMater
         }
     }
 #ifdef ICO_RD
-    /* R3ab: the vertices were rewritten in the packets: the meshes follow */
-    for (pk = pkt; pk != 0; pk = pk->next) {
-        pac_HostRefresh(pk);
+    /* R3ab: the vertices were rewritten in the packets: the meshes follow
+       (v0.5.0, M4: named, for a model pack's replacement that cannot) */
+    for (n = 0, pk = pkt; pk != 0; pk = pk->next, n++) {
+        PacHostIdent id;
+
+        memset(&id, 0, sizeof(id));
+        id.model = o->model != 0 ? o->model->name : 0;
+        id.part = idx;
+        id.ordinal = n;
+        id.bones = o->nodeNum;
+        id.obj = o;
+        pac_HostRefreshFor(pk, &id);
     }
 #endif
 }

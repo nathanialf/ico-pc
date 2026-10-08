@@ -944,10 +944,11 @@ static void clusterChecks(void)
     clearFiles();
     roundTrip();
     PacHeader *pk = packetB();
-    /* the original's draw */
-    setPacketMesh(pk, 0);
+    /* the original's draw (made here: with the pack indexed, the packet's
+       own build would make the replacement, Packet.c pac_hostBuild) */
+    RdMesh orig = rd_CreateVuMesh(&s_pdB.d);
+    setPacketMesh(pk, orig.id);
     recordObj(&s_objB);
-    RdMesh orig = {pac_HostMesh(pk)};
     const RdMeshRec *orc = rd__MeshRec(orig.id);
     Found fd;
     walkFrame(rd__LastFrame(), &fd);
@@ -1006,7 +1007,7 @@ static void clusterChecks(void)
     }
     /* the prelit one in the same way */
     RdMesh ma = modelpack_Create(modelpack_Lookup(s_hA), &s_pdA.d, NULL, 0);
-    RdMesh oa = {pac_HostMesh(packetA())};
+    RdMesh oa = rd_CreateVuMesh(&s_pdA.d);
     const RdMeshRec *ra = rd__MeshRec(ma.id), *rao = rd__MeshRec(oa.id);
     CHECK(ra && rao && ra->vertexCount == rao->vertexCount && ra->indexCount == rao->indexCount &&
               memcmp(ra->stream, rao->stream, (size_t)ra->vertexCount * 3 * 16) == 0,
@@ -1050,7 +1051,9 @@ static void compareImages(const char *what, int minCover)
 
 static void deviceCase(const char *what, Sub15C *o, PacHeader *pk, const PkDesc *pd, uint64_t h)
 {
-    setPacketMesh(pk, 0);
+    /* the original made here (the packet's own build would make the
+       replacement) */
+    setPacketMesh(pk, rd_CreateVuMesh(&pd->d).id);
     recordObj(o);
     if (!readScene(s_imgA)) {
         CHECK(0, "%s: readback", what);

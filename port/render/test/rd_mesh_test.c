@@ -26,6 +26,14 @@
  *   model packs  (v0.5.0, M0) the mesh identity, replacements from a
  *            tagless stream, one drawn in the prelit packet's place,
  *            rd_VuMeshRetire and the sweep; recording only
+ *   pack hooks (v0.5.0, M4) the game's side of model packs on a pack in
+ *            rd_mesh_modelpack/ under the working folder: the dump at the
+ *            draw (both parts, the cluster one with its skeleton), the
+ *            dumps moved into replacements/ and the pack switched off and
+ *            on: the draws record the replacements Packet.c made (the
+ *            cluster one with the object's bone count); the morph path
+ *            (pac_HostRefreshFor) declines a replaced mesh and draws the
+ *            original again; recording only
  *
  * Checks on the recording (no device needed): the mesh built from the
  * packet (vertex count, batches, the index list against vu1ref_StaticKicks);
@@ -46,6 +54,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "gltf.h"
+#include "host_fs.h"
+#include "modelpack.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
@@ -1227,11 +1238,175 @@ static void replacementDrawChecks(void)
           "pac_HostMesh builds a retired mesh again with the same hash");
 }
 
+/* ------------------------------- model packs: the game's hooks (v0.5.0, M4)
+ *
+ * Packet.c / RegistPacket.c with a real pack (modelpack.c) in a folder of
+ * the working directory: what regHostMesh dumps when dumping is on, and
+ * what pac_HostMeshFor builds and pac_HostRefreshFor reverts once the dumps
+ * are the pack's replacements. */
+static const char *s_mpBase = "rd_mesh_modelpack";
+
+static const char *mpPath(const char *rel)
+{
+    static char buf[4][700];
+    static int k;
+    char *b = buf[k = (k + 1) & 3];
+    snprintf(b, sizeof(buf[0]), "%s/%s", s_mpBase, rel);
+    return b;
+}
+
+typedef struct MpFiles {
+    char p[64][700];
+    int n;
+} MpFiles;
+
+static int mpCollect(const char *path, const char *name, void *user)
+{
+    MpFiles *f = user;
+    (void)name;
+    if (f->n < 64) {
+        snprintf(f->p[f->n++], sizeof(f->p[0]), "%s", path);
+    }
+    return 0;
+}
+
+/* every file under the pack's folder removed (the folders stay) */
+static void mpClear(void)
+{
+    static MpFiles f;
+    f.n = 0;
+    ico_dir_walk(s_mpBase, 8, mpCollect, &f);
+    for (int i = 0; i < f.n; i++) {
+        ico_remove(f.p[i]);
+    }
+}
+
+static const char *mpHex(uint64_t h)
+{
+    static char b[4][17];
+    static int k;
+    char *o = b[k = (k + 1) & 3];
+    snprintf(o, 17, "%016llx", (unsigned long long)h);
+    return o;
+}
+
+static int mpExists(const char *path)
+{
+    return ico_path_kind(path, NULL, NULL) >= 0;
+}
+
+/* the mesh of the one draw the last frame recorded, 0 when not one */
+static uint32_t mpDrawnMesh(RdCmdType type)
+{
+    Found fd;
+    walkFrame(rd__LastFrame(), &fd);
+    return fd.n == 1 && fd.cmd[0]->type == type ? fd.cmd[0]->u[0] : 0;
+}
+
+static void packHookChecks(void)
+{
+    static PkDesc pa, pb;
+    packetDesc(packetA(), RD_VU_QW_PRELIT, &pa);
+    packetDesc(packetB(), RD_VU_QW_SKIN, &pb);
+    const uint64_t ha = rd_VuMeshDescHash(&pa.d, NULL, NULL);
+    const uint64_t hb = rd_VuMeshDescHash(&pb.d, NULL, NULL);
+    (void)ico_mkdir(s_mpBase);
+    (void)ico_mkdir(mpPath("models"));
+    (void)ico_mkdir(mpPath("models/SCES-50760"));
+    (void)ico_mkdir(mpPath("models/SCES-50760/replacements"));
+    mpClear(); /* an earlier run's files */
+    ModelpackConfig cfg = {s_mpBase, NULL, "SCES-50760", 0, 1};
+    CHECK(modelpack_Init(&cfg) == 0, "an empty pack");
+
+    /* dumping on: each part drawn is written, once */
+    recordPrelit(&s_objA, 1);
+    recordCluster();
+    char rel[200];
+    snprintf(rel, sizeof(rel), "models/SCES-50760/dumps/%s.gltf", mpHex(ha));
+    CHECK(mpExists(mpPath(rel)), "the prelit part dumped at its draw (%s)", rel);
+    snprintf(rel, sizeof(rel), "models/SCES-50760/dumps/%s.gltf", mpHex(hb));
+    CHECK(mpExists(mpPath(rel)), "the cluster part dumped at its draw (%s)", rel);
+    GltfDoc doc;
+    char why[256] = "";
+    if (gltf_Read(mpPath(rel), &doc, why, sizeof(why)) == 0) {
+        CHECK(doc.skin.count == (uint32_t)s_objB.nodeNum &&
+                  memcmp(doc.skin.invBind[1], s_modelB.clusterMtx[1], 64) == 0 &&
+                  doc.skin.parent[0] < 0,
+              "the skeleton from the object: %u bones, clusterMtx as the inverse binds",
+              doc.skin.count);
+        CHECK(doc.meshName && strcmp(doc.meshName, "test_cluster/part0/0") == 0,
+              "the cluster part named by the draw (%s)", doc.meshName ? doc.meshName : "-");
+        gltf_Free(&doc);
+    } else {
+        CHECK(0, "the cluster dump reads: %s", why);
+    }
+    ModelpackStats st;
+    modelpack_GetStats(&st);
+    recordPrelit(&s_objA, 1);
+    ModelpackStats st2;
+    modelpack_GetStats(&st2);
+    CHECK(st.dumped == 2 && st2.dumped == 2, "two parts dumped, once (%u, %u)", st.dumped,
+          st2.dumped);
+
+    /* the dumps as the pack's replacements */
+    for (int i = 0; i < 2; i++) {
+        for (int k = 0; k < 2; k++) {
+            char from[200], to[200];
+            snprintf(from, sizeof(from), "models/SCES-50760/dumps/%s.%s", mpHex(i ? hb : ha),
+                     k ? "bin" : "gltf");
+            snprintf(to, sizeof(to), "models/SCES-50760/replacements/%s.%s", mpHex(i ? hb : ha),
+                     k ? "bin" : "gltf");
+            CHECK(ico_rename_replace(mpPath(from), mpPath(to)) == 0, "move %s", from);
+        }
+    }
+    cfg.dumpEnabled = 0;
+    CHECK(modelpack_Init(&cfg) == 2 && modelpack_Lookup(ha) >= 0 && modelpack_Lookup(hb) >= 0,
+          "both parts indexed");
+    /* the switch off and on: the originals retired, made again at the draw */
+    const RdMesh oa = {pac_HostMesh(packetA())}, ob = {pac_HostMesh(packetB())};
+    modelpack_SetEnabled(false);
+    modelpack_SetEnabled(true);
+    CHECK(!rd_VuMeshValid(oa) && !rd_VuMeshValid(ob), "on: the originals retired");
+    recordPrelit(&s_objA, 1);
+    const RdMesh ra = {mpDrawnMesh(RDC_MESH)};
+    CHECK(ra.id != 0 && rd_VuMeshReplaced(ra) && rd_VuMeshHash(ra) == ha &&
+              pac_HostMesh(packetA()) == ra.id,
+          "the prelit draw records the replacement Packet.c made");
+    recordCluster();
+    const RdMesh rb = {mpDrawnMesh(RDC_SKINNED)};
+    CHECK(rb.id != 0 && rd_VuMeshReplaced(rb) && rd_VuMeshHash(rb) == hb &&
+              pac_HostMesh(packetB()) == rb.id,
+          "the cluster draw records the replacement (bones from the object)");
+    modelpack_GetStats(&st);
+    CHECK(st.created == 2 && st.declined == 0, "two replacements made (%u), none declined (%u)",
+          st.created, st.declined);
+
+    /* the morph path: a replaced mesh cannot follow it, the original back */
+    PacHostIdent id = {"test_prelit", 0, 0, NULL, s_objA.nodeNum, &s_objA};
+    pac_HostRefreshFor(packetA(), &id);
+    const RdMesh back = {pac_HostMesh(packetA())};
+    CHECK(!rd_VuMeshValid(ra) && back.id != 0 && back.id != ra.id && rd_VuMeshValid(back) &&
+              !rd_VuMeshReplaced(back) && rd_VuMeshHash(back) == ha,
+          "the morph path: the replacement retired, the original built");
+    CHECK(modelpack_Lookup(ha) < 0 && modelpack_Lookup(hb) >= 0, "the morphing part declined");
+    recordPrelit(&s_objA, 1);
+    CHECK(mpDrawnMesh(RDC_MESH) == back.id, "the original drawn again");
+    pac_HostRefreshFor(packetA(), &id);
+    CHECK(pac_HostMesh(packetA()) == back.id, "an original follows the morph in place");
+
+    /* the pack away: the other tests draw the originals */
+    modelpack_SetEnabled(false);
+    modelpack_Shutdown();
+    CHECK(!rd_VuMeshValid(rb) && modelpack_Lookup(hb) < 0, "the pack switched off and closed");
+    mpClear();
+}
+
 static void modelPackChecks(void)
 {
     hashChecks();
     replacementChecks();
     replacementDrawChecks();
+    packHookChecks();
 }
 
 /* ----------------------------------------------------------- the setup */

@@ -117,5 +117,35 @@ int pac_HostStripOrder(const char *model, const short *index, int stride, int nu
 unsigned int pac_HostMesh(PacHeader *pk);
 void pac_HostRefresh(PacHeader *pk);
 
+/* v0.5.0 (M4): model packs (port/render/modelpack.h).  The part a packet
+   belongs to, as the draw (RegistPacket.c regHostMesh) or the morph path
+   (reg_setShape) knows it: the model's name (PObjModel.name), the part's
+   index, the packet's place in the part's chain (-1: unknown), the
+   skeleton the dump writes for a skinned part (NULL: none), the drawing
+   object's skeleton node count (Sub15C.nodeNum; 0: unknown) and the
+   object itself (Sub15C, for the one-shot dump; NULL: unknown).
+   pac_HostMeshFor is pac_HostMesh with the part named: a mesh built now
+   is a model pack's replacement when the pack has one for the packet's
+   mesh hash (a skinned part only with its bone count), the original
+   otherwise; pac_HostMesh is pac_HostMeshFor without a name.
+   pac_HostRefreshFor is pac_HostRefresh with the part named: a replaced
+   mesh cannot follow the morph, so the pack's entry is declined (one log
+   line naming the part) and the original built.  pac_HostDump writes the
+   packet's part to the pack's dumps (modelpack_Dump); the caller asks
+   modelpack_DumpWanted first. */
+struct ModelpackSkeleton;
+
+typedef struct PacHostIdent {
+    const char *model;
+    int part, ordinal;
+    const struct ModelpackSkeleton *skel;
+    int bones;
+    const void *obj;
+} PacHostIdent;
+
+unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id);
+void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id);
+int pac_HostDump(PacHeader *pk, const PacHostIdent *id);
+
 #endif
 #endif /* PACKET_H */

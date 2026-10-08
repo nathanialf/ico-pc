@@ -19,6 +19,7 @@
 
 #include <stdlib.h>
 #include "rd_mesh.h"
+#include "modelpack.h"
 
 #endif
 #ifdef ICO_RD
@@ -103,51 +104,156 @@ static unsigned int pac_hostCollect(const PacHeader *pk, unsigned int *nb, unsig
     return pac_hostStream(pk, pacHostQw, pacHostQwCap, pacHostBatch, nb, qpv);
 }
 
-static void pac_hostBuild(PacHeader *pk, const char *name)
+/* The packet's mesh desc (its stream in pacHostQw); 0 when the packet has
+   no batches. */
+static int pac_hostDesc(const PacHeader *pk, RdVuMeshDesc *d, const char *name)
+{
+    unsigned int nb, qpv, n;
+
+    if (pk->data == 0 || pk->size == 0) {
+        return 0;
+    }
+    n = pac_hostCollect(pk, &nb, &qpv);
+    if (n == 0 || nb == 0 || qpv == 0) {
+        return 0;
+    }
+    memset(d, 0, sizeof(*d));
+    d->qw = (const float (*)[4])pacHostQw;
+    d->qwCount = n;
+    d->qwPerVertex = qpv;
+    d->batchCount = nb;
+    d->batches = pacHostBatch;
+    d->materialCount = 1;
+    d->debugName = name;
+    return 1;
+}
+
+/* v0.5.0 (M4): the part's name in the pack's log lines and the record */
+static const char *pac_hostPartName(const PacHostIdent *id, const char *name, char *buf,
+                                    unsigned int n)
+{
+    if (id == 0 || id->model == 0 || id->model[0] == 0) {
+        return name;
+    }
+    if (id->part < 0) {
+        snprintf(buf, n, "%s", id->model);
+    } else {
+        snprintf(buf, n, "%s part %d", id->model, id->part);
+    }
+    return buf;
+}
+
+/* The packet's mesh: the model pack's replacement when it has one for the
+   packet's mesh hash (v0.5.0, M4), else the original.  A skinned
+   replacement needs the object's bone count (id->bones), which the load
+   (pac_makePacket) does not know: there (load) the mesh is left to the
+   first draw, which names the part; a later build without it makes the
+   original. */
+static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *id, int load)
 {
     RdVuMeshDesc d;
     RdMesh m = {0};
-    unsigned int nb, qpv, n;
+    char part[64];
+    uint64_t h;
+    int e;
 
     memset(pk->pad9C, 0, sizeof(pk->pad9C));
-    if (pk->data == 0 || pk->size == 0) {
+    if (!pac_hostDesc(pk, &d, name)) {
         return;
     }
-    n = pac_hostCollect(pk, &nb, &qpv);
-    if (n != 0 && nb != 0 && qpv != 0) {
-        memset(&d, 0, sizeof(d));
-        d.qw = (const float (*)[4])pacHostQw;
-        d.qwCount = n;
-        d.qwPerVertex = qpv;
-        d.batchCount = nb;
-        d.batches = pacHostBatch;
-        d.materialCount = 1;
-        d.debugName = name;
+    h = rd_VuMeshDescHash(&d, 0, 0);
+    e = h != 0 ? modelpack_Lookup(h) : -1;
+    if (e >= 0) {
+        if (d.qwPerVertex != RD_VU_QW_SKIN || (id != 0 && id->bones > 0)) {
+            m = modelpack_Create(e, &d, pac_hostPartName(id, name, part, sizeof(part)),
+                                 (uint32_t)(id != 0 && id->bones > 0 ? id->bones : 0));
+        } else if (load) {
+            return; /* made at the first draw */
+        }
+    }
+    if (m.id == 0) {
         m = rd_CreateVuMesh(&d);
     }
     memcpy(pk->pad9C, &m.id, sizeof(m.id));
 }
 
-unsigned int pac_HostMesh(PacHeader *pk)
+unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id)
 {
     RdMesh m;
 
     memcpy(&m.id, pk->pad9C, sizeof(m.id));
     if (m.id == 0 || !rd_VuMeshValid(m)) {
-        pac_hostBuild(pk, "pac");
+        pac_hostBuild(pk, id != 0 && id->model != 0 ? id->model : "pac", id, 0);
         memcpy(&m.id, pk->pad9C, sizeof(m.id));
     }
     return m.id;
 }
 
+unsigned int pac_HostMesh(PacHeader *pk)
+{
+    return pac_HostMeshFor(pk, 0);
+}
+
+static uint64_t pacHostDeclined;
+
+static bool pac_hostRetireDeclined(uint64_t hash, bool replaced, void *user)
+{
+    (void)user;
+    return replaced && hash == pacHostDeclined;
+}
+
+void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id)
+{
+    RdMesh m = {pac_HostMeshFor(pk, id)};
+    unsigned int nb, qpv;
+    uint64_t h;
+
+    if (m.id == 0 || pac_hostCollect(pk, &nb, &qpv) == 0) {
+        return;
+    }
+    if (rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw) || !rd_VuMeshReplaced(m)) {
+        return;
+    }
+    /* v0.5.0 (M4): a replacement cannot follow the morph: the pack's entry
+       declined (logged once: the lookup fails from now on), every mesh made
+       from it retired, the original built from the packet as it is now */
+    h = rd_VuMeshHash(m);
+    if (modelpack_Lookup(h) >= 0) {
+        if (id != 0 && id->model != 0 && id->model[0] != 0) {
+            fprintf(stderr,
+                    "models: model %s part %d changes shape every frame; the original is used\n",
+                    id->model, id->part);
+        } else {
+            fprintf(stderr,
+                    "models: a model part (mesh %016llx) changes shape every frame; the "
+                    "original is used\n",
+                    (unsigned long long)h);
+        }
+    }
+    modelpack_Decline(h);
+    pacHostDeclined = h;
+    rd_VuMeshRetire(pac_hostRetireDeclined, 0);
+    pac_hostBuild(pk, id != 0 && id->model != 0 ? id->model : "pac", id, 0);
+}
+
 void pac_HostRefresh(PacHeader *pk)
 {
-    RdMesh m = {pac_HostMesh(pk)};
-    unsigned int nb, qpv;
+    pac_HostRefreshFor(pk, 0);
+}
 
-    if (m.id != 0 && pac_hostCollect(pk, &nb, &qpv) != 0) {
-        rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw);
+int pac_HostDump(PacHeader *pk, const PacHostIdent *id)
+{
+    RdVuMeshDesc d;
+    ModelpackIdent mi;
+
+    if (!pac_hostDesc(pk, &d, id != 0 && id->model != 0 ? id->model : "pac")) {
+        return 0;
     }
+    mi.model = id != 0 ? id->model : 0;
+    mi.part = id != 0 ? id->part : -1;
+    mi.ordinal = id != 0 ? id->ordinal : -1;
+    mi.obj = id != 0 ? id->obj : 0;
+    return modelpack_Dump(&d, &mi, d.qwPerVertex == RD_VU_QW_SKIN && id != 0 ? id->skel : 0);
 }
 
 #endif /* ICO_RD */
@@ -1440,7 +1546,11 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                         node->clip = obj->mode.s.shade;
                         node->next = prev;
 #ifdef ICO_RD
-                        pac_hostBuild(node, obj->name);
+                        {
+                            PacHostIdent hid = {obj->name, i, -1, 0, 0, 0};
+
+                            pac_hostBuild(node, obj->name, &hid, 1);
+                        }
 #endif
                         pac_makeBoundingBox(node->box, obj->mode.s.type == 1);
                         prev = node;
@@ -1464,7 +1574,11 @@ static void pac_makePacket(PObjModel *obj, int variant, int mode)
                     malloc_MemCpy(p->data, prev->data, prev->size);
 #ifdef ICO_RD
                     /* the copy has its own data: its own mesh */
-                    pac_hostBuild(p, obj->name);
+                    {
+                        PacHostIdent hid = {obj->name, i, -1, 0, 0, 0};
+
+                        pac_hostBuild(p, obj->name, &hid, 1);
+                    }
 #endif
                     prev = prev->next;
                     if (prev != 0) {
