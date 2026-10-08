@@ -7,6 +7,11 @@
 # preset's own compiler into a static library: the generic C decoder (the
 # library's riscv function selectors, which pick the generic C routines and
 # nothing else), no SIMD, its pthread layer replaced by ithread_single.c.
+# v0.4.2 (N2): on arm64 Android/Linux (ICO_LIBMPEG2_NEON, the top
+# CMakeLists.txt) the library's NEON assembly and its armv8 selectors
+# instead, as Android's own build of the library has them (ARMV8,
+# DEFAULT_ARCH D_ARCH_ARMV8_GENERIC): the phone decodes movies several times
+# faster.  x86 and the rest are unchanged.
 if(NOT DEFINED ICO_DEPS_DIR)
     set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps")
 endif()
@@ -47,7 +52,6 @@ add_library(ico_libmpeg2 STATIC
     ${_m2}/decoder/impeg2d_vld.c
     ${_m2}/decoder/impeg2d_vld_tables.c
     ${_m2}/decoder/impeg2d_deinterlace.c
-    ${_m2}/decoder/riscv/impeg2d_function_selector.c
     ${_m2}/common/icv_sad.c
     ${_m2}/common/icv_variance.c
     ${_m2}/common/ideint.c
@@ -55,21 +59,44 @@ add_library(ico_libmpeg2 STATIC
     ${_m2}/common/ideint_debug.c
     ${_m2}/common/ideint_function_selector_generic.c
     ${_m2}/common/ideint_utils.c
-    ${_m2}/common/riscv/ideint_function_selector.c
     ithread_single.c)
-target_include_directories(ico_libmpeg2 PUBLIC "${_m2}/common" "${_m2}/decoder"
-                                              "${_m2}/common/riscv")
+if(ICO_LIBMPEG2_NEON)
+    # the armv8 selectors pick the _av8 routines (the generic ones stay for
+    # what has no NEON version); the platform macros are armv8's
+    target_sources(ico_libmpeg2 PRIVATE
+        ${_m2}/decoder/arm/impeg2d_function_selector.c
+        ${_m2}/decoder/arm/impeg2d_function_selector_av8.c
+        ${_m2}/common/arm/ideint_function_selector.c
+        ${_m2}/common/arm/ideint_function_selector_av8.c
+        ${_m2}/common/armv8/icv_sad_av8.s
+        ${_m2}/common/armv8/icv_variance_av8.s
+        ${_m2}/common/armv8/ideint_cac_av8.s
+        ${_m2}/common/armv8/ideint_spatial_filter_av8.s
+        ${_m2}/common/armv8/impeg2_format_conv.s
+        ${_m2}/common/armv8/impeg2_idct.s
+        ${_m2}/common/armv8/impeg2_inter_pred.s
+        ${_m2}/common/armv8/impeg2_mem_func.s)
+    target_compile_definitions(ico_libmpeg2 PRIVATE ARMV8 DEFAULT_ARCH=D_ARCH_ARMV8_GENERIC)
+    # "${_m2}/common/armv8" also serves the assembly's .include
+    target_include_directories(ico_libmpeg2 PUBLIC "${_m2}/common" "${_m2}/decoder"
+                                                  "${_m2}/common/armv8")
+else()
+    target_sources(ico_libmpeg2 PRIVATE ${_m2}/decoder/riscv/impeg2d_function_selector.c
+                                        ${_m2}/common/riscv/ideint_function_selector.c)
+    target_include_directories(ico_libmpeg2 PUBLIC "${_m2}/common" "${_m2}/decoder"
+                                                  "${_m2}/common/riscv")
+endif()
 if(ANDROID)
     # <log/log.h> is AOSP's, not the NDK's (android/log/log.h)
     target_include_directories(ico_libmpeg2 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/android")
 endif()
 # third-party code: its own warnings are not ours to fix
-target_compile_options(ico_libmpeg2 PRIVATE -w -fwrapv)
+target_compile_options(ico_libmpeg2 PRIVATE -w $<$<COMPILE_LANGUAGE:C>:-fwrapv>)
 # The decoder left-shifts negative coefficients (impeg2d_vld.c), defined by
 # GCC and Clang but undefined in ISO C; UBSan's shift check would stop the
 # sanitizer builds inside the library.
 if(ICO_SANITIZE)
-    target_compile_options(ico_libmpeg2 PRIVATE -fno-sanitize=shift)
+    target_compile_options(ico_libmpeg2 PRIVATE $<$<COMPILE_LANGUAGE:C>:-fno-sanitize=shift>)
 endif()
 set_target_properties(ico_libmpeg2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
