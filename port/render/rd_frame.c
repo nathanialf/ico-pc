@@ -115,11 +115,16 @@ float rd__TargetZScale(uint32_t id)
     case RD_ZFMT_16:
         return 1.0f / 65536.0f;
     default:
-        /* package QUEEN: PSMZ32 on a float depth buffer is z * 2^-33 with
-           the top values apart (gs_math.hlsli gs_z_to_depth); on D24S8
-           (no depth readback, rhi.h) z * 2^-32 */
-        return g_rd.hasDevice && !rhi_Limits()->depthReadback ? 1.0f / 4294967296.0f
-                                                              : 1.0f / 8589934592.0f;
+        /* package QUEEN: PSMZ32 on a float depth buffer (D32S8) is z * 2^-33
+           with the top values apart (gs_math.hlsli gs_z_to_depth); on any
+           other (the Vulkan D24S8 fallback, rhi.h) z * 2^-32 */
+        if (g_rd.hasDevice) {
+            const char *ds = rhi_Limits()->depthStencilFormatName;
+            if (!ds || strcmp(ds, "D32S8") != 0) {
+                return 1.0f / 4294967296.0f;
+            }
+        }
+        return 1.0f / 8589934592.0f;
     }
 }
 
