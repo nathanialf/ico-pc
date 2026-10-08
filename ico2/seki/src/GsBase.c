@@ -101,6 +101,8 @@ static void gsbHostWidenCull(float *projHalf);
 /* port/game/video_options.c: the presentation's aspect / (4/3), 1 in the
    Original preset */
 extern float ico_video_wide_x(void);
+/* port/game/video_options.c: the Screen softening switch (issue 11), 1 = on */
+extern int ico_video_effect_softening(void);
 
 /* Point the double buffer's two display and two draw environments at the
  * frame this stage draws into: the low nine bits of each frame word carry the
@@ -687,6 +689,10 @@ static void gsb_antiAlias(void)
     GsbRect d2 = {-1028, -1028, 2048, 2048};
     int lv[2];
 
+    /* PC port (issue 11): Options > Effects > Screen softening off */
+    if (!ico_video_effect_softening()) {
+        return;
+    }
     if (optionScreenMode == 0) {
         lv[0] = GlobalStageSetting.antiLevel0;
         lv[1] = GlobalStageSetting.antiLevel1;

@@ -84,6 +84,35 @@ void *dmaVif;
 char *matrixptr;
 int debug_font_flag;
 int debug_fullscreen_effect = 1;
+/* video_options.c's effect switches (issue 11), set by the cases below:
+   glow, depth of field, softening, motion blur, fog */
+static int s_fx[5] = {1, 1, 1, 1, 1};
+
+int ico_video_effect_glow(void)
+{
+    return s_fx[0];
+}
+
+int ico_video_effect_depth_of_field(void)
+{
+    return s_fx[1];
+}
+
+int ico_video_effect_softening(void)
+{
+    return s_fx[2];
+}
+
+int ico_video_effect_motion_blur(void)
+{
+    return s_fx[3];
+}
+
+int ico_video_effect_fog(void)
+{
+    return s_fx[4];
+}
+
 StageSetting GlobalStageSetting;
 PadState pad[16];
 int systemStatus[12];
@@ -472,6 +501,104 @@ static void checkRecordingModes(void)
         }
         CHECK(s_lockBase == 0x3A00, "%s: PAL texture lock base 0x3A00", what);
     }
+}
+
+/* one frame of post mode post and feed mode feed under the switches in
+   s_fx: the sprites of each kind into kinds */
+static void recordSwitched(int post, int feed, int kinds[RD_POST_COUNT])
+{
+    setStage(post, feed, 64);
+    FullScreenEffectBefore();
+    FullScreenEffectAfter();
+    dl_Swap();
+    collectFrame(rd__LastFrame());
+    memset(kinds, 0, sizeof(int) * RD_POST_COUNT);
+    for (int i = 0; i < s_nspr; i++) {
+        kinds[s_spr[i].kind]++;
+    }
+}
+
+/* issue 11: Glow off drops the flare (or bloom) half of every post mode,
+   Depth of field off the depth half, each leaving the other as it was; the
+   aura is neither */
+static void checkRecordingSwitches(void)
+{
+    int kinds[RD_POST_COUNT], on[RD_POST_COUNT];
+
+    for (int post = 1; post <= 8; post++) {
+        const int flare = post != 2 && post != 8;
+        const int dof = post == 2 || post == 3 || post == 5 || post == 7;
+        const int want = post == 4 || post == 5 ? RD_POST_BLOOM : RD_POST_FLARE;
+        char what[64];
+
+        /* glow off */
+        s_fx[0] = 0;
+        s_fx[1] = 1;
+        snprintf(what, sizeof(what), "post %d, glow off", post);
+        recordSwitched(post, 0, kinds);
+        CHECK(kinds[RD_POST_FLARE] == 0 && kinds[RD_POST_BLOOM] == 0 &&
+                  kinds[RD_POST_EYE_BLUR] == 0,
+              "%s: no flare, bloom or eye blur (%d, %d, %d)", what, kinds[RD_POST_FLARE],
+              kinds[RD_POST_BLOOM], kinds[RD_POST_EYE_BLUR]);
+        CHECK(kinds[RD_POST_DOF] == (dof ? 2 + 6 + 4 : 0), "%s: DoF sprites %d", what,
+              kinds[RD_POST_DOF]);
+        checkReadAfterWrite(what);
+        /* depth of field off */
+        s_fx[0] = 1;
+        s_fx[1] = 0;
+        snprintf(what, sizeof(what), "post %d, depth of field off", post);
+        recordSwitched(post, 0, kinds);
+        CHECK(kinds[RD_POST_DOF] == 0, "%s: no DoF sprites (%d)", what, kinds[RD_POST_DOF]);
+        if (flare) {
+            CHECK(kinds[want] > 20 && kinds[RD_POST_EYE_BLUR] >= 1, "%s: flare sprites as %s (%d)",
+                  what, kindName((uint32_t)want), kinds[want]);
+        } else {
+            CHECK(kinds[RD_POST_FLARE] == 0 && kinds[RD_POST_BLOOM] == 0, "%s: no flare", what);
+        }
+        checkReadAfterWrite(what);
+        /* both off: nothing */
+        s_fx[0] = s_fx[1] = 0;
+        snprintf(what, sizeof(what), "post %d, both off", post);
+        recordSwitched(post, 0, kinds);
+        CHECK(s_nspr == 0, "%s: no sprites (%d)", what, s_nspr);
+    }
+    /* the aura (feedback) the same with every switch off as on */
+    for (int feed = 1; feed <= 3; feed++) {
+        char what[64];
+
+        snprintf(what, sizeof(what), "post 7 feed %d", feed);
+        s_fx[0] = s_fx[1] = s_fx[2] = s_fx[3] = s_fx[4] = 1;
+        recordSwitched(7, feed, on);
+        s_fx[0] = s_fx[1] = s_fx[2] = s_fx[3] = s_fx[4] = 0;
+        recordSwitched(7, feed, kinds);
+        CHECK(on[RD_POST_AURA] > 0 && kinds[RD_POST_AURA] == on[RD_POST_AURA],
+              "%s: aura sprites with the switches off %d, on %d", what, kinds[RD_POST_AURA],
+              on[RD_POST_AURA]);
+    }
+    s_fx[0] = s_fx[1] = s_fx[2] = s_fx[3] = s_fx[4] = 1;
+}
+
+/* issue 11: Motion blur off draws nothing, whatever the stage's alpha, and
+   leaves nothing for the presenter to scale */
+static void checkRecordingMotionBlurOff(void)
+{
+    ScreenHeight = 448;
+    systemStatus[0] = 0;
+    currentScreenWidth = 0;
+    SetMotionBlur(0x40);
+    s_fx[3] = 0;
+    dl_SetDLPriority(0);
+    MotionBlur();
+    dl_Swap();
+    collectFrame(rd__LastFrame());
+    CHECK(s_nspr == 0, "motion blur off: no sprite (%d)", s_nspr);
+    s_fx[3] = 1;
+    MotionBlur();
+    dl_Swap();
+    collectFrame(rd__LastFrame());
+    CHECK(s_nspr == 1 && s_spr[0].kind == RD_POST_MOTION_BLUR, "motion blur back on: one sprite");
+    ScreenHeight = H;
+    systemStatus[0] = 1;
 }
 
 /* the motion blur: DISPLAY (PSMCT24) H/2 lines stretched over H */
@@ -1324,6 +1451,7 @@ int main(void)
               "first After before any Before: %d sprites, %d into SCENE (want 2)", s_nspr, scene);
     }
     checkRecordingModes();
+    checkRecordingSwitches();
     InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
     setStage(7, 0, 64);
     FullScreenEffectBefore();
@@ -1346,6 +1474,7 @@ int main(void)
     InitializeStaticBlur();
     checkRecordingMotionBlur(448);
     checkRecordingMotionBlur(512);
+    checkRecordingMotionBlurOff();
     rd_Shutdown();
     printf("  (r) recording checks: %s\n", failures ? "FAILED" : "ok");
     if (failures) {

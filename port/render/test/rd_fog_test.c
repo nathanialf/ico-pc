@@ -70,6 +70,14 @@ void *dmaVif;
 char *matrixptr;
 int debug_font_flag;
 int debug_fullscreen_effect = 1;
+/* video_options.c's Fog switch (issue 11) */
+static int s_fogSwitch = 1;
+
+int ico_video_effect_fog(void)
+{
+    return s_fogSwitch;
+}
+
 StageSetting GlobalStageSetting;
 PadState pad[16];
 
@@ -570,6 +578,30 @@ static void checkRecording(int k)
               rd__RecFrame()->lists[4].count == b4 && dl_GetPri() == 3,
           "fogOn 0 records nothing");
     dl_Swap();
+    /* issue 11: Options > Effects > Fog off records nothing either, and no
+       RD_POST_FOG */
+    setFog(k);
+    s_fogSwitch = 0;
+    dl_SetDLPriority(3);
+    const uint32_t o3 = rd__RecFrame() ? rd__RecFrame()->lists[3].count : 0;
+    const uint32_t o4 = rd__RecFrame() ? rd__RecFrame()->lists[4].count : 0;
+    fog_DrawFog();
+    CHECK(rd__RecFrame() && rd__RecFrame()->lists[3].count == o3 &&
+              rd__RecFrame()->lists[4].count == o4 && dl_GetPri() == 3,
+          "fog off records nothing");
+    dl_Swap();
+    {
+        const RdFrame *g = rd__LastFrame();
+        int fogs = 0;
+        for (int l = 0; l < RD_LIST_COUNT; l++) {
+            for (uint32_t j = 0; j < g->lists[l].count; j++) {
+                fogs += g->lists[l].cmds[j].type == RDC_POST_STUB &&
+                        g->lists[l].cmds[j].b[0] == RD_POST_FOG;
+            }
+        }
+        CHECK(fogs == 0, "fog off: no RD_POST_FOG (%d)", fogs);
+    }
+    s_fogSwitch = 1;
 }
 
 /* ===================================================== (p) the pixels */

@@ -8,6 +8,9 @@
 #include "DmaPacket.h"
 #include "DisplayList.h"
 
+/* port/game/video_options.c: the Fog switch (issue 11), 1 = on */
+extern int ico_video_effect_fog(void);
+
 #ifdef ICO_RD
 
 #include <string.h>
@@ -344,6 +347,7 @@ void fog_DrawFog(void)
 
     if (debug_fullscreen_effect == 0) return;
     if (GlobalStageSetting.fogOn == 0) return;
+    if (!ico_video_effect_fog()) return; /* PC port (issue 11): Options > Effects > Fog off */
 
     if (debug_font_flag & 1) debug_Printf(510, ScreenHeight / 2 - 8, 0xCCCCCC00, "Z");
 

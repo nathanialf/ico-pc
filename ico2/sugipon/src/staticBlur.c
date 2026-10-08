@@ -62,6 +62,11 @@ extern void gif_SetZWrite(int on);
 extern void gif_SpriteSensitiveOrg(void *r, long long z, void *uv, void *col, int prim);
 /* as in GifPacket.h, which this file does not include */
 extern void gif_StartPacketPri(int pri);
+/* port/game/video_options.c: the Glow, Depth of field and Motion blur
+   switches (issue 11), 1 = on */
+extern int ico_video_effect_glow(void);
+extern int ico_video_effect_depth_of_field(void);
+extern int ico_video_effect_motion_blur(void);
 
 #ifdef ICO_RD
 
@@ -1213,6 +1218,10 @@ void MotionBlur(void)
     if (motionBlurAlpha == 0) {
         return;
     }
+    /* PC port (issue 11): Options > Effects > Motion blur off */
+    if (!ico_video_effect_motion_blur()) {
+        return;
+    }
     if (currentScreenWidth != 0) {
         return;
     }
@@ -1408,13 +1417,45 @@ static void dispFeedInfo(void)
     }
 }
 
+/* PC port (issue 11): the post mode with Options > Effects' Glow or Depth
+ * of field off.  The modes are 1, 4, 6 flare (or bloom) alone, 2 depth of
+ * field alone, 3, 5, 7 flare (or bloom) and depth of field, 8 none.  Glow
+ * off drops the flare half (1, 4, 6 -> 8; 3, 5, 7 -> 2), then Depth of field
+ * off drops the depth half (2 -> 8; 3 -> 1, 5 -> 4, 7 -> 6).  Each half is
+ * self-contained: makeFullScreenFlareBefore's FB alpha (cleanUpFB) feeds
+ * only its own mask and paste, depthField makes its own copies of the
+ * frame and reads its alpha nowhere in its colour, and the latched postMode
+ * keeps FullScreenEffectAfter in step with this frame's Before.  What the
+ * frame's alpha holds afterwards (read by the aura's feedback mode 3
+ * through DATE) is then the scene's own, as in a stage without the flare. */
+static int sbEffectMode(int m)
+{
+    if (!ico_video_effect_glow()) {
+        if (m == 1 || m == 4 || m == 6) {
+            m = 8;
+        } else if (m == 3 || m == 5 || m == 7) {
+            m = 2;
+        }
+    }
+    if (!ico_video_effect_depth_of_field()) {
+        if (m == 2) {
+            m = 8;
+        } else if (m == 3) {
+            m = 1;
+        } else if (m == 5 || m == 7) {
+            m = m - 1;
+        }
+    }
+    return m;
+}
+
 void FullScreenEffectBefore(void)
 {
     if (debug_fullscreen_effect == 0) {
         return;
     }
 
-    postModeRequest = GlobalStageSetting.postEffect;
+    postModeRequest = sbEffectMode(GlobalStageSetting.postEffect);
     feedModeRequest = GlobalStageSetting.feedbackEffect;
 
     blurCol.f[0] = GlobalStageSetting.feedbackCol[0];

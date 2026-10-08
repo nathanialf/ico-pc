@@ -52,6 +52,7 @@
 #include "GifHost.h"
 #include "GifPacket.h"
 #include "GsBase.h"
+#include "video_options.h"
 
 static int failures;
 
@@ -1189,6 +1190,56 @@ static void checkMask(void)
     }
 }
 
+/* issue 11: Options > Effects > Screen softening off: the stage's levels
+   record no anti-alias pass (rd_post.c expands RD_POST_AA_DOWNSAMPLE and
+   RD_POST_AA_COMPOSITE into list-10 sprites drawing into or sampling AA0
+   and AA1); back on, its four sprites */
+static int s_aaSprites;
+
+static void aaWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
+{
+    (void)user, (void)index;
+    if (list != 10 || c->type != RDC_SCREEN) {
+        return;
+    }
+    const uint32_t aa0 = rd_Target(RD_TARGET_AA0).id, aa1 = rd_Target(RD_TARGET_AA1).id;
+    const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
+    const int samples = t && t->kind == RD_TEXKIND_TARGET && (t->target == aa0 || t->target == aa1);
+    s_aaSprites += st->color == aa0 || st->color == aa1 || samples;
+}
+
+static int aaRecords(const RdFrame *f)
+{
+    s_aaSprites = 0;
+    RdStateBlock st = f->startState;
+    rd__Walk(f, 0, &st, aaWalk, NULL);
+    return s_aaSprites;
+}
+
+static void checkSofteningOff(void)
+{
+    IcoVideoOptions o;
+    for (int on = 0; on <= 1; on++) {
+        ico_video_get(&o);
+        o.effectSoftening = on;
+        ico_video_set(&o);
+        CHECK(ico_video_effect_softening() == on, "softening: the switch reads %d", on);
+        tick(); /* opens the frame */
+        GlobalStageSetting.antiLevel0 = 0x40;
+        GlobalStageSetting.antiLevel1 = 0x20;
+        tick(); /* closes it: anti-alias (list 10) */
+        GlobalStageSetting.antiLevel0 = GlobalStageSetting.antiLevel1 = 0;
+        const RdFrame *f = rd__LastFrame();
+        if (!f) {
+            CHECK(0, "softening: a frame");
+            return;
+        }
+        const int n = aaRecords(f);
+        CHECK(n == (on ? 4 : 0), "softening %s: %d anti-alias sprites (want %d)", on ? "on" : "off",
+              n, on ? 4 : 0);
+    }
+}
+
 static void boot(void)
 {
     matrixptr = s_spr;
@@ -1208,6 +1259,7 @@ static void recordingChecks(void)
     checkParity();
     checkLeak();
     checkMask();
+    checkSofteningOff();
     checkVu();
     checkZScale();
 }
