@@ -724,7 +724,9 @@ const char *rhi_OverlayFromLayerName(const char *layer);
  * leaves it on: vkBasalt (implicit) needs ENABLE_VKBASALT=1, its manifest's
  * enable_environment; the Mesa overlay (explicit) needs VK_INSTANCE_LAYERS
  * or VK_LOADER_LAYERS_ENABLE to name it; VK_LOADER_LAYERS_DISABLE naming a
- * layer switches it off.  The other layers above are implicit without an
+ * layer switches it off, as does the layer's own disable variable set to
+ * anything (its manifest's disable_environment: DISABLE_VK_LAYER_reshade_1,
+ * DISABLE_VKBASALT, DISABLE_VK_LAYER_VALVE_steam_overlay_1).  The other layers above are implicit without an
  * enable variable: on.  env reads a variable (getenv; a table in tests). */
 bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name));
 

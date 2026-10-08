@@ -441,19 +441,23 @@ const char *rhi_OverlayName(void)
 /* ------------------------------------------- the layer classifiers (R0)
  * The known layers: name (a trailing '*' matches any rest), the program,
  * whether it is an overlay, whether the loader takes it as an explicit
- * layer, and the variable an implicit one needs set to "1" (its manifest's
- * enable_environment), NULL for none. */
+ * layer, the variable an implicit one needs set to "1" (its manifest's
+ * enable_environment), NULL for none, and the variable that switches it off
+ * when set to anything (its manifest's disable_environment), NULL for none
+ * (the Mesa overlay is explicit and has none). */
 typedef struct RhiKnownLayer {
     const char *layer, *program;
     bool overlay, isExplicit;
-    const char *enableEnv;
+    const char *enableEnv, *disableEnv;
 } RhiKnownLayer;
 
 static const RhiKnownLayer s_knownLayers[] = {
-    {"VK_LAYER_reshade", "ReShade", false, false, NULL},
-    {"VK_LAYER_VKBASALT_post_processing", "vkBasalt", false, false, "ENABLE_VKBASALT"},
-    {"VK_LAYER_VALVE_steam_overlay_*", "Steam overlay", true, false, NULL},
-    {"VK_LAYER_MESA_overlay", "Mesa overlay", true, true, NULL},
+    {"VK_LAYER_reshade", "ReShade", false, false, NULL, "DISABLE_VK_LAYER_reshade_1"},
+    {"VK_LAYER_VKBASALT_post_processing", "vkBasalt", false, false, "ENABLE_VKBASALT",
+     "DISABLE_VKBASALT"},
+    {"VK_LAYER_VALVE_steam_overlay_*", "Steam overlay", true, false, NULL,
+     "DISABLE_VK_LAYER_VALVE_steam_overlay_1"},
+    {"VK_LAYER_MESA_overlay", "Mesa overlay", true, true, NULL, NULL},
 };
 
 /* a glob with '*' (any run of characters) against s */
@@ -532,6 +536,12 @@ bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name)
     }
     if (listNames(env("VK_LOADER_LAYERS_DISABLE"), layer, k->isExplicit)) {
         return false;
+    }
+    if (k->disableEnv) {
+        const char *d = env(k->disableEnv);
+        if (d && *d) {
+            return false;
+        }
     }
     if (k->isExplicit) {
         return listNames(env("VK_INSTANCE_LAYERS"), layer, true) ||

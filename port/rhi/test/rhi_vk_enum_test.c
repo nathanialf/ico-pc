@@ -137,6 +137,10 @@ static void checkLayers(void)
     static const char *const offReshade[] = {"VK_LOADER_LAYERS_DISABLE=VK_LAYER_reshade", NULL};
     static const char *const offImplicit[] = {"ENABLE_VKBASALT=1",
                                               "VK_LOADER_LAYERS_DISABLE=~implicit~", NULL};
+    static const char *const offReshadeVar[] = {"DISABLE_VK_LAYER_reshade_1=1", NULL};
+    static const char *const offBasaltVar[] = {"ENABLE_VKBASALT=1", "DISABLE_VKBASALT=1", NULL};
+    static const char *const offSteamVar[] = {"DISABLE_VK_LAYER_VALVE_steam_overlay_1=1", NULL};
+    static const char *const emptyVar[] = {"DISABLE_VK_LAYER_reshade_1=", NULL};
     static const char *const offSteam[] = {"VK_LOADER_LAYERS_DISABLE=VK_LAYER_VALVE_*", NULL};
 
     static const struct {
@@ -151,6 +155,13 @@ static void checkLayers(void)
         {"VK_LAYER_VALVE_steam_overlay_64", none, true},
         {"VK_LAYER_VALVE_steam_overlay_64", offSteam, false},
         {"VK_LAYER_VALVE_steam_overlay_64", offReshade, true},
+        /* the layer's own disable variable (its manifest's disable_environment) */
+        {"VK_LAYER_reshade", offReshadeVar, false},
+        {"VK_LAYER_reshade", emptyVar, true},
+        {"VK_LAYER_reshade", offSteamVar, true},
+        {"VK_LAYER_VALVE_steam_overlay_64", offSteamVar, false},
+        {"VK_LAYER_VALVE_steam_overlay_32", offSteamVar, false},
+        {"VK_LAYER_VKBASALT_post_processing", offBasaltVar, false},
         /* vkBasalt: ENABLE_VKBASALT=1, or the loader's enable list */
         {"VK_LAYER_VKBASALT_post_processing", none, false},
         {"VK_LAYER_VKBASALT_post_processing", basaltZero, false},
