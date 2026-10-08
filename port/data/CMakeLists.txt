@@ -142,6 +142,28 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endif()
 
+# iso_import_test (v0.5.0, AN-C): the Android first start's copy of the
+# chosen disc image (port/platform/android/iso_import.c), on Linux with SDL's
+# memory streams for the content:// one: the copy byte for byte with its
+# progress, a cancel leaving nothing, a write failure's reason, the space
+# arithmetic. The Linux window build only; SDL3 is found after this
+# directory (port/rhi), so the target is made at the end of the configure.
+function(_ico_data_iso_import_test)
+    if(NOT TARGET SDL3::SDL3-shared)
+        return()
+    endif()
+    add_executable(iso_import_test "${CMAKE_SOURCE_DIR}/port/data/test/iso_import_test.c"
+                                   "${CMAKE_SOURCE_DIR}/port/platform/android/iso_import.c")
+    target_include_directories(iso_import_test PRIVATE "${CMAKE_SOURCE_DIR}/port/data"
+                               "${CMAKE_SOURCE_DIR}/port/platform/android")
+    target_compile_options(iso_import_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(iso_import_test PRIVATE SDL3::SDL3-shared)
+    add_test(NAME iso_import COMMAND iso_import_test "${CMAKE_BINARY_DIR}/port/data")
+endfunction()
+if(NOT ICO_HEADLESS AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+    cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_data_iso_import_test)
+endif()
+
 # --- The data tables' runtime loader --
 # The game's copy (port/data/tables.c and port/data/gen/) is compiled into
 # ico_game by the top-level CMakeLists.txt. Here: its tests.

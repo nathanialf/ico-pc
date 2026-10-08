@@ -72,6 +72,14 @@
  * in it), the log is mirrored to logcat, a fatal error shows SDL's message
  * box and ends the process with _exit, and the end-of-run steps run from
  * ico_host_shutdown before ico_host_main returns instead of atexit.
+ * The window opens before the game data is mounted (SDL has one window
+ * there), and the disc image is Ico_PAL.iso or .chd in the files folder,
+ * else ini iso= when that file exists, else the one chosen in the system's
+ * file picker, copied into the files folder first
+ * (port/platform/android/iso_import.h); the copy's and the extraction's
+ * progress are drawn in the game's window (window_host.h
+ * ico_window_progress), Back stops them and the run ends; once the data is
+ * mounted the copy is deleted unless ini keep_image=1.
  */
 #include <errno.h>
 #include <stdarg.h>
@@ -95,6 +103,7 @@
 #include "trace_host.h"
 #ifdef __ANDROID__
 #include "host_android.h" /* port/platform/android: the version line */
+#include "iso_import.h"   /* the first start's copy of the chosen image */
 #endif
 #ifndef ICO_HEADLESS
 #include "game_font.h" /* port/ui: the game face, extracted after the tables */
@@ -111,6 +120,12 @@
 #include "video_options.h"
 #include "window_host.h"
 
+#endif
+/* Android's window build (package AN-C): the window opens before the game
+   data is mounted, the first start chooses the image in the system's
+   picker and copies it, and its progress is drawn in the game's window. */
+#if defined(__ANDROID__) && !defined(ICO_HEADLESS)
+#define ICO_ANDROID_UI 1
 #endif
 /* The PAL disc image's SHA-1. */
 #define ICO_ISO_SHA1 ICO_DISC_ISO_SHA1
@@ -501,10 +516,13 @@ static void record_check(const char *path)
 
 /* Linux window build: SDL3's file dialog (xdg-desktop-portal, else zenity or
    kdialog), since host_config.c's native dialog is Windows only. Returns 0
-   with the path in out, -1 when cancelled or unavailable. */
+   with the path in out, -1 when cancelled or unavailable. Android: the
+   system's file picker in front of the game's window, which is already
+   open (SDL's video stays as it is); out is a content:// address
+   (iso_import.h copies it). */
 typedef struct PickState {
     char path[ICO_PATH_MAX];
-    int done;
+    SDL_AtomicInt done; /* the answer may come on another thread (Android's UI thread) */
     int ok;
 } PickState;
 
@@ -517,8 +535,38 @@ static void SDLCALL pick_done(void *user, const char *const *files, int filter)
         snprintf(st->path, sizeof(st->path), "%s", files[0]);
         st->ok = 1;
     }
-    st->done = 1;
+    SDL_SetAtomicInt(&st->done, 1);
 }
+
+#ifdef __ANDROID__
+
+/* no filters: Android's picker matches MIME types, and a disc image has
+   none it knows (the extractor checks the file) */
+static int pick_iso_sdl(char *out, size_t size)
+{
+    PickState st;
+
+    memset(&st, 0, sizeof(st));
+    SDL_ShowOpenFileDialog(pick_done, &st, NULL, NULL, 0, NULL, false);
+    while (SDL_GetAtomicInt(&st.done) == 0) {
+        /* the window keeps drawing behind the picker; Back while it shows
+           (the picker did not come up) gives up */
+        if (ico_window_progress("Setting up ICO (first start only)",
+                                "Choose your ICO disc image (.iso or .chd)", -1)) {
+            fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
+            return -1;
+        }
+        SDL_Delay(20);
+    }
+    if (!st.ok) {
+        fprintf(stderr, "ico_pc: no file chosen in the picker (%s)\n", SDL_GetError());
+        return -1;
+    }
+    snprintf(out, size, "%s", st.path);
+    return 0;
+}
+
+#else
 
 static int pick_iso_sdl(char *out, size_t size)
 {
@@ -537,10 +585,10 @@ static int pick_iso_sdl(char *out, size_t size)
     }
     SDL_ShowOpenFileDialog(pick_done, &st, NULL, filters, 2, NULL, false);
     started = 1;
-    while (started && !st.done) {
+    while (started && SDL_GetAtomicInt(&st.done) == 0) {
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_EVENT_QUIT) {
-                st.done = 1;
+                SDL_SetAtomicInt(&st.done, 1);
             }
         }
         SDL_Delay(20);
@@ -553,11 +601,18 @@ static int pick_iso_sdl(char *out, size_t size)
     return 0;
 }
 
+#endif /* __ANDROID__ */
+
+#endif
+
+#ifdef ICO_ANDROID_UI
+static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, int *picked);
 #endif
 
 /* Finds the disc image; fatal when there is none. *picked is set when it
-   came from the dialog (to be saved once verified). */
-static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
+   came from the dialog (to be saved once verified). 0, or 1 when the player
+   stopped the Android first start's copy (the run ends without a box). */
+static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
 {
     /* the plain image first: of two copies, the one read without decoding */
     static const char *const names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
@@ -568,13 +623,19 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
     if (a->iso != NULL) {
         snprintf(iso, ICO_PATH_MAX, "%s", a->iso);
         fprintf(stderr, "ico_pc: disc image from --iso: %s\n", iso);
-        return;
+        return 0;
     }
+#ifdef ICO_ANDROID_UI
+    (void)names;
+    (void)v;
+    (void)i;
+    return find_iso_android(ini, exe_dir, iso, picked);
+#else
     for (i = 0; i < 2; i++) {
         ico_path_join(iso, ICO_PATH_MAX, exe_dir, names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
-            return;
+            return 0;
         }
     }
     v = ico_ini_get(ini, "iso");
@@ -583,19 +644,19 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
             fprintf(stderr, "ico_pc: iso= in ico-pc.ini: the path is too long\n");
         }
         fprintf(stderr, "ico_pc: disc image from ico-pc.ini: %s\n", iso);
-        return;
+        return 0;
     }
     v = getenv("ICO_ISO");
     if (v != NULL && v[0] != '\0') {
         snprintf(iso, ICO_PATH_MAX, "%s", v);
         fprintf(stderr, "ico_pc: disc image from ICO_ISO: %s\n", iso);
-        return;
+        return 0;
     }
     for (i = 0; i < 2; i++) {
         snprintf(iso, ICO_PATH_MAX, "baserom/%s", names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
-            return;
+            return 0;
         }
     }
 #if !defined(ICO_HEADLESS) && !defined(_WIN32)
@@ -605,10 +666,12 @@ static void find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char
 #endif
         fprintf(stderr, "ico_pc: disc image chosen in the dialog: %s\n", iso);
         *picked = 1;
-        return;
+        return 0;
     }
     ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
                                "Ico_PAL.chd next to the program, or set iso=<path> in ico-pc.ini.");
+    return 0;
+#endif
 }
 
 static void verify_iso(const char *iso)
@@ -662,7 +725,25 @@ static int use_iso_mode(const IcoIni *ini)
 #endif
 }
 
-#ifndef ICO_HEADLESS
+#ifdef ICO_ANDROID_UI
+
+/* Android: one window only (SDL), the game's, already open: the progress is
+   drawn in it (window_host.h ico_window_progress), Back stops */
+static void progress_ui_open(void) {}
+
+/* 1 when the player asked to stop. */
+static int progress_ui_update(const char *phase, int pct)
+{
+    const char *words = strcmp(phase, "hash") == 0   ? "Checking the disc image"
+                        : strcmp(phase, "copy") == 0 ? "Copying the disc image into the app"
+                                                     : "Preparing the game's data";
+
+    return ico_window_progress("Setting up ICO (first start only)", words, pct);
+}
+
+static void progress_ui_close(void) {}
+
+#elif !defined(ICO_HEADLESS)
 
 /* The window build's progress window during the first-run extraction: SDL's
    2D renderer, a title and a bar, closed before the game's window opens. */
@@ -746,8 +827,9 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
         p->phase = phase;
         p->logged = -1;
         fprintf(stderr, "ico_pc: first run: %s\n",
-                strcmp(phase, "hash") == 0 ? "checking the disc image's SHA-1"
-                                           : "copying the game's files into the archive");
+                strcmp(phase, "hash") == 0   ? "checking the disc image's SHA-1"
+                : strcmp(phase, "copy") == 0 ? "copying the chosen disc image into the app"
+                                             : "copying the game's files into the archive");
     }
     if (pct / 10 != p->logged) {
         p->logged = pct / 10;
@@ -766,6 +848,123 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
 #endif
     return 0;
 }
+
+#ifdef ICO_ANDROID_UI
+
+static const char *const android_image_names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
+
+/* Android's find_iso: Ico_PAL.iso or .chd in the app's files folder (a
+   copy kept with keep_image=1, or one put there with a cable or the Files
+   app), then ini iso= when that file is there, else the system's picker
+   and a copy of the chosen file into the files folder (iso_import.h). */
+static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
+{
+    char uri[ICO_PATH_MAX];
+    char why[1024];
+    const char *v;
+    Progress prog;
+    int i, r;
+
+    for (i = 0; i < 2; i++) {
+        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, android_image_names[i]) == 0 &&
+            ico_file_exists(iso)) {
+            fprintf(stderr, "ico_pc: disc image in the app's folder: %s\n", iso);
+            return 0;
+        }
+    }
+    v = ico_ini_get(ini, "iso");
+    if (v != NULL && v[0] != '\0') {
+        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, v) == 0 && ico_file_exists(iso)) {
+            fprintf(stderr, "ico_pc: disc image from ico-pc.ini: %s\n", iso);
+            return 0;
+        }
+        fprintf(stderr, "ico_pc: iso=%s in ico-pc.ini is not there; asking for the image\n", v);
+    }
+    if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
+        ico_host_fatal(log_file(),
+                       "No disc image was chosen.\n"
+                       "Start the game again and choose your ICO disc image (a .iso or .chd "
+                       "copy of the PAL disc), or copy it as Ico_PAL.iso into %s with a USB "
+                       "cable or the Files app.",
+                       exe_dir);
+    }
+    fprintf(stderr, "ico_pc: disc image chosen in the file picker: %s\n", uri);
+    memset(&prog, 0, sizeof(prog));
+    r = ico_iso_import(uri, iso, ICO_PATH_MAX, extract_progress, &prog, why, sizeof(why));
+    if (r == ICO_ISO_IMPORT_CANCELLED) {
+        return 1;
+    }
+    if (r != ICO_ISO_IMPORT_OK) {
+        ico_host_fatal(log_file(), "%s", why);
+    }
+    *picked = 1;
+    return 0;
+}
+
+/* whether iso is the app's own Ico_PAL.iso or .chd in the files folder */
+static int android_own_image(const char *exe_dir, const char *iso)
+{
+    char own[ICO_PATH_MAX];
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        if (ico_path_join(own, sizeof(own), exe_dir, android_image_names[i]) == 0 &&
+            strcmp(own, iso) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* The extractor refused the app's own image (unreadable, or not the PAL
+   disc): it goes, so the next start asks for the image again instead of
+   finding this one. */
+static void android_drop_refused_image(const char *exe_dir, const char *iso)
+{
+    if (android_own_image(exe_dir, iso)) {
+        fprintf(stderr, "ico_pc: deleting the refused image %s %s\n", iso,
+                ico_remove(iso) == 0 ? "(the next start asks for one)" : "failed");
+    }
+}
+
+/* After the game's data is mounted: the app's own copy of the image
+   (Ico_PAL.iso or .chd in the files folder) is deleted, which gives back
+   its space, unless ini keep_image=1; iso= is saved only for an image that
+   stays. */
+static void android_image_done(const IcoIni *ini, const char *ini_path, const char *exe_dir,
+                               const char *iso, int picked)
+{
+    const char *v = ico_ini_get(ini, "keep_image");
+    const int keep = v != NULL && (strcmp(v, "1") == 0 || strcmp(v, "true") == 0);
+    const int mine = android_own_image(exe_dir, iso);
+    SDL_PathInfo info;
+
+    if (mine && !keep) {
+        const long long bytes = SDL_GetPathInfo(iso, &info) ? (long long)info.size : -1;
+
+        if (ico_remove(iso) == 0) {
+            fprintf(stderr,
+                    "ico_pc: deleted the copy of the disc image %s: %.2f GB given back "
+                    "(keep_image=1 in ico-pc.ini keeps it)\n",
+                    iso, bytes > 0 ? (double)bytes / 1e9 : 0.0);
+        } else {
+            fprintf(stderr, "ico_pc: cannot delete the copy of the disc image %s\n", iso);
+        }
+        return;
+    }
+    if (mine) {
+        fprintf(stderr, "ico_pc: keep_image=1: the copy of the disc image %s stays\n", iso);
+    }
+    if (picked) {
+        if (ico_ini_store(ini_path, "iso", iso) == 0) {
+            fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+        } else {
+            fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
+        }
+    }
+}
+
+#endif
 
 /* Checks an archive (meta.json, this disc, the boot ELF's hash read back
    through it) and makes it the disc. 0, or -1 with the reason. */
@@ -834,9 +1033,10 @@ static void copy_path(char *out, size_t size, const char *s)
     out[n] = '\0';
 }
 
-/* The archive mode: mount ico.o2r, extracting it on the first run. */
-static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir,
-                            const char *ini_path, char *source, size_t source_size)
+/* The archive mode: mount ico.o2r, extracting it on the first run. 0, or 1
+   when the player stopped the Android first start (the run ends). */
+static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir,
+                           const char *ini_path, char *source, size_t source_size)
 {
     char pref[ICO_PATH_MAX];
     char cand[2][ICO_PATH_MAX];
@@ -861,7 +1061,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         }
         if (mount_archive(cand[i], why, sizeof(why)) == 0) {
             copy_path(source, source_size, cand[i]);
-            return;
+            return 0;
         }
         fprintf(stderr, "ico_pc: %s is not usable: %s\n", cand[i], why);
     }
@@ -869,7 +1069,9 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     /* the first run: the image, verified and extracted once */
     fprintf(stderr, "ico_pc: no usable %s in %s: the first run extracts it from the disc image\n",
             ICO_ARCHIVE_NAME, pref);
-    find_iso(a, ini, exe_dir, iso, &picked);
+    if (find_iso(a, ini, exe_dir, iso, &picked) != 0) {
+        return 1;
+    }
     if (ico_make_dir(pref) != 0) {
         ico_host_fatal(log_file(),
                        "Cannot create the folder %s for the game's data.\n"
@@ -887,10 +1089,20 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
     if (r != 0 && res.cancelled) {
         fprintf(stderr, "ico_pc: first run: cancelled; nothing was written\n");
         fflush(stderr);
+#ifdef ICO_ANDROID_UI
+        /* ico_host_main's end-of-run steps, then SDL_main returns */
+        return 1;
+#else
         exit(0);
+#endif
     }
     if (r != 0) {
         fprintf(stderr, "ico_pc: first run: %s\n", why);
+#ifdef ICO_ANDROID_UI
+        if (res.wrong_disc || res.unreadable) {
+            android_drop_refused_image(exe_dir, iso);
+        }
+#endif
         /* the box says what to do about it, in verify_iso's words */
         if (res.wrong_disc) {
             ico_host_fatal(log_file(),
@@ -927,6 +1139,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
         fprintf(stderr, "ico_pc: first run: note: DATA.DF did not match the manifest (%s)\n",
                 res.datadf_why);
     }
+#ifndef ICO_ANDROID_UI
     if (picked) {
         if (ico_ini_store(ini_path, "iso", iso) == 0) {
             fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
@@ -934,6 +1147,7 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
             fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
         }
     }
+#endif
     if (mount_archive(cand[0], why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s cannot be mounted: %s\n", cand[0], why);
         ico_host_fatal(log_file(),
@@ -941,8 +1155,39 @@ static void mount_game_data(const Args *a, const IcoIni *ini, const char *exe_di
                        "Delete that file and start the game again to extract it once more.",
                        cand[0]);
     }
+#ifdef ICO_ANDROID_UI
+    android_image_done(ini, ini_path, exe_dir, iso, picked);
+#endif
     copy_path(source, source_size, cand[0]);
+    return 0;
 }
+
+#ifndef ICO_HEADLESS
+
+/* The window and the renderer before boot: gsb_InitGSSystem's first frame
+   already records into rd.  512 x 512 is the PAL frame; gsb_Init resizes
+   the scene targets if the game switches to 60 Hz.  On Android before the
+   game data is mounted (ico_window_open needs only the config, rd and
+   port/ui's own font). */
+static void open_window(void)
+{
+    if (ico_window_open(512, 512) != 0) {
+#ifdef ICO_ANDROID_UI
+        ico_host_fatal(log_file(), "Could not start the game's graphics.\n"
+                                   "ICO needs a device whose graphics support Vulkan 1.2 (most "
+                                   "phones and tablets from 2022 on). Install the latest system "
+                                   "update and try again; the log says why.");
+#else
+        ico_host_fatal(log_file(), "Could not open the game window.\n"
+                                   "The game needs a graphics driver with Vulkan 1.2 or later. "
+                                   "Update your graphics driver and try again; the log says "
+                                   "why.");
+#endif
+    }
+    at_shutdown(ico_window_close);
+}
+
+#endif
 
 static int host_main(int argc, char **argv)
 {
@@ -1043,11 +1288,20 @@ static int host_main(int argc, char **argv)
         }
     }
 
+#ifdef ICO_ANDROID_UI
+    /* Android: the window first, the first start's picker, copy and
+       progress are shown in it (SDL has one window there) */
+    open_window();
+#endif
     /* the disc goes in before boot, so a missing image fails here rather
        than leaving the game at file_Init's disc wait */
     if (use_iso_mode(&ini)) {
         fprintf(stderr, "ico_pc: use_iso: the disc image is read directly\n");
-        find_iso(&a, &ini, exe_dir, source, &picked);
+        if (find_iso(&a, &ini, exe_dir, source, &picked) != 0) {
+            exit_reason = "the first start was stopped";
+            fprintf(stderr, "ico_pc: the first start was stopped\n");
+            return 0;
+        }
         v = ico_ini_get(&ini, "verify");
         if (a.no_verify || (v != NULL && strcmp(v, "0") == 0)) {
             fprintf(stderr, "ico_pc: disc image SHA-1 check skipped\n");
@@ -1065,8 +1319,10 @@ static int host_main(int argc, char **argv)
         if (ico_cdvd_host_mount_iso(source) != 0) {
             ico_host_fatal(log_file(), "Cannot open the disc image %s.", source);
         }
-    } else {
-        mount_game_data(&a, &ini, exe_dir, ini_path, source, sizeof(source));
+    } else if (mount_game_data(&a, &ini, exe_dir, ini_path, source, sizeof(source)) != 0) {
+        exit_reason = "the first start was stopped";
+        fprintf(stderr, "ico_pc: the first start was stopped\n");
+        return 0;
     }
     /* the data tables, from the disc's boot ELF, before anything reads one
        (port/data/tables.h) */
@@ -1217,16 +1473,9 @@ static int host_main(int argc, char **argv)
     ico_diag_arm_vectored();
 #endif
 #ifndef ICO_HEADLESS
-    /* the window and the renderer before boot: gsb_InitGSSystem's first
-       frame already records into rd.  512 x 512 is the PAL frame; gsb_Init
-       resizes the scene targets if the game switches to 60 Hz. */
-    if (ico_window_open(512, 512) != 0) {
-        ico_host_fatal(log_file(), "Could not open the game window.\n"
-                                   "The game needs a graphics driver with Vulkan 1.2 or later. "
-                                   "Update your graphics driver and try again; the log says "
-                                   "why.");
-    }
-    at_shutdown(ico_window_close);
+#ifndef ICO_ANDROID_UI
+    open_window();
+#endif
     /* v0.4.0: a PCSX2 texture pack in the user folder or beside the
        program, indexed now (the game data is mounted, the device knows its
        formats); its loader thread stops before the window closes */

@@ -12,6 +12,7 @@
 #include "audio_host.h"
 #include "config.h"
 #include "diag_host.h"
+#include "font.h" /* port/ui: ico_window_progress's text and bar */
 #include "host_config.h"
 #include "host_fs.h"
 #include "host_loop.h"
@@ -743,6 +744,113 @@ int ico_window_pump(void)
     ui_HostVsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
     return !quit;
+}
+
+/* --- package AN-C: the first start's progress, in the game's window ----- */
+
+typedef struct ProgressView {
+    const char *title;
+    const char *phase;
+    int pct;
+} ProgressView;
+
+/* the layout grid's 4:3 picture (port/ui/font.h): the title, the phase
+   line, the bar and (Android) how to stop */
+static void progress_overlay(const RdOverlayCtx *ctx, void *user)
+{
+    const ProgressView *v = user;
+    /* GS colours: the text's 0x80 is full white, a rect's RGB is as given */
+    static const uint8_t title[4] = {0x80, 0x7C, 0x70, 0x80};
+    static const uint8_t body[4] = {0x66, 0x64, 0x5E, 0x80};
+    static const uint8_t frame[4] = {96, 96, 96, 0x80};
+    static const uint8_t track[4] = {24, 24, 24, 0x80};
+    static const uint8_t fill[4] = {200, 180, 120, 0x80};
+    char line[256];
+
+    ui_BeginOverlay(ctx);
+    if (v->title != NULL) {
+        ui_DrawText(UI_GRID_CX, 196.0f, 30.0f, title, v->title,
+                    UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    }
+    if (v->phase != NULL) {
+        if (v->pct >= 0) {
+            snprintf(line, sizeof(line), "%s: %d%%", v->phase, v->pct > 100 ? 100 : v->pct);
+        } else {
+            snprintf(line, sizeof(line), "%s", v->phase);
+        }
+        ui_DrawText(UI_GRID_CX, 232.0f, 20.0f, body, line, UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    }
+    if (v->pct >= 0) {
+        const float x0 = 120.0f, x1 = 520.0f, y0 = 250.0f, y1 = 266.0f;
+        const int pct = v->pct > 100 ? 100 : v->pct;
+
+        ui_DrawRect(x0, y0, x1, y1, frame);
+        ui_DrawRect(x0 + 2.0f, y0 + 2.0f, x1 - 2.0f, y1 - 2.0f, track);
+        ui_DrawRect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
+                    y1 - 2.0f, fill);
+#ifdef __ANDROID__
+        ui_DrawText(UI_GRID_CX, 300.0f, 16.0f, body,
+                    "Press Back to stop (you can start again later)",
+                    UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+#endif
+    }
+    ui_EndOverlay();
+}
+
+int ico_window_progress(const char *title, const char *phase, int pct)
+{
+    static int s_cancelLogged;
+    SDL_Event e;
+    int cancel = 0;
+    void *prevUser = NULL;
+    RdOverlayFn prev;
+    ProgressView v;
+
+    if (!s_open) {
+        return 0;
+    }
+    while (SDL_PollEvent(&e)) {
+        switch (e.type) {
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            cancel = 1;
+            break;
+        case SDL_EVENT_KEY_DOWN:
+            /* Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON), Escape */
+            if ((e.key.key == SDLK_AC_BACK || e.key.key == SDLK_ESCAPE) && !e.key.repeat) {
+                cancel = 1;
+            }
+            break;
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            if (e.window.data1 > 0 && e.window.data2 > 0) {
+                fprintf(stderr, "window: %dx%d pixels\n", e.window.data1, e.window.data2);
+                rd_ResizeOutput((uint32_t)e.window.data1, (uint32_t)e.window.data2);
+                ico_video_set_window(e.window.data1, e.window.data2);
+                video_apply(1);
+            }
+            break;
+        default:
+            /* the pads plugged in at the start, and the rest: as the game's
+               pump would pass them on */
+            ico_input_sdl_event(&e);
+            break;
+        }
+    }
+    if (device_lost_quit()) {
+        return 1;
+    }
+    if (cancel && !s_cancelLogged) {
+        s_cancelLogged = 1;
+        fprintf(stderr, "window: stop asked during \"%s\"\n", phase != NULL ? phase : "");
+    }
+    v.title = title;
+    v.phase = phase;
+    v.pct = pct;
+    prev = rd_GetPresentOverlay(&prevUser);
+    rd_SetPresentOverlay(progress_overlay, &v);
+    rd_PresentBlank();
+    rd_SetPresentOverlay(prev, prevUser);
+    return cancel;
 }
 
 /* P1: logs/ico-pc-perf.csv, opened on the first record when [dev] perf_log

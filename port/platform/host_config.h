@@ -32,6 +32,10 @@
  *                    memcard beside the per-user folder
  *   saves2=PATH      a second card folder, the card in port 1; absent or
  *                    empty: port 1 has no card (the original behaviour)
+ *   keep_image=1     Android: keep the copy of the disc image the first
+ *                    start made in the app's folder (Ico_PAL.iso or .chd);
+ *                    by default it is deleted once the game's data is
+ *                    ready, which gives its space back (main_host.c)
  */
 #ifndef ICO_PLATFORM_HOST_CONFIG_H
 #define ICO_PLATFORM_HOST_CONFIG_H

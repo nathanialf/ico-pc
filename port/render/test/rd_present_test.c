@@ -64,6 +64,13 @@
  *             shown picture has the overlay inside it, package CRT2; the
  *             capture takes a filter pass without it); rd_CaptureResult
  *             reports it once
+ *   blank     package AN-C, rd_PresentBlank: at 800 x 600 with nothing
+ *             registered the output is all 0 (no scene, though a frame was
+ *             just recorded and presented); with an overlay drawing a red
+ *             rectangle it is called once with the output's 4:3 box, the
+ *             rectangle is exactly red and every other byte 0;
+ *             rd_GetPresentOverlay gives back the registration; no
+ *             validation errors
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
  */
@@ -2194,6 +2201,88 @@ static void checkEffectsDepth(void)
 
 /* ------------------------------------------------------------------ main */
 
+/* ------------------------------------------- the blank present (package AN-C) */
+
+static void blankCallback(const RdOverlayCtx *ctx, void *user)
+{
+    OvTest *t = user;
+    static const uint8_t red[4] = {255, 0, 0, 0x80};
+    t->calls++;
+    t->box = ctx->box;
+    t->boxScale = ctx->boxScale;
+    ovRect(ctx->box.x + OV_RX0, ctx->box.y + OV_RY0, ctx->box.x + OV_RX1, ctx->box.y + OV_RY1, red);
+}
+
+static void checkBlank(void)
+{
+    const uint32_t w = 800, h = 600;
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *out = malloc(n);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (!out || !rd_Init(512, 512, &s, NULL)) {
+        CHECK(0, "blank: rd_Init or memory");
+        free(out);
+        return;
+    }
+    /* a frame first: its picture must not show through */
+    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(t, 1);
+    rd_SetPresentOverlay(NULL, NULL);
+    CHECK(rd_PresentBlank(), "blank: rd_PresentBlank without an overlay");
+    uint32_t ow = 0, oh = 0;
+    uint32_t nonzero = 0;
+    if (rd_ReadPresented(out, &ow, &oh) && ow == w && oh == h) {
+        for (size_t i = 0; i < n; i++) {
+            nonzero += out[i] != 0;
+        }
+        CHECK(nonzero == 0, "blank: %u bytes of the output are not 0", nonzero);
+    } else {
+        CHECK(0, "blank: the presented %ux%u output (%ux%u)", w, h, ow, oh);
+    }
+    memset(&s_ovt, 0, sizeof(s_ovt));
+    rd_SetPresentOverlay(blankCallback, &s_ovt);
+    void *user = NULL;
+    CHECK(rd_GetPresentOverlay(&user) == blankCallback && user == &s_ovt,
+          "blank: rd_GetPresentOverlay");
+    CHECK(rd_PresentBlank(), "blank: rd_PresentBlank with an overlay");
+    CHECK(s_ovt.calls == 1, "blank: %d overlay calls", s_ovt.calls);
+    RhiRect box;
+    rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+    CHECK(s_ovt.box.x == box.x && s_ovt.box.y == box.y && s_ovt.box.w == box.w &&
+              s_ovt.box.h == box.h && fabsf(s_ovt.boxScale - (float)box.h / 448.0f) < 1e-6f,
+          "blank: the ctx (box %d,%d %ux%u)", s_ovt.box.x, s_ovt.box.y, s_ovt.box.w, s_ovt.box.h);
+    if (rd_ReadPresented(out, &ow, &oh) && ow == w && oh == h) {
+        const int32_t rx0 = box.x + OV_RX0, ry0 = box.y + OV_RY0;
+        const int32_t rx1 = box.x + OV_RX1, ry1 = box.y + OV_RY1;
+        uint32_t badRect = 0, badOutside = 0;
+        for (int32_t y = 0; y < (int32_t)h; y++) {
+            for (int32_t x = 0; x < (int32_t)w; x++) {
+                const uint8_t *o = &out[((size_t)y * w + (size_t)x) * 4];
+                if (ovInside(x, y, rx0, ry0, rx1, ry1)) {
+                    badRect += !(o[0] == 255 && o[1] == 0 && o[2] == 0);
+                } else {
+                    badOutside += (o[0] | o[1] | o[2] | o[3]) != 0;
+                }
+            }
+        }
+        CHECK(badRect == 0, "blank: %u pixels of the rectangle are not its red", badRect);
+        CHECK(badOutside == 0, "blank: %u pixels outside the rectangle are not 0", badOutside);
+        printf("  blank %ux%u: cleared, the overlay's rectangle at %d,%d\n", w, h, rx0, ry0);
+    } else {
+        CHECK(0, "blank: the presented output with the overlay");
+    }
+    rd_SetPresentOverlay(NULL, NULL);
+    CHECK(rd_GetPresentOverlay(&user) == NULL && user == NULL, "blank: unregistered");
+    rd_DestroyTexture(t);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "blank: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    free(out);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -2231,6 +2320,7 @@ int main(int argc, char **argv)
     checkOverlayCrt();
     checkCapture(dir);
     checkEffectsDepth();
+    checkBlank();
     if (failures) {
         printf("rd_present_test: %d failures\n", failures);
         return 1;

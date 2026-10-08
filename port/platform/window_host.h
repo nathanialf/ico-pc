@@ -18,6 +18,19 @@
  *                               falls more than 100 ms behind resynchronises
  *                               instead of running fast to catch up
  *   ico_window_close()          rd_Shutdown, the window, SDL (atexit-safe)
+ *   ico_window_progress(title, phase, pct)
+ *                               package AN-C, the Android first start
+ *                               (main_host.c): drains SDL events (the quit
+ *                               event, Back or Escape ask to stop; a size
+ *                               change reaches rd_ResizeOutput; the rest
+ *                               go to the pad layer as ico_window_pump
+ *                               passes them) and presents one frame with
+ *                               no scene (rd_PresentBlank): title, then
+ *                               "phase: pct%" and a bar, or the phase alone
+ *                               when pct < 0, through an overlay of its own
+ *                               that replaces the registered one for that
+ *                               present.  1 when the player asked to stop
+ *                               (or the device was lost), else 0
  */
 #ifndef ICO_PLATFORM_WINDOW_HOST_H
 #define ICO_PLATFORM_WINDOW_HOST_H
@@ -26,5 +39,6 @@ int ico_window_open(unsigned int gsW, unsigned int gsH);
 int ico_window_pump(void);
 void ico_window_pace(int hz);
 void ico_window_close(void);
+int ico_window_progress(const char *title, const char *phase, int pct);
 
 #endif /* ICO_PLATFORM_WINDOW_HOST_H */

@@ -411,6 +411,9 @@ static const struct {
     {"paths.saves", "saves"},
     /* the port-1 card folder; empty or absent: no card in port 1 (package S1) */
     {"paths.saves2", "saves2"},
+    /* Android: 1 keeps the first start's copy of the disc image (package
+       AN-C, main_host.c); else it is deleted once the game data is ready */
+    {"paths.keep_image", "keep_image"},
     {"audio.enabled", "audio"},
     {"dev.ticks", "ticks"},
     {"dev.watchdog", "watchdog"},

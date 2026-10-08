@@ -248,6 +248,12 @@ static const char first_run_text[] =
     "[paths]\n"
     "# The disc image, a .iso or a .chd; empty asks on the first start.\n"
     "iso = \"\"\n"
+#ifdef __ANDROID__
+    "# true keeps the copy of the disc image the first start makes in this\n"
+    "# folder (Ico_PAL.iso or .chd); false deletes it once the game is ready,\n"
+    "# which gives its space back.\n"
+    "keep_image = false\n"
+#endif
     "\n"
     "[video]\n"
     "# \"original\" is the PS2 picture; \"enhanced\" takes resolution,\n"

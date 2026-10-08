@@ -52,6 +52,11 @@
  * glyph quads, and textRecord draws the prims after step 2, before the
  * overlay.  In the Original preset nothing is collected and the quads draw.
  *
+ * The blank present (package AN-C, rd.h rd_PresentBlank): an empty keep
+ * frame replayed with s_blank set: rd__OverlayCollect gives the overlay the
+ * output's context (no CRT grid, no deferred text) and rd__PresentRecord
+ * clears the output and draws the overlay on it, without DISPLAY.
+ *
  * The CRT filter (packages CRT and CRT2, rd_crt.c): with RdSettings.crtMode set and a strength above 0, the scene
  * renders at 1x (rd__ApplyDisplay), no text is deferred (the rows draw as
  * quads into the scene, as in the Original preset), the overlay's prims are
@@ -513,6 +518,30 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user)
     s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
 }
 
+RdOverlayFn rd_GetPresentOverlay(void **user)
+{
+    if (user) {
+        *user = s_ov.user;
+    }
+    return s_ov.fn;
+}
+
+/* package AN-C: the present in progress is rd_PresentBlank's */
+static int s_blank;
+
+bool rd_PresentBlank(void)
+{
+    if (!g_rd.hasDevice) {
+        return false;
+    }
+    /* lists 11 and 12 of a frame with none: no draw, no target touched */
+    static RdFrame empty;
+    s_blank = 1;
+    const bool ok = rd__ReplayFrame(&empty, 1, true);
+    s_blank = 0;
+    return ok;
+}
+
 void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user)
 {
     s_ov.textFn = fn;
@@ -827,7 +856,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
      * it, and rd__CrtRecord draws the prims into that grid */
-    const bool crt = rd__CrtOn();
+    const bool crt = rd__CrtOn() && !s_blank;
     if (crt) {
         uint32_t vw, vh;
         rd__CrtGrid(&vw, &vh);
@@ -845,7 +874,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     /* package DEF: the deferred text first, so the overlay draws above it;
      * package CRT2: none under the CRT filter (the rows draw as quads into
      * the scene, as in the Original preset, and go through the filter) */
-    if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt) {
+    if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt && !s_blank) {
         g_rd.deferText = true;
         textCollect(f, keep);
     }
@@ -1086,8 +1115,35 @@ void rd__CaptureFinish(void)
     s_cap.result = ok ? 1 : -1;
 }
 
+/* package AN-C: rd_PresentBlank's pass: the output cleared to 0, the
+ * overlay on it */
+static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
+{
+    rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = out;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.colorCount = 1;
+    p.width = s_outW;
+    p.height = s_outH;
+    rhi_CmdBeginRenderPass(cl, &p);
+    rhi_CmdEndRenderPass(cl);
+    RhiRect box;
+    outputBox(s_outW, s_outH, &box);
+    overlayRecord(cl, out, &box, false);
+    if (s_window) {
+        rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
+    }
+}
+
 void rd__PresentRecord(RhiCommandList cl)
 {
+    if (s_blank) {
+        blankRecord(cl, s_window ? s_backbuffer : g_rd.presentOut,
+                    s_window ? &s_backbufferState : &g_rd.presentOutState);
+        return;
+    }
     RdTargetRec *disp = rd__TargetRec(RD_TARGET_DISPLAY + 1);
     if (!disp || !disp->color.id) {
         return;

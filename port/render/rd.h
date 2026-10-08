@@ -583,7 +583,20 @@ bool rd_NoDual(void);
  *                       tool).  The window build presents the swapchain
  *                       image and keeps no copy, so it returns false there
  *                       (a capture copy in rd__PresentRecord is the place
- *                       to add one) */
+ *                       to add one)
+ * rd_GetPresentOverlay  the registered fn (NULL: none) and its user, so a
+ *                       caller can put back what it replaced
+ * rd_PresentBlank       package AN-C: a present with no scene: the output
+ *                       (the swapchain's next image, or the headless
+ *                       output) cleared to 0, the registered overlay drawn
+ *                       on it (its ctx as for a frame's present, the box
+ *                       the aspect's; never on the CRT filter's grid, no
+ *                       deferred text), and presented.  The frame being
+ *                       recorded, DISPLAY and the retained frames are not
+ *                       touched.  For the host's own screens before the
+ *                       game runs (the Android first start's progress,
+ *                       window_host.c ico_window_progress).  false with no
+ *                       device or when the replay could not run */
 typedef struct RdRect {
     int32_t x, y;
     uint32_t w, h;
@@ -599,6 +612,8 @@ typedef struct RdOverlayCtx {
 typedef void (*RdOverlayFn)(const RdOverlayCtx *ctx, void *user);
 
 void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
+RdOverlayFn rd_GetPresentOverlay(void **user);
+bool rd_PresentBlank(void);
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
 
