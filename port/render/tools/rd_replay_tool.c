@@ -62,6 +62,17 @@
  *                         (id and size), and for screen prims the prim,
  *                         space, vertex count, the bounding box in GS pixels
  *                         and the texel rectangle (UV, or STQ times the size)
+ *   --no-device           (package QUEEN) no device: the dump is loaded into a
+ *                         record-only renderer (rd__InitRecordOnly) for
+ *                         --list, --mesh and --dump-textures and nothing is
+ *                         rendered (<out.png> is not written); --list falls
+ *                         back to it by itself when there is no device.
+ *                         --list also prints, per texture, its alpha (min,
+ *                         max, the share below 0x80, the share of black
+ *                         texels; "replacement (blank)" for a pack's
+ *                         texture, dumped blank), the state's FBA, PABE,
+ *                         TEXA, DATE and targets, and a post record's kind,
+ *                         rectangle, UVs, scalar, RGBA and blend
  *   --nop L:A[-B]         turns commands A..B of list L into NOPs before the
  *                         replay (repeatable), to find the draw behind a pixel
  *   --mesh NAME           prints the VU meshes of that name vertex by vertex
@@ -92,7 +103,7 @@
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
  *
- * Exit: 0 written, 1 error, 77 no device or no dump file. */
+ * Exit: 0 written (or, with --no-device, listed), 1 error, 77 no device or no dump file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -116,16 +127,178 @@ static const char *const kCmdNames[RDC_COUNT] = {
 static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
                                          "tristrip", "trifan", "sprites"};
 
+static const char *const kPostNames[RD_POST_COUNT] = {
+    "REDUCTION",  "KEEP",          "FADE",         "LETTERBOX",    "BRIGHTNESS",
+    "FILM_NOISE", "AA_DOWNSAMPLE", "AA_COMPOSITE", "FOG",          "SHADOW_RESOLVE",
+    "BLUR",       "COMPOSITE_FIX", "COPY",         "PRESENT_BLIT", "MOTION_BLUR",
+    "DOF",        "FLARE",         "BLOOM",        "AURA",         "EYE_BLUR"};
+
+/* the name of a named target's id, else the id in hex */
+static const char *targetName(uint32_t id, char buf[16])
+{
+    if (id == 0) {
+        return "none";
+    }
+    for (int k = 0; k < RD_TARGET_COUNT; k++) {
+        if (k == RD_TARGET_DATE_SNAPSHOT) {
+            if (rd_Target((RdTargetId)k).id == id) {
+                return "DATE_SNAPSHOT";
+            }
+        } else if (k < (int)(sizeof(kNames) / sizeof(kNames[0])) &&
+                   rd_Target((RdTargetId)k).id == id) {
+            return kNames[k];
+        }
+    }
+    snprintf(buf, 16, "%#x", id);
+    return buf;
+}
+
+/* --list: a texture's alpha as the GS sees it (0x80 = 1.0): min and max,
+ * the share below 0x80 and the share of black texels (RGB 0); a dumped
+ * replacement is a blank image (rd_dump.c), every byte 0 */
+static void texSummary(uint32_t id)
+{
+    const RdTexRec *t = rd__TexRec(id);
+    if (!t) {
+        printf(" (no record)");
+        return;
+    }
+    if (t->kind == RD_TEXKIND_TARGET) {
+        char buf[16];
+        printf(" target %s view %u", targetName(t->target, buf), t->view);
+        return;
+    }
+    if (!t->pixels || t->format > RD_TEXEL_R8) {
+        printf(" no texels");
+        return;
+    }
+    const size_t n = (size_t)t->w * t->h;
+    if (t->format == RD_TEXEL_R8) {
+        unsigned lo = 255, hi = 0;
+        for (size_t k = 0; k < n; k++) {
+            lo = t->pixels[k] < lo ? t->pixels[k] : lo;
+            hi = t->pixels[k] > hi ? t->pixels[k] : hi;
+        }
+        printf(" r8 %02x..%02x", lo, hi);
+        return;
+    }
+    unsigned lo = 255, hi = 0;
+    size_t below = 0, black = 0, zero = 0;
+    for (size_t k = 0; k < n; k++) {
+        const uint8_t *px = t->pixels + k * 4;
+        lo = px[3] < lo ? px[3] : lo;
+        hi = px[3] > hi ? px[3] : hi;
+        below += px[3] < 0x80;
+        black += (px[0] | px[1] | px[2]) == 0;
+        zero += (px[0] | px[1] | px[2] | px[3]) == 0;
+    }
+    if (zero == n) {
+        printf(" replacement (blank)");
+        return;
+    }
+    printf(" alpha %02x..%02x below80 %.1f%% black %.1f%%", lo, hi,
+           n ? 100.0 * (double)below / (double)n : 0.0,
+           n ? 100.0 * (double)black / (double)n : 0.0);
+}
+
+/* --list, RDC_SKINNED: the drawn vertices' place as cluster.vsm computes it
+ * (vu_skin.hlsl: two bones, the world-to-screen matrix at VU memory 4..7,
+ * the divide), on the CPU: the bounding box in GS pixels of the target and
+ * the GS Z range.  A summary of where the draw lands, not a raster */
+static void skinnedPlace(const RdFrame *f, const RdCmd *c, const RdStateBlock *st)
+{
+    RdVuPayload p;
+    const RdMeshRec *m = rd__MeshRec(c->u[0]);
+    if (!m || !m->stream || m->qwPerVertex < 5 ||
+        (uint64_t)c->u[1] + sizeof(p) + sizeof(RdVuBlock) > f->payloadSize) {
+        return;
+    }
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    const float (*mem)[4] = (const float (*)[4])(const void *)(f->payload + c->u[1] + sizeof(p));
+    const float (*bone)[4] = mem + 36;
+    if ((uint64_t)c->u[1] + sizeof(p) + sizeof(RdVuBlock) + (uint64_t)p.boneQw * 16 >
+        f->payloadSize) {
+        return;
+    }
+    uint32_t last = p.firstBatch + p.batchCount;
+    if (last > m->batchCount || p.batchCount == 0) {
+        last = m->batchCount;
+    }
+    double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30, z0 = 1e30, z1 = -1e30;
+    const double ox = 2048.0 - (double)(st->gsW >> 1), oy = 2048.0 - (double)(st->gsH >> 1);
+    for (uint32_t b = p.firstBatch; b < last; b++) {
+        const RdVuBatchRec *br = &m->batches[b];
+        for (uint32_t v = br->firstVertex; v < br->firstVertex + br->vertexCount; v++) {
+            const float (*q)[4] = m->stream + (size_t)v * m->qwPerVertex;
+            uint32_t a[2];
+            memcpy(&a[0], &q[2][0], 4);
+            memcpy(&a[1], &q[2][2], 4);
+            const float w[2] = {q[2][1], q[2][3]};
+            float pb[3] = {0, 0, 0};
+            for (int k = 0; k < 2; k++) {
+                const uint32_t i = (a[k] < 16 ? 16 : a[k]) - 16;
+                if (i + 3 >= p.boneQw) {
+                    continue;
+                }
+                for (int e = 0; e < 3; e++) {
+                    const float t = bone[i][e] * q[0][0] + bone[i + 1][e] * q[0][1] +
+                                    bone[i + 2][e] * q[0][2] + bone[i + 3][e];
+                    pb[e] += t * w[k];
+                }
+            }
+            float h[4];
+            for (int e = 0; e < 4; e++) {
+                h[e] = mem[4][e] * pb[0] + mem[5][e] * pb[1] + mem[6][e] * pb[2] + mem[7][e];
+            }
+            if (h[3] <= 0.0f) {
+                continue;
+            }
+            const double x = h[0] / h[3] - ox, y = h[1] / h[3] - oy, z = 16.0 * h[2] / h[3];
+            x0 = x < x0 ? x : x0;
+            x1 = x > x1 ? x : x1;
+            y0 = y < y0 ? y : y0;
+            y1 = y > y1 ? y : y1;
+            z0 = z < z0 ? z : z0;
+            z1 = z > z1 ? z : z1;
+        }
+    }
+    if (x1 >= x0) {
+        printf(" place (%.1f,%.1f)-(%.1f,%.1f) z %.0f..%.0f", x0, y0, x1, y1, z0, z1);
+    }
+}
+
+static uint32_t s_listed;
+
 static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
 {
     const RdFrame *f = user;
+    s_listed++;
+    char nb[2][16];
     printf("%2d:%-5u %-14s key %08x%08x", list, index,
            c->type < RDC_COUNT ? kCmdNames[c->type] : "?", c->keyHi, c->keyLo);
     if (c->type == RDC_TEXTURE) {
         const RdTexRec *t = rd__TexRec(c->u[0]);
         printf(" tex %u %ux%u fn %u tcc %u", c->u[0], t ? t->w : 0, t ? t->h : 0, c->b[0], c->b[1]);
+        texSummary(c->u[0]);
     } else if (c->type == RDC_FILTER || c->type == RDC_WRAP) {
         printf(" %u %u", c->b[0], c->b[1]);
+    } else if (c->type == RDC_TARGET) {
+        printf(" colour %s depth %s gs %ux%u offset %u", targetName(c->u[0], nb[0]),
+               targetName(c->u[1], nb[1]), c->u[2] & 0xFFFF, c->u[2] >> 16, c->b[0]);
+    } else if (c->type == RDC_ALPHA) {
+        printf(" blend %u fix %u", c->b[0], c->b[1]);
+    } else if (c->type == RDC_COLORMASK) {
+        printf(" fbmsk %08x", c->u[0]);
+    } else if (c->type == RDC_SCISSOR) {
+        printf(" (%d,%d)-(%d,%d)", (int32_t)c->u[0], (int32_t)c->u[1], (int32_t)c->u[2],
+               (int32_t)c->u[3]);
+    } else if (c->type <= RDC_STATE_LAST || c->type == RDC_AA1) {
+        if (c->type != RDC_TEXTURE_OFF && c->type != RDC_NOP && c->type != RDC_UVOFFSET) {
+            printf(" %u", c->b[0]);
+        }
+    } else if (c->type == RDC_CLEAR) {
+        printf(" %s rgba %u,%u,%u,%u depth %u z %u", targetName(c->u[0], nb[0]), c->b[0], c->b[1],
+               c->b[2], c->b[3], c->b[4], c->u[1]);
     } else if (c->type == RDC_SCREEN &&
                c->u[0] + (uint64_t)c->u[1] * sizeof(RdScreenVtx) <= f->payloadSize) {
         const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
@@ -180,22 +353,45 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
                sizeof(RdPostRec) <= f->payloadSize - c->u[1]) {
         RdPostRec r;
         memcpy(&r, f->payload + c->u[1], sizeof(r));
-        printf(" post %u rgba %u,%u,%u,%u fix %u", c->b[0], r.rgba[0], r.rgba[1], r.rgba[2],
-               r.rgba[3], r.fix);
+        printf(" post %s rgba %u,%u,%u,%u fix %u blend %u abe %u exact %u z %u lines %u"
+               " rect (%g,%g)-(%g,%g) uv (%g,%g)-(%g,%g) scalar (%g,%g,%g,%g)"
+               " src %s dst %s view %u target %s depth %s",
+               c->b[0] < RD_POST_COUNT ? kPostNames[c->b[0]] : "?", r.rgba[0], r.rgba[1], r.rgba[2],
+               r.rgba[3], r.fix, r.blend, r.abe, r.exactInt, r.z, r.lines, (double)r.rect[0],
+               (double)r.rect[1], (double)r.rect[2], (double)r.rect[3], (double)r.uv[0],
+               (double)r.uv[1], (double)r.uv[2], (double)r.uv[3], (double)r.scalar[0],
+               (double)r.scalar[1], (double)r.scalar[2], (double)r.scalar[3],
+               targetName(r.src, nb[0]), targetName(r.dst, nb[1]), r.srcView,
+               targetName(st->color, nb[0]), targetName(st->depth, nb[1]));
+        if (st->ds.texEnabled) {
+            printf(" tex %u", st->tex);
+            texSummary(st->tex);
+        }
     } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
         const RdMeshRec *m = rd__MeshRec(c->u[0]);
         if (m) {
             printf(" mesh %s (%u vertices, %u batches)", m->name, m->vertexCount, m->batchCount);
         }
+        printf(" prog %u", c->b[0]);
+        if (c->type == RDC_SKINNED) {
+            skinnedPlace(f, c, st);
+        }
         if (st->ds.texEnabled) {
             printf(" tex %u", st->tex);
+            texSummary(st->tex);
         }
     }
     if (c->type >= RDC_CLEAR) {
         const RdTestState *t = &st->ds.test;
-        printf(" | ate %u atst %u aref %u afail %u zte %u ztst %u zwrite %u abe %u blend %u fix %u",
+        printf(" | ate %u atst %u aref %u afail %u zte %u ztst %u zwrite %u abe %u blend %u fix %u"
+               " fba %u pabe %u texa %u date %u colclamp %u mask %x",
                t->ate, t->atst, t->aref, t->afail, t->zte, t->ztst, st->ds.zwrite, st->ds.abe,
-               st->ds.blend, st->ds.blendFix);
+               st->ds.blend, st->ds.blendFix, st->ds.fba, st->ds.pabe, st->ds.texa, t->date,
+               st->ds.colclamp, st->ds.colorMask);
+        if (c->type != RDC_CLEAR) {
+            printf(" target %s depth %s", targetName(st->color, nb[0]),
+                   targetName(st->depth, nb[1]));
+        }
     }
     printf("\n");
 }
@@ -344,6 +540,7 @@ int main(int argc, char **argv)
             "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
             "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
             "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV] [--quad-text]\n"
+            "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
             "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
             argv[0]);
         return 1;
@@ -354,6 +551,7 @@ int main(int argc, char **argv)
     /* R7a: the display options */
     RdSettings s;
     bool list = false, overlay = false, noAa1 = false, stats = false, quadText = false;
+    bool noDevice = false;
     const char *gameFont = NULL;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
@@ -464,6 +662,8 @@ int main(int argc, char **argv)
             s.crtStrength = k;
         } else if (strcmp(argv[i], "--list") == 0) {
             list = true;
+        } else if (strcmp(argv[i], "--no-device") == 0) {
+            noDevice = true;
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
             meshName = argv[++i];
         } else if (strcmp(argv[i], "--dump-textures") == 0 && i + 1 < argc) {
@@ -502,10 +702,23 @@ int main(int argc, char **argv)
     }
     s.outputWidth = pw;
     s.outputHeight = ph;
-    if (!rd_Init(gw, gh, &s, NULL)) {
-        fprintf(stderr, "no usable %s device\n",
-                rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
-        return 77;
+    /* package QUEEN: --no-device (or --list without a device) loads the dump
+       into a record-only renderer, lists it and renders nothing */
+    if (noDevice && !list && !texDir && !meshName) {
+        fprintf(stderr, "--no-device renders nothing: give --list, --mesh or --dump-textures\n");
+        return 1;
+    }
+    if (noDevice || !rd_Init(gw, gh, &s, NULL)) {
+        if (!noDevice && !list) {
+            fprintf(stderr, "no usable %s device\n",
+                    rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
+            return 77;
+        }
+        noDevice = true;
+        if (!rd__InitRecordOnly(gw, gh)) {
+            fprintf(stderr, "rd__InitRecordOnly failed\n");
+            return 1;
+        }
     }
     rd__SetNotImplementedFatal(false);
     if (overlay) {
@@ -567,7 +780,10 @@ int main(int argc, char **argv)
     }
     if (list) {
         RdStateBlock st = rf->startState;
+        s_listed = 0;
         rd__Walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
+        printf("listed %u commands of frame %u (%ux%u, fba/pabe/texa/date per action)\n", s_listed,
+               rf->number, rf->gsW, rf->gsH);
     }
     if (texDir) {
         dumpTextures(texDir);
@@ -576,6 +792,12 @@ int main(int argc, char **argv)
         listMesh(meshName);
     }
     int rc = 1;
+    if (noDevice) {
+        rd__FrameFree(&f);
+        rd__FrameFree(&pf);
+        rd_Shutdown();
+        return 0;
+    }
     const bool replayed = rd__ReplayFrame(rf, (int)rf->keep, pw != 0);
     if (replayed && stats) {
         /* the record rd__PerfEnd just closed (rd_PerfPop hands it out only

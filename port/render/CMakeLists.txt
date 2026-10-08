@@ -140,6 +140,7 @@ target_link_libraries(rd_replay_tool PRIVATE ico_render)
 #             blend_int feedback over 100 frames, dump -> load -> replay,
 #             pipeline count (Vulkan; exit 77 without a device)
 #   rd_replay_tool  rd_pixel's dump rendered to a PNG through the presenter
+#   rd_replay_tool_list  the same dump listed without a device (package QUEEN)
 #   rd_shadow  Shadow.c's host path and the stencil count (wave 4, below)
 #   rd_fog     ZFog.c's host path and the depth fog (wave 4, below)
 add_executable(rd_state_test test/rd_state_test.c)
@@ -567,6 +568,13 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool.png" --present 640x480)
     set_tests_properties(rd_replay_tool PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # package QUEEN: the same dump listed without a device (--list --no-device)
+    add_test(NAME rd_replay_tool_list
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_list.cmake")
+    set_tests_properties(rd_replay_tool_list PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                        FIXTURES_REQUIRED rd_dump)
     add_test(NAME rd_water COMMAND rd_water_test)
     set_tests_properties(rd_water PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_raw COMMAND rd_raw_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
