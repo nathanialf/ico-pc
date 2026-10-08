@@ -458,6 +458,68 @@ static void test_video_effects_depth(const char *dir)
     ico_video_reload();
 }
 
+/* v0.5.0: [video] model_pack (default on) and dump_models (default off):
+   the defaults, the file read, the round trip, and the preset untouched */
+static void test_video_models(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o, d;
+    const char *text;
+    FILE *f;
+
+    ico_video_defaults(&d);
+    CHECK(d.modelPack == 1 && d.dumpModels == 0);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.modelPack == 1 && o.dumpModels == 0);
+    CHECK(ico_video_model_pack() == 1 && ico_video_dump_models() == 0);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    snprintf(path, sizeof(path), "%s/options_models_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\nmodel_pack = false\ndump_models = true\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.modelPack == 0 && o.dumpModels == 1);
+    CHECK(ico_video_model_pack() == 0 && ico_video_dump_models() == 1);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    /* run-time values are sanitized to 0 or 1 */
+    o.modelPack = 5;
+    o.dumpModels = -1;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.modelPack == 1 && o.dumpModels == 1);
+    o.modelPack = 0;
+    o.dumpModels = 0;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "model_pack = false") != NULL &&
+          strstr(text, "dump_models = false") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.modelPack == 0 && o.dumpModels == 0);
+    /* neither moves the preset off Original, and Enhanced's shortcut
+       leaves them alone */
+    ico_video_defaults(&o);
+    o.modelPack = 0;
+    o.dumpModels = 1;
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.modelPack == 0 && o.dumpModels == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 int main(int argc, char **argv)
 {
     test_defaults();
@@ -466,6 +528,7 @@ int main(int argc, char **argv)
     test_brain();
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
+    test_video_models(argc > 1 ? argv[1] : ".");
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
         return 1;

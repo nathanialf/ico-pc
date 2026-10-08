@@ -376,6 +376,11 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Esporta texture",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Per chi crea pacchetti: ogni texture col suo nome PCSX2 in textures/SCES-50760/dumps nella cartella utente.",
+    [UI_STR_OPT_MODEL_PACK] = "Pacchetto modelli",
+    [UI_STR_MODEL_PACK_NOTE] = "Pacchetti di modelli: copia SCES-50760 in models.",
+    [UI_STR_OPT_DUMP_MODELS] = "Esporta modelli",
+    [UI_STR_DUMP_MODELS_NOTE] =
+        "Per chi crea pacchetti: ogni parte di modello come file glTF in models/SCES-50760/dumps nella cartella utente.",
     [UI_STR_SECTION_EFFECTS] = "Effetti",
     [UI_STR_OPT_EFFECT_GLOW] = "Bagliore",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondità di campo",

@@ -461,6 +461,15 @@ static int texturePackInstalled(void)
     return s_texturePackCount != NULL && s_texturePackCount() > 0;
 }
 
+static int (*s_modelPackCount)(void); /* v0.5.0: replacement models installed, when known */
+
+/* v0.5.0: a model pack was found at start (modelpack_Count through the
+   host's hook; none without one) */
+static int modelPackInstalled(void)
+{
+    return s_modelPackCount != NULL && s_modelPackCount() > 0;
+}
+
 static const char *onOff(int v)
 {
     return ui_Str(v ? UI_STR_ON : UI_STR_OFF);
@@ -625,6 +634,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return texturePackInstalled() ? onOff(o.texturePack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
     case UI_OPT_DUMP_TEXTURES:
         return onOff(o.dumpTextures);
+    case UI_OPT_MODEL_PACK:
+        return modelPackInstalled() ? onOff(o.modelPack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
+    case UI_OPT_DUMP_MODELS:
+        return onOff(o.dumpModels);
     case UI_OPT_EFFECT_GLOW:
         return onOff(o.effectGlow);
     case UI_OPT_EFFECT_DEPTH_OF_FIELD:
@@ -744,13 +757,14 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS) {
         return gFlagGameClear != 0;
     }
-    if (opt == UI_OPT_DUMP_TEXTURES) {
+    if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
         return ico_opt_developer_mode(); /* v0.4.0: for pack authors */
     }
-    if (opt == UI_OPT_VIDEO_MODE) {
+    if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* v0.4.0: it changes only from the title (onTitle); the pause
            menu's Display page has no room for a row that cannot step once
-           Texture pack is there (fourteen rows do not fit 13 lines apart) */
+           Texture pack is there (fourteen rows do not fit 13 lines apart); Model
+           pack (v0.5.0) is the title's too, for the same reason */
         return onTitle();
     }
     return 1;
@@ -774,7 +788,8 @@ static int canStep(int opt)
 {
     return steppable(opt) && (opt != UI_OPT_VIDEO_MODE || onTitle()) && optShown(opt, -1) &&
            (opt != UI_OPT_RESOLUTION || !resolutionLocked()) &&
-           (opt != UI_OPT_TEXTURE_PACK || texturePackInstalled());
+           (opt != UI_OPT_TEXTURE_PACK || texturePackInstalled()) &&
+           (opt != UI_OPT_MODEL_PACK || modelPackInstalled());
 }
 
 const char *ui_SettingsValueText(UiSettingsOpt opt)
@@ -843,6 +858,17 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_DUMP_TEXTURES:
         o.dumpTextures = !o.dumpTextures;
+        video = 1;
+        break;
+    case UI_OPT_MODEL_PACK:
+        if (!modelPackInstalled()) {
+            return; /* "None installed": nothing to switch */
+        }
+        o.modelPack = !o.modelPack;
+        video = 1;
+        break;
+    case UI_OPT_DUMP_MODELS:
+        o.dumpModels = !o.dumpModels;
         video = 1;
         break;
     case UI_OPT_EFFECT_GLOW:
@@ -999,6 +1025,11 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_opt_set_developer_mode(!ico_opt_developer_mode());
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
         s_dirtyConfig = 1;
+        if (!ico_opt_developer_mode() && o.dumpModels) {
+            /* v0.5.0: the same for Dump models */
+            o.dumpModels = 0;
+            video = 1;
+        }
         if (!ico_opt_developer_mode() && o.dumpTextures) {
             /* v0.4.0: Dump textures lives under Developer mode; with its row
                hidden it is switched off too, or the dumps would go on being
@@ -1280,16 +1311,19 @@ static void buildGalleryBar(void)
    line pitch so Back stays above the notes, the eight of the pause menu on
    the original 19, ten (v0.4.0: Dump textures in developer mode) 15; with
    the Effects link (issue 11) one more each: the ten of the title 15, the
-   nine 17, eleven (developer mode) 14: Back at 180, the box to 220. */
+   nine 17, eleven (developer mode) 14: Back at 180, the box to 220; with
+   Dump models (v0.5.0) twelve 13: Back at 183, the box to 223.  Display,
+   v0.5.0: Model pack is the title's too, so the title shows fourteen rows,
+   12 apart from 34: Back at 190, the box to 226. */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
         *y0 = n > 12 ? 34 : 36;
-        return n > 12 ? 13 : 14;
+        return n > 13 ? 12 : n > 12 ? 13 : 14;
     }
     *y0 = 40;
     if (page == UI_PAGE_MAIN) {
-        return n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
+        return n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     return 18;
 }
@@ -1385,10 +1419,12 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_LANGUAGE, UI_STR_LANGUAGE_NOTE);
         addNote(pg, UI_OPT_DEVELOPER, UI_STR_DEVELOPER_NOTE);
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
+        addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
         break;
     case UI_PAGE_DISPLAY:
         addNote(pg, UI_OPT_RESOLUTION, UI_STR_RESOLUTION_CRT_NOTE);
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
+        addNote(pg, UI_OPT_MODEL_PACK, UI_STR_MODEL_PACK_NOTE);
         break;
     case UI_PAGE_AUDIO:
         break;
@@ -1738,20 +1774,15 @@ static void build(void)
     /* Extras (after Achievements) is shown only when Settings was opened
        from the title (layoutPage) */
     /* v0.4.0: Dump textures under Developer mode, shown while it is on */
-    static const int mainOpts[] = {UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
-                                   UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_LINK, UI_OPT_LINK,
-                                   UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_BACK};
-    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
-                                   UI_STR_SECTION_EFFECTS,
-                                   UI_STR_SECTION_AUDIO,
-                                   UI_STR_SECTION_CONTROLS,
-                                   UI_STR_SECTION_GAMEPLAY,
-                                   UI_STR_SECTION_LANGUAGE,
-                                   UI_STR_SECTION_ACHIEVEMENTS,
-                                   UI_STR_EXTRAS,
-                                   UI_STR_OPT_DEVELOPER_MODE,
-                                   UI_STR_OPT_DUMP_TEXTURES,
-                                   UI_STR_BACK};
+    static const int mainOpts[] = {UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
+                                   UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
+                                   UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_DEVELOPER,
+                                   UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+    static const int mainStrs[] = {
+        UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,  UI_STR_SECTION_AUDIO,
+        UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,
+        UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE,
+        UI_STR_OPT_DUMP_TEXTURES,    UI_STR_OPT_DUMP_MODELS,  UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
                                     UI_PAGE_AUDIO,
@@ -1760,6 +1791,7 @@ static void build(void)
                                     -1,
                                     UI_PAGE_ACHIEVEMENTS,
                                     UI_PAGE_EXTRAS,
+                                    -1,
                                     -1,
                                     -1,
                                     -1};
@@ -1776,18 +1808,16 @@ static void build(void)
     /* R7d: every Display row always shown, Frame rate included (S1:
        Brightness from the pause menu) */
     /* v0.4.0: Texture pack after Texture filter */
-    static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION,   UI_OPT_ASPECT,
-                                   UI_OPT_FULLSCREEN,   UI_OPT_VSYNC,        UI_OPT_FILTER,
-                                   UI_OPT_TEXTURE_PACK, UI_OPT_FULL_HEIGHT,  UI_OPT_FRAMERATE,
-                                   UI_OPT_CRT,          UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS,
-                                   UI_OPT_VIDEO_MODE,   UI_OPT_BACK};
-    static const int dispStrs[] = {UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION,
-                                   UI_STR_OPT_ASPECT,       UI_STR_OPT_FULLSCREEN,
-                                   UI_STR_OPT_VSYNC,        UI_STR_OPT_FILTERING,
-                                   UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_FULL_HEIGHT,
-                                   UI_STR_OPT_FRAMERATE,    UI_STR_OPT_CRT,
-                                   UI_STR_OPT_CRT_STRENGTH, UI_STR_OPT_BRIGHTNESS,
-                                   UI_STR_OPT_VIDEO_MODE,   UI_STR_BACK};
+    static const int dispOpts[] = {
+        UI_OPT_PRESET, UI_OPT_RESOLUTION,   UI_OPT_ASPECT,     UI_OPT_FULLSCREEN,  UI_OPT_VSYNC,
+        UI_OPT_FILTER, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT, UI_OPT_FRAMERATE,
+        UI_OPT_CRT,    UI_OPT_CRT_STRENGTH, UI_OPT_BRIGHTNESS, UI_OPT_VIDEO_MODE,  UI_OPT_BACK};
+    static const int dispStrs[] = {
+        UI_STR_OPT_PRESET,       UI_STR_OPT_RESOLUTION, UI_STR_OPT_ASPECT,
+        UI_STR_OPT_FULLSCREEN,   UI_STR_OPT_VSYNC,      UI_STR_OPT_FILTERING,
+        UI_STR_OPT_TEXTURE_PACK, UI_STR_OPT_MODEL_PACK, UI_STR_OPT_FULL_HEIGHT,
+        UI_STR_OPT_FRAMERATE,    UI_STR_OPT_CRT,        UI_STR_OPT_CRT_STRENGTH,
+        UI_STR_OPT_BRIGHTNESS,   UI_STR_OPT_VIDEO_MODE, UI_STR_BACK};
     static const int audioOpts[] = {UI_OPT_VOLUME, UI_OPT_MUSIC,  UI_OPT_EFFECTS,
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
@@ -2037,6 +2067,11 @@ static void buildQuitScreen(void)
 void ui_SettingsSetFullscreenQuery(int (*fn)(void))
 {
     s_fullscreenQuery = fn;
+}
+
+void ui_SettingsSetModelPackCount(int (*fn)(void))
+{
+    s_modelPackCount = fn;
 }
 
 void ui_SettingsSetTexturePackCount(int (*fn)(void))
@@ -2799,6 +2834,9 @@ static int rowLocked(const Row *r)
     if (r->opt == UI_OPT_TEXTURE_PACK) {
         return !texturePackInstalled(); /* v0.4.0: "None installed" */
     }
+    if (r->opt == UI_OPT_MODEL_PACK) {
+        return !modelPackInstalled();
+    }
     return r->opt == UI_OPT_EXTRAS_CREDITS && !creditsUnlocked();
 }
 
@@ -2882,7 +2920,8 @@ static void refreshPage(Page *pg, int id, int cur)
         if (r->value >= 0) {
             lt_ext_SetText(r->value, ui_SettingsValueText((UiSettingsOpt)r->opt));
         }
-        if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION || r->opt == UI_OPT_TEXTURE_PACK) {
+        if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION || r->opt == UI_OPT_TEXTURE_PACK ||
+            r->opt == UI_OPT_MODEL_PACK) {
             /* the locked style: the label and its value greyed */
             lt_ext_SetDim(r->label, locked);
             if (r->value >= 0) {

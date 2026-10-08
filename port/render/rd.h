@@ -361,6 +361,12 @@ typedef struct RdSettings {
      * RESHADE_DEPTH_INPUT_IS_REVERSED = 0.  Not under the CRT filter.  0 in
      * a zeroed RdSettings: the present is as before. */
     uint8_t effectsDepth;
+    /* Model packs ([video] model_pack, dump_models): replacement models
+     * drawn in place of the game's, and each model part saved as glTF.
+     * Both 0 in a zeroed RdSettings. */
+    uint8_t modelPack;
+    uint8_t dumpModels;
+    uint8_t _pad[1];
     /* Wave 7 (R7a): the internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

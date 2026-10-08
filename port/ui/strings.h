@@ -424,6 +424,13 @@ typedef enum UiStrId {
     UI_STR_TEXTURE_PACK_NOTE,
     UI_STR_OPT_DUMP_TEXTURES,
     UI_STR_DUMP_TEXTURES_NOTE,
+    /* model packs: Settings > Display, "Model pack" (On/Off, or "None
+       installed" without a pack; the title's Options only) and its note;
+       the developer row "Dump models" and its note */
+    UI_STR_OPT_MODEL_PACK,
+    UI_STR_MODEL_PACK_NOTE,
+    UI_STR_OPT_DUMP_MODELS,
+    UI_STR_DUMP_MODELS_NOTE,
     /* Options > Effects (issue 11): the page, its five switches, its note */
     UI_STR_SECTION_EFFECTS,
     UI_STR_OPT_EFFECT_GLOW,

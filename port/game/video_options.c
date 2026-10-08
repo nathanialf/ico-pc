@@ -33,6 +33,8 @@ void ico_video_defaults(IcoVideoOptions *o)
     o->crtScanlines = o->crtMask = o->crtHalation = o->crtBloom = o->crtCurvature = -1.0f;
     o->texturePack = 1;
     o->dumpTextures = 0;
+    o->modelPack = 1;
+    o->dumpModels = 0;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
@@ -274,6 +276,8 @@ static void sanitize(IcoVideoOptions *o)
     o->crtCurvature = crt_override(o->crtCurvature, 0.25f);
     o->texturePack = o->texturePack != 0;
     o->dumpTextures = o->dumpTextures != 0;
+    o->modelPack = o->modelPack != 0;
+    o->dumpModels = o->dumpModels != 0;
     if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
     } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
@@ -335,6 +339,8 @@ static void read_config(void)
     /* texture packs */
     o.texturePack = ico_config_get_bool("video.texture_pack", 1) != 0;
     o.dumpTextures = ico_config_get_bool("video.dump_textures", 0) != 0;
+    o.modelPack = ico_config_get_bool("video.model_pack", 1) != 0;
+    o.dumpModels = ico_config_get_bool("video.dump_models", 0) != 0;
     {
         long long mb =
             ico_config_get_int("video.texture_pack_budget_mb", ICO_TEXPACK_BUDGET_DEFAULT);
@@ -452,6 +458,8 @@ int ico_video_save(void)
     }
     r |= ico_config_set_bool("video.texture_pack", o.texturePack);
     r |= ico_config_set_bool("video.dump_textures", o.dumpTextures);
+    r |= ico_config_set_bool("video.model_pack", o.modelPack);
+    r |= ico_config_set_bool("video.dump_models", o.dumpModels);
     /* the config-only keys only when not at their defaults, as the CRT
        overrides: an absent key is the default */
     if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
@@ -558,12 +566,21 @@ int ico_video_effect_fog(void)
     return s_opt.effectFog;
 }
 
-int ico_video_effects_depth(void)
+int ico_video_effects_depth(void) int ico_video_model_pack(void)
 {
     if (!s_read) {
         read_config();
     }
     return s_opt.effectsDepth;
+    return s_opt.modelPack;
+}
+
+int ico_video_dump_models(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.dumpModels;
 }
 
 int ico_video_framerate(void)

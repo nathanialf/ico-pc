@@ -90,6 +90,10 @@ void ui_SettingsSetFullscreenQuery(int (*fn)(void));
    found at start) to tell an installed pack from none ("None installed",
    the row then does not step); NULL, or none installed, is none. */
 void ui_SettingsSetTexturePackCount(int (*fn)(void));
+/* Likewise the number of replacement models found (modelpack_Count): the
+   Model pack row reads "None installed" and does not step while it is 0 or
+   no hook is set. */
+void ui_SettingsSetModelPackCount(int (*fn)(void));
 /* Package MV: Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
@@ -138,7 +142,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row (package CRT) */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
     UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */
-    UI_OPT_BRIGHTNESS,   /* S1: the game's brightness step, systemStatus[11] 0..14 */
+    UI_OPT_MODEL_PACK, /* [video] model_pack: On/Off, "None installed" without a pack; title only */
+    UI_OPT_BRIGHTNESS, /* S1: the game's brightness step, systemStatus[11] 0..14 */
     UI_OPT_VIDEO_MODE,
     /* Effects ([video] effect_*; On/Off, outside the preset) */
     UI_OPT_EFFECT_GLOW,
@@ -165,6 +170,7 @@ typedef enum UiSettingsOpt {
     /* Main */
     UI_OPT_LANGUAGE,
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
+    UI_OPT_DUMP_MODELS,   /* [video] dump_models, for pack makers (developer mode) */
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

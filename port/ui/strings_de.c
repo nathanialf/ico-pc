@@ -378,6 +378,11 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Für Paketersteller: jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
+    [UI_STR_OPT_MODEL_PACK] = "Modellpaket",
+    [UI_STR_MODEL_PACK_NOTE] = "Modellpakete: SCES-50760 nach models kopieren.",
+    [UI_STR_OPT_DUMP_MODELS] = "Modelle exportieren",
+    [UI_STR_DUMP_MODELS_NOTE] =
+        "Für Paketersteller: jedes Modellteil als glTF-Datei in models/SCES-50760/dumps im Benutzerordner.",
     [UI_STR_SECTION_EFFECTS] = "Effekte",
     [UI_STR_OPT_EFFECT_GLOW] = "Leuchten",
     [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Tiefenschärfe",

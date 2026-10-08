@@ -174,6 +174,8 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->dumpTextures = (uint8_t)(o.dumpTextures != 0 && ico_opt_developer_mode());
     /* v0.5.0 (R1): the depth for an effects program (ReShade) */
     rs->effectsDepth = (uint8_t)(o.effectsDepth != 0);
+    rs->modelPack = (uint8_t)(o.modelPack != 0);
+    rs->dumpModels = (uint8_t)(o.dumpModels != 0 && ico_opt_developer_mode());
     /* R7b: rd presents between ticks, in both presets (F2) */
     {
         const char *e = getenv("ICO_RD_S2_LEGACY");
@@ -251,6 +253,10 @@ static void video_log_changes(const IcoVideoOptions *o)
                     o->texturePack ? "on" : "off");
     video_log_field(line, sizeof(line), "dump textures", p->dumpTextures ? "on" : "off",
                     o->dumpTextures ? "on" : "off");
+    video_log_field(line, sizeof(line), "model pack", p->modelPack ? "on" : "off",
+                    o->modelPack ? "on" : "off");
+    video_log_field(line, sizeof(line), "dump models", p->dumpModels ? "on" : "off",
+                    o->dumpModels ? "on" : "off");
     if (line[0] != '\0') {
         fprintf(stderr, "window: display changed: %s\n", line);
     }
@@ -389,7 +395,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         fprintf(stderr,
                 "window: %dx%d pixels%s, %s on %s, %s preset (resolution %s, aspect %s, "
                 "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
-                "dump textures %s, depth %s\n",
+                "dump textures %s, model pack %s, dump models %s, depth %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
                 rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
@@ -398,6 +404,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
+                o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
                 rhi_Limits()->depthStencilFormatName);
         fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
                 rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
