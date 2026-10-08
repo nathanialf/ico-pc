@@ -358,8 +358,10 @@ typedef struct RdSettings {
      * the picture's pixels and 0.0 (far) in the bars, so an effects program
      * hooked into the API (ReShade) finds a depth buffer of the
      * backbuffer's size.  Near 1, far 0 (gs_z_to_depth: the depth grows
-     * with GS Z): ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED = 1.  Not under the CRT filter.  0 in
-     * a zeroed RdSettings: the present is as before. */
+     * with GS Z): ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED = 1.  Only
+     * with an effects program loaded (rhi_InjectorName), never on Android,
+     * not under the CRT filter.  0 in a zeroed RdSettings: the present is
+     * as before. */
     uint8_t effectsDepth;
     /* Model packs ([video] model_pack, dump_models): replacement models
      * drawn in place of the game's, and each model part saved as glTF.

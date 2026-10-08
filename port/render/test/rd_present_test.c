@@ -2128,7 +2128,10 @@ static void checkEffectsDepth(void)
     testSetEnv("ICO_VK_VALIDATION", "1");
     const uint32_t W = 1280, H = 720;
     DepthRun off, on;
+    /* the pass runs only with an effects program loaded: forced here */
+    rd__ForceEffectsDepth(true);
     const bool ran = depthRun(W, H, 0, &off) && depthRun(W, H, 1, &on);
+    rd__ForceEffectsDepth(false);
     const uint32_t verrors = rhi_vk_ValidationErrorCount();
     testSetEnv("ICO_VK_VALIDATION", prev ? saved : NULL);
     CHECK(ran, "effects depth: rd_Init");

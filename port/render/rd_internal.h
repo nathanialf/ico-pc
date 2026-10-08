@@ -1375,6 +1375,10 @@ bool rd__ReadPresent(void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* v0.4.1 (R1): the effects depth of the last present (RdSettings.effectsDepth),
  * outW x outH floats; false when no present has drawn it (tests). */
 bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h);
+/* v0.4.1 (R1): the effects depth pass runs only with an effects program
+ * loaded (rhi_InjectorName); true runs it whenever RdSettings.effectsDepth
+ * is on, as with a program (tests: lavapipe has no layer). */
+void rd__ForceEffectsDepth(bool force);
 /* package PHOTO: a synchronous readback of an RHI texture (RGBA8 or BGRA8,
  * w x h, tightly packed), leaving it in COPY_SRC (*state follows) */
 bool rd__ReadRhiTexture(RhiTexture t, RhiState *state, uint32_t w, uint32_t h, void *dst,

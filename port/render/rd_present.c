@@ -314,7 +314,8 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
 }
 
 /* ------------------------------- the effects depth (v0.4.1, package R1)
- * RdSettings.effectsDepth: step 2 as one pass with two targets, the output
+ * RdSettings.effectsDepth, with an effects program loaded (depthWanted):
+ * step 2 as one pass with two targets, the output
  * and an output-size RHI_FMT_D32F depth buffer cleared to 0.0 (far), drawn
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
  * depth at the same normalised source position (SCENE and DISPLAY cover
@@ -329,6 +330,32 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
  * docs' ReShade notes, R3).  The
  * deferred text, the capture and the overlay stay colour-only passes after
  * it; under the CRT filter there is no box blit and no effects depth. */
+/* Only for an effects program: the pass runs when the setting is on and
+ * rhi_InjectorName() names one (ReShade, vkBasalt), never on Android (no
+ * effects program hooks the game there); the tests force it (a lavapipe
+ * run has no layer). */
+static bool s_forceDepth;
+
+void rd__ForceEffectsDepth(bool force)
+{
+    s_forceDepth = force;
+}
+
+static bool depthWanted(void)
+{
+    if (!g_rd.settings.effectsDepth) {
+        return false;
+    }
+    if (s_forceDepth) {
+        return true;
+    }
+#ifdef __ANDROID__
+    return false;
+#else
+    return rhi_InjectorName() != NULL;
+#endif
+}
+
 static struct {
     RhiTexture copy; /* SCENE's depth, D32F_S8, sampled */
     RhiState copyState;
@@ -1164,7 +1191,7 @@ void rd__PresentRecord(RhiCommandList cl)
     const int mirror = pr->mirror && rd__MirrorOn();
     bool filtered = false, uiInPicture = false;
     if (rd__CrtOn()) {
-        if (g_rd.settings.effectsDepth) {
+        if (depthWanted()) {
             /* package R1: the filter replaces the box blit that carries it */
             rd__LogOnce(RD_ONCE_EFFECTS_DEPTH_CRT,
                         "effects depth is not available with the CRT filter");
@@ -1213,9 +1240,10 @@ void rd__PresentRecord(RhiCommandList cl)
     }
     if (!filtered) {
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-        /* package R1: with the effects depth when asked for (never under
-         * the CRT filter, even when it could not draw) */
-        const bool depth = g_rd.settings.effectsDepth && !rd__CrtOn() &&
+        /* package R1: with the effects depth when asked for and an
+         * effects program is loaded (never under the CRT filter, even when
+         * it could not draw) */
+        const bool depth = depthWanted() && !rd__CrtOn() &&
                            depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box,
                                      pr->scaleFilter, mirror);
         if (!depth) {

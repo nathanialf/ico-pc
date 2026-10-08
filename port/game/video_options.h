@@ -37,9 +37,10 @@
  *                           true        the game's own picture effects (issue 11): the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
- *   [video] effects_depth   true        v0.4.1 (R1): the scene's depth beside the picture
- *                                       for an effects program (ReShade's depth effects);
- *                                       not with the CRT filter
+ *   [video] effects_depth   true        config only, v0.4.1 (R1): the scene's depth beside
+ *                                       the picture for an effects program (ReShade's depth
+ *                                       effects), drawn only when one is loaded; not with
+ *                                       the CRT filter, never on Android
  *
  * Every option applies on its own.  preset is not an option but a
  * shortcut over four of them, read and written as such: "enhanced" or
