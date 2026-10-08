@@ -1249,16 +1249,22 @@ static int host_main(int argc, char **argv)
         at_shutdown(texpack_Shutdown);
     }
 #endif
-    if (rhi_InjectorName() != NULL && watchdog != 0) {
+    {
         /* R2: an effects program (ReShade) compiles its shaders on the first
-           frames; the first limit is doubled for it. rhi_InjectorName comes
-           from package R0 (port/rhi/rhi.h). */
-        ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit is "
-                     "doubled to %lu seconds (its shaders compile on the first frames)",
-                     rhi_InjectorName(), watchdog * 2);
-        ico_diag_start((unsigned int)(watchdog * 2), (unsigned int)(watchdog * 2));
-    } else {
-        ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
+           frames; the first limit is doubled for it (rhi_InjectorName, port/rhi/
+           rhi.h, is only in the window build). */
+        const char *injector = NULL;
+#ifndef ICO_HEADLESS
+        injector = rhi_InjectorName();
+#endif
+        if (injector != NULL && watchdog != 0) {
+            ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit "
+                         "is doubled to %lu seconds (its shaders compile on the first frames)",
+                         injector, watchdog * 2);
+            ico_diag_start((unsigned int)(watchdog * 2), (unsigned int)(watchdog * 2));
+        } else {
+            ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
+        }
     }
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
