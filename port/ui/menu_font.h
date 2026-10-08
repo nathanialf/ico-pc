@@ -21,8 +21,12 @@
  * (magnified onto the output).
  *
  * Strips.  A drawn text is one coverage strip in a cache of 1024 x 1024
- * pages, shelf packed with 4 texels between strips and from the edges, a
- * page set per style (the light ink's rim, the plain inks without it); a
+ * pages (four per style, 1 MB each, 12 MB for the three styles), shelf
+ * packed with each strip's corner on a multiple of 4 texels (the dither
+ * cell) and 7 texels across, 5 down, between strips (the rim's reach and
+ * the bilinear texel, so no strip's rim reaches its neighbour), 8 from the
+ * page's top left: a page holds 36 rows of 20-texel menu items, a
+ * page set per style (the light ink's rim, a faint rim, the plain inks); a
  * set whose pages are full drops its page drawn least recently once no
  * frame of the last EVICT_FRAMES can still name it.  A game row's strip is
  * its item's rectangle (it->w x it->h texels) with the item's words where

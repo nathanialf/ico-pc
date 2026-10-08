@@ -16,11 +16,30 @@
 #include "rd.h"
 #endif
 
+#include "../shaders/shader_consts.h"
 #include "strings.h"
 #include "ui_internal.h"
 
-#define MF_PAGE 1024      /* a page's side, texels */
-#define MF_GAP 4          /* texels between strips and from a page's edges */
+#define MF_PAGE 1024 /* a page's side, texels */
+/* Texels between strips: font_sheet_ps builds a texel's rim from the page's
+   coverage up to ICO_SHEET_RX across and ICO_SHEET_RY down and cannot see
+   where a strip ends, and the bilinear read takes one texel past a strip's
+   edge, so a neighbour's ink must sit at least the rim's reach plus one
+   texel away or its rim smears onto this strip's edge.  Strip origins sit
+   on multiples of MF_ALIGN (the dither's Bayer cell, font.hlsl
+   sheet_threshold indexes it by page texel), so a word's grain is the same
+   wherever it lands and the gaps come out at 8 either way. */
+#define MF_GAP_X 7
+#define MF_GAP_Y 5
+#define MF_ALIGN 4
+#define MF_ORIGIN 8 /* the first strip's corner: the gaps rounded up to MF_ALIGN */
+_Static_assert(MF_GAP_X >= ICO_SHEET_RX + 1, "strips must be a rim's reach apart across");
+_Static_assert(MF_GAP_Y >= ICO_SHEET_RY + 1, "strips must be a rim's reach apart down");
+_Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_ALIGN == 0,
+               "the first strip's corner keeps the gaps and the alignment");
+/* the largest strip a page holds */
+#define MF_MAX_W (MF_PAGE - MF_ORIGIN - MF_GAP_X)
+#define MF_MAX_H (MF_PAGE - MF_ORIGIN - MF_GAP_Y)
 #define MF_PAGES 4        /* pages per style */
 #define MF_STRIPS 1024    /* strips cached at once */
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
@@ -437,24 +456,30 @@ static void resetPage(int cls, int page)
     if (p->cov) {
         memset(p->cov, 0, (size_t)MF_PAGE * MF_PAGE);
     }
-    p->shelfX = p->shelfY = MF_GAP;
+    p->shelfX = p->shelfY = MF_ORIGIN;
     p->shelfH = 0;
 }
 
-/* a w x h cell on page p's shelves */
+static int alignUp(int v)
+{
+    return (v + MF_ALIGN - 1) / MF_ALIGN * MF_ALIGN;
+}
+
+/* a w x h cell on page p's shelves, its corner on MF_ALIGN texels and
+   MF_GAP_X / MF_GAP_Y clear of every other strip */
 static int shelfFit(MfPage *p, int w, int h, int *x, int *y)
 {
-    if (p->shelfX + w + MF_GAP > MF_PAGE) {
-        p->shelfY += p->shelfH + MF_GAP;
-        p->shelfX = MF_GAP;
+    if (p->shelfX + w + MF_GAP_X > MF_PAGE) {
+        p->shelfY = alignUp(p->shelfY + p->shelfH + MF_GAP_Y);
+        p->shelfX = MF_ORIGIN;
         p->shelfH = 0;
     }
-    if (p->shelfY + h + MF_GAP > MF_PAGE) {
+    if (p->shelfY + h + MF_GAP_Y > MF_PAGE) {
         return 0;
     }
     *x = p->shelfX;
     *y = p->shelfY;
-    p->shelfX += w + MF_GAP;
+    p->shelfX = alignUp(p->shelfX + w + MF_GAP_X);
     if (h > p->shelfH) {
         p->shelfH = h;
     }
@@ -483,7 +508,7 @@ static int evictOne(int cls, uint32_t now)
    new page, or the least recently drawn page reset */
 static int allocCell(int cls, int w, int h, int *page, int *x, int *y)
 {
-    if (w + 2 * MF_GAP > MF_PAGE || h + 2 * MF_GAP > MF_PAGE) {
+    if (w > MF_MAX_W || h > MF_MAX_H) {
         return 0;
     }
     for (int pg = 0; pg < MF_PAGES; pg++) {
@@ -493,7 +518,7 @@ static int allocCell(int cls, int w, int h, int *page, int *x, int *y)
             if (!p->cov) {
                 return 0;
             }
-            p->shelfX = p->shelfY = MF_GAP;
+            p->shelfX = p->shelfY = MF_ORIGIN;
             p->shelfH = 0;
             p->tex = 0;
         }
@@ -509,7 +534,8 @@ static int allocCell(int cls, int w, int h, int *page, int *x, int *y)
     }
     if (!s_mf.warnedFull) {
         s_mf.warnedFull = 1;
-        fprintf(stderr, "ui: the menu text pages are full; a word is not drawn\n");
+        fprintf(stderr, "ui: the menu text pages are full; words that do not fit are drawn "
+                        "with the plain font until a page is free\n");
     }
     return 0;
 }
@@ -535,7 +561,8 @@ static MfStrip *newStrip(void)
     }
     if (!s_mf.warnedFull) {
         s_mf.warnedFull = 1;
-        fprintf(stderr, "ui: the menu text strips are full; a word is not drawn\n");
+        fprintf(stderr, "ui: the menu text strips are full; words that do not fit are drawn "
+                        "with the plain font until a strip is free\n");
     }
     return NULL;
 }
@@ -705,8 +732,8 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls)
     const int ox = (int)floorf(minX - padX), oy = (int)floorf(b0 - asc - padY);
     int w = (int)ceilf(maxX + padX) - ox;
     int hgt = (int)ceilf(b0 + (float)(n - 1) * step + desc + padY) - oy;
-    w = w > MF_PAGE - 2 * MF_GAP ? MF_PAGE - 2 * MF_GAP : w;
-    hgt = hgt > MF_PAGE - 2 * MF_GAP ? MF_PAGE - 2 * MF_GAP : hgt;
+    w = w > MF_MAX_W ? MF_MAX_W : w;
+    hgt = hgt > MF_MAX_H ? MF_MAX_H : hgt;
     if (w <= 0 || hgt <= 0) {
         return NULL;
     }
@@ -784,6 +811,10 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     }
     const MfStrip *s = textStrip(utf8, size * 0.5f, flags & (UI_ALIGN_MASK | UI_VALIGN_MASK), cls);
     if (!s) {
+        /* every page of the style holds words a recorded frame still
+           draws: the plain glyphs rather than nothing, so a screen whose
+           strings change every tick never goes blank */
+        ui_DrawTextXf(x, y, size, col, utf8, flags & ~(unsigned)UI_KEEP_STATE, xf);
         return;
     }
     const uint32_t tex = pageTex(s->cls, s->page, (int)lang);
@@ -815,6 +846,37 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
 #endif
 }
 
+#ifdef ICO_RD
+/* ui_MenuWordDraw with no room in the pages: the item's lines in the plain
+   glyphs at the item's anchor, em and pitch, mapped through the sprite's
+   box (the glow pass draws nothing) */
+static void itemFallback(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
+                         const uint8_t col[4], int glow)
+{
+    const char *text = ui_StrIn((UiLang)lang, (UiStrId)it->str);
+    if (glow || !text || !*text) {
+        return;
+    }
+    /* grid units per item texel, and the item's corner on the grid */
+    const float sx = ((float)box[2] / 16.0f) / ((float)uv[2] / 16.0f);
+    const float sy = ((float)box[3] / 8.0f) / ((float)uv[3] / 16.0f);
+    const float x0 =
+        (float)box[0] / 16.0f + UI_GRID_CX - ((float)uv[0] / 16.0f - (float)it->u) * sx;
+    const float y0 = (float)box[1] / 8.0f + UI_GRID_CY - ((float)uv[1] / 16.0f - (float)it->v) * sy;
+    const char *start[MF_LINES];
+    size_t len[MF_LINES];
+    const int n = splitLines(text, start, len);
+    for (int i = 0; i < n; i++) {
+        char line[256];
+        const size_t k = len[i] < sizeof(line) - 1 ? len[i] : sizeof(line) - 1;
+        memcpy(line, start[i], k);
+        line[k] = 0;
+        ui_DrawText(x0 + it->x[lang] * sx, y0 + (it->y[lang] + (float)i * it->pitch) * sy,
+                    it->em[lang] * sy, col, line, (unsigned)it->align | UI_VALIGN_MIDDLE);
+    }
+}
+#endif
+
 void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
                      const unsigned char rgba[4], int glow)
 {
@@ -835,6 +897,7 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
                          : -2;
     const MfStrip *s = itemStrip(it, item, lang, cls);
     if (!s) {
+        itemFallback(it, lang, box, uv, col, glow);
         return;
     }
     const uint32_t tex = pageTex(s->cls, s->page, lang);
