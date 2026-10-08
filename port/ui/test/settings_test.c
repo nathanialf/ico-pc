@@ -675,7 +675,7 @@ static void testBuild(void)
     ui_SettingsReset();
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 11), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 12), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 6), "effects rows");
     {
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
@@ -684,7 +684,7 @@ static void testBuild(void)
                                          UI_STR_EXTRAS_CREDITS, UI_STR_BACK};
         CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 4), "Extras page rows");
     }
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14),
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 15),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 10), "controls rows");
@@ -759,7 +759,7 @@ static void testBuild(void)
     lt_ext_Reset();
     ui_SettingsReset();
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 14), "display rows (Enhanced)");
+    CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 15), "display rows (Enhanced)");
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_FRAMERATE), "144 fps") == 0, "framerate 144 (%s)",
           ui_SettingsValueText(UI_OPT_FRAMERATE));
 }
