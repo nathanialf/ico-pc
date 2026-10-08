@@ -862,6 +862,103 @@ static void driver(void *arg)
     CHECK(req.result == 0 && req.dirCount == 0 && req.mask == 0);
     CHECK(file_size(CARD_B "/" PRODUCT "/game.001") < 0);
 
+    /* v0.4.2 (Android issue 20): saves as they reach a phone.
+       A save folder copied or renamed with other capitals: on a file
+       system that tells case apart (Linux; Android's app folder) it is
+       still found (mc_host.c fold_case), and the load reads it whole. */
+    memset(buf, 0, sizeof(buf));
+    for (i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = (unsigned char)(i * 13 + 1);
+    }
+    do_save(3, buf);
+    CHECK(rename(CARD_B "/" PRODUCT, CARD_B "/besces-50760ICO") == 0);
+    {
+        struct stat st;
+        const int folds = stat(CARD_B "/" PRODUCT, &st) != 0; /* the system tells case apart */
+
+        req.port = 0;
+        req.flags.ll &= ~2;
+        iosMcChdirProduct(&req);
+        wait_request();
+        CHECK(req.result == 0);
+        strcpy(req.path, "game.");
+        iosMcGetBlockSaveInfo(&req);
+        wait_request();
+        CHECK(req.dirCount == 1 && req.mask == (1 << 3));
+        req.fileNo = 3;
+        memset(back, 0, sizeof(back));
+        iosMcLoadGameBlock(&req, back);
+        wait_request();
+        CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+        /* a re-save goes into that folder, not a second one */
+        do_save(3, back);
+        CHECK(file_size(CARD_B "/besces-50760ICO/game.003") == 25600);
+        if (folds) {
+            CHECK(stat(CARD_B "/" PRODUCT, &st) != 0);
+        }
+        printf("part B: a save folder in other capitals loads (%s)\n",
+               folds ? "the file system tells case apart" : "the file system ignores case");
+    }
+    CHECK(rename(CARD_B "/besces-50760ICO", CARD_B "/" PRODUCT) == 0);
+
+    /* An empty product file (a copy cut short): the card check reads it as
+       no save (-15, which _la_memory_card_check turns into -14), and the
+       load of a game file of 0 bytes fails with -15, not a crash */
+    {
+        FILE *f = fopen(CARD_B "/" PRODUCT "/" PRODUCT, "wb");
+
+        CHECK(f != NULL);
+        if (f != NULL) {
+            fclose(f);
+        }
+        iosMcLoadProductBlock(&req);
+        wait_request();
+        CHECK(req.result == -15);
+        f = fopen(CARD_B "/" PRODUCT "/game.003", "wb");
+        CHECK(f != NULL);
+        if (f != NULL) {
+            fclose(f);
+        }
+        req.fileNo = 3;
+        iosMcLoadGameBlock(&req, back);
+        wait_request();
+        CHECK(req.result == -15);
+    }
+#ifndef _WIN32
+    /* A card folder that cannot be written (a copy with no write right):
+       the load works, a save fails with a card error the save screen shows
+       (sceMcResDeniedPermit, -5 here) and the files stay as they were.
+       root writes anyway: then only the load is checked. */
+    do_save(3, buf);
+    CHECK(chmod(CARD_B "/" PRODUCT, 0555) == 0);
+    {
+        const int asRoot = geteuid() == 0;
+
+        req.fileNo = 3;
+        memset(back, 0, sizeof(back));
+        iosMcLoadGameBlock(&req, back);
+        wait_request();
+        CHECK(req.result == 0 && memcmp(back, buf, sizeof(buf)) == 0);
+        if (!asRoot) {
+            req.port = 0;
+            strcpy(req.path, "game.");
+            req.fileNo = 3;
+            iosMcSaveIconBlock(&req);
+            wait_request();
+            CHECK(req.result < 0);
+            iosMcSaveGameBlock(&req, back);
+            wait_request();
+            CHECK(req.result < 0);
+            n = slurp(CARD_B "/" PRODUCT "/game.003", file, sizeof(file));
+            CHECK(n == 25600);
+        }
+        printf("part B: a card folder that cannot be written: the load works%s\n",
+               asRoot ? " (root: the refused save is not checked)" : ", the save is refused");
+    }
+    CHECK(chmod(CARD_B "/" PRODUCT, 0755) == 0);
+#endif
+    remove(CARD_B "/" PRODUCT "/game.003");
+
     /* port 1 is empty: the game's "no card" path (type 0, result -9) */
     req.port = 1;
     iosMcChdirProduct(&req);

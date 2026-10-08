@@ -28,6 +28,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <strings.h> /* strncasecmp */
+#endif
 #include <time.h>
 
 /* UTF-8 host paths through port/platform/host_fs.h (wide calls on Windows) */
@@ -158,10 +161,74 @@ static int resolve(int port, const char *name, char *rel, size_t size)
     return 0;
 }
 
+static int list_dir(const char *path, char (*names)[MC_NAME_MAX + 1], int max);
+
+static int kind_of(const char *path, unsigned long *size, time_t *mtime);
+
+/* v0.4.2: on a file system that tells case apart (Linux, Android's app
+   folder outside the shared storage) a card folder copied or renamed with
+   other capitals ("besces-50760ICO") is still the game's: a component that
+   does not exist as spelled takes the name of the one entry of its
+   directory that differs only in ASCII case. Windows and macOS ignore case
+   themselves. */
+static void fold_case(char *path, size_t size, size_t from)
+{
+#if defined(_WIN32) || defined(__APPLE__)
+    (void)path;
+    (void)size;
+    (void)from;
+#else
+    static char names[MC_DIR_MAX][MC_NAME_MAX + 1];
+    size_t i = from;
+
+    while (path[i] == '/') {
+        i++;
+    }
+    while (path[i] != '\0') {
+        size_t end = i;
+        char keep;
+        int n;
+        int j;
+
+        while (path[end] != '\0' && path[end] != '/') {
+            end++;
+        }
+        keep = path[end];
+        path[end] = '\0';
+        if (kind_of(path, NULL, NULL) < 0) {
+            /* the directory holding it, then a name equal but for case */
+            path[i - 1] = '\0';
+            n = list_dir(path, names, MC_DIR_MAX);
+            path[i - 1] = '/';
+            for (j = 0; j < n; j++) {
+                if (strlen(names[j]) == end - i && strncasecmp(names[j], path + i, end - i) == 0) {
+                    memcpy(path + i, names[j], end - i);
+                    break;
+                }
+            }
+            if (j == n) {
+                path[end] = keep;
+                return; /* nothing like it: the rest cannot exist either */
+            }
+        }
+        path[end] = keep;
+        if (keep == '\0') {
+            break;
+        }
+        i = end + 1;
+    }
+    (void)size;
+#endif
+}
+
 static void host_path(int port, char *out, size_t size, const char *rel)
 {
     if (rel[0] != '\0') {
-        snprintf(out, size, "%s/%s", mc.root[port], rel);
+        int n = snprintf(out, size, "%s/%s", mc.root[port], rel);
+
+        if (n > 0 && (size_t)n < size) {
+            fold_case(out, size, strlen(mc.root[port]) + 1);
+        }
     } else {
         snprintf(out, size, "%s", mc.root[port]);
     }
