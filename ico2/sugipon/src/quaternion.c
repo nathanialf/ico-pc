@@ -154,8 +154,11 @@ void RegularizeQuaternion(void *q)
     _ScaleVector(q, q, 1.0f / _Sqrt(ico_quaternion_norm2((const float *)q)));
 }
 
-/* int (float) here, short (float) in tableSin.h */
-extern int GetTableArcCos(float c);
+/* short (float), as tableSin.h and the definition: the int the decompiled
+   declaration had read the whole return register, whose upper half the
+   callee leaves unspecified (the x86-64 clang build returned 16383 as
+   0x13FFF, which this slerp then multiplied; issue 19) */
+extern short GetTableArcCos(float c);
 /* float (int) here, float (short) in tableSin.h */
 extern float GetTableSin(int x);
 
