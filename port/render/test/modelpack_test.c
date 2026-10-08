@@ -550,6 +550,22 @@ static void stripChecks(void)
     CHECK(!modelpack_DumpWanted(h, NULL) && modelpack_Dump(&o.d, &id, NULL) == 0, "once per hash");
     CHECK(strstr(modelpack_DumpDir(), "models/SCES-50760/dumps") != NULL, "the dumps folder %s",
           modelpack_DumpDir());
+    {
+        /* a part that changes shape: its stream differs at every dump, its
+           build-time hash does not; one dump, not one per frame */
+        static Orig m1, m2, m3;
+        origMake(&m1, RD_VU_QW_PRELIT, 2, counts, 0.25f, restarts, 3);
+        origMake(&m2, RD_VU_QW_PRELIT, 2, counts, 0.75f, restarts, 3);
+        origMake(&m3, RD_VU_QW_PRELIT, 2, counts, 0.9f, restarts, 3);
+        const uint64_t built = hashOf(&m1);
+        ModelpackIdent mid = {"morphy", 4, 0, NULL, built};
+        CHECK(hashOf(&m2) != hashOf(&m3) && hashOf(&m2) != built, "the morph streams differ");
+        CHECK(modelpack_DumpWanted(built, NULL), "the build hash is wanted at first");
+        CHECK(modelpack_Dump(&m2.d, &mid, NULL) == 2, "the first morph frame is dumped");
+        CHECK(!modelpack_DumpWanted(built, NULL), "the build hash is done after it");
+        CHECK(modelpack_Dump(&m3.d, &mid, NULL) == 0,
+              "a later frame (another stream, the same build hash) writes nothing");
+    }
     size_t n = 0;
     char *list = readAll(pathOf("s/models/SCES-50760/dumps/models.txt"), &n);
     char want[200];

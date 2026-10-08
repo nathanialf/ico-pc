@@ -161,12 +161,16 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     if (!pac_hostDesc(pk, &d, name)) {
         return;
     }
-    h = rd_VuMeshDescHash(&d, 0, 0);
+    /* no hash without a pack, dumping or a shot; a morph part is never replaced */
+    h = modelpack_HashWanted() && (id == 0 || !id->morph) ? rd_VuMeshDescHash(&d, 0, 0) : 0;
     e = h != 0 ? modelpack_Lookup(h) : -1;
     if (e >= 0) {
         if (d.qwPerVertex != RD_VU_QW_SKIN || (id != 0 && id->bones > 0)) {
             m = modelpack_Create(e, &d, pac_hostPartName(id, name, part, sizeof(part)),
                                  (uint32_t)(id != 0 && id->bones > 0 ? id->bones : 0));
+            if (m.id != 0 && id != 0 && id->skel != 0) {
+                modelpack_NoteSkeleton(e, id->skel);
+            }
         } else if (load) {
             return; /* made at the first draw */
         }
@@ -253,6 +257,7 @@ int pac_HostDump(PacHeader *pk, const PacHostIdent *id)
     mi.part = id != 0 ? id->part : -1;
     mi.ordinal = id != 0 ? id->ordinal : -1;
     mi.obj = id != 0 ? id->obj : 0;
+    mi.buildHash = id != 0 ? id->buildHash : 0;
     return modelpack_Dump(&d, &mi, d.qwPerVertex == RD_VU_QW_SKIN && id != 0 ? id->skel : 0);
 }
 

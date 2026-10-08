@@ -107,6 +107,7 @@ static void regHostIdent(PacHostIdent *id, int n)
     id->ordinal = n;
     id->bones = regKeyObj->nodeNum;
     id->obj = regKeyObj;
+    id->morph = regKeyGrp->morph != 0; /* a part with morph shapes */
 }
 
 /* the skeleton of the object drawn (regKeyObj) for the dump of a skinned
@@ -117,16 +118,20 @@ static const ModelpackSkeleton *regHostSkeleton(void)
 {
     static ModelpackSkeleton sk;
     const Sub15C *o = regKeyObj;
-    int i;
+    int i, cnt;
 
-    if (o == 0 || o->clusterMtx == 0 || o->nodeNum <= 0 || o->nodeNum > 60) {
+    /* only a skinned object (dispType 1) has its inverse binds in step with
+       its nodes; clusterMtx holds skelNodeNum matrices */
+    if (o == 0 || o->clusterMtx == 0 || o->dispType != 1 || o->nodeNum <= 0 || o->nodeNum > 60 ||
+        o->skelNodeNum <= 0) {
         return 0;
     }
+    cnt = o->nodeNum < o->skelNodeNum ? o->nodeNum : o->skelNodeNum;
     memset(&sk, 0, sizeof(sk));
-    sk.count = (uint32_t)o->nodeNum;
-    for (i = 0; i < o->nodeNum; i++) {
+    sk.count = (uint32_t)cnt;
+    for (i = 0; i < cnt; i++) {
         memcpy(sk.invBind[i], o->clusterMtx + i * 64, 64);
-        sk.parent[i] = o->skel != 0 && i < o->skelNodeNum ? o->skel[i].parent : -1;
+        sk.parent[i] = o->skel != 0 ? o->skel[i].parent : -1;
     }
     return &sk;
 }
@@ -143,14 +148,19 @@ static void regHostMesh(PacHeader *pk, int pass)
     (dl_OpenDma)(2, pk->data, pk->size >> 4); /* the chain as the PS2 has it */
     n = regKeyOrdinal(pk);
     regHostIdent(&id, n);
+    memcpy(&m.id, pk->pad9C, sizeof(m.id));
+    if (id.obj != 0 && (m.id == 0 || !rd_VuMeshValid(m))) {
+        id.skel = regHostSkeleton(); /* the mesh is built now: its pack entry checks it */
+    }
     m.id = pac_HostMeshFor(pk, &id);
     if (m.id == 0) {
         return;
     }
     /* v0.4.1 (M4): the model pack's dump, at every draw (meshes are made
        lazily, and the one-shot dump wants each part of its object drawn) */
-    if (modelpack_DumpWanted(rd_VuMeshHash(m), id.obj)) {
+    if (!id.morph && modelpack_DumpWanted(rd_VuMeshHash(m), id.obj)) {
         id.skel = regHostSkeleton();
+        id.buildHash = rd_VuMeshHash(m);
         pac_HostDump(pk, &id);
     }
     /* the PRIM every batch's GIF tag (PRE) writes: strip, IIP, TME, ABE */

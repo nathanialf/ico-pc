@@ -141,6 +141,8 @@ typedef struct PacHostIdent {
     const struct ModelpackSkeleton *skel;
     int bones;
     const void *obj;
+    uint64_t buildHash; /* the hash the mesh was built with (modelpack_DumpWanted's) */
+    int morph; /* the part has morph shapes: never replaced, never dumped */
 } PacHostIdent;
 
 unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id);

@@ -132,11 +132,15 @@ bool modelpack_Enabled(void);
 /* ---------------------------------------------------------------- dumps */
 
 typedef struct ModelpackIdent {
-    const char *model; /* the model's name (regKeyGrp->name) */
-    int part;          /* the part's index (regKeyIdx) */
-    int ordinal;       /* the packet's ordinal in the part (regKeyOrdinal) */
-    const void *obj;   /* the drawing object (regKeyObj), for
+    const char *model;  /* the model's name (regKeyGrp->name) */
+    int part;           /* the part's index (regKeyIdx) */
+    int ordinal;        /* the packet's ordinal in the part (regKeyOrdinal) */
+    const void *obj;    /* the drawing object (regKeyObj), for
                           modelpack_DumpObjectOnce; may be NULL */
+    uint64_t buildHash; /* the hash the mesh was built with (what
+                           modelpack_DumpWanted was asked); 0 if unknown.  A part
+                           that changes shape hashes differently every frame:
+                           this one is marked done too */
 } ModelpackIdent;
 
 /* A skinned part's skeleton: bone i = skeleton node i (Sub15C.skel),
@@ -148,12 +152,20 @@ typedef struct ModelpackSkeleton {
     int parent[60];
 } ModelpackSkeleton;
 
+/* The game's skeleton of a skinned part whose entry was just used: logged
+ * once per file if the file's own inverse bind matrices differ (they are
+ * ignored; the game's are used). */
+void modelpack_NoteSkeleton(int entry, const ModelpackSkeleton *skel);
+
 /* Whether the draw of a part (its mesh hash, the drawing object) should
  * be dumped now: with dumping on, a hash not dumped yet this session; and
  * every part of the object modelpack_DumpObjectOnce armed, in the frame it
  * is first drawn.  Cheap: call it at every mesh draw and build the desc for
  * modelpack_Dump only when it says so. */
 bool modelpack_DumpWanted(uint64_t hash, const void *obj);
+/* Whether anything wants a mesh's hash now: a pack with files, dumping on,
+ * or a shot armed. */
+bool modelpack_HashWanted(void);
 /* Writes the part orig describes (skel: NULL for a static part) as
  * dumps/<hash16>.gltf + .bin and appends its line to dumps/models.txt.
  * Once per hash a session, and a file already on disk is kept, except for

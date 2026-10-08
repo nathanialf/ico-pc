@@ -27,7 +27,11 @@ typedef struct PackMesh {
     uint32_t qwPerVertex; /* RD_VU_QW_PRELIT / _LIT / _SKIN */
     RdVuReplacementBatch *batches;
     uint32_t batchCount;
-    uint32_t bones; /* skinned: the highest bone a vertex weights + 1 */
+    uint32_t bones;   /* skinned: the highest bone a vertex weights + 1 */
+    float (*ibm)[16]; /* skinned: the file's own inverse bind matrices */
+    uint32_t ibmCount;
+    uint8_t ibmChecked;
+    uint8_t buildFailLogged;
     uint8_t declined;
     uint64_t bytes;
 } PackMesh;
@@ -502,6 +506,18 @@ static int convertDoc(const GltfDoc *d, PackMesh *m, char *why, size_t whyLen)
     int skin = 0, allNormals = 1;
     uint64_t total = 0;
     for (uint32_t i = 0; i < d->primCount; i++) {
+        const GltfPrim *gp = &d->prims[i];
+        const size_t nv = gp->vertexCount;
+        for (size_t k = 0; k < nv * 3; k++) {
+            if (!isfinite(gp->pos[k]) || (gp->nrm && !isfinite(gp->nrm[k]))) {
+                return convFail(&c, "piece %u has a position or normal that is not a number", i);
+            }
+        }
+        for (size_t k = 0; gp->joints && k < nv * 4; k++) {
+            if (!isfinite(gp->weights[k])) {
+                return convFail(&c, "piece %u has a bone weight that is not a number", i);
+            }
+        }
         skin |= d->prims[i].joints != NULL;
         allNormals &= d->prims[i].nrm != NULL;
         total += d->prims[i].vertexCount;
@@ -614,6 +630,13 @@ static int convertDoc(const GltfDoc *d, PackMesh *m, char *why, size_t whyLen)
     m->batches = batches;
     m->batchCount = d->primCount;
     m->bones = skin ? c.maxBone : 0;
+    if (skin && d->skin.count > 0 && d->skin.count <= MODELPACK_MAX_BONES && d->skin.invBind) {
+        m->ibm = malloc((size_t)d->skin.count * sizeof(*m->ibm));
+        if (m->ibm) {
+            memcpy(m->ibm, d->skin.invBind, (size_t)d->skin.count * sizeof(*m->ibm));
+            m->ibmCount = d->skin.count;
+        }
+    }
     m->bytes = (uint64_t)s.n * qpv * 16 + (uint64_t)d->primCount * sizeof(*batches);
     batches = NULL;
     rc = 0;
@@ -668,6 +691,7 @@ static int addFile(const char *path, const char *name, void *user)
                 (unsigned long long)(MODELPACK_MAX_BYTES >> 20));
         free(m.qw);
         free(m.batches);
+        free(m.ibm);
         s_mp.stats.failed++;
         return 0;
     }
@@ -677,6 +701,7 @@ static int addFile(const char *path, const char *name, void *user)
         if (!g) {
             free(m.qw);
             free(m.batches);
+            free(m.ibm);
             return 1;
         }
         s_mp.e = g;
@@ -686,6 +711,7 @@ static int addFile(const char *path, const char *name, void *user)
     if (!m.path) {
         free(m.qw);
         free(m.batches);
+        free(m.ibm);
         return 1;
     }
     strcpy(m.path, path);
@@ -694,6 +720,7 @@ static int addFile(const char *path, const char *name, void *user)
         s_mp.n--;
         free(m.qw);
         free(m.batches);
+        free(m.ibm);
         free(m.path);
         return 1;
     }
@@ -788,6 +815,36 @@ int modelpack_Count(void)
     return s_mp.n;
 }
 
+bool modelpack_HashWanted(void)
+{
+    return s_mp.n > 0 || s_mp.dumpEnabled || s_mp.shotArmed;
+}
+
+void modelpack_NoteSkeleton(int entry, const ModelpackSkeleton *skel)
+{
+    if (entry < 0 || entry >= s_mp.n || !skel) {
+        return;
+    }
+    PackMesh *m = &s_mp.e[entry];
+    if (m->ibmChecked || !m->ibm) {
+        return;
+    }
+    m->ibmChecked = 1;
+    const uint32_t n = m->ibmCount < skel->count ? m->ibmCount : skel->count;
+    for (uint32_t b = 0; b < n; b++) {
+        for (int k = 0; k < 16; k++) {
+            const float d = fabsf(m->ibm[b][k] - skel->invBind[b][k]);
+            if (!(d <= 1e-3f * (1.0f + fabsf(skel->invBind[b][k])))) {
+                fprintf(stderr,
+                        "models: %s has its own inverse bind matrices, which differ from the "
+                        "game's; the game's are used\n",
+                        m->path);
+                return;
+            }
+        }
+    }
+}
+
 void modelpack_GetStats(ModelpackStats *out)
 {
     *out = s_mp.stats;
@@ -800,6 +857,7 @@ void modelpack_Shutdown(void)
         free(s_mp.e[i].path);
         free(s_mp.e[i].qw);
         free(s_mp.e[i].batches);
+        free(s_mp.e[i].ibm);
     }
     free(s_mp.e);
     free(s_mp.table);
@@ -903,10 +961,25 @@ RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, u
         }
         rep.qw = (const float (*)[4])tmp;
     }
+    for (uint32_t b = 0; b < m->batchCount; b++) {
+        if ((uint64_t)m->batches[b].firstVertex + m->batches[b].vertexCount > m->vertexCount) {
+            free(tmp);
+            decline(m, part, "its pieces do not fit its vertices");
+            return (RdMesh){0};
+        }
+    }
     RdMesh mesh = rd_CreateVuMeshReplacement(orig, &rep, name);
     free(tmp);
     if (mesh.id == 0) {
-        decline(m, part, "the game could not build it");
+        /* not a mismatch the file could be blamed for (it was checked
+           above): a failed allocation, say.  The entry stays on; the next
+           build tries again */
+        if (!m->buildFailLogged) {
+            m->buildFailLogged = 1;
+            fprintf(stderr,
+                    "models: %s: the game could not build %s just now; trying again later\n",
+                    m->path, part ? part : "a part");
+        }
         return mesh;
     }
     s_mp.stats.created++;
@@ -1204,7 +1277,12 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
         (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT && qpv != RD_VU_QW_SKIN)) {
         return 0;
     }
+    const uint64_t built = id ? id->buildHash : 0;
     if (shot ? listHas(&s_mp.shotDone, hash) : seenHas(hash)) {
+        return 0;
+    }
+    /* a part that changes shape: the hash it was built with stands for it */
+    if (built != 0 && (shot ? listHas(&s_mp.shotDone, built) : seenHas(built))) {
         return 0;
     }
     if (shot) {
@@ -1213,8 +1291,14 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
             s_mp.shotFrame = g_rd.frameCounter;
         }
         listAdd(&s_mp.shotDone, hash);
+        if (built != 0) {
+            listAdd(&s_mp.shotDone, built);
+        }
     }
     seenAdd(hash);
+    if (built != 0) {
+        seenAdd(built);
+    }
     if (ensureDumpDir() != 0) {
         return 0;
     }
