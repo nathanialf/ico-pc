@@ -369,6 +369,14 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Dump textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "For pack makers: saves each texture under its PCSX2 name in textures/SCES-50760/dumps in the user folder.",
+    [UI_STR_SECTION_EFFECTS] = "Effects",
+    [UI_STR_OPT_EFFECT_GLOW] = "Glow",
+    [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Depth of field",
+    [UI_STR_OPT_EFFECT_SOFTENING] = "Screen softening",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Motion blur",
+    [UI_STR_OPT_EFFECT_FOG] = "Fog",
+    [UI_STR_EFFECTS_NOTE] =
+        "The game’s own picture effects. All On is the PS2 picture; the Preset does not change these.",
     [UI_STR_STATS_PLAY_TIME] = "Play time",
     [UI_STR_STATS_DEATHS] = "Deaths",
     [UI_STR_STATS_CAPTURES] = "Yorda captured",

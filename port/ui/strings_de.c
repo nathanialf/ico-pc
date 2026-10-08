@@ -375,6 +375,14 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Texturen exportieren",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Für Paketersteller: jede Textur unter ihrem PCSX2-Namen in textures/SCES-50760/dumps im Benutzerordner.",
+    [UI_STR_SECTION_EFFECTS] = "Effekte",
+    [UI_STR_OPT_EFFECT_GLOW] = "Leuchten",
+    [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Tiefenschärfe",
+    [UI_STR_OPT_EFFECT_SOFTENING] = "Bildweichzeichnung",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Bewegungsunschärfe",
+    [UI_STR_OPT_EFFECT_FOG] = "Nebel",
+    [UI_STR_EFFECTS_NOTE] =
+        "Die Bildeffekte des Spiels. Alles An ist das PS2-Bild; die Voreinstellung ändert sie nicht.",
     [UI_STR_STATS_PLAY_TIME] = "Spielzeit",
     [UI_STR_STATS_DEATHS] = "Tode",
     [UI_STR_STATS_CAPTURES] = "Yorda entführt",

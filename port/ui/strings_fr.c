@@ -375,6 +375,14 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_DUMP_TEXTURES] = "Extraire les textures",
     [UI_STR_DUMP_TEXTURES_NOTE] =
         "Pour les créateurs de packs : chaque texture sous son nom PCSX2, dans textures/SCES-50760/dumps du dossier utilisateur.",
+    [UI_STR_SECTION_EFFECTS] = "Effets",
+    [UI_STR_OPT_EFFECT_GLOW] = "Lueur",
+    [UI_STR_OPT_EFFECT_DEPTH_OF_FIELD] = "Profondeur de champ",
+    [UI_STR_OPT_EFFECT_SOFTENING] = "Adoucissement de l’écran",
+    [UI_STR_OPT_EFFECT_MOTION_BLUR] = "Flou de mouvement",
+    [UI_STR_OPT_EFFECT_FOG] = "Brouillard",
+    [UI_STR_EFFECTS_NOTE] =
+        "Les effets d’image du jeu. Tout activé donne l’image PS2 ; le préréglage ne les modifie pas.",
     [UI_STR_STATS_PLAY_TIME] = "Temps de jeu",
     [UI_STR_STATS_DEATHS] = "Morts",
     [UI_STR_STATS_CAPTURES] = "Yorda enlevée",

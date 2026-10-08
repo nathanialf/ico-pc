@@ -623,10 +623,17 @@ static int labelsAre(UiSettingsPage page, const int *opts, const int *strs, int 
 
 static void testBuild(void)
 {
-    static const int mainOpts[] = {UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
-                                   UI_OPT_LANGUAGE,      UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
-                                   UI_OPT_DUMP_TEXTURES, UI_OPT_BACK};
+    static const int mainOpts[] = {UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
+                                   UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_LINK, UI_OPT_LINK,
+                                   UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_BACK};
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_FOG,       UI_OPT_BACK};
+    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,      UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_STR_OPT_EFFECT_SOFTENING, UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_FOG,       UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_AUDIO,
                                    UI_STR_SECTION_CONTROLS,
                                    UI_STR_SECTION_GAMEPLAY,
@@ -672,7 +679,8 @@ static void testBuild(void)
     ui_SettingsReset();
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
-    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 10), "main page rows");
+    CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 11), "main page rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 6), "effects rows");
     {
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
                                          UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
@@ -1259,8 +1267,8 @@ static void testNavigation(void)
     press(0x40); /* Cross */
     int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "Cross opens the Settings menu (%d)", current_layout_id);
-    /* down to Language (row 5), right: French */
-    for (int i = 0; i < 4; i++) {
+    /* down to Language (row 6), right: French */
+    for (int i = 0; i < 5; i++) {
         press(0x4000);
     }
     CHECK(lt_ext_Layout(mainL)->curItem == ui_SettingsRowOf(UI_PAGE_MAIN, UI_OPT_LANGUAGE),
@@ -1272,8 +1280,8 @@ static void testNavigation(void)
     CHECK(s_sounds[0] > cur0, "the cursor sound");
     int labels[16], values[16];
     ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, values, 16);
-    CHECK(strstr(lt_ext_RowText(values[4]), "Français") != NULL, "the value row: %s",
-          lt_ext_RowText(values[4]));
+    CHECK(strstr(lt_ext_RowText(values[5]), "Français") != NULL, "the value row: %s",
+          lt_ext_RowText(values[5]));
     CHECK(strcmp(lt_ext_RowText(labels[0]), "Affichage") == 0, "labels follow the language");
     CHECK(strcmp(ico_config_get_string("game.language", ""), "fr") == 0, "[game] language");
     press(0x8000); /* left: English again */
@@ -1291,6 +1299,7 @@ static void testNavigation(void)
     press(0x40);
     CHECK(settle(mainL, 60), "the menu again");
     CHECK(lt_ext_Layout(mainL)->curItem == labels[0], "opens on its first row");
+    press(0x4000);
     press(0x4000);
     press(0x4000);
     press(0x40); /* Controls */
@@ -1941,11 +1950,8 @@ static void testCirclePortScreens(void)
     static const struct {
         int row; /* main page row */
         UiSettingsPage page;
-    } kPages[] = {{0, UI_PAGE_DISPLAY},
-                  {1, UI_PAGE_AUDIO},
-                  {2, UI_PAGE_CONTROLS},
-                  {3, UI_PAGE_GAMEPLAY},
-                  {5, UI_PAGE_ACHIEVEMENTS}};
+    } kPages[] = {{0, UI_PAGE_DISPLAY},  {1, UI_PAGE_EFFECTS},  {2, UI_PAGE_AUDIO},
+                  {3, UI_PAGE_CONTROLS}, {4, UI_PAGE_GAMEPLAY}, {6, UI_PAGE_ACHIEVEMENTS}};
 
     int labels[16];
     ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -1960,7 +1966,7 @@ static void testCirclePortScreens(void)
         CHECK(lt_ext_Layout(mainL)->curItem == labels[kPages[i].row], "on its row");
     }
     /* Controls -> Remap -> Circle -> Controls */
-    lt_ext_Layout(mainL)->curItem = labels[2];
+    lt_ext_Layout(mainL)->curItem = labels[3];
     press(0x40);
     int ctlL = ui_SettingsPageLayout(UI_PAGE_CONTROLS);
     CHECK(settle(ctlL, 60), "Controls");
@@ -2756,20 +2762,20 @@ static void testExtras(void)
         }
         /* v0.4.0: Dump textures (developer mode only, hidden here) before
            Back */
-        CHECK(n == 10 && idx == 6, "Extras is the row after Achievements (index %d of %d)", idx, n);
+        CHECK(n == 11 && idx == 7, "Extras is the row after Achievements (index %d of %d)", idx, n);
         CHECK(lt_ext_Prop(ex)->right == ui_SettingsPageLayout(UI_PAGE_EXTRAS), "Extras opens");
         CHECK(lt_ext_Prop(ex)->defaultMask == !title, "title %d: the Extras row is %s", title,
               title ? "shown" : "hidden (masked)");
         /* the cursor: Achievements, Down */
-        lt_ext_Layout(mainL)->curItem = labels[5];
+        lt_ext_Layout(mainL)->curItem = labels[6];
         press(0x4000);
-        CHECK(lt_ext_Layout(mainL)->curItem == (title ? ex : labels[7]),
+        CHECK(lt_ext_Layout(mainL)->curItem == (title ? ex : labels[8]),
               "title %d: Down from Achievements lands on %s", title,
               title ? "Extras" : "Developer");
         /* the rows below follow: Back's y, one pitch table for each entry */
-        CHECK(title ? lt_ext_Prop(labels[9])->dispY == 40 + 17 * 8
-                    : lt_ext_Prop(labels[9])->dispY == 40 + 19 * 7,
-              "title %d: Back at y %d", title, lt_ext_Prop(labels[9])->dispY);
+        CHECK(title ? lt_ext_Prop(labels[10])->dispY == 40 + 15 * 9
+                    : lt_ext_Prop(labels[10])->dispY == 40 + 17 * 8,
+              "title %d: Back at y %d", title, lt_ext_Prop(labels[10])->dispY);
         if (!title) {
             continue;
         }
@@ -3157,7 +3163,7 @@ static void testGallery(void)
     int mainL = enterMain(1);
     int ml[16];
     ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-    lt_ext_Layout(mainL)->curItem = ml[6];
+    lt_ext_Layout(mainL)->curItem = ml[7];
     press(0x40);
     int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
     CHECK(settle(exL, 60), "gallery: Extras");
@@ -3383,7 +3389,7 @@ static void testGameOptions(void)
         checkPageFits(UI_PAGE_DISPLAY, title ? "Display (title)" : "Display (pause)");
         press(0x10);
         CHECK(settle(mainL, 60), "Display: back");
-        const int ctlL = openPage(mainL, 2, UI_PAGE_CONTROLS);
+        const int ctlL = openPage(mainL, 3, UI_PAGE_CONTROLS);
         CHECK(rowShown(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_VIBRATION) == !title &&
                   rowShown(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE) == !title,
@@ -3396,7 +3402,7 @@ static void testGameOptions(void)
               "title %d: down from Remap", title);
         press(0x10);
         CHECK(settle(mainL, 60), "Controls: back");
-        openPage(mainL, 3, UI_PAGE_GAMEPLAY);
+        openPage(mainL, 4, UI_PAGE_GAMEPLAY);
         CHECK(!rowShown(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT) &&
                   !rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
               "title %d, not cleared: no Film effect or Players", title);
@@ -3409,7 +3415,7 @@ static void testGameOptions(void)
     gFlagGameClear = 1;
     stage_no = 11;
     int mainL = enterMain(0);
-    const int gameL = openPage(mainL, 3, UI_PAGE_GAMEPLAY);
+    const int gameL = openPage(mainL, 4, UI_PAGE_GAMEPLAY);
     const int film = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
     const int players = ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS);
     CHECK(rowShown(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT) &&
@@ -3448,7 +3454,7 @@ static void testGameOptions(void)
     CHECK(settle(mainL, 60), "Gameplay: back");
 
     /* Controls: Vibration and Hold type, Button configuration to 59 and back */
-    const int ctlL = openPage(mainL, 2, UI_PAGE_CONTROLS);
+    const int ctlL = openPage(mainL, 3, UI_PAGE_CONTROLS);
     const int bc = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
     CHECK(bc >= 0 && lt_ext_Prop(bc)->right == 59, "Button configuration opens 59");
     press(0x4000);
@@ -3499,7 +3505,7 @@ static void testGameOptions(void)
     texLayout[13].curItem = ui_SettingsEntryRow(13);
     press(0x40);
     CHECK(settle(mainL, 60), "the title's Settings");
-    openPage(mainL, 2, UI_PAGE_CONTROLS);
+    openPage(mainL, 3, UI_PAGE_CONTROLS);
     const int remap = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_LINK);
     CHECK(lt_ext_Layout(ctlL)->curItem == remap, "title: Controls opens on Remap (%d, not %d)",
           lt_ext_Layout(ctlL)->curItem, bc);
@@ -3514,7 +3520,7 @@ static void testGameOptions(void)
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
     lt_ext_Layout(ctlL)->defaultItem = bc;
-    openPage(mainL, 2, UI_PAGE_CONTROLS);
+    openPage(mainL, 3, UI_PAGE_CONTROLS);
     frame(0);
     CHECK(lt_ext_Layout(ctlL)->curItem == remap && lt_ext_Layout(ctlL)->defaultItem == remap,
           "title: off the hidden row (%d)", lt_ext_Layout(ctlL)->curItem);
@@ -4078,9 +4084,10 @@ static int render(void)
         int row; /* main page row */
         int downs;
         const char *name;
-    } pages[] = {{0, 0, "settings_display.png"},  {0, 8, "settings_display_videomode.png"},
-                 {1, 0, "settings_audio.png"},    {2, 1, "settings_controls.png"},
-                 {3, 0, "settings_gameplay.png"}, {5, 0, "settings_achievements.png"}};
+    } pages[] = {{0, 0, "settings_display.png"},     {0, 8, "settings_display_videomode.png"},
+                 {1, 0, "settings_effects.png"},     {2, 0, "settings_audio.png"},
+                 {3, 1, "settings_controls.png"},    {4, 0, "settings_gameplay.png"},
+                 {6, 0, "settings_achievements.png"}};
 
     int labels[16];
     ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
@@ -4104,7 +4111,7 @@ static int render(void)
                           "Speakers (USB Audio Interface with a very long product name)");
     ico_config_set_string("audio.output", "mono");
     ico_opt_reload();
-    lt_ext_Layout(mainL)->curItem = labels[1];
+    lt_ext_Layout(mainL)->curItem = labels[2];
     press(0x40);
     for (int k = 0; k < 30; k++) {
         frame(0);
@@ -4120,7 +4127,7 @@ static int render(void)
     ico_config_set_string("audio.output", "auto");
     ico_opt_reload();
     /* Controls -> Remap, then a capture in progress */
-    lt_ext_Layout(mainL)->curItem = labels[2];
+    lt_ext_Layout(mainL)->curItem = labels[3];
     press(0x40);
     CHECK(settle(ui_SettingsPageLayout(UI_PAGE_CONTROLS), 60), "Controls");
     press(0x40);
@@ -4191,7 +4198,7 @@ static int render(void)
         ui_SetScale(ui_ScaleFor(1, e.outputHeight));
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 4x");
-        lt_ext_Layout(mainL)->curItem = labels[4]; /* Language: its note */
+        lt_ext_Layout(mainL)->curItem = labels[5]; /* Language: its note */
         frame(0);
         frame(0);
         snap4("settings_main_4x.png");
@@ -4212,11 +4219,11 @@ static int render(void)
         CHECK(settle(mainL, 60), "the menu from the title");
         int ml[16];
         ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-        lt_ext_Layout(mainL)->curItem = ml[5];
+        lt_ext_Layout(mainL)->curItem = ml[6];
         frame(0);
         frame(0);
         snap4("settings_main_title_4x.png");
-        lt_ext_Layout(mainL)->curItem = ml[6];
+        lt_ext_Layout(mainL)->curItem = ml[7];
         press(0x40);
         int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "Extras at 4x");
@@ -4257,16 +4264,17 @@ static int render(void)
         ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 1080p");
-        lt_ext_Layout(mainL)->curItem = ml[4];
+        lt_ext_Layout(mainL)->curItem = ml[5];
         frame(0);
         snap1080("settings_main", 1);
 
         static const struct {
             int row, downs;
             const char *name;
-        } pg[] = {{0, 0, "settings_display"},      {1, 0, "settings_audio"},
-                  {2, 1, "settings_controls"},     {3, 0, "settings_gameplay"},
-                  {5, 0, "settings_achievements"}, {6, 2, "settings_extras"}};
+        } pg[] = {{0, 0, "settings_display"},  {1, 0, "settings_effects"},
+                  {2, 0, "settings_audio"},    {3, 1, "settings_controls"},
+                  {4, 0, "settings_gameplay"}, {6, 0, "settings_achievements"},
+                  {7, 2, "settings_extras"}};
 
         for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
             lt_ext_Layout(mainL)->curItem = ml[pg[i].row];
@@ -4340,7 +4348,7 @@ static int render(void)
             press(0x4000);
             press(0x40);
             CHECK(settle(mainL, 60), "the menu from the title at 1080p");
-            lt_ext_Layout(mainL)->curItem = ml[6];
+            lt_ext_Layout(mainL)->curItem = ml[7];
             press(0x40);
             int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
             CHECK(settle(exL, 60), "Extras at 1080p");
@@ -4549,7 +4557,9 @@ static void testTexturePack(void)
         int labels[16];
         const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
         const LtProperty *back = lt_ext_Prop(labels[n - 1]);
-        CHECK(back->dispY == 40 + 15 * 9, "ten rows 15 lines apart: Back at %d", back->dispY);
+        CHECK(back->dispY == 40 + 14 * 10, "eleven rows 14 lines apart: Back at %d", back->dispY);
+        CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
+        checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
     }
     ico_opt_set_developer_mode(0);
     for (int k = 0; k < 4; k++) {
@@ -4561,6 +4571,65 @@ static void testTexturePack(void)
     CHECK(rowShown(UI_PAGE_DISPLAY, UI_OPT_TEXTURE_PACK), "the Texture pack row");
     checkPageFits(UI_PAGE_DISPLAY, "Display with Texture pack (title)");
     ui_SettingsSetTexturePackCount(NULL);
+    useConfig("version = 1\n");
+}
+
+/* issue 11: Options > Effects.  The link sits under Display on the main page,
+   the five rows read On by default, a step flips one and ui_SettingsSave
+   writes [video] effect_*; the Main page fits in all four entries */
+static void testEffects(void)
+{
+    static const struct {
+        UiSettingsOpt opt;
+        const char *key;
+    } kFx[] = {{UI_OPT_EFFECT_GLOW, "video.effect_glow"},
+               {UI_OPT_EFFECT_DEPTH_OF_FIELD, "video.effect_depth_of_field"},
+               {UI_OPT_EFFECT_SOFTENING, "video.effect_softening"},
+               {UI_OPT_EFFECT_MOTION_BLUR, "video.effect_motion_blur"},
+               {UI_OPT_EFFECT_FOG, "video.effect_fog"}};
+
+    useConfig("version = 1\n");
+    int mainL = enterMain(1);
+    int fxL = openPage(mainL, 1, UI_PAGE_EFFECTS);
+    CHECK(fxL == ui_SettingsPageLayout(UI_PAGE_EFFECTS), "the Effects link opens the page");
+    CHECK(rowWithPrefix(UI_PAGE_EFFECTS, "Effects") >= 0, "the page is called Effects");
+    checkPageFits(UI_PAGE_EFFECTS, "Effects");
+    CHECK(rowWithPrefix(UI_PAGE_EFFECTS, "The game") >= 0, "the Effects note");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Effects: back");
+
+    for (int i = 0; i < 5; i++) {
+        CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "On") == 0, "effect %d: On by default", i);
+        ui_SettingsStep(kFx[i].opt, 1);
+        CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "Off") == 0, "effect %d: Off", i);
+        CHECK(ui_SettingsSave() == 0, "save %d", i);
+        char p[1100];
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL, "config %d", i);
+        for (int j = 0; t && j < 5; j++) {
+            CHECK(ico_toml_get_bool(t, kFx[j].key, 1) == (j > i), "%s after step %d", kFx[j].key,
+                  i);
+        }
+        ico_toml_free(t);
+    }
+    for (int i = 0; i < 5; i++) {
+        ui_SettingsStep(kFx[i].opt, -1);
+        CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "On") == 0, "effect %d: On again", i);
+    }
+
+    for (int title = 1; title >= 0; title--) {
+        for (int dev = 0; dev <= 1; dev++) {
+            ico_opt_set_developer_mode(dev);
+            enterMain(title);
+            for (int k = 0; k < 4; k++) {
+                frame(0);
+            }
+            checkPageFits(UI_PAGE_MAIN, title ? (dev ? "Main (title, developer)" : "Main (title)")
+                                              : (dev ? "Main (pause, developer)" : "Main (pause)"));
+        }
+    }
+    ico_opt_set_developer_mode(0);
     useConfig("version = 1\n");
 }
 
@@ -4596,6 +4665,7 @@ int main(int argc, char **argv)
     testCoversTitle();
     testTexturePack();
     testTexturePackNoteLines();
+    testEffects();
     if (failures) {
         printf("settings_test: %d failure(s)\n", failures);
         return 1;

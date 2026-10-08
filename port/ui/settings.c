@@ -625,6 +625,16 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return texturePackInstalled() ? onOff(o.texturePack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
     case UI_OPT_DUMP_TEXTURES:
         return onOff(o.dumpTextures);
+    case UI_OPT_EFFECT_GLOW:
+        return onOff(o.effectGlow);
+    case UI_OPT_EFFECT_DEPTH_OF_FIELD:
+        return onOff(o.effectDepthOfField);
+    case UI_OPT_EFFECT_SOFTENING:
+        return onOff(o.effectSoftening);
+    case UI_OPT_EFFECT_MOTION_BLUR:
+        return onOff(o.effectMotionBlur);
+    case UI_OPT_EFFECT_FOG:
+        return onOff(o.effectFog);
     case UI_OPT_FRAMERATE:
         /* the option as set, in force in both presets (F2) */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
@@ -748,7 +758,7 @@ static int optShown(int opt, int link)
 
 static int steppable(int opt)
 {
-    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER;
+    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER; /* includes the Effects rows */
 }
 
 static int resolutionLocked(void)
@@ -833,6 +843,26 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_DUMP_TEXTURES:
         o.dumpTextures = !o.dumpTextures;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_GLOW:
+        o.effectGlow = !o.effectGlow;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_DEPTH_OF_FIELD:
+        o.effectDepthOfField = !o.effectDepthOfField;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_SOFTENING:
+        o.effectSoftening = !o.effectSoftening;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_MOTION_BLUR:
+        o.effectMotionBlur = !o.effectMotionBlur;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_FOG:
+        o.effectFog = !o.effectFog;
         video = 1;
         break;
     case UI_OPT_FRAMERATE:
@@ -1248,7 +1278,9 @@ static void buildGalleryBar(void)
    with Texture pack, thirteen on both entries: Video mode is the title's
    and Brightness the pause menu's).  Main: the nine of the title on a 17
    line pitch so Back stays above the notes, the eight of the pause menu on
-   the original 19, ten (v0.4.0: Dump textures in developer mode) 15. */
+   the original 19, ten (v0.4.0: Dump textures in developer mode) 15; with
+   the Effects link (issue 11) one more each: the ten of the title 15, the
+   nine 17, eleven (developer mode) 14: Back at 180, the box to 220. */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
@@ -1257,7 +1289,7 @@ static int pagePitch(int page, int n, int *y0)
     }
     *y0 = 40;
     if (page == UI_PAGE_MAIN) {
-        return n > 9 ? 15 : n > 8 ? 17 : 19;
+        return n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     return 18;
 }
@@ -1359,6 +1391,9 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
         break;
     case UI_PAGE_AUDIO:
+        break;
+    case UI_PAGE_EFFECTS:
+        addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
         break;
     case UI_PAGE_CONTROLS:
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
@@ -1703,10 +1738,11 @@ static void build(void)
     /* Extras (after Achievements) is shown only when Settings was opened
        from the title (layoutPage) */
     /* v0.4.0: Dump textures under Developer mode, shown while it is on */
-    static const int mainOpts[] = {UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
-                                   UI_OPT_LANGUAGE,      UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
-                                   UI_OPT_DUMP_TEXTURES, UI_OPT_BACK};
+    static const int mainOpts[] = {UI_OPT_LINK,      UI_OPT_LINK,          UI_OPT_LINK, UI_OPT_LINK,
+                                   UI_OPT_LINK,      UI_OPT_LANGUAGE,      UI_OPT_LINK, UI_OPT_LINK,
+                                   UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_EFFECTS,
                                    UI_STR_SECTION_AUDIO,
                                    UI_STR_SECTION_CONTROLS,
                                    UI_STR_SECTION_GAMEPLAY,
@@ -1717,6 +1753,7 @@ static void build(void)
                                    UI_STR_OPT_DUMP_TEXTURES,
                                    UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
+                                    UI_PAGE_EFFECTS,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
@@ -1726,6 +1763,12 @@ static void build(void)
                                     -1,
                                     -1,
                                     -1};
+    static const int fxOpts[] = {UI_OPT_EFFECT_GLOW,      UI_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_OPT_EFFECT_SOFTENING, UI_OPT_EFFECT_MOTION_BLUR,
+                                 UI_OPT_EFFECT_FOG,       UI_OPT_BACK};
+    static const int fxStrs[] = {UI_STR_OPT_EFFECT_GLOW,      UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
+                                 UI_STR_OPT_EFFECT_SOFTENING, UI_STR_OPT_EFFECT_MOTION_BLUR,
+                                 UI_STR_OPT_EFFECT_FOG,       UI_STR_BACK};
     static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
                                      UI_OPT_EXTRAS_CREDITS, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
@@ -1767,6 +1810,7 @@ static void build(void)
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
+    _Static_assert(sizeof(fxOpts) == sizeof(fxStrs), "a string for each Effects row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
 
     ui_FontInit(); /* the notes are wrapped by measuring */
@@ -1785,6 +1829,8 @@ static void build(void)
                     N_OF(ctlOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_GAMEPLAY, UI_STR_SECTION_GAMEPLAY, gameOpts, gameStrs, NULL,
                     N_OF(gameOpts), UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
+                    UI_PAGE_MAIN);
 #undef N_OF
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, NULL, 4, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);

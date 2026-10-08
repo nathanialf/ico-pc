@@ -115,8 +115,9 @@ typedef enum UiSettingsPage {
     UI_PAGE_GAMEPLAY,
     UI_PAGE_ACHIEVEMENTS,
     UI_PAGE_REMAP,
-    UI_PAGE_EXTRAS, /* Music, Models, Credits (from the title only) */
-    UI_PAGE_MUSIC,  /* Extras > Music, the music gallery (gallery.h) */
+    UI_PAGE_EXTRAS,  /* Music, Models, Credits (from the title only) */
+    UI_PAGE_MUSIC,   /* Extras > Music, the music gallery (gallery.h) */
+    UI_PAGE_EFFECTS, /* Effects: the game's own picture effects, On/Off (issue 11) */
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -139,6 +140,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */
     UI_OPT_BRIGHTNESS,   /* S1: the game's brightness step, systemStatus[11] 0..14 */
     UI_OPT_VIDEO_MODE,
+    /* Effects ([video] effect_*; On/Off, outside the preset) */
+    UI_OPT_EFFECT_GLOW,
+    UI_OPT_EFFECT_DEPTH_OF_FIELD,
+    UI_OPT_EFFECT_SOFTENING,
+    UI_OPT_EFFECT_MOTION_BLUR,
+    UI_OPT_EFFECT_FOG,
     /* Audio */
     UI_OPT_VOLUME,
     UI_OPT_MUSIC,   /* [audio] music (port/audio/mix_gain.h) */

@@ -421,6 +421,14 @@ typedef enum UiStrId {
     UI_STR_TEXTURE_PACK_NOTE,
     UI_STR_OPT_DUMP_TEXTURES,
     UI_STR_DUMP_TEXTURES_NOTE,
+    /* Options > Effects (issue 11): the page, its five switches, its note */
+    UI_STR_SECTION_EFFECTS,
+    UI_STR_OPT_EFFECT_GLOW,
+    UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
+    UI_STR_OPT_EFFECT_SOFTENING,
+    UI_STR_OPT_EFFECT_MOTION_BLUR,
+    UI_STR_OPT_EFFECT_FOG,
+    UI_STR_EFFECTS_NOTE,
     /* the pause menu's journey lines (settings.c pauseStats): the labels;
        New Game+, Mirror mode, Achievements and the assists' names are the
        options' own words, the values the port's figures and On / Off */
