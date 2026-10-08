@@ -119,7 +119,8 @@ endif()
 ico_ui_library(ico_ui_cpu OFF)
 ico_ui_settings(ico_ui_cpu)
 ico_include_dirs(common _ico_ui_settings_incs)
-add_executable(settings_test test/settings_test.c $<TARGET_OBJECTS:ico_ui_cpu>
+add_executable(settings_test test/settings_test.c test/settings_fixture.c
+    $<TARGET_OBJECTS:ico_ui_cpu>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
     "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
@@ -139,6 +140,32 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME settings COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# settings_extra_test: the tests v0.4.3 added to the Settings menu, over the same
+# fixture (settings_fixture.c) and sources as settings_test; settings_test.c is
+# close to the source size cap, so new settings tests go in settings_extra_test.c
+add_executable(settings_extra_test test/settings_extra_test.c test/settings_fixture.c
+    $<TARGET_OBJECTS:ico_ui_cpu>
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
+    "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(settings_extra_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           ${_ico_ui_settings_incs} "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(settings_extra_test PRIVATE ICO_HOST=1)
+target_compile_options(settings_extra_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(settings_extra_test PRIVATE ${_ui_settings_deps} ico_platform ico_math)
+if(NOT WIN32)
+    target_link_libraries(settings_extra_test PRIVATE m)
+endif()
+if(WIN32)
+    target_link_libraries(settings_extra_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME settings_extra COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # --- gallery_test (CPU) --------------------------------------------------------
@@ -289,7 +316,8 @@ target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref)
 # written as settings_<screen>.png beside it (exit 77 without a device)
 ico_ui_library(ico_ui_settings_rd ON)
 ico_ui_settings(ico_ui_settings_rd)
-add_executable(settings_render test/settings_test.c $<TARGET_OBJECTS:ico_ui_settings_rd>
+add_executable(settings_render test/settings_test.c test/settings_fixture.c
+    $<TARGET_OBJECTS:ico_ui_settings_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
