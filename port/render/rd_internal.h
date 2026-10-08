@@ -1275,6 +1275,26 @@ void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t 
 void rd__OverlayState(RdStateBlock *s, uint8_t blend);
 /* Moves a texture to a state with a barrier when needed (outside passes). */
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
+
+/* v0.4.2 (N2): a target clear the replay has not recorded yet
+ * (rd_replay.c doClear): the next pass on the target takes it as its load op
+ * (a tile-based GPU then neither writes the cleared target out nor reads it
+ * back), else it is recorded as its own pass before anything else touches
+ * the target.  target 0: none. */
+typedef struct RdPendingClear {
+    uint32_t target;
+    uint8_t depth; /* the target's depth and stencil cleared too */
+    float color[4];
+    float clearDepth;
+} RdPendingClear;
+
+/* A pass about to open on colour target cid (depth target did, 0 none) with
+ * these loads takes the pending clear p: the colour load LOAD on p's target,
+ * and when p clears depth, the pass's depth p's target's loaded too.  Then
+ * the loads become CLEAR (the depth's only when p clears it) and true is
+ * returned; else they are left and false is returned. */
+bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, RhiLoadOp *colorLoad,
+                          RhiLoadOp *depthLoad);
 /* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,
  * the camera probe): also starts a new epoch of the bind group caches
  * (rd_replay.c, package P1), since bind groups live one frame slot. */

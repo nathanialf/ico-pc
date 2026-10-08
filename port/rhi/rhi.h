@@ -401,10 +401,20 @@ typedef enum RhiLoadOp {
     RHI_LOAD_COUNT
 } RhiLoadOp;
 
+/* v0.4.2 (N2): what the pass leaves in an attachment.  STORE (0, the
+ * default of a zeroed desc) keeps what the pass drew; DONT_CARE lets a
+ * tile-based GPU skip writing the attachment back to memory, for contents
+ * nothing reads afterwards (the attachment is then undefined).  A
+ * read-only depth attachment (readOnlyDepth) is never stored whatever this
+ * says.  D3D12 (no render pass objects) keeps the contents either way, a
+ * valid DONT_CARE. */
+typedef enum RhiStoreOp { RHI_STORE_STORE = 0, RHI_STORE_DONT_CARE, RHI_STORE_COUNT } RhiStoreOp;
+
 typedef struct RhiColorAttachment {
     RhiTexture texture;
     RhiLoadOp load;
     float clear[4]; /* integer formats (RGBA8_UINT...): the integer value per channel, 0..255 */
+    RhiStoreOp store;
 } RhiColorAttachment;
 
 typedef struct RhiDepthAttachment {
@@ -414,6 +424,7 @@ typedef struct RhiDepthAttachment {
     uint8_t clearStencil;
     bool
         readOnlyDepth; /* depth test without write and the same texture bound for sampling is NOT allowed; use a copy */
+    RhiStoreOp store; /* v0.4.2 (N2): depth and stencil */
 } RhiDepthAttachment;
 
 typedef struct RhiRenderPassDesc {

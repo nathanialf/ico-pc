@@ -666,7 +666,9 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             .imageView = t->view,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .loadOp = vkr_loadOpMap[a->load < RHI_LOAD_COUNT ? a->load : 0].vk,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            /* v0.4.2 (N2): DONT_CARE when asked (a tiler skips the write-back) */
+            .storeOp = a->store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                                       : VK_ATTACHMENT_STORE_OP_STORE,
             .clearValue = cv,
         };
     }
@@ -689,8 +691,10 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         depth.imageLayout = layout;
         depth.loadOp =
             vkr_loadOpMap[pass->depth.depthLoad < RHI_LOAD_COUNT ? pass->depth.depthLoad : 0].vk;
-        depth.storeOp =
-            pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE : VK_ATTACHMENT_STORE_OP_STORE;
+        depth.storeOp = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
+                        : pass->depth.store == RHI_STORE_DONT_CARE
+                            ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                            : VK_ATTACHMENT_STORE_OP_STORE;
         depth.clearValue = cv;
         if (t->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
             hasStencil = true;
@@ -729,12 +733,13 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                         ~0u);
         }
         /* a read-only depth attachment is only read when it is loaded and
-         * not stored; anything else writes it */
+         * not stored; anything else writes it (a DONT_CARE store too: it is
+         * a write access in Vulkan's synchronisation) */
         bool depthWrites = false;
         if (depthTex) {
-            depthWrites = depth.storeOp == VK_ATTACHMENT_STORE_OP_STORE ||
+            depthWrites = depth.storeOp != VK_ATTACHMENT_STORE_OP_NONE ||
                           depth.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD ||
-                          (hasStencil && (stencil.storeOp == VK_ATTACHMENT_STORE_OP_STORE ||
+                          (hasStencil && (stencil.storeOp != VK_ATTACHMENT_STORE_OP_NONE ||
                                           stencil.loadOp != VK_ATTACHMENT_LOAD_OP_LOAD));
             vkr_HzImage(&h, c, depthTex, depth.imageLayout, VKR_DEPTH_STAGES,
                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |

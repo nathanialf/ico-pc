@@ -303,6 +303,8 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         dsv = dx_Cpu(g_dx.dsvCpu, g_dx.dsvInc,
                      (pass->depth.readOnlyDepth ? dt->dsvRO : dt->dsv) - 1u);
     }
+    /* v0.4.2 (N2): the store ops (RhiStoreOp) are ignored: without render
+     * pass objects the contents are always kept, which DONT_CARE allows */
     ID3D12GraphicsCommandList_OMSetRenderTargets(
         c->cl, pass->colorCount, pass->colorCount ? rtv : NULL, FALSE, dt ? &dsv : NULL);
     for (uint32_t i = 0; i < pass->colorCount; i++) {

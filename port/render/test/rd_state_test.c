@@ -27,6 +27,9 @@
  *              mirage's list 8: a GRID keyed by a second object inside the
  *              open window is kept (and after it), a third object's is not;
  *              list 8's targets, Z writes, clear and aura sprite survive
+ *   pass ops   (v0.4.2 N2) clear -> draw: the draw's pass takes the clear as its
+ *              load op (colour and depth CLEAR), both stored; the passes that
+ *              cannot take it keep their loads (rd__TakePendingClear)
  *   pipelines  the reachable screen and post set is under 250 keys (150
  *              before package TEXA's sprite_texa_ps twins), with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX
@@ -786,6 +789,99 @@ static void testAuraFilter(void)
         targets, zw, clears, posts);
 }
 
+/* v0.4.2 (N2): the render pass ops of a synthetic frame (clear -> draw ->
+ * present).  The clear is not a pass of its own: the draw's pass takes it as
+ * its load op (rd__TakePendingClear, as rd_replay.c beginPass), so the
+ * scene's colour and depth open with CLEAR and are stored (a zeroed
+ * RhiRenderPassDesc: RHI_STORE_STORE; the depth is kept, since a keep
+ * replay of the frame and the dumps read it after the frame).  A pass that
+ * cannot take the clear (another target, the cleared depth absent or not
+ * loaded) leaves its loads as asked. */
+typedef struct PassWalk {
+    RdPendingClear pend;
+    int draws, taken;
+    RhiLoadOp colorLoad, depthLoad;
+} PassWalk;
+
+static void onPassCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
+{
+    PassWalk *w = user;
+    (void)list;
+    (void)index;
+    if (c->type == RDC_CLEAR) {
+        memset(&w->pend, 0, sizeof(w->pend));
+        w->pend.target = c->u[0];
+        w->pend.depth = c->b[4] != 0;
+    } else if (c->type == RDC_SCREEN) {
+        RhiLoadOp cl = RHI_LOAD_LOAD, dl = RHI_LOAD_LOAD;
+        if (rd__TakePendingClear(&w->pend, s->color, s->depth, &cl, &dl)) {
+            w->taken++;
+            w->pend.target = 0;
+        }
+        if (w->draws++ == 0) {
+            w->colorLoad = cl;
+            w->depthLoad = dl;
+        }
+    }
+}
+
+static void testPassOps(void)
+{
+    static const uint8_t bg[4] = {10, 20, 30, 0x80};
+    const RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_SetTarget(scene, scene, 512, 448, 0);
+    rd_ClearTarget(scene, bg, 1, 0);
+    draw(1);
+    draw(2);
+    rd_EndFrame(0);
+    const RdFrame *f = rd__LastFrame();
+    PassWalk w;
+    memset(&w, 0, sizeof(w));
+    RdStateBlock st = f->startState;
+    rd__Walk(f, (int)f->keep, &st, onPassCmd, &w);
+    CHECK(w.draws == 2 && w.taken == 1, "pass ops: %d draws, %d took the clear", w.draws, w.taken);
+    CHECK(w.colorLoad == RHI_LOAD_CLEAR && w.depthLoad == RHI_LOAD_CLEAR,
+          "pass ops: the first draw's pass loads colour %d, depth %d (CLEAR expected)",
+          (int)w.colorLoad, (int)w.depthLoad);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    CHECK(RHI_STORE_STORE == 0 && p.color[0].store == RHI_STORE_STORE &&
+              p.depth.store == RHI_STORE_STORE,
+          "pass ops: a zeroed pass stores colour and depth");
+
+    /* the cases that keep their loads */
+    RdPendingClear pc;
+    memset(&pc, 0, sizeof(pc));
+    RhiLoadOp cl = RHI_LOAD_LOAD, dl = RHI_LOAD_LOAD;
+    CHECK(!rd__TakePendingClear(&pc, 5, 5, &cl, &dl) && cl == RHI_LOAD_LOAD,
+          "pass ops: nothing pending");
+    pc.target = 5;
+    pc.depth = 1;
+    CHECK(!rd__TakePendingClear(&pc, 6, 5, &cl, &dl) && cl == RHI_LOAD_LOAD && dl == RHI_LOAD_LOAD,
+          "pass ops: another colour target");
+    CHECK(!rd__TakePendingClear(&pc, 5, 0, &cl, &dl) && cl == RHI_LOAD_LOAD,
+          "pass ops: the cleared depth not bound");
+    CHECK(!rd__TakePendingClear(&pc, 5, 6, &cl, &dl) && cl == RHI_LOAD_LOAD,
+          "pass ops: another depth bound");
+    dl = RHI_LOAD_DONT_CARE;
+    CHECK(!rd__TakePendingClear(&pc, 5, 5, &cl, &dl) && cl == RHI_LOAD_LOAD,
+          "pass ops: the depth not loaded");
+    dl = RHI_LOAD_LOAD;
+    cl = RHI_LOAD_CLEAR;
+    CHECK(!rd__TakePendingClear(&pc, 5, 5, &cl, &dl) && cl == RHI_LOAD_CLEAR && dl == RHI_LOAD_LOAD,
+          "pass ops: a pass clearing on its own");
+    /* a colour-only clear: any depth (or none) loads as asked */
+    pc.depth = 0;
+    cl = RHI_LOAD_LOAD;
+    CHECK(rd__TakePendingClear(&pc, 5, 6, &cl, &dl) && cl == RHI_LOAD_CLEAR && dl == RHI_LOAD_LOAD,
+          "pass ops: a colour-only clear with another depth");
+    cl = RHI_LOAD_LOAD;
+    CHECK(rd__TakePendingClear(&pc, 5, 5, &cl, &dl) && cl == RHI_LOAD_CLEAR && dl == RHI_LOAD_LOAD,
+          "pass ops: a colour-only clear keeps its own depth loaded");
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -802,6 +898,7 @@ int main(int argc, char **argv)
     testEnumeration();
     testWideScissor();
     testAuraFilter();
+    testPassOps();
     rd_Shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

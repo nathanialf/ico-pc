@@ -285,10 +285,25 @@ static uint32_t s_slot;
 
 static uint64_t s_ringOff;
 
+/* v0.4.2 (N2): the clear doClear has not recorded yet (RdPendingClear),
+ * with the replay it belongs to and its textures */
+static struct {
+    RdPendingClear p;
+    struct Replay *r;
+    uint32_t colorTex, depthTex; /* RhiTexture ids */
+} s_pend;
+
+static void flushClear(void);
+
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want)
 {
     if (!t.id || *cur == want) {
         return;
+    }
+    /* N2: a pending clear's target leaves its attachment state (read,
+     * copied): the clear is recorded first */
+    if (s_pend.p.target && (t.id == s_pend.colorTex || t.id == s_pend.depthTex)) {
+        flushClear();
     }
     RhiTextureBarrier b = {t, *cur, want};
     rhi_CmdBarrier(cl, &b, 1);
@@ -644,6 +659,10 @@ typedef struct Replay {
 
 static void flushScreenRun(Replay *r);
 
+static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
+                      RhiLoadOp colorLoad, const float clear[4], RhiLoadOp depthLoad,
+                      float clearDepth);
+
 static void endPass(Replay *r)
 {
     flushScreenRun(r); /* package PC: the run's draw goes before anything after it */
@@ -651,12 +670,63 @@ static void endPass(Replay *r)
         rhi_CmdEndRenderPass(s_cl);
         r->passOpen = 0;
     }
+    /* N2: whoever ends a pass is about to record something else (a copy,
+     * another pass): a pending clear goes first, unless beginPass took it */
+    flushClear();
+}
+
+bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, RhiLoadOp *colorLoad,
+                          RhiLoadOp *depthLoad)
+{
+    if (!p->target || cid != p->target || *colorLoad != RHI_LOAD_LOAD) {
+        return false;
+    }
+    if (p->depth && (did != p->target || *depthLoad != RHI_LOAD_LOAD)) {
+        return false; /* the cleared depth not in this pass, or not loaded */
+    }
+    *colorLoad = RHI_LOAD_CLEAR;
+    if (p->depth) {
+        *depthLoad = RHI_LOAD_CLEAR;
+    }
+    return true;
+}
+
+/* N2: the pending clear recorded as its own pass (what doClear did before) */
+static void flushClear(void)
+{
+    if (!s_pend.p.target) {
+        return;
+    }
+    const RdPendingClear p = s_pend.p;
+    Replay *r = s_pend.r;
+    s_pend.p.target = 0;
+    s_pend.colorTex = s_pend.depthTex = 0;
+    RdTargetRec *t = rd__TargetRec(p.target);
+    if (!t || !r) {
+        return;
+    }
+    beginPass(r, t, p.depth ? t : NULL, p.target, p.depth ? p.target : 0, RHI_LOAD_CLEAR, p.color,
+              RHI_LOAD_CLEAR, p.clearDepth);
+    endPass(r);
 }
 
 static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
                       RhiLoadOp colorLoad, const float clear[4], RhiLoadOp depthLoad,
                       float clearDepth)
 {
+    /* N2: the pending clear as this pass's load op when it can take it
+     * (the same clear values, the same render area: the whole target) */
+    float pendColor[4];
+    if (s_pend.p.target &&
+        rd__TakePendingClear(&s_pend.p, cid, d ? did : 0, &colorLoad, &depthLoad)) {
+        memcpy(pendColor, s_pend.p.color, sizeof(pendColor));
+        clear = pendColor;
+        if (s_pend.p.depth) {
+            clearDepth = s_pend.p.clearDepth;
+        }
+        s_pend.p.target = 0;
+        s_pend.colorTex = s_pend.depthTex = 0;
+    }
     endPass(r);
     rd__Transition(s_cl, c->color, &c->colorState, RHI_STATE_RENDER_TARGET);
     if (d) {
@@ -702,9 +772,22 @@ static void doClear(Replay *r, const RdCmd *c)
     }
     const int depth = c->b[4] && t->withDepth;
     r->writeSerial++;
-    beginPass(r, t, depth ? t : NULL, c->u[0], depth ? c->u[0] : 0, RHI_LOAD_CLEAR, col,
-              RHI_LOAD_CLEAR, rd__GsDepth(c->u[1], rd__TargetZScale(c->u[0])));
+    /* v0.4.2 (N2): not recorded yet: the next pass on the target takes it
+     * as its load op (beginPass), else it is recorded as its own pass
+     * before anything else touches the target (endPass, rd__Transition).
+     * The pass open now and an earlier pending clear go first. */
     endPass(r);
+    rd__Transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
+    if (depth) {
+        rd__Transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
+    }
+    s_pend.r = r;
+    s_pend.p.target = c->u[0];
+    s_pend.p.depth = (uint8_t)(depth != 0);
+    memcpy(s_pend.p.color, col, sizeof(col));
+    s_pend.p.clearDepth = rd__GsDepth(c->u[1], rd__TargetZScale(c->u[0]));
+    s_pend.colorTex = t->color.id;
+    s_pend.depthTex = depth ? t->depth.id : 0;
 }
 
 /* Package P1: built in a local and stored whole, so writing straight into
@@ -4086,6 +4169,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     Replay r;
     memset(&r, 0, sizeof(r));
     r.st = f->startState;
+    memset(&s_pend, 0, sizeof(s_pend)); /* N2: no clear pending from another replay */
     for (int l = rd__FirstList(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
