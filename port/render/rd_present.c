@@ -830,7 +830,7 @@ static void textCollect(const RdFrame *f, int keep)
     s_text.f = NULL;
     /* no item, nothing to walk for: most presents (rd_DeferredText counts
      * them; an interpolated frame adds prev's it inserts, rd__LoadFrame
-     * counts a dump's, a pinned frame copies the count) */
+     * counts a dump's) */
     if (!f->textItems) {
         return;
     }

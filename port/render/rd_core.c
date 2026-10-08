@@ -260,11 +260,7 @@ void rd__FrameReset(RdFrame *f)
     }
     f->payloadSize = 0;
     for (uint32_t i = 0; i < f->tempCount; i++) {
-        /* package PHOTO: a target the pinned copy of this frame still names
-         * is the pin's to free */
-        if (!rd__PhotoAdoptTemp(f->tempTargets[i])) {
-            rd__TempTargetFree(f->tempTargets[i]);
-        }
+        rd__TempTargetFree(f->tempTargets[i]);
     }
     f->tempCount = 0;
     rd__WaterFrameReset(f); /* R5b: block targets, aliases, camera scopes */
@@ -1172,7 +1168,6 @@ void rd_Shutdown(void)
     if (g_rd.hasDevice) {
         rhi_WaitIdle();
     }
-    rd__PhotoShutdown(); /* package PHOTO: the pin first, then the frames it named */
     for (int i = 0; i < RD_FRAME_RING; i++) {
         rd__FrameFree(&g_rd.frames[i]);
     }
@@ -1405,12 +1400,8 @@ void rd_EndFrame(int keep)
     /* R7b: with interpolation the host presents (rd_Present); otherwise,
      * the Original preset always, the frame is replayed and presented once
      * here, as before */
-    /* package PHOTO: with the camera override on, the scene frames are
-     * pinned, and the present below replays the pin through the override */
-    rd__PhotoPin(f);
     if (g_rd.hasDevice && !rd_InterpolationActive()) {
-        const RdFrame *pf = rd__PhotoPresentFrame();
-        ReplayCall c = {pf ? pf : f, pf ? 0 : f->keep};
+        ReplayCall c = {f, f->keep};
         rd__OnHost(replayOnHost, &c);
     }
     if (s_dumpEvery && f->number % s_dumpEvery == 0 && f->number >= s_dumpFrom) {

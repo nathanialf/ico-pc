@@ -895,8 +895,9 @@ static inline bool rd__IsBlurKind(uint32_t kind)
 
 /* The interpolation hook of the feedback passes (motion blur, aura): the
  * FIX that gives over dt frames the retention FIX gives over one, for a
- * LERP_FIX (retention (128 - FIX) / 128 per frame) or an additive or
- * subtractive FIX (scaled by dt).  dt = 1 returns fix unchanged, which is
+ * LERP_FIX (A = Cs the old frame, C = FIX: the old frame keeps FIX / 128
+ * per frame, so FIX' = 128 (FIX / 128)^dt) or an additive or subtractive
+ * FIX (scaled by dt).  dt = 1 returns fix unchanged, which is
  * all the Original preset ever passes. */
 uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
 
@@ -973,40 +974,6 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                                int firstOfTick, RdInterpStats *stats);
 void rd__InterpShutdown(void);
 
-/* Package PHOTO (rd_photo.c, rd_interp.c; rd.h rd_SetPhotoCamera).
- * rd__PhotoFrame builds, into rd_interp.c's output frame, pin replayed
- * through ov: the frame's camera and VU common block are ov's, every VU
- * draw through pin's camera is re-based onto it (E = Vc^-1 Vov, L = Pov
- * Pc^-1, camRebase), CPU-projected draws are left as recorded, and with
- * RD_PHOTO_HIDE_UI the UI-space and full-screen RDC_SCREEN draws and the
- * RDC_OVERLAY_TEXT items and ops of lists 11 and 12 become RDC_NOP.  The
- * motion blur's feedback stands for 4 ticks (the trail of the camera's
- * moves dies at once) and FEED128 is kept or put back as in
- * rd__InterpFrame, by firstOfTick.  Returns NULL when the copy fails. */
-typedef struct RdPhotoStats {
-    uint32_t rebased;    /* VU draws re-based onto ov */
-    uint32_t keptCamera; /* VU draws through another camera (CAM_NONE): kept */
-    uint32_t dropped;    /* UI draws dropped (RD_PHOTO_HIDE_UI) */
-} RdPhotoStats;
-
-const RdFrame *rd__PhotoFrame(const RdFrame *pin, const RdCamera *ov, uint32_t flags,
-                              int firstOfTick, RdPhotoStats *stats);
-/* rd_photo.c: the override's state and the pin.  rd__PhotoOn: the override
- * is on; rd__PhotoPin: rd_EndFrame's hook for a closed frame (kept when it
- * is not a keep frame and the override is on); rd__PhotoPinned: the pinned
- * copy (NULL: none); rd__PhotoPinBytes: its lists and payload, bytes;
- * rd__PhotoPresentFrame: the frame a present replays instead of the ring's
- * (NULL: the override is off or nothing is pinned), firstOfTick from the
- * pin's number; rd__PhotoAdoptTemp: rd__FrameReset's hook, true when the
- * pin still refers to temporary target id, which it then frees itself
- * when it lets the frame go; rd__PhotoShutdown: rd_Shutdown's. */
-bool rd__PhotoOn(void);
-void rd__PhotoPin(const RdFrame *f);
-const RdFrame *rd__PhotoPinned(void);
-size_t rd__PhotoPinBytes(void);
-const RdFrame *rd__PhotoPresentFrame(void);
-bool rd__PhotoAdoptTemp(uint32_t id);
-void rd__PhotoShutdown(void);
 /* rd_present.c's capture (rd.h rd_CapturePresented): whether one is armed;
  * rd__CaptureRecord copies the output into the capture texture (from
  * rd__PresentRecord, before the overlay); rd__CaptureFinish reads it back

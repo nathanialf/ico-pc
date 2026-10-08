@@ -146,11 +146,13 @@ uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt)
     float f;
     if (blend == RD_BLEND_LERP_FIX) {
         if (fix > 128) {
-            return fix; /* overshoots: no retention to spread (powf of a negative base is NaN) */
+            return fix; /* overshoots: no retention to spread (FIX / 128 above 1) */
         }
-        /* the destination keeps (128 - FIX) / 128 per frame */
-        const float keep = powf((128.0f - (float)fix) / 128.0f, dt);
-        f = 128.0f - 128.0f * keep;
+        /* (Cs - Cd) FIX / 128 + Cd with Cs the old frame (motion blur:
+         * the previous DISPLAY, staticBlur.c MotionBlur): the old frame
+         * keeps FIX / 128 per frame, so over dt frames (FIX / 128)^dt */
+        const float keep = powf((float)fix / 128.0f, dt);
+        f = 128.0f * keep;
     } else {
         f = (float)fix * dt;
     }

@@ -744,22 +744,15 @@ static void photo_capture(void)
     }
 }
 
-/* Package PHOTO: the renderer's camera override follows photo mode's state
-   (port/game/photo_mode.h) every vsync; the captures' results become a
-   popup */
+/* Package PHOTO: Cross in photo mode arms a capture of the next present
+   (the paused game draws from the photo camera itself, port/game/
+   photo_view.c); the captures' results become a popup */
 static void photo_pump(void)
 {
     if (ico_photo_active()) {
-        RdCamera game, ov;
-
-        if (rd_PhotoSceneCamera(&game) && ico_photo_camera(&ov, &game)) {
-            rd_SetPhotoCamera(&ov, RD_PHOTO_HIDE_UI);
-        }
         while (ico_photo_take_capture()) {
             photo_capture();
         }
-    } else if (rd_PhotoActive()) {
-        rd_SetPhotoCamera(NULL, 0);
     }
     {
         char path[ICO_PATH_MAX];

@@ -174,11 +174,11 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
     IcoPhotoState st;
     ico_photo_get(&st);
-    RdCamera game, ov;
     char fov[96] = "";
-    if (rd_PhotoSceneCamera(&game) && ico_photo_camera(&ov, &game)) {
+    const float fovNow = ico_photo_fov_now();
+    if (fovNow > 0.0f) {
         char deg[16];
-        snprintf(deg, sizeof(deg), "%d", (int)(ico_photo_fov_deg(&ov) + 0.5f));
+        snprintf(deg, sizeof(deg), "%d", (int)(fovNow + 0.5f));
         fill(fov, sizeof(fov), ui_Str(UI_STR_PHOTO_FOV), "%d", deg);
     }
     char title[160];

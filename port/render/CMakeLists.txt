@@ -91,7 +91,6 @@ add_library(ico_render STATIC
     rd_mesh.c
     modelpack.c # v0.4.1 (M3): model packs, the index, the glTF conversion, the dump
     rd_perf.c # package P1: per-replay performance records
-    rd_photo.c # package PHOTO: the camera override and its pinned frame
     rd_pipeline.c
     rd_png.c
     rd_post.c

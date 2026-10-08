@@ -12,6 +12,9 @@
  *             a fully faded frame (the fade edge), a discarded frame between
  *             (gap), a camera turn past the threshold: the current data
  *   ordinal   the same key twice matches in order
+ *   photo     (package PHOTO) two paused photo ticks whose cameras differ:
+ *             the camera blends half way, and list 11's full-screen prims
+ *             (brightness, letterbox, film noise) are all kept
  *   grid      a grid's vertices blend one by one, its STs and headers stay
  *   mesh      the VU block's matrices blend, the UV scroll across Texture.c's
  *             wrap by 2 blends the short way, a model origin moved further
@@ -42,8 +45,10 @@
  *             older from the kept version), alpha 1 the current tick's
  *             shape, not the newer one; a mesh rewritten every frame the
  *             same; the replays use the kept streams
- *   feedback  rd__BlurFeedbackFix at dt 0.5: the LERP retention is a^0.5 (to
- *             the FIX's rounding), additive FIX x 0.5; the motion blur
+ *   feedback  rd__BlurFeedbackFix at dt 0.5: the LERP retention (the old
+ *             frame keeps a = FIX / 128) is a^0.5 (to the FIX's rounding),
+ *             two presents of dt 0.5 keep a (within 1/128), additive FIX x
+ *             0.5; the motion blur
  *             sprite of an interpolated frame carries dt; a frame that
  *             writes FEED128 keeps every aura sprite in every present, and
  *             its head copies FEED128 into FEED_HELD in a tick's first
@@ -783,16 +788,28 @@ static void testFade(void)
 
 static void testFeedback(void)
 {
-    /* rd__BlurFeedbackFix: a = (128 - FIX) / 128 per tick; dt 0.5 keeps
-     * a^0.5 to the rounding of the FIX (half a step of 1/128) */
+    /* rd__BlurFeedbackFix: LERP_FIX is (Cs - Cd) FIX / 128 + Cd with Cs
+     * the old frame (staticBlur.c MotionBlur draws the previous DISPLAY),
+     * so the old frame keeps a = FIX / 128 per tick; dt 0.5 keeps a^0.5 to
+     * the rounding of the FIX (half a step of 1/128), and two presents of
+     * dt 0.5 keep a over the tick (within one step) */
     for (int fix = 8; fix <= 120; fix += 16) {
         const uint8_t f2 = rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, (uint8_t)fix, 0.5f);
-        const double a = (128.0 - fix) / 128.0, a2 = (128.0 - f2) / 128.0;
+        const double a = fix / 128.0, a2 = f2 / 128.0;
         CHECK(fabs(a2 - sqrt(a)) <= 0.5 / 128.0 + 1e-9,
               "FIX %d at dt 0.5: %u keeps %.4f, a^0.5 %.4f", fix, f2, a2, sqrt(a));
+        CHECK(fabs(a2 * a2 - a) <= 1.0 / 128.0 + 1e-9,
+              "FIX %d: two presents of dt 0.5 keep %.4f, one tick %.4f", fix, a2 * a2, a);
         CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, (uint8_t)fix, 1.0f) == fix,
               "dt 1: FIX unchanged");
     }
+    /* FIX 32 (a quarter kept): 64 at dt 0.5 (half kept), 1 at dt 4 (a
+     * quarter to the fourth, 0.5, rounded up: the trail all but gone) */
+    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 0.5f) == 64, "FIX 32 at dt 0.5: %u",
+          rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 0.5f));
+    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 4.0f) == 1, "FIX 32 at dt 4: %u",
+          rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 4.0f));
+    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 0xC0, 0.5f) == 0xC0, "FIX above 128: unchanged");
     CHECK(rd__BlurFeedbackFix(RD_BLEND_CS_FIX_ADD_CD, 0x40, 0.5f) == 0x20, "additive: FIX x dt");
     /* the frame: a motion blur sprite and two aura sprites, one into FEED128 */
     for (int k = 0; k < 2; k++) {
@@ -1923,23 +1940,18 @@ static void testCameraBlend(void)
 
 /* ------------------------------------------- package PHOTO: photo mode */
 
-static const char kObjPh;
-
-static void volume(int x0, RdKey key);
-
-/* the scene photo mode pins: mesh A through the camera at 0 degrees, a
- * shadow volume in list 3, and in list 11 a UI sprite, a full-screen sprite
- * (the pause menu's dimming) and a world-space screen prim (lightning);
- * *tempId the frame's temporary target */
-static void photoScene(RdMesh mesh, uint32_t *tempId)
+/* A paused photo tick as the game records it (port/game/photo_view.c):
+ * the frame's camera turned deg about the origin, and in list 11 the
+ * full-screen passes rd_post.c records as RD_SPACE_FULLSCREEN screen
+ * prims: the brightness sprite (GsBase.c gsb_controlBrightness), the two
+ * letterbox bars, the film noise */
+static void photoTick(double deg)
 {
-    static const uint8_t grey[4] = {90, 90, 90, 0x80};
-    double wa[16];
     rd_BeginFrame();
     frameHead();
     double eye[3], v[16], p[16];
-    s6OrbitEye(0.0, eye);
-    s6View(0.0, eye, v);
+    s6OrbitEye(deg, eye);
+    s6View(deg, eye, v);
     s6Proj(p);
     RdCamera cam;
     memset(&cam, 0, sizeof(cam));
@@ -1949,27 +1961,20 @@ static void photoScene(RdMesh mesh, uint32_t *tempId)
     }
     cam.zoom = 500.0f;
     rd_SetCamera(&cam);
-    s6Translate(wa, 0.0, 0.0, 0.0);
-    s6Draw(mesh, v, wa, RD_KEY(&kObjPh, 0, 32));
-    if (tempId) {
-        *tempId = rd_TempTarget(64, 64, 0, 0).id;
-    }
-    rd_SelectList(3);
-    rd_ShadowReset();
-    volume(10, RD_KEY(&kObjPh, 1, 0));
-    rd_ShadowResolve();
     rd_SelectList(11);
-    sprite(0, 0, 10, 10, grey, RD_KEY(&kObjPh, 2, 0)); /* UI */
-    RdScreenVtx w[2];
-    memset(w, 0, sizeof(w));
-    w[1].x = OX + TW * 16;
-    w[1].y = OY + TH * 16;
-    w[0].q = w[1].q = 1.0f;
-    memcpy(w[0].rgba, grey, 4);
-    memcpy(w[1].rgba, grey, 4);
-    rd_ScreenPrims(RD_PRIM_SPRITES, w, 2, RD_SPACE_FULLSCREEN, 0, 0);
-    w[1].x = OX + 20 * 16;
-    rd_ScreenPrims(RD_PRIM_SPRITES, w, 2, RD_SPACE_WORLD, 0, 0);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 0xFF;
+    pp.rgba[3] = 8;
+    rd_Post(RD_POST_BRIGHTNESS, &pp);
+    memset(&pp, 0, sizeof(pp));
+    pp.fix = 0x60;
+    pp.lines = 58;
+    rd_Post(RD_POST_LETTERBOX, &pp);
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[3] = 0x20;
+    pp.scalar[0] = 4.0f;
+    rd_Post(RD_POST_FILM_NOISE, &pp);
     rd_EndFrame(0);
 }
 
@@ -1983,121 +1988,55 @@ static int countType(const RdFrame *f, int l, uint8_t type, uint8_t space)
     return n;
 }
 
+/* a camera's eye and its yaw (degrees, s6View's angle) */
+static void eyeYaw(const RdCamera *c, double eye[3], double *yaw)
+{
+    const float *v = c->view;
+    for (int j = 0; j < 3; j++) {
+        eye[j] = -((double)v[j * 4 + 0] * v[12] + (double)v[j * 4 + 1] * v[13] +
+                   (double)v[j * 4 + 2] * v[14]);
+    }
+    *yaw = atan2(-(double)v[2], (double)v[10]) * 180.0 / 3.14159265358979323846;
+}
+
+/* Photo mode is the paused game drawn from the photo camera every tick:
+ * two such ticks whose cameras differ (20 degrees about the origin, the
+ * eye 174 of 300 units) are blended like any pair, the camera half way,
+ * and list 11's full-screen passes all survive rd__InterpFrame (nothing
+ * of the picture is dropped) */
 static void testPhoto(void)
 {
-    RdMesh mesh = makeMesh();
-    uint32_t temp = 0;
-    double wa[16];
-    s6Translate(wa, 0.0, 0.0, 0.0);
-    photoScene(mesh, &temp);
-    const RdFrame *pin = rd__LastFrame();
-    /* the override: the camera turned 28 degrees about the origin and
-     * zoomed (focal length 600) */
-    double eye[3], v[16], p[16], s[16], m[16], want[2], got[2];
-    s6OrbitEye(28.0, eye);
-    s6View(28.0, eye, v);
-    s6Focal = 600.0;
-    s6Proj(p);
-    s6Focal = 500.0;
-    RdCamera ov = pin->camera;
-    for (int k = 0; k < 16; k++) {
-        ov.view[k] = (float)v[k];
-        ov.proj43[k] = (float)p[k];
+    photoTick(0.0);
+    photoTick(20.0);
+    const RdFrame *pf = rd__PrevFrame(), *cf = rd__LastFrame();
+    const int want = countType(cf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN);
+    CHECK(want == 4 && countType(pf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 4,
+          "photo: the tick records brightness, two letterbox bars and the noise (%d)", want);
+    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    CHECK(st->snap == RD_SNAP_NONE, "photo: the two ticks blend (snap %u)", st->snap);
+    const RdFrame *f = built(0.5f);
+    CHECK(f && countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == want,
+          "photo: list 11's full-screen prims all kept (%d of %d)",
+          countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN), want);
+    CHECK(f && f->hasCamera, "photo: the blended frame has a camera");
+    if (f && f->hasCamera && pf->hasCamera && cf->hasCamera) {
+        double e0[3], e1[3], e[3], y0, y1, y;
+        eyeYaw(&pf->camera, e0, &y0);
+        eyeYaw(&cf->camera, e1, &y1);
+        eyeYaw(&f->camera, e, &y);
+        CHECK(memcmp(f->camera.view, pf->camera.view, sizeof(f->camera.view)) != 0 &&
+                  memcmp(f->camera.view, cf->camera.view, sizeof(f->camera.view)) != 0,
+              "photo: the camera is blended, not either tick's");
+        CHECK(y > y0 + 1.0 && y < y1 - 1.0 && fabs(y - 0.5 * (y0 + y1)) < 1.0,
+              "photo: the yaw half way (%.3f between %.3f and %.3f)", y, y0, y1);
+        CHECK(e[0] > e0[0] && e[0] < e1[0] && fabs(e[1]) < 1e-3,
+              "photo: the eye between the ticks' (x %.3f between %.3f and %.3f)", e[0], e0[0],
+              e1[0]);
     }
-    ov.zoom = 600.0f;
-    RdPhotoStats st;
-    const RdFrame *f = rd__PhotoFrame(pin, &ov, RD_PHOTO_HIDE_UI, 1, &st);
-    const float (*mo)[4] = f ? vuBlock(f, findKey(f, 0, RD_KEY(&kObjPh, 0, 32), 0)) : NULL;
-    CHECK(f && mo && st.rebased == 1 && st.keptCamera == 0, "photo: the mesh re-based (%u, %u)",
-          f ? st.rebased : 0u, f ? st.keptCamera : 0u);
-    if (mo) {
-        mul4(p, v, s);
-        mul4(s, wa, m);
-        s6Project(m, kS6PointA, want);
-        s6ProjectF(mo, kS6PointA, got);
-        CHECK(hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
-              "photo: the point through the override (%.3f, %.3f; want %.3f, %.3f)", got[0], got[1],
-              want[0], want[1]);
-        /* the world to screen (qw 4..7) is ov's, the inverse view its eye */
-        double sw[16];
-        for (int c = 0; c < 4; c++) {
-            for (int r = 0; r < 4; r++) {
-                sw[c * 4 + r] = mo[4 + c][r];
-            }
-        }
-        s6Project(sw, kS6PointA, got);
-        CHECK(hypot(got[0] - want[0], got[1] - want[1]) < 0.01 && fabs(mo[15][0] - eye[0]) < 1e-2 &&
-                  fabs(mo[15][2] - eye[2]) < 1e-2,
-              "photo: qw 4..7 and the eye are the override's (%.3f, eye %.2f %.2f)", got[0],
-              (double)mo[15][0], (double)mo[15][2]);
-        const RdCmd *mc = findKey(f, 0, RD_KEY(&kObjPh, 0, 32), 0);
-        CHECK(mc && mc->b[2] == RD_VU_CLIP_SCISSOR &&
-                  ((const RdVuPayload *)(const void *)(f->payload + mc->u[1]))->clip ==
-                      RD_VU_CLIP_SCISSOR,
-              "photo: the prelit mesh drawn with the scissor program's clipping");
-        CHECK(memcmp(f->camera.view, ov.view, sizeof(ov.view)) == 0 &&
-                  memcmp(f->camera.proj43, ov.proj43, sizeof(ov.proj43)) == 0,
-              "photo: the frame's camera is the override");
-    }
-    /* the shadow volume as recorded; the UI and full-screen prims of list
-     * 11 dropped, the world-space one kept */
-    const RdCmd *sc = findKey(f, 3, RD_KEY(&kObjPh, 1, 0), 0);
-    const RdCmd *sp = findKey(pin, 3, RD_KEY(&kObjPh, 1, 0), 0);
-    CHECK(sc && sp && sc->u[0] == sp->u[0] && sc->u[3] == sp->u[3] &&
-              memcmp(f->payload + sc->u[1], pin->payload + sp->u[1],
-                     (sp->u[0] + sp->u[3]) * sizeof(RdScreenVtx)) == 0,
-          "photo: the shadow volume untouched");
-    CHECK(countType(f, 11, RDC_SCREEN, RD_SPACE_UI) == 0 &&
-              countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 0 &&
-              countType(f, 11, RDC_SCREEN, RD_SPACE_WORLD) == 1 && st.dropped == 2,
-          "photo: the UI dropped, the world prim kept (%u dropped)", st.dropped);
-    f = rd__PhotoFrame(pin, &ov, 0, 1, &st);
-    CHECK(countType(f, 11, RDC_SCREEN, RD_SPACE_UI) == 1 &&
-              countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 1 && st.dropped == 0,
-          "photo: without RD_PHOTO_HIDE_UI the UI stays");
-    /* the override at the game's own camera: the pin, payload byte for byte */
-    f = rd__PhotoFrame(pin, &pin->camera, 0, 1, &st);
-    CHECK(f && f->payloadSize == pin->payloadSize &&
-              memcmp(f->payload, pin->payload, pin->payloadSize) == 0 && st.rebased == 0,
-          "photo: the game's camera changes nothing");
-
-    /* the pin: taken from the ring when the override turns on, it survives
-     * three keep frames (the ring's slots all reused), and so does the
-     * temporary target it names; the next full frame replaces it; off,
-     * it is freed and the next frame is a cut */
-    const uint32_t number = pin->number;
-    rd_SetPhotoCamera(&ov, RD_PHOTO_HIDE_UI);
-    const RdFrame *pinned = rd__PhotoPinned();
-    CHECK(rd_PhotoActive() && pinned && pinned->number == number, "photo: pinned frame %u (%u)",
-          pinned ? pinned->number : 0u, number);
-    const size_t bytes = rd__PhotoPinBytes();
-    uint8_t *copy = malloc(pinned ? pinned->payloadSize : 1);
-    if (copy && pinned) {
-        memcpy(copy, pinned->payload, pinned->payloadSize);
-    }
-    for (int k = 0; k < 3; k++) {
-        rd_BeginFrame();
-        rd_SelectList(11);
-        rd_EndFrame(1);
-    }
-    pinned = rd__PhotoPinned();
-    CHECK(pinned && pinned->number == number && rd__PhotoPinBytes() == bytes && copy &&
-              memcmp(copy, pinned->payload, pinned->payloadSize) == 0,
-          "photo: the pin survives three keep frames");
-    CHECK(rd__TargetRec(temp) != NULL, "photo: the pin keeps its temporary target alive");
-    CHECK(rd__PhotoPresentFrame() != NULL, "photo: a present replays the pin");
-    free(copy);
-    photoScene(mesh, NULL);
-    pinned = rd__PhotoPinned();
-    CHECK(pinned && pinned->number == rd__LastFrame()->number,
-          "photo: the next full frame is pinned");
-    CHECK(rd__TargetRec(temp) == NULL, "photo: the old pin's temporary target freed");
-    rd_SetPhotoCamera(NULL, 0);
-    CHECK(!rd_PhotoActive() && rd__PhotoPinned() == NULL, "photo: off, nothing pinned");
-    rd_BeginFrame();
-    CHECK(rd__RecFrame() && rd__RecFrame()->cut, "photo: leaving is a camera cut");
-    rd_EndFrame(0);
-    rd_DestroyVuMesh(mesh);
+    /* alpha 1 is the current tick's camera */
+    f = built(1.0f);
+    CHECK(f && memcmp(f->camera.view, cf->camera.view, sizeof(f->camera.view)) == 0,
+          "photo: alpha 1 is the current tick's camera");
 }
 
 /* ------------------------------------------------- S2: the present clock */

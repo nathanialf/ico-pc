@@ -666,7 +666,7 @@ void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), voi
 
 void rd__VuMeshSweepStale(void)
 {
-    if (s_staleCount == 0 || !g_rd.meshes || rd__PhotoPinned()) {
+    if (s_staleCount == 0 || !g_rd.meshes) {
         return;
     }
     for (uint32_t i = 0; i < RD_MAX_MESHES && s_staleCount; i++) {

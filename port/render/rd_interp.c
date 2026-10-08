@@ -81,11 +81,12 @@
  * per tick as on the PS2.
  *
  * Feedback per present: the motion blur's sprite (DISPLAY back into SCENE
- * with LERP FIX) runs at every present.  On the PS2 DISPLAY keeps a =
- * (128 - FIX) / 128 of itself per tick T; a present that stands for dt
- * ticks uses the FIX that keeps a^dt (rd__BlurFeedbackFix: FIX' = 128 -
- * 128 a^dt, rounded), so k presents of dt = 1/k keep a per tick, whatever
- * the present rate.  dt is the alpha advanced since the previous present
+ * with LERP FIX) runs at every present.  On the PS2 the sprite draws the
+ * previous DISPLAY as Cs with ALPHA (Cs - Cd) FIX / 128 + Cd (staticBlur.c
+ * MotionBlur, gif_SetAlpha mode 2), so the old picture keeps a = FIX / 128
+ * of itself per tick T; a present that stands for dt ticks uses the FIX
+ * that keeps a^dt (rd__BlurFeedbackFix: FIX' = 128 a^dt, rounded), so k
+ * presents of dt = 1/k keep a per tick, whatever the present rate.  dt is the alpha advanced since the previous present
  * (plus whole ticks when frames were closed in between), at least 1/256,
  * at most 4.
  */
@@ -3371,177 +3372,6 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
     return &s_out;
 }
 
-/* ------------------------------------------------- photo mode (PHOTO) */
-
-/* the override's projection over pin's, x and y (1 when they are equal):
- * the scale photo mode's zoom gives the clip matrices (camPhotoDraw) */
-static double s_photoKx, s_photoKy;
-
-/* s_cam for a replay of pin through ov (rd.h rd_SetPhotoCamera): Vt = ov's
- * view, Ec = Vc^-1 Vt, Lc = Pov Pc^-1 when the projections differ; still
- * when both are pin's (nothing is touched) */
-static void camSetupOverride(const RdFrame *pin, const RdCamera *ov)
-{
-    memset(&s_cam, 0, sizeof(s_cam));
-    s_camGen++;
-    s_photoKx = s_photoKy = 1.0;
-    if (!pin->hasCamera) {
-        return;
-    }
-    if (pin->camera.proj43[0] != 0.0f && pin->camera.proj43[5] != 0.0f) {
-        s_photoKx = (double)ov->proj43[0] / pin->camera.proj43[0];
-        s_photoKy = (double)ov->proj43[5] / pin->camera.proj43[5];
-    }
-    double ic[16], ipc[16];
-    loadF16(pin->camera.view, s_cam.vc);
-    loadF16(ov->view, s_cam.vt);
-    loadF16(pin->camera.proj43, s_cam.pc);
-    if (!invert4d(s_cam.vc, ic) || !invert4d(s_cam.vt, s_cam.it)) {
-        return;
-    }
-    memcpy(s_cam.vp, s_cam.vc, sizeof(s_cam.vp));
-    mul4d(ic, s_cam.vt, s_cam.ec);
-    memcpy(s_cam.ep, s_cam.ec, sizeof(s_cam.ep));
-    s_cam.still = memcmp(pin->camera.view, ov->view, sizeof(ov->view)) == 0;
-    if (memcmp(pin->camera.proj43, ov->proj43, sizeof(ov->proj43)) != 0 &&
-        invert4d(s_cam.pc, ipc)) {
-        double po[16];
-        loadF16(ov->proj43, po);
-        mul4d(po, ipc, s_cam.lc);
-        s_cam.zoom = 1;
-        s_cam.still = 0;
-    }
-    for (int i = 0; i < 16; i++) {
-        s_cam.itf[i] = (float)s_cam.it[i];
-    }
-    s_cam.on = 1;
-}
-
-/* camCurDraw for the photo frame: 1 re-based, -1 through another camera
- * (kept), 0 not a VU draw (or a matrix that would not invert).  A re-based
- * normal_c or normal_l (code 32, 34, 36: RD_PROG_PRELIT, RD_PROG_LIT) draw
- * is drawn as the scissor program (code 36's clip mode): the game chose
- * the no-test (34) or region (32) program for its own camera, where the
- * mesh was wholly in view or inside the guard band; through another camera
- * the no-test program's X/Y wrap smears whatever leaves the window, and the
- * region test drops every triangle with a corner behind the eye.  The
- * scissor program clips against the model to clip matrix (qw 20..23, which
- * SET_NORMAL_MATRIX writes with qw 16..19 for every normal draw, re-based
- * with them), scaled here by the override's zoom (the clip projection is
- * symmetric about its centre).  The other programs have no scissor variant
- * (the region test). */
-static int camPhotoDraw(RdCmd *c)
-{
-    switch (c->type) {
-    case RDC_MESH:
-    case RDC_SKINNED:
-    case RDC_GRID:
-    case RDC_PARTICLES:
-        break;
-    default:
-        return 0;
-    }
-    if (!s_cam.on || s_cam.still || c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
-        return 0;
-    }
-    uint8_t *op = outPayload(c);
-    if (!op) {
-        return 0;
-    }
-    float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
-    const int how = camOf((const float (*)[4])vo, s_cam.vc, s_cam.pc);
-    if (how == CAM_NONE) {
-        return -1;
-    }
-    if (!camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
-                   how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL)) {
-        return 0;
-    }
-    if (c->type == RDC_MESH && (c->b[0] == RD_PROG_PRELIT || c->b[0] == RD_PROG_LIT)) {
-        RdVuPayload *p = (RdVuPayload *)(void *)op;
-        p->clip = RD_VU_CLIP_SCISSOR;
-        c->b[2] = RD_VU_CLIP_SCISSOR;
-        for (int q = 20; q < 24; q++) {
-            vo[q][0] = (float)(vo[q][0] * s_photoKx);
-            vo[q][1] = (float)(vo[q][1] * s_photoKy);
-        }
-    }
-    return 1;
-}
-
-const RdFrame *rd__PhotoFrame(const RdFrame *pin, const RdCamera *ov, uint32_t flags,
-                              int firstOfTick, RdPhotoStats *stats)
-{
-    RdPhotoStats st;
-    memset(&st, 0, sizeof(st));
-    if (stats) {
-        *stats = st;
-    }
-    if (!pin || !ov || !copyFrame(pin)) {
-        return NULL;
-    }
-    s_scratchUsed = 0;
-    s_scratchBytes = 0;
-    s_doneCount = 0;
-    s_pivotMesh = 0;
-    s_rebased = s_rebasedCur = 0;
-    camSetupOverride(pin, ov);
-    if (s_cam.on) {
-        /* FrameCB (rd__SetReplayCamera): ov's view and projection; the
-         * frame's other fields (near, far) stay the game's */
-        memcpy(s_out.camera.view, ov->view, sizeof(ov->view));
-        memcpy(s_out.camera.proj43, ov->proj43, sizeof(ov->proj43));
-        s_out.camera.zoom = ov->zoom;
-        s_out.camera.cut = 0;
-        if (pin->hasVu && !s_cam.still) {
-            double sv[16], se[16];
-            loadF16(pin->vu.screenView, sv);
-            mul4d(sv, s_cam.ec, se);
-            if (s_cam.zoom) {
-                double lse[16];
-                mul4d(s_cam.lc, se, lse);
-                memcpy(se, lse, sizeof(se));
-            }
-            for (int k = 0; k < 16; k++) {
-                s_out.vu.screenView[k] = (float)se[k];
-            }
-            memcpy(s_out.vu.invView, s_cam.itf, sizeof(s_cam.itf));
-        }
-    }
-    for (int l = 0; l < RD_LIST_COUNT; l++) {
-        const int ui = l >= 11 && (flags & RD_PHOTO_HIDE_UI);
-        for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
-            RdCmd *c = &s_out.lists[l].cmds[i];
-            if (ui && (c->type == RDC_OVERLAY_TEXT ||
-                       (c->type == RDC_SCREEN && c->b[1] != RD_SPACE_WORLD))) {
-                c->type = RDC_NOP;
-                st.dropped++;
-                continue;
-            }
-            const int r = camPhotoDraw(c);
-            st.rebased += r > 0;
-            st.keptCamera += r < 0;
-        }
-    }
-    /* R7d: a mesh whose live stream moved on since pin draws pin's */
-    for (int l = 0; l < RD_LIST_COUNT; l++) {
-        for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
-            RdCmd *c = &s_out.lists[l].cmds[i];
-            if (c->type == RDC_MESH || c->type == RDC_SKINNED) {
-                (void)morphDraw(c, NULL, NULL, pin, 1.0f);
-            }
-        }
-    }
-    /* the motion blur's feedback stands for the longest present (4 ticks:
-     * the trail of the camera's moves fades at once); every present of the
-     * pin starts from the FEED128 its first present found */
-    feedback(4.0f, firstOfTick);
-    if (stats) {
-        *stats = st;
-    }
-    return &s_out;
-}
-
 /* ------------------------------------------------------------- present */
 
 static struct {
@@ -3682,12 +3512,6 @@ bool rd_Present(float alpha)
     s_pres.number = cur->number;
     s_pres.alpha = alpha;
     s_pres.presents++;
-    /* package PHOTO: the pinned scene through the camera override, keep
-     * frames or not */
-    const RdFrame *pf = rd__PhotoPresentFrame();
-    if (pf) {
-        return rd__ReplayFrame(pf, 0, true);
-    }
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */
