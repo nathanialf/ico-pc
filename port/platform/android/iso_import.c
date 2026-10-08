@@ -225,7 +225,21 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
         snprintf(why, n, "The app's folder %s has too long a path for the disc image.", p->files);
         return ICO_ISO_IMPORT_FAILED;
     }
-    remove(tmp); /* an earlier start's, stopped half way */
+    /* an earlier start's, stopped half way: the .iso's and the .chd's, so a
+       copy of the other kind does not stay behind */
+    {
+        static const char *const exts[2] = {"iso", "chd"};
+        char other[ICO_ANDROID_PATH_MAX];
+        char otherTmp[ICO_ANDROID_PATH_MAX + 8];
+        int i;
+
+        for (i = 0; i < 2; i++) {
+            if (ico_android_image_path(p, exts[i], other, sizeof(other)) == 0 &&
+                snprintf(otherTmp, sizeof(otherTmp), "%s.tmp", other) < (int)sizeof(otherTmp)) {
+                remove(otherTmp);
+            }
+        }
+    }
     freeBytes = ico_android_free_bytes(p->files);
     if (size > 0 && freeBytes >= 0 && (uint64_t)freeBytes < ico_iso_need_bytes((uint64_t)size)) {
         fprintf(stderr, "ico_pc: %s: %lld bytes, %lld free in %s, %llu needed\n", uri,
