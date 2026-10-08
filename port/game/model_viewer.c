@@ -490,7 +490,14 @@ int ico_mv_title_list_layout(void)
 
 int ico_mv_characters_enter(void)
 {
-    if (s_state != MV_OFF || mv_modelCount < 2) {
+    /* v0.4.2: each refusal says why (Extras' Characters row then stays) */
+    if (s_state != MV_OFF) {
+        fprintf(stderr, "model_viewer: characters not opened: the viewer is still %s\n",
+                s_state == MV_LEAVING ? "leaving" : "running");
+        return -1;
+    }
+    if (mv_modelCount < 2) {
+        fprintf(stderr, "model_viewer: characters not opened: no models (%d)\n", mv_modelCount);
         return -1;
     }
     s_chars = 1;
@@ -600,6 +607,11 @@ static void mvToTitle(void)
     /* from Characters (Triangle there, or a failure): Settings on Extras
        once the title is back */
     s_returnExtras = s_chars;
+    if (s_chars) {
+        /* Characters' colours, however the viewer is left (Triangle has
+           written them already; a failure has not) */
+        ui_SettingsSave();
+    }
     putBackShadow();
     freeAnims();
     s_obj = NULL;

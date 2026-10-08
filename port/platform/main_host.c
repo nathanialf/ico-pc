@@ -1650,6 +1650,11 @@ static int host_main(int argc, char **argv)
         ico_fpenv_host_enter();
         if (!ico_window_pump()) {
             exit_reason = "the window was closed";
+            /* v0.4.2: Escape or the close button can end the run on a
+               Settings page that was never left (Characters in the model
+               viewer, the pause menu's pages): its changes are written now,
+               not lost */
+            ui_SettingsSaveOnQuit();
             return 0;
         }
         ico_window_pace(ico_host_vsync_hz());

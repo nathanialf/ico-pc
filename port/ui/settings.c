@@ -756,6 +756,8 @@ static int pageFirstNav(Page *pg);
 static int charsEnter(void)
 {
     if (!charsHosted() || s_pages[UI_PAGE_CHARACTERS].layout < 0) {
+        fprintf(stderr, "characters: the viewer did not open (%s)\n",
+                charsHosted() ? "the page was not built" : "no viewer");
         return -1;
     }
     ui_SettingsSave();
@@ -1319,6 +1321,21 @@ int ui_SettingsSave(void)
         fprintf(stderr, "settings: could not write %s\n", ico_config_toml_path());
     }
     s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
+    return r;
+}
+
+int ui_SettingsSaveOnQuit(void)
+{
+    if (!(s_dirtyVideo || s_dirtyConfig || s_dirtyBindings || ico_config_dirty())) {
+        return 0;
+    }
+    fprintf(stderr, "settings: saving the changed settings on quit\n");
+    int r = ui_SettingsSave();
+    /* a setter outside the pages (the language the game chose, ...) */
+    if (ico_config_dirty() && ico_config_save() != 0) {
+        fprintf(stderr, "settings: could not write %s\n", ico_config_toml_path());
+        r = -1;
+    }
     return r;
 }
 

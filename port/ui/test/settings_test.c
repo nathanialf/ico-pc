@@ -2692,9 +2692,18 @@ static int rowWithText(UiSettingsPage page, const char *str)
 
 /* Settings from the title (13) or from the pause menu (57) to the main
    page */
+static int enterMainKeep(int title);
+
 static int enterMain(int title)
 {
     useConfig("version = 1\n");
+    return enterMainKeep(title);
+}
+
+/* enterMain on the config file as it is (a new start of the game reads
+   what the last one wrote) */
+static int enterMainKeep(int title)
+{
     fakeTables();
     lt_ext_Reset();
     ui_SettingsReset();
@@ -4836,10 +4845,11 @@ static void fakeCharsLeave(void)
 static const UiCharactersHost kFakeHost = {fakeCharsEnter, fakeCharsShown, fakeCharsSwitch,
                                            fakeCharsLeave};
 
-/* Settings (title or pause menu) > Extras > Characters, settled */
-static int openCharacters(int title)
+/* Settings (title or pause menu) > Extras > Characters, settled; keep:
+   on the config file as it is */
+static int openCharactersOn(int title, int keep)
 {
-    const int mainL = enterMain(title);
+    const int mainL = keep ? enterMainKeep(title) : enterMain(title);
     const int exL = openPage(mainL, 7, UI_PAGE_EXTRAS);
     int el[8];
     ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
@@ -4852,6 +4862,11 @@ static int openCharacters(int title)
         frame(0); /* the page refreshes */
     }
     return l;
+}
+
+static int openCharacters(int title)
+{
+    return openCharactersOn(title, 0);
 }
 
 /* the cursor on `label`, one Left (-1) or Right (+1) */
@@ -4888,6 +4903,183 @@ static const char *savedChar(IcoToml *t, int part)
     char key[64];
     snprintf(key, sizeof(key), "characters.%s", kCharKeys[part]);
     return t ? ico_toml_get(t, key) : NULL;
+}
+
+/* the end of a run and a new start: what main_host calls when the window
+   closes (Escape, the close button, Quit to desktop's event), then a new
+   process's config: the file read again, the options and the colours
+   forgotten (ico_opt_reload -> ico_appearance_reload) */
+static void quitGame(char *log, size_t n)
+{
+    errCapture();
+    ui_SettingsSaveOnQuit();
+    errRelease(log, n);
+}
+
+static void startAgain(const char *p)
+{
+    ico_config_reset(p, "");
+    ico_sysconf_reset();
+    ico_opt_reload();
+    ico_video_reload();
+}
+
+/* [characters] ico_tunic and yorda_dress in the file at p */
+static int savedTunicDress(const char *p, const char *tunic, const char *dress)
+{
+    IcoToml *t = ico_toml_load(p);
+    const char *a = savedChar(t, ICO_APP_ICO_TUNIC);
+    const char *b = savedChar(t, ICO_APP_YORDA_DRESS);
+    const int ok = a != NULL && b != NULL && strcmp(a, tunic) == 0 && strcmp(b, dress) == 0;
+    ico_toml_free(t);
+    return ok;
+}
+
+/* start 2: the page (pause menu, then the title's viewer) shows Red and
+   Gold, the colours are read back, and the textures are recoloured */
+static void checkSecondStart(const char *p, const char *who)
+{
+    int lb[16], lo[16], lv[16];
+    startAgain(p);
+    CHECK(ico_appearance_get(ICO_APP_ICO_TUNIC) == 1 &&
+              ico_appearance_get(ICO_APP_YORDA_DRESS) == 17,
+          "%s: start 2 reads Ico's tunic %d (want 1, Red) and Yorda's dress %d (want 17, Gold)",
+          who, ico_appearance_get(ICO_APP_ICO_TUNIC), ico_appearance_get(ICO_APP_YORDA_DRESS));
+    {
+        /* a brown CLUT of 16 (RDTEX_PSMCT32 is 0): b_suit and fuku03 are
+           recoloured, a texture of no character is not */
+        unsigned char clut[16 * 4], out[16 * 4];
+        for (int i = 0; i < 16; i++) {
+            clut[i * 4 + 0] = (unsigned char)(0x60 + i * 4);
+            clut[i * 4 + 1] = (unsigned char)(0x30 + i * 3);
+            clut[i * 4 + 2] = (unsigned char)(0x20 + i * 2);
+            clut[i * 4 + 3] = 0x80;
+        }
+        CHECK(ico_appearance_recolour("b_suit", clut, 16, 0, out) == 1 &&
+                  ico_appearance_recolour("fuku03", clut, 16, 0, out) == 1 &&
+                  ico_appearance_recolour("b_face2", clut, 16, 0, out) == 0,
+              "%s: start 2 recolours the tunic's and the dress's textures", who);
+    }
+    ui_SettingsSetCharactersHost(NULL);
+    openCharactersOn(0, 1);
+    ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+    CHECK(strcmp(textNow(lv[5]), "Red") == 0 && strcmp(textNow(lv[8]), "Gold") == 0,
+          "%s: start 2, the pause menu's page shows \"%s\" and \"%s\" (want Red, Gold)", who,
+          lt_ext_RowText(lv[5]), lt_ext_RowText(lv[8]));
+    press(0x10);
+    ui_SettingsSetCharactersHost(&kFakeHost);
+    s_hostShown = -2;
+    s_hostFail = 0;
+    const int l = openCharactersOn(1, 1);
+    s_hostShown = 0;
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    const int n = ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+    CHECK(ui_SettingsCharactersInViewer() && n == 13 && current_layout_id == l &&
+              strcmp(textNow(lv[5]), "Red") == 0 && strcmp(textNow(lv[8]), "Gold") == 0 &&
+              strcmp(textNow(lb[9]), "Switch to Yorda") == 0,
+          "%s: start 2, the viewer's page shows \"%s\", \"%s\" and \"%s\"", who,
+          lt_ext_RowText(lv[5]), lt_ext_RowText(lv[8]), lt_ext_RowText(lb[9]));
+    press(0x10);
+    ui_SettingsSetCharactersHost(NULL);
+    s_hostShown = -2;
+}
+
+/* v0.4.2 (K-E): the player's report "the colours are not kept after a
+   restart": start 1 picks Ico's tunic Red and Yorda's dress Gold, the
+   game closes, start 2 has them.  The file each start begins with is the
+   one a first run writes (ico_config_write_first_run), so [characters] is
+   a table the file does not have yet.  Four ways the first start ends:
+   the viewer's Triangle then Escape at the title; Escape inside the
+   viewer (no Triangle: before the quit save the picks were never written);
+   the pause menu's Characters left with Back; Escape on the pause menu's
+   Characters page. */
+static void testCharactersRestart(void)
+{
+    char p[1100], log[512];
+    int lb[16], lo[16], lv[16];
+    path(p, sizeof(p), "settings_test.toml");
+
+    for (int way = 0; way < 4; way++) {
+        static const char *const kWho[4] = {"viewer, Triangle", "viewer, Escape", "pause, Back",
+                                            "pause, Escape"};
+        const char *who = kWho[way];
+        const int viewer = way < 2;
+        const int leave = way == 0 || way == 2;
+
+        /* start 1: the first run's file */
+        remove(p);
+        ico_config_reset(p, "");
+        CHECK(ico_config_write_first_run() == 0, "%s: the first run's file", who);
+        startAgain(p);
+        ui_SettingsSetCharactersHost(viewer ? &kFakeHost : NULL);
+        s_hostEnters = s_hostLeaves = s_hostFail = 0;
+        s_hostShown = -2;
+        s_hostSwitch = -1;
+        const int l = openCharactersOn(viewer, 1);
+        if (viewer) {
+            CHECK(s_hostEnters == 1 && ui_SettingsCharactersInViewer(),
+                  "%s: Characters opens in the viewer (%d enters)", who, s_hostEnters);
+            s_hostShown = 0; /* Ico's model is up */
+        }
+        ui_SettingsPageRows(UI_PAGE_CHARACTERS, lb, lo, lv, 16);
+        charStep(l, lb[5], 1); /* Tunic: Red */
+        if (viewer) {
+            press(0x0008); /* R1: Yorda */
+            CHECK(s_hostSwitch == 1, "%s: R1 loads Yorda", who);
+            s_hostShown = 1;
+        }
+        for (int k = 0; k < 17; k++) {
+            charStep(l, lb[8], 1); /* Dress: Original, Red, ... Gold */
+        }
+        CHECK(strcmp(textNow(lv[5]), "Red") == 0 && strcmp(textNow(lv[8]), "Gold") == 0,
+              "%s: start 1 shows \"%s\" and \"%s\"", who, lt_ext_RowText(lv[5]),
+              lt_ext_RowText(lv[8]));
+        if (leave) {
+            press(0x10); /* Triangle: the viewer's leave, or Back to Extras */
+            if (viewer) {
+                CHECK(s_hostLeaves == 1, "%s: the viewer leaves (%d)", who, s_hostLeaves);
+                s_hostShown = -2; /* the title is back */
+            } else {
+                CHECK(settle(ui_SettingsPageLayout(UI_PAGE_EXTRAS), 60), "%s: Back to Extras", who);
+            }
+            CHECK(savedTunicDress(p, "red", "gold"), "%s: leaving the page writes both", who);
+        } else {
+            CHECK(!savedTunicDress(p, "red", "gold"),
+                  "%s: nothing left the page, nothing written yet", who);
+        }
+        quitGame(log, sizeof(log));
+        CHECK(savedTunicDress(p, "red", "gold"), "%s: the file has both after the quit", who);
+        CHECK(leave ? strstr(log, "on quit") == NULL : strstr(log, "on quit") != NULL,
+              "%s: the quit's log (\"%s\")", who, log);
+        {
+            /* the first run's lines kept, [characters] added */
+            FILE *f = fopen(p, "rb");
+            char text[8192];
+            size_t got = f ? fread(text, 1, sizeof(text) - 1, f) : 0;
+            text[got] = '\0';
+            if (f) {
+                fclose(f);
+            }
+            CHECK(strstr(text, "# ico-pc settings.") == text && strstr(text, "[photo]") != NULL &&
+                      strstr(text, "[characters]\n") != NULL &&
+                      strstr(text, "ico_tunic = \"red\"") != NULL &&
+                      strstr(text, "yorda_dress = \"gold\"") != NULL,
+                  "%s: the first run's file with [characters] added", who);
+        }
+        if (viewer) {
+            ui_SettingsSetCharactersHost(NULL);
+            s_hostShown = -2;
+        }
+        checkSecondStart(p, who);
+    }
+    /* nothing pending: the quit writes nothing and says nothing */
+    quitGame(log, sizeof(log));
+    CHECK(log[0] == '\0', "a quit with nothing changed is quiet (\"%s\")", log);
+    ico_appearance_reset();
+    ui_SettingsSave();
+    useConfig("version = 1\n");
 }
 
 static void testCharacters(void)
@@ -5856,6 +6048,7 @@ int main(int argc, char **argv)
     testTexturePack();
     testTexturePackNoteLines();
     testCharacters();
+    testCharactersRestart();
     testModelPack();
     testEffects();
     testTouch();
