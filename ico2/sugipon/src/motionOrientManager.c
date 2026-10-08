@@ -1012,6 +1012,10 @@ static void getMotionGeometry(void *self)
         Vec16 v;
         Vec16 rv;
 
+        /* PC port: neither root-position call writes w (see below); 0
+           rather than whatever the host's frame left there (issue 19) */
+        v.f[3] = 0.0f;
+        rv.f[3] = 0.0f;
         if (motionKind[w->motion].blendKind == 320) {
             GetFloatingMotion((StreamElem *)mot, w->animFrame, v.f, md, n, blendless, skel);
             GetFloatingMotionRootPos(rv.f, md, w->lastFrame);

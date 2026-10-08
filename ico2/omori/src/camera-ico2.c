@@ -74,7 +74,12 @@ static float targetAStart[3]; /* derived name */
 
 static float targetASmooth[3]; /* derived name */
 
-static float targetBSmooth[3]; /* derived name */
+/* CameraMove takes it as a 16-byte vector (_DistGV and ChaseCamera read
+   the fourth word); on the EE and in the x86-64 gcc build that word is
+   the .bss padding after it, so 0, while an arm64 clang build put
+   pluralCameraSetNum there.  The host gives it its own fourth word, 0
+   (ASan global-buffer-overflow, issue 19). */
+static float targetBSmooth[4]; /* derived name */
 
 static float groupProbePos[36]; /* derived name */
 
@@ -788,6 +793,11 @@ static void GetTargetOffset(GObj *gobj, float *v, unsigned char flag)
         ofs[0] = v[0];
         ofs[1] = v[1];
         ofs[2] = -v[2];
+        /* PC port: _ApplyRyGV multiplies w by the zero translation row, so
+           any value gives the same x, y and z but the sign of a zero; the
+           stack word the EE left there is made 0 so no build depends on
+           its frame (issue 19) */
+        ofs[3] = 0.0f;
         need = ACTNotNeedCameraOffset(gobj) ? 1 : flag;
         if (need) {
             lastTargetOffset[0] = 0.0f;
