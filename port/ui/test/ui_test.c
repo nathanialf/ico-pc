@@ -490,11 +490,12 @@ static void testLayoutExtension(void)
               v[1].rgba[0], v[1].rgba[3]);
         /* the label starts at the row's dispX: x = (dispX - 320) * 16 + 4 in 1/16 px, through
            gif_SpriteSensitiveOffset's 512 / 640; the strip starts its margin
-           (the glyphs' overhang and the rim, UI_MENU_RIM_X 5 since the
-           sheets' survey: 9 texels at this size, 119 measured) before */
+           (the glyphs' overhang and the rim, UI_MENU_RIM_X 7 since the
+           rim fades out over the sheets' 6 texels: 11 texels at this size,
+           145 measured; 119 with the hard 4-texel rim) before */
         int x0 = 0x8000 + ((200 - 320) * 16 + 4) * 512 / 640;
-        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 8, "row %d starts at x %d (box %d)", labels, v[0].x,
-              x0);
+        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 10, "row %d starts at x %d (box %d)", labels,
+              v[0].x, x0);
         labels++;
     }
     CHECK(labels == 2, "%d labels", labels);
@@ -934,7 +935,8 @@ static int toPixY(float gy)
    read (UI_MENU_RIM_X and UI_MENU_RIM_Y texels: a texel is an x unit and
    2 y units) and the anchor's snap to whole texels (an x unit, a y unit).
    Written for a rim of 1 x 1 texels (3 and 5 units); the sheets' survey
-   set 4 x 3, and 44 pixels of rim fell outside the old bounds. */
+   set 4 x 3, and 44 pixels of rim fell outside the old bounds; the faded
+   rim reaches 6 x 4. */
 typedef struct Box {
     int x0, y0, x1, y1;
 } Box;

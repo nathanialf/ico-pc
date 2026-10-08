@@ -19,7 +19,9 @@
 #define TITLE_SIZE 26.0f
 #define BODY_SIZE 21.0f
 #define PAD_X 14.0f
-#define PAD_Y 9.0f
+/* the text's dark halo reaches 4 field lines (8 units) past the letters and
+   the bilinear read a texel more: the panel holds it (9 let it spill) */
+#define PAD_Y 11.0f
 #define GAP_Y 3.0f
 #define MARGIN_X 18.0f /* from the right edge of the 4:3 picture */
 #define TOP_Y 30.0f

@@ -52,8 +52,8 @@ extern "C" {
 
 /* The margin round a port text's ink, texels: the rim's reach (rd's
    ICO_SHEET_RX and ICO_SHEET_RY) plus the bilinear read's texel. */
-#define UI_MENU_RIM_X 5
-#define UI_MENU_RIM_Y 4
+#define UI_MENU_RIM_X 7
+#define UI_MENU_RIM_Y 5
 
 /* A sheet style, rd.h RdSheetStyle's fields (rd.h is not included here:
    the headless build has no rd). */

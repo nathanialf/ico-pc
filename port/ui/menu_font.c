@@ -26,7 +26,7 @@
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
 #define MF_LINES 16       /* lines of one text */
 /* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
-   ICO_SHEET_RY, 4 and 3; ctest menu_look checks the pair) and the bilinear
+   ICO_SHEET_RY, 6 and 4; ctest menu_look checks the pair) and the bilinear
    read one texel past it */
 #define MF_RIM_X UI_MENU_RIM_X
 #define MF_RIM_Y UI_MENU_RIM_Y
@@ -53,9 +53,14 @@ enum { MF_LIGHT = 0, MF_PLAIN = 1, MF_CLASSES };
             FR .88 .78 .72 .59 .44 .37, DE .93 .84 .74 .65 .50 .41, above and
             below 1..4: EN .77 .44 .36 .27, FR .89 .67 .49 .30, DE .91 .70 .51
             .36).  The mass of the first six texels is 3.1 (EN) to 4.1 (DE) across
-            and 2.0 (EN) to 3.1 (DE) down, 3.7 and 2.7 averaged over the five:
-            ICO_SHEET_RX 4, ICO_SHEET_RY 3 (shader_consts.h) draw a hard rim of
-            the same mass.
+            and 2.0 (EN) to 3.1 (DE) down, 3.7 and 2.7 averaged over the five.
+            The rim is the coverage dilated with the English falloff
+            (shader_consts.h: ICO_SHEET_RX 6, ICO_SHEET_RY 4, ICO_SHEET_WX
+            1 .76 .61 .54 .50 .39 .33, ICO_SHEET_WY 1 .77 .44 .36 .27), one
+            shape for every language; the stronger French and German halo is
+            not modelled (the style has a rim grey, not a rim strength).  A
+            hard rim of the same mass (4 x 3) filled the gaps between the
+            letters and drew each word in a dark box.
      steps  the white texels' alpha takes three steps between none and full
             (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
             0x5E then 0x7E): five levels, ICO_SHEET_LEVELS 5.

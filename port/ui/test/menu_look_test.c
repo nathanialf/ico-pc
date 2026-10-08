@@ -11,7 +11,8 @@
  *   testSurvey        measures the sheets (the light-ink items of the menu
  *                     text table on the five languages' sheets) and pins
  *                     the constants that came from it: kSheetInk (menu_font.c),
- *                     ICO_SHEET_RX / RY / LEVELS (shader_consts.h).
+ *                     ICO_SHEET_RX / RY, the rim's falloff ICO_SHEET_WX / WY
+ *                     and ICO_SHEET_LEVELS (shader_consts.h).
  *   testCompareItems  every item of ui_menu_text_items in the five languages:
  *                     the reference strip against the sheet's rectangle,
  *                     both composited on black and on mid-grey with MODULATE
@@ -25,11 +26,11 @@
  * the top row at x4 nearest, the bottom at x4 bilinear; and
  * OUT_DIR/menu_look/<lang>/contact.png, every item of the language at x1.
  *
- * ICO_MENU_LOOK_FIT=1 (development only): searches the rim reach (RX, RY),
- * the levels and each language's rim and fill grey for the smallest blurred
- * difference over the light-ink items and prints the best, instead of the
- * checks.  The constants it finds are then written into shader_consts.h,
- * sheet_text.hlsli and kSheetInk by hand.
+ * ICO_MENU_LOOK_FIT=1 (development only): searches the levels and each
+ * language's rim and fill grey (the rim's reach and falloff are the
+ * survey's) for the smallest blurred difference over the light-ink items and
+ * prints the best, instead of the checks.  The constants it finds are then
+ * written into shader_consts.h, sheet_text.hlsli and kSheetInk by hand.
  *
  * Exit 0, 1 on a failure, 77 without the ELF or the disc image (so it runs
  * where the disc is: main's release validation, never in a worktree).
@@ -78,6 +79,9 @@ static const float kExpMassX[UI_LANG_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3.64f
 static const float kExpMassY[UI_LANG_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
 #define TOL_LEVEL 0.6f /* grey levels */
 #define TOL_MASS 0.08f
+/* the rim's falloff (ICO_SHEET_WX / WY, per mille) against the English
+   sheets' mean rim alpha at each distance, per entry */
+#define TOL_FALLOFF 0.08f
 #define EXP_STEPS 3 /* the median number of antialiasing steps of a sheet's white */
 
 static int failures;
@@ -166,6 +170,7 @@ static void collect(void)
 
 typedef struct Survey {
     double fill, rim, massX, massY;
+    double profX[7], profY[7]; /* the mean alpha (0..1) at distance 1..6, [0] unused */
     int sheets;
     int steps[16]; /* the antialiasing steps of each sheet's white */
 } Survey;
@@ -307,6 +312,15 @@ static void survey(int lang, Survey *out)
     }
     out->massX = (m[0] + m[1]) * 0.5;
     out->massY = (m[2] + m[3]) * 0.5;
+    for (int d = 1; d <= 6; d++) {
+        double px[2], py[2];
+        for (int k = 0; k < 2; k++) {
+            px[k] = pm[k][d][1] > 0 ? pm[k][d][0] / pm[k][d][1] / 255.0 : 0;
+            py[k] = pm[2 + k][d][1] > 0 ? pm[2 + k][d][0] / pm[2 + k][d][1] / 255.0 : 0;
+        }
+        out->profX[d] = (px[0] + px[1]) * 0.5;
+        out->profY[d] = (py[0] + py[1]) * 0.5;
+    }
     for (int si = 0; si < out->sheets; si++) {
         long tot = 0;
         for (int a = 0; a < 256; a++) {
@@ -349,6 +363,15 @@ static void testSurvey(void)
             steps[nsteps++] = sv[l].steps[s];
         }
         printf("\n");
+        printf("menu_look: survey %s: falloff across", kLang[l]);
+        for (int d = 1; d <= 6; d++) {
+            printf(" %.2f", sv[l].profX[d]);
+        }
+        printf(", down");
+        for (int d = 1; d <= 6; d++) {
+            printf(" %.2f", sv[l].profY[d]);
+        }
+        printf("\n");
         CHECK(sv[l].sheets >= 4, "%s: only %d sheets measured", kLang[l], sv[l].sheets);
         CHECK(fabs(sv[l].fill - kExpFill[l]) <= TOL_LEVEL, "%s: fill %.1f, expected %.1f", kLang[l],
               sv[l].fill, kExpFill[l]);
@@ -373,12 +396,26 @@ static void testSurvey(void)
           sv[UI_LANG_EN].rim);
     qsort(steps, (size_t)nsteps, sizeof(int), cmpInt);
     const int median = nsteps ? steps[nsteps / 2] : 0;
-    printf("menu_look: survey: rim reach %.2f x %.2f, median %d steps (rim %d x %d, %d levels)\n",
+    printf("menu_look: survey: rim mass %.2f x %.2f, median %d steps (rim %d x %d, %d levels)\n",
            meanX, meanY, median, ICO_SHEET_RX, ICO_SHEET_RY, ICO_SHEET_LEVELS);
-    CHECK((int)floor(meanX + 0.5) == ICO_SHEET_RX, "ICO_SHEET_RX %d, the survey's %.2f",
-          ICO_SHEET_RX, meanX);
-    CHECK((int)floor(meanY + 0.5) == ICO_SHEET_RY, "ICO_SHEET_RY %d, the survey's %.2f",
-          ICO_SHEET_RY, meanY);
+    /* the rim's reach and falloff: the English sheets' rim alpha at each
+       distance (six across, four down; the survey measures six, the
+       falloff past four field lines is in the noise of the rows below) */
+    static const int kWx[7] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2, ICO_SHEET_WX_3,
+                               ICO_SHEET_WX_4, ICO_SHEET_WX_5, ICO_SHEET_WX_6};
+    static const int kWy[5] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2, ICO_SHEET_WY_3,
+                               ICO_SHEET_WY_4};
+    CHECK(ICO_SHEET_RX == 6 && ICO_SHEET_RY == 4, "the rim's reach %d x %d, the survey's 6 x 4",
+          ICO_SHEET_RX, ICO_SHEET_RY);
+    CHECK(kWx[0] == 1000 && kWy[0] == 1000, "the falloff is 1 at the texel itself");
+    for (int d = 1; d <= 6; d++) {
+        CHECK(fabs(sv[UI_LANG_EN].profX[d] - kWx[d] / 1000.0) <= TOL_FALLOFF,
+              "ICO_SHEET_WX_%d %d, the English sheets' %.2f", d, kWx[d], sv[UI_LANG_EN].profX[d]);
+    }
+    for (int d = 1; d <= 4; d++) {
+        CHECK(fabs(sv[UI_LANG_EN].profY[d] - kWy[d] / 1000.0) <= TOL_FALLOFF,
+              "ICO_SHEET_WY_%d %d, the English sheets' %.2f", d, kWy[d], sv[UI_LANG_EN].profY[d]);
+    }
     CHECK(median == EXP_STEPS, "the sheets' white has %d antialiasing steps, expected %d", median,
           EXP_STEPS);
     CHECK(median + 2 == ICO_SHEET_LEVELS, "ICO_SHEET_LEVELS %d, the survey's %d", ICO_SHEET_LEVELS,
@@ -806,25 +843,33 @@ static const uint8_t kBayerT[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 
 
 typedef struct FitItem {
     const Rect *r;
-    uint8_t *cov, *rim; /* the strip and its max filter for the current reach */
+    uint8_t *cov, *rim; /* the strip and its rim (the weighted dilation) */
 } FitItem;
 
-static void maxFilter(const FitItem *f, int rx, int ry)
+/* the rim: the coverage dilated with the falloff (shader_consts.h's), a copy
+   of sheet_ref.c's arithmetic (testFitCopy holds the two together) */
+static void maxFilter(const FitItem *f)
 {
+    static const unsigned kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
+                                                   ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
+                                                   ICO_SHEET_WX_6};
+    static const unsigned kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
+                                                   ICO_SHEET_WY_3, ICO_SHEET_WY_4};
     const int w = f->r->w, h = f->r->h;
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             unsigned m = 0;
-            for (int dy = -ry; dy <= ry; dy++) {
-                for (int dx = -rx; dx <= rx; dx++) {
+            for (int dy = -ICO_SHEET_RY; dy <= ICO_SHEET_RY; dy++) {
+                for (int dx = -ICO_SHEET_RX; dx <= ICO_SHEET_RX; dx++) {
                     const int xx = x + dx, yy = y + dy;
                     if (xx >= 0 && yy >= 0 && xx < w && yy < h) {
-                        const unsigned c = f->cov[yy * w + xx];
+                        const unsigned c =
+                            f->cov[yy * w + xx] * kWx[dx < 0 ? -dx : dx] * kWy[dy < 0 ? -dy : dy];
                         m = c > m ? c : m;
                     }
                 }
             }
-            f->rim[y * w + x] = (uint8_t)m;
+            f->rim[y * w + x] = (uint8_t)((m + 500000u) / 1000000u);
         }
     }
 }
@@ -895,44 +940,36 @@ static void fit(void)
             n++;
         }
         double best = 1e9, atCurrent = 1e9;
-        unsigned bx = 0, by = 0, bl = 0, br = 0, bf = 0;
+        unsigned bl = 0, br = 0, bf = 0;
         const UiSheetInk *cur = ui_MenuSheetInk(lang);
-        for (int ry = 0; ry <= 5; ry++) {
-            for (int rx = 0; rx <= 7; rx++) {
-                for (int i = 0; i < n; i++) {
-                    maxFilter(&fi[i], rx, ry);
-                }
-                for (unsigned lv = 3; lv <= 9; lv++) {
-                    for (size_t ri = 0; ri < sizeof(kRims) / sizeof(kRims[0]); ri++) {
-                        for (size_t fl = 0; fl < sizeof(kFills) / sizeof(kFills[0]); fl++) {
-                            double s = 0.0;
-                            for (int i = 0; i < n; i++) {
-                                s += fitScore(&fi[i], lv, kRims[ri], kFills[fl]);
-                            }
-                            s /= n ? n : 1;
-                            if (s < best) {
-                                best = s;
-                                bx = (unsigned)rx;
-                                by = (unsigned)ry;
-                                bl = lv;
-                                br = kRims[ri];
-                                bf = kFills[fl];
-                            }
-                            if (rx == ICO_SHEET_RX && ry == ICO_SHEET_RY &&
-                                lv == (unsigned)ICO_SHEET_LEVELS && kRims[ri] == cur->rimLevel &&
-                                kFills[fl] == cur->fillLevel) {
-                                atCurrent = s;
-                            }
-                        }
+        for (int i = 0; i < n; i++) {
+            maxFilter(&fi[i]);
+        }
+        for (unsigned lv = 3; lv <= 9; lv++) {
+            for (size_t ri = 0; ri < sizeof(kRims) / sizeof(kRims[0]); ri++) {
+                for (size_t fl = 0; fl < sizeof(kFills) / sizeof(kFills[0]); fl++) {
+                    double s = 0.0;
+                    for (int i = 0; i < n; i++) {
+                        s += fitScore(&fi[i], lv, kRims[ri], kFills[fl]);
+                    }
+                    s /= n ? n : 1;
+                    if (s < best) {
+                        best = s;
+                        bl = lv;
+                        br = kRims[ri];
+                        bf = kFills[fl];
+                    }
+                    if (lv == (unsigned)ICO_SHEET_LEVELS && kRims[ri] == cur->rimLevel &&
+                        kFills[fl] == cur->fillLevel) {
+                        atCurrent = s;
                     }
                 }
             }
         }
-        printf(
-            "menu_look: fit %s (%d items): best blur %.2f at RX %u RY %u LEVELS %u rim %u fill %u;"
-            " the constants (RX %d RY %d LEVELS %d rim %d fill %d): %.2f\n",
-            kLang[lang], n, best, bx, by, bl, br, bf, ICO_SHEET_RX, ICO_SHEET_RY, ICO_SHEET_LEVELS,
-            cur->rimLevel, cur->fillLevel, atCurrent);
+        printf("menu_look: fit %s (%d items): best blur %.2f at LEVELS %u rim %u fill %u;"
+               " the constants (LEVELS %d rim %d fill %d): %.2f\n",
+               kLang[lang], n, best, bl, br, bf, ICO_SHEET_LEVELS, cur->rimLevel, cur->fillLevel,
+               atCurrent);
         for (int i = 0; i < n; i++) {
             free(fi[i].cov);
             free(fi[i].rim);
@@ -960,7 +997,7 @@ static void testFitCopy(void)
     f.rim = malloc((size_t)r->w * (size_t)r->h);
     CHECK(ui__MenuStripRaster(&ui_menu_text_items[r->item], UI_LANG_EN, f.cov, r->w, r->h) == 0,
           "the strip of the first item");
-    maxFilter(&f, ICO_SHEET_RX, ICO_SHEET_RY);
+    maxFilter(&f);
     const UiSheetInk *k = ui_MenuSheetInk(UI_LANG_EN);
     RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither};
     int diff = 0;
