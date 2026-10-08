@@ -542,17 +542,25 @@ void rhi_Present(void)
         r = s_forcePresent; /* a test's result for this present, once */
         s_forcePresent = VK_SUCCESS;
     }
-    if (r == VK_ERROR_OUT_OF_DATE_KHR) {
+#ifdef __ANDROID__
+    const bool rebuild = r == VK_ERROR_OUT_OF_DATE_KHR;
+#else
+    /* the desktop (as v0.4.0): suboptimal recreates too, at the window's
+     * pixel size; Wayland compositors and gamescope report it when another
+     * swapchain could be scanned out directly */
+    const bool rebuild = r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR;
+#endif
+    if (rebuild) {
         int w = (int)g_vkr.swapWidth, h = (int)g_vkr.swapHeight;
 #ifdef ICO_RHI_HAVE_SDL
         SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
         rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
     } else if (r == VK_SUBOPTIMAL_KHR) {
-        /* package AN-D: the image was shown.  Recreated only when the size
-         * changed: with the identity transform on a rotated Android display
-         * the driver reports suboptimal at every present, and a recreation
-         * would change nothing */
+        /* package AN-D, Android only: the image was shown.  Recreated only
+         * when the size changed: with the identity transform on a rotated
+         * Android display the driver reports suboptimal at every present,
+         * and a recreation would change nothing */
         uint32_t w = 0, h = 0;
         if (vkr_SwapTargetSize(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
             rhi_ResizeSwapchain(w, h, g_vkr.vsync);

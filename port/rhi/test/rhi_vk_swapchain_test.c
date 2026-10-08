@@ -7,7 +7,8 @@
  * swapchain format is BGRA8 or RGBA8; the test checks the channel order
  * rhi_SwapchainFormat reports) and presents.  Package AN-D: the surface
  * released and made again (the Android background and foreground), a
- * present reporting suboptimal without a size change (no new swapchain) and
+ * present reporting suboptimal without a size change (a new swapchain on
+ * the desktop, none on Android) and
  * one reporting the surface lost (a new surface and swapchain), through
  * the rhi_vk.h test hook.  Exit 77 when SDL has no offscreen Vulkan surface
  * or no device presents to it. */
@@ -83,16 +84,22 @@ static int lifecycle(SDL_Window *win, RhiFormat fmt)
 {
     int failures = 0;
 
-    /* a present that reports suboptimal at the same size: shown, no new
-       swapchain (an Android display turned by the compositor reports it at
-       every present) */
+    /* a present that reports suboptimal at the same size: shown; on
+       Android no new swapchain (a display turned by the compositor reports
+       it at every present), on the desktop one (Wayland and gamescope
+       report it for direct scanout) */
+#ifdef __ANDROID__
+    const uint32_t wantNew = 0;
+#else
+    const uint32_t wantNew = 1;
+#endif
     uint32_t n0 = vkr_TestSwapchainCreations();
     vkr_TestForcePresentResult(RHI_VK_TEST_SUBOPTIMAL);
     failures += frame(win, fmt, 10);
     failures += frame(win, fmt, 11);
-    if (vkr_TestSwapchainCreations() != n0) {
-        printf("FAIL suboptimal without a size change made %u swapchain(s)\n",
-               vkr_TestSwapchainCreations() - n0);
+    if (vkr_TestSwapchainCreations() - n0 != wantNew) {
+        printf("FAIL suboptimal without a size change made %u swapchain(s), want %u\n",
+               vkr_TestSwapchainCreations() - n0, wantNew);
         failures++;
     }
 
