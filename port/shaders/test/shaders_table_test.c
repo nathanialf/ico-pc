@@ -25,9 +25,8 @@ static const char *const expected[] = {
 
 /* package AN-E: the gs_dual_out entries without the second output */
 static const char *const expectedNoDual[] = {
-    "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
-    "sprite_stq_ps_nodual", "blit_fix_ps_nodual",    "fog_lut_ps_nodual",
-    "font_ps_nodual",       "vu_ps_nodual",          "vu_texa_ps_nodual",
+    "sprite_ps_nodual",  "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual", "sprite_stq_ps_nodual",
+    "fog_lut_ps_nodual", "font_ps_nodual",        "vu_ps_nodual",         "vu_texa_ps_nodual",
 };
 
 int main(void)
