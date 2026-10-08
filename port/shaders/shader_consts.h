@@ -98,10 +98,27 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
  * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
  * The style reaches the shader in DrawCB.param: rimOn, rimLevel, fillLevel,
  * dither (rd_replay.c, from RdTexRec.sheet). */
-/* The three values are the sheets' survey (package F-C1, the comment above
- * kSheetInk in port/ui/menu_font.c; ctest menu_look testSurvey). */
-#define ICO_SHEET_RX 4     /* rim: texels across */
-#define ICO_SHEET_RY 3     /* rim: texels (field lines) down */
+/* The values are the sheets' survey (package F-C1, the comment above
+ * kSheetInk in port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
+ * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across
+ * and ICO_SHEET_RY down, each scaled by WX[|dx|] * WY[|dy|] (per mille), so
+ * the dark halo fades out as the sheets' does instead of filling the gaps
+ * between letters.  The falloff is the English sheets' mean rim alpha at
+ * each distance outside the letters (across 1..6, down 1..4). */
+#define ICO_SHEET_RX 6 /* rim: texels across */
+#define ICO_SHEET_RY 4 /* rim: texels (field lines) down */
+#define ICO_SHEET_WX_0 1000
+#define ICO_SHEET_WX_1 760
+#define ICO_SHEET_WX_2 610
+#define ICO_SHEET_WX_3 540
+#define ICO_SHEET_WX_4 500
+#define ICO_SHEET_WX_5 390
+#define ICO_SHEET_WX_6 330
+#define ICO_SHEET_WY_0 1000
+#define ICO_SHEET_WY_1 770
+#define ICO_SHEET_WY_2 440
+#define ICO_SHEET_WY_3 360
+#define ICO_SHEET_WY_4 270
 #define ICO_SHEET_LEVELS 5 /* opacity and rim-to-fill levels */
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280

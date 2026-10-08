@@ -12,6 +12,22 @@
 #include "sheet_text.hlsli"
 _Static_assert(SHEET_RX == ICO_SHEET_RX, "sheet_text.hlsli SHEET_RX");
 _Static_assert(SHEET_RY == ICO_SHEET_RY, "sheet_text.hlsli SHEET_RY");
+_Static_assert(SHEET_WX_0 == ICO_SHEET_WX_0, "sheet_text.hlsli SHEET_WX_0");
+_Static_assert(SHEET_WX_1 == ICO_SHEET_WX_1, "sheet_text.hlsli SHEET_WX_1");
+_Static_assert(SHEET_WX_2 == ICO_SHEET_WX_2, "sheet_text.hlsli SHEET_WX_2");
+_Static_assert(SHEET_WX_3 == ICO_SHEET_WX_3, "sheet_text.hlsli SHEET_WX_3");
+_Static_assert(SHEET_WX_4 == ICO_SHEET_WX_4, "sheet_text.hlsli SHEET_WX_4");
+_Static_assert(SHEET_WX_5 == ICO_SHEET_WX_5, "sheet_text.hlsli SHEET_WX_5");
+_Static_assert(SHEET_WX_6 == ICO_SHEET_WX_6, "sheet_text.hlsli SHEET_WX_6");
+_Static_assert(SHEET_WY_0 == ICO_SHEET_WY_0, "sheet_text.hlsli SHEET_WY_0");
+_Static_assert(SHEET_WY_1 == ICO_SHEET_WY_1, "sheet_text.hlsli SHEET_WY_1");
+_Static_assert(SHEET_WY_2 == ICO_SHEET_WY_2, "sheet_text.hlsli SHEET_WY_2");
+_Static_assert(SHEET_WY_3 == ICO_SHEET_WY_3, "sheet_text.hlsli SHEET_WY_3");
+_Static_assert(SHEET_WY_4 == ICO_SHEET_WY_4, "sheet_text.hlsli SHEET_WY_4");
+_Static_assert(ICO_SHEET_RX == 6 && ICO_SHEET_RY == 4,
+               "the falloff tables have RX + 1 and RY + 1 entries");
+_Static_assert(ICO_SHEET_WX_0 == 1000 && ICO_SHEET_WY_0 == 1000,
+               "the falloff is 1 at the texel itself");
 _Static_assert(SHEET_LEVELS == ICO_SHEET_LEVELS, "sheet_text.hlsli SHEET_LEVELS");
 _Static_assert(SHEET_BAYER_ROW0 == ICO_SHEET_BAYER_ROW0, "sheet_text.hlsli SHEET_BAYER_ROW0");
 _Static_assert(SHEET_BAYER_ROW1 == ICO_SHEET_BAYER_ROW1, "sheet_text.hlsli SHEET_BAYER_ROW1");
@@ -19,6 +35,13 @@ _Static_assert(SHEET_BAYER_ROW2 == ICO_SHEET_BAYER_ROW2, "sheet_text.hlsli SHEET
 _Static_assert(SHEET_BAYER_ROW3 == ICO_SHEET_BAYER_ROW3, "sheet_text.hlsli SHEET_BAYER_ROW3");
 _Static_assert(SHEET_T_OFF == ICO_SHEET_T_OFF, "sheet_text.hlsli SHEET_T_OFF");
 _Static_assert(ICO_SHEET_LEVELS >= 2 && ICO_SHEET_LEVELS <= 256, "sheet levels");
+
+/* the rim's falloff across (|dx|) and down (|dy|), per mille */
+static const uint32_t kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
+                                               ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
+                                               ICO_SHEET_WX_6};
+static const uint32_t kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
+                                               ICO_SHEET_WY_3, ICO_SHEET_WY_4};
 
 /* the standard 4x4 Bayer matrix, [y][x] */
 static const uint8_t kBayer[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
@@ -47,13 +70,16 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
     static const RdSheetStyle kDefault = {1, 0, 0xFF, 1};
     const RdSheetStyle *s = style ? style : &kDefault;
     const uint32_t c = covAt(cov, w, h, x, y);
-    uint32_t r = 0;
+    /* the rim: the largest coverage weighted by the falloff, rounded to 0..255 */
+    uint32_t m = 0;
     for (int32_t dy = -ICO_SHEET_RY; dy <= ICO_SHEET_RY; dy++) {
         for (int32_t dx = -ICO_SHEET_RX; dx <= ICO_SHEET_RX; dx++) {
-            const uint32_t k = covAt(cov, w, h, x + dx, y + dy);
-            r = k > r ? k : r;
+            const uint32_t k =
+                covAt(cov, w, h, x + dx, y + dy) * kWx[dx < 0 ? -dx : dx] * kWy[dy < 0 ? -dy : dy];
+            m = k > m ? k : m;
         }
     }
+    const uint32_t r = (m + 500000u) / 1000000u;
     const uint32_t a = s->rimOn ? (c > r ? c : r) : c;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
     /* the threshold in 32nds: the Bayer entry's centre, or a half */

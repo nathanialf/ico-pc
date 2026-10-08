@@ -12,11 +12,26 @@
 #ifndef ICO_SHEET_TEXT_HLSLI
 #define ICO_SHEET_TEXT_HLSLI
 
-// The rim: the largest coverage within SHEET_RX texels across and SHEET_RY
-// texels down (a sheet texel is one x unit wide and one field line tall).
-// The values are the sheets' survey (port/ui/menu_font.c, above kSheetInk).
-#define SHEET_RX 4
-#define SHEET_RY 3
+// The rim: a weighted dilation of the coverage, the largest of
+// c(p + d) * WX[|dx|] * WY[|dy|] (per mille each) within SHEET_RX texels
+// across and SHEET_RY texels down (a sheet texel is one x unit wide and one
+// field line tall), so the dark halo fades out with the distance from the
+// letters.  The reach and the falloff are the sheets' survey
+// (port/ui/menu_font.c, above kSheetInk): the English sheets' rim alpha.
+#define SHEET_RX 6
+#define SHEET_RY 4
+#define SHEET_WX_0 1000
+#define SHEET_WX_1 760
+#define SHEET_WX_2 610
+#define SHEET_WX_3 540
+#define SHEET_WX_4 500
+#define SHEET_WX_5 390
+#define SHEET_WX_6 330
+#define SHEET_WY_0 1000
+#define SHEET_WY_1 770
+#define SHEET_WY_2 440
+#define SHEET_WY_3 360
+#define SHEET_WY_4 270
 // The levels the opacity and the rim-to-fill mix are quantised to (the
 // sheets' 16 colours hold three antialiasing steps between none and full).
 #define SHEET_LEVELS 5
@@ -35,6 +50,34 @@
 #define SHEET_GH (2 + 2 * SHEET_RY)
 
 #ifndef ICO_SHEET_TEXT_C
+
+// The falloff across at |dx| = i (0..SHEET_RX) and down at |dy| = i
+// (0..SHEET_RY), per mille; constant under [unroll].
+uint sheet_wx(int i)
+{
+    return i == 0   ? (uint)SHEET_WX_0
+           : i == 1 ? (uint)SHEET_WX_1
+           : i == 2 ? (uint)SHEET_WX_2
+           : i == 3 ? (uint)SHEET_WX_3
+           : i == 4 ? (uint)SHEET_WX_4
+           : i == 5 ? (uint)SHEET_WX_5
+                    : (uint)SHEET_WX_6;
+}
+uint sheet_wy(int i)
+{
+    return i == 0   ? (uint)SHEET_WY_0
+           : i == 1 ? (uint)SHEET_WY_1
+           : i == 2 ? (uint)SHEET_WY_2
+           : i == 3 ? (uint)SHEET_WY_3
+                    : (uint)SHEET_WY_4;
+}
+
+// The rim from the largest weighted coverage m (c * wx * wy, 0..255e6):
+// 0..255, rounded.
+uint sheet_rim(uint m)
+{
+    return (m + 500000u) / 1000000u;
+}
 
 // The threshold (in 32nds) at sheet texel p; dither 0: SHEET_T_OFF.
 uint sheet_threshold(int2 p, uint dither)

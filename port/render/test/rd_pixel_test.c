@@ -1045,31 +1045,31 @@ static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1};    /* the English sheets: 
 static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1};   /* French, Italian, Spanish: grey */
 static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1}; /* the dark inks: no rim */
 
-/* a few shapes more than the rim's reach inside the edges (x 5..34 with
- * SHEET_RX 4, y 4..15 with SHEET_RY 3), so no edge texel has a rim: the
+/* a few shapes more than the rim's reach inside the edges (x 7..32 with
+ * SHEET_RX 6, y 5..14 with SHEET_RY 4), so no edge texel has a rim: the
  * RGBA8 reference clamps to its edge texels where the shader rebuilds
  * texels beyond the edge, and the two agree only where both are clear: a
  * solid block, a soft diagonal edge, a thin stroke of partial coverage, a
  * noisy patch.  (With the shapes 3 texels in, written for a smaller reach,
  * the magnified alpha was 64 to 78 off along the left and right edges.) */
-_Static_assert(ICO_SHEET_RX <= 4 && ICO_SHEET_RY <= 3, "sheetCov's margins hold the rim's reach");
+_Static_assert(ICO_SHEET_RX <= 6 && ICO_SHEET_RY <= 4, "sheetCov's margins hold the rim's reach");
 
 static uint8_t sheetCov(int x, int y)
 {
-    if (x < 5 || y < 4 || x >= SHEET_W - 5 || y >= SHEET_H - 4) {
+    if (x < 7 || y < 5 || x >= SHEET_W - 7 || y >= SHEET_H - 5) {
         return 0;
     }
-    if (x >= 5 && x < 11 && y >= 4 && y < 16) {
+    if (x < 12) {
         return 0xFF;
     }
-    if (x >= 13 && x < 23 && y >= 4 && y < 16) {
-        const int v = ((x - 13) * 2 - (y - 4)) * 40 + 128;
+    if (x >= 14 && x < 22) {
+        const int v = ((x - 14) * 2 - (y - 5)) * 40 + 128;
         return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
     }
-    if (y >= 4 && y < 16 && (x == 25 || x == 26)) {
-        return x == 25 ? 160 : 60;
+    if (x == 23 || x == 24) {
+        return x == 23 ? 160 : 60;
     }
-    if (x >= 28 && x < 35 && y >= 5 && y < 15) {
+    if (x >= 26 && y >= 6 && y < 14) {
         return (uint8_t)hash((uint32_t)(y * 64 + x) + 77u);
     }
     return 0;

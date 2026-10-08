@@ -50,13 +50,22 @@ DualOut font_ps(SpriteVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// The coverage byte at texel p of t1; 0 outside the texture.
-uint sheet_cov(int2 p, int2 size)
+// The coverage bytes of the 2x2 texels at q (x), q + (1, 0) (y),
+// q + (0, 1) (z) and q + (1, 1) (w) of t1, in one gather (the sample point
+// is the corner the four share, half a texel from any other footprint); 0
+// outside the texture, whatever the sampler's address mode.
+uint4 sheet_cov4(int2 q, int2 size)
 {
-    if (p.x < 0 || p.y < 0 || p.x >= size.x || p.y >= size.y) {
-        return 0u;
-    }
-    return (uint)floor(g_atlas.Load(int3(p, 0)).r * 255.0 + 0.5);
+    const float4 v = g_atlas.GatherRed(g_sampler, (float2(q) + 1.0) / float2(size));
+    // Gather's order: x (0, 1), y (1, 1), z (1, 0), w (0, 0)
+    uint4 c = uint4(floor(float4(v.w, v.z, v.x, v.y) * 255.0 + 0.5));
+    const bool in0x = q.x >= 0 && q.x < size.x, in1x = q.x + 1 >= 0 && q.x + 1 < size.x;
+    const bool in0y = q.y >= 0 && q.y < size.y, in1y = q.y + 1 >= 0 && q.y + 1 < size.y;
+    c.x = in0x && in0y ? c.x : 0u;
+    c.y = in1x && in0y ? c.y : 0u;
+    c.z = in0x && in1y ? c.z : 0u;
+    c.w = in1x && in1y ? c.w : 0u;
+    return c;
 }
 
 DualOut font_sheet_ps(SpriteVSOut i)
@@ -78,21 +87,40 @@ DualOut font_sheet_ps(SpriteVSOut i)
         const float2 base = floor(pos);
         const float2 f = pos - base;
         const int2 p0 = int2(base);
+        // the grid is even on both sides (2 + 2 * reach): one gather a 2x2
+        // block, a quarter of the reads of one Load a texel
         uint g[SHEET_GH][SHEET_GW];
-        [unroll] for (int gy = 0; gy < SHEET_GH; gy++) {
-            [unroll] for (int gx = 0; gx < SHEET_GW; gx++) {
-                g[gy][gx] = sheet_cov(p0 + int2(gx - SHEET_RX, gy - SHEET_RY), size);
+        [unroll] for (int by = 0; by < SHEET_GH; by += 2) {
+            [unroll] for (int bx = 0; bx < SHEET_GW; bx += 2) {
+                const uint4 c = sheet_cov4(p0 + int2(bx - SHEET_RX, by - SHEET_RY), size);
+                g[by][bx] = c.x;
+                g[by][bx + 1] = c.y;
+                g[by + 1][bx] = c.z;
+                g[by + 1][bx + 1] = c.w;
+            }
+        }
+        // the rim's weighted dilation, separable (the weight is a product
+        // and a max commutes with a non-negative factor, so this is
+        // exactly the max over the box of c * wx * wy): each grid row's
+        // largest c * wx for the two texel columns, then down with wy
+        uint h[SHEET_GH][2];
+        [unroll] for (int ry = 0; ry < SHEET_GH; ry++) {
+            [unroll] for (int tx = 0; tx < 2; tx++) {
+                uint mx = 0u;
+                [unroll] for (int dx = 0; dx <= 2 * SHEET_RX; dx++) {
+                    mx = max(mx, g[ry][tx + dx] * sheet_wx(abs(dx - SHEET_RX)));
+                }
+                h[ry][tx] = mx;
             }
         }
         float2 v[2][2];
         [unroll] for (int ty = 0; ty < 2; ty++) {
             [unroll] for (int tx = 0; tx < 2; tx++) {
-                uint r = 0u;
+                uint m = 0u;
                 [unroll] for (int dy = 0; dy <= 2 * SHEET_RY; dy++) {
-                    [unroll] for (int dx = 0; dx <= 2 * SHEET_RX; dx++) {
-                        r = max(r, g[ty + dy][tx + dx]);
-                    }
+                    m = max(m, h[ty + dy][tx] * sheet_wy(abs(dy - SHEET_RY)));
                 }
+                const uint r = sheet_rim(m);
                 const int2 p = p0 + int2(tx, ty);
                 const uint2 st = sheet_texel(g[ty + SHEET_RY][tx + SHEET_RX], r, style,
                                              sheet_threshold(p, style.w));

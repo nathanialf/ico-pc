@@ -868,8 +868,11 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                        coverage 0):
  *                          c  the coverage at (x, y);
  *                          r  the largest coverage within ICO_SHEET_RX
- *                             texels across and ICO_SHEET_RY down
- *                             (shader_consts.h): the rim;
+ *                             texels across and ICO_SHEET_RY down, each
+ *                             scaled by the falloff ICO_SHEET_WX[|dx|] *
+ *                             ICO_SHEET_WY[|dy|] (per mille,
+ *                             shader_consts.h), rounded: the rim, a dark
+ *                             halo that fades out;
  *                          a  rimOn ? max(c, r) : c, the texel's opacity;
  *                          t  c / a (0 where a is 0): rim (0) to fill (1);
  *                          a and t quantised to ICO_SHEET_LEVELS levels,
