@@ -291,6 +291,16 @@ jobs:
           if grep -q 'resizeableActivity.*false' manifest.txt; then echo "resizeableActivity is false"; exit 1; fi
           grep -q 'android:theme' manifest.txt
           grep -q 'density' android/app/src/main/AndroidManifest.xml
+          # the APK's own: configChanges is there, and when aapt2 prints it as
+          # a mask, the density bit (0x1000) is set
+          grep -q 'configChanges' manifest.txt
+          cc=$(grep -o 'configChanges(.*' manifest.txt | head -n1 | tr -d '\r')
+          hex=$(echo "$cc" | grep -o '0x[0-9a-fA-F]*$' || true)
+          if [ -n "$hex" ]; then
+            if [ $(( hex & 0x1000 )) -eq 0 ]; then echo "configChanges $hex lacks density"; exit 1; fi
+          else
+            echo "$cc" | grep -q 'density'
+          fi
 
           # SDL_main is exported (SDL's Java glue calls it)
           # (nm's output goes to a file first: grep -q closing the pipe makes nm exit 74 where SIGPIPE is ignored)
