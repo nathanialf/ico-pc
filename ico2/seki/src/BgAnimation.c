@@ -535,6 +535,13 @@ static void bga_noteLastKey(const char *fn, float f, int linear, const int *next
 
 #define BGA_NOTE_LAST_KEY(fn, k, f) bga_noteLastKey((fn), (f), (k)->linear, &((k) + 1)->linear)
 
+/* PC port: the three bga_GetMotion* store each angle as (short)(int)(f), not
+   (short)(f): the int rot[] is then sign-tested (_RotTransCurrentMatrixYXZ's
+   SIGNF), and a float converted straight to short and widened to int is
+   one conversion to int for clang, so an angle past 180 degrees kept its
+   unwrapped value and the sine its wrong sign on arm64 (the opening's
+   trunk shot was seen mirrored, issue 19).  The int is in range; its
+   conversion to short wraps as the EE's and gcc's code did. */
 static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
 {
     BgaPtKey *k;
@@ -562,9 +569,9 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
         pos[1] = p->pos[1];
         pos[2] = p->pos[2];
         pos[3] = 1.0f;
-        rot[0] = (short)(p->rot[0] * (65536.0f / 360.0f));
-        rot[1] = (short)(p->rot[1] * (65536.0f / 360.0f));
-        rot[2] = (short)(p->rot[2] * (65536.0f / 360.0f));
+        rot[0] = (short)(int)(p->rot[0] * (65536.0f / 360.0f));
+        rot[1] = (short)(int)(p->rot[1] * (65536.0f / 360.0f));
+        rot[2] = (short)(int)(p->rot[2] * (65536.0f / 360.0f));
         col[0] = p->col[0];
         col[1] = p->col[1];
         col[2] = p->col[2];
@@ -645,8 +652,8 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
             } else {
                 m1 = s1 * (tc * dv + td * (k1[1].rot[i] - k1->rot[i]));
             }
-            rot[i] = (short)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
-                             (65536.0f / 360.0f));
+            rot[i] = (short)(int)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
+                                  (65536.0f / 360.0f));
         }
         for (i = 0; i < 3; i++) {
             dv = k1->col[i] - k->col[i];
@@ -674,7 +681,8 @@ static void bga_GetMotion(float *pos, int *rot, float *col, BgaPtMotion *m)
             dv = k1->pos[i] - k->pos[i];
             pos[i] = k->pos[i] + u * dv;
             dv = k1->rot[i] - k->rot[i];
-            rot[i] = (short)((k->rot[i] + (180.0f < u * dv
+            rot[i] =
+                (short)(int)((k->rot[i] + (180.0f < u * dv
                                                ? u * dv - 360.0f
                                                : (u * dv < -180.0f ? u * dv + 360.0f : u * dv))) *
                              (65536.0f / 360.0f));
@@ -714,9 +722,9 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
         pos[1] = p->pos[1];
         pos[2] = p->pos[2];
         pos[3] = 1.0f;
-        rot[0] = (short)(p->rot[0] * (65536.0f / 360.0f));
-        rot[1] = (short)(p->rot[1] * (65536.0f / 360.0f));
-        rot[2] = (short)(p->rot[2] * (65536.0f / 360.0f));
+        rot[0] = (short)(int)(p->rot[0] * (65536.0f / 360.0f));
+        rot[1] = (short)(int)(p->rot[1] * (65536.0f / 360.0f));
+        rot[2] = (short)(int)(p->rot[2] * (65536.0f / 360.0f));
         col[0] = p->col[0];
         col[1] = p->col[1];
         col[2] = p->col[2];
@@ -819,8 +827,8 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
             } else {
                 m1 = s1 * (tc * dv + td * (k1[1].rot[i] - k1->rot[i]));
             }
-            rot[i] = (short)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
-                             (65536.0f / 360.0f));
+            rot[i] = (short)(int)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
+                                  (65536.0f / 360.0f));
         }
         for (i = 0; i < 3; i++) {
             dv = w[1][i] - w[0][i];
@@ -842,7 +850,7 @@ static void bga_GetMotionParticle(float *pos, int *rot, float *col, BgaPtMotion 
             dv = k1->pos[i] - k->pos[i];
             pos[i] = k->pos[i] + u * dv;
             dv = k1->rot[i] - k->rot[i];
-            rot[i] = (short)((k->rot[i] + u * dv) * (65536.0f / 360.0f));
+            rot[i] = (short)(int)((k->rot[i] + u * dv) * (65536.0f / 360.0f));
             dv = w[1][i] - w[0][i];
             col[i] = w[0][i] + u * dv;
         }
@@ -878,9 +886,9 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
         pos[1] = p->pos[1];
         pos[2] = p->pos[2];
         pos[3] = 1.0f;
-        rot[0] = (short)(p->rot[0] * (65536.0f / 360.0f));
-        rot[1] = (short)(p->rot[1] * (65536.0f / 360.0f));
-        rot[2] = (short)(p->rot[2] * (65536.0f / 360.0f));
+        rot[0] = (short)(int)(p->rot[0] * (65536.0f / 360.0f));
+        rot[1] = (short)(int)(p->rot[1] * (65536.0f / 360.0f));
+        rot[2] = (short)(int)(p->rot[2] * (65536.0f / 360.0f));
         col[0] = p->col[0];
         col[1] = p->col[1];
         col[2] = p->col[2];
@@ -961,8 +969,8 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
             } else {
                 m1 = s1 * (tc * dv + td * (k1[1].rot[i] - k1->rot[i]));
             }
-            rot[i] = (short)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
-                             (65536.0f / 360.0f));
+            rot[i] = (short)(int)((k->rot[i] * h00 + k1->rot[i] * h01 + m0 * h10 + m1 * h11) *
+                                  (65536.0f / 360.0f));
         }
         for (i = 0; i < 3; i++) {
             dv = k1->col[i] - k->col[i];
@@ -990,7 +998,8 @@ static void bga_GetMotionLightning(float *pos, int *rot, float *col, BgaPtMotion
             dv = k1->pos[i] - k->pos[i];
             pos[i] = k->pos[i] + u * dv;
             dv = k1->rot[i] - k->rot[i];
-            rot[i] = (short)((k->rot[i] + (180.0f < u * dv
+            rot[i] =
+                (short)(int)((k->rot[i] + (180.0f < u * dv
                                                ? u * dv - 360.0f
                                                : (u * dv < -180.0f ? u * dv + 360.0f : u * dv))) *
                              (65536.0f / 360.0f));
