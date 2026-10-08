@@ -206,7 +206,7 @@ static void fold_case(char *path, size_t size, size_t from)
                     break;
                 }
             }
-            if (j == n) {
+            if (j >= n) { /* n is -1 when the directory cannot be read */
                 path[end] = keep;
                 return; /* nothing like it: the rest cannot exist either */
             }
@@ -828,6 +828,15 @@ int sceMcDelete(int port, int slot, char *name)
     return begin(sceMcFuncNoDelete, ico_remove(path) == 0 ? 0 : sceMcResDeniedPermit);
 }
 
+/* 1 for a save's game file ("game.000" .. "game.009" in any folder) */
+static int game_file(const char *rel)
+{
+    const char *base = strrchr(rel, '/');
+
+    base = base != NULL ? base + 1 : rel;
+    return strncmp(base, "game.", 5) == 0;
+}
+
 int sceMcOpen(int port, int slot, char *name, int flags)
 {
     char rel[MC_REL_MAX];
@@ -915,6 +924,12 @@ int sceMcOpen(int port, int slot, char *name, int flags)
             free(fpath);
             tmp = fpath = NULL;
         }
+    }
+    if (game_file(rel)) {
+        /* v0.4.2: a save's game file is read (a Continue's load) or written
+           (a save): one line each, so a log that stops there says so */
+        fprintf(stderr, "mc: %s %s/%s%s\n", (mode & SCE_WRONLY) ? "writing" : "reading",
+                mc.root[port], rel, fp == NULL ? ": refused" : "");
     }
     if (fp == NULL) {
         return begin(sceMcFuncNoOpen, k < 0 ? sceMcResFullDevice : sceMcResDeniedPermit);
