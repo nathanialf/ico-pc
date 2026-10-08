@@ -40,6 +40,24 @@ add_executable(texpack_disc_test test/texpack_disc_test.c)
 target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
 
+# ico_gltf (v0.5.0, M2): glTF 2.0 for model packs (gltf.h), the dump's
+# .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
+# configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
+add_library(ico_gltf STATIC gltf.c)
+target_include_directories(ico_gltf PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_gltf PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_gltf PUBLIC ico_json ico_host_fs)
+if(NOT WIN32)
+    target_link_libraries(ico_gltf PUBLIC m)
+endif()
+
+# gltf_test: write -> read bit-exact (static and skinned), the written JSON,
+# a GLB container, a Blender-style file, every rejection (CPU only; its
+# files under the build tree).
+add_executable(gltf_test test/gltf_test.c)
+target_compile_options(gltf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(gltf_test PRIVATE ico_gltf)
+
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     if(NOT DEFINED ICO_DISC_IMAGE)
@@ -51,6 +69,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set(ICO_TEXPACK_DIR "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements"
         CACHE PATH "A PCSX2 texture pack's replacements folder for texpack_disc_test")
     add_test(NAME texpack_name COMMAND texpack_name_test)
+    add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(texpack_disc PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP texpack_names)
