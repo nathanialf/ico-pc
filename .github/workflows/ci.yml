@@ -284,7 +284,9 @@ jobs:
           grep -q "targetSdkVersion:'35'" badging.txt
 
           # SDL_main is exported (SDL's Java glue calls it)
-          "$llvm/llvm-nm" -D "$so" | grep -q ' T SDL_main'
+          # (nm's output goes to a file first: grep -q closing the pipe makes nm exit 74 where SIGPIPE is ignored)
+          "$llvm/llvm-nm" -D "$so" > nm.txt
+          grep -q ' T SDL_main' nm.txt
 
           # no compiled shaders from the DXC step in the program
           n=$(strings "$so" | grep -c DXBC || true)
