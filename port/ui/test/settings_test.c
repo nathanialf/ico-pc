@@ -4447,6 +4447,28 @@ static int render(void)
         press(0x10); /* Back leaves for Extras, the Music row under the cursor */
         CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
         gallery_SetEngine(NULL);
+        /* v0.4.2 (K): Extras > Characters at the same 4x, the colours from
+           a fixed seed, the cursor on Ico's tunic, its swatch beside the
+           value */
+        {
+            int el[8], cl[16];
+            ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+            ico_appearance_randomize(12345u);
+            lt_ext_Layout(exL)->curItem = el[3];
+            frame(0);
+            press(0x40);
+            const int chL = ui_SettingsPageLayout(UI_PAGE_CHARACTERS);
+            CHECK(settle(chL, 60), "Characters at 4x");
+            ui_SettingsPageRows(UI_PAGE_CHARACTERS, cl, NULL, NULL, 16);
+            lt_ext_Layout(chL)->curItem = cl[5];
+            for (int k = 0; k < 4; k++) {
+                frame(0); /* the page refreshes */
+            }
+            snap4("settings_characters_4x.png");
+            ico_appearance_reset();
+            press(0x10);
+            CHECK(settle(exL, 60), "back to Extras from Characters at 4x");
+        }
     }
     /* every screen presented at Enhanced 1080p (snap1080) */
     {
