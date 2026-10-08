@@ -91,6 +91,8 @@ static int s_fullscreen;
 static IcoVideoOptions s_videoLast;
 
 /* renderer wave 7 (R7b): the presentation loop (ico_window_pace) */
+static int s_pollRestarted; /* N4: the poll's restart at the first game frame, once */
+
 static struct {
     int framerate;           /* ico_video_framerate() as last applied */
     unsigned cutSerial;      /* ico_video_cut_serial() last passed on */
@@ -1495,6 +1497,12 @@ static void pace(int hz)
             s_pres.frame = fn;
             s_pres.tickPrev = s_pres.tickAt;
             s_pres.tickAt = s_deadline - period;
+            if (!s_pollRestarted) {
+                /* N4: the first game frame (the opening scene follows it)
+                   restarts the surface-size poll's every-present spell */
+                s_pollRestarted = 1;
+                rhi_SurfacePollRestart();
+            }
             s_pres.statFrames++;
         }
     }

@@ -565,6 +565,11 @@ static bool vkr_PollSurfaceOn(void)
  * the swapchain as a suboptimal present with a size change does, and the
  * renderer's output follows it at the next acquire
  * (rd__OutputFollowSwapchain). */
+void rhi_SurfacePollRestart(void)
+{
+    s_swapMadeNs = vkr_NowNs();
+}
+
 static void vkr_PollSurface(void)
 {
     if (!vkr_PollSurfaceOn() || !g_vkr.swapchain) {

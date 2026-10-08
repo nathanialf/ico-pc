@@ -152,6 +152,11 @@ bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
     return be()->SwapchainSize(w, h);
 }
 
+void rhi_SurfacePollRestart(void)
+{
+    be()->SurfacePollRestart();
+}
+
 RhiTexture rhi_AcquireBackbuffer(void)
 {
     return be()->AcquireBackbuffer();

@@ -25,6 +25,7 @@
 #define rhi_ResizeSwapchain     RHI__NAME(ResizeSwapchain)
 #define rhi_SwapchainFormat     RHI__NAME(SwapchainFormat)
 #define rhi_SwapchainSize       RHI__NAME(SwapchainSize)
+#define rhi_SurfacePollRestart  RHI__NAME(SurfacePollRestart)
 #define rhi_AcquireBackbuffer   RHI__NAME(AcquireBackbuffer)
 #define rhi_Present             RHI__NAME(Present)
 #define rhi_ReleaseSurface      RHI__NAME(ReleaseSurface)

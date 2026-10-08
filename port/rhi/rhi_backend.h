@@ -28,6 +28,7 @@
     X(ResizeSwapchain)                                                                             \
     X(SwapchainFormat)                                                                             \
     X(SwapchainSize)                                                                               \
+    X(SurfacePollRestart)                                                                          \
     X(AcquireBackbuffer)                                                                           \
     X(Present)                                                                                     \
     X(ReleaseSurface)                                                                              \

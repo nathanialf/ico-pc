@@ -529,6 +529,12 @@ RhiFormat rhi_SwapchainFormat(void);
  * *w, *h left alone) when there is no swapchain (headless, the surface
  * released). */
 bool rhi_SwapchainSize(uint32_t *w, uint32_t *h);
+/* v0.4.2 N4: the surface-size poll runs at every present again for a
+ * while (as it does after a swapchain is made); called at the first game
+ * frame, which can come long after the window opened (the disc import and
+ * extraction on a first start), so the opening scene is covered.  A no-op
+ * on backends that do not poll. */
+void rhi_SurfacePollRestart(void);
 /* Acquire the next backbuffer image for this frame; returns id 0 when the
  * swapchain must be recreated. */
 RhiTexture rhi_AcquireBackbuffer(void);

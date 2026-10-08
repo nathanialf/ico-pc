@@ -133,6 +133,11 @@ bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
     return true;
 }
 
+void rhi_SurfacePollRestart(void)
+{
+    /* D3D12 learns a size change from DXGI; nothing to poll */
+}
+
 RhiTexture rhi_AcquireBackbuffer(void)
 {
     RhiTexture out = {0};
