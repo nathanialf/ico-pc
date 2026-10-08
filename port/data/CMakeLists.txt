@@ -62,6 +62,21 @@ target_compile_options(ico_libchdr PRIVATE
 target_compile_options(ico_libchdr PRIVATE -w)
 set_target_properties(ico_libchdr PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# ico_json (v0.5.0, M1): json.h's RFC 8259 reader, no dependencies; read
+# by archive.c (meta.json) and port/render's glTF loader.
+add_library(ico_json STATIC json.c)
+target_include_directories(ico_json PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_json PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+
+# json_test: numbers (signs, fractions, exponents, the integer views),
+# nesting and the depth limit, escapes, malformed input (CPU only).
+add_executable(json_test test/json_test.c)
+target_compile_options(json_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(json_test PRIVATE ico_json)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME json COMMAND json_test)
+endif()
+
 # archive.c is the VFS backend over ico.o2r; extract.c the first-run
 # extractor that writes it (it calls host_config.c's SHA-1, which ico_pc and
 # archive_test compile).
@@ -86,6 +101,7 @@ target_compile_options(ico_port_data PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(ico_port_data INTERFACE ico_platform)
 target_link_libraries(ico_port_data INTERFACE ico_miniz)
 target_link_libraries(ico_port_data PRIVATE ico_libchdr)
+target_link_libraries(ico_port_data PUBLIC ico_json)
 target_include_directories(ico_port_data PRIVATE "${CMAKE_SOURCE_DIR}/port/third_party/miniz")
 target_compile_definitions(ico_port_data PRIVATE MINIZ_NO_ZLIB_COMPATIBLE_NAMES=1)
 

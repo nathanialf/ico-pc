@@ -9,6 +9,7 @@
 #define _FILE_OFFSET_BITS 64
 
 #include "archive.h"
+#include "json.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -67,56 +68,7 @@ static void say(char *why, size_t n, const char *fmt, ...)
     va_end(ap);
 }
 
-/* --- a small JSON reader (RFC 8259), enough for meta.json ------------------ */
-
-enum { J_NULL, J_FALSE, J_TRUE, J_NUM, J_STR, J_ARR, J_OBJ };
-
-typedef struct JNode {
-    int type;
-    const char *key; /* inside an object */
-    const char *str; /* J_STR */
-    uint64_t u;      /* J_NUM: a non-negative integer */
-    int is_int;      /* J_NUM: u holds the value exactly */
-    int child;       /* J_ARR, J_OBJ: first member, -1 if none */
-    int next;        /* next member of the parent, -1 */
-} JNode;
-
-typedef struct JParse {
-    char *p;
-    JNode *n;
-    int count;
-    int cap;
-    int bad;
-} JParse;
-
-#define J_DEPTH_MAX 16
-
-static int jnew(JParse *j, int type)
-{
-    if (j->count == j->cap) {
-        int cap = j->cap ? j->cap * 2 : 64;
-        JNode *n = realloc(j->n, (size_t)cap * sizeof(*n));
-
-        if (n == NULL) {
-            j->bad = 1;
-            return -1;
-        }
-        j->n = n;
-        j->cap = cap;
-    }
-    memset(&j->n[j->count], 0, sizeof(JNode));
-    j->n[j->count].type = type;
-    j->n[j->count].child = -1;
-    j->n[j->count].next = -1;
-    return j->count++;
-}
-
-static void jws(JParse *j)
-{
-    while (*j->p == ' ' || *j->p == '\t' || *j->p == '\r' || *j->p == '\n') {
-        j->p++;
-    }
-}
+/* --- meta.json through json.h ---------------------------------------------- */
 
 static int hexval(char c)
 {
@@ -132,270 +84,20 @@ static int hexval(char c)
     return -1;
 }
 
-/* At '"': unescapes the string in place and returns it, NUL-terminated. */
-static const char *jstring(JParse *j)
+static const char *jget_str(const IcoJsonNode *obj, const char *key)
 {
-    char *r = j->p + 1;
-    char *w = r;
-    const char *s = r;
-
-    for (;;) {
-        unsigned char c = (unsigned char)*r;
-
-        if (c == '\0' || c < 0x20) {
-            j->bad = 1;
-            return NULL;
-        }
-        if (c == '"') {
-            break;
-        }
-        if (c != '\\') {
-            *w++ = *r++;
-            continue;
-        }
-        r++;
-        switch (*r) {
-        case '"':
-        case '\\':
-        case '/':
-            *w++ = *r++;
-            break;
-        case 'b':
-            *w++ = '\b';
-            r++;
-            break;
-        case 'f':
-            *w++ = '\f';
-            r++;
-            break;
-        case 'n':
-            *w++ = '\n';
-            r++;
-            break;
-        case 'r':
-            *w++ = '\r';
-            r++;
-            break;
-        case 't':
-            *w++ = '\t';
-            r++;
-            break;
-        case 'u': {
-            unsigned v = 0;
-            int i;
-
-            for (i = 1; i <= 4; i++) {
-                int h = hexval(r[i]);
-
-                if (h < 0) {
-                    j->bad = 1;
-                    return NULL;
-                }
-                v = v << 4 | (unsigned)h;
-            }
-            r += 5;
-            /* UTF-8; a surrogate (outside the BMP) becomes '?' */
-            if (v < 0x80) {
-                *w++ = (char)v;
-            } else if (v < 0x800) {
-                *w++ = (char)(0xC0 | v >> 6);
-                *w++ = (char)(0x80 | (v & 0x3F));
-            } else if (v >= 0xD800 && v < 0xE000) {
-                *w++ = '?';
-            } else {
-                *w++ = (char)(0xE0 | v >> 12);
-                *w++ = (char)(0x80 | (v >> 6 & 0x3F));
-                *w++ = (char)(0x80 | (v & 0x3F));
-            }
-            break;
-        }
-        default:
-            j->bad = 1;
-            return NULL;
-        }
-    }
-    j->p = r + 1;
-    *w = '\0';
-    return s;
+    return ico_json_str(ico_json_get(obj, key));
 }
 
-static int jvalue(JParse *j, int depth)
+/* a non-negative integer exactly (json.h's is_int) */
+static int jget_u64(const IcoJsonNode *obj, const char *key, uint64_t *out)
 {
-    int idx;
-
-    jws(j);
-    if (depth > J_DEPTH_MAX) {
-        j->bad = 1;
-        return -1;
-    }
-    switch (*j->p) {
-    case '{':
-    case '[': {
-        int obj = *j->p == '{';
-        char close = obj ? '}' : ']';
-        int last = -1;
-
-        idx = jnew(j, obj ? J_OBJ : J_ARR);
-        if (idx < 0) {
-            return -1;
-        }
-        j->p++;
-        jws(j);
-        if (*j->p == close) {
-            j->p++;
-            return idx;
-        }
-        for (;;) {
-            const char *key = NULL;
-            int v;
-
-            jws(j);
-            if (obj) {
-                if (*j->p != '"' || (key = jstring(j)) == NULL) {
-                    j->bad = 1;
-                    return -1;
-                }
-                jws(j);
-                if (*j->p != ':') {
-                    j->bad = 1;
-                    return -1;
-                }
-                j->p++;
-            }
-            v = jvalue(j, depth + 1);
-            if (v < 0) {
-                return -1;
-            }
-            j->n[v].key = key;
-            if (last < 0) {
-                j->n[idx].child = v;
-            } else {
-                j->n[last].next = v;
-            }
-            last = v;
-            jws(j);
-            if (*j->p == ',') {
-                j->p++;
-                continue;
-            }
-            if (*j->p == close) {
-                j->p++;
-                return idx;
-            }
-            j->bad = 1;
-            return -1;
-        }
-    }
-    case '"': {
-        const char *s = jstring(j);
-
-        if (s == NULL) {
-            return -1;
-        }
-        idx = jnew(j, J_STR);
-        if (idx >= 0) {
-            j->n[idx].str = s;
-        }
-        return idx;
-    }
-    case 't':
-        if (strncmp(j->p, "true", 4) == 0) {
-            j->p += 4;
-            return jnew(j, J_TRUE);
-        }
-        break;
-    case 'f':
-        if (strncmp(j->p, "false", 5) == 0) {
-            j->p += 5;
-            return jnew(j, J_FALSE);
-        }
-        break;
-    case 'n':
-        if (strncmp(j->p, "null", 4) == 0) {
-            j->p += 4;
-            return jnew(j, J_NULL);
-        }
-        break;
-    default: {
-        char *start = j->p;
-        uint64_t u = 0;
-        int digits = 0;
-        int exact = 1;
-
-        if (*j->p == '-') {
-            exact = 0;
-            j->p++;
-        }
-        while (*j->p >= '0' && *j->p <= '9') {
-            unsigned d = (unsigned)(*j->p - '0');
-
-            if (u > (UINT64_MAX - d) / 10) {
-                exact = 0;
-            }
-            u = u * 10 + d;
-            digits++;
-            j->p++;
-        }
-        if (*j->p == '.' || *j->p == 'e' || *j->p == 'E') {
-            char *end;
-
-            exact = 0;
-            (void)strtod(start, &end);
-            j->p = end;
-        }
-        if (digits == 0) {
-            break;
-        }
-        idx = jnew(j, J_NUM);
-        if (idx >= 0) {
-            j->n[idx].u = u;
-            j->n[idx].is_int = exact;
-        }
-        return idx;
-    }
-    }
-    j->bad = 1;
-    return -1;
+    return ico_json_u64(ico_json_get(obj, key), out);
 }
 
-static int jget(const JParse *j, int obj, const char *key)
+static int jget_bool(const IcoJsonNode *obj, const char *key)
 {
-    int c;
-
-    if (obj < 0 || j->n[obj].type != J_OBJ) {
-        return -1;
-    }
-    for (c = j->n[obj].child; c >= 0; c = j->n[c].next) {
-        if (strcmp(j->n[c].key, key) == 0) {
-            return c;
-        }
-    }
-    return -1;
-}
-
-static const char *jget_str(const JParse *j, int obj, const char *key)
-{
-    int v = jget(j, obj, key);
-
-    return v >= 0 && j->n[v].type == J_STR ? j->n[v].str : NULL;
-}
-
-static int jget_u64(const JParse *j, int obj, const char *key, uint64_t *out)
-{
-    int v = jget(j, obj, key);
-
-    if (v < 0 || j->n[v].type != J_NUM || !j->n[v].is_int) {
-        return -1;
-    }
-    *out = j->n[v].u;
-    return 0;
-}
-
-static int jget_bool(const JParse *j, int obj, const char *key)
-{
-    int v = jget(j, obj, key);
-
-    return v >= 0 && j->n[v].type == J_TRUE;
+    return ico_json_bool(ico_json_get(obj, key)) == 1;
 }
 
 /* --- the archive ----------------------------------------------------------- */
@@ -498,33 +200,33 @@ static void arch_free(Arch *a)
     }
 }
 
-static int parse_entry(Arch *a, mz_zip_archive *zip, const JParse *j, int node, AEntry *ae,
-                       char *why, size_t whysize)
+static int parse_entry(Arch *a, mz_zip_archive *zip, const IcoJsonNode *node, AEntry *ae, char *why,
+                       size_t whysize)
 {
-    const char *path = jget_str(j, node, "path");
-    const char *name = jget_str(j, node, "name");
-    const char *data = jget_str(j, node, "data");
-    const char *tail = jget_str(j, node, "tail");
-    int date = jget(j, node, "date");
+    const char *path = jget_str(node, "path");
+    const char *name = jget_str(node, "name");
+    const char *data = jget_str(node, "data");
+    const char *tail = jget_str(node, "tail");
+    const IcoJsonNode *date = ico_json_get(node, "date");
     uint64_t lsn, size;
     int i;
 
     memset(ae, 0, sizeof(*ae));
-    if (path == NULL || name == NULL || jget_u64(j, node, "lsn", &lsn) != 0 ||
-        jget_u64(j, node, "size", &size) != 0 || lsn > UINT32_MAX || size > UINT32_MAX ||
+    if (path == NULL || name == NULL || jget_u64(node, "lsn", &lsn) != 0 ||
+        jget_u64(node, "size", &size) != 0 || lsn > UINT32_MAX || size > UINT32_MAX ||
         ico_vfs_normalize(path, ae->path, sizeof(ae->path)) != 0) {
         say(why, whysize, "meta.json: a malformed entry (%s)", path ? path : "no path");
         return -1;
     }
     ae->e.lsn = (uint32_t)lsn;
     ae->e.size = (uint32_t)size;
-    ae->e.is_dir = (uint8_t)jget_bool(j, node, "dir");
+    ae->e.is_dir = (uint8_t)jget_bool(node, "dir");
     copy_str(ae->e.name, sizeof(ae->e.name), name);
-    if (date >= 0 && j->n[date].type == J_ARR) {
-        int c = j->n[date].child;
+    if (date != NULL && date->type == ICO_JSON_ARR) {
+        const IcoJsonNode *c = date->child;
 
-        for (i = 0; i < 7 && c >= 0; i++, c = j->n[c].next) {
-            ae->e.date[i] = (uint8_t)j->n[c].u;
+        for (i = 0; i < 7 && c != NULL; i++, c = c->next) {
+            ae->e.date[i] = (uint8_t)c->u;
         }
     }
     ae->nsec = ico_vfs_size_to_sectors(ae->e.size);
@@ -556,11 +258,12 @@ static int parse_entry(Arch *a, mz_zip_archive *zip, const JParse *j, int node, 
 static int arch_open(const char *path, Arch **out, char *why, size_t whysize)
 {
     mz_zip_archive zip;
-    JParse j;
+    IcoJson j;
+    const IcoJsonNode *root, *src, *ents, *c;
     Arch *a;
     char *text = NULL;
     size_t textlen = 0;
-    int idx, root, src, ents, c;
+    int idx;
     int64_t end;
     uint64_t v;
     int ok = 0;
@@ -602,55 +305,40 @@ static int arch_open(const char *path, Arch **out, char *why, size_t whysize)
         say(why, whysize, "%s has no readable " ICO_ARCHIVE_META, path);
         goto done;
     }
-    /* NUL-terminate the copy the parser works in */
-    {
-        char *t = realloc(text, textlen + 1);
-
-        if (t == NULL) {
-            say(why, whysize, "out of memory");
-            goto done;
-        }
-        text = t;
-        text[textlen] = '\0';
-    }
-    j.p = text;
-    root = jvalue(&j, 0);
-    jws(&j);
-    if (root < 0 || j.bad || *j.p != '\0' || j.n[root].type != J_OBJ) {
+    if (ico_json_parse(text, textlen, &j) != 0 || j.root->type != ICO_JSON_OBJ) {
         say(why, whysize, ICO_ARCHIVE_META " is not valid JSON");
         goto done;
     }
-    copy_str(a->info.format, sizeof(a->info.format), jget_str(&j, root, "format"));
-    if (jget_u64(&j, root, "version", &v) == 0 && v <= INT_MAX) {
+    root = j.root;
+    copy_str(a->info.format, sizeof(a->info.format), jget_str(root, "format"));
+    if (jget_u64(root, "version", &v) == 0 && v <= INT_MAX) {
         a->info.version = (int)v;
     }
-    copy_str(a->info.extractor, sizeof(a->info.extractor), jget_str(&j, root, "extractor"));
-    copy_str(a->info.disc_id, sizeof(a->info.disc_id), jget_str(&j, root, "disc_id"));
+    copy_str(a->info.extractor, sizeof(a->info.extractor), jget_str(root, "extractor"));
+    copy_str(a->info.disc_id, sizeof(a->info.disc_id), jget_str(root, "disc_id"));
     if (strcmp(a->info.format, ICO_ARCHIVE_FORMAT) != 0) {
         say(why, whysize, ICO_ARCHIVE_META ": format '%s', not " ICO_ARCHIVE_FORMAT,
             a->info.format);
         goto done;
     }
-    src = jget(&j, root, "source");
-    copy_str(a->info.iso_sha1, sizeof(a->info.iso_sha1), jget_str(&j, src, "sha1"));
-    copy_str(a->info.accepted_by, sizeof(a->info.accepted_by), jget_str(&j, src, "accepted_by"));
-    copy_str(a->info.elf_sha1, sizeof(a->info.elf_sha1), jget_str(&j, src, "elf_sha1"));
-    if (jget_u64(&j, src, "size", &v) == 0) {
+    src = ico_json_get(root, "source");
+    copy_str(a->info.iso_sha1, sizeof(a->info.iso_sha1), jget_str(src, "sha1"));
+    copy_str(a->info.accepted_by, sizeof(a->info.accepted_by), jget_str(src, "accepted_by"));
+    copy_str(a->info.elf_sha1, sizeof(a->info.elf_sha1), jget_str(src, "elf_sha1"));
+    if (jget_u64(src, "size", &v) == 0) {
         a->info.iso_size = v;
     }
-    if (jget_u64(&j, root, "volume_sectors", &v) != 0 || v == 0 || v > UINT32_MAX) {
+    if (jget_u64(root, "volume_sectors", &v) != 0 || v == 0 || v > UINT32_MAX) {
         say(why, whysize, ICO_ARCHIVE_META ": no volume_sectors");
         goto done;
     }
     a->info.volume_sectors = (uint32_t)v;
-    ents = jget(&j, root, "entries");
-    if (ents < 0 || j.n[ents].type != J_ARR) {
+    ents = ico_json_get(root, "entries");
+    if (ents == NULL || ents->type != ICO_JSON_ARR || ents->count > UINT32_MAX) {
         say(why, whysize, ICO_ARCHIVE_META ": no entries");
         goto done;
     }
-    for (c = j.n[ents].child; c >= 0; c = j.n[c].next) {
-        a->count++;
-    }
+    a->count = (uint32_t)ents->count;
     a->ent = calloc(a->count ? a->count : 1, sizeof(*a->ent));
     if (a->ent == NULL) {
         say(why, whysize, "out of memory");
@@ -658,8 +346,8 @@ static int arch_open(const char *path, Arch **out, char *why, size_t whysize)
     }
     a->info.entries = a->count;
     idx = 0;
-    for (c = j.n[ents].child; c >= 0; c = j.n[c].next, idx++) {
-        if (parse_entry(a, &zip, &j, c, &a->ent[idx], why, whysize) != 0) {
+    for (c = ents->child; c != NULL; c = c->next, idx++) {
+        if (parse_entry(a, &zip, c, &a->ent[idx], why, whysize) != 0) {
             goto done;
         }
     }
@@ -667,7 +355,7 @@ static int arch_open(const char *path, Arch **out, char *why, size_t whysize)
 
 done:
     mz_zip_reader_end(&zip);
-    free(j.n);
+    ico_json_free(&j);
     if (text != NULL) {
         mz_free(text);
     }
