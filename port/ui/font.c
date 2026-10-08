@@ -1148,12 +1148,22 @@ void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char
 /* stb's scales of a sheet em of emRows texel rows: a texel row is a field
    line (two y units) and a texel column an x unit, so the horizontal scale
    is the vertical one times 2 * UI_X_PER_Y (the typeface's proportions on
-   the 4:3 screen) */
-static void sheetScales(float emRows, float *sx, float *sy)
+   the 4:3 screen), times the sheets' width (ui_internal.h UI_SHEET_WIDTH)
+   and the item's wx */
+static float s_sheetWidth = UI_SHEET_WIDTH;
+
+float ui__SheetSetWidth(float k)
+{
+    const float old = s_sheetWidth;
+    s_sheetWidth = k;
+    return old;
+}
+
+static void sheetScales(float emRows, float wx, float *sx, float *sy)
 {
     const float y = stbtt_ScaleForMappingEmToPixels(&s_font.info, emRows > 0.01f ? emRows : 0.01f);
     *sy = y;
-    *sx = y * 2.0f * UI_X_PER_Y;
+    *sx = y * 2.0f * UI_X_PER_Y * s_sheetWidth * wx;
 }
 
 void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap)
@@ -1161,7 +1171,7 @@ void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineS
     float sx = 0.0f, sy = 0.0f;
     const int ok = ui_FontInit();
     if (ok) {
-        sheetScales(emRows, &sx, &sy);
+        sheetScales(emRows, 1.0f, &sx, &sy);
     }
     if (ascent) {
         *ascent = ok ? (float)s_font.ascent * sy : 0.0f;
@@ -1177,13 +1187,13 @@ void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineS
     }
 }
 
-float ui__SheetLineWidth(float emRows, const char *utf8, size_t len)
+float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len)
 {
     if (!utf8 || !ui_FontInit()) {
         return 0.0f;
     }
     float sx, sy;
-    sheetScales(emRows, &sx, &sy);
+    sheetScales(emRows, wx, &sx, &sy);
     const char *s = utf8, *end = utf8 + len;
     float pen = 0.0f;
     uint32_t prev = 0, cp;
@@ -1200,14 +1210,14 @@ float ui__SheetLineWidth(float emRows, const char *utf8, size_t len)
     return pen;
 }
 
-void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float penX,
+void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx, float penX,
                          float baseY, const char *utf8, size_t len)
 {
     if (!cov || !utf8 || w <= 0 || h <= 0 || !ui_FontInit()) {
         return;
     }
     float sx, sy;
-    sheetScales(emRows, &sx, &sy);
+    sheetScales(emRows, wx, &sx, &sy);
     const char *s = utf8, *end = utf8 + len;
     uint32_t prev = 0, cp;
     const float by = floorf(baseY), fy = baseY - by;

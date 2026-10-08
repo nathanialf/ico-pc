@@ -46,12 +46,15 @@ typedef struct UiMenuTextItem {
     int str;                   /* UiStrId: the text, lines split at '\n' */
     unsigned char align;       /* UI_ALIGN_LEFT / CENTER / RIGHT about x */
     unsigned char ink;         /* UiMenuTextInk: how the sheet colours the letters */
-    float em;                  /* the em, texels (vertical) */
-    float x;                   /* the anchor: the lettering's left edge, centre or right
-                                  edge, texels */
+    float em[5];               /* the em, texels (vertical), per language (UiLang) */
+    float x[5];                /* the anchor: the lettering's left edge, centre or right
+                                  edge, texels, per language */
     float pitch;               /* texels from one line's capitals to the next's */
     float y[5];                /* the first line's capital middle, texels, per language
                                   (UiLang: EN FR DE IT ES; the sheets differ in lines) */
+    float wx[5];               /* the lettering's width against the menus' (UI_SHEET_WIDTH),
+                                  per language: the five sheets were lettered apart and
+                                  their faces differ a little in size and width */
 } UiMenuTextItem;
 
 /* A texProperty row that draws an item's rectangle. */

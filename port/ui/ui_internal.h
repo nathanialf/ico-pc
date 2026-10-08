@@ -44,12 +44,15 @@ int ui__FontReusedNearest(void);
    menus' words are rasterised on the sheets' own texel grid: a texel
    column is an x unit, a texel row a field line (two y units), so an em of
    size y units is size / 2 rows and stb's horizontal scale is the
-   vertical one times 2 * UI_X_PER_Y.  Coverage 0..255, stb's bitmap as it
-   is (rd.h rd_CreateTextureSheet).
+   vertical one times 2 * UI_X_PER_Y (the typeface's own proportions on the
+   4:3 screen) times UI_SHEET_WIDTH (the sheets' lettering, below) times
+   the caller's wx.  Coverage 0..255, stb's bitmap as it is (rd.h
+   rd_CreateTextureSheet).
    ui__SheetVMetrics   ascent, descent (positive), line step and capital
                        height of an em of emRows rows, in rows
    ui__SheetLineWidth  the advance width of len bytes of utf8 (one line, no
-                       '\n'), kerning included, in texel columns
+                       '\n'), kerning included, in texel columns, the
+                       horizontal scale times wx (1: the menus' width)
    ui__SheetRasterLine those bytes rasterised into cov (w x h, rows stride
                        bytes apart), the pen at (penX, baseY) in texels,
                        fractional: each glyph at its fractional pen
@@ -66,9 +69,24 @@ int ui__FontReusedNearest(void);
                        them when it makes its first page; font.c is built
                        without it in several tests and tools) */
 void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap);
-float ui__SheetLineWidth(float emRows, const char *utf8, size_t len);
-void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float penX,
+float ui__SheetLineWidth(float emRows, float wx, const char *utf8, size_t len);
+void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx, float penX,
                          float baseY, const char *utf8, size_t len);
+/* The sheets' lettering is 0.8 as wide as the typeface's proportions on the
+   screen.  The units are right: display_texture draws a menu row's box
+   texW x units wide (dispW is 0 on the menu rows, or texW) and 2 * texH y
+   units tall (dispH = 2 * texH), so a texel is an x unit by a field line
+   on the 4:3 screen as the scales above have it.  But the sheets were
+   lettered for a texel a pixel of the GS's 512-wide frame (1.25 x units):
+   gif_SpriteSensitiveOffset maps the 640-unit grid onto 512 pixels and so
+   shows them at 512 / 640 of their width.  ctest menu_look's fit
+   (ICO_MENU_LOOK_GEOFIT) found the lettering's width at 0.79 .. 0.87 of
+   Arimo's per sheet (menu_PAL_03 / 04 0.79, 02 and the title 0.83, 01
+   and scei 0.87), the rest per item (UiMenuTextItem.wx). */
+#define UI_SHEET_WIDTH 0.8f
+/* Tests: the lettering's width factor (UI_SHEET_WIDTH) set; returns the
+   previous one */
+float ui__SheetSetWidth(float k);
 uint64_t ui__TextKey(const char *utf8, unsigned flags, int page);
 /* Tests (menu_look): the coverage strip of a menu text item in language lang
    (UiLang), the one ui_MenuWordDraw caches, into out (w x h bytes, the
@@ -76,6 +94,15 @@ uint64_t ui__TextKey(const char *utf8, unsigned flags, int page);
    item's. */
 struct UiMenuTextItem;
 int ui__MenuStripRaster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
+/* The letters' extra weight, texels across and down (menu_font.c embolden):
+   the sheets' strokes are heavier than Arimo Regular's at the same size
+   (the fill's amount 0.8 of the sheets' without it); ctest menu_look's fit
+   over 0 .. 1.2 across and 0 .. 0.6 down put the smallest difference at
+   0.3 / 0.3 (0.45 / 0.15 and 0.6 / 0 within 1 %). */
+#define UI_MENU_BOLD_X 0.3f
+#define UI_MENU_BOLD_Y 0.3f
+/* Tests: the letters' extra weight across and down (UI_MENU_BOLD_X / Y) set */
+void ui__MenuSetBold(float bx, float by);
 void ui__SetMenuFontHooks(void (*shutdown)(void), void (*forget)(void));
 
 #ifdef ICO_RD

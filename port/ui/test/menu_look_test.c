@@ -32,6 +32,15 @@
  * prints the best, instead of the checks.  The constants it finds are then
  * written into shader_consts.h, sheet_text.hlsli and kSheetInk by hand.
  *
+ * ICO_MENU_LOOK_GEOFIT=1 (development only): fits each item's em, width,
+ * anchor and capital middle per language to its sheet (geoFit) and prints
+ * them, instead of the checks; =2 keeps the width.  The menu text table's
+ * values came from it.  ICO_MENU_LOOK_BOLD=x,y and ICO_MENU_LOOK_WIDTH=k
+ * set the letters' weight and the menus' width for a run (the fit's
+ * grids).  ICO_MENU_LOOK_GEOM=1 prints every item's ink box and capitals
+ * against the sheet's; the medians per sheet and the limits' measures per
+ * language are always printed.
+ *
  * Exit 0, 1 on a failure, 77 without the ELF or the disc image (so it runs
  * where the disc is: main's release validation, never in a worktree).
  */
@@ -90,9 +99,10 @@
    0.30 0.29 0.23 0.31, max 1.10 1.02 1.03 1.04 1.04; p5 0.57.  The low ones:
    row 61's "10" (the sheet's digits fill the tile, Arimo's two are set at 60
    % to fit) and row 414 in Italian (the sheet's dash is a thick outlined
-   bar, Arimo's a thin rule) */
+   bar, Arimo's a thin rule); since the geometry fit, the digit 1 tiles reach
+   1.35 (Arimo's 1 has a foot, the sheets' none) */
 #define T_AMOUNT_LO 0.20f
-#define T_AMOUNT_HI 1.25f
+#define T_AMOUNT_HI 1.40f
 /* the rim / fill / edge shares, the worst of the three, absolute: median
    0.21 0.07 0.16 0.08 0.12, max 0.77 0.76 0.80 0.62 0.77; p95 0.62; the
    worst German menu_PAL_04 (rows 73 Accessing, 211 Loading, 249 Formatting:
@@ -479,13 +489,13 @@ static void inkOf(int ink, int lang, RdSheetStyle *st, int *col)
 
 /* the reference rectangle: grey and alpha 0..255 after the texture function
    (MODULATE with the sprite colour) */
-static int refRect(const Rect *r, uint8_t *grey, uint8_t *alpha)
+static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uint8_t *alpha)
 {
     uint8_t *cov = malloc((size_t)r->w * (size_t)r->h);
     if (!cov) {
         return -1;
     }
-    if (ui__MenuStripRaster(&ui_menu_text_items[r->item], r->lang, cov, r->w, r->h) != 0) {
+    if (ui__MenuStripRaster(it, r->lang, cov, r->w, r->h) != 0) {
         free(cov);
         return -1;
     }
@@ -506,6 +516,11 @@ static int refRect(const Rect *r, uint8_t *grey, uint8_t *alpha)
     return 0;
 }
 
+static int refRect(const Rect *r, uint8_t *grey, uint8_t *alpha)
+{
+    return refRectOf(r, &ui_menu_text_items[r->item], grey, alpha);
+}
+
 /* ------------------------------------------------------------- measures */
 
 typedef struct Measures {
@@ -515,6 +530,7 @@ typedef struct Measures {
     float capTop, baseline;         /* the first line's, rows */
     int hasLine;                    /* a run of 4 rows or more (a colon's dots have none) */
     float shareRim, shareFill, shareEdge;
+    float mx, my, sdx, sdy; /* the fill's centre and spread (standard deviation), texels */
     int ok;
 } Measures;
 
@@ -584,6 +600,22 @@ static void inkMeasures(const uint8_t *grey, const uint8_t *alpha, int w, int h,
         }
     }
     m->ink = total;
+    {
+        double sx = 0, sxx = 0, sy = 0, syy = 0;
+        for (int x = 0; x < w; x++) {
+            sx += col[x] * (x + 0.5);
+            sxx += col[x] * (x + 0.5) * (x + 0.5);
+        }
+        for (int y = 0; y < h; y++) {
+            sy += amt[y] * (y + 0.5);
+            syy += amt[y] * (y + 0.5) * (y + 0.5);
+        }
+        const double t = total > 0.0f ? total : 1.0;
+        m->mx = (float)(sx / t);
+        m->my = (float)(sy / t);
+        m->sdx = (float)sqrt(fmax(sxx / t - (sx / t) * (sx / t), 0.0));
+        m->sdy = (float)sqrt(fmax(syy / t - (sy / t) * (sy / t), 0.0));
+    }
     m->shareRim = any ? (float)rim / (float)any : 0.0f;
     m->shareFill = any ? (float)fill / (float)any : 0.0f;
     m->shareEdge = any ? (float)edge / (float)any : 0.0f;
@@ -699,6 +731,147 @@ static void measure(const Rect *r, const uint8_t *rg, const uint8_t *ra, Measure
     inkMeasures(rg, ra, r->w, r->h, ref);
 }
 
+/* ------------------------------------------------------------ geometry */
+
+/* The ink box and the first line of the strips against the sheets', per
+   language and sheet: medians of strip / sheet (the box's width and height,
+   the first line's capital height: capital top to baseline), the capital
+   top's offset (rows, strip less sheet) and the ink amount.  Single-line
+   items with a line on both. ICO_MENU_LOOK_GEOM=1 prints every item. */
+#define GEO_SHEETS 16
+#define GEO_ITEMS 256
+
+enum { G_W, G_H, G_CAP, G_TOP, G_INK, G_SX, G_SY, G_DX, G_DY, G_N };
+
+typedef struct Geo {
+    const char *sheet;
+    int n;
+    float v[G_N][GEO_ITEMS];
+} Geo;
+
+static Geo s_geo[UI_LANG_COUNT][GEO_SHEETS + 1]; /* [GEO_SHEETS]: the language's all */
+static float s_geoMed[UI_LANG_COUNT][G_N];       /* the language's medians */
+
+static int cmpFloat(const void *a, const void *b)
+{
+    const float x = *(const float *)a, y = *(const float *)b;
+    return x < y ? -1 : x > y;
+}
+
+static float median(const float *v, int n)
+{
+    float t[GEO_ITEMS];
+    if (n <= 0) {
+        return 0.0f;
+    }
+    memcpy(t, v, sizeof(float) * (size_t)n);
+    qsort(t, (size_t)n, sizeof(float), cmpFloat);
+    return n & 1 ? t[n / 2] : 0.5f * (t[n / 2 - 1] + t[n / 2]);
+}
+
+static void geoAdd(const Rect *r, const Measures *ms, const Measures *mr)
+{
+    const float sw = ms->right - ms->left, sh = ms->bottom - ms->top;
+    const float sc = ms->baseline - ms->capTop, rc = mr->baseline - mr->capTop;
+    if (!ms->hasLine || !mr->hasLine || sw < 2.0f || sh < 2.0f || sc < 2.0f) {
+        return;
+    }
+    const float v[G_N] = {(mr->right - mr->left) / sw,
+                          (mr->bottom - mr->top) / sh,
+                          rc / sc,
+                          mr->capTop - ms->capTop,
+                          mr->ink / ms->ink,
+                          mr->sdx / ms->sdx,
+                          mr->sdy / ms->sdy,
+                          mr->mx - ms->mx,
+                          mr->my - ms->my};
+    const char *env = getenv("ICO_MENU_LOOK_GEOM");
+    if (env && *env == '1') {
+        const LtProperty *e = &texProperty[r->row];
+        printf(
+            "menu_look: geom %s row %d item %d %s tex %dx%d disp %dx%d em %.1f: cap %.2f / "
+            "%.2f (x%.3f) width x%.3f height x%.3f top %+.2f ink x%.2f spread x%.3f y%.3f centre %+.2f %+.2f\n",
+            kLang[r->lang], r->row, r->item, r->sheet, e->texW, e->texH, e->dispW, e->dispH,
+            ui_menu_text_items[r->item].em[r->lang], rc, sc, v[G_CAP], v[G_W], v[G_H], v[G_TOP],
+            v[G_INK], v[G_SX], v[G_SY], v[G_DX], v[G_DY]);
+    }
+    int si = 0;
+    while (si < GEO_SHEETS && s_geo[r->lang][si].sheet && s_geo[r->lang][si].sheet != r->sheet) {
+        si++;
+    }
+    Geo *gs[2] = {si < GEO_SHEETS ? &s_geo[r->lang][si] : NULL, &s_geo[r->lang][GEO_SHEETS]};
+    for (int k = 0; k < 2; k++) {
+        Geo *g = gs[k];
+        if (!g || g->n >= GEO_ITEMS) {
+            continue;
+        }
+        if (k == 0) {
+            g->sheet = r->sheet;
+        }
+        for (int m = 0; m < G_N; m++) {
+            g->v[m][g->n] = v[m];
+        }
+        g->n++;
+    }
+}
+
+static void geoPrint(int lang)
+{
+    for (int si = 0; si <= GEO_SHEETS; si++) {
+        const Geo *g = &s_geo[lang][si];
+        if (g->n == 0) {
+            continue;
+        }
+        const char *name = si == GEO_SHEETS ? "all" : g->sheet;
+        const char *slash = strrchr(name, '/');
+        float med[G_N];
+        for (int m = 0; m < G_N; m++) {
+            med[m] = median(g->v[m], g->n);
+            if (si == GEO_SHEETS) {
+                s_geoMed[lang][m] = med[m];
+            }
+        }
+        printf("menu_look: geometry %s %-16s %3d items, strip / sheet: width %.3f height %.3f cap "
+               "%.3f top %+.2f ink %.2f spread %.3f %.3f centre %+.2f %+.2f\n",
+               kLang[lang], slash ? slash + 1 : name, g->n, med[G_W], med[G_H], med[G_CAP],
+               med[G_TOP], med[G_INK], med[G_SX], med[G_SY], med[G_DX], med[G_DY]);
+    }
+}
+
+/* the measures of every compared item, per language, for the limits'
+   comments: blur and plain (the larger background), the worst box edge
+   (single and several lines), the worse of capital top and baseline, the
+   ink ratio, the worst share */
+enum { S_BLUR, S_PLAIN, S_EDGE, S_LINE, S_INK, S_SHARE, S_N };
+
+static float s_stat[UI_LANG_COUNT][S_N][GEO_ITEMS];
+static int s_statMulti[UI_LANG_COUNT][GEO_ITEMS];
+
+static void statPrint(int lang, int n)
+{
+    static const char *const kName[S_N] = {"blur", "plain", "edge", "line", "ink", "share"};
+    printf("menu_look: limits %s:", kLang[lang]);
+    for (int q = 0; q <= S_N; q++) {
+        /* q == S_N: the edge of the items of several lines */
+        const int k = q == S_N ? S_EDGE : q;
+        float v[GEO_ITEMS], lo = 1e9f, hi = -1e9f;
+        int m = 0;
+        for (int i = 0; i < n; i++) {
+            if (k == S_EDGE && s_statMulti[lang][i] != (q == S_N)) {
+                continue;
+            }
+            v[m++] = s_stat[lang][k][i];
+            lo = s_stat[lang][k][i] < lo ? s_stat[lang][k][i] : lo;
+            hi = s_stat[lang][k][i] > hi ? s_stat[lang][k][i] : hi;
+        }
+        printf(" %s %.2f/%.2f", q == S_N ? "edge(multi)" : kName[q], median(v, m), m ? hi : 0.0f);
+        if (k == S_INK) {
+            printf(" (min %.2f)", lo);
+        }
+    }
+    printf("\n");
+}
+
 /* ------------------------------------------------------------ pictures */
 
 static void writeDirs(const char *dir, int lang)
@@ -811,8 +984,32 @@ static void testCompareItems(const char *outDir)
                 continue; /* nothing of the item's words on this sheet */
             }
             total++;
+            if (!strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n')) {
+                geoAdd(r, &ms, &mr);
+            }
             langN++;
             const int multi = strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
+            if (langN <= GEO_ITEMS) {
+                const float b[4] = {fabsf(mr.left - ms.left), fabsf(mr.right - ms.right),
+                                    fabsf(mr.top - ms.top), fabsf(mr.bottom - ms.bottom)};
+                const float sh[3] = {fabsf(mr.shareRim - ms.shareRim),
+                                     fabsf(mr.shareFill - ms.shareFill),
+                                     fabsf(mr.shareEdge - ms.shareEdge)};
+                const float line =
+                    mr.hasLine && ms.hasLine
+                        ? fmaxf(fabsf(mr.capTop - ms.capTop), fabsf(mr.baseline - ms.baseline))
+                        : 0.0f;
+                const float st[S_N] = {fmaxf(mr.blur[0], mr.blur[1]),
+                                       fmaxf(mr.plain[0], mr.plain[1]),
+                                       fmaxf(fmaxf(b[0], b[1]), fmaxf(b[2], b[3])),
+                                       line,
+                                       mr.ink / ms.ink,
+                                       fmaxf(sh[0], fmaxf(sh[1], sh[2]))};
+                for (int q = 0; q < S_N; q++) {
+                    s_stat[lang][q][langN - 1] = st[q];
+                }
+                s_statMulti[lang][langN - 1] = multi;
+            }
             const float edge = multi ? T_EDGE_MULTI : T_EDGE;
             char why[512];
             why[0] = '\0';
@@ -864,6 +1061,8 @@ static void testCompareItems(const char *outDir)
                         1);
             free(contact);
         }
+        geoPrint(lang);
+        statPrint(lang, langN < GEO_ITEMS ? langN : GEO_ITEMS);
         printf("menu_look: %s: %d items compared, %d outside the limits\n", kLang[lang], langN,
                langBad);
         CHECK(langN >= 60, "%s: only %d items compared", kLang[lang], langN);
@@ -872,6 +1071,217 @@ static void testCompareItems(const char *outDir)
            "ink on the sheet; the worst blur %.1f, plain %.1f\n",
            total, bad, T_BLUR, T_PLAIN, skipped, worstBlur, worstPlain);
     CHECK(bad == 0, "%d items outside the limits", bad);
+}
+
+/* -------------------------------------------------------------- geofit */
+
+/* ICO_MENU_LOOK_GEOFIT=1 (development only): per item and language, the
+   item's width factor (UiMenuTextItem.wx), the em's factor and the
+   anchor's x and y offsets that bring the strip's fill closest to the
+   sheet's (the mean difference of the two fill maps after the 3 x 3 blur),
+   by coordinate descent; =2 keeps the width.
+   Prints each item and the medians per sheet. */
+
+/* the fill map (fillness of the picture on black) blurred */
+static void fillMap(const uint8_t *grey, const uint8_t *alpha, int w, int h, float *tmp, float *out)
+{
+    for (int i = 0; i < w * h; i++) {
+        tmp[i] = fillness((float)grey[i] * (float)alpha[i] / 255.0f);
+    }
+    blur3(tmp, w, h, out);
+}
+
+typedef struct GeoFitCtx {
+    const Rect *r;
+    const float *sheet; /* the sheet's blurred fill map */
+    uint8_t *g, *a;
+    float *tmp, *map;
+} GeoFitCtx;
+
+static double geoErr(GeoFitCtx *c, const float *p)
+{
+    const Rect *r = c->r;
+    UiMenuTextItem t = ui_menu_text_items[r->item];
+    t.em[r->lang] *= p[1];
+    t.x[r->lang] += p[2];
+    t.y[r->lang] += p[3];
+    t.wx[r->lang] *= p[0];
+    if (refRectOf(r, &t, c->g, c->a) != 0) {
+        return 1e9;
+    }
+    fillMap(c->g, c->a, r->w, r->h, c->tmp, c->map);
+    double d = 0.0;
+    for (int i = 0; i < r->w * r->h; i++) {
+        d += fabsf(c->map[i] - c->sheet[i]);
+    }
+    return d / (r->w * r->h) * 255.0;
+}
+
+static int cmpD(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return x < y ? -1 : x > y;
+}
+
+static double medianD(double *v, int n)
+{
+    if (n <= 0) {
+        return 0.0;
+    }
+    qsort(v, (size_t)n, sizeof(double), cmpD);
+    return n & 1 ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+static void geoFit(int fixedWidth)
+{
+    const float w0 = ui__SheetSetWidth(UI_SHEET_WIDTH);
+    ui__SheetSetWidth(w0);
+    double tot0 = 0.0, tot = 0.0;
+    int totN = 0;
+
+    enum { NP = 4 };
+
+    static double res[UI_LANG_COUNT][512][NP + 2];
+    static int has[UI_LANG_COUNT][512];
+    memset(has, 0, sizeof(has));
+    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
+        for (int k = 0; k < s_nrect[lang]; k++) {
+            const Rect *r = &s_rect[lang][k];
+            const int n = r->w * r->h;
+            GeoFitCtx c;
+            float *sheet = malloc(sizeof(float) * (size_t)n);
+            c.r = r;
+            c.sheet = sheet;
+            c.g = malloc((size_t)n);
+            c.a = malloc((size_t)n);
+            c.tmp = malloc(sizeof(float) * (size_t)n);
+            c.map = malloc(sizeof(float) * (size_t)n);
+            fillMap(r->grey, r->alpha, r->w, r->h, c.tmp, sheet);
+            double ink = 0.0;
+            for (int i = 0; i < n; i++) {
+                ink += c.tmp[i];
+            }
+            if (ink >= MIN_INK_AMOUNT) {
+                float p[NP] = {1.0f, 1.0f, 0.0f, 0.0f};
+                float st[NP] = {0.04f, 0.04f, 1.0f, 1.0f};
+                const float minSt[NP] = {0.005f, 0.005f, 0.125f, 0.125f};
+                const float p0[NP] = {1.0f, 1.0f, 0.0f, 0.0f};
+                const double e0 = geoErr(&c, p0);
+                double e = geoErr(&c, p);
+                for (int it = 0; it < 200; it++) {
+                    int better = 0;
+                    for (int q = fixedWidth ? 1 : 0; q < NP; q++) {
+                        for (int sgn = -1; sgn <= 1; sgn += 2) {
+                            float t[NP];
+                            memcpy(t, p, sizeof(t));
+                            t[q] += (float)sgn * st[q];
+                            const double et = geoErr(&c, t);
+                            if (et < e - 1e-6) {
+                                e = et;
+                                memcpy(p, t, sizeof(t));
+                                better = 1;
+                            }
+                        }
+                    }
+                    if (!better) {
+                        int more = 0;
+                        for (int q = 0; q < NP; q++) {
+                            if (st[q] > minSt[q]) {
+                                st[q] *= 0.5f;
+                                more = 1;
+                            }
+                        }
+                        if (!more) {
+                            break;
+                        }
+                    }
+                }
+                printf("menu_look: geofit %s row %d item %d %s: width %.3f em x%.3f dx %+.2f dy "
+                       "%+.2f err %.2f -> %.2f\n",
+                       kLang[lang], r->row, r->item, r->sheet, p[0], p[1], p[2], p[3], e0, e);
+                for (int q = 0; q < NP; q++) {
+                    res[lang][r->item][q] = p[q];
+                }
+                tot0 += e0;
+                tot += e;
+                totN++;
+                res[lang][r->item][NP] = e0;
+                res[lang][r->item][NP + 1] = e;
+                has[lang][r->item] = 1;
+            }
+            free(sheet);
+            free(c.g);
+            free(c.a);
+            free(c.tmp);
+            free(c.map);
+        }
+    }
+    /* per item over the languages: the medians (the table's em and x are
+       per item, y per language) */
+    for (int i = 0; i < ui_menu_text_item_count; i++) {
+        double v[NP + 2][UI_LANG_COUNT];
+        int m = 0;
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            if (has[l][i]) {
+                for (int q = 0; q < NP + 2; q++) {
+                    v[q][m] = res[l][i][q];
+                }
+                m++;
+            }
+        }
+        if (!m) {
+            continue;
+        }
+        printf("menu_look: geofit item %d row %d: width %.3f em x%.3f (%.2f) dx %+.2f err %.2f -> "
+               "%.2f, dy",
+               i, rowOfItem(i), medianD(v[0], m), medianD(v[1], m),
+               ui_menu_text_items[i].em[0] * medianD(v[1], m), medianD(v[2], m), medianD(v[4], m),
+               medianD(v[5], m));
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            if (has[l][i]) {
+                printf(" %s %+.2f", kLang[l], res[l][i][3]);
+            }
+        }
+        printf("\n");
+    }
+    /* per sheet: the medians over its items and languages */
+    for (int pass = 0; pass < 16; pass++) {
+        const char *name = NULL;
+        double v[NP + 2][UI_LANG_COUNT * 512];
+        int m = 0;
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            for (int k = 0; k < s_nrect[l]; k++) {
+                const Rect *r = &s_rect[l][k];
+                const char *base = strrchr(r->sheet, '/');
+                base = base ? base + 1 : r->sheet;
+                static const char *seen[16];
+                int si = 0;
+                while (si < 16 && seen[si] && strcmp(seen[si], base) != 0) {
+                    si++;
+                }
+                if (si < 16 && !seen[si]) {
+                    seen[si] = base;
+                }
+                if (si != pass || !has[l][r->item]) {
+                    continue;
+                }
+                name = base;
+                for (int q = 0; q < NP + 2; q++) {
+                    v[q][m] = res[l][r->item][q];
+                }
+                m++;
+            }
+        }
+        if (name) {
+            printf("menu_look: geofit sheet %-16s %3d: width %.3f em x%.3f dx %+.2f dy %+.2f err "
+                   "%.2f -> %.2f\n",
+                   name, m, medianD(v[0], m), medianD(v[1], m), medianD(v[2], m), medianD(v[3], m),
+                   medianD(v[4], m), medianD(v[5], m));
+        }
+    }
+    printf("menu_look: geofit total %d: err %.3f -> %.3f\n", totN, totN ? tot0 / totN : 0.0,
+           totN ? tot / totN : 0.0);
+    ui__SheetSetWidth(w0);
 }
 
 /* ------------------------------------------------------------------ fit */
@@ -1126,7 +1536,22 @@ int main(int argc, char **argv)
         return 77;
     }
     const char *fitEnv = getenv("ICO_MENU_LOOK_FIT");
-    if (fitEnv && *fitEnv == '1') {
+    const char *geoEnv = getenv("ICO_MENU_LOOK_GEOFIT");
+    const char *boldEnv = getenv("ICO_MENU_LOOK_BOLD");
+    if (boldEnv) {
+        float bx = 0.0f, by = 0.0f;
+        if (sscanf(boldEnv, "%f,%f", &bx, &by) == 2) {
+            ui__MenuSetBold(bx, by);
+            printf("menu_look: bold %.2f %.2f\n", bx, by);
+        }
+    }
+    const char *widthEnv = getenv("ICO_MENU_LOOK_WIDTH");
+    if (widthEnv) {
+        ui__SheetSetWidth((float)atof(widthEnv));
+    }
+    if (geoEnv && (*geoEnv == '1' || *geoEnv == '2')) {
+        geoFit(*geoEnv == '2');
+    } else if (fitEnv && *fitEnv == '1') {
         fit();
     } else {
         testSurvey();

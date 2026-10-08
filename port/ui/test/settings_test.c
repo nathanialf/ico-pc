@@ -1235,7 +1235,7 @@ static void testPlacement(void)
     CHECK(it && it->align == UI_ALIGN_LEFT, "Options (294) in the menu text table");
     if (it) {
         const float portStart = (float)ph->dispX + 0.25f;
-        const float gameStart = (float)r294->dispX + it->x - 0.25f;
+        const float gameStart = (float)r294->dispX + it->x[UI_LANG_EN] - 0.25f;
         CHECK(portStart - gameStart <= 0.5f && gameStart - portStart <= 0.5f,
               "pause: the row starts at x %.2f, the rows' letters at %.2f", portStart, gameStart);
     }

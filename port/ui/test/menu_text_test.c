@@ -225,9 +225,12 @@ static void testTable(void)
               it->h);
         /* package TXT: a digit tile's figure fills it (capitals 13 of 15
            texels: an em of 18) */
-        CHECK(it->x >= 0.0f && it->x <= (float)it->w && it->em > 0.0f &&
-                  it->em <= (float)it->h * 1.25f,
-              "item %d: anchor %g, em %g inside %ux%u", i, it->x, it->em, it->w, it->h);
+        for (int l = 0; l < UI_LANG_COUNT; l++) {
+            CHECK(it->x[l] >= 0.0f && it->x[l] <= (float)it->w && it->em[l] > 0.0f &&
+                      it->em[l] <= (float)it->h * 1.25f && it->wx[l] > 0.7f && it->wx[l] < 1.4f,
+                  "item %d language %d: anchor %g, em %g, width %g inside %ux%u", i, l, it->x[l],
+                  it->em[l], it->wx[l], it->w, it->h);
+        }
         CHECK(it->ink <= UI_INK_GREY, "item %d: ink %u", i, it->ink);
         CHECK(it->align == UI_ALIGN_LEFT || it->align == UI_ALIGN_CENTER ||
                   it->align == UI_ALIGN_RIGHT,

@@ -13,8 +13,10 @@
  * units) tall (font.h's grid); the menu rows' em is 13.5 texels, 27 y units
  * (UI_MENU_TEXT_SIZE).  A text of em `size` y units is rasterised with
  * stb's vertical scale for an em of size / 2 texel rows and a horizontal
- * scale 2 * UI_X_PER_Y times that (font.c ui__SheetRasterLine), whatever the
- * output's resolution: the strip is the same 1x coverage in the scene list
+ * scale 2 * UI_X_PER_Y * UI_SHEET_WIDTH times that (font.c
+ * ui__SheetRasterLine; the sheets' lettering is 0.8 as wide as the
+ * typeface, ui_internal.h), made a little heavier (UI_MENU_BOLD_X / Y),
+ * whatever the output's resolution: the strip is the same 1x coverage in the scene list
  * (scaled by the replay as the sheets were) and on the presentation overlay
  * (magnified onto the output).
  *
@@ -24,8 +26,8 @@
  * set whose pages are full drops its page drawn least recently once no
  * frame of the last EVICT_FRAMES can still name it.  A game row's strip is
  * its item's rectangle (it->w x it->h texels) with the item's words where
- * the sheet has its lettering (the anchor it->x and it->align, the first
- * line's capital middle it->y[lang], the line pitch); drawn with the
+ * the sheet has its lettering (the language's em, width and anchor with
+ * it->align, the first line's capital middle it->y[lang], the line pitch); drawn with the
  * sprite's own box and texel rectangle relative to the item's, it lands
  * where the sheet's texels would have, insets and half-texel offsets
  * included.  A port text's strip is its measured lines plus a margin for
