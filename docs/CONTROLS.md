@@ -31,7 +31,7 @@ A few more keys on a PC:
 - **F12** saves a picture of the current moment for a bug report. See
   [When something goes wrong](TROUBLESHOOTING.md#save-a-picture-of-a-problem).
 
-You can change any of these in **Options > Controls > Remap controls**.
+Escape and F12 cannot be changed. Everything else can be, in **Options > Controls > Remap controls**.
 
 ## Look at the models
 

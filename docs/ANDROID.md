@@ -31,6 +31,13 @@
 To update, install the new version over the old one in the same way. Your
 saves stay.
 
+That holds from one release to the next. A test build you were given
+(not from the releases page) is signed differently, and Android will not
+install a release over it. You would have to uninstall the test build
+first, and uninstalling deletes the game's whole folder, saves included
+(see [Where your files are](#where-your-files-are)). Before you uninstall,
+copy the `memcard` folder out to a computer.
+
 ## The first start
 
 1. The game opens your phone's file picker. Find your disc image and tap
@@ -49,8 +56,8 @@ the next version will show what it is doing during those stretches.
 If there is not enough free space, the game tells you how much it needs
 and how much is free. Free some space and start it again.
 
-To stop the copy, press **Back**. Nothing is left behind, and the next
-start asks again.
+To stop at any point, during either bar, press **Back**. The game deletes
+the copy it made, so nothing is left behind, and the next start asks again.
 
 Once the game is set up, it deletes its copy of the disc image to give the
 space back. Your own file, where you picked it from, is not touched.
@@ -61,7 +68,9 @@ uses it without asking. It deletes that file too once it is set up.
 
 **Keeping the copy.** Most people do not need this. If you want the disc
 image to stay in the game's folder, put a text file named `ico-pc.ini` in
-that folder ([where it is](#where-your-files-are)) with this line in it:
+that folder ([where it is](#where-your-files-are)) with this line in it
+(putting `keep_image = true` in `config.toml` under `[paths]` works the
+same):
 
 ```
 keep_image=1
@@ -90,7 +99,10 @@ In that folder:
 - `textures` is where a [texture pack](TEXTURE_PACKS.md) goes:
   `textures/SCES-50760/replacements`.
 - `models` is where a [model pack](MODEL_PACKS.md) goes:
-  `models/SCES-50760/replacements`. Make the folders yourself.
+  `models/SCES-50760/replacements`.
+
+The game makes the `textures` and `models` folders for you. Inside them,
+make the `SCES-50760/replacements` folders yourself.
 - `screenshots` holds the pictures you take in photo mode.
 - `config.toml` holds your settings.
 

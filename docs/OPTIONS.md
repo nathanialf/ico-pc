@@ -63,6 +63,8 @@ How the picture looks.
 
 ## Effects
 
+This page is on the first Options page, under Display.
+
 The game's own picture effects. Each one is On or Off. All On is the
 picture the PS2 gives you, and that is how the game starts.
 
@@ -215,4 +217,4 @@ On Android, under `[paths]`:
 
 | Line | What it does |
 | --- | --- |
-| `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. [About Android](ANDROID.md#the-first-start). |
+| `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. Under `[paths]`. On Android, a line `keep_image=1` in `ico-pc.ini` works as well. [About Android](ANDROID.md#the-first-start). |

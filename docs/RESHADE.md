@@ -96,18 +96,36 @@ prepares every effect before the game shows anything. The game knows when
 ReShade is there and waits longer before it decides something is wrong.
 Later starts are quicker.
 
-## Linux and Steam Deck: vkBasalt
+## Linux: vkBasalt
 
 vkBasalt adds effects much like ReShade does. Install it from your
-system's software store or package manager. Then start the game with
-vkBasalt switched on:
+system's package manager. Then start the game with vkBasalt switched on:
 
 - From a terminal: `ENABLE_VKBASALT=1 ./ico_pc`
 - From Steam: right-click the game, choose **Properties**, and put this in
   **Launch options**: `ENABLE_VKBASALT=1 %command%`
 
+For depth effects, set `RESHADE_DEPTH_INPUT_IS_REVERSED=1` the same way.
 vkBasalt's own support for depth effects is still experimental, so those
 may not work.
+
+The game gives vkBasalt (and ReShade) the depth picture only when it
+finds one of them running. It never does this on Android.
+
+**Steam Deck.** SteamOS has no package manager for vkBasalt, and the
+vkBasalt in the Discover store is only for Flatpak apps, so it does not
+work with this game. Install it by hand, in Desktop Mode:
+
+1. Download the latest vkBasalt release (a `.tar.gz` file) from its page
+   on GitHub, and unpack it.
+2. Copy the layer file (`vkBasalt.json`) into the folder
+   `~/.local/share/vulkan/implicit_layer.d` (make the folder if it is not
+   there).
+3. Copy the library (`libvkbasalt.so`) to the place the `library_path`
+   line inside that `.json` file points to, or change that line to where
+   you put the library.
+4. In Steam, put `ENABLE_VKBASALT=1 RESHADE_DEPTH_INPUT_IS_REVERSED=1 %command%`
+   in the game's **Launch options**.
 
 ## The Steam overlay
 

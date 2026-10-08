@@ -63,7 +63,7 @@ notes are written for it.
 2. Then do one of these:
    - To save everything as you play: turn on **Dump models**, the row that
      appears under Developer mode. Every model piece the game draws is
-     saved once.
+     saved once. Parts that change shape every frame are not saved.
    - To save one model: open **Options > Extras > Models** on the title
      screen, pick the model, and press **Select**. A message says how
      many files it saved and where.
@@ -118,8 +118,12 @@ game's textures. In Blender, each piece shows up as its own material.
   the same place as the original. Something that sticks out far past it
   can vanish at the edge of the screen.
 - **Parts that change shape every frame** on their own, not through a
-  skeleton. The game uses the original for these. The log says so, with a line that
+  skeleton. The dump does not save these, and the game uses the original
+  for them. The log says so, with a line that
   ends in "changes shape every frame; the original is used".
+- **The rest pose of the skeleton.** The game uses its own bone starting
+  positions (the inverse bind matrices). If the file has a different rest
+  pose, it is ignored, and the log says so.
 - **Bending or not bending.** A part that bends with a skeleton must keep
   its bone weights. A part that does not bend must not get any.
 

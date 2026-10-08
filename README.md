@@ -48,7 +48,8 @@ Download the file for your device from the
 3. Double-click `ico_pc`, or run it from a terminal.
 
 The Linux version needs a fairly new system: SteamOS 3.5, Debian 13,
-Ubuntu 24.04 or newer. On a Steam Deck, unpack it in Desktop Mode, then
+Ubuntu 24.04 or newer. On a Steam Deck, unpack it in Desktop Mode and start it
+once there so it can ask for the disc image, then
 add `ico_pc` to Steam with Steam > Add a Non-Steam Game and play in Game
 Mode. [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 

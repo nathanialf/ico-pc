@@ -79,6 +79,11 @@ were found and why a file was not used.
 [Texture packs](TEXTURE_PACKS.md#check-that-the-game-found-it),
 [model packs](MODEL_PACKS.md#when-a-replacement-is-not-used).
 
+## Known limits
+
+On a few graphics drivers (rare), the 32-bit depth format is missing. There,
+surfaces that sit very close together may still flicker.
+
 ## Linux
 
 The Linux version needs a fairly new system: SteamOS 3.5, Debian 13,

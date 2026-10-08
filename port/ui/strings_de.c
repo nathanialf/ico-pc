@@ -135,7 +135,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_SMALL] = "Klein",
     [UI_STR_VAL_MEDIUM] = "Mittel",
     [UI_STR_VAL_LARGE] = "Groß",
-    [UI_STR_TOUCH_NOTE] = "Tasten auf dem Bildschirm. Automatisch blendet sie mit Gamepad aus.",
+    [UI_STR_TOUCH_NOTE] =
+        "Bildschirmtasten. Automatisch versteckt sie, solange ein Gamepad verbunden ist.",
     [UI_STR_BTN_CROSS] = "Kreuz",
     [UI_STR_BTN_CIRCLE] = "Kreis",
     [UI_STR_BTN_SQUARE] = "Quadrat",

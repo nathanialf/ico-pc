@@ -5,6 +5,16 @@
 # the folder under the program folder the game looks in, and the note in it
 pkg_textures_rel="textures/SCES-50760/replacements"
 
+# pkg_note_eol <file> <crlf|lf>: crlf keeps the Windows wording and adds CRs;
+# lf turns the backslash paths into forward slashes (the Linux wording)
+pkg_note_eol() {
+    if [[ "$2" == crlf ]]; then
+        sed -i 's/$/\r/' "$1"
+    else
+        sed -i 's#\\#/#g' "$1"
+    fi
+}
+
 # pkg_stage_textures_readme <dir> <crlf|lf>: writes <dir>/textures/SCES-50760/replacements/README.txt
 pkg_stage_textures_readme() {
     local d="$1/$pkg_textures_rel" eol="$2"
@@ -21,9 +31,7 @@ With portable mode (a userdata folder next to the program) the pack may
 also go in userdata\textures\SCES-50760\replacements\.
 Packs made for PCSX2 work as they are.
 TXT
-    if [[ "$eol" == crlf ]]; then
-        sed -i 's/$/\r/' "$d/README.txt"
-    fi
+    pkg_note_eol "$d/README.txt" "$eol"
 }
 
 # the models folder (model packs) and a folder for ReShade presets, with
@@ -47,16 +55,15 @@ With portable mode (a userdata folder next to the program) the pack may
 also go in userdata\models\SCES-50760\replacements\.
 To make a pack, see docs\MODEL_PACKS.md.
 TXT
-    if [[ "$eol" == crlf ]]; then
-        sed -i 's/$/\r/' "$d/README.txt"
-    fi
+    pkg_note_eol "$d/README.txt" "$eol"
 }
 
 # pkg_stage_reshade_readme <dir> <crlf|lf>: writes <dir>/reshade/README.txt
 pkg_stage_reshade_readme() {
     local d="$1/$pkg_reshade_rel" eol="$2"
     mkdir -p "$d"
-    cat > "$d/README.txt" <<'TXT'
+    if [[ "$eol" == crlf ]]; then
+        cat > "$d/README.txt" <<'TXT'
 This folder is a place for your ReShade presets (.ini files) and shader
 packs, so they stay with the game. Playing the game needs nothing in it.
 ReShade itself installs next to the program: run its installer, pick
@@ -66,9 +73,18 @@ in this folder.
 Depth effects work: set RESHADE_DEPTH_INPUT_IS_REVERSED to 1.
 For the full steps see docs\RESHADE.md.
 TXT
-    if [[ "$eol" == crlf ]]; then
-        sed -i 's/$/\r/' "$d/README.txt"
+    else
+        cat > "$d/README.txt" <<'TXT'
+On Linux this folder is a place for your vkBasalt presets (.conf files)
+and shader packs, so they stay with the game. Playing the game needs
+nothing in it.
+vkBasalt installs on your system, not here. Start the game with
+ENABLE_VKBASALT=1 and point vkBasalt's config at a preset in this folder.
+For depth effects, also set RESHADE_DEPTH_INPUT_IS_REVERSED=1.
+For the full steps see docs/RESHADE.md.
+TXT
     fi
+    pkg_note_eol "$d/README.txt" "$eol"
 }
 
 # pkg_stage_folder_notes <dir> <crlf|lf>: the three folders and their notes
