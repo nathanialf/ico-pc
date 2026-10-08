@@ -70,6 +70,8 @@
 #include "GifPacket.h"
 #include "DisplayP2O.h"
 #include "layout_texture.h"
+#include "Packet.h"
+#include "Texture.h"
 
 #include "font.h"
 #include "layout_ext.h"
@@ -749,6 +751,48 @@ static void play(void)
     s_logFrame = 0;
 }
 
+/* Developer mode: one line per texture the model's packets use, with the
+ * ICO header values that decide the game's effect lists (the shine list, the
+ * CLUT scroll, the UV scroll, the alpha test), to compare with the PS2 */
+static void logTexture(int idx, unsigned char *seen)
+{
+    if (idx < 0 || idx >= 200 || seen[idx]) {
+        return;
+    }
+    seen[idx] = 1;
+    const TexExt *e = tex_GetTexExtData(idx);
+    if (e == NULL) {
+        return;
+    }
+    const char *name = tex_GetTextureName(idx);
+    char label[32] = "";
+    if (name != NULL && name[0] != 0) {
+        snprintf(label, sizeof label, "%.24s", name);
+    }
+    fprintf(stderr,
+            "model_viewer: texture %d (%s): animated %d shine %d clut scroll %d..%d speed %d "
+            "step %d uv scroll %g %g alpha test %d fail %d func %d\n",
+            idx, label, e->animated, e->file.shine, e->file.csBgn, e->file.csEnd, e->file.csSpd,
+            e->file.csStp, (double)e->file.scrlU, (double)e->file.scrlV, e->file.alpTst,
+            e->file.alpFai, e->file.texFnc);
+}
+
+static void logModelTextures(const Sub15C *d)
+{
+    unsigned char seen[200] = {0};
+    const PObjModel *pm = d != NULL ? d->model : NULL;
+    if (pm == NULL || pm->groups == NULL) {
+        return;
+    }
+    for (int j = 0; j < pm->partCount; j++) {
+        const PacHeader *pkt = pm->groups[j].packets;
+        for (int n = 0; pkt != NULL && n < 100000; n++, pkt = pkt->next) {
+            logTexture(pkt->tex, seen);
+            logTexture(pkt->tex1, seen);
+        }
+    }
+}
+
 static void setup(void)
 {
     const MvModel *m = &mv_models[s_model];
@@ -824,6 +868,9 @@ static void setup(void)
             (int)GlobalStageSetting.postEffect, (int)GlobalStageSetting.feedbackEffect,
             (int)GlobalStageSetting.feedbackCol[0], (int)GlobalStageSetting.feedbackCol[1],
             (int)GlobalStageSetting.feedbackCol[2], (int)GlobalStageSetting.feedbackCol[3]);
+    if (ico_opt_developer_mode() != 0) {
+        logModelTextures(g->dobj);
+    }
 }
 
 /* the model files can be saved: Developer mode on, and the renderer there */
