@@ -18,10 +18,12 @@
  *               movie, and the heartbeat printed the count;
  *   - stall:    the tick stands still and nothing else moves: the later
  *               limit fires as before;
- *   - present:  a fake present of 2.5 s inside a 1 s later limit (the tick
- *               stands still) does not fire; the stall after it does, 1 s
- *               after the present ended; a long present before the first
- *               tick does not trip a 1 s first limit either;
+ *   - present:  with an effects program set, a fake present of 4 s inside a
+ *               2 s later limit (the tick stands still) does not fire (only
+ *               the part above 1 s is excused); the stall after it does,
+ *               2 s after the present ended; a long present before the first
+ *               tick does not trip a 2 s first limit either; without the
+ *               effects program a 2.5 s present fires inside it;
  *   - lines:    milestones and logs reach the file at once.
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
@@ -145,16 +147,21 @@ static void progress_child(int progress)
     exit(0);
 }
 
-/* A present of 2.5 s (ico_diag_present_enter/leave) against a 1 s limit.
-   first != 0: the first limit, before any tick; the run must end with exit 0.
-   Otherwise the later limit: it must not fire inside the present and must
-   after it. */
-static void present_child(int first)
+/* A present (ico_diag_present_enter/leave) against a limit.
+   effects != 0: an effects program is set; a 4 s present against a 2 s limit
+   (3 s of it excused). first != 0: the first limit, before any tick; the run
+   must end with exit 0. Otherwise the later limit: it must not fire inside
+   the present and must after it.
+   effects == 0: a 2.5 s present against a 1 s later limit; nothing is
+   excused, so the watchdog fires inside it. */
+static void present_child(int first, int effects)
 {
+    const unsigned int lim = effects ? 2 : 1;
     fake_ticks = first ? 0 : 1;
-    ico_diag_start(first ? 1 : 0, first ? 0 : 1);
+    ico_diag_set_effects_program(effects);
+    ico_diag_start(first ? lim : 0, first ? 0 : lim);
     ico_diag_present_enter();
-    pause_ms(2500);
+    pause_ms(effects ? 4000 : 2500);
     ico_diag_present_leave();
     ico_diag_log("test: present done");
     if (first) {
@@ -187,8 +194,9 @@ static void run_child(const char *mode, const char *log)
         ico_diag_start(1, 2);
     } else if (strcmp(mode, "progress") == 0 || strcmp(mode, "stall") == 0) {
         progress_child(strcmp(mode, "progress") == 0 ? 1 : 0);
-    } else if (strcmp(mode, "present") == 0 || strcmp(mode, "presentfirst") == 0) {
-        present_child(strcmp(mode, "presentfirst") == 0);
+    } else if (strcmp(mode, "present") == 0 || strcmp(mode, "presentfirst") == 0 ||
+               strcmp(mode, "presentplain") == 0) {
+        present_child(strcmp(mode, "presentfirst") == 0, strcmp(mode, "presentplain") != 0);
     } else {
         ico_diag_milestone("a milestone");
         exit(0);
@@ -328,12 +336,13 @@ int main(int argc, char **argv)
         printf("--- stall log ---\n%s\n", s);
     }
 
-    /* a long present is not a stall: the later limit fires only after it */
+    /* with an effects program a long present is not a stall: the later limit
+       fires only after it */
     r = run(argv[0], "present", log);
     s = read_file(log);
     CHECK(r == 4);
     CHECK(strstr(s, "test: present done") != NULL);
-    CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s") != NULL);
+    CHECK(strstr(s, "WATCHDOG: no new Main tick for 2 s") != NULL);
     CHECK(strstr(s, "test: present done") < strstr(s, "WATCHDOG:"));
     CHECK(strstr(s, "for a picture to be shown") == NULL);
     if (fails) {
@@ -348,6 +357,15 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "WATCHDOG:") == NULL);
     if (fails) {
         printf("--- presentfirst log ---\n%s\n", s);
+    }
+    /* ... but without one nothing is excused: it fires inside the present */
+    r = run(argv[0], "presentplain", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "test: present done") == NULL);
+    CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s") != NULL);
+    if (fails) {
+        printf("--- presentplain log ---\n%s\n", s);
     }
     remove(log);
     if (fails) {

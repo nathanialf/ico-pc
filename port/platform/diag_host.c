@@ -75,7 +75,9 @@
 /* the watchdog polls every 0.25 s; a longer gap between two polls means
    the system or the process was suspended (watchdog_loop) */
 #define SUSPEND_GAP_S 5.0
-/* the longest one present is excused from the watchdog */
+/* with an effects program loaded, the part of one present above
+   PRESENT_FREE_NS is excused from the watchdog, for at most PRESENT_EXCUSE_NS */
+#define PRESENT_FREE_NS (1000000000ull)
 #define PRESENT_EXCUSE_NS (300ull * 1000000000ull)
 #define STACK_SCAN_BYTES (64 * 1024)
 #define STACK_HITS 24
@@ -105,6 +107,8 @@ static volatile int movie_playing;
 static volatile unsigned long long present_since_ns;
 
 static volatile unsigned long long present_done_ns;
+/* ico_diag_set_effects_program: written by the host before the first present */
+static volatile int effects_program;
 static void (*exit_hook)(const char *reason);
 
 static char failure[512];
@@ -980,6 +984,22 @@ static int sample_main(void)
 
 #endif
 
+void ico_diag_set_effects_program(int loaded)
+{
+    effects_program = loaded != 0;
+}
+
+/* The excused part of a present that has lasted d ns: nothing without an
+   effects program; with one, what is above PRESENT_FREE_NS, capped. */
+static unsigned long long present_excused(unsigned long long d)
+{
+    if (!effects_program || d <= PRESENT_FREE_NS) {
+        return 0;
+    }
+    d -= PRESENT_FREE_NS;
+    return d < PRESENT_EXCUSE_NS ? d : PRESENT_EXCUSE_NS;
+}
+
 void ico_diag_present_enter(void)
 {
     present_since_ns = ico_diag_now_ns();
@@ -990,13 +1010,13 @@ void ico_diag_present_leave(void)
     const unsigned long long since = present_since_ns;
     if (since != 0) {
         const unsigned long long d = ico_diag_now_ns() - since;
-        present_done_ns += d < PRESENT_EXCUSE_NS ? d : PRESENT_EXCUSE_NS;
+        present_done_ns += present_excused(d);
     }
     present_since_ns = 0;
 }
 
-/* Seconds spent inside presents so far (finished ones plus the one in
-   progress, each capped). *current is the one in progress, 0 if none. */
+/* Seconds of present time excused so far (finished ones plus the one in
+   progress, see present_excused). *current is the one in progress, 0 if none. */
 static double present_seconds(double *current)
 {
     unsigned long long done, since, now, cur = 0;
@@ -1011,10 +1031,7 @@ static double present_seconds(double *current)
     if (current != NULL) {
         *current = (double)cur / 1e9;
     }
-    if (cur > PRESENT_EXCUSE_NS) {
-        cur = PRESENT_EXCUSE_NS;
-    }
-    return (double)(done + cur) / 1e9;
+    return (double)(done + present_excused(cur)) / 1e9;
 }
 
 static void watchdog_fire(const char *reason)

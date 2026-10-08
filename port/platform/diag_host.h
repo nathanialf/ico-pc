@@ -80,7 +80,10 @@ void ico_diag_set_exit_hook(void (*fn)(const char *reason));
    graphics driver or an effects injector (ReShade) may compile shaders inside
    its first presents for minutes. A single present is excused for at most
    300 s, so a driver that hangs for good is still stopped; the report says
-   when the main thread is inside a present. */
+   when the main thread is inside a present. Only the part of one present
+   above 1 s is excused, and only after ico_diag_set_effects_program(1): a
+   plain driver's slow present is a stall. */
+void ico_diag_set_effects_program(int loaded);
 void ico_diag_present_enter(void);
 void ico_diag_present_leave(void);
 

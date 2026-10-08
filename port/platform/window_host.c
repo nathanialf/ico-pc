@@ -567,6 +567,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
+        ico_diag_set_effects_program(rhi_InjectorName() != NULL);
                 ico_video_framerate_name(ico_video_framerate(), fr, sizeof(fr)),
                 o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
