@@ -566,12 +566,19 @@ int ico_video_effect_fog(void)
     return s_opt.effectFog;
 }
 
-int ico_video_effects_depth(void) int ico_video_model_pack(void)
+int ico_video_effects_depth(void)
 {
     if (!s_read) {
         read_config();
     }
     return s_opt.effectsDepth;
+}
+
+int ico_video_model_pack(void)
+{
+    if (!s_read) {
+        read_config();
+    }
     return s_opt.modelPack;
 }
 
