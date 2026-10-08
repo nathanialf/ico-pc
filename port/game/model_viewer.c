@@ -181,7 +181,9 @@ static int s_sel;          /* the animation selected (index into s_anims) */
 static int s_playing = -1; /* the motion id playing, -1 for none */
 static int s_loop;
 static int saveAvailable(void);
+#ifdef ICO_RD
 static int s_saveWait; /* Select armed the one-shot dump, its outcome not yet known */
+#endif
 static unsigned int s_logTick;
 static int s_logFrame;
 static MvCam s_cam;       /* the orbit: yaw, pitch, distance and its limits, the vertical move */
@@ -482,8 +484,8 @@ static void setState(int st)
         if (s_saveWait) {
             modelpack_DumpObjectOnce(NULL);
         }
-#endif
         s_saveWait = 0;
+#endif
         s_cam.panY = 0.0f; /* the move is per model: gone when one is left */
         s_cam.panX = 0.0f;
     }
@@ -891,8 +893,8 @@ static void setup(void)
     if (s_saveWait) {
         modelpack_DumpObjectOnce(NULL); /* a shot for the model left */
     }
-#endif
     s_saveWait = 0;
+#endif
     setState(MV_VIEW);
     ui_ListReset(&s_animList);
     fprintf(stderr,

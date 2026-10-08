@@ -91,11 +91,19 @@ sdk_package() {
     [[ "${SKIP_SDK_INSTALL:-0}" != "1" ]] || die "$1 missing at $2 (SKIP_SDK_INSTALL=1)"
     [[ -n "$SDKMANAGER" ]] || die "$1 missing and no sdkmanager (install the SDK command-line tools)"
     echo "==> installing $1 with sdkmanager"
-    yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null || true
-    yes | "$SDKMANAGER" --sdk_root="$SDK" --install "$1" >"$TMP/sdkmanager.log" 2>&1 || {
+    # sdkmanager's own status, not the pipeline's: `yes` dies on the closed
+    # pipe once sdkmanager exits (SIGPIPE, or EPIPE where the runner ignores
+    # the signal), and pipefail would turn a finished install red
+    yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null 2>&1 || true
+    local rc=0
+    set +e +o pipefail
+    yes 2>/dev/null | "$SDKMANAGER" --sdk_root="$SDK" --install "$1" >"$TMP/sdkmanager.log" 2>&1
+    rc=${PIPESTATUS[1]}
+    set -e -o pipefail
+    if [[ "$rc" != 0 && ! -f "$2/source.properties" && ! -f "$2/package.xml" ]]; then
         tail -20 "$TMP/sdkmanager.log" >&2
-        die "sdkmanager could not install $1"
-    }
+        die "sdkmanager could not install $1 (exit $rc)"
+    fi
     [[ -f "$2/source.properties" || -f "$2/package.xml" ]] || die "$1 not found at $2 after sdkmanager"
 }
 NDK="$SDK/ndk/$NDK_VERSION"
