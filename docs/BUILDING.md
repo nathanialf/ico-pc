@@ -51,6 +51,32 @@ The Linux presets use the host's gcc 14 and glibc. Ninja comes from
 `.venv/bin` (`tools/requirements.txt`) or the `PATH`. Any CMake 3.25 or later
 on the `PATH` works in place of the pinned one.
 
+## Android: `tools/fetch_android.sh`
+
+Run it once after `tools/fetch_toolchain.sh` (it uses the pinned CMake and the
+dependencies that script fetched). It needs the Android SDK
+(`ANDROID_HOME`, else `ANDROID_SDK_ROOT`, else `~/Android/Sdk`) and installs
+the packages below with `sdkmanager`; `SKIP_SDK_INSTALL=1` only checks them.
+
+| what | pin |
+| --- | --- |
+| NDK | `ndk;28.2.13676358` (r28c; arm64 libraries get 16 KB pages by default) |
+| platform, build-tools | `platforms;android-35`, `build-tools;35.0.0` (`aapt2`, `zipalign`, `apksigner`) |
+| SDL3 for arm64 | built from the release source with the NDK into `tools/toolchain/deps/sdl3/android-arm64/` |
+| `tools/toolchain/android.env` | the paths and versions above, read by the CMake toolchain file and `android/app/build.gradle` |
+| `android/local.properties` | `sdk.dir` and `cmake.dir` for this checkout (gitignored); every checkout runs the script once |
+
+The Gradle project is `android/` (arm64-v8a only, `minSdk` 29, `targetSdk`
+35). `cd android && ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]`
+builds the debug APK into `android/app/build/outputs/apk/debug/`;
+`assembleRelease` builds `app-release-unsigned.apk`. `-PicoLabel` sets the
+version name (default: `git describe`); `icoNativeJobs` sets the native build
+parallelism. `cmake --preset android-arm64` configures the native code alone,
+for a compile check without Gradle. The unstripped `libmain.so` is under
+`android/app/build/intermediates/cxx/RelWithDebInfo/<hash>/obj/arm64-v8a/`
+and the link map `ico_pc.map` under
+`android/app/.cxx/RelWithDebInfo/<hash>/arm64-v8a/`.
+
 ## Presets
 
 ```sh
@@ -264,15 +290,16 @@ ever committed.
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: two Linux
-jobs (`ubuntu-24.04`) side by side, no secrets, no disc image. `linux` runs
-the steps below in order; `extra` is a matrix of three runners, each with
-the same host packages, venv and (restored, never saved) toolchain cache,
-that builds one more preset.
+jobs (`ubuntu-24.04`) and the `android` job side by side, no secrets, no disc
+image. `linux` runs the steps below in order; `extra` is a matrix of three
+runners, each with the same host packages, venv and (restored, never saved)
+toolchain cache, that builds one more preset; `android` is described after
+the table.
 
 | step | what |
 | --- | --- |
 | host packages, venv | gcc 14 (the runner's default gcc 13 also configures, since `cmake/IcoFlags.cmake` drops warning flags a compiler does not know), the X11, ALSA and PulseAudio headers SDL3 builds against, lavapipe (`mesa-vulkan-drivers`, `libvulkan1`) so the render tests run on a CPU Vulkan device, `tools/requirements.txt` |
-| cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh` and `fetch_deps.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
+| cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
 | `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/`, `sce/`, `vusrc/` |
@@ -286,6 +313,20 @@ that builds one more preset.
 | `extra`: `fptrap` | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
 
+The `android` job (90 minutes at most) builds the debug APK and checks its
+structure; the game is not run:
+
+| step | what |
+| --- | --- |
+| Java, wrapper validation | Temurin 17; `gradle/actions/wrapper-validation` checks `gradle-wrapper.jar` |
+| host packages, venv, cache | as `linux`, with its own cache key (`toolchain-android-...`, the same four scripts) that this job saves |
+| `tools/fetch_toolchain.sh` | with `SKIP_SDL3_LINUX=1 SKIP_SDL3_MINGW=1 SKIP_VALIDATION_LAYER=1` |
+| `tools/fetch_android.sh` | NDK, platform, build-tools and SDL3 for arm64, in the runner's preinstalled SDK |
+| `tools/check_no_rom.sh` | the IP scan |
+| `./gradlew --no-daemon assembleDebug -PicoLabel=ci` | the debug APK |
+| APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; every `LOAD` segment of both libraries has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
+| artifact `ico-pc-android-debug` | the APK, the unstripped `libmain.so` and `ico_pc.map`, kept 14 days |
+
 Run the same steps locally before pushing.
 
 ## Packages
@@ -294,6 +335,34 @@ Run the same steps locally before pushing.
 the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 `dist/ico-pc-<label>-linux.tar.gz`). Neither contains game data; both carry
 the README, the licence files and the save importer.
+
+`tools/package_android.sh <label>` does the same for Android
+(`dist/ico-pc-<label>-android.apk`, log `build-host/pkg-android-<label>.log`):
+`tools/fetch_android.sh`, `assembleRelease -PicoLabel=<label>`,
+`zipalign -P 16 -f 4`, then `apksigner sign` (v2 and v3) and
+`apksigner verify --print-certs` (the certificate digests go in the log and on
+screen) and `zipalign -c -P 16 -v 4`. The unstripped `libmain.so`, `ico_pc.map`
+and `VERSION.txt` are left in `dist/stage/android/`.
+
+The signing key is never in the repository. The script reads it from
+`android-keystores/` next to the repository folder (`../android-keystores/`
+from the root): the upload keystore (a `.jks` file, key alias `upload`) and
+`readme.txt` beside it, whose first line starting with `password` (as
+`password: <value>`) holds the password; without such a line the first
+non-empty line is used. The script stops at once when either file is
+missing. The password goes to `apksigner` through the environment and is
+never printed or logged, and the keystore is never copied. `tools/check_no_rom.sh`
+fails on a tracked key file or keystore password. To turn a crash offset from
+a release build into a function name, run
+`llvm-symbolizer --obj=dist/stage/android/libmain.so <offset>` (from the NDK's
+`toolchains/llvm/prebuilt/linux-x86_64/bin/`) with the stage folder of the same
+build.
+
+A release uploads the three packages:
+
+```sh
+gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-linux.tar.gz dist/ico-pc-<tag>-android.apk
+```
 
 ## Appendix, maintainers: the base ELF
 

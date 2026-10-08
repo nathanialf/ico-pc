@@ -22,6 +22,9 @@
 #      reviewed exemption list).
 #   6. Any file whose path matches our gitignore patterns but is somehow
 #      tracked anyway (checked against the patterns, not the index).
+#   7. Signing keys: a tracked *.jks, *.keystore, *.p12 or *.pem, anything
+#      under android-keystores/, or a file naming the release keystore or
+#      holding a keystore password (outside tools/package_android.sh).
 #
 # In pre-commit mode (something is staged) the content rules (3, 4, 5, 5b)
 # read the staged blobs (`git show :path`), not the working tree: what is
@@ -206,6 +209,26 @@ mapfile -d '' -t ignored < <(printf "%s\0" "${files[@]}" |
 for f in "${ignored[@]}"; do
     [[ -z "$f" ]] && continue
     note "tracked file matches .gitignore: $f"
+done
+
+# --- 7. signing keys ---
+# The Android release keystore lives outside the repository
+# (../android-keystores/); tools/package_android.sh reads it at package time.
+# Nothing that is, or names, a key may be tracked. The two scripts that have
+# to spell the words are exempt from the content check.
+key_path_re='(\.(jks|keystore|p12|pem)$|(^|/)android-keystores/)'
+key_text_re='(upload\.jks|storePassword|keyPassword)'
+for f in "${files[@]}"; do
+    [[ -z "$f" ]] && continue
+    if [[ "$f" =~ $key_path_re ]]; then
+        note "signing key or keystore path: $f"
+        continue
+    fi
+    case "$f" in tools/package_android.sh|tools/check_no_rom.sh) continue ;; esac
+    have "$f" || continue
+    if blob "$f" 2>/dev/null | grep -IE "$key_text_re" >/dev/null; then
+        note "names the release keystore or a keystore password: $f"
+    fi
 done
 
 if (( bad )); then
