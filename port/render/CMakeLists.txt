@@ -184,19 +184,21 @@ target_link_libraries(rd_layout_test PRIVATE ico_render ico_math)
 # rd_tex_test: the texture cache, and Texture.c's host path with the three
 # files above, fed synthetic TIM2 files; decode, CLUT scroll, cache keys and
 # the decoder's binding on the recording, one sprite per format's texels on
-# a device (77 without one).
+# a device (77 without one). ico_options: Texture.c's CLUT recolour
+# (port/game/appearance.c, v0.4.2), whose config store needs host_config.c
 add_executable(rd_tex_test test/rd_tex_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/Texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
-    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c")
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(rd_tex_test PRIVATE ${_ico_seki_incs}
                            "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
                            "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_definitions(rd_tex_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(rd_tex_test PRIVATE ico_render ico_math)
+target_link_libraries(rd_tex_test PRIVATE ico_render ico_math ico_options)
 
 # rd_gsbase_test (wave 2, R2c): GsBase.c's host path with the 2D layer
 # (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
