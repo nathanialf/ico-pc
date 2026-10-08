@@ -490,9 +490,10 @@ static void testLayoutExtension(void)
               v[1].rgba[0], v[1].rgba[3]);
         /* the label starts at the row's dispX: x = (dispX - 320) * 16 + 4 in 1/16 px, through
            gif_SpriteSensitiveOffset's 512 / 640; the strip starts its margin
-           (the glyphs' overhang and the rim, 6 texels at this size) before */
+           (the glyphs' overhang and the rim, UI_MENU_RIM_X 5 since the
+           sheets' survey: 9 texels at this size, 119 measured) before */
         int x0 = 0x8000 + ((200 - 320) * 16 + 4) * 512 / 640;
-        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 7, "row %d starts at x %d (box %d)", labels, v[0].x,
+        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 8, "row %d starts at x %d (box %d)", labels, v[0].x,
               x0);
         labels++;
     }
@@ -930,8 +931,10 @@ static int toPixY(float gy)
 
 /* the drawn word's bounds: x from the measure, y from the line metrics
    (the menus' text, menu_font.h), plus the strip's rim and its bilinear
-   read (a texel each: 2 x units, 4 y units) and the anchor's snap to whole
-   texels (an x unit, a y unit) */
+   read (UI_MENU_RIM_X and UI_MENU_RIM_Y texels: a texel is an x unit and
+   2 y units) and the anchor's snap to whole texels (an x unit, a y unit).
+   Written for a rim of 1 x 1 texels (3 and 5 units); the sheets' survey
+   set 4 x 3, and 44 pixels of rim fell outside the old bounds. */
 typedef struct Box {
     int x0, y0, x1, y1;
 } Box;
@@ -942,10 +945,11 @@ static Box wordBox(float x, float y, float size, const char *s)
     ui_MenuFontMetrics(size, &asc, &desc, NULL);
     Box b;
     float w = ui_MeasureMenuText(size, s);
-    b.x0 = toPixX(x - w * 0.5f - 3.0f) - 1;
-    b.x1 = toPixX(x + w * 0.5f + 3.0f) + 1;
-    b.y0 = toPixY(y - 5.0f) - 1;
-    b.y1 = toPixY(y + asc + desc + 5.0f) + 1;
+    const float mx = (float)UI_MENU_RIM_X + 1.0f, my = 2.0f * (float)UI_MENU_RIM_Y + 1.0f;
+    b.x0 = toPixX(x - w * 0.5f - mx) - 1;
+    b.x1 = toPixX(x + w * 0.5f + mx) + 1;
+    b.y0 = toPixY(y - my) - 1;
+    b.y1 = toPixY(y + asc + desc + my) + 1;
     return b;
 }
 
@@ -1021,10 +1025,15 @@ static void testPixels(void)
     /* the blend in the stems of the two I: the sheet texel is the fill
        (white) at full coverage (alpha 0x80), MODULATE gives (255 * c) >> 7 */
     int fullHits = 0, halfHits = 0, worst = 0;
+    /* the stems' rows only: the capitals' top to the baseline, 3 lines in
+       (the rim's band under the stem is a flat run of the rim grey too) */
+    float iAsc, iCap;
+    ui_MenuFontMetrics(150.0f, &iAsc, NULL, &iCap);
+    const int stemY0 = toPixY(40.0f + iAsc - iCap) + 3, stemY1 = toPixY(40.0f + iAsc) - 3;
     for (int side = 0; side < 2; side++) {
         const Box *bx = side ? &iR : &iL;
         const int cx = (bx->x0 + bx->x1) / 2;
-        for (int y = bx->y0 + 2; y <= bx->y1 - 2; y++) {
+        for (int y = stemY0; y <= stemY1; y++) {
             const uint8_t *p = &px[(y * 512 + cx) * 4];
             const uint8_t *l = &px[(y * 512 + cx - 2) * 4];
             const uint8_t *r = &px[(y * 512 + cx + 2) * 4];
