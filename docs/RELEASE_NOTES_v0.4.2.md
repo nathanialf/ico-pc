@@ -11,7 +11,7 @@
 
 - Photo mode no longer looks different from the game (issue 14).
 - Motion blur at 60 Hz is as strong as on the PS2.
-- Android: the opening scene after the logo is drawn at the screen's size from its first frames, and the movies sit in the middle of the screen whatever the phone's shape.
+- Android: the opening scene after the logo no longer looks the wrong way in the forest (an angle the phone's compiler did not wrap), the scene is drawn at the screen's size from its first frames, and the movies sit in the middle of the screen whatever the phone's shape.
 - Shiny surfaces no longer flicker while the camera moves at higher resolutions (this may also be the shaking glow on the coffins before the Queen).
 - Some moving textures no longer jump when the game draws extra frames between its own (Frame rate above Original).
 - Android: when the game has to close it now says so, and the log of the run before is kept.
