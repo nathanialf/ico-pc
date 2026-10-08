@@ -16,6 +16,9 @@
 #include "ico_gamestate.h"
 #include "popup.h"
 #include "strings.h"
+#ifdef __ANDROID__
+#include "host_loop.h"
+#endif
 
 /* --- conditions ------------------------------------------------------------
  * Each returns nonzero when its achievement's condition holds.  They read
@@ -723,7 +726,12 @@ void ico_ach_init(const char *path)
     ico_diag_log("achievements: %d of %d unlocked, popups %s, %s", n, ACH_COUNT,
                  s_popups ? "on" : "off", s_path);
     if (!s_inited) {
+#ifdef __ANDROID__
+        /* Android: Quit returns from ico_host_main, which runs this */
+        ico_host_at_shutdown(ico_ach_flush);
+#else
         atexit(ico_ach_flush);
+#endif
     }
     s_inited = 1;
 }

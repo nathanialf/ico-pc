@@ -13,6 +13,9 @@
 #include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
+#ifdef __ANDROID__
+#include "host_loop.h"
+#endif
 
 #define MAX_FRAMES_PER_VSYNC 1024 /* 960 at 50 Hz, 800 or 801 at 59.94 Hz */
 
@@ -110,7 +113,12 @@ void ico_audio_host_init(void)
     fprintf(stderr, "audio: headless build: the driver runs, the output is %s\n",
             wav != NULL ? "only dumped" : "discarded");
 #endif
+#ifdef __ANDROID__
+    /* Android: Quit returns from ico_host_main, which runs this */
+    ico_host_at_shutdown(ico_audio_host_shutdown);
+#else
     atexit(ico_audio_host_shutdown);
+#endif
 }
 
 void ico_audio_host_vsync(int hz)

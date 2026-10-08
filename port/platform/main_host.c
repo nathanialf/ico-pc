@@ -240,12 +240,13 @@ static const char *exit_reason = "exit() from the game or the C library";
 
 /* The end-of-run steps, run last registered first: summary, then
    ico_input_record_close, ico_window_close, texpack_Shutdown and
-   modelpack_Shutdown as they are registered. Desktop: atexit, so an exit()
-   from the game runs them too.
+   modelpack_Shutdown as they are registered, and the achievements' flush
+   and the audio's shutdown (ico_host_at_shutdown) when those start.
+   Desktop: atexit, so an exit() from the game runs them too.
    Android: SDL_main's return finishes the activity while the process may
    live on, so ico_host_main runs them itself (ico_host_shutdown) when it
    returns. */
-#define SHUTDOWN_MAX 8
+#define SHUTDOWN_MAX 12
 static void (*shutdown_fn[SHUTDOWN_MAX])(void);
 static int shutdown_n;
 
@@ -254,10 +255,17 @@ static void at_shutdown(void (*fn)(void))
 #ifdef __ANDROID__
     if (shutdown_n < SHUTDOWN_MAX) {
         shutdown_fn[shutdown_n++] = fn;
+    } else {
+        ico_diag_log("ico_pc: no room for another end-of-run step (SHUTDOWN_MAX %d)", SHUTDOWN_MAX);
     }
 #else
     atexit(fn);
 #endif
+}
+
+void ico_host_at_shutdown(void (*fn)(void))
+{
+    at_shutdown(fn);
 }
 
 void ico_host_shutdown(void)
