@@ -185,7 +185,9 @@ def main():
         print("check_const_writes: no %s" % db)
         return 1
     entries, seen = [], set()
-    for e in json.load(open(db)):
+    with open(db) as f:
+        entries = json.load(f)
+    for e in entries:
         f = e["file"]
         path = f if os.path.isabs(f) else os.path.join(e["directory"], f)
         if not f.endswith(".c") or f in seen or "third_party" in f or not os.path.isfile(path):

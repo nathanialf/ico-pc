@@ -323,7 +323,9 @@ def check_casts(sources, defs, td, out):
 def load_allow(path):
     allowed = set()
     if os.path.exists(path):
-        for ln in open(path, encoding='latin-1'):
+        with open(path, encoding='latin-1') as f:
+            lines = f.readlines()
+        for ln in lines:
             ln = ln.strip()
             if ln and not ln.startswith('#'):
                 allowed.add(ln.split()[0])

@@ -18,6 +18,7 @@ carries its own target's link order.
 """
 from __future__ import annotations
 import os
+import sys
 from pathlib import Path
 
 # Detection order.
@@ -25,6 +26,7 @@ VERSIONS = ("pal", "us", "aug6")
 
 
 def detect_version(repo_root: Path) -> str:
+    """The target slug: $VERSION, else the first with a link order file, else us."""
     v = os.environ.get("VERSION")
     if v:
         return v
@@ -42,6 +44,7 @@ def baserom_dir(repo_root: Path, version: str) -> Path:
 
 
 def baseelf_path(repo_root: Path, version: str) -> Path:
+    """The extracted boot ELF of this target."""
     return baserom_dir(repo_root, version) / "baseelf.elf"
 
 
@@ -53,7 +56,6 @@ _KEYS = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    import sys
     argv = list(sys.argv[1:] if argv is None else argv)
     root = Path(__file__).resolve().parent.parent
     ver = detect_version(root)

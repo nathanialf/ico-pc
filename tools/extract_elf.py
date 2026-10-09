@@ -335,7 +335,7 @@ def main() -> int:
     print(f"==> {ELF.name} SHA-1: {sha1}")
     mismatch = update_sha1sums("baseelf.elf", sha1)
     if mismatch is not None:
-        print(f"extract_elf: SHA-1 mismatch with recorded value!", file=sys.stderr)
+        print("extract_elf: SHA-1 mismatch with recorded value!", file=sys.stderr)
         print(f"  recorded: {mismatch}", file=sys.stderr)
         print(f"  actual:   {sha1}", file=sys.stderr)
         print("Either your disc image is a different revision, or the recorded",

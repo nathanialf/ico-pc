@@ -92,8 +92,7 @@ CALLEES = {
 SIZED = {"memcpy": (0, 1, 2), "memmove": (0, 1, 2), "memset": (0, None, 2)}
 
 # Callees whose argument 0 is only written (for the write-only check).
-WRITERS = {n for n, a in CALLEES.items() if 0 in a and n not in (
-    "sceVu0AddVector", "sceVu0SubVector", "sceVu0MulVector")}
+WRITERS = {n for n, a in CALLEES.items() if 0 in a}
 WRITERS |= {"sceVu0AddVector", "sceVu0SubVector", "sceVu0MulVector",
             "memset", "memcpy", "memmove", "UnitMatrix33", "_UnitRotation",
             "UnitRotation", "_UnitVector", "GetRootMatrix", "GetRootPosition",
@@ -499,8 +498,13 @@ def calls(body):
         yield m.group(1), m.start(), m.end(), j, split_top(body[m.end():j])
 
 
+def read_text(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
 def audit_file(path, rel, base_types, consts):
-    raw = open(path, encoding="utf-8", errors="replace").read()
+    raw = read_text(path)
     s = strip(raw)
     types = base_types.copy()
     types.learn(s, consts)
@@ -585,7 +589,7 @@ def header_types(root):
     for d, _, files in os.walk(root):
         for f in sorted(files):
             if f.endswith(".h"):
-                txt = open(os.path.join(d, f), encoding="utf-8", errors="replace").read()
+                txt = read_text(os.path.join(d, f))
                 consts.update(consts_of(txt))
                 texts.append(strip(txt))
     for _ in range(2):              # twice, so a typedef built on a later one resolves
@@ -616,7 +620,7 @@ def run(paths, type_roots):
     for p in sorted(set(sources(paths))):
         rel = os.path.relpath(p, ROOT)
         c = dict(consts)
-        c.update(consts_of(open(p, encoding="utf-8", errors="replace").read()))
+        c.update(consts_of(read_text(p)))
         hits += audit_file(p, rel, types, c)
     return hits
 
@@ -625,7 +629,9 @@ def read_allow(path):
     allow = {}
     if not os.path.exists(path):
         return allow
-    for n, ln in enumerate(open(path, encoding="utf-8"), 1):
+    with open(path, encoding="utf-8") as f:
+        lines = f.readlines()
+    for n, ln in enumerate(lines, 1):
         ln = ln.strip()
         if not ln or ln.startswith("#"):
             continue
@@ -643,7 +649,9 @@ def selftest():
     want = set()
     for p in sources([FIXTURES]):
         rel = os.path.relpath(p, ROOT)
-        for n, ln in enumerate(open(p, encoding="utf-8"), 1):
+        with open(p, encoding="utf-8") as f:
+            lines = f.readlines()
+        for n, ln in enumerate(lines, 1):
             for k in re.findall(r"EXPECT:\s*([\w-]+)", ln):
                 want.add((rel, n, k))
     ok = True

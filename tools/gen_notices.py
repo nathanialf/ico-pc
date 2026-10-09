@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/gen_notices.py --platform {linux,windows,android} --out NOTICES.txt [--root DIR]
+"""tools/gen_notices.py --platform {linux,windows,android} --out NOTICES.txt [--root DIR] [--manifest FILE]
 
 Writes the third-party notices file a package ships beside the program:
 every component in tools/notices/manifest.json for that platform, with its
@@ -59,7 +59,8 @@ def main():
     ap.add_argument("--platform", required=True, choices=["linux", "windows", "android"])
     ap.add_argument("--out", required=True)
     ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    ap.add_argument("--manifest", default=None)
+    ap.add_argument("--manifest", default=None,
+                    help="the components list (default: tools/notices/manifest.json under --root)")
     a = ap.parse_args()
 
     root = os.path.abspath(a.root)

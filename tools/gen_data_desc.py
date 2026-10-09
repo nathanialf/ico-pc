@@ -56,7 +56,6 @@ ROOT = g.ROOT
 OUT_DIR = ROOT / "port/data/gen"
 MANIFEST = ROOT / "config/tables_manifest.txt"
 CLANG_FORMAT = ROOT / ".venv/bin/clang-format"
-SECTIONS = {"data": 0, "rodata": 1, "sdata": 2}
 
 
 def fail(msg):
@@ -172,10 +171,7 @@ class Record:
             self.ctype = f"ico_td_rec_{self.key}"
             self.typedef = f"typedef {tname} {star}{self.ctype}{dims};"
         self.fields = []
-        if self.ty.kind == "struct":
-            flatten(self.ty, "", 0, self.fields)
-        else:
-            flatten(self.ty, "", 0, self.fields)
+        flatten(self.ty, "", 0, self.fields)
         self.pointers = has_pointer(self.ty)
 
 

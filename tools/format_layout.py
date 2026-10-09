@@ -18,7 +18,8 @@ that item and moves with it. Nothing inside a function body is touched.
   tools/format_layout.py FILE...          rewrite in place
   tools/format_layout.py --check FILE...  exit 1 if any file would change
 """
-import re, sys
+import re
+import sys
 
 INCLUDE = re.compile(r"^#\s*include\b")
 PP = re.compile(r"^#")
@@ -71,7 +72,6 @@ def items(lines):
     cur = []
     cur_kind = None
     pending_comment = []
-    in_comment_item = False
 
     def flush():
         nonlocal cur, cur_kind
@@ -132,8 +132,6 @@ def items(lines):
             ends = (kind in ("include", "pp") and not stripped.endswith("\\")) or \
                    (kind == "decl" and code.rstrip().endswith(";")) or \
                    (kind == "def" and depth == 0 and (code.rstrip().endswith(";") or code.rstrip().endswith("}")))
-            if kind == "def" and depth == 0 and not ends and not code.strip():
-                ends = False
             if ends:
                 flush()
             i += 1
@@ -168,11 +166,8 @@ def render(its):
         # strip trailing blank lines inside multi-line items (bodies keep theirs)
         while ls and ls[-1].strip() == "":
             ls = ls[:-1]
-        if prev is not None:
-            if kind in CONTIG and prev == kind:
-                pass
-            else:
-                out.append("")
+        if prev is not None and not (kind in CONTIG and prev == kind):
+            out.append("")
         out.extend(ls)
         prev = kind
     return out
@@ -196,14 +191,16 @@ def main(argv):
         argv = argv[1:]
     bad = 0
     for path in argv:
-        text = open(path, encoding="utf-8", errors="surrogateescape").read()
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
+            text = f.read()
         new = process(text)
         if new != text:
             if check:
                 print(f"format_layout: {path} would change (run tools/format.sh {path})", file=sys.stderr)
                 bad = 1
             else:
-                open(path, "w", encoding="utf-8", errors="surrogateescape").write(new)
+                with open(path, "w", encoding="utf-8", errors="surrogateescape") as f:
+                    f.write(new)
     return bad
 
 
