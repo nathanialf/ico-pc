@@ -25,6 +25,8 @@
 
 static const char k_failed_box[] =
     "The graphics driver you chose did not start. The game uses the phone's own driver.";
+/* the same once the phone's own driver has failed too (the start-up choice) */
+static const char k_failed_box_no_phone[] = "The graphics driver you chose did not start.";
 
 /* --- the drivers folder and the list ----------------------------------------- */
 
@@ -83,6 +85,7 @@ static int find_folder(const char *folder)
 static int s_trial;         /* the player's driver is on trial (the marker is written) */
 static unsigned s_presents; /* presents since the start, while on trial */
 static char s_active[160];  /* its folder */
+static int s_phoneFailed;   /* the phone's own driver did not start in this run */
 
 /* a Java exception from the last call, cleared: 1 when there was one */
 static int clear_exception(JNIEnv *env)
@@ -186,7 +189,7 @@ static void driver_failed(const char *folder, const char *why)
         ico_gpu_driver_trial_ok(root);
     }
     s_trial = 0;
-    ico_android_message_box(k_failed_box, 1);
+    ico_android_message_box(s_phoneFailed ? k_failed_box_no_phone : k_failed_box, 1);
 }
 
 int ico_gpu_driver_android_start(void)
@@ -288,6 +291,9 @@ static SDL_AtomicInt s_installState;
 static SDL_AtomicInt s_installResult; /* UI_GPU_INSTALL_* once DONE */
 static SDL_AtomicInt s_pickGen;
 static char s_uri[2048];
+/* the folder the last install made; written before install_done, read once
+   the state says DONE */
+static char s_installed[160];
 
 static void install_done(int result)
 {
@@ -334,6 +340,7 @@ static int SDLCALL install_thread(void *user)
     ico_remove(zip);
     if (r == ICO_GPU_DRIVER_OK) {
         fprintf(stderr, "gpu driver: installed %s\n", folder);
+        snprintf(s_installed, sizeof(s_installed), "%s", folder);
         install_done(UI_GPU_INSTALL_ADDED);
     } else {
         fprintf(stderr, "gpu driver: the chosen file was not installed: %s\n", why);
@@ -423,6 +430,7 @@ static int host_install_begin(void)
         return -1;
     }
     SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_PENDING);
+    s_installed[0] = '\0';
     SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
     const int gen = SDL_AddAtomicInt(&s_pickGen, 1) + 1;
     /* no filters: Android's picker matches MIME types, and the package's
@@ -488,4 +496,68 @@ static const UiGpuDriverHost k_host = {
 const UiGpuDriverHost *ico_gpu_driver_android_host(void)
 {
     return &k_host;
+}
+
+/* --- the start-up choice, before there is a device ------------------------------ */
+
+int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn)
+{
+    int r;
+
+    folder[0] = '\0';
+    why[0] = '\0';
+    s_phoneFailed = 1;
+    if (host_install_begin() != 0) {
+        snprintf(why, whyn, "The file picker could not be opened.");
+        return 0;
+    }
+    /* nothing can be drawn yet: SDL's events are pumped (the picker's
+       answer and the app coming back to the front) and left in the queue */
+    while ((r = host_install_poll()) == UI_GPU_INSTALL_PENDING) {
+        SDL_PumpEvents();
+        SDL_Delay(20);
+    }
+    if (r != UI_GPU_INSTALL_ADDED) {
+        snprintf(why, whyn, "%s",
+                 r == UI_GPU_INSTALL_NOSPACE     ? "Not enough free space."
+                 : r == UI_GPU_INSTALL_CANCELLED ? "No file was chosen."
+                                                 : "That file is not a graphics driver package.");
+        return 0;
+    }
+    const int i = find_folder(s_installed); /* host_install_poll refreshed the list */
+    if (i < 0) {
+        fprintf(stderr, "gpu driver: %s was installed but is not in the list\n", s_installed);
+        snprintf(why, whyn, "That file is not a graphics driver package.");
+        return 0;
+    }
+    host_select(i);
+    if (ico_config_save() != 0) {
+        fprintf(stderr, "gpu driver: could not save the settings\n");
+    }
+    snprintf(folder, n, "%s", s_list[i].folder);
+    fprintf(stderr, "gpu driver: %s chosen at the start\n", folder);
+    return 1;
+}
+
+void ico_gpu_driver_android_use_phone(void)
+{
+    const char *root = driver_root();
+
+    s_phoneFailed = 1;
+    rhi_set_vulkan_loader(NULL);
+    s_trial = 0;
+    s_active[0] = '\0';
+    ico_config_set_string(KEY_DRIVER, "");
+    if (ico_config_save() != 0) {
+        fprintf(stderr, "gpu driver: could not save the settings\n");
+    }
+    if (root != NULL) {
+        ico_gpu_driver_trial_ok(root);
+    }
+}
+
+int ico_gpu_driver_android_tried(void)
+{
+    const char *failed = ico_config_get_string(KEY_FAILED, "");
+    return s_active[0] != '\0' || (failed != NULL && failed[0] != '\0');
 }

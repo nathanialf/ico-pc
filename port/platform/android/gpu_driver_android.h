@@ -20,6 +20,13 @@
  *   ico_gpu_driver_android_presented after each present: the marker goes
  *   after 300 (the pipelines made, a few seconds drawn).
  *
+ * The start-up choice (window_host.c, when no driver started and there is
+ * no device, so the Settings page cannot be reached): a box offers a
+ * driver package from the system's file picker
+ * (ico_gpu_driver_android_choose: installed, chosen and saved as on the
+ * Settings page; the caller then starts again as above) or the phone's
+ * own driver again (ico_gpu_driver_android_use_phone).
+ *
  * ico_gpu_driver_android_host: the Settings page's host (settings.h
  * UiGpuDriverHost): the installed drivers (<files>/drivers/ in the app's
  * internal folder, the only place the system lets the app load a library
@@ -32,6 +39,7 @@
 #ifndef ICO_PLATFORM_GPU_DRIVER_ANDROID_H
 #define ICO_PLATFORM_GPU_DRIVER_ANDROID_H
 
+#include <stddef.h>
 #include "settings.h"
 
 /* 1 when the player's driver is in use for this start (rd_init next), 0
@@ -39,6 +47,17 @@
 int ico_gpu_driver_android_start(void);
 /* rd_init failed with the player's driver (start returned 1). */
 void ico_gpu_driver_android_init_failed(void);
+/* The start-up choice: the system's file picker, waited for with SDL's
+   events pumped (nothing drawn).  1 with the installed package's folder
+   in folder, chosen and the config saved; 0 with a sentence for the player
+   in why (not a package, no space, no file chosen). */
+int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn);
+/* The start-up choice's "the phone's own driver": the choice emptied and
+   saved, the loader back to the system's. */
+void ico_gpu_driver_android_use_phone(void);
+/* 1 when this start tried the player's driver or an earlier one failed
+   ([video] gpu_driver_failed set). */
+int ico_gpu_driver_android_tried(void);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
 /* The Settings page's host; valid for the program's life. */
