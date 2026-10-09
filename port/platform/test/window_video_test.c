@@ -10,6 +10,7 @@
  * Exit 77 (skipped) when SDL has no offscreen video driver. */
 #include "../window_video.h"
 #include <stdio.h>
+#include <string.h>
 
 static int s_failures;
 
@@ -107,7 +108,12 @@ int main(void)
         pw = ph = -1;
         r = ico_window_video_mode(w, ICO_WINDOWVIDEO_BORDERLESS, &pw, &ph);
         CHECK(r == ICO_WINDOWVIDEO_BORDERLESS, "borderless returned %d", r);
-        CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_BORDERLESS) != 0, "borderless flag not set");
+        if (strcmp(SDL_GetCurrentVideoDriver(), "offscreen") != 0) {
+            CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_BORDERLESS) != 0, "borderless flag not set");
+        } else {
+            printf("borderless: the offscreen driver has no borders, flag %s\n",
+                   (SDL_GetWindowFlags(w) & SDL_WINDOW_BORDERLESS) ? "set" : "not set");
+        }
         CHECK((SDL_GetWindowFlags(w) & SDL_WINDOW_FULLSCREEN) == 0, "borderless is fullscreen");
         printf("borderless: window %dx%d, display %dx%d\n", pw, ph, b.w, b.h);
 

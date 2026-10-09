@@ -2277,7 +2277,9 @@ static void build(void)
        two arrows, Randomize, Reset, Back, nine swatches, the note) and
        Extras' Characters row one, 51 in all: with the model viewer's,
        about 431 of the 512 (380 before, settings_test's last count), under
-       the 448 settings_test's budget cell allows (64 kept spare); and one
+       the 448 settings_test's budget cell allowed (64 kept spare; v0.4.3
+       raised the table to 768 for the mouse rows, Cinematic bars and the
+       Android driver page, the same 64 spare); and one
        layout (19 of 32, 4 kept spare).  The viewer's panel (package K-D)
        is this page: 15 more rows (Switch, and the prompt line's six
        words and eight glyphs), no layout */

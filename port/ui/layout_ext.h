@@ -41,7 +41,8 @@ extern "C" {
 #define LT_GAME_LAYOUT_COUNT 80
 #define LT_GAME_PROPERTY_COUNT 436
 #define LT_EXT_MAX_LAYOUTS 32
-#define LT_EXT_MAX_PROPERTIES 512
+#define LT_EXT_MAX_PROPERTIES                                                                      \
+    768 /* v0.4.3: 512 before; the mouse rows, Cinematic bars and the Android driver page */
 
 /* The label of a port row. */
 typedef struct LtExtText {

@@ -30,17 +30,15 @@ static int fakeI17cMode(void)
     return s_i17cAnswer;
 }
 
+/* the Display page's Window mode row is shown: the pages keep every row
+   and mask the hidden ones when the page is laid out, so open it first */
 static int i17cDisplayHasWindowMode(void)
 {
-    int rows[16], opts[16];
-    const int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, rows, opts, NULL, 16);
+    const int mainL = enterMain(0);
 
-    for (int i = 0; i < n; i++) {
-        if (opts[i] == UI_OPT_WINDOW_MODE) {
-            return 1;
-        }
-    }
-    return 0;
+    openPage(mainL, 0, UI_PAGE_DISPLAY);
+    const int row = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_WINDOW_MODE);
+    return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
 }
 
 static void testWindowMode(void)

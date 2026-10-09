@@ -109,7 +109,7 @@ static void testBuild(void)
     ui_SetLanguage(UI_LANG_EN);
     ui_SettingsInstall();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 12), "main page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 8), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
     {
         /* v0.4.2: Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,

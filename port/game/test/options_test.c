@@ -374,7 +374,7 @@ static void test_video_effects(const char *dir)
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(effects_are(&o, 1, 1, 1, 1, 0, 0));
+    CHECK(effects_are(&o, 1, 1, 1, 1, 0, 1));
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
     /* run-time values are sanitized to 0 or 1 */
     o.effectGlow = 0;

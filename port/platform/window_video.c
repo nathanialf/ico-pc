@@ -42,6 +42,17 @@ static int s_maximizedByUs; /* Wayland's borderless is a maximised window */
 #define DEFAULT_W 960
 #define DEFAULT_H 720
 
+static int s_askedBorderless; /* the last request was Borderless */
+
+/* SDL's offscreen and dummy drivers have no window borders to take away,
+   so SDL leaves the frameless flag alone there: the request stands in */
+static int driver_has_borders(void)
+{
+    const char *d = SDL_GetCurrentVideoDriver();
+
+    return d != NULL && strcmp(d, "offscreen") != 0 && strcmp(d, "dummy") != 0;
+}
+
 static int real_mode(SDL_Window *w)
 {
     const SDL_WindowFlags f = SDL_GetWindowFlags(w);
@@ -49,7 +60,11 @@ static int real_mode(SDL_Window *w)
     if (f & SDL_WINDOW_FULLSCREEN) {
         return ICO_WINDOWVIDEO_FULLSCREEN;
     }
-    return (f & SDL_WINDOW_BORDERLESS) ? ICO_WINDOWVIDEO_BORDERLESS : ICO_WINDOWVIDEO_WINDOWED;
+    if (f & SDL_WINDOW_BORDERLESS) {
+        return ICO_WINDOWVIDEO_BORDERLESS;
+    }
+    return (s_askedBorderless && !driver_has_borders()) ? ICO_WINDOWVIDEO_BORDERLESS
+                                                        : ICO_WINDOWVIDEO_WINDOWED;
 }
 
 static void leave_fullscreen(SDL_Window *w)
@@ -86,6 +101,7 @@ int ico_window_video_mode(SDL_Window *w, int mode, int *pxW, int *pxH)
     if (mode < ICO_WINDOWVIDEO_WINDOWED || mode > ICO_WINDOWVIDEO_FULLSCREEN) {
         mode = ICO_WINDOWVIDEO_WINDOWED;
     }
+    s_askedBorderless = mode == ICO_WINDOWVIDEO_BORDERLESS;
     if (mode == ICO_WINDOWVIDEO_FULLSCREEN) {
         remember_rect(w);
         if (s_maximizedByUs) {
