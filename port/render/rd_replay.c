@@ -3785,6 +3785,47 @@ static void blurSnapArea(const Replay *r, const RdTargetRec *tc, const RdPostRec
     *need = dstRead && selfSample ? rectJoin(dst, tex) : (dstRead ? dst : tex);
 }
 
+/* fx_sprite_ps's flags (DrawCB.mode.x) for a staticBlur sprite: the texture
+ * function and sampling, ABE, PABE, FBA, DATE and the destination read */
+static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, int dstRead)
+{
+    uint32_t fl = 0;
+    if (textured) {
+        fl |= RD_FXF_TEXTURED | ((lines & 3u) << RD_FXF_TFX_SHIFT);
+        if (d->texFn == RD_TEXFN_DECAL && (lines & 3u) == 0) {
+            fl |= 1u << RD_FXF_TFX_SHIFT; /* a DECAL bound through rd_Texture */
+        }
+        if (d->tcc == RD_TCC_RGBA) {
+            fl |= RD_FXF_TCC;
+        }
+        if (d->magFilter == RD_FILTER_LINEAR) {
+            fl |= RD_FXF_LINEAR;
+        }
+        if (d->wrap.s == RD_WRAP_CLAMP) {
+            fl |= RD_FXF_CLAMP_S;
+        }
+        if (d->wrap.t == RD_WRAP_CLAMP) {
+            fl |= RD_FXF_CLAMP_T;
+        }
+    }
+    if (d->abe) {
+        fl |= RD_FXF_ABE;
+    }
+    if (d->pabe) {
+        fl |= RD_FXF_PABE;
+    }
+    if (d->fba) {
+        fl |= RD_FXF_FBA;
+    }
+    if (d->test.date != RD_DATE_OFF) {
+        fl |= RD_FXF_DATE | (d->test.date == RD_DATE_DEST_ALPHA_1 ? RD_FXF_DATM : 0u);
+    }
+    if (dstRead) {
+        fl |= RD_FXF_DST;
+    }
+    return fl;
+}
+
 /* ------------------------------------------- staticBlur (wave 5, R5a)
  * RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR: one GS sprite through fx_rect_vs
  * and fx_sprite_ps (rd_blur.c says what is modelled).  The state block's
@@ -3914,40 +3955,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
-    uint32_t fl = 0;
-    if (textured) {
-        fl |= RD_FXF_TEXTURED | ((p.lines & 3u) << RD_FXF_TFX_SHIFT);
-        if (d->texFn == RD_TEXFN_DECAL && (p.lines & 3u) == 0) {
-            fl |= 1u << RD_FXF_TFX_SHIFT; /* a DECAL bound through rd_Texture */
-        }
-        if (d->tcc == RD_TCC_RGBA) {
-            fl |= RD_FXF_TCC;
-        }
-        if (d->magFilter == RD_FILTER_LINEAR) {
-            fl |= RD_FXF_LINEAR;
-        }
-        if (d->wrap.s == RD_WRAP_CLAMP) {
-            fl |= RD_FXF_CLAMP_S;
-        }
-        if (d->wrap.t == RD_WRAP_CLAMP) {
-            fl |= RD_FXF_CLAMP_T;
-        }
-    }
-    if (d->abe) {
-        fl |= RD_FXF_ABE;
-    }
-    if (d->pabe) {
-        fl |= RD_FXF_PABE;
-    }
-    if (d->fba) {
-        fl |= RD_FXF_FBA;
-    }
-    if (d->test.date != RD_DATE_OFF) {
-        fl |= RD_FXF_DATE | (d->test.date == RD_DATE_DEST_ALPHA_1 ? RD_FXF_DATM : 0u);
-    }
-    if (dstRead) {
-        fl |= RD_FXF_DST;
-    }
+    const uint32_t fl = blurFlags(d, p.lines, textured, dstRead);
     memcpy(cb.col, (const uint32_t[4]){p.rgba[0], p.rgba[1], p.rgba[2], p.rgba[3]}, sizeof(cb.col));
     cb.mode[0] = fl;
     cb.mode[1] = d->texa | (tfmt << 8);
