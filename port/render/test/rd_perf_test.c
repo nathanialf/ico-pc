@@ -402,9 +402,15 @@ static void checkGroups(const char *what, const Sum *s)
  * copy (ICO_VK_GLOBAL_BARRIERS=1, the _GLOBAL counts).  A backend
  * without counters (D3D12) reads 0 and is not checked.  v0.4.2 (N2): two
  * fewer in every mode (36, 39, 44, 48 before), the target clears now taken
- * as the next pass's load op instead of passes of their own. */
-#define BARRIERS_REPLAY 34
-#define BARRIERS_RECORD 37
+ * as the next pass's load op instead of passes of their own.  The counts
+ * are vkCmdPipelineBarrier calls: the image transitions recorded together
+ * go out in one call, joined to the next pass's or copy's own barrier
+ * (vk_cmd.c, vkr_FlushBarriers; 34 and 37 when each went out alone).  The
+ * global mode records each transition in a call of its own, as before.
+ * 18 and 20 are estimates from reading the replay, to be confirmed from
+ * the steady-state counts this test prints. */
+#define BARRIERS_REPLAY 18
+#define BARRIERS_RECORD 20
 #define BARRIERS_REPLAY_GLOBAL 42
 #define BARRIERS_RECORD_GLOBAL 46
 

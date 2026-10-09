@@ -118,6 +118,9 @@ typedef struct VkrGarbage {
 #define VKR_GARBAGE_OVERFLOW 256
 
 #define VKR_MAX_CMD_LISTS 8
+/* image barriers a command list holds back before issuing them together
+ * (vk_cmd.c, vkr_FlushBarriers) */
+#define VKR_PENDING_BARRIERS 8
 #define VKR_DESC_POOLS_MAX 16
 /* swapchain images: the most a surface's swapchain may have (vk_swapchain.c) */
 #define VKR_MAX_SWAP_IMAGES 16u
@@ -139,6 +142,12 @@ typedef struct VkrCmdList {
      * instead (ICO_VK_GLOBAL_BARRIERS=1, or lists recorded interleaved) */
     uint64_t epoch;
     bool globalOrder;
+    /* image barriers recorded by rhi_CmdBarrier and not issued yet, with
+     * their stage masks OR-ed: they go out in one vkCmdPipelineBarrier
+     * before the list's next command (vk_cmd.c, vkr_FlushBarriers) */
+    VkImageMemoryBarrier pendImg[VKR_PENDING_BARRIERS];
+    uint32_t pendCount;
+    VkPipelineStageFlags pendSrc, pendDst;
 } VkrCmdList;
 
 typedef struct VkrFrame {

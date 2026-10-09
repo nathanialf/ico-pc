@@ -181,6 +181,7 @@ void rhi_WaitIdle(void)
 }
 
 static void vkr_OpenBarrier(VkCommandBuffer cb);
+static void vkr_FlushBarriers(VkrCmdList *c);
 
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1). */
@@ -212,6 +213,8 @@ RhiCommandList rhi_BeginCommands(void)
         return out;
     }
     c->recording = true;
+    c->pendCount = 0;
+    c->pendSrc = c->pendDst = 0;
     /* package PB: a new hazard-tracking epoch ("Hazards") */
     c->epoch = ++g_vkr.hzEpoch;
     c->globalOrder = g_vkr.globalBarriers;
@@ -243,6 +246,7 @@ void rhi_EndCommands(RhiCommandList cl)
     if (!c || !c->recording) {
         return;
     }
+    vkr_FlushBarriers(c);
     if (c->inPass) {
         VKR_LOG("rhi_EndCommands inside a render pass");
         g_vkr.cmdEndRendering(c->cb);
@@ -360,7 +364,32 @@ bool vkr_SubmitPresentSignal(void)
     return vkr_SubmitBatch(NULL, 0, true);
 }
 
-/* ---------------------------------------------------------------- barriers */
+/* ---------------------------------------------------------------- barriers
+ * Image barriers are deferred.  vkr_ImageBarrier adds each one to the
+ * list's pending set (VkrCmdList.pendImg) instead of recording it, and the
+ * set goes out as one vkCmdPipelineBarrier, its stage masks OR-ed, before
+ * the next command of any kind: every recording entry point below calls
+ * vkr_FlushBarriers first, and a render pass or a copy puts the set into
+ * the barrier of its own hazards (vkr_HzTakePending).  So every command
+ * sees the same barriers it saw when each went out in a call of its own;
+ * the wider stage masks only add waits.  A second barrier on an image
+ * already in the set sends the set first (two layout transitions of one
+ * image in one call are not ordered), and so does a full set.  A list on
+ * the global barrier path (ICO_VK_GLOBAL_BARRIERS=1, or recorded
+ * interleaved: vkr_OrderWrites) defers nothing and records each barrier
+ * at once, as before.  stats.barriers counts vkCmdPipelineBarrier calls. */
+static void vkr_FlushBarriers(VkrCmdList *c)
+{
+    if (c->pendCount == 0) {
+        return;
+    }
+    vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, 0, NULL, 0, NULL, c->pendCount,
+                         c->pendImg);
+    g_vkr.stats.barriers++;
+    c->pendCount = 0;
+    c->pendSrc = c->pendDst = 0;
+}
+
 void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after)
 {
     const VkrStateMap *b = &vkr_stateMap[before];
@@ -402,8 +431,21 @@ void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState af
     if (after == RHI_STATE_PRESENT) {
         dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     }
-    vkCmdPipelineBarrier(c->cb, src, dst, 0, 0, NULL, 0, NULL, 1, &ib);
-    g_vkr.stats.barriers++;
+    for (uint32_t i = 0; i < c->pendCount; i++) {
+        if (c->pendImg[i].image == t->image) {
+            vkr_FlushBarriers(c);
+            break;
+        }
+    }
+    if (c->pendCount == VKR_PENDING_BARRIERS) {
+        vkr_FlushBarriers(c);
+    }
+    c->pendImg[c->pendCount++] = ib;
+    c->pendSrc |= src;
+    c->pendDst |= dst;
+    if (c->globalOrder) {
+        vkr_FlushBarriers(c);
+    }
     /* package PB: the barrier covers whatever was pending on the image */
     t->hzEpoch = 0;
     t->hzXferMips = 0;
@@ -494,11 +536,27 @@ static void vkr_OpenBarrier(VkCommandBuffer cb)
 
 /* the barriers one pass or copy needs, emitted as one vkCmdPipelineBarrier */
 typedef struct VkrHz {
-    VkImageMemoryBarrier img[RHI_MAX_COLOR_TARGETS + 2];
+    VkImageMemoryBarrier img[VKR_PENDING_BARRIERS + RHI_MAX_COLOR_TARGETS + 2];
     VkBufferMemoryBarrier buf[2];
     uint32_t imgCount, bufCount;
     VkPipelineStageFlags src, dst;
 } VkrHz;
+
+/* The list's deferred image barriers into h, so they go out in the call h
+ * makes (vkr_HzFlush) with the hazards' own barriers.  None of their
+ * images is among those hazards: a deferred barrier cleared its image's
+ * record (vkr_ImageBarrier), and vkr_HzImage adds nothing for a cleared
+ * record. */
+static void vkr_HzTakePending(VkrHz *h, VkrCmdList *c)
+{
+    for (uint32_t i = 0; i < c->pendCount; i++) {
+        h->img[h->imgCount++] = c->pendImg[i];
+    }
+    h->src |= c->pendSrc;
+    h->dst |= c->pendDst;
+    c->pendCount = 0;
+    c->pendSrc = c->pendDst = 0;
+}
 
 static void vkr_HzTouch(const VkrCmdList *c, VkrTexture *t)
 {
@@ -604,12 +662,14 @@ static void vkr_HzCopy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vkr
                        uint32_t dstMip, VkrBuffer *dstBuf)
 {
     if (c->globalOrder) {
+        vkr_FlushBarriers(c);
         vkr_OrderWrites(c->cb, false);
         return;
     }
     VkrHz h;
     h.imgCount = h.bufCount = 0;
     h.src = h.dst = 0;
+    vkr_HzTakePending(&h, c);
     if (srcTex) {
         vkr_HzImage(&h, c, srcTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, 0);
@@ -720,12 +780,15 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         .pStencilAttachment = hasStencil ? &stencil : NULL,
     };
     if (c->globalOrder) {
+        vkr_FlushBarriers(c);
         vkr_OrderWrites(c->cb, true);
     } else {
-        /* package PB: barriers for the targets only ("Hazards") */
+        /* barriers for the targets only ("Hazards"), in one
+         * call with the deferred image barriers */
         VkrHz h;
         h.imgCount = h.bufCount = 0;
         h.src = h.dst = 0;
+        vkr_HzTakePending(&h, c);
         for (uint32_t i = 0; i < pass->colorCount; i++) {
             vkr_HzImage(&h, c, colorTex[i], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -773,6 +836,7 @@ void rhi_CmdEndRenderPass(RhiCommandList cl)
     if (!c || !c->inPass) {
         return;
     }
+    vkr_FlushBarriers(c);
     g_vkr.cmdEndRendering(c->cb);
     c->inPass = false;
 }
@@ -783,6 +847,7 @@ void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *v)
     if (!c || !v) {
         return;
     }
+    vkr_FlushBarriers(c);
     /* Negative height (core since Vulkan 1.1) gives D3D's y-up NDC, so the
      * same HLSL runs on both backends without -fvk-invert-y. */
     VkViewport vp = {v->x, v->y + v->h, v->w, -v->h, v->minDepth, v->maxDepth};
@@ -795,6 +860,7 @@ void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *r)
     if (!c || !r) {
         return;
     }
+    vkr_FlushBarriers(c);
     VkRect2D sc = {{r->x, r->y}, {r->w, r->h}};
     vkCmdSetScissor(c->cb, 0, 1, &sc);
 }
@@ -811,6 +877,7 @@ void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
             c->groupDirty = 0xFFu; /* rebind against the new layout */
         }
         c->pipeline = pp;
+        vkr_FlushBarriers(c);
         vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pp->pipeline);
         g_vkr.stats.pipelineBinds++;
     }
@@ -878,6 +945,7 @@ void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, ui
         return;
     }
     VkDeviceSize off = offset;
+    vkr_FlushBarriers(c);
     vkCmdBindVertexBuffers(c->cb, binding, 1, &buf->buffer, &off);
 }
 
@@ -888,6 +956,7 @@ void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool
     if (!c || !buf) {
         return;
     }
+    vkr_FlushBarriers(c);
     vkCmdBindIndexBuffer(c->cb, buf->buffer, offset,
                          u32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 }
@@ -896,6 +965,7 @@ void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref)
 {
     VkrCmdList *c = vkr_GetCmd(cl);
     if (c) {
+        vkr_FlushBarriers(c);
         vkCmdSetStencilReference(c->cb, VK_STENCIL_FACE_FRONT_AND_BACK, ref);
     }
 }
@@ -904,6 +974,7 @@ void rhi_CmdSetBlendConstant(RhiCommandList cl, const float rgba[4])
 {
     VkrCmdList *c = vkr_GetCmd(cl);
     if (c) {
+        vkr_FlushBarriers(c);
         vkCmdSetBlendConstants(c->cb, rgba);
     }
 }
@@ -915,6 +986,7 @@ void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
     if (!c || !c->pipeline) {
         return;
     }
+    vkr_FlushBarriers(c);
     vkr_FlushBindGroups(c);
     vkCmdDraw(c->cb, vertexCount, instanceCount ? instanceCount : 1u, firstVertex, 0);
     g_vkr.stats.draws++;
@@ -927,6 +999,7 @@ void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIn
     if (!c || !c->pipeline) {
         return;
     }
+    vkr_FlushBarriers(c);
     vkr_FlushBindGroups(c);
     vkCmdDrawIndexed(c->cb, indexCount, instanceCount ? instanceCount : 1u, firstIndex,
                      vertexOffset, 0);
@@ -944,6 +1017,7 @@ void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, Rhi
         return;
     }
     VkBufferCopy r = {srcOffset, dstOffset, size};
+    vkr_FlushBarriers(c);
     /* package P1: rhi.h: the copy waits for every earlier read of the
      * destination (draws of earlier frames reading a range rewritten now)
      * and write (an earlier copy) */
@@ -1065,6 +1139,7 @@ void rhi_CmdBeginLabel(RhiCommandList cl, const char *name)
         return;
     }
     VkDebugUtilsLabelEXT l = {.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = name};
+    vkr_FlushBarriers(c);
     vkCmdBeginDebugUtilsLabelEXT(c->cb, &l);
 }
 
@@ -1074,6 +1149,7 @@ void rhi_CmdEndLabel(RhiCommandList cl)
     if (!c || !g_vkr.debugUtils || !vkCmdEndDebugUtilsLabelEXT) {
         return;
     }
+    vkr_FlushBarriers(c);
     vkCmdEndDebugUtilsLabelEXT(c->cb);
 }
 
@@ -1188,6 +1264,7 @@ void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
         (f->tsWritten & (1u << index))) {
         return;
     }
+    vkr_FlushBarriers(c);
     vkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f->queryPool, index);
     f->tsWritten |= 1u << index;
 }
