@@ -19,6 +19,9 @@
  *   caller runs rd_init again).
  *   ico_gpu_driver_android_presented after each present: the marker goes
  *   after 300 (the pipelines made, a few seconds drawn).
+ *   ico_gpu_driver_android_end at a normal end (the window's close among
+ *   the end-of-run steps): the marker goes too, since the driver did not
+ *   crash; a crash or a fatal error (_exit) skips it and leaves the marker.
  *
  * The start-up choice (window_host.c, when no driver started and there is
  * no device, so the Settings page cannot be reached): a box offers a
@@ -56,6 +59,9 @@ void ico_gpu_driver_android_init_failed(void);
 int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
+/* At a normal end, before the renderer shuts down: a trial still running
+   ends as passed (the marker removed). */
+void ico_gpu_driver_android_end(void);
 /* The Settings page's host; valid for the program's life. */
 const UiGpuDriverHost *ico_gpu_driver_android_host(void);
 

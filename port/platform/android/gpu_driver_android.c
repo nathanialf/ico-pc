@@ -280,6 +280,19 @@ void ico_gpu_driver_android_presented(void)
     fprintf(stderr, "gpu driver: %s drew %u frames; it is kept\n", s_active, TRIAL_PRESENTS);
 }
 
+void ico_gpu_driver_android_end(void)
+{
+    if (!s_trial) {
+        return;
+    }
+    s_trial = 0;
+    if (driver_root() != NULL) {
+        ico_gpu_driver_trial_ok(s_root);
+    }
+    fprintf(stderr, "gpu driver: %s ran until a normal end (%u frames); it is kept\n", s_active,
+            s_presents);
+}
+
 /* --- adding a driver: the picker, then a thread -------------------------------- */
 
 enum { INSTALL_IDLE = 0, INSTALL_PICKING, INSTALL_COPYING, INSTALL_DONE };

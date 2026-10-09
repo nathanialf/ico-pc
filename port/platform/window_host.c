@@ -2045,6 +2045,9 @@ void ico_window_close(void)
     s_open = 0;
 #ifdef __ANDROID__
     SDL_RemoveEventWatch(lifecycle_watch, NULL);
+    /* a normal end: a driver package still on trial did not crash, so the
+       next start does not treat it as failed */
+    ico_gpu_driver_android_end();
 #endif
     set_capture(ICO_CAPTURE_OFF);
     ico_input_sdl_shutdown();
