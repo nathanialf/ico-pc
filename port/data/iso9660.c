@@ -469,7 +469,8 @@ int ico_cue_parse(const char *text, size_t len, IcoCueTrack *out, char *err, siz
                     snprintf(err, errsz, "the cue sheet's first track type %s is not supported", b);
                     return -1;
                 }
-                snprintf(out->type, sizeof(out->type), "%s", b);
+                /* b is at most 31 letters (the type's own size), so the copy is whole */
+                snprintf(out->type, sizeof(out->type), "%.*s", (int)sizeof(out->type) - 1, b);
                 out->unit_bytes = (uint32_t)unit;
                 out->data_off = (uint32_t)off;
             }
