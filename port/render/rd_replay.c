@@ -3664,6 +3664,11 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.th = tz->h;
     ds.textured = 1;
     r->stretch = 1; /* R7a: the fog sprite covers the screen */
+    /* no prepareDraw here: the per-draw flags it resets are reset here, so
+     * the previous draw's mirror (scissorRect) is not inherited */
+    r->mirror = 0;
+    r->uiPrim = 0;
+    r->blockCs = 0.5f;
     if (!bindDraw(r, &ds).id) {
         return;
     }
@@ -3878,6 +3883,11 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
                         (d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY);
     const int selfSample = src == tc;
     r->stretch = 1; /* R7a: fx_rect_vs covers the target; no wide x scale */
+    /* as doFog: prepareDraw's other per-draw flags, not the previous draw's
+     * (the scissor and blurSnapArea read mirror) */
+    r->mirror = 0;
+    r->uiPrim = 0;
+    r->blockCs = 0.5f;
     float uv[4];
     rd__BlurUvRect(c->b[0], &p, uv); /* R-POST: the reduction's mirror */
     RhiRect need = {0, 0, tc->tw, tc->th};
