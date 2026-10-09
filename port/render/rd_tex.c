@@ -463,7 +463,7 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
             }
         }
         if (e == NULL) {
-            rd__Log("rd_tex: the cache is full (%d entries)", RDTEX_MAX_ENTRIES);
+            rd__Log("the texture cache is full (%d entries)", RDTEX_MAX_ENTRIES);
             free(px);
             s_tc.stats.failures++;
             return (RdTex){0};
