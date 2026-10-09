@@ -34,8 +34,6 @@ static unsigned int vsyncs;
 
 static int field;
 
-static unsigned long long time_us;
-
 static IcoStepProfile profile;
 
 /* The EE's main thread starts at priority 0 and libkernl's InitThread
@@ -96,7 +94,6 @@ void ico_host_step(void)
     ico_fpenv_sim_enter();
     ico_sched_vsync_advance();
     vsyncs++;
-    time_us += ico_host_vsync_hz() == 50 ? 20000u : 16683u; /* NTSC: 59.94 Hz */
     ico_vsync(field);
     field ^= 1;
     ico_host_run_vsync_hooks();
@@ -141,9 +138,4 @@ unsigned int ico_host_vsync_count(void)
 int ico_host_vsync_hz(void)
 {
     return systemStatus[0] != 0 ? 50 : 60;
-}
-
-unsigned long long ico_host_time_us(void)
-{
-    return time_us;
 }

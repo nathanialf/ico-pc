@@ -59,7 +59,7 @@
  * Developer overrides, which win over all of the above:
  *
  *   ico_pc [--iso PATH] [--pad-script FILE] [--trace FILE|none] [--ticks N]
- *          [--vsync-rate X] [--no-verify] [--console] [--help]
+ *          [--no-verify] [--console] [--help]
  *
  * --console keeps stdout and stderr on the console instead of the log.
  * Options also take the --opt=VALUE spelling. An unknown option or a bad
@@ -206,7 +206,6 @@ static void usage(FILE *out, const char *prog)
         "  --trace FILE|none  the per-Main-tick trace (logs/trace-<time>.txt by\n"
         "                     default in the headless build; FILE turns it on)\n"
         "  --ticks N          exit after N Main ticks\n"
-        "  --vsync-rate X     accepted and ignored (pacing comes later)\n"
         "  --no-verify        skip the disc image's SHA-1 check\n"
         "  --console          log to the console, not logs/ico-pc.log\n"
         "  --help             this text\n",
@@ -223,16 +222,6 @@ static int parse_count(const char *s, unsigned long *out)
     errno = 0;
     *out = strtoul(s, &end, 10);
     return errno != 0 || *end != '\0' || *out > 0xFFFFFFFFul ? -1 : 0;
-}
-
-static int parse_rate(const char *s)
-{
-    char *end;
-    double v;
-
-    errno = 0;
-    v = strtod(s, &end);
-    return errno != 0 || end == s || *end != '\0' || !(v > 0.0) ? -1 : 0;
 }
 
 static const char *exit_reason = "exit() from the game or the C library";
@@ -365,12 +354,6 @@ static int parse_args(int argc, char **argv, Args *a)
                 return 2;
             }
             a->ticks = v;
-        } else if ((r = option(argc, argv, &i, "--vsync-rate", &v)) != 0) {
-            if (r > 0 && parse_rate(v) != 0) {
-                say(stderr, "%s: --vsync-rate wants a positive number, not '%s'\n", prog, v);
-                usage(stderr, prog);
-                return 2;
-            }
         } else {
             say(stderr, "%s: unknown option '%s'\n", prog, name);
             usage(stderr, prog);

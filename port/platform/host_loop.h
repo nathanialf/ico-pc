@@ -36,8 +36,6 @@ void ico_host_step(void);
 unsigned int ico_host_vsync_count(void);
 /* The simulated vsync rate: 50 (PAL, systemStatus[0] != 0) or 60. */
 int ico_host_vsync_hz(void);
-/* Simulated time in microseconds (the sum of each vsync's period). */
-unsigned long long ico_host_time_us(void);
 
 /* Package Q1: where the last ico_host_step's real time went, for the window
    build's slow-step lines (window_host.c), in ms: the vsync callbacks (the

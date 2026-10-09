@@ -23,9 +23,5 @@ void ico_kernel_reset(void);
 int ico_kernel_raise_intc(int cause);
 /* 1 when the cause is enabled (EnableIntc). */
 int ico_kernel_intc_enabled(int cause);
-/* scePrintf output: off unless the ICO_TTY environment variable is set. */
-void ico_kernel_set_tty(int on);
-/* The last SetGsCrt arguments, for the presentation layer. */
-void ico_kernel_gs_crt(short *interlace, short *omode, short *ffmd);
 
 #endif /* ICO_PLATFORM_KERNEL_HOST_H */

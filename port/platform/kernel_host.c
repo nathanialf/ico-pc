@@ -61,12 +61,6 @@ static volatile unsigned long long *vsync_csr;
 
 static unsigned long long gs_imr = GS_IMR_ALL_MASKED;
 
-static short crt_interlace;
-
-static short crt_omode;
-
-static short crt_ffmd;
-
 static int tty_on = -1;
 
 void ico_kernel_reset(void)
@@ -84,9 +78,6 @@ void ico_kernel_reset(void)
     vsync_flag = 0;
     vsync_csr = 0;
     gs_imr = GS_IMR_ALL_MASKED;
-    crt_interlace = 0;
-    crt_omode = 0;
-    crt_ffmd = 0;
 }
 
 /* next == 0 puts the handler first, anything else last (the EE's -1). */
@@ -501,18 +492,13 @@ unsigned long long GsPutIMR(unsigned long long imr)
     return old;
 }
 
+/* The video mode the PS2 put on the TV: the host's renderer sets its own
+   output, so nothing here needs it. */
 void SetGsCrt(short interlace, short omode, short ffmd)
 {
-    crt_interlace = interlace;
-    crt_omode = omode;
-    crt_ffmd = ffmd;
-}
-
-void ico_kernel_gs_crt(short *interlace, short *omode, short *ffmd)
-{
-    *interlace = crt_interlace;
-    *omode = crt_omode;
-    *ffmd = crt_ffmd;
+    (void)interlace;
+    (void)omode;
+    (void)ffmd;
 }
 
 /* The kernel writes 1 to *flag and GS_CSR to *csr at the next vblank start
@@ -551,12 +537,8 @@ long long VSync2(void)
     return (long long)*GS_CSR;
 }
 
-void ico_kernel_set_tty(int on)
-{
-    tty_on = on;
-}
-
-/* The retail game's scePrintf output went to the development kit's TTY. */
+/* The retail game's scePrintf output went to the development kit's TTY;
+   here it goes to stdout when the ICO_TTY environment variable is set. */
 void scePrintf(char *fmt, ...)
 {
     va_list ap;
