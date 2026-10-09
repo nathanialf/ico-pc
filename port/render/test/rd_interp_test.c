@@ -2806,15 +2806,17 @@ static void recordHallLights(RdMesh mesh, RdMesh skin, int k)
 
 /* normal_l's and cluster's colour for the unit normal n (vu_skin.hlsl,
  * vu_lit.hlsl: c = L2 max0(L1 n) with the ambient column) */
+/* the shader's lighting of normal n from eight rows: L1's four rows (qw
+ * 28..31) then L2's four (qw 32..35); a VU block is passed as block + 28 */
 static void lightShade(const float (*m)[4], const double n[3], double out[3])
 {
     double l[3];
     for (int i = 0; i < 3; i++) {
-        const double v = m[28][i] * n[0] + m[29][i] * n[1] + m[30][i] * n[2] + m[31][i];
+        const double v = m[0][i] * n[0] + m[1][i] * n[1] + m[2][i] * n[2] + m[3][i];
         l[i] = v > 0.0 ? v : 0.0;
     }
     for (int ch = 0; ch < 3; ch++) {
-        out[ch] = m[32][ch] * l[0] + m[33][ch] * l[1] + m[34][ch] * l[2] + m[35][ch];
+        out[ch] = m[4][ch] * l[0] + m[5][ch] * l[1] + m[6][ch] * l[2] + m[7][ch];
     }
 }
 
@@ -2866,7 +2868,7 @@ static void testLightSlots(void)
                 double sp[3], sc[3], so[3];
                 lightShade(p, n, sp);
                 lightShade(c, n, sc);
-                lightShade(m, n, so);
+                lightShade(m + 28, n, so);
                 for (int ch = 0; ch < 3; ch++) {
                     const double lo = fmin(sp[ch], sc[ch]);
                     if (!within(so[ch], sp[ch], sc[ch], 1e-4 + 1e-3 * fmax(sp[ch], sc[ch]))) {

@@ -58,6 +58,9 @@ static int s_fail;
 #define OUT_H 720
 /* a fully faded frame: rd_post's 1 + alpha for an alpha of 127 or more */
 #define FADE_FULL 0x80u
+
+/* per loaded frame: a sign is drawn over its fade (filled by installFrame) */
+static bool s_signOver[1024]; /* ICO_BOOT_FRAMES spans at most this many frames */
 #define BLACK_MAX 2u
 
 typedef struct BootConfig {
@@ -98,12 +101,16 @@ static int fileExists(const char *path)
 typedef struct FadeScan {
     const RdFrame *f;
     uint32_t fade;
+    uint32_t fadeIndex; /* the fade sprite's index in list 11 */
+    uint32_t after;     /* screen draws in list 11 after the fade: a sign's backdrop and words */
 } FadeScan;
 
 static void fadeWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
 {
     FadeScan *s = (FadeScan *)user;
-    (void)index;
+    if (list == 11 && c->type == RDC_SCREEN && s->fade && index > s->fadeIndex) {
+        s->after++;
+    }
     if (list != 11 || c->type != RDC_SCREEN || !(c->keyLo | c->keyHi) || st->ds.texEnabled ||
         !st->ds.abe || st->ds.blend != RD_BLEND_LERP_AS || c->u[1] < 2 ||
         (uint64_t)c->u[0] + (uint64_t)c->u[1] * sizeof(RdScreenVtx) > s->f->payloadSize) {
@@ -126,14 +133,19 @@ static void fadeWalk(void *user, int list, uint32_t index, const RdCmd *c, const
     }
     if (s->fade < 1u + alpha) {
         s->fade = 1u + alpha;
+        s->fadeIndex = index;
+        s->after = 0;
     }
 }
 
-static uint32_t findFade(const RdFrame *f)
+/* the frame's fade, and whether a sign (its backdrop and words) is drawn
+ * over it: those frames show the sign, so they need not be black */
+static uint32_t findFade(const RdFrame *f, bool *signOver)
 {
-    FadeScan s = {f, 0};
+    FadeScan s = {f, 0, 0, 0};
     RdStateBlock st = f->startState;
     rd__walk(f, (int)f->keep, &st, fadeWalk, &s);
+    *signOver = s.after != 0;
     return s.fade;
 }
 
@@ -150,7 +162,7 @@ static RdFrame *installFrame(uint32_t n)
         CHECK(0, "%s: rd__load_frame", path);
         return NULL;
     }
-    slot->fade = findFade(slot);
+    slot->fade = findFade(slot, &s_signOver[n - s_first]);
     slot->closed = 1;
     g_rd.lastIndex = idx;
     g_rd.frameCounter = slot->number;
@@ -220,7 +232,7 @@ static bool runConfig(const BootConfig *cfg, uint32_t gw, uint32_t gh, uint8_t *
         const int snap = rd__interp_snap(prev, cur);
         /* a present that must be black: this frame and its pair kept or
          * fully faded */
-        const bool dark = (cur->keep || cur->fade >= FADE_FULL) &&
+        const bool dark = (cur->keep || cur->fade >= FADE_FULL) && !s_signOver[n - s_first] &&
                           (!prev || prev->keep || prev->fade >= FADE_FULL);
         printf("  frame %u: keep %u, fade %u (alpha %u), snap %s, %u texts%s\n", cur->number,
                cur->keep, cur->fade, cur->fade ? cur->fade - 1 : 0, snapName(snap), cur->textItems,
@@ -287,7 +299,7 @@ int main(int argc, char **argv)
     const char *range = getenv("ICO_BOOT_FRAMES");
     if (range && range[0]) {
         unsigned a = 0, b = 0;
-        if (sscanf(range, "%u-%u", &a, &b) != 2 || !a || b < a || b - a > 200) {
+        if (sscanf(range, "%u-%u", &a, &b) != 2 || !a || b < a || b - a > 1000) {
             printf("bad ICO_BOOT_FRAMES \"%s\" (FIRST-LAST)\n", range);
             return 1;
         }

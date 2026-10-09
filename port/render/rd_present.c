@@ -151,9 +151,10 @@ static void pictureRect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect 
     if (!(half > 2.0f * crop)) {
         return;
     }
-    /* rounded up, so the cropped margin is always outside the box */
-    const int32_t dx = (int32_t)ceilf((float)box->w * 2.0f / (W - 4.0f) - 0.001f);
-    const int32_t dy = (int32_t)ceilf((float)box->h * crop / (half - 2.0f * crop) - 0.001f);
+    /* rounded up and one pixel more, so the cropped margin and the bilinear
+     * blend at its edge both land outside the box */
+    const int32_t dx = (int32_t)ceilf((float)box->w * 2.0f / (W - 4.0f) - 0.001f) + 1;
+    const int32_t dy = (int32_t)ceilf((float)box->h * crop / (half - 2.0f * crop) - 0.001f) + 1;
     pic->x = box->x - dx;
     pic->y = box->y - dy;
     pic->w = box->w + 2u * (uint32_t)dx;
