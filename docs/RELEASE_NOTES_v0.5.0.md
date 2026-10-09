@@ -12,5 +12,4 @@
 - In wide pictures, a flat grey block no longer shows through the arch at the end of the long walkway.
 - The shadow creatures rise out of their pools again instead of appearing above them.
 - Android: the fog no longer covers the whole picture on some phones.
-
 - The scenery no longer shows for a moment before the Sony sign when the game starts.
