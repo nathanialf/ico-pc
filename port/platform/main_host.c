@@ -1616,8 +1616,13 @@ static int host_main(int argc, char **argv)
 #ifdef ICO_ANDROID_UI
     /* every start, not only the first: the tables, the game's own start-up
        and the first frame follow with nothing else on the screen; this
-       stays up until the game draws */
-    (void)ico_window_progress("ICO", "Starting the game", -1);
+       stays up until the game draws.  Back, a quit or a close polled here
+       ends the run, as on the first start's screens. */
+    if (ico_window_progress("ICO", "Starting the game", -1)) {
+        exit_reason = "the start was stopped";
+        fprintf(stderr, "ico_pc: the start was stopped\n");
+        return 0;
+    }
 #endif
     load_tables(source);
 #ifndef ICO_HEADLESS

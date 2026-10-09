@@ -1292,7 +1292,9 @@ static void progress_event(const SDL_Event *e, int *cancel, int *closing)
    the window's size and fullscreen changes among it, stays queued for the
    window loop's first ico_window_pump, which handles it as usual.  Returns
    1 when the player asked to stop and allowCancel is set (or the device was
-   lost). */
+   lost).  A quit or close request is also kept (s_quitLatched) whatever
+   allowCancel is, so a screen whose caller carries on still ends the run at
+   the next ico_window_pump. */
 static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
 {
     static int s_cancelLogged;
@@ -1324,13 +1326,15 @@ static int progress_present(const char *title, const char *phase, int pct, int a
     if (device_lost_quit()) {
         return 1;
     }
-    if (!allowCancel) {
-        /* this screen cannot stop: a close request is kept for the pump */
-        if (closing && !s_quitLatched) {
-            s_quitLatched = 1;
+    if (closing && !s_quitLatched) {
+        s_quitLatched = 1;
+        if (!allowCancel) {
+            /* this screen cannot stop: the pump quits after it */
             fprintf(stderr, "window: close asked during \"%s\"; quitting after it\n",
                     phase != NULL ? phase : "");
         }
+    }
+    if (!allowCancel) {
         cancel = 0;
     }
     if (cancel && !s_cancelLogged) {
@@ -1354,10 +1358,15 @@ static int progress_present(const char *title, const char *phase, int pct, int a
 
 int ico_window_progress(const char *title, const char *phase, int pct)
 {
+    int stop;
+
     if (!s_open) {
         return 0;
     }
-    return progress_present(title, phase, pct, 1);
+    stop = progress_present(title, phase, pct, 1);
+    /* a quit or close from an earlier screen that could not stop (the
+       start-up graphics screen) stops this one too */
+    return stop || s_quitLatched;
 }
 
 #ifdef __ANDROID__

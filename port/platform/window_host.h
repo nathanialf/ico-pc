@@ -25,9 +25,12 @@
  *   ico_window_progress(title, phase, pct)
  *                               Android's first start and its "Starting the
  *                               game" screen (main_host.c), once the window
- *                               is open; the window's own start-up screen
+ *                               is open; Android's own start-up screen
  *                               while the graphics are prepared draws the
- *                               same way before that: drains SDL events (the quit
+ *                               same way before that, taking only the quit
+ *                               and close requests and the keys from SDL's
+ *                               queue and leaving the rest for the first
+ *                               ico_window_pump.  Drains SDL events (the quit
  *                               event, Back or Escape ask to stop; a size
  *                               change reaches rd_resize_output; the rest
  *                               go to the pad layer as ico_window_pump
@@ -36,8 +39,10 @@
  *                               "phase: pct%" and a bar, or the phase alone
  *                               when pct < 0, through an overlay of its own
  *                               that replaces the registered one for that
- *                               present.  1 when the player asked to stop
- *                               (or the device was lost), else 0
+ *                               present.  1 when the player asked to stop,
+ *                               a quit or close came in on an earlier
+ *                               start-up screen, or the device was lost;
+ *                               else 0
  */
 #ifndef ICO_PLATFORM_WINDOW_HOST_H
 #define ICO_PLATFORM_WINDOW_HOST_H
