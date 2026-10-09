@@ -137,7 +137,7 @@ While one is connected, the touch buttons go away. Change that in
 ([the table](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse)),
 except that Escape does not close the game.
 
-**Closing the game.** Choose **Quit to desktop** on the title screen.
+**Closing the game.** Choose **Quit game** on the title screen.
 Save first. You can also close it from the phone's recent apps screen,
 like any app.
 

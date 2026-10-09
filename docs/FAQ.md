@@ -33,11 +33,20 @@ they are. You do not need to rename or convert anything. [The full guide](TEXTUR
 
 ## Can I turn off the blur, the glow or the fog?
 
-Yes. Open **Options > Effects**. There are five switches: Glow, Depth of
-field, Screen softening, Motion blur and Fog. All of them On is the picture
+Yes. Open **Options > Effects**. There are six switches: Glow, Depth of
+field, Screen softening, Motion blur, Fog and Cinematic bars (the black
+bars of cutscenes). All of them On is the picture
 the PS2 gives. [What each one does](OPTIONS.md#effects).
 
 (Asked for in [issue 11](https://github.com/nathanialf/ico-pc/issues/11).)
+
+## Why does the CRT filter switch the picture back to the original resolution?
+
+The CRT filter draws the PS2's own picture dots with dark lines between
+them, like a tube television. Drawn over a sharper picture, every tiny dot
+would get its own dark lines, and the whole screen would look like a fine
+mesh, a bit like looking through a screen door. So the filter keeps the
+original resolution on purpose. Texture packs still show through it.
 
 ## Where are my saves?
 
@@ -83,7 +92,7 @@ there, with all its effects. Press Cross to save a picture.
 
 ## How do I close the game?
 
-Choose **Quit to desktop** on the title screen, or press Escape on a PC.
+Choose **Quit to desktop** on the title screen (**Quit game** on Android), or press Escape on a PC.
 
 ## Something went wrong. What now?
 

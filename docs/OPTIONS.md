@@ -39,7 +39,10 @@ How the picture looks.
   and steps down (3x, then 2x, then 1x) when your computer or phone
   cannot draw the pictures in time. It never steps back up while the
   game runs; the row then reads, for example, **Auto (2x)**. On Android,
-  the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on.
+  the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on:
+  the filter draws the PS2's own picture dots with dark lines between them,
+  and over a sharper picture it would look like a fine mesh.
+  [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution)
   The menus' lettering follows it too: at 2x and above it is drawn that
   much finer, so it stays crisp, in the same style.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
@@ -75,7 +78,9 @@ This page is on the first Options page, under Display.
 The CRT filter and the game's own picture effects.
 
 - **CRT filter** makes the picture look like an old tube television, with
-  several styles. **CRT strength** is how strong it is.
+  several styles. **CRT strength** is how strong it is. It always draws at
+  the PS2's original resolution, on purpose (the dark lines would look like
+  a fine mesh on a sharper picture). Texture packs still show through it.
 
 The game's own effects are each On or Off. All On is the picture the PS2
 gives you, and that is how the game starts.
@@ -289,11 +294,20 @@ Under `[video]`:
 
 | Line | What it does |
 | --- | --- |
+| `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. A `config.toml` from an older version has a `fullscreen` line instead, and it is still read. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
+| `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
+
+Under `[input]`, for the mouse camera:
+
+| Line | What it does |
+| --- | --- |
+| `mouse_camera = true`, `mouse_sensitivity = 1.0`, `mouse_invert_y = false` | The three mouse rows of the Controls page. |
+| `mouse_hold = 0.75` | How many seconds the mouse must stay still before the camera swings back behind Ico. |
 
 Under `[characters]`, for the Character Customization page. A line that is missing means
 Original:

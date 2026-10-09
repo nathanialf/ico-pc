@@ -114,7 +114,7 @@ error messages and what to try first.
 
 ## How it differs from the PS2
 
-- The title screen has an **Options** line and a **Quit to desktop** line.
+- The title screen has an **Options** line and a **Quit to desktop** line (**Quit game** on Android).
   Options is the same menu you get from the pause menu.
 - The language and 50/60 Hz questions the PS2 asks at first start are
   skipped. Both are in Options.
