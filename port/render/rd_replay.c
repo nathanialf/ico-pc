@@ -4462,9 +4462,9 @@ static const char *stubName(uint8_t type)
 {
     switch (type) {
     case RDC_WORLD_PRIMS:
-        return "rd_WorldPrims (wave 5)";
+        return "rd_WorldPrims";
     case RDC_POST_STUB:
-        return "rd_Post (shadow resolve, blur: wave 5)";
+        return "an rd_Post kind without a replay";
     default:
         return "unknown command";
     }

@@ -1206,8 +1206,12 @@ enum {
     RD_ONCE_NODUAL_GREATER, /* the two-pass blend's alpha pass under Z GREATER with Z write */
     RD_ONCE_NODUAL_KEY,     /* a LERP or Cd*FIX + Cs key reached rd__GetPipeline unexpanded */
     /* v0.4.1 (R1) */
-    RD_ONCE_EFFECTS_DEPTH_CRT /* RdSettings.effectsDepth under the CRT filter: none */
+    RD_ONCE_EFFECTS_DEPTH_CRT, /* RdSettings.effectsDepth under the CRT filter: none */
+    RD_ONCE_POST_RESERVED,     /* rd_Post with a reserved kind: not recorded */
+    RD_ONCE_COUNT
 };
+
+_Static_assert(RD_ONCE_COUNT <= 32, "rd__LogOnce keeps its flags in 32 bits");
 
 /* a + "/" + b into out (no separator added when a is empty or already ends
  * in '/' or '\\'); -1 when it does not fit, 0 otherwise.  The texture and

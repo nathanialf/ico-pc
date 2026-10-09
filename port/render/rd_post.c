@@ -605,6 +605,14 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
     case RD_POST_EYE_BLUR:
         rd__PostBlur(kind, params);
         break;
+    case RD_POST_SHADOW_RESOLVE:
+    case RD_POST_BLUR:
+    case RD_POST_PRESENT_BLIT:
+        /* reserved numbers: no caller issues them and the replay has no
+         * model, so nothing is recorded */
+        rd__LogOnce(RD_ONCE_POST_RESERVED, "rd_Post kind %u is reserved: not recorded",
+                    (unsigned)kind);
+        break;
     default:
         postStub(kind, params);
         break;

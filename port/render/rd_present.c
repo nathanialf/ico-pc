@@ -80,8 +80,6 @@
 #include "rd_internal.h"
 #include "shader_consts.h"
 
-_Static_assert(RD_ONCE_EFFECTS_DEPTH_CRT < 32, "rd__LogOnce keeps 32 bits");
-
 typedef struct RdPresentPreset {
     RdFilter doubleFilter; /* step 1 */
     RdFilter scaleFilter;  /* step 2 */

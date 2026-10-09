@@ -249,11 +249,11 @@ typedef enum RdPostKind {
     RD_POST_AA_DOWNSAMPLE, /* gsb_antiAlias chain step */
     RD_POST_AA_COMPOSITE,
     RD_POST_FOG,            /* fog_DrawFog: depth-indexed LUT (wave 4, R4c: see rd_Post) */
-    RD_POST_SHADOW_RESOLVE, /* stencil != 0 -> SHADOW0 */
-    RD_POST_BLUR,           /* staticBlur.c / Shadow.c downsample-blur step between two targets */
+    RD_POST_SHADOW_RESOLVE, /* reserved (no caller; rd_Post refuses it) */
+    RD_POST_BLUR,           /* reserved (no caller; rd_Post refuses it) */
     RD_POST_COMPOSITE_FIX,  /* textured quad with LERP_FIX blend (motion blur, DoF planes, flare) */
     RD_POST_COPY,           /* texture-to-texture copy standing in for gif_MoveImage / VRAM grabs */
-    RD_POST_PRESENT_BLIT,   /* internal: DISPLAY -> backbuffer with aspect, scale, mirror */
+    RD_POST_PRESENT_BLIT,   /* reserved (no caller; rd_Post refuses it) */
     /* Wave 5 (R5a): one GS sprite of staticBlur.c, drawn in the GS integer
      * arithmetic (see rd_Post below); the kind names the effect it belongs
      * to, all six replay alike */
@@ -982,16 +982,16 @@ void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace s
  * around the gif helpers that draw them: layout_texture.c's primary sprite).
  * -1 ends it.  Returns the previous value. */
 int rd_SetSpaceOverride(int space);
-/* darkVolume.c, lightning.c, lineManager.c, sun flare: world-space
- * vertices with the matrix the call site used, transformed on the GPU. */
+/* (tests) World-space vertices with a matrix.  No game code calls it and the
+ * replay has no model for its command (rd__NotImplemented); rd_filter_test
+ * records it for the draw filter. */
 void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key);
-/* shadow_RenderVolume (Shadow.c): a clipped, extruded strip; sign picks
- * stencil increment or decrement.  Depth-tested against SCENE, no writes
- * to colour or depth. */
+/* (tests) A shadow volume as one float strip: v[i] = (GS 12.4 window X, Y,
+ * GS Z, unused), every triangle counted with sign (stencil increment or
+ * decrement), depth-tested against SCENE, no writes to colour or depth.  No
+ * game code calls it (Shadow.c uses rd_ShadowTris below); rd_state_test and
+ * rd_filter_test keep the strip path recorded and replayed. */
 void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
-/* Wave 4 (R4b): v[i] = (GS 12.4 window X, Y, GS Z, unused) as floats, one
- * triangle strip, every triangle counted with sign; replayed since R4b.
- * Shadow.c uses the exact form below. */
 
 /* ------------------------------------------------- shadows (wave 4, R4b)
  * Shadow.c's count.  The PS2 adds each
