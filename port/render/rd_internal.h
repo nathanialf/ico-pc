@@ -310,6 +310,9 @@ typedef struct RdTargetRec {
     RhiState colorState, depthState;
     RhiTexture snap; /* copy used when a draw samples the target it renders to */
     RhiState snapState;
+    /* the texels of snap copied from the target by the latest copy (the
+     * rest holds older content): a draw reads snap only inside it */
+    RhiRect snapRect;
     uint32_t snapFor;    /* replay counter at which snap was taken */
     uint32_t viewTex[3]; /* RdTex ids of rd_TargetTexture, per RdTexView */
     uint32_t ownerFrame;

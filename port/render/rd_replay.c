@@ -1193,6 +1193,43 @@ static void noteMipUse(RdTexRec *t, const RdDrawState *d)
     t->dirtyY1 = t->h;
 }
 
+/* The target's colour copied into its snapshot texture (created on first
+ * use) at the same texels, area only: the copy ends the open pass and
+ * leaves the snapshot readable.  tc->snapRect is the area it holds now; the
+ * rest of the snapshot is older content, which no draw reads (each reads
+ * inside the area it asked for: snapHolds).  False when there is no
+ * snapshot texture. */
+static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
+{
+    endPass(r);
+    if (!tc->snap.id) {
+        tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
+            tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
+        tc->snapState = RHI_STATE_UNDEFINED;
+    }
+    if (!tc->snap.id) {
+        return false;
+    }
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
+    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
+    rhi_CmdCopyTexture(s_cl, tc->color, area, tc->snap, area.x, area.y);
+    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
+    tc->snapRect = area;
+    return true;
+}
+
+static bool rectHolds(RhiRect outer, RhiRect inner);
+
+/* Whether the snapshot holds every texel a draw reads (need); if not, the
+ * whole target is copied, so a draw never reads a stale texel. */
+static bool snapHolds(Replay *r, RdTargetRec *tc, RhiRect need)
+{
+    if (rectHolds(tc->snapRect, need)) {
+        return true;
+    }
+    return takeSnap(r, tc, (RhiRect){0, 0, tc->tw, tc->th});
+}
+
 /* The texture a draw samples, after any state change it needs.  Returns the
  * RhiTexture and its size and TEXFMT; dummy when untextured. */
 static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t drawTargetId,
@@ -1242,17 +1279,10 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         return s_shadowRed; /* package RSMALL: the shadow count at the GS size */
     }
     if (t->target == drawTargetId && src == drawTarget) {
-        /* the GS reads the buffer it is drawing into: sample a copy */
-        endPass(r);
-        if (!src->snap.id) {
-            src->snap = rhi_CreateTexture(&(RhiTextureDesc){
-                src->tw, src->th, 1, src->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
-            src->snapState = RHI_STATE_UNDEFINED;
-        }
-        rd__Transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
-        rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_COPY_DST);
-        rhi_CmdCopyTexture(s_cl, src->color, (RhiRect){0, 0, src->tw, src->th}, src->snap, 0, 0);
-        rd__Transition(s_cl, src->snap, &src->snapState, RHI_STATE_SHADER_READ);
+        /* the GS reads the buffer it is drawing into: sample a copy, whole
+         * (the sampler, the mip choice and a perspective STQ leave the
+         * texels it reads unbounded here) */
+        takeSnap(r, src, (RhiRect){0, 0, src->tw, src->th});
         return src->snap;
     }
     if (src->colorState != RHI_STATE_SHADER_READ) {
@@ -3566,6 +3596,92 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     (void)topo;
 }
 
+static RhiRect rectJoin(RhiRect a, RhiRect b)
+{
+    const int32_t x0 = a.x < b.x ? a.x : b.x, y0 = a.y < b.y ? a.y : b.y;
+    const int64_t ax1 = (int64_t)a.x + a.w, bx1 = (int64_t)b.x + b.w;
+    const int64_t ay1 = (int64_t)a.y + a.h, by1 = (int64_t)b.y + b.h;
+    const int64_t x1 = ax1 > bx1 ? ax1 : bx1, y1 = ay1 > by1 ? ay1 : by1;
+    return (RhiRect){x0, y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+}
+
+/* fx_sprite_ps's texel range on one axis of a sprite sampling the target it
+ * draws into, in that target's texels: U(X) = u0 + (X - x0) (u1 - u0) /
+ * (x1 - x0) (integers, 12.4, truncated: monotonic in X) for every X a
+ * covered fragment can have (within a pixel of x0 .. x1; two allowed),
+ * su = round(U * ss), the nearest texel su >> 4 or LINEAR's (su - 8) >> 4
+ * and the one after (one texel more), CLAMP on the TEX0 size (round(size *
+ * ss), at least 1) and then on the backing size asz: both monotonic, so the
+ * range's ends are the ends' images.  False (the whole axis) under REPEAT, for an empty
+ * or degenerate sprite and where the shader's int product could overflow. */
+static bool blurUvAxis(int32_t x0, int32_t x1, int32_t u0, int32_t u1, float ss, float size,
+                       int clamp, uint32_t asz, int32_t *lo, int32_t *hi)
+{
+    const int64_t dx = (int64_t)x1 - x0, du = (int64_t)u1 - u0;
+    if (!clamp || dx <= 0 || asz == 0 || (dx + 32) * (du < 0 ? -du : du) > (1ll << 30)) {
+        return false;
+    }
+    const int64_t ua = u0 + (-32 * du) / dx, ub = u0 + ((dx + 32) * du) / dx;
+    const float umin = (float)((ua < ub ? ua : ub) - 1), umax = (float)((ua > ub ? ua : ub) + 1);
+    const int32_t smin = (int32_t)floorf(umin * ss) - 1, smax = (int32_t)ceilf(umax * ss) + 1;
+    int32_t t0 = floorDiv16(smin - 8), t1 = floorDiv16(smax) + 1;
+    /* the shader's round() is floor or ceil of the product: the low end
+     * clamps on the smaller, the high end on the larger */
+    int32_t lszLo = (int32_t)floorf(size * ss), lszHi = (int32_t)ceilf(size * ss);
+    lszLo = lszLo < 1 ? 1 : lszLo;
+    lszHi = lszHi < 1 ? 1 : lszHi;
+    t0 = t0 < 0 ? 0 : (t0 > lszLo - 1 ? lszLo - 1 : t0);
+    t1 = t1 < 0 ? 0 : (t1 > lszHi - 1 ? lszHi - 1 : t1);
+    *lo = t0 < (int32_t)asz - 1 ? t0 : (int32_t)asz - 1;
+    *hi = t1 < (int32_t)asz - 1 ? t1 : (int32_t)asz - 1;
+    return true;
+}
+
+/* The snapshot texels a staticBlur sprite reads (texels of tc, the whole
+ * target until narrowed).  The destination (dstRead: blend, DATE, AFAIL
+ * RGB_ONLY) is read at the fragment's own texel, and fragments are the
+ * pixels with x0 <= X < x1 of the sprite's rect (fx_sprite_ps's coverage)
+ * inside the scissor bindDraw sets (r->stretch is the draw's already):
+ * that box padded by two GS pixels (the half-line offset, rounding), in
+ * texels.  Sampling itself (selfSample), the texture is read at the UVs:
+ * blurUvAxis on each axis, the whole target under REPEAT.  Both: the box
+ * holding the two. */
+static void blurSnapArea(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                         const float uv[4], int dstRead, int selfSample, RhiRect *need)
+{
+    const RhiRect whole = {0, 0, tc->tw, tc->th};
+    const int32_t x0 = (int32_t)p->rect[0], y0 = (int32_t)p->rect[1];
+    const int32_t x1 = (int32_t)p->rect[2], y1 = (int32_t)p->rect[3];
+    RhiRect dst = whole, tex = whole;
+    if (dstRead) {
+        const int32_t ox = 16 * (2048 - (int32_t)(r->st.gsW >> 1));
+        const int32_t oy = 16 * (2048 - (int32_t)(r->st.gsH >> 1));
+        RhiRect box, sc;
+        if (x1 > x0 && y1 > y0 &&
+            gsRectToTexels(tc, floorDiv16(x0 - ox) - 2, floorDiv16(y0 - oy) - 2,
+                           -floorDiv16(-(x1 - ox)) + 2, -floorDiv16(-(y1 - oy)) + 2, 1.0f, 0,
+                           &box) &&
+            scissorRect(r, tc, &sc) && !rectMeet(box, sc, &dst)) {
+            dst = whole; /* nothing covered: kept as it was */
+        }
+    }
+    if (selfSample) {
+        const RdDrawState *d = &r->st.ds;
+        int32_t a, b, e, g;
+        if (blurUvAxis(x0, x1, (int32_t)uv[0], (int32_t)uv[2], tc->sx, p->scalar[0],
+                       d->wrap.s == RD_WRAP_CLAMP, tc->tw, &a, &b)) {
+            tex.x = a;
+            tex.w = (uint32_t)(b - a + 1);
+        }
+        if (blurUvAxis(y0, y1, (int32_t)uv[1], (int32_t)uv[3], tc->sy, p->scalar[1],
+                       d->wrap.t == RD_WRAP_CLAMP, tc->th, &e, &g)) {
+            tex.y = e;
+            tex.h = (uint32_t)(g - e + 1);
+        }
+    }
+    *need = dstRead && selfSample ? rectJoin(dst, tex) : (dstRead ? dst : tex);
+}
+
 /* ------------------------------------------- staticBlur (wave 5, R5a)
  * RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR: one GS sprite through fx_rect_vs
  * and fx_sprite_ps (rd_blur.c says what is modelled).  The state block's
@@ -3645,20 +3761,17 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
                         d->test.date != RD_DATE_OFF ||
                         (d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY);
     const int selfSample = src == tc;
+    r->stretch = 1; /* R7a: fx_rect_vs covers the target; no wide x scale */
+    float uv[4];
+    rd__BlurUvRect(c->b[0], &p, uv); /* R-POST: the reduction's mirror */
+    RhiRect need = {0, 0, tc->tw, tc->th};
     if (dstRead || selfSample) {
-        endPass(r);
-        if (!tc->snap.id) {
-            tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
-                tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
-            tc->snapState = RHI_STATE_UNDEFINED;
-        }
-        if (!tc->snap.id) {
+        /* the texels the sprite reads from the snapshot: the destination
+         * at its own fragments, the texture at its UVs (blurSnapArea) */
+        blurSnapArea(r, tc, &p, uv, dstRead, selfSample, &need);
+        if (!takeSnap(r, tc, need) || !snapHolds(r, tc, need)) {
             return;
         }
-        rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
-        rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
-        rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->tw, tc->th}, tc->snap, 0, 0);
-        rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
     }
     if (src) {
         if (selfSample) {
@@ -3682,7 +3795,6 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tw;
     ds.th = th;
     ds.textured = textured;
-    r->stretch = 1; /* R7a: fx_rect_vs covers the target; no wide x scale */
     const RhiBindGroup g2 = bindDraw(r, &ds);
     if (!g2.id) {
         return;
@@ -3738,7 +3850,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.blend[1] = d->blendFix;
     cb.blend[2] = d->colclamp;
     cb.blend[3] = p.z;
-    rd__BlurUvRect(c->b[0], &p, cb.uvRect); /* R-POST: the reduction's mirror */
+    memcpy(cb.uvRect, uv, sizeof(cb.uvRect));
     cb.tex[0] = p.scalar[0];
     cb.tex[1] = p.scalar[1];
     cb.tex[2] = (float)tw;
