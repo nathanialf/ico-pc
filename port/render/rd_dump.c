@@ -50,6 +50,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "host_fs.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
@@ -176,7 +177,7 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     static IdSet texs, temps, meshes;
     texs.n = temps.n = meshes.n = 0;
     collectRefs(f, &texs, &temps, &meshes);
-    FILE *fp = fopen(path, "wb");
+    FILE *fp = ico_fopen(path, "wb");
     if (!fp) {
         rd__Log("dump: cannot open %s", path);
         return false;
@@ -410,7 +411,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     if (!g_rd.inited || !path || !out) {
         return false;
     }
-    FILE *fp = fopen(path, "rb");
+    FILE *fp = ico_fopen(path, "rb");
     if (!fp) {
         rd__Log("load: cannot open %s", path);
         return false;
