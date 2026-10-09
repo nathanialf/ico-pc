@@ -1060,6 +1060,9 @@ bool rd__s2_legacy(void);
 bool rd__vu_off_grid(void);
 
 int rd__interp_snap(const RdFrame *prev, const RdFrame *cur);
+/* rd_last_present_info's record for rd_end_frame's present of f
+ * (interpolation off; rd_interp.c) */
+void rd__note_frame_present(const RdFrame *f);
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats);
 void rd__interp_shutdown(void);

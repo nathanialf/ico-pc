@@ -1369,6 +1369,7 @@ typedef struct ReplayCall {
 static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
+    rd__note_frame_present(c->f); /* rd_last_present_info, as rd_present notes its own */
     rd__replay_frame(c->f, c->keep, true);
 }
 

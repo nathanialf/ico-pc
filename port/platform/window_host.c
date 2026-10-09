@@ -1947,12 +1947,15 @@ static void pace(int hz)
     const Uint64 period = hz == 50 ? 20000000ull : 16683333ull;
     Uint64 now;
 
+    int newFrame = 0;
+
     s_deadline += period;
     s_pres.statVsyncs++;
     {
         const uint32_t fn = rd_frame_number();
 
         if (fn != s_pres.frame) {
+            newFrame = 1;
             s_pres.frame = fn;
             s_pres.tickPrev = s_pres.tickAt;
             s_pres.tickAt = s_deadline - period;
@@ -1967,7 +1970,11 @@ static void pace(int hz)
     }
     if (!rd_interpolation_active()) {
         /* framerate "original": rd_end_frame presented the frame once; the
-           picture is held until the next */
+           picture is held until the next.  That present's start-up log line
+           (the frame whole: t 1), its readback inside the wait */
+        if (newFrame) {
+            boot_log(1.0f);
+        }
         now = SDL_GetTicksNS();
         if (now < s_deadline) {
             SDL_DelayPrecise(s_deadline - now);

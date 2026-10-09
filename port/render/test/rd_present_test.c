@@ -37,6 +37,8 @@
  *             width (58 lines), the present fills a 16:9 output; a UI
  *             band one pixel short at each side (the menus' bars) stretches,
  *             one two pixels short stays boxed
+ *   present info  with interpolation off, rd_last_present_info names the
+ *             frame rd_end_frame presented
  *   full pixel  the reduction's border off the box's edges, black around
  *             it, no validation errors; a square's width and height grow by
  *             the same factor at 512 lines; with the CRT filter the overlay
@@ -1737,6 +1739,31 @@ static void checkFullPixelSquare(void)
     CHECK(gy > 1.04 && gx > 1.04, "full pixel square: grown about 7 %% (x %.4f, y %.4f)", gx, gy);
 }
 
+/* with interpolation off rd_end_frame presents each frame once, and
+ * rd_last_present_info (the window's start-up log) names that present */
+static void checkPresentInfo(void)
+{
+    RdSettings s = originalSettings();
+    s.interpolate = 0;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    RdPresentInfo pi;
+    CHECK(!rd_last_present_info(&pi), "present info: none before the first present");
+    makeNoiseScene();
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    for (int k = 0; k < 2; k++) {
+        recordRichFrame(t, 1);
+        memset(&pi, 0, sizeof(pi));
+        CHECK(rd_last_present_info(&pi) && pi.frame == rd_frame_number() && pi.firstOfTick &&
+                  !pi.keep,
+              "present info: frame %u's present noted (frame %u, first %u, keep %u)",
+              rd_frame_number(), pi.frame, pi.firstOfTick, pi.keep);
+    }
+    rd_destroy_texture(t);
+    rd_shutdown();
+}
+
 static void checkFullPixel(void)
 {
     checkFullPixelCase("fullpixel 4:3 640x480", 4.0f / 3.0f, 640, 480, 0);
@@ -2930,6 +2957,7 @@ int main(int argc, char **argv)
     checkOriginal();
     checkScale2();
     checkWide169();
+    checkPresentInfo();
     checkFullPixel();
     checkFullPixelSquare();
     checkFullPixelCrtOverlay();

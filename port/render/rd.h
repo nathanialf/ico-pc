@@ -495,7 +495,8 @@ bool rd_present(float alpha);
 uint32_t rd_frame_number(void);
 void rd_camera_cut(void);
 
-/* What the last rd_present showed, for the window's start-up log: the
+/* What the last present showed (rd_present's, or with interpolation off
+ * rd_end_frame's one present of the frame), for the window's start-up log: the
  * frame's number, its keep flag, the strongest fade it recorded (1 + the
  * fade's alpha, GS 0x80 = 1.0; 0 for none), the frame-level snap against
  * the frame before (rd_internal.h RD_SNAP_*: 0 blended) and whether it was

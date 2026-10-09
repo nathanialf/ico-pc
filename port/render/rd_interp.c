@@ -4036,6 +4036,17 @@ static void presentReset(void)
     s_infoValid = false;
 }
 
+/* with interpolation off rd_end_frame presents each frame once, whole */
+void rd__note_frame_present(const RdFrame *f)
+{
+    s_info.frame = f->number;
+    s_info.keep = f->keep;
+    s_info.fade = f->fade;
+    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), f);
+    s_info.firstOfTick = 1;
+    s_infoValid = true;
+}
+
 bool rd_last_present_info(RdPresentInfo *out)
 {
     if (!out || !s_infoValid) {
