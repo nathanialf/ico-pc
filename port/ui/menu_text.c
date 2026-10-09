@@ -79,6 +79,7 @@
 #include <stddef.h>
 
 #include "font.h"
+#include "layout_ext.h"
 #include "strings.h"
 
 /* clang-format off */
@@ -436,7 +437,7 @@ const int ui_menu_text_row_count = (int)(sizeof(ui_menu_text_rows) / sizeof(ui_m
 /* clang-format on */
 
 /* the row -> item map, built on first use: -1 for a row not in the table */
-#define MT_GAME_ROWS 436
+#define MT_GAME_ROWS LT_GAME_PROPERTY_COUNT
 static short s_itemOf[MT_GAME_ROWS];
 static int s_mapBuilt;
 

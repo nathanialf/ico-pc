@@ -1729,6 +1729,9 @@ static void targetName(int t, char *buf, unsigned size)
 }
 
 /* gamepad sources by position (ICO_GP_*); the names are UI_STR_PAD_*, in order */
+_Static_assert(UI_STR_PAD_RSTICK_DOWN - UI_STR_PAD_SOUTH == ICO_GP_RY_POS - ICO_GP_SOUTH,
+               "the UI_STR_PAD_* names follow the ICO_GP_* sources");
+
 static const char *padName(int src)
 {
     return ui_Str((UiStrId)(UI_STR_PAD_SOUTH + src - ICO_GP_SOUTH));

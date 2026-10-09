@@ -449,6 +449,13 @@ int lt_ext_PropCount(void)
     return s_propCount;
 }
 
+/* a row's draw key: the row and the pass (1 the label or words, 2 the
+   glow), so the presenter blends a row that moves or fades */
+static uint64_t rowKey(const LtProperty *e, int glow)
+{
+    return ((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u);
+}
+
 void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
 {
     if (!lt_ext_IsPortProp(e)) {
@@ -461,7 +468,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     if (r->kind == ROW_RECT) {
         if (!glow) {
-            const uint64_t owner = ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ 1u);
+            const uint64_t owner = ui_SetDrawKey(rowKey(e, 0));
             drawRect(r, box, rgba);
             ui_SetDrawKey(owner);
         }
@@ -516,8 +523,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     /* the row's draws are keyed by the row and the pass (the label,
        the glow), so a row that moves or fades blends between ticks */
-    const uint64_t owner =
-        ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
+    const uint64_t owner = ui_SetDrawKey(rowKey(e, glow));
     /* the menus' text in the sheets' look, light ink
        (menu_font.h), into the scene list at 1x in every preset */
     if (!glow) {
@@ -560,8 +566,7 @@ void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
     ui__Sync();
     /* keyed by the row and the pass (the words, the glow), as the port's
        rows are, so the presenter blends a row that moves or fades */
-    const uint64_t owner =
-        ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
+    const uint64_t owner = ui_SetDrawKey(rowKey(e, glow));
     ui_MenuWordDraw(it, (int)ui_GetLanguage(), box, uv, rgba, glow);
     ui_SetDrawKey(owner);
 }
