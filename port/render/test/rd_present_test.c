@@ -69,6 +69,13 @@
  *             shown picture has the overlay inside it, package CRT2; the
  *             capture takes a filter pass without it); rd_CaptureResult
  *             reports it once
+ *   passes    the Enhanced preset at 960 x 720 with a deferred text item:
+ *             the box blit, the deferred text and both overlay layers draw
+ *             in one pass on the output, so the present records two passes
+ *             (the line doubling's and the output's) with or without them;
+ *             with a capture armed the output's pass is ended for the copy
+ *             and opened again (one more), and the shown picture is the
+ *             same byte for byte; each layer's rectangle is drawn
  *   blank     package AN-C, rd_PresentBlank: at 800 x 600 with nothing
  *             registered the output is all 0 (no scene, though a frame was
  *             just recorded and presented); with an overlay drawing a red
@@ -2189,6 +2196,144 @@ static void checkCapture(const char *dir)
     checkCaptureAt(dir, 1);
 }
 
+/* ------------------------------------------- the present's render passes */
+
+/* the deferred text's renderer: one green rectangle a call, in output
+ * pixels from the box (inside the item's region) */
+static int s_textCalls;
+
+static void textRect(const RdOverlayCtx *ctx, const RdTextItem *item, void *user)
+{
+    (void)item;
+    (void)user;
+    static const uint8_t green[4] = {0, 255, 0, 0x80};
+    s_textCalls++;
+    ovRect(ctx->box.x + 300, ctx->box.y + 150, ctx->box.x + 340, ctx->box.y + 170, green);
+}
+
+/* the scene, one deferred text item in list 11 and the reduction into
+ * DISPLAY (list 12) */
+static void recordTextFrame(RdTex t)
+{
+    rd_BeginFrame();
+    drawScene(t);
+    rd_SelectList(11);
+    RdTextItem it;
+    memset(&it, 0, sizeof(it));
+    snprintf(it.utf8, sizeof(it.utf8), "Continue");
+    it.x = 320.0f;
+    it.y = 200.0f;
+    it.size = 27.0f;
+    it.rgba[0] = it.rgba[1] = it.rgba[2] = it.rgba[3] = 0x80;
+    rd_DeferredText(&it, 0);
+    rd_SelectList(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_Post(RD_POST_REDUCTION, &pp);
+    rd_EndFrame(0);
+}
+
+/* the text frame at w x h (0 x 0: no output, no present), with the three
+ * layers (the deferred text, the overlay and the top layer) or none, a
+ * capture armed or not: the render passes the frame's replay recorded, the
+ * output into dst (when there is one) */
+static bool passRun(uint32_t w, uint32_t h, int layers, const char *png, uint8_t *dst,
+                    uint32_t *passes)
+{
+    RdSettings s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (!rd_Init(512, 512, &s, NULL)) {
+        return false;
+    }
+    LayerTest m = {.x0 = 100, .y0 = 50, .x1 = 140, .y1 = 71, .c = {255, 0, 0, 0x80}};
+    LayerTest t = {.x0 = 200, .y0 = 50, .x1 = 240, .y1 = 71, .c = {0, 0, 255, 0x80}};
+    s_textCalls = 0;
+    if (layers) {
+        rd_SetDeferredTextFn(textRect, NULL);
+        rd_SetPresentOverlay(layerRect, &m);
+        rd_SetPresentOverlayTop(layerRect, &t);
+    }
+    RdTex tex = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    if (png) {
+        CHECK(rd_CapturePresented(png), "passes: capture armed");
+    }
+    RhiStats a, b;
+    rhi_GetStats(&a);
+    recordTextFrame(tex);
+    rhi_GetStats(&b);
+    *passes = (uint32_t)(b.renderPasses - a.renderPasses);
+    bool ok = true;
+    if (w && h) {
+        uint32_t ow = 0, oh = 0;
+        ok = rd_ReadPresented(dst, &ow, &oh) && ow == w && oh == h;
+        CHECK(ok, "passes: the presented %ux%u output", w, h);
+    }
+    if (png) {
+        char done[1100];
+        CHECK(rd_CaptureResult(done, sizeof(done)) == 1, "passes: the capture written");
+    }
+    CHECK(!layers || (s_textCalls == 1 && m.calls == 1 && t.calls == 1),
+          "passes: one call a layer (text %d, main %d, top %d)", s_textCalls, m.calls, t.calls);
+    rd_SetDeferredTextFn(NULL, NULL);
+    rd_SetPresentOverlay(NULL, NULL);
+    rd_SetPresentOverlayTop(NULL, NULL);
+    rd_DestroyTexture(tex);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "passes: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    return ok;
+}
+
+static void checkPresentPasses(const char *dir)
+{
+    const uint32_t w = 960, h = 720;
+    const size_t n = (size_t)w * h * 4;
+    uint8_t *plain = malloc(n), *over = malloc(n), *cap = malloc(n);
+    char png[1100];
+    snprintf(png, sizeof(png), "%s/rd_present_passes.png", dir);
+    remove(png);
+    makeNoiseScene();
+    uint32_t none = 0, bare = 0, all = 0, captured = 0;
+    const bool ok = plain && over && cap && passRun(0, 0, 0, NULL, NULL, &none) &&
+                    passRun(w, h, 0, NULL, plain, &bare) && passRun(w, h, 1, NULL, over, &all) &&
+                    passRun(w, h, 1, png, cap, &captured);
+    CHECK(ok, "passes: the four runs");
+    if (ok) {
+        printf("  passes: replay %u, present %u bare, %u with the text and both overlay layers, "
+               "%u with a capture\n",
+               none, bare - none, all - none, captured - none);
+        /* the line doubling's pass and the output's (five with a pass a
+         * layer) */
+        CHECK(bare == none + 2 && all == none + 2,
+              "passes: the present records %u passes bare and %u with the three layers, not 2",
+              bare - none, all - none);
+        CHECK(captured == all + 1, "passes: a capture adds %u passes, not 1 (the reopened one)",
+              captured - all);
+        CHECK(memcmp(over, cap, n) == 0, "passes: the capture changed the shown picture");
+        RhiRect box;
+        rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+
+        static const struct {
+            int32_t x, y;
+            uint8_t c[3];
+        } at[3] = {{120, 60, {255, 0, 0}}, {220, 60, {0, 0, 255}}, {320, 160, {0, 255, 0}}};
+
+        for (int i = 0; i < 3; i++) {
+            const size_t k = ((size_t)(box.y + at[i].y) * w + (size_t)(box.x + at[i].x)) * 4;
+            CHECK(memcmp(&over[k], at[i].c, 3) == 0 && memcmp(&plain[k], at[i].c, 3) != 0,
+                  "passes: layer %d's rectangle not drawn (%u %u %u)", i, over[k], over[k + 1],
+                  over[k + 2]);
+        }
+    }
+    remove(png);
+    free(plain);
+    free(over);
+    free(cap);
+}
+
 /* ------------------------------------------------- effects depth (R1) */
 
 /* the depth frame presented at w x h with the effects depth on or off: the
@@ -2497,6 +2642,7 @@ int main(int argc, char **argv)
     checkOverlayCrt();
     checkOverlayTop(); /* package AN-T */
     checkCapture(dir);
+    checkPresentPasses(dir);
     checkEffectsDepth();
     checkBlank();
     if (failures) {

@@ -38,10 +38,12 @@
  * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
  *
  * The overlay (package OV, rd.h rd_SetPresentOverlay): after step 2, the prims the registered callback
- * gave for this present are drawn on the output in a load-preserving pass,
- * one 12.4 unit a sixteenth of an output pixel, unflipped.  The callback
- * runs before the frame's replay (rd__OverlayCollect, from replayFrame) so
- * the textures it touches upload with the frame; only the drawing is here.
+ * gave for this present are drawn on the output in step 2's pass (left
+ * open for them and the deferred text; a load-preserving pass of their own
+ * under the CRT filter or the effects depth), one 12.4 unit a sixteenth of
+ * an output pixel, unflipped.  The callback runs before the frame's
+ * replay (rd__OverlayCollect, from replayFrame) so the textures it touches
+ * upload with the frame; only the drawing is here.
  * With no callback registered nothing below step 2 runs, and the output is
  * byte for byte what it was before the overlay existed.
  *
@@ -269,9 +271,11 @@ bool rd__PresentAcquire(void)
     return g_rd.presentOut.id != 0;
 }
 
+/* src (sw x sh) into box of dst in a pass of its own; keepOpen leaves the
+ * pass open for the caller to draw more into dst and end it */
 static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                  RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
-                 RdFilter filter, int mirror)
+                 RdFilter filter, int mirror, bool keepOpen)
 {
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -310,14 +314,16 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
             cl, 2, rd__TexGroup(src, rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
         rhi_CmdDraw(cl, 3, 0, 1);
     }
-    rhi_CmdEndRenderPass(cl);
+    if (!keepOpen) {
+        rhi_CmdEndRenderPass(cl);
+    }
 }
 
 void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                      RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
                      RdFilter filter, int mirror)
 {
-    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror);
+    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror, false);
 }
 
 /* ------------------------------- the effects depth (v0.4.1, package R1)
@@ -1012,24 +1018,28 @@ static RhiRect scaleRect(RhiRect r, const RhiRect *dst, uint64_t ow, uint64_t oh
  * on out (fmt, tw x th: the output, or package CRT2's grid layer).  dst
  * NULL: c's frame is out's, 1:1; else it is scaled into dst of out (the
  * grid-mode overlay on the output when the CRT pass could not draw it, see
- * overlayRecord) */
+ * overlayRecord).  inPass: a pass on out is already open (the box blit's,
+ * rd__PresentRecord); the batches draw into it and leave it open, with the
+ * viewport, scissor and FrameCB set here all the same */
 static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t tw,
                           uint32_t th, const RdOverlayCtx *c, const RhiRect *dst, uint32_t from,
-                          uint32_t to)
+                          uint32_t to, bool inPass)
 {
     const uint32_t ow = c->outW, oh = c->outH;
     if (from >= to || !ow || !oh || (!dst && (ow != tw || oh != th)) ||
         (dst && (!dst->w || !dst->h))) {
         return;
     }
-    RhiRenderPassDesc p;
-    memset(&p, 0, sizeof(p));
-    p.color[0].texture = out;
-    p.color[0].load = RHI_LOAD_LOAD;
-    p.colorCount = 1;
-    p.width = tw;
-    p.height = th;
-    rhi_CmdBeginRenderPass(cl, &p);
+    if (!inPass) {
+        RhiRenderPassDesc p;
+        memset(&p, 0, sizeof(p));
+        p.color[0].texture = out;
+        p.color[0].load = RHI_LOAD_LOAD;
+        p.colorCount = 1;
+        p.width = tw;
+        p.height = th;
+        rhi_CmdBeginRenderPass(cl, &p);
+    }
     const RhiRect all = {0, 0, ow, oh};
     const RhiRect area = dst ? *dst : all;
     RhiViewport vp = {(float)area.x, (float)area.y, (float)area.w, (float)area.h, 0.0f, 1.0f};
@@ -1053,20 +1063,23 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
         }
         rd__OverlayDraw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
     }
-    rhi_CmdEndRenderPass(cl);
+    if (!inPass) {
+        rhi_CmdEndRenderPass(cl);
+    }
 }
 
 static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t ow, uint32_t oh,
-                        const RdOverlayCtx *c, uint32_t from, uint32_t to)
+                        const RdOverlayCtx *c, uint32_t from, uint32_t to, bool inPass)
 {
-    drawBatchesAt(cl, out, fmt, ow, oh, c, NULL, from, to);
+    drawBatchesAt(cl, out, fmt, ow, oh, c, NULL, from, to, inPass);
 }
 
-/* package DEF: the deferred text, at the insertion point */
-static void textRecord(RhiCommandList cl, RhiTexture out)
+/* package DEF: the deferred text, at the insertion point (inPass as for
+ * drawBatchesAt) */
+static void textRecord(RhiCommandList cl, RhiTexture out, bool inPass)
 {
     if (!s_ov.grid) {
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, 0, s_ov.textBatches);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, 0, s_ov.textBatches, inPass);
     }
 }
 
@@ -1078,19 +1091,22 @@ static void textRecord(RhiCommandList cl, RhiTexture out)
  * the popups do not vanish.  Package AN-T's top layer is always on the
  * output: under the main layer when that is on the output too (the touch
  * controls under the HUD and the popups), over the filtered picture when
- * the main layer is in the grid */
-static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box, bool inPicture)
+ * the main layer is in the grid.  inPass as for drawBatchesAt */
+static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box, bool inPicture,
+                          bool inPass)
 {
     if (!s_ov.grid) {
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount,
+                    inPass);
         drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, s_ov.textBatches,
-                    s_ov.topFirst);
+                    s_ov.topFirst, inPass);
     } else {
         if (!inPicture) {
             drawBatchesAt(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, box, s_ov.textBatches,
-                          s_ov.topFirst);
+                          s_ov.topFirst, inPass);
         }
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount,
+                    inPass);
     }
     overlayForget();
     s_ov.grid = 0;
@@ -1104,7 +1120,7 @@ bool rd__OverlayGridPending(void)
 void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h)
 {
     if (s_ov.grid) {
-        drawBatches(cl, t, fmt, w, h, &s_ov.ctx, s_ov.textBatches, s_ov.topFirst);
+        drawBatches(cl, t, fmt, w, h, &s_ov.ctx, s_ov.textBatches, s_ov.topFirst, false);
     }
 }
 
@@ -1153,8 +1169,11 @@ int rd_CaptureResult(char *path, uint32_t pathSize)
 }
 
 /* the output, out (RENDER_TARGET), into the capture texture; out goes back
- * to RENDER_TARGET for the overlay */
-static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
+ * to RENDER_TARGET for the overlay.  inPass: the output's pass is open
+ * (rd__PresentRecord); a copy cannot be recorded inside a pass, so it is
+ * ended before the copy and a pass that loads the output is opened after
+ * it, for the overlay to draw in */
+static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass)
 {
     if (!s_cap.armed) {
         return;
@@ -1178,10 +1197,23 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
         s_cap.result = -1;
         return;
     }
+    if (inPass) {
+        rhi_CmdEndRenderPass(cl);
+    }
     rd__Transition(cl, out, outState, RHI_STATE_COPY_SRC);
     rd__Transition(cl, s_cap.tex, &s_cap.state, RHI_STATE_COPY_DST);
     rhi_CmdCopyTexture(cl, out, (RhiRect){0, 0, s_outW, s_outH}, s_cap.tex, 0, 0);
     rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    if (inPass) {
+        RhiRenderPassDesc p;
+        memset(&p, 0, sizeof(p));
+        p.color[0].texture = out;
+        p.color[0].load = RHI_LOAD_LOAD;
+        p.colorCount = 1;
+        p.width = s_outW;
+        p.height = s_outH;
+        rhi_CmdBeginRenderPass(cl, &p);
+    }
     s_cap.copied = 1;
 }
 
@@ -1225,7 +1257,7 @@ static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
     rhi_CmdEndRenderPass(cl);
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
-    overlayRecord(cl, out, &box, false);
+    overlayRecord(cl, out, &box, false, false);
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
     }
@@ -1273,7 +1305,7 @@ void rd__PresentRecord(RhiCommandList cl)
              * second pass with it */
             capOk = rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, false);
             if (capOk) {
-                captureRecord(cl, out, outState);
+                captureRecord(cl, out, outState, false);
             }
         }
         /* a failed capture pass: the box blit below, the capture before the
@@ -1299,12 +1331,22 @@ void rd__PresentRecord(RhiCommandList cl)
         rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
         blit(cl, disp->color, disp->tw, disp->th, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh,
-             RHI_LOAD_DONT_CARE, &full, pr->doubleFilter, 0);
+             RHI_LOAD_DONT_CARE, &full, pr->doubleFilter, 0, false);
         rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
         sh = lh;
     }
+    /* the output's pass, open from the box blit to the end of the overlay
+     * without the CRT filter and the effects depth: the deferred text and
+     * both overlay layers draw in the blit's pass instead of a pass each.
+     * The draws, their order, blend states, viewports and scissors are
+     * those of the separate passes, and those passes only loaded what the
+     * one before stored on the same single colour attachment, so the
+     * pixels are the same; a tile-based GPU no longer writes the output out
+     * and reads it back between them.  The CRT filter and the effects
+     * depth keep a pass each */
+    bool open = false;
     if (!filtered) {
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
         /* package R1: with the effects depth when asked for and an
@@ -1314,20 +1356,24 @@ void rd__PresentRecord(RhiCommandList cl)
                            depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box,
                                      pr->scaleFilter, mirror);
         if (!depth) {
+            open = !rd__CrtOn();
             blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
-                 pr->scaleFilter, mirror);
+                 pr->scaleFilter, mirror, open);
         }
     }
     /* package DEF: the deferred text, drawn in list order with the regions
      * and colours the passes after it gave it.  Package CRT2: none under the CRT filter (the rows are
      * in the scene, filtered with it) */
-    textRecord(cl, out);
+    textRecord(cl, out, open);
     /* ==== INSERTION POINT for later presentation passes ====================
      * After the box (the blit) and the deferred text, before the overlay
      * (the port's UI stays sharp above it).  Each one is a pass on `out`
      * (RHI_STATE_RENDER_TARGET at this point; a pass that samples the
      * picture copies it first or blits from `src`, `box`) with
      * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
+     * With `open` the output's pass is still open: a new pass ends it
+     * first and reopens it with RHI_LOAD_LOAD after, as captureRecord does
+     * around its copy.
      * Keep the overlay last.  Under the CRT filter (packages CRT, CRT2) the
      * filter is the last pass but for package AN-T's top layer (the touch
      * controls, over the tube): the main overlay is already inside it, and
@@ -1337,8 +1383,11 @@ void rd__PresentRecord(RhiCommandList cl)
      * port's own UI on the overlay (the popups, the photo HUD); under the
      * CRT filter with UI in the grid it was taken above, from a pass
      * without that UI (a no-op here then) */
-    captureRecord(cl, out, outState);
-    overlayRecord(cl, out, &box, uiInPicture);
+    captureRecord(cl, out, outState, open);
+    overlayRecord(cl, out, &box, uiInPicture, open);
+    if (open) {
+        rhi_CmdEndRenderPass(cl);
+    }
     if (s_window) {
         rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
     }
