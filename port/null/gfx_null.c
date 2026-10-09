@@ -99,11 +99,12 @@ int sceGsSwapDBuff(void *db, int id)
 
 /* The channel register blocks: seki/src/Basic.c's dma_init sets CHCR.TIE
    (|= 0x40) in three of them, so they are writable memory. */
-static DmaChan dmaChannels[10];
+#define DMA_CHANNELS 10
+static DmaChan dmaChannels[DMA_CHANNELS];
 
 DmaChan *sceDmaGetChan(unsigned int id)
 {
-    return id < 10 ? &dmaChannels[id] : NULL;
+    return id < DMA_CHANNELS ? &dmaChannels[id] : NULL;
 }
 
 int sceDmaReset(int mode)

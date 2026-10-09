@@ -5,11 +5,8 @@
  * script).  The sound driver's tests moved to port/audio/test/sndn2_test.c
  * (Phase 4B), libscf's to port/config/test/config_test.c (4F).
  */
-#include <libmc.h>
 #include <libpad.h>
-#include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 static int failures;
 
