@@ -28,23 +28,24 @@
  * when Main reports it done (ico_host_main_tick, port/platform/
  * trace_host.c), so while Main runs tick t the counter reads t, and the
  * pad read of tick t (Main -> ExecKeyInput -> iosPadDevRead -> the pad
- * manager thread -> scePadRead, sugipon/src/keyInput.c:40) sees the line
- * for tick t. --trace writes its line for tick t after that tick, and
- * --ticks N stops after ticks 0..N-1: the numbering is the same in all
- * three. Ticks are not vsyncs: a movie (main.c:167-193) or a stage load
- * may take many vsyncs and no Main tick.
+ * manager thread -> scePadRead; sugipon/src/keyInput.c ExecKeyInput) sees
+ * the line for tick t. --trace writes its line for tick t after that tick,
+ * and --ticks N stops after ticks 0..N-1: the numbering is the same in all
+ * three. Ticks are not vsyncs: a movie (Main's movie_proc call in
+ * common/src/main.c) or a stage load may take many vsyncs and no Main tick.
  *
  * Buttons. <buttons-hex> is the word the game itself works with:
- * pad[0].now / pad[0].flags (keyInput.c:45-46), which iosPadRead builds as
- * ((byte 2 << 8) | byte 3) ^ 0xFFFF of libpad's buffer (fumi/ios/pad.c:369-
- * 382, fumi/include/pad.h:15-24, through iosPadConfDefault's identity bit
- * table, pad.c:62-63). That is SCE libpad's own order (byte 2 high), not
- * the ps2sdk order (byte 2 low). The game confirms it: movies skip on
- * flags & 0x0800 = START (common/src/main.c:392); the menus move on 0x1000
- * up, 0x4000 down, 0x8000 left, 0x2000 right (common/src/kanban.c:127-
- * 133, fumi/ios/pad.c:484-494); 0x0040 confirms and 0x0010 cancels
- * (kanban.c:138-141, layout_action.c:128-139, the PAL release's CROSS and
- * TRIANGLE).
+ * pad[0].now / pad[0].flags (keyInput.c ExecKeyInput), which iosPadRead
+ * builds as ((byte 2 << 8) | byte 3) ^ 0xFFFF of libpad's buffer
+ * (fumi/ios/pad.c iosPadRead, fumi/include/pad.h IosPadBuf, through
+ * iosPadConfDefault's identity bit table in pad.c). That is SCE libpad's
+ * own order (byte 2 high), not the ps2sdk order (byte 2 low). The game
+ * confirms it: movies skip on flags & 0x0800 = START (common/src/main.c
+ * movie_abort_check); the menus move on 0x1000 up, 0x4000 down, 0x8000
+ * left, 0x2000 right (common/src/kanban.c kanban_layout_key, fumi/ios/pad.c
+ * iosPadGetStick_func); 0x0040 confirms and 0x0010 cancels (kanban.c
+ * kanban_layout_key, layout_action.c PSH_POSITIVE_OR_NEGATIVE, the PAL
+ * release's CROSS and TRIANGLE).
  */
 #ifndef ICO_PORT_INPUT_PAD_SCRIPT_H
 #define ICO_PORT_INPUT_PAD_SCRIPT_H

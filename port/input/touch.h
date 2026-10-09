@@ -48,54 +48,13 @@
  * mapper keeps mapping while hidden (a finger down shows it anyway, unless
  * a gamepad is connected: then touches still act, unseen).
  *
- * --- the SDL wiring (the drawing/rows package; input_sdl.c, window_host.c)
- *
- *   state: static IcoTouchState s_touch; static IcoTouchLayout s_touchLayout;
- *     ico_touch_reset(&s_touch, SDL_GetTicksNS()) in ico_input_sdl_init when
- *     SDL_GetTouchDevices() reports a device of type
- *     SDL_TOUCH_DEVICE_DIRECT (shows the overlay for 5 s at start);
- *     s_touch.look_decay = s_bind.mouse_decay after the config is applied.
- *   events, in ico_input_sdl_event:
- *     SDL_EVENT_FINGER_DOWN / _MOTION / _UP / _CANCELED ->
- *       ico_touch_event(&s_touch, e->tfinger.fingerID, e->tfinger.x,
- *                       e->tfinger.y, ICO_TOUCH_DOWN / MOVE / UP / CANCEL,
- *                       e->tfinger.timestamp)
- *     x and y are SDL's normalised 0..1 window coordinates (the same in
- *     points and pixels; the step scales them by the layout's outW/outH).
- *     The touch device id is ignored (finger ids are unique per device;
- *     a direct touch screen is the only device on a phone). Android's
- *     synthetic mouse is off (SDL_HINT_TOUCH_MOUSE_EVENTS "0",
- *     SDL_HINT_MOUSE_TOUCH_EVENTS "0", main_android.c), so a finger is not
- *     also a left click. SDL_EVENT_WINDOW_FOCUS_LOST and the
- *     WILL_ENTER_BACKGROUND lifecycle event: ico_touch_event(.., 0, 0, 0,
- *     ICO_TOUCH_CANCEL, now) so nothing stays held.
- *     SDL_EVENT_GAMEPAD_ADDED / _REMOVED: after open_pad / close_pad,
- *     ico_touch_set_gamepads(&s_touch, <open pads>, SDL_GetTicksNS()).
- *   layout, in window_host.c: on open, on SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED,
- *     on SDL_EVENT_WINDOW_SAFE_AREA_CHANGED and when the Touch size row
- *     changes: SDL_GetWindowSizeInPixels(w, h); SDL_GetWindowSafeArea(win,
- *     &r) (points: scale by w / SDL_GetWindowSize's width, likewise y) ->
- *     insets {r.x, r.y, w - r.x - r.w, h - r.y - r.h} in pixels ->
- *     s_touchLayout = ico_touch_layout(w, h, insets, size); hand it to
- *     input_sdl.c (a setter, e.g. ico_input_sdl_set_touch_layout).
- *   per vsync, in ico_input_sdl_update after ico_bindings_step(&s_bind,
- *     &s_raw, &v) and before ico_input_set_vpad(&v):
- *       if (touch mode != Off) {
- *           IcoVirtualPad tv;
- *           ico_touch_step(&s_touch, &s_touchLayout, &tv, SDL_GetTicksNS());
- *           ico_vpad_merge(&v, &tv);
- *       }
- *     (ico_touch_update: the step every vsync, the merge only while
- *     ico_touch_accepts, so with a gamepad in Auto nothing unseen is held)
- *     so the stick fix, mirror and quantisation (ico_input_vpad_to_frame in
- *     pad_host.c) apply to touch as to every other source.
- *   drawing, from ui_host.c's hostOverlay at output resolution:
- *     ico_touch_opacity(&s_touch, s_raw.gamepads, now) (Auto; Always: 1),
- *     times the Touch opacity row, and ico_touch_draw_info(&s_touch,
- *     &s_touchLayout) for the pressed zones and the stick. The presenter
- *     may run on another thread than the input pump: snapshot the layout
- *     and the draw info under a lock (or copy them at the step) rather than
- *     reading s_touch while events write it.
+ * The wiring is input_sdl.c's (input_sdl.h): it feeds the finger events of
+ * a direct touch screen, cancels every finger when the window loses focus
+ * or the app goes to the background, steps the mapper once per vsync
+ * (ico_touch_update) and merges its pad before the stick fix, the mirror
+ * and the quantisation, so touch is treated like every other source;
+ * window_host.c hands it the output's size and safe area, and the overlay
+ * (port/ui/touch_ui.c) draws from the copy input_sdl.c takes at the step.
  */
 #ifndef ICO_PORT_INPUT_TOUCH_H
 #define ICO_PORT_INPUT_TOUCH_H

@@ -190,7 +190,7 @@ int scePadGetReqState(int port, int slot)
      0     status, 0 = ok
      1     terminal id: 0x41 digital, 0x73 analog, 0x79 analog + pressure
      2,3   buttons, active low: byte 2 the high byte, byte 3 the low byte of
-           the logical word (fumi/include/pad.h:15-24)
+           the logical word (fumi/include/pad.h IosPadBuf)
      4-7   right x, right y, left x, left y (analog ids only; digital mode
            leaves them centred)
      8-19  pressure, 0x79 only: right left up down triangle circle cross
