@@ -618,6 +618,7 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
     return true;
 }
 
+#ifdef __ANDROID__
 /* the start-up screen's state and callback (the callback is below, with the
    progress view) */
 typedef struct PipeScreen {
@@ -626,6 +627,7 @@ typedef struct PipeScreen {
 } PipeScreen;
 
 static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+#endif
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
@@ -728,15 +730,20 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        rd_init (which makes the device), so the game never waits on a
        pipeline compile (tens of ms each on a GPU driver); the time is
        logged */
+#ifdef __ANDROID__
     {
         static PipeScreen screen;
 
-        /* a start with a cold driver cache can take many seconds: say what
-           is going on (nothing is drawn when it is quick) */
+        /* a start with a cold driver cache can take many seconds on a
+           phone: say what is going on (nothing is drawn when it is quick).
+           The PC keeps its silent start. */
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
     }
+#else
+    rd_precreate_pipelines();
+#endif
     {
         IcoVideoOptions o;
         char res[32], fr[16];
@@ -1244,12 +1251,48 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
     ui_end_overlay();
 }
 
+/* One event for a progress screen: a quit or close request sets *closing
+   and *cancel, Back or Escape sets *cancel; the rest is handled as the
+   game's pump would once the window loop is open (s_open). */
+static void progress_event(const SDL_Event *e, int *cancel, int *closing)
+{
+    switch (e->type) {
+    case SDL_EVENT_QUIT:
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        *cancel = 1;
+        *closing = 1;
+        break;
+    case SDL_EVENT_KEY_DOWN:
+        /* Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON), Escape */
+        if ((e->key.key == SDLK_AC_BACK || e->key.key == SDLK_ESCAPE) && !e->key.repeat) {
+            *cancel = 1;
+        }
+        break;
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+        if (s_open && e->window.data1 > 0 && e->window.data2 > 0) {
+            fprintf(stderr, "window: %dx%d pixels\n", e->window.data1, e->window.data2);
+            window_pixel_size(e->window.data1, e->window.data2);
+        }
+        break;
+    default:
+        /* the pads plugged in at the start, and the rest: as the game's
+           pump would pass them on */
+        if (s_open) {
+            ico_input_sdl_event(e);
+        }
+        break;
+    }
+}
+
 /* Draws one progress screen and handles the events that came in.  Works
    before the game's window loop is open (s_open), as long as the renderer
    is up: the start-up screen is drawn while the graphics are prepared.
-   Before that point the events only keep the window alive: the size and
-   the pads are left to the code that opens the window.  Returns 1 when the
-   player asked to stop and allowCancel is set (or the device was lost). */
+   Before that point only the quit and close requests and the key presses
+   are taken from SDL's queue (SDL_PeepEvents by type); everything else,
+   the window's size and fullscreen changes among it, stays queued for the
+   window loop's first ico_window_pump, which handles it as usual.  Returns
+   1 when the player asked to stop and allowCancel is set (or the device was
+   lost). */
 static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
 {
     static int s_cancelLogged;
@@ -1259,32 +1302,20 @@ static int progress_present(const char *title, const char *phase, int pct, int a
     RdOverlayFn prev, prevTop;
     ProgressView v;
 
-    while (SDL_PollEvent(&e)) {
-        switch (e.type) {
-        case SDL_EVENT_QUIT:
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-            cancel = 1;
-            closing = 1;
-            break;
-        case SDL_EVENT_KEY_DOWN:
-            /* Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON), Escape */
-            if ((e.key.key == SDLK_AC_BACK || e.key.key == SDLK_ESCAPE) && !e.key.repeat) {
-                cancel = 1;
+    if (s_open) {
+        while (SDL_PollEvent(&e)) {
+            progress_event(&e, &cancel, &closing);
+        }
+    } else {
+        static const Uint32 k_taken[] = {SDL_EVENT_QUIT, SDL_EVENT_WINDOW_CLOSE_REQUESTED,
+                                         SDL_EVENT_KEY_DOWN};
+        size_t i;
+
+        SDL_PumpEvents();
+        for (i = 0; i < sizeof(k_taken) / sizeof(k_taken[0]); i++) {
+            while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, k_taken[i], k_taken[i]) == 1) {
+                progress_event(&e, &cancel, &closing);
             }
-            break;
-        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            if (s_open && e.window.data1 > 0 && e.window.data2 > 0) {
-                fprintf(stderr, "window: %dx%d pixels\n", e.window.data1, e.window.data2);
-                window_pixel_size(e.window.data1, e.window.data2);
-            }
-            break;
-        default:
-            /* the pads plugged in at the start, and the rest: as the game's
-               pump would pass them on */
-            if (s_open) {
-                ico_input_sdl_event(&e);
-            }
-            break;
         }
     }
     if (s_open) {
@@ -1329,6 +1360,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     return progress_present(title, phase, pct, 1);
 }
 
+#ifdef __ANDROID__
 /* The start-up screen while the graphics are prepared (rd_set_pipeline_progress).
    With the graphics already prepared (the driver's saved cache, a start that
    follows another) this takes a few tens of milliseconds and nothing is
@@ -1360,6 +1392,7 @@ static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
     /* the present itself took time: the next draw is measured from its end */
     p->lastNs = SDL_GetTicksNS();
 }
+#endif
 
 /* logs/ico-pc-perf.csv, opened on the first record when [dev] perf_log
    is true */
