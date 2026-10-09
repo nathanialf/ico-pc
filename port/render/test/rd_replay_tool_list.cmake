@@ -1,4 +1,4 @@
-# rd_replay_tool_list (package QUEEN): rd_replay_tool --list --no-device on
+# rd_replay_tool_list: rd_replay_tool --list --no-device on
 # the dump rd_pixel leaves behind loads it without a device, renders
 # nothing, exits 0 and prints one line per command ("L:INDEX TYPE key ...")
 # and the count.  -DTOOL=<rd_replay_tool> -DDUMP=<rddump>
