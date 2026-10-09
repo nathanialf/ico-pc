@@ -61,6 +61,7 @@
 #include "rhi.h"
 #include "shader_consts.h"
 #include "video_options.h"
+#include "vk/rhi_vk.h"
 
 static int failures;
 
@@ -746,6 +747,10 @@ static void checkFullPixel(void)
         if (!present(&s, 0)) {
             return;
         }
+        /* the grown picture starts left of and above the target: only the
+         * viewport may, the scissor is the box */
+        CHECK(rhi_vk_validation_error_count() == 0, "full pixel %s: %u validation errors",
+              on ? "on" : "off", rhi_vk_validation_error_count());
         const uint32_t cx = (uint32_t)b.x + b.w / 2, cy = (uint32_t)b.y + b.h / 2;
         const uint32_t xs[4] = {(uint32_t)b.x, (uint32_t)b.x + b.w - 1, cx, cx};
         const uint32_t ys[4] = {cy, cy, (uint32_t)b.y, (uint32_t)b.y + b.h - 1};

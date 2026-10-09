@@ -532,9 +532,13 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     rd__transition(cl, gb->t, &gb->state, RHI_STATE_SHADER_READ);
 
     /* 3. the composite into the box, black around it (the caller left out
-     * in RENDER_TARGET): t1 the grid, t2 the glow */
-    beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
-    rhi_cmd_set_scissor(cl, scissor);
+     * in RENDER_TARGET): t1 the grid, t2 the glow.  The pass begins on the
+     * scissor and only then takes box as its viewport: the full pixel box
+     * starts left of and above the target, which a viewport may do and a
+     * scissor may not */
+    beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, scissor);
+    rhi_cmd_set_viewport(
+        cl, &(RhiViewport){(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f});
     crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
     rhi_cmd_end_render_pass(cl);
     s_passes++;
