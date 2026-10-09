@@ -39,7 +39,7 @@ static char *s_pool;
 static size_t s_poolLen, s_poolCap;
 static int s_indexed;
 
-void ico_df_reset(void)
+static void ico_df_reset(void)
 {
     free(s_dir);
     free(s_members);

@@ -21,7 +21,8 @@ static uint32_t loaded_rows, loaded_records;
 
 static const char *const section_names[] = {".data", ".rodata", ".sdata"};
 
-uint32_t ico_tables_crc32(const uint8_t *p, size_t n)
+/* The CRC-32 (zlib's) of a byte range. */
+static uint32_t ico_tables_crc32(const uint8_t *p, size_t n)
 {
     static uint32_t table[256];
     uint32_t c;

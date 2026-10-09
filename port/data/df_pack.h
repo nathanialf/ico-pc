@@ -71,7 +71,4 @@ const char *ico_df_member_name(int i);
    pack has too): 0 and *out filled, or -1 for an i out of range. */
 int ico_df_member(int i, IcoDfMember *out);
 
-/* Forgets the index (a new volume; tests). */
-void ico_df_reset(void);
-
 #endif /* ICO_PORT_DF_PACK_H */

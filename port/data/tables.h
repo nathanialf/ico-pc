@@ -38,7 +38,4 @@ int ico_tables_load_vfs(IcoVfs *vfs, char *err, size_t errsz);
 uint32_t ico_tables_loaded_rows(void);
 uint32_t ico_tables_loaded_records(void);
 
-/* The CRC-32 (zlib's) of a byte range. */
-uint32_t ico_tables_crc32(const uint8_t *p, size_t n);
-
 #endif /* ICO_PORT_DATA_TABLES_H */

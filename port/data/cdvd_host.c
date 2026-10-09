@@ -117,7 +117,6 @@ static struct {
     /* the stream */
     int stInit;
     int stActive;
-    int stPaused;
     int stBufMax;
     uint32_t stLsn;
 
@@ -509,7 +508,8 @@ int sceCdReadClock(struct sceCdCLOCK *clock)
 /* --- the stream ------------------------------------------------------------ */
 /* The PS2 streams through a ring in IOP memory that the drive keeps full;
    the host reads the requested sectors straight from the disc, so the ring
-   is always full and sceCdStStat reports its size. */
+   is always full and sceCdStStat reports its size.  Pause and resume are
+   accepted and change nothing: a paused stream still reads. */
 
 int sceCdStInit(int bufmax, int bankmax, void *buf)
 {
@@ -517,7 +517,6 @@ int sceCdStInit(int bufmax, int bankmax, void *buf)
     (void)buf;
     cd.stInit = 1;
     cd.stActive = 0;
-    cd.stPaused = 0;
     cd.stBufMax = bufmax;
     return 1;
 }
@@ -530,7 +529,6 @@ int sceCdStStart(int lsn, CdRMode *mode)
     }
     cd.stLsn = (uint32_t)lsn;
     cd.stActive = 1;
-    cd.stPaused = 0;
     cd.error = ICO_CD_ERR_NONE;
     return 1;
 }
@@ -573,7 +571,6 @@ int sceCdStStat(void)
 int sceCdStStop(void)
 {
     cd.stActive = 0;
-    cd.stPaused = 0;
     return 1;
 }
 
@@ -591,7 +588,6 @@ int sceCdStPause(void)
     if (!cd.stActive) {
         return 0;
     }
-    cd.stPaused = 1;
     return 1;
 }
 
@@ -600,7 +596,6 @@ int sceCdStResume(void)
     if (!cd.stActive) {
         return 0;
     }
-    cd.stPaused = 0;
     return 1;
 }
 
