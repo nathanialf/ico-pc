@@ -4,7 +4,27 @@
  * where the domain is small and dense elsewhere. */
 #include "hlsl_shim.h"
 #include "gs_math.hlsli"
+#include "shader_consts.h"
+#include "../../render/rd_state.h"
 #include <stdio.h>
+
+/* The constants gs_math.hlsli shares with C, pinned at compile time: the
+ * texel formats (shader_consts.h), the alpha tests and the TEXA modes
+ * (port/render/rd_state.h). */
+_Static_assert(TEXFMT_RGBA32 == ICO_TEXFMT_RGBA32, "TEXFMT_RGBA32");
+_Static_assert(TEXFMT_RGB24 == ICO_TEXFMT_RGB24, "TEXFMT_RGB24");
+_Static_assert(TEXFMT_RGBA16 == ICO_TEXFMT_RGBA16, "TEXFMT_RGBA16");
+_Static_assert(ATST_NEVER == RD_ATST_NEVER, "ATST_NEVER");
+_Static_assert(ATST_ALWAYS == RD_ATST_ALWAYS, "ATST_ALWAYS");
+_Static_assert(ATST_LESS == RD_ATST_LESS, "ATST_LESS");
+_Static_assert(ATST_LEQUAL == RD_ATST_LEQUAL, "ATST_LEQUAL");
+_Static_assert(ATST_EQUAL == RD_ATST_EQUAL, "ATST_EQUAL");
+_Static_assert(ATST_GEQUAL == RD_ATST_GEQUAL, "ATST_GEQUAL");
+_Static_assert(ATST_GREATER == RD_ATST_GREATER, "ATST_GREATER");
+_Static_assert(ATST_NOTEQUAL == RD_ATST_NOTEQUAL, "ATST_NOTEQUAL");
+_Static_assert(TEXA_80_80 == RD_TEXA_80_80, "TEXA_80_80");
+_Static_assert(TEXA_7F_81_AEM == RD_TEXA_7F_81_AEM, "TEXA_7F_81_AEM");
+_Static_assert(TEXA_80_80_AEM == RD_TEXA_80_80_AEM, "TEXA_80_80_AEM");
 
 static int failures;
 
