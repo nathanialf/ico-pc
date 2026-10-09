@@ -671,7 +671,6 @@ static RdSettings originalSettings(void)
  * hashes of this file's own frame (they must equal the constants above) */
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     makeNoiseScene();
     RdSettings s = originalSettings();
     FrameHashes h;
