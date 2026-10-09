@@ -412,9 +412,9 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
         "${CMAKE_SOURCE_DIR}/port/data/tables.c" "${CMAKE_SOURCE_DIR}/port/data/gen/table_defs.c"
         "${CMAKE_SOURCE_DIR}/port/data/gen/table_desc.c"
         "${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c")
-    set_source_files_properties("${CMAKE_SOURCE_DIR}/port/data/gen/ee_symbols.c" PROPERTIES
-                                COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
-    set_source_files_properties(menu_font.c menu_text.c test/menu_look_test.c test/menu_sheets.c
+    # ee_symbols.c's ICO_EE_SYMBOLS_STUBS and menu_font.c/menu_text.c's
+    # -Wno-strict-prototypes are set above, in this directory
+    set_source_files_properties(test/menu_look_test.c test/menu_sheets.c
                                 PROPERTIES COMPILE_OPTIONS "-Wno-strict-prototypes")
     target_include_directories(menu_look_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                "${CMAKE_CURRENT_SOURCE_DIR}/test" ${_ico_cov_incs}
