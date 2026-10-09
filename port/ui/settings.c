@@ -2276,6 +2276,17 @@ static const char *areaName(int stage)
     return NULL;
 }
 
+/* the achievements unlocked (not ICO_ACH_LOCKED) */
+static int achUnlocked(void)
+{
+    const int n = ico_ach_count();
+    int got = 0;
+    for (int i = 0; i < n; i++) {
+        got += ico_ach_state(i) != ICO_ACH_LOCKED;
+    }
+    return got;
+}
+
 /* Shows the lines (show) or hides them, each pause frame: the layout code
    puts every row back to its defaultMask before the procs run, and the
    default follows the last frame's choice so the lines fade with the menu.
@@ -2291,11 +2302,8 @@ static void pauseStats(int show)
     }
     if (show) {
         ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
-        int got = 0;
+        const int got = achUnlocked();
         const int n = ico_ach_count();
-        for (int i = 0; i < n; i++) {
-            got += ico_ach_state(i) != ICO_ACH_LOCKED;
-        }
         playTimeText(ico_gs_play_frames(), text[STAT_PLAY_TIME], sizeof(text[0]));
         snprintf(text[STAT_DEATHS], sizeof(text[0]), "%u", ico_gs_run_game_overs());
         snprintf(text[STAT_CAPTURES], sizeof(text[0]), "%u", ico_gs_run_captures());
@@ -2965,7 +2973,8 @@ static int pauseRowsOk(void)
    alone (logged once). */
 static void repoint(void)
 {
-    if (!pauseRowsOk() || texLayout[12].first != 49 || texLayout[13].first != 51 ||
+    if (!pauseRowsOk() || texLayout[LAYOUT_TITLE_CONTINUE].first != 49 ||
+        texLayout[LAYOUT_TITLE_NEW].first != 51 ||
         !(titleRowsAt(PAL_CONTINUE_Y, PAL_NEW_GAME_Y, PAL_COPYRIGHT_Y) ||
           titleRowsAt(TITLE_Y(0), TITLE_Y(1), TITLE_COPYRIGHT_Y))) {
         if (!s_warned) {
@@ -3119,24 +3128,27 @@ void ui_SettingsTitleMask(int masked)
     }
 }
 
-int ui_SettingsEntryRow(int gameLayout)
+/* the entry (ENTRY_*) whose game layout is gameLayout, or -1 */
+static int entryOf(int gameLayout)
 {
     for (int e = 0; e < ENTRY_COUNT; e++) {
         if (kEntryGame[e] == gameLayout) {
-            return s_entryRow[e];
+            return e;
         }
     }
     return -1;
 }
 
+int ui_SettingsEntryRow(int gameLayout)
+{
+    const int e = entryOf(gameLayout);
+    return e >= 0 ? s_entryRow[e] : -1;
+}
+
 int ui_SettingsQuitRow(int gameLayout)
 {
-    for (int e = 0; e < ENTRY_COUNT; e++) {
-        if (kEntryGame[e] == gameLayout) {
-            return s_quitRow[e];
-        }
-    }
-    return -1;
+    const int e = entryOf(gameLayout);
+    return e >= 0 ? s_quitRow[e] : -1;
 }
 
 int ui_SettingsPhotoRow(void)
@@ -3156,7 +3168,7 @@ int ui_SettingsReopenPage(int page)
 {
     const int cur = current_layout_id;
     if (!s_built || page < 0 || page >= UI_PAGE_COUNT || s_pages[page].layout < 0 ||
-        (cur != LAYOUT_TITLE_CONTINUE && cur != LAYOUT_TITLE_NEW)) {
+        !isTitleLayout(cur)) {
         return -1;
     }
     /* as entryProc on an entry from this title: onTitle() holds, each page
@@ -3206,12 +3218,8 @@ int ui_SettingsKeyConfigBack(void)
 
 int ui_SettingsEntryLayout(int gameLayout)
 {
-    for (int e = 0; e < ENTRY_COUNT; e++) {
-        if (kEntryGame[e] == gameLayout) {
-            return s_entryLayout[e];
-        }
-    }
-    return -1;
+    const int e = entryOf(gameLayout);
+    return e >= 0 ? s_entryLayout[e] : -1;
 }
 
 int ui_SettingsPageLayout(UiSettingsPage page)
@@ -3338,7 +3346,7 @@ static int leaveTo(int pageId, int to)
     } else if (to == LAYOUT_PAUSE) {
         /* on Options, as the Options screen's Triangle came back */
         gameCursorOn(LAYOUT_PAUSE, ROW_PAUSE_OPTIONS);
-    } else if (to == LAYOUT_TITLE_CONTINUE || to == LAYOUT_TITLE_NEW) {
+    } else if (isTitleLayout(to)) {
         gameCursorOn(to, s_entryRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
     }
     return to;
@@ -3377,10 +3385,7 @@ static void achDecorate(void *user, int d)
 {
     (void)user;
     Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
-    int n = ico_ach_count(), got = 0;
-    for (int i = 0; i < n; i++) {
-        got += ico_ach_state(i) != ICO_ACH_LOCKED;
-    }
+    int n = ico_ach_count(), got = achUnlocked();
     snprintf(s_text, sizeof(s_text), "%s   %d / %d", ui_Str(UI_STR_SECTION_ACHIEVEMENTS), got, n);
     lt_ext_SetText(pg->header, s_text);
     char buf[256];
