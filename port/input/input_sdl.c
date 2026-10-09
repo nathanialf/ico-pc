@@ -504,7 +504,17 @@ static void send_rumble(void)
        Off in either gives zero here). Called on SDL's main thread, which
        is where the host loop runs this. */
     if ((high != 0 || low != 0) && !taken) {
-        const int amp = low != 0 ? (low / 257 > 0 ? low / 257 : 1) : 255;
+        /* one vibrator for two motors: the stronger of the two, the small
+           motor (on or off, pad_host.c) counting as full strength and the
+           large one by its level; at least 1 so a weak large motor alone
+           still vibrates */
+        const int small_amp = high != 0 ? 255 : 0;
+        const int large_amp = low / 257;
+        int amp = small_amp > large_amp ? small_amp : large_amp;
+
+        if (amp < 1) {
+            amp = 1;
+        }
 
         ico_host_vibrate(amp, RUMBLE_MS);
         s_phone_vibrating = 1;
