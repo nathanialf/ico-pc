@@ -407,10 +407,11 @@ static void checkGroups(const char *what, const Sum *s)
  * go out in one call, joined to the next pass's or copy's own barrier
  * (vk_cmd.c, vkr_FlushBarriers; 34 and 37 when each went out alone).  The
  * global mode records each transition in a call of its own, as before.
- * 18 and 20 are estimates from reading the replay, to be confirmed from
- * the steady-state counts this test prints. */
+ * The shadow reset is the next pass's stencil clear, not a pass of its own,
+ * so one fewer still; 18 and 21 are the steady-state counts this test
+ * printed after those changes. */
 #define BARRIERS_REPLAY 18
-#define BARRIERS_RECORD 20
+#define BARRIERS_RECORD 21
 #define BARRIERS_REPLAY_GLOBAL 42
 #define BARRIERS_RECORD_GLOBAL 46
 

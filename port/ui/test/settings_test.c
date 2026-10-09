@@ -2733,20 +2733,25 @@ static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
 }
 
 /* the page in front: its shown rows top to bottom at least 13 field lines
-   apart, below the header, the last one's box inside the 226 lines */
+   apart (11 on a page of more than 13 rows, which starts higher: the
+   Controls page with the touch rows), below the header, the last one's box
+   inside the 226 lines */
 static void checkPageFits(UiSettingsPage page, const char *what)
 {
     int labels[16];
     const int n = ui_SettingsPageRows(page, labels, NULL, NULL, 16);
-    int prev = -1, last = -1;
-    /* the CRT rows moved to Effects: no page needs less than 13 lines */
-    const int gap = 13;
+    int prev = -1, last = -1, shown = 0;
+    for (int i = 0; i < n; i++) {
+        shown += !lt_ext_Prop(labels[i])->defaultMask;
+    }
+    const int gap = shown > 13 ? 11 : 13;
+    const int top = shown > 13 ? 30 : 34;
     for (int i = 0; i < n; i++) {
         const LtProperty *r = lt_ext_Prop(labels[i]);
         if (r->defaultMask) {
             continue;
         }
-        CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + gap,
+        CHECK(prev < 0 ? r->dispY >= top : r->dispY >= prev + gap,
               "%s: row %d at y %d (the one above at %d)", what, i, r->dispY, prev);
         prev = r->dispY;
         last = labels[i];
