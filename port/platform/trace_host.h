@@ -1,8 +1,7 @@
 /*
  * port/platform/trace_host.h
  *
- * The Main tick count and the --trace file (package 1D; package 2A replaces
- * the trace with its own).
+ * The Main tick count, the heartbeat's state line and the --trace file.
  *
  * Main tick: one pass of the game's Main loop (common/src/main.c, Main,
  * from iosThreadSleep to frameReady = 1). The game reports each pass by

@@ -6,10 +6,9 @@
  * The EE's FPU rounds every single-precision result toward zero and flushes
  * denormal inputs and outputs to zero. ico_fpenv_sim_enter() puts the host
  * FPU in the closest IEEE mode: round toward zero with flush-to-zero and
- * denormals-are-zero (MXCSR on x86 and x86-64, FPCR on arm64). It does not
+ * denormals-are-zero (MXCSR on x86-64, FPCR on arm64). It does not
  * give the EE's other differences (no infinities or NaNs, clamped results,
- * its own division and square root); those are package 1A's helpers
- * (port/math/) and are recorded.
+ * its own division and square root); those are port/math's helpers.
  *
  * ico_fpenv_host_enter() puts back the host defaults (round to nearest,
  * denormals kept, every exception masked) for host code: the platform layer,

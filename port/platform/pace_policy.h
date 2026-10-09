@@ -1,7 +1,7 @@
 /*
  * port/platform/pace_policy.h
  *
- * Package R2: the window's "is a present slow" decision, free of SDL so a
+ * The window's "is a present slow" decision, free of SDL so a
  * unit test checks it. A present with vsync on blocks up to one display
  * refresh, so slow means a cost above max(refresh, period) + period / 2; with
  * an effects program loaded (ReShade, vkBasalt: rhi_InjectorName() != NULL)
@@ -37,7 +37,7 @@ uint64_t pace_SlowThreshold(uint64_t refreshNs, uint64_t periodNs, bool injector
 bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
                       bool injector);
 
-/* v0.4.2 (N2): resolution "auto" (video_options.h ICO_RES_AUTO).  The window
+/* Resolution "auto" (video_options.h ICO_RES_AUTO).  The window
  * feeds each present's cost (the GPU time of a replay when the backend has
  * timestamps, else its CPU time without the acquire and the present, which
  * wait for the display) into a PaceSamples; every PACE_AUTO_WINDOW_NS it asks
@@ -47,7 +47,8 @@ bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t
  * PACE_AUTO_WINDOW_NS of samples, at least PACE_AUTO_MIN_SAMPLES of them)
  * is above 70 % of the frame budget (1/60 s, or the frame rate cap's
  * period), the scale steps down once: the window's own size (scale 0) goes
- * to the largest of 3x, 2x, 1x below the window's scale, Nx to (N-1)x;
+ * to the largest of 3x, 2x, 1x below the window's scale, Nx to (N-1)x and
+ * anything above 3x straight to 3x;
  * never below 1x, never back up, and at most once per PACE_AUTO_WINDOW_NS
  * (lastStepNs). */
 #define PACE_AUTO_SAMPLES 256

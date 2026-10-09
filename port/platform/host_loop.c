@@ -80,7 +80,7 @@ static double ms_since(unsigned long long *t)
 
 void ico_host_step(void)
 {
-    /* package Q1: the step's phases in real time (ico_host_step_profile) */
+    /* the step's phases in real time (ico_host_step_profile) */
     const unsigned long long start = ico_diag_now_ns();
     unsigned long long t = start;
     const unsigned long switches = ico_sched_switch_count();
@@ -107,12 +107,11 @@ void ico_host_step(void)
     ico_fpenv_sim_enter();
     ico_sched_run();
     profile.threadsMs = ms_since(&t);
-    /* the port's achievements: once per new Main
-       tick, after the threads have run; reads game state, writes none */
+    /* the port's achievements: once per new Main tick, after the threads
+       have run; reads game state, writes none */
     ico_ach_host_poll(ico_host_main_ticks());
-    /* the Extras credits' playback: nothing unless
-       one is running; then it watches the stage and puts the game flags
-       back at the title */
+    /* the Extras credits' playback: nothing unless one is running; then it
+       watches the stage and puts the game flags back at the title */
     ico_credits_host_poll();
     profile.achMs = ms_since(&t);
     profile.totalMs = (double)(t - start) / 1e6;

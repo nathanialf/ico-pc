@@ -2,7 +2,7 @@
  * port/platform/vsync_hooks.c
  *
  * The on-vsync callback list (host_loop.h). Apart from host_loop.c so that
- * device code (package 1C's cdvd_host.c) and its tests link it without the
+ * device code (port/data's cdvd_host.c) and its tests link it without the
  * game.
  */
 #include "host_loop.h"

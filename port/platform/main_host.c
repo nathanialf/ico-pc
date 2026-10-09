@@ -5,10 +5,11 @@
  * is compiled as ico_game_main (CMakeLists.txt renames it with a definition
  * on that one source) and runs on the boot fiber (host_loop.c).
  *
- * The default build opens a window titled "ICO" (window_host.h): the game
- * draws through rd into it, one simulated vsync per real 20 ms (PAL; 16.7 ms
- * at 60 Hz), presented with vsync on, and Escape or closing the window ends
- * the run. The headless build (CMake ICO_HEADLESS=ON: the trace and test
+ * The window build (ICO_HEADLESS=OFF) opens a window titled "ICO"
+ * (window_host.h): the game draws through rd into it, one simulated vsync
+ * per real 20 ms (PAL; 16.7 ms at 60 Hz), presented at the frame rate and
+ * with the vsync the display options choose, and Escape or closing the
+ * window ends the run. The headless build (CMake ICO_HEADLESS=ON: the trace and test
  * runs) has no window and simulates vsyncs as fast as it can.
  *
  * Run with no arguments (a double-click), everything comes from the
@@ -113,14 +114,14 @@
 
 #include <SDL3/SDL.h>
 #include "rhi.h"
-#include "modelpack.h" /* v0.4.1: model packs */
+#include "modelpack.h" /* model packs */
 #include "settings.h"  /* port/ui: Display > Model pack's "None installed" */
-#include "texpack.h"   /* v0.4.0: PCSX2 texture packs */
+#include "texpack.h"   /* PCSX2 texture packs */
 #include "video_options.h"
 #include "window_host.h"
 
 #endif
-/* Android's window build (package AN-C): the window opens before the game
+/* Android's window build: the window opens before the game
    data is mounted, the first start chooses the image in the system's
    picker and copies it, and its progress is drawn in the game's window. */
 #if defined(__ANDROID__) && !defined(ICO_HEADLESS)
@@ -226,10 +227,10 @@ static int parse_count(const char *s, unsigned long *out)
 
 static const char *exit_reason = "exit() from the game or the C library";
 
-/* The end-of-run steps, run last registered first: summary, then
-   ico_input_record_close, ico_window_close, texpack_Shutdown and
-   modelpack_Shutdown as they are registered, and the achievements' flush
-   and the audio's shutdown (ico_host_at_shutdown) when those start.
+/* The end-of-run steps: each start-up step registers its own end (the pad
+   recording, the summary, the window, the texture and model packs, and
+   through ico_host_at_shutdown the achievements' flush and the audio), and
+   they run last registered first.
    Desktop: atexit, so an exit() from the game runs them too.
    Android: SDL_main's return finishes the activity while the process may
    live on, so ico_host_main runs them itself (ico_host_shutdown) when it
@@ -274,7 +275,7 @@ static void summary(void)
                  ico_host_vsync_count(), ico_host_stage_no());
 }
 
-/* v0.4.2: the run before's log as logs/ico-pc-previous.log, so the log of
+/* The run before's log as logs/ico-pc-previous.log, so the log of
    a run that ended by itself is still there when the player starts the
    game again before sending it (on a phone the game just went away) */
 static void keep_previous_log(const char *logs_dir, const char *log_path)
@@ -378,7 +379,7 @@ static void timestamp(char *out, size_t size, const char *fmt)
     }
 }
 
-/* --- the pad recording (package Q1, port/input/input_record.h) ---------- */
+/* --- the pad recording (port/input/input_record.h) ---------------------- */
 
 /* The config values the simulation depends on, written into the recording's
    header and compared when a recording is replayed as the pad script. */
@@ -1296,8 +1297,8 @@ static void load_tables(const char *source)
 }
 
 #ifndef ICO_HEADLESS
-/* v0.4.2: the menus no longer use the game's lettering, so the files
-   an earlier version cut from the disc's menu sheets on its first
+/* The menus do not use the game's lettering, so the files an earlier
+   version cut from the disc's menu sheets on its first
    start (gamefont-<version>-<disc SHA-1>.bin in the per-user folder)
    are of no use: removed, once (nothing is left to find after that) */
 static void remove_old_lettering(void)
@@ -1413,7 +1414,7 @@ static void name_threads(void)
 }
 
 #ifndef ICO_HEADLESS
-/* v0.4.0: a PCSX2 texture pack in the user folder or beside the
+/* A PCSX2 texture pack in the user folder or beside the
    program, indexed now (the game data is mounted, the device knows its
    formats); its loader thread stops before the window closes */
 static void open_texture_pack(const char *exe_dir)
@@ -1439,7 +1440,7 @@ static void open_texture_pack(const char *exe_dir)
     at_shutdown(texpack_Shutdown);
 }
 
-/* v0.4.1 (M4): a model pack from the same folders, read and converted
+/* A model pack from the same folders, read and converted
    now (before the game loads a model: the meshes made at load look
    their parts up); the dump is a Developer mode row */
 static void open_model_pack(const char *exe_dir)
@@ -1467,7 +1468,7 @@ static void open_model_pack(const char *exe_dir)
 /* the watchdog, from the limit in seconds (0 off) */
 static void start_watchdog(unsigned long watchdog)
 {
-    /* R2: an effects program (ReShade) compiles its shaders on the first
+    /* An effects program (ReShade) compiles its shaders on the first
        frames; the first limit is doubled for it (rhi_InjectorName, port/rhi/
        rhi.h, is only in the window build). */
     const char *injector = NULL;
@@ -1534,7 +1535,7 @@ static int host_main(int argc, char **argv)
        no log file when none was opened */
     ico_diag_init(log_file());
 #ifdef __ANDROID__
-    /* v0.4.2: a crash or the watchdog ends the run with a box and the C
+    /* A crash or the watchdog ends the run with a box and the C
        library's last words in the log, not by the game just going */
     ico_diag_set_fatal_ui(ico_android_fatal_box, ico_android_log_mirror_try_flush);
 #endif
@@ -1636,7 +1637,7 @@ static int host_main(int argc, char **argv)
 
     setup_trace(&a, &ini, exe_dir, logs_dir);
 
-    /* the pad recording (package Q1) */
+    /* the pad recording */
     record_open(&ini, exe_dir, logs_dir);
 
     /* when to stop */
@@ -1684,7 +1685,7 @@ static int host_main(int argc, char **argv)
             ico_diag_milestone("first vsync done");
         }
         ico_trace_poll();
-        /* package Q1: the pad recording's lines, then the log: on Windows
+        /* the pad recording's lines, then the log: on Windows
            stdout and stderr are fully buffered (host_config.h), so this is
            one write a vsync at most */
         ico_input_record_poll(ico_host_main_ticks());
@@ -1695,7 +1696,7 @@ static int host_main(int argc, char **argv)
         ico_fpenv_host_enter();
         if (!ico_window_pump()) {
             exit_reason = "the window was closed";
-            /* v0.4.2: Escape or the close button can end the run on a
+            /* Escape or the close button can end the run on a
                Settings page that was never left (Characters in the model
                viewer, the pause menu's pages): its changes are written now,
                not lost */

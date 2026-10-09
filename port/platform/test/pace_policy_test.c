@@ -4,7 +4,7 @@
  * The slow-present decision (pace_policy.h): the threshold, entering after 3
  * presents above it and leaving below 80 % of it, no flicker on a borderline
  * sequence, one spike changing nothing, the injector's higher threshold.
- * v0.4.2 (N2): resolution "auto"'s steps (testAutoResolution).
+ * Resolution "auto"'s steps (testAutoResolution).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -28,7 +28,7 @@ static bool feed(PaceHist *h, uint64_t ms10, bool inj)
     return pace_SlowPresent(h, ms10 * MS / 10, REFRESH, PERIOD, inj);
 }
 
-/* v0.4.2 (N2): the window's loop over pace_AutoResolutionStep: a sample
+/* The window's loop over pace_AutoResolutionStep: a sample
    per present at 60 a second for sec seconds, each cost ms10 tenths of a
    ms; every 2 s a step decision, a new window, the step's time kept */
 static int autoRun(PaceSamples *s, uint64_t *clock, int scale, float winScale, uint64_t ms10,

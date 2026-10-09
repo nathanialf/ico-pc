@@ -1,8 +1,8 @@
 /*
  * port/platform/trace_host.c
  *
- * The Main tick count and the --trace file (trace_host.h). Package 2A
- * replaces the trace; the tick hook stays.
+ * The Main tick count, the heartbeat's state line and the --trace file
+ * (trace_host.h).
  */
 #include "trace_host.h"
 #include <stdint.h>
@@ -20,7 +20,7 @@ extern int systemStatus[];         /* common/src/main.c:37, int[12] */
 extern int gameover_flag;          /* common/src/main.c:493 */
 extern char gameSysMainSaveBuff[]; /* common/src/gamesys.c:79 */
 int gflagChk(int bit_idx);         /* script/src/gflag.c:58 */
-/* port/game/options.h: developer mode (renderer wave 6, R6a) */
+/* port/game/options.h: developer mode */
 int ico_opt_developer_mode(void);
 /* read by the heartbeat (ico_host_status) */
 extern int fadeStatus;                   /* seki/src/Basic.c:124 */
@@ -59,7 +59,7 @@ void ico_host_main_tick(void)
         ico_diag_milestone("stage_no %d -> %d", logged_stage, stage_no);
         logged_stage = stage_no;
     }
-    /* v0.4.2: the menu screen (layout_action.c's numbers: 12 the title
+    /* the menu screen (layout_action.c's numbers: 12 the title
        with Continue, 20 the load's card check, 19 the file select, 25 the
        load itself), so a log that ends after Continue says which step it
        reached */
@@ -112,9 +112,9 @@ int ico_trace_open(const char *path)
         fprintf(stderr, "trace: cannot create %s\n", path);
         return -1;
     }
-    /* developer mode as the run starts: the
-       menu and option table it opens can change the simulation, so a trace
-       says which kind of run it is.  Comparisons skip '#' lines. */
+    /* developer mode as the run starts: the menu and option table it opens
+       can change the simulation, so a trace says which kind of run it is.
+       Comparisons skip '#' lines. */
     fprintf(trace, "# developer_mode %d\n", ico_opt_developer_mode() ? 1 : 0);
     fprintf(trace, "# tick vsync stage sys0 sys1 gameover");
     for (i = 0; i < GFLAG_WORDS; i++) {

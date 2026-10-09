@@ -1,10 +1,10 @@
 /*
  * port/platform/gpu_driver.h
  *
- * Graphics driver packages for the Android build (v0.4.3, package AN-22a,
- * issue 22): the community driver packages for Adreno GPUs (Turnip, the
- * patched Qualcomm drivers) that libadrenotools loads, as zip files the
- * player adds from the Settings page.  A package is flat: meta.json, the
+ * Graphics driver packages for the Android build (issue 22): the
+ * community driver packages for Adreno GPUs (Turnip, the patched Qualcomm
+ * drivers) that libadrenotools loads, as zip files the player adds from the
+ * Settings page.  A package is flat: meta.json, the
  * driver library it names (libraryName) and the libraries that one needs.
  *
  *   meta.json  {"schemaVersion": 1, "name": "Turnip", "description": "...",
@@ -79,8 +79,8 @@ int ico_gpu_driver_parse_meta(const char *text, size_t n, IcoGpuDriverMeta *out,
 /* 1 when name matches ^[A-Za-z0-9._-]+\.so$ (and has no ".."), else 0. */
 int ico_gpu_driver_library_name_ok(const char *name);
 
-/* 1 when name may be a file of a package: not empty, no '/', '\\', "..",
-   control character or leading '.', at most 127 bytes. */
+/* 1 when name may be a file of a package: not empty, no '/', '\\', ':',
+   "..", control character, DEL or leading '.', at most 127 bytes. */
 int ico_gpu_driver_entry_name_ok(const char *name);
 
 /* The folder a package installs into: name, then '-' and driverVersion

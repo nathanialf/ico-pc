@@ -33,7 +33,7 @@ int ico_window_video_fullscreen(SDL_Window *w, int want, int *pxW, int *pxH)
     return real;
 }
 
-/* v0.4.3 (I17c): the window's mode.  The windowed rectangle is remembered
+/* The window's mode.  The windowed rectangle is remembered
    when the window leaves the windowed state, and comes back with it. */
 static int s_haveRect;
 static int s_rectX, s_rectY, s_rectW, s_rectH;

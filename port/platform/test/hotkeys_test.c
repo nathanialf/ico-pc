@@ -1,7 +1,7 @@
 /*
  * port/platform/test/hotkeys_test.c
  *
- * The window build's diagnostic keys (hotkeys.h, package Q1): F12 is the
+ * The window build's diagnostic keys (hotkeys.h): F12 is the
  * frame dump and F11 the fast stats lines, a held key's repeats do
  * nothing, no other key is taken (Escape, Alt+Enter and the bindable keys
  * stay with window_host.c and the binding layer), the stats period and

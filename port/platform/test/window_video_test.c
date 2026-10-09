@@ -1,11 +1,11 @@
-/* window_video_test.c: ico_window_video_fullscreen (window_video.c) on SDL's
- * offscreen video driver.
+/* window_video_test.c: ico_window_video_fullscreen and ico_window_video_mode
+ * (window_video.c) on SDL's offscreen video driver.
  *
- * This exercises the wrapper's readback and logging: what it returns is the
- * window's flag after the request, and the size it reports is the window's
- * pixel size then.  It does not exercise X11, KWin or gamescope (the
+ * This exercises their readback and logging: what they return is the
+ * window's state after the request, and the size they report is the
+ * window's pixel size then.  It does not exercise X11, KWin or gamescope (the
  * offscreen driver has no window manager to refuse anything); the Deck is
- * where that is checked, through the log lines this wrapper writes.
+ * where that is checked, through the log lines these calls write.
  *
  * Exit 77 (skipped) when SDL has no offscreen video driver. */
 #include "../window_video.h"
@@ -99,7 +99,7 @@ int main(void)
     printf("fullscreen off: events enter %d, leave %d, pixel size %d\n", entered, left, sized);
     CHECK(left || sized, "no LEAVE_FULLSCREEN or PIXEL_SIZE_CHANGED event after fullscreen off");
 
-    /* v0.4.3 (I17c): the window mode.  Borderless: the frameless flag, no
+    /* the window mode.  Borderless: the frameless flag, no
        fullscreen state, the display's size (informational: the offscreen
        driver may ignore a size request). */
     {

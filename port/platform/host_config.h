@@ -3,15 +3,16 @@
  *
  * What ico_pc needs to run from a double-click: the folder the executable
  * is in, the ico-pc.ini file beside it, the log folder, the disc image's
- * SHA-1, the Windows file-open dialog and error box (package 1D; main_host.c
- * uses them).
+ * SHA-1, the Windows file-open dialog and error box (main_host.c uses
+ * them).
  *
  * ico-pc.ini, next to the executable: `key=value` lines. A line whose first
  * non-blank character is `#` or `;` is a comment (whole lines only, so a
  * value may contain either). Key and value are trimmed of blanks; a value
  * in double quotes loses them (Explorer's "Copy as path" adds them). Paths
  * may contain spaces and backslashes; a relative path is taken from the
- * executable's folder. Keys:
+ * executable's folder. The common keys (host_config.c's ini_map lists
+ * every key, the developer ones among them):
  *
  *   iso=PATH         the disc image (written back after the file dialog)
  *   ticks=N          exit after N Main ticks; absent: run until closed
@@ -182,10 +183,10 @@ void ico_sha1_init(IcoSha1 *s);
 void ico_sha1_update(IcoSha1 *s, const void *data, size_t n);
 void ico_sha1_final(IcoSha1 *s, unsigned char digest[20]);
 /* The file's SHA-1 as 40 lowercase hex digits; *bytes gets its size. 0, or
-   -1 if it cannot be read. */
+   -1 if it cannot be read. (tests) */
 int ico_sha1_file(const char *path, char hex[41], unsigned long long *bytes);
 /* Sends stdout and stderr to log_path, created afresh: unbuffered on POSIX,
-   fully buffered on Windows (package Q1: msvcrt writes an unbuffered stream
+   fully buffered on Windows (msvcrt writes an unbuffered stream
    one character per OS call), where the host loop calls ico_host_log_flush
    once per vsync. Fatal errors still reach the original stderr on POSIX.
    Android: through host_android.c's mirror, to the file and logcat. 0,

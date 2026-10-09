@@ -1,8 +1,8 @@
 /*
  * port/platform/test/gpu_driver_test.c
  *
- * The Android build's graphics driver packages (port/platform/gpu_driver.c,
- * v0.4.3 package AN-22a), on any platform: meta.json read as the community
+ * The Android build's graphics driver packages (port/platform/gpu_driver.c),
+ * on any platform: meta.json read as the community
  * packages write it; bad library names, a missing name and a too high
  * minApi refused; zips made here with miniz's writer installed, and the
  * unsafe ones (a path in a name, "..", a backslash, a directory, a file

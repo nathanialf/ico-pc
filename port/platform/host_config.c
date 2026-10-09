@@ -269,15 +269,15 @@ static char *read_text(const char *path)
     return text;
 }
 
-/* dump_every=N (renderer wave 3): the renderer (port/render, which does not
+/* dump_every=N: the renderer (port/render, which does not
    link this file) writes every Nth frame it replays as an rd dump into the
    folder dump_dir= names (default: dumps beside the ini; created), for
    rd_replay_tool.  Handed over in the environment, ICO_RD_DUMP_EVERY and
-   ICO_RD_DUMP_DIR, which rd_Init reads.  dump_interp=1 (renderer wave 7,
-   R7d) also writes each dumped frame interpolated half way from the one
+   ICO_RD_DUMP_DIR, which rd_Init reads.  dump_interp=1 also
+   writes each dumped frame interpolated half way from the one
    before (rd-NNNNN-i50.rddump), handed over as ICO_RD_DUMP_INTERP, which is
    always set with the other two so the ini or config.toml decides.
-   dump_from=N (package S2) dumps no frame numbered below N, handed over as
+   dump_from=N dumps no frame numbered below N, handed over as
    ICO_RD_DUMP_FROM (0 when unset). */
 static void export_dump_keys(const IcoIni *ini, const char *path)
 {
@@ -327,7 +327,7 @@ static void export_dump_keys(const IcoIni *ini, const char *path)
 #endif
 }
 
-/* audio_dump=PATH and audio=0 (Phase 4B): handed to port/audio/audio_host.c
+/* audio_dump=PATH and audio=0: handed to port/audio/audio_host.c
    (which ico_platform does not link to here) in the environment, as
    ICO_AUDIO_DUMP (PATH joined to the ini's folder; audio_dump=1 means
    logs/audio.wav there) and ICO_AUDIO. */
@@ -409,10 +409,10 @@ static const struct {
 } ini_map[] = {
     {"paths.iso", "iso"},
     {"paths.saves", "saves"},
-    /* the port-1 card folder; empty or absent: no card in port 1 (package S1) */
+    /* the port-1 card folder; empty or absent: no card in port 1 */
     {"paths.saves2", "saves2"},
-    /* Android: 1 keeps the first start's copy of the disc image (package
-       AN-C, main_host.c); else it is deleted once the game data is ready */
+    /* Android: 1 keeps the first start's copy of the disc image
+       (main_host.c); else it is deleted once the game data is ready */
     {"paths.keep_image", "keep_image"},
     {"audio.enabled", "audio"},
     {"dev.ticks", "ticks"},
@@ -420,13 +420,13 @@ static const struct {
     {"dev.trace", "trace"},
     {"dev.dump_every", "dump_every"},
     {"dev.dump_dir", "dump_dir"},
-    /* 1: each dump also half way interpolated (renderer wave 7, R7d) */
+    /* 1: each dump also half way interpolated */
     {"dev.dump_interp", "dump_interp"},
-    /* the first frame number dump_every dumps (package S2) */
+    /* the first frame number dump_every dumps */
     {"dev.dump_from", "dump_from"},
     {"dev.audio_dump", "audio_dump"},
     {"dev.pad_script", "pad_script"},
-    /* the pad recording, logs/input-<time>.txt (package Q1; main_host.c:
+    /* the pad recording, logs/input-<time>.txt (main_host.c:
        default on in the window build, off headless; a path writes there) */
     {"dev.input_record", "input_record"},
     {"dev.verify", "verify"},
@@ -438,20 +438,20 @@ static const struct {
     /* 1: write config.toml with its defaults when there is none (main_host.c;
        default 1 in the window build, 0 headless, so test runs leave no file) */
     {"dev.write_config", "write_config"},
-    /* the stage Main starts in (developer key, renderer wave 5, R5b) */
+    /* the stage Main starts in (developer key) */
     {"dev.start_stage", "start_stage"},
     /* one forced stage change: the stage, and the Main tick from which it
-       is taken (developer keys, package X5; common/src/main.c,
+       is taken (developer keys; common/src/main.c,
        ico_dev_switch_stage) */
     {"dev.switch_to", "switch_to"},
     {"dev.switch_at", "switch_at"},
     /* Settings > Extras > Credits unlocked whatever the achievements say
-       (package CRED; port/game/credits.c) */
+       (port/game/credits.c) */
     {"dev.unlock_credits", "unlock_credits"},
-    /* test popups from Main tick 100 (Phase 6, 6B; port/ui/popup.h) */
+    /* test popups from Main tick 100 (port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
     /* the renderer backend of the window build, "vulkan" (default) or "d3d12"
-       (renderer wave 6, R6c; window_host.c, port/rhi/rhi.h rhi_CreateBackend) */
+       (window_host.c, port/rhi/rhi.h rhi_CreateBackend) */
     {"video.backend", "backend"},
 };
 
@@ -564,13 +564,13 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
     if (r == 0 || ini->count > 0) {
         export_dump_keys(ini, path);
         export_audio_keys(ini, path);
-        /* start_stage=N (developer key, renderer wave 5): the stage Main
-           starts in instead of stage 1, through debug_TryToGetStartStage
-           (port/null/debug_null.c), which reads ICO_START_STAGE */
+        /* start_stage=N (developer key): the stage Main starts in instead
+           of stage 1, through debug_TryToGetStartStage (common/src/debug.c),
+           which reads ICO_START_STAGE */
         if (ico_ini_get(ini, "start_stage") != NULL) {
             put_env("ICO_START_STAGE", ico_ini_get(ini, "start_stage"));
         }
-        /* switch_to=N, switch_at=T (developer keys, package X5): one
+        /* switch_to=N, switch_at=T (developer keys): one
            forced stage change to N from Main tick T, through an exit of the
            current stage (common/src/main.c, ico_dev_switch_stage, which
            reads ICO_SWITCH_TO and ICO_SWITCH_AT) */
@@ -580,7 +580,7 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
         if (ico_ini_get(ini, "switch_at") != NULL) {
             put_env("ICO_SWITCH_AT", ico_ini_get(ini, "switch_at"));
         }
-        /* popup_test=true (developer key, Phase 6 6B): port/ui/ui_host.c
+        /* popup_test=true (developer key): port/ui/ui_host.c
            queues a test popup at Main tick 100 and every 150 ticks after;
            it reads ICO_UI_POPUP_TEST (1, true, on, yes) */
         if (ico_ini_get(ini, "popup_test") != NULL) {
@@ -860,7 +860,7 @@ int ico_host_redirect_output(const char *log_path)
     }
 #endif
 #ifdef _WIN32
-    /* Package Q1: fully buffered, flushed by the host loop once a vsync
+    /* Fully buffered, flushed by the host loop once a vsync
        (ico_host_log_flush) and by the fatal paths (diag_host.c).  msvcrt
        has no line buffering and writes an unbuffered stream one character
        per OS call, each after a seek to the end (append mode): a player's

@@ -19,10 +19,10 @@
 /* Puts the FPU in simulation mode, allocates the EE RAM arena and runs the
    game's main() on the boot fiber until it and its threads wait. */
 void ico_host_init(void);
-/* The host program's end-of-run steps (main_host.c), last registered first:
-   the texture pack's loader, the window, the pad recording, the summary
-   line, and the audio and the achievements (ico_host_at_shutdown). Each
-   runs once. On the desktop they are atexit handlers and this
+/* The host program's end-of-run steps (main_host.c and the libraries that
+   register through ico_host_at_shutdown: the audio, the achievements), each
+   registered by the start-up step that needs it and run last registered
+   first. Each runs once. On the desktop they are atexit handlers and this
    finds nothing left to run; on Android ico_host_main calls it before it
    returns. A second call does nothing. */
 void ico_host_shutdown(void);
@@ -37,7 +37,7 @@ unsigned int ico_host_vsync_count(void);
 /* The simulated vsync rate: 50 (PAL, systemStatus[0] != 0) or 60. */
 int ico_host_vsync_hz(void);
 
-/* Package Q1: where the last ico_host_step's real time went, for the window
+/* Where the last ico_host_step's real time went, for the window
    build's slow-step lines (window_host.c), in ms: the vsync callbacks (the
    disc's reads complete there), the audio block (the SPU2 mix and the SDL
    push), the game's threads, the achievements' poll (and its stats file
@@ -58,7 +58,7 @@ void ico_host_step_profile(IcoStepProfile *out);
 /* Callbacks run at every simulated vsync, on the host context as interrupt
    code (wake threads with the i-calls: iWakeupThread, iSignalSema), after
    the vblank interrupt's handlers and before the threads run. Disc I/O
-   (package 1C) completes from here, so a request issued during one tick
+   (port/data's cdvd_host.c) completes from here, so a request issued during one tick
    completes at the next vsync. Returns 0, or -1 when the table is full. */
 int ico_host_on_vsync_register(void (*fn)(void *user), void *user);
 void ico_host_on_vsync_unregister(void (*fn)(void *user), void *user);

@@ -1,6 +1,6 @@
 # port/platform/build_commit.cmake: writes OUT (ico_build_commit.h) with the
 # source tree's commit, "git describe --always --dirty", as ICO_BUILD_COMMIT
-# (package Q1: the pad recording's header names the build). Run at every
+# (the pad recording's header names the build). Run at every
 # build (port/platform/CMakeLists.txt); the file is rewritten only when the
 # value changes, so nothing recompiles otherwise.
 set(_commit "unknown")

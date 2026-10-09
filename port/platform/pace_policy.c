@@ -68,7 +68,7 @@ bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t
     return h->slow;
 }
 
-/* v0.4.2 (N2): resolution "auto" */
+/* resolution "auto": the cost samples */
 void pace_SamplesReset(PaceSamples *s, uint64_t nowNs)
 {
     s->count = s->next = 0;

@@ -1,22 +1,23 @@
 /*
  * port/platform/window_lifecycle.h
  *
- * What the window build does when the system moves the app (package AN-D,
- * Android): one table of steps per lifecycle event, run in order through
- * a set of operations the caller supplies, so a unit test checks the order
+ * What the window build does when the system moves the app (Android): one
+ * table of steps per lifecycle event, run in order through a set of
+ * operations the caller supplies, so a unit test checks the order
  * with fake operations (port/platform/test/lifecycle_test.c) and
  * window_host.c plugs in the real ones. Plain C, no SDL.
  *
- *   will enter background  the GPU idle, the window's surface released
- *                          (the device kept), the watchdog paused, the
- *                          sound paused, the log flushed: SDL then blocks
- *                          the event pump until the app comes back
+ *   will enter background  a line, then the GPU idle, the window's
+ *                          surface released (the device kept), the
+ *                          watchdog paused, the sound paused, the log
+ *                          flushed: SDL then blocks the event pump until
+ *                          the app comes back
  *   did enter foreground   the surface and swapchain made again, the
  *                          watchdog running, the sound resumed with its
  *                          queue emptied, the pacer's deadline reset to
  *                          now (the time away is not caught up), a line
- *   terminating            the settings saved when changed, the pad
- *                          recording closed, the log flushed
+ *   terminating            a line, then the settings saved when changed,
+ *                          the pad recording closed, the log flushed
  *   low memory             the texture pack's read-ahead held at what it
  *                          has, a line, the log flushed
  *

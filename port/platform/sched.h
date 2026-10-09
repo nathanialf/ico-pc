@@ -104,8 +104,7 @@ void ico_sched_set_fiber_start_hook(void (*hook)(void));
    call and resumes the same thread at once (no other thread runs in
    between); from the host context fn is called directly. For host work too
    deep for a fiber's stack (the GPU driver: replay, pipeline creation,
-   present). fn must
-   not make kernel calls. */
+   present). fn must not make kernel calls. */
 void ico_sched_call_on_host(void (*fn)(void *arg), void *arg);
 /* Creates and starts the program's first thread (the EE's main thread, id
    1), which runs entry(arg) at the given priority. Returns its id. */
@@ -119,6 +118,7 @@ unsigned int ico_sched_vsync_count(void);
 /* Bracket "interrupt" code run on the host context (for assertions). */
 void ico_sched_interrupt_begin(void);
 void ico_sched_interrupt_end(void);
+/* 1 between the two (tests). */
 int ico_sched_in_interrupt(void);
 /* Context switches into fibers so far (statistics). */
 unsigned long ico_sched_switch_count(void);

@@ -1,9 +1,11 @@
 /*
  * port/platform/window_host.h
  *
- * The windowed ico_pc (renderer wave 2, package R2a): one SDL3 window
- * titled "ICO", the Vulkan RHI device on it through rd_Init (Original
- * preset, vsync on), and the real-time pacing of the simulated vsyncs.
+ * The windowed ico_pc: one SDL3 window titled "ICO", the renderer device
+ * on it ([video] backend: Vulkan, or Direct3D 12 on Windows) through
+ * rd_Init with the display options, and the real-time pacing of the
+ * simulated vsyncs, presenting between ticks when the frame rate option
+ * allows.
  * main_host.c drives it; the headless build (ICO_HEADLESS) leaves it out.
  *
  *   ico_window_open(gsW, gsH)   SDL video, the window, rd_Init; 0, or -1
@@ -13,14 +15,19 @@
  *                               the close button returns 0 (quit), else 1;
  *                               a lost device (rhi_DeviceLost) shows one
  *                               message box and returns 0
- *   ico_window_pace(hz)         sleeps until this vsync's deadline at hz
- *                               (50 PAL, 60 NTSC) in real time; a host that
- *                               falls more than 100 ms behind resynchronises
- *                               instead of running fast to catch up
+ *   ico_window_pace(hz)         presents until this vsync's deadline at hz
+ *                               (50 PAL, 60 NTSC) in real time, as often as
+ *                               the frame rate option and vsync allow, then
+ *                               sleeps to it; a host that falls more than
+ *                               100 ms behind resynchronises instead of
+ *                               running fast to catch up
  *   ico_window_close()          rd_Shutdown, the window, SDL (atexit-safe)
  *   ico_window_progress(title, phase, pct)
- *                               package AN-C, the Android first start
- *                               (main_host.c): drains SDL events (the quit
+ *                               Android's first start and its "Starting the
+ *                               game" screen (main_host.c), once the window
+ *                               is open; the window's own start-up screen
+ *                               while the graphics are prepared draws the
+ *                               same way before that: drains SDL events (the quit
  *                               event, Back or Escape ask to stop; a size
  *                               change reaches rd_ResizeOutput; the rest
  *                               go to the pad layer as ico_window_pump

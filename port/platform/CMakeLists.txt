@@ -1,6 +1,5 @@
-# port/platform/CMakeLists.txt: the platform layer's sources (the
-# fiber scheduler, the EE kernel calls, the EE RAM arena, the host loop and
-# the headless graphics seam) and its tests.
+# port/platform/CMakeLists.txt: the platform sources ico_platform takes
+# beyond the top-level CMakeLists.txt's, and the platform tests.
 
 target_sources(ico_platform PRIVATE
     arena.c
@@ -42,8 +41,8 @@ if(TARGET ico_pc)
     add_dependencies(ico_pc ico_build_commit)
     target_include_directories(ico_pc PRIVATE "${_ico_commit_dir}")
 endif()
-# port/null/gfx_null.c (the headless graphics floor) is linked into ico_pc
-# by the top-level CMakeLists.txt.
+# port/null/gfx_null.c (the graphics floor under the game's packet code, in
+# both builds) is linked into ico_pc by the top-level CMakeLists.txt.
 
 # ICO_HEAP_STATS: memory.c reports allocations to arena.c, which logs each
 # partition's high-water mark.
@@ -127,7 +126,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME ios_chain COMMAND ios_chain_test)
 endif()
 
-# The fullscreen request's readback (window_video.c) on SDL's
+# The window mode requests' readback (window_video.c) on SDL's
 # offscreen video driver. SDL3 is found by port/rhi, configured after this
 # directory, so the test is defined once the top level is done; exit 77
 # (skipped) without the offscreen driver.

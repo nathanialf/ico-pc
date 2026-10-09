@@ -274,8 +274,8 @@ int iDisableDmac(int channel)
     return DisableDmac(channel);
 }
 
-/* No alarms on the host yet: only the movie player (ito/mpeg, not built
-   headless) would use them. */
+/* No alarms on the host: the game's only user, the PS2 movie player
+   (ico2/ito/mpeg), is replaced by port/fmv and not compiled. */
 int SetAlarm(unsigned short time, void (*handler)(int id, unsigned short time, void *arg),
              void *arg)
 {

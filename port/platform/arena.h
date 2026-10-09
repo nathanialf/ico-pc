@@ -50,8 +50,9 @@ void ico_heap_stats_free(const void *part, unsigned int bytes);
 /* The partition's bytes in use and high-water mark; 0 if never seen. */
 unsigned int ico_heap_stats_used(const void *part);
 unsigned int ico_heap_stats_high_water(const void *part);
-/* Prints every partition's figures to stderr. */
+/* Prints every partition's figures to stderr (tests). */
 void ico_heap_stats_dump(void);
+/* Forgets every partition's figures (tests). */
 void ico_heap_stats_reset(void);
 
 #endif /* ICO_PLATFORM_ARENA_H */

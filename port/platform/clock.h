@@ -1,8 +1,8 @@
 /*
  * port/platform/clock.h
  *
- * The host's clocks: the wall clock sceCdReadClock
- * reports, and the EE timers T0..T3.
+ * The host's clocks: the wall clock sceCdReadClock reports, and the EE
+ * timers T0..T3.
  */
 #ifndef ICO_PLATFORM_CLOCK_H
 #define ICO_PLATFORM_CLOCK_H
@@ -26,12 +26,12 @@ typedef struct IcoClockBcd {
 void ico_clock_pack(IcoClockBcd *out, int year, int month, int day, int hour, int minute,
                     int second);
 /* The clock as the game reads it: the host's local wall clock, or when the
-   clock is fixed (ICO_FIXED_CLOCK=1 in the environment, which the config layer
-   sets from [dev] fixed_clock; 1 when unset) 2002-01-01 00:00:00, so that
+   clock is fixed (unless ICO_FIXED_CLOCK is "0" in the environment, which
+   host_config.c sets from [dev] fixed_clock) 2002-01-01 00:00:00, so that
    trace runs and the save serial (layout_action.c mcMakeSerial packs this
    clock) are reproducible. */
 void ico_clock_now(IcoClockBcd *out);
-/* Overrides the environment's choice (1 fixed, 0 real). */
+/* Overrides the environment's choice (1 fixed, 0 real). (tests) */
 void ico_clock_set_fixed(int fixed);
 
 /* The EE timers: the counters in ico_hw_eeio (T0_COUNT at +0x0000, T1 at
@@ -57,7 +57,8 @@ void ico_clock_set_mode_word(const volatile int *word);
    hook's step, and the way for a caller inside a frame to give a sub-vsync
    estimate. */
 void ico_clock_timers_step(unsigned frac_q16);
-/* Zeroes the counters, the modes and the fractions of a tick carried over. */
+/* Zeroes the counters, the modes and the fractions of a tick carried over.
+   (tests) */
 void ico_clock_timers_reset(void);
 
 #endif /* ICO_PLATFORM_CLOCK_H */

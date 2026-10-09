@@ -68,6 +68,7 @@
 #endif
 
 #endif
+/* marks a function the OS or the C runtime calls (a handler, a thread's entry) */
 #define ICO_ENTRY
 #define LINE_MAX_BYTES 1024
 #define HEARTBEAT_S 2.0
@@ -112,7 +113,7 @@ static volatile int effects_program;
 static void (*exit_hook)(const char *reason);
 
 #ifndef _WIN32
-/* v0.4.2 (Android): ico_diag_set_fatal_ui's box and flush, and the
+/* Android: ico_diag_set_fatal_ui's box and flush, and the
    requests the crashing thread leaves for the watchdog thread (fatal_ui_*) */
 static void (*fatal_box)(const char *text);
 static void (*fatal_flush)(void);
@@ -241,7 +242,7 @@ static void lock_give(void)
     LeaveCriticalSection(&lock);
 }
 
-/* Package Q1: stdout and stderr are fully buffered on Windows
+/* stdout and stderr are fully buffered on Windows
    (host_config.c ico_host_redirect_output; msvcrt writes an unbuffered
    stream one character per OS call). Before a fatal report their content
    is written out by a helper thread, waited on for at most STDIO_FLUSH_MS:
@@ -609,7 +610,7 @@ static void dump_threads(void)
     }
 }
 
-/* --- Process memory and the fatal end's player box (v0.4.2) --------------------- */
+/* --- Process memory and the fatal end's player box ------------------------------ */
 
 void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void))
 {
@@ -792,8 +793,7 @@ static void fatal_text(char *out, size_t size, const char *what)
 
 /* --- Heartbeat ------------------------------------------------------------------ */
 
-/* The heartbeat's content without the time; 1 when it differs from the
-   last one. */
+/* The heartbeat's content without the time. */
 static void heartbeat_body(char *out, size_t size)
 {
     char st[512];
@@ -852,7 +852,7 @@ static void heartbeat(int fatal_path)
         same_beats = 0;
         memcpy(last_body, body, sizeof body);
     }
-    /* v0.4.2: the process's memory (a phone ends a process that holds too
+    /* the process's memory (a phone ends a process that holds too
        much without a word), outside the comparison: it moves while the game
        stands still */
     memory_note(mem, sizeof mem);
@@ -1035,7 +1035,7 @@ static void finish(const char *reason, const char *box_text, int code)
 #else
 #ifdef __ANDROID__
     {
-        /* v0.4.2: the watchdog's end (a crash keeps the system's handlers,
+        /* the watchdog's end (a crash keeps the system's handlers,
            crash_handler): the box, then the end */
         static char box[1536];
         fatal_ui_flush();
@@ -1359,7 +1359,7 @@ static void watchdog_loop(void)
 #else
         struct timespec ts = {0, 250 * 1000 * 1000};
         nanosleep(&ts, NULL);
-        /* v0.4.2: a crashing thread's flush and box (fatal_ui_*) */
+        /* a crashing thread's flush and box (fatal_ui_*) */
         fatal_ui_serve();
 #endif
         if (fatal_once || !main_alive) {
@@ -1716,7 +1716,7 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
     crash.thread = ico_sched_current();
     stack_bounds_here(crash.sp, &crash.stack_lo, &crash.stack_hi);
 #ifdef __ANDROID__
-    /* v0.4.2: the C library's last words first (abort, FORTIFY and the
+    /* the C library's last words first (abort, FORTIFY and the
        stack protector write them to stderr, the log mirror's pipe) */
     fatal_ui_flush();
     report_crash_block();
@@ -1725,7 +1725,7 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
         exit_hook(crash.what);
     }
     {
-        /* v0.4.2: a box instead of the game just going (the system shows
+        /* a box instead of the game just going (the system shows
            nothing), from the watchdog thread; this thread waits for it */
         static char box[1536];
         fatal_text(box, sizeof box, "ICO ran into a problem and has to close.");
@@ -1935,7 +1935,7 @@ void ico_diag_arm_vectored(void)
 
 #endif
 
-/* --- Float faults (v0.4.3 AN-19) ----------------------------------------------- */
+/* --- Float faults (issue 19) --------------------------------------------------- */
 
 #define FLOAT_FAULT_SITES 32
 

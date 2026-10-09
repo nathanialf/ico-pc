@@ -264,7 +264,7 @@ static int walk_name_cmp(const void *a, const void *b)
     return strcmp(*(char *const *)a, *(char *const *)b);
 }
 
-/* The entries of dir except the hidden ones (".", "..", ".DS_Store"), as
+/* The entries of dir except the hidden ones (a leading '.'), as
    malloc'd UTF-8 names in *out, sorted: the count, or -1 when dir cannot
    be read. */
 static int walk_list(const char *dir, char ***out)

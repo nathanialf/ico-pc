@@ -29,8 +29,8 @@
  * Every line goes straight to the log file with an unbuffered OS write, so
  * a crash or a kill leaves everything written before it.
  *
- * The C library's stdout and stderr are fully buffered on Windows (package
- * Q1, host_config.h ico_host_redirect_output) and the host loop flushes
+ * The C library's stdout and stderr are fully buffered on Windows
+ * (host_config.h ico_host_redirect_output) and the host loop flushes
  * them once per vsync; a crash, abort or watchdog report first writes out
  * what they hold (from a helper thread it waits on for at most half a
  * second, since the stopped thread may hold a stream lock), and a milestone
@@ -67,6 +67,7 @@ void ico_diag_set_sources(IcoDiagStatusFn status, unsigned int (*main_ticks)(voi
    and each vsync of its preroll. The watchdog's later limit counts from
    whichever moved last; the Main ticks themselves are untouched. */
 void ico_diag_note_progress(void);
+/* The count ico_diag_note_progress raised (tests). */
 unsigned int ico_diag_progress(void);
 /* 1 while a movie plays, 0 after: the heartbeat and the watchdog's reason
    say so. */
@@ -74,7 +75,7 @@ void ico_diag_set_movie(int playing);
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
-/* v0.4.2 (Android): a crash or the watchdog there ends the run with no
+/* Android: a crash or the watchdog there ends the run with no
    window of its own, and the system shows nothing. box shows the player a
    message and returns when it is dismissed; flush writes into the log what
    the process wrote to stderr just before (the C library's abort message,
@@ -86,7 +87,7 @@ void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void));
    Linux, Android); 0, or -1 where unknown. Async-signal-safe. */
 int ico_diag_process_memory(long *rss_kb, long *peak_kb);
 
-/* Package R2: the window's rd_Present is bracketed by these two. The time
+/* The window's rd_Present is bracketed by these two. The time
    spent inside a present does not count towards either watchdog limit: a
    graphics driver or an effects injector (ReShade) may compile shaders inside
    its first presents for minutes. A single present is excused for at most
@@ -129,7 +130,7 @@ double ico_diag_uptime(void);
    for timing the host's work; its zero is arbitrary. */
 unsigned long long ico_diag_now_ns(void);
 
-/* v0.4.3 AN-19: a NaN reached game code that the PS2 never fed one (its FPU
+/* Issue 19: a NaN reached game code that the PS2 never fed one (its FPU
    has no NaN): site names the check, caller is a return address (NULL if
    none), logged as module+offset (libmain.so+0x..., ico_pc+0x...) once
    ico_diag_init has found the program's extent, else as a plain pointer.
@@ -140,7 +141,7 @@ int ico_diag_float_fault(const char *site, const void *caller);
 /* The faults counted so far (tests). */
 unsigned int ico_diag_float_faults(void);
 
-/* --- The game's hooks (#ifdef ICO_HOST calls in ico2/) ------------------------------------------------ */
+/* --- The game's hooks (calls in ico2/) ----------------------------------- */
 
 /* common/src/main.c: boot milestones and its static thread functions. */
 void ico_host_milestone(const char *what);

@@ -1,7 +1,7 @@
 /*
  * port/platform/gpu_driver.c
  *
- * Graphics driver packages (gpu_driver.h, v0.4.3 package AN-22a).
+ * Graphics driver packages (gpu_driver.h).
  */
 #include "gpu_driver.h"
 #include <errno.h>
@@ -295,6 +295,9 @@ static int removeFlatDir(const char *dir)
     if (ico_path_kind(dir, NULL, NULL) != 1) {
         return ico_path_kind(dir, NULL, NULL) < 0 ? 0 : -1;
     }
+    /* a pass that removed everything is followed by an empty walk, which
+       ends the loop; a failure ends it at once; further passes only matter
+       if files appear meanwhile */
     for (int pass = 0; pass < 4; pass++) {
         int failed = 0;
         const int n = ico_dir_walk(dir, 0, removeFileCb, &failed);
@@ -451,6 +454,7 @@ int ico_gpu_driver_install_zip_max(const char *root, const char *zipPath, int ap
     }
     staged = 1;
     for (mz_uint i = 0; i < count; i++) {
+        /* the check loop above read every name, so this read succeeds */
         mz_zip_reader_get_filename(&zip, i, name, sizeof(name));
         if (joinPath(path, sizeof(path), stage, name) != 0) {
             say(why, whyN, "a path in the driver folder is too long");

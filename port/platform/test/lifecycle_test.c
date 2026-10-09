@@ -1,7 +1,7 @@
 /*
  * port/platform/test/lifecycle_test.c
  *
- * The Android lifecycle's tables (window_lifecycle.h, package AN-D) on fake
+ * The Android lifecycle's tables (window_lifecycle.h) on fake
  * operations that write down each call: the order of every event's steps,
  * the settings saved only when changed, a missing operation skipped, a
  * failed surface or save logged, unknown events refused, and SDL's event

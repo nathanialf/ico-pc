@@ -72,7 +72,7 @@ static int rq_tail[ICO_SCHED_PRIORITIES];
 
 static int current_id; /* the thread on the CPU, 0 on the host context */
 
-static int last_id; /* the thread that ran last (iGetThreadId) */
+static int last_id; /* the thread that ran last (GetThreadId from the host context) */
 
 static int dispatching;
 
