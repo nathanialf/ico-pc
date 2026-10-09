@@ -321,6 +321,25 @@ typedef struct RdTargetRec {
     uint8_t parked, clearPending;
 } RdTargetRec;
 
+/* The texels a screen-prim command can touch on the bound target tc: the
+ * bounding box of its vertices (12.4, after XYOFFSET) padded by two GS
+ * pixels (three with PRIM.AA1's edge fringes), through the same wide x
+ * scale, mirror and texel scale as the draw, intersected with the scissor
+ * bindDraw sets.  stretch, uiPrim and mirror are the draw's (rd_replay.c
+ * doScreen).  False when it covers nothing.  The DATE snapshot copies only
+ * this area (rd_replay.c dateSnapshot). */
+bool rd__ScreenArea(const RdTargetRec *tc, const RdStateBlock *st, const RdScreenVtx *v, uint32_t n,
+                    int stretch, int uiPrim, int mirror, int aa1, RhiRect *area);
+/* Whether the DATE snapshot must be (re)taken for a draw on target tcId at
+ * write serial serial that reads area want (texels; NULL = the whole tw x
+ * th target), given the snapshot held (for target heldFor at serial
+ * heldSerial, area held).  When it must, *take is the area to copy: want
+ * for a new target or serial, the whole target for a second area in the
+ * same target and serial (at most one retake more than a whole-target
+ * snapshot would need). */
+bool rd__DateRetake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held, uint32_t tcId,
+                    uint32_t serial, const RhiRect *want, uint32_t tw, uint32_t th, RhiRect *take);
+
 /* GS Z to depth scale of a target id's depth buffer: PSMZ32, the default
  * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli
  * GS_ZSCALE_32F: the top Z values mapped apart) and 2^-32 on D24S8. */

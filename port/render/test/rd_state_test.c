@@ -32,6 +32,11 @@
  *   pass ops   (v0.4.2 N2) clear -> draw: the draw's pass takes the clear as its
  *              load op (colour and depth CLEAR), both stored; the passes that
  *              cannot take it keep their loads (rd__TakePendingClear)
+ *   date area  the DATE snapshot of a screen-prim command covers its box
+ *              (rd__ScreenArea: the vertices' box padded by two pixels, in
+ *              the scissor), not the whole target; a sprite larger than the
+ *              target clamps to it; rd_perf_test's DATE sprites still take
+ *              one snapshot each (rd__DateRetake)
  *   pipelines  the reachable screen and post set is under 250 keys (150
  *              before package TEXA's sprite_texa_ps twins), with
  *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX;
@@ -904,6 +909,141 @@ static void testPassOps(void)
           "pass ops: a colour-only clear keeps its own depth loaded");
 }
 
+/* The DATE snapshot's area.  rd_perf_test's list 4 (four 40 x 60 DATE
+ * sprites on SCENE, each writing alpha) and a sprite larger than the target,
+ * walked as rd_replay.c replays them: each DATE draw's area from
+ * rd__ScreenArea, the retake decision from rd__DateRetake with the write
+ * serial bumped after every draw (each writes alpha, as there).  A sprite's
+ * area is its box padded by two GS pixels, not the target; the large one
+ * is the target inside the scissor; four snapshots for the four sprites
+ * (rd_perf_test's dateSnapshots is unchanged), one more for the large one. */
+#define DA_W 512
+#define DA_H 448
+
+typedef struct DateWalk {
+    const RdFrame *f;
+    int draws, takes;
+    uint32_t heldFor, heldSerial, serial;
+    RhiRect held, area[8];
+    int got[8];
+} DateWalk;
+
+static void onDateCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
+{
+    DateWalk *w = user;
+    (void)list;
+    (void)index;
+    if (c->type != RDC_SCREEN || s->ds.test.date == RD_DATE_OFF || w->draws >= 8) {
+        return;
+    }
+    const RdTargetRec *tc = rd__TargetRec(s->color);
+    const RdScreenVtx *v = (const RdScreenVtx *)(w->f->payload + c->u[0]);
+    const int i = w->draws++;
+    w->got[i] =
+        tc && rd__ScreenArea(tc, s, v, c->u[1], 0, c->b[1] == RD_SPACE_UI, 0, 0, &w->area[i]);
+    RhiRect take;
+    if (tc && rd__DateRetake(w->heldFor, w->heldSerial, &w->held, s->color, w->serial,
+                             w->got[i] ? &w->area[i] : NULL, tc->tw, tc->th, &take)) {
+        w->takes++;
+        w->heldFor = s->color;
+        w->heldSerial = w->serial;
+        w->held = take;
+    }
+    w->serial++; /* the sprite writes alpha */
+}
+
+static RdScreenVtx daVtx(int x, int y)
+{
+    RdScreenVtx v;
+    memset(&v, 0, sizeof(v));
+    v.x = (2048 - DA_W / 2 + x) * 16;
+    v.y = (2048 - DA_H / 2 + y) * 16;
+    v.z = 0x2000000u;
+    v.q = 1.0f;
+    v.rgba[0] = v.rgba[1] = v.rgba[2] = 200;
+    v.rgba[3] = 0x80;
+    return v;
+}
+
+static void testDateArea(void)
+{
+    const RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    rd_BeginFrame();
+    rd_SelectList(4);
+    rd_SetTarget(scene, scene, DA_W, DA_H, RD_TARGET_OFFSET);
+    rd_TestGs(0x5C000); /* DATE on, Z GEQUAL (rd_perf_test's list 4) */
+    for (int i = 0; i < 4; i++) {
+        RdScreenVtx q[2] = {daVtx(100 + i * 50, 100), daVtx(140 + i * 50, 160)};
+        rd_TextureOff();
+        rd_ScreenPrims(RD_PRIM_SPRITES, q, 2, RD_SPACE_WORLD, 0, 0);
+    }
+    {
+        RdScreenVtx q[2] = {daVtx(-50, -50), daVtx(DA_W + 100, DA_H + 100)};
+        rd_ScreenPrims(RD_PRIM_SPRITES, q, 2, RD_SPACE_WORLD, 0, 0);
+    }
+    rd_EndFrame(0);
+    const RdFrame *f = rd__LastFrame();
+    DateWalk w;
+    memset(&w, 0, sizeof(w));
+    w.f = f;
+    RdStateBlock st = f->startState;
+    rd__Walk(f, (int)f->keep, &st, onDateCmd, &w);
+    const RdTargetRec *tc = rd__TargetRec(rd_Target(RD_TARGET_SCENE).id);
+    CHECK(tc && tc->sx == 1.0f && tc->sy == 1.0f, "date area: SCENE at 1x in the record-only rd");
+    CHECK(w.draws == 5, "date area: %d DATE draws walked (5)", w.draws);
+    if (!tc || w.draws != 5) {
+        return;
+    }
+    for (int i = 0; i < 4; i++) {
+        const RhiRect a = w.area[i];
+        CHECK(w.got[i] && a.x == 98 + i * 50 && a.y == 98 && a.w == 45 && a.h == 65,
+              "date area: sprite %d (%d,100)-(%d,160) takes (%d,%d) %ux%u, the padded box "
+              "(%d,98) 45x65 expected",
+              i, 100 + i * 50, 140 + i * 50, a.x, a.y, a.w, a.h, 98 + i * 50);
+        CHECK(a.w < tc->tw && a.h < tc->th, "date area: sprite %d's area is not the %ux%u target",
+              i, tc->tw, tc->th);
+    }
+    const uint32_t cw = tc->tw < DA_W ? tc->tw : DA_W, ch = tc->th < DA_H ? tc->th : DA_H;
+    CHECK(w.got[4] && w.area[4].x == 0 && w.area[4].y == 0 && w.area[4].w == cw &&
+              w.area[4].h == ch,
+          "date area: the large sprite takes (%d,%d) %ux%u, the target in the scissor %ux%u",
+          w.area[4].x, w.area[4].y, w.area[4].w, w.area[4].h, cw, ch);
+    CHECK(w.takes == 5, "date area: %d snapshots for 4 alpha-writing sprites and the large one (5)",
+          w.takes);
+
+    /* the retake rule: the same target and serial reuse a snapshot that holds
+     * the area, and retake the whole target for one it does not */
+    const RhiRect held = {98, 98, 45, 65}, inner = {100, 100, 40, 60}, other = {148, 98, 45, 65};
+    RhiRect take = {0, 0, 0, 0};
+    CHECK(!rd__DateRetake(7, 3, &held, 7, 3, &inner, 512, 448, &take),
+          "date retake: an area inside the snapshot reuses it");
+    CHECK(rd__DateRetake(7, 3, &held, 7, 3, &other, 512, 448, &take) && take.x == 0 &&
+              take.y == 0 && take.w == 512 && take.h == 448,
+          "date retake: another area at the same serial takes the whole target");
+    CHECK(rd__DateRetake(7, 3, &held, 7, 4, &inner, 512, 448, &take) && take.x == 100 &&
+              take.w == 40,
+          "date retake: a new serial takes the draw's area");
+    CHECK(rd__DateRetake(7, 3, &held, 8, 3, NULL, 512, 448, &take) && take.w == 512 &&
+              take.h == 448,
+          "date retake: another target without an area takes it whole");
+
+    /* AA1 pads one pixel more; the UI mirror flips the box about the centre */
+    RdScreenVtx q[2] = {daVtx(100, 100), daVtx(140, 160)};
+    RdStateBlock s = f->startState;
+    s.gsW = DA_W;
+    s.gsH = DA_H;
+    s.scissor[0] = s.scissor[1] = 0;
+    s.scissor[2] = DA_W - 1;
+    s.scissor[3] = DA_H - 1;
+    RhiRect a;
+    CHECK(rd__ScreenArea(tc, &s, q, 2, 0, 0, 0, 1, &a) && a.x == 97 && a.w == 47,
+          "date area: AA1 pads three pixels: (%d) %u wide, (97) 47 expected", a.x, a.w);
+    CHECK(rd__ScreenArea(tc, &s, q, 2, 0, 1, 1, 0, &a) && a.x == (int32_t)tc->w - 1 - 142 &&
+              a.w == 45,
+          "date area: mirrored to (%d) %u wide, (%d) 45 expected", a.x, a.w,
+          (int32_t)tc->w - 1 - 142);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -921,6 +1061,7 @@ int main(int argc, char **argv)
     testWideScissor();
     testAuraFilter();
     testPassOps();
+    testDateArea();
     rd_Shutdown();
     if (failures) {
         printf("rd_state_test: %d failures\n", failures);

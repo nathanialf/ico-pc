@@ -659,6 +659,7 @@ typedef struct Replay {
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
     uint32_t dateFor;     /* target id the DATE snapshot holds, 0 = none */
     uint32_t dateSerial;  /* writeSerial when it was taken */
+    RhiRect dateArea;     /* the texels it holds (dateSnapshot) */
     ScreenRun run;        /* package PC: the screen-prim run not drawn yet */
 } Replay;
 
@@ -1265,16 +1266,17 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
  * (RD_TARGET_DATE_SNAPSHOT), pixel for pixel, for sprite_ps to test at t2.
  * Retaken when the target changed or anything may have written alpha since
  * the last one, so consecutive DATE draws see each other's writes as on the
- * GS (within one draw, overlapping primitives see the snapshot: accepted). */
-static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
+ * GS (within one draw, overlapping primitives see the snapshot: accepted).
+ * area (texels, NULL = the whole target) holds every fragment the draw can
+ * make (rd__ScreenArea), and the shaders read the snapshot only at the
+ * fragment's own texel, so only that area is drawn: the snapshot is right
+ * inside r->dateArea and stale outside it, and a draw whose area it does
+ * not hold retakes it (rd__DateRetake), never reading a stale texel. */
+static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const RhiRect *area)
 {
     RdTargetRec *sn = rd__TargetRec(RD_TARGET_DATE_SNAPSHOT + 1);
     if (!sn || !sn->color.id || tc == sn) {
         return g_rd.dummy;
-    }
-    if (r->dateFor == tcId && r->dateSerial == r->writeSerial &&
-        sn->colorState == RHI_STATE_SHADER_READ) {
-        return sn->color;
     }
     /* in texels: the snapshot has the scene's scale (R7a) and sprite_ps
      * reads it at the fragment's texel */
@@ -1283,6 +1285,16 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
         rd__LogOnce(RD_ONCE_DATE_SIZE, "DATE on a target larger than the snapshot: clipped");
         w = w > sn->tw ? sn->tw : w;
         h = h > sn->th ? sn->th : h;
+    }
+    RhiRect take;
+    const bool retake = rd__DateRetake(r->dateFor, r->dateSerial, &r->dateArea, tcId,
+                                       r->writeSerial, area, w, h, &take);
+    if (!retake && sn->colorState == RHI_STATE_SHADER_READ) {
+        return sn->color;
+    }
+    if (!retake) {
+        /* the snapshot was touched elsewhere since: nothing of it is known */
+        take = (RhiRect){0, 0, w, h};
     }
     endPass(r);
     g_rdPerf.dateSnapshots++;
@@ -1298,8 +1310,8 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
     rhi_CmdBeginRenderPass(s_cl, &p);
     RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
     rhi_CmdSetViewport(s_cl, &vp);
-    const RhiRect sc = {0, 0, w, h};
-    rhi_CmdSetScissor(s_cl, &sc);
+    /* the same full-target triangle and viewport, cut to the area */
+    rhi_CmdSetScissor(s_cl, &take);
     RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
     RhiPipeline pipe = rd__GetPipeline(&k);
     if (pipe.id) {
@@ -1324,6 +1336,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId)
     rd__Transition(s_cl, sn->color, &sn->colorState, RHI_STATE_SHADER_READ);
     r->dateFor = tcId;
     r->dateSerial = r->writeSerial;
+    r->dateArea = take;
     return sn->color;
 }
 
@@ -1368,28 +1381,30 @@ void rd__WideScissor(int32_t *x0, int32_t *x1, int32_t w, float f)
     }
 }
 
-/* the scissor in texels: GS pixels x0..x1 (inclusive) cover texels
- * floor(x0 * sx) .. ceil((x1 + 1) * sx) - 1 */
-static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
+/* GS pixels x0..x1, y0..y1 (inclusive, after XYOFFSET) of target tc in its
+ * texels: the wide x scale f about the target's centre (rd__WideScissor:
+ * outwards, a side at or beyond the target's edge left alone; f 1 nothing),
+ * the UI flip when mirror (R7c: GS pixel p is target pixel w - 1 - p),
+ * clipped to the target, then the texel scale: GS pixels x0..x1 cover texels
+ * floor(x0 * sx) .. ceil((x1 + 1) * sx) - 1.  f is at most 1 (the display's
+ * aspect is 4:3 or wider), so a range inside the target stays inside and
+ * the clip changes nothing for the scissor; a draw's box may start outside
+ * (its vertices off the target's edge).  False when nothing is left. */
+static bool gsRectToTexels(const RdTargetRec *tc, int32_t x0, int32_t y0, int32_t x1, int32_t y1,
+                           float f, int mirror, RhiRect *out)
 {
-    int32_t x0 = r->st.scissor[0] < 0 ? 0 : r->st.scissor[0];
-    int32_t y0 = r->st.scissor[1] < 0 ? 0 : r->st.scissor[1];
-    int32_t x1 = r->st.scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : r->st.scissor[2];
-    int32_t y1 = r->st.scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : r->st.scissor[3];
-    if (x1 < x0 || y1 < y0) {
-        return false;
-    }
-    if (r->uiPrim) {
-        /* package RSMALL: a UI draw's x scale about the target's centre (the
-         * wide factor) applies to a scissor that does not reach the edges */
-        rd__WideScissor(&x0, &x1, (int32_t)tc->w, wideFor(tc, r->stretch));
-    }
-    if (r->mirror) {
-        /* R7c: a flipped UI draw clips where its scissor lands after the
-         * flip (GS pixel p is target pixel w - 1 - p) */
+    rd__WideScissor(&x0, &x1, (int32_t)tc->w, f);
+    if (mirror) {
         const int32_t a = (int32_t)tc->w - 1 - x1, b = (int32_t)tc->w - 1 - x0;
         x0 = a;
         x1 = b;
+    }
+    x0 = x0 < 0 ? 0 : x0;
+    y0 = y0 < 0 ? 0 : y0;
+    x1 = x1 >= (int32_t)tc->w ? (int32_t)tc->w - 1 : x1;
+    y1 = y1 >= (int32_t)tc->h ? (int32_t)tc->h - 1 : y1;
+    if (x1 < x0 || y1 < y0) {
+        return false;
     }
     if (tc->sx != 1.0f || tc->sy != 1.0f) {
         int32_t a = (int32_t)((float)x0 * tc->sx), b = (int32_t)((float)y0 * tc->sy);
@@ -1400,7 +1415,110 @@ static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
         x1 = c >= (int32_t)tc->tw ? (int32_t)tc->tw - 1 : c;
         y1 = d >= (int32_t)tc->th ? (int32_t)tc->th - 1 : d;
     }
-    *sc = (RhiRect){x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
+    *out = (RhiRect){x0, y0, (uint32_t)(x1 - x0 + 1), (uint32_t)(y1 - y0 + 1)};
+    return true;
+}
+
+/* the scissor (SCISSOR_1, inclusive GS pixels) in texels, clipped to the
+ * target first.  Package RSMALL: a UI draw's x scale about the target's
+ * centre (the wide factor) applies to a scissor that does not reach the
+ * edges; R7c: a flipped UI draw clips where its scissor lands after the
+ * flip. */
+static bool scissorTexels(const RdTargetRec *tc, const RdStateBlock *st, int stretch, int uiPrim,
+                          int mirror, RhiRect *sc)
+{
+    int32_t x0 = st->scissor[0] < 0 ? 0 : st->scissor[0];
+    int32_t y0 = st->scissor[1] < 0 ? 0 : st->scissor[1];
+    int32_t x1 = st->scissor[2] >= (int32_t)tc->w ? (int32_t)tc->w - 1 : st->scissor[2];
+    int32_t y1 = st->scissor[3] >= (int32_t)tc->h ? (int32_t)tc->h - 1 : st->scissor[3];
+    if (x1 < x0 || y1 < y0) {
+        return false;
+    }
+    return gsRectToTexels(tc, x0, y0, x1, y1, uiPrim ? wideFor(tc, stretch) : 1.0f, mirror, sc);
+}
+
+/* the scissor of the draw being bound, in texels */
+static bool scissorRect(const Replay *r, const RdTargetRec *tc, RhiRect *sc)
+{
+    return scissorTexels(tc, &r->st, r->stretch, r->uiPrim, r->mirror, sc);
+}
+
+static bool rectMeet(RhiRect a, RhiRect b, RhiRect *out)
+{
+    const int64_t x0 = a.x > b.x ? a.x : b.x, y0 = a.y > b.y ? a.y : b.y;
+    const int64_t ax1 = (int64_t)a.x + a.w, bx1 = (int64_t)b.x + b.w;
+    const int64_t ay1 = (int64_t)a.y + a.h, by1 = (int64_t)b.y + b.h;
+    const int64_t x1 = ax1 < bx1 ? ax1 : bx1, y1 = ay1 < by1 ? ay1 : by1;
+    if (x1 <= x0 || y1 <= y0) {
+        return false;
+    }
+    *out = (RhiRect){(int32_t)x0, (int32_t)y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+    return true;
+}
+
+static bool rectHolds(RhiRect outer, RhiRect inner)
+{
+    return inner.x >= outer.x && inner.y >= outer.y &&
+           (int64_t)inner.x + inner.w <= (int64_t)outer.x + outer.w &&
+           (int64_t)inner.y + inner.h <= (int64_t)outer.y + outer.h;
+}
+
+/* Every fragment of a screen-prim command lies in its vertices' bounding
+ * box give or take a pixel: sprite corners snapped up to whole pixels
+ * (snapAxis), points drawn as one-pixel quads, lines reaching the pixels
+ * next to them, the mirror's sixteenth of a texel and the half-line offset
+ * of a field target; AA1 adds a one-pixel fringe outside every edge
+ * (aa1Fringe).  The pad covers all of them, convVtx's clamp to the 12.4
+ * range is applied to the box as to the vertices, and the box takes the
+ * wide x scale the vertex shader gives the draw (every draw that is not
+ * full-screen). */
+bool rd__ScreenArea(const RdTargetRec *tc, const RdStateBlock *st, const RdScreenVtx *v, uint32_t n,
+                    int stretch, int uiPrim, int mirror, int aa1, RhiRect *area)
+{
+    if (!tc || n == 0) {
+        return false;
+    }
+    int32_t lx = v[0].x, hx = v[0].x, ly = v[0].y, hy = v[0].y;
+    for (uint32_t i = 1; i < n; i++) {
+        lx = v[i].x < lx ? v[i].x : lx;
+        hx = v[i].x > hx ? v[i].x : hx;
+        ly = v[i].y < ly ? v[i].y : ly;
+        hy = v[i].y > hy ? v[i].y : hy;
+    }
+    lx = lx < 0 ? 0 : (lx > 0xFFFF ? 0xFFFF : lx);
+    hx = hx < 0 ? 0 : (hx > 0xFFFF ? 0xFFFF : hx);
+    ly = ly < 0 ? 0 : (ly > 0xFFFF ? 0xFFFF : ly);
+    hy = hy < 0 ? 0 : (hy > 0xFFFF ? 0xFFFF : hy);
+    const int32_t pad = aa1 ? 3 : 2;
+    const int32_t ox = 2048 - (int32_t)(st->gsW >> 1), oy = 2048 - (int32_t)(st->gsH >> 1);
+    RhiRect box, sc;
+    if (!gsRectToTexels(tc, floorDiv16(lx) - ox - pad, floorDiv16(ly) - oy - pad,
+                        -floorDiv16(-hx) - ox + pad, -floorDiv16(-hy) - oy + pad,
+                        wideFor(tc, stretch), mirror, &box) ||
+        !scissorTexels(tc, st, stretch, uiPrim, mirror, &sc)) {
+        return false;
+    }
+    return rectMeet(box, sc, area);
+}
+
+bool rd__DateRetake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held, uint32_t tcId,
+                    uint32_t serial, const RhiRect *want, uint32_t tw, uint32_t th, RhiRect *take)
+{
+    const RhiRect whole = {0, 0, tw, th};
+    RhiRect need = whole;
+    if (want && !rectMeet(*want, whole, &need)) {
+        need = whole;
+    }
+    if (heldFor == tcId && heldSerial == serial) {
+        if (held && rectHolds(*held, need)) {
+            return false;
+        }
+        /* nothing changed the target's alpha since the snapshot: what it
+         * holds is still right, and the whole target ends the retakes */
+        *take = whole;
+        return true;
+    }
+    *take = need;
     return true;
 }
 
@@ -1517,7 +1635,9 @@ static void replacementUv(uint32_t tex, DrawSetup *ds)
     }
 }
 
-static bool prepareDraw(Replay *r, DrawSetup *ds)
+/* dateArea: the texels the draw can touch, for the DATE snapshot (NULL:
+ * the whole target) */
+static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
 {
     memset(ds, 0, sizeof(*ds));
     r->stretch = 0;    /* R7a: doScreen decides for screen prims after this */
@@ -1530,7 +1650,7 @@ static bool prepareDraw(Replay *r, DrawSetup *ds)
     }
     ds->dateTex = g_rd.dummy;
     if (r->st.ds.test.date != RD_DATE_OFF) {
-        ds->dateTex = dateSnapshot(r, ds->tc, r->st.color);
+        ds->dateTex = dateSnapshot(r, ds->tc, r->st.color, dateArea);
     }
     RdTargetRec *td = rd__TargetRec(r->st.depth);
     if (td && !td->withDepth) {
@@ -1975,13 +2095,24 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         doScreenWrap(r, f, c); /* wave 5 (R5c): COLCLAMP 0 */
         return;
     }
-    if (!prepareDraw(r, &ds)) {
+    const uint32_t n = c->u[1];
+    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    /* the DATE snapshot only where the command can draw: its box with the
+     * full-screen, UI and mirror decisions made below */
+    RhiRect dateArea;
+    const RhiRect *dateAt = NULL;
+    const RdTargetRec *tcA = rd__TargetRec(r->st.color);
+    if (r->st.ds.test.date != RD_DATE_OFF && tcA &&
+        rd__ScreenArea(tcA, &r->st, v, n, screenStretch(r, tcA, v, n, c->b[0], c->b[1]),
+                       c->b[1] == RD_SPACE_UI, mirrorUi(r, c->b[1]), r->st.aa1 && aa1Prim(c->b[0]),
+                       &dateArea)) {
+        dateAt = &dateArea;
+    }
+    if (!prepareDraw(r, &ds, dateAt)) {
         return;
     }
 
     /* geometry */
-    const uint32_t n = c->u[1];
-    const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
     r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
     r->uiPrim = c->b[1] == RD_SPACE_UI;
     setUvShift(ds.tc->sx * wideFor(ds.tc, r->stretch), ds.tc->sy);
@@ -2414,7 +2545,7 @@ static RhiPipeline wrapPipeline(int resolve, uint8_t vs, uint8_t prim, RhiFormat
 static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
-    if (!prepareDraw(r, &ds)) {
+    if (!prepareDraw(r, &ds, NULL)) {
         return;
     }
     RdTargetRec *tc = ds.tc;
@@ -2768,7 +2899,7 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
         }
     }
     DrawSetup ds;
-    if (!prepareDraw(r, &ds)) {
+    if (!prepareDraw(r, &ds, NULL)) {
         return;
     }
     const uint64_t ua = rhi_Limits()->uniformAlign;
@@ -3078,7 +3209,7 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     DrawSetup ds;
-    if (!prepareDraw(r, &ds) || !ds.tdId) {
+    if (!prepareDraw(r, &ds, NULL) || !ds.tdId) {
         return;
     }
     uint32_t count[2];
