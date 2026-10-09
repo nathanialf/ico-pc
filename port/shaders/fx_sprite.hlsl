@@ -1,5 +1,5 @@
-// fx_sprite.hlsl: one GS sprite in the GS integer arithmetic (renderer wave
-// 5, R5a): staticBlur.c's passes, RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR
+// fx_sprite.hlsl: one GS sprite in the GS integer arithmetic: staticBlur.c's
+// passes, RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR
 // (port/render/rd_blur.c says what is modelled).
 //
 //   fx_rect_vs   fullscreen triangle at the sprite's depth (no vertex input;
@@ -19,14 +19,13 @@
 //   g_uvRect u0 v0 u1 v1, 12.4 texels (integers held as floats)
 //   g_tex    xy the TEX0 size (2^TW, 2^TH), zw the size of t1
 //   g_param  x0 y0 x1 y1, 12.4 window coordinates (integers held as floats)
-//   g_scale  xy t1 texels per GS texel (R7a: a scaled target's scale; 1
+//   g_scale  xy t1 texels per GS texel (a scaled target's scale; 1
 //            for images and in Original)
 // FrameCB: g_origin.xy the XYOFFSET of the bound target (GS pixels, + 0.5 y
 // with the half-line offset), g_z.x the GS Z scale of its depth, g_z.yz the
-// bound target's texels per GS pixel (R7a; 1 in Original).
+// bound target's texels per GS pixel (1 in Original).
 //
-// Scaled targets (renderer wave 7, R7a): a texel
-// stands for the GS pixel coordinate its centre falls on, (pos / s - 0.5)
+// Scaled targets: a texel stands for the GS pixel coordinate its centre falls on, (pos / s - 0.5)
 // in 12.4, and the texture coordinates address t1 at its own scale (UV
 // times g_scale), so every sum below is the GS's at scale 1 (bit-exact) and
 // the same picture at finer sampling elsewhere.
@@ -97,7 +96,7 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
 {
     const uint flags = g_mode.x;
     const int2 px = int2(pos.xy);
-    // the pixel's GS window coordinate, 12.4: px * 16 at scale 1.  R7a: on a
+    // the pixel's GS window coordinate, 12.4: px * 16 at scale 1.  On a
     // scaled target the texel's GS pixel (its s x s block) for the coverage,
     // and the GS position of its own centre for the UV
     const float2 ts = float2(g_z.y > 0.0 ? g_z.y : 1.0, g_z.z > 0.0 ? g_z.z : 1.0);

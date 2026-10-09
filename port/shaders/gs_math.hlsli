@@ -126,17 +126,17 @@ GS_FN int gs_blend_reg_ch(uint reg, int cs, int cd, int as, int ad, int fix, uin
 // GS Z to depth, increasing with Z (GS GEQUAL is the depth test GEQUAL,
 // GREATER is GREATER): depth = z * scale. scale is 1 / 2^24 for PSMZ24, 1 /
 // 2^16 for PSMZ16 (exact for every z: below 2^24, a float holds it) and, for
-// PSMZ32 (every ZBUF the game writes; FrameCB g_z.x per target, R2c), 1 /
+// PSMZ32 (every ZBUF the game writes; FrameCB g_z.x per target), 1 /
 // 2^32 on a 24-bit depth buffer (D24S8: 2^8 GS units a step, the most it
 // holds over the range) or GS_ZSCALE_32F = 1 / 2^33 on a float one: there
 // z * 2^-33 in [0, 0.5) is z as a float scaled, exact below 2^24 and to 1
 // part in 2^24 above (the game's 3D Z is about 2^24: 1 or 2 GS units a
 // step), and the top 2^16 values (the UI's 0xFFFFFF9B, 0xFFFFFFFF) are
-// exact in [1 - 2^-8, 1), one float step each.  (Package QUEEN: the depth
-// was 1 - z * scale before, which at z near 2^24 put every depth near 1,
-// where a float steps 2^-24: 256 GS units, so layers within that of each
-// other tied, and the Queen's mist and hair behind her face passed the
-// mirage's GEQUAL.)  Z above the format's largest clamps to it.
+// exact in [1 - 2^-8, 1), one float step each.  (Increasing with Z, not
+// 1 - z * scale: at z near 2^24 that put every depth near 1, where a float
+// steps 2^-24: 256 GS units, so layers within that of each other tied, and
+// the Queen's mist and hair behind her face passed the mirage's GEQUAL.)
+// Z above the format's largest clamps to it.
 #define GS_ZSCALE_32F (1.0 / 8589934592.0)
 GS_FN float gs_z_to_depth(uint z, float scale)
 {

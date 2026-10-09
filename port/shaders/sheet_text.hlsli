@@ -1,5 +1,5 @@
-// sheet_text.hlsli: the sheet texel of font_sheet_ps (font.hlsl; v0.4.2,
-// package F-A).  rd.h rd_CreateTextureSheet says what a sheet texture is
+// sheet_text.hlsli: the sheet texel of font_sheet_ps (font.hlsl).
+// rd.h rd_CreateTextureSheet says what a sheet texture is
 // and what the shader makes of it; port/render/test/sheet_ref.c is the
 // same arithmetic on the CPU (the tests' oracle).
 //
@@ -44,10 +44,9 @@
 // The quantiser's threshold, in 32nds: 2 * bayer + 1 dithered (1..31),
 // SHEET_T_OFF (16, a half: rounding) with dither off.
 #define SHEET_T_OFF 16
-// v0.4.2 (package F-G): the largest scale of a strip (texels a sheet
-// texel; shader_consts.h ICO_SHEET_SCALE_MAX).  Above 1 the rim comes
-// precomputed in the texture's bottom half (rd.h rd_SheetRim), one value a
-// sheet texel (v0.4.3, package RIM).
+// The largest scale of a strip (texels a sheet texel; shader_consts.h
+// ICO_SHEET_SCALE_MAX).  Above 1 the rim comes precomputed in the texture's
+// bottom half (rd.h rd_SheetRim), one value a sheet texel.
 #define SHEET_SCALE_MAX 4
 // The grid of coverage texels the four sheet texels of a bilinear sample
 // are rebuilt from.
@@ -99,7 +98,8 @@ uint sheet_threshold(int2 p, uint dither)
 }
 
 // v 0..255 quantised to SHEET_LEVELS levels against threshold th (32nds),
-// returned on the 0..255 scale (0, 64, 128, 191, 255 for 5 levels; 8 since v0.4.2's geometry fit).
+// returned on the 0..255 scale (0, 64, 128, 191, 255 for 5 levels;
+// SHEET_LEVELS is 8).
 uint sheet_quantise(uint v, uint th)
 {
     const uint n = (uint)SHEET_LEVELS - 1u;
@@ -119,7 +119,7 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
     return uint2(grey, (aq * 128u + 127u) / 255u);
 }
 
-// v0.4.3 (package RIM): a scaled strip's rim is the sheet's, magnified.
+// A scaled strip's rim is the sheet's, magnified.
 // The rim level (0..255) of a sheet texel from its rim r (rd_SheetRim: the
 // 1x dilation of the sheet texels' mean coverage) under the style at the
 // sheet texel's threshold th: the rim's alpha alone, without the letters.

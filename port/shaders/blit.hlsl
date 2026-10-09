@@ -4,7 +4,7 @@
 // draw 3 vertices.
 //   blit_ps      single colour output; colour = texture function(texel, tint)
 //   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
-//                effects depth, package R1)
+//                effects depth)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
 #include "common.hlsli"
@@ -43,7 +43,7 @@ float4 blit_ps(BlitVSOut i) : SV_Target0
     return float4(blit_color(i.uv)) * (1.0 / 255.0);
 }
 
-// blit_depth_ps (v0.4.1, package R1; rd_present.c): blit_ps's colour, and
+// blit_depth_ps (rd_present.c): blit_ps's colour, and
 // SV_Depth from t2, the copy of the scene's depth, at the same normalised uv
 // (the source rectangle covers the whole scene; a mirrored blit flips both)
 // read nearest: the texel under uv. Drawn into the output's box with an
@@ -71,7 +71,7 @@ BlitDepthOut blit_depth_ps(BlitVSOut i)
     return o;
 }
 
-// box_reduce_ps (package RSMALL; rd_replay.c doShadowResolve): the exact box
+// box_reduce_ps (rd_replay.c doShadowResolve): the exact box
 // average of a scaled target down to its GS size, t1 read with Load. The
 // output pixel p averages the source texels under [p * f, (p + 1) * f), f =
 // DrawCB.g_param.xy the source texels per output pixel (not necessarily an
@@ -95,7 +95,7 @@ float4 box_reduce_ps(BlitVSOut i) : SV_Target0
     return sum / (g_param.x * g_param.y);
 }
 
-// camera_probe_ps (wave 2, R2c; tests only, rd__CameraProbe): FrameCB's
+// camera_probe_ps (tests only, rd__CameraProbe): FrameCB's
 // matrices applied to the point DrawCB.g_param, written as raw float bits so
 // the HLSL column_major packing can be compared with the C side. Target 4 x 3
 // RGBA8_UNORM, drawn with blit_vs: column = component, row 0 mul(g_view, p),

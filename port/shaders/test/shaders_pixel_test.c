@@ -8,14 +8,14 @@
  *           sprite_ps: untextured, textured modulate, alpha test discard
  *           and pass, dual-source LERP_AS at As 0x80 / 0x40, additive with
  *           As 0xFF through DF_PREMUL (exact) and through the plain
- *           dual-source factor (measured, reported); PABE (package P8):
+ *           dual-source factor (measured, reported); PABE:
  *           a lerp with As 0x7F writes Cs unblended, a LERP_FIX with As
  *           0x90 blends by FIX, Cd*FIX + Cs with As 0x10 writes Cs; FBA: a
  *           lerp with As 0x40 blends by 0x40 and stores alpha 0xC0
  *   pass 2  blit_ps: identity tint copy of pass 1 (exact), then tinted
  *   pass 3  blend_int_ps: three GS blends on RGBA8_UINT textures (exact)
  *
- * --nodual (package AN-E, ctest shaders_pixel_nodual): sprite_ps_nodual,
+ * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual,
  * and the draws that read the second output (the lerps, Cd*FIX + Cs, the
  * plain additive) drawn as rd_pipeline.c's two-pass fallback draws them: a
  * colour pass (ICO_DF_NODUAL_FACTOR, SRC_ALPHA factors, mask RGB), then an
@@ -187,7 +187,7 @@ int main(int argc, char **argv)
 
     static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
     static const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER, VS | FS}};
-    /* t2: sprite_ps's DATE snapshot (wave 2), read only under DF_DATE */
+    /* t2: sprite_ps's DATE snapshot, read only under DF_DATE */
     static const RhiBindSlot s2a[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                        {1, RHI_BIND_SAMPLER, FS},
                                        {2, RHI_BIND_SAMPLED_TEXTURE, FS}};

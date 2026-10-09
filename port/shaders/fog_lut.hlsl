@@ -1,5 +1,5 @@
 // fog_lut.hlsl: the depth fog of fog_DrawFog (ico2/seki/src/ZFog.c),
-// RD_POST_FOG (renderer wave 4, R4c).
+// RD_POST_FOG.
 //
 // What the GS does: the Z buffer (PSMZ32) is copied pixel for pixel into a
 // PSMCT32 buffer, a PSMT4 view of that buffer copies the third byte of every
@@ -58,7 +58,7 @@ uint fog_gs_z(float d, float scale)
 DualOut fog_lut_ps(FogPSIn i)
 {
     // the texel the sprite's UV addresses, nearest (ZFog.c writes TEX1 0);
-    // R7a: in the depth target's own texels (g_scale, 1 in Original)
+    // in the depth target's own texels (g_scale, 1 in Original)
     float2 sc = float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
     float2 fsize = g_tex.xy * sc;
     int2 size = int2(round(fsize));

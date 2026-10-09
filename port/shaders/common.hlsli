@@ -43,14 +43,14 @@ cbuffer FrameCB : register(b0, space0)
                         // convention; 0 puts GS integer coordinates on pixel edges)
     float4 g_space[2];  // [0] WORLD, [1] UI: ndc = ndc * xy + zw (scale xy, offset zw)
     float4 g_z;         // x scale (1 / 2^24), yz the bound target's texels per GS
-                        // pixel (R7a; 1 in Original), w 1: the VU programs output
-                        // unquantised X, Y (S2; only the developer switch
+                        // pixel (1 in Original), w 1: the VU programs output
+                        // unquantised X, Y (only the developer switch
                         // ICO_RD_VU_OFFGRID, Enhanced on a scaled target)
     float4 g_misc;      // x frame counter, y preset (0 Original, 1 Enhanced), zw reserved
 };
 
 // ---------------------------------------------------------------- DrawCB
-// Group 1, slot 1. 112 bytes (96 before R7a).
+// Group 1, slot 1. 112 bytes.
 //   g_col    constant colour RGBA 0..255 (blit tint, fade colour)
 //   g_mode   x = DF_* flags
 //            y = TEXA mode | TEXFMT << 8
@@ -64,7 +64,7 @@ cbuffer FrameCB : register(b0, space0)
 //   g_param  kind-specific: blend_int source offset in pixels (xy);
 //            fog_lut strength (x)
 //   g_scale  xy t1 texels per GS texel: 1 for images and unscaled targets,
-//            the target's scale for a scaled one (R7a); zw the x addressing
+//            the target's scale for a scaled one; zw the x addressing
 //            of a widened render-to-texture block, u' = u * z + w (0, 0:
 //            none; gs_block_uv)
 cbuffer DrawCB : register(b1, space1)
@@ -98,7 +98,7 @@ float2 gs_block_uv(float2 uv)
 #define DF_DATM 256u     // TEST.DATM: with DF_DATE, pass where the MSB is 1 (else 0)
 #define DF_AA1_FULL 512u // sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha
 #define DF_C1_DST 32768u // the pipeline is Cs + Cd * c1 (dst factor SRC1): see gs_dual_out
-// Package AN-E, the two-pass blend without dual-source blending (the
+// The two-pass blend without dual-source blending (the
 // *_nodual entries, built with ICO_NO_DUAL=1; rd_pipeline.c rd__ExpandNoDual):
 #define DF_NODUAL_FACTOR 65536u      // colour pass: c0.a is the blend factor c1 would carry
 #define DF_NODUAL_ALPHA_PASS 131072u // alpha pass: c0.a is the stored alpha (RGB unused)
@@ -264,7 +264,7 @@ bool gs_alpha_discard(uint flagsZ, uint aref, uint a)
 // Cd: Cs + Cd or Cd - Cs there (rd_pipeline.c reports it; the game's PABE
 // draws are all lerps).
 //
-// Package AN-E: without dual-source blending (ICO_NO_DUAL, the *_nodual
+// Without dual-source blending (ICO_NO_DUAL, the *_nodual
 // entries) DualOut has c0 alone. A LERP or Cd*FIX + Cs draw becomes two
 // passes (rd_pipeline.c rd__ExpandNoDual): the colour pass (DF_NODUAL_FACTOR)
 // writes the factor c1 would carry into c0.a, blended with SRC_ALPHA /

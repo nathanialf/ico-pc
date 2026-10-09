@@ -172,7 +172,7 @@ int main(void)
         }
     }
 
-    /* Z (package QUEEN: the depth grows with Z): 0 -> 0, 0xFFFFFF -> just
+    /* Z (the depth grows with Z): 0 -> 0, 0xFFFFFF -> just
      * under 1, monotone, exact at the 2^-24 scale; PSMZ32 on a float depth
      * buffer (GS_ZSCALE_32F) z * 2^-33 below the top band, which is apart */
     const float s24 = 1.0f / 16777216.0f, s32f = (float)GS_ZSCALE_32F;

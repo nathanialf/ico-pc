@@ -20,8 +20,8 @@ typedef struct IcoFrameCB {
     float target[4];    /* w, h of the bound target in GS pixels, 1/w, 1/h */
     float origin[4];    /* xy GS window coordinate of the target's top-left, zw added after */
     float space[2][4];  /* [0] WORLD, [1] UI: ndc = ndc * xy + zw */
-    float z[4];         /* x = 1 / 2^24 (PSMZ24 scale); R7a: yz the bound target's
-                         * texels per GS pixel (1 in Original); S2: w = 1, the VU
+    float z[4];         /* x = 1 / 2^24 (PSMZ24 scale); yz the bound target's
+                         * texels per GS pixel (1 in Original); w = 1: the VU
                          * programs output unquantised X, Y (only the developer
                          * switch ICO_RD_VU_OFFGRID; Enhanced, a scaled target) */
     float misc[4];      /* x frame counter, y preset */
@@ -35,12 +35,12 @@ typedef struct IcoDrawCB {
     float uvRect[4];   /* u0, v0, u1, v1 in texels */
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
     float param[4];    /* kind specific */
-    float scale[4];    /* R7a: xy t1 texels per GS texel (1, or a scaled target's
+    float scale[4];    /* xy t1 texels per GS texel (1, or a scaled target's
                         * scale); zw a widened block's x addressing, u' = u z + w
                         * (0 0: none; common.hlsli gs_block_uv) */
 } IcoDrawCB;
 
-/* Package CRT: crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
+/* crt.hlsl's CrtCB, group 1, slot 1 (register b1, space1),
  * bound in DrawCB's place through the draw layout, whose dynamic group is
  * cached per block size (rd_replay.c dynamicGroup), so the two sizes need
  * not match (port/render/rd_crt.c).
@@ -71,7 +71,7 @@ enum {
     ICO_DF_DATE = 128,     /* destination alpha test against t2 (the DATE snapshot) */
     ICO_DF_DATM = 256,     /* with DF_DATE: pass where the MSB is 1 (else where it is 0) */
     ICO_DF_AA1_FULL = 512, /* sprite_aa1_ps: PRIM.ABE 0, the coverage alpha replaces every alpha */
-    /* package TEXA: the sampler state sprite_texa_ps and vu_texa_ps filter
+    /* the sampler state sprite_texa_ps and vu_texa_ps filter
      * by (gs_texa_texture in common.hlsli); set only for those entries */
     ICO_DF_TEXA_MAG_LINEAR = 1024,
     ICO_DF_TEXA_MIN_LINEAR = 2048,
@@ -81,7 +81,7 @@ enum {
     /* the pipeline blends Cs + Cd * c1 (src ONE, dst SRC1: Cd*FIX + Cs): a
      * PABE pixel left unblended outputs c1 = 0 */
     ICO_DF_C1_DST = 32768,
-    /* package AN-E, the two-pass blend without dual-source blending (the
+    /* the two-pass blend without dual-source blending (the
      * *_nodual entries; rd_pipeline.c rd__ExpandNoDual): the colour pass
      * writes the blend factor into c0.a, the alpha pass the stored alpha */
     ICO_DF_NODUAL_FACTOR = 65536,
@@ -94,13 +94,13 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SPACE_WORLD 0
 #define ICO_SPACE_UI 1
 
-/* v0.4.2 (package F-A): font_sheet_ps's constants, SHEET_* in
+/* font_sheet_ps's constants, SHEET_* in
  * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
  * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
  * The style reaches the shader in DrawCB.param: the rim's weight (0 off,
  * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet). */
-/* The values are the sheets' survey (package F-C1, the comment above
- * kSheetInk in port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
+/* The values are the sheets' survey (the comment above kSheetInk in
+ * port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
  * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across
  * and ICO_SHEET_RY down, each scaled by WX[|dx|] * WY[|dy|] (per mille), so
  * the dark halo fades out as the sheets' does instead of filling the gaps
@@ -132,15 +132,14 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_BAYER_ROW2 0x91B3
 #define ICO_SHEET_BAYER_ROW3 0x5D7F
 #define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
-/* v0.4.2 (package F-G): a strip rasterised at s strip texels a sheet texel
- * across and down (the scene's or the output's scale, port/ui/menu_font.c),
- * 1..ICO_SHEET_SCALE_MAX: the letters are the strip's texels, the rim is
- * the 1x rim of the sheet texels' mean coverage magnified s times (v0.4.3,
- * package RIM; rd.h rd_SheetRim computes it into the texture's bottom
- * half), the Bayer cell is s x s strip texels (one sheet texel), the
- * levels are the same.  The
- * scale reaches the shader in DrawCB.param.w above the dither bit:
- * dither | (s - 1) << 1 (rd_replay.c sheetParam), so 1x is as before. */
+/* A strip rasterised at s strip texels a sheet texel across and down (the
+ * scene's or the output's scale, port/ui/menu_font.c), 1..ICO_SHEET_SCALE_MAX:
+ * the letters are the strip's texels, the rim is the 1x rim of the sheet
+ * texels' mean coverage magnified s times (rd.h rd_SheetRim computes it
+ * into the texture's bottom half), the Bayer cell is s x s strip texels
+ * (one sheet texel), the levels are the same.  The scale reaches the
+ * shader in DrawCB.param.w above the dither bit: dither | (s - 1) << 1
+ * (rd_replay.c sheetParam), so s = 1 leaves the dither word as it is. */
 #define ICO_SHEET_SCALE_MAX 4
 
 /* Vertex of sprite.hlsl and font.hlsl: 20 bytes.
@@ -153,7 +152,7 @@ typedef struct IcoSpriteVertex {
     float u, v;      /* texels of t1 */
 } IcoSpriteVertex;
 
-/* Package AA1: the vertex of sprite_aa1_*_vs, 24 bytes: IcoSpriteVertex and,
+/* The vertex of sprite_aa1_*_vs, 24 bytes: IcoSpriteVertex and,
  * at loc 4 (RHI_VTX_F32x1), the coverage: 0..1 on the geometry rd_replay.c
  * adds along an antialiased edge (interpolated, it is the pixel's coverage),
  * ICO_AA1_INTERIOR on a triangle's own vertices. */
@@ -164,8 +163,7 @@ typedef struct IcoSpriteAa1Vertex {
 
 #define ICO_AA1_INTERIOR 2.0f
 
-/* Perspective-correct STQ: the vertex
- * of sprite_stq_*_vs, 24 bytes: IcoSpriteVertex and, at loc 4
+/* Perspective-correct STQ: the vertex of sprite_stq_*_vs, 24 bytes: IcoSpriteVertex and, at loc 4
  * (RHI_VTX_F32x1), the GS Q.  u and v are S and T in texels of t1 (S times
  * the texture size, the UV offset added times Q), not divided: the shader
  * interpolates (u, v, q) in screen space and sprite_stq_ps divides per
@@ -228,9 +226,9 @@ _Static_assert(offsetof(IcoSpriteStqVertex, q) == 20, "STQ vertex q");
 _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
 
 /* ---------------------------------------------------------------- VU1
- * Wave 3 (R3c): the VU1 program shaders (vu_common.hlsli). Group 1: t0 = the vertex stream (float4
- * quadwords as the VIF unpacked them), b2 = IcoVuCB, b3 = IcoVuBoneCB
- * (cluster only). */
+ * The VU1 program shaders (vu_common.hlsli). Group 1: t0 = the vertex
+ * stream (float4 quadwords as the VIF unpacked them), b2 = IcoVuCB,
+ * b3 = IcoVuBoneCB (cluster only). */
 
 /* VuCB: group 1, slot 2 (register b2, space1). 608 bytes.
  *   mem    VU1 data memory 0..35 as the program reads it: 0..15 the common

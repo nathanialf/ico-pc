@@ -1,5 +1,4 @@
-// crt.hlsl: the CRT filter (packages CRT and CRT2; port/render/rd_crt.c
-// drives it).
+// crt.hlsl: the CRT filter (port/render/rd_crt.c drives it).
 //
 // Written for ico-pc. The maths reference for the Gaussian beam is Timothy
 // Lottes' crt-lottes shader, which he placed in the public domain; no code

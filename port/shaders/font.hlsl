@@ -4,14 +4,14 @@
 // behind sprite_ui_vs or sprite_world_vs, with sprite_ps's bind groups: the
 // atlas at t1 with its sampler, the DATE snapshot at t2.
 //
-// The texel is the alpha the RGBA8 atlas held before package R8 (coverage
-// in GS units, 0x80 = full) and stands for a white texel with that alpha:
+// The texel is the alpha an RGBA8 atlas would hold (coverage in GS units,
+// 0x80 = full) and stands for a white texel with that alpha:
 // read back as sprite_ps reads a texel, then sprite_ps's texture function,
 // TCC, alpha test, DATE and dual-source output, so the bytes are those of
 // the RGBA8 path, filtered or not (the sampler filters the same UNORM8
 // values).
 //
-// font_sheet_ps (v0.4.2, package F-A): screen and overlay prims that sample
+// font_sheet_ps: screen and overlay prims that sample
 // a sheet texture (rd_CreateTextureSheet, RD_FS_FONT_SHEET): R8 coverage
 // 0..255 at the same t1, the style in g_param (rimOn, rimLevel, fillLevel,
 // dither, as rd_replay.c writes them).  rd.h says what it draws;
@@ -68,7 +68,7 @@ uint4 sheet_cov4(int2 q, int2 size)
     return c;
 }
 
-// v0.4.2 (package F-G), v0.4.3 (package RIM): the four texels at p0 ..
+// The four texels at p0 ..
 // p0 + (1, 1) of a strip rasterised at s texels a sheet texel
 // (2..SHEET_SCALE_MAX).  The texture's top half is the coverage, its
 // bottom half the rim rd_SheetRim made on the CPU (rd.h: the 1x dilation of
@@ -143,7 +143,7 @@ DualOut font_sheet_ps(SpriteVSOut i)
         g_atlas.GetDimensions(tw, th);
         const int2 size = int2((int)tw, (int)th);
         const uint4 style = uint4(g_param + 0.5);
-        // param.w: the dither bit, the strip's scale above it (F-G)
+        // param.w: the dither bit, the strip's scale above it
         const uint dither = style.w & 1u, scale = (style.w >> 1) + 1u;
         // the four sheet texels around the sample (a bilinear read with the
         // texel centres at +0.5), each rebuilt from the coverage grid

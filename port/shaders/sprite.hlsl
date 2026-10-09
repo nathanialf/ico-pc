@@ -2,7 +2,7 @@
 // coordinates (RD_PROG_SCREEN and RD_PROG_WORLD_PRIM): quads, strips,
 // triangles, lines and points, whatever topology the pipeline sets.
 //
-// Vertex layout (SpriteVertex in shader_consts.h, 20 bytes):
+// Vertex layout (IcoSpriteVertex in shader_consts.h, 20 bytes):
 //   loc 0  RHI_VTX_U16x2_UINT   XY, GS 12.4 fixed point
 //   loc 1  RHI_VTX_U32x1        Z, GS value (PSMZ24 scale unless FrameCB.g_z says otherwise)
 //   loc 2  RHI_VTX_U8x4_UINT    RGBA 0..255, alpha 0x80 = 1.0
@@ -10,15 +10,14 @@
 // Entries: sprite_ui_vs and sprite_world_vs differ only in the FrameCB.g_space
 // slot they apply; sprite_ps serves both.
 //
-// Package AA1: sprite_aa1_ui_vs, sprite_aa1_world_vs and sprite_aa1_ps draw
-// the lines and triangles PRIM.AA1 antialiases. Their vertex (IcoSpriteAa1Vertex, 24 bytes) adds
+// sprite_aa1_ui_vs, sprite_aa1_world_vs and sprite_aa1_ps draw the lines
+// and triangles PRIM.AA1 antialiases. Their vertex (IcoSpriteAa1Vertex,
+// 24 bytes) adds
 //   loc 4  RHI_VTX_F32x1        the coverage: 0..1 on the geometry
 //                               rd_replay.c adds along an edge, interpolated
 //                               without perspective; ICO_AA1_INTERIOR (2.0)
 //                               on a triangle's own vertices
-// and sprite_aa1_ps takes the coverage as the fragment's alpha. The other
-// entries do not change with them (their SPIR-V and DXIL are the same as
-// before AA1).
+// and sprite_aa1_ps takes the coverage as the fragment's alpha.
 #include "common.hlsli"
 
 struct SpriteVSIn
@@ -57,7 +56,7 @@ SpriteVSOut sprite_world_vs(SpriteVSIn i)
 
 Texture2D<float4> g_texture : register(t1, space2);
 SamplerState g_sampler : register(s1, space2);
-// The DATE snapshot (wave 2): R8, 1.0 where the bound target's alpha MSB
+// The DATE snapshot: R8, 1.0 where the bound target's alpha MSB
 // was set, addressed in target pixels. Read only under DF_DATE; otherwise a
 // 1x1 dummy is bound and never fetched.
 Texture2D<float> g_dateSnap : register(t2, space2);
@@ -81,7 +80,7 @@ DualOut sprite_ps(SpriteVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// sprite_texa_ps (package TEXA): sprite_ps for a PSMCT24 or PSMCT16 texture
+// sprite_texa_ps: sprite_ps for a PSMCT24 or PSMCT16 texture
 // (or a 24- or 16-bit CLUT) under a TEXA with AEM and a linear filter, which
 // the planner (rd_pipeline.c rd__TexaPerTexel) gives this entry: TEXA per
 // texel before the bilinear weights, as the GS (gs_texa_texture). sprite_ps
@@ -104,7 +103,7 @@ DualOut sprite_texa_ps(SpriteVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// ------------------------------------------------------- PRIM.AA1 (package AA1)
+// ------------------------------------------------------------------- PRIM.AA1
 
 // sprite_ps's DATE, texture function and TEXA: the fragment's colour before
 // the alpha test, or a discard. (sprite_ps keeps its own copy, so that its
@@ -184,7 +183,7 @@ DualOut sprite_aa1_ps(SpriteAa1VSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// ------------------------------------------------ perspective STQ (package RSMALL)
+// ------------------------------------------------------------ perspective STQ
 
 // The vertex of sprite_stq_*_vs (IcoSpriteStqVertex, 24 bytes) adds
 //   loc 4  RHI_VTX_F32x1   Q
@@ -237,7 +236,7 @@ DualOut sprite_stq_ps(SpriteStqVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// date_snap_ps (wave 2): the bound target's alpha MSB into the R8 DATE
+// date_snap_ps: the bound target's alpha MSB into the R8 DATE
 // snapshot, pixel for pixel (t1 is the target, read with Load; viewport =
 // the target's size). Drawn with blit_vs.
 struct DateSnapIn

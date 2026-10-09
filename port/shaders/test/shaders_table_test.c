@@ -23,7 +23,7 @@ static const char *const expected[] = {
     "yuv_vs",
 };
 
-/* package AN-E: the gs_dual_out entries without the second output */
+/* the gs_dual_out entries without the second output (ICO_NO_DUAL) */
 static const char *const expectedNoDual[] = {
     "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
     "sprite_stq_ps_nodual", "fog_lut_ps_nodual",     "font_ps_nodual",
