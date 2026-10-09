@@ -1,7 +1,7 @@
 /*
  * port/input/pointer.c
  *
- * The mouse pointer in the menus (pointer.h; package I17b).
+ * The mouse pointer in the menus (pointer.h).
  */
 #include "input.h"
 #include "pointer.h"

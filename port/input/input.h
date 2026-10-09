@@ -162,7 +162,7 @@ typedef struct IcoInputRaw {
     unsigned char key[ICO_KEY_COUNT];       /* 1 down */
     unsigned char mouse[ICO_MOUSE_BUTTONS]; /* index 1..5 */
     float mouse_dx, mouse_dy;               /* relative motion since the last snapshot */
-    float dt; /* seconds since the last snapshot (I17a; 0: 1/60, at most 0.1 is used) */
+    float dt;                 /* seconds since the last snapshot (0: 1/60, at most 0.1 is used) */
     float gp[ICO_GP_BUTTONS]; /* 0..1; all gamepads merged (max) */
     float axis[4];            /* lx ly rx ry, -1..1, y down; merged (largest magnitude) */
     int gamepads;             /* how many are connected */
@@ -181,7 +181,7 @@ typedef struct IcoBindings {
     float mouse_sens;  /* multiplier on the built-in per-count gain */
     float mouse_decay; /* the touch look pad's per vsync decay, 0..0.99 (touch.h) */
     int mouse_invert_y;
-    /* I17a (issue 17): the mouse camera ([input] mouse_camera, default on;
+    /* the mouse camera, issue 17 ([input] mouse_camera, default on;
        mouse_hold, seconds 0..10, default 0.75). The captured motion moves
        a held look offset (1/400 of the unit circle a count at sensitivity
        1); still for mouse_hold seconds, the offset relaxes to centre (time
@@ -219,7 +219,7 @@ typedef struct IcoBindings {
 
 /* The defaults. On Android they include ico_bindings_android_defaults. */
 void ico_bindings_defaults(IcoBindings *b);
-/* Package AN-D: Android's back button (the Back key, keys.def) added to
+/* Android's back button (the Back key, keys.def) added to
    the keyboard row of Start, so Back opens the pause menu (where Quit is);
    nothing when the row has it already. Plain C, tested on every build. */
 void ico_bindings_android_defaults(IcoBindings *b);
@@ -238,7 +238,7 @@ int ico_gp_from_name(const char *name);
 const char *ico_gp_name(int src);
 /* One snapshot to the virtual pad: advances the mouse stick by raw->dt. */
 void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *out);
-/* I17a: the mouse camera's state (the look offset, its idle time and the
+/* The mouse camera's state (the look offset, its idle time and the
    stick) back to centre: the device layer calls it when the capture mode
    changes. */
 void ico_bindings_mouse_reset(IcoBindings *b);
@@ -248,7 +248,7 @@ void ico_bindings_mouse_reset(IcoBindings *b);
 struct IcoToml;
 int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t);
 
-/* --- the remap screen (Phase 6, 6C; input_config.c) ------------------------ */
+/* --- the remap screen (input_config.c) ------------------------------------- */
 
 /* The bindings the live sources use: input_sdl.c steps this table, the
    Settings menu's remap screen edits it in place, so a change applies on the
@@ -295,14 +295,14 @@ extern const char *const ico_mouse_names[ICO_MOUSE_BUTTONS];
    already in the file, as a string ("Space", "Tab, Backquote", "none";
    bindings.c splits a comma list like an array), mouse_sensitivity,
    mouse_camera, mouse_invert_y, mouse_hold, mouse_camera_speed,
-   mouse_full_range, mouse_return, and touch_mode, touch_size
-   and touch_opacity, each when it differs from the default or is already
-   in the file. Returns the number of keys set, or
-   -1. */
+   mouse_full_range, mouse_return, and touch_mode, touch_size and
+   touch_opacity, each when it differs from the default or is already in
+   the file. Returns the number of keys set, or -1. */
 int ico_input_write_bindings(const IcoBindings *b);
-/* Rebuild *b from the defaults and the config's [input] and [gameplay]
-   keys as port/config reads them (ico_config_get_string): the reload after
-   a write, or ico_input_apply_toml over the config in use. */
+/* Rebuild *b from the defaults and the config's [input] keys as
+   port/config reads them (ico_config_get_string): the reload after a
+   write. [gameplay] stick_fix is not part of *b and is not reloaded here
+   (ico_input_apply_toml applies it). */
 void ico_input_reload_bindings(IcoBindings *b);
 
 /* v clamped to 0..1, NaN to 0: a pointer or a finger's place on the

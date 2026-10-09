@@ -31,7 +31,7 @@ static void ico_host_vibrate(int amplitude, int ms)
 #define RUMBLE_REFRESH 8 /* vsyncs between re-issues of a running rumble */
 
 /* the live table (input_config.c), which the Settings menu's remap screen
-   edits in place (Phase 6, 6C) */
+   edits in place */
 #define s_bind (*ico_input_live_bindings())
 static IcoInputRaw s_raw;
 /* the last snapshot's gamepad sources, for the press edges the remap
@@ -40,18 +40,18 @@ static unsigned char s_gp_down[ICO_GP_COUNT];
 static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
 static unsigned char s_sdl_to_key[SDL_SCANCODE_COUNT];
-static int s_capture; /* ICO_CAPTURE_* (mouse_look.h; I17a) */
+static int s_capture; /* ICO_CAPTURE_* (mouse_look.h) */
 static float s_acc_dx, s_acc_dy;
 static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
 static int s_phone_vibrating; /* the phone, not a controller, was last sent a rumble */
 static void phone_vibrate_stop(void);
 static int s_ready;
-static Uint64 s_last_update; /* I17a: the snapshot's dt */
-/* I17b: the left button went down over a menu the pointer uses, so it stays
+static Uint64 s_last_update; /* the snapshot's time, for its dt */
+/* the left button went down over a menu the pointer uses, so it stays
    off Cross until it is released (a click there is the pointer's) */
 static int s_left_menu;
-/* I17b: when the pointer was last freed: SDL puts it back where it was
+/* when the menus' pointer was last freed: SDL puts it back where it was
    held as relative mode ends, a motion the player did not make, so the
    motion of the first moment after is not a hover */
 static Uint64 s_free_since;
@@ -248,14 +248,14 @@ static void clear_held(void)
     s_left_menu = 0;
 }
 
-/* I17b: whether the pointer is the menus' (free, not the camera's; with
+/* whether the pointer is the menus' (free, not the camera's; with
    [input] mouse = false the mouse does nothing, in the menus too) */
 static int pointer_free(void)
 {
     return s_capture == ICO_CAPTURE_OFF && s_bind.mouse_on;
 }
 
-/* I17b: the pointer's place from a window position (points), as 0..1 of
+/* the pointer's place from a window position (points), as 0..1 of
    the window's size */
 static void pointer_at(SDL_WindowID id, float x, float y)
 {
@@ -306,7 +306,7 @@ void ico_input_sdl_event(const SDL_Event *e)
             if (down) {
                 ico_input_note_press(ICO_SRC_MOUSE, map[e->button.button]);
             }
-            /* I17b: the menus' pointer, while it is free: the left button
+            /* the menus' pointer, while it is free: the left button
                clicks (and, pressed over a menu, is not Cross until it is
                released); the others only show the pointer is in use */
             if (e->button.button == SDL_BUTTON_LEFT) {
@@ -341,12 +341,12 @@ void ico_input_sdl_event(const SDL_Event *e)
             /* photo mode: its screen takes the motion each Main tick */
             ico_mouse_look_add(e->motion.xrel, e->motion.yrel);
         } else if (pointer_free() && e->motion.timestamp >= s_free_since + POINTER_SETTLE_NS) {
-            /* I17b: free, the menus' pointer */
+            /* free, the menus' pointer */
             pointer_at(e->motion.windowID, e->motion.x, e->motion.y);
         }
         break;
     case SDL_EVENT_MOUSE_WHEEL:
-        /* I17b: the menus' wheel, up (away from the player) positive; a
+        /* the menus' wheel, up (away from the player) positive; a
            flipped direction (natural scrolling) is turned back */
         if (touch_synth_mouse(e->wheel.which) || !pointer_free()) {
             break;
@@ -354,13 +354,13 @@ void ico_input_sdl_event(const SDL_Event *e)
         ico_pointer_wheel(e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e->wheel.y : e->wheel.y);
         break;
     case SDL_EVENT_WINDOW_MOUSE_LEAVE:
-        ico_pointer_leave(); /* I17b */
+        ico_pointer_leave();
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         clear_held();
         touch_cancel();
         phone_vibrate_stop();
-        ico_pointer_leave(); /* I17b */
+        ico_pointer_leave();
         break;
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
     case SDL_EVENT_DID_ENTER_BACKGROUND:
@@ -398,11 +398,11 @@ void ico_input_sdl_set_capture(int mode)
     if (mode == s_capture) {
         return;
     }
-    /* I17a: any change starts the look from centre, so play does not keep
+    /* any change starts the look from centre, so play does not keep
        a turn from before a menu and photo mode not a move from play */
     s_capture = mode;
     s_acc_dx = s_acc_dy = 0.0f;
-    /* I17b: a held pointer has no place in the menus; the next move after
+    /* a held pointer has no place in the menus; the next move after
        it is freed gives it one */
     ico_pointer_leave();
     s_free_since = mode == ICO_CAPTURE_OFF ? SDL_GetTicksNS() : 0;
@@ -513,7 +513,7 @@ static void send_rumble(void)
     }
 }
 
-/* Phase 6 (6C): the gamepad's new presses for the remap screen's capture:
+/* The gamepad's new presses for the remap screen's capture:
    a button, a trigger past half, a stick axis past half (as a direction
    source); release below a quarter re-arms it. */
 static void note_pad_presses(void)
@@ -575,14 +575,14 @@ void ico_input_sdl_update(void)
     s_raw.mouse_dy = s_acc_dy;
     s_acc_dx = s_acc_dy = 0.0f;
     {
-        /* I17a: the time the mouse camera's hold and relax run on */
+        /* the time the mouse camera's hold and relax run on */
         const Uint64 now = SDL_GetTicksNS();
 
         s_raw.dt = s_last_update != 0 ? (float)((double)(now - s_last_update) / 1e9) : 0.0f;
         s_last_update = now;
     }
     {
-        /* I17b: over a menu the pointer uses, the left button is the
+        /* over a menu the pointer uses, the left button is the
            pointer's click (port/ui/ui_mouse.c), not Cross, so a click off
            every row never confirms the row the cursor is on; right (Circle)
            and middle (R1) stay, and the remap screen's capture still saw

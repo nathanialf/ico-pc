@@ -1,7 +1,7 @@
 /*
  * port/input/pointer.h
  *
- * The mouse pointer in the menus (package I17b, issue 17).  Plain C, no SDL
+ * The mouse pointer in the menus (issue 17).  Plain C, no SDL
  * and no game symbols: the device layer (input_sdl.c) feeds it while the
  * pointer is free (capture mode ICO_CAPTURE_OFF, mouse_look.h): where the
  * pointer is in the window (0..1 across and down), the left button's

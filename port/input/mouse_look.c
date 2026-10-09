@@ -2,7 +2,7 @@
  * port/input/mouse_look.c
  *
  * The mouse camera's capture rule and photo mode's look accumulator
- * (mouse_look.h; package I17a).
+ * (mouse_look.h).
  */
 #include "mouse_look.h"
 

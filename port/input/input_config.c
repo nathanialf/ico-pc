@@ -5,7 +5,7 @@
  * pad host (input.h). Kept apart from bindings.c so that the headless build,
  * which has no config.toml, does not pull host_config.c's TOML reader in.
  *
- * Phase 6 (6C): the live binding table, the last-press record the remap
+ * Here: the live binding table, the last-press record the remap
  * screen's capture reads, and the writer that puts the tables back into
  * config.toml through port/config.
  */
@@ -87,7 +87,7 @@ int ico_input_apply_toml(IcoBindings *b, const struct IcoToml *t)
     return bad;
 }
 
-/* --- Phase 6 (6C): the remap screen's side ---------------------------------- */
+/* --- the remap screen's side ---------------------------------------------- */
 
 static IcoBindings s_live;
 
@@ -251,7 +251,7 @@ int ico_input_write_bindings(const IcoBindings *b)
         }
         n++;
     }
-    /* I17a: the Mouse camera and Invert mouse up/down rows, and the hold
+    /* the Mouse camera and Invert mouse up/down rows, and the hold
        (config only) */
     if (b->mouse_camera != def.mouse_camera ||
         ico_config_get_string("input.mouse_camera", NULL) != NULL) {

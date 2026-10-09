@@ -11,7 +11,7 @@
 #include "input.h"
 #include "touch.h"
 
-/* I17a: the mouse camera (input.h IcoBindings.mouse_camera): counts for the
+/* The mouse camera (input.h IcoBindings.mouse_camera): counts for the
    whole look offset at sensitivity 1, the stick's start just past the
    game's dead zone of 48 (pad.c) and its full deflection, both over
    127.5, the relax time constant in seconds, and the offset under which
@@ -613,7 +613,7 @@ void ico_bindings_mouse_reset(IcoBindings *b)
     b->mouse_drives = 0;
 }
 
-/* I17a: the mouse camera's stick from this snapshot's motion (input.h):
+/* The mouse camera's stick from this snapshot's motion (input.h):
    motion moves the held look offset; still for mouse_hold seconds, the
    offset relaxes to centre; the stick is the offset past the dead zone */
 static void mouse_look(IcoBindings *b, const IcoInputRaw *raw)
@@ -687,7 +687,7 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
     memset(&kb, 0, sizeof(kb));
     memset(out, 0, sizeof(*out));
 
-    /* the mouse camera's stick (I17a) */
+    /* the mouse camera's stick */
     if (b->mouse_on && b->mouse_camera) {
         mouse_look(b, raw);
     } else {

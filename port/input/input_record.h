@@ -1,7 +1,7 @@
 /*
  * port/input/input_record.h
  *
- * The pad recording (package Q1): what the game read from the pad, written as a pad script
+ * The pad recording: what the game read from the pad, written as a pad script
  * (pad_script.h), so the headless build replays a player's session with
  * pad_script=<the file>.
  *
@@ -36,7 +36,7 @@ int ico_input_record_format(char *out, size_t size, unsigned int tick, const Ico
 /* Creates path (replacing it) and writes header (NULL or lines each ending
    in a newline). 0, or -1 with a message on stderr. */
 int ico_input_record_open(const char *path, const char *header);
-/* 1 while a recording is open. */
+/* 1 while a recording is open (tests). */
 int ico_input_record_active(void);
 /* The game's read at `tick` (scePadRead); does nothing without a
    recording. No I/O. */
@@ -49,7 +49,7 @@ void ico_input_record_flush(void);
 /* Writes the last sample and the closing comment and closes the file
    (idempotent; atexit-safe). */
 void ico_input_record_close(void);
-/* Lines written so far (not counting comments). */
+/* Lines written so far, not counting comments (tests). */
 unsigned int ico_input_record_lines(void);
 
 #endif /* ICO_PORT_INPUT_INPUT_RECORD_H */

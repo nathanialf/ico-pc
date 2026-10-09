@@ -2,7 +2,7 @@
  * port/input/mouse_look.h
  *
  * The mouse camera's capture rule and photo mode's look accumulator
- * (package I17a, issue 17). Plain C, no SDL and no game symbols: the
+ * (issue 17). Plain C, no SDL and no game symbols: the
  * window (port/platform/window_host.c) fills IcoCaptureState from the
  * game's state once a vsync, asks the rule, and hands the answer to the
  * device layer (input_sdl.c ico_input_sdl_set_capture).

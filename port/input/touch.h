@@ -218,7 +218,8 @@ void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *ou
 void ico_touch_set_gamepads(IcoTouchState *t, int gamepads, uint64_t nowNs);
 
 /* 1 while the overlay shows: no gamepad, and a finger down or one lifted
-   less than ICO_TOUCH_HIDE_NS ago. */
+   less than ICO_TOUCH_HIDE_NS ago (tests; touch.c uses its own
+   touch_visible). */
 int ico_touch_visible(const IcoTouchState *t, int gamepads, uint64_t nowNs);
 
 /* 0..1: the overlay's opacity with its ICO_TOUCH_FADE_NS fades in and out

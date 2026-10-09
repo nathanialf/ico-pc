@@ -726,7 +726,7 @@ static void test_merged_frame(void)
     CHECK(f.rx == 128 && f.ry == 0);
 }
 
-/* v0.4.2 (Android issue 19): the touch stick in every direction (1 degree
+/* Android issue 19: the touch stick in every direction (1 degree
    steps) and at every reach (inside the dead zone to past the ring) gives
    the bytes a round gamepad stick deflected as far gives: the same frame
    from ico_input_vpad_to_frame, stick fix off and on, so Ico walks and runs

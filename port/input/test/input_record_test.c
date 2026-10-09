@@ -1,7 +1,7 @@
 /*
  * port/input/test/input_record_test.c
  *
- * The pad recording (port/input/input_record.c, package Q1): its line
+ * The pad recording (port/input/input_record.c): its line
  * format, the round trip through the pad script reader (pad_script.c) for a
  * long varied session, the "only when it changes" rule, a second read in
  * the same tick, the poll's timing, and the sample point in scePadRead

@@ -92,7 +92,7 @@ static void test_bindings_defaults(void)
     CHECK(has_key(b.gp[ICO_T_L2], ICO_GP_LTRIGGER) && has_key(b.gp[ICO_T_R3], ICO_GP_RSTICK));
     CHECK(has_key(b.gp[ICO_T_START], ICO_GP_START) && has_key(b.gp[ICO_T_SELECT], ICO_GP_BACK));
     CHECK(near_(b.deadzone, 0.12f, 1e-6f) && near_(b.walk_scale, 0.5f, 1e-6f));
-    /* package AN-D: Android's Back key joins Start, once, and nothing else
+    /* Android's Back key joins Start, once, and nothing else
        changes */
     {
         IcoBindings a = b;
@@ -174,7 +174,7 @@ static void test_bindings_config(void)
     CHECK(ico_bindings_set(&b, "bogus", "1") == -1);
     CHECK(ico_bindings_set(&b, "kb.cross", "A,B,C,D,E") == 0 && b.kb[ICO_T_CROSS][3] != 0);
 
-    /* I17a: the mouse camera's keys; a hold outside 0..10 is refused */
+    /* the mouse camera's keys; a hold outside 0..10 is refused */
     ico_bindings_defaults(&b);
     CHECK(b.mouse_camera == 1 && near_(b.mouse_hold, 0.75f, 1e-6f));
     CHECK(strstr(ico_bindings_default_text(), "mouse_camera = true\n") != NULL &&
@@ -212,7 +212,7 @@ static void test_bindings_config(void)
     ico_toml_free(t);
 }
 
-/* I17a: the capture rule (mouse_look.c) and photo mode's accumulator */
+/* The capture rule (mouse_look.c) and photo mode's accumulator */
 static void test_mouse_capture(void)
 {
     IcoCaptureState play, c;
@@ -480,7 +480,7 @@ static void test_step(void)
     ico_bindings_step(&b, &r, &v);
     CHECK(v.buttons == (ICO_PAD_CROSS | ICO_PAD_CIRCLE));
 
-    /* I17a: the mouse camera. Motion moves a held look offset (1/400 a
+    /* the mouse camera. Motion moves a held look offset (1/400 a
        count at sensitivity 1); the stick is its direction at 48.5/127.5
        (just past the game's dead zone of 48) plus 71.5/127.5 of its
        length; still for mouse_hold (0.75 s), it relaxes to centre */
@@ -668,7 +668,7 @@ static void test_step(void)
     CHECK(v.buttons == 0 && v.lx == 0.0f);
 }
 
-/* I17b: the menus' pointer (pointer.c): its place, the clicks and the wheel
+/* The menus' pointer (pointer.c): its place, the clicks and the wheel
    between two takes, and leaving the window */
 static void test_pointer(void)
 {

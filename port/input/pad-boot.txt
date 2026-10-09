@@ -4,8 +4,8 @@
 # in PAL: frame step systemStatus[1] = 2, common/src/main.c:37). Buttons are
 # the game's logical word, active high: CROSS 0040, START 0800, LEFT 8000.
 #
-# Not one tick of this has been run: the boot timings below come from
-# reading the code. Each step's tick depends on load and memory-card latency,
+# The boot timings below were first worked out from the code; the measured
+# ones follow the memory card notes ("Measured"). Each step's tick depends on load and memory-card latency,
 # so the script does not try to hit each screen at a known tick. It repeats
 # a cycle in which every press either advances the screen that is up or does
 # nothing there (checked for each screen below). Every press lasts 3 ticks;
@@ -105,7 +105,7 @@
 # 7 below were written when both ports reported no card (the earlier null
 # card) and describe that path, not the one a card in port 0 takes.
 #
-# Measured (package 1E, ref-m32 on Linux, the same code as win-x86-ref):
+# Measured:
 # flag 382 sets at Main tick 661 (stage 1); the stages then run 41 (tick
 # 663), 42, 43, 45, 40 and 3 (tick 1036).
 
