@@ -1366,6 +1366,26 @@ typedef struct RdPendingClear {
  * returned; else they are left and false is returned. */
 bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, RhiLoadOp *colorLoad,
                           RhiLoadOp *depthLoad);
+
+/* The stencil of a depth target holds something only for the shadow count:
+ * its reset clears it (RDC_SHADOW_RESET), the volumes count into it
+ * (doShadowStrip) and the resolve reads it (doShadowResolve).  Every other
+ * pipeline has the stencil test off (rd_pipeline.c shadowStencil sets it for
+ * the volume and resolve keys alone), so outside that window no pass needs
+ * the stencil loaded or stored.
+ *   live      the depth whose stencil holds the count, from its reset to the
+ *             end of its resolve's pass (0: none)
+ * A depth is named by its texture id in rd_replay.c. */
+typedef struct RdStencilWindow {
+    uint32_t live;
+} RdStencilWindow;
+
+/* The stencil ops of a pass on depth (not 0) whose depth loads depthLoad:
+ * on the live depth, the stencil loads as the depth does; on any other, a
+ * CLEAR stays CLEAR and anything else is DONT_CARE.  The stencil is stored
+ * on the live depth only. */
+void rd__StencilOps(const RdStencilWindow *w, uint32_t depth, RhiLoadOp depthLoad,
+                    RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore);
 /* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,
  * the camera probe): also starts a new epoch of the bind group caches
  * (rd_replay.c, package P1), since bind groups live one frame slot. */
