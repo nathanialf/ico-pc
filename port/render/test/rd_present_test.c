@@ -1926,8 +1926,11 @@ static void checkFullPixelClamp(void)
             if (full) {
                 CHECK(r[0] >= 250 && r[1] <= 2 && r[2] <= 2,
                       "full pixel clamp: column 511 is red (%u %u %u)", r[0], r[1], r[2]);
-                CHECK(l[2] >= 250 && l[0] <= 2, "full pixel clamp: column 0 is blue (%u %u %u)",
-                      l[0], l[1], l[2]);
+                /* the GS samples column 0 at u = 0.75: three quarters of
+                   the blue texel and a quarter of the red one beside it */
+                CHECK(l[2] >= 180 && l[2] <= 200 && l[0] >= 55 && l[0] <= 75 && l[1] <= 2,
+                      "full pixel clamp: column 0 is three quarters blue (%u %u %u)", l[0], l[1],
+                      l[2]);
             } else {
                 CHECK(r[0] < 8 && r[1] < 8 && r[2] < 8 && l[0] < 8 && l[1] < 8 && l[2] < 8,
                       "full pixel clamp: off, the border columns stay black");
