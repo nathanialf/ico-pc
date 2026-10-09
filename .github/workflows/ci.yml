@@ -21,7 +21,6 @@ concurrency:
 
 env:
   CMAKE: ${{ github.workspace }}/tools/toolchain/cmake/bin
-  PYBIN: ${{ github.workspace }}/.venv/bin
   # the developer compiler (Debian's gcc 14); the runner's default gcc is 13
   # (cmake/IcoFlags.cmake drops the flags a compiler does not know anyway)
   ICO_CC: gcc-14
