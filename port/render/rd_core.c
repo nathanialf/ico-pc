@@ -548,8 +548,10 @@ bool rd__TargetCreateGpu(RdTargetRec *t, const char *name)
     t->color = rhi_CreateTexture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {
-        t->depth = rhi_CreateTexture(&(RhiTextureDesc){
-            t->tw, t->th, 1, RHI_FMT_D32F_S8, RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC, name});
+        /* sampled: the fog reads it in place (rd_replay.c doFog) */
+        t->depth = rhi_CreateTexture(
+            &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8,
+                              RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | RHI_TEX_SAMPLED, name});
         t->depthState = RHI_STATE_UNDEFINED;
     }
     return t->color.id != 0 && (!t->withDepth || t->depth.id != 0);
