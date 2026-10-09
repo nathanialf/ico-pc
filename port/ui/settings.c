@@ -1740,14 +1740,16 @@ static const char *padName(int src)
     return ui_Str((UiStrId)(UI_STR_PAD_SOUTH + src - ICO_GP_SOUTH));
 }
 
-static const char *const kMouseNames[ICO_MOUSE_BUTTONS] = {"",        "Mouse L",  "Mouse R",
-                                                           "Mouse M", "Mouse X1", "Mouse X2"};
+/* the mouse buttons, after the language's word for the mouse (the one
+   photo mode's help panel uses) */
+static const char *const kMouseButtons[ICO_MOUSE_BUTTONS] = {"", "L", "R", "M", "X1", "X2"};
 
 /* One column of the remap screen: the keyboard's keys and mouse buttons,
    or the gamepad's sources, of target t. */
 static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, size_t size)
 {
     size_t n = 0;
+    char mouse[32];
     buf[0] = '\0';
     for (int i = 0; i < ICO_BIND_MAX * 2; i++) {
         const char *name = NULL;
@@ -1760,7 +1762,9 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
                 name = ico_key_name(b->kb[t][i]);
             }
         } else if (b->mouse[t][i - ICO_BIND_MAX]) {
-            name = kMouseNames[b->mouse[t][i - ICO_BIND_MAX]];
+            snprintf(mouse, sizeof(mouse), "%s %s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX),
+                     kMouseButtons[b->mouse[t][i - ICO_BIND_MAX]]);
+            name = mouse;
         }
         if (name) {
             snprintf(buf + n, size - n, "%s%s", n ? ", " : "", name);
