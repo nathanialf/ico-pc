@@ -92,7 +92,6 @@ typedef struct IcoGsSnapshot {
     int boy_present;
     int girl_present;
     int weapon_kind;            /* scpGameStat_BoyWeaponkind: 0 bare hands */
-    int held_item;              /* GetCharHeldItem(boyGObj): -1 none */
     int hand_held;              /* ACTGame_FLAG_TETSUNAGI: holding hands */
     int yorda_carried_by_enemy; /* girl actMode 0x6F, carrier an enemy */
     const char *stage_name;     /* stageData[stage_no].name, or NULL */
@@ -109,8 +108,6 @@ void ico_gs_sample_live(IcoGsSnapshot *out);
 void ico_gs_tick(void);
 /* Forgets everything (signals, counters, the run); tests and a new profile. */
 void ico_gs_reset(void);
-/* the current snapshot */
-const IcoGsSnapshot *ico_gs_snapshot(void);
 /* Main ticks seen by ico_gs_tick */
 unsigned int ico_gs_ticks(void);
 
@@ -136,10 +133,8 @@ unsigned int ico_gs_play_seconds(void);
 int ico_gs_tick_hz(void);
 /* the game is paused (systemStatus[5]) */
 int ico_gs_paused(void);
-int ico_gs_current_layout(void);
 /* the boy's weapon: 0 bare hands or not known; kinds per weaponKind[10] */
 int ico_gs_weapon_kind(void);
-int ico_gs_held_item(void);
 int ico_gs_yorda_present(void);
 int ico_gs_yorda_held(void);     /* holding hands now */
 int ico_gs_yorda_captured(void); /* carried by an enemy now */
@@ -148,7 +143,6 @@ int ico_gs_yorda_captured(void); /* carried by an enemy now */
 unsigned int ico_gs_enemies_killed(void);
 unsigned int ico_gs_game_overs(void);
 unsigned int ico_gs_saves(void);
-unsigned int ico_gs_endings(void);
 
 /* The run: from the title (stage 1) to the next return to it.  "Fresh"
    when it began with a new game (gflag 382) and nothing was loaded. */
@@ -195,7 +189,6 @@ void ico_gs_run_set(const IcoGsRun *in);
 /* the port's options (port/game/options.h) */
 int ico_gs_developer_mode(void);
 int ico_gs_yorda_safe(void);
-int ico_gs_stick_fix(void);
 /* [dev] start_stage put the game somewhere other than the boot */
 int ico_gs_start_stage_used(void);
 /* developer mode or start_stage is on, or the model viewer is up

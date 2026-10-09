@@ -41,7 +41,6 @@ extern int mpegPlay;                        /* common/src/StageManager.c */
 extern int stageManagerFreeResourceFlag;    /* common/src/StageManager.c */
 int gflagChk(int bit_idx);                  /* script/src/gflag.c */
 int CheckWeaponKind(struct GObj *self);     /* sugipon/src/weapon.c */
-int GetCharHeldItem(struct GObj *chara);    /* sugipon/src/item.c */
 unsigned char ACTGame_FLAG_TETSUNAGI(void); /* fumi/src/act-game.c */
 
 #define STAGE_COUNT 106  /* stageData[106] */
@@ -75,7 +74,6 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     s->stage_name =
         (stage_no >= 0 && stage_no < STAGE_COUNT) ? stageData[stage_no].name : (const char *)0;
     s->weapon_kind = 0;
-    s->held_item = -1;
     /* The objects are followed only while no stage is being torn down or
        loaded and no movie runs: stop_free_resources (StageManager.c) frees
        the object partitions and then zeroes boyGObj and girlGObj, and the
@@ -89,13 +87,10 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     {
         Act *a = GOBJ_ACT(boyGObj);
 
-        /* scpGameStat_BoyWeaponkind (script.c:1541) and GetCharHeldItem
-           (item.c:797), with the null checks a snapshot needs */
+        /* scpGameStat_BoyWeaponkind (script.c:1541), with the null checks a
+           snapshot needs */
         if (a->weapon != 0 && GOBJ_SUB(a->weapon) != 0 && GOBJ_SUB(a->weapon)->work != 0) {
             s->weapon_kind = CheckWeaponKind(a->weapon);
-        }
-        if (a->curItem != 0 && GOBJ_SUB(a->curItem) != 0 && GOBJ_SUB(a->curItem)->work != 0) {
-            s->held_item = GetCharHeldItem(boyGObj);
         }
     }
     if (girlGObj != 0 && GOBJ_ACT(girlGObj) != 0) {
@@ -167,7 +162,7 @@ static IcoGsSnapshot s_snap, s_prev;
 static unsigned int s_ticks;
 static int s_stage_entered;
 
-static unsigned int s_enemies, s_game_overs, s_saves, s_endings;
+static unsigned int s_enemies, s_game_overs, s_saves;
 
 static struct {
     int fresh;
@@ -197,7 +192,7 @@ void ico_gs_reset(void)
     s_dropped = 0;
     s_ticks = 0;
     s_stage_entered = 0;
-    s_enemies = s_game_overs = s_saves = s_endings = 0;
+    s_enemies = s_game_overs = s_saves = 0;
 }
 
 static int flag_in(const IcoGsSnapshot *s, int n)
@@ -307,12 +302,6 @@ void ico_gs_tick(void)
     s_enemies += (unsigned int)s_count[ICO_GS_EV_ENEMY_KILLED];
     s_game_overs += (unsigned int)s_count[ICO_GS_EV_GAME_OVER];
     s_saves += (unsigned int)s_count[ICO_GS_EV_SAVE_DONE];
-    s_endings += (unsigned int)s_count[ICO_GS_EV_ENDING];
-}
-
-const IcoGsSnapshot *ico_gs_snapshot(void)
-{
-    return &s_snap;
 }
 
 unsigned int ico_gs_ticks(void)
@@ -385,19 +374,9 @@ int ico_gs_paused(void)
     return s_snap.system_status[5] != 0;
 }
 
-int ico_gs_current_layout(void)
-{
-    return s_snap.layout;
-}
-
 int ico_gs_weapon_kind(void)
 {
     return s_snap.weapon_kind;
-}
-
-int ico_gs_held_item(void)
-{
-    return s_snap.actors_valid ? s_snap.held_item : -1;
 }
 
 int ico_gs_yorda_present(void)
@@ -428,11 +407,6 @@ unsigned int ico_gs_game_overs(void)
 unsigned int ico_gs_saves(void)
 {
     return s_saves;
-}
-
-unsigned int ico_gs_endings(void)
-{
-    return s_endings;
 }
 
 int ico_gs_run_fresh(void)
@@ -514,11 +488,6 @@ int ico_gs_developer_mode(void)
 int ico_gs_yorda_safe(void)
 {
     return ico_opt_yorda_safe();
-}
-
-int ico_gs_stick_fix(void)
-{
-    return ico_opt_stick_fix();
 }
 
 int ico_gs_start_stage_used(void)

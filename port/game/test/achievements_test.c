@@ -111,7 +111,6 @@ static void fresh_world(void)
     g.layout = 54;
     g.actors_valid = 1;
     g.boy_present = 1;
-    g.held_item = -1;
     g.stage_name = "title";
 }
 
