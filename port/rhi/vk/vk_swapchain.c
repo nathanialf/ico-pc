@@ -303,12 +303,27 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     }
     vkGetSwapchainImagesKHR(g_vkr.device, sc, &n, images);
     VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+    bool semaphoresMade = true;
     for (uint32_t i = 0; i < n; i++) {
         g_vkr.swapTextures[i] =
             vkr_register_swapchain_image(images[i], pick.format, g_vkr.swapRhiFormat, w, h);
-        VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &g_vkr.renderDone[i]));
+        if (!VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &g_vkr.renderDone[i]))) {
+            g_vkr.renderDone[i] = VK_NULL_HANDLE;
+            semaphoresMade = false;
+        }
     }
     g_vkr.swapImageCount = n;
+    if (!semaphoresMade) {
+        /* a present on that image would have nothing to wait on: no
+         * swapchain, as for too many images above */
+        vkr_destroy_swap_resources();
+        vkDestroySwapchainKHR(g_vkr.device, sc, NULL);
+        g_vkr.swapchain = VK_NULL_HANDLE;
+        g_vkr.swapAcquired = false;
+        g_vkr.presentSignalled = false;
+        g_vkr.acquireWaitPending = false;
+        return false;
+    }
     g_vkr.swapAcquired = false;
     g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = false;

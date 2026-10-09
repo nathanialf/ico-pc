@@ -290,6 +290,7 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
     VkSemaphore sigSems[2];
     uint64_t sigValues[2];
     uint32_t sigCount = 0;
+    bool tookAcquire = false;
 
     if (g_vkr.acquireWaitPending) {
         /* The first submit after an acquire waits for the image.  With
@@ -306,6 +307,7 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
                                       : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         waitCount++;
         g_vkr.acquireWaitPending = false;
+        tookAcquire = true;
     }
     if (forPresent) {
         if (count == 0) {
@@ -349,6 +351,12 @@ static bool vkr_submit_batch(const VkCommandBuffer *cbs, uint32_t count, bool fo
         /* nothing will signal the value: a later wait on it (the present
          * batch's, vkr_wait_value) would never return */
         g_vkr.timelineValue--;
+        /* a failed submit other than a device loss leaves its semaphores
+         * as they were: the acquire semaphore is still signalled, and the
+         * next submit must wait on it before the next acquire reuses it */
+        if (tookAcquire && !g_vkr.deviceLost) {
+            g_vkr.acquireWaitPending = true;
+        }
         return false;
     }
     g_vkr.stats.submits++;
