@@ -654,11 +654,13 @@ static int tick(Ex *x, const char *phase, uint64_t n)
 }
 
 /* A step with no byte count (done and total 0). A stop asked in the reply
-   is not lost: the next tick asks again. */
+   is kept for the next tick, which then ends the extraction: a reply may
+   report a key press only once (Android's Back). After "finish" nothing
+   reads it, so the archive is completed. */
 static void note_phase(Ex *x, const char *phase)
 {
-    if (x->progress != NULL) {
-        (void)x->progress(x->ctx, phase, 0, 0);
+    if (x->progress != NULL && x->progress(x->ctx, phase, 0, 0) != 0) {
+        x->cancelled = 1;
     }
 }
 
