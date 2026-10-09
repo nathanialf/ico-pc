@@ -612,7 +612,18 @@ bool rd_NoDual(void);
  *                       touched.  For the host's own screens before the
  *                       game runs (the Android first start's progress,
  *                       window_host.c ico_window_progress).  false with no
- *                       device or when the replay could not run */
+ *                       device or when the replay could not run
+ * rd_SetPresentOverlayTop  package AN-T: a second callback, the top layer
+ *                       (the touch controls; NULL: none).  Called after
+ *                       fn at the same presents; its ctx is always the
+ *                       output (outW x outH the output, box the aspect's),
+ *                       never the CRT filter's grid, and its prims are
+ *                       drawn on the output at its resolution: under fn's
+ *                       prims without the filter, over the filtered
+ *                       picture with it (fn's prims are inside that
+ *                       picture).  rd_OverlayPrims as for fn.  The capture
+ *                       (rd_CapturePresented) leaves both layers out.
+ *                       rd_GetPresentOverlayTop as rd_GetPresentOverlay */
 typedef struct RdRect {
     int32_t x, y;
     uint32_t w, h;
@@ -630,6 +641,8 @@ typedef void (*RdOverlayFn)(const RdOverlayCtx *ctx, void *user);
 void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
 RdOverlayFn rd_GetPresentOverlay(void **user);
 bool rd_PresentBlank(void);
+void rd_SetPresentOverlayTop(RdOverlayFn fn, void *user);
+RdOverlayFn rd_GetPresentOverlayTop(void **user);
 void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
 

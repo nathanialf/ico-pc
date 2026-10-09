@@ -35,13 +35,22 @@ extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
 extern void gif_HostFlush(void); /* GifHost.h */
 
 /* package OV: the presenter's overlay, at every present (rd.h
-   rd_SetPresentOverlay): the popup on the output */
+   rd_SetPresentOverlay): the popup on the output (inside the picture under
+   the CRT filter) */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_TouchDrawOverlay(ctx); /* package AN-G: the touch controls, under the rest */
     ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
+}
+
+/* package AN-T: the touch controls (package AN-G) on the presenter's top
+   layer (rd.h rd_SetPresentOverlayTop): on the output at its resolution,
+   never through the CRT filter; under the HUD and the popups without it */
+static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    ui_TouchDrawOverlay(ctx);
 }
 #endif
 
@@ -95,6 +104,7 @@ void ui_HostInit(void)
 #ifdef ICO_RD
     ui__SetRecordHook(gif_HostFlush);
     rd_SetPresentOverlay(hostOverlay, NULL);
+    rd_SetPresentOverlayTop(hostOverlayTop, NULL);
 #endif
     ui_PopupSetDevTest(truthy(getenv("ICO_UI_POPUP_TEST")));
 #ifdef ICO_UI_HAVE_SDL
@@ -112,6 +122,7 @@ void ui_HostShutdown(void)
 {
 #ifdef ICO_RD
     rd_SetPresentOverlay(NULL, NULL);
+    rd_SetPresentOverlayTop(NULL, NULL);
 #endif
 #ifdef ICO_UI_HAVE_SDL
     ui_SettingsSetQuitHandler(NULL);

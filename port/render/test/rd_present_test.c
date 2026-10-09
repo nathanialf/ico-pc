@@ -57,6 +57,11 @@
  *             filter's grid (box 0, 0, 512 x 512, scale 512 / 448), and its
  *             red rectangle comes out of the filter as phosphors: in the
  *             rectangle each block's R column red, its G column dark
+ *   overlay top  package AN-T, rd_SetPresentOverlayTop without the CRT
+ *             filter at 960 x 720: both layers get the output's ctx and
+ *             draw, the top layer under the main one where they overlap;
+ *             rd__OverlayRingBytes counts both layers' batches, and a
+ *             registration and the present forget them
  *   capture   package PHOTO, rd_CapturePresented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
@@ -1951,6 +1956,104 @@ static void checkOverlayCrt(void)
     free(px);
 }
 
+/* package AN-T: the top layer (rd_SetPresentOverlayTop) without the CRT
+ * filter: one rectangle a layer, in output pixels from the box */
+typedef struct LayerTest {
+    RdOverlayCtx ctx;
+    int calls;
+    int32_t x0, y0, x1, y1;
+    uint8_t c[4];
+} LayerTest;
+
+static void layerRect(const RdOverlayCtx *ctx, void *user)
+{
+    LayerTest *t = user;
+    t->ctx = *ctx;
+    t->calls++;
+    ovRect(ctx->box.x + t->x0, ctx->box.y + t->y0, ctx->box.x + t->x1, ctx->box.y + t->y1, t->c);
+}
+
+static void checkOverlayTop(void)
+{
+    const uint32_t w = 960, h = 720;
+    uint8_t *px = malloc((size_t)w * h * 4);
+    makeNoiseScene();
+    RdSettings s = originalSettings();
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (!px || !rd_Init(512, 512, &s, NULL)) {
+        free(px);
+        return;
+    }
+    /* the main layer's red, the top layer's blue across its lower right */
+    LayerTest m = {.x0 = 100, .y0 = 50, .x1 = 140, .y1 = 71, .c = {255, 0, 0, 0x80}};
+    LayerTest t = {.x0 = 120, .y0 = 60, .x1 = 180, .y1 = 90, .c = {0, 0, 255, 0x80}};
+    /* the ring: both layers' batches counted, the counters reset by a
+     * registration */
+    const uint64_t align = rhi_Limits()->uniformAlign;
+    const uint64_t oneRect = sizeof(IcoDrawCB) + 2 * align + 16 + 2 * 6 * sizeof(IcoSpriteVertex);
+    rd__OverlayCollect(NULL, 0);
+    CHECK(rd__OverlayRingBytes() == 0, "overlay top: nothing registered, no ring");
+    rd_SetPresentOverlayTop(layerRect, &t);
+    rd__OverlayCollect(NULL, 0);
+    const uint64_t topOnly = rd__OverlayRingBytes();
+    rd_SetPresentOverlayTop(NULL, NULL);
+    CHECK(rd__OverlayRingBytes() == 0, "overlay top: a registration forgets the batches");
+    rd_SetPresentOverlay(layerRect, &m);
+    rd__OverlayCollect(NULL, 0);
+    const uint64_t mainOnly = rd__OverlayRingBytes();
+    rd_SetPresentOverlayTop(layerRect, &t);
+    rd__OverlayCollect(NULL, 0);
+    const uint64_t both = rd__OverlayRingBytes();
+    CHECK(topOnly > 0 && topOnly == mainOnly && both == mainOnly + oneRect,
+          "overlay top: the ring counts both layers (top %llu, main %llu, both %llu, a rect %llu)",
+          (unsigned long long)topOnly, (unsigned long long)mainOnly, (unsigned long long)both,
+          (unsigned long long)oneRect);
+    /* the present */
+    m.calls = t.calls = 0;
+    RdTex tex = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    recordRichFrame(tex, 1);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd_ReadPresented(px, &ow, &oh) && ow == w && oh == h;
+    CHECK(rd__OverlayRingBytes() == 0 && !rd__OverlayGridPending(),
+          "overlay top: the batches forgotten after the present");
+    rd_SetPresentOverlay(NULL, NULL);
+    rd_SetPresentOverlayTop(NULL, NULL);
+    rd_DestroyTexture(tex);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay top: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
+    CHECK(ok && m.calls == 1 && t.calls == 1, "overlay top: one call a layer (%d, %d)", m.calls,
+          t.calls);
+    CHECK(memcmp(&m.ctx, &t.ctx, sizeof(m.ctx)) == 0,
+          "overlay top: without the filter both layers have the output's ctx");
+    if (ok) {
+        RhiRect box;
+        rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+        uint32_t badMain = 0, badTop = 0, n = 0;
+        for (int32_t y = box.y + m.y0; y < box.y + t.y1; y++) {
+            for (int32_t x = box.x + m.x0; x < box.x + t.x1; x++) {
+                const uint8_t *o = &px[((size_t)y * w + (size_t)x) * 4];
+                const int inM =
+                    ovInside(x, y, box.x + m.x0, box.y + m.y0, box.x + m.x1, box.y + m.y1);
+                const int inT =
+                    ovInside(x, y, box.x + t.x0, box.y + t.y0, box.x + t.x1, box.y + t.y1);
+                if (inM) {
+                    /* the main layer over the top one where they overlap */
+                    badMain += !(o[0] == 255 && o[1] == 0 && o[2] == 0);
+                    n += inT;
+                } else if (inT) {
+                    badTop += !(o[0] == 0 && o[1] == 0 && o[2] == 255);
+                }
+            }
+        }
+        CHECK(n == 20 * 11 && badMain == 0,
+              "overlay top: %u pixels of the main red are not red (%u overlapping)", badMain, n);
+        CHECK(badTop == 0, "overlay top: %u pixels of the top layer's blue are not blue", badTop);
+    }
+    free(px);
+}
+
 /* ------------------------------------------------- capture (package PHOTO) */
 
 static uint32_t be32At(const uint8_t *p)
@@ -2392,6 +2495,7 @@ int main(int argc, char **argv)
     checkLatticeMips(1); /* as the game's materials draw it */
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
+    checkOverlayTop(); /* package AN-T */
     checkCapture(dir);
     checkEffectsDepth();
     checkBlank();

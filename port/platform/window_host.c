@@ -1143,8 +1143,8 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     static int s_cancelLogged;
     SDL_Event e;
     int cancel = 0;
-    void *prevUser = NULL;
-    RdOverlayFn prev;
+    void *prevUser = NULL, *prevTopUser = NULL;
+    RdOverlayFn prev, prevTop;
     ProgressView v;
 
     if (!s_open) {
@@ -1187,9 +1187,14 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     v.phase = phase;
     v.pct = pct;
     prev = rd_GetPresentOverlay(&prevUser);
+    /* package AN-T: the touch controls' layer off too, as when they shared
+       the overlay this replaces */
+    prevTop = rd_GetPresentOverlayTop(&prevTopUser);
     rd_SetPresentOverlay(progress_overlay, &v);
+    rd_SetPresentOverlayTop(NULL, NULL);
     rd_PresentBlank();
     rd_SetPresentOverlay(prev, prevUser);
+    rd_SetPresentOverlayTop(prevTop, prevTopUser);
     return cancel;
 }
 

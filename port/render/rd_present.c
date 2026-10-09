@@ -63,7 +63,13 @@
  * laid out on the filter's source grid and drawn into it, and rd__CrtRecord
  * draws the box from DISPLAY in place of steps 1 and 2 (no line doubling:
  * the scanlines are DISPLAY's own lines).  The filter is the present's last
- * pass: nothing draws above it.  Off, this file presents as before.
+ * pass but for the top layer below.  Off, this file presents as before.
+ *
+ * The top layer (package AN-T, rd.h rd_SetPresentOverlayTop): a second
+ * callback collected after the overlay's, always laid out on the output;
+ * its prims are drawn on the output under the overlay's without the CRT
+ * filter and over the filtered picture with it, so the touch controls stay
+ * sharp.
  */
 #include <math.h>
 #include <stdio.h>
@@ -524,18 +530,29 @@ typedef struct OverlayBatch {
 static struct {
     RdOverlayFn fn;
     void *user;
+    RdOverlayFn topFn; /* package AN-T: the top layer, on the output after the CRT filter */
+    void *topUser;
     RdDeferredTextFn textFn; /* package DEF */
     void *textUser;
-    int inside; /* in fn or textFn: rd_OverlayPrims keeps prims */
-    RhiRect sc; /* the region rd_OverlayPrims gives its batch */
-    RdOverlayCtx ctx;
+    int inside;          /* in fn or textFn: rd_OverlayPrims keeps prims */
+    RhiRect sc;          /* the region rd_OverlayPrims gives its batch */
+    RdOverlayCtx ctx;    /* the main layer's (the deferred text's too) */
+    RdOverlayCtx topCtx; /* package AN-T: the top layer's, always the output */
     RdScreenVtx *v;
     uint32_t vCount, vCap;
     OverlayBatch *b;
     uint32_t bCount, bCap;
     uint32_t textBatches; /* package DEF: b[0, textBatches) are the deferred text's */
-    int grid;             /* package CRT2: the prims are on the CRT filter's source grid */
+    uint32_t topFirst;    /* package AN-T: b[topFirst, bCount) are the top layer's,
+                           * b[textBatches, topFirst) the main layer's */
+    int grid;             /* package CRT2: the main layer is on the CRT filter's source grid */
 } s_ov;
+
+/* the batches collected for a present, forgotten together */
+static void overlayForget(void)
+{
+    s_ov.vCount = s_ov.bCount = s_ov.textBatches = s_ov.topFirst = 0;
+}
 
 /* a present's prims at most (a popup is a few hundred) */
 #define RD_OVERLAY_MAX_VERTICES (1u << 20)
@@ -544,7 +561,22 @@ void rd_SetPresentOverlay(RdOverlayFn fn, void *user)
 {
     s_ov.fn = fn;
     s_ov.user = fn ? user : NULL;
-    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    overlayForget();
+}
+
+void rd_SetPresentOverlayTop(RdOverlayFn fn, void *user)
+{
+    s_ov.topFn = fn;
+    s_ov.topUser = fn ? user : NULL;
+    overlayForget();
+}
+
+RdOverlayFn rd_GetPresentOverlayTop(void **user)
+{
+    if (user) {
+        *user = s_ov.topUser;
+    }
+    return s_ov.topFn;
 }
 
 RdOverlayFn rd_GetPresentOverlay(void **user)
@@ -575,7 +607,7 @@ void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user)
 {
     s_ov.textFn = fn;
     s_ov.textUser = fn ? user : NULL;
-    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    overlayForget();
 }
 
 bool rd_DeferredTextActive(void)
@@ -869,11 +901,12 @@ static void textCollect(const RdFrame *f, int keep)
 
 void rd__OverlayCollect(const RdFrame *f, int keep)
 {
-    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    overlayForget();
     s_ov.grid = 0;
     g_rd.deferText = false;
     uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
-    if ((!s_ov.fn && !s_ov.textFn) || !w || !h) {
+    const uint32_t outW = w, outH = h;
+    if ((!s_ov.fn && !s_ov.textFn && !s_ov.topFn) || !w || !h) {
         return;
     }
     /* the output and box rd__PresentRecord will use: both come from
@@ -884,6 +917,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     const RdPresentPreset *pr = &s_present;
     RhiRect box;
     outputBox(w, h, &box);
+    const RhiRect outBox = box;
     /* package CRT2: under the CRT filter the overlay is part of the
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
@@ -917,6 +951,22 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
         s_ov.fn(c, s_ov.user);
         s_ov.inside = 0;
     }
+    /* package AN-T: the top layer (the touch controls) last, laid out on
+     * the output in every mode, never on the grid: overlayRecord draws it
+     * on the output after the CRT filter, so it stays sharp */
+    s_ov.topFirst = s_ov.bCount;
+    if (s_ov.topFn) {
+        RdOverlayCtx *t = &s_ov.topCtx;
+        t->outW = outW;
+        t->outH = outH;
+        t->box = (RdRect){outBox.x, outBox.y, outBox.w, outBox.h};
+        t->boxScale = (float)outBox.h / 448.0f;
+        t->mirror = c->mirror;
+        s_ov.sc = (RhiRect){0, 0, outW, outH};
+        s_ov.inside = 1;
+        s_ov.topFn(t, s_ov.topUser);
+        s_ov.inside = 0;
+    }
 }
 
 uint64_t rd__OverlayRingBytes(void)
@@ -925,19 +975,20 @@ uint64_t rd__OverlayRingBytes(void)
         return 0;
     }
     const uint64_t align = rhi_Limits()->uniformAlign;
-    /* FrameCB once, a DrawCB and the expanded vertices (sprites and points
-     * give 6 a prim's 2 or 1) a batch */
-    uint64_t total = sizeof(IcoFrameCB) + 2 * align;
+    /* a FrameCB a pass (three at most: the deferred text, the main layer
+     * or the CRT filter's two grid passes, package AN-T's top layer), a
+     * DrawCB and the expanded vertices (sprites and points give 6 a prim's
+     * 2 or 1) a batch */
+    uint64_t total = 3 * ((uint64_t)sizeof(IcoFrameCB) + 2 * align);
     total += (uint64_t)s_ov.bCount * (sizeof(IcoDrawCB) + 2 * align + 16);
     total += (uint64_t)s_ov.vCount * 6 * sizeof(IcoSpriteVertex);
     return total;
 }
 
-/* a region of the overlay's own frame (ctx.outW x outH) scaled into dst,
- * rounded outwards */
-static RhiRect scaleRect(RhiRect r, const RhiRect *dst)
+/* a region of a layer's own frame (ow x oh) scaled into dst, rounded
+ * outwards */
+static RhiRect scaleRect(RhiRect r, const RhiRect *dst, uint64_t ow, uint64_t oh)
 {
-    const uint64_t ow = s_ov.ctx.outW, oh = s_ov.ctx.outH;
     if (r.x < 0) {
         r.w = (uint32_t)-r.x < r.w ? r.w + (uint32_t)r.x : 0;
         r.x = 0;
@@ -957,15 +1008,16 @@ static RhiRect scaleRect(RhiRect r, const RhiRect *dst)
     return (RhiRect){dst->x + (int32_t)x0, dst->y + (int32_t)y0, x1 - x0, y1 - y0};
 }
 
-/* batches [from, to) in one load-preserving pass on out (fmt, tw x th: the
- * output, or package CRT2's grid layer).  dst NULL: the overlay's frame is
- * out's, 1:1; else its frame is scaled into dst of out (the grid-mode
- * overlay on the output when the CRT pass could not draw it, see
+/* batches [from, to), laid out on c's frame, in one load-preserving pass
+ * on out (fmt, tw x th: the output, or package CRT2's grid layer).  dst
+ * NULL: c's frame is out's, 1:1; else it is scaled into dst of out (the
+ * grid-mode overlay on the output when the CRT pass could not draw it, see
  * overlayRecord) */
 static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t tw,
-                          uint32_t th, const RhiRect *dst, uint32_t from, uint32_t to)
+                          uint32_t th, const RdOverlayCtx *c, const RhiRect *dst, uint32_t from,
+                          uint32_t to)
 {
-    const uint32_t ow = s_ov.ctx.outW, oh = s_ov.ctx.outH;
+    const uint32_t ow = c->outW, oh = c->outH;
     if (from >= to || !ow || !oh || (!dst && (ow != tw || oh != th)) ||
         (dst && (!dst->w || !dst->h))) {
         return;
@@ -993,7 +1045,7 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
         if (memcmp(&b->sc, &cur, sizeof(cur)) != 0) {
             cur = b->sc;
             if (dst) {
-                const RhiRect sc = scaleRect(cur, dst);
+                const RhiRect sc = scaleRect(cur, dst, ow, oh);
                 rhi_CmdSetScissor(cl, &sc);
             } else {
                 rhi_CmdSetScissor(cl, &cur);
@@ -1005,44 +1057,54 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
 }
 
 static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t ow, uint32_t oh,
-                        uint32_t from, uint32_t to)
+                        const RdOverlayCtx *c, uint32_t from, uint32_t to)
 {
-    drawBatchesAt(cl, out, fmt, ow, oh, NULL, from, to);
+    drawBatchesAt(cl, out, fmt, ow, oh, c, NULL, from, to);
 }
 
 /* package DEF: the deferred text, at the insertion point */
 static void textRecord(RhiCommandList cl, RhiTexture out)
 {
     if (!s_ov.grid) {
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, 0, s_ov.textBatches);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, 0, s_ov.textBatches);
     }
 }
 
-/* the overlay on the output; under the CRT filter (package CRT2) it was
- * drawn into the filter's grid (inPicture), and this only forgets it.  A
- * grid-mode overlay the filter did not draw (rd__CrtRecord failed, or the
- * capture's pass left it out and the second pass failed) is drawn on the
- * output, its grid frame scaled into box, so the popups do not vanish */
+/* the overlay on the output.  The main layer: under the CRT filter
+ * (package CRT2) it was drawn into the filter's grid (inPicture), and this
+ * only forgets it; a grid-mode main layer the filter did not draw
+ * (rd__CrtRecord failed, or the capture's pass left it out and the second
+ * pass failed) is drawn on the output, its grid frame scaled into box, so
+ * the popups do not vanish.  Package AN-T's top layer is always on the
+ * output: under the main layer when that is on the output too (the touch
+ * controls under the HUD and the popups), over the filtered picture when
+ * the main layer is in the grid */
 static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box, bool inPicture)
 {
     if (!s_ov.grid) {
-        drawBatches(cl, out, s_outFormat, s_outW, s_outH, s_ov.textBatches, s_ov.bCount);
-    } else if (!inPicture) {
-        drawBatchesAt(cl, out, s_outFormat, s_outW, s_outH, box, s_ov.textBatches, s_ov.bCount);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount);
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, s_ov.textBatches,
+                    s_ov.topFirst);
+    } else {
+        if (!inPicture) {
+            drawBatchesAt(cl, out, s_outFormat, s_outW, s_outH, &s_ov.ctx, box, s_ov.textBatches,
+                          s_ov.topFirst);
+        }
+        drawBatches(cl, out, s_outFormat, s_outW, s_outH, &s_ov.topCtx, s_ov.topFirst, s_ov.bCount);
     }
-    s_ov.vCount = s_ov.bCount = s_ov.textBatches = 0;
+    overlayForget();
     s_ov.grid = 0;
 }
 
 bool rd__OverlayGridPending(void)
 {
-    return s_ov.grid && s_ov.bCount > s_ov.textBatches;
+    return s_ov.grid && s_ov.topFirst > s_ov.textBatches;
 }
 
 void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h)
 {
     if (s_ov.grid) {
-        drawBatches(cl, t, fmt, w, h, s_ov.textBatches, s_ov.bCount);
+        drawBatches(cl, t, fmt, w, h, &s_ov.ctx, s_ov.textBatches, s_ov.topFirst);
     }
 }
 
@@ -1267,8 +1329,9 @@ void rd__PresentRecord(RhiCommandList cl)
      * picture copies it first or blits from `src`, `box`) with
      * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
      * Keep the overlay last.  Under the CRT filter (packages CRT, CRT2) the
-     * filter is the last pass: the overlay is already inside it, and a pass
-     * here would draw over the tube.
+     * filter is the last pass but for package AN-T's top layer (the touch
+     * controls, over the tube): the main overlay is already inside it, and
+     * a pass here would draw over the tube.
      * ======================================================================= */
     /* package PHOTO: a capture takes the picture as shown, without the
      * port's own UI on the overlay (the popups, the photo HUD); under the
@@ -1311,7 +1374,8 @@ void rd__PresentShutdown(void)
     s_text.n = s_text.cap = 0;
     s_ov.v = NULL;
     s_ov.b = NULL;
-    s_ov.vCount = s_ov.vCap = s_ov.bCount = s_ov.bCap = s_ov.textBatches = 0;
+    s_ov.vCap = s_ov.bCap = 0;
+    overlayForget();
 }
 
 bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h)

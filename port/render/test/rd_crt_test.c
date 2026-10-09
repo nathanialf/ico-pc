@@ -39,6 +39,10 @@
  *             each mode as played (glow, curvature, vignette) at a 1440 x
  *             1080 box: no channel brighter than its input in the mode's
  *             linear light, the hue kept, the mask still in a white
+ *   top layer (package AN-T) rd_SetPresentOverlayTop under the scanlines:
+ *             its ctx the output, its solid quad drawn after the filter
+ *             (every pixel its flat colour), the main overlay's quad still
+ *             in the filtered picture (its rows vary)
  * Without a device, also:
  *   highlights (package C1) the CPU model of crt_ps over a flat field
  *             (rd__CrtBeam, the mask's weights and gains, rd__CrtStrengthAt,
@@ -1081,6 +1085,91 @@ static void checkLight(void)
     }
 }
 
+/* ------------------------------- the touch controls' layer (package AN-T) */
+
+/* one layer's callback: its ctx kept, one solid quad drawn at fractions
+ * of its frame (fx0, fy0)..(fx1, fy1) in colour c */
+typedef struct LayerTest {
+    RdOverlayCtx ctx;
+    int calls;
+    float fx0, fy0, fx1, fy1;
+    uint8_t c[4];
+} LayerTest;
+
+static void layerQuad(const RdOverlayCtx *ctx, void *user)
+{
+    LayerTest *t = user;
+    t->ctx = *ctx;
+    t->calls++;
+    const float w = (float)ctx->outW, h = (float)ctx->outH;
+    RdScreenVtx v[2] = {vtx((int32_t)(t->fx0 * w) * 16, (int32_t)(t->fy0 * h) * 16, t->c, 0, 0),
+                        vtx((int32_t)(t->fx1 * w) * 16, (int32_t)(t->fy1 * h) * 16, t->c, 0, 0)};
+    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+}
+
+/* the scanlines on a black frame, a grey quad on the main overlay (inside
+ * the filtered picture) and a red one on the top layer (the touch
+ * controls): the red is drawn on the output after the filter, every pixel
+ * its flat colour, while the grey's rows vary with the scanlines */
+static void checkTopLayer(void)
+{
+    const uint32_t w = 960, h = 720;
+    makeFlatScene(0, 0, 0);
+    RdSettings s = outputSettings(w, h);
+    rd_CrtSettings(&s, RD_CRT_SCANLINES, 1.0f);
+    s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    LayerTest m = {.fx0 = 0.25f, .fy0 = 0.25f, .fx1 = 0.5f, .fy1 = 0.5f, .c = {64, 64, 64, 0x80}};
+    LayerTest t = {.fx0 = 0.6f, .fy0 = 0.6f, .fx1 = 0.8f, .fy1 = 0.8f, .c = {255, 0, 0, 0x80}};
+    RhiRect b;
+    rd__PresentBox(w, h, 4.0f / 3.0f, &b);
+    rd_SetPresentOverlay(layerQuad, &m);
+    rd_SetPresentOverlayTop(layerQuad, &t);
+    const bool ok = present(&s, 0);
+    rd_SetPresentOverlay(NULL, NULL);
+    rd_SetPresentOverlayTop(NULL, NULL);
+    if (!ok) {
+        return;
+    }
+    CHECK(m.calls == 1 && t.calls == 1, "top layer: one call each (%d, %d)", m.calls, t.calls);
+    CHECK(t.ctx.outW == w && t.ctx.outH == h && t.ctx.box.x == b.x && t.ctx.box.y == b.y &&
+              t.ctx.box.w == b.w && t.ctx.box.h == b.h,
+          "top layer: its ctx is the output (%ux%u, box %d,%d %ux%u)", t.ctx.outW, t.ctx.outH,
+          t.ctx.box.x, t.ctx.box.y, t.ctx.box.w, t.ctx.box.h);
+    CHECK(m.ctx.outW != w && m.ctx.box.x == 0 && m.ctx.box.w == m.ctx.outW,
+          "top layer: the main overlay's ctx is still the grid (%ux%u)", m.ctx.outW, m.ctx.outH);
+    /* the red quad, output pixels (its own frame is the output) */
+    const uint32_t tx0 = (uint32_t)(0.6f * w), ty0 = (uint32_t)(0.6f * h);
+    const uint32_t tx1 = (uint32_t)(0.8f * w), ty1 = (uint32_t)(0.8f * h);
+    uint32_t notRed = 0;
+    for (uint32_t y = ty0; y < ty1; y++) {
+        for (uint32_t x = tx0; x < tx1; x++) {
+            const uint8_t *p = &s_out[((size_t)y * w + x) * 4];
+            notRed += !(p[0] == 255 && p[1] == 0 && p[2] == 0);
+        }
+    }
+    CHECK(notRed == 0, "top layer: %u pixels of the red quad are not its flat red (filtered?)",
+          notRed);
+    /* the grey quad: a quarter of the box from its corner, inset away from
+     * the edges' glow; each row's mean */
+    const uint32_t mx0 = (uint32_t)b.x + b.w / 4 + 8, mx1 = (uint32_t)b.x + b.w / 2 - 8;
+    const uint32_t my0 = (uint32_t)b.y + b.h / 4 + 8, my1 = (uint32_t)b.y + b.h / 2 - 8;
+    double lo = 1e9, hi = 0.0;
+    for (uint32_t y = my0; y < my1; y++) {
+        double sum = 0.0;
+        for (uint32_t x = mx0; x < mx1; x++) {
+            sum += s_out[((size_t)y * w + x) * 4];
+        }
+        const double mean = sum / (double)(mx1 - mx0);
+        lo = mean < lo ? mean : lo;
+        hi = mean > hi ? mean : hi;
+    }
+    printf("  top layer: the main overlay's grey rows %.1f .. %.1f\n", lo, hi);
+    CHECK(hi > 30.0, "top layer: the main overlay's quad is in the picture (rows up to %.1f)", hi);
+    CHECK(hi - lo > 16.0,
+          "top layer: the main overlay's quad goes through the scanlines (rows %.1f .. %.1f)", lo,
+          hi);
+}
+
 /* ------------------------------------------------------------------ main */
 
 int main(int argc, char **argv)
@@ -1107,6 +1196,7 @@ int main(int argc, char **argv)
     checkLuma();
     checkPhosphors();
     checkLight();
+    checkTopLayer(); /* package AN-T */
     if (failures) {
         printf("rd_crt_test: %d failures\n", failures);
         return 1;

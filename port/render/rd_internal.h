@@ -1294,7 +1294,9 @@ void rd__OverlayCollect(const RdFrame *f, int keep);
  * layer (t, of fmt, w x h, RENDER_TARGET) with rd__OverlayGridDraw, and the
  * present draws no overlay above the filter (unless the filter could not
  * draw: then the grid's prims are scaled into the box on the output).  rd__OverlayGridPending: there
- * are prims for the layer. */
+ * are prims for the layer.  Package AN-T: only the main layer's
+ * (rd_SetPresentOverlay); the top layer's (rd_SetPresentOverlayTop) are
+ * laid out on the output and drawn on it after the filter. */
 bool rd__OverlayGridPending(void);
 void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h);
 /* rd_present.c's blit: src (sw x sh) into box of dst, filter, x flipped */
