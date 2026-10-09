@@ -651,7 +651,8 @@ static void choose_driver(void)
     static const char *const labels[2] = {"Choose a driver file", "Quit"};
     char folder[160], why[128];
 
-    while (ico_android_message_box_buttons(s_window, k_driver_box, labels, 2, 1) == 0) {
+    /* Enter chooses a file, Escape quits */
+    while (ico_android_message_box_buttons(s_window, k_driver_box, labels, 2, 0, 1) == 0) {
         if (!ico_gpu_driver_android_choose(folder, sizeof(folder), why, sizeof(why))) {
             fprintf(stderr, "window: no graphics driver package was added: %s\n", why);
             ico_android_message_box(why, 1);

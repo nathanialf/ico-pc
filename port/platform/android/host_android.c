@@ -329,20 +329,20 @@ void ico_android_message_box(const char *text, int error)
 }
 
 int ico_android_message_box_buttons(void *window, const char *text, const char *const *labels,
-                                    int count, int quit)
+                                    int count, int enter, int quit)
 {
     SDL_MessageBoxButtonData buttons[4];
     SDL_MessageBoxData box;
     int chosen = quit;
 
     __android_log_write(ANDROID_LOG_ERROR, LOG_TAG, text);
-    if (count < 1 || count > (int)SDL_arraysize(buttons) || quit < 0 || quit >= count) {
+    if (count < 1 || count > (int)SDL_arraysize(buttons) || quit < 0 || quit >= count ||
+        enter < 0 || enter >= count) {
         return quit;
     }
     for (int i = 0; i < count; i++) {
-        buttons[i].flags = i == quit ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT |
-                                           SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT
-                                     : 0;
+        buttons[i].flags = (i == enter ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT : 0) |
+                           (i == quit ? SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT : 0);
         buttons[i].buttonID = i;
         buttons[i].text = labels[i];
     }

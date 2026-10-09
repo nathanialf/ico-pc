@@ -53,10 +53,11 @@ void ico_android_fatal_box(const char *text);
 void ico_android_message_box(const char *text, int error);
 /* The same with buttons (SDL_ShowMessageBox, error style, over the SDL
    window given, or none): labels[0..count-1] (at most 4) left to right;
-   quit is the one Enter and Escape choose.  Blocks until one is picked and
-   returns its index; quit when the box cannot be shown. */
+   enter is the one Enter chooses, quit the one Escape chooses.  Blocks
+   until one is picked and returns its index; quit when the box cannot be
+   shown. */
 int ico_android_message_box_buttons(void *window, const char *text, const char *const *labels,
-                                    int count, int quit);
+                                    int count, int enter, int quit);
 
 /* Vibrates the phone (IcoActivity.vibrate) at amplitude 1 to 255 for ms
    milliseconds; amplitude 0 stops it. Must be called on SDL's main thread
