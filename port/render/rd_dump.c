@@ -33,6 +33,9 @@
  *   slots start one later; an older dump's temps start at low half 17)
  *   (version 8: RD_TARGET_DISPLAY_HELD appended, the same again; a
  *   version 6 or 7 dump's temps start at low half 18)
+ *   (RDC_MESH's b[4], RD_VU_VIEW_*, rd_mesh.h: 0 in the dumps from before
+ *   it, which the interpolation takes for a part placed through the view,
+ *   as it always did; the version is unchanged)
  *   u32      VU mesh count (from version 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list

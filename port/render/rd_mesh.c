@@ -1267,6 +1267,9 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
         pushVu(d->bones ? RDC_SKINNED : RDC_MESH, key, &p, &d->vu, d->bones, NULL, d->materials);
     if (c) {
         c->u[0] = mesh.id;
+        /* b[4]: RD_VU_VIEW_*, how the model matrices follow the camera
+         * (rd_interp.c's re-base); 0 in older dumps */
+        c->b[4] = d->bones ? 0 : d->view;
     }
 }
 

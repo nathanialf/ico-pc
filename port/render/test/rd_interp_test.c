@@ -90,6 +90,17 @@
  *             dumps' blocks) each stay at their place
  *   grid STs  a grid sampling a target blends its STs half way; a grid
  *             with an image keeps the tick's
+ *   locked    the camera backs away 60 units and turns 8 degrees in the
+ *             tick: at alpha 0.25 and 0.5 a part locked to the camera (node
+ *             flag 2, RD_VU_VIEW_LOCKED: the 500 unit screen times its place
+ *             in view space, as reg_setMMatrixPacket builds it), matched or
+ *             the tick's alone, stays where the tick put it on the screen;
+ *             a billboard (node flag 4, RD_VU_VIEW_FACING), matched or the
+ *             tick's alone, is where the blended camera sees its world
+ *             point and faces that camera (no turn about the view's axes);
+ *             the same locked part of the tick alone recorded as a world
+ *             object (the re-base before node flags reached it) is carried
+ *             behind the eye or off the screen
  */
 #include <math.h>
 #include <stdio.h>
@@ -1977,6 +1988,208 @@ static void testCameraBlend(void)
           "still camera: nothing re-based, the unmatched mesh is the tick's (%u)", st->rebased);
 }
 
+/* ------------------------------------------- parts that follow the camera */
+
+static const char kObjLk;
+
+/* a prelit draw of mesh with the common block of the camera v (world to
+ * screen q v, the inverse view), the model matrices m16 (qw 16..19 and
+ * 20..23) and m24, view RD_VU_VIEW_* */
+static void lockDraw(RdMesh mesh, const double *q, const double *v, const double *m16,
+                     const double *m24, uint8_t view, RdKey key)
+{
+    double s[16], iv[16];
+    mul4(q, v, s);
+    memset(iv, 0, sizeof(iv));
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            iv[c * 4 + r] = v[r * 4 + c];
+        }
+    }
+    for (int r = 0; r < 3; r++) {
+        iv[12 + r] = -(iv[r] * v[12] + iv[4 + r] * v[13] + iv[8 + r] * v[14]);
+    }
+    iv[15] = 1.0;
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    d.clip = RD_VU_CLIP_NONE;
+    d.view = view;
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
+            d.vu.mem[12 + c][r] = (float)iv[c * 4 + r];
+            d.vu.mem[16 + c][r] = (float)m16[c * 4 + r];
+            d.vu.mem[20 + c][r] = (float)m16[c * 4 + r];
+            d.vu.mem[24 + c][r] = (float)m24[c * 4 + r];
+        }
+    }
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+#define LOCK_ZOOM 512.0 /* the screen matrix's focal length (GsBase.c vs[0]) */
+
+static const double kLockPlace[2][3] = {{10.0, 0.0, 30.0}, {-15.0, 5.0, 20.0}}; /* view space */
+
+static const double kLockWorld[2][3] = {{100.0, 0.0, 300.0}, {-80.0, 20.0, 250.0}}; /* world */
+
+/* the two ticks' cameras: the eye backs away 60 units, the view turns 8
+ * degrees (under the cut thresholds, RD_INTERP_CAMERA_MOVE and _TURN) */
+static void lockCamera(double t, double *v)
+{
+    const double eye[3] = {0.0, 0.0, -60.0 * t};
+    s6View(8.0 * t, eye, v);
+}
+
+/* the screen matrix at focal length f (s6Proj's) */
+static void lockProj(double f, double *p)
+{
+    const double keep = s6Focal;
+    s6Focal = f;
+    s6Proj(p);
+    s6Focal = keep;
+}
+
+/* a billboard at the world point o seen through v: q T(v o) x 20 */
+static void lockBillboard(const double *q, const double *v, const double o[3], double *m16,
+                          double *x)
+{
+    double vo[3];
+    for (int r = 0; r < 3; r++) {
+        vo[r] = v[r] * o[0] + v[4 + r] * o[1] + v[8 + r] * o[2] + v[12 + r];
+    }
+    s6Translate(x, vo[0], vo[1], vo[2]);
+    x[0] = x[5] = x[10] = 20.0;
+    mul4(q, x, m16);
+}
+
+/* tick k (0, 1): the locked part (part 0) and the billboard (part 1) in
+ * both ticks; in tick 1 a second locked part (2) and billboard (3) of that
+ * tick only, and the first locked part again recorded as a world object of
+ * that tick only (part 4: a matched pair of it would land within a fraction
+ * of a pixel, the two ticks' errors cancelling in the blend; the tick's
+ * alone is cur's object through the blended camera) */
+static void lockFrame(RdMesh mesh, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], f[16];
+    lockCamera((double)k, v);
+    lockProj(LOCK_ZOOM, q);
+    lockProj(500.0, f); /* +0x640: the 500 unit screen */
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    double l[16], m[16], x[16], stale[16];
+    s6Translate(stale, 0.0, 0.0, 0.0); /* +0x80 x +0x40, another draw's */
+    for (int n = 0; n < (k ? 2 : 1); n++) {
+        s6Translate(l, kLockPlace[n][0], kLockPlace[n][1], kLockPlace[n][2]);
+        mul4(f, l, m);
+        lockDraw(mesh, q, v, m, stale, RD_VU_VIEW_LOCKED, RD_KEY(&kObjLk, n * 2, 0));
+        if (n == 0 && k) {
+            lockDraw(mesh, q, v, m, stale, RD_VU_VIEW_WORLD, RD_KEY(&kObjLk, 4, 0));
+        }
+        lockBillboard(q, v, kLockWorld[n], m, x);
+        lockDraw(mesh, q, v, m, x, RD_VU_VIEW_FACING, RD_KEY(&kObjLk, n * 2 + 1, 0));
+    }
+    rd_end_frame(0);
+}
+
+/* the model origin through a block's qw 16..19: GS X, Y and w */
+static void lockOrigin(const float (*m)[4], double out[3])
+{
+    const float *c = m[19];
+    out[0] = c[0] / c[3];
+    out[1] = c[1] / c[3];
+    out[2] = c[3];
+}
+
+/* a billboard's turn about the view's y axis in degrees: its x axis (qw 16)
+ * through the screen matrix q of focal length f is (f x + 2048 z, 0, z, z) */
+static double lockTilt(const float (*m)[4], double f)
+{
+    const double z = m[16][3], x = (m[16][0] - 2048.0 * z) / f;
+    return atan2(z, x) * 180.0 / 3.14159265358979323846;
+}
+
+static void testCameraLocked(void)
+{
+    RdMesh mesh = makeMesh();
+    double f[16], q[16];
+    lockProj(500.0, f);
+    lockProj(LOCK_ZOOM, q);
+    static const float kAlphas[2] = {0.25f, 0.5f};
+    for (int a = 0; a < 2; a++) {
+        const float t = kAlphas[a];
+        lockFrame(mesh, 0);
+        lockFrame(mesh, 1);
+        const RdInterpStats *st = build(t, 1);
+        CHECK(st->snap == RD_SNAP_NONE, "locked %.2f: the pair blends (snap %u)", (double)t,
+              st->snap);
+        const RdFrame *o = built(t);
+        double vt[16];
+        lockCamera((double)t, vt); /* the blended camera: the turn and the eye's step at t */
+        for (int n = 0; n < 2; n++) {
+            /* the locked part: where the tick put it */
+            const float (*m)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, n * 2, 0), 0));
+            double l[16], fl[16], want[2], got[3];
+            s6Translate(l, kLockPlace[n][0], kLockPlace[n][1], kLockPlace[n][2]);
+            mul4(f, l, fl);
+            s6Project(fl, (const double[3]){0.0, 0.0, 0.0}, want);
+            if (m) {
+                lockOrigin(m, got);
+                CHECK(got[2] > 0.0 && hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
+                      "locked %.2f: the %s part at the tick's place on the screen (%.3f, %.3f; "
+                      "want %.3f, %.3f; w %.2f)",
+                      (double)t, n ? "tick's own" : "matched", got[0], got[1], want[0], want[1],
+                      got[2]);
+            } else {
+                CHECK(0, "locked %.2f: locked part %d drawn", (double)t, n);
+            }
+            /* the billboard: its world point through the blended camera,
+             * facing that camera */
+            const float (*b)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, n * 2 + 1, 0), 0));
+            double qv[16], wp[2];
+            mul4(q, vt, qv);
+            s6Project(qv, kLockWorld[n], wp);
+            if (b) {
+                lockOrigin(b, got);
+                const double tilt = lockTilt(b, LOCK_ZOOM);
+                CHECK(hypot(got[0] - wp[0], got[1] - wp[1]) < 0.01 && fabs(tilt) < 1e-3,
+                      "locked %.2f: the %s billboard at its world point (%.3f, want %.3f) facing "
+                      "the blended camera (turned %.4f degrees)",
+                      (double)t, n ? "tick's own" : "matched", got[0], wp[0], tilt);
+            } else {
+                CHECK(0, "locked %.2f: billboard %d drawn", (double)t, n);
+            }
+        }
+        /* the same locked part, the tick's alone, taken for a world object
+         * is carried with the blended camera: behind the eye at 0.25 (w
+         * -14), at GS X 6224 at 0.5 */
+        const float (*w)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, 4, 0), 0));
+        if (w) {
+            double l[16], fl[16], want[2], got[3];
+            s6Translate(l, kLockPlace[0][0], kLockPlace[0][1], kLockPlace[0][2]);
+            mul4(f, l, fl);
+            s6Project(fl, (const double[3]){0.0, 0.0, 0.0}, want);
+            lockOrigin(w, got);
+            CHECK(!(got[2] > 0.0) || hypot(got[0] - want[0], got[1] - want[1]) > 5.0,
+                  "locked %.2f: as a world object the part leaves its place (%.3f, w %.2f; the "
+                  "tick's %.3f)",
+                  (double)t, got[0], got[2], want[0]);
+        } else {
+            CHECK(0, "locked %.2f: the world copy drawn", (double)t);
+        }
+    }
+}
+
 /* ------------------------------------------------------------ photo mode */
 
 /* A paused photo tick as the game records it (port/game/photo_view.c):
@@ -3194,6 +3407,7 @@ static void runCpu(void)
     testRotationBlend();
     testRotationDraws();
     testCameraBlend();
+    testCameraLocked();
     testPhoto();
     testPresentClock();
     testSprites();

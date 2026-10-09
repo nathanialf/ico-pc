@@ -952,7 +952,19 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
  * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
  * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space
  * (unmatched, the fade or half-way switch, unmatchedPass); draws under
- * another camera (a reflection's) keep the element-wise blend. */
+ * another camera (a reflection's) keep the element-wise blend.
+ *
+ * Two kinds of part carry the frame's camera block but are not placed
+ * through the view (RdVuDraw.view, the command's b[4], from the game's node
+ * flags; reg_setMMatrixPacket): a part locked to the camera (flag 2, its
+ * model matrices the 500 unit screen times its place in view space) is
+ * already where the camera puts it, so only its camera block is re-based
+ * and its model matrices stay the ticks' (moving it as a world object
+ * would carry it across the screen, or behind the eye, with every step of
+ * the blended camera); a billboard (flag 4, the screen matrix times a
+ * matrix whose rotation is the view's) keeps its rotation in view space and
+ * moves only its place, the world point, onto the blended camera, so it
+ * faces that camera (camRebase's view). */
 static bool isNormalProg(uint8_t prog);
 static uint8_t *outPayload(const RdCmd *c);
 
@@ -1096,13 +1108,30 @@ static int camModelMats(uint8_t type, uint8_t prog)
     return type == RDC_GRID || type == RDC_PARTICLES ? 1 : 0;
 }
 
-/* m (a VU block, 36 qw) re-based from its tick's view onto Vt by e (Vp^-1 Vt
- * or Vc^-1 Vt); false (m untouched) when a matrix is singular or the result
- * is not finite */
-static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
+/* The view a VU draw's model matrices are built in (rd_mesh.h
+ * RD_VU_VIEW_*): only a normal program's mesh has one */
+static int vuView(const RdCmd *c)
+{
+    if (c->type != RDC_MESH || !isNormalProg(c->b[0]) || c->b[4] > RD_VU_VIEW_FACING) {
+        return RD_VU_VIEW_WORLD;
+    }
+    return c->b[4];
+}
+
+/* m (a VU block, 36 qw) re-based from its tick's view v onto Vt by e (v^-1
+ * Vt: Vp^-1 Vt or Vc^-1 Vt), its model matrices by their view (vuView):
+ * through the view, as the world seen by Vt; locked to the camera, kept;
+ * facing the camera, the place moved as a world point and the rotation
+ * kept in view space; false (m untouched) when a matrix is singular or the
+ * result is not finite */
+static bool camRebase(float (*m)[4], const double *e, int mats, const double *l, const double *v,
+                      int view)
 {
     double s[16], is[16], se[16], w[16], iw[16], k[16], tmp[16], x[16];
     float out[16][4];
+    if (view == RD_VU_VIEW_LOCKED) {
+        mats = 0;
+    }
     loadQw4(m, 4, s);
     mul4d(s, e, se);
     if (l) {
@@ -1121,7 +1150,39 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
         if (!invert4d(w, iw)) {
             return false;
         }
-        mul4d(iw, e, tmp);
+        double eb[16];
+        const double *ek = e;
+        if (view == RD_VU_VIEW_FACING) {
+            /* X = v W, the billboard in view space: its place p moves by D p
+             * - p (D = v e v^-1 = Vt v^-1, the view-space step to the blended
+             * camera), its rotation stays; E_b = v^-1 T(D p - p) v */
+            double iv[16], vw[16], d[16], tr[16];
+            if (!invert4d(v, iv)) {
+                return false;
+            }
+            mul4d(v, w, vw);
+            if (!(fabs(vw[15]) > 1e-12)) {
+                return false;
+            }
+            mul4d(v, e, tmp);
+            mul4d(tmp, iv, d);
+            double pv[3], dp[3];
+            for (int r = 0; r < 3; r++) {
+                pv[r] = vw[12 + r] / vw[15];
+            }
+            for (int r = 0; r < 3; r++) {
+                dp[r] = d[r] * pv[0] + d[4 + r] * pv[1] + d[8 + r] * pv[2] + d[12 + r];
+            }
+            memset(tr, 0, sizeof(tr));
+            tr[0] = tr[5] = tr[10] = tr[15] = 1.0;
+            for (int r = 0; r < 3; r++) {
+                tr[12 + r] = dp[r] - pv[r];
+            }
+            mul4d(iv, tr, tmp);
+            mul4d(tmp, v, eb);
+            ek = eb;
+        }
+        mul4d(iw, ek, tmp);
         mul4d(tmp, w, k); /* W^-1 E W */
     }
     float model[12][4];
@@ -1186,8 +1247,9 @@ static void camCurDraw(RdCmd *c)
     }
     float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
     const int how = camOf((const float (*)[4])vo, s_cam.vc, s_cam.pc);
-    if (how != CAM_NONE && camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
-                                     how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL)) {
+    if (how != CAM_NONE &&
+        camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
+                  how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL, s_cam.vc, vuView(c))) {
         s_rebased++;
         s_rebasedCur++;
     }
@@ -1638,7 +1700,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     /* the program must match; the MSCAL code and clip mode (b[1], b[2])
      * change when a part crosses the edge of the screen (REGION against
      * SCISSOR, reg_clipPacketBoundingBox) and say nothing about the data */
-    if (pc->b[0] != cc->b[0] ||
+    if (pc->b[0] != cc->b[0] || vuView(pc) != vuView(cc) ||
         (rd__s2_legacy() && (pc->b[1] != cc->b[1] || pc->b[2] != cc->b[2]))) {
         return mismatch(RD_MISMATCH_STATE);
     }
@@ -1671,7 +1733,9 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     /* the jump tests, on cur's data before it is blended */
     switch (cc->type) {
     case RDC_MESH:
-        if (isNormalProg(cc->b[0]) && worldJump(vp, (const float (*)[4])vc)) {
+        /* a part locked to the camera has no place in the world */
+        if (isNormalProg(cc->b[0]) && vuView(cc) != RD_VU_VIEW_LOCKED &&
+            worldJump(vp, (const float (*)[4])vc)) {
             return R_JUMP;
         }
         break;
@@ -1701,7 +1765,9 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         memcpy(vpr, vp, sizeof(vpr));
         memcpy(vcr, vc, sizeof(vcr));
         /* the projections blend with the block (linear in them) */
-        if (camRebase(vpr, s_cam.ep, mats, NULL) && camRebase(vcr, s_cam.ec, mats, NULL)) {
+        const int view = vuView(cc);
+        if (camRebase(vpr, s_cam.ep, mats, NULL, s_cam.vp, view) &&
+            camRebase(vcr, s_cam.ec, mats, NULL, s_cam.vc, view)) {
             memcpy(vc, vcr, sizeof(vc));
             memcpy(vo[4], vc[4], 24 * sizeof(vo[0])); /* qw 4..27 */
             vp = (const float (*)[4])vpr;

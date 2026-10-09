@@ -83,7 +83,8 @@ typedef enum RdCmdType {
     RDC_COPY,        /* u[0] src target, u[1] dst target, u[2] payload offset of RdCopyRec */
     /* the VU draws, the world prims (recorded only: replay calls
      * rd__not_implemented), the shadow count and the post records */
-    RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size */
+    RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size,
+                       * b[4] RD_VU_VIEW_* (rd_mesh.h; 0 in older dumps) */
     RDC_SKINNED,      /* same, plus bones in the payload */
     RDC_GRID,         /* u[1] payload offset, u[2] size */
     RDC_PARTICLES,    /* u[1] payload offset, u[2] size */

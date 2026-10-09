@@ -63,11 +63,28 @@ static PObjGroup *regKeyGrp;
 
 static int regKeyIdx;
 
+/* RdVuDraw.view of the part's draws (rd_mesh.h RD_VU_VIEW_*) */
+static unsigned char regKeyView;
+
 static void regKeyPart(Sub15C *o, PObjGroup *grp, int part)
 {
     regKeyObj = o;
     regKeyGrp = grp;
     regKeyIdx = part;
+    regKeyView = RD_VU_VIEW_WORLD;
+}
+
+/* regKeyPart for the walks after reg_setMMatrixPacket(o, node), which
+   builds a node with flag 2 in the camera's space and one with flag 4
+   facing the camera, flag 2 first */
+static void regKeyPartM(Sub15C *o, PObjGroup *grp, int node)
+{
+    regKeyPart(o, grp, node);
+    if ((o->nodes[node].flags.ll & 2) != 0) {
+        regKeyView = RD_VU_VIEW_LOCKED;
+    } else if ((o->nodes[node].flags.ll & 4) != 0) {
+        regKeyView = RD_VU_VIEW_FACING;
+    }
 }
 
 static int regKeyOrdinal(PacHeader *pk)
@@ -169,6 +186,7 @@ static void regHostMesh(PacHeader *pk, int pass)
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
     if (rd_vu_draw_from_state(&d)) {
+        d.view = regKeyView;
         rd_draw_vu_mesh(m, &d,
                         n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
                                : RD_KEY(pk, rd_current_list(), d.code));
@@ -1194,7 +1212,7 @@ static void reg_dispMObj(Sub15C *o)
                 pkt = grp->packets;
             }
 #ifdef ICO_RD
-            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+            regKeyPartM(o, grp, i); /* R7d: the draws' keys */
 #endif
             while (pkt != 0) {
                 r = reg_clipPacketBoundingBox(pkt);
@@ -1285,7 +1303,7 @@ static void reg_dispSObj(Sub15C *o, int idx)
             }
         }
 #ifdef ICO_RD
-        regKeyPart(o, grp, idx); /* R7d: the draws' keys */
+        regKeyPartM(o, grp, idx); /* R7d: the draws' keys */
 #endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
@@ -2135,7 +2153,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
             pkt = grp->packets;
         }
 #ifdef ICO_RD
-        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+        regKeyPartM(o, grp, i); /* R7d: the draws' keys */
 #endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
