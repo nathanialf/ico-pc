@@ -11,9 +11,13 @@
  *                               the libpad port. SDL_INIT_GAMEPAD must be on.
  *   ico_input_sdl_event(e)      one SDL event (keys, mouse, gamepad hotplug,
  *                               focus loss clears everything held)
- *   ico_input_sdl_set_capture(on)  the mouse is captured (relative mode):
- *                               its motion drives the right stick; off, the
- *                               stick decays to centre
+ *   ico_input_sdl_set_capture(mode)  ICO_CAPTURE_* (mouse_look.h): the
+ *                               window has the pointer captured (relative
+ *                               mode) in STICK (play: the motion is the
+ *                               right stick) and DELTA (photo mode: the
+ *                               motion goes to ico_mouse_look_add); OFF
+ *                               drops it. A change starts the look from
+ *                               centre.
  *   ico_input_sdl_update()      once per vsync: snapshot -> bindings ->
  *                               virtual pad; rumble to the gamepads
  *   ico_input_sdl_shutdown()
@@ -42,7 +46,7 @@
 
 void ico_input_sdl_init(const char *config_path);
 void ico_input_sdl_event(const SDL_Event *e);
-void ico_input_sdl_set_capture(int on);
+void ico_input_sdl_set_capture(int mode);
 void ico_input_sdl_update(void);
 void ico_input_sdl_shutdown(void);
 void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh);

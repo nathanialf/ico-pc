@@ -146,6 +146,15 @@ void ico_photo_set_left(int left);
    the pad asks to leave (Triangle, Circle, Start pressed), else 0.  Does
    nothing (0) while inactive. */
 int ico_photo_update(const IcoPhotoPad *pad);
+/* I17a (issue 17): the mouse's look for this tick, degrees, signed as its
+   stick pushed right and up: the free camera's fyaw and fpitch (turns
+   right, looks up), the orbit camera's yaw and pitch (the eye goes right
+   and rises), each with its stick's limit on the pitch, the
+   step kept within ico_photo_update's per-tick turn. The photo screen
+   (port/ui/photo_ui.c) calls it before ico_photo_update with the motion
+   the window captured, mirror and the mouse's invert already applied.
+   Nothing while inactive. */
+void ico_photo_mouse_look(float yawDeg, float pitchDeg);
 /* The ticks a second ico_photo_update assumes (25: PAL's frame step 2). */
 void ico_photo_set_tick_hz(int hz);
 /* The camera override for the game camera game: its view orbited (orbit)

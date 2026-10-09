@@ -489,4 +489,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
     [UI_STR_QUIT_GAME] = "Spiel beenden",
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
+    /* v0.4.3 I17a */
+    [UI_STR_OPT_MOUSE_INVERT] = "Maus: oben/unten umkehren",
 };

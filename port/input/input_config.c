@@ -17,9 +17,10 @@
 #include "options.h"
 
 static const char *const scalar_keys[] = {
-    "keyboard",       "mouse",      "gamepad",           "rumble",
-    "deadzone",       "walk_scale", "mouse_sensitivity", "mouse_decay",
-    "mouse_invert_y", "touch_mode", "touch_size",        "touch_opacity"};
+    "keyboard",       "mouse",        "gamepad",           "rumble",
+    "deadzone",       "walk_scale",   "mouse_sensitivity", "mouse_decay",
+    "mouse_invert_y", "mouse_camera", "mouse_hold",        "touch_mode",
+    "touch_size",     "touch_opacity"};
 
 static const char *const dev_prefix[3] = {"kb.", "mouse.", "pad."};
 
@@ -234,6 +235,29 @@ int ico_input_write_bindings(const IcoBindings *b)
     if (b->mouse_sens != def.mouse_sens ||
         ico_config_get_string("input.mouse_sensitivity", NULL) != NULL) {
         if (ico_config_set_float("input.mouse_sensitivity", b->mouse_sens) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    /* I17a: the Mouse camera and Invert mouse up/down rows, and the hold
+       (config only) */
+    if (b->mouse_camera != def.mouse_camera ||
+        ico_config_get_string("input.mouse_camera", NULL) != NULL) {
+        if (ico_config_set_bool("input.mouse_camera", b->mouse_camera != 0) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->mouse_invert_y != def.mouse_invert_y ||
+        ico_config_get_string("input.mouse_invert_y", NULL) != NULL) {
+        if (ico_config_set_bool("input.mouse_invert_y", b->mouse_invert_y != 0) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->mouse_hold != def.mouse_hold ||
+        ico_config_get_string("input.mouse_hold", NULL) != NULL) {
+        if (ico_config_set_float("input.mouse_hold", b->mouse_hold) != 0) {
             return -1;
         }
         n++;

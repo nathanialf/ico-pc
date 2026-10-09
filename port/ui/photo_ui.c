@@ -10,8 +10,11 @@
 #include <string.h>
 
 #include "font.h"
+#include "input.h" /* I17a: the mouse's sensitivity and invert */
 #include "layout_ext.h"
 #include "menu_font.h"
+#include "mouse_look.h"
+#include "options.h" /* ico_opt_mirror */
 #include "photo_mode.h"
 #include "popup.h"
 #include "settings.h"
@@ -19,13 +22,15 @@
 #include "ui_list.h" /* ui_SettingsAddRow */
 
 #ifdef ICO_RD
-#include "input.h"
 #include "rd.h"
 #include "ui_internal.h" /* ui__DrawTexQuads */
 
 /* seki/src/Texture.c: the rd texture of a texture table entry (0: none) */
 extern unsigned int tex_HostTextureId(int idx);
 #endif
+
+/* I17a: the photo camera's degrees per mouse count at sensitivity 1 */
+#define PHOTO_MOUSE_DEG 0.08f
 
 /* the game's side */
 extern PadState pad[16];
@@ -101,6 +106,11 @@ static int photoProc(int first, int item)
         }
         ico_photo_enter();
     }
+    /* I17a: the mouse's motion since the last tick (the window captures it
+       while photo mode is open), taken every tick and dropped while the
+       screen fades */
+    float mdx, mdy;
+    const int moved = ico_mouse_look_take(&mdx, &mdy);
     if (lt_fade_status() != 2) {
         return -1;
     }
@@ -110,6 +120,15 @@ static int photoProc(int first, int item)
     memcpy(p.ana, pad[0].ana, sizeof(p.ana));
     if (!ico_photo_active()) {
         ico_photo_enter(); /* came back without a first call (a reset) */
+    }
+    if (moved) {
+        /* right turns right and up looks up, as the stick; the picture
+           mirrored, so is the turn (the stick's x is negated the same way,
+           ico_input_mirror); the mouse's own invert */
+        const IcoBindings *b = ico_input_live_bindings();
+        const float k = PHOTO_MOUSE_DEG * (b->mouse_sens > 0.0f ? b->mouse_sens : 1.0f);
+        ico_photo_mouse_look((ico_opt_mirror() ? -mdx : mdx) * k,
+                             (b->mouse_invert_y ? mdy : -mdy) * k);
     }
     if (ico_photo_update(&p)) {
         ico_photo_exit();

@@ -487,4 +487,6 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "No hay espacio suficiente para este controlador.",
     [UI_STR_QUIT_GAME] = "Salir del juego",
     [UI_STR_QUIT_GAME_CONFIRM] = "¿Salir del juego?",
+    /* v0.4.3 I17a */
+    [UI_STR_OPT_MOUSE_INVERT] = "Ratón: invertir arriba/abajo",
 };

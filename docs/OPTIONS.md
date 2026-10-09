@@ -119,7 +119,14 @@ A change takes effect the next time you start the game.
 ## Controls
 
 - **Remap controls** lets you change which button or key does what.
-- **Mouse sensitivity** is how fast the mouse turns the camera.
+- **Mouse camera** lets the mouse move the camera while you play, with
+  the pointer hidden. It is on unless you turn it off. When you keep the
+  mouse still, the camera swings back behind Ico.
+  [More about the mouse camera](CONTROLS.md#look-around-with-the-mouse).
+- **Mouse sensitivity** is how fast the mouse turns the camera, in play and
+  in photo mode.
+- **Invert mouse up/down** swaps up and down for the mouse. The three
+  mouse rows do not show on phones and tablets.
 - **Circle goes back** makes Circle leave menus, like Triangle.
 - **Touch controls, Touch size and Touch opacity** set up the buttons on a
   touch screen. They only show up on a device with one.

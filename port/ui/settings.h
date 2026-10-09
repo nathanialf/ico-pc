@@ -238,9 +238,11 @@ typedef enum UiSettingsOpt {
     UI_OPT_DEVICE,  /* [audio] device: Default or a device name (audio_host.h) */
     /* Controls */
     UI_OPT_MOUSE_SENS,
-    UI_OPT_CIRCLE_BACK, /* [game] circle_back (Q2) */
-    UI_OPT_VIBRATION,   /* S1: the game's iosPadActRequestEnable */
-    UI_OPT_HOLD_TYPE,   /* S1: the game's optionControlType, A 0 or B 1 */
+    UI_OPT_MOUSE_CAMERA, /* v0.4.3 I17a: [input] mouse_camera, On/Off; not on Android */
+    UI_OPT_MOUSE_INVERT, /* v0.4.3 I17a: [input] mouse_invert_y, On/Off; not on Android */
+    UI_OPT_CIRCLE_BACK,  /* [game] circle_back (Q2) */
+    UI_OPT_VIBRATION,    /* S1: the game's iosPadActRequestEnable */
+    UI_OPT_HOLD_TYPE,    /* S1: the game's optionControlType, A 0 or B 1 */
     /* AN-G: the touch overlay ([input] touch_*), shown with a touch screen */
     UI_OPT_TOUCH_MODE,    /* Off, Auto, Always */
     UI_OPT_TOUCH_SIZE,    /* Small, Medium, Large */

@@ -489,4 +489,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "Pas assez d'espace pour ajouter ce pilote.",
     [UI_STR_QUIT_GAME] = "Quitter le jeu",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quitter le jeu ?",
+    /* v0.4.3 I17a */
+    [UI_STR_OPT_MOUSE_INVERT] = "Souris : inverser haut/bas",
 };

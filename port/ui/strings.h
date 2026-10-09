@@ -555,6 +555,9 @@ typedef enum UiStrId {
     UI_STR_GPU_DRIVER_NOSPACE,
     UI_STR_QUIT_GAME,
     UI_STR_QUIT_GAME_CONFIRM,
+    /* v0.4.3 I17a: Controls > Invert mouse up/down (the mouse camera's
+       up and down swapped, in play and in photo mode) */
+    UI_STR_OPT_MOUSE_INVERT,
     UI_STR_COUNT
 } UiStrId;
 

@@ -17,8 +17,11 @@
 #include "host_fs.h"
 #include "host_loop.h"
 #include "hotkeys.h"
+#include "ico_credits.h"
+#include "input.h"
 #include "input_record.h"
 #include "input_sdl.h"
+#include "mouse_look.h"
 #include "options.h"
 #include "pace_policy.h"
 #include "photo_mode.h"
@@ -63,15 +66,22 @@ _Static_assert(SDL_EVENT_TERMINATING == ICO_SDL_EVENT_TERMINATING &&
 /* Package Q1: F12's dump (port/render/rd_dump.c; rd.h is outside this
    package, so it is declared here) */
 bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
-/* The game's state the mouse capture follows (common/include/main.h): the
-   boy exists in a stage, and the game is neither paused nor loading. */
+/* The game's state the mouse capture follows (I17a, mouse_look.h
+   ico_mouse_capture_rule): the boy, the stage (common/include/main.h), the
+   layout in front (layout_texture.c), the pause (systemStatus[5]: the
+   pause menu and the title procs set it; game_pause is not 0 while a
+   stage runs, so it cannot gate play), loading and a movie
+   (StageManager.c). */
 extern void *boyGObj;
-extern int game_pause;
 extern int data_loading;
+extern int stage_no;
+extern int current_layout_id;
+extern int systemStatus[12];
+extern int mpegPlay;
 
 static SDL_Window *s_window;
 
-static int s_captured;
+static int s_captured; /* ICO_CAPTURE_* (mouse_look.h) */
 
 static Uint64 s_deadline;
 
@@ -749,19 +759,45 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     return 0;
 }
 
-static void set_capture(int want)
+/* I17a: mode is ICO_CAPTURE_* (mouse_look.h): STICK and DELTA hide and
+   hold the pointer (relative mode), OFF frees it; the device layer routes
+   the motion by mode */
+static void set_capture(int mode)
 {
 #ifdef __ANDROID__
     /* package AN-D: no mouse to capture; touches and pads drive the
        camera */
-    want = 0;
+    mode = ICO_CAPTURE_OFF;
 #endif
-    if (want == s_captured) {
+    if (mode == s_captured) {
         return;
     }
-    s_captured = want;
-    SDL_SetWindowRelativeMouseMode(s_window, want != 0);
-    ico_input_sdl_set_capture(want);
+    if ((mode != ICO_CAPTURE_OFF) != (s_captured != ICO_CAPTURE_OFF)) {
+        SDL_SetWindowRelativeMouseMode(s_window, mode != ICO_CAPTURE_OFF);
+    }
+    s_captured = mode;
+    ico_input_sdl_set_capture(mode);
+}
+
+/* I17a: the game's state for the capture rule, once a pump */
+static int capture_mode(void)
+{
+    const IcoBindings *b = ico_input_live_bindings();
+    IcoCaptureState c;
+
+    memset(&c, 0, sizeof(c));
+    c.focus = (SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+    c.look = b->mouse_on && b->mouse_camera;
+    c.photo = ico_photo_active();
+    c.boy = boyGObj != NULL;
+    c.stage = stage_no;
+    c.layout = current_layout_id;
+    c.paused = systemStatus[5] != 0;
+    c.loading = data_loading != 0;
+    c.movie = mpegPlay != 0;
+    c.viewer = ico_mv_active != 0;
+    c.credits = ico_credits_active();
+    return ico_mouse_capture_rule(&c);
 }
 
 static void toggle_fullscreen(void)
@@ -1041,9 +1077,8 @@ int ico_window_pump(void)
         s_pres.cutSerial = ico_video_cut_serial();
         rd_CameraCut();
     }
-    photo_pump(); /* package PHOTO */
-    set_capture((SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0 && boyGObj != NULL &&
-                game_pause == 0 && data_loading == 0);
+    photo_pump();                /* package PHOTO */
+    set_capture(capture_mode()); /* I17a: play and photo mode */
     ico_input_sdl_update();
     /* Phase 6 (6B): the popups' clock; the presenter draws them on its
        overlay at each present (package OV, port/ui/ui_host.c) */

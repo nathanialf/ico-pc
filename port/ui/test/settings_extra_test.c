@@ -507,6 +507,120 @@ static void testQuitGame(void)
     ui_SettingsSetQuitHandler(NULL);
     CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0,
           "no hook: back to the desktop words");
+/* v0.4.3 I17a: Controls' Mouse camera and Invert mouse up/down rows: On
+   and Off on the live table, saved as [input] mouse_camera and
+   mouse_invert_y; the three mouse rows after Hold type, hidden on Android;
+   twelve rows (the pause menu with a touch screen) fit 13 lines apart */
+static int s_i17aTouch;
+
+static int i17aTouch(void)
+{
+    return s_i17aTouch;
+}
+
+static void testMouseCamera(void)
+{
+    static const UiSettingsOpt kMouse[3] = {UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
+                                            UI_OPT_MOUSE_INVERT};
+    IcoBindings *b = ico_input_live_bindings();
+    char p[1100];
+
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    CHECK(b->mouse_camera == 1 && b->mouse_invert_y == 0 && b->mouse_hold == 0.75f,
+          "defaults: camera on, not inverted, hold 0.75 (%d, %d, %.2f)", b->mouse_camera,
+          b->mouse_invert_y, (double)b->mouse_hold);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_CAMERA), "On") == 0 &&
+              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_INVERT), "Off") == 0,
+          "values: On, Off (%s)", ui_SettingsValueText(UI_OPT_MOUSE_CAMERA));
+    CHECK(strcmp(ui_Str(UI_STR_OPT_MOUSE_INVERT), "Invert mouse up/down") == 0,
+          "the Invert row's label");
+
+    /* each step flips the live table at once; the save writes both keys */
+    ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
+    CHECK(b->mouse_camera == 0 && strcmp(ui_SettingsValueText(UI_OPT_MOUSE_CAMERA), "Off") == 0,
+          "Right: the mouse camera off");
+    ui_SettingsStep(UI_OPT_MOUSE_INVERT, -1);
+    CHECK(b->mouse_invert_y == 1 && strcmp(ui_SettingsValueText(UI_OPT_MOUSE_INVERT), "On") == 0,
+          "Left: inverted");
+    CHECK(ui_SettingsSave() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t && ico_toml_get_bool(t, "input.mouse_camera", 1) == 0 &&
+              ico_toml_get_bool(t, "input.mouse_invert_y", 0) == 1,
+          "saved: mouse_camera = false, mouse_invert_y = true");
+    CHECK(t && ico_toml_get(t, "input.mouse_hold") == NULL, "the hold not written (default)");
+    ico_toml_free(t);
+    ico_input_reload_bindings(b);
+    CHECK(b->mouse_camera == 0 && b->mouse_invert_y == 1, "read back");
+    ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
+    ui_SettingsStep(UI_OPT_MOUSE_INVERT, 1);
+    CHECK(b->mouse_camera == 1 && b->mouse_invert_y == 0, "stepped back");
+
+    /* the rows: after Hold type from the pause menu, after Remap on the
+       title; hidden on Android */
+    for (int android = 0; android < 2; android++) {
+        ico_video_set_android(android);
+        for (int title = 1; title >= 0; title--) {
+            ui_SettingsSetTouchQuery(NULL);
+            const int mainL = enterMain(title);
+            const int ctlL = openPage(mainL, 3, UI_PAGE_CONTROLS);
+            for (int i = 0; i < 3; i++) {
+                const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, kMouse[i]);
+                const int shown =
+                    row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+                CHECK(shown == !android, "android %d, title %d: mouse row %d %s", android, title, i,
+                      android ? "hidden" : "shown");
+            }
+            const int remap = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_LINK);
+            const int below = lt_ext_Prop(remap)->downItem;
+            const UiSettingsOpt want = android
+                                           ? (title ? UI_OPT_CIRCLE_BACK : UI_OPT_BUTTON_CONFIG)
+                                           : (title ? UI_OPT_MOUSE_CAMERA : UI_OPT_BUTTON_CONFIG);
+            CHECK(below == ui_SettingsRowOf(UI_PAGE_CONTROLS, want),
+                  "android %d, title %d: down from Remap (%d)", android, title, below);
+            if (!title && !android) {
+                const int hold = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
+                CHECK(lt_ext_Prop(hold)->downItem ==
+                          ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
+                      "pause: Mouse camera after Hold type");
+            }
+            (void)ctlL;
+            press(0x10);
+            CHECK(settle(mainL, 60), "Controls: back");
+        }
+    }
+    ico_video_set_android(0);
+
+    /* twelve rows with a touch screen from the pause menu: 13 lines apart
+       from 40, the last box inside the 226 lines */
+    s_i17aTouch = 1;
+    ui_SettingsSetTouchQuery(i17aTouch);
+    const int mainL = enterMain(0);
+    openPage(mainL, 3, UI_PAGE_CONTROLS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    int labels[16], n = 0, prev = -1, last = -1;
+    const int c = ui_SettingsPageRows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
+    for (int i = 0; i < c; i++) {
+        const LtProperty *r = lt_ext_Prop(labels[i]);
+        if (r->defaultMask) {
+            continue;
+        }
+        CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 13,
+              "twelve rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
+        prev = r->dispY;
+        last = labels[i];
+        n++;
+    }
+    CHECK(n == 12, "twelve rows shown (%d)", n);
+    CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+          "twelve rows: the last box ends at %d",
+          last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+    press(0x10);
+    CHECK(settle(mainL, 60), "Controls: back");
+    ui_SettingsSetTouchQuery(NULL);
 }
 
 int main(int argc, char **argv)
@@ -525,6 +639,8 @@ int main(int argc, char **argv)
     /* v0.4.3 AN-22b */
     testGpuDriver();
     testQuitGame();
+    /* v0.4.3 I17a */
+    testMouseCamera();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

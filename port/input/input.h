@@ -162,9 +162,10 @@ typedef struct IcoInputRaw {
     unsigned char key[ICO_KEY_COUNT];       /* 1 down */
     unsigned char mouse[ICO_MOUSE_BUTTONS]; /* index 1..5 */
     float mouse_dx, mouse_dy;               /* relative motion since the last snapshot */
-    float gp[ICO_GP_BUTTONS];               /* 0..1; all gamepads merged (max) */
-    float axis[4]; /* lx ly rx ry, -1..1, y down; merged (largest magnitude) */
-    int gamepads;  /* how many are connected */
+    float dt; /* seconds since the last snapshot (I17a; 0: 1/60, at most 0.1 is used) */
+    float gp[ICO_GP_BUTTONS]; /* 0..1; all gamepads merged (max) */
+    float axis[4];            /* lx ly rx ry, -1..1, y down; merged (largest magnitude) */
+    int gamepads;             /* how many are connected */
 } IcoInputRaw;
 
 #define ICO_BIND_MAX 4
@@ -178,10 +179,23 @@ typedef struct IcoBindings {
     float deadzone;    /* gamepad radial dead zone, 0..0.9 */
     float walk_scale;  /* left stick magnitude while a walk key is down */
     float mouse_sens;  /* multiplier on the built-in per-count gain */
-    float mouse_decay; /* per vsync, 0..0.99: how much of the stick stays */
+    float mouse_decay; /* the touch look pad's per vsync decay, 0..0.99 (touch.h) */
     int mouse_invert_y;
+    /* I17a (issue 17): the mouse camera ([input] mouse_camera, default on;
+       mouse_hold, seconds 0..10, default 0.75). The captured motion moves
+       a held look offset (1/400 of the unit circle a count at sensitivity
+       1); still for mouse_hold seconds, the offset relaxes to centre (time
+       constant 0.25 s), so the camera swings back behind Ico. The game's
+       camera is position control with a dead zone, so the stick is the
+       offset's direction at 48.5/127.5 (just past the dead zone) plus the
+       offset's length up to 120/127.5 (full). Off: no stick from the mouse
+       ([input] mouse still drives the buttons). */
+    int mouse_camera;
+    float mouse_hold;
     int rumble;
     float mouse_x, mouse_y; /* the mouse's stick, state between steps */
+    float look_x, look_y;   /* the held look offset, unit circle */
+    float look_idle;        /* seconds since the last motion */
     /* the touch overlay (touch.h; [input] touch_mode, touch_size,
        touch_opacity): ICO_TOUCH_MODE_* (default Auto), ICO_TOUCH_SMALL..LARGE
        (default medium), percent 10..100 (default 75; the Settings row
@@ -208,8 +222,12 @@ int ico_key_from_name(const char *name);
 const char *ico_key_name(int key);
 int ico_gp_from_name(const char *name);
 const char *ico_gp_name(int src);
-/* One snapshot to the virtual pad: advances the mouse stick by one vsync. */
+/* One snapshot to the virtual pad: advances the mouse stick by raw->dt. */
 void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *out);
+/* I17a: the mouse camera's state (the look offset, its idle time and the
+   stick) back to centre: the device layer calls it when the capture mode
+   changes. */
+void ico_bindings_mouse_reset(IcoBindings *b);
 
 /* config.toml's [input] and [gameplay] onto *b and the pad host, through
    host_config's TOML subset (input_config.c). Missing file: defaults. */
@@ -261,9 +279,10 @@ extern const char *const ico_mouse_names[ICO_MOUSE_BUTTONS];
    the caller saves with ico_config_save): [input.kb], [input.mouse] and
    [input.pad] for each target whose row differs from the default or is
    already in the file, as a string ("Space", "Tab, Backquote", "none";
-   bindings.c splits a comma list like an array), mouse_sensitivity, and
-   touch_mode, touch_size and touch_opacity, each when it differs from the
-   default or is already in the file. Returns the number of keys set, or
+   bindings.c splits a comma list like an array), mouse_sensitivity,
+   mouse_camera, mouse_invert_y, mouse_hold, and touch_mode, touch_size
+   and touch_opacity, each when it differs from the default or is already
+   in the file. Returns the number of keys set, or
    -1. */
 int ico_input_write_bindings(const IcoBindings *b);
 /* Rebuild *b from the defaults and the config's [input] and [gameplay]

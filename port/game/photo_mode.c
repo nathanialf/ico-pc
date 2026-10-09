@@ -417,6 +417,32 @@ static void clampStep(IcoPhotoState *st, const IcoPhotoState *before)
     lerpState(st, before, &full, 0.0f);
 }
 
+void ico_photo_mouse_look(float yawDeg, float pitchDeg)
+{
+    if (!s.st.active || (yawDeg == 0.0f && pitchDeg == 0.0f)) {
+        return;
+    }
+    IcoPhotoState *st = &s.st;
+    const IcoPhotoState before = *st;
+    if (st->mode == ICO_PHOTO_CAM_FREE) {
+        /* freeStep's look and its limit */
+        const Basis *b = basis();
+        st->fyaw += DEG(yawDeg);
+        st->fpitch += DEG(pitchDeg);
+        const float hi = MAX_ELEVATION - b->e0, lo = -MAX_ELEVATION - b->e0;
+        st->fpitch = st->fpitch > hi ? hi : (st->fpitch < lo ? lo : st->fpitch);
+    } else {
+        /* orbitStep's orbit and its limit */
+        st->yaw += DEG(yawDeg);
+        st->pitch += DEG(pitchDeg);
+        if (s.haveBasis) {
+            const float hi = s.b.e0 + MAX_ELEVATION, lo = s.b.e0 - MAX_ELEVATION;
+            st->pitch = st->pitch > hi ? hi : (st->pitch < lo ? lo : st->pitch);
+        }
+    }
+    clampStep(st, &before);
+}
+
 int ico_photo_update(const IcoPhotoPad *pad)
 {
     if (!s.st.active || !pad) {

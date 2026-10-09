@@ -484,4 +484,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
     [UI_STR_QUIT_GAME] = "Quit game",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",
+    /* v0.4.3 I17a */
+    [UI_STR_OPT_MOUSE_INVERT] = "Invert mouse up/down",
 };

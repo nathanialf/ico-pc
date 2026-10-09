@@ -11,7 +11,16 @@
 #include "input.h"
 #include "touch.h"
 
-#define MOUSE_GAIN 0.015f /* stick units per mouse count at sensitivity 1 */
+/* I17a: the mouse camera (input.h IcoBindings.mouse_camera): counts for the
+   whole look offset at sensitivity 1, the stick's start just past the
+   game's dead zone of 48 (pad.c) and its full deflection, both over
+   127.5, the relax time constant in seconds, and the offset under which
+   a relaxing offset is centre */
+#define MOUSE_COUNTS 400.0f
+#define MOUSE_STICK_MIN (48.5f / 127.5f)
+#define MOUSE_STICK_MAX (120.0f / 127.5f)
+#define MOUSE_RELAX 0.25f
+#define MOUSE_SNAP 0.01f
 #define BUTTON_ON 0.5f
 
 static const char *const target_names[ICO_T_COUNT] = {
@@ -155,6 +164,8 @@ static const char default_text[] = "[input]\n"
                                    "mouse_sensitivity = 1.0\n"
                                    "mouse_decay = 0.80\n"
                                    "mouse_invert_y = false\n"
+                                   "mouse_camera = true\n"
+                                   "mouse_hold = 0.75\n"
                                    "rumble = true\n"
                                    "touch_mode = \"auto\"\n"
                                    "touch_size = \"medium\"\n"
@@ -244,6 +255,8 @@ void ico_bindings_defaults(IcoBindings *b)
     b->walk_scale = 0.5f;
     b->mouse_sens = 1.0f;
     b->mouse_decay = 0.80f;
+    b->mouse_camera = 1;
+    b->mouse_hold = 0.75f;
     b->touch_mode = ICO_TOUCH_MODE_AUTO;
     b->touch_size = ICO_TOUCH_MEDIUM;
     b->touch_opacity = 75;
@@ -404,6 +417,10 @@ int ico_bindings_set(IcoBindings *b, const char *key, const char *value)
             b->rumble = on;
         } else if (strcmp(key, "mouse_invert_y") == 0 && parse_bool(value, &on) == 0) {
             b->mouse_invert_y = on;
+        } else if (strcmp(key, "mouse_camera") == 0 && parse_bool(value, &on) == 0) {
+            b->mouse_camera = on;
+        } else if (strcmp(key, "mouse_hold") == 0 && parse_float(value, 0.0f, 10.0f, &f) == 0) {
+            b->mouse_hold = f;
         } else if (strcmp(key, "deadzone") == 0 && parse_float(value, 0.0f, 0.9f, &f) == 0) {
             b->deadzone = f;
         } else if (strcmp(key, "walk_scale") == 0 && parse_float(value, 0.05f, 1.0f, &f) == 0) {
@@ -542,6 +559,94 @@ static void unit_clamp(float *x, float *y)
     }
 }
 
+/* sqrt(v) for v >= 0 by Newton's method (no libm here, as unit_clamp) */
+static float sqrt_pos(float v)
+{
+    float r = v > 1.0f ? v : 1.0f;
+    int i;
+
+    if (!(v > 0.0f)) {
+        return 0.0f;
+    }
+    for (i = 0; i < 40; i++) {
+        r = 0.5f * (r + v / r);
+    }
+    return r;
+}
+
+/* e^-x for x >= 0: halved to under 1/8, a Taylor series, squared back */
+static float exp_neg(float x)
+{
+    float r;
+    int n = 0;
+
+    if (!(x > 0.0f)) {
+        return 1.0f;
+    }
+    while (x > 0.125f && n < 40) {
+        x *= 0.5f;
+        n++;
+    }
+    r = 1.0f - x * (1.0f - x * (0.5f - x * (1.0f / 6.0f - x / 24.0f)));
+    while (n-- > 0) {
+        r *= r;
+    }
+    return r;
+}
+
+void ico_bindings_mouse_reset(IcoBindings *b)
+{
+    b->look_x = b->look_y = b->look_idle = 0.0f;
+    b->mouse_x = b->mouse_y = 0.0f;
+}
+
+/* I17a: the mouse camera's stick from this snapshot's motion (input.h):
+   motion moves the held look offset; still for mouse_hold seconds, the
+   offset relaxes to centre; the stick is the offset past the dead zone */
+static void mouse_look(IcoBindings *b, const IcoInputRaw *raw)
+{
+    const float dt = raw->dt > 0.0f ? (raw->dt < 0.1f ? raw->dt : 0.1f) : 1.0f / 60.0f;
+    const float dx = raw->mouse_dx;
+    const float dy = b->mouse_invert_y ? -raw->mouse_dy : raw->mouse_dy;
+    float len;
+
+    if (dx != 0.0f || dy != 0.0f) {
+        b->look_x += dx * b->mouse_sens / MOUSE_COUNTS;
+        b->look_y += dy * b->mouse_sens / MOUSE_COUNTS;
+        unit_clamp(&b->look_x, &b->look_y);
+        if (b->look_x * b->look_x + b->look_y * b->look_y < 1e-10f) {
+            /* back where it started (a flick and the same move back): the
+               rounding is centre, not a nudge past the dead zone */
+            b->look_x = b->look_y = 0.0f;
+        }
+        b->look_idle = 0.0f;
+    } else {
+        const float before = b->look_idle;
+
+        b->look_idle += dt;
+        if (b->look_idle > b->mouse_hold) {
+            /* the part of this step past the hold */
+            const float t = before >= b->mouse_hold ? dt : b->look_idle - b->mouse_hold;
+            const float k = exp_neg(t / MOUSE_RELAX);
+
+            b->look_x *= k;
+            b->look_y *= k;
+            if (b->look_x * b->look_x + b->look_y * b->look_y < MOUSE_SNAP * MOUSE_SNAP) {
+                b->look_x = b->look_y = 0.0f;
+            }
+        }
+    }
+    len = sqrt_pos(b->look_x * b->look_x + b->look_y * b->look_y);
+    if (len > 0.0f) {
+        const float s = (MOUSE_STICK_MIN + (MOUSE_STICK_MAX - MOUSE_STICK_MIN) * len) / len;
+
+        b->mouse_x = b->look_x * s;
+        b->mouse_y = b->look_y * s;
+    } else {
+        b->mouse_x = b->mouse_y = 0.0f;
+    }
+}
+
 /* four digital directions to a vector no longer than 1 */
 static void dirs(int up, int down, int left, int right, float *x, float *y)
 {
@@ -568,16 +673,11 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
     memset(&kb, 0, sizeof(kb));
     memset(out, 0, sizeof(*out));
 
-    /* mouse stick: decays toward zero, pushed by this vsync's motion */
-    if (b->mouse_on) {
-        float gain = MOUSE_GAIN * b->mouse_sens;
-
-        b->mouse_x = b->mouse_x * b->mouse_decay + raw->mouse_dx * gain;
-        b->mouse_y = b->mouse_y * b->mouse_decay +
-                     (b->mouse_invert_y ? -raw->mouse_dy : raw->mouse_dy) * gain;
-        unit_clamp(&b->mouse_x, &b->mouse_y);
+    /* the mouse camera's stick (I17a) */
+    if (b->mouse_on && b->mouse_camera) {
+        mouse_look(b, raw);
     } else {
-        b->mouse_x = b->mouse_y = 0.0f;
+        ico_bindings_mouse_reset(b);
     }
 
     /* gamepad: buttons, analog sticks with the dead zone, digital stick targets */

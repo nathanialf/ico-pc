@@ -1068,6 +1068,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_MOUSE_SENS:
         snprintf(buf, size, "%.2f", (double)liveBindings()->mouse_sens);
         return buf;
+    case UI_OPT_MOUSE_CAMERA:
+        return onOff(liveBindings()->mouse_camera);
+    case UI_OPT_MOUSE_INVERT:
+        return onOff(liveBindings()->mouse_invert_y);
     case UI_OPT_CIRCLE_BACK:
         return onOff(ico_opt_circle_back());
     case UI_OPT_VIBRATION:
@@ -1154,6 +1158,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_WINDOW_MODE) {
         return !ico_video_android(); /* v0.4.3: the phone's window is the screen */
+    }
+    if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT) {
+        return !ico_video_android(); /* v0.4.3 I17a: no mouse camera on a phone */
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
         /* v0.4.0: it changes only from the title (onTitle); the pause
@@ -1388,6 +1395,16 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyBindings = 1;
         break;
     }
+    case UI_OPT_MOUSE_CAMERA:
+        /* v0.4.3 I17a: live from the next vsync (the window reads the
+           table for the capture, input_sdl.c steps it) */
+        liveBindings()->mouse_camera = !liveBindings()->mouse_camera;
+        s_dirtyBindings = 1;
+        break;
+    case UI_OPT_MOUSE_INVERT:
+        liveBindings()->mouse_invert_y = !liveBindings()->mouse_invert_y;
+        s_dirtyBindings = 1;
+        break;
     case UI_OPT_TOUCH_MODE: {
         /* AN-G: live from the next vsync (input_sdl.c reads the table) */
         IcoBindings *b = liveBindings();
@@ -1801,8 +1818,10 @@ static int pagePitch(int page, int n, int *y0)
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
         /* AN-G: with the touch rows from the pause menu, ten rows 16 apart
-           (Back at 184, its box to 220) */
-        return 16;
+           (Back at 184, its box to 220); v0.4.3 I17a: with the three mouse
+           rows too (a touch screen on a computer), twelve 13 apart (Back
+           at 183, its box to 219) */
+        return n > 11 ? 13 : 16;
     }
     return 18;
 }
@@ -2402,17 +2421,18 @@ static void build(void)
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
     /* S1: the game's Button configuration, Vibration and Hold type after
        Remap, from the pause menu; AN-G: the touch overlay's three rows
-       before Back, with a touch screen */
-    static const int ctlOpts[] = {UI_OPT_LINK,       UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
-                                  UI_OPT_HOLD_TYPE,  UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
-                                  UI_OPT_TOUCH_MODE, UI_OPT_TOUCH_SIZE,    UI_OPT_TOUCH_OPACITY,
-                                  UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,         UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_OPT_TOUCH_MODE,    UI_STR_OPT_TOUCH_SIZE,
-                                  UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+       before Back, with a touch screen; v0.4.3 I17a: the mouse camera's
+       three rows (not on Android) */
+    static const int ctlOpts[] = {UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE,    UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,
+                                  UI_OPT_MOUSE_INVERT, UI_OPT_CIRCLE_BACK,   UI_OPT_TOUCH_MODE,
+                                  UI_OPT_TOUCH_SIZE,   UI_OPT_TOUCH_OPACITY, UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
+        UI_STR_OPT_HOLD_TYPE,    UI_STR_OPT_MOUSE_CAMERA,  UI_STR_OPT_MOUSE_SENS,
+        UI_STR_OPT_MOUSE_INVERT, UI_STR_OPT_CIRCLE_BACK,   UI_STR_OPT_TOUCH_MODE,
+        UI_STR_OPT_TOUCH_SIZE,   UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
+    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* S1: the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
                                    UI_OPT_PLAYERS, UI_OPT_BACK};
@@ -2463,7 +2483,10 @@ static void build(void)
        Android driver page, the same 64 spare); and one
        layout (19 of 32, 4 kept spare).  The viewer's panel (package K-D)
        is this page: 15 more rows (Switch, and the prompt line's six
-       words and eight glyphs), no layout */
+       words and eight glyphs), no layout.  v0.4.3 I17a: Controls' Mouse
+       camera and Invert mouse up/down rows add 8 (label, value and the
+       two arrows each): with Effects' Cinematic bars (4), about 443 of
+       the 448 */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
 #undef N_OF

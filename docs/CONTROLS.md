@@ -34,6 +34,27 @@ A few more keys on a PC:
 
 Escape and F12 cannot be changed. Everything else can be, in **Options > Controls > Remap controls**.
 
+## Look around with the mouse
+
+On a computer, the mouse moves the camera while you play. The pointer
+disappears as soon as Ico is on the move, and moving the mouse turns the
+camera the way the right stick does. Keep the mouse still for a moment and
+the camera swings back behind Ico on its own, just like letting go of the
+stick.
+
+The pointer comes back whenever a menu is open, during a film, while the
+game is loading, and when you switch to another window.
+
+You can change how it feels in **Options > Controls**:
+
+- **Mouse camera** turns it off if you would rather keep the pointer.
+  The mouse buttons still work.
+- **Mouse sensitivity** sets how far the camera turns for the same move of
+  the mouse.
+- **Invert mouse up/down** swaps up and down.
+
+These rows are not shown on phones and tablets.
+
 ## Look at the models
 
 The model viewer lets you look closely at the characters and some of the
@@ -85,20 +106,20 @@ The camera starts as a free camera. You fly it around like a drone:
 | To do this | Press |
 | --- | --- |
 | Move forward, back and to the sides | left stick |
-| Look around | right stick |
+| Look around | right stick, or move the mouse |
 | Rise / sink | Up / Down |
 | Tilt the picture | L1 / R1 |
 | Zoom out / zoom in | L2 / R2 |
 | Change the speed (Slow, Normal, Fast) | R3, press the right stick in (keyboard B) |
 | Put the camera back where it started | Select |
-| Save a picture | Cross |
+| Save a picture | Cross, or click the left mouse button |
 | Hide or show the help panel | Square |
-| Leave photo mode | Triangle, Circle or Start |
+| Leave photo mode | Triangle, Circle or Start, or click the right mouse button |
 
 Press **L3** (press the left stick in, or keyboard V) to switch to the
 orbit camera. It circles around the spot you were looking at:
 
-- The left stick circles around that spot.
+- The left stick, or moving the mouse, circles around that spot.
 - The right stick moves nearer, farther and to the sides.
 - Up and Down zoom.
 

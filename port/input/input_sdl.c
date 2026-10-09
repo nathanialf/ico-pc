@@ -12,6 +12,7 @@
 #include "host_config.h"
 #include "input.h"
 #include "input_sdl.h"
+#include "mouse_look.h"
 #include "touch.h"
 
 #define MAX_PADS 8
@@ -28,11 +29,12 @@ static unsigned char s_gp_down[ICO_GP_COUNT];
 static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
 static unsigned char s_sdl_to_key[SDL_SCANCODE_COUNT];
-static int s_capture;
+static int s_capture; /* ICO_CAPTURE_* (mouse_look.h; I17a) */
 static float s_acc_dx, s_acc_dy;
 static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
 static int s_ready;
+static Uint64 s_last_update; /* I17a: the snapshot's dt */
 
 /* the touch overlay: the mapper's state and zones, whether a direct touch
    screen exists, the output and safe area the zones were built for, and the
@@ -264,9 +266,16 @@ void ico_input_sdl_event(const SDL_Event *e)
         break;
     }
     case SDL_EVENT_MOUSE_MOTION:
-        if (s_capture && !touch_synth_mouse(e->motion.which)) {
+        if (touch_synth_mouse(e->motion.which)) {
+            break;
+        }
+        if (s_capture == ICO_CAPTURE_STICK) {
+            /* play: the right stick (bindings.c's held look offset) */
             s_acc_dx += e->motion.xrel;
             s_acc_dy += e->motion.yrel;
+        } else if (s_capture == ICO_CAPTURE_DELTA) {
+            /* photo mode: its screen takes the motion each Main tick */
+            ico_mouse_look_add(e->motion.xrel, e->motion.yrel);
         }
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
@@ -303,12 +312,17 @@ void ico_input_sdl_event(const SDL_Event *e)
     }
 }
 
-void ico_input_sdl_set_capture(int on)
+void ico_input_sdl_set_capture(int mode)
 {
-    s_capture = on != 0;
-    if (!s_capture) {
-        s_acc_dx = s_acc_dy = 0.0f;
+    if (mode == s_capture) {
+        return;
     }
+    /* I17a: any change starts the look from centre, so play does not keep
+       a turn from before a menu and photo mode not a move from play */
+    s_capture = mode;
+    s_acc_dx = s_acc_dy = 0.0f;
+    ico_bindings_mouse_reset(&s_bind);
+    ico_mouse_look_reset();
 }
 
 static float axis_f(SDL_Gamepad *g, SDL_GamepadAxis a)
@@ -453,6 +467,13 @@ void ico_input_sdl_update(void)
     s_raw.mouse_dx = s_acc_dx;
     s_raw.mouse_dy = s_acc_dy;
     s_acc_dx = s_acc_dy = 0.0f;
+    {
+        /* I17a: the time the mouse camera's hold and relax run on */
+        const Uint64 now = SDL_GetTicksNS();
+
+        s_raw.dt = s_last_update != 0 ? (float)((double)(now - s_last_update) / 1e9) : 0.0f;
+        s_last_update = now;
+    }
     ico_bindings_step(&s_bind, &s_raw, &v);
     if (s_touchDevice) {
         touch_step(&v);

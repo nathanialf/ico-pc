@@ -10,6 +10,7 @@
 #include <string.h>
 #include "host_config.h"
 #include "input.h"
+#include "mouse_look.h"
 
 static int failures;
 
@@ -171,6 +172,94 @@ static void test_bindings_config(void)
     CHECK(ico_bindings_set(&b, "deadzone", "7") == -1 && near_(b.deadzone, 0.12f, 1e-6f));
     CHECK(ico_bindings_set(&b, "bogus", "1") == -1);
     CHECK(ico_bindings_set(&b, "kb.cross", "A,B,C,D,E") == 0 && b.kb[ICO_T_CROSS][3] != 0);
+
+    /* I17a: the mouse camera's keys; a hold outside 0..10 is refused */
+    ico_bindings_defaults(&b);
+    CHECK(b.mouse_camera == 1 && near_(b.mouse_hold, 0.75f, 1e-6f));
+    CHECK(strstr(ico_bindings_default_text(), "mouse_camera = true\n") != NULL &&
+          strstr(ico_bindings_default_text(), "mouse_hold = 0.75\n") != NULL);
+    CHECK(ico_bindings_set(&b, "mouse_camera", "false") == 0 && b.mouse_camera == 0);
+    CHECK(ico_bindings_set(&b, "mouse_hold", "2") == 0 && near_(b.mouse_hold, 2.0f, 1e-6f));
+    CHECK(ico_bindings_set(&b, "mouse_hold", "0") == 0 && b.mouse_hold == 0.0f);
+    CHECK(ico_bindings_set(&b, "mouse_hold", "11") == -1 && b.mouse_hold == 0.0f);
+    CHECK(ico_bindings_set(&b, "mouse_hold", "-1") == -1 && b.mouse_hold == 0.0f);
+    t = ico_toml_parse("[input]\nmouse_camera = false\nmouse_hold = 1.5\nmouse_invert_y = true\n");
+    ico_bindings_defaults(&b);
+    CHECK(ico_input_apply_toml(&b, t) == 0);
+    CHECK(b.mouse_camera == 0 && near_(b.mouse_hold, 1.5f, 1e-6f) && b.mouse_invert_y == 1);
+    ico_toml_free(t);
+}
+
+/* I17a: the capture rule (mouse_look.c) and photo mode's accumulator */
+static void test_mouse_capture(void)
+{
+    IcoCaptureState play, c;
+    float dx, dy;
+
+    memset(&play, 0, sizeof(play));
+    play.focus = play.look = play.boy = 1;
+    play.stage = 11;
+    play.layout = 54;
+    CHECK(ico_mouse_capture_rule(&play) == ICO_CAPTURE_STICK);
+    c = play;
+    c.layout = 55; /* a scene */
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_STICK);
+    c = play;
+    c.paused = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.stage = 1; /* the title */
+    c.layout = 13;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.layout = 13;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.stage = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.loading = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.movie = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.viewer = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.credits = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.boy = 0;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.focus = 0;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c = play;
+    c.look = 0;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    /* photo mode: the game paused under it, the motion as degrees */
+    c = play;
+    c.paused = 1;
+    c.photo = 1;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_DELTA);
+    c.look = 0;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    c.look = 1;
+    c.focus = 0;
+    CHECK(ico_mouse_capture_rule(&c) == ICO_CAPTURE_OFF);
+    CHECK(ico_mouse_capture_rule(NULL) == ICO_CAPTURE_OFF);
+
+    /* the accumulator: sums until taken, then empty; reset drops it */
+    ico_mouse_look_reset();
+    CHECK(ico_mouse_look_take(&dx, &dy) == 0 && dx == 0.0f && dy == 0.0f);
+    ico_mouse_look_add(3.0f, -2.0f);
+    ico_mouse_look_add(1.5f, 4.0f);
+    CHECK(ico_mouse_look_take(&dx, &dy) == 1 && dx == 4.5f && dy == 2.0f);
+    CHECK(ico_mouse_look_take(&dx, &dy) == 0 && dx == 0.0f && dy == 0.0f);
+    ico_mouse_look_add(7.0f, 7.0f);
+    ico_mouse_look_reset();
+    CHECK(ico_mouse_look_take(&dx, &dy) == 0);
 }
 
 static void test_quantise(void)
@@ -369,32 +458,97 @@ static void test_step(void)
     ico_bindings_step(&b, &r, &v);
     CHECK(v.buttons == (ICO_PAD_CROSS | ICO_PAD_CIRCLE));
 
-    /* mouse motion drives the right stick and decays to centre */
+    /* I17a: the mouse camera. Motion moves a held look offset (1/400 a
+       count at sensitivity 1); the stick is its direction at 48.5/127.5
+       (just past the game's dead zone of 48) plus 71.5/127.5 of its
+       length; still for mouse_hold (0.75 s), it relaxes to centre */
+    CHECK(b.mouse_camera == 1 && near_(b.mouse_hold, 0.75f, 1e-6f) && b.mouse_invert_y == 0);
     blank(&r);
-    r.mouse_dx = 40.0f; /* 40 counts * 0.015 = 0.6 */
+    r.mouse_dx = 100.0f; /* a quarter of the offset */
     ico_bindings_step(&b, &r, &v);
-    CHECK(near_(v.rx, 0.6f, 1e-4f) && v.ry == 0.0f);
+    CHECK(near_(v.rx, (48.5f + 71.5f * 0.25f) / 127.5f, 1e-4f) && v.ry == 0.0f);
     r.mouse_dx = 0.0f;
-    ico_bindings_step(&b, &r, &v);
-    CHECK(near_(v.rx, 0.48f, 1e-4f)); /* decay 0.8 per vsync */
-    for (i = 0; i < 60; i++) {
+    for (i = 0; i < 30; i++) { /* half a second still: held */
         ico_bindings_step(&b, &r, &v);
     }
-    CHECK(absf(v.rx) < 0.0001f);
-    r.mouse_dx = 5000.0f; /* a huge flick clamps to the unit circle */
+    CHECK(near_(v.rx, (48.5f + 71.5f * 0.25f) / 127.5f, 1e-4f));
+    r.dt = 0.05f;
+    for (i = 0; i < 10; i++) { /* to 1 s: a quarter second of relaxing */
+        ico_bindings_step(&b, &r, &v);
+    }
+    CHECK(near_(b.look_x, 0.25f * 0.36788f, 2e-3f) && v.rx > 48.5f / 127.5f &&
+          v.rx < (48.5f + 71.5f * 0.25f) / 127.5f);
+    for (i = 0; i < 25; i++) { /* to 2.25 s: centre */
+        ico_bindings_step(&b, &r, &v);
+    }
+    CHECK(v.rx == 0.0f && v.ry == 0.0f && b.look_x == 0.0f);
+    r.dt = 0.0f;
+    /* one count already passes the dead zone, either way */
+    r.mouse_dx = 1.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(ico_input_quantise(v.rx) >= 176); /* 176 - 127.5 > 48 */
+    ico_bindings_mouse_reset(&b);
+    r.mouse_dx = -1.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(ico_input_quantise(v.rx) <= 79);
+    /* a flick: the offset clamps to the unit circle, the stick to 120/127.5;
+       the same distance back is centre */
+    ico_bindings_mouse_reset(&b);
+    r.mouse_dx = 5000.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(near_(v.rx, 120.0f / 127.5f, 1e-4f) && v.ry == 0.0f);
+    r.mouse_dx = -400.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.rx == 0.0f && v.ry == 0.0f);
+    r.mouse_dx = 5000.0f; /* diagonal: the unit circle */
     r.mouse_dy = 5000.0f;
     ico_bindings_step(&b, &r, &v);
-    CHECK(near_(v.rx * v.rx + v.ry * v.ry, 1.0f, 1e-3f) && v.rx > 0 && v.ry > 0);
-    r.mouse_dx = r.mouse_dy = 0.0f;
-    for (i = 0; i < 80; i++) {
-        ico_bindings_step(&b, &r, &v);
-    }
-    CHECK(absf(v.rx) < 0.0001f && absf(v.ry) < 0.0001f);
-    /* mouse off */
-    b.mouse_on = 0;
-    r.mouse_dx = 40.0f;
+    CHECK(near_(v.rx * v.rx + v.ry * v.ry, (120.0f / 127.5f) * (120.0f / 127.5f), 1e-3f) &&
+          v.rx > 0 && v.ry > 0);
+    /* sensitivity 2 doubles the offset */
+    ico_bindings_mouse_reset(&b);
+    b.mouse_sens = 2.0f;
+    r.mouse_dx = 100.0f;
+    r.mouse_dy = 0.0f;
     ico_bindings_step(&b, &r, &v);
-    CHECK(v.rx == 0.0f);
+    CHECK(near_(v.rx, (48.5f + 71.5f * 0.5f) / 127.5f, 1e-4f));
+    b.mouse_sens = 1.0f;
+    /* invert: down on the mouse is up on the stick */
+    ico_bindings_mouse_reset(&b);
+    b.mouse_invert_y = 1;
+    r.mouse_dx = 0.0f;
+    r.mouse_dy = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(near_(v.ry, -(48.5f + 71.5f * 0.25f) / 127.5f, 1e-4f) && v.rx == 0.0f);
+    b.mouse_invert_y = 0;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.ry == 0.0f); /* the same 100 counts back down */
+    /* the reset: centre at once */
+    r.mouse_dy = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.ry > 0.0f);
+    ico_bindings_mouse_reset(&b);
+    r.mouse_dy = 0.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.rx == 0.0f && v.ry == 0.0f && b.look_idle > 0.0f);
+    /* the keyboard's J (full left) beats a small move */
+    r.key[ICO_KEY_J] = 1;
+    r.mouse_dx = 10.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.rx == -1.0f);
+    r.key[ICO_KEY_J] = 0;
+    /* mouse camera off: no stick, the buttons still work */
+    ico_bindings_mouse_reset(&b);
+    b.mouse_camera = 0;
+    r.mouse[1] = 1;
+    r.mouse_dx = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.rx == 0.0f && v.buttons == ICO_PAD_CROSS);
+    b.mouse_camera = 1;
+    /* mouse off: neither */
+    b.mouse_on = 0;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.rx == 0.0f && v.buttons == 0);
     b.mouse_on = 1;
 
     /* gamepad: dead zone, deflection, buttons, triggers */
@@ -628,6 +782,7 @@ int main(void)
     test_stick_fix();
     test_merge();
     test_step();
+    test_mouse_capture();
     test_frame();
     test_libpad();
     if (failures != 0) {

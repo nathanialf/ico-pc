@@ -93,15 +93,15 @@ static void testBuild(void)
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    static const int ctlOpts[] = {UI_OPT_LINK,       UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
-                                  UI_OPT_HOLD_TYPE,  UI_OPT_MOUSE_SENS,    UI_OPT_CIRCLE_BACK,
-                                  UI_OPT_TOUCH_MODE, UI_OPT_TOUCH_SIZE,    UI_OPT_TOUCH_OPACITY,
-                                  UI_OPT_BACK};
-    static const int ctlStrs[] = {UI_STR_OPT_REMAP,         UI_STR_OPT_BUTTON_CONFIG,
-                                  UI_STR_OPT_VIBRATION,     UI_STR_OPT_HOLD_TYPE,
-                                  UI_STR_OPT_MOUSE_SENS,    UI_STR_OPT_CIRCLE_BACK,
-                                  UI_STR_OPT_TOUCH_MODE,    UI_STR_OPT_TOUCH_SIZE,
-                                  UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
+    static const int ctlOpts[] = {UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
+                                  UI_OPT_HOLD_TYPE,    UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,
+                                  UI_OPT_MOUSE_INVERT, UI_OPT_CIRCLE_BACK,   UI_OPT_TOUCH_MODE,
+                                  UI_OPT_TOUCH_SIZE,   UI_OPT_TOUCH_OPACITY, UI_OPT_BACK};
+    static const int ctlStrs[] = {
+        UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
+        UI_STR_OPT_HOLD_TYPE,    UI_STR_OPT_MOUSE_CAMERA,  UI_STR_OPT_MOUSE_SENS,
+        UI_STR_OPT_MOUSE_INVERT, UI_STR_OPT_CIRCLE_BACK,   UI_STR_OPT_TOUCH_MODE,
+        UI_STR_OPT_TOUCH_SIZE,   UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
                                    UI_OPT_PLAYERS, UI_OPT_BACK};
     static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
@@ -130,7 +130,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 13),
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
-    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 10), "controls rows");
+    CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 12), "controls rows");
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 5), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -2803,7 +2803,7 @@ static void testGameOptions(void)
         press(0x4000);
         CHECK(lt_ext_Layout(ctlL)->curItem ==
                   ui_SettingsRowOf(UI_PAGE_CONTROLS,
-                                   title ? UI_OPT_MOUSE_SENS : UI_OPT_BUTTON_CONFIG),
+                                   title ? UI_OPT_MOUSE_CAMERA : UI_OPT_BUTTON_CONFIG),
               "title %d: down from Remap", title);
         press(0x10);
         CHECK(settle(mainL, 60), "Controls: back");
@@ -2930,7 +2930,7 @@ static void testGameOptions(void)
     CHECK(lt_ext_Layout(ctlL)->curItem == remap && lt_ext_Layout(ctlL)->defaultItem == remap,
           "title: off the hidden row (%d)", lt_ext_Layout(ctlL)->curItem);
     CHECK(lt_ext_Prop(bc)->upItem == remap &&
-              lt_ext_Prop(bc)->downItem == ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_SENS),
+              lt_ext_Prop(bc)->downItem == ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
           "title: the hidden row's links lead to shown rows (%d, %d)", lt_ext_Prop(bc)->upItem,
           lt_ext_Prop(bc)->downItem);
     for (int i = 0; i < 12; i++) {

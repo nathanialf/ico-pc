@@ -32,6 +32,10 @@
  *   step      at stick_speed 10, a tick moves the eye 250 and turns the view
  *             25 degrees at most (the renderer blends below 300 and 30);
  *             Select still jumps
+ *   mouse     (I17a) ico_photo_mouse_look: the free camera's yaw grows by the
+ *             degrees given, its pitch stops at 85 degrees, a big move
+ *             turns 25 degrees a tick at most; the orbit camera's yaw and
+ *             pitch, its dolly and pan left alone; nothing while inactive
  */
 #include <math.h>
 #include <stdio.h>
@@ -487,6 +491,51 @@ int main(int argc, char **argv)
     ico_photo_camera(&out, &game);
     CHECK(memcmp(&out, &game, sizeof(game)) == 0, "step: Select jumps back to the game camera");
     ico_photo_exit();
+
+    /* I17a: the mouse's look */
+    {
+        writeConfig(path, "version = 1\n[photo]\nstick_speed = 1.0\n");
+        IcoPhotoState was, now;
+        ico_photo_get(&was);
+        ico_photo_mouse_look(10.0f, 10.0f);
+        ico_photo_get(&now);
+        CHECK(memcmp(&was, &now, sizeof(was)) == 0, "mouse: nothing while inactive");
+        ico_photo_enter();
+        ico_photo_set_game(&game);
+        ico_photo_mouse_look(10.0f, 0.0f);
+        ico_photo_get(&now);
+        CHECK(fabsf(now.fyaw - 0.1745329f) < 1e-4f && now.fpitch == 0.0f,
+              "mouse: 10 degrees of yaw (%.4f)", (double)now.fyaw);
+        ico_photo_mouse_look(10.0f, 0.0f);
+        ico_photo_get(&now);
+        CHECK(fabsf(now.fyaw - 0.3490659f) < 1e-4f, "mouse: the yaw grows (%.4f)",
+              (double)now.fyaw);
+        for (int i = 0; i < 10; i++) {
+            ico_photo_mouse_look(0.0f, 20.0f);
+        }
+        ico_photo_get(&now);
+        CHECK(fabsf(now.fpitch - 1.4835299f) < 1e-3f, "mouse: the pitch stops at 85 (%.4f)",
+              (double)now.fpitch);
+        ico_photo_mouse_look(0.0f, -200.0f);
+        ico_photo_get(&was);
+        CHECK(was.fpitch < now.fpitch && was.fpitch >= now.fpitch - 0.4363323f - 1e-3f,
+              "mouse: a big move turns 25 degrees at most (%.4f to %.4f)", (double)now.fpitch,
+              (double)was.fpitch);
+        IcoPhotoPad l3 = pressed(ICO_PHOTO_L3);
+        ico_photo_update(&l3);
+        CHECK(ico_photo_mode() == ICO_PHOTO_CAM_ORBIT, "mouse: the orbit camera");
+        ico_photo_get(&was);
+        ico_photo_mouse_look(15.0f, 10.0f);
+        ico_photo_get(&now);
+        CHECK(fabsf(now.yaw - was.yaw - 0.2617994f) < 1e-4f &&
+                  fabsf(now.pitch - was.pitch - 0.1745329f) < 1e-4f,
+              "mouse: orbit yaw and pitch (%.4f, %.4f)", (double)(now.yaw - was.yaw),
+              (double)(now.pitch - was.pitch));
+        CHECK(now.dolly == was.dolly && now.pan == was.pan && now.fyaw == was.fyaw &&
+                  now.fpitch == was.fpitch,
+              "mouse: orbit leaves the dolly, the pan and the free camera");
+        ico_photo_exit();
+    }
 
     char name[64];
     ico_photo_file_name(name, sizeof(name), 2026, 10, 6, 9, 5, 7, 1);
