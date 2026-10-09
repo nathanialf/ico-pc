@@ -496,9 +496,9 @@ static int gpuSelected(void)
     return i >= 0 && i < n ? i : -1;
 }
 
-/* the Driver row's text: Built-in or the chosen name; "(Did not start last
-   time)" after the name of the driver that failed, the name cut to leave
-   the box room for it (the shrink to fit does the rest) */
+/* the Driver row's text: Built-in or the chosen name, cut to its box (the
+   shrink to fit does the rest); a driver that did not start last time is
+   said in the page's note (gpuRefresh), where a sentence fits */
 static const char *gpuText(char *buf, unsigned size)
 {
     const int i = gpuSelected();
@@ -507,18 +507,13 @@ static const char *gpuText(char *buf, unsigned size)
     }
     const char *name = s_gpuHost.name(i);
     name = name != NULL ? name : "";
-    const char *tail = s_gpuHost.lastFailed(i) ? ui_Str(UI_STR_GPU_DRIVER_FAILED) : "";
     const size_t len = strlen(name);
     size_t n = len;
     if (size < 8) {
         return "";
     }
     for (;;) {
-        if (tail[0] != '\0') {
-            snprintf(buf, size, "%.*s%s (%s)", (int)n, name, n < len ? "\xE2\x80\xA6" : "", tail);
-        } else {
-            snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
-        }
+        snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
         if (n == 0 || ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
             break;
         }
@@ -527,6 +522,20 @@ static const char *gpuText(char *buf, unsigned size)
         } while (n > 0 && ((unsigned char)name[n] & 0xC0u) == 0x80u);
     }
     return buf;
+}
+
+/* the page's one note: the Adreno-and-restart line, or that the chosen
+   driver did not start last time */
+static void gpuRefresh(Page *pg)
+{
+    const int i = gpuSelected();
+    const int note =
+        i >= 0 && s_gpuHost.lastFailed(i) ? UI_STR_GPU_DRIVER_FAILED : UI_STR_GPU_DRIVER_NOTE;
+    for (int k = 0; k < pg->count; k++) {
+        if (pg->rows[k].note >= 0) {
+            pg->rows[k].noteStr = note;
+        }
+    }
 }
 
 /* Driver: Built-in, then each installed driver, around; the host stores the
@@ -3088,6 +3097,19 @@ int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values
     return n;
 }
 
+int ui_SettingsNoteRowOf(UiSettingsPage page, UiSettingsOpt opt)
+{
+    if (page < 0 || page >= UI_PAGE_COUNT) {
+        return -1;
+    }
+    for (int i = 0; i < s_pages[page].count; i++) {
+        if (s_pages[page].rows[i].opt == (int)opt) {
+            return s_pages[page].rows[i].note;
+        }
+    }
+    return -1;
+}
+
 int ui_SettingsRowOf(UiSettingsPage page, UiSettingsOpt opt)
 {
     if (page < 0 || page >= UI_PAGE_COUNT) {
@@ -3678,6 +3700,9 @@ static void refreshPage(Page *pg, int id, int cur)
     layoutPage(pg, id);
     if (id == UI_PAGE_CHARACTERS) {
         charactersRefresh(pg);
+    }
+    if (id == UI_PAGE_GPU_DRIVER && s_gpuHostSet) {
+        gpuRefresh(pg);
     }
     if (id == UI_PAGE_EXTRAS) {
         /* from the title with the viewer there, Characters opens in it

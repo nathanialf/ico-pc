@@ -317,6 +317,8 @@ int ui_SettingsPageLayout(UiSettingsPage page);
 int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values, int max);
 /* The row index of an option on a page, -1 if it has none. */
 int ui_SettingsRowOf(UiSettingsPage page, UiSettingsOpt opt);
+/* the note row under a page's option, -1 for none (tests) */
+int ui_SettingsNoteRowOf(UiSettingsPage page, UiSettingsOpt opt);
 /* The value text an option shows now. */
 const char *ui_SettingsValueText(UiSettingsOpt opt);
 /* Steps an option by dir (-1 left, +1 right) through its setter, as a

@@ -345,12 +345,24 @@ static void testGpuDriver(void)
     ui_SettingsStep(UI_OPT_GPU_DRIVER, -1);
     CHECK(s_gpuSel == 1, "Left wraps to the last driver (%d)", s_gpuSel);
 
-    /* the one that did not start says so after its name */
+    /* the one that did not start keeps its name on the row; the page's note
+       says so (a sentence fits there, not in the value box) */
     s_gpuFailed = 1;
-    CHECK(strstr(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 25.0") != NULL &&
-              strstr(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Did not start last time") != NULL,
-          "failed: %s", ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    frame(0);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 25.0") == 0, "failed: %s",
+          ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    {
+        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "did not start") != NULL,
+              "failed: the note says so (%s)", note >= 0 ? lt_ext_RowText(note) : "-");
+    }
     s_gpuFailed = -1;
+    frame(0);
+    {
+        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "Adreno") != NULL,
+              "the note is back to the Adreno line");
+    }
 
     /* Add: the picker opens, the page polls every frame until it answers */
     frame(0);
@@ -507,6 +519,8 @@ static void testQuitGame(void)
     ui_SettingsSetQuitHandler(NULL);
     CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0,
           "no hook: back to the desktop words");
+}
+
 /* v0.4.3 I17a: Controls' Mouse camera and Invert mouse up/down rows: On
    and Off on the live table, saved as [input] mouse_camera and
    mouse_invert_y; the three mouse rows after Hold type, hidden on Android;
@@ -564,7 +578,7 @@ static void testMouseCamera(void)
         for (int title = 1; title >= 0; title--) {
             ui_SettingsSetTouchQuery(NULL);
             const int mainL = enterMain(title);
-            const int ctlL = openPage(mainL, 3, UI_PAGE_CONTROLS);
+            const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
             for (int i = 0; i < 3; i++) {
                 const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, kMouse[i]);
                 const int shown =
@@ -597,7 +611,7 @@ static void testMouseCamera(void)
     s_i17aTouch = 1;
     ui_SettingsSetTouchQuery(i17aTouch);
     const int mainL = enterMain(0);
-    openPage(mainL, 3, UI_PAGE_CONTROLS);
+    openPage(mainL, 4, UI_PAGE_CONTROLS);
     for (int k = 0; k < 4; k++) {
         frame(0);
     }

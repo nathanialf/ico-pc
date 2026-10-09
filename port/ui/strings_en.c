@@ -480,7 +480,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_ADDED] = "Driver added",
     [UI_STR_GPU_DRIVER_BAD] = "This file is not a driver package.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Driver removed",
-    [UI_STR_GPU_DRIVER_FAILED] = "Did not start last time",
+    [UI_STR_GPU_DRIVER_FAILED] =
+        "The driver you chose did not start last time. The phone's own driver is in use.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
     [UI_STR_QUIT_GAME] = "Quit game",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",

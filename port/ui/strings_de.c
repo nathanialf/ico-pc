@@ -485,7 +485,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_ADDED] = "Treiber hinzugefügt",
     [UI_STR_GPU_DRIVER_BAD] = "Diese Datei ist kein Treiberpaket.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Treiber entfernt",
-    [UI_STR_GPU_DRIVER_FAILED] = "Startete beim letzten Mal nicht",
+    [UI_STR_GPU_DRIVER_FAILED] =
+        "Der gewählte Treiber startete beim letzten Mal nicht. Der Treiber des Telefons ist in Gebrauch.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
     [UI_STR_QUIT_GAME] = "Spiel beenden",
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",

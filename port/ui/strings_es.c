@@ -483,7 +483,8 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_ADDED] = "Controlador añadido",
     [UI_STR_GPU_DRIVER_BAD] = "Este archivo no es un paquete de controlador.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Controlador quitado",
-    [UI_STR_GPU_DRIVER_FAILED] = "No se inició la última vez",
+    [UI_STR_GPU_DRIVER_FAILED] =
+        "El controlador elegido no se inició la última vez. Se usa el controlador del teléfono.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "No hay espacio suficiente para este controlador.",
     [UI_STR_QUIT_GAME] = "Salir del juego",
     [UI_STR_QUIT_GAME_CONFIRM] = "¿Salir del juego?",
