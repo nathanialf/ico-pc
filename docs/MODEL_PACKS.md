@@ -121,9 +121,9 @@ game's textures. In Blender, each piece shows up as its own material.
   skeleton. The dump does not save these, and the game uses the original
   for them. The log says so, with a line that
   ends in "changes shape every frame; the original is used".
-- **The rest pose of the skeleton.** The game uses its own bone starting
-  positions (the inverse bind matrices). If the file has a different rest
-  pose, it is ignored, and the log says so.
+- **The rest pose of the skeleton.** The game uses its own starting
+  positions for the bones. If the file has a different rest pose, it is
+  ignored, and the log says so.
 - **Bending or not bending.** A part that bends with a skeleton must keep
   its bone weights. A part that does not bend must not get any.
 

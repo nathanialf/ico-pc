@@ -13,8 +13,8 @@ in the same folder, so the log of a run that went wrong is still there
 after you start the game once more.
 
 The log records your display settings, every change you make to them, and
-every 10 seconds how fast the game is running. When something goes wrong,
-it says what.
+every 10 seconds how fast the game is running (every second for 30 seconds
+after you press F11). When something goes wrong, it says what.
 
 ## Send a problem report
 
@@ -24,10 +24,6 @@ it says what.
 3. Attach `ico-pc.log`.
 4. If you are asked for it, also attach `config.toml` from the folder with
    your saves ([where that is](PORTABLE_MODE.md#where-your-saves-are)).
-
-If you are asked to, put `hand_probe = true` under `[dev]` in `config.toml`
-([how to edit it](OPTIONS.md#settings-you-can-only-change-in-a-file)); the
-log then records the numbers Ico and Yorda hold hands with.
 
 ## Save a picture of a problem
 
@@ -58,11 +54,16 @@ another `.chd` does not work, so use the full `.chd` or the `.iso`.
 (about 1 GB is needed), or the disc image is incomplete. Free some space
 and try again.
 
-**"Could not open the game window."** or **"Could not start the game's
-graphics."** Your graphics driver does not support Vulkan 1.2, the way the
-game talks to the graphics card. Updating the graphics driver usually
-fixes it. On a phone, install the latest system update. The lines in the
-log that mention Vulkan say what is missing.
+**"Could not open the game window."** (on a PC) or **"Could not start the
+game's graphics."** (on a phone) Your graphics driver or graphics chip does
+not support Vulkan 1.2, the way the game talks to the graphics. Updating
+the graphics driver usually fixes it. On a phone, install the latest
+system update. The lines in the log that mention Vulkan say what is
+missing.
+
+**"No disc image was chosen."** (on a phone) You left the file picker
+without choosing a file. Start the game again and choose your ICO disc
+image.
 
 ## The game closes by itself
 
@@ -87,8 +88,8 @@ were found and why a file was not used.
 
 ## Known limits
 
-On a few graphics drivers (rare), the 32-bit depth format is missing. There,
-surfaces that sit very close together may still flicker.
+On a few graphics drivers (rare), surfaces that sit very close together
+may flicker.
 
 ## Linux
 

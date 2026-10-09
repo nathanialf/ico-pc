@@ -13,7 +13,8 @@ own blur, glow or fog off, use **Options > Effects** instead
 
 ## Put ReShade in (Windows)
 
-ReShade can hook into the game in two ways. The first one is simpler.
+There are two ways to set ReShade up for this game. The first one is
+simpler.
 
 **The simple way (Vulkan)**
 

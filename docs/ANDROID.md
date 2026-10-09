@@ -138,9 +138,11 @@ on **Options > Gameplay > Analogue stick fix**.
 **Back.** The phone's Back button or gesture opens the pause menu, like
 Start.
 
-**Vibration.** With the touch controls and no gamepad, the phone itself
-vibrates where a gamepad would rumble. A connected gamepad takes over. The
-game's **Vibration** option (Options > Controls) turns it off.
+**Vibration.** When no gamepad is connected, the phone itself vibrates
+where a gamepad would rumble, for example when Ico is hurt. A connected
+gamepad takes over. To turn it off, open the pause menu's **Options >
+Controls** and set **Vibration** to Off. The row is only in the pause
+menu's Options.
 
 **Gamepads.** A Bluetooth or USB gamepad works, with rumble if it has it.
 While one is connected, the touch buttons go away. Change that in
@@ -176,50 +178,44 @@ preset uses Auto on Android.
    [issues page](https://github.com/nathanialf/ico-pc/issues), say which
    phone or tablet you have, and attach the file.
 
-**Sending us a log about speed.** If the whole file is too big to send,
-the parts that matter are the first lines of `logs/ico-pc.log` (they say
-which phone, graphics and settings the game found) and, from a moment of
-play that stutters, the four lines starting with `window:` that the game
-writes every 10 seconds. Copy them as they are.
+A few problems are easier to track down with a little more. If one of
+these is yours, add it to the report.
 
-**Sending us a log about the picture's size.** If the opening scene after
-the logo (the forest) is drawn too small, shifted or stretched, send the
-first lines of `logs/ico-pc.log` from that start, down to where the scene
-looks right, including every line that starts with `window:` and every
-line that contains the word `swapchain`. They say what size the game was
-told the screen is, and when that changed. Copy them as they are.
+**The game is slow.** If the whole log is too big to send, send its first
+lines (they say which phone, graphics chip and settings the game found)
+and, from a moment of play that stutters, a few of the speed reports the
+game writes every 10 seconds. Those lines start with `window:`. Copy them
+as they are.
 
-**Sending us a log about the opening scene.** If the forest after the logo
-looks as if it were seen from another place (bare thin trunks, flat dark
-bushes, a pale empty ground where the trees and grass should be), send
-every line of `logs/ico-pc.log` that starts with `rd: camera`, and say
-which phone you have. Those lines say where the game put its camera; we
-compare them with a PC's to tell whether the game itself or the drawing
-went another way.
+**The picture is the wrong size.** If the opening scene after the logo
+(the forest) is drawn too small, shifted or stretched, send the first
+lines of the log from that start, down to where the scene looks right.
+They say what size the game was told the screen is, and when that changed.
+Copy them as they are.
 
-**Sending us a log when the game closes by itself.** When the game has
-to close, it first shows a message that says so and where its log is.
-Send `logs/ico-pc.log` from the start where it happened. If you have
-started the game again since, the log of the start before is
-`logs/ico-pc-previous.log`. If you cannot send the whole file, copy
-everything from the line of `=====` signs near the end (the next line
-says `CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines
-if there is no such line. They say where the game stopped. Also tell us
-what you pressed just before, and whether your saves in `memcard` came
-from this phone or were copied from somewhere else.
+**The game closes by itself.** When the game has to close, it first shows
+a message that says so and where its log is. Send `logs/ico-pc.log` from
+the start where it happened. If you have started the game again since,
+the log of the start before is `logs/ico-pc-previous.log`. If you cannot
+send the whole file, copy everything from the line of `=====` signs near
+the end (the next line says `CRASH` or `WATCHDOG`) down to the last line,
+or the last 60 lines if there is no such line. They say where the game
+stopped. Also tell us what you pressed just before, and whether your
+saves in `memcard` came from this phone or were copied from somewhere
+else.
 
-**Sending us the buttons you pressed.** Each start also writes a file in
-`logs` whose name starts with `input-` and goes on with the date and
-time of that start. It lists the buttons you pressed. With it and your
-`memcard` folder as it was when you started, we can play the same
-session on a computer, step for step, and see whether the problem
-happens there too. Send it with the log for any problem you can make
-happen again: closing by itself, a pose, a place.
+**The buttons you pressed.** Each start also writes a file in `logs`
+whose name starts with `input-` and goes on with the date and time of
+that start. It lists the buttons you pressed. With it and your `memcard`
+folder as it was when you started, we can play the same session again on
+a computer, step for step, and see whether the problem happens there too.
+Send it with the log for any problem you can make happen again: closing
+by itself, a pose, a place.
 
-**Sending us a save that shows a problem.** If something looks wrong in
-the game (a pose, a place, a character), save near it if you can, then
-send the `memcard` folder with the log. We load the same save on a
-computer to see whether it happens there too.
+**A save that shows a problem.** If something looks wrong in the game (a
+pose, a place, a character), save near it if you can, then send the
+`memcard` folder with the log. We load the same save on a computer to see
+whether it happens there too.
 
 ## Screens of every shape
 
@@ -262,8 +258,9 @@ try another one or remove it yourself.
 
 ## Known limits
 
-- The game needs Vulkan 1.2 graphics. Older or cheaper devices may not
-  have it, and a system update does not always add it.
+- The game needs a graphics chip that supports Vulkan 1.2 (Vulkan is how
+  the game talks to the graphics). Older or cheaper devices may not have
+  it, and a system update does not always add it.
 - The file picker cannot hide files that are not disc images. If you pick
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in

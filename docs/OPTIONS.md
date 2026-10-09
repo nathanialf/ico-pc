@@ -10,7 +10,8 @@ There are two ways in, and both open the same menu:
 - During play, press Start and choose **Options**.
 
 Up and Down move between rows. Left and Right change a value. Cross opens
-a page or confirms. Triangle or Circle goes back.
+a page or confirms. Triangle goes back, and so does Circle (see **Circle
+goes back** under [Controls](#controls)).
 
 Every change happens at once, and the game remembers it the next time you
 play. A few rows only show up in one of the two places. This page says
@@ -42,15 +43,13 @@ How the picture looks.
   the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on:
   the filter draws the PS2's own picture dots with dark lines between them,
   and over a sharper picture it would look like a fine mesh.
-  [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution)
+  [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution).
   The menus' lettering follows it too: at 2x and above it is drawn that
   much finer, so it stays crisp, in the same style.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9 or 32:9. **Auto** follows the shape of your window or screen.
   On a wider picture you see more of the world to the sides. Menus,
-  subtitles and movies stay in a 4:3 box in the middle. At the far edges
-  of a very wide picture, a few things can pop in a moment late, because
-  the game only ever expected a 4:3 view.
+  subtitles and movies stay in a 4:3 box in the middle.
 - **Window mode** is **Windowed** (a normal window), **Borderless** (a
   window without a frame that fills the whole screen, so switching to
   another program is quick) or **Fullscreen**. In Steam Deck Game Mode the
@@ -73,14 +72,17 @@ How the picture looks.
 
 ## Effects
 
-This page is on the first Options page, under Display.
+This page is in the Options menu, right under Display.
 
 The CRT filter and the game's own picture effects.
 
-- **CRT filter** makes the picture look like an old tube television, with
-  several styles. **CRT strength** is how strong it is. It always draws at
-  the PS2's original resolution, on purpose (the dark lines would look like
-  a fine mesh on a sharper picture). Texture packs still show through it.
+- **CRT filter** makes the picture look like an old tube television. Off
+  turns it off; the other choices are the styles Scanlines, Consumer TV,
+  Trinitron, PVM and Shadow mask. **CRT strength** is how strong it is. It
+  always draws at the PS2's original resolution, on purpose (the dark
+  lines would look like a fine mesh on a sharper picture). Texture packs
+  still show through it. To adjust a style's details, see
+  [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
 
 The game's own effects are each On or Off. All On is the picture the PS2
 gives you, and that is how the game starts.
@@ -100,15 +102,17 @@ here show in photo mode at once.
 
 ## Graphics driver
 
-This page only exists on Android phones and tablets with an Adreno
-graphics chip (most Qualcomm Snapdragon phones); on other phones it is not
-shown. It lets you try a different graphics driver instead of the one that
-came with the phone. [How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
+This page is in the Options menu, under Effects. It only exists on Android
+phones and tablets with an Adreno graphics chip (most Qualcomm Snapdragon
+phones); on other phones it is not shown. It lets you try a different
+graphics driver instead of the one that came with the phone.
+[How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
 
 - **Driver** picks the driver for the next start. **Built-in** is the
-  phone's own driver. Every driver you added is listed after it. If the
-  driver you chose does not start, the game tells you, goes back to
-  **Built-in**, and the note at the bottom of this page says so.
+  phone's own driver, so choose it to go back to that one. Every driver you
+  added is listed after it. If the driver you chose does not start, the
+  game tells you, goes back to **Built-in**, and the note at the bottom of
+  this page says so.
 - **Add a driver** opens the file picker so you can choose a driver's zip
   file. It is hidden on phones without an Adreno chip.
 - **Remove this driver** deletes the driver you have chosen. It only shows
@@ -126,35 +130,39 @@ A change takes effect the next time you start the game.
 
 - **Remap controls** lets you change which button or key does what.
 - **Mouse camera** lets the mouse move the camera while you play, with
-  the pointer hidden. It is on unless you turn it off. When you keep the
-  mouse still, the camera swings back behind Ico.
+  the pointer hidden. It is on unless you turn it off.
   [More about the mouse camera](CONTROLS.md#look-around-with-the-mouse).
 - **Mouse sensitivity** is how fast the mouse turns the camera, in play and
   in photo mode.
 - **Invert mouse up/down** swaps up and down for the mouse.
 - **Mouse camera speed** is how quickly the camera reaches where you point
   it. 1.0x is the normal speed; Instant moves it at once.
-- **Mouse camera range** Normal keeps each area's own limit on how far the
+- **Mouse camera range:** Normal keeps each area's own limit on how far the
   camera turns. Full lets you look all the way around.
-- **Camera swings back** Off keeps the camera where you left it until you
-  move the mouse again. The six mouse rows do not show on phones and
-  tablets.
-- **Circle goes back** makes Circle leave menus, like Triangle.
+- **Camera swings back:** On means that when you keep the mouse still, the
+  camera swings back behind Ico. Off keeps the camera where you left it
+  until you move the mouse again.
+
+The six mouse rows do not show on phones and tablets.
+
+- **Circle goes back** lets Circle leave the game's own menus, like
+  Triangle. It starts On. In the Options menu, Circle always goes back.
 - **Touch controls, Touch size and Touch opacity** set up the buttons on a
   touch screen. They only show up on a device with one.
   [About touch controls](CONTROLS.md#touch-controls-phones-and-tablets).
 
 ## Gameplay
 
-The first two are off unless you turn them on.
+The first two are off unless you turn them on, on a phone too.
 
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows.
   [Why this is needed](FAQ.md#ico-walks-instead-of-running).
-- **Achievement pop-ups** is on by default. Turn it off to stop the pop-up
-  when you earn an achievement. You still earn them, and the list shows them.
+- **Achievement pop-ups** is on until you turn it off. Off stops the
+  pop-up when you earn an achievement. You still earn them, and the list
+  under Achievements shows them.
 
 ## Language
 
@@ -258,8 +266,9 @@ those two lines stay hidden until you start a New Game.
 ## Starting a New Game
 
 **Mirror mode** and **New Game+** are not in Options. When you start a New
-Game, the screen after "Vibration" has a row for each, Off or On. Up and
-Down move between them, Left and Right pick, and Cross starts the game.
+Game, the screen after the Vibration question has a row for each, Off or
+On. Up and Down move between them, Left and Right pick, and Cross or Start
+starts the game.
 
 - **Mirror mode** plays the whole game flipped left to right.
 - **New Game+** plays the second journey, the one the PS2 gives you after
@@ -305,13 +314,16 @@ Under `[video]`:
 | --- | --- |
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. A `config.toml` from an older version has a `fullscreen` line instead, and it is still read. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
+| `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
+| `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
+| `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |
 | `texture_pack_budget_mb`, `texture_pack_precache`, `texture_pack_cache_mb` | How much memory a texture pack may use. [About texture packs](TEXTURE_PACKS.md#if-the-pack-uses-a-lot-of-memory). |
 
-Under `[input]`, for the mouse camera:
+Under `[input]`, for the mouse camera and vibration:
 
 | Line | What it does |
 | --- | --- |
@@ -320,6 +332,14 @@ Under `[input]`, for the mouse camera:
 | `mouse_full_range = false` | The Mouse camera range row. `true` is Full. |
 | `mouse_return = true` | The Camera swings back row. |
 | `mouse_hold = 0.75` | How many seconds the mouse must stay still before the camera swings back behind Ico. |
+| `rumble = true` | `false` stops all vibration: a gamepad's rumble and, on a phone, the phone's own. |
+
+Under `[game]`:
+
+| Line | What it does |
+| --- | --- |
+| `achievements = true` | The Achievement pop-ups row. |
+| `circle_back = true` | The Circle goes back row. |
 
 Under `[characters]`, for the Character Customization page. A line that is missing means
 Original:

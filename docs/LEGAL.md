@@ -157,11 +157,11 @@ again until it is reviewed. They fall into four groups:
   metrics): written as typed C in the decompiled source, as every code
   member's data is; this is not one of the data-only members the section
   above keeps out.
-- The two 8x8 debug fonts (`ico2/common/src/debug.c` `fontBitmap`,
-  `ico2/common/src/debug_exception.c` `dbgFont`): glyph bitmaps from code
-  members' `.rodata`. Listed so the scan passes, and marked in the
-  exemption list as under review: if they are judged asset content, the fix
-  is a port-owned replacement font, not a wider exemption.
+- The 8x8 debug font (`ico2/common/src/debug.c` `fontBitmap`): glyph
+  bitmaps from a code member's `.rodata`. Listed so the scan passes, and
+  marked in the exemption list as under review: if it is judged asset
+  content, the fix is a port-owned replacement font, not a wider
+  exemption.
 - The port's own tables in `port/`: the SPU's Gaussian interpolation table
   (`port/audio/spu2_tables.c`, transcribed from psx-spx), fdlibm's 2/pi
   bits (`port/math/newlib/ico_libm.c`), two test vectors (a hand-written

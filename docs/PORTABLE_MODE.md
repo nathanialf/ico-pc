@@ -20,8 +20,7 @@ In the user folder:
   PCSX2 can keep a memory card as a folder in the same way, so saves can
   move between the two.
 - `config.toml` holds your settings.
-- `ico.o2r` holds the game's files, copied from your disc image at the
-  first start.
+- The game's own data, copied from your disc image at the first start.
 - `screenshots` holds the pictures you take in photo mode.
 - Your achievements, and any texture or model pack you put there.
 

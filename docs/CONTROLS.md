@@ -13,7 +13,7 @@ PlayStation or Switch pad.
 | PS2 button | Gamepad | Keyboard | Mouse |
 | --- | --- | --- | --- |
 | Cross (confirm, jump, call Yorda) | bottom face button (A on Xbox) | Space | left button |
-| Circle | right face button | E | right button |
+| Circle (in menus, goes back like Triangle) | right face button | E | right button |
 | Square | left face button | Q | |
 | Triangle (back) | top face button | R | |
 | L1 / R1 | shoulder buttons | Tab or ` / F | middle button (R1) |
@@ -31,8 +31,12 @@ A few more keys on a PC:
   Borderless or Fullscreen choice you made under Window mode).
 - **F12** saves a picture of the current moment for a bug report. See
   [When something goes wrong](TROUBLESHOOTING.md#save-a-picture-of-a-problem).
+- **F11** makes the game write its speed numbers into the log every second
+  for 30 seconds, instead of every 10 seconds. Press it again to stop
+  early. It is for problem reports about slow play.
 
-Escape and F12 cannot be changed. Everything else can be, in **Options > Controls > Remap controls**.
+Escape, F11 and F12 cannot be changed. Everything else can be, in
+**Options > Controls > Remap controls**.
 
 ## Look around with the mouse
 
@@ -206,6 +210,10 @@ On a phone or tablet, buttons are drawn on the screen over the game:
 - **Start and Select** are at the top in the middle.
 
 You can use several fingers at once, for example the stick and a button.
+
+With no gamepad connected, the phone itself vibrates where a gamepad
+would rumble. **Options > Controls > Vibration** (in the pause menu's
+Options) turns that off.
 
 The buttons fade away 5 seconds after you last touched the screen. Touch
 the screen and they come back. When you connect a gamepad, they go away

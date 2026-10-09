@@ -24,8 +24,8 @@ widescreen and smoother motion, but they stay off until you turn them on.
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
   - a Steam Deck;
   - or a 64-bit Android phone or tablet with Android 10 or later, usually
-    one from 2022 or newer. Android is experimental in this version.
-    [More about Android](docs/ANDROID.md).
+    one from 2022 or newer. Android support is experimental in this
+    version. [More about Android](docs/ANDROID.md).
 - **About 1 GB of free space** for the game's files, which the first start
   copies out of the disc image.
 
@@ -69,7 +69,9 @@ controls and where your saves are.
 The first time you start the game, it asks for your disc image. Choose the
 file and wait while it copies the game's files out of it. This takes a
 minute or two and happens only once. After that, the game no longer needs
-the disc image, so you can move or delete it.
+the disc image, so you can move or delete it. On Android, the screen says
+what the game is doing the whole time
+([the Android guide](docs/ANDROID.md#the-first-start) has the steps).
 
 You can skip the question. Put the disc image beside the program and name
 it `Ico_PAL.iso` (or `Ico_PAL.chd`). On Windows, "beside the program"
@@ -107,15 +109,17 @@ means inside the `x64` folder.
 ## Getting help
 
 When something goes wrong, the game writes what happened into a file named
-`ico-pc.log`, in a `logs` folder beside the program. Open a report on the
+`ico-pc.log`, in a `logs` folder beside the program (on Android, in the
+game's own folder). Open a report on the
 [issues page](https://github.com/nathanialf/ico-pc/issues) and attach that
 file. [When something goes wrong](docs/TROUBLESHOOTING.md) explains the
 error messages and what to try first.
 
 ## How it differs from the PS2
 
-- The title screen has an **Options** line and a **Quit to desktop** line (**Quit game** on Android).
-  Options is the same menu you get from the pause menu.
+- The title screen has an **Options** line and a **Quit to desktop** line
+  (**Quit game** on Android). Options is the same menu you get from the
+  pause menu.
 - The language and 50/60 Hz questions the PS2 asks at first start are
   skipped. Both are in Options.
 - Starting a New Game shows one more screen, with **Mirror mode** and
