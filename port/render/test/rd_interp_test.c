@@ -78,6 +78,18 @@
  *             linear scroll's unwrap put it half a repeat off at 0.25 and
  *             0.75); SET_UVOFFSET's quadword w marks V, the common block
  *             clears the mark
+ *   lights    the boy's lights in the dark hall (two F12 dumps), two of
+ *             which change slots between the ticks: on a skinned draw, a lit
+ *             mesh and a lit grid, every light's direction and colour at
+ *             alpha 0.5 lies between the two ticks' values of the same
+ *             light, and the shading of normals all round between the two
+ *             ticks' shading
+ *   instances still instances under one key, the first gone: each blends
+ *             with itself; one gone and one new: the new one is the tick's;
+ *             moving instances pair by ordinal; the pool's ripples (two F12
+ *             dumps' blocks) each stay at their place
+ *   grid STs  a grid sampling a target blends its STs half way; a grid
+ *             with an image keeps the tick's
  */
 #include <math.h>
 #include <stdio.h>
@@ -2711,6 +2723,470 @@ static void testSineScroll(void)
     rd_end_frame(0);
 }
 
+/* ------------------------------------------------ the near lights' slots */
+
+static const char kObjN, kObjR, kObjG;
+
+/* The boy's lights in the dark hall: qw 28..35 of the VU block of boymodel
+ * (SKINNED, key 016f5fd1fb600000, prog 5, code 24, list 0) in the F12 dumps
+ * frame-20261009-083248-v13836 and -v13847.  Light 0 is the torch; lights
+ * A (direction (+0.151, -0.531, +0.834), grey 0.252) and B ((+0.947,
+ * -0.251, -0.200), colour (0.238, 0.205, 0.178) then (0.292, 0.252,
+ * 0.219)) are in slots 1 and 2 in the first and in slots 2 and 1 in the
+ * second (Light.c light_getNearLight orders them by strength). */
+static const float kHallLights[2][8][4] = {
+    {{-0.739586651f, 0.150836766f, 0.947048664f, 0.0f},
+     {-0.526257157f, -0.531259656f, -0.251055896f, 0.0f},
+     {-0.419600993f, 0.833673537f, -0.20017457f, 0.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.672120154f, 0.579868317f, 0.503431141f, 1.0f},
+     {0.252478987f, 0.252478987f, 0.252478987f, 1.0f},
+     {0.238166645f, 0.205477074f, 0.178391472f, 1.0f},
+     {0.478431344f, 0.505882323f, 0.521568596f, 1.0f}},
+    {{-0.739988029f, 0.946839809f, 0.150774419f, 0.0f},
+     {-0.52592051f, -0.251541257f, -0.531289577f, 0.0f},
+     {-0.419315368f, -0.200553343f, 0.833665729f, 0.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.822243273f, 0.709386289f, 0.615876257f, 1.0f},
+     {0.29238373f, 0.252252609f, 0.219001129f, 1.0f},
+     {0.252479583f, 0.252479583f, 0.252479583f, 1.0f},
+     {0.478431344f, 0.505882323f, 0.521568596f, 1.0f}},
+};
+
+/* the hall's lights k on a skinned draw (prog 5, code 24, one bone at
+ * rest), a lit mesh (normal_l) and a lit grid (code 22), still */
+static void recordHallLights(RdMesh mesh, RdMesh skin, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    memcpy(d.vu.mem[28], kHallLights[k], sizeof(kHallLights[k]));
+    static float bone[4][4];
+    identity(bone, 0);
+    d.prog = RD_PROG_SKIN_SPEC;
+    d.code = 24;
+    d.bones = (const float (*)[4])bone;
+    d.boneQw = 4;
+    rd_select_list(0);
+    rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjN, 0, 24));
+    d.prog = RD_PROG_LIT;
+    d.code = 32;
+    d.bones = NULL;
+    d.boneQw = 0;
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjN, 1, 32));
+    /* one strip of 3 lit vertices: VIF qword, tag, colour, 3 x (pos,
+     * normal, ST), MSCNT */
+    static float g[3 * 3 + 4][4];
+    memset(g, 0, sizeof(g));
+    g[1][0] = 7.0f;
+    g[2][0] = g[2][1] = g[2][2] = 128.0f;
+    for (int v = 0; v < 3; v++) {
+        g[3 + v * 3][0] = (float)(v * 10);
+        g[3 + v * 3][3] = 1.0f;
+        g[4 + v * 3][1] = 1.0f;
+        g[5 + v * 3][0] = 0.5f;
+    }
+    RdVuGridDraw gd;
+    memset(&gd, 0, sizeof(gd));
+    gd.qw = (const float (*)[4])g;
+    gd.strips = 1;
+    gd.stripLen = 3;
+    gd.lit = 1;
+    gd.code = 22;
+    gd.vu = d.vu;
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjN, 2, 22));
+    rd_end_frame(0);
+}
+
+/* normal_l's and cluster's colour for the unit normal n (vu_skin.hlsl,
+ * vu_lit.hlsl: c = L2 max0(L1 n) with the ambient column) */
+static void lightShade(const float (*m)[4], const double n[3], double out[3])
+{
+    double l[3];
+    for (int i = 0; i < 3; i++) {
+        const double v = m[28][i] * n[0] + m[29][i] * n[1] + m[30][i] * n[2] + m[31][i];
+        l[i] = v > 0.0 ? v : 0.0;
+    }
+    for (int ch = 0; ch < 3; ch++) {
+        out[ch] = m[32][ch] * l[0] + m[33][ch] * l[1] + m[34][ch] * l[2] + m[35][ch];
+    }
+}
+
+static bool within(double v, double a, double b, double tol)
+{
+    return v >= fmin(a, b) - tol && v <= fmax(a, b) + tol;
+}
+
+static void testLightSlots(void)
+{
+    RdMesh mesh = makeMesh(), skin = makeSkinMesh();
+    recordHallLights(mesh, skin, 0);
+    recordHallLights(mesh, skin, 1);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->lerped == 3 && st->lightPaired == 3,
+          "the skinned draw, the lit mesh and the lit grid blend with their lights re-paired "
+          "(lerped %u, re-paired %u)",
+          st->lerped, st->lightPaired);
+    const RdFrame *f = built(0.5f);
+    const RdKey keys[3] = {RD_KEY(&kObjN, 0, 24), RD_KEY(&kObjN, 1, 32), RD_KEY(&kObjN, 2, 22)};
+    const int same[3] = {0, 2, 1}; /* cur's slot i is prev's slot same[i] */
+    const float (*p)[4] = kHallLights[0], (*c)[4] = kHallLights[1];
+    for (int d = 0; d < 3; d++) {
+        const float (*m)[4] = vuBlock(f, findKey(f, 0, keys[d], 0));
+        if (!m) {
+            CHECK(0, "the lit draw %d", d);
+            continue;
+        }
+        int rows = 0;
+        for (int i = 0; i < 3; i++) {
+            for (int k = 0; k < 4; k++) {
+                /* L1's row i (qw 28..31 element i) and L2's column i */
+                rows += within(m[28 + k][i], p[k][same[i]], c[k][i], 1e-6) &&
+                        within(m[32 + i][k], p[4 + same[i]][k], c[4 + i][k], 1e-6);
+            }
+        }
+        CHECK(rows == 12,
+              "draw %d: every light's direction and colour lies between the two ticks' values of "
+              "the same light (%d of 12)",
+              d, rows);
+        /* the shading of normals all round stays between the two ticks' */
+        double worst = 0.0;
+        int out = 0;
+        for (int a = 0; a < 360; a += 10) {
+            for (int b = -80; b <= 80; b += 10) {
+                const double ra = a * 3.14159265358979323846 / 180.0;
+                const double rb = b * 3.14159265358979323846 / 180.0;
+                const double n[3] = {cos(rb) * cos(ra), sin(rb), cos(rb) * sin(ra)};
+                double sp[3], sc[3], so[3];
+                lightShade(p, n, sp);
+                lightShade(c, n, sc);
+                lightShade(m, n, so);
+                for (int ch = 0; ch < 3; ch++) {
+                    const double lo = fmin(sp[ch], sc[ch]);
+                    if (!within(so[ch], sp[ch], sc[ch], 1e-4 + 1e-3 * fmax(sp[ch], sc[ch]))) {
+                        out++;
+                        if (lo > 0.0 && (lo - so[ch]) / lo > worst) {
+                            worst = (lo - so[ch]) / lo;
+                        }
+                    }
+                }
+            }
+        }
+        CHECK(out == 0,
+              "draw %d: the half-way shading stays between the two ticks' (%d channels out, the "
+              "darkest %.1f %% under)",
+              d, out, worst * 100.0);
+        if (d == 0) {
+            printf("rd_interp_test: hall lights at alpha 0.5: %d shaded channels outside the two "
+                   "ticks' range\n",
+                   out);
+        }
+    }
+    /* recorded in the same order: nothing to re-pair */
+    recordHallLights(mesh, skin, 1);
+    recordHallLights(mesh, skin, 1);
+    st = build(0.5f, 1);
+    CHECK(st->lightPaired == 0, "lights in the same slots stay (%u)", st->lightPaired);
+    rd_destroy_vu_mesh(mesh);
+    rd_destroy_vu_mesh(skin);
+}
+
+/* ------------------------------------------------- same-key instances */
+
+/* a still prelit instance at world x (S identity: the origin is qw 19) */
+static void instanceAt(RdMesh mesh, float x, RdKey key)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    d.vu.mem[19][0] = d.vu.mem[23][0] = d.vu.mem[27][0] = x;
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+static void instanceFrame(RdMesh mesh, const float *xs, int n)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < n; i++) {
+        instanceAt(mesh, xs[i], RD_KEY(&kObjR, 0, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* the blended x of the n-th instance */
+static float instanceX(const RdFrame *f, int nth)
+{
+    const float (*m)[4] = vuBlock(f, findKey(f, 5, RD_KEY(&kObjR, 0, 34), nth));
+    return m ? m[19][0] : -1.0e9f;
+}
+
+/* The pool's ripples (hamon, list 5, key 016f5fc525f00100, prog 0 code 34)
+ * in the F12 dumps frame-20261009-083502-v21878 and -083503-v21889, six
+ * ticks apart: the common block's world to screen (qw 4..7) and each
+ * instance's model to screen (qw 16..19).  The ripples stand still and grow;
+ * in the second the oldest (world x 971.5) is gone and a new one of scale 0
+ * (x 1093.8) is the last, so by ordinal each would blend from the place of
+ * the one before it (12 to 55 units away). */
+static const float kPoolS[2][16] = {
+    {1981.80237f, 1517.66699f, -3606.70361f, 0.880751312f, 816.943115f, 1501.67151f, -1633.49951f,
+     0.398898005f, -92.4732056f, 439.468201f, -1044.38696f, 0.255037636f, -818977.938f, -836864.25f,
+     1.074736e+09f, -240.81897f},
+    {1983.39221f, 1529.83594f, -3628.23999f, 0.886010468f, 809.374817f, 1495.43274f, -1618.36658f,
+     0.395202547f, -121.36026f, 418.298096f, -992.057922f, 0.242258981f, -831610.0f, -847413.25f,
+     1.07476006e+09f, -246.694855f},
+};
+
+static const float kPoolM[2][5][16] = {
+    {{1874.01575f, 902.704102f, -2145.25732f, 0.523868442f, 1126.32007f, 2070.35547f, -2252.10693f,
+      0.549960971f, 2003.4657f, 1996.24194f, -4744.02686f, 1.15848386f, 1844667.25f, 1969408.75f,
+      1.06980672e+09f, 962.892334f},
+     {2001.3844f, 1097.10242f, -2607.24097f, 0.63668412f, 1055.20361f, 1939.6322f, -2109.90771f,
+      0.515236139f, 1606.77881f, 1726.98633f, -4104.14648f, 1.00222611f, 1899899.75f, 1997198.5f,
+      1.06974067e+09f, 979.019531f},
+     {1818.97156f, 1047.61047f, -2489.62451f, 0.60796237f, 912.326721f, 1677.00183f, -1824.22168f,
+      0.445472032f, 1266.85815f, 1425.10852f, -3386.74048f, 0.827036619f, 1915560.0f, 2004579.5f,
+      1.06972314e+09f, 983.302979f},
+     {1005.3338f, 583.225281f, -1386.02258f, 0.338464528f, 498.67334f, 916.640991f, -997.110596f,
+      0.243492842f, 678.531738f, 769.373413f, -1828.39978f, 0.446492314f, 2005382.75f, 2056413.0f,
+      1.0696e+09f, 1013.38379f},
+     {262.342651f, 144.094528f, -342.437622f, 0.0836227238f, 132.216156f, 243.034348f, -264.36972f,
+      0.0645586699f, 215.981873f, 232.509155f, -552.553101f, 0.134932593f, 2043516.5f, 2078757.5f,
+      1.06954688e+09f, 1026.35083f}},
+    {{2117.1814f, 1176.86133f, -2791.10693f, 0.681583822f, 1092.07373f, 2017.7583f, -2183.63062f,
+      0.533239126f, 1659.13611f, 1802.86584f, -4275.77246f, 1.04413688f, 1884069.0f, 1994665.25f,
+      1.06975322e+09f, 975.963318f},
+     {2022.44604f, 1179.13367f, -2796.49609f, 0.682899952f, 992.304871f, 1833.42139f, -1984.14001f,
+      0.484523863f, 1357.4093f, 1545.72791f, -3665.93042f, 0.895214379f, 1900002.75f, 2002328.75f,
+      1.06973504e+09f, 980.40155f},
+     {1357.06116f, 796.834229f, -1889.81409f, 0.461489618f, 657.341858f, 1214.53064f, -1314.37256f,
+      0.320967704f, 888.8255f, 1020.53302f, -2420.35034f, 0.591045737f, 1990854.5f, 2055398.5f,
+      1.06960915e+09f, 1011.13702f},
+     {773.140381f, 430.522247f, -1021.04938f, 0.249338627f, 398.079865f, 735.507996f, -795.971313f,
+      0.194374934f, 597.141785f, 649.852905f, -1541.22546f, 0.376364827f, 2029406.25f, 2078254.0f,
+      1.06955494e+09f, 1024.3739f},
+     {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2083245.0f,
+      2109330.5f, 1.06948128e+09f, 1042.37207f}},
+};
+
+static void rippleFrame(RdMesh mesh, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < 5; i++) {
+        RdVuDraw d;
+        memset(&d, 0, sizeof(d));
+        d.prog = RD_PROG_PRELIT;
+        d.code = 34;
+        identity(d.vu.mem, 12);
+        memcpy(d.vu.mem[4], kPoolS[k], sizeof(kPoolS[k]));
+        for (int a = 16; a < 28; a += 4) {
+            memcpy(d.vu.mem[a], kPoolM[k][i], sizeof(kPoolM[k][i]));
+        }
+        rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjR, 1, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* a block's model origin in the world, S^-1 (qw 19), in double */
+static bool worldOriginOf(const float (*m)[4], double out[3])
+{
+    double a[4][8];
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            a[r][c] = m[4 + c][r];
+            a[r][4 + c] = r == c ? 1.0 : 0.0;
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        int piv = i;
+        for (int r = i + 1; r < 4; r++) {
+            piv = fabs(a[r][i]) > fabs(a[piv][i]) ? r : piv;
+        }
+        for (int c = 0; c < 8; c++) {
+            const double t = a[i][c];
+            a[i][c] = a[piv][c];
+            a[piv][c] = t;
+        }
+        if (!(fabs(a[i][i]) > 1e-30)) {
+            return false;
+        }
+        const double d = a[i][i];
+        for (int c = 0; c < 8; c++) {
+            a[i][c] /= d;
+        }
+        for (int r = 0; r < 4; r++) {
+            if (r != i) {
+                const double f = a[r][i];
+                for (int c = 0; c < 8; c++) {
+                    a[r][c] -= f * a[i][c];
+                }
+            }
+        }
+    }
+    double w[4];
+    for (int r = 0; r < 4; r++) {
+        w[r] = 0.0;
+        for (int k = 0; k < 4; k++) {
+            w[r] += a[r][4 + k] * m[19][k];
+        }
+    }
+    for (int j = 0; j < 3; j++) {
+        out[j] = w[j] / w[3];
+    }
+    return fabs(w[3]) > 1e-12;
+}
+
+static void testInstances(void)
+{
+    RdMesh mesh = makeMesh();
+    /* three still instances, the first gone in the tick: each blends with
+     * itself (by ordinal, B from A's place and C from B's) */
+    const float abc[3] = {0.0f, 40.0f, 80.0f}, bc[2] = {40.0f, 80.0f};
+    instanceFrame(mesh, abc, 3);
+    instanceFrame(mesh, bc, 2);
+    const RdInterpStats *st = build(0.5f, 1);
+    const RdFrame *f = built(0.5f);
+    CHECK(st->lerped == 2 && st->placed == 2 && instanceX(f, 0) == 40.0f &&
+              instanceX(f, 1) == 80.0f,
+          "a still instance gone: the others blend with themselves (x %.2f %.2f, ordinal 20 60; "
+          "lerped %u, placed %u)",
+          (double)instanceX(f, 0), (double)instanceX(f, 1), st->lerped, st->placed);
+    /* the first gone and a new one at 120 in the same tick: the new one is
+     * the tick's, not blended from the one that went */
+    const float bcd[3] = {40.0f, 80.0f, 120.0f};
+    instanceFrame(mesh, abc, 3);
+    instanceFrame(mesh, bcd, 3);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    CHECK(st->lerped == 2 && st->missing == 1 && instanceX(f, 0) == 40.0f &&
+              instanceX(f, 1) == 80.0f && instanceX(f, 2) == 120.0f,
+          "one gone, one new: the new one is the tick's (x %.2f %.2f %.2f; lerped %u, unmatched "
+          "%u)",
+          (double)instanceX(f, 0), (double)instanceX(f, 1), (double)instanceX(f, 2), st->lerped,
+          st->missing);
+    /* moving instances (none at a place of the tick before): by ordinal */
+    const float ab[2] = {0.0f, 40.0f}, ab2[2] = {10.0f, 50.0f};
+    instanceFrame(mesh, ab, 2);
+    instanceFrame(mesh, ab2, 2);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    CHECK(st->lerped == 2 && st->placed == 0 && fabsf(instanceX(f, 0) - 5.0f) < 1e-4f &&
+              fabsf(instanceX(f, 1) - 45.0f) < 1e-4f,
+          "moving instances pair by ordinal (x %.2f %.2f, placed %u)", (double)instanceX(f, 0),
+          (double)instanceX(f, 1), st->placed);
+
+    /* the pool's ripples, the two dumps' blocks as two ticks */
+    rippleFrame(mesh, 0);
+    rippleFrame(mesh, 1);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    const RdFrame *cur = rd__last_frame();
+    CHECK(st->lerped == 4 && st->missing == 1,
+          "ripples: 4 blend, the new one is the tick's (%u, %u)", st->lerped, st->missing);
+    for (int i = 0; i < 5; i++) {
+        const float (*m)[4] = vuBlock(f, findKey(f, 5, RD_KEY(&kObjR, 1, 34), i));
+        const float (*mc)[4] = vuBlock(cur, findKey(cur, 5, RD_KEY(&kObjR, 1, 34), i));
+        double o[3], oc[3];
+        if (!m || !mc || !worldOriginOf(m, o) || !worldOriginOf(mc, oc)) {
+            CHECK(0, "ripple %d", i);
+            continue;
+        }
+        const double dx = o[0] - oc[0], dy = o[1] - oc[1], dz = o[2] - oc[2];
+        const double off = sqrt(dx * dx + dy * dy + dz * dz);
+        CHECK(off < 0.5, "ripple %d stays at its place (%.2f %.2f %.2f, %.3f units off)", i, o[0],
+              o[1], o[2], off);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* -------------------------------------------- screen-space grid STs */
+
+/* two unlit grids, one sampling WORK1 (the pool's surface sampling the
+ * scene's copy), one an image; their STs u0 + v * 0.1 */
+static void gridStFrame(RdTex image, float u0)
+{
+    rd_begin_frame();
+    frameHead();
+    static float g[3 * 2 + 4][4];
+    memset(g, 0, sizeof(g));
+    g[1][0] = 7.0f;
+    g[2][0] = 128.0f;
+    for (int v = 0; v < 3; v++) {
+        g[3 + v * 2][0] = (float)(v * 10);
+        g[3 + v * 2][3] = 1.0f;
+        g[4 + v * 2][0] = u0 + (float)v * 0.1f;
+        g[4 + v * 2][1] = u0;
+        g[4 + v * 2][2] = 1.0f;
+    }
+    RdVuGridDraw gd;
+    memset(&gd, 0, sizeof(gd));
+    gd.qw = (const float (*)[4])g;
+    gd.strips = 1;
+    gd.stripLen = 3;
+    gd.code = 20;
+    identity(gd.vu.mem, 4);
+    identity(gd.vu.mem, 16);
+    rd_select_list(4);
+    rd_texture(rd_target_texture(rd_target(RD_TARGET_WORK1), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+               RD_TCC_RGBA);
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjG, 0, 20));
+    rd_texture(image, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjG, 1, 20));
+    rd_texture_off();
+    rd_end_frame(0);
+}
+
+static const float (*gridStream(const RdFrame *f, RdKey k))[4]
+{
+    const RdCmd *c = findKey(f, 4, k, 0);
+    return c ? (const float (*)[4])(const void *)(f->payload + c->u[1] + sizeof(RdVuPayload) +
+                                                  sizeof(RdVuBlock))
+             : NULL;
+}
+
+static void testGridScreenSt(void)
+{
+    static const uint8_t px[4 * 4 * 4] = {0};
+    RdTex image = rd_create_texture(4, 4, px, RD_TEXA_7F_81_AEM, "grid image");
+    gridStFrame(image, 0.25f);
+    gridStFrame(image, 0.75f);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->lerped == 2 && st->gridSt == 1, "both grids blend, one with its STs (%u, %u)",
+          st->lerped, st->gridSt);
+    const RdFrame *f = built(0.5f);
+    const float (*a)[4] = gridStream(f, RD_KEY(&kObjG, 0, 20));
+    const float (*b)[4] = gridStream(f, RD_KEY(&kObjG, 1, 20));
+    if (a && b) {
+        int mid = 0, held = 0;
+        for (int v = 0; v < 3; v++) {
+            mid += fabsf(a[4 + v * 2][0] - (0.5f + (float)v * 0.1f)) < 1e-6f &&
+                   fabsf(a[4 + v * 2][1] - 0.5f) < 1e-6f;
+            held += b[4 + v * 2][0] == 0.75f + (float)v * 0.1f && b[4 + v * 2][1] == 0.75f;
+        }
+        CHECK(mid == 3, "the grid sampling a target: STs half way (%d of 3; s %.4f)", mid,
+              (double)a[4][0]);
+        CHECK(held == 3, "the grid with an image keeps the tick's STs (%d of 3; s %.4f)", held,
+              (double)b[4][0]);
+    } else {
+        CHECK(0, "the two grids");
+    }
+    rd_destroy_texture(image);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -2735,6 +3211,9 @@ static void runCpu(void)
     testShineFollows();
     testParticleSwap();
     testSineScroll();
+    testLightSlots();
+    testInstances();
+    testGridScreenSt();
 }
 
 int main(void)

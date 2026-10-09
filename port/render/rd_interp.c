@@ -14,7 +14,12 @@
  * key (RdKey, RD_KEY at the call sites; 0 = never) and prev has a draw of
  * the same type in the same list with the same key; the n-th occurrence of
  * a key in cur matches the n-th in prev (the "call ordinal" for packets
- * drawn more than once).  What blends, per command:
+ * drawn more than once).  Objects the game draws many times under one key
+ * (the swim ripples, the fog billboards) are paired by place first: a VU
+ * draw of a key prev drew more than once pairs with prev's draw at the same
+ * place in the world; when some of the key's draws stand still, a draw with
+ * no draw of prev at its place is a new one and is cur's, and when none
+ * does, the ordinal decides (placeSlot).  What blends, per command:
  *
  *   RDC_MESH, RDC_SKINNED   the VU block (VuCB.mem): qw 2 (the UV scroll
  *                           SET_UVOFFSET left, with Texture.c's wrap of
@@ -22,12 +27,19 @@
  *                           cluster fade alpha), qw 4..15 (the common
  *                           block's world to screen, viewport and inverse
  *                           view matrices), 16..27 (the model matrices),
- *                           28..35 (the light matrices; a lit program's
- *                           L1 turns with the model, rotateLight); the
- *                           bones; not qw 0, 1, 3 (constants and the GIF tag)
+ *                           28..35 (the light matrices: in a lit draw,
+ *                           prev's three lights first take the slots of
+ *                           cur's lights they are nearest in direction,
+ *                           as the game orders them by strength,
+ *                           pairLights; a lit program's L1 then turns with
+ *                           the model, rotateLight); the bones; not qw 0,
+ *                           1, 3 (constants and the GIF tag)
  *   RDC_GRID                the VU block and each vertex's position (and
- *                           normal when lit); the strip headers, colours
- *                           and STs are cur's
+ *                           normal when lit), and its ST when the grid
+ *                           samples a target (the pool's surface: the STs
+ *                           are screen positions through the tick's
+ *                           camera); the strip headers, colours and an
+ *                           image's STs are cur's
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
@@ -743,6 +755,122 @@ static bool rotateLight(float (*o)[4], const float (*p)[4], const float (*c)[4],
     return true;
 }
 
+/* The near lights' slots.  Light.c's light_getNearLight fills L1's rows 0..2
+ * and L2's columns 0..2 with the three lights nearest the object, ordered by
+ * strength (falloff, scale and mean colour), so two lights whose strengths
+ * cross between ticks change slots: in the dark hall a pulsing light passes
+ * a steady one and slots 1 and 2 of the boy's lights swap.  Blended slot by
+ * slot, the half-way frame would light him from a direction between the two
+ * lights, with a mix of their colours: some normals a quarter darker in red
+ * than in either tick (rd_interp_test's hall lights).  Before the blend,
+ * prev's three lights are put in the slots of the lights of cur they are
+ * nearest in direction: light i is element i of qw 28..31 (L1's row i) and
+ * qw 32 + i (L2's column i); qw 35, the ambient, stays.  The shading of
+ * prev's block is the same in any order (the program sums the three lights'
+ * terms).  A zero row (no light) pairs with a zero row.  The order changes
+ * only when another pairing is closer than the recorded one. */
+static int s_lightPair; /* lit draws whose previous lights were re-paired, this present */
+
+static bool isLitDraw(uint8_t type, uint8_t prog)
+{
+    switch (type) {
+    case RDC_MESH:
+        return prog == RD_PROG_LIT || prog == RD_PROG_LIT_SPEC;
+    case RDC_SKINNED:
+        return prog == RD_PROG_SKIN || prog == RD_PROG_SKIN_SPEC;
+    case RDC_GRID:
+        return prog == RD_PROG_GRID_LIT;
+    default:
+        return false;
+    }
+}
+
+/* the three lights' unit directions in the world, for the pairing: a draw
+ * with a model matrix (normal_l, the grid: L1 is in the model's space)
+ * through its model to world W = S^-1 M (qw 4..7, 16..19), Ln = L1 W^-1 as
+ * rotateLight has it, so a turn of the object between the ticks does not
+ * move them; a skinned draw's L1 as it is (cluster turns the normals by
+ * the bones, which are in the world), and as it is when W is singular.
+ * zero[i]: the row is zero (no light) */
+static void lightDirs(const float (*m)[4], bool model, double d[3][3], bool zero[3])
+{
+    double iw[16];
+    bool world = false;
+    if (model) {
+        double s[16], is[16], mm[16], w[16];
+        loadQw4(m, 4, s);
+        loadQw4(m, 16, mm);
+        if (invert4d(s, is)) {
+            mul4d(is, mm, w);
+            world = invert4d(w, iw);
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        double len = 0.0;
+        for (int j = 0; j < 3; j++) {
+            double v = 0.0;
+            if (world) {
+                for (int k = 0; k < 3; k++) {
+                    v += (double)m[28 + k][i] * iw[j * 4 + k];
+                }
+            } else {
+                v = m[28 + j][i];
+            }
+            d[i][j] = v;
+            len += v * v;
+        }
+        len = sqrt(len);
+        zero[i] = !(len > 1e-6) || !isfinite(len);
+        for (int j = 0; j < 3; j++) {
+            d[i][j] = zero[i] ? 0.0 : d[i][j] / len;
+        }
+    }
+}
+
+/* p (prev's block, a copy) with its lights moved into the slots of cur's
+ * (c) they pair with; false: the recorded order is the nearest */
+static bool pairLights(float (*p)[4], const float (*c)[4], bool model)
+{
+    static const int perms[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+                                    {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    double dp[3][3], dc[3][3], score[3][3];
+    bool zp[3], zc[3];
+    lightDirs((const float (*)[4])p, model, dp, zp);
+    lightDirs(c, model, dc, zc);
+    for (int i = 0; i < 3; i++) { /* cur's light i, prev's light j */
+        for (int j = 0; j < 3; j++) {
+            if (zc[i] || zp[j]) {
+                score[i][j] = zc[i] == zp[j] ? 2.0 : -2.0;
+            } else {
+                score[i][j] = dc[i][0] * dp[j][0] + dc[i][1] * dp[j][1] + dc[i][2] * dp[j][2];
+            }
+        }
+    }
+    int best = 0;
+    double bestScore = score[0][0] + score[1][1] + score[2][2];
+    const double keep = bestScore;
+    for (int k = 1; k < 6; k++) {
+        const double s = score[0][perms[k][0]] + score[1][perms[k][1]] + score[2][perms[k][2]];
+        if (s > bestScore) {
+            bestScore = s;
+            best = k;
+        }
+    }
+    if (best == 0 || !(bestScore > keep + 1e-3)) {
+        return false;
+    }
+    float was[8][4];
+    memcpy(was, p[28], sizeof(was));
+    for (int i = 0; i < 3; i++) {
+        const int j = perms[best][i];
+        for (int k = 0; k < 4; k++) {
+            p[28 + k][i] = was[k][j]; /* L1's row */
+        }
+        memcpy(p[32 + i], was[4 + j], sizeof(p[0])); /* L2's column */
+    }
+    return true;
+}
+
 /* A normal program's model matrices (qw 16..19 model to screen, 20..23
  * model to clip, 24..27 model to view) are each a camera part times the
  * object's model to world W.  W = S^-1 (qw 16..19), S the common block's
@@ -1144,15 +1272,33 @@ static bool vtxJump(const RdScreenVtx *p, const RdScreenVtx *c, uint32_t n)
 
 typedef struct Slot {
     uint32_t lo, hi;
-    uint8_t type, list, used, _pad;
-    int32_t head, tail, cursor; /* prev's occurrences, in order (Node.next) */
+    uint8_t type, list, used;
+    uint8_t placed;                      /* cur's occurrences are paired (placeSlot) */
+    int32_t head, tail, cursor;          /* prev's occurrences, in order (Node.next) */
+    uint32_t count;                      /* of them */
+    int32_t curHead, curTail, curCursor; /* cur's, when prev has two or more (CurNode) */
 } Slot;
 
 typedef struct Node {
     uint32_t list, index;
     int32_t next;
     int32_t out; /* the index of its match in s_out's list, -1: unmatched */
+    int32_t org; /* placeSlot: 1 the draw's origin is in at, -1 it has none, 0 not known */
+    float at[3]; /* its model origin in the world (vuWorldOrigin) */
 } Node;
+
+/* cur's occurrence of a key prev drew two or more times (placeSlot) */
+typedef struct CurNode {
+    uint32_t index; /* in s_out's list */
+    int32_t next;
+    int32_t pick; /* the prev Node it is paired with, -1 none */
+} CurNode;
+
+static CurNode *s_curNodes;
+
+static uint32_t s_curCap, s_curCount;
+
+static int s_placed; /* draws paired by their place in the world, not by their ordinal */
 
 static Slot *s_slots;
 
@@ -1207,6 +1353,7 @@ static Slot *slotFind(const RdCmd *c, int list, bool insert)
             s->type = c->type;
             s->list = (uint8_t)list;
             s->head = s->tail = s->cursor = -1;
+            s->curHead = s->curTail = s->curCursor = -1;
             return s;
         }
         if (s->lo == c->keyLo && s->hi == c->keyHi && s->type == c->type && s->list == list) {
@@ -1259,6 +1406,8 @@ static bool buildIndex(const RdFrame *prev)
             s_nodes[k].index = i;
             s_nodes[k].next = -1;
             s_nodes[k].out = -1;
+            s_nodes[k].org = 0;
+            s->count++;
             if (s->tail >= 0) {
                 s_nodes[s->tail].next = k;
             } else {
@@ -1270,11 +1419,153 @@ static bool buildIndex(const RdFrame *prev)
     return true;
 }
 
+/* Same-key instances.  The game keys a packet by its object and part
+ * (RegistPacket.c), not by the instance, so objects drawn many times share
+ * one key: the swim ripples (hamon, wfrip1: a ring of up to 30 spawned by
+ * the swimming, each fixed in the world where it was spawned), the fog
+ * billboards (fog1).  Paired by ordinal, when the oldest instance goes
+ * every later one would blend from the place and size of the one before
+ * it, a jump back and forth once per spawn.  So the VU meshes and grids
+ * of a key prev drew two or more times are paired by their model
+ * origin in the world (vuWorldOrigin; the camera's motion cancels) first:
+ * each draw of cur with the first unpaired draw of prev at the same origin
+ * (sameOrigin).  When none is at the same origin (the instances move), the
+ * pairing is the ordinal one.  When some are, the slot's instances stand
+ * still and a draw of cur without its origin in prev is a new instance:
+ * it is the tick's (unmatched), not blended from another instance's place;
+ * a draw of prev left over is one that went. */
+static bool canPlace(const RdCmd *c)
+{
+    /* not particles: MicroCode.c keys their batches by emitter */
+    return c->type == RDC_MESH || c->type == RDC_GRID;
+}
+
+static bool sameOrigin(const float a[3], const float b[3])
+{
+    /* the origins of a still object, inverted from two ticks' matrices
+     * through different cameras, agree to about 1e-6 of their distance from
+     * the world's origin (the pool's ripples, 1000 units out, six ticks
+     * apart: within 1e-3); instances of one key stand apart by many units
+     * (the ripples by 11 or more) */
+    const float m = fmaxf(fmaxf(fabsf(a[0]), fabsf(a[1])), fmaxf(fabsf(a[2]), 1.0f));
+    return dist3(a, b) <= 0.01f + 2e-5f * m;
+}
+
+static bool growTo(void **p, uint32_t *cap, uint32_t n, size_t size);
+
+static const void *payloadAt(const RdFrame *f, uint32_t off, uint32_t size);
+
+/* the model origin of draw c of frame f (prev's or s_out), false without one */
+static bool drawOrigin(const RdFrame *f, const RdCmd *c, float out[3])
+{
+    if (c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return false;
+    }
+    const uint8_t *p = payloadAt(f, c->u[1], c->u[2]);
+    if (!p) {
+        return false;
+    }
+    float m[36][4];
+    memcpy(m, p + sizeof(RdVuPayload), sizeof(m));
+    return vuWorldOrigin((const float (*)[4])m, out);
+}
+
+/* cur's (s_out's) occurrences of the keys prev drew two or more times, in
+ * order; false on out of memory (the pairing is then the ordinal one) */
+static bool indexCur(void)
+{
+    s_curCount = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
+            const RdCmd *c = &s_out.lists[l].cmds[i];
+            if (!isKeyedDraw(c) || !canPlace(c)) {
+                continue;
+            }
+            Slot *s = slotFind(c, l, false);
+            if (!s || s->count < 2) {
+                continue;
+            }
+            if (!growTo((void **)&s_curNodes, &s_curCap, s_curCount + 1, sizeof(CurNode))) {
+                for (uint32_t k = 0; k < s_slotCap; k++) {
+                    s_slots[k].curHead = s_slots[k].curTail = s_slots[k].curCursor = -1;
+                }
+                return false;
+            }
+            const int32_t k = (int32_t)s_curCount++;
+            s_curNodes[k].index = i;
+            s_curNodes[k].next = -1;
+            s_curNodes[k].pick = -1;
+            if (s->curTail >= 0) {
+                s_curNodes[s->curTail].next = k;
+            } else {
+                s->curHead = s->curCursor = k;
+            }
+            s->curTail = k;
+        }
+    }
+    return true;
+}
+
+/* pairs the occurrences of slot s (see above) into CurNode.pick */
+static void placeSlot(const RdFrame *prev, Slot *s)
+{
+    s->placed = 1;
+    const RdCmdList *cl = &s_out.lists[s->list];
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        Node *nd = &s_nodes[k];
+        nd->org = drawOrigin(prev, &prev->lists[nd->list].cmds[nd->index], nd->at) ? 1 : -1;
+    }
+    /* the draws at the same origin; out marks the prev draws taken (reset
+     * below: matchOf sets it) */
+    uint32_t same = 0;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        float at[3];
+        if (!drawOrigin(&s_out, &cl->cmds[s_curNodes[j].index], at)) {
+            continue;
+        }
+        for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+            if (s_nodes[k].out < 0 && s_nodes[k].org > 0 && sameOrigin(s_nodes[k].at, at)) {
+                s_curNodes[j].pick = k;
+                s_nodes[k].out = 0;
+                same++;
+                break;
+            }
+        }
+    }
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        s_nodes[k].out = -1;
+    }
+    /* o: the ordinal's pick */
+    for (int32_t j = s->curHead, o = s->head; j >= 0; j = s_curNodes[j].next) {
+        if (same == 0) { /* none still: the ordinal pairing */
+            s_curNodes[j].pick = o;
+        } else {
+            s_placed += s_curNodes[j].pick != o;
+        }
+        o = o >= 0 ? s_nodes[o].next : -1;
+    }
+}
+
 /* the next unmatched occurrence in prev of cur's draw c, index i in list l */
 static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t i)
 {
     Slot *s = slotFind(c, l, false);
-    if (!s || s->cursor < 0) {
+    if (!s) {
+        return NULL;
+    }
+    if (s->curCursor >= 0 && s_curNodes[s->curCursor].index == i) {
+        if (!s->placed) {
+            placeSlot(prev, s);
+        }
+        const int32_t k = s_curNodes[s->curCursor].pick;
+        s->curCursor = s_curNodes[s->curCursor].next;
+        if (k < 0) {
+            return NULL;
+        }
+        s_nodes[k].out = (int32_t)i;
+        return &prev->lists[s_nodes[k].list].cmds[s_nodes[k].index];
+    }
+    if (s->cursor < 0) {
         return NULL;
     }
     Node *nd = &s_nodes[s->cursor];
@@ -1323,6 +1614,19 @@ static bool sameMesh(uint32_t a, uint32_t b)
            x->qwPerVertex == y->qwPerVertex && x->batchCount == y->batchCount &&
            x->indexCount == y->indexCount;
 }
+
+/* The grid draw blendVu is given samples a target (RD_TEXKIND_TARGET) under
+ * its state: its STs are screen positions.  pool.c makes the pool surface's
+ * STs (its refraction and reflection grids, sampling the scene copied into
+ * a work target) by projecting each vertex with the tick's camera
+ * (pool.c:549-550, 590-591).  The camera and the copied scene blend, so
+ * with cur's STs the image under the water would stand a tick ahead of the
+ * scene and jump back at every tick; blended with the positions it follows
+ * the blended camera.  A grid with an image keeps cur's STs (its texture's
+ * own coordinates, the UV scroll in qw 2 blending instead). */
+static bool s_gridScreenSt;
+
+static int s_gridSt; /* grids whose STs blended (s_gridScreenSt), this present */
 
 static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
 {
@@ -1404,6 +1708,16 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
             s_rebased++;
         }
     }
+    /* prev's lights in the slots of the lights of cur they pair with, before
+     * the blend and the light's turn (pairLights, rotateLight) */
+    float vpl[36][4];
+    if (isLitDraw(cc->type, cc->b[0])) {
+        memcpy(vpl, vp, sizeof(vpl));
+        if (pairLights(vpl, (const float (*)[4])vc, cc->type != RDC_SKINNED)) {
+            vp = (const float (*)[4])vpl;
+            s_lightPair++;
+        }
+    }
     lerpVuBlock(vo, vp, (const float (*)[4])vc, t, hc.scroll);
     /* a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__s2_legacy();
@@ -1445,16 +1759,24 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         const uint32_t qpv = hc.qwPerVertex, len = hc.vertsPerBatch;
         const uint32_t per = len * qpv + 4;
         const uint32_t lerpQw = qpv == RD_VU_QW_GRID_LIT ? 2u : 1u; /* pos (, normal) */
+        /* the ST, the vertex's last qword, too when it is a projection of the
+         * vertex through the tick's camera into a target the frame drew
+         * (s_gridScreenSt: the pool's refraction and reflection) */
+        const bool st = s_gridScreenSt && qpv >= 2u;
         for (uint32_t s = 0; s < hc.batchCount && (s + 1) * per <= hc.streamQw; s++) {
             for (uint32_t k = 0; k < len; k++) {
                 const uint32_t at = s * per + 3 + k * qpv;
                 float tmp[4];
-                for (uint32_t q = 0; q < lerpQw; q++) {
+                for (uint32_t q = 0; q < qpv; q++) {
+                    if (q >= lerpQw && !(st && q == qpv - 1u)) {
+                        continue;
+                    }
                     memcpy(tmp, so[at + q], sizeof(tmp));
                     lerpFloats(so[at + q], sp[at + q], tmp, 4, t);
                 }
             }
         }
+        s_gridSt += st;
     } else if (cc->type == RDC_PARTICLES && hc.streamQw >= 6) {
         /* 6 header qwords, then (x, y, z, size), (u, v, grey, alpha) each */
         const uint32_t n = (hc.streamQw - 6) / 2;
@@ -3207,6 +3529,13 @@ static int readsTarget(const RdCmd *c, const RdStateBlock *st, uint32_t id)
     }
 }
 
+/* Does a draw under the state st sample a target (any)? */
+static bool readsAnyTarget(const RdStateBlock *st)
+{
+    const RdTexRec *t = st->ds.texEnabled ? rd__tex_rec(st->tex) : NULL;
+    return t && t->kind == RD_TEXKIND_TARGET;
+}
+
 /* an RDC_COPY of all of from into to (one size and scale) at the head of
  * list l */
 static void headCopy(int l, uint32_t from, uint32_t to, uint32_t sizeOf)
@@ -3300,11 +3629,15 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_umCurN = 0;
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
     s_lightRot = 0;
+    s_lightPair = s_placed = s_gridSt = 0;
     s_pivotMesh = 0; /* the pivots are recomputed per present */
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
     }
     const bool blend = st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev);
+    if (blend) {
+        (void)indexCur(); /* false: the ordinal pairing for every key */
+    }
     s_cam.on = 0;
     s_rebased = s_rebasedCur = 0;
     if (blend) {
@@ -3336,9 +3669,13 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 memcpy(s_out.vu.invView, s_cam.itf, sizeof(s_cam.itf));
             }
         }
+        RdStateBlock rs = s_out.startState; /* the state each draw replays under */
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
                 RdCmd *c = &s_out.lists[l].cmds[i];
+                if (rd__apply_state(&rs, c)) {
+                    continue;
+                }
                 if (!isKeyedDraw(c)) {
                     camCurDraw(c); /* unkeyed, cur's through the blended camera */
                     continue;
@@ -3370,7 +3707,9 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     r = blendText(op, prev, pc, c, t);
                     break;
                 default:
+                    s_gridScreenSt = c->type == RDC_GRID && readsAnyTarget(&rs);
                     r = blendVu(op, prev, pc, c, t);
+                    s_gridScreenSt = false;
                     break;
                 }
                 if (r != R_LERP) {
@@ -3420,6 +3759,9 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     }
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
+    st.lightPaired = (uint32_t)s_lightPair;
+    st.placed = (uint32_t)s_placed;
+    st.gridSt = (uint32_t)s_gridSt;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -3445,6 +3787,10 @@ static struct {
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
     uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
+    /* lit draws whose previous lights were re-paired (pairLights), draws of
+     * a key drawn several times paired by their place (placeSlot), grids
+     * whose screen-space STs blended (s_gridScreenSt) */
+    uint64_t lightPaired, placed, gridSt;
     uint32_t scratchMax;      /* the most scratch meshes a present used */
     uint64_t scratchBytesMax; /* and the most bytes they held */
 } s_pres;
@@ -3477,6 +3823,9 @@ static void presentLog(void)
     s_pres.halfOut += s_umHalfOut;
     s_pres.held += s_umHeld;
     s_pres.lightRot += (uint64_t)s_lightRot;
+    s_pres.lightPaired += st->lightPaired;
+    s_pres.placed += st->placed;
+    s_pres.gridSt += st->gridSt;
     s_pres.scratchMax = s_scratchUsed > s_pres.scratchMax ? s_scratchUsed : s_pres.scratchMax;
     s_pres.scratchBytesMax =
         s_scratchBytes > s_pres.scratchBytesMax ? s_scratchBytes : s_pres.scratchBytesMax;
@@ -3519,6 +3868,13 @@ static void presentLog(void)
             (unsigned long long)s_pres.halfIn, (unsigned long long)s_pres.halfOut,
             (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
             RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
+    /* a fourth line: the lights' slots, the same-key instances, the pool's
+     * screen-space STs */
+    rd__log("interp: %llu lit draws whose previous lights were re-paired by direction; %llu draws "
+            "of a key drawn several times paired by their place in the world instead of their "
+            "order; %llu grids sampling a target whose STs blended",
+            (unsigned long long)s_pres.lightPaired, (unsigned long long)s_pres.placed,
+            (unsigned long long)s_pres.gridSt);
     const uint32_t number = s_pres.number;
     memset(&s_pres, 0, sizeof(s_pres));
     s_pres.number = number;

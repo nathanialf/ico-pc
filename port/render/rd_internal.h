@@ -1019,6 +1019,14 @@ typedef struct RdInterpStats {
      * unkeyed) those re-based */
     uint32_t rebased;
     uint32_t rebasedCur;
+    /* lit draws whose previous tick's lights were put in the slots of the
+     * current tick's lights they pair with by direction; draws of a key
+     * drawn several times paired by their place in the world instead of
+     * their order (unpaired new instances included); grids sampling a
+     * target whose screen-space STs blended */
+    uint32_t lightPaired;
+    uint32_t placed;
+    uint32_t gridSt;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0

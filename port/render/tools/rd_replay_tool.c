@@ -741,9 +741,11 @@ int main(int argc, char **argv)
             return 1;
         }
         printf("interp %u -> %u at %g: snap %u, %u keyed draws: %u blended, %u unmatched, %u "
-               "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations\n",
+               "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations; %u lights "
+               "re-paired; %u paired by place; %u grid STs blended\n",
                pf.number, f.number, (double)interpT, ist.snap, ist.keyed, ist.lerped, ist.missing,
-               ist.mismatch, ist.jump, ist.morph, ist.rotated);
+               ist.mismatch, ist.jump, ist.morph, ist.rotated, ist.lightPaired, ist.placed,
+               ist.gridSt);
     }
     if (list) {
         RdStateBlock st = rf->startState;
