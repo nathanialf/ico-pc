@@ -127,8 +127,7 @@ int ico_sndn2_pitch_load(void)
     if (why != NULL) {
         ico_sndn2_pitch_set(NULL);
         fprintf(stderr,
-                "sndn2: pitch table: %s; using the formula floor(4096 * 2^((i - 208) / 192)) "
-                "\n",
+                "sndn2: pitch table: %s; using the formula floor(4096 * 2^((i - 208) / 192))\n",
                 why);
         return H.pitch_source;
     }
@@ -177,7 +176,7 @@ uint16_t ico_sndn2_pitch_compute(uint32_t w2, uint32_t w3)
         H.pitch_clamps++;
         sndn2_log_once(&logged_clamp,
                        "pitch index %d outside the table (base %d note %d fine %d bend %d range "
-                       "%d): clamped (R1 open question 4)",
+                       "%d): clamped",
                        idx, base, note, fine, bend, range);
         idx = idx < 0 ? 0 : ICO_SNDN2_PITCH_ENTRIES - 1;
     }
