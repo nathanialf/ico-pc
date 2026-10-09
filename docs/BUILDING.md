@@ -298,7 +298,8 @@ owns; the hook and CI check it. Use `/* */` comments only. A comment says
 what the code does and why, without release or package tags (git history
 keeps those); an issue number may stay where it explains a behaviour.
 
-Names are `prefix_snake_case`, the prefix being the module's:
+Names are `prefix_snake_case`, the prefix being the module's. The main
+prefixes:
 
 | prefix | module |
 | --- | --- |
@@ -314,23 +315,23 @@ The older mixed-case prefixed names were renamed by
 `tools/rename_port_symbols.py` with its table `tools/rename_table.txt`;
 `--check` with that table lists any mixed-case name left.
 
-Log lines start with the module's prefix and a colon: `ico_pc:` (the host:
-`main_host.c`, `host_config.c`, `diag_host.c`, `kernel_host.c`), `rd:`,
-`rhi:`, `rhi_vk:`, `rhi_d3d12:`, `window:`, `video:`, `photo:`, `config:`,
-`audio:`, `input:`, `textures:`, `models:`, `credits:`, `appearance:`,
-`settings:`, `mc:`. A test's own lines start with the test's name. Player
-guides quote some of these lines (`textures:`, `models:` and
-`window: an effects program is loaded`), so change their text together with
-the guide.
+Log lines start with the module's prefix and a colon, for example
+`ico_pc:` (the host: `main_host.c`, `host_config.c`, `diag_host.c`,
+`kernel_host.c`), `rd:`, `rhi:`, `rhi_vk:`, `rhi_d3d12:`, `window:`,
+`video:`, `photo:`, `config:`, `audio:`, `input:`, `textures:`, `models:`,
+`credits:`, `appearance:`, `settings:`, `mc:`. A test's own lines start
+with the test's name. Player guides quote some of these lines
+(`textures:`, `models:` and `window: an effects program is loaded`), so
+change their text together with the guide.
 
 A message box is titled `ICO PC` on every platform (Android's launcher
 name is `ICO`).
 
-Tests use the shared `CHECK` header of their module where one exists
+New tests use the shared `CHECK` header of their module where one exists
 (`port/test/ico_check.h`; `port/ui/test/settings_fixture.h` for the Options
 tests) instead of defining their own.
 
-Python tools start with a docstring, use `argparse` and run with
+New Python tools start with a docstring, use `argparse` and run with
 `python3 -I`. Shell scripts start with `set -euo pipefail`.
 
 ## Tests

@@ -58,7 +58,7 @@ You can change how it feels in **Options > Controls**:
 - **Invert mouse up/down** swaps up and down.
 - **Mouse camera speed** is how quickly the camera reaches the place you
   point it at. 1.0x is how the camera always moved; a higher number is
-  quicker, a lower one is slower, and Instant moves it at once.
+  quicker, a lower one is slower, and Instant moves it almost at once.
 - **Mouse camera range** Normal keeps each area's own limit on how far the
   camera can turn. Full lets you look all the way around. In scenes where
   the game steers the camera itself, Full can show what the camera was
@@ -211,8 +211,8 @@ On a phone or tablet, buttons are drawn on the screen over the game:
 
 You can use several fingers at once, for example the stick and a button.
 
-With no gamepad connected, the phone itself vibrates where a gamepad
-would rumble. **Options > Controls > Vibration** (in the pause menu's
+When no connected gamepad can rumble, the phone itself vibrates where a
+gamepad would rumble. **Options > Controls > Vibration** (in the pause menu's
 Options) turns that off.
 
 The buttons fade away 5 seconds after you last touched the screen. Touch

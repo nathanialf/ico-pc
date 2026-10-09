@@ -1,7 +1,7 @@
 ## New
 
 - On PC, Options > Controls has three more mouse camera rows: Mouse camera speed, Mouse camera range and Camera swings back.
-- Android: the first start shows what the game is doing the whole time, and so does the first start after an update.
+- Android: the first start shows what the game is doing at each step, and so does the first start after an update.
 - Android: the touch controls make the phone vibrate the way a controller would rumble.
 - Options > Gameplay > Achievement pop-ups turns the pop-ups off.
 - Android: smoother play, with fewer stalls in busy rooms.
@@ -13,5 +13,5 @@
 - The darkening behind the title is no longer narrower than the picture on ultrawide screens.
 - French menus: the apostrophes on the Graphics driver page look right.
 - The button remap screen names the mouse buttons in the menu's language.
-- Saving a picture of the frame with F12 works when the user folder has accented characters.
+- On Windows, saving a picture of the frame with F12 works when the user folder has accented characters.
 <!-- P5c: boot flash -->

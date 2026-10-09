@@ -136,7 +136,7 @@ A change takes effect the next time you start the game.
   in photo mode.
 - **Invert mouse up/down** swaps up and down for the mouse.
 - **Mouse camera speed** is how quickly the camera reaches where you point
-  it. 1.0x is the normal speed; Instant moves it at once.
+  it. 1.0x is the normal speed; Instant moves it almost at once.
 - **Mouse camera range:** Normal keeps each area's own limit on how far the
   camera turns. Full lets you look all the way around.
 - **Camera swings back:** On means that when you keep the mouse still, the
@@ -355,4 +355,4 @@ On Android, under `[paths]`:
 
 | Line | What it does |
 | --- | --- |
-| `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. Under `[paths]`. On Android, a line `keep_image=1` in `ico-pc.ini` works as well. [About Android](ANDROID.md#the-first-start). |
+| `keep_image = false` | `true` keeps the copy of your disc image that the first start makes. On Android, a line `keep_image=1` in `ico-pc.ini` works as well. [About Android](ANDROID.md#the-first-start). |

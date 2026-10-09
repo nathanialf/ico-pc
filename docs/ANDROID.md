@@ -56,9 +56,9 @@ copy the `memcard` folder out to a computer.
 5. **Starting the game** shows on every start. A few seconds of black can
    follow it, until the game's own logo appears.
 
-The screen always says what the game is doing. Where it shows no bar, the
-step is short and its length cannot be told in advance. Leave the game open
-and do not switch away.
+At each step the screen says what the game is doing. Where it shows no
+bar, the step is short and its length cannot be told in advance. Leave the
+game open and do not switch away.
 
 If there is not enough free space, the game tells you how much it needs
 and how much is free. Free some space and start it again.
@@ -140,9 +140,9 @@ Start.
 
 **Vibration.** When no gamepad is connected, the phone itself vibrates
 where a gamepad would rumble, for example when Ico is hurt. A connected
-gamepad takes over. To turn it off, open the pause menu's **Options >
-Controls** and set **Vibration** to Off. The row is only in the pause
-menu's Options.
+gamepad that can rumble takes over. To turn it off, open the pause menu's
+**Options > Controls** and set **Vibration** to Off. The row is only in the
+pause menu's Options.
 
 **Gamepads.** A Bluetooth or USB gamepad works, with rumble if it has it.
 While one is connected, the touch buttons go away. Change that in
