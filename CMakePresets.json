@@ -28,6 +28,19 @@
             }
         },
         {
+            "name": "linux-arm64",
+            "inherits": "base",
+            "displayName": "Linux arm64 (aarch64), host GCC",
+            "description": "Built on an arm64 Linux host (no cross toolchain). Window build with the program linked, Vulkan only: no Direct3D 12 and no DXIL shaders.",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "gcc",
+                "ICO_HEADLESS": "OFF",
+                "ICO_LINK_EXE": "ON",
+                "ICO_RHI_D3D12": "OFF",
+                "ICO_SHADERS_DXIL": "OFF"
+            }
+        },
+        {
             "name": "win-x64",
             "inherits": "base",
             "displayName": "Windows x64, mingw-w64 GCC",
@@ -88,6 +101,10 @@
             "configurePreset": "linux-x64"
         },
         {
+            "name": "linux-arm64",
+            "configurePreset": "linux-arm64"
+        },
+        {
             "name": "win-x64",
             "configurePreset": "win-x64"
         },
@@ -117,6 +134,13 @@
         {
             "name": "linux-x64",
             "configurePreset": "linux-x64",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "linux-arm64",
+            "configurePreset": "linux-arm64",
             "output": {
                 "outputOnFailure": true
             }

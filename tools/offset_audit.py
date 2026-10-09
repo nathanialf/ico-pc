@@ -1547,7 +1547,9 @@ def probe_values(u, exprs, workdir):
                 if m:
                     cur = int(m.group(1))
                     continue
-                m = re.match(r"^\s*\.(quad|long|8byte)\s+(-?\d+)", line)
+                # the 8-byte data directive: .quad (x86-64), .xword (aarch64
+                # gcc), .dword, .8byte; .long where long is 4 bytes
+                m = re.match(r"^\s*\.(quad|xword|dword|long|8byte)\s+(-?\d+)", line)
                 if m and cur is not None:
                     vals[cur] = int(m.group(2))
                     cur = None
