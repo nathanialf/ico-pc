@@ -684,6 +684,7 @@ void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, Rh
         if (srcRegion.x || srcRegion.y || dstX || dstY || srcRegion.w != s->width ||
             srcRegion.h != s->height || s->width != d->width || s->height != d->height) {
             DX_LOG("rhi_CmdCopyTexture: depth formats copy whole textures only");
+            return;
         }
         uint32_t planes = fm->stencil ? 2u : 1u;
         for (uint32_t p = 0; p < planes; p++) {
@@ -726,9 +727,14 @@ void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect
     D3D12_BOX box = {
         (UINT)region.x, (UINT)region.y, 0, (UINT)region.x + region.w, (UINT)region.y + region.h, 1};
     bool whole = region.x == 0 && region.y == 0 && region.w == t->width && region.h == t->height;
+    const bool depth = dx_formatMap[t->rhiFormat].depth;
+    if (depth && !whole) {
+        /* depth-stencil resources copy whole subresources only */
+        DX_LOG("rhi_CmdCopyTextureToBuffer: depth formats copy whole textures only");
+        return;
+    }
     dx_BufferCopyBegin(c, d);
-    ID3D12GraphicsCommandList_CopyTextureRegion(
-        c->cl, &dl, 0, 0, 0, &sl, (dx_formatMap[t->rhiFormat].depth && whole) ? NULL : &box);
+    ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, 0, 0, 0, &sl, depth ? NULL : &box);
     dx_BufferCopyEnd(c, d);
 }
 
