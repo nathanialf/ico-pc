@@ -1373,22 +1373,39 @@ bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, R
  * pipeline has the stencil test off (rd_pipeline.c shadowStencil sets it for
  * the volume and resolve keys alone), so outside that window no pass needs
  * the stencil loaded or stored.
- *   live      the depth whose stencil holds the count, from its reset to the
- *             end of its resolve's pass (0: none)
+ *   live      the depths whose stencil holds a count, each from its reset to
+ *             the end of its resolve's pass (0: a free slot).  One per depth,
+ *             so a reset on a second depth before the first depth's resolve
+ *             leaves the first one's count loaded and stored.
  *   clearFor  the depth whose reset is not recorded yet: the next pass on it
  *             clears the stencil as its load op (0: none)
- * A depth is named by its texture id in rd_replay.c. */
+ *   spill     set when more depths were live at once than live[] holds: from
+ *             then on every depth counts as live (loaded and stored, the safe
+ *             side) until the window is emptied for the next replay
+ * A depth is named by its texture id in rd_replay.c.  The game opens one
+ * window a frame, on SCENE's depth (one rd_ShadowReset and one
+ * rd_ShadowResolve). */
+#define RD_STENCIL_LIVE_MAX 4
+
 typedef struct RdStencilWindow {
-    uint32_t live;
+    uint32_t live[RD_STENCIL_LIVE_MAX];
     uint32_t clearFor;
+    uint8_t spill;
 } RdStencilWindow;
+
+/* Whether depth (not 0) is inside its window. */
+bool rd__StencilLive(const RdStencilWindow *w, uint32_t depth);
+/* The reset of depth opens its window (nothing when it is open already). */
+void rd__StencilOpen(RdStencilWindow *w, uint32_t depth);
+/* The end of depth's resolve closes its window. */
+void rd__StencilClose(RdStencilWindow *w, uint32_t depth);
 
 /* The stencil ops of a pass on depth (not 0) whose depth loads depthLoad;
  * whole: the pass's render area is the whole depth.  A pending reset of
  * this depth is taken when whole: the stencil loads CLEAR (to 0), clearFor
- * is emptied and true is returned.  Else, on the live depth, the stencil
+ * is emptied and true is returned.  Else, on a live depth, the stencil
  * loads as the depth does; on any other, a CLEAR stays CLEAR and anything
- * else is DONT_CARE.  The stencil is stored on the live depth only. */
+ * else is DONT_CARE.  The stencil is stored on a live depth only. */
 bool rd__StencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore);
 /* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,

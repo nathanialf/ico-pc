@@ -1015,7 +1015,7 @@ static void onStencilCmd(void *user, int list, uint32_t index, const RdCmd *c,
     case RDC_SHADOW_RESET:
         swEnd(w);
         w->resets++;
-        w->w.live = did;
+        rd__StencilOpen(&w->w, did);
         if (w->fold) {
             w->w.clearFor = did;
         } else {
@@ -1025,9 +1025,7 @@ static void onStencilCmd(void *user, int list, uint32_t index, const RdCmd *c,
     case RDC_SHADOW_RESOLVE:
         swBegin(w, 'S', s->color, did, RHI_LOAD_CLEAR, RHI_LOAD_LOAD);
         swEnd(w);
-        if (w->w.live == did) {
-            w->w.live = 0;
-        }
+        rd__StencilClose(&w->w, did);
         break;
     default:
         break;
@@ -1125,7 +1123,10 @@ static void testStencilOps(void)
           w.passes);
 
     /* the rule's other cases */
-    RdStencilWindow sw = {7, 7};
+    RdStencilWindow sw;
+    memset(&sw, 0, sizeof(sw));
+    rd__StencilOpen(&sw, 7);
+    sw.clearFor = 7;
     RhiLoadOp sl;
     RhiStoreOp ss;
     CHECK(!rd__StencilOps(&sw, 7, false, RHI_LOAD_LOAD, &sl, &ss) && sw.clearFor == 7 &&
@@ -1140,6 +1141,32 @@ static void testStencilOps(void)
     CHECK(rd__StencilOps(&sw, 7, true, RHI_LOAD_CLEAR, &sl, &ss) && sw.clearFor == 0 &&
               sl == RHI_LOAD_CLEAR && ss == RHI_STORE_STORE,
           "stencil ops: the live depth's pass takes the reset");
+
+    /* two depths' windows interleaved (reset 7, reset 9, then 7's volumes
+     * and resolve, then 9's): each depth keeps its own count, loaded and
+     * stored until its own resolve */
+    memset(&sw, 0, sizeof(sw));
+    rd__StencilOpen(&sw, 7);
+    rd__StencilOpen(&sw, 9);
+    CHECK(!rd__StencilOps(&sw, 7, true, RHI_LOAD_LOAD, &sl, &ss) && sl == RHI_LOAD_LOAD &&
+              ss == RHI_STORE_STORE,
+          "stencil ops: a reset on another depth leaves the first depth's count loaded and stored");
+    rd__StencilClose(&sw, 7);
+    CHECK(!rd__StencilOps(&sw, 7, true, RHI_LOAD_LOAD, &sl, &ss) && sl == RHI_LOAD_DONT_CARE &&
+              ss == RHI_STORE_DONT_CARE,
+          "stencil ops: the first depth's window closes at its own resolve");
+    CHECK(!rd__StencilOps(&sw, 9, true, RHI_LOAD_LOAD, &sl, &ss) && sl == RHI_LOAD_LOAD &&
+              ss == RHI_STORE_STORE,
+          "stencil ops: the second depth stays live after the first one's resolve");
+    rd__StencilClose(&sw, 9);
+    CHECK(!rd__StencilLive(&sw, 7) && !rd__StencilLive(&sw, 9) && !rd__StencilLive(&sw, 0),
+          "stencil ops: both windows closed");
+    /* more live depths than the window holds: every depth counts as live */
+    for (uint32_t d = 1; d <= RD_STENCIL_LIVE_MAX + 1; d++) {
+        rd__StencilOpen(&sw, d);
+    }
+    CHECK(sw.spill && rd__StencilLive(&sw, 100) && !rd__StencilLive(&sw, 0),
+          "stencil ops: a spilled window treats every depth as live");
 }
 
 /* The DATE snapshot's area.  rd_perf_test's list 4 (four 40 x 60 DATE

@@ -711,10 +711,49 @@ bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, R
     return true;
 }
 
+bool rd__StencilLive(const RdStencilWindow *w, uint32_t depth)
+{
+    if (depth == 0) {
+        return false;
+    }
+    if (w->spill) {
+        return true;
+    }
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
+        if (w->live[i] == depth) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void rd__StencilOpen(RdStencilWindow *w, uint32_t depth)
+{
+    if (depth == 0 || rd__StencilLive(w, depth)) {
+        return;
+    }
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
+        if (w->live[i] == 0) {
+            w->live[i] = depth;
+            return;
+        }
+    }
+    w->spill = 1;
+}
+
+void rd__StencilClose(RdStencilWindow *w, uint32_t depth)
+{
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX && depth != 0; i++) {
+        if (w->live[i] == depth) {
+            w->live[i] = 0;
+        }
+    }
+}
+
 bool rd__StencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
 {
-    const bool live = depth != 0 && depth == w->live;
+    const bool live = rd__StencilLive(w, depth);
     *stencilStore = live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
     if (depth != 0 && depth == w->clearFor && whole) {
         w->clearFor = 0;
@@ -754,7 +793,8 @@ static void flushStencilClear(void)
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
-    p.depth.stencilStore = depthTex == s_stencil.w.live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    p.depth.stencilStore =
+        rd__StencilLive(&s_stencil.w, depthTex) ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
     p.width = tc->tw;
     p.height = tc->th;
     rhi_CmdBeginRenderPass(s_cl, &p);
@@ -3303,7 +3343,7 @@ static void doShadowReset(Replay *r)
      * the volumes and the resolve use it, each in a pass on it), so the
      * clear is in place before its first user either way.  The window
      * opens: the depth's stencil is loaded and stored until the resolve. */
-    s_stencil.w.live = td->depth.id;
+    rd__StencilOpen(&s_stencil.w, td->depth.id);
     s_stencil.w.clearFor = td->depth.id;
     s_stencil.color = r->st.color;
     s_stencil.depth = r->st.depth;
@@ -3503,9 +3543,7 @@ static void doShadowResolve(Replay *r)
     endPass(r);
     /* the count has been read: the window closes, and later passes on the
      * depth neither load nor store its stencil until the next reset */
-    if (s_stencil.w.live == td->depth.id) {
-        s_stencil.w.live = 0;
-    }
+    rd__StencilClose(&s_stencil.w, td->depth.id);
     s_shadowRedFor = 0;
     if (tc->tw != tc->w || tc->th != tc->h) {
         shadowReduce(r, tc);
