@@ -8,11 +8,6 @@
  *      on a card with no save, the first save to slot 1, reload, re-save
  *      (the file is byte-identical), delete; and the result codes the game
  *      compares (libmc.h sceMcRes*).
- *   C. the importer (port/save/mc_import.c) on synthetic card images, plain
- *      and with ECC spares, and a synthetic .psu, all built here: the
- *      game's files read back through the folder card byte for byte, other
- *      games' entries skipped and named; tools/mc_import (argv[1]) on the
- *      same files; and the second card in port 1.
  *   B. fumi/ios/mcard.c and fumi/ios/mcdata.c themselves, compiled unchanged
  *      with the game's options, on the fiber scheduler: the card manager
  *      thread, driven through the iosMc* entry points the way kanbanBoot.c
@@ -22,6 +17,11 @@
  *      iosMcIconWriteIconsys -> iosCdvdBackGroundRead into its 64-byte
  *      aligned stack buffer); a stand-in of cdvd.c's background manager
  *      below runs the read on its own thread and fills a known pattern.
+ *   C. the importer (port/save/mc_import.c) on synthetic card images, plain
+ *      and with ECC spares, and a synthetic .psu, all built here: the
+ *      game's files read back through the folder card byte for byte, other
+ *      games' entries skipped and named; tools/mc_import (argv[1]) on the
+ *      same files; and the second card in port 1.
  *
  * Both run on simulated vsyncs, as host_loop.c drives the hooks. No game
  * data is needed.

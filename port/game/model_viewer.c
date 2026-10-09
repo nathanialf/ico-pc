@@ -1,8 +1,9 @@
 /*
  * port/game/model_viewer.c
  *
- * Settings > Extras > Models, the game side (model_viewer.h).  Built from the development build's Motion Viewer
- * (sugipon/src/motionViewer.c) without calling it: MotionViewer() runs on the
+ * Settings > Extras > Models, the game side (model_viewer.h).  Built from
+ * the development build's Motion Viewer (sugipon/src/motionViewer.c)
+ * without calling it: MotionViewer() runs on the
  * debug CSV windows, pad 1 and the debug font.  What is taken from it:
  *
  *   objMenuProc       the object is found by its kind, its run function is
@@ -170,8 +171,8 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 #define ROOT_ROT_ONLY 19
 /* the backdrop: a neutral grey, dark enough for the menu's light text */
 #define BACKDROP_GREY 78
-/* the free camera: its field of view (degrees), the sticks' dead zone and
-   rates per tick (25 a second in PAL) */
+/* the free camera's field of view, degrees (the stick rates are
+   model_viewer_cam.h's) */
 #define CAM_FOV 40.0f
 /* how far the model sits left of the middle, in distances */
 #define MODEL_SHIFT 0.16f
@@ -626,12 +627,6 @@ static void mvToTitle(void)
     la_host_end_game();
 }
 
-/* a shadow is drawn only once it has come out (enemy.c EnemyDL and
-   DisplayEnemy: Act flags18 bit 33, which enemy_act.c's subEnemyCollision
-   sets each tick once the shadow has a motion request, and the work's
-   loaded flag, SetEnemyHitGeometryAction): the viewer's shadow never comes
-   out, so both are set for it */
-
 /* A shadow still in its generator is hidden by its layout row (enemy_act.c
    isEnemyHyde and actEnemyFlagCheckActive: the row's display bit 21 clear
    or its dead bit 18 set); of the survey's shadows only the plain one is
@@ -652,7 +647,12 @@ static void bringOutShadow(GObj *g)
     }
 }
 
-/* at each display, as its own threads put it back in the generator */
+/* A shadow is drawn only once it has come out (enemy.c EnemyDL and
+   DisplayEnemy: Act flags18 bit 33, which enemy_act.c's subEnemyCollision
+   sets each tick once the shadow has a motion request, and the work's
+   loaded flag, SetEnemyHitGeometryAction): the viewer's shadow never comes
+   out, so both are set for it, at each display, as its own threads put it
+   back in the generator. */
 static void showShadow(void)
 {
     if (s_obj != NULL && s_obj->kind == 4 && s_obj->act != NULL) {

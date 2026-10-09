@@ -828,7 +828,8 @@ int sceMcDelete(int port, int slot, char *name)
     return begin(sceMcFuncNoDelete, ico_remove(path) == 0 ? 0 : sceMcResDeniedPermit);
 }
 
-/* 1 for a save's game file ("game.000" .. "game.009" in any folder) */
+/* 1 for a save's game file (any name starting "game.", in any folder; only
+   selects a log line) */
 static int game_file(const char *rel)
 {
     const char *base = strrchr(rel, '/');

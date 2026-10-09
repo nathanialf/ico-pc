@@ -11,10 +11,10 @@
 #define MV_YAW_RATE 0.12f
 #define MV_PITCH_RATE 0.08f
 #define MV_PITCH_MAX 1.35f
-/* per tick while L2 or R2 is held: dist *= exp(+-ZOOM_RATE) */
+/* per tick while L2 or R2 is held: dist *= exp(+-MV_ZOOM_RATE) */
 #define MV_ZOOM_RATE 0.05f
 /* per tick at full stick, as a share of dist */
-#define MV_PAN_RATE 0.012f /* of the distance per tick at full stick (0.03 was too quick) */
+#define MV_PAN_RATE 0.012f
 /* the most the model is moved up or down, as a share of dist */
 #define MV_PAN_MAX 0.6f
 

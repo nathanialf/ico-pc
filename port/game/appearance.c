@@ -259,7 +259,6 @@ static void randomizeScope(unsigned int seed, int character)
 
         /* every part draws, in or out of the scope, so a part's colour
            from a seed is the same either way */
-
         for (;;) {
             int q;
             int clash = 0;

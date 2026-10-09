@@ -59,7 +59,7 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
     s->gameover_flag = gameover_flag;
     s->gameover_layout_flag = gameover_layout_flag;
     s->frame_count = frame_count;
-    s->language = NonLinearCameraMove;
+    s->language = NonLinearCameraMove; /* the game keeps the language here */
     s->time_count = gamesysTimeCount;
     s->game_clear = gFlagGameClear;
     s->save_stage = gFlagSaveStage;
@@ -561,8 +561,8 @@ int ico_gs_peek(unsigned int addr, unsigned int size, unsigned int *out)
             unsigned int v = 0;
             unsigned int b;
 
-            /* the host's int fields are little endian like the EE's (the
-               port's x86-64 targets); read byte-wise, any alignment */
+            /* the host's int fields are little endian like the EE's (every
+               target the port builds for is); read byte-wise, any alignment */
             for (b = 0; b < size; b++) {
                 v |= (unsigned int)p[b] << (8 * b);
             }

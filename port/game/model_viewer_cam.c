@@ -14,7 +14,7 @@ float mv_CamStick(int v)
 
 void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4])
 {
-    /* the signs are as they were when the sticks were the other way round */
+    /* ana[0], ana[1] turn the camera (yaw, pitch); ana[2], ana[3] pan it */
     c->yaw -= mv_CamStick(ana[0]) * MV_YAW_RATE;
     c->pitch += mv_CamStick(ana[1]) * MV_PITCH_RATE;
     c->pitch = c->pitch > MV_PITCH_MAX    ? MV_PITCH_MAX
@@ -26,7 +26,7 @@ void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4])
     c->dist *= expf(z * MV_ZOOM_RATE);
     c->dist = c->dist < c->distMin ? c->distMin : c->dist > c->distMax ? c->distMax : c->dist;
 
-    /* stick() is negative for up and the game's y points down: up must add
+    /* mv_CamStick is negative for up and the game's y points down: up must add
        to panY (the camera goes down, the model rises) */
     c->panY -= mv_CamStick(ana[3]) * MV_PAN_RATE * c->dist;
     /* stick right: the model moves right on the screen */

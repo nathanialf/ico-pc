@@ -241,7 +241,7 @@ typedef struct AchDef {
     UiStrId title;
     UiStrId desc;
     int (*check)(void);
-    int hidden; /* not listed before it is unlocked (a future list view) */
+    int hidden; /* the Extras list shows it as hidden until it is unlocked */
 } AchDef;
 
 #define ACH(id, name, fn, hidden) {id, UI_STR_ACH_##name, UI_STR_ACH_##name##_DESC, fn, hidden}
@@ -360,7 +360,8 @@ static long long parse_time(const char *s)
  *   version = 2
  *   [stats]  enemies, hand_ms, saves, clears, couches ("id,id,..."),
  *            stages (128-bit hex)
- *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>. Unknown keys are ignored.
+ *   [unlocked.<id>]  time = "2026-10-05T12:00:00Z", play_time = <seconds>.
+ * Unknown keys are ignored.
  */
 
 static void sofa_list(const int *set, int n, char *out, size_t size)
