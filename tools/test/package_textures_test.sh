@@ -21,14 +21,7 @@ for r in "${pkg_note_rels[@]}"; do [[ -f "$w/stage/$r/README.txt" ]] || bad "no 
 ok "win staging, CRLF"
 mkdir -p "$w/pkg/ico-pc-x/x64/$pkg_textures_rel"
 cp -a "$w/stage/$rel" "$w/pkg/ico-pc-x/x64/$rel"
-python3 -I - "$w/pkg" ico-pc-x "$t/out/a.zip" <<'PY'
-import os, sys, zipfile
-base, top, out = sys.argv[1:4]
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for dp, _, fs in os.walk(os.path.join(base, top)):
-        for f in sorted(fs):
-            p = os.path.join(dp, f); z.write(p, os.path.relpath(p, base))
-PY
+pkg_zip_dir "$w/pkg" ico-pc-x "$t/out/a.zip"
 pkg_assert_zip_has "$t/out/a.zip" "ico-pc-x/x64/$rel" || bad "zip check misses a present entry"
 pkg_assert_zip_has "$t/out/a.zip" "ico-pc-x/$rel" && bad "zip check accepts a wrong path"
 rm -rf "$w/pkg/ico-pc-x/x64/textures"

@@ -94,6 +94,20 @@ pkg_stage_folder_notes() {
     pkg_stage_reshade_readme "$1" "$2"
 }
 
+# pkg_zip_dir <base> <top> <zip>: <base>/<top> and everything under it into
+# <zip> (deflated, names relative to <base>, files sorted within each folder)
+pkg_zip_dir() {
+    python3 -I - "$1" "$2" "$3" <<'PY'
+import os, sys, zipfile
+base, top, out = sys.argv[1:4]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for dp, _, fs in os.walk(os.path.join(base, top)):
+        for f in sorted(fs):
+            p = os.path.join(dp, f)
+            z.write(p, os.path.relpath(p, base))
+PY
+}
+
 # pkg_assert_zip_has <zip> <entry>: fails (returns 1) unless the zip lists the entry
 pkg_assert_zip_has() {
     python3 -I - "$1" "$2" <<'PY'

@@ -119,15 +119,7 @@ for f in "ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES
     tools/compare_backends.cmd tools/README.txt "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt"; do
     cp -a "$stage/$a/$f" "$pkgroot/ico-pc-$label/$a/$f" || fail "stage: no $a/$f"
 done
-"$root/.venv/bin/python" - "$pkgroot" "ico-pc-$label" "$zip" >>"$log" 2>&1 <<'PY' || fail "zip"
-import os, sys, zipfile
-base, top, out = sys.argv[1:4]
-with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for dp, _, fs in os.walk(os.path.join(base, top)):
-        for f in sorted(fs):
-            p = os.path.join(dp, f)
-            z.write(p, os.path.relpath(p, base))
-PY
+pkg_zip_dir "$pkgroot" "ico-pc-$label" "$zip" >>"$log" 2>&1 || fail "zip"
 rm -rf "$pkgroot"
 for n in "${pkg_player_docs[@]}"; do
     pkg_assert_zip_has "$zip" "ico-pc-$label/docs/$n.md" || fail "the zip lacks docs/$n.md"
