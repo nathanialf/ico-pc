@@ -106,6 +106,41 @@ static void testWindowMode(void)
     CHECK(i17cDisplayHasWindowMode(), "the row shows again");
 }
 
+/* v0.4.3 R27: Effects > Cinematic bars, the last switch before Back, On by
+   default, a step flips it live and ui_SettingsSave writes the key; the other
+   effects keep their value */
+static void testCinematicBars(void)
+{
+    int rows[16], opts[16];
+    char p[1100];
+
+    useConfig("version = 1\n");
+    enterMain(0);
+    const int n = ui_SettingsPageRows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
+    CHECK(n >= 2 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
+              opts[n - 3] == UI_OPT_EFFECT_FOG,
+          "bars: the row sits after Fog, before Back (%d rows)", n);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
+          "bars: On by default");
+    CHECK(ico_video_effect_cinematic_bars() == 1, "bars: the getter reads On");
+    ui_SettingsStep(UI_OPT_EFFECT_CINEMATIC_BARS, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "Off") == 0, "bars: Off");
+    CHECK(ico_video_effect_cinematic_bars() == 0, "bars: the getter reads Off at once");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_FOG), "On") == 0, "bars: Fog untouched");
+    CHECK(ui_SettingsSave() == 0, "bars: save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL, "bars: config");
+    if (t) {
+        CHECK(ico_toml_get_bool(t, "video.effect_cinematic_bars", 1) == 0,
+              "bars: [video] effect_cinematic_bars false");
+        ico_toml_free(t);
+    }
+    ui_SettingsStep(UI_OPT_EFFECT_CINEMATIC_BARS, -1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0, "bars: On again");
+    useConfig("version = 1\n");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -115,6 +150,8 @@ int main(int argc, char **argv)
     testFixture();
     /* v0.4.3 I17c */
     testWindowMode();
+    /* v0.4.3 R27 */
+    testCinematicBars();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

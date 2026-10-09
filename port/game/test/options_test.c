@@ -334,19 +334,20 @@ static char *read_text(const char *path)
     return buf;
 }
 
-static int effects_are(const IcoVideoOptions *o, int g, int d, int s, int m, int f)
+static int effects_are(const IcoVideoOptions *o, int g, int d, int s, int m, int f, int cb)
 {
     return o->effectGlow == g && o->effectDepthOfField == d && o->effectSoftening == s &&
-           o->effectMotionBlur == m && o->effectFog == f && ico_video_effect_glow() == g &&
+           o->effectMotionBlur == m && o->effectFog == f && o->effectCinematicBars == cb &&
+           ico_video_effect_cinematic_bars() == cb && ico_video_effect_glow() == g &&
            ico_video_effect_depth_of_field() == d && ico_video_effect_softening() == s &&
            ico_video_effect_motion_blur() == m && ico_video_effect_fog() == f;
 }
 
 static void test_video_effects(const char *dir)
 {
-    static const char *const keys[5] = {
-        "effect_glow = ", "effect_depth_of_field = ", "effect_softening = ",
-        "effect_motion_blur = ", "effect_fog = "};
+    static const char *const keys[6] = {"effect_glow = ",      "effect_depth_of_field = ",
+                                        "effect_softening = ", "effect_motion_blur = ",
+                                        "effect_fog = ",       "effect_cinematic_bars = "};
     char path[512];
     IcoVideoOptions o, d;
     const char *text;
@@ -355,11 +356,11 @@ static void test_video_effects(const char *dir)
     /* the defaults, and no file: every effect on */
     ico_video_defaults(&d);
     CHECK(d.effectGlow == 1 && d.effectDepthOfField == 1 && d.effectSoftening == 1 &&
-          d.effectMotionBlur == 1 && d.effectFog == 1);
+          d.effectMotionBlur == 1 && d.effectFog == 1 && d.effectCinematicBars == 1);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(effects_are(&o, 1, 1, 1, 1, 1));
+    CHECK(effects_are(&o, 1, 1, 1, 1, 1, 1));
     /* a file with fog off (and a stray value elsewhere) */
     snprintf(path, sizeof(path), "%s/options_video_test.toml", dir);
     f = fopen(path, "wb");
@@ -373,7 +374,7 @@ static void test_video_effects(const char *dir)
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(effects_are(&o, 1, 1, 1, 1, 0));
+    CHECK(effects_are(&o, 1, 1, 1, 1, 0, 0));
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
     /* run-time values are sanitized to 0 or 1 */
     o.effectGlow = 0;
@@ -381,29 +382,31 @@ static void test_video_effects(const char *dir)
     o.effectSoftening = 0;
     o.effectMotionBlur = -1;
     o.effectFog = 1;
+    o.effectCinematicBars = 5;
     ico_video_set(&o);
     ico_video_get(&o);
-    CHECK(effects_are(&o, 0, 1, 0, 1, 1));
-    /* saved: all five keys written, and read back the same */
+    CHECK(effects_are(&o, 0, 1, 0, 1, 1, 1));
+    /* saved: all six keys written, and read back the same */
     CHECK(ico_video_save() == 0);
     text = read_text(path);
     CHECK(text != NULL);
-    for (int i = 0; text != NULL && i < 5; i++) {
+    for (int i = 0; text != NULL && i < 6; i++) {
         CHECK(strstr(text, keys[i]) != NULL);
     }
     CHECK(text != NULL && strstr(text, "effect_glow = false") != NULL &&
           strstr(text, "effect_softening = false") != NULL &&
-          strstr(text, "effect_fog = true") != NULL);
+          strstr(text, "effect_fog = true") != NULL &&
+          strstr(text, "effect_cinematic_bars = true") != NULL);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(effects_are(&o, 0, 1, 0, 1, 1));
-    /* none of the five moves the preset off Original, and Enhanced's
+    CHECK(effects_are(&o, 0, 1, 0, 1, 1, 1));
+    /* none of the six moves the preset off Original, and Enhanced's
        shortcut leaves them alone */
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         ico_video_defaults(&o);
-        int *fx[5] = {&o.effectGlow, &o.effectDepthOfField, &o.effectSoftening, &o.effectMotionBlur,
-                      &o.effectFog};
+        int *fx[6] = {&o.effectGlow,       &o.effectDepthOfField, &o.effectSoftening,
+                      &o.effectMotionBlur, &o.effectFog,          &o.effectCinematicBars};
         *fx[i] = 0;
         CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
         ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
@@ -442,7 +445,7 @@ static void test_video_effects_depth(const char *dir)
     ico_video_reload();
     ico_video_get(&o);
     CHECK(o.effectsDepth == 0 && ico_video_effects_depth() == 0);
-    CHECK(effects_are(&o, 1, 1, 1, 1, 1));
+    CHECK(effects_are(&o, 1, 1, 1, 1, 1, 1));
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
     /* sanitized to 0 or 1 */
     o.effectsDepth = 5;

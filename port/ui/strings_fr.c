@@ -472,4 +472,6 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_WINDOW_MODE] = "Mode d’affichage",
     [UI_STR_VAL_WINDOWED] = "Fenêtré",
     [UI_STR_VAL_BORDERLESS] = "Sans bordure",
+    /* v0.4.3 R27 */
+    [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bandes cinéma",
 };

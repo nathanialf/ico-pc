@@ -192,6 +192,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_EFFECT_SOFTENING,
     UI_OPT_EFFECT_MOTION_BLUR,
     UI_OPT_EFFECT_FOG,
+    UI_OPT_EFFECT_CINEMATIC_BARS,
     /* Audio */
     UI_OPT_VOLUME,
     UI_OPT_MUSIC,   /* [audio] music (port/audio/mix_gain.h) */

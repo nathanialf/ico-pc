@@ -468,4 +468,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_WINDOW_MODE] = "Window mode",
     [UI_STR_VAL_WINDOWED] = "Windowed",
     [UI_STR_VAL_BORDERLESS] = "Borderless",
+    /* v0.4.3 R27 */
+    [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",
 };

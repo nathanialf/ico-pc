@@ -110,6 +110,8 @@ static void gsbHostWidenCull(float *projHalf);
 extern float ico_video_wide_x(void);
 /* port/game/video_options.c: the Screen softening switch (issue 11), 1 = on */
 extern int ico_video_effect_softening(void);
+/* port/game/video_options.c: the Cinematic bars switch (issue 27), 1 = on */
+extern int ico_video_effect_cinematic_bars(void);
 
 /* Point the double buffer's two display and two draw environments at the
  * frame this stage draws into: the low nine bits of each frame word carry the
@@ -577,35 +579,39 @@ static void gsb_scissorOnDemo(void)
             debug_Printf(0x21C, ScreenHeight / 2 - 8, 0xCCCCCC00, "D");
         }
         dl_SetDLPriority(11);
+        /* PC port (issue 27): Options > Effects > Cinematic bars off skips the bars
+           (and the subtitle dimming that rides on them); the ramp above still runs */
+        if (ico_video_effect_cinematic_bars()) {
 #ifdef ICO_RD
-        /* PC port (R2c): rd_Post(RD_POST_LETTERBOX): the scene
+            /* PC port (R2c): rd_Post(RD_POST_LETTERBOX): the scene
            environment, TEST 0x30000, Z write on, PABE 0, ALPHA 0x64 with
            FIX = the level, the two 58-line bars */
-        (void)r;
-        (void)col;
-        (void)i;
-        {
-            RdPostParams pp;
+            (void)r;
+            (void)col;
+            (void)i;
+            {
+                RdPostParams pp;
 
-            memset(&pp, 0, sizeof(pp));
-            pp.fix = (unsigned char)(int)scissorLevel;
-            pp.lines = 58;
-            rd_Post(RD_POST_LETTERBOX, &pp);
-        }
+                memset(&pp, 0, sizeof(pp));
+                pp.fix = (unsigned char)(int)scissorLevel;
+                pp.lines = 58;
+                rd_Post(RD_POST_LETTERBOX, &pp);
+            }
 #else
-        gif_StartPacketPriPath1(dl_GetPri());
-        memset(col, 0, 4);
-        col[3] = 0x80;
-        gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
-        gif_SetGsReg(0x47, 0x30000);
-        gif_SetGsReg(0x4E, 0x300000C0);
-        gif_SetGsReg(0x49, 0);
-        gif_SetGsReg(0x42, ((long long)(int)scissorLevel << 32) | 0x64);
-        for (i = 0; i < 2; i++) {
-            spriteRect(r[i].x, r[i].y, r[i].w, r[i].h, -1LL, col, 0x446);
-        }
-        gif_EndPacketPath1();
+            gif_StartPacketPriPath1(dl_GetPri());
+            memset(col, 0, 4);
+            col[3] = 0x80;
+            gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
+            gif_SetGsReg(0x47, 0x30000);
+            gif_SetGsReg(0x4E, 0x300000C0);
+            gif_SetGsReg(0x49, 0);
+            gif_SetGsReg(0x42, ((long long)(int)scissorLevel << 32) | 0x64);
+            for (i = 0; i < 2; i++) {
+                spriteRect(r[i].x, r[i].y, r[i].w, r[i].h, -1LL, col, 0x446);
+            }
+            gif_EndPacketPath1();
 #endif
+        }
     } else {
         SetMotionBlur(GlobalStageSetting.motionBlur);
     }

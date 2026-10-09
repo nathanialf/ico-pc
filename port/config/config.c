@@ -322,6 +322,8 @@ static const char first_run_text[] =
     "effect_motion_blur = true\n"
     "# Fog: the haze over the distance.\n"
     "effect_fog = true\n"
+    "# Cinematic bars: the black bars above and below the picture in cutscenes.\n"
+    "effect_cinematic_bars = true\n"
     "# Depth for an effects program such as ReShade: true lets its depth\n"
     "# effects see how far away things are (not with the CRT filter).\n"
     "effects_depth = true\n"

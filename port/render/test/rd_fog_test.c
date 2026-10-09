@@ -78,6 +78,11 @@ int ico_video_effect_fog(void)
     return s_fogSwitch;
 }
 
+int ico_video_effect_cinematic_bars(void) /* v0.4.3 R27 */
+{
+    return 1;
+}
+
 StageSetting GlobalStageSetting;
 PadState pad[16];
 

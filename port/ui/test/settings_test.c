@@ -47,6 +47,7 @@ static void testBuild(void)
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -55,6 +56,7 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     static const int mainStrs[] = {
         UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,  UI_STR_SECTION_AUDIO,
@@ -5226,7 +5228,7 @@ static void testModelPack(void)
 }
 
 /* issue 11: Options > Effects.  The link sits under Display on the main page,
-   the five rows read On by default, a step flips one and ui_SettingsSave
+   the six rows read On by default, a step flips one and ui_SettingsSave
    writes [video] effect_*; the Main page fits in all four entries */
 static void testEffects(void)
 {
@@ -5237,7 +5239,8 @@ static void testEffects(void)
                {UI_OPT_EFFECT_DEPTH_OF_FIELD, "video.effect_depth_of_field"},
                {UI_OPT_EFFECT_SOFTENING, "video.effect_softening"},
                {UI_OPT_EFFECT_MOTION_BLUR, "video.effect_motion_blur"},
-               {UI_OPT_EFFECT_FOG, "video.effect_fog"}};
+               {UI_OPT_EFFECT_FOG, "video.effect_fog"},
+               {UI_OPT_EFFECT_CINEMATIC_BARS, "video.effect_cinematic_bars"}};
 
     useConfig("version = 1\n");
     int mainL = enterMain(1);
@@ -5249,7 +5252,7 @@ static void testEffects(void)
     press(0x10);
     CHECK(settle(mainL, 60), "Effects: back");
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "On") == 0, "effect %d: On by default", i);
         ui_SettingsStep(kFx[i].opt, 1);
         CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "Off") == 0, "effect %d: Off", i);
@@ -5258,13 +5261,13 @@ static void testEffects(void)
         path(p, sizeof(p), "settings_test.toml");
         IcoToml *t = ico_toml_load(p);
         CHECK(t != NULL, "config %d", i);
-        for (int j = 0; t && j < 5; j++) {
+        for (int j = 0; t && j < 6; j++) {
             CHECK(ico_toml_get_bool(t, kFx[j].key, 1) == (j > i), "%s after step %d", kFx[j].key,
                   i);
         }
         ico_toml_free(t);
     }
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         ui_SettingsStep(kFx[i].opt, -1);
         CHECK(strcmp(ui_SettingsValueText(kFx[i].opt), "On") == 0, "effect %d: On again", i);
     }

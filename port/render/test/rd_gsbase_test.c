@@ -381,9 +381,13 @@ void FullScreenEffectBefore(void) {}
 
 void MotionBlur(void) {}
 
+/* counts the calls: the bars leave the blur alone while they are up (issue 27) */
+static int s_blurCalls;
+
 void SetMotionBlur(int v)
 {
     (void)v;
+    s_blurCalls++;
 }
 
 void staffRollMain(void) {}
@@ -1575,6 +1579,78 @@ static void checkSofteningOff(void)
     }
 }
 
+/* issue 27: Options > Effects > Cinematic bars.  On layout 55 the level ramps
+   up and list 11 records the two bars (two full-screen sprites); with the
+   switch off it records two fewer, at once if the switch flips mid-cutscene.
+   The motion blur is left alone while the level is above 0 in both states
+   and restored once it is back to 0 (10 steps down from 25: ticks 10 to 12
+   of the 12 call it), with the switch back on */
+static int fullScreenSprites(void)
+{
+    const RdFrame *f = rd__LastFrame();
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[11].count; i++) {
+        const RdCmd *c = &f->lists[11].cmds[i];
+        n += c->type == RDC_SCREEN && c->b[1] == RD_SPACE_FULLSCREEN;
+    }
+    return n;
+}
+
+static void checkCinematicBars(void)
+{
+    IcoVideoOptions o;
+    int n[2] = {0, 0};
+
+    for (int on = 1; on >= 0; on--) {
+        ico_video_get(&o);
+        o.effectCinematicBars = on;
+        ico_video_set(&o);
+        CHECK(ico_video_effect_cinematic_bars() == on, "bars: the switch reads %d", on);
+        current_layout_id = 55;
+        s_blurCalls = 0;
+        for (int i = 0; i < 10; i++) {
+            tick();
+        }
+        CHECK(rd__LastFrame() != NULL, "bars: a frame");
+        n[on] = fullScreenSprites();
+        CHECK(s_blurCalls == 0, "bars %d: the motion blur is left alone while up (%d calls)", on,
+              s_blurCalls);
+        current_layout_id = 0;
+        s_blurCalls = 0;
+        for (int i = 0; i < 12; i++) {
+            tick();
+        }
+        CHECK(s_blurCalls == 3, "bars %d: the blur is restored once the level is 0 (%d calls)", on,
+              s_blurCalls);
+    }
+    CHECK(n[1] == n[0] + 2, "bars: 2 fewer full-screen sprites when off (%d on, %d off)", n[1],
+          n[0]);
+
+    /* switching mid-cutscene applies at once */
+    ico_video_get(&o);
+    o.effectCinematicBars = 1;
+    ico_video_set(&o);
+    current_layout_id = 55;
+    for (int i = 0; i < 5; i++) {
+        tick();
+    }
+    const int before = fullScreenSprites();
+    o.effectCinematicBars = 0;
+    ico_video_set(&o);
+    tick();
+    CHECK(fullScreenSprites() == before - 2, "bars: switched off mid-cutscene (%d -> %d)", before,
+          fullScreenSprites());
+    o.effectCinematicBars = 1;
+    ico_video_set(&o);
+    tick();
+    CHECK(fullScreenSprites() == before, "bars: switched back on mid-cutscene (%d)",
+          fullScreenSprites());
+    current_layout_id = 0;
+    for (int i = 0; i < 12; i++) {
+        tick();
+    }
+}
+
 static void boot(void)
 {
     matrixptr = s_spr;
@@ -1595,6 +1671,7 @@ static void recordingChecks(void)
     checkLeak();
     checkMask();
     checkSofteningOff();
+    checkCinematicBars(); /* v0.4.3 R27 */
     checkVu();
     checkZScale();
     checkPhotoView();

@@ -539,6 +539,8 @@ typedef enum UiStrId {
     UI_STR_OPT_WINDOW_MODE,
     UI_STR_VAL_WINDOWED,
     UI_STR_VAL_BORDERLESS,
+    /* v0.4.3 R27: Effects > Cinematic bars */
+    UI_STR_OPT_EFFECT_CINEMATIC_BARS,
     UI_STR_COUNT
 } UiStrId;
 

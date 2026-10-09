@@ -473,4 +473,6 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_WINDOW_MODE] = "Anzeigemodus",
     [UI_STR_VAL_WINDOWED] = "Fenster",
     [UI_STR_VAL_BORDERLESS] = "Randlos",
+    /* v0.4.3 R27 */
+    [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
 };

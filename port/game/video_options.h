@@ -42,7 +42,7 @@
  *                           0           config only: RAM for that read-ahead, 0 (half the
  *                                       computer's memory) or 128..65536
  *   [video] effect_glow, effect_depth_of_field, effect_softening, effect_motion_blur,
- *           effect_fog
+ *           effect_fog, effect_cinematic_bars
  *                           true        the game's own picture effects (issue 11): the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
@@ -132,11 +132,12 @@ typedef struct IcoVideoOptions {
     /* the game's own picture effects (issue 11), 1 = on (the PS2 picture),
        applied whatever the preset; the game reads them through the
        ico_video_effect_* getters below */
-    int effectGlow;         /* the flare and bloom passes and the sun (staticBlur.c) */
-    int effectDepthOfField; /* the depth-of-field pass (staticBlur.c depthField) */
-    int effectSoftening;    /* the edge softening (GsBase.c gsb_antiAlias) */
-    int effectMotionBlur;   /* the motion blur (staticBlur.c MotionBlur) */
-    int effectFog;          /* the depth fog (ZFog.c fog_DrawFog) */
+    int effectGlow;          /* the flare and bloom passes and the sun (staticBlur.c) */
+    int effectDepthOfField;  /* the depth-of-field pass (staticBlur.c depthField) */
+    int effectSoftening;     /* the edge softening (GsBase.c gsb_antiAlias) */
+    int effectMotionBlur;    /* the motion blur (staticBlur.c MotionBlur) */
+    int effectFog;           /* the depth fog (ZFog.c fog_DrawFog) */
+    int effectCinematicBars; /* the cutscene bars (GsBase.c, issue 27); 1 = on */
     /* v0.4.1 (R1): an output-size depth buffer in the presentation for an
        effects program (rd.h RdSettings.effectsDepth); 1 = on */
     int effectsDepth;
@@ -222,6 +223,7 @@ int ico_video_effect_depth_of_field(void);
 int ico_video_effect_softening(void);
 int ico_video_effect_motion_blur(void);
 int ico_video_effect_fog(void);
+int ico_video_effect_cinematic_bars(void);
 /* [video] effects_depth (R1), 1 or 0 */
 int ico_video_effects_depth(void);
 /* The model pack switches in force, 1 or 0: [video] model_pack and

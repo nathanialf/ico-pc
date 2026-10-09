@@ -86,6 +86,9 @@ gives you, and that is how the game starts.
   jagged edges.
 - **Motion blur:** the trail that moving things leave behind.
 - **Fog:** the haze that hides the distance.
+- **Cinematic bars:** the black bars at the top and bottom of the picture
+  during cutscenes. With them Off you see the whole picture, and the
+  subtitles are not dimmed.
 
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
@@ -263,7 +266,7 @@ Under `[video]`:
 
 | Line | What it does |
 | --- | --- |
-| `effect_glow = true` and the four other `effect_` lines | The five switches of the Effects page. |
+| `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
 | `model_pack = true` | The Model pack row. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |

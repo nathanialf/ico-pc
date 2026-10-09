@@ -865,6 +865,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.effectMotionBlur);
     case UI_OPT_EFFECT_FOG:
         return onOff(o.effectFog);
+    case UI_OPT_EFFECT_CINEMATIC_BARS:
+        return onOff(o.effectCinematicBars);
     case UI_OPT_FRAMERATE:
         /* the option as set, in force in both presets (F2) */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
@@ -1145,6 +1147,10 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_EFFECT_FOG:
         o.effectFog = !o.effectFog;
+        video = 1;
+        break;
+    case UI_OPT_EFFECT_CINEMATIC_BARS:
+        o.effectCinematicBars = !o.effectCinematicBars;
         video = 1;
         break;
     case UI_OPT_FRAMERATE:
@@ -2145,6 +2151,7 @@ static void build(void)
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -2153,6 +2160,7 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     /* v0.4.2: Characters after Credits (from both entries; the other three
        from the title only) */
