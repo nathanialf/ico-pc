@@ -92,7 +92,10 @@ there, with all its effects. Press Cross to save a picture.
 
 ## How do I close the game?
 
-Choose **Quit to desktop** on the title screen (**Quit game** on Android), or press Escape on a PC.
+Choose **Quit to desktop** on the title screen (**Quit game** on Android).
+While you play, open the pause menu (Start, or Escape on a PC), choose
+**End Game** to reach the title screen, and quit from there. On a PC you
+can also close the window.
 
 ## Something went wrong. What now?
 

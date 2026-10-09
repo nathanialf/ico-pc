@@ -135,8 +135,8 @@ come back when you touch it. [The full description](CONTROLS.md#touch-controls-p
 If Ico does not run in every direction you push the on-screen stick, turn
 on **Options > Gameplay > Analogue stick fix**.
 
-**Back.** The phone's Back button or gesture opens the pause menu, like
-Start.
+**Back.** The phone's Back button or gesture opens the pause menu while
+you play, like Start. In the menus it goes back, like Triangle.
 
 **Vibration.** When no gamepad is connected, the phone itself vibrates
 where a gamepad would rumble, for example when Ico is hurt. A connected
@@ -149,8 +149,8 @@ While one is connected, the touch buttons go away. Change that in
 **Options > Controls > Touch controls**.
 
 **Keyboards.** A keyboard works too, with the same keys as on a PC
-([the table](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse)),
-except that Escape does not close the game.
+([the table](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse)).
+Escape works like the Back button.
 
 **Closing the game.** Choose **Quit game** on the title screen.
 Save first. You can also close it from the phone's recent apps screen,

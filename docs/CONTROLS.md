@@ -26,7 +26,10 @@ PlayStation or Switch pad.
 
 A few more keys on a PC:
 
-- **Escape** closes the game.
+- **Escape** opens the pause menu while you play, and goes back in the
+  menus, like Triangle. It does not close the game: to quit, choose
+  **End Game** in the pause menu, then **Quit to desktop** on the title
+  screen, or close the window.
 - **Alt+Enter** switches between a window and the whole screen (the
   Borderless or Fullscreen choice you made under Window mode).
 - **F12** saves a picture of the current moment for a bug report. See

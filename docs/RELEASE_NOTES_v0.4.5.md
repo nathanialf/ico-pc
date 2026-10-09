@@ -14,4 +14,5 @@
 - French menus: the apostrophes on the Graphics driver page look right.
 - The button remap screen names the mouse buttons in the menu's language.
 - On Windows, saving a picture of the frame with F12 works when the user folder has accented characters.
+- Escape no longer closes the game: it opens the pause menu while you play and goes back in the menus.
 <!-- P5c: boot flash -->
