@@ -90,6 +90,12 @@
  *             dumps' blocks) each stay at their place
  *   grid STs  a grid sampling a target blends its STs half way; a grid
  *             with an image keeps the tick's
+ *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
+ *             degrees in the tick (a shadow climbing out of its pool, its
+ *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
+ *             0.75 it blends as a rotation, the bone's origin stays between
+ *             the ticks' heights and the skin's centroid on the line between
+ *             its two places
  *   locked    the camera backs away 60 units and turns 8 degrees in the
  *             tick: at alpha 0.25 and 0.5 a part locked to the camera (node
  *             flag 2, RD_VU_VIEW_LOCKED: the 500 unit screen times its place
@@ -1674,6 +1680,133 @@ static void testRotationDraws(void)
               memcmp(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock),
                      cur->payload + skc->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0,
           "a 150 degree turn in a tick keeps the tick's bone");
+}
+
+/* A shadow coming out of its pool: the root climbs up to 13
+ * units a tick in EN1 START (shadow_spawn_test's rise) while the hips
+ * turn.  A skinned draw whose bone 0 rises 40 units (Y down: 100 to 60) and
+ * turns 30 degrees about x in the tick, its three vertices at (0, -100, 0),
+ * (10, -100, 0) and (0, -90, 0), so the bone's pivot (their centroid) is
+ * 97 units from its origin. */
+static RdMesh makeRisingSkinMesh(void)
+{
+    static float qw[1 + 3 * 5][4];
+    static const float pos[3][3] = {
+        {0.0f, -100.0f, 0.0f}, {10.0f, -100.0f, 0.0f}, {0.0f, -90.0f, 0.0f}};
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8003u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 3; k++) {
+        qw[1 + k * 5][0] = pos[k][0];
+        qw[1 + k * 5][1] = pos[k][1];
+        qw[1 + k * 5][2] = pos[k][2];
+        qw[1 + k * 5][3] = 1.0f;
+        qw[1 + k * 5 + 3][3] = k == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        const uint32_t addr = 16u;                   /* bone 0, weight 1 */
+        memcpy(&qw[1 + k * 5 + 2][0], &addr, 4);
+        qw[1 + k * 5 + 2][1] = 1.0f;
+        memcpy(&qw[1 + k * 5 + 2][2], &addr, 4);
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 16;
+    md.qwPerVertex = RD_VU_QW_SKIN;
+    md.batchCount = 1;
+    md.batches = &bd;
+    return rd_create_vu_mesh(&md);
+}
+
+/* bone 0 of the rising draw: turned deg about x, its origin at (5, y, -20) */
+static void risingBone(float (*b)[4], double deg, double y)
+{
+    const double a = deg * 3.14159265358979323846 / 180.0;
+    memset(b, 0, 16 * sizeof(float));
+    b[0][0] = 1.0f;
+    b[1][1] = (float)cos(a);
+    b[1][2] = (float)sin(a);
+    b[2][1] = (float)-sin(a);
+    b[2][2] = (float)cos(a);
+    b[3][0] = 5.0f;
+    b[3][1] = (float)y;
+    b[3][2] = -20.0f;
+    b[3][3] = 1.0f;
+}
+
+static void recordRise(RdMesh skin, double deg, double y)
+{
+    rd_begin_frame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    static float bone[4][4];
+    risingBone(bone, deg, y);
+    d.prog = RD_PROG_SKIN;
+    d.code = 24;
+    d.bones = (const float (*)[4])bone;
+    d.boneQw = 4;
+    rd_select_list(0);
+    rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjE, 2, 24));
+    rd_end_frame(0);
+}
+
+/* p's image through the bone b (column-major rows: b[3] the origin) */
+static void boneApply(const float (*b)[4], const double p[3], double o[3])
+{
+    for (int r = 0; r < 3; r++) {
+        o[r] = b[0][r] * p[0] + b[1][r] * p[1] + b[2][r] * p[2] + b[3][r];
+    }
+}
+
+static void testRisingBone(void)
+{
+    RdMesh skin = makeRisingSkinMesh();
+    const double pivot[3] = {10.0 / 3.0, -290.0 / 3.0, 0.0};
+    float bp[4][4], bc[4][4];
+    double ip[3], ic[3];
+    risingBone(bp, 0.0, 100.0);
+    risingBone(bc, 30.0, 60.0);
+    boneApply((const float (*)[4])bp, pivot, ip);
+    boneApply((const float (*)[4])bc, pivot, ic);
+    recordRise(skin, 0.0, 100.0);
+    recordRise(skin, 30.0, 60.0);
+    static const float alphas[3] = {0.25f, 0.5f, 0.75f};
+    for (int i = 0; i < 3; i++) {
+        const float t = alphas[i];
+        const RdInterpStats *st = build(t, 1);
+        CHECK(st->rotated == 1 && st->jump == 0,
+              "alpha %.2f: the bone blends as a rotation, "
+              "no jump (%u rotated, %u jumped)",
+              t, st->rotated, st->jump);
+        const RdFrame *f = built(t);
+        const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjE, 2, 24), 0);
+        if (!sk) {
+            CHECK(0, "alpha %.2f: the rising draw", t);
+            continue;
+        }
+        const float (*b)[4] = (const float (*)[4])(
+            const void *)(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+        double im[3];
+        boneApply(b, pivot, im);
+        const double want[3] = {ip[0] + (ic[0] - ip[0]) * t, ip[1] + (ic[1] - ip[1]) * t,
+                                ip[2] + (ic[2] - ip[2]) * t};
+        CHECK(b[3][1] <= 100.0f + 1e-3f && b[3][1] >= 60.0f - 1e-3f,
+              "alpha %.2f: the bone's origin at Y %.4f, outside the ticks' 100 and 60", t, b[3][1]);
+        CHECK(fabs(im[0] - want[0]) < 1e-3 && fabs(im[1] - want[1]) < 1e-3 &&
+                  fabs(im[2] - want[2]) < 1e-3,
+              "alpha %.2f: the skin's centroid at %.4f %.4f %.4f, want %.4f %.4f %.4f on the "
+              "line between the ticks",
+              t, im[0], im[1], im[2], want[0], want[1], want[2]);
+        printf("rd_interp_test: rising bone at alpha %.2f: origin Y %.4f, centroid Y %.4f "
+               "(ticks %.4f and %.4f)\n",
+               t, b[3][1], im[1], ip[1], ic[1]);
+    }
 }
 
 /* ---------------------------------------------------- the blended camera */
@@ -3406,6 +3539,7 @@ static void runCpu(void)
 {
     testRotationBlend();
     testRotationDraws();
+    testRisingBone();
     testCameraBlend();
     testCameraLocked();
     testPhoto();

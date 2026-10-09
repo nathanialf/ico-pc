@@ -16,6 +16,7 @@
 #include <libvu0.h>
 #include "camera-editor.h"
 #include "ee_view.h"
+#include "sceneManager.h"
 #include <assert.h>
 
 typedef struct GenBga { /* field names derived */
@@ -773,7 +774,17 @@ void generatorBeforeFunc(GObj *gobj)
     q->count = 0;
 }
 
-inline GenWork *InitGeneratorGeo(GObj *gobj, GenGeo *src)
+/* The kind's constructor (objKindData's create slot): CreateLayoutedGObj
+   (sceneManager.c) hands it the scene object's SObjSimpleSetting, not the
+   layout row.  The ROM reads the enemy kind as the word at 0x30, the
+   setting's object word (initSceneGObj fills it from the row's initArg, 0 for
+   every generator on the disc), and the aim angle as the float at 0x14, the
+   setting's Y rotation.  PC port: read through the setting's own type; read
+   as a GenGeo, the kind came from the setting's never written alignment tail
+   on a 64-bit host (GenGeo's pointers move its accessary to 0x3C), so a
+   shadow's start depth (actEnemyRestart, kind 0) was left to stack
+   contents. */
+inline GenWork *InitGeneratorGeo(GObj *gobj, SObjSimpleSetting *src)
 {
     GenWork *p = iosMallocDebug(ios_partition_sugipon, ICO_MAX_SIZE(GenWork, 112), __FILE__, 1230);
     int i;
@@ -783,7 +794,7 @@ inline GenWork *InitGeneratorGeo(GObj *gobj, GenGeo *src)
     p->callRequests = 0;
     p->masked = 0;
     p->resetRequest = 0;
-    p->kind = src->accessary;
+    p->kind = (int)src->obj;
     p->hard = 0;
 
     p->status = 0;
@@ -799,7 +810,7 @@ inline GenWork *InitGeneratorGeo(GObj *gobj, GenGeo *src)
     /* the direction is a quadword whose fourth word holds the bgaDone byte */
     *(float *)&p->bgaDone = 0.0f;
 
-    _ApplyRyGV(p->dir, src->rot[2]);
+    _ApplyRyGV(p->dir, src->rot[1]);
 
     for (i = 0; i < 4; i++) {
         p->bga[i].p = InitMultiBgaManager(1);

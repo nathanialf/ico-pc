@@ -110,6 +110,30 @@ if(ICO_RUN_TESTS)
     add_test(NAME hand_ik COMMAND hand_ik_test)
 endif()
 
+# The shadows' start in their pools: the generator's enemy kind
+# read from the setting its constructor is handed (ico2/omori/src/generator.c
+# compiled in, run through Generator_Call and GeneratorGeo), and with the disc
+# EN1 START's rise from that start through the game's motion decode
+# (motionFileManager.c, motionManager2.c); without the disc the rise part is
+# skipped and the generator part runs. CPU only.
+add_executable(shadow_spawn_test test/shadow_spawn_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/omori/src/generator.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionManager2.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionFileManager.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
+ico_include_dirs(omori _ico_shadow_spawn_incs)
+target_include_directories(shadow_spawn_test PRIVATE ${_ico_shadow_spawn_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(shadow_spawn_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(shadow_spawn_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(shadow_spawn_test PRIVATE ico_math ico_platform ico_port_data)
+if(ICO_RUN_TESTS)
+    add_test(NAME shadow_spawn COMMAND shadow_spawn_test "${ICO_DISC_IMAGE}")
+endif()
+
 # --- Achievements -----------------------------------
 # ico_gamestate.h (port/include) is the read-only game-state view and the
 # signal queue; the game's one-line hooks (ICO_HOST) include it from common,
