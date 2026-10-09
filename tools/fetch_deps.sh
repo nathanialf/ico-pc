@@ -57,28 +57,19 @@ trap 'rm -rf "$TMP"' EXIT
 source "$ROOT/tools/fetch_common.sh"
 
 # unpack_debs <dest> "<pool path> <sha256>"...: fetch pinned Debian packages
-# (deb.debian.org, else DEB_SNAPSHOT), check them and unpack them into
-# <dest>. Their lib*.so development links, relative to their own lib dir,
+# (fetch_deb, tools/fetch_common.sh) into <dest>. Their lib*.so development
+# links, relative to their own lib dir,
 # are pointed at the host's runtime libraries (dangling when the host has
 # none, so CMake does not find them).
 unpack_debs() {
-    local dest="$1" entry path sum deb so tgt
+    local dest="$1" entry so tgt
     shift
     command -v dpkg-deb >/dev/null 2>&1 || {
         echo "fetch_deps: dpkg-deb not found; cannot unpack the Debian header packages" >&2
         exit 1
     }
-    DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
     for entry in "$@"; do
-        path="${entry% *}"
-        sum="${entry#* }"
-        deb="$TMP/$(basename "$path")"
-        echo "==> fetching $(basename "$path")"
-        if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
-            curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
-        fi
-        echo "${sum}  ${deb}" | sha256sum -c -
-        dpkg-deb -x "$deb" "$dest"
+        fetch_deb "$entry" "$dest"
     done
     for so in "$dest"/usr/lib/x86_64-linux-gnu/lib*.so; do
         [[ -L "$so" ]] || continue
@@ -270,16 +261,10 @@ elif stamped "$VVL" "$VVL_ID"; then
 elif ! command -v dpkg-deb >/dev/null 2>&1; then
     echo "==> dpkg-deb not found; skipping the validation layer"
 else
-    DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
-    deb="$TMP/$(basename "$VVL_DEB")"
-    echo "==> fetching $(basename "$VVL_DEB")"
-    if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${VVL_DEB}"; then
-        curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${VVL_DEB}"
-    fi
-    echo "${VVL_SHA256}  ${deb}" | sha256sum -c -
+    mkdir -p "$TMP/vvl"
+    fetch_deb "$VVL_DEB $VVL_SHA256" "$TMP/vvl"
     rm -rf "$VVL"
-    mkdir -p "$TMP/vvl" "$VVL"
-    dpkg-deb -x "$deb" "$TMP/vvl"
+    mkdir -p "$VVL"
     mv "$TMP/vvl/usr/lib/x86_64-linux-gnu/libVkLayer_khronos_validation.so" "$VVL/"
     sed "s|\"library_path\": *\"[^\"]*\"|\"library_path\": \"$VVL/libVkLayer_khronos_validation.so\"|" \
         "$TMP/vvl/usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json" \

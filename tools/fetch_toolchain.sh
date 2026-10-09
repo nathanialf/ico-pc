@@ -40,8 +40,6 @@ NAME="llvm-mingw-${TAG}-ucrt-ubuntu-22.04-x86_64"
 SHA256="${LLVM_MINGW_SHA256:-bb7bb7654b33d5aa8712acb837c963b2e0c56352560c76105270a3268c665c21}"
 URL="${LLVM_MINGW_URL:-https://github.com/mstorsjo/llvm-mingw/releases/download/${TAG}/${NAME}.tar.xz}"
 
-STAMP="$DEST/llvm-mingw/.ico-release"
-
 case "$(uname -m)" in
     x86_64) ;;
     *) echo "fetch_toolchain: only x86_64 Linux hosts are pinned here; set LLVM_MINGW_URL" >&2; exit 1 ;;
@@ -51,19 +49,21 @@ mkdir -p "$DEST"
 TMP="$(mktemp -d "$DEST/.fetch.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
+# fetch, stamped, fetch_deb
+# shellcheck source=tools/fetch_common.sh
+source "$ROOT/tools/fetch_common.sh"
+
 # --- 1. llvm-mingw -----------------------------------------------------------
 
-if [[ -f "$STAMP" && "$(cat "$STAMP")" == "$NAME" ]]; then
+if stamped "$DEST/llvm-mingw" "$NAME"; then
     echo "==> llvm-mingw ${TAG} already at $DEST/llvm-mingw"
 else
-    echo "==> fetching $URL"
-    curl -fL --retry 3 -o "$TMP/$NAME.tar.xz" "$URL"
-    echo "${SHA256}  $TMP/$NAME.tar.xz" | sha256sum -c -
+    fetch "$URL" "$SHA256" "$TMP/$NAME.tar.xz"
     echo "==> unpacking"
     tar -C "$TMP" -xJf "$TMP/$NAME.tar.xz"
     rm -rf "$DEST/llvm-mingw"
     mv "$TMP/$NAME" "$DEST/llvm-mingw"
-    echo "$NAME" > "$STAMP"
+    echo "$NAME" > "$DEST/llvm-mingw/.ico-release"
     "$DEST/llvm-mingw/bin/clang" --version | head -n 1
 fi
 
@@ -72,24 +72,9 @@ if ! command -v dpkg-deb >/dev/null 2>&1; then
     exit 1
 fi
 
-# --- 2. Debian package helper ------------------------------------------------
+# --- 2. Debian packages -------------------------------------------------------
 #
-# The packages are pinned by version and SHA-256; deb.debian.org drops
-# superseded versions, so snapshot.debian.org is the fallback.
-DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
-
-# fetch_deb "<pool path> <sha256>" <dir>: download, verify, unpack into dir.
-fetch_deb() {
-    local path="${1% *}" sum="${1#* }" dir="$2" deb
-    deb="$TMP/$(basename "$path")"
-    echo "==> fetching $(basename "$path")"
-    if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
-        curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
-    fi
-    echo "${sum}  ${deb}" | sha256sum -c -
-    dpkg-deb -x "$deb" "$dir"
-    rm -f "$deb"
-}
+# fetch_deb (tools/fetch_common.sh) downloads, verifies and unpacks them.
 
 # --- 3. mingw-w64 gcc, the GCC-family Windows presets ------------------------
 #
@@ -111,7 +96,7 @@ MINGW_DEBS=(
 
 if [[ "${SKIP_MINGW_GCC:-0}" == "1" ]]; then
     echo "==> SKIP_MINGW_GCC=1; not building $MINGW_GCC"
-elif [[ -f "$MINGW_GCC/.ico-release" && "$(cat "$MINGW_GCC/.ico-release")" == "$MINGW_GCC_ID" ]]; then
+elif stamped "$MINGW_GCC" "$MINGW_GCC_ID"; then
     echo "==> mingw-w64 gcc already at $MINGW_GCC"
 else
     rm -rf "$MINGW_GCC"
@@ -138,12 +123,10 @@ CMAKE_DIR="$DEST/cmake"
 
 if [[ "${SKIP_CMAKE:-0}" == "1" ]]; then
     echo "==> SKIP_CMAKE=1; not fetching CMake"
-elif [[ -f "$CMAKE_DIR/.ico-release" && "$(cat "$CMAKE_DIR/.ico-release")" == "$CMAKE_NAME" ]]; then
+elif stamped "$CMAKE_DIR" "$CMAKE_NAME"; then
     echo "==> CMake ${CMAKE_VERSION} already at $CMAKE_DIR"
 else
-    echo "==> fetching $CMAKE_URL"
-    curl -fL --retry 3 -o "$TMP/$CMAKE_NAME.tar.gz" "$CMAKE_URL"
-    echo "${CMAKE_SHA256}  $TMP/$CMAKE_NAME.tar.gz" | sha256sum -c -
+    fetch "$CMAKE_URL" "$CMAKE_SHA256" "$TMP/$CMAKE_NAME.tar.gz"
     tar -C "$TMP" -xzf "$TMP/$CMAKE_NAME.tar.gz"
     rm -rf "$CMAKE_DIR"
     mv "$TMP/$CMAKE_NAME" "$CMAKE_DIR"

@@ -2,9 +2,14 @@
 # =============================================================================
 # tools/fetch_common.sh
 #
-# The helpers tools/fetch_deps.sh and tools/fetch_android.sh share. Sourced,
-# not run.
+# The helpers and pins tools/fetch_toolchain.sh, tools/fetch_deps.sh and
+# tools/fetch_android.sh share. Sourced, not run; fetch_deb downloads into
+# the caller's $TMP.
 # =============================================================================
+
+# Debian packages are pinned by version and SHA-256; deb.debian.org drops
+# superseded versions, so snapshot.debian.org is the fallback.
+DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
 
 # fetch <url> <sha256> <file>: download and verify.
 fetch() {
@@ -16,4 +21,19 @@ fetch() {
 # stamped <dir> <id>: true when <dir> already holds release <id>.
 stamped() {
     [[ -f "$1/.ico-release" && "$(cat "$1/.ico-release")" == "$2" ]]
+}
+
+# fetch_deb "<pool path> <sha256>" <dir>: download a pinned Debian package
+# (deb.debian.org, else DEB_SNAPSHOT), verify it and unpack it into <dir>
+# (dpkg-deb -x, no root).
+fetch_deb() {
+    local path="${1% *}" sum="${1#* }" dir="$2" deb
+    deb="$TMP/$(basename "$path")"
+    echo "==> fetching $(basename "$path")"
+    if ! curl -fsL --retry 3 -o "$deb" "http://deb.debian.org/debian/${path//+/%2B}"; then
+        curl -fsL --retry 3 -o "$deb" "${DEB_SNAPSHOT}/${path//+/%2B}"
+    fi
+    echo "${sum}  ${deb}" | sha256sum -c -
+    dpkg-deb -x "$deb" "$dir"
+    rm -f "$deb"
 }
