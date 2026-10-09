@@ -1698,6 +1698,24 @@ static float wideFor(const RdTargetRec *tc, int stretch)
     return tc->wide && !stretch ? g_rd.wideX : 1.0f;
 }
 
+/* A sprite (vertices i and i + 1) the layout draws as a full-width band:
+ * the first and last pixel it covers (ceil(x0), ceil(x1) - 1 in the target's
+ * pixels) are within one of the target's two edges.  True for such a band. */
+static int bandSprite(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t i,
+                      int32_t *first, int32_t *last)
+{
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    int32_t a = v[i].x, b = v[i + 1].x;
+    if (a > b) {
+        const int32_t t = a;
+        a = b;
+        b = t;
+    }
+    *first = -floorDiv16(-a) - ox;
+    *last = -floorDiv16(-b) - 1 - ox;
+    return *first <= 1 && *last >= (int32_t)tc->w - 2;
+}
+
 /* Whether a screen-prim command is full-screen: tagged so, or sprites that
  * cover the target's whole width (in GS pixels, after XYOFFSET).  A sprite
  * covers the pixels p with x0 <= p < x1 (the GS's top-left rule on the 1/16
@@ -1717,21 +1735,66 @@ static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenV
     if (prim != RD_PRIM_SPRITES || n < 2) {
         return 0;
     }
-    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
     for (uint32_t i = 0; i + 1 < n; i += 2) {
-        int32_t a = v[i].x, b = v[i + 1].x;
-        if (a > b) {
-            const int32_t t = a;
-            a = b;
-            b = t;
-        }
-        /* the first and last pixel covered: ceil(x0), ceil(x1) - 1 */
-        const int32_t first = -floorDiv16(-a) - ox, last = -floorDiv16(-b) - 1 - ox;
-        if (first <= 1 && last >= (int32_t)tc->w - 2) {
+        int32_t first, last;
+        if (bandSprite(r, tc, v, i, &first, &last)) {
             return 1;
         }
     }
     return 0;
+}
+
+/* Full pixel: the screen bands one pixel short of the target's edge
+ * (bandSprite) reach the edge, so the strip the option shows beside them
+ * is not a column of the picture under the bar.  Only the sprite's x
+ * moves; its u stays, so the added pixel reads the sprite's own end texel
+ * and the texture is never extrapolated.  Returns v, or a copy with the
+ * bands moved (the recorded frame is never written).  Off, a
+ * full-screen-space prim, a block target or no short band: v itself. */
+static const RdScreenVtx *widenBands(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v,
+                                     uint32_t n, uint8_t prim, uint8_t space)
+{
+    static RdScreenVtx *s_wv;
+    static uint32_t s_wvCap;
+    if (!g_rd.settings.fullPixel || !tc || !tc->wide || tc->wideBlock ||
+        space == RD_SPACE_FULLSCREEN || prim != RD_PRIM_SPRITES || n < 2) {
+        return v;
+    }
+    const RdScreenVtx *src = v;
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    for (uint32_t i = 0; i + 1 < n; i += 2) {
+        int32_t first, last;
+        if (!bandSprite(r, tc, v, i, &first, &last) || (first <= 0 && last >= (int32_t)tc->w - 1)) {
+            continue;
+        }
+        if (src == v) {
+            if (n > s_wvCap) {
+                RdScreenVtx *p = realloc(s_wv, (size_t)n * sizeof(*p));
+                if (!p) {
+                    return v;
+                }
+                s_wv = p;
+                s_wvCap = n;
+            }
+            memcpy(s_wv, v, (size_t)n * sizeof(*v));
+            src = s_wv;
+        }
+        /* the smaller x is the left edge; the pixel 0 starts at ox * 16,
+         * the one past the last at (ox + w) * 16 */
+        RdScreenVtx *lo = &s_wv[i], *hi = &s_wv[i + 1];
+        if (lo->x > hi->x) {
+            RdScreenVtx *t = lo;
+            lo = hi;
+            hi = t;
+        }
+        if (first > 0) {
+            lo->x = ox * 16;
+        }
+        if (last < (int32_t)tc->w - 1) {
+            hi->x = (ox + (int32_t)tc->w) * 16;
+        }
+    }
+    return src;
 }
 
 /* What a draw binds besides its geometry: doScreen and the VU draws. */
@@ -2280,6 +2343,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    v = widenBands(r, rd__target_rec(r->st.color), v, n, c->b[0], c->b[1]);
     RhiRect dateArea;
     const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
     if (!prepareDraw(r, &ds, dateAt)) {

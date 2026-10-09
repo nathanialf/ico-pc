@@ -23,8 +23,7 @@
  *   [video] full_height     false
  *   [video] full_pixel      false       show the strip the PS2's thin black border hid:
  *                                       the reduction draws the whole frame, nothing is
- *                                       cut or enlarged; any
- *                                       preset, not part of them
+ *                                       cut or enlarged; any preset, not part of them
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *                                       (60 on Android)
  *   [video] crt             false       the CRT filter (any preset)

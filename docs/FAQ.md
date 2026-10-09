@@ -47,7 +47,8 @@ at the sides and a little more at the top and bottom, and the game keeps
 it. To hide it, turn on **Full pixel (no border)** in **Options > Effects**.
 It shows the strip of picture the PS2 hid under the border, so the picture
 fills the box. Nothing is cut off or enlarged, and the picture stays as
-sharp as it is without the option.
+sharp as it is without the option. With Video mode at 50 Hz the strip at
+the top and bottom is a little taller.
 [What it does](OPTIONS.md#effects).
 
 ## Why does the CRT filter switch the picture back to the original resolution?

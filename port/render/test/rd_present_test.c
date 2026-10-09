@@ -1868,7 +1868,9 @@ static bool lineRun(int full, uint32_t w, uint32_t h, uint8_t *out)
 
 /* the reduction is native with the option on: the picture inside the box
  * is the same pixels as with it off, not resampled, so a one-pixel line
- * lands on the same output pixels with the same values */
+ * lands on the same output pixels with the same values.  Only the interior
+ * is compared (an eighth in from each side): the strip itself is the same
+ * reduction draw either way, so it cannot show a resample. */
 static void checkFullPixelSharp(uint32_t w, uint32_t h)
 {
     static uint8_t off[1440 * 1080 * 4], on[1440 * 1080 * 4];
@@ -1893,54 +1895,155 @@ static void checkFullPixelSharp(uint32_t w, uint32_t h)
     CHECK(same, "full pixel sharp %ux%u: the same output pixels on and off", w, h);
 }
 
-/* the reduction's last column reads its own colour, not a quarter of the
- * first: SCENE red with a blue column 0, DISPLAY's column 511 stays red with
- * the option on (the game's wrap would blend blue into it) */
+/* SCENE (red, with the extras the case draws) through the reduction with
+ * Full pixel on or off, DISPLAY read back; scale above 1 puts the reduction
+ * on the scaled target (the hardware sprite, where the clamp on the rows
+ * matters), fullHeight doubles the rows, mirror flips the UI sprite.
+ * bandTest 0: a blue column 0 and a blue row 0 in the scene.  1: a black
+ * band, GS 1..511 across and the middle half of the rows, as the pause
+ * menu's bars are drawn. */
+static uint8_t *clampRun(int full, float scale, int fullHeight, int mirror, int bandTest,
+                         uint32_t *w, uint32_t *h)
+{
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80},
+                         black[4] = {0, 0, 0, 0x80};
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    s.fullHeightScene = (uint8_t)fullHeight;
+    s.mirror = (uint8_t)mirror;
+    if (scale > 1.0f) {
+        s.preset = RD_PRESET_ENHANCED;
+        s.sceneScale = scale;
+    }
+    if (!rd_init(512, 512, &s, NULL)) {
+        return NULL;
+    }
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    opaque2D();
+    rd_texture_off();
+    if (bandTest) {
+        sprite(RD_SPACE_UI, 4, 128 * 16, 511 * 16 + 7, 384 * 16, black, 0, 0, 0, 0);
+    } else {
+        sprite(RD_SPACE_WORLD, 0, 0, 16, 512 * 16, blue, 0, 0, 0, 0);
+        sprite(RD_SPACE_WORLD, 0, 0, 512 * 16, 16, blue, 0, 0, 0, 0);
+    }
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint8_t *p = readTarget(RD_TARGET_DISPLAY, w, h);
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel clamp: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return p && *w >= 512 && *h >= 64 ? p : NULL;
+}
+
+/* the reduction's edges read their own colour, not the opposite edge's: SCENE
+ * red with a blue column 0 and a blue row 0.  With the option on DISPLAY's
+ * last column and last row hold no blue (a lost clamp wraps column 0 and row
+ * 0 into them; on the scaled target and with full height the last row's
+ * bilinear taps reach past the scene's rows, where only the clamp matters),
+ * and with the mirror on the left column, which then samples past the other
+ * edge, is red.  The plain 1x case also keeps the exact value of column 0. */
 static void checkFullPixelClamp(void)
 {
-    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80};
-    for (int full = 0; full < 2; full++) {
-        RdSettings s = originalSettings();
-        s.fullPixel = (uint8_t)full;
-        if (!rd_init(512, 512, &s, NULL)) {
-            return;
-        }
-        rd_begin_frame();
-        rd_select_list(0);
-        rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
-        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
-        opaque2D();
-        rd_texture_off();
-        sprite(RD_SPACE_WORLD, 0, 0, 16, 512 * 16, blue, 0, 0, 0, 0);
-        rd_select_list(12);
-        RdPostParams pp;
-        memset(&pp, 0, sizeof(pp));
-        pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
-        rd_post(RD_POST_REDUCTION, &pp);
-        rd_end_frame(0);
-        uint32_t w = 0, h = 0;
-        uint8_t *p = readTarget(RD_TARGET_DISPLAY, &w, &h);
-        if (p && w == 512 && h >= 64) {
-            const uint8_t *r = &p[((size_t)(h / 2) * w + 511) * 4];
-            const uint8_t *l = &p[((size_t)(h / 2) * w) * 4];
+    static const struct {
+        float scale;
+        int fullHeight, mirror;
+        const char *name;
+    } cases[] = {
+        {1.0f, 0, 0, "1x"},        {1.0f, 1, 0, "1x full height"},
+        {2.0f, 0, 0, "2x"},        {2.0f, 1, 0, "2x full height"},
+        {1.0f, 0, 1, "1x mirror"}, {2.0f, 0, 1, "2x mirror"},
+    };
+
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        for (int full = 0; full < 2; full++) {
+            const char *nm = cases[k].name;
+            uint32_t w = 0, h = 0;
+            uint8_t *p =
+                clampRun(full, cases[k].scale, cases[k].fullHeight, cases[k].mirror, 0, &w, &h);
+            if (!p) {
+                CHECK(0, "full pixel clamp %s: DISPLAY readback (%ux%u)", nm, w, h);
+                continue;
+            }
+#define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
+#define NOBLUE(q) ((q)[0] >= 250 && (q)[1] <= 2 && (q)[2] <= 2)
+            const uint8_t *r = PX(w - 1, h / 2), *l = PX(0, h / 2);
             if (full) {
-                CHECK(r[0] >= 250 && r[1] <= 2 && r[2] <= 2,
-                      "full pixel clamp: column 511 is red (%u %u %u)", r[0], r[1], r[2]);
-                /* the GS samples column 0 at u = 0.75: three quarters of
-                   the blue texel and a quarter of the red one beside it */
-                CHECK(l[2] >= 180 && l[2] <= 200 && l[0] >= 55 && l[0] <= 75 && l[1] <= 2,
-                      "full pixel clamp: column 0 is three quarters blue (%u %u %u)", l[0], l[1],
-                      l[2]);
+                const uint8_t *bot = PX(w / 2, h - 1), *corner = PX(w - 1, h - 1);
+                CHECK(NOBLUE(bot) && NOBLUE(corner),
+                      "full pixel clamp %s: the last row is red (%u %u %u, corner %u %u %u)", nm,
+                      bot[0], bot[1], bot[2], corner[0], corner[1], corner[2]);
+                if (cases[k].mirror) {
+                    CHECK(NOBLUE(l), "full pixel clamp %s: the left column is red (%u %u %u)", nm,
+                          l[0], l[1], l[2]);
+                    continue; /* the right column is the flipped blue one */
+                }
+                CHECK(NOBLUE(r), "full pixel clamp %s: the last column is red (%u %u %u)", nm, r[0],
+                      r[1], r[2]);
+                if (cases[k].scale == 1.0f && !cases[k].fullHeight) {
+                    /* the GS samples column 0 at u = 0.75: three quarters of
+                       the blue texel and a quarter of the red one beside it */
+                    CHECK(l[2] >= 180 && l[2] <= 200 && l[0] >= 55 && l[0] <= 75 && l[1] <= 2,
+                          "full pixel clamp %s: column 0 is three quarters blue (%u %u %u)", nm,
+                          l[0], l[1], l[2]);
+                }
             } else {
                 CHECK(r[0] < 8 && r[1] < 8 && r[2] < 8 && l[0] < 8 && l[1] < 8 && l[2] < 8,
-                      "full pixel clamp: off, the border columns stay black");
+                      "full pixel clamp %s: off, the border columns stay black", nm);
             }
-        } else {
-            CHECK(0, "full pixel clamp: DISPLAY readback (%ux%u)", w, h);
+#undef NOBLUE
+#undef PX
         }
-        CHECK(rhi_vk_validation_error_count() == 0, "full pixel clamp: %u validation errors",
-              rhi_vk_validation_error_count());
-        rd_shutdown();
+    }
+}
+
+/* the layout's full-width bands (the pause and End Game bars, GS pixels 1
+ * to 511 of 512) reach the frame's edge with the option on: the strip it
+ * shows beside the bar is the bar, not a column of the scene under it.
+ * Rows outside the band keep the scene's red at the edge, and with the
+ * option off the border stays black as it was. */
+static void checkFullPixelBands(void)
+{
+    static const struct {
+        float scale;
+        int mirror;
+        const char *name;
+    } cases[] = {{1.0f, 0, "1x"}, {2.0f, 0, "2x"}, {1.0f, 1, "1x mirror"}, {2.0f, 1, "2x mirror"}};
+
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        for (int full = 0; full < 2; full++) {
+            const char *nm = cases[k].name;
+            uint32_t w = 0, h = 0;
+            uint8_t *p = clampRun(full, cases[k].scale, 0, cases[k].mirror, 1, &w, &h);
+            if (!p) {
+                CHECK(0, "full pixel bands %s: DISPLAY readback (%ux%u)", nm, w, h);
+                continue;
+            }
+#define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
+#define DARK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
+            const uint8_t *l = PX(0, h / 2), *r = PX(w - 1, h / 2), *m = PX(w / 2, h / 2);
+            if (full) {
+                const uint8_t *lo = PX(0, h / 8), *ro = PX(w - 1, h / 8);
+                CHECK(DARK(l) && DARK(r) && DARK(m),
+                      "full pixel bands %s: the band is black to both edges (%u %u %u, %u %u %u)",
+                      nm, l[0], l[1], l[2], r[0], r[1], r[2]);
+                CHECK(lo[0] >= 250 && lo[1] <= 2 && lo[2] <= 2 && ro[0] >= 250 && ro[1] <= 2 &&
+                          ro[2] <= 2,
+                      "full pixel bands %s: rows outside the band are red at the edge", nm);
+            } else {
+                CHECK(DARK(l) && DARK(r) && DARK(m),
+                      "full pixel bands %s: off, the border columns stay black", nm);
+            }
+#undef DARK
+#undef PX
+        }
     }
 }
 
@@ -2371,15 +2474,16 @@ static void edgeCallback(const RdOverlayCtx *ctx, void *user)
     ovRect(x0, y1 - 4, x1, y1, white);
 }
 
-/* the CRT filter with full pixel at 512 lines (50 Hz), 960 x 720: the
+/* the CRT filter at 512 lines (50 Hz), 960 x 720, full pixel on or off: the
  * filter draws the whole grid into the box, so the overlay is laid out on
- * the whole grid and its top and bottom lines show inside the output */
-static void checkFullPixelCrtOverlay(void)
+ * the whole grid and its top and bottom lines show inside the output.
+ * boxOut gets the overlay's box. */
+static void crtOverlayRun(int full, RdRect *boxOut)
 {
     const uint32_t w = 960, h = 720;
     static uint8_t out[960 * 720 * 4];
     RdSettings s = originalSettings();
-    s.fullPixel = 1;
+    s.fullPixel = (uint8_t)full;
     rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
     s.crtScanlines = 0.0f; /* a flat beam: every output row of a lit line lit */
@@ -2401,21 +2505,21 @@ static void checkFullPixelCrtOverlay(void)
     uint32_t ow = 0, oh = 0;
     const bool ok = rd__read_present(out, sizeof(out), &ow, &oh) && ow == w && oh == h;
     rd_set_present_overlay(NULL, NULL);
-    CHECK(rhi_vk_validation_error_count() == 0, "full pixel crt overlay: %u validation errors",
-          rhi_vk_validation_error_count());
+    CHECK(rhi_vk_validation_error_count() == 0, "crt overlay (full pixel %d): %u validation errors",
+          full, rhi_vk_validation_error_count());
     rd_shutdown();
     if (!ok) {
-        CHECK(0, "full pixel crt overlay: present readback");
+        CHECK(0, "crt overlay (full pixel %d): present readback", full);
         return;
     }
     const RdRect b = s_edgeCtx.box;
     printf("  full pixel crt overlay: grid %ux%u, box %d,%d %ux%u\n", s_edgeCtx.outW,
            s_edgeCtx.outH, b.x, b.y, b.w, b.h);
-    CHECK(s_edgeCalls == 1, "full pixel crt overlay: one callback (%d)", s_edgeCalls);
+    CHECK(s_edgeCalls == 1, "crt overlay (full pixel %d): one callback (%d)", full, s_edgeCalls);
     CHECK(s_edgeCtx.outH == 512 && b.x == 0 && b.y == 0 && b.w == s_edgeCtx.outW &&
               b.h == s_edgeCtx.outH,
-          "full pixel crt overlay: the box is the whole grid (%d,%d %ux%u of %ux%u)", b.x, b.y, b.w,
-          b.h, s_edgeCtx.outW, s_edgeCtx.outH);
+          "crt overlay (full pixel %d): the box is the whole grid (%d,%d %ux%u of %ux%u)", full,
+          b.x, b.y, b.w, b.h, s_edgeCtx.outW, s_edgeCtx.outH);
     /* the centre column: the top and bottom bands lit within the output's
      * first and last 12 rows (4 grid lines are about 5.6 output rows) */
     int top = 0, bottom = 0;
@@ -2423,10 +2527,24 @@ static void checkFullPixelCrtOverlay(void)
         top |= out[((size_t)y * w + w / 2) * 4] > 128;
         bottom |= out[((size_t)(h - 1 - y) * w + w / 2) * 4] > 128;
     }
-    CHECK(top && bottom, "full pixel crt overlay: the overlay's top (%d) and bottom (%d) show", top,
-          bottom);
+    CHECK(top && bottom, "crt overlay (full pixel %d): the overlay's top (%d) and bottom (%d) show",
+          full, top, bottom);
     /* the middle row stays the black scene */
-    CHECK(out[((size_t)(h / 2) * w + w / 2) * 4] < 16, "full pixel crt overlay: black between");
+    CHECK(out[((size_t)(h / 2) * w + w / 2) * 4] < 16, "crt overlay (full pixel %d): black between",
+          full);
+    *boxOut = b;
+}
+
+/* the overlay's box does not depend on the option: it is the whole grid
+ * either way */
+static void checkFullPixelCrtOverlay(void)
+{
+    RdRect off = {0}, on = {0};
+    crtOverlayRun(0, &off);
+    crtOverlayRun(1, &on);
+    CHECK(off.x == on.x && off.y == on.y && off.w == on.w && off.h == on.h,
+          "crt overlay: the box is the same with full pixel off (%d,%d %ux%u) and on (%d,%d %ux%u)",
+          off.x, off.y, off.w, off.h, on.x, on.y, on.w, on.h);
 }
 
 /* the overlay drawn into the CRT filter's grid */
@@ -3166,6 +3284,7 @@ int main(int argc, char **argv)
     checkFullPixelSharp(960, 720);
     checkFullPixelSharp(1440, 1080);
     checkFullPixelClamp();
+    checkFullPixelBands();
     checkFullPixelCrtOverlay();
     checkMips();
     checkLatticeMips(0);

@@ -295,8 +295,8 @@ bool rd__present_acquire(void)
     return g_rd.presentOut.id != 0;
 }
 
-/* src (sw x sh) into box of dst in a pass of its own; keepOpen leaves the pass open for the caller to draw more into dst and
- * end it */
+/* src (sw x sh) into box of dst in a pass of its own; keepOpen leaves the
+ * pass open for the caller to draw more into dst and end it */
 static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                  RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
                  RdFilter filter, int mirror, bool keepOpen)

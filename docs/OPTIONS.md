@@ -105,7 +105,9 @@ The last row is not one of the game's effects:
 - **Full pixel (no border)** shows the whole picture the game draws,
   including the strip the PS2 hid under its thin black border. Nothing is
   cut off or enlarged, and the picture stays as sharp as it is without the
-  option. Off by default. It works with every Preset and with the CRT filter.
+  option. With Video mode at 50 Hz the strip at the top and bottom is a
+  little taller. Off by default. It works with every Preset and with the CRT
+  filter.
 
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
