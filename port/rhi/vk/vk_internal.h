@@ -148,6 +148,10 @@ typedef struct VkrCmdList {
     VkImageMemoryBarrier pendImg[VKR_PENDING_BARRIERS];
     uint32_t pendCount;
     VkPipelineStageFlags pendSrc, pendDst;
+    /* the swapchain image the list moves to RHI_STATE_PRESENT
+     * (VK_NULL_HANDLE: none): its submit signals the present semaphore
+     * (rhi_Submit) */
+    VkImage presentImage;
 } VkrCmdList;
 
 typedef struct VkrFrame {
@@ -225,7 +229,11 @@ typedef struct VkrState {
     uint32_t swapImage;                          /* acquired index */
     bool swapAcquired;                           /* image acquired, not yet presented */
     bool acquireWaitPending; /* acquire semaphore not yet waited on by a submit */
-    VkSemaphore acquireSem;  /* the semaphore that acquire signals */
+    /* renderDone[swapImage] is signalled by the submit of the list that
+     * moved the image to PRESENT (rhi_Submit): rhi_Present submits nothing
+     * before presenting.  Cleared wherever swapAcquired is. */
+    bool presentSignalled;
+    VkSemaphore acquireSem; /* the semaphore that acquire signals */
 
     /* one-shot command pool for readback */
     VkCommandPool oneShotPool;
@@ -328,7 +336,8 @@ uint32_t vkr_BindGroupDynamicCount(RhiBindGroup bg);
 /* vk_cmd.c */
 bool vkr_FramesInit(void);
 /* Empty submit after the frame's work that signals the image's present
- * semaphore (rhi_Present). */
+ * semaphore (rhi_Present), when no list's submit signalled it
+ * (presentSignalled). */
 bool vkr_SubmitPresentSignal(void);
 void vkr_FramesShutdown(void);
 VkrCmdList *vkr_GetCmd(RhiCommandList cl);

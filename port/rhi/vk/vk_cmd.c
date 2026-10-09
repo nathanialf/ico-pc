@@ -215,6 +215,7 @@ RhiCommandList rhi_BeginCommands(void)
     c->recording = true;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
+    c->presentImage = VK_NULL_HANDLE;
     /* package PB: a new hazard-tracking epoch ("Hazards") */
     c->epoch = ++g_vkr.hzEpoch;
     c->globalOrder = g_vkr.globalBarriers;
@@ -266,7 +267,11 @@ void rhi_EndCommands(RhiCommandList cl)
 }
 
 /* Submits command buffers (possibly none) with the frame's swapchain
- * semaphores attached as needed, signalling the next timeline value. */
+ * semaphores attached as needed, signalling the next timeline value.
+ * forPresent: the batch also signals the acquired image's present
+ * semaphore (renderDone), either as an empty batch after all frame work
+ * (vkr_SubmitPresentSignal) or as the submit of the list that moved the
+ * image to PRESENT (rhi_Submit). */
 static bool vkr_SubmitBatch(const VkCommandBuffer *cbs, uint32_t count, bool forPresent)
 {
     VkSemaphore waitSems[2];
@@ -278,21 +283,32 @@ static bool vkr_SubmitBatch(const VkCommandBuffer *cbs, uint32_t count, bool for
     uint32_t sigCount = 0;
 
     if (g_vkr.acquireWaitPending) {
-        /* the first submit after an acquire waits for the image */
+        /* The first submit after an acquire waits for the image.  With
+         * commands, at COLOR_ATTACHMENT_OUTPUT: the image's first use after
+         * an acquire is a barrier out of UNDEFINED or PRESENT, and such a
+         * barrier on a swapchain image has that stage in its first scope
+         * (vkr_ImageBarrier), which chains it to this wait in this submit
+         * or a later one; the work before it, on other images, need not
+         * wait for the presentation engine.  An empty batch keeps
+         * ALL_COMMANDS. */
         waitSems[waitCount] = g_vkr.acquireSem;
         waitValues[waitCount] = 0;
-        waitStages[waitCount] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        waitStages[waitCount] = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                      : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         waitCount++;
         g_vkr.acquireWaitPending = false;
     }
     if (forPresent) {
-        /* an empty batch after all frame work: the timeline wait orders it
-         * after every earlier submission, and it signals the binary
-         * semaphore the present waits on */
-        waitSems[waitCount] = g_vkr.timeline;
-        waitValues[waitCount] = g_vkr.timelineValue;
-        waitStages[waitCount] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
-        waitCount++;
+        if (count == 0) {
+            /* an empty batch after all frame work: the timeline wait
+             * orders it after every earlier submission */
+            waitSems[waitCount] = g_vkr.timeline;
+            waitValues[waitCount] = g_vkr.timelineValue;
+            waitStages[waitCount] = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            waitCount++;
+        }
+        /* the binary semaphore the present waits on; a semaphore signal
+         * covers the batch's commands and every earlier submission */
         sigSems[sigCount] = g_vkr.renderDone[g_vkr.swapImage];
         sigValues[sigCount] = 0;
         sigCount++;
@@ -356,7 +372,19 @@ void rhi_Submit(RhiCommandList cl)
         rhi_EndCommands(cl);
     }
     c->submitted = true;
-    vkr_SubmitBatch(&c->cb, 1, false);
+    /* One submit per present: the list that moves the acquired image to
+     * PRESENT signals the present semaphore itself, and rhi_Present adds
+     * no empty submit.  Any other list (and a presenting list after the
+     * semaphore was signalled) is submitted alone, and rhi_Present
+     * signals the semaphore with an empty batch after it, as before. */
+    bool signal = false;
+    if (c->presentImage != VK_NULL_HANDLE && g_vkr.swapAcquired && !g_vkr.presentSignalled) {
+        const VkrTexture *bb = vkr_GetTexture((RhiTexture){g_vkr.swapTextures[g_vkr.swapImage]});
+        signal = bb && bb->image == c->presentImage;
+    }
+    if (vkr_SubmitBatch(&c->cb, 1, signal) && signal) {
+        g_vkr.presentSignalled = true;
+    }
 }
 
 bool vkr_SubmitPresentSignal(void)
@@ -396,6 +424,13 @@ void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState af
     const VkrStateMap *a = &vkr_stateMap[after];
     VkPipelineStageFlags src = b->stages;
     VkAccessFlags srcAccess = b->access;
+    if (t->swapchain && (before == RHI_STATE_UNDEFINED || before == RHI_STATE_PRESENT)) {
+        /* a swapchain image's first barrier after an acquire: the submit
+         * waits on the acquire semaphore at COLOR_ATTACHMENT_OUTPUT
+         * (vkr_SubmitBatch), and this stage in the first scope makes the
+         * transition wait for it */
+        src = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    }
     if (t->hzEpoch == c->epoch) {
         /* package PB: the uses still pending on the image join the first
          * scope (they are the before state's own, unless the caller
@@ -430,6 +465,9 @@ void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState af
     VkPipelineStageFlags dst = a->stages;
     if (after == RHI_STATE_PRESENT) {
         dst = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+        if (t->swapchain) {
+            c->presentImage = t->image; /* rhi_Submit */
+        }
     }
     for (uint32_t i = 0; i < c->pendCount; i++) {
         if (c->pendImg[i].image == t->image) {

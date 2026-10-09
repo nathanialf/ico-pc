@@ -18,8 +18,11 @@
  * on Android) a window resized without rhi_ResizeSwapchain and a present
  * that reports nothing (lavapipe's headless surface returns VK_SUCCESS)
  * leaves a swapchain at the window's new size, made by that present; the
- * desktop without the switch keeps the old one.  Exit 77 when SDL has no
- * offscreen Vulkan surface or no device presents to it. */
+ * desktop without the switch keeps the old one.  A list that moves the
+ * backbuffer to PRESENT signals the present semaphore with its own submit:
+ * such a frame costs one submit, and a frame whose drawing list does not
+ * present costs one submit per list and none more.  Exit 77 when SDL has
+ * no offscreen Vulkan surface or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
 #include <SDL3/SDL.h>
@@ -281,6 +284,42 @@ static int presentAtSwapSize(int n)
     return 0;
 }
 
+/* The submits of a present (RhiStats.submits; rhi_ReadbackTexture's own
+ * submit is not counted there).  A frame drawn and moved to PRESENT in one
+ * list: that list's submit signals the semaphore the present waits on, so
+ * one submit and one present.  frame(): the drawing list leaves the image
+ * in COPY_SRC and a second list moves it to PRESENT, so two submits (one
+ * per list) and no empty one before the present.  A present with no list
+ * moving the image to PRESENT (the empty submit's path) is not drawn here:
+ * the image would be presented in an undefined layout. */
+static int submitCounts(SDL_Window *win, RhiFormat fmt)
+{
+    int failures = 0;
+    RhiStats a, b;
+    rhi_GetStats(&a);
+    if (presentAtSwapSize(40)) {
+        return 1;
+    }
+    rhi_GetStats(&b);
+    if (b.submits - a.submits != 1 || b.presents - a.presents != 1) {
+        printf("FAIL a presenting list: %llu submits and %llu presents, want 1 and 1\n",
+               (unsigned long long)(b.submits - a.submits),
+               (unsigned long long)(b.presents - a.presents));
+        failures++;
+    }
+    rhi_GetStats(&a);
+    failures += frame(win, fmt, 41);
+    rhi_GetStats(&b);
+    if (b.submits - a.submits != 2 || b.presents - a.presents != 1) {
+        printf("FAIL a drawing list and a presenting list: %llu submits and %llu presents, want "
+               "2 and 1\n",
+               (unsigned long long)(b.submits - a.submits),
+               (unsigned long long)(b.presents - a.presents));
+        failures++;
+    }
+    return failures;
+}
+
 /* v0.4.2 N4: the window resized without rhi_ResizeSwapchain and no present
  * reporting it (an Android surface that changed size in the first seconds
  * while the driver returns VK_SUCCESS): with the poll on, the present
@@ -374,6 +413,9 @@ static int run(SDL_Window *win)
             }
         }
         failures += frame(win, fmt, n);
+    }
+    if (!failures) {
+        failures += submitCounts(win, fmt);
     }
     if (!failures) {
         failures += lifecycle(win, fmt);

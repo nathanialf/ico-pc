@@ -269,6 +269,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
             vkDestroySwapchainKHR(g_vkr.device, old, NULL);
             g_vkr.swapchain = VK_NULL_HANDLE;
             g_vkr.swapAcquired = false;
+            g_vkr.presentSignalled = false;
             g_vkr.acquireWaitPending = false;
         }
         return false;
@@ -296,6 +297,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         vkDestroySwapchainKHR(g_vkr.device, sc, NULL);
         g_vkr.swapchain = VK_NULL_HANDLE;
         g_vkr.swapAcquired = false;
+        g_vkr.presentSignalled = false;
         g_vkr.acquireWaitPending = false;
         return false;
     }
@@ -308,6 +310,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     }
     g_vkr.swapImageCount = n;
     g_vkr.swapAcquired = false;
+    g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = false;
     /* a line when the present mode, the image count or the size differs
        from the last swapchain (always the first); v0.4.2 N1: the size too,
@@ -401,6 +404,7 @@ void rhi_ReleaseSurface(void)
     g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
     vkr_SwapchainDestroy();
     g_vkr.swapAcquired = false;
+    g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = false;
     vkDestroySurfaceKHR(g_vkr.instance, g_vkr.surface, NULL);
     g_vkr.surface = VK_NULL_HANDLE;
@@ -546,6 +550,7 @@ RhiTexture rhi_AcquireBackbuffer(void)
     }
     g_vkr.swapImage = idx;
     g_vkr.swapAcquired = true;
+    g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = true;
     g_vkr.acquireSem = f->acquireSem;
     out.id = g_vkr.swapTextures[idx];
@@ -620,7 +625,9 @@ void rhi_Present(void)
     if (!g_vkr.swapchain || !g_vkr.swapAcquired) {
         return;
     }
-    if (!vkr_SubmitPresentSignal()) {
+    /* the presenting list's submit signalled the semaphore already
+     * (rhi_Submit); otherwise an empty batch after the frame's work */
+    if (!g_vkr.presentSignalled && !vkr_SubmitPresentSignal()) {
         return;
     }
     VkPresentInfoKHR pi = {
@@ -636,6 +643,7 @@ void rhi_Present(void)
     g_vkr.stats.presentNs += vkr_NowNs() - t0;
     g_vkr.stats.presents++;
     g_vkr.swapAcquired = false;
+    g_vkr.presentSignalled = false;
     if (s_forcePresent != VK_SUCCESS && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
         r = s_forcePresent; /* a test's result for this present, once */
         s_forcePresent = VK_SUCCESS;
