@@ -20,9 +20,7 @@ $CMAKE/cmake --build build-host/linux-x64
 $CMAKE/ctest --test-dir build-host/linux-x64
 ```
 
-`tools/setup.sh` does the venv step and installs the git hooks (below); it
-also checks for a MIPS objcopy unless `SKIP_TOOLCHAIN=1`, and only the
-appendix needs that.
+`tools/setup.sh` does the venv step and installs the git hooks (below).
 
 The build needs no disc image and no `baserom/`: the program holds no disc
 data. The game reads the player's own PAL disc image (SCES-50760) at run
@@ -41,7 +39,10 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned |
 | `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2 and libchdr | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
-The Debian packages come from `deb.debian.org`, falling back to
+The pins the fetch scripts share (the SDL3 version and its SHA-256,
+`DEB_SNAPSHOT`, and the `fetch_deb` helper that downloads a Debian package
+into the caller's temporary directory) are in `tools/fetch_common.sh`. The
+Debian packages come from `deb.debian.org`, falling back to
 `snapshot.debian.org` once a version is superseded. `SKIP_MINGW_GCC=1` and
 `SKIP_CMAKE=1` skip the mingw-gcc tree and CMake; the header of each script
 lists its other overrides. The toolchain files take `ICO_LLVM_MINGW` and
@@ -97,23 +98,30 @@ how several configurations of one preset live side by side under
 | `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
 | `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in the simulation | host gcc 14 |
 | `linux-x64-clang`, `win-x64-clang` | the same two targets, headless | llvm-mingw clang 23 (the host glibc for Linux) |
+| `android-arm64` | Android arm64-v8a, `libmain.so` alone: a compile check without Gradle (`tools/fetch_android.sh` first); window build, `ICO_LINK_EXE=ON`, no Direct3D 12 and no DXIL shaders | NDK clang |
 
-The port targets 64-bit x86 only.
+The port targets x86-64 (Windows and Linux) and arm64 (Android).
 
 ### Options
 
 | cache variable | default | effect |
 | --- | --- | --- |
-| `ICO_HEADLESS` | `ON` on every preset except `win-x64` | `OFF` is the window build: the game draws through `port/render` (`ICO_RD=1`) into an SDL3 window. `ON` is the headless build for trace and test runs: no window and no renderer, `ICO_HEADLESS=1`. Both compile the same game sources |
+| `ICO_HEADLESS` | `ON` on every preset except `win-x64` and `android-arm64` | `OFF` is the window build: the game draws through `port/render` (`ICO_RD=1`) into an SDL3 window. `ON` is the headless build for trace and test runs: no window and no renderer, `ICO_HEADLESS=1`. Both compile the same game sources |
 | `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program. Without it only the libraries and the tests are built |
 | `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics that modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings |
 | `ICO_BUILD_BLOCKED` | `OFF` | also compiles the sources `cmake/IcoExclusions.cmake` leaves out (the list is empty today; it is the place to park a game source that stops compiling) |
 | `ICO_HEAP_STATS` | `OFF` | the game's allocator (`fumi/ios/memory.c`) reports to `port/platform/arena.c`, which logs each heap partition's high-water mark |
 | `ICO_FPTRAP` | `OFF` | set by the `fptrap` preset |
 | `ICO_SANITIZE` | empty | the `-fsanitize=` list; the `asan` preset sets `address,undefined` |
+| `ICO_RHI_VULKAN` | `ON` | builds the Vulkan renderer backend |
 | `ICO_RHI_D3D12` | `ON` for 64-bit Windows | builds the Direct3D 12 renderer backend next to the Vulkan one |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
 | `ICO_DXC`, `ICO_DEPS_DIR` | the fetched copies | the shader compiler and the dependency tree |
+
+At run time, the environment variable `ICO_TTY` (any value) turns on the
+game's `scePrintf` output on stdout, which the retail game sent to the
+development kit's TTY; it is off otherwise. Release programs have no
+console, so use it with `--console` on a program started from a terminal.
 
 ## Compilers
 
@@ -196,8 +204,8 @@ still declaring an unprototyped function (`typedef.h`, `thread.h`, `act.h`,
 
 ## The game code
 
-`ico2/` (and `sce/` and `ico2/vusrc/` where the port compiles them) is the
-port's own source. It started as the decompilation's `main`, but it is only
+`ico2/` (and `sce/libsndn2/sound.c`, the one `sce/` file the port compiles)
+is the port's own source. It started as the decompilation's `main`, but it is only
 ever compiled for the host, so a change to it is a platform change made
 directly in the code: the host form replaces the original spelling. There
 are no `#ifdef ICO_HOST` / `#else` arms carrying the PS2 text, and the tree
@@ -207,7 +215,7 @@ select between host build variants (`ICO_RD`, `ICO_HEADLESS`,
 `ICO_HEAP_ASAN`, `ICO_FPTRAP`) stay too. `tools/strip_host_gates.py` is the
 record of how the gated tree became this one (968 sites); its `--check`
 runs in CI and in the pre-commit hook and fails on any `ICO_HOST`
-conditional under `ico2/`, `sce/` or `vusrc/`.
+conditional under `ico2/` or `sce/`.
 
 The conventions that still matter on the host:
 `ICO_WORD` for a word that holds an address (pointer-wide), `ICO_RAW` /
@@ -260,19 +268,68 @@ hook that runs, in order:
    assets, large binaries and integer tables ([`LEGAL.md`](LEGAL.md)). It
    reads the staged blobs (`git show :path`), so what it judges is what
    is committed;
-2. `tools/format.sh --check` on the staged C;
+2. `tools/format.sh --check --staged`: the staged C must be formatted; it
+   checks the staged blobs, not the worktree;
 3. the three freshness checks CI also runs: `tools/gen_data_desc.py
    --check` (`port/data/gen/`), `tools/gen_layout_asserts.py --check`
    (`port/test/layout_asserts.c`) and `tools/gen_sources.py --check`
-   (`cmake/IcoSources.cmake`). Each needs pyelftools, so the hook uses
-   `.venv/bin/python`. Regenerate with the same script without `--check`;
+   (`cmake/IcoSources.cmake`). `gen_data_desc.py` needs pyelftools, so the
+   hook uses `.venv/bin/python`. Regenerate with the same script without
+   `--check`;
 4. `tools/strip_host_gates.py --check`: no `ICO_HOST` conditional in the
    game sources ([The game code](#the-game-code));
 5. `tools/stack_overread_audit.py`: no game code that relies on the PS2's
-   stack layout (the CI table below says what it looks for).
+   stack layout (the CI table below says what it looks for);
+6. `tools/check_call_types.py`: calls and declarations agree with the
+   definitions, as in CI.
 
 `tools/format.sh` formats the tracked C with the tracked `.clang-format` and
-then applies `tools/format_layout.py`'s top-level blank-line layout.
+then applies `tools/format_layout.py`'s top-level blank-line layout. With
+`--check` it only reports (exit 1 if a file would change); `FILE...` limits
+it to those files, and `--check --staged [FILE...]` judges the staged
+version of those files, or of every staged file the script owns. A FILE that
+does not exist is an error.
+
+## Conventions
+
+Formatting. `tools/format.sh` runs clang-format with the tracked
+`.clang-format` (LLVM style, 4 spaces, 100 columns) over the C the script
+owns; the hook and CI check it. Use `/* */` comments only. A comment says
+what the code does and why, without release or package tags (git history
+keeps those); an issue number may stay where it explains a behaviour.
+
+Names are `prefix_snake_case`, the prefix being the module's:
+
+| prefix | module |
+| --- | --- |
+| `ico_` | `port/platform`, `port/game`, `port/data`, `port/input`, `port/audio`, `port/config` |
+| `rd_`, `rd__` (internal) | `port/render` |
+| `rhi_`, `vkr_`, `d3dp_` | `port/rhi` and its Vulkan and Direct3D 12 backends |
+| `ui_` | `port/ui`, the menus |
+| `texpack_`, `modelpack_`, `gltf_` | the texture pack, model pack and glTF code in `port/render` |
+
+The `render`, `ui` and `rhi` families are being renamed to snake case in
+this release; some functions still carry the older mixed-case spelling until
+that lands.
+
+Log lines start with the module's prefix and a colon: `ico_pc:` (the host:
+`main_host.c`, `host_config.c`, `diag_host.c`, `kernel_host.c`), `rd:`,
+`rhi:`, `rhi_vk:`, `rhi_d3d12:`, `window:`, `video:`, `photo:`, `config:`,
+`audio:`, `input:`, `textures:`, `models:`, `credits:`, `appearance:`,
+`settings:`, `mc:`. A test's own lines start with the test's name. Player
+guides quote some of these lines (`textures:`, `models:` and
+`window: an effects program is loaded`), so change their text together with
+the guide.
+
+A message box is titled `ICO PC` on every platform (Android's launcher
+name is `ICO`).
+
+Tests use the shared `CHECK` header of their module where one exists
+(`port/test/ico_check.h`; `port/ui/test/settings_fixture.h` for the Options
+tests) instead of defining their own.
+
+Python tools start with a docstring, use `argparse` and run with
+`python3 -I`. Shell scripts start with `set -euo pipefail`.
 
 ## Tests
 
@@ -285,7 +342,9 @@ The disc tests read `ICO_DISC_IMAGE` (default `baserom/Ico_PAL.iso`).
 `texpack_disc` also matches a PCSX2 texture pack's file names against the
 disc's textures when `ICO_TEXPACK_DIR` (default
 `build-host/tmp/texpack/SCES-50760/replacements`) exists; no pack file is
-ever committed.
+ever committed. `ICO_TEXPACK_DIR` is a cache variable, and the environment
+variable of the same name sets its default at the first configure; it feeds
+`texpack_disc`, `texpack_e2e` and `texpack_pack_files`.
 
 The Android code is tested on Linux, where it can be: `android_paths`
 (the files folder layout), `iso_import` (the first start's copy of the
@@ -306,50 +365,6 @@ allocations; `rhi_vk_mali` also checks that what goes past them is refused
 by the limit's name, and `rd_perf_mali` creates the whole reachable pipeline
 set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
-Whether the game code gives the same numbers on a phone as on a PC is
-checked by `tools/arm64_diff.sh [out-dir]`, a developer tool rather than a
-test (it needs `qemu-aarch64` in user mode, Debian's `qemu-user`, and the
-NDK): it builds the arm IK of Ico and Yorda holding hands
-(`tools/arm64_diff/ikdiff.c` with the real `handManager.c`,
-`motionManager.c`, `matrixDrive.c`, `quaternion.c`, `tableSin.c` and
-`port/math`, the rest stubbed) with the arm64 build's flags, the x86-64 gcc
-build's, the NDK clang's for x86-64 and, when that preset is configured, the
-linux-x64-clang build's; runs them over the same inputs in the game's
-rounding mode (the arm64 one under qemu); and diffs the outputs line by
-line: the turn, table, quaternion and matrix helpers over every angle and
-thousands of directions, the game's own reordering of its joint limit table
-(`SetNodeRotationLimitDataTable` from the real `motionOrientManager.c`; every
-row is printed), the joint limits over every row of that table
-(read from `ICO_BASE_ELF`, else synthetic rows), and 4000 stretches of 16
-frames of both characters' hand and arm updates. A second program,
-`tools/arm64_diff/followdiff.c`, does the same for Yorda following Ico by the
-hand: the real `girl_act.c`, `act-game.c`, `commonact.c`, `fieldCollision.c`,
-`geometryManager.c`, `motionManager2.c`, `gv.c` and the arm IK's files, the
-data table loader (the game's tables from `ICO_BASE_ELF`, else zero rows) and
-`port/platform/fiber.c`, on which `actGirlHand` runs as the game runs an
-actor; it sweeps the steering helpers, the motion direction setters and the
-hand manager, then walks the two through 42 scripted stretches (standing,
-walking, running, turning, stopping) and prints every frame's motion request,
-play speed, direction, hand distance flags and Ico's hand target. Calls
-nothing answers stop it with their name; objects nothing defines read as
-zero. The flags come from each preset's `compile_commands.json` under
-`build-host/` (or `CC_DB_X64`, `CC_DB_A64`, `CC_DB_X64_CLANG`), with built-in
-copies when a preset is not configured; `NDK` and `QEMU` name the tools when
-they are not found. It exits 0 when the only differences are the three it
-knows (listed at the end of the script).
-
-What a real run gives is logged by the hand probe: `hand_probe = true` under
-`[dev]` in `config.toml` writes `probe:` lines into `ico-pc.log` while Ico
-holds Yorda's hand (every Main tick both characters' root positions,
-directions, motions, frames, action modes and the two random states; every
-30 ticks the arm reach `handManager.c` works from and `actGirlHand`'s side),
-each float as value/bits. The CMake option `ICO_HAND_PROBE_DEFAULT=ON`
-(Gradle: `-PicoHandProbe=ON`) makes a diagnostic build with the probe on by
-default and the key in the first start's `config.toml`.
-`tools/hand_probe_diff.py <log> [<log>] [--align first]` summarises a log
-(the shoulder distance against the arms' reach, the arm angle) and, given
-two, prints the first tick where any field differs bit for bit.
-
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: two Linux
@@ -365,7 +380,7 @@ the table.
 | cache and `tools/fetch_toolchain.sh` | `tools/toolchain/` is cached on the hash of `fetch_toolchain.sh`, `fetch_deps.sh`, `fetch_common.sh` and `fetch_android.sh`, restored and saved as separate steps so a cold fetch is saved even when a later step fails |
 | `tools/check_no_rom.sh` | the IP scan over every tracked file |
 | `tools/format.sh --check` | clang-format over the tracked C |
-| `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/`, `sce/`, `vusrc/` |
+| `tools/strip_host_gates.py --check` | no `ICO_HOST` conditional in `ico2/` or `sce/` |
 | `tools/stack_overread_audit.py` (`--selftest`, then the tree) | no game code in `ico2/` that relies on the PS2's stack layout: a matrix or vector call that reads or writes past the local it is given, or a local that is only written; checked exceptions are in `tools/stack_overread_allow.txt` |
 | `tools/check_call_types.py` | no call through a function-pointer cast that passes fewer arguments than the function it reaches reads, and no `extern` in an `ico2/` `.c` file that differs from its definition in parameter count, integer width or return width; checked exceptions are in `tools/check_call_types_allow.txt` |
 | `gen_data_desc.py`, `gen_layout_asserts.py`, `gen_sources.py` with `--check` | the generated files are fresh |
@@ -389,7 +404,7 @@ structure; the game is not run:
 | `tools/check_no_rom.sh` | the IP scan |
 | `./gradlew --no-daemon assembleDebug -PicoLabel=ci` | the debug APK |
 | `tools/check_android_flags.sh` | the game's semantics options reach the NDK clang for every `ico2/` and `port/` source; no game unit writes an object it declares const (`tools/check_const_writes.py`: clang deletes such stores where gcc keeps them; the `const_write_audit` test runs it on native clang builds); no game or `port/math` object holds a fused multiply-add; no object stores onto its stack protector's guard (`tools/check_stack_guard.py`: only the Android build has `-fstack-protector-strong`, so a write past a local array ends the run on a phone alone) |
-| APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; every `LOAD` segment of both libraries has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
+| APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; `libSDL3.so` and exactly three libadrenotools hook libraries (`libmain_hook.so`, `libhook_impl.so`, `libfile_redirect_hook.so`) are there; every `LOAD` segment of every library has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; the manifest (`aapt2 dump xmltree`) has `resizeableActivity` true, a theme, `extractNativeLibs` true and a `configChanges` list that includes `density`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
 | artifact `ico-pc-android-debug` | the APK, the unstripped `libmain.so` and `ico_pc.map`, kept 14 days |
 
 Run the same steps locally before pushing.
@@ -400,6 +415,11 @@ Run the same steps locally before pushing.
 the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 `dist/ico-pc-<label>-linux.tar.gz`). Neither contains game data; both carry
 the README, the player guides, the licence files and the save importer.
+The three package scripts share `tools/package_common_lib.sh` (the label
+check, the log, `fail` and `run`, and the clean worktree with the
+`ICO_PKG_FILES` overlay); the guides and the package's `ico-pc.ini` (its
+text is `pkg_write_ini`) come from `tools/package_docs_lib.sh`, and the
+folder notes and the archive checks from `tools/package_textures_lib.sh`.
 
 The documents: `README.md` is the players' front page, and the player
 guides it links are `docs/FAQ.md`, `CONTROLS.md`, `OPTIONS.md`,
@@ -461,6 +481,6 @@ The loader's reference test and `gen_data_desc.py --manifest` read the boot
 ELF from `baserom/pal/baseelf.elf`, which `tools/extract_elf.sh` writes from
 `baserom/Ico_PAL.iso` (the disc's `SCES_507.60`, SHA-1
 `da3644c54c26fe760f3b6a591a5fc2eab396ed2b`, checked against
-`config/sha1sums.txt`; it needs pycdlib and `mips-linux-gnu-objcopy`).
+`config/sha1sums.txt`; it needs pycdlib, from `tools/requirements.txt`, and no MIPS tools).
 Nothing under `baserom/` is committed ([`LEGAL.md`](LEGAL.md)). Without it
 those two tests are not built, and CI never has it.
