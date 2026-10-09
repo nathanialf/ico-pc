@@ -48,7 +48,7 @@ char **ico_roll_port_line(int k)
         return NULL;
     }
     if (k == ICO_ROLL_PORT_HEADING) {
-        fprintf(stderr, "staff roll: the port credit is posted (%s)\n",
+        fprintf(stderr, "credits: the port credit is posted (%s)\n",
                 ico_credits_active() ? "Extras > Credits" : "the ending");
     }
     return &s_lines[k];
@@ -56,7 +56,7 @@ char **ico_roll_port_line(int k)
 
 void ico_roll_started(int discLines)
 {
-    fprintf(stderr, "staff roll: start, %d lines from the disc and %d of the port's (%s)\n",
+    fprintf(stderr, "credits: roll start, %d lines from the disc and %d of the port's (%s)\n",
             discLines, PORT_LINES, ico_credits_active() ? "Extras > Credits" : "the ending");
 }
 

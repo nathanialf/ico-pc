@@ -9,9 +9,9 @@ scene to the title.  The log must show, in order:
 
   credits: enter                       the row started the playback
   credits: stage 60 up                 STAFF1 loaded
-  staff roll: start ... (Extras > Credits)
+  credits: roll start ... (Extras > Credits)
   credits: the ending's song is playing
-  staff roll: the port credit is posted (Extras > Credits)
+  credits: the port credit is posted (Extras > Credits)
   credits: back at the title           the flags put back, the flag cleared
   stage_no 62 -> 1                     the title's stage after the last scene
 
@@ -117,9 +117,9 @@ def main():
             fails.append(ln)
     want = ["credits: enter",
             "credits: stage 60 up",
-            "staff roll: start, 962 lines from the disc and 18 of the port's (Extras > Credits)",
+            "credits: roll start, 962 lines from the disc and 18 of the port's (Extras > Credits)",
             "credits: the ending's song is playing",
-            "staff roll: the port credit is posted (Extras > Credits)",
+            "credits: the port credit is posted (Extras > Credits)",
             "credits: back at the title",
             "stage_no 62 -> 1"]
     at = 0

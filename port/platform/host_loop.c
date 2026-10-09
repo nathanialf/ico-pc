@@ -47,7 +47,7 @@ static void boot_main(void *arg)
     (void)arg;
     ico_game_main();
     /* main returned: crt0 would call Exit */
-    fprintf(stderr, "host: the game's main returned\n");
+    fprintf(stderr, "ico_pc: the game's main returned\n");
     exit(0);
 }
 
@@ -55,7 +55,7 @@ void ico_host_init(void)
 {
     ico_fpenv_sim_enter();
     if (ico_arena_init() != 0) {
-        fprintf(stderr, "host: cannot allocate the EE RAM arena\n");
+        fprintf(stderr, "ico_pc: cannot allocate the EE RAM arena\n");
         exit(1);
     }
     ico_diag_name_func((void *)boot_main, "boot (the game's main)");

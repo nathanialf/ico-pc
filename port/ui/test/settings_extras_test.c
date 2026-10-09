@@ -854,7 +854,7 @@ static void testCharacters(void)
         errCapture();
         press(0x40);
         errRelease(log, sizeof(log));
-        CHECK(s_hostEnters == 1 && current_layout_id == exL && strstr(log, "characters:") != NULL,
+        CHECK(s_hostEnters == 1 && current_layout_id == exL && strstr(log, "appearance:") != NULL,
               "enter fails: Extras stays and logs (\"%s\")", log);
         s_hostFail = 0;
 

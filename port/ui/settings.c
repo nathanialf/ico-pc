@@ -963,14 +963,14 @@ static int pageFirstNav(Page *pg);
 static int charsEnter(void)
 {
     if (!charsHosted() || s_pages[UI_PAGE_CHARACTERS].layout < 0) {
-        fprintf(stderr, "characters: the viewer did not open (%s)\n",
+        fprintf(stderr, "appearance: the viewer did not open (%s)\n",
                 charsHosted() ? "the page was not built" : "no viewer");
         return -1;
     }
     ui_SettingsSave();
     s_charsRows = 0; /* Ico first */
     if (s_charsHost.enter() != 0) {
-        fprintf(stderr, "characters: the viewer did not open\n");
+        fprintf(stderr, "appearance: the viewer did not open\n");
         return -1;
     }
     la_host_leave();
