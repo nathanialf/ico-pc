@@ -165,6 +165,11 @@ static struct {
     PaceSamples samples;
 } s_autoRes;
 
+/* the command lists a perf record times (RdPerfRecord.gpuListMs) */
+#define GPU_LISTS                                                                                  \
+    ((int)(sizeof(((const RdPerfRecord *)0)->gpuListMs) /                                          \
+           sizeof(((const RdPerfRecord *)0)->gpuListMs[0])))
+
 /* The renderer's per-replay records (rd.h RdPerfRecord): summed over
    the 10 s block for the window's second line, and with [dev] perf_log =
    true written one line each into logs/ico-pc-perf.csv */
@@ -174,7 +179,7 @@ static struct {
     unsigned n, gpuN;
     double total, maxTotal, interp, wait, acquire, upload, walk, bind, submit, present, readback,
         fence;
-    double gpu, maxGpu, gpuList[13], gpuUpload, gpuPresent;
+    double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent;
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
@@ -986,7 +991,6 @@ static void photo_capture(void)
                         tm->tm_hour, tm->tm_min, tm->tm_sec, 1);
     /* two captures in one second: -2, -3, ... */
     if (strcmp(name, lastName) == 0) {
-        snprintf(lastName, sizeof(lastName), "%s", name);
         ico_photo_file_name(name, sizeof(name), tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
                             tm->tm_hour, tm->tm_min, tm->tm_sec, ++seq);
     } else {
@@ -1070,6 +1074,7 @@ static void window_fullscreen_event(int entered)
 int ico_window_pump(void)
 {
     SDL_Event e;
+    IcoHotkey hotkey;
     int quit = 0;
     const Uint64 t0 = SDL_GetTicksNS();
 
@@ -1088,9 +1093,10 @@ int ico_window_pump(void)
             quit = 1;
             break;
         case SDL_EVENT_KEY_DOWN:
-            if (ico_hotkey_for(e.key.key, e.key.repeat) == ICO_HOTKEY_FRAME_DUMP) {
+            hotkey = ico_hotkey_for(e.key.key, e.key.repeat);
+            if (hotkey == ICO_HOTKEY_FRAME_DUMP) {
                 frame_dump();
-            } else if (ico_hotkey_for(e.key.key, e.key.repeat) == ICO_HOTKEY_STATS_FAST) {
+            } else if (hotkey == ICO_HOTKEY_STATS_FAST) {
                 stats_fast_toggle();
             } else if (e.key.key == SDLK_F11 || e.key.key == SDLK_F12) {
                 /* a held key's repeats: nothing */
@@ -1386,7 +1392,7 @@ static void perf_csv_open(void)
             "date_snapshots,exact_blends,pipeline_creates,upload_bytes,mesh_upload_bytes,gpu_valid,"
             "gpu_ms,"
             "gpu_upload_ms");
-    for (int l = 0; l < 13; l++) {
+    for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(s_perf.csv, ",gpu_list%d_ms", l);
     }
     fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick\n");
@@ -1408,7 +1414,7 @@ static void perf_csv_line(const RdPerfRecord *r)
             r->meshUploads, r->tempClears, r->dateSnapshots, r->exactBlends, r->pipelineCreates,
             (unsigned long long)r->uploadBytes, (unsigned long long)r->meshUploadBytes, r->gpuValid,
             r->gpuMs, r->gpuUploadMs);
-    for (int l = 0; l < 13; l++) {
+    for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(f, ",%.3f", r->gpuListMs[l]);
     }
     fprintf(f, ",%.3f,%.3f,%.4f,%u\n", r->gpuPresentMs, r->startMs, (double)r->alpha,
@@ -1474,7 +1480,7 @@ static void perf_drain(void)
             s_perf.maxGpu = r.gpuMs > s_perf.maxGpu ? r.gpuMs : s_perf.maxGpu;
             s_perf.gpuUpload += r.gpuUploadMs;
             s_perf.gpuPresent += r.gpuPresentMs;
-            for (int l = 0; l < 13; l++) {
+            for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
         }
@@ -1918,7 +1924,7 @@ void ico_window_close(void)
 #ifdef __ANDROID__
     SDL_RemoveEventWatch(lifecycle_watch, NULL);
 #endif
-    set_capture(0);
+    set_capture(ICO_CAPTURE_OFF);
     ico_input_sdl_shutdown();
     ui_SettingsSetWindowModeQuery(NULL);
     ui_SettingsSetTexturePackCount(NULL);
