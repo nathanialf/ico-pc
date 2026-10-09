@@ -137,11 +137,6 @@ int ico_sndn2_pitch_load(void)
     return H.pitch_source;
 }
 
-int ico_sndn2_pitch_source(void)
-{
-    return H.pitch_source;
-}
-
 const uint16_t *ico_sndn2_pitch_table(void)
 {
     return H.pitch;

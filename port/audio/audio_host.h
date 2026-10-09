@@ -40,8 +40,6 @@ int ico_audio_host_frames(int hz, unsigned int vsync_index);
    it is on ico_audio_host_vsync swaps left and right in each rendered block
    (renderer wave 7, R7c): the device and the WAV dump hear the mirrored
    pan; the SPU2 and the driver are untouched. */
-void ico_audio_set_mirror(int on);
-int ico_audio_mirror(void);
 /* frames: `count` interleaved stereo S16 frames, swapped in place when
    mirror is non-zero (pure; the unit test's entry) */
 void ico_audio_pan_mirror(int16_t *frames, int count, int mirror);

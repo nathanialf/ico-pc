@@ -199,13 +199,3 @@ void ico_audio_pan_mirror(int16_t *frames, int count, int mirror)
         frames[2 * i + 1] = l;
     }
 }
-
-void ico_audio_set_mirror(int on)
-{
-    ico_opt_set_mirror(on);
-}
-
-int ico_audio_mirror(void)
-{
-    return ico_opt_mirror();
-}

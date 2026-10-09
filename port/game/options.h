@@ -44,7 +44,7 @@ int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
-   host swaps the pan (ico_audio_mirror), the renderer flips the picture
+   host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
    (rd.h rd_SetMirror, through the listener below; renderer wave 7, R7c).
    The value is the run's: [gameplay] mirror (default false) until the
    player picks at New Game (port/ui/settings.h ui_NewGameScreen*) or loads a

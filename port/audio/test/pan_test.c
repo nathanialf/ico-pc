@@ -3,8 +3,8 @@
  *   swap    ico_audio_pan_mirror swaps left and right of every frame when
  *           mirror is set, in place, and leaves the block alone when not
  *   twice   swapping twice gives the block back byte for byte
- *   option  ico_audio_set_mirror / ico_audio_mirror are ico_opt_mirror's
- *           value (the one ico_audio_host_vsync reads per block)
+ *   option  ico_opt_set_mirror / ico_opt_mirror, the value ico_audio_host_vsync
+ *           reads per block
  */
 #include <stdio.h>
 #include <string.h>
@@ -59,10 +59,10 @@ int main(void)
     ico_audio_pan_mirror(NULL, FRAMES, 1);
     CHECK(memcmp(b, ref, sizeof(b)) == 0, "empty and NULL blocks: no change");
 
-    ico_audio_set_mirror(1);
-    CHECK(ico_audio_mirror() == 1 && ico_opt_mirror() == 1, "the option on");
-    ico_audio_set_mirror(0);
-    CHECK(ico_audio_mirror() == 0 && ico_opt_mirror() == 0, "the option off");
+    ico_opt_set_mirror(1);
+    CHECK(ico_opt_mirror() == 1, "the option on");
+    ico_opt_set_mirror(0);
+    CHECK(ico_opt_mirror() == 0, "the option off");
 
     if (failures) {
         printf("pan_test: %d failures\n", failures);

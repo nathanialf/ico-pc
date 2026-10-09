@@ -58,7 +58,6 @@ const uint8_t *ico_sndn2_host_last_reply(void);
 int ico_sndn2_pitch_load(void);
 /* Use `table` (608 entries), or the formula when NULL (tests). */
 void ico_sndn2_pitch_set(const uint16_t *table);
-int ico_sndn2_pitch_source(void);
 const uint16_t *ico_sndn2_pitch_table(void);
 /* The formula's entry i. */
 uint16_t ico_sndn2_pitch_formula(int i);
