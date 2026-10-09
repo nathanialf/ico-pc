@@ -7,13 +7,13 @@
 # the folder under the program folder the game looks in, and the note in it
 pkg_textures_rel="textures/SCES-50760/replacements"
 
-# pkg_note_eol <file> <crlf|lf>: crlf keeps the Windows wording and adds CRs;
-# lf turns the backslash paths into forward slashes (the Linux wording)
+# pkg_note_eol <file> <crlf|lf>: the notes are written with the Linux
+# wording and forward slashes in their paths (no other slash appears in
+# them); crlf turns the slashes into backslashes and adds CRs for the
+# Windows package, lf leaves the text as it is
 pkg_note_eol() {
     if [[ "$2" == crlf ]]; then
-        sed -i 's/$/\r/' "$1"
-    else
-        sed -i 's#\\#/#g' "$1"
+        sed -i -e 's#/#\\#g' -e 's/$/\r/' "$1"
     fi
 }
 
@@ -25,12 +25,12 @@ pkg_stage_textures_readme() {
 This folder is for texture packs: pictures that replace the game's own
 textures. Playing the game needs nothing in it.
 Copy a pack here keeping the pack's own folders, so its files end up under
-textures\SCES-50760\replacements\ next to the program. A pack copied one
-level too high, into textures\, is found too.
+textures/SCES-50760/replacements/ next to the program. A pack copied one
+level too high, into textures/, is found too.
 Then start the game. Options > Display > Texture pack reads On, and
-logs\ico-pc.log says how many textures were found.
+logs/ico-pc.log says how many textures were found.
 With portable mode (a userdata folder next to the program) the pack may
-also go in userdata\textures\SCES-50760\replacements\.
+also go in userdata/textures/SCES-50760/replacements/.
 Packs made for PCSX2 work as they are.
 TXT
     pkg_note_eol "$d/README.txt" "$eol"
@@ -50,12 +50,12 @@ pkg_stage_models_readme() {
 This folder is for model packs: 3D models that replace the game's own.
 Playing the game needs nothing in it.
 Copy a pack here keeping the pack's own folders, so its files end up under
-models\SCES-50760\replacements\ next to the program.
+models/SCES-50760/replacements/ next to the program.
 Then start the game. Options > Display > Model pack (from the title
-screen) reads On, and logs\ico-pc.log says how many models were found.
+screen) reads On, and logs/ico-pc.log says how many models were found.
 With portable mode (a userdata folder next to the program) the pack may
-also go in userdata\models\SCES-50760\replacements\.
-To make a pack, see docs\MODEL_PACKS.md.
+also go in userdata/models/SCES-50760/replacements/.
+To make a pack, see docs/MODEL_PACKS.md.
 TXT
     pkg_note_eol "$d/README.txt" "$eol"
 }
@@ -73,7 +73,7 @@ ico_pc_x64.exe and choose Vulkan (or Direct3D 12 if you set backend=d3d12
 in ico-pc.ini). In ReShade's settings you can point it at the presets
 in this folder.
 Depth effects work: set RESHADE_DEPTH_INPUT_IS_REVERSED to 1.
-For the full steps see docs\RESHADE.md.
+For the full steps see docs/RESHADE.md.
 TXT
     else
         cat > "$d/README.txt" <<'TXT'

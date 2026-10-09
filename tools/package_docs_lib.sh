@@ -1,9 +1,9 @@
 # shellcheck shell=bash
 # tools/package_docs_lib.sh: the player guides of the release packages
 # (docs/*.md that README.md links) and the package's ico-pc.ini, sourced by
-# package_win.sh and package_linux.sh. Functions only. BUILDING.md, LEGAL.md and THIRD_PARTY.md
-# are developer documents and are not in this list (the Linux package ships
-# THIRD_PARTY.md at its root).
+# package_win.sh and package_linux.sh. Functions only. BUILDING.md, LEGAL.md
+# and THIRD_PARTY.md are developer documents and are not in this list (the
+# Linux package ships THIRD_PARTY.md at its root).
 
 pkg_player_docs=(FAQ CONTROLS OPTIONS TEXTURE_PACKS MODEL_PACKS RESHADE ANDROID PORTABLE_MODE TROUBLESHOOTING)
 

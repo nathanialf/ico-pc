@@ -68,15 +68,20 @@ rm -rf "$d/tools"; mkdir -p "$d/tools"
 cp "$b/port/rhi/rhi_d3d12_test.exe" "$b/port/render/rd_replay_tool.exe" "$b/port/save/mc_import.exe" "$b/SDL3.dll" "$d/tools/"
 cp "$wt/port/rhi/test/compare_png.ps1" "$d/tools/"
 cat > "$d/tools/README.txt" <<'TXT'
-Developer tools; playing the game needs none of them. mc_import.exe copies
-ICO's save out of a PS2 memory card image or save archive into the game's
-save folder (docs\PORTABLE_MODE.md, "Bring a PS2 save over"). rhi_d3d12_test.exe checks
-the Direct3D 12 renderer against exact expected pixels and ends with a
-message box giving the verdict (log: rhi_d3d12_test.log). rd_replay_tool.exe
-renders a frame dump (F12 in the game writes one to dumps\) to a PNG, and
-compare_backends.cmd, with compare_png.ps1, renders every dump in dumps\ on
-Vulkan and on Direct3D 12 and compares the pictures (log:
-compare_backends.log). SDL3.dll is the library these tools need beside them.
+Developer tools; playing the game needs none of them.
+mc_import.exe copies ICO's save out of a PS2 memory card file or save
+archive into the game's save folder (see docs\PORTABLE_MODE.md, "Bring a
+PS2 save over").
+The other files are for people who help build the game. They check that the
+picture is drawn the same way with Vulkan and with Direct3D 12.
+rhi_d3d12_test.exe tests the Direct3D 12 drawing against exact expected
+pixels and ends with a message box giving the verdict (log:
+rhi_d3d12_test.log). rd_replay_tool.exe draws a picture file that F12 saved
+in the game (in the dumps folder) and writes it as a PNG.
+compare_backends.cmd, with compare_png.ps1, does that for every saved
+picture in dumps\ with Vulkan and with Direct3D 12 and compares the results
+(log: compare_backends.log). SDL3.dll is a library these tools need beside
+them.
 TXT
 sed -i 's/$/\r/' "$d/tools/README.txt"
 # the repository stores the .cmd with LF (it has no labels or goto, so
