@@ -256,6 +256,20 @@ static int onTitle(void)
     return s_origin == LAYOUT_TITLE_CONTINUE || s_origin == LAYOUT_TITLE_NEW;
 }
 
+/* v0.4.3 UI-D: the title is up invisibly while Options is to open on a page
+   (Characters' way back, model_viewer.c): s_titleReturn is the page (-1 for
+   none), s_titleDecided whether the title's card check has decided (its
+   procs' last TitleMask(0)), s_titleHandoff the frames of the switch to the
+   page, in which the title layout is still current and the logo stays down */
+static int s_titleReturn = -1;
+static int s_titleDecided;
+static int s_titleHandoff;
+
+static int isTitleLayout(int l)
+{
+    return l == LAYOUT_TITLE_CONTINUE || l == LAYOUT_TITLE_NEW;
+}
+
 static int s_restoreTitle = -1; /* a game layout whose defaultItem to restore */
 static int s_restoreDefault;
 static int s_dirtyVideo, s_dirtyConfig, s_dirtyBindings;
@@ -2927,6 +2941,8 @@ void ui_SettingsReset(void)
     s_warned = 0;
     s_origin = LAYOUT_PAUSE;
     s_restoreTitle = -1;
+    s_titleReturn = -1;
+    s_titleDecided = s_titleHandoff = 0;
     s_dirtyVideo = s_dirtyConfig = s_dirtyBindings = 0;
     memset(&s_capture, 0, sizeof(s_capture));
     for (int e = 0; e < ENTRY_COUNT; e++) {
@@ -2955,8 +2971,29 @@ void ui_SettingsReset(void)
     memset(&s_charHint, 0, sizeof(s_charHint));
 }
 
+void ui_SettingsTitleReturn(int page)
+{
+    s_titleReturn = (page >= 0 && page < UI_PAGE_COUNT) ? page : -1;
+    s_titleDecided = 0;
+    s_titleHandoff = 0;
+}
+
+int ui_SettingsTitleReturnPending(void)
+{
+    return s_titleReturn >= 0;
+}
+
+int ui_SettingsTitleDecided(void)
+{
+    return s_titleDecided;
+}
+
 int ui_SettingsEntryItem(int item)
 {
+    /* a pending return: every item, so no confirm gets through */
+    if (s_titleReturn >= 0) {
+        return 1;
+    }
     /* the title's port rows (the pause menu's entry is the game's row) */
     for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
         if (item >= 0 && (item == s_entryRow[e] || item == s_quitRow[e])) {
@@ -2968,12 +3005,33 @@ int ui_SettingsEntryItem(int item)
 
 void ui_SettingsTitleMask(int masked)
 {
+    const int pending = s_titleReturn >= 0;
+    const int cur = current_layout_id;
+    s_titleDecided = !masked;
+    if (pending) {
+        masked = 1;
+    }
     for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
         if (s_entryRow[e] >= 0) {
             lt_mask_property(s_entryRow[e], masked);
         }
         if (s_quitRow[e] >= 0) {
             lt_mask_property(s_quitRow[e], masked);
+        }
+    }
+    if (pending) {
+        /* nothing of the title's menu is seen or reachable: every row of
+           this layout and its chain */
+        lt_item_select_disable = 1;
+        if (isTitleLayout(cur)) {
+            int n = 0;
+            for (int l = cur; l >= 0 && n < 8; n++) {
+                const LtProp *lp = lt_ext_Layout(l);
+                for (int r = lp->first; r < lp->last; r++) {
+                    lt_mask_property(r, 1);
+                }
+                l = lp->link;
+            }
         }
     }
 }
@@ -3021,6 +3079,8 @@ int ui_SettingsReopenPage(int page)
     /* as entryProc on an entry from this title: onTitle() holds, each page
        opens on its first row ... */
     s_origin = cur;
+    s_titleHandoff = s_titleReturn >= 0;
+    s_titleReturn = -1;
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
             lt_ext_Layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
@@ -3880,5 +3940,13 @@ static int settingsProc(int first, int item)
 /* package L1: settings.h */
 int ui_SettingsCoversTitle(void)
 {
+    if (s_titleHandoff && !isTitleLayout(current_layout_id)) {
+        s_titleHandoff = 0;
+    }
+    /* v0.4.3 UI-D: from the first frame of a pending return to the switch
+       to its page, the logo is down too */
+    if (s_built && (s_titleReturn >= 0 || s_titleHandoff)) {
+        return 1;
+    }
     return s_built && onTitle() && pageOfLayout(current_layout_id, NULL) != NULL;
 }

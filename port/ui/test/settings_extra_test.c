@@ -637,6 +637,76 @@ static void testMouseCamera(void)
     ui_SettingsSetTouchQuery(NULL);
 }
 
+/* v0.4.3 UI-D: the title run unseen while Options is to reopen */
+static int rowsMasked(int layout, int want)
+{
+    const LtProp *lp = lt_ext_Layout(layout);
+    for (int r = lp->first; r < lp->last; r++) {
+        if (lt_ext_Prop(r)->masked != want) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static void testTitleReturn(void)
+{
+    for (int title = 12; title <= 13; title++) {
+        enterMain(1);
+        lt_switch_layout(title);
+        CHECK(settle(title, 60), "the title %d", title);
+        const int opt = ui_SettingsEntryRow(title), quit = ui_SettingsQuitRow(title);
+
+        /* nothing pending: the entry rows follow the mask, nothing else */
+        CHECK(!ui_SettingsTitleReturnPending() && !ui_SettingsCoversTitle(),
+              "%d: nothing pending, the logo shows", title);
+        ui_SettingsTitleMask(1);
+        CHECK(!ui_SettingsTitleDecided() && lt_ext_Prop(opt)->masked && lt_ext_Prop(quit)->masked,
+              "%d: unchanged: the entry rows masked", title);
+        ui_SettingsTitleMask(0);
+        CHECK(ui_SettingsTitleDecided() && !lt_ext_Prop(opt)->masked && !lt_ext_Prop(quit)->masked,
+              "%d: unchanged: unmasked once decided", title);
+        CHECK(ui_SettingsEntryItem(51) == 0 && ui_SettingsEntryItem(opt) == 1,
+              "%d: unchanged: only the entry rows", title);
+
+        /* armed: the logo is down from this frame, the rows masked, no confirm */
+        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
+        CHECK(ui_SettingsTitleReturnPending() && ui_SettingsCoversTitle(), "%d: armed covers",
+              title);
+        CHECK(ui_SettingsEntryItem(51) == 1 && ui_SettingsEntryItem(0) == 1,
+              "%d: every item is an entry item while pending", title);
+        lt_item_select_disable = 0;
+        ui_SettingsTitleMask(1);
+        CHECK(rowsMasked(title, 1) && lt_ext_Prop(opt)->masked && lt_ext_Prop(quit)->masked &&
+                  lt_item_select_disable == 1 && !ui_SettingsTitleDecided(),
+              "%d: TitleMask(1): rows masked, selection disabled, undecided", title);
+        lt_item_select_disable = 0;
+        ui_SettingsTitleMask(0);
+        CHECK(rowsMasked(title, 1) && lt_ext_Prop(opt)->masked && lt_item_select_disable == 1 &&
+                  ui_SettingsTitleDecided(),
+              "%d: TitleMask(0): still masked, decided", title);
+
+        /* cancelled */
+        ui_SettingsTitleReturn(-1);
+        CHECK(!ui_SettingsTitleReturnPending() && !ui_SettingsCoversTitle() &&
+                  ui_SettingsEntryItem(51) == 0,
+              "%d: cancelled: the logo and the confirms are back", title);
+
+        /* the reopen ends it; Back from Main returns to this title layout */
+        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
+        ui_SettingsTitleMask(0);
+        const int exL = ui_SettingsReopenPage(UI_PAGE_EXTRAS);
+        CHECK(exL >= 0 && !ui_SettingsTitleReturnPending(), "%d: the reopen clears pending", title);
+        CHECK(ui_SettingsCoversTitle(), "%d: the logo stays down through the switch", title);
+        lt_switch_layout(exL);
+        CHECK(settle(exL, 60) && ui_SettingsCoversTitle(), "%d: Extras up", title);
+        press(0x10);
+        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_MAIN), 60), "%d: Back: Main", title);
+        press(0x10);
+        CHECK(settle(title, 60), "%d: Back: the title layout (%d)", title, current_layout_id);
+    }
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -655,6 +725,8 @@ int main(int argc, char **argv)
     testQuitGame();
     /* v0.4.3 I17a */
     testMouseCamera();
+    /* v0.4.3 UI-D */
+    testTitleReturn();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

@@ -49,6 +49,16 @@ void ui_SettingsInstall(void);
 int ui_SettingsEntryItem(int item);
 /* The title procs: masked while their own rows are (the card check). */
 void ui_SettingsTitleMask(int masked);
+/* v0.4.3 UI-D: leaving Character Customization, the title runs unseen
+   until its card check has decided, then Options opens on page
+   (ui_SettingsReopenPage).  TitleReturn(page) arms it, TitleReturn(-1)
+   cancels; while armed every row of the title's layouts is masked and
+   confirms are blocked (TitleMask, EntryItem), the logo is hidden
+   (CoversTitle).  Decided: the procs' last TitleMask said the check is
+   done.  ReopenPage ends the pending state. */
+void ui_SettingsTitleReturn(int page /* UiSettingsPage or -1 */);
+int ui_SettingsTitleReturnPending(void);
+int ui_SettingsTitleDecided(void);
 /* A Settings page opened from the title is the current layout (Extras and
    its Music page, Achievements and the remap list among them); not from
    the pause menu (port/game/title_logo.c hides the title's logo under it). */

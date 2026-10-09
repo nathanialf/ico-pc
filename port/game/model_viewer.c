@@ -59,9 +59,11 @@
  * the camera.  Every step bumps the colours' serial, so the model's
  * textures are decoded again on the next frame (Texture.c tex_ResetVram).
  * Switch (or L1 / R1) loads the other character's stage, the page staying
- * up.  Triangle goes back to the title, and back in MV_OFF the viewer
- * waits (RETURN_TIMEOUT_TICKS) for the title's menu to be up and faded in,
- * then opens Settings on Extras again (ui_SettingsReopenPage).
+ * up.  Triangle goes back to the title, which comes up with no menu and no
+ * logo (ui_SettingsTitleReturn); back in MV_OFF the viewer waits
+ * (RETURN_TIMEOUT_TICKS) for the title's card check to have decided (13 or
+ * 12, unseen) and the layout to be faded in, then opens Settings on Extras
+ * (ui_SettingsReopenPage), Back returning to the decided title menu.
  *
  * Nothing is saved and no game flag is set but what End Game resets.  The
  * viewer's own buffers are host memory (malloc), not the game's arena.
@@ -609,6 +611,9 @@ static void mvToTitle(void)
        once the title is back */
     s_returnExtras = s_chars;
     if (s_chars) {
+        /* v0.4.3: the title comes up with no menu and no logo until its
+           card check has decided (settings.h ui_SettingsTitleReturn) */
+        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
         /* Characters' colours, however the viewer is left (Triangle has
            written them already; a failure has not) */
         ui_SettingsSave();
@@ -1171,7 +1176,7 @@ void ico_mv_tick(void)
             /* v0.4.2: back from Characters: Settings on Extras (its
                Characters row) once the title's menu is up and faded in
                (lt_switch_layout works only then) */
-            if (stage_no == TITLE_STAGE && lt_fade_status() == 2 &&
+            if (stage_no == TITLE_STAGE && lt_fade_status() == 2 && ui_SettingsTitleDecided() &&
                 (current_layout_id == LAYOUT_TITLE_CONTINUE ||
                  current_layout_id == LAYOUT_TITLE_NEW)) {
                 s_returnExtras = 0;
@@ -1181,6 +1186,7 @@ void ico_mv_tick(void)
                 }
             } else if (now - s_since > RETURN_TIMEOUT_TICKS) {
                 s_returnExtras = 0;
+                ui_SettingsTitleReturn(-1);
                 fprintf(stderr,
                         "model_viewer: the title's menu did not come back; Settings not "
                         "reopened (stage %d, layout %d)\n",
