@@ -68,11 +68,23 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // order.
 #define VU_F_CUT_ONLY 32u
 #define VU_F_KICK_ONLY 64u
+// The parts of a wide target beside the 4:3 picture are drawn with
+// VU_F_DROP_WIDE: a triangle marked VU_INDEX_WIDE (a stage closing plane,
+// rd_mesh.c markWideHidden) is not drawn there (vu_wide_dropped)
+#define VU_F_DROP_WIDE 128u
 // Issue 25: the index bit of a triangle that overlaps an earlier triangle of
 // its mesh in the same plane (shader_consts.h ICO_VU_INDEX_LATER; static
 // prelit and lit meshes, rd_mesh.c markLaterOverlaps); vu_later_out
 #define VU_INDEX_LATER 0x40000000u
-#define VU_INDEX_MASK 0x3FFFFFFFu
+#define VU_INDEX_WIDE 0x20000000u // shader_consts.h ICO_VU_INDEX_WIDE
+#define VU_INDEX_MASK 0x1FFFFFFFu
+
+// Whether the triangle of index value vid is left out of this draw: a
+// closing plane in a draw of the parts beside the 4:3 picture.
+bool vu_wide_dropped(uint vid)
+{
+    return (vid & VU_INDEX_WIDE) != 0u && (vu_draw.z & VU_F_DROP_WIDE) != 0u;
+}
 
 #define VU_PROBE_FIELDS 16u
 

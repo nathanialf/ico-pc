@@ -560,8 +560,12 @@ typedef struct RdMeshRec {
     /* issue 25: the index list the device draws, index with
      * ICO_VU_INDEX_LATER on each triangle that overlaps an earlier
      * triangle of the mesh in its plane (rd_mesh.c markLaterOverlaps);
-     * NULL when none does (rd__mesh_draw_index) */
+     * NULL when none does (rd__mesh_draw_index); also ICO_VU_INDEX_WIDE
+     * on each triangle of a stage closing plane (rd_mesh.c markWideHidden) */
     uint32_t *drawIndex;
+    /* drawIndex holds an ICO_VU_INDEX_WIDE triangle: rd_replay.c draws
+     * the mesh beside the 4:3 picture of a wide target without them */
+    uint8_t wideHidden;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -628,8 +632,8 @@ static inline const uint32_t *rd__mesh_draw_index(const RdMeshRec *m)
     return m->drawIndex ? m->drawIndex : m->index;
 }
 
-/* dst's drawIndex becomes a copy of src's (none when src has none): the
- * interpolation's scratch meshes draw their source's (rd_interp.c);
+/* dst's drawIndex (and wideHidden) becomes a copy of src's (none when src
+ * has none): the interpolation's scratch meshes draw their source's (rd_interp.c);
  * false on no memory (dst then has none) */
 bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src);
 /* rd_mesh.c: the per-list VU images (rd_set_vu_common updates all 13). */

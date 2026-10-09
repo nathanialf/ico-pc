@@ -41,6 +41,9 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
         VuVtx v = vu_prelit_vertex(vu_probe_vertex(vid), mode, true);
         return vu_probe_out(vid, vu_probe_field(v, (vid / 3u) % VU_PROBE_FIELDS));
     }
+    if (vu_wide_dropped(vid)) {
+        return vu_out_init();
+    }
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     uint corner = vid & 3u;
     VuVtx a = vu_prelit_vertex(kick - 2u, mode, false);
