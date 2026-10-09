@@ -1168,7 +1168,6 @@ static inline bool rd__MirrorOn(void)
 /* Once-only diagnostics, by bit. */
 enum {
     RD_ONCE_OUTSIDE_FRAME = 0,
-    RD_ONCE_DATE,
     RD_ONCE_COLCLAMP,
     RD_ONCE_BLEND_RANGE,
     RD_ONCE_CD_KEEP,

@@ -376,11 +376,6 @@ static void setKey(RdCmd *c, RdKey key)
 
 /* ---------------------------------------------------------------- targets */
 
-/* wave 5 (R5a): the work buffers' resolution scale; applied since wave 7
- * (R7a), when the replay sizes the GS window apart from the target's
- * texture (RdTargetRec.tw/th/sx/sy, rd__TargetScaleOf) */
-#define RD_WORK_SCALE_APPLY 1
-
 static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uint32_t *h,
                             RhiFormat *fmt, uint8_t *depth)
 {
@@ -439,9 +434,8 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *w = *h = 1;
         break;
     }
-    /* wave 5 (R5a): the work buffers' resolution scale (rd.h
-     * rd_WorkTargetScale) is the texture's, not the GS size's, since wave 7
-     * (R7a): rd__TargetScaleOf */
+    /* the work buffers' resolution scale (rd.h rd_WorkTargetScale) applies
+     * to the texture, not to the GS size: rd__TargetScaleOf */
 }
 
 /* Wave 7 (R7a): the scene-class targets, which take the Enhanced scene

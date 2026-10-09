@@ -269,47 +269,6 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, nodual too
  * (and logged) on every draw */
 #define RD_PIPELINE_FAIL_MAX 64
 
-/* GS register numbers the game writes through gif_SetGsReg, for the
- * transitional rd_gs_shim.c and for assertions. */
-enum RdGsReg {
-    RD_GS_PRIM = 0x00,
-    RD_GS_RGBAQ = 0x01,
-    RD_GS_ST = 0x02,
-    RD_GS_UV = 0x03,
-    RD_GS_XYZF2 = 0x04,
-    RD_GS_XYZ2 = 0x05,
-    RD_GS_TEX0_1 = 0x06,
-    RD_GS_CLAMP_1 = 0x08,
-    RD_GS_XYZF3 = 0x0C,
-    RD_GS_XYZ3 = 0x0D,
-    RD_GS_TEX1_1 = 0x14,
-    RD_GS_TEX2_1 = 0x16,
-    RD_GS_XYOFFSET_1 = 0x18,
-    RD_GS_PRMODECONT = 0x1A,
-    RD_GS_PRMODE = 0x1B,
-    RD_GS_TEXCLUT = 0x1C,
-    RD_GS_SCANMSK = 0x22,
-    RD_GS_MIPTBP1_1 = 0x34,
-    RD_GS_MIPTBP2_1 = 0x36,
-    RD_GS_TEXA = 0x3B,
-    RD_GS_FOGCOL = 0x3D,
-    RD_GS_TEXFLUSH = 0x3F,
-    RD_GS_SCISSOR_1 = 0x40,
-    RD_GS_ALPHA_1 = 0x42,
-    RD_GS_DIMX = 0x44,
-    RD_GS_DTHE = 0x45,
-    RD_GS_COLCLAMP = 0x46,
-    RD_GS_TEST_1 = 0x47,
-    RD_GS_PABE = 0x49,
-    RD_GS_FBA_1 = 0x4A,
-    RD_GS_FRAME_1 = 0x4C,
-    RD_GS_ZBUF_1 = 0x4E,
-    RD_GS_BITBLTBUF = 0x50,
-    RD_GS_TRXPOS = 0x51,
-    RD_GS_TRXREG = 0x52,
-    RD_GS_TRXDIR = 0x53
-};
-
 #ifdef __cplusplus
 }
 #endif
