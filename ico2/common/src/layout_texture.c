@@ -71,6 +71,10 @@ static unsigned int fadeLength; /* derived name */
 
 static unsigned int fadeCount; /* derived name */
 
+/* PC port (I17b): lt_item_select_disable as the last exec_layout_texture
+   left it just before clearing it (lt_host_select_disabled) */
+static int ltHostSelectDisabled;
+
 #include "Texture.h"
 
 /* PC port (Phase 6, 6B): the rows past the game's tables.  texLayout[80] and
@@ -745,7 +749,42 @@ void exec_layout_texture(void)
     for (k = 0; list[k] >= 0; k++) {
         lt_draw_layout(list[k]);
     }
+    /* PC port (I17b): what this tick's procs decided, for the mouse
+       pointer's tick before the next one (lt_host_select_disabled) */
+    ltHostSelectDisabled = lt_item_select_disable;
     lt_item_select_disable = 0;
+}
+
+/* PC port (I17b): the menus' mouse pointer (port/ui/ui_mouse.c), which runs
+   once a Main tick before the layouts.  Whether property row no is shown
+   (lt_property_visible); whether the last tick's procs had the item select
+   off (the title's card check, a list's wrap, a layout that switched with
+   no fade-in): lt_item_select_disable itself is always 0 between ticks;
+   and the cursor of layout no put on item, as default_item_select's pad
+   move does (its sound and glow), without the frame of the move, so a
+   click in the same tick is not cleared with the move's pad flags. */
+int lt_host_property_visible(int no)
+{
+    return lt_property_visible(no);
+}
+
+int lt_host_select_disabled(void)
+{
+    return ltHostSelectDisabled;
+}
+
+void lt_host_point_item(int no, int item)
+{
+    LtProp *p = &LT_LAYOUT(no);
+
+    if (item < 0 || p->curItem == item) {
+        return;
+    }
+    p->curItem = item;
+    soundSeDefPlay(411, 0xFFFFFFFE, 0, 0);
+    glowOn = 1;
+    glowLength = (unsigned int)((60 - systemStatus[0] * 10) / systemStatus[1] * 0.25f);
+    glowCount = 0;
 }
 
 /* init_textures_of_specified_property is a file static, as is

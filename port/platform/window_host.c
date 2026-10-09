@@ -26,6 +26,7 @@
 #include "pace_policy.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
+#include "pointer.h"
 #include "rd.h"
 #include "rd_tex.h"
 #include "../fmv/rd_video.h"
@@ -36,6 +37,7 @@
 #include "touch_ui.h"
 #include "trace_host.h"
 #include "ui_host.h"
+#include "ui_mouse.h"
 #include "video_options.h"
 #include "window_host.h"
 #include "window_lifecycle.h"
@@ -808,6 +810,43 @@ static void set_capture(int mode)
     ico_input_sdl_set_capture(mode);
 }
 
+/* I17b: the system pointer over the window: shown while it is free over a
+   menu it works in (port/ui/ui_mouse.h) and no movie plays, hidden
+   otherwise (play with the mouse camera off, a movie, a key or pad press in
+   a menu); changed only when that changes.  With [input] mouse = false the
+   pointer is left as the system has it.  Nothing is drawn: it is the
+   system's own pointer. */
+static void pointer_visibility(void)
+{
+    /* a movie stops the game's Main loop (and the pointer's tick) before
+       the menus: the left button is Cross again (it skips the movie) */
+    if (mpegPlay != 0) {
+        ico_pointer_set_menu(0);
+    }
+#ifndef __ANDROID__
+    static int s_shown = -1; /* -1: not managed (at the start, mouse off) */
+    int want;
+
+    if (!ico_input_live_bindings()->mouse_on) {
+        if (s_shown == 0) {
+            SDL_ShowCursor(); /* give it back as it was */
+        }
+        s_shown = -1;
+        return;
+    }
+    want = s_captured == ICO_CAPTURE_OFF && ui_MouseMenuActive() && mpegPlay == 0;
+    if (want == s_shown) {
+        return;
+    }
+    if (want) {
+        SDL_ShowCursor();
+    } else {
+        SDL_HideCursor();
+    }
+    s_shown = want;
+#endif
+}
+
 /* I17a: the game's state for the capture rule, once a pump */
 static int capture_mode(void)
 {
@@ -1108,6 +1147,7 @@ int ico_window_pump(void)
     }
     photo_pump();                /* package PHOTO */
     set_capture(capture_mode()); /* I17a: play and photo mode */
+    pointer_visibility();        /* I17b: the pointer in the menus */
     ico_input_sdl_update();
     /* Phase 6 (6B): the popups' clock; the presenter draws them on its
        overlay at each present (package OV, port/ui/ui_host.c) */

@@ -189,6 +189,23 @@ int lt_ext_CircleBack(void);
 int lt_ext_SetRectColor(int index, const unsigned char rgba[4]);
 int lt_ext_RectColor(int index, unsigned char rgba[4]);
 
+/* v0.4.3 I17b: what a click of the mouse pointer on a port row does
+   (port/ui/ui_mouse.h).  AUTO (every row to begin with, and every game
+   row): an item (a row with item links, one the pad can reach, or one lit
+   with an owner item) is pointed at and a click is Cross on it, on its
+   owner item when it has no item links of its own; any other row is not
+   hit.  NONE:
+   never hit (a list's heading or empty slot).  LEFT / RIGHT: a value's
+   arrows, a click is Left / Right on the owner item (their boxes padded so
+   the small arrows are easy to hit).  STEP: a stepped value, a click is
+   Right on the owner item (Cross does nothing on a stepped row).  Cleared
+   by lt_ext_Reset; -1 for an index that is not a port row. */
+enum { LT_POINTER_AUTO = 0, LT_POINTER_NONE, LT_POINTER_LEFT, LT_POINTER_RIGHT, LT_POINTER_STEP };
+
+int lt_ext_SetPointerRole(int index, int role);
+/* LT_POINTER_AUTO for a game row or an index outside the tables */
+int lt_ext_PointerRole(int index);
+
 #ifdef __cplusplus
 }
 #endif

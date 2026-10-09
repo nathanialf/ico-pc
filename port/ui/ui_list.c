@@ -92,6 +92,11 @@ int ui_ListItemOfRow(const UiList *l, int row)
     return s >= 0 ? l->offset + s : -1;
 }
 
+static int isHeading(const UiList *l, int item, int n)
+{
+    return l->def->heading != NULL && item >= 0 && item < n && l->def->heading(l->user, item);
+}
+
 static void setCell(int row, const char *text, int strId)
 {
     if (row < 0) {
@@ -119,15 +124,18 @@ void ui_ListRefresh(UiList *l, int cursorRow)
         setCell(l->label[s], out.label, out.labelStr);
         setCell(l->colA[s], out.colA, out.colAStr);
         setCell(l->colB[s], out.colB, out.colBStr);
+        /* v0.4.3 I17b: the mouse pointer never picks a heading or an empty
+           slot (the cursor would only skip on from it) */
+        const int role = d >= n || isHeading(l, d, n) ? LT_POINTER_NONE : LT_POINTER_AUTO;
+        lt_ext_SetPointerRole(l->label[s], role);
+        lt_ext_SetPointerRole(l->colA[s], role);
+        if (l->colB[s] >= 0) {
+            lt_ext_SetPointerRole(l->colB[s], role);
+        }
     }
     if (l->def->decorate) {
         l->def->decorate(l->user, ui_ListItemOfRow(l, cursorRow));
     }
-}
-
-static int isHeading(const UiList *l, int item, int n)
-{
-    return l->def->heading != NULL && item >= 0 && item < n && l->def->heading(l->user, item);
 }
 
 /* A cursor on a heading goes on in the direction it came (wrapping at the

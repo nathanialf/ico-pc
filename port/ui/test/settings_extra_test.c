@@ -11,6 +11,8 @@
  */
 #include "settings_fixture.h"
 #include "popup.h"
+#include "pointer.h"
+#include "ui_mouse.h"
 
 /* v0.4.3 ST-SPLIT: the fixture builds a layout and the menu opens */
 static void testFixture(void)
@@ -707,6 +709,286 @@ static void testTitleReturn(void)
     }
 }
 
+/* v0.4.3 I17b: the mouse pointer in the menus (ui_mouse.h), through the real
+   layout code: a view of 640 x 448 at 0,0, so a point of the grid is the
+   pointer at (gx, gy - 2) */
+static int s_i17bDeciding;
+
+/* a title proc as layout_action.c's while the memory card check runs: the
+   item select off, the row shown */
+static int i17bTitleProc(int first, int item)
+{
+    (void)first;
+    (void)item;
+    lt_mask_property(51, 0);
+    if (s_i17bDeciding) {
+        lt_item_select_disable = 1;
+    }
+    return -1;
+}
+
+/* one Main tick as main.c runs it: the pad read (flags), the pointer's
+   tick, the layouts */
+static void mouseFrameWith(int flags)
+{
+    pad[0].flags = flags;
+    pad[0].now = flags;
+    ui_MouseTick();
+    frame(pad[0].flags);
+}
+
+static void mouseFrame(void)
+{
+    mouseFrameWith(0);
+}
+
+/* the pointer on the middle of row j (or dx grid pixels off it) */
+static void pointAtOff(int j, float dx)
+{
+    const LtProperty *e = lt_ext_Prop(j);
+    const int w = e->dispW ? e->dispW : e->texW;
+    const int h = e->dispH ? e->dispH : e->texH;
+    const float gx = (e->centerX ? 320.0f : (float)e->dispX + (float)w * 0.5f) + dx;
+    const float gy = 2.0f * (float)e->dispY + (float)h * 0.5f;
+    ico_pointer_move(gx / 640.0f, (gy - 2.0f) / 448.0f);
+}
+
+static void pointAt(int j)
+{
+    pointAtOff(j, 0.0f);
+}
+
+static void click(void)
+{
+    ico_pointer_button(1);
+    ico_pointer_button(0);
+}
+
+/* the main page's row labelled strId, among all its rows (openPage's index) */
+static int i17bMainIndex(int strId)
+{
+    int labels[16];
+    const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    for (int i = 0; i < n; i++) {
+        if (strcmp(lt_ext_RowText(labels[i]), ui_Str((UiStrId)strId)) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* the arrow of the value of label in layout l with role, -1 */
+static int i17bArrow(int l, int label, int role)
+{
+    const LtProp *lay = lt_ext_Layout(l);
+    for (int j = lay->first; j < lay->last; j++) {
+        if (lt_ext_Prop(j)->ownerItem == label && lt_ext_PointerRole(j) == role) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+static void testPointer(void)
+{
+    char before[64], after[64];
+    int labels[16];
+
+    ui_MouseReset();
+    ui_MouseSetView(640, 448, 0, 0, 640, 448);
+
+    /* play (layout 54) is no menu */
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_Reset();
+    ui_SettingsReset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    init_layout_texture(2);
+    settle(54, 4);
+    ico_pointer_move(0.5f, 0.5f);
+    mouseFrame();
+    CHECK(!ui_MouseMenuActive() && !ico_pointer_menu(), "layout 54: no menu");
+
+    /* the title while its memory card check runs: the item select off, so
+       pointing at the Settings row moves nothing until it is decided */
+    lt_switch_layout(13);
+    CHECK(settle(13, 60), "pointer: the title");
+    texLayout[13].proc = i17bTitleProc;
+    s_i17bDeciding = 1;
+    mouseFrame();
+    mouseFrame();
+    const int entry = ui_SettingsEntryRow(13);
+    CHECK(texLayout[13].curItem == 51, "the title on New Game (%d)", texLayout[13].curItem);
+    CHECK(ico_pointer_menu() == 1, "the title is a menu");
+    pointAt(entry);
+    mouseFrame();
+    CHECK(texLayout[13].curItem == 51, "deciding: the pointer moves nothing (%d)",
+          texLayout[13].curItem);
+    s_i17bDeciding = 0;
+    mouseFrame(); /* the tick that decided */
+    pointAt(entry);
+    mouseFrame();
+    CHECK(texLayout[13].curItem == entry, "decided: the pointer on the Settings row (%d, want %d)",
+          texLayout[13].curItem, entry);
+    texLayout[13].proc = NULL;
+
+    /* the main page: hover moves the cursor, a click opens the page */
+    const int mainL = enterMain(1);
+    const int iDisp = i17bMainIndex(UI_STR_SECTION_DISPLAY);
+    const int iAch = i17bMainIndex(UI_STR_SECTION_ACHIEVEMENTS);
+    const int iCtl = i17bMainIndex(UI_STR_SECTION_CONTROLS);
+    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    CHECK(iDisp >= 0 && iAch >= 0 && iCtl >= 0, "the main page's rows (%d %d %d)", iDisp, iAch,
+          iCtl);
+    lt_ext_Layout(mainL)->curItem = labels[iCtl];
+    mouseFrame();
+    mouseFrame();
+    CHECK(ico_pointer_menu() == 1 && ui_MouseMenuActive(), "the main page is a menu");
+    pointAt(labels[iDisp]);
+    mouseFrame();
+    CHECK(lt_ext_Layout(mainL)->curItem == labels[iDisp], "hover: the cursor on Display (%d)",
+          lt_ext_Layout(mainL)->curItem);
+    CHECK(current_layout_id == mainL, "hover opens nothing");
+    click();
+    mouseFrame();
+    CHECK(lt_fade_status() != 2, "the click starts the fade (%d)", lt_fade_status());
+    /* nothing while the layout fades */
+    pointAt(labels[iCtl]);
+    mouseFrame();
+    CHECK(lt_ext_Layout(mainL)->curItem == labels[iDisp], "fading: the cursor stays (%d)",
+          lt_ext_Layout(mainL)->curItem);
+    const int dispL = ui_SettingsPageLayout(UI_PAGE_DISPLAY);
+    CHECK(settle(dispL, 60), "click: Display opens (%d)", current_layout_id);
+
+    /* Aspect's arrows: Right as the pad's Right, Left back; the value
+       itself steps as Right */
+    const int aspect = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_ASPECT);
+    const int left = i17bArrow(dispL, aspect, LT_POINTER_LEFT);
+    const int right = i17bArrow(dispL, aspect, LT_POINTER_RIGHT);
+    CHECK(aspect >= 0 && left >= 0 && right >= 0, "Aspect and its arrows (%d %d %d)", aspect, left,
+          right);
+    mouseFrame();
+    mouseFrame();
+    snprintf(before, sizeof(before), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
+    pointAt(right);
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+    snprintf(after, sizeof(after), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
+    CHECK(lt_ext_Layout(dispL)->curItem == aspect, "the arrow's click: the cursor on Aspect (%d)",
+          lt_ext_Layout(dispL)->curItem);
+    CHECK(strcmp(before, after) != 0, "the right arrow steps Aspect (%s)", after);
+    pointAt(left);
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), before) == 0,
+          "the left arrow steps it back (%s, want %s)", ui_SettingsValueText(UI_OPT_ASPECT),
+          before);
+    press(0x2000);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), after) == 0,
+          "the pad's Right gives what the right arrow gave (%s, want %s)",
+          ui_SettingsValueText(UI_OPT_ASPECT), after);
+    press(0x8000);
+    int opts[16], values[16];
+    const int nd = ui_SettingsPageRows(UI_PAGE_DISPLAY, labels, opts, values, 16);
+    int value = -1;
+    for (int i = 0; i < nd; i++) {
+        if (labels[i] == aspect) {
+            value = values[i];
+        }
+    }
+    CHECK(value >= 0 && lt_ext_PointerRole(value) == LT_POINTER_STEP, "Aspect's value (%d)", value);
+    pointAt(value);
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), after) == 0,
+          "a click on the value steps as Right (%s, want %s)", ui_SettingsValueText(UI_OPT_ASPECT),
+          after);
+    pointAt(left);
+    click();
+    mouseFrame();
+    frame(0);
+    frame(0);
+
+    /* a click on empty space: nothing */
+    snprintf(before, sizeof(before), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
+    const int cur = lt_ext_Layout(dispL)->curItem;
+    ico_pointer_move(4.0f / 640.0f, 0.5f);
+    click();
+    pad[0].flags = 0;
+    ui_MouseTick();
+    CHECK(pad[0].flags == 0, "empty space: no button (0x%x)", (unsigned)pad[0].flags);
+    frame(pad[0].flags);
+    frame(0);
+    CHECK(current_layout_id == dispL && lt_ext_Layout(dispL)->curItem == cur &&
+              strcmp(ui_SettingsValueText(UI_OPT_ASPECT), before) == 0,
+          "empty space: nothing changed (%d, %d)", current_layout_id,
+          lt_ext_Layout(dispL)->curItem);
+
+    /* a key or pad press hides the pointer, a move shows it again */
+    mouseFrame();
+    mouseFrame();
+    CHECK(ui_MouseMenuActive(), "shown before the press");
+    mouseFrameWith(0x4000);
+    CHECK(!ui_MouseMenuActive() && ico_pointer_menu(), "a pad press hides the pointer");
+    mouseFrame();
+    CHECK(!ui_MouseMenuActive(), "still hidden");
+    ico_pointer_move(0.5f, 0.5f);
+    mouseFrame();
+    CHECK(ui_MouseMenuActive(), "a move shows it");
+
+    /* the wheel on Achievements: Down, a notch a move */
+    press(0x10);
+    CHECK(settle(mainL, 60), "Display: back");
+    openPage(mainL, iAch, UI_PAGE_ACHIEVEMENTS);
+    mouseFrame();
+    mouseFrame();
+    ico_pointer_wheel(-1.0f);
+    pad[0].flags = 0;
+    ui_MouseTick();
+    CHECK(pad[0].flags == 0x4000, "the wheel down: Down (0x%x)", (unsigned)pad[0].flags);
+    frame(pad[0].flags);
+    ico_pointer_wheel(-1.0f);
+    pad[0].flags = 0;
+    ui_MouseTick();
+    CHECK(pad[0].flags == 0, "the next notch waits a tick (0x%x)", (unsigned)pad[0].flags);
+    frame(pad[0].flags);
+    pad[0].flags = 0;
+    ui_MouseTick();
+    CHECK(pad[0].flags == 0x4000, "then Down (0x%x)", (unsigned)pad[0].flags);
+    frame(pad[0].flags);
+    press(0x10);
+    CHECK(settle(mainL, 60), "Achievements: back");
+
+    /* the remap screen waiting for a press: a click is bound, not chosen */
+    openPage(mainL, iCtl, UI_PAGE_CONTROLS);
+    press(0x40); /* Remap controls */
+    const int remapL = ui_SettingsPageLayout(UI_PAGE_REMAP);
+    CHECK(settle(remapL, 60), "pointer: the remap screen");
+    press(0x40); /* the capture */
+    frame(0);
+    CHECK(ui_SettingsCapturing(), "the capture waits");
+    ui_SettingsPageRows(UI_PAGE_REMAP, labels, NULL, NULL, 16);
+    const int capCur = lt_ext_Layout(remapL)->curItem;
+    pointAt(labels[2]);
+    click();
+    pad[0].flags = 0;
+    ui_MouseTick();
+    CHECK(pad[0].flags == 0 && lt_ext_Layout(remapL)->curItem == capCur,
+          "capturing: no Cross, no move (0x%x, %d)", (unsigned)pad[0].flags,
+          lt_ext_Layout(remapL)->curItem);
+    frame(0);
+
+    ui_SettingsReset();
+    ui_MouseReset();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -727,6 +1009,8 @@ int main(int argc, char **argv)
     testMouseCamera();
     /* v0.4.3 UI-D */
     testTitleReturn();
+    /* v0.4.3 I17b */
+    testPointer();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

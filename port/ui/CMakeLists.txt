@@ -42,7 +42,7 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c ui_list.c
-                            ui_hint.c gallery.c photo_ui.c PROPERTIES
+                            ui_hint.c gallery.c photo_ui.c ui_mouse.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
 
 function(ico_ui_library name rd)
@@ -68,7 +68,10 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c)
+    # v0.4.3 I17b: the mouse pointer in the menus (ui_mouse.c, its arithmetic
+    # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c)
+    target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c ui_mouse.c
+                                   ui_mouse_geom.c)
     foreach(_lib ${_ui_settings_deps})
         target_include_directories(${name} PRIVATE
                                    $<TARGET_PROPERTY:${_lib},INTERFACE_INCLUDE_DIRECTORIES>)
@@ -266,6 +269,17 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
+endif()
+
+# ui_mouse_test (v0.4.3 I17b): the mouse pointer's arithmetic in the menus
+# (ui_mouse_geom.c): the pointer into the layouts' grid (4:3 and a
+# pillarboxed 1920 x 1080), the rows' boxes and the hit test. CPU only.
+add_executable(ui_mouse_test test/ui_mouse_test.c ui_mouse_geom.c)
+target_include_directories(ui_mouse_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ui_mouse_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME ui_mouse COMMAND ui_mouse_test)
 endif()
 
 if(NOT TARGET ico_render)

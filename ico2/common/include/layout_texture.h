@@ -103,4 +103,12 @@ typedef struct {                     /* field names derived */
 
 extern LtProp texLayout[];
 
+/* PC port (I17b): the menus' mouse pointer's view of the layouts (port/ui/
+   ui_mouse.c): whether row no is shown, whether the last tick's procs had
+   the item select off, and the cursor of layout no moved onto item as a
+   pad move does (sound and glow) */
+int lt_host_property_visible(int no);
+int lt_host_select_disabled(void);
+void lt_host_point_item(int no, int item);
+
 #endif /* LAYOUT_TEXTURE_H */

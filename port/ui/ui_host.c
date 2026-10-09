@@ -24,6 +24,7 @@
 #include "strings.h"
 #include "touch_ui.h"
 #include "ui_internal.h"
+#include "ui_mouse.h"
 
 /* the game's side (GsBase.c, main.c; common/include/main.h) */
 extern int ScreenWidth;
@@ -40,6 +41,9 @@ extern void gif_HostFlush(void); /* GifHost.h */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
+    /* v0.4.3 I17b: where the picture is, for the mouse pointer's hit test */
+    ui_MouseSetView((int)ctx->outW, (int)ctx->outH, ctx->box.x, ctx->box.y, (int)ctx->box.w,
+                    (int)ctx->box.h);
     ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
 }

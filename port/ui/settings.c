@@ -1882,10 +1882,15 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
     if (steppable(opt)) {
         r->value =
             ui_SettingsAddRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
-        ui_SettingsAddRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9", 0.0f,
-                          UI_ALIGN_LEFT);
-        ui_SettingsAddRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA", 0.0f,
-                          UI_ALIGN_LEFT);
+        const int al = ui_SettingsAddRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9",
+                                         0.0f, UI_ALIGN_LEFT);
+        const int ar = ui_SettingsAddRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA",
+                                         0.0f, UI_ALIGN_LEFT);
+        /* v0.4.3 I17b: the mouse pointer's clicks: the arrows are Left and
+           Right, the value itself steps as Right does */
+        lt_ext_SetPointerRole(r->value, LT_POINTER_STEP);
+        lt_ext_SetPointerRole(al, LT_POINTER_LEFT);
+        lt_ext_SetPointerRole(ar, LT_POINTER_RIGHT);
     }
     pg->count++;
 }
@@ -2713,6 +2718,11 @@ static void buildQuitScreen(void)
     P(s_quitYesNo[0])->leftItem = s_quitYesNo[1];
     int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
     s_quitLayout = addLayout(first, last + 1, 0.6f, quitScreenProc, s_quitYesNo[0]);
+}
+
+int ui_SettingsCapturing(void)
+{
+    return s_capture.active || s_capture.cooldown > 0; /* v0.4.3 I17b */
 }
 
 void ui_SettingsSetWindowModeQuery(int (*fn)(void))

@@ -364,6 +364,10 @@ typedef struct UiRemapCapture {
 enum { UI_CAPTURE_IDLE = 0, UI_CAPTURE_WAITING, UI_CAPTURE_BOUND, UI_CAPTURE_TIMEOUT };
 
 void ui_RemapCaptureStart(UiRemapCapture *c, int target);
+/* v0.4.3 I17b: whether the remap screen is waiting for a press (or in the
+   few ticks after one), when the mouse pointer leaves the menu alone so a
+   click is bound rather than chosen (port/ui/ui_mouse.c) */
+int ui_SettingsCapturing(void);
 /* One Main tick: UI_CAPTURE_WAITING, UI_CAPTURE_BOUND (b changed),
    UI_CAPTURE_TIMEOUT, or UI_CAPTURE_IDLE when not active. */
 int ui_RemapCaptureStep(UiRemapCapture *c, void *bindings /* IcoBindings */);

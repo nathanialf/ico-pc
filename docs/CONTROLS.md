@@ -42,8 +42,8 @@ camera the way the right stick does. Keep the mouse still for a moment and
 the camera swings back behind Ico on its own, just like letting go of the
 stick.
 
-The pointer comes back whenever a menu is open, during a film, while the
-game is loading, and when you switch to another window.
+The pointer comes back whenever a menu is open and when you switch to
+another window. It stays out of the way during films.
 
 You can change how it feels in **Options > Controls**:
 
@@ -54,6 +54,25 @@ You can change how it feels in **Options > Controls**:
 - **Invert mouse up/down** swaps up and down.
 
 These rows are not shown on phones and tablets.
+
+## Use the mouse in menus
+
+The mouse works in every menu: the title screen, the pause menu, the
+memory card and save screens, and all of Options.
+
+- **Point** at a choice to pick it, just like moving to it with the d-pad.
+- **Click** it with the left button to choose it.
+- To change a setting, click the small arrows on either side of it, or
+  click the setting itself to go to the next choice.
+- **Scroll the wheel** to move up and down, one line per notch. Long lists
+  scroll along.
+- The **right button** goes back, like Circle.
+
+Clicking an empty spot does nothing, so a stray click never chooses
+anything. If you press a key or a gamepad button, the pointer hides until
+you move the mouse again. While the title screen is still checking the
+memory card, the choices wait until it is done, for the mouse just as
+for a gamepad.
 
 ## Look at the models
 

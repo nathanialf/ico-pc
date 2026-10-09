@@ -13,6 +13,7 @@
 #include "input.h"
 #include "input_sdl.h"
 #include "mouse_look.h"
+#include "pointer.h"
 #include "touch.h"
 
 #define MAX_PADS 8
@@ -35,6 +36,14 @@ static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
 static int s_ready;
 static Uint64 s_last_update; /* I17a: the snapshot's dt */
+/* I17b: the left button went down over a menu the pointer uses, so it stays
+   off Cross until it is released (a click there is the pointer's) */
+static int s_left_menu;
+/* I17b: when the pointer was last freed: SDL puts it back where it was
+   held as relative mode ends, a motion the player did not make, so the
+   motion of the first moment after is not a hover */
+static Uint64 s_free_since;
+#define POINTER_SETTLE_NS 100000000ull
 
 /* the touch overlay: the mapper's state and zones, whether a direct touch
    screen exists, the output and safe area the zones were built for, and the
@@ -224,6 +233,26 @@ static void clear_held(void)
     memset(s_raw.key, 0, sizeof(s_raw.key));
     memset(s_raw.mouse, 0, sizeof(s_raw.mouse));
     s_acc_dx = s_acc_dy = 0.0f;
+    s_left_menu = 0;
+}
+
+/* I17b: whether the pointer is the menus' (free, not the camera's) */
+static int pointer_free(void)
+{
+    return s_capture == ICO_CAPTURE_OFF;
+}
+
+/* I17b: the pointer's place from a window position (points), as 0..1 of
+   the window's size */
+static void pointer_at(SDL_WindowID id, float x, float y)
+{
+    SDL_Window *w = SDL_GetWindowFromID(id);
+    int ww = 0, wh = 0;
+
+    if (w == NULL || !SDL_GetWindowSize(w, &ww, &wh) || ww <= 0 || wh <= 0) {
+        return;
+    }
+    ico_pointer_move(x / (float)ww, y / (float)wh);
 }
 
 /* SDL synthesizes mouse events from touches (SDL_TOUCH_MOUSEID); with the
@@ -258,9 +287,31 @@ void ico_input_sdl_event(const SDL_Event *e)
             break;
         }
         if (e->button.button >= 1 && e->button.button <= 5) {
-            s_raw.mouse[map[e->button.button]] = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
-            if (e->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            const int down = e->type == SDL_EVENT_MOUSE_BUTTON_DOWN;
+
+            s_raw.mouse[map[e->button.button]] = (unsigned char)down;
+            if (down) {
                 ico_input_note_press(ICO_SRC_MOUSE, map[e->button.button]);
+            }
+            /* I17b: the menus' pointer, while it is free: the left button
+               clicks (and, pressed over a menu, is not Cross until it is
+               released); the others only show the pointer is in use */
+            if (e->button.button == SDL_BUTTON_LEFT) {
+                if (down) {
+                    s_left_menu = pointer_free() && ico_pointer_menu();
+                } else {
+                    s_left_menu = 0;
+                }
+            }
+            if (pointer_free()) {
+                if (e->button.button == SDL_BUTTON_LEFT) {
+                    if (down) {
+                        pointer_at(e->button.windowID, e->button.x, e->button.y);
+                    }
+                    ico_pointer_button(down);
+                } else if (down) {
+                    ico_pointer_other_button();
+                }
             }
         }
         break;
@@ -276,11 +327,26 @@ void ico_input_sdl_event(const SDL_Event *e)
         } else if (s_capture == ICO_CAPTURE_DELTA) {
             /* photo mode: its screen takes the motion each Main tick */
             ico_mouse_look_add(e->motion.xrel, e->motion.yrel);
+        } else if (e->motion.timestamp >= s_free_since + POINTER_SETTLE_NS) {
+            /* I17b: free, the menus' pointer */
+            pointer_at(e->motion.windowID, e->motion.x, e->motion.y);
         }
+        break;
+    case SDL_EVENT_MOUSE_WHEEL:
+        /* I17b: the menus' wheel, up (away from the player) positive; a
+           flipped direction (natural scrolling) is turned back */
+        if (touch_synth_mouse(e->wheel.which) || !pointer_free()) {
+            break;
+        }
+        ico_pointer_wheel(e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e->wheel.y : e->wheel.y);
+        break;
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        ico_pointer_leave(); /* I17b */
         break;
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         clear_held();
         touch_cancel();
+        ico_pointer_leave(); /* I17b */
         break;
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
     case SDL_EVENT_DID_ENTER_BACKGROUND:
@@ -321,6 +387,10 @@ void ico_input_sdl_set_capture(int mode)
        a turn from before a menu and photo mode not a move from play */
     s_capture = mode;
     s_acc_dx = s_acc_dy = 0.0f;
+    /* I17b: a held pointer has no place in the menus; the next move after
+       it is freed gives it one */
+    ico_pointer_leave();
+    s_free_since = mode == ICO_CAPTURE_OFF ? SDL_GetTicksNS() : 0;
     ico_bindings_mouse_reset(&s_bind);
     ico_mouse_look_reset();
 }
@@ -474,7 +544,20 @@ void ico_input_sdl_update(void)
         s_raw.dt = s_last_update != 0 ? (float)((double)(now - s_last_update) / 1e9) : 0.0f;
         s_last_update = now;
     }
-    ico_bindings_step(&s_bind, &s_raw, &v);
+    {
+        /* I17b: over a menu the pointer uses, the left button is the
+           pointer's click (port/ui/ui_mouse.c), not Cross, so a click off
+           every row never confirms the row the cursor is on; right (Circle)
+           and middle (R1) stay, and the remap screen's capture still saw
+           the press (ico_input_note_press, at the event) */
+        const unsigned char left = s_raw.mouse[1];
+
+        if (s_left_menu || (pointer_free() && ico_pointer_menu())) {
+            s_raw.mouse[1] = 0;
+        }
+        ico_bindings_step(&s_bind, &s_raw, &v);
+        s_raw.mouse[1] = left;
+    }
     if (s_touchDevice) {
         touch_step(&v);
     }

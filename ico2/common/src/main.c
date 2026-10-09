@@ -133,6 +133,8 @@ unsigned int ico_host_main_ticks(void);
 void ico_diag_milestone(const char *fmt, ...);
 /* port/game/model_viewer.h: the model viewer's tick (package MV) */
 void ico_mv_tick(void);
+/* port/ui/ui_mouse.h: the mouse pointer in the menus (I17b) */
+void ui_MouseTick(void);
 /* port/game/photo_view.h: photo mode's camera in the game's matrices
    (issue 14) */
 void ico_photo_view_tick(void);
@@ -335,6 +337,11 @@ void Main(void)
         /* [dev] switch_to (above): the exit taken here, after the pad is
            read, as a script or the boy's exit floor would in this tick */
         ico_dev_switch_stage();
+        /* PC port (I17b): the mouse pointer in the menus, after the pad
+           read and before the layouts: a hover moves the cursor, a click
+           or the wheel adds its button to this tick's pad
+           (port/ui/ui_mouse.h) */
+        ui_MouseTick();
         /* PC port (package MV): the model viewer's tick, after the pad read
            and before the layouts and the objects (port/game/model_viewer.h) */
         ico_mv_tick();

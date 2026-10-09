@@ -39,7 +39,8 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
-    int dim; /* greyed (lt_ext_SetDim): the colour at half */
+    int dim;  /* greyed (lt_ext_SetDim): the colour at half */
+    int role; /* v0.4.3 I17b: LT_POINTER_* (lt_ext_SetPointerRole) */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -164,6 +165,22 @@ int lt_ext_RowDim(int index)
 {
     ExtRow *r = rowOf(index);
     return r ? r->dim : 0;
+}
+
+int lt_ext_SetPointerRole(int index, int role)
+{
+    ExtRow *r = rowOf(index);
+    if (!r || role < LT_POINTER_AUTO || role > LT_POINTER_STEP) {
+        return -1;
+    }
+    r->role = role;
+    return 0;
+}
+
+int lt_ext_PointerRole(int index)
+{
+    ExtRow *r = rowOf(index);
+    return r ? r->role : LT_POINTER_AUTO;
 }
 
 int lt_ext_SetStr(int index, int strId)

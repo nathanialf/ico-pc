@@ -11,6 +11,7 @@
 #include "host_config.h"
 #include "input.h"
 #include "mouse_look.h"
+#include "pointer.h"
 
 static int failures;
 
@@ -598,6 +599,66 @@ static void test_step(void)
     CHECK(v.buttons == 0 && v.lx == 0.0f);
 }
 
+/* I17b: the menus' pointer (pointer.c): its place, the clicks and the wheel
+   between two takes, and leaving the window */
+static void test_pointer(void)
+{
+    IcoPointerTick t;
+
+    ico_pointer_reset();
+    CHECK(ico_pointer_take(&t) == 0 && !t.valid && !t.moved && t.clicks == 0 && t.wheel == 0);
+    /* a move: the place, clamped to the window */
+    ico_pointer_move(0.25f, 1.5f);
+    CHECK(ico_pointer_take(&t) == 1 && t.valid && t.moved && t.x == 0.25f && t.y == 1.0f);
+    /* the take cleared the edges, the place stays */
+    CHECK(ico_pointer_take(&t) == 0 && t.valid && !t.moved && t.clicks == 0 && t.x == 0.25f);
+    /* two clicks between takes count two; a release alone is no click */
+    ico_pointer_button(1);
+    ico_pointer_button(0);
+    ico_pointer_button(1);
+    ico_pointer_button(0);
+    CHECK(ico_pointer_take(&t) == 1 && t.clicks == 2 && !t.moved);
+    ico_pointer_button(0);
+    CHECK(ico_pointer_take(&t) == 1 && t.clicks == 0);
+    CHECK(ico_pointer_take(&t) == 0 && t.clicks == 0);
+    /* the other buttons are use of the mouse, no click */
+    ico_pointer_other_button();
+    CHECK(ico_pointer_take(&t) == 1 && t.clicks == 0);
+    /* a fractional wheel (a touchpad) adds up to whole notches; the rest
+       waits, both ways */
+    ico_pointer_wheel(0.5f);
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == 0);
+    ico_pointer_wheel(0.75f);
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == 1);
+    ico_pointer_wheel(0.75f); /* 0.25 + 0.75 */
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == 1);
+    ico_pointer_wheel(-2.5f);
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == -2);
+    ico_pointer_wheel(-0.5f); /* -0.5 - 0.5 */
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == -1);
+    CHECK(ico_pointer_take(&t) == 0 && t.wheel == 0);
+    /* leaving: no place and no move until the next move */
+    ico_pointer_move(0.5f, 0.5f);
+    ico_pointer_leave();
+    CHECK(ico_pointer_take(&t) == 1 && !t.valid && !t.moved);
+    ico_pointer_button(1);
+    CHECK(ico_pointer_take(&t) == 1 && !t.valid && t.clicks == 1);
+    ico_pointer_move(0.75f, 0.0f);
+    CHECK(ico_pointer_take(&t) == 1 && t.valid && t.moved && t.x == 0.75f && t.y == 0.0f);
+    /* the menu flag, and the reset */
+    ico_pointer_set_menu(1);
+    CHECK(ico_pointer_menu() == 1);
+    ico_pointer_set_menu(0);
+    CHECK(ico_pointer_menu() == 0);
+    ico_pointer_set_menu(1);
+    ico_pointer_wheel(0.5f);
+    ico_pointer_reset();
+    CHECK(ico_pointer_menu() == 0);
+    ico_pointer_wheel(0.5f);
+    CHECK(ico_pointer_take(&t) == 1 && t.wheel == 0 && !t.valid);
+    ico_pointer_reset();
+}
+
 static void test_frame(void)
 {
     IcoVirtualPad v;
@@ -783,6 +844,7 @@ int main(void)
     test_merge();
     test_step();
     test_mouse_capture();
+    test_pointer();
     test_frame();
     test_libpad();
     if (failures != 0) {

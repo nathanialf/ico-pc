@@ -2,9 +2,10 @@
 # subset (pad_host.c), the pad script reader (pad_script.c, the headless and
 # test source), the virtual pad's arithmetic (vpad.c), the binding layer
 # (bindings.c, input_config.c), the touch overlay's mapper (touch.c) and the
-# mouse camera's capture rule and photo look accumulator (mouse_look.c). The
-# SDL3 device layer (input_sdl.c) is part of the window build only; the
-# headless build has no SDL dependency.
+# mouse camera's capture rule and photo look accumulator (mouse_look.c) and
+# the menus' mouse pointer (pointer.c, v0.4.3 I17b). The SDL3 device layer
+# (input_sdl.c) is part of the window build only; the headless build has no
+# SDL dependency.
 add_library(ico_input STATIC
     bindings.c
     input_config.c
@@ -12,6 +13,7 @@ add_library(ico_input STATIC
     mouse_look.c
     pad_host.c
     pad_script.c
+    pointer.c
     touch.c
     vpad.c)
 target_include_directories(ico_input
