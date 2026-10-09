@@ -53,9 +53,10 @@ once there so it can ask for the disc image, then
 add `ico_pc` to Steam with Steam > Add a Non-Steam Game and play in Game
 Mode. [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
-The download is for x86-64 PCs. On an arm64 Linux device with a Vulkan
-driver (a Raspberry Pi 5, or a handheld such as one running ROCKNIX), build
-it from source: [Linux arm64](docs/BUILDING.md#linux-arm64).
+This download is for PCs and the Steam Deck. There is no download yet for
+64-bit ARM Linux handhelds and boards, but the game can be built for them
+from the source code ([the build guide](docs/BUILDING.md#linux-arm64)). It
+needs the same fairly new system: Debian 13, Ubuntu 24.04 or newer.
 
 **Android**
 
