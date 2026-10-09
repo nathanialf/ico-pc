@@ -9,16 +9,12 @@
  * the 40-byte header audioDecEndPut collects) and from the disc's streams.
  */
 #include "pss.h"
+#include "../include/ico_endian.h"
 #include <string.h>
 
 static uint32_t rd16be(const uint8_t *p)
 {
     return ((uint32_t)p[0] << 8) | p[1];
-}
-
-static uint32_t rd32le(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
 /* A 33-bit time stamp in the 5-byte PES form. */
@@ -177,15 +173,15 @@ int ico_pss_audio_header(const uint8_t *h, IcoPssAudioHeader *out)
 {
     memset(out, 0, sizeof(*out));
     memcpy(out->id, h, 4);
-    out->header_size = rd32le(h + 4);
-    out->type = rd32le(h + 8);
-    out->rate = rd32le(h + 12);
-    out->channels = rd32le(h + 16);
-    out->interleave = rd32le(h + 20);
-    out->interleave_start = rd32le(h + 24);
-    out->interleave_end = rd32le(h + 28);
+    out->header_size = ico_le32(h + 4);
+    out->type = ico_le32(h + 8);
+    out->rate = ico_le32(h + 12);
+    out->channels = ico_le32(h + 16);
+    out->interleave = ico_le32(h + 20);
+    out->interleave_start = ico_le32(h + 24);
+    out->interleave_end = ico_le32(h + 28);
     memcpy(out->data_id, h + 32, 4);
-    out->data_size = rd32le(h + 36);
+    out->data_size = ico_le32(h + 36);
     return memcmp(out->id, "SShd", 4) == 0 && memcmp(out->data_id, "SSbd", 4) == 0 ? 0 : -1;
 }
 

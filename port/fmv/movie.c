@@ -48,6 +48,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../include/ico_endian.h"
 #include "diag_host.h"
 #include "iop_ram.h"
 #include "m2v.h"
@@ -204,8 +205,7 @@ static int find_in_datadf(const char *base, uint32_t *lsn, uint32_t *size)
     if (ico_vfs_read_sectors(vfs, df.lsn, 1, sec) != 0) {
         return -1;
     }
-    count =
-        (uint32_t)sec[0] | (uint32_t)sec[1] << 8 | (uint32_t)sec[2] << 16 | (uint32_t)sec[3] << 24;
+    count = ico_le32(sec);
     if (count == 0 || count > 4096) {
         return -1;
     }
@@ -219,10 +219,8 @@ static int find_in_datadf(const char *base, uint32_t *lsn, uint32_t *size)
     for (i = 0; i < count; i++) {
         const uint8_t *e = dir + 4 + i * 40;
         char nm[33];
-        uint32_t off =
-            (uint32_t)e[32] | (uint32_t)e[33] << 8 | (uint32_t)e[34] << 16 | (uint32_t)e[35] << 24;
-        uint32_t sz =
-            (uint32_t)e[36] | (uint32_t)e[37] << 8 | (uint32_t)e[38] << 16 | (uint32_t)e[39] << 24;
+        uint32_t off = ico_le32(e + 32);
+        uint32_t sz = ico_le32(e + 36);
         size_t k;
 
         memcpy(nm, e, 32);
