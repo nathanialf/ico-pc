@@ -15,6 +15,16 @@
 #include "mouse_look.h"
 #include "pointer.h"
 #include "touch.h"
+#ifdef __ANDROID__
+#include "host_android.h"
+#else
+/* no phone vibrator here: a controller is the only rumble */
+static void ico_host_vibrate(int amplitude, int ms)
+{
+    (void)amplitude;
+    (void)ms;
+}
+#endif
 
 #define MAX_PADS 8
 #define RUMBLE_MS 250
@@ -34,6 +44,8 @@ static int s_capture; /* ICO_CAPTURE_* (mouse_look.h; I17a) */
 static float s_acc_dx, s_acc_dy;
 static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
+static int s_phone_vibrating; /* the phone, not a controller, was last sent a rumble */
+static void phone_vibrate_stop(void);
 static int s_ready;
 static Uint64 s_last_update; /* I17a: the snapshot's dt */
 /* I17b: the left button went down over a menu the pointer uses, so it stays
@@ -347,12 +359,14 @@ void ico_input_sdl_event(const SDL_Event *e)
     case SDL_EVENT_WINDOW_FOCUS_LOST:
         clear_held();
         touch_cancel();
+        phone_vibrate_stop();
         ico_pointer_leave(); /* I17b */
         break;
     case SDL_EVENT_WILL_ENTER_BACKGROUND:
     case SDL_EVENT_DID_ENTER_BACKGROUND:
         /* nothing stays held while the app is away (Android) */
         touch_cancel();
+        phone_vibrate_stop();
         break;
     case SDL_EVENT_FINGER_DOWN:
         touch_finger(e, ICO_TOUCH_DOWN);
@@ -452,10 +466,19 @@ static void sample_pads(void)
     }
 }
 
+/* stops the phone's vibration if it was started */
+static void phone_vibrate_stop(void)
+{
+    if (s_phone_vibrating) {
+        s_phone_vibrating = 0;
+        ico_host_vibrate(0, 0);
+    }
+}
+
 static void send_rumble(void)
 {
     unsigned short high, low;
-    int i;
+    int i, taken = 0;
 
     if (s_bind.rumble) {
         ico_input_rumble_get(&high, &low);
@@ -471,9 +494,22 @@ static void send_rumble(void)
     s_last_high = high;
     s_last_low = low;
     for (i = 0; i < MAX_PADS; i++) {
-        if (s_pad[i] != NULL) {
-            SDL_RumbleGamepad(s_pad[i], low, high, high != 0 || low != 0 ? RUMBLE_MS : 0);
+        if (s_pad[i] != NULL &&
+            SDL_RumbleGamepad(s_pad[i], low, high, high != 0 || low != 0 ? RUMBLE_MS : 0)) {
+            taken = 1;
         }
+    }
+    /* no controller took it: the phone's own vibrator does (the same values
+       the game's vibration setting and [input] rumble already produced, so
+       Off in either gives zero here). Called on SDL's main thread, which
+       is where the host loop runs this. */
+    if ((high != 0 || low != 0) && !taken) {
+        const int amp = low != 0 ? (low / 257 > 0 ? low / 257 : 1) : 255;
+
+        ico_host_vibrate(amp, RUMBLE_MS);
+        s_phone_vibrating = 1;
+    } else {
+        phone_vibrate_stop();
     }
 }
 
@@ -580,6 +616,7 @@ void ico_input_sdl_shutdown(void)
             s_pad[i] = NULL;
         }
     }
+    phone_vibrate_stop();
     s_touchSnap.opacity = 0.0f;
     s_touchDevice = 0;
     s_ready = 0;

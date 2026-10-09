@@ -18,6 +18,7 @@
 #include <sys/statvfs.h>
 #include <unistd.h>
 #include <SDL3/SDL.h>
+#include <jni.h>
 
 #define LOG_TAG "ico-pc"
 
@@ -351,3 +352,48 @@ void ico_android_log_version(void)
 }
 
 #endif
+
+/* --- the phone's vibrator ------------------------------------------------- */
+
+/* Calls the static Java method IcoActivity.vibrate(int ms, int amplitude).
+   The JNI environment SDL_GetAndroidJNIEnv returns belongs to the calling
+   thread, so this runs only on SDL's main thread (the host loop's, where
+   the input layer's rumble is sent). The class comes from the activity
+   object, the method id is looked up once (a failed lookup is remembered
+   and the call then does nothing), and every local reference is deleted. */
+void ico_host_vibrate(int amplitude, int ms)
+{
+    static jmethodID s_mid;
+    static int s_failed;
+    JNIEnv *env;
+    jobject act;
+    jclass cls;
+
+    if (s_failed) {
+        return;
+    }
+    env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    if (env == NULL || act == NULL) {
+        return;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    if (cls != NULL) {
+        if (s_mid == NULL) {
+            s_mid = (*env)->GetStaticMethodID(env, cls, "vibrate", "(II)V");
+            if (s_mid == NULL) {
+                s_failed = 1;
+            }
+        }
+        if (s_mid != NULL) {
+            (*env)->CallStaticVoidMethod(env, cls, s_mid, (jint)ms, (jint)amplitude);
+        }
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    } else if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteLocalRef(env, act);
+}

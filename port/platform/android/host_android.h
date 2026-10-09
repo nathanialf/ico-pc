@@ -49,6 +49,12 @@ void ico_android_fatal_box(const char *text);
    SDL_Init) titled ICO; the text also goes to logcat. */
 void ico_android_message_box(const char *text, int error);
 
+/* Vibrates the phone (IcoActivity.vibrate) at amplitude 1 to 255 for ms
+   milliseconds; amplitude 0 stops it. Must be called on SDL's main thread
+   (the host loop's), the thread SDL_GetAndroidJNIEnv answers for. Does
+   nothing when the phone has no vibrator or the call is not available. */
+void ico_host_vibrate(int amplitude, int ms);
+
 /* Logs the APK's assets/VERSION.txt (a relative SDL_IOFromFile path reads
    the assets) to stderr. */
 void ico_android_log_version(void);
