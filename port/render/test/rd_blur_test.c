@@ -1,5 +1,4 @@
-/* rd_blur_test.c: the full-screen effects of staticBlur.c on rd (renderer
- * wave 5, R5a).
+/* rd_blur_test.c: the full-screen effects of staticBlur.c on rd.
  *
  * staticBlur.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c)
  * and Matrix.c, compiled as the window build has them (ICO_HOST, ICO_RD);
@@ -29,7 +28,7 @@
  *      DATE pass), and a dump -> load -> replay of one of them;
  *   m  600 frames of motion blur feedback (DISPLAY -> SCENE, then SCENE
  *      reduced into DISPLAY by rd_Post(RD_POST_REDUCTION), tinted, the
- *      whole loop in the model since R-POST): FIX 0x40 on a static image,
+ *      whole loop in the model): FIX 0x40 on a static image,
  *      FIX 0x40 on noise, FIX 0x70 with cuts (the cases of blend exactness under feedback);
  *   a  600 frames of the aura feedback through FEED128, 200 each of modes
  *      1 (aura), 2 (mirage) and 3 (aura v2), blurCol alpha 0x20 then 0x40;
@@ -38,15 +37,16 @@
  *      present and as a later one: both draw the same SCENE and leave the
  *      same FEED128 (the later present of the cut drew black before
  *      FEED_HELD).
- *   n  (v0.4.3, issue 28) the motion blur with the aura's glow and a tint
+ *   n  (issue 28) the motion blur with the aura's glow and a tint
  *      of 0x98 over a still picture, each tick presented 1, 2, 4 and 10
  *      times (30 Hz ticks at 30, 60, 120, 300 presents a second): every
  *      tick's DISPLAY is the bytes of one replay a tick (Original), and the
- *      presents as v0.4.2 drew them (each feeding back the present before,
- *      FIX 128 (FIX / 128)^(1 / N)) run brighter, to white at 10; then on
+ *      presents as drawn before the fix for issue 28 (each feeding back
+ *      the present before, FIX 128 (FIX / 128)^(1 / N)) run brighter, to
+ *      white at 10; then on
  *      the GPU at Enhanced 2x with the full-height scene, DISPLAY_HELD is
  *      DISPLAY's size and 10 presents a tick give one present's DISPLAY.
- *   q  (package QUEEN) the mirage as the Queen's F12 dumps record it: NTSC,
+ *   q  the mirage as the Queen's F12 dumps record it: NTSC,
  *      feedbackCol (64, 64, 64, 128), the sprites' rectangles, UVs, TEX0
  *      sizes, colours and modes checked against the dumps', list 8's shine
  *      material into AURA_WORK with SCENE's depth (TEST 0x5346D, Z write)
@@ -54,7 +54,7 @@
  *      then Enhanced 4x and 4x with the full-height scene, SCENE at the GS
  *      pixel centres against the 1x model: exact where the mask is 0 within
  *      16 GS pixels, within 4 where it is one value within 16.
- *   p  (package QUEEN) the mirage frame of q with the shine a keyed world
+ *   p  the mirage frame of q with the shine a keyed world
  *      draw, presented as the presenter does (a tick's first present at
  *      alpha 0.5 and a later one at 1, the shine moving between ticks): the
  *      face band's interior (mask 0) is untouched and FEED128's alpha as the
@@ -134,7 +134,7 @@ int ico_video_effect_fog(void)
     return s_fx[4];
 }
 
-int ico_video_effect_cinematic_bars(void) /* v0.4.3 R27 */
+int ico_video_effect_cinematic_bars(void)
 {
     return 1;
 }
@@ -1149,7 +1149,7 @@ static void putScene(void)
 /* the reduction that closes the motion blur loop: gsbHostReduction's
  * rd_Post(RD_POST_REDUCTION) in list 12 (the black clear of DISPLAY, then
  * SCENE bilinear at u = x + 0.75, v = 2y + 1, tinted, inside the border
- * crop), drawn through the GS sprite model since R-POST, so the CPU model
+ * crop), drawn through the GS sprite model, so the CPU model
  * runs it as one more sprite and the loop is compared exactly */
 static void putReductionTint(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -1444,7 +1444,7 @@ static void checkCutPresents(void)
 
 /* ========== (n) the motion blur presented many times a tick (issue 28)
  *
- * v0.4.3.  The motion blur at FIX 32 (the old frame keeps a quarter a tick)
+ * The motion blur at FIX 32 (the old frame keeps a quarter a tick)
  * with the aura of mode 1 (its glow added onto SCENE in list 8, after the
  * blur) and a reduction tint of 0x98 (a gain of 1.1875 on the way back to
  * DISPLAY), on a still picture: N_TICKS ticks, each presented N = 1, 2, 4
@@ -1454,9 +1454,10 @@ static void checkCutPresents(void)
  * its DISPLAY must be the bytes the same frames give replayed once a tick
  * without interpolation (the Original frame rate, the PS2's arithmetic):
  * the old frame keeps FIX / 128 a tick and the loop through the aura and
- * the tint runs once a tick, whatever N.  The presents as v0.4.2 drew them
- * are replayed too (the frames recorded with FIX' = 128 (32 / 128)^(1 / N)
- * and every present reading the DISPLAY the present before left): there
+ * the tint runs once a tick, whatever N.  The presents as drawn before the
+ * fix for issue 28 are replayed too (the frames recorded with FIX' = 128
+ * (32 / 128)^(1 / N) and every present reading the DISPLAY the present
+ * before left): there
  * the tint and the aura went round N times a tick, 1.1875 x 111 / 128 > 1
  * at N = 10, so the picture ran to white; the test shows how far. */
 #define N_TICKS 8
@@ -1498,7 +1499,8 @@ static double nMean(const uint8_t *d, int *sat)
     return sum / n;
 }
 
-/* N_TICKS ticks presented n times each; legacy: as v0.4.2 presented them.
+/* N_TICKS ticks presented n times each; legacy: as presented before the fix
+ * for issue 28.
  * Returns the bytes of the ticks' DISPLAYs that differ from s_nRef's; the
  * last tick's mean and saturated channels in *mean, *sat. */
 static int nRun(int n, int legacy, double *mean, int *sat)
@@ -1518,7 +1520,7 @@ static int nRun(int n, int legacy, double *mean, int *sat)
             const RdFrame *f =
                 rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), (float)(k + 1) / n, first, NULL);
             if (f && legacy && !first) {
-                /* v0.4.2: no DISPLAY_HELD, the present before's DISPLAY read */
+                /* legacy: no DISPLAY_HELD, the present before's DISPLAY read */
                 RdCmdList *cl = (RdCmdList *)&f->lists[0];
                 for (uint32_t i = 0; i < cl->count && i < 2; i++) {
                     if (cl->cmds[i].type == RDC_COPY && cl->cmds[i].u[0] == dispHeld &&
@@ -1597,7 +1599,7 @@ static void checkMotionBlurPresents(void)
         legacyDiff[i] = nRun(kN[i], 1, &legacyMean[i], &legacySat[i]);
     }
     g_rd.settings.interpolate = interpolate;
-    /* v0.4.2 at N = 1 is the PS2's too; at N = 2 already brighter; at
+    /* legacy at N = 1 is the PS2's too; at N = 2 already brighter; at
      * N = 10 its loop gain is over 1: white inside the crop (the black
      * border is about 7 % of DISPLAY) */
     CHECK(legacyDiff[0] == 0, "(n) v0.4.2 at one present a tick: %d bytes differ", legacyDiff[0]);
@@ -1620,7 +1622,7 @@ static void checkMotionBlurPresents(void)
 
 /* ====================== (q) the queen's mirage, as the F12 dumps record it
  *
- * Package QUEEN.  The model viewer's dumps of the Queen (NTSC, 512 x 448,
+ * The model viewer's dumps of the Queen (NTSC, 512 x 448,
  * feedback mode 2, feedbackCol (64, 64, 64, 128)) record the mirage's
  * sprites with these parameters (rd_replay_tool --list --no-device): the
  * reduction AURA_WORK -> WORK0 rect (30720,31736)-(34816,33528) (256 x 112
@@ -1910,7 +1912,7 @@ static void checkQueenMirage(void)
     systemStatus[0] = status0;
 }
 
-/* ===================== (p) the mirage in the presenter's presents (QUEEN)
+/* ============================= (p) the mirage in the presenter's presents
  *
  * The model viewer's rc2 dumps: the GS model of their own commands leaves
  * the Queen's face outside the mirage's mask in every frame, yet the
@@ -2256,15 +2258,15 @@ int main(void)
     checkMotionBlur();
     checkAura();
     checkCutPresents();
-    checkMotionBlurPresents(); /* v0.4.3, issue 28 */
+    checkMotionBlurPresents(); /* issue 28 */
 
     checkPipelines();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    checkQueenMirage(); /* package QUEEN: re-initialises rd (NTSC, 1x, 4x) */
+    checkQueenMirage(); /* re-initialises rd (NTSC, 1x, 4x) */
     checkQueenPresents();
-    checkMotionBlurPresentsScaled(); /* v0.4.3, issue 28: re-initialises rd (2x) */
+    checkMotionBlurPresentsScaled(); /* issue 28: re-initialises rd (2x) */
     if (failures) {
         printf("rd_blur_test: %d failures\n", failures);
         return 1;

@@ -1,4 +1,4 @@
-/* rd_crt_test.c: the CRT filter (package CRT; port/render/rd_crt.c,
+/* rd_crt_test.c: the CRT filter (port/render/rd_crt.c,
  * port/shaders/crt.hlsl).
  *
  * Without a device:
@@ -20,7 +20,7 @@
  *             every pixel outside the box black, in every mode
  *   luma      the scanlines mode's mean luminance in the box within 20 %
  *             of the plain present's
- *   phosphors (package CRT2) the mask per output pixel, glow and
+ *   phosphors the mask per output pixel, glow and
  *             curvature off: at a 1440 x 1080 box (2.81 output pixels a
  *             source pixel) under a grey frame every box pixel is one
  *             channel only, the one rd__CrtMaskWeight gives its position,
@@ -35,16 +35,16 @@
  *             of the other channels (Trinitron, Consumer TV) and at 1440 x
  *             1080 every triad keeps its pixel's light; the gap columns,
  *             the leak and the gains (each triad's light integrated)
- *   light     (package C1) white and light colours (pink, sky, cream) in
+ *   light     white and light colours (pink, sky, cream) in
  *             each mode as played (glow, curvature, vignette) at a 1440 x
  *             1080 box: no channel brighter than its input in the mode's
  *             linear light, the hue kept, the mask still in a white
- *   top layer (package AN-T) rd_SetPresentOverlayTop under the scanlines:
+ *   top layer rd_SetPresentOverlayTop under the scanlines:
  *             its ctx the output, its solid quad drawn after the filter
  *             (every pixel its flat colour), the main overlay's quad still
  *             in the filtered picture (its rows vary)
  * Without a device, also:
- *   highlights (package C1) the CPU model of crt_ps over a flat field
+ *   highlights the CPU model of crt_ps over a flat field
  *             (rd__CrtBeam, the mask's weights and gains, rd__CrtStrengthAt,
  *             rd__CrtTriadTop, rd__CrtGainFade, rd__CrtGlowMix,
  *             rd__CrtShoulder): white, light colours and a mid grey in
@@ -272,7 +272,7 @@ static void checkResolve(void)
           "resolve: the mask fades from 1080 box lines to 720");
 }
 
-/* ------------------------------------------ the highlights (package C1) */
+/* -------------------------------------------------------- the highlights */
 
 static const char *const kModeName[RD_CRT_MODE_COUNT] = {"off",       "scanlines", "consumer",
                                                          "trinitron", "pvm",       "shadow"};
@@ -590,10 +590,10 @@ static bool s_llvmpipe;
 #define GOLD_OFF 0xedb088b74a237351ull
 
 /* The presents of the rich frame through each mode (llvmpipe, LLVM 19.1.7,
- * this file's frame; package CRT2's phosphors per output pixel, FIX0's leak
- * and per-triad gain; FIXB's flat face counted by column edges, which moved
- * PVM's columns on a stripe's edge at 1920 x 1440; C1's highlights: the
- * glow mixed in, the gains' fade, the eased strength, the shoulder):
+ * this file's frame; the phosphors per output pixel, the leak and the
+ * per-triad gain; the flat face counted by column edges, which moves PVM's
+ * columns on a stripe's edge at 1920 x 1440; the highlights: the glow
+ * mixed in, the gains' fade, the eased strength, the shoulder):
  * [mode - 1][0] 960 x 720, [1] 1920 x 1440 */
 static const uint64_t kGold[RD_CRT_MODE_COUNT - 1][2] = {
     {0xb63d6f980571913bull, 0x06ebfa2d69b427ceull}, /* scanlines */
@@ -726,7 +726,7 @@ static void checkLuma(void)
     }
 }
 
-/* ------------------------------------------ the phosphors (package CRT2) */
+/* --------------------------------------------------------- the phosphors */
 
 static uint32_t s_w; /* the last present's output width */
 static RhiRect s_box;
@@ -1022,7 +1022,7 @@ static void checkPhosphors(void)
     }
 }
 
-/* ------------------------------------- the highlights on a device (C1) */
+/* -------------------------------------------- the highlights on a device */
 
 /* White and light colours through each mode as the player sees it (its
  * glow, curvature and vignette on) at 1920 x 1080 (the 1440 x 1080 box,
@@ -1085,7 +1085,7 @@ static void checkLight(void)
     }
 }
 
-/* ------------------------------- the touch controls' layer (package AN-T) */
+/* -------------------------------------------- the touch controls' layer */
 
 /* one layer's callback: its ctx kept, one solid quad drawn at fractions
  * of its frame (fx0, fy0)..(fx1, fy1) in colour c */
@@ -1198,7 +1198,7 @@ int main(int argc, char **argv)
     checkLuma();
     checkPhosphors();
     checkLight();
-    checkTopLayer(); /* package AN-T */
+    checkTopLayer();
     if (failures) {
         printf("rd_crt_test: %d failures\n", failures);
         return 1;

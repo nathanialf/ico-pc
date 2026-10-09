@@ -1,4 +1,4 @@
-/* rd_interp_test.c: presentation between ticks (renderer wave 7, R7b).
+/* rd_interp_test.c: presentation between ticks.
  *
  * Two synthetic frames with keyed draws, blended by rd__InterpFrame.
  * Without a device (recording only):
@@ -12,7 +12,7 @@
  *             a fully faded frame (the fade edge), a discarded frame between
  *             (gap), a camera turn past the threshold: the current data
  *   ordinal   the same key twice matches in order
- *   photo     (package PHOTO) two paused photo ticks whose cameras differ:
+ *   photo     two paused photo ticks whose cameras differ:
  *             the camera blends half way, and list 11's full-screen prims
  *             (brightness, letterbox, film noise) are all kept
  *   grid      a grid's vertices blend one by one, its STs and headers stay
@@ -22,22 +22,22 @@
  *   particles a batch's particles blend; one moved further than four sizes
  *             keeps the current position
  *   shadow    a shadow volume's vertices blend; a triangle count change snaps
- *   prisms    (V3) Shadow.c's prisms regrouped by their tags: two ticks of
+ *   prisms    Shadow.c's prisms regrouped by their tags: two ticks of
  *             equal counts whose faces changed sides blend prism by prism,
  *             every prism closed (its faces' signed areas net to 0) and half
  *             way; a prism of one tick only is drawn on the nearer tick's
  *             side of t = 0.5; alpha 1 is the current volume byte for byte
  *   fade      the fade sprite's level blends (the post sprite is keyed)
- *   text      (R7d) a string's glyph quads keyed as port/ui/font.c keys them
+ *   text      a string's glyph quads keyed as port/ui/font.c keys them
  *             (the string's hash): moved and faded, every glyph blends half
  *             way (the alpha 0x80 -> 0 text at 0x40); another string is
  *             another key and is the current; the same string twice matches
  *             in order
- *   deferred  (package DEF) RDC_OVERLAY_TEXT items: the anchor, alpha and
+ *   deferred  RDC_OVERLAY_TEXT items: the anchor, alpha and
  *             glow stretch blend half way; a jump past the screen threshold
  *             and a changed size are the current item; the fade op after
  *             them blends; alpha 0 and 1 are the two ticks' items
- *   morph     (R7d) a morphing part as RegistPacket.c draws it: two meshes
+ *   morph     a morphing part as RegistPacket.c draws it: two meshes
  *             of one layout drawn in alternate frames under one key, the
  *             older rewritten (rd_UpdateVuMesh) while the next frame
  *             records: the half-way frame draws a scratch mesh whose
@@ -45,7 +45,7 @@
  *             older from the kept version), alpha 1 the current tick's
  *             shape, not the newer one; a mesh rewritten every frame the
  *             same; the replays use the kept streams
- *   feedback  (v0.4.3, issue 28) a frame whose motion blur sprite reads
+ *   feedback  (issue 28) a frame whose motion blur sprite reads
  *             DISPLAY copies DISPLAY into DISPLAY_HELD at the head of a
  *             tick's first present and back at the later ones', and its
  *             motion blur sprite is the recorded one in every present (the
@@ -57,15 +57,15 @@
  *   pixels    replays of the blended frame at alpha 0 and 1 equal the
  *             previous and current frames' replays byte for byte; at 0.5 the
  *             translated sprite covers the half-way columns exactly
- *   mirage    (package QUEEN) a tick that pastes FEED128 over SCENE and
+ *   mirage    a tick that pastes FEED128 over SCENE and
  *             copies SCENE back into it, presented twice (alpha 0.5 as the
  *             first present, 1 as a later one): the two SCENEs and
  *             FEED128s are byte-identical, and FEED128 advances once per tick
- *   present   rd_Present does nothing in the Original preset or with
- *             interpolate off, presents in Enhanced with it; a change of
- *             scale drops the history (the next pair snaps)
- * Package S (the shake of the glowing coffins before the Queen), without
- * a device and again with one:
+ *   present   in either preset, rd_Present does nothing with interpolate
+ *             off and presents with it on; a change of scale drops the
+ *             history (the next pair snaps)
+ * The shake of the glowing coffins before the Queen, without a device and
+ * again with one:
  *   shine     a list-8 shine draw (the mirage's mask, into AURA_WORK) and
  *             the same object's list-0 draw, the camera turning 20 degrees
  *             in the tick: at alpha 0.25, 0.5 and 0.75 a point of the mask
@@ -545,9 +545,9 @@ static void testVu(void)
     const RdCmd *sc = findKey(f, 3, RD_KEY(&kObjE, 3, 0), 0);
     const RdCmd *scc = findKey(cur, 3, RD_KEY(&kObjE, 3, 0), 0);
     if (sc && scc && sc->u[0] + sc->u[3] == 9) {
-        /* S2: the medians move from x 12, z 1000 (2 triangles) to x 32, z
-         * 1100 (3), y 3 to 4: cur's 9 vertices half way back, 10 pixels, half a pixel
-         * and 50 */
+        /* the medians move from x 12, z 1000 (2 triangles) to x 32, z 1100
+         * (3), y 3 to 4: cur's 9 vertices half way back, 10 pixels, half a
+         * pixel and 50 */
         const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + sc->u[1]);
         const RdScreenVtx *w = (const RdScreenVtx *)(const void *)(cur->payload + scc->u[1]);
         int ok = 1;
@@ -577,7 +577,7 @@ static void testVu(void)
     rd_DestroyVuMesh(mesh);
 }
 
-/* ------------------------------------------- shadow prisms (package V3) */
+/* ------------------------------------------------------- shadow prisms */
 
 /* Shadow.c's volume for one caster triangle: emitVolumeStrip's ten
  * positions over the top cap (whole pixels from x0, y0) and the cap moved
@@ -830,7 +830,7 @@ static void recordFeedback(int display, int feed)
     rd_EndFrame(0);
 }
 
-/* v0.4.3 (issue 28): the copies at the head of a present's first list:
+/* issue 28: the copies at the head of a present's first list:
  * DISPLAY <-> DISPLAY_HELD and FEED128 <-> FEED_HELD found (1 each at
  * most), and the number of RDC_COPYs in the frame */
 static int headCopies(const RdFrame *f, int first, int *display, int *feed)
@@ -984,7 +984,7 @@ static void testPixels(void)
     }
 }
 
-/* Package QUEEN: a mirage tick presented twice (alpha 0.5 as the tick's
+/* A mirage tick presented twice (alpha 0.5 as the tick's
  * first present, then alpha 1 as a later one).  The frame pastes
  * FEED128 over SCENE at half brightness through FEED128's alpha and copies
  * SCENE into FEED128 for the next tick (staticBlur.c's mode 2).  Both
@@ -1108,7 +1108,7 @@ static void testPresent(void)
 {
     RdSettings s = *rd_GetSettings();
     CHECK(!rd_InterpolationActive() && !rd_Present(0.5f), "Original: rd_Present does nothing");
-    /* F2: the Original preset interpolates too when asked */
+    /* the Original preset interpolates too when asked */
     s.interpolate = 1;
     rd_SetSettings(&s);
     recordSprites(0);
@@ -1140,7 +1140,7 @@ static void testPresent(void)
     recordSprites(0);
 }
 
-/* ------------------------------------------------------ keyed text (R7d) */
+/* ------------------------------------------------------------ keyed text */
 
 static RdKey textKeyOf(const char *s)
 {
@@ -1222,7 +1222,7 @@ static void testText(void)
           "text: a new label is the current frame's");
 }
 
-/* ---------------------------------------- deferred text (package DEF) */
+/* --------------------------------------------------------- deferred text */
 
 static void deferredItem(const char *str, float x, float y, uint8_t alpha, RdKey key)
 {
@@ -1297,7 +1297,7 @@ static void testDeferredText(void)
     const RdTextItem *l = itemOf(f, RD_KEY(&kObjD, 3, 0));
     CHECK(l && l->size == 20.0f, "deferred: another size is the current item (%.1f)",
           l ? l->size : -1.0f);
-    /* I1: an item of one tick only fades with t, as its quads */
+    /* an item of one tick only fades with t, as its quads */
     const RdTextItem *ex = itemOf(f, RD_KEY(&kObjD, 4, 0)), *gone = itemOf(f, RD_KEY(&kObjD, 5, 0));
     CHECK(ex && ex->rgba[3] == 0x40 && gone && gone->rgba[3] == 0x40,
           "deferred: cur's new row at alpha %d, prev's gone row inserted at %d (0x40, 0x40)",
@@ -1323,7 +1323,7 @@ static void testDeferredText(void)
     CHECK(a1 && ac && memcmp(a1, ac, sizeof(*a1)) == 0, "deferred: alpha 1 is the current item");
 }
 
-/* ------------------------------------------------- morphing meshes (R7d) */
+/* ------------------------------------------------------- morphing meshes */
 
 /* the creation stream of a 3-vertex prelit batch with vertex 1 at x */
 static void morphStream(float (*qw)[4], float x)
@@ -1446,7 +1446,7 @@ static void testMorph(void)
     rd_DestroyVuMesh(one);
 }
 
-/* ------------------------------------------- S2: rotation-aware blend */
+/* ------------------------------------------------ rotation-aware blend */
 
 /* column-major 4 x 4 (double): a turn of deg about z, uniform scale sc,
  * translation (tx, 0, 0) */
@@ -1653,7 +1653,7 @@ static void testRotationDraws(void)
           "a 150 degree turn in a tick keeps the tick's bone");
 }
 
-/* ------------------------------------------- S6: the blended camera */
+/* ---------------------------------------------------- the blended camera */
 
 static void mul4(const double *a, const double *b, double *o)
 {
@@ -1749,7 +1749,7 @@ static const double kS6PointA[3] = {300.0, 0.0, 0.0}; /* in A's model space (W =
 
 static const double kS6PointB[3] = {0.0, 0.0, 0.0}; /* B's origin: W = (-200, 0, 150) */
 
-static int s_s6List; /* the list s6Draw draws in (package S: 8 for a shine packet) */
+static int s_s6List; /* the list s6Draw draws in (8 for a shine packet) */
 
 /* a prelit static mesh with model to world w through the camera v */
 static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
@@ -1915,7 +1915,8 @@ static void testCameraBlend(void)
                   hypot(gb[0] - wb2[0], gb[1] - wb2[1]) < 0.01,
               "unmatched neighbour: A at %.3f (want %.3f), B at %.3f (want %.3f)", ga[0], wa2[0],
               gb[0], wb2[0]);
-        /* without S6, B was cur's: at the 28 degree camera */
+        /* without the blended camera, B would be cur's: at the 28 degree
+         * camera */
         const RdFrame *cf = rd__LastFrame();
         const float (*mbc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
         double gc[2];
@@ -1952,7 +1953,7 @@ static void testCameraBlend(void)
     }
 
     /* a still camera: nothing is re-based, the blocks are the element-wise
-     * blend as before (bit for bit) */
+     * blend (bit for bit) */
     s6Frame(mesh, 10.0, 0);
     s6Frame(mesh, 10.0, 1);
     st = build(0.5f, 1);
@@ -1964,7 +1965,7 @@ static void testCameraBlend(void)
           "still camera: nothing re-based, the unmatched mesh is the tick's (%u)", st->rebased);
 }
 
-/* ------------------------------------------- package PHOTO: photo mode */
+/* ------------------------------------------------------------ photo mode */
 
 /* A paused photo tick as the game records it (port/game/photo_view.c):
  * the frame's camera turned deg about the origin, and in list 11 the
@@ -2065,7 +2066,7 @@ static void testPhoto(void)
           "photo: alpha 1 is the current tick's camera");
 }
 
-/* ------------------------------------------------- S2: the present clock */
+/* ----------------------------------------------------- the present clock */
 
 static void testPresentClock(void)
 {
@@ -2119,7 +2120,7 @@ static void testPresentClock(void)
           "present clock: a 500 ms pause resets it (alpha %.4f)", a);
 }
 
-/* ------------------------------- I1: unmatched draws, particles, lights */
+/* ----------------------------------- unmatched draws, particles, lights */
 
 static const char kObjU, kObjP1, kObjP2, kObjP3, kObjL;
 
@@ -2335,7 +2336,7 @@ static void testParticleOrder(void)
           "particles by list order: a batch inserted ahead snaps the others (lerped %u, "
           "mismatch %u, missing %u)",
           st->lerped, st->mismatch, st->missing);
-    /* I1: by emitter, the two batches keep their partners */
+    /* by emitter, the two batches keep their partners */
     recordParticleOrder(0, 1);
     recordParticleOrder(1, 1);
     st = build(0.5f, 1);
@@ -2420,11 +2421,10 @@ static void testLightTurn(void)
     rd_DestroyVuMesh(mesh);
 }
 
-/* I1: morph limits.  A mesh rewritten twice before its draw in every frame
+/* Morph limits.  A mesh rewritten twice before its draw in every frame
  * (two reg_setShape calls), twins (C in odd frames, D in even ones) each
  * rewritten twice in the frame before their draw, and RD_INTERP_MORPH_MANY
- * meshes rewritten every frame (more than the 64 scratch meshes a present
- * had before I1) */
+ * meshes rewritten every frame */
 #define RD_INTERP_MORPH_MANY 200
 
 static void morphLimitFrame(RdMesh a, RdMesh c, RdMesh d, const RdMesh *many, int n, float x,
@@ -2505,7 +2505,7 @@ static void testMorphLimits(void)
     }
 }
 
-/* ------------------------------------------------- package S cells */
+/* ------------------------------------------------ shine, swap and sine */
 
 /* (hypothesis 2) a glowing material in list 8 (the mirage's mask, drawn
  * into AURA_WORK, RegistPacket.c regGetShinePri: shine 2) and the stone of
@@ -2732,7 +2732,7 @@ static void runCpu(void)
     testParticleOrder();
     testLightTurn();
     testMorphLimits();
-    testShineFollows(); /* package S */
+    testShineFollows();
     testParticleSwap();
     testSineScroll();
 }

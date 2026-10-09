@@ -1,5 +1,4 @@
-/* rd_tex_test.c: the texture cache and Texture.c on rd (renderer wave 2,
- * R2b).
+/* rd_tex_test.c: the texture cache and Texture.c on rd.
  *
  * Texture.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
  * window build compiles them (ICO_HOST, ICO_RD), fed synthetic TIM2 files
@@ -27,7 +26,7 @@
  *            PSMCT16 sprite under TEXA 7F/81+AEM, drawn through
  *            tex_TransTexture + gif_SpriteSensitiveOrg, give the exact
  *            texels in SCENE;
- *   r8       (package R8) rd_CreateTextureR8 keeps w * h bytes and the
+ *   r8       rd_CreateTextureR8 keeps w * h bytes and the
  *            format; rd_UpdateTextureRect writes the rectangle alone,
  *            clipped, counts only updates that change texels and keeps the
  *            union of the rectangles as the dirty one; an RGBA8 texture
@@ -35,13 +34,13 @@
  *            as created, and after two rectangle updates the GPU copy
  *            changed inside their union only (texels changed in the CPU
  *            copy outside it without an update stay as uploaded before).
- *            v0.4.2 (F-A): rd_CreateTextureSheet keeps w * h bytes, the
+ *            rd_CreateTextureSheet keeps w * h bytes, the
  *            SHEET format (R8 on the device) and its style; rectangles as
  *            R8; rd_SetTextureSheetStyle changes a sheet's style alone.
  *   packs    (texture packs) rdtex_CreateReplacement moves the image into
  *            the texture's pending upload with the box chain for an RGBA8
  *            image without mips, rdtex_ReplacementMips on a size that is
- *            not a power of two; package P8: a replacement's chain is the
+ *            not a power of two; a replacement's chain is the
  *            alpha-weighted box chain with no alpha coverage kept (a
  *            lattice's level 1 alpha is the plain average, its colour the
  *            wires'); BC refused without a device;
@@ -194,7 +193,7 @@ void ico_assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
-/* wave 3 (R3ab): tex_TransTexture's UV offset packet to the VU state
+/* tex_TransTexture's UV offset packet to the VU state
    (MicroCode.c); the mesh path's test covers it (rd_mesh_test) */
 void mc_HostDma(int id, const void *addr, int qwc)
 {
@@ -873,7 +872,7 @@ static void replacementChecks(void)
           "13x5 chain");
     CHECK(rdtex_ReplacementMips(&img) == -1, "a second chain refused");
     texpack_FreeImage(&img);
-    /* package P8: a lattice (wires every 4th row and column, (200, 180,
+    /* a lattice (wires every 4th row and column, (200, 180,
      * 160) alpha 0x80; holes black alpha 0): level 1 is the alpha-weighted
      * box chain exactly, with no coverage boost (the boost would raise the
      * 0x20 texels over 64) */
@@ -1210,7 +1209,7 @@ static void r8Checks(void)
           "RGBA8 rectangle");
     rd_DestroyTexture(u);
 
-    /* v0.4.2 (F-A): a sheet texture is one byte a texel, keeps its style
+    /* a sheet texture is one byte a texel, keeps its style
      * (the rim as its weight, 64 full, and dither as 0 or 1) and takes R8's
      * rectangles */
     const RdSheetStyle fr = {7, 62, 0xF0, 3, 0, 1};

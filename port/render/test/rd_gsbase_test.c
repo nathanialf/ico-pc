@@ -1,4 +1,4 @@
-/* rd_gsbase_test.c: GsBase.c's host path on rd (renderer wave 2, R2c).
+/* rd_gsbase_test.c: GsBase.c's host path on rd.
  *
  * GsBase.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
  * window build compiles them (ICO_HOST, ICO_RD), with the rest of the game
@@ -17,12 +17,12 @@
  *            per buffer when it alternates per flip
  *   leak     the post passes leave their state: fade -> ALPHA 0x44, ABE,
  *            PABE 0; keep -> TEXA 80/80, DISPLAY bound
- *   mask     FBMSK's extent (R-POST): FRAME.FBMSK masked in list 10 holds
+ *   mask     FBMSK's extent: FRAME.FBMSK masked in list 10 holds
  *            for a draw after it and ends at the anti-alias pass's FRAME
  *            write or the reduction's
  *   vu       gsb_MakeCommonMatrix's VU block and the frame camera
  *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32, and
- *            Z 17 apart at 2^24 (package QUEEN: the depth grows with Z)
+ *            Z 17 apart at 2^24 (the depth grows with Z)
  *   photo    photo mode's camera in the game's matrices (issue 14,
  *            port/game/photo_view.c): gsb_PushView / gsb_PopView put back
  *            the eleven matrices, vsParam, the focus distance and the zoom
@@ -516,8 +516,8 @@ static void checkKeep(void)
         }
     }
     CHECK(keepAfter, "keep: the keep sprite follows the head");
-    /* the reduction in list 12: its tinted sprite's colour (R-POST: an
-     * RdPostRec of kind RD_POST_REDUCTION) */
+    /* the reduction in list 12: its tinted sprite's colour (an RdPostRec
+     * of kind RD_POST_REDUCTION) */
     const RdCmd *last = NULL;
     for (uint32_t i = 0; i < f->lists[12].count; i++) {
         const RdCmd *k = &f->lists[12].cmds[i];
@@ -644,7 +644,7 @@ static void checkVu(void)
 
 static void checkZScale(void)
 {
-    /* package QUEEN: the depth grows with GS Z (gs_z_to_depth); PSMZ32 is
+    /* the depth grows with GS Z (gs_z_to_depth); PSMZ32 is
        z * 2^-33 on a float depth buffer (the top 2^16 values apart in
        [1 - 2^-8, 1)), z * 2^-32 on D24S8 */
     const float s32 = 1.0f / 4294967296.0f, s32f = 1.0f / 8589934592.0f, s24 = 1.0f / 16777216.0f;
@@ -1568,7 +1568,7 @@ static void checkPipelines(void)
 
 /* ------------------------------------------------------------------ main */
 
-/* FBMSK's extent (R-POST): a FRAME.FBMSK left masked in list 10 (as
+/* FBMSK's extent: a FRAME.FBMSK left masked in list 10 (as
  * darkVolume.c's PSMCT24 composite leaves it) holds for the draws after it
  * until the next FRAME write: the anti-alias pass's or the reduction's
  * (rd_raw_test checks the frame head's) */
@@ -1769,7 +1769,7 @@ static void recordingChecks(void)
     checkLeak();
     checkMask();
     checkSofteningOff();
-    checkCinematicBars(); /* v0.4.3 R27 */
+    checkCinematicBars();
     checkVu();
     checkZScale();
     checkPhotoView();

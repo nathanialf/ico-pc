@@ -1,4 +1,4 @@
-/* rd_fog_test.c: the depth fog of fog_DrawFog (renderer wave 4, R4c).
+/* rd_fog_test.c: the depth fog of fog_DrawFog.
  *
  * ZFog.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c),
  * compiled as the window build has them (ICO_HOST, ICO_RD); the rest of the
@@ -78,7 +78,7 @@ int ico_video_effect_fog(void)
     return s_fogSwitch;
 }
 
-int ico_video_effect_cinematic_bars(void) /* v0.4.3 R27 */
+int ico_video_effect_cinematic_bars(void)
 {
     return 1;
 }
@@ -796,7 +796,7 @@ static void checkPipelines(void)
               k->gs.program, k->vs, k->fs, k->gs.blend);
     }
     printf("  pipelines: %u created (%d fog), %u reachable\n", rd__PipelineCount(), fog, n);
-    /* package AN-E: the fog's LERP takes a colour and an alpha pass in the
+    /* the fog's LERP takes a colour and an alpha pass in the
      * two-pass blend fallback (rd_fog_nodual) */
     const int wantFog = rd_NoDual() ? 2 : 1;
     CHECK(fog == wantFog, "%d fog pipeline(s), %d expected", fog, wantFog);

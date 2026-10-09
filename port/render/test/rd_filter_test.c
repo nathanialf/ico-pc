@@ -1,5 +1,5 @@
-/* rd_filter_test.c: the draw filter (package MV; rd.h rd_SetDrawFilter) on synthetic keys, recorded without a
- * device (rd__InitRecordOnly):
+/* rd_filter_test.c: the draw filter (rd.h rd_SetDrawFilter) on synthetic
+ * keys, recorded without a device (rd__InitRecordOnly):
  *   - off (the default and after rd_SetDrawFilter(false, ...)): every draw
  *     is recorded;
  *   - on: a world draw (screen prims in RD_SPACE_WORLD, also through a

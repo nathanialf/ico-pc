@@ -1,4 +1,4 @@
-/* rd_debug_test.c: common/src/debug.c on the host (renderer wave 6, R6a).
+/* rd_debug_test.c: common/src/debug.c on the host.
  *
  * debug.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the window
  * build compiles them (ICO_HOST, ICO_RD), sifdev_host.c for host0:, the
@@ -607,7 +607,7 @@ static void checkOptionFile(const char *root)
     remove(path);
 }
 
-/* Package RSMALL: the developer text under the mirror mode.  The present
+/* The developer text under the mirror mode.  The present
  * flips the picture, so the target the overlay is drawn into (SCENE, or
  * DISPLAY after the reduction) must hold it flipped about its centre (pixel
  * p at w - 1 - p): glyphs, outlines and backdrops together, for an
@@ -802,7 +802,7 @@ int main(int argc, char **argv)
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
           rhi_vk_ValidationErrorCount());
     rd_Shutdown();
-    /* package RSMALL: the mirrored overlay again at scene scale 2 (Enhanced) */
+    /* the mirrored overlay again at scene scale 2 (Enhanced) */
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ENHANCED;
     st.outputWidth = 640;

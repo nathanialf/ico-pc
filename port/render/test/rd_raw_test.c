@@ -1,4 +1,4 @@
-/* rd_raw_test.c: the raw packet builders outside seki (renderer wave 5, R5c).
+/* rd_raw_test.c: the raw packet builders outside seki.
  *
  * darkVolume.c, particleEffect.c, lineManager.c and lightning.c with the
  * VU1 chain reader (MicroCode.c), Primitive.c, matrixDrive.c, the 2D layer
@@ -17,8 +17,8 @@
  *             table, c = 12 and -1 mode 0 (reported once)
  *   lines     Draw2DLine (flat, Z given or the vertices'), Draw2DLineG
  *             (Gouraud), the segment pair, DrawLine / DrawLineG through
- *             _getLine against a double-precision projection; PRIM.AA1
- *             (package AA1): 0x18A and 0x189 draw under rd_AA1(1), 0x142
+ *             _getLine against a double-precision projection; PRIM.AA1:
+ *             0x18A and 0x189 draw under rd_AA1(1), 0x142
  *             under 0, and the packet's end returns it to 0; the
  *             particles' PRIM 0xD6 (a sprite) records no RDC_AA1
  *   dark      SetupDarkVolume and DispGameOverEffect: packet 1 hand-decoded,
@@ -28,7 +28,7 @@
  *             FBMSK 0xFF000000 (FRAME PSMCT24) reading the block's RGB24
  *             view, the state left (ZBUF write on, TEST 0x50000); sonic's
  *             TEST 0x33001 (RGB_ONLY) sprite reading SCENE
- *   mask      FBMSK's extent (R-POST): a draw after the composite and
+ *   mask      FBMSK's extent: a draw after the composite and
  *             before the next FRAME write draws with alpha masked, one
  *             after the anti-alias pass's FRAME writes or after the next
  *             frame's head writes alpha (and a list-0 draw before the head
@@ -43,8 +43,8 @@
  *             after the composite against the GS LERP of the bilinear count
  *             (the GS order: TEXA expanded per texel, then the 4-bit
  *             bilinear, as rd's sprite_texa_ps), 1 LSB, SCENE's alpha
- *             untouched (PSMCT24); the order before package TEXA (TEXA
- *             after filtering) is measured and printed
+ *             untouched (PSMCT24); the sampler's order (TEXA after
+ *             filtering) is measured and printed
  *   mask      the five sprites of the mask check: RGB written, alpha
  *             written only by the two after a FRAME write
  *   lightning one bolt with c = 4 (LERP As) and one with c = 5 (Cs As + Cd)
@@ -843,7 +843,7 @@ static void checkLineRecording(void)
         } else {
             flat += (int)c->u[1] / 2;
         }
-        /* package AA1: 0x18A and 0x189 (Gouraud) set PRIM.AA1, 0x142 does not */
+        /* 0x18A and 0x189 (Gouraud) set PRIM.AA1, 0x142 does not */
         CHECK(s_ev[i].st.aa1 == s_ev[i].st.gouraud, "line AA1 %u with IIP %u", s_ev[i].st.aa1,
               s_ev[i].st.gouraud);
         aa1 += s_ev[i].st.aa1 ? (int)c->u[1] / 2 : 0;
@@ -1151,9 +1151,9 @@ static void darkPixel(void *user, int x, int y, double z, int tie)
 
 /* bilinear of the count at the composite's sample of pixel (x, y): texels
    x - 1 and x weighted 1/4 and 3/4 in each axis (UV 4 + 16 x in 12.4); the
-   GS (and rd since package TEXA) expands TEXA (AEM: A = 0x80 where RGB is
-   not 0) per texel and floors the weighted sum (expandFirst); the sampler
-   order rd had before filtered RGB, rounded, and expanded after */
+   GS (and rd) expands TEXA (AEM: A = 0x80 where RGB is not 0) per texel
+   and floors the weighted sum (expandFirst); the sampler's order filters
+   RGB, rounds, and expands after */
 static void compositeRef(int x, int y, int expandFirst, uint8_t out[4], const uint8_t *before)
 {
     static const int wq[2] = {4, 12}; /* 16ths */
@@ -1623,7 +1623,7 @@ static void gpuLines(void)
 /* ----------------------------------------------------------- main */
 /* ------------------------------------------------- FBMSK's extent
  * darkVolume.c's composite writes FRAME PSMCT24 (FBMSK 0xFF000000); on the
- * GS that mask holds until the next FRAME write.  R-POST: rd records FBMSK
+ * GS that mask holds until the next FRAME write.  rd records FBMSK
  * 0 with every FRAME write of its own (rd_FrameHead, the rd_Post passes),
  * and the dark volume leaves the mask in force.  Five 16 x 16 sprites into
  * SCENE (RGB and alpha their own):

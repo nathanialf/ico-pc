@@ -1,4 +1,4 @@
-/* rd_shadow_test.c: the shadow count on the stencil (renderer wave 4, R4b).
+/* rd_shadow_test.c: the shadow count on the stencil.
  *
  * Shadow.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c) and
  * Matrix.c, compiled as the window build has them (ICO_HOST, ICO_RD); the
@@ -11,8 +11,8 @@
  *      the register writes of their packets as rd state, the reset and the
  *      resolve, and the volume's eight triangles with the signs of the RGBAQ
  *      the packet carries (compared with the packet words Shadow.c wrote),
- *      each vertex tagged with its triangle's place (V3); at a work scale
- *      of 2 the blur levels keep 256, 128 and 64 texels (V3).
+ *      each vertex tagged with its triangle's place; at a work scale
+ *      of 2 the blur levels keep 256, 128 and 64 texels.
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   a  the resolved count against the wrapped colour sum the GS makes (4 n
  *      mod 256, A = 0x80 where non-zero), exact, for net counts 0..127,
@@ -26,7 +26,7 @@
  *   e  Shadow.c's own volume shadows the receiver where the caster's
  *      projection along the shadow direction lands (count +-1) and nowhere
  *      far from it.
- *   f  (package RSMALL) at scene scale 4 the first blur level's integral of a
+ *   f  at scene scale 4 the first blur level's integral of a
  *      rectangle moved by quarter pixels varies by under 0.5 % (the count is
  *      box-reduced to the GS size before level 1 samples it).
  * Every pipeline created is enumerated; no validation errors. */
@@ -942,7 +942,7 @@ static void checkPipelines(void)
     printf("  pipelines: %u created, %u reachable\n", rd__PipelineCount(), n);
 }
 
-/* V3: at a work scale of 2 (Enhanced, 896 lines and up) the blur levels
+/* At a work scale of 2 (Enhanced, 896 lines and up) the blur levels
  * keep the PS2 sizes, whose texels are the shadow's blur; WORK0 scales */
 static void checkLevelScale(void)
 {
@@ -968,7 +968,7 @@ static void checkLevelScale(void)
     g_rd.workScale = keep;
 }
 
-/* Package RSMALL: the count of a rectangle at scale 4 (Enhanced), after
+/* The count of a rectangle at scale 4 (Enhanced), after
  * the box reduction to the GS size, gives the first blur level the integral
  * the area gives however the rectangle sits against the GS pixel grid
  * (sub-pixel offsets of a quarter pixel); sampled with 2x2 taps it varied by

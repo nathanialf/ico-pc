@@ -1,4 +1,4 @@
-/* rd_mesh_test.c: the mesh path (renderer wave 3, R3ab).
+/* rd_mesh_test.c: the mesh path.
  *
  * Packet.c, RegistPacket.c, MicroCode.c, DisplayP2O.c and Primitive.c with
  * the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c) and Matrix.c,
@@ -18,7 +18,7 @@
  *   grid     a Mesh3D through prim_InitMesh3D / prim_UpdateMesh3D /
  *            prim_DispMesh3D (mesh code 20)
  *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
- *            batch keyed by its emitter (package I1)
+ *            batch keyed by its emitter
  *   stretch  the prelit model named a full-screen title model
  *            (title_logo.c ico_title_stretch_model, stubbed): reg_DispObj
  *            records its draw with the stretch byte (b[3] 1, 0 for any
@@ -31,10 +31,10 @@
  *            their entries (pac_HostStrips): the table, the I's through
  *            p2o_MakePacket, and with the disc image given as the argument
  *            their geometry (below, "strip order"); recording only
- *   model packs  (v0.4.1, M0) the mesh identity, replacements from a
+ *   model packs  the mesh identity, replacements from a
  *            tagless stream, one drawn in the prelit packet's place,
  *            rd_VuMeshRetire and the sweep; recording only
- *   pack hooks (v0.4.1, M4) the game's side of model packs on a pack in
+ *   pack hooks the game's side of model packs on a pack in
  *            rd_mesh_modelpack/ under the working folder: the dump at the
  *            draw (both parts, the cluster one with its skeleton), the
  *            dumps moved into replacements/ and the pack switched off and
@@ -395,7 +395,7 @@ static void checkParticleRecording(void)
               memEq(mem + 80, (const float *)(matrixptr + 0xC0), 4),
           "VuCB 16..23: SET_PARTICLE_MATRIX's two matrices");
     CHECK(fd.st[0].ds.abe == 1, "PRIM 0xD6: ABE");
-    /* package I1: keyed by its emitter (mc_HostParticleKey), so the
+    /* keyed by its emitter (mc_HostParticleKey), so the
      * presenter matches it whatever other emitters draw before it */
     const RdKey k = RD_KEY(s_part, 18, 0);
     CHECK(fd.cmd[0]->keyLo == (uint32_t)k && fd.cmd[0]->keyHi == (uint32_t)(k >> 32),
@@ -1065,7 +1065,7 @@ static void stripDiscChecks(const char *disc)
     ico_vfs_unmount(vfs);
 }
 
-/* ---------------------------------------- model packs (v0.4.1, M0)
+/* ---------------------------------------------------------- model packs
  *
  * The mesh identity (rd_VuMeshDescHash) on a synthetic prelit packet of
  * two batches (5 and 6 vertices, a strip restart at vertex 3 of the
@@ -1349,7 +1349,7 @@ static void replacementDrawChecks(void)
           "pac_HostMesh builds a retired mesh again with the same hash");
 }
 
-/* ------------------------------- model packs: the game's hooks (v0.4.1, M4)
+/* -------------------------------------------- model packs: the game's hooks
  *
  * Packet.c / RegistPacket.c with a real pack (modelpack.c) in a folder of
  * the working directory: what regHostMesh dumps when dumping is on, and

@@ -1,5 +1,4 @@
-/* rd_perf_test (package P1): the
- * renderer's CPU cost per replay and its steady state.
+/* rd_perf_test: the renderer's CPU cost per replay and its steady state.
  *
  * A synthetic frame shaped like a game frame: SCENE cleared with its depth,
  * textured UI sprites and world triangle strips, 96 static mesh draws over
@@ -14,18 +13,18 @@
  *             or static mesh is uploaded again, and the mean CPU time of a
  *             replay without its wait for the GPU (rhi_WaitFrame: on
  *             lavapipe that is the rasterisation) is under 20 ms; and
- *             (package PA) every replay, here and below, creates one
+ *             every replay, here and below, creates one
  *             uniform bind group per uniform layout (frame, draw, VU),
- *             however many draws; (package PB) a steady replay records
+ *             however many draws; a steady replay records
  *             exactly BARRIERS_REPLAY pipeline barriers (BARRIERS_RECORD
- *             below); (package PC) the screen-prim commands make
+ *             below); the screen-prim commands make
  *             SCREEN_CMDS draws one by one and SCREEN_DRAWS merged;
  *   record    200 frames recorded and closed as the game does (rd_EndFrame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
  *             destroyed either, and only the morphing mesh is uploaded.
  *
- * With a dump instead (the measurement tool of the package):
+ * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
  *                [--precreate] [--repeat N]
  * replays the dump N times (default 200) and prints the mean and the
@@ -262,13 +261,13 @@ typedef struct Sum {
     double total, wait, upload, walk, bind, submit, present, gpu;
     double minTotal;
     uint64_t created, destroyed, allocs, waitIdles, texUploads, meshUploads, meshBytes, draws;
-    /* package PA: bind groups created, per replay: all, and rd's uniform
+    /* bind groups created, per replay: all, and rd's uniform
      * and texture groups (the least and most of the uniform ones) */
     uint64_t groups, uniformGroups, textureGroups;
     uint32_t uniformMin, uniformMax;
-    /* package PB: pipeline barriers recorded per replay (least, most) */
+    /* pipeline barriers recorded per replay (least, most) */
     uint32_t barrierMin, barrierMax;
-    /* package PC: screen-prim draws per replay, one per command and merged
+    /* screen-prim draws per replay, one per command and merged
      * (least, most) */
     uint32_t screenCmdMin, screenCmdMax, screenDrawMin, screenDrawMax;
 } Sum;
@@ -378,7 +377,7 @@ static void samePixels(const char *what, const uint8_t *a, const uint8_t *b)
     }
 }
 
-/* Package PA: the uniform blocks take dynamic offsets, so every replay
+/* The uniform blocks take dynamic offsets, so every replay
  * creates one group per uniform layout it uses, whatever its draw count:
  * the frame (FrameCB), draw (DrawCB) and VU (DrawCB, VuCB, VuBoneCB over
  * the stream's buffer) layouts, all three in this frame, whose meshes live
@@ -396,20 +395,18 @@ static void checkGroups(const char *what, const Sum *s)
           (unsigned long long)s->uniformGroups, (unsigned long long)s->textureGroups);
 }
 
-/* Package PB: the pipeline barriers of a steady replay.  The Vulkan backend
- * orders same-state writes per resource: one list-opening barrier and one per pass or copy whose target
- * has a write pending, instead of a global barrier before every pass and
- * copy (ICO_VK_GLOBAL_BARRIERS=1, the _GLOBAL counts).  A backend
- * without counters (D3D12) reads 0 and is not checked.  v0.4.2 (N2): two
- * fewer in every mode (36, 39, 44, 48 before), the target clears now taken
- * as the next pass's load op instead of passes of their own.  The counts
- * are vkCmdPipelineBarrier calls: the image transitions recorded together
- * go out in one call, joined to the next pass's or copy's own barrier
- * (vk_cmd.c, vkr_FlushBarriers; 34 and 37 when each went out alone).  The
- * global mode records each transition in a call of its own, as before.
- * The shadow reset is the next pass's stencil clear, not a pass of its own,
- * so one fewer still; 18 and 21 are the steady-state counts this test
- * printed after those changes. */
+/* The pipeline barriers of a steady replay.  The Vulkan backend orders
+ * same-state writes per resource: one list-opening barrier and one per
+ * pass or copy whose target has a write pending, instead of a global
+ * barrier before every pass and copy (ICO_VK_GLOBAL_BARRIERS=1, the
+ * _GLOBAL counts).  A backend without counters (D3D12) reads 0 and is not
+ * checked.  A target clear is the next pass's load op and the shadow reset
+ * the next pass's stencil clear, not passes of their own.  The counts are
+ * vkCmdPipelineBarrier calls: the image transitions recorded together go
+ * out in one call, joined to the next pass's or copy's own barrier
+ * (vk_cmd.c, vkr_FlushBarriers); the global mode records each transition
+ * in a call of its own.  18 and 21 are the steady-state counts this test
+ * prints. */
 #define BARRIERS_REPLAY 18
 #define BARRIERS_RECORD 21
 #define BARRIERS_REPLAY_GLOBAL 42
@@ -428,7 +425,7 @@ static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint
           want);
 }
 
-/* Package PC: the screen-prim draws of a replay.  One per command: the 20
+/* The screen-prim draws of a replay.  One per command: the 20
  * world strips, the 60 UI sprites, the 4 DATE sprites and the reflection
  * sprite, 85.  Merged (rd_replay.c doScreen: consecutive commands under the
  * same state, pipeline, texture, scissor and DATE snapshot): the strips are
@@ -593,7 +590,7 @@ static int synthetic(void)
     checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
     checkScreen("record", &rest);
 
-    /* v0.4.2 (Android): the reachable set, as the window creates it at
+    /* the reachable set, as the window creates it at
        start-up (rd_PrecreatePipelines): every key makes a pipeline.
        rd_perf_mali runs this on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=
        mali), where a key past them would be refused by the limit's name */

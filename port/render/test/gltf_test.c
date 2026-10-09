@@ -1,4 +1,4 @@
-/* gltf_test.c: port/render/gltf.h (v0.4.1, M2), CPU only.
+/* gltf_test.c: port/render/gltf.h, CPU only.
  *
  * Write -> read bit-exact on every float for a 2-primitive static mesh and
  * a 3-bone skinned mesh; the written JSON's accessors, views, nodes and

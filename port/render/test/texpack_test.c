@@ -637,7 +637,7 @@ static void testPrecache(void)
     CHECK(s_tc.installed[22] != 0 && strcmp(s_tc.tag[22], "user-n5-big") == 0 &&
               s_tc.levels[22] == 2 && stats().cached == 5,
           "past the limit: loaded on request, with its chain, not cached");
-    /* package AN-D: low memory lets go of the cached images (no copy is
+    /* low memory lets go of the cached images (no copy is
        being made of any) and holds the cache at what is left */
     const uint64_t held = texpack_LowMemory();
     s = stats();

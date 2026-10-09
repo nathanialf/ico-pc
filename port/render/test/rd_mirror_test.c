@@ -1,4 +1,4 @@
-/* rd_mirror_test.c: the mirror mode (renderer wave 7, R7c).
+/* rd_mirror_test.c: the mirror mode.
  *
  * Without a device:
  *   flag      rd_SetMirror and RdSettings.mirror both turn rd_MirrorActive on
@@ -17,7 +17,7 @@
  *             WORLD sprite in the same frame is flipped
  *   scene     the same UI drawn into SCENE: SCENE with the mirror on is the
  *             exact flip of SCENE with it off
- *   reduce    R-POST: that UI plus glyph-like stems (one to three pixels
+ *   reduce    that UI plus glyph-like stems (one to three pixels
  *             wide, quarter-pixel edges, a 1:1 textured run) in SCENE,
  *             reduced to DISPLAY by rd_Post(RD_POST_REDUCTION) with a tint:
  *             DISPLAY with the mirror on is the exact flip of DISPLAY with

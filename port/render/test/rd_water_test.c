@@ -1,5 +1,4 @@
-/* rd_water_test.c: the surfaces that render to and sample from textures
- * (renderer wave 5, R5b).
+/* rd_water_test.c: the surfaces that render to and sample from textures.
  *
  * puddle.c, pool.c, queen_barrier_disp.c, waterDot.c and clothAnimation.c
  * with the mesh path (Packet.c, RegistPacket.c, MicroCode.c, DisplayP2O.c,

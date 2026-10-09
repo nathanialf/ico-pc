@@ -1,4 +1,4 @@
-/* modelpack_test.c: model packs (v0.4.1, M3; modelpack.h).
+/* modelpack_test.c: model packs (modelpack.h).
  *
  * Packet.c, RegistPacket.c, MicroCode.c, DisplayP2O.c and Primitive.c with
  * the 2D layer and Matrix.c, as rd_mesh_test.c has them (test/mesh_env.h

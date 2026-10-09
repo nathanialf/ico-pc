@@ -1,14 +1,14 @@
-/* sheet_ref.h: font_sheet_ps on the CPU (v0.4.2, package F-A), the oracle
- * of the sheet-text tests (rd_pixel_test testSheetText, the UI package's
- * menu comparison).  rd.h rd_CreateTextureSheet says what the shader draws;
+/* sheet_ref.h: font_sheet_ps on the CPU, the oracle of the sheet-text
+ * tests (rd_pixel_test testSheetText, port/ui/test's menu comparisons).
+ * rd.h rd_CreateTextureSheet says what the shader draws;
  * this is the same arithmetic with the same constants (shader_consts.h
  * ICO_SHEET_*, checked against sheet_text.hlsli at compile time).
  *
  * cov is a w x h coverage strip (0..255 a texel, rows packed), the
  * texture's bytes; texels outside it have coverage 0.  style may be null:
- * rd_CreateTextureSheet's default {1, 0, 255, 1}.  style->scale (F-G) is
+ * rd_CreateTextureSheet's default {1, 0, 255, 1}.  style->scale is
  * the strip texels a sheet texel: the Bayer threshold is the sheet texel's
- * (floor(x / scale), floor(y / scale)) and (v0.4.3, package RIM) the rim
+ * (floor(x / scale), floor(y / scale)) and the rim
  * is the 1x rim of the sheet texels' mean coverage, quantised per sheet
  * texel and magnified bilinearly, the letters the texel's own coverage on
  * top (rd.h, "Scaled strips").

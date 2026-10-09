@@ -1,4 +1,4 @@
-/* rd_layout_test.c: the layout frame (renderer wave 2, R2a).
+/* rd_layout_test.c: the layout frame.
  *
  * GifPacket.c, DisplayList.c and DmaPacket.c compiled as the window build
  * compiles them (ICO_HOST, ICO_RD) and fed the gif_* call sequence that
@@ -16,7 +16,7 @@
  *     texture-seam placeholder bound, TEX1 96 (linear/linear), FST UVs;
  *   - the glow sprite's gif_SetAlpha(1, 5, 0) is ALPHA 0x48;
  *   - nothing was written to a register the decoder does not decode;
- *   - (R7d) a row sprite under gif_HostDrawKey carries the key, blends half
+ *   - a row sprite under gif_HostDrawKey carries the key, blends half
  *     way between two frames (rd__InterpFrame), and the sprite after the
  *     key ends is unkeyed and the current frame's.
  * Then on a Vulkan device (exit 77 without one; lavapipe in the container),
@@ -115,7 +115,7 @@ void sceDmaSend(void *ch, void *addr)
     (void)addr;
 }
 
-/* --------------------------------------------- the layout calls (R2a) */
+/* ------------------------------------------------------ the layout calls */
 
 /* layout_texture.c's SprRect / SprCol are GifRect / GifColor */
 static const GifRect kPrimaryRect = {-160 * 16, -56 * 16, 320 * 16, 112 * 16};
@@ -198,7 +198,7 @@ static void displayTexture(void)
     s_ofs = ofs;
 }
 
-/* the head R2a's GsBase.c hook records, then the frame */
+/* the head GsBase.c's hook records, then the frame */
 static void recordFrame(void)
 {
     static const uint8_t black[4] = {0, 0, 0, 0x80};
@@ -323,7 +323,7 @@ static void checkPixels(void)
     free(px);
 }
 
-/* ------------------------------------------- R7d: keyed layout rows */
+/* ------------------------------------------------- keyed layout rows */
 
 /* display_texture's row sprite under gif_HostDrawKey (layout_texture.c's
    LT_HOST_KEY: the row's texProperty entry), sliding 32 px and fading out,

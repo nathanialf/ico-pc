@@ -274,8 +274,9 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
     }
 
     /* the ICO block after the headers (tex_makeTexturePacket): a CLUT
-       scroll (csSpd, csStp, csBgn != csEnd: tex_textureAnimation) rewrites the CLUT while the game runs, so the
-       names of the frames after the first cannot be made from the disc */
+       scroll (csSpd, csStp, csBgn != csEnd: tex_textureAnimation) rewrites
+       the CLUT while the game runs, so the names of the frames after the
+       first cannot be made from the disc */
     static const uint32_t kMipHeader[8] = {0, 0, 32, 32, 32, 48, 48, 48};
     const uint8_t *ext = pic + 0x30 + kMipHeader[levels];
     int scroll = ext + 0x24 <= image && memcmp(ext, "ICO", 4) == 0 && rd32(ext + 0x1C) != 0 &&

@@ -83,7 +83,7 @@ static uint32_t rimWeight(const RdSheetStyle *s)
     return s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64u;
 }
 
-/* v0.4.3 (package RIM): the coverage of sheet texel (x, y) of a strip at
+/* the coverage of sheet texel (x, y) of a strip at
    sc texels a sheet texel: the mean of its sc x sc texels, rounded */
 static uint32_t sheetCovAt(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
                            uint32_t sc)
@@ -120,7 +120,7 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
     static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1};
     const RdSheetStyle *s = style ? style : &kDefault;
     const uint32_t c = covAt(cov, w, h, x, y);
-    /* the strip texels a sheet texel (F-G): 0 is 1 */
+    /* the strip texels a sheet texel: 0 is 1 */
     const uint32_t sc = s->scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
                         : s->scale                     ? s->scale
                                                        : 1u;
@@ -140,7 +140,7 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
         *outAlpha = (uint8_t)((aq * 128u + 127u) / 255u);
         return;
     }
-    /* v0.4.3 (package RIM): the rim levels of the four sheet texels around
+    /* the rim levels of the four sheet texels around
        the texel's centre ((x + 0.5) / sc - 0.5, in 2sc-ths 2x + 1 - sc),
        each the rim alone quantised at its own threshold, blended
        bilinearly: on the 0..255 scale and in GS units */

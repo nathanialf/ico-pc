@@ -2,7 +2,7 @@
  *
  *   order    the same pixel drawn from list 5 (recorded first) and list 1:
  *            list 5 wins, it replays later
- *   railing  (package P8) the stair railings' state, TEST 0x5160D (ATE
+ *   railing  the stair railings' state, TEST 0x5160D (ATE
  *            GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL) and ALPHA 0x44 with ABE
  *            and Z write, on a lattice texture whose holes have alpha 0,
  *            then an opaque sprite drawn later behind it (smaller GS Z):
@@ -14,19 +14,19 @@
  *            covering no pixel centre, a one-pixel sprite; a textured
  *            sprite with the +8 UV nudge copies texels exactly; TEXA
  *            7F/81+AEM on an RGB24 source; rd_UVOffset
- *   texa     (package TEXA) an RGBA16 texture with A = 0, A = 1 and black
+ *   texa     an RGBA16 texture with A = 0, A = 1 and black
  *            texels under 7F/81+AEM, magnified 4x: bilinear is the GS
  *            order (TEXA per texel, then the 4-bit bilinear) with 0 LSB
  *            (sprite_texa_ps), nearest is the expanded texel with 0 LSB
  *            (sprite_ps); the planner's choice of entry
- *   font     (package R8) a 4x4 R8 coverage atlas (GS alpha units) drawn
+ *   font     a 4x4 R8 coverage atlas (GS alpha units) drawn
  *            through rd_ScreenPrims under port/ui/font.c's state (font_ps):
  *            1:1 at texel centres the stored alpha is (c * va) >> 7, and
  *            1:1 and magnified 8x with bilinear filtering every byte equals
  *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
- *   sheet    (v0.4.2, package F-A) a coverage strip (rd_CreateTextureSheet)
+ *   sheet    a coverage strip (rd_CreateTextureSheet)
  *            through font_sheet_ps against sprite_ps drawing the CPU
  *            reference's texels (sheet_ref.c sheetref_Texel) as RGBA8,
  *            magnified, the grey (TCC RGB) and the alpha (TCC RGBA) within 1,
@@ -38,31 +38,31 @@
  *            texel's); on the presentation overlay magnified 4x within 2;
  *            the frame dumped and loaded keeps the format and the style and
  *            replays to the same bytes; a strip rasterised at 2 and 4
- *            texels a sheet texel (F-G, style.scale) drawn 1:1 is
+ *            texels a sheet texel (style.scale) drawn 1:1 is
  *            sheetref_Texel's at that scale within 1, its rim reaches 6.5 S
  *            pixels across and 4.5 S down, its fill's grain is constant
  *            over each S x S cell, magnified it is within 1 of the
  *            reference, outside the letters it is the 1x strip of its sheet
- *            texels magnified S times within 1 (v0.4.3 RIM: the rim is the
- *            sheets' look magnified), and its dump keeps the scale
- *   stq      (package RSMALL) a textured triangle strip with Q 1 to 0.25
+ *            texels magnified S times within 1 (the rim is the sheets'
+ *            look magnified), and its dump keeps the scale
+ *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
  *   reduce   rd_Post(RD_POST_REDUCTION) on a synthetic 512x512 scene
  *            against a CPU reference of gsb_Reduction (the GS bilinear at
- *            the GS sample points, tint, border crop) exactly (R-POST: the
+ *            the GS sample points, tint, border crop) exactly (the
  *            reduction is drawn through the GS sprite model)
  *   keep     a keep frame (lists 11/12 only) draws DISPLAY back at 112/128
  *   exact    100 frames of RD_POST_COMPOSITE_FIX with exactInt into
  *            FEED128 equal the GS integer formula exactly every frame
  *   dump     a frame replayed, dumped, loaded and replayed again gives the
  *            same DISPLAY bytes; the dump is left for rd_replay_tool
- *   runs     (package PC) consecutive screen-prim commands under one state
+ *   runs     consecutive screen-prim commands under one state
  *            are one draw: six overlapping, differently coloured blended
  *            sprites drawn merged give the bytes of six sequential draws;
  *            two DATE sprites (the second retakes the snapshot), an AFAIL
  *            split and a scissor change each end a run (draws counted)
- *   aa1      PRIM.AA1 (package AA1) against a CPU coverage reference, in
+ *   aa1      PRIM.AA1 against a CPU coverage reference, in
  *            GS pixels at the integer sample points, As on the 0x80 scale
  *            (grey 0x80 LERPed over black writes As itself): a line with
  *            ABE 0 (the storm's) has coverage 1 - d on the two pixels per
@@ -70,7 +70,7 @@
  *            ABE 1 and alpha 0x80 has its interior at 0x80 and a one-pixel
  *            fringe outside its top edge at 1 - d; As = the 16-bit coverage
  *            >> 9; within 1 LSB of As
- *   nodual   (package AN-E) every RdBlend 0..11 x PABE x FBA x DATE off/on x
+ *   nodual   every RdBlend 0..11 x PABE x FBA x DATE off/on x
  *            the alpha test (off, or GREATER 0x60 with AFAIL KEEP, FB_ONLY,
  *            ZB_ONLY, RGB_ONLY) x colour mask F, 7, 8 x Z ALWAYS, GEQUAL x Z
  *            write, two overlapping gouraud quads in one command (alpha
@@ -81,17 +81,16 @@
  *            DISPLAY equal byte for byte; the pipeline cache is cleared
  *            after it (its states are outside the reachable set)
  *   pipes    every pipeline created is in the enumerated reachable set,
- *            whose screen and post part has fewer than 250 keys (with package
- *            TEXA's sprite_texa_ps twins) and holds the colour
- *            mask 7 keys of the 2D draws (font_ps and font_sheet_ps too)
- *            under the dark volume's FBMSK and the
- *            STQ keys of the lightning (all of it,
- *            with the VU programs of wave 3, fewer than RD_PIPELINE_REACHABLE_MAX)
- *            (package AN-E: the set with the two-pass fallback too, also
- *            under RD_PIPELINE_REACHABLE_MAX; a created key is in the set of
- *            its mode)
+ *            whose screen and post part has fewer than 250 keys (with the
+ *            sprite_texa_ps twins) and holds the colour mask 7 keys of the
+ *            2D draws (font_ps and font_sheet_ps too) under the dark
+ *            volume's FBMSK and the STQ keys of the lightning (all of it,
+ *            with the VU programs, fewer than RD_PIPELINE_REACHABLE_MAX)
+ *            (the set with the two-pass fallback too, also under
+ *            RD_PIPELINE_REACHABLE_MAX; a created key is in the set of its
+ *            mode)
  *
- *   aura     (package QUEEN) the mirage's mask as list 8 draws it into
+ *   aura     the mirage's mask as list 8 draws it into
  *            AURA_WORK with SCENE's depth (TEST 0x5346D, ALPHA 0x44, ABE, Z
  *            write): a mask quad behind a nearer opaque scene quad leaves
  *            AURA_WORK's alpha at the clear's 0, one at equal depth passes,
@@ -103,7 +102,7 @@
  *            fails, RGB the GS lerp within 2 (As at most
  *            0x80; reported above it); in Original 1x, Enhanced 4x
  *            and Enhanced 4x with the full-height scene
- *   vu paths (package S) one sloped prelit triangle off the 12.4 grid
+ *   vu paths one sloped prelit triangle off the 12.4 grid
  *            through each position path of vu_triangle_out (code 34, 32,
  *            36 uncut, 36 cut by the far plane), drawn with Z write and
  *            again over itself by each path with Z GEQUAL: no interior
@@ -264,7 +263,7 @@ static void testOrder(void)
 
 /* ---------------------------------------------------------------- railing */
 
-/* Package P8: issue 9's lattice.  On the GS a hole texel (alpha 0) fails
+/* Issue 9's lattice.  On the GS a hole texel (alpha 0) fails
  * the alpha test, FB_ONLY keeps its colour (blended to Cd by As = 0) and
  * drops its Z, so geometry drawn later behind the railing passes the Z
  * test there.  A Z write by the failing pass would leave the clear colour
@@ -338,7 +337,7 @@ static void testRailing(int fba)
     }
     const float zScale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
     const float railD = rd__GsDepth(RAIL_Z, zScale), wallD = rd__GsDepth(WALL_Z, zScale);
-    /* the depth grows with GS Z (gs_z_to_depth, package QUEEN) */
+    /* the depth grows with GS Z (gs_z_to_depth) */
     CHECK(wallD < railD, "railing: the wall is behind the railing (%g, %g)", (double)railD,
           (double)wallD);
     int holeBad = 0, wireBad = 0, holeZBad = 0, wireZBad = 0, holes = 0, wires = 0;
@@ -374,7 +373,7 @@ static void testRailing(int fba)
 
 /* ------------------------------------------------------------ DATE, flat */
 
-/* Wave 2: TEST.DATE against the R8 snapshot, and PRIM.IIP 0.  WORK0 gets
+/* TEST.DATE against the R8 snapshot, and PRIM.IIP 0.  WORK0 gets
  * alpha 0 on its left half and 0x80 on its right; a DATM=1 sprite over all
  * of it lands on the right half only, a DATM=0 one on the left only.  A flat
  * triangle takes its last vertex's colour. */
@@ -423,7 +422,7 @@ static void testDateFlat(void)
 
 /* ------------------------------------------------------- screen-prim runs */
 
-/* Package PC: consecutive screen-prim commands under the same state are one
+/* Consecutive screen-prim commands under the same state are one
  * draw (rd_replay.c doScreen).  The frame is replayed merged and with
  * merging off (rd__SetScreenMerge); WORK0 must be the same bytes, and the
  * draws are counted (RdPerfRecord screenCmds, screenDraws). */
@@ -749,14 +748,14 @@ static void texaTexel(const uint8_t *tex, int n, int x, int y, uint32_t mode, ui
     o[3] = gs_texa_alpha(t[0], t[1], t[2], t[3], mode, TEXFMT_RGBA16);
 }
 
-/* Package TEXA: an RGBA16 texture whose texels mix A = 0 and A = 1 and
+/* An RGBA16 texture whose texels mix A = 0 and A = 1 and
  * black ones (AEM), drawn magnified 4x (UV 8 + 4 x in 12.4, the 4-bit
  * fractions 0, 4, 8 and 12) under TEXA 7F/81+AEM, MODULATE by 0x80 with
  * TCC RGBA: every pixel is the GS order (TEXA per texel, then the 4-bit
  * bilinear, floor of the sum >> 8), 0 LSB, through sprite_texa_ps; the
  * same sprite with nearest filtering (UV 10 + 4 x, off the texel edges) is
  * the expanded texel under it, 0 LSB,
- * through sprite_ps as before.  The planner gives sprite_texa_ps only to a
+ * through sprite_ps.  The planner gives sprite_texa_ps only to a
  * 24- or 16-bit texture under AEM with a linear filter. */
 static void testTexa(void)
 {
@@ -1078,7 +1077,7 @@ static void testFont(const char *dir)
 }
 
 /* ------------------------------------------------------------ sheet text
- * v0.4.2 (package F-A): a coverage strip through font_sheet_ps against the
+ * A coverage strip through font_sheet_ps against the
  * CPU reference (sheet_ref.c).  The reference texels as an RGBA8 texture
  * drawn by sprite_ps are what the sheet texture drawn by font_sheet_ps must
  * give: the shader rebuilds the same texels and blends them as the sampler
@@ -1385,7 +1384,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
 
         testSheetOverlay(sheet, ref);
 
-        testSheetScaled(2, dir); /* v0.4.2 (F-G) */
+        testSheetScaled(2, dir);
         testSheetScaled(4, dir);
 
         /* the dump keeps the format and the style: load, replay, the same
@@ -1439,7 +1438,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
     rd_DestroyTexture(ref);
 }
 
-/* v0.4.2 (package F-G): a strip rasterised at S texels a sheet texel
+/* A strip rasterised at S texels a sheet texel
  * (style.scale S): sheetCov's shapes S times finer, plus a band of noise at
  * the strip's own texels (detail finer than a sheet texel), drawn 1:1 at
  * the texel centres in a 1x scene: every pixel is sheetref_Texel's at
@@ -1448,8 +1447,8 @@ static void testSheetText(const char *mode, int scale, const char *dir)
  * sheet texel of the magnified ramp) and 4.5 S down; the fill's grain is
  * the sheet texel's (with the plain style a flat partial patch is constant
  * over each S x S cell and changes between cells); magnified 1.5x the
- * strip is within 1 of sprite_ps on the reference's texels; v0.4.3
- * (package RIM): outside the letters the strip is the 1x strip of its
+ * strip is within 1 of sprite_ps on the reference's texels; outside the
+ * letters the strip is the 1x strip of its
  * sheet texels' mean coverage magnified S times, grey and alpha within 1
  * (the rim at any scale is the sheets' look magnified, never a finer
  * rendition of it); the frame dumped and loaded keeps the scale and
@@ -1460,7 +1459,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
 
 /* the coverage, and below it the rim (rd_SheetRim) */
 static uint8_t s_scaledCov[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX * 2];
-/* v0.4.3 (RIM): its sheet texels' coverage, the means of the S x S cells */
+/* its sheet texels' coverage, the means of the S x S cells */
 static uint8_t s_scaledCov1[SHEET_W * SHEET_H];
 
 /* floor(v / d) */
@@ -1536,7 +1535,7 @@ static void testSheetScaled(int S, const char *dir)
         }
     }
     RdTex ref = rd_CreateTexture((uint32_t)W, (uint32_t)H, rgba, RD_TEXA_80_80, "sheet S ref");
-    /* v0.4.3 (RIM): the same strip in the plain style (the fill's grain),
+    /* the same strip in the plain style (the fill's grain),
        and the 1x strip of its sheet texels' mean coverage */
     RdSheetStyle plain = kSheetPlain;
     plain.scale = (uint8_t)S;
@@ -1574,7 +1573,7 @@ static void testSheetScaled(int S, const char *dir)
         rd_Texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16, H * 16);
     }
-    /* RIM: right of the 1:1 strip the 1x strip magnified S times, RGB
+    /* right of the 1:1 strip the 1x strip magnified S times, RGB
        then RGBA, nudged by half a pixel (8 / S sixteenths of a sheet
        texel: a pixel samples at its corner) so pixel x samples sheet
        texel position (x + 0.5) / S, where the scaled strip's texel x
@@ -1647,7 +1646,7 @@ static void testSheetScaled(int S, const char *dir)
         }
         const int wRgb = sheetWorst(img, w, 1, 8, yM, 8 + mw + 8, yM, mw, mh, 0, 2);
         const int wA = sheetWorst(img, w, 1, 8, yMA, 8 + mw + 8, yMA, mw, mh, 3, 3);
-        /* RIM: outside the letters (the four sheet texels a pixel's rim
+        /* outside the letters (the four sheet texels a pixel's rim
            blends have no coverage) the scaled strip is the 1x strip
            magnified, grey and alpha */
         int out1x = 0, rim1x = 0, worst1x = 0;
@@ -1707,7 +1706,7 @@ static void testSheetScaled(int S, const char *dir)
     }
     if (img && dir) {
         char path[1024];
-        /* RIM: the scaled strip (left) and the 1x strip magnified */
+        /* the scaled strip (left) and the 1x strip magnified */
         const int ow = W * 4 * 2 + 16, oh = H * 4;
         uint8_t *png = calloc((size_t)ow * (size_t)oh, 4);
         if (png) {
@@ -2109,7 +2108,7 @@ static void testPresent(void)
     }
 }
 
-/* ------------------------------------------------- nodual (package AN-E) */
+/* ---------------------------------------------------------------- nodual */
 
 #define ND_CELL 8
 #define ND_AFAILS 5 /* ATE off, then AFAIL KEEP, FB_ONLY, ZB_ONLY, RGB_ONLY under ATE GREATER */
@@ -2314,7 +2313,7 @@ static void testNoDual(void)
 static void testPipelines(void)
 {
     static RdPipeKeyInt keys[512], keysNd[512];
-    /* package AN-E: both sets, with dual-source blending (keys) and with the
+    /* both sets, with dual-source blending (keys) and with the
      * two-pass fallback (keysNd); the created keys are in the set of the
      * mode the test runs in */
     const bool was = rd_NoDual();
@@ -2366,7 +2365,7 @@ static void testPipelines(void)
                     }
                     CHECK(prim || found,
                           "font draw under colour mask 7 (depth %d) is not enumerated", dz);
-                    /* v0.4.2 (F-A): the menus' sheet text in the same state */
+                    /* the menus' sheet text in the same state */
                     dp[i].key.fs = RD_FS_FONT_SHEET;
                     found = 0;
                     for (uint32_t j = 0; j < ns; j++) {
@@ -2411,7 +2410,7 @@ static void testPipelines(void)
 
 /* ------------------------------------------------------ the mirage mask
  *
- * Package QUEEN: the inputs of staticBlur.c's mirage (feedback mode 2) as
+ * The inputs of staticBlur.c's mirage (feedback mode 2) as
  * the F12 dumps of the Queen in the model viewer record them.  List 8 draws
  * the "shine" materials into AURA_WORK with SCENE's depth bound, TEST ATE
  * GREATER 0x46 AFAIL RGB_ONLY (or 0x60 FB_ONLY), Z GEQUAL, Z write, ALPHA
@@ -2750,7 +2749,7 @@ static void testAuraMaskAt(const char *mode, float scale, int fullHeight)
 }
 
 /* ------------------------------------------------------------ VU paths */
-/* (package S) one prelit triangle through the four position paths of
+/* One prelit triangle through the four position paths of
  * vu_triangle_out: code 34 (RD_VU_CLIP_NONE: vu_gs_position), code 32
  * (REGION: vu_vtx_position), code 36 uncut (SCISSOR: vu_vtx_position) and
  * code 36 with vertex 1 past the clip space's far plane (SCISSOR, cut:
@@ -3564,7 +3563,7 @@ int main(int argc, char **argv)
     }
     printf("rd_pixel_test: adapter %s%s\n", rhi_AdapterName(),
            rd_NoDual() ? " (two-pass blend fallback)" : "");
-    testNoDual(); /* package AN-E: first, it clears the pipeline cache */
+    testNoDual(); /* first: it clears the pipeline cache */
     testOrder();
     testRailing(0);
     testRailing(1); /* as the game's materials draw it */
@@ -3573,7 +3572,7 @@ int main(int argc, char **argv)
     testSprites();
     testTexa();
     testFont(dir);
-    testSheetText("Original 1x", 1, dir); /* v0.4.2 (F-A) */
+    testSheetText("Original 1x", 1, dir);
     testStq();
     testAa1();
     testReduction(dir);
@@ -3582,16 +3581,16 @@ int main(int argc, char **argv)
     testExact();
     testDump(dir);
     testPipelines();
-    testAuraMask("Original 1x"); /* package QUEEN */
+    testAuraMask("Original 1x");
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%u validation errors", verr);
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     rd_Shutdown();
     testAuraMaskAt("Enhanced 4x", 4.0f, 0);
     testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
-    testSheetTextAt("Enhanced 2x", 2); /* v0.4.2 (F-A) */
+    testSheetTextAt("Enhanced 2x", 2);
     testSheetTextAt("Enhanced 3x", 3);
-    testVuPathsAt("Original 1x", RD_PRESET_ORIGINAL, 1.0f, 1); /* package S */
+    testVuPathsAt("Original 1x", RD_PRESET_ORIGINAL, 1.0f, 1);
     testVuPathsAt("Original 4x", RD_PRESET_ORIGINAL, 4.0f, 1);
     testVuPathsAt("Enhanced 2.25x", RD_PRESET_ENHANCED, 2.25f, 1); /* issues 25, 26 */
     testVuPathsAt("Enhanced 4x", RD_PRESET_ENHANCED, 4.0f, 1);

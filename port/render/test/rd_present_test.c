@@ -1,4 +1,4 @@
-/* rd_present_test.c: the display options (renderer wave 7, R7a).
+/* rd_present_test.c: the display options.
  *
  * GsBase.c, GifPacket.c, DisplayList.c and DmaPacket.c compiled as the
  * window build compiles them (as rd_gsbase_test does), the display options
@@ -17,32 +17,32 @@
  *             box, the 4K cap, the work buffers' scale, full height
  *   boxes     rd__PresentBox at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
  *   coverage  rdtex_KeepAlphaCoverage keeps an alpha-tested texture's share;
- *             package P8: a lattice (wires alpha 0x80, black holes alpha 0)
+ *             a lattice (wires alpha 0x80, black holes alpha 0)
  *             keeps its wire colour down the alpha-weighted chain and no
  *             level's alpha rises above the base's
  * On a Vulkan device (77 without one):
  *   original  rd_pixel_test's rich frame (scene, additive quad, fade,
  *             letterbox, brightness, reduction) in the Original preset:
  *             DISPLAY, SCENE and the 960 x 720 present hash to the values
- *             the renderer before R7a produced (llvmpipe only: another
- *             driver's bilinear may differ; logged elsewhere), and the
+ *             the renderer gave before the display options (llvmpipe only:
+ *             another driver's bilinear may differ; logged elsewhere), and the
  *             Enhanced preset with every option neutral gives the same bytes
  *   scale2    the same frame at 2x: every 2 x 2 block of SCENE uniform and
  *             equal to the 1x pixel (nearest-only content, 0 LSB), DISPLAY's
  *             block averages within 2 LSB of 1x (bilinear reduction)
  *   wide169   16:9 at 1x: a UI sprite lands in the centred 4:3 box, the
  *             letterbox bars and a full-width fill stretch over the whole
- *             width (58 lines), the present fills a 16:9 output; W3: a UI
+ *             width (58 lines), the present fills a 16:9 output; a UI
  *             band one pixel short at each side (the menus' bars) stretches,
  *             one two pixels short stays boxed
  *   mips      the trilinear filter: a mipmapped game texture, minified,
- *             samples its average; package P8: a lattice drawn as the
+ *             samples its average; a lattice drawn as the
  *             railings are (TEST 0x5160D, ALPHA 0x44 with ABE) minified 8:1
  *             blends its wire colour over the background by the average
  *             alpha, unraised (no coverage kept for a texture blended by
  *             As), and an unblended alpha-tested texture gets its mips
  *             rebuilt with the coverage of its draw's AREF
- *   overlay   package OV, the presentation overlay (rd.h
+ *   overlay   the presentation overlay (rd.h
  *             rd_SetPresentOverlay): the rich frame presented at 960 x 720
  *             and 1920 x 1080 with a callback drawing two rectangles (one
  *             in the box, one in the pillarbox) and "H" through port/ui's
@@ -51,22 +51,22 @@
  *             nothing else changed against the present without the
  *             overlay; with the mirror on the all-UI box shows the same
  *             picture (within 1 LSB) and the overlay is not flipped;
- *             unregistered, the present hashes as before
- *   overlay under the CRT filter (package CRT2): Trinitron at 1536 x
+ *             unregistered, the present hashes as it did without one
+ *   overlay under the CRT filter: Trinitron at 1536 x
  *             1152 (k 3), the glow and curvature off: the callback sees the
  *             filter's grid (box 0, 0, 512 x 512, scale 512 / 448), and its
  *             red rectangle comes out of the filter as phosphors: in the
  *             rectangle each block's R column red, its G column dark
- *   overlay top  package AN-T, rd_SetPresentOverlayTop without the CRT
+ *   overlay top  rd_SetPresentOverlayTop without the CRT
  *             filter at 960 x 720: both layers get the output's ctx and
  *             draw, the top layer under the main one where they overlap;
  *             rd__OverlayRingBytes counts both layers' batches, and a
  *             registration and the present forget them
- *   capture   package PHOTO, rd_CapturePresented: the rich frame at 800 x
+ *   capture   rd_CapturePresented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
  *             present without the overlay, under the CRT filter too (the
- *             shown picture has the overlay inside it, package CRT2; the
+ *             shown picture has the overlay inside it; the
  *             capture takes a filter pass without it); rd_CaptureResult
  *             reports it once
  *   passes    the Enhanced preset at 960 x 720 with a deferred text item:
@@ -76,7 +76,7 @@
  *             with a capture armed the output's pass is ended for the copy
  *             and opened again (one more), and the shown picture is the
  *             same byte for byte; each layer's rectangle is drawn
- *   blank     package AN-C, rd_PresentBlank: at 800 x 600 with nothing
+ *   blank     rd_PresentBlank: at 800 x 600 with nothing
  *             registered the output is all 0 (no scene, though a frame was
  *             just recorded and presented); with an overlay drawing a red
  *             rectangle it is called once with the output's 4:3 box, the
@@ -96,7 +96,7 @@
 #include "vk/rhi_vk.h"
 
 #ifndef RD_PRESENT_BASELINE
-/* port/ui's font (package OV: the overlay check draws a glyph) */
+/* port/ui's font (the overlay check draws a glyph) */
 #include "font.h"
 #include "ui_internal.h"
 #endif
@@ -549,9 +549,9 @@ static void makeSmoothScene(void)
     }
 }
 
-/* package R1 (checkEffectsDepth): the scene's depth cleared to
+/* checkEffectsDepth: the scene's depth cleared to
  * DEPTH_CLEAR_Z instead of 0, and a sprite written at DEPTH_NEAR_Z over
- * DEPTH_RECT (GS pixels); 0 (every other cell): the frame as before */
+ * DEPTH_RECT (GS pixels); 0 (every other cell): the plain frame */
 static int s_depthFrame;
 
 #define DEPTH_CLEAR_Z 0x40000000u
@@ -646,7 +646,7 @@ static RdSettings originalSettings(void)
     RdSettings s;
     memset(&s, 0, sizeof(s));
     s.preset = RD_PRESET_ORIGINAL;
-    s.sceneScale = 1.0f; /* the host's Original rows (v0.3.1) */
+    s.sceneScale = 1.0f; /* the host's Original rows */
     s.outputWidth = 960;
     s.outputHeight = 720;
     s.aspect = 4.0f / 3.0f;
@@ -654,20 +654,21 @@ static RdSettings originalSettings(void)
     return s;
 }
 
-/* What the renderer before R7a produced for the rich frame on llvmpipe:
- * rd_replay_tool (pre-R7a build) on rd_pixel_test's dump of this frame,
- * DISPLAY, SCENE and --present 960x720.  R-POST moved the reduction onto the GS sprite model (the GS
- * integer bilinear instead of the hardware's, at most 1 LSB apart;
- * rd_pixel_test checks it exactly), so DISPLAY and the present are that
- * build's values for those two (0xde837c63a5e63c88, 0xbc970416f934e0c1
- * before) and SCENE is still the pre-R7a value. */
+/* What the renderer produced for the rich frame on llvmpipe before the
+ * display options: rd_replay_tool, built from that renderer, on
+ * rd_pixel_test's dump of this frame, DISPLAY, SCENE and --present 960x720.
+ * The reduction later moved onto the GS sprite model (the GS integer
+ * bilinear instead of the hardware's, at most 1 LSB apart; rd_pixel_test
+ * checks it exactly), so DISPLAY and the present are the values of a build
+ * with that change (0xde837c63a5e63c88, 0xbc970416f934e0c1 without it) and
+ * SCENE is still the value from before the display options. */
 #define GOLD_DISPLAY 0x212c1c733f4ba8a1ull
 #define GOLD_SCENE 0x8da6e2ca4577cdacull
 #define GOLD_PRESENT 0xedb088b74a237351ull
 #ifdef RD_PRESENT_BASELINE
 
-/* built against the pre-R7a renderer: prints the hashes of this file's own
- * frame (they must equal the constants above) */
+/* built against the renderer from before the display options: prints the
+ * hashes of this file's own frame (they must equal the constants above) */
 int main(void)
 {
     makeNoiseScene();
@@ -746,7 +747,7 @@ static void checkOptions(const char *dir)
           "options: every key read, Custom");
     CHECK(near(ico_video_wide_x(), 4.0f / 3.0f), "options: 16:9 widens by 4/3");
 
-    /* v0.4.3 (I17c): window_mode, and the older fullscreen bool when it is absent */
+    /* window_mode, and the older fullscreen bool when it is absent */
     writeFile(toml, "version = 1\n[video]\nwindow_mode = \"borderless\"\n");
     ico_config_reset(toml, ini);
     ico_video_reload();
@@ -1112,7 +1113,7 @@ static void checkScales(void)
               g_rd.wideX == 1.0f && g_rd.outAspect == 4.0f / 3.0f && !g_rd.fullHeight &&
               !g_rd.filterUpgrade,
           "scales: the Original rows are 1");
-    /* v0.3.1: the options apply under the Original flag too */
+    /* the options apply under the Original flag too */
     s.sceneScale = 3.0f;
     s.aspect = 16.0f / 9.0f;
     applyWith(&s);
@@ -1210,7 +1211,7 @@ static void checkBoxes(void)
     CHECK(b.w == 960 && b.h == 600 && b.y == 60, "boxes: 16:10 in 4:3");
     rd__PresentBox(960, 720, 4.0f / 3.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 960 && b.h == 720, "boxes: 4:3 in 4:3");
-    /* v0.4.2 N1: phone shapes (the movie's box is always 4:3) */
+    /* phone shapes (the movie's box is always 4:3) */
     rd__PresentBox(2400, 1080, 4.0f / 3.0f, &b);
     CHECK(b.x == 480 && b.y == 0 && b.w == 1440 && b.h == 1080,
           "boxes: 4:3 in a 2400x1080 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
@@ -1260,7 +1261,7 @@ static void checkCoverage(void)
     rdtex_KeepAlphaCoverage(img, 16, 16, chain, n, 64);
     CHECK(fnv(chain, sizeof(chain)) == h0, "coverage: an opaque texture is untouched");
 
-    /* package P8: the railing's lattice, wires (x % 4 == 0 or y % 4 == 0,
+    /* the railing's lattice, wires (x % 4 == 0 or y % 4 == 0,
      * 7/16 of the texels) colour (200, 180, 160) alpha 0x80, holes black
      * alpha 0.  Alpha-weighted, every level keeps the wire colour exactly
      * (the box filter darkened it to 7/16 of itself) and the mean alpha
@@ -1308,7 +1309,7 @@ static void checkCoverage(void)
 
 static bool s_llvmpipe;
 
-static uint64_t s_presentOriginal; /* checkOriginal's present hash (package OV) */
+static uint64_t s_presentOriginal; /* checkOriginal's present hash */
 
 static void checkOriginal(void)
 {
@@ -1458,7 +1459,7 @@ static void checkWide169(void)
     sprite(RD_SPACE_UI, 128 * 16, 100 * 16, 384 * 16, 200 * 16, white, 0, 0, 0, 0);
     /* a full-width fill the game tags WORLD: rows 300..310 */
     sprite(RD_SPACE_WORLD, 0, 300 * 16, 512 * 16, 310 * 16, red, 0, 0, 0, 0);
-    /* W3: the pause menu's band as the layout draws it, UI space, GS x
+    /* the pause menu's band as the layout draws it, UI space, GS x
      * 0.25 .. 511.44 (pixels 1..511): rows 320..330 */
     sprite(RD_SPACE_UI, 4, 320 * 16, 511 * 16 + 7, 330 * 16, red, 0, 0, 0, 0);
     /* a UI band two pixels short at the left (pixels 2..511): rows 340..350,
@@ -1587,7 +1588,7 @@ static void checkMips(void)
     rd_Shutdown();
 }
 
-/* Package P8: issue 9's far railings.  A 64 x 64 lattice (wires every 4th
+/* Issue 9's far railings.  A 64 x 64 lattice (wires every 4th
  * row and column, 7/16 of the texels, colour (200, 200, 200) alpha 0x80;
  * holes black alpha 0) drawn as the railings are, TEST 0x5160D and ALPHA
  * 0x44 with ABE, minified 8:1 under the trilinear filter: level 3 is
@@ -1684,7 +1685,7 @@ static void checkLatticeMips(int fba)
     rd_Shutdown();
 }
 
-/* ---------------------------------------------- the overlay (package OV) */
+/* ----------------------------------------------------------- the overlay */
 
 typedef struct OvTest {
     int rects;  /* draw the two rectangles and the glyph */
@@ -1851,7 +1852,7 @@ static void checkOverlayAt(uint32_t w, uint32_t h)
     if (ovPresent(w, h, 1, 0, plainM) && ovPresent(w, h, 1, 1, overM)) {
         CHECK(s_ovt.mirror, "overlay %ux%u: ctx.mirror with the mirror on", w, h);
         /* the rich frame is all UI: the replay's flip and the present's
-         * cancel, and since R-POST the reduction samples the mirror image
+         * cancel, and the reduction samples the mirror image
          * too, so the box shows the same picture, exactly where the box's
          * horizontal scale gives mirrored bilinear weights equal ones, else within 1 LSB */
         int maxd = 0;
@@ -1892,7 +1893,7 @@ static void checkOverlay(uint64_t presentNoOverlay)
 {
     checkOverlayAt(960, 720);
     checkOverlayAt(1920, 1080);
-    /* registered and unregistered again: the Original present as before */
+    /* registered and unregistered again: the Original present unchanged */
     rd_SetPresentOverlay(ovCallback, &s_ovt);
     rd_SetPresentOverlay(NULL, NULL);
     makeNoiseScene();
@@ -1907,7 +1908,7 @@ static void checkOverlay(uint64_t presentNoOverlay)
     }
 }
 
-/* package CRT2: the overlay drawn into the CRT filter's grid */
+/* the overlay drawn into the CRT filter's grid */
 static void checkOverlayCrt(void)
 {
     const uint32_t w = 1536, h = 1152;
@@ -1920,7 +1921,7 @@ static void checkOverlayCrt(void)
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
     s.crtMask = 1.0f; /* pure stripes: the R column passes red alone (in a highlight,
                        * the overlay's full red, the strength eases to half: the G
-                       * column leaks half the R column's red, package C1) */
+                       * column leaks half the R column's red) */
     if (!px || !rd_Init(512, 512, &s, NULL)) {
         free(px);
         return;
@@ -1963,7 +1964,7 @@ static void checkOverlayCrt(void)
     free(px);
 }
 
-/* package AN-T: the top layer (rd_SetPresentOverlayTop) without the CRT
+/* the top layer (rd_SetPresentOverlayTop) without the CRT
  * filter: one rectangle a layer, in output pixels from the box */
 typedef struct LayerTest {
     RdOverlayCtx ctx;
@@ -2061,7 +2062,7 @@ static void checkOverlayTop(void)
     free(px);
 }
 
-/* ------------------------------------------------- capture (package PHOTO) */
+/* --------------------------------------------------------------- capture */
 
 static uint32_t be32At(const uint8_t *p)
 {
@@ -2178,7 +2179,7 @@ static void checkCaptureAt(const char *dir, int crt)
             diffOver += memcmp(rgb + i * 3, over + i * 4, 3) != 0;
         }
         /* under the CRT filter too: the overlay is inside the filtered
-         * picture shown (package CRT2), and the capture takes a pass of the
+         * picture shown, and the capture takes a pass of the
          * filter without it */
         CHECK(diffPlain == 0 && diffOver > 0,
               "capture (crt %d): the present without the overlay (%zu pixels differ; %zu "
@@ -2334,7 +2335,7 @@ static void checkPresentPasses(const char *dir)
     free(cap);
 }
 
-/* ------------------------------------------------- effects depth (R1) */
+/* --------------------------------------------------------- effects depth */
 
 /* the depth frame presented at w x h with the effects depth on or off: the
  * present's bytes, its hash, SCENE's depth (sw x sh) and the effects depth
@@ -2417,7 +2418,7 @@ static void testSetEnv(const char *name, const char *value)
 #endif
 }
 
-/*   effects depth (package R1, RdSettings.effectsDepth): the rich frame with
+/*   effects depth (RdSettings.effectsDepth): the rich frame with
  *   its scene depth cleared to 0x40000000 and a sprite written at
  *   0xC0000000, presented at 1280 x 720 (4:3 box at x 160, w 960): the
  *   present, DISPLAY and SCENE hash the same with the pass on and off; the
@@ -2523,7 +2524,7 @@ static void checkEffectsDepth(void)
 
 /* ------------------------------------------------------------------ main */
 
-/* ------------------------------------------- the blank present (package AN-C) */
+/* ------------------------------------------------------ the blank present */
 
 static void blankCallback(const RdOverlayCtx *ctx, void *user)
 {
@@ -2640,7 +2641,7 @@ int main(int argc, char **argv)
     checkLatticeMips(1); /* as the game's materials draw it */
     checkOverlay(s_presentOriginal);
     checkOverlayCrt();
-    checkOverlayTop(); /* package AN-T */
+    checkOverlayTop();
     checkCapture(dir);
     checkPresentPasses(dir);
     checkEffectsDepth();
