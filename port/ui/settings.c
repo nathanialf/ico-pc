@@ -1037,7 +1037,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
     case UI_OPT_FRAMERATE:
-        /* the option as set, in force in both presets (F2) */
+        /* the option as set, in force in both presets */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
             return ui_str(UI_STR_VAL_ORIGINAL);
         }

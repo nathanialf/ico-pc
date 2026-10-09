@@ -1,7 +1,7 @@
 /*
  * port/game/test/hand_ik_test.c
  *
- * Issue 19 (v0.4.3 AN-19): on a phone Ico and Yorda walked hand in hand
+ * Issue 19: on a phone Ico and Yorda walked hand in hand
  * with both arms raised straight up.  A NaN reaching GetTableArcCos gives
  * exactly 90 degrees on arm64 (the index conversion saturates to 0) where
  * x86-64 reads 4 GB below the table.  This test runs the hand records the
@@ -43,7 +43,7 @@ static int failures;
 int debug_now_motion_viewer;
 const MotionDef motionKind[1];
 char motionIKEffKind[256];
-GObj *girlGObj; /* v0.4.3 AN-19d: the hand probe's "girl" field */
+GObj *girlGObj; /* main.h's Yorda object; nothing compiled in here reads it */
 
 void InitMatrixDrive(void);
 
@@ -244,7 +244,7 @@ static void testCases(void)
         CHECK(fabsf(d - sa) < 0.05f * sa, "out of reach: %g from Yorda, expected %g", (double)d,
               (double)sa);
     }
-    /* hands at one point (len 0): before AN-19 (ll + ss - tt) / (l2 * sa)
+    /* hands at one point (len 0): before the issue 19 fix (ll + ss - tt) / (l2 * sa)
        was 0 / 0, a NaN into GetTableArcCos (the fault count above) */
     testGrip("same point", 1.0f, 1.0f, a, a);
     /* a zero bone scale, apart and at one point (0 / 0 again) */

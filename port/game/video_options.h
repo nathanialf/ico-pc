@@ -1,16 +1,15 @@
 /*
  * port/game/video_options.h
  *
- * The display options (renderer wave 7, R7a, the
- * [video] keys): one place that holds them, so the
- * window (port/platform/window_host.c), the game's widescreen hook
+ * The display options (the [video] keys): one place that holds them, so
+ * the window (port/platform/window_host.c), the game's widescreen hook
  * (ico2/seki/src/GsBase.c gsbHostWideX, under ICO_HOST) and the Settings
- * menu (package 6C) read and write the same values.
+ * menu (port/ui/settings.c) read and write the same values.
  *
  *   [video] preset          "original"  "original" | "enhanced" | "custom"
  *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8) | "auto"
- *                                       ("auto" on Android, v0.4.2 N2: the window's
- *                                       size, lowered a step at a time (3x, 2x, 1x)
+ *                                       ("auto" on Android: the window's size,
+ *                                       lowered a step at a time (3x, 2x, 1x)
  *                                       while the presents take too long)
  *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "auto"
  *   [video] window_mode     "windowed"  "windowed" | "borderless" | "fullscreen"
@@ -23,8 +22,8 @@
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
- *                                       (60 on Android, v0.4.2 N2)
- *   [video] crt             false       the CRT filter (package CRT, any preset)
+ *                                       (60 on Android)
+ *   [video] crt             false       the CRT filter (any preset)
  *   [video] crt_mode        "consumer"  "scanlines" | "consumer" | "trinitron" | "pvm" |
  *                                       "shadow"
  *   [video] crt_strength    1.0         0..1
@@ -46,7 +45,7 @@
  *                           true        the game's own picture effects (issue 11): the
  *                                       light bloom and sun flare, the distance blur, the
  *                                       edge softening, the motion trail, the distance fog
- *   [video] effects_depth   true        config only, v0.4.1 (R1): the scene's depth beside
+ *   [video] effects_depth   true        config only: the scene's depth beside
  *                                       the picture for an effects program (ReShade's depth
  *                                       effects), drawn only when one is loaded; not with
  *                                       the CRT filter, never on Android
@@ -62,13 +61,12 @@
  * saved back as "original" when Original, else "enhanced" with the rows.
  * fullscreen, vsync, framerate, the CRT keys, the texture pack keys and the
  * effect keys are not part of it.
- * framerate (renderer wave 7, R7b): "original" presents once per
+ * framerate: "original" presents once per
  * simulation tick (each picture held for the tick's refreshes, as the PS2);
  * "uncapped" presents as often as the display allows (vsync) and
  * interpolates between the last two ticks; N does the same at most N times
- * a second.  Whatever the preset (package F2; before it the Original
- * preset was always "original"): each tick's picture is the options', the
- * in-between ones are blended from the last two.
+ * a second.  It applies whatever the preset: each tick's picture is the
+ * options', the in-between ones are blended from the last two.
  *
  * Read from config.toml through ico_config_get_* the first time any value
  * is asked for; ico_video_set changes them at run time (the window applies
@@ -93,7 +91,7 @@ enum {
     ICO_ASPECT_COUNT = 6
 };
 
-/* v0.4.3 (I17c): the window's mode.  FULLSCREEN is SDL's desktop fullscreen;
+/* The window's mode.  FULLSCREEN is SDL's desktop fullscreen;
    BORDERLESS a frameless window over its display. */
 enum {
     ICO_WINDOW_WINDOWED = 0,
@@ -112,8 +110,8 @@ typedef struct IcoVideoOptions {
     int vsync;      /* the swapchain waits for the vertical blank */
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
-    int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second (R7b) */
-    /* package CRT: applied whatever the preset */
+    int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second */
+    /* the CRT filter: applied whatever the preset */
     int crt;           /* the filter on */
     int crtMode;       /* ICO_CRT_* */
     float crtStrength; /* 0..1 */
@@ -138,7 +136,7 @@ typedef struct IcoVideoOptions {
     int effectMotionBlur;    /* the motion blur (staticBlur.c MotionBlur) */
     int effectFog;           /* the depth fog (ZFog.c fog_DrawFog) */
     int effectCinematicBars; /* the cutscene bars (GsBase.c, issue 27); 1 = on */
-    /* v0.4.1 (R1): an output-size depth buffer in the presentation for an
+    /* an output-size depth buffer in the presentation for an
        effects program (rd.h RdSettings.effectsDepth); 1 = on */
     int effectsDepth;
 } IcoVideoOptions;
@@ -158,7 +156,7 @@ enum {
     ICO_CRT_CONSUMER = 1,
     ICO_CRT_TRINITRON = 2,
     ICO_CRT_PVM = 3,
-    ICO_CRT_SHADOW = 4 /* package CRT2 */
+    ICO_CRT_SHADOW = 4
 };
 
 #define ICO_CRT_MODES 5
@@ -166,7 +164,7 @@ enum {
 /* IcoVideoOptions.framerate: these two, or 30..1000 (a cap) */
 enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
-/* IcoVideoOptions.resScale for resolution "auto" (v0.4.2 N2): the scene
+/* IcoVideoOptions.resScale for resolution "auto": the scene
    starts at the window's size and the window lowers it a step (3x, 2x, 1x)
    when the presents take too long (pace_policy.h pace_auto_resolution_step),
    never back up while the game runs */
@@ -178,7 +176,7 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
    on with precache and a 2048 MB budget, no dump, every effect on, the
    effects depth on. */
 void ico_video_defaults(IcoVideoOptions *o);
-/* v0.4.2 (N2): the defaults of either build, android 1 or 0 (tests check
+/* The defaults of either build, android 1 or 0 (tests check
    the Android ones on any computer) */
 void ico_video_defaults_for(IcoVideoOptions *o, int android);
 /* The framerate default: 60 on Android, else ICO_FRAMERATE_UNCAPPED */
@@ -224,13 +222,13 @@ int ico_video_effect_softening(void);
 int ico_video_effect_motion_blur(void);
 int ico_video_effect_fog(void);
 int ico_video_effect_cinematic_bars(void);
-/* [video] effects_depth (R1), 1 or 0 */
+/* [video] effects_depth, 1 or 0 */
 int ico_video_effects_depth(void);
 /* The model pack switches in force, 1 or 0: [video] model_pack and
    dump_models (the dump also needs Developer mode, which the caller checks). */
 int ico_video_model_pack(void);
 int ico_video_dump_models(void);
-/* The presentation rate in force (R7b): the framerate option, whatever
+/* The presentation rate in force: the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);
 /* 1 when the presenter blends pictures between the simulation's ticks (a
@@ -239,7 +237,7 @@ int ico_video_framerate(void);
    edges then, so a part that is just off screen at a tick is still recorded
    for the blended pictures that show it. */
 int ico_video_interpolate(void);
-/* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
+/* The game's camera-cut signal: the hard-cut sites (camera-root.c,
    StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window
    compares ico_video_cut_serial() once per vsync and marks the frame being
    recorded as a cut (rd_camera_cut), so the presenter does not blend across
@@ -260,7 +258,7 @@ const char *ico_video_aspect_name(int aspect);
 /* "windowed", "borderless", "fullscreen" (any case) */
 int ico_video_parse_window_mode(const char *s, int *mode);
 const char *ico_video_window_mode_name(int mode);
-/* package CRT: "scanlines", "consumer", "trinitron", "pvm", "shadow" */
+/* the CRT modes: "scanlines", "consumer", "trinitron", "pvm", "shadow" */
 int ico_video_parse_crt_mode(const char *s, int *mode);
 const char *ico_video_crt_mode_name(int mode);
 const char *ico_video_filter_name(int filter);

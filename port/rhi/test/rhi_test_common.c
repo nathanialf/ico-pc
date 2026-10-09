@@ -1,6 +1,6 @@
 /* rhi_test_common.c: headless rendering through port/rhi/rhi.h on any
- * backend, checked texel by texel (generalised from rhi_vk_test.c in
- * renderer wave 6, R6c; the expected values are unchanged).
+ * backend, checked texel by texel (generalised from rhi_vk_test.c; the
+ * expected values are the same as there).
  *
  * A 64x32 RGBA8 target with a D32F+S8 depth-stencil is split into eight
  * 16x16 cells, each exercising one feature the GS emulation needs:
@@ -8,7 +8,7 @@
  *   0  dual-source blend, SRC1_COLOR factors
  *   1  dual-source blend, SRC1_ALPHA factor with an RGB-only colour mask
  *      (0 and 1 keep the clear colour on a device without dual-source
- *      blending, package AN-E: rhi_vk_nodual fakes one)
+ *      blending: rhi_vk_nodual fakes one)
  *   2  stencil DECR_WRAP 0 -> 255, then EQUAL 255
  *   3  stencil REPLACE 255, INCR_WRAP -> 0, then EQUAL 0
  *   4  reversed-Z: depth cleared to 0, GEQUAL with writes
@@ -368,7 +368,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         rhi_test_log("FAIL limits\n");
         failures++;
     }
-    /* package AN-E: dual-source blending is optional; without it cells 0
+    /* dual-source blending is optional; without it cells 0
      * and 1 are not drawn and keep the clear colour */
     const bool dual = lim->dualSourceBlend;
     const char *fakeD24 = getenv("ICO_VK_FAKE_D24S8"); /* rhi_vk_d24s8 */
@@ -388,7 +388,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     const uint32_t ua = lim->uniformAlign;
 
     Ctx c;
-    /* package PA: TestCB is a dynamic uniform, one group bound at three
+    /* TestCB is a dynamic uniform, one group bound at three
      * offsets (the game's FrameCB and DrawCB are too) */
     static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC,
                                        (1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT)}};
@@ -757,7 +757,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
 
         static float dep[W * H];
         if (!lim->depthReadback) {
-            /* package AN-F: D24S8 gives no float depth; the readback must fail cleanly */
+            /* D24S8 gives no float depth; the readback must fail cleanly */
             if (rhi_readback_texture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch)) {
                 rhi_test_log("FAIL depth readback succeeded without depthReadback\n");
                 failures++;

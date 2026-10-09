@@ -128,7 +128,7 @@ static int cacheCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
-/* v0.4.2 (Android): under ICO_VK_FAKE_LIMITS=mali (ctest rhi_vk_mali) the
+/* Android: under ICO_VK_FAKE_LIMITS=mali (ctest rhi_vk_mali) the
  * device has a Mali-G68's limits, the cells above still draw within them,
  * and what goes past them is refused by the limit's name: a pipeline with
  * five descriptor sets, one with 17 sampled images in the fragment stage,

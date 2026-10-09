@@ -1,5 +1,5 @@
 /* rhi_vk_present_mode_test.c: the swapchain's present mode
- * (vk/vk_present_mode.c, v0.3.1) over the mode sets drivers offer.
+ * (vk/vk_present_mode.c) over the mode sets drivers offer.
  *
  * vkr_choose_present_mode is pure, so it is compiled into this test on its
  * own: no device, no surface, no Vulkan call.  The rules: with vsync,

@@ -1,7 +1,7 @@
 /*
  * port/game/title_logo.h
  *
- * The title's logo under the port's menus (package L1).  The logo (the
+ * The title's logo under the port's menus.  The logo (the
  * models I, C and O, their glows I_f, C_f and O_f and their shadows I_sd,
  * C_sd and O_sd, stage animations of the title's stage, stage 1) stays on
  * the stage behind the layouts; while a Settings or Extras page opened from

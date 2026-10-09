@@ -1,5 +1,5 @@
 /* title_logo_test.c: the title's logo under the port's menus
- * (port/game/title_logo.c, package L1).  CPU only; the game's globals and
+ * (port/game/title_logo.c).  CPU only; the game's globals and
  * the two menus' answers are stubs here (settings_test checks
  * ui_settings_covers_title itself).
  *

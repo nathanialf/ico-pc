@@ -5,16 +5,16 @@
  *
  * Each frame clears the backbuffer to a known colour, reads it back (the
  * swapchain format is BGRA8 or RGBA8; the test checks the channel order
- * rhi_swapchain_format reports) and presents.  Package AN-D: the surface
+ * rhi_swapchain_format reports) and presents.  Then the surface
  * released and made again (the Android background and foreground), a
  * present reporting suboptimal without a size change (a new swapchain on
  * the desktop, none on Android) and
  * one reporting the surface lost (a new surface and swapchain), through
- * the rhi_vk.h test hook.  v0.4.2 N1: rhi_swapchain_size reports the
+ * the rhi_vk.h test hook.  rhi_swapchain_size reports the
  * swapchain's size (none without a surface), and a window resized without
  * rhi_resize_swapchain, then a present forced out of date, leaves a
  * swapchain at the window's new size, which rhi_swapchain_size reports and
- * the next frame draws at.  v0.4.2 N4: with ICO_VK_POLL_SURFACE=1 (always
+ * the next frame draws at.  With ICO_VK_POLL_SURFACE=1 (always
  * on Android) a window resized without rhi_resize_swapchain and a present
  * that reports nothing (lavapipe's headless surface returns VK_SUCCESS)
  * leaves a swapchain at the window's new size, made by that present; the
@@ -108,7 +108,7 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
     return failures;
 }
 
-/* Package AN-D: the surface's lifecycle on the device made by run() */
+/* The surface's lifecycle on the device made by run() */
 static int lifecycle(SDL_Window *win, RhiFormat fmt)
 {
     int failures = 0;
@@ -188,7 +188,7 @@ static int lifecycle(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
-/* v0.4.2 N1: the window resized without rhi_resize_swapchain (an Android
+/* The window resized without rhi_resize_swapchain (an Android
  * rotation or unfold whose size event the renderer has not seen); a present
  * forced out of date rebuilds the swapchain at the window's size, and
  * rhi_swapchain_size reports it */
@@ -320,7 +320,7 @@ static int submitCounts(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
-/* v0.4.2 N4: the window resized without rhi_resize_swapchain and no present
+/* The window resized without rhi_resize_swapchain and no present
  * reporting it (an Android surface that changed size in the first seconds
  * while the driver returns VK_SUCCESS): with the poll on, the present
  * itself rebuilds the swapchain at the new size */

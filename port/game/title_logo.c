@@ -1,7 +1,7 @@
 /*
  * port/game/title_logo.c
  *
- * The title's logo under the port's menus (package L1): title_logo.h.
+ * The title's logo under the port's menus: title_logo.h.
  */
 #include <string.h>
 

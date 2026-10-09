@@ -21,7 +21,7 @@ static unsigned s_serial;
 
 static int s_winW, s_winH;
 
-/* v0.4.2 (N2): the Android rules (a 60 a second frame rate default, and
+/* The Android rules (a 60 a second frame rate default, and
    Enhanced's resolution "auto"); the build's, or a test's
    (ico_video_set_android) */
 #ifdef __ANDROID__
@@ -30,7 +30,7 @@ static int s_android = 1;
 static int s_android = 0;
 #endif
 
-/* v0.4.2 (N2): resolution "auto"'s scene scale in force (0: the window's) */
+/* Resolution "auto"'s scene scale in force (0: the window's) */
 static int s_autoScale;
 
 static void set_preset(IcoVideoOptions *o, int preset, int android);
@@ -57,7 +57,7 @@ int ico_video_auto_scale(void)
 
 int ico_video_default_framerate(int android)
 {
-    /* R7b: "uncapped"; v0.4.2 (N2): 60 on Android, where "uncapped" in
+    /* "uncapped"; 60 on Android, where "uncapped" in
        mailbox mode presented twice a display refresh (window_host.c pace),
        two full replays a refresh on the one thread that also runs the game */
     return android ? 60 : ICO_FRAMERATE_UNCAPPED;
@@ -266,7 +266,7 @@ int ico_video_preset(const IcoVideoOptions *o)
         !o->fullHeight) {
         return ICO_VIDEO_ORIGINAL;
     }
-    /* Enhanced's resolution: the window's, "auto" on Android (N2); on
+    /* Enhanced's resolution: the window's, "auto" on Android; on
        Android a saved Enhanced with "window" (from before v0.4.2) is still
        Enhanced, so the player keeps the preset's name (the shortcut writes
        "auto") */
@@ -395,7 +395,7 @@ static void read_config(void)
     int preset;
 
     ico_video_defaults(&o);
-    /* no key: Enhanced's resolution (N2: "auto" on Android) */
+    /* no key: Enhanced's resolution ("auto" on Android) */
     {
         const char *dres = s_android ? "auto" : "window";
 
@@ -412,7 +412,7 @@ static void read_config(void)
         fprintf(stderr, "video: texture_filter not understood; \"original\" used\n");
     }
     {
-        /* v0.4.3 (I17c): window_mode when it is a mode, else the older
+        /* window_mode when it is a mode, else the older
            fullscreen bool (a file from before the key, or an older build's
            save: it writes only the bool) */
         const char *wm = ico_config_get_string("video.window_mode", "");
@@ -428,7 +428,7 @@ static void read_config(void)
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
     {
-        /* no key: the default (N2: 60 on Android, else "uncapped") */
+        /* no key: the default (60 on Android, else "uncapped") */
         char dfr[16];
 
         ico_video_framerate_name(ico_video_default_framerate(s_android), dfr, sizeof(dfr));
@@ -438,7 +438,7 @@ static void read_config(void)
             fprintf(stderr, "video: framerate not understood; \"%s\" used\n", dfr);
         }
     }
-    /* package CRT */
+    /* the CRT filter */
     o.crt = ico_config_get_bool("video.crt", 0) != 0;
     if (ico_video_parse_crt_mode(ico_config_get_string("video.crt_mode", "consumer"), &o.crtMode) !=
         0) {
@@ -483,7 +483,7 @@ static void read_config(void)
     o.effectMotionBlur = ico_config_get_bool("video.effect_motion_blur", 1);
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     o.effectCinematicBars = ico_config_get_bool("video.effect_cinematic_bars", 1);
-    /* v0.4.1 (R1): the depth handed to an effects program (ReShade) */
+    /* the depth handed to an effects program (ReShade) */
     o.effectsDepth = ico_config_get_bool("video.effects_depth", 1);
     /* the preset is a shortcut over the four rows: only "enhanced" and
        "custom" take them as written; "original", no key, or anything else
@@ -724,7 +724,7 @@ int ico_video_framerate(void)
     IcoVideoOptions o;
 
     ico_video_get(&o);
-    /* whatever the preset (F2): the Original picture is the PS2's per tick,
+    /* whatever the preset: the Original picture is the PS2's per tick,
        and "uncapped" presents it between ticks too */
     return o.framerate;
 }
@@ -735,7 +735,7 @@ int ico_video_interpolate(void)
     return ico_video_framerate() != ICO_FRAMERATE_ORIGINAL;
 }
 
-/* R7b: the camera-cut signal (video_options.h) */
+/* the camera-cut signal (video_options.h) */
 static unsigned s_cutSerial;
 
 void ico_video_camera_cut(void)

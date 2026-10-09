@@ -8,7 +8,7 @@
  * the hole with zeroes, and zero is a valid Vulkan value for most enums).
  * Spot checks pin the mappings the GS emulation depends on.
  *
- * Package R0 (v0.4.1): rhi_backend.c's layer classifiers, compiled in with
+ * Also rhi_backend.c's layer classifiers, compiled in with
  * no backend linked: a table of instance layer names to the injector or
  * overlay each is (or none), and rhi_layer_switched_on over environments
  * given as tables. */
@@ -69,7 +69,7 @@ static int failures;
         }                                                                                          \
     } while (0)
 
-/* ------------------------------------------------ package R0's classifiers */
+/* ------------------------------------------------- the layer classifiers */
 static int strEq(const char *a, const char *b)
 {
     return (a == NULL && b == NULL) || (a != NULL && b != NULL && strcmp(a, b) == 0);
@@ -240,7 +240,7 @@ int main(void)
     CHECK_EQ(vkr_formatMap[RHI_FMT_D32F_S8].vk, VK_FORMAT_D32_SFLOAT_S8_UINT);
     CHECK_EQ(vkr_formatMap[RHI_FMT_D32F_S8].aspect,
              VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-    /* package AN-F: the accessor is the table for every format but D32F_S8,
+    /* the accessor is the table for every format but D32F_S8,
      * which takes the device's chosen depth-stencil format */
     for (unsigned i = 0; i < RHI_FMT_COUNT; i++) {
         const VkFormat want =
