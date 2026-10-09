@@ -61,11 +61,11 @@ int ico_title_logo_skip(const char *model)
 
 int ico_title_stretch_model(const char *model)
 {
-    /* the title stage's models built to cover the 4:3 screen */
+    /* the title stage's models built to cover the 4:3 screen; keyed on the
+       name alone: when a save loads, stage_no changes before the title's
+       last frames are drawn, and a title_back squeezed back to its 4:3 width
+       would uncover the sides of a wide picture for those frames */
     static const char *const kModels[] = {"title_back"};
-    if (stage_no != TITLE_STAGE) {
-        return 0;
-    }
     for (unsigned i = 0; i < sizeof(kModels) / sizeof(kModels[0]); i++) {
         if (strcmp(model, kModels[i]) == 0) {
             return 1;

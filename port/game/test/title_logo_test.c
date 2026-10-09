@@ -12,7 +12,7 @@
  *             neither) keep it hidden until the stage changes, and the next
  *             visit to the title starts with it shown
  *   pause     the pause menu's Settings, on any other stage, hides nothing
- *   stretch   title_back is the title's full-screen model on the title's
+ *   stretch   title_back is the title's full-screen model, by name alone, on any
  *             stage and on no other; no other model is, the logo's
  *             included
  */
@@ -154,10 +154,12 @@ static void testStretch(void)
     for (unsigned i = 0; i < sizeof(other) / sizeof(other[0]); i++) {
         CHECK(!ico_title_stretch_model(other[i]), "\"%s\" on the title: not stretched", other[i]);
     }
+    /* the name alone decides: the stage number has already moved on while the
+       title's last frames are drawn at the start of a load */
     static const int stages[] = {0, 2, 6, 26, 46};
     for (unsigned i = 0; i < sizeof(stages) / sizeof(stages[0]); i++) {
         stage_no = stages[i];
-        CHECK(!ico_title_stretch_model("title_back"), "title_back on stage %d: not stretched",
+        CHECK(ico_title_stretch_model("title_back"), "title_back on stage %d: still stretched",
               stages[i]);
     }
     /* the logo's hidden state does not enter into it */
