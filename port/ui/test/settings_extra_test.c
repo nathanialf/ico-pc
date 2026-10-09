@@ -435,18 +435,28 @@ static void testGpuDriver(void)
     frame(0);
     CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove hides again");
 
-    /* a phone without Adreno graphics: no Add, the rest stays */
+    /* a phone without Adreno graphics: no Add on the page, and the page's
+       link on the main menu is hidden */
     s_gpuAdreno = 0;
     frame(0);
     CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "non-Adreno: Add is hidden");
-    CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER), "non-Adreno: Driver stays");
     s_gpuBegins = 0;
     lt_ext_Layout(gpuL)->curItem = add;
     press(0x40);
     CHECK(s_gpuBegins == 0, "a hidden Add does nothing");
-    s_gpuAdreno = 1;
     press(0x10);
     CHECK(settle(mainL, 60), "Triangle: back to the menu");
+    for (int k = 0; k < 4; k++) {
+        frame(0); /* the main page refreshes */
+    }
+    CHECK(an22bLink() >= 0 && lt_ext_Prop(an22bLink())->defaultMask,
+          "non-Adreno: the Graphics driver link is hidden");
+    s_gpuAdreno = 1;
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(an22bLink() >= 0 && !lt_ext_Prop(an22bLink())->defaultMask,
+          "Adreno again: the link shows");
 
     /* the Main page with the link and Developer mode: thirteen rows fit */
     ico_opt_set_developer_mode(1);

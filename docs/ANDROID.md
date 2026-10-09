@@ -225,7 +225,8 @@ Options > Display > Aspect ratio decides how the picture fits:
 ## Using a different graphics driver
 
 This is optional, and it only works on phones with an Adreno graphics chip
-(most Qualcomm Snapdragon phones). If the game looks wrong or runs badly on
+(most Qualcomm Snapdragon phones); on other phones the Graphics driver
+page is not shown at all. If the game looks wrong or runs badly on
 your phone, a newer graphics driver from the community can sometimes fix
 it. If you do not have a problem, you can skip this.
 

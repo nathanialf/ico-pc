@@ -100,10 +100,10 @@ here show in photo mode at once.
 
 ## Graphics driver
 
-This page only exists on Android phones and tablets. It is for phones with
-an Adreno graphics chip (most Qualcomm Snapdragon phones), and it lets you
-try a different graphics driver instead of the one that came with the
-phone. [How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
+This page only exists on Android phones and tablets with an Adreno
+graphics chip (most Qualcomm Snapdragon phones); on other phones it is not
+shown. It lets you try a different graphics driver instead of the one that
+came with the phone. [How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
 
 - **Driver** picks the driver for the next start. **Built-in** is the
   phone's own driver. Every driver you added is listed after it. If the

@@ -1166,7 +1166,10 @@ static int isGameOpt(int opt)
 static int optShown(int opt, int link)
 {
     if (opt == UI_OPT_LINK && link == UI_PAGE_GPU_DRIVER) {
-        return s_gpuHostSet; /* v0.4.3 AN-22b: only where a host answers for the driver */
+        /* v0.4.3 AN-22b: only where a host answers for the driver, and only
+           on an Adreno chip, the one kind a driver package exists for
+           (user: the page is hidden elsewhere) */
+        return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
