@@ -188,7 +188,7 @@ typedef struct TexpackStats {
 
 void texpack_GetStats(TexpackStats *out);
 
-/* Package AN-D, the system low on memory (Android's LOW_MEMORY): the RAM
+/* The system low on memory (Android's LOW_MEMORY): the RAM
    cache lets go of every image no copy is being made of at the moment,
    and its limit drops to what it still holds, so the precache reads
    nothing more ahead and a loaded file is no longer kept (requests still

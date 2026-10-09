@@ -1,5 +1,4 @@
-/* rd_shadow.c: the shadow count of Shadow.c on the stencil (renderer wave 4,
- * package R4b).
+/* rd_shadow.c: the shadow count of Shadow.c on the stencil.
  *
  * What the PS2 does
  * -----------------
@@ -39,7 +38,7 @@
  * bilinear filter work on expanded texels as the GS filter does (chosen
  * when rd's shader still expanded TEXA after the sampler had filtered).
  *
- * Package V3: every vertex carries the place its triangle had in the call
+ * Every vertex carries the place its triangle had in the call
  * (rd__SetShadowTag, in rgba: the volume draw writes no colour), so
  * rd_interp.c can regroup Shadow.c's prisms after the split.
  *
@@ -101,7 +100,7 @@ void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, 
         uint32_t *at = sign[t] > 0 ? &a : &b;
         memcpy(&out[*at], &v[t * 3], 3 * sizeof(RdScreenVtx));
         for (uint32_t k = 0; k < 3; k++) {
-            rd__SetShadowTag(&out[*at + k], t + 1); /* V3: the call's order */
+            rd__SetShadowTag(&out[*at + k], t + 1); /* the call's order */
         }
         *at += 3;
     }

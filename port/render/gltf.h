@@ -1,7 +1,7 @@
 /*
  * port/render/gltf.h
  *
- * glTF 2.0 for model packs (v0.4.1, M2): the dump writes a model part as
+ * glTF 2.0 for model packs: the dump writes a model part as
  * <path>.gltf + <path>.bin, the pack reads a replacement back from a .gltf
  * (its buffers in files next to it) or a .glb.  CPU only, no device and no
  * game state; JSON through port/data/json.h.  Library ico_gltf (gltf.c on
@@ -9,7 +9,7 @@
  *
  * The in-memory form (GltfDoc) is neutral: one mesh, its primitives as
  * triangle lists, one optional skin, the mesh node's world transform and
- * the asset's extras as JSON text.  modelpack.c (M3) turns it into and
+ * the asset's extras as JSON text.  modelpack.c turns it into and
  * out of the game's batches.
  *
  * Matrices: 16 floats in glTF's order, column-major (element row r,

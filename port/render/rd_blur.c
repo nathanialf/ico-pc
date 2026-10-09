@@ -1,13 +1,13 @@
-/* rd_blur.c: staticBlur.c's sprites (renderer wave 5, R5a).
+/* rd_blur.c: staticBlur.c's sprites.
  *
  * staticBlur.c's host path (ICO_RD) records every register write of its
  * packets as rd state, in packet order, and every gif_SpriteSensitiveOrg
  * as rd_Post of the kind of the effect it belongs to
- * (RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR); since R-POST rd_post.c's
- * reduction records its two sprites here too (RD_POST_REDUCTION), so the
- * motion blur loop through DISPLAY is in this model end to end.  This file
- * records that sprite: an RdPostRec in an RDC_POST_STUB, with the corners, UVs, RGBAQ
- * and Z as the GS gets them, the TEX0 size and TFX.  rd_replay.c
+ * (RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR); rd_post.c's reduction
+ * records its two sprites here too (RD_POST_REDUCTION), so the motion blur
+ * loop through DISPLAY is in this model end to end.  This file records
+ * that sprite: an RdPostRec in an RDC_POST_STUB, with the corners, UVs,
+ * RGBAQ and Z as the GS gets them, the TEX0 size and TFX.  rd_replay.c
  * (doBlurSprite) draws it through fx_rect_vs / fx_sprite_ps with the state
  * block in force:
  *
@@ -33,8 +33,9 @@
  * The destination is read from a copy taken just before the sprite (the
  * target's snapshot), so overlapping sprites of one record cannot happen
  * (one sprite per record) and the result is the GS integer arithmetic of
- * every pass, feedback or not.  That is the exactness of blend_int's RGBA8_UINT ping-pong, without the UINT copies:
- * UNORM8 holds k / 255 exactly and a Load of it gives k back.
+ * every pass, feedback or not.  That is the exactness of blend_int's
+ * RGBA8_UINT ping-pong, without the UINT copies: UNORM8 holds k / 255
+ * exactly and a Load of it gives k back.
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -75,7 +76,7 @@ void rd__PostBlurVerts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx
         r.scalar[2] = 1.0f;
     }
     r.lines = p->lines & 3;
-    /* R-POST: the sprite as screen prims too (the reduction's, unmirrored
+    /* the sprite as screen prims too (the reduction's, unmirrored
      * then mirrored), for a replay at a scale (rd__BlurScreenFallback) */
     r.lutOffset = v ? rd__FramePayload(f, v, 4 * (uint32_t)sizeof(RdScreenVtx)) : ~0u;
     const uint32_t off = rd__FramePayload(f, &r, sizeof(r));
@@ -116,9 +117,9 @@ void rd__BlurUvRect(uint32_t kind, const RdPostRec *p, float uv[4])
  * aspect): fx_sprite_ps steps the GS position in 1/16 GS pixel and weighs in
  * 1/16 texel, which at a scale that is not an integer puts neighbouring
  * texels' samples up to a tenth of a texel off their place (edges of up to
- * 33 LSB jitter at 16:9 1080p).  There the reduction keeps the
- * hardware-filtered sprite it was before R-POST, continuous in position and
- * weight; Original, and Enhanced wherever both targets are at scale 1, take
+ * 33 LSB jitter at 16:9 1080p).  There the reduction draws a
+ * hardware-filtered sprite, continuous in position and weight;
+ * Original, and Enhanced wherever both targets are at scale 1, take
  * the exact model.  Returns the payload offset of the two vertices to draw
  * (the mirrored pair with the mirror on), or ~0u for the model. */
 uint32_t rd__BlurScreenFallback(uint32_t kind, const RdPostRec *p, const RdStateBlock *st)

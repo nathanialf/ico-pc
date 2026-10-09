@@ -1,12 +1,14 @@
-/* rd_mesh.h: the mesh draws on the VU1 program shaders (wave 3, R3c; the
- * interface). Implemented by package R3ab in rd_mesh.c (recording, the
+/* rd_mesh.h: the mesh draws on the VU1 program shaders (the interface).
+ * Implemented in rd_mesh.c (recording, the
  * mesh registry, the per-list VU state) and rd_replay.c (the draws), called
  * from Packet.c / RegistPacket.c / MicroCode.c (static and skinned objects)
  * and Primitive.c (grids and particles).
  *
  * The shaders are port/shaders/vu_*.hlsl; the binding and constant
- * layouts are in shader_consts.h (IcoVuCB, IcoVuBoneCB). CPU references (test oracle, software fallback):
- * port/render/vu1_ref/vu1_ref.h.
+ * layouts are in shader_consts.h (IcoVuCB, IcoVuBoneCB). The CPU references
+ * of the programs, the tests' oracles, are port/render/vu1_ref/vu1_ref.h;
+ * rd_mesh.c keeps its per-list VU images in a Vu1Ref and runs
+ * vu1ref_Particle for the end-tag check.
  *
  * Principle: the GPU gets what the VU got. The vertex stream is the VIF
  * UNPACK payload Packet.c / Primitive.c built (float4 quadwords, the GIF tag
@@ -16,17 +18,8 @@
  * semantic transforms, so no rounding or convention differs from the PS2's
  * before the shader runs.
  *
- * Relation to rd.h: RdProg, RdMesh, RdMaterial and RdKey are rd.h's. rd.h's
- * rd_CreateMesh / rd_DrawMesh / rd_DrawSkinned / rd_DrawGrid /
- * rd_DrawParticles (wave 0, recorded as stubs) carry semantic transforms
- * (RdXform, RdLights) that cannot hold what the programs read: RdXform has no
- * slot for the scissor clip matrix (+0x200 x model, VU memory 20..23), and
- * RdLights keeps three directions and colours where the programs multiply by
- * two full 4 x 4 matrices (the light matrix's fourth column meets n.w).
- * The functions below are the exact path; R3a/R3b call them from the seki
- * sites and either drop the five semantic declarations or keep them for an
- * Enhanced path (a note either way). No edit to rd.h is
- * needed for this header. */
+ * Relation to rd.h: RdProg, RdMesh, RdMaterial and RdKey are rd.h's. The
+ * functions below are the exact path. */
 #ifndef PORT_RENDER_RD_MESH_H
 #define PORT_RENDER_RD_MESH_H
 
@@ -83,7 +76,7 @@ enum {
     RD_VU_QW_PARTICLE = 2  /* (x, y, z, size), (u, v, grey, alpha); header: 6 qwords */
 };
 
-/* ---------------------------------------------------- static meshes (R3a)
+/* ---------------------------------------------------- static meshes
  *
  * One RdMesh per PObjPart (pac_MakePacket), built once at load from the
  * packet Packet.c already makes: every VIF UNPACK payload (GIF tag, then
@@ -122,7 +115,7 @@ typedef struct RdVuMeshDesc {
  * (REGION, NONE), or batch by batch, twice, under SCISSOR (see below). */
 RdMesh rd_CreateVuMesh(const RdVuMeshDesc *desc);
 
-/* Added in wave 3 (R3ab).  The morph path (reg_setShape) rewrites the
+/* The morph path (reg_setShape) rewrites the
  * vertex quadwords of a packet in place every tick; the PS2's DMA reads
  * them when the frame's lists are kicked, so every draw of the frame being
  * recorded sees the last write.  rd_UpdateVuMesh re-reads the stream (the
@@ -137,7 +130,7 @@ bool rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
 void rd_DestroyVuMesh(RdMesh m);
 bool rd_VuMeshValid(RdMesh m);
 
-/* ------------------------------------------- model packs (v0.4.1, M0)
+/* ------------------------------------------- model packs
  *
  * The identity of a mesh: XXH3-64 (xxh3_64, xxh3.h) over one byte stream,
  * little-endian:
@@ -228,7 +221,7 @@ typedef struct RdVuBlock {
     float mem[36][4];
 } RdVuBlock;
 
-/* Package S: the kind of the UV scroll in mem[2].xy (RdVuDraw.scroll,
+/* The kind of the UV scroll in mem[2].xy (RdVuDraw.scroll,
  * RdVuPayload.scroll).  Texture.c's sine scroll (ampU / ampV) is never
  * wrapped, so the interpolation blends it straight; a linear scroll's step
  * of more than 1 is its wrap by 2 (rd_interp.c lerpWrap).  The seki side
@@ -259,7 +252,7 @@ typedef struct RdVuDraw {
  * and dissolve passes: records an RDC_MESH (or RDC_SKINNED when bones is
  * set) with the payload below.
  *
- * Wave 3 (R3ab): materials may be NULL, and the seki sites pass NULL. The
+ * materials may be NULL, and the seki sites pass NULL. The
  * GS state a batch draws with (TEX0, TEX1, CLAMP, ALPHA, FBA, TEST, the
  * batch tag's PRIM.ABE/TME, ...) is the state block at the command's
  * position: the material, texture, dissolve, specular and reflection
@@ -267,10 +260,10 @@ typedef struct RdVuDraw {
  * the seki layer decodes them into ordinary rd state commands
  * (GifPacket.c's decoder, gif_HostWriteRegs) and they leak between draws
  * and lists exactly as on the GS. A non-NULL materials array is recorded
- * for a later Enhanced path and not applied. */
+ * but not applied. */
 void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
 
-/* ------------------------------------- VU1 state per list (wave 3, R3ab)
+/* ------------------------------------- VU1 state per list
  *
  * VU1 data memory and the VF registers the programs keep between MSCALs
  * persist across draws and across lists (one VU, the 13 lists kicked in
@@ -279,11 +272,12 @@ void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
  * current position of all 13 lists (and gsb_SetGsDefault at their heads),
  * and each object chains its own matrix and light packets into every list
  * it draws in. So rd keeps, at record time, one VU image per list, as the
- * chains recorded into that list so far leave it: the common block (rd_SetVuCommon updates all 13), the
- * SET_* uploads, the UV offset (SET_UVOFFSET, which persists until the next
- * one or the next common block), the resident program (mc_TransMicroCode)
- * and the BEGIN code of the last MSCALF. A draw takes its VuCB from the
- * image of its list at its position.
+ * chains recorded into that list so far leave it: the common block
+ * (rd_SetVuCommon updates all 13), the SET_* uploads, the UV offset
+ * (SET_UVOFFSET, which persists until the next one or the next common
+ * block), the resident program (mc_TransMicroCode) and the BEGIN code of
+ * the last MSCALF. A draw takes its VuCB from the image of its list at its
+ * position.
  *
  * rd_VuProgram  the resident program of the current list: 1 normal_c,
  *               2 normal_l, 3 cluster, 4 mesh, 5 particle (MicroCodeAddress)
@@ -302,7 +296,7 @@ int rd_VuCurrentProgram(void);
 void rd_VuCall(int code, const float (*top)[4], uint32_t qw);
 bool rd_VuDrawFromState(RdVuDraw *d);
 
-/* ------------------------------------------------- grids (R3b, mesh.vsm)
+/* ------------------------------------------------------ grids (mesh.vsm)
  * prim_DispMesh3D: the Mesh3D packet buffer of the frame (m->bufs[buffer_ID],
  * Mesh3D.qwc quadwords) copied into the frame as it is. Per strip it holds
  * the DpkHead's VIF qword, the GIF tag, the colour, stripLen vertices and
@@ -324,7 +318,7 @@ typedef struct RdVuGridDraw {
 
 void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key);
 
-/* ------------------------------------------ particles (R3b, particle.vsm)
+/* -------------------------------------------------- particles (particle.vsm)
  * prim_DispParticle: the PrimParticleObj of the frame from num on (count,
  * the two GIF tags, clip window, (size scale, du, dv), two qwords per
  * particle), 6 + 2 * count quadwords, copied. Drawn non-indexed, six
@@ -361,7 +355,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key);
  * merging batches with the same material and clip mode into one draw is
  * correct except under SCISSOR (the cut-first order is per batch). */
 typedef struct RdVuPayload {
-    uint8_t code, clip, prog, scroll; /* scroll: RD_VU_SCROLL_* (package S) */
+    uint8_t code, clip, prog, scroll; /* scroll: RD_VU_SCROLL_* */
     uint32_t firstBatch, batchCount;
     uint32_t boneQw;        /* RDC_SKINNED */
     uint32_t streamQw;      /* RDC_GRID / RDC_PARTICLES: the copied stream */

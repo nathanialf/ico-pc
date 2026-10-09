@@ -1,5 +1,4 @@
-/* rd_perf.c: the per-replay performance records of package P1 (rd.h
- * RdPerfRecord).
+/* rd_perf.c: the per-replay performance records (rd.h RdPerfRecord).
  *
  * A record is filled while a replay runs (rd_replay.c adds its CPU phases
  * and counts to g_rdPerf), closed by rd__PerfEnd with the RHI's counters
@@ -71,7 +70,7 @@ void rd__PerfInterpMs(double ms)
     s_interpMs += ms;
 }
 
-/* S2: the alpha of the present about to replay (rd_Present) */
+/* the alpha of the present about to replay (rd_Present) */
 static float s_alpha = -1.0f;
 
 static uint8_t s_first;

@@ -5,7 +5,8 @@
  * (the quadwords the VIF UNPACK put at TOP: a GIF tag, then the vertices)
  * and returns what the program writes to the GS: per vertex the PACKED ST,
  * RGBAQ and XYZ2 quadwords, with the ADC bit, in output order. They are test
- * oracles for port/shaders/vu_*.hlsl and the mesh path's software fallback.
+ * oracles for port/shaders/vu_*.hlsl; rd_mesh.c keeps its per-list VU
+ * images in a Vu1Ref and runs vu1ref_Particle for the end-tag check.
  * The code below cites the VU1 instruction lines it follows.
  *
  * Float semantics: plain C float arithmetic in the caller's rounding mode

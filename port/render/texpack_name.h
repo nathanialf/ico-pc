@@ -58,8 +58,9 @@
  *             entry i on memory entry rdtex_Csm1Index(i), as the CT32 path
  *             does; texpack_name_test runs both paths), then each entry
  *             expanded as the CT16 texel above with the TEXA in force (so
- *             a 16-bit CLUT's name depends on TEXA too, through the hash).  24-bit CLUTs are not GS CLUTs
- *             (TIM2 allows them): unsupported.  0 for direct formats.
+ *             a 16-bit CLUT's name depends on TEXA too, through the
+ *             hash).  24-bit CLUTs are not GS CLUTs (TIM2 allows them):
+ *             unsupported.  0 for direct formats.
  *   mips      PCSX2 with hardware mipmapping on hashes the bound level and
  *             the levels after it up to TEX1.MXL into one TEX0Hash; off
  *             (Sad Origami's PAL pack is made so) only the bound level, as
@@ -140,8 +141,6 @@ typedef struct TexpackName {
        plain name).  Region names are stored and counted, never matched. */
     uint32_t regionW, regionH;
 } TexpackName;
-
-/* xxh3_64: xxh3.h (included above) */
 
 /* The PSM's block size in texels (CT32/CT24, PSMT8H, PSMT4HL/HH 8x8,
    CT16/CT16S 16x8, PSMT8 16x16, PSMT4 32x16; GSLocalMemory.cpp m_psm[].bs).

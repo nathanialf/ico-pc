@@ -1,5 +1,4 @@
-/* rd_crt.c: the CRT filter (packages CRT and CRT2; the shader is
- * port/shaders/crt.hlsl).
+/* rd_crt.c: the CRT filter (the shader is port/shaders/crt.hlsl).
  *
  * A present-time pass in place of the line doubling and the box blit of
  * rd_present.c, and the last pass of the present: SCENE and DISPLAY are
@@ -254,12 +253,14 @@ float rd__CrtRowGain(int mask, float gap)
 }
 
 /* The highlights (crt.hlsl strengthAt, gainFadeOf, the glow, shoulderOf;
- * the same functions, for the tests' model of a flat field).  Before these
- * a white went out brighter than it came in: the gains lifted each lit
- * stripe past 1, so it clipped, the other two stripes rose to nearly the
- * same level and the mask vanished into a flat white; halation and bloom
- * were added on top (a white field some 15 to 27 % over); and the final
- * clamp, channel by channel, bleached light colours toward white. */
+ * the same functions, for the tests' model of a flat field).  The strength
+ * eases off as the brightest channel goes from 0.5 to 1; the gains fade
+ * before any lit stripe passes 1, so a white keeps its mask instead of
+ * clipping flat; halation and bloom are mixed in (they replace part of the
+ * colour, their weights scaled down when they sum past 1) rather than added
+ * on top; and the shoulder compresses the top smoothly, scaling all three
+ * channels by one factor, instead of clamping each channel, so light
+ * colours keep their hue. */
 static float smooth01(float e0, float e1, float x)
 {
     float t = (x - e0) / (e1 - e0);

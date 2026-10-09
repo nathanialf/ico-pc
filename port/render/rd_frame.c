@@ -1,4 +1,4 @@
-/* rd_frame.c: the frame lifecycle pieces of wave 2 (package R2c).
+/* rd_frame.c: the frame lifecycle pieces.
  *
  *   rd_FrameHead / rd_FrameFlip   the flip's draw environment and clear
  *                                 (rd.h)
@@ -115,7 +115,7 @@ float rd__TargetZScale(uint32_t id)
     case RD_ZFMT_16:
         return 1.0f / 65536.0f;
     default:
-        /* package QUEEN: PSMZ32 on a float depth buffer (D32S8) is z * 2^-33
+        /* PSMZ32 on a float depth buffer (D32S8) is z * 2^-33
            with the top values apart (gs_math.hlsli gs_z_to_depth); on any
            other (the Vulkan D24S8 fallback, rhi.h) z * 2^-32 */
         if (g_rd.hasDevice) {
@@ -156,7 +156,7 @@ void rd_SetVuCommon(const RdVuCommon *block)
         f->hasVu = 1;
     }
     if (block) {
-        /* wave 3 (R3ab): the packet is referenced from the current position
+        /* the packet is referenced from the current position
          * of all 13 lists, so every list's VU image takes it here */
         rd__VuLoadCommon(block);
     }
@@ -228,7 +228,7 @@ void rd__FillCameraCB(void *cbv, const RdCamera *cam)
     }
     memcpy(cb->view, cam->view, sizeof(cb->view));
     memcpy(cb->proj, cam->proj43, sizeof(cb->proj));
-    /* wave 7 (R7a), widescreen: the renderer's projection is proj43 with its
+    /* widescreen: the renderer's projection is proj43 with its
      * GS X compressed about the screen centre (2048) by (4/3) / aspect,
      * X' = f X + (1 - f) 2048 W: the visible screen then shows aspect /
      * (4/3) times as much horizontally (the cull side is GsBase.c
