@@ -29,12 +29,6 @@ option(ICO_RHI_D3D12 "Build the D3D12 backend of port/rhi (ico_rhi_d3d12; Window
 set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
     "Prefix of the dependencies tools/fetch_deps.sh installs")
 
-set(_ico_rhi_run_tests OFF)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
-    set(_ico_rhi_run_tests ON)
-endif()
-
 # --- The D3D12 plan test (CPU only, every target) ------------------------------
 # The D3D12 backend's header-free bookkeeping (d3d12/d3d12_plan.c): state
 # transitions, descriptor rings, layouts, the DXBC signature reader; with the
@@ -56,7 +50,7 @@ function(_ico_rhi_plan_test_shaders)
 endfunction()
 # port/shaders is configured after port/rhi
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_rhi_plan_test_shaders)
-if(_ico_rhi_run_tests)
+if(ICO_RUN_TESTS)
     add_test(NAME rhi_d3d12_plan COMMAND rhi_d3d12_plan_test)
 endif()
 
@@ -263,7 +257,7 @@ if(_ico_have_vk)
         endforeach()
     endif()
 
-    if(_ico_rhi_run_tests)
+    if(ICO_RUN_TESTS)
         add_test(NAME rhi_vk_enum COMMAND rhi_vk_enum_test)
         add_test(NAME rhi_vk_present_mode COMMAND rhi_vk_present_mode_test)
         add_test(NAME rhi_vk COMMAND rhi_vk_test)
@@ -342,7 +336,7 @@ if(_ico_have_d3d12)
                                    "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:rhi_d3d12_test>"
                            VERBATIM)
     endif()
-    if(_ico_rhi_run_tests)
+    if(ICO_RUN_TESTS)
         add_test(NAME rhi_d3d12 COMMAND rhi_d3d12_test --console)
         set_tests_properties(rhi_d3d12 PROPERTIES SKIP_RETURN_CODE 77)
     endif()

@@ -33,7 +33,7 @@ target_link_libraries(options_test PRIVATE ico_options)
 if(WIN32)
     target_link_libraries(options_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -50,7 +50,7 @@ endif()
 if(WIN32)
     target_link_libraries(photo_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -78,7 +78,7 @@ target_link_libraries(appearance_disc_test PRIVATE ico_options ico_port_data)
 if(WIN32)
     target_link_libraries(appearance_disc_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME appearance COMMAND appearance_test "${CMAKE_CURRENT_BINARY_DIR}")
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
@@ -103,7 +103,7 @@ target_link_libraries(kanban_boot_test PRIVATE ico_config)
 if(WIN32)
     target_link_libraries(kanban_boot_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -122,7 +122,7 @@ target_compile_definitions(hand_ik_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(hand_ik_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(hand_ik_test PRIVATE ico_math ico_platform)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME hand_ik COMMAND hand_ik_test)
 endif()
 
@@ -200,7 +200,7 @@ target_link_libraries(achievements_test PRIVATE ico_achievements)
 if(WIN32)
     target_link_libraries(achievements_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -245,7 +245,7 @@ target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 # port/ui's "settings.h" by -iquote, so <strings.h> stays the C library's
 target_compile_options(title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME title_logo COMMAND title_logo_test)
 endif()
 
@@ -253,8 +253,7 @@ endif()
 # Settings > Extras > Models to the first model and back to the title, its
 # log checked (test/model_viewer_headless.cmake). The
 # disc image is needed (skipped without it); one game run, so alone.
-if(TARGET ico_pc AND ICO_HEADLESS AND (NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-                                       OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME))
+if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
             "The PAL disc image (SCES-50760) the disc tests read, never committed")
@@ -286,6 +285,6 @@ target_link_libraries(credits_test PRIVATE ico_config ico_platform)
 if(WIN32)
     target_link_libraries(credits_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME credits COMMAND credits_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()

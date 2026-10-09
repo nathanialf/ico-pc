@@ -21,7 +21,7 @@ add_executable(null_devices_test test/null_devices_test.c ../platform/host_confi
 target_include_directories(null_devices_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(null_devices_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(null_devices_test PRIVATE ico_port_null)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME null_devices COMMAND null_devices_test)
 endif()
 
@@ -30,7 +30,7 @@ add_executable(pad_script_test ../input/test/pad_script_test.c ../platform/host_
 target_include_directories(pad_script_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(pad_script_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(pad_script_test PRIVATE ico_port_null)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME pad_script COMMAND pad_script_test)
 endif()
 
@@ -43,7 +43,7 @@ target_compile_options(host_config_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PO
 if(WIN32)
     target_link_libraries(host_config_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME host_config COMMAND host_config_test)
 endif()
 # the same with ICO_HOST_FORCE_PORTABLE, as the Android build compiles
@@ -60,7 +60,7 @@ set_target_properties(host_config_portable_test PROPERTIES
 if(WIN32)
     target_link_libraries(host_config_portable_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME host_config_portable COMMAND host_config_portable_test
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable")
 endif()

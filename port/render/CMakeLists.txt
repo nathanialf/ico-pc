@@ -69,8 +69,7 @@ add_executable(gltf_test test/gltf_test.c)
 target_compile_options(gltf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(gltf_test PRIVATE ico_gltf)
 
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
             "The PAL disc image (SCES-50760) the disc tests read, never committed")
@@ -550,8 +549,7 @@ if(WIN32 AND SDL3_FOUND)
     endforeach()
 endif()
 
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME rd_pixel COMMAND rd_pixel_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME rd_layout COMMAND rd_layout_test)

@@ -77,7 +77,7 @@ if(NOT WIN32)
     target_link_libraries(softdouble_test PRIVATE ico_math ico_dpbit_ref)
 endif()
 
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME math COMMAND math_test)
     add_test(NAME newlib COMMAND newlib_test)
     if(TARGET softdouble_test)

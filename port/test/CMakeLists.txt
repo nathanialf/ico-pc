@@ -15,8 +15,7 @@ target_compile_definitions(layout_asserts PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(layout_asserts PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     # the asserts hold at compile time; running the program only says so
     add_test(NAME layout_asserts COMMAND layout_asserts)
 endif()

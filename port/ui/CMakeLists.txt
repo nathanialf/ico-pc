@@ -140,8 +140,7 @@ endif()
 if(WIN32)
     target_link_libraries(settings_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME settings COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
@@ -166,8 +165,7 @@ endif()
 if(WIN32)
     target_link_libraries(settings_extra_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME settings_extra COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}")
     # the three settings executables write the same settings_test.toml in
     # this directory: never in parallel
@@ -202,8 +200,7 @@ target_link_libraries(gallery_test PRIVATE ico_port_data)
 if(NOT WIN32)
     target_link_libraries(gallery_test PRIVATE m)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
             "The PAL disc image (SCES-50760) the disc tests read, never committed")
@@ -251,8 +248,7 @@ target_compile_options(model_viewer_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 if(NOT WIN32)
     target_link_libraries(model_viewer_test PRIVATE m)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME model_viewer COMMAND model_viewer_test)
 endif()
 
@@ -266,8 +262,7 @@ target_compile_options(model_viewer_cam_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${I
 if(NOT WIN32)
     target_link_libraries(model_viewer_cam_test PRIVATE m)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
 endif()
 
@@ -277,8 +272,7 @@ endif()
 add_executable(ui_mouse_test test/ui_mouse_test.c ui_mouse_geom.c)
 target_include_directories(ui_mouse_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ui_mouse_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME ui_mouse COMMAND ui_mouse_test)
 endif()
 
@@ -406,8 +400,7 @@ if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
                                ${ICO_GAME_DEFINITIONS})
     target_link_libraries(font_coverage_test PRIVATE ico_port_data)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
             "The PAL disc image (SCES-50760) the disc tests read, never committed")
@@ -453,8 +446,7 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
     if(WIN32)
         target_link_libraries(menu_look_test PRIVATE comdlg32 user32)
     endif()
-    if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-       OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    if(ICO_RUN_TESTS)
         add_test(NAME menu_look COMMAND menu_look_test "${_ico_cov_elf}" "${ICO_DISC_IMAGE}"
                  "${CMAKE_CURRENT_BINARY_DIR}")
         set_tests_properties(menu_look PROPERTIES SKIP_RETURN_CODE 77)
@@ -481,8 +473,7 @@ if(WIN32 AND SDL3_FOUND)
                                "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:ui_test>"
                        VERBATIM)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME ui COMMAND ui_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"

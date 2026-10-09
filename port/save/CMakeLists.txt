@@ -47,7 +47,7 @@ target_link_libraries(save_test PRIVATE ico_save ico_save_import ico_platform ic
 if(WIN32)
     target_link_libraries(save_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     # the importer's command line, run by the test on its synthetic files
     add_test(NAME save COMMAND save_test $<TARGET_FILE:mc_import>)
 endif()

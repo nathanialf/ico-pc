@@ -244,11 +244,19 @@ endif()
 
 # --- Tests ------------------------------------------------------------------
 enable_testing()
+# ctest runs the test programs only where they can run: a native build, a
+# cross build with an emulator, or a cross build for the host's own system.
+# Every directory below reads this one switch.
+set(ICO_RUN_TESTS OFF)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
+   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    set(ICO_RUN_TESTS ON)
+endif()
 add_executable(fpenv_test port/platform/fpenv_test.c)
 target_compile_options(fpenv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_compile_definitions(fpenv_test PRIVATE ${ICO_FPTRAP_DEFINITION})
 target_link_libraries(fpenv_test PRIVATE ico_platform)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME fpenv COMMAND fpenv_test)
     if(ICO_FPTRAP)
         add_test(NAME fpenv_trap COMMAND fpenv_test trap)

@@ -6,12 +6,6 @@
 #   vu1            the VU1 program shaders against port/render/vu1_ref: hand
 #                  traces (CPU), probe and rendered strips (Vulkan; exit 77
 #                  without a device once the CPU part passes)
-set(_ico_shaders_run_tests OFF)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
-   OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
-    set(_ico_shaders_run_tests ON)
-endif()
-
 add_executable(shaders_table_test shaders_table_test.c)
 target_compile_options(shaders_table_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(shaders_table_test PRIVATE ico_shaders)
@@ -46,7 +40,7 @@ if(TARGET ico_rhi_vk)
     endif()
 endif()
 
-if(_ico_shaders_run_tests)
+if(ICO_RUN_TESTS)
     add_test(NAME shaders_table COMMAND shaders_table_test)
     add_test(NAME gs_math COMMAND gs_math_test)
     if(TARGET shaders_pixel_test)

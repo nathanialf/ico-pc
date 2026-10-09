@@ -73,7 +73,7 @@ target_compile_options(ico_json PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNI
 add_executable(json_test test/json_test.c)
 target_compile_options(json_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(json_test PRIVATE ico_json)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME json COMMAND json_test)
 endif()
 
@@ -113,7 +113,7 @@ add_executable(vfs_test test/vfs_test.c)
 target_include_directories(vfs_test PRIVATE "${ICO_COMPAT_DIR}")
 target_compile_options(vfs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(vfs_test PRIVATE ico_port_data)
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     # a synthetic image built by the test: runs everywhere, no disc needed
     add_test(NAME vfs_synthetic COMMAND vfs_test synth "${CMAKE_CURRENT_BINARY_DIR}")
     # the user's disc, read at run time; skipped (77) when it is absent
@@ -135,7 +135,7 @@ target_link_libraries(archive_test PRIVATE ico_port_data)
 if(WIN32)
     target_link_libraries(archive_test PRIVATE comdlg32 user32)
 endif()
-if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+if(ICO_RUN_TESTS)
     add_test(NAME archive_synthetic COMMAND archive_test synth "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"
                                        "${CMAKE_CURRENT_BINARY_DIR}")
@@ -229,7 +229,7 @@ if(ICO_DATA_PYTHON AND _ico_have_elftools EQUAL 0 AND EXISTS "${ICO_BASE_ELF}")
     target_compile_options(tables_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS})
     target_link_libraries(tables_test PRIVATE ico_port_data)
-    if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    if(ICO_RUN_TESTS)
         # through the VFS from the disc image when it is present, else the ELF
         add_test(NAME tables_loader
                  COMMAND tables_test "${ICO_BASE_ELF}" "${ICO_DISC_IMAGE}")
