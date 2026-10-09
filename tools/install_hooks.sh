@@ -30,8 +30,8 @@ cat > "$HOOK" <<'EOF'
 #        tools/gen_layout_asserts.py --check  the 64-bit layout asserts
 #        tools/gen_sources.py --check         cmake/IcoSources.cmake
 #      Regenerate with the same script without --check.
-#   4. tools/strip_host_gates.py --check   no ICO_HOST conditional in ico2/,
-#                                          sce/, vusrc/
+#   4. tools/strip_host_gates.py --check   no ICO_HOST conditional in ico2/
+#                                          or sce/
 #   5. tools/stack_overread_audit.py       no reliance on the PS2's stack
 #                                          layout in ico2/
 #   6. tools/check_call_types.py           calls and declarations agree with

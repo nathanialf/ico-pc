@@ -21,8 +21,8 @@ usage: check_const_writes.py --build DIR [--cc CLANG] [--jobs N] [--all]
   --build DIR  a configured build tree with compile_commands.json
   --cc CLANG   the clang to use (default: each entry's own compiler, which
                must be clang)
-  --all        every C unit of the tree, not only the game's (ico2/, sce/,
-               vusrc/ and the generated tables, port/data/gen/)
+  --all        every C unit of the tree, not only the game's (ico2/, sce/
+               and the generated tables, port/data/gen/)
 Prints `file:line: function writes const global` per finding and exits 1
 when there is one; exits 77 when the build's compiler is not clang and no
 --cc is given (the hazard and the IR are clang's).
@@ -37,7 +37,7 @@ import subprocess
 import sys
 import tempfile
 
-GAME_DIRS = ("/ico2/", "/sce/", "/vusrc/", "/port/data/gen/")
+GAME_DIRS = ("/ico2/", "/sce/", "/port/data/gen/")
 DROP_WITH_ARG = {"-o", "-MF", "-MT", "-MQ"}
 DROP = {"-c", "-MD", "-MMD", "-MP"}
 

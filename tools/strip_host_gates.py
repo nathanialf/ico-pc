@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Resolve every ICO_HOST preprocessor conditional in the game sources.
 
-ico2/, sce/ and vusrc/ are the port's own source (docs/BUILDING.md, "The game
+ico2/ and sce/ are the port's own source (docs/BUILDING.md, "The game
 code"): they are only ever compiled for the host, with ICO_HOST defined, so a
 conditional on ICO_HOST has one live arm. This tool keeps that arm and drops
 the other, together with the #if/#else/#endif lines themselves:
@@ -27,7 +27,7 @@ no conditional.
   tools/strip_host_gates.py            rewrite the files, print sites per file
   tools/strip_host_gates.py --dry-run  print sites per file, change nothing
   tools/strip_host_gates.py --check    exit 1 if any ICO_HOST conditional
-                                       remains under ico2/, sce/, vusrc/
+                                       remains under ico2/ or sce/
 """
 
 import argparse
@@ -36,7 +36,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DIRS = ("ico2", "sce", "vusrc")
+DIRS = ("ico2", "sce")
 EXTS = (".c", ".h", ".inc", ".s", ".S")
 
 DIRECTIVE = re.compile(rb"^[ \t]*#[ \t]*(if|ifdef|ifndef|elif|else|endif)\b(.*)$", re.S)
