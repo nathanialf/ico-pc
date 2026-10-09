@@ -1483,7 +1483,7 @@ static void decoderOnlyChecks(void)
            sawAA0, depth0, texAA0);
     CHECK(vram == 0x2800, "the block after tex_ResetVramPri is 0x2800 (0x%x)", vram);
     CHECK(sawAA0 && depth0 && texAA0,
-          "the decoder alone maps the block to AA0 without depth (the finding R5b fixes)");
+          "the decoder alone maps the block to AA0 without depth (what the named block fixes)");
     CHECK(rd_gs_named_block(0x2800, 256, 256).id == rd_target(RD_TARGET_AA0).id &&
               rd_gs_named_block(0x2800, 512, 256).id == rd_target(RD_TARGET_AA0).id &&
               rd_gs_named_block(0x2900, 256, 256).id == 0,

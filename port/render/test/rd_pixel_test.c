@@ -2391,8 +2391,7 @@ static void testPipelines(void)
             s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
         }
     }
-    CHECK(n < RD_PIPELINE_REACHABLE_MAX,
-          "reachable pipelines %u >= %d (wave 3: with the VU programs)", n,
+    CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u >= %d (with the VU programs)", n,
           RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < c; i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);

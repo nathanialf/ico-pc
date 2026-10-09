@@ -1326,7 +1326,7 @@ static void checkOriginal(void)
            (unsigned long long)h.present);
     if (s_llvmpipe) {
         CHECK(h.display == GOLD_DISPLAY && h.scene == GOLD_SCENE && h.present == GOLD_PRESENT,
-              "original: the bytes of the renderer before R7a (with R-POST's reduction)");
+              "original: the recorded bytes (the PS2 picture as before the display options)");
     } else {
         printf("  original: not llvmpipe, the recorded hashes are not compared\n");
     }
