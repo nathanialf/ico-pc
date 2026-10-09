@@ -599,12 +599,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         p->strides[d->vertexBindings[i].binding] = d->vertexBindings[i].stride;
         p->bindingMask |= 1u << d->vertexBindings[i].binding;
     }
-    if (g_dx.debugLayer && d->debugName) {
-        WCHAR w[128];
-        if (MultiByteToWideChar(CP_UTF8, 0, d->debugName, -1, w, 128)) {
-            ID3D12PipelineState_SetName(p->pso, w);
-        }
-    }
+    dx_SetName((ID3D12Object *)p->pso, d->debugName);
     dx_DrainMessages();
     out.id = id;
     return out;

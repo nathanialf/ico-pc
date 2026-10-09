@@ -72,7 +72,7 @@ void dx_DestroyGarbage(DxFrame *f)
     g_dx.overflowCount = keep;
 }
 
-static void dx_SetName(ID3D12Object *o, const char *name)
+void dx_SetName(ID3D12Object *o, const char *name)
 {
     if (!o || !name || !g_dx.debugLayer) {
         return;

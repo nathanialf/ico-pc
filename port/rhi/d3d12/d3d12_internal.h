@@ -265,6 +265,8 @@ DxTexture *dx_GetTexture(RhiTexture t);
 uint32_t dx_RegisterSwapchainBuffer(ID3D12Resource *res, uint32_t w, uint32_t h);
 void dx_ReleaseSwapchainBuffer(uint32_t id);
 void dx_ReleaseAllObjects(void);
+/* Names an object for the debug layer's messages (nothing without it). */
+void dx_SetName(ID3D12Object *o, const char *name);
 /* d3d12_pipeline.c */
 DxBindGroup *dx_GetBindGroup(uint32_t id);
 /* This frame's bind group of null views for a layout (for a root parameter
