@@ -285,19 +285,19 @@ float4 vu_homogeneous_position(float4 h)
     // precise: common.hlsli gs_xy_to_ndc
     precise float x = ((h.x - o.x * h.w) * g_target.z * 2.0 - h.w) * s.x + t.x * h.w;
     precise float y = (h.w - (h.y - o.y * h.w) * g_target.w * 2.0) * s.y + t.y * h.w;
-    precise float z = 16.0 * h.z * g_z.x; // gs_z_to_depth's z * scale (package QUEEN)
+    precise float z = 16.0 * h.z * g_z.x; // gs_z_to_depth's z * scale
     return float4(x, y, z, h.w);
 }
 
-// Package S2: the vertex the GS gets, from a loop's vertex: the ftoi4
-// value, on the 12.4 grid at every scale, so a VU vertex lands where the
+// The vertex the GS gets, from a loop's vertex: the ftoi4 value, on the
+// 12.4 grid at every scale, so a VU vertex lands where the
 // GIF and CPU paths put the same point (sprite.hlsl) and two meshes'
 // shared vertices the GS merges stay merged (issue 26: a crack between
 // them showed the clear, which the fog pass paints at full fog).  g_z.w set
 // (rd: only the developer switch ICO_RD_VU_OFFGRID, Enhanced on a target
-// finer than the GS grid) keeps X and Y the divided position unquantised,
-// as S2 first shipped: smoother slow motion (the grid is 1/16 GS pixel, a
-// quarter output pixel at 4x), but seams open.
+// finer than the GS grid) keeps X and Y the divided position unquantised:
+// smoother slow motion (the grid is 1/16 GS pixel, a quarter output pixel
+// at 4x), but seams open.
 float4 vu_vtx_position(VuVtx v)
 {
     if (g_z.w != 0.0) {
@@ -352,13 +352,13 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     o.col = float4(me.rgba);
     o.stq = me.stq;
     if (mode == VU_CLIP_NONE) {
-        // Package S: vu_vtx_position, as codes 32, 36 and 38 draw (on the
-        // 12.4 grid, or off it under ICO_RD_VU_OFFGRID): a triangle placed
-        // differently from the same triangle drawn by them sits up to 1/16
-        // GS pixel away, which on a sloped surface moves its depth one way
-        // over the whole triangle, so a coplanar pass by another program
-        // (the reflection pass, 38) failed or passed GEQUAL wholesale as the
-        // camera moved.  A vertex whose X or Y the 16-bit wrap would change
+        // vu_vtx_position, as codes 32, 36 and 38 draw (on the 12.4 grid,
+        // or off it under ICO_RD_VU_OFFGRID): a triangle placed differently
+        // from the same triangle drawn by them would sit up to 1/16 GS pixel
+        // away, which on a sloped surface moves its depth one way over the
+        // whole triangle, so a coplanar pass by another program (the
+        // reflection pass, 38) would fail or pass GEQUAL wholesale as the
+        // camera moves.  A vertex whose X or Y the 16-bit wrap would change
         // keeps the wrapped GS value.
         bool wrapped = any((me.gs.xy & 0xFFFF) != me.gs.xy);
         o.pos = wrapped ? vu_gs_position(me.gs, true) : vu_vtx_position(me);
@@ -516,7 +516,7 @@ DualOut vu_pixel(VuVSOut i)
     return gs_dual_out(col, g_mode.x, g_blend.y);
 }
 
-// vu_texa_ps (package TEXA): vu_pixel with TEXA per texel before the
+// vu_texa_ps: vu_pixel with TEXA per texel before the
 // bilinear weights (gs_texa_texture), for the draws rd_replay.c's VU
 // planner gives it (the texture formats and TEXA modes of sprite_texa_ps).
 DualOut vu_pixel_texa(VuVSOut i)

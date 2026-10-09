@@ -1,8 +1,8 @@
 // vu_prelit.hlsl: normal_c (RD_PROG_PRELIT), codes 32 (region test), 34
 // (no test) and 36 (scissor), chosen by vu_draw.z's clip mode. Vertex: pos,
 // ST, colour (pac_makeNormalStrip). Also vu_ps, the pixel shader of every
-// mesh program (vu_texa_ps for the 24- and 16-bit textures under AEM,
-// package TEXA), and vu_probe_ps, the tests' probe output.
+// mesh program (vu_texa_ps for the 24- and 16-bit textures under AEM), and
+// vu_probe_ps, the tests' probe output.
 #include "vu_common.hlsli"
 
 // One vertex of START_NORMAL_C / _NOCLIP (normal_c.vsm:135-269) or
