@@ -10,16 +10,7 @@
 #include <string.h>
 #include "input.h"
 #include "mouse_camera.h"
-
-static int failures;
-
-#define CHECK(c)                                                                                   \
-    do {                                                                                           \
-        if (!(c)) {                                                                                \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #c);                           \
-            failures++;                                                                            \
-        }                                                                                          \
-    } while (0)
+#include "../../test/ico_check.h"
 
 static int near_(float a, float b, float tol)
 {
@@ -168,10 +159,5 @@ int main(void)
     test_step_speeds();
     test_step_continuous();
     test_gating();
-    if (failures != 0) {
-        fprintf(stderr, "mouse_camera_test: %d failure(s)\n", failures);
-        return 1;
-    }
-    printf("mouse_camera_test: ok\n");
-    return 0;
+    return ico_check_summary("mouse_camera_test");
 }
