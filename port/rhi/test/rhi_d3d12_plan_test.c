@@ -237,8 +237,8 @@ static void testRings(void)
 static void testLayouts(void)
 {
     const uint32_t VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT;
-    /* rd_core's layouts (rd_replay.c rd__GpuInit; package PA: the uniforms
-     * are dynamic, root CBVs) */
+    /* rd_core's layouts (rd_replay.c rd__GpuInit; the uniforms are dynamic,
+     * root CBVs) */
     const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},

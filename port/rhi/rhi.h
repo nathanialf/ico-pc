@@ -229,7 +229,7 @@ typedef enum RhiBindType {
     RHI_BIND_STORAGE_BUFFER,
     RHI_BIND_SAMPLED_TEXTURE,
     RHI_BIND_SAMPLER,
-    /* Package PA: a uniform buffer whose offset is given when the group is
+    /* A uniform buffer whose offset is given when the group is
      * bound (rhi_CmdSetBindGroupOffsets), so one group serves every draw
      * that reads a block of the same size from the same buffer.  The
      * binding's offset is the base and its size (required) the range each
@@ -310,7 +310,7 @@ typedef enum RhiBlendFactor {
     /* dual-source: the fragment shader's second output carries the GS blend
      * factor (As/128 or FIX/128), so alpha above 1.0 and the 0x80 scale are
      * exact.  Only with RhiLimits.dualSourceBlend (Vulkan dualSrcBlend,
-     * optional since package AN-E; D3D12 always, Metal always). */
+     * optional; D3D12 always, Metal always). */
     RHI_BF_SRC1_COLOR,
     RHI_BF_ONE_MINUS_SRC1_COLOR,
     RHI_BF_SRC1_ALPHA,
@@ -401,7 +401,7 @@ typedef enum RhiLoadOp {
     RHI_LOAD_COUNT
 } RhiLoadOp;
 
-/* v0.4.2 (N2): what the pass leaves in an attachment.  STORE (0, the
+/* What the pass leaves in an attachment.  STORE (0, the
  * default of a zeroed desc) keeps what the pass drew; DONT_CARE lets a
  * tile-based GPU skip writing the attachment back to memory, for contents
  * nothing reads afterwards (the attachment is then undefined).  A
@@ -448,7 +448,7 @@ typedef struct RhiRect {
 typedef struct RhiLimits {
     uint32_t uniformAlign; /* 256 on D3D12, usually 64..256 on Vulkan: rd_core aligns to this */
     uint32_t maxTextureSize;
-    bool dualSourceBlend; /* package AN-E: optional; without it rd blends in two passes */
+    bool dualSourceBlend; /* optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
     /* true when rhi_ReadbackTexture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
      * returns float depth (frame dumps and tests that compare depth); false
@@ -461,17 +461,17 @@ typedef struct RhiLimits {
      * rounds the pitch up to copyRowPitchAlign from width * texel size. */
     uint32_t copyRowPitchAlign;
     uint32_t copyOffsetAlign;
-    /* Renderer wave 7 (R7a), the Enhanced texture filter.  textureMips:
+    /* The Enhanced texture filter.  textureMips:
      * rhi_CreateTexture honours mipLevels > 1 for sampled RGBA8 textures,
      * rhi_CmdCopyBufferToTexture's mip selects the level (each level is
      * uploaded by the caller; no GPU mip generation), and samplers apply
      * RhiSamplerDesc.mip, minLod/maxLod and maxAnisotropy.  maxAnisotropy:
      * the largest RhiSamplerDesc.maxAnisotropy that takes effect (1 = none).
-     * Both backends set them (D3D12 since R6c); a backend that leaves
+     * Both backends set them; a backend that leaves
      * textureMips false gets one level per texture from rd. */
     bool textureMips;
     float maxAnisotropy;
-    /* Package PA.  uniformAlign above is also the alignment of every
+    /* Dynamic uniforms.  uniformAlign above is also the alignment of every
      * dynamic offset (Vulkan minUniformBufferOffsetAlignment, D3D12 256).
      * maxDynamicUniforms: the RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots one
      * pipeline's layouts may have together (Vulkan
@@ -521,7 +521,7 @@ bool rhi_DeviceLost(void);
 /* Swapchain.  Resize is driven by rd_present from SDL window events. */
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync);
 RhiFormat rhi_SwapchainFormat(void);
-/* The current swapchain's image size (v0.4.2 N1).  The backend rebuilds
+/* The current swapchain's image size.  The backend rebuilds
  * the swapchain on its own (Vulkan: out of date, an Android suboptimal
  * present at another size, a lost or recreated surface; D3D12: a present
  * after the window's size changed) at the surface's size, which can differ
@@ -530,7 +530,7 @@ RhiFormat rhi_SwapchainFormat(void);
  * *w, *h left alone) when there is no swapchain (headless, the surface
  * released). */
 bool rhi_SwapchainSize(uint32_t *w, uint32_t *h);
-/* v0.4.2 N4: the surface-size poll runs at every present again for a
+/* The surface-size poll runs at every present again for a
  * while (as it does after a swapchain is made); called at the first game
  * frame, which can come long after the window opened (the disc import and
  * extraction on a first start), so the opening scene is covered.  A no-op
@@ -542,7 +542,7 @@ RhiTexture rhi_AcquireBackbuffer(void);
 /* The backbuffer's state after acquire is UNDEFINED; before rhi_Present the
  * caller moves it to RHI_STATE_PRESENT. */
 void rhi_Present(void);
-/* The window's surface (package AN-D, the Android lifecycle).
+/* The window's surface (the Android lifecycle).
  * rhi_ReleaseSurface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to
  * the background, where the system takes the window away.  Until a surface
@@ -613,7 +613,7 @@ void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *vp);
 void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *rect);
 void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p);
 void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
-/* Package PA: binds a group with the offsets of its layout's
+/* Binds a group with the offsets of its layout's
  * RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots, one per such slot in ascending slot
  * order (count = their number), each a multiple of rhi_Limits()->uniformAlign
  * and added to the binding's base offset.  rhi_CmdSetBindGroup is this call
@@ -636,7 +636,7 @@ void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIn
 /* Buffer copy: fills RHI_MEM_DEVICE buffers (meshes) from an UPLOAD buffer.
  * Buffers have no rhi_CmdBarrier; the backend makes the written range
  * visible to every later vertex, index, uniform, storage and copy read, and
- * (package P1) the copy waits for every earlier read or copy of the
+ * the copy waits for every earlier read or copy of the
  * destination recorded or submitted before it, so a range the GPU may still
  * be reading for an earlier frame can be rewritten by a copy. */
 void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
@@ -663,7 +663,7 @@ void rhi_CmdEndLabel(RhiCommandList cl);
 bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
                          uint32_t *outRowPitch);
 
-/* ------------------------------------------------- performance (package P1)
+/* ------------------------------------------------------------- performance
  * Counters since rhi_Init, cumulative: the caller takes differences
  * (rd_core's per-replay records).  The
  * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
@@ -681,7 +681,7 @@ typedef struct RhiStats {
     uint64_t fenceWaits, fenceWaitNs;
     uint64_t waitIdles, readbacks;
     uint64_t acquireNs, presentNs;
-    /* gauges, not counts (v0.4.2): the device memory objects alive now and
+    /* gauges, not counts: the device memory objects alive now and
      * the most ever, their bytes, and the device's limit on their number
      * (Vulkan; 0 elsewhere) */
     uint64_t memoryLive, memoryPeak, memoryLiveBytes, memoryPeakBytes, memoryLimit;
@@ -704,7 +704,7 @@ bool rhi_TimestampsSupported(void);
 void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
 
-/* Swapchain present mode with vsync on (package P1): mailbox (the newest
+/* Swapchain present mode with vsync on: mailbox (the newest
  * finished image is shown at each refresh, older ones are dropped; a present
  * never waits for the display) instead of FIFO.  Applies from the next
  * swapchain (re)creation; rhi_PresentMailbox says whether the current one
@@ -712,7 +712,7 @@ uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
  * not offered (false). */
 void rhi_PreferMailbox(bool on);
 bool rhi_PresentMailbox(void);
-/* The current swapchain's present mode, for the logs (v0.3.1): "fifo",
+/* The current swapchain's present mode, for the logs: "fifo",
  * "mailbox", "immediate", "fifo_relaxed", or "none" without a swapchain.
  * Vulkan: the mode it was created with (vsync off prefers immediate, then
  * mailbox).  D3D12: "fifo" with vsync; without, "immediate" when DXGI
@@ -720,7 +720,7 @@ bool rhi_PresentMailbox(void);
  * replaces the queued frame). */
 const char *rhi_PresentModeName(void);
 
-/* A pipeline cache kept across runs (FIXB): Vulkan loads a VkPipelineCache
+/* A pipeline cache kept across runs: Vulkan loads a VkPipelineCache
  * blob from path at rhi_Init when its header names this device (header
  * version one, vendor and device ids, pipelineCacheUUID; anything else
  * starts empty), creates every pipeline through it, and writes it back at
@@ -730,7 +730,7 @@ const char *rhi_PresentModeName(void);
  * copied.  D3D12: ignored (its drivers keep their own shader cache). */
 void rhi_SetPipelineCachePath(const char *path);
 
-/* v0.4.3 (AN-22a): the Vulkan loader rhi_Init uses, as its
+/* The Vulkan loader rhi_Init uses, as its
  * vkGetInstanceProcAddr: a graphics driver the Android build loaded itself
  * (port/platform/android/gpu_driver_android.c, through libadrenotools).
  * NULL (the default) uses SDL's, the system's loader.  Call before rhi_Init;
@@ -738,7 +738,7 @@ void rhi_SetPipelineCachePath(const char *path);
  * through the same function (vk_surface_android.c).  D3D12: ignored. */
 void rhi_SetVulkanLoader(void *getInstanceProcAddr);
 
-/* Programs that hook the graphics API from outside (v0.4.1, package R0),
+/* Programs that hook the graphics API from outside,
  * for the logs and the pacing; valid after rhi_Init, NULL when none (and
  * before rhi_Init).
  * rhi_InjectorName: an effects program, "ReShade" or "vkBasalt".  Vulkan:
@@ -770,7 +770,7 @@ const char *rhi_OverlayFromLayerName(const char *layer);
 bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name));
 
 /* --------------------------------------------------- backend selection
- * (renderer wave 6, R6c.)  rhi_CreateBackend selects the backend every call
+ * rhi_CreateBackend selects the backend every call
  * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the
  * default.  The default is the ICO_RHI_BACKEND environment variable when it
  * names a linked backend, else the first linked one (Vulkan when it is

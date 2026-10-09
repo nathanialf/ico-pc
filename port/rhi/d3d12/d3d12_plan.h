@@ -111,7 +111,7 @@ void d3dp_RingReset(D3dpRing *r);
 #define D3DP_MAX_SLOTS 16
 #define D3DP_TABLE_RESOURCE 0
 #define D3DP_TABLE_SAMPLER 1
-/* package PA: an RHI_BIND_UNIFORM_BUFFER_DYNAMIC slot is no table entry but
+/* An RHI_BIND_UNIFORM_BUFFER_DYNAMIC slot is no table entry but
  * a root CBV of its own; its offset is its rank among the layout's dynamic
  * slots in ascending slot order (the order of the bind-time offsets) */
 #define D3DP_ROOT_CBV 2
@@ -130,7 +130,7 @@ typedef struct D3dpLayout {
     uint8_t offset[D3DP_MAX_SLOTS]; /* descriptor offset in that table */
     uint32_t resCount, smpCount;
     uint32_t resStages, smpStages;            /* union of the slots' (1 << RhiShaderStage) */
-    uint32_t dynCount;                        /* root CBVs (package PA) */
+    uint32_t dynCount;                        /* root CBVs */
     uint8_t dynSlot[RHI_MAX_DYNAMIC_OFFSETS]; /* the layout entry of root CBV k */
 } D3dpLayout;
 
@@ -144,7 +144,7 @@ int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type);
 
 /* Root parameters of a pipeline whose group g uses layouts[g] (NULL for a
  * group without a layout): in group order, the resource table, the sampler
- * table and the root CBVs (package PA) of each group that has them.
+ * table and the root CBVs of each group that has them.
  * resParam[g] / smpParam[g] receive the parameter index or -1, dynParam[g]
  * the index of the group's first root CBV (the others follow it in
  * D3dpLayout.dynSlot order) or -1.  Returns the parameter count, at most

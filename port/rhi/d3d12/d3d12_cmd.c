@@ -1,6 +1,5 @@
 /* d3d12_cmd.c: frames, command lists, submission, barriers, render passes,
- * draws, copies and readback for the D3D12 backend.  README.md, "Frame
- * lifecycle" and "States and barriers", describes the synchronisation. */
+ * draws, copies and readback for the D3D12 backend. */
 #include "d3d12_internal.h"
 #include <stdlib.h>
 #include <string.h>
@@ -293,8 +292,8 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         dsv = dx_Cpu(g_dx.dsvCpu, g_dx.dsvInc,
                      (pass->depth.readOnlyDepth ? dt->dsvRO : dt->dsv) - 1u);
     }
-    /* v0.4.2 (N2): the store ops (RhiStoreOp) are ignored: without render
-     * pass objects the contents are always kept, which DONT_CARE allows */
+    /* the store ops (store, stencilStore) are ignored: without render pass
+     * objects D3D12 keeps both aspects, which DONT_CARE allows */
     ID3D12GraphicsCommandList_OMSetRenderTargets(
         c->cl, pass->colorCount, pass->colorCount ? rtv : NULL, FALSE, dt ? &dsv : NULL);
     for (uint32_t i = 0; i < pass->colorCount; i++) {
@@ -398,7 +397,7 @@ void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup 
         DX_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
         bg.id = 0;
     }
-    /* package PA: the offsets of the group's root CBVs, the missing ones 0 */
+    /* the offsets of the group's root CBVs, the missing ones 0 */
     const uint32_t dyn = g ? g->dynCount : 0;
     if (count > dyn) {
         DX_LOG("rhi_CmdSetBindGroupOffsets: %u offsets for %u dynamic slots", count, dyn);
@@ -453,7 +452,7 @@ static void dx_Flush(DxCmdList *c)
             ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(c->cl, (UINT)r->smpParam[g],
                                                                      bg->smp);
         }
-        /* package PA: the root CBVs at base + bind-time offset (a null group
+        /* the root CBVs at base + bind-time offset (a null group
          * has none: an unbound dynamic group leaves them unset) */
         for (uint32_t k = 0; r->dynParam[g] >= 0 && k < r->dynCount[g] && k < bg->dynCount; k++) {
             if (bg->dyn[k]) {

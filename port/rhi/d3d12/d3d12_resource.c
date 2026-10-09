@@ -1,5 +1,5 @@
 /* d3d12_resource.c: buffers, textures, samplers, shaders and deferred
- * destruction for the D3D12 backend (README.md, "Memory").  Every resource
+ * destruction for the D3D12 backend.  Every resource
  * is a committed resource. */
 #include "d3d12_internal.h"
 #include <stdlib.h>

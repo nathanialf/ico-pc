@@ -441,7 +441,7 @@ void rhi_SetVulkanLoader(void *getInstanceProcAddr)
     be()->SetVulkanLoader(getInstanceProcAddr);
 }
 
-/* v0.4.1 (package R0): the injector and the overlay, from the backend that
+/* The injector and the overlay, from the backend that
  * rhi_Init brought up */
 const char *rhi_InjectorName(void)
 {
@@ -453,7 +453,7 @@ const char *rhi_OverlayName(void)
     return s_up ? be()->OverlayName() : NULL;
 }
 
-/* ------------------------------------------- the layer classifiers (R0)
+/* ------------------------------------------------ the layer classifiers
  * The known layers: name (a trailing '*' matches any rest), the program,
  * whether it is an overlay, whether the loader takes it as an explicit
  * layer, the variable an implicit one needs set to "1" (its manifest's

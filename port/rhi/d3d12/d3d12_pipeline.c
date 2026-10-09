@@ -1,6 +1,5 @@
 /* d3d12_pipeline.c: bind group layouts, root signatures, transient bind
- * groups and pipeline state objects for the D3D12 backend (README.md,
- * "Descriptors"). */
+ * groups and pipeline state objects for the D3D12 backend. */
 #include "d3d12_internal.h"
 #include <stdlib.h>
 #include <string.h>
@@ -87,7 +86,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
         for (uint32_t i = 0; i < l->slotCount; i++) {
             const RhiBindSlot *s = &l->slots[i];
             if (l->table[i] == D3DP_ROOT_CBV) {
-                /* package PA: a root CBV; its address comes at bind time */
+                /* a root CBV; its address comes at bind time */
                 D3D12_ROOT_PARAMETER *p = &params[r->dynParam[g] + l->offset[i]];
                 p->ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
                 p->Descriptor.ShaderRegister = s->slot;
@@ -348,7 +347,7 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
         const RhiBindSlot *s = &l->slots[i];
         const RhiBinding *b = dx_FindBinding(desc, s);
         if (l->table[i] == D3DP_ROOT_CBV) {
-            /* package PA: the base address; a root CBV has no size and no
+            /* the base address; a root CBV has no size and no
              * null form, so a missing or bad binding leaves 0, which the
              * shader must not read (rd_core binds every one) */
             DxBuffer *buf = b ? dx_GetBuffer(b->buffer) : NULL;

@@ -1,6 +1,6 @@
 /* d3d12_device.c: runtime loading, adapter selection, the device and its
  * queue, the debug layer, descriptor heaps, limits, rhi_Init/rhi_Shutdown
- * of the D3D12 backend (README.md, "Device"). */
+ * of the D3D12 backend. */
 #include "d3d12_internal.h"
 #include "rhi_d3d12.h"
 #include "../rhi_backend.h"
@@ -154,7 +154,7 @@ static void dx_SetupInfoQueue(void)
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory2)(UINT, REFIID, void **);
 typedef HRESULT(WINAPI *PFN_CreateDXGIFactory1)(REFIID, void **);
 
-/* v0.4.1 (package R0): ReShade's Direct3D 12 install is a dxgi.dll (or
+/* ReShade's Direct3D 12 install is a dxgi.dll (or
  * d3d12.dll) beside the program, which LoadLibraryA finds before the
  * system's (no SetDefaultDllDirectories).  A module whose file is outside
  * the system directory (System32; SysWOW64 for a 32-bit program) is taken
@@ -214,7 +214,7 @@ static bool dx_LoadRuntime(bool debug)
         DX_LOG("d3d12.dll or dxgi.dll not found (Windows 10 or later is required)");
         return false;
     }
-    dx_ScanInjector(); /* package R0 */
+    dx_ScanInjector(); /* an effects program beside the executable */
     g_dx.createDevice =
         (PFN_D3D12_CREATE_DEVICE)(void *)GetProcAddress(g_dx.d3d12Dll, "D3D12CreateDevice");
     g_dx.getDebugInterface = (PFN_D3D12_GET_DEBUG_INTERFACE)(void *)GetProcAddress(
@@ -381,13 +381,13 @@ static void dx_FillLimits(void)
     o->depthStencilFormatName = "D32S8";
     o->copyRowPitchAlign = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;   /* 256 */
     o->copyOffsetAlign = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT; /* 512 */
-    /* R7a's fields: textures carry mipLevels, every barrier spans all
+    /* the Enhanced filter's fields: textures carry mipLevels, every barrier spans all
      * subresources, rhi_CmdCopyBufferToTexture writes the given level, and
      * samplers apply the mip filter, LOD range and anisotropy (d3d12_cmd.c,
      * d3d12_resource.c); 16x anisotropy at every feature level */
     o->textureMips = true;
     o->maxAnisotropy = (float)D3D12_MAX_MAXANISOTROPY;
-    /* package PA: root CBVs cost 2 of the root signature's 64 DWORDs each;
+    /* root CBVs cost 2 of the root signature's 64 DWORDs each;
      * 8 of them leave room for every group's tables */
     o->maxDynamicUniforms = 8;
     /* a structured-buffer SRV of 16-byte elements:
@@ -563,7 +563,7 @@ bool rhi_DeviceLost(void)
     return g_dx.deviceLost;
 }
 
-/* Package P1's performance entry points (rhi.h).  Not implemented on D3D12
+/* The performance entry points (rhi.h).  Not implemented on D3D12
  * yet: the counters read zero, timestamps are unsupported (nothing is
  * written, nothing read back) and there is no mailbox mode (DXGI's flip
  * model with sync interval 1 is FIFO). */
@@ -609,7 +609,7 @@ void rhi_SetPipelineCachePath(const char *path)
 
 void rhi_SetVulkanLoader(void *getInstanceProcAddr)
 {
-    (void)getInstanceProcAddr; /* v0.4.3 AN-22a: Vulkan only */
+    (void)getInstanceProcAddr; /* Vulkan only */
 }
 
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */

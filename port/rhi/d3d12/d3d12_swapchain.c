@@ -160,7 +160,7 @@ RhiTexture rhi_AcquireBackbuffer(void)
 }
 
 /* rhi.h: what rhi_Present's sync interval and flags amount to, in the
- * Vulkan backend's words (v0.3.1) */
+ * Vulkan backend's words */
 const char *rhi_PresentModeName(void)
 {
     if (!g_dx.swapchain) {
@@ -203,7 +203,7 @@ void rhi_Present(void)
     }
 }
 
-/* rhi.h (package AN-D): the Android lifecycle's surface calls.  A DXGI
+/* rhi.h: the Android lifecycle's surface calls.  A DXGI
  * swapchain stays on its window for the window's life, so there is nothing
  * to release; recreate reports whether the swapchain is there. */
 void rhi_ReleaseSurface(void) {}
