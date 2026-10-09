@@ -1342,41 +1342,6 @@ static void replayOnHost(void *arg)
     rd__ReplayFrame(c->f, c->keep, true);
 }
 
-/* The game's camera every RD_CAMERA_LOG_EVERY-th frame up to
- * RD_CAMERA_LOG_LAST, so a run on one machine can be set beside a run on
- * another (a phone's opening scene beside a PC's): the game computes the
- * camera (GsBase.c gsbHostCommon, rd_SetCamera) and the same disc and pad
- * give the same numbers on both, so a different eye says the game itself
- * went another way and the same eye under a different picture says the
- * drawing did.  Whole numbers, truncated, so no printf rounding (which
- * follows the simulation's round-toward-zero mode here) enters. */
-#define RD_CAMERA_LOG_EVERY 100u
-#define RD_CAMERA_LOG_LAST 3000u
-
-static int cameraLogInt(float x)
-{
-    return x > -2.0e9f && x < 2.0e9f ? (int)x : 0;
-}
-
-static void logCamera(const RdFrame *f)
-{
-    if (!f->hasCamera || f->number % RD_CAMERA_LOG_EVERY != 0 || f->number > RD_CAMERA_LOG_LAST) {
-        return;
-    }
-    /* column-major world to view: the eye is -R^T t, the view's z axis in
-     * the world is R's third row */
-    const float *v = f->camera.view;
-    int eye[3], axis[3];
-    for (int j = 0; j < 3; j++) {
-        eye[j] =
-            cameraLogInt(-(v[j * 4 + 0] * v[12] + v[j * 4 + 1] * v[13] + v[j * 4 + 2] * v[14]));
-        axis[j] = cameraLogInt(v[j * 4 + 2] * 1000.0f);
-    }
-    rd__Log("camera at frame %u: eye %d %d %d, view axis %d %d %d (thousandths), zoom %d",
-            f->number, eye[0], eye[1], eye[2], axis[0], axis[1], axis[2],
-            cameraLogInt(f->camera.zoom));
-}
-
 void rd_BeginFrame(void)
 {
     if (!g_rd.inited) {
@@ -1452,7 +1417,6 @@ void rd_EndFrame(int keep)
     g_rd.recIndex = -1;
     g_rd.stats.bytesPayload = f->payloadSize;
     g_rd.videoShown = 0; /* R7b */
-    logCamera(f);
     /* R7b: with interpolation the host presents (rd_Present); otherwise,
      * the Original preset always, the frame is replayed and presented once
      * here, as before */
