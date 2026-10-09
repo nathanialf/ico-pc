@@ -182,6 +182,17 @@ void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
    exactly.  lt_ext_CircleBack reads the alias back (tests). */
 #define LT_PAD_TRIANGLE 0x0010
 #define LT_PAD_CIRCLE 0x0020
+/* the other trigger bits of the pad word (keyInput.c's logical word) the
+   port's screens read */
+#define LT_PAD_L1 0x0004
+#define LT_PAD_R1 0x0008
+#define LT_PAD_CROSS 0x0040
+#define LT_PAD_SQUARE 0x0080
+#define LT_PAD_START 0x0800
+#define LT_PAD_UP 0x1000
+#define LT_PAD_RIGHT 0x2000
+#define LT_PAD_DOWN 0x4000
+#define LT_PAD_LEFT 0x8000
 int lt_ext_BackButtons(void);
 void lt_ext_SetCircleBack(int on);
 int lt_ext_CircleBack(void);

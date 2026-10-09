@@ -80,24 +80,12 @@ extern void la_host_film_effect(int mode);
    clock the seed of Extras > Characters' Randomize */
 extern unsigned int ico_host_main_ticks(void);
 
-/* the pad's trigger bits (keyInput.c's logical word) */
-#define PAD_L1 0x0004
-#define PAD_R1 0x0008
-#define PAD_TRIANGLE 0x0010
-#define PAD_CIRCLE 0x0020
-#define PAD_CROSS 0x0040
-#define PAD_START 0x0800
-#define PAD_SQUARE 0x0080
-#define PAD_UP 0x1000
-#define PAD_RIGHT 0x2000
-#define PAD_DOWN 0x4000
-#define PAD_LEFT 0x8000
 /* on the port's screens Circle goes back as Triangle does, whatever
    [game] circle_back says (that switch is for the game's own menus,
    layout_ext.h lt_ext_BackButtons): no PS2 behaviour to keep here, and
    Circle has no other use on them (a remap capture takes it before this
    check) */
-#define PAD_BACK (PAD_TRIANGLE | PAD_CIRCLE)
+#define PAD_BACK (LT_PAD_TRIANGLE | LT_PAD_CIRCLE)
 
 /* the game layouts the menu is entered from */
 #define LAYOUT_PAUSE 57
@@ -2755,7 +2743,7 @@ static int newGameScreenProc(int first, int item)
         return -1;
     }
     int flags = pad[0].flags;
-    if (flags & (PAD_CROSS | PAD_START)) {
+    if (flags & (LT_PAD_CROSS | LT_PAD_START)) {
         s_newGameChosen = 1;
         POSITIVE_SE();
         ico_opt_set_mirror(s_mirrorChoice);
@@ -2882,13 +2870,13 @@ static int quitScreenProc(int first, int item)
     }
     int flags = pad[0].flags;
     int to = s_origin == LAYOUT_TITLE_CONTINUE ? LAYOUT_TITLE_CONTINUE : LAYOUT_TITLE_NEW;
-    if ((flags & PAD_CROSS) && l->curItem == s_quitYesNo[1]) {
+    if ((flags & LT_PAD_CROSS) && l->curItem == s_quitYesNo[1]) {
         s_quitChosen = 1;
         POSITIVE_SE();
         requestQuit();
         return -1;
     }
-    if (flags & (PAD_CROSS | PAD_BACK)) {
+    if (flags & (LT_PAD_CROSS | PAD_BACK)) {
         NEGATIVE_SE();
         la_host_leave();
         gameCursorOn(to, s_quitRow[to == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
@@ -3403,7 +3391,7 @@ static int achInput(void *user, int d, int flags)
 {
     (void)user;
     Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
-    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && d == ico_ach_count())) {
+    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && d == ico_ach_count())) {
         return leaveTo(UI_PAGE_ACHIEVEMENTS, parentLayout(pg));
     }
     return UI_LIST_PASS;
@@ -3472,19 +3460,19 @@ static int remapInput(void *user, int d, int flags)
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
     if (d >= 0 && d < ICO_T_COUNT) {
-        if (flags & PAD_CROSS) {
+        if (flags & LT_PAD_CROSS) {
             POSITIVE_SE();
             ui_RemapCaptureStart(&s_capture, kRemapOrder[d]);
             lt_item_select_disable = 1;
             return -1;
         }
-        if (flags & PAD_SQUARE) {
+        if (flags & LT_PAD_SQUARE) {
             CUR_SE();
             ico_bindings_clear(liveBindings(), kRemapOrder[d]);
             s_dirtyBindings = 1;
             return -1;
         }
-    } else if (d == ICO_T_COUNT && (flags & PAD_CROSS)) {
+    } else if (d == ICO_T_COUNT && (flags & LT_PAD_CROSS)) {
         /* the bindings only; sensitivity and the other [input] values stay */
         IcoBindings def, *b = liveBindings();
         ico_bindings_defaults(&def);
@@ -3495,7 +3483,7 @@ static int remapInput(void *user, int d, int flags)
         s_dirtyBindings = 1;
         POSITIVE_SE();
         return -1;
-    } else if (d == ICO_T_COUNT + 1 && (flags & PAD_CROSS)) {
+    } else if (d == ICO_T_COUNT + 1 && (flags & LT_PAD_CROSS)) {
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
     return UI_LIST_PASS;
@@ -3615,20 +3603,20 @@ static int galInput(void *user, int d, int flags)
     (void)user;
     Page *pg = &s_pages[UI_PAGE_MUSIC];
     const GalleryItem *it = gallery_Item(d);
-    if ((flags & PAD_BACK) || ((flags & PAD_CROSS) && it != NULL && it->kind == GAL_K_BACK)) {
+    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && it != NULL && it->kind == GAL_K_BACK)) {
         return galLeave();
     }
-    if ((flags & PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
+    if ((flags & LT_PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
         gallery_Toggle(d);
         return -1;
     }
-    if (flags & PAD_SQUARE) {
+    if (flags & LT_PAD_SQUARE) {
         gallery_Stop();
         return -1;
     }
-    if ((flags & (PAD_L1 | PAD_R1)) && d >= 0) {
+    if ((flags & (LT_PAD_L1 | LT_PAD_R1)) && d >= 0) {
         /* the previous or next entry: the cursor on it, and it plays */
-        int k = gallery_Step(d, (flags & PAD_L1) ? -1 : 1);
+        int k = gallery_Step(d, (flags & LT_PAD_L1) ? -1 : 1);
         int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
         if (k >= 0) {
             if (k < pg->list.offset) {
@@ -3642,9 +3630,9 @@ static int galInput(void *user, int d, int flags)
         }
         return -1;
     }
-    if ((flags & (PAD_LEFT | PAD_RIGHT)) && d >= 0) {
+    if ((flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && d >= 0) {
         /* the next or previous group, at the top of the window */
-        int k = gallery_JumpGroup(d, (flags & PAD_LEFT) ? -1 : 1);
+        int k = gallery_JumpGroup(d, (flags & LT_PAD_LEFT) ? -1 : 1);
         int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
         if (k >= 0) {
             int head = k > 0 && galHeading(NULL, k - 1) ? k - 1 : k;
@@ -3926,7 +3914,7 @@ static int settingsProc(int first, int item)
         if (charsShown() < 0) {
             return -1; /* a model loading, or the viewer leaving */
         }
-        const int cross = flags & PAD_CROSS;
+        const int cross = flags & LT_PAD_CROSS;
         if ((flags & PAD_BACK) ||
             (cross && lay->curItem == ui_SettingsRowOf(UI_PAGE_CHARACTERS, UI_OPT_BACK))) {
             /* Triangle, or Back: to the title, what changed written */
@@ -3938,7 +3926,7 @@ static int settingsProc(int first, int item)
         }
         const int onSwitch =
             cross && lay->curItem == ui_SettingsRowOf(UI_PAGE_CHARACTERS, UI_OPT_CHAR_SWITCH);
-        if ((flags & (PAD_L1 | PAD_R1)) || onSwitch) {
+        if ((flags & (LT_PAD_L1 | LT_PAD_R1)) || onSwitch) {
             POSITIVE_SE();
             s_charsRows = 1 - charsShown();
             s_charsHost.switchTo(s_charsRows);
@@ -3954,25 +3942,25 @@ static int settingsProc(int first, int item)
         if (r->label != lay->curItem) {
             continue;
         }
-        if ((flags & (PAD_LEFT | PAD_RIGHT)) && canStep(r->opt)) {
-            ui_SettingsStep((UiSettingsOpt)r->opt, (flags & PAD_LEFT) ? -1 : 1);
+        if ((flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && canStep(r->opt)) {
+            ui_SettingsStep((UiSettingsOpt)r->opt, (flags & LT_PAD_LEFT) ? -1 : 1);
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & PAD_SQUARE) && r->opt == UI_OPT_BRIGHTNESS && canStep(r->opt)) {
+        if ((flags & LT_PAD_SQUARE) && r->opt == UI_OPT_BRIGHTNESS && canStep(r->opt)) {
             /* the adjust screen's Default */
             systemStatus[11] = BRIGHTNESS_DEFAULT;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & PAD_SQUARE) && isCharOpt(r->opt)) {
+        if ((flags & LT_PAD_SQUARE) && isCharOpt(r->opt)) {
             /* the part's Original, as Brightness's Default */
             ico_appearance_set(charPart(r->opt), 0);
             s_dirtyConfig = 1;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & PAD_CROSS) &&
+        if ((flags & LT_PAD_CROSS) &&
             (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
             /* in the viewer only the character shown, from the
                pause menu both */
@@ -3993,7 +3981,7 @@ static int settingsProc(int first, int item)
             POSITIVE_SE();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & PAD_CROSS) && r->opt == UI_OPT_LINK && r->link == UI_PAGE_CHARACTERS &&
+        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_LINK && r->link == UI_PAGE_CHARACTERS &&
             onTitle() && charsHosted()) {
             /* Characters from the title, inside the model viewer */
             int to = charsEnter();
@@ -4002,19 +3990,19 @@ static int settingsProc(int first, int item)
                 return to;
             }
         }
-        if ((flags & PAD_CROSS) && r->opt == UI_OPT_GPU_ADD) {
+        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_GPU_ADD) {
             POSITIVE_SE();
             gpuAdd();
         }
-        if ((flags & PAD_CROSS) && r->opt == UI_OPT_GPU_REMOVE) {
+        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_GPU_REMOVE) {
             POSITIVE_SE();
             gpuRemove();
             refreshPage(pg, id, lay->curItem);
         }
-        if ((flags & PAD_CROSS) && r->opt == UI_OPT_BACK) {
+        if ((flags & LT_PAD_CROSS) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));
         }
-        if ((flags & PAD_CROSS) && isExtrasOpt(r->opt)) {
+        if ((flags & LT_PAD_CROSS) && isExtrasOpt(r->opt)) {
             int to = extrasOpen(r->opt);
             if (to >= 0) {
                 POSITIVE_SE();

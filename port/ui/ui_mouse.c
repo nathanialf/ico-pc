@@ -24,13 +24,6 @@ _Static_assert((int)UI_MOUSE_ROLE_AUTO == (int)LT_POINTER_AUTO &&
 /* the game's side (common/; layout_texture.h declares the lt_* calls) */
 extern PadState pad[16];
 
-/* the pad's trigger bits (keyInput.c's logical word), as settings.c has them */
-#define PAD_CROSS 0x0040
-#define PAD_UP 0x1000
-#define PAD_RIGHT 0x2000
-#define PAD_DOWN 0x4000
-#define PAD_LEFT 0x8000
-
 /* play and its scenes (layout_texture.c init_layout_texture; mouse_look.h) */
 #define LAYOUT_PLAY 54
 #define LAYOUT_SCENE 55
@@ -215,16 +208,16 @@ void ui_MouseTick(void)
         if (hitAt(t.x, t.y, &hit)) {
             lt_host_point_item(hit.layout, hit.item);
             if (t.clicks > 0) {
-                pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT    ? PAD_LEFT
-                                : hit.action == UI_MOUSE_ACT_RIGHT ? PAD_RIGHT
-                                                                   : PAD_CROSS;
+                pad[0].flags |= hit.action == UI_MOUSE_ACT_LEFT    ? LT_PAD_LEFT
+                                : hit.action == UI_MOUSE_ACT_RIGHT ? LT_PAD_RIGHT
+                                                                   : LT_PAD_CROSS;
             }
         }
     }
     /* a notch a move; the move's next tick has its pad cleared
        (exec_layout_texture), so the next notch waits a tick */
     if (s_m.wheel != 0 && s_m.wheelWait == 0) {
-        pad[0].flags |= s_m.wheel > 0 ? PAD_UP : PAD_DOWN;
+        pad[0].flags |= s_m.wheel > 0 ? LT_PAD_UP : LT_PAD_DOWN;
         s_m.wheel += s_m.wheel > 0 ? -1 : 1;
         s_m.wheelWait = 2; /* counted down at the start of the next two ticks */
     }

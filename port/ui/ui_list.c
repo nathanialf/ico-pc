@@ -13,13 +13,8 @@
 /* layout_action.c: the menus' sound */
 extern void CUR_SE(void);
 
-/* the pad's trigger bits (keyInput.c's logical word), as settings.c has them */
-#define PAD_TRIANGLE 0x0010
-#define PAD_CIRCLE 0x0020
-#define PAD_CROSS 0x0040
-#define PAD_UP 0x1000
-#define PAD_DOWN 0x4000
-#define PAD_BACK (PAD_TRIANGLE | PAD_CIRCLE)
+/* Triangle or Circle, as settings.c's PAD_BACK */
+#define PAD_BACK (LT_PAD_TRIANGLE | LT_PAD_CIRCLE)
 
 static LtProperty *P(int index)
 {
@@ -173,10 +168,10 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
     int s = ui_ListSlotOf(l, lay->curItem);
     int shown = ui_ListShown(l);
     int wrapped = 0;
-    if (s < 0 || shown == 0 || (flags & (PAD_CROSS | PAD_BACK))) {
+    if (s < 0 || shown == 0 || (flags & (LT_PAD_CROSS | PAD_BACK))) {
         return;
     }
-    if ((flags & PAD_DOWN) && s == shown - 1) {
+    if ((flags & LT_PAD_DOWN) && s == shown - 1) {
         if (l->offset + shown < n) {
             l->offset++;
         } else {
@@ -185,7 +180,7 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
             wrapped = 1;
         }
         CUR_SE();
-    } else if ((flags & PAD_UP) && s == 0) {
+    } else if ((flags & LT_PAD_UP) && s == 0) {
         if (l->offset > 0) {
             l->offset--;
         } else {
@@ -207,9 +202,9 @@ static void scrollList(UiList *l, LtProp *lay, int flags)
 int ui_ListProc(UiList *l, LtProp *lay, int flags)
 {
     skipHeading(l, lay);
-    if (flags & PAD_DOWN) {
+    if (flags & LT_PAD_DOWN) {
         l->lastDir = 1;
-    } else if (flags & PAD_UP) {
+    } else if (flags & LT_PAD_UP) {
         l->lastDir = -1;
     }
     if (l->def->input != NULL) {
