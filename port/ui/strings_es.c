@@ -490,4 +490,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_QUIT_GAME_CONFIRM] = "¿Salir del juego?",
     /* v0.4.3 I17a */
     [UI_STR_OPT_MOUSE_INVERT] = "Ratón: invertir arriba/abajo",
+    [UI_STR_OPT_MOUSE_SPEED] = "Velocidad de cámara con ratón",
+    [UI_STR_OPT_MOUSE_RANGE] = "Alcance de cámara con ratón",
+    [UI_STR_OPT_MOUSE_RETURN] = "La cámara vuelve atrás",
+    [UI_STR_VAL_RANGE_NORMAL] = "Normal",
+    [UI_STR_VAL_RANGE_FULL] = "Total",
+    [UI_STR_VAL_INSTANT] = "Instantánea",
 };

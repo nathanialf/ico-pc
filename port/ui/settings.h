@@ -250,6 +250,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_MOUSE_SENS,
     UI_OPT_MOUSE_CAMERA, /* v0.4.3 I17a: [input] mouse_camera, On/Off; not on Android */
     UI_OPT_MOUSE_INVERT, /* v0.4.3 I17a: [input] mouse_invert_y, On/Off; not on Android */
+    UI_OPT_MOUSE_SPEED,  /* [input] mouse_camera_speed, 0.5x to Instant; not on Android */
+    UI_OPT_MOUSE_RANGE,  /* [input] mouse_full_range, Normal/Full; not on Android */
+    UI_OPT_MOUSE_RETURN, /* [input] mouse_return, On/Off; not on Android */
     UI_OPT_CIRCLE_BACK,  /* [game] circle_back (Q2) */
     UI_OPT_VIBRATION,    /* S1: the game's iosPadActRequestEnable */
     UI_OPT_HOLD_TYPE,    /* S1: the game's optionControlType, A 0 or B 1 */

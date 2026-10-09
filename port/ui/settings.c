@@ -342,6 +342,9 @@ static int stepIndex(int i, int n, int dir)
 
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 #define MOUSE_SENS_N ((int)(sizeof(kMouseSens) / sizeof(kMouseSens[0])))
+/* the Mouse camera speed row's steps; the last one is "Instant" */
+static const float kMouseCamSpeed[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f, 10.0f};
+#define MOUSE_CAM_SPEED_N ((int)(sizeof(kMouseCamSpeed) / sizeof(kMouseCamSpeed[0])))
 
 /* R7d: the Frame rate row's values, in the order Right steps them
    (ico_video_parse_framerate / ico_video_framerate_name: "original",
@@ -1113,6 +1116,19 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(liveBindings()->mouse_camera);
     case UI_OPT_MOUSE_INVERT:
         return onOff(liveBindings()->mouse_invert_y);
+    case UI_OPT_MOUSE_SPEED: {
+        const float v = liveBindings()->mouse_camera_speed;
+        if (v >= kMouseCamSpeed[MOUSE_CAM_SPEED_N - 1]) {
+            return ui_Str(UI_STR_VAL_INSTANT);
+        }
+        snprintf(buf, size, "%.1fx", (double)v);
+        return buf;
+    }
+    case UI_OPT_MOUSE_RANGE:
+        return ui_Str(liveBindings()->mouse_full_range ? UI_STR_VAL_RANGE_FULL
+                                                       : UI_STR_VAL_RANGE_NORMAL);
+    case UI_OPT_MOUSE_RETURN:
+        return onOff(liveBindings()->mouse_return);
     case UI_OPT_CIRCLE_BACK:
         return onOff(ico_opt_circle_back());
     case UI_OPT_VIBRATION:
@@ -1203,7 +1219,8 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_WINDOW_MODE) {
         return !ico_video_android(); /* v0.4.3: the phone's window is the screen */
     }
-    if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT) {
+    if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
+        opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
         return !ico_video_android(); /* v0.4.3 I17a: no mouse camera on a phone */
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
@@ -1447,6 +1464,28 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_MOUSE_INVERT:
         liveBindings()->mouse_invert_y = !liveBindings()->mouse_invert_y;
+        s_dirtyBindings = 1;
+        break;
+    case UI_OPT_MOUSE_SPEED: {
+        IcoBindings *b = liveBindings();
+        int i, best = 1;
+        for (i = 0; i < MOUSE_CAM_SPEED_N; i++) {
+            if (kMouseCamSpeed[i] <= b->mouse_camera_speed + 0.001f) {
+                best = i;
+            }
+        }
+        best += dir;
+        best = best < 0 ? 0 : best >= MOUSE_CAM_SPEED_N ? MOUSE_CAM_SPEED_N - 1 : best;
+        b->mouse_camera_speed = kMouseCamSpeed[best];
+        s_dirtyBindings = 1;
+        break;
+    }
+    case UI_OPT_MOUSE_RANGE:
+        liveBindings()->mouse_full_range = !liveBindings()->mouse_full_range;
+        s_dirtyBindings = 1;
+        break;
+    case UI_OPT_MOUSE_RETURN:
+        liveBindings()->mouse_return = !liveBindings()->mouse_return;
         s_dirtyBindings = 1;
         break;
     case UI_OPT_TOUCH_MODE: {
@@ -1861,10 +1900,17 @@ static int pagePitch(int page, int n, int *y0)
         return n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
-        /* AN-G: with the touch rows from the pause menu, ten rows 16 apart
-           (Back at 184, its box to 220); v0.4.3 I17a: with the three mouse
-           rows too (a touch screen on a computer), twelve 13 apart (Back
-           at 183, its box to 219) */
+        /* With the touch rows from the pause menu, ten rows 16 apart (Back
+           at 184, its box to 220); with the three mouse rows too (a touch
+           screen on a computer), twelve 13 apart (Back at 183, its box to
+           219); with the mouse camera's three more rows, twelve from the
+           title (or nine from the pause menu) stay 13 apart, and the
+           fifteen of the pause menu with a touch screen start at 30 and
+           are 11 apart (Back at 184, its box to 220) */
+        if (n > 13) {
+            *y0 = 30;
+            return 11;
+        }
         return n > 11 ? 13 : 16;
     }
     return 18;
@@ -2474,14 +2520,17 @@ static void build(void)
        three rows (not on Android) */
     static const int ctlOpts[] = {UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
                                   UI_OPT_HOLD_TYPE,    UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,
-                                  UI_OPT_MOUSE_INVERT, UI_OPT_CIRCLE_BACK,   UI_OPT_TOUCH_MODE,
+                                  UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,   UI_OPT_MOUSE_RANGE,
+                                  UI_OPT_MOUSE_RETURN, UI_OPT_CIRCLE_BACK,   UI_OPT_TOUCH_MODE,
                                   UI_OPT_TOUCH_SIZE,   UI_OPT_TOUCH_OPACITY, UI_OPT_BACK};
     static const int ctlStrs[] = {
         UI_STR_OPT_REMAP,        UI_STR_OPT_BUTTON_CONFIG, UI_STR_OPT_VIBRATION,
         UI_STR_OPT_HOLD_TYPE,    UI_STR_OPT_MOUSE_CAMERA,  UI_STR_OPT_MOUSE_SENS,
-        UI_STR_OPT_MOUSE_INVERT, UI_STR_OPT_CIRCLE_BACK,   UI_STR_OPT_TOUCH_MODE,
+        UI_STR_OPT_MOUSE_INVERT, UI_STR_OPT_MOUSE_SPEED,   UI_STR_OPT_MOUSE_RANGE,
+        UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,   UI_STR_OPT_TOUCH_MODE,
         UI_STR_OPT_TOUCH_SIZE,   UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
-    static const int ctlLinks[] = {UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+    static const int ctlLinks[] = {
+        UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* S1: the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
                                    UI_OPT_PLAYERS, UI_OPT_BACK};
@@ -2534,8 +2583,10 @@ static void build(void)
        is this page: 15 more rows (Switch, and the prompt line's six
        words and eight glyphs), no layout.  v0.4.3 I17a: Controls' Mouse
        camera and Invert mouse up/down rows add 8 (label, value and the
-       two arrows each): with Effects' Cinematic bars (4), about 443 of
-       the 448 */
+       two arrows each): with Effects' Cinematic bars (4), about 443 in
+       all.  Controls' Mouse camera speed, Mouse camera range and Camera
+       swings back rows add 12 more (label, value and the two arrows
+       each): about 455 of the table's 768 (layout_ext.h) */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
 #undef N_OF

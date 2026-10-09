@@ -487,4 +487,10 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",
     /* v0.4.3 I17a */
     [UI_STR_OPT_MOUSE_INVERT] = "Invert mouse up/down",
+    [UI_STR_OPT_MOUSE_SPEED] = "Mouse camera speed",
+    [UI_STR_OPT_MOUSE_RANGE] = "Mouse camera range",
+    [UI_STR_OPT_MOUSE_RETURN] = "Camera swings back",
+    [UI_STR_VAL_RANGE_NORMAL] = "Normal",
+    [UI_STR_VAL_RANGE_FULL] = "Full",
+    [UI_STR_VAL_INSTANT] = "Instant",
 };

@@ -558,6 +558,14 @@ typedef enum UiStrId {
     /* v0.4.3 I17a: Controls > Invert mouse up/down (the mouse camera's
        up and down swapped, in play and in photo mode) */
     UI_STR_OPT_MOUSE_INVERT,
+    /* Controls > Mouse camera speed, Mouse camera range and Camera swings
+       back, and the values Normal, Full and Instant */
+    UI_STR_OPT_MOUSE_SPEED,
+    UI_STR_OPT_MOUSE_RANGE,
+    UI_STR_OPT_MOUSE_RETURN,
+    UI_STR_VAL_RANGE_NORMAL,
+    UI_STR_VAL_RANGE_FULL,
+    UI_STR_VAL_INSTANT,
     UI_STR_COUNT
 } UiStrId;
 

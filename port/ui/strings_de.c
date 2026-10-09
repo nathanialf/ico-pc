@@ -492,4 +492,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
     /* v0.4.3 I17a */
     [UI_STR_OPT_MOUSE_INVERT] = "Maus: oben/unten umkehren",
+    [UI_STR_OPT_MOUSE_SPEED] = "Mauskamera-Tempo",
+    [UI_STR_OPT_MOUSE_RANGE] = "Mauskamera-Bereich",
+    [UI_STR_OPT_MOUSE_RETURN] = "Kamera schwenkt zurück",
+    [UI_STR_VAL_RANGE_NORMAL] = "Normal",
+    [UI_STR_VAL_RANGE_FULL] = "Voll",
+    [UI_STR_VAL_INSTANT] = "Sofort",
 };
