@@ -28,7 +28,7 @@
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
- *   --full-pixel          the picture enlarged to hide the reduction pass's border
+ *   --full-pixel          the reduction draws the whole frame: no black border
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
