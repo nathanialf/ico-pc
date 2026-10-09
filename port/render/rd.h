@@ -310,7 +310,7 @@ typedef struct RdSettings {
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     /* draw the picture so the area the reduction pass fills reaches the box edges,
-     * hiding the black border the PS2 left (rd_present.c pictureRect) */
+     * hiding the black border the PS2 left (rd_present.c rd__picture_rect) */
     uint8_t fullPixel;
     uint8_t vsync;
     /* Texture packs ([video] texture_pack, dump_textures): replacements

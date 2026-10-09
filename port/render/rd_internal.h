@@ -1339,6 +1339,10 @@ void rd__output_follow_swapchain(void);
  * is recorded; false before the first */
 void rd__note_present_box(uint32_t outW, uint32_t outH, const RhiRect *box);
 bool rd__last_present_box(uint32_t *outW, uint32_t *outH, RhiRect *box);
+/* The rectangle the picture is drawn into for box: box itself, or with
+ * the full pixel option box grown evenly so the reduction's border falls
+ * outside it (rd_present.c) */
+void rd__picture_rect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect *pic);
 void rd__present_finish(void);
 void rd__present_shutdown(void);
 

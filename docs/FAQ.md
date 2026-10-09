@@ -45,7 +45,9 @@ the PS2 gives. [What each one does](OPTIONS.md#effects).
 The PS2 itself drew a thin black border around the picture, a few dots wide
 at the sides and a little more at the top and bottom, and the game keeps
 it. To hide it, turn on **Full pixel (no border)** in **Options > Effects**.
-It enlarges the picture about 1% so it fills the box.
+It enlarges the picture so it fills the box: about 2% with Video mode at
+60 Hz, about 7% at 50 Hz. The picture keeps its shape, so a little of it
+goes past the edges of the box.
 [What it does](OPTIONS.md#effects).
 
 ## Why does the CRT filter switch the picture back to the original resolution?

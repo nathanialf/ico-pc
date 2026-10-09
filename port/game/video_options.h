@@ -21,8 +21,10 @@
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
- *   [video] full_pixel      false       enlarge the picture ~1% so it fills the box (hides the PS2's
- *                                       thin black border); any preset, not part of them
+ *   [video] full_pixel      false       enlarge the picture so it fills the box (hides the
+ *                                       PS2's thin black border), both axes alike: about
+ *                                       2 % at 448 lines (60 Hz), 7 % at 512 (50 Hz); any
+ *                                       preset, not part of them
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *                                       (60 on Android)
  *   [video] crt             false       the CRT filter (any preset)

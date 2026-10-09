@@ -137,10 +137,13 @@ static void outputBox(uint32_t outW, uint32_t outH, RhiRect *box)
 
 /* The box the picture is drawn into.  Off, the box itself.  With full pixel
  * on, DISPLAY is drawn so the part the reduction pass filled (it clears the
- * rest black: W - 4 columns and H/2 - 2 crop rows of its W x H/2) lands on
- * the box: the drawn rectangle grows by the cropped margin on every side
- * and the caller's scissor stays at the box. */
-static void pictureRect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect *pic)
+ * rest black: W - 4 columns and H/2 - 2 crop rows of its W x H/2) covers
+ * the box, and the caller's scissor stays at the box.  Both axes grow by
+ * the larger of the two factors, so the picture keeps its shape: at 448
+ * lines the rows' 224 / 220 (the columns' 512 / 508 is smaller), at 512
+ * lines 256 / 240, where the sides lose about 3 % of the picture each
+ * rather than the picture stretching about 6 % taller. */
+void rd__picture_rect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect *pic)
 {
     *pic = *box;
     const float W = (float)gsW, half = (float)gsH * 0.5f;
@@ -151,10 +154,12 @@ static void pictureRect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect 
     if (!(half > 2.0f * crop)) {
         return;
     }
-    /* rounded up and one pixel more, so the cropped margin and the bilinear
-     * blend at its edge both land outside the box */
-    const int32_t dx = (int32_t)ceilf((float)box->w * 2.0f / (W - 4.0f) - 0.001f) + 1;
-    const int32_t dy = (int32_t)ceilf((float)box->h * crop / (half - 2.0f * crop) - 0.001f) + 1;
+    const float sx = W / (W - 4.0f), sy = half / (half - 2.0f * crop);
+    const float grow = (sx > sy ? sx : sy) - 1.0f;
+    /* each side's margin, rounded up and one pixel more, so the cropped
+     * margin and the bilinear blend at its edge both land outside the box */
+    const int32_t dx = (int32_t)ceilf((float)box->w * grow * 0.5f - 0.001f) + 1;
+    const int32_t dy = (int32_t)ceilf((float)box->h * grow * 0.5f - 0.001f) + 1;
     pic->x = box->x - dx;
     pic->y = box->y - dy;
     pic->w = box->w + 2u * (uint32_t)dx;
@@ -852,7 +857,7 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     /* the picture's rectangle: the box, or with full pixel the box grown by
      * the reduction's crop, which the clamp below takes back out */
     RhiRect pic;
-    pictureRect(&real, t->gsW, t->gsH, &pic);
+    rd__picture_rect(&real, t->gsW, t->gsH, &pic);
     const float bx = (float)pic.x, by = (float)pic.y, bw = (float)pic.w, bh = (float)pic.h;
     const float W = (float)t->gsW, H = (float)t->gsH;
     /* the 4:3 picture the UI is drawn in (font.h ui_begin_overlay) */
@@ -866,8 +871,8 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     float y1 = by + (float)(t->sc[3] + 1) * bh / H;
     /* the reduction's crop (rd_post.c postReduction): 2 pixels left and
      * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512).  The
-     * box is that picture without the crop, or the picture after pictureRect
-     * grew it past the crop */
+     * box is that picture without the crop, or the picture after
+     * rd__picture_rect grew it past the crop */
     const float crop = (float)rd__reduction_crop(t->gsH), half = H * 0.5f;
     const float rx = (float)real.x, ry = (float)real.y;
     const float rw = (float)real.w, rh = (float)real.h;
@@ -1319,7 +1324,7 @@ void rd__present_record(RhiCommandList cl)
     outputBox(s_outW, s_outH, &box);
     rd__note_present_box(s_outW, s_outH, &box); /* for the tests */
     RhiRect pic;
-    pictureRect(&box, g_rd.gsW, g_rd.gsH, &pic);
+    rd__picture_rect(&box, g_rd.gsW, g_rd.gsH, &pic);
     /* the CRT filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
