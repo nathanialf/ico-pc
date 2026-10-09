@@ -380,6 +380,7 @@ static void dx_fill_limits(void)
     o->stencilWrap = true;
     o->depthReadback = true;
     o->depthStencilFormatName = "D32S8";
+    o->tiler = false;
     o->copyRowPitchAlign = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;   /* 256 */
     o->copyOffsetAlign = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT; /* 512 */
     /* the Enhanced filter's fields: textures carry mipLevels, every barrier spans all

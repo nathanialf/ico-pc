@@ -547,13 +547,60 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
     t->color = rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {
-        /* sampled: the fog reads it in place (rd_replay.c doFog) */
-        t->depth = rhi_create_texture(
-            &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8,
-                              RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | RHI_TEX_SAMPLED, name});
+        /* sampled when the fog and the effects depth read it in place
+         * (rd__sampled_depth); with g_rd.depthCopy they read a copy, and the
+         * depth is an attachment and a copy source only, as up to v0.4.4 */
+        const uint32_t dsUsage = RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC |
+                                 (g_rd.depthCopy ? 0u : (uint32_t)RHI_TEX_SAMPLED);
+        t->depth =
+            rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8, dsUsage, name});
         t->depthState = RHI_STATE_UNDEFINED;
+        t->depthSampled = !g_rd.depthCopy;
     }
     return t->color.id != 0 && (!t->withDepth || t->depth.id != 0);
+}
+
+RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy, const char *name)
+{
+    if (!g_rd.depthCopy && t->depthSampled) {
+        rd__transition(cl, t->depth, &t->depthState, RHI_STATE_DEPTH_READ);
+        return t->depth;
+    }
+    /* the whole depth, both aspects, into a texture that is only ever
+     * sampled: the read goes through a transfer, after the depth's last
+     * pass has stored it, never through the attachment itself */
+    if (!copy->tex.id || copy->w != t->tw || copy->h != t->th) {
+        rd__depth_copy_free(copy);
+        /* the depth-stencil usage: Vulkan's sampled depth layout
+         * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it */
+        copy->tex = rhi_create_texture(
+            &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8,
+                              RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, name});
+        copy->state = RHI_STATE_UNDEFINED;
+        copy->w = t->tw;
+        copy->h = t->th;
+    }
+    if (!copy->tex.id) {
+        return (RhiTexture){0};
+    }
+    rd__transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, copy->tex, &copy->state, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_texture(cl, t->depth, (RhiRect){0, 0, t->tw, t->th}, copy->tex, 0, 0);
+    rd__transition(cl, copy->tex, &copy->state, RHI_STATE_SHADER_READ);
+    return copy->tex;
+}
+
+void rd__depth_copy_free(RdDepthCopy *copy)
+{
+    if (copy->tex.id) {
+        rhi_destroy_texture(copy->tex);
+    }
+    memset(copy, 0, sizeof(*copy));
+}
+
+void rd__force_depth_copy(void)
+{
+    g_rd.depthCopy = true;
 }
 
 void rd__target_destroy_gpu(RdTargetRec *t)
@@ -1132,6 +1179,21 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
+    /* the depth copy (RdContext.depthCopy), before the targets are made */
+    const char *depthCopy = getenv("ICO_RD_DEPTH_COPY");
+    const char *ds = rhi_limits()->depthStencilFormatName;
+    const bool d24 = ds && strcmp(ds, "D24S8") == 0;
+    if (depthCopy && depthCopy[0]) {
+        g_rd.depthCopy = depthCopy[0] != '0';
+    } else {
+        g_rd.depthCopy = rhi_limits()->tiler || d24;
+    }
+    rd__log("depth: the fog reads %s (%s)",
+            g_rd.depthCopy ? "a copy of the scene depth" : "the scene depth in place",
+            depthCopy && depthCopy[0] ? "ICO_RD_DEPTH_COPY"
+            : rhi_limits()->tiler     ? "tile-based GPU"
+            : d24                     ? "D24S8"
+                                      : "desktop GPU");
     rd__apply_display(); /* the scales the named targets take */
     createNamedTargets();
     readDumpConfig();

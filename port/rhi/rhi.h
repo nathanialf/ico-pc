@@ -493,6 +493,11 @@ typedef struct RhiLimits {
      * of 4 or reaching the level's edge (a level under 4 x 4 passes its
      * real size). */
     bool bcTextures;
+    /* A tile-based phone GPU (Vulkan vendor Qualcomm, ARM, Imagination,
+     * Samsung, Apple or Broadcom; false on D3D12).  The renderer then samples
+     * copies of the scene depth rather than the depth itself (rd_core.c
+     * rd__sampled_depth). */
+    bool tiler;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {

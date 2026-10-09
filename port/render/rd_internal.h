@@ -311,6 +311,7 @@ typedef struct RdTargetRec {
     RhiFormat format;
     RhiTexture color, depth;
     RhiState colorState, depthState;
+    uint8_t depthSampled; /* depth made sampleable (rd__sampled_depth reads it in place) */
     /* copy used when a draw samples the target it renders to, or reads its
      * destination (rd_replay.c takeSnap: only the area a draw reads is fresh) */
     RhiTexture snap;
@@ -1136,6 +1137,13 @@ typedef struct RdContext {
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
     RhiShader fsNoDual[RD_FS_COUNT];
     bool noDual;
+    /* The scene depth is read through a copy (rd__sampled_depth) and every
+     * pass keeps its stencil (loaded and stored), as up to v0.4.4: on a
+     * tile-based GPU (RhiLimits.tiler), on D24S8, or ICO_RD_DEPTH_COPY=1
+     * (=0 reads the depth in place everywhere).  Off, the fog and the
+     * effects depth sample the depth target itself, and the stencil is
+     * kept inside the shadow window only. */
+    bool depthCopy;
     RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;
@@ -1388,6 +1396,26 @@ RhiShader rd__make_shader(const char *name);
  * nothing pending on t, which is asserted; the replay's last endPass records
  * whatever is pending before its list ends. */
 void rd__transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
+
+/* A copy of a target's depth for a pass to sample (g_rd.depthCopy) */
+typedef struct RdDepthCopy {
+    RhiTexture tex;
+    RhiState state;
+    uint32_t w, h;
+} RdDepthCopy;
+
+/* The texture a pass samples t's depth from (RHI_ASPECT_DEPTH), left in a
+ * sampled state, outside any pass: t's depth itself in
+ * RHI_STATE_DEPTH_READ, or with g_rd.depthCopy a whole copy of it in *copy
+ * (made or resized here) in RHI_STATE_SHADER_READ.  Id 0 when the copy
+ * cannot be made. */
+RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
+                             const char *name);
+void rd__depth_copy_free(RdDepthCopy *copy);
+/* Turns g_rd.depthCopy on for the targets made so far (tests: the copy
+ * against the depth read in place, in one run).  One way: a target made
+ * with the copy on has no sampled depth. */
+void rd__force_depth_copy(void);
 
 /* A target clear the replay has not recorded yet
  * (rd_replay.c doClear): the next pass on the target takes it as its load op

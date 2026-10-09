@@ -783,6 +783,23 @@ bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp d
     return false;
 }
 
+/* rd__stencil_ops, and with g_rd.depthCopy the stencil loaded with the
+ * depth and stored outside the window too, as up to v0.4.4: no pass on a
+ * packed depth-stencil then asks for its depth and its stencil
+ * differently */
+static bool stencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
+                       RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
+{
+    const bool took = rd__stencil_ops(w, depth, whole, depthLoad, stencilLoad, stencilStore);
+    if (g_rd.depthCopy) {
+        *stencilStore = RHI_STORE_STORE;
+        if (*stencilLoad == RHI_LOAD_DONT_CARE) {
+            *stencilLoad = depthLoad;
+        }
+    }
+    return took;
+}
+
 /* A shadow reset no pass took, recorded as a pass of its own: the colour
  * and depth loaded and kept, the stencil cleared to 0 and stored (the
  * depth is live: only the end of a resolve's pass leaves the window, and
@@ -811,8 +828,9 @@ static void flushStencilClear(void)
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
-    p.depth.stencilStore =
-        rd__stencil_live(&s_stencil.w, depthTex) ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    p.depth.stencilStore = g_rd.depthCopy || rd__stencil_live(&s_stencil.w, depthTex)
+                               ? RHI_STORE_STORE
+                               : RHI_STORE_DONT_CARE;
     p.width = tc->tw;
     p.height = tc->th;
     rhi_cmd_begin_render_pass(s_cl, &p);
@@ -861,8 +879,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
      * shadow window only (RdStencilWindow) */
     RhiLoadOp stencilLoad = depthLoad;
     RhiStoreOp stencilStore = RHI_STORE_STORE;
-    if (d && rd__stencil_ops(&s_stencil.w, d->depth.id, c->tw == d->tw && c->th == d->th, depthLoad,
-                             &stencilLoad, &stencilStore)) {
+    if (d && stencilOps(&s_stencil.w, d->depth.id, c->tw == d->tw && c->th == d->th, depthLoad,
+                        &stencilLoad, &stencilStore)) {
         s_stencil.colorTex = s_stencil.depthTex = 0;
     }
     endPass(r);
@@ -2793,8 +2811,8 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         p.depth.depthLoad = RHI_LOAD_LOAD;
         /* the stencil as beginPass has it (a pending reset was flushed by
          * the endPass above) */
-        rd__stencil_ops(&s_stencil.w, td->depth.id, false, RHI_LOAD_LOAD, &p.depth.stencilLoad,
-                        &p.depth.stencilStore);
+        stencilOps(&s_stencil.w, td->depth.id, false, RHI_LOAD_LOAD, &p.depth.stencilLoad,
+                   &p.depth.stencilStore);
     }
     p.width = tc->tw;
     p.height = tc->th;
@@ -3562,8 +3580,10 @@ static void doShadowResolve(Replay *r)
  * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
  * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:
  * the Z source's depth (the target of the bound depth view, else the state's
- * depth target; every target depth is created sampleable, rd_core.c) is
- * sampled where it is, in RHI_STATE_DEPTH_READ, the LUT is uploaded into
+ * depth target) is sampled where it is, in RHI_STATE_DEPTH_READ, or with
+ * g_rd.depthCopy through a whole copy of it (rd__sampled_depth: tile-based
+ * GPUs and D24S8, where only the copy is trusted to see the stored depth;
+ * the same values, ctest rd_fog_depth_copy_dump), the LUT is uploaded into
  * s_fogLut, and the sprite is drawn through the sprite vertex shader and
  * fog_lut_ps, which reconstructs the GS Z, takes bits 16..23 as the index,
  * applies the texture function and the Z test, and blends with the state
@@ -3574,12 +3594,15 @@ static RhiTexture s_fogLut;
 
 static RhiState s_fogLutState;
 
+static RdDepthCopy s_fogDepth; /* the depth's copy with g_rd.depthCopy */
+
 void rd__fog_shutdown(void)
 {
     if (s_fogLut.id) {
         rhi_destroy_texture(s_fogLut);
     }
     s_fogLut = (RhiTexture){0};
+    rd__depth_copy_free(&s_fogDepth);
 }
 
 static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -3640,9 +3663,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!s_fogLut.id) {
         return;
     }
-    /* the GS's BITBLT of the Z buffer to 0x2800: the depth read in place
-     * (the pass below binds the colour target alone) */
-    rd__transition(s_cl, tz->depth, &tz->depthState, RHI_STATE_DEPTH_READ);
+    /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, or
+     * its copy (g_rd.depthCopy); the pass below binds the colour target
+     * alone either way */
+    const RhiTexture zTex = rd__sampled_depth(s_cl, tz, &s_fogDepth, "rd fog depth");
+    if (!zTex.id) {
+        return;
+    }
     rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
     rhi_cmd_copy_buffer_to_texture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
                                    (RhiRect){0, 0, 256, 1});
@@ -3670,7 +3697,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
     b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[0].texture = tz->depth;
+    b[0].texture = zTex;
     b[0].aspect = RHI_ASPECT_DEPTH;
     b[1].slot = 1;
     b[1].type = RHI_BIND_SAMPLER;
@@ -4470,8 +4497,8 @@ static void clearNewTargets(void)
             p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth) */
             /* the stencil cleared, and stored only inside a shadow window
              * (none is open before the walk) */
-            rd__stencil_ops(&s_stencil.w, t->depth.id, true, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
-                            &p.depth.stencilStore);
+            stencilOps(&s_stencil.w, t->depth.id, true, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
+                       &p.depth.stencilStore);
         }
         p.width = t->tw;
         p.height = t->th;

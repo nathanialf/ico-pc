@@ -666,7 +666,10 @@ if(ICO_RUN_TESTS)
     # D32S8 gets (ICO_VK_FAKE_D24S8=1, port/rhi/vk/vk_device.c): the same
     # pixels as on D32S8, one-pass and two-pass blends
     # (each in its own directory: the test writes its dump file there)
-    set(_env_d24s8 ${_env} "ICO_VK_FAKE_D24S8=1")
+    # (started with the depth read in place, ICO_RD_DEPTH_COPY=0, so the
+    # test's compare against the depth copy D24S8 takes by default runs on
+    # the 24-bit depth too)
+    set(_env_d24s8 ${_env} "ICO_VK_FAKE_D24S8=1" "ICO_RD_DEPTH_COPY=0")
     set(_env_d24s8_nodual ${_env_d24s8} "ICO_RD_NO_DUAL=1")
     set(_d24 "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
     set(_d24nd "${CMAKE_CURRENT_BINARY_DIR}/d24s8_nodual")
@@ -678,6 +681,38 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_fog_nodual_d24s8
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_d24nd}"
                                     ENVIRONMENT "${_env_d24s8_nodual}")
+    # the fog and the effects depth on a copy of the scene depth, with the
+    # stencil kept by every pass (ICO_RD_DEPTH_COPY=1: what a tile-based
+    # phone GPU and D24S8 get, rd_core.c rd__sampled_depth): the same
+    # expectations, the target depths not sampleable at all
+    set(_env_dcopy ${_env} "ICO_RD_DEPTH_COPY=1")
+    set(_dc "${CMAKE_CURRENT_BINARY_DIR}/depth_copy")
+    file(MAKE_DIRECTORY "${_dc}")
+    add_test(NAME rd_fog_depth_copy COMMAND rd_fog_test)
+    add_test(NAME rd_present_depth_copy COMMAND rd_present_test "${_dc}")
+    set_tests_properties(rd_fog_depth_copy rd_present_depth_copy
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_dc}"
+                                    ENVIRONMENT "${_env_dcopy}")
+    # a player dump with the fog (the dark hall) replayed with the depth in
+    # place and with its copy: SCENE byte for byte the same, on D32S8 and
+    # on D24S8.  Not Run without the dump (dist/dumps is not in the tree)
+    set(ICO_FOG_DUMP "${CMAKE_SOURCE_DIR}/dist/dumps/frame-20261009-083248-v13836.rddump"
+        CACHE FILEPATH "a player dump with the depth fog, for rd_fog_depth_copy_dump")
+    add_test(NAME rd_fog_depth_copy_dump
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
+    add_test(NAME rd_fog_depth_copy_dump_d24s8
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump_d24s8"
+                     "-DEXTRA_ENV=ICO_VK_FAKE_D24S8=1"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
+    set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
+    if(_env)
+        set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
+                             PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage

@@ -26,7 +26,14 @@
  *      (index = Z >> 16 where Z <= 0xFFFFFF, LUT, MODULATE by the strength,
  *      the GS LERP with As, alpha As) within 1 LSB per blend; with
  *      fogOffsetA the flat quad on top within 2;
- *   d  the fog frame dumped, loaded and replayed again gives the same pixels.
+ *   d  the fog frame dumped, loaded and replayed again gives the same pixels;
+ *      replayed once more with the depth copy forced on (rd__force_depth_copy:
+ *      the fog samples a copy of the depth, the path of tile-based GPUs and
+ *      D24S8) it gives the same pixels byte for byte as the depth sampled in
+ *      place; case 1 then runs on the copy.  rd_fog_depth_copy runs the whole
+ *      test with the copy from the start (ICO_RD_DEPTH_COPY=1: the target
+ *      depths are not even sampleable), and the D24S8 runs start in place
+ *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too.
  * The same checks and tolerances hold on a 24-bit depth buffer
  * (rd_fog_d24s8 and rd_fog_nodual_d24s8: ICO_VK_FAKE_D24S8=1, the Vulkan
  * fallback of a phone GPU without a sampled D32S8): there Z is stored in
@@ -785,6 +792,21 @@ static void checkDump(void)
         printf("  (d) dump -> load -> replay: %d bytes differ\n", diff);
         CHECK(diff == 0, "the replayed dump equals the recorded frame");
     }
+    if (g_rd.depthCopy) {
+        printf("  (d) the depth copy is on from the start: no in-place replay to compare\n");
+    } else {
+        rd__force_depth_copy();
+        CHECK(rd__replay_frame(&g, 0, false), "replay the loaded frame on the depth copy");
+        rhi_wait_idle();
+        if (readScene(again)) {
+            int diff = 0;
+            for (size_t i = 0; i < sizeof(again); i++) {
+                diff += again[i] != s_px[i];
+            }
+            printf("  (d) the fog on a copy of the depth: %d bytes differ from in place\n", diff);
+            CHECK(diff == 0, "the fog on the depth copy equals the fog on the depth in place");
+        }
+    }
     rd__frame_free(&g);
     remove(path);
 }
@@ -854,6 +876,14 @@ int main(void)
             CHECK(rd__depth_unorm_steps() == (d24 ? 16777215.0f : 0.0f), "%s: the fog compares %s",
                   ds ? ds : "?", d24 ? "24-bit steps" : "float depths");
         }
+        /* the depth copy: as ICO_RD_DEPTH_COPY says, else on D24S8 and on a
+         * tile-based GPU */
+        const char *dc = getenv("ICO_RD_DEPTH_COPY");
+        const bool d24 = ds && strcmp(ds, "D24S8") == 0;
+        const bool wantCopy = dc && dc[0] ? dc[0] != '0' : d24 || rhi_limits()->tiler;
+        printf("  depth copy %s\n", g_rd.depthCopy ? "on" : "off");
+        CHECK(g_rd.depthCopy == wantCopy, "the depth copy is %s, %s expected",
+              g_rd.depthCopy ? "on" : "off", wantCopy ? "on" : "off");
     }
     gif_HostForgetTextures();
     gif_HostFrameReset();

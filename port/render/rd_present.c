@@ -371,8 +371,8 @@ void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
  * depth at the same normalised source position (SCENE and DISPLAY cover
  * the same GS frame; a mirrored box flips both), read nearest from SCENE's
- * depth where it is, in RHI_STATE_DEPTH_READ, as rd_replay.c doFog reads
- * it (every target depth is created sampleable).  Outside the box the
+ * depth as rd_replay.c doFog reads it (rd__sampled_depth: in place, or a
+ * copy with g_rd.depthCopy).  Outside the box the
  * clear stays, so the bars read as far.  The point is an effects program
  * hooked into the API (ReShade, vkBasalt): it looks for a depth buffer of
  * the backbuffer's size among the render passes, and the scene's is the
@@ -412,6 +412,7 @@ static struct {
     RhiState outState;
     uint32_t outW, outH;
     int failLogged;
+    RdDepthCopy copy; /* SCENE's depth with g_rd.depthCopy */
 } s_depth;
 
 static void depthShutdown(void)
@@ -419,6 +420,7 @@ static void depthShutdown(void)
     if (s_depth.out.id) {
         rhi_destroy_texture(s_depth.out);
     }
+    rd__depth_copy_free(&s_depth.copy);
     memset(&s_depth, 0, sizeof(s_depth));
 }
 
@@ -455,7 +457,11 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
         }
         return false;
     }
-    rd__transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_READ);
+    /* SCENE's depth in place, or its copy (g_rd.depthCopy) */
+    const RhiTexture zTex = rd__sampled_depth(cl, ts, &s_depth.copy, "rd effects depth copy");
+    if (!zTex.id) {
+        return false;
+    }
     rd__transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
 
     RhiRenderPassDesc p;
@@ -497,7 +503,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     b[1].sampler = rd__sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[2].texture = ts->depth;
+    b[2].texture = zTex;
     b[2].aspect = RHI_ASPECT_DEPTH;
     const RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
     if (g2.id) {
