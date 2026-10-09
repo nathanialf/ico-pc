@@ -118,7 +118,7 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
     enterMain(0);
     const int n = ui_SettingsPageRows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    CHECK(n >= 2 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
+    CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
               opts[n - 3] == UI_OPT_EFFECT_FOG,
           "bars: the row sits after Fog, before Back (%d rows)", n);
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
@@ -1114,7 +1114,7 @@ static void testAchievementPopups(void)
     ico_ach_set_popups(1);
     enterMain(0);
     const int n = ui_SettingsPageRows(UI_PAGE_GAMEPLAY, rows, opts, NULL, 16);
-    CHECK(n >= 2 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_ACH_POPUPS &&
+    CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_ACH_POPUPS &&
               opts[n - 3] == UI_OPT_PLAYERS,
           "pop-ups: the row sits after Players, before Back (%d rows)", n);
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On by default");
