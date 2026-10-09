@@ -3,15 +3,16 @@
  *
  * Hardware tables of the software SPU2, transcribed from psx-spx's "Sound
  * Processing Unit (SPU)" page (https://psx-spx.consoledev.net/
- * soundprocessingunitspu/; source file
- * soundprocessingunitspu.md of github.com/psx-spx/psx-spx.github.io at commit b8b3f284, 2026-09-30):
+ * soundprocessingunitspu/; source file soundprocessingunitspu.md of
+ * github.com/psx-spx/psx-spx.github.io at commit b8b3f284, 2026-09-30):
  *
  *   spu2_gauss          "4-Point Gaussian Interpolation", the 512-entry
  *                       table (each set of four taps sums to 0x7F7F..0x7F81;
  *                       spu2_test checks it)
  *   spu2_reverb_fir     "Reverb Buffer Resampling", the 39-tap FIR
- *   spu2_reverb_presets "SPU Reverb Examples", in libsd's effect mode order: off, room, studio small /
- *                       medium / large (libsd STUDIO_1-3), hall, space echo,
+ *   spu2_reverb_presets "SPU Reverb Examples", in libsd's effect mode
+ *                       order: off, room, studio small / medium / large
+ *                       (libsd STUDIO_1-3), hall, space echo,
  *                       chaos echo (libsd ECHO), delay, half echo (PIPE).
  *                       The sizes are psx-spx's work area sizes in bytes.
  *

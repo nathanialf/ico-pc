@@ -4,9 +4,9 @@
  * libsd's register-level behaviour on the software SPU2 (spu2_sd.h).
  * Register offsets and init values follow ps2sdk's clean-room libsd
  * (iop/sound/libsd/src/freesd.c, effect.c, voice.c; AFL-2.0, read for
- * behaviour, no code taken), checked against the disc's LIBSD.IRX: sceSdInit's register writes are its code's,
- * and the reverb presets and the idle block are its data, read at start
- * by libsd_irx.c.
+ * behaviour, no code taken), checked against the disc's LIBSD.IRX:
+ * sceSdInit's register writes are its code's, and the reverb presets and
+ * the idle block are its data, read at start by libsd_irx.c.
  */
 #include "spu2_sd.h"
 

@@ -42,8 +42,8 @@ void ico_set_transpose_matrix_ps2(float *dst, const float *src)
     memcpy(dst, t, sizeof t);
 }
 
-/* The PS2 wrote through the uncached alias of dst (dst | 0x20000000);
-   the host has one memory view. */
+/* No caller. The PS2 wrote through the uncached alias of dst
+   (dst | 0x20000000); the host has one memory view. */
 void CopyMatrixUncached(void *dst, void *src)
 {
     memmove(dst, src, 64);

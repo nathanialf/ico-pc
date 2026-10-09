@@ -2,8 +2,7 @@
  * port/audio/adpcm.c
  *
  * SPU ADPCM block decoding (adpcm.h).  Written from psx-spx's description
- * of the format; no decoder code was
- * consulted.
+ * of the format; no decoder code was consulted.
  */
 #include "adpcm.h"
 

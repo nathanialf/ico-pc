@@ -18,8 +18,8 @@
  *     when a gain is below 100 %); the game's voice volumes are all fixed
  *     levels.
  *   - The film category scales the PCM mixer's channel volumes
- *     (stream.c pcm_mix), not a slot; no Settings row sets it, so films
- *     follow the master volume alone.
+ *     (stream.c pcm_mix), not a slot; no Settings row sets it yet, so films
+ *     follow the master volume alone (the category is the hook for one).
  *   - A gain change re-issues the cached volumes of the slots it covers,
  *     so it is heard at once.
  *
@@ -64,7 +64,8 @@ uint16_t ico_audio_gain_apply(int slot, uint16_t vol);
 /* The driver's voice volume write: cache voll/volr as the raw values of
    slot and write VOLL/VOLR scaled (spu2_sd_set_param). */
 void ico_audio_gain_voice(int slot, uint16_t voll, uint16_t volr);
-/* Re-issue every cached volume; returns how many slots were written. */
+/* Re-issue every cached volume; returns how many slots were written (tests;
+   a gain change re-issues its own category's). */
 int ico_audio_gain_reapply(void);
 /* Forget the cached volumes (the driver's init, 0x1E, and its reset). */
 void ico_audio_gain_forget(void);

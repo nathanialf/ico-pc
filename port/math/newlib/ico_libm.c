@@ -45,8 +45,7 @@
  * large-argument path), atanf, atan2f, acosf and asinf goes through
  * ps2_add/ps2_sub (port/math/ps2float.h), the EE adder, which drops the
  * smaller operand's bits below one guard bit; IEEE round toward zero does
- * not. sinf's table argument just under pi/2 is the
- * case that shows it: 1 - 4.7e-9 is 1.0 on the EE and 0x3F7FFFFF under IEEE
+ * not. sinf's table argument just under pi/2 is the case that shows it: 1 - 4.7e-9 is 1.0 on the EE and 0x3F7FFFFF under IEEE
  * RTZ. Left as IEEE: __kernel_rem_pio2f and floorf (sinf's arguments above
  * 2^7 * pi/2 only, which the game never passes), fmodf (exact).
  *

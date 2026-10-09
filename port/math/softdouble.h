@@ -4,8 +4,7 @@
  * `double` arithmetic as the PS2 did it. The EE has no double hardware:
  * ee-gcc turned every double operation into a call to libgcc's soft float
  * (sce/libgcc/dp-bit.c, fp-bit.c), so the game's few double expressions
- * (33 functions in 20 files) rounded to
- * nearest, read denormal inputs as zero and truncated a tiny result into a
+ * (33 functions in 20 files) rounded to nearest, read denormal inputs as zero and truncated a tiny result into a
  * denormal. On the host they would be SSE doubles under the simulation
  * thread's round-toward-zero mode. These functions compute the EE's results
  * with integer arithmetic only, so the host's rounding mode and DAZ/FTZ do

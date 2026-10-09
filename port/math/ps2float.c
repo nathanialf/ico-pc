@@ -8,8 +8,8 @@
  * 10.1109/ARITH.1995.465363), 25 quotient digits from the set {-1, 0, 1},
  * the digit picked from the top bits of the redundant remainder. The result
  * is the truncated quotient or root, or one ulp above it, depending on the
- * bits. Integer arithmetic only, so the host's
- * rounding mode does not reach them.
+ * bits. Integer arithmetic only, so the host's rounding mode does not
+ * reach them.
  */
 #include "ps2float.h"
 

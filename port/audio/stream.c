@@ -96,8 +96,7 @@ static void enqueue(const StEvent *e)
     q_write++;
 }
 
-/* 0x248C, for the voice
-   `core`, `voice`: a pending fill of that voice is forgotten, so the read
+/* 0x248C, for the voice `core`, `voice`: a pending fill of that voice is forgotten, so the read
    offset does not advance for the transfer in flight; every queued FILL of
    the voice is zeroed; a queued KEYON keeps its place but loses the voice's
    bit.  For a core 0 voice the IRX clears bit `voice` in both masks (its

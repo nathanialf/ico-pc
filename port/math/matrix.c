@@ -191,6 +191,7 @@ float _GetLength(void *a, void *b)
     return ps2_sqrt(dot3(d, d));
 }
 
+/* No caller. */
 float _GetLengthXY(void *a, void *b)
 {
     const float *p = a;
@@ -249,7 +250,8 @@ void _UnitMatrix(void *dst)
     memcpy(dst, identity, sizeof identity);
 }
 
-/* The first three rows of the identity; row 3 (the translation) is kept. */
+/* No caller. The first three rows of the identity; row 3 (the translation)
+   is kept. */
 void _UnitRotation(void *dst)
 {
     static const float rows[3][4] = {
@@ -416,7 +418,7 @@ static float sq_len_xzy(const float *v)
 }
 
 /* The per-field squares with x replaced by sq_len_xzy, which is what the
-   assembly leaves in the register it later scales (see _MakeNormal4). */
+   assembly leaves in the register it later scales (see makeNormal4). */
 static void squares(float *out, const float *v)
 {
     out[0] = sq_len_xzy(v);

@@ -102,6 +102,7 @@ void _InitCurrentMatrix(void)
     matrixStackTop = 0;
 }
 
+/* No caller; the same as _InitCurrentMatrix. */
 void _UnitCurrentMatrix(void)
 {
     set_identity(ico_current_matrix);

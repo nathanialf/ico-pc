@@ -825,8 +825,8 @@ static void wb(uint32_t base, int32_t v, int irq)
         irq_check(a, 1);
 }
 
-/* Steps 3-6 of a frame for core ci, after its
-   voices: `bus` the four voice buses (dry L, dry R, wet L, wet R) before
+/* The rest of a frame for core ci after its voices (from the external and
+   AutoDMA inputs of step 2 on, and step 3): `bus` the four voice buses (dry L, dry R, wet L, wet R) before
    saturation, v1 and v3 voice 1's and 3's outputs for the write-back, `p`
    the reverb plan (NULL: built here), `irq` whether a write-back can raise
    an IRQ (render_chunk runs only when none can). */

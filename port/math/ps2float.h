@@ -56,8 +56,8 @@ static inline float ps2_fmax_signed(float a, float b)
 /* An operand as the PS2 reads it: the FPU and VU0 have no Inf or NaN, an
    exponent of 255 is an ordinary exponent (about 2^128), so such a bit
    pattern becomes +-Fmax on the host (the hardware's value is not a host
-   float). Only for values that can come from raw memory,
-   such as the allocator's 0xFFFFFFFF fill of freed blocks. */
+   float). Only for values that can come from raw memory, such as the
+   allocator's 0xFFFFFFFF fill of freed blocks. */
 static inline float ps2_operand(float x)
 {
     uint32_t u = ps2_float_bits(x);
@@ -76,7 +76,8 @@ float ps2_div_nonzero(uint32_t a, uint32_t b);
    0/0 included. Otherwise the divider's own quotient (PCSX2 PR #12001's
    hardware-derived PS2Float::Div, a radix-2 SRT divider with a carry-save
    remainder): the truncated quotient T or T + 1, depending on the bits, so
-   neither IEEE round toward zero nor round to nearest. A zero or denormal dividend gives a zero with the sign of a XOR b. */
+   neither IEEE round toward zero nor round to nearest. A zero or denormal
+   dividend gives a zero with the sign of a XOR b. */
 static inline float ps2_div(float a, float b)
 {
     uint32_t ua = ps2_float_bits(a);
@@ -175,9 +176,9 @@ static inline float ps2_mul(float fa, float fb)
     return ps2_bits_float(sign | ((uint32_t)e << 23) | (m & 0x7FFFFFu));
 }
 
-/* a + b and a - b as the EE adder computes them, after
-   PCSX2's hardware-derived PS2Float::Add/Sub/DoAdd (PR #12001): the operand with the smaller exponent
-   keeps one bit below its alignment shift (its lower bits are masked off),
+/* a + b and a - b as the EE adder computes them, after PCSX2's
+   hardware-derived PS2Float::Add/Sub/DoAdd (PR #12001): the operand with
+   the smaller exponent keeps one bit below its alignment shift (its lower bits are masked off),
    the mantissas are summed as integers with six extra low bits, and the sum
    is truncated. An effective subtraction can therefore come out one ulp
    larger in magnitude than IEEE round toward zero, and an operand 25 or
@@ -258,8 +259,8 @@ static inline float ps2_sub(float a, float b)
 float ps2_sqrt(float x);
 
 /* VU0 `vrsqrt`: a / sqrt(|b|), rounded in two steps (the hardware's single
-   iterative step can differ in the last bit). b == 0
-   gives +-Fmax, or +-0 when a is also 0. port/math/ps2float.c. */
+   iterative step can differ in the last bit). b == 0 gives +-Fmax, or +-0
+   when a is also 0. port/math/ps2float.c. */
 float ps2_rsqrt(float a, float b);
 
 /* Float to int, truncating, saturating at +-2^31 by sign (EE `cvt.w.s`,

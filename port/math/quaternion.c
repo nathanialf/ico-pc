@@ -60,7 +60,7 @@ void GetMatrixFromQuaternionRotElem(void *mtx, void *q)
     ico_quaternion_rotation_rows((float (*)[4])mtx, (const float *)q);
 }
 
-/* x*x + y*y + z*z + w*w, summed in that order. */
+/* a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w, summed in that order. */
 static float dot4(const float *a, const float *b)
 {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];

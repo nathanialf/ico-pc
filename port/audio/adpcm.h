@@ -45,7 +45,7 @@ int adpcm_decode_block(const uint8_t *block, int16_t *out, adpcm_hist *h);
 
 /* Decode `blocks` consecutive blocks into out (28 samples each), carrying
    the history across blocks; the flags are ignored.  Returns the number of
-   samples written. */
+   samples written.  The tests' helper: the SPU2 decodes block by block. */
 int adpcm_decode(const uint8_t *src, int blocks, int16_t *out, adpcm_hist *h);
 
 #endif
