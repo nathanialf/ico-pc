@@ -1367,16 +1367,7 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                         k.gs.program = prog;
                         k.vs = vs;
                         k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
-                        int dup = 0;
-                        for (uint32_t j = 0; j < n && j < max; j++) {
-                            dup |= rd__PipeKeyEqual(&out[j], &k);
-                        }
-                        if (!dup) {
-                            if (n < max) {
-                                out[n] = k;
-                            }
-                            n++;
-                        }
+                        n = rd__AddPipeKey(out, max, n, &k);
                     }
                 }
             }

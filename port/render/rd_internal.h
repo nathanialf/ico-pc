@@ -784,6 +784,11 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i);
  * set (rd_pipeline.c lists the families and their sources).  Writes up to
  * max keys, returns the total. */
 uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max);
+/* Adds k to out[0 .. n) unless an equal key is there; returns the new count.
+ * Past max the key is not stored but still counted, so the total is the
+ * set's size however small out is.  Every rd__EnumerateReachable* family
+ * adds its keys through it. */
+uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k);
 /* The screen and post families alone (wave 2's set, asserted under 100). */
 uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max);
 /* Wave 3 (R3ab): the VU program families (rd_mesh.c): each VU vertex shader

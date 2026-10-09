@@ -820,7 +820,7 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  * Wave 3 (R3ab): rd__EnumerateReachable adds the VU program families
  * (rd__EnumerateReachableVu, rd_mesh.c) to these; the screen and post set
  * alone stays rd__EnumerateReachableScreen. */
-static uint32_t addKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
+uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < n && i < max; i++) {
         if (rd__PipeKeyEqual(&out[i], k)) {
@@ -861,7 +861,7 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
         in.key = raw[i];
         const int m = rd__ExpandNoDual(&in, 1, ex);
         for (int j = 0; j < m; j++) {
-            n = addKey(out, max, n, &ex[j].key);
+            n = rd__AddPipeKey(out, max, n, &ex[j].key);
         }
     }
     return n;
@@ -877,7 +877,7 @@ uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                                   rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_RGBA8_UNORM),
                                   rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_BGRA8_UNORM)};
     for (int i = 0; i < 4; i++) {
-        n = addKey(out, max, n, &keys[i]);
+        n = rd__AddPipeKey(out, max, n, &keys[i]);
     }
     return n;
 }
@@ -908,7 +908,7 @@ uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n)
     RdDrawPass dp[2];
     const int np = rd__FogPlan(&s, RHI_FMT_RGBA8_UNORM, dp);
     for (int i = 0; i < np; i++) {
-        n = addKey(out, max, n, &dp[i].key);
+        n = rd__AddPipeKey(out, max, n, &dp[i].key);
     }
     return n;
 }
@@ -966,14 +966,14 @@ uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t 
     s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL); /* shadow_Reset's TEST 0x50000 */
     for (int decr = 0; decr < 2; decr++) {
         const RdPipeKeyInt k = rd__ShadowVolumeKey(&s, RHI_FMT_RGBA8_UNORM, decr);
-        n = addKey(out, max, n, &k);
+        n = rd__AddPipeKey(out, max, n, &k);
     }
     for (int p = 0; p < RD_SHADOW_RESOLVE_PASSES; p++) {
         const RdPipeKeyInt k = rd__ShadowResolveKey(p);
-        n = addKey(out, max, n, &k);
+        n = rd__AddPipeKey(out, max, n, &k);
     }
     const RdPipeKeyInt kr = rd__ShadowReduceKey(); /* package RSMALL */
-    n = addKey(out, max, n, &kr);
+    n = rd__AddPipeKey(out, max, n, &kr);
     return n;
 }
 
@@ -1014,12 +1014,12 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                                             space ? RD_SPACE_WORLD : RD_SPACE_UI,
                                                             RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                                 for (int i = 0; i < np; i++) {
-                                    n = addKey(out, max, n, &dp[i].key);
+                                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
                                     /* package TEXA: the same state on a 24-
                                      * or 16-bit texture under AEM */
                                     RdPipeKeyInt kt = dp[i].key;
                                     kt.fs = RD_FS_SPRITE_TEXA;
-                                    n = addKey(out, max, n, &kt);
+                                    n = rd__AddPipeKey(out, max, n, &kt);
                                 }
                                 /* package RSMALL: a textured STQ triangle
                                  * command with Q != 1 (the lightning's strips,
@@ -1027,7 +1027,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                 if (space && kPrims[p] == RD_PRIM_TRIANGLES) {
                                     for (int i = 0; i < np; i++) {
                                         if (rd__StqPass(&dp[i])) {
-                                            n = addKey(out, max, n, &dp[i].key);
+                                            n = rd__AddPipeKey(out, max, n, &dp[i].key);
                                         }
                                     }
                                 }
@@ -1062,7 +1062,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                         const int np = rd__PlanScreenDrawEx(&s, kPrims[p], 1, RD_SPACE_WORLD,
                                                             RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                         for (int i = 0; i < np; i++) {
-                            n = addKey(out, max, n, &dp[i].key);
+                            n = rd__AddPipeKey(out, max, n, &dp[i].key);
                         }
                     }
                 }
@@ -1081,14 +1081,14 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
                                               RHI_FMT_UNKNOWN, dp);
             for (int i = 0; i < np; i++) {
-                n = addKey(out, max, n, &dp[i].key);
+                n = rd__AddPipeKey(out, max, n, &dp[i].key);
                 /* package R8: the font atlas on the overlay (font_ps) */
                 dp[i].key.fs = RD_FS_FONT;
-                n = addKey(out, max, n, &dp[i].key);
+                n = rd__AddPipeKey(out, max, n, &dp[i].key);
                 /* v0.4.2 (F-A): the popups' and the photo panel's sheet
                  * text (font_sheet_ps) */
                 dp[i].key.fs = RD_FS_FONT_SHEET;
-                n = addKey(out, max, n, &dp[i].key);
+                n = rd__AddPipeKey(out, max, n, &dp[i].key);
             }
         }
     }
@@ -1113,9 +1113,9 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                 for (int sh = 0; sh < 2; sh++) {
                     dp[i].key.fs = sh ? RD_FS_FONT_SHEET : RD_FS_FONT;
                     dp[i].key.gs.colorMask = 0xF;
-                    n = addKey(out, max, n, &dp[i].key);
+                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
                     dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */
-                    n = addKey(out, max, n, &dp[i].key);
+                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
                 }
             }
         }
@@ -1124,15 +1124,15 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     const RdPipeKeyInt blitB = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_BGRA8_UNORM);
     const RdPipeKeyInt exact = rd__PostKey(RD_VS_BLEND_INT, RD_FS_BLEND_INT, RHI_FMT_RGBA8_UINT);
     const RdPipeKeyInt dateSnap = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
-    n = addKey(out, max, n, &dateSnap);
-    n = addKey(out, max, n, &blitA);
-    n = addKey(out, max, n, &blitB);
+    n = rd__AddPipeKey(out, max, n, &dateSnap);
+    n = rd__AddPipeKey(out, max, n, &blitA);
+    n = rd__AddPipeKey(out, max, n, &blitB);
     /* v0.4.1 (R1): the box blit with the effects depth, on both outputs */
     const RdPipeKeyInt depthA = rd__PresentDepthKey(RHI_FMT_RGBA8_UNORM);
     const RdPipeKeyInt depthB = rd__PresentDepthKey(RHI_FMT_BGRA8_UNORM);
-    n = addKey(out, max, n, &depthA);
-    n = addKey(out, max, n, &depthB);
-    n = addKey(out, max, n, &exact);
+    n = rd__AddPipeKey(out, max, n, &depthA);
+    n = rd__AddPipeKey(out, max, n, &depthB);
+    n = rd__AddPipeKey(out, max, n, &exact);
     return n;
 }
 
@@ -1176,7 +1176,7 @@ uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n)
             s.ds.test.ztst = kZ[z];
             s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
             const RdPipeKeyInt k = rd__BlurKey(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
-            n = addKey(out, max, n, &k);
+            n = rd__AddPipeKey(out, max, n, &k);
         }
     }
     return n;

@@ -302,18 +302,7 @@ uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n
         const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, kStates[i].space,
                                           RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
         for (int k = 0; k < np; k++) {
-            uint32_t j;
-            for (j = 0; j < n && j < max; j++) {
-                if (rd__PipeKeyEqual(&out[j], &dp[k].key)) {
-                    break;
-                }
-            }
-            if (j == n) {
-                if (n < max) {
-                    out[n] = dp[k].key;
-                }
-                n++;
-            }
+            n = rd__AddPipeKey(out, max, n, &dp[k].key);
         }
     }
     return n;
