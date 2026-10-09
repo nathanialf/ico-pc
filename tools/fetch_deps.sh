@@ -361,7 +361,7 @@ fi
 # 2026-10-09), with the three submodules the compiler needs at the commits
 # that tree records, each checked the same way (googletest is left out with
 # the tests). The dxc target
-# alone, Release, with the host's g++ and Ninja; about 5 minutes on 8 cores.
+# alone, Release, with the host's g++ and Ninja; a few minutes on 8 cores.
 # bin/dxc loads lib/libdxcompiler.so through its $ORIGIN/../lib run path, as
 # in the x86-64 release. No libdxil.so: the arm64 presets compile no DXIL
 # (ICO_SHADERS_DXIL=OFF).

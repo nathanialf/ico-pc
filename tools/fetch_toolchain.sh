@@ -23,15 +23,18 @@
 # too (CMakeLists.txt, cmake_minimum_required).
 #
 # The host is x86-64 or arm64 (aarch64) Linux (tools/fetch_common.sh). An
-# arm64 host takes llvm-mingw's and Kitware's aarch64 builds of the same
-# releases, and skips section 3 unless SKIP_MINGW_GCC=0: its Debian packages
-# are amd64 programs. tools/fetch_deps.sh picks its own per-host pieces.
+# arm64 host takes Kitware's aarch64 build of the same CMake release. It
+# skips section 1 unless SKIP_LLVM_MINGW=0 (the presets that use llvm-mingw
+# build for x86-64; the pin of its aarch64 build is kept for that override)
+# and section 3 unless SKIP_MINGW_GCC=0 (its Debian packages are amd64
+# programs). tools/fetch_deps.sh picks its own per-host pieces.
 #
 # Overrides:
 #   LLVM_MINGW_TAG, LLVM_MINGW_SHA256   pin another release
 #   LLVM_MINGW_URL                      fetch from elsewhere
 #   DEB_SNAPSHOT                        snapshot.debian.org fallback base
 #   CMAKE_VERSION, CMAKE_SHA256         pin another CMake release
+#   SKIP_LLVM_MINGW=1                   skip section 1 (the default on arm64)
 #   SKIP_MINGW_GCC=1                    skip section 3 (the default on arm64)
 #   SKIP_CMAKE=1                        skip section 4
 # =============================================================================
@@ -59,7 +62,14 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- 1. llvm-mingw -----------------------------------------------------------
 
-if stamped "$DEST/llvm-mingw" "$NAME"; then
+if [[ "${SKIP_LLVM_MINGW:-$(by_arch 0 1)}" == "1" ]]; then
+    if [[ -z "${SKIP_LLVM_MINGW:-}" ]]; then
+        echo "==> llvm-mingw: its presets build for x86-64, not fetched on this host" \
+            "(SKIP_LLVM_MINGW=0 fetches it)"
+    else
+        echo "==> SKIP_LLVM_MINGW=1; not fetching llvm-mingw"
+    fi
+elif stamped "$DEST/llvm-mingw" "$NAME"; then
     echo "==> llvm-mingw ${TAG} already at $DEST/llvm-mingw"
 else
     fetch "$URL" "$SHA256" "$TMP/$NAME.tar.xz"
@@ -99,7 +109,12 @@ MINGW_DEBS=(
 )
 
 if [[ "${SKIP_MINGW_GCC:-$(by_arch 0 1)}" == "1" ]]; then
-    echo "==> SKIP_MINGW_GCC=1; not building $MINGW_GCC"
+    if [[ -z "${SKIP_MINGW_GCC:-}" ]]; then
+        echo "==> mingw-gcc: amd64 programs, not fetched on this host" \
+            "(SKIP_MINGW_GCC=0 fetches them)"
+    else
+        echo "==> SKIP_MINGW_GCC=1; not building $MINGW_GCC"
+    fi
 elif stamped "$MINGW_GCC" "$MINGW_GCC_ID"; then
     echo "==> mingw-w64 gcc already at $MINGW_GCC"
 else

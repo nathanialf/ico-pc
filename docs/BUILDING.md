@@ -34,7 +34,7 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 
 | directory | what | from |
 | --- | --- | --- |
-| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64` (`-aarch64` on an arm64 host), SHA-256 pinned |
+| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned (not fetched on an arm64 host unless `SKIP_LLVM_MINGW=0`, which takes the pinned `-aarch64` build) |
 | `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz` (`-linux-aarch64` on an arm64 host), SHA-256 pinned |
 | `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2 and libchdr | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
@@ -87,21 +87,24 @@ one architecture replaces the other's CMake and DXC in place.
 
 What differs from an x86-64 host:
 
-- `tools/fetch_toolchain.sh` takes the aarch64 builds of the same llvm-mingw
-  and CMake releases and leaves out `mingw-gcc/` (its Debian packages are
-  amd64 programs; `SKIP_MINGW_GCC=0` asks for it anyway). The Windows presets
-  are for x86-64 hosts.
+- `tools/fetch_toolchain.sh` takes the aarch64 build of the same CMake
+  release and leaves out `llvm-mingw/` and `mingw-gcc/`: the presets that
+  use them (`win-x64`, `win-x64-clang`, `linux-x64-clang`) build for x86-64
+  and are for x86-64 hosts, and mingw-gcc's Debian packages are amd64
+  programs. `SKIP_LLVM_MINGW=0` and `SKIP_MINGW_GCC=0` fetch them anyway.
 - `tools/fetch_deps.sh` builds SDL3 into `deps/sdl3/linux-arm64/` with the
   Wayland and KMSDRM video backends as well as X11 (it stops when SDL's
   configure leaves either out), writes the Wayland protocol files' notices
   beside it for the package's `NOTICES.txt`, and takes the arm64 builds of
   the pinned Debian packages (the X11 and audio headers when the host has
-  none, the validation layer).
+  none, the validation layer). SDL picks the backend at run time. Wayland
+  is reported working on one handheld (Sway on ROCKNIX); KMSDRM, with no
+  desktop at all, is untested.
 - Microsoft publishes no aarch64 Linux DXC, so `tools/fetch_deps.sh` builds
   the pinned release's tag from source (the commit id and the SHA-256 of its
   `git archive` checked, as libmpeg2's and libchdr's, and the same two checks
   on each of its three submodules) into `deps/dxc/` with the
-  host's g++: about 5 minutes on 8 cores. It builds the `dxc` program and
+  host's g++: a few minutes on 8 cores. It builds the `dxc` program and
   `libdxcompiler.so` only; there is no `libdxil.so`, and the arm64 preset
   compiles no DXIL (`ICO_SHADERS_DXIL=OFF`).
 - The preset is the window build with the program linked, Vulkan only
