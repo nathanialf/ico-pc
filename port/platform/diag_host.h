@@ -141,6 +141,13 @@ int ico_diag_float_fault(const char *site, const void *caller);
 /* The faults counted so far (tests). */
 unsigned int ico_diag_float_faults(void);
 
+#ifdef _WIN32
+/* Windows: puts the vectored exception handler in, once the file dialog is
+   behind us (shell extensions in it may raise and handle their own
+   faults); main_host.c calls it. */
+void ico_diag_arm_vectored(void);
+#endif
+
 /* --- The game's hooks (calls in ico2/) ----------------------------------- */
 
 /* common/src/main.c: boot milestones and its static thread functions. */

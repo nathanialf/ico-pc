@@ -145,12 +145,6 @@ void jimakuManager(void);
 void sndManager(void);
 void InitIcoMisc(int *arg); /* common/src/icoMisc.c */
 
-#ifdef _WIN32
-
-void ico_diag_arm_vectored(void);
-
-#endif
-
 typedef struct Args {
     const char *iso;
     const char *pad_script;

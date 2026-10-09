@@ -941,20 +941,20 @@ void ico_host_kanban_step(int boot_step, int mc_check_step)
     }
 }
 
+/* what an abort() is called in the crash report, on both systems */
+#define ABORT_WHAT "abort() (an assertion or a fatal error; see the last failure message)"
+
 /* --- Stacks ------------------------------------------------------------------------ */
 
 /* Words in [lo, hi) that point into the executable: return-address
    candidates, innermost first. */
-static void scan_stack(const unsigned char *lo, const unsigned char *hi, uintptr_t shown_base,
-                       uintptr_t real_base)
+static void scan_stack(const unsigned char *lo, const unsigned char *hi)
 {
     char line[LINE_MAX_BYTES];
     size_t n = 0;
     int hits = 0;
     const unsigned char *p;
     line[0] = '\0';
-    (void)shown_base;
-    (void)real_base;
     for (p = lo; p + sizeof(uintptr_t) <= hi && hits < STACK_HITS; p += sizeof(uintptr_t)) {
         uintptr_t w;
         memcpy(&w, p, sizeof w);
@@ -1083,8 +1083,7 @@ static void report_crash_block(void)
         flog("ico_pc: last failure message: %s", failure);
     }
     if (crash.stack_hi > crash.stack_lo) {
-        scan_stack((const unsigned char *)crash.stack_lo, (const unsigned char *)crash.stack_hi, 0,
-                   0);
+        scan_stack((const unsigned char *)crash.stack_lo, (const unsigned char *)crash.stack_hi);
     }
     heartbeat(1);
     dump_threads();
@@ -1286,7 +1285,7 @@ static void watchdog_fire(const char *reason)
         flog("ico_pc: (a game thread that never reaches a kernel call keeps the host loop from "
              "running; the address shows where)");
         if (sample_len > 0) {
-            scan_stack(sample_stack, sample_stack + sample_len, 0, 0);
+            scan_stack(sample_stack, sample_stack + sample_len);
         }
     } else {
         flog("ico_pc: could not sample the main thread");
@@ -1630,7 +1629,7 @@ ICO_ENTRY static void abort_handler(int sig)
     if (InterlockedExchange((volatile LONG *)&fatal_once, 1) != 0) {
         TerminateProcess(GetCurrentProcess(), EXIT_CRASH);
     }
-    crash.what = "abort() (an assertion or a fatal error; see the last failure message)";
+    crash.what = ABORT_WHAT;
     crash.code = SIGABRT;
     crash.pc = 0;
     crash.sp = (uintptr_t)&here;
@@ -1680,7 +1679,7 @@ static const char *signal_name(int sig)
     case SIGTRAP:
         return "SIGTRAP";
     case SIGABRT:
-        return "abort() (an assertion or a fatal error; see the last failure message)";
+        return ABORT_WHAT;
     }
     return "a signal";
 }
@@ -1923,10 +1922,6 @@ void ico_diag_init(const char *log_path)
 }
 
 #ifdef _WIN32
-
-/* The vectored handler goes in once the file dialog is behind us (shell
-   extensions in it may raise and handle their own faults). */
-void ico_diag_arm_vectored(void);
 
 void ico_diag_arm_vectored(void)
 {
