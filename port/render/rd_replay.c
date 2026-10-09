@@ -42,6 +42,7 @@
  * (backends do not).  A draw that samples its own render target samples a
  * copy taken just before it (the GS reads the live buffer).
  */
+#include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -311,13 +312,22 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
         return;
     }
     /* N2: a pending clear's target leaves its attachment state (read,
-     * copied): the clear is recorded first */
+     * copied): the clear is recorded first.  A pending clear or reset
+     * belongs to the replay's list (s_cl), so only a transition in that list
+     * records it; any other list finds nothing pending (the replay's last
+     * endPass records both before it ends its list). */
     if (s_pend.p.target && (t.id == s_pend.colorTex || t.id == s_pend.depthTex)) {
-        flushClear();
+        assert(cl.id == s_cl.id && "a pending clear's target moved in another list");
+        if (cl.id == s_cl.id) {
+            flushClear();
+        }
     }
     /* the same for a pending shadow reset's targets */
     if (s_stencil.depthTex && (t.id == s_stencil.colorTex || t.id == s_stencil.depthTex)) {
-        flushStencilClear();
+        assert(cl.id == s_cl.id && "a pending shadow reset's target moved in another list");
+        if (cl.id == s_cl.id) {
+            flushStencilClear();
+        }
     }
     RhiTextureBarrier b = {t, *cur, want};
     rhi_CmdBarrier(cl, &b, 1);

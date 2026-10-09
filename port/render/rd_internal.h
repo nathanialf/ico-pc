@@ -1344,7 +1344,12 @@ uint64_t rd__OverlayRingBytes(void);
 void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t prim,
                      const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend);
 void rd__OverlayState(RdStateBlock *s, uint8_t blend);
-/* Moves a texture to a state with a barrier when needed (outside passes). */
+/* Moves a texture to a state with a barrier when needed (outside passes).
+ * A clear or shadow reset the replay has not recorded yet (RdPendingClear,
+ * RdStencilWindow) on t is recorded first, into the replay's list: only when
+ * cl is that list.  Any other list (a readback, the present's own) must find
+ * nothing pending on t, which is asserted; the replay's last endPass records
+ * whatever is pending before its list ends. */
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
 
 /* v0.4.2 (N2): a target clear the replay has not recorded yet
