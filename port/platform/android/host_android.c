@@ -355,8 +355,6 @@ void ico_android_log_version(void)
     }
 }
 
-#endif
-
 /* --- the phone's vibrator ------------------------------------------------- */
 
 /* Calls the static Java method IcoActivity.vibrate(int ms, int amplitude).
@@ -401,3 +399,5 @@ void ico_host_vibrate(int amplitude, int ms)
     }
     (*env)->DeleteLocalRef(env, act);
 }
+
+#endif /* __ANDROID__ */
