@@ -298,7 +298,8 @@ static bool dx_PickAdapter(void)
             char name[128];
             dx_AdapterName(a, name, sizeof(name));
             bool ok = !dx_IsSoftware(a) && dx_AdapterOk(a);
-            DX_LOG("adapter %u: %s%s", i, name, ok ? "" : " (unsuitable: no feature level 11_0)");
+            DX_LOG("adapter %u: %s%s", i, name,
+                   ok ? "" : " (unsuitable: a software adapter, or no feature level 11_0)");
             bool forced = false;
             if (force && *force && ok) {
                 char idx[16];
