@@ -2224,6 +2224,20 @@ static bool drawExpanded(Replay *r, const RdDrawPass *pass, const DrawSetup *ds,
     return any;
 }
 
+/* The DATE snapshot only where a screen-prim command can draw: its box with
+ * the full-screen, UI and mirror decisions doScreen makes after
+ * prepareDraw.  False (the whole target) when the draw does not test DATE
+ * or the area cannot be had. */
+static bool dateAreaFor(const Replay *r, const RdCmd *c, const RdScreenVtx *v, uint32_t n,
+                        RhiRect *area)
+{
+    const RdTargetRec *tcA = rd__TargetRec(r->st.color);
+    return r->st.ds.test.date != RD_DATE_OFF && tcA &&
+           rd__ScreenArea(tcA, &r->st, v, n, screenStretch(r, tcA, v, n, c->b[0], c->b[1]),
+                          c->b[1] == RD_SPACE_UI, mirrorUi(r, c->b[1]),
+                          r->st.aa1 && aa1Prim(c->b[0]), area);
+}
+
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
@@ -2241,17 +2255,8 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
-    /* the DATE snapshot only where the command can draw: its box with the
-     * full-screen, UI and mirror decisions made below */
     RhiRect dateArea;
-    const RhiRect *dateAt = NULL;
-    const RdTargetRec *tcA = rd__TargetRec(r->st.color);
-    if (r->st.ds.test.date != RD_DATE_OFF && tcA &&
-        rd__ScreenArea(tcA, &r->st, v, n, screenStretch(r, tcA, v, n, c->b[0], c->b[1]),
-                       c->b[1] == RD_SPACE_UI, mirrorUi(r, c->b[1]), r->st.aa1 && aa1Prim(c->b[0]),
-                       &dateArea)) {
-        dateAt = &dateArea;
-    }
+    const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
     if (!prepareDraw(r, &ds, dateAt)) {
         return;
     }
