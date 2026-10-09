@@ -2,7 +2,7 @@
 
 - Options > Effects has a "Full pixel (no border)" row that removes the thin black border around the picture. It is off by default.
 - The disc image can now be a .bin file, with or without its .cue file. On Android, choose the .bin.
-- A download for 64-bit ARM Linux handhelds and boards (the file whose name ends in `-linux-arm64.tar.gz`). It needs Debian 13, Ubuntu 24.04 or newer, and has been tested on one handheld so far.
+- A download for 64-bit ARM Linux handhelds and boards (the file whose name ends in `-linux-arm64.tar.gz`). It needs Debian 13, Ubuntu 24.04 or newer, and has been tested on one handheld so far. Thanks to KClough for building and testing it.
 
 ## Fixed
 
