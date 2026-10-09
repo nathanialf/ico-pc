@@ -8,7 +8,7 @@
       "used_for": "window, input, audio output; shipped as libSDL3.so.0 / SDL3.dll beside the program",
       "platforms": ["linux", "windows"],
       "texts": [
-        {"any_of": ["tools/toolchain/deps/sdl3/linux-x64/LICENSE.txt", "tools/toolchain/deps/sdl3/mingw/LICENSE.txt"]}
+        {"any_of": ["tools/toolchain/deps/sdl3/linux-x64/LICENSE.txt", "tools/toolchain/deps/sdl3/linux-arm64/LICENSE.txt", "tools/toolchain/deps/sdl3/mingw/LICENSE.txt"]}
       ]
     },
     {

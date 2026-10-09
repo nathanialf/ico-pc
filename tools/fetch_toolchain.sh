@@ -22,12 +22,17 @@
 # (tools/toolchain/cmake/bin/cmake); the system's CMake 3.25 or later works
 # too (CMakeLists.txt, cmake_minimum_required).
 #
+# The host is x86-64 or arm64 (aarch64) Linux (tools/fetch_common.sh). An
+# arm64 host takes llvm-mingw's and Kitware's aarch64 builds of the same
+# releases, and skips section 3 unless SKIP_MINGW_GCC=0: its Debian packages
+# are amd64 programs. tools/fetch_deps.sh picks its own per-host pieces.
+#
 # Overrides:
 #   LLVM_MINGW_TAG, LLVM_MINGW_SHA256   pin another release
 #   LLVM_MINGW_URL                      fetch from elsewhere
 #   DEB_SNAPSHOT                        snapshot.debian.org fallback base
 #   CMAKE_VERSION, CMAKE_SHA256         pin another CMake release
-#   SKIP_MINGW_GCC=1                    skip section 3
+#   SKIP_MINGW_GCC=1                    skip section 3 (the default on arm64)
 #   SKIP_CMAKE=1                        skip section 4
 # =============================================================================
 set -euo pipefail
@@ -35,23 +40,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/tools/toolchain"
 
-TAG="${LLVM_MINGW_TAG:-20260922}"
-NAME="llvm-mingw-${TAG}-ucrt-ubuntu-22.04-x86_64"
-SHA256="${LLVM_MINGW_SHA256:-bb7bb7654b33d5aa8712acb837c963b2e0c56352560c76105270a3268c665c21}"
-URL="${LLVM_MINGW_URL:-https://github.com/mstorsjo/llvm-mingw/releases/download/${TAG}/${NAME}.tar.xz}"
+# fetch, stamped, fetch_deb; the host (ICO_HOST_ARCH, by_arch)
+# shellcheck source=tools/fetch_common.sh
+source "$ROOT/tools/fetch_common.sh"
 
-case "$(uname -m)" in
-    x86_64) ;;
-    *) echo "fetch_toolchain: only x86_64 Linux hosts are pinned here; set LLVM_MINGW_URL" >&2; exit 1 ;;
-esac
+# the host builds of one llvm-mingw release; the SHA-256s are the digests
+# GitHub lists for the assets
+TAG="${LLVM_MINGW_TAG:-20260922}"
+NAME="llvm-mingw-${TAG}-ucrt-ubuntu-22.04-$(by_arch x86_64 aarch64)"
+SHA256="${LLVM_MINGW_SHA256:-$(by_arch \
+    bb7bb7654b33d5aa8712acb837c963b2e0c56352560c76105270a3268c665c21 \
+    07d21263c56bfe9a713db6fdb3f7434bf4c121a005e40397d3b4c0170fb06769)}"
+URL="${LLVM_MINGW_URL:-https://github.com/mstorsjo/llvm-mingw/releases/download/${TAG}/${NAME}.tar.xz}"
 
 mkdir -p "$DEST"
 TMP="$(mktemp -d "$DEST/.fetch.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
-
-# fetch, stamped, fetch_deb
-# shellcheck source=tools/fetch_common.sh
-source "$ROOT/tools/fetch_common.sh"
 
 # --- 1. llvm-mingw -----------------------------------------------------------
 
@@ -94,7 +98,7 @@ MINGW_DEBS=(
     "pool/main/m/mingw-w64/mingw-w64-x86-64-dev_12.0.0-5_all.deb 0bf89cf7454cccb49cd2a46a6f7b33896f6ae3a1a2fe33e02c40be6155bbb385"
 )
 
-if [[ "${SKIP_MINGW_GCC:-0}" == "1" ]]; then
+if [[ "${SKIP_MINGW_GCC:-$(by_arch 0 1)}" == "1" ]]; then
     echo "==> SKIP_MINGW_GCC=1; not building $MINGW_GCC"
 elif stamped "$MINGW_GCC" "$MINGW_GCC_ID"; then
     echo "==> mingw-w64 gcc already at $MINGW_GCC"
@@ -112,12 +116,14 @@ fi
 
 # --- 4. CMake ----------------------------------------------------------------
 #
-# Kitware's portable Linux x86-64 build, pinned by version and by the SHA-256
-# that release's cmake-<version>-SHA-256.txt lists. It runs from any
+# Kitware's portable Linux build for the host (x86_64 or aarch64), pinned by
+# version and by the SHA-256 that release's cmake-<version>-SHA-256.txt lists. It runs from any
 # directory (its modules are found relative to the executable).
 CMAKE_VERSION="${CMAKE_VERSION:-4.4.4}"
-CMAKE_SHA256="${CMAKE_SHA256:-e5bb807f7728cb60cd8b27ebc97a2edb469b68655f21e844a600c3575b76f5bb}"
-CMAKE_NAME="cmake-${CMAKE_VERSION}-linux-x86_64"
+CMAKE_SHA256="${CMAKE_SHA256:-$(by_arch \
+    e5bb807f7728cb60cd8b27ebc97a2edb469b68655f21e844a600c3575b76f5bb \
+    a1b6cc63636a0e55c63257cf3315a8a5f129e42fade25db1afea4ff8ab06f25e)}"
+CMAKE_NAME="cmake-${CMAKE_VERSION}-linux-$(by_arch x86_64 aarch64)"
 CMAKE_URL="https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/${CMAKE_NAME}.tar.gz"
 CMAKE_DIR="$DEST/cmake"
 

@@ -53,8 +53,8 @@ if(ICO_RUN_TESTS)
 endif()
 
 # --- SDL3 ---------------------------------------------------------------------
-# One prefix per target: the source build for Linux x86-64, SDL's mingw
-# development release for the two Windows targets, the NDK build for
+# One prefix per target: the source builds for Linux x86-64 and arm64, SDL's
+# mingw development release for the two Windows targets, the NDK build for
 # Android arm64. SDL3_DIR is set directly
 # so the cross toolchains' CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY does not
 # hide the user-local prefix.
@@ -64,6 +64,8 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 elseif(ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     # tools/fetch_android.sh's NDK build
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/android-arm64")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|AARCH64|arm64)$")
+    set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/linux-arm64")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/linux-x64")
 endif()
