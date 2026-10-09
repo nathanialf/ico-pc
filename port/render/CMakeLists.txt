@@ -392,6 +392,20 @@ target_compile_options(rd_fog_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_fog_test PRIVATE ico_render ico_math)
 
+# fog_lut_test: the depth fog's game side alone, ZFog.c with the renderer
+# calls stubbed: the fog tables and sprites of three player dumps byte for
+# byte, and a sweep of the stage parameters against the integer formula.
+# tools/fog_arm64_diff.sh builds the same program for arm64 (the Android
+# build's compiler and flags), runs it under qemu-aarch64 and compares its
+# output with this build's (77 without an NDK or qemu).
+add_executable(fog_lut_test test/fog_lut_test.c "${CMAKE_SOURCE_DIR}/ico2/seki/src/ZFog.c")
+target_include_directories(fog_lut_test PRIVATE ${_ico_seki_incs} "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(fog_lut_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(fog_lut_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+
 # rd_blur_test: the full-screen effects of staticBlur.c.
 # staticBlur.c with the 2D layer and Matrix.c, as the window build has
 # them, the rest of the game stubbed: the commands each entry point records,
@@ -566,6 +580,17 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_fog PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME fog_lut COMMAND fog_lut_test)
+    if(CMAKE_HOST_UNIX AND NOT CMAKE_CROSSCOMPILING)
+        find_program(ICO_QEMU_AARCH64 qemu-aarch64)
+        add_test(NAME fog_lut_arm64
+                 COMMAND "${CMAKE_SOURCE_DIR}/tools/fog_arm64_diff.sh" $<TARGET_FILE:fog_lut_test>
+                         "${CMAKE_CURRENT_BINARY_DIR}/fog-arm64")
+        set_tests_properties(fog_lut_arm64 PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+        if(ICO_QEMU_AARCH64)
+            set_tests_properties(fog_lut_arm64 PROPERTIES ENVIRONMENT "QEMU=${ICO_QEMU_AARCH64}")
+        endif()
+    endif()
     add_test(NAME rd_blur COMMAND rd_blur_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_blur PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
