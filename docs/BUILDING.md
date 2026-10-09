@@ -308,9 +308,11 @@ Names are `prefix_snake_case`, the prefix being the module's:
 | `ui_` | `port/ui`, the menus |
 | `texpack_`, `modelpack_`, `gltf_` | the texture pack, model pack and glTF code in `port/render` |
 
-The `render`, `ui` and `rhi` families are being renamed to snake case in
-this release; some functions still carry the older mixed-case spelling until
-that lands.
+Every name `port/` declares with a module prefix uses `prefix_snake_case`;
+generated files and the names the game itself defines keep their spelling.
+The older mixed-case prefixed names were renamed by
+`tools/rename_port_symbols.py` with its table `tools/rename_table.txt`;
+`--check` with that table lists any mixed-case name left.
 
 Log lines start with the module's prefix and a colon: `ico_pc:` (the host:
 `main_host.c`, `host_config.c`, `diag_host.c`, `kernel_host.c`), `rd:`,

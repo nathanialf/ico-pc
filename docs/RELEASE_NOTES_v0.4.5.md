@@ -1,6 +1,6 @@
 ## New
 
-- Options > Controls has three more mouse camera rows: Mouse camera speed, Mouse camera range and Camera swings back.
+- On PC, Options > Controls has three more mouse camera rows: Mouse camera speed, Mouse camera range and Camera swings back.
 - Android: the first start shows what the game is doing the whole time, and so does the first start after an update.
 - Android: the touch controls make the phone vibrate the way a controller would rumble.
 - Options > Gameplay > Achievement pop-ups turns the pop-ups off.
