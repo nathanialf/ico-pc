@@ -89,7 +89,7 @@ static void normalCLoop(Vu1Ref *r, int clip, const float (*in)[4], VuBatchOut *o
         /* :173 ftoi0.xyzw vf22, vf18: the colour as sent, no clamp */
         vu_ftoi0_4(o->rgba, col);
         /* :175-180 region test (code 32 only); :166-198 the ADC counter vi05 */
-        int inside = clip ? vu_inside(p, r->vf[13], r->vf[14]) : 1;
+        int inside = clip ? vu_inside_region(p, r->vf[13], r->vf[14]) : 1;
         int adc = vu_adc_counter(&r->vi[5], restartFlag(st), inside);
         o->inside = inside;
         o->clipFlags = 0;
@@ -248,7 +248,7 @@ static void normalLLoop(Vu1Ref *r, int spec, const float (*in)[4], VuBatchOut *o
         } else {
             litColour(r, nrm, col, o->rgba);
         }
-        int inside = vu_inside(p, r->vf[13], r->vf[14]);
+        int inside = vu_inside_region(p, r->vf[13], r->vf[14]);
         int adc = vu_adc_counter(&r->vi[5], restartFlag(st), inside);
         o->inside = inside;
         o->clipFlags = 0;
@@ -321,7 +321,7 @@ static void normalRef(Vu1Ref *r, const float (*in)[4], VuBatchOut *out)
         o->stq[3] = 0.0f;
         /* :402 ftoi0 of the colour as sent */
         vu_ftoi0_4(o->rgba, col);
-        int inside = vu_inside(p, r->vf[13], r->vf[14]);
+        int inside = vu_inside_region(p, r->vf[13], r->vf[14]);
         int adc = vu_adc_counter(&r->vi[5], restartFlag(st), inside);
         o->inside = inside;
         o->clipFlags = 0;

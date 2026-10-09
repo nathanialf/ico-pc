@@ -135,6 +135,13 @@ void vu1ref_MeshSetLight(Vu1Ref *r, const float qw[8][4]);
 /* particle code 16, SET_PARTICLE_MATRIX (particle.vsm:43): vf01..vf08. */
 void vu1ref_ParticleSetMatrix(Vu1Ref *r, const float qw[8][4]);
 
+/* The wide factor of the frame's world space (g_space[SPACE_WORLD].x, the
+ * renderer's wideX: (4/3) / aspect on a wide scene target, 1 otherwise),
+ * shared by every Vu1Ref. The region test of normal_c, normal_l and mesh
+ * compares x squeezed by it about GS X 2048, as vu_common.hlsli's
+ * vu_region_pos does; 1 (the default) tests the position as it is. */
+void vu1ref_SetWideX(float f);
+
 /* ------------------------------------------------------------- draws
  * in = the batch at TOP: in[0] is the GIF tag (NLOOP in the low 15 bits of
  * the first word is the vertex count), then the vertices. Each run is the

@@ -128,6 +128,39 @@ static inline int vu_inside(const float *p, const float *lo, const float *hi)
 extern const float vu_lo0[4];
 extern const float vu_hi4094[4];
 
+/* vu1ref_SetWideX's factor (1 = 4:3) and the centre the wide projection
+ * squeezes x about (shader_consts.h ICO_VU_REGION_CX). */
+extern float vu1ref_wideX;
+#define VU_REGION_CX 2048.0f
+
+/* The x the region test compares on a wide screen (vu_common.hlsli
+ * vu_region_pos): x squeezed by the wide factor f about the centre, the
+ * subtract, multiply and add each rounded on its own as the shader's
+ * precise expression does. Only called for f != 1. */
+static inline float vu_region_x(float x, float f)
+{
+    float d = x - VU_REGION_CX;
+    d = d * f;
+    return d + VU_REGION_CX;
+}
+
+/* The region test of normal_c code 32, normal_l 32, 34 and 38 and the mesh
+ * program (vu_inside against vf13/vf14) with x where the wide picture puts
+ * it. A factor of exactly 1 tests p as it is: (x - 2048) * 1 + 2048 rounds
+ * a tiny positive x to 0, so the remap is skipped there. The cluster
+ * program's test (bounds from the common block) is not remapped. */
+static inline int vu_inside_region(const float *p, const float *lo, const float *hi)
+{
+    const float f = vu1ref_wideX;
+    if (f == 1.0f) {
+        return vu_inside(p, lo, hi);
+    }
+    Vec4 q;
+    v4_copy(q, p);
+    q[0] = vu_region_x(p[0], f);
+    return vu_inside(q, lo, hi);
+}
+
 /* ADC counter of the triangle loops (vi05 in normal_c/normal_l/mesh, vi07 in
  * cluster): a strip-start vertex (ST.w < 1) sets it to 3 before the
  * decrement, a vertex outside the region sets it to 3 after it; the vertex

@@ -63,7 +63,7 @@ void vu1ref_Mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
         o->stq[3] = 0.0f;
         /* :197-204 region test against vf13/vf14 from SET_MESH_MATRIX;
          * :200-213 the ADC counter vi05, no strip flag */
-        int inside = vu_inside(p, r->vf[13], r->vf[14]);
+        int inside = vu_inside_region(p, r->vf[13], r->vf[14]);
         int adc = vu_adc_counter(&r->vi[5], 0, inside);
         o->inside = inside;
         o->clipFlags = 0;
