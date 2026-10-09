@@ -1,7 +1,7 @@
-/* rd_interp.c: presentation between simulation ticks (renderer wave 7, R7b).
+/* rd_interp.c: presentation between simulation ticks.
  *
  * The game draws one frame per tick (25 Hz PAL, 30 Hz NTSC at the frame
- * step 2).  With RdSettings.interpolate in the Enhanced preset, rd_EndFrame
+ * step 2).  With RdSettings.interpolate on, in either preset, rd_EndFrame
  * only closes the frame and the host calls rd_Present(alpha) as often as
  * the display allows: the last closed frame (cur) is replayed with the data
  * of every keyed draw blended from its match in the frame before (prev),
@@ -22,7 +22,7 @@
  *                           cluster fade alpha), qw 4..15 (the common
  *                           block's world to screen, viewport and inverse
  *                           view matrices), 16..27 (the model matrices),
- *                           28..35 (the light matrices; I1: a lit program's
+ *                           28..35 (the light matrices; a lit program's
  *                           L1 turns with the model, rotateLight); the
  *                           bones; not qw 0, 1, 3 (constants and the GIF tag)
  *   RDC_GRID                the VU block and each vertex's position (and
@@ -31,36 +31,38 @@
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
- *   RDC_SHADOW_STRIP        XY and Z of each vertex; since V3 Shadow.c's
- *                           volumes prism by prism (blendPrisms)
- *   RDC_OVERLAY_TEXT        package DEF: an item's anchor, glow stretch and
- *                           colour (string, size and flags must be equal);
- *                           an op's colour and level (blendText)
- * Since I1 the RDC_SCREEN and RDC_SHADOW_STRIP draws of one tick only fade
- * in or out with t, or switch at t = 0.5 (unmatchedPass); prev's are
- * inserted into the output.  Package DEF: so do the RDC_OVERLAY_TEXT items
- * (their alpha), as the quads they stand for.
- * Matrices blend element by element, except (package S2) a normal
- * program's model matrices and a skinned draw's bones, which blend as a
- * slerped rotation and a lerped stretch about a pivot (rotateModel,
- * rotateBone): element by element a turn of 77 degrees in a tick, which
- * stage 3 has, drew a bone 22 % short half way.  A float pair with
- * different bits that is not both finite keeps cur's.  Since package S6 the
- * camera is one rigid blend for the frame (camSetup: the inverse views'
- * rotation slerped, the eye lerped, the projection lerped) and every VU
- * draw through the frame's camera is re-based on it, the draws that are
- * cur's included (camRebase, camCurDraw): an unmatched draw stood a tick
- * ahead of its neighbours.
+ *   RDC_SHADOW_STRIP        XY and Z of each vertex; Shadow.c's volumes
+ *                           prism by prism (blendPrisms)
+ *   RDC_OVERLAY_TEXT        an item's anchor, glow stretch and colour
+ *                           (string, size and flags must be equal); an
+ *                           op's colour and level (blendText)
+
+ * The RDC_SCREEN and RDC_SHADOW_STRIP draws of one tick only fade in or out
+ * with t, or switch at t = 0.5 (unmatchedPass); prev's are inserted into
+ * the output.  So do the RDC_OVERLAY_TEXT items (their alpha), as the quads
+ * they stand for.
+ * Matrices blend element by element, except a normal program's model
+ * matrices and a skinned draw's bones, which blend as a slerped rotation
+ * and a lerped stretch about a pivot (rotateModel, rotateBone): element by
+ * element a turn of 77 degrees in a tick, which stage 3 has, would draw a
+ * bone 22 % short half way.  A float pair with different bits that is not
+ * both finite keeps cur's.  The camera is one rigid blend for the frame
+ * (camSetup: the inverse views' rotation slerped, the eye lerped, the
+ * projection lerped) and every VU draw through the frame's camera is
+ * re-based on it, the draws that are cur's included (camRebase,
+ * camCurDraw); otherwise an unmatched draw would stand a tick ahead of its
+ * neighbours.
  *
  * A keyed draw snaps (is cur's) when prev has no match, when the payload's
  * shape differs (mesh, program, batch range, bone, vertex or particle
- * count, prim type; since S2 neither a mesh's code and clip mode nor a
- * shadow volume's topology, which blendPrisms (V3) or shiftShadow handles), or when it
- * jumped: a model's origin in the world (the model to screen translation
- * through the inverse of the frame's world to screen; a skinned draw's first
- * bone) moved more than RD_INTERP_JUMP_WORLD in the tick, or a screen prim's
- * or shadow vertex more than RD_INTERP_JUMP_SCREEN.  A particle whose position moved more than
- * four times its size, or whose alpha is 0 in either frame, keeps cur's.
+ * count, prim type; not a mesh's code and clip mode, nor a shadow volume's
+ * topology, which blendPrisms or shiftShadow handles), or when it jumped: a
+ * model's origin in the world (the model to screen translation through the
+ * inverse of the frame's world to screen; a skinned draw's first bone)
+ * moved more than RD_INTERP_JUMP_WORLD in the tick, or a screen prim's or
+ * shadow vertex more than RD_INTERP_JUMP_SCREEN.  A particle whose position
+ * moved more than four times its size, or whose alpha is 0 in either
+ * frame, keeps cur's.
  *
  * The whole frame snaps (rd__InterpSnap, RD_SNAP_*) without a previous
  * frame, across a discarded frame, on a keep frame, on a camera cut
@@ -81,26 +83,25 @@
  * every present of a tick draws the same feedback and FEED128 and DISPLAY
  * advance once per tick as on the PS2.
  *
- * The motion blur (v0.4.3, issue 28).  On the PS2 the sprite draws the
- * previous DISPLAY as Cs over the new SCENE with ALPHA (Cs - Cd) FIX / 128
- * + Cd (staticBlur.c MotionBlur, gif_SetAlpha mode 2), once a tick, and
- * the passes after it in lists 8 to 12 (the aura's add, the softening,
- * the brightness step, fades, the UI, the reduction's tint) make the next
- * DISPLAY of that: D_n = P((1 - a) S_n + a D_n-1) with a = FIX / 128.
- * Every present replays the whole frame, so a present that read the
- * previous present's DISPLAY ran that loop k times a tick (k presents a
- * tick).  The retention can be spread over the k presents (v0.4.2: FIX' =
- * 128 a^(1/k), a over the tick), but P cannot: with its gain g (the tint
- * over 128) and the light L it adds (the aura, the brightness step, a fade
- * to white) a still picture settled at (g (1 - a') S + L) / (1 - g a'),
- * a' = FIX' / 128, instead of the PS2's (g (1 - a) S + L) / (1 - g a).
- * FIX 32 on 30 Hz ticks at 300 presents a second (FIX' 111) kept 5.6 times
- * the PS2's share of L, and a tint of 148 or more (g a' >= 1) ran to white;
- * a tint under 128 went dark the same way.  Now every present of a tick
- * draws the recorded FIX over the DISPLAY the tick started from
- * (DISPLAY_HELD, feedback), so the loop runs once a tick at any present
- * rate and the tick's picture is the PS2's; between ticks the old frame
- * stays the last tick's, as on the PS2.
+ * The motion blur (issue 28).  On the PS2 the sprite draws the previous
+ * DISPLAY as Cs over the new SCENE with ALPHA (Cs - Cd) FIX / 128 + Cd
+ * (staticBlur.c MotionBlur, gif_SetAlpha mode 2), once a tick, and the passes
+ * after it in lists 8 to 12 (the aura's add, the softening, the brightness
+ * step, fades, the UI, the reduction's tint) make the next DISPLAY of that:
+ * D_n = P((1 - a) S_n + a D_n-1) with a = FIX / 128.  Every present replays
+ * the whole frame, so a present that read the previous present's DISPLAY
+ * would run that loop k times a tick (k presents a tick).  The retention
+ * could be spread over the k presents (FIX' = 128 a^(1/k), a over the tick),
+ * but P cannot: with its gain g (the tint over 128) and the light L it adds
+ * (the aura, the brightness step, a fade to white) a still picture would
+ * settle at (g (1 - a') S + L) / (1 - g a'), a' = FIX' / 128, instead of the
+ * PS2's (g (1 - a) S + L) / (1 - g a).  FIX 32 on 30 Hz ticks at 300 presents
+ * a second (FIX' 111) would keep 5.6 times the PS2's share of L, and a tint
+ * of 148 or more (g a' >= 1) would run to white; a tint under 128 would go
+ * dark the same way.  Instead every present of a tick draws the recorded FIX
+ * over the DISPLAY the tick started from (DISPLAY_HELD, feedback), so the
+ * loop runs once a tick at any present rate and the tick's picture is the
+ * PS2's; between ticks the old frame stays the last tick's, as on the PS2.
  */
 #include <math.h>
 #include <stddef.h>
@@ -217,10 +218,9 @@ static void lerpFloats(float *o, const float *p, const float *c, uint32_t n, flo
 
 /* Texture.c's linear UV scroll keeps uOfs/vOfs in (-1, 1] by adding or
  * taking 2 (tex_textureAnimation); a step of more than 1 is that wrap.  Not
- * for a sine scroll (package S: RD_VU_SCROLL_SINE_*), which is never
- * wrapped and can step further: amplitude 0.8 at 7 Hz moves 1.23 in a
- * tick, and unwrapping it put the texture half a repeat off at alpha 0.25
- * and 0.75. */
+ * for a sine scroll (RD_VU_SCROLL_SINE_*), which is never wrapped and can
+ * step further: amplitude 0.8 at 7 Hz moves 1.23 in a tick, and unwrapping
+ * it would put the texture half a repeat off at alpha 0.25 and 0.75. */
 static float lerpWrap(float p, float c, float t)
 {
     if (c - p > 1.0f) {
@@ -333,7 +333,7 @@ static bool invert4(const float *m, double *o)
     return invert4d(a, o);
 }
 
-/* ------------------------------------------- rotation-aware blend (S2) */
+/* ------------------------------------------------- rotation-aware blend */
 
 /* o = a b, column-major 4 x 4 (o may not alias a or b) */
 static void mul4d(const double *a, const double *b, double *o)
@@ -583,7 +583,7 @@ static bool sameQw4(const float (*a)[4], const float (*b)[4], int at)
     return memcmp(a[at], b[at], 4 * 4 * sizeof(float)) == 0;
 }
 
-/* The pivots the rotations turn about (S2).  A skinned draw's bone is the
+/* The pivots the rotations turn about.  A skinned draw's bone is the
  * node times the cluster (bind) inverse, so its translation is not the
  * joint: blended about it, a turning limb would leave its joint.  Each
  * bone's pivot is the weighted centroid of the mesh vertices bound to it
@@ -685,11 +685,12 @@ static bool rotateBone(float (*o)[4], const float (*p)[4], const float (*c)[4], 
     return true;
 }
 
-/* Package I1: a lit program's light matrix L1 (qw 28..31) follows the
- * object's turn.  normal_l computes l = max0(L1 n) from the model-space
- * normal n (n.w the ambient weight) and c = max0(L2 l): L1's rows 0..2 are the three lights' directions in model
- * space, row 3 (0, 0, 0, 1) carries n.w into l.w; L2 (qw 32..35) holds the
- * lights' colours in columns 0..2 and the ambient colour in column 3.
+/* A lit program's light matrix L1 (qw 28..31) follows the object's turn.
+ * normal_l computes l = max0(L1 n) from the model-space normal n (n.w the
+ * ambient weight) and c = max0(L2 l): L1's rows 0..2 are the three lights'
+ * directions in model space, row 3 (0, 0, 0, 1) carries n.w into l.w; L2
+ * (qw 32..35) holds the lights' colours in columns 0..2 and the ambient
+ * colour in column 3.
  * RegistPacket.c builds L1 = Ln N: Light.c's normal light matrix
  * (_MakeNormalLightMatrix: the negated unit directions as rows, an unused
  * light a zero row) times the node's 3 x 3 with its scale, the translation
@@ -772,7 +773,7 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
         return false;
     }
     if (s_turnDeg > RD_INTERP_TURN_SNAP) {
-        /* a flip, not a motion: the tick's (I1: its lights with it) */
+        /* a flip, not a motion: the tick's (its lights with it) */
         memcpy(o[16], c[16], (lit ? 16 : 12) * sizeof(o[0]));
         return true;
     }
@@ -807,7 +808,7 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
     return true;
 }
 
-/* ----------------------------------------------- the camera (package S6) */
+/* ------------------------------------------------------------- the camera */
 
 /* The half-way frame's camera, a rigid transform: the inverse views (view to
  * world: the rotation and the eye) blended by rd__BlendAffine about the eye
@@ -822,7 +823,7 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
  * or unkeyed one is cur's object through Vt, so it stays with its neighbours
  * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
  * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space
- * (unmatched, I1's fade or half-way switch, unmatchedPass); draws under
+ * (unmatched, the fade or half-way switch, unmatchedPass); draws under
  * another camera (a reflection's) keep the element-wise blend. */
 static bool isNormalProg(uint8_t prog);
 static uint8_t *outPayload(const RdCmd *c);
@@ -1028,7 +1029,7 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
     return true;
 }
 
-static int s_rebased; /* S6: VU draws re-based on the blended camera, this frame */
+static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
 
@@ -1150,7 +1151,7 @@ typedef struct Slot {
 typedef struct Node {
     uint32_t list, index;
     int32_t next;
-    int32_t out; /* I1: the index of its match in s_out's list, -1: unmatched */
+    int32_t out; /* the index of its match in s_out's list, -1: unmatched */
 } Node;
 
 static Slot *s_slots;
@@ -1173,7 +1174,7 @@ static bool isKeyedDraw(const RdCmd *c)
     case RDC_GRID:
     case RDC_PARTICLES:
     case RDC_SHADOW_STRIP:
-    case RDC_OVERLAY_TEXT: /* package DEF */
+    case RDC_OVERLAY_TEXT: /* deferred text */
         return true;
     default:
         return false;
@@ -1286,7 +1287,7 @@ static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t
 
 enum { R_LERP = 0, R_MISMATCH, R_JUMP };
 
-/* S2: the last R_MISMATCH's RD_MISMATCH_*, and whether the last R_LERP of a
+/* the last R_MISMATCH's RD_MISMATCH_*, and whether the last R_LERP of a
  * mesh blended its model matrices or bones as rotations */
 static int s_why;
 
@@ -1305,14 +1306,13 @@ static const void *payloadAt(const RdFrame *f, uint32_t off, uint32_t size)
     return off <= f->payloadSize && size <= f->payloadSize - off ? f->payload + off : NULL;
 }
 
-/* R7d: two mesh ids a draw may blend across: the same mesh, or meshes of
- * one layout (a morphing part's two packets, which the game draws in
- * alternate frames; a mesh rebuilt after an eviction).  v0.4.1 (M0): a
- * replaced mesh (rd_CreateVuMeshReplacement) keeps its id for as long as it
- * lives, so a part drawn with its replacement in both frames blends as
- * itself; across a pack switch (rd_VuMeshRetire, a new id) the layouts
- * usually differ and the draw falls back to no blend, as after any change
- * of vertex count. */
+/* two mesh ids a draw may blend across: the same mesh, or meshes of one
+ * layout (a morphing part's two packets, which the game draws in alternate
+ * frames; a mesh rebuilt after an eviction).  A replaced mesh
+ * (rd_CreateVuMeshReplacement) keeps its id for as long as it lives, so a
+ * part drawn with its replacement in both frames blends as itself; across a
+ * pack switch (rd_VuMeshRetire, a new id) the layouts usually differ and the
+ * draw falls back to no blend, as after any change of vertex count. */
 static bool sameMesh(uint32_t a, uint32_t b)
 {
     if (a == b) {
@@ -1331,7 +1331,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     if (pc->u[2] != cc->u[2]) {
         return mismatch(RD_MISMATCH_SIZE);
     }
-    /* S2: the program must match; the MSCAL code and clip mode (b[1], b[2])
+    /* the program must match; the MSCAL code and clip mode (b[1], b[2])
      * change when a part crosses the edge of the screen (REGION against
      * SCISSOR, reg_clipPacketBoundingBox) and say nothing about the data */
     if (pc->b[0] != cc->b[0] ||
@@ -1387,7 +1387,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         break;
     }
 
-    /* S6: both ticks' blocks through the blended camera (the camera parts
+    /* both ticks' blocks through the blended camera (the camera parts
      * then agree; only the object's own motion is left to blend) */
     float vpr[36][4];
     if (s_cam.on && !s_cam.still && camOf(vp, s_cam.vp, NULL) != CAM_NONE &&
@@ -1405,7 +1405,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         }
     }
     lerpVuBlock(vo, vp, (const float (*)[4])vc, t, hc.scroll);
-    /* S2: a turning object keeps its size half way */
+    /* a turning object keeps its size half way */
     const bool rot = t > 0.0f && t < 1.0f && !rd__S2Legacy();
     if (cc->type == RDC_MESH && isNormalProg(cc->b[0]) && rot) {
         double centre[3];
@@ -1502,7 +1502,7 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     return R_LERP;
 }
 
-/* Package DEF: a deferred text item or op.  An item blends its anchor (grid
+/* A deferred text item or op.  An item blends its anchor (grid
  * units: a jump beyond RD_INTERP_JUMP_SCREEN of them snaps, about the screen
  * prims' limit), its glow stretch and its colour; its string, size and flags
  * stay cur's and must match prev's.  An op blends its colour and level, as
@@ -1549,7 +1549,7 @@ static int blendText(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const Rd
     return R_LERP;
 }
 
-/* S2: the shadow volumes whose topology changed this tick (rd_ShadowTris:
+/* The shadow volumes whose topology changed this tick (rd_ShadowTris:
  * the silhouette gains or loses edges as the caster animates, in most ticks
  * for a walking character) are not snapped to cur's, which would put the
  * shadow a tick ahead of its caster in every other tick: cur's volume is
@@ -1619,27 +1619,27 @@ static int shiftShadow(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     return R_LERP;
 }
 
-/* V3: Shadow.c's volumes blended prism by prism.  A volume is one closed
- * prism per caster triangle (emitVolumeStrip: ten strip positions over six
+/* Shadow.c's volumes blended prism by prism.  A volume is one closed prism
+ * per caster triangle (emitVolumeStrip: ten strip positions over six
  * vertices, eight triangles), each triangle counted +1 or -1 by its facing.
  * rd_ShadowTris sorts the triangles into increments and decrements, so two
- * ticks' volumes of equal counts did not pair triangle for triangle once a
- * face had changed sides (the lerp then joined faces of different prisms
- * and the count no longer netted to 0 outside the shadow), and volumes of
+ * ticks' volumes of equal counts do not pair triangle for triangle once a
+ * face has changed sides (a vertex lerp would join faces of different prisms
+ * and the count would not net to 0 outside the shadow), and volumes of
  * different counts (prisms come and go as triangles turn from the light)
- * took cur's shape moved by the median shift, a tick ahead of the caster.
- * Here the tags (rd_internal.h, RD_SHADOW_PRISM_TRIS) regroup each tick's
- * prisms; the two sequences, which keep the caster's triangle order, are
- * aligned by dynamic programming (a pair costs the mean square distance of
- * the top caps, the caster triangle, after the volume's median shift, and
- * needs the same strip sign; RD_INTERP_PRISM_GAP prices an unmatched
- * prism); a pair is blended vertex by vertex and its eight triangles are
- * given the signs of their blended facing, the rule emitVolumeStrip applies
- * (plus where W s0 (-1)^i > 0, W the triangle's winding, i its strip
- * position, s0 the strip's sign; the second triangle of each side quad
- * takes the first's), so every blended prism is closed again.  The prisms
- * of one tick only are those of the nearer tick (prev's below t = 0.5,
- * cur's from it), moved by the volume's shift. */
+ * would take cur's shape moved by the median shift, a tick ahead of the
+ * caster.  Here the tags (rd_internal.h, RD_SHADOW_PRISM_TRIS) regroup each
+ * tick's prisms; the two sequences, which keep the caster's triangle order,
+ * are aligned by dynamic programming (a pair costs the mean square distance
+ * of the top caps, the caster triangle, after the volume's median shift, and
+ * needs the same strip sign; RD_INTERP_PRISM_GAP prices an unmatched prism);
+ * a pair is blended vertex by vertex and its eight triangles are given the
+ * signs of their blended facing, the rule emitVolumeStrip applies (plus where
+ * W s0 (-1)^i > 0, W the triangle's winding, i its strip position, s0 the
+ * strip's sign; the second triangle of each side quad takes the first's), so
+ * every blended prism is closed again.  The prisms of one tick only are those
+ * of the nearer tick (prev's below t = 0.5, cur's from it), moved by the
+ * volume's shift. */
 typedef struct ShPrism {
     RdScreenVtx v[6]; /* emitVolumeStrip's vi[0..5]: the top cap 0..2, the bottom 3..5 */
     int8_t plus[8];   /* the recorded signs of its triangles (1: increment) */
@@ -1997,7 +1997,8 @@ static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
 }
 
 /* R_LERP, R_JUMP, or -1 when the volumes are not tagged prisms (the caller
- * then blends as before V3) */
+ * then blends them vertex by vertex or, across a topology change, moves
+ * cur's by the median shift: shiftShadow) */
 static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd *cc, float t)
 {
     const uint32_t nvp = pc->u[0] + pc->u[3], nvc = cc->u[0] + cc->u[3];
@@ -2113,14 +2114,14 @@ static int blendShadow(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
         return mismatch(RD_MISMATCH_TOPOLOGY);
     }
     if (cc->b[0] == RD_SHADOW_TRIS && !rd__S2Legacy()) {
-        const int r = blendPrisms(op, prev, pc, cc, t); /* V3 */
+        const int r = blendPrisms(op, prev, pc, cc, t);
         if (r >= 0) {
             return r;
         }
     }
     if (pc->u[0] != cc->u[0] || pc->u[2] != cc->u[2] || pc->u[3] != cc->u[3]) {
         if (cc->b[0] == RD_SHADOW_TRIS && !rd__S2Legacy()) {
-            return shiftShadow(op, prev, pc, cc, t); /* S2 */
+            return shiftShadow(op, prev, pc, cc, t);
         }
         return mismatch(RD_MISMATCH_TOPOLOGY); /* the volume's topology changed */
     }
@@ -2186,21 +2187,21 @@ static uint8_t *outPayload(const RdCmd *c)
 
 /* ---------------------------------------------------- morphing meshes */
 
-/* R7d.  A mesh draw names its mesh by id and the replay reads the mesh's
- * live stream, which rd_UpdateVuMesh (the morph path) may have rewritten
- * for a frame recorded after cur.  A draw whose stream in cur (or, matched
- * and blended, in prev) differs from the live one is given a scratch mesh
- * of the same layout holding cur's stream, its vertex positions (qw 0) and
- * normals (qw 1, the lit and skinned layouts) blended from prev's
- * (rd__MeshStreamAt: rd_mesh.c keeps what the retained frames drew).  At
- * most RD_INTERP_SCRATCH draws a present; more keep the live stream (I1:
- * 256, was 64; a scratch mesh holds a copy of its mesh's stream, indices
- * and batches, s_scratchBytes, logged).  A mesh rewritten more than once
- * while a frame records keeps the version a retained frame drew (the first
- * rewrite keeps it: rd_mesh.c keepVersion), and the frame takes the last. */
+/* A mesh draw names its mesh by id and the replay reads the mesh's live
+ * stream, which rd_UpdateVuMesh (the morph path) may have rewritten for a
+ * frame recorded after cur.  A draw whose stream in cur (or, matched and
+ * blended, in prev) differs from the live one is given a scratch mesh of the
+ * same layout holding cur's stream, its vertex positions (qw 0) and normals
+ * (qw 1, the lit and skinned layouts) blended from prev's (rd__MeshStreamAt:
+ * rd_mesh.c keeps what the retained frames drew).  At most RD_INTERP_SCRATCH
+ * draws a present; more keep the live stream (a scratch mesh holds a copy of
+ * its mesh's stream, indices and batches, s_scratchBytes, logged).  A mesh
+ * rewritten more than once while a frame records keeps the version a retained
+ * frame drew (the first rewrite keeps it: rd_mesh.c keepVersion), and the
+ * frame takes the last. */
 #define RD_INTERP_SCRATCH 256
 
-/* I1: the bytes the scratch meshes of the last present hold */
+/* the bytes the scratch meshes of the last present hold */
 static uint64_t s_scratchBytes;
 
 static uint32_t s_scratch[RD_INTERP_SCRATCH];
@@ -2278,7 +2279,7 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
         size + (uint64_t)c->indexCount * 4u + (uint64_t)c->batchCount * sizeof(RdVuBatchRec);
     m->lastUsed = g_rd.frameCounter;
     m->replaySeen = 0; /* upload again */
-    m->transient = 1;  /* P1: from the ring, not the device arena */
+    m->transient = 1;  /* from the ring, not the device arena */
     s_scratchUsed++;
     return m;
 }
@@ -2293,7 +2294,7 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
     }
     const float (*cs)[4] = rd__MeshStreamAt(mc, cur->number);
     if (!cs) {
-        cs = (const float (*)[4])mc->stream; /* no kept version: as before */
+        cs = (const float (*)[4])mc->stream; /* no kept version: the live stream */
     }
     const size_t size = (size_t)mc->vertexCount * mc->qwPerVertex * 16;
     const float (*ps)[4] = NULL;
@@ -2325,14 +2326,15 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
     return true;
 }
 
-/* ------------------------------- unmatched CPU-projected draws (I1)
+/* ------------------------------------------ unmatched CPU-projected draws
  *
  * A screen prim (RDC_SCREEN) or a shadow volume (RDC_SHADOW_STRIP) holds GS
  * positions and cannot be re-based on the blended camera.  One that has no
  * partner in the other tick (a packet culled in one tick, a string that
- * changed, a caster that came or went) used to stand at the tick: a draw of
- * cur only was drawn whole from t = 0, a tick early, and one of prev only
- * was never drawn between the ticks, so it vanished a tick early.  Now:
+ * changed, a caster that came or went) would otherwise stand at the tick: a
+ * draw of cur only would be drawn whole from t = 0, a tick early, and one of
+ * prev only would never be drawn between the ticks, so it would vanish a
+ * tick early.  Instead:
  *
  *   a screen prim whose blend fades with its vertex alpha (alphaFades:
  *   ALPHA's C is As and D is Cd, ABE on, PABE off, and the vertex alpha
@@ -2341,19 +2343,19 @@ static bool morphDraw(RdCmd *o, const RdFrame *prev, const RdCmd *pc, const RdFr
  *
  *   any other screen prim, and every shadow volume, is drawn on the nearer
  *   tick's side of t = 0.5 (prev's below it, cur's from it), whole.  A
- *   shadow volume only counts the stencil (each
- *   triangle +1 or -1, then RDC_SHADOW_RESOLVE darkens every pixel whose
- *   count is not 0 by one shadow colour for all the volumes), so it has no
- *   alpha to fade and a partial volume would leave the count unbalanced:
- *   the switch is the rule blendPrisms already applies to a prism of one
- *   tick only.
+ *   shadow volume only counts the stencil (each triangle +1 or -1, then
+ *   RDC_SHADOW_RESOLVE darkens every pixel whose count is not 0 by one
+ *   shadow colour for all the volumes), so it has no alpha to fade and a
+ *   partial volume would leave the count unbalanced: the switch is the rule
+ *   blendPrisms already applies to a prism of one tick only.
+
  *
  * A draw of prev only is inserted into s_out's list after the match of the
  * keyed draw before it in prev's list (else before the match of the one
  * after it), bracketed by state commands that set prev's state for it and
  * restore cur's (stateDiff); a shadow volume only next to a volume (or
  * before the list's RDC_SHADOW_RESOLVE), and only when the colour and depth
- * targets agree.  A draw that cannot be placed is not drawn, as before. */
+ * targets agree.  A draw that cannot be placed is not drawn. */
 typedef struct UmAt {
     uint32_t list, index;
 } UmAt;
@@ -2423,12 +2425,12 @@ static void umFree(void)
 
 static bool isProjected(const RdCmd *c)
 {
-    /* package DEF: a deferred text item fades as its quads do (its alpha) */
+    /* a deferred text item fades as its quads do (its alpha) */
     return c->type == RDC_SCREEN || c->type == RDC_SHADOW_STRIP ||
            (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM);
 }
 
-/* package DEF: an item's alpha times w (the colour and the rest kept) */
+/* an item's alpha times w (the colour and the rest kept) */
 static void scaleItemAlpha(uint8_t *payload, float w)
 {
     RdTextItem it;
@@ -2441,7 +2443,7 @@ static void scaleItemAlpha(uint8_t *payload, float w)
 static void umCurOnly(uint32_t list, uint32_t index)
 {
     if (!growTo((void **)&s_umCur, &s_umCurCap, s_umCurN + 1, sizeof(UmAt))) {
-        return; /* it stays whole, as before */
+        return; /* out of memory: it stays whole */
     }
     s_umCur[s_umCurN].list = list;
     s_umCur[s_umCurN].index = index;
@@ -2705,7 +2707,7 @@ static uint32_t umPlace(const RdFrame *prev, uint32_t k, int32_t lastOut)
     return resolveOf(nd->list);
 }
 
-/* I1: the unmatched screen prims and shadow volumes at t (see above);
+/* the unmatched screen prims and shadow volumes at t (see above);
  * after the blends and the morph pass, which keep command indices */
 static void unmatchedPass(const RdFrame *prev, float t)
 {
@@ -2923,7 +2925,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
     }
 }
 
-/* ------------------------------------------------- flap detector (S2)
+/* ---------------------------------------------------------- flap detector
  *
  * A keyed draw's outcome per frame (blended, mismatched, jumped,
  * unmatched), at each frame's first present.  A draw whose outcome changes
@@ -3232,20 +3234,19 @@ static void headCopy(int l, uint32_t from, uint32_t to, uint32_t sizeOf)
     c->u[2] = off;
 }
 
-/* The feedback passes' inputs, held at the tick.  A frame that writes
- * FEED128 reads what the frame before left there (the aura's feedback),
- * and every present of a tick replays all of its passes, so every present
- * must start from the FEED128 the tick's first present started from: the
- * first copies FEED128 into FEED_HELD at its head, the later ones copy
- * FEED_HELD back into FEED128 at theirs.  Every present then draws the
- * same picture and leaves FEED128 in the tick's final state, which the
- * next tick reads, as on the PS2.  (Dropping a later present's FEED128
- * writes instead, while its reads still ran, pasted the tick's final
- * FEED128 over the screen: after the black reset of a camera cut,
- * auraInspireAfter's GlobalTimer fill, a black frame.)  v0.4.3 (issue 28):
- * the same for DISPLAY when the frame reads it (the motion blur's old
- * frame, the file header): DISPLAY into DISPLAY_HELD at the first
- * present's head, back at the later ones', so every present draws the
+/* The feedback passes' inputs, held at the tick.  A frame that writes FEED128
+ * reads what the frame before left there (the aura's feedback), and every
+ * present of a tick replays all of its passes, so every present must start
+ * from the FEED128 the tick's first present started from: the first copies
+ * FEED128 into FEED_HELD at its head, the later ones copy FEED_HELD back into
+ * FEED128 at theirs.  Every present then draws the same picture and leaves
+ * FEED128 in the tick's final state, which the next tick reads, as on the
+ * PS2.  (Dropping a later present's FEED128 writes instead, while its reads
+ * still run, would paste the tick's final FEED128 over the screen: after the
+ * black reset of a camera cut, auraInspireAfter's GlobalTimer fill, a black
+ * frame.)  For issue 28, the same for DISPLAY when the frame reads it (the
+ * motion blur's old frame, the file header): DISPLAY into DISPLAY_HELD at the
+ * first present's head, back at the later ones', so every present draws the
  * tick's FIX over the previous tick's picture. */
 static void feedback(int firstOfTick)
 {
@@ -3296,10 +3297,10 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
     s_scratchUsed = 0;
     s_scratchBytes = 0;
     s_doneCount = 0;
-    s_umCurN = 0; /* I1 */
+    s_umCurN = 0;
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
     s_lightRot = 0;
-    s_pivotMesh = 0; /* S2: the pivots are recomputed per present */
+    s_pivotMesh = 0; /* the pivots are recomputed per present */
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
     }
@@ -3307,7 +3308,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
     s_cam.on = 0;
     s_rebased = s_rebasedCur = 0;
     if (blend) {
-        camSetup(prev, cur, t); /* S6 */
+        camSetup(prev, cur, t); /* the blended camera */
         if (prev->hasCamera && cur->hasCamera) {
             lerpCamera(&s_out.camera, &prev->camera, &cur->camera, t);
             if (s_cam.on) {
@@ -3339,7 +3340,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
                 RdCmd *c = &s_out.lists[l].cmds[i];
                 if (!isKeyedDraw(c)) {
-                    camCurDraw(c); /* S6: unkeyed, cur's through the blended camera */
+                    camCurDraw(c); /* unkeyed, cur's through the blended camera */
                     continue;
                 }
                 const RdCmd *pc = matchOf(prev, c, l, i);
@@ -3348,7 +3349,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                     st.missing++;
                     camCurDraw(c);
                     if (!pc && isProjected(c)) {
-                        umCurOnly((uint32_t)l, i); /* I1: faded in, or from half way */
+                        umCurOnly((uint32_t)l, i); /* faded in, or from half way */
                     }
                     if (s_track) {
                         flapNote(c, l, O_UNMATCHED, NULL, cur->number);
@@ -3373,7 +3374,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                     break;
                 }
                 if (r != R_LERP) {
-                    camCurDraw(c); /* S6: the tick's draw, through the blended camera */
+                    camCurDraw(c); /* the tick's draw, through the blended camera */
                 }
                 st.lerped += r == R_LERP;
                 st.mismatch += r == R_MISMATCH;
@@ -3398,7 +3399,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
             }
         }
     }
-    /* R7d: the other mesh draws (unkeyed, unmatched, snapped) take cur's
+    /* the other mesh draws (unkeyed, unmatched, snapped) take cur's
      * stream when the live one has moved on */
     uint32_t next = 0;
     for (int l = 0; l < RD_LIST_COUNT; l++) {
@@ -3415,7 +3416,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
         }
     }
     if (blend) {
-        unmatchedPass(prev, t); /* I1: inserts commands, so after the passes above */
+        unmatchedPass(prev, t); /* inserts commands, so after the passes above */
     }
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
@@ -3434,13 +3435,13 @@ static struct {
     /* the log: per frame, at its first present */
     uint32_t frames, presents, snaps[RD_SNAP_COUNT];
     uint64_t keyed, lerped, missing, mismatch, jump, morph;
-    /* S2: mismatch reasons, rotation blends, frames whose snap differs
+    /* mismatch reasons, rotation blends, frames whose snap differs
      * from the frame before's (whole-frame flaps) */
     uint64_t why[RD_MISMATCH_COUNT], rotated, turned, shifted;
     float maxTurn;
     uint32_t snapFlips, lastSnap;
-    uint64_t rebased, rebasedCur; /* S6 */
-    /* I1: unmatched screen prims and shadow volumes (faded in, faded out,
+    uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
+    /* unmatched screen prims and shadow volumes (faded in, faded out,
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
     uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
@@ -3495,7 +3496,7 @@ static void presentLog(void)
             n[RD_SNAP_SIZE], (unsigned long long)s_pres.keyed, (unsigned long long)s_pres.lerped,
             (unsigned long long)s_pres.missing, (unsigned long long)s_pres.mismatch,
             (unsigned long long)s_pres.jump, (unsigned long long)s_pres.morph);
-    /* S2: a separate line, so the line above keeps its form */
+    /* a separate line, so the line above keeps its form */
     const uint32_t flapping = flapReport();
     rd__Log(
         "interp: mismatched by size %llu, mesh %llu, state %llu, header %llu, topology %llu; "
@@ -3509,7 +3510,7 @@ static void presentLog(void)
         (unsigned long long)s_pres.turned, (double)s_pres.maxTurn,
         (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN, s_pres.snapFlips,
         (unsigned long long)s_pres.rebased, (unsigned long long)s_pres.rebasedCur);
-    /* I1: a third line */
+    /* a third line: the unmatched draws and the scratch meshes */
     rd__Log("interp: unmatched screen prims and shadow volumes: %llu faded in, %llu faded out, "
             "%llu of the tick drawn from half way, %llu of the tick before drawn until half way, "
             "%llu of the tick before not placed; %llu lit draws whose lights turned with them; "
@@ -3530,7 +3531,7 @@ static void presentReset(void)
 
 bool rd_InterpolationActive(void)
 {
-    /* both presets (F2): the Original preset presents its PS2-exact tick
+    /* both presets: the Original preset presents its PS2-exact tick
      * pictures and the blended ones between them */
     return g_rd.inited && g_rd.settings.interpolate != 0;
 }
@@ -3551,7 +3552,7 @@ bool rd_Present(float alpha)
         alpha = 1.0f;
     }
     /* the tick's first present keeps the feedback passes' inputs (FEED128,
-     * and since v0.4.3 DISPLAY: issue 28), the later ones start from them
+     * and DISPLAY for issue 28), the later ones start from them
      * again (feedback) */
     const int first = cur->number != s_pres.number;
     s_pres.number = cur->number;
@@ -3566,10 +3567,10 @@ bool rd_Present(float alpha)
         return rd__ReplayFrame(&empty, 1, true);
     }
     const double t0 = rd__NowMs();
-    s_track = first; /* S2: the flap detector, once a frame */
+    s_track = first; /* the flap detector, once a frame */
     const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, alpha, first, &s_pres.stats);
     s_track = 0;
-    rd__PerfInterpMs(rd__NowMs() - t0); /* P1: charged to the replay below */
+    rd__PerfInterpMs(rd__NowMs() - t0); /* charged to the replay below */
     rd__PerfAlpha(alpha, first);
     if (first) {
         presentLog();
@@ -3577,7 +3578,7 @@ bool rd_Present(float alpha)
     return f != NULL && rd__ReplayFrame(f, 0, true);
 }
 
-/* ---------------------------------------------------- present clock (S2) */
+/* ---------------------------------------------------------- present clock */
 
 float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
                            double nominalMs)

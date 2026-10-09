@@ -10,7 +10,7 @@
  * into the next, exactly as GS registers do (rd.h, "Defaults and leakage").
  *
  * The two most recent closed frames are retained (the current one and the
- * one before it) for the interpolation (rd_interp.c, wave 7 R7b); the frame
+ * one before it) for the interpolation (rd_interp.c); the frame
  * being recorded takes a third slot (RD_FRAME_RING).
  */
 #ifdef _WIN32
@@ -29,7 +29,7 @@
 #include <time.h>
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
-#include "modelpack.h" /* v0.4.1 (M4): the model pack switch */
+#include "modelpack.h" /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "texpack.h"
@@ -268,13 +268,13 @@ void rd__FrameReset(RdFrame *f)
         rd__TempTargetFree(f->tempTargets[i]);
     }
     f->tempCount = 0;
-    rd__WaterFrameReset(f); /* R5b: block targets, aliases, camera scopes */
+    rd__WaterFrameReset(f); /* block targets, aliases, camera scopes */
     f->hasCamera = 0;
-    f->hasVu = 0;     /* R2c */
-    f->headValid = 0; /* R2c */
-    f->cut = 0;       /* R7b */
+    f->hasVu = 0;
+    f->headValid = 0;
+    f->cut = 0;
     f->fade = 0;
-    f->textItems = 0; /* package DEF */
+    f->textItems = 0;
     f->closed = 0;
     f->keep = 0;
     f->number = 0;
@@ -388,7 +388,7 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *depth = 1;
         break;
     case RD_TARGET_DISPLAY:
-    case RD_TARGET_DISPLAY_HELD: /* v0.4.3 (issue 28): DISPLAY's copy */
+    case RD_TARGET_DISPLAY_HELD: /* issue 28: DISPLAY's copy */
         *w = gsW;
         *h = gsH / 2;
         break;
@@ -402,11 +402,11 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *w = *h = 64;
         break;
     case RD_TARGET_WORK0:
-    case RD_TARGET_WORK3: /* wave 5 (R5a): TBP 0x3000, 256 x 128 */
+    case RD_TARGET_WORK3: /* TBP 0x3000, 256 x 128 */
         *w = 256;
         *h = 128;
         break;
-    case RD_TARGET_WORK2: /* wave 5 (R5a): TBP 0x2E00, the scene-sized flare mask */
+    case RD_TARGET_WORK2: /* TBP 0x2E00, the scene-sized flare mask */
     case RD_TARGET_AURA_WORK:
         *w = gsW;
         *h = gsH;
@@ -438,7 +438,7 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
      * to the texture, not to the GS size: rd__TargetScaleOf */
 }
 
-/* Wave 7 (R7a): the scene-class targets, which take the Enhanced scene
+/* The scene-class targets, which take the Enhanced scene
  * resolution and (SCENE, WORK2, AURA_WORK) the wide projection: the
  * scene-sized buffers and DISPLAY.  The other named targets are the fixed
  * work buffers, scaled by rd_WorkTargetScale. */
@@ -449,19 +449,19 @@ static int sceneClass(int id)
            id == RD_TARGET_DISPLAY_HELD;
 }
 
-/* DISPLAY and its held copy (v0.4.3, issue 28), of one size and scale */
+/* DISPLAY and its held copy (issue 28), of one size and scale */
 static int displayClass(int id)
 {
     return id == RD_TARGET_DISPLAY || id == RD_TARGET_DISPLAY_HELD;
 }
 
-/* Package V3: Shadow.c's blur levels (SHADOW0..2) keep the PS2 sizes at
- * every scale.  The shadow's blur is not a GS distance there but the levels'
- * resolution itself (each level a bilinear half of the one before, 256, 128
- * and 64 texels over the screen, composited back with bilinear
- * magnification), so levels at the work scale halved the penumbra: at 4x
- * the softest level needed a further Gaussian of about 4 GS pixels to match
- * the Original preset's (package V3). */
+/* Shadow.c's blur levels (SHADOW0..2) keep the PS2 sizes at every scale.
+ * The shadow's blur is not a GS distance there but the levels' resolution
+ * itself (each level a bilinear half of the one before, 256, 128 and 64
+ * texels over the screen, composited back with bilinear magnification), so
+ * levels at the work scale would halve the penumbra: at 4x the softest level
+ * would need a further Gaussian of about 4 GS pixels to match the Original
+ * preset's. */
 static int shadowLevel(int id)
 {
     return id == RD_TARGET_SHADOW0 || id == RD_TARGET_SHADOW1 || id == RD_TARGET_SHADOW2;
@@ -594,7 +594,7 @@ static void createNamedTargets(void)
     }
 }
 
-/* Package P1: temporary targets come from a pool.  A freed record keeps
+/* Temporary targets come from a pool.  A freed record keeps
  * its GPU textures (parked: not live, so its id is dead) and the next
  * allocation of the same texture size, format and depth takes them over:
  * the per-frame targets (the shadow count, the block targets, the decoder's
@@ -681,7 +681,7 @@ void rd__TempTargetFree(uint32_t id)
             rd_DestroyTexture((RdTex){t->viewTex[v]});
         }
     }
-    /* P1: parked with its textures for the next allocation of its size,
+    /* parked with its textures for the next allocation of its size,
      * up to RD_TEMP_PARKED of them (more are sizes no frame asks for any
      * more: destroyed) */
     uint32_t parked = 0;
@@ -752,7 +752,7 @@ RdTarget rd_TempTarget(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcross
 
 void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset)
 {
-    /* R5b: a target rd_AliasTarget stands in for, with its own depth buffer */
+    /* a target rd_AliasTarget stands in for, with its own depth buffer */
     uint32_t alias = rd__AliasOf(color.id);
     if (alias != 0) {
         const RdTargetRec *a = rd__TargetRec(alias);
@@ -768,13 +768,13 @@ void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, in
     c->u[0] = color.id;
     c->u[1] = depth.id;
     c->u[2] = (gsW & 0xFFFF) | ((gsH & 0xFFFF) << 16);
-    /* bit 0 RD_TARGET_OFFSET, bit 1 RD_TARGET_HALF_Y (R2c, the flip's half offset) */
+    /* bit 0 RD_TARGET_OFFSET, bit 1 RD_TARGET_HALF_Y (the flip's half offset) */
     c->b[0] = (uint8_t)(useOffset & (RD_TARGET_OFFSET | RD_TARGET_HALF_Y));
 }
 
 void rd_ClearTarget(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z)
 {
-    if (rd__AliasOf(t.id) != 0) { /* R5b */
+    if (rd__AliasOf(t.id) != 0) { /* a target rd_AliasTarget stands in for */
         t.id = rd__AliasOf(t.id);
     }
     RdCmd *c = rd__Push(RDC_CLEAR);
@@ -820,11 +820,11 @@ static uint32_t texAlloc(void)
     return 0;
 }
 
-/* R8: the whole texture changed (a create, rd_UpdateTexture) */
+/* The whole texture changed (a create, rd_UpdateTexture) */
 static void texDirtyAll(RdTexRec *t)
 {
     if (!t->dirty) {
-        g_rd.texDirtyCount++; /* P1 */
+        g_rd.texDirtyCount++;
     }
     t->dirty = 1;
     t->dirtyX0 = t->dirtyY0 = 0;
@@ -936,7 +936,7 @@ void rd_UpdateTexture(RdTex tex, const void *rgba8)
         return; /* a pack replacement has no CPU texels to update */
     }
     const size_t bytes = (size_t)t->w * t->h * rd__TexelBytes(t->format);
-    /* P1: an update that changes nothing (a page or CLUT re-expanded to the
+    /* an update that changes nothing (a page or CLUT re-expanded to the
      * same texels) is not uploaded again */
     if (memcmp(t->pixels, rgba8, bytes) == 0) {
         return;
@@ -967,7 +967,7 @@ void rd_UpdateTextureRect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_
         }
     }
     if (!changed) {
-        return; /* P1's rule: nothing to upload */
+        return; /* nothing changed: nothing to upload */
     }
     g_rd.texRectUpdates++;
     if (!t->dirty) {
@@ -1001,7 +1001,7 @@ void rd_DestroyTexture(RdTex tex)
         rhi_DestroyTexture(t->rhi);
     }
     if (t->dirty && g_rd.texDirtyCount) {
-        g_rd.texDirtyCount--; /* P1 */
+        g_rd.texDirtyCount--;
     }
     free(t->pixels);
     rd__FreePending(t); /* a replacement destroyed before its upload */
@@ -1048,9 +1048,9 @@ static void initCommon(uint32_t gsW, uint32_t gsH, const RdSettings *settings)
     g_rd.meshes = calloc(RD_MAX_MESHES, sizeof(RdMeshRec));
     g_rd.recIndex = -1;
     g_rd.lastIndex = -1;
-    g_rd.texLevelsFilter = -1; /* P1 */
+    g_rd.texLevelsFilter = -1;
     rd__ResetStateBlock(&g_rd.persistent);
-    rd__VuInit(); /* wave 3: the per-list VU images */
+    rd__VuInit(); /* the per-list VU images */
     g_rd.inited = true;
 }
 
@@ -1068,21 +1068,21 @@ bool rd__InitRecordOnly(uint32_t gsW, uint32_t gsH)
     return true;
 }
 
-/* Frame dumps every N replayed frames (wave 3): ico-pc.ini dump_every= and
+/* Frame dumps every N replayed frames: ico-pc.ini dump_every= and
  * dump_dir=, handed over by port/platform/host_config.c in the environment
  * (ICO_RD_DUMP_EVERY, ICO_RD_DUMP_DIR), read at rd_Init. */
 static uint32_t s_dumpEvery;
 
 static char s_dumpDir[512];
 
-/* Wave 7 (R7b): ICO_RD_DUMP_INTERP=1 (since R7d the hand-over of the config
- * key [dev] dump_interp, port/platform/host_config.c) also dumps, next to
+/* ICO_RD_DUMP_INTERP=1 (the hand-over of the config key [dev]
+ * dump_interp, port/platform/host_config.c) also dumps, next to
  * each frame dump, the frame interpolated half way from the one before
  * (rd-NNNNN-i50.rddump; rd__InterpFrame at alpha 0.5, the feedback passes as
  * a first present) */
 static int s_dumpInterp;
 
-/* S2: ICO_RD_DUMP_FROM (config key [dev] dump_from): no frame numbered
+/* ICO_RD_DUMP_FROM (config key [dev] dump_from): no frame numbered
  * below it is dumped */
 static uint32_t s_dumpFrom;
 
@@ -1119,14 +1119,14 @@ bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
-    /* package AN-E: the two-pass blend without dual-source blending (a
+    /* the two-pass blend without dual-source blending (a
      * device without dualSrcBlend; ICO_RD_NO_DUAL=1 forces it for tests) */
     const char *noDual = getenv("ICO_RD_NO_DUAL");
     g_rd.noDual = !rhi_Limits()->dualSourceBlend || (noDual && noDual[0] && noDual[0] != '0');
     if (g_rd.noDual) {
         rd__Log("blend: two-pass fallback (no dualSrcBlend)");
     }
-    rd__ApplyDisplay(); /* wave 7 (R7a): the scales the named targets take */
+    rd__ApplyDisplay(); /* the scales the named targets take */
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -1143,7 +1143,7 @@ void rd_Shutdown(void)
     for (int i = 0; i < RD_FRAME_RING; i++) {
         rd__FrameFree(&g_rd.frames[i]);
     }
-    rd__InterpShutdown(); /* R7b */
+    rd__InterpShutdown();
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
         if (g_rd.targets[i].live || g_rd.targets[i].parked) {
             rd__TargetDestroyGpu(&g_rd.targets[i]);
@@ -1184,7 +1184,7 @@ void rd_ResetScene(uint32_t gsWidth, uint32_t gsHeight)
     g_rd.gsH = gsHeight;
     rd__ApplyDisplay();
     createNamedTargets();
-    rd__TempTargetPoolClear(); /* P1: the parked ones have the old scene size */
+    rd__TempTargetPoolClear(); /* the parked ones have the old scene size */
     for (int v = 0; v < 3; v++) {
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
             RdTexRec *t = rd__TexRec(g_rd.targets[i].viewTex[v]);
@@ -1290,7 +1290,7 @@ static void recreateTargets(void *arg)
     (void)arg;
     rhi_WaitIdle();
     createNamedTargets();
-    rd__TempTargetPoolClear(); /* P1: the parked textures have the old scale */
+    rd__TempTargetPoolClear(); /* the parked textures have the old scale */
 }
 
 typedef struct ReplayCall {
@@ -1313,10 +1313,10 @@ void rd_BeginFrame(void)
         rd__Log("rd_BeginFrame without rd_EndFrame: the open frame is discarded");
     }
     if (g_rd.settingsPending) {
-        /* v0.4.0: the texture pack switched off: the originals back (once
+        /* the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_RevertReplacements) */
         const bool packOff = g_rd.settings.texturePack && !g_rd.pendingSettings.texturePack;
-        /* v0.4.1 (M4): the model pack's switch and its dump, on a change */
+        /* the model pack's switch and its dump, on a change */
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         g_rd.settings = g_rd.pendingSettings;
@@ -1330,31 +1330,31 @@ void rd_BeginFrame(void)
         if (dumpChanged) {
             modelpack_SetDumpEnabled(g_rd.settings.dumpModels != 0);
         }
-        /* wave 7 (R7a): the Settings menu applies here; a change of the
+        /* the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next
          * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
         if (rd__ApplyDisplay() && g_rd.hasDevice) {
             rd__Log("display: targets recreated at scene %gx%g, work %g", (double)g_rd.sceneSx,
                     (double)g_rd.sceneSy, (double)g_rd.workScale);
             rd__OnHost(recreateTargets, NULL);
-            /* R7b: the retained frames' history is dropped: the frame opened
+            /* the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */
             g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }
-    /* R7b: the slot after the last closed frame, which is neither it nor
+    /* the slot after the last closed frame, which is neither it nor
      * the one before it */
     int idx = g_rd.lastIndex < 0 ? 0 : (g_rd.lastIndex + 1) % RD_FRAME_RING;
     RdFrame *f = &g_rd.frames[idx];
     rd__FrameReset(f);
     f->number = ++g_rd.frameCounter;
-    rd__VuMeshSweepStale(); /* v0.4.1 (M0): retired meshes no kept frame drew */
+    rd__VuMeshSweepStale(); /* retired meshes no kept frame drew */
     f->startState = g_rd.persistent;
     f->gsW = g_rd.gsW;
     f->gsH = g_rd.gsH;
     g_rd.recIndex = idx;
     g_rd.stats.draws = 0;
-    f->cut = g_rd.cutPending; /* R7b: rd_CameraCut between frames */
+    f->cut = g_rd.cutPending; /* rd_CameraCut between frames */
     g_rd.cutPending = 0;
     recordDefaults();
 }
@@ -1367,9 +1367,9 @@ void rd_EndFrame(int keep)
     }
     f->keep = keep ? 1 : 0;
     if (f->cut) {
-        f->camera.cut = 1; /* R7b */
+        f->camera.cut = 1;
     }
-    rd__FrameHeadResolve(f, f->keep); /* R2c: the flip's head in the first replayed list */
+    rd__FrameHeadResolve(f, f->keep); /* the flip's head in the first replayed list */
     f->closed = 1;
     RdStateBlock s = f->startState;
     rd__Walk(f, f->keep, &s, NULL, NULL);
@@ -1378,10 +1378,9 @@ void rd_EndFrame(int keep)
     g_rd.lastIndex = g_rd.recIndex;
     g_rd.recIndex = -1;
     g_rd.stats.bytesPayload = f->payloadSize;
-    g_rd.videoShown = 0; /* R7b */
-    /* R7b: with interpolation the host presents (rd_Present); otherwise,
-     * the Original preset always, the frame is replayed and presented once
-     * here, as before */
+    g_rd.videoShown = 0;
+    /* with interpolation on (either preset) the host presents (rd_Present);
+     * with it off the frame is replayed and presented once here */
     if (g_rd.hasDevice && !rd_InterpolationActive()) {
         ReplayCall c = {f, f->keep};
         rd__OnHost(replayOnHost, &c);
@@ -1394,7 +1393,7 @@ void rd_EndFrame(int keep)
         }
         if (s_dumpInterp) {
             RdInterpStats st;
-            /* S6: the previous frame too (rd-NNNNN-prev.rddump), so a
+            /* the previous frame too (rd-NNNNN-prev.rddump), so a
              * half-way dump can be checked against both its ticks */
             const RdFrame *pv = rd__PrevFrame();
             snprintf(path, sizeof(path), "%s/rd-%05u-prev.rddump", s_dumpDir, f->number);
@@ -1467,7 +1466,7 @@ const RdFrame *rd__PrevFrame(void)
     if (g_rd.lastIndex < 0) {
         return NULL;
     }
-    /* R7b: the slot before the last closed one in the ring */
+    /* the slot before the last closed one in the ring */
     const RdFrame *f = &g_rd.frames[(g_rd.lastIndex + RD_FRAME_RING - 1) % RD_FRAME_RING];
     const RdFrame *last = &g_rd.frames[g_rd.lastIndex];
     return f->closed && f->number < last->number ? f : NULL;
@@ -1576,7 +1575,7 @@ void rd_Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t)
 
 void rd_Texture(RdTex tex, RdTexFn fn, RdTcc tcc)
 {
-    /* R5b: a view of a target rd_AliasTarget stands in for */
+    /* a view of a target rd_AliasTarget stands in for */
     const RdTexRec *tr = rd__TexRec(tex.id);
     if (tr != NULL && tr->kind == RD_TEXKIND_TARGET && rd__AliasOf(tr->target) != 0) {
         tex = rd_TargetTexture((RdTarget){rd__AliasOf(tr->target)}, (RdTexView)tr->view);
@@ -1676,7 +1675,7 @@ void rd_AA1(int aa1)
 
 /* ------------------------------------------------------------------ draws */
 
-/* --------------------------------------------- the draw filter (package MV)
+/* ------------------------------------------------------- the draw filter
  * rd.h rd_SetDrawFilter: a set of object words (RD_KEY's objptr, the key
  * shifted right by 16), searched linearly (a few dozen at most). */
 static struct {
@@ -1754,16 +1753,16 @@ void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace s
     RdCmd *c = rd__Push(RDC_SCREEN);
     c->b[0] = (uint8_t)type;
     c->b[1] = (uint8_t)(g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space);
-    /* T1: RD_UV_FIXED_CONTINUOUS is kept (port UI text, no GS-pixel snap) */
+    /* RD_UV_FIXED_CONTINUOUS is kept (port UI text, no GS-pixel snap) */
     c->b[2] = uvFixed == RD_UV_FIXED_CONTINUOUS ? RD_UV_FIXED_CONTINUOUS : (uvFixed ? 1 : 0);
     c->u[0] = off;
     c->u[1] = count;
-    c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* package DEF */
+    c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* deferred text's quads */
     setKey(c, key);
     g_rd.stats.draws++;
 }
 
-/* ------------------------------------------- deferred text (package DEF) */
+/* ---------------------------------------------------------- deferred text */
 
 void rd_DeferredText(const RdTextItem *item, RdKey key)
 {

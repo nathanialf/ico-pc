@@ -11,18 +11,18 @@
  * texture of RdSettings.outputWidth x outputHeight (tests, the replay tool;
  * none when either is 0).
  *
- * The display options (wave 2, R2c: hooks; wave 7, R7a; v0.3.1: each
- * applies on its own, the preset is only the host's shortcut over them).
+ * The display options each apply on their own; the preset is only the
+ * host's shortcut over them.
  * RdPresentPreset holds the present's filters and its mirror (the
- * interpolation, R7b rd_interp.c, is not one: it presents several times per
+ * interpolation, rd_interp.c, is not one: it presents several times per
  * tick through rd_Present with RdSettings.interpolate, each present
  * replaying the frame blended from the retained pair, and this step is the
  * same either way: it shows whatever DISPLAY the replay left):
- *   mirror        R7c: step 2 may flip x (the mirror mode is a gameplay
+ *   mirror        step 2 may flip x (the mirror mode is a gameplay
  *                 option, not a display one); flipped when
  *                 rd__MirrorOn (rd.h rd_SetMirror, RdSettings.mirror).  Every
- *                 present goes through here, the interpolated ones (R7b
- *                 rd_Present) included; UI prims were flipped at replay
+ *                 present goes through here, the interpolated ones
+ *                 (rd_Present) included; UI prims were flipped at replay
  *                 (rd_replay.c mirrorUi) so they read normally
  * The box takes the aspect option (g_rd.outAspect, 4:3 for a zeroed
  * RdSettings); the projection side is rd_frame.c rd__FillCameraCB, the
@@ -37,41 +37,42 @@
  * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
  * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
  *
- * The overlay (package OV, rd.h rd_SetPresentOverlay): after step 2, the prims the registered callback
- * gave for this present are drawn on the output in step 2's pass (left
- * open for them and the deferred text; a load-preserving pass of their own
- * under the CRT filter or the effects depth), one 12.4 unit a sixteenth of
- * an output pixel, unflipped.  The callback runs before the frame's
- * replay (rd__OverlayCollect, from replayFrame) so the textures it touches
- * upload with the frame; only the drawing is here.
+ * The overlay (rd.h rd_SetPresentOverlay): after step 2, the prims the
+ * registered callback gave for this present are drawn on the output in step
+ * 2's pass (left open for them and the deferred text; a load-preserving
+ * pass of their own under the CRT filter or the effects depth), one 12.4
+ * unit a sixteenth of an output pixel, unflipped.  The callback runs before
+ * the frame's replay (rd__OverlayCollect, from replayFrame) so the textures
+ * it touches upload with the frame; only the drawing is here.
  * With no callback registered nothing below step 2 runs, and the output is
- * byte for byte what it was before the overlay existed.
+ * byte for byte the picture without an overlay.
  *
- * Deferred text (package DEF, rd.h rd_DeferredText): in the Enhanced preset with a renderer registered,
- * rd__OverlayCollect first walks the frame's RDC_OVERLAY_TEXT items and the
- * post passes after them, and has the renderer lay each item out on the
- * output (font.c's overlay mode) in its region; the replay skips the items'
- * glyph quads, and textRecord draws the prims after step 2, before the
- * overlay.  In the Original preset nothing is collected and the quads draw.
+ * Deferred text (rd.h rd_DeferredText): in the Enhanced preset with a
+ * renderer registered, rd__OverlayCollect first walks the frame's
+ * RDC_OVERLAY_TEXT items and the post passes after them, and has the renderer
+ * lay each item out on the output (font.c's overlay mode) in its region; the
+ * replay skips the items' glyph quads, and textRecord draws the prims after
+ * step 2, before the overlay.  In the Original preset nothing is collected
+ * and the quads draw.
  *
- * The blank present (package AN-C, rd.h rd_PresentBlank): an empty keep
- * frame replayed with s_blank set: rd__OverlayCollect gives the overlay the
- * output's context (no CRT grid, no deferred text) and rd__PresentRecord
- * clears the output and draws the overlay on it, without DISPLAY.
+ * The blank present (rd.h rd_PresentBlank): an empty keep frame replayed with
+ * s_blank set: rd__OverlayCollect gives the overlay the output's context (no
+ * CRT grid, no deferred text) and rd__PresentRecord clears the output and
+ * draws the overlay on it, without DISPLAY.
  *
- * The CRT filter (packages CRT and CRT2, rd_crt.c): with RdSettings.crtMode set and a strength above 0, the scene
- * renders at 1x (rd__ApplyDisplay), no text is deferred (the rows draw as
- * quads into the scene, as in the Original preset), the overlay's prims are
- * laid out on the filter's source grid and drawn into it, and rd__CrtRecord
- * draws the box from DISPLAY in place of steps 1 and 2 (no line doubling:
- * the scanlines are DISPLAY's own lines).  The filter is the present's last
- * pass but for the top layer below.  Off, this file presents as before.
+ * The CRT filter (rd_crt.c): with RdSettings.crtMode set and a strength above
+ * 0, the scene renders at 1x (rd__ApplyDisplay), no text is deferred (the
+ * rows draw as quads into the scene, as in the Original preset), the
+ * overlay's prims are laid out on the filter's source grid and drawn into it,
+ * and rd__CrtRecord draws the box from DISPLAY in place of steps 1 and 2 (no
+ * line doubling: the scanlines are DISPLAY's own lines).  The filter is the
+ * present's last pass but for the top layer below.  Off, steps 1 and 2 draw
+ * the box.
  *
- * The top layer (package AN-T, rd.h rd_SetPresentOverlayTop): a second
- * callback collected after the overlay's, always laid out on the output;
- * its prims are drawn on the output under the overlay's without the CRT
- * filter and over the filtered picture with it, so the touch controls stay
- * sharp.
+ * The top layer (rd.h rd_SetPresentOverlayTop): a second callback collected
+ * after the overlay's, always laid out on the output; its prims are drawn on
+ * the output under the overlay's without the CRT filter and over the filtered
+ * picture with it, so the touch controls stay sharp.
  */
 #include <math.h>
 #include <stdio.h>
@@ -84,7 +85,7 @@ typedef struct RdPresentPreset {
     RdFilter doubleFilter; /* step 1 */
     RdFilter scaleFilter;  /* step 2 */
     int lineDouble;        /* step 1, unless the full-height option is on */
-    int mirror;            /* R7c: step 2 flips x when the mirror mode is on */
+    int mirror;            /* step 2 flips x when the mirror mode is on */
 } RdPresentPreset;
 
 #define RD_ASPECT_43 (4.0f / 3.0f)
@@ -94,7 +95,7 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 {
     uint32_t h = outH, w;
     if (!(aspect > RD_ASPECT_43 + 1e-4f)) {
-        /* 4:3, the Original box (integer arithmetic, as before R7a) */
+        /* 4:3, the Original box (integer arithmetic) */
         w = (outH * 4 + 1) / 3;
         if (w > outW) {
             w = outW;
@@ -119,7 +120,7 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
     box->h = h ? h : 1;
 }
 
-/* one for every preset: the options it used to gate apply on their own
+/* one for every preset: the display options apply on their own
  * (rd__ApplyDisplay) */
 static const RdPresentPreset s_present = {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1};
 
@@ -140,14 +141,14 @@ static float clampAspect(float a)
 bool rd__ApplyDisplay(void)
 {
     const RdSettings *st = &g_rd.settings;
-    /* v0.3.1: every option applies whatever the preset; a zeroed
+    /* every option applies whatever the preset; a zeroed
      * RdSettings is the PS2 picture (scale 0 and no size is the GS size
      * unless the Enhanced flag asks for the output's box, below) */
     const float aspect = clampAspect(st->aspect);
     const float wide = RD_ASPECT_43 / aspect;
     const float gw = (float)g_rd.gsW, gh = (float)g_rd.gsH;
     float w, h;
-    /* package CRT2: the CRT filter shows the PS2's pixels, so the scene
+    /* the CRT filter shows the PS2's pixels, so the scene
      * renders at 1x while it is on, whatever the resolution asks (which
      * takes effect again with the filter off) */
     const int crtLock = rd__CrtOn() && st->sceneScale != 1.0f;
@@ -241,7 +242,7 @@ bool rd__PresentAcquire(void)
         if (!s_backbuffer.id) {
             return false;
         }
-        rd__OutputFollowSwapchain(); /* N1: the image's own size */
+        rd__OutputFollowSwapchain(); /* the image's own size */
         s_backbufferState = RHI_STATE_UNDEFINED;
         s_outFormat = rhi_SwapchainFormat();
         s_outW = g_rd.settings.outputWidth;
@@ -295,7 +296,7 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
             cb.col[i] = 0x80; /* modulate by 1.0: identity */
         }
         cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
-        /* R7c: the source rectangle right to left (blit_vs interpolates
+        /* mirrored: the source rectangle right to left (blit_vs interpolates
          * u0 + t (u1 - u0)): u = sw (1 - t), exact at the box's pixel
          * centres when the scale is a power of two */
         cb.uvRect[0] = mirror ? (float)sw : 0.0f;
@@ -324,7 +325,7 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
     blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror, false);
 }
 
-/* ------------------------------- the effects depth (v0.4.1, package R1)
+/* ------------------------------------------------------ the effects depth
  * RdSettings.effectsDepth, with an effects program loaded (depthWanted):
  * step 2 as one pass with two targets, the output
  * and an output-size RHI_FMT_D32F depth buffer cleared to 0.0 (far), drawn
@@ -333,14 +334,14 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
  * the same GS frame; a mirrored box flips both), read nearest from SCENE's
  * depth where it is, in RHI_STATE_DEPTH_READ, as rd_replay.c doFog reads
  * it (every target depth is created sampleable).  Outside the box the
- * clear stays, so the bars read as far.  The point is an effects program hooked into the
- * API (ReShade, vkBasalt): it looks for a depth buffer of the backbuffer's
- * size among the render passes, and the scene's is the scene's size.  The
- * convention is the scene's (gs_z_to_depth): the depth grows with GS Z,
- * near 1 and far 0, so ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED is 1 (the
- * docs' ReShade notes, R3).  The
- * deferred text, the capture and the overlay stay colour-only passes after
- * it; under the CRT filter there is no box blit and no effects depth. */
+ * clear stays, so the bars read as far.  The point is an effects program
+ * hooked into the API (ReShade, vkBasalt): it looks for a depth buffer of
+ * the backbuffer's size among the render passes, and the scene's is the
+ * scene's size.  The convention is the scene's (gs_z_to_depth): the depth
+ * grows with GS Z, near 1 and far 0, so ReShade's
+ * RESHADE_DEPTH_INPUT_IS_REVERSED is 1 (docs/RESHADE.md).  The deferred
+ * text, the capture and the overlay stay colour-only passes after it; under
+ * the CRT filter there is no box blit and no effects depth. */
 /* Only for an effects program: the pass runs when the setting is on and
  * rhi_InjectorName() names one (ReShade, vkBasalt), never on Android (no
  * effects program hooks the game there); the tests force it (a lavapipe
@@ -499,13 +500,13 @@ bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
     return pitch == s_depth.outW * sizeof(float);
 }
 
-/* --------------------------------------------- the overlay (package OV) */
+/* ------------------------------------------------------------ the overlay */
 
 typedef struct OverlayBatch {
     uint32_t first, count; /* in s_ov.v */
     uint32_t tex;          /* RdTex id, 0 untextured */
     uint8_t prim, blend;
-    RhiRect sc; /* package DEF: the region (the whole output for the overlay's) */
+    RhiRect sc; /* the deferred text's region (the whole output for the overlay's) */
 } OverlayBatch;
 
 /* outside g_rd: the registration outlives rd_Shutdown / rd_Init (port/ui
@@ -513,22 +514,22 @@ typedef struct OverlayBatch {
 static struct {
     RdOverlayFn fn;
     void *user;
-    RdOverlayFn topFn; /* package AN-T: the top layer, on the output after the CRT filter */
+    RdOverlayFn topFn; /* the top layer, on the output after the CRT filter */
     void *topUser;
-    RdDeferredTextFn textFn; /* package DEF */
+    RdDeferredTextFn textFn; /* the deferred text's renderer */
     void *textUser;
     int inside;          /* in fn or textFn: rd_OverlayPrims keeps prims */
     RhiRect sc;          /* the region rd_OverlayPrims gives its batch */
     RdOverlayCtx ctx;    /* the main layer's (the deferred text's too) */
-    RdOverlayCtx topCtx; /* package AN-T: the top layer's, always the output */
+    RdOverlayCtx topCtx; /* the top layer's, always the output */
     RdScreenVtx *v;
     uint32_t vCount, vCap;
     OverlayBatch *b;
     uint32_t bCount, bCap;
-    uint32_t textBatches; /* package DEF: b[0, textBatches) are the deferred text's */
-    uint32_t topFirst;    /* package AN-T: b[topFirst, bCount) are the top layer's,
+    uint32_t textBatches; /* b[0, textBatches) are the deferred text's */
+    uint32_t topFirst;    /* b[topFirst, bCount) are the top layer's,
                            * b[textBatches, topFirst) the main layer's */
-    int grid;             /* package CRT2: the main layer is on the CRT filter's source grid */
+    int grid;             /* the main layer is on the CRT filter's source grid */
 } s_ov;
 
 /* the batches collected for a present, forgotten together */
@@ -570,7 +571,7 @@ RdOverlayFn rd_GetPresentOverlay(void **user)
     return s_ov.fn;
 }
 
-/* package AN-C: the present in progress is rd_PresentBlank's */
+/* the present in progress is rd_PresentBlank's */
 static int s_blank;
 
 bool rd_PresentBlank(void)
@@ -636,23 +637,23 @@ void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, R
     s_ov.vCount += n;
 }
 
-/* ------------------------------------------- deferred text (package DEF).  The frame's RDC_OVERLAY_TEXT
- * commands are walked in replay order with the state they replay under: an
- * item takes the scissor in force; an op (a post pass recorded after text)
- * changes the items before it as the pass changed the pixels they had been
- * drawn into.  FADE, BRIGHTNESS and the LETTERBOX are lerps of the
- * destination toward a colour, d' = d (1 - k) + C k, affine in d, so a text
- * pixel blended over the scene and then lerped is the lerped scene with the
- * text blended over it in the lerped colour: a lerp item's colour becomes
- * c (1 - k) + C k with its alpha kept, an additive item's (Cs As + Cd) c (1
- * - k).  The letterbox does that inside its two bands only, so an item is
- * cut into segments by scene line.  KEEP draws DISPLAY over the whole scene
- * without blending: the items before it are gone, as their quads would be.
- * The REDUCTION's tint scales the colour of either kind (linear; where the
- * GS clamps a tint above 1.0 behind a partly covered pixel, the fold is a
- * little darker).
- * Then each item is drawn once per segment, clipped to the segment, its
- * scissor and the reduction's border crop (output pixels). */
+/* ---------------------------------------------------------- deferred text
+ * The frame's RDC_OVERLAY_TEXT commands are walked in replay order with the
+ * state they replay under: an item takes the scissor in force; an op (a post
+ * pass recorded after text) changes the items before it as the pass changed
+ * the pixels they had been drawn into.  FADE, BRIGHTNESS and the LETTERBOX
+ * are lerps of the destination toward a colour, d' = d (1 - k) + C k, affine
+ * in d, so a text pixel blended over the scene and then lerped is the lerped
+ * scene with the text blended over it in the lerped colour: a lerp item's
+ * colour becomes c (1 - k) + C k with its alpha kept, an additive item's (Cs
+ * As + Cd) c (1 - k).  The letterbox does that inside its two bands only, so
+ * an item is cut into segments by scene line.  KEEP draws DISPLAY over the
+ * whole scene without blending: the items before it are gone, as their quads
+ * would be.  The REDUCTION's tint scales the colour of either kind (linear;
+ * where the GS clamps a tint above 1.0 behind a partly covered pixel, the
+ * fold is a little darker).  Then each item is drawn once per segment,
+ * clipped to the segment, its scissor and the reduction's border crop (output
+ * pixels). */
 
 typedef struct TextSeg {
     float y0, y1; /* scene lines */
@@ -901,7 +902,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     RhiRect box;
     outputBox(w, h, &box);
     const RhiRect outBox = box;
-    /* package CRT2: under the CRT filter the overlay is part of the
+    /* under the CRT filter the overlay is part of the
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
      * it, and rd__CrtRecord draws the prims into that grid */
@@ -920,9 +921,9 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     c->box = (RdRect){box.x, box.y, box.w, box.h};
     c->boxScale = (float)box.h / 448.0f;
     c->mirror = pr->mirror && rd__MirrorOn();
-    /* package DEF: the deferred text first, so the overlay draws above it;
-     * package CRT2: none under the CRT filter (the rows draw as quads into
-     * the scene, as in the Original preset, and go through the filter) */
+    /* the deferred text first, so the overlay draws above it; none under
+     * the CRT filter (the rows draw as quads into the scene, as in the
+     * Original preset, and go through the filter) */
     if (s_ov.textFn && f && g_rd.settings.preset == RD_PRESET_ENHANCED && !crt && !s_blank) {
         g_rd.deferText = true;
         textCollect(f, keep);
@@ -934,7 +935,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
         s_ov.fn(c, s_ov.user);
         s_ov.inside = 0;
     }
-    /* package AN-T: the top layer (the touch controls) last, laid out on
+    /* the top layer (the touch controls) last, laid out on
      * the output in every mode, never on the grid: overlayRecord draws it
      * on the output after the CRT filter, so it stays sharp */
     s_ov.topFirst = s_ov.bCount;
@@ -959,7 +960,7 @@ uint64_t rd__OverlayRingBytes(void)
     }
     const uint64_t align = rhi_Limits()->uniformAlign;
     /* a FrameCB a pass (three at most: the deferred text, the main layer
-     * or the CRT filter's two grid passes, package AN-T's top layer), a
+     * or the CRT filter's two grid passes, the top layer), a
      * DrawCB and the expanded vertices (sprites and points give 6 a prim's
      * 2 or 1) a batch */
     uint64_t total = 3 * ((uint64_t)sizeof(IcoFrameCB) + 2 * align);
@@ -992,7 +993,7 @@ static RhiRect scaleRect(RhiRect r, const RhiRect *dst, uint64_t ow, uint64_t oh
 }
 
 /* batches [from, to), laid out on c's frame, in one load-preserving pass
- * on out (fmt, tw x th: the output, or package CRT2's grid layer).  dst
+ * on out (fmt, tw x th: the output, or the CRT filter's grid layer).  dst
  * NULL: c's frame is out's, 1:1; else it is scaled into dst of out (the
  * grid-mode overlay on the output when the CRT pass could not draw it, see
  * overlayRecord).  inPass: a pass on out is already open (the box blit's,
@@ -1028,7 +1029,7 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
     const RdUniform frame = rd__FrameGroup(ow, oh, 0.5f, 0.5f);
     for (uint32_t i = from; i < to; i++) {
         const OverlayBatch *b = &s_ov.b[i];
-        /* package DEF: the deferred text's batches carry their regions */
+        /* the deferred text's batches carry their regions */
         if (memcmp(&b->sc, &cur, sizeof(cur)) != 0) {
             cur = b->sc;
             if (dst) {
@@ -1051,7 +1052,7 @@ static void drawBatches(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32
     drawBatchesAt(cl, out, fmt, ow, oh, c, NULL, from, to, inPass);
 }
 
-/* package DEF: the deferred text, at the insertion point (inPass as for
+/* the deferred text, at the insertion point (inPass as for
  * drawBatchesAt) */
 static void textRecord(RhiCommandList cl, RhiTexture out, bool inPass)
 {
@@ -1060,15 +1061,15 @@ static void textRecord(RhiCommandList cl, RhiTexture out, bool inPass)
     }
 }
 
-/* the overlay on the output.  The main layer: under the CRT filter
- * (package CRT2) it was drawn into the filter's grid (inPicture), and this
- * only forgets it; a grid-mode main layer the filter did not draw
- * (rd__CrtRecord failed, or the capture's pass left it out and the second
- * pass failed) is drawn on the output, its grid frame scaled into box, so
- * the popups do not vanish.  Package AN-T's top layer is always on the
- * output: under the main layer when that is on the output too (the touch
- * controls under the HUD and the popups), over the filtered picture when
- * the main layer is in the grid.  inPass as for drawBatchesAt */
+/* the overlay on the output.  The main layer: under the CRT filter it was
+ * drawn into the filter's grid (inPicture), and this only forgets it; a
+ * grid-mode main layer the filter did not draw (rd__CrtRecord failed, or the
+ * capture's pass left it out and the second pass failed) is drawn on the
+ * output, its grid frame scaled into box, so the popups do not vanish.  The
+ * top layer is always on the output: under the main layer when that is on the
+ * output too (the touch controls under the HUD and the popups), over the
+ * filtered picture when the main layer is in the grid.  inPass as for
+ * drawBatchesAt */
 static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box, bool inPicture,
                           bool inPass)
 {
@@ -1101,7 +1102,7 @@ void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_
     }
 }
 
-/* ------------------------------------------- the capture (package PHOTO)
+/* ------------------------------------------------------------ the capture
  * rd.h rd_CapturePresented: the output of the next present, copied before
  * the overlay into a texture of the output's format and read back after the
  * submit.  The headless output and the swapchain image both allow copies
@@ -1218,7 +1219,7 @@ void rd__CaptureFinish(void)
     s_cap.result = ok ? 1 : -1;
 }
 
-/* package AN-C: rd_PresentBlank's pass: the output cleared to 0, the
+/* rd_PresentBlank's pass: the output cleared to 0, the
  * overlay on it */
 static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
 {
@@ -1260,15 +1261,15 @@ void rd__PresentRecord(RhiCommandList cl)
     rd__Transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
-    rd__NotePresentBox(s_outW, s_outH, &box); /* N4: the tests */
-    /* package CRT: the filter draws the box from DISPLAY's own lines (its
+    rd__NotePresentBox(s_outW, s_outH, &box); /* for the tests */
+    /* the CRT filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
     const int mirror = pr->mirror && rd__MirrorOn();
     bool filtered = false, uiInPicture = false;
     if (rd__CrtOn()) {
         if (depthWanted()) {
-            /* package R1: the filter replaces the box blit that carries it */
+            /* the filter replaces the box blit that carries the effects depth */
             rd__LogOnce(RD_ONCE_EFFECTS_DEPTH_CRT,
                         "effects depth is not available with the CRT filter");
         }
@@ -1276,7 +1277,7 @@ void rd__PresentRecord(RhiCommandList cl)
         const bool ui = rd__OverlayGridPending();
         bool capOk = true;
         if (ui && rd__CaptureArmed()) {
-            /* package PHOTO: a capture never carries the port's UI; under
+            /* a capture never carries the port's UI; under
              * the CRT filter that UI is inside the filtered picture, so the
              * capture takes a pass without it and the shown picture a
              * second pass with it */
@@ -1320,13 +1321,13 @@ void rd__PresentRecord(RhiCommandList cl)
      * The draws, their order, blend states, viewports and scissors are
      * those of the separate passes, and those passes only loaded what the
      * one before stored on the same single colour attachment, so the
-     * pixels are the same; a tile-based GPU no longer writes the output out
-     * and reads it back between them.  The CRT filter and the effects
+     * pixels are the same, and a tile-based GPU does not write the output
+     * out and read it back between them.  The CRT filter and the effects
      * depth keep a pass each */
     bool open = false;
     if (!filtered) {
         rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-        /* package R1: with the effects depth when asked for and an
+        /* with the effects depth when asked for and an
          * effects program is loaded (never under the CRT filter, even when
          * it could not draw) */
         const bool depth = depthWanted() && !rd__CrtOn() &&
@@ -1338,8 +1339,8 @@ void rd__PresentRecord(RhiCommandList cl)
                  pr->scaleFilter, mirror, open);
         }
     }
-    /* package DEF: the deferred text, drawn in list order with the regions
-     * and colours the passes after it gave it.  Package CRT2: none under the CRT filter (the rows are
+    /* the deferred text, drawn in list order with the regions and colours
+     * the passes after it gave it.  None under the CRT filter (the rows are
      * in the scene, filtered with it) */
     textRecord(cl, out, open);
     /* ==== INSERTION POINT for later presentation passes ====================
@@ -1351,12 +1352,12 @@ void rd__PresentRecord(RhiCommandList cl)
      * With `open` the output's pass is still open: a new pass ends it
      * first and reopens it with RHI_LOAD_LOAD after, as captureRecord does
      * around its copy.
-     * Keep the overlay last.  Under the CRT filter (packages CRT, CRT2) the
-     * filter is the last pass but for package AN-T's top layer (the touch
-     * controls, over the tube): the main overlay is already inside it, and
-     * a pass here would draw over the tube.
+     * Keep the overlay last.  Under the CRT filter the filter is the last
+     * pass but for the top layer (the touch controls, over the tube): the
+     * main overlay is already inside it, and a pass here would draw over the
+     * tube.
      * ======================================================================= */
-    /* package PHOTO: a capture takes the picture as shown, without the
+    /* a capture takes the picture as shown, without the
      * port's own UI on the overlay (the popups, the photo HUD); under the
      * CRT filter with UI in the grid it was taken above, from a pass
      * without that UI (a no-op here then) */
@@ -1387,11 +1388,11 @@ void rd__PresentShutdown(void)
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
     if (s_cap.tex.id) {
-        rhi_DestroyTexture(s_cap.tex); /* package PHOTO */
+        rhi_DestroyTexture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
-    depthShutdown();   /* package R1 */
-    rd__CrtShutdown(); /* package CRT */
+    depthShutdown();   /* the effects depth */
+    rd__CrtShutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
     free(s_ov.b);
@@ -1435,14 +1436,15 @@ void rd_ResizeOutput(uint32_t width, uint32_t height)
     if (g_rd.hasDevice && rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
         rhi_ResizeSwapchain(width, height, g_rd.settings.vsync != 0);
     }
-    /* R7a: a scene sized by the window (resolution "window", the
+    /* a scene sized by the window (resolution "window", the
      * Enhanced flag) follows it at the next rd_BeginFrame
      * (rd__ApplyDisplay recreates the targets if their scale changed; a
      * fixed scale or size never changes) */
     g_rd.settingsPending = true;
 }
 
-/* v0.4.2 N1: the output follows the swapchain.  The backend rebuilds the
+/* The output follows the swapchain.  The backend rebuilds the
+
  * swapchain at the surface's size on its own (rhi_SwapchainSize), and the
  * window's size event may come later or never (Android); an output size
  * other than the image's drew the picture and the movie's 4:3 box for the

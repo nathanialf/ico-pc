@@ -9,8 +9,8 @@
  * fba are 0, afailSplit is 0, the effect of an AFAIL split pass on the
  * pipeline is carried by zwrite and colorMask, and blend holds one
  * representative mode per blend path (4 for the LERPs, 5 for the premultiplied
- * adds, 6 for the premultiplied subtracts).  DATE is a uniform too (wave 2:
- * DF_DATE/DF_DATM, sprite_ps tests the R8 snapshot rd_replay.c binds at t2),
+ * adds, 6 for the premultiplied subtracts).  DATE is a uniform too
+ * (DF_DATE/DF_DATM: sprite_ps tests the R8 snapshot rd_replay.c binds at t2),
  * so date stays 0 in the key.
  *
  * Blend paths: on UNORM targets fixed-point blend factors clamp to 1.0, so
@@ -35,7 +35,7 @@
  * The feedback passes do not use the hardware blender at all: RDC_EXACT_BLEND
  * runs blend_int on RGBA8_UINT copies (rd_replay.c).
  *
- * Package AN-E, a device without dual-source blending (g_rd.noDual): only
+ * On a device without dual-source blending (g_rd.noDual), only
  * the LERPs and Cd*FIX + Cs read the second output, so only they change
  * (rd__ExpandNoDual).  The draw becomes two: a colour pass whose c0.a is
  * the factor c1 would carry (the same float: F/128, or 1.0 / 0 for a PABE
@@ -44,7 +44,7 @@
  * when the mask has A, an alpha pass writing the stored alpha (As, FBA's
  * MSB) with blending off, no Z write, under a Z test that admits the Z the
  * colour pass left.  The shaders are the *_nodual entries (ICO_NO_DUAL: c0
- * alone); every other path draws in one pass as before, with those entries.
+ * alone); every other path draws in one pass, with those entries.
  * Why the alpha is the one-pass alpha: blending never reads Ad on these
  * paths, so RGB does not depend on the alpha pass.  Without Z write the
  * depth buffer is the same for both passes, so the alpha pass keeps the Z
@@ -60,8 +60,8 @@
  * whose mask has no RGB blends nothing: one pass, blending off, its own Z.
  *
  * Z: the shaders map GS Z to a depth that grows with it (gs_z_to_depth, z
- * times the target's scale; package QUEEN, before it 1 - z * scale), so GS
- * GEQUAL is RHI_CMP_GEQUAL and GREATER is GREATER.
+ * times the target's scale), so GS GEQUAL is RHI_CMP_GEQUAL and GREATER is
+ * GREATER.
  */
 #include <string.h>
 #include "rd_internal.h"
@@ -76,7 +76,7 @@ static RdPipeEntry s_cache[RD_PIPELINE_CACHE_MAX];
 
 static uint32_t s_count;
 
-/* F2 (C2): keys whose creation failed; looked up before a retry, so a
+/* Keys whose creation failed; looked up before a retry, so a
  * failed pipeline costs one creation attempt and one log line per session
  * (per cache clear), not two lines per draw. */
 static RdPipeKeyInt s_failed[RD_PIPELINE_FAIL_MAX];
@@ -121,8 +121,7 @@ RdBlendPath rd__BlendPath(uint8_t b)
 /* The raw ALPHA register of each mode (GifPacket.c alphaTable, rd_state.h). */
 uint32_t rd__AlphaRegister(uint8_t blend)
 {
-    /* mode 3 is 0x29 (alphaTable {1, 2, 2, 0}: A Cd, B 0, C FIX, D Cs); 0x61
-     * until R5c, which is (Cd - Cs) FIX + Cd */
+    /* mode 3 is 0x29 (alphaTable {1, 2, 2, 0}: A Cd, B 0, C FIX, D Cs) */
     static const uint8_t kReg[RD_BLEND_COUNT] = {0x68, 0x62, 0x64, 0x29, 0x44, 0x48,
                                                  0x42, 0x44, 0x58, 0x52, 0x54, 0x49};
     return blend < RD_BLEND_COUNT ? kReg[blend] : 0x44;
@@ -167,14 +166,15 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
     return rd__PlanScreenDrawEx(s, prim, 0, space, colorFmt, depthFmt, out);
 }
 
-/* Package AA1: aa1 is PRIM.AA1 on a line or triangle command (rd_replay.c
+/* PRIM.AA1: aa1 is PRIM.AA1 on a line or triangle command (rd_replay.c
  * doScreen decides; points and sprites pass 0).  The key takes the AA1 bit
  * and the AA1 shaders, the topology becomes triangles (rd_replay.c draws an
  * antialiased line as quads), blending is on whatever PRIM.ABE says (the
  * ALPHA register's equation; with ABE 0 the coverage alpha replaces every
  * fragment's alpha, ICO_DF_AA1_FULL, else only an alpha of 0x80), and an
- * antialiased line writes no Z: all its pixels are edge pixels.  The edge geometry of a triangle draws with the
- * pass's key and zwrite off (rd_replay.c). */
+ * antialiased line writes no Z: all its pixels are edge pixels.  The edge
+ * geometry of a triangle draws with the pass's key and zwrite off
+ * (rd_replay.c). */
 int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
                          RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2])
 {
@@ -216,9 +216,9 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     k->fs = RD_FS_SPRITE;
     k->colorFmt = (uint8_t)colorFmt;
     k->depthFmt = (uint8_t)depthFmt;
-    /* package R8: an R8 coverage texture (rd_CreateTextureR8) is drawn by
-     * font_ps; the fragment shader is part of the key.  v0.4.2 (F-A): a
-     * sheet texture (rd_CreateTextureSheet) by font_sheet_ps */
+    /* an R8 coverage texture (rd_CreateTextureR8) is drawn by font_ps and a
+     * sheet texture (rd_CreateTextureSheet) by font_sheet_ps; the fragment
+     * shader is part of the key */
     if (d->texEnabled) {
         const RdTexRec *tr = rd__TexRec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
@@ -227,7 +227,7 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
             k->fs = RD_FS_FONT_SHEET;
         }
     }
-    /* package AA1 (not for an R8 texture: no AA1 draw samples one) */
+    /* PRIM.AA1 (not for an R8 texture: no AA1 draw samples one) */
     if (aa1 && k->fs == RD_FS_SPRITE) {
         k->gs.aa1 = 1;
         k->gs.prim = RD_PRIM_TRIANGLES;
@@ -241,7 +241,7 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
         }
     }
 
-    /* package TEXA: TEXA per texel before the bilinear filter */
+    /* TEXA applied per texel, before the bilinear filter */
     if (k->fs == RD_FS_SPRITE && rd__TexaPerTexel(s)) {
         k->fs = RD_FS_SPRITE_TEXA;
     }
@@ -260,7 +260,7 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     if (bp == RD_BP_DST_FIX) {
         base.flags |= ICO_DF_C1_DST;
     }
-    /* DATE (wave 2): a shader test against the R8 snapshot rd_replay.c binds
+    /* DATE: a shader test against the R8 snapshot rd_replay.c binds
      * at t2; a uniform, so the key keeps date normalised to off */
     if (d->test.date == RD_DATE_DEST_ALPHA_0) {
         base.flags |= ICO_DF_DATE;
@@ -326,19 +326,18 @@ int rd__TexaPerTexel(const RdStateBlock *s)
         return 0; /* TEXA 80/80 gives every texel alpha 0x80: no order to keep */
     }
     if (d->magFilter != RD_FILTER_LINEAR && d->minFilter != RD_FILTER_LINEAR) {
-        return 0; /* nearest: one texel, expanded after the fetch as before */
+        return 0; /* nearest: one texel, expanded after the fetch */
     }
     const RdTexRec *tr = rd__TexRec(s->tex);
     return tr && tr->src != RD_TEXSRC_RGBA32 &&
            !(tr->kind == RD_TEXKIND_IMAGE && rd__TexelIsCoverage(tr->format));
 }
 
-/* Package RSMALL: a planned screen pass for a command whose prims carry
- * Q != 1: the STQ vertex shader of its
- * space and sprite_stq_ps.  Only the plain sprite pass converts (an R8
- * font texture and PRIM.AA1 keep their shaders); returns whether it did.
- * Package TEXA: a sprite_texa_ps pass converts too, and sprite_stq_ps
- * expands TEXA after the sampler. */
+/* Converts a planned screen pass for a command whose prims carry Q != 1 to
+ * the STQ vertex shader of its space and sprite_stq_ps.  Only the plain
+ * sprite pass converts (an R8 font texture and PRIM.AA1 keep their
+ * shaders); returns whether it did.  A sprite_texa_ps pass converts too,
+ * and sprite_stq_ps expands TEXA after the sampler. */
 int rd__StqPass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
@@ -351,7 +350,7 @@ int rd__StqPass(RdDrawPass *dp)
     return 1;
 }
 
-/* Package OV: the presentation overlay's state (rd.h rd_OverlayPrims):
+/* The presentation overlay's state (rd.h rd_OverlayPrims):
  * blend with ABE on, no Z test or write (and no depth target), no alpha
  * test, no DATE, FBA and PABE off, COLCLAMP on, all channels written. */
 void rd__OverlayState(RdStateBlock *s, uint8_t blend)
@@ -391,7 +390,7 @@ RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt)
     return k;
 }
 
-/* Package AN-E: the entries that call gs_dual_out (their *_nodual twins
+/* The entries that call gs_dual_out (their *_nodual twins
  * output c0 alone). */
 bool rd__FsHasNoDual(uint8_t fs)
 {
@@ -481,7 +480,7 @@ static RhiBlendState blendState(RdBlendPath bp, uint8_t mask, uint8_t nodual)
     b.enable = bp != RD_BP_NONE;
     switch (bp) {
     case RD_BP_LERP:
-        /* package AN-E: the colour pass's c0.a is the factor */
+        /* no dual-source blending: the colour pass's c0.a is the factor */
         b.srcColor = nodual ? RHI_BF_SRC_ALPHA : RHI_BF_SRC1_COLOR;
         b.dstColor = nodual ? RHI_BF_ONE_MINUS_SRC_ALPHA : RHI_BF_ONE_MINUS_SRC1_COLOR;
         break;
@@ -537,7 +536,7 @@ static RhiCompare depthCompare(uint8_t ztst)
     }
 }
 
-/* Wave 4 (R4b): the stencil of the shadow count.
+/* The stencil of the shadow count.
  * Volumes: both faces INCR_WRAP or DECR_WRAP where the depth test passes,
  * written through RD_SHADOW_STENCIL_MASK, so the stencil holds n mod 64 as
  * 4 n mod 256 wraps.  Resolve bit k: EQUAL to the reference 1 << k under
@@ -580,7 +579,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
     };
-    /* package AA1: the same and the coverage */
+    /* PRIM.AA1: the same and the coverage */
     static const RhiVertexBinding vbAa1 = {0, sizeof(IcoSpriteAa1Vertex), false};
     static const RhiVertexAttr vaAa1[5] = {
         {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
@@ -589,7 +588,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
         {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteAa1Vertex, cov)},
     };
-    /* package RSMALL: the same and Q */
+    /* STQ: the same and Q */
     static const RhiVertexBinding vbStq = {0, sizeof(IcoSpriteStqVertex), false};
     static const RhiVertexAttr vaStq[5] = {
         {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
@@ -599,14 +598,14 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteStqVertex, q)},
     };
     const int vu = k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
-    /* wave 3 (R3ab): the VU program shaders read the stream, VuCB and
+    /* the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
     RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, vu ? g_rd.layoutVu : g_rd.layoutDraw,
                                      k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex};
     RhiPipelineDesc d;
     memset(&d, 0, sizeof(d));
     d.vertex = g_rd.vs[k->vs];
-    /* package AN-E: the *_nodual twin (c0 alone) */
+    /* no dual-source blending: the *_nodual twin (c0 alone) */
     d.fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
     d.layouts = layouts;
     d.layoutCount = 3;
@@ -633,7 +632,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
         d.depthStencil.depthTest = true;
         d.depthStencil.depthWrite = k->gs.zwrite == RD_ZWRITE_ON;
         d.depthStencil.depthCompare = depthCompare(k->gs.ztst);
-        shadowStencil(k->gs.stencil, &d.depthStencil); /* wave 4 (R4b) */
+        shadowStencil(k->gs.stencil, &d.depthStencil); /* the shadow count */
     }
     d.colorFormats[0] = (RhiFormat)k->colorFmt;
     d.colorCount = 1;
@@ -642,7 +641,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
     return rhi_CreatePipeline(&d);
 }
 
-/* Package P1: an open-addressed index over s_cache (slot + 1, 0 = empty),
+/* An open-addressed index over s_cache (slot + 1, 0 = empty),
  * so a draw's lookup is a hash and a compare, not a walk of every pipeline */
 #define RD_PIPE_HASH (4 * RD_PIPELINE_CACHE_MAX)
 
@@ -660,7 +659,7 @@ static uint32_t keyHash(const RdPipeKeyInt *k)
 
 RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
 {
-    /* package AN-E: without dual-source blending a gs_dual_out entry draws
+    /* without dual-source blending a gs_dual_out entry draws
      * as its *_nodual twin; the planned passes come through rd__ExpandNoDual,
      * the single keys (the shadow count's volumes) are turned here */
     RdPipeKeyInt nk;
@@ -746,7 +745,7 @@ uint32_t rd_PrecreatePipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     if (!g_rd.hasDevice) {
-        /* P1: said, so a call before rd_Init does not pass unnoticed */
+        /* logged, so a call before rd_Init does not pass unnoticed */
         rd__Log("rd_PrecreatePipelines without a device (before rd_Init?): nothing created");
         return 0;
     }
@@ -804,8 +803,8 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   glows): the same plus the depth-tested literals 0x50000, 0x5000D, the
  *   list 1/2 default 0x5140D (AFAIL split) and the list 4 default 0x5C000
  *   (DATE, normalised out).
- *   The DATE snapshot (wave 2): blit_vs/date_snap_ps into R8.
- *   PRIM.AA1 lines and triangles (package AA1): WORLD screen prims through
+ *   The DATE snapshot: blit_vs/date_snap_ps into R8.
+ *   PRIM.AA1 lines and triangles: WORLD screen prims through
  *   sprite_aa1_world_vs / sprite_aa1_ps, the states stormTest.c and puddle.c
  *   draw them under (rd__EnumerateReachableScreen lists them).
  *   Blits: blit_vs/blit_ps into RGBA8 (presenter line doubling, headless
@@ -813,11 +812,11 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   RGBA8_UINT (exact feedback blends).
  *
  * The mode 3 and Ad blends are reachable only through BGA lightning data,
- * drawn by rd_WorldPrims (wave 5), so they are not in the screen families.
+ * drawn by rd_WorldPrims, so they are not in the screen families.
  * Each enumerated state goes through rd__PlanScreenDraw, the function the
  * replayer uses, so the count is the count the cache would reach.
  *
- * Wave 3 (R3ab): rd__EnumerateReachable adds the VU program families
+ * rd__EnumerateReachable adds the VU program families
  * (rd__EnumerateReachableVu, rd_mesh.c) to these; the screen and post set
  * alone stays rd__EnumerateReachableScreen. */
 uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
@@ -836,14 +835,14 @@ uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPip
 static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
 {
     uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
-    n = rd__EnumerateReachableShadow(out, max, n);  /* wave 4 (R4b) */
-    n = rd__EnumerateReachableFog(out, max, n);     /* wave 4 (R4c) */
-    n = rd__EnumerateReachableWater(out, max, n);   /* wave 5 (R5b) */
-    n = rd__EnumerateReachableCrt(out, max, n);     /* package CRT */
-    return rd__EnumerateReachableBlur(out, max, n); /* wave 5 (R5a) */
+    n = rd__EnumerateReachableShadow(out, max, n);
+    n = rd__EnumerateReachableFog(out, max, n);
+    n = rd__EnumerateReachableWater(out, max, n);
+    n = rd__EnumerateReachableCrt(out, max, n);
+    return rd__EnumerateReachableBlur(out, max, n);
 }
 
-/* Package AN-E: in the two-pass fallback every key is what rd__ExpandNoDual
+/* In the two-pass fallback every key is what rd__ExpandNoDual
  * makes of it (the families above plan with dual-source blending), so the
  * set precreated is the set the draws reach (rd_mesh.c's VU and rd_water.c's
  * families among them). */
@@ -867,7 +866,7 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
     return n;
 }
 
-/* package CRT (rd_crt.c): the glow passes into RGBA16F, the composite on
+/* the CRT filter (rd_crt.c): the glow passes into RGBA16F, the composite on
  * the headless output (RGBA8) and the swapchain (BGRA8); the virtual
  * source's box reduction is the shadow family's key */
 uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
@@ -882,7 +881,7 @@ uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
     return n;
 }
 
-/* ----------------------------------------------------- fog (wave 4, R4c) */
+/* ------------------------------------------------------------------- fog */
 
 int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
 {
@@ -913,7 +912,7 @@ uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n)
     return n;
 }
 
-/* ------------------------------------------------- shadows (wave 4, R4b) */
+/* --------------------------------------------------------------- shadows */
 
 RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int decr)
 {
@@ -936,7 +935,7 @@ RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int 
     return k;
 }
 
-/* Package RSMALL: the box reduction of the scaled count to the GS size
+/* The box reduction of the scaled count to the GS size
  * (rd_replay.c shadowReduce): RGBA8 like the count. */
 RdPipeKeyInt rd__ShadowReduceKey(void)
 {
@@ -972,7 +971,7 @@ uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t 
         const RdPipeKeyInt k = rd__ShadowResolveKey(p);
         n = rd__AddPipeKey(out, max, n, &k);
     }
-    const RdPipeKeyInt kr = rd__ShadowReduceKey(); /* package RSMALL */
+    const RdPipeKeyInt kr = rd__ShadowReduceKey(); /* box reduction to the GS size */
     n = rd__AddPipeKey(out, max, n, &kr);
     return n;
 }
@@ -1015,13 +1014,13 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                                             RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                                 for (int i = 0; i < np; i++) {
                                     n = rd__AddPipeKey(out, max, n, &dp[i].key);
-                                    /* package TEXA: the same state on a 24-
-                                     * or 16-bit texture under AEM */
+                                    /* TEXA per texel: the same state on a
+                                     * 24- or 16-bit texture under AEM */
                                     RdPipeKeyInt kt = dp[i].key;
                                     kt.fs = RD_FS_SPRITE_TEXA;
                                     n = rd__AddPipeKey(out, max, n, &kt);
                                 }
-                                /* package RSMALL: a textured STQ triangle
+                                /* STQ: a textured STQ triangle
                                  * command with Q != 1 (the lightning's strips,
                                  * raw GIF writes: WORLD space) */
                                 if (space && kPrims[p] == RD_PRIM_TRIANGLES) {
@@ -1038,7 +1037,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             }
         }
     }
-    /* package AA1: the PRIM.AA1 lines and triangles, WORLD space (the storm's
+    /* the PRIM.AA1 lines and triangles, WORLD space (the storm's
      * line strips, stormTest.c: list 11, TEST 0x50000, ZMSK, ALPHA mode 5
      * with ABE 0; the puddle's ripple strips, puddle.c: TEST 0x3F000, mode 0
      * or 4 with ABE 1), with every game blend literal, Z on and off, with and
@@ -1069,7 +1068,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             }
         }
     }
-    /* package OV: the presentation overlay on the headless output and the
+    /* the presentation overlay on the headless output and the
      * swapchain (sprites and triangles; the popups' blend and the glow's) */
     static const uint8_t kOverlayBlends[] = {RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD};
     static const RhiFormat kOutFormats[] = {RHI_FMT_RGBA8_UNORM, RHI_FMT_BGRA8_UNORM};
@@ -1082,17 +1081,17 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                                               RHI_FMT_UNKNOWN, dp);
             for (int i = 0; i < np; i++) {
                 n = rd__AddPipeKey(out, max, n, &dp[i].key);
-                /* package R8: the font atlas on the overlay (font_ps) */
+                /* the font atlas on the overlay (font_ps) */
                 dp[i].key.fs = RD_FS_FONT;
                 n = rd__AddPipeKey(out, max, n, &dp[i].key);
-                /* v0.4.2 (F-A): the popups' and the photo panel's sheet
-                 * text (font_sheet_ps) */
+                /* the popups' and the photo panel's sheet text
+                 * (font_sheet_ps) */
                 dp[i].key.fs = RD_FS_FONT_SHEET;
                 n = rd__AddPipeKey(out, max, n, &dp[i].key);
             }
         }
     }
-    /* package R8: the port's text in the frame (port/ui/font.c setState:
+    /* the port's text in the frame (port/ui/font.c setState:
      * TEST 0x30000, no Z write, ALPHA 0x44 or 0x48; UI_KEEP_STATE keeps the
      * layout packet's, which differs only in the alpha test, a uniform)
      * through font_ps, with and without the depth target */
@@ -1108,8 +1107,8 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
             const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
                                               RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
             for (int i = 0; i < np; i++) {
-                /* v0.4.2 (F-A): the menus' sheet text (font_sheet_ps) in the
-                 * same states */
+                /* the menus' sheet text (font_sheet_ps) in the same
+                 * states */
                 for (int sh = 0; sh < 2; sh++) {
                     dp[i].key.fs = sh ? RD_FS_FONT_SHEET : RD_FS_FONT;
                     dp[i].key.gs.colorMask = 0xF;
@@ -1127,7 +1126,7 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     n = rd__AddPipeKey(out, max, n, &dateSnap);
     n = rd__AddPipeKey(out, max, n, &blitA);
     n = rd__AddPipeKey(out, max, n, &blitB);
-    /* v0.4.1 (R1): the box blit with the effects depth, on both outputs */
+    /* the box blit with the effects depth, on both outputs */
     const RdPipeKeyInt depthA = rd__PresentDepthKey(RHI_FMT_RGBA8_UNORM);
     const RdPipeKeyInt depthB = rd__PresentDepthKey(RHI_FMT_BGRA8_UNORM);
     n = rd__AddPipeKey(out, max, n, &depthA);
@@ -1136,7 +1135,8 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     return n;
 }
 
-/* ------------------------------------------------ staticBlur (wave 5, R5a)
+/* ------------------------------------------------------------ staticBlur
+
  * fx_sprite_ps does the alpha test, DATE, the blend, PABE, FBA and COLCLAMP
  * itself on integers, so the key keeps only what the hardware does: the
  * colour mask (FRAME.FBMSK) and, with a depth target, the Z test and Z
