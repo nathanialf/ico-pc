@@ -147,14 +147,18 @@ function(ico_settings_test name main_c)
 endfunction()
 ico_settings_test(settings_test test/settings_test.c)
 
-# settings_extra_test: the newer Settings menu tests, over the same
-# fixture (settings_fixture.c) and sources as settings_test; settings_test.c is
-# close to the source size cap, so new settings tests go in settings_extra_test.c
+# settings_extras_test: the Extras and Characters pages and the pages that
+# hide the title's logo
+ico_settings_test(settings_extras_test test/settings_extras_test.c)
+# settings_extra_test: the newer Settings menu tests; each settings test file
+# stays well under the source size cap (tools/check_no_rom.sh), so new
+# settings tests go in settings_extra_test.c
 ico_settings_test(settings_extra_test test/settings_extra_test.c)
 if(ICO_RUN_TESTS)
-    # the three settings executables write the same settings_test.toml in
+    # the four settings executables write the same settings_test.toml in
     # this directory: never in parallel
-    set_tests_properties(settings settings_extra PROPERTIES RESOURCE_LOCK settings_toml)
+    set_tests_properties(settings settings_extras settings_extra PROPERTIES RESOURCE_LOCK
+                         settings_toml)
 endif()
 
 # --- gallery_test (CPU) --------------------------------------------------------
@@ -303,12 +307,13 @@ target_compile_options(ui_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT
 # font_sheet_ps's CPU reference (port/render/test/sheet_ref.h)
 target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref)
 
-# settings_render: settings_test.c with SETTINGS_RENDER, the Settings screens
-# through the real layout code and rd on a Vulkan device, each screen's SCENE
-# written as settings_<screen>.png beside it (exit 77 without a device)
+# settings_render: settings_photo_test.c with SETTINGS_RENDER, the Settings
+# screens through the real layout code and rd on a Vulkan device, each
+# screen's SCENE written as settings_<screen>.png beside it (exit 77 without a
+# device)
 ico_ui_library(ico_ui_settings_rd ON)
 ico_ui_settings(ico_ui_settings_rd)
-add_executable(settings_render test/settings_test.c test/settings_fixture.c
+add_executable(settings_render test/settings_photo_test.c test/settings_fixture.c
     $<TARGET_OBJECTS:ico_ui_settings_rd>
     "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"

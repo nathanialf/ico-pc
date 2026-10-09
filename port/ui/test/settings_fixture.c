@@ -607,3 +607,153 @@ int openPage(int mainL, int mainRow, UiSettingsPage page)
     CHECK(settle(l, 60), "page %d opens (%d)", page, current_layout_id);
     return l;
 }
+
+/* --- helpers shared by the settings test programs --- */
+
+/* the pause menu journey lines' game state, set by the tests (ico_gs_set_sampler) */
+IcoGsSnapshot s_gs;
+
+void gsSampler(IcoGsSnapshot *out)
+{
+    *out = s_gs;
+}
+
+/* the row of layout page whose text is str, -1 */
+int rowWithText(UiSettingsPage page, const char *str)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    for (int j = l->first; j < l->last; j++) {
+        if (strcmp(lt_ext_RowText(j), str) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+/* the page in front: its shown rows top to bottom at least 13 field lines
+   apart (11 on a page of more than 13 rows, which starts higher: the
+   Controls page with the touch rows), below the header, the last one's box
+   inside the 226 lines */
+void checkPageFits(UiSettingsPage page, const char *what)
+{
+    int labels[16];
+    const int n = ui_SettingsPageRows(page, labels, NULL, NULL, 16);
+    int prev = -1, last = -1, shown = 0;
+    for (int i = 0; i < n; i++) {
+        shown += !lt_ext_Prop(labels[i])->defaultMask;
+    }
+    const int gap = shown > 13 ? 11 : 13;
+    const int top = shown > 13 ? 30 : 34;
+    for (int i = 0; i < n; i++) {
+        const LtProperty *r = lt_ext_Prop(labels[i]);
+        if (r->defaultMask) {
+            continue;
+        }
+        CHECK(prev < 0 ? r->dispY >= top : r->dispY >= prev + gap,
+              "%s: row %d at y %d (the one above at %d)", what, i, r->dispY, prev);
+        prev = r->dispY;
+        last = labels[i];
+    }
+    CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+          "%s: the last row's box ends at %d", what,
+          last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+}
+
+/* the note row of `page` whose text starts with prefix, -1 */
+int noteStarting(UiSettingsPage page, const char *prefix)
+{
+    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    for (int j = l->first; j < l->last; j++) {
+        if (strncmp(lt_ext_RowText(j), prefix, strlen(prefix)) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+/* the texture and model pack count the Display page asks for, set by the tests */
+int s_packCount;
+
+int fakePackCount(void)
+{
+    return s_packCount;
+}
+
+/* Settings > Extras > Music's engine, faked: a few streams in each group and
+   the calls counted (gallery.h) */
+AdpcmDataRec s_fakeAdpcm[105];
+int s_galPlays, s_galStops, s_galLeaves, s_galLastKey = -1, s_galPaused;
+const GalleryItem *s_galCur;
+
+static int galTables(GalleryTables *t)
+{
+    static const struct {
+        int no;
+        const char *path;
+    } kRows[] = {{1, "sound/ICO_ADPCM/battle.int"},
+                 {6, "sound/ICO_ADPCM/event/01.int"},
+                 {60, "sound/ICO_ADPCM/event2/54.int"},
+                 {61, "sound/ICO_ADPCM/event2/55.int"},
+                 {101, "sound/ICO_ADPCM/event2/hint1_1.int"}};
+
+    for (unsigned i = 0; i < sizeof(kRows) / sizeof(kRows[0]); i++) {
+        snprintf(s_fakeAdpcm[kRows[i].no].path, sizeof(s_fakeAdpcm[0].path), "%s", kRows[i].path);
+        s_fakeAdpcm[kRows[i].no].channels = 2;
+        s_fakeAdpcm[kRows[i].no].pitch = 44100;
+    }
+    memset(t, 0, sizeof(*t));
+    t->adpcm = s_fakeAdpcm;
+    t->adpcmCount = 105;
+    return 0;
+}
+
+static int galPlay(const GalleryItem *it)
+{
+    s_galPaused = 0;
+    s_galPlays++;
+    s_galLastKey = it->key;
+    s_galCur = it;
+    return 0;
+}
+
+static void galStop(void)
+{
+    s_galPaused = 0;
+    s_galStops++;
+    s_galCur = NULL;
+}
+
+static void galLeaveHook(void)
+{
+    s_galLeaves++;
+    s_galCur = NULL;
+}
+
+static const GalleryItem *galPlaying(void)
+{
+    return s_galCur;
+}
+
+/* a stream pauses; an effect cannot */
+static int galPause(int on)
+{
+    if (s_galCur == NULL || s_galCur->kind != GAL_K_STREAM) {
+        return -1;
+    }
+    s_galPaused = on;
+    return 0;
+}
+
+/* 42 s into 4:25 */
+static int galPosition(float *el, float *tot)
+{
+    if (s_galCur == NULL) {
+        return -1;
+    }
+    *el = 42.4f;
+    *tot = 265.6f;
+    return 0;
+}
+
+const GalleryEngine kFakeEngine = {galTables, NULL,       galLeaveHook, galPlay,    galStop,
+                                   NULL,      galPlaying, galPause,     galPosition};

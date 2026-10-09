@@ -1,7 +1,10 @@
-/* settings_fixture.h: what settings_test.c and settings_extra_test.c share (the
- * stubs for the game's imports, the fake tables, frame/settle/press, the
- * config helpers, enterMain/openPage).  The fixture is compiled once per
- * test executable, with SETTINGS_RENDER for settings_render. */
+/* settings_fixture.h: what the settings test programs (settings_test.c,
+ * settings_extra_test.c, settings_extras_test.c, settings_photo_test.c)
+ * share: the stubs for the game's imports, the fake tables,
+ * frame/settle/press, the config helpers, enterMain/openPage, the row
+ * lookups and the fake hosts more than one program uses.  The fixture is
+ * compiled once per test executable, with SETTINGS_RENDER for
+ * settings_render. */
 #ifndef SETTINGS_FIXTURE_H
 #define SETTINGS_FIXTURE_H
 
@@ -98,9 +101,20 @@ void la_host_film_effect(int mode);
 int enterMain(int title);
 int enterMainKeep(int title);
 int openPage(int mainL, int mainRow, UiSettingsPage page);
+extern IcoGsSnapshot s_gs;
+void gsSampler(IcoGsSnapshot *out);
+int rowWithText(UiSettingsPage page, const char *str);
+void checkPageFits(UiSettingsPage page, const char *what);
+int noteStarting(UiSettingsPage page, const char *prefix);
+extern int s_packCount;
+int fakePackCount(void);
+extern AdpcmDataRec s_fakeAdpcm[105];
+extern int s_galPlays, s_galStops, s_galLeaves, s_galLastKey, s_galPaused;
+extern const GalleryItem *s_galCur;
+extern const GalleryEngine kFakeEngine;
 #ifdef SETTINGS_RENDER
 extern int s_reduce;
-/* defined by settings_test.c (the render variant's fake sheets) */
+/* defined by settings_photo_test.c (the render variant's fake sheets) */
 void bindFakeSheet(int no);
 #endif
 
