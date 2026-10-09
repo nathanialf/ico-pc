@@ -39,7 +39,11 @@ static char s_root[1100], s_work[1024];
 
 static void path_in(char *out, size_t n, const char *dir, const char *name)
 {
-    snprintf(out, n, "%s/%s", dir, name);
+    /* the test's paths are short; a cut would only make a later check fail */
+    const int w = snprintf(out, n, "%s/%s", dir, name);
+    if (w < 0 || (size_t)w >= n) {
+        out[0] = '\0';
+    }
 }
 
 static int exists(const char *dir, const char *name)
@@ -426,7 +430,7 @@ int main(int argc, char **argv)
 {
     const char *base = argc > 1 ? argv[1] : ".";
 
-    snprintf(s_work, sizeof(s_work), "%s/gpu_driver_test", base);
+    snprintf(s_work, sizeof(s_work), "%s/gpu_driver_work", base); /* not the executable's name */
     rm_tree(s_work);
     ico_mkdir(s_work);
     snprintf(s_root, sizeof(s_root), "%s/root", s_work);
