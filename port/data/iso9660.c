@@ -14,18 +14,30 @@
  * in use rather than a multiple of the sector size; the walk reads every
  * sector the length touches and stops at a zero length byte in each.
  *
- * The image is a plain .iso file or a .chd (issue 2: PCSX2 users keep their
- * discs as MAME "compressed hunks of data", read here with libchdr).  Both
- * give the same logical bytes, the ISO's, through IcoDiscImage:
+ * The image is a plain .iso file, a raw CD image (.bin, or the .cue sheet
+ * that names one) or a .chd (PCSX2 users keep their discs as MAME
+ * "compressed hunks of data", read here with libchdr).  All give the same
+ * logical bytes, the ISO's, through IcoDiscImage:
  *   - a DVD CHD (chdman createdvd): 2048-byte units, the ISO's bytes in
  *     order, `logicalbytes` long;
  *   - a CD CHD (chdman createcd, which some users run on a DVD image):
  *     2448-byte frames (2352 sector bytes plus 96 subcode bytes) described
  *     by the track metadata (CHT2 or CHTR); the first track must be a data
  *     track, and each frame's 2048 user bytes are taken where the track type
- *     puts them (libchdr's cdrom.h lists the types).
- * Each read decodes whole hunks through a one-hunk cache.  A CHD that needs
- * a parent image (a "diff" CHD) is refused.
+ *     puts them (libchdr's cdrom.h lists the types);
+ *   - a raw CD image (.bin): 2352-byte sectors with no subcode, recognised
+ *     by the 12-byte sync pattern at the start of the file (00, ten FF,
+ *     00).  Byte 15 is the sector mode: in mode 1 the 2048 user bytes
+ *     start at byte 16, in mode 2 form 1 at byte 24 after the subheader (a
+ *     form 2 sector, submode bit 0x20 at byte 18, holds no ISO data and is
+ *     refused).  The logical size is the whole frames times 2048.  A .cue
+ *     sheet is read for its first FILE, first TRACK type and INDEX 01 (the
+ *     frame where the track's sector 0 sits); the .bin it names is opened
+ *     from beside the sheet, and when the sheet's type and the sector
+ *     header both speak they must agree.  A sheet with several files or a
+ *     first track that is not data is refused.
+ * Each CHD read decodes whole hunks through a one-hunk cache.  A CHD that
+ * needs a parent image (a "diff" CHD) is refused.
  */
 #define _FILE_OFFSET_BITS 64
 
@@ -59,10 +71,11 @@ struct IcoDiscImage {
     /* a .chd only */
     chd_file *chd;
     uint32_t hunkbytes;
-    uint64_t chd_bytes;  /* the CHD's own logical size: hunk data in use */
-    uint32_t unitbytes;  /* 2048 (DVD), or a CD frame */
-    uint32_t data_off;   /* CD: where a frame's 2048 user bytes start */
-    uint32_t first_unit; /* CD: the frame that holds the track's sector 0 */
+    /* a .chd or a raw .bin (0 unitbytes: a plain .iso) */
+    uint64_t store_bytes; /* the container's own size: CHD hunk data in use, or the file */
+    uint32_t unitbytes;   /* 2048 (DVD), or a CD frame (2448 CHD, 2352 or 2336 .bin) */
+    uint32_t data_off;    /* CD: where a frame's 2048 user bytes start */
+    uint32_t first_unit;  /* CD: the frame that holds the track's sector 0 */
     uint8_t *hunk;
     uint32_t hunk_num; /* the hunk in `hunk`, NO_HUNK when none */
 };
@@ -207,7 +220,7 @@ static int chd_open_image(IcoDiscImage *img, const char *path)
     }
     h = chd_get_header(img->chd);
     img->hunkbytes = h->hunkbytes;
-    img->chd_bytes = (uint64_t)h->hunkbytes * h->totalhunks;
+    img->store_bytes = (uint64_t)h->hunkbytes * h->totalhunks;
     img->unitbytes = h->unitbytes;
     if (h->hunkbytes == 0 || h->hunkbytes % h->unitbytes != 0) {
         fprintf(stderr, "iso9660: %s: the CHD's hunk size %u is not whole units of %u bytes\n",
@@ -251,7 +264,7 @@ static int chd_read_bytes(IcoDiscImage *img, uint64_t pos, uint8_t *dst, size_t 
         size_t k = img->hunkbytes - o;
         chd_error err;
 
-        if (pos >= img->chd_bytes || hunk >= NO_HUNK) {
+        if (pos >= img->store_bytes || hunk >= NO_HUNK) {
             return -1;
         }
         if (k > n) {
@@ -275,16 +288,345 @@ static int chd_read_bytes(IcoDiscImage *img, uint64_t pos, uint8_t *dst, size_t 
     return 0;
 }
 
+/* `n` bytes at byte `pos` of the container's own data: the CHD's hunks, or
+   the .bin file.  The CD frame-to-sector mapping reads through this. */
+static int unit_read(IcoDiscImage *img, uint64_t pos, uint8_t *dst, size_t n)
+{
+    if (img->chd != NULL) {
+        return chd_read_bytes(img, pos, dst, n);
+    }
+    if (pos > img->store_bytes || n > img->store_bytes - pos || seek64(img->fp, pos) != 0) {
+        return -1;
+    }
+    return fread(dst, 1, n, img->fp) == n ? 0 : -1;
+}
+
+/* --- the raw CD image and its cue sheet ------------------------------------ */
+
+#define CUE_MAX_BYTES (64u << 10) /* a cue sheet is a few lines; read no more */
+#define CUE_LINE_MAX 1024
+
+static int raw_sync(const uint8_t *h)
+{
+    int i;
+
+    if (h[0] != 0x00 || h[11] != 0x00) {
+        return 0;
+    }
+    for (i = 1; i < 11; i++) {
+        if (h[i] != 0xff) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int ci_equal(const char *a, const char *b)
+{
+    for (; *a != '\0' && *b != '\0'; a++, b++) {
+        char x = *a, y = *b;
+
+        if (x >= 'a' && x <= 'z') {
+            x = (char)(x - 'a' + 'A');
+        }
+        if (y >= 'a' && y <= 'z') {
+            y = (char)(y - 'a' + 'A');
+        }
+        if (x != y) {
+            return 0;
+        }
+    }
+    return *a == *b;
+}
+
+/* The next word of a line: bare, or quoted (the quotes dropped, spaces
+   kept).  1 with the word in `out`, 0 when the line has no more, -1 when
+   the word does not fit. */
+static int cue_word(const char **pp, char *out, size_t outsz)
+{
+    const char *p = *pp;
+    size_t n = 0;
+    int quoted;
+
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p == '\0') {
+        *pp = p;
+        return 0;
+    }
+    quoted = *p == '"';
+    if (quoted) {
+        p++;
+    }
+    while (*p != '\0' && (quoted ? *p != '"' : (*p != ' ' && *p != '\t'))) {
+        if (n + 1 >= outsz) {
+            return -1;
+        }
+        out[n++] = *p++;
+    }
+    if (quoted && *p == '"') {
+        p++;
+    }
+    out[n] = '\0';
+    *pp = p;
+    return 1;
+}
+
+static void cue_fail(char *err, size_t errsz, const char *msg)
+{
+    snprintf(err, errsz, "%s", msg);
+}
+
+/* "mm:ss:ff" into frames (75 to the second); 0, or -1 if malformed. */
+static int cue_msf(const char *w, uint32_t *frames)
+{
+    unsigned mm, ss, ff;
+    char tail;
+
+    if (sscanf(w, "%u:%u:%u%c", &mm, &ss, &ff, &tail) != 3 || ss >= 60 || ff >= 75 || mm > 9999) {
+        return -1;
+    }
+    *frames = (mm * 60u + ss) * 75u + ff;
+    return 0;
+}
+
+int ico_cue_parse(const char *text, size_t len, IcoCueTrack *out, char *err, size_t errsz)
+{
+    char line[CUE_LINE_MAX], kw[32], a[512], b[512];
+    size_t at = 0;
+    int nfile = 0, ntrack = 0, have_index = 0;
+
+    memset(out, 0, sizeof(*out));
+    if (len >= 3 && memcmp(text, "\xef\xbb\xbf", 3) == 0) {
+        at = 3; /* a byte-order mark */
+    }
+    while (at < len) {
+        const char *p = line;
+        size_t n = 0;
+
+        /* one line: either kind of line end, an over-long line cut short */
+        while (at < len && text[at] != '\n' && text[at] != '\r') {
+            if (n + 1 < sizeof(line)) {
+                line[n++] = text[at];
+            }
+            at++;
+        }
+        while (at < len && (text[at] == '\n' || text[at] == '\r')) {
+            at++;
+        }
+        line[n] = '\0';
+        if (cue_word(&p, kw, sizeof(kw)) != 1) {
+            continue;
+        }
+        if (ci_equal(kw, "FILE")) {
+            if (nfile > 0) {
+                cue_fail(err, errsz,
+                         "a cue sheet with several files is not supported; choose the .bin of "
+                         "the data track");
+                return -1;
+            }
+            nfile++;
+            if (cue_word(&p, a, sizeof(a)) != 1 || a[0] == '\0' ||
+                cue_word(&p, b, sizeof(b)) != 1 || !ci_equal(b, "BINARY")) {
+                cue_fail(err, errsz, "the cue sheet's FILE line is not a name and BINARY");
+                return -1;
+            }
+            memcpy(out->file, a, strlen(a) + 1);
+        } else if (ci_equal(kw, "TRACK")) {
+            ntrack++;
+            if (ntrack == 1) {
+                const char *slash;
+                char *end;
+                unsigned long unit;
+                int off;
+
+                if (nfile == 0 || cue_word(&p, a, sizeof(a)) != 1 ||
+                    cue_word(&p, b, sizeof(b)) != 1) {
+                    cue_fail(err, errsz, "the cue sheet's TRACK line has no file or type");
+                    return -1;
+                }
+                if (ci_equal(b, "AUDIO")) {
+                    cue_fail(err, errsz, "the cue sheet's first track is audio, not a data track");
+                    return -1;
+                }
+                slash = strchr(b, '/');
+                off = -1;
+                if (slash != NULL) {
+                    /* the table spells its names in capitals */
+                    char up[32];
+                    size_t i;
+
+                    for (i = 0; b[i] != '\0' && i + 1 < sizeof(up); i++) {
+                        up[i] = (b[i] >= 'a' && b[i] <= 'z') ? (char)(b[i] - 'a' + 'A') : b[i];
+                    }
+                    up[i] = '\0';
+                    off = cd_data_offset(up);
+                }
+                unit = slash != NULL ? strtoul(slash + 1, &end, 10) : 0;
+                if (off < 0 || slash == NULL || *end != '\0' || unit < (unsigned long)off + 2048 ||
+                    unit > 4096) {
+                    snprintf(err, errsz, "the cue sheet's first track type %s is not supported", b);
+                    return -1;
+                }
+                snprintf(out->type, sizeof(out->type), "%s", b);
+                out->unit_bytes = (uint32_t)unit;
+                out->data_off = (uint32_t)off;
+            }
+        } else if (ci_equal(kw, "INDEX") && ntrack == 1) {
+            if (cue_word(&p, a, sizeof(a)) == 1 && atoi(a) == 1 &&
+                cue_word(&p, b, sizeof(b)) == 1) {
+                if (cue_msf(b, &out->first_unit) != 0) {
+                    cue_fail(err, errsz, "the cue sheet's INDEX 01 time is malformed");
+                    return -1;
+                }
+                have_index = 1;
+            }
+        }
+    }
+    if (nfile == 0 || ntrack == 0 || !have_index) {
+        cue_fail(err, errsz, "the cue sheet has no FILE, TRACK and INDEX 01 for its first track");
+        return -1;
+    }
+    return 0;
+}
+
+/* Set the layout of a raw .bin file of `size` bytes.  `cue` is its sheet's
+   first track, or NULL for a bare .bin, which must prove itself by its sync
+   pattern.  0, or -1 with the reason logged. */
+static int raw_layout(IcoDiscImage *img, const char *path, uint64_t size, const IcoCueTrack *cue)
+{
+    uint32_t unit = cue != NULL ? cue->unit_bytes : CD_RAW_BYTES;
+    uint32_t first = cue != NULL ? cue->first_unit : 0;
+    int off = cue != NULL ? (int)cue->data_off : -1;
+    uint8_t h[24];
+    uint64_t frames;
+
+    /* the track's first sector header, when the sheet puts it in a raw frame */
+    if (unit == CD_RAW_BYTES && size >= ((uint64_t)first + 1) * unit &&
+        seek64(img->fp, (uint64_t)first * unit) == 0 &&
+        fread(h, 1, sizeof(h), img->fp) == sizeof(h) && raw_sync(h)) {
+        int mode = h[15];
+        int sniffed = mode == 1 ? 16 : mode == 2 ? 24 : -1;
+
+        if (sniffed < 0) {
+            fprintf(stderr, "iso9660: %s: sector mode %d is not supported (mode 1 or 2 only)\n",
+                    path, mode);
+            return -1;
+        }
+        if (mode == 2 && (h[18] & 0x20) != 0) {
+            fprintf(stderr,
+                    "iso9660: %s: the first sector is mode 2 form 2, which holds no disc data\n",
+                    path);
+            return -1;
+        }
+        if (cue != NULL && off != sniffed) {
+            fprintf(stderr, "iso9660: %s: the cue sheet says %s but the sectors are mode %d\n",
+                    path, cue->type, mode);
+            return -1;
+        }
+        off = sniffed;
+    } else if (cue == NULL) {
+        fprintf(stderr, "iso9660: %s holds no ISO9660 volume\n", path);
+        return -1;
+    }
+    frames = size / unit;
+    if (size % unit != 0) {
+        fprintf(stderr,
+                "iso9660: %s: the size is not a whole number of %u-byte frames; the last "
+                "part is ignored\n",
+                path, (unsigned)unit);
+    }
+    if (frames <= first) {
+        fprintf(stderr, "iso9660: %s holds no data after the cue sheet's start\n", path);
+        return -1;
+    }
+    img->unitbytes = unit;
+    img->data_off = (uint32_t)off;
+    img->first_unit = first;
+    img->store_bytes = size;
+    img->bytes = (frames - first) * ICO_VFS_SECTOR;
+    fprintf(stderr, "iso9660: %s: a raw CD image, %u-byte frames, data at %d, %llu sectors\n", path,
+            (unsigned)unit, off, (unsigned long long)(frames - first));
+    return 0;
+}
+
+static int has_cue_ext(const char *path)
+{
+    size_t n = strlen(path);
+
+    return n >= 4 && ci_equal(path + n - 4, ".cue");
+}
+
+/* Open the .bin a cue sheet names (beside the sheet) into `img`. */
+static int cue_open_image(IcoDiscImage *img, const char *path)
+{
+    char text[CUE_MAX_BYTES], err[160], bin[2048];
+    IcoCueTrack track;
+    const char *base, *dir_end = path, *p;
+    size_t n, dir;
+    int64_t size;
+    FILE *fp = ico_fopen(path, "rb");
+
+    if (fp == NULL) {
+        fprintf(stderr, "iso9660: cannot open %s\n", path);
+        return -1;
+    }
+    n = fread(text, 1, sizeof(text), fp);
+    fclose(fp);
+    if (ico_cue_parse(text, n, &track, err, sizeof(err)) != 0) {
+        fprintf(stderr, "iso9660: %s: %s\n", path, err);
+        return -1;
+    }
+    for (p = path; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\') {
+            dir_end = p + 1;
+        }
+    }
+    dir = (size_t)(dir_end - path);
+    base = track.file;
+    for (p = track.file; *p != '\0'; p++) {
+        if (*p == '/' || *p == '\\') {
+            base = p + 1;
+        }
+    }
+    if (dir + strlen(base) + 1 > sizeof(bin) || *base == '\0') {
+        fprintf(stderr, "iso9660: %s: the cue sheet's file name is unusable\n", path);
+        return -1;
+    }
+    memcpy(bin, path, dir);
+    memcpy(bin + dir, base, strlen(base) + 1);
+    img->fp = ico_fopen(bin, "rb");
+    if (img->fp == NULL) {
+        fprintf(stderr, "iso9660: %s: cannot open %s, the file the cue sheet names\n", path, bin);
+        return -1;
+    }
+    size = file_size(img->fp);
+    if (size <= 0) {
+        fprintf(stderr, "iso9660: %s is empty or cannot be read\n", bin);
+        return -1;
+    }
+    return raw_layout(img, bin, (uint64_t)size, &track);
+}
+
 /* --- the image ------------------------------------------------------------ */
 
 IcoDiscImage *ico_disc_image_open(const char *path)
 {
     IcoDiscImage *img = calloc(1, sizeof(*img));
-    char magic[8];
+    uint8_t head[16];
+    size_t got;
     int64_t size;
 
     if (img == NULL) {
         return NULL;
+    }
+    if (has_cue_ext(path)) {
+        if (cue_open_image(img, path) != 0) {
+            ico_disc_image_close(img);
+            return NULL;
+        }
+        return img;
     }
     img->fp = ico_fopen(path, "rb"); /* UTF-8 path (host_fs.h) */
     if (img->fp == NULL) {
@@ -292,8 +634,8 @@ IcoDiscImage *ico_disc_image_open(const char *path)
         free(img);
         return NULL;
     }
-    if (fread(magic, 1, sizeof(magic), img->fp) == sizeof(magic) &&
-        memcmp(magic, CHD_MAGIC, sizeof(magic)) == 0) {
+    got = fread(head, 1, sizeof(head), img->fp);
+    if (got >= sizeof(CHD_MAGIC) - 1 && memcmp(head, CHD_MAGIC, sizeof(CHD_MAGIC) - 1) == 0) {
         if (chd_open_image(img, path) != 0) {
             ico_disc_image_close(img);
             return NULL;
@@ -305,6 +647,13 @@ IcoDiscImage *ico_disc_image_open(const char *path)
         fprintf(stderr, "iso9660: %s is empty or cannot be read\n", path);
         ico_disc_image_close(img);
         return NULL;
+    }
+    if (got == sizeof(head) && raw_sync(head)) {
+        if (raw_layout(img, path, (uint64_t)size, NULL) != 0) {
+            ico_disc_image_close(img);
+            return NULL;
+        }
+        return img;
     }
     img->bytes = (uint64_t)size;
     return img;
@@ -337,16 +686,16 @@ int ico_disc_image_read(IcoDiscImage *img, uint64_t offset, void *dst, size_t le
     if (offset > img->bytes || len > img->bytes - offset) {
         return -1;
     }
-    if (img->chd == NULL) {
+    if (img->unitbytes == 0) {
         if (seek64(img->fp, offset) != 0) {
             return -1;
         }
         return fread(dst, 1, len, img->fp) == len ? 0 : -1;
     }
-    if (img->unitbytes == ICO_VFS_SECTOR) {
-        return chd_read_bytes(img, offset, d, len);
+    if (img->unitbytes == ICO_VFS_SECTOR && img->data_off == 0 && img->first_unit == 0) {
+        return unit_read(img, offset, d, len);
     }
-    /* a CD CHD: sector by sector, each from its frame */
+    /* a CD image: sector by sector, each from its frame */
     while (len > 0) {
         uint64_t sector = offset / ICO_VFS_SECTOR;
         uint32_t in = (uint32_t)(offset % ICO_VFS_SECTOR);
@@ -356,7 +705,7 @@ int ico_disc_image_read(IcoDiscImage *img, uint64_t offset, void *dst, size_t le
         if (k > len) {
             k = len;
         }
-        if (chd_read_bytes(img, pos, d, k) != 0) {
+        if (unit_read(img, pos, d, k) != 0) {
             return -1;
         }
         d += k;

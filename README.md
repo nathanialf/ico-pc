@@ -17,8 +17,9 @@ widescreen and smoother motion, but they stay off until you turn them on.
 ## What you need
 
 - **Your own disc image of ICO, PAL version (SCES-50760).** A disc image is
-  one file that holds the whole disc. It ends in `.iso` or `.chd`. Other
-  regions and editions do not work.
+  one file that holds the whole disc. It ends in `.iso`, `.chd` or `.bin` (a
+  `.bin` can come with a `.cue` file, which also works). Other regions and
+  editions do not work.
 - **Something to play on:**
   - a 64-bit Windows 10 or 11 PC, or a Linux PC, with an up-to-date
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
@@ -74,7 +75,7 @@ what the game is doing the whole time
 ([the Android guide](docs/ANDROID.md#the-first-start) has the steps).
 
 You can skip the question. Put the disc image beside the program and name
-it `Ico_PAL.iso` (or `Ico_PAL.chd`). On Windows, "beside the program"
+it `Ico_PAL.iso` (or `Ico_PAL.chd`, or `Ico_PAL.bin`). On Windows, "beside the program"
 means inside the `x64` folder.
 
 ## Questions people ask first

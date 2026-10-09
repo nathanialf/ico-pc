@@ -913,7 +913,8 @@ int ico_host_pick_iso(char *out, size_t size)
 
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
-    ofn.lpstrFilter = L"ICO disc image (*.iso, *.chd)\0*.iso;*.chd\0All files\0*.*\0";
+    ofn.lpstrFilter =
+        L"ICO disc image (*.iso, *.chd, *.bin, *.cue)\0*.iso;*.chd;*.bin;*.cue\0All files\0*.*\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = (DWORD)(sizeof(path) / sizeof(path[0]));
     ofn.lpstrTitle = L"Choose your ICO (PAL, SCES-50760) disc image";

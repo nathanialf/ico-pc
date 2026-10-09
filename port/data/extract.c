@@ -937,8 +937,8 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     if (x.iso == NULL) {
         res->unreadable = 1;
         say(why, whysize,
-            "%s is not a disc image this program can read (an .iso, or a .chd made from "
-            "one); the log says why",
+            "%s is not a disc image this program can read (an .iso, a .bin or .cue, or a .chd made "
+            "from one); the log says why",
             iso_path);
         return -1;
     }

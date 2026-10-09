@@ -52,6 +52,8 @@ static void test_layout(void)
           strcmp(img, FILES "/Ico_PAL.iso") == 0);
     CHECK(ico_android_image_path(&p, "chd", img, sizeof(img)) == 0 &&
           strcmp(img, FILES "/Ico_PAL.chd") == 0);
+    CHECK(ico_android_image_path(&p, "bin", img, sizeof(img)) == 0 &&
+          strcmp(img, FILES "/Ico_PAL.bin") == 0);
     CHECK(ico_android_image_path(&p, "iso", img, 8) == -1 && img[0] == '\0');
     /* the external folder may be missing (no shared storage): the internal
        one has the same layout */

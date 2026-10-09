@@ -87,8 +87,8 @@ it.
 
 ## Which disc image works?
 
-Only the PAL version of ICO, numbered SCES-50760, as a `.iso` or `.chd`
-file. The US, Japanese and later editions do not work. If the image is not
+Only the PAL version of ICO, numbered SCES-50760, as a `.iso`, `.chd` or
+`.bin` file (a `.cue` file that points to the `.bin` works too). The US, Japanese and later editions do not work. If the image is not
 the right one, the game says so when you start it.
 
 ## How do I take a photo?

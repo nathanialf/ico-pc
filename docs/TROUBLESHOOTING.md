@@ -48,7 +48,9 @@ and editions do not work.
 
 **"Cannot read the disc image ..."** The file is incomplete or not a disc
 image. A `.chd` must be complete on its own: one made as a difference from
-another `.chd` does not work, so use the full `.chd` or the `.iso`.
+another `.chd` does not work, so use the full `.chd`, the `.iso` or the
+`.bin`. A `.cue` file with several files listed in it does not work either:
+choose the `.bin` of the data track.
 
 **"Could not extract the game's data ..."** There is not enough free space
 (about 1 GB is needed), or the disc image is incomplete. Free some space
@@ -112,7 +114,7 @@ folder.
 
 The window that asks for your disc image needs a small program named
 `zenity`, which most desktops have. Without it, put the image beside
-`ico_pc` named `Ico_PAL.iso` (or `Ico_PAL.chd`) instead.
+`ico_pc` named `Ico_PAL.iso` (or `Ico_PAL.chd`, `Ico_PAL.bin` or `Ico_PAL.cue`) instead.
 
 ## Steam Deck
 
