@@ -36,19 +36,19 @@ Escape and F12 cannot be changed. Everything else can be, in **Options > Control
 
 ## Look around with the mouse
 
-On a computer, the mouse moves the camera while you play. The pointer
-disappears as soon as Ico is on the move, and moving the mouse turns the
-camera the way the right stick does. Keep the mouse still for a moment and
-the camera swings back behind Ico on its own, just like letting go of the
-stick.
+On a computer, the mouse moves the camera while you play. The pointer is
+hidden then, and moving the mouse turns the camera the way the right stick
+does. Keep the mouse still for a moment and the camera swings back behind
+Ico on its own, just like letting go of the stick.
 
 The pointer comes back whenever a menu is open and when you switch to
 another window. It stays out of the way during films.
 
 You can change how it feels in **Options > Controls**:
 
-- **Mouse camera** turns it off if you would rather keep the pointer.
-  The mouse buttons still work.
+- **Mouse camera** Off stops the mouse from turning the camera and lets
+  the pointer leave the window while you play. The mouse buttons still
+  work.
 - **Mouse sensitivity** sets how far the camera turns for the same move of
   the mouse.
 - **Invert mouse up/down** swaps up and down.
