@@ -24,6 +24,13 @@
  * field lines).  The clear frames (rd_video_clear) take the same road, so
  * the tube shows them as it shows the film.
  *
+ * A field of an interlaced film (rd_video_field) takes one more pass in
+ * front: the previous, current and next pictures go into the plane texture
+ * one under the other, yuv_field_ps deinterlaces and converts the field
+ * into an RGBA8 target of the picture's size, and the box pass scales
+ * that target instead of the planes (yuv.hlsl's header).  Pictures given
+ * to rd_video_frame take the single pass as before.
+ *
  * GPU objects: its own two shaders and pipeline (one per output format)
  * over rd's bind group layouts (group 0 FrameCB, group 1 DrawCB, group 2
  * t1/s1/t2), one R8 plane texture, and per frame in flight an upload buffer
@@ -54,6 +61,11 @@ static struct {
     RhiTexture area; /* the display area under the CRT filter */
     RhiState areaState;
     uint32_t areaW, areaH;
+    RhiShader fieldFs; /* a field: yuv_field_ps into fieldTex (w x h RGBA8) */
+    RhiPipeline fieldPipe;
+    RhiTexture fieldTex;
+    RhiState fieldState;
+    uint32_t fieldW, fieldH;
 } s_v = {.dispW = 720, .dispH = 576, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
 
 void rd_video_set_display(uint32_t dispW, uint32_t dispH)
@@ -216,7 +228,7 @@ static bool ensureArea(void)
  * its display area, the rectangle mirrored with the mirror mode. */
 static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32_t dw, uint32_t dh,
                         const RhiRect *box, bool picture, uint32_t w, uint32_t h, bool mirror,
-                        RhiBuffer buf, uint64_t cbOff, uint64_t dcOff)
+                        RhiTexture src, RhiBuffer buf, uint64_t cbOff, uint64_t dcOff)
 {
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -258,7 +270,7 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
             memset(tb, 0, sizeof(tb));
             tb[0].slot = 1;
             tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
-            tb[0].texture = s_v.planes;
+            tb[0].texture = src;
             tb[1].slot = 1;
             tb[1].type = RHI_BIND_SAMPLER;
             tb[1].sampler =
@@ -279,13 +291,107 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
     rhi_cmd_end_render_pass(cl);
 }
 
-/* One present: the picture (planes != NULL) or the clear colour alone. */
-static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
-                        const uint32_t pitch[3], uint32_t w, uint32_t h, const uint8_t rgba[4])
+/* The field pass's shader, pipeline and w x h target. */
+static bool ensureField(uint32_t w, uint32_t h)
+{
+    if (!s_v.fieldFs.id) {
+        s_v.fieldFs = rd__make_shader("yuv_field_ps");
+        if (!s_v.fieldFs.id) {
+            return false;
+        }
+    }
+    if (!s_v.fieldPipe.id) {
+        RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex};
+        RhiPipelineDesc d;
+        memset(&d, 0, sizeof(d));
+        d.vertex = s_v.vs;
+        d.fragment = s_v.fieldFs;
+        d.layouts = layouts;
+        d.layoutCount = 3;
+        d.topology = RHI_TOPO_TRIANGLE_LIST;
+        d.cullNone = true;
+        d.blend[0].writeMask = 0xF;
+        d.colorFormats[0] = RHI_FMT_RGBA8_UNORM;
+        d.colorCount = 1;
+        d.depthFormat = RHI_FMT_UNKNOWN;
+        d.debugName = "rd video field";
+        s_v.fieldPipe = rhi_create_pipeline(&d);
+        if (!s_v.fieldPipe.id) {
+            return false;
+        }
+    }
+    if (!s_v.fieldTex.id || s_v.fieldW != w || s_v.fieldH != h) {
+        if (s_v.fieldTex.id) {
+            rhi_destroy_texture(s_v.fieldTex);
+        }
+        s_v.fieldTex = rhi_create_texture(&(RhiTextureDesc){w, h, 1, RHI_FMT_RGBA8_UNORM,
+                                                            RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                            "rd video field"});
+        s_v.fieldState = RHI_STATE_UNDEFINED;
+        s_v.fieldW = w;
+        s_v.fieldH = h;
+    }
+    return s_v.fieldTex.id != 0;
+}
+
+/* The field pass: the planes (three pictures) deinterlaced and converted
+ * 1:1 into fieldTex, with the DrawCB at dcOff. */
+static void drawField(RhiCommandList cl, uint32_t w, uint32_t h, RhiBuffer buf, uint64_t cbOff,
+                      uint64_t dcOff)
+{
+    rd__transition(cl, s_v.fieldTex, &s_v.fieldState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = s_v.fieldTex;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.colorCount = 1;
+    p.width = w;
+    p.height = h;
+    rhi_cmd_begin_render_pass(cl, &p);
+    RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, &(RhiRect){0, 0, w, h});
+    RhiBinding tb[3];
+    memset(tb, 0, sizeof(tb));
+    tb[0].slot = 1;
+    tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[0].texture = s_v.planes;
+    tb[1].slot = 1;
+    tb[1].type = RHI_BIND_SAMPLER;
+    tb[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    tb[2].slot = 2;
+    tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[2].texture = g_rd.dummy;
+    rhi_cmd_set_pipeline(cl, s_v.fieldPipe);
+    rhi_cmd_set_bind_group(
+        cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
+    rhi_cmd_set_bind_group(
+        cl, 1, uniformGroup(g_rd.layoutDraw, 1, buf, dcOff, (uint32_t)sizeof(IcoDrawCB)));
+    rhi_cmd_set_bind_group(cl, 2,
+                           rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, tb, 3}));
+    rhi_cmd_draw(cl, 3, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, s_v.fieldTex, &s_v.fieldState, RHI_STATE_SHADER_READ);
+}
+
+/* yuv.hlsl g_mode.w */
+#define YUV_FIELD 1u        /* three pictures, a field of the middle one */
+#define YUV_FIELD_ODD 2u    /* the field's rows are the odd ones */
+#define YUV_FIELD_SECOND 4u /* the picture's second field in time */
+#define YUV_CONVERTED 8u    /* yuv_ps: t1 is yuv_field_ps's target */
+#define YUV_FILL_SHIFT 4u   /* RdVideoFill */
+
+/* One present: the picture (pics != NULL: one picture, or with field
+ * flags (yuv.hlsl g_mode.w, YUV_FIELD set) the previous, current and next)
+ * or the clear colour alone. */
+static int presentVideo(const RdVideoPicture *pics, uint32_t w, uint32_t h, uint32_t fieldFlags,
+                        const uint8_t rgba[4])
 {
     if (!ensureInit()) {
         return -1;
     }
+    const bool isField = pics != NULL && (fieldFlags & YUV_FIELD) != 0;
+    const uint32_t npics = isField ? 3u : 1u;
     /* the ring for the CRT pass's uniforms (and the slot kept in step with
        the replays' either way) */
     if (!rd__begin_own_frame(64u * 1024u)) {
@@ -294,50 +400,59 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     const int slot = (int)rhi_frame_slot();
     const RhiLimits *lim = rhi_limits();
     const uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;
-    const uint32_t tw = 2 * cw, th = h + ch;
+    const uint32_t tw = 2 * cw, th = h + ch, tall = th * npics;
     const uint32_t pitchA = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1;
     const uint32_t rowPitch = (tw + pitchA - 1) / pitchA * pitchA;
     const uint64_t ua = lim->uniformAlign ? lim->uniformAlign : 256;
     const uint64_t offA = lim->copyOffsetAlign ? lim->copyOffsetAlign : 4;
     const uint64_t cbOff = 0;
     const uint64_t dcOff = (sizeof(IcoFrameCB) + ua - 1) / ua * ua;
+    /* the field pass's DrawCB after the box pass's */
+    const uint64_t dcFieldOff = (dcOff + sizeof(IcoDrawCB) + ua - 1) / ua * ua;
     const uint64_t texOff =
-        ((dcOff + sizeof(IcoDrawCB) + ua - 1) / ua * ua + offA - 1) / offA * offA;
-    const bool picture = y != NULL && w > 0 && h > 0;
+        ((dcFieldOff + sizeof(IcoDrawCB) + ua - 1) / ua * ua + offA - 1) / offA * offA;
+    const bool picture = pics != NULL && pics[0].y != NULL && w > 0 && h > 0;
 
-    if (!ensureUpload(slot, texOff + (picture ? (uint64_t)rowPitch * th : 0))) {
+    if (isField && !ensureField(w, h)) {
+        return -1;
+    }
+    if (!ensureUpload(slot, texOff + (picture ? (uint64_t)rowPitch * tall : 0))) {
         return -1;
     }
     uint8_t *map = s_v.uploadMap[slot];
     RhiBuffer buf = s_v.upload[slot];
 
-    /* the planes into one R8 image: Y on top, Cb | Cr below */
+    /* the planes into one R8 image: Y on top, Cb | Cr below (a field: the
+       three pictures so, one under the other) */
     if (picture) {
-        if (!s_v.planes.id || s_v.planesW != tw || s_v.planesH != th) {
+        if (!s_v.planes.id || s_v.planesW != tw || s_v.planesH != tall) {
             if (s_v.planes.id) {
                 rhi_destroy_texture(s_v.planes);
             }
-            s_v.planes = rhi_create_texture(&(RhiTextureDesc){tw, th, 1, RHI_FMT_R8_UNORM,
+            s_v.planes = rhi_create_texture(&(RhiTextureDesc){tw, tall, 1, RHI_FMT_R8_UNORM,
                                                               RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
                                                               "rd video planes"});
             s_v.planesState = RHI_STATE_UNDEFINED;
             s_v.planesW = tw;
-            s_v.planesH = th;
+            s_v.planesH = tall;
             if (!s_v.planes.id) {
                 return -1;
             }
         }
-        uint8_t *dst = map + texOff;
-        for (uint32_t r = 0; r < h; r++) {
-            memcpy(dst + (size_t)r * rowPitch, y + (size_t)r * pitch[0], w);
-            if (tw > w) {
-                dst[(size_t)r * rowPitch + w] = dst[(size_t)r * rowPitch + w - 1];
+        for (uint32_t k = 0; k < npics; k++) {
+            const RdVideoPicture *pk = &pics[k];
+            uint8_t *dst = map + texOff + (size_t)k * th * rowPitch;
+            for (uint32_t r = 0; r < h; r++) {
+                memcpy(dst + (size_t)r * rowPitch, pk->y + (size_t)r * pk->pitch[0], w);
+                if (tw > w) {
+                    dst[(size_t)r * rowPitch + w] = dst[(size_t)r * rowPitch + w - 1];
+                }
             }
-        }
-        for (uint32_t r = 0; r < ch; r++) {
-            uint8_t *row = dst + (size_t)(h + r) * rowPitch;
-            memcpy(row, u + (size_t)r * pitch[1], cw);
-            memcpy(row + cw, v + (size_t)r * pitch[2], cw);
+            for (uint32_t r = 0; r < ch; r++) {
+                uint8_t *row = dst + (size_t)(h + r) * rowPitch;
+                memcpy(row, pk->u + (size_t)r * pk->pitch[1], cw);
+                memcpy(row + cw, pk->v + (size_t)r * pk->pitch[2], cw);
+            }
         }
     }
     /* the output last: a backbuffer acquired is presented below (a failure
@@ -362,6 +477,16 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     /* the films follow the mirror mode (rd_set_mirror or
        RdSettings.mirror) */
     dcb.param[0] = rd__mirror_on() ? 1.0f : 0.0f;
+    if (isField) {
+        /* the field pass converts at the picture's size; the box pass
+           scales its target */
+        IcoDrawCB fdc = dcb;
+        fdc.mode[2] = th;
+        fdc.mode[3] = fieldFlags;
+        fdc.param[0] = 0.0f;
+        memcpy(map + dcFieldOff, &fdc, sizeof(fdc));
+        dcb.mode[3] = YUV_CONVERTED;
+    }
     memcpy(map + dcOff, &dcb, sizeof(dcb));
 
     RhiCommandList cl = rhi_begin_commands();
@@ -371,9 +496,13 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (picture) {
         rd__transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_COPY_DST);
         rhi_cmd_copy_buffer_to_texture(cl, buf, texOff, rowPitch, s_v.planes, 0,
-                                       (RhiRect){0, 0, tw, th});
+                                       (RhiRect){0, 0, tw, tall});
         rd__transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_SHADER_READ);
+        if (isField) {
+            drawField(cl, w, h, buf, cbOff, dcFieldOff);
+        }
     }
+    const RhiTexture src = isField ? s_v.fieldTex : s_v.planes;
     RhiRect box;
     box43(out.w, out.h, &box);
     rd__note_present_box(out.w, out.h, &box); /* for the tests */
@@ -393,7 +522,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
         rd__transition(cl, s_v.area, &s_v.areaState, RHI_STATE_RENDER_TARGET);
         const RhiRect all = {0, 0, s_v.dispW, s_v.dispH};
         drawPicture(cl, s_v.area, RHI_FMT_RGBA8_UNORM, s_v.dispW, s_v.dispH, &all, picture, w, h,
-                    mirror, buf, cbOff, dcOff);
+                    mirror, src, buf, cbOff, dcOff);
         rd__transition(cl, s_v.area, &s_v.areaState, RHI_STATE_SHADER_READ);
         uint32_t vw, vh;
         rd__crt_film_grid(s_v.dispH, &vw, &vh);
@@ -403,8 +532,8 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     }
     if (!filtered) {
         rd__transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
-        drawPicture(cl, out.tex, out.fmt, out.w, out.h, &box, picture, w, h, mirror, buf, cbOff,
-                    dcOff);
+        drawPicture(cl, out.tex, out.fmt, out.w, out.h, &box, picture, w, h, mirror, src, buf,
+                    cbOff, dcOff);
     }
     if (out.window) {
         rd__transition(cl, out.tex, out.state, RHI_STATE_PRESENT);
@@ -420,9 +549,8 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
 
 /* presentVideo through rd__on_host: the driver work off the fiber's stack */
 typedef struct VideoCall {
-    const uint8_t *y, *u, *v;
-    const uint32_t *pitch;
-    uint32_t w, h;
+    const RdVideoPicture *pics;
+    uint32_t w, h, fieldFlags;
     const uint8_t *rgba;
     int ret;
 } VideoCall;
@@ -430,14 +558,13 @@ typedef struct VideoCall {
 static void videoOnHost(void *arg)
 {
     VideoCall *c = (VideoCall *)arg;
-    c->ret = presentVideo(c->y, c->u, c->v, c->pitch, c->w, c->h, c->rgba);
+    c->ret = presentVideo(c->pics, c->w, c->h, c->fieldFlags, c->rgba);
 }
 
-static int presentVideoOnHost(const uint8_t *y, const uint8_t *u, const uint8_t *v,
-                              const uint32_t pitch[3], uint32_t w, uint32_t h,
-                              const uint8_t rgba[4])
+static int presentVideoOnHost(const RdVideoPicture *pics, uint32_t w, uint32_t h,
+                              uint32_t fieldFlags, const uint8_t rgba[4])
 {
-    VideoCall c = {y, u, v, pitch, w, h, rgba, -1};
+    VideoCall c = {pics, w, h, fieldFlags, rgba, -1};
     rd__on_host(videoOnHost, &c);
     return c.ret;
 }
@@ -455,7 +582,38 @@ int rd_video_frame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const u
         s_presentFails++;
         return -1;
     }
-    const int r = presentVideoOnHost(y, u, v, pitch, w, h, NULL);
+    const RdVideoPicture pic = {y, u, v, {pitch[0], pitch[1], pitch[2]}};
+    const int r = presentVideoOnHost(&pic, w, h, 0, NULL);
+    if (r == 0) {
+        s_presents++;
+    } else {
+        s_presentFails++;
+    }
+    return r;
+}
+
+static bool pictureOk(const RdVideoPicture *p)
+{
+    return p != NULL && p->y != NULL && p->u != NULL && p->v != NULL;
+}
+
+int rd_video_field(const RdVideoPicture *prev, const RdVideoPicture *cur,
+                   const RdVideoPicture *next, uint32_t w, uint32_t h, int field, int top_first,
+                   RdVideoFill fill)
+{
+    if (!pictureOk(cur) || w == 0 || h == 0) {
+        s_presentFails++;
+        return -1;
+    }
+    const RdVideoPicture pics[3] = {pictureOk(prev) ? *prev : *cur, *cur,
+                                    pictureOk(next) ? *next : *cur};
+    /* the field's rows: the first field in time is the top one (even rows)
+       when top_first */
+    const bool odd = (field != 0) == (top_first != 0);
+    const uint32_t flags = YUV_FIELD | (odd ? YUV_FIELD_ODD : 0u) |
+                           (field != 0 ? YUV_FIELD_SECOND : 0u) |
+                           ((uint32_t)fill & 3u) << YUV_FILL_SHIFT;
+    const int r = presentVideoOnHost(pics, w, h, flags, NULL);
     if (r == 0) {
         s_presents++;
     } else {
@@ -474,13 +632,14 @@ uint32_t rd_video_presents(uint32_t *failed)
 
 int rd_video_clear(const uint8_t rgba[4])
 {
-    return presentVideoOnHost(NULL, NULL, NULL, NULL, 0, 0, rgba);
+    return presentVideoOnHost(NULL, 0, 0, 0, rgba);
 }
 
 void rd_video_shutdown(void)
 {
     if (!g_rd.hasDevice) {
         memset(&s_v.pipe, 0, sizeof(s_v.pipe));
+        s_v.fieldPipe = (RhiPipeline){0};
         s_v.ready = false;
         return;
     }
@@ -509,6 +668,19 @@ void rd_video_shutdown(void)
     }
     s_v.area = (RhiTexture){0};
     s_v.areaW = s_v.areaH = 0;
+    if (s_v.fieldTex.id) {
+        rhi_destroy_texture(s_v.fieldTex);
+    }
+    s_v.fieldTex = (RhiTexture){0};
+    s_v.fieldW = s_v.fieldH = 0;
+    if (s_v.fieldPipe.id) {
+        rhi_destroy_pipeline(s_v.fieldPipe);
+    }
+    s_v.fieldPipe = (RhiPipeline){0};
+    if (s_v.fieldFs.id) {
+        rhi_destroy_shader(s_v.fieldFs);
+    }
+    s_v.fieldFs = (RhiShader){0};
     if (s_v.vs.id) {
         rhi_destroy_shader(s_v.vs);
     }

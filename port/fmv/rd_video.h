@@ -37,9 +37,35 @@ void rd_video_set_display(uint32_t dispW, uint32_t dispH);
    Returns 0, or -1 without a device. */
 int rd_video_frame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
                    uint32_t w, uint32_t h);
-/* The pictures rd_video_frame put on screen since the program started, and
-   in *failed (may be NULL) the ones it could not (no device, no swapchain
-   image).  The window's 10 s statistics line and movie_proc's summary take
+
+/* One decoded picture's planes, as rd_video_frame takes them. */
+typedef struct RdVideoPicture {
+    const uint8_t *y, *u, *v;
+    uint32_t pitch[3];
+} RdVideoPicture;
+
+/* How rd_video_field fills the rows of the other field. */
+typedef enum RdVideoFill {
+    RD_VIDEO_DEINTERLACE = 0, /* from the field itself and the pictures around it */
+    RD_VIDEO_WEAVE_PREV = 1,  /* the previous picture's rows (field matching) */
+    RD_VIDEO_WEAVE_NEXT = 2,  /* the next picture's rows */
+    RD_VIDEO_WEAVE_CUR = 3    /* the picture's own rows: the frame as decoded */
+} RdVideoFill;
+
+/* Shows one field of an interlaced picture, cur, as a whole picture:
+   field 0 is the field that comes first in time (the top field when
+   top_first), 1 the other; its own rows are cur's, the other rows are
+   filled as fill says (RD_VIDEO_DEINTERLACE: yuv.hlsl field_sample, which
+   weaves cur's own rows exactly where the three pictures do not change).
+   prev and next are the pictures shown before and after cur (cur itself
+   at the stream's ends), all three w x h.  Placed, converted and presented
+   as rd_video_frame does, and counted with its presents. */
+int rd_video_field(const RdVideoPicture *prev, const RdVideoPicture *cur,
+                   const RdVideoPicture *next, uint32_t w, uint32_t h, int field, int top_first,
+                   RdVideoFill fill);
+/* The pictures rd_video_frame and rd_video_field put on screen since the
+   program started, and in *failed (may be NULL) the ones they could not
+   (no device, no swapchain image).  The window's 10 s statistics line and movie_proc's summary take
    differences: the only record in a player's log that a movie reached the
    screen, since its presents are not the game's frames. */
 uint32_t rd_video_presents(uint32_t *failed);

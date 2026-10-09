@@ -46,6 +46,8 @@ ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 # the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
+# a movie's field deinterlaced and converted at the picture's size
+ico_add_shader(yuv_field_ps yuv.hlsl yuv_field_ps fragment)
 # staticBlur.c's sprites in the GS integer arithmetic
 # (port/render/rd_blur.c)
 ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)

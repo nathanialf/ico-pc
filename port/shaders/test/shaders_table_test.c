@@ -19,8 +19,8 @@ static const char *const expected[] = {
     "vu_grid_spec_vs", "vu_grid_vs",       "vu_lit_spec_vs",   "vu_lit_vs",
     "vu_particle_vs",  "vu_prelit_vs",     "vu_probe_ps",      "vu_ps",
     "vu_reflect_vs",   "vu_skin_debug_vs", "vu_skin_spec_vs",  "vu_skin_vs",
-    "vu_texa_ps",      "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_ps",
-    "yuv_vs",
+    "vu_texa_ps",      "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_field_ps",
+    "yuv_ps",          "yuv_vs",
 };
 
 /* the gs_dual_out entries without the second output (ICO_NO_DUAL) */

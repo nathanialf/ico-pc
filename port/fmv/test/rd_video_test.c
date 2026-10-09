@@ -23,6 +23,14 @@
  *            output: the picture is fitted into the 144 x 108 box, its top
  *            band on the box's first rows and its bottom band on the last
  *            (not the 1.2x picture the box used to cut), black around it
+ *   field    rd_video_field at 1:1: the ramp as previous, current and next
+ *            picture (nothing moves), either field, is the ramp woven,
+ *            bit for bit the IPU model; then an interlaced film of a bar
+ *            moving between the fields (the top field from one instant,
+ *            the bottom from the next): woven as decoded its rows
+ *            alternate, each field deinterlaced is the bar of that field's
+ *            instant over the whole height, no row alternation; afterwards
+ *            rd_video_frame shows the ramp exactly again
  *
  * Exit 77 without a device.
  */
@@ -368,6 +376,113 @@ static void testFit(void)
     setCrt(RD_CRT_OFF, OW, OH);
 }
 
+/* ------------------------------------------- fields of an interlaced film */
+
+/* the scene at instant t: a bar of luma 200, 16 wide, at x = 8 + 6 t on 50 */
+static uint8_t scene_luma(int x, int t)
+{
+    return (uint8_t)(x >= 8 + 6 * t && x < 24 + 6 * t ? 200 : 50);
+}
+
+/* interlaced picture k: even rows (the top field, first in time) at
+   instant 2k, odd rows at 2k + 1; neutral chroma */
+static void interlaced_picture(uint8_t *y, int k)
+{
+    for (int r = 0; r < OH; r++) {
+        for (int x = 0; x < OW; x++) {
+            y[r * OW + x] = scene_luma(x, 2 * k + (r & 1));
+        }
+    }
+}
+
+/* the output's pixels that differ from the scene at instant t, and its
+   comb count: pixels whose red steps away from both rows around it by more
+   than 10 in the same direction */
+static void field_measure(int t, int *bad, int *combs)
+{
+    *bad = 0;
+    *combs = 0;
+    for (int py = 0; py < OH; py++) {
+        for (int px = 0; px < OW; px++) {
+            uint8_t want[3];
+            const uint8_t *p = s_out + (py * OW + px) * 4;
+            ipu_csc(scene_luma(px, t), 128, 128, want);
+            if (p[0] != want[0] || p[1] != want[1] || p[2] != want[2]) {
+                (*bad)++;
+            }
+            if (py > 0 && py + 1 < OH) {
+                const int e1 = (int)p[0] - (int)s_out[((py - 1) * OW + px) * 4];
+                const int e2 = (int)p[0] - (int)s_out[((py + 1) * OW + px) * 4];
+                if ((e1 > 10 && e2 > 10) || (e1 < -10 && e2 < -10)) {
+                    (*combs)++;
+                }
+            }
+        }
+    }
+}
+
+static void testField(void)
+{
+    const uint32_t pitch[3] = {OW, OW / 2, OW / 2};
+    const RdVideoPicture ramp = {s_y, s_u, s_v, {OW, OW / 2, OW / 2}};
+
+    rd_video_set_display(OW, OH);
+    /* a still picture: woven exactly, either field, either order */
+    for (int field = 0; field < 2; field++) {
+        for (int tff = 0; tff < 2; tff++) {
+            CHECK(rd_video_field(&ramp, &ramp, &ramp, OW, OH, field, tff, RD_VIDEO_DEINTERLACE) ==
+                      0,
+                  "field: still frame");
+            if (readOut() == 0) {
+                const int bad = checkRamp(0);
+                CHECK(bad == 0,
+                      "field: a still picture's field %d (%s first): %d pixels differ "
+                      "from the woven ramp",
+                      field, tff ? "top" : "bottom", bad);
+            }
+        }
+    }
+
+    /* motion between the fields */
+    static uint8_t py[3][OW * OH], pu[(OW / 2) * (OH / 2)], pv[(OW / 2) * (OH / 2)];
+    memset(pu, 128, sizeof(pu));
+    memset(pv, 128, sizeof(pv));
+    RdVideoPicture pic[3];
+    for (int k = 0; k < 3; k++) {
+        interlaced_picture(py[k], k);
+        pic[k] = (RdVideoPicture){py[k], pu, pv, {OW, OW / 2, OW / 2}};
+    }
+    int bad = 0, combs = 0;
+    /* the middle picture (instants 2 and 3) woven as decoded */
+    CHECK(rd_video_field(&pic[0], &pic[1], &pic[2], OW, OH, 0, 1, RD_VIDEO_WEAVE_CUR) == 0,
+          "field: woven");
+    if (readOut() == 0) {
+        field_measure(2, &bad, &combs);
+        printf("field: woven as decoded, %d comb pixels\n", combs);
+        CHECK(combs > 0, "field: the interlaced picture woven shows no combing");
+    }
+    for (int field = 0; field < 2; field++) {
+        CHECK(rd_video_field(&pic[0], &pic[1], &pic[2], OW, OH, field, 1, RD_VIDEO_DEINTERLACE) ==
+                  0,
+              "field: deinterlaced");
+        if (readOut() == 0) {
+            field_measure(2 + field, &bad, &combs);
+            printf("field %d deinterlaced: %d pixels off the instant's scene, %d comb pixels\n",
+                   field, bad, combs);
+            CHECK(combs == 0, "field %d: %d comb pixels after the deinterlacer", field, combs);
+            CHECK(bad == 0, "field %d: %d pixels are not the scene of the field's instant", field,
+                  bad);
+        }
+    }
+
+    /* the single-picture path afterwards: the ramp, bit for bit */
+    CHECK(rd_video_frame(s_y, s_u, s_v, pitch, OW, OH) == 0, "field: ramp after");
+    if (readOut() == 0) {
+        const int b = checkRamp(0);
+        CHECK(b == 0, "field: the ramp after the field path: %d pixels differ", b);
+    }
+}
+
 int main(void)
 {
     RdSettings s;
@@ -386,6 +501,7 @@ int main(void)
     testMirror();
     testCrt();
     testFit();
+    testField();
     rd_video_shutdown();
     const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%u validation errors", verr);
