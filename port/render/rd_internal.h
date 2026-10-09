@@ -346,6 +346,10 @@ bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held,
  * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli
  * GS_ZSCALE_32F: the top Z values mapped apart) and 2^-32 on D24S8. */
 float rd__target_z_scale(uint32_t id);
+/* 2^24 - 1 when the targets' depth is 24-bit fixed point (the Vulkan
+ * D24S8 fallback), 0 when it is float: the fog shader compares depths in
+ * the steps the buffer stores (fog_lut.hlsl) */
+float rd__depth_unorm_steps(void);
 /* gs_z_to_depth on the CPU (clears): the same formula as gs_math.hlsli. */
 float rd__gs_depth(uint32_t z, float scale);
 

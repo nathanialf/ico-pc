@@ -3694,6 +3694,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         cb.col[0] = p.z;
         cb.col[1] = r->st.ds.test.zte ? r->st.ds.test.ztst : RD_ZTST_ALWAYS;
         cb.param[0] = rd__target_z_scale(zid);
+        cb.param[1] = rd__depth_unorm_steps();
         cb.scale[0] = tz->sx; /* the depth's texels per GS pixel */
         cb.scale[1] = tz->sy;
         rhi_cmd_set_pipeline(s_cl, pipe);

@@ -21,6 +21,8 @@
 //   g_col.y    the Z test (RdZTest: ALWAYS 1, GEQUAL 2, GREATER 3, NEVER 0)
 //   g_param.x  the depth source's GS Z scale (PSMZ32: 2^-33 on a float
 //              depth buffer, 2^-32 on D24S8; rd__target_z_scale)
+//   g_param.y  2^24 - 1 when the depth source is 24-bit UNORM (D24S8),
+//              0 on a float one
 // The Z test is done here because the depth buffer being read cannot also be
 // the bound attachment; it compares the same depth values the pipeline
 // would (gs_z_to_depth of the sprite Z against the stored depth).
@@ -69,6 +71,15 @@ DualOut fog_lut_ps(FogPSIn i)
     if (ztst != FOG_ZTST_ALWAYS) {
         // GS GEQUAL (sprite Z >= buffer Z) is depth(sprite) >= depth(buffer)
         float ds = gs_z_to_depth(g_col.x, g_param.x);
+        if (g_param.y > 0.0) {
+            // a 24-bit depth buffer holds the step nearest each depth, so
+            // the sprite's depth is compared as the step it would store, as
+            // the GS compares integers: 0xFFFFFF at 2^-32 is step 65535.996,
+            // and a pixel drawn at Z 0xFFFF80 .. 0xFFFFFF stores step 65536,
+            // above the sprite's float depth, which failed GEQUAL
+            ds = round(ds * g_param.y);
+            d = round(d * g_param.y);
+        }
         bool pass = ztst == FOG_ZTST_GEQUAL ? ds >= d : (ztst == FOG_ZTST_GREATER ? ds > d : false);
         if (!pass) {
             discard;

@@ -27,6 +27,12 @@
  *      the GS LERP with As, alpha As) within 1 LSB per blend; with
  *      fogOffsetA the flat quad on top within 2;
  *   d  the fog frame dumped, loaded and replayed again gives the same pixels.
+ * The same checks and tolerances hold on a 24-bit depth buffer
+ * (rd_fog_d24s8 and rd_fog_nodual_d24s8: ICO_VK_FAKE_D24S8=1, the Vulkan
+ * fallback of a phone GPU without a sampled D32S8): there Z is stored in
+ * steps of 256 GS units (2^-32 scale), so bits 16..23 survive except
+ * within one step of an index boundary, which the cells stay 0x400 away
+ * from; the tie and a Z 64 below it round (to nearest) up to the step at 2^24.
  * Every pipeline created is enumerated; no validation errors; no stubbed
  * command replayed. */
 #include <math.h>
@@ -621,8 +627,10 @@ static const uint8_t kClear[4] = {30, 60, 90, 0x80};
 
 /* cell Z: indices 0..255 spread over most cells, the low 16 bits kept
  * 0x400 away from the index boundaries (the D32F depth carries Z to 256
- * near 2^24); some cells above 0xFFFFFF (not fogged), one at the 0xFFFFFF
- * tie (fogged: GEQUAL), a few left at the clear's Z 0 (index 0) */
+ * near 2^24, D24S8 to 256 everywhere); some cells above 0xFFFFFF (not
+ * fogged), one at the 0xFFFFFF tie and one 64 below it (fogged: GEQUAL;
+ * on D24S8 both round to the step at 2^24, above the tie), a few left at
+ * the clear's Z 0 (index 0) */
 static void buildCells(void)
 {
     for (int k = 0; k < CELLS * CELLS; k++) {
@@ -632,6 +640,8 @@ static void buildCells(void)
             z = 0x01000400u + (h & 0x0FFFFF00u); /* above 0xFFFFFF */
         } else if (k == 200) {
             z = 0xFFFFFFu; /* the tie */
+        } else if (k == 201) {
+            z = 0xFFFFC0u; /* below the tie, in its 24-bit step */
         } else if (k % 31 == 3) {
             z = 0; /* not drawn: the clear */
         } else {
@@ -829,6 +839,21 @@ int main(void)
     if (!rd_init(W, H, &st, NULL)) {
         printf("rd_fog_test: CPU checks ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
+    }
+    {
+        /* the D24S8 runs must really have the 24-bit depth */
+        const char *fake = getenv("ICO_VK_FAKE_D24S8");
+        const char *ds = rhi_limits()->depthStencilFormatName;
+        printf("  depth-stencil format %s\n", ds ? ds : "?");
+        if (fake && fake[0] && fake[0] != '0') {
+            CHECK(ds && strcmp(ds, "D24S8") == 0, "ICO_VK_FAKE_D24S8 set but %s in use",
+                  ds ? ds : "?");
+            CHECK(rd__depth_unorm_steps() == 16777215.0f, "D24S8: the fog compares 24-bit steps");
+        } else {
+            const bool d24 = ds && strcmp(ds, "D24S8") == 0;
+            CHECK(rd__depth_unorm_steps() == (d24 ? 16777215.0f : 0.0f), "%s: the fog compares %s",
+                  ds ? ds : "?", d24 ? "24-bit steps" : "float depths");
+        }
     }
     gif_HostForgetTextures();
     gif_HostFrameReset();

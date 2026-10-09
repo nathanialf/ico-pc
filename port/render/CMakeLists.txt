@@ -630,6 +630,22 @@ if(ICO_RUN_TESTS)
                          rd_water_nodual rd_raw_nodual rd_mirror_nodual rd_interp_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
+    # the fog on the 24-bit depth buffer a phone GPU without a sampled
+    # D32S8 gets (ICO_VK_FAKE_D24S8=1, port/rhi/vk/vk_device.c): the same
+    # pixels as on D32S8, one-pass and two-pass blends
+    # (each in its own directory: the test writes its dump file there)
+    set(_env_d24s8 ${_env} "ICO_VK_FAKE_D24S8=1")
+    set(_env_d24s8_nodual ${_env_d24s8} "ICO_RD_NO_DUAL=1")
+    set(_d24 "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
+    set(_d24nd "${CMAKE_CURRENT_BINARY_DIR}/d24s8_nodual")
+    file(MAKE_DIRECTORY "${_d24}" "${_d24nd}")
+    add_test(NAME rd_fog_d24s8 COMMAND rd_fog_test)
+    add_test(NAME rd_fog_nodual_d24s8 COMMAND rd_fog_test)
+    set_tests_properties(rd_fog_d24s8 PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_d24}"
+                                                 ENVIRONMENT "${_env_d24s8}")
+    set_tests_properties(rd_fog_nodual_d24s8
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_d24nd}"
+                                    ENVIRONMENT "${_env_d24s8_nodual}")
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage
