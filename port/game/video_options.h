@@ -233,6 +233,12 @@ int ico_video_dump_models(void);
 /* The presentation rate in force (R7b): the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);
+/* 1 when the presenter blends pictures between the simulation's ticks (a
+   framerate other than "original", as the window decides it), else 0.  The
+   game's cull (GsBase.c gsbHostWidenCull) keeps a margin past the screen's
+   edges then, so a part that is just off screen at a tick is still recorded
+   for the blended pictures that show it. */
+int ico_video_interpolate(void);
 /* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
    StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window
    compares ico_video_cut_serial() once per vsync and marks the frame being

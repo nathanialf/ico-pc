@@ -35,6 +35,12 @@
  *            after a puddle pass enter rebuilds +0x240; 16:9 widens the photo
  *            camera's +0x240; a stage change or the game running again drops
  *            the save
+ *   cull     gsbHostWidenCull: with the Original framerate at 4:3 +0x240 and
+ *            the 500 unit pair's +0x680 are as gsb_SetVSMatrixSub made them;
+ *            with pictures blended between ticks both scales are divided by
+ *            1.12 (and x by 4/3 more at 16:9); at 16:9 with the Original
+ *            framerate x alone by 4/3, y untouched; the matrices that place
+ *            anything never change
  * On a Vulkan device (exit 77 without one, after the recording checks):
  *   camera   rd__CameraProbe (FrameCB through camera_probe_ps) against the
  *            C products and sceVu0RotTransPers through matrixptr+0x100
@@ -975,6 +981,98 @@ static void checkPhotoView(void)
     gameCamAt(PHOTO_D);
 }
 
+/* The cull's width and margin (GsBase.c gsbHostWidenCull) on the two
+   projections that cull: +0x240 (slot 3) and the 500 unit pair's +0x680
+   (slot 6).  The 4:3 Original-framerate camera is the reference: the
+   matrices exactly as gsb_SetVSMatrixSub computes them. */
+static void checkCullScales(const char *what, const Snap *s, const Snap *raw, float kx, float ky)
+{
+    static const int cull[2] = {3, 6};
+    for (int i = 0; i < 2; i++) {
+        const float *a = s->m[cull[i]], *r = raw->m[cull[i]];
+        const int sx = kx == 1.0f ? a[0] == r[0] : relNear(a[0] * kx, r[0], 1e-6f);
+        const int sy = ky == 1.0f ? a[5] == r[5] : relNear(a[5] * ky, r[5], 1e-6f);
+        int rest = 1;
+        for (int j = 0; j < 16; j++) {
+            rest &= j == 0 || j == 5 || a[j] == r[j];
+        }
+        CHECK(sx && sy && rest,
+              "cull %s: matrixptr+0x%X x scale %g (4:3 Original %g, divided by %g), y %g (%g, "
+              "divided by %g), the rest as computed",
+              what, s_slot[cull[i]], (double)a[0], (double)r[0], (double)kx, (double)a[5],
+              (double)r[5], (double)ky);
+    }
+    /* the view, the screen matrices, the viewport and their products */
+    static const int placed[8] = {0, 1, 2, 4, 5, 7, 8, 10};
+    for (int i = 0; i < 8; i++) {
+        CHECK(memcmp(s->m[placed[i]], raw->m[placed[i]], 64) == 0,
+              "cull %s: matrixptr+0x%X byte-identical", what, s_slot[placed[i]]);
+    }
+}
+
+static void checkCull(void)
+{
+    IcoVideoOptions o;
+    Snap raw, s;
+    const float m = 1.0f + 0.12f;
+    const float k = 4.0f / 3.0f;
+
+    gsb_SetZoom(1.0f, 1000.0f); /* no easing between the cameras below */
+    ico_video_defaults(&o);
+    o.framerate = ICO_FRAMERATE_ORIGINAL;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    gameCamAt(PHOTO_D);
+    snap(&raw);
+    /* as gsb_SetVSMatrixSub builds them: +0x240 the +0x1C0 projection's
+       1500 unit screen over the half screen, +0x680 a 500 unit one */
+    const float hw = (float)(ScreenWidth / 2), hh = (float)(ScreenHeight / 2);
+    CHECK(relNear(raw.m[3][0], raw.m[2][0] * 1500.0f / hw, 1e-5f) &&
+              relNear(raw.m[3][5], raw.m[2][5] * 1500.0f / hh, 1e-5f),
+          "cull 4:3 Original: +0x240 as computed (%g %g)", (double)raw.m[3][0],
+          (double)raw.m[3][5]);
+    CHECK(relNear(raw.m[6][0], 500.0f / hw, 1e-5f) && relNear(raw.m[6][5], 500.0f / hh, 1e-5f),
+          "cull 4:3 Original: +0x680 as computed (%g %g)", (double)raw.m[6][0],
+          (double)raw.m[6][5]);
+    CHECK(!ico_video_interpolate(), "cull: the Original framerate blends nothing");
+
+    o.framerate = ICO_FRAMERATE_UNCAPPED;
+    ico_video_set(&o);
+    CHECK(ico_video_interpolate(), "cull: uncapped blends between ticks");
+    gameCamAt(PHOTO_D);
+    snap(&s);
+    checkCullScales("4:3 uncapped", &s, &raw, m, m);
+
+    o.aspect = ICO_ASPECT_16_9;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    snap(&s);
+    checkCullScales("16:9 uncapped", &s, &raw, k * m, m);
+
+    o.framerate = 60;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    snap(&s);
+    checkCullScales("16:9 at 60", &s, &raw, k * m, m);
+
+    o.framerate = ICO_FRAMERATE_ORIGINAL;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    snap(&s);
+    checkCullScales("16:9 Original", &s, &raw, k, 1.0f);
+
+    o.aspect = ICO_ASPECT_4_3;
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+    snap(&s);
+    CHECK(slotDiff(&s, &raw) == -1, "cull 4:3 Original again: matrixptr+0x%X differs",
+          slotDiff(&s, &raw));
+
+    ico_video_defaults(&o);
+    ico_video_set(&o);
+    gameCamAt(PHOTO_D);
+}
+
 /* --------------------------------------------------------- device checks */
 
 #define W 512
@@ -1675,6 +1773,7 @@ static void recordingChecks(void)
     checkVu();
     checkZScale();
     checkPhotoView();
+    checkCull();
 }
 
 int main(void)

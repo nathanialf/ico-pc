@@ -654,6 +654,35 @@ static void test_video_auto(const char *dir)
     ico_video_reload();
 }
 
+/* ico_video_interpolate: 1 for every framerate but "original", whatever
+   the preset (the window's rule; GsBase.c's cull margin follows it) */
+static void test_video_interpolate(void)
+{
+    static const int rates[] = {ICO_FRAMERATE_UNCAPPED, 30, 60, 144, 1000};
+    IcoVideoOptions o, keep;
+
+    ico_video_get(&keep);
+    ico_video_defaults(&o);
+    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+    o.framerate = ICO_FRAMERATE_ORIGINAL;
+    ico_video_set(&o);
+    CHECK(ico_video_framerate() == ICO_FRAMERATE_ORIGINAL && ico_video_interpolate() == 0);
+    for (unsigned i = 0; i < sizeof(rates) / sizeof(rates[0]); i++) {
+        o.framerate = rates[i];
+        ico_video_set(&o);
+        CHECK(ico_video_framerate() == rates[i] && ico_video_interpolate() == 1);
+    }
+    /* the preset does not enter into it */
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    o.framerate = ICO_FRAMERATE_ORIGINAL;
+    ico_video_set(&o);
+    CHECK(ico_video_interpolate() == 0);
+    o.framerate = ICO_FRAMERATE_UNCAPPED;
+    ico_video_set(&o);
+    CHECK(ico_video_interpolate() == 1);
+    ico_video_set(&keep);
+}
+
 int main(int argc, char **argv)
 {
     test_defaults();
@@ -664,6 +693,7 @@ int main(int argc, char **argv)
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
     test_video_models(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
+    test_video_interpolate();
     if (failures != 0) {
         fprintf(stderr, "options_test: %d failure(s)\n", failures);
         return 1;

@@ -729,6 +729,12 @@ int ico_video_framerate(void)
     return o.framerate;
 }
 
+int ico_video_interpolate(void)
+{
+    /* the window's rule (window_host.c: rs->interpolate) */
+    return ico_video_framerate() != ICO_FRAMERATE_ORIGINAL;
+}
+
 /* R7b: the camera-cut signal (video_options.h) */
 static unsigned s_cutSerial;
 

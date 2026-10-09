@@ -108,6 +108,9 @@ static void gsbHostWidenCull(float *projHalf);
 /* port/game/video_options.c: the presentation's aspect / (4/3), 1 in the
    Original preset */
 extern float ico_video_wide_x(void);
+/* port/game/video_options.c: 1 when pictures are blended between ticks (a
+   framerate other than Original) */
+extern int ico_video_interpolate(void);
 /* port/game/video_options.c: the Screen softening switch (issue 11), 1 = on */
 extern int ico_video_effect_softening(void);
 /* port/game/video_options.c: the Cinematic bars switch (issue 27), 1 = on */
@@ -1467,24 +1470,46 @@ void gsb_SetVSMatrix(int w, int h, float d)
     gsb_SetVSMatrixSub((float *)(matrixptr + 0xC0), (float *)(matrixptr + 0x1C0),
                        (float *)(matrixptr + 0x240), (float *)(matrixptr + 0x340), vsParam);
     gsbHostWidenCull((float *)(matrixptr + 0x240));
+    gsbHostWidenCull((float *)(matrixptr + 0x680));
 }
 
-/* PC port (R2c; wave 7, R7a), the widescreen hook (plan "Widescreen"): how
-   much wider than 4:3 the output is, (aspect) / (4/3), from the display
-   options (port/game/video_options.c: 1 in the Original preset, 4/3 at
-   16:9, 1.2 at 16:10).  projHalf (matrixptr+0x240) is the projection of the
-   visible screen that +0x280 (gsb_MakeCommonMatrix) and RegistPacket.c's
-   per-object +0x300 are built from, and gsb_ClipBox culls against the
-   current matrix made from them; a wide output divides its x scale so
-   objects at the sides are not culled.  The renderer's own projection
-   widens in rd (rd__FillCameraCB, the replay's g_space); the gameplay
-   matrices +0x80 and +0xC0 (IsPointIsInScreen and the screen tests) never
-   change.  puddle.c and pool.c call gsb_SetVSMatrix for their reflection
-   views too, so the reflections' cull widens by the same factor: it only
-   ever adds objects to a reflection, whose +0xC0 stays 4:3 as well; the
-   renderer widens the render-to-texture block and its draws (rd_core.c
-   rd__TargetScaleOf), so those objects show at the sides of a wide frame.
-   At 1 the matrix is left exactly as computed. */
+/* PC port: the widescreen and in-between cull.  Two projections cull:
+   projHalf (matrixptr+0x240), the projection of the visible screen that
+   +0x280 (gsb_MakeCommonMatrix) and RegistPacket.c's per-object +0x300 are
+   built from, and the 500 unit pair's +0x680, which RegistPacket.c's
+   reg_setMMatrixPacket uses in place of +0x240 for the parts that follow
+   the camera (node flag 2).  gsb_ClipBox culls against the current matrix
+   made from them.  Both are widened here, never a matrix that places
+   anything on screen.
+     - The width: a wide output divides the x scale by how much wider than
+       4:3 it is, (aspect) / (4/3), from the display options
+       (port/game/video_options.c: 1 in the Original preset, 4/3 at 16:9,
+       1.2 at 16:10), so objects at the sides are not culled.
+     - The margin: when pictures are blended between ticks (a framerate
+       other than Original) the x and y scales are divided by a further
+       1 + GSB_CULL_MARGIN.  A blended picture only draws what both ticks
+       drew (rd_interp.c), so a part culled at the newer tick vanished one
+       tick early at the screen's edges while the camera turned; with the
+       margin a part just past the edge is still drawn at the tick (the
+       scissor keeps it off the tick's own picture).  0.12 makes the
+       culled frustum's half-width and half-height 1.12 times the
+       screen's, the same share of the picture at every aspect.
+   The renderer's own projection widens in rd (rd__FillCameraCB, the
+   replay's g_space); the gameplay matrices +0x80 and +0xC0
+   (IsPointIsInScreen and the screen tests) never change.  puddle.c and
+   pool.c call gsb_SetVSMatrix for their reflection views too, so the
+   reflections' cull widens by the same factors: it only ever adds objects
+   to a reflection, whose +0xC0 stays 4:3 as well; the renderer widens the
+   render-to-texture block and its draws (rd_core.c rd__TargetScaleOf), so
+   those objects show at the sides of a wide frame.  A part the widened
+   frustum holds whole but that crosses the screen's edge is drawn by the
+   VU program for parts inside (code 34) instead of the one with the
+   per-triangle region test (code 32); its vertices are well inside the
+   GS's 0..4094 window, which is all that test drops.  At width 1 with the
+   Original framerate (the Original preset's picture) the matrices are
+   left exactly as computed. */
+#define GSB_CULL_MARGIN 0.12f
+
 static float gsbHostWideX(void)
 {
     return ico_video_wide_x();
@@ -1493,9 +1518,13 @@ static float gsbHostWideX(void)
 static void gsbHostWidenCull(float *projHalf)
 {
     float k = gsbHostWideX();
+    float m = ico_video_interpolate() ? GSB_CULL_MARGIN : 0.0f;
 
-    if (k != 1.0f) {
-        projHalf[0] = projHalf[0] / k;
+    if (k != 1.0f || m != 0.0f) {
+        projHalf[0] = projHalf[0] / (k * (1.0f + m));
+    }
+    if (m != 0.0f) {
+        projHalf[5] = projHalf[5] / (1.0f + m);
     }
 }
 
@@ -1511,7 +1540,8 @@ static void gsbHostWidenCull(float *projHalf)
              by gsbHostWidenCull)
      +0x340  the viewport (its viewport)
      +0x640  the 500 unit pair's screen matrix (gsb_SetVSMatrixSub)
-     +0x680  the 500 unit pair's projection (gsb_SetVSMatrixSub)
+     +0x680  the 500 unit pair's projection (gsb_SetVSMatrixSub, widened
+             by gsbHostWidenCull)
      +0x100  +0xC0 x +0x80 (gsb_MakeCommonMatrix)
      +0x200  +0x1C0 x +0x80 (gsb_MakeCommonMatrix)
      +0x280  +0x240 x +0x80 (gsb_MakeCommonMatrix)
