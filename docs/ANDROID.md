@@ -138,6 +138,10 @@ on **Options > Gameplay > Analogue stick fix**.
 **Back.** The phone's Back button or gesture opens the pause menu, like
 Start.
 
+**Vibration.** With the touch controls and no gamepad, the phone itself
+vibrates where a gamepad would rumble. A connected gamepad takes over. The
+game's **Vibration** option (Options > Controls) turns it off.
+
 **Gamepads.** A Bluetooth or USB gamepad works, with rumble if it has it.
 While one is connected, the touch buttons go away. Change that in
 **Options > Controls > Touch controls**.

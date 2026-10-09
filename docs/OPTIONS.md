@@ -146,13 +146,15 @@ A change takes effect the next time you start the game.
 
 ## Gameplay
 
-Both of these are off unless you turn them on.
+The first two are off unless you turn them on.
 
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows.
   [Why this is needed](FAQ.md#ico-walks-instead-of-running).
+- **Achievement pop-ups** is on by default. Turn it off to stop the pop-up
+  when you earn an achievement. You still earn them, and the list shows them.
 
 ## Language
 
