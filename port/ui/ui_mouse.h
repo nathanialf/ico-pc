@@ -30,7 +30,8 @@ extern "C" {
 
 /* Where the presenter put the picture: the output's size and the box the
    game's 4:3 picture was blitted into (output pixels; RdOverlayCtx's
-   outW, outH and box), from the presentation overlay (ui_host.c).  Until
+   outW, outH and box), from the presentation's top layer (ui_host.c),
+   which is laid out on the output with or without the CRT filter.  Until
    the first call the pointer hits nothing. */
 void ui_MouseSetView(int outW, int outH, int boxX, int boxY, int boxW, int boxH);
 /* Once a Main tick, after the pad is read and before the layouts run

@@ -41,9 +41,6 @@ extern void gif_HostFlush(void); /* GifHost.h */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    /* v0.4.3 I17b: where the picture is, for the mouse pointer's hit test */
-    ui_MouseSetView((int)ctx->outW, (int)ctx->outH, ctx->box.x, ctx->box.y, (int)ctx->box.w,
-                    (int)ctx->box.h);
     ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
 }
@@ -54,6 +51,12 @@ static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
+    /* v0.4.3 I17b: where the picture is on the output, for the mouse
+       pointer's hit test: this layer's ctx is always the output and its
+       box, where the overlay's is the CRT filter's grid under the filter
+       (the pointer's place is a fraction of the window) */
+    ui_MouseSetView((int)ctx->outW, (int)ctx->outH, ctx->box.x, ctx->box.y, (int)ctx->box.w,
+                    (int)ctx->box.h);
     ui_TouchDrawOverlay(ctx);
 }
 #endif
