@@ -3604,7 +3604,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         d->test.atst | ((uint32_t)(d->test.ate != 0) << 8) | ((uint32_t)d->test.afail << 16);
     cb.mode[3] = d->test.aref;
     cb.blend[0] = rd__AlphaRegister(d->blend < RD_BLEND_COUNT ? d->blend : RD_BLEND_LERP_AS);
-    cb.blend[1] = rd__BlurFeedbackFix(d->blend, d->blendFix, p.scalar[2]);
+    cb.blend[1] = d->blendFix;
     cb.blend[2] = d->colclamp;
     cb.blend[3] = p.z;
     rd__BlurUvRect(c->b[0], &p, cb.uvRect); /* R-POST: the reduction's mirror */

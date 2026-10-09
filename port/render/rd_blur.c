@@ -36,7 +36,6 @@
  * every pass, feedback or not.  That is the exactness of blend_int's RGBA8_UINT ping-pong, without the UINT copies:
  * UNORM8 holds k / 255 exactly and a Load of it gives k back.
  */
-#include <math.h>
 #include <string.h>
 #include "rd_internal.h"
 
@@ -136,26 +135,4 @@ uint32_t rd__BlurScreenFallback(uint32_t kind, const RdPostRec *p, const RdState
         return ~0u;
     }
     return p->lutOffset + (rd__MirrorOn() ? 2u * (uint32_t)sizeof(RdScreenVtx) : 0u);
-}
-
-uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt)
-{
-    if (dt == 1.0f || dt <= 0.0f) {
-        return fix;
-    }
-    float f;
-    if (blend == RD_BLEND_LERP_FIX) {
-        if (fix > 128) {
-            return fix; /* overshoots: no retention to spread (FIX / 128 above 1) */
-        }
-        /* (Cs - Cd) FIX / 128 + Cd with Cs the old frame (motion blur:
-         * the previous DISPLAY, staticBlur.c MotionBlur): the old frame
-         * keeps FIX / 128 per frame, so over dt frames (FIX / 128)^dt */
-        const float keep = powf((float)fix / 128.0f, dt);
-        f = 128.0f * keep;
-    } else {
-        f = (float)fix * dt;
-    }
-    f = f < 0.0f ? 0.0f : (f > 255.0f ? 255.0f : f);
-    return (uint8_t)(f + 0.5f);
 }

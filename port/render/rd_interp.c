@@ -75,20 +75,32 @@
  * updated in place), the rand-driven draws (the menu sparkle, lightning:
  * world prims and particles' screen packets with key 0), the dissolve FIX
  * (an ALPHA state command), film noise (an unkeyed post sprite), and the
- * aura's input from FEED128: the first present of a tick keeps FEED128 in
- * FEED_HELD and the later presents start from it again (feedback), so
- * every present of a tick draws the same feedback and FEED128 advances once
- * per tick as on the PS2.
+ * feedback passes' inputs (feedback): the first present of a tick keeps
+ * FEED128 (the aura's) in FEED_HELD and DISPLAY (the motion blur's old
+ * frame) in DISPLAY_HELD, and the later presents start from them again, so
+ * every present of a tick draws the same feedback and FEED128 and DISPLAY
+ * advance once per tick as on the PS2.
  *
- * Feedback per present: the motion blur's sprite (DISPLAY back into SCENE
- * with LERP FIX) runs at every present.  On the PS2 the sprite draws the
- * previous DISPLAY as Cs with ALPHA (Cs - Cd) FIX / 128 + Cd (staticBlur.c
- * MotionBlur, gif_SetAlpha mode 2), so the old picture keeps a = FIX / 128
- * of itself per tick T; a present that stands for dt ticks uses the FIX
- * that keeps a^dt (rd__BlurFeedbackFix: FIX' = 128 a^dt, rounded), so k
- * presents of dt = 1/k keep a per tick, whatever the present rate.  dt is the alpha advanced since the previous present
- * (plus whole ticks when frames were closed in between), at least 1/256,
- * at most 4.
+ * The motion blur (v0.4.3, issue 28).  On the PS2 the sprite draws the
+ * previous DISPLAY as Cs over the new SCENE with ALPHA (Cs - Cd) FIX / 128
+ * + Cd (staticBlur.c MotionBlur, gif_SetAlpha mode 2), once a tick, and
+ * the passes after it in lists 8 to 12 (the aura's add, the softening,
+ * the brightness step, fades, the UI, the reduction's tint) make the next
+ * DISPLAY of that: D_n = P((1 - a) S_n + a D_n-1) with a = FIX / 128.
+ * Every present replays the whole frame, so a present that read the
+ * previous present's DISPLAY ran that loop k times a tick (k presents a
+ * tick).  The retention can be spread over the k presents (v0.4.2: FIX' =
+ * 128 a^(1/k), a over the tick), but P cannot: with its gain g (the tint
+ * over 128) and the light L it adds (the aura, the brightness step, a fade
+ * to white) a still picture settled at (g (1 - a') S + L) / (1 - g a'),
+ * a' = FIX' / 128, instead of the PS2's (g (1 - a) S + L) / (1 - g a).
+ * FIX 32 on 30 Hz ticks at 300 presents a second (FIX' 111) kept 5.6 times
+ * the PS2's share of L, and a tint of 148 or more (g a' >= 1) ran to white;
+ * a tint under 128 went dark the same way.  Now every present of a tick
+ * draws the recorded FIX over the DISPLAY the tick started from
+ * (DISPLAY_HELD, feedback), so the loop runs once a tick at any present
+ * rate and the tick's picture is the PS2's; between ticks the old frame
+ * stays the last tick's, as on the PS2.
  */
 #include <math.h>
 #include <stddef.h>
@@ -3178,54 +3190,37 @@ static int writesTarget(const RdCmd *c, const RdStateBlock *st, uint32_t id)
     }
 }
 
-/* The feedback passes for a present standing for dt ticks: the motion
- * blur's FIX, and FEED128's input.  A frame that writes FEED128 reads what
- * the frame before left there (the aura's feedback), and every present of
- * a tick replays all of its passes, so every present must start from the
- * FEED128 the tick's first present started from: the first copies FEED128
- * into FEED_HELD at its head, the later ones copy FEED_HELD back into
- * FEED128 at theirs.  Every present then draws the same picture and leaves
- * FEED128 in the tick's final state, which the next tick reads, as on the
- * PS2.  (Dropping a later present's FEED128 writes instead, while its
- * reads still ran, pasted the tick's final FEED128 over the screen: after
- * the black reset of a camera cut, auraInspireAfter's GlobalTimer fill, a
- * black frame.) */
-static void feedback(float dt, int firstOfTick)
+/* Does c, under the state st, sample the target id? */
+static int readsTarget(const RdCmd *c, const RdStateBlock *st, uint32_t id)
 {
-    const uint32_t feed = rd_Target(RD_TARGET_FEED128).id;
-    const uint32_t held = rd_Target(RD_TARGET_FEED_HELD).id;
-    const int head = rd__FirstList((int)s_out.keep);
-    int fed = 0;
-    RdStateBlock st = s_out.startState;
-    for (int l = head; l < RD_LIST_COUNT; l++) {
-        RdCmdList *cl = &s_out.lists[l];
-        for (uint32_t i = 0; i < cl->count; i++) {
-            RdCmd *c = &cl->cmds[i];
-            if (rd__ApplyState(&st, c)) {
-                continue;
-            }
-            fed |= feed && writesTarget(c, &st, feed);
-            if (c->type == RDC_POST_STUB && c->b[0] == RD_POST_MOTION_BLUR) {
-                RdPostRec *r = (RdPostRec *)payloadAt(&s_out, c->u[1], sizeof(RdPostRec));
-                if (r) {
-                    r->scalar[2] = dt;
-                }
-            }
-        }
+    switch (c->type) {
+    case RDC_NOP:
+    case RDC_OVERLAY_TEXT:
+    case RDC_CLEAR:
+        return 0;
+    case RDC_COPY:
+        return c->u[0] == id;
+    default: {
+        const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
+        return t && t->kind == RD_TEXKIND_TARGET && t->target == id;
     }
-    if (!fed || !held) {
-        return;
     }
-    RdCmdList *cl = &s_out.lists[head];
+}
+
+/* an RDC_COPY of all of from into to (one size and scale) at the head of
+ * list l */
+static void headCopy(int l, uint32_t from, uint32_t to, uint32_t sizeOf)
+{
+    RdCmdList *cl = &s_out.lists[l];
+    const RdTargetRec *t = rd__TargetRec(sizeOf);
     uint32_t off;
-    RdCopyRec *r = (RdCopyRec *)(void *)outAppend(sizeof(RdCopyRec), &off);
+    RdCopyRec *r = t ? (RdCopyRec *)(void *)outAppend(sizeof(RdCopyRec), &off) : NULL;
     if (!r) {
         return;
     }
-    const RdTargetRec *t = rd__TargetRec(feed);
     memset(r, 0, sizeof(*r));
-    r->w = t ? t->w : 128u;
-    r->h = t ? t->h : 128u;
+    r->w = t->w;
+    r->h = t->h;
     if (!growTo((void **)&cl->cmds, &cl->cap, cl->count + 1, sizeof(RdCmd))) {
         return;
     }
@@ -3234,12 +3229,55 @@ static void feedback(float dt, int firstOfTick)
     RdCmd *c = &cl->cmds[0];
     memset(c, 0, sizeof(*c));
     c->type = RDC_COPY;
-    c->u[0] = firstOfTick ? feed : held;
-    c->u[1] = firstOfTick ? held : feed;
+    c->u[0] = from;
+    c->u[1] = to;
     c->u[2] = off;
 }
 
-const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
+/* The feedback passes' inputs, held at the tick.  A frame that writes
+ * FEED128 reads what the frame before left there (the aura's feedback),
+ * and every present of a tick replays all of its passes, so every present
+ * must start from the FEED128 the tick's first present started from: the
+ * first copies FEED128 into FEED_HELD at its head, the later ones copy
+ * FEED_HELD back into FEED128 at theirs.  Every present then draws the
+ * same picture and leaves FEED128 in the tick's final state, which the
+ * next tick reads, as on the PS2.  (Dropping a later present's FEED128
+ * writes instead, while its reads still ran, pasted the tick's final
+ * FEED128 over the screen: after the black reset of a camera cut,
+ * auraInspireAfter's GlobalTimer fill, a black frame.)  v0.4.3 (issue 28):
+ * the same for DISPLAY when the frame reads it (the motion blur's old
+ * frame, the file header): DISPLAY into DISPLAY_HELD at the first
+ * present's head, back at the later ones', so every present draws the
+ * tick's FIX over the previous tick's picture. */
+static void feedback(int firstOfTick)
+{
+    const uint32_t feed = rd_Target(RD_TARGET_FEED128).id;
+    const uint32_t held = rd_Target(RD_TARGET_FEED_HELD).id;
+    const uint32_t disp = rd_Target(RD_TARGET_DISPLAY).id;
+    const uint32_t dispHeld = rd_Target(RD_TARGET_DISPLAY_HELD).id;
+    const int head = rd__FirstList((int)s_out.keep);
+    int fed = 0, read = 0;
+    RdStateBlock st = s_out.startState;
+    for (int l = head; l < RD_LIST_COUNT; l++) {
+        const RdCmdList *cl = &s_out.lists[l];
+        for (uint32_t i = 0; i < cl->count; i++) {
+            const RdCmd *c = &cl->cmds[i];
+            if (rd__ApplyState(&st, c)) {
+                continue;
+            }
+            fed |= feed && writesTarget(c, &st, feed);
+            read |= disp && readsTarget(c, &st, disp);
+        }
+    }
+    if (fed && held) {
+        headCopy(head, firstOfTick ? feed : held, firstOfTick ? held : feed, feed);
+    }
+    if (read && dispHeld) {
+        headCopy(head, firstOfTick ? disp : dispHeld, firstOfTick ? dispHeld : disp, disp);
+    }
+}
+
+const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                int firstOfTick, RdInterpStats *stats)
 {
     RdInterpStats st;
@@ -3383,7 +3421,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
     }
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
-    feedback(dt, firstOfTick);
+    feedback(firstOfTick);
     if (stats) {
         *stats = st;
     }
@@ -3394,7 +3432,6 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
 
 static struct {
     uint32_t number; /* the frame of the last present */
-    float alpha;     /* and its alpha */
     RdInterpStats stats;
     /* the log: per frame, at its first present */
     uint32_t frames, presents, snaps[RD_SNAP_COUNT];
@@ -3484,10 +3521,8 @@ static void presentLog(void)
             (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
             RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
     const uint32_t number = s_pres.number;
-    const float alpha = s_pres.alpha;
     memset(&s_pres, 0, sizeof(s_pres));
     s_pres.number = number;
-    s_pres.alpha = alpha;
 }
 
 static void presentReset(void)
@@ -3517,18 +3552,11 @@ bool rd_Present(float alpha)
     if (alpha > 1.0f) {
         alpha = 1.0f;
     }
+    /* the tick's first present keeps the feedback passes' inputs (FEED128,
+     * and since v0.4.3 DISPLAY: issue 28), the later ones start from them
+     * again (feedback) */
     const int first = cur->number != s_pres.number;
-    float dt;
-    if (first) {
-        const uint32_t k =
-            s_pres.number && cur->number > s_pres.number ? cur->number - s_pres.number : 1u;
-        dt = (float)k - s_pres.alpha + alpha;
-    } else {
-        dt = alpha - s_pres.alpha;
-    }
-    dt = dt < 1.0f / 256.0f ? 1.0f / 256.0f : (dt > 4.0f ? 4.0f : dt);
     s_pres.number = cur->number;
-    s_pres.alpha = alpha;
     s_pres.presents++;
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
@@ -3541,7 +3569,7 @@ bool rd_Present(float alpha)
     }
     const double t0 = rd__NowMs();
     s_track = first; /* S2: the flap detector, once a frame */
-    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, alpha, dt, first, &s_pres.stats);
+    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, alpha, first, &s_pres.stats);
     s_track = 0;
     rd__PerfInterpMs(rd__NowMs() - t0); /* P1: charged to the replay below */
     rd__PerfAlpha(alpha, first);

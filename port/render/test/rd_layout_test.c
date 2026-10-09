@@ -375,7 +375,7 @@ static void checkKeyedRow(void)
         return;
     }
     RdInterpStats st;
-    const RdFrame *f = rd__InterpFrame(prev, cur, 0.5f, 1.0f, 1, &st);
+    const RdFrame *f = rd__InterpFrame(prev, cur, 0.5f, 1, &st);
     CHECK(f && st.snap == RD_SNAP_NONE && st.keyed == 1 && st.lerped == 1,
           "the keyed row blends (snap %u keyed %u lerped %u)", st.snap, st.keyed, st.lerped);
     const RdCmd *r = screenCmd(f, 0), *rp = screenCmd(prev, 0), *rc = screenCmd(cur, 0);

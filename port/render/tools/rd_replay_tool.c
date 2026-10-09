@@ -6,8 +6,9 @@
  *                  [--backend vulkan|d3d12]
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
- * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD, FEED_HELD).  --present renders the Original presenter into a
- * W x H output and writes that instead.  Commands of later waves (meshes,
+ * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD,
+ * FEED_HELD, DISPLAY_HELD).  --present renders the Original presenter into
+ * a W x H output and writes that instead.  Commands of later waves (meshes,
  * fog, ...) are skipped with a message instead of stopping.
  *
  * --backend picks the RHI backend (renderer wave 6, R6c; default: the
@@ -89,7 +90,7 @@
  *                         dump PREV (the tick before, e.g. the game's
  *                         rd-NNNNN-prev.rddump) and <dump> at alpha T (0..1)
  *                         instead of <dump> itself: rd__InterpFrame as a
- *                         tick's first present (dt 1); the two must be
+ *                         tick's first present; the two must be
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
  *
@@ -101,10 +102,10 @@
 #include "rd_mesh.h"
 #include "font.h" /* port/ui: the overlay test's text */
 
-static const char *const kNames[] = {"SCENE",     "DISPLAY",  "SHADOW0", "SHADOW1",   "SHADOW2",
-                                     "WORK0",     "WORK1",    "WORK2",   "WORK3",     "AA0",
-                                     "AA1",       "FEED128",  "",        "AURA_WORK", "AURA_TAP",
-                                     "WORK2_PAD", "FEED_HELD"};
+static const char *const kNames[] = {
+    "SCENE", "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
+    "WORK1", "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
+    "",      "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
     "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",
@@ -730,7 +731,7 @@ int main(int argc, char **argv)
     if (interpPrev) {
         /* I1: the presenter's frame between the two */
         RdInterpStats ist;
-        rf = rd__InterpFrame(&pf, &f, interpT, 1.0f, 1, &ist);
+        rf = rd__InterpFrame(&pf, &f, interpT, 1, &ist);
         if (!rf) {
             fprintf(stderr, "rd__InterpFrame failed\n");
             rd__FrameFree(&pf);

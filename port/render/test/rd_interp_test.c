@@ -45,21 +45,21 @@
  *             older from the kept version), alpha 1 the current tick's
  *             shape, not the newer one; a mesh rewritten every frame the
  *             same; the replays use the kept streams
- *   feedback  rd__BlurFeedbackFix at dt 0.5: the LERP retention (the old
- *             frame keeps a = FIX / 128) is a^0.5 (to the FIX's rounding),
- *             two presents of dt 0.5 keep a (within 1/128), additive FIX x
- *             0.5; the motion blur
- *             sprite of an interpolated frame carries dt; a frame that
- *             writes FEED128 keeps every aura sprite in every present, and
- *             its head copies FEED128 into FEED_HELD in a tick's first
- *             present and back in the later ones (none without a write)
+ *   feedback  (v0.4.3, issue 28) a frame whose motion blur sprite reads
+ *             DISPLAY copies DISPLAY into DISPLAY_HELD at the head of a
+ *             tick's first present and back at the later ones', and its
+ *             motion blur sprite is the recorded one in every present (the
+ *             tick's FIX); a frame that writes FEED128 keeps every aura
+ *             sprite in every present, and its head copies FEED128 into
+ *             FEED_HELD in a tick's first present and back in the later
+ *             ones; neither copy without the read or the write
  * On a device (skipped without one):
  *   pixels    replays of the blended frame at alpha 0 and 1 equal the
  *             previous and current frames' replays byte for byte; at 0.5 the
  *             translated sprite covers the half-way columns exactly
  *   mirage    (package QUEEN) a tick that pastes FEED128 over SCENE and
- *             copies SCENE back into it, presented twice (dt 0.5, alpha 0.5
- *             as the first present, 1 as a later one): the two SCENEs and
+ *             copies SCENE back into it, presented twice (alpha 0.5 as the
+ *             first present, 1 as a later one): the two SCENEs and
  *             FEED128s are byte-identical, and FEED128 advances once per tick
  *   present   rd_Present does nothing in the Original preset or with
  *             interpolate off, presents in Enhanced with it; a change of
@@ -159,16 +159,16 @@ static const RdScreenVtx *screenVtx(const RdFrame *f, const RdCmd *c)
     return c ? (const RdScreenVtx *)(const void *)(f->payload + c->u[0]) : NULL;
 }
 
-static const RdInterpStats *build(float alpha, float dt, int first)
+static const RdInterpStats *build(float alpha, int first)
 {
     static RdInterpStats st;
-    rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, dt, first, &st);
+    rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, first, &st);
     return &st;
 }
 
 static const RdFrame *built(float alpha)
 {
-    return rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, 1.0f, 1, NULL);
+    return rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, 1, NULL);
 }
 
 /* ----------------------------------------------------- screen sprites */
@@ -208,7 +208,7 @@ static void testSprites(void)
               memcmp(f->payload, cur->payload, cur->payloadSize) == 0,
           "alpha 1: the current frame's payload");
     /* alpha 0: the previous frame's draws (the keyed ones that match) */
-    const RdInterpStats *st = build(0.0f, 1.0f, 1);
+    const RdInterpStats *st = build(0.0f, 1);
     f = built(0.0f);
     const RdScreenVtx *a = screenVtx(f, findKey(f, 0, RD_KEY(&kObjA, 0, 0), 0));
     const RdScreenVtx *pa = screenVtx(prev, findKey(prev, 0, RD_KEY(&kObjA, 0, 0), 0));
@@ -270,7 +270,7 @@ static void testSpriteSnaps(void)
         sprite(k ? 300 : 0, 0, k ? 310 : 10, 10, grey, RD_KEY(&kObjD, 0, 0));
         rd_EndFrame(0);
     }
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->mismatch == 1 && st->jump == 1 && st->lerped == 0,
           "count change and jump snap (mismatch %u jump %u lerped %u)", st->mismatch, st->jump,
           st->lerped);
@@ -338,7 +338,7 @@ static void testFrameSnaps(void)
 
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
         framePair(cases[i].what);
-        const RdInterpStats *st = build(0.5f, 1.0f, 1);
+        const RdInterpStats *st = build(0.5f, 1);
         const RdFrame *f = built(0.5f);
         const RdScreenVtx *a = screenVtx(f, findKey(f, 0, RD_KEY(&kObjA, 2, 0), 0));
         const int x = a ? (a[0].x - OX) : -1;
@@ -491,7 +491,7 @@ static void testVu(void)
     CHECK(mesh.id != 0, "the test mesh");
     recordVu(mesh, 0, 0, 0);
     recordVu(mesh, 1, 1, 1);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->keyed == 5 && st->lerped == 4 && st->jump == 1 &&
               st->mismatch == 0 && st->shifted == 1,
           "mesh, grid and particles blend, the teleported mesh jumps, the shadow whose count "
@@ -564,7 +564,7 @@ static void testVu(void)
     /* the shadow blends when the topology is the same */
     recordVu(mesh, 0, 0, 0);
     recordVu(mesh, 1, 0, 0);
-    st = build(0.5f, 1.0f, 1);
+    st = build(0.5f, 1);
     f = built(0.5f);
     CHECK(st->lerped == 5 && st->jump == 0 && st->mismatch == 0, "all five blend (lerped %u)",
           st->lerped);
@@ -704,7 +704,7 @@ static void testPrisms(void)
     }
     CHECK(incP == incC && differ,
           "precondition: equal counts (%d, %d), the increments of different triangles", incP, incC);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     int closed = 0;
     int np = closedPrisms(f, key, &closed);
@@ -730,7 +730,7 @@ static void testPrisms(void)
     static const int xs2[2] = {10, 110};
     prismFrame(xs2, dSame, 2, 0, &incP);
     prismFrame(xs3, dSame, 3, 8, &incC);
-    build(0.25f, 1.0f, 1);
+    build(0.25f, 1);
     f = built(0.25f);
     np = closedPrisms(f, key, &closed);
     CHECK(np == 2 && closed == 2, "a prism of cur only: at 0.25, %d prisms (2), %d closed", np,
@@ -785,7 +785,7 @@ static void testFade(void)
         rd_Post(RD_POST_FADE, &pp);
         rd_EndFrame(0);
     }
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->lerped == 1, "a partial fade interpolates");
     const RdFrame *f = built(0.5f);
     int found = 0;
@@ -800,111 +800,121 @@ static void testFade(void)
     CHECK(found, "the fade sprite is keyed");
 }
 
-static void testFeedback(void)
+/* the frame of testFeedback: with display, a motion blur sprite reading
+ * DISPLAY's RGB24 view (staticBlur.c MotionBlur's TEX0); with feed, an aura
+ * sprite into FEED128; always one into AURA_WORK */
+static void recordFeedback(int display, int feed)
 {
-    /* rd__BlurFeedbackFix: LERP_FIX is (Cs - Cd) FIX / 128 + Cd with Cs
-     * the old frame (staticBlur.c MotionBlur draws the previous DISPLAY),
-     * so the old frame keeps a = FIX / 128 per tick; dt 0.5 keeps a^0.5 to
-     * the rounding of the FIX (half a step of 1/128), and two presents of
-     * dt 0.5 keep a over the tick (within one step) */
-    for (int fix = 8; fix <= 120; fix += 16) {
-        const uint8_t f2 = rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, (uint8_t)fix, 0.5f);
-        const double a = fix / 128.0, a2 = f2 / 128.0;
-        CHECK(fabs(a2 - sqrt(a)) <= 0.5 / 128.0 + 1e-9,
-              "FIX %d at dt 0.5: %u keeps %.4f, a^0.5 %.4f", fix, f2, a2, sqrt(a));
-        CHECK(fabs(a2 * a2 - a) <= 1.0 / 128.0 + 1e-9,
-              "FIX %d: two presents of dt 0.5 keep %.4f, one tick %.4f", fix, a2 * a2, a);
-        CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, (uint8_t)fix, 1.0f) == fix,
-              "dt 1: FIX unchanged");
-    }
-    /* FIX 32 (a quarter kept): 64 at dt 0.5 (half kept), 1 at dt 4 (a
-     * quarter to the fourth, 0.5, rounded up: the trail all but gone) */
-    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 0.5f) == 64, "FIX 32 at dt 0.5: %u",
-          rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 0.5f));
-    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 4.0f) == 1, "FIX 32 at dt 4: %u",
-          rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 32, 4.0f));
-    CHECK(rd__BlurFeedbackFix(RD_BLEND_LERP_FIX, 0xC0, 0.5f) == 0xC0, "FIX above 128: unchanged");
-    CHECK(rd__BlurFeedbackFix(RD_BLEND_CS_FIX_ADD_CD, 0x40, 0.5f) == 0x20, "additive: FIX x dt");
-    /* the frame: a motion blur sprite and two aura sprites, one into FEED128 */
-    for (int k = 0; k < 2; k++) {
-        rd_BeginFrame();
-        frameHead();
+    rd_BeginFrame();
+    frameHead();
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.fix = 0x20;
+    pp.blend = RD_BLEND_LERP_FIX;
+    pp.scalar[2] = 1.0f;
+    if (display) {
         rd_SelectList(7);
-        RdPostParams pp;
-        memset(&pp, 0, sizeof(pp));
-        pp.fix = 0x20;
-        pp.blend = RD_BLEND_LERP_FIX;
+        rd_BlendFunc(RD_BLEND_LERP_FIX, 0x20);
+        rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_DISPLAY), RD_VIEW_RGB24_TA0),
+                   RD_TEXFN_MODULATE, RD_TCC_RGBA);
         rd_Post(RD_POST_MOTION_BLUR, &pp);
-        rd_SelectList(8);
-        rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
-        rd_Post(RD_POST_AURA, &pp);
+        rd_TextureOff();
+    }
+    rd_SelectList(8);
+    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
+    rd_Post(RD_POST_AURA, &pp);
+    if (feed) {
         rd_SetTarget(rd_Target(RD_TARGET_FEED128), (RdTarget){0}, 128, 128, 0);
         rd_Post(RD_POST_AURA, &pp);
-        rd_EndFrame(0);
     }
-    for (int first = 1; first >= 0; first--) {
-        const RdFrame *f =
-            rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 0.5f, 0.5f, first, NULL);
-        float dt = 0.0f;
-        int aura = 0;
-        for (int l = 7; l <= 8; l++) {
-            for (uint32_t i = 0; i < f->lists[l].count; i++) {
-                const RdCmd *c = &f->lists[l].cmds[i];
-                if (c->type == RDC_POST_STUB && c->b[0] == RD_POST_MOTION_BLUR) {
-                    RdPostRec r;
-                    memcpy(&r, f->payload + c->u[1], sizeof(r));
-                    dt = r.scalar[2];
+    rd_EndFrame(0);
+}
+
+/* v0.4.3 (issue 28): the copies at the head of a present's first list:
+ * DISPLAY <-> DISPLAY_HELD and FEED128 <-> FEED_HELD found (1 each at
+ * most), and the number of RDC_COPYs in the frame */
+static int headCopies(const RdFrame *f, int first, int *display, int *feed)
+{
+    const uint32_t disp = rd_Target(RD_TARGET_DISPLAY).id;
+    const uint32_t dispHeld = rd_Target(RD_TARGET_DISPLAY_HELD).id;
+    const uint32_t fd = rd_Target(RD_TARGET_FEED128).id;
+    const uint32_t fdHeld = rd_Target(RD_TARGET_FEED_HELD).id;
+    *display = *feed = 0;
+    for (uint32_t i = 0; i < f->lists[0].count && i < 2; i++) {
+        const RdCmd *c = &f->lists[0].cmds[i];
+        if (c->type != RDC_COPY) {
+            break;
+        }
+        RdCopyRec r;
+        memcpy(&r, f->payload + c->u[2], sizeof(r));
+        const int whole0 = r.srcX == 0 && r.srcY == 0 && r.dstX == 0 && r.dstY == 0;
+        if (c->u[0] == (first ? disp : dispHeld) && c->u[1] == (first ? dispHeld : disp)) {
+            *display += whole0 && r.w == 512 && r.h == 256;
+        } else if (c->u[0] == (first ? fd : fdHeld) && c->u[1] == (first ? fdHeld : fd)) {
+            *feed += whole0 && r.w == 128 && r.h == 128;
+        }
+    }
+    int copies = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            copies += f->lists[l].cmds[i].type == RDC_COPY;
+        }
+    }
+    return copies;
+}
+
+static void testFeedback(void)
+{
+    /* every present of a tick starts from the feedback inputs the tick
+     * started from: a frame that reads DISPLAY (the motion blur's old
+     * frame) copies all of DISPLAY into DISPLAY_HELD at the head of a
+     * tick's first present and back at the later ones', one that writes
+     * FEED128 the same with FEED_HELD; the motion blur sprite is the
+     * recorded one in every present (the tick's FIX, no time factor) */
+    static const struct {
+        int display, feed;
+    } kCases[] = {{1, 1}, {1, 0}, {0, 1}, {0, 0}};
+
+    for (size_t k = 0; k < sizeof(kCases) / sizeof(kCases[0]); k++) {
+        const int display = kCases[k].display, feed = kCases[k].feed;
+        recordFeedback(display, feed);
+        recordFeedback(display, feed);
+        const RdFrame *cur = rd__LastFrame();
+        for (int first = 1; first >= 0; first--) {
+            const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, 0.5f, first, NULL);
+            if (!f) {
+                CHECK(0, "feedback case %zu: the frame built", k);
+                continue;
+            }
+            int blur = 0, same = 0, aura = 0;
+            for (int l = 7; l <= 8; l++) {
+                for (uint32_t i = 0; i < f->lists[l].count; i++) {
+                    const RdCmd *c = &f->lists[l].cmds[i];
+                    if (c->type != RDC_POST_STUB) {
+                        continue;
+                    }
+                    if (c->b[0] == RD_POST_MOTION_BLUR) {
+                        blur++;
+                        same += memcmp(f->payload + c->u[1], cur->payload + c->u[1],
+                                       sizeof(RdPostRec)) == 0;
+                    }
+                    aura += c->b[0] == RD_POST_AURA;
                 }
-                aura += c->type == RDC_POST_STUB && c->b[0] == RD_POST_AURA;
             }
+            CHECK(blur == display && same == display,
+                  "case %zu, %s present: the motion blur sprite as recorded (%d of %d)", k,
+                  first ? "a tick's first" : "a later", same, blur);
+            CHECK(aura == 1 + feed, "case %zu, %s present: %d aura sprites (FEED128's kept)", k,
+                  first ? "a tick's first" : "a later", aura);
+            int d = 0, fd = 0;
+            const int copies = headCopies(f, first, &d, &fd);
+            CHECK(d == display && fd == feed && copies == display + feed,
+                  "case %zu (DISPLAY read %d, FEED128 written %d), %s present: the head copies %s "
+                  "%d, %s %d (%d copies)",
+                  k, display, feed, first ? "a tick's first" : "a later",
+                  first ? "DISPLAY into DISPLAY_HELD" : "DISPLAY_HELD back into DISPLAY", d,
+                  first ? "FEED128 into FEED_HELD" : "FEED_HELD back into FEED128", fd, copies);
         }
-        CHECK(dt == 0.5f, "the motion blur sprite stands for dt 0.5 (%g)", dt);
-        CHECK(aura == 2, "%s present: %d aura sprites (FEED128's kept)",
-              first ? "a tick's first" : "a later", aura);
-        /* the head of the first list: FEED128 kept in FEED_HELD by the
-         * first present, put back from it by the later ones */
-        const uint32_t feed = rd_Target(RD_TARGET_FEED128).id;
-        const uint32_t held = rd_Target(RD_TARGET_FEED_HELD).id;
-        const RdCmd *h = f->lists[0].count ? &f->lists[0].cmds[0] : NULL;
-        int copies = 0;
-        for (int l = 0; l < RD_LIST_COUNT; l++) {
-            for (uint32_t i = 0; i < f->lists[l].count; i++) {
-                copies += f->lists[l].cmds[i].type == RDC_COPY;
-            }
-        }
-        CHECK(h && h->type == RDC_COPY && h->u[0] == (first ? feed : held) &&
-                  h->u[1] == (first ? held : feed) && copies == 1,
-              "%s present: the head copies %s (%d copies)", first ? "a tick's first" : "a later",
-              first ? "FEED128 into FEED_HELD" : "FEED_HELD back into FEED128", copies);
-        if (h && h->type == RDC_COPY) {
-            RdCopyRec r;
-            memcpy(&r, f->payload + h->u[2], sizeof(r));
-            CHECK(r.srcX == 0 && r.srcY == 0 && r.dstX == 0 && r.dstY == 0 && r.w == 128 &&
-                      r.h == 128,
-                  "the copy is all of FEED128 (%u x %u)", r.w, r.h);
-        }
-    }
-    /* a frame that does not write FEED128 gets no copy */
-    for (int k = 0; k < 2; k++) {
-        rd_BeginFrame();
-        frameHead();
-        rd_SelectList(8);
-        RdPostParams pp;
-        memset(&pp, 0, sizeof(pp));
-        rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
-        rd_Post(RD_POST_AURA, &pp);
-        rd_EndFrame(0);
-    }
-    for (int first = 1; first >= 0; first--) {
-        const RdFrame *f =
-            rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 0.5f, 0.5f, first, NULL);
-        int copies = 0;
-        for (int l = 0; l < RD_LIST_COUNT; l++) {
-            for (uint32_t i = 0; i < f->lists[l].count; i++) {
-                copies += f->lists[l].cmds[i].type == RDC_COPY;
-            }
-        }
-        CHECK(copies == 0, "no FEED128 write, no copy (%d)", copies);
     }
 }
 
@@ -974,8 +984,8 @@ static void testPixels(void)
     }
 }
 
-/* Package QUEEN: a mirage tick presented twice (dt 0.5, alpha 0.5 as the
- * tick's first present, then alpha 1 as a later one).  The frame pastes
+/* Package QUEEN: a mirage tick presented twice (alpha 0.5 as the tick's
+ * first present, then alpha 1 as a later one).  The frame pastes
  * FEED128 over SCENE at half brightness through FEED128's alpha and copies
  * SCENE into FEED128 for the next tick (staticBlur.c's mode 2).  Both
  * presents must draw byte-identical SCENEs and leave the same FEED128, so
@@ -1062,8 +1072,8 @@ static void testMiragePresents(void)
     for (int n = 0; n < 4; n++) {
         mirageTick(n);
         for (int k = 0; k < 2; k++) {
-            const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), k ? 1.0f : 0.5f,
-                                               0.5f, k == 0, NULL);
+            const RdFrame *f =
+                rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), k ? 1.0f : 0.5f, k == 0, NULL);
             CHECK(f && rd__ReplayFrame(f, 0, false), "mirage tick %d present %d: replay", n, k);
             rhi_WaitIdle();
             CHECK(readTo(RD_TARGET_SCENE, scene[k], sizeof(scene[k])) &&
@@ -1089,7 +1099,7 @@ static void testMiragePresents(void)
     }
     g_rd.settings.interpolate = interpolate;
     CHECK(advanced == 3, "mirage: FEED128 advanced on %d of 3 tick changes", advanced);
-    printf("  mirage presents (dt 0.5, two per tick, 4 ticks): SCENE %d, FEED128 %d bytes differ "
+    printf("  mirage presents (two per tick, 4 ticks): SCENE %d, FEED128 %d bytes differ "
            "between a tick's presents; FEED128 advanced on %d of 3 ticks\n",
            sceneDiff, feedDiff, advanced);
 }
@@ -1120,9 +1130,9 @@ static void testPresent(void)
     s.sceneScale = 2.0f;
     rd_SetSettings(&s);
     recordSprites(0);
-    CHECK(build(0.5f, 1.0f, 1)->snap == RD_SNAP_HISTORY, "history dropped after a recreate");
+    CHECK(build(0.5f, 1)->snap == RD_SNAP_HISTORY, "history dropped after a recreate");
     recordSprites(1);
-    CHECK(build(0.5f, 1.0f, 1)->snap == RD_SNAP_NONE, "the next pair blends again");
+    CHECK(build(0.5f, 1)->snap == RD_SNAP_NONE, "the next pair blends again");
     CHECK(rd_Present(0.5f), "rd_Present at 2x");
     s.preset = RD_PRESET_ORIGINAL;
     s.sceneScale = 0.0f;
@@ -1187,7 +1197,7 @@ static void testText(void)
 {
     recordText(0);
     recordText(1);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->keyed == 4 && st->lerped == 3 && st->missing == 1,
           "text: three strings blend, the changed label is unmatched (keyed %u lerped %u "
           "missing %u)",
@@ -1269,7 +1279,7 @@ static void testDeferredText(void)
 {
     recordDeferred(0);
     recordDeferred(1);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->lerped >= 2 && st->jump >= 1 && st->mismatch >= 1,
           "deferred: items blend, a jump snaps, a changed size mismatches (lerped %u jump %u "
           "mismatch %u)",
@@ -1407,7 +1417,7 @@ static void testMorph(void)
     morphDrawAt(a, kTwin);
     morphUpdate(one, 200.0f);
     morphDrawAt(one, kOne);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->lerped == 2 && st->mismatch == 0 && st->morph == 2,
           "morph: the twins match across their two meshes, both streams blended (lerped %u "
           "mismatch %u morph %u)",
@@ -1594,7 +1604,7 @@ static void testRotationDraws(void)
     RdMesh mesh = makeMesh(), skin = makeSkinMesh();
     recordTurn(mesh, skin, 0.0);
     recordTurn(mesh, skin, 90.0);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->lerped == 2 && st->rotated == 2, "mesh and skinned draw blend as rotations (%u, %u)",
           st->lerped, st->rotated);
     const RdFrame *f = built(0.5f);
@@ -1628,7 +1638,7 @@ static void testRotationDraws(void)
     /* a turn of 150 degrees in a tick is a flip: the tick's matrices */
     recordTurn(mesh, skin, 0.0);
     recordTurn(mesh, skin, 150.0);
-    build(0.5f, 1.0f, 1);
+    build(0.5f, 1);
     f = built(0.5f);
     const RdFrame *cur = rd__LastFrame();
     const float (*mf)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
@@ -1837,7 +1847,7 @@ static void testCameraBlend(void)
      * cut threshold, RD_INTERP_CAMERA_TURN; the eye moves 242 of 300) */
     s6Frame(mesh, 0.0, 0);
     s6Frame(mesh, 28.0, 0);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->lerped == 1 && st->rebased == 1,
           "camera turn: the static mesh blends through the blended camera (snap %u, lerped %u, "
           "rebased %u)",
@@ -1881,7 +1891,7 @@ static void testCameraBlend(void)
      * camera, each where the blended camera puts it */
     s6Frame(mesh, 0.0, 0);
     s6Frame(mesh, 28.0, 1);
-    st = build(0.5f, 1.0f, 1);
+    st = build(0.5f, 1);
     CHECK(st->lerped == 1 && st->missing == 1 && st->rebased == 2 && st->rebasedCur == 1,
           "unmatched neighbour: one blended, one unmatched, both re-based (%u, %u, %u, %u)",
           st->lerped, st->missing, st->rebased, st->rebasedCur);
@@ -1923,7 +1933,7 @@ static void testCameraBlend(void)
     s6Focal = 520.0;
     s6Frame(mesh, 28.0, 1);
     s6Focal = 500.0;
-    st = build(0.5f, 1.0f, 1);
+    st = build(0.5f, 1);
     f = built(0.5f);
     ma = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 32), 0));
     mb = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
@@ -1945,7 +1955,7 @@ static void testCameraBlend(void)
      * blend as before (bit for bit) */
     s6Frame(mesh, 10.0, 0);
     s6Frame(mesh, 10.0, 1);
-    st = build(0.5f, 1.0f, 1);
+    st = build(0.5f, 1);
     f = built(0.5f);
     const RdFrame *cf = rd__LastFrame();
     const float (*mo)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
@@ -2028,7 +2038,7 @@ static void testPhoto(void)
     const int want = countType(cf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN);
     CHECK(want == 4 && countType(pf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 4,
           "photo: the tick records brightness, two letterbox bars and the noise (%d)", want);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE, "photo: the two ticks blend (snap %u)", st->snap);
     const RdFrame *f = built(0.5f);
     CHECK(f && countType(f, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == want,
@@ -2320,7 +2330,7 @@ static void testParticleOrder(void)
      * pair differs in count: all three snap */
     recordParticleOrder(0, 0);
     recordParticleOrder(1, 0);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->lerped == 0 && st->mismatch == 2 && st->missing == 1,
           "particles by list order: a batch inserted ahead snaps the others (lerped %u, "
           "mismatch %u, missing %u)",
@@ -2328,7 +2338,7 @@ static void testParticleOrder(void)
     /* I1: by emitter, the two batches keep their partners */
     recordParticleOrder(0, 1);
     recordParticleOrder(1, 1);
-    st = build(0.5f, 1.0f, 1);
+    st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     CHECK(st->lerped == 2 && st->mismatch == 0 && st->missing == 1,
           "particles by emitter: both batches blend, the new one is the tick's (lerped %u, "
@@ -2383,7 +2393,7 @@ static void testLightTurn(void)
     RdMesh mesh = makeMesh();
     recordLitTurn(mesh, 0.0);
     recordLitTurn(mesh, 90.0);
-    build(0.5f, 1.0f, 1);
+    build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjL, 0, 32), 0));
     if (m) {
@@ -2454,7 +2464,7 @@ static void testMorphLimits(void)
     morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 120.0f, 1); /* draws C (120) */
     rd_EndFrame(0);
     morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 200.0f, 0); /* records */
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     /* frame 1 drew a at 100, D at 100 (set before it), frame 2 a at 120, C
      * at 100 + 20 (rewritten twice in frame 1) */
@@ -2537,7 +2547,7 @@ static void testShineFollows(void)
     static const float kAlpha[3] = {0.25f, 0.5f, 0.75f};
     double worst = 0.0;
     for (int a = 0; a < 3; a++) {
-        const RdInterpStats *st = build(kAlpha[a], 1.0f, 1);
+        const RdInterpStats *st = build(kAlpha[a], 1);
         const RdFrame *f = built(kAlpha[a]);
         const float (*ms)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 0, 0), 0));
         const float (*mg)[4] = vuBlock(f, findKey(f, 8, RD_KEY(&kObjS6, 0, 4), 0));
@@ -2583,7 +2593,7 @@ static void testParticleSwap(void)
 {
     recordParticleSwap(0, 1);
     recordParticleSwap(1, 1);
-    const RdInterpStats *st = build(0.5f, 1.0f, 1);
+    const RdInterpStats *st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     CHECK(st->lerped == 2 && st->mismatch == 0 && st->missing == 0,
           "particles swapped, by emitter: both blend (lerped %u, mismatch %u, missing %u)",
@@ -2593,7 +2603,7 @@ static void testParticleSwap(void)
           particleX(f, 1));
     recordParticleSwap(0, 0);
     recordParticleSwap(1, 0);
-    build(0.5f, 1.0f, 1);
+    build(0.5f, 1);
     f = built(0.5f);
     printf("  particles swapped, by list order (not the game's key): first particles at %g and "
            "%g (each from the other emitter: within four sizes they would blend across)\n",

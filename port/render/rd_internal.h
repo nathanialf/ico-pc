@@ -932,23 +932,16 @@ static inline bool rd__IsBlurKind(uint32_t kind)
     return kind == RD_POST_REDUCTION || (kind >= RD_POST_MOTION_BLUR && kind <= RD_POST_EYE_BLUR);
 }
 
-/* The interpolation hook of the feedback passes (motion blur, aura): the
- * FIX that gives over dt frames the retention FIX gives over one, for a
- * LERP_FIX (A = Cs the old frame, C = FIX: the old frame keeps FIX / 128
- * per frame, so FIX' = 128 (FIX / 128)^dt) or an additive or subtractive
- * FIX (scaled by dt).  dt = 1 returns fix unchanged, which is
- * all the Original preset ever passes. */
-uint8_t rd__BlurFeedbackFix(uint8_t blend, uint8_t fix, float dt);
-
 /* ---------------------------------------------- interpolation (wave 7, R7b)
  * rd_interp.c.  rd__InterpFrame builds, into a
  * frame it owns, the current frame cur with every keyed draw's data blended
  * from its match in prev by alpha (0 = prev's data, 1 = cur's), and the
- * feedback passes set up for a present that stands for dt ticks
- * (motion blur's FIX through rd__BlurFeedbackFix; a frame that writes
- * FEED128 copies it into FEED_HELD at its head when firstOfTick, and back
- * from FEED_HELD otherwise, so every present of a tick starts from the same
- * FEED128).  prev NULL, or a frame-level snap
+ * feedback passes held at the tick: a frame that writes FEED128 copies it
+ * into FEED_HELD at its head when firstOfTick, and back from FEED_HELD
+ * otherwise, and (v0.4.3, issue 28) a frame that reads DISPLAY (the motion
+ * blur's old frame) does the same with DISPLAY and DISPLAY_HELD, so every
+ * present of a tick starts from the same FEED128 and DISPLAY and draws the
+ * recorded FIX.  prev NULL, or a frame-level snap
  * (rd__InterpSnap), copies cur's data.  The result is valid until the next
  * call; it owns no temporary targets (cur's are used). */
 enum {
@@ -1014,7 +1007,7 @@ bool rd__S2Legacy(void);
 bool rd__VuOffGrid(void);
 
 int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);
-const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,
+const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                int firstOfTick, RdInterpStats *stats);
 void rd__InterpShutdown(void);
 
@@ -1435,11 +1428,12 @@ bool rd__ReadTexture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t *
  * targets in the current context and rewrites the ids in the commands. */
 #define RD_DUMP_MAGIC "ICORDMP\0"
 #define RD_DUMP_VERSION                                                                            \
-    7u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
+    8u /* 2: RDC_ALPHA, RDC_SHADE, RdStateBlock.gouraud (wave 2); 3: VU meshes (wave 3); 4:     \
           RDC_AA1, RdStateBlock.aa1 (package AA1); 5: RDC_OVERLAY_TEXT and RDC_SCREEN's       \
           RD_SCREEN_TEXT_QUADS (package DEF); 6: RD_TARGET_FEED_HELD, a 17th fixed target;    \
-          7: RD_TEXEL_SHEET images, the style in the view word (v0.4.2, F-A).                 \
-          rd__LoadFrame reads 3 to 7 */
+          7: RD_TEXEL_SHEET images, the style in the view word (v0.4.2, F-A); 8:              \
+          RD_TARGET_DISPLAY_HELD, an 18th fixed target (v0.4.3, issue 28).                    \
+          rd__LoadFrame reads 3 to 8 */
 bool rd__DumpFrame(const RdFrame *f, const char *path);
 bool rd__LoadFrame(const char *path, RdFrame *out);
 

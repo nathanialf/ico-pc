@@ -38,6 +38,14 @@
  *      present and as a later one: both draw the same SCENE and leave the
  *      same FEED128 (the later present of the cut drew black before
  *      FEED_HELD).
+ *   n  (v0.4.3, issue 28) the motion blur with the aura's glow and a tint
+ *      of 0x98 over a still picture, each tick presented 1, 2, 4 and 10
+ *      times (30 Hz ticks at 30, 60, 120, 300 presents a second): every
+ *      tick's DISPLAY is the bytes of one replay a tick (Original), and the
+ *      presents as v0.4.2 drew them (each feeding back the present before,
+ *      FIX 128 (FIX / 128)^(1 / N)) run brighter, to white at 10; then on
+ *      the GPU at Enhanced 2x with the full-height scene, DISPLAY_HELD is
+ *      DISPLAY's size and 10 presents a tick give one present's DISPLAY.
  *   q  (package QUEEN) the mirage as the Queen's F12 dumps record it: NTSC,
  *      feedbackCol (64, 64, 64, 128), the sprites' rectangles, UVs, TEX0
  *      sizes, colours and modes checked against the dumps', list 8's shine
@@ -47,10 +55,10 @@
  *      pixel centres against the 1x model: exact where the mask is 0 within
  *      16 GS pixels, within 4 where it is one value within 16.
  *   p  (package QUEEN) the mirage frame of q with the shine a keyed world
- *      draw, presented as the presenter does (a tick's first present and a
- *      later one at dt 0.5, the shine moving between ticks): the face band's
- *      interior (mask 0) is untouched and FEED128's alpha as the paste
- *      reads it is the mask, not SCENE's alpha, in every present.
+ *      draw, presented as the presenter does (a tick's first present at
+ *      alpha 0.5 and a later one at 1, the shine moving between ticks): the
+ *      face band's interior (mask 0) is untouched and FEED128's alpha as the
+ *      paste reads it is the mask, not SCENE's alpha, in every present.
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -342,9 +350,9 @@ static int named(uint32_t id)
 }
 
 static const char *const kTargetNames[RD_TARGET_COUNT] = {
-    "SCENE",     "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",  "WORK0",
-    "WORK1",     "WORK2",     "WORK3",    "AA0",       "AA1",      "FEED128",
-    "DATE_SNAP", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD"};
+    "SCENE",     "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
+    "WORK1",     "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
+    "DATE_SNAP", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
 
 static const char *tname(uint32_t id)
 {
@@ -831,7 +839,7 @@ static void cpuSprite(const RdStateBlock *s, const RdPostRec *r)
     const int tcc = d->tcc == RD_TCC_RGBA;
     const int linear = d->magFilter == RD_FILTER_LINEAR;
     const uint32_t reg = rd__AlphaRegister(d->blend < RD_BLEND_COUNT ? d->blend : RD_BLEND_LERP_AS);
-    const int fix = rd__BlurFeedbackFix(d->blend, d->blendFix, r->scalar[2]);
+    const int fix = d->blendFix;
     const int x0 = (int)r->rect[0], y0 = (int)r->rect[1], x1 = (int)r->rect[2],
               y1 = (int)r->rect[3];
     const int u0 = (int)r->uv[0], v0 = (int)r->uv[1], u1 = (int)r->uv[2], v1 = (int)r->uv[3];
@@ -1019,7 +1027,7 @@ static uint8_t s_gpu[W * H * 4];
 static const int kCompared[] = {RD_TARGET_SCENE,     RD_TARGET_DISPLAY,   RD_TARGET_WORK0,
                                 RD_TARGET_WORK1,     RD_TARGET_WORK2,     RD_TARGET_WORK3,
                                 RD_TARGET_FEED128,   RD_TARGET_AURA_WORK, RD_TARGET_AURA_TAP,
-                                RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD};
+                                RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD, RD_TARGET_DISPLAY_HELD};
 
 static int compareAll(const char *what, int verbose)
 {
@@ -1143,16 +1151,21 @@ static void putScene(void)
  * SCENE bilinear at u = x + 0.75, v = 2y + 1, tinted, inside the border
  * crop), drawn through the GS sprite model since R-POST, so the CPU model
  * runs it as one more sprite and the loop is compared exactly */
-static void putReduction(void)
+static void putReductionTint(uint8_t r, uint8_t g, uint8_t b)
 {
     dl_SetDLPriority(12);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
-    p.rgba[0] = 0x80;
-    p.rgba[1] = 0x78;
-    p.rgba[2] = 0x64;
+    p.rgba[0] = r;
+    p.rgba[1] = g;
+    p.rgba[2] = b;
     p.rgba[3] = 0x80;
     rd_Post(RD_POST_REDUCTION, &p);
+}
+
+static void putReduction(void)
+{
+    putReductionTint(0x80, 0x78, 0x64);
 }
 
 /* every compared target cleared to 0 (and SCENE's Z) on both sides */
@@ -1363,7 +1376,7 @@ static uint8_t s_firstScene[W * H * 4], s_firstFeed[128 * 128 * 4];
 
 static int presentTick(const char *what, int first, uint8_t *scene, uint8_t *feed)
 {
-    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 1.0f, 1.0f, first, NULL);
+    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 1.0f, first, NULL);
     if (!f || !rd__ReplayFrame(f, 0, false)) {
         CHECK(0, "%s: build and replay the present", what);
         return 0;
@@ -1427,6 +1440,182 @@ static void checkCutPresents(void)
     printf("  (c) 8 mirage ticks (a cut at the sixth), two presents each: max difference %d LSB, "
            "at most %d black pixels\n",
            worst, black);
+}
+
+/* ========== (n) the motion blur presented many times a tick (issue 28)
+ *
+ * v0.4.3.  The motion blur at FIX 32 (the old frame keeps a quarter a tick)
+ * with the aura of mode 1 (its glow added onto SCENE in list 8, after the
+ * blur) and a reduction tint of 0x98 (a gain of 1.1875 on the way back to
+ * DISPLAY), on a still picture: N_TICKS ticks, each presented N = 1, 2, 4
+ * and 10 times (alpha k / N, the first present the tick's first), as the
+ * presenter does at 30 Hz ticks with 30, 60, 120 and 300 presents a
+ * second.  Every tick's last present is compared with the CPU model, and
+ * its DISPLAY must be the bytes the same frames give replayed once a tick
+ * without interpolation (the Original frame rate, the PS2's arithmetic):
+ * the old frame keeps FIX / 128 a tick and the loop through the aura and
+ * the tint runs once a tick, whatever N.  The presents as v0.4.2 drew them
+ * are replayed too (the frames recorded with FIX' = 128 (32 / 128)^(1 / N)
+ * and every present reading the DISPLAY the present before left): there
+ * the tint and the aura went round N times a tick, 1.1875 x 111 / 128 > 1
+ * at N = 10, so the picture ran to white; the test shows how far. */
+#define N_TICKS 8
+#define N_DW W
+#define N_DH (H / 2)
+
+static uint8_t s_nRef[N_TICKS][N_DW * N_DH * 4];
+
+/* one tick of the still picture, recorded (closed by the caller) */
+static void nRecord(int fix)
+{
+    setStage(0, 1, 0x40);
+    GlobalTimer = 0;
+    currentScreenWidth = 0;
+    putScene();
+    FullScreenEffectBefore();
+    /* the aura's objects: into AURA_WORK, left bound by auraInspireBefore */
+    dl_SetDLPriority(8);
+    putImage(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, H, 150, 250, 0, 0);
+    FullScreenEffectAfter();
+    SetMotionBlur(fix);
+    MotionBlur();
+    putReductionTint(0x98, 0x98, 0x98);
+}
+
+/* DISPLAY's mean RGB and its saturated RGB channels */
+static double nMean(const uint8_t *d, int *sat)
+{
+    double sum = 0.0;
+    int n = 0;
+    *sat = 0;
+    for (int i = 0; i < N_DW * N_DH * 4; i++) {
+        if ((i & 3) != 3) {
+            sum += d[i];
+            *sat += d[i] == 255;
+            n++;
+        }
+    }
+    return sum / n;
+}
+
+/* N_TICKS ticks presented n times each; legacy: as v0.4.2 presented them.
+ * Returns the bytes of the ticks' DISPLAYs that differ from s_nRef's; the
+ * last tick's mean and saturated channels in *mean, *sat. */
+static int nRun(int n, int legacy, double *mean, int *sat)
+{
+    const uint32_t disp = rd_Target(RD_TARGET_DISPLAY).id;
+    const uint32_t dispHeld = rd_Target(RD_TARGET_DISPLAY_HELD).id;
+    const int fix = legacy ? (int)(128.0 * pow(32.0 / 128.0, 1.0 / n) + 0.5) : 32;
+    const CpuT *dp = &s_cpu[RD_TARGET_DISPLAY];
+    int differ = 0, firstLast = 0;
+    clearAll();
+    for (int t = 0; t < N_TICKS; t++) {
+        nRecord(fix);
+        dl_Swap(); /* closed, not replayed: interpolate is on */
+        static uint8_t firstDisp[N_DW * N_DH * 4];
+        for (int k = 0; k < n; k++) {
+            const int first = k == 0;
+            const RdFrame *f =
+                rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), (float)(k + 1) / n, first, NULL);
+            if (f && legacy && !first) {
+                /* v0.4.2: no DISPLAY_HELD, the present before's DISPLAY read */
+                RdCmdList *cl = (RdCmdList *)&f->lists[0];
+                for (uint32_t i = 0; i < cl->count && i < 2; i++) {
+                    if (cl->cmds[i].type == RDC_COPY && cl->cmds[i].u[0] == dispHeld &&
+                        cl->cmds[i].u[1] == disp) {
+                        cl->cmds[i].type = RDC_NOP;
+                    }
+                }
+            }
+            if (!f || !rd__ReplayFrame(f, 0, false)) {
+                CHECK(0, "(n) N %d%s tick %d present %d: build and replay", n,
+                      legacy ? " (v0.4.2)" : "", t, k);
+                return -1;
+            }
+            rhi_WaitIdle();
+            s_unexpected = 0;
+            cpuFrame(f);
+            CHECK(s_unexpected == 0, "(n) %d commands the CPU model does not know", s_unexpected);
+            if (first) {
+                memcpy(firstDisp, dp->c, sizeof(firstDisp));
+            }
+        }
+        char what[64];
+        snprintf(what, sizeof(what), "(n) N %d%s tick %d", n, legacy ? " (v0.4.2)" : "", t);
+        compareAll(what, failures < 10);
+        firstLast += memcmp(firstDisp, dp->c, sizeof(firstDisp)) != 0;
+        for (int i = 0; i < N_DW * N_DH * 4; i++) {
+            differ += dp->c[i] != s_nRef[t][i];
+        }
+    }
+    if (!legacy) {
+        CHECK(firstLast == 0, "(n) N %d: a tick's presents draw one DISPLAY (%d ticks differ)", n,
+              firstLast);
+    }
+    *mean = nMean(dp->c, sat);
+    return differ;
+}
+
+static void checkMotionBlurPresents(void)
+{
+    const CpuT *dp = &s_cpu[RD_TARGET_DISPLAY];
+    if (dp->w != N_DW || dp->h != N_DH) {
+        CHECK(0, "(n) DISPLAY is %d x %d", dp->w, dp->h);
+        return;
+    }
+    makeImage(5, 0);
+    rd_UpdateTexture(s_imgTex, s_img);
+    /* the reference: each tick replayed once as it closes (Original) */
+    clearAll();
+    for (int t = 0; t < N_TICKS; t++) {
+        nRecord(32);
+        char what[48];
+        snprintf(what, sizeof(what), "(n) reference tick %d", t);
+        runFrame(what, failures < 10);
+        memcpy(s_nRef[t], dp->c, sizeof(s_nRef[t]));
+    }
+    int refSat = 0;
+    const double refMean = nMean(s_nRef[N_TICKS - 1], &refSat);
+    /* the blur and the aura are there: the first tick (no old frame yet)
+     * against the last */
+    int moved = 0;
+    for (int i = 0; i < N_DW * N_DH * 4; i++) {
+        moved += s_nRef[0][i] != s_nRef[N_TICKS - 1][i];
+    }
+    CHECK(moved > N_DW * N_DH, "(n) the feedback changed %d channels from the first tick", moved);
+    const uint8_t interpolate = g_rd.settings.interpolate;
+    g_rd.settings.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
+    static const int kN[] = {1, 2, 4, 10};
+    double mean[4], legacyMean[4];
+    int sat[4], legacySat[4], legacyDiff[4];
+    for (int i = 0; i < 4; i++) {
+        const int d = nRun(kN[i], 0, &mean[i], &sat[i]);
+        CHECK(d == 0,
+              "(n) %d presents a tick: %d bytes of the ticks' DISPLAYs differ from one "
+              "replay a tick",
+              kN[i], d);
+        legacyDiff[i] = nRun(kN[i], 1, &legacyMean[i], &legacySat[i]);
+    }
+    g_rd.settings.interpolate = interpolate;
+    /* v0.4.2 at N = 1 is the PS2's too; at N = 2 already brighter; at
+     * N = 10 its loop gain is over 1: white inside the crop (the black
+     * border is about 7 % of DISPLAY) */
+    CHECK(legacyDiff[0] == 0, "(n) v0.4.2 at one present a tick: %d bytes differ", legacyDiff[0]);
+    CHECK(legacyMean[1] > refMean + 5.0, "(n) v0.4.2 at 2 presents a tick: mean %.1f (%.1f)",
+          legacyMean[1], refMean);
+    CHECK(legacyMean[3] > refMean + 40.0 && legacySat[3] > N_DW * N_DH * 3 / 10 * 8,
+          "(n) v0.4.2 at 10 presents a tick: mean %.1f (one replay a tick %.1f), %d of %d "
+          "channels at 255",
+          legacyMean[3], refMean, legacySat[3], N_DW * N_DH * 3);
+    printf("  (n) %d ticks of motion blur (FIX 32), aura and tint 0x98, one replay a tick: mean "
+           "%.1f, %d of %d channels at 255\n",
+           N_TICKS, refMean, refSat, N_DW * N_DH * 3);
+    for (int i = 0; i < 4; i++) {
+        printf("  (n) N = %2d: mean %.1f, %d at 255 (as v0.4.2 presented them, FIX %d: mean %.1f, "
+               "%d at 255, %d bytes of the ticks differ)\n",
+               kN[i], mean[i], sat[i], (int)(128.0 * pow(0.25, 1.0 / kN[i]) + 0.5), legacyMean[i],
+               legacySat[i], legacyDiff[i]);
+    }
 }
 
 /* ====================== (q) the queen's mirage, as the F12 dumps record it
@@ -1784,7 +1973,7 @@ static void qPresTick(int dx)
  * band clear and the copy of SCENE into FEED128) made a NOP */
 static const RdFrame *qPresBuild(float alpha, int first, int probe)
 {
-    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, 0.5f, first, NULL);
+    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, first, NULL);
     if (!f || !probe) {
         return f;
     }
@@ -1876,7 +2065,7 @@ static void checkQueenPresents(void)
         qPresCheck(what, 1.0f, 0);
     }
     g_rd.settings.interpolate = interpolate;
-    printf("  (p) %d mirage presents (first and later, dt 0.5, the shine moving): %d face pixels "
+    printf("  (p) %d mirage presents (first and later, the shine moving): %d face pixels "
            "changed, %d FEED128 texels over the face set at the paste, the shine's mask set in "
            "%d\n",
            s_qpPresents, s_qpFaceBad, s_qpFeedBad, s_qpShineSet);
@@ -1886,6 +2075,84 @@ static void checkQueenPresents(void)
     rd_Shutdown();
     ScreenHeight = screenHeight;
     systemStatus[0] = status0;
+}
+
+/* (n) at a scale, the GPU alone: Enhanced 2x with the full-height scene
+ * (DISPLAY 2 x 4 times its GS size), DISPLAY_HELD has DISPLAY's texels and
+ * every tick presented 10 times leaves the DISPLAY one present a tick does
+ * (FNV-1a of the readback).  Re-initialises rd, after the queen's cases. */
+static uint64_t fnv64(const uint8_t *p, size_t n)
+{
+    uint64_t h = 0xCBF29CE484222325ull;
+    for (size_t i = 0; i < n; i++) {
+        h = (h ^ p[i]) * 0x100000001B3ull;
+    }
+    return h;
+}
+
+static void checkMotionBlurPresentsScaled(void)
+{
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.aspect = 4.0f / 3.0f;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.sceneScale = 2.0f;
+    st.fullHeightScene = 1;
+    st.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
+    if (!rd_Init(W, H, &st, NULL)) {
+        CHECK(0, "(n) rd_Init at 2x");
+        return;
+    }
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    makeImage(5, 0);
+    s_imgTex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    const RdTargetRec *d = rd__TargetRec(rd_Target(RD_TARGET_DISPLAY).id);
+    const RdTargetRec *h = rd__TargetRec(rd_Target(RD_TARGET_DISPLAY_HELD).id);
+    CHECK(d && h && d->tw == h->tw && d->th == h->th && d->sx == h->sx && d->sy == h->sy &&
+              d->tw == 2 * N_DW && d->th == 4 * N_DH,
+          "(n) 2x full height: DISPLAY %u x %u, DISPLAY_HELD %u x %u", d ? d->tw : 0, d ? d->th : 0,
+          h ? h->tw : 0, h ? h->th : 0);
+    const size_t size = d ? (size_t)d->tw * d->th * 4 : 0;
+    uint8_t *px = size ? malloc(size) : NULL;
+    static const int kN[2] = {1, 10};
+    uint64_t hash[2][N_TICKS];
+    memset(hash, 0, sizeof(hash));
+    for (int r = 0; px && r < 2; r++) {
+        clearAll();
+        for (int t = 0; t < N_TICKS; t++) {
+            nRecord(32);
+            dl_Swap();
+            for (int k = 0; k < kN[r]; k++) {
+                const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(),
+                                                   (float)(k + 1) / kN[r], k == 0, NULL);
+                CHECK(f && rd__ReplayFrame(f, 0, false), "(n) 2x N %d tick %d present %d", kN[r], t,
+                      k);
+            }
+            rhi_WaitIdle();
+            uint32_t w = 0, hh = 0;
+            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), px, size, &w, &hh) &&
+                      (size_t)w * hh * 4 == size,
+                  "(n) 2x: read DISPLAY");
+            hash[r][t] = fnv64(px, size);
+        }
+    }
+    int differ = 0;
+    for (int t = 0; t < N_TICKS; t++) {
+        differ += hash[0][t] != hash[1][t];
+    }
+    CHECK(px && differ == 0, "(n) 2x full height: %d of %d ticks differ between 1 and 10 presents",
+          differ, N_TICKS);
+    printf("  (n) Enhanced 2x, full height (DISPLAY %u x %u): 10 presents a tick against one, %d "
+           "of %d ticks' DISPLAYs differ\n",
+           d ? d->tw : 0, d ? d->th : 0, differ, N_TICKS);
+    free(px);
+    CHECK(rhi_vk_ValidationErrorCount() == 0, "(n) 2x: %u validation errors",
+          rhi_vk_ValidationErrorCount());
+    rd_Shutdown();
 }
 
 static void checkPipelines(void)
@@ -1989,6 +2256,7 @@ int main(void)
     checkMotionBlur();
     checkAura();
     checkCutPresents();
+    checkMotionBlurPresents(); /* v0.4.3, issue 28 */
 
     checkPipelines();
     CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
@@ -1996,6 +2264,7 @@ int main(void)
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     checkQueenMirage(); /* package QUEEN: re-initialises rd (NTSC, 1x, 4x) */
     checkQueenPresents();
+    checkMotionBlurPresentsScaled(); /* v0.4.3, issue 28: re-initialises rd (2x) */
     if (failures) {
         printf("rd_blur_test: %d failures\n", failures);
         return 1;

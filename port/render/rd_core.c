@@ -388,6 +388,7 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
         *depth = 1;
         break;
     case RD_TARGET_DISPLAY:
+    case RD_TARGET_DISPLAY_HELD: /* v0.4.3 (issue 28): DISPLAY's copy */
         *w = gsW;
         *h = gsH / 2;
         break;
@@ -445,7 +446,14 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
 static int sceneClass(int id)
 {
     return id == RD_TARGET_SCENE || id == RD_TARGET_DISPLAY || id == RD_TARGET_WORK2 ||
-           id == RD_TARGET_AURA_WORK || id == RD_TARGET_DATE_SNAPSHOT;
+           id == RD_TARGET_AURA_WORK || id == RD_TARGET_DATE_SNAPSHOT ||
+           id == RD_TARGET_DISPLAY_HELD;
+}
+
+/* DISPLAY and its held copy (v0.4.3, issue 28), of one size and scale */
+static int displayClass(int id)
+{
+    return id == RD_TARGET_DISPLAY || id == RD_TARGET_DISPLAY_HELD;
 }
 
 /* Package V3: Shadow.c's blur levels (SHADOW0..2) keep the PS2 sizes at
@@ -478,7 +486,7 @@ void rd__TargetScaleOf(RdTargetRec *t, int named)
     if (scene) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
-        if (named == RD_TARGET_DISPLAY && g_rd.fullHeight) {
+        if (displayClass(named) && g_rd.fullHeight) {
             sy *= 2.0f; /* the full-height scene: no vertical halving */
         }
     } else if (named >= 0 && g_rd.workScale > 1.0f && !shadowLevel(named)) {
@@ -500,7 +508,7 @@ void rd__TargetScaleOf(RdTargetRec *t, int named)
     t->sy = sy;
     t->tw = sx == 1.0f ? t->w : scaled(t->w, sx);
     t->th = sy == 1.0f ? t->h : scaled(t->h, sy);
-    t->wide = (scene && named != RD_TARGET_DISPLAY && named != RD_TARGET_DATE_SNAPSHOT) || block;
+    t->wide = (scene && !displayClass(named) && named != RD_TARGET_DATE_SNAPSHOT) || block;
     t->wideBlock = (uint8_t)block;
 }
 
@@ -514,9 +522,9 @@ float rd_WorkTargetScale(uint32_t sceneHeight)
 }
 
 static const char *const s_targetNames[RD_TARGET_COUNT] = {
-    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",  "WORK0",
-    "WORK1",         "WORK2",     "WORK3",    "AA0",       "AA1",      "FEED128",
-    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD"};
+    "SCENE",         "DISPLAY",   "SHADOW0",  "SHADOW1",   "SHADOW2",   "WORK0",
+    "WORK1",         "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
+    "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
 
 RdTargetRec *rd__TargetRec(uint32_t id)
 {
@@ -1465,7 +1473,7 @@ void rd_EndFrame(int keep)
             if (pv && pv->closed && pv->number + 1 == f->number) {
                 (void)rd__DumpFrame(pv, path);
             }
-            const RdFrame *i = rd__InterpFrame(pv, f, 0.5f, 1.0f, 1, &st);
+            const RdFrame *i = rd__InterpFrame(pv, f, 0.5f, 1, &st);
             snprintf(path, sizeof(path), "%s/rd-%05u-i50.rddump", s_dumpDir, f->number);
             if (i && rd__DumpFrame(i, path)) {
                 rd__Log("frame %u interpolated half way (snap %u, %u keyed draws: %u blended, "

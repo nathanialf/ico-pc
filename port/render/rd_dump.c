@@ -32,6 +32,8 @@
  *   dump has none, so it replays as before in every preset)
  *   (version 6: RD_TARGET_FEED_HELD appended, so the temporary targets'
  *   slots start one later; an older dump's temps start at low half 17)
+ *   (version 8, v0.4.3: RD_TARGET_DISPLAY_HELD appended, the same again; a
+ *   version 6 or 7 dump's temps start at low half 18)
  *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
@@ -431,8 +433,9 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         return false;
     }
     /* version 6 appended RD_TARGET_FEED_HELD: an older dump's handles have
-       16 fixed targets, so its first temporary slot's low half is 17 */
-    tgtMap.fixedCount = ver <= 5u ? 16u : RD_TARGET_COUNT;
+       16 fixed targets, so its first temporary slot's low half is 17;
+       version 8 RD_TARGET_DISPLAY_HELD: 17 before it, low half 18 */
+    tgtMap.fixedCount = ver <= 5u ? 16u : (ver <= 7u ? 17u : RD_TARGET_COUNT);
     ok = r32(fp, &out->gsW) && r32(fp, &out->gsH) && r32(fp, &out->number) && r32(fp, &out->keep) &&
          r32(fp, &out->hasCamera) && rraw(fp, &out->camera, sizeof(out->camera)) &&
          rraw(fp, &out->startState, szState) && rraw(fp, &out->endState, szState);

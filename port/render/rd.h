@@ -190,6 +190,11 @@ typedef enum RdTargetId {
      * put back at the head of the tick's later presents (rd_interp.c
      * feedback) */
     RD_TARGET_FEED_HELD,
+    /* host only (v0.4.3, issue 28): DISPLAY as a tick's first present found
+     * it, the previous tick's picture, put back at the head of the tick's
+     * later presents when the frame reads DISPLAY (the motion blur; rd_interp.c
+     * feedback); DISPLAY's size and scale */
+    RD_TARGET_DISPLAY_HELD,
     RD_TARGET_COUNT
 } RdTargetId;
 
@@ -500,9 +505,10 @@ void rd_SetCamera(const RdCamera *cam);
  *                         applied at the last rd_BeginFrame)
  * rd_Present              replays and presents; false (nothing done) when
  *                         interpolation is off, before the first frame, or
- *                         while an FMV picture is on the output.  Each call
- *                         advances the feedback passes (motion blur) by the
- *                         time since the previous one
+ *                         while an FMV picture is on the output.  Every call
+ *                         of a tick draws its feedback passes (motion blur,
+ *                         aura) from what the tick started from, so they
+ *                         advance once a tick, as on the PS2
  * rd_FrameNumber          the last closed frame's RdFrame number, 0 before
  *                         the first: the host's tick clock
  * rd_CameraCut            the frame being recorded starts a new shot (a hard
@@ -1151,9 +1157,9 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  *   rgba     RGBAQ
  *   z        the GS Z of the second vertex
  *   scalar   [0], [1] the TEX0 size 2^TW, 2^TH (CLAMP/REPEAT wrap there);
- *            [2] the frame-time factor of a feedback FIX (1 in Original,
- *            the interpolation hook: rd__BlurFeedbackFix; the old frame
- *            keeps FIX/128 per tick)
+ *            [2] 1, not read (until v0.4.3 the presents' frame-time factor
+ *            of a feedback FIX; every present of a tick now draws the
+ *            tick's FIX over the tick's old frame, rd_interp.c feedback)
  *   lines    TEX0.TFX: 0 MODULATE, 1 DECAL, 2 HIGHLIGHT, 3 HIGHLIGHT2
  *   exactInt 1 */
 
