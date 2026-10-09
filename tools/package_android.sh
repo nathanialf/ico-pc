@@ -24,16 +24,10 @@
 set -euo pipefail
 set +x
 
-label="${1:-}"
-if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo "usage: tools/package_android.sh <label>" >&2
-    exit 2
-fi
-
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$root"
-mkdir -p build-host/tmp dist
-export TMPDIR="$root/build-host/tmp"   # system /tmp is nearly full
+pkg_name=package_android
+# shellcheck source=package_common_lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/package_common_lib.sh"
+pkg_begin "${1:-}"
 log="$root/build-host/pkg-android-$label.log"
 wt="$root/build-host/pkg-android-wt"
 stage="$root/dist/stage/android"
@@ -43,11 +37,8 @@ ks="$ksdir/upload.jks"
 ksreadme="$ksdir/readme.txt"
 : > "$log"
 
-fail() { echo "package_android: FAILED: $1 (see $log)" >&2; tail -n 30 "$log" >&2; exit 1; }
-run() { "$@" >>"$log" 2>&1 || fail "$*"; }
 cleanup() {
-    git -C "$root" worktree remove --force "$wt" >>"$log" 2>&1 || rm -rf "$wt"
-    git -C "$root" worktree prune >>"$log" 2>&1 || true
+    pkg_remove_worktree
     rm -f "$root/build-host/tmp/android-$label-aligned.apk"
 }
 trap cleanup EXIT
@@ -79,17 +70,7 @@ commit="$(git rev-parse HEAD)"
 echo "package_android: $label from $commit" >>"$log"
 
 # clean worktree of HEAD; only the untracked toolchain and venv are shared
-cleanup
-run git worktree add --detach "$wt" "$commit"
-ln -s "$root/.venv" "$wt/.venv"
-ln -s "$root/tools/toolchain" "$wt/tools/toolchain"
-
-for f in ${ICO_PKG_FILES:-}; do
-    [[ -f "$root/$f" ]] || fail "ICO_PKG_FILES: no such file $f"
-    mkdir -p "$(dirname "$wt/$f")"
-    cp "$root/$f" "$wt/$f"
-    echo "package_android: overlay $f" >>"$log"
-done
+pkg_make_worktree "$commit"
 
 export PATH="$wt/.venv/bin:$PATH"
 cd "$wt"

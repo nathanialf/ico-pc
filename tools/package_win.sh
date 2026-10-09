@@ -9,43 +9,23 @@
 # no disc data). ICO_PKG_FILES="path ..." overlays working-tree files on HEAD.
 set -euo pipefail
 
-label="${1:-}"
-if [[ ! "$label" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo "usage: tools/package_win.sh <label>" >&2
-    exit 2
-fi
-
-root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$root"
-mkdir -p build-host/tmp dist
-export TMPDIR="$root/build-host/tmp"   # system /tmp is nearly full
+pkg_name=package_win
+# shellcheck source=package_common_lib.sh
+. "$(dirname "${BASH_SOURCE[0]}")/package_common_lib.sh"
+pkg_begin "${1:-}"
 log="$root/build-host/pkg-$label.log"
 wt="$root/build-host/pkg-wt"
 stage="$root/dist/stage"
 zip="$root/dist/ico-pc-$label-win.zip"
 : > "$log"
 
-fail() { echo "package_win: FAILED: $1 (see $log)" >&2; tail -n 30 "$log" >&2; exit 1; }
-run() { "$@" >>"$log" 2>&1 || fail "$*"; }
-cleanup() {
-    git -C "$root" worktree remove --force "$wt" >>"$log" 2>&1 || rm -rf "$wt"
-    git -C "$root" worktree prune >>"$log" 2>&1 || true
-}
 trap cleanup EXIT
 
 commit="$(git rev-parse HEAD)"
 echo "package_win: $label from $commit" >>"$log"
 
-# clean worktree of HEAD
-cleanup
-run git worktree add --detach "$wt" "$commit"
-ln -s "$root/.venv" "$wt/.venv"
-ln -s "$root/tools/toolchain" "$wt/tools/toolchain"
-for f in ${ICO_PKG_FILES:-}; do   # working-tree files to try over HEAD (see package_linux.sh)
-    [[ -f "$root/$f" ]] || fail "ICO_PKG_FILES: no such file $f"
-    mkdir -p "$(dirname "$wt/$f")"
-    cp "$root/$f" "$wt/$f"
-done
+# clean worktree of HEAD, with the ICO_PKG_FILES overlay
+pkg_make_worktree "$commit"
 
 # the one architecture (its stage folder and program name) and its preset
 a=x64
