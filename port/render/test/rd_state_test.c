@@ -8,44 +8,45 @@
  *              state left by list 12 reaches the next frame's list 0
  *   keep       rd_EndFrame(1) walks lists 11 and 12 only
  *   retention  the closed frame and the one before it are kept
- *   stubs      later-wave draws and post kinds are recorded with payload
- *   scissor    (package RSMALL) rd__WideScissor: a UI scissor narrower than the
- *              target follows the wide x scale, outwards, edges stay
+ *   stubs      VU, shadow-strip and post draws are recorded with payload
+ *   scissor    rd__WideScissor: a UI scissor narrower than the target
+ *              follows the wide x scale, outwards, edges stay
  *   plans      AFAIL splits, blend paths, FIX clamps (rd__PlanScreenDraw);
- *              package P8: the stair railings' state (TEST 0x5160D, ALPHA
+ *              the stair railings' state (TEST 0x5160D, ALPHA
  *              0x44 with ABE, Z write) splits into two passes that differ
  *              in Z write only (depth test GEQUAL in both, no stencil, no
  *              DATE), as the VU path and its edge-clipped fans (ABE forced
  *              on) draw them; the DATE snapshot and the shadow count write
  *              no Z; PABE flags (DF_C1_DST for Cd*FIX + Cs only)
  *   dump       a frame with textures and a temp target survives dump/load;
- *              package AA1: RDC_AA1 and RdStateBlock.aa1 round-trip, and a
+ *              RDC_AA1 and RdStateBlock.aa1 round-trip, and a
  *              version 3 dump (no aa1) still loads, with AA1 off; a version
  *              5 and a version 7 dump's temps at the handles FEED_HELD and
  *              DISPLAY_HELD (appended after them) are recreated
  *   aa1 plans  PRIM.AA1 keys: the AA1 shaders, triangles, blending with ABE
  *              0 (DF_AA1_FULL), no Z write on lines; aa1 0 unchanged
- *   aura filter (package QUEEN) the model viewer's draw filter around the
+ *   aura filter the model viewer's draw filter around the
  *              mirage's list 8: a GRID keyed by a second object inside the
  *              open window is kept (and after it), a third object's is not;
  *              list 8's targets, Z writes, clear and aura sprite survive
- *   pass ops   (v0.4.2 N2) clear -> draw: the draw's pass takes the clear as its
+ *   pass ops   clear -> draw: the draw's pass takes the clear as its
  *              load op (colour and depth CLEAR), both stored; the passes that
  *              cannot take it keep their loads (rd__TakePendingClear)
  *   stencil ops clear -> draw -> shadow reset -> volumes -> resolve -> draw:
  *              outside the shadow window the stencil is not stored and
  *              loads DONT_CARE (a CLEAR stays CLEAR), inside it loads and
  *              stores; the reset is the volumes' pass's stencil CLEAR, not
- *              a pass of its own (rd__StencilOps)
+ *              a pass of its own (rd__StencilOps); two depths' windows
+ *              interleaved keep their own counts (rd__StencilOpen/Close)
  *   date area  the DATE snapshot of a screen-prim command covers its box
  *              (rd__ScreenArea: the vertices' box padded by two pixels, in
  *              the scissor), not the whole target; a sprite larger than the
  *              target clamps to it; rd_perf_test's DATE sprites still take
  *              one snapshot each (rd__DateRetake)
- *   pipelines  the reachable screen and post set is under 250 keys (150
- *              before package TEXA's sprite_texa_ps twins), with
- *              the VU program families (wave 3) under RD_PIPELINE_REACHABLE_MAX;
- *              font_sheet_ps (v0.4.2) has font_ps's 10 keys
+ *   pipelines  the reachable screen and post set is under 250 keys (the
+ *              sprite_texa_ps twins included), with the VU program families
+ *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps has font_ps's
+ *              10 keys
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -229,7 +230,7 @@ static void testKeep(void)
 
 static void testStubs(void)
 {
-    /* wave 3 (R3ab): a VU mesh of one batch of three prelit vertices (a GIF
+    /* a VU mesh of one batch of three prelit vertices (a GIF
      * tag with NLOOP 3, then pos, ST, colour each) */
     static float qw[1 + 3 * 3][4];
     memset(qw, 0, sizeof(qw));
@@ -312,7 +313,7 @@ static void testPlans(void)
               dp[0].key.gs.ztst == RD_ZTST_GEQUAL,
           "AFAIL FB_ONLY: two passes, Z written by the passing one only");
 
-    /* package P8: the railing (tesri.tm2's TEST 0x5160D: ATE GREATER 0x60,
+    /* the railing (tesri.tm2's TEST 0x5160D: ATE GREATER 0x60,
      * AFAIL FB_ONLY, Z GEQUAL; ALPHA 0x44 with ABE; Z write on), with ABE
      * as the material packet sets it and as doVu's scissor fans force it:
      * the failing pass is the passing one's pipeline with Z write off, so
@@ -352,7 +353,7 @@ static void testPlans(void)
                   "the shadow count writes no Z (decr %d)", decr);
         }
     }
-    /* PABE (package P8): a uniform; DF_C1_DST tells the shader the
+    /* PABE: a uniform; DF_C1_DST tells the shader the
      * unblended c1 is 0 for Cd*FIX + Cs only */
     rd__ResetStateBlock(&s);
     s.ds.abe = 1;
@@ -411,7 +412,7 @@ static void testPlans(void)
 /* A dump written before a fixed target was appended: version 5 (before
    RD_TARGET_FEED_HELD) had 16 fixed targets, so its first temporary slot
    has low half 17, FEED_HELD's handle now; versions 6 and 7 (before
-   RD_TARGET_DISPLAY_HELD, v0.4.3) had 17, so theirs is 18, DISPLAY_HELD's.
+   RD_TARGET_DISPLAY_HELD) had 17, so theirs is 18, DISPLAY_HELD's.
    The dump at path with its temp's handle moved to that slot and its
    version set loads with the temp recreated and remapped, not read as the
    fixed target. */
@@ -516,7 +517,7 @@ static void testDump(const char *dir)
     rd_Texture(b, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     rd_Texture(rd_TargetTexture(tt, RD_VIEW_RGB24_TA0), RD_TEXFN_MODULATE, RD_TCC_RGBA);
     draw(2);
-    rd_AA1(1); /* package AA1 */
+    rd_AA1(1); /* PRIM.AA1 on */
     draw(3);
     rd_AA1(0);
     draw(4);
@@ -560,7 +561,7 @@ static void testDump(const char *dir)
         }
     }
     CHECK(texSeen == 3, "three texture binds compared, got %d", texSeen);
-    /* package AA1: the bit at each draw after the round trip */
+    /* PRIM.AA1: the bit at each draw after the round trip */
     Seen seen;
     walk(&g, &seen);
     const RdStateBlock *s2 = stateFor(&seen, 2), *s3 = stateFor(&seen, 3), *s4 = stateFor(&seen, 4);
@@ -620,7 +621,7 @@ static void testDump(const char *dir)
         remove(path3);
     }
     testDumpOldTemps(f, path, dir, 5u, RD_TARGET_FEED_HELD);
-    testDumpOldTemps(f, path, dir, 7u, RD_TARGET_DISPLAY_HELD); /* v0.4.3, issue 28 */
+    testDumpOldTemps(f, path, dir, 7u, RD_TARGET_DISPLAY_HELD); /* issue 28 */
     remove(path);
 }
 
@@ -677,7 +678,7 @@ static void testEnumeration(void)
                   keys[i].gs.afailSplit == 0 && keys[i].gs.date == 0,
               "key %u normalised", i);
     }
-    /* v0.4.2 (F-A): font_sheet_ps has font_ps's keys: the overlay's two
+    /* font_sheet_ps has font_ps's keys: the overlay's two
      * blends on the two outputs and the frame's text, two blends, with and
      * without depth, colour mask F and 7 (the overlay's RGBA8 keys are the
      * frame's depthless mask F ones: 10 in all) */
@@ -691,7 +692,7 @@ static void testEnumeration(void)
           sheet);
 }
 
-/* Package RSMALL: a UI scissor narrower than the target follows the wide x
+/* A UI scissor narrower than the target follows the wide x
  * scale about the target's centre, rounded outwards (it clips as much as the
  * draw does, no more); a side at the target's edge stays; f 1 changes nothing. */
 static void testWideScissor(void)
@@ -727,7 +728,7 @@ static void testWideScissor(void)
 }
 
 /* ------------------------------------------------------- the aura filter
- * Package QUEEN: the model viewer's draw filter (rd_SetDrawFilter, open
+ * The model viewer's draw filter (rd_SetDrawFilter, open
  * while the viewed object's display list runs) and the mirage's list 8.
  * The Queen's dumps hold list 8's shine materials keyed by her and two
  * GRIDs keyed by other objects (her cloth), which are not in list 1.  A GRID
@@ -821,7 +822,7 @@ static void testAuraFilter(void)
         targets, zw, clears, posts);
 }
 
-/* v0.4.2 (N2): the render pass ops of a synthetic frame (clear -> draw ->
+/* The render pass ops of a synthetic frame (clear -> draw ->
  * present).  The clear is not a pass of its own: the draw's pass takes it as
  * its load op (rd__TakePendingClear, as rd_replay.c beginPass), so the
  * scene's colour and depth open with CLEAR and are stored (a zeroed
