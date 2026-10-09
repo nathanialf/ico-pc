@@ -88,6 +88,21 @@ if readelf -d "$b/ico_pc" | grep -E 'RUNPATH|RPATH' | grep -q "$root"; then
     fail "the run path names the build tree"
 fi
 
+# the oldest C library the package runs on: README.md says Ubuntu 24.04 or
+# newer (glibc 2.39), so no shipped binary may need a newer symbol version.
+# A build host newer than that usually still passes; the log has each
+# binary's newest version.
+glibc_floor=2.39
+for f in "$b/ico_pc" "$b/port/save/mc_import" \
+    "$root/tools/toolchain/deps/sdl3/linux-$arch/lib/libSDL3.so.0"; do
+    v="$(objdump -T "$f" | sed -n 's/.*GLIBC_\([0-9][0-9.]*\).*/\1/p' | sort -Vu | tail -n 1)" ||
+        fail "objdump -T $f"
+    echo "package_linux: ${f##*/} needs glibc ${v:-(none)}" >>"$log"
+    if [[ -n "$v" && "$(printf '%s\n' "$glibc_floor" "$v" | sort -V | tail -n 1)" != "$glibc_floor" ]]; then
+        fail "${f##*/} needs glibc $v, newer than $glibc_floor (Ubuntu 24.04)"
+    fi
+done
+
 # the textures folder's note and the archive checks
 . "$wt/tools/package_textures_lib.sh"
 # the player guides (docs/*.md)

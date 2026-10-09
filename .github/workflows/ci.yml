@@ -4,13 +4,16 @@
 # docs/BUILDING.md ("Continuous integration") describes the jobs: `linux`
 # (the hygiene checks and the four main builds), `extra`, a matrix of the
 # sanitizer, float-trap and Windows clang builds, `linux-arm64`, the arm64
-# Linux build and tests on an arm64 runner, and `android`, the APK build and
+# Linux build and tests on an arm64 runner (and on a pushed v* tag the arm64
+# package), and `android`, the APK build and
 # its structural checks; all four run side by side.
 name: ci
 
 on:
   push:
     branches: [main]
+    # a release tag also builds the Linux arm64 package (the linux-arm64 job)
+    tags: ['v*']
   pull_request:
 
 permissions:
@@ -258,6 +261,34 @@ jobs:
         run: |
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
             -R '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
+
+      # A pushed release tag (never a pull request): the Linux arm64 package
+      # of the tagged commit, which the maintainer's x86-64 machine cannot
+      # build, kept as an artifact named after the tag with its SHA-256 and
+      # the packaging log (docs/BUILDING.md, "Packages"). The preset names
+      # plain gcc; a gcc directory first on PATH makes that the gcc 14 the
+      # tests above were built with.
+      - name: Package linux-arm64 (release tags only)
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          mkdir -p "$RUNNER_TEMP/gcc14"
+          ln -sf "$(command -v "$ICO_CC")" "$RUNNER_TEMP/gcc14/gcc"
+          PATH="$RUNNER_TEMP/gcc14:$PATH" tools/package_linux.sh "$GITHUB_REF_NAME"
+          cd dist
+          sha256sum "ico-pc-$GITHUB_REF_NAME-linux-arm64.tar.gz" \
+            > "ico-pc-$GITHUB_REF_NAME-linux-arm64.tar.gz.sha256"
+
+      - name: Upload the linux-arm64 package (release tags only)
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref_type == 'tag' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ico-pc-${{ github.ref_name }}-linux-arm64
+          path: |
+            dist/ico-pc-${{ github.ref_name }}-linux-arm64.tar.gz
+            dist/ico-pc-${{ github.ref_name }}-linux-arm64.tar.gz.sha256
+            build-host/pkg-linux-arm64-${{ github.ref_name }}.log
+          retention-days: 30
+          if-no-files-found: error
 
   # The Android APK (arm64-v8a), debug-signed, built with the Gradle project in
   # android/ and checked structurally; the game is not run. The toolchain

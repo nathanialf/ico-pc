@@ -430,7 +430,9 @@ set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request: two Linux
+`.github/workflows/ci.yml` runs on every push to main, every pull request and
+every pushed `v*` tag (which also packages for arm64, see
+[Packages](#packages)): two Linux
 jobs (`ubuntu-24.04`), the `linux-arm64` job (`ubuntu-24.04-arm`) and the
 `android` job side by side, no secrets, no disc image. `linux` runs the steps
 below in order; `extra` is a matrix of three runners, each with the same host
@@ -500,7 +502,34 @@ the README, the player guides, the licence files and the save importer.
 `tools/package_linux.sh` packages for the host's architecture: on an arm64
 host it builds `linux-arm64` into `dist/ico-pc-<label>-linux-arm64.tar.gz`
 (stage `dist/stage/linux-arm64/`, log `build-host/pkg-linux-arm64-<label>.log`),
-the same contents with the aarch64 program and SDL3.
+the same contents with the aarch64 program and SDL3 (and, in
+`NOTICES.txt`, the notices of the Wayland protocol files SDL3 is built
+with). On either architecture it fails when a shipped binary (`ico_pc`,
+`tools/mc_import`, `libSDL3.so.0`) needs a glibc symbol version newer than
+2.39, Ubuntu 24.04's and the oldest system the README names; the log has
+each binary's newest.
+
+The release's arm64 archive is built by CI, since the maintainer's machine
+is x86-64. Pushing a `v*` tag runs `ci.yml`, and its `linux-arm64` job,
+once its gating tests pass, runs `tools/package_linux.sh <tag>` and uploads
+the archive, its `.sha256` and the packaging log as the artifact
+`ico-pc-<tag>-linux-arm64` (kept 30 days). Pull requests and pushes to main
+never package. To fetch it (the artifact keeps the `dist/` and
+`build-host/` folders):
+
+```sh
+gh run list --workflow ci.yml --branch <tag> --limit 1     # the tag's run id
+gh run download <run-id> -n ico-pc-<tag>-linux-arm64 -D build-host/tmp/ci-arm64
+mv build-host/tmp/ci-arm64/dist/ico-pc-<tag>-linux-arm64.tar.gz* dist/
+(cd dist && sha256sum -c ico-pc-<tag>-linux-arm64.tar.gz.sha256)
+tar -xzOf dist/ico-pc-<tag>-linux-arm64.tar.gz ico-pc-<tag>/VERSION.txt  # the tag's commit
+```
+
+Ask someone with an arm64 handheld to try that archive before attaching it
+to the release (first start from a disc image, play, sound, gamepad,
+quit). Its `ico_pc.map` symbolizes aarch64 crash addresses with a
+symbolizer that reads aarch64, such as llvm-mingw's `llvm-symbolizer` or
+`llvm-addr2line` on the x86-64 host.
 The three package scripts share `tools/package_common_lib.sh` (the label
 check, the log, `fail` and `run`, and the clean worktree with the
 `ICO_PKG_FILES` overlay); the guides and the package's `ico-pc.ini` (its

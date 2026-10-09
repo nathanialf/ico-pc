@@ -1,7 +1,8 @@
 # ico-pc
 
 This is **ICO** (Sony Computer Entertainment, 2001) made to run natively on
-a Windows or Linux PC, the Steam Deck, and Android phones and tablets. It
+a Windows or Linux PC, the Steam Deck, 64-bit ARM Linux handhelds, and
+Android phones and tablets. It
 runs the game's own code, so it plays, sounds and feels like the PAL
 PlayStation 2 game. There are extras, such as a sharper picture,
 widescreen and smoother motion, but they stay off until you turn them on.
@@ -23,6 +24,8 @@ widescreen and smoother motion, but they stay off until you turn them on.
   - a 64-bit Windows 10 or 11 PC, or a Linux PC, with an up-to-date
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
   - a Steam Deck;
+  - a 64-bit ARM Linux handheld or board with an up-to-date graphics
+    driver (new in this version, and tested on one handheld so far);
   - or a 64-bit Android phone or tablet with Android 10 or later, usually
     one from 2022 or newer. Android support is experimental in this
     version. [More about Android](docs/ANDROID.md).
@@ -53,10 +56,10 @@ once there so it can ask for the disc image, then
 add `ico_pc` to Steam with Steam > Add a Non-Steam Game and play in Game
 Mode. [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
-This download is for PCs and the Steam Deck. There is no download yet for
-64-bit ARM Linux handhelds and boards, but the game can be built for them
-from the source code ([the build guide](docs/BUILDING.md#linux-arm64)). It
-needs the same fairly new system: Debian 13, Ubuntu 24.04 or newer.
+On a 64-bit ARM Linux handheld or board, download the file whose name ends
+in `-linux-arm64.tar.gz` instead and follow the same steps. It also needs
+a fairly new system: Debian 13, Ubuntu 24.04 or newer. This download is new
+in this version and has been tested on one handheld so far.
 
 **Android**
 
