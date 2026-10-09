@@ -53,10 +53,8 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     else
         spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(17);
 
-    /* PC port: the mouse camera speed; a factor of 1 leaves spd untouched */
+    /* PC port: the mouse camera speed, applied by ico_mouse_camera_step */
     k = ico_mouse_camera_speed();
-    if (k != 1.0f)
-        spd *= k;
 
     db = x * (p[5] * 3.1415927f / 180.0f) - *yaw;
 

@@ -26,6 +26,11 @@ int ico_mouse_camera_full_range(void)
 
 void ico_mouse_camera_step(float *da, float *db, float d, float spd, float k)
 {
+    /* the farther move: spd * k (spd * 1.0f is spd exactly) */
+    const float lim = spd * k;
+
+    /* the close zone is the game's own (spd * 10), so both zones move by
+       lim where they meet: k * spd / 10 of the remainder at d = spd * 10 */
     if (d < spd * 10.0f) {
         if (k == 1.0f) {
             *da = *da / 10.0f;
@@ -36,8 +41,8 @@ void ico_mouse_camera_step(float *da, float *db, float d, float spd, float k)
             *da = *da * frac;
             *db = *db * frac;
         }
-    } else if (spd < d) {
-        *da = *da * spd / d;
-        *db = *db * spd / d;
+    } else if (lim < d) {
+        *da = *da * lim / d;
+        *db = *db * lim / d;
     }
 }

@@ -5,6 +5,7 @@
  * (mouse_camera.c): the step arithmetic, and that the speed and the range
  * apply only while the mouse's stick drives the camera.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "input.h"
@@ -76,11 +77,44 @@ static void test_step_speeds(void)
     ico_mouse_camera_step(&da, &db, 0.56f, 1.0f, 0.5f);
     CHECK(near_(da, 0.025f, 1e-6f) && near_(db, -0.0125f, 1e-6f));
 
-    /* beyond the close range the move is limited to spd, whatever k is */
+    /* beyond the close range the move is limited to spd * k */
     da = 0.5f;
     db = -0.25f;
     ico_mouse_camera_step(&da, &db, 0.56f, 0.01f, 3.0f);
-    CHECK(near_(da, 0.5f * 0.01f / 0.56f, 1e-7f) && near_(db, -0.25f * 0.01f / 0.56f, 1e-7f));
+    CHECK(near_(da, 0.5f * 0.03f / 0.56f, 1e-7f) && near_(db, -0.25f * 0.03f / 0.56f, 1e-7f));
+}
+
+/* a positive float moved by n units in the last place (no libm here) */
+static float ulps_(float x, int n)
+{
+    uint32_t u;
+
+    memcpy(&u, &x, sizeof u);
+    u = (uint32_t)((int32_t)u + n);
+    memcpy(&x, &u, sizeof x);
+    return x;
+}
+
+/* the move is continuous where the close zone ends (d = spd * 10): just
+   inside, min(1, k / 10) of the remainder; at the edge, spd * k; the two
+   within one unit in the last place, for a faster and a slower speed */
+static void test_step_continuous(void)
+{
+    static const float kSpd[2] = {0.01f, 0.0043633230f};
+    static const float kK[2] = {2.0f, 0.5f};
+
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            const float edge = kSpd[i] * 10.0f;
+            const float inside = ulps_(edge, -1);
+            float inA = inside, inB = 0.0f, outA = edge, outB = 0.0f;
+
+            ico_mouse_camera_step(&inA, &inB, inside, kSpd[i], kK[j]);
+            ico_mouse_camera_step(&outA, &outB, edge, kSpd[i], kK[j]);
+            CHECK(near_(inA, outA, ulps_(outA, 1) - outA));
+            CHECK(near_(outA, kSpd[i] * kK[j], ulps_(outA, 1) - outA));
+        }
+    }
 }
 
 /* the speed and the range reach the hand camera only while the mouse's stick
@@ -132,6 +166,7 @@ int main(void)
 {
     test_step_unit();
     test_step_speeds();
+    test_step_continuous();
     test_gating();
     if (failures != 0) {
         fprintf(stderr, "mouse_camera_test: %d failure(s)\n", failures);
