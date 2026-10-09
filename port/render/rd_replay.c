@@ -294,10 +294,16 @@ static struct {
     uint32_t colorTex, depthTex; /* RhiTexture ids */
 } s_pend;
 
-/* The stencil's shadow window (RdStencilWindow, by depth texture id) */
-static RdStencilWindow s_stencil;
+/* The stencil's shadow window (RdStencilWindow, by depth texture id), with
+ * the colour target of the reset not recorded yet and its textures */
+static struct {
+    RdStencilWindow w;
+    uint32_t color, depth;       /* the reset's target ids */
+    uint32_t colorTex, depthTex; /* their RhiTexture ids, 0 when no reset is pending */
+} s_stencil;
 
 static void flushClear(void);
+static void flushStencilClear(void);
 
 void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want)
 {
@@ -308,6 +314,10 @@ void rd__Transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState wan
      * copied): the clear is recorded first */
     if (s_pend.p.target && (t.id == s_pend.colorTex || t.id == s_pend.depthTex)) {
         flushClear();
+    }
+    /* the same for a pending shadow reset's targets */
+    if (s_stencil.depthTex && (t.id == s_stencil.colorTex || t.id == s_stencil.depthTex)) {
+        flushStencilClear();
     }
     RhiTextureBarrier b = {t, *cur, want};
     rhi_CmdBarrier(cl, &b, 1);
@@ -682,6 +692,7 @@ static void endPass(Replay *r)
     /* N2: whoever ends a pass is about to record something else (a copy,
      * another pass): a pending clear goes first, unless beginPass took it */
     flushClear();
+    flushStencilClear(); /* and a pending shadow reset (never both pending) */
 }
 
 bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, RhiLoadOp *colorLoad,
@@ -700,12 +711,54 @@ bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, R
     return true;
 }
 
-void rd__StencilOps(const RdStencilWindow *w, uint32_t depth, RhiLoadOp depthLoad,
+bool rd__StencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
 {
     const bool live = depth != 0 && depth == w->live;
     *stencilStore = live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    if (depth != 0 && depth == w->clearFor && whole) {
+        w->clearFor = 0;
+        *stencilLoad = RHI_LOAD_CLEAR;
+        return true;
+    }
     *stencilLoad = live || depthLoad == RHI_LOAD_CLEAR ? depthLoad : RHI_LOAD_DONT_CARE;
+    return false;
+}
+
+/* A shadow reset not taken by a pass, recorded as its own pass, as
+ * doShadowReset did before: the colour and depth loaded and kept, the
+ * stencil cleared to 0 and stored (the depth is live: only the end of a
+ * resolve's pass leaves the window, and that pass took or flushed the
+ * reset first). */
+static void flushStencilClear(void)
+{
+    if (!s_stencil.depthTex) {
+        return;
+    }
+    const uint32_t depthTex = s_stencil.depthTex;
+    s_stencil.w.clearFor = 0;
+    s_stencil.colorTex = s_stencil.depthTex = 0;
+    RdTargetRec *tc = rd__TargetRec(s_stencil.color);
+    RdTargetRec *td = rd__TargetRec(s_stencil.depth);
+    if (!tc || !td || td->depth.id != depthTex) {
+        return;
+    }
+    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
+    rd__Transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = tc->color;
+    p.color[0].load = RHI_LOAD_LOAD;
+    p.colorCount = 1;
+    p.depth.texture = td->depth;
+    p.depth.depthLoad = RHI_LOAD_LOAD;
+    p.depth.stencilLoad = RHI_LOAD_CLEAR;
+    p.depth.clearStencil = 0;
+    p.depth.stencilStore = depthTex == s_stencil.w.live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    p.width = tc->tw;
+    p.height = tc->th;
+    rhi_CmdBeginRenderPass(s_cl, &p);
+    rhi_CmdEndRenderPass(s_cl);
 }
 
 /* N2: the pending clear recorded as its own pass (what doClear did before) */
@@ -744,12 +797,15 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
         s_pend.p.target = 0;
         s_pend.colorTex = s_pend.depthTex = 0;
     }
-    /* the stencil loaded and stored inside the shadow window only
-     * (RdStencilWindow) */
+    /* the stencil: a pending shadow reset of this depth as its load op when
+     * the pass covers the whole depth (the clear the reset's own pass made,
+     * before any draw of this pass), else loaded and stored inside the
+     * shadow window only (RdStencilWindow) */
     RhiLoadOp stencilLoad = depthLoad;
     RhiStoreOp stencilStore = RHI_STORE_STORE;
-    if (d) {
-        rd__StencilOps(&s_stencil, d->depth.id, depthLoad, &stencilLoad, &stencilStore);
+    if (d && rd__StencilOps(&s_stencil.w, d->depth.id, c->tw == d->tw && c->th == d->th, depthLoad,
+                            &stencilLoad, &stencilStore)) {
+        s_stencil.colorTex = s_stencil.depthTex = 0;
     }
     endPass(r);
     rd__Transition(s_cl, c->color, &c->colorState, RHI_STATE_RENDER_TARGET);
@@ -2691,8 +2747,9 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (td) {
         p.depth.texture = td->depth;
         p.depth.depthLoad = RHI_LOAD_LOAD;
-        /* the stencil as beginPass has it */
-        rd__StencilOps(&s_stencil, td->depth.id, RHI_LOAD_LOAD, &p.depth.stencilLoad,
+        /* the stencil as beginPass has it (a pending reset was flushed by
+         * the endPass above) */
+        rd__StencilOps(&s_stencil.w, td->depth.id, false, RHI_LOAD_LOAD, &p.depth.stencilLoad,
                        &p.depth.stencilStore);
     }
     p.width = tc->tw;
@@ -3234,24 +3291,20 @@ static void doShadowReset(Replay *r)
     }
     endPass(r);
     s_shadowRedFor = 0; /* package RSMALL: a new count starts */
-    /* the window opens: the depth's stencil is loaded and stored from this
-     * clear until the end of the resolve's pass */
-    s_stencil.live = td->depth.id;
-    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
-    rd__Transition(s_cl, td->depth, &td->depthState, RHI_STATE_DEPTH_WRITE);
-    RhiRenderPassDesc p;
-    memset(&p, 0, sizeof(p));
-    p.color[0].texture = tc->color;
-    p.color[0].load = RHI_LOAD_LOAD;
-    p.colorCount = 1;
-    p.depth.texture = td->depth;
-    p.depth.depthLoad = RHI_LOAD_LOAD;
-    p.depth.stencilLoad = RHI_LOAD_CLEAR;
-    p.depth.clearStencil = 0;
-    p.width = tc->tw;
-    p.height = tc->th;
-    rhi_CmdBeginRenderPass(s_cl, &p);
-    rhi_CmdEndRenderPass(s_cl);
+    /* The stencil clear is not recorded yet: the next pass on the depth
+     * takes it as its stencil load op (beginPass), else it is recorded as
+     * its own pass (flushStencilClear, the pass this function recorded
+     * before) at the next endPass or transition of either target.  Nothing
+     * reads or writes the stencil before the next pass on the depth (only
+     * the volumes and the resolve use it, each in a pass on it), so the
+     * clear is in place before its first user either way.  The window
+     * opens: the depth's stencil is loaded and stored until the resolve. */
+    s_stencil.w.live = td->depth.id;
+    s_stencil.w.clearFor = td->depth.id;
+    s_stencil.color = r->st.color;
+    s_stencil.depth = r->st.depth;
+    s_stencil.colorTex = tc->color.id;
+    s_stencil.depthTex = td->depth.id;
 }
 
 /* RDC_SHADOW_STRIP: rd_ShadowTris's two triangle lists, or rd_ShadowStrip's
@@ -3446,8 +3499,8 @@ static void doShadowResolve(Replay *r)
     endPass(r);
     /* the count has been read: the window closes, and later passes on the
      * depth neither load nor store its stencil until the next reset */
-    if (s_stencil.live == td->depth.id) {
-        s_stencil.live = 0;
+    if (s_stencil.w.live == td->depth.id) {
+        s_stencil.w.live = 0;
     }
     s_shadowRedFor = 0;
     if (tc->tw != tc->w || tc->th != tc->h) {
@@ -4348,7 +4401,7 @@ static void clearNewTargets(void)
             p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth) */
             /* the stencil cleared, and stored only inside a shadow window
              * (none is open before the walk) */
-            rd__StencilOps(&s_stencil, t->depth.id, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
+            rd__StencilOps(&s_stencil.w, t->depth.id, true, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
                            &p.depth.stencilStore);
         }
         p.width = t->tw;

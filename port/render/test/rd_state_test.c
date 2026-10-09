@@ -35,7 +35,8 @@
  *   stencil ops clear -> draw -> shadow reset -> volumes -> resolve -> draw:
  *              outside the shadow window the stencil is not stored and
  *              loads DONT_CARE (a CLEAR stays CLEAR), inside it loads and
- *              stores (rd__StencilOps)
+ *              stores; the reset is the volumes' pass's stencil CLEAR, not
+ *              a pass of its own (rd__StencilOps)
  *   date area  the DATE snapshot of a screen-prim command covers its box
  *              (rd__ScreenArea: the vertices' box padded by two pixels, in
  *              the scissor), not the whole target; a sprite larger than the
@@ -916,14 +917,17 @@ static void testPassOps(void)
 /* The stencil's ops through a frame with the shadow count (clear -> draw ->
  * shadow reset -> volumes -> resolve -> draw), walked as rd_replay.c opens
  * its passes: beginPass's loads (rd__TakePendingClear, then rd__StencilOps
- * on the pass's depth), a pending clear not taken recorded as its own pass
- * before the next one (endPass), the reset's own pass opening the
+ * on the pass's depth), a pending clear or shadow reset not taken recorded
+ * as its own pass before the next one (endPass), the reset opening the
  * window and the end of the resolve's pass closing it.  Outside the window
  * the stencil is not stored and loads DONT_CARE, a CLEAR staying CLEAR;
- * inside it loads and stores as before. */
+ * inside it loads and stores as before.  The reset is no pass of its own:
+ * the volumes' pass clears the stencil as its load op, one pass fewer than
+ * with the reset recorded alone (fold 0, what doShadowReset did before). */
 #define SW_MAX 16
 
 typedef struct StencilWalk {
+    int fold;
     RdStencilWindow w;
     RdPendingClear pend;
     int open;
@@ -951,10 +955,20 @@ static void swEnd(StencilWalk *w)
     if (w->pend.target) {
         RhiLoadOp sl;
         RhiStoreOp ss;
-        rd__StencilOps(&w->w, w->pend.depth ? w->pend.target : 0, RHI_LOAD_CLEAR, &sl, &ss);
+        rd__StencilOps(&w->w, w->pend.depth ? w->pend.target : 0, true, RHI_LOAD_CLEAR, &sl, &ss);
         w->pend.target = 0;
         swRecord(w, 'C', sl, ss);
     }
+    if (w->w.clearFor) {
+        swRecord(w, 'R', RHI_LOAD_CLEAR, RHI_STORE_STORE);
+        w->w.clearFor = 0;
+    }
+}
+
+static int swWhole(uint32_t cid, uint32_t did)
+{
+    const RdTargetRec *c = rd__TargetRec(cid), *d = rd__TargetRec(did);
+    return c && d && c->tw == d->tw && c->th == d->th;
 }
 
 /* beginPass on colour cid and depth did (0: none) */
@@ -967,7 +981,7 @@ static void swBegin(StencilWalk *w, char what, uint32_t cid, uint32_t did, RhiLo
     RhiLoadOp sl = RHI_LOAD_LOAD;
     RhiStoreOp ss = RHI_STORE_STORE;
     if (did) {
-        rd__StencilOps(&w->w, did, depthLoad, &sl, &ss);
+        rd__StencilOps(&w->w, did, swWhole(cid, did), depthLoad, &sl, &ss);
     }
     swEnd(w);
     swRecord(w, what, sl, ss);
@@ -1002,7 +1016,11 @@ static void onStencilCmd(void *user, int list, uint32_t index, const RdCmd *c,
         swEnd(w);
         w->resets++;
         w->w.live = did;
-        swRecord(w, 'R', RHI_LOAD_CLEAR, RHI_STORE_STORE);
+        if (w->fold) {
+            w->w.clearFor = did;
+        } else {
+            swRecord(w, 'R', RHI_LOAD_CLEAR, RHI_STORE_STORE);
+        }
         break;
     case RDC_SHADOW_RESOLVE:
         swBegin(w, 'S', s->color, did, RHI_LOAD_CLEAR, RHI_LOAD_LOAD);
@@ -1052,38 +1070,76 @@ static void testStencilOps(void)
     draw(2);
     rd_EndFrame(0);
     const RdFrame *f = rd__LastFrame();
+    CHECK(swWhole(cnt.id, scene.id), "stencil ops: the count target has SCENE's size");
 
-    StencilWalk w;
+    StencilWalk w, before;
     memset(&w, 0, sizeof(w));
+    w.fold = 1;
     RdStateBlock st = f->startState;
     rd__Walk(f, (int)f->keep, &st, onStencilCmd, &w);
     swEnd(&w);
-    CHECK(w.resets == 1 && w.passes == 5, "stencil ops: %d passes, %d resets (5, 1)", w.passes,
-          w.resets);
-    static const char whats[] = "DRVSD";
-    static const RhiLoadOp loads[] = {RHI_LOAD_CLEAR, RHI_LOAD_CLEAR, RHI_LOAD_LOAD, RHI_LOAD_LOAD,
+    memset(&before, 0, sizeof(before));
+    st = f->startState;
+    rd__Walk(f, (int)f->keep, &st, onStencilCmd, &before);
+    swEnd(&before);
+
+    CHECK(w.resets == 1 && w.passes == 4 && before.passes == 5 &&
+              before.passes - w.passes == w.resets,
+          "stencil ops: %d passes, %d with the reset as its own pass, %d resets (4, 5, 1)",
+          w.passes, before.passes, w.resets);
+    static const char whats[] = "DVSD";
+    static const RhiLoadOp loads[] = {RHI_LOAD_CLEAR, RHI_LOAD_CLEAR, RHI_LOAD_LOAD,
                                       RHI_LOAD_DONT_CARE};
     static const RhiStoreOp stores[] = {RHI_STORE_DONT_CARE, RHI_STORE_STORE, RHI_STORE_STORE,
-                                        RHI_STORE_STORE, RHI_STORE_DONT_CARE};
-    for (int i = 0; i < 5 && i < w.passes; i++) {
+                                        RHI_STORE_DONT_CARE};
+    for (int i = 0; i < 4 && i < w.passes; i++) {
         CHECK(w.what[i] == whats[i] && w.load[i] == loads[i] && w.store[i] == stores[i],
               "stencil ops: pass %d is %c, stencil load %d store %d (%c, %d, %d expected)", i,
               w.what[i], (int)w.load[i], (int)w.store[i], whats[i], (int)loads[i], (int)stores[i]);
     }
+    /* before: the reset's own pass clears and stores, the volumes load */
+    CHECK(before.passes == 5 && before.what[1] == 'R' && before.load[1] == RHI_LOAD_CLEAR &&
+              before.store[1] == RHI_STORE_STORE && before.what[2] == 'V' &&
+              before.load[2] == RHI_LOAD_LOAD && before.store[2] == RHI_STORE_STORE,
+          "stencil ops: with the reset as its own pass, reset CLEAR/STORE then volumes LOAD/STORE");
+
+    /* a reset with no volumes (frames without a shadow volume): the
+     * resolve's pass takes it and reads the cleared stencil */
+    rd_BeginFrame();
+    rd_SelectList(3);
+    const RdTarget cnt2 = rd_ShadowCountTarget(gw, gh);
+    rd_SetTarget(cnt2, scene, gw, gh, 0);
+    rd_ShadowReset();
+    rd_ShadowResolve();
+    rd_EndFrame(0);
+    f = rd__LastFrame();
+    memset(&w, 0, sizeof(w));
+    w.fold = 1;
+    st = f->startState;
+    rd__Walk(f, (int)f->keep, &st, onStencilCmd, &w);
+    swEnd(&w);
+    CHECK(w.passes == 1 && w.what[0] == 'S' && w.load[0] == RHI_LOAD_CLEAR &&
+              w.store[0] == RHI_STORE_STORE,
+          "stencil ops: reset -> resolve is one pass, %d (1), the resolve's with stencil CLEAR "
+          "and STORE",
+          w.passes);
 
     /* the rule's other cases */
-    const RdStencilWindow sw = {7};
+    RdStencilWindow sw = {7, 7};
     RhiLoadOp sl;
     RhiStoreOp ss;
-    rd__StencilOps(&sw, 7, RHI_LOAD_CLEAR, &sl, &ss);
-    CHECK(sl == RHI_LOAD_CLEAR && ss == RHI_STORE_STORE,
-          "stencil ops: a depth clear inside the window clears and stores the stencil");
-    rd__StencilOps(&sw, 8, RHI_LOAD_LOAD, &sl, &ss);
-    CHECK(sl == RHI_LOAD_DONT_CARE && ss == RHI_STORE_DONT_CARE,
-          "stencil ops: another depth neither loads nor stores");
-    rd__StencilOps(&sw, 8, RHI_LOAD_CLEAR, &sl, &ss);
-    CHECK(sl == RHI_LOAD_CLEAR && ss == RHI_STORE_DONT_CARE,
+    CHECK(!rd__StencilOps(&sw, 7, false, RHI_LOAD_LOAD, &sl, &ss) && sw.clearFor == 7 &&
+              sl == RHI_LOAD_LOAD && ss == RHI_STORE_STORE,
+          "stencil ops: a pass not covering the depth leaves the reset pending, loads and stores");
+    CHECK(!rd__StencilOps(&sw, 8, true, RHI_LOAD_LOAD, &sl, &ss) && sw.clearFor == 7 &&
+              sl == RHI_LOAD_DONT_CARE && ss == RHI_STORE_DONT_CARE,
+          "stencil ops: another depth neither loads nor stores, the reset stays pending");
+    CHECK(!rd__StencilOps(&sw, 8, true, RHI_LOAD_CLEAR, &sl, &ss) && sl == RHI_LOAD_CLEAR &&
+              ss == RHI_STORE_DONT_CARE,
           "stencil ops: a depth clear outside the window still clears the stencil");
+    CHECK(rd__StencilOps(&sw, 7, true, RHI_LOAD_CLEAR, &sl, &ss) && sw.clearFor == 0 &&
+              sl == RHI_LOAD_CLEAR && ss == RHI_STORE_STORE,
+          "stencil ops: the live depth's pass takes the reset");
 }
 
 /* The DATE snapshot's area.  rd_perf_test's list 4 (four 40 x 60 DATE

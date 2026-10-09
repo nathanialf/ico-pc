@@ -1375,16 +1375,21 @@ bool rd__TakePendingClear(const RdPendingClear *p, uint32_t cid, uint32_t did, R
  * the stencil loaded or stored.
  *   live      the depth whose stencil holds the count, from its reset to the
  *             end of its resolve's pass (0: none)
+ *   clearFor  the depth whose reset is not recorded yet: the next pass on it
+ *             clears the stencil as its load op (0: none)
  * A depth is named by its texture id in rd_replay.c. */
 typedef struct RdStencilWindow {
     uint32_t live;
+    uint32_t clearFor;
 } RdStencilWindow;
 
-/* The stencil ops of a pass on depth (not 0) whose depth loads depthLoad:
- * on the live depth, the stencil loads as the depth does; on any other, a
- * CLEAR stays CLEAR and anything else is DONT_CARE.  The stencil is stored
- * on the live depth only. */
-void rd__StencilOps(const RdStencilWindow *w, uint32_t depth, RhiLoadOp depthLoad,
+/* The stencil ops of a pass on depth (not 0) whose depth loads depthLoad;
+ * whole: the pass's render area is the whole depth.  A pending reset of
+ * this depth is taken when whole: the stencil loads CLEAR (to 0), clearFor
+ * is emptied and true is returned.  Else, on the live depth, the stencil
+ * loads as the depth does; on any other, a CLEAR stays CLEAR and anything
+ * else is DONT_CARE.  The stencil is stored on the live depth only. */
+bool rd__StencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore);
 /* rhi_WaitFrame for the renderer's own frames (the replay, the FMV picture,
  * the camera probe): also starts a new epoch of the bind group caches
