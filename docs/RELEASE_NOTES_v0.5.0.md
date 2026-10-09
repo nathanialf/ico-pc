@@ -16,5 +16,5 @@
 
 ## Known issues
 
-- On the platform with the save bench by the sea, a dark patch on the floor in the back corner flickers while the camera turns.
+- At the old bridge save bench, a dark patch on the floor in the back corner flickers while the camera turns.
 - Distant water surfaces shimmer while the camera moves.
