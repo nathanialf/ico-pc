@@ -9,6 +9,7 @@
  *
  *   <files>/ico-pc.ini
  *   <files>/config.toml
+ *   <files>/achievements.toml          the achievements
  *   <files>/ico.o2r                    the extracted game data
  *   <files>/memcard/                   the memory cards
  *   <files>/logs/ico-pc.log            the log (+ perf csv, pad recordings)

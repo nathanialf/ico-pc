@@ -1,8 +1,7 @@
 /*
  * port/platform/android/gpu_driver_android.h
  *
- * The Android build's own graphics driver (v0.4.3, package AN-22a, issue
- * 22): a community driver package for Adreno GPUs (Turnip and others,
+ * The Android build's own graphics driver (issue 22): a community driver package for Adreno GPUs (Turnip and others,
  * port/platform/gpu_driver.h) the player added on the Settings page,
  * loaded through libadrenotools in place of the phone's driver.
  *

@@ -1,8 +1,7 @@
 /*
  * port/platform/android/gpu_driver_android.c
  *
- * The player's graphics driver on Android (gpu_driver_android.h, v0.4.3
- * package AN-22a).
+ * The player's graphics driver on Android (gpu_driver_android.h).
  */
 #include "gpu_driver_android.h"
 #include <SDL3/SDL.h>

@@ -1,7 +1,7 @@
 /*
  * port/platform/android/iso_import.h
  *
- * The Android first start (package AN-C): the disc image the player chose in
+ * The Android first start: the disc image the player chose in
  * the system's file picker (a content:// address, which SDL_IOFromFile opens
  * through the content resolver as a seekable stream) copied into the app's
  * files folder as Ico_PAL.iso or Ico_PAL.chd (android_paths.h), where the
