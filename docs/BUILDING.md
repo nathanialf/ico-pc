@@ -306,6 +306,26 @@ allocations; `rhi_vk_mali` also checks that what goes past them is refused
 by the limit's name, and `rd_perf_mali` creates the whole reachable pipeline
 set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
+Whether the game code gives the same numbers on a phone as on a PC is
+checked by `tools/arm64_diff.sh [out-dir]`, a developer tool rather than a
+test (it needs `qemu-aarch64` in user mode, Debian's `qemu-user`, and the
+NDK): it builds the arm IK of Ico and Yorda holding hands
+(`tools/arm64_diff/ikdiff.c` with the real `handManager.c`,
+`motionManager.c`, `matrixDrive.c`, `quaternion.c`, `tableSin.c` and
+`port/math`, the rest stubbed) with the arm64 build's flags, the x86-64 gcc
+build's, the NDK clang's for x86-64 and, when that preset is configured, the
+linux-x64-clang build's; runs them over the same inputs in the game's
+rounding mode (the arm64 one under qemu); and diffs the outputs line by
+line: the turn, table, quaternion and matrix helpers over every angle and
+thousands of directions, the joint limits over every row of the game's table
+(read from `ICO_BASE_ELF`, else synthetic rows), and 4000 stretches of 16
+frames of both characters' hand and arm updates. The flags come from each
+preset's `compile_commands.json` under `build-host/` (or `CC_DB_X64`,
+`CC_DB_A64`, `CC_DB_X64_CLANG`), with built-in copies when a preset is not
+configured; `NDK` and `QEMU` name the tools when they are not found. It
+exits 0 when the only differences are the three it knows (listed at the end
+of the script).
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: two Linux
