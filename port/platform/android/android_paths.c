@@ -55,9 +55,8 @@ static int under(const char *path, const char *dir)
     return strncmp(path, dir, n) == 0 && (path[n] == '\0' || path[n] == '/');
 }
 
-int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *out)
+int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *p)
 {
-    IcoAndroidPaths *p = out;
     int bad = 0;
 
     memset(p, 0, sizeof(*p));

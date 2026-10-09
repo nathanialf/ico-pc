@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
     a.status = 1;
     props = SDL_CreateProperties();
     if (props == 0) {
-        __android_log_print(ANDROID_LOG_ERROR, "ico-pc", "SDL_CreateProperties: %s",
+        __android_log_print(ANDROID_LOG_ERROR, ICO_ANDROID_LOG_TAG, "SDL_CreateProperties: %s",
                             SDL_GetError());
         return 1;
     }
@@ -73,8 +73,8 @@ int main(int argc, char *argv[])
     SDL_DestroyProperties(props);
     if (t == NULL) {
         /* without the thread there is no stack big enough to run on */
-        __android_log_print(ANDROID_LOG_ERROR, "ico-pc", "cannot start the game thread: %s",
-                            SDL_GetError());
+        __android_log_print(ANDROID_LOG_ERROR, ICO_ANDROID_LOG_TAG,
+                            "cannot start the game thread: %s", SDL_GetError());
         ico_android_message_box("ICO could not start (no memory for its main thread).", 1);
         return 1;
     }

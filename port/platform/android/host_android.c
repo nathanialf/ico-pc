@@ -20,7 +20,7 @@
 #include <SDL3/SDL.h>
 #include <jni.h>
 
-#define LOG_TAG "ico-pc"
+#define LOG_TAG ICO_ANDROID_LOG_TAG
 
 /* --- folders -------------------------------------------------------------- */
 
@@ -192,6 +192,16 @@ static int mirror_drain(void)
     }
 }
 
+/* what is still in the pipe, then a line not yet ended; the caller holds
+   s_mirror_lock */
+static void mirror_flush_locked(void)
+{
+    mirror_drain();
+    if (s_line_len > 0) {
+        logcat_line();
+    }
+}
+
 static int SDLCALL mirror_main(void *user)
 {
     struct pollfd pf;
@@ -281,10 +291,7 @@ void ico_android_log_mirror_flush(void)
     /* what the reader already took is written before it lets go of the
        lock; what is still in the pipe is drained here */
     SDL_LockMutex(s_mirror_lock);
-    mirror_drain();
-    if (s_line_len > 0) {
-        logcat_line();
-    }
+    mirror_flush_locked();
     SDL_UnlockMutex(s_mirror_lock);
 }
 
@@ -297,10 +304,7 @@ void ico_android_log_mirror_try_flush(void)
     }
     for (i = 0; i < 50; i++) {
         if (SDL_TryLockMutex(s_mirror_lock)) {
-            mirror_drain();
-            if (s_line_len > 0) {
-                logcat_line();
-            }
+            mirror_flush_locked();
             SDL_UnlockMutex(s_mirror_lock);
             return;
         }

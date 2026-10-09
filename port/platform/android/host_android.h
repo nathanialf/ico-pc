@@ -11,6 +11,9 @@
 #include <stddef.h>
 #include "android_paths.h"
 
+/* The logcat tag of every line the program writes there. */
+#define ICO_ANDROID_LOG_TAG "ico-pc"
+
 /* The host program's main (main_host.c), run by SDL_main
    (main_android.c) on a thread with a large stack; the end-of-run steps
    (ico_host_shutdown, host_loop.h) have run when it returns. */

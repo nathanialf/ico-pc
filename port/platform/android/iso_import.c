@@ -138,13 +138,18 @@ uint64_t ico_iso_need_bytes(uint64_t imageBytes)
     return imageBytes + ICO_ISO_IMPORT_SPARE_BYTES;
 }
 
+/* bytes in tenths of a GB (10^8 bytes), rounded up */
+static uint64_t tenths_up(uint64_t bytes)
+{
+    return (bytes + 99999999ull) / 100000000ull;
+}
+
 void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t freeBytes,
                         const char *folder)
 {
     /* tenths of a GB: what is needed up, what is free down, so the two
        never read the same */
-    const uint64_t tenth = 100000000ull;
-    const uint64_t need = (needBytes + tenth - 1) / tenth, have = freeBytes / tenth;
+    const uint64_t need = tenths_up(needBytes), have = freeBytes / 100000000ull;
 
     snprintf(out, size,
              "This disc image needs %llu.%llu GB free in %s; %llu.%llu GB is free.\n"
@@ -269,7 +274,7 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
     if (r != 0) {
         fprintf(stderr, "ico_pc: the copy failed after %.1f s: %s\n", secs, copyWhy);
         if (size > 0) {
-            const uint64_t gb10 = (ico_iso_need_bytes((uint64_t)size) + 99999999ull) / 100000000ull;
+            const uint64_t gb10 = tenths_up(ico_iso_need_bytes((uint64_t)size));
 
             snprintf(why, n,
                      "The disc image could not be copied into %s.\n"
