@@ -1264,6 +1264,36 @@ const char *ui_SettingsValueText(UiSettingsOpt opt)
     return s_text;
 }
 
+/* The display rows that are a plain On/Off switch: their field in o, else
+   NULL. */
+static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
+{
+    switch (opt) {
+    case UI_OPT_VSYNC:
+        return &o->vsync;
+    case UI_OPT_FULL_HEIGHT:
+        return &o->fullHeight;
+    case UI_OPT_DUMP_TEXTURES:
+        return &o->dumpTextures;
+    case UI_OPT_DUMP_MODELS:
+        return &o->dumpModels;
+    case UI_OPT_EFFECT_GLOW:
+        return &o->effectGlow;
+    case UI_OPT_EFFECT_DEPTH_OF_FIELD:
+        return &o->effectDepthOfField;
+    case UI_OPT_EFFECT_SOFTENING:
+        return &o->effectSoftening;
+    case UI_OPT_EFFECT_MOTION_BLUR:
+        return &o->effectMotionBlur;
+    case UI_OPT_EFFECT_FOG:
+        return &o->effectFog;
+    case UI_OPT_EFFECT_CINEMATIC_BARS:
+        return &o->effectCinematicBars;
+    default:
+        return NULL;
+    }
+}
+
 void ui_SettingsStep(UiSettingsOpt opt, int dir)
 {
     IcoVideoOptions o;
@@ -1313,16 +1343,8 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
                                  ICO_WINDOW_COUNT, dir);
         video = 1;
         break;
-    case UI_OPT_VSYNC:
-        o.vsync = !o.vsync;
-        video = 1;
-        break;
     case UI_OPT_FILTER:
         o.filter = stepIndex(o.filter, 3, dir);
-        video = 1;
-        break;
-    case UI_OPT_FULL_HEIGHT:
-        o.fullHeight = !o.fullHeight;
         video = 1;
         break;
     case UI_OPT_TEXTURE_PACK:
@@ -1332,10 +1354,6 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         o.texturePack = !o.texturePack;
         video = 1;
         break;
-    case UI_OPT_DUMP_TEXTURES:
-        o.dumpTextures = !o.dumpTextures;
-        video = 1;
-        break;
     case UI_OPT_MODEL_PACK:
         if (!modelPackInstalled()) {
             return; /* "None installed": nothing to switch */
@@ -1343,34 +1361,22 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         o.modelPack = !o.modelPack;
         video = 1;
         break;
+    case UI_OPT_VSYNC:
+    case UI_OPT_FULL_HEIGHT:
+    case UI_OPT_DUMP_TEXTURES:
     case UI_OPT_DUMP_MODELS:
-        o.dumpModels = !o.dumpModels;
-        video = 1;
-        break;
     case UI_OPT_EFFECT_GLOW:
-        o.effectGlow = !o.effectGlow;
-        video = 1;
-        break;
     case UI_OPT_EFFECT_DEPTH_OF_FIELD:
-        o.effectDepthOfField = !o.effectDepthOfField;
-        video = 1;
-        break;
     case UI_OPT_EFFECT_SOFTENING:
-        o.effectSoftening = !o.effectSoftening;
-        video = 1;
-        break;
     case UI_OPT_EFFECT_MOTION_BLUR:
-        o.effectMotionBlur = !o.effectMotionBlur;
-        video = 1;
-        break;
     case UI_OPT_EFFECT_FOG:
-        o.effectFog = !o.effectFog;
+    case UI_OPT_EFFECT_CINEMATIC_BARS: {
+        /* the plain On/Off display rows */
+        int *const on = videoSwitch(&o, opt);
+        *on = !*on;
         video = 1;
         break;
-    case UI_OPT_EFFECT_CINEMATIC_BARS:
-        o.effectCinematicBars = !o.effectCinematicBars;
-        video = 1;
-        break;
+    }
     case UI_OPT_FRAMERATE:
         o.framerate = stepFramerate(o.framerate, dir);
         video = 1;
