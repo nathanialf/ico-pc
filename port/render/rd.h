@@ -304,7 +304,7 @@ typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPrese
 typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
-    float aspect;                       /* 4/3 .. 32/9 (0, a zeroed RdSettings: 4/3) */
+    float aspect;                       /* 4/3 .. 20/3 (0, a zeroed RdSettings: 4/3) */
     uint8_t interpolate;                /* uncapped presentation (rd_present), any preset */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
@@ -399,6 +399,11 @@ const RdSettings *rd_get_settings(void);
  * widening) and down; 1 x 1 before rd_init, at 1x and under the CRT
  * filter.  The menus' text strips are rasterised to it (port/ui/menu_font.c). */
 void rd_get_scene_scale(float *sx, float *sy);
+/* The scene's vertical scale (a whole number, rounded down) when the GPU
+ * could not hold the scale the options asked for and the targets were made
+ * smaller (rd_core.c createNamedTargets); 0 when they are as asked.  The
+ * Resolution row shows it after the asked scale, "16x (8x)". */
+int rd_scene_scale_lowered(void);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */

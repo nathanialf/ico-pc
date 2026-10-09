@@ -12,6 +12,7 @@
 #define ASPECT_16_9 (16.0f / 9.0f)
 #define ASPECT_21_9 (64.0f / 27.0f)
 #define ASPECT_32_9 (32.0f / 9.0f)
+#define ASPECT_48_9 (48.0f / 9.0f)
 
 static IcoVideoOptions s_opt;
 
@@ -130,7 +131,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
         return 0;
     }
     if (sscanf(s, "%u%c%c", &n, &tail, &tail) == 2 && (tail == 'x' || tail == 'X') && n >= 1 &&
-        n <= 8) {
+        n <= 16) {
         o->resW = o->resH = 0;
         o->resScale = (int)n;
         return 0;
@@ -138,7 +139,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
     return -1;
 }
 
-static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "auto"};
+static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "48:9", "auto"};
 
 static const char *const kWindowMode[] = {"windowed", "borderless", "fullscreen"};
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
@@ -631,12 +632,14 @@ float ico_video_aspect(void)
         return ASPECT_21_9;
     case ICO_ASPECT_32_9:
         return ASPECT_32_9;
+    case ICO_ASPECT_48_9:
+        return ASPECT_48_9;
     case ICO_ASPECT_AUTO:
         if (s_winW <= 0 || s_winH <= 0) {
             return ASPECT_4_3;
         }
         a = (float)s_winW / (float)s_winH;
-        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ASPECT_32_9 ? ASPECT_32_9 : a);
+        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ICO_ASPECT_MAX ? ICO_ASPECT_MAX : a);
     default:
         return ASPECT_4_3;
     }

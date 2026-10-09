@@ -1496,8 +1496,8 @@ static void testValues(void)
     ico_video_set_auto_scale(0);
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    CHECK(o.resScale == 4, "resolution: Left from Auto is 4x");
-    /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9 */
+    CHECK(o.resScale == 16, "resolution: Left from Auto is 16x");
+    /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9, 48:9 */
     ui_settings_step(UI_OPT_ASPECT, 1);
     ui_settings_step(UI_OPT_ASPECT, 1);
     ui_settings_step(UI_OPT_ASPECT, 1);
@@ -1512,6 +1512,10 @@ static void testValues(void)
     ico_video_get(&o);
     CHECK(o.aspect == ICO_ASPECT_32_9 && strstr(ui_settings_value_text(UI_OPT_ASPECT), "32:9"),
           "aspect 32:9");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9 && strstr(ui_settings_value_text(UI_OPT_ASPECT), "48:9"),
+          "aspect 48:9");
     ui_settings_step(UI_OPT_ASPECT, 1);
     CHECK(strstr(ui_settings_value_text(UI_OPT_ASPECT), "Auto") != NULL, "aspect Auto");
     /* Enhanced's filter is anisotropic, its height full */
@@ -1596,8 +1600,7 @@ static void testValues(void)
               ui_settings_value_text(UI_OPT_RESOLUTION));
         ui_settings_step(UI_OPT_RESOLUTION, 1);
         ico_video_get(&o);
-        CHECK(o.resScale == ICO_RES_AUTO, "resolution steps again with the filter off (%d)",
-              o.resScale);
+        CHECK(o.resScale == 6, "resolution steps again with the filter off (%d)", o.resScale);
         ui_settings_step(UI_OPT_RESOLUTION, -1);
         ui_settings_step(UI_OPT_CRT, -1); /* Shadow mask */
         ui_settings_step(UI_OPT_CRT, -1); /* PVM */

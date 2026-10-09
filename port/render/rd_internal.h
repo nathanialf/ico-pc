@@ -1174,6 +1174,11 @@ typedef struct RdContext {
      * into scene-class targets (1 in Original), the output aspect, and the
      * texture filter upgrade in force */
     float sceneSx, sceneSy, workScale, wideX, outAspect;
+    /* the scene scale the options asked for (rd__apply_display); sceneSx/Sy
+     * are what the targets were made at, lower when createNamedTargets had
+     * to fall back (sceneFellBack) */
+    float sceneReqSx, sceneReqSy;
+    bool sceneFellBack;
     uint8_t filterUpgrade, fullHeight;
     int spaceOverride; /* rd_set_space_override + 1; 0 = none */
     uint32_t vsyncApplied;
@@ -1325,6 +1330,12 @@ void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box);
  * DISPLAY's gsH / 2 at the top and bottom (GsBase.c) that it leaves black.
  * Shared with the presenter's full pixel crop-and-scale. */
 uint32_t rd__reduction_crop(uint32_t gsH);
+/* The widest aspect the presenter shows: ICO_ASPECT_MAX in
+ * port/game/video_options.h (4/3 times ICO_WIDE_X_MAX, the factor the
+ * water's dot window can be widened by).  Mirrored here because the
+ * renderer is built without the game's options module; rd_present_test
+ * checks the two are equal. */
+#define RD_ASPECT_MAX (4.0f / 3.0f * 5.0f)
 /* g_rd.settings -> g_rd.sceneSx/Sy, workScale, wideX,
  * outAspect, filterUpgrade, fullHeight (and the swapchain's vsync).  True
  * when a target scale changed (the caller recreates the named targets). */

@@ -602,6 +602,19 @@ static void test_video_auto(const char *dir)
     CHECK(strcmp(ico_video_resolution_name(&o, buf, sizeof(buf)), "auto") == 0);
     CHECK(ico_video_parse_resolution("AUTO", &o) == 0 && o.resScale == ICO_RES_AUTO);
     CHECK(ico_video_parse_resolution("auto2", &o) == -1 && o.resScale == ICO_RES_AUTO);
+    /* 48:9 and 16x parse and print back as they were written */
+    {
+        int asp = -1;
+
+        CHECK(ico_video_parse_aspect("48:9", &asp) == 0 && asp == ICO_ASPECT_48_9 &&
+              strcmp(ico_video_aspect_name(asp), "48:9") == 0);
+        CHECK(ico_video_parse_aspect("auto", &asp) == 0 && asp == ICO_ASPECT_AUTO &&
+              strcmp(ico_video_aspect_name(asp), "auto") == 0);
+        CHECK(ico_video_parse_resolution("16x", &o) == 0 && o.resScale == 16 &&
+              strcmp(ico_video_resolution_name(&o, buf, sizeof(buf)), "16x") == 0);
+        CHECK(ico_video_parse_resolution("17x", &o) == -1 && o.resScale == 16);
+        CHECK(ico_video_parse_resolution("auto", &o) == 0);
+    }
     /* the PC rules: "auto" is not Enhanced's; Enhanced keeps "window"; the
        default frame rate stays "uncapped" */
     ico_video_set_android(0);

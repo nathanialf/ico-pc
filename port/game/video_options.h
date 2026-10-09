@@ -7,11 +7,11 @@
  * menu (port/ui/settings.c) read and write the same values.
  *
  *   [video] preset          "original"  "original" | "enhanced" | "custom"
- *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..8) | "auto"
+ *   [video] resolution      "window"    "window" | "WxH" | "Nx" (N = 1..16) | "auto"
  *                                       ("auto" on Android: the window's size,
  *                                       lowered a step at a time (3x, 2x, 1x)
  *                                       while the presents take too long)
- *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "auto"
+ *   [video] aspect          "4:3"       "4:3" | "16:10" | "16:9" | "21:9" | "32:9" | "48:9" | "auto"
  *   [video] window_mode     "windowed"  "windowed" | "borderless" | "fullscreen"
  *                                       (borderless: a frameless window over the
  *                                       whole display; ignored on Android)
@@ -91,9 +91,19 @@ enum {
     ICO_ASPECT_16_9 = 2,
     ICO_ASPECT_21_9 = 3,
     ICO_ASPECT_32_9 = 4,
-    ICO_ASPECT_AUTO = 5,
-    ICO_ASPECT_COUNT = 6
+    ICO_ASPECT_48_9 = 5,
+    ICO_ASPECT_AUTO = 6,
+    ICO_ASPECT_COUNT = 7
 };
+
+/* The widest the picture is made, as a multiple of the 4:3 width.  The
+   water's dot window (waterDot.c) is widened by this factor and packs its
+   x coordinate in 16 bits, which holds up to a factor of 5 (aspect 20:3);
+   48:9 is a factor of 4.  rd_present.c mirrors the aspect as RD_ASPECT_MAX
+   (the renderer is built without this module); rd_present_test checks the
+   two agree. */
+#define ICO_WIDE_X_MAX 5.0f
+#define ICO_ASPECT_MAX (4.0f / 3.0f * ICO_WIDE_X_MAX)
 
 /* The window's mode.  FULLSCREEN is SDL's desktop fullscreen;
    BORDERLESS a frameless window over its display. */
@@ -108,7 +118,7 @@ enum { ICO_FILTER_ORIGINAL = 0, ICO_FILTER_TRILINEAR = 1, ICO_FILTER_ANISOTROPIC
 
 typedef struct IcoVideoOptions {
     int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
-    int resScale;   /* resolution "Nx": N (1..8); ICO_RES_AUTO: "auto"; 0 otherwise */
+    int resScale;   /* resolution "Nx": N (1..16); ICO_RES_AUTO: "auto"; 0 otherwise */
     int aspect;     /* ICO_ASPECT_* */
     int windowMode; /* ICO_WINDOW_* */
     int vsync;      /* the swapchain waits for the vertical blank */
@@ -213,7 +223,7 @@ void ico_video_reload(void);
    on open and on every resize; 0 x 0, the headless build's, means 4:3). */
 void ico_video_set_window(int w, int h);
 /* The presentation aspect (width / height) in force: the aspect option,
-   whatever the preset, "auto" being the window's clamped to [4:3, 16:9]. */
+   whatever the preset, "auto" being the window's clamped to [4:3, ICO_ASPECT_MAX]. */
 float ico_video_aspect(void);
 /* How much wider than 4:3 the presentation is: ico_video_aspect() / (4/3),
    at least 1 (GsBase.c gsbHostWideX). */

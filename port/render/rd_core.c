@@ -620,7 +620,10 @@ void rd__target_destroy_gpu(RdTargetRec *t)
     t->color = t->depth = t->snap = (RhiTexture){0};
 }
 
-static void createNamedTargets(void)
+/* One pass over the named targets at the scale in force.  True when a
+ * scene-class target could not be created (the pass stops there: the caller
+ * may retry smaller); any other failure is only logged, as it always was. */
+static bool createNamedPass(bool stopOnSceneFail)
 {
     for (int i = 0; i < RD_TARGET_COUNT; i++) {
         RdTargetRec *t = &g_rd.targets[i];
@@ -636,6 +639,9 @@ static void createNamedTargets(void)
         namedTargetDesc(i, g_rd.gsW, g_rd.gsH, &t->w, &t->h, &t->format, &t->withDepth);
         rd__target_scale_of(t, i);
         if (!rd__target_create_gpu(t, s_targetNames[i])) {
+            if (stopOnSceneFail && sceneClass(i)) {
+                return true;
+            }
             rd__log("could not create target %s", s_targetNames[i]);
         }
         /* cleared at the first replay (rd_replay.c clearNewTargets): a new
@@ -643,6 +649,36 @@ static void createNamedTargets(void)
            first frames of a start sample DISPLAY (the game's kept frame
            buffer) before anything has drawn into it */
         t->clearPending = 1;
+    }
+    return false;
+}
+
+/* The named targets at the scene scale the options asked for.  A scene
+ * scale the GPU cannot hold (16x of a wide picture is hundreds of megabytes
+ * a target) would leave the scene targets without a texture and the picture
+ * black, so the scale is halved, both axes together, until they fit or it
+ * reaches 1x.  The scale in force then stays lowered until the options
+ * change it (rd__apply_display), and rd_scene_scale_lowered reports it. */
+static void createNamedTargets(void)
+{
+    for (;;) {
+        const bool canLower = g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f);
+
+        if (!createNamedPass(canLower)) {
+            return;
+        }
+        /* give back what this pass made before asking for less */
+        for (int i = 0; i < RD_TARGET_COUNT; i++) {
+            rd__target_destroy_gpu(&g_rd.targets[i]);
+        }
+        const float nx = g_rd.sceneSx * 0.5f < 1.0f ? 1.0f : g_rd.sceneSx * 0.5f;
+        const float ny = g_rd.sceneSy * 0.5f < 1.0f ? 1.0f : g_rd.sceneSy * 0.5f;
+
+        rd__log("display: scene %gx%g does not fit this GPU, falling back to %gx%g",
+                (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)nx, (double)ny);
+        g_rd.sceneSx = nx;
+        g_rd.sceneSy = ny;
+        g_rd.sceneFellBack = true;
     }
 }
 
@@ -1285,6 +1321,14 @@ void rd_get_scene_scale(float *sx, float *sy)
     if (sy) {
         *sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
     }
+}
+
+int rd_scene_scale_lowered(void)
+{
+    if (!g_rd.sceneFellBack) {
+        return 0;
+    }
+    return g_rd.sceneSy < 1.0f ? 1 : (int)g_rd.sceneSy;
 }
 
 void rd_set_mirror(int on)

@@ -1305,6 +1305,56 @@ static void testEscapeNewGame(void)
     CHECK(s_newGames == games + 1, "Start: the game starts");
 }
 
+/* Display > Resolution cycles Window, 1x, 2x, 3x, 4x, 6x, 8x, 12x, 16x,
+   Auto; a scale from the file that is not on the list steps from the ends.
+   Aspect goes 32:9, 48:9, Auto */
+static void testResolutionCycle(void)
+{
+    static const int want[] = {1, 2, 3, 4, 6, 8, 12, 16};
+    IcoVideoOptions o;
+
+    useConfig("version = 1\n[video]\npreset = \"custom\"\nresolution = \"5x\"\n"
+              "aspect = \"32:9\"\n");
+    enterMainKeep(0);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "5x") == 0,
+          "5x from the file reads 5x");
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.resW == 0, "Right from an off-list scale is Window (%d)",
+          o.resScale);
+    for (int i = 0; i < 8; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, 1);
+        ico_video_get(&o);
+        CHECK(o.resScale == want[i], "Right: step %d is %dx (%d)", i, want[i], o.resScale);
+    }
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "16x") == 0, "16x reads 16x");
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO, "Right from 16x is Auto (%d)", o.resScale);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0, "Right from Auto wraps to Window (%d)", o.resScale);
+
+    useConfig("version = 1\n[video]\npreset = \"custom\"\nresolution = \"5x\"\n"
+              "aspect = \"32:9\"\n");
+    enterMainKeep(0);
+    ui_settings_step(UI_OPT_RESOLUTION, -1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 16, "Left from an off-list scale is 16x (%d)", o.resScale);
+
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), "32:9") == 0, "aspect 32:9 from the file");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9 && strcmp(ui_settings_value_text(UI_OPT_ASPECT), "48:9") == 0,
+          "Right from 32:9 is 48:9");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_AUTO, "Right from 48:9 is Auto");
+    ui_settings_step(UI_OPT_ASPECT, -1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9, "Left from Auto is 48:9");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1333,6 +1383,8 @@ int main(int argc, char **argv)
     testRemapMenuNote();
     /* Escape's button on the New Game screen */
     testEscapeNewGame();
+    /* Display > Resolution and Aspect ratio cycles */
+    testResolutionCycle();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

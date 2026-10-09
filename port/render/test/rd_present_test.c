@@ -842,6 +842,10 @@ static void checkOptions(const char *dir)
     ico_video_set(&p);
     CHECK(near(ico_video_aspect(), 32.0f / 9.0f) && near(ico_video_wide_x(), 8.0f / 3.0f),
           "options: 32:9 widens by 8/3");
+    p.aspect = ICO_ASPECT_48_9;
+    ico_video_set(&p);
+    CHECK(near(ico_video_aspect(), 48.0f / 9.0f) && near(ico_video_wide_x(), 4.0f),
+          "options: 48:9 widens by 4");
     p.aspect = ICO_ASPECT_AUTO;
     ico_video_set(&p);
     ico_video_set_window(0, 0);
@@ -851,8 +855,13 @@ static void checkOptions(const char *dir)
     ico_video_set_window(3440, 1440);
     CHECK(near(ico_video_aspect(), 3440.0f / 1440.0f), "options: auto passes 3440x1440 through");
     ico_video_set_window(5760, 1080);
-    CHECK(near(ico_video_aspect(), 32.0f / 9.0f), "options: auto clamps at 32:9");
-    CHECK(near(ico_video_wide_x(), 32.0f / 12.0f), "options: auto at 32:9 widens by 8/3");
+    CHECK(near(ico_video_aspect(), 48.0f / 9.0f), "options: auto passes 5760x1080 (48:9) through");
+    CHECK(near(ico_video_wide_x(), 4.0f), "options: auto at 48:9 widens by 4");
+    ico_video_set_window(9600, 1080);
+    CHECK(ico_video_aspect() == ICO_ASPECT_MAX && near(ico_video_wide_x(), ICO_WIDE_X_MAX),
+          "options: auto clamps at the maximum (20:3), 9600x1080");
+    /* the renderer's mirror of the maximum (rd_internal.h) */
+    CHECK(RD_ASPECT_MAX == ICO_ASPECT_MAX, "options: RD_ASPECT_MAX equals ICO_ASPECT_MAX");
     ico_video_set_window(1280, 1024);
     CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps at 4:3");
     ico_video_set_window(2400, 1080);
@@ -927,12 +936,17 @@ static void checkOptions(const char *dir)
     CHECK(ico_video_parse_resolution("3840x2160", &q) == 0 && q.resW == 3840 && q.resH == 2160,
           "options: WxH");
     CHECK(ico_video_parse_resolution("2xx", &q) != 0 && ico_video_parse_resolution("0x", &q) != 0 &&
-              ico_video_parse_resolution("10x", &q) != 0 && q.resW == 3840,
+              ico_video_parse_resolution("17x", &q) != 0 && q.resW == 3840,
           "options: bad resolutions rejected, value kept");
+    CHECK(ico_video_parse_resolution("10x", &q) == 0 && q.resScale == 10 &&
+              ico_video_parse_resolution("16x", &q) == 0 && q.resScale == 16,
+          "options: 10x and 16x");
+    ico_video_parse_resolution("3840x2160", &q);
     int a = -1;
     CHECK(ico_video_parse_aspect("16:10", &a) == 0 && a == ICO_ASPECT_16_10 &&
               ico_video_parse_aspect("21:9", &a) == 0 && a == ICO_ASPECT_21_9 &&
               ico_video_parse_aspect("32:9", &a) == 0 && a == ICO_ASPECT_32_9 &&
+              ico_video_parse_aspect("48:9", &a) == 0 && a == ICO_ASPECT_48_9 &&
               ico_video_parse_aspect("21:10", &a) != 0,
           "options: aspect parser");
     char buf[32];
@@ -1173,8 +1187,25 @@ static void checkScales(void)
     s.sceneWidth = 7680;
     s.sceneHeight = 4320;
     applyWith(&s);
-    CHECK(near(g_rd.sceneSx * 512.0f, 3840.0f) && near(g_rd.sceneSy * 512.0f, 2160.0f),
-          "scales: capped at 4K");
+    CHECK(near(g_rd.sceneSx * 512.0f, 7680.0f) && near(g_rd.sceneSy * 512.0f, 4320.0f),
+          "scales: 8K is no longer held to 4K");
+    s.sceneWidth = 20000;
+    s.sceneHeight = 15000;
+    applyWith(&s);
+    CHECK(near(g_rd.sceneSx * 512.0f, 16384.0f) && near(g_rd.sceneSy * 512.0f, 12288.0f),
+          "scales: capped at the texture limit, shape kept (%g x %g)",
+          (double)(g_rd.sceneSx * 512.0f), (double)(g_rd.sceneSy * 512.0f));
+    /* 48:9 in a 5760x1080 window with Window resolution: the box itself */
+    s.sceneWidth = s.sceneHeight = 0;
+    s.outputWidth = 5760;
+    s.outputHeight = 1080;
+    s.aspect = 48.0f / 9.0f;
+    applyWith(&s);
+    CHECK(near(g_rd.sceneSx * 512.0f, 5760.0f) && near(g_rd.sceneSy * 512.0f, 1080.0f),
+          "scales: 48:9 in 5760x1080 renders 5760x1080");
+    s.aspect = 10.0f;
+    applyWith(&s);
+    CHECK(g_rd.outAspect == RD_ASPECT_MAX, "scales: the aspect is held to the maximum");
     s.sceneWidth = s.sceneHeight = 0;
     s.outputWidth = 320;
     s.outputHeight = 240;
@@ -1489,6 +1520,68 @@ static void checkScale2(void)
           rhi_vk_validation_error_count());
     rd_destroy_texture(t);
     rd_shutdown();
+}
+
+/* The scene cap follows the device's texture limit (4096 under
+ * ICO_VK_FAKE_LIMITS=min), and a scale the device cannot allocate falls back
+ * by halves.  The settings are applied without recreating the targets for
+ * the cap (a 16384 texture is not worth allocating); the fallback test makes
+ * texture creates above a size fail instead of allocating the big ones. */
+static void checkSceneLimit(void)
+{
+    RdSettings s = originalSettings();
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    const float lim = (float)rhi_limits()->maxTextureSize;
+    float ew = 20000.0f, eh = 15000.0f;
+    if (ew > lim) {
+        eh *= lim / ew;
+        ew = lim;
+    }
+    if (eh > lim) {
+        ew *= lim / eh;
+        eh = lim;
+    }
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneWidth = 20000;
+    s.sceneHeight = 15000;
+    s.outputWidth = s.outputHeight = 0;
+    g_rd.settings = s;
+    rd__apply_display();
+    CHECK(near(g_rd.sceneSx * 512.0f, ew) && near(g_rd.sceneSy * 512.0f, eh),
+          "limit: the scene is held to the device's %g, shape kept (%g x %g)", (double)lim,
+          (double)(g_rd.sceneSx * 512.0f), (double)(g_rd.sceneSy * 512.0f));
+    rd_shutdown();
+
+    /* 16x asked, the device holds nothing over 3 million texels: 16x, 8x
+       and 4x fail, 2x is made.  Nothing big is ever allocated. */
+    s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 16.0f;
+    s.aspect = 4.0f / 3.0f;
+    vkr_test_fail_texels_above(3000000);
+    if (rd_init(512, 512, &s, NULL)) {
+        const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+        CHECK(g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f && rd_scene_scale_lowered() == 2,
+              "fallback: 16x lands at 2x (%g x %g, lowered %d)", (double)g_rd.sceneSx,
+              (double)g_rd.sceneSy, rd_scene_scale_lowered());
+        CHECK(t && t->color.id != 0 && t->tw == 1024 && t->th == 1024,
+              "fallback: the scene target exists at 2x");
+        /* the same options again do not recreate the targets or raise it */
+        g_rd.settings = s;
+        CHECK(!rd__apply_display() && g_rd.sceneSx == 2.0f && rd_scene_scale_lowered() == 2,
+              "fallback: unchanged options keep the lowered scale");
+        /* a new request is tried afresh */
+        s.sceneScale = 1.0f;
+        g_rd.settings = s;
+        CHECK(rd__apply_display() && rd_scene_scale_lowered() == 0 && g_rd.sceneSx == 1.0f,
+              "fallback: a new scale starts from what is asked");
+        rd_shutdown();
+    } else {
+        CHECK(0, "fallback: rd_init");
+    }
+    vkr_test_fail_texels_above(0);
 }
 
 static void checkWide169(void)
@@ -2956,6 +3049,7 @@ int main(int argc, char **argv)
     rd_shutdown();
     checkOriginal();
     checkScale2();
+    checkSceneLimit();
     checkWide169();
     checkPresentInfo();
     checkFullPixel();

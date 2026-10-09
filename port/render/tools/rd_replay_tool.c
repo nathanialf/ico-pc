@@ -22,8 +22,9 @@
  *                         the four options below apply without it, but a
  *                         replay at a scale above 1x still wants it for the
  *                         game's picture
- *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9 or
- *                         a number (w / h)
+ *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9, 48:9
+ *                         (the widest the game allows is 20:3) or a number
+ *                         (w / h)
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene

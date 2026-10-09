@@ -677,15 +677,23 @@ static int brightness(void)
     return v < 0 ? 0 : v > BRIGHTNESS_MAX ? BRIGHTNESS_MAX : v;
 }
 
+/* The Resolution row's cycle: Window, then these scales, then Auto.  A
+   scale from the file that is not in the list (5x, 7x) or a WxH reads -1. */
+static const int kResScales[] = {1, 2, 3, 4, 6, 8, 12, 16};
+#define RES_STEPS ((int)N_OF(kResScales))
+
+/* the position in the cycle: 0 Window, 1..RES_STEPS the scales, -1 neither */
 static int resolutionIndex(const IcoVideoOptions *o)
 {
-    if (o->resScale >= 1 && o->resScale <= 4) {
-        return o->resScale;
+    for (int i = 0; i < RES_STEPS; i++) {
+        if (o->resScale == kResScales[i]) {
+            return i + 1;
+        }
     }
     if (o->resW == 0 && o->resScale == 0) {
         return 0;
     }
-    return -1; /* a WxH or a larger N from the file */
+    return -1; /* a WxH or another N from the file */
 }
 
 /* ------------------------------------------------------------- Extras
@@ -994,6 +1002,14 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         if (resolutionIndex(&o) == 0) {
             return ui_str(UI_STR_VAL_WINDOW);
         }
+#ifdef ICO_RD
+        if (o.resScale > 0 && rd_scene_scale_lowered() > 0 &&
+            rd_scene_scale_lowered() < o.resScale) {
+            /* the graphics card could not hold it: the scale in use after it */
+            snprintf(buf, size, "%dx (%dx)", o.resScale, rd_scene_scale_lowered());
+            return buf;
+        }
+#endif
         return ico_video_resolution_name(&o, buf, size);
     case UI_OPT_ASPECT:
         return o.aspect == ICO_ASPECT_AUTO ? ui_str(UI_STR_VAL_AUTO)
@@ -1317,11 +1333,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         if (crtForcesNative(&o)) {
             return; /* 1x while the CRT filter is on */
         }
-        /* Window, 1x .. 4x, then Auto (index 5) */
-        int i = o.resScale == ICO_RES_AUTO ? 5 : resolutionIndex(&o);
-        i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 6, dir);
+        /* Window, the scales, then Auto (index RES_STEPS + 1) */
+        int i = o.resScale == ICO_RES_AUTO ? RES_STEPS + 1 : resolutionIndex(&o);
+        i = i < 0 ? (dir > 0 ? 0 : RES_STEPS) : stepIndex(i, RES_STEPS + 2, dir);
         o.resW = o.resH = 0;
-        o.resScale = i == 5 ? ICO_RES_AUTO : i;
+        o.resScale = i == RES_STEPS + 1 ? ICO_RES_AUTO : (i == 0 ? 0 : kResScales[i - 1]);
         video = 1;
         break;
     }

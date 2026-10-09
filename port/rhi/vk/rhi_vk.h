@@ -34,6 +34,11 @@ uint32_t vkr_test_swapchain_creations(void);
 const char *vkr_test_last_limit(void);
 uint32_t vkr_test_limit(const char *name);
 
+/* For rd_present_test's allocation fallback: rhi_create_texture returns a
+ * null texture for any texture with more than this many texels (width times
+ * height), as a device out of memory does.  0 turns it off. */
+void vkr_test_fail_texels_above(uint64_t texels);
+
 #ifdef __cplusplus
 }
 

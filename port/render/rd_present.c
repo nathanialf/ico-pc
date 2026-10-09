@@ -89,7 +89,6 @@ typedef struct RdPresentPreset {
 } RdPresentPreset;
 
 #define RD_ASPECT_43 (4.0f / 3.0f)
-#define RD_ASPECT_MAX (32.0f / 9.0f)
 
 void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 {
@@ -207,14 +206,16 @@ bool rd__apply_display(void)
         w = gw;
         h = gh;
     }
-    /* from the GS size up to 4K (3840 x 2160) */
-    if (w > 3840.0f) {
-        h *= 3840.0f / w;
-        w = 3840.0f;
+    /* from the GS size up to the GPU's largest texture, both axes scaled
+     * together so the shape is kept (16384 where there is no device) */
+    const float lim = g_rd.hasDevice ? (float)rhi_limits()->maxTextureSize : 16384.0f;
+    if (w > lim) {
+        h *= lim / w;
+        w = lim;
     }
-    if (h > 2160.0f) {
-        w *= 2160.0f / h;
-        h = 2160.0f;
+    if (h > lim) {
+        w *= lim / h;
+        h = lim;
     }
     const float sx = w / gw < 1.0f ? 1.0f : w / gw;
     const float sy = h / gh < 1.0f ? 1.0f : h / gh;
@@ -225,7 +226,10 @@ bool rd__apply_display(void)
     }
     const uint8_t full = st->fullHeightScene != 0;
     const uint32_t vs = st->vsync ? 2u : 1u;
-    const bool changed = sx != g_rd.sceneSx || sy != g_rd.sceneSy || work != g_rd.workScale ||
+    /* compared with what the options asked for last time, not with what the
+     * allocation fallback (createNamedTargets) settled on, so an unrelated
+     * change does not recreate the targets just to fail the same way again */
+    const bool changed = sx != g_rd.sceneReqSx || sy != g_rd.sceneReqSy || work != g_rd.workScale ||
                          full != g_rd.fullHeight;
     /* one line when what the options give differs from what was in force:
      * this runs on a settings change or a resize (rd_begin_frame's
@@ -236,8 +240,13 @@ bool rd__apply_display(void)
                 (double)sx, (double)sy, crtLock ? " (CRT: 1x)" : "", (double)work, (double)aspect,
                 (unsigned)filter, full ? "full" : "half", st->vsync ? "on" : "off");
     }
-    g_rd.sceneSx = sx;
-    g_rd.sceneSy = sy;
+    if (changed) {
+        g_rd.sceneReqSx = sx;
+        g_rd.sceneReqSy = sy;
+        g_rd.sceneSx = sx;
+        g_rd.sceneSy = sy;
+        g_rd.sceneFellBack = false;
+    }
     g_rd.workScale = work;
     g_rd.wideX = wide;
     g_rd.outAspect = aspect;

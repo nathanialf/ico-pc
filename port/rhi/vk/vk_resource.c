@@ -413,6 +413,14 @@ static bool vkr_create_view(VkImage image, VkFormat fmt, VkImageAspectFlags aspe
     return VKR_CHECK(vkCreateImageView(g_vkr.device, &vi, NULL, out));
 }
 
+/* vkr_test_fail_texels_above: 0 is off */
+static uint64_t s_failTexelsAbove;
+
+void vkr_test_fail_texels_above(uint64_t texels)
+{
+    s_failTexelsAbove = texels;
+}
+
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
     RhiTexture out = {0};
@@ -426,6 +434,9 @@ RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
         /* texture packs: BC needs the device feature (RhiLimits.bcTextures)
          * and is sampled and copied into only, never drawn to */
         return out;
+    }
+    if (s_failTexelsAbove && (uint64_t)desc->width * desc->height > s_failTexelsAbove) {
+        return out; /* the test's stand-in for a device that is out of memory */
     }
     const VkrFormatMap *fm = &vkr_formatMap[desc->format];
     const VkFormat vkFmt = vkr_vk_format(desc->format);
