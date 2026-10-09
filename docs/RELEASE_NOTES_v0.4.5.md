@@ -11,5 +11,7 @@
 - Scenery near the edges of the screen no longer pops in or out on wide screens or while the camera turns.
 - Water droplets near the sides of ultrawide screens are no longer missing.
 - The darkening behind the title is no longer narrower than the picture on ultrawide screens.
-<!-- F3: French apostrophes -->
+- French menus: the apostrophes on the Graphics driver page look right.
+- The button remap screen names the mouse buttons in the menu's language.
+- Saving a picture of the frame with F12 works when the user folder has accented characters.
 <!-- P5c: boot flash -->
