@@ -47,8 +47,9 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    gaps, the alignment and the first corner above are in sheet texels (s
    times as many strip texels).  A page holds strips of one scale: 1024 x
    1024 at 1x; above it 1024 s x 256 s of coverage, at most 4096 wide, and
-   below it as many texels of rim (rd.h rd_SheetRim: the shader reads the
-   rim there instead of dilating 50 x 34 texels a pixel at 4x), so the
+   below it as many texels of rim (rd.h rd_SheetRim: the 1x rim of the
+   sheet texels, one value over each sheet texel's texels, which the shader
+   magnifies; v0.4.3 RIM), so the
    texture is 2048 x 1024 at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2,
    4.5 and 8 MB, kept on the CPU and in the texture; at most MF_PAGES of a
    style, three styles: 96 MB of textures at 4x if every page of every style
@@ -717,10 +718,12 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
                              (uint32_t)h, cov);
     }
     if (p->scale > 1) {
-        /* the rim below, over the strip and the texel round it that the
-           bilinear read takes (the gaps keep other strips' rims out) */
+        /* the rim below, over the strip and the sheet texel round it that
+           the magnified rim's bilinear read takes (v0.4.3 RIM: one value a
+           sheet texel; the gaps keep other strips' rims out) */
         uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
-        const int rx = s->x - 1, ry = s->y - 1, rw = w + 2, rh = h + 2;
+        const int sc = p->scale;
+        const int rx = s->x - sc, ry = s->y - sc, rw = w + 2 * sc, rh = h + 2 * sc;
         rd_SheetRim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
                     rim);
         if (p->tex) {

@@ -65,26 +65,53 @@ static uint32_t quantise(uint32_t v, uint32_t th32)
     return (q * 255u + n / 2u) / n;
 }
 
-/* v0.4.2 (package F-G): the falloff W (n + 1 entries) at strip distance d
-   of a strip at s texels a sheet texel: W at d / s, linearly interpolated,
-   rounded to per mille; 0 past the reach */
-static uint32_t falloffAt(const uint32_t *wt, int32_t n, int32_t d, uint32_t s)
-{
-    d = d < 0 ? -d : d;
-    if (d > n * (int32_t)s) {
-        return 0;
-    }
-    const int32_t i = d / (int32_t)s, f = d % (int32_t)s;
-    if (f == 0) {
-        return wt[i];
-    }
-    return (wt[i] * (s - (uint32_t)f) + wt[i + 1] * (uint32_t)f + s / 2u) / s;
-}
-
 /* floor(v / s) */
 static int32_t floorDiv(int32_t v, int32_t s)
 {
     return v >= 0 ? v / s : -((-v + s - 1) / s);
+}
+
+/* the Bayer threshold (32nds) of sheet texel (x, y), or a half */
+static uint32_t thresholdAt(const RdSheetStyle *s, int32_t x, int32_t y)
+{
+    return s->dither ? 2u * kBayer[(uint32_t)y & 3u][(uint32_t)x & 3u] + 1u : 16u;
+}
+
+/* the rim's weight in 64ths */
+static uint32_t rimWeight(const RdSheetStyle *s)
+{
+    return s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64u;
+}
+
+/* v0.4.3 (package RIM): the coverage of sheet texel (x, y) of a strip at
+   sc texels a sheet texel: the mean of its sc x sc texels, rounded */
+static uint32_t sheetCovAt(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
+                           uint32_t sc)
+{
+    uint32_t sum = 0;
+    for (int32_t j = 0; j < (int32_t)sc; j++) {
+        for (int32_t i = 0; i < (int32_t)sc; i++) {
+            sum += covAt(cov, w, h, x * (int32_t)sc + i, y * (int32_t)sc + j);
+        }
+    }
+    return (sum + sc * sc / 2u) / (sc * sc);
+}
+
+/* the rim of sheet texel (x, y): the largest sheet coverage weighted by
+   the falloff, rounded to 0..255 */
+static uint32_t sheetRimAt(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
+                           uint32_t sc)
+{
+    uint32_t m = 0;
+    for (int32_t dy = -ICO_SHEET_RY; dy <= ICO_SHEET_RY; dy++) {
+        for (int32_t dx = -ICO_SHEET_RX; dx <= ICO_SHEET_RX; dx++) {
+            const uint32_t c = sc > 1 ? sheetCovAt(cov, w, h, x + dx, y + dy, sc)
+                                      : covAt(cov, w, h, x + dx, y + dy);
+            const uint32_t k = c * kWx[dx < 0 ? -dx : dx] * kWy[dy < 0 ? -dy : dy];
+            m = k > m ? k : m;
+        }
+    }
+    return (m + 500000u) / 1000000u;
 }
 
 void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
@@ -97,32 +124,56 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
     const uint32_t sc = s->scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
                         : s->scale                     ? s->scale
                                                        : 1u;
-    const int32_t rx = ICO_SHEET_RX * (int32_t)sc, ry = ICO_SHEET_RY * (int32_t)sc;
-    /* the rim: the largest coverage weighted by the falloff, rounded to 0..255 */
-    uint32_t m = 0;
-    for (int32_t dy = -ry; dy <= ry; dy++) {
-        const uint32_t wy = falloffAt(kWy, ICO_SHEET_RY, dy, sc);
-        for (int32_t dx = -rx; dx <= rx; dx++) {
-            const uint32_t k =
-                covAt(cov, w, h, x + dx, y + dy) * falloffAt(kWx, ICO_SHEET_RX, dx, sc) * wy;
-            m = k > m ? k : m;
+    /* the threshold in 32nds: the Bayer entry's centre, or a half; above
+       1x the sheet texel's, one entry for the sc x sc strip texels in it */
+    const uint32_t th = thresholdAt(s, floorDiv(x, (int32_t)sc), floorDiv(y, (int32_t)sc));
+    if (sc == 1) {
+        /* the rim: the largest coverage weighted by the falloff */
+        const uint32_t r = sheetRimAt(cov, w, h, x, y, 1);
+        const uint32_t rw = (r * rimWeight(s) + 32u) / 64u;
+        const uint32_t a = s->rimOn ? (c > rw ? c : rw) : c;
+        const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
+        const uint32_t aq = quantise(a, th), tq = quantise(t, th);
+        const uint32_t grey =
+            ((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) / 255u;
+        *outGrey = (uint8_t)grey;
+        *outAlpha = (uint8_t)((aq * 128u + 127u) / 255u);
+        return;
+    }
+    /* v0.4.3 (package RIM): the rim levels of the four sheet texels around
+       the texel's centre ((x + 0.5) / sc - 0.5, in 2sc-ths 2x + 1 - sc),
+       each the rim alone quantised at its own threshold, blended
+       bilinearly: on the 0..255 scale and in GS units */
+    const int32_t nx = 2 * x + 1 - (int32_t)sc, ny = 2 * y + 1 - (int32_t)sc;
+    const int32_t qx = floorDiv(nx, 2 * (int32_t)sc), qy = floorDiv(ny, 2 * (int32_t)sc);
+    const float gx = (float)(nx - 2 * (int32_t)sc * qx) / (float)(2 * sc);
+    const float gy = (float)(ny - 2 * (int32_t)sc * qy) / (float)(2 * sc);
+    float lq[2][2], la[2][2];
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+            const uint32_t r =
+                s->rimOn ? sheetRimAt(cov, w, h, qx + i, qy + j, sc) * rimWeight(s) : 0u;
+            const uint32_t l =
+                quantise(s->rimOn ? (r + 32u) / 64u : 0u, thresholdAt(s, qx + i, qy + j));
+            lq[j][i] = (float)l;
+            la[j][i] = (float)((l * 128u + 127u) / 255u);
         }
     }
-    const uint32_t r = (m + 500000u) / 1000000u;
-    const uint32_t wgt = s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64u;
-    const uint32_t rw = (r * wgt + 32u) / 64u;
-    const uint32_t a = s->rimOn ? (c > rw ? c : rw) : c;
+    const float q0 = lq[0][0] + (lq[0][1] - lq[0][0]) * gx,
+                q1 = lq[1][0] + (lq[1][1] - lq[1][0]) * gx;
+    const float a0 = la[0][0] + (la[0][1] - la[0][0]) * gx,
+                a1 = la[1][0] + (la[1][1] - la[1][0]) * gx;
+    const float lm = q0 + (q1 - q0) * gy, am = a0 + (a1 - a0) * gy;
+    /* the fill on top: the texel's own coverage */
+    const uint32_t rm = (uint32_t)floorf(lm + 0.5f);
+    const uint32_t a = c > rm ? c : rm;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
-    /* the threshold in 32nds: the Bayer entry's centre, or a half */
-    /* the sheet texel's: one entry for the s x s strip texels in it */
-    const uint32_t bx = (uint32_t)floorDiv(x, (int32_t)sc) & 3u,
-                   by = (uint32_t)floorDiv(y, (int32_t)sc) & 3u;
-    const uint32_t th = s->dither ? 2u * kBayer[by][bx] + 1u : 16u;
-    const uint32_t aq = quantise(a, th), tq = quantise(t, th);
-    const uint32_t grey =
-        ((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) / 255u;
-    *outGrey = (uint8_t)grey;
-    *outAlpha = (uint8_t)((aq * 128u + 127u) / 255u);
+    const uint32_t cq = quantise(c, th), tq = quantise(t, th);
+    const float af = (float)((cq * 128u + 127u) / 255u);
+    *outGrey =
+        (uint8_t)(((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) /
+                  255u);
+    *outAlpha = (uint8_t)floorf((am > af ? am : af) + 0.5f);
 }
 
 void sheetref_Sample(const uint8_t *cov, uint32_t w, uint32_t h, float u, float v,

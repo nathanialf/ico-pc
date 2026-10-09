@@ -46,7 +46,8 @@
 #define SHEET_T_OFF 16
 // v0.4.2 (package F-G): the largest scale of a strip (texels a sheet
 // texel; shader_consts.h ICO_SHEET_SCALE_MAX).  Above 1 the rim comes
-// precomputed in the texture's bottom half (rd.h rd_SheetRim).
+// precomputed in the texture's bottom half (rd.h rd_SheetRim), one value a
+// sheet texel (v0.4.3, package RIM).
 #define SHEET_SCALE_MAX 4
 // The grid of coverage texels the four sheet texels of a bilinear sample
 // are rebuilt from.
@@ -116,6 +117,33 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
     const uint aq = sheet_quantise(a, th), tq = sheet_quantise(t, th);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
     return uint2(grey, (aq * 128u + 127u) / 255u);
+}
+
+// v0.4.3 (package RIM): a scaled strip's rim is the sheet's, magnified.
+// The rim level (0..255) of a sheet texel from its rim r (rd_SheetRim: the
+// 1x dilation of the sheet texels' mean coverage) under the style at the
+// sheet texel's threshold th: the rim's alpha alone, without the letters.
+uint sheet_rim_level(uint r, uint4 style, uint th)
+{
+    return sheet_quantise(style.x != 0u ? (r * style.x + 32u) / 64u : 0u, th);
+}
+
+// The texel of a scaled strip from its own coverage c and the rim levels
+// of the four sheet texels around its centre blended bilinearly: rq on the
+// 0..255 scale, ra in GS units (each sheet texel's (level * 128 + 127) /
+// 255), at the threshold th of the sheet texel it lies in.  The alpha is
+// the larger of the magnified rim's and the fill's (c quantised), rounded;
+// the grey mixes the rim level to the fill level by the fill's share of
+// max(c, rim), quantised, so the letter's edge is the texel's own.
+uint2 sheet_texel_scaled(uint c, float rq, float ra, uint4 style, uint th)
+{
+    const uint rm = (uint)floor(rq + 0.5);
+    const uint a = max(c, rm);
+    const uint t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
+    const uint cq = sheet_quantise(c, th), tq = sheet_quantise(t, th);
+    const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
+    const float af = (float)((cq * 128u + 127u) / 255u);
+    return uint2(grey, (uint)floor(max(ra, af) + 0.5));
 }
 
 #endif // ICO_SHEET_TEXT_C

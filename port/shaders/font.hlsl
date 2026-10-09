@@ -68,32 +68,63 @@ uint4 sheet_cov4(int2 q, int2 size)
     return c;
 }
 
-// v0.4.2 (package F-G): the four texels at p0 .. p0 + (1, 1) of a strip
-// rasterised at s texels a sheet texel (2..SHEET_SCALE_MAX).  The texture's
-// top half is the coverage, its bottom half the rim rd_SheetRim made from
-// it on the CPU (rd.h: the dilation with the falloff at distance / s, RX * s
-// and RY * s texels across and down, which a pixel cannot afford to redo:
-// 50 x 34 texels at 4x), each 0 outside its half.  The threshold is the
-// Bayer entry of the sheet texel the texel lies in (an s x s cell: the
-// grain is the sheets', not finer); the levels are the same.
+// v0.4.2 (package F-G), v0.4.3 (package RIM): the four texels at p0 ..
+// p0 + (1, 1) of a strip rasterised at s texels a sheet texel
+// (2..SHEET_SCALE_MAX).  The texture's top half is the coverage, its
+// bottom half the rim rd_SheetRim made on the CPU (rd.h: the 1x dilation of
+// each sheet texel's mean coverage, its value over the sheet texel's s x s
+// texels), each 0 outside its half.  The rim is drawn as a sheet drew it:
+// each sheet texel quantised against its own Bayer entry, then magnified
+// (the four sheet texels around the texel's centre blended bilinearly, as
+// the GS magnified a sheet), so the halo has the sheets' steps and grain
+// at any scale; the letters are the fine coverage on top, quantised with
+// the threshold of the sheet texel the texel lies in.
 void sheet_scaled(int2 p0, int2 size, uint4 style, uint dither, uint s, out float2 v[2][2])
 {
     const int hh = size.y / 2;
-    // the coverage and the rim of the same texels, each 0 outside its half
-    // (the gather addresses the whole texture)
-    uint4 c = sheet_cov4(p0, size), r = sheet_cov4(p0 + int2(0, hh), size);
+    const int si = (int)s;
+    // the coverage of the four texels, 0 outside the top half (the gather
+    // addresses the whole texture)
+    uint4 c = sheet_cov4(p0, size);
     const bool in0 = p0.y >= 0 && p0.y < hh, in1 = p0.y + 1 >= 0 && p0.y + 1 < hh;
     c = uint4(in0 ? c.xy : uint2(0u, 0u), in1 ? c.zw : uint2(0u, 0u));
-    r = uint4(in0 ? r.xy : uint2(0u, 0u), in1 ? r.zw : uint2(0u, 0u));
     const uint cc[2][2] = {{c.x, c.y}, {c.z, c.w}};
-    const uint rr[2][2] = {{r.x, r.y}, {r.z, r.w}};
+    // texel p's centre in sheet texels is (p + 0.5) / s - 0.5, in 2s-ths
+    // 2p + 1 - s; the four texels' blends read sheet texels qa .. qa + 2
+    // (kept positive for the divisions: the offset is a multiple of the
+    // Bayer cell)
+    const int2 qa = (2 * p0 + 1 - si + 8192 * si) / (2 * si) - 4096;
+    float rq[3][3], ra[3][3];
+    [unroll] for (int j = 0; j < 3; j++) {
+        [unroll] for (int i = 0; i < 3; i++) {
+            const int2 q = qa + int2(i, j);
+            const int2 t = q * si;
+            const bool inside = t.x >= 0 && t.x < size.x && t.y >= 0 && t.y < hh;
+            // the load's address clamped (it is made whether or not used)
+            const int2 tc = clamp(t, int2(0, 0), int2(size.x - 1, hh - 1));
+            const float rv = g_atlas.Load(int3(tc.x, hh + tc.y, 0)).r;
+            const uint r = inside ? (uint)floor(rv * 255.0 + 0.5) : 0u;
+            const uint l = sheet_rim_level(r, style, sheet_threshold(q, dither));
+            rq[j][i] = (float)l;
+            ra[j][i] = (float)((l * 128u + 127u) / 255u);
+        }
+    }
     [unroll] for (int ty = 0; ty < 2; ty++) {
         [unroll] for (int tx = 0; tx < 2; tx++) {
-            // the sheet texel of texel p: floor(p / s), kept positive for
-            // the division (the offset is a multiple of the Bayer cell)
             const int2 p = p0 + int2(tx, ty);
-            const int2 q = (p + 4096 * (int)s) / (int)s - 4096;
-            const uint2 st = sheet_texel(cc[ty][tx], rr[ty][tx], style, sheet_threshold(q, dither));
+            const int2 n = 2 * p + 1 - si;
+            const int2 q0 = (n + 8192 * si) / (2 * si) - 4096;
+            const float2 g = float2(n - 2 * si * q0) / (float)(2 * si);
+            const int2 o = q0 - qa; // 0 or 1
+            const float rq0 = lerp(rq[o.y][o.x], rq[o.y][o.x + 1], g.x);
+            const float rq1 = lerp(rq[o.y + 1][o.x], rq[o.y + 1][o.x + 1], g.x);
+            const float ra0 = lerp(ra[o.y][o.x], ra[o.y][o.x + 1], g.x);
+            const float ra1 = lerp(ra[o.y + 1][o.x], ra[o.y + 1][o.x + 1], g.x);
+            // the threshold of the sheet texel p lies in: floor(p / s)
+            const int2 q = (p + 4096 * si) / si - 4096;
+            const uint2 st = sheet_texel_scaled(cc[ty][tx], lerp(rq0, rq1, g.y),
+                                                lerp(ra0, ra1, g.y), style,
+                                                sheet_threshold(q, dither));
             v[ty][tx] = float2(st);
         }
     }

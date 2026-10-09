@@ -749,20 +749,9 @@ RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
     return t;
 }
 
-/* v0.4.2 (package F-G): the falloff table wt (n + 1 per-mille entries) at
-   texel distance d of a strip at s texels a sheet texel: wt at d / s,
-   linearly interpolated, rounded */
-static uint32_t sheetFalloff(const uint32_t *wt, int n, int d, int s)
-{
-    if (d > n * s) {
-        return 0;
-    }
-    const int i = d / s, f = d % s;
-    return f ? (wt[i] * (uint32_t)(s - f) + wt[i + 1] * (uint32_t)f + (uint32_t)s / 2u) /
-                   (uint32_t)s
-             : wt[i];
-}
-
+/* v0.4.2 (package F-G), v0.4.3 (package RIM): the rim at sheet
+   resolution, as the 1x shader makes it, over the sheet texels that the
+   rectangle touches */
 void rd_SheetRim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int32_t x, int32_t y,
                  int32_t rw, int32_t rh, uint8_t *rim)
 {
@@ -771,54 +760,81 @@ void rd_SheetRim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int
                                                    ICO_SHEET_WX_6};
     static const uint32_t kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
                                                    ICO_SHEET_WY_3, ICO_SHEET_WY_4};
-    const int s = scale < 1 ? 1 : scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : (int)scale;
-    const int rx = ICO_SHEET_RX * s, ry = ICO_SHEET_RY * s;
+    const int32_t s = scale < 1                     ? 1
+                      : scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
+                                                    : (int)scale;
     const int32_t x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y;
     const int32_t x1 = x + rw > (int32_t)w ? (int32_t)w : x + rw;
     const int32_t y1 = y + rh > (int32_t)h ? (int32_t)h : y + rh;
     if (!cov || !rim || x0 >= x1 || y0 >= y1) {
         return;
     }
-    uint32_t wx[ICO_SHEET_RX * ICO_SHEET_SCALE_MAX + 1], wy[ICO_SHEET_RY * ICO_SHEET_SCALE_MAX + 1];
-    for (int d = 0; d <= rx; d++) {
-        wx[d] = sheetFalloff(kWx, ICO_SHEET_RX, d, s);
-    }
-    for (int d = 0; d <= ry; d++) {
-        wy[d] = sheetFalloff(kWy, ICO_SHEET_RY, d, s);
-    }
-    /* separable (a max commutes with a non-negative factor): each row's
-       largest c * wx across, then down with wy */
-    const int32_t ya = y0 - ry<0 ? 0 : y0 - ry, yb = y1 + ry>(int32_t) h ? (int32_t)h : y1 + ry;
-    const int32_t cw = x1 - x0;
-    uint32_t *hm = malloc(sizeof(uint32_t) * (size_t)cw * (size_t)(yb - ya));
-    if (!hm) {
+    /* the sheet texels: those the rectangle touches (qx0..qx1 - 1 across,
+       qy0..qy1 - 1 down), and their coverage's reach round them, clipped to
+       the sheet (sw x sh) */
+    const int32_t sw = ((int32_t)w + s - 1) / s, sh = ((int32_t)h + s - 1) / s;
+    const int32_t qx0 = x0 / s, qx1 = (x1 + s - 1) / s, qy0 = y0 / s, qy1 = (y1 + s - 1) / s;
+    const int32_t cx0 = qx0 - ICO_SHEET_RX < 0 ? 0 : qx0 - ICO_SHEET_RX;
+    const int32_t cx1 = qx1 + ICO_SHEET_RX > sw ? sw : qx1 + ICO_SHEET_RX;
+    const int32_t cy0 = qy0 - ICO_SHEET_RY < 0 ? 0 : qy0 - ICO_SHEET_RY;
+    const int32_t cy1 = qy1 + ICO_SHEET_RY > sh ? sh : qy1 + ICO_SHEET_RY;
+    const int32_t cw = cx1 - cx0, ch = cy1 - cy0, ow = qx1 - qx0;
+    uint32_t *c = malloc(sizeof(uint32_t) * (size_t)cw * (size_t)ch);
+    uint32_t *hm = malloc(sizeof(uint32_t) * (size_t)ow * (size_t)ch);
+    if (!c || !hm) {
+        free(c);
+        free(hm);
         return;
     }
-    for (int32_t yy = ya; yy < yb; yy++) {
-        const uint8_t *row = cov + (size_t)yy * w;
-        for (int32_t xx = x0; xx < x1; xx++) {
-            uint32_t m = 0;
-            const int32_t a = xx - rx < 0 ? 0 : xx - rx;
-            const int32_t b = xx + rx >= (int32_t)w ? (int32_t)w - 1 : xx + rx;
-            for (int32_t k = a; k <= b; k++) {
-                const uint32_t v = row[k] * wx[k < xx ? xx - k : k - xx];
-                m = v > m ? v : m;
+    /* each sheet texel's coverage: the mean of its s x s texels (0 outside
+       the coverage), rounded */
+    const uint32_t n = (uint32_t)(s * s);
+    for (int32_t qy = cy0; qy < cy1; qy++) {
+        for (int32_t qx = cx0; qx < cx1; qx++) {
+            uint32_t sum = 0;
+            for (int32_t yy = qy * s; yy < qy * s + s && yy < (int32_t)h; yy++) {
+                for (int32_t xx = qx * s; xx < qx * s + s && xx < (int32_t)w; xx++) {
+                    sum += cov[(size_t)yy * w + (size_t)xx];
+                }
             }
-            hm[(size_t)(yy - ya) * (size_t)cw + (size_t)(xx - x0)] = m;
+            c[(size_t)(qy - cy0) * (size_t)cw + (size_t)(qx - cx0)] = (sum + n / 2u) / n;
         }
     }
-    for (int32_t yy = y0; yy < y1; yy++) {
-        for (int32_t xx = x0; xx < x1; xx++) {
+    /* the 1x dilation, separable (a max commutes with a non-negative
+       factor): each row's largest c * wx across, then down with wy */
+    for (int32_t qy = cy0; qy < cy1; qy++) {
+        for (int32_t qx = qx0; qx < qx1; qx++) {
             uint32_t m = 0;
-            const int32_t a = yy - ry < ya ? ya : yy - ry, b = yy + ry >= yb ? yb - 1 : yy + ry;
-            for (int32_t k = a; k <= b; k++) {
-                const uint32_t v = hm[(size_t)(k - ya) * (size_t)cw + (size_t)(xx - x0)] *
-                                   wy[k < yy ? yy - k : k - yy];
-                m = v > m ? v : m;
+            for (int32_t k = qx - ICO_SHEET_RX; k <= qx + ICO_SHEET_RX; k++) {
+                if (k >= cx0 && k < cx1) {
+                    const uint32_t v = c[(size_t)(qy - cy0) * (size_t)cw + (size_t)(k - cx0)] *
+                                       kWx[k < qx ? qx - k : k - qx];
+                    m = v > m ? v : m;
+                }
             }
-            rim[(size_t)yy * w + (size_t)xx] = (uint8_t)((m + 500000u) / 1000000u);
+            hm[(size_t)(qy - cy0) * (size_t)ow + (size_t)(qx - qx0)] = m;
         }
     }
+    for (int32_t qy = qy0; qy < qy1; qy++) {
+        for (int32_t qx = qx0; qx < qx1; qx++) {
+            uint32_t m = 0;
+            for (int32_t k = qy - ICO_SHEET_RY; k <= qy + ICO_SHEET_RY; k++) {
+                if (k >= cy0 && k < cy1) {
+                    const uint32_t v = hm[(size_t)(k - cy0) * (size_t)ow + (size_t)(qx - qx0)] *
+                                       kWy[k < qy ? qy - k : k - qy];
+                    m = v > m ? v : m;
+                }
+            }
+            /* the value over the sheet texel's texels */
+            const uint8_t r = (uint8_t)((m + 500000u) / 1000000u);
+            for (int32_t yy = qy * s; yy < qy * s + s && yy < (int32_t)h; yy++) {
+                for (int32_t xx = qx * s; xx < qx * s + s && xx < (int32_t)w; xx++) {
+                    rim[(size_t)yy * w + (size_t)xx] = r;
+                }
+            }
+        }
+    }
+    free(c);
     free(hm);
 }
 

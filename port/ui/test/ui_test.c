@@ -1197,7 +1197,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
         const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2],
                                  t->sheet[3],      t->sheet[0], t->sheetScale};
         /* F-G: a scaled page's coverage is its top half; its texels under
-           the quad made once (sheetref_Texel's rim at 4x is 49 x 33 texels)
+           the quad made once (sheetref_Texel dilates four sheet texels a texel)
            and blended as sheetref_Sample blends them */
         const uint32_t th = t->sheetScale > 1 ? t->h / 2 : t->h;
         const int tx0 = (int)floorf(g->u0) - 2, ty0 = (int)floorf(g->v0) - 2;
@@ -1386,6 +1386,17 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
                   crisp);
             CHECK(soft > crisp, "4x: the 1x strips' edges (%d) wider than the 4x strips' (%d)",
                   soft, crisp);
+        }
+        if (pass == 1 && pngs) {
+            /* v0.4.3 (RIM): the menu look with the 1x strips magnified,
+               beside ui_test_scene4x.png: the rims alike, the letters
+               crisper at 4x */
+            ui__MenuForceScale(1);
+            drawRows4(bg, light, UI_INK_LIGHT);
+            if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
+                writeCrop4("ui_test_scene4x_1x.png", px);
+            }
+            ui__MenuForceScale(0);
         }
     }
 done:

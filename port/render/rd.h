@@ -921,30 +921,51 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                        draws are recorded
  * rd_UpdateTextureRect   takes a sheet texture's rectangles as R8's: w * h
  *                        bytes of coverage
- * Scaled strips (v0.4.2, package F-G): with style.scale s > 1 the coverage
- *                        holds s x s texels for each sheet texel (a strip
- *                        rasterised s times finer for a scene or an output
- *                        s times the GS's), and the sheet's look is kept in
- *                        sheet texels: r reaches ICO_SHEET_RX * s and
- *                        ICO_SHEET_RY * s texels with the falloff at
- *                        distance / s (the per-mille tables linearly
- *                        interpolated, rounded), the Bayer threshold is the
- *                        one of the sheet texel (floor(x / s),
- *                        floor(y / s)), so s x s texels share it and the
- *                        grain is the sheets' size, and the levels are the
- *                        same; the bilinear blend is of the texture's own
- *                        texels.  Such a texture is w x h with the
- *                        coverage in rows 0 .. h/2 - 1 and r in rows
- *                        h/2 .. h - 1 (the caller fills them with
- *                        rd_SheetRim: the dilation is 50 x 34 texels at
- *                        4x, too much for every pixel); the coverage and
- *                        the rim are 0 outside their halves, and a draw
- *                        addresses the top half.  s = 1 draws as before,
- *                        byte for byte (the rim made by the shader).
- * rd_SheetRim            r of the rw x rh texels at (x, y) of a w x h
- *                        coverage at scale s (rows packed, 0 outside it),
- *                        into rim at the same places (w bytes a row);
- *                        the rectangle is clipped to the coverage
+ * Scaled strips (v0.4.2, package F-G; v0.4.3, package RIM): with
+ *                        style.scale s > 1 the coverage holds s x s texels
+ *                        for each sheet texel (a strip rasterised s times
+ *                        finer for a scene or an output s times the GS's).
+ *                        The letters are those texels' own and the rim is
+ *                        the sheet's, magnified as the GS magnified a
+ *                        sheet: each sheet texel (X, Y) (texels sX ..
+ *                        sX + s - 1 across, sY .. down) has the coverage
+ *                        C, the mean of its s x s texels rounded, and the
+ *                        rim R, the 1x dilation of C (ICO_SHEET_RX and
+ *                        ICO_SHEET_RY sheet texels, the per-mille tables as
+ *                        they are); its rim level is
+ *                        L = quantise(rimOn ? R * weight : 0) against its
+ *                        own Bayer threshold (X & 3, Y & 3).  A texel
+ *                        (x, y) blends the L of the four sheet texels
+ *                        around its centre, ((x + 0.5) / s - 0.5,
+ *                        (y + 0.5) / s - 0.5), bilinearly: Lm on the
+ *                        0..255 scale and Am of the GS units
+ *                        (L * 128 + 127) / 255.  With c the texel's own
+ *                        coverage and th the threshold of the sheet texel
+ *                        it lies in (floor(x / s), floor(y / s)):
+ *                          alpha  the larger of Am and the fill's
+ *                                 quantise(c) in GS units, rounded;
+ *                          grey   the rim level lerped to the fill level
+ *                                 by t = c / max(c, Lm rounded),
+ *                                 quantised;
+ *                        so outside the letters a texel is the 1x strip's
+ *                        rim magnified s times (its steps, its grain the
+ *                        sheet texel's), and the letters' edge is the fine
+ *                        texel's.  The bilinear blend of a sample is of
+ *                        the texture's own texels.  Such a texture is
+ *                        w x h with the coverage in rows 0 .. h/2 - 1 and
+ *                        R in rows h/2 .. h - 1, each sheet texel's over
+ *                        its s x s texels (the caller fills them with
+ *                        rd_SheetRim); the coverage and the rim are 0
+ *                        outside their halves, and a draw addresses the
+ *                        top half.  s = 1 draws as before, byte for byte
+ *                        (the rim made by the shader).
+ * rd_SheetRim            R of the sheet texels (s x s texels each) that
+ *                        the rw x rh texels at (x, y) of a w x h coverage
+ *                        at scale s touch (rows packed, 0 outside it),
+ *                        into rim at those sheet texels' texels (w bytes a
+ *                        row), whole sheet texels: a rectangle on the
+ *                        sheet texels' corners writes only itself.  The
+ *                        rectangle is clipped to the coverage
  * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
 typedef struct RdSheetStyle {
     uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
