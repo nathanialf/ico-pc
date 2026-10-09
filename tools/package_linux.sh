@@ -102,7 +102,6 @@ fi
 . "$wt/tools/package_docs_lib.sh"
 
 # stage
-commit8="${commit:0:8}"
 date_str="$(date +%Y-%m-%d)"
 mkdir -p "$stage"
 rm -f "$stage"/ico_pc "$stage"/ico_pc.map "$stage"/libSDL3.so* "$stage"/README.txt "$stage"/README.md
