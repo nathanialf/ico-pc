@@ -27,6 +27,7 @@
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
+ *   --full-pixel          the picture enlarged to hide the reduction pass's border
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -517,7 +518,7 @@ int main(int argc, char **argv)
     if (argc < 3) {
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
-                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
+                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
@@ -565,6 +566,8 @@ int main(int argc, char **argv)
             s.preset = RD_PRESET_ENHANCED;
         } else if (strcmp(argv[i], "--full-height") == 0) {
             s.fullHeightScene = 1;
+        } else if (strcmp(argv[i], "--full-pixel") == 0) {
+            s.fullPixel = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {

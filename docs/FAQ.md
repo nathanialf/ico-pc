@@ -40,6 +40,14 @@ the PS2 gives. [What each one does](OPTIONS.md#effects).
 
 (Asked for in [issue 11](https://github.com/nathanialf/ico-pc/issues/11).)
 
+## Why is there a thin black border around the picture?
+
+The PS2 itself drew a thin black border around the picture, a few dots wide
+at the sides and a little more at the top and bottom, and the game keeps
+it. To hide it, turn on **Full pixel (no border)** in **Options > Effects**.
+It enlarges the picture about 1% so it fills the box.
+[What it does](OPTIONS.md#effects).
+
 ## Why does the CRT filter switch the picture back to the original resolution?
 
 The CRT filter draws the PS2's own picture dots with dark lines between

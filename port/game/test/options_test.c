@@ -467,6 +467,58 @@ static void test_video_effects_depth(const char *dir)
     ico_video_reload();
 }
 
+/* [video] full_pixel (default off): the default, the file read, the
+   normalising, the round trip, and the presets leaving it alone */
+static void test_video_full_pixel(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o;
+    const char *text;
+    FILE *f;
+
+    ico_video_defaults(&o);
+    CHECK(o.fullPixel == 0);
+    snprintf(path, sizeof(path), "%s/options_full_pixel_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\nfull_pixel = true\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.fullPixel == 1);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    /* normalised to 0 or 1 */
+    o.fullPixel = 7;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.fullPixel == 1);
+    o.fullPixel = 0;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "full_pixel = false") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.fullPixel == 0);
+    /* the presets' shortcut leaves it alone */
+    ico_video_defaults(&o);
+    o.fullPixel = 1;
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.fullPixel == 1);
+    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+    CHECK(o.fullPixel == 1);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 /* [video] model_pack (default on) and dump_models (default off):
    the defaults, the file read, the round trip, and the preset untouched */
 static void test_video_models(const char *dir)
@@ -691,6 +743,7 @@ int main(int argc, char **argv)
     test_brain();
     test_video_effects(argc > 1 ? argv[1] : ".");
     test_video_effects_depth(argc > 1 ? argv[1] : ".");
+    test_video_full_pixel(argc > 1 ? argv[1] : ".");
     test_video_models(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
     test_video_interpolate();

@@ -727,6 +727,45 @@ static void checkLuma(void)
     }
 }
 
+/* Full pixel under the filter: a flat frame through the tube at 1920 x 1080
+ * (pillars).  Off, the reduction's border is dark at the box edge; on, the
+ * edge pixels are as lit as the centre and the pillars stay black. */
+static void checkFullPixel(void)
+{
+    const uint32_t w = 1920, h = 1080;
+    uint8_t edge[2][4][3], mid[2][3];
+    RhiRect b;
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
+    for (int on = 0; on < 2; on++) {
+        makeFlatScene(0xC0, 0xC0, 0xC0);
+        RdSettings s = outputSettings(w, h);
+        rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+        s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+        s.crtScanlines = 0.0f;
+        s.fullPixel = (uint8_t)on;
+        if (!present(&s, 0)) {
+            return;
+        }
+        const uint32_t cx = (uint32_t)b.x + b.w / 2, cy = (uint32_t)b.y + b.h / 2;
+        const uint32_t xs[4] = {(uint32_t)b.x, (uint32_t)b.x + b.w - 1, cx, cx};
+        const uint32_t ys[4] = {cy, cy, (uint32_t)b.y, (uint32_t)b.y + b.h - 1};
+        for (int k = 0; k < 4; k++) {
+            memcpy(edge[on][k], &s_out[((size_t)ys[k] * w + xs[k]) * 4], 3);
+        }
+        memcpy(mid[on], &s_out[((size_t)cy * w + cx) * 4], 3);
+        /* the pillars beside the box */
+        CHECK(!(s_out[((size_t)cy * w + b.x - 1) * 4] | s_out[((size_t)cy * w + b.x + b.w) * 4]),
+              "full pixel %s: the pillars stay black", on ? "on" : "off");
+    }
+    static const char *const kSide[4] = {"left", "right", "top", "bottom"};
+    for (int k = 0; k < 4; k++) {
+        CHECK(edge[0][k][0] < mid[0][0] / 8, "full pixel off: the %s edge is dark (%u of %u)",
+              kSide[k], edge[0][k][0], mid[0][0]);
+        CHECK(edge[1][k][0] * 4 >= mid[1][0] * 3, "full pixel on: the %s edge is lit (%u of %u)",
+              kSide[k], edge[1][k][0], mid[1][0]);
+    }
+}
+
 /* --------------------------------------------------------- the phosphors */
 
 static uint32_t s_w; /* the last present's output width */
@@ -1198,6 +1237,7 @@ int main(int argc, char **argv)
     checkModes();
     checkOutside();
     checkLuma();
+    checkFullPixel();
     checkPhosphors();
     checkLight();
     checkTopLayer();

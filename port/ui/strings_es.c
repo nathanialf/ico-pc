@@ -466,6 +466,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Sin bordes",
     /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
+    [UI_STR_OPT_FULL_PIXEL] = "Imagen sin borde",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Controlador gráfico",
     [UI_STR_OPT_GPU_DRIVER] = "Controlador",

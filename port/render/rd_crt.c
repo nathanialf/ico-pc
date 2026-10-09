@@ -464,10 +464,13 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
 }
 
 /* steps 1 to 3: src (vw x vh, the grid, SHADER_READ) through the glow
- * targets ga and gb into box of out, black around it */
+ * targets ga and gb into box of out, black around it.  The composite is
+ * clipped to scissor, which is box except with the full pixel option, where
+ * box is the grown rectangle and scissor the real one */
 static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, uint32_t vw,
                     uint32_t vh, CrtTex *ga, CrtTex *gb, RhiTexture out, RhiFormat outFmt,
-                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror)
+                    uint32_t outW, uint32_t outH, const RhiRect *box, const RhiRect *scissor,
+                    int mirror)
 {
     const RdCrtParams p = *pp;
     const RdPipeKeyInt kBloom = rd__post_key(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F);
@@ -531,6 +534,7 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     /* 3. the composite into the box, black around it (the caller left out
      * in RENDER_TARGET): t1 the grid, t2 the glow */
     beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
+    rhi_cmd_set_scissor(cl, scissor);
     crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
     rhi_cmd_end_render_pass(cl);
     s_passes++;
@@ -540,7 +544,8 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
 }
 
 bool rd__crt_record(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
+                    uint32_t outW, uint32_t outH, const RhiRect *box, const RhiRect *scissor,
+                    int mirror, bool overlay)
 {
     RdCrtParams p;
     if (!rd__crt_resolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
@@ -584,7 +589,8 @@ bool rd__crt_record(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, 
         }
         mirror = 0;
     }
-    return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, mirror);
+    return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, scissor,
+                   mirror);
 }
 
 void rd__crt_film_grid(uint32_t dispH, uint32_t *vw, uint32_t *vh)
@@ -611,7 +617,7 @@ bool rd__crt_record_film(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_
         src = s_filmSrc.t;
     }
     return compose(cl, &p, src, vw, vh, &s_filmGlowA, &s_filmGlowB, out, outFmt, outW, outH, box,
-                   0);
+                   box, 0);
 }
 
 uint32_t rd__crt_last_pass(uint32_t *vw, uint32_t *vh)

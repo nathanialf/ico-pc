@@ -97,6 +97,12 @@ gives you, and that is how the game starts.
   during cutscenes. With them Off you see the whole picture, and the
   subtitles are not dimmed.
 
+The last row is not one of the game's effects:
+
+- **Full pixel (no border)** fills the picture box by enlarging the
+  picture about 1%, hiding the thin black border the PS2 drew around it.
+  Off by default. It works with every Preset and with the CRT filter.
+
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
 

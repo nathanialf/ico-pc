@@ -344,6 +344,7 @@ static void sanitize(IcoVideoOptions *o)
     }
     o->vsync = o->vsync != 0;
     o->fullHeight = o->fullHeight != 0;
+    o->fullPixel = o->fullPixel != 0;
     if (o->framerate != ICO_FRAMERATE_ORIGINAL && o->framerate != ICO_FRAMERATE_UNCAPPED &&
         (o->framerate < FRAMERATE_MIN || o->framerate > FRAMERATE_MAX)) {
         o->framerate = d.framerate;
@@ -427,6 +428,7 @@ static void read_config(void)
     }
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
+    o.fullPixel = ico_config_get_bool("video.full_pixel", 0) != 0;
     {
         /* no key: the default (60 on Android, else "uncapped") */
         char dfr[16];
@@ -552,6 +554,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.vsync", o.vsync);
     r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
     r |= ico_config_set_bool("video.full_height", o.fullHeight);
+    r |= ico_config_set_bool("video.full_pixel", o.fullPixel);
     r |= ico_config_set_string("video.framerate",
                                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
     r |= ico_config_set_bool("video.crt", o.crt);

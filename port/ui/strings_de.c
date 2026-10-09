@@ -468,6 +468,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Randlos",
     /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
+    [UI_STR_OPT_FULL_PIXEL] = "Bild ohne Rand",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Grafiktreiber",
     [UI_STR_OPT_GPU_DRIVER] = "Treiber",

@@ -42,6 +42,7 @@ static void testBuild(void)
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -51,6 +52,7 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
@@ -113,7 +115,7 @@ static void testBuild(void)
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 13), "main page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
     {
         /* Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,

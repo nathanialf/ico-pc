@@ -120,6 +120,11 @@ void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
     box->h = h ? h : 1;
 }
 
+static int32_t roundPx(float v)
+{
+    return (int32_t)floorf(v + 0.5f);
+}
+
 /* one for every preset: the display options apply on their own
  * (rd__apply_display) */
 static const RdPresentPreset s_present = {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1};
@@ -128,6 +133,31 @@ static const RdPresentPreset s_present = {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1
 static void outputBox(uint32_t outW, uint32_t outH, RhiRect *box)
 {
     rd__present_box(outW, outH, g_rd.outAspect, box);
+}
+
+/* The box the picture is drawn into.  Off, the box itself.  With full pixel
+ * on, DISPLAY is drawn so the part the reduction pass filled (it clears the
+ * rest black: W - 4 columns and H/2 - 2 crop rows of its W x H/2) lands on
+ * the box: the drawn rectangle grows by the cropped margin on every side
+ * and the caller's scissor stays at the box. */
+static void pictureRect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect *pic)
+{
+    *pic = *box;
+    const float W = (float)gsW, half = (float)gsH * 0.5f;
+    if (!g_rd.settings.fullPixel || !(W > 4.0f) || !gsH) {
+        return;
+    }
+    const float crop = (float)rd__reduction_crop(gsH);
+    if (!(half > 2.0f * crop)) {
+        return;
+    }
+    /* rounded up, so the cropped margin is always outside the box */
+    const int32_t dx = (int32_t)ceilf((float)box->w * 2.0f / (W - 4.0f) - 0.001f);
+    const int32_t dy = (int32_t)ceilf((float)box->h * crop / (half - 2.0f * crop) - 0.001f);
+    pic->x = box->x - dx;
+    pic->y = box->y - dy;
+    pic->w = box->w + 2u * (uint32_t)dx;
+    pic->h = box->h + 2u * (uint32_t)dy;
 }
 
 static float clampAspect(float a)
@@ -277,11 +307,12 @@ bool rd__present_acquire(void)
     return g_rd.presentOut.id != 0;
 }
 
-/* src (sw x sh) into box of dst in a pass of its own; keepOpen leaves the
- * pass open for the caller to draw more into dst and end it */
+/* src (sw x sh) into box of dst in a pass of its own, clipped to scissor;
+ * keepOpen leaves the pass open for the caller to draw more into dst and
+ * end it */
 static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                  RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
-                 RdFilter filter, int mirror, bool keepOpen)
+                 const RhiRect *scissor, RdFilter filter, int mirror, bool keepOpen)
 {
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -293,7 +324,7 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     rhi_cmd_begin_render_pass(cl, &p);
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
     rhi_cmd_set_viewport(cl, &vp);
-    rhi_cmd_set_scissor(cl, box);
+    rhi_cmd_set_scissor(cl, scissor);
     RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, dstFmt);
     RhiPipeline pipe = rd__get_pipeline(&k);
     if (pipe.id) {
@@ -329,7 +360,7 @@ void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
                       RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load,
                       const RhiRect *box, RdFilter filter, int mirror)
 {
-    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror, false);
+    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, box, filter, mirror, false);
 }
 
 /* ------------------------------------------------------ the effects depth
@@ -394,7 +425,7 @@ static void depthShutdown(void)
  * run, and the plain blit draws the box */
 static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                       RhiFormat dstFmt, uint32_t dw, uint32_t dh, const RhiRect *box,
-                      RdFilter filter, int mirror)
+                      const RhiRect *scissor, RdFilter filter, int mirror)
 {
     RdTargetRec *ts = rd__target_rec(RD_TARGET_SCENE + 1);
     if (!ts || !ts->withDepth || !ts->depth.id || ts->depthState == RHI_STATE_UNDEFINED) {
@@ -440,7 +471,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     rhi_cmd_begin_render_pass(cl, &p);
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
     rhi_cmd_set_viewport(cl, &vp);
-    rhi_cmd_set_scissor(cl, box);
+    rhi_cmd_set_scissor(cl, scissor);
     /* blit()'s constants, so the colour is blit_ps's bytes */
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
@@ -805,17 +836,17 @@ static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const
     }
 }
 
-static int32_t roundPx(float v)
-{
-    return (int32_t)floorf(v + 0.5f);
-}
-
 /* the region of segment g of t on the output: its scissor, its lines and
  * the reduction's crop, inside the box; false when empty */
 static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
 {
     const RdRect *b = &s_ov.ctx.box;
-    const float bx = (float)b->x, by = (float)b->y, bw = (float)b->w, bh = (float)b->h;
+    const RhiRect real = {b->x, b->y, (uint32_t)b->w, (uint32_t)b->h};
+    /* the picture's rectangle: the box, or with full pixel the box grown by
+     * the reduction's crop, which the clamp below takes back out */
+    RhiRect pic;
+    pictureRect(&real, t->gsW, t->gsH, &pic);
+    const float bx = (float)pic.x, by = (float)pic.y, bw = (float)pic.w, bh = (float)pic.h;
     const float W = (float)t->gsW, H = (float)t->gsH;
     /* the 4:3 picture the UI is drawn in (font.h ui_begin_overlay) */
     const float w43 = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
@@ -827,12 +858,23 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     float y0 = by + (float)t->sc[1] * bh / H;
     float y1 = by + (float)(t->sc[3] + 1) * bh / H;
     /* the reduction's crop (rd_post.c postReduction): 2 pixels left and
-     * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512) */
-    const float crop = t->gsH >= 512 ? 8.0f : 2.0f, half = H * 0.5f;
-    x0 = fmaxf(x0, bx + bw * 2.0f / W);
-    x1 = fminf(x1, bx + bw * (W - 2.0f) / W);
-    y0 = fmaxf(y0, by + bh * crop / half);
-    y1 = fminf(y1, by + bh * (half - crop) / half);
+     * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512).  The
+     * box is that picture without the crop, or the picture after pictureRect
+     * grew it past the crop */
+    const float crop = (float)rd__reduction_crop(t->gsH), half = H * 0.5f;
+    const float rx = (float)real.x, ry = (float)real.y;
+    const float rw = (float)real.w, rh = (float)real.h;
+    if (pic.w == real.w && pic.h == real.h) {
+        x0 = fmaxf(x0, bx + bw * 2.0f / W);
+        x1 = fminf(x1, bx + bw * (W - 2.0f) / W);
+        y0 = fmaxf(y0, by + bh * crop / half);
+        y1 = fminf(y1, by + bh * (half - crop) / half);
+    } else {
+        x0 = fmaxf(x0, rx);
+        x1 = fminf(x1, rx + rw);
+        y0 = fmaxf(y0, ry);
+        y1 = fminf(y1, ry + rh);
+    }
     /* the segment */
     y0 = fmaxf(y0, by + g->y0 * bh / H);
     y1 = fminf(y1, by + g->y1 * bh / H);
@@ -1269,6 +1311,8 @@ void rd__present_record(RhiCommandList cl)
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
     rd__note_present_box(s_outW, s_outH, &box); /* for the tests */
+    RhiRect pic;
+    pictureRect(&box, g_rd.gsW, g_rd.gsH, &pic);
     /* the CRT filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
@@ -1288,15 +1332,16 @@ void rd__present_record(RhiCommandList cl)
              * the CRT filter that UI is inside the filtered picture, so the
              * capture takes a pass without it and the shown picture a
              * second pass with it */
-            capOk = rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, false);
+            capOk = rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &pic, &box, mirror,
+                                   false);
             if (capOk) {
                 captureRecord(cl, out, outState, false);
             }
         }
         /* a failed capture pass: the box blit below, the capture before the
          * overlay as without the filter */
-        filtered =
-            capOk && rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
+        filtered = capOk && rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &pic, &box,
+                                           mirror, true);
         uiInPicture = filtered && ui;
     }
     /* the full-height scene: DISPLAY already has every line */
@@ -1316,7 +1361,7 @@ void rd__present_record(RhiCommandList cl)
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
         blit(cl, disp->color, disp->tw, disp->th, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh,
-             RHI_LOAD_DONT_CARE, &full, pr->doubleFilter, 0, false);
+             RHI_LOAD_DONT_CARE, &full, &full, pr->doubleFilter, 0, false);
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
@@ -1338,11 +1383,11 @@ void rd__present_record(RhiCommandList cl)
          * effects program is loaded (never under the CRT filter, even when
          * it could not draw) */
         const bool depth = depthWanted() && !rd__crt_on() &&
-                           depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box,
+                           depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &pic, &box,
                                      pr->scaleFilter, mirror);
         if (!depth) {
             open = !rd__crt_on();
-            blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
+            blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &pic, &box,
                  pr->scaleFilter, mirror, open);
         }
     }

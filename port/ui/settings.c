@@ -1036,6 +1036,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.effectFog);
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
+    case UI_OPT_FULL_PIXEL:
+        return onOff(o.fullPixel);
     case UI_OPT_FRAMERATE:
         /* the option as set, in force in both presets */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
@@ -1277,6 +1279,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectFog;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
+    case UI_OPT_FULL_PIXEL:
+        return &o->fullPixel;
     default:
         return NULL;
     }
@@ -1358,7 +1362,8 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_SOFTENING:
     case UI_OPT_EFFECT_MOTION_BLUR:
     case UI_OPT_EFFECT_FOG:
-    case UI_OPT_EFFECT_CINEMATIC_BARS: {
+    case UI_OPT_EFFECT_CINEMATIC_BARS:
+    case UI_OPT_FULL_PIXEL: {
         /* the plain On/Off display rows */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
@@ -1883,6 +1888,7 @@ static void buildGalleryBar(void)
      Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 or
                   13 rows 13 (Back at 183, its box to 219); 14 or more from
                   30, 11 apart (Back at 184, its box to 220)
+     Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220)
      the others   from 40, 18 apart */
 static int pagePitch(int page, int n, int *y0)
 {
@@ -1892,6 +1898,9 @@ static int pagePitch(int page, int n, int *y0)
         return 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_EFFECTS && n > 9) {
+        return 16; /* ten rows: Back at 184, its box to 220 */
+    }
     if (page == UI_PAGE_CHARACTERS) {
         if (ui_settings_characters_in_viewer()) {
             /* inside the viewer: the shown character's rows, Switch,
@@ -2455,6 +2464,7 @@ static void build(void)
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -2464,6 +2474,7 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only) */

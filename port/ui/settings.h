@@ -247,6 +247,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_EFFECT_MOTION_BLUR,
     UI_OPT_EFFECT_FOG,
     UI_OPT_EFFECT_CINEMATIC_BARS,
+    UI_OPT_FULL_PIXEL, /* [video] full_pixel; On/Off, last Effects row, outside the preset */
     /* Audio */
     UI_OPT_VOLUME,
     UI_OPT_MUSIC,   /* [audio] music (port/audio/mix_gain.h) */

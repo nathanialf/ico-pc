@@ -204,6 +204,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->vsync = (uint8_t)(o.vsync != 0);
     rs->filterUpgrade = (uint8_t)o.filter;
     rs->fullHeightScene = (uint8_t)(o.fullHeight != 0);
+    rs->fullPixel = (uint8_t)(o.fullPixel != 0);
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;

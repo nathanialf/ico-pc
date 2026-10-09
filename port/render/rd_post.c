@@ -204,6 +204,11 @@ static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, cons
     rd__post_blur_verts(RD_POST_REDUCTION, &q, v);
 }
 
+uint32_t rd__reduction_crop(uint32_t gsH)
+{
+    return gsH >= 512 ? 8u : 2u;
+}
+
 /* gsb_Reduction.  Both sprites go through the GS sprite model rather than
  * the hardware sampler: the bilinear SCENE read is the GS's 4-bit fractions
  * with the sum shifted down (rd_blur.c), so the reduction, and with it the
@@ -216,7 +221,7 @@ static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, cons
 static void postReduction(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
-    const int32_t crop = p->lines ? (int32_t)p->lines : (H >= 512 ? 8 : 2);
+    const int32_t crop = p->lines ? (int32_t)p->lines : (int32_t)rd__reduction_crop((uint32_t)H);
     RdTarget src = orDefault(p->src, RD_TARGET_SCENE);
     RdTarget dst = orDefault(p->dst, RD_TARGET_DISPLAY);
     static const uint8_t kBlack[4] = {0, 0, 0, 0};

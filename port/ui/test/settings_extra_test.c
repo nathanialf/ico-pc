@@ -118,9 +118,21 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
     enterMain(0);
     const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
-              opts[n - 3] == UI_OPT_EFFECT_FOG,
-          "bars: the row sits after Fog, before Back (%d rows)", n);
+    CHECK(n >= 4 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_FULL_PIXEL &&
+              opts[n - 3] == UI_OPT_EFFECT_CINEMATIC_BARS && opts[n - 4] == UI_OPT_EFFECT_FOG,
+          "bars: the row sits after Fog, before Full pixel and Back (%d rows)", n);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0,
+          "full pixel: Off by default");
+    ui_settings_step(UI_OPT_FULL_PIXEL, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "On") == 0, "full pixel: On");
+    CHECK(ui_settings_save() == 0, "full pixel: save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *fp = ico_toml_load(p);
+    CHECK(fp != NULL && ico_toml_get_bool(fp, "video.full_pixel", 0) == 1,
+          "full pixel: [video] full_pixel true");
+    ico_toml_free(fp);
+    ui_settings_step(UI_OPT_FULL_PIXEL, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0, "full pixel: Off again");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
           "bars: On by default");
     CHECK(ico_video_effect_cinematic_bars() == 1, "bars: the getter reads On");

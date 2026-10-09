@@ -463,6 +463,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Borderless",
     /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",
+    [UI_STR_OPT_FULL_PIXEL] = "Full pixel (no border)",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Graphics driver",
     [UI_STR_OPT_GPU_DRIVER] = "Driver",

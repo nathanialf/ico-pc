@@ -1533,6 +1533,102 @@ static void checkWide169(void)
     rd_shutdown();
 }
 
+/* Full pixel: SCENE red through the reduction pass (which leaves its border
+ * black), presented into w x h.  The box's edge columns and rows are red
+ * with the option on and, with it off, the border shows. */
+static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int fullHeight,
+                         uint8_t *dst, uint32_t *ow, uint32_t *oh)
+{
+    RdSettings s = originalSettings();
+    s.aspect = aspect;
+    s.outputWidth = w;
+    s.outputHeight = h;
+    s.fullPixel = (uint8_t)full;
+    s.fullHeightScene = (uint8_t)fullHeight;
+    if (aspect > 4.0f / 3.0f + 0.01f) {
+        s.preset = RD_PRESET_ENHANCED;
+    }
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    static const uint8_t red[4] = {255, 0, 0, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    const bool ok = rd__read_present(dst, (size_t)w * h * 4, ow, oh) && *ow == w && *oh == h;
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return ok;
+}
+
+static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint32_t h,
+                               int fullHeight)
+{
+    static uint8_t off[960 * 540 * 4], on[960 * 540 * 4];
+    uint32_t ow = 0, oh = 0;
+    if (!fullPixelRun(aspect, w, h, 0, fullHeight, off, &ow, &oh) ||
+        !fullPixelRun(aspect, w, h, 1, fullHeight, on, &ow, &oh)) {
+        CHECK(0, "%s: present readback", name);
+        return;
+    }
+    RhiRect box;
+    rd__present_box(w, h, aspect, &box);
+    const uint32_t bw = box.w, bh = box.h;
+    const uint32_t x0 = (uint32_t)box.x, x1 = x0 + bw - 1, y0 = (uint32_t)box.y, y1 = y0 + bh - 1;
+#define PXO(b, x, y) (&(b)[((size_t)(y) * w + (x)) * 4])
+#define RED(q) ((q)[0] > 200 && (q)[1] < 60 && (q)[2] < 60)
+#define BLACK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
+    const uint32_t cx = w / 2, cy = h / 2;
+    /* off: the reduction's border at the box edge (2 of 512 columns, 8 of
+     * DISPLAY's 256 rows), red inside */
+    CHECK(BLACK(PXO(off, x0, cy)) && BLACK(PXO(off, x0 + 1, cy)) && BLACK(PXO(off, x1, cy)) &&
+              BLACK(PXO(off, x1 - 1, cy)),
+          "%s: off: the side columns are black", name);
+    CHECK(BLACK(PXO(off, cx, y0)) && BLACK(PXO(off, cx, y0 + 3)) && BLACK(PXO(off, cx, y1)) &&
+              BLACK(PXO(off, cx, y1 - 3)),
+          "%s: off: the top and bottom rows are black", name);
+    CHECK(RED(PXO(off, cx, cy)) && RED(PXO(off, x0 + bw / 8, cy)) && RED(PXO(off, cx, y0 + bh / 8)),
+          "%s: off: red inside", name);
+    /* on: the picture reaches the box's edge */
+    CHECK(RED(PXO(on, x0, cy)) && RED(PXO(on, x1, cy)), "%s: on: the edge columns are red", name);
+    CHECK(RED(PXO(on, cx, y0)) && RED(PXO(on, cx, y1)), "%s: on: the edge rows are red", name);
+    CHECK(RED(PXO(on, x0, y0)) && RED(PXO(on, x1, y1)), "%s: on: the corners are red", name);
+    CHECK(memcmp(PXO(on, cx, cy), PXO(off, cx, cy), 4) == 0, "%s: the centre is unchanged", name);
+    /* outside the box stays black, the scissor holding the grown picture */
+    int outside = 1;
+    if (x0 > 0) {
+        for (uint32_t y = 0; y < h; y += 7) {
+            outside &= BLACK(PXO(on, x0 - 1, y)) && BLACK(PXO(on, x1 + 1, y)) &&
+                       BLACK(PXO(on, 0, y)) && BLACK(PXO(on, w - 1, y));
+        }
+    }
+    if (y0 > 0) {
+        for (uint32_t x = 0; x < w; x += 7) {
+            outside &= BLACK(PXO(on, x, y0 - 1)) && BLACK(PXO(on, x, y1 + 1));
+        }
+    }
+    CHECK(outside, "%s: on: nothing outside the box", name);
+#undef PXO
+#undef RED
+#undef BLACK
+}
+
+static void checkFullPixel(void)
+{
+    checkFullPixelCase("fullpixel 4:3 640x480", 4.0f / 3.0f, 640, 480, 0);
+    checkFullPixelCase("fullpixel 4:3 full height", 4.0f / 3.0f, 640, 480, 1);
+    checkFullPixelCase("fullpixel 4:3 in 16:9 (pillars)", 4.0f / 3.0f, 960, 540, 0);
+    checkFullPixelCase("fullpixel pillars, full height", 4.0f / 3.0f, 960, 540, 1);
+    checkFullPixelCase("fullpixel 16:9", 16.0f / 9.0f, 960, 540, 0);
+}
+
 static void checkMips(void)
 {
     RdSettings s = originalSettings();
@@ -2638,6 +2734,7 @@ int main(int argc, char **argv)
     checkOriginal();
     checkScale2();
     checkWide169();
+    checkFullPixel();
     checkMips();
     checkLatticeMips(0);
     checkLatticeMips(1); /* as the game's materials draw it */
