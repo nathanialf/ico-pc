@@ -39,7 +39,9 @@
  *             one two pixels short stays boxed
  *   full pixel  the reduction's border off the box's edges, black around
  *             it, no validation errors; a square's width and height grow by
- *             the same factor at 512 lines
+ *             the same factor at 512 lines; with the CRT filter the overlay
+ *             is laid out in the part of the grid the box shows, so its top
+ *             and bottom lines are in the output
  *   mips      the trilinear filter: a mipmapped game texture, minified,
  *             samples its average; a lattice drawn as the
  *             railings are (TEST 0x5160D, ALPHA 0x44 with ABE) minified 8:1
@@ -2119,6 +2121,84 @@ static void checkOverlay(uint64_t presentNoOverlay)
     }
 }
 
+/* the overlay's frame drawn in white along its ctx box's top and bottom
+ * lines (4 grid lines each) */
+static RdOverlayCtx s_edgeCtx;
+static int s_edgeCalls;
+
+static void edgeCallback(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    s_edgeCtx = *ctx;
+    s_edgeCalls++;
+    static const uint8_t white[4] = {255, 255, 255, 0x80};
+    const int32_t x0 = ctx->box.x, x1 = ctx->box.x + (int32_t)ctx->box.w;
+    const int32_t y0 = ctx->box.y, y1 = ctx->box.y + (int32_t)ctx->box.h;
+    ovRect(x0, y0, x1, y0 + 4, white);
+    ovRect(x0, y1 - 4, x1, y1, white);
+}
+
+/* the CRT filter with full pixel at 512 lines (50 Hz), 960 x 720: the
+ * filter draws the grid into the grown picture and keeps only the box, so
+ * the overlay is laid out in the part of the grid that lands on the box:
+ * its top and bottom lines show inside the output (they were cut off), and
+ * no scissor starts outside the target (validation) */
+static void checkFullPixelCrtOverlay(void)
+{
+    const uint32_t w = 960, h = 720;
+    static uint8_t out[960 * 720 * 4];
+    RdSettings s = originalSettings();
+    s.fullPixel = 1;
+    rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+    s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    s.crtScanlines = 0.0f; /* a flat beam: every output row of a lit line lit */
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    s_edgeCalls = 0;
+    rd_set_present_overlay(edgeCallback, NULL);
+    static const uint8_t black[4] = {0, 0, 0, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, sizeof(out), &ow, &oh) && ow == w && oh == h;
+    rd_set_present_overlay(NULL, NULL);
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel crt overlay: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    if (!ok) {
+        CHECK(0, "full pixel crt overlay: present readback");
+        return;
+    }
+    const RdRect b = s_edgeCtx.box;
+    printf("  full pixel crt overlay: grid %ux%u, box %d,%d %ux%u\n", s_edgeCtx.outW,
+           s_edgeCtx.outH, b.x, b.y, b.w, b.h);
+    CHECK(s_edgeCalls == 1, "full pixel crt overlay: one callback (%d)", s_edgeCalls);
+    CHECK(s_edgeCtx.outH == 512 && b.x > 0 && b.y > 0 &&
+              b.x + (int32_t)b.w < (int32_t)s_edgeCtx.outW &&
+              b.y + (int32_t)b.h < (int32_t)s_edgeCtx.outH,
+          "full pixel crt overlay: the box is inside the grid (%d,%d %ux%u of %ux%u)", b.x, b.y,
+          b.w, b.h, s_edgeCtx.outW, s_edgeCtx.outH);
+    /* the centre column: the top and bottom bands lit within the output's
+     * first and last 12 rows (4 grid lines are about 5.6 output rows) */
+    int top = 0, bottom = 0;
+    for (uint32_t y = 0; y < 12; y++) {
+        top |= out[((size_t)y * w + w / 2) * 4] > 128;
+        bottom |= out[((size_t)(h - 1 - y) * w + w / 2) * 4] > 128;
+    }
+    CHECK(top && bottom, "full pixel crt overlay: the overlay's top (%d) and bottom (%d) show", top,
+          bottom);
+    /* the middle row stays the black scene */
+    CHECK(out[((size_t)(h / 2) * w + w / 2) * 4] < 16, "full pixel crt overlay: black between");
+}
+
 /* the overlay drawn into the CRT filter's grid */
 static void checkOverlayCrt(void)
 {
@@ -2852,6 +2932,7 @@ int main(int argc, char **argv)
     checkWide169();
     checkFullPixel();
     checkFullPixelSquare();
+    checkFullPixelCrtOverlay();
     checkMips();
     checkLatticeMips(0);
     checkLatticeMips(1); /* as the game's materials draw it */

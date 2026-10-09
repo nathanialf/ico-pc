@@ -975,6 +975,24 @@ void rd__overlay_collect(const RdFrame *f, int keep)
         h = g_rd.gsH ? g_rd.gsH : 2 * vh;
         box = (RhiRect){0, 0, w, h};
         s_ov.grid = 1;
+        RhiRect pic;
+        rd__picture_rect(&outBox, g_rd.gsW, g_rd.gsH, &pic);
+        if (pic.w > outBox.w && pic.h > outBox.h) {
+            /* full pixel: the filter draws the grid into the grown picture
+             * and the output keeps only the box, so the overlay is laid out
+             * in the part of the grid that lands on the box, whole lines
+             * and columns inside it, and nothing of it is cut off */
+            const float kx = (float)w / (float)pic.w, ky = (float)h / (float)pic.h;
+            const int32_t x0 = (int32_t)ceilf((float)(outBox.x - pic.x) * kx - 0.001f);
+            const int32_t y0 = (int32_t)ceilf((float)(outBox.y - pic.y) * ky - 0.001f);
+            const int32_t x1 =
+                (int32_t)floorf((float)(outBox.x - pic.x + (int32_t)outBox.w) * kx + 0.001f);
+            const int32_t y1 =
+                (int32_t)floorf((float)(outBox.y - pic.y + (int32_t)outBox.h) * ky + 0.001f);
+            if (x0 >= 0 && y0 >= 0 && x1 > x0 && y1 > y0 && x1 <= (int32_t)w && y1 <= (int32_t)h) {
+                box = (RhiRect){x0, y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
+            }
+        }
     }
     RdOverlayCtx *c = &s_ov.ctx;
     c->outW = w;
