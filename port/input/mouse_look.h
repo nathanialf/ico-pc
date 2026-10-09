@@ -57,6 +57,12 @@ typedef struct IcoCaptureState {
    off. */
 int ico_mouse_capture_rule(const IcoCaptureState *s);
 
+/* The steps (ico_escape_take calls, one a vsync) a press stays on the pad
+   at least: the game reads the pad once a Main tick, every second vsync,
+   so a press and release inside one pump (Android's back gesture) must
+   last two steps to be seen. */
+#define ICO_ESCAPE_TAP_STEPS 2
+
 /* The pad button Escape and Android's Back press: ICO_T_START in play (the
    same test as ICO_CAPTURE_STICK, without the focus and mouse camera
    conditions), ICO_T_TRIANGLE anywhere else (the pause menu, the title,
@@ -67,18 +73,20 @@ int ico_escape_target(const IcoCaptureState *s);
 /* The key held: the target is chosen at the press and kept until the
    release, so a held Escape that opens the pause menu does not turn into
    Triangle on the next vsync (now paused) and close it again. A press
-   released before the next step still reaches that step (tapped). */
+   stays on the pad for ICO_ESCAPE_TAP_STEPS steps even when it was let go
+   sooner (tapped counts them down); a new press inside those steps keeps
+   the button and starts the count again. */
 typedef struct IcoEscapeLatch {
     int held;
     int tapped;
     int target;
 } IcoEscapeLatch;
 
-/* A press (down 1) latches ico_escape_target(s) unless already held; a
-   release (down 0) lets go. */
+/* A press (down 1) latches ico_escape_target(s) unless already held or
+   still on the pad; a release (down 0) lets go. */
 void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s);
 /* Once a step: the latched target as a pad button bit (1u << target) while
-   held or pressed since the last call, else 0. */
+   held or within ICO_ESCAPE_TAP_STEPS steps of the press, else 0. */
 unsigned ico_escape_take(IcoEscapeLatch *l);
 
 /* Photo mode's accumulator: the device layer adds the captured motion

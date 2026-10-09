@@ -328,6 +328,7 @@ static void test_escape(void)
     c.paused = 1;
     ico_escape_latch(&l, 1, &c); /* a second down while held: no change */
     CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == start); /* held past the tap's steps */
     ico_escape_latch(&l, 0, NULL);
     CHECK(ico_escape_take(&l) == 0);
     /* the next press, paused: Triangle, kept after the menu closes */
@@ -337,10 +338,40 @@ static void test_escape(void)
     CHECK(ico_escape_take(&l) == triangle);
     ico_escape_latch(&l, 0, NULL);
     CHECK(ico_escape_take(&l) == 0);
-    /* a press and release between two steps still reaches one step */
+    /* a press and release between two steps reaches exactly two steps,
+       one Main tick (the game reads the pad every second vsync) */
     ico_escape_latch(&l, 1, &play);
     ico_escape_latch(&l, 0, NULL);
     CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == 0);
+    CHECK(ico_escape_take(&l) == 0);
+    /* a new press inside a tap's steps is not dropped: it keeps the tap's
+       button (the pause menu opened by now does not make it Triangle) and
+       lasts its own two steps, then as long as it is held */
+    ico_escape_latch(&l, 1, &play);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == start);
+    ico_escape_latch(&l, 1, &c);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == start);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == 0);
+    /* the same with a tap: two steps from the second press */
+    ico_escape_latch(&l, 1, &play);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == start);
+    ico_escape_latch(&l, 1, &c);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == 0);
+    /* once the steps are over, the next press chooses again */
+    ico_escape_latch(&l, 1, &c);
+    CHECK(ico_escape_take(&l) == triangle);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == triangle);
     CHECK(ico_escape_take(&l) == 0);
 }
 

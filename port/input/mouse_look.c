@@ -47,16 +47,23 @@ void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s)
         return;
     }
     if (!l->held) {
-        l->held = l->tapped = 1;
-        l->target = ico_escape_target(s);
+        /* a tap still on the pad keeps its button: choosing again could
+           cut that tap to one step, which the game may not sample */
+        if (!l->tapped) {
+            l->target = ico_escape_target(s);
+        }
+        l->held = 1;
+        l->tapped = ICO_ESCAPE_TAP_STEPS;
     }
 }
 
 unsigned ico_escape_take(IcoEscapeLatch *l)
 {
-    const int on = l->held || l->tapped;
+    const int on = l->held || l->tapped > 0;
 
-    l->tapped = 0;
+    if (l->tapped > 0) {
+        l->tapped--;
+    }
     return on ? 1u << l->target : 0u;
 }
 
