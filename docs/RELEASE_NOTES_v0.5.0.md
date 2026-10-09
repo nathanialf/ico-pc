@@ -8,9 +8,9 @@
 - In shallow water, the ripples around Ico and Yorda no longer jump about while they move, and the water's reflection no longer jitters while the camera moves.
 - Ico no longer flickers darker in rooms lit by torches.
 - Effects fixed to the camera, such as those at the main gate, no longer vanish while the camera moves.
-- Android: fog at the far distance is now drawn on some phones.
-- The movies no longer show comb lines on moving edges. <!-- M2 -->
+- The movies no longer show comb lines on moving edges.
+- In wide pictures, a flat grey block no longer shows through the arch at the end of the long walkway.
+- The shadow creatures rise out of their pools again instead of appearing above them.
+- Android: the fog no longer covers the whole picture on some phones.
 
-## Known issues
-
-- When the game starts, the scenery can show for a moment before the Sony sign. This version's log records what the screen shows at start: if you see it, please send logs/ico-pc.log.
+- The scenery no longer shows for a moment before the Sony sign when the game starts.
