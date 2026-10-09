@@ -218,6 +218,13 @@ bool rd__apply_display(void)
     return changed;
 }
 
+/* rd_display_probe's texture: one texel per point, DISPLAY's format */
+static struct {
+    RhiTexture tex;
+    RhiState state;
+    RhiFormat format;
+} s_probe;
+
 static RhiTexture s_backbuffer;
 
 static RhiState s_backbufferState;
@@ -1391,6 +1398,10 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
+    if (s_probe.tex.id) {
+        rhi_destroy_texture(s_probe.tex); /* rd_display_probe's */
+    }
+    memset(&s_probe, 0, sizeof(s_probe));
     depthShutdown();    /* the effects depth */
     rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
@@ -1403,6 +1414,58 @@ void rd__present_shutdown(void)
     s_ov.b = NULL;
     s_ov.vCap = s_ov.bCap = 0;
     overlayForget();
+}
+
+bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4])
+{
+    RdTargetRec *disp = rd__target_rec(rd_target(RD_TARGET_DISPLAY).id);
+    if (!g_rd.hasDevice || !rgba || !disp || !disp->color.id || disp->tw < 4 || disp->th < 4 ||
+        disp->format == RHI_FMT_R8_UNORM) {
+        return false;
+    }
+    if (s_probe.tex.id && s_probe.format != disp->format) {
+        rhi_wait_idle();
+        rhi_destroy_texture(s_probe.tex);
+        s_probe.tex = (RhiTexture){0};
+    }
+    if (!s_probe.tex.id) {
+        s_probe.tex = rhi_create_texture(
+            &(RhiTextureDesc){RD_DISPLAY_PROBE_POINTS, 1, 1, disp->format,
+                              RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC, "rd display probe"});
+        s_probe.state = RHI_STATE_UNDEFINED;
+        s_probe.format = disp->format;
+        if (!s_probe.tex.id) {
+            return false;
+        }
+    }
+    const uint32_t w = disp->tw, h = disp->th;
+    const uint32_t xs[RD_DISPLAY_PROBE_POINTS] = {w / 2, w / 4, 3 * w / 4, w / 4, 3 * w / 4};
+    const uint32_t ys[RD_DISPLAY_PROBE_POINTS] = {h / 2, h / 4, h / 4, 3 * h / 4, 3 * h / 4};
+    RhiCommandList cl = rhi_begin_commands();
+    if (!cl.id) {
+        return false;
+    }
+    rd__transition(cl, disp->color, &disp->colorState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, s_probe.tex, &s_probe.state, RHI_STATE_COPY_DST);
+    for (int k = 0; k < RD_DISPLAY_PROBE_POINTS; k++) {
+        const RhiRect r = {(int32_t)xs[k], (int32_t)ys[k], 1, 1};
+        rhi_cmd_copy_texture(cl, disp->color, r, s_probe.tex, k, 0);
+    }
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    uint8_t px[RD_DISPLAY_PROBE_POINTS * 4];
+    if (!rd__read_rhi_texture(s_probe.tex, &s_probe.state, RD_DISPLAY_PROBE_POINTS, 1, px,
+                              sizeof(px))) {
+        return false;
+    }
+    const bool bgra = disp->format == RHI_FMT_BGRA8_UNORM;
+    for (int k = 0; k < RD_DISPLAY_PROBE_POINTS; k++) {
+        rgba[k][0] = px[k * 4 + (bgra ? 2 : 0)];
+        rgba[k][1] = px[k * 4 + 1];
+        rgba[k][2] = px[k * 4 + (bgra ? 0 : 2)];
+        rgba[k][3] = px[k * 4 + 3];
+    }
+    return true;
 }
 
 bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h)

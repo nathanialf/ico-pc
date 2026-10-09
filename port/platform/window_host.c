@@ -1791,6 +1791,60 @@ static void pace_log(Uint64 now)
     s_pres.slowSteps = s_pres.slowLogged = 0;
 }
 
+/* The start-up's presents, one log line each: the boot shows black (keep
+   frames, then stage 1 under a full fade) until the first sign's backdrop,
+   and this names any present that was not.  For game frames BOOT_LOG_FIRST
+   to BOOT_LOG_LAST, and the first BOOT_LOG_AFTER_FULL after the first frame
+   that is not a keep frame: the frame, its keep flag, the fade it recorded
+   (1 + alpha), its snap, the present's alpha, DISPLAY at its centre and
+   its quarters' centres (a readback, so only in that window; never again
+   once past it) and "first" on a tick's first present. */
+#define BOOT_LOG_FIRST 100u
+#define BOOT_LOG_LAST 130u
+#define BOOT_LOG_AFTER_FULL 12u
+
+static struct {
+    uint32_t firstFull; /* the first frame that is not a keep frame, 0 before it */
+    int done;
+} s_bootLog;
+
+static void boot_log(float alpha)
+{
+    RdPresentInfo pi;
+    uint8_t px[RD_DISPLAY_PROBE_POINTS][4];
+    char pts[RD_DISPLAY_PROBE_POINTS * 20] = "";
+    size_t n = 0;
+
+    if (s_bootLog.done || !rd_last_present_info(&pi)) {
+        return;
+    }
+    if (!pi.keep && !s_bootLog.firstFull) {
+        s_bootLog.firstFull = pi.frame;
+    }
+    const int inFixed = pi.frame >= BOOT_LOG_FIRST && pi.frame <= BOOT_LOG_LAST;
+    const int inFull = s_bootLog.firstFull && pi.frame <= s_bootLog.firstFull + BOOT_LOG_AFTER_FULL;
+
+    if (!inFixed && !inFull) {
+        if (pi.frame > BOOT_LOG_LAST && s_bootLog.firstFull &&
+            pi.frame > s_bootLog.firstFull + BOOT_LOG_AFTER_FULL) {
+            s_bootLog.done = 1;
+        }
+        return;
+    }
+    if (rd_display_probe(px)) {
+        for (int k = 0; k < RD_DISPLAY_PROBE_POINTS && n < sizeof(pts); k++) {
+            const int w =
+                snprintf(pts + n, sizeof(pts) - n, " (%u,%u,%u)", px[k][0], px[k][1], px[k][2]);
+
+            n += w > 0 ? (size_t)w : 0;
+        }
+    } else {
+        snprintf(pts, sizeof(pts), " unread");
+    }
+    fprintf(stderr, "boot: frame %u keep %u fade %u snap %u t %.3f display%s%s\n", pi.frame,
+            pi.keep, pi.fade, pi.snap, (double)alpha, pts, pi.firstOfTick ? " first" : "");
+}
+
 /* The pacer more than RESYNC_NS behind: the lag is dropped (counted) */
 static void resync(Uint64 now)
 {
@@ -2016,6 +2070,8 @@ static void pace(int hz)
                a present is slower with an effects program loaded */
             s_pres.paceSlow = pace_slow_present(&s_pres.paceHist, s_pres.cost, refresh, period,
                                                 rhi_injector_name() != NULL);
+            /* after the cost: the start-up log's readback is not the present's */
+            boot_log(a);
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */

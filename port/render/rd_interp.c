@@ -3880,9 +3880,24 @@ static void presentLog(void)
     s_pres.number = number;
 }
 
+/* rd_last_present_info's record; valid once a present ran */
+static RdPresentInfo s_info;
+static bool s_infoValid;
+
 static void presentReset(void)
 {
     memset(&s_pres, 0, sizeof(s_pres));
+    memset(&s_info, 0, sizeof(s_info));
+    s_infoValid = false;
+}
+
+bool rd_last_present_info(RdPresentInfo *out)
+{
+    if (!out || !s_infoValid) {
+        return false;
+    }
+    *out = s_info;
+    return true;
 }
 
 bool rd_interpolation_active(void)
@@ -3913,6 +3928,12 @@ bool rd_present(float alpha)
     const int first = cur->number != s_pres.number;
     s_pres.number = cur->number;
     s_pres.presents++;
+    s_info.frame = cur->number;
+    s_info.keep = cur->keep;
+    s_info.fade = cur->fade;
+    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), cur);
+    s_info.firstOfTick = (uint32_t)first;
+    s_infoValid = true;
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */

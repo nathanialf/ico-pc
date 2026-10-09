@@ -492,6 +492,25 @@ bool rd_present(float alpha);
 uint32_t rd_frame_number(void);
 void rd_camera_cut(void);
 
+/* What the last rd_present showed, for the window's start-up log: the
+ * frame's number, its keep flag, the strongest fade it recorded (1 + the
+ * fade's alpha, GS 0x80 = 1.0; 0 for none), the frame-level snap against
+ * the frame before (rd_internal.h RD_SNAP_*: 0 blended) and whether it was
+ * the tick's first present.  False before the first present. */
+typedef struct RdPresentInfo {
+    uint32_t frame, keep, fade, snap, firstOfTick;
+} RdPresentInfo;
+
+bool rd_last_present_info(RdPresentInfo *out);
+
+/* DISPLAY's colour (RGBA, as stored) at RD_DISPLAY_PROBE_POINTS points: the
+ * centre, then the centres of the top-left, top-right, bottom-left and
+ * bottom-right quarters.  Five single-texel copies and a readback that
+ * waits for the GPU: for a diagnostic over a few frames, never per frame
+ * in play.  False without a device or DISPLAY. */
+#define RD_DISPLAY_PROBE_POINTS 5
+bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4]);
+
 /* The present clock the host derives alpha from.  A present's
  * measured time carries the jitter of the simulation step and the sleeps
  * before it (a few ms: up to a fifth of a tick), which an alpha taken from it
