@@ -1259,7 +1259,7 @@ static void testRemapMenuNote(void)
     }
     ui_set_language(UI_LANG_EN);
     CHECK(strcmp(ui_str(UI_STR_REMAP_MENU_NOTE),
-                 "In the menus the gamepad buttons always go by position.") == 0,
+                 "In the menus the gamepad's face buttons and d-pad always go by position.") == 0,
           "menu note text");
     for (int i = LT_GAME_PROPERTY_COUNT; i < LT_GAME_PROPERTY_COUNT + lt_ext_prop_count(); i++) {
         const char *t = lt_ext_row_text(i);
@@ -1306,7 +1306,7 @@ static void testEscapeNewGame(void)
 }
 
 /* Display > Resolution cycles Window, 1x, 2x, 3x, 4x, 6x, 8x, 12x, 16x,
-   Auto; a scale from the file that is not on the list steps from the ends.
+   Auto; a scale from the file that is not on the list steps to its neighbours.
    Aspect goes 32:9, 48:9, Auto */
 static void testResolutionCycle(void)
 {
@@ -1318,11 +1318,9 @@ static void testResolutionCycle(void)
     enterMainKeep(0);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "5x") == 0,
           "5x from the file reads 5x");
-    ui_settings_step(UI_OPT_RESOLUTION, 1);
-    ico_video_get(&o);
-    CHECK(o.resScale == 0 && o.resW == 0, "Right from an off-list scale is Window (%d)",
-          o.resScale);
-    for (int i = 0; i < 8; i++) {
+    /* 5x is not in the list: Right goes to the next entry above it, 6x,
+       then on through the list */
+    for (int i = 4; i < 8; i++) {
         ui_settings_step(UI_OPT_RESOLUTION, 1);
         ico_video_get(&o);
         CHECK(o.resScale == want[i], "Right: step %d is %dx (%d)", i, want[i], o.resScale);
@@ -1340,7 +1338,22 @@ static void testResolutionCycle(void)
     enterMainKeep(0);
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    CHECK(o.resScale == 16, "Left from an off-list scale is 16x (%d)", o.resScale);
+    CHECK(o.resScale == 4, "Left from 5x is the entry below it, 4x (%d)", o.resScale);
+    /* Window, then the whole list from 1x */
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.resW == 0, "Right from 16x, Auto, then Window (%d)", o.resScale);
+    for (int i = 0; i < 8; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, 1);
+        ico_video_get(&o);
+        CHECK(o.resScale == want[i], "Right from Window: step %d is %dx (%d)", i, want[i],
+              o.resScale);
+    }
 
     CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), "32:9") == 0, "aspect 32:9 from the file");
     ui_settings_step(UI_OPT_ASPECT, 1);
