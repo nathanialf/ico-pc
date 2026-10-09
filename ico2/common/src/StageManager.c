@@ -30,6 +30,7 @@
 #include "Basic.h"
 #include "ios.h"
 #include "jimaku.h"
+#include "kanbanBoot.h" /* PC port: ico_kanban_boot_holds_keep */
 
 typedef struct { /* field names derived */
     int stage;
@@ -454,7 +455,13 @@ void StageManager(void)
             if (mpegPlay == 0) {
                 stgmgrNextStagePreLoadEntry(msg->stage);
             }
-            fbKeep = 0;
+            /* PC port: stage 1's load at the boot ends while the card check
+               runs; the check keeps the frame buffer until its first sign,
+               where the PS2's language sign covered the frames between
+               (kanbanBoot.c, ico_kanban_boot_holds_keep) */
+            if (ico_kanban_boot_holds_keep() == 0) {
+                fbKeep = 0;
+            }
             stgMgrWakeupRequest = 0;
         } else {
             stgMgrWakeupRequest = 1;

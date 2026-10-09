@@ -15,5 +15,9 @@ void kanbanBootStart(void);
 /* kanbanBoot.o's .sdata global: set when the boot sequence ends */
 extern int kanbanBootEnd;
 void kanbanBootMain(void);
+/* PC port: the boot's card check is running and keeps the frame buffer
+   (fbKeep) until its first sign; StageManager.c leaves fbKeep alone at the
+   end of a load while this is set */
+int ico_kanban_boot_holds_keep(void);
 
 #endif /* KANBANBOOT_H */

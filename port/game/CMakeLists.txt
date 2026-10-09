@@ -76,7 +76,9 @@ endif()
 # The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled
 # into the test) for a first and a later boot: no reload of stage 1, no
 # gsResetFunc, no second card check, and the language and 60 Hz main.c sets
-# from the config in force throughout. CPU only.
+# from the config in force throughout; over stage 1's load, keep frames from
+# the check's start to the Sony sign's frame, at the start-up log's ticks.
+# CPU only.
 add_executable(kanban_boot_test test/kanban_boot_test.c ../platform/host_config.c)
 ico_include_dirs(common _ico_kanban_boot_incs)
 target_include_directories(kanban_boot_test PRIVATE ${_ico_kanban_boot_incs}

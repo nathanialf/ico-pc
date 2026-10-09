@@ -288,10 +288,14 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 
 # rd_boot_present_test: a saved start-up (rd-NNNNN.rddump, dump_every=1)
 # through the window's present path in order, several presents a tick, each
-# read back: the frames before the first sign must present black.  The dump
-# folder is ICO_BOOT_DUMP_DIR (or the ICO_BOOT_DUMPS environment variable);
-# skipped without it, as in CI.
+# read back: the frames before the first sign must present black, and draw
+# no scenery (keep frames).  The dump folder is ICO_BOOT_DUMP_DIR (or the
+# ICO_BOOT_DUMPS environment variable); skipped without it, as in CI.  A
+# start-up dumped before the card check kept its frames to the first sign
+# (v0.4.5 and older: frames 118 to 120 draw stage 1) needs ICO_BOOT_DUMP_OLD
+# (the test's ICO_BOOT_OLD=1).
 set(ICO_BOOT_DUMP_DIR "" CACHE PATH "A start-up's frame dumps for rd_boot_present_test")
+option(ICO_BOOT_DUMP_OLD "ICO_BOOT_DUMP_DIR is a start-up from v0.4.5 or older" OFF)
 add_executable(rd_boot_present_test test/rd_boot_present_test.c)
 target_compile_options(rd_boot_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_boot_present_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
@@ -595,6 +599,9 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_boot_present COMMAND rd_boot_present_test "${ICO_BOOT_DUMP_DIR}")
     set_tests_properties(rd_boot_present PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
+    if(ICO_BOOT_DUMP_OLD)
+        set_tests_properties(rd_boot_present PROPERTIES ENVIRONMENT "ICO_BOOT_OLD=1")
+    endif()
     add_test(NAME texpack_load COMMAND texpack_load_test)
     add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
     set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)

@@ -2,7 +2,9 @@
  * present, as the window shows it.
  *
  * The frames of a start-up dumped with dump_every=1 (rd-NNNNN.rddump; the
- * boot's keep frames, then stage 1 under a full fade, then the first sign)
+ * boot's keep frames, then, in a start-up from before the card check kept
+ * them to its first sign, stage 1 under the loading layout's black, then
+ * the first sign)
  * go through the window's present path in order: each frame takes the
  * frame ring's next slot as rd_end_frame leaves it (the slot two frames
  * back freed first, so the previous frame stays the interpolation's pair),
@@ -21,13 +23,33 @@
  * A dump does not keep a frame's fade (RdFrame.fade: rd_post's record of
  * gsb_fade's alpha, which the presenter snaps on): it is found again here
  * from the fade's sprite (list 11, keyed, untextured, ALPHA 0x44 with ABE,
- * covering the whole screen), as rd_post records it.  Not in a dump either:
+ * covering the whole screen), as rd_post records it.  A layout's black
+ * backdrop (layout_texture.c's primary sprite, kanban.c's sign backdrop,
+ * colA 1.0: alpha 127) has the same form and is found the same way; in the
+ * start-up it is the only black over frames 118 to 120 (gsb_fade draws
+ * nothing there: fadeStatus is 0 from the load's end, the window log's
+ * heartbeat "fade 0").  The presenter's own fade (RdFrame.fade) is 0 for
+ * it, the test's is 0x80; both are below the fade snap (over 0x80), so the
+ * pairs blend in both.  Not in a dump either:
  * the VU common block (RdFrame.vu, which a blended pair lerps; a dump's
  * frames have none) and the window's overlay and deferred text.
  *
  * The check: every present whose frame is a keep frame or fully faded
  * (fade 1 + 0x7F or more), and whose pair (the frame before) is too, is
  * black: maximum 2 at most (an alpha of 127 leaks 1/128 of the scene).
+ *
+ * And the frames themselves: a frame with no sign over it (before the
+ * first sign) draws no scenery.  It is a keep frame (rd_end_frame(1): lists
+ * 11 and 12 replay, over the kept black DISPLAY), or its black is whole
+ * (alpha 0x80, fade 0x81 or more).  The boot's card check keeps the frame
+ * buffer until its first sign (ico2/common/src/kanbanBoot.c,
+ * ico_kanban_boot_holds_keep), so a start-up dumped with it has keep frames
+ * up to the Sony sign's.  A start-up dumped before it (v0.4.5 rc3 and
+ * earlier: frames 118 to 120 draw all of stage 1, lists 0 to 10, under the
+ * loading layout's black of alpha 127, layout_texture.c's primary sprite)
+ * fails this check: with ICO_BOOT_OLD=1 the test prints those frames as the
+ * old behaviour and passes (the presents are still checked).  Each frame's
+ * line says how many draws of lists 0 to 10 it replays.
  *
  * Input: the dump folder as the first argument (the cmake cache variable
  * ICO_BOOT_DUMP_DIR) or the environment variable ICO_BOOT_DUMPS; the frames
@@ -58,6 +80,27 @@ static int s_fail;
 #define OUT_H 720
 /* a fully faded frame: rd_post's 1 + alpha for an alpha of 127 or more */
 #define FADE_FULL 0x80u
+
+/* ICO_BOOT_OLD=1: the dumps are from before the card check kept the frame
+ * buffer to its first sign (see the header) */
+static bool s_old;
+
+/* the draws (not state, not the deferred text) a frame replays from
+ * lists 0 to 10: none in a keep frame */
+static uint32_t sceneDraws(const RdFrame *f)
+{
+    uint32_t n = 0;
+    if (f->keep) {
+        return 0;
+    }
+    for (int l = 0; l <= 10; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const RdCmd *c = &f->lists[l].cmds[i];
+            n += c->type > RDC_STATE_LAST && c->type != RDC_OVERLAY_TEXT;
+        }
+    }
+    return n;
+}
 
 /* per loaded frame: a sign is drawn over its fade (filled by installFrame) */
 static bool s_signOver[1024]; /* ICO_BOOT_FRAMES spans at most this many frames */
@@ -234,9 +277,23 @@ static bool runConfig(const BootConfig *cfg, uint32_t gw, uint32_t gh, uint8_t *
          * fully faded */
         const bool dark = (cur->keep || cur->fade >= FADE_FULL) && !s_signOver[n - s_first] &&
                           (!prev || prev->keep || prev->fade >= FADE_FULL);
-        printf("  frame %u: keep %u, fade %u (alpha %u), snap %s, %u texts%s\n", cur->number,
-               cur->keep, cur->fade, cur->fade ? cur->fade - 1 : 0, snapName(snap), cur->textItems,
+        printf("  frame %u: keep %u, fade %u (alpha %u), snap %s, %u texts, %u scene draws%s%s\n",
+               cur->number, cur->keep, cur->fade, cur->fade ? cur->fade - 1 : 0, snapName(snap),
+               cur->textItems, sceneDraws(cur), s_signOver[n - s_first] ? ", under a sign" : "",
                dark ? "; must be black" : "");
+        /* before the first sign: no scenery in the frame at all */
+        if (!s_signOver[n - s_first] && !cur->keep && cur->fade <= FADE_FULL) {
+            if (s_old) {
+                printf("    frame %u draws the scenery under a black of alpha %u with no sign over "
+                       "it: the old behaviour (ICO_BOOT_OLD)\n",
+                       n, cur->fade ? cur->fade - 1 : 0);
+            } else {
+                CHECK(0,
+                      "%s: frame %u: before the first sign, %u scene draws under a black of alpha "
+                      "%u (want a keep frame, or alpha 128; ICO_BOOT_OLD=1 for older dumps)",
+                      cfg->tag, n, sceneDraws(cur), cur->fade ? cur->fade - 1 : 0);
+            }
+        }
         for (size_t k = 0; k < sizeof(kAlphas) / sizeof(kAlphas[0]); k++) {
             const float a = kAlphas[k];
             const bool ok = rd_present(a);
@@ -296,6 +353,8 @@ int main(int argc, char **argv)
         return 77;
     }
     snprintf(s_dir, sizeof(s_dir), "%s", dir);
+    const char *old = getenv("ICO_BOOT_OLD");
+    s_old = old && old[0] == '1';
     const char *range = getenv("ICO_BOOT_FRAMES");
     if (range && range[0]) {
         unsigned a = 0, b = 0;
