@@ -56,7 +56,8 @@
 #   ANDROID_HOME (else ANDROID_SDK_ROOT, else ~/Android/Sdk)
 #   ICO_ANDROID_NDK_VERSION, ICO_ANDROID_BUILD_TOOLS_VERSION,
 #   ICO_ANDROID_COMPILE_SDK
-#   SDL3_VERSION, SDL3_SRC_SHA256 (the same pins as tools/fetch_deps.sh)
+#   SDL3_VERSION, SDL3_SRC_SHA256 (pinned in tools/fetch_common.sh, the same
+#                           release as the desktop builds)
 #   ADRENOTOOLS_COMMIT, ADRENOTOOLS_SHA256, LINKERNSBYPASS_COMMIT,
 #   LINKERNSBYPASS_SHA256   the libadrenotools pins
 #   SKIP_SDK_INSTALL=1      only check the SDK packages, never install
@@ -160,13 +161,11 @@ echo "==> CMake $CMAKE_VERSION_GOT and ninja for Gradle at $ACMAKE/bin"
 
 # --- 3. SDL3 for arm64-v8a ------------------------------------------------------
 #
-# The release source tarball tools/fetch_deps.sh pins (the SHA-256 GitHub
+# The release source tarball tools/fetch_common.sh pins (the SHA-256 GitHub
 # lists for the asset), built with the NDK's CMake toolchain. The Java glue
 # (android-project/app/src/main/java/org/libsdl/app/) comes from the same
 # tarball, so the Java and native halves are one release. SDL3.jar is not
 # built: the app compiles the glue from source.
-SDL3_VERSION="${SDL3_VERSION:-3.4.18}"
-SDL3_SRC_SHA256="${SDL3_SRC_SHA256:-9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3}"
 SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VERSION}"
 SDL3_ANDROID="$DEST/sdl3/android-arm64"
 SDL3_ANDROID_ID="SDL3-${SDL3_VERSION}+ndk-${NDK_VERSION}+${ANDROID_PLATFORM_LEVEL}"

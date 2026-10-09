@@ -120,10 +120,9 @@ fi
 
 # --- 2. SDL3 -----------------------------------------------------------------
 #
-# Release 3.4.18. The SHA-256s are the digests GitHub lists for the release
-# assets (gh api repos/libsdl-org/SDL/releases/latest).
-SDL3_VERSION="${SDL3_VERSION:-3.4.18}"
-SDL3_SRC_SHA256="${SDL3_SRC_SHA256:-9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3}"
+# The release tools/fetch_common.sh pins (SDL3_VERSION, SDL3_SRC_SHA256). The
+# SHA-256s are the digests GitHub lists for the release assets (gh api
+# repos/libsdl-org/SDL/releases/latest).
 SDL3_MINGW_SHA256="${SDL3_MINGW_SHA256:-049b9dd711e3fb3f8d84feb998dfec54a75e17cf539c4a80ff4d058d839771cf}"
 SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VERSION}"
 

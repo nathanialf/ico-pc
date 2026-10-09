@@ -7,6 +7,12 @@
 # the caller's $TMP.
 # =============================================================================
 
+# SDL3: one release for the desktop and Android builds (tools/notices/
+# manifest.json names it). The SHA-256 is the digest GitHub lists for the
+# release's source tarball.
+SDL3_VERSION="${SDL3_VERSION:-3.4.18}"
+SDL3_SRC_SHA256="${SDL3_SRC_SHA256:-9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3}"
+
 # Debian packages are pinned by version and SHA-256; deb.debian.org drops
 # superseded versions, so snapshot.debian.org is the fallback.
 DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
