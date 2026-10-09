@@ -89,6 +89,10 @@ static int s_captured; /* ICO_CAPTURE_* (mouse_look.h) */
 static Uint64 s_deadline;
 
 static int s_open;
+/* a quit or close request that came in while a start-up screen could not
+   stop (progress_present with allowCancel 0): the next ico_window_pump
+   quits */
+static int s_quitLatched;
 
 /* renderer wave 7 (R7a): the display options last applied
    (port/game/video_options.h) */
@@ -916,15 +920,21 @@ static void toggle_fullscreen(void)
    logged the reason. */
 static int device_lost_quit(void)
 {
+    static int s_shown;
+
     if (!rhi_DeviceLost()) {
         return 0;
     }
-    fprintf(stderr, "window: the graphics device was lost; quitting\n");
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC",
-                             "The graphics card stopped responding (its driver was reset or "
-                             "updated, or the card was removed).\n\nThe game has to close. "
-                             "Your last save is kept; logs/ico-pc.log says why.",
-                             s_window);
+    /* the start-up screens and the pump all ask: one line and one box */
+    if (!s_shown) {
+        s_shown = 1;
+        fprintf(stderr, "window: the graphics device was lost; quitting\n");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC",
+                                 "The graphics card stopped responding (its driver was reset or "
+                                 "updated, or the card was removed).\n\nThe game has to close. "
+                                 "Your last save is kept; logs/ico-pc.log says why.",
+                                 s_window);
+    }
     return 1;
 }
 
@@ -1068,6 +1078,10 @@ int ico_window_pump(void)
 
     if (device_lost_quit()) {
         return 0;
+    }
+    if (s_quitLatched) {
+        s_quitLatched = 0;
+        quit = 1;
     }
 
     while (SDL_PollEvent(&e)) {
@@ -1237,7 +1251,7 @@ static int progress_present(const char *title, const char *phase, int pct, int a
 {
     static int s_cancelLogged;
     SDL_Event e;
-    int cancel = 0;
+    int cancel = 0, closing = 0;
     void *prevUser = NULL, *prevTopUser = NULL;
     RdOverlayFn prev, prevTop;
     ProgressView v;
@@ -1247,6 +1261,7 @@ static int progress_present(const char *title, const char *phase, int pct, int a
         case SDL_EVENT_QUIT:
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
             cancel = 1;
+            closing = 1;
             break;
         case SDL_EVENT_KEY_DOWN:
             /* Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON), Escape */
@@ -1276,6 +1291,12 @@ static int progress_present(const char *title, const char *phase, int pct, int a
         return 1;
     }
     if (!allowCancel) {
+        /* this screen cannot stop: a close request is kept for the pump */
+        if (closing && !s_quitLatched) {
+            s_quitLatched = 1;
+            fprintf(stderr, "window: close asked during \"%s\"; quitting after it\n",
+                    phase != NULL ? phase : "");
+        }
         cancel = 0;
     }
     if (cancel && !s_cancelLogged) {
