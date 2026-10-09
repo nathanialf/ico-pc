@@ -648,6 +648,106 @@ static void traceKicks(void)
     }
 }
 
+/* The region test on a wide screen (vu1ref_SetWideX, vu_common.hlsli
+ * vu_region_pos): x is compared where the squeezed picture puts it,
+ * (X - 2048) * f + 2048, so at f = 0.375 (32:9) a vertex up to X 7504 or
+ * down to X -3413 passes, while the drawn position stays the unsqueezed
+ * one; at f = 1 the test is the 4:3 one. */
+static void wideVertex(const char *what, int k, const VuGsVertex *v, int32_t x, int inside, int adc)
+{
+    if (v->xyz[0] != x || v->inside != inside || vu_gs_adc(v) != adc) {
+        FAILF("%s v%d X %d inside %d adc %d, expected %d %d %d\n", what, k, v->xyz[0], v->inside,
+              vu_gs_adc(v), x, inside, adc);
+    }
+}
+
+static void traceWide(void)
+{
+    Vu1Ref r;
+    /* normal_c / normal_l code 32 with the scene's M (X = 8x + 2048 at
+     * z = 2, Y = 2048): v0 x 0 (strip start), v1 x -2 (X 2032), v2 x 600
+     * (X 6848: (4800 * 0.375) + 2048 = 3848), v3 x -600 (X -2752: 248),
+     * v4 x 744 (X 8000: 4280, outside at both), v5 x 0. Wide: v2 and v3
+     * pass and kick the triangles 0-1-2 and 1-2-3 (vi05 2, 1, 0, -1); v4
+     * sets ADC and vi05 = 3, v5 is then ADC. 4:3: v2, v3, v4 outside, every
+     * vertex ADC. */
+    static const float xs[6] = {0, -2, 600, -600, 744, 0};
+    static const int32_t gx[6] = {32768, 32512, 109568, -44032, 128000, 32768};
+    static const int inWide[6] = {1, 1, 1, 1, 0, 1}, adcWide[6] = {1, 1, 0, 0, 1, 1};
+    static const int in43[6] = {1, 1, 0, 0, 0, 1};
+    float c[1 + 6 * 3][4], l[1 + 6 * 4][4];
+    tag(c[0], 6);
+    tag(l[0], 6);
+    for (int k = 0; k < 6; k++) {
+        qw(c[1 + 3 * k], xs[k], 0, 2, 1);
+        qw(c[2 + 3 * k], 0, 0, 1, k == 0 ? 0.0f : 1.0f);
+        qw(c[3 + 3 * k], 64, 64, 64, 127);
+        qw(l[1 + 4 * k], xs[k], 0, 2, 1);
+        qw(l[2 + 4 * k], 0, 0, 1, 1);
+        qw(l[3 + 4 * k], 0, 0, 1, k == 0 ? 0.0f : 1.0f);
+        qw(l[4 + 4 * k], 64, 64, 64, 127);
+    }
+    int kicks[VU_BATCH_MAX];
+    for (int wide = 0; wide < 2; wide++) {
+        vu1ref_SetWideX(wide ? 0.375f : 1.0f);
+        for (int prog = 0; prog < 2; prog++) {
+            const char *what = prog ? (wide ? "normal_l 32 wide" : "normal_l 32 4:3")
+                                    : (wide ? "normal_c 32 wide" : "normal_c 32 4:3");
+            stateNormal(&r);
+            if (prog) {
+                vu1ref_NormalL(&r, 32, (const float (*)[4])l, &outA);
+            } else {
+                vu1ref_NormalC(&r, 32, (const float (*)[4])c, &outA);
+            }
+            for (int k = 0; k < 6 && outA.count == 6; k++) {
+                wideVertex(what, k, &outA.v[k], gx[k], wide ? inWide[k] : in43[k],
+                           wide ? adcWide[k] : 1);
+            }
+            int n = vu1ref_Kicks(&outA, kicks);
+            if (outA.count != 6 || n != (wide ? 2 : 0) ||
+                (wide && (kicks[0] != 2 || kicks[1] != 3))) {
+                FAILF("%s: %d vertices, %d kicks\n", what, outA.count, n);
+            }
+        }
+    }
+
+    /* the grid program (mesh code 20) with M = identity: p = pos, w = 1.
+     * v0 (2048, 2048), v1 (2100, 2100), v2 (4200, 2060), v3 x 2^-20.
+     * vi05 starts at 0: v0 and v1 kick (nothing drawn yet). v2: 4:3 outside
+     * (ADC, vi05 = 3); wide (2152 * 0.375) + 2048 = 2855, kicks the
+     * triangle 0-1-2. v3 at 4:3 passes the test: the remap is skipped at
+     * f = 1 ((2^-20 - 2048) + 2048 rounds to 0, which would fail 0 < x). */
+    float m[4][4];
+    qw(m[0], 1, 0, 0, 0);
+    qw(m[1], 0, 1, 0, 0);
+    qw(m[2], 0, 0, 1, 0);
+    qw(m[3], 0, 0, 0, 1);
+    float g[2 + 4 * 2][4];
+    tag(g[0], 4);
+    qw(g[1], 128, 64, 32, 127);
+    static const float gp[4][2] = {{2048, 2048}, {2100, 2100}, {4200, 2060}, {0x1p-20f, 2048}};
+    for (int k = 0; k < 4; k++) {
+        qw(g[2 + 2 * k], gp[k][0], gp[k][1], 0, 1);
+        qw(g[3 + 2 * k], 0, 0, 1, 0);
+    }
+    for (int wide = 0; wide < 2; wide++) {
+        const char *what = wide ? "mesh 20 wide" : "mesh 20 4:3";
+        vu1ref_SetWideX(wide ? 0.375f : 1.0f);
+        stateMesh(&r);
+        vu1ref_MeshSetMatrix(&r, m);
+        vu1ref_Mesh(&r, 20, (const float (*)[4])g, &outA);
+        if (outA.count != 4) {
+            FAILF("%s count %d\n", what, outA.count);
+            continue;
+        }
+        wideVertex(what, 0, &outA.v[0], 32768, 1, 0);
+        wideVertex(what, 1, &outA.v[1], 33600, 1, 0);
+        wideVertex(what, 2, &outA.v[2], 67200, wide, !wide);
+        wideVertex(what, 3, &outA.v[3], 0, 1, !wide);
+    }
+    vu1ref_SetWideX(1.0f);
+}
+
 /* -------------------------------------------------------- part c: layout */
 
 static void checkLayout(void)
@@ -696,6 +796,7 @@ typedef struct Case {
     int measured; /* report, do not assert, the rendered comparison */
     int trail;    /* qwords after each batch's vertices (a Mesh3D buffer's MSCNT) */
     int tagless;  /* the GPU stream is the vertices only, as rd_CreateVuMesh keeps them */
+    float wide;   /* the world x scale of the draw (g_space[0].x): 1, or 0.375 for 32:9 */
 } Case;
 
 /* the CPU side of one case */
@@ -723,13 +824,16 @@ static float rnd(float lo, float hi)
  * clip-space cut points interpolate like the GPU's screen-space ones);
  * 2: z alternating 0.5 (behind M2's near plane z = 1) and 2. out: x = 150
  * (beyond the scissor guard band, X = 3248) for the scissor cases, else
- * x = 600 (X = 6848, outside the region test). */
+ * x = 600 (X = 6848, outside the region test). The wide cases (Case.wide
+ * 0.375) use out 2: x = 255.875 (X 4095, outside at 4:3, inside the wide
+ * test, and below 4096 so the reference's 16-bit sprite X is the same
+ * point), and out 3: x = 744 (X 8000, outside both). */
 static void makeVertex(int prog, float (*v)[4], int k, int start, int out, int zmode, int scissor)
 {
     float z = zmode == 2 ? (k & 1 ? 0.5f : 2.0f) : zmode == 1 ? 2.0f : rnd(1.8f, 2.4f);
     float x = rnd(-3.5f, 3.5f) * z / 2.0f, y = rnd(-3.5f, 3.5f) * z / 2.0f;
     if (out) {
-        x = scissor ? 150.0f : 600.0f;
+        x = scissor ? 150.0f : out == 2 ? 255.875f : out == 3 ? 744.0f : 600.0f;
         z = 2.0f;
     }
     float pos[4] = {x, y, z, 1};
@@ -798,6 +902,9 @@ static int makeInput(const Case *c, float (*in)[4])
             int start = k == 0 || (c->prog != P_MESH && k == 5);
             int scissor = c->clip == ICO_VU_CLIP_SCISSOR;
             int out = c->clip != ICO_VU_CLIP_NONE && (k == 7) && !c->measured;
+            if (c->wide != 1.0f && c->clip == ICO_VU_CLIP_REGION) {
+                out = k == 7 ? 2 : k == 9 ? 3 : 0;
+            }
             int zmode = c->measured ? 2 : scissor ? 1 : 0;
             makeVertex(c->prog, v, k, start, out, zmode, scissor);
             if (c->prog == P_MESH) {
@@ -1050,23 +1157,31 @@ static int compareImages(const uint8_t *a, const uint8_t *b, uint32_t pitch, int
 }
 
 static const Case kCases[] = {
-    {"prelit 32", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0},
-    {"prelit 34", "vu_prelit_vs", P_NORMALC, 34, ICO_VU_CLIP_NONE, 3, 1, 1, 12, 0, 0, 0},
-    {"prelit 36", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 12, 0, 0, 0},
-    {"prelit 36 near", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 8, 1, 0, 0},
-    {"lit 32 tagless", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 2, 12, 0, 0, 1},
-    {"lit 36", "vu_lit_vs", P_NORMALL, 36, ICO_VU_CLIP_SCISSOR, 4, 1, 1, 12, 0, 0, 0},
-    {"lit spec 34", "vu_lit_spec_vs", P_NORMALL, 34, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0},
-    {"reflect 38", "vu_reflect_vs", P_NORMALL, 38, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0},
-    {"skin 20 tagless", "vu_skin_vs", P_CLUSTER, 20, ICO_VU_CLIP_REGION, 5, 1, 2, 12, 0, 0, 1},
-    {"skin 22", "vu_skin_spec_vs", P_CLUSTER, 22, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0},
-    {"skin 24", "vu_skin_debug_vs", P_CLUSTER, 24, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0},
-    {"grid 20", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 3, 10, 0, 0, 0},
+    {"prelit 32", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f},
+    {"prelit 34", "vu_prelit_vs", P_NORMALC, 34, ICO_VU_CLIP_NONE, 3, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"prelit 36", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"prelit 36 near", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 8, 1, 0, 0,
+     1.0f},
+    {"lit 32 tagless", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 2, 12, 0, 0, 1, 1.0f},
+    {"lit 36", "vu_lit_vs", P_NORMALL, 36, ICO_VU_CLIP_SCISSOR, 4, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"lit spec 34", "vu_lit_spec_vs", P_NORMALL, 34, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0,
+     1.0f},
+    {"reflect 38", "vu_reflect_vs", P_NORMALL, 38, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"skin 20 tagless", "vu_skin_vs", P_CLUSTER, 20, ICO_VU_CLIP_REGION, 5, 1, 2, 12, 0, 0, 1,
+     1.0f},
+    {"skin 22", "vu_skin_spec_vs", P_CLUSTER, 22, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"skin 24", "vu_skin_debug_vs", P_CLUSTER, 24, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"grid 20", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 3, 10, 0, 0, 0, 1.0f},
     /* as prim_makePacketMesh3D lays the buffer out: VIF qword, tag, colour,
      * vertices, MSCNT */
-    {"grid 22 raw", "vu_grid_lit_vs", P_MESH, 22, ICO_VU_CLIP_REGION, 3, 3, 3, 10, 0, 1, 0},
-    {"grid 24", "vu_grid_spec_vs", P_MESH, 24, ICO_VU_CLIP_REGION, 3, 2, 2, 10, 0, 0, 0},
-    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0},
+    {"grid 22 raw", "vu_grid_lit_vs", P_MESH, 22, ICO_VU_CLIP_REGION, 3, 3, 3, 10, 0, 1, 0, 1.0f},
+    {"grid 24", "vu_grid_spec_vs", P_MESH, 24, ICO_VU_CLIP_REGION, 3, 2, 2, 10, 0, 0, 0, 1.0f},
+    /* a wide scene draw at 32:9: the region test compares the squeezed x */
+    {"prelit 32 wide", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f},
+    {"lit 32 wide", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f},
+    {"grid 20 wide", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 2, 10, 0, 0, 0, 0.375f},
+    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f},
 };
 
 #define NCASES ((int)(sizeof(kCases) / sizeof(kCases[0])))
@@ -1211,6 +1326,8 @@ static int gpuTests(void)
         rngState = 777u + (uint32_t)ci * 31u;
         memset(in, 0, sizeof(in));
         int nq = makeInput(c, in);
+        const float wide = c->wide;
+        vu1ref_SetWideX(wide);
         runRef(c, (const float (*)[4])in, nq, &cr);
 
         rhi_WaitFrame();
@@ -1251,6 +1368,7 @@ static int gpuTests(void)
         IcoFrameCB fProbe, fDraw;
         frameCB(&fProbe, ICO_VU_PROBE_FIELDS, MAXV, 0, 0);
         frameCB(&fDraw, RT, RT, 2048.0f - RT / 2, 2048.0f - RT / 2);
+        fProbe.space[0][0] = fDraw.space[0][0] = wide;
         IcoDrawCB dcb;
         memset(&dcb, 0, sizeof(dcb));
         dcb.tex[0] = dcb.tex[1] = 2;
@@ -1399,6 +1517,7 @@ static int gpuTests(void)
             compareProbe(c, &rz, pimg, ppitch);
             statSet = 0;
         }
+        vu1ref_SetWideX(1.0f);
         int maxd = 0, covered = 0;
         int bad = compareImages(a, b, pitch, &maxd);
         for (int i = 0; i < RT * RT; i++) {
@@ -1449,6 +1568,7 @@ int main(void)
     traceMesh();
     traceParticle();
     traceKicks();
+    traceWide();
     checkLayout();
     int cpuFailures = failures;
     printf("vu1_test: hand traces and layout: %s\n", cpuFailures ? "FAILED" : "ok");
