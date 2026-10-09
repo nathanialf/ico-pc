@@ -267,7 +267,8 @@ static int addFile(const char *path, const char *name, void *user)
     }
     s_tp.stats.files++;
     if (isMipFile(name)) {
-        s_tp.stats.mipFiles++; /* read beside its base file, never indexed */
+        /* a level file: no loader reads it (an RGBA8 image gets its own box chain) */
+        s_tp.stats.mipFiles++;
         return 0;
     }
     int r = texpack_ParseName(name, &tn);

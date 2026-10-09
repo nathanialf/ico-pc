@@ -6,53 +6,53 @@
  *                  [--backend vulkan|d3d12]
  *
  * NAME is a named target (SCENE, DISPLAY (default), SHADOW0..2, WORK0..3,
- * AA0, AA1, FEED128, and since wave 5 AURA_WORK, AURA_TAP, WORK2_PAD,
- * FEED_HELD, DISPLAY_HELD).  --present renders the Original presenter into
- * a W x H output and writes that instead.  Commands of later waves (meshes,
- * fog, ...) are skipped with a message instead of stopping.
+ * AA0, AA1, FEED128, AURA_WORK, AURA_TAP, WORK2_PAD, FEED_HELD,
+ * DISPLAY_HELD).  --present renders the Original presenter into a W x H
+ * output and writes that instead.  Commands the replayer does not model are
+ * skipped with a message (the final line counts them).
  *
- * --backend picks the RHI backend (renderer wave 6, R6c; default: the
- * build's default, port/rhi/rhi.h rhi_CreateBackend), so the same dump can
- * be rendered on Vulkan and D3D12 and the PNGs compared.
+ * --backend picks the RHI backend (default: the build's default,
+ * port/rhi/rhi.h rhi_CreateBackend), so the same dump can be rendered on
+ * Vulkan and D3D12 and the PNGs compared.
  *
- * The display options (renderer wave 7, R7a): a
- * dump does not carry them, so the replay takes them here, the PS2 picture
- * by default:
+ * The display options: a dump does not carry them, so the replay takes them
+ * here, the PS2 picture by default:
  *   --enhanced            the Enhanced flag: the deferred text and UI scale,
  *                         and the --present box as the default resolution;
  *                         the four options below apply without it, but a
  *                         replay at a scale above 1x still wants it for the
  *                         game's picture
- *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9 or a number (w / h)
+ *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9 or
+ *                         a number (w / h)
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
  *   --filter F            original, trilinear or anisotropic
- *   --mirror              the mirror mode (R7c, section 21): UI prims
- *                         flipped at replay, the present flipped (any preset)
- *   --crt MODE            (with --present; package CRT) the CRT filter in
- *                         MODE (scanlines, consumer, trinitron, pvm, shadow) at
- *                         full strength, the modes' own parameters; --crt-strength K (0..1,
- *                         after it) sets the strength
+ *   --mirror              the mirror mode: UI prims flipped at replay, the
+ *                         present flipped (any preset)
+ *   --crt MODE            (with --present) the CRT filter in MODE
+ *                         (scanlines, consumer, trinitron, pvm, shadow) at
+ *                         full strength, the modes' own parameters;
+ *                         --crt-strength K (0..1, after it) sets the strength
  *   --overlay-test        (with --present) registers a presentation overlay
- *                         (package OV, rd.h rd_SetPresentOverlay) drawing a
- *                         test pattern after the box blit: a one-pixel white
+ *                         (rd.h rd_SetPresentOverlay) drawing a test
+ *                         pattern after the box blit: a one-pixel white
  *                         outline on the box's edge and a 32 x 32 square,
  *                         opaque red, 16 pixels in from the box's top-left
  *                         corner, plus a half-transparent white one beside
- *                         it, and (package CRT2) a popup: a dark panel
- *                         with two rows of text ("Continue", "Quit Game")
- *                         through font.c's overlay mode.  Without it the
- *                         tool registers no overlay
+ *                         it, and a popup: a dark panel with two rows of
+ *                         text ("Continue", "Quit Game") through font.c's
+ *                         overlay mode.  Without it the tool registers no
+ *                         overlay
  *
- * Inspection (P2):
+ * Inspection:
  *   --list                prints every command of the replayed lists: the
  *                         list, index, type and key; for a draw its texture
  *                         (id and size), and for screen prims the prim,
  *                         space, vertex count, the bounding box in GS pixels
  *                         and the texel rectangle (UV, or STQ times the size)
- *   --no-device           (package QUEEN) no device: the dump is loaded into a
- *                         record-only renderer (rd__InitRecordOnly) for
+ *   --no-device           no device: the dump is loaded into a record-only
+ *                         renderer (rd__InitRecordOnly) for
  *                         --list, --mesh and --dump-textures and nothing is
  *                         rendered (<out.png> is not written); --list falls
  *                         back to it by itself when there is no device.
@@ -73,19 +73,18 @@
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
  *                         texture as grey, its byte in each channel)
- *   --stats               (package PA) prints the replay's counts from its
- *                         performance record (rd.h RdPerfRecord): draws,
- *                         passes, bind groups created (rd's uniform and
- *                         texture groups apart), bind group and pipeline
- *                         binds, ring bytes, (package PB) pipeline
- *                         barriers and copies, (package PC) the
- *                         screen-prim draws one per command and merged
- *   --no-aa1              (package AA1) replays with PRIM.AA1 off: every
- *                         RDC_AA1 a NOP and the start state's bit clear, the
- *                         frame as the renderer drew it before AA1 was
- *                         decoded (a before/after pair from one dump)
+ *   --stats               prints the replay's counts from its performance
+ *                         record (rd.h RdPerfRecord): draws, passes, bind
+ *                         groups created (rd's uniform and texture groups
+ *                         apart), bind group and pipeline binds, ring bytes,
+ *                         pipeline barriers and copies, the screen-prim
+ *                         draws one per command and merged
+ *   --no-aa1              replays with PRIM.AA1 off: every RDC_AA1 a NOP and
+ *                         the start state's bit clear, the frame as the
+ *                         renderer drew it before AA1 was decoded (a
+ *                         before/after pair from one dump)
  *
- * Interpolation (package I1):
+ * Interpolation:
  *   --interp T PREV       replays the frame the presenter builds between the
  *                         dump PREV (the tick before, e.g. the game's
  *                         rd-NNNNN-prev.rddump) and <dump> at alpha T (0..1)
@@ -442,7 +441,7 @@ static void dumpTextures(const char *dir)
         const uint32_t id = (t->gen << 16) | (i + 1);
         snprintf(path, sizeof(path), "%s/tex-%u-%ux%u.png", dir, id, t->w, t->h);
         if (rd__TexelIsCoverage(t->format)) {
-            /* package R8: coverage as grey (a sheet's too, v0.4.2) */
+            /* coverage as grey (a sheet's too) */
             uint8_t *grey = malloc((size_t)t->w * t->h * 4);
             for (size_t k = 0; grey && k < (size_t)t->w * t->h; k++) {
                 grey[k * 4] = grey[k * 4 + 1] = grey[k * 4 + 2] = t->pixels[k];
@@ -502,7 +501,7 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
     overlaySprite(x1 - 1, y0, x1, y1, white);
     overlaySprite(x0 + 16, y0 + 16, x0 + 48, y0 + 48, red);
     overlaySprite(x0 + 64, y0 + 16, x0 + 96, y0 + 48, half);
-    /* package CRT2: a popup as port/ui draws one (a dark panel, two rows of
+    /* a popup as port/ui draws one (a dark panel, two rows of
      * text through font.c's overlay mode), to see the UI under the filter */
     static const uint8_t panel[4] = {0x10, 0x10, 0x18, 0x60}, row[4] = {0xFF, 0xFF, 0xFF, 0x80},
                          dim[4] = {0xA0, 0xA0, 0xA0, 0x80};
@@ -529,7 +528,7 @@ int main(int argc, char **argv)
     const char *dump = argv[1], *png = argv[2];
     int target = RD_TARGET_DISPLAY;
     uint32_t pw = 0, ph = 0;
-    /* R7a: the display options */
+    /* the display options */
     RdSettings s;
     bool list = false, overlay = false, noAa1 = false, stats = false;
     bool noDevice = false;
@@ -567,7 +566,7 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--full-height") == 0) {
             s.fullHeightScene = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
-            s.mirror = 1; /* R7c */
+            s.mirror = 1;
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             const char *v = argv[++i];
@@ -613,7 +612,7 @@ int main(int argc, char **argv)
             }
             interpPrev = argv[++i];
         } else if (strcmp(argv[i], "--crt") == 0 && i + 1 < argc) {
-            /* package CRT: the CRT filter's mode, at full strength */
+            /* the CRT filter's mode, at full strength */
             static const char *const modes[] = {"scanlines", "consumer", "trinitron", "pvm",
                                                 "shadow"};
             const char *v = argv[++i];
@@ -678,8 +677,8 @@ int main(int argc, char **argv)
     }
     s.outputWidth = pw;
     s.outputHeight = ph;
-    /* package QUEEN: --no-device (or --list without a device) loads the dump
-       into a record-only renderer, lists it and renders nothing */
+    /* --no-device (or --list without a device) loads the dump into a
+       record-only renderer, lists it and renders nothing */
     if (noDevice && !list && !texDir && !meshName) {
         fprintf(stderr, "--no-device renders nothing: give --list, --mesh or --dump-textures\n");
         return 1;
@@ -731,7 +730,7 @@ int main(int argc, char **argv)
     }
     const RdFrame *rf = &f;
     if (interpPrev) {
-        /* I1: the presenter's frame between the two */
+        /* the presenter's frame between the two */
         RdInterpStats ist;
         rf = rd__InterpFrame(&pf, &f, interpT, 1, &ist);
         if (!rf) {
