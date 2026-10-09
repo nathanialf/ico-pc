@@ -65,7 +65,9 @@
  *                         replay (repeatable), to find the draw behind a pixel
  *   --mesh NAME           prints the VU meshes of that name vertex by vertex
  *                         (stream quadwords; '*' where the static index list
- *                         draws the triangle ending at the vertex)
+ *                         draws the triangle ending at the vertex, '^' where
+ *                         that triangle overlaps an earlier one in its plane
+ *                         and is drawn in front of it: issue 25)
  *   --dump-textures DIR   writes every image texture of the dump to
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
@@ -407,11 +409,13 @@ static void listMesh(const char *name)
                    br->material, br->firstVertex, br->firstVertex + br->vertexCount - 1,
                    br->indexCount);
             for (uint32_t v = br->firstVertex; v < br->firstVertex + br->vertexCount; v++) {
-                bool drawn = false;
+                bool drawn = false, later = false;
                 for (uint32_t k = 0; k < br->indexCount; k++) {
-                    drawn |= m->index[br->firstIndex + k] / 4 == v;
+                    const uint32_t ix = m->index[br->firstIndex + k];
+                    drawn |= ix / 4 == v;
+                    later |= ix / 4 == v && rd__MeshDrawIndex(m)[br->firstIndex + k] != ix;
                 }
-                printf("  %4u %c", v, drawn ? '*' : ' ');
+                printf("  %4u %c", v, later ? '^' : drawn ? '*' : ' ');
                 for (uint32_t q = 0; q < m->qwPerVertex; q++) {
                     const float *f = m->stream[(size_t)v * m->qwPerVertex + q];
                     printf(" (%g %g %g %g)", f[0], f[1], f[2], f[3]);

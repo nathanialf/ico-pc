@@ -68,6 +68,11 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // order.
 #define VU_F_CUT_ONLY 32u
 #define VU_F_KICK_ONLY 64u
+// Issue 25: the index bit of a triangle that overlaps an earlier triangle of
+// its mesh in the same plane (shader_consts.h ICO_VU_INDEX_LATER; static
+// prelit and lit meshes, rd_mesh.c markLaterOverlaps); vu_later_out
+#define VU_INDEX_LATER 0x40000000u
+#define VU_INDEX_MASK 0x3FFFFFFFu
 
 #define VU_PROBE_FIELDS 16u
 
@@ -291,7 +296,8 @@ bool vu_has_gs_position(VuVtx v)
 // points and the screen-space (noperspective) varyings are those of either
 // form.  The homogeneous depth, Z * g_z.x linear, differed from gs_depth's
 // value enough that a coplanar pass (the specular pass, 34/38) won or lost
-// GEQUAL per pixel: the near railing's shimmer.
+// GEQUAL per pixel.  (Made for issue 25, but the near railing's shimmer the
+// user's dumps showed is a code-32 draw: vu_later_out.)
 float4 vu_cut_position(VuVtx v)
 {
     return vu_has_gs_position(v) ? vu_vtx_position(v) : vu_homogeneous_position(v.h);
@@ -356,6 +362,50 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         // only x/y flags: the VU clips to its guard band (the 1500 unit
         // clip window, wider than any target), the GS scissor does the rest
         o.pos = vu_vtx_position(me);
+    }
+    return o;
+}
+
+// Issue 25: a triangle marked VU_INDEX_LATER and the earlier one it
+// overlaps are one plane in the model (the two faces of the railing's
+// lattice, split along other diagonals), where an exact GS's GEQUAL would
+// let the later pass over the earlier at every pixel.  ftoi4 rounds each
+// vertex's X, Y and Z on its own, so two triangulations of a plane differ
+// in depth by up to (|dZ/dX| + |dZ/dY|) / 8 + 2 GS units, either way, and
+// which one won flipped region by region with sub-pixel camera motion (the
+// near railing's shimmer).  The later triangle's depth rises by twice that
+// bound (the gradient from its own GS vertices) plus 512 GS units (two
+// steps of a 24-bit depth buffer) and Z / 2^20 (float steps), at most Z /
+// 256 (or 1024 units), the same in every program and pass that draws it.
+// Only when all three vertices have their GS position (not a triangle the
+// GPU clips at the eye) and Z is below the UI's top band.
+float vu_later_bias(VuVtx a, VuVtx b, VuVtx c)
+{
+    precise float3 pa = float3(float2(a.gs.xy) * (1.0 / 16.0), float(asuint(a.gs.z)));
+    precise float3 pb = float3(float2(b.gs.xy) * (1.0 / 16.0), float(asuint(b.gs.z)));
+    precise float3 pc = float3(float2(c.gs.xy) * (1.0 / 16.0), float(asuint(c.gs.z)));
+    precise float3 e1 = pb - pa;
+    precise float3 e2 = pc - pa;
+    precise float nx = e1.y * e2.z - e1.z * e2.y;
+    precise float ny = e1.z * e2.x - e1.x * e2.z;
+    precise float nz = abs(e1.x * e2.y - e1.y * e2.x);
+    precise float zmax = max(pa.z, max(pb.z, pc.z));
+    precise float cap = max(zmax * (1.0 / 256.0), 1024.0);
+    // (|dZ/dX| + |dZ/dY|) / 4 = (|nx| + |ny|) / (4 |nz|), or the cap for a
+    // triangle seen edge on
+    precise float slope = (abs(nx) + abs(ny)) * 0.25;
+    precise float bias = slope < cap * nz ? slope / nz : cap;
+    precise float r = min(bias + 512.0 + zmax * (1.0 / 1048576.0), cap);
+    return r;
+}
+
+VuVSOut vu_later_out(VuVSOut o, VuVtx a, VuVtx b, VuVtx c)
+{
+    uint zmax = max(asuint(a.gs.z), max(asuint(b.gs.z), asuint(c.gs.z)));
+    if (vu_has_gs_position(a) && vu_has_gs_position(b) && vu_has_gs_position(c) &&
+        zmax < 0xF0000000u) {
+        precise float z = o.pos.z + vu_later_bias(a, b, c) * g_z.x * o.pos.w;
+        o.pos.z = z;
     }
     return o;
 }

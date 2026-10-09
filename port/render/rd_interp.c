@@ -2259,6 +2259,7 @@ static RdMeshRec *scratchFor(const RdMeshRec *c, const float (*stream)[4])
             return NULL;
         }
     }
+    rd__VuMeshCopyDrawIndex(m, c); /* issue 25: the source's overlap marks */
     m->materialCount = c->materialCount;
     m->srcQw = c->srcQw;
     s_scratchBytes +=

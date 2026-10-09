@@ -28,6 +28,7 @@
  * rd_DrawVuParticles runs the CPU reference on a copy of the list image to
  * see whether a batch would have clobbered the common block, and a skinned
  * draw later in that list then logs once. */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -239,9 +240,11 @@ static void meshFree(RdMeshRec *m)
     }
     free(m->stream);
     free(m->index);
+    free(m->drawIndex);
     free(m->batches);
     m->stream = NULL;
     m->index = NULL;
+    m->drawIndex = NULL;
     m->batches = NULL;
     m->live = 0;
     m->vu = 0;
@@ -290,6 +293,253 @@ static RdMeshRec *meshAlloc(uint32_t *id)
     return NULL;
 }
 
+/* ------------------------------------------- coplanar overlaps (issue 25)
+ *
+ * The near railing's lattice (st13b_p3, one code-32 draw: ATE GREATER 0x60,
+ * AFAIL FB_ONLY, Z GEQUAL with Z write, ABE) is double sided: each panel's
+ * front strips and then its back strips, the same five corners split along
+ * other diagonals, and a corner whose UV is off the panel's mapping by two
+ * texels, so the two faces show the wires two texels apart.  In the model
+ * the faces are one plane, and with exact depths the GS's GEQUAL would let
+ * the later face pass over the earlier at every pixel.  ftoi4 rounds every
+ * vertex's X, Y and Z on its own, though, so the two triangulations' depths
+ * differ by up to (|dZ/dX| + |dZ/dY|) / 8 + 2 GS units either way, and which
+ * face wins, region by region, flips with sub-pixel camera motion (the
+ * user's dumps: from one frame to the next the earlier face won 0 then 42%
+ * of the panel): the wires and the dark FB_ONLY fringes of the two copies
+ * took turns, the shimmer.  A triangle that overlaps an earlier one of its
+ * mesh in the same plane carries ICO_VU_INDEX_LATER in the index list the
+ * device draws, and vu_later_out raises its depth by more than that bound:
+ * the later face wins every frame, the picture of an exact GS.
+ *
+ * Candidates are the earlier triangles that share a corner position with
+ * the triangle (double-sided faces share all their corners), tested in
+ * double: every corner within 1/1000 of the longer triangle's longest edge
+ * of the earlier triangle's plane, and the two overlapping in that plane by
+ * more than that on every separating axis (triangles that only share an
+ * edge or a corner do not).  Only the prelit and lit layouts, whose first
+ * quadword is the position the static programs transform; the
+ * interpolation's scratch meshes take their source's list
+ * (rd__VuMeshCopyDrawIndex), and a morph (rd_UpdateVuMesh) keeps the marks
+ * of the creation stream. */
+
+typedef struct OvlTri {
+    double p[3][3];
+} OvlTri;
+
+static double ovlDot(const double *a, const double *b)
+{
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+static void ovlSub(const double *a, const double *b, double *o)
+{
+    o[0] = a[0] - b[0];
+    o[1] = a[1] - b[1];
+    o[2] = a[2] - b[2];
+}
+
+static double ovlLongest(const OvlTri *t)
+{
+    double e = 0.0, d[3];
+    for (int i = 0; i < 3; i++) {
+        ovlSub(t->p[(i + 1) % 3], t->p[i], d);
+        const double l = ovlDot(d, d);
+        e = l > e ? l : e;
+    }
+    return sqrt(e);
+}
+
+/* whether t overlaps s (earlier) in s's plane */
+static bool ovlCoplanarOverlap(const OvlTri *s, const OvlTri *t)
+{
+    double e1[3], e2[3], n[3], d[3];
+    ovlSub(s->p[1], s->p[0], e1);
+    ovlSub(s->p[2], s->p[0], e2);
+    n[0] = e1[1] * e2[2] - e1[2] * e2[1];
+    n[1] = e1[2] * e2[0] - e1[0] * e2[2];
+    n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+    const double ls = ovlLongest(s), lt = ovlLongest(t);
+    const double len = ls > lt ? ls : lt, nn = sqrt(ovlDot(n, n));
+    if (!(len > 0.0) || !(nn > 1e-9 * ls * ls)) {
+        return false; /* degenerate */
+    }
+    const double tol = 1e-3 * len;
+    for (int k = 0; k < 3; k++) {
+        ovlSub(t->p[k], s->p[0], d);
+        if (fabs(ovlDot(n, d)) > tol * nn) {
+            return false;
+        }
+    }
+    /* the plane without its dominant axis; then the six edge normals */
+    const int ax = fabs(n[0]) >= fabs(n[1]) && fabs(n[0]) >= fabs(n[2]) ? 0
+                   : fabs(n[1]) >= fabs(n[2])                           ? 1
+                                                                        : 2;
+    const int u = ax == 0 ? 1 : 0, v = ax == 2 ? 1 : 2;
+    double a[3][2], b[3][2];
+    for (int k = 0; k < 3; k++) {
+        a[k][0] = s->p[k][u];
+        a[k][1] = s->p[k][v];
+        b[k][0] = t->p[k][u];
+        b[k][1] = t->p[k][v];
+    }
+    for (int tri = 0; tri < 2; tri++) {
+        const double (*e)[2] = tri == 0 ? a : b;
+        for (int i = 0; i < 3; i++) {
+            const double nx = e[i][1] - e[(i + 1) % 3][1], ny = e[(i + 1) % 3][0] - e[i][0];
+            const double nl = sqrt(nx * nx + ny * ny);
+            if (!(nl > 0.0)) {
+                continue;
+            }
+            double a0 = 1e300, a1 = -1e300, b0 = 1e300, b1 = -1e300;
+            for (int k = 0; k < 3; k++) {
+                const double pa = a[k][0] * nx + a[k][1] * ny, pb = b[k][0] * nx + b[k][1] * ny;
+                a0 = pa < a0 ? pa : a0;
+                a1 = pa > a1 ? pa : a1;
+                b0 = pb < b0 ? pb : b0;
+                b1 = pb > b1 ? pb : b1;
+            }
+            const double lo = a0 > b0 ? a0 : b0, hi = a1 < b1 ? a1 : b1;
+            if (hi - lo <= tol * nl) {
+                return false; /* separated, or only touching */
+            }
+        }
+    }
+    return true;
+}
+
+static uint32_t ovlHash(const float *p)
+{
+    uint32_t w[3];
+    memcpy(w, p, sizeof(w));
+    uint32_t h = w[0] * 0x9E3779B1u;
+    h = (h ^ (h >> 15) ^ w[1]) * 0x85EBCA77u;
+    h = (h ^ (h >> 13) ^ w[2]) * 0xC2B2AE3Du;
+    return h ^ (h >> 16);
+}
+
+/* m->drawIndex for m's stream and index list (none when no triangle
+ * overlaps an earlier one, or on no memory) */
+static void markLaterOverlaps(RdMeshRec *m)
+{
+    free(m->drawIndex);
+    m->drawIndex = NULL;
+    const uint32_t nt = m->indexCount / 3, qpv = m->qwPerVertex;
+    if (nt < 2 || (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT)) {
+        return;
+    }
+    /* a corner position (its float bits) to the triangles at it so far */
+    uint32_t cap = 16;
+    while (cap < nt * 6u && cap < (1u << 28)) {
+        cap <<= 1;
+    }
+
+    typedef struct Slot {
+        float key[3];
+        int32_t head; /* -1: empty slot */
+    } Slot;
+
+    typedef struct Link {
+        uint32_t tri;
+        int32_t next;
+    } Link;
+
+    Slot *slot = malloc((size_t)cap * sizeof(Slot));
+    Link *link = malloc((size_t)nt * 3 * sizeof(Link));
+    uint32_t *seen = malloc((size_t)nt * sizeof(uint32_t));
+    uint32_t *out = NULL;
+    if (!slot || !link || !seen) {
+        goto done;
+    }
+    for (uint32_t i = 0; i < cap; i++) {
+        slot[i].head = -1;
+    }
+    for (uint32_t i = 0; i < nt; i++) {
+        seen[i] = UINT32_MAX;
+    }
+    uint32_t links = 0;
+    for (uint32_t t = 0; t < nt; t++) {
+        const uint32_t kick = (m->index[t * 3] & ICO_VU_INDEX_MASK) / 4u;
+        if (kick < 2 || kick >= m->vertexCount) {
+            continue;
+        }
+        OvlTri tt;
+        const float *pos[3];
+        for (int k = 0; k < 3; k++) {
+            pos[k] = m->stream[(size_t)(kick - 2u + (uint32_t)k) * qpv];
+            for (int c = 0; c < 3; c++) {
+                tt.p[k][c] = (double)pos[k][c];
+            }
+        }
+        bool later = false;
+        uint32_t at[3];
+        for (int k = 0; k < 3; k++) {
+            uint32_t h = ovlHash(pos[k]) & (cap - 1);
+            while (slot[h].head >= 0 && memcmp(slot[h].key, pos[k], sizeof(slot[h].key)) != 0) {
+                h = (h + 1) & (cap - 1);
+            }
+            at[k] = h;
+            for (int32_t l = slot[h].head; l >= 0 && !later; l = link[l].next) {
+                const uint32_t s = link[l].tri;
+                if (seen[s] == t) {
+                    continue;
+                }
+                seen[s] = t;
+                const uint32_t sk = (m->index[s * 3] & ICO_VU_INDEX_MASK) / 4u;
+                OvlTri ss;
+                for (int j = 0; j < 3; j++) {
+                    const float *q = m->stream[(size_t)(sk - 2u + (uint32_t)j) * qpv];
+                    for (int c = 0; c < 3; c++) {
+                        ss.p[j][c] = (double)q[c];
+                    }
+                }
+                later = ovlCoplanarOverlap(&ss, &tt);
+            }
+        }
+        if (later) {
+            if (!out) {
+                out = malloc((size_t)m->indexCount * 4);
+                if (!out) {
+                    goto done;
+                }
+                memcpy(out, m->index, (size_t)m->indexCount * 4);
+            }
+            for (int c = 0; c < 3; c++) {
+                out[t * 3 + (uint32_t)c] |= ICO_VU_INDEX_LATER;
+            }
+        }
+        for (int k = 0; k < 3; k++) {
+            if (slot[at[k]].head < 0) {
+                memcpy(slot[at[k]].key, pos[k], sizeof(slot[at[k]].key));
+            }
+            link[links].tri = t;
+            link[links].next = slot[at[k]].head;
+            slot[at[k]].head = (int32_t)links++;
+        }
+    }
+    m->drawIndex = out;
+    out = NULL;
+done:
+    free(out);
+    free(slot);
+    free(link);
+    free(seen);
+}
+
+bool rd__VuMeshCopyDrawIndex(RdMeshRec *dst, const RdMeshRec *src)
+{
+    free(dst->drawIndex);
+    dst->drawIndex = NULL;
+    if (!src->drawIndex || dst->indexCount != src->indexCount) {
+        return !src->drawIndex;
+    }
+    dst->drawIndex = malloc((size_t)src->indexCount * 4);
+    if (dst->drawIndex) {
+        memcpy(dst->drawIndex, src->drawIndex, (size_t)src->indexCount * 4);
+    }
+    return dst->drawIndex != NULL;
+}
+
 uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uint32_t qwPerVertex,
                              const uint32_t *index, uint32_t indexCount,
                              const RdVuBatchRec *batches, uint32_t batchCount, const char *name)
@@ -323,6 +573,7 @@ uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uin
         memcpy(m->batches, batches, (size_t)batchCount * sizeof(RdVuBatchRec));
     }
     snprintf(m->name, sizeof(m->name), "%s", name ? name : "vu mesh");
+    markLaterOverlaps(m); /* issue 25 */
     return id;
 }
 

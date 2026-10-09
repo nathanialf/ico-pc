@@ -268,6 +268,12 @@ enum {
 /* The index value of an indexed VU draw: kick * 4 + corner (corner 0..2 =
  * vertex kick - 2 + corner); vertexOffset must be 0. */
 #define ICO_VU_INDEX(kick, corner) ((uint32_t)(kick) * 4u + (uint32_t)(corner))
+/* Issue 25: set on the three indices of a triangle that overlaps an earlier
+ * triangle of its mesh in the same plane (RdMeshRec.drawIndex; static
+ * prelit and lit meshes only), which vu_later_out draws in front of it;
+ * vu_common.hlsli's VU_INDEX_LATER and VU_INDEX_MASK */
+#define ICO_VU_INDEX_LATER 0x40000000u
+#define ICO_VU_INDEX_MASK 0x3FFFFFFFu
 #define ICO_VU_PROBE_FIELDS 16
 
 _Static_assert(offsetof(IcoVuCB, mem) == 0, "vu mem");

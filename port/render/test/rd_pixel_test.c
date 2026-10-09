@@ -132,6 +132,18 @@
  *            grid, which opens S1 with the VU on P3's side and S2; before
  *            issue 25 the cut path's unsnapped corners opened S3 in every
  *            mode)
+ *   vu overlap (issue 25, the near railing's shimmer) in the same four
+ *            renderers: a lattice panel's front strip and then its back
+ *            strips in one code-32 mesh (the same corners split along other
+ *            diagonals, a corner's UV 2 texels off), under the railing's
+ *            state (ATE GREATER 0x60, FB_ONLY, Z GEQUAL with Z write, ABE),
+ *            seen obliquely at Z 30M..41M, the camera moving a little in 12
+ *            steps: the back triangles are marked (ICO_VU_INDEX_LATER), and
+ *            every step the one draw equals the front strip drawn and then
+ *            the back strips with Z ALWAYS (the later face over the earlier
+ *            at every pixel, an exact GS's picture); the faces drawn apart
+ *            with GEQUAL differ from it in some steps (the rounding's
+ *            picture: the earlier face wins in steps 1, 5, 9 and 10)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
@@ -2909,8 +2921,9 @@ static int vpEdges(int path, double tx, int *left, int *right)
  * move forward only, by at most one output pixel a frame, and 34's edges
  * stay within one output pixel of 32's.  check34: whether code 34 is to
  * match the other paths (1x; Enhanced above 1x once fixed); the cut path
- * is checked like the others since issue 25 (the near railing's shimmer),
- * its reversed twin reported, not checked */
+ * is checked like the others since issue 25's first fix (vu_cut_position;
+ * the shimmer itself was the case of testVuOverlap), its reversed twin
+ * reported, not checked */
 static void testVuPaths(const char *mode, int check34)
 {
     vpMeshes();
@@ -3284,6 +3297,237 @@ static void testVuSeams(const char *mode)
     }
 }
 
+/* ------------------------------------------------- coplanar overlaps */
+/* (issue 25) the near railing's lattice as the game draws it: one code-32
+ * mesh holding a panel's front strip and then its back strips, the same
+ * five corners (the quad and a corner on its right edge whose UV is off the
+ * panel's mapping, by 2 texels here as in the dump) split along other
+ * diagonals, under the railing's state (ATE GREATER 0x60, AFAIL FB_ONLY, Z
+ * GEQUAL with Z write, ABE LERP As), seen obliquely with the game's Z range
+ * (30M to 41M) by a camera moving a little each step.  In GS arithmetic
+ * (ftoi4 per vertex) the two triangulations' depths differ by hundreds of
+ * units with a sign that changes from step to step: the earlier face wins
+ * GEQUAL in steps 1, 5, 9 and 10, the later one elsewhere.  The single draw
+ * must give the picture of the faces with the later one passing over the
+ * earlier at every pixel (the reference: the front strip, then the back
+ * strips with Z ALWAYS), every step; the two faces drawn apart with
+ * GEQUAL, the rounding's picture, show that the steps do make the earlier
+ * face win.  Nearest filtering, so every passing texel is opaque and the
+ * order of a fringe under a later wire does not enter. */
+static const char kOvKey;
+
+#define OV_TEX 32
+
+/* the lattice: diagonal wires 3 texels wide every 16, the middle texel
+ * opaque (its colour from the texel's place, so the two faces' copies 2
+ * texels apart differ), the outer two a dark fringe at 0x40 (fails the
+ * alpha test, FB_ONLY blends it), the holes alpha 0 */
+static RdTex ovTexture(void)
+{
+    static uint8_t tex[OV_TEX * OV_TEX * 4];
+    for (int y = 0; y < OV_TEX; y++) {
+        for (int x = 0; x < OV_TEX; x++) {
+            uint8_t *p = &tex[(y * OV_TEX + x) * 4];
+            const int a = (x + y) % 16, b = (x - y + 2 * OV_TEX) % 16;
+            const int core = a == 1 || b == 1, edge = a == 0 || a == 2 || b == 0 || b == 2;
+            if (core) {
+                p[0] = (uint8_t)(90 + x * 5);
+                p[1] = (uint8_t)(100 + y * 4);
+                p[2] = (uint8_t)(150 + (x * 3 + y) % 60);
+                p[3] = 0x80;
+            } else if (edge) {
+                p[0] = 20;
+                p[1] = 24;
+                p[2] = 30;
+                p[3] = 0x40;
+            } else {
+                p[0] = p[1] = p[2] = p[3] = 0;
+            }
+        }
+    }
+    return rd_CreateTexture(OV_TEX, OV_TEX, tex, RD_TEXA_80_80, "overlap lattice");
+}
+
+/* a textured prelit mesh of one batch: corners k[0..n) of the panel, a
+ * strip starting at each vertex start marks */
+static RdMesh ovMesh(const int *k, const uint8_t *start, int n)
+{
+    /* P0, P1, P2 (the quad's top left, top right, bottom left), Pm (on the
+     * right edge, 0.62 down; its V 0.555, 2 texels off), P4 (bottom right) */
+    static const float kPos[5][2] = {
+        {-40.0f, -30.0f}, {40.0f, -30.0f}, {-40.0f, 30.0f}, {40.0f, 7.2f}, {40.0f, 30.0f}};
+    static const float kUv[5][2] = {
+        {0.0f, 0.0f}, {1.25f, 0.0f}, {0.0f, 1.0f}, {1.25f, 0.555f}, {1.25f, 1.0f}};
+    float qw[1 + 12 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8000u | (uint32_t)n; /* NLOOP n, EOP */
+    memcpy(&qw[0][0], &tag, 4);
+    for (int i = 0; i < n && i < 12; i++) {
+        float *pos = qw[1 + i * 3], *st = qw[2 + i * 3], *rgba = qw[3 + i * 3];
+        pos[0] = kPos[k[i]][0];
+        pos[1] = kPos[k[i]][1];
+        pos[3] = 1.0f;
+        st[0] = kUv[k[i]][0];
+        st[1] = kUv[k[i]][1];
+        st[2] = 1.0f;
+        st[3] = start[i] ? 0.0f : 1.0f; /* the strip flag */
+        rgba[0] = rgba[1] = rgba[2] = rgba[3] = 128.0f;
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 1 + (uint32_t)n * 3;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    const RdMesh m = rd_CreateVuMesh(&md);
+    CHECK(m.id != 0, "overlap mesh: rd_CreateVuMesh");
+    return m;
+}
+
+/* one code-32 draw at camera step s: model (x, y, 0) at view X = x + 0.2 y
+ * + cx, Y = y + cy, depth D = 200 + 1.2 x + 0.45 y + dD (focal 300), GS Z =
+ * 16 (1M + 220M / D) */
+static void ovDraw(RdMesh m, int s, int ord)
+{
+    const double f = 300.0, kx = 1.2, ky = 0.45, sh = 0.2, za = 1.0e6, zb = 2.2e8;
+    const double cx = 0.0131 * s, cy = 0.0077 * s, d = 200.0 + 0.0093 * s;
+    RdVuDraw dr;
+    memset(&dr, 0, sizeof(dr));
+    dr.prog = RD_PROG_PRELIT;
+    dr.code = 32;
+    dr.clip = RD_VU_CLIP_REGION;
+    const double col[4][4] = {{f + 2048.0 * kx, 2048.0 * kx, za * kx, kx},
+                              {f * sh + 2048.0 * ky, f + 2048.0 * ky, za * ky, ky},
+                              {0.0, 0.0, 0.0, 0.0},
+                              {f * cx + 2048.0 * d, f * cy + 2048.0 * d, za * d + zb, d}};
+    for (int c = 0; c < 4; c++) {
+        for (int e = 0; e < 4; e++) {
+            dr.vu.mem[16 + c][e] = (float)col[c][e];
+        }
+    }
+    rd_DrawVuMesh(m, &dr, RD_KEY(&kOvKey, s, ord));
+}
+
+static void ovState(RdTex t, uint32_t test)
+{
+    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_TestGs(test);
+    rd_ZWrite(1);
+    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_PABE(0);
+    rd_FBA(0);
+    rd_Gouraud(1);
+    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+}
+
+#define OV_TEST_GEQUAL 0x5160Du /* the railing's TEST: ATE GREATER 0x60, FB_ONLY, Z GEQUAL */
+#define OV_TEST_ALWAYS 0x3160Du /* the same with Z ALWAYS */
+
+/* one frame: mesh a under test ta, then (b.id: ) mesh b under tb; SCENE */
+static uint8_t *ovFrame(RdTex t, RdMesh a, uint32_t ta, RdMesh b, uint32_t tb, int s, uint32_t *w,
+                        uint32_t *h)
+{
+    float sx = 1.0f, sy = 1.0f;
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    ovState(t, ta);
+    ovDraw(a, s, 0);
+    if (b.id) {
+        ovState(t, tb);
+        ovDraw(b, s, 1);
+    }
+    rd_EndFrame(0);
+    return readScaled(RD_TARGET_SCENE, w, h, &sx, &sy);
+}
+
+/* pixels whose RGB differs by more than 1 */
+static int ovDiff(const uint8_t *x, const uint8_t *y, uint32_t w, uint32_t h)
+{
+    int n = 0;
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        const uint8_t *p = &x[i * 4], *q = &y[i * 4];
+        n += abs(p[0] - q[0]) > 1 || abs(p[1] - q[1]) > 1 || abs(p[2] - q[2]) > 1;
+    }
+    return n;
+}
+
+static void testVuOverlap(const char *mode)
+{
+    /* the game's order: the front strip, then the back strips */
+    static const int kAll[12] = {0, 1, 2, 3, 4, 2, 3, 0, 1, 4, 3, 2};
+    static const uint8_t kAllStart[12] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0};
+    const RdTex t = ovTexture();
+    const RdMesh all = ovMesh(kAll, kAllStart, 12);
+    const RdMesh front = ovMesh(kAll, kAllStart, 5);
+    const RdMesh back = ovMesh(kAll + 5, kAllStart + 5, 7);
+    const RdMesh none = {0};
+    /* the marks: the back strips' three triangles (kicks 7, 8 and 11) in the
+     * one mesh, none in either face alone */
+    const RdMeshRec *ma = rd__MeshRec(all.id), *mf = rd__MeshRec(front.id),
+                    *mb = rd__MeshRec(back.id);
+    if (ma && mf && mb) {
+        int marks = 0, right = 0;
+        for (uint32_t i = 0; i < ma->indexCount; i++) {
+            const uint32_t ix = rd__MeshDrawIndex(ma)[i], kick = (ix & ICO_VU_INDEX_MASK) / 4;
+            const int later = (ix & ICO_VU_INDEX_LATER) != 0;
+            marks += later;
+            right += later == (kick == 7 || kick == 8 || kick == 11);
+        }
+        CHECK(marks == 9 && right == (int)ma->indexCount && !mf->drawIndex && !mb->drawIndex,
+              "vu overlap: %d marked indices (%d as expected of %u), front %s, back %s", marks,
+              right, ma->indexCount, mf->drawIndex ? "marked" : "clear",
+              mb->drawIndex ? "marked" : "clear");
+    } else {
+        CHECK(0, "vu overlap: mesh records");
+    }
+    int bad = 0, worst = 0, earlierWins = 0, covered = 0;
+    for (int s = 0; s < 12; s++) {
+        uint32_t w = 0, h = 0, w2 = 0, h2 = 0, w3 = 0, h3 = 0;
+        uint8_t *one = ovFrame(t, all, OV_TEST_GEQUAL, none, 0, s, &w, &h);
+        uint8_t *ref = ovFrame(t, front, OV_TEST_GEQUAL, back, OV_TEST_ALWAYS, s, &w2, &h2);
+        uint8_t *gs = ovFrame(t, front, OV_TEST_GEQUAL, back, OV_TEST_GEQUAL, s, &w3, &h3);
+        if (one && ref && gs && w == w2 && h == h2 && w == w3 && h == h3) {
+            const int d = ovDiff(one, ref, w, h), g = ovDiff(gs, ref, w, h);
+            int drawn = 0;
+            for (size_t i = 0; i < (size_t)w * h; i++) {
+                drawn += !vpIsBg(&ref[i * 4]);
+            }
+            covered = drawn > covered ? drawn : covered;
+            printf("  vu overlap (%s): step %2d: the one draw differs from the later face over "
+                   "the earlier in %d pixels; the faces drawn apart with GEQUAL in %d\n",
+                   mode, s, d, g);
+            bad += d > 0;
+            worst = d > worst ? d : worst;
+            earlierWins += g > 0;
+        } else {
+            CHECK(0, "vu overlap (%s): step %d: readback", mode, s);
+        }
+        free(one);
+        free(ref);
+        free(gs);
+    }
+    printf("  vu overlap (%s): %d of 12 steps differ (at most %d pixels); the earlier face wins "
+           "GEQUAL in %d steps\n",
+           mode, bad, worst, earlierWins);
+    CHECK(covered > 1000, "vu overlap (%s): the panel covers %d pixels", mode, covered);
+    CHECK(earlierWins > 0,
+          "vu overlap (%s): no step makes the earlier face win (the test "
+          "geometry no longer z-fights)",
+          mode);
+    CHECK(bad == 0,
+          "vu overlap (%s): %d steps where the later face does not pass over the "
+          "earlier (at most %d pixels)",
+          mode, bad, worst);
+    rd_DestroyVuMesh(all);
+    rd_DestroyVuMesh(front);
+    rd_DestroyVuMesh(back);
+    rd_DestroyTexture(t);
+}
+
 static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int check34)
 {
     RdSettings s;
@@ -3298,7 +3542,8 @@ static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int ch
         return;
     }
     testVuPaths(mode, check34);
-    testVuSeams(mode); /* issue 26 */
+    testVuSeams(mode);   /* issue 26 */
+    testVuOverlap(mode); /* issue 25 */
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%s: %u validation errors", mode, verr);
     rd_Shutdown();

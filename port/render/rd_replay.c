@@ -2801,7 +2801,7 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     } else if (m) {
         if (m->replaySeen != g_rd.replayCounter) {
             m->ringStream = ringCopy(m->stream, (uint64_t)m->vertexCount * m->qwPerVertex * 16, ua);
-            m->ringIndex = ringCopy(m->index, (uint64_t)m->indexCount * 4, 16);
+            m->ringIndex = ringCopy(rd__MeshDrawIndex(m), (uint64_t)m->indexCount * 4, 16);
             m->replaySeen = g_rd.replayCounter;
             g_rdPerf.meshUploads++;
             g_rdPerf.meshUploadBytes +=
@@ -4054,7 +4054,8 @@ static void uploadMeshes(const RdFrame *f, int keep)
                 memcpy(g_rd.ringMap[s_slot] + off, m->stream, sb);
             }
             if (ib) {
-                memcpy(g_rd.ringMap[s_slot] + off + (m->gpuIndexOff - m->gpuOff), m->index, ib);
+                memcpy(g_rd.ringMap[s_slot] + off + (m->gpuIndexOff - m->gpuOff),
+                       rd__MeshDrawIndex(m), ib);
             }
             rhi_CmdCopyBuffer(s_cl, g_rd.ring[s_slot], off, rd__MeshGpuBuffer(m->gpuChunk),
                               m->gpuOff, span);

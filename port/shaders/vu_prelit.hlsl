@@ -41,13 +41,17 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
         VuVtx v = vu_prelit_vertex(vu_probe_vertex(vid), mode, true);
         return vu_probe_out(vid, vu_probe_field(v, (vid / 3u) % VU_PROBE_FIELDS));
     }
-    uint kick = vid >> 2;
+    uint kick = (vid & VU_INDEX_MASK) >> 2;
     uint corner = vid & 3u;
     VuVtx a = vu_prelit_vertex(kick - 2u, mode, false);
     VuVtx b = vu_prelit_vertex(kick - 1u, mode, false);
     VuVtx c = vu_prelit_vertex(kick, mode, false);
     VuVtx me = vu_prelit_vertex(kick - 2u + corner, mode, true);
-    return vu_triangle_out(a, b, c, me, mode);
+    VuVSOut o = vu_triangle_out(a, b, c, me, mode);
+    if ((vid & VU_INDEX_LATER) != 0u) {
+        o = vu_later_out(o, a, b, c);
+    }
+    return o;
 }
 
 DualOut vu_ps(VuVSOut i)

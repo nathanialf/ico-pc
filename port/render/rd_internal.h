@@ -530,6 +530,11 @@ typedef struct RdMeshRec {
     uint32_t qwPerVertex, batchCount, srcQw;
     float (*stream)[4]; /* vertexCount * qwPerVertex quadwords */
     uint32_t *index;
+    /* issue 25: the index list the device draws, index with
+     * ICO_VU_INDEX_LATER on each triangle that overlaps an earlier
+     * triangle of the mesh in its plane (rd_mesh.c markLaterOverlaps);
+     * NULL when none does (rd__MeshDrawIndex) */
+    uint32_t *drawIndex;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -584,10 +589,22 @@ uint64_t rd__MeshGpuBufferSize(uint32_t chunk);
 /* destroys the arena's buffers; every mesh loses its device copy */
 void rd__MeshGpuShutdown(void);
 /* Creates a VU mesh record from a stream and index list already in the
- * tagless layout (dump loading); returns the id, 0 on failure. */
+ * tagless layout (dump loading); returns the id, 0 on failure.  Every VU
+ * mesh is made here, so its drawIndex (issue 25) is worked out here too. */
 uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uint32_t qwPerVertex,
                              const uint32_t *index, uint32_t indexCount,
                              const RdVuBatchRec *batches, uint32_t batchCount, const char *name);
+
+/* Issue 25: the index list a draw of m uploads (RdMeshRec.drawIndex) */
+static inline const uint32_t *rd__MeshDrawIndex(const RdMeshRec *m)
+{
+    return m->drawIndex ? m->drawIndex : m->index;
+}
+
+/* dst's drawIndex becomes a copy of src's (none when src has none): the
+ * interpolation's scratch meshes draw their source's (rd_interp.c);
+ * false on no memory (dst then has none) */
+bool rd__VuMeshCopyDrawIndex(RdMeshRec *dst, const RdMeshRec *src);
 /* rd_mesh.c: the per-list VU images (rd_SetVuCommon updates all 13). */
 void rd__VuInit(void);
 void rd__VuShutdown(void);
