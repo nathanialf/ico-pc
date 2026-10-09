@@ -145,11 +145,6 @@ float ico_photo_stick_speed(void)
     return s.speed > 0.0f ? s.speed : (float)ico_config_get_float("photo.stick_speed", 1.0);
 }
 
-int ico_photo_invert_y(void)
-{
-    return s.invertY;
-}
-
 int ico_photo_hide_ui(void)
 {
     return s.hideUi;

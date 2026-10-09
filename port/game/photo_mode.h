@@ -190,7 +190,6 @@ int ico_photo_speed(void);
    hide_ui also follows Square) */
 int ico_photo_hide_ui(void);
 float ico_photo_stick_speed(void);
-int ico_photo_invert_y(void);
 const char *ico_photo_png_dir(void);
 /* The capture's file name for a local time (ico-YYYYMMDD-HHMMSS.png, then
    -2, -3 ... when seq > 1), into buf. */
