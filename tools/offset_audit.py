@@ -2725,6 +2725,8 @@ NARROW_LOC = re.compile(r"\[[^\]]*\] ")
 # reviewed: (file, the source line stripped) -> why it is a 32-bit quantity
 NARROW_OK = {
     ("ico2/common/src/debug.c", "return (int)n;"): "strtol of the start-stage number, 1..105",
+    ("ico2/omori/src/generator.c", "p->kind = (int)src->obj;"):
+        "the generator's enemy kind: the layout row's object word, an index (0 in every row), never an address",
     ("ico2/fumi/ios/thread.c", "return buf[0];"): "the join message, an int iosThreadMessage sent",
     ("ico2/seki/src/DisplayList.c", "unsigned int end = (unsigned int)entry->cur;"):
         "debug quadword count: only the difference of the two words is used",
