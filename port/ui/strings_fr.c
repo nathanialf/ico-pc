@@ -484,11 +484,11 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOTE] =
         "Pour les puces graphiques Adreno uniquement. Appliqué au prochain démarrage.",
     [UI_STR_GPU_DRIVER_ADDED] = "Pilote ajouté",
-    [UI_STR_GPU_DRIVER_BAD] = "Ce fichier n'est pas un paquet de pilote.",
+    [UI_STR_GPU_DRIVER_BAD] = "Ce fichier n’est pas un paquet de pilote.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Pilote supprimé",
     [UI_STR_GPU_DRIVER_FAILED] =
-        "Le pilote choisi n'a pas démarré la dernière fois. Le pilote du téléphone est utilisé.",
-    [UI_STR_GPU_DRIVER_NOSPACE] = "Pas assez d'espace pour ajouter ce pilote.",
+        "Le pilote choisi n’a pas démarré la dernière fois. Le pilote du téléphone est utilisé.",
+    [UI_STR_GPU_DRIVER_NOSPACE] = "Pas assez d’espace pour ajouter ce pilote.",
     [UI_STR_QUIT_GAME] = "Quitter le jeu",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quitter le jeu ?",
     /* v0.4.3 I17a */

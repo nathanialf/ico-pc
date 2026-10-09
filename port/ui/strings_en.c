@@ -194,7 +194,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_QUIT_CONFIRM] = "Quit to desktop?",
     [UI_STR_OPT_CIRCLE_BACK] = "Circle goes back",
     [UI_STR_CIRCLE_BACK_NOTE] =
-        "Circle (gamepad B) also backs out of the game's menus, as Triangle does.",
+        "Circle (gamepad B) also backs out of the game’s menus, as Triangle does.",
     /* the game's menu words (P3), as the PAL sheets have them: drawn as
        text in the sheets' look by the rows of menu_text.h's table */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
@@ -311,7 +311,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GAL_SE] = "Sound effects",
     [UI_STR_GAL_PLAYING] = "Playing",
     [UI_STR_GAL_STOPPED] = "Stopped",
-    [UI_STR_GAL_EMPTY] = "The game's sound tables are not loaded",
+    [UI_STR_GAL_EMPTY] = "The game’s sound tables are not loaded",
     [UI_STR_GAL_PAUSED] = "Paused",
     [UI_STR_HINT_PLAY] = "Play",
     [UI_STR_HINT_PAUSE] = "Pause",
@@ -482,7 +482,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_BAD] = "This file is not a driver package.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Driver removed",
     [UI_STR_GPU_DRIVER_FAILED] =
-        "The driver you chose did not start last time. The phone's own driver is in use.",
+        "The driver you chose did not start last time. The phone’s own driver is in use.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
     [UI_STR_QUIT_GAME] = "Quit game",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",

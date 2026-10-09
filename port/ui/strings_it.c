@@ -180,7 +180,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_ACH_LOCKED] = "Bloccato",
     [UI_STR_ACH_STATE_UNLOCKED] = "Sbloccato",
     [UI_STR_MIRROR_SCREEN] =
-        "L'intera partita è ribaltata da sinistra a destra. Ogni salvataggio conserva la scelta.",
+        "L’intera partita è ribaltata da sinistra a destra. Ogni salvataggio conserva la scelta.",
     [UI_STR_OPT_NEWGAME_PLUS] = "Nuova partita +",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "Nuova partita + gioca il secondo viaggio: parole di Yorda tradotte, finale e oggetti cambiati. Disattivato gioca il primo viaggio anche dopo aver finito il gioco.",
@@ -485,7 +485,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_BAD] = "Questo file non è un pacchetto driver.",
     [UI_STR_GPU_DRIVER_REMOVED] = "Driver rimosso",
     [UI_STR_GPU_DRIVER_FAILED] =
-        "Il driver scelto non si è avviato l'ultima volta. È in uso il driver del telefono.",
+        "Il driver scelto non si è avviato l’ultima volta. È in uso il driver del telefono.",
     [UI_STR_GPU_DRIVER_NOSPACE] = "Spazio insufficiente per aggiungere questo driver.",
     [UI_STR_QUIT_GAME] = "Esci dal gioco",
     [UI_STR_QUIT_GAME_CONFIRM] = "Uscire dal gioco?",
