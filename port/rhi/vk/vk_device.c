@@ -414,8 +414,9 @@ static void vkr_FakeLimits(void)
 /* The format behind RHI_FMT_D32F_S8.  The spec guarantees one of
  * D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
  * preferred.  Either is taken only with the sampled and transfer uses too:
- * the fog samples the scene's depth in place (rd_replay.c doFog), and the
- * effects depth copies it and samples the copy (rd_present.c).  When
+ * the fog and the effects depth sample the scene's depth in place
+ * (rd_replay.c doFog, rd_present.c depthBlit), and the tests' depth
+ * readbacks copy it out (rd_replay.c rd__ReadTargetDepth).  When
  * neither has them all, D32 unless only D24 is an attachment.
  * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests:
  * rhi_vk_d24s8). */

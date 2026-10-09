@@ -330,10 +330,10 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
  * and an output-size RHI_FMT_D32F depth buffer cleared to 0.0 (far), drawn
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
  * depth at the same normalised source position (SCENE and DISPLAY cover
- * the same GS frame; a mirrored box flips both), read nearest from a copy
- * (SCENE's depth is an attachment, never sampled; the fog's copy in
- * rd_replay.c doFog is the precedent).  Outside the box the clear stays, so
- * the bars read as far.  The point is an effects program hooked into the
+ * the same GS frame; a mirrored box flips both), read nearest from SCENE's
+ * depth where it is, in RHI_STATE_DEPTH_READ, as rd_replay.c doFog reads
+ * it (every target depth is created sampleable).  Outside the box the
+ * clear stays, so the bars read as far.  The point is an effects program hooked into the
  * API (ReShade, vkBasalt): it looks for a depth buffer of the backbuffer's
  * size among the render passes, and the scene's is the scene's size.  The
  * convention is the scene's (gs_z_to_depth): the depth grows with GS Z,
@@ -368,9 +368,6 @@ static bool depthWanted(void)
 }
 
 static struct {
-    RhiTexture copy; /* SCENE's depth, D32F_S8, sampled */
-    RhiState copyState;
-    uint32_t copyW, copyH;
     RhiTexture out; /* the output-size D32F */
     RhiState outState;
     uint32_t outW, outH;
@@ -379,9 +376,6 @@ static struct {
 
 static void depthShutdown(void)
 {
-    if (s_depth.copy.id) {
-        rhi_DestroyTexture(s_depth.copy);
-    }
     if (s_depth.out.id) {
         rhi_DestroyTexture(s_depth.out);
     }
@@ -398,18 +392,6 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     if (!ts || !ts->withDepth || !ts->depth.id || ts->depthState == RHI_STATE_UNDEFINED) {
         return false;
     }
-    if (!s_depth.copy.id || s_depth.copyW != ts->tw || s_depth.copyH != ts->th) {
-        if (s_depth.copy.id) {
-            rhi_DestroyTexture(s_depth.copy);
-        }
-        s_depth.copy = rhi_CreateTexture(&(RhiTextureDesc){
-            ts->tw, ts->th, 1, RHI_FMT_D32F_S8,
-            /* the depth-stencil usage: Vulkan's sampled depth layout needs it */
-            RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, "rd effects depth copy"});
-        s_depth.copyState = RHI_STATE_UNDEFINED;
-        s_depth.copyW = ts->tw;
-        s_depth.copyH = ts->th;
-    }
     if (!s_depth.out.id || s_depth.outW != dw || s_depth.outH != dh) {
         if (s_depth.out.id) {
             rhi_DestroyTexture(s_depth.out);
@@ -425,7 +407,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     }
     const RdPipeKeyInt k = rd__PresentDepthKey(dstFmt);
     const RhiPipeline pipe = rd__GetPipeline(&k);
-    if (!s_depth.copy.id || !s_depth.out.id || !pipe.id) {
+    if (!s_depth.out.id || !pipe.id) {
         if (!s_depth.failLogged) {
             s_depth.failLogged = 1;
             rd__Log("present: no effects depth (%s); the picture is shown without it",
@@ -433,10 +415,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
         }
         return false;
     }
-    rd__Transition(cl, ts->depth, &ts->depthState, RHI_STATE_COPY_SRC);
-    rd__Transition(cl, s_depth.copy, &s_depth.copyState, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(cl, ts->depth, (RhiRect){0, 0, ts->tw, ts->th}, s_depth.copy, 0, 0);
-    rd__Transition(cl, s_depth.copy, &s_depth.copyState, RHI_STATE_SHADER_READ);
+    rd__Transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_READ);
     rd__Transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
 
     RhiRenderPassDesc p;
@@ -478,7 +457,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     b[1].sampler = rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[2].texture = s_depth.copy;
+    b[2].texture = ts->depth;
     b[2].aspect = RHI_ASPECT_DEPTH;
     const RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
     if (g2.id) {

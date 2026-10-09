@@ -44,7 +44,7 @@ float4 blit_ps(BlitVSOut i) : SV_Target0
 }
 
 // blit_depth_ps (rd_present.c): blit_ps's colour, and
-// SV_Depth from t2, the copy of the scene's depth, at the same normalised uv
+// SV_Depth from t2, the scene's depth (sampled in place), at the same normalised uv
 // (the source rectangle covers the whole scene; a mirrored blit flips both)
 // read nearest: the texel under uv. Drawn into the output's box with an
 // output-size depth target cleared to 0.0, so an effects program hooked into
