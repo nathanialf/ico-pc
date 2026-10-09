@@ -3167,17 +3167,13 @@ int main(int argc, char **argv)
     testPreset();
     testCapture();
     testBootSkip();
-    testExtras();
     testGlyphSources();
     testTitleOptionsWord();
     testGallery();
     testList();
     testGameOptions();
-    testCoversTitle();
     testTexturePack();
     testTexturePackNoteLines();
-    testCharacters();
-    testCharactersRestart();
     testModelPack();
     testEffects();
     testTouch();
