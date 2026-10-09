@@ -13,4 +13,4 @@
 
 ## Known issues
 
-- When the game starts, the scenery can show for a moment before the Sony sign. The next version's log records what the screen shows at start, so you can send logs/ico-pc.log.
+- When the game starts, the scenery can show for a moment before the Sony sign. This version's log records what the screen shows at start: if you see it, please send logs/ico-pc.log.
