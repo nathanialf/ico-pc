@@ -1279,6 +1279,211 @@ static void open_window(void)
 
 #endif
 
+/* the data tables, from the disc's boot ELF, before anything reads one
+   (port/data/tables.h) */
+static void load_tables(const char *source)
+{
+    char why[512];
+
+    if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
+        fprintf(stderr, "ico_pc: the data tables: %s\n", why);
+        ico_host_fatal(log_file(), "Cannot read the game's data from %s.\nThe log says why.",
+                       source);
+    }
+    fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
+            (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
+            ICO_TABLES_BOOT_ELF);
+}
+
+#ifndef ICO_HEADLESS
+/* v0.4.2: the menus no longer use the game's lettering, so the files
+   an earlier version cut from the disc's menu sheets on its first
+   start (gamefont-<version>-<disc SHA-1>.bin in the per-user folder)
+   are of no use: removed, once (nothing is left to find after that) */
+static void remove_old_lettering(void)
+{
+    char pref[ICO_PATH_MAX];
+    int removed = 0;
+
+    if (ico_host_pref_dir(pref, sizeof(pref)) == 0) {
+        ico_dir_walk(pref, 0, remove_gamefont, &removed);
+    }
+    if (removed > 0) {
+        fprintf(stderr,
+                "ico_pc: removed %d file(s) of the game's lettering from the user "
+                "folder (the menus no longer use them)\n",
+                removed);
+    }
+}
+#endif
+
+/* the pad: a script from --pad-script or [dev] pad_script */
+static void setup_pad(const Args *a, const IcoIni *ini, const char *exe_dir)
+{
+    const char *v;
+    char path[ICO_PATH_MAX];
+
+    /* command-line paths are the working folder's, ini paths the
+       executable's */
+    v = ico_ini_get(ini, "pad_script");
+    if (a->pad_script != NULL) {
+        snprintf(path, sizeof(path), "%s", a->pad_script);
+    } else if (v != NULL && v[0] != '\0') {
+        if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
+            fprintf(stderr, "ico_pc: pad_script: the path is too long\n");
+        }
+    } else {
+        path[0] = '\0';
+#ifdef ICO_HEADLESS
+        /* the headless build's default; a player's window build takes a
+           script only when [dev] pad_script names one, so a stray file
+           beside the exe never replaces the live controller */
+        ico_path_join(path, sizeof(path), exe_dir, "pad-script.txt");
+        if (!ico_file_exists(path)) {
+            path[0] = '\0';
+        }
+#endif
+    }
+    if (path[0] != '\0') {
+        if (ico_pad_script_load(path) != 0) {
+            ico_host_fatal(log_file(), "Cannot use the pad script %s (details in the log).", path);
+        }
+        fprintf(stderr, "ico_pc: pad script %s, %d entries: a DualShock in port 1\n", path,
+                ico_pad_script_count());
+        record_check(path);
+    } else {
+        fprintf(stderr, "ico_pc: no pad script: no controller\n");
+    }
+}
+
+/* the trace */
+static void setup_trace(const Args *a, const IcoIni *ini, const char *exe_dir, const char *logs_dir)
+{
+    const char *v;
+    char path[ICO_PATH_MAX];
+    char stamp[32];
+
+    /* on by default in the headless build; the window build writes one only
+       when asked ([dev] trace = true or a path, or --trace), so a player's
+       logs folder does not fill with a trace per run */
+    v = a->trace != NULL ? a->trace : ico_ini_get(ini, "trace");
+#ifdef ICO_HEADLESS
+    const int trace_on =
+        !(v != NULL && (strcmp(v, "0") == 0 || strcmp(v, "none") == 0 || strcmp(v, "false") == 0));
+#else
+    const int trace_on = v != NULL && v[0] != '\0' && strcmp(v, "0") != 0 &&
+                         strcmp(v, "none") != 0 && strcmp(v, "false") != 0;
+#endif
+    if (!trace_on) {
+        fprintf(stderr, "ico_pc: no trace\n");
+    } else {
+        if (a->trace != NULL) {
+            snprintf(path, sizeof(path), "%s", a->trace);
+        } else if (v != NULL && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
+            if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
+                path[0] = '\0';
+            }
+        } else {
+            char name[64];
+
+            timestamp(stamp, sizeof(stamp), "%Y%m%d-%H%M%S");
+            snprintf(name, sizeof(name), "trace-%s.txt", stamp);
+            if (ico_path_join(path, sizeof(path), logs_dir, name) != 0) {
+                path[0] = '\0';
+            }
+        }
+        if (path[0] != '\0' && ico_trace_open(path) == 0) {
+            fprintf(stderr, "ico_pc: trace %s\n", path);
+        } else {
+            fprintf(stderr, "ico_pc: running without a trace\n");
+        }
+    }
+}
+
+/* the game's thread functions, by name in the crash report */
+static void name_threads(void)
+{
+    ico_diag_name_func((void *)Main, "Main");
+    ico_diag_name_func((void *)StageManager, "StageManager");
+    ico_diag_name_func((void *)iosCdvdManager, "iosCdvdManager");
+    ico_diag_name_func((void *)iosMcManager, "iosMcManager");
+    ico_diag_name_func((void *)jimakuManager, "jimakuManager");
+    ico_diag_name_func((void *)sndManager, "sndManager");
+    ico_diag_name_func((void *)InitIcoMisc, "InitIcoMisc");
+}
+
+#ifndef ICO_HEADLESS
+/* v0.4.0: a PCSX2 texture pack in the user folder or beside the
+   program, indexed now (the game data is mounted, the device knows its
+   formats); its loader thread stops before the window closes */
+static void open_texture_pack(const char *exe_dir)
+{
+    IcoVideoOptions vo;
+    TexpackConfig tc;
+    char user[ICO_PATH_MAX];
+
+    ico_video_get(&vo);
+    ico_host_pref_dir(user, sizeof(user));
+    memset(&tc, 0, sizeof(tc));
+    tc.userDir = user;
+    tc.programDir = exe_dir;
+    tc.serial = "SCES-50760";
+    tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
+    tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
+    /* read ahead only while the pack is in use */
+    tc.precache = vo.texturePackPrecache && vo.texturePack;
+    tc.bcSupported = rhi_Limits() != NULL && rhi_Limits()->bcTextures;
+    tc.maxTextureSize = rhi_Limits() != NULL ? rhi_Limits()->maxTextureSize : 0;
+    tc.developer = ico_opt_developer_mode();
+    texpack_Init(&tc);
+    at_shutdown(texpack_Shutdown);
+}
+
+/* v0.4.1 (M4): a model pack from the same folders, read and converted
+   now (before the game loads a model: the meshes made at load look
+   their parts up); the dump is a Developer mode row */
+static void open_model_pack(const char *exe_dir)
+{
+    ModelpackConfig mc;
+    char user[ICO_PATH_MAX];
+    const int developer = ico_opt_developer_mode();
+
+    ico_host_pref_dir(user, sizeof(user));
+    memset(&mc, 0, sizeof(mc));
+    mc.userDir = user;
+    mc.programDir = exe_dir;
+    mc.serial = "SCES-50760";
+    mc.developer = developer;
+    mc.dumpEnabled = developer && ico_video_dump_models();
+    modelpack_Init(&mc);
+    modelpack_SetEnabled(ico_video_model_pack() != 0);
+    fprintf(stderr, "models: %d replacements, model pack %s, dump models %s\n", modelpack_Count(),
+            ico_video_model_pack() ? "on" : "off", mc.dumpEnabled ? "on" : "off");
+    ui_SettingsSetModelPackCount(modelpack_Count);
+    at_shutdown(modelpack_Shutdown);
+}
+#endif
+
+/* the watchdog, from the limit in seconds (0 off) */
+static void start_watchdog(unsigned long watchdog)
+{
+    /* R2: an effects program (ReShade) compiles its shaders on the first
+       frames; the first limit is doubled for it (rhi_InjectorName, port/rhi/
+       rhi.h, is only in the window build). */
+    const char *injector = NULL;
+#ifndef ICO_HEADLESS
+    injector = rhi_InjectorName();
+#endif
+    if (injector != NULL && watchdog != 0) {
+        ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit "
+                     "is doubled to %lu seconds (it prepares its effects on the first frames)",
+                     injector, watchdog * 2);
+        ico_diag_start((unsigned int)(watchdog * 2), (unsigned int)(watchdog * 2));
+    } else {
+        ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
+    }
+}
+
 static int host_main(int argc, char **argv)
 {
     Args a;
@@ -1287,7 +1492,6 @@ static int host_main(int argc, char **argv)
     char logs_dir[ICO_PATH_MAX];
     char ini_path[ICO_PATH_MAX];
     char source[ICO_PATH_MAX]; /* the disc image (use_iso) or the archive */
-    char path[ICO_PATH_MAX];
     char stamp[32];
     const char *v;
     unsigned long ticks = 0;
@@ -1423,110 +1627,14 @@ static int host_main(int argc, char **argv)
        stays up until the game draws */
     (void)ico_window_progress("ICO", "Starting the game", -1);
 #endif
-    /* the data tables, from the disc's boot ELF, before anything reads one
-       (port/data/tables.h) */
-    {
-        char why[512];
-
-        if (ico_tables_load_vfs(ico_vfs_disc(), why, sizeof(why)) != 0) {
-            fprintf(stderr, "ico_pc: the data tables: %s\n", why);
-            ico_host_fatal(log_file(), "Cannot read the game's data from %s.\nThe log says why.",
-                           source);
-        }
-        fprintf(stderr, "ico_pc: %u data table rows (%u records) loaded from %s\n",
-                (unsigned)ico_tables_loaded_rows(), (unsigned)ico_tables_loaded_records(),
-                ICO_TABLES_BOOT_ELF);
-    }
+    load_tables(source);
 #ifndef ICO_HEADLESS
-    /* v0.4.2: the menus no longer use the game's lettering, so the files
-       an earlier version cut from the disc's menu sheets on its first
-       start (gamefont-<version>-<disc SHA-1>.bin in the per-user folder)
-       are of no use: removed, once (nothing is left to find after that) */
-    {
-        char pref[ICO_PATH_MAX];
-        int removed = 0;
-
-        if (ico_host_pref_dir(pref, sizeof(pref)) == 0) {
-            ico_dir_walk(pref, 0, remove_gamefont, &removed);
-        }
-        if (removed > 0) {
-            fprintf(stderr,
-                    "ico_pc: removed %d file(s) of the game's lettering from the user "
-                    "folder (the menus no longer use them)\n",
-                    removed);
-        }
-    }
+    remove_old_lettering();
 #endif
 
-    /* the pad */
-    /* command-line paths are the working folder's, ini paths the
-       executable's */
-    v = ico_ini_get(&ini, "pad_script");
-    if (a.pad_script != NULL) {
-        snprintf(path, sizeof(path), "%s", a.pad_script);
-    } else if (v != NULL && v[0] != '\0') {
-        if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
-            fprintf(stderr, "ico_pc: pad_script: the path is too long\n");
-        }
-    } else {
-        path[0] = '\0';
-#ifdef ICO_HEADLESS
-        /* the headless build's default; a player's window build takes a
-           script only when [dev] pad_script names one, so a stray file
-           beside the exe never replaces the live controller */
-        ico_path_join(path, sizeof(path), exe_dir, "pad-script.txt");
-        if (!ico_file_exists(path)) {
-            path[0] = '\0';
-        }
-#endif
-    }
-    if (path[0] != '\0') {
-        if (ico_pad_script_load(path) != 0) {
-            ico_host_fatal(log_file(), "Cannot use the pad script %s (details in the log).", path);
-        }
-        fprintf(stderr, "ico_pc: pad script %s, %d entries: a DualShock in port 1\n", path,
-                ico_pad_script_count());
-        record_check(path);
-    } else {
-        fprintf(stderr, "ico_pc: no pad script: no controller\n");
-    }
+    setup_pad(&a, &ini, exe_dir);
 
-    /* the trace */
-    /* on by default in the headless build; the window build writes one only
-       when asked ([dev] trace = true or a path, or --trace), so a player's
-       logs folder does not fill with a trace per run */
-    v = a.trace != NULL ? a.trace : ico_ini_get(&ini, "trace");
-#ifdef ICO_HEADLESS
-    const int trace_on =
-        !(v != NULL && (strcmp(v, "0") == 0 || strcmp(v, "none") == 0 || strcmp(v, "false") == 0));
-#else
-    const int trace_on = v != NULL && v[0] != '\0' && strcmp(v, "0") != 0 &&
-                         strcmp(v, "none") != 0 && strcmp(v, "false") != 0;
-#endif
-    if (!trace_on) {
-        fprintf(stderr, "ico_pc: no trace\n");
-    } else {
-        if (a.trace != NULL) {
-            snprintf(path, sizeof(path), "%s", a.trace);
-        } else if (v != NULL && strcmp(v, "1") != 0 && strcmp(v, "true") != 0) {
-            if (ico_path_join(path, sizeof(path), exe_dir, v) != 0) {
-                path[0] = '\0';
-            }
-        } else {
-            char name[64];
-
-            timestamp(stamp, sizeof(stamp), "%Y%m%d-%H%M%S");
-            snprintf(name, sizeof(name), "trace-%s.txt", stamp);
-            if (ico_path_join(path, sizeof(path), logs_dir, name) != 0) {
-                path[0] = '\0';
-            }
-        }
-        if (path[0] != '\0' && ico_trace_open(path) == 0) {
-            fprintf(stderr, "ico_pc: trace %s\n", path);
-        } else {
-            fprintf(stderr, "ico_pc: running without a trace\n");
-        }
-    }
+    setup_trace(&a, &ini, exe_dir, logs_dir);
 
     /* the pad recording (package Q1) */
     record_open(&ini, exe_dir, logs_dir);
@@ -1555,13 +1663,7 @@ static int host_main(int argc, char **argv)
     }
     ico_diag_set_sources(ico_host_status, ico_host_main_ticks, ico_host_vsync_count);
     ico_diag_set_exit_hook(fatal_summary);
-    ico_diag_name_func((void *)Main, "Main");
-    ico_diag_name_func((void *)StageManager, "StageManager");
-    ico_diag_name_func((void *)iosCdvdManager, "iosCdvdManager");
-    ico_diag_name_func((void *)iosMcManager, "iosMcManager");
-    ico_diag_name_func((void *)jimakuManager, "jimakuManager");
-    ico_diag_name_func((void *)sndManager, "sndManager");
-    ico_diag_name_func((void *)InitIcoMisc, "InitIcoMisc");
+    name_threads();
 #ifdef _WIN32
     ico_diag_arm_vectored();
 #endif
@@ -1569,71 +1671,10 @@ static int host_main(int argc, char **argv)
 #ifndef ICO_ANDROID_UI
     open_window();
 #endif
-    /* v0.4.0: a PCSX2 texture pack in the user folder or beside the
-       program, indexed now (the game data is mounted, the device knows its
-       formats); its loader thread stops before the window closes */
-    {
-        IcoVideoOptions vo;
-        TexpackConfig tc;
-        char user[ICO_PATH_MAX];
-
-        ico_video_get(&vo);
-        ico_host_pref_dir(user, sizeof(user));
-        memset(&tc, 0, sizeof(tc));
-        tc.userDir = user;
-        tc.programDir = exe_dir;
-        tc.serial = "SCES-50760";
-        tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
-        tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
-        /* read ahead only while the pack is in use */
-        tc.precache = vo.texturePackPrecache && vo.texturePack;
-        tc.bcSupported = rhi_Limits() != NULL && rhi_Limits()->bcTextures;
-        tc.maxTextureSize = rhi_Limits() != NULL ? rhi_Limits()->maxTextureSize : 0;
-        tc.developer = ico_opt_developer_mode();
-        texpack_Init(&tc);
-        at_shutdown(texpack_Shutdown);
-    }
-    /* v0.4.1 (M4): a model pack from the same folders, read and converted
-       now (before the game loads a model: the meshes made at load look
-       their parts up); the dump is a Developer mode row */
-    {
-        ModelpackConfig mc;
-        char user[ICO_PATH_MAX];
-        const int developer = ico_opt_developer_mode();
-
-        ico_host_pref_dir(user, sizeof(user));
-        memset(&mc, 0, sizeof(mc));
-        mc.userDir = user;
-        mc.programDir = exe_dir;
-        mc.serial = "SCES-50760";
-        mc.developer = developer;
-        mc.dumpEnabled = developer && ico_video_dump_models();
-        modelpack_Init(&mc);
-        modelpack_SetEnabled(ico_video_model_pack() != 0);
-        fprintf(stderr, "models: %d replacements, model pack %s, dump models %s\n",
-                modelpack_Count(), ico_video_model_pack() ? "on" : "off",
-                mc.dumpEnabled ? "on" : "off");
-        ui_SettingsSetModelPackCount(modelpack_Count);
-        at_shutdown(modelpack_Shutdown);
-    }
+    open_texture_pack(exe_dir);
+    open_model_pack(exe_dir);
 #endif
-    {
-        /* R2: an effects program (ReShade) compiles its shaders on the first
-           frames; the first limit is doubled for it (rhi_InjectorName, port/rhi/
-           rhi.h, is only in the window build). */
-        const char *injector = NULL;
-#ifndef ICO_HEADLESS
-        injector = rhi_InjectorName();
-#endif
-        if (injector != NULL && watchdog != 0) {
-            ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit "
-                         "is doubled to %lu seconds (it prepares its effects on the first frames)",
-                         injector, watchdog * 2);
-            ico_diag_start((unsigned int)(watchdog * 2), (unsigned int)(watchdog * 2));
-        } else {
-            ico_diag_start((unsigned int)watchdog, (unsigned int)(watchdog * 2));
-        }
-    }
+    start_watchdog(watchdog);
     ico_diag_milestone("boot starts (ico_host_init)");
     ico_host_init();
     ico_diag_milestone("boot ran until every thread waits");
