@@ -232,8 +232,9 @@ float4 vu_gs_position(int3 gs, bool wrap)
     return float4(vu_ndc(float2(xy) * (1.0 / 16.0)), gs_depth(asuint(gs.z)), 1.0);
 }
 
-// The homogeneous form of the same mapping, for triangles the GPU has to
-// clip (scissor programs, a vertex behind the eye or outside the Z range):
+// The homogeneous form of the same mapping, for the vertices of a triangle
+// the GPU has to clip that have no GS position (vu_cut_position: behind the
+// eye, outside the Z range or saturated by ftoi4):
 // x/w and y/w are the pixel positions above (unsnapped), z/w = Z * g_z.x
 // for the unsaturated GS Z = 16 * h.z / h.w, linear (gs_z_to_depth without
 // its top band and clamp: a piecewise map is not linear in clip space).
@@ -254,17 +255,46 @@ float4 vu_homogeneous_position(float4 h)
     return float4(x, y, z, h.w);
 }
 
-// Package S2: the vertex the GS gets, from a loop's vertex. With g_z.w set
-// (rd: the Enhanced preset on a target finer than the GS grid) X and Y are
-// the divided position unquantised: the 12.4 grid is 1/16 GS pixel, a
-// quarter output pixel at 4x, which a slowly moving vertex steps across.
-// Original (g_z.w 0) is the ftoi4 value as before.
+// Package S2: the vertex the GS gets, from a loop's vertex: the ftoi4
+// value, on the 12.4 grid at every scale, so a VU vertex lands where the
+// GIF and CPU paths put the same point (sprite.hlsl) and two meshes'
+// shared vertices the GS merges stay merged (issue 26: a crack between
+// them showed the clear, which the fog pass paints at full fog).  g_z.w set
+// (rd: only the developer switch ICO_RD_VU_OFFGRID, Enhanced on a target
+// finer than the GS grid) keeps X and Y the divided position unquantised,
+// as S2 first shipped: smoother slow motion (the grid is 1/16 GS pixel, a
+// quarter output pixel at 4x), but seams open.
 float4 vu_vtx_position(VuVtx v)
 {
     if (g_z.w != 0.0) {
         return float4(vu_ndc(v.p.xy), gs_depth(asuint(v.gs.z)), 1.0);
     }
     return vu_gs_position(v.gs, false);
+}
+
+// Issue 25: whether the GS position of a vertex is the one the GS would
+// draw it at: in front of the eye (w > 0), GS Z not negative (no -z clip)
+// and none of X, Y, Z saturated by ftoi4 (the values vu_ftoi writes).
+bool vu_has_gs_position(VuVtx v)
+{
+    bool satX = v.gs.x == 0x7FFFFFFF || v.gs.x == (int)0x80000000u;
+    bool satY = v.gs.y == 0x7FFFFFFF || v.gs.y == (int)0x80000000u;
+    return v.h.w > 0.0 && v.gs.z >= 0 && v.gs.z != 0x7FFFFFFF && !satX && !satY;
+}
+
+// A corner of a triangle the GPU clips (code 36's SCISSOR_COMMON): the
+// vertex's GS position when it has one, so the triangle's depth and edges
+// are bit for bit those of the kicked triangles and of codes 32, 34 and 38
+// over the same surface (w = 1, gs_depth of the ftoi4 Z), and only the
+// corners without one take the homogeneous form.  Mixing the two is sound:
+// a clip-space position is homogeneous of degree 1, so the GPU's clip
+// points and the screen-space (noperspective) varyings are those of either
+// form.  The homogeneous depth, Z * g_z.x linear, differed from gs_depth's
+// value enough that a coplanar pass (the specular pass, 34/38) won or lost
+// GEQUAL per pixel: the near railing's shimmer.
+float4 vu_cut_position(VuVtx v)
+{
+    return vu_has_gs_position(v) ? vu_vtx_position(v) : vu_homogeneous_position(v.h);
 }
 
 static const float4 VU_CULLED = float4(2.0, 2.0, 2.0, 1.0); // outside x <= w: clipped away
@@ -287,13 +317,14 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     o.col = float4(me.rgba);
     o.stq = me.stq;
     if (mode == VU_CLIP_NONE) {
-        // Package S: off the 12.4 grid where vu_vtx_position is (Enhanced
-        // above 1x), as codes 32 and 36 draw: a snapped triangle sits up to
-        // 1/16 GS pixel from the same triangle drawn by them, which on a
-        // sloped surface moves its depth one way over the whole triangle,
-        // so a coplanar pass by another program (the reflection pass, 38)
-        // failed or passed GEQUAL wholesale as the camera moved.  A vertex
-        // whose X or Y the 16-bit wrap would change keeps the GS value.
+        // Package S: vu_vtx_position, as codes 32, 36 and 38 draw (on the
+        // 12.4 grid, or off it under ICO_RD_VU_OFFGRID): a triangle placed
+        // differently from the same triangle drawn by them sits up to 1/16
+        // GS pixel away, which on a sloped surface moves its depth one way
+        // over the whole triangle, so a coplanar pass by another program
+        // (the reflection pass, 38) failed or passed GEQUAL wholesale as the
+        // camera moved.  A vertex whose X or Y the 16-bit wrap would change
+        // keeps the wrapped GS value.
         bool wrapped = any((me.gs.xy & 0xFFFF) != me.gs.xy);
         o.pos = wrapped ? vu_gs_position(me.gs, true) : vu_vtx_position(me);
         return o;
@@ -318,7 +349,9 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     } else if ((fa & fb & fc) != 0u) {
         return o; // trivially rejected (the six fcor tests)
     } else if (((fa | fb | fc) & 0x30u) != 0u || min(a.h.w, min(b.h.w, c.h.w)) <= 0.0) {
-        o.pos = vu_homogeneous_position(me.h); // SCISSOR_COMMON; the GPU clips
+        // SCISSOR_COMMON; the GPU clips (at 0 <= z <= w, not the VU's
+        // z = -w: that would need SV_ClipDistance)
+        o.pos = vu_cut_position(me);
     } else {
         // only x/y flags: the VU clips to its guard band (the 1500 unit
         // clip window, wider than any target), the GS scissor does the rest

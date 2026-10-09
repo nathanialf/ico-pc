@@ -105,14 +105,31 @@
  *            through each position path of vu_triangle_out (code 34, 32,
  *            36 uncut, 36 cut by the far plane), drawn with Z write and
  *            again over itself by each path with Z GEQUAL: no interior
- *            pixel fails between 34, 32 and 36 (the cut path, which keeps
- *            X and Y off the grid in Original too, is reported only); 32
- *            over 34 along a diagonal pan in 1/64 GS pixel steps never
+ *            pixel fails between any two of 34, 32, 36 and 36 cut (issue
+ *            25: the cut path's vertices with a GS position draw at it;
+ *            the cut triangle with its winding reversed is reported only);
+ *            32 over 34 along a diagonal pan in 1/64 GS pixel steps never
  *            fails; panned across, every path's edges move forward by at
  *            most one pixel a frame and 34's stay on 32's; in Original 1x,
- *            Original 4x and Enhanced 4x (where 34 drew on the 12.4 grid
- *            and the others off it: 32 over 34 failed everywhere in 62 of
- *            65 pan frames)
+ *            Original 4x, Enhanced 2.25x and Enhanced 4x (where 34 drew on
+ *            the 12.4 grid and the others off it: 32 over 34 failed
+ *            everywhere in 62 of 65 pan frames)
+ *   vu seams (issue 26) in the same four renderers, over a grey clear at
+ *            Z 0 with GEQUAL and Z write, the clear's pixels within one
+ *            output pixel of a shared edge (parameter 0.1..0.9): none for
+ *            S1 a code-32 triangle beside a GIF triangle (rd_ScreenPrims)
+ *            at the VU's ftoi4 corners, the VU on either side; S2 two
+ *            meshes under matrices 0.01 GS pixel apart whose shared
+ *            vertices have equal ftoi4; S3 a code-36 strip whose first
+ *            triangle is cut (v0 with GS Z < 0 and the -z flag, then with
+ *            w < 0) beside its kicked second, along v1-v2, and the cut
+ *            triangle still covers v0's side; S4 (reported against
+ *            Original 1x) 8 x 8 quads of one mesh under a matrix each,
+ *            turned 0.002 rad, whose shared corners differ by float noise.
+ *            (before issue 26 Enhanced above 1x drew the VU off the 12.4
+ *            grid, which opens S1 with the VU on P3's side and S2; before
+ *            issue 25 the cut path's unsnapped corners opened S3 in every
+ *            mode)
  *
  * argv[1]: a writable directory.  Exit 0, 1 on a mismatch, 77 without a
  * Vulkan device.  Any validation error fails the test. */
@@ -2593,44 +2610,49 @@ static void testAuraMaskAt(const char *mode, float scale, int fullHeight)
 /* (package S) one prelit triangle through the four position paths of
  * vu_triangle_out: code 34 (RD_VU_CLIP_NONE: vu_gs_position), code 32
  * (REGION: vu_vtx_position), code 36 uncut (SCISSOR: vu_vtx_position) and
- * code 36 with vertex 0 past the clip space's far plane (SCISSOR: the
- * GPU-clipped vu_homogeneous_position).  The vertices sit off the 12.4 grid
- * and the triangle slopes in Z (thousands of GS Z units a pixel around 16M,
- * the game's 3D range). */
-enum { VP_34, VP_32, VP_36, VP_36H, VP_COUNT };
+ * code 36 with vertex 1 past the clip space's far plane (SCISSOR, cut:
+ * vu_cut_position, which is vu_vtx_position for these vertices since issue
+ * 25); VP_36R is the cut one with its winding reversed (vertices 0, 2, 1).
+ * The vertices sit off the 12.4 grid and the triangle slopes in Z
+ * (thousands of GS Z units a pixel around 16M, the game's 3D range). */
+enum { VP_34, VP_32, VP_36, VP_36H, VP_36R, VP_COUNT };
 
-static const char *const kVpName[VP_COUNT] = {"34", "32", "36", "36 cut"};
+static const char *const kVpName[VP_COUNT] = {"34", "32", "36", "36 cut", "36 cut reversed"};
 
-static RdMesh s_vpMesh[2]; /* red, green */
+static RdMesh s_vpMesh[2][2]; /* [reversed][red, green] */
 
 static void vpMeshes(void)
 {
     static const float kPos[3][4] = {{40.3f, 30.7f, 1000000.3f, 1.0f},
                                      {200.6f, 60.2f, 1040000.7f, 1.0f},
                                      {90.9f, 210.45f, 980000.1f, 1.0f}};
-    static float qw[2][1 + 3 * 3][4];
-    for (int i = 0; i < 2; i++) {
-        memset(qw[i], 0, sizeof(qw[i]));
-        const uint32_t tag = 0x8003u; /* NLOOP 3, EOP */
-        memcpy(&qw[i][0][0], &tag, 4);
-        for (int k = 0; k < 3; k++) {
-            memcpy(qw[i][1 + k * 3], kPos[k], sizeof(kPos[k]));
-            qw[i][1 + k * 3 + 1][2] = 1.0f;
-            qw[i][1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f; /* the strip flag on vertex 0 */
-            qw[i][1 + k * 3 + 2][0] = i == 0 ? 200.0f : 30.0f;
-            qw[i][1 + k * 3 + 2][1] = i == 0 ? 30.0f : 200.0f;
-            qw[i][1 + k * 3 + 2][2] = 30.0f;
-            qw[i][1 + k * 3 + 2][3] = 127.0f;
+    static const int kOrder[2][3] = {{0, 1, 2}, {0, 2, 1}};
+    static float qw[2][2][1 + 3 * 3][4];
+    for (int r = 0; r < 2; r++) {
+        for (int i = 0; i < 2; i++) {
+            memset(qw[r][i], 0, sizeof(qw[r][i]));
+            const uint32_t tag = 0x8003u; /* NLOOP 3, EOP */
+            memcpy(&qw[r][i][0][0], &tag, 4);
+            for (int k = 0; k < 3; k++) {
+                memcpy(qw[r][i][1 + k * 3], kPos[kOrder[r][k]], sizeof(kPos[0]));
+                qw[r][i][1 + k * 3 + 1][2] = 1.0f;
+                /* the strip flag on vertex 0 */
+                qw[r][i][1 + k * 3 + 1][3] = k == 0 ? 0.0f : 1.0f;
+                qw[r][i][1 + k * 3 + 2][0] = i == 0 ? 200.0f : 30.0f;
+                qw[r][i][1 + k * 3 + 2][1] = i == 0 ? 30.0f : 200.0f;
+                qw[r][i][1 + k * 3 + 2][2] = 30.0f;
+                qw[r][i][1 + k * 3 + 2][3] = 127.0f;
+            }
+            const RdVuBatchDesc bd = {0, 0, 0};
+            RdVuMeshDesc md;
+            memset(&md, 0, sizeof(md));
+            md.qw = (const float (*)[4])qw[r][i];
+            md.qwCount = 10;
+            md.qwPerVertex = RD_VU_QW_PRELIT;
+            md.batchCount = 1;
+            md.batches = &bd;
+            s_vpMesh[r][i] = rd_CreateVuMesh(&md);
         }
-        const RdVuBatchDesc bd = {0, 0, 0};
-        RdVuMeshDesc md;
-        memset(&md, 0, sizeof(md));
-        md.qw = (const float (*)[4])qw[i];
-        md.qwCount = 10;
-        md.qwPerVertex = RD_VU_QW_PRELIT;
-        md.batchCount = 1;
-        md.batches = &bd;
-        s_vpMesh[i] = rd_CreateVuMesh(&md);
     }
 }
 
@@ -2653,10 +2675,11 @@ static void vpDraw(int path, int green, double tx, double ty)
     d.vu.mem[19][0] = (float)(1792.0 + tx);
     d.vu.mem[19][1] = (float)(1792.0 + ty);
     /* clip space (mem[20..23]): x = y = 0, w = 1, z = pos.z / 1.02M: vertex
-     * 0 (1.04M) past z = w for VP_36H, nothing flagged otherwise */
+     * 1 (1.04M) past z = w for VP_36H and VP_36R, nothing flagged otherwise */
+    const int cut = path == VP_36H || path == VP_36R;
     d.vu.mem[23][3] = 1.0f;
-    d.vu.mem[22][2] = path == VP_36H ? 1.0f / 1020000.0f : 0.0f;
-    rd_DrawVuMesh(s_vpMesh[green], &d, RD_KEY(&kVpKey, green, path));
+    d.vu.mem[22][2] = cut ? 1.0f / 1020000.0f : 0.0f;
+    rd_DrawVuMesh(s_vpMesh[path == VP_36R][green], &d, RD_KEY(&kVpKey, green, path));
 }
 
 static void vpState(int zwrite)
@@ -2755,7 +2778,8 @@ static int vpEdges(int path, double tx, int *left, int *right)
  * move forward only, by at most one output pixel a frame, and 34's edges
  * stay within one output pixel of 32's.  check34: whether code 34 is to
  * match the other paths (1x; Enhanced above 1x once fixed); the cut path
- * is reported, not checked */
+ * is checked like the others since issue 25 (the near railing's shimmer),
+ * its reversed twin reported, not checked */
 static void testVuPaths(const char *mode, int check34)
 {
     vpMeshes();
@@ -2765,10 +2789,12 @@ static void testVuPaths(const char *mode, int check34)
             vpPair(a, b, 0.0, 0.0, &interior, &failed);
             printf("  vu paths (%s): %s then %s over it: %d of %d interior pixels fail GEQUAL\n",
                    mode, kVpName[a], kVpName[b], failed, interior);
-            CHECK(interior > 1000, "vu paths (%s): %s drew %d interior pixels", mode, kVpName[a],
-                  interior);
+            if (a != VP_36R) {
+                CHECK(interior > 1000, "vu paths (%s): %s drew %d interior pixels", mode,
+                      kVpName[a], interior);
+            }
             const int checked =
-                a != VP_36H && b != VP_36H && (check34 || (a != VP_34 && b != VP_34));
+                a != VP_36R && b != VP_36R && (check34 || (a != VP_34 && b != VP_34));
             if (checked) {
                 CHECK(failed == 0,
                       "vu paths (%s): %s over %s: %d of %d interior pixels fail the depth test",
@@ -2832,8 +2858,299 @@ static void testVuPaths(const char *mode, int check34)
     if (check34) {
         CHECK(maxSep == 0, "vu paths (%s): 34's edges %d pixels from 32's", mode, maxSep);
     }
-    rd_DestroyVuMesh(s_vpMesh[0]);
-    rd_DestroyVuMesh(s_vpMesh[1]);
+    for (int r = 0; r < 2; r++) {
+        rd_DestroyVuMesh(s_vpMesh[r][0]);
+        rd_DestroyVuMesh(s_vpMesh[r][1]);
+    }
+}
+
+/* ------------------------------------------------------------ VU seams */
+/* (issue 26) edges two draws share, against the frame's clear: the GS
+ * draws a vertex where ftoi4 put it, so an edge two primitives share is
+ * drawn by both from the same 12.4 values and leaves no pixel between
+ * them.  A pixel the clear shows along it (grey, Z 0) is a crack, which in
+ * the game the fog pass paints at full fog (the bright dots of issue 26).
+ * Model space is GS pixels from the 512 target's top-left, as in vpDraw. */
+static const char kSeamKey;
+static const uint8_t kSeamRed[4] = {200, 30, 30, 0x80}, kSeamGreen[4] = {30, 200, 30, 0x80};
+
+/* ftoi4 as vu_ftoi4 computes it, of a float the VU holds */
+static int32_t seamFtoi4(float x)
+{
+    const float v = x * 16.0f;
+    if (v >= 2147483648.0f) {
+        return INT32_MAX;
+    }
+    if (v <= -2147483648.0f) {
+        return INT32_MIN;
+    }
+    return (int32_t)v;
+}
+
+/* a prelit mesh of one batch: n vertices (x, y, z, w), a strip starting at
+ * each vertex start marks (the strip flag) */
+static RdMesh seamMesh(const float (*pos)[4], const uint8_t *start, int n, const uint8_t c[4])
+{
+    float (*qw)[4] = calloc(1 + (size_t)n * 3, sizeof(*qw));
+    if (!qw) {
+        CHECK(0, "seam mesh: no memory");
+        return (RdMesh){0};
+    }
+    const uint32_t tag = 0x8000u | (uint32_t)n; /* NLOOP n, EOP */
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < n; k++) {
+        memcpy(qw[1 + k * 3], pos[k], sizeof(pos[k]));
+        qw[1 + k * 3 + 1][2] = 1.0f;
+        qw[1 + k * 3 + 1][3] = start[k] ? 0.0f : 1.0f;
+        for (int i = 0; i < 4; i++) {
+            qw[1 + k * 3 + 2][i] = i < 3 ? (float)c[i] : 127.0f;
+        }
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 1 + (uint32_t)n * 3;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    const RdMesh m = rd_CreateVuMesh(&md);
+    free(qw);
+    CHECK(m.id != 0, "seam mesh: rd_CreateVuMesh");
+    return m;
+}
+
+/* one draw of a seam mesh by code 32 (REGION) or 36 (SCISSOR): the model
+ * to screen matrix turns by (cs, sn) = (cos, sin) about model (0, 0) and
+ * moves by (tx, ty) GS pixels; clip space as vpDraw's (x = y = 0, w =
+ * pos.w, z = pos.z / 1.02M) */
+static void seamVuDraw(RdMesh m, int code, double cs, double sn, double tx, double ty, int ord)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = (uint8_t)code;
+    d.clip = code == 36 ? RD_VU_CLIP_SCISSOR : RD_VU_CLIP_REGION;
+    d.vu.mem[16][0] = (float)cs;
+    d.vu.mem[16][1] = (float)sn;
+    d.vu.mem[17][0] = (float)-sn;
+    d.vu.mem[17][1] = (float)cs;
+    d.vu.mem[18][2] = 1.0f;
+    d.vu.mem[19][0] = (float)(1792.0 + tx);
+    d.vu.mem[19][1] = (float)(1792.0 + ty);
+    d.vu.mem[19][3] = 1.0f;
+    d.vu.mem[22][2] = 1.0f / 1020000.0f;
+    d.vu.mem[23][3] = 1.0f;
+    rd_DrawVuMesh(m, &d, RD_KEY(&kSeamKey, code, ord));
+}
+
+/* the GS vertex (12.4 X, Y and Z) of model point p under the identity
+ * matrix moved by (tx, ty), as the VU computes it (each product and sum in
+ * float: x * 1 + y * 0 + z * 0 + T is x + T) */
+static RdScreenVtx seamGsVtx(const float p[4], double tx, double ty, const uint8_t c[4])
+{
+    const float hx = p[0] + (float)(1792.0 + tx), hy = p[1] + (float)(1792.0 + ty);
+    return vtx(seamFtoi4(hx), seamFtoi4(hy), (uint32_t)seamFtoi4(p[2]), c, 0.0f, 0.0f);
+}
+
+/* the background pixels within one output pixel of the segments (x0, y0,
+ * x1, y1 in GS pixels from the target's top-left) at parameters t0..t1
+ * along each, each pixel counted once; *nearOut: all pixels so near.  A
+ * pixel's centre is GS x / sx (FrameCB g_origin.zw: GS integers on texel
+ * centres) */
+static int seamCracks(const uint8_t *img, uint32_t w, uint32_t h, float sx, float sy,
+                      const double (*seg)[4], int nseg, double t0, double t1, int *nearOut)
+{
+    int cracks = 0, near = 0;
+    for (uint32_t y = 0; y < h; y++) {
+        for (uint32_t x = 0; x < w; x++) {
+            int hit = 0;
+            for (int i = 0; i < nseg && !hit; i++) {
+                const double ax = seg[i][0] * sx, ay = seg[i][1] * sy;
+                const double dx = seg[i][2] * sx - ax, dy = seg[i][3] * sy - ay;
+                const double t =
+                    (((double)x - ax) * dx + ((double)y - ay) * dy) / (dx * dx + dy * dy);
+                if (t < t0 || t > t1) {
+                    continue;
+                }
+                const double ex = ax + t * dx - (double)x, ey = ay + t * dy - (double)y;
+                hit = ex * ex + ey * ey <= 1.0;
+            }
+            if (hit) {
+                near++;
+                cracks += vpIsBg(&img[((size_t)y * w + x) * 4]);
+            }
+        }
+    }
+    *nearOut = near;
+    return cracks;
+}
+
+static void seamBegin(void)
+{
+    rd_BeginFrame();
+    rd_SelectList(0);
+    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    vpState(1);
+}
+
+/* ends the frame begun by seamBegin: seamCracks of the scene (-1: no
+ * readback); probe (GS pixels, NULL: none): *probeBg whether that pixel
+ * shows the clear */
+static int seamEnd(const double (*seg)[4], int nseg, double t0, double t1, int *near,
+                   const double *probe, int *probeBg)
+{
+    rd_EndFrame(0);
+    uint32_t w = 0, h = 0;
+    float sx = 1.0f, sy = 1.0f;
+    uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
+    *near = 0;
+    if (!img) {
+        return -1;
+    }
+    const int n = seamCracks(img, w, h, sx, sy, seg, nseg, t0, t1, near);
+    if (probe) {
+        const double px = probe[0] * sx + 0.5, py = probe[1] * sy + 0.5;
+        *probeBg = px < 0.0 || py < 0.0 || px >= (double)w || py >= (double)h ||
+                   vpIsBg(&img[((size_t)py * w + (size_t)px) * 4]);
+    }
+    free(img);
+    return n;
+}
+
+/* S1-S4 in the bound renderer (mode: its name) */
+static void testVuSeams(const char *mode)
+{
+    /* a quad split along P1-P2 (its normal points to P3's side); off the
+     * 12.4 grid, Z below the far plane of seamVuDraw's clip space */
+    static const float kP[4][4] = {{60.37f, 50.81f, 1000000.3f, 1.0f},
+                                   {300.62f, 90.23f, 1010000.7f, 1.0f},
+                                   {120.91f, 330.47f, 990000.1f, 1.0f},
+                                   {380.13f, 310.69f, 1005000.9f, 1.0f}};
+    static const uint8_t kStart3[3] = {1, 0, 0}, kStart4[4] = {1, 0, 0, 0};
+    const double edge[1][4] = {{kP[1][0], kP[1][1], kP[2][0], kP[2][1]}}; /* within 1/16 GS pixel */
+    int near = 0, n;
+
+    /* S1: a code-32 triangle beside a GIF triangle (rd_ScreenPrims) at the
+     * VU's ftoi4 corners; the VU on either side of the shared edge */
+    for (int side = 0; side < 2; side++) {
+        const int vu0 = side == 0 ? 0 : 1, gif0 = side == 0 ? 1 : 0;
+        const RdMesh m = seamMesh(&kP[vu0], kStart3, 3, kSeamRed);
+        seamBegin();
+        seamVuDraw(m, 32, 1.0, 0.0, 0.0, 0.0, side);
+        RdScreenVtx g[3];
+        for (int k = 0; k < 3; k++) {
+            g[k] = seamGsVtx(kP[gif0 + k], 0.0, 0.0, kSeamGreen);
+        }
+        rd_ScreenPrims(RD_PRIM_TRIANGLES, g, 3, RD_SPACE_WORLD, 1, 0);
+        n = seamEnd(edge, 1, 0.1, 0.9, &near, NULL, NULL);
+        printf("  vu seams (%s): S1 code 32 on P%d's side of a GIF triangle: %d cracks in %d "
+               "pixels along the edge\n",
+               mode, side == 0 ? 0 : 3, n, near);
+        CHECK(n == 0 && near > 100, "vu seams (%s): S1 side %d: %d cracks (%d pixels near)", mode,
+              side, n, near);
+        rd_DestroyVuMesh(m);
+    }
+
+    /* S2: two meshes under matrices 0.01 GS pixel apart whose shared
+     * vertices have the same ftoi4 values (16 x frac(X, Y) = n + 0.5) */
+    {
+        static const float kQ[4][4] = {{60.37f, 50.81f, 1000000.3f, 1.0f},
+                                       {300.65625f, 90.21875f, 1010000.7f, 1.0f},
+                                       {120.90625f, 330.46875f, 990000.1f, 1.0f},
+                                       {380.13f, 310.69f, 1005000.9f, 1.0f}};
+        const double qEdge[1][4] = {{kQ[1][0], kQ[1][1], kQ[2][0], kQ[2][1]}};
+        for (int k = 1; k <= 2; k++) {
+            const RdScreenVtx v0 = seamGsVtx(kQ[k], 0.0, 0.0, kSeamRed);
+            const RdScreenVtx v1 = seamGsVtx(kQ[k], 0.01, 0.01, kSeamRed);
+            CHECK(v0.x == v1.x && v0.y == v1.y,
+                  "vu seams: S2 vertex %d's ftoi4 differs under the two matrices", k);
+        }
+        const RdMesh ma = seamMesh(&kQ[0], kStart3, 3, kSeamRed);
+        const RdMesh mb = seamMesh(&kQ[1], kStart3, 3, kSeamGreen);
+        seamBegin();
+        seamVuDraw(ma, 32, 1.0, 0.0, 0.0, 0.0, 0);
+        seamVuDraw(mb, 32, 1.0, 0.0, 0.01, 0.01, 1);
+        n = seamEnd(qEdge, 1, 0.1, 0.9, &near, NULL, NULL);
+        printf("  vu seams (%s): S2 two meshes 0.01 GS pixel apart: %d cracks in %d pixels\n", mode,
+               n, near);
+        CHECK(n == 0 && near > 100, "vu seams (%s): S2: %d cracks (%d pixels near)", mode, n, near);
+        rd_DestroyVuMesh(ma);
+        rd_DestroyVuMesh(mb);
+    }
+
+    /* S3: a code-36 strip v0..v3 whose first triangle is cut (v0 flagged
+     * -z) and whose second is kicked; v0 on P3's side, so the cut triangle
+     * off the grid would leave the gap.  v0 with GS Z < 0 (w 1), then with
+     * w < 0 (GS Z > 0 then: only w tells).  The probe: 8 GS pixels from
+     * the edge's middle into v0's side, which the cut triangle covers */
+    for (int c = 0; c < 2; c++) {
+        float strip[4][4];
+        memcpy(strip[0], kP[3], sizeof(strip[0]));
+        memcpy(strip[1], kP[1], sizeof(strip[1]));
+        memcpy(strip[2], kP[2], sizeof(strip[2]));
+        memcpy(strip[3], kP[0], sizeof(strip[3]));
+        strip[0][2] = -2000000.0f; /* clip z < -w: the -z flag */
+        strip[0][3] = c == 0 ? 1.0f : -1.0f;
+        const RdMesh m = seamMesh((const float (*)[4])strip, kStart4, 4, kSeamRed);
+        seamBegin();
+        seamVuDraw(m, 36, 1.0, 0.0, 0.0, 0.0, 2 + c);
+        const double probe[2] = {(kP[1][0] + kP[2][0]) * 0.5 + 8.0 * 0.8,
+                                 (kP[1][1] + kP[2][1]) * 0.5 + 8.0 * 0.6};
+        int probeBg = 1;
+        n = seamEnd(edge, 1, 0.1, 0.9, &near, probe, &probeBg);
+        printf("  vu seams (%s): S3 code 36 cut beside kicked, v0 %s: %d cracks in %d pixels, "
+               "v0's side %s\n",
+               mode, c == 0 ? "GS Z < 0" : "w < 0", n, near, probeBg ? "empty" : "covered");
+        CHECK(n == 0 && near > 100, "vu seams (%s): S3 (%s): %d cracks (%d pixels near)", mode,
+              c == 0 ? "GS Z < 0" : "w < 0", n, near);
+        CHECK(!probeBg, "vu seams (%s): S3 (%s): the cut triangle left v0's side empty", mode,
+              c == 0 ? "GS Z < 0" : "w < 0");
+        rd_DestroyVuMesh(m);
+    }
+
+    /* S4: 8 x 8 quads of one mesh, each drawn under its own matrix (the
+     * grid's turn by 0.002 rad and the quad's corner, in double): shared
+     * corners differ by float noise only.  Reported against Original 1x */
+    {
+        static int s_s4Ref = -1;
+        const double qs = 40.0, ang = 0.002, cs = cos(ang), sn = sin(ang), bx = 96.3, by = 80.7;
+        const float quad[4][4] = {{0.0f, 0.0f, 1000000.3f, 1.0f},
+                                  {(float)qs, 0.0f, 1000000.3f, 1.0f},
+                                  {0.0f, (float)qs, 1000000.3f, 1.0f},
+                                  {(float)qs, (float)qs, 1000000.3f, 1.0f}};
+        const RdMesh m = seamMesh(quad, kStart4, 4, kSeamRed);
+        seamBegin();
+        for (int j = 0; j < 8; j++) {
+            for (int i = 0; i < 8; i++) {
+                const double mx = i * qs, my = j * qs;
+                seamVuDraw(m, 32, cs, sn, bx + cs * mx - sn * my, by + sn * mx + cs * my,
+                           j * 8 + i);
+            }
+        }
+        double lines[14][4];
+        for (int k = 1; k < 8; k++) {
+            const double a = k * qs, e = 8.0 * qs;
+            double *v = lines[k - 1], *u = lines[6 + k];
+            v[0] = bx + cs * a; /* model (a, 0) to (a, 8 qs) */
+            v[1] = by + sn * a;
+            v[2] = bx + cs * a - sn * e;
+            v[3] = by + sn * a + cs * e;
+            u[0] = bx - sn * a; /* model (0, a) to (8 qs, a) */
+            u[1] = by + cs * a;
+            u[2] = bx + cs * e - sn * a;
+            u[3] = by + sn * e + cs * a;
+        }
+        n = seamEnd((const double (*)[4])lines, 14, 0.02, 0.98, &near, NULL, NULL);
+        if (strcmp(mode, "Original 1x") == 0) {
+            s_s4Ref = n;
+        }
+        printf("  vu seams (%s): S4 8 x 8 quads, a matrix each: %d cracks in %d pixels along the "
+               "inner edges (Original 1x: %d)\n",
+               mode, n, near, s_s4Ref);
+        CHECK(near > 1000, "vu seams (%s): S4 saw %d pixels near the inner edges", mode, near);
+        rd_DestroyVuMesh(m);
+    }
 }
 
 static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int check34)
@@ -2850,6 +3167,7 @@ static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int ch
         return;
     }
     testVuPaths(mode, check34);
+    testVuSeams(mode); /* issue 26 */
     const uint32_t verr = rhi_vk_ValidationErrorCount();
     CHECK(verr == 0, "%s: %u validation errors", mode, verr);
     rd_Shutdown();
@@ -2899,6 +3217,7 @@ int main(int argc, char **argv)
     testSheetTextAt("Enhanced 3x", 3);
     testVuPathsAt("Original 1x", RD_PRESET_ORIGINAL, 1.0f, 1); /* package S */
     testVuPathsAt("Original 4x", RD_PRESET_ORIGINAL, 4.0f, 1);
+    testVuPathsAt("Enhanced 2.25x", RD_PRESET_ENHANCED, 2.25f, 1); /* issues 25, 26 */
     testVuPathsAt("Enhanced 4x", RD_PRESET_ENHANCED, 4.0f, 1);
     if (failures) {
         printf("rd_pixel_test: %d failures\n", failures);

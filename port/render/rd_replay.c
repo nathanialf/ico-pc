@@ -518,9 +518,13 @@ RdUniform rd__FrameGroupEx(uint32_t targetW, uint32_t targetH, float originX, fl
     cb.z[1] = scaleX; /* R7a: the bound target's texels per GS pixel */
     cb.z[2] = scaleY;
     /* S2: the meshes' vertices off the 12.4 grid where the target is finer
-     * than it (Enhanced only; Original keeps the GS's quantisation) */
-    cb.z[3] = g_rd.settings.preset == RD_PRESET_ENHANCED && (scaleX > 1.0f || scaleY > 1.0f) &&
-                      !rd__S2Legacy()
+     * than it, only under the developer switch ICO_RD_VU_OFFGRID (Enhanced
+     * only).  Issue 26: off the grid, a VU vertex no longer lands where the
+     * GIF path or another mesh puts the same point, and the crack between
+     * them showed the clear as a bright dot through the fog; every preset
+     * keeps the GS's quantisation. */
+    cb.z[3] = rd__VuOffGrid() && g_rd.settings.preset == RD_PRESET_ENHANCED &&
+                      (scaleX > 1.0f || scaleY > 1.0f)
                   ? 1.0f
                   : 0.0f;
     cb.misc[0] = (float)g_rd.replayCounter;

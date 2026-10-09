@@ -44,7 +44,8 @@ cbuffer FrameCB : register(b0, space0)
     float4 g_space[2];  // [0] WORLD, [1] UI: ndc = ndc * xy + zw (scale xy, offset zw)
     float4 g_z;         // x scale (1 / 2^24), yz the bound target's texels per GS
                         // pixel (R7a; 1 in Original), w 1: the VU programs output
-                        // unquantised X, Y (S2; Enhanced on a scaled target)
+                        // unquantised X, Y (S2; only the developer switch
+                        // ICO_RD_VU_OFFGRID, Enhanced on a scaled target)
     float4 g_misc;      // x frame counter, y preset (0 Original, 1 Enhanced), zw reserved
 };
 

@@ -986,10 +986,15 @@ enum {
  * is not affine, is singular, or the two have opposite handedness. */
 bool rd__BlendAffine(const double *p, const double *c, double t, const double *pivot, double *o);
 /* S2: ICO_RD_S2_LEGACY=1 in the environment (a developer A/B switch, read
- * once) turns off the package's picture changes: rotation-aware blends and
- * unquantised VU positions (the window also takes alpha from the measured
- * present time) */
+ * once) turns off the package's picture changes: rotation-aware blends (the
+ * window also takes alpha from the measured present time).  The VU
+ * positions are on the 12.4 grid whatever it says (issue 26). */
 bool rd__S2Legacy(void);
+/* Issue 26: ICO_RD_VU_OFFGRID=1 in the environment (a developer switch,
+ * read once) brings back S2's unquantised VU X and Y (FrameCB g_z.w) with
+ * the Enhanced preset on a scaled target: smoother slow motion, but the
+ * seams between meshes and against the GIF path open. */
+bool rd__VuOffGrid(void);
 
 int rd__InterpSnap(const RdFrame *prev, const RdFrame *cur);
 const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float alpha, float dt,

@@ -547,6 +547,16 @@ bool rd__S2Legacy(void)
     return v != 0;
 }
 
+bool rd__VuOffGrid(void)
+{
+    static int v = -1;
+    if (v < 0) {
+        const char *e = getenv("ICO_RD_VU_OFFGRID");
+        v = e != NULL && e[0] != '\0' && e[0] != '0';
+    }
+    return v != 0;
+}
+
 static void loadQw4(const float (*m)[4], int at, double *o)
 {
     for (int c = 0; c < 4; c++) {
