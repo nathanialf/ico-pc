@@ -591,6 +591,11 @@ static void createNamedTargets(void)
         if (!rd__target_create_gpu(t, s_targetNames[i])) {
             rd__log("could not create target %s", s_targetNames[i]);
         }
+        /* cleared at the first replay (rd_replay.c clearNewTargets): a new
+           texture holds whatever the driver's memory held before, and the
+           first frames of a start sample DISPLAY (the game's kept frame
+           buffer) before anything has drawn into it */
+        t->clearPending = 1;
     }
 }
 

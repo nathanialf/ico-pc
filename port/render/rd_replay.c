@@ -4439,14 +4439,18 @@ static void uploadMeshes(const RdFrame *f, int keep)
     }
 }
 
-/* A temporary target that took a pooled texture (rd_core.c
- * rd__temp_target_alloc), or a new one, starts cleared: zero colour and
- * stencil, and depth 1.0, above every GS Z (gs_z_to_depth: the depth grows
- * with Z).  Every pending target is cleared, whichever frame it belongs
- * to: none of them was drawn since it was taken. */
+/* A target with a new texture starts cleared: zero colour and stencil, and
+ * depth 1.0, above every GS Z (gs_z_to_depth: the depth grows with Z).  That
+ * is every named target after rd_core.c createNamedTargets (a start, or a
+ * display change), and a temporary target that took a pooled texture
+ * (rd__temp_target_alloc) or a new one.  Every pending target is cleared,
+ * whichever frame it belongs to: none of them was drawn since it was taken.
+ * Without the named ones a start's first frames, which only keep and fade
+ * the frame buffer, show what the driver's memory held before (the last
+ * run's picture). */
 static void clearNewTargets(void)
 {
-    for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
+    for (int i = 0; i < RD_MAX_TARGETS; i++) {
         RdTargetRec *t = &g_rd.targets[i];
         if (!t->live || !t->clearPending || !t->color.id) {
             continue;
@@ -4472,7 +4476,9 @@ static void clearNewTargets(void)
         p.height = t->th;
         rhi_cmd_begin_render_pass(s_cl, &p);
         rhi_cmd_end_render_pass(s_cl);
-        g_rdPerf.tempClears++;
+        if (i >= RD_TARGET_COUNT) {
+            g_rdPerf.tempClears++;
+        }
     }
 }
 
