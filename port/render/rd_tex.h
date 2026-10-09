@@ -31,11 +31,9 @@
  *             destroyed two rdtex_FrameTick calls later, after any frame
  *             that may reference it has been replayed.
  *
- * Mips: the Original preset samples one level per texture, the one the
- * caller decodes (TexExt.level); rdtex_SetEnhancedMips is the hook for the
- * Enhanced filter upgrade (generated mips, trilinear/anisotropic): when on,
- * each entry also keeps a CPU mip chain (rdtex_BuildMipChain) for the RHI to
- * upload once it has mipmapped textures.  Not exposed in settings yet.
+ * Mips: an entry holds the one level the caller decodes (TexExt.level).
+ * The replay builds and uploads the further levels the texture filter
+ * samples (rd_replay.c uploadMips, rdtex_BuildMipChain).
  *
  * All calls from the game fiber, like the rest of rd.
  */
@@ -249,9 +247,6 @@ void rdtex_RevertReplacements(void);
 typedef void (*RdTexReleaseFn)(RdTex t);
 void rdtex_SetReleaseHook(RdTexReleaseFn fn);
 
-/* The Enhanced hook (not in the settings yet): keep a CPU mip chain per
- * entry. */
-void rdtex_SetEnhancedMips(int on);
 const RdTexCacheStats *rdtex_Stats(void);
 
 #ifdef __cplusplus

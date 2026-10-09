@@ -344,7 +344,6 @@ typedef struct RdTexEntry {
     RdTex tex;
     uint8_t replaced; /* texture packs: tex is a pack replacement (rdtex_Replace) */
     RdTexSampler smp;
-    uint8_t *mips; /* the Enhanced CPU chain, or null */
 } RdTexEntry;
 
 static struct {
@@ -357,7 +356,6 @@ static struct {
 
     uint32_t nRetired;
     uint32_t tick;
-    int enhancedMips;
     RdTexCacheStats stats;
     RdTexReleaseFn release; /* texture packs: rdtex_SetReleaseHook */
     int bcSingleLogged;     /* "a compressed replacement without mips", once */
@@ -409,7 +407,6 @@ static void freeEntry(RdTexEntry *e)
 {
     releaseReplaced(e);
     retire(e->tex);
-    free(e->mips);
     memset(e, 0, sizeof(*e));
     s_tc.stats.entries--;
 }
@@ -512,14 +509,6 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
     if (smp) {
         e->smp = *smp;
     }
-    free(e->mips);
-    e->mips = NULL;
-    if (s_tc.enhancedMips && (pw & (pw - 1)) == 0 && (ph & (ph - 1)) == 0) {
-        e->mips = malloc(rdtex_MipChainBytes(pw, ph) + 4);
-        if (e->mips) {
-            rdtex_BuildMipChain(px, pw, ph, e->mips, src == RD_TEXSRC_RGBA32);
-        }
-    }
     free(px);
     return e->tex;
 }
@@ -561,7 +550,6 @@ void rdtex_Reset(void)
         if (s_tc.e[i].used) {
             releaseReplaced(&s_tc.e[i]);
         }
-        free(s_tc.e[i].mips);
     }
     memset(s_tc.e, 0, sizeof(s_tc.e));
     s_tc.nRetired = 0;
@@ -689,9 +677,6 @@ int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
     }
     e->tex = rep;
     e->replaced = 1;
-    /* the Enhanced CPU chain was the original's */
-    free(e->mips);
-    e->mips = NULL;
     s_tc.stats.replaced++;
     return 0;
 }
@@ -710,11 +695,6 @@ void rdtex_RevertReplacements(void)
 void rdtex_SetReleaseHook(RdTexReleaseFn fn)
 {
     s_tc.release = fn;
-}
-
-void rdtex_SetEnhancedMips(int on)
-{
-    s_tc.enhancedMips = on != 0;
 }
 
 const RdTexCacheStats *rdtex_Stats(void)
