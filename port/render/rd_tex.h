@@ -1,4 +1,4 @@
-/* rd_tex.h: the texture cache (renderer wave 2, package R2b).
+/* rd_tex.h: the texture cache.
  *
  * The game keeps its TIM2 files in memory as Texture.c loaded them: per
  * mipmap level a copy of the image, one copy of the CLUT.  rd_tex decodes
@@ -45,7 +45,6 @@
 #include "rd.h"
 
 #ifdef __cplusplus
-
 extern "C" {
 #endif
 
@@ -138,10 +137,10 @@ int rdtex_Decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src);
  * texels are left alone. */
 void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
 
-/* The Enhanced mip chain: successive 2x2 box levels of a w x h RGBA8 image
+/* A mip chain: successive 2x2 box levels of a w x h RGBA8 image
  * (both powers of two) written one after the other to out, which holds
  * rdtex_MipChainBytes(w, h) bytes.  Returns the number of levels written
- * after the base.  alphaWeighted (package P8; for textures whose alpha
+ * after the base.  alphaWeighted (for textures whose alpha
  * byte is the alpha the draws see, RD_TEXSRC_RGBA32): RGB is the
  * alpha-weighted average (premultiplied, divided back by the summed
  * alpha; the plain average where all four alphas are 0), so transparent
@@ -153,7 +152,7 @@ uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_
  * right for square images: a 128x4 chain is 764 bytes (its 1-high levels
  * keep a full row each), 512x2 is 2044. */
 size_t rdtex_MipChainBytes(uint32_t w, uint32_t h);
-/* Wave 7 (R7a): alpha-coverage preservation for the Enhanced filter's mips.
+/* Alpha-coverage preservation for the mips the texture filter samples.
  * base is level 0 (w x h), chain the levels rdtex_BuildMipChain wrote
  * (levels of them); each level whose share of texels with alpha > ref fell
  * below level 0's has its alpha scaled up (at most 4x, never past level 0's
@@ -212,7 +211,8 @@ struct TexpackImage; /* texpack.h */
 RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
                               const char *debugName);
 /* The 2x2 box chain (rdtex_BuildMipChain, colour weighted by alpha; no
- * alpha coverage kept, as PCSX2 keeps none for a pack) appended to a one-level RGBA8 image: img's blob
+ * alpha coverage kept, as PCSX2 keeps none for a pack) appended to a
+ * one-level RGBA8 image: img's blob
  * is replaced by one holding every level and img->levels set.  CPU only,
  * callable from any thread (the pack's loader thread may do it so the game
  * fiber does not).  0, or -1 (img unchanged: not a one-level RGBA8 image
@@ -251,6 +251,5 @@ const RdTexCacheStats *rdtex_Stats(void);
 
 #ifdef __cplusplus
 }
-
 #endif
 #endif /* PORT_RENDER_RD_TEX_H */

@@ -35,8 +35,9 @@ typedef enum RdBlend {
     RD_BLEND_LERP_FIX = 2, /* 0x64: (Cs-Cd)*FIX + Cd   mode 2; letterbox, motion blur, AA, fades */
     RD_BLEND_CD_FIX_ADD_CS = 3, /* 0x29: Cd*FIX + Cs        mode 3; disc data only */
     RD_BLEND_LERP_AS = 4,       /* 0x44: (Cs-Cd)*As + Cd    mode 4; default material */
-    RD_BLEND_CS_AS_ADD_CD =
-        5, /* 0x48: Cs*As + Cd         mode 5; additive, specular (PABE cannot give Cs here: the pixel blends, rd_pipeline.c) */
+    /* 0x48: Cs*As + Cd, mode 5; additive, specular (PABE cannot give Cs here:
+     * the pixel blends, rd_pipeline.c) */
+    RD_BLEND_CS_AS_ADD_CD = 5,
     RD_BLEND_CD_SUB_CS_AS = 6,  /* 0x42: Cd - Cs*As         mode 6; subtractive material */
     RD_BLEND_LERP_AS_ALT = 7,   /* 0x44: same as mode 4     mode 7 */
     RD_BLEND_CS_AD_ADD_CD = 8,  /* 0x58: Cs*Ad + Cd         disc data only */
@@ -117,8 +118,9 @@ enum {
     RD_TEST_DATE0 = 0x34000, /* DATE=1 DATM=0, Z ALWAYS                (aura) */
     RD_TEST_AT_ALWAYS_DATE0 = 0x34003, /* ATE ALWAYS, DATE=1 DATM=0, Z ALWAYS    (aura) */
     RD_TEST_RGBONLY_DATE1 = 0x3F000,   /* AFAIL RGB_ONLY (ATE off), DATE=1 DATM=1, Z ALWAYS */
-    RD_TEST_NEVER_RGBONLY_DATE1 =
-        0x3F001, /* ATE NEVER AFAIL RGB_ONLY, DATE=1 DATM=1, Z ALWAYS (RGB mask where dest alpha set) */
+    /* ATE NEVER AFAIL RGB_ONLY, DATE=1 DATM=1, Z ALWAYS (RGB mask where dest
+     * alpha set) */
+    RD_TEST_NEVER_RGBONLY_DATE1 = 0x3F001,
     RD_TEST_AT_LT129 = 0x30815,         /* ATE LESS aref 0x81, Z ALWAYS            (flare) */
     RD_TEST_Z_ALWAYS_ATST_GT = 0x3000C, /* ATE off (ATST bits set, no effect), Z ALWAYS */
     RD_TEST_NEVER_RGBONLY =
@@ -189,7 +191,8 @@ typedef enum RdFilter { RD_FILTER_NEAREST = 0, RD_FILTER_LINEAR = 1 } RdFilter;
 /* ------------------------------------------------------------ TEX0 / TCC
  * Texture function (TFX, TEX0 bits 35-36) and TCC (bit 34).  Only MODULATE
  * and DECAL appear (0x664...800 family = DECAL/RGBA from Texture.c; material
- * TEX0 from TexExt.texFnc).  HIGHLIGHT variants are not used. */
+ * TEX0 from TexExt.texFnc).  The HIGHLIGHT variants reach only staticBlur.c's
+ * sprites, which carry the function in their RdPostRec (rd_blur.c). */
 typedef enum RdTexFn { RD_TEXFN_MODULATE = 0, RD_TEXFN_DECAL = 1 } RdTexFn;
 
 typedef enum RdTcc { RD_TCC_RGB = 0, RD_TCC_RGBA = 1 } RdTcc;
@@ -239,8 +242,9 @@ typedef struct RdPipelineKey {
     uint8_t program; /* RdProg (rd.h) */
     uint8_t blend;   /* RdBlend, or RD_BLEND_COUNT when abe == 0 */
     uint8_t atst;    /* RdAlphaTest, RD_ATST_ALWAYS when ate == 0 */
-    uint8_t
-        afailSplit; /* 0 = none, 1 = pass A (alpha > ref, Z write), 2 = pass B (alpha <= ref, no Z write) */
+    /* 0 = none, 1 = pass A (alpha > ref, Z write), 2 = pass B (alpha <= ref,
+     * no Z write) */
+    uint8_t afailSplit;
     uint8_t date;   /* RdDate */
     uint8_t ztst;   /* RdZTest */
     uint8_t zwrite; /* RdZWrite */
@@ -252,17 +256,17 @@ typedef struct RdPipelineKey {
     uint8_t prim;      /* RdPrim topology (rd.h) */
     uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
                     coverage */
-    uint8_t nodual;    /* package AN-E: the *_nodual fragment entry and the two-pass blend
+    uint8_t nodual;    /* the *_nodual fragment entry and the two-pass blend
                           state (rd_pipeline.c rd__ExpandNoDual); 0 with dual-source blending */
     uint8_t _pad[1];
 } RdPipelineKey;
 
 _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, nodual took a pad byte");
 
-/* 512 since package TEXA: every sprite_ps and vu_ps key has a twin with
- * sprite_texa_ps / vu_texa_ps (TEXA, the texture's format and its filter
- * are runtime state that leaks between lists, so any of those states can
- * meet a 24- or 16-bit texture under AEM), 426 keys against 250 before */
+/* Every sprite_ps and vu_ps key has a twin with sprite_texa_ps / vu_texa_ps
+ * (TEXA, the texture's format and its filter are runtime state that leaks
+ * between lists, so any of those states can meet a 24- or 16-bit texture
+ * under AEM), which roughly doubles the set; the tests keep it under this. */
 #define RD_PIPELINE_REACHABLE_MAX 512
 #define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
 /* keys whose rhi_CreatePipeline failed, remembered so they are not retried

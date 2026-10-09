@@ -1,4 +1,4 @@
-/* rd_mesh.c: rd_mesh.h's recording half (wave 3, package R3ab).
+/* rd_mesh.c: rd_mesh.h's recording half.
  *
  *   the mesh registry   rd_CreateVuMesh builds a mesh once from the VIF
  *                       UNPACK payloads Packet.c packed: the vertex stream
@@ -50,7 +50,7 @@ RdMeshRec *rd__MeshRec(uint32_t id)
     return m->live && m->gen == (id >> 16) ? m : NULL;
 }
 
-/* ----------------------------------------------- the device arena (P1) */
+/* ---------------------------------------------------- the device arena */
 
 typedef struct ArenaSpan {
     uint64_t off, size;
@@ -233,7 +233,7 @@ static void meshFree(RdMeshRec *m)
         s_staleCount--;
     }
     m->stale = 0;
-    meshGpuRelease(m); /* P1 */
+    meshGpuRelease(m); /* its span of the device arena */
     for (int i = 0; i < 2; i++) {
         free(m->hist[i].stream);
         m->hist[i].stream = NULL;
@@ -811,7 +811,7 @@ RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacemen
     return (RdMesh){id};
 }
 
-/* R7d: a rewrite while frame `rec` records.  The presenter draws the two
+/* A rewrite while frame `rec` records.  The presenter draws the two
  * frames closed last (rd_interp.c) after the game has recorded the next
  * one, so a stream either of them drew is kept before it is overwritten:
  * a morphing part (reg_setShape) then shows the shape of the tick it
@@ -868,7 +868,7 @@ bool rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
                (size_t)br->vertexCount * m->qwPerVertex * 16);
     }
     m->replaySeen = 0; /* upload again at the next replay */
-    m->gpuDirty = 1;   /* P1: the device copy too */
+    m->gpuDirty = 1;   /* the device copy too */
     return true;
 }
 
@@ -952,7 +952,7 @@ typedef struct RdVuList {
     int program;    /* resident program id, 0 = none uploaded yet */
     int code;       /* the last BEGIN code */
     int endTagHit;  /* a particle batch of this list would have clobbered mem[0..1] */
-    uint8_t scroll; /* package S: RD_VU_SCROLL_* of the last SET_UVOFFSET */
+    uint8_t scroll; /* RD_VU_SCROLL_* of the last SET_UVOFFSET */
 } RdVuList;
 
 static RdVuList *s_vu;
@@ -1287,12 +1287,12 @@ void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key)
     pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
 }
 
-/* Wave 7 (R7b): a particle batch drawn with key 0 is keyed here by list
- * and the occurrence order rd_interp.c adds, and a batch interpolates only
- * when its count matches (per particle a jump or an alpha 0 end snaps).
- * Since package I1 MicroCode.c keys prim_DispParticle's batches by their
- * emitter (mc_HostParticleKey), so a batch another emitter inserts ahead
- * does not shift the match; key 0 is left for a batch chained elsewhere. */
+/* A particle batch drawn with key 0 is keyed here by list and the
+ * occurrence order rd_interp.c adds, and a batch interpolates only when its
+ * count matches (per particle a jump or an alpha 0 end snaps).  MicroCode.c
+ * keys prim_DispParticle's batches by their emitter (mc_HostParticleKey),
+ * so a batch another emitter inserts ahead does not shift the match; key 0
+ * is left for a batch chained elsewhere. */
 static const char kParticleKeyTag;
 
 void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
@@ -1360,7 +1360,7 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                     RdDrawPass dp[2];
                     int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
                                                 RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
-                    /* package TEXA: vu_ps and, for a 24- or 16-bit texture
+                    /* vu_ps and, for a 24- or 16-bit texture
                      * under AEM, vu_texa_ps */
                     for (int i = 0; i < np * 2; i++) {
                         RdPipeKeyInt k = dp[i / 2].key;

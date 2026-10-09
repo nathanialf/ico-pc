@@ -1,4 +1,4 @@
-/* rd_video.c: the FMV picture on the output (Phase 4E; port/fmv/rd_video.h).
+/* rd_video.c: the FMV picture on the output (port/fmv/rd_video.h).
  *
  * The PS2 movie player did not draw through the game's display: it set up
  * its own 720-wide interlaced display environment and sent each picture
@@ -16,7 +16,7 @@
  * picture wider or taller than the area is fitted into the box on that side
  * (drawPicture), never cut by it.
  *
- * Under the CRT filter (package C1) the films go through it as the game's
+ * Under the CRT filter the films go through it as the game's
  * frames do: the picture is drawn into a target of the PS2 display area
  * (dispW x dispH, the clear colour around the picture, mirrored as shown),
  * and rd__CrtRecordFilm draws that through the tube into the same box,
@@ -51,7 +51,7 @@ static struct {
     uint64_t uploadCap[RHI_FRAMES_IN_FLIGHT];
     uint32_t dispW, dispH;
     float clear[4];
-    RhiTexture area; /* C1: the display area under the CRT filter */
+    RhiTexture area; /* the display area under the CRT filter */
     RhiState areaState;
     uint32_t areaW, areaH;
 } s_v = {.dispW = 720, .dispH = 576, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
@@ -130,7 +130,7 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t bindSlot, R
     RhiBinding b;
     memset(&b, 0, sizeof(b));
     b.slot = bindSlot;
-    /* package PA: rd's frame and draw layouts take a dynamic uniform; the
+    /* rd's frame and draw layouts take a dynamic uniform; the
      * movie's two blocks are the group's base, bound with offset 0 (one
      * draw a frame: no group to share) */
     b.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
@@ -141,7 +141,7 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t bindSlot, R
 }
 
 /* The movie's box: the presenter's 4:3 box (rd_present.c rd__PresentBox).
- * Wave 7 (R7a): whatever the aspect option, the 4:3 movie is pillarboxed
+ * Whatever the aspect option, the 4:3 movie is pillarboxed
  * in the output (in a 16:9 Enhanced presentation the scene fills the window
  * and the movie keeps 4:3); the full-height and resolution options do not
  * apply (the picture goes straight to the output). */
@@ -173,7 +173,7 @@ static bool acquireOut(VideoOut *o)
             o->tex = rhi_AcquireBackbuffer();
         }
         if (o->tex.id) {
-            rd__OutputFollowSwapchain(); /* N1: the image's own size */
+            rd__OutputFollowSwapchain(); /* the image's own size */
         }
         o->localState = RHI_STATE_UNDEFINED;
         o->state = &o->localState;
@@ -193,7 +193,7 @@ static bool acquireOut(VideoOut *o)
     return o->tex.id != 0;
 }
 
-/* C1: the display area's target (dispW x dispH, RGBA8) */
+/* The display area's target (dispW x dispH, RGBA8) */
 static bool ensureArea(void)
 {
     if (s_v.area.id && s_v.areaW == s_v.dispW && s_v.areaH == s_v.dispH) {
@@ -359,7 +359,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     dcb.tex[1] = (float)h;
     dcb.mode[0] = cw;
     dcb.mode[1] = h;
-    /* R7c: the films follow the mirror mode (rd_SetMirror or
+    /* the films follow the mirror mode (rd_SetMirror or
        RdSettings.mirror) */
     dcb.param[0] = rd__MirrorOn() ? 1.0f : 0.0f;
     memcpy(map + dcOff, &dcb, sizeof(dcb));
@@ -376,7 +376,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     }
     RhiRect box;
     box43(out.w, out.h, &box);
-    rd__NotePresentBox(out.w, out.h, &box); /* v0.4.2 N4: the tests */
+    rd__NotePresentBox(out.w, out.h, &box); /* for the tests */
     if (rgba != NULL) {
         /* dispClear's colour: what the PS2 showed around the picture (the
            whole screen there; the whole output here, bars included, or the
@@ -388,7 +388,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     const bool mirror = dcb.param[0] != 0.0f;
     bool filtered = false;
     if (rd__CrtOn() && ensureArea()) {
-        /* C1: the display area 1:1 (the picture at its PS2 offsets), then
+        /* the display area 1:1 (the picture at its PS2 offsets), then
            the tube over it into the box */
         rd__Transition(cl, s_v.area, &s_v.areaState, RHI_STATE_RENDER_TARGET);
         const RhiRect all = {0, 0, s_v.dispW, s_v.dispH};
@@ -414,7 +414,7 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (out.window) {
         rhi_Present();
     }
-    g_rd.videoShown = 1; /* R7b: rd_Present leaves the picture until a game frame closes */
+    g_rd.videoShown = 1; /* rd_Present leaves the picture until a game frame closes */
     return 0;
 }
 

@@ -1,5 +1,5 @@
-/* rd_tex.c: the texture cache (renderer wave 2, package R2b).  rd_tex.h
- * describes the decoding and the cache. */
+/* rd_tex.c: the texture cache, and the sheet-text textures (rd.h
+ * rd_CreateTextureSheet).  rd_tex.h describes the decoding and the cache. */
 #include "rd_tex.h"
 #include <math.h>
 #include <stdlib.h>
@@ -255,7 +255,7 @@ uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_
 
                 for (int c = 0; c < 3; c++) {
                     if (alphaWeighted && asum > 0) {
-                        /* package P8: the premultiplied average, divided
+                        /* the premultiplied average, divided
                            back by the alpha: a texel that is not there
                            (alpha 0, often black) gives no colour, so a
                            lattice's wires keep theirs in the distance */
@@ -282,7 +282,7 @@ uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_
     return levels;
 }
 
-/* Wave 7 (R7a): the share of texels whose alpha passes "a > ref". */
+/* The share of texels whose alpha passes "a > ref". */
 static double coverage(const uint8_t *px, size_t n, uint8_t ref, double scale)
 {
     size_t pass = 0;
@@ -702,7 +702,7 @@ const RdTexCacheStats *rdtex_Stats(void)
     return &s_tc.stats;
 }
 
-/* ------------------------------------------------- sheet text (v0.4.2, F-A)
+/* --------------------------------------------------------------- sheet text
  * rd.h rd_CreateTextureSheet: an R8 image of coverage with the style the
  * replay hands font_sheet_ps (rd_replay.c fillDrawCB, rd__OverlayDraw). */
 
@@ -729,9 +729,8 @@ RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
     return t;
 }
 
-/* v0.4.2 (package F-G), v0.4.3 (package RIM): the rim at sheet
-   resolution, as the 1x shader makes it, over the sheet texels that the
-   rectangle touches */
+/* The rim at sheet resolution, as the 1x shader makes it, over the sheet
+   texels that the rectangle touches */
 void rd_SheetRim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int32_t x, int32_t y,
                  int32_t rw, int32_t rh, uint8_t *rim)
 {

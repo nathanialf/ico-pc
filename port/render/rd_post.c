@@ -58,24 +58,25 @@
  * COPY is gif_MoveImage: params->uv (x, y) in src to params->rect (x, y,
  * w, h) in dst, a texture copy.
  *
- * FOG (wave 4, R4c) is fog_DrawFog's textured sprite alone: ZFog.c's host
+ * FOG is fog_DrawFog's textured sprite alone: ZFog.c's host
  * path records the packet's register writes as rd state around it (TEST,
  * ZBUF, ALPHA, FBA, TEX0 as SCENE's depth view, TEX1, PRIM), so they leak
  * as on the GS; this records the sprite and the CLUT (an RdPostRec in an
  * RDC_POST_STUB), and rd_replay.c's doFog draws it through fog_lut_ps with
  * the state in force (rd.h).
  *
- * The remaining kinds (shadow resolve, blur) are recorded with their
- * parameters and stop at replay (wave 5).
+ * SHADOW_RESOLVE, BLUR and PRESENT_BLIT are reserved numbers that no
+ * caller issues: rd_Post records nothing for them (logged once).  Any other
+ * unknown kind falls to postStub: recorded, and skipped at replay.
  *
- * MOTION_BLUR, DOF, FLARE, BLOOM, AURA, EYE_BLUR (wave 5, R5a) are one
+ * MOTION_BLUR, DOF, FLARE, BLOOM, AURA, EYE_BLUR are one
  * staticBlur.c sprite each, recorded by rd_blur.c (rd__PostBlur) with the
  * register writes around it recorded by staticBlur.c's host path.
  */
 #include <string.h>
 #include "rd_internal.h"
 
-/* Wave 7 (R7b): the RdKey the next post sprites carry, so the presenter
+/* The RdKey the next post sprites carry, so the presenter
  * can interpolate the fade's level and the letterbox bars between ticks
  * (rd_interp.c); 0 (snap) for every other post sprite (film noise,
  * brightness, keep, reduction, anti-alias). */
@@ -141,7 +142,7 @@ static int32_t win(int32_t px16, uint32_t w)
     return 0x8000 - (int32_t)(w / 2) * 16 + px16;
 }
 
-/* Package DEF: the op the present folds into the deferred text before this
+/* The op the present folds into the deferred text before this
  * pass (rd_core.c rd__DeferredTextOp; nothing without such text) */
 static void textOp(RdPostKind kind, const uint8_t rgba[4], uint8_t fix, uint32_t lines, RdKey key)
 {
@@ -155,7 +156,7 @@ static void textOp(RdPostKind kind, const uint8_t rgba[4], uint8_t fix, uint32_t
     rd__DeferredTextOp((uint8_t)kind, &op, key);
 }
 
-/* One reduction sprite (R-POST): an RdPostRec of kind RD_POST_REDUCTION,
+/* One reduction sprite: an RdPostRec of kind RD_POST_REDUCTION,
  * drawn by rd_replay.c's doBlurSprite through fx_sprite_ps in the GS
  * integer arithmetic (rd_blur.c), with the state block in force: corners
  * and UV as the GS receives them (12.4), the TEX0 size 2^TW x 2^TH of
@@ -182,7 +183,7 @@ static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, cons
         return;
     }
     /* the hardware sprite a scaled replay draws instead (rd_blur.c
-     * rd__BlurScreenFallback): as recorded before R-POST, then mirrored */
+     * rd__BlurScreenFallback): the plain screen sprite, then mirrored */
     RdScreenVtx v[4];
     memset(v, 0, sizeof(v));
     for (int m = 0; m < 2; m++) {
@@ -204,14 +205,14 @@ static void reductionSprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, cons
 }
 
 /* gsb_Reduction.  Both sprites go through the GS sprite model rather than
- * the hardware sampler (R-POST): the bilinear SCENE read is the GS's 4-bit
- * fractions with the sum shifted down (rd_blur.c), so the reduction, and
- * with it the motion blur loop that feeds DISPLAY back into SCENE, is the
- * GS integer result.  On a scaled target the textured sprite is drawn as
- * the hardware sprite instead (rd__BlurScreenFallback).  The textured sprite samples SCENE at u = x + 0.75
- * (corners at -0.25 px, UV 0.5 at the corner), v = 2y + 1; with the mirror
- * on, the replay samples at u = x + 0.25 instead, the mirror image
- * (rd__BlurUvRect). */
+ * the hardware sampler: the bilinear SCENE read is the GS's 4-bit fractions
+ * with the sum shifted down (rd_blur.c), so the reduction, and with it the
+ * motion blur loop that feeds DISPLAY back into SCENE, is the GS integer
+ * result.  On a scaled target the textured sprite is drawn as the hardware
+ * sprite instead (rd__BlurScreenFallback).  The textured sprite samples
+ * SCENE at u = x + 0.75 (corners at -0.25 px, UV 0.5 at the corner),
+ * v = 2y + 1; with the mirror on, the replay samples at u = x + 0.25
+ * instead, the mirror image (rd__BlurUvRect). */
 static void postReduction(const RdPostParams *p)
 {
     const int32_t W = (int32_t)g_rd.gsW, H = (int32_t)g_rd.gsH;
@@ -289,7 +290,7 @@ static void postFade(const RdPostParams *p)
     const int32_t x0 = -(W / 2) * 16 + 0x8000, y0 = -(H / 2) * 16 + 0x8000;
     RdFrame *f = rd__RecFrame();
     if (f && f->fade < 1u + p->rgba[3]) {
-        f->fade = 1u + p->rgba[3]; /* R7b: the fade edge */
+        f->fade = 1u + p->rgba[3]; /* the fade edge (rd_interp.c snaps on it) */
     }
     s_spriteKey = POST_KEY(RD_POST_FADE, 0);
     sprite(x0, y0, x0 + W * 16, y0 + H * 16, 0xFFFFFFFFu, p->rgba, 0, 0, 0, 0);
@@ -595,7 +596,7 @@ void rd_Post(RdPostKind kind, const RdPostParams *params)
     case RD_POST_FOG:
         postFog(params);
         break;
-    /* wave 5 (R5a): staticBlur.c's sprites, recorded by rd_blur.c and
+    /* staticBlur.c's sprites, recorded by rd_blur.c and
      * replayed by rd_replay.c's doBlurSprite */
     case RD_POST_MOTION_BLUR:
     case RD_POST_DOF:

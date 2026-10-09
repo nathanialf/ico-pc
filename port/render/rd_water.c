@@ -1,4 +1,4 @@
-/* rd_water.c: the render-to-texture surfaces of renderer wave 5 (R5b):
+/* rd_water.c: the render-to-texture surfaces of
  * puddle.c, pool.c and queen_barrier_disp.c.
  *
  * Recording only.  Three things the GS register decoder cannot know:
@@ -274,7 +274,7 @@ uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes)
  *   puddle.c leveldown, copy, drawRipples (WORLD, list 4): TEST 0x3F001
  *   and 0x3F000 (DATE DATM 1, Z ALWAYS; AFAIL RGB_ONLY), Z write off,
  *   ALPHA modes 0 (ADD FIX), 2 (LERP FIX), 4 (LERP As, stage 34);
- *   waterDot.c (list 11 raw writes: WORLD space since R7c, UI before):
+ *   waterDot.c (list 11 raw writes, recorded in WORLD space):
  *   TEST 0x50000, Z write off, mode 5 (ADD As). */
 uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {

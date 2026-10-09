@@ -16,25 +16,24 @@
  *   u32      payload size, payload bytes
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
  *            target, view; then the texels for images.  An image has no
- *            view: its view word holds the texel format (RD_TEXEL_*,
- *            package R8; 0 RGBA8 in every older dump), and its texels are
- *            w*h*4 RGBA8 bytes or w*h R8 bytes.  Version 7 (v0.4.2,
- *            package F-A): a sheet image (RD_TEXEL_SHEET, w*h coverage
- *            bytes) has its style above the format byte: bit 8 rimOn, bit
- *            9 dither, bits 10..15 the rim's weight in 64ths (0 full: the
- *            first version 7 dumps have none), bits 16..23 rimLevel,
- *            24..31 fillLevel (sheetView); v0.4.2 F-G: a sheet's
- *            bakedTexa word holds its scale less one in bits 8..15 (0, a
- *            1x sheet, in every older dump: sheetTexa)
+ *            view: its view word holds the texel format (RD_TEXEL_*;
+ *            0 RGBA8 in the dumps from before R8 images), and its texels
+ *            are w*h*4 RGBA8 bytes or w*h R8 bytes.  Version 7: a sheet
+ *            image (RD_TEXEL_SHEET, w*h coverage bytes) has its style
+ *            above the format byte: bit 8 rimOn, bit 9 dither, bits
+ *            10..15 the rim's weight in 64ths (0 full: the first version 7
+ *            dumps have none), bits 16..23 rimLevel, 24..31 fillLevel
+ *            (sheetView); a sheet's bakedTexa word holds its scale less
+ *            one in bits 8..15 (0, a 1x sheet, in older dumps: sheetTexa)
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
- *   (version 5, package DEF: RDC_OVERLAY_TEXT commands, their RdTextItem and
+ *   (version 5: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
  *   dump has none, so it replays as before in every preset)
  *   (version 6: RD_TARGET_FEED_HELD appended, so the temporary targets'
  *   slots start one later; an older dump's temps start at low half 17)
- *   (version 8, v0.4.3: RD_TARGET_DISPLAY_HELD appended, the same again; a
+ *   (version 8: RD_TARGET_DISPLAY_HELD appended, the same again; a
  *   version 6 or 7 dump's temps start at low half 18)
- *   u32      VU mesh count (version 3, wave 3); per mesh: u32 id, vertexCount,
+ *   u32      VU mesh count (from version 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
  *            (u32 each) and the batch records (RdVuBatchRec, raw)
@@ -90,7 +89,7 @@ static int isTemp(uint32_t targetId)
 }
 
 /* an image's view word: its texel format, and a sheet's style above it
-   (version 7, v0.4.2 package F-A; the header comment's layout) */
+   (version 7; the header comment's layout) */
 static uint32_t sheetView(const RdTexRec *t)
 {
     if (t->format != RD_TEXEL_SHEET) {
@@ -101,7 +100,7 @@ static uint32_t sheetView(const RdTexRec *t)
            (uint32_t)t->sheet[1] << 16 | (uint32_t)t->sheet[2] << 24;
 }
 
-/* an image's bakedTexa word: a sheet's scale less one above the byte (F-G) */
+/* an image's bakedTexa word: a sheet's scale less one above the byte */
 static uint32_t sheetTexa(const RdTexRec *t)
 {
     const uint32_t up = t->format == RD_TEXEL_SHEET && t->sheetScale > 1 ? t->sheetScale - 1u : 0u;
@@ -366,14 +365,14 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
         }
         RdPostRec r;
         memcpy(&r, f->payload + c->u[1], sizeof(r));
-        /* the fog's LUT, or (R-POST) the reduction's four screen vertices */
+        /* the fog's LUT, or the reduction's four screen vertices */
         const uint64_t n =
             c->b[0] == RD_POST_REDUCTION ? 4 * (uint64_t)sizeof(RdScreenVtx) : 256 * 4;
         return r.lutOffset == ~0u || payloadRange(psz, r.lutOffset, n);
     }
     case RDC_WORLD_PRIMS:
         return payloadRange(psz, c->u[1], c->u[2]);
-    case RDC_OVERLAY_TEXT: /* package DEF: an item or an op, as recorded */
+    case RDC_OVERLAY_TEXT: /* an item or an op, as recorded */
         return payloadRange(psz, c->u[1], c->u[2]) &&
                ((c->b[0] == RD_OTEXT_ITEM && c->u[2] == sizeof(RdTextItem)) ||
                 (c->b[0] == RD_OTEXT_OP && c->u[2] == sizeof(RdTextOp)));
@@ -421,7 +420,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     memset(out, 0, sizeof(*out));
     char magic[8];
     uint32_t ver = 0, szCmd = 0, szState = 0, szVtx = 0;
-    /* package AA1: version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
+    /* version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
      * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes */
     bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
               ver >= 3u && ver <= RD_DUMP_VERSION && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
@@ -461,7 +460,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         for (uint32_t i = 0; ok && i < out->lists[l].count; i++) {
             const RdCmd *c = &out->lists[l].cmds[i];
             ok = cmdValid(out, c);
-            /* package DEF: the count is not dumped; textCollect needs it */
+            /* the count is not dumped; textCollect needs it */
             if (c->type == RDC_OVERLAY_TEXT && c->b[0] == RD_OTEXT_ITEM) {
                 out->textItems++;
             }
@@ -480,7 +479,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
             break;
         }
         if (h.kind == RD_TEXKIND_IMAGE) {
-            /* R8: an image's view word is its texel format (the uncompressed
+            /* an image's view word is its texel format (the uncompressed
                ones: a pack's BC replacement is never dumped); version 7 a
                sheet's, with its style above the format byte */
             const uint8_t fmt = (uint8_t)(h.view & 0xFFu);
@@ -611,7 +610,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
 
 /* ------------------------------------------------------ dump on demand */
 
-/* Package Q1: the window build's F12 (port/platform/window_host.c): the
+/* The window build's F12 (port/platform/window_host.c): the
  * last closed frame as a dump (rd_DumpFrame) and the DISPLAY target as it
  * was last presented as a PNG (rd_ReadDisplay: a synchronous readback, so
  * for a key press, not for every frame).  Either path may be NULL.  True
