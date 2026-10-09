@@ -14,7 +14,7 @@ extern "C" {
  * after rhi_Shutdown).  Always 0 when the layer is not installed. */
 uint32_t rhi_vk_ValidationErrorCount(void);
 
-/* Package AN-D, for rhi_vk_swapchain_test: the next rhi_Present reports
+/* For rhi_vk_swapchain_test: the next rhi_Present reports
  * `result` (a VkResult value) instead of what the driver returned, once;
  * the image is still presented.  RHI_VK_TEST_SUBOPTIMAL takes the
  * suboptimal path (a recreation only when the size changed),
@@ -27,10 +27,10 @@ uint32_t rhi_vk_ValidationErrorCount(void);
 void vkr_TestForcePresentResult(int32_t result);
 uint32_t vkr_TestSwapchainCreations(void);
 
-/* v0.4.2, for rhi_vk_test's limits cell (ICO_VK_FAKE_LIMITS): the name of
- * the VkPhysicalDeviceLimits member the last refused pipeline, memory
- * allocation or sampler ran into ("maxBoundDescriptorSets", ...), NULL when
- * none since rhi_Init; and the device's limits as rhi_Init left them. */
+/* For rhi_vk_test's limits cell (ICO_VK_FAKE_LIMITS): the name of the
+ * VkPhysicalDeviceLimits member the last pipeline, allocation or sampler
+ * reached ("maxBoundDescriptorSets", ...), NULL when none since rhi_Init;
+ * and the device's limits as rhi_Init left them. */
 const char *vkr_TestLastLimit(void);
 uint32_t vkr_TestLimit(const char *name);
 

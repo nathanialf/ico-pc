@@ -188,9 +188,9 @@ static bool vkr_HasLayer(const char *name)
     return found;
 }
 
-/* v0.4.1 (package R0): the injector and the overlay among the instance
- * layers (rhi.h rhi_InjectorName), found once after volk is up; kept out
- * of g_vkr so rhi_Init's reset leaves them to this scan */
+/* the injector and the overlay among the instance layers (rhi.h
+ * rhi_InjectorName), found once after volk is up; kept out of g_vkr so
+ * rhi_Init's reset leaves them to this scan */
 static const char *s_vkrInjector, *s_vkrOverlay;
 
 static const char *vkr_Env(const char *name)
@@ -355,15 +355,15 @@ static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags n
     return (fp.optimalTilingFeatures & need) == need;
 }
 
-/* v0.4.2 (Android): the one read of ICO_VK_FAKE_LIMITS.  =min is noted
- * for vkr_FillLimits (the RhiLimits at the spec's required values).
- * =mali clamps the device's limits to
- * a Mali-G68's (Samsung A36 class: four descriptor sets, 128 bytes of push
- * constants, 256-byte storage offsets, 16 sampled images, samplers and
- * storage buffers a stage, 4096 memory allocations, 4000 samplers), so the
- * lavapipe tests run under a phone's limits: the checks in rhi_CreatePipeline
- * and vkr_Allocate (vk_pipeline.c, vk_resource.c) read props.limits.  A
- * maximum only goes down and an alignment only up. */
+/* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_FillLimits
+ * (the RhiLimits at the spec's required values).  =mali clamps the
+ * device's limits to a Mali-G68's (Samsung A36 class: four descriptor
+ * sets, 128 bytes of push constants, 256-byte storage offsets, 16 sampled
+ * images, samplers and storage buffers a stage, 4096 memory allocations,
+ * 4000 samplers), so the lavapipe tests run under a phone's limits: the
+ * checks in rhi_CreatePipeline and vkr_Allocate (vk_pipeline.c,
+ * vk_resource.c) read props.limits.  A maximum only goes down and an
+ * alignment only up. */
 static void vkr_FakeLimits(void)
 {
     const char *e = getenv("ICO_VK_FAKE_LIMITS");
@@ -411,12 +411,14 @@ static void vkr_FakeLimits(void)
     VKR_LOG("ICO_VK_FAKE_LIMITS=mali: the device's limits are clamped to a Mali-G68's");
 }
 
-/* package AN-F: the format behind RHI_FMT_D32F_S8.  The spec guarantees one
- * of D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
- * preferred.  Either is taken only with the sampled and transfer uses too
- * (the fog and the effects depth copy the scene's depth and sample the
- * copy); when neither has them all, D32 unless only D24 is an attachment.  ICO_VK_FAKE_D24S8=1 takes D24 where the device has it
- * (tests: rhi_vk_d24s8). */
+/* The format behind RHI_FMT_D32F_S8.  The spec guarantees one of
+ * D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
+ * preferred.  Either is taken only with the sampled and transfer uses too:
+ * the fog samples the scene's depth in place (rd_replay.c doFog), and the
+ * effects depth copies it and samples the copy (rd_present.c).  When
+ * neither has them all, D32 unless only D24 is an attachment.
+ * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests:
+ * rhi_vk_d24s8). */
 static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
 {
     const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -456,9 +458,9 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
         *why = "no swapchain extension";
         return -1;
     }
-    /* package AN-E: dualSrcBlend is optional (rd's two-pass blend fallback
-     * covers its absence, RhiLimits.dualSourceBlend); a device with it is
-     * preferred over an otherwise equal one */
+    /* dualSrcBlend is optional (rd's two-pass blend fallback covers its
+     * absence, RhiLimits.dualSourceBlend); a device with it is preferred
+     * over an otherwise equal one */
     VkPhysicalDeviceFeatures f;
     vkGetPhysicalDeviceFeatures(pd, &f);
     VkPhysicalDeviceVulkan12Features f12 = {
@@ -614,8 +616,8 @@ static bool vkr_CreateDevice(void)
     VkPhysicalDeviceFeatures avail;
     vkGetPhysicalDeviceFeatures(g_vkr.phys, &avail);
     g_vkr.anisotropy = avail.samplerAnisotropy == VK_TRUE;
-    /* package AN-E: ICO_VK_FAKE_NO_DUAL=1 leaves the feature off, as on a
-     * device without it (tests: rhi_vk_nodual) */
+    /* ICO_VK_FAKE_NO_DUAL=1 leaves the feature off, as on a device without
+     * it (tests: rhi_vk_nodual) */
     const char *fakeNoDual = getenv("ICO_VK_FAKE_NO_DUAL");
     g_vkr.dualSrcBlend =
         avail.dualSrcBlend == VK_TRUE && !(fakeNoDual && fakeNoDual[0] && fakeNoDual[0] != '0');
@@ -676,7 +678,7 @@ static bool vkr_CreateDevice(void)
     volkLoadDevice(g_vkr.device);
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
     {
-        /* package P1: GPU timestamps when the queue writes them */
+        /* GPU timestamps when the queue writes them */
         uint32_t qn = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, NULL);
         VkQueueFamilyProperties *qp = calloc(qn ? qn : 1, sizeof(*qp));
@@ -730,18 +732,18 @@ static void vkr_FillLimits(void)
     }
     o->uniformAlign = align < 16u ? 16u : align;
     o->maxTextureSize = l->maxImageDimension2D;
-    o->dualSourceBlend = g_vkr.dualSrcBlend; /* package AN-E: optional */
+    o->dualSourceBlend = g_vkr.dualSrcBlend; /* optional */
     o->stencilWrap = true;                   /* core Vulkan */
-    /* package AN-F: a D24 depth copies out as packed 24-bit words, not floats */
+    /* a D24 depth copies out as packed 24-bit words, not floats */
     o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
     o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
-    /* R7a: images carry mipLevels, views and barriers span every level, and
+    /* images carry mipLevels, views and barriers span every level, and
      * vkCmdCopyBufferToImage takes the level (vk_resource.c, vk_cmd.c) */
     o->textureMips = true;
     o->maxAnisotropy = g_vkr.anisotropy ? l->maxSamplerAnisotropy : 1.0f;
-    /* package PA */
+    /* dynamic uniform buffers (rhi_CmdSetBindGroupOffsets) */
     o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
     o->maxStorageRange = l->maxStorageBufferRange;
     /* texture packs: the BC formats (vkr_CreateDevice enabled the feature) */
@@ -773,8 +775,7 @@ static void vkr_FillLimits(void)
 }
 
 /* ------------------------------------------------------------- lifecycle */
-/* v0.4.3 AN-22a: rhi_SetVulkanLoader's function; outside g_vkr, which
- * rhi_Init clears */
+/* rhi_SetVulkanLoader's function; outside g_vkr, which rhi_Init clears */
 static PFN_vkGetInstanceProcAddr s_loaderGipa;
 
 void rhi_SetVulkanLoader(void *getInstanceProcAddr)
@@ -789,7 +790,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
     }
     memset(&g_vkr, 0, sizeof(g_vkr));
     VkResult vr;
-    /* AN-22a: a driver the program loaded (rhi_SetVulkanLoader) first */
+    /* a driver the program loaded (rhi_SetVulkanLoader) first */
     PFN_vkGetInstanceProcAddr gipa = s_loaderGipa;
 #ifdef ICO_RHI_HAVE_SDL
     if (!gipa && desc->sdlWindow) {
@@ -812,7 +813,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
         VKR_LOG("no Vulkan loader (libvulkan / vulkan-1.dll) found");
         return false;
     }
-    vkr_ScanInjectors(); /* package R0 */
+    vkr_ScanInjectors(); /* rhi_InjectorName */
     if (!vkr_CreateInstance(desc)) {
         rhi_Shutdown();
         return false;
@@ -821,7 +822,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
 #ifdef ICO_RHI_HAVE_SDL
         g_vkr.window = desc->sdlWindow;
 #ifdef __ANDROID__
-        /* AN-22a: SDL's surface call goes through its own loader, which is
+        /* SDL's surface call goes through its own loader, which is
            not the one a driver the program loaded answers to */
         if (!vkr_CreateWindowSurface(desc->sdlWindow, &g_vkr.surface)) {
             VKR_LOG("no surface on the window (no native window yet, or the call failed)");

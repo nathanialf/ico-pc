@@ -18,9 +18,9 @@ _Static_assert(RHI_VK_TEST_SURFACE_LOST == VK_ERROR_SURFACE_LOST_KHR,
 _Static_assert(RHI_VK_TEST_OUT_OF_DATE == VK_ERROR_OUT_OF_DATE_KHR,
                "rhi_vk.h: VK_ERROR_OUT_OF_DATE_KHR");
 
-/* package AN-D, tests (rhi_vk.h): the result the next present reports
- * instead of the driver's (VK_SUCCESS: none), and the swapchains created
- * since the program started */
+/* tests (rhi_vk.h): the result the next present reports instead of the
+ * driver's (VK_SUCCESS: none), and the swapchains created since the
+ * program started */
 static VkResult s_forcePresent = VK_SUCCESS;
 static uint32_t s_creations;
 
@@ -34,8 +34,8 @@ uint32_t vkr_TestSwapchainCreations(void)
     return s_creations;
 }
 
-/* v0.4.2 N4: the surface's size polled after a present (vkr_PollSurface):
- * when the swapchain was last made, when the poll last ran */
+/* the surface's size polled after a present (vkr_PollSurface): when the
+ * swapchain was last made, when the poll last ran */
 static uint64_t s_swapMadeNs, s_pollNs;
 /* a poll rebuild whose swapchain came out at another size than the surface
  * asked (clamped by the surface's limits): that target and the size made,
@@ -67,7 +67,7 @@ void vkr_SwapchainDestroy(void)
     }
 }
 
-/* package P1 (rhi_PreferMailbox): kept across rhi_Init, which clears g_vkr */
+/* rhi_PreferMailbox: kept across rhi_Init, which clears g_vkr */
 static bool s_preferMailbox;
 
 /* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
@@ -215,10 +215,10 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     VkPresentModeKHR *modes = vkr_SurfacePresentModes(&nModes);
     char offered[128];
     vkr_PresentModeList(offered, sizeof(offered), modes, nModes);
-    /* package AN-D: the compositor turns the picture (an Android phone held
-     * sideways reports a rotated current transform); presenting in the
-     * window's own orientation keeps every pass and the readbacks unrotated.
-     * The current transform only where identity is not offered. */
+    /* the compositor turns the picture (an Android phone held sideways
+     * reports a rotated current transform); presenting in the window's own
+     * orientation keeps every pass and the readbacks unrotated.  The
+     * current transform only where identity is not offered. */
     VkSurfaceTransformFlagBitsKHR pre = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     if (!(caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
         pre = caps.currentTransform;
@@ -275,7 +275,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         return false;
     }
     s_creations++;
-    s_swapMadeNs = vkr_NowNs(); /* N4: the poll runs at every present again */
+    s_swapMadeNs = vkr_NowNs(); /* the poll runs at every present again */
     vkr_DestroySwapResources();
     if (old) {
         vkDestroySwapchainKHR(g_vkr.device, old, NULL);
@@ -313,8 +313,8 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = false;
     /* a line when the present mode, the image count or the size differs
-       from the last swapchain (always the first); v0.4.2 N1: the size too,
-       so a log shows every rebuild the renderer's output then follows (a
+       from the last swapchain (always the first).  The size counts so a
+       log shows every rebuild the renderer's output then follows (a
        window-edge drag prints a line per size) */
     static VkPresentModeKHR s_loggedMode;
     static uint32_t s_loggedCount, s_loggedW, s_loggedH;
@@ -333,7 +333,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     return true;
 }
 
-/* package AN-D: a surface on the window rhi_Init was given (or the last
+/* A surface on the window rhi_Init was given (or the last
  * rhi_RecreateSurface named).  The first failure of a run of them is
  * logged: on Android the window has no native surface while the app is in
  * the background, and every frame's retry would log it again. */
@@ -349,8 +349,8 @@ static bool vkr_SurfaceCreate(void)
     }
     VkSurfaceKHR surface = VK_NULL_HANDLE;
 #ifdef __ANDROID__
-    /* AN-22a: through the loader rhi_Init used (vk_surface_android.c),
-       which logs nothing while the app has no native window */
+    /* through the loader rhi_Init used (vk_surface_android.c), which logs
+       nothing while the app has no native window */
     if (!vkr_CreateWindowSurface(g_vkr.window, &surface)) {
         if (!s_surfaceFailLogged) {
             s_surfaceFailLogged = true;
@@ -439,10 +439,10 @@ bool rhi_RecreateSurface(void *window)
     return true;
 }
 
-/* package AN-D: the surface went away under the swapchain
- * (VK_ERROR_SURFACE_LOST_KHR; Android destroys the window's surface before
- * the app hears it is in the background): a new surface and swapchain, or
- * none until the window has a surface again */
+/* The surface went away under the swapchain (VK_ERROR_SURFACE_LOST_KHR;
+ * Android destroys the window's surface before the app hears it is in the
+ * background): a new surface and swapchain, or none until the window has a
+ * surface again */
 static void vkr_SurfaceLost(const char *where)
 {
     VKR_LOG("surface lost at %s; making it again", where);
@@ -472,8 +472,8 @@ static bool vkr_SwapTargetSize(uint32_t *w, uint32_t *h)
 bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_vkr.surface) {
-        /* package AN-D: released (the background) or lost: made again
-         * when the window has a surface */
+        /* released (the background) or lost: made again when the window
+         * has a surface */
         if (!g_vkr.device || !g_vkr.window || !vkr_SurfaceCreate()) {
             return false;
         }
@@ -503,9 +503,9 @@ const char *rhi_PresentModeName(void)
 
 RhiFormat rhi_SwapchainFormat(void)
 {
-    /* package AN-D: a window device keeps its format while the surface is
-     * released or lost, so the renderer goes on presenting to it (and
-     * skips frames) rather than switching to its headless output */
+    /* a window device keeps its format while the surface is released or
+     * lost, so the renderer goes on presenting to it (and skips frames)
+     * rather than switching to its headless output */
     return g_vkr.surface || g_vkr.window ? g_vkr.swapRhiFormat : RHI_FMT_UNKNOWN;
 }
 
@@ -539,8 +539,8 @@ RhiTexture rhi_AcquireBackbuffer(void)
         return out; /* rd_present recreates via rhi_ResizeSwapchain */
     }
     if (r == VK_ERROR_SURFACE_LOST_KHR) {
-        /* package AN-D: this frame is skipped (the semaphore was not
-         * signalled; the caller's retry acquires on the new swapchain) */
+        /* this frame is skipped (the semaphore was not signalled; the
+         * caller's retry acquires on the new swapchain) */
         vkr_SurfaceLost("acquire");
         return out;
     }
@@ -557,7 +557,7 @@ RhiTexture rhi_AcquireBackbuffer(void)
     return out;
 }
 
-/* v0.4.2 N4: Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
+/* Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
 static bool vkr_PollSurfaceOn(void)
 {
 #ifdef __ANDROID__
@@ -571,8 +571,8 @@ static bool vkr_PollSurfaceOn(void)
 #define VKR_POLL_ALWAYS_NS (15ull * 1000000000ull) /* every present this long */
 #define VKR_POLL_PERIOD_NS 1000000000ull           /* then once a second */
 
-/* v0.4.2 N4: the swapchain follows the surface after a present that
- * reported nothing.  On Android the surface can change size in the first
+/* The swapchain follows the surface after a present that reported
+ * nothing.  On Android the surface can change size in the first
  * seconds (the system bars hidden, the turn to landscape, the cutout mode
  * applied) while the driver goes on returning VK_SUCCESS and SDL's size
  * event comes late or never; the compositor then scales and offsets the old
@@ -651,9 +651,9 @@ void rhi_Present(void)
 #ifdef __ANDROID__
     const bool rebuild = r == VK_ERROR_OUT_OF_DATE_KHR;
 #else
-    /* the desktop (as v0.4.0): suboptimal recreates too, at the window's
-     * pixel size; Wayland compositors and gamescope report it when another
-     * swapchain could be scanned out directly */
+    /* the desktop: suboptimal recreates too, at the window's pixel size;
+     * Wayland compositors and gamescope report it when another swapchain
+     * could be scanned out directly */
     const bool rebuild = r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR;
 #endif
     if (rebuild) {
@@ -663,10 +663,10 @@ void rhi_Present(void)
 #endif
         rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
     } else if (r == VK_SUBOPTIMAL_KHR) {
-        /* package AN-D, Android only: the image was shown.  Recreated only
-         * when the size changed: with the identity transform on a rotated
-         * Android display the driver reports suboptimal at every present,
-         * and a recreation would change nothing */
+        /* Android only: the image was shown.  Recreated only when the size
+         * changed: with the identity transform on a rotated Android display
+         * the driver reports suboptimal at every present, and a recreation
+         * would change nothing */
         uint32_t w = 0, h = 0;
         if (vkr_SwapTargetSize(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
             rhi_ResizeSwapchain(w, h, g_vkr.vsync);
@@ -677,6 +677,6 @@ void rhi_Present(void)
         VKR_CHECK(r);
     }
     if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
-        vkr_PollSurface(); /* v0.4.2 N4 */
+        vkr_PollSurface(); /* a size change the present did not report */
     }
 }

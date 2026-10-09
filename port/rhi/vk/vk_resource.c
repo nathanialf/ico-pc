@@ -1,6 +1,6 @@
 /* vk_resource.c: buffers, textures, samplers, shaders and deferred
- * destruction for the Vulkan backend.  Every resource has its own
- * VkDeviceMemory (README.md, "Memory"). */
+ * destruction for the Vulkan backend.  Every buffer and texture has its own
+ * VkDeviceMemory (vkr_Allocate); there is no suballocation. */
 #include "vk_internal.h"
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +19,7 @@ bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryP
     return false;
 }
 
-/* v0.4.2 (Android): every vkFreeMemory, so the live counts stay right */
+/* every vkFreeMemory, so the live counts stay right */
 void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
 {
     if (!memory) {
@@ -32,11 +32,11 @@ void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
     g_vkr.memLiveBytes = g_vkr.memLiveBytes > size ? g_vkr.memLiveBytes - size : 0;
 }
 
-/* v0.4.2 (Android): past the device's allocation limit
+/* Past the device's allocation limit
    (VkPhysicalDeviceLimits.maxMemoryAllocationCount; 4096 on phone GPUs and
    some desktop drivers) a line says so once per time it is reached, and the
-   driver is still asked (it may allow more, as before); under
-   ICO_VK_FAKE_LIMITS the allocation is refused, as a strict driver would. */
+   driver is still asked (it may allow more); under ICO_VK_FAKE_LIMITS the
+   allocation is refused, as a strict driver would. */
 static bool vkr_MemoryRoom(VkDeviceSize size)
 {
     const uint32_t limit = g_vkr.props.limits.maxMemoryAllocationCount;

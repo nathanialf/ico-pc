@@ -206,7 +206,7 @@ static bool vkr_NewDescriptorPool(VkrFrame *f)
     }
     const VkDescriptorPoolSize sizes[] = {
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8192},
-        /* package PA: rd_core makes a few dynamic groups a frame */
+        /* rd_core makes a few dynamic groups a frame */
         {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1024},
         {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2048},
         {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 8192},
@@ -450,10 +450,10 @@ static bool vkr_ValidPipelineDesc(const RhiPipelineDesc *d)
     return ds->depthCompare < RHI_CMP_COUNT;
 }
 
-/* v0.4.2 (Android): the pipeline within the device's limits (a phone GPU's
- * are close to the spec's minimums: four descriptor sets, 16 sampled images
- * a stage; ICO_VK_FAKE_LIMITS=mali sets them on any device), checked here so
- * a pipeline the device cannot take is a log line naming the limit and a
+/* The pipeline within the device's limits (a phone GPU's are close to the
+ * spec's minimums: four descriptor sets, 16 sampled images a stage;
+ * ICO_VK_FAKE_LIMITS=mali sets them on any device), checked here so a
+ * pipeline the device cannot take is a log line naming the limit and a
  * failed create (its draws are skipped, rd_pipeline.c) rather than invalid
  * use of the driver.  The renderer needs 3 sets, 4 dynamic uniforms and at
  * most 2 sampled images and 1 sampler a stage. */

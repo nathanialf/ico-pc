@@ -1,5 +1,5 @@
-/* vk_surface_android.c: the window's surface on Android (v0.4.3, package
- * AN-22a; vk_internal.h vkr_CreateWindowSurface).
+/* vk_surface_android.c: the window's surface on Android (vk_internal.h
+ * vkr_CreateWindowSurface).
  *
  * SDL_Vulkan_CreateSurface fetches vkCreateAndroidSurfaceKHR through SDL's
  * own loader.  With a graphics driver the program loaded itself

@@ -1,5 +1,5 @@
 /* vk_present_mode.c: the swapchain's present mode from what the surface
- * offers (v0.3.1, package P3).  Pure: no device and no Vulkan call, so
+ * offers.  Pure: no device and no Vulkan call, so
  * test/rhi_vk_present_mode_test.c compiles it on its own. */
 #include "vk_internal.h"
 

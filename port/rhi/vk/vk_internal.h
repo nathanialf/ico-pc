@@ -44,9 +44,8 @@ typedef struct VkrBuffer {
     RhiMemory kind;
     void *mapped;
     bool coherent;
-    /* package PB, hazard tracking (vk_cmd.c, "Hazards"): a copy's write or
-     * read not yet behind a barrier, valid while hzEpoch is the recording
-     * list's */
+    /* hazard tracking (vk_cmd.c, "Hazards"): a copy's write or read not yet
+     * behind a barrier, valid while hzEpoch is the recording list's */
     uint64_t hzEpoch;
     bool hzXferWrite, hzXferRead;
 } VkrBuffer;
@@ -62,9 +61,9 @@ typedef struct VkrTexture {
     VkImageAspectFlags aspects;
     uint32_t width, height, mips;
     bool swapchain;
-    /* package PB, hazard tracking (vk_cmd.c, "Hazards"): what touched the
-     * image since its last barrier, valid while hzEpoch is the recording
-     * list's: the mips a copy wrote, and an attachment write or read */
+    /* hazard tracking (vk_cmd.c, "Hazards"): what touched the image since
+     * its last barrier, valid while hzEpoch is the recording list's: the
+     * mips a copy wrote, and an attachment write or read */
     uint64_t hzEpoch;
     uint32_t hzXferMips;
     uint8_t hzAttach; /* VKR_HZ_ATTACH_* */
@@ -83,7 +82,7 @@ typedef struct VkrLayout {
     VkDescriptorSetLayout layout;
     uint32_t slotCount;
     RhiBindSlot slots[16];
-    uint32_t dynamicCount; /* RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots (package PA) */
+    uint32_t dynamicCount; /* RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots */
 } VkrLayout;
 
 typedef struct VkrPipeline {
@@ -132,14 +131,14 @@ typedef struct VkrCmdList {
     /* draw-time state */
     VkrPipeline *pipeline;
     VkDescriptorSet groups[RHI_MAX_BIND_SLOTS];
-    /* package PA: each bound group's dynamic offsets, in binding order */
+    /* each bound group's dynamic offsets, in binding order */
     uint32_t dynCount[RHI_MAX_BIND_SLOTS];
     uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
     uint32_t groupDirty; /* bit per group */
     bool inPass;
-    /* package PB: the list's hazard-tracking epoch (g_vkr.hzEpoch when it
-     * began); globalOrder: a global barrier before every pass and copy
-     * instead (ICO_VK_GLOBAL_BARRIERS=1, or lists recorded interleaved) */
+    /* the list's hazard-tracking epoch (g_vkr.hzEpoch when it began);
+     * globalOrder: a global barrier before every pass and copy instead
+     * (ICO_VK_GLOBAL_BARRIERS=1, or lists recorded interleaved) */
     uint64_t epoch;
     bool globalOrder;
     /* image barriers recorded by rhi_CmdBarrier and not issued yet, with
@@ -163,12 +162,12 @@ typedef struct VkrFrame {
     uint32_t descPoolCount; /* pools created */
     uint32_t descPoolCur;   /* pool being allocated from */
     VkDescriptorSet *sets;  /* transient bind groups of this frame */
-    uint8_t *setDynamic;    /* per set: its layout's dynamic slots (package PA) */
+    uint8_t *setDynamic;    /* per set: its layout's dynamic slots */
     uint32_t setCount, setCap;
     VkrGarbage *garbage;
     uint32_t garbageCount, garbageCap;
     VkSemaphore acquireSem; /* swapchain image acquire */
-    /* package P1: the slot's GPU timestamps (rhi_CmdWriteTimestamp) */
+    /* the slot's GPU timestamps (rhi_CmdWriteTimestamp) */
     VkQueryPool queryPool;
     uint32_t tsWritten; /* bit per index written since the slot was recycled */
     bool tsReset;       /* the pool's reset is recorded in this slot's first list */
@@ -193,10 +192,10 @@ typedef struct VkrState {
     PFN_vkCmdBeginRendering cmdBeginRendering;
     PFN_vkCmdEndRendering cmdEndRendering;
     bool anisotropy;
-    /* package AN-F: the Vulkan format behind RHI_FMT_D32F_S8 (D32_SFLOAT_S8_UINT,
-     * or D24_UNORM_S8_UINT without it or under ICO_VK_FAKE_D24S8) */
+    /* the Vulkan format behind RHI_FMT_D32F_S8 (D32_SFLOAT_S8_UINT, or
+     * D24_UNORM_S8_UINT without it or under ICO_VK_FAKE_D24S8) */
     VkFormat dsFormat;
-    bool dualSrcBlend; /* package AN-E: the feature enabled (RhiLimits.dualSourceBlend) */
+    bool dualSrcBlend; /* the feature enabled (RhiLimits.dualSourceBlend) */
     /* texture packs: textureCompressionBC enabled and the four BC formats
      * sampleable and copyable (RhiLimits.bcTextures) */
     bool bc;
@@ -241,7 +240,7 @@ typedef struct VkrState {
     /* every pipeline is created through it (vkr_PipelineCacheInit) */
     VkPipelineCache pipelineCache;
 
-    /* package P1: counters (rhi_GetStats), timestamps, the mailbox option */
+    /* counters (rhi_GetStats), timestamps, the mailbox option */
     RhiStats stats;
     bool timestamps;        /* the queue writes timestamps */
     float timestampPeriod;  /* ns per tick */
@@ -250,23 +249,24 @@ typedef struct VkrState {
     uint32_t tsCount; /* of the slot rhi_WaitFrame recycled last */
     bool mailbox;     /* the swapchain presents in mailbox mode (rhi_PreferMailbox) */
 
-    /* v0.3.1: the swapchain's present mode (rhi_PresentModeName) */
+    /* the swapchain's present mode (rhi_PresentModeName) */
     VkPresentModeKHR presentMode;
 
-    /* package PB: hazard tracking (vk_cmd.c, "Hazards") */
-    bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: main's global barrier path */
+    /* hazard tracking (vk_cmd.c, "Hazards") */
+    bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: a global barrier before every pass and copy */
     uint64_t hzEpoch;    /* the last command list's epoch (one per rhi_BeginCommands) */
 
     VkrGarbage overflow[VKR_GARBAGE_OVERFLOW]; /* see VKR_GARBAGE_OVERFLOW */
     uint32_t overflowCount;
 
-    /* v0.4.2 (Android): the device memory objects alive and their bytes,
-     * with the peaks, and the samplers alive.  Every buffer and texture has
-     * its own allocation (vk_resource.c), and maxMemoryAllocationCount is
-     * 4096 on many phone GPUs (desktops allow far more): vkr_Allocate
-     * refuses past the device's limits with a log line instead of asking
-     * the driver for what the spec does not allow, and the counts reach
-     * the 10-second log through rhi_GetStats (RhiStats.memoryLive...). */
+    /* The device memory objects alive and their bytes, with the peaks, and
+     * the samplers alive.  Every buffer and texture has its own allocation
+     * (vk_resource.c), and maxMemoryAllocationCount is 4096 on many phone
+     * GPUs (desktops allow far more): vkr_Allocate logs once when the
+     * device's limit is reached and refuses only under ICO_VK_FAKE_LIMITS
+     * (vkr_MemoryRoom; rhi_CreateSampler does the same for samplers).  The
+     * counts reach the 10-second log through rhi_GetStats
+     * (RhiStats.memoryLive...). */
     uint32_t memLive, memPeak, samplersLive;
     uint64_t memLiveBytes, memPeakBytes;
     uint32_t memNextLog; /* the live count whose crossing logs next */
@@ -283,7 +283,7 @@ typedef struct VkrState {
 extern VkrState g_vkr;
 
 /* the Vulkan format of an RhiFormat; RHI_FMT_D32F_S8 resolves to the chosen
- * depth-stencil format (package AN-F) */
+ * depth-stencil format */
 static inline VkFormat vkr_VkFormat(RhiFormat f)
 {
     return vkr_VkFormatWith(f, g_vkr.dsFormat);
@@ -331,7 +331,7 @@ void vkr_PipelineCacheInit(void);
 void vkr_PipelineCacheShutdown(void);
 /* vk_pipeline.c */
 VkDescriptorSet vkr_GetBindGroup(RhiBindGroup bg);
-/* The number of dynamic uniform slots of a bind group's layout (package PA). */
+/* The number of dynamic uniform slots of a bind group's layout. */
 uint32_t vkr_BindGroupDynamicCount(RhiBindGroup bg);
 /* vk_cmd.c */
 bool vkr_FramesInit(void);
@@ -353,12 +353,13 @@ const char *vkr_PresentModeName(VkPresentModeKHR m);
 
 /* vk_swapchain.c */
 #ifdef __ANDROID__
-/* vk_surface_android.c (v0.4.3 AN-22a): a VkSurfaceKHR on the SDL window's
- * ANativeWindow, made with vkCreateAndroidSurfaceKHR from the instance's own
+/* vk_surface_android.c: a VkSurfaceKHR on the SDL window's ANativeWindow,
+ * made with vkCreateAndroidSurfaceKHR from the instance's own
  * vkGetInstanceProcAddr (SDL_Vulkan_CreateSurface would take SDL's loader's,
- * which a driver the program loaded does not answer to).  false (logged
- * once per failure kind) when the window has no native window (the app in
- * the background) or the call fails. */
+ * which a driver the program loaded does not answer to).  false when the
+ * window has no native window (the app in the background, not logged) or
+ * the lookup or the call fails (logged every time; the caller,
+ * vk_swapchain.c vkr_SurfaceCreate, limits repeats). */
 bool vkr_CreateWindowSurface(void *sdlWindow, VkSurfaceKHR *out);
 #endif
 bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);

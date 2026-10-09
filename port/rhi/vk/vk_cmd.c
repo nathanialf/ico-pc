@@ -1,6 +1,14 @@
 /* vk_cmd.c: frames, command lists, submission, barriers, render passes,
- * draws, copies and readback for the Vulkan backend.  README.md, "Frame
- * lifecycle", describes the synchronisation. */
+ * draws, copies and readback for the Vulkan backend.
+ *
+ * Synchronisation: RHI_FRAMES_IN_FLIGHT frame slots each own a command
+ * pool, descriptor pools and the objects destroyed while they recorded.
+ * Every submit signals the next value of one timeline semaphore, and
+ * rhi_WaitFrame waits for the value of a slot's last submit before it
+ * reuses the slot.  The first submit after a swapchain acquire waits on
+ * the acquire semaphore; the present waits on the image's renderDone
+ * semaphore, which the presenting list's submit or an empty batch in
+ * rhi_Present signals (rhi_Submit). */
 #include "vk_internal.h"
 #include <stdlib.h>
 #include <string.h>
@@ -8,8 +16,9 @@
 /* ------------------------------------------------------------------ frames */
 bool vkr_FramesInit(void)
 {
-    /* package PB: main's global barrier before every pass and copy, for A/B
-     * comparisons and bisecting ("Hazards" below) */
+    /* ICO_VK_GLOBAL_BARRIERS=1: a global barrier before every pass and copy
+     * instead of hazard tracking, for A/B comparisons and bisecting
+     * ("Hazards" below) */
     const char *gb = getenv("ICO_VK_GLOBAL_BARRIERS");
     g_vkr.globalBarriers = gb && gb[0] && gb[0] != '0';
     if (g_vkr.globalBarriers) {
@@ -87,7 +96,7 @@ static void vkr_WaitValue(uint64_t value)
     if (value == 0) {
         return;
     }
-    /* package P1: a wait that blocks is counted with its time */
+    /* a wait that blocks is counted with its time */
     uint64_t done = 0;
     if (vkGetSemaphoreCounterValue(g_vkr.device, g_vkr.timeline, &done) == VK_SUCCESS &&
         done >= value) {
@@ -105,8 +114,8 @@ static void vkr_WaitValue(uint64_t value)
     g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
 }
 
-/* package P1: the finished slot's timestamps into g_vkr.tsResult (the slot
- * is complete: nothing waits) */
+/* the finished slot's timestamps into g_vkr.tsResult (the slot is complete:
+ * nothing waits) */
 static void vkr_CollectTimestamps(VkrFrame *f)
 {
     g_vkr.tsCount = 0;
@@ -216,7 +225,7 @@ RhiCommandList rhi_BeginCommands(void)
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
     c->presentImage = VK_NULL_HANDLE;
-    /* package PB: a new hazard-tracking epoch ("Hazards") */
+    /* a new hazard-tracking epoch ("Hazards") */
     c->epoch = ++g_vkr.hzEpoch;
     c->globalOrder = g_vkr.globalBarriers;
     for (uint32_t j = 0; j < f->listCount; j++) {
@@ -232,8 +241,8 @@ RhiCommandList rhi_BeginCommands(void)
     }
     f->listCount++;
     if (f->queryPool && !f->tsReset) {
-        /* package P1: the slot's timestamps start unwritten (outside any
-         * render pass: the frame's first list) */
+        /* the slot's timestamps start unwritten (outside any render pass:
+         * the frame's first list) */
         vkCmdResetQueryPool(c->cb, f->queryPool, 0, RHI_MAX_TIMESTAMPS);
         f->tsReset = true;
     }
@@ -372,11 +381,14 @@ void rhi_Submit(RhiCommandList cl)
         rhi_EndCommands(cl);
     }
     c->submitted = true;
-    /* One submit per present: the list that moves the acquired image to
-     * PRESENT signals the present semaphore itself, and rhi_Present adds
-     * no empty submit.  Any other list (and a presenting list after the
-     * semaphore was signalled) is submitted alone, and rhi_Present
-     * signals the semaphore with an empty batch after it, as before. */
+    /* The first list of a frame that moves the acquired image to PRESENT
+     * signals the present semaphore (renderDone) with its own submit, and
+     * rhi_Present then adds no empty batch.  When no list did, rhi_Present
+     * signals it with an empty batch after the frame's work.  Only the
+     * first presenting list signals: a later list that writes the
+     * backbuffer again and moves it back to PRESENT is not covered by the
+     * present's wait.  Today rd_replay.c (rd__PresentRecord) and
+     * rd_video.c each present from one list. */
     bool signal = false;
     if (c->presentImage != VK_NULL_HANDLE && g_vkr.swapAcquired && !g_vkr.presentSignalled) {
         const VkrTexture *bb = vkr_GetTexture((RhiTexture){g_vkr.swapTextures[g_vkr.swapImage]});
@@ -405,7 +417,7 @@ bool vkr_SubmitPresentSignal(void)
  * image in one call are not ordered), and so does a full set.  A list on
  * the global barrier path (ICO_VK_GLOBAL_BARRIERS=1, or recorded
  * interleaved: vkr_OrderWrites) defers nothing and records each barrier
- * at once, as before.  stats.barriers counts vkCmdPipelineBarrier calls. */
+ * at once.  stats.barriers counts vkCmdPipelineBarrier calls. */
 static void vkr_FlushBarriers(VkrCmdList *c)
 {
     if (c->pendCount == 0) {
@@ -432,9 +444,9 @@ void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState af
         src = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
     if (t->hzEpoch == c->epoch) {
-        /* package PB: the uses still pending on the image join the first
-         * scope (they are the before state's own, unless the caller
-         * discards the contents with before = UNDEFINED) */
+        /* the uses still pending on the image join the first scope (they
+         * are the before state's own, unless the caller discards the
+         * contents with before = UNDEFINED) */
         const bool depth = (t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
         if (t->hzXferMips) {
             src |= VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -484,7 +496,7 @@ void vkr_ImageBarrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState af
     if (c->globalOrder) {
         vkr_FlushBarriers(c);
     }
-    /* package PB: the barrier covers whatever was pending on the image */
+    /* the barrier covers whatever was pending on the image */
     t->hzEpoch = 0;
     t->hzXferMips = 0;
     t->hzAttach = 0;
@@ -512,9 +524,9 @@ void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32
  * the backend.  Vulkan gives no implicit ordering across copies or across
  * render passes.
  *
- * vkr_OrderWrites is main's way, kept for ICO_VK_GLOBAL_BARRIERS=1 and for
- * lists recorded interleaved: a global memory barrier before every copy and
- * every render pass. */
+ * vkr_OrderWrites orders them for ICO_VK_GLOBAL_BARRIERS=1 and for lists
+ * recorded interleaved: a global memory barrier before every copy and
+ * every render pass.  Other lists use hazard tracking ("Hazards" below). */
 static void vkr_OrderWrites(VkCommandBuffer cb, bool attachments)
 {
     VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};
@@ -536,16 +548,16 @@ static void vkr_OrderWrites(VkCommandBuffer cb, bool attachments)
     g_vkr.stats.barriers++;
 }
 
-/* Hazards (package PB; README.md, "States and barriers").  Each texture and
- * buffer records what touched it since its last barrier: the mips a copy
- * wrote, an attachment write or a read-only depth attachment read (a
- * buffer: a copy's write or read).  A render pass or copy emits one
- * pipeline barrier holding an image (buffer) barrier for each resource it
- * uses that has a pending hazard with that use (write after write, read
- * after write, write after read), in the layout the use needs (old = new:
- * layouts change only at the caller's rhi_CmdBarrier, which clears the
- * record).  Anything else needs no barrier: sampling, copying from and
- * presenting all need a state change, and that transition is the caller's.
+/* Hazards.  Each texture and buffer records what touched it since its last
+ * barrier: the mips a copy wrote, an attachment write or a read-only depth
+ * attachment read (a buffer: a copy's write or read).  A render pass or
+ * copy emits one pipeline barrier holding an image (buffer) barrier for
+ * each resource it uses that has a pending hazard with that use (write
+ * after write, read after write, write after read), in the layout the use
+ * needs (old = new: layouts change only at the caller's rhi_CmdBarrier,
+ * which clears the record).  Anything else needs no barrier: sampling,
+ * copying from and presenting all need a state change, and that
+ * transition is the caller's.
  *
  * The record belongs to one command list (its epoch).  Each list begins
  * with one global barrier over attachment and transfer writes
@@ -764,7 +776,7 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             .imageView = t->view,
             .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             .loadOp = vkr_loadOpMap[a->load < RHI_LOAD_COUNT ? a->load : 0].vk,
-            /* v0.4.2 (N2): DONT_CARE when asked (a tiler skips the write-back) */
+            /* DONT_CARE when asked (a tiler skips the write-back) */
             .storeOp = a->store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
                                                        : VK_ATTACHMENT_STORE_OP_STORE,
             .clearValue = cv,
@@ -801,8 +813,8 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                 vkr_loadOpMap[pass->depth.stencilLoad < RHI_LOAD_COUNT ? pass->depth.stencilLoad
                                                                        : 0]
                     .vk;
-            /* the stencil's own store op; zero (STORE) keeps it, as before
-             * when the stencil followed the depth's */
+            /* the stencil's own store op; zero (RHI_STORE_STORE) keeps the
+             * stencil */
             stencil.storeOp = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
                               : pass->depth.stencilStore == RHI_STORE_DONT_CARE
                                   ? VK_ATTACHMENT_STORE_OP_DONT_CARE
@@ -938,8 +950,8 @@ void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup 
     if (!s && bg.id) {
         VKR_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
     }
-    /* package PA: the layout's dynamic slots take the given offsets, the
-     * missing ones 0 (rhi_CmdSetBindGroup) */
+    /* the layout's dynamic slots take the given offsets, the missing ones 0
+     * (rhi_CmdSetBindGroup) */
     const uint32_t dyn = s ? vkr_BindGroupDynamicCount(bg) : 0;
     if (count > dyn) {
         VKR_LOG("rhi_CmdSetBindGroupOffsets: %u offsets for %u dynamic slots", count, dyn);
@@ -949,8 +961,8 @@ void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup 
     for (uint32_t i = 0; i < count && offsets; i++) {
         off[i] = offsets[i];
     }
-    /* package P1: the set already bound (PA: with the same offsets) is not
-     * bound again */
+    /* the set already bound with the same dynamic offsets is not bound
+     * again */
     if (c->groups[group] != s || c->dynCount[group] != dyn ||
         memcmp(c->offsets[group], off, dyn * sizeof(off[0])) != 0) {
         c->groups[group] = s;
@@ -1062,9 +1074,9 @@ void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, Rhi
     }
     VkBufferCopy r = {srcOffset, dstOffset, size};
     vkr_FlushBarriers(c);
-    /* package P1: rhi.h: the copy waits for every earlier read of the
-     * destination (draws of earlier frames reading a range rewritten now)
-     * and write (an earlier copy) */
+    /* rhi.h: the copy waits for every earlier read of the destination
+     * (draws of earlier frames reading a range rewritten now) and write (an
+     * earlier copy) */
     VkMemoryBarrier pre = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -1299,7 +1311,7 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
     return ok;
 }
 
-/* ------------------------------------------------------- timestamps (P1) */
+/* -------------------------------------------------------------- timestamps */
 void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
 {
     VkrCmdList *c = vkr_GetCmd(cl);

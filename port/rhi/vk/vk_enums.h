@@ -149,7 +149,8 @@ static const VkrLoadOpMap vkr_loadOpMap[RHI_LOAD_COUNT] = {
 /* Bind types: the descriptor type, and the shift added to the RHI slot to
  * give the Vulkan binding number.  HLSL b, t and s registers share one
  * number space per register space in D3D12 but not in Vulkan, so DXC is run
- * with -fvk-b-shift 0, -fvk-t-shift 16, -fvk-s-shift 32 (README.md). */
+ * with -fvk-b-shift 0, -fvk-t-shift 16, -fvk-s-shift 32
+ * (cmake/IcoShaders.cmake). */
 #define VKR_SHIFT_B 0u
 #define VKR_SHIFT_T 16u
 #define VKR_SHIFT_S 32u
@@ -165,7 +166,7 @@ static const VkrBindTypeMap vkr_bindTypeMap[RHI_BIND_COUNT] = {
     [RHI_BIND_STORAGE_BUFFER] = {true, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VKR_SHIFT_T},
     [RHI_BIND_SAMPLED_TEXTURE] = {true, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, VKR_SHIFT_T},
     [RHI_BIND_SAMPLER] = {true, VK_DESCRIPTOR_TYPE_SAMPLER, VKR_SHIFT_S},
-    /* package PA: offsets at bind time (vkCmdBindDescriptorSets) */
+    /* offsets at bind time (vkCmdBindDescriptorSets) */
     [RHI_BIND_UNIFORM_BUFFER_DYNAMIC] = {true, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,
                                          VKR_SHIFT_B},
 };
@@ -221,8 +222,8 @@ static const VkrStateMap vkr_stateMap[RHI_STATE_COUNT] = {
                            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0},
 };
 
-/* package AN-F: RHI_FMT_D32F_S8 is the logical scene depth-stencil format;
- * the device backs it with D32_SFLOAT_S8_UINT or, where that is missing,
+/* RHI_FMT_D32F_S8 is the logical scene depth-stencil format; the device
+ * backs it with D32_SFLOAT_S8_UINT or, where that is missing,
  * D24_UNORM_S8_UINT (vkr_formatMap holds the D32 entry, ds the chosen one).
  * Every Vulkan format read of an RhiFormat goes through vkr_VkFormat
  * (vk_internal.h) or this. */
