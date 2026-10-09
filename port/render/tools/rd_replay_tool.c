@@ -98,6 +98,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../include/ico_endian.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "font.h" /* port/ui: the overlay test's text */
@@ -467,10 +468,8 @@ static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
     bool ok = fread(b, 1, sizeof(b), fp) == sizeof(b) && memcmp(b, RD_DUMP_MAGIC, 8) == 0;
     fclose(fp);
     if (ok) {
-        *w = (uint32_t)b[24] | ((uint32_t)b[25] << 8) | ((uint32_t)b[26] << 16) |
-             ((uint32_t)b[27] << 24);
-        *h = (uint32_t)b[28] | ((uint32_t)b[29] << 8) | ((uint32_t)b[30] << 16) |
-             ((uint32_t)b[31] << 24);
+        *w = ico_le32(b + 24);
+        *h = ico_le32(b + 28);
     }
     return ok;
 }

@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../include/ico_endian.h"
 #include "rd_internal.h"
 #include "texpack.h"
 
@@ -84,11 +85,6 @@ static const struct {
     {{32, DDS_RGB, 0, 24, 0x00ff0000u, 0x0000ff00u, 0x000000ffu, 0}, DDS_CONV_R8G8B8},
     {{32, DDS_RGBA, 0, 32, 0x000000ffu, 0x0000ff00u, 0x00ff0000u, 0xff000000u}, DDS_CONV_A8B8G8R8},
 };
-
-static uint32_t rd32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
-}
 
 static int refuse(const char *file, const char *why, TexpackImage *out)
 {
@@ -159,15 +155,16 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
         return -1;
     }
     memset(out, 0, sizeof(*out));
-    if (data == NULL || size < 4u + DDS_HEADER_BYTES || rd32(data) != DDS_MAGIC) {
+    if (data == NULL || size < 4u + DDS_HEADER_BYTES || ico_le32(data) != DDS_MAGIC) {
         return refuse(file, "not a DDS file", out);
     }
     const uint8_t *hd = data + 4;
-    const uint32_t hSize = rd32(hd + 0), flags = rd32(hd + 4);
-    const uint32_t height = rd32(hd + 8), width = rd32(hd + 12);
-    const uint32_t pitchOrLinear = rd32(hd + 16), mipCount = rd32(hd + 24);
-    const DdsPixelFormat pf = {rd32(hd + 72), rd32(hd + 76), rd32(hd + 80), rd32(hd + 84),
-                               rd32(hd + 88), rd32(hd + 92), rd32(hd + 96), rd32(hd + 100)};
+    const uint32_t hSize = ico_le32(hd + 0), flags = ico_le32(hd + 4);
+    const uint32_t height = ico_le32(hd + 8), width = ico_le32(hd + 12);
+    const uint32_t pitchOrLinear = ico_le32(hd + 16), mipCount = ico_le32(hd + 24);
+    const DdsPixelFormat pf = {ico_le32(hd + 72), ico_le32(hd + 76), ico_le32(hd + 80),
+                               ico_le32(hd + 84), ico_le32(hd + 88), ico_le32(hd + 92),
+                               ico_le32(hd + 96), ico_le32(hd + 100)};
     if (hSize < DDS_HEADER_BYTES) {
         return refuse(file, "a damaged DDS header", out);
     }
@@ -202,11 +199,11 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
                 return refuse(file, "a damaged DDS header", out);
             }
             const uint8_t *x = data + offset;
-            if (rd32(x + 4) != DDS_DIMENSION_TEXTURE2D || rd32(x + 12) != 1) {
+            if (ico_le32(x + 4) != DDS_DIMENSION_TEXTURE2D || ico_le32(x + 12) != 1) {
                 return refuse(file, "not a single 2D DDS texture", out);
             }
             offset += DDS_DX10_BYTES;
-            dxgi = rd32(x);
+            dxgi = ico_le32(x);
         }
         if (pf.fourcc == FOURCC('D', 'X', 'T', '1') || dxgi == 71) {
             fmt = RD_TEXEL_BC1;

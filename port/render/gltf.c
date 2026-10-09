@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../include/ico_endian.h"
 #include "host_fs.h"
 #include "json.h"
 
@@ -30,17 +31,6 @@ static char *dup_str(const char *s)
     if (d)
         memcpy(d, s, n);
     return d;
-}
-
-static int hexval(char c)
-{
-    if (c >= '0' && c <= '9')
-        return c - '0';
-    if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-    return -1;
 }
 
 static int fail(char *why, size_t whyLen, const char *fmt, ...)
@@ -308,19 +298,9 @@ static void put_f32(uint8_t *p, float f)
     put_u32(p, v);
 }
 
-static uint32_t get_u32(const uint8_t *p)
-{
-    return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
-}
-
-static uint16_t get_u16(const uint8_t *p)
-{
-    return (uint16_t)(p[0] | p[1] << 8);
-}
-
 static float get_f32(const uint8_t *p)
 {
-    uint32_t v = get_u32(p);
+    uint32_t v = ico_le32(p);
     float f;
     memcpy(&f, &v, 4);
     return f;
@@ -855,7 +835,7 @@ static int uri_decode(Rd *r, uint64_t bi, const char *uri, char *out, size_t out
     for (const char *c = uri; *c; c++) {
         char ch = *c;
         if (ch == '%') {
-            int hi = hexval(c[1]), lo = hi >= 0 ? hexval(c[2]) : -1;
+            int hi = ico_json_hexval(c[1]), lo = hi >= 0 ? ico_json_hexval(c[2]) : -1;
             if (hi < 0 || lo < 0)
                 return fail(r->why, r->whyLen, "buffer %llu's uri \"%s\" has a bad %% escape",
                             (unsigned long long)bi, uri);
@@ -1123,7 +1103,7 @@ static float acc_f(const Acc *a, uint64_t i, int c)
     case CT_UBYTE:
         return (float)p[c] / 255.0f;
     case CT_USHORT:
-        return (float)get_u16(p + 2 * c) / 65535.0f;
+        return (float)ico_le16(p + 2 * c) / 65535.0f;
     default:
         return get_f32(p + 4 * c);
     }
@@ -1136,9 +1116,9 @@ static uint32_t acc_u(const Acc *a, uint64_t i, int c)
     case CT_UBYTE:
         return p[c];
     case CT_USHORT:
-        return get_u16(p + 2 * c);
+        return ico_le16(p + 2 * c);
     default:
-        return get_u32(p + 4 * c);
+        return ico_le32(p + 4 * c);
     }
 }
 
@@ -1623,17 +1603,17 @@ static int read_doc(Rd *r, GltfDoc *out)
     /* the container */
     const char *jsonText = (const char *)r->file;
     size_t jsonLen = r->fileLen;
-    if (r->fileLen >= 4 && get_u32(r->file) == GLB_MAGIC) {
+    if (r->fileLen >= 4 && ico_le32(r->file) == GLB_MAGIC) {
         if (r->fileLen < 20)
             return fail(r->why, r->whyLen, "the GLB is truncated (%zu bytes)", r->fileLen);
-        uint32_t version = get_u32(r->file + 4), length = get_u32(r->file + 8);
+        uint32_t version = ico_le32(r->file + 4), length = ico_le32(r->file + 8);
         if (version != 2)
             return fail(r->why, r->whyLen, "the GLB is version %u (2 is supported)", version);
         if (length > r->fileLen || length < 20)
             return fail(r->why, r->whyLen,
                         "the GLB is truncated: its header says %u bytes, the file has %zu", length,
                         r->fileLen);
-        uint32_t clen = get_u32(r->file + 12), ctype = get_u32(r->file + 16);
+        uint32_t clen = ico_le32(r->file + 12), ctype = ico_le32(r->file + 16);
         if (ctype != GLB_JSON)
             return fail(r->why, r->whyLen, "the GLB's first chunk is not JSON");
         if (clen > length - 20)
@@ -1646,7 +1626,7 @@ static int read_doc(Rd *r, GltfDoc *out)
             jsonLen--;
         uint64_t at = 20 + (uint64_t)clen;
         if (at + 8 <= length) {
-            uint32_t blen = get_u32(r->file + at), btype = get_u32(r->file + at + 4);
+            uint32_t blen = ico_le32(r->file + at), btype = ico_le32(r->file + at + 4);
             if (btype == GLB_BIN) {
                 if (blen > length - at - 8)
                     return fail(r->why, r->whyLen, "the GLB's BIN chunk is truncated");
