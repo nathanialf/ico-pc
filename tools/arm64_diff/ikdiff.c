@@ -279,6 +279,10 @@ unsigned int ico_diag_float_faults(void)
     return faults;
 }
 
+/* v0.4.3 AN-19d: the hand probe (diag_host.h), off */
+int ico_hand_probe_on;
+GObj *girlGObj; /* handManager.c's hand probe compares the target with it */
+
 int GetSkeltonFocusNode(GObj *self, int focus)
 {
     return GOBJ_SUB(self)->focusNodes[focus];

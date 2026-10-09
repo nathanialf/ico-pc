@@ -3730,6 +3730,37 @@ static void GetBoyMode(int *mode, int *p1, int *p2, int *p3)
     }
 }
 
+/* PC port (AN-19d): port/platform/diag_host.c, the hand probe ([dev]
+   hand_probe, issue 19) */
+extern int ico_hand_probe_on;
+int ico_hand_probe_due(int slot);
+
+void ico_hand_probe_girl(int boy_mode, int p1, int p2, int p3, float hand_dist, float hand_height,
+                         int flags, float dist, float pull_len, float pull_turn, int st,
+                         int request, int motion, float speed, int speed_pri);
+
+/* PC port (AN-19d): Yorda's side of the hand-holding walk, once every 30
+   Main ticks: the boy's mode, the hand manager's distance and flags, the
+   distance actGirlHand pulls by, its pull length and turn, the step it
+   chose, the motion it asked for and the play speed reserved. Only
+   reads. */
+static void probeGirlHand(GObj *self, int mode, int p1, int p2, int p3, float dist, float pullLen,
+                          float pullTurn, int st) /* port name */
+{
+    struct EnemyBattleWork *e = GOBJ_ACT(self)->enemy;
+
+    if (ico_hand_probe_due(4) == 0) {
+        return;
+    }
+    ico_hand_probe_girl(
+        mode, p1, p2, p3, handmgr.handDist, handmgr.handHeight,
+        (handmgr.still != 0) | (handmgr.turned != 0) << 1 | (handmgr.far100 != 0) << 2 |
+            (handmgr.far125 != 0) << 3 | (handmgr.far135 != 0) << 4 | (handmgr.near90 != 0) << 5 |
+            (handmgr.heightGap != 0) << 6,
+        dist, pullLen, pullTurn, st, GOBJ_SUB(self)->ctrl.request, GOBJ_SUB(self)->ctrl.motion,
+        e != 0 ? e->speedRatio : 0.0f, e != 0 ? (int)e->speedRatioPri : -1);
+}
+
 void actGirlHand(GObj *volatile self)
 {
     float look[4];
@@ -4003,6 +4034,10 @@ void actGirlHand(GObj *volatile self)
                 sub->motReq = SetMotionRequest((void *)self, 0xE, sub->env.motOriReq);
                 st = 0;
                 break;
+            }
+            /* PC port (AN-19d): the hand probe, off by default */
+            if (ico_hand_probe_on != 0) {
+                probeGirlHand(self, mode, p1, p2, p3, dist, pullLen, pullTurn, st);
             }
         }
         flag =

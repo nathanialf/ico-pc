@@ -17,6 +17,11 @@ option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
 option(ICO_BUILD_BLOCKED "Also compile the sources cmake/IcoExclusions.cmake blocks" OFF)
 option(ICO_LINK_EXE "Link the ico_pc executable (fails while symbols are unresolved)" OFF)
+# v0.4.3 AN-19d (issue 19): a diagnostic build for a bug report. ON turns
+# the hand probe ([dev] hand_probe, port/platform/diag_host.h) on by
+# default and writes the key into the first start's settings file, so the
+# build logs the hand-holding numbers without anything to set.
+option(ICO_HAND_PROBE_DEFAULT "Turn [dev] hand_probe on by default (diagnostic builds)" OFF)
 
 # The retail game ran with its asserts live (the reconstruction calls
 # __assert where the macro expanded), so no configuration defines NDEBUG:
@@ -204,6 +209,9 @@ if(ICO_LINK_EXE)
                                 ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
     if(ICO_HEADLESS)
         target_compile_definitions(ico_pc PRIVATE ICO_HEADLESS=1)
+    endif()
+    if(ICO_HAND_PROBE_DEFAULT)
+        target_compile_definitions(ico_pc PRIVATE ICO_HAND_PROBE_DEFAULT=1)
     endif()
     target_compile_options(ico_pc PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(ico_pc PRIVATE ico_game ico_platform)

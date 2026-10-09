@@ -1976,3 +1976,113 @@ unsigned int ico_diag_float_faults(void)
 {
     return float_fault_count;
 }
+
+/* --- v0.4.3 AN-19d: the hand probe (diag_host.h) ----------------------------- */
+
+#define HAND_PROBE_EVERY 30u
+#define HAND_PROBE_SLOTS 8
+/* the probe lines' layout; tools/hand_probe_diff.py checks it */
+#define HAND_PROBE_VERSION 1
+
+int ico_hand_probe_on;
+
+static unsigned int hand_probe_last[HAND_PROBE_SLOTS];
+
+static unsigned int hand_probe_tick(void)
+{
+    return ticks_fn != NULL ? ticks_fn() : 0u;
+}
+
+void ico_hand_probe_start(int on)
+{
+    int i;
+
+    ico_hand_probe_on = on != 0;
+    for (i = 0; i < HAND_PROBE_SLOTS; i++) {
+        hand_probe_last[i] = ~0u;
+    }
+    if (ico_hand_probe_on) {
+        ico_diag_log("probe: on version=%d every=%u", HAND_PROBE_VERSION, HAND_PROBE_EVERY);
+    }
+}
+
+int ico_hand_probe_due(int slot)
+{
+    unsigned int t = hand_probe_tick();
+
+    if (slot < 0 || slot >= HAND_PROBE_SLOTS || t % HAND_PROBE_EVERY != 0 ||
+        hand_probe_last[slot] == t) {
+        return 0;
+    }
+    hand_probe_last[slot] = t;
+    return 1;
+}
+
+char *ico_hand_probe_put(char *p, char *end, const char *name, const float *v, int n)
+{
+    int i;
+
+    for (i = 0; i < n && p < end; i++) {
+        uint32_t bits;
+        int w;
+
+        memcpy(&bits, &v[i], sizeof bits);
+        w = snprintf(p, (size_t)(end - p), "%s%s%s%.9g/%08x", i == 0 ? " " : ",",
+                     i == 0 ? name : "", i == 0 ? "=" : "", (double)v[i], (unsigned int)bits);
+        if (w < 0) {
+            break;
+        }
+        p += (w < end - p) ? w : end - p;
+    }
+    return p;
+}
+
+void ico_hand_probe_ik(int hand, int mode, int na, int nb, int nc, int tgt_girl, const float *own,
+                       const float *tb, const float *tc, float len, float sa, float sb, float scale,
+                       float tscale, const float *ik_dir)
+{
+    /* static: the game's fibers have small stacks (game thread only) */
+    static char line[LINE_MAX_BYTES - 2];
+    char *end = line + sizeof line;
+    char *p = line;
+    int w;
+
+    w = snprintf(p, sizeof line, "probe: ik t=%u hand=%d mode=%d na=%d nb=%d nc=%d girl=%d",
+                 hand_probe_tick(), hand, mode, na, nb, nc, tgt_girl);
+    p += (w > 0 && w < end - p) ? w : 0;
+    p = ico_hand_probe_put(p, end, "own", own, 3);
+    p = ico_hand_probe_put(p, end, "tb", tb, 3);
+    p = ico_hand_probe_put(p, end, "tc", tc, 3);
+    p = ico_hand_probe_put(p, end, "len", &len, 1);
+    p = ico_hand_probe_put(p, end, "sa", &sa, 1);
+    p = ico_hand_probe_put(p, end, "sb", &sb, 1);
+    p = ico_hand_probe_put(p, end, "scale", &scale, 1);
+    p = ico_hand_probe_put(p, end, "tscale", &tscale, 1);
+    (void)ico_hand_probe_put(p, end, "ikdir", ik_dir, 3);
+    ico_diag_log("%s", line);
+}
+
+void ico_hand_probe_girl(int boy_mode, int p1, int p2, int p3, float hand_dist, float hand_height,
+                         int flags, float dist, float pull_len, float pull_turn, int st,
+                         int request, int motion, float speed, int speed_pri)
+{
+    /* static: the game's fibers have small stacks (game thread only) */
+    static char line[LINE_MAX_BYTES - 2];
+    char *end = line + sizeof line;
+    char *p = line;
+    int w;
+
+    w = snprintf(p, sizeof line,
+                 "probe: girl t=%u bmode=%d p1=%d p2=%d p3=%d hflags=%02x st=%d "
+                 "req=%d mot=%d spri=%d",
+                 hand_probe_tick(), boy_mode, p1, p2, p3, (unsigned int)flags & 0xFFu, st, request,
+                 motion, speed_pri);
+    p += (w > 0 && w < end - p) ? w : 0;
+    p = ico_hand_probe_put(p, end, "hdist", &hand_dist, 1);
+    p = ico_hand_probe_put(p, end, "hheight", &hand_height, 1);
+    p = ico_hand_probe_put(p, end, "dist", &dist, 1);
+    p = ico_hand_probe_put(p, end, "pulllen", &pull_len, 1);
+    p = ico_hand_probe_put(p, end, "pullturn", &pull_turn, 1);
+    (void)ico_hand_probe_put(p, end, "speed", &speed, 1);
+    ico_diag_log("%s", line);
+}

@@ -3,7 +3,7 @@
 // variables); libSDL3.so and SDL's Java glue are tools/fetch_android.sh's
 // build of the pinned SDL release (tools/toolchain/deps/sdl3/android-arm64).
 //
-//   ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>]
+//   ./gradlew --no-daemon assembleDebug [-PicoLabel=<label>] [-PicoHandProbe=ON]
 //
 // versionName: -PicoLabel, else `git describe --always --dirty --abbrev=10`;
 // versionCode: `git rev-list --count HEAD`. assets/VERSION.txt (the three
@@ -51,6 +51,9 @@ def icoLabel = (project.findProperty('icoLabel') ?: gitOut(['describe', '--alway
 def icoCommit = gitOut(['rev-parse', 'HEAD']) ?: 'unknown'
 def icoVersionCode = (gitOut(['rev-list', '--count', 'HEAD']) ?: '1') as Integer
 def nativeJobs = (project.findProperty('icoNativeJobs') ?: '2').toString()
+// -PicoHandProbe=ON: a diagnostic build for issue 19, the hand probe on
+// from the first start (CMakeLists.txt, ICO_HAND_PROBE_DEFAULT); default OFF
+def icoHandProbe = (project.findProperty('icoHandProbe') ?: 'OFF').toString().toUpperCase() in ['ON', '1', 'TRUE', 'YES'] ? 'ON' : 'OFF'
 
 // assets/VERSION.txt and assets/NOTICES.txt
 abstract class IcoAssetsTask extends DefaultTask {
@@ -109,6 +112,7 @@ android {
                         '-DICO_LINK_EXE=ON',
                         '-DICO_RHI_D3D12=OFF',
                         '-DICO_SHADERS_DXIL=OFF',
+                        "-DICO_HAND_PROBE_DEFAULT=${icoHandProbe}",
                         "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
                         '-DCMAKE_JOB_POOL_COMPILE=compile',
                         '-DCMAKE_JOB_POOL_LINK=link'

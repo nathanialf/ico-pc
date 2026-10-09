@@ -253,6 +253,9 @@ unsigned int ico_diag_float_faults(void)
     return faults;
 }
 
+/* v0.4.3 AN-19d: the hand probe (diag_host.h), off */
+int ico_hand_probe_on;
+
 void ico_diag_set_failure(const char *fmt, ...)
 {
     (void)fmt;

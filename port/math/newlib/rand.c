@@ -39,6 +39,12 @@ void ico_srand(unsigned int seed)
     ico_rand_next = (uint32_t)seed;
 }
 
+/* v0.4.3 AN-19d: the state, read by the hand probe's lines (diag_host.h) */
+unsigned int ico_rand_state(void)
+{
+    return ico_rand_next;
+}
+
 int ico_rand(void)
 {
     uint32_t s = ico_rand_next * UINT32_C(0x41C64E6D) + UINT32_C(0x3039);

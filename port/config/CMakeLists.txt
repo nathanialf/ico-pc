@@ -10,6 +10,11 @@ target_include_directories(ico_config
 target_compile_options(ico_config PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 # sysconf.c attaches the EE timers (platform/clock.c)
 target_link_libraries(ico_config PUBLIC ico_platform)
+# v0.4.3 AN-19d: the diagnostic build's first-run settings file turns the
+# hand probe on (CMakeLists.txt, ICO_HAND_PROBE_DEFAULT)
+if(ICO_HAND_PROBE_DEFAULT)
+    target_compile_definitions(ico_config PRIVATE ICO_HAND_PROBE_DEFAULT=1)
+endif()
 
 # the window build: SDL's preferred locales and preference folder
 # (SDL3 is found by port/render, which comes first)

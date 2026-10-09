@@ -48,8 +48,16 @@ static int logged_stage = -1;
 
 static int logged_layout = -1;
 
+/* port/game/hand_probe_live.c (v0.4.3 AN-19d) */
+void ico_hand_probe_tick(unsigned int tick);
+
 void ico_host_main_tick(void)
 {
+    /* v0.4.3 AN-19d (issue 19): the hand probe's line for the tick Main
+       just ran, after the objects ([dev] hand_probe; one load when off) */
+    if (ico_hand_probe_on != 0) {
+        ico_hand_probe_tick(main_ticks);
+    }
     if (main_ticks == 0) {
         ico_diag_milestone("first Main tick done (stage_no %d)", stage_no);
     }

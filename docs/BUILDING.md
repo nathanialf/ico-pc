@@ -336,6 +336,18 @@ copies when a preset is not configured; `NDK` and `QEMU` name the tools when
 they are not found. It exits 0 when the only differences are the three it
 knows (listed at the end of the script).
 
+What a real run gives is logged by the hand probe: `hand_probe = true` under
+`[dev]` in `config.toml` writes `probe:` lines into `ico-pc.log` while Ico
+holds Yorda's hand (every Main tick both characters' root positions,
+directions, motions, frames, action modes and the two random states; every
+30 ticks the arm reach `handManager.c` works from and `actGirlHand`'s side),
+each float as value/bits. The CMake option `ICO_HAND_PROBE_DEFAULT=ON`
+(Gradle: `-PicoHandProbe=ON`) makes a diagnostic build with the probe on by
+default and the key in the first start's `config.toml`.
+`tools/hand_probe_diff.py <log> [<log>] [--align first]` summarises a log
+(the shoulder distance against the arms' reach, the arm angle) and, given
+two, prints the first tick where any field differs bit for bit.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push and pull request: two Linux

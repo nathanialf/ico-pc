@@ -215,6 +215,45 @@ static void checkHandTarget(GObj *obj, HandRec *hw, int node, const void *caller
     }
 }
 
+/* PC port (AN-19d): port/platform/diag_host.c, the hand probe ([dev]
+   hand_probe, issue 19) */
+extern int ico_hand_probe_on;
+int ico_hand_probe_due(int slot);
+
+void ico_hand_probe_ik(int hand, int mode, int na, int nb, int nc, int tgt_girl, const float *own,
+                       const float *tb, const float *tc, float len, float sa, float sb, float scale,
+                       float tscale, const float *ik_dir);
+
+extern GObj *girlGObj; /* common/src/main.c */
+
+/* PC port (AN-19d): what a reach (mode 5, Ico to Yorda; mode 6, Yorda to
+   Ico's hand) was made from, once every 30 Main ticks per object and hand
+   record: the nodes, their positions, the shoulder distance and the two
+   arm lengths as connectToTarget measures them, both scales and the
+   target. Only reads. */
+static void probeHandTarget(GObj *obj, HandRec *hw, int na, int nt) /* port name */
+{
+    GObj *tgt = hw->obj;
+    int hand = hw == &GOBJ_SUB(obj)->root.hand0 ? 0 : 1;
+    float b0[4];
+    float b1[4];
+    float d[4];
+    const float *own;
+    const float *tb;
+
+    if (tgt == 0 || ico_hand_probe_due((obj == girlGObj ? 2 : 0) + hand) == 0) {
+        return;
+    }
+    getBone(b0, obj);
+    getBone(b1, tgt);
+    own = (const float *)((char *)GOBJ_SUB(obj)->nodeMtx + (na << 6) + 0x30);
+    tb = (const float *)((char *)GOBJ_SUB(tgt)->nodeMtx + (nt << 6) + 0x30);
+    _SubVector(d, (void *)own, (void *)tb);
+    ico_hand_probe_ik(hand, hw->mode, na, nt, nt, tgt == girlGObj, own, tb, tb, VectorLength(d),
+                      b0[0] + b0[1], b1[0] + b1[1], GOBJ_SUB(obj)->nodes->scale[0],
+                      GOBJ_SUB(tgt)->nodes->scale[0], hw->ikDir);
+}
+
 static float _handManager(GObj *obj, HandRec *hw, char *vec, float *ref, int node)
 {
     switch (hw->mode) {
@@ -234,10 +273,18 @@ static float _handManager(GObj *obj, HandRec *hw, char *vec, float *ref, int nod
             hw->ikLock = 1;
         }
         hw->ikMode = 1;
+        /* PC port (AN-19d): the hand probe, off by default */
+        if (ico_hand_probe_on != 0) {
+            probeHandTarget(obj, hw, node, GetSkeltonFocusNode(obj, 6));
+        }
         break;
     case 5:
         connectToTarget(obj, hw, node, GetSkeltonFocusNode(obj, 19), GetSkeltonFocusNode(obj, 19));
         hw->ikMode = 1;
+        /* PC port (AN-19d): the hand probe, off by default */
+        if (ico_hand_probe_on != 0) {
+            probeHandTarget(obj, hw, node, GetSkeltonFocusNode(obj, 19));
+        }
         break;
     case 1:
         _ApplyMatrix(hw->ikDir, (char *)GOBJ_SUB(hw->obj)->nodeMtx + (hw->node << 6), hw->pos);

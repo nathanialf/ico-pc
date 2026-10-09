@@ -25,6 +25,10 @@ it says what.
 4. If you are asked for it, also attach `config.toml` from the folder with
    your saves ([where that is](PORTABLE_MODE.md#where-your-saves-are)).
 
+If you are asked to, put `hand_probe = true` under `[dev]` in `config.toml`
+([how to edit it](OPTIONS.md#settings-you-can-only-change-in-a-file)); the
+log then records the numbers Ico and Yorda hold hands with.
+
 ## Save a picture of a problem
 
 If something looks wrong on screen, press **F12** while it is showing. The

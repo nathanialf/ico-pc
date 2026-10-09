@@ -359,7 +359,16 @@ static const char first_run_text[] =
     "# true starts photo mode with its help panel hidden (Square shows it).\n"
     "hide_ui = false\n"
     "# The folder for saved pictures, inside your user folder.\n"
-    "png_dir = \"screenshots\"\n";
+    "png_dir = \"screenshots\"\n"
+#ifdef ICO_HAND_PROBE_DEFAULT
+    /* v0.4.3 AN-19d: the diagnostic build (CMakeLists.txt) */
+    "\n"
+    "[dev]\n"
+    "# true writes the characters' hand-holding numbers into the log, for a\n"
+    "# bug report. This test version has it on; false turns it off.\n"
+    "hand_probe = true\n"
+#endif
+    ;
 
 int ico_config_write_first_run(void)
 {
