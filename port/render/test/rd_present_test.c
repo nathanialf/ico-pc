@@ -1981,9 +1981,16 @@ static void checkFullPixelClamp(void)
                       "full pixel clamp %s: the last row is red (%u %u %u, corner %u %u %u)", nm,
                       bot[0], bot[1], bot[2], corner[0], corner[1], corner[2]);
                 if (cases[k].mirror) {
-                    CHECK(NOBLUE(l), "full pixel clamp %s: the left column is red (%u %u %u)", nm,
+                    /* the mirror flips at the present, not in DISPLAY: the
+                       mirrored reduction samples column 0 at u = 0.25, which
+                       the clamp keeps on its own blue texel (the wrap would
+                       blend the red column 511 in) */
+                    CHECK(l[2] >= 250 && l[0] <= 2,
+                          "full pixel clamp %s: the left column is its own blue (%u %u %u)", nm,
                           l[0], l[1], l[2]);
-                    continue; /* the right column is the flipped blue one */
+                    CHECK(NOBLUE(r), "full pixel clamp %s: the last column is red (%u %u %u)", nm,
+                          r[0], r[1], r[2]);
+                    continue;
                 }
                 CHECK(NOBLUE(r), "full pixel clamp %s: the last column is red (%u %u %u)", nm, r[0],
                       r[1], r[2]);
