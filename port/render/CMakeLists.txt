@@ -70,10 +70,16 @@ target_compile_options(gltf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARN
 target_link_libraries(gltf_test PRIVATE ico_gltf)
 
 if(ICO_RUN_TESTS)
-    # a PCSX2 pack's replacements folder (never committed); the match is
-    # reported only when it exists
-    set(ICO_TEXPACK_DIR "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements"
-        CACHE PATH "A PCSX2 texture pack's replacements folder for texpack_disc_test")
+    # a PCSX2 pack's replacements folder (never committed), for
+    # texpack_disc, texpack_e2e and texpack_pack_files; the match is reported
+    # only when it exists. The environment variable of the same name, when
+    # set at the first configure, is the default.
+    set(_ico_texpack_default "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements")
+    if(DEFINED ENV{ICO_TEXPACK_DIR})
+        set(_ico_texpack_default "$ENV{ICO_TEXPACK_DIR}")
+    endif()
+    set(ICO_TEXPACK_DIR "${_ico_texpack_default}"
+        CACHE PATH "A PCSX2 texture pack's replacements folder for the texture pack tests")
     add_test(NAME texpack_name COMMAND texpack_name_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
@@ -581,12 +587,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME texpack_load COMMAND texpack_load_test)
-    if(DEFINED ENV{ICO_TEXPACK_DIR})
-        set(_ico_texpack_dir "$ENV{ICO_TEXPACK_DIR}")
-    else()
-        set(_ico_texpack_dir "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements")
-    endif()
-    add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${_ico_texpack_dir}")
+    add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
     set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)
     set(_env "")
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
