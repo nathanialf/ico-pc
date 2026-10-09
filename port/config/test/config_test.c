@@ -286,8 +286,8 @@ static void test_save(void)
     CHECK_STR(ico_config_get_string("audio.output", "?"), "mono");
     CHECK_STR(ico_config_get_string("audio.device", "?"), "USB Audio \"Headset\" #2");
 
-    /* a hand-edited file: comments, an unknown key, 4C's bindings survive a
-       save that changes one value */
+    /* a hand-edited file: comments, an unknown key, the input bindings
+       survive a save that changes one value */
     write_file(toml, "version = 1\n# mine\n[input]\nkb.cross = \"Q\"\n[future]\nx = [1, 2]\n"
                      "[game]\nlanguage = \"it\"  # c\n");
     ico_config_reset(toml, "no-such.ini");
@@ -314,7 +314,7 @@ static void test_save(void)
         free(a);
         free(b);
     }
-    /* the retired [game] classic_menu_text and port_font (package TXT2):
+    /* the retired [game] classic_menu_text and port_font:
        read without complaint, logged once, kept by a save */
     write_file(toml, "version = 1\n[game]\nclassic_menu_text = true\nport_font = \"arimo\"\n"
                      "language = \"fr\"\n");
@@ -433,7 +433,7 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("video.preset", "?"), "original");
     CHECK(ico_config_get_bool("video.vsync", 0) == 1);
     CHECK(ico_config_get_bool("video.fullscreen", 1) == 0);
-    CHECK_STR(ico_config_get_string("video.window_mode", "?"), "windowed"); /* v0.4.3 I17c */
+    CHECK_STR(ico_config_get_string("video.window_mode", "?"), "windowed"); /* issue 17 */
     CHECK(ico_config_get_bool("video.texture_pack", 0) == 1);
     /* issue 11: the five effect keys, each on */
     CHECK(ico_config_get_bool("video.effect_glow", 0) == 1);
@@ -441,7 +441,7 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("video.effect_softening", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_motion_blur", 0) == 1);
     CHECK(ico_config_get_bool("video.effect_fog", 0) == 1);
-    CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1); /* v0.4.3 R27 */
+    CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1); /* issue 27 */
     CHECK(ico_config_get_bool("video.effects_depth", 0) == 1);
     CHECK(ico_config_get_bool("audio.enabled", 0) == 1);
     CHECK(ico_config_get_float("audio.volume", 0.0) == 1.0);
@@ -451,7 +451,7 @@ static void test_first_run(void)
     CHECK_STR(ico_config_get_string("audio.device", "?"), "");
     CHECK_STR(ico_config_get_string("game.language", "?"), "auto");
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
-    /* v0.4.1: photo mode's keys */
+    /* photo mode's keys */
     CHECK(ico_config_get_float("photo.stick_speed", 0.0) == 1.0);
     CHECK(ico_config_get_bool("photo.invert_y", 1) == 0);
     CHECK(ico_config_get_bool("photo.hide_ui", 1) == 0);
@@ -478,7 +478,7 @@ static void test_first_run(void)
     remove(toml);
 }
 
-/* v0.4.3 AN-22a: [video] gpu_driver and gpu_driver_failed (the Android
+/* [video] gpu_driver and gpu_driver_failed (the Android
    graphics driver, port/platform/android/gpu_driver_android.c): in the
    Android first-run file, empty; both round trip through a save */
 static void test_gpu_driver_keys(void)
@@ -514,7 +514,7 @@ static void test_gpu_driver_keys(void)
     remove(toml);
 }
 
-/* dump_interp (R7d): handed to the renderer as ICO_RD_DUMP_INTERP with
+/* dump_interp: handed to the renderer as ICO_RD_DUMP_INTERP with
    dump_every, so the ini or config.toml decides, 0 when absent */
 static void test_dump_interp(void)
 {

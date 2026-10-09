@@ -5,7 +5,7 @@
  * sce/libkernl/sifdev.h (this project's own clean-room header, MIT), with
  * pointer-sized and 64-bit types made host-correct.
  *
- * The five file calls are port/data/sifdev_host.c's (renderer wave 6, R6a):
+ * The five file calls are port/data/sifdev_host.c's:
  * a "host0:" path, the development kit's PC-side device, is a file under
  * <pref>/dev/; every other device fails with -1 as before.  Descriptors are
  * small numbers from 0.

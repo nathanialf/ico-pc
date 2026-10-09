@@ -5,7 +5,8 @@
  * signatures of sce/libkernl/eekernel.h (this project's own clean-room
  * header, MIT), adapted for the host: the 64-bit GS registers are
  * `unsigned long long` (the EE's `long` is 64 bits; the host's may be 32).
- * The definitions are package 1B's fiber scheduler (port/platform/sched.c).
+ * The definitions are port/platform/kernel_host.c, over the fiber scheduler
+ * (sched.c).
  * Only what the game uses is declared.
  */
 #ifndef ICO_COMPAT_EEKERNEL_H

@@ -1,7 +1,8 @@
 /*
  * port/null/gfx_null.c
  *
- * The ICO_HEADLESS graphics floor.  The headless build compiles the game's
+ * The graphics floor under the game's renderer layer, in both builds (the
+ * window build draws through rd above it).  The build compiles the game's
  * own renderer layer (seki/src: GsBase, GifPacket, DisplayList, DmaPacket,
  * Texture, Packet, RegistPacket, ...; the sugipon and ito effect files): it
  * builds its packets and display lists in its own buffers exactly as on the
@@ -9,12 +10,10 @@
  * matrices, the R register lightning reseeds, the game-over ring's mail,
  * heap allocations made by the packet builders) is the same as with a
  * renderer.  What is stubbed is the hardware underneath, here: Sony's
- * libgraph and libdma entry points (the FMV player is port/fmv/movie.c
- * since Phase 4E).  Nothing is sent
- * anywhere: a DMA kick is a no-op, the GS is always idle.  (MicroCode.c's
- * VU1 microprogram table is empty on the host: ico2/vusrc is assembled only
- * by the PS2 build.)
- *
+ * libgraph and libdma entry points (the FMV player is port/fmv/movie.c).
+ * Nothing is sent anywhere: a DMA kick is a no-op, the GS is always idle.
+ * (MicroCode.c's VU1 microprogram table is empty on the host: ico2/vusrc is
+ * assembled only by the PS2 build.)
  */
 #include <eeregs.h>
 #include <libdma.h>

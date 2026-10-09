@@ -2,8 +2,8 @@
  * port/null/test/null_devices_test.c
  *
  * The pad as an empty console answers it (port/input's libpad without a
- * script).  The sound driver's tests moved to port/audio/test/sndn2_test.c
- * (Phase 4B), libscf's to port/config/test/config_test.c (4F).
+ * script).  The sound driver's tests are port/audio/test/sndn2_test.c,
+ * libscf's port/config/test/config_test.c.
  */
 #include <libpad.h>
 #include <stdio.h>

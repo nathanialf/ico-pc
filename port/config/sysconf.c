@@ -4,8 +4,8 @@
  * sceScfGetLanguage and friends (sysconf.h). The language is [game] language
  * when it is not "auto", else the host's locale. The PS2's console language
  * only preselects the boot menu's cursor (common/src/kanbanBoot.c, step 101:
- * the language screen still shows); Phase 6 skips that screen and uses this
- * value directly.
+ * the language screen still shows); the port skips that screen and uses
+ * this value directly.
  */
 #include "sysconf.h"
 #include "clock.h"
@@ -141,7 +141,7 @@ int sceScfGetLanguage(void)
     return cached;
 }
 
-/* --- Phase 6 (6C): the boot screens' choices --------------------------- */
+/* --- the boot screens' choices --------------------------------------------- */
 
 int ico_scf_to_game_language(int scf)
 {

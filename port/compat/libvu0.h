@@ -3,7 +3,7 @@
  *
  * The host build's libvu0.h: the VU0 entry points the game calls, with the
  * signatures of sce/libvu0/libvu0.h (this project's own clean-room header,
- * MIT). The definitions are package 1A's (port/math/), reimplemented in C
+ * MIT). The definitions are port/math/'s, reimplemented in C
  * behind these signatures. Only what the game uses is declared.
  */
 #ifndef ICO_COMPAT_LIBVU0_H

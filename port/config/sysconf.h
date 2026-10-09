@@ -31,7 +31,7 @@ int ico_sysconf_host_language(void);
 /* Forget the answer sceScfGetLanguage cached (tests). */
 void ico_sysconf_reset(void);
 
-/* --- Phase 6 (6C): the boot screens' choices from the config ------------- */
+/* --- the boot screens' choices from the config ----------------------------- */
 
 /* The game's language numbers, as the boot language screen stores them in
    NonLinearCameraMove (common/src/kanbanBoot.c step 102; texFile's language
