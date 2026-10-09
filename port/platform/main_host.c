@@ -127,8 +127,6 @@
 #if defined(__ANDROID__) && !defined(ICO_HEADLESS)
 #define ICO_ANDROID_UI 1
 #endif
-/* The PAL disc image's SHA-1. */
-#define ICO_ISO_SHA1 ICO_DISC_ISO_SHA1
 /* Vsyncs without a Main tick after which the loop warns once (the game's
    tick hook may be missing, and then ticks= never ends). */
 #define NO_TICK_WARN_VSYNCS 3000u
@@ -636,13 +634,27 @@ static int pick_iso_sdl(char *out, size_t size)
 static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, int *picked);
 #endif
 
+/* The disc image's names beside the program (Android: in the app's files
+   folder), the plain image first: of two copies, the one read without
+   decoding. */
+static const char *const image_names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
+
+/* iso= into ico-pc.ini when the image was picked (the dialog, the Android
+   picker), so the next start finds it */
+static void save_picked_iso(const char *ini_path, const char *iso)
+{
+    if (ico_ini_store(ini_path, "iso", iso) == 0) {
+        fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
+    } else {
+        fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
+    }
+}
+
 /* Finds the disc image; fatal when there is none. *picked is set when it
    came from the dialog (to be saved once verified). 0, or 1 when the player
    stopped the Android first start's copy (the run ends without a box). */
 static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char *iso, int *picked)
 {
-    /* the plain image first: of two copies, the one read without decoding */
-    static const char *const names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
     const char *v;
     int i;
 
@@ -653,13 +665,12 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         return 0;
     }
 #ifdef ICO_ANDROID_UI
-    (void)names;
     (void)v;
     (void)i;
     return find_iso_android(ini, exe_dir, iso, picked);
 #else
     for (i = 0; i < 2; i++) {
-        ico_path_join(iso, ICO_PATH_MAX, exe_dir, names[i]);
+        ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
             return 0;
@@ -680,7 +691,7 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         return 0;
     }
     for (i = 0; i < 2; i++) {
-        snprintf(iso, ICO_PATH_MAX, "baserom/%s", names[i]);
+        snprintf(iso, ICO_PATH_MAX, "baserom/%s", image_names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
             return 0;
@@ -721,9 +732,9 @@ static void verify_iso(const char *iso)
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
-    if (strcmp(hex, ICO_ISO_SHA1) != 0) {
+    if (strcmp(hex, ICO_DISC_ISO_SHA1) != 0) {
         /* the checksums are for the log; the box says what to use instead */
-        fprintf(stderr, "ico_pc: the image's SHA-1 is %s, expected %s\n", hex, ICO_ISO_SHA1);
+        fprintf(stderr, "ico_pc: the image's SHA-1 is %s, expected %s\n", hex, ICO_DISC_ISO_SHA1);
         ico_host_fatal(log_file(),
                        "%s is not the disc image this port needs.\n"
                        "Use a complete, unmodified image of the PAL release of ICO "
@@ -911,8 +922,6 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
 
 #ifdef ICO_ANDROID_UI
 
-static const char *const android_image_names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
-
 /* Android's find_iso: Ico_PAL.iso or .chd in the app's files folder (a
    copy kept with keep_image=1, or one put there with a cable or the Files
    app), then ini iso= when that file is there, else the system's picker
@@ -926,7 +935,7 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     int i, r;
 
     for (i = 0; i < 2; i++) {
-        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, android_image_names[i]) == 0 &&
+        if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]) == 0 &&
             ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image in the app's folder: %s\n", iso);
             return 0;
@@ -968,7 +977,7 @@ static int android_own_image(const char *exe_dir, const char *iso)
     int i;
 
     for (i = 0; i < 2; i++) {
-        if (ico_path_join(own, sizeof(own), exe_dir, android_image_names[i]) == 0 &&
+        if (ico_path_join(own, sizeof(own), exe_dir, image_names[i]) == 0 &&
             strcmp(own, iso) == 0) {
             return 1;
         }
@@ -1040,11 +1049,7 @@ static void android_image_done(const IcoIni *ini, const char *ini_path, const ch
         fprintf(stderr, "ico_pc: keep_image=1: the copy of the disc image %s stays\n", iso);
     }
     if (picked) {
-        if (ico_ini_store(ini_path, "iso", iso) == 0) {
-            fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
-        } else {
-            fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
-        }
+        save_picked_iso(ini_path, iso);
     }
 }
 
@@ -1226,11 +1231,7 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
     }
 #ifndef ICO_ANDROID_UI
     if (picked) {
-        if (ico_ini_store(ini_path, "iso", iso) == 0) {
-            fprintf(stderr, "ico_pc: saved iso=%s in %s\n", iso, ini_path);
-        } else {
-            fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
-        }
+        save_picked_iso(ini_path, iso);
     }
 #endif
     if (mount_archive(cand[0], why, sizeof(why)) != 0) {
@@ -1422,7 +1423,7 @@ static void open_texture_pack(const char *exe_dir)
     memset(&tc, 0, sizeof(tc));
     tc.userDir = user;
     tc.programDir = exe_dir;
-    tc.serial = "SCES-50760";
+    tc.serial = ICO_DISC_ID;
     tc.budgetMb = (uint32_t)vo.texturePackBudgetMb;
     tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
     /* read ahead only while the pack is in use */
@@ -1447,7 +1448,7 @@ static void open_model_pack(const char *exe_dir)
     memset(&mc, 0, sizeof(mc));
     mc.userDir = user;
     mc.programDir = exe_dir;
-    mc.serial = "SCES-50760";
+    mc.serial = ICO_DISC_ID;
     mc.developer = developer;
     mc.dumpEnabled = developer && ico_video_dump_models();
     modelpack_Init(&mc);
@@ -1602,11 +1603,7 @@ static int host_main(int argc, char **argv)
             verify_iso(source);
         }
         if (picked) {
-            if (ico_ini_store(ini_path, "iso", source) == 0) {
-                fprintf(stderr, "ico_pc: saved iso=%s in %s\n", source, ini_path);
-            } else {
-                fprintf(stderr, "ico_pc: cannot save the image path in %s\n", ini_path);
-            }
+            save_picked_iso(ini_path, source);
         }
         if (ico_cdvd_host_mount_iso(source) != 0) {
             ico_host_fatal(log_file(), "Cannot open the disc image %s.", source);
