@@ -80,6 +80,11 @@ $CMAKE/cmake --build --preset linux-arm64
 $CMAKE/ctest --preset linux-arm64
 ```
 
+Use a separate clone for an arm64 host or container, not the checkout an
+x86-64 host uses: `tools/toolchain/`, `.venv/` and `build-host/` hold
+programs for the machine that made them, and `tools/fetch_toolchain.sh` on
+one architecture replaces the other's CMake and DXC in place.
+
 What differs from an x86-64 host:
 
 - `tools/fetch_toolchain.sh` takes the aarch64 builds of the same llvm-mingw

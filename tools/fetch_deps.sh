@@ -291,7 +291,9 @@ fi
 # library by bare file name, so it is rewritten to the absolute path. Never
 # shipped.
 VVL="$DEST/vulkan-validation"
-VVL_ID="vulkan-validationlayers-1.4.309.0-1"
+# the stamp names the architecture on arm64, so a tree another host
+# architecture fetched is replaced rather than kept
+VVL_ID="vulkan-validationlayers-1.4.309.0-1$(by_arch "" "_arm64")"
 VVL_DEB="pool/main/v/vulkan-validationlayers/vulkan-validationlayers_1.4.309.0-1_${DEB_ARCH}.deb"
 VVL_SHA256="$(by_arch \
     ff7e18ef011ff448ac799daf16134a676ccf9c5987e1a9f4b779611ed5fc3b0d \
