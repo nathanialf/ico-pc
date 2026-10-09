@@ -1934,3 +1934,45 @@ void ico_diag_arm_vectored(void)
 }
 
 #endif
+
+/* --- Float faults (v0.4.3 AN-19) ----------------------------------------------- */
+
+#define FLOAT_FAULT_SITES 32
+
+static struct {
+    const char *site;
+    const void *caller;
+} float_fault_seen[FLOAT_FAULT_SITES];
+
+static int float_fault_sites;
+
+static unsigned int float_fault_count;
+
+int ico_diag_float_fault(const char *site, const void *caller)
+{
+    char where[160];
+    int i;
+
+    float_fault_count++;
+    for (i = 0; i < float_fault_sites; i++) {
+        if (float_fault_seen[i].caller == caller &&
+            (float_fault_seen[i].site == site || strcmp(float_fault_seen[i].site, site) == 0)) {
+            return 0;
+        }
+    }
+    if (float_fault_sites >= FLOAT_FAULT_SITES) {
+        return 0;
+    }
+    float_fault_seen[float_fault_sites].site = site;
+    float_fault_seen[float_fault_sites].caller = caller;
+    float_fault_sites++;
+    describe((uintptr_t)caller, where, sizeof where);
+    ico_diag_log("ico_pc: NaN in %s, called from %s (fault %u; first from this caller)", site,
+                 where, float_fault_count);
+    return 1;
+}
+
+unsigned int ico_diag_float_faults(void)
+{
+    return float_fault_count;
+}

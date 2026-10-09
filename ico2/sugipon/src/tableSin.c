@@ -10,6 +10,9 @@ void InitTableSin(void);
 short GetTableArcSin(float x);
 short GetTableArcCos(float x);
 int GetTableArcTan2(float y, float x);
+/* PC port (AN-19): port/platform/diag_host.c, the log of a NaN's first
+   arrival from each caller */
+int ico_diag_float_fault(const char *site, const void *caller);
 
 /* the two lookup tables: a quarter-turn of sine at 16385 steps, then the
    arc-sine table at 4097 steps.  The sine table is declared 16388 long; the
@@ -69,6 +72,22 @@ static inline void arcClamp(float *x, int *neg) /* derived name */
     }
 }
 
+/* PC port (AN-19): the EE's FPU has no NaN, so the clamp above never saw
+   one.  On the host a NaN fails every compare in it and its conversion to
+   a table index is the host's: 0 on arm64 (fcvtzs), an arc-cosine of
+   exactly 90 degrees (issue 19's raised arms), INT_MIN on x86-64, a read
+   4 GB below the table.  It is logged once per caller and read as the
+   input whose angle is 0 (zero: 1 for the arc-cosine, 0 for the arc-sine).
+   Every other input, the infinities included, is untouched. */
+static inline void arcNaN(float *x, float zero, const char *site,
+                          const void *caller) /* port name */
+{
+    if (*x != *x) {
+        ico_diag_float_fault(site, caller);
+        *x = zero;
+    }
+}
+
 inline int GetTableArcTan2(float y, float x)
 {
     return y < 0.0f ? (short)-GetTableArcCos(x) : GetTableArcCos(x);
@@ -79,6 +98,7 @@ inline short GetTableArcSin(float x)
     int neg;
     int hi;
 
+    arcNaN(&x, 0.0f, "GetTableArcSin", __builtin_return_address(0));
     arcClamp(&x, &neg);
     hi = ((short *)arcSinTable)[(int)(x * 4096.0f)];
     return (short)(neg ? -hi : hi);
@@ -89,6 +109,7 @@ inline short GetTableArcCos(float x)
     int neg;
     int hi;
 
+    arcNaN(&x, 1.0f, "GetTableArcCos", __builtin_return_address(0));
     arcClamp(&x, &neg);
     hi = (short)(arcSinTable[(int)(x * 4096.0f)] + 16384);
     if (neg == 0) {

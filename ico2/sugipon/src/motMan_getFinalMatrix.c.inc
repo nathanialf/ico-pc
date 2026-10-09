@@ -66,7 +66,13 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
     *bp = 0;
 
     if (lim != 0) {
-        short rev = (1.0f - rate) * 32768.0f;
+        /* PC port (AN-19): every float stored to a short below goes through
+           int, (short)(int)f: the EE's cvt.w.s and halfword store wrap a
+           value past 32767, and so does the int's conversion to short on
+           every host, where clang may keep a (short)f conversion's result
+           as the unwrapped int (issue 21's mirrored opening; rev is 32768
+           at a rate of 0) */
+        short rev = (short)(int)((1.0f - rate) * 32768.0f);
 
         float lo = ANG_OF_DEG(lim[4].h);
         float hi = ANG_OF_DEG(lim[6].h);
@@ -79,10 +85,10 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
 
         if (prevH < 0 && *hp > 0) {
             int base = rev - 32768;
-            short d = (-*hp - base) / rate;
+            short d = (short)(int)((-*hp - base) / rate);
 
             if ((float)d < ANG_OF_DEG(lim[7].p)) {
-                *hp = (short)lo;
+                *hp = (short)(int)lo;
                 if (setflag) {
                     skelMotCtrl->flags = skelMotCtrl->flags | 0x100;
                 }
@@ -90,23 +96,23 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
         }
         if (prevH > 0 && *hp < 0) {
             int base = rev - 32768;
-            short d = (*hp - base) / rate;
+            short d = (short)(int)((*hp - base) / rate);
 
             if ((float)d < ANG_OF_DEG(lim[7].p)) {
-                *hp = (short)hi;
+                *hp = (short)(int)hi;
                 if (setflag) {
                     skelMotCtrl->flags = skelMotCtrl->flags | 0x200;
                 }
             }
         }
         if ((float)*hp < lo) {
-            *hp = (short)lo;
+            *hp = (short)(int)lo;
             if (setflag) {
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x100;
             }
         }
         if (hi < (float)*hp) {
-            *hp = (short)hi;
+            *hp = (short)(int)hi;
             if (setflag) {
                 skelMotCtrl->flags = skelMotCtrl->flags | 0x200;
             }
@@ -136,10 +142,10 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
         }
 
         if ((float)*pp < dnlim) {
-            *pp = (short)dnlim;
+            *pp = (short)(int)dnlim;
         }
         if (uplim < (float)*pp) {
-            *pp = (short)uplim;
+            *pp = (short)(int)uplim;
         }
 
         if (*hp >= 0) {
@@ -151,14 +157,14 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
                     (ANG_OF_DEG(lim[2].b) - ANG_OF_DEG(lim[1].b)) * rh + ANG_OF_DEG(lim[1].b);
 
                 rp = ANG_RATE((float)*pp, uplim);
-                *bp = (vb - va) * rp + va;
+                *bp = (short)(int)((vb - va) * rp + va);
 
             } else {
                 float vb =
                     (ANG_OF_DEG(lim[10].b) - ANG_OF_DEG(lim[9].b)) * rh + ANG_OF_DEG(lim[9].b);
 
                 rp = ANG_RATE((float)*pp, dnlim);
-                *bp = (vb - va) * rp + va;
+                *bp = (short)(int)((vb - va) * rp + va);
             }
         } else {
             float rh = ANG_RATE((float)*hp, lo);
@@ -169,22 +175,22 @@ static void limitHPAngleAndSetB(short *hp, short *pp, short *bp, MotLimAng *lim,
                     (ANG_OF_DEG(lim[0].b) - ANG_OF_DEG(lim[1].b)) * rh + ANG_OF_DEG(lim[1].b);
 
                 rp = ANG_RATE((float)*pp, uplim);
-                *bp = (vb - va) * rp + va;
+                *bp = (short)(int)((vb - va) * rp + va);
 
             } else {
                 float vb =
                     (ANG_OF_DEG(lim[8].b) - ANG_OF_DEG(lim[9].b)) * rh + ANG_OF_DEG(lim[9].b);
 
                 rp = ANG_RATE((float)*pp, dnlim);
-                *bp = (vb - va) * rp + va;
+                *bp = (short)(int)((vb - va) * rp + va);
             }
         }
 
         if (setb) {
             if (*pp >= 0)
-                *bp = (float)*bp * (1.0f - rp) + ANG_OF_DEG(lim[1].b) * rp;
+                *bp = (short)(int)((float)*bp * (1.0f - rp) + ANG_OF_DEG(lim[1].b) * rp);
             else
-                *bp = (float)*bp * (1.0f - rp) + ANG_OF_DEG(lim[9].b) * rp;
+                *bp = (short)(int)((float)*bp * (1.0f - rp) + ANG_OF_DEG(lim[9].b) * rp);
         }
     }
 }
@@ -214,8 +220,11 @@ static int avoidReverseInterpOnCurrentMatrix(float *q, MotLimAng *info, void *ou
     float mtx[16];
     Vec16 up;
     Vec16 dir;
-    short ang;
-    short ang2;
+    /* PC port (AN-19): MatrixDrive_GetTurnYAngleXZ leaves ang alone for a
+       direction along x (or a NaN one); the stack word the EE left there is
+       made 0 so no build depends on its frame (issue 19) */
+    short ang = 0;
+    short ang2 = 0;
 
     GetMatrixFromQuaternion(mtx, q);
     _ApplyMatrix(&up, mtx, YUnitVector);
@@ -258,8 +267,11 @@ static void avoidReverseInterpOnCurrentMatrixWithLimit(float *q, MotLimAng *info
     float mtx[16];
     Vec16 up;
     Vec16 dir;
-    short ang;
-    short ang2;
+    /* PC port (AN-19): MatrixDrive_GetTurnYAngleXZ leaves ang alone for a
+       direction along x (or a NaN one); the stack word the EE left there is
+       made 0 so no build depends on its frame (issue 19) */
+    short ang = 0;
+    short ang2 = 0;
 
     GetMatrixFromQuaternion(mtx, q);
     _ApplyMatrix(&up, mtx, YUnitVector);
@@ -415,11 +427,14 @@ static void _getFinalMatrix(int id)
             CopyQuaternion(ik->step, ik->offset);
         } else {
             float out[4];
-            short h;
-            short p;
-            short ha;
-            short pa;
-            short ba;
+            /* PC port (AN-19): the turn below leaves h alone for a target
+               straight ahead (or a NaN one); 0 rather than the host's stack
+               word (issue 19) */
+            short h = 0;
+            short p = 0;
+            short ha = 0;
+            short pa = 0;
+            short ba = 0;
 
             if (skelGeoType == 4) {
                 MatrixDrive_RotMatrixX(-32768);
@@ -490,11 +505,14 @@ static void _getFinalMatrix(int id)
             int p;
             int n;
             int hv;
-            short a0, a1;
-            short b0, b1;
-            short c0, c1;
-            short ha, pa, ba;
-            short hb, pb, bb;
+            /* PC port (AN-19): each turn below leaves its first angle alone
+               for a target on its axis (or a NaN one); 0 rather than the
+               host's stack word (issue 19) */
+            short a0 = 0, a1 = 0;
+            short b0 = 0, b1 = 0;
+            short c0 = 0, c1 = 0;
+            short ha = 0, pa = 0, ba = 0;
+            short hb = 0, pb = 0, bb = 0;
             float rate = 1.0f;
 
             avoidReverseInterpOnCurrentMatrix(ik->q, lim, ik->offset);
@@ -592,8 +610,11 @@ static void _getFinalMatrix(int id)
         GET_NODE_ROT(q, dq);
         {
             float out[4], r[4], work0[4], qa[4], work1[4], dv[4];
-            short a0, a1;
-            short ha, pa, ba;
+            /* PC port (AN-19): MatrixDrive_GetTurnXAngleZY leaves a0 alone
+               for a target along x (or a NaN one); 0 rather than the host's
+               stack word (issue 19) */
+            short a0 = 0, a1 = 0;
+            short ha = 0, pa = 0, ba = 0;
 
             memset(qa, 0, 16);
             qa[3] = 1.0f;
@@ -618,7 +639,9 @@ static void _getFinalMatrix(int id)
             MultiQuaternion(qa, qa, r);
             switch (skelRoot->hand0.ikMode) {
             case 1: {
-                float len[4], t[4], p[4];
+                /* PC port (AN-19): a node without children leaves the bone
+                   lengths unset; 0 rather than the host's stack words */
+                float len[4] = {0.0f, 0.0f}, t[4], p[4];
                 float d;
                 float l;
                 float dd;
@@ -807,8 +830,9 @@ static void _getFinalMatrix(int id)
         GET_NODE_ROT(q, dq);
         {
             float qa[4], out[4], r[4], work[4], dv[4];
-            short a0, a1;
-            short ha, pa, ba;
+            /* PC port (AN-19): as in case 19 */
+            short a0 = 0, a1 = 0;
+            short ha = 0, pa = 0, ba = 0;
 
             memset(qa, 0, 16);
             qa[3] = 1.0f;
@@ -828,7 +852,8 @@ static void _getFinalMatrix(int id)
             MultiQuaternion(qa, qa, r);
             switch (skelRoot->hand1.ikMode) {
             case 1: {
-                float len[4];
+                /* PC port (AN-19): as in case 19 */
+                float len[4] = {0.0f, 0.0f};
                 float d;
                 int i;
                 int ci;
@@ -845,10 +870,14 @@ static void _getFinalMatrix(int id)
                 }
                 len[1] += skelScale *
                           VectorLength(skelNode[GetSkeltonFocusNode((GObj *)skelGObj, 16)].pos);
-                ikBend0 = GetTableArcCos((d * d + len[0] * len[0] - len[1] * len[1]) /
-                                         (2.0f * len[0] * d));
-                ikBend1 = GetTableArcCos((d * d + len[1] * len[1] - len[0] * len[0]) /
-                                         (2.0f * len[1] * d));
+                /* PC port (AN-19): as hand 0's above, a target at the
+                   shoulder (d 0) or a zero bone length divides by zero:
+                   +-Fmax on the EE, NaN under IEEE for 0/0, an arm raised
+                   straight up on arm64 (issue 19) */
+                ikBend0 = GetTableArcCos(
+                    ps2_div(d * d + len[0] * len[0] - len[1] * len[1], 2.0f * len[0] * d));
+                ikBend1 = GetTableArcCos(
+                    ps2_div(d * d + len[1] * len[1] - len[0] * len[0], 2.0f * len[1] * d));
                 RotQuaternionX(qa, ba);
                 RotQuaternionZ(qa, ikBend0);
                 CopyQuaternion(t, qa);

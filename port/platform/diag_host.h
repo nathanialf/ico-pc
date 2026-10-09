@@ -129,6 +129,17 @@ double ico_diag_uptime(void);
    for timing the host's work; its zero is arbitrary. */
 unsigned long long ico_diag_now_ns(void);
 
+/* v0.4.3 AN-19: a NaN reached game code that the PS2 never fed one (its FPU
+   has no NaN): site names the check, caller is a return address (NULL if
+   none), logged as module+offset (libmain.so+0x..., ico_pc+0x...) once
+   ico_diag_init has found the program's extent, else as a plain pointer.
+   The first fault from each (site, caller) pair is logged, up to 32 pairs;
+   every fault is counted. Returns 1 when this call wrote the line (the
+   caller may add a line of its own), else 0. Game thread only. */
+int ico_diag_float_fault(const char *site, const void *caller);
+/* The faults counted so far (tests). */
+unsigned int ico_diag_float_faults(void);
+
 /* --- The game's hooks (#ifdef ICO_HOST calls in ico2/) ------------------------------------------------ */
 
 /* common/src/main.c: boot milestones and its static thread functions. */

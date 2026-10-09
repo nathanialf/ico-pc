@@ -92,7 +92,10 @@ static void connectToTarget(GObj *obj, HandRec *hw, int na, int nb, int nc)
         float l2 = l + l;
 
         sa = s;
-        SetQuaternionByAxisRotateV(q, GetTableArcCos((ll + ss - tt) / (l2 * sa)), ax);
+        /* PC port (AN-19): hands at one point (len 0) or a zero bone scale
+           divide by zero: +-Fmax on the EE, NaN under IEEE when the
+           dividend is 0 too (issue 19) */
+        SetQuaternionByAxisRotateV(q, GetTableArcCos(ps2_div(ll + ss - tt, l2 * sa)), ax);
         GetMatrixFromQuaternion(m, q);
         _SubVector(v, (char *)GOBJ_SUB(tgt)->nodeMtx + (nb << 6) + 0x30,
                    (char *)GOBJ_SUB(obj)->nodeMtx + (na << 6) + 0x30);
@@ -167,6 +170,51 @@ static inline int PutHandOnLadder(HandRec *hw, int node) /* derived name */
     return 1;
 }
 
+/* PC port (AN-19): port/platform/diag_host.c */
+int ico_diag_float_fault(const char *site, const void *caller);
+void ico_diag_log(const char *fmt, ...);
+
+/* PC port (AN-19): the arm IK turns toward ikDir; a NaN there makes every
+   arm angle 90 degrees on arm64 (issue 19).  Checked when this frame set
+   a target (ikMode nonzero); the first NaN from each mode
+   is logged with what it was made from: the hand's own node, the other
+   object's node it reaches for (mode 5: its focus-19 node, mode 6: its
+   focus-6 node, else the record's node) and both bone scales. */
+static void checkHandTarget(GObj *obj, HandRec *hw, int node, const void *caller) /* port name */
+{
+    static const char *const site[8] = {
+        "hand target, mode 0", "hand target, mode 1", "hand target, mode 2", "hand target, mode 3",
+        "hand target, mode 4", "hand target, mode 5", "hand target, mode 6", "hand target, mode 7"};
+    const float *d = hw->ikDir;
+    const float *own;
+    const float *other = 0;
+    int on;
+
+    if (hw->ikMode == 0 || (d[0] == d[0] && d[1] == d[1] && d[2] == d[2])) {
+        return;
+    }
+    if (ico_diag_float_fault(hw->mode >= 0 && hw->mode < 8 ? site[hw->mode] : "hand target",
+                             caller) == 0) {
+        return;
+    }
+    own = (const float *)((char *)GOBJ_SUB(obj)->nodeMtx + (node << 6) + 0x30);
+    on = hw->mode == 5   ? GetSkeltonFocusNode(obj, 19)
+         : hw->mode == 6 ? GetSkeltonFocusNode(obj, 6)
+                         : hw->node;
+    if (hw->obj != 0) {
+        other = (const float *)((char *)GOBJ_SUB(hw->obj)->nodeMtx + (on << 6) + 0x30);
+    }
+    ico_diag_log("  hand mode %d, node %d: target %g %g %g; own node %g %g %g, scale %g", hw->mode,
+                 node, (double)d[0], (double)d[1], (double)d[2], (double)own[0], (double)own[1],
+                 (double)own[2], (double)GOBJ_SUB(obj)->nodes->scale[0]);
+    if (other != 0) {
+        ico_diag_log("  other object's node %d %g %g %g, scale %g; record pos %g %g %g", on,
+                     (double)other[0], (double)other[1], (double)other[2],
+                     (double)GOBJ_SUB(hw->obj)->nodes->scale[0], (double)hw->pos[0],
+                     (double)hw->pos[1], (double)hw->pos[2]);
+    }
+}
+
 static float _handManager(GObj *obj, HandRec *hw, char *vec, float *ref, int node)
 {
     switch (hw->mode) {
@@ -200,6 +248,7 @@ static float _handManager(GObj *obj, HandRec *hw, char *vec, float *ref, int nod
         hw->ikMode = 1;
         break;
     }
+    checkHandTarget(obj, hw, node, __builtin_return_address(0));
     return 1.0f;
 }
 

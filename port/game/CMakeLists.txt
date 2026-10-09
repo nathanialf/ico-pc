@@ -107,6 +107,25 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAM
     add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# v0.4.3 AN-19 (issue 19): the hand records Ico and Yorda hold hands with
+# (ico2/sugipon/src/handManager.c, compiled into the test) and the arc-cosine
+# table's NaN guard (tableSin.c, quaternion.c and matrixDrive.c as the game
+# has them; ico_platform for the fault log). CPU only.
+add_executable(hand_ik_test test/hand_ik_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
+ico_include_dirs(sugipon _ico_hand_ik_incs)
+target_include_directories(hand_ik_test PRIVATE ${_ico_hand_ik_incs}
+    "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(hand_ik_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(hand_ik_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(hand_ik_test PRIVATE ico_math ico_platform)
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME hand_ik COMMAND hand_ik_test)
+endif()
+
 # --- Achievements (Phase 6E) -----------------------
 # ico_gamestate.h (port/include) is the read-only game-state view and the
 # signal queue; the game's one-line hooks (ICO_HOST) include it from common,
