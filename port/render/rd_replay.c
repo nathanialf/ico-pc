@@ -2194,8 +2194,6 @@ static bool joinsRun(const Replay *r, const ScreenRun *n)
            memcmp(&q->sc, &n->sc, sizeof(q->sc)) == 0 && memcmp(&q->st, &r->st, sizeof(q->st)) == 0;
 }
 
-static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c);
-
 /* Package AN-E: one planned screen pass as the device draws it
  * (rd__ExpandNoDual: itself, or the two-pass fallback's colour and alpha
  * passes), count vertices from first of the bound vertex buffer; count 0
@@ -4200,7 +4198,7 @@ static int uploadReplacement(RdTexRec *t)
         t->state = RHI_STATE_UNDEFINED;
         t->mipLevels = (uint8_t)p->levels;
         if (!t->rhi.id) {
-            rd__Log("texture pack: the graphics card refused \"%s\" (%ux%u); the game's own "
+            rd__Log("textures: the graphics card refused \"%s\" (%ux%u); the game's own "
                     "texture is shown instead",
                     t->name, t->w, t->h);
             t->refused = 1;

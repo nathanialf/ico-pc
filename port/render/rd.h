@@ -1247,15 +1247,15 @@ typedef struct RdPerfRecord {
      * commands make one by one (a command's passes); screenDraws: the draws
      * recorded after consecutive commands under the same state are merged */
     uint32_t screenCmds, screenDraws;
-    uint64_t uploadBytes;     /* everything written into the upload ring */
-    uint64_t meshUploadBytes; /* of which mesh streams and indices */
-    double gpuMs;             /* first timestamp to last */
-    double gpuUploadMs;       /* the upload copies at the head */
-    double gpuListMs[13];     /* per command list (0 for a list not replayed) */
-    double gpuPresentMs;      /* the present blits */
-    double startMs;           /* S2: the replay's start (rd's monotonic ms clock) */
-    float alpha;              /* S2: rd_Present's alpha; -1 for a replay that is not one */
-    uint8_t firstOfTick;      /* S2: the first present of its frame */
+    uint64_t uploadBytes;            /* everything written into the upload ring */
+    uint64_t meshUploadBytes;        /* of which mesh streams and indices */
+    double gpuMs;                    /* first timestamp to last */
+    double gpuUploadMs;              /* the upload copies at the head */
+    double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
+    double gpuPresentMs;             /* the present blits */
+    double startMs;                  /* S2: the replay's start (rd's monotonic ms clock) */
+    float alpha;                     /* S2: rd_Present's alpha; -1 for a replay that is not one */
+    uint8_t firstOfTick;             /* S2: the first present of its frame */
     uint8_t _pad2[3];
 } RdPerfRecord;
 

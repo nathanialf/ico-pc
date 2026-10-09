@@ -635,7 +635,7 @@ RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, con
     }
     if (g_rd.hasDevice &&
         (img->w > rhi_Limits()->maxTextureSize || img->h > rhi_Limits()->maxTextureSize)) {
-        rd__Log("texture pack: \"%s\" is %ux%u, larger than this graphics card takes (%u)",
+        rd__Log("textures: \"%s\" is %ux%u, larger than this graphics card takes (%u)",
                 debugName ? debugName : "?", img->w, img->h, rhi_Limits()->maxTextureSize);
         return (RdTex){0};
     }
@@ -654,7 +654,7 @@ RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, con
             rdtex_ReplacementMips(img);
         } else if (!s_tc.bcSingleLogged) {
             s_tc.bcSingleLogged = 1;
-            rd__Log("texture pack: compressed textures without mipmaps are drawn without them "
+            rd__Log("textures: compressed textures without mipmaps are drawn without them "
                     "(\"%s\" is the first)",
                     debugName ? debugName : "?");
         }

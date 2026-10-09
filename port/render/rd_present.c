@@ -1483,8 +1483,8 @@ void rd__OutputFollowSwapchain(void)
     if (sw == g_rd.settings.outputWidth && sh == g_rd.settings.outputHeight) {
         return;
     }
-    fprintf(stderr, "render: output follows the swapchain %ux%u (was %ux%u)\n", sw, sh,
-            g_rd.settings.outputWidth, g_rd.settings.outputHeight);
+    rd__Log("output follows the swapchain %ux%u (was %ux%u)", sw, sh, g_rd.settings.outputWidth,
+            g_rd.settings.outputHeight);
     setOutputSize(sw, sh);
     g_rd.settingsPending = true;
     s_followed = true;
