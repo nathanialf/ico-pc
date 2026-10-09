@@ -106,8 +106,9 @@ try a different graphics driver instead of the one that came with the
 phone. [How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
 
 - **Driver** picks the driver for the next start. **Built-in** is the
-  phone's own driver. Every driver you added is listed after it. If a
-  driver did not start last time, its name says so.
+  phone's own driver. Every driver you added is listed after it. If the
+  driver you chose does not start, the game tells you, goes back to
+  **Built-in**, and the note at the bottom of this page says so.
 - **Add a driver** opens the file picker so you can choose a driver's zip
   file. It is hidden on phones without an Adreno chip.
 - **Remove this driver** deletes the driver you have chosen. It only shows

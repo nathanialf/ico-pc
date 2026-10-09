@@ -539,12 +539,30 @@ static const char *gpuText(char *buf, unsigned size)
 }
 
 /* the page's one note: the Adreno-and-restart line, or that the chosen
-   driver did not start last time */
-static void gpuRefresh(Page *pg)
+   driver did not start last time.  A driver that does not start is
+   remembered as failed and the choice goes back to Built-in (the host,
+   gpu_driver_android.c), and choosing a driver again forgets the failure:
+   so the failed note shows while Built-in is chosen and an installed
+   driver is marked failed (or, for a host that keeps a failed choice, while
+   the chosen one is) */
+static int gpuShowFailed(void)
 {
     const int i = gpuSelected();
-    const int note =
-        i >= 0 && s_gpuHost.lastFailed(i) ? UI_STR_GPU_DRIVER_FAILED : UI_STR_GPU_DRIVER_NOTE;
+    if (i >= 0) {
+        return s_gpuHost.lastFailed(i) != 0;
+    }
+    const int n = s_gpuHost.count();
+    for (int k = 0; k < n; k++) {
+        if (s_gpuHost.lastFailed(k)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void gpuRefresh(Page *pg)
+{
+    const int note = gpuShowFailed() ? UI_STR_GPU_DRIVER_FAILED : UI_STR_GPU_DRIVER_NOTE;
     for (int k = 0; k < pg->count; k++) {
         if (pg->rows[k].note >= 0) {
             pg->rows[k].noteStr = note;

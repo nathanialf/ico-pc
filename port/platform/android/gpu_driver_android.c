@@ -229,7 +229,15 @@ int ico_gpu_driver_android_start(void)
     }
     snprintf(driverDir, sizeof(driverDir), "%s/%s/", root, s_active);
     if (ico_gpu_driver_trial_begin(root, s_active) != 0) {
-        fprintf(stderr, "gpu driver: cannot write the start marker in %s\n", root);
+        /* without the marker a crash inside the driver would go unseen at
+           the next start, and every start would load it again: the phone's
+           own driver this time, the choice kept for a start that can write
+           it */
+        fprintf(stderr,
+                "gpu driver: cannot write the start marker in %s; using the phone's own driver "
+                "this time\n",
+                root);
+        return 0;
     }
     fprintf(stderr, "gpu driver: opening %s (%s, %s) from %s, hooks in %s\n", s_active,
             s_list[i].meta.name, s_list[i].meta.libraryName, driverDir, hookDir);

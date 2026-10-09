@@ -215,6 +215,7 @@ static void gpuSelect(int i)
 {
     s_gpuSel = i;
     s_gpuSelects++;
+    s_gpuFailed = -1; /* as the real host: a new choice forgets the failure */
 }
 
 static int gpuLastFailed(int i)
@@ -364,6 +365,29 @@ static void testGpuDriver(void)
         const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
         CHECK(note >= 0 && strstr(lt_ext_RowText(note), "Adreno") != NULL,
               "the note is back to the Adreno line");
+    }
+    /* as the real host leaves it after a failure (gpu_driver_android.c
+       driver_failed): the choice back on Built-in, the driver remembered as
+       failed; the note says so until a driver is chosen again */
+    s_gpuSel = -1;
+    s_gpuFailed = 1;
+    frame(0);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Built-in") == 0,
+          "after a failure: Built-in (%s)", ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    {
+        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "did not start") != NULL,
+              "after a failure: the note says so on Built-in (%s)",
+              note >= 0 ? lt_ext_RowText(note) : "-");
+    }
+    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    frame(0);
+    CHECK(s_gpuSel == 0 && s_gpuFailed == -1, "a new choice forgets the failure (%d %d)", s_gpuSel,
+          s_gpuFailed);
+    {
+        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "Adreno") != NULL,
+              "a new choice: the note is the Adreno line again");
     }
 
     /* Add: the picker opens, the page polls every frame until it answers */
