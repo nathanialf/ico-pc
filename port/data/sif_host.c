@@ -42,15 +42,25 @@ void ico_sif_host_last_rpc(unsigned int *sid, unsigned int *rpc, unsigned int *c
     *count = rpcCount;
 }
 
-int ico_sif_register_server(unsigned int sid, IcoSifServerFn fn)
+static int find_server(unsigned int sid)
 {
     int i;
 
     for (i = 0; i < serverCount; i++) {
         if (servers[i].sid == sid) {
-            servers[i].fn = fn;
-            return 0;
+            return i;
         }
+    }
+    return -1;
+}
+
+int ico_sif_register_server(unsigned int sid, IcoSifServerFn fn)
+{
+    int i = find_server(sid);
+
+    if (i >= 0) {
+        servers[i].fn = fn;
+        return 0;
     }
     if (serverCount >= MAX_SERVERS) {
         return -1;
@@ -66,18 +76,6 @@ void ico_sif_host_reset(void)
     memset(servers, 0, sizeof(servers));
     serverCount = 0;
     ico_iop_heap_reset();
-}
-
-static int find_server(unsigned int sid)
-{
-    int i;
-
-    for (i = 0; i < serverCount; i++) {
-        if (servers[i].sid == sid) {
-            return i;
-        }
-    }
-    return -1;
 }
 
 /* --- boot: the IOP reboot and the modules --------------------------------- */
