@@ -146,11 +146,21 @@ static inline void getWaterDotScreenPos(int *out, VECTOR *pos) /* derived name *
     _FTOI4Vector(out, &v);
 }
 
+/* PC port: port/game/video_options.c, how much wider than 4:3 the picture
+   is (1 in the Original preset) */
+extern float ico_video_wide_x(void);
+
 void DispWaterDot(WaterDotWork *w)
 {
     int ip[4];
     WaterDot *p;
     int i;
+    /* PC port: the dots are drawn within 400 GS pixels of the screen's
+       centre across (26368 .. 39168 in 1/16 pixels), which is past the 4:3
+       picture's edges; a wider picture widens the window by the same
+       factor so the dots at its sides are drawn too.  At 1 the window is
+       26368 .. 39168 exactly. */
+    int halfX = (int)(6400.0f * ico_video_wide_x());
 
     gif_StartPacketPri(11);
 
@@ -164,7 +174,7 @@ void DispWaterDot(WaterDotWork *w)
         if (p->used != 0) {
             getWaterDotScreenPos(ip, &p->pos);
 
-            if (ip[0] >= 26368 && ip[0] <= 39168) {
+            if (ip[0] >= 32768 - halfX && ip[0] <= 32768 + halfX) {
                 if (ip[1] >= 29568 && ip[1] <= 35968) {
                     gif_SetGsReg(1, 0x80LL | (0x80LL << 8) | (0x80LL << 16) |
                                         ((long long)p->life << 24) | (0x3F800000LL << 32));

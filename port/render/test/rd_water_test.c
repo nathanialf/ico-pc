@@ -32,7 +32,9 @@
  *             for the scene copy and the barrier grid; the refraction STs
  *             against a double-precision recomputation of makeRefractST
  *   waterdot  DispWaterDot: points in list 11 at the game's ftoi4
- *             positions, colour (128, 128, 128, life), ABE, ALPHA 0x48
+ *             positions, colour (128, 128, 128, life), ABE, ALPHA 0x48;
+ *             dots 600 GS pixels left and right of the centre are dropped
+ *             at 4:3 (the game's 400 pixel window) and drawn at 32:9
  *   cloth     DispClothMesh: a lit, textured grid in list 2 (ALPHA 0x44
  *             with ABE, CLAMP 0)
  *
@@ -341,6 +343,15 @@ int ico_title_logo_skip(const char *model)
 {
     (void)model;
     return 0;
+}
+
+/* port/game/video_options.c: how much wider than 4:3 the picture is
+   (waterDot.c's window); 1 unless a case sets it */
+static float s_wideX = 1.0f;
+
+float ico_video_wide_x(void)
+{
+    return s_wideX;
 }
 
 int ico_arena_contains(const void *p, __SIZE_TYPE__ n)
@@ -1862,6 +1873,72 @@ static void checkDotsRecording(void)
           "water dots: ABE, ALPHA 0x48, no Z write");
 }
 
+/* The water dots' window across (DispWaterDot): 400 GS pixels either side
+ * of the centre at 4:3, that times the wide factor on a wider picture.  Two
+ * dots placed through the game's projection 600 pixels left and right of
+ * the centre, on the centre row: none drawn at 4:3, both at 32:9 (8/3). */
+static WaterDotWork *s_edgeDots;
+
+/* the x that +0x100 projects to GS x gx (pixels) at y, z: the projection is
+   (a x + b) / (c x + d) along x */
+static float dotXFor(float gx, float y, float z)
+{
+    VECTOR p0, p1;
+    float v0[4], v1[4];
+    qw4(&p0.x, 0.0f, y, z, 1.0f);
+    qw4(&p1.x, 1.0f, y, z, 1.0f);
+    _ApplyMatrix(v0, matrixptr + 0x100, &p0);
+    _ApplyMatrix(v1, matrixptr + 0x100, &p1);
+    const float a = v1[0] - v0[0], b = v0[0], c = v1[3] - v0[3], d = v0[3];
+    return (gx * d - b) / (a - gx * c);
+}
+
+static int edgeDotsDrawn(float wideX)
+{
+    s_wideX = wideX;
+    beginScene();
+    DispWaterDot(s_edgeDots);
+    dl_Swap();
+    s_wideX = 1.0f;
+    walkFrame(rd__LastFrame());
+    int n = 0;
+    for (int i = 0; i < s_fd.n; i++) {
+        if (s_fd.cmd[i].c->type == RDC_SCREEN && s_fd.cmd[i].list == 11) {
+            n += (int)s_fd.cmd[i].c->u[1];
+        }
+    }
+    return n;
+}
+
+static void checkDotsWindow(void)
+{
+    s_edgeDots = AllocWaterDot(NULL, 2, 1);
+    if (!s_edgeDots) {
+        CHECK(0, "water dots: no work for the window case");
+        return;
+    }
+    const float y = s_dots->dot[0].pos.y, z = s_dots->dot[0].pos.z;
+    for (int i = 0; i < 2; i++) {
+        WaterDot *d = &s_edgeDots->dot[i];
+        d->used = 1;
+        d->life = 100;
+        qw4(&d->pos.x, dotXFor(i ? 2648.0f : 1448.0f, y, z), y, z, 1.0f);
+        float v[4];
+        int ip[4];
+        _ApplyMatrix(v, matrixptr + 0x100, &d->pos);
+        _ScaleVector(v, v, 1.0f / v[3]);
+        _FTOI4Vector(ip, v);
+        CHECK(v[3] != 0.0f && abs(ip[0] - (i ? 2648 : 1448) * 16) <= 16 && ip[1] >= 29568 &&
+                  ip[1] <= 35968,
+              "water dot window: dot %d at GS (%g, %g), want x %d inside the rows", i, ip[0] / 16.0,
+              ip[1] / 16.0, i ? 2648 : 1448);
+    }
+    const int n43 = edgeDotsDrawn(1.0f);
+    const int n329 = edgeDotsDrawn(8.0f / 3.0f);
+    CHECK(n43 == 0, "water dots 600 pixels out: none drawn at 4:3 (%d)", n43);
+    CHECK(n329 == 2, "water dots 600 pixels out: both drawn at 32:9 (%d)", n329);
+}
+
 /* ================================================================ cloth */
 
 static ClothRec s_cloth;
@@ -2549,6 +2626,7 @@ static void recordingChecks(void)
     checkBarrierRecording();
     recordDots();
     checkDotsRecording();
+    checkDotsWindow();
     recordCloth();
     checkClothRecording();
     CHECK(s_vsCalls >= 3, "gsb_SetVSMatrix called by the effects (%d)", s_vsCalls);
