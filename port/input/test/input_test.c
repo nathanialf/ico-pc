@@ -844,7 +844,7 @@ static void test_menu_word(void)
 
     /* defaults: both words are the same for every source */
     ico_bindings_defaults(&b);
-    for (s = 1; s < ICO_GP_COUNT; s++) {
+    for (s = 1; s < ICO_GP_BUTTONS; s++) {
         gp_press(&b, s, &play, &menu);
         CHECK(play == menu);
     }
@@ -869,8 +869,7 @@ static void test_menu_word(void)
 
     /* a d-pad source moved off its direction still navigates the menus */
     ico_bindings_defaults(&b);
-    memset(b.gp[ICO_T_L1], 0, ICO_BIND_MAX);
-    b.gp[ICO_T_L1][0] = ICO_GP_DPUP;
+    ico_bindings_assign(&b, ICO_T_L1, ICO_SRC_PAD, ICO_GP_DPUP); /* Up takes the shoulder */
     gp_press(&b, ICO_GP_DPUP, &play, &menu);
     CHECK(play == ICO_PAD_L1 && menu == ICO_PAD_UP);
 

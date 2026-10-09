@@ -184,6 +184,8 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
    when the presents take too long (pace_policy.h pace_auto_resolution_step),
    never back up while the game runs */
 #define ICO_RES_AUTO (-1)
+/* The largest resolution "Nx" (the menu stops at it too). */
+#define ICO_RES_SCALE_MAX 16
 
 /* The defaults: the Original rows (1x, 4:3, original filter, half height),
    windowed, vsync on, framerate uncapped (60 on Android), the CRT filter

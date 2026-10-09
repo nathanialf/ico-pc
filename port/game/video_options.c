@@ -131,7 +131,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
         return 0;
     }
     if (sscanf(s, "%u%c%c", &n, &tail, &tail) == 2 && (tail == 'x' || tail == 'X') && n >= 1 &&
-        n <= 16) {
+        n <= ICO_RES_SCALE_MAX) {
         o->resW = o->resH = 0;
         o->resScale = (int)n;
         return 0;
@@ -337,7 +337,7 @@ static void sanitize(IcoVideoOptions *o)
     }
     if (o->resScale == ICO_RES_AUTO) {
         o->resW = o->resH = 0;
-    } else if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
+    } else if (o->resScale < 0 || o->resScale > ICO_RES_SCALE_MAX || o->resW < 0 || o->resH < 0) {
         o->resScale = o->resW = o->resH = 0;
     }
     if (o->windowMode < 0 || o->windowMode >= ICO_WINDOW_COUNT) {

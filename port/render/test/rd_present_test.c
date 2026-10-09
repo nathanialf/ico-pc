@@ -1544,6 +1544,7 @@ static void checkSceneLimit(void)
         eh = lim;
     }
     s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 0.0f; /* the size below, not a scale */
     s.sceneWidth = 20000;
     s.sceneHeight = 15000;
     s.outputWidth = s.outputHeight = 0;

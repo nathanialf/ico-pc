@@ -749,7 +749,8 @@ static void testNavigation(void)
     frame(0);
     IcoBindings *b = ico_input_live_bindings();
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K && b->kb[ICO_T_CROSS][1] == 0, "Cross is K");
-    CHECK(b->kb[ICO_T_RSTICK_DOWN][0] == 0, "K is off the right stick");
+    CHECK(b->kb[ICO_T_RSTICK_DOWN][0] == ICO_KEY_SPACE && b->kb[ICO_T_RSTICK_DOWN][1] == 0,
+          "K and Space swap: the right stick takes Space");
     frame(0);
     frame(0);
     frame(0);
@@ -765,8 +766,8 @@ static void testNavigation(void)
     press(0x10); /* back to Controls: the bindings are written */
     CHECK(settle(ctlL, 60), "Triangle: Controls");
     CHECK(strcmp(ico_config_get_string("input.kb.cross", ""), "K") == 0, "input.kb.cross = K");
-    CHECK(strcmp(ico_config_get_string("input.kb.rstick_down", ""), "none") == 0,
-          "input.kb.rstick_down = none");
+    CHECK(strcmp(ico_config_get_string("input.kb.rstick_down", ""), "Space") == 0,
+          "input.kb.rstick_down = Space");
     CHECK(ico_config_get_string("input.kb.circle", NULL) == NULL, "unchanged rows not written");
     ico_input_reload_bindings(b);
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
@@ -1497,6 +1498,12 @@ static void testValues(void)
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
     CHECK(o.resScale == 16, "resolution: Left from Auto is 16x");
+    /* 12x, 8x, 6x, 4x: the CRT block below expects 4x */
+    for (int i = 0; i < 4; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, -1);
+    }
+    ico_video_get(&o);
+    CHECK(o.resScale == 4, "resolution: four Lefts reach 4x (%d)", o.resScale);
     /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9, 48:9 */
     ui_settings_step(UI_OPT_ASPECT, 1);
     ui_settings_step(UI_OPT_ASPECT, 1);
