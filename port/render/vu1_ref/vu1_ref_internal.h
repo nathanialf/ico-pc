@@ -123,11 +123,6 @@ static inline int vu_inside(const float *p, const float *lo, const float *hi)
            p[3] < hi[3];
 }
 
-/* The bounds normal_c, normal_l and mesh load into vf13/vf14 (loi
- * 0x457FF000 = 4094.0, loi 0x4B7FFFFE = 16777214.0). */
-extern const float vu_lo0[4];
-extern const float vu_hi4094[4];
-
 /* vu1ref_SetWideX's factor (1 = 4:3) and the centre the wide projection
  * squeezes x about (shader_consts.h ICO_VU_REGION_CX). */
 extern float vu1ref_wideX;

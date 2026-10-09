@@ -2,9 +2,6 @@
  * by the program references. Line numbers are ico2/vusrc files. */
 #include "vu1_ref_internal.h"
 
-const float vu_lo0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-const float vu_hi4094[4] = {4094.0f, 4094.0f, 0.0f, 16777214.0f};
-
 float vu1ref_wideX = 1.0f;
 
 void vu1ref_SetWideX(float f)
