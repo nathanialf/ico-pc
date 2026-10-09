@@ -14,50 +14,24 @@ are 8 bytes or less, in the order it emits them). A row marked count-of= is
 a count of an array the member defines before it, written as sizeof over that
 array, so its value is computed by the compiler and not read from the ROM.
 
-Four modes, one member each (MEMBER is the name in the schema):
+One member per run (MEMBER is the name in the schema):
 
-  --stub MEMBER --out F.s
-      a zero-filled stand-in of the member's ROM ranges carrying its symbols,
-      for the layout link (build/ico.layout.elf) that fixes every other
-      object's address before the C exists
-  --alias MEMBER --labels build/data_labels.txt --out F.ld
-      the linker assignments that bind each placeholder label a source spells
-      inside the member (D_<VMA>) to the member's symbol plus its offset
-  --c MEMBER --layout build/ico.layout.elf --out F.c
-      the member's C: every pointer word resolved to the symbol the layout
-      link places at that address, floats as the shortest decimal that reads
-      back to the same bits, strings as literals
-  --check MEMBER --obj F.o --layout build/ico.layout.elf --out STAMP
-      each section of the compiled object, with its relocations applied
-      against the layout link, must equal the member's ROM range for that
-      section (zero fill after it); otherwise the first differing offset and
-      the field there are reported
+  --c MEMBER --symbol-map [--elf ELF] --out F.c
+      the member's C: every pointer word resolved to the symbol the committed
+      symbol lists (config/symbol_addrs.pal.txt,
+      config/symbol_addrs.pal.data.txt), the data members' own symbols
+      (config/data_members.pal.txt), SUPPLEMENT below and any
+      --extra-symbols FILE place at that address, floats as the shortest
+      decimal that reads back to the same bits, strings as literals.
+      port/data/CMakeLists.txt writes the loader test's reference copy of
+      each member this way (tables_test).
 
---c and --check take --symbol-map in place of --layout ELF: the addresses
-then come from the committed symbol lists (config/symbol_addrs.pal.txt,
-config/symbol_addrs.pal.data.txt), the data members' own symbols
-(config/data_members.pal.txt) and SUPPLEMENT below, plus any
---extra-symbols FILE, so a host build can write the tables without the
-period toolchain's layout link. Over the 73 members it writes the same C as
---layout does.
-
---c also takes --writable NAME (repeatable; host build only). A symbol the
-member defines in .rodata is written `const`, as the developers compiled it,
-and the EE has no page protection, so the game's stores into a few of those
-tables worked on the PS2; on a host the same stores fault. --writable drops
-the `const` from NAME's definition, so the host compiler places it in .data.
-A NAME the member does not define is ignored (CMakeLists.txt passes one list
-to every member), but every NAME must be a symbol of
-config/data_members.pal.txt. When a writable symbol is defined, its name is
-#defined to NAME_header_decl around the member's #includes, so a header's
-`extern const` declaration of it declares a different, unused name instead
-of conflicting with the non-const definition. (A TU that writes the table
-must not see a const declaration at all: clang deletes the stores, issue 19.
-motionOrientManager.h declares motionLimitDef without const for that, and
---c with --symbol-map writes a table its header declares so without const
-too.) The PS2 build never passes --writable: the object would put the table
-in .data, and --check, which compares sections with the ROM's, would fail.
-CMakeLists.txt holds the list and the evidence for each entry.
+A symbol the member defines in .rodata is written `const`, as the developers
+compiled it, unless its header declares it `extern` without const: a table
+the game writes (the EE has no page protection, so those stores worked on
+the PS2), which must not be const on the host either (clang deletes stores
+to an object declared const, issue 19; motionOrientManager.h declares
+motionLimitDef without const for that).
 
 The record type is read from the header the schema row names: a typedef of a
 struct, or a struct tag (`struct Name { ... };`, which the C then spells
@@ -75,7 +49,6 @@ import sys
 from pathlib import Path
 
 from elftools.elf.elffile import ELFFile
-from elftools.elf.relocation import RelocationSection
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "config/data_schema.pal.txt"
@@ -120,14 +93,6 @@ def rom_bytes(elf, lo, hi, section):
     if not (base <= lo and hi <= base + size):
         fail(f"0x{lo:x}..0x{hi:x} is outside the base ELF's .{section} (0x{base:x}..0x{base + size:x})")
     return s.data()[lo - base:hi - base]
-
-
-def natural_align(addr):
-    """The largest power of two dividing addr, at most 16."""
-    a = 1
-    while a < 16 and addr % (a * 2) == 0:
-        a *= 2
-    return a
 
 
 # ---------------------------------------------------------------- schema ----
@@ -519,23 +484,8 @@ PLACEHOLDER = re.compile(r"^(D_|func_|jtbl_)[0-9A-F]{8}$")
 
 
 class Layout:
-    """Addresses of the layout link: every defined symbol, by address."""
-
-    def __init__(self, path):
-        self.by_addr = {}
-        self.by_name = {}
-        with open(path, "rb") as fh:
-            e = ELFFile(fh)
-            for s in e.get_section_by_name(".symtab").iter_symbols():
-                info = s["st_info"]
-                if s["st_shndx"] == "SHN_UNDEF" or info["type"] in ("STT_SECTION", "STT_FILE"):
-                    continue
-                if not s.name or s.name.startswith(("$", ".")):
-                    continue
-                rec = (s.name, info["bind"], info["type"], s["st_shndx"])
-                self.by_addr.setdefault(s["st_value"], []).append(rec)
-                if info["bind"] == "STB_GLOBAL":
-                    self.by_name[s.name] = s["st_value"]
+    """Addresses as the period layout link had them: every defined symbol, by
+    address (filled by SymbolMap)."""
 
     def add(self, name, addr, func):
         """A global the symbol map names (SymbolMap); shndx "MAP" stands for
@@ -796,12 +746,10 @@ def declared_writable(header, name):
     return False
 
 
-def write_c(member, rows, datas, layout, writable=frozenset()):
+def write_c(member, rows, datas, layout):
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
-    host = isinstance(layout, SymbolMap)
     defs, headers, funcs, objs = [], [], {}, {}
     arrays = {}
-    unconst = []  # the writable symbols this member defines in .rodata
     for s, row in rows:
         if s is None:
             continue
@@ -832,12 +780,10 @@ def write_c(member, rows, datas, layout, writable=frozenset()):
         bounds = [i for _, i in s["syms"]] + [n]
         tname, star, dims = c_type(ty, s["type"])
         for (name, first), last in zip(s["syms"], bounds[1:]):
-            # the host's own declaration without const (declared_writable)
-            # needs no rename: the definition drops const to agree with it
-            const = ("const " if row["section"] == "rodata" and name not in writable and
-                     not (host and declared_writable(s["header"], name)) else "")
-            if row["section"] == "rodata" and name in writable:
-                unconst.append(name)
+            # a header's declaration without const (declared_writable): the
+            # definition drops const to agree with it
+            const = ("const " if row["section"] == "rodata" and
+                     not declared_writable(s["header"], name) else "")
             if s["count"] is None:
                 defs.append(f"{const}{tname} {star}{name}{dims} = {w.value(ty, 0, '')};")
             else:
@@ -860,9 +806,7 @@ def write_c(member, rows, datas, layout, writable=frozenset()):
         " * and config/data_schema.pal.txt. Generated: do not commit. */",
         "",
     ]
-    out += [f"#define {n} {n}_header_decl" for n in unconst]
     out += [f'#include "{(Path("../..") / h).as_posix()}"' for h in headers]
-    out += [f"#undef {n}" for n in unconst]
     out.append("")
     for f in sorted(funcs):
         out.append(f"extern {funcs[f]}{f}();")
@@ -871,105 +815,6 @@ def write_c(member, rows, datas, layout, writable=frozenset()):
     if funcs or objs:
         out.append("")
     return "\n".join(out + defs)
-
-
-# --------------------------------------------------------- stub / alias -----
-
-def write_stub(member, rows):
-    out = [f"# layout stand-in for {member}.o (zeros); generated."]
-    for s, row in rows:
-        lo, hi = row["lo"], row["hi"]
-        align = natural_align(lo)
-        out += [f"    .section .{row['section']}", f"    .align {align.bit_length() - 1}"]
-        labels = []
-        if s is not None:
-            size = Header(s["header"]).typedef(s["type"]).size
-            start = start_of(s, row)
-            labels = [(n, start + i * size) for n, i in s["syms"]]
-        out += [f"    .globl {n}" for n, _ in labels]
-        a = 0
-        for n, o in labels:
-            if o > a:
-                out.append(f"    .space {o - a}")
-                a = o
-            out.append(f"{n}:")
-        out.append(f"    .space {hi - lo - a}")
-    return "\n".join(out) + "\n"
-
-
-def write_alias(member, rows, labels_path):
-    out = [f"/* {member}: placeholder labels sources spell inside it; generated. */"]
-    for line in Path(labels_path).read_text().splitlines():
-        if not line.strip():
-            continue
-        name, addr = line.split()
-        a = int(addr, 16)
-        for s, row in rows:
-            if not row["lo"] <= a < row["hi"]:
-                continue
-            if s is None:
-                fail(f"{member}: {name} lies in its .{row['section']} string pool")
-            if name not in {n for n, _ in s["syms"]}:
-                base = row["lo"] + start_of(s, row)
-                out.append(f"{name} = {s['syms'][0][0]} + {a - base};")
-    return "\n".join(out) + "\n"
-
-
-# --------------------------------------------------------------- check ------
-
-def check(member, rows, datas, obj, layout):
-    """Each section of the compiled object, its relocations applied against
-    the layout link, must equal the member's row of that section (zero fill
-    after it); the object may hold bytes in no other section."""
-    by_sec = {"." + r["section"]: (sch, r) for sch, r in rows}
-    with open(obj, "rb") as fh:
-        e = ELFFile(fh)
-        for other in (".data", ".rodata", ".sdata", ".sbss", ".bss", ".text"):
-            t = e.get_section_by_name(other)
-            if other not in by_sec and t is not None and t["sh_size"]:
-                fail(f"{obj}: {t['sh_size']} B in {other}, where {member} has no row")
-        got = {}
-        for sec in by_sec:
-            t = e.get_section_by_name(sec)
-            got[sec] = bytearray(t.data()) if t is not None else bytearray()
-        symtab = e.get_section_by_name(".symtab")
-        for rs in e.iter_sections():
-            if not isinstance(rs, RelocationSection):
-                continue
-            sec = e.get_section(rs["sh_info"]).name
-            if sec not in by_sec:
-                continue
-            for r in rs.iter_relocations():
-                if r["r_info_type"] != 2:  # R_MIPS_32
-                    fail(f"{obj}: relocation type {r['r_info_type']} at {sec}+0x{r['r_offset']:x}")
-                sym = symtab.get_symbol(r["r_info_sym"])
-                if sym["st_shndx"] == "SHN_UNDEF":
-                    if sym.name not in layout.by_name:
-                        fail(f"{obj}: {sym.name} is not defined by the layout link")
-                    v = layout.by_name[sym.name]
-                else:
-                    tsec = e.get_section(sym["st_shndx"]).name
-                    if tsec not in by_sec:
-                        fail(f"{obj}: relocation against {tsec}")
-                    v = by_sec[tsec][1]["lo"] + sym["st_value"]
-                o = r["r_offset"]
-                v += int.from_bytes(got[sec][o:o + 4], "little")
-                got[sec][o:o + 4] = (v & 0xFFFFFFFF).to_bytes(4, "little")
-    sizes = []
-    for sec, (sch, row) in by_sec.items():
-        g, want = got[sec], datas[row["section"]]
-        if len(g) > len(want) or any(want[len(g):]) or bytes(g) != want[:len(g)]:
-            n = min(len(g), len(want))
-            diff = next((i for i in range(n) if g[i] != want[i]), n)
-            where = ""
-            if sch is not None and diff >= start_of(sch, row):
-                size = Header(sch["header"]).typedef(sch["type"]).size
-                el, within = divmod(diff - start_of(sch, row), size)
-                where = f"element {el}, offset 0x{within:x} of {sch['type']}; "
-            fail(f"{obj}: {sec} differs from the ROM at 0x{row['lo'] + diff:08X} "
-                 f"({where}object {len(g)} B, ROM {len(want)} B)")
-        sizes.append(f"{sec} {len(g)} B equal to 0x{row['lo']:08X}..0x{row['lo'] + len(g):08X}")
-    return "; ".join(sizes)
 
 
 def write_if_changed(path, text):
@@ -983,56 +828,23 @@ def write_if_changed(path, text):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--stub")
-    g.add_argument("--alias")
-    g.add_argument("--c")
-    g.add_argument("--check")
+    ap.add_argument("--c", required=True, metavar="MEMBER")
     ap.add_argument("--elf", type=Path, default=BASE_ELF)
-    src = ap.add_mutually_exclusive_group()
-    src.add_argument("--layout", type=Path)
-    src.add_argument("--symbol-map", action="store_true",
-                     help="name pointers from the committed symbol lists, not a layout link")
+    ap.add_argument("--symbol-map", action="store_true", required=True,
+                    help="name pointers from the committed symbol lists")
     ap.add_argument("--extra-symbols", type=Path, action="append", default=[],
-                    help="with --symbol-map: another splat-format list (repeatable)")
-    ap.add_argument("--writable", action="append", default=[], metavar="NAME",
-                    help="with --c, host build only: define NAME without const, in .data "
-                         "(repeatable; ignored when the member does not define NAME)")
-    ap.add_argument("--labels", type=Path)
-    ap.add_argument("--obj", type=Path)
+                    help="another splat-format list (repeatable)")
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
-    member = a.stub or a.alias or a.c or a.check
-    if a.writable and not a.c:
-        fail("--writable needs --c")
-    known = {n for r in parse_table(TABLE) for n, _ in r["syms"]} if a.writable else set()
-    unknown = sorted(set(a.writable) - known)
-    if unknown:
-        fail(f"--writable {', '.join(unknown)}: not a symbol of {TABLE.relative_to(ROOT)}")
+    member = a.c
     rows = member_rows(member)
     a.out.parent.mkdir(parents=True, exist_ok=True)
-    if a.stub:
-        write_if_changed(a.out, write_stub(member, rows))
-        return 0
-    if a.alias:
-        write_if_changed(a.out, write_alias(member, rows, a.labels))
-        return 0
     with open(a.elf, "rb") as fh:
         elf = ELFFile(fh)
         datas = {r["section"]: rom_bytes(elf, r["lo"], r["hi"], r["section"])
                  for _, r in rows}
-    if a.extra_symbols and not a.symbol_map:
-        fail("--extra-symbols needs --symbol-map")
-    if a.symbol_map:
-        layout = SymbolMap(a.extra_symbols)
-    elif a.layout:
-        layout = Layout(a.layout)
-    else:
-        fail("--c and --check need --layout ELF or --symbol-map")
-    if a.c:
-        write_if_changed(a.out, write_c(member, rows, datas, layout, frozenset(a.writable)))
-        return 0
-    a.out.write_text(f"{member}: {check(member, rows, datas, a.obj, layout)}\n")
+    layout = SymbolMap(a.extra_symbols)
+    write_if_changed(a.out, write_c(member, rows, datas, layout))
     return 0
 
 
