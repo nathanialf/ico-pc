@@ -44,9 +44,6 @@ target_compile_definitions(save_test PRIVATE ${ICO_GAME_DEFINITIONS})
 target_compile_options(save_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(save_test PRIVATE ico_save ico_save_import ico_platform ico_options)
-if(WIN32)
-    target_link_libraries(save_test PRIVATE comdlg32 user32)
-endif()
 if(ICO_RUN_TESTS)
     # the importer's command line, run by the test on its synthetic files
     add_test(NAME save COMMAND save_test $<TARGET_FILE:mc_import>)

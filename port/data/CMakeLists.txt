@@ -132,9 +132,6 @@ target_include_directories(archive_test PRIVATE "${ICO_COMPAT_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(archive_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(archive_test PRIVATE ico_port_data)
-if(WIN32)
-    target_link_libraries(archive_test PRIVATE comdlg32 user32)
-endif()
 if(ICO_RUN_TESTS)
     add_test(NAME archive_synthetic COMMAND archive_test synth "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME archive_disc COMMAND archive_test disc "${ICO_DISC_IMAGE}"

@@ -221,9 +221,6 @@ target_compile_options(rd_gsbase_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
 # ico_options: GsBase.c's widescreen hook reads the display options (R7a),
 # whose config store needs host_config.c (above)
 target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math ico_options)
-if(WIN32)
-    target_link_libraries(rd_gsbase_test PRIVATE comdlg32 user32)
-endif()
 
 # rd_present_test (wave 7, R7a): the display options.  GsBase.c as
 # rd_gsbase_test has it (the widened cull, +0x80/+0xC0 untouched) and the
@@ -245,9 +242,6 @@ target_compile_definitions(rd_present_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
-if(WIN32)
-    target_link_libraries(rd_present_test PRIVATE comdlg32 user32)
-endif()
 
 # rd_crt_test (package CRT): the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
@@ -258,9 +252,6 @@ target_include_directories(rd_crt_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders
                            "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform")
 target_compile_options(rd_crt_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_crt_test PRIVATE ico_render ico_options)
-if(WIN32)
-    target_link_libraries(rd_crt_test PRIVATE comdlg32 user32)
-endif()
 
 # rd_filter_test (package MV): the draw filter (rd.h rd_SetDrawFilter) on
 # synthetic keys, recorded without a device.

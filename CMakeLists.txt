@@ -224,10 +224,10 @@ if(ICO_LINK_EXE)
         target_link_libraries(ico_pc PRIVATE m)
     else()
         # A double-clicked program: GUI subsystem (no console window; output
-        # goes to logs/ico-pc.log), the file dialog and message box, and the
-        # GCC runtime linked in so the .exe needs only system DLLs.
+        # goes to logs/ico-pc.log) and the GCC runtime linked in so the .exe
+        # needs only system DLLs. The file dialog and message box libraries
+        # come with host_config.c (ico_link_host_fs below).
         target_link_options(ico_pc PRIVATE -mwindows)
-        target_link_libraries(ico_pc PRIVATE comdlg32 user32)
         # The application manifest (port/platform/win/ico_pc.manifest): the
         # UTF-8 active code page for paths,
         # compiled by the toolchain's windres.
@@ -353,6 +353,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
 endif()
 
 # --- host_fs for every target that compiles host_config.c -------------------
+# and, on Windows, the libraries of its file dialog and message box
 function(ico_link_host_fs dir)
     get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
     foreach(t IN LISTS targets)
@@ -361,6 +362,9 @@ function(ico_link_host_fs dir)
             get_target_property(srcs ${t} SOURCES)
             if(srcs MATCHES "host_config\\.c")
                 target_link_libraries(${t} PRIVATE ico_host_fs)
+                if(WIN32)
+                    target_link_libraries(${t} PRIVATE comdlg32 user32)
+                endif()
             endif()
         endif()
     endforeach()
