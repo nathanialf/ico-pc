@@ -102,7 +102,11 @@ for t in zipalign apksigner; do
     [[ -x "$bt/$t" ]] || fail "no $t in $bt: run tools/fetch_android.sh"
 done
 
-(cd android && run ./gradlew --no-daemon assembleRelease "-PicoLabel=$label")
+# ICO_GRADLE_ARGS: extra Gradle properties, e.g. "-PicoHandProbe=ON" for a
+# diagnostic package that still carries the release signature (an unsigned
+# debug build cannot be installed over the release without losing the saves)
+# shellcheck disable=SC2086
+(cd android && run ./gradlew --no-daemon assembleRelease "-PicoLabel=$label" ${ICO_GRADLE_ARGS:-})
 unsigned="$wt/android/app/build/outputs/apk/release/app-release-unsigned.apk"
 [[ -f "$unsigned" ]] || fail "Gradle did not produce app-release-unsigned.apk"
 so="$(ls "$wt"/android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/libmain.so 2>/dev/null | head -n 1 || true)"
