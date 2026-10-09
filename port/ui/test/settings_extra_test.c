@@ -1149,6 +1149,38 @@ static void testAchievementPopups(void)
     ico_ach_set_popups(1);
 }
 
+/* Escape outside play presses Triangle, never Start (mouse_look.h
+   ico_escape_target): on the New Game screen, reached from the title,
+   Start confirms and starts the game while Triangle goes back to the
+   vibration screen without starting one. */
+static void testEscapeNewGame(void)
+{
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    gFlagGameClear = 0;
+    init_layout_texture(2);
+    settle(54, 4);
+    const int games = s_newGames;
+    int ml = ui_new_game_screen_enter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the New Game screen (%d)", current_layout_id);
+    press(0x10); /* Triangle: Escape's button off the play layouts */
+    CHECK(settle(9, 60), "Triangle: the vibration screen (%d)", current_layout_id);
+    CHECK(s_newGames == games, "Triangle: no game started");
+    lt_switch_layout(54);
+    settle(54, 60);
+    ml = ui_new_game_screen_enter();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "the New Game screen again (%d)", current_layout_id);
+    press(0x800); /* Start confirms here, so Escape must not be Start */
+    CHECK(s_newGames == games + 1, "Start: the game starts");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1172,6 +1204,8 @@ int main(int argc, char **argv)
     testPointer();
     /* Gameplay > Achievement pop-ups */
     testAchievementPopups();
+    /* Escape's button on the New Game screen */
+    testEscapeNewGame();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;
