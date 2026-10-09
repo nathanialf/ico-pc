@@ -122,45 +122,37 @@ endif()
 ico_ui_library(ico_ui_cpu OFF)
 ico_ui_settings(ico_ui_cpu)
 ico_include_dirs(common _ico_ui_settings_incs)
-add_executable(settings_test test/settings_test.c test/settings_fixture.c
-    $<TARGET_OBJECTS:ico_ui_cpu>
-    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
-    "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
-    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
-target_include_directories(settings_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-                           ${_ico_ui_settings_incs} "${CMAKE_SOURCE_DIR}/port/platform"
-                           "${CMAKE_SOURCE_DIR}/port/include")
-target_compile_definitions(settings_test PRIVATE ICO_HOST=1)
-target_compile_options(settings_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
-                       ${ICO_GAME_WARNINGS})
-target_link_libraries(settings_test PRIVATE ${_ui_settings_deps} ico_platform ico_math)
-if(NOT WIN32)
-    target_link_libraries(settings_test PRIVATE m)
-endif()
-if(ICO_RUN_TESTS)
-    add_test(NAME settings COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}")
-endif()
+# ico_settings_test(<name> <main.c>): a settings test program over the shared
+# fixture (settings_fixture.c) and sources, and its ctest <name> without the
+# _test suffix
+function(ico_settings_test name main_c)
+    add_executable(${name} ${main_c} test/settings_fixture.c
+        $<TARGET_OBJECTS:ico_ui_cpu>
+        "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
+        "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
+        "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+    target_include_directories(${name} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                               ${_ico_ui_settings_incs} "${CMAKE_SOURCE_DIR}/port/platform"
+                               "${CMAKE_SOURCE_DIR}/port/include")
+    target_compile_definitions(${name} PRIVATE ICO_HOST=1)
+    target_compile_options(${name} PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                           ${ICO_GAME_WARNINGS})
+    target_link_libraries(${name} PRIVATE ${_ui_settings_deps} ico_platform ico_math)
+    if(NOT WIN32)
+        target_link_libraries(${name} PRIVATE m)
+    endif()
+    if(ICO_RUN_TESTS)
+        string(REGEX REPLACE "_test$" "" _test "${name}")
+        add_test(NAME ${_test} COMMAND ${name} "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+endfunction()
+ico_settings_test(settings_test test/settings_test.c)
 
 # settings_extra_test: the tests v0.4.3 added to the Settings menu, over the same
 # fixture (settings_fixture.c) and sources as settings_test; settings_test.c is
 # close to the source size cap, so new settings tests go in settings_extra_test.c
-add_executable(settings_extra_test test/settings_extra_test.c test/settings_fixture.c
-    $<TARGET_OBJECTS:ico_ui_cpu>
-    "${CMAKE_SOURCE_DIR}/ico2/common/src/layout_texture.c"
-    "${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
-    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
-target_include_directories(settings_extra_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
-                           ${_ico_ui_settings_incs} "${CMAKE_SOURCE_DIR}/port/platform"
-                           "${CMAKE_SOURCE_DIR}/port/include")
-target_compile_definitions(settings_extra_test PRIVATE ICO_HOST=1)
-target_compile_options(settings_extra_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
-                       ${ICO_GAME_WARNINGS})
-target_link_libraries(settings_extra_test PRIVATE ${_ui_settings_deps} ico_platform ico_math)
-if(NOT WIN32)
-    target_link_libraries(settings_extra_test PRIVATE m)
-endif()
+ico_settings_test(settings_extra_test test/settings_extra_test.c)
 if(ICO_RUN_TESTS)
-    add_test(NAME settings_extra COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}")
     # the three settings executables write the same settings_test.toml in
     # this directory: never in parallel
     set_tests_properties(settings settings_extra PROPERTIES RESOURCE_LOCK settings_toml)
