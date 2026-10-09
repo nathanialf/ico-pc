@@ -753,16 +753,24 @@ uint32_t rd_PrecreatePipelines(void)
     const double t0 = rd__NowMs();
     const uint32_t before = s_count;
     const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    /* n counts the whole set, keys[] holds the first RD_PIPELINE_CACHE_MAX:
+     * only those are created, and the progress counts to them */
+    const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+    if (n > m) {
+        rd__Log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
+                "the first %u are created",
+                n, (unsigned)RD_PIPELINE_CACHE_MAX, m);
+    }
     uint32_t failed = 0;
     if (s_progressFn != NULL) {
-        s_progressFn(s_progressCtx, 0, n);
+        s_progressFn(s_progressCtx, 0, m);
     }
-    for (uint32_t i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < m; i++) {
         if (!rd__GetPipeline(&keys[i]).id) {
             failed++;
         }
         if (s_progressFn != NULL) {
-            s_progressFn(s_progressCtx, i + 1, n);
+            s_progressFn(s_progressCtx, i + 1, m);
         }
     }
     const double ms = rd__NowMs() - t0;
