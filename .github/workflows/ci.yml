@@ -240,13 +240,24 @@ jobs:
         run: tools/check_no_rom.sh
 
       # lavapipe on arm64 misses the filtered-pixel comparisons by an LSB or
-      # two (docs/BUILDING.md); rd_replay_tool needs rd_pixel's dump
+      # two (docs/BUILDING.md): those programs and every variant of them
+      # (rd_present_depth_copy, the _nodual, _minlimits and _mali runs) are
+      # left out here, and rd_replay_tool with them because it needs
+      # rd_pixel's dump
       - name: linux-arm64
         run: |
           $CMAKE/cmake --preset linux-arm64 -DCMAKE_C_COMPILER=$ICO_CC
           $CMAKE/cmake --build build-host/linux-arm64 --parallel
           $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
-            -E '^(rd_(pixel|gsbase|present|crt)(_[a-z]+)?|rd_replay_tool(_list)?)$'
+            -E '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
+
+      # the tests left out above, run for the log only: a failure here does
+      # not fail the job, but their output shows what an arm64 change did
+      - name: linux-arm64, filtered-pixel render tests (not gating)
+        continue-on-error: true
+        run: |
+          $CMAKE/ctest --test-dir build-host/linux-arm64 --output-on-failure --parallel 4 \
+            -R '^(rd_(pixel|gsbase|present|crt)(_[a-z0-9_]+)?|rd_replay_tool(_list)?)$'
 
   # The Android APK (arm64-v8a), debug-signed, built with the Gradle project in
   # android/ and checked structurally; the game is not run. The toolchain

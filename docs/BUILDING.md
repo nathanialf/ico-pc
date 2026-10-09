@@ -449,13 +449,20 @@ The `linux-arm64` job builds the `linux-arm64` preset on GitHub's arm64
 runner and runs its tests, with its own toolchain cache
 (`toolchain-arm64-...`, the same four scripts; a cold fetch builds DXC from
 source) that it saves. Its host packages are `linux`'s plus the Wayland and
-KMSDRM headers and `g++` ([Linux arm64](#linux-arm64)). The hygiene checks are
-`linux`'s alone. `ctest` leaves out the render tests that compare filtered
-pixels with a tolerance of 1 or 2 (`rd_pixel`, `rd_gsbase`, `rd_present`,
-`rd_crt` and their variants, and `rd_replay_tool`, which needs `rd_pixel`'s
-dump): lavapipe on an arm64 host filters a step differently from lavapipe on
-x86-64 and misses them by an LSB or two. On an Adreno 650 (Turnip) all of
-them but `rd_pixel`'s sheet-magnification check pass.
+KMSDRM headers, `g++` and `git` ([Linux arm64](#linux-arm64)). The hygiene
+checks are `linux`'s alone. The gating `ctest` leaves out the render tests
+that compare filtered pixels with a tolerance of 1 or 2 (`rd_pixel`,
+`rd_gsbase`, `rd_present`, `rd_crt` and every variant of them, such as
+`rd_present_depth_copy` and the `_nodual`, `_minlimits` and `_mali` runs, and
+`rd_replay_tool` and `rd_replay_tool_list`, which need `rd_pixel`'s dump):
+lavapipe on an arm64 host filters a step differently from lavapipe on
+x86-64 and misses them by an LSB or two. A second step runs those tests
+alone and does not gate (`continue-on-error`), so their output is still in
+the log. The rest gate as on `linux`: `fog_lut` runs natively,
+`fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
+that need the disc or saved frames (`shadow_spawn`, `fmv_fields`,
+`rd_boot_present`, `rd_fog_depth_copy_dump`) skip. On an Adreno 650 (Turnip)
+all of the left-out tests but `rd_pixel`'s sheet-magnification check pass.
 
 The `android` job (90 minutes at most) builds the debug APK and checks its
 structure; the game is not run:
