@@ -121,18 +121,40 @@ static void unexpected(const char *name)
     failures++;
 }
 
+/* the game never frees what its constructors allocate; the test keeps every
+   block and frees them at the end, so the leak checker stays quiet */
+static void *s_blocks[64];
+static int s_blockCount;
+
+static void *keptCalloc(size_t size)
+{
+    void *p = calloc(1, size);
+    if (s_blockCount < (int)(sizeof(s_blocks) / sizeof(s_blocks[0]))) {
+        s_blocks[s_blockCount++] = p;
+    }
+    return p;
+}
+
+static void freeKept(void)
+{
+    for (int i = 0; i < s_blockCount; i++) {
+        free(s_blocks[i]);
+    }
+    s_blockCount = 0;
+}
+
 void *iosMallocDebug(struct IosMemPart *part, int size, const char *file, int line)
 {
     (void)part;
     (void)file;
     (void)line;
-    return calloc(1, (size_t)size);
+    return keptCalloc((size_t)size);
 }
 
 void *InitMultiBgaManager(int n)
 {
     (void)n;
-    return calloc(1, 4096);
+    return keptCalloc(4096);
 }
 
 void EntryMultiBgaManager(void *p, int a, int b, void *pos, void *mtx)
@@ -631,6 +653,7 @@ int main(int argc, char **argv)
     } else {
         printf("shadow_spawn_test: rise SKIP (no disc image)\n");
     }
+    freeKept();
     if (failures != 0) {
         printf("shadow_spawn_test: %d failure(s)\n", failures);
         return 1;
