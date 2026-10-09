@@ -103,7 +103,7 @@ unsigned int ico_appearance_serial(void);
 int ico_appearance_covers(const char *texName);
 /* Recolours the texture's CLUT into out (colors entries of 4 bytes, the
    CLUT's own memory order: the GS CSM1 order for 256 colours, as
-   rdtex_Csm1Index reads it).  Only RGB is changed; the alpha bytes are
+   rdtex_csm1_index reads it).  Only RGB is changed; the alpha bytes are
    copied.  Returns 1 when out was written, 0 (out untouched) when every
    part is Original, the texture is not covered, cpsm is not RDTEX_PSMCT32,
    colors is not 1..256, or clut / out is NULL. */

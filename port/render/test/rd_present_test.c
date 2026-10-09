@@ -12,11 +12,11 @@
  *             IsPointIsInScreen and the screen tests are unchanged), +0x240
  *             x scale divided by 4/3 and +0x280 following it; the renderer's
  *             g_proj / g_viewProj x row compressed about 2048
- *   scales    rd__ApplyDisplay: the Original rows 1, the options under the
+ *   scales    rd__apply_display: the Original rows 1, the options under the
  *             Original flag, its zero-size fallback; 2x, WxH, the window's
  *             box, the 4K cap, the work buffers' scale, full height
- *   boxes     rd__PresentBox at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
- *   coverage  rdtex_KeepAlphaCoverage keeps an alpha-tested texture's share;
+ *   boxes     rd__present_box at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
+ *   coverage  rdtex_keep_alpha_coverage keeps an alpha-tested texture's share;
  *             a lattice (wires alpha 0x80, black holes alpha 0)
  *             keeps its wire colour down the alpha-weighted chain and no
  *             level's alpha rises above the base's
@@ -43,7 +43,7 @@
  *             As), and an unblended alpha-tested texture gets its mips
  *             rebuilt with the coverage of its draw's AREF
  *   overlay   the presentation overlay (rd.h
- *             rd_SetPresentOverlay): the rich frame presented at 960 x 720
+ *             rd_set_present_overlay): the rich frame presented at 960 x 720
  *             and 1920 x 1080 with a callback drawing two rectangles (one
  *             in the box, one in the pillarbox) and "H" through port/ui's
  *             font in overlay mode: the rectangles exactly at their output
@@ -57,17 +57,17 @@
  *             filter's grid (box 0, 0, 512 x 512, scale 512 / 448), and its
  *             red rectangle comes out of the filter as phosphors: in the
  *             rectangle each block's R column red, its G column dark
- *   overlay top  rd_SetPresentOverlayTop without the CRT
+ *   overlay top  rd_set_present_overlay_top without the CRT
  *             filter at 960 x 720: both layers get the output's ctx and
  *             draw, the top layer under the main one where they overlap;
- *             rd__OverlayRingBytes counts both layers' batches, and a
+ *             rd__overlay_ring_bytes counts both layers' batches, and a
  *             registration and the present forget them
- *   capture   rd_CapturePresented: the rich frame at 800 x
+ *   capture   rd_capture_presented: the rich frame at 800 x
  *             600 with the overlay's rectangles registered, CRT off and
  *             Consumer TV: the PNG is 800 x 600 RGB and holds exactly the
  *             present without the overlay, under the CRT filter too (the
  *             shown picture has the overlay inside it; the
- *             capture takes a filter pass without it); rd_CaptureResult
+ *             capture takes a filter pass without it); rd_capture_result
  *             reports it once
  *   passes    the Enhanced preset at 960 x 720 with a deferred text item:
  *             the box blit, the deferred text and both overlay layers draw
@@ -76,12 +76,12 @@
  *             with a capture armed the output's pass is ended for the copy
  *             and opened again (one more), and the shown picture is the
  *             same byte for byte; each layer's rectangle is drawn
- *   blank     rd_PresentBlank: at 800 x 600 with nothing
+ *   blank     rd_present_blank: at 800 x 600 with nothing
  *             registered the output is all 0 (no scene, though a frame was
  *             just recorded and presented); with an overlay drawing a red
  *             rectangle it is called once with the output's 4:3 box, the
  *             rectangle is exactly red and every other byte 0;
- *             rd_GetPresentOverlay gives back the registration; no
+ *             rd_get_present_overlay gives back the registration; no
  *             validation errors
  *
  * Usage: rd_present_test [dir]  (dir: where the scratch config goes)
@@ -497,22 +497,22 @@ static void sprite(RdSpace space, int32_t x0, int32_t y0, int32_t x1, int32_t y1
     const int32_t o = (2048 - 256) * 16;
     RdScreenVtx v[2] = {vtx(o + x0, o + y0, 0, c, (float)u0, (float)v0),
                         vtx(o + x1, o + y1, 0, c, (float)u1, (float)v1)};
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, space, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, space, 1, 0);
 }
 
 static void opaque2D(void)
 {
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
 }
 
 static uint8_t *readTarget(RdTargetId id, uint32_t *w, uint32_t *h)
 {
     static uint8_t buf[2048 * 2048 * 4];
-    if (!rd__ReadTarget(rd_Target(id), buf, sizeof(buf), w, h)) {
+    if (!rd__read_target(rd_target(id), buf, sizeof(buf), w, h)) {
         CHECK(0, "readback of target %d", (int)id);
         return NULL;
     }
@@ -562,12 +562,12 @@ static void drawScene(RdTex t)
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     static const uint8_t clr[4] = {0, 0, 0, 0};
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, s_depthFrame ? DEPTH_CLEAR_Z : 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, s_depthFrame ? DEPTH_CLEAR_Z : 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     opaque2D();
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(RD_SPACE_UI, 0, 0, 512 * 16, 512 * 16, grey, 8, 8, 512 * 16 + 8, 512 * 16 + 8);
     if (s_depthFrame) {
         static const uint8_t near[4] = {0x30, 0x60, 0x90, 0x80};
@@ -575,59 +575,59 @@ static void drawScene(RdTex t)
         RdScreenVtx v[2] = {
             vtx(o + DEPTH_RECT[0] * 16, o + DEPTH_RECT[1] * 16, DEPTH_NEAR_Z, near, 0, 0),
             vtx(o + DEPTH_RECT[2] * 16, o + DEPTH_RECT[3] * 16, DEPTH_NEAR_Z, near, 0, 0)};
-        rd_TextureOff();
-        rd_ZWrite(1);
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
-        rd_ZWrite(0);
-        rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_texture_off();
+        rd_z_write(1);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
+        rd_z_write(0);
+        rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     }
 }
 
 /* rd_pixel_test.c recordRichFrame, the frame of its dump */
 static void recordRichFrame(RdTex t, int reduce)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     drawScene(t);
-    rd_SelectList(2);
+    rd_select_list(2);
     static const uint8_t add[4] = {60, 30, 90, 0xFF};
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_Blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
-    rd_TextureOff();
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
+    rd_texture_off();
     sprite(RD_SPACE_UI, 100 * 16, 100 * 16, 300 * 16, 200 * 16, add, 0, 0, 0, 0);
-    rd_SelectList(11);
+    rd_select_list(11);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = 0x40;
     pp.rgba[0] = 0x20;
-    rd_Post(RD_POST_FADE, &pp);
+    rd_post(RD_POST_FADE, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.fix = 0x60;
-    rd_Post(RD_POST_LETTERBOX, &pp);
+    rd_post(RD_POST_LETTERBOX, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = 5;
-    rd_Post(RD_POST_BRIGHTNESS, &pp);
+    rd_post(RD_POST_BRIGHTNESS, &pp);
     if (reduce) {
-        rd_SelectList(12);
+        rd_select_list(12);
         memset(&pp, 0, sizeof(pp));
         pp.rgba[0] = 128;
         pp.rgba[1] = 120;
         pp.rgba[2] = 110;
-        rd_Post(RD_POST_REDUCTION, &pp);
+        rd_post(RD_POST_REDUCTION, &pp);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 typedef struct FrameHashes {
     uint64_t display, scene, present;
 } FrameHashes;
 
-/* rd_Init with s, the rich frame, the three hashes; false without a device */
+/* rd_init with s, the rich frame, the three hashes; false without a device */
 static bool richFrame(const RdSettings *s, FrameHashes *h)
 {
-    if (!rd_Init(512, 512, s, NULL)) {
+    if (!rd_init(512, 512, s, NULL)) {
         return false;
     }
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
     uint32_t w = 0, hh = 0;
     uint8_t *p = readTarget(RD_TARGET_DISPLAY, &w, &hh);
@@ -635,9 +635,9 @@ static bool richFrame(const RdSettings *s, FrameHashes *h)
     p = readTarget(RD_TARGET_SCENE, &w, &hh);
     h->scene = p ? fnv(p, (size_t)w * hh * 4) : 0;
     static uint8_t out[960 * 720 * 4];
-    h->present = rd__ReadPresent(out, sizeof(out), &w, &hh) ? fnv(out, sizeof(out)) : 0;
-    rd_DestroyTexture(t);
-    rd_Shutdown();
+    h->present = rd__read_present(out, sizeof(out), &w, &hh) ? fnv(out, sizeof(out)) : 0;
+    rd_destroy_texture(t);
+    rd_shutdown();
     return true;
 }
 
@@ -1015,7 +1015,7 @@ static void cameraMats(Mats *m)
     memcpy(m->m100, matrixptr + 0x100, 64);
     memcpy(m->m240, matrixptr + 0x240, 64);
     memcpy(m->m280, matrixptr + 0x280, 64);
-    const RdFrame *f = rd__RecFrame();
+    const RdFrame *f = rd__rec_frame();
     if (f && f->hasCamera) {
         m->cam = f->camera;
     }
@@ -1026,7 +1026,7 @@ static void checkWide(void)
     IcoVideoOptions o;
     ico_video_defaults(&o);
     ico_video_set(&o);
-    rd_BeginFrame();
+    rd_begin_frame();
     Mats a, b;
     memset(&a, 0, sizeof(a));
     memset(&b, 0, sizeof(b));
@@ -1034,7 +1034,7 @@ static void checkWide(void)
     o.aspect = ICO_ASPECT_16_9;
     ico_video_set(&o);
     cameraMats(&b);
-    rd_DiscardFrame();
+    rd_discard_frame();
     const float k = 4.0f / 3.0f;
     CHECK(memcmp(a.m80, b.m80, 64) == 0, "wide: +0x80 (the view) byte-identical");
     CHECK(memcmp(a.mC0, b.mC0, 64) == 0, "wide: +0xC0 (the 4:3 screen matrix) byte-identical");
@@ -1066,9 +1066,9 @@ static void checkWide(void)
     IcoFrameCB n, w;
     const float saved = g_rd.wideX;
     g_rd.wideX = 1.0f;
-    rd__FillCameraCB(&n, &a.cam);
+    rd__fill_camera_cb(&n, &a.cam);
     g_rd.wideX = 0.75f;
-    rd__FillCameraCB(&w, &a.cam);
+    rd__fill_camera_cb(&w, &a.cam);
     g_rd.wideX = saved;
     int ok = 1;
     for (int c = 0; c < 4; c++) {
@@ -1101,7 +1101,7 @@ static void checkWide(void)
 static void applyWith(const RdSettings *s)
 {
     g_rd.settings = *s;
-    rd__ApplyDisplay();
+    rd__apply_display();
 }
 
 static void checkScales(void)
@@ -1123,7 +1123,7 @@ static void checkScales(void)
           g_rd.sceneSy, g_rd.workScale, g_rd.wideX);
     {
         RhiRect b;
-        rd__PresentBox(1920, 1080, g_rd.outAspect, &b);
+        rd__present_box(1920, 1080, g_rd.outAspect, &b);
         CHECK(b.x == 0 && b.y == 0 && b.w == 1920 && b.h == 1080,
               "scales: the Original flag's 16:9 box fills 1920x1080");
     }
@@ -1179,52 +1179,52 @@ static void checkScales(void)
     memset(&t, 0, sizeof(t));
     t.w = 512;
     t.h = 256;
-    rd__TargetScaleOf(&t, RD_TARGET_DISPLAY);
+    rd__target_scale_of(&t, RD_TARGET_DISPLAY);
     CHECK(t.tw == 512 && t.th == 512 && t.sy == 2.0f && !t.wide,
           "scales: full height doubles DISPLAY's texture (%ux%u)", t.tw, t.th);
     s.fullHeightScene = 0;
     s.sceneScale = 2.0f;
     applyWith(&s);
     t.w = t.h = 512;
-    rd__TargetScaleOf(&t, -1);
+    rd__target_scale_of(&t, -1);
     CHECK(t.tw == 1024 && t.th == 1024 && t.wide, "scales: a scene-sized temporary target");
     t.w = t.h = 256;
-    rd__TargetScaleOf(&t, -1);
+    rd__target_scale_of(&t, -1);
     CHECK(t.tw == 256 && t.sx == 1.0f && !t.wide, "scales: other temporary targets stay");
     t.w = t.h = 128;
-    rd__TargetScaleOf(&t, RD_TARGET_FEED128);
+    rd__target_scale_of(&t, RD_TARGET_FEED128);
     CHECK(t.tw == 256 && t.th == 256 && !t.wide, "scales: the work buffers by the work scale");
     g_rd.settings = saved;
-    rd__ApplyDisplay();
+    rd__apply_display();
 }
 
 static void checkBoxes(void)
 {
     RhiRect b;
-    rd__PresentBox(1920, 1080, 4.0f / 3.0f, &b);
+    rd__present_box(1920, 1080, 4.0f / 3.0f, &b);
     CHECK(b.x == 240 && b.y == 0 && b.w == 1440 && b.h == 1080, "boxes: 4:3 in 16:9");
-    rd__PresentBox(1920, 1080, 16.0f / 9.0f, &b);
+    rd__present_box(1920, 1080, 16.0f / 9.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 1920 && b.h == 1080, "boxes: 16:9 in 16:9");
-    rd__PresentBox(1280, 1024, 16.0f / 9.0f, &b);
+    rd__present_box(1280, 1024, 16.0f / 9.0f, &b);
     CHECK(b.x == 0 && b.y == 152 && b.w == 1280 && b.h == 720, "boxes: 16:9 in 5:4 letterboxed");
-    rd__PresentBox(960, 720, 16.0f / 10.0f, &b);
+    rd__present_box(960, 720, 16.0f / 10.0f, &b);
     CHECK(b.w == 960 && b.h == 600 && b.y == 60, "boxes: 16:10 in 4:3");
-    rd__PresentBox(960, 720, 4.0f / 3.0f, &b);
+    rd__present_box(960, 720, 4.0f / 3.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 960 && b.h == 720, "boxes: 4:3 in 4:3");
     /* phone shapes (the movie's box is always 4:3) */
-    rd__PresentBox(2400, 1080, 4.0f / 3.0f, &b);
+    rd__present_box(2400, 1080, 4.0f / 3.0f, &b);
     CHECK(b.x == 480 && b.y == 0 && b.w == 1440 && b.h == 1080,
           "boxes: 4:3 in a 2400x1080 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
-    rd__PresentBox(2400, 1080, 2400.0f / 1080.0f, &b);
+    rd__present_box(2400, 1080, 2400.0f / 1080.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 2400 && b.h == 1080,
           "boxes: Auto fills a 2400x1080 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
-    rd__PresentBox(2316, 904, 2316.0f / 904.0f, &b);
+    rd__present_box(2316, 904, 2316.0f / 904.0f, &b);
     CHECK(b.x == 0 && b.y == 0 && b.w == 2316 && b.h == 904,
           "boxes: Auto fills a 2316x904 phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
-    rd__PresentBox(2208, 1840, 4.0f / 3.0f, &b);
+    rd__present_box(2208, 1840, 4.0f / 3.0f, &b);
     CHECK(b.x == 0 && b.y == 92 && b.w == 2208 && b.h == 1656,
           "boxes: 4:3 in an unfolded 2208x1840 screen (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
-    rd__PresentBox(1080, 2400, 4.0f / 3.0f, &b);
+    rd__present_box(1080, 2400, 4.0f / 3.0f, &b);
     CHECK(b.x == 0 && b.y == 795 && b.w == 1080 && b.h == 810,
           "boxes: 4:3 in a 1080x2400 portrait phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
 }
@@ -1241,11 +1241,11 @@ static void checkCoverage(void)
             p[3] = (x % 4 == 0 && y % 4 == 0) ? 0x80 : 0;
         }
     }
-    const uint32_t n = rdtex_BuildMipChain(img, 16, 16, chain, 1);
+    const uint32_t n = rdtex_build_mip_chain(img, 16, 16, chain, 1);
     CHECK(n == 4, "coverage: 4 levels below 16x16");
     /* level 1 (8x8) box filtered: 0x20 at the dots, under the test */
     CHECK(chain[3] == 0x20, "coverage: the plain box filter thins it out");
-    rdtex_KeepAlphaCoverage(img, 16, 16, chain, n, 64);
+    rdtex_keep_alpha_coverage(img, 16, 16, chain, n, 64);
     int pass = 0;
     for (int i = 0; i < 64; i++) {
         pass += chain[i * 4 + 3] > 64;
@@ -1256,9 +1256,9 @@ static void checkCoverage(void)
     for (int i = 0; i < 256; i++) {
         img[i * 4 + 3] = 0x80;
     }
-    rdtex_BuildMipChain(img, 16, 16, chain, 1);
+    rdtex_build_mip_chain(img, 16, 16, chain, 1);
     const uint64_t h0 = fnv(chain, sizeof(chain));
-    rdtex_KeepAlphaCoverage(img, 16, 16, chain, n, 64);
+    rdtex_keep_alpha_coverage(img, 16, 16, chain, n, 64);
     CHECK(fnv(chain, sizeof(chain)) == h0, "coverage: an opaque texture is untouched");
 
     /* the railing's lattice, wires (x % 4 == 0 or y % 4 == 0,
@@ -1280,7 +1280,7 @@ static void checkCoverage(void)
     for (int i = 0; i < 256; i++) {
         base += img[i * 4 + 3];
     }
-    const uint32_t ln = rdtex_BuildMipChain(img, 16, 16, chain, 1);
+    const uint32_t ln = rdtex_build_mip_chain(img, 16, 16, chain, 1);
     const uint8_t *lv = chain;
     int dark = 0, high = 0;
     for (uint32_t l = 1, lw = 8; l <= ln; l++, lw /= 2) {
@@ -1298,7 +1298,7 @@ static void checkCoverage(void)
     }
     CHECK(dark == 0, "lattice: %d texels of the alpha-weighted chain lost the wire colour", dark);
     CHECK(high == 0, "lattice: %d texels above alpha 0x80", high);
-    rdtex_BuildMipChain(img, 16, 16, chain, 0);
+    rdtex_build_mip_chain(img, 16, 16, chain, 0);
     /* level 1 texel (2, 1): one wire column over two hole rows */
     CHECK(chain[(1 * 8 + 2) * 4] == 100,
           "lattice: the plain box filter darkens the wires (%u), the weighted one does not",
@@ -1317,7 +1317,7 @@ static void checkOriginal(void)
     RdSettings s = originalSettings();
     FrameHashes h;
     if (!richFrame(&s, &h)) {
-        CHECK(0, "original: rd_Init");
+        CHECK(0, "original: rd_init");
         return;
     }
     s_presentOriginal = h.present;
@@ -1350,11 +1350,11 @@ static void checkScale2(void)
     makeSmoothScene();
     /* 1x */
     RdSettings s = originalSettings();
-    if (!rd_Init(512, 512, &s, NULL)) {
-        CHECK(0, "scale2: rd_Init");
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "scale2: rd_init");
         return;
     }
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
     uint32_t w, h;
     uint8_t *p = readTarget(RD_TARGET_DISPLAY, &w, &h);
@@ -1367,16 +1367,16 @@ static void checkScale2(void)
     if (p) {
         memcpy(s_scene1, p, sizeof(s_scene1));
     }
-    rd_DestroyTexture(t);
-    rd_Shutdown();
+    rd_destroy_texture(t);
+    rd_shutdown();
 
     /* 2x */
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 2.0f;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return;
     }
-    t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
     p = readTarget(RD_TARGET_DISPLAY, &w, &h);
     CHECK(p && w == 1024 && h == 512, "scale2: DISPLAY is 1024x512 (%ux%u)", w, h);
@@ -1430,10 +1430,10 @@ static void checkScale2(void)
     CHECK(uneven == 0, "scale2: every 2x2 block of SCENE uniform");
     CHECK(worst <= 1, "scale2: SCENE blocks equal the 1x pixels within 1 LSB");
     CHECK(worstD <= 2, "scale2: DISPLAY's block averages within 2 LSB of 1x");
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "scale2: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_DestroyTexture(t);
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "scale2: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_destroy_texture(t);
+    rd_shutdown();
 }
 
 static void checkWide169(void)
@@ -1444,17 +1444,17 @@ static void checkWide169(void)
     s.sceneScale = 1.0f;
     s.outputWidth = 960;
     s.outputHeight = 540;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return;
     }
     static const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {255, 255, 255, 0x80},
                          red[4] = {255, 0, 0, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     opaque2D();
-    rd_TextureOff();
+    rd_texture_off();
     /* a UI item: GS 128..384 x 100..200 */
     sprite(RD_SPACE_UI, 128 * 16, 100 * 16, 384 * 16, 200 * 16, white, 0, 0, 0, 0);
     /* a full-width fill the game tags WORLD: rows 300..310 */
@@ -1466,16 +1466,16 @@ static void checkWide169(void)
      * stays in the 4:3 box */
     sprite(RD_SPACE_UI, 2 * 16, 340 * 16, 512 * 16, 350 * 16, red, 0, 0, 0, 0);
     /* the letterbox at full strength */
-    rd_SelectList(11);
+    rd_select_list(11);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.fix = 0x80;
-    rd_Post(RD_POST_LETTERBOX, &pp);
-    rd_SelectList(12);
+    rd_post(RD_POST_LETTERBOX, &pp);
+    rd_select_list(12);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
     uint32_t w, h;
     uint8_t *p = readTarget(RD_TARGET_SCENE, &w, &h);
     CHECK(p && w == 683 && h == 512, "wide169: SCENE is 683x512 (%ux%u)", w, h);
@@ -1521,16 +1521,16 @@ static void checkWide169(void)
     /* the present: 16:9 fills the 960 x 540 output (no pillars) */
     static uint8_t out[960 * 540 * 4];
     uint32_t ow = 0, oh = 0;
-    if (rd__ReadPresent(out, sizeof(out), &ow, &oh) && ow == 960 && oh == 540) {
+    if (rd__read_present(out, sizeof(out), &ow, &oh) && ow == 960 && oh == 540) {
         /* 12 output pixels in: past the reduction's 2-pixel border crop */
         const uint8_t *q = &out[(305 * 540 / 512 * 960 + 12) * 4];
         CHECK(q[0] > 200, "wide169: the fill reaches the output's left edge (%u)", q[0]);
     } else {
         CHECK(0, "wide169: present readback");
     }
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "wide169: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "wide169: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
 }
 
 static void checkMips(void)
@@ -1539,12 +1539,12 @@ static void checkMips(void)
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f;
     s.filterUpgrade = RD_FILTER_UPGRADE_TRILINEAR;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return;
     }
-    if (!rhi_Limits()->textureMips) {
+    if (!rhi_limits()->textureMips) {
         printf("  mips: the backend has no mipmapped textures; skipped\n");
-        rd_Shutdown();
+        rd_shutdown();
         return;
     }
     /* 64 x 64 one-texel checker, white and black */
@@ -1554,19 +1554,19 @@ static void checkMips(void)
         img[i * 4 + 0] = img[i * 4 + 1] = img[i * 4 + 2] = (uint8_t)c;
         img[i * 4 + 3] = 0x80;
     }
-    RdTex t = rd_CreateTexture(64, 64, img, RD_TEXA_80_80, "checker");
+    RdTex t = rd_create_texture(64, 64, img, RD_TEXA_80_80, "checker");
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80}, black[4] = {0, 0, 0, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     opaque2D();
-    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     /* minified 8:1 into 8 x 8 pixels */
     sprite(RD_SPACE_WORLD, 16 * 16, 16 * 16, 24 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
-    rd_EndFrame(0);
-    const RdTexRec *tr = rd__TexRec(t.id);
+    rd_end_frame(0);
+    const RdTexRec *tr = rd__tex_rec(t.id);
     CHECK(tr && tr->mipLevels == 7, "mips: a 64x64 texture gets 7 levels (%u)",
           tr ? tr->mipLevels : 0);
     uint32_t w, h;
@@ -1582,10 +1582,10 @@ static void checkMips(void)
     }
     printf("  mips: minified checker within %d of mid grey\n", worst);
     CHECK(worst <= 8, "mips: the minified checker samples its average");
-    rd_DestroyTexture(t);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "mips: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_destroy_texture(t);
+    CHECK(rhi_vk_validation_error_count() == 0, "mips: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
 }
 
 /* Issue 9's far railings.  A 64 x 64 lattice (wires every 4th
@@ -1602,12 +1602,12 @@ static void checkLatticeMips(int fba)
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f;
     s.filterUpgrade = RD_FILTER_UPGRADE_TRILINEAR;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return;
     }
-    if (!rhi_Limits()->textureMips) {
+    if (!rhi_limits()->textureMips) {
         printf("  lattice mips: the backend has no mipmapped textures; skipped\n");
-        rd_Shutdown();
+        rd_shutdown();
         return;
     }
     static uint8_t img[64 * 64 * 4];
@@ -1619,7 +1619,7 @@ static void checkLatticeMips(int fba)
             p[3] = wire ? 0x80 : 0;
         }
     }
-    RdTex t = rd_CreateTexture(64, 64, img, RD_TEXA_80_80, "lattice");
+    RdTex t = rd_create_texture(64, 64, img, RD_TEXA_80_80, "lattice");
     /* dots: 1 texel in 16 alpha 0x80, drawn unblended with AFAIL KEEP and
      * ATST GREATER 0x30 */
     static uint8_t dots[64 * 64 * 4];
@@ -1627,31 +1627,31 @@ static void checkLatticeMips(int fba)
         dots[i * 4 + 0] = dots[i * 4 + 1] = dots[i * 4 + 2] = 200;
         dots[i * 4 + 3] = (i % 4 == 0 && (i / 64) % 4 == 0) ? 0x80 : 0;
     }
-    RdTex td = rd_CreateTexture(64, 64, dots, RD_TEXA_80_80, "dots");
+    RdTex td = rd_create_texture(64, 64, dots, RD_TEXA_80_80, "dots");
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80}, bg[4] = {0, 160, 0, 0x80};
     for (int frame = 0; frame < 2; frame++) {
-        rd_BeginFrame();
-        rd_SelectList(0);
-        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
-        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-        rd_SelectList(1);
-        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-        rd_TestGs(0x5160D);
-        rd_ZWrite(1);
-        rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-        rd_PABE(0);
-        rd_FBA(fba);
-        rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-        rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_begin_frame();
+        rd_select_list(0);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+        rd_select_list(1);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+        rd_test_gs(0x5160D);
+        rd_z_write(1);
+        rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+        rd_pabe(0);
+        rd_fba(fba);
+        rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(RD_SPACE_WORLD, 16 * 16, 16 * 16, 24 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
-        rd_TestGs(0x3030D); /* ATE GREATER 0x30, AFAIL KEEP, Z ALWAYS */
-        rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-        rd_FBA(0);
-        rd_Texture(td, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_test_gs(0x3030D); /* ATE GREATER 0x30, AFAIL KEEP, Z ALWAYS */
+        rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+        rd_fba(0);
+        rd_texture(td, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(RD_SPACE_WORLD, 48 * 16, 16 * 16, 56 * 16, 24 * 16, grey, 0, 0, 64 * 16, 64 * 16);
-        rd_EndFrame(0);
+        rd_end_frame(0);
     }
-    const RdTexRec *tr = rd__TexRec(t.id), *trd = rd__TexRec(td.id);
+    const RdTexRec *tr = rd__tex_rec(t.id), *trd = rd__tex_rec(td.id);
     CHECK(tr && tr->mipLevels == 7 && (tr->mipUse & RD_MIPUSE_BLEND_AS) && !tr->mipBuiltBoost,
           "lattice mips: blended by As, no coverage kept (use %u boost %u)", tr ? tr->mipUse : 0,
           tr ? tr->mipBuiltBoost : 0);
@@ -1678,11 +1678,11 @@ static void checkLatticeMips(int fba)
            "alpha\n",
            fba, worst);
     CHECK(p && worst <= 6, "lattice mips (FBA %d): the minified lattice is off by %d", fba, worst);
-    rd_DestroyTexture(t);
-    rd_DestroyTexture(td);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "lattice mips: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_destroy_texture(t);
+    rd_destroy_texture(td);
+    CHECK(rhi_vk_validation_error_count() == 0, "lattice mips: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
 }
 
 /* ----------------------------------------------------------- the overlay */
@@ -1709,7 +1709,7 @@ static void ovRect(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t
 {
     RdScreenVtx v[2] = {vtx(x0 * 16, y0 * 16, 0, c, 0.0f, 0.0f),
                         vtx(x1 * 16, y1 * 16, 0, c, 0.0f, 0.0f)};
-    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+    rd_overlay_prims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
 }
 
 /* the glyph's quad on its way to rd (font.c's overlay sink) */
@@ -1722,7 +1722,7 @@ static void ovSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdB
         s_ovt.hy1 = v[1].y / 16;
         s_ovt.hquads++;
     }
-    rd_OverlayPrims(type, v, n, tex, blend);
+    rd_overlay_prims(type, v, n, tex, blend);
 }
 
 static void ovCallback(const RdOverlayCtx *ctx, void *user)
@@ -1742,11 +1742,11 @@ static void ovCallback(const RdOverlayCtx *ctx, void *user)
     if (ctx->box.x >= 30) {
         ovRect(10, 20, 30, 40, green);
     }
-    ui__SetOverlaySink(ovSink);
-    ui_BeginOverlay(ctx);
-    ui_DrawText(320.0f, 300.0f, 40.0f, white, "H", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
-    ui_EndOverlay();
-    ui__SetOverlaySink(NULL);
+    ui__set_overlay_sink(ovSink);
+    ui_begin_overlay(ctx);
+    ui_draw_text(320.0f, 300.0f, 40.0f, white, "H", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_end_overlay();
+    ui__set_overlay_sink(NULL);
 }
 
 /* the rich frame presented at w x h, mirror on or off, with the overlay
@@ -1758,26 +1758,26 @@ static bool ovPresent(uint32_t w, uint32_t h, int mirror, int rects, uint8_t *ds
     s.outputWidth = w;
     s.outputHeight = h;
     s.mirror = (uint8_t)mirror;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return false;
     }
     memset(&s_ovt, 0, sizeof(s_ovt));
     s_ovt.rects = rects;
     if (rects) {
-        rd_SetPresentOverlay(ovCallback, &s_ovt);
+        rd_set_present_overlay(ovCallback, &s_ovt);
     }
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
     uint32_t ow = 0, oh = 0;
-    const bool ok = rd_ReadPresented(dst, &ow, &oh) && ow == w && oh == h;
+    const bool ok = rd_read_presented(dst, &ow, &oh) && ow == w && oh == h;
     CHECK(ok, "overlay: the presented %ux%u output", w, h);
     CHECK(!rects || s_ovt.calls == 1, "overlay: one callback a present (%d)", s_ovt.calls);
-    rd_SetPresentOverlay(NULL, NULL);
-    ui_FontShutdown();
-    rd_DestroyTexture(t);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_set_present_overlay(NULL, NULL);
+    ui_font_shutdown();
+    rd_destroy_texture(t);
+    CHECK(rhi_vk_validation_error_count() == 0, "overlay: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     return ok;
 }
 
@@ -1807,7 +1807,7 @@ static void checkOverlayAt(uint32_t w, uint32_t h)
     }
     const OvTest t = s_ovt;
     RhiRect box;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+    rd__present_box(w, h, 4.0f / 3.0f, &box);
     CHECK(t.box.x == box.x && t.box.y == box.y && t.box.w == box.w && t.box.h == box.h &&
               fabsf(t.boxScale - (float)box.h / 448.0f) < 1e-6f && !t.mirror,
           "overlay %ux%u: the ctx (box %d,%d %ux%u scale %g)", w, h, t.box.x, t.box.y, t.box.w,
@@ -1818,7 +1818,7 @@ static void checkOverlayAt(uint32_t w, uint32_t h)
     /* the glyph: a px-pixel "H", its quad the bitmap's size */
     const int px = (int)lrintf(40.0f * (float)box.h / 448.0f);
     UiGlyph g;
-    CHECK(t.hquads == 1 && ui_FontGlyph('H', px, &g) && t.hx1 - t.hx0 == g.w &&
+    CHECK(t.hquads == 1 && ui_font_glyph('H', px, &g) && t.hx1 - t.hx0 == g.w &&
               t.hy1 - t.hy0 == g.h,
           "overlay %ux%u: one glyph quad of the %d px bitmap (%d x %d)", w, h, px, t.hx1 - t.hx0,
           t.hy1 - t.hy0);
@@ -1894,8 +1894,8 @@ static void checkOverlay(uint64_t presentNoOverlay)
     checkOverlayAt(960, 720);
     checkOverlayAt(1920, 1080);
     /* registered and unregistered again: the Original present unchanged */
-    rd_SetPresentOverlay(ovCallback, &s_ovt);
-    rd_SetPresentOverlay(NULL, NULL);
+    rd_set_present_overlay(ovCallback, &s_ovt);
+    rd_set_present_overlay(NULL, NULL);
     makeNoiseScene();
     RdSettings s = originalSettings();
     FrameHashes h;
@@ -1917,28 +1917,28 @@ static void checkOverlayCrt(void)
     RdSettings s = originalSettings();
     s.outputWidth = w;
     s.outputHeight = h;
-    rd_CrtSettings(&s, RD_CRT_TRINITRON, 1.0f);
+    rd_crt_settings(&s, RD_CRT_TRINITRON, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
     s.crtMask = 1.0f; /* pure stripes: the R column passes red alone (in a highlight,
                        * the overlay's full red, the strength eases to half: the G
                        * column leaks half the R column's red) */
-    if (!px || !rd_Init(512, 512, &s, NULL)) {
+    if (!px || !rd_init(512, 512, &s, NULL)) {
         free(px);
         return;
     }
     memset(&s_ovt, 0, sizeof(s_ovt));
     s_ovt.rects = 1;
-    rd_SetPresentOverlay(ovCallback, &s_ovt);
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    rd_set_present_overlay(ovCallback, &s_ovt);
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
     uint32_t ow = 0, oh = 0;
-    const bool ok = rd_ReadPresented(px, &ow, &oh) && ow == w && oh == h;
-    rd_SetPresentOverlay(NULL, NULL);
-    ui_FontShutdown();
-    rd_DestroyTexture(t);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay crt: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    const bool ok = rd_read_presented(px, &ow, &oh) && ow == w && oh == h;
+    rd_set_present_overlay(NULL, NULL);
+    ui_font_shutdown();
+    rd_destroy_texture(t);
+    CHECK(rhi_vk_validation_error_count() == 0, "overlay crt: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     CHECK(ok && s_ovt.calls == 1, "overlay crt: one callback, the present read");
     CHECK(s_ovt.box.x == 0 && s_ovt.box.y == 0 && s_ovt.box.w == 512 && s_ovt.box.h == 512 &&
               fabsf(s_ovt.boxScale - 512.0f / 448.0f) < 1e-6f,
@@ -1964,7 +1964,7 @@ static void checkOverlayCrt(void)
     free(px);
 }
 
-/* the top layer (rd_SetPresentOverlayTop) without the CRT
+/* the top layer (rd_set_present_overlay_top) without the CRT
  * filter: one rectangle a layer, in output pixels from the box */
 typedef struct LayerTest {
     RdOverlayCtx ctx;
@@ -1989,7 +1989,7 @@ static void checkOverlayTop(void)
     RdSettings s = originalSettings();
     s.outputWidth = w;
     s.outputHeight = h;
-    if (!px || !rd_Init(512, 512, &s, NULL)) {
+    if (!px || !rd_init(512, 512, &s, NULL)) {
         free(px);
         return;
     }
@@ -1998,46 +1998,46 @@ static void checkOverlayTop(void)
     LayerTest t = {.x0 = 120, .y0 = 60, .x1 = 180, .y1 = 90, .c = {0, 0, 255, 0x80}};
     /* the ring: both layers' batches counted, the counters reset by a
      * registration */
-    const uint64_t align = rhi_Limits()->uniformAlign;
+    const uint64_t align = rhi_limits()->uniformAlign;
     const uint64_t oneRect = sizeof(IcoDrawCB) + 2 * align + 16 + 2 * 6 * sizeof(IcoSpriteVertex);
-    rd__OverlayCollect(NULL, 0);
-    CHECK(rd__OverlayRingBytes() == 0, "overlay top: nothing registered, no ring");
-    rd_SetPresentOverlayTop(layerRect, &t);
-    rd__OverlayCollect(NULL, 0);
-    const uint64_t topOnly = rd__OverlayRingBytes();
-    rd_SetPresentOverlayTop(NULL, NULL);
-    CHECK(rd__OverlayRingBytes() == 0, "overlay top: a registration forgets the batches");
-    rd_SetPresentOverlay(layerRect, &m);
-    rd__OverlayCollect(NULL, 0);
-    const uint64_t mainOnly = rd__OverlayRingBytes();
-    rd_SetPresentOverlayTop(layerRect, &t);
-    rd__OverlayCollect(NULL, 0);
-    const uint64_t both = rd__OverlayRingBytes();
+    rd__overlay_collect(NULL, 0);
+    CHECK(rd__overlay_ring_bytes() == 0, "overlay top: nothing registered, no ring");
+    rd_set_present_overlay_top(layerRect, &t);
+    rd__overlay_collect(NULL, 0);
+    const uint64_t topOnly = rd__overlay_ring_bytes();
+    rd_set_present_overlay_top(NULL, NULL);
+    CHECK(rd__overlay_ring_bytes() == 0, "overlay top: a registration forgets the batches");
+    rd_set_present_overlay(layerRect, &m);
+    rd__overlay_collect(NULL, 0);
+    const uint64_t mainOnly = rd__overlay_ring_bytes();
+    rd_set_present_overlay_top(layerRect, &t);
+    rd__overlay_collect(NULL, 0);
+    const uint64_t both = rd__overlay_ring_bytes();
     CHECK(topOnly > 0 && topOnly == mainOnly && both == mainOnly + oneRect,
           "overlay top: the ring counts both layers (top %llu, main %llu, both %llu, a rect %llu)",
           (unsigned long long)topOnly, (unsigned long long)mainOnly, (unsigned long long)both,
           (unsigned long long)oneRect);
     /* the present */
     m.calls = t.calls = 0;
-    RdTex tex = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex tex = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(tex, 1);
     uint32_t ow = 0, oh = 0;
-    const bool ok = rd_ReadPresented(px, &ow, &oh) && ow == w && oh == h;
-    CHECK(rd__OverlayRingBytes() == 0 && !rd__OverlayGridPending(),
+    const bool ok = rd_read_presented(px, &ow, &oh) && ow == w && oh == h;
+    CHECK(rd__overlay_ring_bytes() == 0 && !rd__overlay_grid_pending(),
           "overlay top: the batches forgotten after the present");
-    rd_SetPresentOverlay(NULL, NULL);
-    rd_SetPresentOverlayTop(NULL, NULL);
-    rd_DestroyTexture(tex);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "overlay top: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_set_present_overlay(NULL, NULL);
+    rd_set_present_overlay_top(NULL, NULL);
+    rd_destroy_texture(tex);
+    CHECK(rhi_vk_validation_error_count() == 0, "overlay top: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     CHECK(ok && m.calls == 1 && t.calls == 1, "overlay top: one call a layer (%d, %d)", m.calls,
           t.calls);
     CHECK(memcmp(&m.ctx, &t.ctx, sizeof(m.ctx)) == 0,
           "overlay top: without the filter both layers have the output's ctx");
     if (ok) {
         RhiRect box;
-        rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+        rd__present_box(w, h, 4.0f / 3.0f, &box);
         uint32_t badMain = 0, badTop = 0, n = 0;
         for (int32_t y = box.y + m.y0; y < box.y + t.y1; y++) {
             for (int32_t x = box.x + m.x0; x < box.x + t.x1; x++) {
@@ -2130,41 +2130,41 @@ static void checkCaptureAt(const char *dir, int crt)
     s.outputWidth = w;
     s.outputHeight = h;
     if (crt) {
-        rd_CrtSettings(&s, RD_CRT_CONSUMER, 1.0f);
+        rd_crt_settings(&s, RD_CRT_CONSUMER, 1.0f);
     }
     bool ok = plain && over;
     /* the present without the overlay */
-    if (ok && rd_Init(512, 512, &s, NULL)) {
-        RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    if (ok && rd_init(512, 512, &s, NULL)) {
+        RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
         recordRichFrame(t, 1);
         uint32_t ow = 0, oh = 0;
-        ok = rd_ReadPresented(plain, &ow, &oh) && ow == w && oh == h;
-        rd_DestroyTexture(t);
-        rd_Shutdown();
+        ok = rd_read_presented(plain, &ow, &oh) && ow == w && oh == h;
+        rd_destroy_texture(t);
+        rd_shutdown();
     } else {
         ok = false;
     }
     /* again with the overlay's rectangles and a capture armed */
-    if (ok && rd_Init(512, 512, &s, NULL)) {
+    if (ok && rd_init(512, 512, &s, NULL)) {
         memset(&s_ovt, 0, sizeof(s_ovt));
         s_ovt.rects = 1;
-        rd_SetPresentOverlay(ovCallback, &s_ovt);
-        RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+        rd_set_present_overlay(ovCallback, &s_ovt);
+        RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
         char done[1100];
-        CHECK(rd_CaptureResult(done, sizeof(done)) == 0, "capture: nothing before");
-        CHECK(rd_CapturePresented(png), "capture: armed");
+        CHECK(rd_capture_result(done, sizeof(done)) == 0, "capture: nothing before");
+        CHECK(rd_capture_presented(png), "capture: armed");
         recordRichFrame(t, 1);
-        CHECK(rd_CaptureResult(done, sizeof(done)) == 1 && strcmp(done, png) == 0,
+        CHECK(rd_capture_result(done, sizeof(done)) == 1 && strcmp(done, png) == 0,
               "capture: written (%s)", png);
-        CHECK(rd_CaptureResult(done, sizeof(done)) == 0, "capture: reported once");
+        CHECK(rd_capture_result(done, sizeof(done)) == 0, "capture: reported once");
         uint32_t ow = 0, oh = 0;
-        ok = rd_ReadPresented(over, &ow, &oh);
-        rd_SetPresentOverlay(NULL, NULL);
-        ui_FontShutdown();
-        rd_DestroyTexture(t);
-        CHECK(rhi_vk_ValidationErrorCount() == 0, "capture: %u validation errors",
-              rhi_vk_ValidationErrorCount());
-        rd_Shutdown();
+        ok = rd_read_presented(over, &ow, &oh);
+        rd_set_present_overlay(NULL, NULL);
+        ui_font_shutdown();
+        rd_destroy_texture(t);
+        CHECK(rhi_vk_validation_error_count() == 0, "capture: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
     } else {
         ok = false;
     }
@@ -2216,9 +2216,9 @@ static void textRect(const RdOverlayCtx *ctx, const RdTextItem *item, void *user
  * DISPLAY (list 12) */
 static void recordTextFrame(RdTex t)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     drawScene(t);
-    rd_SelectList(11);
+    rd_select_list(11);
     RdTextItem it;
     memset(&it, 0, sizeof(it));
     snprintf(it.utf8, sizeof(it.utf8), "Continue");
@@ -2226,13 +2226,13 @@ static void recordTextFrame(RdTex t)
     it.y = 200.0f;
     it.size = 27.0f;
     it.rgba[0] = it.rgba[1] = it.rgba[2] = it.rgba[3] = 0x80;
-    rd_DeferredText(&it, 0);
-    rd_SelectList(12);
+    rd_deferred_text(&it, 0);
+    rd_select_list(12);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
 }
 
 /* the text frame at w x h (0 x 0: no output, no present), with the three
@@ -2246,45 +2246,45 @@ static bool passRun(uint32_t w, uint32_t h, int layers, const char *png, uint8_t
     s.preset = RD_PRESET_ENHANCED;
     s.outputWidth = w;
     s.outputHeight = h;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return false;
     }
     LayerTest m = {.x0 = 100, .y0 = 50, .x1 = 140, .y1 = 71, .c = {255, 0, 0, 0x80}};
     LayerTest t = {.x0 = 200, .y0 = 50, .x1 = 240, .y1 = 71, .c = {0, 0, 255, 0x80}};
     s_textCalls = 0;
     if (layers) {
-        rd_SetDeferredTextFn(textRect, NULL);
-        rd_SetPresentOverlay(layerRect, &m);
-        rd_SetPresentOverlayTop(layerRect, &t);
+        rd_set_deferred_text_fn(textRect, NULL);
+        rd_set_present_overlay(layerRect, &m);
+        rd_set_present_overlay_top(layerRect, &t);
     }
-    RdTex tex = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex tex = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     if (png) {
-        CHECK(rd_CapturePresented(png), "passes: capture armed");
+        CHECK(rd_capture_presented(png), "passes: capture armed");
     }
     RhiStats a, b;
-    rhi_GetStats(&a);
+    rhi_get_stats(&a);
     recordTextFrame(tex);
-    rhi_GetStats(&b);
+    rhi_get_stats(&b);
     *passes = (uint32_t)(b.renderPasses - a.renderPasses);
     bool ok = true;
     if (w && h) {
         uint32_t ow = 0, oh = 0;
-        ok = rd_ReadPresented(dst, &ow, &oh) && ow == w && oh == h;
+        ok = rd_read_presented(dst, &ow, &oh) && ow == w && oh == h;
         CHECK(ok, "passes: the presented %ux%u output", w, h);
     }
     if (png) {
         char done[1100];
-        CHECK(rd_CaptureResult(done, sizeof(done)) == 1, "passes: the capture written");
+        CHECK(rd_capture_result(done, sizeof(done)) == 1, "passes: the capture written");
     }
     CHECK(!layers || (s_textCalls == 1 && m.calls == 1 && t.calls == 1),
           "passes: one call a layer (text %d, main %d, top %d)", s_textCalls, m.calls, t.calls);
-    rd_SetDeferredTextFn(NULL, NULL);
-    rd_SetPresentOverlay(NULL, NULL);
-    rd_SetPresentOverlayTop(NULL, NULL);
-    rd_DestroyTexture(tex);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "passes: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_set_deferred_text_fn(NULL, NULL);
+    rd_set_present_overlay(NULL, NULL);
+    rd_set_present_overlay_top(NULL, NULL);
+    rd_destroy_texture(tex);
+    CHECK(rhi_vk_validation_error_count() == 0, "passes: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     return ok;
 }
 
@@ -2315,7 +2315,7 @@ static void checkPresentPasses(const char *dir)
               captured - all);
         CHECK(memcmp(over, cap, n) == 0, "passes: the capture changed the shown picture");
         RhiRect box;
-        rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+        rd__present_box(w, h, 4.0f / 3.0f, &box);
 
         static const struct {
             int32_t x, y;
@@ -2356,11 +2356,11 @@ static bool depthRun(uint32_t w, uint32_t h, int on, DepthRun *r)
     s.outputWidth = w;
     s.outputHeight = h;
     s.effectsDepth = (uint8_t)on;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         return false;
     }
     makeNoiseScene();
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     s_depthFrame = 1;
     recordRichFrame(t, 1);
     s_depthFrame = 0;
@@ -2369,21 +2369,21 @@ static bool depthRun(uint32_t w, uint32_t h, int on, DepthRun *r)
     r->display = p ? fnv(p, (size_t)ow * oh * 4) : 0;
     p = readTarget(RD_TARGET_SCENE, &ow, &oh);
     r->scene = p ? fnv(p, (size_t)ow * oh * 4) : 0;
-    r->present = rd__ReadPresent(out, (size_t)w * h * 4, &ow, &oh) && ow == w && oh == h
+    r->present = rd__read_present(out, (size_t)w * h * 4, &ow, &oh) && ow == w && oh == h
                      ? fnv(out, (size_t)w * h * 4)
                      : 0;
-    CHECK(rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), s_sceneDepth, sizeof(s_sceneDepth),
-                              &r->sw, &r->sh),
+    CHECK(rd__read_target_depth(rd_target(RD_TARGET_SCENE), s_sceneDepth, sizeof(s_sceneDepth),
+                                &r->sw, &r->sh),
           "effects depth: SCENE's depth readback");
     if (on) {
         uint32_t dw = 0, dh = 0;
-        r->depthOk =
-            rd__ReadPresentDepth(s_presDepth, sizeof(s_presDepth), &dw, &dh) && dw == w && dh == h;
+        r->depthOk = rd__read_present_depth(s_presDepth, sizeof(s_presDepth), &dw, &dh) &&
+                     dw == w && dh == h;
     } else {
-        r->depthOk = !rd__ReadPresentDepth(s_presDepth, sizeof(s_presDepth), NULL, NULL);
+        r->depthOk = !rd__read_present_depth(s_presDepth, sizeof(s_presDepth), NULL, NULL);
     }
-    rd_DestroyTexture(t);
-    rd_Shutdown();
+    rd_destroy_texture(t);
+    rd_shutdown();
     return true;
 }
 
@@ -2391,12 +2391,12 @@ static bool depthRun(uint32_t w, uint32_t h, int on, DepthRun *r)
 static bool reachable(const RdPipeKeyInt *k, bool noDual)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
-    const bool was = rd_NoDual();
-    rd_SetNoDual(noDual);
-    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
-    rd_SetNoDual(was);
+    const bool was = rd_no_dual();
+    rd_set_no_dual(noDual);
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
+    rd_set_no_dual(was);
     for (uint32_t i = 0; i < n; i++) {
-        if (rd__PipeKeyEqual(k, &keys[i])) {
+        if (rd__pipe_key_equal(k, &keys[i])) {
             return true;
         }
     }
@@ -2438,12 +2438,12 @@ static void checkEffectsDepth(void)
     const uint32_t W = 1280, H = 720;
     DepthRun off, on;
     /* the pass runs only with an effects program loaded: forced here */
-    rd__ForceEffectsDepth(true);
+    rd__force_effects_depth(true);
     const bool ran = depthRun(W, H, 0, &off) && depthRun(W, H, 1, &on);
-    rd__ForceEffectsDepth(false);
-    const uint32_t verrors = rhi_vk_ValidationErrorCount();
+    rd__force_effects_depth(false);
+    const uint32_t verrors = rhi_vk_validation_error_count();
     testSetEnv("ICO_VK_VALIDATION", prev ? saved : NULL);
-    CHECK(ran, "effects depth: rd_Init");
+    CHECK(ran, "effects depth: rd_init");
     if (!ran) {
         return;
     }
@@ -2460,10 +2460,11 @@ static void checkEffectsDepth(void)
         return;
     }
     RhiRect box;
-    rd__PresentBox(W, H, 4.0f / 3.0f, &box);
+    rd__present_box(W, H, 4.0f / 3.0f, &box);
     CHECK(box.x == 160 && box.w == 960 && box.y == 0 && box.h == 720, "effects depth: the box");
-    const float scale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
-    const float nearD = rd__GsDepth(DEPTH_NEAR_Z, scale), farD = rd__GsDepth(DEPTH_CLEAR_Z, scale);
+    const float scale = rd__target_z_scale(rd_target(RD_TARGET_SCENE).id);
+    const float nearD = rd__gs_depth(DEPTH_NEAR_Z, scale),
+                farD = rd__gs_depth(DEPTH_CLEAR_Z, scale);
     uint32_t barBad = 0, boxBad = 0, nNear = 0, nFar = 0;
     for (uint32_t y = 0; y < H; y++) {
         for (uint32_t x = 0; x < W; x++) {
@@ -2512,7 +2513,7 @@ static void checkEffectsDepth(void)
     for (int m = 0; m < 2; m++) {
         for (int f = 0; f < 2; f++) {
             const RdPipeKeyInt k =
-                rd__PresentDepthKey(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
+                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
             CHECK(k.depthFmt == RHI_FMT_D32F && k.gs.zwrite == RD_ZWRITE_ON &&
                       k.gs.ztst == RD_ZTST_ALWAYS && k.fs == RD_FS_BLIT_DEPTH,
                   "effects depth: the key");
@@ -2545,19 +2546,19 @@ static void checkBlank(void)
     RdSettings s = originalSettings();
     s.outputWidth = w;
     s.outputHeight = h;
-    if (!out || !rd_Init(512, 512, &s, NULL)) {
-        CHECK(0, "blank: rd_Init or memory");
+    if (!out || !rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "blank: rd_init or memory");
         free(out);
         return;
     }
     /* a frame first: its picture must not show through */
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t, 1);
-    rd_SetPresentOverlay(NULL, NULL);
-    CHECK(rd_PresentBlank(), "blank: rd_PresentBlank without an overlay");
+    rd_set_present_overlay(NULL, NULL);
+    CHECK(rd_present_blank(), "blank: rd_present_blank without an overlay");
     uint32_t ow = 0, oh = 0;
     uint32_t nonzero = 0;
-    if (rd_ReadPresented(out, &ow, &oh) && ow == w && oh == h) {
+    if (rd_read_presented(out, &ow, &oh) && ow == w && oh == h) {
         for (size_t i = 0; i < n; i++) {
             nonzero += out[i] != 0;
         }
@@ -2566,18 +2567,18 @@ static void checkBlank(void)
         CHECK(0, "blank: the presented %ux%u output (%ux%u)", w, h, ow, oh);
     }
     memset(&s_ovt, 0, sizeof(s_ovt));
-    rd_SetPresentOverlay(blankCallback, &s_ovt);
+    rd_set_present_overlay(blankCallback, &s_ovt);
     void *user = NULL;
-    CHECK(rd_GetPresentOverlay(&user) == blankCallback && user == &s_ovt,
-          "blank: rd_GetPresentOverlay");
-    CHECK(rd_PresentBlank(), "blank: rd_PresentBlank with an overlay");
+    CHECK(rd_get_present_overlay(&user) == blankCallback && user == &s_ovt,
+          "blank: rd_get_present_overlay");
+    CHECK(rd_present_blank(), "blank: rd_present_blank with an overlay");
     CHECK(s_ovt.calls == 1, "blank: %d overlay calls", s_ovt.calls);
     RhiRect box;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &box);
+    rd__present_box(w, h, 4.0f / 3.0f, &box);
     CHECK(s_ovt.box.x == box.x && s_ovt.box.y == box.y && s_ovt.box.w == box.w &&
               s_ovt.box.h == box.h && fabsf(s_ovt.boxScale - (float)box.h / 448.0f) < 1e-6f,
           "blank: the ctx (box %d,%d %ux%u)", s_ovt.box.x, s_ovt.box.y, s_ovt.box.w, s_ovt.box.h);
-    if (rd_ReadPresented(out, &ow, &oh) && ow == w && oh == h) {
+    if (rd_read_presented(out, &ow, &oh) && ow == w && oh == h) {
         const int32_t rx0 = box.x + OV_RX0, ry0 = box.y + OV_RY0;
         const int32_t rx1 = box.x + OV_RX1, ry1 = box.y + OV_RY1;
         uint32_t badRect = 0, badOutside = 0;
@@ -2597,33 +2598,33 @@ static void checkBlank(void)
     } else {
         CHECK(0, "blank: the presented output with the overlay");
     }
-    rd_SetPresentOverlay(NULL, NULL);
-    CHECK(rd_GetPresentOverlay(&user) == NULL && user == NULL, "blank: unregistered");
-    rd_DestroyTexture(t);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "blank: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_set_present_overlay(NULL, NULL);
+    CHECK(rd_get_present_overlay(&user) == NULL && user == NULL, "blank: unregistered");
+    rd_destroy_texture(t);
+    CHECK(rhi_vk_validation_error_count() == 0, "blank: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     free(out);
 }
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     checkOptions(dir);
     checkBoxes();
     checkCoverage();
     RdSettings st = originalSettings();
     st.outputWidth = st.outputHeight = 0;
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     boot();
     checkWide();
     checkScales();
-    rd_Shutdown();
-    if (!rd_Init(512, 512, &st, NULL)) {
+    rd_shutdown();
+    if (!rd_init(512, 512, &st, NULL)) {
         if (failures) {
             printf("rd_present_test: %d failures\n", failures);
             return 1;
@@ -2631,9 +2632,9 @@ int main(int argc, char **argv)
         printf("rd_present_test: recording ok; SKIP the pixel checks: no usable device\n");
         return 77;
     }
-    s_llvmpipe = strstr(rhi_AdapterName(), "llvmpipe") != NULL;
-    printf("rd_present_test: adapter %s\n", rhi_AdapterName());
-    rd_Shutdown();
+    s_llvmpipe = strstr(rhi_adapter_name(), "llvmpipe") != NULL;
+    printf("rd_present_test: adapter %s\n", rhi_adapter_name());
+    rd_shutdown();
     checkOriginal();
     checkScale2();
     checkWide169();

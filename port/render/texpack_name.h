@@ -34,7 +34,7 @@
  *                             blocks covering tw x th, in block raster
  *                             order, each as GS memory holds it (the
  *                             write swizzle of the TIM2's linear texels,
- *                             texpack_BlockOffset).
+ *                             texpack_block_offset).
  *               expanded path otherwise (a level smaller than a block, or
  *                             PSMCT24, PSMCT16/16S and the H formats): the
  *                             level read out linearly, th rows of
@@ -51,11 +51,11 @@
  *             zeros here and the name is marked unstable.
  *   CLUTHash  XXH3-64 over the CLUT as 16 or 256 u32 colours in index
  *             order (entry i is index i's colour).  CT32 CLUTs: the CSM1
- *             swizzle undone (entry i = memory entry rdtex_Csm1Index(i));
+ *             swizzle undone (entry i = memory entry rdtex_csm1_index(i));
  *             a 16-entry CLUT is straight.  CT16/16S CLUTs: the same
  *             de-swizzle, middle-run swap included (WriteCLUT_T16_I8_CSM1
  *             reads the two CT16 blocks a 16x16 upload fills and lands
- *             entry i on memory entry rdtex_Csm1Index(i), as the CT32 path
+ *             entry i on memory entry rdtex_csm1_index(i), as the CT32 path
  *             does; texpack_name_test runs both paths), then each entry
  *             expanded as the CT16 texel above with the TEXA in force (so
  *             a 16-bit CLUT's name depends on TEXA too, through the
@@ -85,10 +85,10 @@ extern "C" {
 
 /* GS levels a TIM2 holds (the base and up to 6 mips, TEX1.MXL <= 6) */
 #define TEXPACK_MAX_LEVELS 7
-/* texpack_Candidates never returns more (every structure times the three
+/* texpack_candidates never returns more (every structure times the three
    TEXA modes) */
 #define TEXPACK_MAX_CANDIDATES 64
-/* the longest name texpack_FormatName writes, with its terminator and
+/* the longest name texpack_format_name writes, with its terminator and
    without an extension: 16 + 1 + 16 + 1 + 8 + 1 */
 #define TEXPACK_NAME_MAX 48
 /* TexpackName.texa for a name that does not depend on TEXA */
@@ -100,7 +100,7 @@ typedef struct TexpackLevel {
     uint32_t w, h;      /* the image's texels (w <= 2^tw, h <= 2^th) */
     uint32_t tbw;       /* TEX0.TBW, in 64-texel units (tbw * 64 >= 2^tw in ICO) */
     const void *pixels; /* rows of w texels in the source's psm, linear (host)
-                           order, no row padding (rdtex_ImageBytes(psm, w, h)) */
+                           order, no row padding (rdtex_image_bytes(psm, w, h)) */
 } TexpackLevel;
 
 /* A texture as the cache's hook sees it: every level of the TIM2, lv[0]
@@ -116,14 +116,14 @@ typedef struct TexpackSource {
                             for a 16-entry TIM2 CLUT, 16x16 for any other), so
                             a PSMT4 texture with a 256-entry CLUT passes 256 */
     const void *clut;    /* clutColors entries of cpsm in GS CSM1 memory order, i.e.
-                            the uploaded image's texels in rows (rdtex_ClutToCsm1
+                            the uploaded image's texels in rows (rdtex_clut_to_csm1
                             applied when the TIM2 held them in index order), or
                             null for direct formats; a palette reading past them
                             (PSMT8 with 16 entries) hashes zeros there and the
                             name is unstable */
 } TexpackSource;
 
-/* A name, computed (texpack_ComputeName) or parsed (texpack_ParseName).
+/* A name, computed (texpack_compute_name) or parsed (texpack_parse_name).
    The pack index's key is (tex0Hash, clutHash, bits); the other fields say
    how a computed name was made. */
 typedef struct TexpackName {
@@ -137,7 +137,7 @@ typedef struct TexpackName {
     uint8_t mipChain; /* the hash covers startLevel..levels-1, not startLevel alone */
     uint8_t unstable; /* a hashed level's image is smaller than 2^tw x 2^th: the
                          padding hashed as zeros, PCSX2 hashed stale VRAM there */
-    /* texpack_ParseName only: the region of a "-rWxH" name (0 x 0 for a
+    /* texpack_parse_name only: the region of a "-rWxH" name (0 x 0 for a
        plain name).  Region names are stored and counted, never matched. */
     uint32_t regionW, regionH;
 } TexpackName;
@@ -146,24 +146,24 @@ typedef struct TexpackName {
    CT16/CT16S 16x8, PSMT8 16x16, PSMT4 32x16; GSLocalMemory.cpp m_psm[].bs).
    0, or -1 for a psm the names do not cover (the PSMZ formats, which ICO
    never samples, and unknown values). */
-int texpack_BlockSize(uint32_t psm, uint32_t *bw, uint32_t *bh);
+int texpack_block_size(uint32_t psm, uint32_t *bw, uint32_t *bh);
 
 /* Where texel (x, y) of a block (x < block width, y < block height) sits
    inside its 256-byte GS block, in units of the texel: a u32 index for
    PSMCT32/24, u16 for PSMCT16/16S, a byte for PSMT8, a nibble for PSMT4
    (byte = offset >> 1, an even offset the low nibble).  UINT32_MAX for a
-   psm texpack_BlockSize refuses, and for the H formats (always the
+   psm texpack_block_size refuses, and for the H formats (always the
    expanded path).  The write swizzle of GSBlock.h/GSTables.cpp,
    e.g. CT32 (2,0) -> 4, PSMT8 (0,2) -> 33, PSMT4 (0,4) -> 192. */
-uint32_t texpack_BlockOffset(uint32_t psm, uint32_t x, uint32_t y);
+uint32_t texpack_block_offset(uint32_t psm, uint32_t x, uint32_t y);
 
 /* The bytes TEX0Hash takes for one level of src under texa (an RdTexA;
    ignored where TEXA does not enter), as the header describes (block or
    expanded path).  Writes them to out when out is not null and cap is
    large enough.  Returns the byte count (the same with out null, to size
    the buffer), 0 for an unsupported psm or level. */
-size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uint8_t *out,
-                         size_t cap);
+size_t texpack_hash_bytes(const TexpackSource *src, uint32_t level, int texa, uint8_t *out,
+                          size_t cap);
 
 /* The name of src bound at startLevel (alone, or with the levels after it
    when mipChain) under texa (an RdTexA; ignored and stored as
@@ -171,8 +171,8 @@ size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uin
    cannot be made: a 24-bit CLUT, an unknown psm, startLevel >= levels or
    levels > TEXPACK_MAX_LEVELS, a palette format without a CLUT, a texa
    outside the three RdTexA modes for a name that depends on it. */
-int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa, int mipChain,
-                        TexpackName *out);
+int texpack_compute_name(const TexpackSource *src, uint32_t startLevel, int texa, int mipChain,
+                         TexpackName *out);
 
 /* The names to look up for src bound at boundLevel, most likely first:
    boundLevel alone, the chain boundLevel..levels-1 (when there is more
@@ -180,14 +180,14 @@ int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa,
    chain.  A name that depends on TEXA comes once per RdTexA mode (RdTexA
    order) at each place; one that does not comes once.  Duplicates (a
    chain of one level) are left out.  Writes at most max names; returns
-   how many, or -1 when texpack_ComputeName refuses the source. */
-int texpack_Candidates(const TexpackSource *src, uint32_t boundLevel, TexpackName *out, int max);
+   how many, or -1 when texpack_compute_name refuses the source. */
+int texpack_candidates(const TexpackSource *src, uint32_t boundLevel, TexpackName *out, int max);
 
 /* n as a file name without the extension ("%llx-%llx-%08x" with the CLUT
    part, "%llx-%08x" without; never a region or mip suffix).  Returns the
    length written (buf holds at least TEXPACK_NAME_MAX bytes to be safe), or
    -1 when size is too small. */
-int texpack_FormatName(const TexpackName *n, char *buf, size_t size);
+int texpack_format_name(const TexpackName *n, char *buf, size_t size);
 
 /* The inverse, as PCSX2 parses: fileName is a base name with its
    extension ("<name>.png"; the extension itself is not checked, a '.'
@@ -197,7 +197,7 @@ int texpack_FormatName(const TexpackName *n, char *buf, size_t size);
    the old "-r<hex>" form), -1 for anything else, "-mipN" level files
    included (PCSX2 never indexes them either: they are read beside their
    base file). */
-int texpack_ParseName(const char *fileName, TexpackName *out);
+int texpack_parse_name(const char *fileName, TexpackName *out);
 
 #ifdef __cplusplus
 }

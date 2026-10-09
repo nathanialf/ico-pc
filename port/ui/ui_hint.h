@@ -9,7 +9,7 @@
  * resolution in Enhanced), the glyphs glyph rows (the game's sprites).  The
  * music gallery's transport and the model viewer's hints use it.
  *
- * ui_HintLayout measures the words in the current language and places the
+ * ui_hint_layout measures the words in the current language and places the
  * items; a line wider than UI_HINT_WIDTH is set smaller to fit, glyphs and
  * words alike, down to 60 % as a Settings label is.
  */
@@ -92,14 +92,14 @@ extern const UiHintItem ui_hint_mv_keys[UI_HINT_MV_KEYS_COUNT];
 
 /* Adds the rows (for each item its glyphs, then its word) and lays them
    out. */
-void ui_HintBuild(UiHint *h, int y, float size, const UiHintItem *items, int n);
+void ui_hint_build(UiHint *h, int y, float size, const UiHintItem *items, int n);
 /* Shows or hides item i (its rows masked by default); then lay it out. */
-void ui_HintShow(UiHint *h, int i, int on);
+void ui_hint_show(UiHint *h, int i, int on);
 /* Changes item i's word. */
-void ui_HintSetStr(UiHint *h, int i, int strId);
+void ui_hint_set_str(UiHint *h, int i, int strId);
 /* Places the shown items in the current language: once a tick from the
    page's proc is cheap (a measure per word). */
-void ui_HintLayout(UiHint *h);
+void ui_hint_layout(UiHint *h);
 
 #ifdef __cplusplus
 }

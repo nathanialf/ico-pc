@@ -207,17 +207,17 @@ void fog_MakeFogClut(void)
  * (ZBUF write on, TEST 0x50000, ALPHA 0x44 FIX 0x80, PABE 0, TEX0 on the Z
  * copy, TEX1 0x60, PRIM 0x446's flat untextured ABE, FRAME 0x40 with the
  * field offset) leaks into the rest of the list as on the GS, and the fog
- * sprite as rd_Post(RD_POST_FOG):
+ * sprite as rd_post(RD_POST_FOG):
  *   BITBLTBUF/TRXPOS/TRXREG/TRXDIR, the CLUT image and the PSMT4 copies
  *                  not recorded: the Z copy and its byte copy are what
- *                  rd_Post(RD_POST_FOG) folds into its index (bits 16..23
+ *                  rd_post(RD_POST_FOG) folds into its index (bits 16..23
  *                  of the GS Z, the derivation in section 15), the CLUT is
  *                  passed to it in index order
  *   TEXFLUSH       nothing to do
- *   FRAME/SCISSOR/XYOFFSET 0x40  rd_SetTarget(SCENE, SCENE), as GifPacket.c
+ *   FRAME/SCISSOR/XYOFFSET 0x40  rd_set_target(SCENE, SCENE), as GifPacket.c
  *                  decodes FRAME 0x40 (RD_TARGET_OFFSET; the window is
  *                  centred, the field offset 0 here)
- *   TEXA (dbg)     rd_TexA(80/80); dbg is 0 in the game
+ *   TEXA (dbg)     rd_tex_a(80/80); dbg is 0 in the game
  *   PABE 0, ALPHA 0x44 FIX 0x80, TEX0 (Z copy as PSMT8H, MODULATE, TCC 1, the
  *                  fog CLUT), ZBUF with ZMSK, TEST 0x50000, TEX1 0, the
  *                  sprite (PRIM 0x156: sprite, TME, ABE, FST, flat), TEX1
@@ -225,7 +225,7 @@ void fog_MakeFogClut(void)
  *                  TEST 0x50000), ZBUF write on, FRAME 0x40 with
  *                  screenOffsetX/Y
  * The GS register decoder (GifPacket.c) never sees these writes; like
- * rd_Post's other passes and Shadow.c they leave its per-list PRIM/TEX0/
+ * rd_post's other passes and Shadow.c they leave its per-list PRIM/TEX0/
  * FRAME shadow behind (section 12). */
 
 /* The CLUT in index order: fog_MakeFogClut stores it for CSM1, entries 8..15
@@ -259,25 +259,25 @@ static void fogHostCorners(const int *r, int *x0, int *y0, int *x1, int *y1)
 
 static void fogHostDraw(const int *rc0, const int *rc1, const unsigned char *cl, int dbg)
 {
-    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    RdTarget scene = rd_target(RD_TARGET_SCENE);
     static unsigned char lut[256 * 4];
     RdPostParams pp;
     int x0, y0, x1, y1;
 
     if (dbg) {
-        rd_TexA(RD_TEXA_80_80); /* TEXA 0x8000000080 */
+        rd_tex_a(RD_TEXA_80_80); /* TEXA 0x8000000080 */
     }
     /* FOG_SET_FRAME(64, ScreenWidth, ScreenHeight, 0, 0) */
-    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
-    rd_PABE(0);                          /* PABE 0 (register 73, 0x49) */
-    rd_BlendFunc(RD_BLEND_LERP_AS, 128); /* ALPHA_1 0x44, FIX 128 */
-    rd_Texture(rd_TargetTexture(scene, RD_VIEW_DEPTH), RD_TEXFN_MODULATE,
+    rd_set_target(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_pabe(0);                           /* PABE 0 (register 73, 0x49) */
+    rd_blend_func(RD_BLEND_LERP_AS, 128); /* ALPHA_1 0x44, FIX 128 */
+    rd_texture(rd_target_texture(scene, RD_VIEW_DEPTH), RD_TEXFN_MODULATE,
                RD_TCC_RGBA); /* TEX0_1: TBP 0x2800 PSMT8H, TCC 1, MODULATE */
-    rd_ZWrite(0);            /* ZBUF_1 0xC0 PSMZ32, ZMSK */
-    rd_TestGs(0x50000);      /* TEST_1: Z GEQUAL */
-    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST); /* TEX1_1 0 */
-    rd_ABE(1);                                              /* PRIM 0x156 */
-    rd_Gouraud(0);
+    rd_z_write(0);           /* ZBUF_1 0xC0 PSMZ32, ZMSK */
+    rd_test_gs(0x50000);     /* TEST_1: Z GEQUAL */
+    rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST); /* TEX1_1 0 */
+    rd_abe(1);                                               /* PRIM 0x156 */
+    rd_gouraud(0);
 
     fogHostLut(lut);
     fogHostCorners(rc0, &x0, &y0, &x1, &y1);
@@ -293,9 +293,9 @@ static void fogHostDraw(const int *rc0, const int *rc1, const unsigned char *cl,
     pp.uv[1] = (float)rc1[1];
     pp.uv[2] = (float)(rc1[0] + rc1[2]);
     pp.uv[3] = (float)(rc1[1] + rc1[3]);
-    rd_Post(RD_POST_FOG, &pp);
+    rd_post(RD_POST_FOG, &pp);
 
-    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR); /* TEX1_1 96 */
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR); /* TEX1_1 96 */
 
     if (GlobalStageSetting.fogOffsetA > 0) {
         unsigned char cl2[4];
@@ -306,11 +306,11 @@ static void fogHostDraw(const int *rc0, const int *rc1, const unsigned char *cl,
         cl2[1] = (unsigned char)GlobalStageSetting.fogColG;
         cl2[2] = (unsigned char)GlobalStageSetting.fogColB;
         cl2[3] = (unsigned char)GlobalStageSetting.fogOffsetA;
-        rd_TestGs(0x30000);
+        rd_test_gs(0x30000);
         /* PRIM 0x446: sprite, ABE, FIX; no TME, flat */
-        rd_ABE(1);
-        rd_Gouraud(0);
-        rd_TextureOff();
+        rd_abe(1);
+        rd_gouraud(0);
+        rd_texture_off();
         memset(v, 0, sizeof(v));
         v[0].x = x0;
         v[0].y = y0;
@@ -321,12 +321,12 @@ static void fogHostDraw(const int *rc0, const int *rc1, const unsigned char *cl,
             v[i].q = 1.0f;
             memcpy(v[i].rgba, cl2, 4);
         }
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 1, 0);
-        rd_TestGs(0x50000);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_FULLSCREEN, 1, 0);
+        rd_test_gs(0x50000);
     }
-    rd_ZWrite(1); /* ZBUF_1 0xC0, write on */
+    rd_z_write(1); /* ZBUF_1 0xC0, write on */
     /* FOG_SET_FRAME(64, ScreenWidth, ScreenHeight, screenOffsetX, screenOffsetY) */
-    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_set_target(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
 }
 
 #endif /* ICO_RD */

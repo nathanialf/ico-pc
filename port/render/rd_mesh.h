@@ -8,7 +8,7 @@
  * layouts are in shader_consts.h (IcoVuCB, IcoVuBoneCB). The CPU references
  * of the programs, the tests' oracles, are port/render/vu1_ref/vu1_ref.h;
  * rd_mesh.c keeps its per-list VU images in a Vu1Ref and runs
- * vu1ref_Particle for the end-tag check.
+ * vu1ref_particle for the end-tag check.
  *
  * Principle: the GPU gets what the VU got. The vertex stream is the VIF
  * UNPACK payload Packet.c / Primitive.c built (float4 quadwords, the GIF tag
@@ -109,26 +109,26 @@ typedef struct RdVuMeshDesc {
  *   - the index buffer (uint32): for each batch and each of its vertices k
  *     (k-th in the batch, K in the mesh numbering) with k >= 2 and neither
  *     vertex k nor k-1 carrying the strip flag (ST.w < 1), the three indices
- *     ICO_VU_INDEX(K, 0..2) = K * 4 + corner (vu1ref_StaticKicks is the
+ *     ICO_VU_INDEX(K, 0..2) = K * 4 + corner (vu1ref_static_kicks is the
  *     rule); per batch its (firstIndex, indexCount).
  * Replay draws a run of batches with one material in one indexed draw
  * (REGION, NONE), or batch by batch, twice, under SCISSOR (see below). */
-RdMesh rd_CreateVuMesh(const RdVuMeshDesc *desc);
+RdMesh rd_create_vu_mesh(const RdVuMeshDesc *desc);
 
 /* The morph path (reg_setShape) rewrites the
  * vertex quadwords of a packet in place every tick; the PS2's DMA reads
  * them when the frame's lists are kicked, so every draw of the frame being
- * recorded sees the last write.  rd_UpdateVuMesh re-reads the stream (the
+ * recorded sees the last write.  rd_update_vu_mesh re-reads the stream (the
  * same layout as at creation: desc->qw with the same batches) with that
  * meaning; it returns false (nothing written) for no such mesh, a NULL
- * stream or a replaced mesh (rd_CreateVuMeshReplacement), true otherwise.
+ * stream or a replaced mesh (rd_create_vu_mesh_replacement), true otherwise.
  * Destroy frees the mesh; a mesh no frame has drawn for a while
- * may also be evicted when the registry fills (rd_VuMeshValid tells the
+ * may also be evicted when the registry fills (rd_vu_mesh_valid tells the
  * seki side to build it again from its packet; false too for a mesh
- * rd_VuMeshRetire marked stale). */
-bool rd_UpdateVuMesh(RdMesh m, const float (*qw)[4]);
-void rd_DestroyVuMesh(RdMesh m);
-bool rd_VuMeshValid(RdMesh m);
+ * rd_vu_mesh_retire marked stale). */
+bool rd_update_vu_mesh(RdMesh m, const float (*qw)[4]);
+void rd_destroy_vu_mesh(RdMesh m);
+bool rd_vu_mesh_valid(RdMesh m);
 
 /* ------------------------------------------- model packs
  *
@@ -140,17 +140,17 @@ bool rd_VuMeshValid(RdMesh m);
  *   u32 vertexCount                  per batch, in batch order (the NLOOP)
  *   the vertex quadwords             every batch's, without its GIF tag, in
  *                                    batch order (vertexCount x qwPerVertex
- *                                    x 16 bytes; the stream rd_CreateVuMesh
+ *                                    x 16 bytes; the stream rd_create_vu_mesh
  *                                    keeps)
  * PRIM, material, group, the model name and the GIF tags' other bits are
- * not in the key. rd_VuMeshDescHash validates the desc as rd_CreateVuMesh
- * does and returns 0 for one rd_CreateVuMesh would refuse (a valid desc
+ * not in the key. rd_vu_mesh_desc_hash validates the desc as rd_create_vu_mesh
+ * does and returns 0 for one rd_create_vu_mesh would refuse (a valid desc
  * hashing to 0 is not special-cased). vertexCount (may be NULL) receives
  * the total vertex count, normalW (may be NULL) the first vertex's normal.w
  * (quadword 1's w) for the lit and skinned layouts (qwPerVertex >= 4),
  * 0 for prelit or an empty stream; both 0 on a malformed desc.
- * rd_CreateVuMesh stores the same hash in the record (rd_VuMeshHash). */
-uint64_t rd_VuMeshDescHash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW);
+ * rd_create_vu_mesh stores the same hash in the record (rd_vu_mesh_hash). */
+uint64_t rd_vu_mesh_desc_hash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW);
 
 /* A replacement's vertices: vertexCount x qwPerVertex quadwords in the
  * original's layout (RD_VU_QW_*: ST = (s, t, 1, flag), the strip flag
@@ -172,40 +172,40 @@ typedef struct RdVuReplacement {
 } RdVuReplacement;
 
 /* Builds a mesh from rep that draws in the place of the mesh orig would
- * build: the index list from rep's strip flags by rd_CreateVuMesh's rule
+ * build: the index list from rep's strip flags by rd_create_vu_mesh's rule
  * (per batch, vertex k >= 2 kicks unless k or k-1 carries the flag), each
  * batch's PRIM from the original's GIF tag and material and group from
  * orig->batches, the original's batch and material counts; the record's
- * hash is orig's (rd_VuMeshDescHash) and it is marked replaced.  name (NULL:
+ * hash is orig's (rd_vu_mesh_desc_hash) and it is marked replaced.  name (NULL:
  * orig->debugName) names the record.  {0} when orig is malformed, the
  * layouts differ, rep has more batches than orig, a run lies outside
  * rep->qw, the total reaches 2^30 vertices, or memory runs out. */
-RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
-                                  const char *name);
+RdMesh rd_create_vu_mesh_replacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
+                                     const char *name);
 
 /* The record's hash (0: no such mesh, or one created from a raw stream)
- * and whether rd_CreateVuMeshReplacement built it.  rd_UpdateVuMesh on a
+ * and whether rd_create_vu_mesh_replacement built it.  rd_update_vu_mesh on a
  * replaced mesh returns false without writing (the morph path must fall
  * back to the original). */
-uint64_t rd_VuMeshHash(RdMesh m);
-bool rd_VuMeshReplaced(RdMesh m);
+uint64_t rd_vu_mesh_hash(RdMesh m);
+bool rd_vu_mesh_replaced(RdMesh m);
 
 /* Marks stale every live VU mesh for which pred(hash, replaced, user) is
  * true (pred NULL: every one; the interpolation's scratch meshes are never
- * offered).  A stale mesh fails rd_VuMeshValid at once, so the seki side
+ * offered).  A stale mesh fails rd_vu_mesh_valid at once, so the seki side
  * builds it again on its next draw (with or without the pack), while the
  * record stays for the frames already recorded with it: it is freed at a
- * rd_BeginFrame once three frames have opened since its last draw (the
+ * rd_begin_frame once three frames have opened since its last draw (the
  * retained interpolation frames keep theirs), not while photo mode holds a
  * pinned frame.  Recording only, no device needed. */
-void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user);
+void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user);
 
 /* --------------------------------------------------------- per draw */
 
 /* VU1 data memory 0..35 as the program reads it: IcoVuCB.mem, the slot map
  * in vu_common.hlsli. Filled by the seki sites from the packets they build:
  *   0..15  the RdVuCommon block in force at the draw's list position
- *          (rd_GetVuCommon)
+ *          (rd_get_vu_common)
  *          with qw 2 as SET_UVOFFSET left it (xy: the bound texture's
  *          t->uv scroll or clearUVOffset's zero; it persists in VU memory
  *          until the next SET_UVOFFSET or common block, so a draw without
@@ -226,7 +226,7 @@ typedef struct RdVuBlock {
  * wrapped, so the interpolation blends it straight; a linear scroll's step
  * of more than 1 is its wrap by 2 (rd_interp.c lerpWrap).  The seki side
  * marks a sine axis in the texture's SET_UVOFFSET quadword (z for U, w for
- * V, nonzero; the microprograms move only x and y), rd_VuCall keeps it per
+ * V, nonzero; the microprograms move only x and y), rd_vu_call keeps it per
  * list until the next one or the next common block. */
 #define RD_VU_SCROLL_SINE_U 1u
 #define RD_VU_SCROLL_SINE_V 2u
@@ -261,7 +261,7 @@ typedef struct RdVuDraw {
  * (GifPacket.c's decoder, gif_HostWriteRegs) and they leak between draws
  * and lists exactly as on the GS. A non-NULL materials array is recorded
  * but not applied. */
-void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
+void rd_draw_vu_mesh(RdMesh m, const RdVuDraw *d, RdKey key);
 
 /* ------------------------------------- VU1 state per list
  *
@@ -273,28 +273,28 @@ void rd_DrawVuMesh(RdMesh m, const RdVuDraw *d, RdKey key);
  * and each object chains its own matrix and light packets into every list
  * it draws in. So rd keeps, at record time, one VU image per list, as the
  * chains recorded into that list so far leave it: the common block
- * (rd_SetVuCommon updates all 13), the SET_* uploads, the UV offset
+ * (rd_set_vu_common updates all 13), the SET_* uploads, the UV offset
  * (SET_UVOFFSET, which persists until the next one or the next common
  * block), the resident program (mc_TransMicroCode) and the BEGIN code of
  * the last MSCALF. A draw takes its VuCB from the image of its list at its
  * position.
  *
- * rd_VuProgram  the resident program of the current list: 1 normal_c,
+ * rd_vu_program  the resident program of the current list: 1 normal_c,
  *               2 normal_l, 3 cluster, 4 mesh, 5 particle (MicroCodeAddress)
- * rd_VuCall     MSCAL / MSCALF code with the quadwords the preceding VIF
+ * rd_vu_call     MSCAL / MSCALF code with the quadwords the preceding VIF
  *               UNPACKs left at TOP: SET_UVOFFSET (2), SET_*_MATRIX (16),
  *               SET_*_LIGHT (18; particle: BEGIN_PARTICLE), and the BEGIN
  *               codes (20..24, 32..38), which are remembered for the next
  *               batches. Code 0 (SET_GSREGISTER) is the caller's: the A+D
  *               payload goes to the GS register decoder.
- * rd_VuDrawFromState
+ * rd_vu_draw_from_state
  *               fills prog, code, clip, vu and bones of a draw from the
  *               current list's image; false (and a once-per-pair log) when
  *               the (program, code) pair has no row in the table above. */
-void rd_VuProgram(int id);
-int rd_VuCurrentProgram(void);
-void rd_VuCall(int code, const float (*top)[4], uint32_t qw);
-bool rd_VuDrawFromState(RdVuDraw *d);
+void rd_vu_program(int id);
+int rd_vu_current_program(void);
+void rd_vu_call(int code, const float (*top)[4], uint32_t qw);
+bool rd_vu_draw_from_state(RdVuDraw *d);
 
 /* ------------------------------------------------------ grids (mesh.vsm)
  * prim_DispMesh3D: the Mesh3D packet buffer of the frame (m->bufs[buffer_ID],
@@ -316,7 +316,7 @@ typedef struct RdVuGridDraw {
     RdMaterial material;
 } RdVuGridDraw;
 
-void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key);
+void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key);
 
 /* -------------------------------------------------- particles (particle.vsm)
  * prim_DispParticle: the PrimParticleObj of the frame from num on (count,
@@ -332,13 +332,13 @@ typedef struct RdVuParticleDraw {
     RdMaterial material; /* the particle texture; PRIM 0xD6: TME, ABE (AA1: no effect on sprites) */
 } RdVuParticleDraw;
 
-void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key);
+void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key);
 
 /* ------------------------------------------------- the recorded payload
  *
  * RDC_MESH / RDC_SKINNED / RDC_GRID / RDC_PARTICLES keep their rd_internal.h
  * meaning (u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size)
- * with this payload in the frame arena, 8-byte aligned (rd__FramePayload):
+ * with this payload in the frame arena, 8-byte aligned (rd__frame_payload):
  *
  *   RdVuPayload                  the fixed part
  *   RdVuBlock                    VuCB.mem for the draw

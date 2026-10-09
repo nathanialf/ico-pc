@@ -5,7 +5,7 @@
  */
 #include "ui_mouse_geom.h"
 
-int ui_MouseToGrid(const UiMouseView *v, float px, float py, float *gx, float *gy)
+int ui_mouse_to_grid(const UiMouseView *v, float px, float py, float *gx, float *gy)
 {
     if (v == 0 || v->w <= 0.0f || v->h <= 0.0f) {
         return 0;
@@ -22,7 +22,7 @@ int ui_MouseToGrid(const UiMouseView *v, float px, float py, float *gx, float *g
     return 1;
 }
 
-int ui_MouseRowBox(const UiMouseRow *r, float box[4])
+int ui_mouse_row_box(const UiMouseRow *r, float box[4])
 {
     const int w = r->dispW != 0 ? r->dispW : r->texW;
     const int h = r->dispH != 0 ? r->dispH : r->texH;
@@ -74,7 +74,7 @@ static int target(const UiMouseRow *r, UiMouseHit *out)
     return 1;
 }
 
-int ui_MouseHitTest(const UiMouseRow *rows, int n, float gx, float gy, UiMouseHit *out)
+int ui_mouse_hit_test(const UiMouseRow *rows, int n, float gx, float gy, UiMouseHit *out)
 {
     int found = 0;
     float bestArea = 0.0f, bestDist = 0.0f;
@@ -83,7 +83,7 @@ int ui_MouseHitTest(const UiMouseRow *rows, int n, float gx, float gy, UiMouseHi
     for (int i = 0; i < n; i++) {
         float b[4];
         UiMouseHit h;
-        if (!ui_MouseRowBox(&rows[i], b) || gx < b[0] || gx >= b[2] || gy < b[1] || gy >= b[3]) {
+        if (!ui_mouse_row_box(&rows[i], b) || gx < b[0] || gx >= b[2] || gy < b[1] || gy >= b[3]) {
             continue;
         }
         if (!target(&rows[i], &h)) {

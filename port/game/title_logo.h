@@ -5,7 +5,7 @@
  * models I, C and O, their glows I_f, C_f and O_f and their shadows I_sd,
  * C_sd and O_sd, stage animations of the title's stage, stage 1) stays on
  * the stage behind the layouts; while a Settings or Extras page opened from
- * the title is up (settings.h ui_SettingsCoversTitle, and the model list
+ * the title is up (settings.h ui_settings_covers_title, and the model list
  * the Extras page opens: model_viewer.h ico_mv_title_list_layout) it is not
  * drawn.  Its animation runs on (op.c's actTitleCamera2 waits on
  * opTitleLogoMode), so back on the title it shows settled, with no intro.

@@ -25,7 +25,7 @@
 
 VkrState g_vkr;
 
-uint64_t vkr_NowNs(void)
+uint64_t vkr_now_ns(void)
 {
 #ifdef _WIN32
     LARGE_INTEGER f, c;
@@ -39,7 +39,7 @@ uint64_t vkr_NowNs(void)
 #endif
 }
 
-bool vkr_Check(VkResult r, const char *what, const char *file, int line)
+bool vkr_check(VkResult r, const char *what, const char *file, int line)
 {
     if (r == VK_SUCCESS) {
         return true;
@@ -53,7 +53,7 @@ bool vkr_Check(VkResult r, const char *what, const char *file, int line)
 }
 
 /* ------------------------------------------------------------ handle pools */
-bool vkr_PoolInit(VkrPool *p, const char *name, uint32_t cap, uint32_t elemSize)
+bool vkr_pool_init(VkrPool *p, const char *name, uint32_t cap, uint32_t elemSize)
 {
     memset(p, 0, sizeof(*p));
     p->name = name;
@@ -66,7 +66,7 @@ bool vkr_PoolInit(VkrPool *p, const char *name, uint32_t cap, uint32_t elemSize)
     return p->data && p->gen && p->live && p->freeList;
 }
 
-void vkr_PoolFree(VkrPool *p)
+void vkr_pool_free(VkrPool *p)
 {
     free(p->data);
     free(p->gen);
@@ -75,7 +75,7 @@ void vkr_PoolFree(VkrPool *p)
     memset(p, 0, sizeof(*p));
 }
 
-uint32_t vkr_PoolAlloc(VkrPool *p, void **out)
+uint32_t vkr_pool_alloc(VkrPool *p, void **out)
 {
     uint32_t idx;
     if (p->freeCount > 0) {
@@ -95,7 +95,7 @@ uint32_t vkr_PoolAlloc(VkrPool *p, void **out)
     return ((uint32_t)(p->gen[idx] & VKR_GEN_MASK) << VKR_GEN_SHIFT) | (idx + 1u);
 }
 
-void *vkr_PoolGet(const VkrPool *p, uint32_t id)
+void *vkr_pool_get(const VkrPool *p, uint32_t id)
 {
     uint32_t idx = (id & VKR_INDEX_MASK);
     if (idx == 0 || idx > p->cap) {
@@ -108,9 +108,9 @@ void *vkr_PoolGet(const VkrPool *p, uint32_t id)
     return p->data + (size_t)idx * p->elemSize;
 }
 
-void vkr_PoolRelease(VkrPool *p, uint32_t id)
+void vkr_pool_release(VkrPool *p, uint32_t id)
 {
-    if (!vkr_PoolGet(p, id)) {
+    if (!vkr_pool_get(p, id)) {
         return;
     }
     uint32_t idx = (id & VKR_INDEX_MASK) - 1u;
@@ -120,7 +120,7 @@ void vkr_PoolRelease(VkrPool *p, uint32_t id)
 }
 
 /* ------------------------------------------------------- debug messenger */
-static VKAPI_ATTR VkBool32 VKAPI_CALL vkr_DebugCallback(
+static VKAPI_ATTR VkBool32 VKAPI_CALL vkr_debug_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT types,
     const VkDebugUtilsMessengerCallbackDataEXT *data, void *user)
 {
@@ -135,12 +135,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkr_DebugCallback(
     return VK_FALSE;
 }
 
-const char *vkr_TestLastLimit(void)
+const char *vkr_test_last_limit(void)
 {
     return g_vkr.lastLimit;
 }
 
-uint32_t vkr_TestLimit(const char *name)
+uint32_t vkr_test_limit(const char *name)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
     if (!name) {
@@ -167,13 +167,13 @@ uint32_t vkr_TestLimit(const char *name)
     return 0;
 }
 
-uint32_t rhi_vk_ValidationErrorCount(void)
+uint32_t rhi_vk_validation_error_count(void)
 {
     return g_vkr.validationErrors;
 }
 
 /* ---------------------------------------------------------------- instance */
-static bool vkr_HasLayer(const char *name)
+static bool vkr_has_layer(const char *name)
 {
     uint32_t n = 0;
     vkEnumerateInstanceLayerProperties(&n, NULL);
@@ -189,16 +189,16 @@ static bool vkr_HasLayer(const char *name)
 }
 
 /* the injector and the overlay among the instance layers (rhi.h
- * rhi_InjectorName), found once after volk is up; kept out of g_vkr so
- * rhi_Init's reset leaves them to this scan */
+ * rhi_injector_name), found once after volk is up; kept out of g_vkr so
+ * rhi_init's reset leaves them to this scan */
 static const char *s_vkrInjector, *s_vkrOverlay;
 
-static const char *vkr_Env(const char *name)
+static const char *vkr_env(const char *name)
 {
     return getenv(name);
 }
 
-static void vkr_ScanInjectors(void)
+static void vkr_scan_injectors(void)
 {
     s_vkrInjector = s_vkrOverlay = NULL;
     uint32_t n = 0;
@@ -207,31 +207,31 @@ static void vkr_ScanInjectors(void)
     if (props && vkEnumerateInstanceLayerProperties(&n, props) == VK_SUCCESS) {
         for (uint32_t i = 0; i < n; i++) {
             const char *l = props[i].layerName;
-            if (!rhi_LayerSwitchedOn(l, vkr_Env)) {
+            if (!rhi_layer_switched_on(l, vkr_env)) {
                 continue;
             }
             if (!s_vkrInjector) {
-                s_vkrInjector = rhi_InjectorFromLayerName(l);
+                s_vkrInjector = rhi_injector_from_layer_name(l);
             }
             if (!s_vkrOverlay) {
-                s_vkrOverlay = rhi_OverlayFromLayerName(l);
+                s_vkrOverlay = rhi_overlay_from_layer_name(l);
             }
         }
     }
     free(props);
 }
 
-const char *rhi_InjectorName(void)
+const char *rhi_injector_name(void)
 {
     return s_vkrInjector;
 }
 
-const char *rhi_OverlayName(void)
+const char *rhi_overlay_name(void)
 {
     return s_vkrOverlay;
 }
 
-static bool vkr_HasInstanceExt(const char *name)
+static bool vkr_has_instance_ext(const char *name)
 {
     uint32_t n = 0;
     vkEnumerateInstanceExtensionProperties(NULL, &n, NULL);
@@ -246,7 +246,7 @@ static bool vkr_HasInstanceExt(const char *name)
     return found;
 }
 
-static bool vkr_CreateInstance(const RhiDeviceDesc *desc)
+static bool vkr_create_instance(const RhiDeviceDesc *desc)
 {
     const char *exts[16];
     uint32_t extCount = 0;
@@ -279,12 +279,12 @@ static bool vkr_CreateInstance(const RhiDeviceDesc *desc)
         debug = env[0] != '0';
     }
     if (debug) {
-        if (vkr_HasLayer("VK_LAYER_KHRONOS_validation")) {
+        if (vkr_has_layer("VK_LAYER_KHRONOS_validation")) {
             layers[layerCount++] = "VK_LAYER_KHRONOS_validation";
         } else {
             VKR_LOG("debugLayers: VK_LAYER_KHRONOS_validation not installed; continuing without");
         }
-        if (vkr_HasInstanceExt(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
+        if (vkr_has_instance_ext(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)) {
             exts[extCount++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
             g_vkr.debugUtils = true;
         }
@@ -325,7 +325,7 @@ static bool vkr_CreateInstance(const RhiDeviceDesc *desc)
             .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            .pfnUserCallback = vkr_DebugCallback,
+            .pfnUserCallback = vkr_debug_callback,
         };
         VKR_CHECK(vkCreateDebugUtilsMessengerEXT(g_vkr.instance, &mci, NULL, &g_vkr.messenger));
     }
@@ -333,7 +333,7 @@ static bool vkr_CreateInstance(const RhiDeviceDesc *desc)
 }
 
 /* ------------------------------------------------------- device selection */
-static bool vkr_DeviceHasExt(VkPhysicalDevice pd, const char *name)
+static bool vkr_device_has_ext(VkPhysicalDevice pd, const char *name)
 {
     uint32_t n = 0;
     vkEnumerateDeviceExtensionProperties(pd, NULL, &n, NULL);
@@ -348,30 +348,30 @@ static bool vkr_DeviceHasExt(VkPhysicalDevice pd, const char *name)
     return found;
 }
 
-static bool vkr_FormatOk(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags need)
+static bool vkr_format_ok(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags need)
 {
     VkFormatProperties fp;
     vkGetPhysicalDeviceFormatProperties(pd, f, &fp);
     return (fp.optimalTilingFeatures & need) == need;
 }
 
-/* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_FillLimits
+/* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_fill_limits
  * (the RhiLimits at the spec's required values).  =mali clamps the
  * device's limits to a Mali-G68's (Samsung A36 class: four descriptor
  * sets, 128 bytes of push constants, 256-byte storage offsets, 16 sampled
  * images, samplers and storage buffers a stage, 4096 memory allocations,
  * 4000 samplers), so the lavapipe tests run under a phone's limits: the
- * checks in rhi_CreatePipeline and vkr_Allocate (vk_pipeline.c,
+ * checks in rhi_create_pipeline and vkr_allocate (vk_pipeline.c,
  * vk_resource.c) read props.limits.  A maximum only goes down and an
  * alignment only up. */
-static void vkr_FakeLimits(void)
+static void vkr_fake_limits(void)
 {
     const char *e = getenv("ICO_VK_FAKE_LIMITS");
     if (!e || !e[0] || strcmp(e, "0") == 0) {
         return;
     }
     if (strcmp(e, "min") == 0) {
-        g_vkr.fakeMinLimits = true; /* applied in vkr_FillLimits */
+        g_vkr.fakeMinLimits = true; /* applied in vkr_fill_limits */
         return;
     }
     if (strcmp(e, "mali") != 0) {
@@ -416,11 +416,11 @@ static void vkr_FakeLimits(void)
  * preferred.  Either is taken only with the sampled and transfer uses too:
  * the fog and the effects depth sample the scene's depth in place
  * (rd_replay.c doFog, rd_present.c depthBlit), and the tests' depth
- * readbacks copy it out (rd_replay.c rd__ReadTargetDepth).  When
+ * readbacks copy it out (rd_replay.c rd__read_target_depth).  When
  * neither has them all, D32 unless only D24 is an attachment.
  * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests:
  * rhi_vk_d24s8). */
-static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
+static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
 {
     const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     const VkFormatFeatureFlags all = ds | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
@@ -428,13 +428,13 @@ static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
                                      VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     const char *e = getenv("ICO_VK_FAKE_D24S8");
     *fake = e && e[0] && e[0] != '0';
-    const bool d24 = vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, all);
-    const bool d32 = vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, all);
+    const bool d24 = vkr_format_ok(pd, VK_FORMAT_D24_UNORM_S8_UINT, all);
+    const bool d32 = vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, all);
     if (d24 && (*fake || !d32)) {
         return VK_FORMAT_D24_UNORM_S8_UINT;
     }
-    if (!d32 && !d24 && !vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
-        vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds)) {
+    if (!d32 && !d24 && !vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
+        vkr_format_ok(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds)) {
         return VK_FORMAT_D24_UNORM_S8_UINT;
     }
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
@@ -442,7 +442,7 @@ static VkFormat vkr_ChooseDepthStencil(VkPhysicalDevice pd, bool *fake)
 
 /* Returns a score (higher is better) or -1 when the device cannot run the
  * renderer.  *outQueue receives the graphics(+present) queue family. */
-static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
+static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char **why)
 {
     VkPhysicalDeviceProperties p;
     vkGetPhysicalDeviceProperties(pd, &p);
@@ -451,11 +451,11 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
         return -1;
     }
     bool core13 = p.apiVersion >= VK_API_VERSION_1_3;
-    if (!core13 && !vkr_DeviceHasExt(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
+    if (!core13 && !vkr_device_has_ext(pd, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
         *why = "no dynamic rendering";
         return -1;
     }
-    if (g_vkr.surface && !vkr_DeviceHasExt(pd, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
+    if (g_vkr.surface && !vkr_device_has_ext(pd, VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
         *why = "no swapchain extension";
         return -1;
     }
@@ -476,12 +476,13 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
     const VkFormatFeatureFlags rt =
         VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
     const VkFormatFeatureFlags ds = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    if (!vkr_FormatOk(pd, VK_FORMAT_R8G8B8A8_UNORM,
-                      rt | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) ||
-        !vkr_FormatOk(pd, VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) ||
-        !vkr_FormatOk(pd, VK_FORMAT_R8_UNORM, rt) || !vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT, ds) ||
-        (!vkr_FormatOk(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
-         !vkr_FormatOk(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds))) {
+    if (!vkr_format_ok(pd, VK_FORMAT_R8G8B8A8_UNORM,
+                       rt | VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) ||
+        !vkr_format_ok(pd, VK_FORMAT_R8G8B8A8_UINT, VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT) ||
+        !vkr_format_ok(pd, VK_FORMAT_R8_UNORM, rt) ||
+        !vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT, ds) ||
+        (!vkr_format_ok(pd, VK_FORMAT_D32_SFLOAT_S8_UINT, ds) &&
+         !vkr_format_ok(pd, VK_FORMAT_D24_UNORM_S8_UINT, ds))) {
         *why = "a required format (RGBA8, RGBA8_UINT, R8, D32F, D32F_S8 or D24S8) is missing";
         return -1;
     }
@@ -541,7 +542,7 @@ static int vkr_RateDevice(VkPhysicalDevice pd, uint32_t *outQueue, const char **
     return score;
 }
 
-static bool vkr_PickDevice(void)
+static bool vkr_pick_device(void)
 {
     uint32_t n = 0;
     vkEnumeratePhysicalDevices(g_vkr.instance, &n, NULL);
@@ -563,7 +564,7 @@ static bool vkr_PickDevice(void)
         vkGetPhysicalDeviceProperties(pds[i], &p);
         uint32_t q = 0;
         const char *why = "";
-        int score = vkr_RateDevice(pds[i], &q, &why);
+        int score = vkr_rate_device(pds[i], &q, &why);
         if (score < 0) {
             VKR_LOG("device %u (%s) unsuitable: %s", i, p.deviceName, why);
             continue;
@@ -588,11 +589,11 @@ static bool vkr_PickDevice(void)
     }
     g_vkr.queueFamily = bestQueue;
     vkGetPhysicalDeviceProperties(g_vkr.phys, &g_vkr.props);
-    vkr_FakeLimits();
+    vkr_fake_limits();
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     snprintf(g_vkr.adapterName, sizeof(g_vkr.adapterName), "%s", g_vkr.props.deviceName);
     bool fake = false;
-    g_vkr.dsFormat = vkr_ChooseDepthStencil(g_vkr.phys, &fake);
+    g_vkr.dsFormat = vkr_choose_depth_stencil(g_vkr.phys, &fake);
     if (g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT) {
         VKR_LOG("depth-stencil: D24S8 in use%s, 24-bit depth (the scene depth has less precision "
                 "than the 32-bit float of D32S8)",
@@ -601,7 +602,7 @@ static bool vkr_PickDevice(void)
     return true;
 }
 
-static bool vkr_CreateDevice(void)
+static bool vkr_create_device(void)
 {
     bool core13 = g_vkr.props.apiVersion >= VK_API_VERSION_1_3;
     g_vkr.apiVersion = g_vkr.props.apiVersion;
@@ -632,7 +633,7 @@ static bool vkr_CreateDevice(void)
     g_vkr.bc = avail.textureCompressionBC == VK_TRUE;
     for (int f = RHI_FMT_BC1_UNORM; g_vkr.bc && f <= RHI_FMT_BC7_UNORM; f++) {
         VkFormatProperties fp;
-        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_VkFormat((RhiFormat)f), &fp);
+        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_vk_format((RhiFormat)f), &fp);
         const VkFormatFeatureFlags need = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
                                           VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
                                           VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
@@ -723,7 +724,7 @@ static bool vkr_CreateDevice(void)
     return VKR_CHECK(vkCreateCommandPool(g_vkr.device, &pci, NULL, &g_vkr.oneShotPool));
 }
 
-static void vkr_FillLimits(void)
+static void vkr_fill_limits(void)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
     RhiLimits *o = &g_vkr.limits;
@@ -744,10 +745,10 @@ static void vkr_FillLimits(void)
      * vkCmdCopyBufferToImage takes the level (vk_resource.c, vk_cmd.c) */
     o->textureMips = true;
     o->maxAnisotropy = g_vkr.anisotropy ? l->maxSamplerAnisotropy : 1.0f;
-    /* dynamic uniform buffers (rhi_CmdSetBindGroupOffsets) */
+    /* dynamic uniform buffers (rhi_cmd_set_bind_group_offsets) */
     o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
     o->maxStorageRange = l->maxStorageBufferRange;
-    /* texture packs: the BC formats (vkr_CreateDevice enabled the feature) */
+    /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required
@@ -761,7 +762,7 @@ static void vkr_FillLimits(void)
      * and inside the minimums (rd_replay.c: three sets, at most four uniform
      * buffers and one storage buffer a stage, two sampled images and a
      * sampler, four dynamic uniform buffers, no push constants). */
-    if (g_vkr.fakeMinLimits) { /* read in vkr_FakeLimits */
+    if (g_vkr.fakeMinLimits) { /* read in vkr_fake_limits */
         o->uniformAlign = o->uniformAlign > 256u ? o->uniformAlign : 256u;
         o->maxTextureSize = o->maxTextureSize < 4096u ? o->maxTextureSize : 4096u;
         o->maxDynamicUniforms = o->maxDynamicUniforms < 8u ? o->maxDynamicUniforms : 8u;
@@ -776,22 +777,22 @@ static void vkr_FillLimits(void)
 }
 
 /* ------------------------------------------------------------- lifecycle */
-/* rhi_SetVulkanLoader's function; outside g_vkr, which rhi_Init clears */
+/* rhi_set_vulkan_loader's function; outside g_vkr, which rhi_init clears */
 static PFN_vkGetInstanceProcAddr s_loaderGipa;
 
-void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
     s_loaderGipa = (PFN_vkGetInstanceProcAddr)getInstanceProcAddr;
 }
 
-bool rhi_Init(const RhiDeviceDesc *desc)
+bool rhi_init(const RhiDeviceDesc *desc)
 {
     if (g_vkr.initialised) {
         return true;
     }
     memset(&g_vkr, 0, sizeof(g_vkr));
     VkResult vr;
-    /* a driver the program loaded (rhi_SetVulkanLoader) first */
+    /* a driver the program loaded (rhi_set_vulkan_loader) first */
     PFN_vkGetInstanceProcAddr gipa = s_loaderGipa;
 #ifdef ICO_RHI_HAVE_SDL
     if (!gipa && desc->sdlWindow) {
@@ -814,9 +815,9 @@ bool rhi_Init(const RhiDeviceDesc *desc)
         VKR_LOG("no Vulkan loader (libvulkan / vulkan-1.dll) found");
         return false;
     }
-    vkr_ScanInjectors(); /* rhi_InjectorName */
-    if (!vkr_CreateInstance(desc)) {
-        rhi_Shutdown();
+    vkr_scan_injectors(); /* rhi_injector_name */
+    if (!vkr_create_instance(desc)) {
+        rhi_shutdown();
         return false;
     }
     if (desc->sdlWindow) {
@@ -825,38 +826,38 @@ bool rhi_Init(const RhiDeviceDesc *desc)
 #ifdef __ANDROID__
         /* SDL's surface call goes through its own loader, which is
            not the one a driver the program loaded answers to */
-        if (!vkr_CreateWindowSurface(desc->sdlWindow, &g_vkr.surface)) {
+        if (!vkr_create_window_surface(desc->sdlWindow, &g_vkr.surface)) {
             VKR_LOG("no surface on the window (no native window yet, or the call failed)");
-            rhi_Shutdown();
+            rhi_shutdown();
             return false;
         }
 #else
         if (!SDL_Vulkan_CreateSurface((SDL_Window *)desc->sdlWindow, g_vkr.instance, NULL,
                                       &g_vkr.surface)) {
             VKR_LOG("SDL_Vulkan_CreateSurface: %s", SDL_GetError());
-            rhi_Shutdown();
+            rhi_shutdown();
             return false;
         }
 #endif
 #endif
     }
-    if (!vkr_PickDevice() || !vkr_CreateDevice()) {
-        rhi_Shutdown();
+    if (!vkr_pick_device() || !vkr_create_device()) {
+        rhi_shutdown();
         return false;
     }
-    vkr_FillLimits();
-    vkr_PipelineCacheInit();
-    if (!vkr_PoolInit(&g_vkr.buffers, "buffer", 4096, sizeof(VkrBuffer)) ||
-        !vkr_PoolInit(&g_vkr.textures, "texture", 8192, sizeof(VkrTexture)) ||
-        !vkr_PoolInit(&g_vkr.samplers, "sampler", 256, sizeof(VkSampler)) ||
-        !vkr_PoolInit(&g_vkr.shaders, "shader", 512, sizeof(VkrShader)) ||
-        !vkr_PoolInit(&g_vkr.layouts, "bind group layout", 64, sizeof(VkrLayout)) ||
-        !vkr_PoolInit(&g_vkr.pipelines, "pipeline", 1024, sizeof(VkrPipeline))) {
-        rhi_Shutdown();
+    vkr_fill_limits();
+    vkr_pipeline_cache_init();
+    if (!vkr_pool_init(&g_vkr.buffers, "buffer", 4096, sizeof(VkrBuffer)) ||
+        !vkr_pool_init(&g_vkr.textures, "texture", 8192, sizeof(VkrTexture)) ||
+        !vkr_pool_init(&g_vkr.samplers, "sampler", 256, sizeof(VkSampler)) ||
+        !vkr_pool_init(&g_vkr.shaders, "shader", 512, sizeof(VkrShader)) ||
+        !vkr_pool_init(&g_vkr.layouts, "bind group layout", 64, sizeof(VkrLayout)) ||
+        !vkr_pool_init(&g_vkr.pipelines, "pipeline", 1024, sizeof(VkrPipeline))) {
+        rhi_shutdown();
         return false;
     }
-    if (!vkr_FramesInit()) {
-        rhi_Shutdown();
+    if (!vkr_frames_init()) {
+        rhi_shutdown();
         return false;
     }
     g_vkr.initialised = true;
@@ -865,8 +866,8 @@ bool rhi_Init(const RhiDeviceDesc *desc)
 #ifdef ICO_RHI_HAVE_SDL
         SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
-        if (!vkr_SwapchainCreate((uint32_t)w, (uint32_t)h, desc->vsync)) {
-            rhi_Shutdown();
+        if (!vkr_swapchain_create((uint32_t)w, (uint32_t)h, desc->vsync)) {
+            rhi_shutdown();
             return false;
         }
     }
@@ -876,28 +877,28 @@ bool rhi_Init(const RhiDeviceDesc *desc)
     return true;
 }
 
-void rhi_Shutdown(void)
+void rhi_shutdown(void)
 {
     if (g_vkr.device) {
         vkDeviceWaitIdle(g_vkr.device);
-        vkr_SwapchainDestroy();
-        vkr_FramesShutdown();
-        vkr_ReleaseAllObjects();
+        vkr_swapchain_destroy();
+        vkr_frames_shutdown();
+        vkr_release_all_objects();
         if (g_vkr.oneShotPool) {
             vkDestroyCommandPool(g_vkr.device, g_vkr.oneShotPool, NULL);
         }
         if (g_vkr.timeline) {
             vkDestroySemaphore(g_vkr.device, g_vkr.timeline, NULL);
         }
-        vkr_PipelineCacheShutdown();
+        vkr_pipeline_cache_shutdown();
         vkDestroyDevice(g_vkr.device, NULL);
     }
-    vkr_PoolFree(&g_vkr.buffers);
-    vkr_PoolFree(&g_vkr.textures);
-    vkr_PoolFree(&g_vkr.samplers);
-    vkr_PoolFree(&g_vkr.shaders);
-    vkr_PoolFree(&g_vkr.layouts);
-    vkr_PoolFree(&g_vkr.pipelines);
+    vkr_pool_free(&g_vkr.buffers);
+    vkr_pool_free(&g_vkr.textures);
+    vkr_pool_free(&g_vkr.samplers);
+    vkr_pool_free(&g_vkr.shaders);
+    vkr_pool_free(&g_vkr.layouts);
+    vkr_pool_free(&g_vkr.pipelines);
     if (g_vkr.instance) {
         if (g_vkr.surface) {
             vkDestroySurfaceKHR(g_vkr.instance, g_vkr.surface, NULL);
@@ -912,27 +913,27 @@ void rhi_Shutdown(void)
     g_vkr.validationErrors = errors; /* readable after shutdown, for tests */
 }
 
-RhiBackendKind rhi_Backend(void)
+RhiBackendKind rhi_backend(void)
 {
     return RHI_BACKEND_VULKAN;
 }
 
-const RhiLimits *rhi_Limits(void)
+const RhiLimits *rhi_limits(void)
 {
     return &g_vkr.limits;
 }
 
-const char *rhi_AdapterName(void)
+const char *rhi_adapter_name(void)
 {
     return g_vkr.adapterName;
 }
 
-bool rhi_DeviceLost(void)
+bool rhi_device_lost(void)
 {
     return g_vkr.deviceLost;
 }
 
-void rhi_GetStats(RhiStats *out)
+void rhi_get_stats(RhiStats *out)
 {
     if (out) {
         *out = g_vkr.stats;
@@ -944,10 +945,10 @@ void rhi_GetStats(RhiStats *out)
     }
 }
 
-bool rhi_TimestampsSupported(void)
+bool rhi_timestamps_supported(void)
 {
     return g_vkr.timestamps;
 }
 
-/* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
+/* The rhi_create_backend entry (port/rhi/rhi_backend.h). */
 RHI_BACKEND_DEFINE(rhi_backend_vk, "vulkan");

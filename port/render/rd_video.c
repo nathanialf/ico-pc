@@ -10,7 +10,7 @@
  * black), converting the decoder's 4:2:0 planes with the IPU's CSC in
  * yuv.hlsl, then presents.  DISPLAY and the game's frames are not touched.
  *
- * Layout: the box is the PS2 display area (rd_VideoSetDisplay, 720 x 576 or
+ * Layout: the box is the PS2 display area (rd_video_set_display, 720 x 576 or
  * 480); a w x h picture sits in it at ((dispW - w) / 2, (dispH - h) / 2),
  * the offsets mv_videodec.c's dispSetTags used, scaled with the area.  A
  * picture wider or taller than the area is fitted into the box on that side
@@ -19,17 +19,17 @@
  * Under the CRT filter the films go through it as the game's
  * frames do: the picture is drawn into a target of the PS2 display area
  * (dispW x dispH, the clear colour around the picture, mirrored as shown),
- * and rd__CrtRecordFilm draws that through the tube into the same box,
- * on the film's grid (rd__CrtFilmGrid: the game's 512 triads, the film's
- * field lines).  The clear frames (rd_VideoClear) take the same road, so
+ * and rd__crt_record_film draws that through the tube into the same box,
+ * on the film's grid (rd__crt_film_grid: the game's 512 triads, the film's
+ * field lines).  The clear frames (rd_video_clear) take the same road, so
  * the tube shows them as it shows the film.
  *
  * GPU objects: its own two shaders and pipeline (one per output format)
  * over rd's bind group layouts (group 0 FrameCB, group 1 DrawCB, group 2
  * t1/s1/t2), one R8 plane texture, and per frame in flight an upload buffer
  * for the planes and the two uniform blocks.  Each call waits for its frame
- * slot (rhi_WaitFrame), records, submits and presents on its own, as
- * rd_EndFrame does for a game frame; it runs on the simulation thread
+ * slot (rhi_wait_frame), records, submits and presents on its own, as
+ * rd_end_frame does for a game frame; it runs on the simulation thread
  * between game frames (the scheduler draws none while a movie plays).
  */
 #include <string.h>
@@ -56,7 +56,7 @@ static struct {
     uint32_t areaW, areaH;
 } s_v = {.dispW = 720, .dispH = 576, .clear = {0.0f, 0.0f, 0.0f, 1.0f}};
 
-void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH)
+void rd_video_set_display(uint32_t dispW, uint32_t dispH)
 {
     s_v.dispW = dispW ? dispW : 720;
     s_v.dispH = dispH ? dispH : 576;
@@ -68,8 +68,8 @@ static bool ensureInit(void)
         return false;
     }
     if (!s_v.ready) {
-        s_v.vs = rd__MakeShader("yuv_vs");
-        s_v.fs = rd__MakeShader("yuv_ps");
+        s_v.vs = rd__make_shader("yuv_vs");
+        s_v.fs = rd__make_shader("yuv_ps");
         s_v.ready = s_v.vs.id && s_v.fs.id;
     }
     return s_v.ready;
@@ -84,7 +84,7 @@ static RhiPipeline pipelineFor(RhiFormat fmt)
     }
     int slot = s_v.pipe[0].id ? 1 : 0;
     if (s_v.pipe[slot].id) {
-        rhi_DestroyPipeline(s_v.pipe[slot]);
+        rhi_destroy_pipeline(s_v.pipe[slot]);
     }
     RhiBindGroupLayout layouts[3] = {g_rd.layoutFrame, g_rd.layoutDraw, g_rd.layoutTex};
     RhiPipelineDesc d;
@@ -100,7 +100,7 @@ static RhiPipeline pipelineFor(RhiFormat fmt)
     d.colorCount = 1;
     d.depthFormat = RHI_FMT_UNKNOWN;
     d.debugName = "rd video";
-    s_v.pipe[slot] = rhi_CreatePipeline(&d);
+    s_v.pipe[slot] = rhi_create_pipeline(&d);
     s_v.pipeFmt[slot] = fmt;
     return s_v.pipe[slot];
 }
@@ -111,15 +111,15 @@ static bool ensureUpload(int slot, uint64_t need)
         return true;
     }
     if (s_v.upload[slot].id) {
-        rhi_DestroyBuffer(s_v.upload[slot]);
+        rhi_destroy_buffer(s_v.upload[slot]);
     }
     uint64_t cap = 1u << 20;
     while (cap < need) {
         cap *= 2;
     }
-    s_v.upload[slot] = rhi_CreateBuffer(&(RhiBufferDesc){cap, RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC,
-                                                         RHI_MEM_UPLOAD, "rd video upload"});
-    s_v.uploadMap[slot] = s_v.upload[slot].id ? rhi_MapBuffer(s_v.upload[slot]) : NULL;
+    s_v.upload[slot] = rhi_create_buffer(&(RhiBufferDesc){cap, RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC,
+                                                          RHI_MEM_UPLOAD, "rd video upload"});
+    s_v.uploadMap[slot] = s_v.upload[slot].id ? rhi_map_buffer(s_v.upload[slot]) : NULL;
     s_v.uploadCap[slot] = s_v.uploadMap[slot] ? cap : 0;
     return s_v.uploadMap[slot] != NULL;
 }
@@ -137,17 +137,17 @@ static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t bindSlot, R
     b.buffer = buf;
     b.offset = off;
     b.size = size;
-    return rhi_CreateBindGroup(&(RhiBindGroupDesc){layout, &b, 1});
+    return rhi_create_bind_group(&(RhiBindGroupDesc){layout, &b, 1});
 }
 
-/* The movie's box: the presenter's 4:3 box (rd_present.c rd__PresentBox).
+/* The movie's box: the presenter's 4:3 box (rd_present.c rd__present_box).
  * Whatever the aspect option, the 4:3 movie is pillarboxed
  * in the output (in a 16:9 Enhanced presentation the scene fills the window
  * and the movie keeps 4:3); the full-height and resolution options do not
  * apply (the picture goes straight to the output). */
 static void box43(uint32_t outW, uint32_t outH, RhiRect *box)
 {
-    rd__PresentBox(outW, outH, 4.0f / 3.0f, box);
+    rd__present_box(outW, outH, 4.0f / 3.0f, box);
 }
 
 /* The output: the swapchain's next image, or rd's headless present target
@@ -164,25 +164,25 @@ typedef struct VideoOut {
 static bool acquireOut(VideoOut *o)
 {
     memset(o, 0, sizeof(*o));
-    o->window = rhi_SwapchainFormat() != RHI_FMT_UNKNOWN;
+    o->window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
     if (o->window) {
-        o->tex = rhi_AcquireBackbuffer();
+        o->tex = rhi_acquire_backbuffer();
         if (!o->tex.id) {
-            rhi_ResizeSwapchain(g_rd.settings.outputWidth, g_rd.settings.outputHeight,
-                                g_rd.settings.vsync != 0);
-            o->tex = rhi_AcquireBackbuffer();
+            rhi_resize_swapchain(g_rd.settings.outputWidth, g_rd.settings.outputHeight,
+                                 g_rd.settings.vsync != 0);
+            o->tex = rhi_acquire_backbuffer();
         }
         if (o->tex.id) {
-            rd__OutputFollowSwapchain(); /* the image's own size */
+            rd__output_follow_swapchain(); /* the image's own size */
         }
         o->localState = RHI_STATE_UNDEFINED;
         o->state = &o->localState;
-        o->fmt = rhi_SwapchainFormat();
+        o->fmt = rhi_swapchain_format();
         o->w = g_rd.settings.outputWidth;
         o->h = g_rd.settings.outputHeight;
         return o->tex.id && o->w && o->h;
     }
-    if (!rd__PresentAcquire()) {
+    if (!rd__present_acquire()) {
         return false;
     }
     o->tex = g_rd.presentOut;
@@ -200,11 +200,11 @@ static bool ensureArea(void)
         return true;
     }
     if (s_v.area.id) {
-        rhi_DestroyTexture(s_v.area);
+        rhi_destroy_texture(s_v.area);
     }
-    s_v.area = rhi_CreateTexture(&(RhiTextureDesc){s_v.dispW, s_v.dispH, 1, RHI_FMT_RGBA8_UNORM,
-                                                   RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
-                                                   "rd video area"});
+    s_v.area = rhi_create_texture(&(RhiTextureDesc){s_v.dispW, s_v.dispH, 1, RHI_FMT_RGBA8_UNORM,
+                                                    RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                    "rd video area"});
     s_v.areaState = RHI_STATE_UNDEFINED;
     s_v.areaW = s_v.dispW;
     s_v.areaH = s_v.dispH;
@@ -226,7 +226,7 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
     p.colorCount = 1;
     p.width = dw;
     p.height = dh;
-    rhi_CmdBeginRenderPass(cl, &p);
+    rhi_cmd_begin_render_pass(cl, &p);
     if (picture) {
         /* the picture's rectangle in the box, from its place in the PS2
            display area (integer offsets as mv_videodec.c computed them).
@@ -250,8 +250,8 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
                 (float)box->x + (float)box->w - (float)ox * sx - vp.w; /* the rectangle mirrored */
         }
         RhiRect sc = *box;
-        rhi_CmdSetViewport(cl, &vp);
-        rhi_CmdSetScissor(cl, &sc);
+        rhi_cmd_set_viewport(cl, &vp);
+        rhi_cmd_set_scissor(cl, &sc);
         RhiPipeline pipe = pipelineFor(fmt);
         if (pipe.id) {
             RhiBinding tb[3];
@@ -262,21 +262,21 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
             tb[1].slot = 1;
             tb[1].type = RHI_BIND_SAMPLER;
             tb[1].sampler =
-                rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+                rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
             tb[2].slot = 2;
             tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
             tb[2].texture = g_rd.dummy;
-            rhi_CmdSetPipeline(cl, pipe);
-            rhi_CmdSetBindGroup(
+            rhi_cmd_set_pipeline(cl, pipe);
+            rhi_cmd_set_bind_group(
                 cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
-            rhi_CmdSetBindGroup(
+            rhi_cmd_set_bind_group(
                 cl, 1, uniformGroup(g_rd.layoutDraw, 1, buf, dcOff, (uint32_t)sizeof(IcoDrawCB)));
-            rhi_CmdSetBindGroup(cl, 2,
-                                rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, tb, 3}));
-            rhi_CmdDraw(cl, 3, 0, 1);
+            rhi_cmd_set_bind_group(
+                cl, 2, rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, tb, 3}));
+            rhi_cmd_draw(cl, 3, 0, 1);
         }
     }
-    rhi_CmdEndRenderPass(cl);
+    rhi_cmd_end_render_pass(cl);
 }
 
 /* One present: the picture (planes != NULL) or the clear colour alone. */
@@ -288,11 +288,11 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     }
     /* the ring for the CRT pass's uniforms (and the slot kept in step with
        the replays' either way) */
-    if (!rd__BeginOwnFrame(64u * 1024u)) {
+    if (!rd__begin_own_frame(64u * 1024u)) {
         return -1;
     }
-    const int slot = (int)rhi_FrameSlot();
-    const RhiLimits *lim = rhi_Limits();
+    const int slot = (int)rhi_frame_slot();
+    const RhiLimits *lim = rhi_limits();
     const uint32_t cw = (w + 1) / 2, ch = (h + 1) / 2;
     const uint32_t tw = 2 * cw, th = h + ch;
     const uint32_t pitchA = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1;
@@ -315,11 +315,11 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     if (picture) {
         if (!s_v.planes.id || s_v.planesW != tw || s_v.planesH != th) {
             if (s_v.planes.id) {
-                rhi_DestroyTexture(s_v.planes);
+                rhi_destroy_texture(s_v.planes);
             }
-            s_v.planes = rhi_CreateTexture(&(RhiTextureDesc){tw, th, 1, RHI_FMT_R8_UNORM,
-                                                             RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
-                                                             "rd video planes"});
+            s_v.planes = rhi_create_texture(&(RhiTextureDesc){tw, th, 1, RHI_FMT_R8_UNORM,
+                                                              RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
+                                                              "rd video planes"});
             s_v.planesState = RHI_STATE_UNDEFINED;
             s_v.planesW = tw;
             s_v.planesH = th;
@@ -359,24 +359,24 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     dcb.tex[1] = (float)h;
     dcb.mode[0] = cw;
     dcb.mode[1] = h;
-    /* the films follow the mirror mode (rd_SetMirror or
+    /* the films follow the mirror mode (rd_set_mirror or
        RdSettings.mirror) */
-    dcb.param[0] = rd__MirrorOn() ? 1.0f : 0.0f;
+    dcb.param[0] = rd__mirror_on() ? 1.0f : 0.0f;
     memcpy(map + dcOff, &dcb, sizeof(dcb));
 
-    RhiCommandList cl = rhi_BeginCommands();
+    RhiCommandList cl = rhi_begin_commands();
     if (!cl.id) {
         return -1;
     }
     if (picture) {
-        rd__Transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_COPY_DST);
-        rhi_CmdCopyBufferToTexture(cl, buf, texOff, rowPitch, s_v.planes, 0,
-                                   (RhiRect){0, 0, tw, th});
-        rd__Transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_SHADER_READ);
+        rd__transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_COPY_DST);
+        rhi_cmd_copy_buffer_to_texture(cl, buf, texOff, rowPitch, s_v.planes, 0,
+                                       (RhiRect){0, 0, tw, th});
+        rd__transition(cl, s_v.planes, &s_v.planesState, RHI_STATE_SHADER_READ);
     }
     RhiRect box;
     box43(out.w, out.h, &box);
-    rd__NotePresentBox(out.w, out.h, &box); /* for the tests */
+    rd__note_present_box(out.w, out.h, &box); /* for the tests */
     if (rgba != NULL) {
         /* dispClear's colour: what the PS2 showed around the picture (the
            whole screen there; the whole output here, bars included, or the
@@ -387,38 +387,38 @@ static int presentVideo(const uint8_t *y, const uint8_t *u, const uint8_t *v,
     }
     const bool mirror = dcb.param[0] != 0.0f;
     bool filtered = false;
-    if (rd__CrtOn() && ensureArea()) {
+    if (rd__crt_on() && ensureArea()) {
         /* the display area 1:1 (the picture at its PS2 offsets), then
            the tube over it into the box */
-        rd__Transition(cl, s_v.area, &s_v.areaState, RHI_STATE_RENDER_TARGET);
+        rd__transition(cl, s_v.area, &s_v.areaState, RHI_STATE_RENDER_TARGET);
         const RhiRect all = {0, 0, s_v.dispW, s_v.dispH};
         drawPicture(cl, s_v.area, RHI_FMT_RGBA8_UNORM, s_v.dispW, s_v.dispH, &all, picture, w, h,
                     mirror, buf, cbOff, dcOff);
-        rd__Transition(cl, s_v.area, &s_v.areaState, RHI_STATE_SHADER_READ);
+        rd__transition(cl, s_v.area, &s_v.areaState, RHI_STATE_SHADER_READ);
         uint32_t vw, vh;
-        rd__CrtFilmGrid(s_v.dispH, &vw, &vh);
-        rd__Transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
-        filtered = rd__CrtRecordFilm(cl, s_v.area, s_v.dispW, s_v.dispH, vw, vh, out.tex, out.fmt,
-                                     out.w, out.h, &box);
+        rd__crt_film_grid(s_v.dispH, &vw, &vh);
+        rd__transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
+        filtered = rd__crt_record_film(cl, s_v.area, s_v.dispW, s_v.dispH, vw, vh, out.tex, out.fmt,
+                                       out.w, out.h, &box);
     }
     if (!filtered) {
-        rd__Transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
+        rd__transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
         drawPicture(cl, out.tex, out.fmt, out.w, out.h, &box, picture, w, h, mirror, buf, cbOff,
                     dcOff);
     }
     if (out.window) {
-        rd__Transition(cl, out.tex, out.state, RHI_STATE_PRESENT);
+        rd__transition(cl, out.tex, out.state, RHI_STATE_PRESENT);
     }
-    rhi_EndCommands(cl);
-    rhi_Submit(cl);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
     if (out.window) {
-        rhi_Present();
+        rhi_present();
     }
-    g_rd.videoShown = 1; /* rd_Present leaves the picture until a game frame closes */
+    g_rd.videoShown = 1; /* rd_present leaves the picture until a game frame closes */
     return 0;
 }
 
-/* presentVideo through rd__OnHost: the driver work off the fiber's stack */
+/* presentVideo through rd__on_host: the driver work off the fiber's stack */
 typedef struct VideoCall {
     const uint8_t *y, *u, *v;
     const uint32_t *pitch;
@@ -438,18 +438,18 @@ static int presentVideoOnHost(const uint8_t *y, const uint8_t *u, const uint8_t 
                               const uint8_t rgba[4])
 {
     VideoCall c = {y, u, v, pitch, w, h, rgba, -1};
-    rd__OnHost(videoOnHost, &c);
+    rd__on_host(videoOnHost, &c);
     return c.ret;
 }
 
-/* rd_VideoPresents: counted on the thread that calls rd_VideoFrame (the
+/* rd_video_presents: counted on the thread that calls rd_video_frame (the
    game's), read by the window's statistics between vsyncs on the same one */
 static uint32_t s_presents;
 
 static uint32_t s_presentFails;
 
-int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
-                  uint32_t w, uint32_t h)
+int rd_video_frame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
+                   uint32_t w, uint32_t h)
 {
     if (!y || !u || !v || !pitch || w == 0 || h == 0) {
         s_presentFails++;
@@ -464,7 +464,7 @@ int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const ui
     return r;
 }
 
-uint32_t rd_VideoPresents(uint32_t *failed)
+uint32_t rd_video_presents(uint32_t *failed)
 {
     if (failed != NULL) {
         *failed = s_presentFails;
@@ -472,48 +472,48 @@ uint32_t rd_VideoPresents(uint32_t *failed)
     return s_presents;
 }
 
-int rd_VideoClear(const uint8_t rgba[4])
+int rd_video_clear(const uint8_t rgba[4])
 {
     return presentVideoOnHost(NULL, NULL, NULL, NULL, 0, 0, rgba);
 }
 
-void rd_VideoShutdown(void)
+void rd_video_shutdown(void)
 {
     if (!g_rd.hasDevice) {
         memset(&s_v.pipe, 0, sizeof(s_v.pipe));
         s_v.ready = false;
         return;
     }
-    rhi_WaitIdle();
+    rhi_wait_idle();
     for (int i = 0; i < 2; i++) {
         if (s_v.pipe[i].id) {
-            rhi_DestroyPipeline(s_v.pipe[i]);
+            rhi_destroy_pipeline(s_v.pipe[i]);
         }
         s_v.pipe[i] = (RhiPipeline){0};
     }
     for (int i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         if (s_v.upload[i].id) {
-            rhi_DestroyBuffer(s_v.upload[i]);
+            rhi_destroy_buffer(s_v.upload[i]);
         }
         s_v.upload[i] = (RhiBuffer){0};
         s_v.uploadMap[i] = NULL;
         s_v.uploadCap[i] = 0;
     }
     if (s_v.planes.id) {
-        rhi_DestroyTexture(s_v.planes);
+        rhi_destroy_texture(s_v.planes);
     }
     s_v.planes = (RhiTexture){0};
     s_v.planesW = s_v.planesH = 0;
     if (s_v.area.id) {
-        rhi_DestroyTexture(s_v.area);
+        rhi_destroy_texture(s_v.area);
     }
     s_v.area = (RhiTexture){0};
     s_v.areaW = s_v.areaH = 0;
     if (s_v.vs.id) {
-        rhi_DestroyShader(s_v.vs);
+        rhi_destroy_shader(s_v.vs);
     }
     if (s_v.fs.id) {
-        rhi_DestroyShader(s_v.fs);
+        rhi_destroy_shader(s_v.fs);
     }
     s_v.vs = s_v.fs = (RhiShader){0};
     s_v.ready = false;

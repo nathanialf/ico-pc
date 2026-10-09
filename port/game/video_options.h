@@ -168,7 +168,7 @@ enum { ICO_FRAMERATE_ORIGINAL = 0, ICO_FRAMERATE_UNCAPPED = -1 };
 
 /* IcoVideoOptions.resScale for resolution "auto" (v0.4.2 N2): the scene
    starts at the window's size and the window lowers it a step (3x, 2x, 1x)
-   when the presents take too long (pace_policy.h pace_AutoResolutionStep),
+   when the presents take too long (pace_policy.h pace_auto_resolution_step),
    never back up while the game runs */
 #define ICO_RES_AUTO (-1)
 
@@ -242,7 +242,7 @@ int ico_video_interpolate(void);
 /* The game's camera-cut signal (R7b): the hard-cut sites (camera-root.c,
    StageManager.c, under ICO_HOST) call ico_video_camera_cut(); the window
    compares ico_video_cut_serial() once per vsync and marks the frame being
-   recorded as a cut (rd_CameraCut), so the presenter does not blend across
+   recorded as a cut (rd_camera_cut), so the presenter does not blend across
    it.  A counter only: no game state reads it, so the simulation and its
    trace are the same with or without a window. */
 void ico_video_camera_cut(void);

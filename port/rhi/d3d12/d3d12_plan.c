@@ -5,7 +5,7 @@
 #include <string.h>
 
 /* ---------------------------------------------------------- resource states */
-uint32_t d3dp_TextureState(RhiState s, bool depthFormat)
+uint32_t d3dp_texture_state(RhiState s, bool depthFormat)
 {
     switch (s) {
     case RHI_STATE_RENDER_TARGET:
@@ -30,20 +30,20 @@ uint32_t d3dp_TextureState(RhiState s, bool depthFormat)
     }
 }
 
-bool d3dp_PlanTextureBarrier(RhiState before, RhiState after, bool depthFormat, uint32_t *tracked,
-                             uint32_t *outBefore, uint32_t *outAfter, bool *mismatch)
+bool d3dp_plan_texture_barrier(RhiState before, RhiState after, bool depthFormat, uint32_t *tracked,
+                               uint32_t *outBefore, uint32_t *outAfter, bool *mismatch)
 {
     uint32_t b = *tracked;
     if (mismatch) {
         *mismatch = false;
     }
     if (before != RHI_STATE_UNDEFINED) {
-        b = d3dp_TextureState(before, depthFormat);
+        b = d3dp_texture_state(before, depthFormat);
         if (b != *tracked && mismatch) {
             *mismatch = true;
         }
     }
-    uint32_t a = d3dp_TextureState(after, depthFormat);
+    uint32_t a = d3dp_texture_state(after, depthFormat);
     *tracked = a;
     *outBefore = b;
     *outAfter = a;
@@ -51,15 +51,15 @@ bool d3dp_PlanTextureBarrier(RhiState before, RhiState after, bool depthFormat, 
 }
 
 /* ------------------------------------------------------------------ buffers */
-uint32_t d3dp_BufferState(const D3dpBufferTrack *t, uint64_t listSerial)
+uint32_t d3dp_buffer_state(const D3dpBufferTrack *t, uint64_t listSerial)
 {
     return t->listSerial == listSerial ? t->state : D3DP_STATE_COMMON;
 }
 
-bool d3dp_BufferBeginCopyDst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *outBefore,
-                             uint32_t *outAfter)
+bool d3dp_buffer_begin_copy_dst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *outBefore,
+                                uint32_t *outAfter)
 {
-    uint32_t cur = d3dp_BufferState(t, listSerial);
+    uint32_t cur = d3dp_buffer_state(t, listSerial);
     t->listSerial = listSerial;
     t->state = D3DP_STATE_COPY_DEST;
     *outBefore = cur;
@@ -67,8 +67,8 @@ bool d3dp_BufferBeginCopyDst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *
     return cur != D3DP_STATE_COPY_DEST;
 }
 
-void d3dp_BufferEndCopyDst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *outBefore,
-                           uint32_t *outAfter)
+void d3dp_buffer_end_copy_dst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *outBefore,
+                              uint32_t *outAfter)
 {
     t->listSerial = listSerial;
     t->state = D3DP_STATE_GENERIC_READ;
@@ -76,21 +76,21 @@ void d3dp_BufferEndCopyDst(D3dpBufferTrack *t, uint64_t listSerial, uint32_t *ou
     *outAfter = D3DP_STATE_GENERIC_READ;
 }
 
-bool d3dp_CopyNeedsSync(uint64_t *texSerial, uint64_t listSerial)
+bool d3dp_copy_needs_sync(uint64_t *texSerial, uint64_t listSerial)
 {
     bool sync = *texSerial == listSerial && listSerial != 0;
     *texSerial = listSerial;
     return sync;
 }
 
-void d3dp_CopyMarkBarrier(uint64_t *texSerial)
+void d3dp_copy_mark_barrier(uint64_t *texSerial)
 {
     *texSerial = 0;
 }
 
 /* ---------------------------------------------------------- descriptor rings */
-void d3dp_RingInit(D3dpRing *r, uint32_t total, uint32_t persistent, uint32_t frames,
-                   uint32_t frame)
+void d3dp_ring_init(D3dpRing *r, uint32_t total, uint32_t persistent, uint32_t frames,
+                    uint32_t frame)
 {
     uint32_t avail = total > persistent ? total - persistent : 0u;
     uint32_t each = frames ? avail / frames : 0u;
@@ -99,7 +99,7 @@ void d3dp_RingInit(D3dpRing *r, uint32_t total, uint32_t persistent, uint32_t fr
     r->used = 0;
 }
 
-bool d3dp_RingAlloc(D3dpRing *r, uint32_t count, uint32_t *outIndex)
+bool d3dp_ring_alloc(D3dpRing *r, uint32_t count, uint32_t *outIndex)
 {
     if (count > r->size - r->used) {
         return false;
@@ -109,13 +109,13 @@ bool d3dp_RingAlloc(D3dpRing *r, uint32_t count, uint32_t *outIndex)
     return true;
 }
 
-void d3dp_RingReset(D3dpRing *r)
+void d3dp_ring_reset(D3dpRing *r)
 {
     r->used = 0;
 }
 
 /* ---------------------------------------------------------------- layouts */
-D3dpRegClass d3dp_RegClass(RhiBindType t)
+D3dpRegClass d3dp_reg_class(RhiBindType t)
 {
     switch (t) {
     case RHI_BIND_UNIFORM_BUFFER:
@@ -130,7 +130,7 @@ D3dpRegClass d3dp_RegClass(RhiBindType t)
     }
 }
 
-bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
+bool d3dp_layout_build(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
 {
     memset(out, 0, sizeof(*out));
     if (count > D3DP_MAX_SLOTS || (count && !slots)) {
@@ -143,7 +143,7 @@ bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
         }
         for (uint32_t j = 0; j < i; j++) {
             if (slots[j].slot == s->slot &&
-                d3dp_RegClass(slots[j].type) == d3dp_RegClass(s->type)) {
+                d3dp_reg_class(slots[j].type) == d3dp_reg_class(s->type)) {
                 return false; /* one register, two bindings */
             }
         }
@@ -168,7 +168,7 @@ bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
     }
     out->slotCount = count;
     /* root CBVs in ascending slot order, the order of the bind-time offsets
-     * (rhi_CmdSetBindGroupOffsets); offset[] is the rank */
+     * (rhi_cmd_set_bind_group_offsets); offset[] is the rank */
     for (uint32_t a = 1; a < out->dynCount; a++) {
         for (uint32_t b = a;
              b > 0 && out->slots[out->dynSlot[b - 1]].slot > out->slots[out->dynSlot[b]].slot;
@@ -184,7 +184,7 @@ bool d3dp_LayoutBuild(const RhiBindSlot *slots, uint32_t count, D3dpLayout *out)
     return true;
 }
 
-int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type)
+int d3dp_layout_find(const D3dpLayout *l, uint32_t slot, RhiBindType type)
 {
     for (uint32_t i = 0; i < l->slotCount; i++) {
         if (l->slots[i].slot == slot && l->slots[i].type == type) {
@@ -194,9 +194,9 @@ int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type)
     return -1;
 }
 
-uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
-                         int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
-                         int8_t dynParam[RHI_MAX_BIND_SLOTS])
+uint32_t d3dp_root_params(const D3dpLayout *const *layouts, uint32_t count,
+                          int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
+                          int8_t dynParam[RHI_MAX_BIND_SLOTS])
 {
     uint32_t n = 0;
     for (uint32_t g = 0; g < RHI_MAX_BIND_SLOTS; g++) {
@@ -221,7 +221,7 @@ uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
 }
 
 /* ------------------------------------------------------------- small maths */
-uint32_t d3dp_CbvSize(uint64_t offset, uint64_t size, uint64_t bufSize)
+uint32_t d3dp_cbv_size(uint64_t offset, uint64_t size, uint64_t bufSize)
 {
     if ((offset & 255u) != 0 || offset >= bufSize) {
         return 0;
@@ -234,14 +234,14 @@ uint32_t d3dp_CbvSize(uint64_t offset, uint64_t size, uint64_t bufSize)
         size &= ~(uint64_t)255u; /* "to the end": the whole 256-byte blocks only */
         return (uint32_t)size;
     }
-    uint64_t v = d3dp_AlignUp(size, 256u);
+    uint64_t v = d3dp_align_up(size, 256u);
     if (v > 65536u || offset + v > bufSize) {
         return 0;
     }
     return (uint32_t)v;
 }
 
-float d3dp_IntClearValue(float v)
+float d3dp_int_clear_value(float v)
 {
     return v <= 0.0f ? 0.0f : floorf(v + 0.5f);
 }
@@ -255,7 +255,7 @@ static uint32_t rd32(const uint8_t *p)
 /* DXBC container: "DXBC", 16-byte hash, u32 version, u32 total size, u32
  * chunk count, u32 chunk offsets; each chunk is a fourcc, a u32 size and
  * the data. */
-bool d3dp_IsDxbc(const void *blob, size_t size)
+bool d3dp_is_dxbc(const void *blob, size_t size)
 {
     const uint8_t *b = blob;
     if (!b || size < 32 || memcmp(b, "DXBC", 4) != 0) {
@@ -274,9 +274,9 @@ bool d3dp_IsDxbc(const void *blob, size_t size)
     return true;
 }
 
-int d3dp_ReadInputSignature(const void *blob, size_t size, D3dpSigElem *out, int max)
+int d3dp_read_input_signature(const void *blob, size_t size, D3dpSigElem *out, int max)
 {
-    if (!d3dp_IsDxbc(blob, size)) {
+    if (!d3dp_is_dxbc(blob, size)) {
         return -1;
     }
     const uint8_t *b = blob;
@@ -327,7 +327,7 @@ int d3dp_ReadInputSignature(const void *blob, size_t size, D3dpSigElem *out, int
     return -1;
 }
 
-int d3dp_LocationElement(const D3dpSigElem *elems, int count, uint32_t loc)
+int d3dp_location_element(const D3dpSigElem *elems, int count, uint32_t loc)
 {
     /* the element whose register has exactly `loc` plain inputs below it */
     for (int i = 0; i < count; i++) {
@@ -348,7 +348,7 @@ int d3dp_LocationElement(const D3dpSigElem *elems, int count, uint32_t loc)
 }
 
 /* ------------------------------------------------------------ handle pools */
-bool d3dp_PoolInit(D3dpPool *p, const char *name, uint32_t cap, uint32_t elemSize)
+bool d3dp_pool_init(D3dpPool *p, const char *name, uint32_t cap, uint32_t elemSize)
 {
     memset(p, 0, sizeof(*p));
     p->name = name;
@@ -361,7 +361,7 @@ bool d3dp_PoolInit(D3dpPool *p, const char *name, uint32_t cap, uint32_t elemSiz
     return p->data && p->gen && p->live && p->freeList;
 }
 
-void d3dp_PoolFree(D3dpPool *p)
+void d3dp_pool_free(D3dpPool *p)
 {
     free(p->data);
     free(p->gen);
@@ -370,7 +370,7 @@ void d3dp_PoolFree(D3dpPool *p)
     memset(p, 0, sizeof(*p));
 }
 
-uint32_t d3dp_PoolAlloc(D3dpPool *p, void **out)
+uint32_t d3dp_pool_alloc(D3dpPool *p, void **out)
 {
     uint32_t idx;
     if (p->freeCount > 0) {
@@ -389,7 +389,7 @@ uint32_t d3dp_PoolAlloc(D3dpPool *p, void **out)
     return ((uint32_t)(p->gen[idx] & D3DP_GEN_MASK) << D3DP_GEN_SHIFT) | (idx + 1u);
 }
 
-void *d3dp_PoolGet(const D3dpPool *p, uint32_t id)
+void *d3dp_pool_get(const D3dpPool *p, uint32_t id)
 {
     uint32_t idx = id & D3DP_INDEX_MASK;
     if (!p->data || idx == 0 || idx > p->cap) {
@@ -402,9 +402,9 @@ void *d3dp_PoolGet(const D3dpPool *p, uint32_t id)
     return p->data + (size_t)idx * p->elemSize;
 }
 
-void d3dp_PoolRelease(D3dpPool *p, uint32_t id)
+void d3dp_pool_release(D3dpPool *p, uint32_t id)
 {
-    if (!d3dp_PoolGet(p, id)) {
+    if (!d3dp_pool_get(p, id)) {
         return;
     }
     uint32_t idx = (id & D3DP_INDEX_MASK) - 1u;
@@ -413,7 +413,7 @@ void d3dp_PoolRelease(D3dpPool *p, uint32_t id)
     p->freeList[p->freeCount++] = idx;
 }
 
-void *d3dp_PoolAt(const D3dpPool *p, uint32_t index)
+void *d3dp_pool_at(const D3dpPool *p, uint32_t index)
 {
     if (!p->data || index >= p->next || !p->live[index]) {
         return NULL;
@@ -421,7 +421,7 @@ void *d3dp_PoolAt(const D3dpPool *p, uint32_t index)
     return p->data + (size_t)index * p->elemSize;
 }
 
-bool d3dp_SlotsInit(D3dpSlots *s, uint32_t cap)
+bool d3dp_slots_init(D3dpSlots *s, uint32_t cap)
 {
     memset(s, 0, sizeof(*s));
     s->cap = cap;
@@ -429,13 +429,13 @@ bool d3dp_SlotsInit(D3dpSlots *s, uint32_t cap)
     return s->freeList != NULL;
 }
 
-void d3dp_SlotsFree(D3dpSlots *s)
+void d3dp_slots_free(D3dpSlots *s)
 {
     free(s->freeList);
     memset(s, 0, sizeof(*s));
 }
 
-bool d3dp_SlotsAlloc(D3dpSlots *s, uint32_t *out)
+bool d3dp_slots_alloc(D3dpSlots *s, uint32_t *out)
 {
     if (s->freeCount) {
         *out = s->freeList[--s->freeCount];
@@ -448,7 +448,7 @@ bool d3dp_SlotsAlloc(D3dpSlots *s, uint32_t *out)
     return false;
 }
 
-void d3dp_SlotsRelease(D3dpSlots *s, uint32_t index)
+void d3dp_slots_release(D3dpSlots *s, uint32_t index)
 {
     if (index < s->next && s->freeCount < s->cap) {
         s->freeList[s->freeCount++] = index;

@@ -430,7 +430,7 @@ void fakeTables(void)
        menu_PAL_01) that settings_render binds to a drawn stand-in */
     for (int g = 0; g < LT_GLYPH_COUNT; g++) {
         int uv[4];
-        int r = lt_ext_GlyphSource(g, uv);
+        int r = lt_ext_glyph_source(g, uv);
         texProperty[r].texU = uv[0];
         texProperty[r].texV = uv[1];
         texProperty[r].texW = uv[2];
@@ -465,15 +465,15 @@ void frame(int flags)
     pad[0].now = flags;
 #ifdef SETTINGS_RENDER
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kBg, 1, 0);
     exec_layout_texture();
     if (s_reduce) {
         RdPostParams pp;
         memset(&pp, 0, sizeof(pp));
         pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
         dl_SetDLPriority(12);
-        rd_Post(RD_POST_REDUCTION, &pp);
+        rd_post(RD_POST_REDUCTION, &pp);
     }
     dl_Swap();
 #else
@@ -532,14 +532,14 @@ void useConfig(const char *text)
 int labelsAre(UiSettingsPage page, const int *opts, const int *strs, int n)
 {
     int labels[32], got[32];
-    int c = ui_SettingsPageRows(page, labels, got, NULL, 32);
+    int c = ui_settings_page_rows(page, labels, got, NULL, 32);
     int ok = c == n;
     for (int i = 0; ok && i < n; i++) {
         ok = got[i] == opts[i] &&
-             (strs[i] < 0 || strcmp(lt_ext_RowText(labels[i]), ui_Str((UiStrId)strs[i])) == 0);
+             (strs[i] < 0 || strcmp(lt_ext_row_text(labels[i]), ui_str((UiStrId)strs[i])) == 0);
         if (!ok) {
             printf("  page %d row %d: opt %d (want %d) \"%s\"\n", page, i, got[i], opts[i],
-                   lt_ext_RowText(labels[i]));
+                   lt_ext_row_text(labels[i]));
         }
     }
     if (c != n) {
@@ -555,7 +555,7 @@ void pauseToMain(void)
     CHECK(settle(57, 40), "the pause menu");
     texLayout[57].curItem = 294;
     press(0x40);
-    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_MAIN), 60), "Options: the menu (%d)",
+    CHECK(settle(ui_settings_page_layout(UI_PAGE_MAIN), 60), "Options: the menu (%d)",
           current_layout_id);
 }
 
@@ -574,24 +574,24 @@ int enterMain(int title)
 int enterMainKeep(int title)
 {
     fakeTables();
-    lt_ext_Reset();
-    ui_SettingsReset();
+    lt_ext_reset();
+    ui_settings_reset();
     memset(pad, 0, sizeof(pad));
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     NonLinearCameraMove = 2;
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
     init_layout_texture(2);
     settle(54, 4);
     if (title) {
         lt_switch_layout(13);
         CHECK(settle(13, 60), "the title");
         press(0x4000);
-        CHECK(texLayout[13].curItem == ui_SettingsEntryRow(13), "on Settings");
+        CHECK(texLayout[13].curItem == ui_settings_entry_row(13), "on Settings");
         press(0x40);
     } else {
         pauseToMain();
     }
-    int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     CHECK(settle(mainL, 60), "the menu (title %d)", title);
     return mainL;
 }
@@ -600,10 +600,10 @@ int enterMainKeep(int title)
 int openPage(int mainL, int mainRow, UiSettingsPage page)
 {
     int labels[16];
-    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
-    lt_ext_Layout(mainL)->curItem = labels[mainRow];
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    lt_ext_layout(mainL)->curItem = labels[mainRow];
     press(0x40);
-    const int l = ui_SettingsPageLayout(page);
+    const int l = ui_settings_page_layout(page);
     CHECK(settle(l, 60), "page %d opens (%d)", page, current_layout_id);
     return l;
 }
@@ -621,9 +621,9 @@ void gsSampler(IcoGsSnapshot *out)
 /* the row of layout page whose text is str, -1 */
 int rowWithText(UiSettingsPage page, const char *str)
 {
-    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    LtProp *l = lt_ext_layout(ui_settings_page_layout(page));
     for (int j = l->first; j < l->last; j++) {
-        if (strcmp(lt_ext_RowText(j), str) == 0) {
+        if (strcmp(lt_ext_row_text(j), str) == 0) {
             return j;
         }
     }
@@ -637,15 +637,15 @@ int rowWithText(UiSettingsPage page, const char *str)
 void checkPageFits(UiSettingsPage page, const char *what)
 {
     int labels[16];
-    const int n = ui_SettingsPageRows(page, labels, NULL, NULL, 16);
+    const int n = ui_settings_page_rows(page, labels, NULL, NULL, 16);
     int prev = -1, last = -1, shown = 0;
     for (int i = 0; i < n; i++) {
-        shown += !lt_ext_Prop(labels[i])->defaultMask;
+        shown += !lt_ext_prop(labels[i])->defaultMask;
     }
     const int gap = shown > 13 ? 11 : 13;
     const int top = shown > 13 ? 30 : 34;
     for (int i = 0; i < n; i++) {
-        const LtProperty *r = lt_ext_Prop(labels[i]);
+        const LtProperty *r = lt_ext_prop(labels[i]);
         if (r->defaultMask) {
             continue;
         }
@@ -654,17 +654,17 @@ void checkPageFits(UiSettingsPage page, const char *what)
         prev = r->dispY;
         last = labels[i];
     }
-    CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+    CHECK(last >= 0 && lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
           "%s: the last row's box ends at %d", what,
-          last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+          last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
 }
 
 /* the note row of `page` whose text starts with prefix, -1 */
 int noteStarting(UiSettingsPage page, const char *prefix)
 {
-    LtProp *l = lt_ext_Layout(ui_SettingsPageLayout(page));
+    LtProp *l = lt_ext_layout(ui_settings_page_layout(page));
     for (int j = l->first; j < l->last; j++) {
-        if (strncmp(lt_ext_RowText(j), prefix, strlen(prefix)) == 0) {
+        if (strncmp(lt_ext_row_text(j), prefix, strlen(prefix)) == 0) {
             return j;
         }
     }

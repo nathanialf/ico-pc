@@ -57,7 +57,7 @@ static void copyText(char *dst, const char *src)
     dst[n] = '\0';
 }
 
-int ui_PopupPush(const char *title, const char *body)
+int ui_popup_push(const char *title, const char *body)
 {
     if (s_count == UI_POPUP_QUEUE) {
         return -1;
@@ -72,19 +72,19 @@ int ui_PopupPush(const char *title, const char *body)
     return 0;
 }
 
-void ui_PopupReset(void)
+void ui_popup_reset(void)
 {
     s_head = s_count = 0;
     s_age = 0;
     s_devNext = DEV_TEST_TICK;
 }
 
-int ui_PopupActive(void)
+int ui_popup_active(void)
 {
     return s_count > 0;
 }
 
-void ui_PopupVsync(void)
+void ui_popup_vsync(void)
 {
     if (s_count == 0) {
         return;
@@ -97,18 +97,18 @@ void ui_PopupVsync(void)
     }
 }
 
-void ui_PopupSetDevTest(int on)
+void ui_popup_set_dev_test(int on)
 {
     s_devTest = on != 0;
 }
 
-void ui_PopupDevTick(unsigned int mainTick)
+void ui_popup_dev_tick(unsigned int mainTick)
 {
     if (s_devTest && mainTick >= s_devNext) {
         while (s_devNext <= mainTick) {
             s_devNext += DEV_TEST_PERIOD;
         }
-        ui_PopupPush(ui_Str(UI_STR_POPUP_TEST_TITLE), ui_Str(UI_STR_POPUP_TEST_BODY));
+        ui_popup_push(ui_str(UI_STR_POPUP_TEST_TITLE), ui_str(UI_STR_POPUP_TEST_BODY));
     }
 }
 
@@ -145,10 +145,10 @@ static int panel(Panel *pn)
     float ta, td, ba, bd;
     /* the menus' text (menu_font.h), measured as its
        strips lay it out */
-    ui_MenuFontMetrics(TITLE_SIZE, &ta, &td, NULL);
-    ui_MenuFontMetrics(BODY_SIZE, &ba, &bd, NULL);
-    float w = ui_MeasureMenuText(TITLE_SIZE, p->title);
-    float bw = ui_MeasureMenuText(BODY_SIZE, p->body);
+    ui_menu_font_metrics(TITLE_SIZE, &ta, &td, NULL);
+    ui_menu_font_metrics(BODY_SIZE, &ba, &bd, NULL);
+    float w = ui_measure_menu_text(TITLE_SIZE, p->title);
+    float bw = ui_measure_menu_text(BODY_SIZE, p->body);
     if (bw > w) {
         w = bw;
     }
@@ -177,12 +177,12 @@ static int panel(Panel *pn)
     return 1;
 }
 
-const char *ui_PopupTitle(void)
+const char *ui_popup_title(void)
 {
     return s_count > 0 ? s_queue[s_head].title : "";
 }
 
-int ui_PopupPanel(float rect[4])
+int ui_popup_panel(float rect[4])
 {
     Panel pn;
     if (!panel(&pn)) {
@@ -205,15 +205,15 @@ static void scaled(uint8_t out[4], uint8_t r, uint8_t g, uint8_t b, uint8_t a, f
 }
 #endif
 
-void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
+void ui_popup_draw_overlay(const struct RdOverlayCtx *ctx)
 {
 #ifdef ICO_RD
-    if (s_count == 0 || !ctx || !ui_FontInit()) {
+    if (s_count == 0 || !ctx || !ui_font_init()) {
         return;
     }
-    /* on the output (font.h ui_BeginOverlay), at this present;
+    /* on the output (font.h ui_begin_overlay), at this present;
        measured at the overlay's scale, so the panel fits its text */
-    ui_BeginOverlay(ctx);
+    ui_begin_overlay(ctx);
     Panel pn;
     if (panel(&pn) && pn.alpha > 0.0f) {
         const Popup *p = &s_queue[s_head];
@@ -221,21 +221,21 @@ void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
         /* the panel: dark, translucent, a hairline in the menu's warm grey
            on top */
         scaled(c, 6, 6, 9, 0x5C, pn.alpha);
-        ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y1, c);
+        ui_draw_rect(pn.x0, pn.y0, pn.x1, pn.y1, c);
         scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
-        ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
+        ui_draw_rect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
         /* in the menus' look, the same 1x strip as
            the scene's text magnified onto the output */
         scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
-        ui_DrawMenuText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE,
-                        UI_INK_LIGHT, NULL);
+        ui_draw_menu_text(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE,
+                          UI_INK_LIGHT, NULL);
         if (p->body[0]) {
             scaled(c, 0x66, 0x64, 0x5E, 0x80, pn.alpha);
-            ui_DrawMenuText(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP,
-                            UI_INK_LIGHT, NULL);
+            ui_draw_menu_text(pn.x0 + PAD_X, pn.bodyTop, BODY_SIZE, c, p->body, UI_VALIGN_TOP,
+                              UI_INK_LIGHT, NULL);
         }
     }
-    ui_EndOverlay();
+    ui_end_overlay();
 #else
     (void)ctx;
 #endif

@@ -882,8 +882,8 @@ static void pump_popups(void)
         return;
     }
     i = s_popq[0];
-    wrap(ui_Str(s_defs[i].desc), text, sizeof(text));
-    if (ui_PopupPush(ui_Str(s_defs[i].title), text) != 0) {
+    wrap(ui_str(s_defs[i].desc), text, sizeof(text));
+    if (ui_popup_push(ui_str(s_defs[i].title), text) != 0) {
         return; /* the popup queue is full: try again next tick */
     }
     memmove(s_popq, s_popq + 1, (size_t)(s_popq_n - 1) * sizeof(s_popq[0]));

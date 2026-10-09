@@ -31,11 +31,11 @@ typedef struct MvCam {
 } MvCam;
 
 /* a stick byte (128 centred) as -1..1 with a dead zone; negative is up/left */
-float mv_CamStick(int v);
+float mv_cam_stick(int v);
 
 /* one tick: the right stick (ana[0] x, ana[1] y) turns, L2 zooms out, R2
    zooms in, the left stick (ana[2], ana[3]) moves the model sideways and up or
    down */
-void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4]);
+void mv_cam_step(MvCam *c, unsigned now, const unsigned char ana[4]);
 
 #endif

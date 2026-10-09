@@ -4,7 +4,7 @@
  * The window's "is a present slow" decision, free of SDL so a
  * unit test checks it. A present with vsync on blocks up to one display
  * refresh, so slow means a cost above max(refresh, period) + period / 2; with
- * an effects program loaded (ReShade, vkBasalt: rhi_InjectorName() != NULL)
+ * an effects program loaded (ReShade, vkBasalt: rhi_injector_name() != NULL)
  * each present also runs the program's passes, so the threshold is
  * max(refresh, period) + refresh + period / 2.
  *
@@ -31,17 +31,17 @@ typedef struct PaceHist {
 } PaceHist;
 
 /* The slow threshold in nanoseconds. */
-uint64_t pace_SlowThreshold(uint64_t refreshNs, uint64_t periodNs, bool injector);
+uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injector);
 
 /* Records one present's cost and returns whether presents are slow now. */
-bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
-                      bool injector);
+bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
+                       bool injector);
 
 /* Resolution "auto" (video_options.h ICO_RES_AUTO).  The window
  * feeds each present's cost (the GPU time of a replay when the backend has
  * timestamps, else its CPU time without the acquire and the present, which
  * wait for the display) into a PaceSamples; every PACE_AUTO_WINDOW_NS it asks
- * pace_AutoResolutionStep for the scene scale and starts a new window.
+ * pace_auto_resolution_step for the scene scale and starts a new window.
  *
  * The rule: when the median cost over the window (at least
  * PACE_AUTO_WINDOW_NS of samples, at least PACE_AUTO_MIN_SAMPLES of them)
@@ -55,7 +55,7 @@ bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t
 #define PACE_AUTO_MIN_SAMPLES 8
 #define PACE_AUTO_WINDOW_NS 2000000000ull
 
-/* Zero-initialise (or pace_SamplesReset) before the first sample. */
+/* Zero-initialise (or pace_samples_reset) before the first sample. */
 typedef struct PaceSamples {
     uint64_t cost[PACE_AUTO_SAMPLES]; /* a ring: the newest PACE_AUTO_SAMPLES */
     unsigned count;                   /* valid entries, up to PACE_AUTO_SAMPLES */
@@ -68,18 +68,18 @@ typedef struct PaceSamples {
 
 /* A new window starting at nowNs: the samples dropped; budgetNs and
    lastStepNs kept. */
-void pace_SamplesReset(PaceSamples *s, uint64_t nowNs);
+void pace_samples_reset(PaceSamples *s, uint64_t nowNs);
 
 /* One present's cost at time nowNs (any monotonic clock in ns, above 0). */
-void pace_SamplesAdd(PaceSamples *s, uint64_t nowNs, uint64_t costNs);
+void pace_samples_add(PaceSamples *s, uint64_t nowNs, uint64_t costNs);
 
 /* The median of the samples (0 with none). */
-uint64_t pace_SamplesMedian(const PaceSamples *s);
+uint64_t pace_samples_median(const PaceSamples *s);
 
 /* The scene scale resolution "auto" should have: currentScale (0 = the
  * window's size, else N) or the next step down.  windowScale is the
  * window's size against the game's 1x (the presentation box's height over
  * 448), to know which step is below the window's own. */
-int pace_AutoResolutionStep(const PaceSamples *s, int currentScale, float windowScale);
+int pace_auto_resolution_step(const PaceSamples *s, int currentScale, float windowScale);
 
 #endif /* ICO_PLATFORM_PACE_POLICY_H */

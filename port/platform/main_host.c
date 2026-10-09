@@ -1428,11 +1428,11 @@ static void open_texture_pack(const char *exe_dir)
     tc.cacheMb = (uint32_t)vo.texturePackCacheMb;
     /* read ahead only while the pack is in use */
     tc.precache = vo.texturePackPrecache && vo.texturePack;
-    tc.bcSupported = rhi_Limits() != NULL && rhi_Limits()->bcTextures;
-    tc.maxTextureSize = rhi_Limits() != NULL ? rhi_Limits()->maxTextureSize : 0;
+    tc.bcSupported = rhi_limits() != NULL && rhi_limits()->bcTextures;
+    tc.maxTextureSize = rhi_limits() != NULL ? rhi_limits()->maxTextureSize : 0;
     tc.developer = ico_opt_developer_mode();
-    texpack_Init(&tc);
-    at_shutdown(texpack_Shutdown);
+    texpack_init(&tc);
+    at_shutdown(texpack_shutdown);
 }
 
 /* A model pack from the same folders, read and converted
@@ -1451,12 +1451,12 @@ static void open_model_pack(const char *exe_dir)
     mc.serial = ICO_DISC_ID;
     mc.developer = developer;
     mc.dumpEnabled = developer && ico_video_dump_models();
-    modelpack_Init(&mc);
-    modelpack_SetEnabled(ico_video_model_pack() != 0);
-    fprintf(stderr, "models: %d replacements, model pack %s, dump models %s\n", modelpack_Count(),
+    modelpack_init(&mc);
+    modelpack_set_enabled(ico_video_model_pack() != 0);
+    fprintf(stderr, "models: %d replacements, model pack %s, dump models %s\n", modelpack_count(),
             ico_video_model_pack() ? "on" : "off", mc.dumpEnabled ? "on" : "off");
-    ui_SettingsSetModelPackCount(modelpack_Count);
-    at_shutdown(modelpack_Shutdown);
+    ui_settings_set_model_pack_count(modelpack_count);
+    at_shutdown(modelpack_shutdown);
 }
 #endif
 
@@ -1464,11 +1464,11 @@ static void open_model_pack(const char *exe_dir)
 static void start_watchdog(unsigned long watchdog)
 {
     /* An effects program (ReShade) compiles its shaders on the first
-       frames; the first limit is doubled for it (rhi_InjectorName, port/rhi/
+       frames; the first limit is doubled for it (rhi_injector_name, port/rhi/
        rhi.h, is only in the window build). */
     const char *injector = NULL;
 #ifndef ICO_HEADLESS
-    injector = rhi_InjectorName();
+    injector = rhi_injector_name();
 #endif
     if (injector != NULL && watchdog != 0) {
         ico_diag_log("ico_pc: an effects program (%s) is loaded, so the start-up time limit "
@@ -1691,7 +1691,7 @@ static int host_main(int argc, char **argv)
                Settings page that was never left (Characters in the model
                viewer, the pause menu's pages): its changes are written now,
                not lost */
-            ui_SettingsSaveOnQuit();
+            ui_settings_save_on_quit();
             return 0;
         }
         ico_window_pace(ico_host_vsync_hz());

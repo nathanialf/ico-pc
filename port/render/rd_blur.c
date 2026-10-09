@@ -2,7 +2,7 @@
  *
  * staticBlur.c's host path (ICO_RD) records every register write of its
  * packets as rd state, in packet order, and every gif_SpriteSensitiveOrg
- * as rd_Post of the kind of the effect it belongs to
+ * as rd_post of the kind of the effect it belongs to
  * (RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR); rd_post.c's reduction
  * records its two sprites here too (RD_POST_REDUCTION), so the motion blur
  * loop through DISPLAY is in this model end to end.  This file records
@@ -40,16 +40,16 @@
 #include <string.h>
 #include "rd_internal.h"
 
-void rd__PostBlur(RdPostKind kind, const RdPostParams *p)
+void rd__post_blur(RdPostKind kind, const RdPostParams *p)
 {
-    rd__PostBlurVerts(kind, p, NULL);
+    rd__post_blur_verts(kind, p, NULL);
 }
 
-void rd__PostBlurVerts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx v[4])
+void rd__post_blur_verts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx v[4])
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (!f) {
-        rd__Push(RDC_POST_STUB);
+        rd__push(RDC_POST_STUB);
         return;
     }
     RdPostRec r;
@@ -77,10 +77,10 @@ void rd__PostBlurVerts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx
     }
     r.lines = p->lines & 3;
     /* the sprite as screen prims too (the reduction's, unmirrored
-     * then mirrored), for a replay at a scale (rd__BlurScreenFallback) */
-    r.lutOffset = v ? rd__FramePayload(f, v, 4 * (uint32_t)sizeof(RdScreenVtx)) : ~0u;
-    const uint32_t off = rd__FramePayload(f, &r, sizeof(r));
-    RdCmd *c = rd__Push(RDC_POST_STUB);
+     * then mirrored), for a replay at a scale (rd__blur_screen_fallback) */
+    r.lutOffset = v ? rd__frame_payload(f, v, 4 * (uint32_t)sizeof(RdScreenVtx)) : ~0u;
+    const uint32_t off = rd__frame_payload(f, &r, sizeof(r));
+    RdCmd *c = rd__push(RDC_POST_STUB);
     if (c) {
         c->b[0] = (uint8_t)kind;
         c->u[1] = off;
@@ -100,14 +100,14 @@ void rd__PostBlurVerts(RdPostKind kind, const RdPostParams *p, const RdScreenVtx
  * and x at 4/16 and 12/16.  That is U moved back by 8 (half a texel); the
  * scissor (2 .. W - 3) and the black sprite (pixels 0 .. W - 1) are
  * symmetric already, and V (v = 2y + 1) does not change.  On a scaled
- * target the hardware sprite (rd__BlurScreenFallback) has its U moved the
+ * target the hardware sprite (rd__blur_screen_fallback) has its U moved the
  * same half texel (rd_post.c records that pair too), so it samples at
  * x + s / 4 and, mirrored, x - s / 4 in the target's texels, again the
  * mirror image. */
-void rd__BlurUvRect(uint32_t kind, const RdPostRec *p, float uv[4])
+void rd__blur_uv_rect(uint32_t kind, const RdPostRec *p, float uv[4])
 {
     memcpy(uv, p->uv, sizeof(p->uv));
-    if (kind == RD_POST_REDUCTION && rd__MirrorOn()) {
+    if (kind == RD_POST_REDUCTION && rd__mirror_on()) {
         uv[0] -= 8.0f;
         uv[2] -= 8.0f;
     }
@@ -122,18 +122,18 @@ void rd__BlurUvRect(uint32_t kind, const RdPostRec *p, float uv[4])
  * Original, and Enhanced wherever both targets are at scale 1, take
  * the exact model.  Returns the payload offset of the two vertices to draw
  * (the mirrored pair with the mirror on), or ~0u for the model. */
-uint32_t rd__BlurScreenFallback(uint32_t kind, const RdPostRec *p, const RdStateBlock *st)
+uint32_t rd__blur_screen_fallback(uint32_t kind, const RdPostRec *p, const RdStateBlock *st)
 {
     if (kind != RD_POST_REDUCTION || p->lutOffset == ~0u) {
         return ~0u;
     }
-    const RdTargetRec *dst = rd__TargetRec(st->color);
-    const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
-    const RdTargetRec *src = t && t->kind == RD_TEXKIND_TARGET ? rd__TargetRec(t->target) : NULL;
+    const RdTargetRec *dst = rd__target_rec(st->color);
+    const RdTexRec *t = st->ds.texEnabled ? rd__tex_rec(st->tex) : NULL;
+    const RdTargetRec *src = t && t->kind == RD_TEXKIND_TARGET ? rd__target_rec(t->target) : NULL;
     const int scaled = (dst && (dst->sx != 1.0f || dst->sy != 1.0f)) ||
                        (src && (src->sx != 1.0f || src->sy != 1.0f));
     if (!scaled) {
         return ~0u;
     }
-    return p->lutOffset + (rd__MirrorOn() ? 2u * (uint32_t)sizeof(RdScreenVtx) : 0u);
+    return p->lutOffset + (rd__mirror_on() ? 2u * (uint32_t)sizeof(RdScreenVtx) : 0u);
 }

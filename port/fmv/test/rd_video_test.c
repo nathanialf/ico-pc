@@ -67,7 +67,7 @@ static uint8_t s_out[OW * OH * 4];
 static int readOut(void)
 {
     uint32_t w = 0, h = 0;
-    if (!rd__ReadPresent(s_out, sizeof(s_out), &w, &h) || w != OW || h != OH) {
+    if (!rd__read_present(s_out, sizeof(s_out), &w, &h) || w != OW || h != OH) {
         printf("FAIL: readback (%u x %u)\n", w, h);
         failures++;
         return -1;
@@ -92,9 +92,9 @@ static void testFlat(void)
     memset(u, 90, sizeof(u));
     memset(v, 240, sizeof(v)); /* BT.601 red-ish */
     ipu_csc(81, 90, 240, want);
-    rd_VideoSetDisplay(64, 48);
-    CHECK(rd_VideoClear(black) == 0, "clear");
-    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "frame");
+    rd_video_set_display(64, 48);
+    CHECK(rd_video_clear(black) == 0, "clear");
+    CHECK(rd_video_frame(y, u, v, pitch, W, H) == 0, "frame");
     if (readOut() != 0) {
         return;
     }
@@ -152,8 +152,8 @@ static void testRamp(void)
         s_u[i] = (uint8_t)((i * 53 + 7) & 0xFF);
         s_v[i] = (uint8_t)((i * 29 + 200) & 0xFF);
     }
-    rd_VideoSetDisplay(OW, OH);
-    CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "ramp frame");
+    rd_video_set_display(OW, OH);
+    CHECK(rd_video_frame(s_y, s_u, s_v, pitch, OW, OH) == 0, "ramp frame");
     if (readOut() == 0) {
         int bad = checkRamp(0);
         CHECK(bad == 0, "ramp: %d pixels differ from the IPU model", bad);
@@ -162,11 +162,11 @@ static void testRamp(void)
 
 static void setMirror(int on)
 {
-    RdSettings s = *rd_GetSettings();
+    RdSettings s = *rd_get_settings();
     s.mirror = (uint8_t)on;
-    rd_SetSettings(&s);
-    rd_BeginFrame(); /* settings apply at the next frame */
-    rd_DiscardFrame();
+    rd_set_settings(&s);
+    rd_begin_frame(); /* settings apply at the next frame */
+    rd_discard_frame();
 }
 
 static void testMirror(void)
@@ -174,13 +174,13 @@ static void testMirror(void)
     const uint32_t pitch[3] = {OW, OW / 2, OW / 2};
 
     setMirror(1);
-    CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "mirror frame");
+    CHECK(rd_video_frame(s_y, s_u, s_v, pitch, OW, OH) == 0, "mirror frame");
     if (readOut() == 0) {
         int bad = checkRamp(1);
         CHECK(bad == 0, "mirror on: %d pixels differ from the flipped model", bad);
     }
     setMirror(0);
-    CHECK(rd_VideoFrame(s_y, s_u, s_v, pitch, OW, OH) == 0, "unmirrored frame");
+    CHECK(rd_video_frame(s_y, s_u, s_v, pitch, OW, OH) == 0, "unmirrored frame");
     if (readOut() == 0) {
         int bad = checkRamp(0);
         CHECK(bad == 0, "mirror off: %d pixels differ from the unflipped model", bad);
@@ -196,13 +196,13 @@ static uint8_t s_big[CW * CH * 4];
 
 static void setCrt(RdCrtMode mode, uint32_t w, uint32_t h)
 {
-    RdSettings s = *rd_GetSettings();
-    rd_CrtSettings(&s, mode, 1.0f);
+    RdSettings s = *rd_get_settings();
+    rd_crt_settings(&s, mode, 1.0f);
     s.outputWidth = w;
     s.outputHeight = h;
-    rd_SetSettings(&s);
-    rd_BeginFrame(); /* settings apply at the next frame */
-    rd_DiscardFrame();
+    rd_set_settings(&s);
+    rd_begin_frame(); /* settings apply at the next frame */
+    rd_discard_frame();
 }
 
 /* the box's (640 x 480 at x 80) mean luma, its rows' spread (the largest
@@ -210,7 +210,7 @@ static void setCrt(RdCrtMode mode, uint32_t w, uint32_t h)
 static int measure(double *mean, double *spread, int *outside)
 {
     uint32_t w = 0, h = 0;
-    if (!rd__ReadPresent(s_big, sizeof(s_big), &w, &h) || w != CW || h != CH) {
+    if (!rd__read_present(s_big, sizeof(s_big), &w, &h) || w != CW || h != CH) {
         printf("FAIL: crt readback (%u x %u)\n", w, h);
         failures++;
         return -1;
@@ -251,28 +251,29 @@ static void testCrt(void)
     memset(y, 160, sizeof(y));
     memset(u, 128, sizeof(u));
     memset(v, 128, sizeof(v));
-    rd_VideoSetDisplay(W, H);
+    rd_video_set_display(W, H);
 
     /* off: no pass, a flat box */
     setCrt(RD_CRT_OFF, CW, CH);
-    const uint32_t n0 = rd__CrtLastPass(NULL, NULL);
-    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt off: frame");
+    const uint32_t n0 = rd__crt_last_pass(NULL, NULL);
+    CHECK(rd_video_frame(y, u, v, pitch, W, H) == 0, "crt off: frame");
     double offMean = 0.0, spread = 0.0;
     int outside = 0;
     if (measure(&offMean, &spread, &outside) == 0) {
         printf("crt off: box luma %.1f, rows' spread %.2f, %d lit outside\n", offMean, spread,
                outside);
-        CHECK(rd__CrtLastPass(NULL, NULL) == n0, "crt off: no CRT pass drawn");
+        CHECK(rd__crt_last_pass(NULL, NULL) == n0, "crt off: no CRT pass drawn");
         CHECK(spread < 0.01 && outside == 0, "crt off: the plain picture in the box");
     }
 
     /* on: one pass a frame, the film's grid, scanlines in the box */
     setCrt(RD_CRT_SCANLINES, CW, CH);
-    CHECK(rd_VideoClear(black) == 0, "crt on: clear");
+    CHECK(rd_video_clear(black) == 0, "crt on: clear");
     uint32_t vw = 0, vh = 0;
-    CHECK(rd__CrtLastPass(&vw, &vh) == n0 + 1, "crt on: the clear frame drawn through the filter");
-    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt on: frame");
-    CHECK(rd__CrtLastPass(&vw, &vh) == n0 + 2, "crt on: the film frame drawn through the filter");
+    CHECK(rd__crt_last_pass(&vw, &vh) == n0 + 1,
+          "crt on: the clear frame drawn through the filter");
+    CHECK(rd_video_frame(y, u, v, pitch, W, H) == 0, "crt on: frame");
+    CHECK(rd__crt_last_pass(&vw, &vh) == n0 + 2, "crt on: the film frame drawn through the filter");
     CHECK(vw == 512 && vh == H / 2, "crt on: the film's grid %u x %u (want 512 x %u)", vw, vh,
           H / 2);
     double crtMean = 0.0;
@@ -287,11 +288,11 @@ static void testCrt(void)
 
     /* off again */
     setCrt(RD_CRT_OFF, CW, CH);
-    const uint32_t n1 = rd__CrtLastPass(NULL, NULL);
-    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "crt off again: frame");
+    const uint32_t n1 = rd__crt_last_pass(NULL, NULL);
+    CHECK(rd_video_frame(y, u, v, pitch, W, H) == 0, "crt off again: frame");
     double again = 0.0;
     if (measure(&again, &spread, &outside) == 0) {
-        CHECK(rd__CrtLastPass(NULL, NULL) == n1 && spread < 0.01 && fabs(again - offMean) < 0.01,
+        CHECK(rd__crt_last_pass(NULL, NULL) == n1 && spread < 0.01 && fabs(again - offMean) < 0.01,
               "crt off again: the plain picture, no pass");
     }
     setCrt(RD_CRT_OFF, OW, OH);
@@ -323,15 +324,15 @@ static void testFit(void)
     ipu_csc(140, 128, 128, mid);
     ipu_csc(60, 128, 128, bot);
 
-    rd_VideoSetDisplay(720, 480);
+    rd_video_set_display(720, 480);
     setCrt(RD_CRT_OFF, FW, FH);
-    CHECK(rd_VideoFrame(y, u, v, pitch, W, H) == 0, "fit: frame");
+    CHECK(rd_video_frame(y, u, v, pitch, W, H) == 0, "fit: frame");
     uint32_t ow = 0, oh = 0;
-    if (!rd__ReadPresent(s_fit, sizeof(s_fit), &ow, &oh) || ow != FW || oh != FH) {
+    if (!rd__read_present(s_fit, sizeof(s_fit), &ow, &oh) || ow != FW || oh != FH) {
         printf("FAIL: fit readback (%u x %u)\n", ow, oh);
         failures++;
     } else {
-        /* the box: 144 x 108 at x 48 (rd__PresentBox 4:3); the picture's
+        /* the box: 144 x 108 at x 48 (rd__present_box 4:3); the picture's
            576 rows at 108/576 = 0.1875 output rows each: the top band on
            rows 0-2, the middle on 3-104, the bottom band on 105-107 (at the
            old 108/480 scale the top band sat above the box, cut away) */
@@ -375,20 +376,20 @@ int main(void)
     s.outputWidth = OW;
     s.outputHeight = OH;
     s.aspect = 4.0f / 3.0f;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         printf("SKIP rd_video_test: no usable Vulkan device\n");
         return 77;
     }
-    printf("rd_video_test: adapter %s\n", rhi_AdapterName());
+    printf("rd_video_test: adapter %s\n", rhi_adapter_name());
     testFlat();
     testRamp();
     testMirror();
     testCrt();
     testFit();
-    rd_VideoShutdown();
-    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    rd_video_shutdown();
+    const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%u validation errors", verr);
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_video_test: %d failures\n", failures);
         return 1;

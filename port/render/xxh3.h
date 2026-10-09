@@ -1,6 +1,6 @@
 /* xxh3.h: XXH3-64 (xxh3.c), shared by the texture pack names
  * (texpack_name.h) and the mesh identity of model packs (rd_mesh.h
- * rd_VuMeshDescHash).  Library ico_texpack_name. */
+ * rd_vu_mesh_desc_hash).  Library ico_texpack_name. */
 #ifndef PORT_RENDER_XXH3_H
 #define PORT_RENDER_XXH3_H
 

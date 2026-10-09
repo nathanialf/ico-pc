@@ -37,7 +37,7 @@
  * the host) have no host counterpart.
  *
  * Headless: pictures are decoded (set ICO_FMV_DECODE=0 to skip decoding)
- * and dropped.  The window build hands them to rd_VideoFrame
+ * and dropped.  The window build hands them to rd_video_frame
  * (port/render/rd_video.c).
  */
 #include <eekernel.h>
@@ -637,7 +637,7 @@ static void show_clear(unsigned int col)
 #ifdef ICO_RD
     uint8_t rgba[4] = {(uint8_t)col, (uint8_t)(col >> 8), (uint8_t)(col >> 16),
                        (uint8_t)(col >> 24)};
-    rd_VideoClear(rgba);
+    rd_video_clear(rgba);
 #else
     (void)col;
 #endif
@@ -652,7 +652,7 @@ static void show_slot(const Slot *s)
         const uint8_t *u = y + (size_t)s->w * s->h;
         const uint8_t *v = u + (size_t)cw * ch;
         uint32_t pitch[3] = {s->w, cw, cw};
-        rd_VideoFrame(y, u, v, pitch, s->w, s->h);
+        rd_video_frame(y, u, v, pitch, s->w, s->h);
     }
 #else
     (void)s;
@@ -724,7 +724,7 @@ int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, i
     /* dispCreate: one vsync, then the movie's display; dispClear */
     sceGsSyncV(0);
 #ifdef ICO_RD
-    rd_VideoSetDisplay((uint32_t)imageW, (uint32_t)imageH);
+    rd_video_set_display((uint32_t)imageW, (uint32_t)imageH);
 #endif
     show_clear((unsigned int)clearCol);
 
@@ -871,7 +871,7 @@ int movie_proc(int (*poll)(void))
         char presents[64] = "";
 #ifdef ICO_RD
         uint32_t failed0, failed1;
-        const uint32_t presents0 = rd_VideoPresents(&failed0);
+        const uint32_t presents0 = rd_video_presents(&failed0);
 #endif
         r = readMpeg(poll);
 #ifdef ICO_RD
@@ -879,7 +879,7 @@ int movie_proc(int (*poll)(void))
             /* what reached the window, beside the pictures the timing
                showed: fewer presents than shown pictures means the screen
                missed some (or decoding was off) */
-            const uint32_t presents1 = rd_VideoPresents(&failed1);
+            const uint32_t presents1 = rd_video_presents(&failed1);
             snprintf(presents, sizeof presents, ", %u movie presents (%u failed)",
                      presents1 - presents0, failed1 - failed0);
         }

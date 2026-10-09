@@ -1,5 +1,5 @@
 // sheet_text.hlsli: the sheet texel of font_sheet_ps (font.hlsl).
-// rd.h rd_CreateTextureSheet says what a sheet texture is
+// rd.h rd_create_texture_sheet says what a sheet texture is
 // and what the shader makes of it; port/render/test/sheet_ref.c is the
 // same arithmetic on the CPU (the tests' oracle).
 //
@@ -46,7 +46,7 @@
 #define SHEET_T_OFF 16
 // The largest scale of a strip (texels a sheet texel; shader_consts.h
 // ICO_SHEET_SCALE_MAX).  Above 1 the rim comes precomputed in the texture's
-// bottom half (rd.h rd_SheetRim), one value a sheet texel.
+// bottom half (rd.h rd_sheet_rim), one value a sheet texel.
 #define SHEET_SCALE_MAX 4
 // The grid of coverage texels the four sheet texels of a bilinear sample
 // are rebuilt from.
@@ -120,7 +120,7 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
 }
 
 // A scaled strip's rim is the sheet's, magnified.
-// The rim level (0..255) of a sheet texel from its rim r (rd_SheetRim: the
+// The rim level (0..255) of a sheet texel from its rim r (rd_sheet_rim: the
 // 1x dilation of the sheet texels' mean coverage) under the style at the
 // sheet texel's threshold th: the rim's alpha alone, without the letters.
 uint sheet_rim_level(uint r, uint4 style, uint th)

@@ -35,7 +35,7 @@
  *               active: neither its functions nor its display list run;
  *               the system objects, kind -1, run on); pause is off
  *               (enable_game_pause) and the fog off; the renderer keeps
- *               only the object's own draws (rd.h rd_SetDrawFilter: its
+ *               only the object's own draws (rd.h rd_set_draw_filter: its
  *               display object's key, and whatever its display list draws,
  *               learned while it runs) over a grey backdrop recorded in
  *               list 0; the camera orbits it (our own yaw, pitch and
@@ -61,10 +61,10 @@
  * textures are decoded again on the next frame (Texture.c tex_ResetVram).
  * Switch (or L1 / R1) loads the other character's stage, the page staying
  * up.  Triangle goes back to the title, which comes up with no menu and no
- * logo (ui_SettingsTitleReturn); back in MV_OFF the viewer waits
+ * logo (ui_settings_title_return); back in MV_OFF the viewer waits
  * (RETURN_TIMEOUT_TICKS) for the title's card check to have decided (13 or
  * 12, unseen) and the layout to be faded in, then opens Settings on Extras
- * (ui_SettingsReopenPage), Back returning to the decided title menu.
+ * (ui_settings_reopen_page), Back returning to the decided title menu.
  *
  * Nothing is saved and no game flag is set but what End Game resets.  The
  * viewer's own buffers are host memory (malloc), not the game's arena.
@@ -236,12 +236,12 @@ static int motionHeld(int id)
 
 static const char *modelName(int row)
 {
-    return row >= 0 && row < mv_modelCount ? ui_Str((UiStrId)mv_models[row].nameStr) : "";
+    return row >= 0 && row < mv_modelCount ? ui_str((UiStrId)mv_models[row].nameStr) : "";
 }
 
 static const char *modelNameEn(int row)
 {
-    return row >= 0 && row < mv_modelCount ? ui_StrIn(UI_LANG_EN, (UiStrId)mv_models[row].nameStr)
+    return row >= 0 && row < mv_modelCount ? ui_str_in(UI_LANG_EN, (UiStrId)mv_models[row].nameStr)
                                            : "";
 }
 
@@ -259,7 +259,7 @@ static int viewProc(int first, int item);
 
 static LtProperty *P(int index)
 {
-    return lt_ext_Prop(index);
+    return lt_ext_prop(index);
 }
 
 /* as settings.c's pages */
@@ -277,12 +277,12 @@ static int addLayout(int first, int last, float shade, int (*proc)(int, int), in
     l.defaultItem = def;
     l.curItem = def;
     l.link = -1;
-    return lt_ext_AddLayout(&l);
+    return lt_ext_add_layout(&l);
 }
 
 static int nextRow(void)
 {
-    return LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    return LT_GAME_PROPERTY_COUNT + lt_ext_prop_count();
 }
 
 /* the model list: the names, the hint in the status line */
@@ -303,9 +303,9 @@ static void listDecorate(void *user, int d)
     (void)user;
     (void)d;
     /* Triangle: back to Extras from the title, to the title from a model */
-    ui_HintSetStr(&s_listHint, UI_HINT_MV_LIST_BACK,
-                  s_state == MV_LIST ? UI_STR_MV_HINT_TITLE : UI_STR_BACK);
-    ui_HintLayout(&s_listHint);
+    ui_hint_set_str(&s_listHint, UI_HINT_MV_LIST_BACK,
+                    s_state == MV_LIST ? UI_STR_MV_HINT_TITLE : UI_STR_BACK);
+    ui_hint_layout(&s_listHint);
 }
 
 static void mvStart(int row);
@@ -323,10 +323,10 @@ static int listInput(void *user, int d, int flags)
             return -1;
         }
         /* back on Extras' Models row */
-        int to = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
-        int row = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MODELS);
+        int to = ui_settings_page_layout(UI_PAGE_EXTRAS);
+        int row = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MODELS);
         if (to >= 0 && row >= 0) {
-            lt_ext_Layout(to)->defaultItem = row;
+            lt_ext_layout(to)->defaultItem = row;
         }
         return to;
     }
@@ -360,8 +360,8 @@ static const UiListDef kAnimDef = {animCount, animFill, NULL, NULL, NULL};
 static int built(void)
 {
     return s_listLayout >= LT_GAME_LAYOUT_COUNT &&
-           s_listLayout < LT_GAME_LAYOUT_COUNT + lt_ext_LayoutCount() &&
-           lt_ext_Layout(s_listLayout)->proc == listProc;
+           s_listLayout < LT_GAME_LAYOUT_COUNT + lt_ext_layout_count() &&
+           lt_ext_layout(s_listLayout)->proc == listProc;
 }
 
 static void build(void)
@@ -369,11 +369,11 @@ static void build(void)
     UiListStyle st;
     int first, last;
 
-    ui_FontInit();
+    ui_font_init();
     /* the model list: the Settings list pages' look (settings.c) */
     first = nextRow();
-    int header = ui_SettingsAddRow(20, 12, 600, 40, 0, -1, UI_STR_EXTRAS_MODELS, NULL, 30.0f,
-                                   UI_ALIGN_CENTER);
+    int header = ui_settings_add_row(20, 12, 600, 40, 0, -1, UI_STR_EXTRAS_MODELS, NULL, 30.0f,
+                                     UI_ALIGN_CENTER);
     P(header)->centerX = 1;
     memset(&st, 0, sizeof(st));
     st.y0 = 40;
@@ -381,9 +381,9 @@ static void build(void)
     st.label = (UiListCol){40, 560, 24.0f, UI_ALIGN_LEFT};
     st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
     st.statusY = 196;
-    ui_ListBuild(&s_list, &kListDef, NULL, &st);
+    ui_list_build(&s_list, &kListDef, NULL, &st);
     /* the status line stays empty: the prompts take its place */
-    ui_HintBuild(&s_listHint, 196, 19.0f, ui_hint_mv_list, UI_HINT_MV_LIST_COUNT);
+    ui_hint_build(&s_listHint, 196, 19.0f, ui_hint_mv_list, UI_HINT_MV_LIST_COUNT);
     last = nextRow() - 1;
     s_listLayout = addLayout(first, last + 1, 0.6f, listProc, s_list.label[0]);
 
@@ -396,27 +396,27 @@ static void build(void)
     st.label = (UiListCol){404, 216, 18.0f, UI_ALIGN_LEFT};
     st.colA = (UiListCol){620, 4, 18.0f, UI_ALIGN_RIGHT};
     st.statusY = 196;
-    ui_ListBuild(&s_animList, &kAnimDef, NULL, &st);
-    ui_HintBuild(&s_viewSticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
-    ui_HintBuild(&s_viewKeys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
+    ui_list_build(&s_animList, &kAnimDef, NULL, &st);
+    ui_hint_build(&s_viewSticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
+    ui_hint_build(&s_viewKeys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
     /* the name, the animation and the frame at the top left, as Settings
        rows: a list label's size, then a note's */
-    s_rowName = ui_SettingsAddRow(24, 10, 360, 30, 0, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
-    s_rowAnim = ui_SettingsAddRow(24, 26, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
-    s_rowFrame = ui_SettingsAddRow(24, 38, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
+    s_rowName = ui_settings_add_row(24, 10, 360, 30, 0, -1, 0, " ", 24.0f, UI_ALIGN_LEFT);
+    s_rowAnim = ui_settings_add_row(24, 26, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
+    s_rowFrame = ui_settings_add_row(24, 38, 360, 30, 0, -1, 0, " ", 19.0f, UI_ALIGN_LEFT);
     last = nextRow() - 1;
     s_viewLayout = addLayout(first, last + 1, 0.0f, viewProc, s_animList.label[0]);
     fprintf(stderr, "model_viewer: layouts %d and %d (%d of %d properties in use)\n", s_listLayout,
-            s_viewLayout, lt_ext_PropCount(), LT_EXT_MAX_PROPERTIES);
+            s_viewLayout, lt_ext_prop_count(), LT_EXT_MAX_PROPERTIES);
 }
 
 static int listProc(int first, int item)
 {
-    LtProp *lay = lt_ext_Layout(s_listLayout);
+    LtProp *lay = lt_ext_layout(s_listLayout);
     (void)item;
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     if (first) {
-        ui_ListReset(&s_list);
+        ui_list_reset(&s_list);
         if (s_model >= 0 && s_model < mv_modelCount) {
             /* the cursor on the model last viewed */
             int shown = mv_modelCount < UI_LIST_SLOTS ? mv_modelCount : UI_LIST_SLOTS;
@@ -424,13 +424,13 @@ static int listProc(int first, int item)
             lay->curItem = s_list.label[s_model - s_list.offset];
         }
     }
-    ui_ListRefresh(&s_list, lay->curItem);
+    ui_list_refresh(&s_list, lay->curItem);
     if (lt_fade_status() != 2 || (s_state != MV_OFF && s_state != MV_LIST)) {
         return -1;
     }
     lt_analog2Pad();
-    int r = ui_ListProc(&s_list, lay, pad[0].flags);
-    ui_ListRefresh(&s_list, lay->curItem);
+    int r = ui_list_proc(&s_list, lay, pad[0].flags);
+    ui_list_refresh(&s_list, lay->curItem);
     return r;
 }
 
@@ -438,7 +438,7 @@ static int listProc(int first, int item)
    reads the pad, so the layout's own cursor moves are off */
 static void refreshView(void)
 {
-    LtProp *lay = lt_ext_Layout(s_viewLayout);
+    LtProp *lay = lt_ext_layout(s_viewLayout);
     int shown = s_animCount < UI_LIST_SLOTS ? s_animCount : UI_LIST_SLOTS;
     if (s_sel < s_animList.offset) {
         s_animList.offset = s_sel;
@@ -448,28 +448,28 @@ static void refreshView(void)
     if (shown > 0) {
         lay->curItem = s_animList.label[s_sel - s_animList.offset];
     }
-    ui_ListRefresh(&s_animList, lay->curItem);
+    ui_list_refresh(&s_animList, lay->curItem);
     if (s_animCount == 0) {
-        lt_ext_SetStr(s_animList.label[0], UI_STR_MV_NO_ANIMATIONS);
+        lt_ext_set_str(s_animList.label[0], UI_STR_MV_NO_ANIMATIONS);
     }
     /* without animations only Triangle is left */
     for (int i = UI_HINT_MV_PLAY; i < UI_HINT_MV_BACK; i++) {
-        ui_HintShow(&s_viewKeys, i, s_animCount > 0);
+        ui_hint_show(&s_viewKeys, i, s_animCount > 0);
     }
     /* Select, saving the model's files, with Developer mode on */
-    ui_HintShow(&s_viewKeys, UI_HINT_MV_SAVE, saveAvailable());
-    ui_HintLayout(&s_viewSticks);
-    ui_HintLayout(&s_viewKeys);
-    lt_ext_SetText(s_rowName, s_ovName);
-    lt_ext_SetText(s_rowAnim, s_ovAnim);
-    lt_ext_SetText(s_rowFrame, s_ovFrame);
+    ui_hint_show(&s_viewKeys, UI_HINT_MV_SAVE, saveAvailable());
+    ui_hint_layout(&s_viewSticks);
+    ui_hint_layout(&s_viewKeys);
+    lt_ext_set_text(s_rowName, s_ovName);
+    lt_ext_set_text(s_rowAnim, s_ovAnim);
+    lt_ext_set_text(s_rowFrame, s_ovFrame);
 }
 
 static int viewProc(int first, int item)
 {
     (void)first;
     (void)item;
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     lt_item_select_disable = 1;
     refreshView();
     return -1;
@@ -550,7 +550,7 @@ static void setState(int st)
     if (st != MV_VIEW) {
 #ifdef ICO_RD
         if (s_saveWait) {
-            modelpack_DumpObjectOnce(NULL);
+            modelpack_dump_object_once(NULL);
         }
         s_saveWait = 0;
 #endif
@@ -572,7 +572,7 @@ static void mvStart(int row)
     if (s_state == MV_OFF) {
         /* leaving the title: what closing Settings writes, the title music
            fading as for a new game */
-        ui_SettingsSave();
+        ui_settings_save();
         la_host_title_music_fade();
         s_pauseSaved = enable_game_pause;
     }
@@ -596,7 +596,7 @@ static void mvStart(int row)
 static void mvLetGo(void)
 {
 #ifdef ICO_RD
-    rd_SetDrawFilter(false, NULL, 0);
+    rd_set_draw_filter(false, NULL, 0);
 #endif
     ico_mv_active = 0;
     enable_game_pause = s_pauseSaved;
@@ -612,11 +612,11 @@ static void mvToTitle(void)
     s_returnExtras = s_chars;
     if (s_chars) {
         /* the title comes up with no menu and no logo until its
-           card check has decided (settings.h ui_SettingsTitleReturn) */
-        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
+           card check has decided (settings.h ui_settings_title_return) */
+        ui_settings_title_return(UI_PAGE_EXTRAS);
         /* Characters' colours, however the viewer is left (Triangle has
            written them already; a failure has not) */
-        ui_SettingsSave();
+        ui_settings_save();
     }
     putBackShadow();
     freeAnims();
@@ -677,13 +677,13 @@ static void viewDl(GObj *g)
 {
     showShadow();
 #ifdef ICO_RD
-    rd_DrawFilterOpen(true);
+    rd_draw_filter_open(true);
 #endif
     if (s_objDl != NULL) {
         s_objDl(g);
     }
 #ifdef ICO_RD
-    rd_DrawFilterOpen(false);
+    rd_draw_filter_open(false);
 #endif
 }
 
@@ -816,7 +816,7 @@ static void drawBackdrop(void)
     GifRect r = {-400, -140, 800, 280};
     GifColor c = {BACKDROP_GREY, BACKDROP_GREY, BACKDROP_GREY + 2, 0x80};
 #ifdef ICO_RD
-    int space = rd_SetSpaceOverride(RD_SPACE_FULLSCREEN);
+    int space = rd_set_space_override(RD_SPACE_FULLSCREEN);
     gif_HostDrawKey(&kTag, 0, 0);
 #else
     (void)kTag;
@@ -830,7 +830,7 @@ static void drawBackdrop(void)
     gif_EndPacket();
 #ifdef ICO_RD
     gif_HostDrawKey(0, 0, 0);
-    rd_SetSpaceOverride(space);
+    rd_set_space_override(space);
 #endif
 }
 
@@ -964,19 +964,19 @@ static void setup(void)
 #ifdef ICO_RD
     {
         const void *own[1] = {g->dobj};
-        rd_SetDrawFilter(true, own, 1);
+        rd_set_draw_filter(true, own, 1);
     }
 #endif
     s_loop = 0;
     s_playing = -1;
 #ifdef ICO_RD
     if (s_saveWait) {
-        modelpack_DumpObjectOnce(NULL); /* a shot for the model left */
+        modelpack_dump_object_once(NULL); /* a shot for the model left */
     }
     s_saveWait = 0;
 #endif
     setState(MV_VIEW);
-    ui_ListReset(&s_animList);
+    ui_list_reset(&s_animList);
     fprintf(stderr,
             "model_viewer: stage %d loaded id %d \"%s\" (%d animations); the stage's picture "
             "effects: post %d, feedback %d colour %d %d %d %d\n",
@@ -1040,18 +1040,18 @@ static int savedFmtOk(const char *f)
 static void saveDone(int n)
 {
     char body[UI_POPUP_TEXT];
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     if (n > 0) {
-        const char *fmt = ui_Str(UI_STR_MV_SAVED_FMT);
+        const char *fmt = ui_str(UI_STR_MV_SAVED_FMT);
         if (!savedFmtOk(fmt)) {
-            fmt = ui_StrIn(UI_LANG_EN, UI_STR_MV_SAVED_FMT);
+            fmt = ui_str_in(UI_LANG_EN, UI_STR_MV_SAVED_FMT);
         }
-        snprintf(body, sizeof(body), fmt, n, shortDir(modelpack_DumpDir()));
-        ui_PopupPush(body, "");
+        snprintf(body, sizeof(body), fmt, n, shortDir(modelpack_dump_dir()));
+        ui_popup_push(body, "");
     } else {
-        ui_PopupPush(ui_Str(UI_STR_MV_SAVED_NONE), "");
+        ui_popup_push(ui_str(UI_STR_MV_SAVED_NONE), "");
     }
-    fprintf(stderr, "model_viewer: saved %d model files to %s\n", n, modelpack_DumpDir());
+    fprintf(stderr, "model_viewer: saved %d model files to %s\n", n, modelpack_dump_dir());
 }
 #endif
 
@@ -1062,10 +1062,10 @@ static void viewInput(void)
         /* the Characters page reads the pad, the left stick its rows
            (lt_analog2Pad): the camera only turns and zooms */
         const unsigned char ana[4] = {pad[0].ana[0], pad[0].ana[1], 128, 128};
-        mv_CamStep(&s_cam, (unsigned)pad[0].now, ana);
+        mv_cam_step(&s_cam, (unsigned)pad[0].now, ana);
         return;
     }
-    mv_CamStep(&s_cam, (unsigned)pad[0].now, pad[0].ana);
+    mv_cam_step(&s_cam, (unsigned)pad[0].now, pad[0].ana);
     if (lt_fade_status() != 2 || current_layout_id != s_viewLayout) {
         return;
     }
@@ -1077,7 +1077,7 @@ static void viewInput(void)
     }
 #ifdef ICO_RD
     if ((flags & PAD_SELECT) && !s_saveWait && saveAvailable() && s_obj != NULL) {
-        modelpack_DumpObjectOnce(s_obj->dobj);
+        modelpack_dump_object_once(s_obj->dobj);
         s_saveWait = 1;
         POSITIVE_SE();
     }
@@ -1108,14 +1108,14 @@ static void viewTick(void)
     int total = 0, frame = 0;
     if (s_state == MV_VIEW) {
         /* the viewer's layout, or in Characters the Settings page */
-        const int want = s_chars ? ui_SettingsPageLayout(UI_PAGE_CHARACTERS) : s_viewLayout;
+        const int want = s_chars ? ui_settings_page_layout(UI_PAGE_CHARACTERS) : s_viewLayout;
         if (want >= 0 && current_layout_id != want && lt_fade_status() == 2) {
             lt_switch_layout(want);
         }
         viewInput();
 #ifdef ICO_RD
         if (s_saveWait) {
-            int n = modelpack_DumpObjectStatus();
+            int n = modelpack_dump_object_status();
             if (n >= 0) {
                 s_saveWait = 0;
                 saveDone(n);
@@ -1145,12 +1145,12 @@ static void viewTick(void)
             fprintf(stderr, "model_viewer: motion \"%s\" frame %d/%d\n", motionName(mot), frame,
                     total);
         }
-        snprintf(s_ovAnim, sizeof(s_ovAnim), "%s: %s%s%s", ui_Str(UI_STR_MV_ANIMATION),
+        snprintf(s_ovAnim, sizeof(s_ovAnim), "%s: %s%s%s", ui_str(UI_STR_MV_ANIMATION),
                  motionName(mot), s_loop ? "  \xC2\xB7  " : "",
-                 s_loop ? ui_Str(UI_STR_MV_LOOP) : "");
-        snprintf(s_ovFrame, sizeof(s_ovFrame), "%s %d / %d", ui_Str(UI_STR_MV_FRAME), frame, total);
+                 s_loop ? ui_str(UI_STR_MV_LOOP) : "");
+        snprintf(s_ovFrame, sizeof(s_ovFrame), "%s %d / %d", ui_str(UI_STR_MV_FRAME), frame, total);
     } else {
-        snprintf(s_ovAnim, sizeof(s_ovAnim), "%s", ui_Str(UI_STR_MV_NO_ANIMATIONS));
+        snprintf(s_ovAnim, sizeof(s_ovAnim), "%s", ui_str(UI_STR_MV_NO_ANIMATIONS));
         s_ovFrame[0] = '\0';
     }
     snprintf(s_ovName, sizeof(s_ovName), "%s", modelName(s_model));
@@ -1163,10 +1163,10 @@ void ico_mv_tick(void)
     static int hooked;
     if (!hooked) {
         hooked = 1;
-        ui_SettingsSetModelsHandler(ico_mv_models_enter);
+        ui_settings_set_models_handler(ico_mv_models_enter);
         static const UiCharactersHost host = {ico_mv_characters_enter, ico_mv_characters_shown,
                                               ico_mv_characters_switch, ico_mv_characters_leave};
-        ui_SettingsSetCharactersHost(&host);
+        ui_settings_set_characters_host(&host);
     }
     unsigned int now = ico_host_main_ticks();
     switch (s_state) {
@@ -1175,17 +1175,17 @@ void ico_mv_tick(void)
             /* back from Characters: Settings on Extras (its
                Characters row) once the title's menu is up and faded in
                (lt_switch_layout works only then) */
-            if (stage_no == TITLE_STAGE && lt_fade_status() == 2 && ui_SettingsTitleDecided() &&
+            if (stage_no == TITLE_STAGE && lt_fade_status() == 2 && ui_settings_title_decided() &&
                 (current_layout_id == LAYOUT_TITLE_CONTINUE ||
                  current_layout_id == LAYOUT_TITLE_NEW)) {
                 s_returnExtras = 0;
-                const int to = ui_SettingsReopenPage(UI_PAGE_EXTRAS);
+                const int to = ui_settings_reopen_page(UI_PAGE_EXTRAS);
                 if (to >= 0) {
                     lt_switch_layout(to);
                 }
             } else if (now - s_since > RETURN_TIMEOUT_TICKS) {
                 s_returnExtras = 0;
-                ui_SettingsTitleReturn(-1);
+                ui_settings_title_return(-1);
                 fprintf(stderr,
                         "model_viewer: the title's menu did not come back; Settings not "
                         "reopened (stage %d, layout %d)\n",
@@ -1199,7 +1199,7 @@ void ico_mv_tick(void)
 #ifdef ICO_RD
             /* the stage being left is behind the fade: from here no world
                draw is kept until the model is found */
-            rd_SetDrawFilter(true, NULL, 0);
+            rd_set_draw_filter(true, NULL, 0);
 #endif
         }
         if (s_sawChange && systemStatus[6] == 0 && stage_no == mv_models[s_model].stage) {
@@ -1217,7 +1217,7 @@ void ico_mv_tick(void)
             fprintf(stderr, "model_viewer: the stage changed under the viewer\n");
             putBackShadow();
 #ifdef ICO_RD
-            rd_SetDrawFilter(true, NULL, 0);
+            rd_set_draw_filter(true, NULL, 0);
 #endif
             s_obj = NULL;
             s_objDl = NULL;

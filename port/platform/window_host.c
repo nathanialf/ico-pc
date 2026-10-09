@@ -67,7 +67,7 @@ _Static_assert(SDL_EVENT_TERMINATING == ICO_SDL_EVENT_TERMINATING &&
                "window_lifecycle.h: SDL3's lifecycle event types");
 
 /* F12's dump (port/render/rd_dump.c; rd.h does not declare it) */
-bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
+bool rd_dump_on_demand(const char *dumpPath, const char *pngPath);
 /* The game's state the mouse capture follows (mouse_look.h
    ico_mouse_capture_rule): the boy, the stage (common/include/main.h), the
    layout in front (layout_texture.c), the pause (systemStatus[5]: the
@@ -116,13 +116,13 @@ static int s_pollRestarted; /* the poll's restart at the first game frame, once 
 static struct {
     int framerate;           /* ico_video_framerate() as last applied */
     unsigned cutSerial;      /* ico_video_cut_serial() last passed on */
-    uint32_t frame;          /* rd_FrameNumber() last seen */
+    uint32_t frame;          /* rd_frame_number() last seen */
     uint32_t presentedFrame; /* the frame of the last present */
     Uint64 tickAt, tickPrev; /* the pace deadlines (simulated time) the last two frames closed at */
     Uint64 lastPresent;
-    Uint64 cost;       /* how long the last rd_Present took */
+    Uint64 cost;       /* how long the last rd_present took */
     PaceHist paceHist; /* the last presents' costs (pace_policy.h) */
-    bool paceSlow;     /* pace_SlowPresent after the last present */
+    bool paceSlow;     /* pace_slow_present after the last present */
     /* the rate log */
     Uint64 statAt;
     unsigned statPresents, statFrames;
@@ -131,8 +131,8 @@ static struct {
        real time by that much) */
     unsigned statVsyncs, statResyncs;
     Uint64 statDropped;
-    uint32_t statFrameNo; /* rd_FrameNumber() at the block's start */
-    /* rd_VideoPresents at the block's start; a movie presents on
+    uint32_t statFrameNo; /* rd_frame_number() at the block's start */
+    /* rd_video_presents at the block's start; a movie presents on
        its own, outside the replays the line counts */
     uint32_t statMovie, statMovieFail;
     /* the simulation step's real time (from the end of one pace to the
@@ -140,7 +140,7 @@ static struct {
     Uint64 paceEnd;
     double stepSumMs, stepMaxMs;
     unsigned stepCount;
-    int mailbox; /* rhi_PreferMailbox as last applied: vsync on and presenting between ticks */
+    int mailbox; /* rhi_prefer_mailbox as last applied: vsync on and presenting between ticks */
     /* the slow-step lines ([dev] slow_step_ms, 0 off): the threshold,
        the block's count and lines, ico_window_pump's time, the renderer's
        texture decodes and pipeline creations at the last pace's end */
@@ -156,7 +156,7 @@ static struct {
 
 /* resolution "auto" (video_options.h ICO_RES_AUTO): the
    replays' costs (perf_drain) against the frame budget, a step down when
-   they are too slow (pace_policy.h pace_AutoResolutionStep, auto_res_update) */
+   they are too slow (pace_policy.h pace_auto_resolution_step, auto_res_update) */
 static struct {
     int active;        /* resolution "auto" in force, the CRT filter off */
     float windowScale; /* the presentation box's height over the game's 448 lines */
@@ -223,7 +223,7 @@ static void video_settings(RdSettings *rs, int w, int h)
                                                             : 1000000000ull / 60u;
     }
     /* the CRT filter in either preset (rd_crt.c) */
-    rd_CrtSettings(rs, o.crt ? (RdCrtMode)(o.crtMode + 1) : RD_CRT_OFF, o.crtStrength);
+    rd_crt_settings(rs, o.crt ? (RdCrtMode)(o.crtMode + 1) : RD_CRT_OFF, o.crtStrength);
     rs->crtScanlines = o.crtScanlines;
     rs->crtMask = o.crtMask;
     rs->crtHalation = o.crtHalation;
@@ -251,7 +251,7 @@ static void video_settings(RdSettings *rs, int w, int h)
        mailbox mode: no tearing, and a present never waits for the display,
        so it cannot hold the simulation back */
     s_pres.mailbox = rs->vsync && rs->interpolate;
-    rhi_PreferMailbox(s_pres.mailbox != 0);
+    rhi_prefer_mailbox(s_pres.mailbox != 0);
 }
 
 /* The window is fullscreen now (SDL's flag, which follows the window
@@ -344,7 +344,7 @@ static void video_log_changes(const IcoVideoOptions *o)
 /* Applies the options changed since the last call (the Settings menu's
    ico_video_set, Alt+Enter; force: a resize, for aspect "auto" and
    resolution "window"): the window mode through SDL, the rest through
-   rd_SetSettings at the next frame (rd recreates the targets and the
+   rd_set_settings at the next frame (rd recreates the targets and the
    swapchain as needed). */
 static void video_apply(int force)
 {
@@ -387,20 +387,20 @@ static void video_apply(int force)
            backend makes at the surface's size; where that differs from the
            window's pixel size (Android, a resize not reported yet) the
            swapchain's size wins, so this call never takes back what the
-           renderer followed (rd_OutputFollowed) */
+           renderer followed (rd_output_followed) */
         uint32_t sw = 0, sh = 0;
-        if (rhi_SwapchainSize(&sw, &sh)) {
+        if (rhi_swapchain_size(&sw, &sh)) {
             w = (int)sw;
             h = (int)sh;
         }
     }
     const int mailbox = s_pres.mailbox;
     video_settings(&rs, w, h);
-    rd_SetSettings(&rs);
+    rd_set_settings(&rs);
     if (mailbox != s_pres.mailbox && w > 0 && h > 0) {
         /* the present mode follows the frame rate option (the swapchain
            is recreated) */
-        rd_ResizeOutput((uint32_t)w, (uint32_t)h);
+        rd_resize_output((uint32_t)w, (uint32_t)h);
     }
 }
 
@@ -442,7 +442,7 @@ static int s_pixW, s_pixH;
 static void window_pixel_size(int w, int h)
 {
     WINDOW_PIX_NOTE(w, h);
-    rd_ResizeOutput((uint32_t)w, (uint32_t)h);
+    rd_resize_output((uint32_t)w, (uint32_t)h);
     ico_video_set_window(w, h);
     video_apply(1);
     touch_layout_update();
@@ -483,7 +483,7 @@ static void first_pump_recheck(void)
 }
 
 #ifdef __ANDROID__
-/* settings.h ui_SettingsSetQuitIsGame: Android's Quit ends the game */
+/* settings.h ui_settings_set_quit_is_game: Android's Quit ends the game */
 static int quit_is_game(void)
 {
     return 1;
@@ -495,7 +495,7 @@ static int quit_is_game(void)
    size. */
 static SDL_WindowFlags window_flags(int mode)
 {
-    const SDL_WindowFlags vk = rhi_Backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
+    const SDL_WindowFlags vk = rhi_backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
 
 #ifdef __ANDROID__
     (void)mode;
@@ -513,19 +513,19 @@ static SDL_WindowFlags window_flags(int mode)
 static void lc_gpu_wait_idle(void *u)
 {
     (void)u;
-    rhi_WaitIdle();
+    rhi_wait_idle();
 }
 
 static void lc_surface_release(void *u)
 {
     (void)u;
-    rhi_ReleaseSurface();
+    rhi_release_surface();
 }
 
 static int lc_surface_recreate(void *u)
 {
     (void)u;
-    return rhi_RecreateSurface(s_window) ? 0 : -1;
+    return rhi_recreate_surface(s_window) ? 0 : -1;
 }
 
 static void lc_watchdog_pause(void *u, int paused)
@@ -574,7 +574,7 @@ static void lc_record_close(void *u)
 static void lc_texture_low_memory(void *u)
 {
     (void)u;
-    texpack_LowMemory();
+    texpack_low_memory();
 }
 
 static void lc_log(void *u, const char *line)
@@ -635,11 +635,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* [video] backend (config.toml) or backend= (ico-pc.ini): "vulkan", the
        default, or "d3d12" where the build has it */
     const char *backend = ico_config_get_string("video.backend", "vulkan");
-    if (!rhi_CreateBackend(backend)) {
+    if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
         backend = "vulkan";
-        rhi_CreateBackend(backend);
+        rhi_create_backend(backend);
     }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "window: SDL_Init: %s\n", SDL_GetError());
@@ -664,9 +664,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     }
     /* the replay, the present and the FMV picture run on the host stack in
        the host FP mode, not on the game's 256 KB fiber stacks */
-    rd_SetHostCall(ico_sched_call_on_host);
+    rd_set_host_call(ico_sched_call_on_host);
     /* the Vulkan pipeline cache in the per-user folder: a later start
-       creates the renderer's pipelines from it (rhi_SetPipelineCachePath;
+       creates the renderer's pipelines from it (rhi_set_pipeline_cache_path;
        D3D12 ignores it). Android: the app's cache folder, which the system
        may empty when space runs low (android_paths.h) */
     {
@@ -680,7 +680,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         ico_host_pref_dir(pref, sizeof(pref));
 #endif
         snprintf(cache, sizeof(cache), "%s/pipelines.vkcache", pref);
-        rhi_SetPipelineCachePath(cache);
+        rhi_set_pipeline_cache_path(cache);
     }
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
@@ -707,16 +707,16 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        the phone's with a message */
     const int customDriver = ico_gpu_driver_android_start();
 #endif
-    bool up = rd_Init(gsW, gsH, &rs, s_window);
+    bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     if (!up && customDriver) {
         ico_gpu_driver_android_init_failed();
-        up = rd_Init(gsW, gsH, &rs, s_window);
+        up = rd_init(gsW, gsH, &rs, s_window);
     }
 #endif
     if (!up) {
         fprintf(stderr,
-                "window: no usable %s device (rd_Init failed; the rhi lines above say "
+                "window: no usable %s device (rd_init failed; the rhi lines above say "
                 "why)\n",
                 backend);
         SDL_DestroyWindow(s_window);
@@ -725,7 +725,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         return -1;
     }
     /* the whole reachable pipeline set before the first frame and after
-       rd_Init (which makes the device), so the game never waits on a
+       rd_init (which makes the device), so the game never waits on a
        pipeline compile (tens of ms each on a GPU driver); the time is
        logged */
     {
@@ -733,9 +733,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 
         /* a start with a cold driver cache can take many seconds: say what
            is going on (nothing is drawn when it is quick) */
-        rd_SetPipelineProgress(pipeline_progress, &screen);
-        rd_PrecreatePipelines();
-        rd_SetPipelineProgress(NULL, NULL);
+        rd_set_pipeline_progress(pipeline_progress, &screen);
+        rd_precreate_pipelines();
+        rd_set_pipeline_progress(NULL, NULL);
     }
     {
         IcoVideoOptions o;
@@ -747,7 +747,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 "texture filter %s, %s height, framerate %s), vsync %s, texture pack %s, "
                 "dump textures %s, model pack %s, dump models %s, depth %s\n",
                 w, h, s_fullscreen ? " fullscreen" : "",
-                rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_AdapterName(),
+                rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", rhi_adapter_name(),
                 video_preset_label(&o), ico_video_resolution_name(&o, res, sizeof(res)),
                 ico_video_aspect_name(o.aspect), ico_video_filter_name(o.filter),
                 o.fullHeight ? "full" : "half",
@@ -755,17 +755,17 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 o.vsync ? "on" : "off", o.texturePack ? "on" : "off",
                 o.dumpTextures && ico_opt_developer_mode() ? "on" : "off",
                 o.modelPack ? "on" : "off", o.dumpModels && ico_opt_developer_mode() ? "on" : "off",
-                rhi_Limits()->depthStencilFormatName);
-        fprintf(stderr, "window: present mode %s%s\n", rhi_PresentModeName(),
-                rhi_PresentMailbox() ? " (vsync without waiting on the display)" : "");
+                rhi_limits()->depthStencilFormatName);
+        fprintf(stderr, "window: present mode %s%s\n", rhi_present_mode_name(),
+                rhi_present_mailbox() ? " (vsync without waiting on the display)" : "");
         /* a program hooking the graphics API, once */
-        ico_diag_set_effects_program(rhi_InjectorName() != NULL);
-        if (rhi_InjectorName() != NULL) {
+        ico_diag_set_effects_program(rhi_injector_name() != NULL);
+        if (rhi_injector_name() != NULL) {
             fprintf(stderr, "window: an effects program is loaded (%s); see docs/RESHADE.md\n",
-                    rhi_InjectorName());
+                    rhi_injector_name());
         }
-        if (rhi_OverlayName() != NULL) {
-            fprintf(stderr, "window: an overlay is loaded (%s)\n", rhi_OverlayName());
+        if (rhi_overlay_name() != NULL) {
+            fprintf(stderr, "window: an overlay is loaded (%s)\n", rhi_overlay_name());
         }
         /* later changes are logged against this */
         s_videoLast = o;
@@ -778,18 +778,18 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
     /* the port's runtime text and popups (port/ui) */
-    ui_HostInit();
+    ui_host_init();
     /* the Window mode row shows what the window is, not the
        option (the window manager can refuse or change it) */
-    ui_SettingsSetWindowModeQuery(window_mode_now);
+    ui_settings_set_window_mode_query(window_mode_now);
     /* Display > Texture pack says "None installed" without one */
-    ui_SettingsSetTexturePackCount(texpack_Count);
+    ui_settings_set_texture_pack_count(texpack_count);
 #ifdef __ANDROID__
     /* the Graphics driver page, and "Quit game" for the
        title's Quit row (a phone has no desktop to quit to); both before the
        game's first frame builds the menus */
-    ui_SettingsSetGpuDriverHost(ico_gpu_driver_android_host());
-    ui_SettingsSetQuitIsGame(quit_is_game);
+    ui_settings_set_gpu_driver_host(ico_gpu_driver_android_host());
+    ui_settings_set_quit_is_game(quit_is_game);
 #endif
     {
         char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
@@ -801,8 +801,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* the touch overlay's zones, its Settings rows (with a
        touch screen) and the copy its drawing reads (port/ui/touch_ui.h) */
     touch_layout_update();
-    ui_SettingsSetTouchQuery(ico_input_sdl_touch_present);
-    ui_TouchSetSource(ico_input_sdl_touch_overlay);
+    ui_settings_set_touch_query(ico_input_sdl_touch_present);
+    ui_touch_set_source(ico_input_sdl_touch_overlay);
     /* SDL delivers the app's lifecycle only to a watch, as
        it happens (SDL sends these on mobile systems only) */
 #ifdef __ANDROID__
@@ -858,7 +858,7 @@ static void pointer_visibility(void)
         s_shown = -1;
         return;
     }
-    want = s_captured == ICO_CAPTURE_OFF && ui_MouseMenuActive() && mpegPlay == 0;
+    want = s_captured == ICO_CAPTURE_OFF && ui_mouse_menu_active() && mpegPlay == 0;
     if (want == s_shown) {
         return;
     }
@@ -896,7 +896,7 @@ static void toggle_fullscreen(void)
 {
     /* the window mode option flips between Windowed and the last other mode
        (in memory, not saved; the Settings menu sees it): video_apply asks
-       SDL and the presenter boxes the picture (rd_ResizeOutput follows) */
+       SDL and the presenter boxes the picture (rd_resize_output follows) */
 #ifdef __ANDROID__
     /* the window is always the whole screen there and the Window mode row
        is not applied: Alt+Enter from a keyboard does nothing */
@@ -925,7 +925,7 @@ static int device_lost_quit(void)
 {
     static int s_shown;
 
-    if (!rhi_DeviceLost()) {
+    if (!rhi_device_lost()) {
         return 0;
     }
     /* the start-up screens and the pump all ask: one line and one box */
@@ -963,16 +963,16 @@ static void frame_dump(void)
         fprintf(stderr, "window: F12: the dumps folder %s is too deep for the file names\n", dir);
         return;
     }
-    const int ok = rd_DumpOnDemand(dump, png);
+    const int ok = rd_dump_on_demand(dump, png);
     /* the recording up to this moment, for the same report */
     ico_input_record_flush();
     fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s and %s\n",
-            ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_FrameNumber(),
+            ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_frame_number(),
             ok ? "wrote" : "could not write all of", dump, png);
 }
 
 /* Cross in photo mode: the picture shown at the next present into
-   <pref>/<[photo] png_dir>/ico-<time>.png (rd_CapturePresented); the
+   <pref>/<[photo] png_dir>/ico-<time>.png (rd_capture_presented); the
    result comes back at a later pump (photo_pump) */
 static void photo_capture(void)
 {
@@ -1001,12 +1001,12 @@ static void photo_capture(void)
     if (ico_path_join(dir, sizeof(dir), pref, ico_photo_png_dir()) != 0 || ico_make_dir(dir) != 0 ||
         ico_path_join(path, sizeof(path), dir, name) != 0) {
         fprintf(stderr, "photo: no usable folder %s under %s\n", ico_photo_png_dir(), pref);
-        ui_PhotoCaptureDone(0, name);
+        ui_photo_capture_done(0, name);
         return;
     }
-    if (!rd_CapturePresented(path)) {
+    if (!rd_capture_presented(path)) {
         fprintf(stderr, "photo: the capture could not be armed (%s)\n", path);
-        ui_PhotoCaptureDone(0, name);
+        ui_photo_capture_done(0, name);
     }
 }
 
@@ -1022,7 +1022,7 @@ static void photo_pump(void)
     }
     {
         char path[ICO_PATH_MAX];
-        const int r = rd_CaptureResult(path, sizeof(path));
+        const int r = rd_capture_result(path, sizeof(path));
 
         if (r != 0) {
             const char *base = strrchr(path, '/');
@@ -1031,7 +1031,7 @@ static void photo_pump(void)
 
             base = b2 != NULL && (base == NULL || b2 > base) ? b2 : base;
 #endif
-            ui_PhotoCaptureDone(r > 0, base != NULL ? base + 1 : path);
+            ui_photo_capture_done(r > 0, base != NULL ? base + 1 : path);
         }
     }
 }
@@ -1170,14 +1170,14 @@ int ico_window_pump(void)
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
        aspect "auto" and resolution "window" follow it as on a resize */
-    video_apply(rd_OutputFollowed(NULL, NULL) ? 1 : 0);
+    video_apply(rd_output_followed(NULL, NULL) ? 1 : 0);
     /* a hard camera cut or stage change the game signalled during the
        step that just ran: the frame it recorded is not blended from the
        one before (the step closes the previous frame before the game's
        threads run, so the open frame is the one the cut belongs to) */
     if (ico_video_cut_serial() != s_pres.cutSerial) {
         s_pres.cutSerial = ico_video_cut_serial();
-        rd_CameraCut();
+        rd_camera_cut();
     }
     photo_pump();                /* photo mode's captures */
     set_capture(capture_mode()); /* play and photo mode */
@@ -1185,7 +1185,7 @@ int ico_window_pump(void)
     ico_input_sdl_update();
     /* the popups' clock; the presenter draws them on its overlay at each
        present (port/ui/ui_host.c) */
-    ui_HostVsync(ico_host_main_ticks());
+    ui_host_vsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
     return !quit;
 }
@@ -1212,10 +1212,10 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
     static const uint8_t fill[4] = {200, 180, 120, 0x80};
     char line[256];
 
-    ui_BeginOverlay(ctx);
+    ui_begin_overlay(ctx);
     if (v->title != NULL) {
-        ui_DrawText(UI_GRID_CX, 196.0f, 30.0f, title, v->title,
-                    UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+        ui_draw_text(UI_GRID_CX, 196.0f, 30.0f, title, v->title,
+                     UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
     }
     if (v->phase != NULL) {
         if (v->pct >= 0) {
@@ -1223,25 +1223,25 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
         } else {
             snprintf(line, sizeof(line), "%s", v->phase);
         }
-        ui_DrawText(UI_GRID_CX, 232.0f, 20.0f, body, line, UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+        ui_draw_text(UI_GRID_CX, 232.0f, 20.0f, body, line, UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
     }
     if (v->pct >= 0) {
         const float x0 = 120.0f, x1 = 520.0f, y0 = 250.0f, y1 = 266.0f;
         const int pct = v->pct > 100 ? 100 : v->pct;
 
-        ui_DrawRect(x0, y0, x1, y1, frame);
-        ui_DrawRect(x0 + 2.0f, y0 + 2.0f, x1 - 2.0f, y1 - 2.0f, track);
-        ui_DrawRect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
-                    y1 - 2.0f, fill);
+        ui_draw_rect(x0, y0, x1, y1, frame);
+        ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x1 - 2.0f, y1 - 2.0f, track);
+        ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
+                     y1 - 2.0f, fill);
 #ifdef __ANDROID__
         if (v->allowCancel) {
-            ui_DrawText(UI_GRID_CX, 300.0f, 16.0f, body,
-                        "Press Back to stop (you can start again later)",
-                        UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+            ui_draw_text(UI_GRID_CX, 300.0f, 16.0f, body,
+                         "Press Back to stop (you can start again later)",
+                         UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
         }
 #endif
     }
-    ui_EndOverlay();
+    ui_end_overlay();
 }
 
 /* Draws one progress screen and handles the events that came in.  Works
@@ -1310,14 +1310,14 @@ static int progress_present(const char *title, const char *phase, int pct, int a
     v.phase = phase;
     v.pct = pct;
     v.allowCancel = allowCancel;
-    prev = rd_GetPresentOverlay(&prevUser);
+    prev = rd_get_present_overlay(&prevUser);
     /* the touch controls' layer off too */
-    prevTop = rd_GetPresentOverlayTop(&prevTopUser);
-    rd_SetPresentOverlay(progress_overlay, &v);
-    rd_SetPresentOverlayTop(NULL, NULL);
-    rd_PresentBlank();
-    rd_SetPresentOverlay(prev, prevUser);
-    rd_SetPresentOverlayTop(prevTop, prevTopUser);
+    prevTop = rd_get_present_overlay_top(&prevTopUser);
+    rd_set_present_overlay(progress_overlay, &v);
+    rd_set_present_overlay_top(NULL, NULL);
+    rd_present_blank();
+    rd_set_present_overlay(prev, prevUser);
+    rd_set_present_overlay_top(prevTop, prevTopUser);
     return cancel;
 }
 
@@ -1329,7 +1329,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     return progress_present(title, phase, pct, 1);
 }
 
-/* The start-up screen while the graphics are prepared (rd_SetPipelineProgress).
+/* The start-up screen while the graphics are prepared (rd_set_pipeline_progress).
    With the graphics already prepared (the driver's saved cache, a start that
    follows another) this takes a few tens of milliseconds and nothing is
    drawn: the screen appears only when the wait is already noticeable, and
@@ -1437,15 +1437,15 @@ static void auto_res_sample(const RdPerfRecord *r)
     }
     if (r->gpuValid) {
         ms = r->gpuMs - r->gpuUploadMs;
-    } else if (rhi_PresentMailbox()) {
+    } else if (rhi_present_mailbox()) {
         ms = r->totalMs - r->acquireMs - r->presentMs;
     } else {
         return;
     }
     if (s_autoRes.samples.count && now - s_autoRes.samples.lastNs > 500000000ull) {
-        pace_SamplesReset(&s_autoRes.samples, now);
+        pace_samples_reset(&s_autoRes.samples, now);
     }
-    pace_SamplesAdd(&s_autoRes.samples, now, ms > 0.0 ? (Uint64)(ms * 1e6) : 0);
+    pace_samples_add(&s_autoRes.samples, now, ms > 0.0 ? (Uint64)(ms * 1e6) : 0);
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -1453,7 +1453,7 @@ static void perf_drain(void)
 {
     RdPerfRecord r;
 
-    while (rd_PerfPop(&r)) {
+    while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (!s_perf.csvTried) {
             perf_csv_open();
@@ -1575,7 +1575,7 @@ static void perf_log(void)
 
         char gfx[160] = "graphics allocations not counted";
 
-        rhi_GetStats(&st);
+        rhi_get_stats(&st);
         ico_diag_process_memory(&rss, &peak);
         if (st.memoryLimit != 0) { /* Vulkan counts them */
             snprintf(gfx, sizeof(gfx),
@@ -1598,7 +1598,7 @@ static void perf_log(void)
 /* Presents and frames per second, every 10 s of real time, in both
    presentation modes. "game frames" counts the frames shown (closed
    frames the pace saw); "frame numbers" also counts the ones the game
-   dropped unshown (rd_DiscardFrame: fbKeep screens, gsb_UpdateGSSystem(1)),
+   dropped unshown (rd_discard_frame: fbKeep screens, gsb_UpdateGSSystem(1)),
    so a gap between the two is not a slowdown. The simulation's own rate
    is the vsyncs against the block's real time, and any lag the pacer had
    to drop (resyncs) says the step plus the presents took longer than real
@@ -1611,9 +1611,9 @@ static void pace_log(Uint64 now)
         s_pres.statAt = now;
         s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
         s_pres.statDropped = 0;
-        s_pres.statFrameNo = rd_FrameNumber();
-        s_pres.statMovie = rd_VideoPresents(&s_pres.statMovieFail);
-        rd_ReplayTimeMax(1, &n);
+        s_pres.statFrameNo = rd_frame_number();
+        s_pres.statMovie = rd_video_presents(&s_pres.statMovieFail);
+        rd_replay_time_max(1, &n);
         perf_drain();
         perf_reset();
         return;
@@ -1623,13 +1623,13 @@ static void pace_log(Uint64 now)
     }
     const double sec = (double)(now - s_pres.statAt) / 1e9;
     uint32_t replays = 0;
-    const double maxMs = rd_ReplayTimeMax(1, &replays);
-    const uint32_t fn = rd_FrameNumber();
+    const double maxMs = rd_replay_time_max(1, &replays);
+    const uint32_t fn = rd_frame_number();
     uint32_t movieFail;
-    const uint32_t movie = rd_VideoPresents(&movieFail);
+    const uint32_t movie = rd_video_presents(&movieFail);
     char movieFailed[32] = "";
 
-    if (!rd_InterpolationActive()) {
+    if (!rd_interpolation_active()) {
         s_pres.statPresents = replays; /* one present per replay */
     }
     /* what the presents went to: the frame rate option, the
@@ -1654,7 +1654,7 @@ static void pace_log(Uint64 now)
             fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
             s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
             (double)s_pres.statDropped / 1e6, maxMs, replays, s_pres.slowSteps, s_pres.slowMs,
-            ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_PresentModeName(),
+            ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_present_mode_name(),
             dm != NULL ? (double)dm->refresh_rate : 0.0, pw, ph,
             window_fullscreen() ? " fullscreen" : "");
     perf_drain();
@@ -1684,8 +1684,8 @@ static void pace(int hz);
 static void slow_step(double ms)
 {
     IcoStepProfile p;
-    const RdTexCacheStats *tc = rdtex_Stats();
-    const RdStats *rs = rd_GetStats();
+    const RdTexCacheStats *tc = rdtex_stats();
+    const RdStats *rs = rd_get_stats();
 
     s_pres.slowSteps++;
     if (s_pres.slowLogged >= SLOW_STEP_LINES) {
@@ -1717,16 +1717,16 @@ static void auto_res_update(void)
         return;
     }
     const int cur = ico_video_auto_scale();
-    const int next = pace_AutoResolutionStep(s, cur, s_autoRes.windowScale);
+    const int next = pace_auto_resolution_step(s, cur, s_autoRes.windowScale);
 
     if (next != cur) {
         fprintf(stderr, "video: resolution auto -> %dx (presents took %.1f ms)\n", next,
-                (double)pace_SamplesMedian(s) / 1e6);
+                (double)pace_samples_median(s) / 1e6);
         ico_video_set_auto_scale(next);
         s->lastStepNs = s->lastNs;
         video_apply(1);
     }
-    pace_SamplesReset(s, s->lastNs);
+    pace_samples_reset(s, s->lastNs);
 }
 
 void ico_window_pace(int hz)
@@ -1753,8 +1753,8 @@ void ico_window_pace(int hz)
     }
     auto_res_update();
     {
-        const RdTexCacheStats *tc = rdtex_Stats();
-        const RdStats *rs = rd_GetStats();
+        const RdTexCacheStats *tc = rdtex_stats();
+        const RdStats *rs = rd_get_stats();
 
         s_pres.decodes = tc != NULL ? tc->decodes : 0;
         s_pres.pipeCreates = rs != NULL ? rs->pipelineCreates : 0;
@@ -1772,7 +1772,7 @@ static void pace(int hz)
     s_deadline += period;
     s_pres.statVsyncs++;
     {
-        const uint32_t fn = rd_FrameNumber();
+        const uint32_t fn = rd_frame_number();
 
         if (fn != s_pres.frame) {
             s_pres.frame = fn;
@@ -1782,13 +1782,13 @@ static void pace(int hz)
                 /* the first game frame (the opening scene follows it)
                    restarts the surface-size poll's every-present spell */
                 s_pollRestarted = 1;
-                rhi_SurfacePollRestart();
+                rhi_surface_poll_restart();
             }
             s_pres.statFrames++;
         }
     }
-    if (!rd_InterpolationActive()) {
-        /* framerate "original": rd_EndFrame presented the frame once; the
+    if (!rd_interpolation_active()) {
+        /* framerate "original": rd_end_frame presented the frame once; the
            picture is held until the next */
         now = SDL_GetTicksNS();
         if (now < s_deadline) {
@@ -1820,19 +1820,19 @@ static void pace(int hz)
         refresh = dm != NULL && dm->refresh_rate > 1.0f ? (Uint64)(1e9 / (double)dm->refresh_rate)
                                                         : period;
 
-        /* "uncapped" with vsync on.  In mailbox mode (rhi_PreferMailbox)
+        /* "uncapped" with vsync on.  In mailbox mode (rhi_prefer_mailbox)
            a present never waits for the display; two presents a refresh keep
            every refresh supplied with a fresh picture without drawing many
            that are never shown.  Under FIFO (no mailbox) one a refresh: the
            display's own rate, so a present rarely finds the queue full and
            waits.  Without vsync "uncapped" is back to back. */
         if (s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox) {
-            gap = rhi_PresentMailbox() ? refresh / 2 : refresh - refresh / 16;
+            gap = rhi_present_mailbox() ? refresh / 2 : refresh - refresh / 16;
 #ifdef __ANDROID__
             /* one a refresh in mailbox mode too: two full
                replays a refresh on the thread that also runs the game left
                a phone too little time for the game and kept its GPU busy */
-            if (rhi_PresentMailbox()) {
+            if (rhi_present_mailbox()) {
                 gap = refresh;
             }
 #endif
@@ -1873,8 +1873,8 @@ static void pace(int hz)
            frame closed; the raw measured time jittered with the step and
            the sleeps before the present */
         float a =
-            rd_PresentClockAlpha(&s_pres.clock, (double)now / 1e6, (double)s_pres.tickAt / 1e6,
-                                 (double)tick / 1e6, (double)gap / 1e6);
+            rd_present_clock_alpha(&s_pres.clock, (double)now / 1e6, (double)s_pres.tickAt / 1e6,
+                                   (double)tick / 1e6, (double)gap / 1e6);
 
         if (s_pres.legacyAlpha) {
             /* ICO_RD_S2_LEGACY=1: the raw measured time, without the clock */
@@ -1884,15 +1884,15 @@ static void pace(int hz)
         }
         const Uint64 t0 = now;
         ico_diag_present_enter();
-        const int ok = rd_Present(a);
+        const int ok = rd_present(a);
         ico_diag_present_leave();
         now = SDL_GetTicksNS();
         s_pres.cost = now - t0;
         if (ok) {
             /* the cost smoothed over the last presents, with hysteresis;
                a present is slower with an effects program loaded */
-            s_pres.paceSlow = pace_SlowPresent(&s_pres.paceHist, s_pres.cost, refresh, period,
-                                               rhi_InjectorName() != NULL);
+            s_pres.paceSlow = pace_slow_present(&s_pres.paceHist, s_pres.cost, refresh, period,
+                                                rhi_injector_name() != NULL);
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */
@@ -1926,17 +1926,17 @@ void ico_window_close(void)
 #endif
     set_capture(ICO_CAPTURE_OFF);
     ico_input_sdl_shutdown();
-    ui_SettingsSetWindowModeQuery(NULL);
-    ui_SettingsSetTexturePackCount(NULL);
-    ui_SettingsSetTouchQuery(NULL);
+    ui_settings_set_window_mode_query(NULL);
+    ui_settings_set_texture_pack_count(NULL);
+    ui_settings_set_touch_query(NULL);
 #ifdef __ANDROID__
-    ui_SettingsSetGpuDriverHost(NULL);
-    ui_SettingsSetQuitIsGame(NULL);
+    ui_settings_set_gpu_driver_host(NULL);
+    ui_settings_set_quit_is_game(NULL);
 #endif
-    ui_TouchSetSource(NULL);
-    ui_HostShutdown();
-    rd_SetHostCall(NULL);
-    rd_Shutdown();
+    ui_touch_set_source(NULL);
+    ui_host_shutdown();
+    rd_set_host_call(NULL);
+    rd_shutdown();
     if (s_window != NULL) {
         SDL_DestroyWindow(s_window);
         s_window = NULL;

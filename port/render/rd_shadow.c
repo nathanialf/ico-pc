@@ -39,53 +39,53 @@
  * when rd's shader still expanded TEXA after the sampler had filtered).
  *
  * Every vertex carries the place its triangle had in the call
- * (rd__SetShadowTag, in rgba: the volume draw writes no colour), so
+ * (rd__set_shadow_tag, in rgba: the volume draw writes no colour), so
  * rd_interp.c can regroup Shadow.c's prisms after the split.
  *
  * Replay (rd_replay.c, doShadow*) draws on the state block's colour and
  * depth targets at the command, so the commands leak and inherit state like
- * any other.  Recording is here; rd_ShadowStrip (rd_core.c) shares
+ * any other.  Recording is here; rd_shadow_strip (rd_core.c) shares
  * RDC_SHADOW_STRIP with b[0] = 0.
  */
 #include <string.h>
 #include "rd_internal.h"
 
-RdTarget rd_ShadowCountTarget(uint32_t gsW, uint32_t gsH)
+RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH)
 {
     static uint32_t s_id;
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (!f || gsW == 0 || gsH == 0) {
         return (RdTarget){0};
     }
     /* this frame's, if it made one: a temporary target dies with its frame */
     for (uint32_t i = 0; i < f->tempCount; i++) {
-        const RdTargetRec *t = rd__TargetRec(f->tempTargets[i]);
+        const RdTargetRec *t = rd__target_rec(f->tempTargets[i]);
         if (f->tempTargets[i] == s_id && t && t->w == gsW && t->h == gsH && !t->withDepth) {
             return (RdTarget){s_id};
         }
     }
-    s_id = rd_TempTarget(gsW, gsH, 0, 0).id;
+    s_id = rd_temp_target(gsW, gsH, 0, 0).id;
     return (RdTarget){s_id};
 }
 
-void rd_ShadowReset(void)
+void rd_shadow_reset(void)
 {
-    rd__Push(RDC_SHADOW_RESET);
+    rd__push(RDC_SHADOW_RESET);
 }
 
-void rd_ShadowResolve(void)
+void rd_shadow_resolve(void)
 {
-    rd__Push(RDC_SHADOW_RESOLVE);
+    rd__push(RDC_SHADOW_RESOLVE);
 }
 
-void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key)
+void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key)
 {
-    RdFrame *f = rd__RecFrame();
-    if (!v || !sign || triCount == 0 || !rd__DrawFilterPass(key)) {
+    RdFrame *f = rd__rec_frame();
+    if (!v || !sign || triCount == 0 || !rd__draw_filter_pass(key)) {
         return;
     }
     if (!f) {
-        rd__Push(RDC_SHADOW_STRIP); /* reports once */
+        rd__push(RDC_SHADOW_STRIP); /* reports once */
         return;
     }
     uint32_t inc = 0;
@@ -93,18 +93,18 @@ void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, 
         inc += sign[t] > 0;
     }
     const uint32_t n = triCount * 3;
-    const uint32_t off = rd__FramePayload(f, NULL, n * (uint32_t)sizeof(RdScreenVtx));
+    const uint32_t off = rd__frame_payload(f, NULL, n * (uint32_t)sizeof(RdScreenVtx));
     RdScreenVtx *out = (RdScreenVtx *)(f->payload + off);
     uint32_t a = 0, b = inc * 3;
     for (uint32_t t = 0; t < triCount; t++) {
         uint32_t *at = sign[t] > 0 ? &a : &b;
         memcpy(&out[*at], &v[t * 3], 3 * sizeof(RdScreenVtx));
         for (uint32_t k = 0; k < 3; k++) {
-            rd__SetShadowTag(&out[*at + k], t + 1); /* the call's order */
+            rd__set_shadow_tag(&out[*at + k], t + 1); /* the call's order */
         }
         *at += 3;
     }
-    RdCmd *c = rd__Push(RDC_SHADOW_STRIP);
+    RdCmd *c = rd__push(RDC_SHADOW_STRIP);
     if (!c) {
         return;
     }

@@ -24,16 +24,16 @@
  *             addresses (2^TW x 2^TH), so STQ coordinates and REPEAT wrap
  *             at the same place as on the GS.
  *   update    a new generation for an id whose entry has the same size and
- *             source format re-expands into the same RdTex (rd_UpdateTexture:
+ *             source format re-expands into the same RdTex (rd_update_texture:
  *             every draw of the frame being recorded sees the new texels,
  *             which is also what the PS2 shows, since its DMA chain reads the
  *             CLUT at kick time); otherwise the old RdTex is retired and
- *             destroyed two rdtex_FrameTick calls later, after any frame
+ *             destroyed two rdtex_frame_tick calls later, after any frame
  *             that may reference it has been replayed.
  *
  * Mips: an entry holds the one level the caller decodes (TexExt.level).
  * The replay builds and uploads the further levels the texture filter
- * samples (rd_replay.c uploadMips, rdtex_BuildMipChain).
+ * samples (rd_replay.c uploadMips, rdtex_build_mip_chain).
  *
  * All calls from the game fiber, like the rest of rd.
  */
@@ -92,11 +92,11 @@ typedef struct RdTexCacheStats {
     uint32_t decodes;  /* images decoded (creates + updates) */
     uint32_t creates;  /* rd textures created */
     uint32_t updates;  /* re-expansions into an existing rd texture */
-    uint32_t hits;     /* rdtex_Find hits */
-    uint32_t misses;   /* rdtex_Find misses */
+    uint32_t hits;     /* rdtex_find hits */
+    uint32_t misses;   /* rdtex_find misses */
     uint32_t retired;  /* rd textures queued for destruction */
     uint32_t failures; /* images that could not be decoded */
-    uint32_t replaced; /* texture packs: entries given a replacement (rdtex_Replace) */
+    uint32_t replaced; /* texture packs: entries given a replacement (rdtex_replace) */
 } RdTexCacheStats;
 
 /* ------------------------------------------------------------ decoding */
@@ -104,7 +104,7 @@ typedef struct RdTexCacheStats {
 /* The position of CLUT index i in GS CSM1 memory order (a 256-entry CLUT
  * swaps the middle two 8-entry runs of every 32; a 16-entry CLUT is held
  * straight). */
-static inline uint32_t rdtex_Csm1Index(uint32_t i, uint32_t colors)
+static inline uint32_t rdtex_csm1_index(uint32_t i, uint32_t colors)
 {
     if (colors != 256) {
         return i;
@@ -122,73 +122,73 @@ static inline uint32_t rdtex_Csm1Index(uint32_t i, uint32_t colors)
 /* Rearrange a CLUT held in index order into CSM1 memory order, in place
  * (Texture.c tex_convertClutCSM2ToCSM1, for any entry size; a 16-entry CLUT
  * is unchanged). */
-void rdtex_ClutToCsm1(void *clut, uint32_t colors, uint32_t entryBytes);
+void rdtex_clut_to_csm1(void *clut, uint32_t colors, uint32_t entryBytes);
 
 /* Bytes of one image of w x h texels in psm (0 for an unknown psm). */
-size_t rdtex_ImageBytes(uint32_t psm, uint32_t w, uint32_t h);
+size_t rdtex_image_bytes(uint32_t psm, uint32_t w, uint32_t h);
 
 /* Decode im into out (padW x padH RGBA8, zero outside w x h).  *src gets
  * the source format the alpha byte holds.  Returns 0, or -1 for a format
  * it does not know. */
-int rdtex_Decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src);
+int rdtex_decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src);
 
 /* The GS TEXA expansion on the CPU: rewrites the alpha byte of n texels of
  * source format src under mode (gs_texa_alpha in gs_math.hlsli).  RGBA32
  * texels are left alone. */
-void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
+void rdtex_apply_texa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode);
 
 /* A mip chain: successive 2x2 box levels of a w x h RGBA8 image
  * (both powers of two) written one after the other to out, which holds
- * rdtex_MipChainBytes(w, h) bytes.  Returns the number of levels written
+ * rdtex_mip_chain_bytes(w, h) bytes.  Returns the number of levels written
  * after the base.  alphaWeighted (for textures whose alpha
  * byte is the alpha the draws see, RD_TEXSRC_RGBA32): RGB is the
  * alpha-weighted average (premultiplied, divided back by the summed
  * alpha; the plain average where all four alphas are 0), so transparent
  * texels do not darken their neighbours; alpha is the plain average. */
-uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
-                             int alphaWeighted);
-/* The bytes rdtex_BuildMipChain writes for a w x h base: the sum of
+uint32_t rdtex_build_mip_chain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
+                               int alphaWeighted);
+/* The bytes rdtex_build_mip_chain writes for a w x h base: the sum of
  * max(w>>k,1) * max(h>>k,1) * 4 over the levels k >= 1.  w*h*4/3 is only
  * right for square images: a 128x4 chain is 764 bytes (its 1-high levels
  * keep a full row each), 512x2 is 2044. */
-size_t rdtex_MipChainBytes(uint32_t w, uint32_t h);
+size_t rdtex_mip_chain_bytes(uint32_t w, uint32_t h);
 /* Alpha-coverage preservation for the mips the texture filter samples.
- * base is level 0 (w x h), chain the levels rdtex_BuildMipChain wrote
+ * base is level 0 (w x h), chain the levels rdtex_build_mip_chain wrote
  * (levels of them); each level whose share of texels with alpha > ref fell
  * below level 0's has its alpha scaled up (at most 4x, never past level 0's
  * largest alpha) until it is back, so alpha-tested foliage and fences do
  * not thin out in the distance.  Textures without such texels or without
  * any are left alone. */
-void rdtex_KeepAlphaCoverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
-                             uint32_t levels, uint8_t ref);
+void rdtex_keep_alpha_coverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
+                               uint32_t levels, uint8_t ref);
 
 /* --------------------------------------------------------------- cache */
 
 /* The entry for (id, gen, texa), or {0}. */
-RdTex rdtex_Find(uint32_t id, uint32_t gen, int texa);
+RdTex rdtex_find(uint32_t id, uint32_t gen, int texa);
 /* Decode im for (id, gen, texa) and return its texture (see "update"
  * above).  smp may be null.  {0} when rd is not initialised or the format
  * is unknown. */
-RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
+RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
                   const RdTexSampler *smp, const char *debugName);
 /* The sampler state stored with the entry for (id, texa), or null. */
-const RdTexSampler *rdtex_Sampler(uint32_t id, int texa);
+const RdTexSampler *rdtex_sampler(uint32_t id, int texa);
 /* The texture id is gone (tex_FreeTexture): retire its entries. */
-void rdtex_Drop(uint32_t id);
+void rdtex_drop(uint32_t id);
 /* Once per game frame: destroys the textures retired two calls ago. */
-void rdtex_FrameTick(void);
+void rdtex_frame_tick(void);
 /* rd was shut down and started again: forget every entry without
- * destroying anything (rd_Shutdown destroyed them).  The game never does
+ * destroying anything (rd_shutdown destroyed them).  The game never does
  * this (a lost device ends the run); the tests do, between renderers. */
-void rdtex_Reset(void);
+void rdtex_reset(void);
 /* ------------------------------------------------------- texture packs
  *
  * A pack replacement (texpack.h) takes the place of a cache entry's
  * texture: every later bind of (id, gen, texa) samples it.  It lasts as
- * long as the entry: a new generation (a CLUT scroll re-store), rdtex_Drop
- * or rdtex_Reset retire it with the entry.  A replacement the graphics
- * card refused when it was uploaded (rdtex_ReplacementRefused) is
- * forgotten by the next rdtex_Find of its entry, which then misses, so the
+ * long as the entry: a new generation (a CLUT scroll re-store), rdtex_drop
+ * or rdtex_reset retire it with the entry.  A replacement the graphics
+ * card refused when it was uploaded (rdtex_replacement_refused) is
+ * forgotten by the next rdtex_find of its entry, which then misses, so the
  * game's own texture is decoded again. */
 
 struct TexpackImage; /* texpack.h */
@@ -196,35 +196,35 @@ struct TexpackImage; /* texpack.h */
 /* A replacement texture from a pack image: its levels (RGBA8 with raw GS
  * alpha, or BC blocks as the file holds them) move into the texture's
  * pending upload and *img is left empty; the next replay uploads every
- * level and frees them (rd_DestroyTexture and rd_Shutdown free them when
+ * level and frees them (rd_destroy_texture and rd_shutdown free them when
  * that never came).  uvW, uvH: the GS size of the texture it replaces
  * (2^TW x 2^TH, the original entry's padded size), which the draws' UVs
  * keep being normalised by.  The texture samples as RD_TEXSRC_RGBA32 (the
  * pack's alpha is raw GS alpha, no TEXA) and as mipmapped: min filter
  * linear, trilinear between its levels under the Original filter and
  * anisotropic when the option says so.  An RGBA8 image without its own
- * mips gets the box chain here (rdtex_ReplacementMips, unless the caller
+ * mips gets the box chain here (rdtex_replacement_mips, unless the caller
  * already did it); a BC image without mips stays one level (logged once).
  * {0} (img untouched) when rd is not initialised, the format is BC and
  * the device has no BC (RhiLimits.bcTextures), the image is larger than
  * the device takes, or it is empty. */
-RdTex rdtex_CreateReplacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
-                              const char *debugName);
-/* The 2x2 box chain (rdtex_BuildMipChain, colour weighted by alpha; no
+RdTex rdtex_create_replacement(struct TexpackImage *img, uint32_t uvW, uint32_t uvH,
+                               const char *debugName);
+/* The 2x2 box chain (rdtex_build_mip_chain, colour weighted by alpha; no
  * alpha coverage kept, as PCSX2 keeps none for a pack) appended to a
  * one-level RGBA8 image: img's blob
  * is replaced by one holding every level and img->levels set.  CPU only,
  * callable from any thread (the pack's loader thread may do it so the game
  * fiber does not).  0, or -1 (img unchanged: not a one-level RGBA8 image
  * with rows of w * 4 bytes, or no memory). */
-int rdtex_ReplacementMips(struct TexpackImage *img);
+int rdtex_replacement_mips(struct TexpackImage *img);
 /* The same chain into a new image: *dst gets src's level 0 and the box
  * chain in a blob of its own (src unchanged, so a shared cached image can
  * be copied for the renderer with its levels in one pass).  0, or -1 with
  * *dst untouched. */
-int rdtex_ReplacementMipsFrom(const struct TexpackImage *src, struct TexpackImage *dst);
+int rdtex_replacement_mips_from(const struct TexpackImage *src, struct TexpackImage *dst);
 /* 1 when t is a pack replacement the graphics card refused to create. */
-int rdtex_ReplacementRefused(RdTex t);
+int rdtex_replacement_refused(RdTex t);
 /* Install rep as the texture of the entry (id, gen, texa): the entry's
  * current texture is retired, rep takes its place and the entry is marked
  * replaced (a later store of that entry, a CLUT scroll's new generation,
@@ -232,22 +232,22 @@ int rdtex_ReplacementRefused(RdTex t);
  * there is no such entry (freed, or a newer generation stored since the
  * request) or rep is not a live texture: the caller keeps rep and
  * destroys it. */
-int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep);
-/* The pack was switched off (rd_SetSettings on a texturePack true -> false
+int rdtex_replace(uint32_t id, uint32_t gen, int texa, RdTex rep);
+/* The pack was switched off (rd_set_settings on a texturePack true -> false
  * edge): retire every replaced entry's texture and forget the entry, so
  * the next bind decodes the game's original again. */
-void rdtex_RevertReplacements(void);
+void rdtex_revert_replacements(void);
 /* Called with each replacement texture the cache gives up: the entry was
- * dropped (rdtex_Drop), stored again (a new generation), reverted
- * (rdtex_RevertReplacements), replaced once more, or forgotten
- * (rdtex_Reset).  The texture itself is destroyed two frame ticks later
- * (or already was, after rd_Shutdown); the hook only settles accounts.
- * texpack.c sets texpack_BudgetRelease here at texpack_Init and null at
- * texpack_Shutdown; null (the default) calls nothing. */
+ * dropped (rdtex_drop), stored again (a new generation), reverted
+ * (rdtex_revert_replacements), replaced once more, or forgotten
+ * (rdtex_reset).  The texture itself is destroyed two frame ticks later
+ * (or already was, after rd_shutdown); the hook only settles accounts.
+ * texpack.c sets texpack_budget_release here at texpack_init and null at
+ * texpack_shutdown; null (the default) calls nothing. */
 typedef void (*RdTexReleaseFn)(RdTex t);
-void rdtex_SetReleaseHook(RdTexReleaseFn fn);
+void rdtex_set_release_hook(RdTexReleaseFn fn);
 
-const RdTexCacheStats *rdtex_Stats(void);
+const RdTexCacheStats *rdtex_stats(void);
 
 #ifdef __cplusplus
 }

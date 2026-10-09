@@ -18,11 +18,11 @@
  * Navigation: the cursor moves on the slots through their item links; at
  * the first or last slot the list scrolls, wrapping at the ends, as the
  * Options screen's rows do.  A cursor that lands on a heading moves on in the
- * direction it came from (one frame later, in ui_ListProc).
+ * direction it came from (one frame later, in ui_list_proc).
  *
  * The rows are port rows of the layout extension (layout_ext.h), added with
- * ui_SettingsAddRow (settings.c); the page's layout proc calls ui_ListRefresh
- * and ui_ListProc.
+ * ui_settings_add_row (settings.c); the page's layout proc calls ui_list_refresh
+ * and ui_list_proc.
  */
 #ifndef PORT_UI_UI_LIST_H
 #define PORT_UI_UI_LIST_H
@@ -84,27 +84,27 @@ typedef struct UiList {
 
 /* Provided by settings.c: appends a port row (the Settings menu's row
    defaults: unique texel rectangle, no links); returns its property index. */
-int ui_SettingsAddRow(int x, int y, int w, int h, int selectable, int owner, int strId,
-                      const char *text, float size, int align);
+int ui_settings_add_row(int x, int y, int w, int h, int selectable, int owner, int strId,
+                        const char *text, float size, int align);
 
 /* Adds the slots' rows (label, column A and B per slot, the item links
    between slots) and the status line, in that order. */
-void ui_ListBuild(UiList *l, const UiListDef *def, void *user, const UiListStyle *style);
+void ui_list_build(UiList *l, const UiListDef *def, void *user, const UiListStyle *style);
 /* The list as the page was entered: the first item at the top. */
-void ui_ListReset(UiList *l);
+void ui_list_reset(UiList *l);
 /* Items now, and slots in use (the smaller of that and UI_LIST_SLOTS). */
-int ui_ListCount(const UiList *l);
-int ui_ListShown(const UiList *l);
+int ui_list_count(const UiList *l);
+int ui_list_shown(const UiList *l);
 /* The slot whose label row is `row`, -1 for none; the item in a slot (-1
    when empty); the item under the cursor row (-1 for none). */
-int ui_ListSlotOf(const UiList *l, int row);
-int ui_ListItemAt(const UiList *l, int slot);
-int ui_ListItemOfRow(const UiList *l, int row);
+int ui_list_slot_of(const UiList *l, int row);
+int ui_list_item_at(const UiList *l, int slot);
+int ui_list_item_of_row(const UiList *l, int row);
 /* Fills every slot from its item (empty past the end) and calls decorate. */
-void ui_ListRefresh(UiList *l, int cursorRow);
+void ui_list_refresh(UiList *l, int cursorRow);
 /* One tick of input with the layout's cursor (lay->curItem): the heading
    skip, def->input, then the scrolling.  The proc's result. */
-int ui_ListProc(UiList *l, LtProp *lay, int flags);
+int ui_list_proc(UiList *l, LtProp *lay, int flags);
 
 #ifdef __cplusplus
 }

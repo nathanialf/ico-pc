@@ -46,7 +46,7 @@ int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
-   (rd.h rd_SetMirror, through the listener below).
+   (rd.h rd_set_mirror, through the listener below).
    The value is the run's: [gameplay] mirror (default false) until the
    player picks at New Game (port/ui/settings.h ui_NewGameScreen*) or loads a
    save, whose slot's flag the port config keeps (below). */
@@ -54,7 +54,7 @@ int ico_opt_mirror(void);
 void ico_opt_set_mirror(int on);
 /* Called with the new value on every ico_opt_set_mirror, and once at
    registration with the current one (the Settings module registers the
-   renderer's rd_SetMirror).  NULL unregisters.  One listener. */
+   renderer's rd_set_mirror).  NULL unregisters.  One listener. */
 void ico_opt_set_mirror_listener(void (*fn)(int on));
 /* The title (layout_action.c, ICO_HOST): no run is in progress, so the
    value goes back to [gameplay] mirror (default false). */
@@ -91,8 +91,8 @@ int ico_opt_debug_option(void);
 /* [game] circle_back: 1 (the default) makes Circle an alias of
    the game menus' Triangle back action (common/src/layout_action.c,
    layout_texture.c default_item_select, through port/ui/layout_ext.h
-   lt_ext_BackButtons); 0 is the PS2's behaviour.  The Settings module hands
-   the value to port/ui (lt_ext_SetCircleBack) at install and on a change. */
+   lt_ext_back_buttons); 0 is the PS2's behaviour.  The Settings module hands
+   the value to port/ui (lt_ext_set_circle_back) at install and on a change. */
 int ico_opt_circle_back(void);
 void ico_opt_set_circle_back(int on);
 /* [audio] output: the
@@ -111,7 +111,7 @@ const char *ico_opt_output_name(int mode);
 /* The game's mode to set, given the game's `current` one: the explicit
    key, else the game's own value (the card's or the Options row's, or
    `current` the first time, which is then recorded as the game's).
-   ui_SettingsInstall and the Settings row apply it with soundOutputModeSet
+   ui_settings_install and the Settings row apply it with soundOutputModeSet
    when it differs from current. */
 int ico_opt_output_resolve(int current);
 /* The memory card hook (fumi/ios/mcard.c, after the system file's mode is

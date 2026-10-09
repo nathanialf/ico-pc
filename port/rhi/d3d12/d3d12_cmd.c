@@ -5,14 +5,14 @@
 #include <string.h>
 
 /* ------------------------------------------------------------------ fence */
-uint64_t dx_Signal(void)
+uint64_t dx_signal(void)
 {
     uint64_t v = ++g_dx.fenceValue;
     DX_CHECK(ID3D12CommandQueue_Signal(g_dx.queue, g_dx.fence, v));
     return v;
 }
 
-void dx_WaitFence(uint64_t value)
+void dx_wait_fence(uint64_t value)
 {
     if (value == 0 || !g_dx.fence || g_dx.deviceLost) {
         return;
@@ -25,7 +25,7 @@ void dx_WaitFence(uint64_t value)
     }
 }
 
-void dx_Transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t before,
+void dx_transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t before,
                    uint32_t after)
 {
     D3D12_RESOURCE_BARRIER b;
@@ -39,7 +39,7 @@ void dx_Transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t 
 }
 
 /* ------------------------------------------------------------------ frames */
-static bool dx_NewList(ID3D12CommandAllocator **alloc, ID3D12GraphicsCommandList **cl)
+static bool dx_new_list(ID3D12CommandAllocator **alloc, ID3D12GraphicsCommandList **cl)
 {
     if (!DX_CHECK(ID3D12Device_CreateCommandAllocator(g_dx.device, D3D12_COMMAND_LIST_TYPE_DIRECT,
                                                       &IID_ID3D12CommandAllocator,
@@ -49,31 +49,31 @@ static bool dx_NewList(ID3D12CommandAllocator **alloc, ID3D12GraphicsCommandList
                                                  (void **)cl))) {
         return false;
     }
-    /* created open; closed until rhi_BeginCommands resets it */
+    /* created open; closed until rhi_begin_commands resets it */
     return DX_CHECK(ID3D12GraphicsCommandList_Close(*cl));
 }
 
-bool dx_FramesInit(void)
+bool dx_frames_init(void)
 {
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         DxFrame *f = &g_dx.frames[i];
         for (uint32_t j = 0; j < DX_MAX_CMD_LISTS; j++) {
-            if (!dx_NewList(&f->lists[j].alloc, &f->lists[j].cl)) {
+            if (!dx_new_list(&f->lists[j].alloc, &f->lists[j].cl)) {
                 return false;
             }
         }
-        d3dp_RingInit(&f->resRing, DX_RES_HEAP_SIZE, 0, RHI_FRAMES_IN_FLIGHT, i);
-        d3dp_RingInit(&f->smpRing, DX_SMP_HEAP_SIZE, DX_SMP_RESERVED, RHI_FRAMES_IN_FLIGHT, i);
+        d3dp_ring_init(&f->resRing, DX_RES_HEAP_SIZE, 0, RHI_FRAMES_IN_FLIGHT, i);
+        d3dp_ring_init(&f->smpRing, DX_SMP_HEAP_SIZE, DX_SMP_RESERVED, RHI_FRAMES_IN_FLIGHT, i);
     }
     g_dx.frameIndex = 0;
-    return dx_NewList(&g_dx.oneShotAlloc, &g_dx.oneShotList);
+    return dx_new_list(&g_dx.oneShotAlloc, &g_dx.oneShotList);
 }
 
-void dx_FramesShutdown(void)
+void dx_frames_shutdown(void)
 {
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         DxFrame *f = &g_dx.frames[i];
-        dx_DestroyGarbage(f);
+        dx_destroy_garbage(f);
         free(f->garbage);
         free(f->groups);
         for (uint32_t j = 0; j < DX_MAX_CMD_LISTS; j++) {
@@ -87,10 +87,10 @@ void dx_FramesShutdown(void)
 }
 
 /* Recycles a frame slot once the GPU is done with it. */
-static void dx_RecycleFrame(DxFrame *f)
+static void dx_recycle_frame(DxFrame *f)
 {
-    dx_WaitFence(f->fenceValue);
-    dx_DestroyGarbage(f);
+    dx_wait_fence(f->fenceValue);
+    dx_destroy_garbage(f);
     for (uint32_t j = 0; j < f->listCount; j++) {
         DX_CHECK(ID3D12CommandAllocator_Reset(f->lists[j].alloc));
     }
@@ -104,45 +104,45 @@ static void dx_RecycleFrame(DxFrame *f)
     }
     f->listCount = 0;
     f->groupCount = 0;
-    d3dp_RingReset(&f->resRing);
-    d3dp_RingReset(&f->smpRing);
+    d3dp_ring_reset(&f->resRing);
+    d3dp_ring_reset(&f->smpRing);
     for (uint32_t j = 0; j < f->deadSamplerCount; j++) {
-        d3dp_PoolRelease(&g_dx.samplers, f->deadSamplers[j]);
+        d3dp_pool_release(&g_dx.samplers, f->deadSamplers[j]);
     }
     f->deadSamplerCount = 0;
     memset(f->nullGroups, 0, sizeof(f->nullGroups));
 }
 
-void rhi_WaitFrame(void)
+void rhi_wait_frame(void)
 {
     g_dx.frameIndex++;
-    dx_RecycleFrame(dx_CurFrame());
+    dx_recycle_frame(dx_cur_frame());
 }
 
-uint32_t rhi_FrameSlot(void)
+uint32_t rhi_frame_slot(void)
 {
     return (uint32_t)(g_dx.frameIndex % RHI_FRAMES_IN_FLIGHT);
 }
 
-void rhi_WaitIdle(void)
+void rhi_wait_idle(void)
 {
-    dx_WaitFence(dx_Signal());
+    dx_wait_fence(dx_signal());
     /* The other slots' garbage is now safe to destroy; the current frame's
      * is not (a list recorded but not submitted may still use it). */
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
-        if (&g_dx.frames[i] != dx_CurFrame()) {
-            dx_DestroyGarbage(&g_dx.frames[i]);
+        if (&g_dx.frames[i] != dx_cur_frame()) {
+            dx_destroy_garbage(&g_dx.frames[i]);
         }
     }
-    dx_DrainMessages();
+    dx_drain_messages();
 }
 
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1).  Each list has its own
  * allocator, so several can be recorded at once within a frame. */
-DxCmdList *dx_GetCmd(RhiCommandList cl)
+DxCmdList *dx_get_cmd(RhiCommandList cl)
 {
-    DxFrame *f = dx_CurFrame();
+    DxFrame *f = dx_cur_frame();
     uint32_t idx = cl.id & D3DP_INDEX_MASK;
     if (idx == 0 || idx > f->listCount ||
         (cl.id >> D3DP_GEN_SHIFT) != (uint32_t)(g_dx.frameIndex & D3DP_GEN_MASK)) {
@@ -151,16 +151,16 @@ DxCmdList *dx_GetCmd(RhiCommandList cl)
     return &f->lists[idx - 1];
 }
 
-static void dx_BindHeaps(ID3D12GraphicsCommandList *cl)
+static void dx_bind_heaps(ID3D12GraphicsCommandList *cl)
 {
     ID3D12DescriptorHeap *heaps[2] = {g_dx.resHeap, g_dx.smpHeap};
     ID3D12GraphicsCommandList_SetDescriptorHeaps(cl, 2, heaps);
 }
 
-RhiCommandList rhi_BeginCommands(void)
+RhiCommandList rhi_begin_commands(void)
 {
     RhiCommandList out = {0};
-    DxFrame *f = dx_CurFrame();
+    DxFrame *f = dx_cur_frame();
     if (f->listCount == DX_MAX_CMD_LISTS) {
         DX_LOG("more than %d command lists in one frame", DX_MAX_CMD_LISTS);
         return out;
@@ -169,7 +169,7 @@ RhiCommandList rhi_BeginCommands(void)
     if (!DX_CHECK(ID3D12GraphicsCommandList_Reset(c->cl, c->alloc, NULL))) {
         return out;
     }
-    dx_BindHeaps(c->cl);
+    dx_bind_heaps(c->cl);
     c->recording = true;
     c->serial = ++g_dx.listSerial;
     c->topoSet = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
@@ -178,70 +178,70 @@ RhiCommandList rhi_BeginCommands(void)
     return out;
 }
 
-void rhi_EndCommands(RhiCommandList cl)
+void rhi_end_commands(RhiCommandList cl)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !c->recording) {
         return;
     }
     if (c->inPass) {
-        DX_LOG("rhi_EndCommands inside a render pass");
+        DX_LOG("rhi_end_commands inside a render pass");
         c->inPass = false;
     }
     /* a list whose Close failed is invalid: executing it is an error of
-     * its own (and removes the device on some drivers); rhi_Submit skips it */
+     * its own (and removes the device on some drivers); rhi_submit skips it */
     c->closeFailed = !DX_CHECK(ID3D12GraphicsCommandList_Close(c->cl));
     c->recording = false;
 }
 
-void rhi_Submit(RhiCommandList cl)
+void rhi_submit(RhiCommandList cl)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || c->submitted) {
         return;
     }
     if (c->recording) {
-        rhi_EndCommands(cl);
+        rhi_end_commands(cl);
     }
     c->submitted = true;
     if (c->closeFailed || g_dx.deviceLost) {
         if (c->closeFailed && !g_dx.deviceLost) {
-            DX_LOG("rhi_Submit: the list did not close; its commands are dropped");
+            DX_LOG("rhi_submit: the list did not close; its commands are dropped");
         }
     } else {
         ID3D12CommandList *lists[1] = {(ID3D12CommandList *)c->cl};
         ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
     }
-    dx_CurFrame()->fenceValue = dx_Signal();
-    dx_DrainMessages();
+    dx_cur_frame()->fenceValue = dx_signal();
+    dx_drain_messages();
 }
 
 /* ---------------------------------------------------------------- barriers */
-void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
+void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c) {
         return;
     }
     D3D12_RESOURCE_BARRIER rb[16];
     uint32_t n = 0;
     for (uint32_t i = 0; i < count; i++) {
-        DxTexture *t = dx_GetTexture(barriers[i].texture);
+        DxTexture *t = dx_get_texture(barriers[i].texture);
         if (!t || barriers[i].before >= RHI_STATE_COUNT || barriers[i].after >= RHI_STATE_COUNT) {
-            DX_LOG("rhi_CmdBarrier: invalid barrier %u", i);
+            DX_LOG("rhi_cmd_barrier: invalid barrier %u", i);
             continue;
         }
         uint32_t b = 0, a = 0;
         bool mismatch = false;
-        bool emit =
-            d3dp_PlanTextureBarrier(barriers[i].before, barriers[i].after,
-                                    dx_formatMap[t->rhiFormat].depth, &t->state, &b, &a, &mismatch);
+        bool emit = d3dp_plan_texture_barrier(barriers[i].before, barriers[i].after,
+                                              dx_formatMap[t->rhiFormat].depth, &t->state, &b, &a,
+                                              &mismatch);
         if (mismatch) {
-            DX_LOG("rhi_CmdBarrier: texture %08x: before state %d does not match the tracked "
+            DX_LOG("rhi_cmd_barrier: texture %08x: before state %d does not match the tracked "
                    "state 0x%x; using the caller's",
                    barriers[i].texture.id, (int)barriers[i].before, (unsigned)b);
         }
-        d3dp_CopyMarkBarrier(&t->copySerial);
+        d3dp_copy_mark_barrier(&t->copySerial);
         if (!emit) {
             continue;
         }
@@ -266,30 +266,30 @@ void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32
  * D3D12 orders render target and depth writes of successive draws and
  * clears in one state, so a pass after a pass on one target needs nothing
  * (the Vulkan backend's global barrier has no counterpart here). */
-void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
+void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !pass || pass->colorCount > RHI_MAX_COLOR_TARGETS) {
         return;
     }
     D3D12_CPU_DESCRIPTOR_HANDLE rtv[RHI_MAX_COLOR_TARGETS];
     for (uint32_t i = 0; i < pass->colorCount; i++) {
-        DxTexture *t = dx_GetTexture(pass->color[i].texture);
+        DxTexture *t = dx_get_texture(pass->color[i].texture);
         if (!t || !t->rtv) {
             DX_LOG("render pass: invalid colour target %u", i);
             return;
         }
-        rtv[i] = dx_Cpu(g_dx.rtvCpu, g_dx.rtvInc, t->rtv - 1u);
+        rtv[i] = dx_cpu(g_dx.rtvCpu, g_dx.rtvInc, t->rtv - 1u);
     }
     D3D12_CPU_DESCRIPTOR_HANDLE dsv = {0};
     DxTexture *dt = NULL;
     if (pass->depth.texture.id) {
-        dt = dx_GetTexture(pass->depth.texture);
+        dt = dx_get_texture(pass->depth.texture);
         if (!dt || !dt->dsv) {
             DX_LOG("render pass: invalid depth target");
             return;
         }
-        dsv = dx_Cpu(g_dx.dsvCpu, g_dx.dsvInc,
+        dsv = dx_cpu(g_dx.dsvCpu, g_dx.dsvInc,
                      (pass->depth.readOnlyDepth ? dt->dsvRO : dt->dsv) - 1u);
     }
     /* the store ops (store, stencilStore) are ignored: without render pass
@@ -301,12 +301,12 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         if (a->load != RHI_LOAD_CLEAR) {
             continue;
         }
-        DxTexture *t = dx_GetTexture(a->texture);
+        DxTexture *t = dx_get_texture(a->texture);
         float v[4];
         for (int k = 0; k < 4; k++) {
             /* integer targets: the clear value is the integer, rounded as
              * on Vulkan; D3D12 converts the (now integral) float exactly */
-            v[k] = dx_formatMap[t->rhiFormat].isInteger ? d3dp_IntClearValue(a->clear[k])
+            v[k] = dx_formatMap[t->rhiFormat].isInteger ? d3dp_int_clear_value(a->clear[k])
                                                         : a->clear[k];
         }
         ID3D12GraphicsCommandList_ClearRenderTargetView(c->cl, rtv[i], v, 0, NULL);
@@ -329,21 +329,21 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
     c->inPass = true;
     RhiViewport vp = {0.0f, 0.0f, (float)pass->width, (float)pass->height, 0.0f, 1.0f};
     RhiRect sc = {0, 0, pass->width, pass->height};
-    rhi_CmdSetViewport(cl, &vp);
-    rhi_CmdSetScissor(cl, &sc);
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, &sc);
 }
 
-void rhi_CmdEndRenderPass(RhiCommandList cl)
+void rhi_cmd_end_render_pass(RhiCommandList cl)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (c) {
         c->inPass = false;
     }
 }
 
-void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *v)
+void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !v) {
         return;
     }
@@ -352,9 +352,9 @@ void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *v)
     ID3D12GraphicsCommandList_RSSetViewports(c->cl, 1, &vp);
 }
 
-void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *r)
+void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *r)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !r) {
         return;
     }
@@ -362,10 +362,10 @@ void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *r)
     ID3D12GraphicsCommandList_RSSetScissorRects(c->cl, 1, &sc);
 }
 
-void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
+void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxPipeline *pp = d3dp_PoolGet(&g_dx.pipelines, p.id);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxPipeline *pp = d3dp_pool_get(&g_dx.pipelines, p.id);
     if (!c || !pp) {
         return;
     }
@@ -385,22 +385,22 @@ void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
     }
 }
 
-void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
-                                const uint32_t *offsets, uint32_t count)
+void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                    const uint32_t *offsets, uint32_t count)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || group >= RHI_MAX_BIND_SLOTS) {
         return;
     }
-    DxBindGroup *g = bg.id ? dx_GetBindGroup(bg.id) : NULL;
+    DxBindGroup *g = bg.id ? dx_get_bind_group(bg.id) : NULL;
     if (bg.id && !g) {
-        DX_LOG("rhi_CmdSetBindGroup: bind group %08x is not from this frame", bg.id);
+        DX_LOG("rhi_cmd_set_bind_group: bind group %08x is not from this frame", bg.id);
         bg.id = 0;
     }
     /* the offsets of the group's root CBVs, the missing ones 0 */
     const uint32_t dyn = g ? g->dynCount : 0;
     if (count > dyn) {
-        DX_LOG("rhi_CmdSetBindGroupOffsets: %u offsets for %u dynamic slots", count, dyn);
+        DX_LOG("rhi_cmd_set_bind_group_offsets: %u offsets for %u dynamic slots", count, dyn);
         count = dyn;
     }
     memset(c->offsets[group], 0, sizeof(c->offsets[group]));
@@ -411,14 +411,14 @@ void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup 
     c->groupDirty |= 1u << group;
 }
 
-void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+void rhi_cmd_set_bind_group(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
 {
-    rhi_CmdSetBindGroupOffsets(cl, group, bg, NULL, 0);
+    rhi_cmd_set_bind_group_offsets(cl, group, bg, NULL, 0);
 }
 
 /* Root signature, topology, dirty bind groups and vertex buffers before a
  * draw. */
-static void dx_Flush(DxCmdList *c)
+static void dx_flush(DxCmdList *c)
 {
     DxPipeline *p = c->pipeline;
     DxRootSig *r = p->root;
@@ -439,8 +439,8 @@ static void dx_Flush(DxCmdList *c)
          * descriptor table is left unset at a draw; its root CBVs (a
          * dynamic group's, below) are: a null group has none to give, and
          * no pipeline reads a cbuffer whose group it leaves unbound */
-        uint32_t id = c->groups[g] ? c->groups[g] : dx_NullBindGroup(r->layoutIds[g]);
-        DxBindGroup *bg = id ? dx_GetBindGroup(id) : NULL;
+        uint32_t id = c->groups[g] ? c->groups[g] : dx_null_bind_group(r->layoutIds[g]);
+        DxBindGroup *bg = id ? dx_get_bind_group(id) : NULL;
         if (!bg) {
             continue;
         }
@@ -473,10 +473,10 @@ static void dx_Flush(DxCmdList *c)
     }
 }
 
-void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset)
+void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxBuffer *buf = dx_GetBuffer(b);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxBuffer *buf = dx_get_buffer(b);
     if (!c || !buf || binding >= RHI_MAX_VERTEX_ATTRS || offset >= buf->size) {
         return;
     }
@@ -485,10 +485,10 @@ void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, ui
     c->vbDirty |= 1u << binding;
 }
 
-void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32)
+void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxBuffer *buf = dx_GetBuffer(b);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxBuffer *buf = dx_get_buffer(b);
     if (!c || !buf || offset >= buf->size) {
         return;
     }
@@ -497,42 +497,42 @@ void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool
     ID3D12GraphicsCommandList_IASetIndexBuffer(c->cl, &v);
 }
 
-void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref)
+void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (c) {
         ID3D12GraphicsCommandList_OMSetStencilRef(c->cl, ref);
     }
 }
 
-void rhi_CmdSetBlendConstant(RhiCommandList cl, const float rgba[4])
+void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (c) {
         ID3D12GraphicsCommandList_OMSetBlendFactor(c->cl, rgba);
     }
 }
 
-void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
-                 uint32_t instanceCount)
+void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
+                  uint32_t instanceCount)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !c->pipeline) {
         return;
     }
-    dx_Flush(c);
+    dx_flush(c);
     ID3D12GraphicsCommandList_DrawInstanced(c->cl, vertexCount, instanceCount ? instanceCount : 1u,
                                             firstVertex, 0);
 }
 
-void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
-                        int32_t vertexOffset, uint32_t instanceCount)
+void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
+                          int32_t vertexOffset, uint32_t instanceCount)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !c->pipeline) {
         return;
     }
-    dx_Flush(c);
+    dx_flush(c);
     ID3D12GraphicsCommandList_DrawIndexedInstanced(
         c->cl, indexCount, instanceCount ? instanceCount : 1u, firstIndex, vertexOffset, 0);
 }
@@ -540,54 +540,54 @@ void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIn
 /* ------------------------------------------------------------------ copies */
 /* A device buffer about to be written by a copy: to COPY_DEST (this also
  * orders the copy after earlier copies into it in this list). */
-static void dx_BufferCopyBegin(DxCmdList *c, DxBuffer *d)
+static void dx_buffer_copy_begin(DxCmdList *c, DxBuffer *d)
 {
     uint32_t b, a;
-    if (d->kind == RHI_MEM_DEVICE && d3dp_BufferBeginCopyDst(&d->track, c->serial, &b, &a)) {
-        dx_Transition(c->cl, d->res, b, a);
+    if (d->kind == RHI_MEM_DEVICE && d3dp_buffer_begin_copy_dst(&d->track, c->serial, &b, &a)) {
+        dx_transition(c->cl, d->res, b, a);
     }
 }
 
 /* ...and after: GENERIC_READ, visible to every later read (rhi.h). */
-static void dx_BufferCopyEnd(DxCmdList *c, DxBuffer *d)
+static void dx_buffer_copy_end(DxCmdList *c, DxBuffer *d)
 {
     uint32_t b, a;
     if (d->kind == RHI_MEM_DEVICE) {
-        d3dp_BufferEndCopyDst(&d->track, c->serial, &b, &a);
-        dx_Transition(c->cl, d->res, b, a);
+        d3dp_buffer_end_copy_dst(&d->track, c->serial, &b, &a);
+        dx_transition(c->cl, d->res, b, a);
     }
 }
 
-void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
-                       uint64_t dstOffset, uint64_t size)
+void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
+                         uint64_t dstOffset, uint64_t size)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxBuffer *s = dx_GetBuffer(src);
-    DxBuffer *d = dx_GetBuffer(dst);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxBuffer *s = dx_get_buffer(src);
+    DxBuffer *d = dx_get_buffer(dst);
     if (!c || !s || !d || size == 0) {
         return;
     }
     if (d->kind == RHI_MEM_UPLOAD) {
-        DX_LOG("rhi_CmdCopyBuffer: an upload buffer cannot be a copy destination");
+        DX_LOG("rhi_cmd_copy_buffer: an upload buffer cannot be a copy destination");
         return;
     }
-    dx_BufferCopyBegin(c, d);
+    dx_buffer_copy_begin(c, d);
     ID3D12GraphicsCommandList_CopyBufferRegion(c->cl, d->res, dstOffset, s->res, srcOffset, size);
-    dx_BufferCopyEnd(c, d);
+    dx_buffer_copy_end(c, d);
 }
 
 /* Before a copy into a texture: a second copy into it in this list since
- * its last barrier waits for the first (d3dp_CopyNeedsSync). */
-static void dx_TextureCopyBegin(DxCmdList *c, DxTexture *t)
+ * its last barrier waits for the first (d3dp_copy_needs_sync). */
+static void dx_texture_copy_begin(DxCmdList *c, DxTexture *t)
 {
-    if (d3dp_CopyNeedsSync(&t->copySerial, c->serial)) {
-        dx_Transition(c->cl, t->res, D3DP_STATE_COPY_DEST, D3DP_STATE_COMMON);
-        dx_Transition(c->cl, t->res, D3DP_STATE_COMMON, D3DP_STATE_COPY_DEST);
+    if (d3dp_copy_needs_sync(&t->copySerial, c->serial)) {
+        dx_transition(c->cl, t->res, D3DP_STATE_COPY_DEST, D3DP_STATE_COMMON);
+        dx_transition(c->cl, t->res, D3DP_STATE_COMMON, D3DP_STATE_COPY_DEST);
     }
 }
 
 /* The placed footprint of plane `plane` of t for a buffer copy. */
-static D3D12_PLACED_SUBRESOURCE_FOOTPRINT dx_Footprint(DxTexture *t, uint32_t plane,
+static D3D12_PLACED_SUBRESOURCE_FOOTPRINT dx_footprint(DxTexture *t, uint32_t plane,
                                                        uint64_t offset, uint32_t w, uint32_t h,
                                                        uint32_t rowPitch)
 {
@@ -595,7 +595,7 @@ static D3D12_PLACED_SUBRESOURCE_FOOTPRINT dx_Footprint(DxTexture *t, uint32_t pl
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     memset(&fp, 0, sizeof(fp));
     /* the copy format of the plane (R32_TYPELESS for D32F_S8's depth...) */
-    ID3D12Device_GetCopyableFootprints(g_dx.device, &rd, d3dp_Subresource(0, plane, t->mips), 1, 0,
+    ID3D12Device_GetCopyableFootprints(g_dx.device, &rd, d3dp_subresource(0, plane, t->mips), 1, 0,
                                        &fp, NULL, NULL, NULL);
     fp.Offset = offset;
     fp.Footprint.Width = w;
@@ -605,25 +605,25 @@ static D3D12_PLACED_SUBRESOURCE_FOOTPRINT dx_Footprint(DxTexture *t, uint32_t pl
     return fp;
 }
 
-static bool dx_CheckCopyAlign(const char *what, uint64_t offset, uint32_t rowPitch)
+static bool dx_check_copy_align(const char *what, uint64_t offset, uint32_t rowPitch)
 {
     if ((offset % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT) ||
         (rowPitch % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT)) {
-        DX_LOG("%s: offset %llu / row pitch %u not aligned to rhi_Limits() (512 / 256)", what,
+        DX_LOG("%s: offset %llu / row pitch %u not aligned to rhi_limits() (512 / 256)", what,
                (unsigned long long)offset, rowPitch);
         return false;
     }
     return true;
 }
 
-void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
-                                uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region)
+void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
+                                    uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxBuffer *s = dx_GetBuffer(src);
-    DxTexture *t = dx_GetTexture(dst);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxBuffer *s = dx_get_buffer(src);
+    DxTexture *t = dx_get_texture(dst);
     if (!c || !s || !t || mip >= t->mips ||
-        !dx_CheckCopyAlign("rhi_CmdCopyBufferToTexture", srcOffset, rowPitch)) {
+        !dx_check_copy_align("rhi_cmd_copy_buffer_to_texture", srcOffset, rowPitch)) {
         return;
     }
     D3D12_TEXTURE_COPY_LOCATION sl, dl;
@@ -636,29 +636,29 @@ void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOf
      * to the block multiple; D3D12 treats a BC subresource as padded to
      * its blocks, so the copy may end past the level's texel size */
     uint32_t fw = region.w, fh = region.h;
-    if (rhi_FormatIsBlock(t->rhiFormat)) {
+    if (rhi_format_is_block(t->rhiFormat)) {
         fw = (fw + 3u) & ~3u;
         fh = (fh + 3u) & ~3u;
     }
-    sl.PlacedFootprint = dx_Footprint(t, 0, srcOffset, fw, fh, rowPitch);
+    sl.PlacedFootprint = dx_footprint(t, 0, srcOffset, fw, fh, rowPitch);
     dl.pResource = t->res;
     dl.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-    dl.SubresourceIndex = d3dp_Subresource(mip, 0, t->mips);
-    dx_TextureCopyBegin(c, t);
+    dl.SubresourceIndex = d3dp_subresource(mip, 0, t->mips);
+    dx_texture_copy_begin(c, t);
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, (UINT)region.x, (UINT)region.y, 0, &sl,
                                                 NULL);
 }
 
-void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
-                        int32_t dstX, int32_t dstY)
+void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
+                          int32_t dstX, int32_t dstY)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxTexture *s = dx_GetTexture(src);
-    DxTexture *d = dx_GetTexture(dst);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxTexture *s = dx_get_texture(src);
+    DxTexture *d = dx_get_texture(dst);
     if (!c || !s || !d) {
         return;
     }
-    dx_TextureCopyBegin(c, d);
+    dx_texture_copy_begin(c, d);
     const DxFormatMap *fm = &dx_formatMap[s->rhiFormat];
     D3D12_TEXTURE_COPY_LOCATION sl, dl;
     memset(&sl, 0, sizeof(sl));
@@ -672,13 +672,13 @@ void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, Rh
          * (depth, then stencil) */
         if (srcRegion.x || srcRegion.y || dstX || dstY || srcRegion.w != s->width ||
             srcRegion.h != s->height || s->width != d->width || s->height != d->height) {
-            DX_LOG("rhi_CmdCopyTexture: depth formats copy whole textures only");
+            DX_LOG("rhi_cmd_copy_texture: depth formats copy whole textures only");
             return;
         }
         uint32_t planes = fm->stencil ? 2u : 1u;
         for (uint32_t p = 0; p < planes; p++) {
-            sl.SubresourceIndex = d3dp_Subresource(0, p, s->mips);
-            dl.SubresourceIndex = d3dp_Subresource(0, p, d->mips);
+            sl.SubresourceIndex = d3dp_subresource(0, p, s->mips);
+            dl.SubresourceIndex = d3dp_subresource(0, p, d->mips);
             ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, 0, 0, 0, &sl, NULL);
         }
         return;
@@ -692,16 +692,16 @@ void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, Rh
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, (UINT)dstX, (UINT)dstY, 0, &sl, &box);
 }
 
-void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
-                                RhiRect region, RhiBuffer dst, uint64_t dstOffset,
-                                uint32_t rowPitch)
+void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
+                                    RhiRect region, RhiBuffer dst, uint64_t dstOffset,
+                                    uint32_t rowPitch)
 {
-    DxCmdList *c = dx_GetCmd(cl);
-    DxTexture *t = dx_GetTexture(src);
-    DxBuffer *d = dx_GetBuffer(dst);
+    DxCmdList *c = dx_get_cmd(cl);
+    DxTexture *t = dx_get_texture(src);
+    DxBuffer *d = dx_get_buffer(dst);
     (void)aspect; /* depth formats copy their depth plane (plane 0) */
     if (!c || !t || !d || d->kind == RHI_MEM_UPLOAD ||
-        !dx_CheckCopyAlign("rhi_CmdCopyTextureToBuffer", dstOffset, rowPitch)) {
+        !dx_check_copy_align("rhi_cmd_copy_texture_to_buffer", dstOffset, rowPitch)) {
         return;
     }
     D3D12_TEXTURE_COPY_LOCATION sl, dl;
@@ -712,26 +712,26 @@ void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect
     sl.SubresourceIndex = 0;
     dl.pResource = d->res;
     dl.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
-    dl.PlacedFootprint = dx_Footprint(t, 0, dstOffset, region.w, region.h, rowPitch);
+    dl.PlacedFootprint = dx_footprint(t, 0, dstOffset, region.w, region.h, rowPitch);
     D3D12_BOX box = {
         (UINT)region.x, (UINT)region.y, 0, (UINT)region.x + region.w, (UINT)region.y + region.h, 1};
     bool whole = region.x == 0 && region.y == 0 && region.w == t->width && region.h == t->height;
     const bool depth = dx_formatMap[t->rhiFormat].depth;
     if (depth && !whole) {
         /* depth-stencil resources copy whole subresources only */
-        DX_LOG("rhi_CmdCopyTextureToBuffer: depth formats copy whole textures only");
+        DX_LOG("rhi_cmd_copy_texture_to_buffer: depth formats copy whole textures only");
         return;
     }
-    dx_BufferCopyBegin(c, d);
+    dx_buffer_copy_begin(c, d);
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, 0, 0, 0, &sl, depth ? NULL : &box);
-    dx_BufferCopyEnd(c, d);
+    dx_buffer_copy_end(c, d);
 }
 
 /* ------------------------------------------------------------ debug labels
  * PIX markers (metadata 0: a UTF-16 string), only with the debug layer. */
-void rhi_CmdBeginLabel(RhiCommandList cl, const char *name)
+void rhi_cmd_begin_label(RhiCommandList cl, const char *name)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !g_dx.debugLayer || !name) {
         return;
     }
@@ -742,9 +742,9 @@ void rhi_CmdBeginLabel(RhiCommandList cl, const char *name)
     }
 }
 
-void rhi_CmdEndLabel(RhiCommandList cl)
+void rhi_cmd_end_label(RhiCommandList cl)
 {
-    DxCmdList *c = dx_GetCmd(cl);
+    DxCmdList *c = dx_get_cmd(cl);
     if (!c || !g_dx.debugLayer) {
         return;
     }
@@ -752,10 +752,10 @@ void rhi_CmdEndLabel(RhiCommandList cl)
 }
 
 /* ---------------------------------------------------------------- readback */
-bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t dstSize,
-                         uint32_t *outRowPitch)
+bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t dstSize,
+                          uint32_t *outRowPitch)
 {
-    DxTexture *t = dx_GetTexture(h);
+    DxTexture *t = dx_get_texture(h);
     if (!t || !dst) {
         return false;
     }
@@ -782,10 +782,10 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
         return false;
     }
     RhiBufferDesc bd = {total, RHI_BUF_READBACK, RHI_MEM_READBACK, "readback"};
-    RhiBuffer rb = rhi_CreateBuffer(&bd);
-    DxBuffer *b = dx_GetBuffer(rb);
+    RhiBuffer rb = rhi_create_buffer(&bd);
+    DxBuffer *b = dx_get_buffer(rb);
     if (!b || !b->mapped) {
-        rhi_DestroyBuffer(rb);
+        rhi_destroy_buffer(rb);
         return false;
     }
     bool ok = DX_CHECK(ID3D12CommandAllocator_Reset(g_dx.oneShotAlloc)) &&
@@ -806,16 +806,16 @@ bool rhi_ReadbackTexture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t d
     if (ok) {
         ID3D12CommandList *lists[1] = {(ID3D12CommandList *)g_dx.oneShotList};
         ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
-        uint64_t v = dx_Signal();
-        dx_CurFrame()->fenceValue = v;
-        dx_WaitFence(v);
+        uint64_t v = dx_signal();
+        dx_cur_frame()->fenceValue = v;
+        dx_wait_fence(v);
         const uint8_t *src = (const uint8_t *)b->mapped + fp.Offset;
         for (uint32_t y = 0; y < t->height; y++) {
             memcpy((uint8_t *)dst + (size_t)y * pitch, src + (size_t)y * fp.Footprint.RowPitch,
                    pitch);
         }
     }
-    dx_DrainMessages();
-    rhi_DestroyBuffer(rb);
+    dx_drain_messages();
+    rhi_destroy_buffer(rb);
     return ok;
 }

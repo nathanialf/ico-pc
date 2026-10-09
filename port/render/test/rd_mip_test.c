@@ -1,9 +1,9 @@
-/* rd_mip_test: the Enhanced mip chain's size (rdtex_MipChainBytes) and
- * rdtex_BuildMipChain staying inside it for non-square power-of-two
+/* rd_mip_test: the Enhanced mip chain's size (rdtex_mip_chain_bytes) and
+ * rdtex_build_mip_chain staying inside it for non-square power-of-two
  * textures, whose 1-texel-high levels the old w*h*4/3 sizing missed
  * (128x4 needs 764 bytes, got 746).  CPU only.
  *
- * Each chain is built into a buffer of exactly rdtex_MipChainBytes bytes
+ * Each chain is built into a buffer of exactly rdtex_mip_chain_bytes bytes
  * followed by guard bytes; a guard that changed is an overflow (ASan builds
  * also catch it on the malloc'd buffer). */
 #include <stdio.h>
@@ -39,7 +39,7 @@ static size_t expected(uint32_t w, uint32_t h)
 
 static void chain(uint32_t w, uint32_t h, size_t want, uint32_t wantLevels)
 {
-    const size_t n = rdtex_MipChainBytes(w, h);
+    const size_t n = rdtex_mip_chain_bytes(w, h);
     CHECK(n == want, "%ux%u: %zu chain bytes, expected %zu", w, h, n, want);
     CHECK(n == expected(w, h), "%ux%u: %zu chain bytes, the level sum is %zu", w, h, n,
           expected(w, h));
@@ -55,13 +55,13 @@ static void chain(uint32_t w, uint32_t h, size_t want, uint32_t wantLevels)
         base[i] = (uint8_t)(i * 7 + 3);
     }
     memset(buf + n, 0xA5, GUARD);
-    const uint32_t levels = rdtex_BuildMipChain(base, w, h, buf, 1);
+    const uint32_t levels = rdtex_build_mip_chain(base, w, h, buf, 1);
     CHECK(levels == wantLevels, "%ux%u: %u levels, expected %u", w, h, levels, wantLevels);
     int intact = 1;
     for (size_t i = 0; i < GUARD; i++) {
         intact &= buf[n + i] == 0xA5;
     }
-    CHECK(intact, "%ux%u: rdtex_BuildMipChain wrote past rdtex_MipChainBytes", w, h);
+    CHECK(intact, "%ux%u: rdtex_build_mip_chain wrote past rdtex_mip_chain_bytes", w, h);
     free(base);
     free(buf);
 }

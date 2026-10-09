@@ -174,7 +174,7 @@ static const VkrBindTypeMap vkr_bindTypeMap[RHI_BIND_COUNT] = {
 /* Resource states: the image layout, and the pipeline stages and accesses
  * that touch an image in that state (the barrier's scope on either side).
  * Depth formats are sampled in a depth-stencil read-only layout, so for them
- * SHADER_READ and DEPTH_READ are the same layout (vkr_StateLayout) and a
+ * SHADER_READ and DEPTH_READ are the same layout (vkr_state_layout) and a
  * descriptor's layout never depends on which of the two states the caller
  * chose.  DEPTH_READ is read-only for stencil as well: a pass that tests
  * depth without writing it but writes stencil (shadow volumes) uses
@@ -192,7 +192,7 @@ typedef struct VkrStateMap {
  * shader of port/shaders (the *_vs entry points) or of the RHI tests'
  * rhi_test.hlsl (vs_main) reads a texture; they read uniforms and the VU
  * stream, a buffer, whose copies keep their own vertex-stage barriers
- * (rhi_CmdCopyBuffer).  So a barrier into or out of SHADER_READ or
+ * (rhi_cmd_copy_buffer).  So a barrier into or out of SHADER_READ or
  * DEPTH_READ does not hold the next pass's vertex work back for the
  * earlier pass's fragments.  A vertex shader that samples an image needs
  * VK_PIPELINE_STAGE_VERTEX_SHADER_BIT added here. */
@@ -225,21 +225,21 @@ static const VkrStateMap vkr_stateMap[RHI_STATE_COUNT] = {
 /* RHI_FMT_D32F_S8 is the logical scene depth-stencil format; the device
  * backs it with D32_SFLOAT_S8_UINT or, where that is missing,
  * D24_UNORM_S8_UINT (vkr_formatMap holds the D32 entry, ds the chosen one).
- * Every Vulkan format read of an RhiFormat goes through vkr_VkFormat
+ * Every Vulkan format read of an RhiFormat goes through vkr_vk_format
  * (vk_internal.h) or this. */
-static inline VkFormat vkr_VkFormatWith(RhiFormat f, VkFormat ds)
+static inline VkFormat vkr_vk_format_with(RhiFormat f, VkFormat ds)
 {
     return f == RHI_FMT_D32F_S8 ? ds : vkr_formatMap[f].vk;
 }
 
-static inline bool vkr_IsDepthFormat(RhiFormat f)
+static inline bool vkr_is_depth_format(RhiFormat f)
 {
     return f == RHI_FMT_D32F || f == RHI_FMT_D32F_S8;
 }
 
-static inline VkImageLayout vkr_StateLayout(RhiState s, RhiFormat f)
+static inline VkImageLayout vkr_state_layout(RhiState s, RhiFormat f)
 {
-    if (s == RHI_STATE_SHADER_READ && vkr_IsDepthFormat(f)) {
+    if (s == RHI_STATE_SHADER_READ && vkr_is_depth_format(f)) {
         return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
     }
     return vkr_stateMap[s].layout;

@@ -87,7 +87,7 @@ void ico_diag_set_fatal_ui(void (*box)(const char *text), void (*flush)(void));
    Linux, Android); 0, or -1 where unknown. Async-signal-safe. */
 int ico_diag_process_memory(long *rss_kb, long *peak_kb);
 
-/* The window's rd_Present is bracketed by these two. The time
+/* The window's rd_present is bracketed by these two. The time
    spent inside a present does not count towards either watchdog limit: a
    graphics driver or an effects injector (ReShade) may compile shaders inside
    its first presents for minutes. A single present is excused for at most

@@ -1,13 +1,13 @@
 /* vk_resource.c: buffers, textures, samplers, shaders and deferred
  * destruction for the Vulkan backend.  Every buffer and texture has its own
- * VkDeviceMemory (vkr_Allocate); there is no suballocation. */
+ * VkDeviceMemory (vkr_allocate); there is no suballocation. */
 #include "vk_internal.h"
 #include <stdlib.h>
 #include <string.h>
 
 /* ------------------------------------------------------------ memory types */
-bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryPropertyFlags avoid,
-                        uint32_t *out)
+bool vkr_find_memory_type(uint32_t typeBits, VkMemoryPropertyFlags want,
+                          VkMemoryPropertyFlags avoid, uint32_t *out)
 {
     for (uint32_t i = 0; i < g_vkr.memProps.memoryTypeCount; i++) {
         VkMemoryPropertyFlags f = g_vkr.memProps.memoryTypes[i].propertyFlags;
@@ -20,7 +20,7 @@ bool vkr_FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags want, VkMemoryP
 }
 
 /* every vkFreeMemory, so the live counts stay right */
-void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
+void vkr_free_memory(VkDeviceMemory memory, VkDeviceSize size)
 {
     if (!memory) {
         return;
@@ -37,7 +37,7 @@ void vkr_FreeMemory(VkDeviceMemory memory, VkDeviceSize size)
    some desktop drivers) a line says so once per time it is reached, and the
    driver is still asked (it may allow more); under ICO_VK_FAKE_LIMITS the
    allocation is refused, as a strict driver would. */
-static bool vkr_MemoryRoom(VkDeviceSize size)
+static bool vkr_memory_room(VkDeviceSize size)
 {
     const uint32_t limit = g_vkr.props.limits.maxMemoryAllocationCount;
     if (limit && g_vkr.memLive >= limit) {
@@ -56,7 +56,7 @@ static bool vkr_MemoryRoom(VkDeviceSize size)
     return true;
 }
 
-static void vkr_MemoryCounted(VkDeviceSize size)
+static void vkr_memory_counted(VkDeviceSize size)
 {
     g_vkr.memLive++;
     g_vkr.memLiveBytes += size;
@@ -80,11 +80,11 @@ static void vkr_MemoryCounted(VkDeviceSize size)
     }
 }
 
-static bool vkr_Allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDeviceMemory *out,
+static bool vkr_allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDeviceMemory *out,
                          bool *coherent)
 {
     uint32_t type = 0;
-    if (!vkr_MemoryRoom(req->size)) {
+    if (!vkr_memory_room(req->size)) {
         return false;
     }
     const VkMemoryPropertyFlags hv = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -92,23 +92,23 @@ static bool vkr_Allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDevi
     bool ok = false;
     switch (kind) {
     case RHI_MEM_DEVICE:
-        ok = vkr_FindMemoryType(req->memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0,
-                                &type) ||
-             vkr_FindMemoryType(req->memoryTypeBits, 0, 0, &type);
+        ok = vkr_find_memory_type(req->memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0,
+                                  &type) ||
+             vkr_find_memory_type(req->memoryTypeBits, 0, 0, &type);
         break;
     case RHI_MEM_UPLOAD:
         /* device-local and host-visible (resizable BAR / UMA) first, then
          * plain host memory; always coherent so writes need no flush */
-        ok = vkr_FindMemoryType(req->memoryTypeBits, hv | hc | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                                0, &type) ||
-             vkr_FindMemoryType(req->memoryTypeBits, hv | hc, 0, &type);
+        ok = vkr_find_memory_type(req->memoryTypeBits,
+                                  hv | hc | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0, &type) ||
+             vkr_find_memory_type(req->memoryTypeBits, hv | hc, 0, &type);
         break;
     case RHI_MEM_READBACK:
-        ok = vkr_FindMemoryType(req->memoryTypeBits, hv | hc | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-                                0, &type) ||
-             vkr_FindMemoryType(req->memoryTypeBits, hv | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, 0,
-                                &type) ||
-             vkr_FindMemoryType(req->memoryTypeBits, hv | hc, 0, &type);
+        ok = vkr_find_memory_type(req->memoryTypeBits, hv | hc | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+                                  0, &type) ||
+             vkr_find_memory_type(req->memoryTypeBits, hv | VK_MEMORY_PROPERTY_HOST_CACHED_BIT, 0,
+                                  &type) ||
+             vkr_find_memory_type(req->memoryTypeBits, hv | hc, 0, &type);
         break;
     }
     if (!ok) {
@@ -129,11 +129,11 @@ static bool vkr_Allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDevi
         *out = VK_NULL_HANDLE;
         return false;
     }
-    vkr_MemoryCounted(req->size);
+    vkr_memory_counted(req->size);
     return true;
 }
 
-static void vkr_SetName(VkObjectType type, uint64_t handle, const char *name)
+static void vkr_set_name(VkObjectType type, uint64_t handle, const char *name)
 {
     if (!g_vkr.debugUtils || !name || !vkSetDebugUtilsObjectNameEXT) {
         return;
@@ -148,26 +148,26 @@ static void vkr_SetName(VkObjectType type, uint64_t handle, const char *name)
 }
 
 /* ------------------------------------------------------ deferred destroy */
-static void vkr_DestroyOne(const VkrGarbage *e);
+static void vkr_destroy_one(const VkrGarbage *e);
 
-static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size);
+static void vkr_defer_sized(VkrGarbageKind kind, uint64_t handle, uint64_t size);
 
-void vkr_Defer(VkrGarbageKind kind, uint64_t handle)
+void vkr_defer(VkrGarbageKind kind, uint64_t handle)
 {
-    vkr_DeferSized(kind, handle, 0);
+    vkr_defer_sized(kind, handle, 0);
 }
 
-void vkr_DeferMemory(VkDeviceMemory memory, VkDeviceSize size)
+void vkr_defer_memory(VkDeviceMemory memory, VkDeviceSize size)
 {
-    vkr_DeferSized(VKR_GARBAGE_MEMORY, (uint64_t)memory, size);
+    vkr_defer_sized(VKR_GARBAGE_MEMORY, (uint64_t)memory, size);
 }
 
-static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size)
+static void vkr_defer_sized(VkrGarbageKind kind, uint64_t handle, uint64_t size)
 {
     if (!handle) {
         return;
     }
-    VkrFrame *f = vkr_CurFrame();
+    VkrFrame *f = vkr_cur_frame();
     if (f->garbageCount == f->garbageCap) {
         uint32_t cap = f->garbageCap ? f->garbageCap * 2u : 64u;
         VkrGarbage *g = realloc(f->garbage, cap * sizeof(*g));
@@ -185,7 +185,7 @@ static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size)
                 for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
                     VkrGarbage *e = &g_vkr.overflow[i];
                     if (e->slot != slot) {
-                        vkr_DestroyOne(e);
+                        vkr_destroy_one(e);
                     } else {
                         g_vkr.overflow[keep++] = *e;
                     }
@@ -214,7 +214,7 @@ static void vkr_DeferSized(VkrGarbageKind kind, uint64_t handle, uint64_t size)
     f->garbageCount++;
 }
 
-static void vkr_DestroyOne(const VkrGarbage *e)
+static void vkr_destroy_one(const VkrGarbage *e)
 {
     VkDevice d = g_vkr.device;
     const uint64_t h = e->handle;
@@ -229,7 +229,7 @@ static void vkr_DestroyOne(const VkrGarbage *e)
         vkDestroyImageView(d, (VkImageView)h, NULL);
         break;
     case VKR_GARBAGE_MEMORY:
-        vkr_FreeMemory((VkDeviceMemory)h, e->size);
+        vkr_free_memory((VkDeviceMemory)h, e->size);
         break;
     case VKR_GARBAGE_SAMPLER:
         vkDestroySampler(d, (VkSampler)h, NULL);
@@ -252,19 +252,19 @@ static void vkr_DestroyOne(const VkrGarbage *e)
     }
 }
 
-void vkr_DestroyGarbage(VkrFrame *f)
+void vkr_destroy_garbage(VkrFrame *f)
 {
     for (uint32_t i = 0; i < f->garbageCount; i++) {
-        vkr_DestroyOne(&f->garbage[i]);
+        vkr_destroy_one(&f->garbage[i]);
     }
     f->garbageCount = 0;
-    /* the entries that overflowed from this slot (vkr_Defer) */
+    /* the entries that overflowed from this slot (vkr_defer) */
     const uint32_t slot = (uint32_t)(f - g_vkr.frames);
     uint32_t keep = 0;
     for (uint32_t i = 0; i < g_vkr.overflowCount; i++) {
         VkrGarbage *e = &g_vkr.overflow[i];
         if (e->slot == slot) {
-            vkr_DestroyOne(e);
+            vkr_destroy_one(e);
         } else {
             g_vkr.overflow[keep++] = *e;
         }
@@ -278,12 +278,12 @@ void vkr_DestroyGarbage(VkrFrame *f)
 #define VKR_H(x) ((uint64_t)(x))
 
 /* --------------------------------------------------------------- buffers */
-VkrBuffer *vkr_GetBuffer(RhiBuffer b)
+VkrBuffer *vkr_get_buffer(RhiBuffer b)
 {
-    return vkr_PoolGet(&g_vkr.buffers, b.id);
+    return vkr_pool_get(&g_vkr.buffers, b.id);
 }
 
-RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
+RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
 {
     RhiBuffer out = {0};
     if (!desc || desc->size == 0) {
@@ -319,7 +319,7 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
     }
 
     VkrBuffer *b = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.buffers, (void **)&b);
+    uint32_t id = vkr_pool_alloc(&g_vkr.buffers, (void **)&b);
     if (!id) {
         return out;
     }
@@ -330,16 +330,16 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     if (!VKR_CHECK(vkCreateBuffer(g_vkr.device, &ci, NULL, &b->buffer))) {
-        vkr_PoolRelease(&g_vkr.buffers, id);
+        vkr_pool_release(&g_vkr.buffers, id);
         return out;
     }
     VkMemoryRequirements req;
     vkGetBufferMemoryRequirements(g_vkr.device, b->buffer, &req);
-    if (!vkr_Allocate(&req, desc->memory, &b->memory, &b->coherent) ||
+    if (!vkr_allocate(&req, desc->memory, &b->memory, &b->coherent) ||
         !VKR_CHECK(vkBindBufferMemory(g_vkr.device, b->buffer, b->memory, 0))) {
         vkDestroyBuffer(g_vkr.device, b->buffer, NULL);
-        vkr_FreeMemory(b->memory, req.size);
-        vkr_PoolRelease(&g_vkr.buffers, id);
+        vkr_free_memory(b->memory, req.size);
+        vkr_pool_release(&g_vkr.buffers, id);
         return out;
     }
     b->memSize = req.size;
@@ -350,29 +350,29 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
             b->mapped = NULL;
         }
     }
-    vkr_SetName(VK_OBJECT_TYPE_BUFFER, VKR_H(b->buffer), desc->debugName);
+    vkr_set_name(VK_OBJECT_TYPE_BUFFER, VKR_H(b->buffer), desc->debugName);
     g_vkr.stats.buffersCreated++;
     g_vkr.stats.memoryAllocs++;
     out.id = id;
     return out;
 }
 
-void rhi_DestroyBuffer(RhiBuffer h)
+void rhi_destroy_buffer(RhiBuffer h)
 {
-    VkrBuffer *b = vkr_GetBuffer(h);
+    VkrBuffer *b = vkr_get_buffer(h);
     if (!b) {
         return;
     }
-    vkr_Defer(VKR_GARBAGE_BUFFER, VKR_H(b->buffer));
-    vkr_DeferMemory(b->memory, b->memSize); /* freeing memory unmaps it */
-    vkr_PoolRelease(&g_vkr.buffers, h.id);
+    vkr_defer(VKR_GARBAGE_BUFFER, VKR_H(b->buffer));
+    vkr_defer_memory(b->memory, b->memSize); /* freeing memory unmaps it */
+    vkr_pool_release(&g_vkr.buffers, h.id);
     g_vkr.stats.buffersDestroyed++;
     g_vkr.stats.memoryFrees++;
 }
 
-void *rhi_MapBuffer(RhiBuffer h)
+void *rhi_map_buffer(RhiBuffer h)
 {
-    VkrBuffer *b = vkr_GetBuffer(h);
+    VkrBuffer *b = vkr_get_buffer(h);
     if (!b || !b->mapped) {
         return NULL;
     }
@@ -389,19 +389,19 @@ void *rhi_MapBuffer(RhiBuffer h)
     return b->mapped;
 }
 
-void rhi_UnmapBuffer(RhiBuffer h)
+void rhi_unmap_buffer(RhiBuffer h)
 {
     (void)h; /* persistently mapped; upload memory is always coherent */
 }
 
 /* -------------------------------------------------------------- textures */
-VkrTexture *vkr_GetTexture(RhiTexture t)
+VkrTexture *vkr_get_texture(RhiTexture t)
 {
-    return vkr_PoolGet(&g_vkr.textures, t.id);
+    return vkr_pool_get(&g_vkr.textures, t.id);
 }
 
-static bool vkr_CreateView(VkImage image, VkFormat fmt, VkImageAspectFlags aspect, uint32_t mips,
-                           VkImageView *out)
+static bool vkr_create_view(VkImage image, VkFormat fmt, VkImageAspectFlags aspect, uint32_t mips,
+                            VkImageView *out)
 {
     VkImageViewCreateInfo vi = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -413,14 +413,14 @@ static bool vkr_CreateView(VkImage image, VkFormat fmt, VkImageAspectFlags aspec
     return VKR_CHECK(vkCreateImageView(g_vkr.device, &vi, NULL, out));
 }
 
-RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
+RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
     RhiTexture out = {0};
     if (!desc || desc->format <= RHI_FMT_UNKNOWN || desc->format >= RHI_FMT_COUNT ||
         desc->width == 0 || desc->height == 0) {
         return out;
     }
-    if (rhi_FormatIsBlock(desc->format) &&
+    if (rhi_format_is_block(desc->format) &&
         (!g_vkr.limits.bcTextures ||
          (desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL)))) {
         /* texture packs: BC needs the device feature (RhiLimits.bcTextures)
@@ -428,7 +428,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         return out;
     }
     const VkrFormatMap *fm = &vkr_formatMap[desc->format];
-    const VkFormat vkFmt = vkr_VkFormat(desc->format);
+    const VkFormat vkFmt = vkr_vk_format(desc->format);
     VkImageUsageFlags usage = 0;
     if (desc->usage & RHI_TEX_SAMPLED) {
         usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -445,11 +445,11 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     if (desc->usage & RHI_TEX_COPY_DST) {
         usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
-    /* rhi_ReadbackTexture works on any texture */
+    /* rhi_readback_texture works on any texture */
     usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     VkrTexture *t = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.textures, (void **)&t);
+    uint32_t id = vkr_pool_alloc(&g_vkr.textures, (void **)&t);
     if (!id) {
         return out;
     }
@@ -468,12 +468,12 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     };
     if (!VKR_CHECK(vkCreateImage(g_vkr.device, &ci, NULL, &t->image))) {
-        vkr_PoolRelease(&g_vkr.textures, id);
+        vkr_pool_release(&g_vkr.textures, id);
         return out;
     }
     VkMemoryRequirements req;
     vkGetImageMemoryRequirements(g_vkr.device, t->image, &req);
-    if (!vkr_Allocate(&req, RHI_MEM_DEVICE, &t->memory, NULL) ||
+    if (!vkr_allocate(&req, RHI_MEM_DEVICE, &t->memory, NULL) ||
         !VKR_CHECK(vkBindImageMemory(g_vkr.device, t->image, t->memory, 0))) {
         goto fail;
     }
@@ -487,18 +487,18 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     /* copy-only textures (staging, R8 copy targets) have no view: a view
      * needs a sampled or attachment usage */
     if ((desc->usage & (RHI_TEX_SAMPLED | RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL)) &&
-        !vkr_CreateView(t->image, vkFmt, fm->aspect, mips, &t->view)) {
+        !vkr_create_view(t->image, vkFmt, fm->aspect, mips, &t->view)) {
         goto fail;
     }
     if ((fm->aspect & VK_IMAGE_ASPECT_STENCIL_BIT) && (desc->usage & RHI_TEX_SAMPLED)) {
         /* a depth-stencil view cannot be sampled; sampling sees depth only */
-        if (!vkr_CreateView(t->image, vkFmt, VK_IMAGE_ASPECT_DEPTH_BIT, mips, &t->depthView)) {
+        if (!vkr_create_view(t->image, vkFmt, VK_IMAGE_ASPECT_DEPTH_BIT, mips, &t->depthView)) {
             goto fail;
         }
     } else {
         t->depthView = VK_NULL_HANDLE;
     }
-    vkr_SetName(VK_OBJECT_TYPE_IMAGE, VKR_H(t->image), desc->debugName);
+    vkr_set_name(VK_OBJECT_TYPE_IMAGE, VKR_H(t->image), desc->debugName);
     g_vkr.stats.texturesCreated++;
     g_vkr.stats.memoryAllocs++;
     out.id = id;
@@ -509,31 +509,31 @@ fail:
         vkDestroyImageView(g_vkr.device, t->view, NULL);
     }
     vkDestroyImage(g_vkr.device, t->image, NULL);
-    vkr_FreeMemory(t->memory, req.size);
-    vkr_PoolRelease(&g_vkr.textures, id);
+    vkr_free_memory(t->memory, req.size);
+    vkr_pool_release(&g_vkr.textures, id);
     return out;
 }
 
-void rhi_DestroyTexture(RhiTexture h)
+void rhi_destroy_texture(RhiTexture h)
 {
-    VkrTexture *t = vkr_GetTexture(h);
+    VkrTexture *t = vkr_get_texture(h);
     if (!t || t->swapchain) {
         return;
     }
-    vkr_Defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
-    vkr_Defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
-    vkr_Defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
-    vkr_DeferMemory(t->memory, t->memSize);
-    vkr_PoolRelease(&g_vkr.textures, h.id);
+    vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
+    vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
+    vkr_defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
+    vkr_defer_memory(t->memory, t->memSize);
+    vkr_pool_release(&g_vkr.textures, h.id);
     g_vkr.stats.texturesDestroyed++;
     g_vkr.stats.memoryFrees++;
 }
 
-uint32_t vkr_RegisterSwapchainImage(VkImage image, VkFormat fmt, RhiFormat rf, uint32_t w,
-                                    uint32_t h)
+uint32_t vkr_register_swapchain_image(VkImage image, VkFormat fmt, RhiFormat rf, uint32_t w,
+                                      uint32_t h)
 {
     VkrTexture *t = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.textures, (void **)&t);
+    uint32_t id = vkr_pool_alloc(&g_vkr.textures, (void **)&t);
     if (!id) {
         return 0;
     }
@@ -545,27 +545,27 @@ uint32_t vkr_RegisterSwapchainImage(VkImage image, VkFormat fmt, RhiFormat rf, u
     t->height = h;
     t->mips = 1;
     t->swapchain = true;
-    if (!vkr_CreateView(image, fmt, VK_IMAGE_ASPECT_COLOR_BIT, 1, &t->view)) {
-        vkr_PoolRelease(&g_vkr.textures, id);
+    if (!vkr_create_view(image, fmt, VK_IMAGE_ASPECT_COLOR_BIT, 1, &t->view)) {
+        vkr_pool_release(&g_vkr.textures, id);
         return 0;
     }
     return id;
 }
 
-void vkr_ReleaseSwapchainImage(uint32_t id)
+void vkr_release_swapchain_image(uint32_t id)
 {
     RhiTexture h = {id};
-    VkrTexture *t = vkr_GetTexture(h);
+    VkrTexture *t = vkr_get_texture(h);
     if (!t) {
         return;
     }
     /* called after vkDeviceWaitIdle: destroy now */
     vkDestroyImageView(g_vkr.device, t->view, NULL);
-    vkr_PoolRelease(&g_vkr.textures, id);
+    vkr_pool_release(&g_vkr.textures, id);
 }
 
 /* -------------------------------------------------------------- samplers */
-RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
+RhiSampler rhi_create_sampler(const RhiSamplerDesc *desc)
 {
     RhiSampler out = {0};
     if (!desc) {
@@ -573,7 +573,7 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
     }
     const uint32_t samplerLimit = g_vkr.props.limits.maxSamplerAllocationCount;
     if (samplerLimit && g_vkr.samplersLive >= samplerLimit) {
-        /* as vkr_MemoryRoom: refused under ICO_VK_FAKE_LIMITS only */
+        /* as vkr_memory_room: refused under ICO_VK_FAKE_LIMITS only */
         g_vkr.lastLimit = "maxSamplerAllocationCount";
         if (!g_vkr.samplerLimitLogged) {
             g_vkr.samplerLimitLogged = true;
@@ -587,7 +587,7 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
         }
     }
     VkSampler *s = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.samplers, (void **)&s);
+    uint32_t id = vkr_pool_alloc(&g_vkr.samplers, (void **)&s);
     if (!id) {
         return out;
     }
@@ -616,7 +616,7 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
         .borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
     };
     if (!VKR_CHECK(vkCreateSampler(g_vkr.device, &ci, NULL, s))) {
-        vkr_PoolRelease(&g_vkr.samplers, id);
+        vkr_pool_release(&g_vkr.samplers, id);
         return out;
     }
     g_vkr.samplersLive++;
@@ -624,18 +624,18 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
     return out;
 }
 
-void rhi_DestroySampler(RhiSampler h)
+void rhi_destroy_sampler(RhiSampler h)
 {
-    VkSampler *s = vkr_PoolGet(&g_vkr.samplers, h.id);
+    VkSampler *s = vkr_pool_get(&g_vkr.samplers, h.id);
     if (!s) {
         return;
     }
-    vkr_Defer(VKR_GARBAGE_SAMPLER, VKR_H(*s));
-    vkr_PoolRelease(&g_vkr.samplers, h.id);
+    vkr_defer(VKR_GARBAGE_SAMPLER, VKR_H(*s));
+    vkr_pool_release(&g_vkr.samplers, h.id);
 }
 
 /* --------------------------------------------------------------- shaders */
-RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
+RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RhiShader out = {0};
     if (!desc || !desc->bytecode || desc->bytecodeSize < 20 || (desc->bytecodeSize & 3u)) {
@@ -646,7 +646,7 @@ RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
         return out;
     }
     VkrShader *s = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.shaders, (void **)&s);
+    uint32_t id = vkr_pool_alloc(&g_vkr.shaders, (void **)&s);
     if (!id) {
         return out;
     }
@@ -656,37 +656,37 @@ RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
         .pCode = desc->bytecode,
     };
     if (!VKR_CHECK(vkCreateShaderModule(g_vkr.device, &ci, NULL, &s->module))) {
-        vkr_PoolRelease(&g_vkr.shaders, id);
+        vkr_pool_release(&g_vkr.shaders, id);
         return out;
     }
     s->stage = desc->stage;
     snprintf(s->entry, sizeof(s->entry), "%s", desc->entryPoint ? desc->entryPoint : "main");
-    vkr_SetName(VK_OBJECT_TYPE_SHADER_MODULE, VKR_H(s->module), desc->debugName);
+    vkr_set_name(VK_OBJECT_TYPE_SHADER_MODULE, VKR_H(s->module), desc->debugName);
     out.id = id;
     return out;
 }
 
-void rhi_DestroyShader(RhiShader h)
+void rhi_destroy_shader(RhiShader h)
 {
-    VkrShader *s = vkr_PoolGet(&g_vkr.shaders, h.id);
+    VkrShader *s = vkr_pool_get(&g_vkr.shaders, h.id);
     if (!s) {
         return;
     }
     /* modules are only needed during pipeline creation, but a deferred
      * destroy keeps the rule uniform */
-    vkr_Defer(VKR_GARBAGE_SHADER, VKR_H(s->module));
-    vkr_PoolRelease(&g_vkr.shaders, h.id);
+    vkr_defer(VKR_GARBAGE_SHADER, VKR_H(s->module));
+    vkr_pool_release(&g_vkr.shaders, h.id);
 }
 
 /* ---------------------------------------------------------------- teardown */
-void vkr_ReleaseAllObjects(void)
+void vkr_release_all_objects(void)
 {
     VkDevice d = g_vkr.device;
     for (uint32_t i = 0; i < g_vkr.buffers.next; i++) {
         if (g_vkr.buffers.live[i]) {
             VkrBuffer *b = (VkrBuffer *)(g_vkr.buffers.data + (size_t)i * sizeof(VkrBuffer));
             vkDestroyBuffer(d, b->buffer, NULL);
-            vkr_FreeMemory(b->memory, b->memSize);
+            vkr_free_memory(b->memory, b->memSize);
         }
     }
     for (uint32_t i = 0; i < g_vkr.textures.next; i++) {
@@ -700,7 +700,7 @@ void vkr_ReleaseAllObjects(void)
             }
             if (!t->swapchain) {
                 vkDestroyImage(d, t->image, NULL);
-                vkr_FreeMemory(t->memory, t->memSize);
+                vkr_free_memory(t->memory, t->memSize);
             }
         }
     }

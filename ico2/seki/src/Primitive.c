@@ -30,8 +30,8 @@
    (mc_HostDma): prim_DispFan2D's SET_GSREGISTER fan reaches the GS register
    decoder, prim_DispMesh3D's matrix, light and UV packets and
    prim_DispParticle's matrix packet the list's VU state, and a particle
-   batch's MSCNT draws it (rd_DrawVuParticles).  A Mesh3D packet buffer is
-   drawn whole (primHostGrid, rd_DrawVuGrid). */
+   batch's MSCNT draws it (rd_draw_vu_particles).  A Mesh3D packet buffer is
+   drawn whole (primHostGrid, rd_draw_vu_grid). */
 static void primHostGrid(Mesh3D *m)
 {
     unsigned long long prim[2];
@@ -47,7 +47,7 @@ static void primHostGrid(Mesh3D *m)
     prim[0] = (tag >> 47) & 0x7FF;
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
-    if (!rd_VuDrawFromState(&d)) {
+    if (!rd_vu_draw_from_state(&d)) {
         return;
     }
     memset(&g, 0, sizeof(g));
@@ -57,7 +57,7 @@ static void primHostGrid(Mesh3D *m)
     g.lit = m->lit != 0;
     g.code = d.code;
     g.vu = d.vu;
-    rd_DrawVuGrid(&g, RD_KEY(m, rd_CurrentList(), 0));
+    rd_draw_vu_grid(&g, RD_KEY(m, rd_current_list(), 0));
 }
 
 #endif

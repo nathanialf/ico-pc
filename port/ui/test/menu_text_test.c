@@ -166,7 +166,7 @@ void __assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
-void ui_SettingsInstall(void) {}
+void ui_settings_install(void) {}
 
 float GetTableSin(short angle)
 {
@@ -236,7 +236,7 @@ static void testTable(void)
                   it->align == UI_ALIGN_RIGHT,
               "item %d: alignment %u", i, it->align);
         for (int l = 0; l < UI_LANG_COUNT; l++) {
-            const char *s = ui_StrIn((UiLang)l, (UiStrId)it->str);
+            const char *s = ui_str_in((UiLang)l, (UiStrId)it->str);
             int lines = 1;
             for (const char *p = s; *p; p++) {
                 lines += *p == '\n';
@@ -264,14 +264,14 @@ static void testStrings(void)
             const char *s = tables[l][id];
             CHECK(s != NULL && s[0] != '\0', "item %d: string %d missing in language %d", i, id, l);
             uint32_t cp;
-            while (s && (cp = ui_Utf8Next(&s)) != 0) {
-                CHECK(cp == '\n' || (cp != 0xFFFD && ui_FontHasGlyph(cp)),
+            while (s && (cp = ui_utf8_next(&s)) != 0) {
+                CHECK(cp == '\n' || (cp != 0xFFFD && ui_font_has_glyph(cp)),
                       "string %d language %d: U+%04X not drawable", id, l, cp);
             }
         }
     }
-    CHECK(strcmp(ui_StrIn(UI_LANG_EN, UI_STR_MT_NEW_GAME), "New Game") == 0 &&
-              strcmp(ui_StrIn(UI_LANG_DE, UI_STR_MT_NEW_GAME), "Neues Spiel") == 0,
+    CHECK(strcmp(ui_str_in(UI_LANG_EN, UI_STR_MT_NEW_GAME), "New Game") == 0 &&
+              strcmp(ui_str_in(UI_LANG_DE, UI_STR_MT_NEW_GAME), "Neues Spiel") == 0,
           "New Game / Neues Spiel");
 }
 
@@ -452,7 +452,7 @@ static void buildTitle(int withCopyright)
 static void layoutFrame(void)
 {
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     exec_layout_texture();
     dl_Swap();
 }
@@ -475,7 +475,7 @@ static int addPortRow(const char *text, int dispX, int dispY, int dispW, int dis
     pr.centerX = centerX;
     pr.selectable = 1;
     LtExtText t = {0, text, UI_MENU_TEXT_SIZE, align};
-    return lt_ext_AddProperty(&pr, &t);
+    return lt_ext_add_property(&pr, &t);
 }
 
 /* rows first..last (port indices) as a layout without a cursor, linked
@@ -488,14 +488,14 @@ static void linkPortRows(int first, int last)
     pl.last = last + 1;
     pl.defaultItem = pl.curItem = -1;
     pl.link = -1;
-    texLayout[TITLE_LAYOUT].link = lt_ext_AddLayout(&pl);
+    texLayout[TITLE_LAYOUT].link = lt_ext_add_layout(&pl);
 }
 
 /* the title's game rows and, below New Game, two port rows on the title's
    pitch (as settings.c placeTitle adds Settings and Quit to desktop) */
 static void buildTitleWithPortRows(int withCopyright)
 {
-    lt_ext_Reset();
+    lt_ext_reset();
     buildTitle(withCopyright);
     const int a = addPortRow("Settings", 0, 185, 0, 40, 1, UI_ALIGN_CENTER);
     const int b = addPortRow("Quit to desktop", 0, 205, 0, 40, 1, UI_ALIGN_CENTER);
@@ -509,13 +509,13 @@ static void buildTitleWithPortRows(int withCopyright)
    texture came before it.)  cols: the strips' vertex colours, in order */
 static void countSprites(int *strips, int *texture, uint8_t cols[][4], int maxCols)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Walk *w = calloc(1, sizeof(Walk));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, w);
+    rd__walk(f, 0, &s, collect, w);
     *strips = *texture = 0;
     for (int i = 0; i < w->n; i++) {
-        const int page = w->st[i].ds.texEnabled && ui_MenuFontIsPage(w->st[i].tex);
+        const int page = w->st[i].ds.texEnabled && ui_menu_font_is_page(w->st[i].tex);
         if (page && w->cmd[i]->u[1] == 2) {
             if (cols && *strips < maxCols) {
                 const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w->cmd[i]->u[0]);
@@ -539,13 +539,13 @@ typedef struct StripQuad {
 /* the last frame's strip sprites, in order */
 static int stripQuads(StripQuad *q, int max)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Walk *w = calloc(1, sizeof(Walk));
     RdStateBlock st = f->startState;
-    rd__Walk(f, 0, &st, collect, w);
+    rd__walk(f, 0, &st, collect, w);
     int n = 0;
     for (int i = 0; i < w->n && n < max; i++) {
-        if (w->st[i].ds.texEnabled && ui_MenuFontIsPage(w->st[i].tex) && w->cmd[i]->u[1] == 2) {
+        if (w->st[i].ds.texEnabled && ui_menu_font_is_page(w->st[i].tex) && w->cmd[i]->u[1] == 2) {
             const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + w->cmd[i]->u[0]);
             q[n].x0 = v[0].x;
             q[n].y0 = v[0].y;
@@ -570,16 +570,16 @@ static void testScaledStrips(void)
 
     StripQuad a[MAXQ], b[MAXQ];
     buildTitleWithPortRows(1);
-    ui__MenuForceScale(1);
+    ui__menu_force_scale(1);
     layoutFrame();
     const int na = stripQuads(a, MAXQ);
     UiMenuStrip one;
-    const int drawn1 = ui_MenuFontLastStrip(&one);
-    ui__MenuForceScale(2);
+    const int drawn1 = ui_menu_font_last_strip(&one);
+    ui__menu_force_scale(2);
     layoutFrame();
     const int nb = stripQuads(b, MAXQ);
     UiMenuStrip last;
-    const int drawn = ui_MenuFontLastStrip(&last);
+    const int drawn = ui_menu_font_last_strip(&last);
     int same = 0, doubled = 0;
     for (int i = 0; i < na && i < nb; i++) {
         same +=
@@ -597,11 +597,11 @@ static void testScaledStrips(void)
               last.h == 2 * one.h,
           "scale 2: the last strip %d x %d at scale %d (%d x %d at 1)", last.w, last.h, last.scale,
           one.w, one.h);
-    ui__MenuForceScale(0);
+    ui__menu_force_scale(0);
     layoutFrame();
-    CHECK(ui_MenuFontLastStrip(&last) && last.scale == 1 && last.w == one.w && last.h == one.h,
+    CHECK(ui_menu_font_last_strip(&last) && last.scale == 1 && last.w == one.w && last.h == one.h,
           "back at 1x: %d x %d at scale %d", last.w, last.h, last.scale);
-    lt_ext_Reset();
+    lt_ext_reset();
 }
 
 /* -------------------------------------------------------- no deferral */
@@ -625,7 +625,7 @@ static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const
         w->tagged += c->b[3] == RD_SCREEN_TEXT_QUADS;
         for (int px = 1; px < 64; px++) {
             for (int pg = 0; pg < 4; pg++) {
-                const uint32_t t = ui_FontPageTex(px, pg);
+                const uint32_t t = ui_font_page_tex(px, pg);
                 w->atlas += s->ds.texEnabled && t != 0 && t == s->tex;
             }
         }
@@ -635,9 +635,9 @@ static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const
 static void walkText(TextWalk *w)
 {
     memset(w, 0, sizeof(*w));
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     RdStateBlock s = f->startState;
-    rd__Walk(f, f->keep, &s, textWalk, w);
+    rd__walk(f, f->keep, &s, textWalk, w);
 }
 
 /* the layout frame with a fade after it in list 11, as gsb_PostEffect
@@ -645,13 +645,13 @@ static void walkText(TextWalk *w)
 static void layoutFrameWithFade(int fade)
 {
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     exec_layout_texture();
     dl_SetDLPriority(11);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = (uint8_t)fade;
-    rd_Post(RD_POST_FADE, &pp);
+    rd_post(RD_POST_FADE, &pp);
     dl_Swap();
 }
 
@@ -666,7 +666,7 @@ static void testNoDeferral(void)
     g_rd.settings.preset = RD_PRESET_ENHANCED;
     g_rd.settings.outputWidth = 1920;
     g_rd.settings.outputHeight = 1080;
-    ui_SetScale(ui_ScaleFor(1, 1080));
+    ui_set_scale(ui_scale_for(1, 1080));
     buildTitleWithPortRows(1);
     layoutFrameWithFade(0x40);
     TextWalk w;
@@ -683,7 +683,7 @@ static void testNoDeferral(void)
     printf("menu_text_test: no deferral: Enhanced 1080p records %d strips, %d texture sprite, "
            "%d text items\n",
            strips, texture, w.items);
-    ui_SetScale(1.0f);
+    ui_set_scale(1.0f);
     g_rd.settings = saved;
 }
 
@@ -707,7 +707,7 @@ static void visit(UiLang lang, const char *s, void *user)
    plain as it is), their textures still transferred */
 static void testDigits(void)
 {
-    lt_ext_Reset();
+    lt_ext_reset();
     memset(texLayout, 0, sizeof(texLayout));
     setRow(52, 210, 70, 30, 0);
     setRow(62, 210, 90, 30, 0);
@@ -740,7 +740,7 @@ static void testDigits(void)
     CHECK(strips == 3 && texture == 0 && s_texTransfers == 3,
           "three digit rows: %d strips, %d texture sprites, %d transfers (3, 0, 3)", strips,
           texture, s_texTransfers);
-    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 2 && last.w == 20 && last.h == 15,
+    CHECK(ui_menu_font_last_strip(&last) && last.cls == 2 && last.w == 20 && last.h == 15,
           "the digits on the plain pages, a strip the tile's 20 x 15 (%d, %d x %d)", last.cls,
           last.w, last.h);
     CHECK(cols[0][0] == 75 && cols[1][0] == 0 && cols[2][0] == 0x7F,
@@ -763,7 +763,7 @@ static void testDigits(void)
 static void testPortRowAnchor(void)
 {
     memset(texLayout, 0, sizeof(texLayout));
-    lt_ext_Reset();
+    lt_ext_reset();
     setRow(181, 270, 100, 40, 0);
     LtProp *l = &texLayout[TITLE_LAYOUT];
     l->first = 181;
@@ -776,10 +776,10 @@ static void testPortRowAnchor(void)
     layoutFrame();
     const UiMenuTextItem *it = itemOfRow(181);
     UiMenuStrip last;
-    const int drawn = ui_MenuFontLastStrip(&last);
+    const int drawn = ui_menu_font_last_strip(&last);
     CHECK(drawn && it, "the port row drawn last as a strip (%d)", drawn);
     if (!drawn || !it) {
-        lt_ext_Reset();
+        lt_ext_reset();
         return;
     }
     /* display_texture's sprite: box y (dispY - 113) * 16 + 4, h dispH * 8 - 16
@@ -795,21 +795,21 @@ static void testPortRowAnchor(void)
           gameY);
     printf("menu_text_test: port row vs the sheet: capitals at %.3f and %.3f\n", last.anchorY,
            gameY);
-    lt_ext_Reset();
+    lt_ext_reset();
 }
 
 static void testHook(void)
 {
     CHECK(itemOfRow(50) && itemOfRow(49) && !itemOfRow(48),
           "New Game and Continue in the table, the copyright line not");
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontForgetTextures();
-    ui__SetRecordHook(gif_HostFlush);
+    ui_font_forget_textures();
+    ui__set_record_hook(gif_HostFlush);
     dl_Init();
-    lt_ext_Reset();
+    lt_ext_reset();
     GlobalStageSetting.reductionCol[0] = GlobalStageSetting.reductionCol[1] =
         GlobalStageSetting.reductionCol[2] = 0x80;
     pad[0].ana[2] = pad[0].ana[3] = 128;
@@ -819,12 +819,12 @@ static void testHook(void)
        sprite; the copyright line (not in the table) keeps its sprite; every
        row's texture is still transferred */
     buildTitle(1);
-    CHECK(lt_ext_IsTextRow(&texProperty[50]) && lt_ext_IsTextRow(&texProperty[49]) &&
-              !lt_ext_IsTextRow(&texProperty[48]),
+    CHECK(lt_ext_is_text_row(&texProperty[50]) && lt_ext_is_text_row(&texProperty[49]) &&
+              !lt_ext_is_text_row(&texProperty[48]),
           "New Game and Continue are text rows, the copyright line not");
-    CHECK(ui_MenuTextItemOf(&texProperty[50]) == itemOfRow(50) &&
-              ui_MenuTextItemOf(&texProperty[48]) == NULL,
-          "ui_MenuTextItemOf: New Game's item, none for the copyright line");
+    CHECK(ui_menu_text_item_of(&texProperty[50]) == itemOfRow(50) &&
+              ui_menu_text_item_of(&texProperty[48]) == NULL,
+          "ui_menu_text_item_of: New Game's item, none for the copyright line");
     s_texTransfers = 0;
     layoutFrame();
     int strips = 0, texture = 0;
@@ -833,7 +833,7 @@ static void testHook(void)
     CHECK(strips == 2 && texture == 1, "game rows: %d strips, %d texture sprites (2, 1)", strips,
           texture);
     UiMenuStrip last;
-    CHECK(ui_MenuFontLastStrip(&last) && last.cls == 0 && last.w == 172 && last.h == 20,
+    CHECK(ui_menu_font_last_strip(&last) && last.cls == 0 && last.w == 172 && last.h == 20,
           "New Game: a strip of its item's 172 x 20 texels on the light pages (%d x %d, %d)",
           last.w, last.h, last.cls);
     printf("menu_text_test: game rows: %d strips, %d texture sprites, %d transfers\n", strips,
@@ -841,7 +841,7 @@ static void testHook(void)
 
     /* not the PAL rectangle: the row is its texture again */
     texProperty[50].texW = 171;
-    CHECK(!lt_ext_IsTextRow(&texProperty[50]), "a rectangle not the table's: the texture");
+    CHECK(!lt_ext_is_text_row(&texProperty[50]), "a rectangle not the table's: the texture");
     texProperty[50].texW = 172;
 
     /* with two port rows linked: those are strips too */
@@ -857,9 +857,9 @@ static void testHook(void)
     testPortRowAnchor();
     testDigits();
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
-    ui__SetRecordHook(NULL);
-    rd_Shutdown();
-    ui_FontForgetTextures();
+    ui__set_record_hook(NULL);
+    rd_shutdown();
+    ui_font_forget_textures();
 }
 
 /* --------------------------------------------------------------- pixels */
@@ -880,11 +880,11 @@ static int toPixY(float gy)
 
 static void testPixels(void)
 {
-    ui__SetRecordHook(gif_HostFlush);
+    ui__set_record_hook(gif_HostFlush);
     dl_Init();
     /* a port row "New Game" in the title's New Game box (row 50 itself is a
        texture, which the stubbed tex_TransTexture leaves unbound) */
-    lt_ext_Reset();
+    lt_ext_reset();
     buildTitle(0);
     texProperty[50].masked = texProperty[50].defaultMask = 1;
     {
@@ -893,19 +893,20 @@ static void testPixels(void)
         linkPortRows(r, r);
     }
     /* the frame: SCENE cleared in list 0, the layout in list 11 */
-    rd_SelectList(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kBg, 1, 0);
     layoutFrame();
     uint32_t w = 0, h = 0;
     uint8_t *px = malloc(512 * 512 * 4);
-    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!px || !rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) ||
+        w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
-        ui__SetRecordHook(NULL);
+        ui__set_record_hook(NULL);
         return;
     }
-    rd_WritePng("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
+    rd_write_png("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
     /* the row's box (display_texture: centred, New Game's 172 texels
        wide, 20 field lines from dispY 165), plus the reach of the sheet
        strip's rim and its bilinear read: a texel each, 2 x units and 4 y
@@ -938,18 +939,19 @@ static void testPixels(void)
            y0, x1, y1, inside, bright, outside);
     free(px);
     texProperty[50].masked = texProperty[50].defaultMask = 0;
-    lt_ext_Reset();
-    ui__SetRecordHook(NULL);
+    lt_ext_reset();
+    ui__set_record_hook(NULL);
 }
 
 int main(int argc, char **argv)
 {
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
     testTable();
     testStrings();
-    ui_StringsForEach(visit, NULL);
+    ui_strings_for_each(visit, NULL);
     CHECK(s_visits > 5 * 300 && s_visitSub == 0,
-          "ui_StringsForEach: %d strings, the subtitles not among them (%d)", s_visits, s_visitSub);
+          "ui_strings_for_each: %d strings, the subtitles not among them (%d)", s_visits,
+          s_visitSub);
     testDiscRows(argc > 1 ? argv[1] : NULL);
     testHook();
     if (failures) {
@@ -960,19 +962,19 @@ int main(int argc, char **argv)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("menu_text_test: CPU checks ok; SKIP the pixel check: no usable Vulkan device\n");
         return 77;
     }
-    ui_FontForgetTextures();
+    ui_font_forget_textures();
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
-    ui_SetGsFrame(&fr);
-    ui_SetScale(1.0f);
+    ui_set_gs_frame(&fr);
+    ui_set_scale(1.0f);
     testPixels();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    ui_FontShutdown();
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    ui_font_shutdown();
+    rd_shutdown();
     if (failures) {
         printf("menu_text_test: %d failures\n", failures);
         return 1;

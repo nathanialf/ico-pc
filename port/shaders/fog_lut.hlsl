@@ -20,7 +20,7 @@
 //   g_col.x    the sprite's GS Z
 //   g_col.y    the Z test (RdZTest: ALWAYS 1, GEQUAL 2, GREATER 3, NEVER 0)
 //   g_param.x  the depth source's GS Z scale (PSMZ32: 2^-33 on a float
-//              depth buffer, 2^-32 on D24S8; rd__TargetZScale)
+//              depth buffer, 2^-32 on D24S8; rd__target_z_scale)
 // The Z test is done here because the depth buffer being read cannot also be
 // the bound attachment; it compares the same depth values the pipeline
 // would (gs_z_to_depth of the sprite Z against the stored depth).

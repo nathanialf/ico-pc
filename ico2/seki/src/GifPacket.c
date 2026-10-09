@@ -847,20 +847,20 @@ int _IsInScreen(volatile int *v)
  * selected:
  *
  *   PRIM            ABE, TME (texture on/off), IIP; resets the vertex queue;
- *                   AA1 on a line or triangle type (rd_AA1, package AA1),
+ *                   AA1 on a line or triangle type (rd_aa1, package AA1),
  *                   returned to 0 when the packet ends
  *   RGBAQ ST UV     the current vertex attributes
  *   XYZ2 XYZF2      a vertex with a drawing kick; XYZ3 XYZF3 without one
  *                   (the queue still advances, as the strip helpers rely on)
  *   TEX0_1          the texture seam (GifHost.h), bound when PRIM.TME is on
- *   TEX1_1 CLAMP_1  rd_SamplerFilter, rd_SamplerWrap
+ *   TEX1_1 CLAMP_1  rd_sampler_filter, rd_sampler_wrap
  *   ALPHA_1 TEST_1 ZBUF_1 FBA_1 PABE TEXA COLCLAMP
- *                   rd_BlendFunc, rd_TestGs, rd_ZWrite, rd_FBA, rd_PABE,
- *                   rd_TexA, rd_ColClamp
+ *                   rd_blend_func, rd_test_gs, rd_z_write, rd_fba, rd_pabe,
+ *                   rd_tex_a, rd_col_clamp
  *   FRAME_1 XYOFFSET_1 SCISSOR_1
- *                   rd_SetTarget (FBP to a named target, size from XYOFFSET)
- *                   and rd_Scissor, emitted before the next primitive or at
- *                   the end of the packet; FRAME.FBMSK to rd_ColorMask
+ *                   rd_set_target (FBP to a named target, size from XYOFFSET)
+ *                   and rd_scissor, emitted before the next primitive or at
+ *                   the end of the packet; FRAME.FBMSK to rd_color_mask
  *   TEXFLUSH        nothing to do
  *
  * Anything else is counted per register and logged once
@@ -869,7 +869,7 @@ int _IsInScreen(volatile int *v)
  * texture cache, FOG/FOGCOL to the fog package.
  *
  * Consecutive primitives of one kind, space and UV mode are batched into one
- * rd_ScreenPrims call; any state change ends the batch first, so rd sees the
+ * rd_screen_prims call; any state change ends the batch first, so rd sees the
  * writes in the order the GS would have.  Strips and fans are expanded to
  * triangle lists here, which also gives XYZ3 its GS meaning.
  * ===================================================================== */
@@ -932,7 +932,7 @@ typedef struct GsShim { /* port */
 
     /* wave 3 (R3ab): render-to-texture targets.  A FRAME.FBP that names no
        fixed buffer (puddle, pool and queen barrier blocks from
-       tex_AllocVramAuto) draws into an rd_TempTarget of the size XYOFFSET
+       tex_AllocVramAuto) draws into an rd_temp_target of the size XYOFFSET
        gives, with its own depth, for the rest of the frame; a TEX0 whose
        TBP is that block's (FBP * 32) samples it */
     struct {
@@ -947,7 +947,7 @@ static GsShim gs = {.q = 1.0f};
 
 static int gsList(void)
 {
-    int l = rd_CurrentList();
+    int l = rd_current_list();
 
     return l >= 0 && l < RD_LIST_COUNT ? l : 0;
 }
@@ -1030,7 +1030,7 @@ static void gsUndecoded(unsigned int r)
         fprintf(stderr,
                 "gif: GS register 0x%02x (%s) written through the packet layer is not decoded "
                 "(first in list %d; counted from here)\n",
-                r, gsRegName(r), rd_CurrentList());
+                r, gsRegName(r), rd_current_list());
     }
     gs.undecodedTotal++;
 }
@@ -1055,7 +1055,7 @@ void gif_HostSetTex0Resolver(GifTex0Resolver fn)
 static void gsFlushBatch(void)
 {
     if (gs.nb != 0) {
-        rd_ScreenPrims((RdPrim)gs.bType, gs.batch, gs.nb, (RdSpace)gs.bSpace, gs.bFixed, gs.key);
+        rd_screen_prims((RdPrim)gs.bType, gs.batch, gs.nb, (RdSpace)gs.bSpace, gs.bFixed, gs.key);
         gs.nb = 0;
     }
 }
@@ -1074,12 +1074,12 @@ static RdTarget gsAliasTarget(unsigned int fbp, unsigned int w, unsigned int h)
         }
     }
     if (gs.aliasCount == (int)(sizeof(gs.alias) / sizeof(gs.alias[0]))) {
-        return rd_Target(RD_TARGET_SCENE);
+        return rd_target(RD_TARGET_SCENE);
     }
     gs.alias[gs.aliasCount].fbp = fbp;
     gs.alias[gs.aliasCount].w = w;
     gs.alias[gs.aliasCount].h = h;
-    gs.alias[gs.aliasCount].t = rd_TempTarget(w, h, 1, 0);
+    gs.alias[gs.aliasCount].t = rd_temp_target(w, h, 1, 0);
     return gs.alias[gs.aliasCount++].t;
 }
 
@@ -1151,16 +1151,16 @@ static void gsSyncEnv(void)
             /* wave 3 (R3ab): a render-to-texture block */
             RdTarget t = gsAliasTarget(fbp, w, h);
 
-            rd_SetTarget(t, t, w, h, 0);
+            rd_set_target(t, t, w, h, 0);
         } else {
             id = gsTargetOfFbp(fbp, w, h);
-            rd_SetTarget(rd_Target(id), id == RD_TARGET_SCENE ? rd_Target(id) : (RdTarget){0}, w, h,
-                         id == RD_TARGET_SCENE);
+            rd_set_target(rd_target(id), id == RD_TARGET_SCENE ? rd_target(id) : (RdTarget){0}, w,
+                          h, id == RD_TARGET_SCENE);
         }
         gs.curW = w;
         gs.curH = h;
         gs.frameDirty = 0;
-        gs.scissorDirty = gs.haveScissorL[gsList()]; /* rd_SetTarget reset it: re-apply */
+        gs.scissorDirty = gs.haveScissorL[gsList()]; /* rd_set_target reset it: re-apply */
         justSet = 1;
     }
     if (gs.scissorDirty) {
@@ -1170,7 +1170,7 @@ static void gsSyncEnv(void)
             y1 = (int)((gs.scissorL[gsList()] >> 48) & 0x7FF);
 
         if (!justSet || !(x0 == 0 && y0 == 0 && x1 == (int)gs.curW - 1 && y1 == (int)gs.curH - 1)) {
-            rd_Scissor(x0, y0, x1, y1);
+            rd_scissor(x0, y0, x1, y1);
         }
         gs.scissorDirty = 0;
     }
@@ -1214,7 +1214,7 @@ RdTex gif_HostPlaceholder(unsigned int tbp)
     }
     slot = gs.phCount++;
     gs.ph[slot].tbp = tbp;
-    gs.ph[slot].tex = rd_CreateTexture(16, 16, px, RD_TEXA_80_80, "R2a placeholder");
+    gs.ph[slot].tex = rd_create_texture(16, 16, px, RD_TEXA_80_80, "R2a placeholder");
     return gs.ph[slot].tex;
 }
 
@@ -1229,7 +1229,7 @@ static RdTex gsResolveTex0(unsigned long long tex0)
     RdTargetId id;
 
     if (gs.resolver != 0) {
-        RdTex t = gs.resolver(tex0, rd_CurrentList());
+        RdTex t = gs.resolver(tex0, rd_current_list());
 
         if (t.id != 0) {
             return t;
@@ -1263,13 +1263,13 @@ static RdTex gsResolveTex0(unsigned long long tex0)
         /* wave 3 (R3ab): a render-to-texture block drawn this frame */
         for (i = 0; i < gs.aliasCount; i++) {
             if (gs.alias[i].fbp * 32 == tbp) {
-                return rd_TargetTexture(gs.alias[i].t, RD_VIEW_RGBA);
+                return rd_target_texture(gs.alias[i].t, RD_VIEW_RGBA);
             }
         }
         return gif_HostPlaceholder(tbp);
     }
     }
-    return rd_TargetTexture(rd_Target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
+    return rd_target_texture(rd_target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
 }
 
 static void gsBindTexture(void)
@@ -1280,7 +1280,7 @@ static void gsBindTexture(void)
         gsOnce(GS_ONCE_TFX, "TEX0.TFX HIGHLIGHT is not supported: MODULATE used", gsTex0());
         tfx = 0;
     }
-    rd_Texture(gsResolveTex0(gsTex0()), tfx ? RD_TEXFN_DECAL : RD_TEXFN_MODULATE,
+    rd_texture(gsResolveTex0(gsTex0()), tfx ? RD_TEXFN_DECAL : RD_TEXFN_MODULATE,
                ((gsTex0() >> 34) & 1) ? RD_TCC_RGBA : RD_TCC_RGB);
     gs.emTex0 = gsTex0();
 }
@@ -1291,7 +1291,7 @@ static void gsBindTexture(void)
 static void gsAa1Off(void)
 {
     if (gs.emAa1) {
-        rd_AA1(0);
+        rd_aa1(0);
         gs.emAa1 = 0;
     }
 }
@@ -1322,23 +1322,23 @@ static void gsApplyPrim(void)
         if (tme) {
             gsBindTexture();
         } else {
-            rd_TextureOff();
+            rd_texture_off();
         }
         gs.emTme = tme;
     }
     if (!gs.emValid || abe != gs.emAbe) {
         gsFlushBatch();
-        rd_ABE(abe);
+        rd_abe(abe);
         gs.emAbe = abe;
     }
     if (!gs.emValid || iip != gs.emIip) {
         gsFlushBatch();
-        rd_Gouraud(iip);
+        rd_gouraud(iip);
         gs.emIip = iip;
     }
     if (aa1 != gs.emAa1) {
         gsFlushBatch();
-        rd_AA1(aa1);
+        rd_aa1(aa1);
         gs.emAa1 = aa1;
     }
     gs.emValid = 1;
@@ -1363,7 +1363,7 @@ static int gsSpace(void)
            font come through the UI helpers above and gif_HostScreenPrims.
            UI and WORLD replay alike except under the mirror mode, which
            flips UI prims */
-        return rd_CurrentList() >= 12 ? RD_SPACE_UI : RD_SPACE_WORLD;
+        return rd_current_list() >= 12 ? RD_SPACE_UI : RD_SPACE_WORLD;
     }
 }
 
@@ -1489,7 +1489,7 @@ static void gsAlpha(unsigned long long data)
 
     for (i = 0; i < RD_BLEND_COUNT; i++) {
         if (gsAlphaRegs[i] == reg) {
-            rd_BlendFunc((RdBlend)i, (uint8_t)((data >> 32) & 0xFF));
+            rd_blend_func((RdBlend)i, (uint8_t)((data >> 32) & 0xFF));
             return;
         }
     }
@@ -1503,12 +1503,12 @@ static void gsTexa(unsigned long long data)
     unsigned int ta1 = (unsigned int)((data >> 32) & 0xFF);
 
     if (ta0 == 0x80 && ta1 == 0x80) {
-        rd_TexA(aem ? RD_TEXA_80_80_AEM : RD_TEXA_80_80);
+        rd_tex_a(aem ? RD_TEXA_80_80_AEM : RD_TEXA_80_80);
     } else if (ta0 == 0x7F && ta1 == 0x81 && aem) {
-        rd_TexA(RD_TEXA_7F_81_AEM);
+        rd_tex_a(RD_TEXA_7F_81_AEM);
     } else {
         gsOnce(GS_ONCE_TEXA, "TEXA outside the three modes: nearest mode used", data);
-        rd_TexA(aem ? RD_TEXA_7F_81_AEM : RD_TEXA_80_80);
+        rd_tex_a(aem ? RD_TEXA_7F_81_AEM : RD_TEXA_80_80);
     }
 }
 
@@ -1576,21 +1576,21 @@ static void gsWrite(unsigned long long reg, unsigned long long data)
     switch (r) {
     case 0x08: /* CLAMP_1 */
     {
-        RdSamplerWrap w = rd_WrapFromGs(data);
+        RdSamplerWrap w = rd_wrap_from_gs(data);
 
         if ((data & 2) || (data & 8)) {
             gsOnce(GS_ONCE_CLAMP, "CLAMP region modes are not decoded: CLAMP used", data);
         }
-        rd_SamplerWrap((RdWrap)w.s, (RdWrap)w.t);
+        rd_sampler_wrap((RdWrap)w.s, (RdWrap)w.t);
         return;
     }
     case 0x14: /* TEX1_1 */
     {
         unsigned int mmin = (unsigned int)((data >> 6) & 7);
 
-        rd_SamplerFilter((data >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
-                         mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
-                                                             : RD_FILTER_NEAREST);
+        rd_sampler_filter((data >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
+                          mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
+                                                              : RD_FILTER_NEAREST);
         return;
     }
     case 0x18: /* XYOFFSET_1 */
@@ -1620,25 +1620,25 @@ static void gsWrite(unsigned long long reg, unsigned long long data)
         }
         return;
     case 0x46: /* COLCLAMP */
-        rd_ColClamp((int)(data & 1));
+        rd_col_clamp((int)(data & 1));
         return;
     case 0x47: /* TEST_1 */
-        rd_TestGs(data);
+        rd_test_gs(data);
         return;
     case 0x49: /* PABE */
-        rd_PABE((int)(data & 1));
+        rd_pabe((int)(data & 1));
         return;
     case 0x4A: /* FBA_1 */
-        rd_FBA((int)(data & 1));
+        rd_fba((int)(data & 1));
         return;
     case 0x4C: /* FRAME_1 */
         gs.frameL[gsList()] = data;
         gs.haveFrameL[gsList()] = 1;
         gs.frameDirty = 1;
-        rd_ColorMask((uint32_t)(data >> 32));
+        rd_color_mask((uint32_t)(data >> 32));
         return;
     case 0x4E: /* ZBUF_1 */
-        rd_ZWrite(((data >> 32) & 1) == 0);
+        rd_z_write(((data >> 32) & 1) == 0);
         return;
     default:
         gsUndecoded(r);
@@ -1722,7 +1722,7 @@ void gif_HostScreenPrims(RdPrim type, const RdScreenVtx *v, unsigned int n, RdSp
     gsRawFlush();
     gsSyncEnv();
     gsFlushBatch();
-    rd_ScreenPrims(type, v, n, space, uvFixed, gs.key);
+    rd_screen_prims(type, v, n, space, uvFixed, gs.key);
 }
 
 void gif_HostDrawKey(const void *obj, int part, int ordinal)

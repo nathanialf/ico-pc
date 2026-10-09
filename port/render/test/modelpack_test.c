@@ -13,7 +13,7 @@
  *              dumps folder and folders below models/ not walked
  *   strips     a two-batch prelit stream with restarts dumped, read back
  *              and made a replacement: its triangles are the original's
- *              (vu1ref_StaticKicks); a triangle list joined into strips
+ *              (vu1ref_static_kicks); a triangle list joined into strips
  *              (shared edges, a lone triangle turned), the node transform,
  *              colours, the layout rules, more pieces than batches
  *   bones      four weights to the two largest renormalised, joints merged,
@@ -23,7 +23,7 @@
  *              one-shot object dump, read back and drawn through
  *              reg_DispObj in the original's place: RDC_SKINNED with the
  *              original's counts, kicks and bones
- *   switch     modelpack_SetEnabled retiring, modelpack_Decline
+ *   switch     modelpack_set_enabled retiring, modelpack_decline
  * Then on a Vulkan device (77 without one): the prelit and the cluster
  * model rendered from the original and from the round-tripped replacement
  * agree within 1 per channel. */
@@ -162,7 +162,7 @@ static char *readAll(const char *path, size_t *n)
 static void writeDoc(const char *relNoExt, const GltfDoc *d)
 {
     char why[256] = "";
-    int rc = gltf_Write(pathOf(relNoExt), d, why, sizeof(why));
+    int rc = gltf_write(pathOf(relNoExt), d, why, sizeof(why));
     CHECK(rc == 0, "write %s: %s", relNoExt, why);
 }
 
@@ -284,7 +284,7 @@ static void origMake(Orig *o, uint32_t qpv, uint32_t nb, const uint32_t *counts,
 
 static uint64_t hashOf(const Orig *o)
 {
-    return rd_VuMeshDescHash(&o->d, NULL, NULL);
+    return rd_vu_mesh_desc_hash(&o->d, NULL, NULL);
 }
 
 /* A triangle-list document: prims[i] from pos/idx arrays the caller owns. */
@@ -298,7 +298,7 @@ typedef struct Doc {
 static void docInit(Doc *x, uint32_t prims)
 {
     memset(x, 0, sizeof(*x));
-    gltf_DocInit(&x->d);
+    gltf_doc_init(&x->d);
     x->d.prims = x->p;
     x->d.primCount = prims;
 }
@@ -306,7 +306,7 @@ static void docInit(Doc *x, uint32_t prims)
 static void docSkin(Doc *x, uint32_t bones)
 {
     for (uint32_t i = 0; i < bones; i++) {
-        gltf_Mat4Identity(x->ib[i]);
+        gltf_mat4_identity(x->ib[i]);
         x->parent[i] = -1;
     }
     x->d.skin.count = bones;
@@ -360,7 +360,7 @@ static void triSort(Tri *t)
     }
 }
 
-/* the original's triangles, batch b: vu1ref_StaticKicks over its strip
+/* the original's triangles, batch b: vu1ref_static_kicks over its strip
  * flags */
 static int origTris(const RdVuMeshDesc *d, uint32_t b, Tri *out)
 {
@@ -375,7 +375,7 @@ static int origTris(const RdVuMeshDesc *d, uint32_t b, Tri *out)
         stw[k] = v[k * qpv + qpv - 2][3];
         first[k] = 0;
     }
-    int nk = vu1ref_StaticKicks(stw, first, (int)n, kicks);
+    int nk = vu1ref_static_kicks(stw, first, (int)n, kicks);
     for (int i = 0; i < nk; i++) {
         for (int c = 0; c < 3; c++) {
             out[i].k[c] = vertexKey(v + (size_t)(kicks[i] - 2 + c) * qpv, qpv);
@@ -478,45 +478,45 @@ static void indexChecks(void)
     snprintf(pcopy, sizeof(pcopy), "%s", pathOf("p"));
     cfg.userDir = ucopy;
     cfg.programDir = pcopy;
-    int n = modelpack_Init(&cfg);
+    int n = modelpack_init(&cfg);
     ModelpackStats st;
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     printf("  %d indexed, %u files, %u duplicates, %u bad names, %u failed\n", n, st.files,
            st.duplicates, st.badNames, st.failed);
-    CHECK(n == 4 && modelpack_Count() == 4 && st.indexed == 4, "4 replacements (%d)", n);
+    CHECK(n == 4 && modelpack_count() == 4 && st.indexed == 4, "4 replacements (%d)", n);
     CHECK(st.files == 10, "10 model files seen (%u)", st.files);
     CHECK(st.duplicates == 1, "one duplicate (%u)", st.duplicates);
     CHECK(st.badNames == 4, "four names that are not model names (%u)", st.badNames);
     CHECK(st.failed == 1, "one broken file (%u)", st.failed);
     for (int i = 0; i < 4; i++) {
-        CHECK(modelpack_Lookup(h[i]) >= 0, "hash %d indexed", i);
+        CHECK(modelpack_lookup(h[i]) >= 0, "hash %d indexed", i);
     }
     for (int i = 4; i < 8; i++) {
-        CHECK(modelpack_Lookup(h[i]) < 0, "hash %d not indexed", i);
+        CHECK(modelpack_lookup(h[i]) < 0, "hash %d not indexed", i);
     }
     /* the user folder's file won: one triangle */
-    RdMesh m = modelpack_Create(modelpack_Lookup(h[0]), &s_o[0].d, "first", 0);
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    RdMesh m = modelpack_create(modelpack_lookup(h[0]), &s_o[0].d, "first", 0);
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->vertexCount == 3 && r->indexCount == 3 && r->replaced,
           "the user folder's file wins (%u vertices)", r ? r->vertexCount : 0);
-    rd_DestroyVuMesh(m);
-    m = modelpack_Create(modelpack_Lookup(h[2]), &s_o[2].d, NULL, 0);
+    rd_destroy_vu_mesh(m);
+    m = modelpack_create(modelpack_lookup(h[2]), &s_o[2].d, NULL, 0);
     CHECK(m.id != 0, "the GLB makes a replacement");
-    rd_DestroyVuMesh(m);
-    CHECK(modelpack_Create(modelpack_Lookup(h[1]), &s_o[0].d, NULL, 0).id == 0 &&
-              modelpack_Lookup(h[1]) >= 0,
+    rd_destroy_vu_mesh(m);
+    CHECK(modelpack_create(modelpack_lookup(h[1]), &s_o[0].d, NULL, 0).id == 0 &&
+              modelpack_lookup(h[1]) >= 0,
           "another part's desc: no mesh, the entry kept");
 
     /* nothing installed */
-    modelpack_Shutdown();
+    modelpack_shutdown();
     mkdirs("e");
     ModelpackConfig none = {pathOf("e"), NULL, NULL, 0, 0};
     char ecopy[1200];
     snprintf(ecopy, sizeof(ecopy), "%s", pathOf("e"));
     none.userDir = ecopy;
-    CHECK(modelpack_Init(&none) == 0 && modelpack_Count() == 0 && modelpack_Lookup(h[0]) < 0,
+    CHECK(modelpack_init(&none) == 0 && modelpack_count() == 0 && modelpack_lookup(h[0]) < 0,
           "no pack");
-    modelpack_Shutdown();
+    modelpack_shutdown();
 }
 
 /* ------------------------------------------------------------ strips */
@@ -526,7 +526,7 @@ static void initAt(const char *userRel, int dump)
     static char u[1200];
     snprintf(u, sizeof(u), "%s", pathOf(userRel));
     ModelpackConfig cfg = {u, NULL, "SCES-50760", 0, dump};
-    modelpack_Init(&cfg);
+    modelpack_init(&cfg);
 }
 
 static Tri s_ta[4096], s_tb[4096];
@@ -544,12 +544,12 @@ static void stripChecks(void)
     const uint64_t h = hashOf(&o);
     mkdirs("s/models/SCES-50760/replacements");
     initAt("s", 1);
-    CHECK(modelpack_DumpWanted(h, NULL), "dumping on: a new part is wanted");
+    CHECK(modelpack_dump_wanted(h, NULL), "dumping on: a new part is wanted");
     ModelpackIdent id = {"synth", 2, 1, NULL};
-    CHECK(modelpack_Dump(&o.d, &id, NULL) == 2, "the dump writes two files");
-    CHECK(!modelpack_DumpWanted(h, NULL) && modelpack_Dump(&o.d, &id, NULL) == 0, "once per hash");
-    CHECK(strstr(modelpack_DumpDir(), "models/SCES-50760/dumps") != NULL, "the dumps folder %s",
-          modelpack_DumpDir());
+    CHECK(modelpack_dump(&o.d, &id, NULL) == 2, "the dump writes two files");
+    CHECK(!modelpack_dump_wanted(h, NULL) && modelpack_dump(&o.d, &id, NULL) == 0, "once per hash");
+    CHECK(strstr(modelpack_dump_dir(), "models/SCES-50760/dumps") != NULL, "the dumps folder %s",
+          modelpack_dump_dir());
     {
         /* a part that changes shape: its stream differs at every dump, its
            build-time hash does not; one dump, not one per frame */
@@ -560,10 +560,10 @@ static void stripChecks(void)
         const uint64_t built = hashOf(&m1);
         ModelpackIdent mid = {"morphy", 4, 0, NULL, built};
         CHECK(hashOf(&m2) != hashOf(&m3) && hashOf(&m2) != built, "the morph streams differ");
-        CHECK(modelpack_DumpWanted(built, NULL), "the build hash is wanted at first");
-        CHECK(modelpack_Dump(&m2.d, &mid, NULL) == 2, "the first morph frame is dumped");
-        CHECK(!modelpack_DumpWanted(built, NULL), "the build hash is done after it");
-        CHECK(modelpack_Dump(&m3.d, &mid, NULL) == 0,
+        CHECK(modelpack_dump_wanted(built, NULL), "the build hash is wanted at first");
+        CHECK(modelpack_dump(&m2.d, &mid, NULL) == 2, "the first morph frame is dumped");
+        CHECK(!modelpack_dump_wanted(built, NULL), "the build hash is done after it");
+        CHECK(modelpack_dump(&m3.d, &mid, NULL) == 0,
               "a later frame (another stream, the same build hash) writes nothing");
     }
     size_t n = 0;
@@ -577,7 +577,7 @@ static void stripChecks(void)
     GltfDoc d;
     char why[256] = "", rel[300];
     snprintf(rel, sizeof(rel), "s/models/SCES-50760/dumps/%s.gltf", hex16(h));
-    int rc = gltf_Read(pathOf(rel), &d, why, sizeof(why));
+    int rc = gltf_read(pathOf(rel), &d, why, sizeof(why));
     CHECK(rc == 0, "the dump reads back: %s", why);
     if (rc == 0) {
         CHECK(d.primCount == 2 && d.prims[0].vertexCount == 7 && d.prims[1].vertexCount == 9,
@@ -595,14 +595,14 @@ static void stripChecks(void)
                   strstr(d.extrasText, "{\"vertices\":9,\"prim\":12,\"material\":1}"),
               "extras.ico: %s", d.extrasText ? d.extrasText : "-");
     }
-    gltf_Free(&d);
+    gltf_free(&d);
     /* back as a replacement */
     moveDump("s/models/SCES-50760/dumps", h, "s/models/SCES-50760/replacements", NULL);
     initAt("s", 0);
-    int e = modelpack_Lookup(h);
+    int e = modelpack_lookup(h);
     CHECK(e >= 0, "the dump indexed as a replacement");
-    RdMesh m = modelpack_Create(e, &o.d, "synth rep", 0);
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    RdMesh m = modelpack_create(e, &o.d, "synth rep", 0);
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->replaced && r->hash == h && r->batchCount == 2, "the replacement");
     if (r) {
         CHECK(r->vertexCount == 16 && r->indexCount == 18,
@@ -614,7 +614,7 @@ static void stripChecks(void)
                   "batch %u: the same triangles (%d and %d)", b, na, nb);
         }
     }
-    rd_DestroyVuMesh(m);
+    rd_destroy_vu_mesh(m);
 
     /* a triangle list: a quad of two triangles sharing an edge (one strip of
        four), two triangles where the first must turn (four again); the node
@@ -664,8 +664,8 @@ static void stripChecks(void)
     snprintf(rel, sizeof(rel), "s/models/SCES-50760/replacements/%s", hex16(hashOf(&l1)));
     writeDoc(rel, &y.d);
     initAt("s", 0);
-    m = modelpack_Create(modelpack_Lookup(ht), &t.d, NULL, 0);
-    r = rd__MeshRec(m.id);
+    m = modelpack_create(modelpack_lookup(ht), &t.d, NULL, 0);
+    r = rd__mesh_rec(m.id);
     CHECK(r != NULL, "the triangle list's replacement");
     if (r) {
         CHECK(r->batches[0].vertexCount == 4 && r->batches[1].vertexCount == 4 &&
@@ -693,24 +693,24 @@ static void stripChecks(void)
                   w[6][0] == 1.0f && w[6][1] == 2.0f && w[9][0] == 2.0f && w[9][1] == 3.0f,
               "the lone triangle turned to join the next");
     }
-    rd_DestroyVuMesh(m);
-    m = modelpack_Create(modelpack_Lookup(hashOf(&lp)), &lp.d, NULL, 0);
-    r = rd__MeshRec(m.id);
+    rd_destroy_vu_mesh(m);
+    m = modelpack_create(modelpack_lookup(hashOf(&lp)), &lp.d, NULL, 0);
+    r = rd__mesh_rec(m.id);
     CHECK(r && r->qwPerVertex == RD_VU_QW_PRELIT && r->vertexCount == 3 &&
               r->stream[1][2] == 1.0f && r->stream[2][0] == 128.0f,
           "a lit file serves a prelit part, the normals dropped");
-    rd_DestroyVuMesh(m);
-    CHECK(modelpack_Create(modelpack_Lookup(hashOf(&ll)), &ll.d, NULL, 0).id == 0 &&
-              modelpack_Lookup(hashOf(&ll)) < 0,
+    rd_destroy_vu_mesh(m);
+    CHECK(modelpack_create(modelpack_lookup(hashOf(&ll)), &ll.d, NULL, 0).id == 0 &&
+              modelpack_lookup(hashOf(&ll)) < 0,
           "a prelit file for a lit part: declined");
-    CHECK(modelpack_Create(modelpack_Lookup(hashOf(&l1)), &l1.d, NULL, 0).id == 0 &&
-              modelpack_Lookup(hashOf(&l1)) < 0,
+    CHECK(modelpack_create(modelpack_lookup(hashOf(&l1)), &l1.d, NULL, 0).id == 0 &&
+              modelpack_lookup(hashOf(&l1)) < 0,
           "more pieces than batches: declined");
     ModelpackStats st;
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     CHECK(st.declined == 2 && st.created == 2, "2 declined, 2 made (%u %u)", st.declined,
           st.created);
-    modelpack_Shutdown();
+    modelpack_shutdown();
 }
 
 /* ------------------------------------------------------------- bones */
@@ -781,12 +781,12 @@ static void boneChecks(void)
     writeDoc(rel, &y.d);
     initAt("b", 0);
     ModelpackStats st;
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     CHECK(st.indexed == 3 && st.failed == 1, "bone 60 refuses its file (%u indexed, %u failed)",
           st.indexed, st.failed);
-    CHECK(modelpack_Lookup(hashOf(&c)) < 0, "no entry for the bone 60 file");
-    RdMesh m = modelpack_Create(modelpack_Lookup(hashOf(&a)), &a.d, NULL, 6);
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    CHECK(modelpack_lookup(hashOf(&c)) < 0, "no entry for the bone 60 file");
+    RdMesh m = modelpack_create(modelpack_lookup(hashOf(&a)), &a.d, NULL, 6);
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->vertexCount == 3 && r->qwPerVertex == RD_VU_QW_SKIN, "the skinned replacement");
     if (r) {
         const float (*v)[4] = r->stream;
@@ -804,12 +804,12 @@ static void boneChecks(void)
               "skinned: no node transform; normals normalised (%g)", (double)v[6][1]);
         CHECK(v[1][3] == 1.0f && v[6][3] == 1.0f, "normal.w the original's");
     }
-    rd_DestroyVuMesh(m);
-    CHECK(modelpack_Create(modelpack_Lookup(hashOf(&b2)), &b2.d, NULL, 5).id == 0 &&
-              modelpack_Lookup(hashOf(&b2)) < 0,
+    rd_destroy_vu_mesh(m);
+    CHECK(modelpack_create(modelpack_lookup(hashOf(&b2)), &b2.d, NULL, 5).id == 0 &&
+              modelpack_lookup(hashOf(&b2)) < 0,
           "bone 5 on a model of 5 bones: declined");
-    m = modelpack_Create(modelpack_Lookup(hashOf(&nm)), &nm.d, NULL, 2);
-    r = rd__MeshRec(m.id);
+    m = modelpack_create(modelpack_lookup(hashOf(&nm)), &nm.d, NULL, 2);
+    r = rd__mesh_rec(m.id);
     CHECK(r != NULL, "the joints-by-name replacement");
     if (r) {
         const float (*v)[4] = r->stream;
@@ -818,8 +818,8 @@ static void boneChecks(void)
               "joints mapped by their names (%u %u %u)", fBitsOf(v[2][0]), fBitsOf(v[7][0]),
               fBitsOf(v[12][0]));
     }
-    rd_DestroyVuMesh(m);
-    modelpack_Shutdown();
+    rd_destroy_vu_mesh(m);
+    modelpack_shutdown();
 }
 
 /* ----------------------------------------------------------- cluster */
@@ -844,8 +844,8 @@ static void recordObj(Sub15C *o)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     reg_DispObj(o);
     dl_Swap();
 }
@@ -892,43 +892,43 @@ static void roundTrip(void)
 {
     packetDesc(packetA(), RD_VU_QW_PRELIT, &s_pdA);
     packetDesc(packetB(), RD_VU_QW_SKIN, &s_pdB);
-    s_hA = rd_VuMeshDescHash(&s_pdA.d, NULL, NULL);
-    s_hB = rd_VuMeshDescHash(&s_pdB.d, NULL, NULL);
+    s_hA = rd_vu_mesh_desc_hash(&s_pdA.d, NULL, NULL);
+    s_hB = rd_vu_mesh_desc_hash(&s_pdB.d, NULL, NULL);
     mkdirs("c/models/SCES-50760/replacements");
     initAt("c", 0);
-    CHECK(!modelpack_DumpWanted(s_hB, &s_objB), "dumping off: not wanted");
-    CHECK(modelpack_DumpObjectStatus() == 0, "no shot yet");
-    modelpack_DumpObjectOnce(&s_objB);
-    CHECK(modelpack_DumpObjectStatus() == -1, "the shot armed");
-    CHECK(!modelpack_DumpWanted(s_hA, &s_objA), "another object: not wanted");
-    CHECK(modelpack_DumpWanted(s_hB, &s_objB), "the armed object's part: wanted");
+    CHECK(!modelpack_dump_wanted(s_hB, &s_objB), "dumping off: not wanted");
+    CHECK(modelpack_dump_object_status() == 0, "no shot yet");
+    modelpack_dump_object_once(&s_objB);
+    CHECK(modelpack_dump_object_status() == -1, "the shot armed");
+    CHECK(!modelpack_dump_wanted(s_hA, &s_objA), "another object: not wanted");
+    CHECK(modelpack_dump_wanted(s_hB, &s_objB), "the armed object's part: wanted");
     ModelpackSkeleton sk;
     skeletonOf(&s_modelB, &sk);
     ModelpackIdent idB = {"test_cluster", 0, 0, &s_objB};
-    CHECK(modelpack_Dump(&s_pdB.d, &idB, &sk) == 2, "the shot writes the part");
-    CHECK(!modelpack_DumpWanted(s_hB, &s_objB) && modelpack_Dump(&s_pdB.d, &idB, &sk) == 0,
+    CHECK(modelpack_dump(&s_pdB.d, &idB, &sk) == 2, "the shot writes the part");
+    CHECK(!modelpack_dump_wanted(s_hB, &s_objB) && modelpack_dump(&s_pdB.d, &idB, &sk) == 0,
           "once in the shot");
-    CHECK(modelpack_DumpObjectStatus() == -1, "the shot's frame still open");
+    CHECK(modelpack_dump_object_status() == -1, "the shot's frame still open");
     dl_Clear();
     dl_Swap();
     dl_Clear();
-    CHECK(modelpack_DumpObjectStatus() == 2, "the shot wrote 2 files (%d)",
-          modelpack_DumpObjectStatus());
-    CHECK(!modelpack_DumpWanted(s_hB, &s_objB), "the shot is over");
+    CHECK(modelpack_dump_object_status() == 2, "the shot wrote 2 files (%d)",
+          modelpack_dump_object_status());
+    CHECK(!modelpack_dump_wanted(s_hB, &s_objB), "the shot is over");
     dl_Swap();
     /* the prelit one through the dump switch */
-    modelpack_SetDumpEnabled(true);
+    modelpack_set_dump_enabled(true);
     ModelpackIdent idA = {"test_prelit", 0, 0, NULL};
-    CHECK(modelpack_DumpWanted(s_hA, NULL) && modelpack_Dump(&s_pdA.d, &idA, NULL) == 2,
+    CHECK(modelpack_dump_wanted(s_hA, NULL) && modelpack_dump(&s_pdA.d, &idA, NULL) == 2,
           "the prelit part dumped");
     ModelpackStats st;
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     CHECK(st.dumped == 2, "two parts dumped (%u)", st.dumped);
     /* the skinned file: the skin as given */
     GltfDoc d;
     char why[256] = "", rel[300];
     snprintf(rel, sizeof(rel), "c/models/SCES-50760/dumps/%s.gltf", hex16(s_hB));
-    int rc = gltf_Read(pathOf(rel), &d, why, sizeof(why));
+    int rc = gltf_read(pathOf(rel), &d, why, sizeof(why));
     CHECK(rc == 0, "the cluster dump reads: %s", why);
     if (rc == 0) {
         CHECK(d.skin.count == 2 && d.skin.parent[0] < 0 && d.skin.parent[1] == 0 &&
@@ -947,13 +947,13 @@ static void roundTrip(void)
                   strstr(d.extrasText, "\"bones\":2") && strstr(d.extrasText, "\"normalW\":1"),
               "extras.ico of the cluster part: %s", d.extrasText);
     }
-    gltf_Free(&d);
+    gltf_free(&d);
     moveDump("c/models/SCES-50760/dumps", s_hA, "c/models/SCES-50760/replacements", NULL);
     char named[64];
     snprintf(named, sizeof(named), "test_cluster-%s.gltf", hex16(s_hB));
     moveDump("c/models/SCES-50760/dumps", s_hB, "c/models/SCES-50760/replacements", named);
     initAt("c", 0);
-    CHECK(modelpack_Count() == 2 && modelpack_Lookup(s_hA) >= 0 && modelpack_Lookup(s_hB) >= 0,
+    CHECK(modelpack_count() == 2 && modelpack_lookup(s_hA) >= 0 && modelpack_lookup(s_hB) >= 0,
           "both round-tripped parts indexed");
 }
 
@@ -965,24 +965,24 @@ static void clusterChecks(void)
     PacHeader *pk = packetB();
     /* the original's draw (made here: with the pack indexed, the packet's
        own build would make the replacement, Packet.c pac_hostBuild) */
-    RdMesh orig = rd_CreateVuMesh(&s_pdB.d);
+    RdMesh orig = rd_create_vu_mesh(&s_pdB.d);
     setPacketMesh(pk, orig.id);
     recordObj(&s_objB);
-    const RdMeshRec *orc = rd__MeshRec(orig.id);
+    const RdMeshRec *orc = rd__mesh_rec(orig.id);
     Found fd;
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     CHECK(orc && fd.n == 1 && fd.cmd[0]->type == RDC_SKINNED, "the original drawn");
     if (!orc || fd.n != 1) {
         return;
     }
     const float *mem;
-    RdVuPayload po = payloadOf(rd__LastFrame(), fd.cmd[0], &mem);
+    RdVuPayload po = payloadOf(rd__last_frame(), fd.cmd[0], &mem);
     static float bonesO[240][4];
     memcpy(bonesO, mem + 36 * 4, sizeof(bonesO));
     /* the replacement in its place */
-    RdMesh m = modelpack_Create(modelpack_Lookup(s_hB), &s_pdB.d, "test_cluster rep",
+    RdMesh m = modelpack_create(modelpack_lookup(s_hB), &s_pdB.d, "test_cluster rep",
                                 (uint32_t)s_objB.nodeNum);
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->replaced && r->hash == orc->hash, "the cluster replacement");
     if (!r) {
         return;
@@ -1013,11 +1013,11 @@ static void clusterChecks(void)
     CHECK(close, "normals and bone weights within rounding");
     setPacketMesh(pk, m.id);
     recordObj(&s_objB);
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->type == RDC_SKINNED && fd.cmd[0]->u[0] == m.id,
           "one RDC_SKINNED of the replacement");
     if (fd.n == 1) {
-        RdVuPayload p = payloadOf(rd__LastFrame(), fd.cmd[0], &mem);
+        RdVuPayload p = payloadOf(rd__last_frame(), fd.cmd[0], &mem);
         CHECK(p.prog == po.prog && p.code == 20 && p.boneQw == 240 && p.boneQw == po.boneQw &&
                   p.firstBatch == 0 && p.batchCount == orc->batchCount &&
                   p.qwPerVertex == RD_VU_QW_SKIN,
@@ -1025,23 +1025,23 @@ static void clusterChecks(void)
         CHECK(memcmp(mem + 36 * 4, bonesO, sizeof(bonesO)) == 0, "the same bones");
     }
     /* the prelit one in the same way */
-    RdMesh ma = modelpack_Create(modelpack_Lookup(s_hA), &s_pdA.d, NULL, 0);
-    RdMesh oa = rd_CreateVuMesh(&s_pdA.d);
-    const RdMeshRec *ra = rd__MeshRec(ma.id), *rao = rd__MeshRec(oa.id);
+    RdMesh ma = modelpack_create(modelpack_lookup(s_hA), &s_pdA.d, NULL, 0);
+    RdMesh oa = rd_create_vu_mesh(&s_pdA.d);
+    const RdMeshRec *ra = rd__mesh_rec(ma.id), *rao = rd__mesh_rec(oa.id);
     CHECK(ra && rao && ra->vertexCount == rao->vertexCount && ra->indexCount == rao->indexCount &&
               memcmp(ra->stream, rao->stream, (size_t)ra->vertexCount * 3 * 16) == 0,
           "the prelit part round-trips bit for bit");
 
     /* the switch: off retires the replacements, on the originals */
-    modelpack_SetEnabled(false);
-    CHECK(!modelpack_Enabled() && !rd_VuMeshValid(m) && !rd_VuMeshValid(ma) && rd_VuMeshValid(oa) &&
-              modelpack_Lookup(s_hB) < 0,
+    modelpack_set_enabled(false);
+    CHECK(!modelpack_enabled() && !rd_vu_mesh_valid(m) && !rd_vu_mesh_valid(ma) &&
+              rd_vu_mesh_valid(oa) && modelpack_lookup(s_hB) < 0,
           "off: the replacements retired, lookups refused");
-    modelpack_SetEnabled(true);
-    CHECK(modelpack_Enabled() && !rd_VuMeshValid(oa) && modelpack_Lookup(s_hB) >= 0,
+    modelpack_set_enabled(true);
+    CHECK(modelpack_enabled() && !rd_vu_mesh_valid(oa) && modelpack_lookup(s_hB) >= 0,
           "on: the originals retired, lookups again");
-    modelpack_Decline(s_hB);
-    CHECK(modelpack_Lookup(s_hB) < 0 && modelpack_Lookup(s_hA) >= 0, "a declined part");
+    modelpack_decline(s_hB);
+    CHECK(modelpack_lookup(s_hB) < 0 && modelpack_lookup(s_hA) >= 0, "a declined part");
     setPacketMesh(pk, 0);
     setPacketMesh(packetA(), 0);
 }
@@ -1072,13 +1072,13 @@ static void deviceCase(const char *what, Sub15C *o, PacHeader *pk, const PkDesc 
 {
     /* the original made here (the packet's own build would make the
        replacement) */
-    setPacketMesh(pk, rd_CreateVuMesh(&pd->d).id);
+    setPacketMesh(pk, rd_create_vu_mesh(&pd->d).id);
     recordObj(o);
     if (!readScene(s_imgA)) {
         CHECK(0, "%s: readback", what);
         return;
     }
-    RdMesh m = modelpack_Create(modelpack_Lookup(h), &pd->d, NULL, (uint32_t)o->nodeNum);
+    RdMesh m = modelpack_create(modelpack_lookup(h), &pd->d, NULL, (uint32_t)o->nodeNum);
     CHECK(m.id != 0, "%s: the replacement", what);
     setPacketMesh(pk, m.id);
     recordObj(o);
@@ -1092,11 +1092,11 @@ static void deviceCase(const char *what, Sub15C *o, PacHeader *pk, const PkDesc 
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     snprintf(s_base, sizeof(s_base), "%s/modelpack_tmp", argc > 1 ? argv[1] : ".");
     (void)ico_mkdir(s_base);
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -1107,7 +1107,7 @@ int main(int argc, char **argv)
     stripChecks();
     boneChecks();
     clusterChecks();
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("modelpack_test: %d failures\n", failures);
         return 1;
@@ -1117,9 +1117,9 @@ int main(int argc, char **argv)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("modelpack_test: SKIP the pixel checks: no usable Vulkan device\n");
-        modelpack_Shutdown();
+        modelpack_shutdown();
         clearFiles();
         return 77;
     }
@@ -1128,14 +1128,14 @@ int main(int argc, char **argv)
     gif_HostSetTex0Resolver(texResolve);
     makeTexture();
     buildScene();
-    modelpack_Decline(0); /* nothing: hash 0 has no entry */
+    modelpack_decline(0); /* nothing: hash 0 has no entry */
     initAt("c", 0);       /* the cluster entry again (the switch case declined it) */
     deviceCase("prelit", &s_objA, packetA(), &s_pdA, s_hA);
     deviceCase("cluster", &s_objB, packetB(), &s_pdB, s_hB);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
-    modelpack_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    modelpack_shutdown();
     clearFiles();
     if (failures) {
         printf("modelpack_test: %d failures\n", failures);

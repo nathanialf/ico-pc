@@ -1,5 +1,5 @@
 /* texpack_dds.c: DDS files of PCSX2 texture packs (texpack.h
- * texpack_LoadDds).
+ * texpack_load_dds).
  *
  * The rules are PCSX2's (GS/Renderers/HW/GSTextureReplacementLoaders.cpp,
  * ParseDDSHeader, ReadDDSMipLevel, DDSLoader), so a file loads here
@@ -148,8 +148,8 @@ static void convertLevel(DdsConv conv, const uint8_t *src, uint32_t srcPitch, ui
     }
 }
 
-int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const char *file,
-                    TexpackImage *out)
+int texpack_load_dds(const uint8_t *data, size_t size, int bcSupported, const char *file,
+                     TexpackImage *out)
 {
     if (out == NULL) {
         return -1;
@@ -172,7 +172,7 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
         height >= DDS_MAX_TEXTURE_SIZE) {
         return refuse(file, "the DDS size is out of range", out);
     }
-    if (texpack_MaxSide() && (width > texpack_MaxSide() || height > texpack_MaxSide())) {
+    if (texpack_max_side() && (width > texpack_max_side() || height > texpack_max_side())) {
         return refuse(file, "the picture is larger than this graphics card can show", out);
     }
     if (flags & DDS_HEADER_FLAGS_VOLUME) {
@@ -225,7 +225,7 @@ int texpack_LoadDds(const uint8_t *data, size_t size, int bcSupported, const cha
             return refuse(file, "this graphics card cannot draw compressed (BC) textures", out);
         }
         blockW = 4;
-        blockBytes = rd__TexelBlockBytes(fmt);
+        blockBytes = rd__texel_block_bytes(fmt);
     } else {
         for (size_t i = 0; i < sizeof(s_layouts) / sizeof(s_layouts[0]); i++) {
             const DdsPixelFormat *l = &s_layouts[i].pf;

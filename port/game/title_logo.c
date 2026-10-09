@@ -49,7 +49,7 @@ void ico_title_logo_update(void)
     int covered = 0;
     if (stage_no == TITLE_STAGE) {
         const int list = ico_mv_title_list_layout();
-        covered = ui_SettingsCoversTitle() || (list >= 0 && current_layout_id == list);
+        covered = ui_settings_covers_title() || (list >= 0 && current_layout_id == list);
     }
     ico_title_logo_step(&s_hidden, stage_no, current_layout_id, covered);
 }

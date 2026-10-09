@@ -16,7 +16,7 @@ static void testFixture(void)
 {
     useConfig("version = 1\n");
     const int mainL = enterMain(1);
-    CHECK(mainL == ui_SettingsPageLayout(UI_PAGE_MAIN), "title: the main page (%d)", mainL);
+    CHECK(mainL == ui_settings_page_layout(UI_PAGE_MAIN), "title: the main page (%d)", mainL);
     CHECK(current_layout_id == mainL, "the main page is current");
     const int viaPause = enterMain(0);
     CHECK(viaPause == mainL, "pause menu: the main page (%d)", viaPause);
@@ -37,8 +37,8 @@ static int i17cDisplayHasWindowMode(void)
     const int mainL = enterMain(0);
 
     openPage(mainL, 0, UI_PAGE_DISPLAY);
-    const int row = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_WINDOW_MODE);
-    return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+    const int row = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_WINDOW_MODE);
+    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
 }
 
 static void testWindowMode(void)
@@ -47,38 +47,41 @@ static void testWindowMode(void)
 
     /* the step wraps through Windowed, Borderless, Fullscreen */
     enterMain(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Windowed") == 0, "default: Windowed");
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Borderless") == 0, "step: Borderless");
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Fullscreen") == 0, "step: Fullscreen");
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_MODE), "Windowed") == 0, "default: Windowed");
+    ui_settings_step(UI_OPT_WINDOW_MODE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_MODE), "Borderless") == 0,
+          "step: Borderless");
+    ui_settings_step(UI_OPT_WINDOW_MODE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_MODE), "Fullscreen") == 0,
+          "step: Fullscreen");
+    ui_settings_step(UI_OPT_WINDOW_MODE, 1);
     ico_video_get(&o);
     CHECK(o.windowMode == ICO_WINDOW_WINDOWED, "step wraps to Windowed (%d)", o.windowMode);
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, -1);
+    ui_settings_step(UI_OPT_WINDOW_MODE, -1);
     ico_video_get(&o);
     CHECK(o.windowMode == ICO_WINDOW_FULLSCREEN, "step back wraps to Fullscreen (%d)",
           o.windowMode);
 
     /* the window's answer is shown and stepped from */
     s_i17cAnswer = ICO_WINDOW_BORDERLESS;
-    ui_SettingsSetWindowModeQuery(fakeI17cMode);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_WINDOW_MODE), "Borderless") == 0, "query: Borderless");
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
+    ui_settings_set_window_mode_query(fakeI17cMode);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_WINDOW_MODE), "Borderless") == 0,
+          "query: Borderless");
+    ui_settings_step(UI_OPT_WINDOW_MODE, 1);
     ico_video_get(&o);
     CHECK(o.windowMode == ICO_WINDOW_FULLSCREEN, "step from the query's Borderless (%d)",
           o.windowMode);
     s_i17cAnswer = ICO_WINDOW_WINDOWED;
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, -1);
+    ui_settings_step(UI_OPT_WINDOW_MODE, -1);
     ico_video_get(&o);
     CHECK(o.windowMode == ICO_WINDOW_FULLSCREEN, "step back from the query's Windowed (%d)",
           o.windowMode);
-    ui_SettingsSetWindowModeQuery(NULL);
+    ui_settings_set_window_mode_query(NULL);
 
     /* the save writes window_mode, and fullscreen for older builds */
     enterMain(0);
-    ui_SettingsStep(UI_OPT_WINDOW_MODE, 1);
-    CHECK(ui_SettingsSave() == 0, "save");
+    ui_settings_step(UI_OPT_WINDOW_MODE, 1);
+    CHECK(ui_settings_save() == 0, "save");
     {
         char p[1100];
         IcoToml *t;
@@ -105,7 +108,7 @@ static void testWindowMode(void)
 }
 
 /* Effects > Cinematic bars, the last switch before Back, On by
-   default, a step flips it live and ui_SettingsSave writes the key; the other
+   default, a step flips it live and ui_settings_save writes the key; the other
    effects keep their value */
 static void testCinematicBars(void)
 {
@@ -114,18 +117,18 @@ static void testCinematicBars(void)
 
     useConfig("version = 1\n");
     enterMain(0);
-    const int n = ui_SettingsPageRows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
+    const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
     CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
               opts[n - 3] == UI_OPT_EFFECT_FOG,
           "bars: the row sits after Fog, before Back (%d rows)", n);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
           "bars: On by default");
     CHECK(ico_video_effect_cinematic_bars() == 1, "bars: the getter reads On");
-    ui_SettingsStep(UI_OPT_EFFECT_CINEMATIC_BARS, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "Off") == 0, "bars: Off");
+    ui_settings_step(UI_OPT_EFFECT_CINEMATIC_BARS, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "Off") == 0, "bars: Off");
     CHECK(ico_video_effect_cinematic_bars() == 0, "bars: the getter reads Off at once");
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_FOG), "On") == 0, "bars: Fog untouched");
-    CHECK(ui_SettingsSave() == 0, "bars: save");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_FOG), "On") == 0, "bars: Fog untouched");
+    CHECK(ui_settings_save() == 0, "bars: save");
     path(p, sizeof(p), "settings_test.toml");
     IcoToml *t = ico_toml_load(p);
     CHECK(t != NULL, "bars: config");
@@ -134,8 +137,9 @@ static void testCinematicBars(void)
               "bars: [video] effect_cinematic_bars false");
         ico_toml_free(t);
     }
-    ui_SettingsStep(UI_OPT_EFFECT_CINEMATIC_BARS, -1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0, "bars: On again");
+    ui_settings_step(UI_OPT_EFFECT_CINEMATIC_BARS, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
+          "bars: On again");
     useConfig("version = 1\n");
 }
 
@@ -158,7 +162,7 @@ static void testItemSelectArg(void)
     const int items[3] = {44, 45, 46};
 
     fakeTables();
-    lt_ext_Reset();
+    lt_ext_reset();
     init_layout_texture(2);
     settle(54, 4);
     lt_switch_layout(layout);
@@ -248,17 +252,17 @@ static const UiGpuDriverHost kGpuHost = {gpuCount,  gpuName,  gpuSelected, gpuSe
 
 static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
 {
-    const int row = ui_SettingsRowOf(page, opt);
-    return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+    const int row = ui_settings_row_of(page, opt);
+    return row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
 }
 
 /* the main page's Graphics driver link: its row, -1 */
 static int an22bLink(void)
 {
     int labels[16];
-    const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
     for (int i = 0; i < n; i++) {
-        if (strcmp(lt_ext_RowText(labels[i]), "Graphics driver") == 0) {
+        if (strcmp(lt_ext_row_text(labels[i]), "Graphics driver") == 0) {
             return labels[i];
         }
     }
@@ -289,9 +293,9 @@ static int an22bIsGame(void)
 /* the text of a row of layout l starting with prefix, -1 */
 static int an22bTextIn(int l, const char *text)
 {
-    const LtProp *lay = lt_ext_Layout(l);
+    const LtProp *lay = lt_ext_layout(l);
     for (int j = lay->first; j < lay->last; j++) {
-        if (strcmp(lt_ext_RowText(j), text) == 0) {
+        if (strcmp(lt_ext_row_text(j), text) == 0) {
             return j;
         }
     }
@@ -300,13 +304,13 @@ static int an22bTextIn(int l, const char *text)
 
 static void testGpuDriver(void)
 {
-    ui_SettingsSetGpuDriverHost(NULL);
-    ui_PopupReset();
+    ui_settings_set_gpu_driver_host(NULL);
+    ui_popup_reset();
 
     /* no host: no link; the Main page is the twelve it was */
     enterMain(1);
     frame(0);
-    CHECK(an22bLink() >= 0 && lt_ext_Prop(an22bLink())->defaultMask,
+    CHECK(an22bLink() >= 0 && lt_ext_prop(an22bLink())->defaultMask,
           "no host: the Graphics driver link is hidden");
 
     /* a host: the link shows after Effects and opens the page */
@@ -314,53 +318,53 @@ static void testGpuDriver(void)
     s_gpuSel = -1;
     s_gpuFailed = -1;
     s_gpuAdreno = 1;
-    ui_SettingsSetGpuDriverHost(&kGpuHost);
+    ui_settings_set_gpu_driver_host(&kGpuHost);
     int mainL = enterMain(1);
     frame(0);
     {
         int labels[16];
-        ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
         const int link = an22bLink();
-        CHECK(link == labels[2] && !lt_ext_Prop(link)->defaultMask,
+        CHECK(link == labels[2] && !lt_ext_prop(link)->defaultMask,
               "host: the link shows after Effects (%d)", link);
-        CHECK(lt_ext_Prop(link)->right == ui_SettingsPageLayout(UI_PAGE_GPU_DRIVER),
+        CHECK(lt_ext_prop(link)->right == ui_settings_page_layout(UI_PAGE_GPU_DRIVER),
               "the link opens the page");
     }
     const int gpuL = openPage(mainL, 2, UI_PAGE_GPU_DRIVER);
-    const int driver = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Built-in") == 0, "Built-in at first");
+    const int driver = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Built-in") == 0, "Built-in at first");
     CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "Add shows on an Adreno");
     CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove is hidden on Built-in");
 
     /* Right steps Built-in, the first, the second, around; each choice goes to the host */
-    lt_ext_Layout(gpuL)->curItem = driver;
+    lt_ext_layout(gpuL)->curItem = driver;
     press(0x2000);
-    CHECK(s_gpuSel == 0 && strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 24.1") == 0,
+    CHECK(s_gpuSel == 0 && strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Turnip 24.1") == 0,
           "Right: the first driver (%d)", s_gpuSel);
     CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove shows on a driver");
-    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    ui_settings_step(UI_OPT_GPU_DRIVER, 1);
     CHECK(s_gpuSel == 1, "Right: the second driver (%d)", s_gpuSel);
-    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    ui_settings_step(UI_OPT_GPU_DRIVER, 1);
     CHECK(s_gpuSel == -1, "Right wraps to Built-in (%d)", s_gpuSel);
-    ui_SettingsStep(UI_OPT_GPU_DRIVER, -1);
+    ui_settings_step(UI_OPT_GPU_DRIVER, -1);
     CHECK(s_gpuSel == 1, "Left wraps to the last driver (%d)", s_gpuSel);
 
     /* the one that did not start keeps its name on the row; the page's note
        says so (a sentence fits there, not in the value box) */
     s_gpuFailed = 1;
     frame(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 25.0") == 0, "failed: %s",
-          ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Turnip 25.0") == 0, "failed: %s",
+          ui_settings_value_text(UI_OPT_GPU_DRIVER));
     {
-        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
-        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "did not start") != NULL,
-              "failed: the note says so (%s)", note >= 0 ? lt_ext_RowText(note) : "-");
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "did not start") != NULL,
+              "failed: the note says so (%s)", note >= 0 ? lt_ext_row_text(note) : "-");
     }
     s_gpuFailed = -1;
     frame(0);
     {
-        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
-        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "Adreno") != NULL,
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Adreno") != NULL,
               "the note is back to the Adreno line");
     }
     /* as the real host leaves it after a failure (gpu_driver_android.c
@@ -369,28 +373,28 @@ static void testGpuDriver(void)
     s_gpuSel = -1;
     s_gpuFailed = 1;
     frame(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Built-in") == 0,
-          "after a failure: Built-in (%s)", ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_GPU_DRIVER), "Built-in") == 0,
+          "after a failure: Built-in (%s)", ui_settings_value_text(UI_OPT_GPU_DRIVER));
     {
-        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
-        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "did not start") != NULL,
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "did not start") != NULL,
               "after a failure: the note says so on Built-in (%s)",
-              note >= 0 ? lt_ext_RowText(note) : "-");
+              note >= 0 ? lt_ext_row_text(note) : "-");
     }
-    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    ui_settings_step(UI_OPT_GPU_DRIVER, 1);
     frame(0);
     CHECK(s_gpuSel == 0 && s_gpuFailed == -1, "a new choice forgets the failure (%d %d)", s_gpuSel,
           s_gpuFailed);
     {
-        const int note = ui_SettingsNoteRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
-        CHECK(note >= 0 && strstr(lt_ext_RowText(note), "Adreno") != NULL,
+        const int note = ui_settings_note_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+        CHECK(note >= 0 && strstr(lt_ext_row_text(note), "Adreno") != NULL,
               "a new choice: the note is the Adreno line again");
     }
 
     /* Add: the picker opens, the page polls every frame until it answers */
     frame(0);
-    const int add = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD);
-    lt_ext_Layout(gpuL)->curItem = add;
+    const int add = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD);
+    lt_ext_layout(gpuL)->curItem = add;
     s_gpuBegins = s_gpuPolls = 0;
     an22bResult(UI_GPU_INSTALL_PENDING, UI_GPU_INSTALL_ADDED);
     press(0x40);
@@ -399,7 +403,7 @@ static void testGpuDriver(void)
         frame(0);
     }
     CHECK(s_gpuPolls == 2, "polled until the answer, then stopped (%d)", s_gpuPolls);
-    CHECK(strcmp(ui_PopupTitle(), "Driver added") == 0, "added: \"%s\"", ui_PopupTitle());
+    CHECK(strcmp(ui_popup_title(), "Driver added") == 0, "added: \"%s\"", ui_popup_title());
 
     static const struct {
         int result;
@@ -409,26 +413,26 @@ static void testGpuDriver(void)
                     {UI_GPU_INSTALL_CANCELLED, ""}};
 
     for (unsigned i = 0; i < sizeof(kAnswers) / sizeof(kAnswers[0]); i++) {
-        ui_PopupReset();
+        ui_popup_reset();
         an22bResult(kAnswers[i].result, kAnswers[i].result);
         press(0x40);
         frame(0);
         frame(0);
-        CHECK(strcmp(ui_PopupTitle(), kAnswers[i].title) == 0, "answer %d: \"%s\"",
-              kAnswers[i].result, ui_PopupTitle());
-        CHECK((kAnswers[i].title[0] != '\0') == ui_PopupActive(), "answer %d: popup or silence",
+        CHECK(strcmp(ui_popup_title(), kAnswers[i].title) == 0, "answer %d: \"%s\"",
+              kAnswers[i].result, ui_popup_title());
+        CHECK((kAnswers[i].title[0] != '\0') == ui_popup_active(), "answer %d: popup or silence",
               kAnswers[i].result);
     }
 
     /* Remove: Built-in is chosen, the host deletes the chosen one, a box says so */
-    ui_PopupReset();
+    ui_popup_reset();
     s_gpuSel = 1;
     frame(0);
-    lt_ext_Layout(gpuL)->curItem = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE);
+    lt_ext_layout(gpuL)->curItem = ui_settings_row_of(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE);
     press(0x40);
     CHECK(s_gpuRemoved == 1 && s_gpuSel == -1, "Remove: driver 1 deleted, Built-in chosen (%d %d)",
           s_gpuRemoved, s_gpuSel);
-    CHECK(strcmp(ui_PopupTitle(), "Driver removed") == 0, "removed: \"%s\"", ui_PopupTitle());
+    CHECK(strcmp(ui_popup_title(), "Driver removed") == 0, "removed: \"%s\"", ui_popup_title());
     frame(0);
     CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove hides again");
 
@@ -438,7 +442,7 @@ static void testGpuDriver(void)
     frame(0);
     CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "non-Adreno: Add is hidden");
     s_gpuBegins = 0;
-    lt_ext_Layout(gpuL)->curItem = add;
+    lt_ext_layout(gpuL)->curItem = add;
     press(0x40);
     CHECK(s_gpuBegins == 0, "a hidden Add does nothing");
     press(0x10);
@@ -446,13 +450,13 @@ static void testGpuDriver(void)
     for (int k = 0; k < 4; k++) {
         frame(0); /* the main page refreshes */
     }
-    CHECK(an22bLink() >= 0 && lt_ext_Prop(an22bLink())->defaultMask,
+    CHECK(an22bLink() >= 0 && lt_ext_prop(an22bLink())->defaultMask,
           "non-Adreno: the Graphics driver link is hidden");
     s_gpuAdreno = 1;
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
-    CHECK(an22bLink() >= 0 && !lt_ext_Prop(an22bLink())->defaultMask,
+    CHECK(an22bLink() >= 0 && !lt_ext_prop(an22bLink())->defaultMask,
           "Adreno again: the link shows");
 
     /* the Main page with the link and Developer mode: thirteen rows fit */
@@ -462,9 +466,9 @@ static void testGpuDriver(void)
     }
     {
         int labels[16], prev = -1, shown = 0, last = -1;
-        const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
         for (int i = 0; i < n; i++) {
-            const LtProperty *r = lt_ext_Prop(labels[i]);
+            const LtProperty *r = lt_ext_prop(labels[i]);
             if (r->defaultMask) {
                 continue;
             }
@@ -475,15 +479,15 @@ static void testGpuDriver(void)
             shown++;
         }
         CHECK(shown == 13, "thirteen rows shown (%d)", shown);
-        CHECK(last >= 0 && lt_ext_Prop(last)->dispY == 40 + 12 * 12 &&
-                  lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
-              "Back at %d ends at %d", last >= 0 ? lt_ext_Prop(last)->dispY : -1,
-              last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+        CHECK(last >= 0 && lt_ext_prop(last)->dispY == 40 + 12 * 12 &&
+                  lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
+              "Back at %d ends at %d", last >= 0 ? lt_ext_prop(last)->dispY : -1,
+              last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
     }
     ico_opt_set_developer_mode(0);
-    ui_SettingsSetGpuDriverHost(NULL);
+    ui_settings_set_gpu_driver_host(NULL);
     frame(0);
-    CHECK(lt_ext_Prop(an22bLink())->defaultMask, "the host removed: the link hides again");
+    CHECK(lt_ext_prop(an22bLink())->defaultMask, "the host removed: the link hides again");
 
     /* the strings, in all five languages */
     static const UiStrId kIds[] = {
@@ -495,10 +499,10 @@ static void testGpuDriver(void)
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     for (int l = 0; l < 5; l++) {
         for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
-            CHECK(ui_StrIn(kLangs[l], kIds[i])[0] != '\0', "language %d, string %d", l, kIds[i]);
+            CHECK(ui_str_in(kLangs[l], kIds[i])[0] != '\0', "language %d, string %d", l, kIds[i]);
         }
     }
-    CHECK(strcmp(ui_StrIn(UI_LANG_ES, UI_STR_QUIT_GAME_CONFIRM), "\xC2\xBFSalir del juego?") == 0,
+    CHECK(strcmp(ui_str_in(UI_LANG_ES, UI_STR_QUIT_GAME_CONFIRM), "\xC2\xBFSalir del juego?") == 0,
           "Spanish question");
 }
 
@@ -510,20 +514,20 @@ static void testQuitGame(void)
     for (int game = 0; game < 2; game++) {
         useConfig("version = 1\n");
         fakeTables();
-        lt_ext_Reset();
-        ui_SettingsReset();
+        lt_ext_reset();
+        ui_settings_reset();
         memset(pad, 0, sizeof(pad));
         pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
         NonLinearCameraMove = 2;
         s_an22bQuits = 0;
         s_an22bGame = game;
-        ui_SettingsSetQuitHandler(an22bQuit);
-        ui_SettingsSetQuitIsGame(game ? an22bIsGame : NULL);
+        ui_settings_set_quit_handler(an22bQuit);
+        ui_settings_set_quit_is_game(game ? an22bIsGame : NULL);
         init_layout_texture(2);
         settle(54, 4);
-        const int q13 = ui_SettingsQuitRow(13), ql = ui_QuitScreenLayout();
-        CHECK(strcmp(lt_ext_RowText(q13), kRow[game]) == 0, "game %d: the row is \"%s\"", game,
-              lt_ext_RowText(q13));
+        const int q13 = ui_settings_quit_row(13), ql = ui_quit_screen_layout();
+        CHECK(strcmp(lt_ext_row_text(q13), kRow[game]) == 0, "game %d: the row is \"%s\"", game,
+              lt_ext_row_text(q13));
         CHECK(an22bTextIn(ql, kAsk[game]) >= 0, "game %d: the question \"%s\"", game, kAsk[game]);
 
         lt_switch_layout(13);
@@ -538,19 +542,19 @@ static void testQuitGame(void)
     }
 
     /* a hook installed after the menu was built: the labels follow */
-    const int q13 = ui_SettingsQuitRow(13), ql = ui_QuitScreenLayout();
+    const int q13 = ui_settings_quit_row(13), ql = ui_quit_screen_layout();
     s_an22bGame = 0;
-    ui_SettingsSetQuitIsGame(an22bIsGame);
-    CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0 &&
+    ui_settings_set_quit_is_game(an22bIsGame);
+    CHECK(strcmp(lt_ext_row_text(q13), "Quit to desktop") == 0 &&
               an22bTextIn(ql, "Quit to desktop?") >= 0,
           "a hook answering 0 keeps the desktop words");
     s_an22bGame = 1;
-    ui_SettingsSetQuitIsGame(an22bIsGame);
-    CHECK(strcmp(lt_ext_RowText(q13), "Quit game") == 0 && an22bTextIn(ql, "Quit the game?") >= 0,
+    ui_settings_set_quit_is_game(an22bIsGame);
+    CHECK(strcmp(lt_ext_row_text(q13), "Quit game") == 0 && an22bTextIn(ql, "Quit the game?") >= 0,
           "a late hook answering 1 changes the words");
-    ui_SettingsSetQuitIsGame(NULL);
-    ui_SettingsSetQuitHandler(NULL);
-    CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0,
+    ui_settings_set_quit_is_game(NULL);
+    ui_settings_set_quit_handler(NULL);
+    CHECK(strcmp(lt_ext_row_text(q13), "Quit to desktop") == 0,
           "no hook: back to the desktop words");
 }
 
@@ -581,30 +585,30 @@ static void testMouseCamera(void)
     CHECK(b->mouse_camera == 1 && b->mouse_invert_y == 0 && b->mouse_hold == 0.75f,
           "defaults: camera on, not inverted, hold 0.75 (%d, %d, %.2f)", b->mouse_camera,
           b->mouse_invert_y, (double)b->mouse_hold);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_CAMERA), "On") == 0 &&
-              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_INVERT), "Off") == 0,
-          "values: On, Off (%s)", ui_SettingsValueText(UI_OPT_MOUSE_CAMERA));
-    CHECK(strcmp(ui_Str(UI_STR_OPT_MOUSE_INVERT), "Invert mouse up/down") == 0,
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MOUSE_CAMERA), "On") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_MOUSE_INVERT), "Off") == 0,
+          "values: On, Off (%s)", ui_settings_value_text(UI_OPT_MOUSE_CAMERA));
+    CHECK(strcmp(ui_str(UI_STR_OPT_MOUSE_INVERT), "Invert mouse up/down") == 0,
           "the Invert row's label");
     CHECK(b->mouse_camera_speed == 1.0f && b->mouse_full_range == 0 && b->mouse_return == 1,
           "defaults: speed 1, normal range, swings back");
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), "1.0x") == 0 &&
-              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RANGE), "Normal") == 0 &&
-              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RETURN), "On") == 0,
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_MOUSE_SPEED), "1.0x") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_MOUSE_RANGE), "Normal") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_MOUSE_RETURN), "On") == 0,
           "values: 1.0x, Normal, On");
-    CHECK(strcmp(ui_Str(UI_STR_OPT_MOUSE_SPEED), "Mouse camera speed") == 0 &&
-              strcmp(ui_Str(UI_STR_OPT_MOUSE_RANGE), "Mouse camera range") == 0 &&
-              strcmp(ui_Str(UI_STR_OPT_MOUSE_RETURN), "Camera swings back") == 0,
+    CHECK(strcmp(ui_str(UI_STR_OPT_MOUSE_SPEED), "Mouse camera speed") == 0 &&
+              strcmp(ui_str(UI_STR_OPT_MOUSE_RANGE), "Mouse camera range") == 0 &&
+              strcmp(ui_str(UI_STR_OPT_MOUSE_RETURN), "Camera swings back") == 0,
           "the three new labels");
 
     /* each step flips the live table at once; the save writes both keys */
-    ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
-    CHECK(b->mouse_camera == 0 && strcmp(ui_SettingsValueText(UI_OPT_MOUSE_CAMERA), "Off") == 0,
+    ui_settings_step(UI_OPT_MOUSE_CAMERA, 1);
+    CHECK(b->mouse_camera == 0 && strcmp(ui_settings_value_text(UI_OPT_MOUSE_CAMERA), "Off") == 0,
           "Right: the mouse camera off");
-    ui_SettingsStep(UI_OPT_MOUSE_INVERT, -1);
-    CHECK(b->mouse_invert_y == 1 && strcmp(ui_SettingsValueText(UI_OPT_MOUSE_INVERT), "On") == 0,
+    ui_settings_step(UI_OPT_MOUSE_INVERT, -1);
+    CHECK(b->mouse_invert_y == 1 && strcmp(ui_settings_value_text(UI_OPT_MOUSE_INVERT), "On") == 0,
           "Left: inverted");
-    CHECK(ui_SettingsSave() == 0, "save");
+    CHECK(ui_settings_save() == 0, "save");
     path(p, sizeof(p), "settings_test.toml");
     IcoToml *t = ico_toml_load(p);
     CHECK(t && ico_toml_get_bool(t, "input.mouse_camera", 1) == 0 &&
@@ -618,8 +622,8 @@ static void testMouseCamera(void)
     ico_toml_free(t);
     ico_input_reload_bindings(b);
     CHECK(b->mouse_camera == 0 && b->mouse_invert_y == 1, "read back");
-    ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
-    ui_SettingsStep(UI_OPT_MOUSE_INVERT, 1);
+    ui_settings_step(UI_OPT_MOUSE_CAMERA, 1);
+    ui_settings_step(UI_OPT_MOUSE_INVERT, 1);
     CHECK(b->mouse_camera == 1 && b->mouse_invert_y == 0, "stepped back");
 
     /* the speed steps 0.5, 1, 1.5, 2, 3, 5, Instant and stops at the ends */
@@ -627,27 +631,28 @@ static void testMouseCamera(void)
         static const char *const kText[7] = {"0.5x", "1.0x", "1.5x",   "2.0x",
                                              "3.0x", "5.0x", "Instant"};
         for (int i = 2; i < 7; i++) {
-            ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
-            CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
-                  "speed step up to %s (%s)", kText[i], ui_SettingsValueText(UI_OPT_MOUSE_SPEED));
+            ui_settings_step(UI_OPT_MOUSE_SPEED, 1);
+            CHECK(strcmp(ui_settings_value_text(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
+                  "speed step up to %s (%s)", kText[i], ui_settings_value_text(UI_OPT_MOUSE_SPEED));
         }
         CHECK(b->mouse_camera_speed == 10.0f, "Instant is 10");
-        ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
+        ui_settings_step(UI_OPT_MOUSE_SPEED, 1);
         CHECK(b->mouse_camera_speed == 10.0f, "speed stops at Instant");
         for (int i = 5; i >= 0; i--) {
-            ui_SettingsStep(UI_OPT_MOUSE_SPEED, -1);
-            CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
-                  "speed step down to %s (%s)", kText[i], ui_SettingsValueText(UI_OPT_MOUSE_SPEED));
+            ui_settings_step(UI_OPT_MOUSE_SPEED, -1);
+            CHECK(strcmp(ui_settings_value_text(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
+                  "speed step down to %s (%s)", kText[i],
+                  ui_settings_value_text(UI_OPT_MOUSE_SPEED));
         }
-        ui_SettingsStep(UI_OPT_MOUSE_SPEED, -1);
+        ui_settings_step(UI_OPT_MOUSE_SPEED, -1);
         CHECK(b->mouse_camera_speed == 0.5f, "speed stops at 0.5x");
-        ui_SettingsStep(UI_OPT_MOUSE_RANGE, 1);
-        ui_SettingsStep(UI_OPT_MOUSE_RETURN, 1);
+        ui_settings_step(UI_OPT_MOUSE_RANGE, 1);
+        ui_settings_step(UI_OPT_MOUSE_RETURN, 1);
         CHECK(b->mouse_full_range == 1 && b->mouse_return == 0 &&
-                  strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RANGE), "Full") == 0 &&
-                  strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RETURN), "Off") == 0,
+                  strcmp(ui_settings_value_text(UI_OPT_MOUSE_RANGE), "Full") == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_MOUSE_RETURN), "Off") == 0,
               "range Full, swings back Off");
-        CHECK(ui_SettingsSave() == 0, "save the three");
+        CHECK(ui_settings_save() == 0, "save the three");
         t = ico_toml_load(p);
         CHECK(t && ico_toml_get_float(t, "input.mouse_camera_speed", 1.0f) == 0.5f &&
                   ico_toml_get_bool(t, "input.mouse_full_range", 0) == 1 &&
@@ -658,9 +663,9 @@ static void testMouseCamera(void)
         CHECK(b->mouse_camera_speed == 0.5f && b->mouse_full_range == 1 && b->mouse_return == 0,
               "the three read back");
         /* back to the defaults: the keys the file now names are kept */
-        ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
-        ui_SettingsStep(UI_OPT_MOUSE_RANGE, 1);
-        ui_SettingsStep(UI_OPT_MOUSE_RETURN, 1);
+        ui_settings_step(UI_OPT_MOUSE_SPEED, 1);
+        ui_settings_step(UI_OPT_MOUSE_RANGE, 1);
+        ui_settings_step(UI_OPT_MOUSE_RETURN, 1);
         CHECK(b->mouse_camera_speed == 1.0f && b->mouse_full_range == 0 && b->mouse_return == 1,
               "the three back at their defaults");
     }
@@ -670,27 +675,27 @@ static void testMouseCamera(void)
     for (int android = 0; android < 2; android++) {
         ico_video_set_android(android);
         for (int title = 1; title >= 0; title--) {
-            ui_SettingsSetTouchQuery(NULL);
+            ui_settings_set_touch_query(NULL);
             const int mainL = enterMain(title);
             const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
             for (int i = 0; i < 6; i++) {
-                const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, kMouse[i]);
+                const int row = ui_settings_row_of(UI_PAGE_CONTROLS, kMouse[i]);
                 const int shown =
-                    row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+                    row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked;
                 CHECK(shown == !android, "android %d, title %d: mouse row %d %s", android, title, i,
                       android ? "hidden" : "shown");
             }
-            const int remap = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_LINK);
-            const int below = lt_ext_Prop(remap)->downItem;
+            const int remap = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_LINK);
+            const int below = lt_ext_prop(remap)->downItem;
             const UiSettingsOpt want = android
                                            ? (title ? UI_OPT_CIRCLE_BACK : UI_OPT_BUTTON_CONFIG)
                                            : (title ? UI_OPT_MOUSE_CAMERA : UI_OPT_BUTTON_CONFIG);
-            CHECK(below == ui_SettingsRowOf(UI_PAGE_CONTROLS, want),
+            CHECK(below == ui_settings_row_of(UI_PAGE_CONTROLS, want),
                   "android %d, title %d: down from Remap (%d)", android, title, below);
             if (!title && !android) {
-                const int hold = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
-                CHECK(lt_ext_Prop(hold)->downItem ==
-                          ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
+                const int hold = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_HOLD_TYPE);
+                CHECK(lt_ext_prop(hold)->downItem ==
+                          ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
                       "pause: Mouse camera after Hold type");
             }
             if (!android) {
@@ -699,8 +704,8 @@ static void testMouseCamera(void)
                                                         UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,
                                                         UI_OPT_CIRCLE_BACK};
                 for (int i = 0; i < 4; i++) {
-                    CHECK(lt_ext_Prop(ui_SettingsRowOf(UI_PAGE_CONTROLS, kOrder[i]))->downItem ==
-                              ui_SettingsRowOf(UI_PAGE_CONTROLS, kOrder[i + 1]),
+                    CHECK(lt_ext_prop(ui_settings_row_of(UI_PAGE_CONTROLS, kOrder[i]))->downItem ==
+                              ui_settings_row_of(UI_PAGE_CONTROLS, kOrder[i + 1]),
                           "title %d: row order after mouse row %d", title, i);
                 }
             }
@@ -714,16 +719,16 @@ static void testMouseCamera(void)
     /* fifteen rows with a touch screen from the pause menu: 11 lines apart
        from 30, the last box inside the 226 lines */
     s_i17aTouch = 1;
-    ui_SettingsSetTouchQuery(i17aTouch);
+    ui_settings_set_touch_query(i17aTouch);
     const int mainL = enterMain(0);
     openPage(mainL, 4, UI_PAGE_CONTROLS);
     for (int k = 0; k < 4; k++) {
         frame(0);
     }
     int labels[16], n = 0, prev = -1, last = -1;
-    const int c = ui_SettingsPageRows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
+    const int c = ui_settings_page_rows(UI_PAGE_CONTROLS, labels, NULL, NULL, 16);
     for (int i = 0; i < c; i++) {
-        const LtProperty *r = lt_ext_Prop(labels[i]);
+        const LtProperty *r = lt_ext_prop(labels[i]);
         if (r->defaultMask) {
             continue;
         }
@@ -734,20 +739,20 @@ static void testMouseCamera(void)
         n++;
     }
     CHECK(n == 15, "fifteen rows shown (%d)", n);
-    CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+    CHECK(last >= 0 && lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH <= 226,
           "fifteen rows: the last box ends at %d",
-          last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+          last >= 0 ? lt_ext_prop(last)->dispY + lt_ext_prop(last)->dispH : -1);
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");
-    ui_SettingsSetTouchQuery(NULL);
+    ui_settings_set_touch_query(NULL);
 }
 
 /* the title run unseen while Options is to reopen */
 static int rowsMasked(int layout, int want)
 {
-    const LtProp *lp = lt_ext_Layout(layout);
+    const LtProp *lp = lt_ext_layout(layout);
     for (int r = lp->first; r < lp->last; r++) {
-        if (lt_ext_Prop(r)->masked != want) {
+        if (lt_ext_prop(r)->masked != want) {
             return 0;
         }
     }
@@ -760,53 +765,55 @@ static void testTitleReturn(void)
         enterMain(1);
         lt_switch_layout(title);
         CHECK(settle(title, 60), "the title %d", title);
-        const int opt = ui_SettingsEntryRow(title), quit = ui_SettingsQuitRow(title);
+        const int opt = ui_settings_entry_row(title), quit = ui_settings_quit_row(title);
 
         /* nothing pending: the entry rows follow the mask, nothing else */
-        CHECK(!ui_SettingsTitleReturnPending() && !ui_SettingsCoversTitle(),
+        CHECK(!ui_settings_title_return_pending() && !ui_settings_covers_title(),
               "%d: nothing pending, the logo shows", title);
-        ui_SettingsTitleMask(1);
-        CHECK(!ui_SettingsTitleDecided() && lt_ext_Prop(opt)->masked && lt_ext_Prop(quit)->masked,
+        ui_settings_title_mask(1);
+        CHECK(!ui_settings_title_decided() && lt_ext_prop(opt)->masked && lt_ext_prop(quit)->masked,
               "%d: unchanged: the entry rows masked", title);
-        ui_SettingsTitleMask(0);
-        CHECK(ui_SettingsTitleDecided() && !lt_ext_Prop(opt)->masked && !lt_ext_Prop(quit)->masked,
+        ui_settings_title_mask(0);
+        CHECK(ui_settings_title_decided() && !lt_ext_prop(opt)->masked &&
+                  !lt_ext_prop(quit)->masked,
               "%d: unchanged: unmasked once decided", title);
-        CHECK(ui_SettingsEntryItem(51) == 0 && ui_SettingsEntryItem(opt) == 1,
+        CHECK(ui_settings_entry_item(51) == 0 && ui_settings_entry_item(opt) == 1,
               "%d: unchanged: only the entry rows", title);
 
         /* armed: the logo is down from this frame, the rows masked, no confirm */
-        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
-        CHECK(ui_SettingsTitleReturnPending() && ui_SettingsCoversTitle(), "%d: armed covers",
+        ui_settings_title_return(UI_PAGE_EXTRAS);
+        CHECK(ui_settings_title_return_pending() && ui_settings_covers_title(), "%d: armed covers",
               title);
-        CHECK(ui_SettingsEntryItem(51) == 1 && ui_SettingsEntryItem(0) == 1,
+        CHECK(ui_settings_entry_item(51) == 1 && ui_settings_entry_item(0) == 1,
               "%d: every item is an entry item while pending", title);
         lt_item_select_disable = 0;
-        ui_SettingsTitleMask(1);
-        CHECK(rowsMasked(title, 1) && lt_ext_Prop(opt)->masked && lt_ext_Prop(quit)->masked &&
-                  lt_item_select_disable == 1 && !ui_SettingsTitleDecided(),
+        ui_settings_title_mask(1);
+        CHECK(rowsMasked(title, 1) && lt_ext_prop(opt)->masked && lt_ext_prop(quit)->masked &&
+                  lt_item_select_disable == 1 && !ui_settings_title_decided(),
               "%d: TitleMask(1): rows masked, selection disabled, undecided", title);
         lt_item_select_disable = 0;
-        ui_SettingsTitleMask(0);
-        CHECK(rowsMasked(title, 1) && lt_ext_Prop(opt)->masked && lt_item_select_disable == 1 &&
-                  ui_SettingsTitleDecided(),
+        ui_settings_title_mask(0);
+        CHECK(rowsMasked(title, 1) && lt_ext_prop(opt)->masked && lt_item_select_disable == 1 &&
+                  ui_settings_title_decided(),
               "%d: TitleMask(0): still masked, decided", title);
 
         /* cancelled */
-        ui_SettingsTitleReturn(-1);
-        CHECK(!ui_SettingsTitleReturnPending() && !ui_SettingsCoversTitle() &&
-                  ui_SettingsEntryItem(51) == 0,
+        ui_settings_title_return(-1);
+        CHECK(!ui_settings_title_return_pending() && !ui_settings_covers_title() &&
+                  ui_settings_entry_item(51) == 0,
               "%d: cancelled: the logo and the confirms are back", title);
 
         /* the reopen ends it; Back from Main returns to this title layout */
-        ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
-        ui_SettingsTitleMask(0);
-        const int exL = ui_SettingsReopenPage(UI_PAGE_EXTRAS);
-        CHECK(exL >= 0 && !ui_SettingsTitleReturnPending(), "%d: the reopen clears pending", title);
-        CHECK(ui_SettingsCoversTitle(), "%d: the logo stays down through the switch", title);
+        ui_settings_title_return(UI_PAGE_EXTRAS);
+        ui_settings_title_mask(0);
+        const int exL = ui_settings_reopen_page(UI_PAGE_EXTRAS);
+        CHECK(exL >= 0 && !ui_settings_title_return_pending(), "%d: the reopen clears pending",
+              title);
+        CHECK(ui_settings_covers_title(), "%d: the logo stays down through the switch", title);
         lt_switch_layout(exL);
-        CHECK(settle(exL, 60) && ui_SettingsCoversTitle(), "%d: Extras up", title);
+        CHECK(settle(exL, 60) && ui_settings_covers_title(), "%d: Extras up", title);
         press(0x10);
-        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_MAIN), 60), "%d: Back: Main", title);
+        CHECK(settle(ui_settings_page_layout(UI_PAGE_MAIN), 60), "%d: Back: Main", title);
         press(0x10);
         CHECK(settle(title, 60), "%d: Back: the title layout (%d)", title, current_layout_id);
     }
@@ -820,14 +827,14 @@ static int s_i17bDeciding;
 
 /* a title proc as layout_action.c's while the memory card check runs: the
    item select off; the rows shown (the real procs mask the Settings rows
-   too while deciding, ui_SettingsTitleMask, which would hide the flag's
+   too while deciding, ui_settings_title_mask, which would hide the flag's
    effect here) */
 static int i17bTitleProc(int first, int item)
 {
     (void)first;
     (void)item;
     lt_mask_property(51, 0);
-    ui_SettingsTitleMask(0);
+    ui_settings_title_mask(0);
     if (s_i17bDeciding) {
         lt_item_select_disable = 1;
     }
@@ -840,7 +847,7 @@ static void mouseFrameWith(int flags)
 {
     pad[0].flags = flags;
     pad[0].now = flags;
-    ui_MouseTick();
+    ui_mouse_tick();
     frame(pad[0].flags);
 }
 
@@ -852,7 +859,7 @@ static void mouseFrame(void)
 /* the pointer on the middle of row j (or dx grid pixels off it) */
 static void pointAtOff(int j, float dx)
 {
-    const LtProperty *e = lt_ext_Prop(j);
+    const LtProperty *e = lt_ext_prop(j);
     const int w = e->dispW ? e->dispW : e->texW;
     const int h = e->dispH ? e->dispH : e->texH;
     const float gx = (e->centerX ? 320.0f : (float)e->dispX + (float)w * 0.5f) + dx;
@@ -875,9 +882,9 @@ static void click(void)
 static int i17bMainIndex(int strId)
 {
     int labels[16];
-    const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    const int n = ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
     for (int i = 0; i < n; i++) {
-        if (strcmp(lt_ext_RowText(labels[i]), ui_Str((UiStrId)strId)) == 0) {
+        if (strcmp(lt_ext_row_text(labels[i]), ui_str((UiStrId)strId)) == 0) {
             return i;
         }
     }
@@ -887,9 +894,9 @@ static int i17bMainIndex(int strId)
 /* the arrow of the value of label in layout l with role, -1 */
 static int i17bArrow(int l, int label, int role)
 {
-    const LtProp *lay = lt_ext_Layout(l);
+    const LtProp *lay = lt_ext_layout(l);
     for (int j = lay->first; j < lay->last; j++) {
-        if (lt_ext_Prop(j)->ownerItem == label && lt_ext_PointerRole(j) == role) {
+        if (lt_ext_prop(j)->ownerItem == label && lt_ext_pointer_role(j) == role) {
             return j;
         }
     }
@@ -901,21 +908,21 @@ static void testPointer(void)
     char before[64], after[64];
     int labels[16];
 
-    ui_MouseReset();
-    ui_MouseSetView(640, 480, 0, 0, 640, 480);
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
 
     /* play (layout 54) is no menu */
     useConfig("version = 1\n");
     fakeTables();
-    lt_ext_Reset();
-    ui_SettingsReset();
+    lt_ext_reset();
+    ui_settings_reset();
     memset(pad, 0, sizeof(pad));
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     init_layout_texture(2);
     settle(54, 4);
     ico_pointer_move(0.5f, 0.5f);
     mouseFrame();
-    CHECK(!ui_MouseMenuActive() && !ico_pointer_menu(), "layout 54: no menu");
+    CHECK(!ui_mouse_menu_active() && !ico_pointer_menu(), "layout 54: no menu");
 
     /* the title while its memory card check runs: the item select off, so
        pointing at the Settings row moves nothing until it is decided */
@@ -925,7 +932,7 @@ static void testPointer(void)
     s_i17bDeciding = 1;
     mouseFrame();
     mouseFrame();
-    const int entry = ui_SettingsEntryRow(13);
+    const int entry = ui_settings_entry_row(13);
     CHECK(texLayout[13].curItem == 51, "the title on New Game (%d)", texLayout[13].curItem);
     CHECK(ico_pointer_menu() == 1, "the title is a menu");
     pointAt(entry);
@@ -945,17 +952,17 @@ static void testPointer(void)
     const int iDisp = i17bMainIndex(UI_STR_SECTION_DISPLAY);
     const int iAch = i17bMainIndex(UI_STR_SECTION_ACHIEVEMENTS);
     const int iCtl = i17bMainIndex(UI_STR_SECTION_CONTROLS);
-    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
     CHECK(iDisp >= 0 && iAch >= 0 && iCtl >= 0, "the main page's rows (%d %d %d)", iDisp, iAch,
           iCtl);
-    lt_ext_Layout(mainL)->curItem = labels[iCtl];
+    lt_ext_layout(mainL)->curItem = labels[iCtl];
     mouseFrame();
     mouseFrame();
-    CHECK(ico_pointer_menu() == 1 && ui_MouseMenuActive(), "the main page is a menu");
+    CHECK(ico_pointer_menu() == 1 && ui_mouse_menu_active(), "the main page is a menu");
     pointAt(labels[iDisp]);
     mouseFrame();
-    CHECK(lt_ext_Layout(mainL)->curItem == labels[iDisp], "hover: the cursor on Display (%d)",
-          lt_ext_Layout(mainL)->curItem);
+    CHECK(lt_ext_layout(mainL)->curItem == labels[iDisp], "hover: the cursor on Display (%d)",
+          lt_ext_layout(mainL)->curItem);
     CHECK(current_layout_id == mainL, "hover opens nothing");
     click();
     mouseFrame();
@@ -963,60 +970,61 @@ static void testPointer(void)
     /* nothing while the layout fades */
     pointAt(labels[iCtl]);
     mouseFrame();
-    CHECK(lt_ext_Layout(mainL)->curItem == labels[iDisp], "fading: the cursor stays (%d)",
-          lt_ext_Layout(mainL)->curItem);
-    const int dispL = ui_SettingsPageLayout(UI_PAGE_DISPLAY);
+    CHECK(lt_ext_layout(mainL)->curItem == labels[iDisp], "fading: the cursor stays (%d)",
+          lt_ext_layout(mainL)->curItem);
+    const int dispL = ui_settings_page_layout(UI_PAGE_DISPLAY);
     CHECK(settle(dispL, 60), "click: Display opens (%d)", current_layout_id);
 
     /* Aspect's arrows: Right as the pad's Right, Left back; the value
        itself steps as Right */
-    const int aspect = ui_SettingsRowOf(UI_PAGE_DISPLAY, UI_OPT_ASPECT);
+    const int aspect = ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_ASPECT);
     const int left = i17bArrow(dispL, aspect, LT_POINTER_LEFT);
     const int right = i17bArrow(dispL, aspect, LT_POINTER_RIGHT);
     CHECK(aspect >= 0 && left >= 0 && right >= 0, "Aspect and its arrows (%d %d %d)", aspect, left,
           right);
     mouseFrame();
     mouseFrame();
-    snprintf(before, sizeof(before), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
+    snprintf(before, sizeof(before), "%s", ui_settings_value_text(UI_OPT_ASPECT));
     pointAt(right);
     click();
     mouseFrame();
     frame(0);
     frame(0);
-    snprintf(after, sizeof(after), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
-    CHECK(lt_ext_Layout(dispL)->curItem == aspect, "the arrow's click: the cursor on Aspect (%d)",
-          lt_ext_Layout(dispL)->curItem);
+    snprintf(after, sizeof(after), "%s", ui_settings_value_text(UI_OPT_ASPECT));
+    CHECK(lt_ext_layout(dispL)->curItem == aspect, "the arrow's click: the cursor on Aspect (%d)",
+          lt_ext_layout(dispL)->curItem);
     CHECK(strcmp(before, after) != 0, "the right arrow steps Aspect (%s)", after);
     pointAt(left);
     click();
     mouseFrame();
     frame(0);
     frame(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), before) == 0,
-          "the left arrow steps it back (%s, want %s)", ui_SettingsValueText(UI_OPT_ASPECT),
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), before) == 0,
+          "the left arrow steps it back (%s, want %s)", ui_settings_value_text(UI_OPT_ASPECT),
           before);
     press(0x2000);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), after) == 0,
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), after) == 0,
           "the pad's Right gives what the right arrow gave (%s, want %s)",
-          ui_SettingsValueText(UI_OPT_ASPECT), after);
+          ui_settings_value_text(UI_OPT_ASPECT), after);
     press(0x8000);
     int opts[16], values[16];
-    const int nd = ui_SettingsPageRows(UI_PAGE_DISPLAY, labels, opts, values, 16);
+    const int nd = ui_settings_page_rows(UI_PAGE_DISPLAY, labels, opts, values, 16);
     int value = -1;
     for (int i = 0; i < nd; i++) {
         if (labels[i] == aspect) {
             value = values[i];
         }
     }
-    CHECK(value >= 0 && lt_ext_PointerRole(value) == LT_POINTER_STEP, "Aspect's value (%d)", value);
+    CHECK(value >= 0 && lt_ext_pointer_role(value) == LT_POINTER_STEP, "Aspect's value (%d)",
+          value);
     pointAt(value);
     click();
     mouseFrame();
     frame(0);
     frame(0);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ASPECT), after) == 0,
-          "a click on the value steps as Right (%s, want %s)", ui_SettingsValueText(UI_OPT_ASPECT),
-          after);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), after) == 0,
+          "a click on the value steps as Right (%s, want %s)",
+          ui_settings_value_text(UI_OPT_ASPECT), after);
     pointAt(left);
     click();
     mouseFrame();
@@ -1024,31 +1032,31 @@ static void testPointer(void)
     frame(0);
 
     /* a click on empty space: nothing */
-    snprintf(before, sizeof(before), "%s", ui_SettingsValueText(UI_OPT_ASPECT));
-    const int cur = lt_ext_Layout(dispL)->curItem;
+    snprintf(before, sizeof(before), "%s", ui_settings_value_text(UI_OPT_ASPECT));
+    const int cur = lt_ext_layout(dispL)->curItem;
     ico_pointer_move(4.0f / 640.0f, 0.5f);
     click();
     pad[0].flags = 0;
-    ui_MouseTick();
+    ui_mouse_tick();
     CHECK(pad[0].flags == 0, "empty space: no button (0x%x)", (unsigned)pad[0].flags);
     frame(pad[0].flags);
     frame(0);
-    CHECK(current_layout_id == dispL && lt_ext_Layout(dispL)->curItem == cur &&
-              strcmp(ui_SettingsValueText(UI_OPT_ASPECT), before) == 0,
+    CHECK(current_layout_id == dispL && lt_ext_layout(dispL)->curItem == cur &&
+              strcmp(ui_settings_value_text(UI_OPT_ASPECT), before) == 0,
           "empty space: nothing changed (%d, %d)", current_layout_id,
-          lt_ext_Layout(dispL)->curItem);
+          lt_ext_layout(dispL)->curItem);
 
     /* a key or pad press hides the pointer, a move shows it again */
     mouseFrame();
     mouseFrame();
-    CHECK(ui_MouseMenuActive(), "shown before the press");
+    CHECK(ui_mouse_menu_active(), "shown before the press");
     mouseFrameWith(0x4000);
-    CHECK(!ui_MouseMenuActive() && ico_pointer_menu(), "a pad press hides the pointer");
+    CHECK(!ui_mouse_menu_active() && ico_pointer_menu(), "a pad press hides the pointer");
     mouseFrame();
-    CHECK(!ui_MouseMenuActive(), "still hidden");
+    CHECK(!ui_mouse_menu_active(), "still hidden");
     ico_pointer_move(0.5f, 0.5f);
     mouseFrame();
-    CHECK(ui_MouseMenuActive(), "a move shows it");
+    CHECK(ui_mouse_menu_active(), "a move shows it");
 
     /* the wheel on Achievements: Down, a notch a move */
     press(0x10);
@@ -1058,16 +1066,16 @@ static void testPointer(void)
     mouseFrame();
     ico_pointer_wheel(-1.0f);
     pad[0].flags = 0;
-    ui_MouseTick();
+    ui_mouse_tick();
     CHECK(pad[0].flags == 0x4000, "the wheel down: Down (0x%x)", (unsigned)pad[0].flags);
     frame(pad[0].flags);
     ico_pointer_wheel(-1.0f);
     pad[0].flags = 0;
-    ui_MouseTick();
+    ui_mouse_tick();
     CHECK(pad[0].flags == 0, "the next notch waits a tick (0x%x)", (unsigned)pad[0].flags);
     frame(pad[0].flags);
     pad[0].flags = 0;
-    ui_MouseTick();
+    ui_mouse_tick();
     CHECK(pad[0].flags == 0x4000, "then Down (0x%x)", (unsigned)pad[0].flags);
     frame(pad[0].flags);
     frame(0); /* the two frames after a move clear the pad */
@@ -1078,28 +1086,28 @@ static void testPointer(void)
     /* the remap screen waiting for a press: a click is bound, not chosen */
     openPage(mainL, iCtl, UI_PAGE_CONTROLS);
     press(0x40); /* Remap controls */
-    const int remapL = ui_SettingsPageLayout(UI_PAGE_REMAP);
+    const int remapL = ui_settings_page_layout(UI_PAGE_REMAP);
     CHECK(settle(remapL, 60), "pointer: the remap screen");
     press(0x40); /* the capture */
     frame(0);
-    CHECK(ui_SettingsCapturing(), "the capture waits");
-    ui_SettingsPageRows(UI_PAGE_REMAP, labels, NULL, NULL, 16);
-    const int capCur = lt_ext_Layout(remapL)->curItem;
+    CHECK(ui_settings_capturing(), "the capture waits");
+    ui_settings_page_rows(UI_PAGE_REMAP, labels, NULL, NULL, 16);
+    const int capCur = lt_ext_layout(remapL)->curItem;
     pointAt(labels[2]);
     click();
     pad[0].flags = 0;
-    ui_MouseTick();
-    CHECK(pad[0].flags == 0 && lt_ext_Layout(remapL)->curItem == capCur,
+    ui_mouse_tick();
+    CHECK(pad[0].flags == 0 && lt_ext_layout(remapL)->curItem == capCur,
           "capturing: no Cross, no move (0x%x, %d)", (unsigned)pad[0].flags,
-          lt_ext_Layout(remapL)->curItem);
+          lt_ext_layout(remapL)->curItem);
     frame(0);
 
-    ui_SettingsReset();
-    ui_MouseReset();
+    ui_settings_reset();
+    ui_mouse_reset();
 }
 
 /* Gameplay > Achievement pop-ups: the last switch before Back, On by
-   default, a step flips the pop-ups live, ui_SettingsSave writes [game]
+   default, a step flips the pop-ups live, ui_settings_save writes [game]
    achievements only after a change, and a step back reads On again */
 static void testAchievementPopups(void)
 {
@@ -1110,22 +1118,22 @@ static void testAchievementPopups(void)
     useConfig("version = 1\n");
     ico_ach_set_popups(1);
     enterMain(0);
-    const int n = ui_SettingsPageRows(UI_PAGE_GAMEPLAY, rows, opts, NULL, 16);
+    const int n = ui_settings_page_rows(UI_PAGE_GAMEPLAY, rows, opts, NULL, 16);
     CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_ACH_POPUPS &&
               opts[n - 3] == UI_OPT_PLAYERS,
           "pop-ups: the row sits after Players, before Back (%d rows)", n);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On by default");
-    CHECK(ui_SettingsSave() == 0, "pop-ups: save without a change");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On by default");
+    CHECK(ui_settings_save() == 0, "pop-ups: save without a change");
     path(p, sizeof(p), "settings_test.toml");
     t = ico_toml_load(p);
     if (t) {
         CHECK(!ico_toml_has(t, "game.achievements"), "pop-ups: no key written unchanged");
         ico_toml_free(t);
     }
-    ui_SettingsStep(UI_OPT_ACH_POPUPS, 1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "Off") == 0, "pop-ups: Off");
+    ui_settings_step(UI_OPT_ACH_POPUPS, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "Off") == 0, "pop-ups: Off");
     CHECK(ico_ach_popups_enabled() == 0, "pop-ups: the getter reads Off at once");
-    CHECK(ui_SettingsSave() == 0, "pop-ups: save");
+    CHECK(ui_settings_save() == 0, "pop-ups: save");
     t = ico_toml_load(p);
     CHECK(t != NULL, "pop-ups: config");
     if (t) {
@@ -1134,8 +1142,8 @@ static void testAchievementPopups(void)
               "pop-ups: [game] achievements false");
         ico_toml_free(t);
     }
-    ui_SettingsStep(UI_OPT_ACH_POPUPS, -1);
-    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On again");
+    ui_settings_step(UI_OPT_ACH_POPUPS, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On again");
     CHECK(ico_ach_popups_enabled() == 1, "pop-ups: the getter reads On again");
     useConfig("version = 1\n");
     ico_ach_set_popups(1);

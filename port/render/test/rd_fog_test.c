@@ -15,7 +15,7 @@
  *   c  the CLUT: the storage order fog_MakeFogClut writes, read through the
  *      CSM1 lookup (index n at storage n with bits 3 and 4 swapped), is the
  *      logical table clut[255 - i] = f(i), and ZFog.c's host path passes
- *      exactly that table to rd_Post;
+ *      exactly that table to rd_post;
  *   r  the recording, in list 4: fog_DrawFog's register writes as rd state in packet
  *      order, the RD_POST_FOG record (sprite corners, UVs, RGBAQ, Z, LUT),
  *      the fogOffsetA sprite and the restores.
@@ -421,7 +421,7 @@ static void logicalLut(int k, uint8_t lut[256 * 4])
 
 /* fogClutPacket is static in ZFog.c: the CLUT words are found in the packet
  * fog_DrawFog's first DMA would send; on the host the packet is not sent,
- * so the storage order is read back from the table ZFog.c hands rd_Post and
+ * so the storage order is read back from the table ZFog.c hands rd_post and
  * from a CSM1 lookup of an independently swizzled copy */
 static void checkClut(int k, const uint8_t *got)
 {
@@ -475,7 +475,7 @@ static const RdCmd *nextCmd(const RdCmdList *cl, uint32_t *i, uint8_t type, cons
 static void expectTest(const RdCmdList *cl, uint32_t *i, uint64_t gs, const char *what)
 {
     const RdCmd *c = nextCmd(cl, i, RDC_TEST, what);
-    const RdTestState t = rd_TestFromGs(gs);
+    const RdTestState t = rd_test_from_gs(gs);
     CHECK(c && c->b[0] == t.ate && c->b[1] == t.atst && c->b[2] == t.aref && c->b[3] == t.afail &&
               c->b[4] == t.date && c->b[5] == t.zte && c->b[6] == t.ztst,
           "%s: TEST 0x%llx", what, (unsigned long long)gs);
@@ -490,7 +490,7 @@ static void expect1(const RdCmdList *cl, uint32_t *i, uint8_t type, int v, const
 static void expectScene(const RdCmdList *cl, uint32_t *i, const char *what)
 {
     const RdCmd *c = nextCmd(cl, i, RDC_TARGET, what);
-    const uint32_t s = rd_Target(RD_TARGET_SCENE).id;
+    const uint32_t s = rd_target(RD_TARGET_SCENE).id;
     CHECK(c && c->u[0] == s && c->u[1] == s && c->u[2] == (W | (H << 16)) &&
               c->b[0] == RD_TARGET_OFFSET,
           "%s: SCENE with its depth, %ux%u", what, W, H);
@@ -509,10 +509,10 @@ static void checkRecording(int k)
     CHECK(dl_GetPri() == 4, "the fog is recorded in list 4");
     CHECK(s_vramResets == resets + 1, "tex_ResetVramPri(4) kept on the host");
     dl_Swap();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     const RdCmdList *cl = &f->lists[4];
     uint32_t i = 0;
-    /* skip the list defaults rd_BeginFrame records */
+    /* skip the list defaults rd_begin_frame records */
     while (i < cl->count && cl->cmds[i].type != RDC_TARGET) {
         i++;
     }
@@ -521,8 +521,8 @@ static void checkRecording(int k)
     const RdCmd *c = nextCmd(cl, &i, RDC_ALPHA, "ALPHA");
     CHECK(c && c->b[0] == RD_BLEND_LERP_AS && c->b[1] == 128, "ALPHA 0x44 FIX 128");
     c = nextCmd(cl, &i, RDC_TEXTURE, "TEX0");
-    const RdTexRec *tr = c ? rd__TexRec(c->u[0]) : NULL;
-    CHECK(tr && tr->kind == RD_TEXKIND_TARGET && tr->target == rd_Target(RD_TARGET_SCENE).id &&
+    const RdTexRec *tr = c ? rd__tex_rec(c->u[0]) : NULL;
+    CHECK(tr && tr->kind == RD_TEXKIND_TARGET && tr->target == rd_target(RD_TARGET_SCENE).id &&
               tr->view == RD_VIEW_DEPTH && c->b[0] == RD_TEXFN_MODULATE && c->b[1] == RD_TCC_RGBA,
           "TEX0: SCENE's depth view, MODULATE, TCC RGBA");
     expect1(cl, &i, RDC_ZWRITE, RD_ZWRITE_OFF, "ZBUF ZMSK");
@@ -576,11 +576,11 @@ static void checkRecording(int k)
     /* fogOn 0: nothing */
     GlobalStageSetting.fogOn = 0;
     dl_SetDLPriority(3);
-    const uint32_t b3 = rd__RecFrame() ? rd__RecFrame()->lists[3].count : 0;
-    const uint32_t b4 = rd__RecFrame() ? rd__RecFrame()->lists[4].count : 0;
+    const uint32_t b3 = rd__rec_frame() ? rd__rec_frame()->lists[3].count : 0;
+    const uint32_t b4 = rd__rec_frame() ? rd__rec_frame()->lists[4].count : 0;
     fog_DrawFog();
-    CHECK(rd__RecFrame() && rd__RecFrame()->lists[3].count == b3 &&
-              rd__RecFrame()->lists[4].count == b4 && dl_GetPri() == 3,
+    CHECK(rd__rec_frame() && rd__rec_frame()->lists[3].count == b3 &&
+              rd__rec_frame()->lists[4].count == b4 && dl_GetPri() == 3,
           "fogOn 0 records nothing");
     dl_Swap();
     /* issue 11: Options > Effects > Fog off records nothing either, and no
@@ -588,15 +588,15 @@ static void checkRecording(int k)
     setFog(k);
     s_fogSwitch = 0;
     dl_SetDLPriority(3);
-    const uint32_t o3 = rd__RecFrame() ? rd__RecFrame()->lists[3].count : 0;
-    const uint32_t o4 = rd__RecFrame() ? rd__RecFrame()->lists[4].count : 0;
+    const uint32_t o3 = rd__rec_frame() ? rd__rec_frame()->lists[3].count : 0;
+    const uint32_t o4 = rd__rec_frame() ? rd__rec_frame()->lists[4].count : 0;
     fog_DrawFog();
-    CHECK(rd__RecFrame() && rd__RecFrame()->lists[3].count == o3 &&
-              rd__RecFrame()->lists[4].count == o4 && dl_GetPri() == 3,
+    CHECK(rd__rec_frame() && rd__rec_frame()->lists[3].count == o3 &&
+              rd__rec_frame()->lists[4].count == o4 && dl_GetPri() == 3,
           "fog off records nothing");
     dl_Swap();
     {
-        const RdFrame *g = rd__LastFrame();
+        const RdFrame *g = rd__last_frame();
         int fogs = 0;
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t j = 0; j < g->lists[l].count; j++) {
@@ -661,13 +661,13 @@ static RdScreenVtx sv(int px, int py, uint32_t z, const uint8_t *rgba)
 static void recordScene(int k)
 {
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, RD_TARGET_OFFSET);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kClear, 1, 0);
-    rd_TextureOff();
-    rd_ABE(0);
-    rd_TestGs(0x30000);
-    rd_ZWrite(1);
-    rd_FBA(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, RD_TARGET_OFFSET);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kClear, 1, 0);
+    rd_texture_off();
+    rd_abe(0);
+    rd_test_gs(0x30000);
+    rd_z_write(1);
+    rd_fba(0);
     for (int c = 0; c < CELLS * CELLS; c++) {
         if (s_cellZ[c] == 0) {
             continue;
@@ -675,7 +675,7 @@ static void recordScene(int k)
         const int x = (c % CELLS) * CELL, y = (c / CELLS) * CELL;
         RdScreenVtx v[2] = {sv(x, y, s_cellZ[c], s_cellCol[c]),
                             sv(x + CELL, y + CELL, s_cellZ[c], s_cellCol[c])};
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
     }
     setFog(k);
     fog_MakeFogClut();
@@ -748,7 +748,7 @@ static void checkPixels(int k, int tol, const char *what)
 static bool readScene(uint8_t *dst)
 {
     uint32_t w = 0, h = 0;
-    bool ok = rd__ReadTarget(rd_Target(RD_TARGET_SCENE), dst, (size_t)W * H * 4, &w, &h) &&
+    bool ok = rd__read_target(rd_target(RD_TARGET_SCENE), dst, (size_t)W * H * 4, &w, &h) &&
               w == W && h == H;
     CHECK(ok, "SCENE readback");
     return ok;
@@ -757,16 +757,16 @@ static bool readScene(uint8_t *dst)
 static void checkDump(void)
 {
     const char *path = "rd_fog_test.rddump";
-    CHECK(rd__DumpFrame(rd__LastFrame(), path), "dump the fog frame");
+    CHECK(rd__dump_frame(rd__last_frame(), path), "dump the fog frame");
     RdFrame g;
     memset(&g, 0, sizeof(g));
-    if (!rd__LoadFrame(path, &g)) {
+    if (!rd__load_frame(path, &g)) {
         CHECK(0, "load the fog frame");
         return;
     }
     static uint8_t again[W * H * 4];
-    CHECK(rd__ReplayFrame(&g, 0, false), "replay the loaded frame");
-    rhi_WaitIdle();
+    CHECK(rd__replay_frame(&g, 0, false), "replay the loaded frame");
+    rhi_wait_idle();
     if (readScene(again)) {
         int diff = 0;
         for (size_t i = 0; i < sizeof(again); i++) {
@@ -775,49 +775,49 @@ static void checkDump(void)
         printf("  (d) dump -> load -> replay: %d bytes differ\n", diff);
         CHECK(diff == 0, "the replayed dump equals the recorded frame");
     }
-    rd__FrameFree(&g);
+    rd__frame_free(&g);
     remove(path);
 }
 
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
     int fog = 0;
-    for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(&keys[j], k);
+            found |= rd__pipe_key_equal(&keys[j], k);
         }
         fog += k->fs == RD_FS_FOG;
         CHECK(found, "created pipeline %u (prog %u vs %u fs %u blend %u) is not enumerated", i,
               k->gs.program, k->vs, k->fs, k->gs.blend);
     }
-    printf("  pipelines: %u created (%d fog), %u reachable\n", rd__PipelineCount(), fog, n);
+    printf("  pipelines: %u created (%d fog), %u reachable\n", rd__pipeline_count(), fog, n);
     /* the fog's LERP takes a colour and an alpha pass in the
      * two-pass blend fallback (rd_fog_nodual) */
-    const int wantFog = rd_NoDual() ? 2 : 1;
+    const int wantFog = rd_no_dual() ? 2 : 1;
     CHECK(fog == wantFog, "%d fog pipeline(s), %d expected", fog, wantFog);
 }
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     printf("rd_fog_test\n");
     checkSwizzle();
 
     /* (c), (r) recording */
-    if (!rd__InitRecordOnly(W, H)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(W, H)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
     for (int k = 0; k < 2; k++) {
         checkRecording(k);
     }
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_fog_test: %d failures\n", failures);
         return 1;
@@ -826,7 +826,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("rd_fog_test: CPU checks ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -846,10 +846,10 @@ int main(void)
     }
 
     checkPipelines();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
     if (failures) {
         printf("rd_fog_test: %d failures\n", failures);
         return 1;

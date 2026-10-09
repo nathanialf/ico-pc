@@ -47,7 +47,7 @@ static UiMouseRow s_rows[ROWS_MAX];
 /* the rows an item link of a candidate names (gatherRows) */
 static unsigned char s_named[ROWS_MAX];
 
-void ui_MouseSetView(int outW, int outH, int boxX, int boxY, int boxW, int boxH)
+void ui_mouse_set_view(int outW, int outH, int boxX, int boxY, int boxW, int boxH)
 {
     if (outW <= 0 || outH <= 0 || boxW <= 0 || boxH <= 0) {
         s_m.haveView = 0;
@@ -62,13 +62,13 @@ void ui_MouseSetView(int outW, int outH, int boxX, int boxY, int boxW, int boxH)
     s_m.view.h = (float)boxH;
 }
 
-void ui_MouseReset(void)
+void ui_mouse_reset(void)
 {
     memset(&s_m, 0, sizeof(s_m));
     ico_pointer_reset();
 }
 
-int ui_MouseMenuActive(void)
+int ui_mouse_menu_active(void)
 {
     return s_m.active && !s_m.hidden;
 }
@@ -77,7 +77,7 @@ int ui_MouseMenuActive(void)
 static int chainOf(int *list)
 {
     int n = 0;
-    for (int l = current_layout_id; l >= 0 && n < CHAIN_MAX; l = lt_ext_Layout(l)->link) {
+    for (int l = current_layout_id; l >= 0 && n < CHAIN_MAX; l = lt_ext_layout(l)->link) {
         list[n++] = l;
     }
     return n;
@@ -92,7 +92,7 @@ static int menuUp(void)
     }
     const int n = chainOf(list);
     for (int i = 0; i < n; i++) {
-        if (lt_ext_Layout(list[i])->curItem >= 0) {
+        if (lt_ext_layout(list[i])->curItem >= 0) {
             return 1;
         }
     }
@@ -109,14 +109,14 @@ static int gatherRows(void)
     int list[CHAIN_MAX];
     int n = 0;
     const int chain = chainOf(list);
-    const int curHas = lt_ext_Layout(current_layout_id)->curItem >= 0;
+    const int curHas = lt_ext_layout(current_layout_id)->curItem >= 0;
     for (int c = 0; c < chain; c++) {
-        const LtProp *lay = lt_ext_Layout(list[c]);
+        const LtProp *lay = lt_ext_layout(list[c]);
         for (int j = lay->first; j < lay->last && n < ROWS_MAX; j++) {
-            const LtProperty *e = lt_ext_Prop(j);
+            const LtProperty *e = lt_ext_prop(j);
             int owner = list[c];
             if (lay->curItem < 0) {
-                if (!lt_ext_IsPortProp(e) || !curHas) {
+                if (!lt_ext_is_port_prop(e) || !curHas) {
                     continue;
                 }
                 owner = current_layout_id;
@@ -133,7 +133,7 @@ static int gatherRows(void)
             r->centerX = e->centerX;
             r->masked = e->masked;
             r->visible = lt_host_property_visible(j);
-            r->role = lt_ext_PointerRole(j);
+            r->role = lt_ext_pointer_role(j);
             r->itemLinks =
                 e->upItem >= 0 || e->downItem >= 0 || e->leftItem >= 0 || e->rightItem >= 0;
             r->ownerItem = e->ownerItem;
@@ -144,7 +144,7 @@ static int gatherRows(void)
        it is) */
     memset(s_named, 0, sizeof(s_named));
     for (int i = 0; i < n; i++) {
-        const LtProperty *e = lt_ext_Prop(s_rows[i].index);
+        const LtProperty *e = lt_ext_prop(s_rows[i].index);
         const int names[4] = {e->upItem, e->downItem, e->leftItem, e->rightItem};
         for (int k = 0; k < 4; k++) {
             if (names[k] >= 0 && names[k] < ROWS_MAX) {
@@ -154,7 +154,7 @@ static int gatherRows(void)
     }
     for (int i = 0; i < n; i++) {
         UiMouseRow *r = &s_rows[i];
-        const LtProp *cl = lt_ext_Layout(r->layout);
+        const LtProp *cl = lt_ext_layout(r->layout);
         r->reachable = (r->index < ROWS_MAX && s_named[r->index]) || r->index == cl->curItem ||
                        r->index == cl->defaultItem;
     }
@@ -164,13 +164,13 @@ static int gatherRows(void)
 static int hitAt(float x, float y, UiMouseHit *hit)
 {
     float gx, gy;
-    if (!s_m.haveView || !ui_MouseToGrid(&s_m.view, x * s_m.outW, y * s_m.outH, &gx, &gy)) {
+    if (!s_m.haveView || !ui_mouse_to_grid(&s_m.view, x * s_m.outW, y * s_m.outH, &gx, &gy)) {
         return 0;
     }
-    return ui_MouseHitTest(s_rows, gatherRows(), gx, gy, hit);
+    return ui_mouse_hit_test(s_rows, gatherRows(), gx, gy, hit);
 }
 
-void ui_MouseTick(void)
+void ui_mouse_tick(void)
 {
     IcoPointerTick t;
     const int used = ico_pointer_take(&t);
@@ -199,7 +199,7 @@ void ui_MouseTick(void)
         s_m.wheelWait--;
     }
     if (!s_m.active || lt_fade_status() != 2 || lt_host_select_disabled() ||
-        ui_SettingsCapturing()) {
+        ui_settings_capturing()) {
         s_m.wheel = 0; /* nothing waits through a fade or into the next screen */
         return;
     }

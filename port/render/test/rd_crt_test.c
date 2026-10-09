@@ -7,7 +7,7 @@
  *             out-of-range values, save and read back
  *   resolve   the modes' table, the overrides (a mask on the maskless
  *             mode, the cylindrical face keeping y flat), the mask's fade
- *             with the box height, rd_CrtSettings
+ *             with the box height, rd_crt_settings
  * On a Vulkan device (77 without one):
  *   off       rd_present_test's rich frame presented at 960 x 720: with the
  *             filter off its bytes are rd_present's recorded hash (llvmpipe),
@@ -23,7 +23,7 @@
  *   phosphors the mask per output pixel, glow and
  *             curvature off: at a 1440 x 1080 box (2.81 output pixels a
  *             source pixel) under a grey frame every box pixel is one
- *             channel only, the one rd__CrtMaskWeight gives its position,
+ *             channel only, the one rd__crt_mask_weight gives its position,
  *             and each source pixel's columns run R, G, B in order; at a
  *             1536 x 1152 box (3 a pixel) a red frame in Trinitron lights
  *             only each pixel's first column, a grey one R, G, B columns;
@@ -39,15 +39,15 @@
  *             each mode as played (glow, curvature, vignette) at a 1440 x
  *             1080 box: no channel brighter than its input in the mode's
  *             linear light, the hue kept, the mask still in a white
- *   top layer rd_SetPresentOverlayTop under the scanlines:
+ *   top layer rd_set_present_overlay_top under the scanlines:
  *             its ctx the output, its solid quad drawn after the filter
  *             (every pixel its flat colour), the main overlay's quad still
  *             in the filtered picture (its rows vary)
  * Without a device, also:
  *   highlights the CPU model of crt_ps over a flat field
- *             (rd__CrtBeam, the mask's weights and gains, rd__CrtStrengthAt,
- *             rd__CrtTriadTop, rd__CrtGainFade, rd__CrtGlowMix,
- *             rd__CrtShoulder): white, light colours and a mid grey in
+ *             (rd__crt_beam, the mask's weights and gains, rd__crt_strength_at,
+ *             rd__crt_triad_top, rd__crt_gain_fade, rd__crt_glow_mix,
+ *             rd__crt_shoulder): white, light colours and a mid grey in
  *             every mode at 2.81, 3 and 2 output pixels a source pixel
  *
  * Usage: rd_crt_test [dir]  (dir: where the scratch config goes)
@@ -175,40 +175,41 @@ static void checkOptions(const char *dir)
 static void checkResolve(void)
 {
     RdCrtParams p;
-    CHECK(!rd__CrtPreset(RD_CRT_OFF, &p) && !rd__CrtPreset(RD_CRT_MODE_COUNT, &p),
+    CHECK(!rd__crt_preset(RD_CRT_OFF, &p) && !rd__crt_preset(RD_CRT_MODE_COUNT, &p),
           "resolve: off and unknown have no parameters");
-    CHECK(rd__CrtPreset(RD_CRT_SCANLINES, &p) && p.mask == RD_CRT_MASK_NONE &&
+    CHECK(rd__crt_preset(RD_CRT_SCANLINES, &p) && p.mask == RD_CRT_MASK_NONE &&
               p.scanline == 0.50f && p.curvX == 0.0f && p.halation == 0.0f,
           "resolve: scanlines: no mask, flat, no glow");
-    CHECK(rd__CrtPreset(RD_CRT_CONSUMER, &p) && p.mask == RD_CRT_MASK_SLOT && p.curvX > 0.0f &&
+    CHECK(rd__crt_preset(RD_CRT_CONSUMER, &p) && p.mask == RD_CRT_MASK_SLOT && p.curvX > 0.0f &&
               p.curvY > p.curvX && p.gammaIn > p.gammaOut,
           "resolve: consumer: slot mask, curved, gamma 2.4 in");
-    CHECK(rd__CrtPreset(RD_CRT_TRINITRON, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvY == 0.0f,
+    CHECK(rd__crt_preset(RD_CRT_TRINITRON, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvY == 0.0f,
           "resolve: trinitron: grille, cylindrical");
     RdCrtParams t;
-    CHECK(rd__CrtPreset(RD_CRT_PVM, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvX == 0.0f &&
-              rd__CrtPreset(RD_CRT_TRINITRON, &t) && p.maskStrength > t.maskStrength &&
+    CHECK(rd__crt_preset(RD_CRT_PVM, &p) && p.mask == RD_CRT_MASK_GRILLE && p.curvX == 0.0f &&
+              rd__crt_preset(RD_CRT_TRINITRON, &t) && p.maskStrength > t.maskStrength &&
               p.beamMin < t.beamMin,
           "resolve: pvm: grille with darker gaps than the Trinitron's, flat, sharper beam");
-    CHECK(rd__CrtPreset(RD_CRT_SHADOW, &p) && p.mask == RD_CRT_MASK_DOTS,
+    CHECK(rd__crt_preset(RD_CRT_SHADOW, &p) && p.mask == RD_CRT_MASK_DOTS,
           "resolve: shadow: dot triads");
-    CHECK(rd__CrtGapColumns(2.8125f) == 0 && rd__CrtGapColumns(3.0f) == 0 &&
-              rd__CrtGapColumns(4.0f) == 1 && rd__CrtGapColumns(5.625f) == 1 &&
-              rd__CrtGapColumns(6.0f) == 2,
+    CHECK(rd__crt_gap_columns(2.8125f) == 0 && rd__crt_gap_columns(3.0f) == 0 &&
+              rd__crt_gap_columns(4.0f) == 1 && rd__crt_gap_columns(5.625f) == 1 &&
+              rd__crt_gap_columns(6.0f) == 2,
           "resolve: a gap column from 4 output pixels a source pixel, two from 6");
-    CHECK(fabsf(rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 0.5f, 0.5f, 0, 0)) < 1e-6f &&
-              fabsf(rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 0) - 0.6f) <
+    CHECK(fabsf(rd__crt_mask_weight(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 0.5f, 0.5f, 0, 0)) < 1e-6f &&
+              fabsf(rd__crt_mask_weight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 0) - 0.6f) <
                   1e-6f &&
-              rd__CrtMaskWeight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 1) == 1.0f,
+              rd__crt_mask_weight(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 0.5f, 0.5f, 0, 1) == 1.0f,
           "resolve: a stripe passes its own channel and leaks 1 - strength of the others");
-    CHECK(
-        fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 3.0f, 0.5f, 10, 0.25f, 0) - 1.5f) < 1e-5f &&
-            rd__CrtTriadGain(RD_CRT_MASK_NONE, 3.0f, 0.5f, 10, 0.25f, 0) == 1.0f &&
-            fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 10, 0.25f, 1) - 3.0f) < 1e-5f &&
-            fabsf(rd__CrtTriadGain(RD_CRT_MASK_GRILLE, 4.0f, 1.0f, 10, 0.25f, 2) - 4.0f) < 1e-5f &&
-            fabsf(rd__CrtRowGain(RD_CRT_MASK_SLOT, 0.5f) - 1.2f) < 1e-5f &&
-            rd__CrtRowGain(RD_CRT_MASK_GRILLE, 0.5f) == 1.0f,
-        "resolve: the gains keep the pixel's light");
+    CHECK(fabsf(rd__crt_triad_gain(RD_CRT_MASK_GRILLE, 3.0f, 0.5f, 10, 0.25f, 0) - 1.5f) < 1e-5f &&
+              rd__crt_triad_gain(RD_CRT_MASK_NONE, 3.0f, 0.5f, 10, 0.25f, 0) == 1.0f &&
+              fabsf(rd__crt_triad_gain(RD_CRT_MASK_GRILLE, 3.0f, 1.0f, 10, 0.25f, 1) - 3.0f) <
+                  1e-5f &&
+              fabsf(rd__crt_triad_gain(RD_CRT_MASK_GRILLE, 4.0f, 1.0f, 10, 0.25f, 2) - 4.0f) <
+                  1e-5f &&
+              fabsf(rd__crt_row_gain(RD_CRT_MASK_SLOT, 0.5f) - 1.2f) < 1e-5f &&
+              rd__crt_row_gain(RD_CRT_MASK_GRILLE, 0.5f) == 1.0f,
+          "resolve: the gains keep the pixel's light");
     {
         /* each triad keeps its pixel's light: a channel's weight times the
            gains, averaged over the output columns its source pixel has and
@@ -227,16 +228,16 @@ static void checkResolve(void)
                             const int n = 600;
                             for (int y = 0; y < n; y++) {
                                 const float v = (y + 0.5f) / n;
-                                const float g = rd__CrtTriadGain(m, rs[i], gaps[gi], sx, v, ch) *
-                                                rd__CrtRowGain(m, gaps[gi]);
+                                const float g = rd__crt_triad_gain(m, rs[i], gaps[gi], sx, v, ch) *
+                                                rd__crt_row_gain(m, gaps[gi]);
                                 for (int x = (int)(sx * rs[i]) - 1;
                                      x <= (int)((sx + 1) * rs[i]) + 1; x++) {
                                     const float px = (x + 0.5f) / rs[i];
                                     if (x < 0 || (int)floorf(px) != sx) {
                                         continue;
                                     }
-                                    sum += rd__CrtMaskWeight(m, rs[i], gaps[gi], px - (float)sx, v,
-                                                             sx & 1, ch) *
+                                    sum += rd__crt_mask_weight(m, rs[i], gaps[gi], px - (float)sx,
+                                                               v, sx & 1, ch) *
                                            g;
                                     cnt++;
                                 }
@@ -253,22 +254,22 @@ static void checkResolve(void)
 
     RdSettings s;
     memset(&s, 0, sizeof(s));
-    rd_CrtSettings(&s, RD_CRT_SCANLINES, 1.5f);
+    rd_crt_settings(&s, RD_CRT_SCANLINES, 1.5f);
     CHECK(s.crtMode == RD_CRT_SCANLINES && s.crtStrength == 1.0f && s.crtScanlines < 0.0f &&
               s.crtCurvature < 0.0f,
-          "resolve: rd_CrtSettings clamps and clears the overrides");
+          "resolve: rd_crt_settings clamps and clears the overrides");
     s.crtMask = 0.4f;
     s.crtCurvature = 0.02f;
-    CHECK(rd__CrtResolve(&s, &p) && p.mask == RD_CRT_MASK_GRILLE && p.maskStrength == 0.4f &&
+    CHECK(rd__crt_resolve(&s, &p) && p.mask == RD_CRT_MASK_GRILLE && p.maskStrength == 0.4f &&
               p.curvX == 0.02f && fabsf(p.curvY - 0.03f) < 1e-6f,
           "resolve: a mask on the maskless mode is a grille; curvature y half as much again");
-    rd_CrtSettings(&s, RD_CRT_TRINITRON, 1.0f);
+    rd_crt_settings(&s, RD_CRT_TRINITRON, 1.0f);
     s.crtCurvature = 0.05f;
     s.crtScanlines = 0.0f;
-    CHECK(rd__CrtResolve(&s, &p) && p.curvX == 0.05f && p.curvY == 0.0f && p.scanline == 0.0f,
+    CHECK(rd__crt_resolve(&s, &p) && p.curvX == 0.05f && p.curvY == 0.0f && p.scanline == 0.0f,
           "resolve: the cylindrical face stays flat vertically; 0 is an override");
-    CHECK(rd__CrtMaskFade(720) == 0.0f && rd__CrtMaskFade(1080) == 1.0f &&
-              rd__CrtMaskFade(1440) == 1.0f && fabsf(rd__CrtMaskFade(900) - 0.5f) < 1e-6f,
+    CHECK(rd__crt_mask_fade(720) == 0.0f && rd__crt_mask_fade(1080) == 1.0f &&
+              rd__crt_mask_fade(1440) == 1.0f && fabsf(rd__crt_mask_fade(900) - 0.5f) < 1e-6f,
           "resolve: the mask fades from 1080 box lines to 720");
 }
 
@@ -291,7 +292,7 @@ static void flatModel(const RdCrtParams *p, const uint8_t rgb[3], float r, float
     for (int c = 0; c < 3; c++) {
         lin[c] = powf(rgb[c] / 255.0f, p->gammaIn);
     }
-    const float ms = p->mask != RD_CRT_MASK_NONE ? rd__CrtStrengthAt(p->maskStrength, lin) : 0.0f;
+    const float ms = p->mask != RD_CRT_MASK_NONE ? rd__crt_strength_at(p->maskStrength, lin) : 0.0f;
     double sum[3] = {0, 0, 0};
     long n = 0, white = 0;
     const int lines = 120;
@@ -305,25 +306,25 @@ static void flatModel(const RdCrtParams *p, const uint8_t rgb[3], float r, float
                 }
                 float col[3], gain[3], top[3];
                 for (int c = 0; c < 3; c++) {
-                    const float beam = rd__CrtBeam(lin[c], d, p->beamMin, p->beamMax) +
-                                       rd__CrtBeam(lin[c], d + 1.0f, p->beamMin, p->beamMax) +
-                                       rd__CrtBeam(lin[c], 1.0f - d, p->beamMin, p->beamMax);
+                    const float beam = rd__crt_beam(lin[c], d, p->beamMin, p->beamMax) +
+                                       rd__crt_beam(lin[c], d + 1.0f, p->beamMin, p->beamMax) +
+                                       rd__crt_beam(lin[c], 1.0f - d, p->beamMin, p->beamMax);
                     col[c] = lin[c] + (beam - lin[c]) * p->scanline;
-                    gain[c] =
-                        rd__CrtTriadGain(p->mask, r, ms, sx, v, c) * rd__CrtRowGain(p->mask, ms);
-                    top[c] = rd__CrtTriadTop(p->mask, r, ms, sx, v, c);
+                    gain[c] = rd__crt_triad_gain(p->mask, r, ms, sx, v, c) *
+                              rd__crt_row_gain(p->mask, ms);
+                    top[c] = rd__crt_triad_top(p->mask, r, ms, sx, v, c);
                 }
                 if (p->mask != RD_CRT_MASK_NONE && fade > 0.0f) {
-                    const float t = rd__CrtGainFade(col, gain, top, fade);
+                    const float t = rd__crt_gain_fade(col, gain, top, fade);
                     for (int c = 0; c < 3; c++) {
                         const float m =
-                            rd__CrtMaskWeight(p->mask, r, ms, fx - (float)sx, v, sx & 1, c) *
+                            rd__crt_mask_weight(p->mask, r, ms, fx - (float)sx, v, sx & 1, c) *
                             (1.0f + (gain[c] - 1.0f) * t);
                         col[c] *= 1.0f + (m - 1.0f) * fade;
                     }
                 }
-                rd__CrtGlowMix(col, lin, lin, p->halation, p->bloom, 1.0f);
-                rd__CrtShoulder(col, 1.0f);
+                rd__crt_glow_mix(col, lin, lin, p->halation, p->bloom, 1.0f);
+                rd__crt_shoulder(col, 1.0f);
                 int all = 1;
                 for (int c = 0; c < 3; c++) {
                     col[c] = col[c] > 1.0f ? 1.0f : col[c];
@@ -368,7 +369,7 @@ static void checkHighlights(void)
     double worstOver = 0.0, worstHue = 0.0, worstFlat = 0.0, dimmest = 9.0, worstMid = 0.0;
     for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
         RdCrtParams p;
-        rd__CrtPreset((RdCrtMode)m, &p);
+        rd__crt_preset((RdCrtMode)m, &p);
         for (int k = 0; k < 3; k++) {
             const float fade = k == 2 ? 0.0f : 1.0f;
             for (int i = 0; i < 6; i++) {
@@ -410,28 +411,28 @@ static void checkHighlights(void)
     CHECK(dimmest > 0.7, "highlights: a white is not left dim (%.3f)", dimmest);
     CHECK(worstMid < 0.04, "highlights: a mid grey keeps its light (worst %.3f)", worstMid);
     float a[3] = {1.0f, 0.5f, 0.25f};
-    rd__CrtShoulder(a, 1.0f);
+    rd__crt_shoulder(a, 1.0f);
     float b[3] = {1.6f, 0.8f, 0.4f};
-    rd__CrtShoulder(b, 1.0f);
+    rd__crt_shoulder(b, 1.0f);
     float g[3] = {0.5f, 0.5f, 0.5f};
-    rd__CrtShoulder(g, 1.0f);
+    rd__crt_shoulder(g, 1.0f);
     CHECK(a[0] < 1.0f && a[0] > 0.95f && fabsf(a[1] / a[0] - 0.5f) < 1e-5f && b[0] < 1.0f &&
               fabsf(b[2] / b[0] - 0.25f) < 1e-5f && g[0] == 0.5f,
           "highlights: the shoulder rolls the brightest channel off below 1, keeps the ratios, "
           "leaves the mid-tones");
     const float col[3] = {0.8f, 0.5f, 0.2f}, gain[3] = {1.5f, 1.5f, 1.5f}, one[3] = {1, 1, 1};
-    const float t = rd__CrtGainFade(col, gain, one, 1.0f);
+    const float t = rd__crt_gain_fade(col, gain, one, 1.0f);
     /* a triad short of its red stripe: red's top is the leak (0.6), its
        gain 1 / 0.6, so red never passes its level and does not hold the
        others back */
     const float shortG[3] = {1.0f / 0.6f, 1.25f, 1.25f}, shortT[3] = {0.6f, 1.0f, 1.0f};
     CHECK(fabsf(0.8f * (1.0f + 0.5f * t) - 1.0f) < 1e-5f &&
-              rd__CrtGainFade((const float[3]){0.2f, 0.2f, 0.2f}, gain, one, 1.0f) == 1.0f &&
-              rd__CrtGainFade((const float[3]){1.0f, 0.2f, 0.2f}, gain, one, 1.0f) == 0.0f &&
-              rd__CrtGainFade((const float[3]){0.7f, 0.7f, 0.7f}, shortG, shortT, 1.0f) == 1.0f,
+              rd__crt_gain_fade((const float[3]){0.2f, 0.2f, 0.2f}, gain, one, 1.0f) == 1.0f &&
+              rd__crt_gain_fade((const float[3]){1.0f, 0.2f, 0.2f}, gain, one, 1.0f) == 0.0f &&
+              rd__crt_gain_fade((const float[3]){0.7f, 0.7f, 0.7f}, shortG, shortT, 1.0f) == 1.0f,
           "highlights: the gains stop where the brightest lit stripe reaches 1");
-    CHECK(rd__CrtTriadTop(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 10, 0.25f, 0) == 1.0f &&
-              rd__CrtTriadTop(RD_CRT_MASK_NONE, 3.0f, 0.4f, 10, 0.25f, 0) == 1.0f,
+    CHECK(rd__crt_triad_top(RD_CRT_MASK_GRILLE, 3.0f, 0.4f, 10, 0.25f, 0) == 1.0f &&
+              rd__crt_triad_top(RD_CRT_MASK_NONE, 3.0f, 0.4f, 10, 0.25f, 0) == 1.0f,
           "highlights: a whole triad's top is its own stripe");
 }
 
@@ -476,7 +477,7 @@ static void sprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t
     const int32_t o = (2048 - 256) * 16;
     RdScreenVtx v[2] = {vtx(o + x0, o + y0, c, (float)u0, (float)v0),
                         vtx(o + x1, o + y1, c, (float)u1, (float)v1)};
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
 }
 
 static uint8_t s_scene[512 * 512 * 4];
@@ -509,66 +510,66 @@ static void recordFrame(RdTex t, int rich)
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     static const uint8_t clr[4] = {0, 0, 0, 0};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(0, 0, 512 * 16, 512 * 16, grey, 8, 8, 512 * 16 + 8, 512 * 16 + 8);
     RdPostParams pp;
     if (rich) {
-        rd_SelectList(2);
+        rd_select_list(2);
         static const uint8_t add[4] = {60, 30, 90, 0xFF};
-        rd_TestGs(RD_TEST_Z_ALWAYS);
-        rd_Blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
-        rd_TextureOff();
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        rd_blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
+        rd_texture_off();
         sprite(100 * 16, 100 * 16, 300 * 16, 200 * 16, add, 0, 0, 0, 0);
-        rd_SelectList(11);
+        rd_select_list(11);
         memset(&pp, 0, sizeof(pp));
         pp.rgba[3] = 0x40;
         pp.rgba[0] = 0x20;
-        rd_Post(RD_POST_FADE, &pp);
+        rd_post(RD_POST_FADE, &pp);
         memset(&pp, 0, sizeof(pp));
         pp.fix = 0x60;
-        rd_Post(RD_POST_LETTERBOX, &pp);
+        rd_post(RD_POST_LETTERBOX, &pp);
         memset(&pp, 0, sizeof(pp));
         pp.rgba[3] = 5;
-        rd_Post(RD_POST_BRIGHTNESS, &pp);
+        rd_post(RD_POST_BRIGHTNESS, &pp);
     }
-    rd_SelectList(12);
+    rd_select_list(12);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = 128;
     pp.rgba[1] = rich ? 120 : 128;
     pp.rgba[2] = rich ? 110 : 128;
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
 }
 
 #define OUT_MAX (1920u * 1440u * 4u)
 
 static uint8_t s_out[OUT_MAX];
 
-/* rd_Init with s, the frame, the present into s_out; false without a device */
+/* rd_init with s, the frame, the present into s_out; false without a device */
 static bool present(const RdSettings *s, int rich)
 {
-    if (!rd_Init(512, 512, s, NULL)) {
+    if (!rd_init(512, 512, s, NULL)) {
         return false;
     }
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordFrame(t, rich);
     uint32_t w = 0, h = 0;
     const size_t n = (size_t)s->outputWidth * s->outputHeight * 4;
-    bool ok = n <= OUT_MAX && rd__ReadPresent(s_out, n, &w, &h) && w == s->outputWidth &&
+    bool ok = n <= OUT_MAX && rd__read_present(s_out, n, &w, &h) && w == s->outputWidth &&
               h == s->outputHeight;
     CHECK(ok, "readback of the %ux%u present", s->outputWidth, s->outputHeight);
-    rd_DestroyTexture(t);
-    rd_Shutdown();
+    rd_destroy_texture(t);
+    rd_shutdown();
     return ok;
 }
 
@@ -606,7 +607,7 @@ static const uint64_t kGold[RD_CRT_MODE_COUNT - 1][2] = {
 static double boxLuma(uint32_t w, uint32_t h)
 {
     RhiRect b;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &b);
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
     double sum = 0.0;
     for (uint32_t y = (uint32_t)b.y; y < (uint32_t)b.y + b.h; y++) {
         for (uint32_t x = (uint32_t)b.x; x < (uint32_t)b.x + b.w; x++) {
@@ -631,14 +632,14 @@ static void checkOff(void)
     }
     for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
         RdSettings z = s;
-        rd_CrtSettings(&z, (RdCrtMode)m, 0.0f);
+        rd_crt_settings(&z, (RdCrtMode)m, 0.0f);
         if (present(&z, 1)) {
             CHECK(fnv(s_out, 960 * 720 * 4) == off, "off: %s at strength 0 is the plain present",
                   kModeName[m]);
         }
     }
     RdSettings o = s;
-    rd_CrtSettings(&o, RD_CRT_OFF, 1.0f);
+    rd_crt_settings(&o, RD_CRT_OFF, 1.0f);
     if (present(&o, 1)) {
         CHECK(fnv(s_out, 960 * 720 * 4) == off, "off: mode off at strength 1 is the plain present");
     }
@@ -651,7 +652,7 @@ static void checkModes(void)
     for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
         for (int k = 0; k < 2; k++) {
             RdSettings s = outputSettings(sizes[k][0], sizes[k][1]);
-            rd_CrtSettings(&s, (RdCrtMode)m, 1.0f);
+            rd_crt_settings(&s, (RdCrtMode)m, 1.0f);
             const size_t n = (size_t)sizes[k][0] * sizes[k][1] * 4;
             if (!present(&s, 1)) {
                 continue;
@@ -678,11 +679,11 @@ static void checkOutside(void)
     makeNoiseScene();
     const uint32_t w = 1280, h = 720;
     RhiRect b;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &b);
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
     CHECK(b.x == 160 && b.w == 960, "outside: the box is columns 160..1119");
     for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
         RdSettings s = outputSettings(w, h);
-        rd_CrtSettings(&s, (RdCrtMode)m, 1.0f);
+        rd_crt_settings(&s, (RdCrtMode)m, 1.0f);
         if (!present(&s, 1)) {
             continue;
         }
@@ -715,7 +716,7 @@ static void checkLuma(void)
             return;
         }
         const double off = boxLuma(w, h);
-        rd_CrtSettings(&s, RD_CRT_SCANLINES, 1.0f);
+        rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
         if (!present(&s, 1)) {
             return;
         }
@@ -739,14 +740,14 @@ static bool phosphors(RdCrtMode mode, uint32_t w, uint32_t h, uint8_t r, uint8_t
 {
     makeFlatScene(r, g, b);
     RdSettings s = outputSettings(w, h);
-    rd_CrtSettings(&s, mode, 1.0f);
+    rd_crt_settings(&s, mode, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
     s.crtMask = mask; /* < 0: the mode's own strength */
     if (flat) {
         s.crtScanlines = 0.0f;
     }
     s_w = w;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &s_box);
+    rd__present_box(w, h, 4.0f / 3.0f, &s_box);
     return present(&s, 0);
 }
 
@@ -782,7 +783,7 @@ static int litChannel(RdCrtParams *p, uint32_t bx, uint32_t by)
     }
     int lit = -1;
     for (int c = 0; c < 3; c++) {
-        if (rd__CrtMaskWeight(p->mask, r, p->maskStrength, f, v, odd, c) == 1.0f) {
+        if (rd__crt_mask_weight(p->mask, r, p->maskStrength, f, v, odd, c) == 1.0f) {
             lit = c;
         }
     }
@@ -795,10 +796,10 @@ static void checkPhosphors(void)
     /* 1440 x 1080 (1920 x 1080), Trinitron, a grey: every box pixel one
        channel, the expected one, each source pixel's columns R, G, B in
        order.  The geometry's frames are 0x80 (linear 0.22), below the
-       highlights where the mask's strength eases (rd__CrtStrengthAt),
+       highlights where the mask's strength eases (rd__crt_strength_at),
        under a flat beam (a grey's beam leaves the lines' edges dark) */
     if (phosphors(RD_CRT_TRINITRON, 1920, 1080, 0x80, 0x80, 0x80, 1, 1.0f)) {
-        rd__CrtPreset(RD_CRT_TRINITRON, &p);
+        rd__crt_preset(RD_CRT_TRINITRON, &p);
         p.maskStrength = 1.0f;
         uint32_t impure = 0, wrong = 0, order = 0, checked = 0;
         /* away from the rounded corners (0.02 of the height) and the
@@ -871,7 +872,7 @@ static void checkPhosphors(void)
        at the expected rows; each stripe its channel in full and the other
        two leaking (1 - strength) */
     if (phosphors(RD_CRT_CONSUMER, 1536, 1152, 0x60, 0x60, 0x60, 1, -1.0f)) {
-        rd__CrtPreset(RD_CRT_CONSUMER, &p);
+        rd__crt_preset(RD_CRT_CONSUMER, &p);
         const float want = powf(1.0f - p.maskStrength, 1.0f / 2.2f);
         uint32_t bad = 0, bridges = 0, n = 0;
         for (uint32_t y = 300; y < 360; y++) {
@@ -922,7 +923,7 @@ static void checkPhosphors(void)
        its channel in full and the other two at (1 - strength) of it in
        linear light */
     if (phosphors(RD_CRT_TRINITRON, 1536, 1152, 0x60, 0x60, 0x60, 1, -1.0f)) {
-        rd__CrtPreset(RD_CRT_TRINITRON, &p);
+        rd__crt_preset(RD_CRT_TRINITRON, &p);
         const float want = powf(1.0f - p.maskStrength, 1.0f / 2.2f);
         float lo = 9.0f, hi = 0.0f;
         uint32_t own = 0;
@@ -987,7 +988,7 @@ static void checkPhosphors(void)
     /* Shadow mask, grey: the first half of a line R, G, B; the second the
        row of dots half a triad over (the expected channel everywhere) */
     if (phosphors(RD_CRT_SHADOW, 1536, 1152, 0x80, 0x80, 0x80, 1, 1.0f)) {
-        rd__CrtPreset(RD_CRT_SHADOW, &p);
+        rd__crt_preset(RD_CRT_SHADOW, &p);
         p.maskStrength = 1.0f;
         uint32_t wrong = 0, shifted = 0;
         for (uint32_t y = 300; y < 340; y++) {
@@ -1036,13 +1037,13 @@ static void checkLight(void)
         {255, 255, 255}, {255, 204, 204}, {204, 229, 255}, {255, 255, 204}};
     for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
         RdCrtParams p;
-        rd__CrtPreset((RdCrtMode)m, &p);
+        rd__crt_preset((RdCrtMode)m, &p);
         for (int i = 0; i < 4; i++) {
             makeFlatScene(kIn[i][0], kIn[i][1], kIn[i][2]);
             RdSettings s = outputSettings(1920, 1080);
-            rd_CrtSettings(&s, (RdCrtMode)m, 1.0f);
+            rd_crt_settings(&s, (RdCrtMode)m, 1.0f);
             s_w = 1920;
-            rd__PresentBox(1920, 1080, 4.0f / 3.0f, &s_box);
+            rd__present_box(1920, 1080, 4.0f / 3.0f, &s_box);
             if (!present(&s, 0)) {
                 return;
             }
@@ -1104,7 +1105,7 @@ static void layerQuad(const RdOverlayCtx *ctx, void *user)
     const float w = (float)ctx->outW, h = (float)ctx->outH;
     RdScreenVtx v[2] = {vtx((int32_t)(t->fx0 * w) * 16, (int32_t)(t->fy0 * h) * 16, t->c, 0, 0),
                         vtx((int32_t)(t->fx1 * w) * 16, (int32_t)(t->fy1 * h) * 16, t->c, 0, 0)};
-    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+    rd_overlay_prims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
 }
 
 /* the scanlines on a black frame, a grey quad on the main overlay (inside
@@ -1116,17 +1117,17 @@ static void checkTopLayer(void)
     const uint32_t w = 960, h = 720;
     makeFlatScene(0, 0, 0);
     RdSettings s = outputSettings(w, h);
-    rd_CrtSettings(&s, RD_CRT_SCANLINES, 1.0f);
+    rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
     s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
     LayerTest m = {.fx0 = 0.25f, .fy0 = 0.25f, .fx1 = 0.5f, .fy1 = 0.5f, .c = {64, 64, 64, 0x80}};
     LayerTest t = {.fx0 = 0.6f, .fy0 = 0.6f, .fx1 = 0.8f, .fy1 = 0.8f, .c = {255, 0, 0, 0x80}};
     RhiRect b;
-    rd__PresentBox(w, h, 4.0f / 3.0f, &b);
-    rd_SetPresentOverlay(layerQuad, &m);
-    rd_SetPresentOverlayTop(layerQuad, &t);
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
+    rd_set_present_overlay(layerQuad, &m);
+    rd_set_present_overlay_top(layerQuad, &t);
     const bool ok = present(&s, 0);
-    rd_SetPresentOverlay(NULL, NULL);
-    rd_SetPresentOverlayTop(NULL, NULL);
+    rd_set_present_overlay(NULL, NULL);
+    rd_set_present_overlay_top(NULL, NULL);
     if (!ok) {
         return;
     }
@@ -1176,13 +1177,13 @@ static void checkTopLayer(void)
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     checkOptions(dir);
     checkResolve();
     checkHighlights();
     RdSettings st = outputSettings(64, 48);
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         if (failures) {
             printf("rd_crt_test: %d failures\n", failures);
             return 1;
@@ -1190,9 +1191,9 @@ int main(int argc, char **argv)
         printf("rd_crt_test: options ok; SKIP the pixel checks: no usable device\n");
         return 77;
     }
-    s_llvmpipe = strstr(rhi_AdapterName(), "llvmpipe") != NULL;
-    printf("rd_crt_test: adapter %s\n", rhi_AdapterName());
-    rd_Shutdown();
+    s_llvmpipe = strstr(rhi_adapter_name(), "llvmpipe") != NULL;
+    printf("rd_crt_test: adapter %s\n", rhi_adapter_name());
+    rd_shutdown();
     checkOff();
     checkModes();
     checkOutside();

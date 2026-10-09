@@ -9,8 +9,8 @@
  * cache's entries (under s_tp.lock) and the files.  A cached image is
  * written once by the thread and read-only after (state CACHED), so the
  * game fiber copies it without holding the lock; the entry is pinned
- * meanwhile (pins), and texpack_LowMemory frees only unpinned ones.  Without SDL (a build
- * with no window library) the same work runs inside texpack_Pump, one
+ * meanwhile (pins), and texpack_low_memory frees only unpinned ones.  Without SDL (a build
+ * with no window library) the same work runs inside texpack_pump, one
  * request a call.
  */
 #include "texpack.h"
@@ -47,7 +47,7 @@ typedef struct PackEntry {
     uint8_t region;  /* a region name: kept, never in the table */
     uint8_t state;   /* ENTRY_*, under the lock */
     uint8_t refused; /* the graphics card refused it (game fiber): not offered again */
-    int pins;        /* copies of cache being made (under the lock): kept by texpack_LowMemory */
+    int pins;        /* copies of cache being made (under the lock): kept by texpack_low_memory */
     char *path;
     TexpackImage cache; /* ENTRY_CACHED: the image as loaded */
 } PackEntry;
@@ -271,7 +271,7 @@ static int addFile(const char *path, const char *name, void *user)
         s_tp.stats.mipFiles++;
         return 0;
     }
-    int r = texpack_ParseName(name, &tn);
+    int r = texpack_parse_name(name, &tn);
     if (r < 0) {
         s_tp.stats.malformed++;
         return 0;
@@ -383,9 +383,9 @@ static int loadEntry(const PackEntry *e, TexpackImage *img)
         return -1;
     }
     if (e->kind == TEXPACK_KIND_DDS) {
-        r = texpack_LoadDds(data, size, s_tp.bc, e->path, img);
+        r = texpack_load_dds(data, size, s_tp.bc, e->path, img);
     } else {
-        r = texpack_LoadPng(data, size, e->path, img);
+        r = texpack_load_png(data, size, e->path, img);
     }
     free(data);
     return r;
@@ -424,11 +424,11 @@ static uint64_t estimateBytes(const PackEntry *e)
 }
 
 /* An RGBA8 image without its own mips gets the box chain (a failure leaves
-   one level, which rdtex_CreateReplacement then tries again). */
+   one level, which rdtex_create_replacement then tries again). */
 static void addMips(TexpackImage *img)
 {
     if (img->fmt == RD_TEXEL_RGBA8 && img->levels == 1) {
-        (void)rdtex_ReplacementMips(img);
+        (void)rdtex_replacement_mips(img);
     }
 }
 
@@ -457,7 +457,7 @@ static int copyImage(const TexpackImage *src, TexpackImage *dst)
 static int uploadCopy(const TexpackImage *src, TexpackImage *dst)
 {
     if (src->fmt == RD_TEXEL_RGBA8 && src->levels == 1 &&
-        rdtex_ReplacementMipsFrom(src, dst) == 0) {
+        rdtex_replacement_mips_from(src, dst) == 0) {
         return 0;
     }
     return copyImage(src, dst);
@@ -592,7 +592,7 @@ static int loaderStep(void)
         e->state = ENTRY_FAILED;
         s_tp.stats.loadFailed++;
     } else if (!cacheImage(e, &img)) {
-        texpack_FreeImage(&img);
+        texpack_free_image(&img);
         s_tp.stats.skipped++;
     }
     return 1;
@@ -615,14 +615,14 @@ static int SDLCALL loaderThread(void *arg)
 
 /* ------------------------------------------------------------- public */
 
-void texpack_GetStats(TexpackStats *out)
+void texpack_get_stats(TexpackStats *out)
 {
     lockTp();
     *out = s_tp.stats;
     unlockTp();
 }
 
-uint64_t texpack_LowMemory(void)
+uint64_t texpack_low_memory(void)
 {
     uint64_t held;
     uint64_t freed = 0;
@@ -641,7 +641,7 @@ uint64_t texpack_LowMemory(void)
             dropped++;
             s_tp.stats.cacheBytes -= e->cache.bytes;
             s_tp.stats.cached--;
-            texpack_FreeImage(&e->cache);
+            texpack_free_image(&e->cache);
             e->state = ENTRY_NONE;
         }
     }
@@ -661,13 +661,13 @@ uint64_t texpack_LowMemory(void)
     return held;
 }
 
-int texpack_Init(const TexpackConfig *cfg)
+int texpack_init(const TexpackConfig *cfg)
 {
     char dirs[6][1100];
     char std[2][1100];
     int nStd = 0;
 
-    texpack_Shutdown();
+    texpack_shutdown();
     memset(&s_tp, 0, sizeof(s_tp));
     if (!cfg) {
         return 0;
@@ -678,11 +678,11 @@ int texpack_Init(const TexpackConfig *cfg)
     s_tp.developer = cfg->developer != 0;
     /* a file larger than the card takes is refused when its header is
        read, before its texels take any memory */
-    texpack_SetMaxSide(cfg->maxTextureSize);
+    texpack_set_max_side(cfg->maxTextureSize);
     s_tp.inited = 1;
-    texpack_BudgetSet((uint64_t)cfg->budgetMb << 20);
+    texpack_budget_set((uint64_t)cfg->budgetMb << 20);
     /* the cache tells the budget when it gives a replacement up */
-    rdtex_SetReleaseHook(texpack_BudgetRelease);
+    rdtex_set_release_hook(texpack_budget_release);
 
     /* the folders, in order: the standard layout of the user folder, then
        of the program's folder, then the tolerant layouts (a pack copied one
@@ -699,18 +699,18 @@ int texpack_Init(const TexpackConfig *cfg)
     char tail[64];
     snprintf(tail, sizeof(tail), "textures/%s/replacements", s_tp.serial);
     for (int i = 0; i < nRoots; i++) {
-        if (rd__JoinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
+        if (rd__join_path(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
             walkFolder(std[nStd], TEXPACK_WALK_DEPTH);
             nStd++;
         }
     }
     for (int i = 0; i < nRoots; i++) {
-        if (rd__JoinPath(dirs[0], sizeof(dirs[0]), uniq[i], "textures/replacements") == 0) {
+        if (rd__join_path(dirs[0], sizeof(dirs[0]), uniq[i], "textures/replacements") == 0) {
             walkFolder(dirs[0], TEXPACK_WALK_DEPTH);
         }
         /* files directly under textures/ only: below it are the serial
            folders (walked above) and the dumps */
-        if (rd__JoinPath(dirs[1], sizeof(dirs[1]), uniq[i], "textures") == 0) {
+        if (rd__join_path(dirs[1], sizeof(dirs[1]), uniq[i], "textures") == 0) {
             walkFolder(dirs[1], 0);
         }
     }
@@ -802,12 +802,12 @@ int texpack_Init(const TexpackConfig *cfg)
     return s_tp.count;
 }
 
-int texpack_Count(void)
+int texpack_count(void)
 {
     return s_tp.count;
 }
 
-int texpack_Lookup(const TexpackName *name)
+int texpack_lookup(const TexpackName *name)
 {
     if (!name || s_tp.count == 0) {
         return -1;
@@ -815,12 +815,12 @@ int texpack_Lookup(const TexpackName *name)
     return findKey(name->tex0Hash, name->hasClut ? name->clutHash : 0, name->bits);
 }
 
-const char *texpack_EntryPath(int entry)
+const char *texpack_entry_path(int entry)
 {
     return entry >= 0 && entry < s_tp.n ? s_tp.e[entry].path : NULL;
 }
 
-int texpack_EntryCached(int entry)
+int texpack_entry_cached(int entry)
 {
     if (entry < 0 || entry >= s_tp.n) {
         return 0;
@@ -853,7 +853,7 @@ static int inList(const PackReq *r, uint32_t texId, uint32_t gen, int texa)
     return 0;
 }
 
-int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t uvW, uint32_t uvH)
+int texpack_request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t uvW, uint32_t uvH)
 {
     if (entry < 0 || entry >= s_tp.n || s_tp.e[entry].region || s_tp.e[entry].refused) {
         return -1;
@@ -869,7 +869,7 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
                  (s_tp.busy && s_tp.busy->texId == texId && s_tp.busy->gen == gen &&
                   s_tp.busy->texa == texa);
     /* the cached image is copied below without the lock: pinned so that
-       texpack_LowMemory keeps it meanwhile */
+       texpack_low_memory keeps it meanwhile */
     const int pinned = state == ENTRY_CACHED && !queued;
     if (pinned) {
         e->pins++;
@@ -917,7 +917,7 @@ int texpack_Request(int entry, uint32_t texId, uint32_t gen, int texa, uint32_t 
         const uint32_t before = s_tp.stats.installed;
         install(r);
         const int done = s_tp.stats.installed != before;
-        texpack_FreeImage(&r->img);
+        texpack_free_image(&r->img);
         free(r);
         return done ? 2 : -1;
     }
@@ -955,7 +955,7 @@ static void install(PackReq *r)
 
     /* the texture changed (a CLUT scroll, another level) or was freed while
        the file loaded */
-    if (rdtex_Find(r->texId, r->gen, r->texa).id == 0) {
+    if (rdtex_find(r->texId, r->gen, r->texa).id == 0) {
         s_tp.stats.discarded++;
         return;
     }
@@ -973,7 +973,7 @@ static void install(PackReq *r)
     }
     /* refused (no BC on this device, larger than it takes): nothing was
        charged or replaced, the game's own texture stays */
-    RdTex rep = rdtex_CreateReplacement(&r->img, r->uvW, r->uvH, name);
+    RdTex rep = rdtex_create_replacement(&r->img, r->uvW, r->uvH, name);
     if (rep.id == 0) {
         s_tp.stats.discarded++;
         if (!s_tp.createLogged) {
@@ -983,9 +983,9 @@ static void install(PackReq *r)
         }
         return;
     }
-    if (texpack_BudgetCharge(rep, bytes) != 0) {
+    if (texpack_budget_charge(rep, bytes) != 0) {
         /* over by the bookkeeping's own count: as declined */
-        rd_DestroyTexture(rep);
+        rd_destroy_texture(rep);
         s_tp.stats.declined++;
         remember(r->texId, r->gen);
         return;
@@ -995,9 +995,9 @@ static void install(PackReq *r)
             s_tp.charges[i].entry = r->entry; /* for a refusal by the card */
         }
     }
-    if (rdtex_Replace(r->texId, r->gen, r->texa, rep) != 0) {
-        texpack_BudgetRelease(rep);
-        rd_DestroyTexture(rep);
+    if (rdtex_replace(r->texId, r->gen, r->texa, rep) != 0) {
+        texpack_budget_release(rep);
+        rd_destroy_texture(rep);
         s_tp.stats.discarded++;
         return;
     }
@@ -1007,7 +1007,7 @@ static void install(PackReq *r)
     }
 }
 
-void texpack_Pump(void)
+void texpack_pump(void)
 {
     if (s_tp.count == 0) {
         return;
@@ -1023,10 +1023,10 @@ void texpack_Pump(void)
     PackReq *r = s_tp.doneHead;
     s_tp.doneHead = s_tp.doneTail = NULL;
     /* the pack switched off: nothing goes in after the switch (the
-       replacements already in were reverted at its edge, rd_BeginFrame);
+       replacements already in were reverted at its edge, rd_begin_frame);
        what is queued is forgotten, and a load in flight lands on the done
        list and is dropped by a later pump while the pack stays off */
-    const int off = !rd_GetSettings()->texturePack;
+    const int off = !rd_get_settings()->texturePack;
     PackReq *queued = NULL;
     if (off) {
         queued = s_tp.reqHead;
@@ -1043,7 +1043,7 @@ void texpack_Pump(void)
             } else if (!q->failed) {
                 install(q);
             }
-            texpack_FreeImage(&q->img);
+            texpack_free_image(&q->img);
             free(q);
             q = next;
         }
@@ -1054,16 +1054,16 @@ static void freeList(PackReq *r)
 {
     while (r) {
         PackReq *next = r->next;
-        texpack_FreeImage(&r->img);
+        texpack_free_image(&r->img);
         free(r);
         r = next;
     }
 }
 
-void texpack_Shutdown(void)
+void texpack_shutdown(void)
 {
     if (s_tp.inited) {
-        rdtex_SetReleaseHook(NULL);
+        rdtex_set_release_hook(NULL);
     }
 #if ICO_TEXPACK_THREAD
     if (s_tp.thread) {
@@ -1087,7 +1087,7 @@ void texpack_Shutdown(void)
     freeList(s_tp.doneHead);
     for (int i = 0; i < s_tp.n; i++) {
         if (s_tp.e[i].state == ENTRY_CACHED) {
-            texpack_FreeImage(&s_tp.e[i].cache);
+            texpack_free_image(&s_tp.e[i].cache);
         }
         free(s_tp.e[i].path);
     }
@@ -1100,22 +1100,22 @@ void texpack_Shutdown(void)
 
 /* ------------------------------------------------------------- budget */
 
-void texpack_BudgetSet(uint64_t bytes)
+void texpack_budget_set(uint64_t bytes)
 {
     s_tp.budgetLimit = bytes;
 }
 
-uint64_t texpack_BudgetLimit(void)
+uint64_t texpack_budget_limit(void)
 {
     return s_tp.budgetLimit;
 }
 
-uint64_t texpack_BudgetUsed(void)
+uint64_t texpack_budget_used(void)
 {
     return s_tp.budgetUsed;
 }
 
-int texpack_BudgetCharge(RdTex t, uint64_t bytes)
+int texpack_budget_charge(RdTex t, uint64_t bytes)
 {
     if (t.id == 0) {
         return -1;
@@ -1154,14 +1154,14 @@ int texpack_BudgetCharge(RdTex t, uint64_t bytes)
     return 0;
 }
 
-void texpack_BudgetRelease(RdTex t)
+void texpack_budget_release(RdTex t)
 {
     for (int i = 0; i < s_tp.nCharges; i++) {
         if (s_tp.charges[i].id == t.id) {
             const int entry = s_tp.charges[i].entry;
-            if (entry >= 0 && entry < s_tp.n && rdtex_ReplacementRefused(t)) {
+            if (entry >= 0 && entry < s_tp.n && rdtex_replacement_refused(t)) {
                 /* the card would refuse it again: the game's own texture
-                   from now on (rdtex_Find decodes it) */
+                   from now on (rdtex_find decodes it) */
                 s_tp.e[entry].refused = 1;
                 s_tp.stats.refused++;
             }
@@ -1184,16 +1184,16 @@ static int ensureDumpDir(void)
     char p[1100];
     s_tp.dumpDirReady = -1;
     if (!s_tp.inited || s_tp.userDir[0] == '\0' ||
-        rd__JoinPath(p, sizeof(p), s_tp.userDir, "textures") != 0) {
+        rd__join_path(p, sizeof(p), s_tp.userDir, "textures") != 0) {
         return -1;
     }
     (void)ico_mkdir(p);
-    if (rd__JoinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, s_tp.serial) != 0) {
+    if (rd__join_path(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, s_tp.serial) != 0) {
         return -1;
     }
     (void)ico_mkdir(s_tp.dumpDir);
     snprintf(p, sizeof(p), "%s", s_tp.dumpDir);
-    if (rd__JoinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, "dumps") != 0) {
+    if (rd__join_path(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, "dumps") != 0) {
         return -1;
     }
     (void)ico_mkdir(s_tp.dumpDir);
@@ -1206,7 +1206,7 @@ static int ensureDumpDir(void)
     return 0;
 }
 
-int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage *im)
+int texpack_dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage *im)
 {
     static TexpackName names[TEXPACK_MAX_CANDIDATES];
     int written = 0;
@@ -1214,7 +1214,7 @@ int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage
     if (!src || !im || ensureDumpDir() != 0) {
         return 0;
     }
-    int n = texpack_Candidates(src, boundLevel, names, TEXPACK_MAX_CANDIDATES);
+    int n = texpack_candidates(src, boundLevel, names, TEXPACK_MAX_CANDIDATES);
     uint32_t w = im->padW ? im->padW : im->w;
     uint32_t h = im->padH ? im->padH : im->h;
     uint8_t *rgba = NULL, *texa = NULL;
@@ -1228,17 +1228,17 @@ int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage
         if (tn->startLevel != boundLevel || tn->mipChain) {
             continue;
         }
-        if (texpack_FormatName(tn, base, sizeof(base)) < 0) {
+        if (texpack_format_name(tn, base, sizeof(base)) < 0) {
             continue;
         }
         snprintf(file, sizeof(file), "%s.png", base);
-        if (rd__JoinPath(path, sizeof(path), s_tp.dumpDir, file) != 0 ||
+        if (rd__join_path(path, sizeof(path), s_tp.dumpDir, file) != 0 ||
             ico_path_kind(path, NULL, NULL) >= 0) {
             continue;
         }
         if (!rgba) {
             rgba = malloc((size_t)w * h * 4);
-            if (!rgba || rdtex_Decode(im, rgba, &fmt) != 0) {
+            if (!rgba || rdtex_decode(im, rgba, &fmt) != 0) {
                 break;
             }
         }
@@ -1251,10 +1251,10 @@ int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage
                 }
             }
             memcpy(texa, rgba, (size_t)w * h * 4);
-            rdtex_ApplyTexa(texa, (size_t)w * h, fmt, (RdTexA)tn->texa);
+            rdtex_apply_texa(texa, (size_t)w * h, fmt, (RdTexA)tn->texa);
             out = texa;
         }
-        if (rd_WritePng(path, out, w, h, w * 4, 1)) {
+        if (rd_write_png(path, out, w, h, w * 4, 1)) {
             written++;
             s_tp.dumped++;
         }

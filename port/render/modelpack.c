@@ -1,7 +1,7 @@
 /* modelpack.c: model packs (modelpack.h): the folder index, the glTF to VU
  * conversion (strips, colours, bones), the replacement meshes and the dump.
  * The files go through gltf.c, the meshes through rd_mesh.c
- * (rd_CreateVuMeshReplacement, rd_VuMeshRetire).
+ * (rd_create_vu_mesh_replacement, rd_vu_mesh_retire).
  */
 #include "modelpack.h"
 
@@ -528,7 +528,7 @@ static int convertDoc(const GltfDoc *d, PackMesh *m, char *why, size_t whyLen)
     if (!skin && !isIdentity(d->nodeMatrix)) {
         memcpy(c.node, d->nodeMatrix, sizeof(c.node));
         float inv[16];
-        if (gltf_Mat4Invert(inv, c.node) != 0) {
+        if (gltf_mat4_invert(inv, c.node) != 0) {
             return convFail(&c, "its transform cannot be undone (a scale of 0)");
         }
         /* the normal matrix: the transpose of the inverse's 3 x 3 (row r,
@@ -670,14 +670,14 @@ static int addFile(const char *path, const char *name, void *user)
     PackMesh m;
     memset(&m, 0, sizeof(m));
     m.hash = hash;
-    if (gltf_Read(path, &doc, why, sizeof(why)) != 0 ||
+    if (gltf_read(path, &doc, why, sizeof(why)) != 0 ||
         convertDoc(&doc, &m, why, sizeof(why)) != 0) {
-        gltf_Free(&doc);
+        gltf_free(&doc);
         fprintf(stderr, "models: %s skipped: %s\n", path, why);
         s_mp.stats.failed++;
         return 0;
     }
-    gltf_Free(&doc);
+    gltf_free(&doc);
     if (s_mp.stats.bytes + m.bytes > MODELPACK_MAX_BYTES) {
         fprintf(stderr, "models: %s skipped: the model pack is over %llu MB\n", path,
                 (unsigned long long)(MODELPACK_MAX_BYTES >> 20));
@@ -741,13 +741,13 @@ static void walkFolder(const char *dir, int depth)
 
 /* ------------------------------------------------------------ public */
 
-int modelpack_Init(const ModelpackConfig *cfg)
+int modelpack_init(const ModelpackConfig *cfg)
 {
     char dirs[2][1100];
     char std[2][1100];
     int nStd = 0;
 
-    modelpack_Shutdown();
+    modelpack_shutdown();
     memset(&s_mp, 0, sizeof(s_mp));
     s_mp.enabled = 1;
     if (!cfg) {
@@ -759,7 +759,7 @@ int modelpack_Init(const ModelpackConfig *cfg)
     s_mp.dumpEnabled = cfg->dumpEnabled != 0;
     s_mp.inited = 1;
 
-    /* the folders in texpack_Init's order: the standard layout of the user
+    /* the folders in texpack_init's order: the standard layout of the user
        folder, then of the program's folder, then the tolerant layouts of
        both; a root given twice (portable mode) once */
     const char *roots[2] = {cfg->userDir, cfg->programDir};
@@ -773,18 +773,18 @@ int modelpack_Init(const ModelpackConfig *cfg)
     char tail[64];
     snprintf(tail, sizeof(tail), "models/%s/replacements", s_mp.serial);
     for (int i = 0; i < nRoots; i++) {
-        if (rd__JoinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
+        if (rd__join_path(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
             walkFolder(std[nStd], MODELPACK_WALK_DEPTH);
             nStd++;
         }
     }
     for (int i = 0; i < nRoots; i++) {
-        if (rd__JoinPath(dirs[0], sizeof(dirs[0]), uniq[i], "models/replacements") == 0) {
+        if (rd__join_path(dirs[0], sizeof(dirs[0]), uniq[i], "models/replacements") == 0) {
             walkFolder(dirs[0], MODELPACK_WALK_DEPTH);
         }
         /* files directly under models/ only: below it are the serial
            folders (walked above) and the dumps */
-        if (rd__JoinPath(dirs[1], sizeof(dirs[1]), uniq[i], "models") == 0) {
+        if (rd__join_path(dirs[1], sizeof(dirs[1]), uniq[i], "models") == 0) {
             walkFolder(dirs[1], 0);
         }
     }
@@ -802,17 +802,17 @@ int modelpack_Init(const ModelpackConfig *cfg)
     return s_mp.n;
 }
 
-int modelpack_Count(void)
+int modelpack_count(void)
 {
     return s_mp.n;
 }
 
-bool modelpack_HashWanted(void)
+bool modelpack_hash_wanted(void)
 {
     return s_mp.n > 0 || s_mp.dumpEnabled || s_mp.shotArmed;
 }
 
-void modelpack_NoteSkeleton(int entry, const ModelpackSkeleton *skel)
+void modelpack_note_skeleton(int entry, const ModelpackSkeleton *skel)
 {
     if (entry < 0 || entry >= s_mp.n || !skel) {
         return;
@@ -837,13 +837,13 @@ void modelpack_NoteSkeleton(int entry, const ModelpackSkeleton *skel)
     }
 }
 
-void modelpack_GetStats(ModelpackStats *out)
+void modelpack_get_stats(ModelpackStats *out)
 {
     *out = s_mp.stats;
     out->indexed = (uint32_t)s_mp.n;
 }
 
-void modelpack_Shutdown(void)
+void modelpack_shutdown(void)
 {
     for (int i = 0; i < s_mp.n; i++) {
         free(s_mp.e[i].path);
@@ -859,7 +859,7 @@ void modelpack_Shutdown(void)
     s_mp.enabled = 1;
 }
 
-int modelpack_Lookup(uint64_t hash)
+int modelpack_lookup(uint64_t hash)
 {
     if (s_mp.n == 0 || !s_mp.enabled) {
         return -1;
@@ -885,7 +885,7 @@ static void decline(PackMesh *m, const char *part, const char *fmt, ...)
     m->declined = 1;
 }
 
-RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, uint32_t boneCount)
+RdMesh modelpack_create(int entry, const RdVuMeshDesc *orig, const char *name, uint32_t boneCount)
 {
     if (entry < 0 || entry >= s_mp.n || !orig) {
         return (RdMesh){0};
@@ -896,7 +896,7 @@ RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, u
     }
     const char *part = name ? name : orig->debugName;
     float normalW = 0.0f;
-    if (rd_VuMeshDescHash(orig, NULL, &normalW) != m->hash) {
+    if (rd_vu_mesh_desc_hash(orig, NULL, &normalW) != m->hash) {
         return (RdMesh){0}; /* not the part this entry is for: nothing to decline */
     }
     const uint32_t oq = orig->qwPerVertex;
@@ -960,7 +960,7 @@ RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, u
             return (RdMesh){0};
         }
     }
-    RdMesh mesh = rd_CreateVuMeshReplacement(orig, &rep, name);
+    RdMesh mesh = rd_create_vu_mesh_replacement(orig, &rep, name);
     free(tmp);
     if (mesh.id == 0) {
         /* not a mismatch the file could be blamed for (it was checked
@@ -981,7 +981,7 @@ RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, u
     return mesh;
 }
 
-void modelpack_Decline(uint64_t hash)
+void modelpack_decline(uint64_t hash)
 {
     int e = findHash(hash);
     if (e >= 0 && !s_mp.e[e].declined) {
@@ -999,10 +999,10 @@ static bool retireReplaced(uint64_t hash, bool replaced, void *user)
 static bool retireOriginal(uint64_t hash, bool replaced, void *user)
 {
     (void)user;
-    return !replaced && modelpack_Lookup(hash) >= 0;
+    return !replaced && modelpack_lookup(hash) >= 0;
 }
 
-void modelpack_SetEnabled(bool on)
+void modelpack_set_enabled(bool on)
 {
     if ((s_mp.enabled != 0) == on) {
         return;
@@ -1011,10 +1011,10 @@ void modelpack_SetEnabled(bool on)
     if (s_mp.n == 0) {
         return;
     }
-    rd_VuMeshRetire(on ? retireOriginal : retireReplaced, NULL);
+    rd_vu_mesh_retire(on ? retireOriginal : retireReplaced, NULL);
 }
 
-bool modelpack_Enabled(void)
+bool modelpack_enabled(void)
 {
     return s_mp.enabled != 0;
 }
@@ -1115,7 +1115,7 @@ static int shotActive(const void *obj)
     return obj && s_mp.shotArmed && obj == s_mp.shotObj;
 }
 
-bool modelpack_DumpWanted(uint64_t hash, const void *obj)
+bool modelpack_dump_wanted(uint64_t hash, const void *obj)
 {
     if (shotActive(obj)) {
         if (!s_mp.shotDrawn) {
@@ -1127,12 +1127,12 @@ bool modelpack_DumpWanted(uint64_t hash, const void *obj)
     return s_mp.dumpEnabled && !seenHas(hash);
 }
 
-void modelpack_SetDumpEnabled(bool on)
+void modelpack_set_dump_enabled(bool on)
 {
     s_mp.dumpEnabled = on;
 }
 
-void modelpack_DumpObjectOnce(const void *obj)
+void modelpack_dump_object_once(const void *obj)
 {
     s_mp.shotObj = obj;
     s_mp.shotArmed = obj != NULL;
@@ -1142,13 +1142,13 @@ void modelpack_DumpObjectOnce(const void *obj)
     s_mp.shotDone.n = 0;
 }
 
-int modelpack_DumpObjectStatus(void)
+int modelpack_dump_object_status(void)
 {
     shotTick();
     return s_mp.shotArmed ? -1 : s_mp.lastShotFiles;
 }
 
-const char *modelpack_DumpDir(void)
+const char *modelpack_dump_dir(void)
 {
     return s_mp.dumpDirReady > 0 ? s_mp.dumpDir : "";
 }
@@ -1161,9 +1161,9 @@ static int ensureDumpDir(void)
     char p[1100], q[1100];
     s_mp.dumpDirReady = -1;
     if (!s_mp.inited || s_mp.userDir[0] == '\0' ||
-        rd__JoinPath(p, sizeof(p), s_mp.userDir, "models") != 0 ||
-        rd__JoinPath(q, sizeof(q), p, s_mp.serial) != 0 ||
-        rd__JoinPath(s_mp.dumpDir, sizeof(s_mp.dumpDir), q, "dumps") != 0) {
+        rd__join_path(p, sizeof(p), s_mp.userDir, "models") != 0 ||
+        rd__join_path(q, sizeof(q), p, s_mp.serial) != 0 ||
+        rd__join_path(s_mp.dumpDir, sizeof(s_mp.dumpDir), q, "dumps") != 0) {
         s_mp.dumpDir[0] = '\0';
         return -1;
     }
@@ -1253,7 +1253,7 @@ typedef struct DumpPrim {
     uint32_t *idx;
 } DumpPrim;
 
-int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
+int modelpack_dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
                    const ModelpackSkeleton *skel)
 {
     const void *obj = id ? id->obj : NULL;
@@ -1263,7 +1263,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     if (!orig || (!shot && !s_mp.dumpEnabled)) {
         return 0;
     }
-    const uint64_t hash = rd_VuMeshDescHash(orig, &nv, &normalW);
+    const uint64_t hash = rd_vu_mesh_desc_hash(orig, &nv, &normalW);
     const uint32_t qpv = orig->qwPerVertex;
     if ((hash == 0 && nv == 0) ||
         (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT && qpv != RD_VU_QW_SKIN)) {
@@ -1296,7 +1296,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     }
     char base[1200], path[1210], hex[17];
     snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)hash);
-    if (rd__JoinPath(base, sizeof(base), s_mp.dumpDir, hex) != 0) {
+    if (rd__join_path(base, sizeof(base), s_mp.dumpDir, hex) != 0) {
         return 0;
     }
     snprintf(path, sizeof(path), "%s.gltf", base);
@@ -1309,7 +1309,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     const int skinned = qpv == RD_VU_QW_SKIN, lit = qpv >= RD_VU_QW_LIT;
     const uint32_t stAt = qpv - 2, colAt = qpv - 1;
     GltfDoc doc;
-    gltf_DocInit(&doc);
+    gltf_doc_init(&doc);
     GltfPrim *prims = calloc(nb, sizeof(*prims));
     DumpPrim *dp = calloc(nb, sizeof(*dp));
     float (*ib)[16] = NULL;
@@ -1397,7 +1397,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
                 }
             }
         }
-        /* the kicks (rd_CreateVuMesh's rule): vertex k >= 2 draws (k-2,
+        /* the kicks (rd_create_vu_mesh's rule): vertex k >= 2 draws (k-2,
            k-1, k) unless k or k-1 starts a strip; every other triangle of a
            strip turned back so the faces agree */
         uint32_t ni = 0, start = 0;
@@ -1452,7 +1452,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
             if (have) {
                 memcpy(ib[i], skel->invBind[i], 64);
             } else {
-                gltf_Mat4Identity(ib[i]);
+                gltf_mat4_identity(ib[i]);
             }
             int pr = have ? skel->parent[i] : -1;
             /* a parent that is not an earlier bone would make a loop or
@@ -1497,7 +1497,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
         goto done;
     }
     doc.extrasText = ex.p;
-    if (gltf_Write(base, &doc, why, sizeof(why)) != 0) {
+    if (gltf_write(base, &doc, why, sizeof(why)) != 0) {
         fprintf(stderr, "models: cannot write the dump of %s: %s\n", meshName, why);
         goto done;
     }
@@ -1505,7 +1505,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     s_mp.stats.dumped++;
     if (!existed) {
         char list[1210];
-        if (rd__JoinPath(list, sizeof(list), s_mp.dumpDir, "models.txt") == 0) {
+        if (rd__join_path(list, sizeof(list), s_mp.dumpDir, "models.txt") == 0) {
             const int fresh = ico_path_kind(list, NULL, NULL) < 0;
             FILE *f = ico_fopen(list, "ab");
             if (f) {

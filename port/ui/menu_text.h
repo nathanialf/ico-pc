@@ -10,9 +10,9 @@
  * whose rectangle holds text, the string (strings.h, UI_STR_MT_*, the five
  * sheets transcribed) and where the lettering sits in the rectangle (the
  * capitals' size, the anchor, the line pitch), measured from the sheets.
- * The draw hooks (layout_ext.h lt_ext_DrawTextRow) draw such a row's words
+ * The draw hooks (layout_ext.h lt_ext_draw_text_row) draw such a row's words
  * with Arimo in the sheets' look in place of the sprite (menu_font.h
- * ui_MenuWordDraw), with the colour, fade, dimming and glow the game
+ * ui_menu_word_draw), with the colour, fade, dimming and glow the game
  * computed for the row; the texture is still transferred, so VRAM and the
  * packets are the texture path's.  Rows the table leaves out (artwork,
  * logos, the copyright, button glyphs, arrows, L1..R2, the subtitles) keep
@@ -30,7 +30,7 @@ extern "C" {
 /* The letters' fill on the sheet. */
 typedef enum UiMenuTextInk {
     UI_INK_LIGHT = 0, /* light letters with the dark rim (the menu rows): menu_font.c's
-                         rim and the language's levels (ui_MenuSheetInk) */
+                         rim and the language's levels (ui_menu_sheet_ink) */
     UI_INK_DARK = 1,  /* black letters without a rim (the white panel's prompts, the
                          save screens' slot numbers of a used file); no glow */
     UI_INK_PLAIN = 2, /* white letters without a rim (the save preview's play time) */
@@ -75,7 +75,7 @@ extern const int ui_menu_text_row_count;
    not a game row) and for a row whose texel rectangle is not the one the
    table was measured on (tables that are not the PAL ones), which then
    draws its texture. */
-const UiMenuTextItem *ui_MenuTextItemOf(const LtProperty *e);
+const UiMenuTextItem *ui_menu_text_item_of(const LtProperty *e);
 
 #ifdef __cplusplus
 }

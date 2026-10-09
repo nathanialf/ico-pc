@@ -7,8 +7,8 @@
  * 4:3 picture, held, and sliding out, timed in vsyncs.
  *
  * Where they are drawn.  On the presentation overlay (port/render/rd.h
- * rd_SetPresentOverlay): the presenter calls ui_host.c's overlay function
- * at every present, which calls ui_PopupDrawOverlay, so the popup is drawn on the output after the
+ * rd_set_present_overlay): the presenter calls ui_host.c's overlay function
+ * at every present, which calls ui_popup_draw_overlay, so the popup is drawn on the output after the
  * box blit, at the output's resolution, outside the game's frame (never
  * reduced, never in DISPLAY's history, so a keep frame cannot show it
  * twice), never mirrored, and at each present's state of the queue.
@@ -28,29 +28,29 @@ extern "C" {
 
 /* Queues a popup (copied; UTF-8, '\n' allowed in body); 0, or -1 when the
    queue is full. */
-int ui_PopupPush(const char *title, const char *body);
+int ui_popup_push(const char *title, const char *body);
 /* One vsync passed: advances the current popup. */
-void ui_PopupVsync(void);
+void ui_popup_vsync(void);
 /* whether a popup is showing or waiting (tests) */
-int ui_PopupActive(void);
+int ui_popup_active(void);
 /* Draws the current popup on the output (above): inside an rd overlay
    callback, ctx the callback's RdOverlayCtx (rd.h).  No-op without a
    popup, and without ICO_RD. */
 struct RdOverlayCtx;
-void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx);
+void ui_popup_draw_overlay(const struct RdOverlayCtx *ctx);
 /* The developer trigger ([dev] popup_test): on, it queues the test popup
    when mainTick reaches 100 and every 150 ticks after (so a run's frame
    dumps catch one on any screen). */
-void ui_PopupSetDevTest(int on);
-void ui_PopupDevTick(unsigned int mainTick);
+void ui_popup_set_dev_test(int on);
+void ui_popup_dev_tick(unsigned int mainTick);
 /* empties the queue (tests) */
-void ui_PopupReset(void);
+void ui_popup_reset(void);
 
 /* The current popup's panel in the layout grid (font.h) at this vsync, for
    tests: x0, y0, x1, y1; 0 when none is showing. */
-int ui_PopupPanel(float rect[4]);
+int ui_popup_panel(float rect[4]);
 /* The current popup's title (tests); "" when none is showing. */
-const char *ui_PopupTitle(void);
+const char *ui_popup_title(void);
 
 #ifdef __cplusplus
 }

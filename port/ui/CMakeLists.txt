@@ -400,7 +400,7 @@ endif()
 # menu_look: the menus' Arimo text against the game's
 # menu sheets: the sheets read from the disc (test/menu_sheets.c, a TIM2
 # reader), the item strips (menu_font.c
-# ui__MenuStripRaster) through the shader's CPU reference (ico_sheet_ref),
+# ui__menu_strip_raster) through the shader's CPU reference (ico_sheet_ref),
 # compared per item in the five languages, with the survey that pinned the
 # sheet constants.  Needs the base ELF to configure, and the disc image to
 # run (exit 77 without it, so a worktree skips it); writes its pictures to

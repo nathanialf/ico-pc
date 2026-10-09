@@ -251,7 +251,7 @@ target_include_directories(rd_crt_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders
 target_compile_options(rd_crt_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_crt_test PRIVATE ico_render ico_options)
 
-# rd_filter_test: the draw filter (rd.h rd_SetDrawFilter) on
+# rd_filter_test: the draw filter (rd.h rd_set_draw_filter) on
 # synthetic keys, recorded without a device.
 add_executable(rd_filter_test test/rd_filter_test.c)
 target_compile_options(rd_filter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -261,7 +261,7 @@ target_link_libraries(rd_filter_test PRIVATE ico_render)
 # rd_interp_test: the presenter's interpolation between the
 # retained frames (rd_interp.c): keyed draws blend by alpha, the snap rules,
 # the feedback FIX at dt; on a device the replays at alpha 0 and 1 against
-# the frames' own, the half-way pixels, rd_Present.
+# the frames' own, the half-way pixels, rd_present.
 add_executable(rd_interp_test test/rd_interp_test.c)
 target_compile_options(rd_interp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_interp_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
@@ -479,8 +479,8 @@ target_compile_options(rd_debug_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_
 # sifdev_host.c opens host0: files through host_fs (ico_widen, ico_mkdir)
 target_link_libraries(rd_debug_test PRIVATE ico_render ico_math ico_host_fs)
 
-# rd_mip_test: rdtex_MipChainBytes against the level sum and
-# rdtex_BuildMipChain inside it for non-square textures (128x4, 512x2).
+# rd_mip_test: rdtex_mip_chain_bytes against the level sum and
+# rdtex_build_mip_chain inside it for non-square textures (128x4, 512x2).
 # CPU only.
 add_executable(rd_mip_test test/rd_mip_test.c)
 target_compile_options(rd_mip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -512,7 +512,7 @@ if(TARGET SDL3::SDL3-shared)
 endif()
 
 # texpack_e2e_test: the disc's names
-# (texpack_disc_test's texpack_names.txt) looked up in the index texpack_Init
+# (texpack_disc_test's texpack_names.txt) looked up in the index texpack_init
 # builds from a real pack's folder, in the hook's order, and every file
 # reached read with the real loaders.  77 without the disc's names or the
 # pack (build-host/tmp/texpack, never committed).

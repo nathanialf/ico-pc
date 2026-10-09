@@ -35,7 +35,7 @@
  * updates the list's VU state (rd_mesh.h) and sends the SET_GSREGISTER
  * payloads to the GS register decoder, in list order.  The packets of a
  * model's vertex batches (pk->data) are drawn instead: regHostMesh records
- * rd_DrawVuMesh of the packet's mesh (Packet.c) with the VU state of the
+ * rd_draw_vu_mesh of the packet's mesh (Packet.c) with the VU state of the
  * list at that point, after the batches' GIF tag PRIM went to the decoder.
  * Game logic, culling (reg_clipPacketBoundingBox, gsb_ClipBox), the list
  * choices and the packets themselves are unchanged.
@@ -149,7 +149,7 @@ static void regHostMesh(PacHeader *pk, int pass)
     n = regKeyOrdinal(pk);
     regHostIdent(&id, n);
     memcpy(&m.id, pk->pad9C, sizeof(m.id));
-    if (id.obj != 0 && (m.id == 0 || !rd_VuMeshValid(m))) {
+    if (id.obj != 0 && (m.id == 0 || !rd_vu_mesh_valid(m))) {
         id.skel = regHostSkeleton(); /* the mesh is built now: its pack entry checks it */
     }
     m.id = pac_HostMeshFor(pk, &id);
@@ -158,9 +158,9 @@ static void regHostMesh(PacHeader *pk, int pass)
     }
     /* v0.4.1 (M4): the model pack's dump, at every draw (meshes are made
        lazily, and the one-shot dump wants each part of its object drawn) */
-    if (!id.morph && modelpack_DumpWanted(rd_VuMeshHash(m), id.obj)) {
+    if (!id.morph && modelpack_dump_wanted(rd_vu_mesh_hash(m), id.obj)) {
         id.skel = regHostSkeleton();
-        id.buildHash = rd_VuMeshHash(m);
+        id.buildHash = rd_vu_mesh_hash(m);
         pac_HostDump(pk, &id);
     }
     /* the PRIM every batch's GIF tag (PRE) writes: strip, IIP, TME, ABE */
@@ -168,10 +168,10 @@ static void regHostMesh(PacHeader *pk, int pass)
     prim[0] = (tag >> 47) & 0x7FF;
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
-    if (rd_VuDrawFromState(&d)) {
-        rd_DrawVuMesh(m, &d,
-                      n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
-                             : RD_KEY(pk, rd_CurrentList(), d.code));
+    if (rd_vu_draw_from_state(&d)) {
+        rd_draw_vu_mesh(m, &d,
+                        n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
+                               : RD_KEY(pk, rd_current_list(), d.code));
     }
 }
 
@@ -2218,7 +2218,7 @@ void reg_DispObj(Sub15C *o)
 #ifdef ICO_RD
     stretch = ico_title_stretch_model(o->model->name);
     if (stretch) {
-        space = rd_SetSpaceOverride(RD_SPACE_FULLSCREEN);
+        space = rd_set_space_override(RD_SPACE_FULLSCREEN);
     }
 #endif
     if (o->dispType == 2) {
@@ -2246,7 +2246,7 @@ void reg_DispObj(Sub15C *o)
     }
 #ifdef ICO_RD
     if (stretch) {
-        rd_SetSpaceOverride(space);
+        rd_set_space_override(space);
     }
 #endif
 }

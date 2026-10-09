@@ -182,14 +182,14 @@ static int seInBank(int b, int prog, int tone)
             }
         }
     }
-    return s_inBankHd == NULL ? -1 : gallery_HdHas(s_inBankHd, s_inBankSize, prog, tone);
+    return s_inBankHd == NULL ? -1 : gallery_hd_has(s_inBankHd, s_inBankSize, prog, tone);
 }
 
 /* The bytes of stream `no` that play: its pass (sectors * 2048), or less
    when the disc's file is blank (blocks with the end flag) from a sector
    inside it to the pass's end (only event/40.int, blank from byte
    0x93000).  Found once per stream, at its first play, from the pass's
-   last sector back (gallery_StreamBlankFrom: a dozen sector reads, not the
+   last sector back (gallery_stream_blank_from: a dozen sector reads, not the
    file). */
 static int readSector(void *user, uint64_t off, uint8_t *buf)
 {
@@ -202,7 +202,7 @@ static unsigned char s_audibleKnown[N_ADPCM];
 
 static double audibleBytes(int no)
 {
-    const double pass = gallery_StreamBytes(&adpcmFile[no]);
+    const double pass = gallery_stream_bytes(&adpcmFile[no]);
     IcoVfs *vfs = ico_vfs_disc();
     if (no <= 0 || no >= N_ADPCM || vfs == NULL) {
         return pass;
@@ -214,7 +214,7 @@ static double audibleBytes(int no)
     base = base ? base + 1 : adpcmFile[no].path;
 
     double at = pass;
-    const long long from = gallery_StreamBlankFrom((uint64_t)pass, readSector, (void *)base);
+    const long long from = gallery_stream_blank_from((uint64_t)pass, readSector, (void *)base);
     if (from >= 0) {
         at = (double)from;
         fprintf(stderr,
@@ -551,7 +551,7 @@ static void findEffectVoices(void)
 
 static double streamSeconds(int no, double bytes)
 {
-    return gallery_StreamSeconds(&adpcmFile[no], bytes);
+    return gallery_stream_seconds(&adpcmFile[no], bytes);
 }
 
 static int playSe(const GalleryItem *it)
@@ -608,7 +608,7 @@ static void stopAll(void)
     }
     s_streamPending = 0;
     s_stream = NULL;
-    gallery_ClockReset(&s_clock);
+    gallery_clock_reset(&s_clock);
     if (s_seId >= 0) {
         soundSeDefStop(s_seId);
         s_seId = -1;
@@ -700,8 +700,8 @@ static void streamTick(void)
     }
     uint32_t ssa = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_SSA));
     uint32_t nax = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_NAX));
-    gallery_ClockStep(&s_clock, nax, ssa, GALLERY_SPU_RING);
-    if (gallery_ClockAtEnd(&s_clock, st->n, audibleBytes(s_streamNo))) {
+    gallery_clock_step(&s_clock, nax, ssa, GALLERY_SPU_RING);
+    if (gallery_clock_at_end(&s_clock, st->n, audibleBytes(s_streamNo))) {
         int ch = st->n > 0 ? st->n : 1;
         fprintf(stderr,
                 "gallery: stream %d closed at its end: %llu of %d bytes played (%.2f s), audio "
@@ -781,7 +781,7 @@ static void tick(void)
            played the pass (streamTick) */
         scpAdpcmPlayRequestFunc(s_streamNo, &s_stream, 1, 2, 1);
         s_streamPending = 1;
-        gallery_ClockReset(&s_clock);
+        gallery_clock_reset(&s_clock);
     }
     if (s_streamPending && s_stream != NULL) {
         s_streamPending = 0;
@@ -857,7 +857,7 @@ static int positionOf(float *elapsed, float *total)
 static const GalleryEngine kEngine = {tables, enter,   leave,     play,      stop,
                                       tick,   playing, pauseItem, positionOf};
 
-void gallery_EngineInstall(void)
+void gallery_engine_install(void)
 {
-    gallery_SetEngine(&kEngine);
+    gallery_set_engine(&kEngine);
 }

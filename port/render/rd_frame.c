@@ -1,16 +1,16 @@
 /* rd_frame.c: the frame lifecycle pieces.
  *
- *   rd_FrameHead / rd_FrameFlip   the flip's draw environment and clear
+ *   rd_frame_head / rd_frame_flip   the flip's draw environment and clear
  *                                 (rd.h)
- *   rd_SetTargetZFormat           per-target GS Z to depth scale
- *   rd_SetVuCommon                gsb_MakeCommonMatrix's VU1 parameter block
- *   rd__FillCameraCB              RdCamera into FrameCB
+ *   rd_set_target_z_format           per-target GS Z to depth scale
+ *   rd_set_vu_common                gsb_MakeCommonMatrix's VU1 parameter block
+ *   rd__fill_camera_cb              RdCamera into FrameCB
  *
  * The head is recorded twice, at the head of list 0 and of list 11, because
  * whether the frame replays from list 0 or from list 11 (fbKeep) is known
- * only when it closes; rd_EndFrame turns the copy that is not the first
+ * only when it closes; rd_end_frame turns the copy that is not the first
  * replayed list's into RDC_NOPs.  The colour and the half offset are patched
- * in place by rd_FrameFlip, so the commands keep their position at the head
+ * in place by rd_frame_flip, so the commands keep their position at the head
  * of their list.
  */
 #include <string.h>
@@ -21,50 +21,50 @@
 
 static void recordHead(RdFrame *f, int copy, int list, const RdFrameHead *h)
 {
-    rd_SelectList(list);
+    rd_select_list(list);
     f->headStart[copy] = f->lists[list].count;
     /* the draw environment: FRAME (FBMSK 0, which ends a mask an earlier
      * FRAME write left, as the flip's FRAME write does on the GS), ZBUF
      * (PSMZ32, ZMSK 0), XYOFFSET, SCISSOR, PRMODECONT 1 (nothing to do),
      * COLCLAMP 1, DTHE 0 (rd never dithers), TEST 0x50000
      * (sceGsSetDefDrawEnv with ztst 2) */
-    rd_ColorMask(0);
+    rd_color_mask(0);
     f->headTarget[copy] = f->lists[list].count;
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), h->gsW, h->gsH,
-                 RD_TARGET_OFFSET | (h->halfY ? RD_TARGET_HALF_Y : 0));
-    rd_ZWrite(1);
-    rd_ColClamp(1);
-    rd_TestGs(RD_TEST_Z_GEQUAL);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), h->gsW, h->gsH,
+                  RD_TARGET_OFFSET | (h->halfY ? RD_TARGET_HALF_Y : 0));
+    rd_z_write(1);
+    rd_col_clamp(1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
     f->headClear[copy] = ~0u;
     if (h->clear) {
         /* sceGsSetDefClear: TEST 0x30000, PRIM 6, RGBAQ, the sprite, TEST 0x50000 */
-        rd_TestGs(RD_TEST_Z_ALWAYS);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
         f->headClear[copy] = f->lists[list].count;
-        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), h->rgba, 1, h->z);
-        rd_ABE(0);
-        rd_TextureOff();
-        rd_Gouraud(0);
-        rd_TestGs(RD_TEST_Z_GEQUAL);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), h->rgba, 1, h->z);
+        rd_abe(0);
+        rd_texture_off();
+        rd_gouraud(0);
+        rd_test_gs(RD_TEST_Z_GEQUAL);
     }
     f->headEnd[copy] = f->lists[list].count;
 }
 
-void rd_FrameHead(const RdFrameHead *head)
+void rd_frame_head(const RdFrameHead *head)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (!f || !head) {
         return;
     }
-    const int cur = rd_CurrentList();
+    const int cur = rd_current_list();
     recordHead(f, 0, 0, head);
     recordHead(f, 1, 11, head);
-    rd_SelectList(cur);
+    rd_select_list(cur);
     f->headValid = 1;
 }
 
-void rd_FrameFlip(const uint8_t rgba[4], int halfY)
+void rd_frame_flip(const uint8_t rgba[4], int halfY)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (!f || !f->headValid) {
         return;
     }
@@ -81,7 +81,7 @@ void rd_FrameFlip(const uint8_t rgba[4], int halfY)
     }
 }
 
-void rd__FrameHeadResolve(RdFrame *f, int keep)
+void rd__frame_head_resolve(RdFrame *f, int keep)
 {
     if (!f || !f->headValid) {
         return;
@@ -98,17 +98,17 @@ void rd__FrameHeadResolve(RdFrame *f, int keep)
 
 /* --------------------------------------------------------------- Z scale */
 
-void rd_SetTargetZFormat(RdTarget t, RdZFormat fmt)
+void rd_set_target_z_format(RdTarget t, RdZFormat fmt)
 {
-    RdTargetRec *r = rd__TargetRec(t.id);
+    RdTargetRec *r = rd__target_rec(t.id);
     if (r) {
         r->zFormat = (uint8_t)fmt;
     }
 }
 
-float rd__TargetZScale(uint32_t id)
+float rd__target_z_scale(uint32_t id)
 {
-    const RdTargetRec *r = rd__TargetRec(id);
+    const RdTargetRec *r = rd__target_rec(id);
     switch (r ? r->zFormat : RD_ZFMT_32) {
     case RD_ZFMT_24:
         return 1.0f / 16777216.0f;
@@ -119,7 +119,7 @@ float rd__TargetZScale(uint32_t id)
            with the top values apart (gs_math.hlsli gs_z_to_depth); on any
            other (the Vulkan D24S8 fallback, rhi.h) z * 2^-32 */
         if (g_rd.hasDevice) {
-            const char *ds = rhi_Limits()->depthStencilFormatName;
+            const char *ds = rhi_limits()->depthStencilFormatName;
             if (!ds || strcmp(ds, "D32S8") != 0) {
                 return 1.0f / 4294967296.0f;
             }
@@ -128,13 +128,13 @@ float rd__TargetZScale(uint32_t id)
     }
 }
 
-float rd_TargetZScale(RdTarget t)
+float rd_target_z_scale(RdTarget t)
 {
-    return rd__TargetZScale(t.id);
+    return rd__target_z_scale(t.id);
 }
 
 /* gs_math.hlsli gs_z_to_depth, the same expression */
-float rd__GsDepth(uint32_t z, float scale)
+float rd__gs_depth(uint32_t z, float scale)
 {
     if (scale < 1.5e-10f) {
         if (z >= 0xFFFF0000u) {
@@ -148,9 +148,9 @@ float rd__GsDepth(uint32_t z, float scale)
 
 /* ---------------------------------------------------------- VU block */
 
-void rd_SetVuCommon(const RdVuCommon *block)
+void rd_set_vu_common(const RdVuCommon *block)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (f && block) {
         f->vu = *block;
         f->hasVu = 1;
@@ -158,17 +158,17 @@ void rd_SetVuCommon(const RdVuCommon *block)
     if (block) {
         /* the packet is referenced from the current position
          * of all 13 lists, so every list's VU image takes it here */
-        rd__VuLoadCommon(block);
+        rd__vu_load_common(block);
     }
 }
 
-const RdVuCommon *rd_GetVuCommon(void)
+const RdVuCommon *rd_get_vu_common(void)
 {
-    const RdFrame *f = rd__RecFrame();
+    const RdFrame *f = rd__rec_frame();
     if (f && f->hasVu) {
         return &f->vu;
     }
-    f = rd__LastFrame();
+    f = rd__last_frame();
     return f && f->hasVu ? &f->vu : NULL;
 }
 
@@ -212,7 +212,7 @@ static void eyeOf(const float *v, float eye[3])
     }
 }
 
-void rd__FillCameraCB(void *cbv, const RdCamera *cam)
+void rd__fill_camera_cb(void *cbv, const RdCamera *cam)
 {
     IcoFrameCB *cb = cbv;
     if (!cam) {

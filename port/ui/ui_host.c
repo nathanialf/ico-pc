@@ -36,17 +36,17 @@ extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
 extern void gif_HostFlush(void); /* GifHost.h */
 
 /* the presenter's overlay, at every present (rd.h
-   rd_SetPresentOverlay): the popup on the output (inside the picture under
+   rd_set_present_overlay): the popup on the output (inside the picture under
    the CRT filter) */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_PhotoDrawOverlay(ctx); /* the photo mode HUD, under the popups */
-    ui_PopupDrawOverlay(ctx);
+    ui_photo_draw_overlay(ctx); /* the photo mode HUD, under the popups */
+    ui_popup_draw_overlay(ctx);
 }
 
 /* the touch controls on the presenter's top
-   layer (rd.h rd_SetPresentOverlayTop): on the output at its resolution,
+   layer (rd.h rd_set_present_overlay_top): on the output at its resolution,
    never through the CRT filter; under the HUD and the popups without it */
 static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
 {
@@ -55,9 +55,9 @@ static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
        pointer's hit test: this layer's ctx is always the output and its
        box, where the overlay's is the CRT filter's grid under the filter
        (the pointer's place is a fraction of the window) */
-    ui_MouseSetView((int)ctx->outW, (int)ctx->outH, ctx->box.x, ctx->box.y, (int)ctx->box.w,
-                    (int)ctx->box.h);
-    ui_TouchDrawOverlay(ctx);
+    ui_mouse_set_view((int)ctx->outW, (int)ctx->outH, ctx->box.x, ctx->box.y, (int)ctx->box.w,
+                      (int)ctx->box.h);
+    ui_touch_draw_overlay(ctx);
 }
 #endif
 
@@ -69,12 +69,12 @@ static void sync(void)
     f.centerX = center_X;
     f.centerY = center_Y;
     f.z = UI_LAYOUT_Z;
-    ui_SetGsFrame(&f);
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_gs_frame(&f);
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
 #ifdef ICO_RD
-    const RdSettings *s = rd_GetSettings();
+    const RdSettings *s = rd_get_settings();
     if (s) {
-        ui_SetScale(ui_ScaleFor((int)s->preset, s->outputHeight));
+        ui_set_scale(ui_scale_for((int)s->preset, s->outputHeight));
     }
 #endif
 }
@@ -104,37 +104,37 @@ static void hostQuit(void)
 
 #endif
 
-void ui_HostInit(void)
+void ui_host_init(void)
 {
-    ui_FontInit();
-    ui__SetSyncHook(sync);
+    ui_font_init();
+    ui__set_sync_hook(sync);
 #ifdef ICO_RD
-    ui__SetRecordHook(gif_HostFlush);
-    rd_SetPresentOverlay(hostOverlay, NULL);
-    rd_SetPresentOverlayTop(hostOverlayTop, NULL);
+    ui__set_record_hook(gif_HostFlush);
+    rd_set_present_overlay(hostOverlay, NULL);
+    rd_set_present_overlay_top(hostOverlayTop, NULL);
 #endif
-    ui_PopupSetDevTest(truthy(getenv("ICO_UI_POPUP_TEST")));
+    ui_popup_set_dev_test(truthy(getenv("ICO_UI_POPUP_TEST")));
 #ifdef ICO_UI_HAVE_SDL
-    ui_SettingsSetQuitHandler(hostQuit);
+    ui_settings_set_quit_handler(hostQuit);
 #endif
 }
 
-void ui_HostVsync(unsigned int mainTick)
+void ui_host_vsync(unsigned int mainTick)
 {
-    ui_PopupDevTick(mainTick);
-    ui_PopupVsync();
+    ui_popup_dev_tick(mainTick);
+    ui_popup_vsync();
 }
 
-void ui_HostShutdown(void)
+void ui_host_shutdown(void)
 {
 #ifdef ICO_RD
-    rd_SetPresentOverlay(NULL, NULL);
-    rd_SetPresentOverlayTop(NULL, NULL);
+    rd_set_present_overlay(NULL, NULL);
+    rd_set_present_overlay_top(NULL, NULL);
 #endif
 #ifdef ICO_UI_HAVE_SDL
-    ui_SettingsSetQuitHandler(NULL);
+    ui_settings_set_quit_handler(NULL);
 #endif
-    ui_FontShutdown();
-    ui__SetRecordHook(NULL);
-    ui__SetSyncHook(NULL);
+    ui_font_shutdown();
+    ui__set_record_hook(NULL);
+    ui__set_sync_hook(NULL);
 }

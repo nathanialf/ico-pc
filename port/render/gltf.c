@@ -128,13 +128,13 @@ static void m4_from_d(float f[16], const double d[16])
         f[i] = (float)d[i];
 }
 
-void gltf_Mat4Identity(float out[16])
+void gltf_mat4_identity(float out[16])
 {
     memset(out, 0, 16 * sizeof(float));
     out[0] = out[5] = out[10] = out[15] = 1.0f;
 }
 
-void gltf_Mat4Mul(float out[16], const float a[16], const float b[16])
+void gltf_mat4_mul(float out[16], const float a[16], const float b[16])
 {
     double da[16], db[16], dr[16];
     m4_to_d(da, a);
@@ -143,7 +143,7 @@ void gltf_Mat4Mul(float out[16], const float a[16], const float b[16])
     m4_from_d(out, dr);
 }
 
-int gltf_Mat4Invert(float out[16], const float m[16])
+int gltf_mat4_invert(float out[16], const float m[16])
 {
     double dm[16], di[16];
     m4_to_d(dm, m);
@@ -152,10 +152,10 @@ int gltf_Mat4Invert(float out[16], const float m[16])
     return rc;
 }
 
-void gltf_DocInit(GltfDoc *doc)
+void gltf_doc_init(GltfDoc *doc)
 {
     memset(doc, 0, sizeof(*doc));
-    gltf_Mat4Identity(doc->nodeMatrix);
+    gltf_mat4_identity(doc->nodeMatrix);
 }
 
 /* --- string builder --------------------------------------------------------- */
@@ -359,7 +359,7 @@ static int is_zero16(const float m[16])
 static int is_identity16(const float m[16])
 {
     float id[16];
-    gltf_Mat4Identity(id);
+    gltf_mat4_identity(id);
     for (int i = 0; i < 16; i++)
         if (m[i] != id[i])
             return 0;
@@ -478,7 +478,7 @@ static void sb_uri(Sb *s, const char *name)
     }
 }
 
-int gltf_Write(const char *path, const GltfDoc *doc, char *why, size_t whyLen)
+int gltf_write(const char *path, const GltfDoc *doc, char *why, size_t whyLen)
 {
     if (!path || !doc)
         return fail(why, whyLen, "no path or document");
@@ -597,7 +597,7 @@ int gltf_Write(const char *path, const GltfDoc *doc, char *why, size_t whyLen)
         float lf[16];
         m4_from_d(lf, local);
         if (!floats_finite(lf, 16))
-            gltf_Mat4Identity(lf);
+            gltf_mat4_identity(lf);
         sb_printf(&s, ",\n{\"name\":\"bone_%02u\"", b);
         if (!is_identity16(lf)) { /* the default is left out */
             sb_str(&s, ",\"matrix\":");
@@ -1418,7 +1418,7 @@ static int read_skin(Rd *r, uint64_t si, GltfDoc *out, int **jointToBone, size_t
     }
     sk->count = count;
     for (uint32_t b = 0; b < count; b++) {
-        gltf_Mat4Identity(sk->invBind[b]);
+        gltf_mat4_identity(sk->invBind[b]);
         sk->parent[b] = -1;
     }
     for (j = 0; j < jc; j++) {
@@ -1705,11 +1705,11 @@ static int read_doc(Rd *r, GltfDoc *out)
     return 0;
 }
 
-int gltf_Read(const char *path, GltfDoc *out, char *why, size_t whyLen)
+int gltf_read(const char *path, GltfDoc *out, char *why, size_t whyLen)
 {
     if (!out)
         return fail(why, whyLen, "no document");
-    gltf_DocInit(out);
+    gltf_doc_init(out);
     if (!path)
         return fail(why, whyLen, "no path");
     Rd r;
@@ -1727,13 +1727,13 @@ int gltf_Read(const char *path, GltfDoc *out, char *why, size_t whyLen)
     free(r.parentOf);
     free(r.file);
     if (rc != 0) {
-        gltf_Free(out);
+        gltf_free(out);
         return -1;
     }
     return 0;
 }
 
-void gltf_Free(GltfDoc *doc)
+void gltf_free(GltfDoc *doc)
 {
     if (!doc)
         return;
@@ -1754,5 +1754,5 @@ void gltf_Free(GltfDoc *doc)
     free(doc->skin.parent);
     free(doc->skin.names);
     free(doc->extrasText);
-    gltf_DocInit(doc);
+    gltf_doc_init(doc);
 }

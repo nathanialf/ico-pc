@@ -19,7 +19,7 @@ ico_add_shader(blit_ps blit.hlsl blit_ps fragment)
 ico_add_shader(blit_depth_ps blit.hlsl blit_depth_ps fragment)
 # the shadow count box-reduced to the GS size (rd_replay.c doShadowResolve)
 ico_add_shader(box_reduce_ps blit.hlsl box_reduce_ps fragment)
-# tests only, rd__CameraProbe
+# tests only, rd__camera_probe
 ico_add_shader(camera_probe_ps blit.hlsl camera_probe_ps fragment)
 ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
 ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
@@ -65,7 +65,7 @@ ico_add_shader(crt_ps crt.hlsl crt_ps fragment)
 # tests only: the probe output of vu1_test (VU_F_PROBE)
 ico_add_shader(vu_probe_ps vu_prelit.hlsl vu_probe_ps fragment)
 # the entries that call gs_dual_out, without the second output,
-# for a device without dual-source blending (rd_pipeline.c rd__ExpandNoDual)
+# for a device without dual-source blending (rd_pipeline.c rd__expand_no_dual)
 foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
     ico_add_shader(${_e} sprite.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 endforeach()

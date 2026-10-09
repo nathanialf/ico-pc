@@ -273,7 +273,7 @@ static char *read_text(const char *path)
    link this file) writes every Nth frame it replays as an rd dump into the
    folder dump_dir= names (default: dumps beside the ini; created), for
    rd_replay_tool.  Handed over in the environment, ICO_RD_DUMP_EVERY and
-   ICO_RD_DUMP_DIR, which rd_Init reads.  dump_interp=1 also
+   ICO_RD_DUMP_DIR, which rd_init reads.  dump_interp=1 also
    writes each dumped frame interpolated half way from the one
    before (rd-NNNNN-i50.rddump), handed over as ICO_RD_DUMP_INTERP, which is
    always set with the other two so the ini or config.toml decides.
@@ -451,7 +451,7 @@ static const struct {
     /* test popups from Main tick 100 (port/ui/popup.h) */
     {"dev.popup_test", "popup_test"},
     /* the renderer backend of the window build, "vulkan" (default) or "d3d12"
-       (window_host.c, port/rhi/rhi.h rhi_CreateBackend) */
+       (window_host.c, port/rhi/rhi.h rhi_create_backend) */
     {"video.backend", "backend"},
 };
 

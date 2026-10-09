@@ -37,7 +37,7 @@
  *
  * On a device without dual-source blending (g_rd.noDual), only
  * the LERPs and Cd*FIX + Cs read the second output, so only they change
- * (rd__ExpandNoDual).  The draw becomes two: a colour pass whose c0.a is
+ * (rd__expand_no_dual).  The draw becomes two: a colour pass whose c0.a is
  * the factor c1 would carry (the same float: F/128, or 1.0 / 0 for a PABE
  * pixel left unblended), blended SRC_ALPHA / ONE_MINUS_SRC_ALPHA (the LERPs)
  * or ONE / SRC_ALPHA (Cd*FIX + Cs) under the RGB part of the mask, then,
@@ -85,12 +85,12 @@ static uint32_t s_failedCount;
 
 static bool s_fullLogged;
 
-bool rd__PipeKeyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
+bool rd__pipe_key_equal(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
 {
     return memcmp(a, b, sizeof(*a)) == 0;
 }
 
-RdBlendPath rd__BlendPath(uint8_t b)
+RdBlendPath rd__blend_path(uint8_t b)
 {
     switch (b) {
     case RD_BLEND_LERP_FIX:
@@ -119,7 +119,7 @@ RdBlendPath rd__BlendPath(uint8_t b)
 }
 
 /* The raw ALPHA register of each mode (GifPacket.c alphaTable, rd_state.h). */
-uint32_t rd__AlphaRegister(uint8_t blend)
+uint32_t rd__alpha_register(uint8_t blend)
 {
     /* mode 3 is 0x29 (alphaTable {1, 2, 2, 0}: A Cd, B 0, C FIX, D Cs) */
     static const uint8_t kReg[RD_BLEND_COUNT] = {0x68, 0x62, 0x64, 0x29, 0x44, 0x48,
@@ -131,7 +131,7 @@ uint32_t rd__AlphaRegister(uint8_t blend)
  * one representative mode per blend path (the uniforms carry the rest). */
 static uint8_t canonicalBlend(uint8_t blend)
 {
-    switch (rd__BlendPath(blend)) {
+    switch (rd__blend_path(blend)) {
     case RD_BP_LERP:
         return RD_BLEND_LERP_AS;
     case RD_BP_PREMUL_ADD:
@@ -160,10 +160,10 @@ static uint8_t tfmtOf(RhiFormat f)
     }
 }
 
-int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFormat colorFmt,
-                       RhiFormat depthFmt, RdDrawPass out[2])
+int rd__plan_screen_draw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFormat colorFmt,
+                         RhiFormat depthFmt, RdDrawPass out[2])
 {
-    return rd__PlanScreenDrawEx(s, prim, 0, space, colorFmt, depthFmt, out);
+    return rd__plan_screen_draw_ex(s, prim, 0, space, colorFmt, depthFmt, out);
 }
 
 /* PRIM.AA1: aa1 is PRIM.AA1 on a line or triangle command (rd_replay.c
@@ -175,8 +175,8 @@ int rd__PlanScreenDraw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFo
  * antialiased line writes no Z: all its pixels are edge pixels.  The edge
  * geometry of a triangle draws with the pass's key and zwrite off
  * (rd_replay.c). */
-int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
-                         RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2])
+int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
+                            RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2])
 {
     const RdDrawState *d = &s->ds;
     const int hasDepth = depthFmt != RHI_FMT_UNKNOWN;
@@ -190,14 +190,14 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     if (colorFmt == RHI_FMT_RGBA8_UINT) {
         blend = RD_BLEND_COUNT; /* integer targets never blend in hardware */
     }
-    const RdBlendPath bp = rd__BlendPath(blend);
+    const RdBlendPath bp = rd__blend_path(blend);
     if (bp == RD_BP_CD_KEEP) {
-        rd__LogOnce(RD_ONCE_CD_KEEP, "blend mode 11 (Cd*As + Cd) is not representable; Cd kept");
+        rd__log_once(RD_ONCE_CD_KEEP, "blend mode 11 (Cd*As + Cd) is not representable; Cd kept");
     } else if (bp >= RD_BP_AD_ADD) {
-        rd__LogOnce(RD_ONCE_AD, "Ad blend modes 8-10 use DST_ALPHA (Ad/255, not Ad/128)");
+        rd__log_once(RD_ONCE_AD, "Ad blend modes 8-10 use DST_ALPHA (Ad/255, not Ad/128)");
     }
     if (!d->colclamp && bp != RD_BP_NONE) {
-        rd__LogOnce(RD_ONCE_COLCLAMP, "COLCLAMP 0 on a hardware-blended draw clamps instead");
+        rd__log_once(RD_ONCE_COLCLAMP, "COLCLAMP 0 on a hardware-blended draw clamps instead");
     }
 
     RdDrawPass base;
@@ -216,11 +216,11 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     k->fs = RD_FS_SPRITE;
     k->colorFmt = (uint8_t)colorFmt;
     k->depthFmt = (uint8_t)depthFmt;
-    /* an R8 coverage texture (rd_CreateTextureR8) is drawn by font_ps and a
-     * sheet texture (rd_CreateTextureSheet) by font_sheet_ps; the fragment
+    /* an R8 coverage texture (rd_create_texture_r8) is drawn by font_ps and a
+     * sheet texture (rd_create_texture_sheet) by font_sheet_ps; the fragment
      * shader is part of the key */
     if (d->texEnabled) {
-        const RdTexRec *tr = rd__TexRec(s->tex);
+        const RdTexRec *tr = rd__tex_rec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_R8) {
             k->fs = RD_FS_FONT;
         } else if (tr && tr->kind == RD_TEXKIND_IMAGE && tr->format == RD_TEXEL_SHEET) {
@@ -242,7 +242,7 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     }
 
     /* TEXA applied per texel, before the bilinear filter */
-    if (k->fs == RD_FS_SPRITE && rd__TexaPerTexel(s)) {
+    if (k->fs == RD_FS_SPRITE && rd__texa_per_texel(s)) {
         k->fs = RD_FS_SPRITE_TEXA;
     }
 
@@ -252,9 +252,9 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     if (d->pabe) {
         base.flags |= ICO_DF_PABE;
         if (bp == RD_BP_PREMUL_ADD || bp == RD_BP_PREMUL_REVSUB || bp >= RD_BP_AD_ADD) {
-            rd__LogOnce(RD_ONCE_PABE, "PABE on an additive, subtractive or destination-alpha "
-                                      "blend: pixels with As below 0x80 blend instead of "
-                                      "writing Cs");
+            rd__log_once(RD_ONCE_PABE, "PABE on an additive, subtractive or destination-alpha "
+                                       "blend: pixels with As below 0x80 blend instead of "
+                                       "writing Cs");
         }
     }
     if (bp == RD_BP_DST_FIX) {
@@ -319,7 +319,7 @@ int rd__PlanScreenDrawEx(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t s
     return 2;
 }
 
-int rd__TexaPerTexel(const RdStateBlock *s)
+int rd__texa_per_texel(const RdStateBlock *s)
 {
     const RdDrawState *d = &s->ds;
     if (!d->texEnabled || d->texa == RD_TEXA_80_80) {
@@ -328,9 +328,9 @@ int rd__TexaPerTexel(const RdStateBlock *s)
     if (d->magFilter != RD_FILTER_LINEAR && d->minFilter != RD_FILTER_LINEAR) {
         return 0; /* nearest: one texel, expanded after the fetch */
     }
-    const RdTexRec *tr = rd__TexRec(s->tex);
+    const RdTexRec *tr = rd__tex_rec(s->tex);
     return tr && tr->src != RD_TEXSRC_RGBA32 &&
-           !(tr->kind == RD_TEXKIND_IMAGE && rd__TexelIsCoverage(tr->format));
+           !(tr->kind == RD_TEXKIND_IMAGE && rd__texel_is_coverage(tr->format));
 }
 
 /* Converts a planned screen pass for a command whose prims carry Q != 1 to
@@ -338,7 +338,7 @@ int rd__TexaPerTexel(const RdStateBlock *s)
  * sprite pass converts (an R8 font texture and PRIM.AA1 keep their
  * shaders); returns whether it did.  A sprite_texa_ps pass converts too,
  * and sprite_stq_ps expands TEXA after the sampler. */
-int rd__StqPass(RdDrawPass *dp)
+int rd__stq_pass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
     if ((k->fs != RD_FS_SPRITE && k->fs != RD_FS_SPRITE_TEXA) ||
@@ -350,19 +350,19 @@ int rd__StqPass(RdDrawPass *dp)
     return 1;
 }
 
-/* The presentation overlay's state (rd.h rd_OverlayPrims):
+/* The presentation overlay's state (rd.h rd_overlay_prims):
  * blend with ABE on, no Z test or write (and no depth target), no alpha
  * test, no DATE, FBA and PABE off, COLCLAMP on, all channels written. */
-void rd__OverlayState(RdStateBlock *s, uint8_t blend)
+void rd__overlay_state(RdStateBlock *s, uint8_t blend)
 {
-    rd__ResetStateBlock(s);
-    s->ds.test = rd_TestFromGs(RD_TEST_OFF);
+    rd__reset_state_block(s);
+    s->ds.test = rd_test_from_gs(RD_TEST_OFF);
     s->ds.zwrite = RD_ZWRITE_OFF;
     s->ds.abe = 1;
     s->ds.blend = blend;
 }
 
-RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
+RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
 {
     RdPipeKeyInt k;
     memset(&k, 0, sizeof(k));
@@ -381,9 +381,9 @@ RdPipeKeyInt rd__PostKey(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
     return k;
 }
 
-RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt)
+RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt)
 {
-    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT_DEPTH, colorFmt);
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_DEPTH, colorFmt);
     k.depthFmt = RHI_FMT_D32F;
     k.gs.ztst = RD_ZTST_ALWAYS;
     k.gs.zwrite = RD_ZWRITE_ON;
@@ -392,7 +392,7 @@ RdPipeKeyInt rd__PresentDepthKey(RhiFormat colorFmt)
 
 /* The entries that call gs_dual_out (their *_nodual twins
  * output c0 alone). */
-bool rd__FsHasNoDual(uint8_t fs)
+bool rd__fs_has_no_dual(uint8_t fs)
 {
     switch (fs) {
     case RD_FS_SPRITE:
@@ -412,15 +412,15 @@ bool rd__FsHasNoDual(uint8_t fs)
 
 static RdBlendPath keyBlendPath(const RdPipeKeyInt *k)
 {
-    return k->colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__BlendPath(k->gs.blend);
+    return k->colorFmt == RHI_FMT_RGBA8_UINT ? RD_BP_NONE : rd__blend_path(k->gs.blend);
 }
 
-int rd__ExpandNoDual(const RdDrawPass *in, int n, RdDrawPass out[4])
+int rd__expand_no_dual(const RdDrawPass *in, int n, RdDrawPass out[4])
 {
     int m = 0;
     for (int i = 0; i < n; i++) {
         RdDrawPass p = in[i];
-        if (!g_rd.noDual || !rd__FsHasNoDual(p.key.fs)) {
+        if (!g_rd.noDual || !rd__fs_has_no_dual(p.key.fs)) {
             out[m++] = p;
             continue;
         }
@@ -451,9 +451,9 @@ int rd__ExpandNoDual(const RdDrawPass *in, int n, RdDrawPass out[4])
                 a.key.gs.zwrite = RD_ZWRITE_OFF;
                 if (a.key.gs.ztst == RD_ZTST_GREATER) {
                     a.key.gs.ztst = RD_ZTST_GEQUAL;
-                    rd__LogOnce(RD_ONCE_NODUAL_GREATER,
-                                "blend: two-pass fallback under Z GREATER with Z write: a "
-                                "fragment at the stored Z writes its alpha");
+                    rd__log_once(RD_ONCE_NODUAL_GREATER,
+                                 "blend: two-pass fallback under Z GREATER with Z write: a "
+                                 "fragment at the stored Z writes its alpha");
                 }
             }
             out[m++] = a;
@@ -462,7 +462,7 @@ int rd__ExpandNoDual(const RdDrawPass *in, int n, RdDrawPass out[4])
     return m;
 }
 
-bool rd__NoDualSecond(const RdDrawPass *ex, int i)
+bool rd__no_dual_second(const RdDrawPass *ex, int i)
 {
     return i > 0 && (ex[i].flags & ICO_DF_NODUAL_ALPHA_PASS) != 0 &&
            (ex[i - 1].flags & ICO_DF_NODUAL_FACTOR) != 0;
@@ -638,7 +638,7 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
     d.colorCount = 1;
     d.depthFormat = (RhiFormat)k->depthFmt;
     d.debugName = "rd";
-    return rhi_CreatePipeline(&d);
+    return rhi_create_pipeline(&d);
 }
 
 /* An open-addressed index over s_cache (slot + 1, 0 = empty),
@@ -657,27 +657,27 @@ static uint32_t keyHash(const RdPipeKeyInt *k)
     return h;
 }
 
-RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
+RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 {
     /* without dual-source blending a gs_dual_out entry draws
-     * as its *_nodual twin; the planned passes come through rd__ExpandNoDual,
+     * as its *_nodual twin; the planned passes come through rd__expand_no_dual,
      * the single keys (the shadow count's volumes) are turned here */
     RdPipeKeyInt nk;
-    if (g_rd.noDual && !k->gs.nodual && rd__FsHasNoDual(k->fs)) {
+    if (g_rd.noDual && !k->gs.nodual && rd__fs_has_no_dual(k->fs)) {
         nk = *k;
         nk.gs.nodual = 1;
         const RdBlendPath bp = keyBlendPath(k);
         if (bp == RD_BP_LERP || bp == RD_BP_DST_FIX) {
-            rd__LogOnce(RD_ONCE_NODUAL_KEY,
-                        "blend: a blended key (program %u blend %u fs %u) was not split into "
-                        "the two-pass fallback; its alpha is the factor",
-                        k->gs.program, k->gs.blend, k->fs);
+            rd__log_once(RD_ONCE_NODUAL_KEY,
+                         "blend: a blended key (program %u blend %u fs %u) was not split into "
+                         "the two-pass fallback; its alpha is the factor",
+                         k->gs.program, k->gs.blend, k->fs);
         }
         k = &nk;
     }
     uint32_t at = keyHash(k) % RD_PIPE_HASH;
     for (; s_hash[at] != 0; at = (at + 1) % RD_PIPE_HASH) {
-        if (rd__PipeKeyEqual(&s_cache[s_hash[at] - 1].key, k)) {
+        if (rd__pipe_key_equal(&s_cache[s_hash[at] - 1].key, k)) {
             return s_cache[s_hash[at] - 1].pipe;
         }
     }
@@ -685,7 +685,7 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
         return (RhiPipeline){0};
     }
     for (uint32_t i = 0; i < s_failedCount; i++) {
-        if (rd__PipeKeyEqual(&s_failed[i], k)) {
+        if (rd__pipe_key_equal(&s_failed[i], k)) {
             return (RhiPipeline){0};
         }
     }
@@ -695,7 +695,7 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
     if (s_count >= RD_PIPELINE_CACHE_MAX) {
         if (!s_fullLogged) {
             s_fullLogged = true;
-            rd__Log("pipeline cache full (%d keys): new keys are not drawn (program %u blend %u "
+            rd__log("pipeline cache full (%d keys): new keys are not drawn (program %u blend %u "
                     "vs %u fs %u)",
                     RD_PIPELINE_CACHE_MAX, k->gs.program, k->gs.blend, k->vs, k->fs);
         }
@@ -705,7 +705,7 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
     if (!p.id) {
         if (s_failedCount < RD_PIPELINE_FAIL_MAX) {
             s_failed[s_failedCount++] = *k;
-            rd__Log("pipeline creation failed (program %u blend %u vs %u fs %u fmt %u/%u); "
+            rd__log("pipeline creation failed (program %u blend %u vs %u fs %u fmt %u/%u); "
                     "draws with this key are skipped",
                     k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt);
         }
@@ -719,11 +719,11 @@ RhiPipeline rd__GetPipeline(const RdPipeKeyInt *k)
     return p;
 }
 
-void rd__PipelineCacheClear(void)
+void rd__pipeline_cache_clear(void)
 {
     if (g_rd.hasDevice) {
         for (uint32_t i = 0; i < s_count; i++) {
-            rhi_DestroyPipeline(s_cache[i].pipe);
+            rhi_destroy_pipeline(s_cache[i].pipe);
         }
     }
     s_count = 0;
@@ -735,28 +735,28 @@ void rd__PipelineCacheClear(void)
 static RdPipelineProgressFn s_progressFn;
 static void *s_progressCtx;
 
-void rd_SetPipelineProgress(RdPipelineProgressFn fn, void *ctx)
+void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx)
 {
     s_progressFn = fn;
     s_progressCtx = fn != NULL ? ctx : NULL;
 }
 
-uint32_t rd_PrecreatePipelines(void)
+uint32_t rd_precreate_pipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     if (!g_rd.hasDevice) {
-        /* logged, so a call before rd_Init does not pass unnoticed */
-        rd__Log("rd_PrecreatePipelines without a device (before rd_Init?): nothing created");
+        /* logged, so a call before rd_init does not pass unnoticed */
+        rd__log("rd_precreate_pipelines without a device (before rd_init?): nothing created");
         return 0;
     }
-    const double t0 = rd__NowMs();
+    const double t0 = rd__now_ms();
     const uint32_t before = s_count;
-    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
     /* n counts the whole set, keys[] holds the first RD_PIPELINE_CACHE_MAX:
      * only those are created, and the progress counts to them */
     const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
     if (n > m) {
-        rd__Log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
+        rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
                 "the first %u are created",
                 n, (unsigned)RD_PIPELINE_CACHE_MAX, m);
     }
@@ -765,25 +765,25 @@ uint32_t rd_PrecreatePipelines(void)
         s_progressFn(s_progressCtx, 0, m);
     }
     for (uint32_t i = 0; i < m; i++) {
-        if (!rd__GetPipeline(&keys[i]).id) {
+        if (!rd__get_pipeline(&keys[i]).id) {
             failed++;
         }
         if (s_progressFn != NULL) {
             s_progressFn(s_progressCtx, i + 1, m);
         }
     }
-    const double ms = rd__NowMs() - t0;
-    rd__Log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed)",
+    const double ms = rd__now_ms() - t0;
+    rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed)",
             s_count - before, n, ms, failed);
     return s_count - before;
 }
 
-uint32_t rd__PipelineCount(void)
+uint32_t rd__pipeline_count(void)
 {
     return s_count;
 }
 
-const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
+const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
 {
     return i < s_count ? &s_cache[i].key : NULL;
 }
@@ -806,23 +806,23 @@ const RdPipeKeyInt *rd__PipelineKeyAt(uint32_t i)
  *   The DATE snapshot: blit_vs/date_snap_ps into R8.
  *   PRIM.AA1 lines and triangles: WORLD screen prims through
  *   sprite_aa1_world_vs / sprite_aa1_ps, the states stormTest.c and puddle.c
- *   draw them under (rd__EnumerateReachableScreen lists them).
+ *   draw them under (rd__enumerate_reachable_screen lists them).
  *   Blits: blit_vs/blit_ps into RGBA8 (presenter line doubling, headless
  *   output) and into the swapchain format (BGRA8 or RGBA8); blend_int into
  *   RGBA8_UINT (exact feedback blends).
  *
  * The mode 3 and Ad blends are reachable only through BGA lightning data,
- * drawn by rd_WorldPrims, so they are not in the screen families.
- * Each enumerated state goes through rd__PlanScreenDraw, the function the
+ * drawn by rd_world_prims, so they are not in the screen families.
+ * Each enumerated state goes through rd__plan_screen_draw, the function the
  * replayer uses, so the count is the count the cache would reach.
  *
- * rd__EnumerateReachable adds the VU program families
- * (rd__EnumerateReachableVu, rd_mesh.c) to these; the screen and post set
- * alone stays rd__EnumerateReachableScreen. */
-uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
+ * rd__enumerate_reachable adds the VU program families
+ * (rd__enumerate_reachable_vu, rd_mesh.c) to these; the screen and post set
+ * alone stays rd__enumerate_reachable_screen. */
+uint32_t rd__add_pipe_key(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < n && i < max; i++) {
-        if (rd__PipeKeyEqual(&out[i], k)) {
+        if (rd__pipe_key_equal(&out[i], k)) {
             return n;
         }
     }
@@ -834,19 +834,19 @@ uint32_t rd__AddPipeKey(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPip
 
 static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
 {
-    uint32_t n = rd__EnumerateReachableVu(out, max, rd__EnumerateReachableScreen(out, max));
-    n = rd__EnumerateReachableShadow(out, max, n);
-    n = rd__EnumerateReachableFog(out, max, n);
-    n = rd__EnumerateReachableWater(out, max, n);
-    n = rd__EnumerateReachableCrt(out, max, n);
-    return rd__EnumerateReachableBlur(out, max, n);
+    uint32_t n = rd__enumerate_reachable_vu(out, max, rd__enumerate_reachable_screen(out, max));
+    n = rd__enumerate_reachable_shadow(out, max, n);
+    n = rd__enumerate_reachable_fog(out, max, n);
+    n = rd__enumerate_reachable_water(out, max, n);
+    n = rd__enumerate_reachable_crt(out, max, n);
+    return rd__enumerate_reachable_blur(out, max, n);
 }
 
-/* In the two-pass fallback every key is what rd__ExpandNoDual
+/* In the two-pass fallback every key is what rd__expand_no_dual
  * makes of it (the families above plan with dual-source blending), so the
  * set precreated is the set the draws reach (rd_mesh.c's VU and rd_water.c's
  * families among them). */
-uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
+uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
 {
     if (!g_rd.noDual) {
         return enumerateAll(out, max);
@@ -858,9 +858,9 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
         RdDrawPass in, ex[4];
         memset(&in, 0, sizeof(in));
         in.key = raw[i];
-        const int m = rd__ExpandNoDual(&in, 1, ex);
+        const int m = rd__expand_no_dual(&in, 1, ex);
         for (int j = 0; j < m; j++) {
-            n = rd__AddPipeKey(out, max, n, &ex[j].key);
+            n = rd__add_pipe_key(out, max, n, &ex[j].key);
         }
     }
     return n;
@@ -869,24 +869,24 @@ uint32_t rd__EnumerateReachable(RdPipeKeyInt *out, uint32_t max)
 /* the CRT filter (rd_crt.c): the glow passes into RGBA16F, the composite on
  * the headless output (RGBA8) and the swapchain (BGRA8); the virtual
  * source's box reduction is the shadow family's key */
-uint32_t rd__EnumerateReachableCrt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_crt(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
-    const RdPipeKeyInt keys[4] = {rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F),
-                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F),
-                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_RGBA8_UNORM),
-                                  rd__PostKey(RD_VS_CRT, RD_FS_CRT, RHI_FMT_BGRA8_UNORM)};
+    const RdPipeKeyInt keys[4] = {rd__post_key(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F),
+                                  rd__post_key(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F),
+                                  rd__post_key(RD_VS_CRT, RD_FS_CRT, RHI_FMT_RGBA8_UNORM),
+                                  rd__post_key(RD_VS_CRT, RD_FS_CRT, RHI_FMT_BGRA8_UNORM)};
     for (int i = 0; i < 4; i++) {
-        n = rd__AddPipeKey(out, max, n, &keys[i]);
+        n = rd__add_pipe_key(out, max, n, &keys[i]);
     }
     return n;
 }
 
 /* ------------------------------------------------------------------- fog */
 
-int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
 {
-    const int np = rd__PlanScreenDraw(s, RD_PRIM_TRIANGLES, RD_SPACE_FULLSCREEN, colorFmt,
-                                      RHI_FMT_UNKNOWN, out);
+    const int np = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_FULLSCREEN, colorFmt,
+                                        RHI_FMT_UNKNOWN, out);
     for (int i = 0; i < np; i++) {
         out[i].key.gs.program = RD_PROG_POST;
         out[i].key.fs = RD_FS_FOG;
@@ -894,27 +894,27 @@ int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
     return np;
 }
 
-uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     /* fog_DrawFog: TEST 0x50000, ZBUF with ZMSK, ALPHA 0x44, PRIM 0x156 (ABE)
      * into SCENE (RGBA8) */
     RdStateBlock s;
-    rd__ResetStateBlock(&s);
-    s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
+    rd__reset_state_block(&s);
+    s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
     s.ds.zwrite = RD_ZWRITE_OFF;
     s.ds.abe = 1;
     s.ds.blend = RD_BLEND_LERP_AS;
     RdDrawPass dp[2];
-    const int np = rd__FogPlan(&s, RHI_FMT_RGBA8_UNORM, dp);
+    const int np = rd__fog_plan(&s, RHI_FMT_RGBA8_UNORM, dp);
     for (int i = 0; i < np; i++) {
-        n = rd__AddPipeKey(out, max, n, &dp[i].key);
+        n = rd__add_pipe_key(out, max, n, &dp[i].key);
     }
     return n;
 }
 
 /* --------------------------------------------------------------- shadows */
 
-RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int decr)
+RdPipeKeyInt rd__shadow_volume_key(const RdStateBlock *s, RhiFormat colorFmt, int decr)
 {
     RdPipeKeyInt k;
     memset(&k, 0, sizeof(k));
@@ -937,14 +937,14 @@ RdPipeKeyInt rd__ShadowVolumeKey(const RdStateBlock *s, RhiFormat colorFmt, int 
 
 /* The box reduction of the scaled count to the GS size
  * (rd_replay.c shadowReduce): RGBA8 like the count. */
-RdPipeKeyInt rd__ShadowReduceKey(void)
+RdPipeKeyInt rd__shadow_reduce_key(void)
 {
-    return rd__PostKey(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
+    return rd__post_key(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
 }
 
-RdPipeKeyInt rd__ShadowResolveKey(int pass)
+RdPipeKeyInt rd__shadow_resolve_key(int pass)
 {
-    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
     k.depthFmt = RHI_FMT_D32F_S8;
     if (pass < 6) {
         /* additive (ONE, ONE): the six bits' 4 << k sum to 4 n, at most 252 */
@@ -958,25 +958,25 @@ RdPipeKeyInt rd__ShadowResolveKey(int pass)
     return k;
 }
 
-uint32_t rd__EnumerateReachableShadow(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     RdStateBlock s;
-    rd__ResetStateBlock(&s);
-    s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL); /* shadow_Reset's TEST 0x50000 */
+    rd__reset_state_block(&s);
+    s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL); /* shadow_Reset's TEST 0x50000 */
     for (int decr = 0; decr < 2; decr++) {
-        const RdPipeKeyInt k = rd__ShadowVolumeKey(&s, RHI_FMT_RGBA8_UNORM, decr);
-        n = rd__AddPipeKey(out, max, n, &k);
+        const RdPipeKeyInt k = rd__shadow_volume_key(&s, RHI_FMT_RGBA8_UNORM, decr);
+        n = rd__add_pipe_key(out, max, n, &k);
     }
     for (int p = 0; p < RD_SHADOW_RESOLVE_PASSES; p++) {
-        const RdPipeKeyInt k = rd__ShadowResolveKey(p);
-        n = rd__AddPipeKey(out, max, n, &k);
+        const RdPipeKeyInt k = rd__shadow_resolve_key(p);
+        n = rd__add_pipe_key(out, max, n, &k);
     }
-    const RdPipeKeyInt kr = rd__ShadowReduceKey(); /* box reduction to the GS size */
-    n = rd__AddPipeKey(out, max, n, &kr);
+    const RdPipeKeyInt kr = rd__shadow_reduce_key(); /* box reduction to the GS size */
+    n = rd__add_pipe_key(out, max, n, &kr);
     return n;
 }
 
-uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
+uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
 {
     static const uint64_t kUiTests[] = {RD_TEST_Z_ALWAYS, RD_TEST_Z_ALWAYS_ATST_GT,
                                         RD_TEST_AT_LT129, RD_TEST_OFF};
@@ -1002,31 +1002,31 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                              * without the anti-alias pass take it) */
                             for (int m = 0; m < (space ? 1 : 2); m++) {
                                 RdStateBlock s;
-                                rd__ResetStateBlock(&s);
-                                s.ds.test = rd_TestFromGs(tests[t]);
+                                rd__reset_state_block(&s);
+                                s.ds.test = rd_test_from_gs(tests[t]);
                                 s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
                                 s.ds.abe = kBlends[b] >= 0;
                                 s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
                                 s.ds.colorMask = m ? 0x7 : 0xF;
                                 RdDrawPass dp[2];
-                                int np = rd__PlanScreenDraw(&s, kPrims[p],
-                                                            space ? RD_SPACE_WORLD : RD_SPACE_UI,
-                                                            RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+                                int np = rd__plan_screen_draw(&s, kPrims[p],
+                                                              space ? RD_SPACE_WORLD : RD_SPACE_UI,
+                                                              RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                                 for (int i = 0; i < np; i++) {
-                                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
                                     /* TEXA per texel: the same state on a
                                      * 24- or 16-bit texture under AEM */
                                     RdPipeKeyInt kt = dp[i].key;
                                     kt.fs = RD_FS_SPRITE_TEXA;
-                                    n = rd__AddPipeKey(out, max, n, &kt);
+                                    n = rd__add_pipe_key(out, max, n, &kt);
                                 }
                                 /* STQ: a textured STQ triangle
                                  * command with Q != 1 (the lightning's strips,
                                  * raw GIF writes: WORLD space) */
                                 if (space && kPrims[p] == RD_PRIM_TRIANGLES) {
                                     for (int i = 0; i < np; i++) {
-                                        if (rd__StqPass(&dp[i])) {
-                                            n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                                        if (rd__stq_pass(&dp[i])) {
+                                            n = rd__add_pipe_key(out, max, n, &dp[i].key);
                                         }
                                     }
                                 }
@@ -1051,17 +1051,17 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
                 for (size_t p = 0; p < sizeof(kPrims); p++) {
                     for (size_t dz = 0; dz < 2; dz++) {
                         RdStateBlock s;
-                        rd__ResetStateBlock(&s);
-                        s.ds.test = rd_TestFromGs(kAa1Tests[t]);
+                        rd__reset_state_block(&s);
+                        s.ds.test = rd_test_from_gs(kAa1Tests[t]);
                         s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
                         s.ds.abe = 1;
                         s.ds.blend = (uint8_t)kAa1Blends[b];
                         s.aa1 = 1;
                         RdDrawPass dp[2];
-                        const int np = rd__PlanScreenDrawEx(&s, kPrims[p], 1, RD_SPACE_WORLD,
-                                                            RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+                        const int np = rd__plan_screen_draw_ex(&s, kPrims[p], 1, RD_SPACE_WORLD,
+                                                               RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
                         for (int i = 0; i < np; i++) {
-                            n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                            n = rd__add_pipe_key(out, max, n, &dp[i].key);
                         }
                     }
                 }
@@ -1075,19 +1075,19 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     for (size_t f = 0; f < 2; f++) {
         for (size_t b = 0; b < 2; b++) {
             RdStateBlock s;
-            rd__OverlayState(&s, kOverlayBlends[b]);
+            rd__overlay_state(&s, kOverlayBlends[b]);
             RdDrawPass dp[2];
-            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
-                                              RHI_FMT_UNKNOWN, dp);
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, kOutFormats[f],
+                                                RHI_FMT_UNKNOWN, dp);
             for (int i = 0; i < np; i++) {
-                n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
                 /* the font atlas on the overlay (font_ps) */
                 dp[i].key.fs = RD_FS_FONT;
-                n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
                 /* the popups' and the photo panel's sheet text
                  * (font_sheet_ps) */
                 dp[i].key.fs = RD_FS_FONT_SHEET;
-                n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                n = rd__add_pipe_key(out, max, n, &dp[i].key);
             }
         }
     }
@@ -1098,40 +1098,40 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
     for (size_t b = 0; b < 2; b++) {
         for (size_t dz = 0; dz < 2; dz++) {
             RdStateBlock s;
-            rd__ResetStateBlock(&s);
-            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+            rd__reset_state_block(&s);
+            s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
             s.ds.zwrite = RD_ZWRITE_OFF;
             s.ds.abe = 1;
             s.ds.blend = kOverlayBlends[b];
             RdDrawPass dp[2];
-            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
-                                              RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI,
+                                                RHI_FMT_RGBA8_UNORM, kDepth[dz], dp);
             for (int i = 0; i < np; i++) {
                 /* the menus' sheet text (font_sheet_ps) in the same
                  * states */
                 for (int sh = 0; sh < 2; sh++) {
                     dp[i].key.fs = sh ? RD_FS_FONT_SHEET : RD_FS_FONT;
                     dp[i].key.gs.colorMask = 0xF;
-                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
                     dp[i].key.gs.colorMask = 0x7; /* under the dark volume's FBMSK, as above */
-                    n = rd__AddPipeKey(out, max, n, &dp[i].key);
+                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
                 }
             }
         }
     }
-    const RdPipeKeyInt blitA = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
-    const RdPipeKeyInt blitB = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_BGRA8_UNORM);
-    const RdPipeKeyInt exact = rd__PostKey(RD_VS_BLEND_INT, RD_FS_BLEND_INT, RHI_FMT_RGBA8_UINT);
-    const RdPipeKeyInt dateSnap = rd__PostKey(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
-    n = rd__AddPipeKey(out, max, n, &dateSnap);
-    n = rd__AddPipeKey(out, max, n, &blitA);
-    n = rd__AddPipeKey(out, max, n, &blitB);
+    const RdPipeKeyInt blitA = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
+    const RdPipeKeyInt blitB = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_BGRA8_UNORM);
+    const RdPipeKeyInt exact = rd__post_key(RD_VS_BLEND_INT, RD_FS_BLEND_INT, RHI_FMT_RGBA8_UINT);
+    const RdPipeKeyInt dateSnap = rd__post_key(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
+    n = rd__add_pipe_key(out, max, n, &dateSnap);
+    n = rd__add_pipe_key(out, max, n, &blitA);
+    n = rd__add_pipe_key(out, max, n, &blitB);
     /* the box blit with the effects depth, on both outputs */
-    const RdPipeKeyInt depthA = rd__PresentDepthKey(RHI_FMT_RGBA8_UNORM);
-    const RdPipeKeyInt depthB = rd__PresentDepthKey(RHI_FMT_BGRA8_UNORM);
-    n = rd__AddPipeKey(out, max, n, &depthA);
-    n = rd__AddPipeKey(out, max, n, &depthB);
-    n = rd__AddPipeKey(out, max, n, &exact);
+    const RdPipeKeyInt depthA = rd__present_depth_key(RHI_FMT_RGBA8_UNORM);
+    const RdPipeKeyInt depthB = rd__present_depth_key(RHI_FMT_BGRA8_UNORM);
+    n = rd__add_pipe_key(out, max, n, &depthA);
+    n = rd__add_pipe_key(out, max, n, &depthB);
+    n = rd__add_pipe_key(out, max, n, &exact);
     return n;
 }
 
@@ -1142,10 +1142,10 @@ uint32_t rd__EnumerateReachableScreen(RdPipeKeyInt *out, uint32_t max)
  * colour mask (FRAME.FBMSK) and, with a depth target, the Z test and Z
  * write.  A Z test of ALWAYS without Z write needs no depth target and
  * binds none. */
-RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
-                         int *useDepth)
+RdPipeKeyInt rd__blur_key(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
+                          int *useDepth)
 {
-    RdPipeKeyInt k = rd__PostKey(RD_VS_FX_RECT, RD_FS_FX_SPRITE, colorFmt);
+    RdPipeKeyInt k = rd__post_key(RD_VS_FX_RECT, RD_FS_FX_SPRITE, colorFmt);
     k.gs.colorMask = s->ds.colorMask;
     const uint8_t ztst = s->ds.test.zte ? s->ds.test.ztst : RD_ZTST_ALWAYS;
     const int depth =
@@ -1161,22 +1161,22 @@ RdPipeKeyInt rd__BlurKey(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat de
     return k;
 }
 
-uint32_t rd__EnumerateReachableBlur(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     /* staticBlur.c draws with Z ALWAYS or GEQUAL (TEST 0x30000, 0x50000,
      * 0x5000D, 0x30815, 0x34003, 0x34000, 0x3000C, 0) and ZMSK; the list-7
      * and list-8 defaults it can inherit add Z write on; colour mask full */
     static const uint8_t kZ[3] = {RD_ZTST_ALWAYS, RD_ZTST_GEQUAL, RD_ZTST_GREATER};
     RdStateBlock s;
-    rd__ResetStateBlock(&s);
+    rd__reset_state_block(&s);
     s.ds.colorMask = 0xF;
     for (int zw = 0; zw < 2; zw++) {
         for (int z = 0; z < 3; z++) {
-            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+            s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
             s.ds.test.ztst = kZ[z];
             s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
-            const RdPipeKeyInt k = rd__BlurKey(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
-            n = rd__AddPipeKey(out, max, n, &k);
+            const RdPipeKeyInt k = rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
+            n = rd__add_pipe_key(out, max, n, &k);
         }
     }
     return n;

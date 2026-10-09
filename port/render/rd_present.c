@@ -15,61 +15,61 @@
  * host's shortcut over them.
  * RdPresentPreset holds the present's filters and its mirror (the
  * interpolation, rd_interp.c, is not one: it presents several times per
- * tick through rd_Present with RdSettings.interpolate, each present
+ * tick through rd_present with RdSettings.interpolate, each present
  * replaying the frame blended from the retained pair, and this step is the
  * same either way: it shows whatever DISPLAY the replay left):
  *   mirror        step 2 may flip x (the mirror mode is a gameplay
  *                 option, not a display one); flipped when
- *                 rd__MirrorOn (rd.h rd_SetMirror, RdSettings.mirror).  Every
+ *                 rd__mirror_on (rd.h rd_set_mirror, RdSettings.mirror).  Every
  *                 present goes through here, the interpolated ones
- *                 (rd_Present) included; UI prims were flipped at replay
+ *                 (rd_present) included; UI prims were flipped at replay
  *                 (rd_replay.c mirrorUi) so they read normally
  * The box takes the aspect option (g_rd.outAspect, 4:3 for a zeroed
- * RdSettings); the projection side is rd_frame.c rd__FillCameraCB, the
+ * RdSettings); the projection side is rd_frame.c rd__fill_camera_cb, the
  * replay's wide x scale and GsBase.c gsbHostWideX.  With the full-height
- * option DISPLAY's texture has the scene's height (rd__TargetScaleOf) and
+ * option DISPLAY's texture has the scene's height (rd__target_scale_of) and
  * step 1 is skipped.
  * The scene resolution needs nothing here: DISPLAY's texture is whatever
- * size rd__ApplyDisplay gave it, and both steps sample it normalised.
- * rd__ApplyDisplay (below) turns RdSettings into the scales and factors the
+ * size rd__apply_display gave it, and both steps sample it normalised.
+ * rd__apply_display (below) turns RdSettings into the scales and factors the
  * targets and the replay use.
  * Field parity is not a present-time effect: the PS2 shifts the scene's
  * XYOFFSET by half a line from the field bit (sceGsSetHalfOffset), which
- * rd_FrameFlip records into the frame head (RD_TARGET_HALF_Y).
+ * rd_frame_flip records into the frame head (RD_TARGET_HALF_Y).
  *
- * The overlay (rd.h rd_SetPresentOverlay): after step 2, the prims the
+ * The overlay (rd.h rd_set_present_overlay): after step 2, the prims the
  * registered callback gave for this present are drawn on the output in step
  * 2's pass (left open for them and the deferred text; a load-preserving
  * pass of their own under the CRT filter or the effects depth), one 12.4
  * unit a sixteenth of an output pixel, unflipped.  The callback runs before
- * the frame's replay (rd__OverlayCollect, from replayFrame) so the textures
+ * the frame's replay (rd__overlay_collect, from replayFrame) so the textures
  * it touches upload with the frame; only the drawing is here.
  * With no callback registered nothing below step 2 runs, and the output is
  * byte for byte the picture without an overlay.
  *
- * Deferred text (rd.h rd_DeferredText): in the Enhanced preset with a
- * renderer registered, rd__OverlayCollect first walks the frame's
+ * Deferred text (rd.h rd_deferred_text): in the Enhanced preset with a
+ * renderer registered, rd__overlay_collect first walks the frame's
  * RDC_OVERLAY_TEXT items and the post passes after them, and has the renderer
  * lay each item out on the output (font.c's overlay mode) in its region; the
  * replay skips the items' glyph quads, and textRecord draws the prims after
  * step 2, before the overlay.  In the Original preset nothing is collected
  * and the quads draw.
  *
- * The blank present (rd.h rd_PresentBlank): an empty keep frame replayed with
- * s_blank set: rd__OverlayCollect gives the overlay the output's context (no
- * CRT grid, no deferred text) and rd__PresentRecord clears the output and
+ * The blank present (rd.h rd_present_blank): an empty keep frame replayed with
+ * s_blank set: rd__overlay_collect gives the overlay the output's context (no
+ * CRT grid, no deferred text) and rd__present_record clears the output and
  * draws the overlay on it, without DISPLAY.
  *
  * The CRT filter (rd_crt.c): with RdSettings.crtMode set and a strength above
- * 0, the scene renders at 1x (rd__ApplyDisplay), no text is deferred (the
+ * 0, the scene renders at 1x (rd__apply_display), no text is deferred (the
  * rows draw as quads into the scene, as in the Original preset), the
  * overlay's prims are laid out on the filter's source grid and drawn into it,
- * and rd__CrtRecord draws the box from DISPLAY in place of steps 1 and 2 (no
+ * and rd__crt_record draws the box from DISPLAY in place of steps 1 and 2 (no
  * line doubling: the scanlines are DISPLAY's own lines).  The filter is the
  * present's last pass but for the top layer below.  Off, steps 1 and 2 draw
  * the box.
  *
- * The top layer (rd.h rd_SetPresentOverlayTop): a second callback collected
+ * The top layer (rd.h rd_set_present_overlay_top): a second callback collected
  * after the overlay's, always laid out on the output; its prims are drawn on
  * the output under the overlay's without the CRT filter and over the filtered
  * picture with it, so the touch controls stay sharp.
@@ -91,7 +91,7 @@ typedef struct RdPresentPreset {
 #define RD_ASPECT_43 (4.0f / 3.0f)
 #define RD_ASPECT_MAX (32.0f / 9.0f)
 
-void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
+void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 {
     uint32_t h = outH, w;
     if (!(aspect > RD_ASPECT_43 + 1e-4f)) {
@@ -121,13 +121,13 @@ void rd__PresentBox(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 }
 
 /* one for every preset: the display options apply on their own
- * (rd__ApplyDisplay) */
+ * (rd__apply_display) */
 static const RdPresentPreset s_present = {RD_FILTER_NEAREST, RD_FILTER_LINEAR, 1, 1};
 
 /* step 2's box in an outW x outH output */
 static void outputBox(uint32_t outW, uint32_t outH, RhiRect *box)
 {
-    rd__PresentBox(outW, outH, g_rd.outAspect, box);
+    rd__present_box(outW, outH, g_rd.outAspect, box);
 }
 
 static float clampAspect(float a)
@@ -138,7 +138,7 @@ static float clampAspect(float a)
     return a > RD_ASPECT_MAX ? RD_ASPECT_MAX : a;
 }
 
-bool rd__ApplyDisplay(void)
+bool rd__apply_display(void)
 {
     const RdSettings *st = &g_rd.settings;
     /* every option applies whatever the preset; a zeroed
@@ -151,8 +151,8 @@ bool rd__ApplyDisplay(void)
     /* the CRT filter shows the PS2's pixels, so the scene
      * renders at 1x while it is on, whatever the resolution asks (which
      * takes effect again with the filter off) */
-    const int crtLock = rd__CrtOn() && st->sceneScale != 1.0f;
-    const float scale = rd__CrtOn() ? 1.0f : st->sceneScale;
+    const int crtLock = rd__crt_on() && st->sceneScale != 1.0f;
+    const float scale = rd__crt_on() ? 1.0f : st->sceneScale;
     if (scale > 0.0f) {
         h = gh * scale;
         w = gw * scale * aspect / RD_ASPECT_43;
@@ -164,7 +164,7 @@ bool rd__ApplyDisplay(void)
          * a zeroed RdSettings (the tests', the replay tool's default) stays
          * the GS size; the host sends scale 1 for the Original rows */
         RhiRect b;
-        rd__PresentBox(st->outputWidth, st->outputHeight, aspect, &b);
+        rd__present_box(st->outputWidth, st->outputHeight, aspect, &b);
         w = (float)b.w;
         h = (float)b.h;
     } else {
@@ -182,9 +182,9 @@ bool rd__ApplyDisplay(void)
     }
     const float sx = w / gw < 1.0f ? 1.0f : w / gw;
     const float sy = h / gh < 1.0f ? 1.0f : h / gh;
-    const float work = rd_WorkTargetScale((uint32_t)(sy * 448.0f + 0.5f));
+    const float work = rd_work_target_scale((uint32_t)(sy * 448.0f + 0.5f));
     uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
-    if (g_rd.hasDevice && !rhi_Limits()->textureMips) {
+    if (g_rd.hasDevice && !rhi_limits()->textureMips) {
         filter = 0;
     }
     const uint8_t full = st->fullHeightScene != 0;
@@ -192,11 +192,11 @@ bool rd__ApplyDisplay(void)
     const bool changed = sx != g_rd.sceneSx || sy != g_rd.sceneSy || work != g_rd.workScale ||
                          full != g_rd.fullHeight;
     /* one line when what the options give differs from what was in force:
-     * this runs on a settings change or a resize (rd_BeginFrame's
+     * this runs on a settings change or a resize (rd_begin_frame's
      * settingsPending) and at init, never per frame */
     if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
         vs != g_rd.vsyncApplied) {
-        rd__Log("display: scene %gx%g%s, work %g, aspect %.3f, filter %u, %s height, vsync %s",
+        rd__log("display: scene %gx%g%s, work %g, aspect %.3f, filter %u, %s height, vsync %s",
                 (double)sx, (double)sy, crtLock ? " (CRT: 1x)" : "", (double)work, (double)aspect,
                 (unsigned)filter, full ? "full" : "half", st->vsync ? "on" : "off");
     }
@@ -210,9 +210,9 @@ bool rd__ApplyDisplay(void)
     /* vsync: the swapchain's present mode (Vulkan FIFO, else MAILBOX or
      * IMMEDIATE; D3D12 the sync interval) */
     if (g_rd.vsyncApplied && g_rd.vsyncApplied != vs && g_rd.hasDevice &&
-        rhi_SwapchainFormat() != RHI_FMT_UNKNOWN && st->outputWidth && st->outputHeight) {
-        rhi_WaitIdle();
-        rhi_ResizeSwapchain(st->outputWidth, st->outputHeight, st->vsync != 0);
+        rhi_swapchain_format() != RHI_FMT_UNKNOWN && st->outputWidth && st->outputHeight) {
+        rhi_wait_idle();
+        rhi_resize_swapchain(st->outputWidth, st->outputHeight, st->vsync != 0);
     }
     g_rd.vsyncApplied = vs;
     return changed;
@@ -228,23 +228,23 @@ static uint32_t s_outW, s_outH;
 
 static bool s_window;
 
-bool rd__PresentAcquire(void)
+bool rd__present_acquire(void)
 {
     s_backbuffer = (RhiTexture){0};
-    s_window = rhi_SwapchainFormat() != RHI_FMT_UNKNOWN;
+    s_window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
     if (s_window) {
-        s_backbuffer = rhi_AcquireBackbuffer();
+        s_backbuffer = rhi_acquire_backbuffer();
         if (!s_backbuffer.id) {
-            rhi_ResizeSwapchain(g_rd.settings.outputWidth, g_rd.settings.outputHeight,
-                                g_rd.settings.vsync != 0);
-            s_backbuffer = rhi_AcquireBackbuffer();
+            rhi_resize_swapchain(g_rd.settings.outputWidth, g_rd.settings.outputHeight,
+                                 g_rd.settings.vsync != 0);
+            s_backbuffer = rhi_acquire_backbuffer();
         }
         if (!s_backbuffer.id) {
             return false;
         }
-        rd__OutputFollowSwapchain(); /* the image's own size */
+        rd__output_follow_swapchain(); /* the image's own size */
         s_backbufferState = RHI_STATE_UNDEFINED;
-        s_outFormat = rhi_SwapchainFormat();
+        s_outFormat = rhi_swapchain_format();
         s_outW = g_rd.settings.outputWidth;
         s_outH = g_rd.settings.outputHeight;
         return s_outW && s_outH;
@@ -255,9 +255,9 @@ bool rd__PresentAcquire(void)
     }
     if (!g_rd.presentOut.id || g_rd.presentOutW != w || g_rd.presentOutH != h) {
         if (g_rd.presentOut.id) {
-            rhi_DestroyTexture(g_rd.presentOut);
+            rhi_destroy_texture(g_rd.presentOut);
         }
-        g_rd.presentOut = rhi_CreateTexture(&(RhiTextureDesc){
+        g_rd.presentOut = rhi_create_texture(&(RhiTextureDesc){
             w, h, 1, RHI_FMT_RGBA8_UNORM,
             RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC, "rd present out"});
         g_rd.presentOutState = RHI_STATE_UNDEFINED;
@@ -283,12 +283,12 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     p.colorCount = 1;
     p.width = dw;
     p.height = dh;
-    rhi_CmdBeginRenderPass(cl, &p);
+    rhi_cmd_begin_render_pass(cl, &p);
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
-    rhi_CmdSetViewport(cl, &vp);
-    rhi_CmdSetScissor(cl, box);
-    RdPipeKeyInt k = rd__PostKey(RD_VS_BLIT, RD_FS_BLIT, dstFmt);
-    RhiPipeline pipe = rd__GetPipeline(&k);
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, box);
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, dstFmt);
+    RhiPipeline pipe = rd__get_pipeline(&k);
     if (pipe.id) {
         IcoDrawCB cb;
         memset(&cb, 0, sizeof(cb));
@@ -306,21 +306,21 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
         cb.tex[1] = (float)sh;
         cb.tex[2] = 1.0f / (float)sw;
         cb.tex[3] = 1.0f / (float)sh;
-        rhi_CmdSetPipeline(cl, pipe);
-        rd__BindUniform(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
-        rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
-        rhi_CmdSetBindGroup(
-            cl, 2, rd__TexGroup(src, rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-        rhi_CmdDraw(cl, 3, 0, 1);
+        rhi_cmd_set_pipeline(cl, pipe);
+        rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
+        rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+        rhi_cmd_set_bind_group(
+            cl, 2, rd__tex_group(src, rd__sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
+        rhi_cmd_draw(cl, 3, 0, 1);
     }
     if (!keepOpen) {
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_end_render_pass(cl);
     }
 }
 
-void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
-                     RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
-                     RdFilter filter, int mirror)
+void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
+                      RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load,
+                      const RhiRect *box, RdFilter filter, int mirror)
 {
     blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, filter, mirror, false);
 }
@@ -343,12 +343,12 @@ void rd__PresentBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh
  * text, the capture and the overlay stay colour-only passes after it; under
  * the CRT filter there is no box blit and no effects depth. */
 /* Only for an effects program: the pass runs when the setting is on and
- * rhi_InjectorName() names one (ReShade, vkBasalt), never on Android (no
+ * rhi_injector_name() names one (ReShade, vkBasalt), never on Android (no
  * effects program hooks the game there); the tests force it (a lavapipe
  * run has no layer). */
 static bool s_forceDepth;
 
-void rd__ForceEffectsDepth(bool force)
+void rd__force_effects_depth(bool force)
 {
     s_forceDepth = force;
 }
@@ -364,7 +364,7 @@ static bool depthWanted(void)
 #ifdef __ANDROID__
     return false;
 #else
-    return rhi_InjectorName() != NULL;
+    return rhi_injector_name() != NULL;
 #endif
 }
 
@@ -378,7 +378,7 @@ static struct {
 static void depthShutdown(void)
 {
     if (s_depth.out.id) {
-        rhi_DestroyTexture(s_depth.out);
+        rhi_destroy_texture(s_depth.out);
     }
     memset(&s_depth, 0, sizeof(s_depth));
 }
@@ -389,35 +389,35 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
                       RhiFormat dstFmt, uint32_t dw, uint32_t dh, const RhiRect *box,
                       RdFilter filter, int mirror)
 {
-    RdTargetRec *ts = rd__TargetRec(RD_TARGET_SCENE + 1);
+    RdTargetRec *ts = rd__target_rec(RD_TARGET_SCENE + 1);
     if (!ts || !ts->withDepth || !ts->depth.id || ts->depthState == RHI_STATE_UNDEFINED) {
         return false;
     }
     if (!s_depth.out.id || s_depth.outW != dw || s_depth.outH != dh) {
         if (s_depth.out.id) {
-            rhi_DestroyTexture(s_depth.out);
+            rhi_destroy_texture(s_depth.out);
         }
         /* sampled and copyable, for the program that reads it (and the
          * tests' readback) */
-        s_depth.out = rhi_CreateTexture(&(RhiTextureDesc){
+        s_depth.out = rhi_create_texture(&(RhiTextureDesc){
             dw, dh, 1, RHI_FMT_D32F, RHI_TEX_DEPTH_STENCIL | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC,
             "rd effects depth"});
         s_depth.outState = RHI_STATE_UNDEFINED;
         s_depth.outW = dw;
         s_depth.outH = dh;
     }
-    const RdPipeKeyInt k = rd__PresentDepthKey(dstFmt);
-    const RhiPipeline pipe = rd__GetPipeline(&k);
+    const RdPipeKeyInt k = rd__present_depth_key(dstFmt);
+    const RhiPipeline pipe = rd__get_pipeline(&k);
     if (!s_depth.out.id || !pipe.id) {
         if (!s_depth.failLogged) {
             s_depth.failLogged = 1;
-            rd__Log("present: no effects depth (%s); the picture is shown without it",
+            rd__log("present: no effects depth (%s); the picture is shown without it",
                     pipe.id ? "no depth texture" : "no pipeline");
         }
         return false;
     }
-    rd__Transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_READ);
-    rd__Transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
+    rd__transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_READ);
+    rd__transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
 
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -430,10 +430,10 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     p.depth.clearDepth = 0.0f; /* far (GS Z 0): the bars */
     p.width = dw;
     p.height = dh;
-    rhi_CmdBeginRenderPass(cl, &p);
+    rhi_cmd_begin_render_pass(cl, &p);
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
-    rhi_CmdSetViewport(cl, &vp);
-    rhi_CmdSetScissor(cl, box);
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, box);
     /* blit()'s constants, so the colour is blit_ps's bytes */
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
@@ -455,24 +455,24 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     b[0].texture = src;
     b[1].slot = 1;
     b[1].type = RHI_BIND_SAMPLER;
-    b[1].sampler = rd__Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[1].sampler = rd__sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
     b[2].texture = ts->depth;
     b[2].aspect = RHI_ASPECT_DEPTH;
-    const RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
+    const RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
     if (g2.id) {
-        rhi_CmdSetPipeline(cl, pipe);
-        rd__BindUniform(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
-        rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
-        rhi_CmdSetBindGroup(cl, 2, g2);
-        rhi_CmdDraw(cl, 3, 0, 1);
+        rhi_cmd_set_pipeline(cl, pipe);
+        rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
+        rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_draw(cl, 3, 0, 1);
     }
-    rhi_CmdEndRenderPass(cl);
+    rhi_cmd_end_render_pass(cl);
     return g2.id != 0;
 }
 
-bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
+bool rd__read_present_depth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
 {
     if (!g_rd.hasDevice || !s_depth.out.id || s_depth.outState == RHI_STATE_UNDEFINED ||
         dstSize < (size_t)s_depth.outW * s_depth.outH * sizeof(float)) {
@@ -485,16 +485,16 @@ bool rd__ReadPresentDepth(float *dst, size_t dstSize, uint32_t *w, uint32_t *h)
         *h = s_depth.outH;
     }
     if (s_depth.outState != RHI_STATE_COPY_SRC) {
-        RhiCommandList cl = rhi_BeginCommands();
+        RhiCommandList cl = rhi_begin_commands();
         if (!cl.id) {
             return false;
         }
-        rd__Transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_COPY_SRC);
-        rhi_EndCommands(cl);
-        rhi_Submit(cl);
+        rd__transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_COPY_SRC);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
     }
     uint32_t pitch = 0;
-    if (!rhi_ReadbackTexture(s_depth.out, RHI_ASPECT_DEPTH, dst, dstSize, &pitch)) {
+    if (!rhi_readback_texture(s_depth.out, RHI_ASPECT_DEPTH, dst, dstSize, &pitch)) {
         return false;
     }
     return pitch == s_depth.outW * sizeof(float);
@@ -509,7 +509,7 @@ typedef struct OverlayBatch {
     RhiRect sc; /* the deferred text's region (the whole output for the overlay's) */
 } OverlayBatch;
 
-/* outside g_rd: the registration outlives rd_Shutdown / rd_Init (port/ui
+/* outside g_rd: the registration outlives rd_shutdown / rd_init (port/ui
  * registers once at start-up; the tests restart rd between checks) */
 static struct {
     RdOverlayFn fn;
@@ -518,8 +518,8 @@ static struct {
     void *topUser;
     RdDeferredTextFn textFn; /* the deferred text's renderer */
     void *textUser;
-    int inside;          /* in fn or textFn: rd_OverlayPrims keeps prims */
-    RhiRect sc;          /* the region rd_OverlayPrims gives its batch */
+    int inside;          /* in fn or textFn: rd_overlay_prims keeps prims */
+    RhiRect sc;          /* the region rd_overlay_prims gives its batch */
     RdOverlayCtx ctx;    /* the main layer's (the deferred text's too) */
     RdOverlayCtx topCtx; /* the top layer's, always the output */
     RdScreenVtx *v;
@@ -541,21 +541,21 @@ static void overlayForget(void)
 /* a present's prims at most (a popup is a few hundred) */
 #define RD_OVERLAY_MAX_VERTICES (1u << 20)
 
-void rd_SetPresentOverlay(RdOverlayFn fn, void *user)
+void rd_set_present_overlay(RdOverlayFn fn, void *user)
 {
     s_ov.fn = fn;
     s_ov.user = fn ? user : NULL;
     overlayForget();
 }
 
-void rd_SetPresentOverlayTop(RdOverlayFn fn, void *user)
+void rd_set_present_overlay_top(RdOverlayFn fn, void *user)
 {
     s_ov.topFn = fn;
     s_ov.topUser = fn ? user : NULL;
     overlayForget();
 }
 
-RdOverlayFn rd_GetPresentOverlayTop(void **user)
+RdOverlayFn rd_get_present_overlay_top(void **user)
 {
     if (user) {
         *user = s_ov.topUser;
@@ -563,7 +563,7 @@ RdOverlayFn rd_GetPresentOverlayTop(void **user)
     return s_ov.topFn;
 }
 
-RdOverlayFn rd_GetPresentOverlay(void **user)
+RdOverlayFn rd_get_present_overlay(void **user)
 {
     if (user) {
         *user = s_ov.user;
@@ -571,10 +571,10 @@ RdOverlayFn rd_GetPresentOverlay(void **user)
     return s_ov.fn;
 }
 
-/* the present in progress is rd_PresentBlank's */
+/* the present in progress is rd_present_blank's */
 static int s_blank;
 
-bool rd_PresentBlank(void)
+bool rd_present_blank(void)
 {
     if (!g_rd.hasDevice) {
         return false;
@@ -582,24 +582,24 @@ bool rd_PresentBlank(void)
     /* lists 11 and 12 of a frame with none: no draw, no target touched */
     static RdFrame empty;
     s_blank = 1;
-    const bool ok = rd__ReplayFrame(&empty, 1, true);
+    const bool ok = rd__replay_frame(&empty, 1, true);
     s_blank = 0;
     return ok;
 }
 
-void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user)
+void rd_set_deferred_text_fn(RdDeferredTextFn fn, void *user)
 {
     s_ov.textFn = fn;
     s_ov.textUser = fn ? user : NULL;
     overlayForget();
 }
 
-bool rd_DeferredTextActive(void)
+bool rd_deferred_text_active(void)
 {
     return g_rd.deferText;
 }
 
-void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
+void rd_overlay_prims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend)
 {
     if (!s_ov.inside || !v || n == 0 || (uint32_t)type > RD_PRIM_SPRITES ||
         n > RD_OVERLAY_MAX_VERTICES - s_ov.vCount) {
@@ -810,11 +810,11 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     const RdRect *b = &s_ov.ctx.box;
     const float bx = (float)b->x, by = (float)b->y, bw = (float)b->w, bh = (float)b->h;
     const float W = (float)t->gsW, H = (float)t->gsH;
-    /* the 4:3 picture the UI is drawn in (font.h ui_BeginOverlay) */
+    /* the 4:3 picture the UI is drawn in (font.h ui_begin_overlay) */
     const float w43 = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
     const float left = bx + (bw - w43) * 0.5f;
     /* the scissor: a side at the target's edge stays at the box's edge
-     * (rd__WideScissor), the others move with the UI */
+     * (rd__wide_scissor), the others move with the UI */
     float x0 = t->sc[0] <= 0 ? bx : left + (float)t->sc[0] * w43 / W;
     float x1 = t->sc[2] >= (int32_t)t->gsW - 1 ? bx + bw : left + (float)(t->sc[2] + 1) * w43 / W;
     float y0 = by + (float)t->sc[1] * bh / H;
@@ -845,15 +845,15 @@ static void textCollect(const RdFrame *f, int keep)
 {
     s_text.n = 0;
     s_text.f = NULL;
-    /* no item, nothing to walk for: most presents (rd_DeferredText counts
-     * them; an interpolated frame adds prev's it inserts, rd__LoadFrame
+    /* no item, nothing to walk for: most presents (rd_deferred_text counts
+     * them; an interpolated frame adds prev's it inserts, rd__load_frame
      * counts a dump's) */
     if (!f->textItems) {
         return;
     }
     s_text.f = f;
     RdStateBlock st = f->startState;
-    rd__Walk(f, keep, &st, textWalk, NULL);
+    rd__walk(f, keep, &st, textWalk, NULL);
     for (uint32_t i = 0; i < s_text.n; i++) {
         const TextPending *t = &s_text.p[i];
         if (t->it->rgba[3] == 0 || !t->it->utf8[0]) {
@@ -883,7 +883,7 @@ static void textCollect(const RdFrame *f, int keep)
     s_text.f = NULL;
 }
 
-void rd__OverlayCollect(const RdFrame *f, int keep)
+void rd__overlay_collect(const RdFrame *f, int keep)
 {
     overlayForget();
     s_ov.grid = 0;
@@ -893,9 +893,9 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     if ((!s_ov.fn && !s_ov.textFn && !s_ov.topFn) || !w || !h) {
         return;
     }
-    /* the output and box rd__PresentRecord will use: both come from
+    /* the output and box rd__present_record will use: both come from
      * g_rd.settings.  One case changes them after this: on the present
-     * where rd__OutputFollowSwapchain takes a rebuilt swapchain's size
+     * where rd__output_follow_swapchain takes a rebuilt swapchain's size
      * (after the acquire, later in the replay), the overlay is laid out for
      * the old size for that one frame and follows from the next */
     const RdPresentPreset *pr = &s_present;
@@ -905,11 +905,11 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     /* under the CRT filter the overlay is part of the
      * picture: its context is the filter's source grid at the frame's
      * lines (the 1x frame the game's own UI is drawn in), the box all of
-     * it, and rd__CrtRecord draws the prims into that grid */
-    const bool crt = rd__CrtOn() && !s_blank;
+     * it, and rd__crt_record draws the prims into that grid */
+    const bool crt = rd__crt_on() && !s_blank;
     if (crt) {
         uint32_t vw, vh;
-        rd__CrtGrid(&vw, &vh);
+        rd__crt_grid(&vw, &vh);
         w = vw;
         h = g_rd.gsH ? g_rd.gsH : 2 * vh;
         box = (RhiRect){0, 0, w, h};
@@ -920,7 +920,7 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     c->outH = h;
     c->box = (RdRect){box.x, box.y, box.w, box.h};
     c->boxScale = (float)box.h / 448.0f;
-    c->mirror = pr->mirror && rd__MirrorOn();
+    c->mirror = pr->mirror && rd__mirror_on();
     /* the deferred text first, so the overlay draws above it; none under
      * the CRT filter (the rows draw as quads into the scene, as in the
      * Original preset, and go through the filter) */
@@ -953,12 +953,12 @@ void rd__OverlayCollect(const RdFrame *f, int keep)
     }
 }
 
-uint64_t rd__OverlayRingBytes(void)
+uint64_t rd__overlay_ring_bytes(void)
 {
     if (!s_ov.bCount) {
         return 0;
     }
-    const uint64_t align = rhi_Limits()->uniformAlign;
+    const uint64_t align = rhi_limits()->uniformAlign;
     /* a FrameCB a pass (three at most: the deferred text, the main layer
      * or the CRT filter's two grid passes, the top layer), a
      * DrawCB and the expanded vertices (sprites and points give 6 a prim's
@@ -997,7 +997,7 @@ static RhiRect scaleRect(RhiRect r, const RhiRect *dst, uint64_t ow, uint64_t oh
  * NULL: c's frame is out's, 1:1; else it is scaled into dst of out (the
  * grid-mode overlay on the output when the CRT pass could not draw it, see
  * overlayRecord).  inPass: a pass on out is already open (the box blit's,
- * rd__PresentRecord); the batches draw into it and leave it open, with the
+ * rd__present_record); the batches draw into it and leave it open, with the
  * viewport, scissor and FrameCB set here all the same */
 static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint32_t tw,
                           uint32_t th, const RdOverlayCtx *c, const RhiRect *dst, uint32_t from,
@@ -1016,17 +1016,17 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
         p.colorCount = 1;
         p.width = tw;
         p.height = th;
-        rhi_CmdBeginRenderPass(cl, &p);
+        rhi_cmd_begin_render_pass(cl, &p);
     }
     const RhiRect all = {0, 0, ow, oh};
     const RhiRect area = dst ? *dst : all;
     RhiViewport vp = {(float)area.x, (float)area.y, (float)area.w, (float)area.h, 0.0f, 1.0f};
-    rhi_CmdSetViewport(cl, &vp);
+    rhi_cmd_set_viewport(cl, &vp);
     RhiRect cur = all;
-    rhi_CmdSetScissor(cl, dst ? &area : &cur);
+    rhi_cmd_set_scissor(cl, dst ? &area : &cur);
     /* sprite_ui_vs: x / 16 - origin + g_origin.zw = x / 16, so 12.4 output
-     * pixels land 1:1 with integers on pixel edges (rd.h rd_OverlayPrims) */
-    const RdUniform frame = rd__FrameGroup(ow, oh, 0.5f, 0.5f);
+     * pixels land 1:1 with integers on pixel edges (rd.h rd_overlay_prims) */
+    const RdUniform frame = rd__frame_group(ow, oh, 0.5f, 0.5f);
     for (uint32_t i = from; i < to; i++) {
         const OverlayBatch *b = &s_ov.b[i];
         /* the deferred text's batches carry their regions */
@@ -1034,15 +1034,15 @@ static void drawBatchesAt(RhiCommandList cl, RhiTexture out, RhiFormat fmt, uint
             cur = b->sc;
             if (dst) {
                 const RhiRect sc = scaleRect(cur, dst, ow, oh);
-                rhi_CmdSetScissor(cl, &sc);
+                rhi_cmd_set_scissor(cl, &sc);
             } else {
-                rhi_CmdSetScissor(cl, &cur);
+                rhi_cmd_set_scissor(cl, &cur);
             }
         }
-        rd__OverlayDraw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
+        rd__overlay_draw(cl, fmt, frame, b->prim, s_ov.v + b->first, b->count, b->tex, b->blend);
     }
     if (!inPass) {
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_end_render_pass(cl);
     }
 }
 
@@ -1063,7 +1063,7 @@ static void textRecord(RhiCommandList cl, RhiTexture out, bool inPass)
 
 /* the overlay on the output.  The main layer: under the CRT filter it was
  * drawn into the filter's grid (inPicture), and this only forgets it; a
- * grid-mode main layer the filter did not draw (rd__CrtRecord failed, or the
+ * grid-mode main layer the filter did not draw (rd__crt_record failed, or the
  * capture's pass left it out and the second pass failed) is drawn on the
  * output, its grid frame scaled into box, so the popups do not vanish.  The
  * top layer is always on the output: under the main layer when that is on the
@@ -1090,12 +1090,12 @@ static void overlayRecord(RhiCommandList cl, RhiTexture out, const RhiRect *box,
     s_ov.grid = 0;
 }
 
-bool rd__OverlayGridPending(void)
+bool rd__overlay_grid_pending(void)
 {
     return s_ov.grid && s_ov.topFirst > s_ov.textBatches;
 }
 
-void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h)
+void rd__overlay_grid_draw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_t w, uint32_t h)
 {
     if (s_ov.grid) {
         drawBatches(cl, t, fmt, w, h, &s_ov.ctx, s_ov.textBatches, s_ov.topFirst, false);
@@ -1103,7 +1103,7 @@ void rd__OverlayGridDraw(RhiCommandList cl, RhiTexture t, RhiFormat fmt, uint32_
 }
 
 /* ------------------------------------------------------------ the capture
- * rd.h rd_CapturePresented: the output of the next present, copied before
+ * rd.h rd_capture_presented: the output of the next present, copied before
  * the overlay into a texture of the output's format and read back after the
  * submit.  The headless output and the swapchain image both allow copies
  * (RHI_TEX_COPY_SRC; Vulkan's swapchain is created with transfer-source
@@ -1115,11 +1115,11 @@ static struct {
     RhiState state;
     uint32_t w, h;
     RhiFormat fmt;
-    int result; /* 1 written, -1 failed, 0 none since the last rd_CaptureResult */
+    int result; /* 1 written, -1 failed, 0 none since the last rd_capture_result */
     char done[1024];
 } s_cap;
 
-bool rd_CapturePresented(const char *png)
+bool rd_capture_presented(const char *png)
 {
     if (!g_rd.hasDevice || !png || !png[0] || strlen(png) >= sizeof(s_cap.path)) {
         return false;
@@ -1130,12 +1130,12 @@ bool rd_CapturePresented(const char *png)
     return true;
 }
 
-bool rd__CaptureArmed(void)
+bool rd__capture_armed(void)
 {
     return s_cap.armed != 0;
 }
 
-int rd_CaptureResult(char *path, uint32_t pathSize)
+int rd_capture_result(char *path, uint32_t pathSize)
 {
     const int r = s_cap.result;
     if (r != 0 && path && pathSize) {
@@ -1148,7 +1148,7 @@ int rd_CaptureResult(char *path, uint32_t pathSize)
 
 /* the output, out (RENDER_TARGET), into the capture texture; out goes back
  * to RENDER_TARGET for the overlay.  inPass: the output's pass is open
- * (rd__PresentRecord); a copy cannot be recorded inside a pass, so it is
+ * (rd__present_record); a copy cannot be recorded inside a pass, so it is
  * ended before the copy and a pass that loads the output is opened after
  * it, for the overlay to draw in */
 static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass)
@@ -1159,29 +1159,29 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
     s_cap.armed = 0;
     if (!s_cap.tex.id || s_cap.w != s_outW || s_cap.h != s_outH || s_cap.fmt != s_outFormat) {
         if (s_cap.tex.id) {
-            rhi_DestroyTexture(s_cap.tex);
+            rhi_destroy_texture(s_cap.tex);
         }
-        s_cap.tex = rhi_CreateTexture(&(RhiTextureDesc){s_outW, s_outH, 1, s_outFormat,
-                                                        RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
-                                                        "rd photo capture"});
+        s_cap.tex = rhi_create_texture(&(RhiTextureDesc){s_outW, s_outH, 1, s_outFormat,
+                                                         RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST,
+                                                         "rd photo capture"});
         s_cap.state = RHI_STATE_UNDEFINED;
         s_cap.w = s_outW;
         s_cap.h = s_outH;
         s_cap.fmt = s_outFormat;
     }
     if (!s_cap.tex.id) {
-        rd__Log("photo: capture %s: no texture for %ux%u", s_cap.path, s_outW, s_outH);
+        rd__log("photo: capture %s: no texture for %ux%u", s_cap.path, s_outW, s_outH);
         snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
         s_cap.result = -1;
         return;
     }
     if (inPass) {
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_end_render_pass(cl);
     }
-    rd__Transition(cl, out, outState, RHI_STATE_COPY_SRC);
-    rd__Transition(cl, s_cap.tex, &s_cap.state, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(cl, out, (RhiRect){0, 0, s_outW, s_outH}, s_cap.tex, 0, 0);
-    rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, out, outState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, s_cap.tex, &s_cap.state, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_texture(cl, out, (RhiRect){0, 0, s_outW, s_outH}, s_cap.tex, 0, 0);
+    rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
     if (inPass) {
         RhiRenderPassDesc p;
         memset(&p, 0, sizeof(p));
@@ -1190,12 +1190,12 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
         p.colorCount = 1;
         p.width = s_outW;
         p.height = s_outH;
-        rhi_CmdBeginRenderPass(cl, &p);
+        rhi_cmd_begin_render_pass(cl, &p);
     }
     s_cap.copied = 1;
 }
 
-void rd__CaptureFinish(void)
+void rd__capture_finish(void)
 {
     if (!s_cap.copied) {
         return;
@@ -1203,7 +1203,7 @@ void rd__CaptureFinish(void)
     s_cap.copied = 0;
     const size_t n = (size_t)s_cap.w * s_cap.h * 4;
     uint8_t *px = malloc(n);
-    bool ok = px && rd__ReadRhiTexture(s_cap.tex, &s_cap.state, s_cap.w, s_cap.h, px, n);
+    bool ok = px && rd__read_rhi_texture(s_cap.tex, &s_cap.state, s_cap.w, s_cap.h, px, n);
     if (ok && s_cap.fmt == RHI_FMT_BGRA8_UNORM) {
         for (size_t i = 0; i < n; i += 4) {
             const uint8_t b = px[i];
@@ -1211,19 +1211,19 @@ void rd__CaptureFinish(void)
             px[i + 2] = b;
         }
     }
-    ok = ok && rd_WritePng(s_cap.path, px, s_cap.w, s_cap.h, s_cap.w * 4, 0);
+    ok = ok && rd_write_png(s_cap.path, px, s_cap.w, s_cap.h, s_cap.w * 4, 0);
     free(px);
-    rd__Log("photo: capture %ux%u %s %s", s_cap.w, s_cap.h,
+    rd__log("photo: capture %ux%u %s %s", s_cap.w, s_cap.h,
             ok ? "written to" : "failed:", s_cap.path);
     snprintf(s_cap.done, sizeof(s_cap.done), "%s", s_cap.path);
     s_cap.result = ok ? 1 : -1;
 }
 
-/* rd_PresentBlank's pass: the output cleared to 0, the
+/* rd_present_blank's pass: the output cleared to 0, the
  * overlay on it */
 static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
 {
-    rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = out;
@@ -1231,24 +1231,24 @@ static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
     p.colorCount = 1;
     p.width = s_outW;
     p.height = s_outH;
-    rhi_CmdBeginRenderPass(cl, &p);
-    rhi_CmdEndRenderPass(cl);
+    rhi_cmd_begin_render_pass(cl, &p);
+    rhi_cmd_end_render_pass(cl);
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
     overlayRecord(cl, out, &box, false, false);
     if (s_window) {
-        rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
+        rd__transition(cl, out, outState, RHI_STATE_PRESENT);
     }
 }
 
-void rd__PresentRecord(RhiCommandList cl)
+void rd__present_record(RhiCommandList cl)
 {
     if (s_blank) {
         blankRecord(cl, s_window ? s_backbuffer : g_rd.presentOut,
                     s_window ? &s_backbufferState : &g_rd.presentOutState);
         return;
     }
-    RdTargetRec *disp = rd__TargetRec(RD_TARGET_DISPLAY + 1);
+    RdTargetRec *disp = rd__target_rec(RD_TARGET_DISPLAY + 1);
     if (!disp || !disp->color.id) {
         return;
     }
@@ -1258,30 +1258,30 @@ void rd__PresentRecord(RhiCommandList cl)
 
     RhiTexture src = disp->color;
     uint32_t sw = disp->tw, sh = disp->th;
-    rd__Transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
+    rd__transition(cl, disp->color, &disp->colorState, RHI_STATE_SHADER_READ);
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
-    rd__NotePresentBox(s_outW, s_outH, &box); /* for the tests */
+    rd__note_present_box(s_outW, s_outH, &box); /* for the tests */
     /* the CRT filter draws the box from DISPLAY's own lines (its
      * scanlines are the PS2's field lines), in place of steps 1 and 2; off,
      * or when it cannot draw, nothing below changes */
-    const int mirror = pr->mirror && rd__MirrorOn();
+    const int mirror = pr->mirror && rd__mirror_on();
     bool filtered = false, uiInPicture = false;
-    if (rd__CrtOn()) {
+    if (rd__crt_on()) {
         if (depthWanted()) {
             /* the filter replaces the box blit that carries the effects depth */
-            rd__LogOnce(RD_ONCE_EFFECTS_DEPTH_CRT,
-                        "effects depth is not available with the CRT filter");
+            rd__log_once(RD_ONCE_EFFECTS_DEPTH_CRT,
+                         "effects depth is not available with the CRT filter");
         }
-        rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
-        const bool ui = rd__OverlayGridPending();
+        rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        const bool ui = rd__overlay_grid_pending();
         bool capOk = true;
-        if (ui && rd__CaptureArmed()) {
+        if (ui && rd__capture_armed()) {
             /* a capture never carries the port's UI; under
              * the CRT filter that UI is inside the filtered picture, so the
              * capture takes a pass without it and the shown picture a
              * second pass with it */
-            capOk = rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, false);
+            capOk = rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, false);
             if (capOk) {
                 captureRecord(cl, out, outState, false);
             }
@@ -1289,7 +1289,7 @@ void rd__PresentRecord(RhiCommandList cl)
         /* a failed capture pass: the box blit below, the capture before the
          * overlay as without the filter */
         filtered =
-            capOk && rd__CrtRecord(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
+            capOk && rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
         uiInPicture = filtered && ui;
     }
     /* the full-height scene: DISPLAY already has every line */
@@ -1297,20 +1297,20 @@ void rd__PresentRecord(RhiCommandList cl)
         const uint32_t lw = disp->tw, lh = disp->th * 2;
         if (!g_rd.presentLines.id || g_rd.presentLinesW != lw || g_rd.presentLinesH != lh) {
             if (g_rd.presentLines.id) {
-                rhi_DestroyTexture(g_rd.presentLines);
+                rhi_destroy_texture(g_rd.presentLines);
             }
-            g_rd.presentLines = rhi_CreateTexture(
+            g_rd.presentLines = rhi_create_texture(
                 &(RhiTextureDesc){lw, lh, 1, RHI_FMT_RGBA8_UNORM,
                                   RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED, "rd present lines"});
             g_rd.presentLinesState = RHI_STATE_UNDEFINED;
             g_rd.presentLinesW = lw;
             g_rd.presentLinesH = lh;
         }
-        rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
+        rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
         blit(cl, disp->color, disp->tw, disp->th, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh,
              RHI_LOAD_DONT_CARE, &full, pr->doubleFilter, 0, false);
-        rd__Transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
+        rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
         sh = lh;
@@ -1326,15 +1326,15 @@ void rd__PresentRecord(RhiCommandList cl)
      * depth keep a pass each */
     bool open = false;
     if (!filtered) {
-        rd__Transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
         /* with the effects depth when asked for and an
          * effects program is loaded (never under the CRT filter, even when
          * it could not draw) */
-        const bool depth = depthWanted() && !rd__CrtOn() &&
+        const bool depth = depthWanted() && !rd__crt_on() &&
                            depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box,
                                      pr->scaleFilter, mirror);
         if (!depth) {
-            open = !rd__CrtOn();
+            open = !rd__crt_on();
             blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box,
                  pr->scaleFilter, mirror, open);
         }
@@ -1348,7 +1348,7 @@ void rd__PresentRecord(RhiCommandList cl)
      * (the port's UI stays sharp above it).  Each one is a pass on `out`
      * (RHI_STATE_RENDER_TARGET at this point; a pass that samples the
      * picture copies it first or blits from `src`, `box`) with
-     * rd__FrameGroup(s_outW, s_outH, ...) for its FrameCB, as blit() does.
+     * rd__frame_group(s_outW, s_outH, ...) for its FrameCB, as blit() does.
      * With `open` the output's pass is still open: a new pass ends it
      * first and reopens it with RHI_LOAD_LOAD after, as captureRecord does
      * around its copy.
@@ -1364,35 +1364,35 @@ void rd__PresentRecord(RhiCommandList cl)
     captureRecord(cl, out, outState, open);
     overlayRecord(cl, out, &box, uiInPicture, open);
     if (open) {
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_end_render_pass(cl);
     }
     if (s_window) {
-        rd__Transition(cl, out, outState, RHI_STATE_PRESENT);
+        rd__transition(cl, out, outState, RHI_STATE_PRESENT);
     }
 }
 
-void rd__PresentFinish(void)
+void rd__present_finish(void)
 {
     if (s_window && s_backbuffer.id) {
-        rhi_Present();
+        rhi_present();
     }
 }
 
-void rd__PresentShutdown(void)
+void rd__present_shutdown(void)
 {
     if (g_rd.presentLines.id) {
-        rhi_DestroyTexture(g_rd.presentLines);
+        rhi_destroy_texture(g_rd.presentLines);
     }
     if (g_rd.presentOut.id) {
-        rhi_DestroyTexture(g_rd.presentOut);
+        rhi_destroy_texture(g_rd.presentOut);
     }
     g_rd.presentLines = g_rd.presentOut = (RhiTexture){0};
     if (s_cap.tex.id) {
-        rhi_DestroyTexture(s_cap.tex); /* the capture's texture */
+        rhi_destroy_texture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
-    depthShutdown();   /* the effects depth */
-    rd__CrtShutdown(); /* the CRT filter */
+    depthShutdown();    /* the effects depth */
+    rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.v);
     free(s_ov.b);
@@ -1405,17 +1405,17 @@ void rd__PresentShutdown(void)
     overlayForget();
 }
 
-bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h)
+bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h)
 {
     /* the window build presents the swapchain image and keeps no copy */
-    if (!g_rd.hasDevice || !dst || s_window || rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
+    if (!g_rd.hasDevice || !dst || s_window || rhi_swapchain_format() != RHI_FMT_UNKNOWN) {
         return false;
     }
-    return rd__ReadPresent(dst, (size_t)g_rd.presentOutW * g_rd.presentOutH * 4, w, h);
+    return rd__read_present(dst, (size_t)g_rd.presentOutW * g_rd.presentOutH * 4, w, h);
 }
 
 /* the output size in the settings and the pending settings (both, so a
- * pending rd_SetSettings does not take it back at the next rd_BeginFrame) */
+ * pending rd_set_settings does not take it back at the next rd_begin_frame) */
 static void setOutputSize(uint32_t width, uint32_t height)
 {
     g_rd.settings.outputWidth = width;
@@ -1427,44 +1427,44 @@ static void setOutputSize(uint32_t width, uint32_t height)
     g_rd.pendingSettings.outputHeight = height;
 }
 
-void rd_ResizeOutput(uint32_t width, uint32_t height)
+void rd_resize_output(uint32_t width, uint32_t height)
 {
     if (!g_rd.inited || width == 0 || height == 0) {
         return;
     }
     setOutputSize(width, height);
-    if (g_rd.hasDevice && rhi_SwapchainFormat() != RHI_FMT_UNKNOWN) {
-        rhi_ResizeSwapchain(width, height, g_rd.settings.vsync != 0);
+    if (g_rd.hasDevice && rhi_swapchain_format() != RHI_FMT_UNKNOWN) {
+        rhi_resize_swapchain(width, height, g_rd.settings.vsync != 0);
     }
     /* a scene sized by the window (resolution "window", the
-     * Enhanced flag) follows it at the next rd_BeginFrame
-     * (rd__ApplyDisplay recreates the targets if their scale changed; a
+     * Enhanced flag) follows it at the next rd_begin_frame
+     * (rd__apply_display recreates the targets if their scale changed; a
      * fixed scale or size never changes) */
     g_rd.settingsPending = true;
 }
 
 /* The output follows the swapchain.  The backend rebuilds the
 
- * swapchain at the surface's size on its own (rhi_SwapchainSize), and the
+ * swapchain at the surface's size on its own (rhi_swapchain_size), and the
  * window's size event may come later or never (Android); an output size
  * other than the image's drew the picture and the movie's 4:3 box for the
  * wrong size (offset, scaled, cropped).  Called with an image acquired, so
- * the swapchain is not rebuilt again here (rd_ResizeOutput would wait for
+ * the swapchain is not rebuilt again here (rd_resize_output would wait for
  * the GPU and destroy the image being drawn): only the settings change,
- * and the scene's targets follow at the next rd_BeginFrame. */
+ * and the scene's targets follow at the next rd_begin_frame. */
 static bool s_followed;
 static uint32_t s_followW, s_followH;
 
-void rd__OutputFollowSwapchain(void)
+void rd__output_follow_swapchain(void)
 {
     uint32_t sw = 0, sh = 0;
-    if (!g_rd.inited || !rhi_SwapchainSize(&sw, &sh) || !sw || !sh) {
+    if (!g_rd.inited || !rhi_swapchain_size(&sw, &sh) || !sw || !sh) {
         return;
     }
     if (sw == g_rd.settings.outputWidth && sh == g_rd.settings.outputHeight) {
         return;
     }
-    rd__Log("output follows the swapchain %ux%u (was %ux%u)", sw, sh, g_rd.settings.outputWidth,
+    rd__log("output follows the swapchain %ux%u (was %ux%u)", sw, sh, g_rd.settings.outputWidth,
             g_rd.settings.outputHeight);
     setOutputSize(sw, sh);
     g_rd.settingsPending = true;
@@ -1477,7 +1477,7 @@ static bool s_boxNoted;
 static uint32_t s_boxOutW, s_boxOutH;
 static RhiRect s_boxLast;
 
-void rd__NotePresentBox(uint32_t outW, uint32_t outH, const RhiRect *box)
+void rd__note_present_box(uint32_t outW, uint32_t outH, const RhiRect *box)
 {
     s_boxNoted = true;
     s_boxOutW = outW;
@@ -1485,7 +1485,7 @@ void rd__NotePresentBox(uint32_t outW, uint32_t outH, const RhiRect *box)
     s_boxLast = *box;
 }
 
-bool rd__LastPresentBox(uint32_t *outW, uint32_t *outH, RhiRect *box)
+bool rd__last_present_box(uint32_t *outW, uint32_t *outH, RhiRect *box)
 {
     if (!s_boxNoted) {
         return false;
@@ -1496,7 +1496,7 @@ bool rd__LastPresentBox(uint32_t *outW, uint32_t *outH, RhiRect *box)
     return true;
 }
 
-bool rd_OutputFollowed(uint32_t *w, uint32_t *h)
+bool rd_output_followed(uint32_t *w, uint32_t *h)
 {
     if (!s_followed) {
         return false;

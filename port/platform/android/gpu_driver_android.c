@@ -176,7 +176,7 @@ static void driver_failed(const char *folder, const char *why)
 
     fprintf(stderr, "gpu driver: %s did not start (%s); using the phone's own driver\n", folder,
             why);
-    rhi_SetVulkanLoader(NULL);
+    rhi_set_vulkan_loader(NULL);
     ico_config_set_string(KEY_FAILED, folder);
     ico_config_set_string(KEY_DRIVER, "");
     if (ico_config_save() != 0) {
@@ -195,7 +195,7 @@ int ico_gpu_driver_android_start(void)
     const char *want = ico_config_get_string(KEY_DRIVER, "");
     const char *root = driver_root();
 
-    rhi_SetVulkanLoader(NULL);
+    rhi_set_vulkan_loader(NULL);
     s_trial = 0;
     s_presents = 0;
     if (want == NULL || want[0] == '\0') {
@@ -255,7 +255,7 @@ int ico_gpu_driver_android_start(void)
         driver_failed(s_active, "it has no vkGetInstanceProcAddr");
         return 0;
     }
-    rhi_SetVulkanLoader(gipa);
+    rhi_set_vulkan_loader(gipa);
     s_trial = 1;
     return 1;
 }
@@ -265,7 +265,7 @@ void ico_gpu_driver_android_init_failed(void)
     if (s_active[0] != '\0') {
         driver_failed(s_active, "the renderer could not start on it");
     }
-    rhi_SetVulkanLoader(NULL);
+    rhi_set_vulkan_loader(NULL);
 }
 
 void ico_gpu_driver_android_presented(void)
@@ -411,7 +411,7 @@ static int host_last_failed(int i)
 
 static int host_adreno(void)
 {
-    const char *name = rhi_AdapterName();
+    const char *name = rhi_adapter_name();
     return name != NULL && (strstr(name, "Adreno") != NULL || strstr(name, "adreno") != NULL ||
                             strstr(name, "ADRENO") != NULL);
 }

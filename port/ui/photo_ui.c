@@ -19,11 +19,11 @@
 #include "popup.h"
 #include "settings.h"
 #include "strings.h"
-#include "ui_list.h" /* ui_SettingsAddRow */
+#include "ui_list.h" /* ui_settings_add_row */
 
 #ifdef ICO_RD
 #include "rd.h"
-#include "ui_internal.h" /* ui__DrawTexQuads */
+#include "ui_internal.h" /* ui__draw_tex_quads */
 
 /* seki/src/Texture.c: the rd texture of a texture table entry (0: none) */
 extern unsigned int tex_HostTextureId(int idx);
@@ -48,16 +48,16 @@ static int s_layout = -1, s_row = -1;
 
 static int photoProc(int first, int item);
 
-int ui_PhotoBuild(void)
+int ui_photo_build(void)
 {
     /* one row, masked: nothing drawn, no cursor (the layout's curItem -1),
        and a texel rectangle of its own as every port row has */
-    s_row =
-        ui_SettingsAddRow(120, 200, 400, 40, 0, -1, UI_STR_PHOTO_MODE, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_row = ui_settings_add_row(120, 200, 400, 40, 0, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
+                                UI_ALIGN_CENTER);
     if (s_row < 0) {
         return -1;
     }
-    lt_ext_Prop(s_row)->defaultMask = 1;
+    lt_ext_prop(s_row)->defaultMask = 1;
     LtProp l;
     memset(&l, 0, sizeof(l));
     l.first = s_row;
@@ -70,22 +70,22 @@ int ui_PhotoBuild(void)
     l.defaultItem = -1;
     l.curItem = -1;
     l.link = -1;
-    s_layout = lt_ext_AddLayout(&l);
+    s_layout = lt_ext_add_layout(&l);
     return s_layout;
 }
 
-int ui_PhotoLayout(void)
+int ui_photo_layout(void)
 {
     return s_layout;
 }
 
-void ui_PhotoReset(void)
+void ui_photo_reset(void)
 {
     s_layout = s_row = -1;
     ico_photo_exit();
 }
 
-int ui_PhotoAvailable(void)
+int ui_photo_available(void)
 {
     return stage_no > 1;
 }
@@ -135,15 +135,15 @@ static int photoProc(int first, int item)
         NEGATIVE_SE();
         la_host_leave();
         /* the pause menu, the cursor on the row (settings.c) */
-        return ui_SettingsPhotoBack();
+        return ui_settings_photo_back();
     }
     return -1;
 }
 
-void ui_PhotoCaptureDone(int ok, const char *name)
+void ui_photo_capture_done(int ok, const char *name)
 {
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
-    ui_PopupPush(ui_Str(ok ? UI_STR_PHOTO_SAVED : UI_STR_PHOTO_FAILED), name ? name : "");
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    ui_popup_push(ui_str(ok ? UI_STR_PHOTO_SAVED : UI_STR_PHOTO_FAILED), name ? name : "");
     fprintf(stderr, "photo: %s %s\n", ok ? "saved" : "not saved", name ? name : "");
 }
 
@@ -175,18 +175,18 @@ static void hudTitle(char *buf, size_t size, const IcoPhotoState *st)
 {
     const int freeCam = st->mode == ICO_PHOTO_CAM_FREE;
     /* French sets its colon apart */
-    const char *colon = ui_GetLanguage() == UI_LANG_FR ? " : " : ": ";
-    const char *cam = ui_Str(freeCam ? UI_STR_PHOTO_CAM_FREE : UI_STR_PHOTO_CAM_ORBIT);
+    const char *colon = ui_get_language() == UI_LANG_FR ? " : " : ": ";
+    const char *cam = ui_str(freeCam ? UI_STR_PHOTO_CAM_FREE : UI_STR_PHOTO_CAM_ORBIT);
     if (!freeCam) {
-        snprintf(buf, size, "%s%s%s", ui_Str(UI_STR_PHOTO_MODE), colon, cam);
+        snprintf(buf, size, "%s%s%s", ui_str(UI_STR_PHOTO_MODE), colon, cam);
         return;
     }
     static const UiStrId words[3] = {UI_STR_PHOTO_SPEED_SLOW, UI_STR_PHOTO_SPEED_NORMAL,
                                      UI_STR_PHOTO_SPEED_FAST};
     const int sp = st->speed >= 0 && st->speed < 3 ? st->speed : ICO_PHOTO_SPEED_NORMAL;
     char speed[64];
-    fill(speed, sizeof(speed), ui_Str(UI_STR_PHOTO_SPEED), "%s", ui_Str(words[sp]));
-    snprintf(buf, size, "%s%s%s, %s", ui_Str(UI_STR_PHOTO_MODE), colon, cam, speed);
+    fill(speed, sizeof(speed), ui_str(UI_STR_PHOTO_SPEED), "%s", ui_str(words[sp]));
+    snprintf(buf, size, "%s%s%s, %s", ui_str(UI_STR_PHOTO_MODE), colon, cam, speed);
 }
 
 /* ---------------------------------------- the panel's items */
@@ -252,7 +252,7 @@ static int keyName(int target, char *out, size_t size)
         const char *comma = strchr(t, ',');
         const int len = (int)(comma ? (size_t)(comma - t) : strlen(t));
         if (k == 1) {
-            snprintf(out, size, "%s %.*s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX), len, t);
+            snprintf(out, size, "%s %.*s", ui_str(UI_STR_PHOTO_MOUSE_PREFIX), len, t);
         } else {
             snprintf(out, size, "%.*s", len, t);
         }
@@ -301,11 +301,11 @@ static void addIcon(UiHudSet *set, UiHudItem *it, HudBtn b, int keyboard)
     if (ic->word) {
         return;
     }
-    if (kBtn[b].glyph >= 0 && lt_ext_GlyphTexture(kBtn[b].glyph) >= 0) {
+    if (kBtn[b].glyph >= 0 && lt_ext_glyph_texture(kBtn[b].glyph) >= 0) {
         ic->glyph = kBtn[b].glyph;
         return;
     }
-    ic->word = kBtn[b].str >= 0 ? ui_Str((UiStrId)kBtn[b].str) : kBtn[b].literal;
+    ic->word = kBtn[b].str >= 0 ? ui_str((UiStrId)kBtn[b].str) : kBtn[b].literal;
 }
 
 static void addItem(UiHudSet *set, int line, UiStrId word, HudBtn a, HudBtn b, int keyboard)
@@ -316,14 +316,15 @@ static void addItem(UiHudSet *set, int line, UiStrId word, HudBtn a, HudBtn b, i
     UiHudItem *it = &set->item[set->n++];
     memset(it, 0, sizeof(*it));
     it->line = line;
-    it->text = ui_Str(word);
+    it->text = ui_str(word);
     addIcon(set, it, a, keyboard);
     if (b != BTN_NONE) {
         addIcon(set, it, b, keyboard);
     }
 }
 
-void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *title, const char *fov)
+void ui__photo_hud_build(UiHudSet *set, int freeCam, int keyboard, const char *title,
+                         const char *fov)
 {
     memset(set, 0, sizeof(*set));
     set->item[set->n].line = 0;
@@ -350,15 +351,15 @@ void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *tit
 }
 
 /* an icon's width at size: a picture's box beside a label of that em (the
-   game's own pairing, layout_ext.h lt_ext_GlyphBox), else its word's */
+   game's own pairing, layout_ext.h lt_ext_glyph_box), else its word's */
 static float iconWidth(const UiHudIcon *ic, float size)
 {
     if (ic->glyph >= 0) {
         int w = 0;
-        lt_ext_GlyphBox(ic->glyph, size, &w, NULL);
+        lt_ext_glyph_box(ic->glyph, size, &w, NULL);
         return (float)w;
     }
-    return ic->word && ic->word[0] ? ui_MeasureMenuText(size, ic->word) : 0.0f;
+    return ic->word && ic->word[0] ? ui_measure_menu_text(size, ic->word) : 0.0f;
 }
 
 /* the gaps, in sizes: between an item's pictures, picture to word, item to
@@ -368,7 +369,7 @@ static float iconWidth(const UiHudIcon *ic, float size)
 #define GAP_ITEM 1.1f
 #define GAP_MIN 0.4f
 
-float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out)
+float ui__photo_hud_layout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out)
 {
     float widest = 0.0f;
 
@@ -388,8 +389,9 @@ float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, 
                 out[i].iconW[k] = cw;
                 iw += cw + (k > 0 ? GAP_ICON * size : 0.0f);
             }
-            const float tw =
-                items[i].text && items[i].text[0] ? ui_MeasureMenuText(size, items[i].text) : 0.0f;
+            const float tw = items[i].text && items[i].text[0]
+                                 ? ui_measure_menu_text(size, items[i].text)
+                                 : 0.0f;
             out[i].textW = tw;
             iw += tw + (items[i].nicon > 0 && tw > 0.0f ? GAP_WORD * size : 0.0f);
             w[i] = iw;
@@ -428,32 +430,32 @@ float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, 
     return widest;
 }
 
-float ui__PhotoHudFit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out)
+float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out)
 {
-    float w = ui__PhotoHudLayout(items, n, *size, room, out);
+    float w = ui__photo_hud_layout(items, n, *size, room, out);
     for (int i = 0; i < 8 && w > room; i++) {
         /* after the first step a little under the ratio, so it converges */
         *size *= room / w * (i > 0 ? 0.99f : 1.0f);
-        w = ui__PhotoHudLayout(items, n, *size, room, out);
+        w = ui__photo_hud_layout(items, n, *size, room, out);
     }
     return w;
 }
 
 /* one picture of the game's button sheets, its box's left edge at x and its
    middle on mid (grid units): the texture the menus draw it from (the
-   table's texNo, layout_ext.h lt_ext_GlyphTexture) magnified onto the
+   table's texNo, layout_ext.h lt_ext_glyph_texture) magnified onto the
    output with bilinear filtering as the menus' text is, the texel
    rectangle half a texel in on each side as display_texture samples it */
 static void hudGlyph(int glyph, float x, float mid, float size)
 {
-    const int no = lt_ext_GlyphTexture(glyph);
+    const int no = lt_ext_glyph_texture(glyph);
     const unsigned tex = no >= 0 ? tex_HostTextureId(no) : 0u;
     if (!tex) {
         return;
     }
     int uvwh[4], w = 0, h = 0;
-    lt_ext_GlyphSource(glyph, uvwh);
-    lt_ext_GlyphBox(glyph, size, &w, &h);
+    lt_ext_glyph_source(glyph, uvwh);
+    lt_ext_glyph_box(glyph, size, &w, &h);
     UiTexQuad q;
     q.x0 = x;
     q.x1 = x + (float)w;
@@ -464,17 +466,17 @@ static void hudGlyph(int glyph, float x, float mid, float size)
     q.u1 = (float)(uvwh[0] + uvwh[2]) - 0.5f;
     q.v1 = (float)(uvwh[1] + uvwh[3]) - 0.5f;
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
-    ui__DrawTexQuads(tex, &q, 1, grey, 0, NULL, 0);
+    ui__draw_tex_quads(tex, &q, 1, grey, 0, NULL, 0);
 }
 #endif
 
-void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
+void ui_photo_draw_overlay(const struct RdOverlayCtx *ctx)
 {
 #ifdef ICO_RD
-    if (!ctx || !ico_photo_hud() || !ui_FontInit()) {
+    if (!ctx || !ico_photo_hud() || !ui_font_init()) {
         return;
     }
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     IcoPhotoState st;
     ico_photo_get(&st);
     char fov[96] = "";
@@ -482,7 +484,7 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     if (fovNow > 0.0f) {
         char deg[16];
         snprintf(deg, sizeof(deg), "%d", (int)(fovNow + 0.5f));
-        fill(fov, sizeof(fov), ui_Str(UI_STR_PHOTO_FOV), "%d", deg);
+        fill(fov, sizeof(fov), ui_str(UI_STR_PHOTO_FOV), "%d", deg);
     }
     char title[160];
     hudTitle(title, sizeof(title), &st);
@@ -492,21 +494,21 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
     ico_input_last_press(&kind, NULL);
     static UiHudSet set;
     static UiHudPlaced at[UI_HUD_ITEMS];
-    ui__PhotoHudBuild(&set, st.mode == ICO_PHOTO_CAM_FREE,
-                      kind == ICO_SRC_KEY || kind == ICO_SRC_MOUSE, title, fov);
-    ui_BeginOverlay(ctx);
+    ui__photo_hud_build(&set, st.mode == ICO_PHOTO_CAM_FREE,
+                        kind == ICO_SRC_KEY || kind == ICO_SRC_MOUSE, title, fov);
+    ui_begin_overlay(ctx);
     /* the text smaller when the widest line (a long translation) would
        leave the screen */
     float size = HUD_SIZE;
-    float w = ui__PhotoHudFit(set.item, set.n, &size, HUD_ROOM, at);
+    float w = ui__photo_hud_fit(set.item, set.n, &size, HUD_ROOM, at);
     w = w > HUD_ROOM ? HUD_ROOM : w;
     const float top = HUD_BOTTOM - (float)UI_HUD_LINES * HUD_PITCH;
     static const uint8_t panel[4] = {6, 6, 9, 0x50};
-    ui_DrawRect(HUD_X - 8.0f, top - 6.0f, HUD_X + w + 8.0f, HUD_BOTTOM + 4.0f, panel);
+    ui_draw_rect(HUD_X - 8.0f, top - 6.0f, HUD_X + w + 8.0f, HUD_BOTTOM + 4.0f, panel);
     static const uint8_t titleCol[4] = {0x80, 0x7C, 0x70, 0x80}, body[4] = {0x6A, 0x68, 0x62, 0x80},
                          pic[4] = {0x7A, 0x78, 0x70, 0x80};
     float asc, desc, cap;
-    ui_MenuFontMetrics(size, &asc, &desc, &cap);
+    ui_menu_font_metrics(size, &asc, &desc, &cap);
     for (int i = 0; i < set.n; i++) {
         const UiHudItem *it = &set.item[i];
         const float mid = top + (float)it->line * HUD_PITCH + asc - cap * 0.5f;
@@ -515,17 +517,17 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
             if (ic->glyph >= 0) {
                 hudGlyph(ic->glyph, HUD_X + at[i].iconX[k], mid, size);
             } else if (ic->word && ic->word[0]) {
-                ui_DrawMenuText(HUD_X + at[i].iconX[k], mid, size, pic, ic->word, UI_VALIGN_MIDDLE,
-                                UI_INK_LIGHT, NULL);
+                ui_draw_menu_text(HUD_X + at[i].iconX[k], mid, size, pic, ic->word,
+                                  UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
             }
         }
         if (it->text && it->text[0]) {
             /* the menus' look, the 1x strip magnified */
-            ui_DrawMenuText(HUD_X + at[i].textX, mid, size, it->line == 0 ? titleCol : body,
-                            it->text, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
+            ui_draw_menu_text(HUD_X + at[i].textX, mid, size, it->line == 0 ? titleCol : body,
+                              it->text, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
         }
     }
-    ui_EndOverlay();
+    ui_end_overlay();
 #else
     (void)ctx;
 #endif

@@ -1,7 +1,7 @@
 /* title_logo_test.c: the title's logo under the port's menus
  * (port/game/title_logo.c, package L1).  CPU only; the game's globals and
  * the two menus' answers are stubs here (settings_test checks
- * ui_SettingsCoversTitle itself).
+ * ui_settings_covers_title itself).
  *
  *   models    the nine logo models and nothing else
  *   title     on the title's menu nothing hides; a Settings page over the
@@ -36,10 +36,10 @@ static int failures;
 /* the game's globals and the menus' answers */
 int stage_no;
 int current_layout_id;
-static int s_covers; /* ui_SettingsCoversTitle */
+static int s_covers; /* ui_settings_covers_title */
 static int s_list = -1;
 
-int ui_SettingsCoversTitle(void)
+int ui_settings_covers_title(void)
 {
     return s_covers;
 }

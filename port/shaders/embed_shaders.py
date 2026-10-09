@@ -49,7 +49,7 @@ extern const IcoShaderBlob g_icoShaders[];
 extern const unsigned g_icoShaderCount;
 
 /* NULL when no shader has that name. */
-const IcoShaderBlob *ico_FindShader(const char *name);
+const IcoShaderBlob *ico_find_shader(const char *name);
 
 #ifdef __cplusplus
 }
@@ -122,7 +122,7 @@ def main():
         "};",
         f"const unsigned g_icoShaderCount = {len(rows)};",
         "",
-        "const IcoShaderBlob *ico_FindShader(const char *name)",
+        "const IcoShaderBlob *ico_find_shader(const char *name)",
         "{",
         "    for (unsigned i = 0; i < g_icoShaderCount; i++) {",
         "        if (strcmp(g_icoShaders[i].name, name) == 0) {",

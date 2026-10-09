@@ -134,7 +134,7 @@ void ico_diag_milestone(const char *fmt, ...);
 /* port/game/model_viewer.h: the model viewer's tick (package MV) */
 void ico_mv_tick(void);
 /* port/ui/ui_mouse.h: the mouse pointer in the menus (I17b) */
-void ui_MouseTick(void);
+void ui_mouse_tick(void);
 /* port/game/photo_view.h: photo mode's camera in the game's matrices
    (issue 14) */
 void ico_photo_view_tick(void);
@@ -341,7 +341,7 @@ void Main(void)
            read and before the layouts: a hover moves the cursor, a click
            or the wheel adds its button to this tick's pad
            (port/ui/ui_mouse.h) */
-        ui_MouseTick();
+        ui_mouse_tick();
         /* PC port (package MV): the model viewer's tick, after the pad read
            and before the layouts and the objects (port/game/model_viewer.h) */
         ico_mv_tick();

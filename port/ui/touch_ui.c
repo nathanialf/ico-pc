@@ -20,7 +20,7 @@
 
 static int (*s_source)(struct IcoTouchOverlay *out);
 
-void ui_TouchSetSource(int (*fn)(struct IcoTouchOverlay *out))
+void ui_touch_set_source(int (*fn)(struct IcoTouchOverlay *out))
 {
     s_source = fn;
 }
@@ -43,7 +43,7 @@ static struct {
 static void flush(void)
 {
     if (s_d.n > 0) {
-        rd_OverlayPrims(RD_PRIM_TRIANGLES, s_d.v, s_d.n, (RdTex){0}, RD_BLEND_LERP_AS);
+        rd_overlay_prims(RD_PRIM_TRIANGLES, s_d.v, s_d.n, (RdTex){0}, RD_BLEND_LERP_AS);
         s_d.n = 0;
     }
 }
@@ -301,10 +301,10 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o)
     const float left = (float)ctx->box.x + (bw - W) * 0.5f, top = (float)ctx->box.y;
     const float sx = W / 640.0f, sy = bh / 448.0f;
 
-    if (ctx->box.w == 0 || ctx->box.h == 0 || !ui_FontInit()) {
+    if (ctx->box.w == 0 || ctx->box.h == 0 || !ui_font_init()) {
         return;
     }
-    ui_BeginOverlay(ctx);
+    ui_begin_overlay(ctx);
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &o->layout.button[z];
         const char *name = labelOf(z);
@@ -321,13 +321,13 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o)
         const float px = (b->rect.x + b->rect.w * 0.5f) * s_d.kx;
         const float py = (b->rect.y + b->rect.h * 0.5f) * s_d.ky;
         const float hPx = b->rect.h * s_d.ky * (name[1] == '\0' || name[2] == '\0' ? 0.5f : 0.38f);
-        ui_DrawText((px - left) / sx, (py - top) / sy + 2.0f, hPx / sy, c, name,
-                    UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        ui_draw_text((px - left) / sx, (py - top) / sy + 2.0f, hPx / sy, c, name,
+                     UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
     }
-    ui_EndOverlay();
+    ui_end_overlay();
 }
 
-void ui_TouchDrawOverlay(const struct RdOverlayCtx *ctx)
+void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
 {
     IcoTouchOverlay o;
 
@@ -354,7 +354,7 @@ void ui_TouchDrawOverlay(const struct RdOverlayCtx *ctx)
 
 #else
 
-void ui_TouchDrawOverlay(const struct RdOverlayCtx *ctx)
+void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
 {
     (void)ctx;
 }

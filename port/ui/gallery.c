@@ -40,13 +40,13 @@ static const GalleryEngine *s_engine;
 static int s_paused = -1;
 static int s_held;
 
-void gallery_SetEngine(const GalleryEngine *e)
+void gallery_set_engine(const GalleryEngine *e)
 {
     s_engine = e;
     s_built = 0; /* the list from this engine's tables at the next enter */
 }
 
-const GalleryTables *gallery_Tables(void)
+const GalleryTables *gallery_tables(void)
 {
     return s_haveTables ? &s_tables : NULL;
 }
@@ -222,7 +222,7 @@ static int bankHasItems(const GalleryTables *t, int canon)
     return 0;
 }
 
-int gallery_Build(const GalleryTables *t)
+int gallery_build(const GalleryTables *t)
 {
     s_count = 0;
     s_built = 1;
@@ -289,17 +289,17 @@ int gallery_Build(const GalleryTables *t)
     return s_count;
 }
 
-int gallery_Count(void)
+int gallery_count(void)
 {
     return s_count;
 }
 
-const GalleryItem *gallery_Item(int i)
+const GalleryItem *gallery_item(int i)
 {
     return i >= 0 && i < s_count ? &s_items[i] : NULL;
 }
 
-int gallery_Find(int group, int kind, int key, int bank)
+int gallery_find(int group, int kind, int key, int bank)
 {
     for (int i = 0; i < s_count; i++) {
         const GalleryItem *it = &s_items[i];
@@ -311,7 +311,7 @@ int gallery_Find(int group, int kind, int key, int bank)
     return -1;
 }
 
-int gallery_JumpGroup(int i, int dir)
+int gallery_jump_group(int i, int dir)
 {
     /* the group starts: every heading, and Back */
     int own = -1, starts[GAL_G_COUNT * 128], n = 0;
@@ -374,7 +374,7 @@ static const char *bankName(int b, char *buf, size_t n)
     return buf;
 }
 
-int gallery_GroupStr(int group)
+int gallery_group_str(int group)
 {
     static const int ids[GAL_G_COUNT] = {UI_STR_GAL_SOUNDTRACK, UI_STR_GAL_SCENE,
                                          UI_STR_GAL_AMBIENCE,   UI_STR_GAL_VOICE,
@@ -382,9 +382,9 @@ int gallery_GroupStr(int group)
     return group >= 0 && group < GAL_G_COUNT ? ids[group] : UI_STR_NONE;
 }
 
-const char *gallery_Label(int i, char *buf, size_t n)
+const char *gallery_label(int i, char *buf, size_t n)
 {
-    const GalleryItem *it = gallery_Item(i);
+    const GalleryItem *it = gallery_item(i);
     if (it == NULL) {
         return "";
     }
@@ -392,11 +392,11 @@ const char *gallery_Label(int i, char *buf, size_t n)
     case GAL_K_HEADING:
         if (it->group == GAL_G_SE && it->bank > 0) {
             char b[64];
-            snprintf(buf, n, "%s: %s", ui_Str((UiStrId)UI_STR_GAL_SE),
+            snprintf(buf, n, "%s: %s", ui_str((UiStrId)UI_STR_GAL_SE),
                      bankName(it->bank, b, sizeof(b)));
             return buf;
         }
-        return ui_Str((UiStrId)gallery_GroupStr(it->group));
+        return ui_str((UiStrId)gallery_group_str(it->group));
     case GAL_K_STREAM:
         return streamName(it->key, buf, n);
     case GAL_K_SE:
@@ -406,15 +406,15 @@ const char *gallery_Label(int i, char *buf, size_t n)
         }
         return buf;
     case GAL_K_BACK:
-        return ui_Str(UI_STR_BACK);
+        return ui_str(UI_STR_BACK);
     default:
         return "";
     }
 }
 
-const char *gallery_ColA(int i, char *buf, size_t n)
+const char *gallery_col_a(int i, char *buf, size_t n)
 {
-    const GalleryItem *it = gallery_Item(i);
+    const GalleryItem *it = gallery_item(i);
     (void)buf;
     (void)n;
     if (it == NULL) {
@@ -426,9 +426,9 @@ const char *gallery_ColA(int i, char *buf, size_t n)
     return "";
 }
 
-const char *gallery_Asset(int i, char *buf, size_t n)
+const char *gallery_asset(int i, char *buf, size_t n)
 {
-    const GalleryItem *it = gallery_Item(i);
+    const GalleryItem *it = gallery_item(i);
     if (it == NULL) {
         return "";
     }
@@ -454,25 +454,25 @@ const char *gallery_Asset(int i, char *buf, size_t n)
 
 /* --- a stream's time ------------------------------------------------------- */
 
-double gallery_StreamSeconds(const AdpcmDataRec *r, double bytes)
+double gallery_stream_seconds(const AdpcmDataRec *r, double bytes)
 {
     int ch = r->channels > 0 ? r->channels : 1;
     int hz = r->pitch > 0 ? r->pitch : 44100;
     return bytes / ch / 16.0 * 28.0 / hz;
 }
 
-double gallery_StreamBytes(const AdpcmDataRec *r)
+double gallery_stream_bytes(const AdpcmDataRec *r)
 {
     return (double)r->sectors * 2048.0;
 }
 
-void gallery_ClockReset(GalleryStreamClock *c)
+void gallery_clock_reset(GalleryStreamClock *c)
 {
     memset(c, 0, sizeof(*c));
 }
 
-unsigned long long gallery_ClockStep(GalleryStreamClock *c, uint32_t nax, uint32_t start,
-                                     uint32_t size)
+unsigned long long gallery_clock_step(GalleryStreamClock *c, uint32_t nax, uint32_t start,
+                                      uint32_t size)
 {
     if (size == 0 || nax < start || nax >= start + size) {
         return c->played;
@@ -492,13 +492,13 @@ unsigned long long gallery_ClockStep(GalleryStreamClock *c, uint32_t nax, uint32
     return c->played;
 }
 
-int gallery_ClockAtEnd(const GalleryStreamClock *c, int channels, double bytes)
+int gallery_clock_at_end(const GalleryStreamClock *c, int channels, double bytes)
 {
     int ch = channels > 0 ? channels : 1;
     return c->started && ((double)c->played + c->step / 2.0) * ch >= bytes;
 }
 
-long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels)
+long gallery_stream_end_block(const uint8_t *buf, size_t n, int channels)
 {
     for (size_t sec = 0; sec + GALLERY_SECTOR <= n; sec += GALLERY_SECTOR) {
         for (size_t b = 0; b < GALLERY_SECTOR; b += 16) {
@@ -511,13 +511,13 @@ long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels)
     return -1;
 }
 
-long long gallery_StreamBlankFrom(uint64_t pass,
-                                  int (*read)(void *user, uint64_t off, uint8_t *buf), void *user)
+long long gallery_stream_blank_from(uint64_t pass,
+                                    int (*read)(void *user, uint64_t off, uint8_t *buf), void *user)
 {
     uint8_t buf[GALLERY_SECTOR];
     const long long n = (long long)(pass / GALLERY_SECTOR);
     if (n <= 0 || read(user, (uint64_t)(n - 1) * GALLERY_SECTOR, buf) != 0 ||
-        gallery_StreamEndBlock(buf, GALLERY_SECTOR, 1) < 0) {
+        gallery_stream_end_block(buf, GALLERY_SECTOR, 1) < 0) {
         return -1; /* the pass's last sector plays: no blank tail */
     }
     /* sectors below lo play, hi and every one after it are blank */
@@ -527,7 +527,7 @@ long long gallery_StreamBlankFrom(uint64_t pass,
         if (read(user, (uint64_t)mid * GALLERY_SECTOR, buf) != 0) {
             return -1;
         }
-        if (gallery_StreamEndBlock(buf, GALLERY_SECTOR, 1) >= 0) {
+        if (gallery_stream_end_block(buf, GALLERY_SECTOR, 1) >= 0) {
             hi = mid;
         } else {
             lo = mid;
@@ -546,7 +546,7 @@ static unsigned rd16(const uint8_t *p)
     return (unsigned)p[0] | (unsigned)p[1] << 8;
 }
 
-int gallery_HdHas(const uint8_t *hd, size_t size, int prog, int tone)
+int gallery_hd_has(const uint8_t *hd, size_t size, int prog, int tone)
 {
     if (hd == NULL || size < 0x24 || prog < 0 || prog >= 0x80 || tone < 0 || tone >= 0x80 ||
         rd32(hd + 0x0C) != 0x64685353u || rd32(hd + 0x20) == 0xFFFFFFFFu) {
@@ -595,7 +595,7 @@ static int s_dwell;     /* seconds an entry may last; 0: SCRIPT_TICKS steps */
 static int s_dwellItem; /* the entry playing in dwell mode, -1 */
 static int s_dwellTick, s_dwellSeen, s_dwellGone;
 /* the item sounding at the last tick (-1) and where it was, for the end
-   and wrap lines (gallery_Tick) */
+   and wrap lines (gallery_tick) */
 static int s_track = -1;
 static float s_trackEl, s_trackTot;
 
@@ -665,7 +665,7 @@ static int bankItem(int k, int j)
 static int scriptItem(const char *kind, int v, int v2)
 {
     if (strcmp(kind, "stream") == 0) {
-        return gallery_Find(-1, GAL_K_STREAM, v, -1);
+        return gallery_find(-1, GAL_K_STREAM, v, -1);
     }
     if (strcmp(kind, "env") == 0) {
         for (int i = 0; i < s_count; i++) {
@@ -677,8 +677,8 @@ static int scriptItem(const char *kind, int v, int v2)
         return -1;
     }
     if (strcmp(kind, "se") == 0) {
-        int i = gallery_Find(GAL_G_VOICE, GAL_K_SE, v, -1);
-        return i >= 0 ? i : gallery_Find(GAL_G_SE, GAL_K_SE, v, -1);
+        int i = gallery_find(GAL_G_VOICE, GAL_K_SE, v, -1);
+        return i >= 0 ? i : gallery_find(GAL_G_SE, GAL_K_SE, v, -1);
     }
     if (strcmp(kind, "bank") == 0) {
         return bankItem(v, v2);
@@ -700,7 +700,7 @@ static int dwellOver(void)
     }
     const GalleryItem *it = &s_items[s_dwellItem];
     s_dwellTick++;
-    if (gallery_Playing() == s_dwellItem) {
+    if (gallery_playing() == s_dwellItem) {
         s_dwellSeen = 1;
         s_dwellGone = 0;
     } else if (s_dwellSeen) {
@@ -715,10 +715,10 @@ static int dwellOver(void)
     }
     if (s_dwellTick >= s_dwell * ticksPerSecond()) {
         float el = 0.0f, tot = 0.0f;
-        gallery_Position(&el, &tot);
+        gallery_position(&el, &tot);
         fprintf(stderr, "gallery: %s %d cut at %.1f s of %.1f s (dwell %d s)\n", kindToken(it),
                 it->key, el, tot, s_dwell);
-        gallery_Stop();
+        gallery_stop();
         return 1;
     }
     return 0;
@@ -745,7 +745,7 @@ static void scriptStep(void)
         }
     }
     if (s_scriptPos >= s_scriptN) {
-        gallery_Stop();
+        gallery_stop();
         s_scriptDone = 1;
         fprintf(stderr, "gallery: script done\n");
         return;
@@ -767,12 +767,12 @@ static void scriptStep(void)
     }
     if (strcmp(kind, "pause") == 0) {
         /* Cross on the item sounding or paused */
-        int i = gallery_Playing();
+        int i = gallery_playing();
         if (i < 0) {
             fprintf(stderr, "gallery: failed pause: nothing plays\n");
             return;
         }
-        gallery_Toggle(i);
+        gallery_toggle(i);
         return;
     }
     if (strcmp(kind, "seq") == 0) {
@@ -784,7 +784,7 @@ static void scriptStep(void)
         fprintf(stderr, "gallery: failed %s %d: no such entry in the list\n", kind, v);
         return;
     }
-    if (gallery_Play(i) != 0) {
+    if (gallery_play(i) != 0) {
         return; /* logged; the next entry at the next step */
     }
     if (s_dwell > 0) {
@@ -793,19 +793,19 @@ static void scriptStep(void)
     }
 }
 
-int gallery_ScriptLeave(void)
+int gallery_script_leave(void)
 {
     int r = s_scriptLeave;
     s_scriptLeave = 0;
     return r;
 }
 
-void gallery_Enter(void)
+void gallery_enter(void)
 {
     if (!s_built) {
         memset(&s_tables, 0, sizeof(s_tables));
         s_haveTables = s_engine && s_engine->tables && s_engine->tables(&s_tables) == 0;
-        gallery_Build(s_haveTables ? &s_tables : NULL);
+        gallery_build(s_haveTables ? &s_tables : NULL);
         int n[GAL_G_COUNT] = {0};
         for (int i = 0; i < s_count; i++) {
             if (s_items[i].kind != GAL_K_HEADING) {
@@ -824,7 +824,7 @@ void gallery_Enter(void)
     scriptParse();
 }
 
-void gallery_Leave(void)
+void gallery_leave(void)
 {
     s_track = -1;
     s_paused = -1;
@@ -834,9 +834,9 @@ void gallery_Leave(void)
     }
 }
 
-int gallery_Play(int i)
+int gallery_play(int i)
 {
-    const GalleryItem *it = gallery_Item(i);
+    const GalleryItem *it = gallery_item(i);
     if (it == NULL || (it->kind != GAL_K_STREAM && it->kind != GAL_K_SE)) {
         return -1;
     }
@@ -845,14 +845,14 @@ int gallery_Play(int i)
     s_track = -1;
     char buf[96];
     fprintf(stderr, "gallery: playing %s %d (%s)\n", groupToken(it->group), it->key,
-            gallery_Label(i, buf, sizeof(buf)));
+            gallery_label(i, buf, sizeof(buf)));
     if (s_engine == NULL || s_engine->play == NULL) {
         return -1;
     }
     return s_engine->play(it);
 }
 
-void gallery_Stop(void)
+void gallery_stop(void)
 {
     s_paused = -1;
     s_held = 0;
@@ -868,14 +868,14 @@ void gallery_Stop(void)
 #define LOG_TICKS 50
 static int s_logTick;
 
-void gallery_Tick(void)
+void gallery_tick(void)
 {
     if (s_engine && s_engine->tick) {
         s_engine->tick();
     }
     float el = 0.0f, tot = 0.0f;
-    int i = gallery_Playing();
-    int pos = i >= 0 && gallery_Position(&el, &tot) == 0;
+    int i = gallery_playing();
+    int pos = i >= 0 && gallery_position(&el, &tot) == 0;
     if (s_track >= 0 && i != s_track) {
         fprintf(stderr, "gallery: %s %d ended at %.1f s of %.1f s\n", kindToken(&s_items[s_track]),
                 s_items[s_track].key, s_trackEl, s_trackTot);
@@ -897,26 +897,26 @@ void gallery_Tick(void)
     } else {
         s_logTick = 0;
     }
-    if (s_paused >= 0 && !s_held && gallery_Playing() != s_paused) {
+    if (s_paused >= 0 && !s_held && gallery_playing() != s_paused) {
         s_paused = -1; /* it ended or was stopped under the page */
     }
     scriptStep();
 }
 
-int gallery_Playing(void)
+int gallery_playing(void)
 {
     const GalleryItem *it = s_engine && s_engine->playing ? s_engine->playing() : NULL;
     return it != NULL && it >= s_items && it < s_items + s_count ? (int)(it - s_items) : -1;
 }
 
-int gallery_Paused(void)
+int gallery_paused(void)
 {
     return s_paused;
 }
 
-int gallery_Toggle(int i)
+int gallery_toggle(int i)
 {
-    const GalleryItem *it = gallery_Item(i);
+    const GalleryItem *it = gallery_item(i);
     if (it == NULL || (it->kind != GAL_K_STREAM && it->kind != GAL_K_SE)) {
         return -1;
     }
@@ -928,35 +928,35 @@ int gallery_Toggle(int i)
         }
     }
     if (s_paused == i && s_held) {
-        return gallery_Play(i); /* from its start */
+        return gallery_play(i); /* from its start */
     }
-    if (gallery_Playing() == i) {
+    if (gallery_playing() == i) {
         if (s_engine && s_engine->pause && s_engine->pause(1) == 0) {
             s_paused = i;
             s_held = 0;
             fprintf(stderr, "gallery: paused %s %d\n", groupToken(it->group), it->key);
         } else {
             /* the engine cannot pause it: stopped, and Cross plays it again */
-            gallery_Stop();
+            gallery_stop();
             s_paused = i;
             s_held = 1;
             fprintf(stderr, "gallery: stopped %s %d (held)\n", groupToken(it->group), it->key);
         }
         return 0;
     }
-    return gallery_Play(i);
+    return gallery_play(i);
 }
 
-int gallery_Position(float *elapsed, float *total)
+int gallery_position(float *elapsed, float *total)
 {
     *elapsed = *total = 0.0f;
-    if (gallery_Playing() < 0 || s_engine == NULL || s_engine->position == NULL) {
+    if (gallery_playing() < 0 || s_engine == NULL || s_engine->position == NULL) {
         return -1;
     }
     return s_engine->position(elapsed, total);
 }
 
-int gallery_Step(int i, int dir)
+int gallery_step(int i, int dir)
 {
     if (s_count == 0) {
         return -1;

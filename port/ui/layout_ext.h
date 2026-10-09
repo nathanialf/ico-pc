@@ -17,11 +17,11 @@
  *   properties 436 .. 436 + LT_EXT_MAX_PROPERTIES - 1
  *
  * held here.  layout_texture.c reads both tables through LT_LAYOUT(i) and
- * LT_PROP(i) under ICO_HOST, which are lt_ext_Layout(i) and lt_ext_Prop(i):
+ * LT_PROP(i) under ICO_HOST, which are lt_ext_layout(i) and lt_ext_prop(i):
  * the game's row below the game's count, the port's row above it.  No
  * stage range reaches an extension index, so no texture is ever looked up
  * for a port row.  A port row draws its label in the menus' look where the
- * texture path would draw the texture (lt_ext_DrawTextRow, called from
+ * texture path would draw the texture (lt_ext_draw_text_row, called from
  * display_texture), with the colour, fade, dimming, cursor sparkle and glow
  * the game computes for any row; so does a game row of the menu text
  * table (menu_text.h), its texture still transferred.
@@ -54,30 +54,30 @@ typedef struct LtExtText {
 
 /* Appends a layout; returns its index (>= LT_GAME_LAYOUT_COUNT), or -1 when
    the extension is full.  first/last name port property indices. */
-int lt_ext_AddLayout(const LtProp *layout);
+int lt_ext_add_layout(const LtProp *layout);
 /* Appends a property row with its label; returns its index
    (>= LT_GAME_PROPERTY_COUNT), or -1 (full: "ui: layout extension full",
    logged once).  A row with neither dispW nor texW
    gets dispW 400, one with neither dispH nor texH dispH 40 (the Options
    screen's row height: 20 field lines). */
-int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text);
+int lt_ext_add_property(const LtProperty *row, const LtExtText *text);
 /* Changes a port row's label (a value that changes, a language switch);
    -1 if index is not a port row. */
-int lt_ext_SetText(int index, const char *utf8);
-int lt_ext_SetStr(int index, int strId);
+int lt_ext_set_text(int index, const char *utf8);
+int lt_ext_set_str(int index, int strId);
 /* Changes a port label's em (a line of button prompts set smaller to fit);
    -1 if index is not a port row. */
-int lt_ext_SetSize(int index, float size);
+int lt_ext_set_size(int index, float size);
 /* Greys a port row (its colour at half, whatever the cursor does): the
-   "locked" style of Settings > Extras.  Cleared by lt_ext_Reset. */
-int lt_ext_SetDim(int index, int dim);
+   "locked" style of Settings > Extras.  Cleared by lt_ext_reset. */
+int lt_ext_set_dim(int index, int dim);
 /* whether a port row is greyed (tests) */
-int lt_ext_RowDim(int index);
+int lt_ext_row_dim(int index);
 /* the label as it would be drawn now (tests) */
-const char *lt_ext_RowText(int index);
+const char *lt_ext_row_text(int index);
 /* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0
    if index is not a port row (tests) */
-float lt_ext_RowSize(int index);
+float lt_ext_row_size(int index);
 
 /* The game's button glyphs on a port row.  A glyph row draws one of the
    game's own sprites, the texture path of display_texture unchanged: the
@@ -107,71 +107,71 @@ typedef enum LtExtGlyph {
 /* Appends a glyph row at (x, y) (dispX, dispY: its box's left and top) at
    the size it has beside a label of em `size` (the game's own pairs, a
    27-unit label: 32 x 30 for a face button); -1 when full. */
-int lt_ext_AddGlyph(int glyph, int x, int y, float size);
+int lt_ext_add_glyph(int glyph, int x, int y, float size);
 /* The box (dispW pixels, dispH y units) of a glyph beside a label of em
    size, without adding it (layout). */
-void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);
+void lt_ext_glyph_box(int glyph, float size, int *w, int *h);
 /* whether e is a glyph row (tests; layout_ext.c uses it too); the texture
    it draws (texProperty's texNo of its game row), -1 when the tables are
    not the PAL ones */
-int lt_ext_IsGlyphRow(const LtProperty *e);
-int lt_ext_GlyphTexNo(const LtProperty *e);
+int lt_ext_is_glyph_row(const LtProperty *e);
+int lt_ext_glyph_tex_no(const LtProperty *e);
 /* the same for a glyph by itself (the photo panel draws the glyphs on the
    presentation overlay from that texture) */
-int lt_ext_GlyphTexture(int glyph);
+int lt_ext_glyph_texture(int glyph);
 /* The PAL texProperty row a glyph is drawn from and its texel rectangle
    (u, v, w, h): the photo panel draws from it, and the tests build fake
    tables with it. */
-int lt_ext_GlyphSource(int glyph, int uvwh[4]);
+int lt_ext_glyph_source(int glyph, int uvwh[4]);
 
 /* A filled rectangle on a port row (the music gallery's progress bar): the
    row's box (dispX, dispY, dispW, dispH), the left `fill` of it (0..1,
-   lt_ext_SetFill; 1 when added), in rgba (GS, 0x80 = 1.0) times the row's
+   lt_ext_set_fill; 1 when added), in rgba (GS, 0x80 = 1.0) times the row's
    colour (its fade), drawn where a label would be (no glow); -1 when
    full. */
-int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4]);
-int lt_ext_SetFill(int index, float fill);
+int lt_ext_add_rect(int x, int y, int w, int h, const unsigned char rgba[4]);
+int lt_ext_set_fill(int index, float fill);
 /* the fill a rect row has (tests) */
-float lt_ext_RowFill(int index);
+float lt_ext_row_fill(int index);
 
 /* The table lookups layout_texture.c makes through LT_LAYOUT/LT_PROP: the
    game's row for an index below its count, the port's above it; an index in
    neither (-1, the tables' "none", or past the port's last row) a zeroed
    scratch row, never memory outside the tables (logged once unless -1). */
-LtProp *lt_ext_Layout(int index);
-LtProperty *lt_ext_Prop(int index);
+LtProp *lt_ext_layout(int index);
+LtProperty *lt_ext_prop(int index);
 /* whether e is a port row, and its index (tests) */
-int lt_ext_IsPortProp(const LtProperty *e);
-int lt_ext_PropIndex(const LtProperty *e);
-int lt_ext_LayoutCount(void);
-int lt_ext_PropCount(void);
+int lt_ext_is_port_prop(const LtProperty *e);
+int lt_ext_prop_index(const LtProperty *e);
+int lt_ext_layout_count(void);
+int lt_ext_prop_count(void);
 /* drops every port row and layout (tests, a Settings rebuild) */
-void lt_ext_Reset(void);
+void lt_ext_reset(void);
 
 /* Port row e's label into the open packet's list with the state the game
-   set (UI_KEEP_STATE), in the menus' look (menu_font.h ui_DrawMenuText,
+   set (UI_KEEP_STATE), in the menus' look (menu_font.h ui_draw_menu_text,
    light ink, into the scene list at 1x).  box is the SprRect the texture
    sprite would have had (x, y, w, h in 1/16 pixel / 1/16 field line from
    the screen centre, after display_texture's inset), rgba the sprite
    colour (GS, 0x80 = 1.0).  glow != 0 is lt_glow_sprite's stretched copy:
    box is the stretched rectangle, mapped from the row's last plain box. */
-void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
+void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow);
 
 /* Whether display_texture (and kanban.c's) draws e as text: a port row (a
    glyph row only when it has no texture: it then draws nothing), or a game
-   row of the menu text table (menu_text.h ui_MenuTextItemOf: its rectangle
+   row of the menu text table (menu_text.h ui_menu_text_item_of: its rectangle
    the PAL one).  Every other game row draws its texture. */
-int lt_ext_IsTextRow(const LtProperty *e);
+int lt_ext_is_text_row(const LtProperty *e);
 /* The text hook of display_texture, lt_glow_sprite and kanban.c's
-   display_texture, for a row lt_ext_IsTextRow says is text: a port row's
-   label (lt_ext_DrawRow) or a game row's words (menu_font.h
-   ui_MenuWordDraw, in the language the game shows), keyed by the row and
+   display_texture, for a row lt_ext_is_text_row says is text: a port row's
+   label (lt_ext_draw_row) or a game row's words (menu_font.h
+   ui_menu_word_draw, in the language the game shows), keyed by the row and
    the pass ((e << 2) ^ (glow ? 2 : 1)).  box and uv are the sprite's
    rectangle and texel rectangle (1/16 texel) as the caller would hand them
    to gif_SpriteSensitiveOffset, rgba its colour, glow the glow sprite's
    pass. */
-void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
-                        const unsigned char rgba[4], int glow);
+void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4],
+                          const unsigned char rgba[4], int glow);
 
 /* The pad bits that take the game menus' back action, where the game
    checks Triangle for it (default_item_select's left link in
@@ -179,7 +179,7 @@ void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
    (0x10), plus Circle (0x20) while the alias is on ([game] circle_back,
    default on; the Settings module sets it from port/game/options.h at
    install and on a change).  Off, it is 0x10 alone: the PS2's checks
-   exactly.  lt_ext_CircleBack reads the alias back (tests). */
+   exactly.  lt_ext_circle_back reads the alias back (tests). */
 #define LT_PAD_TRIANGLE 0x0010
 #define LT_PAD_CIRCLE 0x0020
 /* the other trigger bits of the pad word (keyInput.c's logical word) the
@@ -193,16 +193,16 @@ void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
 #define LT_PAD_RIGHT 0x2000
 #define LT_PAD_DOWN 0x4000
 #define LT_PAD_LEFT 0x8000
-int lt_ext_BackButtons(void);
-void lt_ext_SetCircleBack(int on);
-int lt_ext_CircleBack(void);
+int lt_ext_back_buttons(void);
+void lt_ext_set_circle_back(int on);
+int lt_ext_circle_back(void);
 
 /* A rect row's colour changed after it was added (Settings >
-   Extras > Characters' swatches): rgba as lt_ext_AddRect takes it (GS,
+   Extras > Characters' swatches): rgba as lt_ext_add_rect takes it (GS,
    0x80 = 1.0, times the row's colour when drawn).  0, or -1 for an index
-   that is not a rect row.  lt_ext_RectColor reads it back (tests). */
-int lt_ext_SetRectColor(int index, const unsigned char rgba[4]);
-int lt_ext_RectColor(int index, unsigned char rgba[4]);
+   that is not a rect row.  lt_ext_rect_color reads it back (tests). */
+int lt_ext_set_rect_color(int index, const unsigned char rgba[4]);
+int lt_ext_rect_color(int index, unsigned char rgba[4]);
 
 /* What a click of the mouse pointer on a port row does
    (port/ui/ui_mouse.h).  AUTO (every row to begin with, and every game
@@ -213,12 +213,12 @@ int lt_ext_RectColor(int index, unsigned char rgba[4]);
    arrows, a click is Left / Right on the owner item (their boxes padded so
    the small arrows are easy to hit).  STEP: a stepped value, a click is
    Right on the owner item (Cross does nothing on a stepped row).  Cleared
-   by lt_ext_Reset; -1 for an index that is not a port row. */
+   by lt_ext_reset; -1 for an index that is not a port row. */
 enum { LT_POINTER_AUTO = 0, LT_POINTER_NONE, LT_POINTER_LEFT, LT_POINTER_RIGHT, LT_POINTER_STEP };
 
-int lt_ext_SetPointerRole(int index, int role);
+int lt_ext_set_pointer_role(int index, int role);
 /* LT_POINTER_AUTO for a game row or an index outside the tables */
-int lt_ext_PointerRole(int index);
+int lt_ext_pointer_role(int index);
 
 #ifdef __cplusplus
 }

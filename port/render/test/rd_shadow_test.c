@@ -3,7 +3,7 @@
  * Shadow.c with the 2D layer (GifPacket.c, DisplayList.c, DmaPacket.c) and
  * Matrix.c, compiled as the window build has them (ICO_HOST, ICO_RD); the
  * rest of the game is stubbed below.  No disc data: a receiver plane drawn
- * as sprites, volumes as synthetic rectangles (rd_ShadowTris) and one
+ * as sprites, volumes as synthetic rectangles (rd_shadow_tris) and one
  * synthetic shadow model (a triangle caster) through shadow_RenderVolume.
  *
  * Recording (no device):
@@ -247,24 +247,24 @@ static RdScreenVtx sv(int px, int py, uint32_t z, const uint8_t *rgba)
 static void sprite(int x0, int y0, int x1, int y1, uint32_t z, const uint8_t *rgba)
 {
     RdScreenVtx v[2] = {sv(x0, y0, z, rgba), sv(x1, y1, z, rgba)};
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
 }
 
 static void drawReceiver(void)
 {
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, RD_TARGET_OFFSET);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kClear, 1, 0);
-    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP); /* leaks into list 3: the chain's CLAMP */
-    rd_TextureOff();
-    rd_ABE(0);
-    rd_TestGs(0x30000);
-    rd_ZWrite(1);
-    rd_FBA(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, RD_TARGET_OFFSET);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kClear, 1, 0);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP); /* leaks into list 3: the chain's CLAMP */
+    rd_texture_off();
+    rd_abe(0);
+    rd_test_gs(0x30000);
+    rd_z_write(1);
+    rd_fba(0);
     sprite(0, 0, W / 2, H, kZr, kRecv);
-    rd_FBA(1);
+    rd_fba(1);
     sprite(W / 2, 0, W, H, kZr, kRecv);
-    rd_FBA(0);
+    rd_fba(0);
 }
 
 /* ------------------------------------------------- the synthetic volumes
@@ -468,24 +468,24 @@ static void recordFrame(int vol, const int blend[4])
     if (vol == VOL_MODEL) {
         /* the receiver at the model's plane */
         dl_SetDLPriority(0);
-        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H,
-                     RD_TARGET_OFFSET);
-        rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kClear, 1, 0);
-        rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-        rd_TextureOff();
-        rd_ABE(0);
-        rd_TestGs(0x30000);
-        rd_ZWrite(1);
-        rd_FBA(0);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H,
+                      RD_TARGET_OFFSET);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), kClear, 1, 0);
+        rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rd_texture_off();
+        rd_abe(0);
+        rd_test_gs(0x30000);
+        rd_z_write(1);
+        rd_fba(0);
         sprite(0, 0, W, H, (uint32_t)(16.0f * kB / kZPlane), kRecv);
     } else {
         drawReceiver();
     }
     shadow_Reset();
-    s_count = rd_ShadowCountTarget(W, H);
+    s_count = rd_shadow_count_target(W, H);
     if (vol == VOL_SYNTH) {
         buildVolumes();
-        rd_ShadowTris(s_tri, s_sign, s_nt, 1);
+        rd_shadow_tris(s_tri, s_sign, s_nt, 1);
     } else if (vol == VOL_SUB) {
         const int32_t x0 = (2048 - W / 2 + 100) * 16 + s_subOff, x1 = x0 + 64 * 16 + 4;
         const int32_t y0 = (2048 - H / 2 + 100) * 16 + s_subOff, y1 = y0 + 40 * 16 + 4;
@@ -497,7 +497,7 @@ static void recordFrame(int vol, const int blend[4])
             q[i].y = ys[i];
         }
         static const int8_t plus[2] = {1, 1};
-        rd_ShadowTris(q, plus, 2, 1);
+        rd_shadow_tris(q, plus, 2, 1);
     } else {
         s_volPacket = PacketBufferStruct.ptr.c;
         shadow_RenderVolume(s_obj);
@@ -526,7 +526,7 @@ static const RdCmd *nextCmd(const RdCmdList *cl, uint32_t *i, uint8_t type, cons
 static void expectTest(const RdCmdList *cl, uint32_t *i, uint64_t gs, const char *what)
 {
     const RdCmd *c = nextCmd(cl, i, RDC_TEST, what);
-    const RdTestState t = rd_TestFromGs(gs);
+    const RdTestState t = rd_test_from_gs(gs);
     CHECK(c && c->b[0] == t.ate && c->b[1] == t.atst && c->b[2] == t.aref && c->b[3] == t.afail &&
               c->b[4] == t.date && c->b[5] == t.zte && c->b[6] == t.ztst,
           "%s: TEST 0x%llx", what, (unsigned long long)gs);
@@ -550,7 +550,7 @@ static void expectTarget(const RdCmdList *cl, uint32_t *i, uint32_t color, uint3
 static void expectTexture(const RdCmdList *cl, uint32_t *i, RdTarget t, const char *what)
 {
     const RdCmd *c = nextCmd(cl, i, RDC_TEXTURE, what);
-    const RdTexRec *tr = c ? rd__TexRec(c->u[0]) : NULL;
+    const RdTexRec *tr = c ? rd__tex_rec(c->u[0]) : NULL;
     CHECK(tr && tr->kind == RD_TEXKIND_TARGET && tr->target == t.id && tr->view == RD_VIEW_RGBA &&
               c->b[0] == RD_TEXFN_MODULATE && c->b[1] == RD_TCC_RGBA,
           "%s: the RGBA view of target %u, MODULATE, TCC RGBA", what, t.id);
@@ -614,14 +614,14 @@ static int sameXyz(const RdScreenVtx *a, const RdScreenVtx *b)
 
 static void checkRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     if (!f) {
         CHECK(0, "a closed frame");
         return;
     }
     const RdCmdList *cl = &f->lists[3];
-    const uint32_t scene = rd_Target(RD_TARGET_SCENE).id;
-    const RdTargetRec *ct = rd__TargetRec(s_count.id);
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const RdTargetRec *ct = rd__target_rec(s_count.id);
     CHECK(ct && ct->w == W && ct->h == H && !ct->withDepth && !ct->named,
           "the count target: a %ux%u temporary target without depth", W, H);
     uint32_t i = 0;
@@ -660,7 +660,7 @@ static void checkRecording(void)
             inc += psign[t] > 0;
             for (int k = 0; k < 3; k++) {
                 bad += *at + k < c->u[0] + c->u[3] ? !sameXyz(&v[*at + k], &ptri[t * 3 + k]) ||
-                                                         rd__ShadowTag(&v[*at + k]) != t + 1
+                                                         rd__shadow_tag(&v[*at + k]) != t + 1
                                                    : 1;
             }
             *at += 3;
@@ -687,9 +687,9 @@ static void checkRecording(void)
         const int s = 256 >> l;
         const int r[4] = {-(s * 8 + 4), -(s * 8 + 4), s * 16, s * 16};
         const int uv[4] = {4, 4, 2 * s * 16, 2 * s * 16};
-        expectTarget(cl, &i, rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + l)).id, 0, (uint32_t)s,
+        expectTarget(cl, &i, rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l)).id, 0, (uint32_t)s,
                      (uint32_t)s, "chain: FRAME");
-        expectTexture(cl, &i, l == 0 ? s_count : rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + l - 1)),
+        expectTexture(cl, &i, l == 0 ? s_count : rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l - 1)),
                       "chain: TEX0");
         expectSprite(f, cl, &i, 0, r, uv, col, "chain: sprite");
     }
@@ -703,7 +703,7 @@ static void checkRecording(void)
         const uint8_t col2[4] = {(uint8_t)kShadowCol[0], (uint8_t)kShadowCol[1],
                                  (uint8_t)kShadowCol[2],
                                  (uint8_t)GlobalStageSetting.shadowBlend[l]};
-        expectTexture(cl, &i, rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + l - 1)),
+        expectTexture(cl, &i, rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l - 1)),
                       "composite: TEX0");
         c = nextCmd(cl, &i, RDC_FILTER, "composite: TEX1");
         expectSprite(f, cl, &i, 1, off, uv, col2, "composite: sprite");
@@ -722,7 +722,7 @@ static uint8_t s_cnt[W * H * 4], s_lv[3][256 * 256 * 4], s_scene[W * H * 4];
 static bool readTarget(RdTarget t, uint8_t *dst, uint32_t ew, uint32_t eh)
 {
     uint32_t w = 0, h = 0;
-    bool ok = rd__ReadTarget(t, dst, (size_t)ew * eh * 4, &w, &h) && w == ew && h == eh;
+    bool ok = rd__read_target(t, dst, (size_t)ew * eh * 4, &w, &h) && w == ew && h == eh;
     CHECK(ok, "readback of target %u (%ux%u)", t.id, ew, eh);
     return ok;
 }
@@ -928,18 +928,18 @@ static void checkModel(void)
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
-    for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(&keys[j], k);
+            found |= rd__pipe_key_equal(&keys[j], k);
         }
         CHECK(found, "created pipeline %u (prog %u vs %u fs %u stencil %u) is not enumerated", i,
               k->gs.program, k->vs, k->fs, k->gs.stencil);
     }
-    printf("  pipelines: %u created, %u reachable\n", rd__PipelineCount(), n);
+    printf("  pipelines: %u created, %u reachable\n", rd__pipeline_count(), n);
 }
 
 /* At a work scale of 2 (Enhanced, 896 lines and up) the blur levels
@@ -961,7 +961,7 @@ static void checkLevelScale(void)
         RdTargetRec t;
         memset(&t, 0, sizeof(t));
         t.w = t.h = k[i].id == RD_TARGET_WORK0 ? 256 : k[i].w;
-        rd__TargetScaleOf(&t, k[i].id);
+        rd__target_scale_of(&t, k[i].id);
         CHECK(t.tw == k[i].w, "work scale 2: target %d is %u texels wide (%u)", k[i].id, t.tw,
               k[i].w);
     }
@@ -982,8 +982,8 @@ static void checkScaledIntegral(void)
     st.outputHeight = 480;
     st.aspect = 4.0f / 3.0f;
     st.sceneScale = 4.0f;
-    if (!rd_Init(W, H, &st, NULL)) {
-        CHECK(0, "rd_Init at scene scale 4");
+    if (!rd_init(W, H, &st, NULL)) {
+        CHECK(0, "rd_init at scene scale 4");
         return;
     }
     gif_HostForgetTextures();
@@ -995,7 +995,7 @@ static void checkScaledIntegral(void)
         s_subOff = 4 * k;
         recordFrame(VOL_SUB, kAll);
         CHECK(g_rd.sceneSx > 3.9f, "the scene is at scale %.2f", (double)g_rd.sceneSx);
-        if (!readTarget(rd_Target(RD_TARGET_SHADOW0), s_lv[0], 256, 256)) {
+        if (!readTarget(rd_target(RD_TARGET_SHADOW0), s_lv[0], 256, 256)) {
             break;
         }
         double sum = 0.0;
@@ -1008,26 +1008,26 @@ static void checkScaledIntegral(void)
     }
     CHECK(hi > 0.0 && (hi - lo) / hi < 0.005, "level 1 integral varies by %.2f %% with the offset",
           hi > 0.0 ? 100.0 * (hi - lo) / hi : 0.0);
-    rd_Shutdown();
+    rd_shutdown();
 }
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
     setMatrices();
     buildModel();
 
     /* (e) recording */
-    if (!rd__InitRecordOnly(W, H)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(W, H)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
     recordFrame(VOL_MODEL, kAll);
     checkRecording();
     checkLevelScale();
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_shadow_test: %d failures\n", failures);
         return 1;
@@ -1036,7 +1036,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("rd_shadow_test: recording ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -1051,14 +1051,14 @@ int main(void)
     }
     bool lv = true;
     for (int l = 0; l < 3; l++) {
-        lv = readTarget(rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + l)), s_lv[l],
+        lv = readTarget(rd_target((RdTargetId)(RD_TARGET_SHADOW0 + l)), s_lv[l],
                         (uint32_t)(256 >> l), (uint32_t)(256 >> l)) &&
              lv;
     }
     if (lv) {
         checkChain();
     }
-    if (lv && readTarget(rd_Target(RD_TARGET_SCENE), s_scene, W, H)) {
+    if (lv && readTarget(rd_target(RD_TARGET_SCENE), s_scene, W, H)) {
         checkComposite(kAll, 3, 3, "levels 3, 2, 1 together");
     }
     /* (c) one level at a time */
@@ -1068,7 +1068,7 @@ int main(void)
         recordFrame(VOL_SYNTH, one);
         char what[32];
         snprintf(what, sizeof(what), "level %d alone", l);
-        if (readTarget(rd_Target(RD_TARGET_SCENE), s_scene, W, H)) {
+        if (readTarget(rd_target(RD_TARGET_SCENE), s_scene, W, H)) {
             checkComposite(one, 2, 2, what);
         }
     }
@@ -1079,10 +1079,10 @@ int main(void)
     }
 
     checkPipelines();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
     checkScaledIntegral();
     if (failures) {
         printf("rd_shadow_test: %d failures\n", failures);

@@ -25,29 +25,29 @@ static int fails;
 
 static bool feed(PaceHist *h, uint64_t ms10, bool inj)
 {
-    return pace_SlowPresent(h, ms10 * MS / 10, REFRESH, PERIOD, inj);
+    return pace_slow_present(h, ms10 * MS / 10, REFRESH, PERIOD, inj);
 }
 
-/* The window's loop over pace_AutoResolutionStep: a sample
+/* The window's loop over pace_auto_resolution_step: a sample
    per present at 60 a second for sec seconds, each cost ms10 tenths of a
    ms; every 2 s a step decision, a new window, the step's time kept */
 static int autoRun(PaceSamples *s, uint64_t *clock, int scale, float winScale, uint64_t ms10,
                    int sec, int *steps)
 {
     if (s->firstNs == 0) {
-        pace_SamplesReset(s, *clock);
+        pace_samples_reset(s, *clock);
     }
     for (int i = 0; i < sec * 60; i++) {
         *clock += 16666667ull;
-        pace_SamplesAdd(s, *clock, ms10 * MS / 10);
+        pace_samples_add(s, *clock, ms10 * MS / 10);
         if (s->lastNs - s->firstNs >= PACE_AUTO_WINDOW_NS) {
-            const int next = pace_AutoResolutionStep(s, scale, winScale);
+            const int next = pace_auto_resolution_step(s, scale, winScale);
             if (next != scale) {
                 scale = next;
                 s->lastStepNs = *clock;
                 ++*steps;
             }
-            pace_SamplesReset(s, *clock);
+            pace_samples_reset(s, *clock);
         }
     }
     return scale;
@@ -65,13 +65,13 @@ static void testAutoResolution(void)
     CHECK(scale == 0 && steps == 0);
     /* over it: nothing before 2 s of samples, then one step; a 2400 x 1080
        window (2.41x) goes to 2x, not 3x (larger than the window) */
-    pace_SamplesReset(&s, clock);
+    pace_samples_reset(&s, clock);
     for (int i = 0; i < 100; i++) {
         clock += 16666667ull;
-        pace_SamplesAdd(&s, clock, 14 * MS);
+        pace_samples_add(&s, clock, 14 * MS);
     }
-    CHECK(pace_AutoResolutionStep(&s, 0, 2.41f) == 0); /* 1.65 s */
-    pace_SamplesReset(&s, clock);
+    CHECK(pace_auto_resolution_step(&s, 0, 2.41f) == 0); /* 1.65 s */
+    pace_samples_reset(&s, clock);
     steps = 0;
     scale = autoRun(&s, &clock, 0, 2.41f, 140, 2, &steps);
     CHECK(scale == 2 && steps == 1);
@@ -96,11 +96,11 @@ static void testAutoResolution(void)
         k.budgetNs = 16666667ull;
         k.lastStepNs = 10000 * MS;
         for (int i = 0; i < 66; i++) {
-            pace_SamplesAdd(&k, 8800 * MS + (uint64_t)i * 33 * MS, 20 * MS); /* to 10.945 s */
+            pace_samples_add(&k, 8800 * MS + (uint64_t)i * 33 * MS, 20 * MS); /* to 10.945 s */
         }
-        CHECK(pace_AutoResolutionStep(&k, 3, 4.82f) == 3); /* 0.95 s after the step */
-        pace_SamplesAdd(&k, 12000 * MS, 20 * MS);
-        CHECK(pace_AutoResolutionStep(&k, 3, 4.82f) == 2); /* 2 s after it */
+        CHECK(pace_auto_resolution_step(&k, 3, 4.82f) == 3); /* 0.95 s after the step */
+        pace_samples_add(&k, 12000 * MS, 20 * MS);
+        CHECK(pace_auto_resolution_step(&k, 3, 4.82f) == 2); /* 2 s after it */
     }
     /* never back up: fast presents at 1x or 2x leave the scale */
     steps = 0;
@@ -124,10 +124,10 @@ static void testAutoResolution(void)
         k.budgetNs = 16666667ull;
         for (int i = 0; i < 160; i++) {
             c += 16666667ull;
-            pace_SamplesAdd(&k, c, i % 8 == 0 ? 40 * MS : 5 * MS);
+            pace_samples_add(&k, c, i % 8 == 0 ? 40 * MS : 5 * MS);
         }
-        CHECK(pace_SamplesMedian(&k) == 5 * MS);
-        CHECK(pace_AutoResolutionStep(&k, 0, 2.41f) == 0);
+        CHECK(pace_samples_median(&k) == 5 * MS);
+        CHECK(pace_auto_resolution_step(&k, 0, 2.41f) == 0);
     }
 }
 
@@ -138,17 +138,17 @@ int main(void)
     bool last;
 
     /* max(refresh, period) + period / 2, and that plus a refresh with an effects program */
-    CHECK(pace_SlowThreshold(REFRESH, PERIOD, false) == PERIOD + PERIOD / 2);
-    CHECK(pace_SlowThreshold(33333ull * 1000, PERIOD, false) == 33333ull * 1000 + PERIOD / 2);
-    CHECK(pace_SlowThreshold(REFRESH, PERIOD, true) == PERIOD + REFRESH + PERIOD / 2);
+    CHECK(pace_slow_threshold(REFRESH, PERIOD, false) == PERIOD + PERIOD / 2);
+    CHECK(pace_slow_threshold(33333ull * 1000, PERIOD, false) == 33333ull * 1000 + PERIOD / 2);
+    CHECK(pace_slow_threshold(REFRESH, PERIOD, true) == PERIOD + REFRESH + PERIOD / 2);
     /* 144 Hz and 50 Hz displays against the 60 Hz game period: never below
        the plain threshold (2 * refresh + period / 2 was, at 144 Hz) */
-    CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) == PERIOD + 6944444ull + PERIOD / 2);
-    CHECK(pace_SlowThreshold(6944444ull, PERIOD, true) >
-          pace_SlowThreshold(6944444ull, PERIOD, false));
-    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) == 20000000ull + 20000000ull + PERIOD / 2);
-    CHECK(pace_SlowThreshold(20000000ull, PERIOD, true) >
-          pace_SlowThreshold(20000000ull, PERIOD, false));
+    CHECK(pace_slow_threshold(6944444ull, PERIOD, true) == PERIOD + 6944444ull + PERIOD / 2);
+    CHECK(pace_slow_threshold(6944444ull, PERIOD, true) >
+          pace_slow_threshold(6944444ull, PERIOD, false));
+    CHECK(pace_slow_threshold(20000000ull, PERIOD, true) == 20000000ull + 20000000ull + PERIOD / 2);
+    CHECK(pace_slow_threshold(20000000ull, PERIOD, true) >
+          pace_slow_threshold(20000000ull, PERIOD, false));
 
     /* a steady vsync-blocked present (one refresh) is never slow */
     for (i = 0; i < 40; i++) {

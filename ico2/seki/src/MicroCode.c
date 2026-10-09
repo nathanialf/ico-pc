@@ -115,7 +115,7 @@ inline void mc_TransMicroCode(int id, int mask)
                 dl_CloseDma();
 #ifdef ICO_RD
                 /* R3ab: the program resident in this list from here on */
-                rd_VuProgram(id);
+                rd_vu_program(id);
 #endif
                 mcResident[i] = id;
             }
@@ -309,10 +309,10 @@ inline void mc_Reset(void)
  *   MSCAL / MSCALF 0       SET_GSREGISTER: the GIF tag at TOP and its A+D
  *                          quadwords to the GS register decoder
  *                          (gif_HostWriteRegs), in order with the meshes
- *   MSCAL / MSCALF other   rd_VuCall: SET_UVOFFSET, SET_*_MATRIX,
+ *   MSCAL / MSCALF other   rd_vu_call: SET_UVOFFSET, SET_*_MATRIX,
  *                          SET_*_LIGHT, the BEGIN codes
  *   MSCNT                  a batch: particle batches draw
- *                          (rd_DrawVuParticles); the mesh packets do not come
+ *                          (rd_draw_vu_particles); the mesh packets do not come
  *                          here (static meshes: RegistPacket.c; grids:
  *                          Primitive.c)
  *   DIRECT / DIRECTHL      (wave 5, R5c) path 2: the GIF packets of the block
@@ -547,7 +547,7 @@ static void mcHostSetGsRegister(void)
 /* MSCNT: a batch at TOP for the resident program. */
 static void mcHostBatch(void)
 {
-    if (rd_VuCurrentProgram() == 5) {
+    if (rd_vu_current_program() == 5) {
         RdVuDraw d;
         RdVuParticleDraw pd;
         unsigned long long prim[2];
@@ -563,7 +563,7 @@ static void mcHostBatch(void)
         prim[0] = (prim[0] >> 47) & 0x7FF;
         prim[1] = 0;
         gif_HostWriteRegs(prim, 1);
-        if (!rd_VuDrawFromState(&d)) {
+        if (!rd_vu_draw_from_state(&d)) {
             return;
         }
         memset(&pd, 0, sizeof(pd));
@@ -572,11 +572,11 @@ static void mcHostBatch(void)
         pd.vu = d.vu;
         /* package I1: keyed by the emitter (prim_DispParticle), so a batch
            another emitter inserts ahead of it does not shift its match */
-        rd_DrawVuParticles(&pd, mcHostEmitter ? RD_KEY(mcHostEmitter, 18, 0) : 0);
+        rd_draw_vu_particles(&pd, mcHostEmitter ? RD_KEY(mcHostEmitter, 18, 0) : 0);
         return;
     }
     mcHostOnceLog(1, "a VU batch chained as a small packet is not drawn (program)",
-                  (unsigned int)rd_VuCurrentProgram());
+                  (unsigned int)rd_vu_current_program());
 }
 
 /* The VIF code stream w[0..n). */
@@ -615,7 +615,7 @@ static void mcHostVif(const unsigned int *w, unsigned int n)
             if (imm == 0) {
                 mcHostSetGsRegister();
             } else {
-                rd_VuCall((int)imm, (const float (*)[4])mcHostTop, 1024);
+                rd_vu_call((int)imm, (const float (*)[4])mcHostTop, 1024);
             }
             break;
         case 0x17: /* MSCNT */

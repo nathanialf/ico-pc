@@ -4,7 +4,7 @@
  * matrixptr + 0x100), vf05..vf08 = the screen matrix matrixptr + 0xC0. */
 #include "vu1_ref_internal.h"
 
-void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out)
+void vu1ref_particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out)
 {
     if (inQw < 6) {
         memset(out, 0, sizeof(*out));

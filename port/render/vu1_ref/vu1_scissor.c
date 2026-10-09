@@ -44,8 +44,8 @@ static void interpolate(ClipVtx *o, const ClipVtx *cur, const ClipVtx *nxt, int 
     }
 }
 
-void vu1ref_ScissorCommon(Vu1Ref *r, const float pos[3][4], const float col[3][4],
-                          const float stq[3][4], VuBatchOut *out, int atVertex)
+void vu1ref_scissor_common(Vu1Ref *r, const float pos[3][4], const float col[3][4],
+                           const float stq[3][4], VuBatchOut *out, int atVertex)
 {
     ClipVtx a[VU_FAN_MAX + 1], b[VU_FAN_MAX + 1];
     ClipVtx *src = a, *dst = b;
@@ -121,7 +121,7 @@ static int triviallyOut(unsigned f0, unsigned f1, unsigned f2)
     return (f0 & f1 & f2) != 0;
 }
 
-void vu1ref_ScissorStep(Vu1Ref *r, const VuScissorVtx *win[3], VuBatchOut *out, int k)
+void vu1ref_scissor_step(Vu1Ref *r, const VuScissorVtx *win[3], VuBatchOut *out, int k)
 {
     int32_t *vi = r->vi;
     /* normal_c.vsm:338-339: vi04 = vi05, vi05 = vi06 */
@@ -155,7 +155,7 @@ void vu1ref_ScissorStep(Vu1Ref *r, const VuScissorVtx *win[3], VuBatchOut *out, 
                     v4_copy(col[i], win[i]->colf);
                     v4_copy(stq[i], win[i]->stq);
                 }
-                vu1ref_ScissorCommon(r, pos, col, stq, out, k);
+                vu1ref_scissor_common(r, pos, col, stq, out, k);
             }
         }
         adc = 1; /* :399 isw.w vi11 (0x8000), 2(vi07) */

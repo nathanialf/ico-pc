@@ -82,7 +82,7 @@ DualOut sprite_ps(SpriteVSOut i)
 
 // sprite_texa_ps: sprite_ps for a PSMCT24 or PSMCT16 texture
 // (or a 24- or 16-bit CLUT) under a TEXA with AEM and a linear filter, which
-// the planner (rd_pipeline.c rd__TexaPerTexel) gives this entry: TEXA per
+// the planner (rd_pipeline.c rd__texa_per_texel) gives this entry: TEXA per
 // texel before the bilinear weights, as the GS (gs_texa_texture). sprite_ps
 // itself is unchanged.
 DualOut sprite_texa_ps(SpriteVSOut i)

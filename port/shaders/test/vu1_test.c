@@ -14,7 +14,7 @@
  *           region test exact; (2) a strip drawn through the shipped entry
  *           and vu_ps (untextured, opaque) into a 64 x 64 RGBA8 target, and
  *           the triangles the reference kicks drawn through sprite_world_vs /
- *           sprite_ps (rd_ScreenPrims' shaders); every pixel within 1 LSB.
+ *           sprite_ps (rd_screen_prims' shaders); every pixel within 1 LSB.
  *           Scissor triangles that cross a Z plane go through GPU clipping
  *           and are measured and reported, not asserted.
  *   part c  RdVuCommon (rd.h) against the VU parameter block:
@@ -151,12 +151,12 @@ static void buildScene(void)
 /* The VU state after the uploads a draw of each program makes. */
 static void stateNormal(Vu1Ref *r)
 {
-    vu1ref_Init(r);
-    vu1ref_LoadCommon(r, sceneCommon);
+    vu1ref_init(r);
+    vu1ref_load_common(r, sceneCommon);
     float uv[4] = {0.5f, 0.25f, 0, 0};
-    vu1ref_SetUVOffset(r, uv);
-    vu1ref_NormalSetMatrix(r, sceneNormal);
-    vu1ref_NormalSetLight(r, sceneLight);
+    vu1ref_set_uv_offset(r, uv);
+    vu1ref_normal_set_matrix(r, sceneNormal);
+    vu1ref_normal_set_light(r, sceneLight);
 }
 
 /* Bone 0 (VU address 16) = identity, bone 1 (address 20) = translation by
@@ -174,24 +174,24 @@ static void stateCluster(Vu1Ref *r)
     qw(pk[6], 0, 1, 0, 0);
     qw(pk[7], 0, 0, 1, 0);
     qw(pk[8], 8, 0, 0, 1);
-    vu1ref_Init(r);
-    vu1ref_LoadCommon(r, sceneCommon);
+    vu1ref_init(r);
+    vu1ref_load_common(r, sceneCommon);
     float uv[4] = {0.5f, 0.25f, 0, 0};
-    vu1ref_SetUVOffset(r, uv);
-    vu1ref_ClusterSetMatrix(r, (const float (*)[4])pk);
-    vu1ref_ClusterSetLight(r, sceneLight);
+    vu1ref_set_uv_offset(r, uv);
+    vu1ref_cluster_set_matrix(r, (const float (*)[4])pk);
+    vu1ref_cluster_set_light(r, sceneLight);
 }
 
 static void stateMesh(Vu1Ref *r)
 {
-    vu1ref_Init(r);
-    vu1ref_LoadCommon(r, sceneCommon);
+    vu1ref_init(r);
+    vu1ref_load_common(r, sceneCommon);
     float uv[4] = {0.5f, 0.25f, 0, 0};
-    vu1ref_SetUVOffset(r, uv);
+    vu1ref_set_uv_offset(r, uv);
     float m[4][4];
     memcpy(m, sceneCommon[4], sizeof(m));
-    vu1ref_MeshSetMatrix(r, m);
-    vu1ref_MeshSetLight(r, sceneLight);
+    vu1ref_mesh_set_matrix(r, m);
+    vu1ref_mesh_set_light(r, sceneLight);
 }
 
 static void stateParticle(Vu1Ref *r)
@@ -199,9 +199,9 @@ static void stateParticle(Vu1Ref *r)
     float m[8][4];
     memcpy(m[0], sceneCommon[4], 4 * sizeof(float[4]));
     memcpy(m[4], sceneCommon[4], 4 * sizeof(float[4]));
-    vu1ref_Init(r);
-    vu1ref_LoadCommon(r, sceneCommon);
-    vu1ref_ParticleSetMatrix(r, m);
+    vu1ref_init(r);
+    vu1ref_load_common(r, sceneCommon);
+    vu1ref_particle_set_matrix(r, m);
 }
 
 /* A Packet.c-style GIF tag: NLOOP n, EOP, PRE, PRIM 0x1C (strip, IIP, TME),
@@ -271,7 +271,7 @@ static void traceNormalC(void)
     qw(in[12], 1, 2, 3, 127);
 
     stateNormal(&r);
-    vu1ref_NormalC(&r, 32, (const float (*)[4])in, &outA);
+    vu1ref_normal_c(&r, 32, (const float (*)[4])in, &outA);
     if (outA.count != 4) {
         FAILF("normal_c 32 count %d\n", outA.count);
         return;
@@ -292,7 +292,7 @@ static void traceNormalC(void)
      * kicked with X = 109568, of which the GS keeps 109568 & 0xFFFF = 44032
      * (2752.0): the wrap the shader reproduces in VU_CLIP_NONE */
     stateNormal(&r);
-    vu1ref_NormalC(&r, 34, (const float (*)[4])in, &outA);
+    vu1ref_normal_c(&r, 34, (const float (*)[4])in, &outA);
     expectV("normal_c 34", 3, &outA.v[3], 109568, 32768, 25165824, 0, 1, 2, 3, 127, 0.25f, 0.125f,
             0.5f);
     if (vu_gs_x(&outA.v[3]) != 44032) {
@@ -344,7 +344,7 @@ static void traceScissor(void)
     qw(in[12], 80, 96, 128, 127);
     stateNormal(&r);
     r.vi[9] = 0;
-    vu1ref_NormalC(&r, 36, (const float (*)[4])in, &outA);
+    vu1ref_normal_c(&r, 36, (const float (*)[4])in, &outA);
     if (outA.count != 4 || outA.fanCount != 1) {
         FAILF("scissor count %d fans %d, expected 4 and 1\n", outA.count, outA.fanCount);
         return;
@@ -404,7 +404,7 @@ static void traceNormalL(void)
     qw(in[11], 0, 0, 1, 1);
     qw(in[12], 100, 100, 100, 127);
     stateNormal(&r);
-    vu1ref_NormalL(&r, 32, (const float (*)[4])in, &outA);
+    vu1ref_normal_l(&r, 32, (const float (*)[4])in, &outA);
     expectV("normal_l 32", 0, &outA.v[0], 32768, 32768, 25165824, 1, 80, 80, 96, 127, 0.375f,
             0.375f, 0.5f);
     expectV("normal_l 32", 1, &outA.v[1], 32896, 32896, 37748736, 1, 63, 12, 50, 127, 0.125f,
@@ -417,7 +417,7 @@ static void traceNormalL(void)
      * (2^-12, 2^-16, 0) times (255, 64, 200): (0.06, 0.001, 0) -> 0. v2:
      * (0, 0.5, 0) -> (0, 0.0625 * 100 = 6.25 -> 6, 0). */
     stateNormal(&r);
-    vu1ref_NormalL(&r, 34, (const float (*)[4])in, &outA);
+    vu1ref_normal_l(&r, 34, (const float (*)[4])in, &outA);
     expectV("normal_l 34", 0, &outA.v[0], 32768, 32768, 25165824, 1, 8, 8, 8, 127, 0.375f, 0.375f,
             0.5f);
     expectV("normal_l 34", 1, &outA.v[1], 32896, 32896, 37748736, 1, 0, 0, 0, 127, 0.125f, 0.0625f,
@@ -451,7 +451,7 @@ static void traceReflect(void)
     qw(in[7], 0, 0, 1, 1);
     qw(in[8], 300, 20, 10, 127);
     stateNormal(&r);
-    vu1ref_NormalL(&r, 38, (const float (*)[4])in, &outA);
+    vu1ref_normal_l(&r, 38, (const float (*)[4])in, &outA);
     expectV("normal_ref", 0, &outA.v[0], 32768, 32768, 37748736, 1, 90, 80, 70, 127, 0.25f, 0.25f,
             0.25f);
     /* the colour is sent without a clamp: 300 reaches the GS as 300 & 255 */
@@ -490,7 +490,7 @@ static void traceCluster(void)
     qw(in[9], 0, 0, 1, 1);
     qw(in[10], 128, 128, 128, 127);
     stateCluster(&r);
-    vu1ref_Cluster(&r, 20, (const float (*)[4])in, &outA);
+    vu1ref_cluster(&r, 20, (const float (*)[4])in, &outA);
     expectV("cluster 20", 0, &outA.v[0], 33024, 32768, 25165824, 1, 80, 80, 96, 127, 0.125f, 0.25f,
             0.5f);
     expectV("cluster 20", 1, &outA.v[1], 33280, 32768, 0, 1, 80, 80, 96, 127, 0, 0, 1);
@@ -499,7 +499,7 @@ static void traceCluster(void)
     }
     /* code 22 (:391 vf00 for vf20, :397, :401): (0.5, 0.5, 0.5)^4 * 128 = 8 */
     stateCluster(&r);
-    vu1ref_Cluster(&r, 22, (const float (*)[4])in, &outA);
+    vu1ref_cluster(&r, 22, (const float (*)[4])in, &outA);
     expectV("cluster 22", 0, &outA.v[0], 33024, 32768, 25165824, 1, 8, 8, 8, 127, 0.125f, 0.25f,
             0.5f);
     /* code 24 (CLUSTER_1_SPEC): (0.625, 0.625, 0.75)^2 = (0.390625,
@@ -507,7 +507,7 @@ static void traceCluster(void)
      * (0.5) = 63.5 -> 63; :505 UV offset: STQ ((0.25 + 0.5) / 2, (0.5 + 0.25)
      * / 2, 0.5) */
     stateCluster(&r);
-    vu1ref_Cluster(&r, 24, (const float (*)[4])in, &outA);
+    vu1ref_cluster(&r, 24, (const float (*)[4])in, &outA);
     expectV("cluster 24", 0, &outA.v[0], 33024, 32768, 25165824, 1, 50, 50, 72, 63, 0.375f, 0.375f,
             0.5f);
 }
@@ -529,13 +529,13 @@ static void traceMesh(void)
     qw(in[3], 0, 0, 1, 1);
     qw(in[4], 0.25f, 0.5f, 1, 0);
     stateMesh(&r);
-    vu1ref_Mesh(&r, 22, (const float (*)[4])in, &outA);
+    vu1ref_mesh(&r, 22, (const float (*)[4])in, &outA);
     expectV("mesh 22", 0, &outA.v[0], 32768, 32768, 25165824, 0, 80, 40, 24, 127, 0.375f, 0.375f,
             0.5f);
     /* code 24 (:284 C squared once): (0.390625, 0.390625, 0.5625) * (128, 64,
      * 32) = (50, 25, 18) */
     stateMesh(&r);
-    vu1ref_Mesh(&r, 24, (const float (*)[4])in, &outA);
+    vu1ref_mesh(&r, 24, (const float (*)[4])in, &outA);
     expectV("mesh 24", 0, &outA.v[0], 32768, 32768, 25165824, 0, 50, 25, 18, 127, 0.375f, 0.375f,
             0.5f);
     /* code 20 (START_MESH_NOLIGHT): per vertex pos, ST; :368 the colour as
@@ -546,7 +546,7 @@ static void traceMesh(void)
     qw(in2[2], 0, 0, 2, 1);
     qw(in2[3], 0.25f, 0.5f, 1, 0);
     stateMesh(&r);
-    vu1ref_Mesh(&r, 20, (const float (*)[4])in2, &outA);
+    vu1ref_mesh(&r, 20, (const float (*)[4])in2, &outA);
     expectV("mesh 20", 0, &outA.v[0], 32768, 32768, 25165824, 0, 128, 64, 32, 127, 0.375f, 0.375f,
             0.5f);
 }
@@ -580,7 +580,7 @@ static void traceParticle(void)
     qw(in[11], 0, 0, 128, 64);
     VuParticleOut po;
     stateParticle(&r);
-    vu1ref_Particle(&r, (const float (*)[4])in, 12, &po);
+    vu1ref_particle(&r, (const float (*)[4])in, 12, &po);
     if (po.count != 1 || po.s[0].index != 0) {
         FAILF("particle count %d, expected 1\n", po.count);
         return;
@@ -606,7 +606,7 @@ static void traceParticle(void)
     r.vi[4] = 0;
     qw(in[0], fbits(1), 0, 0, 0);
     qw(in[7], 0, 0, 128, 0);
-    vu1ref_Particle(&r, (const float (*)[4])in, 8, &po);
+    vu1ref_particle(&r, (const float (*)[4])in, 8, &po);
     if (po.count != 0 || ubits(r.mem[0][0]) != 0x8001u) {
         FAILF("particle empty batch: count %d, mem[0].x %08x\n", po.count, ubits(r.mem[0][0]));
     }
@@ -626,7 +626,7 @@ static void traceParticle(void)
 
     for (size_t k = 0; k < sizeof(over) / sizeof(over[0]); k++) {
         stateParticle(&r);
-        vu1ref_Particle(&r, (const float (*)[4])in, over[k].qwords, &po);
+        vu1ref_particle(&r, (const float (*)[4])in, over[k].qwords, &po);
         if (po.count != over[k].want) {
             FAILF("particle over-count input of %u qwords: %d particles, expected %d\n",
                   over[k].qwords, po.count, over[k].want);
@@ -641,14 +641,14 @@ static void traceKicks(void)
     float stw[10] = {0, 1, 1, 1, 0, 1, 1, 0, 1, 1};
     int first[10] = {0, 0, 0, 0, 0, 0, 0, 7, 7, 7};
     int kicks[10];
-    int n = vu1ref_StaticKicks(stw, first, 10, kicks);
+    int n = vu1ref_static_kicks(stw, first, 10, kicks);
     static const int want[] = {2, 3, 6, 9};
     if (n != 4 || memcmp(kicks, want, sizeof(want)) != 0) {
         FAILF("static kicks: %d\n", n);
     }
 }
 
-/* The region test on a wide screen (vu1ref_SetWideX, vu_common.hlsli
+/* The region test on a wide screen (vu1ref_set_wide_x, vu_common.hlsli
  * vu_region_pos): x is compared where the squeezed picture puts it,
  * (X - 2048) * f + 2048, so at f = 0.375 (32:9) a vertex up to X 7504 or
  * down to X -3413 passes, while the drawn position stays the unsqueezed
@@ -689,21 +689,21 @@ static void traceWide(void)
     }
     int kicks[VU_BATCH_MAX];
     for (int wide = 0; wide < 2; wide++) {
-        vu1ref_SetWideX(wide ? 0.375f : 1.0f);
+        vu1ref_set_wide_x(wide ? 0.375f : 1.0f);
         for (int prog = 0; prog < 2; prog++) {
             const char *what = prog ? (wide ? "normal_l 32 wide" : "normal_l 32 4:3")
                                     : (wide ? "normal_c 32 wide" : "normal_c 32 4:3");
             stateNormal(&r);
             if (prog) {
-                vu1ref_NormalL(&r, 32, (const float (*)[4])l, &outA);
+                vu1ref_normal_l(&r, 32, (const float (*)[4])l, &outA);
             } else {
-                vu1ref_NormalC(&r, 32, (const float (*)[4])c, &outA);
+                vu1ref_normal_c(&r, 32, (const float (*)[4])c, &outA);
             }
             for (int k = 0; k < 6 && outA.count == 6; k++) {
                 wideVertex(what, k, &outA.v[k], gx[k], wide ? inWide[k] : in43[k],
                            wide ? adcWide[k] : 1);
             }
-            int n = vu1ref_Kicks(&outA, kicks);
+            int n = vu1ref_kicks(&outA, kicks);
             if (outA.count != 6 || n != (wide ? 2 : 0) ||
                 (wide && (kicks[0] != 2 || kicks[1] != 3))) {
                 FAILF("%s: %d vertices, %d kicks\n", what, outA.count, n);
@@ -732,10 +732,10 @@ static void traceWide(void)
     }
     for (int wide = 0; wide < 2; wide++) {
         const char *what = wide ? "mesh 20 wide" : "mesh 20 4:3";
-        vu1ref_SetWideX(wide ? 0.375f : 1.0f);
+        vu1ref_set_wide_x(wide ? 0.375f : 1.0f);
         stateMesh(&r);
-        vu1ref_MeshSetMatrix(&r, m);
-        vu1ref_Mesh(&r, 20, (const float (*)[4])g, &outA);
+        vu1ref_mesh_set_matrix(&r, m);
+        vu1ref_mesh(&r, 20, (const float (*)[4])g, &outA);
         if (outA.count != 4) {
             FAILF("%s count %d\n", what, outA.count);
             continue;
@@ -745,7 +745,7 @@ static void traceWide(void)
         wideVertex(what, 2, &outA.v[2], 67200, wide, !wide);
         wideVertex(what, 3, &outA.v[3], 0, 1, !wide);
     }
-    vu1ref_SetWideX(1.0f);
+    vu1ref_set_wide_x(1.0f);
 }
 
 /* -------------------------------------------------------- part c: layout */
@@ -773,8 +773,8 @@ static void checkLayout(void)
     memset(&cb, 0, sizeof(cb));
     memcpy(cb.mem, &b, sizeof(b));
     Vu1Ref r;
-    vu1ref_Init(&r);
-    vu1ref_LoadCommon(&r, (const float (*)[4]) & b);
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4]) & b);
     if (cb.mem[1][3] != 16777215.0f || ubits(cb.mem[3][1]) != 0x302EC000u ||
         r.mem[1][0] != 4095.0f || ubits(r.mem[3][2]) != 0x512u) {
         FAILF("VuCB / VU memory 0..15 do not take RdVuCommon verbatim\n");
@@ -795,7 +795,7 @@ typedef struct Case {
     int vq, hdr, nbatch, vpb;
     int measured; /* report, do not assert, the rendered comparison */
     int trail;    /* qwords after each batch's vertices (a Mesh3D buffer's MSCNT) */
-    int tagless;  /* the GPU stream is the vertices only, as rd_CreateVuMesh keeps them */
+    int tagless;  /* the GPU stream is the vertices only, as rd_create_vu_mesh keeps them */
     float wide;   /* the world x scale of the draw (g_space[0].x): 1, or 0.375 for 32:9 */
 } Case;
 
@@ -988,7 +988,7 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
     baseState(c, &r);
     memset(cr, 0, sizeof(*cr));
     if (c->prog == P_PARTICLE) {
-        vu1ref_Particle(&r, in, (uint32_t)nq, &cr->po);
+        vu1ref_particle(&r, in, (uint32_t)nq, &cr->po);
         for (int i = 0; i < cr->po.count; i++) {
             const VuGsSprite *s = &cr->po.s[i];
             VuGsVertex a, b;
@@ -1014,16 +1014,16 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
         static VuBatchOut big;
         switch (c->prog) {
         case P_NORMALC:
-            vu1ref_NormalC(&r, c->code, in + at + tagOffset(c), &big);
+            vu1ref_normal_c(&r, c->code, in + at + tagOffset(c), &big);
             break;
         case P_NORMALL:
-            vu1ref_NormalL(&r, c->code, in + at + tagOffset(c), &big);
+            vu1ref_normal_l(&r, c->code, in + at + tagOffset(c), &big);
             break;
         case P_CLUSTER:
-            vu1ref_Cluster(&r, c->code, in + at + tagOffset(c), &big);
+            vu1ref_cluster(&r, c->code, in + at + tagOffset(c), &big);
             break;
         default:
-            vu1ref_Mesh(&r, c->code, in + at + tagOffset(c), &big);
+            vu1ref_mesh(&r, c->code, in + at + tagOffset(c), &big);
             break;
         }
         int v0 = cr->nv;
@@ -1044,7 +1044,7 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
             }
         }
         int kicks[MAXV];
-        int nk = vu1ref_Kicks(&big, kicks);
+        int nk = vu1ref_kicks(&big, kicks);
         for (int i = 0; i < nk; i++) {
             for (int j = 0; j < 3; j++) {
                 cr->tri[cr->ntri * 3 + j] = spriteV(&big.v[kicks[i] - 2 + j]);
@@ -1188,14 +1188,14 @@ static const Case kCases[] = {
 
 static RhiShader makeShader(const char *name)
 {
-    const IcoShaderBlob *b = ico_FindShader(name);
+    const IcoShaderBlob *b = ico_find_shader(name);
     if (!b) {
         FAILF("shader %s not in the table\n", name);
         return (RhiShader){0};
     }
     RhiShaderDesc d = {b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT,
                        b->spirv, b->spirv_len, b->entry, b->name};
-    RhiShader s = rhi_CreateShader(&d);
+    RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
         FAILF("shader %s not created\n", name);
     }
@@ -1230,7 +1230,7 @@ static RhiPipeline makePipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLa
     d.colorCount = 1;
     d.depthFormat = RHI_FMT_UNKNOWN;
     d.debugName = name;
-    RhiPipeline p = rhi_CreatePipeline(&d);
+    RhiPipeline p = rhi_create_pipeline(&d);
     if (!p.id) {
         FAILF("pipeline %s not created\n", name);
     }
@@ -1261,12 +1261,12 @@ static void frameCB(IcoFrameCB *f, float w, float h, float ox, float oy)
 static int gpuTests(void)
 {
     RhiDeviceDesc dd = {NULL, false, true, "vu1_test"};
-    if (!rhi_Init(&dd)) {
+    if (!rhi_init(&dd)) {
         return 77;
     }
-    printf("vu1_test: adapter %s\n", rhi_AdapterName());
-    if (UBO_SLOT % rhi_Limits()->uniformAlign) {
-        FAILF("uniformAlign %u does not divide %u\n", rhi_Limits()->uniformAlign, UBO_SLOT);
+    printf("vu1_test: adapter %s\n", rhi_adapter_name());
+    if (UBO_SLOT % rhi_limits()->uniformAlign) {
+        FAILF("uniformAlign %u does not divide %u\n", rhi_limits()->uniformAlign, UBO_SLOT);
     }
     const int setupFailures = failures;
     const uint32_t FS = 1u << RHI_STAGE_FRAGMENT, VS = 1u << RHI_STAGE_VERTEX;
@@ -1278,9 +1278,10 @@ static int gpuTests(void)
     const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                {1, RHI_BIND_SAMPLER, FS},
                                {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
-    RhiBindGroupLayout l0 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s0, 1, "frame"});
-    RhiBindGroupLayout l1 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 4, "vu draw"});
-    RhiBindGroupLayout l2 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2, 3, "tex"});
+    RhiBindGroupLayout l0 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s0, 1, "frame"});
+    RhiBindGroupLayout l1 =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s1, 4, "vu draw"});
+    RhiBindGroupLayout l2 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s2, 3, "tex"});
     const RhiBindGroupLayout lay[3] = {l0, l1, l2};
 
     RhiShader probePs = makeShader("vu_probe_ps"), vuPs = makeShader("vu_ps");
@@ -1293,27 +1294,27 @@ static int gpuTests(void)
         pProbe[i] = makePipeline(vs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
         pDraw[i] = makePipeline(vs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
     }
-    RhiBuffer ring = rhi_CreateBuffer(&(RhiBufferDesc){
+    RhiBuffer ring = rhi_create_buffer(&(RhiBufferDesc){
         RING_SIZE,
         RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_SRC,
         RHI_MEM_UPLOAD, "ring"});
-    uint8_t *map = rhi_MapBuffer(ring);
+    uint8_t *map = rhi_map_buffer(ring);
     const uint32_t RTU = RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC;
-    RhiTexture probe = rhi_CreateTexture(
+    RhiTexture probe = rhi_create_texture(
         &(RhiTextureDesc){ICO_VU_PROBE_FIELDS, MAXV, 1, RHI_FMT_RGBA8_UINT, RTU, "probe"});
     RhiTexture imgVu =
-        rhi_CreateTexture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "vu"});
+        rhi_create_texture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "vu"});
     RhiTexture imgRef =
-        rhi_CreateTexture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "ref"});
-    RhiTexture dummy = rhi_CreateTexture(&(RhiTextureDesc){
+        rhi_create_texture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "ref"});
+    RhiTexture dummy = rhi_create_texture(&(RhiTextureDesc){
         2, 2, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "dummy"});
-    RhiSampler smp = rhi_CreateSampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
-                                                         RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
-                                                         RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
+    RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
+                                                          RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
+                                                          RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
     if (failures != setupFailures || !ring.id || !map || !probe.id || !imgVu.id || !imgRef.id ||
         !dummy.id || !smp.id) {
         FAILF("GPU setup\n");
-        rhi_Shutdown();
+        rhi_shutdown();
         return 1;
     }
     RhiState stProbe = RHI_STATE_UNDEFINED, stVu = RHI_STATE_UNDEFINED, stRef = RHI_STATE_UNDEFINED;
@@ -1327,12 +1328,12 @@ static int gpuTests(void)
         memset(in, 0, sizeof(in));
         int nq = makeInput(c, in);
         const float wide = c->wide;
-        vu1ref_SetWideX(wide);
+        vu1ref_set_wide_x(wide);
         runRef(c, (const float (*)[4])in, nq, &cr);
 
-        rhi_WaitFrame();
+        rhi_wait_frame();
         if (c->tagless) {
-            /* rd_CreateVuMesh's layout: each batch's vertices, tags dropped */
+            /* rd_create_vu_mesh's layout: each batch's vertices, tags dropped */
             uint8_t *d = map + OFF_STREAM;
             for (int b = 0, at = 0; b < c->nbatch; b++) {
                 size_t n = (size_t)c->vpb * (size_t)c->vq * 16;
@@ -1349,7 +1350,7 @@ static int gpuTests(void)
         int nvert = c->prog == P_PARTICLE ? c->vpb : cr.nv;
         if (c->prog != P_PARTICLE) {
             int kicks[MAXV];
-            int nk = vu1ref_StaticKicks(c->prog == P_MESH ? NULL : cr.stw, cr.first, cr.nv, kicks);
+            int nk = vu1ref_static_kicks(c->prog == P_MESH ? NULL : cr.stw, cr.first, cr.nv, kicks);
             for (int i = 0; i < nk; i++) {
                 for (int j = 0; j < 3; j++) {
                     idx[nidx++] = ICO_VU_INDEX(kicks[i], j);
@@ -1389,9 +1390,9 @@ static int gpuTests(void)
                          .buffer = ring,
                          .offset = OFF_UBO,
                          .size = sizeof(IcoFrameCB)};
-        RhiBindGroup g0Probe = rhi_CreateBindGroup(&(RhiBindGroupDesc){l0, &b0, 1});
+        RhiBindGroup g0Probe = rhi_create_bind_group(&(RhiBindGroupDesc){l0, &b0, 1});
         b0.offset = OFF_UBO + UBO_SLOT;
-        RhiBindGroup g0Draw = rhi_CreateBindGroup(&(RhiBindGroupDesc){l0, &b0, 1});
+        RhiBindGroup g0Draw = rhi_create_bind_group(&(RhiBindGroupDesc){l0, &b0, 1});
         RhiBinding b1[4] = {
             {.slot = 0,
              .type = RHI_BIND_STORAGE_BUFFER,
@@ -1414,13 +1415,13 @@ static int gpuTests(void)
              .offset = OFF_UBO + 5 * UBO_SLOT,
              .size = sizeof(IcoVuBoneCB)},
         };
-        RhiBindGroup g1Draw = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, b1, 4});
+        RhiBindGroup g1Draw = rhi_create_bind_group(&(RhiBindGroupDesc){l1, b1, 4});
         b1[2].offset = OFF_UBO + 4 * UBO_SLOT;
-        RhiBindGroup g1Probe = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, b1, 4});
+        RhiBindGroup g1Probe = rhi_create_bind_group(&(RhiBindGroupDesc){l1, b1, 4});
         b1[2].offset = OFF_UBO + 6 * UBO_SLOT;
-        RhiBindGroup g1Cut = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, b1, 4});
+        RhiBindGroup g1Cut = rhi_create_bind_group(&(RhiBindGroupDesc){l1, b1, 4});
         b1[2].offset = OFF_UBO + 7 * UBO_SLOT;
-        RhiBindGroup g1Kick = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, b1, 4});
+        RhiBindGroup g1Kick = rhi_create_bind_group(&(RhiBindGroupDesc){l1, b1, 4});
         RhiBinding b2[3] = {{0}, {0}, {0}};
         b2[0].slot = 1;
         b2[0].type = RHI_BIND_SAMPLED_TEXTURE;
@@ -1431,14 +1432,14 @@ static int gpuTests(void)
         b2[2].slot = 2;
         b2[2].type = RHI_BIND_SAMPLED_TEXTURE;
         b2[2].texture = dummy;
-        RhiBindGroup g2 = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2, b2, 3});
+        RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){l2, b2, 3});
 
-        RhiCommandList cl = rhi_BeginCommands();
+        RhiCommandList cl = rhi_begin_commands();
         RhiTextureBarrier pre[4] = {{probe, stProbe, RHI_STATE_RENDER_TARGET},
                                     {imgVu, stVu, RHI_STATE_RENDER_TARGET},
                                     {imgRef, stRef, RHI_STATE_RENDER_TARGET},
                                     {dummy, stDummy, RHI_STATE_SHADER_READ}};
-        rhi_CmdBarrier(cl, pre, stDummy == RHI_STATE_SHADER_READ ? 3 : 4);
+        rhi_cmd_barrier(cl, pre, stDummy == RHI_STATE_SHADER_READ ? 3 : 4);
         stDummy = RHI_STATE_SHADER_READ;
 
         RhiRenderPassDesc rp = {0};
@@ -1446,13 +1447,13 @@ static int gpuTests(void)
         rp.colorCount = 1;
         rp.width = ICO_VU_PROBE_FIELDS;
         rp.height = MAXV;
-        rhi_CmdBeginRenderPass(cl, &rp);
-        rhi_CmdSetPipeline(cl, pProbe[ci]);
-        rhi_CmdSetBindGroup(cl, 0, g0Probe);
-        rhi_CmdSetBindGroup(cl, 1, g1Probe);
-        rhi_CmdSetBindGroup(cl, 2, g2);
-        rhi_CmdDraw(cl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_pipeline(cl, pProbe[ci]);
+        rhi_cmd_set_bind_group(cl, 0, g0Probe);
+        rhi_cmd_set_bind_group(cl, 1, g1Probe);
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_draw(cl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
+        rhi_cmd_end_render_pass(cl);
 
         for (int pass = 0; pass < 2; pass++) {
             RhiRenderPassDesc dp = {0};
@@ -1462,44 +1463,44 @@ static int gpuTests(void)
                                                RHI_STORE_STORE};
             dp.colorCount = 1;
             dp.width = dp.height = RT;
-            rhi_CmdBeginRenderPass(cl, &dp);
-            rhi_CmdSetBindGroup(cl, 0, g0Draw);
-            rhi_CmdSetBindGroup(cl, 1, g1Draw);
-            rhi_CmdSetBindGroup(cl, 2, g2);
+            rhi_cmd_begin_render_pass(cl, &dp);
+            rhi_cmd_set_bind_group(cl, 0, g0Draw);
+            rhi_cmd_set_bind_group(cl, 1, g1Draw);
+            rhi_cmd_set_bind_group(cl, 2, g2);
             if (pass == 0) {
-                rhi_CmdSetPipeline(cl, pDraw[ci]);
+                rhi_cmd_set_pipeline(cl, pDraw[ci]);
                 if (c->prog == P_PARTICLE) {
-                    rhi_CmdDraw(cl, (uint32_t)c->vpb * 6, 0, 1);
+                    rhi_cmd_draw(cl, (uint32_t)c->vpb * 6, 0, 1);
                 } else if (nidx && c->clip == ICO_VU_CLIP_SCISSOR) {
-                    rhi_CmdSetIndexBuffer(cl, ring, OFF_INDEX, true);
-                    rhi_CmdSetBindGroup(cl, 1, g1Cut);
-                    rhi_CmdDrawIndexed(cl, (uint32_t)nidx, 0, 0, 1);
-                    rhi_CmdSetBindGroup(cl, 1, g1Kick);
-                    rhi_CmdDrawIndexed(cl, (uint32_t)nidx, 0, 0, 1);
+                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
+                    rhi_cmd_set_bind_group(cl, 1, g1Cut);
+                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
+                    rhi_cmd_set_bind_group(cl, 1, g1Kick);
+                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
                 } else if (nidx) {
-                    rhi_CmdSetIndexBuffer(cl, ring, OFF_INDEX, true);
-                    rhi_CmdDrawIndexed(cl, (uint32_t)nidx, 0, 0, 1);
+                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
+                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
                 }
             } else if (cr.ntri) {
-                rhi_CmdSetPipeline(cl, pSprite);
-                rhi_CmdSetVertexBuffer(cl, 0, ring, OFF_SPRITE);
-                rhi_CmdDraw(cl, (uint32_t)cr.ntri * 3, 0, 1);
+                rhi_cmd_set_pipeline(cl, pSprite);
+                rhi_cmd_set_vertex_buffer(cl, 0, ring, OFF_SPRITE);
+                rhi_cmd_draw(cl, (uint32_t)cr.ntri * 3, 0, 1);
             }
-            rhi_CmdEndRenderPass(cl);
+            rhi_cmd_end_render_pass(cl);
         }
         RhiTextureBarrier post[3] = {{probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {imgRef, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
-        rhi_CmdBarrier(cl, post, 3);
+        rhi_cmd_barrier(cl, post, 3);
         stProbe = stVu = stRef = RHI_STATE_COPY_SRC;
-        rhi_EndCommands(cl);
-        rhi_Submit(cl);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
 
         static uint8_t pimg[ICO_VU_PROBE_FIELDS * MAXV * 4], a[RT * RT * 4], b[RT * RT * 4];
         uint32_t ppitch = 0, pitch = 0;
-        if (!rhi_ReadbackTexture(probe, RHI_ASPECT_COLOR, pimg, sizeof(pimg), &ppitch) ||
-            !rhi_ReadbackTexture(imgVu, RHI_ASPECT_COLOR, a, sizeof(a), &pitch) ||
-            !rhi_ReadbackTexture(imgRef, RHI_ASPECT_COLOR, b, sizeof(b), &pitch)) {
+        if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, pimg, sizeof(pimg), &ppitch) ||
+            !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, a, sizeof(a), &pitch) ||
+            !rhi_readback_texture(imgRef, RHI_ASPECT_COLOR, b, sizeof(b), &pitch)) {
             FAILF("%s readback\n", c->name);
             break;
         }
@@ -1517,7 +1518,7 @@ static int gpuTests(void)
             compareProbe(c, &rz, pimg, ppitch);
             statSet = 0;
         }
-        vu1ref_SetWideX(1.0f);
+        vu1ref_set_wide_x(1.0f);
         int maxd = 0, covered = 0;
         int bad = compareImages(a, b, pitch, &maxd);
         for (int i = 0; i < RT * RT; i++) {
@@ -1550,10 +1551,10 @@ static int gpuTests(void)
                "relative, RGBA %d, STQ %.2g relative\n",
                i ? "toward zero" : "to nearest", stat[i].xy, stat[i].z, stat[i].rgba, stat[i].stq);
     }
-    if (rhi_vk_ValidationErrorCount() != 0) {
-        FAILF("%u validation errors\n", (unsigned)rhi_vk_ValidationErrorCount());
+    if (rhi_vk_validation_error_count() != 0) {
+        FAILF("%u validation errors\n", (unsigned)rhi_vk_validation_error_count());
     }
-    rhi_Shutdown();
+    rhi_shutdown();
     return 0;
 }
 

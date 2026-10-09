@@ -19,12 +19,12 @@
  *
  * Atlases: one set per rasterised pixel size, built on demand.  The pixel
  * size is round(size * scale): scale 1 in the Original preset (one atlas
- * pixel per y unit), output height / 448 in Enhanced (ui_ScaleFor).  Each
+ * pixel per y unit), output height / 448 in Enhanced (ui_scale_for).  Each
  * page is 512 x 512, kept as R8 coverage on the CPU and uploaded as an R8
- * texture (rd_CreateTextureR8: the coverage in GS alpha units, 0x80 = 1.0,
+ * texture (rd_create_texture_r8: the coverage in GS alpha units, 0x80 = 1.0,
  * a white texel) that font.hlsl's font_ps draws.
  *
- * Drawing: ui_DrawText records GS sprites with uvFixed texels into the
+ * Drawing: ui_draw_text records GS sprites with uvFixed texels into the
  * current rd list (the caller selects it), RD_SPACE_UI, MODULATE with TCC
  * RGBA, the standard sprite blend ALPHA 0x44 ((Cs - Cd) * As + Cd).  The
  * colour is a GS colour: 0x80 is 1.0 (the atlas is white), as for any
@@ -96,50 +96,50 @@ typedef struct UiXform {
 } UiXform;
 
 /* Parses the embedded font; false if it is unusable (logged).  Idempotent. */
-bool ui_FontInit(void);
+bool ui_font_init(void);
 /* Drops the atlases (their rd textures too, when rd is up) and the font. */
-void ui_FontShutdown(void);
-/* rd was shut down and started again without ui_FontShutdown (tests): the
+void ui_font_shutdown(void);
+/* rd was shut down and started again without ui_font_shutdown (tests): the
    texture ids are stale, forget them; the CPU atlases are re-uploaded. */
-void ui_FontForgetTextures(void);
+void ui_font_forget_textures(void);
 
-void ui_SetGsFrame(const UiGsFrame *f);
-const UiGsFrame *ui_GetGsFrame(void);
+void ui_set_gs_frame(const UiGsFrame *f);
+const UiGsFrame *ui_get_gs_frame(void);
 /* atlas pixels per y unit; 1 by default (in overlay mode, the scale
-   ui_EndOverlay restores) */
-void ui_SetScale(float scale);
-float ui_GetScale(void);
+   ui_end_overlay restores) */
+void ui_set_scale(float scale);
+float ui_get_scale(void);
 /* the scale a preset wants: 1 for Original (preset 0), else outputHeight /
    448, at least 1 */
-float ui_ScaleFor(int preset, uint32_t outputHeight);
+float ui_scale_for(int preset, uint32_t outputHeight);
 
 /* line metrics of size, in y units: ascent above the baseline (positive),
    descent below it (positive), the capitals' height */
-void ui_FontMetrics(float size, float *ascent, float *descent, float *capHeight);
+void ui_font_metrics(float size, float *ascent, float *descent, float *capHeight);
 /* the advance width of utf8 at size, in x units, with kerning */
-float ui_MeasureText(float size, const char *utf8);
+float ui_measure_text(float size, const char *utf8);
 /* draws utf8 with its reference point at (x, y): the flags pick the
    horizontal and vertical alignment and the blend */
-void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                 unsigned flags);
+void ui_draw_text(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                  unsigned flags);
 /* the same, the quads mapped through xf (NULL: identity) */
-void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                   unsigned flags, const UiXform *xf);
+void ui_draw_text_xf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                     unsigned flags, const UiXform *xf);
 /* one untextured sprite (the popup panel), x0, y0, x1, y1 in the grid; the
-   blend is 0x44 with the state set as ui_DrawText sets it */
-void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
+   blend is 0x44 with the state set as ui_draw_text sets it */
+void ui_draw_rect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
 /* The owner the next draws are keyed by, so the presenter blends them
    between two ticks.  A string's draw is keyed by a hash of the string, its alignment flags,
    its atlas page and the owner (0: the string alone); the n-th draw of one
    key matches the n-th of the frame before, and the glyphs within a draw
    match in order.  A rect is keyed only under an owner (owner and the rect
    ordinal; 0: unkeyed).  Returns the previous owner. */
-uint64_t ui_SetDrawKey(uint64_t owner);
+uint64_t ui_set_draw_key(uint64_t owner);
 
-/* The presentation overlay (port/render/rd.h rd_SetPresentOverlay).
-   Between ui_BeginOverlay(ctx) and ui_EndOverlay(), inside an rd overlay
-   callback, ui_DrawText, ui_DrawTextXf and ui_DrawRect draw on the output through
-   rd_OverlayPrims instead of recording into the current rd list:
+/* The presentation overlay (port/render/rd.h rd_set_present_overlay).
+   Between ui_begin_overlay(ctx) and ui_end_overlay(), inside an rd overlay
+   callback, ui_draw_text, ui_draw_text_xf and ui_draw_rect draw on the output through
+   rd_overlay_prims instead of recording into the current rd list:
    - the grid maps onto the 4:3 picture in ctx->box (the box itself in 4:3,
      its centred 4:3 part when the box is wider, where the game's UI is):
      x' = left + gx * W / 640 and y' = box.y + (gy - 2) * box.h / 448, W =
@@ -147,30 +147,30 @@ uint64_t ui_SetDrawKey(uint64_t owner);
      place the GS path puts a grid point after the reduction and the box
      blit (226 is the frame's centre line, so its 448 lines are 2 .. 450);
    - text is rasterised at round(size * box.h / 448) pixels (the scale is
-     ctx->boxScale until ui_EndOverlay; ui_SetScale meanwhile sets the
+     ctx->boxScale until ui_end_overlay; ui_set_scale meanwhile sets the
      scale restored after), so one atlas texel is one output pixel, and
      each glyph quad's top-left corner is rounded to a whole output pixel
      with its size kept, so the glyphs are drawn texel for pixel (the
      menus' text, menu_font.h, instead draws its 1x sheet strip magnified,
      continuous);
    - rects have both corners rounded to whole pixels;
-   - blend as ui_DrawText's (0x44, UI_ADDITIVE 0x48), no draw keys, the
+   - blend as ui_draw_text's (0x44, UI_ADDITIVE 0x48), no draw keys, the
      state flags (UI_KEEP_STATE) ignored; nothing is mirrored.
-   ctx is an RdOverlayCtx (rd.h).  Measuring (ui_MeasureText,
-   ui_FontMetrics) works in overlay mode with the overlay's scale.  Without
+   ctx is an RdOverlayCtx (rd.h).  Measuring (ui_measure_text,
+   ui_font_metrics) works in overlay mode with the overlay's scale.  Without
    ICO_RD both are no-ops. */
 struct RdOverlayCtx;
-void ui_BeginOverlay(const struct RdOverlayCtx *ctx);
-void ui_EndOverlay(void);
-/* whether ui_BeginOverlay is in force, and where it puts the grid point
+void ui_begin_overlay(const struct RdOverlayCtx *ctx);
+void ui_end_overlay(void);
+/* whether ui_begin_overlay is in force, and where it puts the grid point
    (gx, gy): 12.4 output pixels, unrounded (tests) */
-int ui_OverlayActive(void);
-void ui_OverlayMap(float gx, float gy, float *x16, float *y16);
+int ui_overlay_active(void);
+void ui_overlay_map(float gx, float gy, float *x16, float *y16);
 
 /* The next code point of a UTF-8 string, advancing *s; U+FFFD for a
    malformed or overlong sequence or a surrogate (one byte consumed), 0 at
    the terminator (not advanced). */
-uint32_t ui_Utf8Next(const char **s);
+uint32_t ui_utf8_next(const char **s);
 
 /* ------------------------------------------------------ introspection (tests) */
 typedef struct UiGlyph {
@@ -181,18 +181,18 @@ typedef struct UiGlyph {
 } UiGlyph;
 
 /* the glyph of cp at the integer pixel size px, rasterised if new */
-bool ui_FontGlyph(uint32_t cp, int px, UiGlyph *out);
+bool ui_font_glyph(uint32_t cp, int px, UiGlyph *out);
 /* kerning between two code points at px, atlas pixels */
-float ui_FontKern(uint32_t a, uint32_t b, int px);
+float ui_font_kern(uint32_t a, uint32_t b, int px);
 /* the coverage of a page (R8, w x h), NULL when it does not exist */
-const uint8_t *ui_FontPage(int px, int page, int *w, int *h);
+const uint8_t *ui_font_page(int px, int page, int *w, int *h);
 /* the rd texture id of a page, 0 when none was created */
-uint32_t ui_FontPageTex(int px, int page);
+uint32_t ui_font_page_tex(int px, int page);
 /* whether the font maps cp to a glyph (not .notdef) */
-bool ui_FontHasGlyph(uint32_t cp);
+bool ui_font_has_glyph(uint32_t cp);
 /* the code points drawn as '?' so far, each once (logged once as well): the
    count, and the first cap of them in cps */
-int ui_FontMissingSeen(uint32_t *cps, int cap);
+int ui_font_missing_seen(uint32_t *cps, int cap);
 
 #ifdef __cplusplus
 }

@@ -152,8 +152,8 @@ void dl_Clear(void)
 #ifdef ICO_RD
     /* R2a: the frame boundary on rd.  A frame still open was never kicked
        (dl_Clear without dl_Swap): it is dropped. */
-    rd_DiscardFrame();
-    rd_BeginFrame();
+    rd_discard_frame();
+    rd_begin_frame();
 #endif
 }
 
@@ -167,7 +167,7 @@ void dl_Swap(void)
     /* R2a: the kick.  rd replays lists 0..12 (11..12 with fbKeep, which
        starts the DMA at list 11) and presents; nothing is DMA'd. */
     gif_HostFlush();
-    rd_EndFrame(fbKeep);
+    rd_end_frame(fbKeep);
 #endif
     dl_SetDLPriority(0xC);
     dl_OpenDma(7, 0, 0);
@@ -207,7 +207,7 @@ inline void dl_SetDLPriority(int pri)
         dlPriority = pri;
     }
 #ifdef ICO_RD
-    rd_SelectList(dlPriority);
+    rd_select_list(dlPriority);
 #endif
 }
 
@@ -232,7 +232,7 @@ void dl_PopPriority(void)
         dlPriority = dlPriorityStack[dlStackDepth - 1];
         dlStackDepth--;
 #ifdef ICO_RD
-        rd_SelectList(dlPriority);
+        rd_select_list(dlPriority);
 #endif
     } else {
         debug_StdPrintfDummy("dl_PopPriority:Stack Underflow.\n");

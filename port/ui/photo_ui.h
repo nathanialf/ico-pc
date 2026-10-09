@@ -23,23 +23,23 @@ extern "C" {
 
 /* Builds the layout (settings.c's build, once); returns its index, -1 when
    the layout extension is full.  Leaving it goes back to the pause menu
-   through settings.h ui_SettingsPhotoBack. */
-int ui_PhotoBuild(void);
-int ui_PhotoLayout(void);
+   through settings.h ui_settings_photo_back. */
+int ui_photo_build(void);
+int ui_photo_layout(void);
 /* Whether the pause menu offers photo mode: a stage is running (not the
    title's stage 1). */
-int ui_PhotoAvailable(void);
-/* Drops the layout (ui_SettingsReset). */
-void ui_PhotoReset(void);
+int ui_photo_available(void);
+/* Drops the layout (ui_settings_reset). */
+void ui_photo_reset(void);
 
 /* A capture's result (the window, port/platform/window_host.c): a popup
    with the file's name, and a log line. */
-void ui_PhotoCaptureDone(int ok, const char *name);
+void ui_photo_capture_done(int ok, const char *name);
 
 struct RdOverlayCtx;
 /* The HUD on the output (ui_host.c's overlay callback): nothing unless
    photo mode is on with its HUD shown. */
-void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx);
+void ui_photo_draw_overlay(const struct RdOverlayCtx *ctx);
 
 #ifdef ICO_RD
 /* The panel's make-up, split from the drawing so a test can read it.  The
@@ -86,16 +86,16 @@ typedef struct UiHudPlaced {
 /* The items for the camera in use; keyboard names the keys from the live
    bindings (the first key, else the first mouse button, else the pad's
    button); title and fov are the first and last lines. */
-void ui__PhotoHudBuild(UiHudSet *set, int freeCam, int keyboard, const char *title,
-                       const char *fov);
+void ui__photo_hud_build(UiHudSet *set, int freeCam, int keyboard, const char *title,
+                         const char *fov);
 /* Places the items at the text size; gaps between a line's items squeeze
    when it is wider than room.  Returns the widest line's width. */
-float ui__PhotoHudLayout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out);
-/* ui__PhotoHudLayout at *size, the size made smaller until the widest line
+float ui__photo_hud_layout(const UiHudItem *items, int n, float size, float room, UiHudPlaced *out);
+/* ui__photo_hud_layout at *size, the size made smaller until the widest line
    fits room (the words' widths and the squeezed gaps do not scale exactly
    with the size, so one proportional step can leave a few units over).
    Returns the widest line's width; *size is the size used. */
-float ui__PhotoHudFit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out);
+float ui__photo_hud_fit(const UiHudItem *items, int n, float *size, float room, UiHudPlaced *out);
 #endif
 
 #ifdef __cplusplus

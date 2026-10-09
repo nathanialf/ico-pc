@@ -312,7 +312,7 @@ static Pts s_pts;
 static void collectPts(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *s)
 {
     Pts *o = user;
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     (void)index;
     (void)s;
     if (list != 12 || c->type != RDC_SCREEN) {
@@ -336,12 +336,12 @@ static void collectPts(void *user, int list, uint32_t index, const RdCmd *c, con
 static const Pts *endFrame(void)
 {
     dl_Swap();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     s_pts.n = 0;
     s_pts.other = 0;
     if (f) {
         RdStateBlock st = f->startState;
-        rd__Walk(f, 0, &st, collectPts, &s_pts);
+        rd__walk(f, 0, &st, collectPts, &s_pts);
     }
     return &s_pts;
 }
@@ -619,9 +619,9 @@ static void sceneFrame(RdTargetId id)
 {
     static const uint8_t black[4] = {0, 0, 0, 0x80};
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(id), id == RD_TARGET_DISPLAY ? (RdTarget){0} : rd_Target(id), 512,
-                 id == RD_TARGET_DISPLAY ? 256 : 512, 1);
-    rd_ClearTarget(rd_Target(id), black, 1, 0);
+    rd_set_target(rd_target(id), id == RD_TARGET_DISPLAY ? (RdTarget){0} : rd_target(id), 512,
+                  id == RD_TARGET_DISPLAY ? 256 : 512, 1);
+    rd_clear_target(rd_target(id), black, 1, 0);
 }
 
 static void drawOverlay(int kind)
@@ -663,7 +663,7 @@ static void checkMirroredText(const char *scale)
         const RdTargetId id = kind == 3 ? RD_TARGET_DISPLAY : RD_TARGET_SCENE;
         uint32_t w = 0, h = 0;
         for (int mirror = 0; mirror < 2; mirror++) {
-            rd_SetMirror(mirror);
+            rd_set_mirror(mirror);
             s_dev = 1;
             systemStatus[1] = 2;
             for (int rep = 0; rep < 2; rep++) {
@@ -675,14 +675,14 @@ static void checkMirroredText(const char *scale)
                 }
                 drawOverlay(kind);
             }
-            if (!rd__ReadTarget(rd_Target(id), mirror ? b : a, sizeof(a), &w, &h) || w < 512) {
+            if (!rd__read_target(rd_target(id), mirror ? b : a, sizeof(a), &w, &h) || w < 512) {
                 CHECK(0, "readback (%s, mirror %d)", kName[kind], mirror);
-                rd_SetMirror(0);
+                rd_set_mirror(0);
                 debug_font_flag = saveFlag;
                 return;
             }
         }
-        rd_SetMirror(0);
+        rd_set_mirror(0);
         int lit = 0, bad = 0;
         for (uint32_t y = 0; y < h; y++) {
             for (uint32_t x = 0; x < w; x++) {
@@ -716,11 +716,11 @@ static void checkPixels(const char *root)
         return;
     }
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
     debug_Printf(100, 50, 0xFF800000u, "-");
     dl_Swap();
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
         return;
@@ -760,14 +760,14 @@ static void checkPixels(const char *root)
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     char root[1024];
 
     snprintf(root, sizeof(root), "%s/rd_debug_host0", argc > 1 ? argv[1] : ".");
     ico_host0_set_root(root);
 
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -783,7 +783,7 @@ int main(int argc, char **argv)
     checkFontWindow();
     checkOptionFile(root);
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded register writes", gif_HostUndecodedTotal());
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_debug_test: %d failures\n", failures);
         return 1;
@@ -792,7 +792,7 @@ int main(int argc, char **argv)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("rd_debug_test: recording ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -800,9 +800,9 @@ int main(int argc, char **argv)
     gif_HostFrameReset();
     dl_Clear();
     checkPixels(root);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     /* the mirrored overlay again at scene scale 2 (Enhanced) */
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ENHANCED;
@@ -810,14 +810,14 @@ int main(int argc, char **argv)
     st.outputHeight = 480;
     st.aspect = 4.0f / 3.0f;
     st.sceneScale = 2.0f;
-    if (rd_Init(512, 512, &st, NULL)) {
+    if (rd_init(512, 512, &st, NULL)) {
         gif_HostForgetTextures();
         gif_HostFrameReset();
         dl_Clear();
         checkMirroredText("Enhanced 2x");
-        rd_Shutdown();
+        rd_shutdown();
     } else {
-        CHECK(0, "rd_Init at scene scale 2");
+        CHECK(0, "rd_init at scene scale 2");
     }
     if (failures) {
         printf("rd_debug_test: %d failures\n", failures);

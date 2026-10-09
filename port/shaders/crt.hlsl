@@ -120,7 +120,7 @@ float3 linearLoad(int2 p)
 // passes the colour where the beam is narrower than about a line, which
 // only a dark line's is: a bright line's beam is near its widest, a few
 // per cent over at the most, and gainFadeOf and shoulderOf take that
-// (rd_crt.c rd__CrtBeam is the same function)
+// (rd_crt.c rd__crt_beam is the same function)
 float3 beamOf(float3 c, float d)
 {
     float3 width = lerp(c_beam.yyy, c_beam.zzz, saturate(c));
@@ -130,7 +130,7 @@ float3 beamOf(float3 c, float d)
 
 // The phosphor mask of an output pixel at f across its source pixel and v
 // down its line (0..1), odd its source column's parity (rd_crt.c
-// rd__CrtMaskWeight is the same function): per channel 1 its own stripe,
+// rd__crt_mask_weight is the same function): per channel 1 its own stripe,
 // 1 - gap (the mask strength's leak) the other two and a gap. A source
 // pixel is r output pixels wide; its last g pixels are a gap, the rest
 // three stripes, R, G, B from the left. Slot: a bridge over the last third
@@ -166,7 +166,7 @@ float3 maskOf(float f, float v, int odd, float strength)
     return stripeOf(f, v, strength) * slotOf(v, odd, strength);
 }
 
-// 1 over the slot bridges' mean over a line (rd_crt.c rd__CrtRowGain)
+// 1 over the slot bridges' mean over a line (rd_crt.c rd__crt_row_gain)
 float rowGainOf(float strength)
 {
     return c_mask.x > 1.5 && c_mask.x < 2.5 && strength < 1.0 ? 1.0 / (1.0 - strength / 3.0)
@@ -174,7 +174,7 @@ float rowGainOf(float strength)
 }
 
 // The mask's strength under a source pixel p (linear; rd_crt.c
-// rd__CrtStrengthAt): eased to half from its brightest channel 0.5 to 1,
+// rd__crt_strength_at): eased to half from its brightest channel 0.5 to 1,
 // so a white still shows its stripes, more softly, as a lit tube does
 // where its glass glows
 float strengthAt(float3 p)
@@ -183,7 +183,7 @@ float strengthAt(float3 p)
 }
 
 // How much of the gains a pixel of colour col takes (rd_crt.c
-// rd__CrtGainFade): the gains (gain) bring each triad's light up to its
+// rd__crt_gain_fade): the gains (gain) bring each triad's light up to its
 // pixel's, but where a lit stripe would pass 1 the light would clip and
 // the stripes flatten into white. One fraction t for the three channels
 // (so a colour keeps its hue): the largest that keeps each channel's
@@ -202,7 +202,7 @@ float gainFadeOf(float3 col, float3 gain, float3 top, float fade)
     return saturate(t);
 }
 
-// The soft shoulder (rd_crt.c rd__CrtShoulder): a colour whose brightest
+// The soft shoulder (rd_crt.c rd__crt_shoulder): a colour whose brightest
 // channel passes the knee (1 - 0.1 strength) is scaled down as a whole,
 // that channel rolled off toward 1, so a light colour keeps its hue rather
 // than clipping channel by channel toward white
@@ -306,7 +306,7 @@ float3 stripeGainFlat(float j, int sx, float v, float strength, out float3 gain,
 
 // 1 over the mean stripe weight, per channel, over the box pixels of px's
 // row whose warped positions fall in source pixel sx (rd_crt.c
-// rd__CrtTriadGain; the mean floored at 0.1): each triad keeps its own
+// rd__crt_triad_gain; the mean floored at 0.1): each triad keeps its own
 // pixel's light whether its stripes are 1 or 2 output pixels wide. Only
 // under x curvature (the flat face counts, stripeGainFlat).
 float3 triadGain(float2 px, int sx, float v, float strength, out float3 top)
@@ -399,7 +399,7 @@ float4 crt_ps(CrtVSOut i) : SV_Target0
 
     // halation (wide, all light) and bloom (narrower, the bright parts),
     // from the glow of the grid: each takes its share of the light from the
-    // picture (rd_crt.c rd__CrtGlowMix), so a flat field keeps its level and
+    // picture (rd_crt.c rd__crt_glow_mix), so a flat field keeps its level and
     // a highlight spreads rather than brightens
     float2 wm = float2(mirror > 0.5 ? 1.0 - w.x : w.x, w.y);
     float3 b = g_bloom.SampleLevel(g_sampler, wm, 0.0).rgb;

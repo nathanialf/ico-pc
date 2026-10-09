@@ -33,7 +33,7 @@
  *            their geometry (below, "strip order"); recording only
  *   model packs  the mesh identity, replacements from a
  *            tagless stream, one drawn in the prelit packet's place,
- *            rd_VuMeshRetire and the sweep; recording only
+ *            rd_vu_mesh_retire and the sweep; recording only
  *   pack hooks the game's side of model packs on a pack in
  *            rd_mesh_modelpack/ under the working folder: the dump at the
  *            draw (both parts, the cluster one with its skeleton), the
@@ -44,7 +44,7 @@
  *            original again; recording only
  *
  * Checks on the recording (no device needed): the mesh built from the
- * packet (vertex count, batches, the index list against vu1ref_StaticKicks);
+ * packet (vertex count, batches, the index list against vu1ref_static_kicks);
  * the recorded commands (program, code, clip); the VuCB against what the EE
  * packet code uploads (the common block, the UV offset, the matrices +0x140,
  * +0x200 x node and +0x80 x node, the cluster bones and lights); the GS state
@@ -53,7 +53,7 @@
  * Then on a Vulkan device (exit 77 without one, after the recording checks
  * passed): each case rendered into SCENE, and the CPU reference's triangles
  * (vu1_ref.h, the same VU state built independently) drawn through the
- * sprite path (rd_ScreenPrims) in the same GS state; the two images agree
+ * sprite path (rd_screen_prims) in the same GS state; the two images agree
  * within 1 per channel and the draw covers pixels.  Every pipeline created
  * is in the enumerated reachable set. */
 #include <math.h>
@@ -127,7 +127,7 @@ static void normalMatrices(const Model *m, float out[12][4])
 static void checkMesh(const PacHeader *pk, int qpv)
 {
     RdMesh m = {pac_HostMesh((PacHeader *)pk)};
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->vu, "a VU mesh for the packet");
     if (!r) {
         return;
@@ -139,7 +139,7 @@ static void checkMesh(const PacHeader *pk, int qpv)
     CHECK(r->vertexCount == NV, "%u vertices, expected %d", r->vertexCount, NV);
     CHECK((int)r->batchCount == b.n && b.n >= 2, "%u batches, the packet has %d", r->batchCount,
           b.n);
-    /* the static kicks: vu1ref_StaticKicks over the stream */
+    /* the static kicks: vu1ref_static_kicks over the stream */
     static float stw[NV];
     static int first[NV], kicks[NV];
     int v = 0;
@@ -151,7 +151,7 @@ static void checkMesh(const PacHeader *pk, int qpv)
             first[v] = v - (int)k;
         }
     }
-    int nk = vu1ref_StaticKicks(stw, first, v, kicks);
+    int nk = vu1ref_static_kicks(stw, first, v, kicks);
     CHECK(r->indexCount == (uint32_t)nk * 3, "%u indices, %d kicks", r->indexCount, nk);
     for (int i = 0; i < nk && (uint32_t)i * 3 + 2 < r->indexCount; i++) {
         for (int c = 0; c < 3; c++) {
@@ -193,15 +193,15 @@ static void recordPrelit(Sub15C *o, int clipRet)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     reg_DispObj(o);
     dl_Swap();
 }
 
 static void checkPrelitRecording(int code, int clip)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Found fd;
     walkFrame(f, &fd);
     CHECK(fd.n == 1, "one mesh draw, got %d", fd.n);
@@ -239,8 +239,8 @@ static void recordCluster(void)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     reg_DispObj(&s_objB);
     dl_Swap();
 }
@@ -255,7 +255,7 @@ static void clusterBones(float out[8][4])
 
 static void checkClusterRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Found fd;
     walkFrame(f, &fd);
     CHECK(fd.n == 1, "one skinned draw, got %d", fd.n);
@@ -312,8 +312,8 @@ static void recordGrid(void)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     _SetCurrentMatrix(matrixptr + 0x100);
     prim_DispMesh3D(s_grid, 0, 0, 0);
     dl_Swap();
@@ -321,7 +321,7 @@ static void recordGrid(void)
 
 static void checkGridRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Found fd;
     walkFrame(f, &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->type == RDC_GRID, "one grid draw (%d)", fd.n);
@@ -370,15 +370,15 @@ static void recordParticles(void)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(6);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     prim_DispParticle(s_part, matrixptr + 0x100);
     dl_Swap();
 }
 
 static void checkParticleRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Found fd;
     walkFrame(f, &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->type == RDC_PARTICLES && fd.list[0] == 6,
@@ -438,7 +438,7 @@ static void refBatch(const VuBatchOut *out)
         }
     }
     static int kicks[VU_BATCH_MAX];
-    int nk = vu1ref_Kicks(out, kicks);
+    int nk = vu1ref_kicks(out, kicks);
     for (int i = 0; i < nk; i++) {
         for (int j = 0; j < 3; j++) {
             refVertex(&out->v[kicks[i] - 2 + j]);
@@ -448,9 +448,9 @@ static void refBatch(const VuBatchOut *out)
 
 static void refCommon(Vu1Ref *r)
 {
-    vu1ref_Init(r);
-    vu1ref_LoadCommon(r, (const float (*)[4])s_common);
-    vu1ref_SetUVOffset(r, kUv);
+    vu1ref_init(r);
+    vu1ref_load_common(r, (const float (*)[4])s_common);
+    vu1ref_set_uv_offset(r, kUv);
 }
 
 static void refPrelit(const PacHeader *pk, int code)
@@ -459,13 +459,13 @@ static void refPrelit(const PacHeader *pk, int code)
     float m[12][4];
     refCommon(&r);
     normalMatrices(&s_modelA, m);
-    vu1ref_NormalSetMatrix(&r, (const float (*)[4])m);
+    vu1ref_normal_set_matrix(&r, (const float (*)[4])m);
     Batches b;
     packetBatches(pk, &b);
     s_nref = 0;
     static VuBatchOut out;
     for (int i = 0; i < b.n; i++) {
-        vu1ref_NormalC(&r, code, b.in[i], &out);
+        vu1ref_normal_c(&r, code, b.in[i], &out);
         refBatch(&out);
     }
 }
@@ -482,14 +482,14 @@ static void refCluster(const PacHeader *pk)
     memcpy(light[0], s_modelB.light.normal, 64);
     memcpy(light[4], s_modelB.light.color, 64);
     refCommon(&r);
-    vu1ref_ClusterSetMatrix(&r, (const float (*)[4])pk2);
-    vu1ref_ClusterSetLight(&r, (const float (*)[4])light);
+    vu1ref_cluster_set_matrix(&r, (const float (*)[4])pk2);
+    vu1ref_cluster_set_light(&r, (const float (*)[4])light);
     Batches b;
     packetBatches(pk, &b);
     s_nref = 0;
     static VuBatchOut out;
     for (int i = 0; i < b.n; i++) {
-        vu1ref_Cluster(&r, 20, b.in[i], &out);
+        vu1ref_cluster(&r, 20, b.in[i], &out);
         refBatch(&out);
     }
 }
@@ -498,13 +498,13 @@ static void refGrid(void)
 {
     static Vu1Ref r;
     refCommon(&r);
-    vu1ref_MeshSetMatrix(&r, (const float (*)[4])(matrixptr + 0x100));
+    vu1ref_mesh_set_matrix(&r, (const float (*)[4])(matrixptr + 0x100));
     s_nref = 0;
     static VuBatchOut out;
     const float (*buf)[4] = s_grid->bufs[0];
     const int per = s_grid->stripLen * 2 + 4;
     for (int i = 0; i < s_grid->strips; i++) {
-        vu1ref_Mesh(&r, 20, buf + i * per + 1, &out);
+        vu1ref_mesh(&r, 20, buf + i * per + 1, &out);
         refBatch(&out);
     }
 }
@@ -516,9 +516,9 @@ static void refParticles(void)
     memcpy(m[0], matrixptr + 0x100, 64);
     memcpy(m[4], matrixptr + 0xC0, 64);
     refCommon(&r);
-    vu1ref_ParticleSetMatrix(&r, (const float (*)[4])m);
+    vu1ref_particle_set_matrix(&r, (const float (*)[4])m);
     VuParticleOut out;
-    vu1ref_Particle(&r, (const float (*)[4])(const void *)s_part->objs[0]->num, 6 + 2 * NPART,
+    vu1ref_particle(&r, (const float (*)[4])(const void *)s_part->objs[0]->num, 6 + 2 * NPART,
                     &out);
     s_nref = 0;
     for (int i = 0; i < out.count && s_nref + 2 <= MAXREF; i++) {
@@ -542,23 +542,23 @@ static void refParticles(void)
 /* The GS state of the mesh draw, recorded as rd state for the reference. */
 static void applyState(const RdStateBlock *s)
 {
-    rd_Test(&s->ds.test);
-    rd_ZWrite(s->ds.zwrite == RD_ZWRITE_ON);
-    rd_FBA(s->ds.fba);
-    rd_PABE(s->ds.pabe);
-    rd_ColClamp(s->ds.colclamp);
-    rd_TexA((RdTexA)s->ds.texa);
-    rd_Blend((RdBlend)s->ds.blend, s->ds.blendFix, s->ds.abe);
-    rd_SamplerFilter((RdFilter)s->ds.magFilter, (RdFilter)s->ds.minFilter);
-    rd_SamplerWrap((RdWrap)s->ds.wrap.s, (RdWrap)s->ds.wrap.t);
+    rd_test(&s->ds.test);
+    rd_z_write(s->ds.zwrite == RD_ZWRITE_ON);
+    rd_fba(s->ds.fba);
+    rd_pabe(s->ds.pabe);
+    rd_col_clamp(s->ds.colclamp);
+    rd_tex_a((RdTexA)s->ds.texa);
+    rd_blend((RdBlend)s->ds.blend, s->ds.blendFix, s->ds.abe);
+    rd_sampler_filter((RdFilter)s->ds.magFilter, (RdFilter)s->ds.minFilter);
+    rd_sampler_wrap((RdWrap)s->ds.wrap.s, (RdWrap)s->ds.wrap.t);
     if (s->ds.texEnabled) {
-        rd_Texture((RdTex){s->tex}, (RdTexFn)s->ds.texFn, (RdTcc)s->ds.tcc);
+        rd_texture((RdTex){s->tex}, (RdTexFn)s->ds.texFn, (RdTcc)s->ds.tcc);
     } else {
-        rd_TextureOff();
+        rd_texture_off();
     }
-    rd_Gouraud((int)s->gouraud);
-    rd_ColorMask(s->ds.fbmsk);
-    rd_UVOffset(0.0f, 0.0f);
+    rd_gouraud((int)s->gouraud);
+    rd_color_mask(s->ds.fbmsk);
+    rd_uv_offset(0.0f, 0.0f);
 }
 
 static uint8_t s_imgA[512 * 512 * 4], s_imgB[512 * 512 * 4];
@@ -570,10 +570,10 @@ static void drawReference(const RdStateBlock *st, int list, RdPrim prim)
     static const uint8_t grey[4] = {40, 40, 60, 0x80};
     dl_Clear();
     dl_SetDLPriority(list);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     applyState(st);
-    rd_ScreenPrims(prim, s_ref, (uint32_t)s_nref, RD_SPACE_WORLD, 0, 0);
+    rd_screen_prims(prim, s_ref, (uint32_t)s_nref, RD_SPACE_WORLD, 0, 0);
     dl_Swap();
 }
 
@@ -606,7 +606,7 @@ static void gpuCase(const char *what, void (*record)(void), void (*ref)(void), R
         return;
     }
     Found fd;
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     if (fd.n < 1) {
         CHECK(0, "%s: nothing recorded", what);
         return;
@@ -667,16 +667,16 @@ static void checkStretchRecording(void)
     Found fd;
     s_stretchModel = NULL;
     recordPrelit(&s_objA, 1);
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 0, "stretch: an ordinary model's draw is not flagged");
     s_stretchModel = "test_prelit";
     recordPrelit(&s_objA, 1);
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 1, "stretch: the title model's draw is flagged");
-    CHECK(rd_SetSpaceOverride(-1) == -1, "stretch: reg_DispObj ends the space override");
+    CHECK(rd_set_space_override(-1) == -1, "stretch: reg_DispObj ends the space override");
     s_stretchModel = NULL;
     recordPrelit(&s_objA, 1);
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 0, "stretch: the next draw is not flagged");
 }
 
@@ -708,7 +708,7 @@ static uint8_t s_wideImg[WT * 512 * 4];
 static int wideColumns(int *x0, int *x1)
 {
     uint32_t w = 0, h = 0;
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), s_wideImg, sizeof(s_wideImg), &w, &h) ||
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), s_wideImg, sizeof(s_wideImg), &w, &h) ||
         w != WT || h != 512) {
         return 0;
     }
@@ -831,7 +831,7 @@ static void stripPacketCheck(const char *name, const short *index, const short *
     snprintf(s_modelS.mdl.name, sizeof(s_modelS.mdl.name), "%s", name);
     p2o_MakePacket(&s_objS);
     PacHeader *pk = (PacHeader *)s_modelS.mdl.groups->packets;
-    const RdMeshRec *r = pk ? rd__MeshRec(pac_HostMesh(pk)) : NULL;
+    const RdMeshRec *r = pk ? rd__mesh_rec(pac_HostMesh(pk)) : NULL;
     CHECK(r && r->vertexCount == (uint32_t)num, "strip model %s: a mesh of %d vertices", name, num);
     for (int i = 0; r && i < num; i++) {
         const float *v = r->stream[(size_t)i * r->qwPerVertex];
@@ -1067,13 +1067,13 @@ static void stripDiscChecks(const char *disc)
 
 /* ---------------------------------------------------------- model packs
  *
- * The mesh identity (rd_VuMeshDescHash) on a synthetic prelit packet of
+ * The mesh identity (rd_vu_mesh_desc_hash) on a synthetic prelit packet of
  * two batches (5 and 6 vertices, a strip restart at vertex 3 of the
  * second) against the byte stream rd_mesh.h specifies, and on the game's
- * packets against the hash rd_CreateVuMesh stored; replacements from a
+ * packets against the hash rd_create_vu_mesh stored; replacements from a
  * tagless stream (counts, indices, PRIM/material/group from the original,
- * the rejections, rd_UpdateVuMesh refusing them); one drawn through
- * reg_DispObj in the original's place; rd_VuMeshRetire and the sweep. */
+ * the rejections, rd_update_vu_mesh refusing them); one drawn through
+ * reg_DispObj in the original's place; rd_vu_mesh_retire and the sweep. */
 #define SYN_QW (2 + 11 * RD_VU_QW_PRELIT)
 
 typedef struct Synth {
@@ -1132,43 +1132,44 @@ static void hashChecks(void)
     synthPacket(&b, 0x0C, 0);
     uint32_t nv = 99;
     float nw = 99.0f;
-    const uint64_t ha = rd_VuMeshDescHash(&a.d, &nv, &nw);
-    CHECK(ha != 0 && ha == rd_VuMeshDescHash(&b.d, NULL, NULL), "two builds hash alike");
+    const uint64_t ha = rd_vu_mesh_desc_hash(&a.d, &nv, &nw);
+    CHECK(ha != 0 && ha == rd_vu_mesh_desc_hash(&b.d, NULL, NULL), "two builds hash alike");
     CHECK(ha == synthHashByHand(&a), "the hash is XXH3-64 of rd_mesh.h's byte stream");
     CHECK(nv == 11 && nw == 0.0f, "11 vertices (%u), prelit normal.w 0 (%g)", nv, (double)nw);
     /* one colour byte (batch 1, vertex 2's red) */
     uint8_t *c = (uint8_t *)&b.qw[2 + 5 * RD_VU_QW_PRELIT + 2 * RD_VU_QW_PRELIT + 2][0];
     c[0] ^= 1;
-    CHECK(rd_VuMeshDescHash(&b.d, NULL, NULL) != ha, "one colour byte changes the hash");
+    CHECK(rd_vu_mesh_desc_hash(&b.d, NULL, NULL) != ha, "one colour byte changes the hash");
     /* PRIM, material and group are not in the key */
     synthPacket(&b, 0x1C, 7);
     b.b[1].group = 5;
-    CHECK(rd_VuMeshDescHash(&b.d, NULL, NULL) == ha, "PRIM, material and group are not hashed");
+    CHECK(rd_vu_mesh_desc_hash(&b.d, NULL, NULL) == ha, "PRIM, material and group are not hashed");
     /* malformed: the last batch runs past the stream */
     b.d.qwCount--;
     nv = 99;
     nw = 99.0f;
-    CHECK(rd_VuMeshDescHash(&b.d, &nv, &nw) == 0 && nv == 0 && nw == 0.0f,
+    CHECK(rd_vu_mesh_desc_hash(&b.d, &nv, &nw) == 0 && nv == 0 && nw == 0.0f,
           "a malformed desc hashes to 0");
-    CHECK(rd_VuMeshDescHash(NULL, NULL, NULL) == 0, "no desc hashes to 0");
-    /* rd_CreateVuMesh keeps the same hash */
-    RdMesh m = rd_CreateVuMesh(&a.d);
-    CHECK(m.id && rd_VuMeshHash(m) == ha && !rd_VuMeshReplaced(m), "the record's hash");
-    rd_DestroyVuMesh(m);
+    CHECK(rd_vu_mesh_desc_hash(NULL, NULL, NULL) == 0, "no desc hashes to 0");
+    /* rd_create_vu_mesh keeps the same hash */
+    RdMesh m = rd_create_vu_mesh(&a.d);
+    CHECK(m.id && rd_vu_mesh_hash(m) == ha && !rd_vu_mesh_replaced(m), "the record's hash");
+    rd_destroy_vu_mesh(m);
     /* the game's packets: the desc rebuilt from the packet hashes as the
      * mesh pac_HostMesh built; skinned: normal.w of the first vertex */
     static PkDesc pd;
     packetDesc(packetA(), RD_VU_QW_PRELIT, &pd);
     RdMesh pa = {pac_HostMesh(packetA())};
-    CHECK(rd_VuMeshHash(pa) != 0 && rd_VuMeshDescHash(&pd.d, &nv, NULL) == rd_VuMeshHash(pa) &&
-              nv == NV,
+    CHECK(rd_vu_mesh_hash(pa) != 0 &&
+              rd_vu_mesh_desc_hash(&pd.d, &nv, NULL) == rd_vu_mesh_hash(pa) && nv == NV,
           "the prelit packet's hash (%u vertices)", nv);
     packetDesc(packetB(), RD_VU_QW_SKIN, &pd);
     RdMesh pb = {pac_HostMesh(packetB())};
-    const RdMeshRec *rb = rd__MeshRec(pb.id);
-    CHECK(rb && rd_VuMeshDescHash(&pd.d, NULL, &nw) == rd_VuMeshHash(pb) && nw == rb->stream[1][3],
+    const RdMeshRec *rb = rd__mesh_rec(pb.id);
+    CHECK(rb && rd_vu_mesh_desc_hash(&pd.d, NULL, &nw) == rd_vu_mesh_hash(pb) &&
+              nw == rb->stream[1][3],
           "the cluster packet's hash, normal.w %g", (double)nw);
-    CHECK(rd_VuMeshHash(pa) != rd_VuMeshHash(pb), "two parts, two hashes");
+    CHECK(rd_vu_mesh_hash(pa) != rd_vu_mesh_hash(pb), "two parts, two hashes");
 }
 
 static void replacementChecks(void)
@@ -1179,17 +1180,17 @@ static void replacementChecks(void)
         uint32_t hi = (1u << 14) | (0x1Cu << 15) | (3u << 28);
         memcpy(&o.qw[o.b[1].firstQw][1], &hi, 4);
     }
-    const uint64_t h = rd_VuMeshDescHash(&o.d, NULL, NULL);
+    const uint64_t h = rd_vu_mesh_desc_hash(&o.d, NULL, NULL);
     /* the tagless vertices of the synthetic packet, the batches swapped */
     static float flat[11 * RD_VU_QW_PRELIT][4];
     memcpy(flat[0], o.qw[1], 5 * RD_VU_QW_PRELIT * 16);
     memcpy(flat[5 * RD_VU_QW_PRELIT], o.qw[2 + 5 * RD_VU_QW_PRELIT], 6 * RD_VU_QW_PRELIT * 16);
     RdVuReplacementBatch rb[3] = {{5, 6}, {0, 5}, {0, 0}};
     RdVuReplacement rep = {(const float (*)[4])flat, 11, RD_VU_QW_PRELIT, rb, 2};
-    RdMesh m = rd_CreateVuMeshReplacement(&o.d, &rep, "synth rep");
-    const RdMeshRec *r = rd__MeshRec(m.id);
-    CHECK(r && r->vu && r->replaced && r->hash == h && rd_VuMeshReplaced(m) &&
-              rd_VuMeshHash(m) == h && rd_VuMeshValid(m),
+    RdMesh m = rd_create_vu_mesh_replacement(&o.d, &rep, "synth rep");
+    const RdMeshRec *r = rd__mesh_rec(m.id);
+    CHECK(r && r->vu && r->replaced && r->hash == h && rd_vu_mesh_replaced(m) &&
+              rd_vu_mesh_hash(m) == h && rd_vu_mesh_valid(m),
           "a replaced VU mesh with the original's hash");
     if (r) {
         CHECK(r->vertexCount == 11 && r->batchCount == 2 && r->qwPerVertex == RD_VU_QW_PRELIT &&
@@ -1223,35 +1224,37 @@ static void replacementChecks(void)
     /* the morph path cannot write a replaced mesh */
     float before[4];
     memcpy(before, r ? r->stream[0] : before, 16);
-    CHECK(!rd_UpdateVuMesh(m, (const float (*)[4])o.qw), "rd_UpdateVuMesh refuses a replaced mesh");
+    CHECK(!rd_update_vu_mesh(m, (const float (*)[4])o.qw),
+          "rd_update_vu_mesh refuses a replaced mesh");
     CHECK(!r || memcmp(before, r->stream[0], 16) == 0, "and writes nothing");
-    RdMesh om = rd_CreateVuMesh(&o.d);
-    CHECK(rd_UpdateVuMesh(om, (const float (*)[4])o.qw), "rd_UpdateVuMesh writes an original");
-    rd_DestroyVuMesh(om);
-    rd_DestroyVuMesh(m);
+    RdMesh om = rd_create_vu_mesh(&o.d);
+    CHECK(rd_update_vu_mesh(om, (const float (*)[4])o.qw), "rd_update_vu_mesh writes an original");
+    rd_destroy_vu_mesh(om);
+    rd_destroy_vu_mesh(m);
     /* fewer batches: the rest empty */
     rep.batchCount = 1;
-    m = rd_CreateVuMeshReplacement(&o.d, &rep, NULL);
-    r = rd__MeshRec(m.id);
+    m = rd_create_vu_mesh_replacement(&o.d, &rep, NULL);
+    r = rd__mesh_rec(m.id);
     CHECK(r && r->batchCount == 2 && r->batches[1].vertexCount == 0 &&
               r->batches[1].indexCount == 0 && r->indexCount == 6 && r->vertexCount == 6 &&
               strcmp(r->name, "synth") == 0,
           "a missing batch is empty, the name the original's");
-    rd_DestroyVuMesh(m);
+    rd_destroy_vu_mesh(m);
     /* rejections */
     rep.batchCount = 3;
-    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "more batches than the original");
+    CHECK(rd_create_vu_mesh_replacement(&o.d, &rep, NULL).id == 0,
+          "more batches than the original");
     rep.batchCount = 2;
     rep.qwPerVertex = RD_VU_QW_LIT;
-    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "another layout");
+    CHECK(rd_create_vu_mesh_replacement(&o.d, &rep, NULL).id == 0, "another layout");
     rep.qwPerVertex = RD_VU_QW_PRELIT;
     rb[1].vertexCount = 12;
-    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "a run outside the stream");
+    CHECK(rd_create_vu_mesh_replacement(&o.d, &rep, NULL).id == 0, "a run outside the stream");
     rb[1].vertexCount = 5;
     o.d.qwCount--;
-    CHECK(rd_CreateVuMeshReplacement(&o.d, &rep, NULL).id == 0, "a malformed original");
+    CHECK(rd_create_vu_mesh_replacement(&o.d, &rep, NULL).id == 0, "a malformed original");
     o.d.qwCount++;
-    CHECK(rd_CreateVuMeshReplacement(&o.d, NULL, NULL).id == 0, "no replacement");
+    CHECK(rd_create_vu_mesh_replacement(&o.d, NULL, NULL).id == 0, "no replacement");
 }
 
 static uint64_t s_retireHash;
@@ -1277,7 +1280,7 @@ static void replacementDrawChecks(void)
 {
     PacHeader *pk = packetA();
     RdMesh orig = {pac_HostMesh(pk)};
-    const RdMeshRec *orc = rd__MeshRec(orig.id);
+    const RdMeshRec *orc = rd__mesh_rec(orig.id);
     if (!orc) {
         CHECK(0, "the prelit mesh");
         return;
@@ -1296,8 +1299,8 @@ static void replacementDrawChecks(void)
         rb[b].vertexCount = orc->batches[b].vertexCount;
     }
     RdVuReplacement rep = {(const float (*)[4])flat, NV, RD_VU_QW_PRELIT, rb, orc->batchCount};
-    RdMesh m = rd_CreateVuMeshReplacement(&pd.d, &rep, "test_prelit rep");
-    const RdMeshRec *r = rd__MeshRec(m.id);
+    RdMesh m = rd_create_vu_mesh_replacement(&pd.d, &rep, "test_prelit rep");
+    const RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r && r->hash == orc->hash && r->indexCount == orc->indexCount &&
               r->batchCount == orc->batchCount,
           "the replacement keeps the original's hash, batches and kicks");
@@ -1308,7 +1311,7 @@ static void replacementDrawChecks(void)
     memcpy(saved, pk->pad9C, sizeof(saved));
     memcpy(pk->pad9C, &m.id, sizeof(m.id));
     recordPrelit(&s_objA, 1);
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Found fd;
     walkFrame(f, &fd);
     CHECK(fd.n == 1 && fd.cmd[0]->type == RDC_MESH && fd.cmd[0]->u[0] == m.id,
@@ -1327,25 +1330,25 @@ static void replacementDrawChecks(void)
     const uint32_t drawn = r->lastUsed;
     s_retireHash = orc->hash;
     s_retireCalls = 0;
-    rd_VuMeshRetire(retireReplaced, NULL);
-    CHECK(s_retireCalls > 0 && !rd_VuMeshValid(m) && rd_VuMeshValid(orig) && rd__MeshRec(m.id),
+    rd_vu_mesh_retire(retireReplaced, NULL);
+    CHECK(s_retireCalls > 0 && !rd_vu_mesh_valid(m) && rd_vu_mesh_valid(orig) && rd__mesh_rec(m.id),
           "retired: the replacement invalid, kept; the original valid");
     int kept = 1;
     for (int i = 0; i < 4; i++) {
         dl_Clear();
         dl_Swap();
         if (g_rd.frameCounter <= drawn + 3) {
-            kept &= rd__MeshRec(m.id) != NULL;
+            kept &= rd__mesh_rec(m.id) != NULL;
         }
     }
-    CHECK(kept && rd__MeshRec(m.id) == NULL, "kept for the retained frames, then freed");
+    CHECK(kept && rd__mesh_rec(m.id) == NULL, "kept for the retained frames, then freed");
     memcpy(pk->pad9C, saved, sizeof(saved));
     /* retiring the original: pac_HostMesh builds it again */
-    rd_VuMeshRetire(retireOriginal, NULL);
-    CHECK(!rd_VuMeshValid(orig), "the original retired");
+    rd_vu_mesh_retire(retireOriginal, NULL);
+    CHECK(!rd_vu_mesh_valid(orig), "the original retired");
     RdMesh again = {pac_HostMesh(pk)};
-    CHECK(again.id != 0 && again.id != orig.id && rd_VuMeshValid(again) &&
-              rd_VuMeshHash(again) == s_retireHash,
+    CHECK(again.id != 0 && again.id != orig.id && rd_vu_mesh_valid(again) &&
+              rd_vu_mesh_hash(again) == s_retireHash,
           "pac_HostMesh builds a retired mesh again with the same hash");
 }
 
@@ -1410,7 +1413,7 @@ static int mpExists(const char *path)
 static uint32_t mpDrawnMesh(RdCmdType type)
 {
     Found fd;
-    walkFrame(rd__LastFrame(), &fd);
+    walkFrame(rd__last_frame(), &fd);
     return fd.n == 1 && fd.cmd[0]->type == type ? fd.cmd[0]->u[0] : 0;
 }
 
@@ -1419,15 +1422,15 @@ static void packHookChecks(void)
     static PkDesc pa, pb;
     packetDesc(packetA(), RD_VU_QW_PRELIT, &pa);
     packetDesc(packetB(), RD_VU_QW_SKIN, &pb);
-    const uint64_t ha = rd_VuMeshDescHash(&pa.d, NULL, NULL);
-    const uint64_t hb = rd_VuMeshDescHash(&pb.d, NULL, NULL);
+    const uint64_t ha = rd_vu_mesh_desc_hash(&pa.d, NULL, NULL);
+    const uint64_t hb = rd_vu_mesh_desc_hash(&pb.d, NULL, NULL);
     (void)ico_mkdir(s_mpBase);
     (void)ico_mkdir(mpPath("models"));
     (void)ico_mkdir(mpPath("models/SCES-50760"));
     (void)ico_mkdir(mpPath("models/SCES-50760/replacements"));
     mpClear(); /* an earlier run's files */
     ModelpackConfig cfg = {s_mpBase, NULL, "SCES-50760", 0, 1};
-    CHECK(modelpack_Init(&cfg) == 0, "an empty pack");
+    CHECK(modelpack_init(&cfg) == 0, "an empty pack");
 
     /* dumping on: each part drawn is written, once */
     recordPrelit(&s_objA, 1);
@@ -1439,7 +1442,7 @@ static void packHookChecks(void)
     CHECK(mpExists(mpPath(rel)), "the cluster part dumped at its draw (%s)", rel);
     GltfDoc doc;
     char why[256] = "";
-    if (gltf_Read(mpPath(rel), &doc, why, sizeof(why)) == 0) {
+    if (gltf_read(mpPath(rel), &doc, why, sizeof(why)) == 0) {
         CHECK(doc.skin.count == (uint32_t)s_objB.nodeNum &&
                   memcmp(doc.skin.invBind[1], s_modelB.clusterMtx[1], 64) == 0 &&
                   doc.skin.parent[0] < 0,
@@ -1447,15 +1450,15 @@ static void packHookChecks(void)
               doc.skin.count);
         CHECK(doc.meshName && strcmp(doc.meshName, "test_cluster/part0/0") == 0,
               "the cluster part named by the draw (%s)", doc.meshName ? doc.meshName : "-");
-        gltf_Free(&doc);
+        gltf_free(&doc);
     } else {
         CHECK(0, "the cluster dump reads: %s", why);
     }
     ModelpackStats st;
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     recordPrelit(&s_objA, 1);
     ModelpackStats st2;
-    modelpack_GetStats(&st2);
+    modelpack_get_stats(&st2);
     CHECK(st.dumped == 2 && st2.dumped == 2, "two parts dumped, once (%u, %u)", st.dumped,
           st2.dumped);
 
@@ -1471,24 +1474,24 @@ static void packHookChecks(void)
         }
     }
     cfg.dumpEnabled = 0;
-    CHECK(modelpack_Init(&cfg) == 2 && modelpack_Lookup(ha) >= 0 && modelpack_Lookup(hb) >= 0,
+    CHECK(modelpack_init(&cfg) == 2 && modelpack_lookup(ha) >= 0 && modelpack_lookup(hb) >= 0,
           "both parts indexed");
     /* the switch off and on: the originals retired, made again at the draw */
     const RdMesh oa = {pac_HostMesh(packetA())}, ob = {pac_HostMesh(packetB())};
-    modelpack_SetEnabled(false);
-    modelpack_SetEnabled(true);
-    CHECK(!rd_VuMeshValid(oa) && !rd_VuMeshValid(ob), "on: the originals retired");
+    modelpack_set_enabled(false);
+    modelpack_set_enabled(true);
+    CHECK(!rd_vu_mesh_valid(oa) && !rd_vu_mesh_valid(ob), "on: the originals retired");
     recordPrelit(&s_objA, 1);
     const RdMesh ra = {mpDrawnMesh(RDC_MESH)};
-    CHECK(ra.id != 0 && rd_VuMeshReplaced(ra) && rd_VuMeshHash(ra) == ha &&
+    CHECK(ra.id != 0 && rd_vu_mesh_replaced(ra) && rd_vu_mesh_hash(ra) == ha &&
               pac_HostMesh(packetA()) == ra.id,
           "the prelit draw records the replacement Packet.c made");
     recordCluster();
     const RdMesh rb = {mpDrawnMesh(RDC_SKINNED)};
-    CHECK(rb.id != 0 && rd_VuMeshReplaced(rb) && rd_VuMeshHash(rb) == hb &&
+    CHECK(rb.id != 0 && rd_vu_mesh_replaced(rb) && rd_vu_mesh_hash(rb) == hb &&
               pac_HostMesh(packetB()) == rb.id,
           "the cluster draw records the replacement (bones from the object)");
-    modelpack_GetStats(&st);
+    modelpack_get_stats(&st);
     CHECK(st.created == 2 && st.declined == 0, "two replacements made (%u), none declined (%u)",
           st.created, st.declined);
 
@@ -1496,19 +1499,19 @@ static void packHookChecks(void)
     PacHostIdent id = {"test_prelit", 0, 0, NULL, s_objA.nodeNum, &s_objA};
     pac_HostRefreshFor(packetA(), &id);
     const RdMesh back = {pac_HostMesh(packetA())};
-    CHECK(!rd_VuMeshValid(ra) && back.id != 0 && back.id != ra.id && rd_VuMeshValid(back) &&
-              !rd_VuMeshReplaced(back) && rd_VuMeshHash(back) == ha,
+    CHECK(!rd_vu_mesh_valid(ra) && back.id != 0 && back.id != ra.id && rd_vu_mesh_valid(back) &&
+              !rd_vu_mesh_replaced(back) && rd_vu_mesh_hash(back) == ha,
           "the morph path: the replacement retired, the original built");
-    CHECK(modelpack_Lookup(ha) < 0 && modelpack_Lookup(hb) >= 0, "the morphing part declined");
+    CHECK(modelpack_lookup(ha) < 0 && modelpack_lookup(hb) >= 0, "the morphing part declined");
     recordPrelit(&s_objA, 1);
     CHECK(mpDrawnMesh(RDC_MESH) == back.id, "the original drawn again");
     pac_HostRefreshFor(packetA(), &id);
     CHECK(pac_HostMesh(packetA()) == back.id, "an original follows the morph in place");
 
     /* the pack away: the other tests draw the originals */
-    modelpack_SetEnabled(false);
-    modelpack_Shutdown();
-    CHECK(!rd_VuMeshValid(rb) && modelpack_Lookup(hb) < 0, "the pack switched off and closed");
+    modelpack_set_enabled(false);
+    modelpack_shutdown();
+    CHECK(!rd_vu_mesh_valid(rb) && modelpack_lookup(hb) < 0, "the pack switched off and closed");
     mpClear();
 }
 
@@ -1568,9 +1571,9 @@ static void recordingChecks(void)
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -1578,7 +1581,7 @@ int main(int argc, char **argv)
     buildModels();
     recordingChecks();
     stripDiscChecks(argc > 1 ? argv[1] : NULL);
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_mesh_test: %d failures\n", failures);
         return 1;
@@ -1588,7 +1591,7 @@ int main(int argc, char **argv)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("rd_mesh_test: SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -1605,41 +1608,41 @@ int main(int argc, char **argv)
 
     /* every pipeline created is in the enumerated reachable set */
     static RdPipeKeyInt keys[512];
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
-    const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
-    rd__EnumerateReachable(keys, 512);
-    printf("  pipelines: %u created, %u reachable (%u screen and post)\n", rd__PipelineCount(), n,
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
+    const uint32_t ns = rd__enumerate_reachable_screen(keys, 512);
+    rd__enumerate_reachable(keys, 512);
+    printf("  pipelines: %u created, %u reachable (%u screen and post)\n", rd__pipeline_count(), n,
            ns);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX && ns < 250, "reachable pipelines %u (screen %u)", n, ns);
-    for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(&keys[j], k);
+            found |= rd__pipe_key_equal(&keys[j], k);
         }
         CHECK(found, "created pipeline %u (prog %u vs %u blend %u z %u/%u) is not enumerated", i,
               k->gs.program, k->vs, k->gs.blend, k->gs.ztst, k->gs.zwrite);
     }
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
 
     /* a full-screen title model at 16:9 */
     st.preset = RD_PRESET_ENHANCED;
     st.aspect = 16.0f / 9.0f;
     st.sceneScale = 1.0f;
-    if (!rd_Init(512, 512, &st, NULL)) {
-        CHECK(0, "rd_Init at 16:9");
+    if (!rd_init(512, 512, &st, NULL)) {
+        CHECK(0, "rd_init at 16:9");
     } else {
         gif_HostForgetTextures();
         gif_HostFrameReset();
         setup();
         buildScene();
         stretchWidePixels();
-        CHECK(rhi_vk_ValidationErrorCount() == 0, "16:9: %u validation errors",
-              rhi_vk_ValidationErrorCount());
-        rd_Shutdown();
+        CHECK(rhi_vk_validation_error_count() == 0, "16:9: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
     }
     if (failures) {
         printf("rd_mesh_test: %d failures\n", failures);

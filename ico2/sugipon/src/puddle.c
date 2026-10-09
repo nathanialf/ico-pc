@@ -128,9 +128,9 @@ static RdTarget puddleHostAlias; /* the named target the block is bound over */
 static void puddleHostBlockBegin(int tbp)
 {
     gif_HostFlush();
-    puddleHostAlias = rd_GsNamedBlock((unsigned int)tbp, 0x100, 0x100);
+    puddleHostAlias = rd_gs_named_block((unsigned int)tbp, 0x100, 0x100);
     if (puddleHostAlias.id != 0) {
-        rd_AliasTarget(puddleHostAlias, rd_BlockTarget((unsigned int)tbp, 0x100, 0x100, 1));
+        rd_alias_target(puddleHostAlias, rd_block_target((unsigned int)tbp, 0x100, 0x100, 1));
     }
 }
 
@@ -138,7 +138,7 @@ static void puddleHostBlockEnd(void)
 {
     gif_HostFlush();
     if (puddleHostAlias.id != 0) {
-        rd_AliasTarget(puddleHostAlias, (RdTarget){0});
+        rd_alias_target(puddleHostAlias, (RdTarget){0});
         puddleHostAlias.id = 0;
     }
 }
@@ -157,9 +157,9 @@ static void puddleHostCamera(int push)
         cam.aspect43 = 4.0f / 3.0f;
         cam.nearZ = 2.0f;
         cam.farZ = 262144.0f;
-        rd_PushCamera(&cam);
+        rd_push_camera(&cam);
     } else {
-        rd_PopCamera();
+        rd_pop_camera();
     }
 }
 

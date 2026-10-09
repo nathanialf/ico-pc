@@ -13,33 +13,33 @@
  *            integer edges, half-pixel edges, the -4 corner nudge, a sprite
  *            covering no pixel centre, a one-pixel sprite; a textured
  *            sprite with the +8 UV nudge copies texels exactly; TEXA
- *            7F/81+AEM on an RGB24 source; rd_UVOffset
+ *            7F/81+AEM on an RGB24 source; rd_uv_offset
  *   texa     an RGBA16 texture with A = 0, A = 1 and black
  *            texels under 7F/81+AEM, magnified 4x: bilinear is the GS
  *            order (TEXA per texel, then the 4-bit bilinear) with 0 LSB
  *            (sprite_texa_ps), nearest is the expanded texel with 0 LSB
  *            (sprite_ps); the planner's choice of entry
  *   font     a 4x4 R8 coverage atlas (GS alpha units) drawn
- *            through rd_ScreenPrims under port/ui/font.c's state (font_ps):
+ *            through rd_screen_prims under port/ui/font.c's state (font_ps):
  *            1:1 at texel centres the stored alpha is (c * va) >> 7, and
  *            1:1 and magnified 8x with bilinear filtering every byte equals
  *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
- *   sheet    a coverage strip (rd_CreateTextureSheet)
+ *   sheet    a coverage strip (rd_create_texture_sheet)
  *            through font_sheet_ps against sprite_ps drawing the CPU
- *            reference's texels (sheet_ref.c sheetref_Texel) as RGBA8,
+ *            reference's texels (sheet_ref.c sheetref_texel) as RGBA8,
  *            magnified, the grey (TCC RGB) and the alpha (TCC RGBA) within 1,
  *            at scene scale 1 (Original) and 2, 3 (Enhanced); 1:1 at the
- *            texel centres every pixel is sheetref_Texel's and the rim
+ *            texel centres every pixel is sheetref_texel's and the rim
  *            texels hold the style's rim level (English black, then French
- *            grey and no rim through rd_SetTextureSheetStyle); the strip
+ *            grey and no rim through rd_set_texture_sheet_style); the strip
  *            moved by whole pixels gives the same pixels (the grain is the
  *            texel's); on the presentation overlay magnified 4x within 2;
  *            the frame dumped and loaded keeps the format and the style and
  *            replays to the same bytes; a strip rasterised at 2 and 4
  *            texels a sheet texel (style.scale) drawn 1:1 is
- *            sheetref_Texel's at that scale within 1, its rim reaches 6.5 S
+ *            sheetref_texel's at that scale within 1, its rim reaches 6.5 S
  *            pixels across and 4.5 S down, its fill's grain is constant
  *            over each S x S cell, magnified it is within 1 of the
  *            reference, outside the letters it is the 1x strip of its sheet
@@ -48,7 +48,7 @@
  *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
- *   reduce   rd_Post(RD_POST_REDUCTION) on a synthetic 512x512 scene
+ *   reduce   rd_post(RD_POST_REDUCTION) on a synthetic 512x512 scene
  *            against a CPU reference of gsb_Reduction (the GS bilinear at
  *            the GS sample points, tint, border crop) exactly (the
  *            reduction is drawn through the GS sprite model)
@@ -77,7 +77,7 @@
  *            0..0xFF, Z across the background's) over a noise background
  *            (RGB, alpha both sides of the MSB) in SCENE with its depth, and
  *            the Z-less half in DISPLAY: replayed with the two-pass blend
- *            fallback off and on (rd_SetNoDual), SCENE, its depth and
+ *            fallback off and on (rd_set_no_dual), SCENE, its depth and
  *            DISPLAY equal byte for byte; the pipeline cache is cleared
  *            after it (its states are outside the reachable set)
  *   pipes    every pipeline created is in the enumerated reachable set,
@@ -118,7 +118,7 @@
  *   vu seams (issue 26) in the same four renderers, over a grey clear at
  *            Z 0 with GEQUAL and Z write, the clear's pixels within one
  *            output pixel of a shared edge (parameter 0.1..0.9): none for
- *            S1 a code-32 triangle beside a GIF triangle (rd_ScreenPrims)
+ *            S1 a code-32 triangle beside a GIF triangle (rd_screen_prims)
  *            at the VU's ftoi4 corners, the VU on either side; S2 two
  *            meshes under matrices 0.01 GS pixel apart whose shared
  *            vertices have equal ftoi4; S3 a code-36 strip whose first
@@ -212,22 +212,22 @@ static void sprite(uint32_t tw, uint32_t th, int32_t x0, int32_t y0, int32_t x1,
     const int32_t ox = (2048 - (int32_t)tw / 2) * 16, oy = (2048 - (int32_t)th / 2) * 16;
     RdScreenVtx v[2] = {vtx(ox + x0, oy + y0, 0, c, (float)u0, (float)v0),
                         vtx(ox + x1, oy + y1, 0, c, (float)u1, (float)v1)};
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 1, 0);
 }
 
 static void opaque2D(void)
 {
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
 }
 
 static uint8_t *readTarget(RdTargetId id, uint32_t *w, uint32_t *h)
 {
     static uint8_t buf[512 * 512 * 4];
-    if (!rd__ReadTarget(rd_Target(id), buf, sizeof(buf), w, h)) {
+    if (!rd__read_target(rd_target(id), buf, sizeof(buf), w, h)) {
         CHECK(0, "readback of target %d", (int)id);
         return NULL;
     }
@@ -240,19 +240,19 @@ static void testOrder(void)
 {
     static const uint8_t red[4] = {200, 0, 0, 0x80}, blue[4] = {0, 0, 200, 0x80};
     static const uint8_t black[4] = {0, 0, 0, 0};
-    rd_BeginFrame();
-    rd_SelectList(5);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
     opaque2D();
-    rd_TextureOff();
+    rd_texture_off();
     sprite(256, 128, 0, 0, 16 * 16, 16 * 16, red, 0, 0, 0, 0);
-    rd_SelectList(1);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    rd_select_list(1);
+    rd_clear_target(rd_target(RD_TARGET_WORK0), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
     opaque2D();
-    rd_TextureOff();
+    rd_texture_off();
     sprite(256, 128, 0, 0, 16 * 16, 16 * 16, blue, 0, 0, 0, 0);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK0, &w, &h);
     if (img) {
@@ -285,58 +285,58 @@ static void testRailing(int fba)
             p[3] = wire ? 0x80 : 0;
         }
     }
-    RdTex t = rd_CreateTexture(16, 16, lattice, RD_TEXA_80_80, "lattice");
+    RdTex t = rd_create_texture(16, 16, lattice, RD_TEXA_80_80, "lattice");
     static const uint8_t clr[4] = {0, 0, 0, 0}, grey[4] = {0x80, 0x80, 0x80, 0x80};
     static const uint8_t wall[4] = {30, 160, 60, 0x80};
     const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     /* the railing: 16 x 16 texels (UVs in 1/16 texel) magnified 4x at
      * (64, 64), in world space like the game's 3D sprites */
-    rd_SelectList(1);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(0x5160D);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_PABE(0);
-    rd_FBA(fba);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_select_list(1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(0x5160D);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(fba);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     {
         RdScreenVtx v[2] = {vtx(ox + 64 * 16, oy + 64 * 16, RAIL_Z, grey, 0.0f, 0.0f),
                             vtx(ox + 128 * 16, oy + 128 * 16, RAIL_Z, grey, 256.0f, 256.0f)};
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
     }
     /* the wall behind it, drawn later: opaque, Z GEQUAL, Z write */
-    rd_SelectList(2);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(RD_TEST_Z_GEQUAL);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_FBA(0);
-    rd_TextureOff();
+    rd_select_list(2);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_fba(0);
+    rd_texture_off();
     {
         RdScreenVtx v[2] = {vtx(ox + 48 * 16, oy + 48 * 16, WALL_Z, wall, 0.0f, 0.0f),
                             vtx(ox + 144 * 16, oy + 144 * 16, WALL_Z, wall, 0.0f, 0.0f)};
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
     static float depth[512 * 512];
     uint32_t dw = 0, dh = 0;
     const bool zOk =
-        rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), depth, sizeof(depth), &dw, &dh);
+        rd__read_target_depth(rd_target(RD_TARGET_SCENE), depth, sizeof(depth), &dw, &dh);
     CHECK(zOk && dw == w && dh == h, "railing: depth readback");
     if (!img || !zOk) {
-        rd_DestroyTexture(t);
+        rd_destroy_texture(t);
         return;
     }
-    const float zScale = rd__TargetZScale(rd_Target(RD_TARGET_SCENE).id);
-    const float railD = rd__GsDepth(RAIL_Z, zScale), wallD = rd__GsDepth(WALL_Z, zScale);
+    const float zScale = rd__target_z_scale(rd_target(RD_TARGET_SCENE).id);
+    const float railD = rd__gs_depth(RAIL_Z, zScale), wallD = rd__gs_depth(WALL_Z, zScale);
     /* the depth grows with GS Z (gs_z_to_depth) */
     CHECK(wallD < railD, "railing: the wall is behind the railing (%g, %g)", (double)railD,
           (double)wallD);
@@ -368,7 +368,7 @@ static void testRailing(int fba)
           holeZBad, holes);
     CHECK(wireBad == 0 && wireZBad == 0, "railing (FBA %d): wires %d off colour, %d off Z", fba,
           wireBad, wireZBad);
-    rd_DestroyTexture(t);
+    rd_destroy_texture(t);
 }
 
 /* ------------------------------------------------------------ DATE, flat */
@@ -382,29 +382,29 @@ static void testDateFlat(void)
     static const uint8_t a0[4] = {10, 10, 10, 0}, a1[4] = {20, 20, 20, 0x80};
     static const uint8_t red[4] = {200, 0, 0, 0x80}, green[4] = {0, 200, 0, 0x80};
     static const uint8_t blue[4] = {0, 0, 200, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(5);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
     opaque2D();
-    rd_TextureOff();
+    rd_texture_off();
     sprite(256, 128, 0, 0, 128 * 16, 64 * 16, a0, 0, 0, 0, 0);
     sprite(256, 128, 128 * 16, 0, 256 * 16, 64 * 16, a1, 0, 0, 0, 0);
-    rd_TestGs(RD_TEST_RGBONLY_DATE1); /* DATE DATM 1, RGB-only AFAIL with ATE off */
+    rd_test_gs(RD_TEST_RGBONLY_DATE1); /* DATE DATM 1, RGB-only AFAIL with ATE off */
     sprite(256, 128, 0, 0, 256 * 16, 32 * 16, red, 0, 0, 0, 0);
-    rd_TestGs(RD_TEST_DATE0); /* DATE DATM 0 */
+    rd_test_gs(RD_TEST_DATE0); /* DATE DATM 0 */
     sprite(256, 128, 0, 32 * 16, 256 * 16, 64 * 16, green, 0, 0, 0, 0);
     /* a flat triangle below: last vertex blue */
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_Gouraud(0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_gouraud(0);
     {
         const int32_t ox = (2048 - 128) * 16, oy = (2048 - 64) * 16;
         RdScreenVtx t[3] = {vtx(ox + 0, oy + 64 * 16, 0, red, 0, 0),
                             vtx(ox + 256 * 16, oy + 64 * 16, 0, green, 0, 0),
                             vtx(ox + 0, oy + 128 * 16, 0, blue, 0, 0)};
-        rd_ScreenPrims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_UI, 1, 0);
+        rd_screen_prims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_UI, 1, 0);
     }
-    rd_Gouraud(1);
-    rd_EndFrame(0);
+    rd_gouraud(1);
+    rd_end_frame(0);
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK0, &w, &h);
     if (!img) {
@@ -424,13 +424,13 @@ static void testDateFlat(void)
 
 /* Consecutive screen-prim commands under the same state are one
  * draw (rd_replay.c doScreen).  The frame is replayed merged and with
- * merging off (rd__SetScreenMerge); WORK0 must be the same bytes, and the
+ * merging off (rd__set_screen_merge); WORK0 must be the same bytes, and the
  * draws are counted (RdPerfRecord screenCmds, screenDraws). */
 static void runReplay(const RdFrame *f, bool merge, uint8_t *dst, uint32_t *cmds, uint32_t *draws)
 {
-    rd__SetScreenMerge(merge);
-    rd__ReplayFrame(f, 0, false);
-    rd__SetScreenMerge(true);
+    rd__set_screen_merge(merge);
+    rd__replay_frame(f, 0, false);
+    rd__set_screen_merge(true);
     *cmds = g_rdPerf.screenCmds;
     *draws = g_rdPerf.screenDraws;
     uint32_t w, h;
@@ -446,7 +446,7 @@ static void checkRun(const char *what, uint32_t wantCmds, uint32_t wantDraws)
     uint32_t c0, d0, c1, d1;
     memset(merged, 0, sizeof(merged));
     memset(seq, 0xFF, sizeof(seq));
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     CHECK(f != NULL, "%s: no closed frame", what);
     if (!f) {
         return;
@@ -481,46 +481,46 @@ static void testScreenRuns(void)
     /* overlapping, differently coloured sprites under one state, blended
      * (LERP As: the result depends on the order), alpha above and below
      * 0x80: one run, one draw, the bytes of six draws */
-    rd_BeginFrame();
-    rd_SelectList(5);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_clear_target(rd_target(RD_TARGET_WORK0), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
     opaque2D();
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_TextureOff();
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_texture_off();
     for (uint32_t i = 0; i < 6; i++) {
         runSprite(10 + (int32_t)i * 17, 8 + (int32_t)i * 9, 90 + (int32_t)i * 19,
                   70 + (int32_t)i * 7, i, (uint8_t)(0x30 + i * 0x18));
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
     checkRun("overlapping run", 6, 1);
 
     /* the boundaries: a run of two; two DATE sprites under the same state
      * (the first writes alpha, so the second retakes the snapshot); two
      * AFAIL FB_ONLY sprites (two passes each, never merged); two sprites,
      * a scissor change, two more */
-    rd_BeginFrame();
-    rd_SelectList(5);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_clear_target(rd_target(RD_TARGET_WORK0), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
     opaque2D();
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_TextureOff();
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_texture_off();
     runSprite(0, 0, 120, 60, 0, 0x90);
     runSprite(60, 20, 200, 100, 1, 0x20);
-    rd_TestGs(RD_TEST_DATE0);
+    rd_test_gs(RD_TEST_DATE0);
     runSprite(20, 10, 160, 90, 2, 0xA0);
     runSprite(40, 30, 240, 120, 3, 0x50);
-    rd_TestGs(RD_TEST_AT_GT64_FBONLY);
+    rd_test_gs(RD_TEST_AT_GT64_FBONLY);
     runSprite(5, 40, 150, 110, 4, 0x60);
     runSprite(80, 0, 250, 80, 5, 0x70);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
     runSprite(0, 50, 100, 128, 0, 0x40);
     runSprite(30, 70, 130, 128, 1, 0x88);
-    rd_Scissor(16, 8, 200, 100);
+    rd_scissor(16, 8, 200, 100);
     runSprite(0, 0, 256, 128, 2, 0x30);
     runSprite(50, 30, 220, 110, 3, 0x58);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     checkRun("run boundaries", 2 + 2 + 4 + 4, 1 + 2 + 4 + 2);
 }
 
@@ -542,27 +542,27 @@ static void testAa1(void)
     const int32_t la[2] = {20 * 16 + 5, 40 * 16 + 7}, lb[2] = {220 * 16 + 3, 90 * 16 + 12};
     const int32_t t0[2] = {30 * 16 + 5, 140 * 16 + 10}, t1[2] = {225 * 16 + 13, 160 * 16 + 3},
                   t2[2] = {120 * 16 + 2, 240 * 16 + 8};
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
     opaque2D(); /* LERP As with ABE 0; WORLD prims, the space the game's AA1 draws use */
-    rd_TextureOff();
-    rd_AA1(1);
+    rd_texture_off();
+    rd_aa1(1);
     {
         RdScreenVtx v[2] = {vtx(ox + la[0], oy + la[1], 0, grey, 0, 0),
                             vtx(ox + lb[0], oy + lb[1], 0, grey, 0, 0)};
-        rd_ScreenPrims(RD_PRIM_LINES, v, 2, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_LINES, v, 2, RD_SPACE_WORLD, 1, 0);
     }
-    rd_ABE(1);
+    rd_abe(1);
     {
         RdScreenVtx v[3] = {vtx(ox + t0[0], oy + t0[1], 0, grey, 0, 0),
                             vtx(ox + t1[0], oy + t1[1], 0, grey, 0, 0),
                             vtx(ox + t2[0], oy + t2[1], 0, grey, 0, 0)};
-        rd_ScreenPrims(RD_PRIM_TRIANGLES, v, 3, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_TRIANGLES, v, 3, RD_SPACE_WORLD, 1, 0);
     }
-    rd_AA1(0);
-    rd_EndFrame(0);
+    rd_aa1(0);
+    rd_end_frame(0);
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
     if (!img) {
@@ -650,34 +650,34 @@ static void testSprites(void)
         tex24[i * 4 + 2] = zero ? 0 : (uint8_t)(hsh >> 16);
         tex24[i * 4 + 3] = 0xEE; /* ignored for RGB24 */
     }
-    RdTex t32 = rd_CreateTexture(16, 16, tex, RD_TEXA_80_80, "t32");
-    RdTex t24 = rd_CreateTextureSrc(16, 16, tex24, RD_TEXSRC_RGB24, "t24");
+    RdTex t32 = rd_create_texture(16, 16, tex, RD_TEXA_80_80, "t32");
+    RdTex t24 = rd_create_texture_src(16, 16, tex24, RD_TEXSRC_RGB24, "t24");
 
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
     opaque2D();
-    rd_TextureOff();
+    rd_texture_off();
     for (int i = 0; i < nc; i++) {
         sprite(256, 256, cases[i].x0, cases[i].y0, cases[i].x1, cases[i].y1, cases[i].c, 0, 0, 0,
                0);
     }
     /* textured 1:1 with the +8 UV nudge, nearest */
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t32, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t32, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(256, 256, 120 * 16, 100 * 16, 136 * 16, 116 * 16, grey, 8, 8, 16 * 16 + 8, 16 * 16 + 8);
     /* RGB24 source under TEXA 7F/81+AEM */
-    rd_TexA(RD_TEXA_7F_81_AEM);
-    rd_Texture(t24, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_tex_a(RD_TEXA_7F_81_AEM);
+    rd_texture(t24, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(256, 256, 150 * 16, 100 * 16, 166 * 16, 116 * 16, grey, 8, 8, 16 * 16 + 8, 16 * 16 + 8);
     /* UV offset: a quarter of the texture to the right, clamped */
-    rd_TexA(RD_TEXA_80_80);
-    rd_Texture(t32, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_UVOffset(0.25f, 0.0f);
+    rd_tex_a(RD_TEXA_80_80);
+    rd_texture(t32, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_uv_offset(0.25f, 0.0f);
     sprite(256, 256, 180 * 16, 100 * 16, 192 * 16, 101 * 16, grey, 8, 8, 12 * 16 + 8, 1 * 16 + 8);
-    rd_UVOffset(0.0f, 0.0f);
-    rd_EndFrame(0);
+    rd_uv_offset(0.0f, 0.0f);
+    rd_end_frame(0);
 
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
@@ -726,11 +726,11 @@ static void testSprites(void)
         const uint8_t *p = img + ((size_t)100 * w + (size_t)(180 + x)) * 4;
         int want[4] = {s[0], s[1], s[2], s[3]};
         if (memcmp(p, s, 4) != 0) {
-            pixFail("rd_UVOffset 0.25", 180 + x, 100, p, want);
+            pixFail("rd_uv_offset 0.25", 180 + x, 100, p, want);
         }
     }
-    rd_DestroyTexture(t32);
-    rd_DestroyTexture(t24);
+    rd_destroy_texture(t32);
+    rd_destroy_texture(t24);
 }
 
 /* ------------------------------------------------------------------ TEXA */
@@ -771,57 +771,57 @@ static void testTexa(void)
         tex[i * 4 + 3] = (uint8_t)((hsh >> 16) & 1); /* the A bit */
     }
     static const uint8_t black[4] = {0, 0, 0, 0}, grey[4] = {0x80, 0x80, 0x80, 0x80};
-    RdTex t16 = rd_CreateTextureSrc(N, N, tex, RD_TEXSRC_RGBA16, "texa rgba16");
-    RdTex t32 = rd_CreateTexture(N, N, tex, RD_TEXA_80_80, "texa rgba32");
+    RdTex t16 = rd_create_texture_src(N, N, tex, RD_TEXSRC_RGBA16, "texa rgba16");
+    RdTex t32 = rd_create_texture(N, N, tex, RD_TEXA_80_80, "texa rgba32");
 
     /* the planner */
     {
         RdStateBlock st;
-        rd__ResetStateBlock(&st);
+        rd__reset_state_block(&st);
         st.ds.texEnabled = 1;
         st.tex = t16.id;
         st.ds.texa = RD_TEXA_7F_81_AEM;
         st.ds.magFilter = st.ds.minFilter = RD_FILTER_LINEAR;
         RdDrawPass dp[2];
-        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
-                           RHI_FMT_UNKNOWN, dp);
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
         CHECK(dp[0].key.fs == RD_FS_SPRITE_TEXA, "texa: RGBA16, AEM, bilinear: sprite_texa_ps");
         st.ds.magFilter = RD_FILTER_NEAREST;
-        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
-                           RHI_FMT_UNKNOWN, dp);
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
         CHECK(dp[0].key.fs == RD_FS_SPRITE_TEXA, "texa: linear MIN alone: sprite_texa_ps");
         st.ds.minFilter = RD_FILTER_NEAREST;
-        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
-                           RHI_FMT_UNKNOWN, dp);
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
         CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: nearest: sprite_ps");
         st.ds.magFilter = st.ds.minFilter = RD_FILTER_LINEAR;
         st.ds.texa = RD_TEXA_80_80;
-        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
-                           RHI_FMT_UNKNOWN, dp);
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
         CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: TEXA 80/80: sprite_ps");
         st.ds.texa = RD_TEXA_80_80_AEM;
         st.tex = t32.id;
-        rd__PlanScreenDraw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
-                           RHI_FMT_UNKNOWN, dp);
+        rd__plan_screen_draw(&st, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
         CHECK(dp[0].key.fs == RD_FS_SPRITE, "texa: RGBA32: sprite_ps");
     }
 
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
     opaque2D();
-    rd_TexA(RD_TEXA_7F_81_AEM);
-    rd_Texture(t16, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_tex_a(RD_TEXA_7F_81_AEM);
+    rd_texture(t16, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     sprite(256, 256, 10 * 16, 10 * 16, (10 + N * S) * 16, (10 + N * S) * 16, grey, 8, 8, N * 16 + 8,
            N * 16 + 8);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     /* UV 10 + 4 x: off the texel edges, where the nearest texel is unambiguous */
     sprite(256, 256, 100 * 16, 10 * 16, (100 + N * S) * 16, (10 + N * S) * 16, grey, 10, 10,
            N * 16 + 10, N * 16 + 10);
-    rd_TexA(RD_TEXA_80_80);
-    rd_EndFrame(0);
+    rd_tex_a(RD_TEXA_80_80);
+    rd_end_frame(0);
 
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
@@ -894,8 +894,8 @@ static void testTexa(void)
         CHECK(after > 100, "texa: the texture exercises the order (%d pixels)", after);
         CHECK(badN == 0, "texa: %d nearest pixels differ", badN);
     }
-    rd_DestroyTexture(t16);
-    rd_DestroyTexture(t32);
+    rd_destroy_texture(t16);
+    rd_destroy_texture(t32);
 }
 
 /* ------------------------------------------------------------------- STQ */
@@ -918,19 +918,19 @@ static void testStq(void)
             p[3] = 0x80;
         }
     }
-    RdTex t = rd_CreateTexture(64, 4, tex, RD_TEXA_80_80, "stq");
+    RdTex t = rd_create_texture(64, 4, tex, RD_TEXA_80_80, "stq");
     static const uint8_t black[4] = {0, 0, 0, 0}, white[4] = {0x80, 0x80, 0x80, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), black, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_ABE(0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_abe(0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     const int32_t ox = (2048 - 128) * 16, oy = (2048 - 128) * 16;
     for (int strip = 0; strip < 2; strip++) {
         const float q1 = strip ? 1.0f : 0.25f;
@@ -940,9 +940,9 @@ static void testStq(void)
                             vtx(ox + 144 * 16, oy + y0, 0, white, q1, 0.0f),
                             vtx(ox + 144 * 16, oy + y1, 0, white, q1, 1.0f)};
         v[2].q = v[3].q = q1;
-        rd_ScreenPrims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
+        rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w, h;
     const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
     if (img) {
@@ -962,20 +962,20 @@ static void testStq(void)
             }
         }
     }
-    rd_DestroyTexture(t);
+    rd_destroy_texture(t);
 }
 
 /* ------------------------------------------------------------------ font */
 
 static void fontState(void)
 {
-    rd_Blend(RD_BLEND_LERP_AS, 0, 1); /* port/ui/font.c setState */
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_FBA(0);
-    rd_PABE(0);
-    rd_ABE(1);
-    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_blend(RD_BLEND_LERP_AS, 0, 1); /* port/ui/font.c setState */
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_fba(0);
+    rd_pabe(0);
+    rd_abe(1);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
 }
 
 static void testFont(const char *dir)
@@ -989,17 +989,17 @@ static void testFont(const char *dir)
         rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 0xFF;
         rgba[i * 4 + 3] = cov[i];
     }
-    RdTex r8 = rd_CreateTextureR8(4, 4, cov, "font r8");
-    RdTex t32 = rd_CreateTexture(4, 4, rgba, RD_TEXA_80_80, "font rgba8");
+    RdTex r8 = rd_create_texture_r8(4, 4, cov, "font r8");
+    RdTex t32 = rd_create_texture(4, 4, rgba, RD_TEXA_80_80, "font rgba8");
     static const uint8_t bg[4] = {40, 80, 120, 0x80};
     static const uint8_t col[4] = {0x70, 0x50, 0x80, 0x60};
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK1), bg, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), bg, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
     fontState();
     for (int k = 0; k < 2; k++) {
-        rd_Texture(k ? t32 : r8, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_texture(k ? t32 : r8, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         /* 1:1, the +8 nudge: each pixel samples a texel centre */
         sprite(256, 256, (10 + 10 * k) * 16, 10 * 16, (14 + 10 * k) * 16, 14 * 16, col, 8, 8,
                4 * 16 + 8, 4 * 16 + 8);
@@ -1007,7 +1007,7 @@ static void testFont(const char *dir)
         sprite(256, 256, (40 + 40 * k) * 16, 40 * 16, (72 + 40 * k) * 16, 72 * 16, col, 0, 0,
                4 * 16, 4 * 16);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w, h;
     uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
     if (img) {
@@ -1047,9 +1047,9 @@ static void testFont(const char *dir)
         memcpy(first, img, (size_t)w * h * 4); /* readTarget's buffer is as large */
         char path[1024];
         snprintf(path, sizeof(path), "%s/rd_pixel_font.rddump", dir);
-        CHECK(rd_DumpFrame(path), "rd_DumpFrame (font)");
+        CHECK(rd_dump_frame(path), "rd_dump_frame (font)");
         RdFrame f;
-        if (rd__LoadFrame(path, &f)) {
+        if (rd__load_frame(path, &f)) {
             int r8s = 0;
             for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                 const RdTexRec *t = &g_rd.textures[i];
@@ -1059,21 +1059,21 @@ static void testFont(const char *dir)
             }
             CHECK(r8s == 1, "the loaded dump has the R8 atlas (%d)", r8s);
             static const uint8_t junk[4] = {1, 2, 3, 4};
-            rd_BeginFrame();
-            rd_SelectList(0);
-            rd_ClearTarget(rd_Target(RD_TARGET_WORK1), junk, 0, 0);
-            rd_EndFrame(0);
-            CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the loaded font frame");
+            rd_begin_frame();
+            rd_select_list(0);
+            rd_clear_target(rd_target(RD_TARGET_WORK1), junk, 0, 0);
+            rd_end_frame(0);
+            CHECK(rd__replay_frame(&f, (int)f.keep, false), "replay of the loaded font frame");
             uint8_t *again = readTarget(RD_TARGET_WORK1, &w, &h);
             CHECK(again && memcmp(again, first, (size_t)w * h * 4) == 0,
                   "font dump -> load -> replay: the same WORK1");
-            rd__FrameFree(&f);
+            rd__frame_free(&f);
         } else {
-            CHECK(0, "rd__LoadFrame (font)");
+            CHECK(0, "rd__load_frame (font)");
         }
     }
-    rd_DestroyTexture(r8);
-    rd_DestroyTexture(t32);
+    rd_destroy_texture(r8);
+    rd_destroy_texture(t32);
 }
 
 /* ------------------------------------------------------------ sheet text
@@ -1135,13 +1135,13 @@ static RdTex sheetRefTexture(const RdSheetStyle *st)
     for (int y = 0; y < SHEET_H; y++) {
         for (int x = 0; x < SHEET_W; x++) {
             uint8_t g, a;
-            sheetref_Texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
+            sheetref_texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
             uint8_t *p = &rgba[(y * SHEET_W + x) * 4];
             p[0] = p[1] = p[2] = g;
             p[3] = a;
         }
     }
-    return rd_CreateTexture(SHEET_W, SHEET_H, rgba, RD_TEXA_80_80, "sheet ref");
+    return rd_create_texture(SHEET_W, SHEET_H, rgba, RD_TEXA_80_80, "sheet ref");
 }
 
 /* the strip at (x, y) GS pixels of SCENE, sw x sh pixels, the whole
@@ -1150,7 +1150,7 @@ static void sheetDraw(RdTex t, RdTcc tcc, int x, int y, int sw, int sh, int nudg
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     const int n = nudge ? 8 : 0;
-    rd_Texture(t, RD_TEXFN_MODULATE, tcc);
+    rd_texture(t, RD_TEXFN_MODULATE, tcc);
     sprite(512, 512, x * 16, y * 16, (x + sw) * 16, (y + sh) * 16, grey, n, n, SHEET_W * 16 + n,
            SHEET_H * 16 + n);
 }
@@ -1158,10 +1158,10 @@ static void sheetDraw(RdTex t, RdTcc tcc, int x, int y, int sw, int sh, int nudg
 static void sheetFrameBegin(void)
 {
     static const uint8_t clr[4] = {0, 0, 0, 0};
-    rd_BeginFrame();
-    rd_SelectList(1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), (RdTarget){0}, 512, 512, 0);
+    rd_begin_frame();
+    rd_select_list(1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, 512, 512, 0);
     fontState();
 }
 
@@ -1184,7 +1184,7 @@ static int sheetWorst(const uint8_t *img, uint32_t w, int s, int ax, int ay, int
     return worst;
 }
 
-/* 1:1 at texel centres (scene scale 1): every pixel is sheetref_Texel's */
+/* 1:1 at texel centres (scene scale 1): every pixel is sheetref_texel's */
 static int sheetExact(const uint8_t *img, uint32_t w, int x0, int yRgb, int yA,
                       const RdSheetStyle *st, int *rim)
 {
@@ -1193,13 +1193,13 @@ static int sheetExact(const uint8_t *img, uint32_t w, int x0, int yRgb, int yA,
     for (int y = 0; y < SHEET_H; y++) {
         for (int x = 0; x < SHEET_W; x++) {
             uint8_t g, a;
-            sheetref_Texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
+            sheetref_texel(s_sheetCov, SHEET_W, SHEET_H, x, y, st, &g, &a);
             const uint8_t *pc = &img[((size_t)(yRgb + y) * w + (size_t)(x0 + x)) * 4];
             const uint8_t *pa = &img[((size_t)(yA + y) * w + (size_t)(x0 + x)) * 4];
             if (pc[0] != g || pc[1] != g || pc[2] != g || pa[3] != a) {
                 const int want[4] = {g, g, g, a};
                 const uint8_t got[4] = {pc[0], pc[1], pc[2], pa[3]};
-                bad += pixFail("sheet 1:1 against sheetref_Texel", x, y, got, want);
+                bad += pixFail("sheet 1:1 against sheetref_texel", x, y, got, want);
             }
             /* a rim texel: no coverage of its own, some within the rim */
             if (s_sheetCov[y * SHEET_W + x] == 0 && a != 0) {
@@ -1230,7 +1230,7 @@ static void sheetOvQuad(RdTex t, int x, int y)
     RdScreenVtx v[2] = {vtx(x * 16, y * 16, 0, c, 0.0f, 0.0f),
                         vtx((x + SHEET_W * SHEET_OV_M) * 16, (y + SHEET_H * SHEET_OV_M) * 16, 0, c,
                             (float)(SHEET_W * 16), (float)(SHEET_H * 16))};
-    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, t, RD_BLEND_LERP_AS);
+    rd_overlay_prims(RD_PRIM_SPRITES, v, 2, t, RD_BLEND_LERP_AS);
 }
 
 static void sheetOvCallback(const RdOverlayCtx *ctx, void *user)
@@ -1247,12 +1247,12 @@ static void testSheetOverlay(RdTex sheet, RdTex ref)
     memset(&ov, 0, sizeof(ov));
     ov.sheet = sheet;
     ov.ref = ref;
-    rd_SetPresentOverlay(sheetOvCallback, &ov);
-    CHECK(rd_PresentBlank(), "sheet overlay: rd_PresentBlank");
+    rd_set_present_overlay(sheetOvCallback, &ov);
+    CHECK(rd_present_blank(), "sheet overlay: rd_present_blank");
     static uint8_t out[640 * 480 * 4];
     uint32_t ow = 0, oh = 0;
-    const bool ok = rd_ReadPresented(out, &ow, &oh) && ow == 640 && oh == 480;
-    rd_SetPresentOverlay(NULL, NULL);
+    const bool ok = rd_read_presented(out, &ow, &oh) && ow == 640 && oh == 480;
+    rd_set_present_overlay(NULL, NULL);
     CHECK(ok && ov.calls == 1, "sheet overlay: the presented output (%ux%u, %d calls)", ow, oh,
           ov.calls);
     if (!ok) {
@@ -1282,9 +1282,9 @@ static void testSheetText(const char *mode, int scale, const char *dir)
             s_sheetCov[y * SHEET_W + x] = sheetCov(x, y);
         }
     }
-    RdTex sheet = rd_CreateTextureSheet(SHEET_W, SHEET_H, s_sheetCov, &kSheetEn, "sheet");
+    RdTex sheet = rd_create_texture_sheet(SHEET_W, SHEET_H, s_sheetCov, &kSheetEn, "sheet");
     RdTex ref = sheetRefTexture(&kSheetEn);
-    const RdTexRec *sr = rd__TexRec(sheet.id);
+    const RdTexRec *sr = rd__tex_rec(sheet.id);
     CHECK(sr && sr->format == RD_TEXEL_SHEET && sr->sheet[0] == 64 && sr->sheet[1] == 0 &&
               sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
           "%s: the sheet texture's record", mode);
@@ -1303,7 +1303,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
     sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
     sheetDraw(sheet, RD_TCC_RGBA, 264, 184, SHEET_W * 2, SHEET_H * 2, 0);
     sheetDraw(sheet, RD_TCC_RGBA, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float fsx = 1.0f, fsy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
@@ -1344,25 +1344,25 @@ static void testSheetText(const char *mode, int scale, const char *dir)
         if (scale == 1) {
             int rim = 0;
             const int bad = sheetExact(img, w, 264, 8, 40, &kSheetEn, &rim);
-            CHECK(bad == 0 && rim > 0, "%s: 1:1 %d texels off sheetref_Texel, %d rim texels", mode,
+            CHECK(bad == 0 && rim > 0, "%s: 1:1 %d texels off sheetref_texel, %d rim texels", mode,
                   bad, rim);
         }
     }
     free(img);
 
     if (scale == 1) {
-        /* the style follows rd_SetTextureSheetStyle: the French rim level,
+        /* the style follows rd_set_texture_sheet_style: the French rim level,
          * a faint rim (fewer rim texels), then no rim (the rim texels go
          * transparent) */
         static const RdSheetStyle *const styles[3] = {&kSheetFr, &kSheetFaint, &kSheetPlain};
         static const char *const names[3] = {"French", "faint", "plain"};
         int rimFull = 0;
         for (int k = 0; k < 3; k++) {
-            rd_SetTextureSheetStyle(sheet, styles[k]);
+            rd_set_texture_sheet_style(sheet, styles[k]);
             sheetFrameBegin();
             sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
             sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
-            rd_EndFrame(0);
+            rd_end_frame(0);
             img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
             if (img) {
                 int rim = 0;
@@ -1370,17 +1370,17 @@ static void testSheetText(const char *mode, int scale, const char *dir)
                 CHECK(bad == 0 && (k == 2   ? rim == 0
                                    : k == 1 ? rim > 0 && rim < rimFull
                                             : rim > 0),
-                      "%s: style %d: %d texels off sheetref_Texel, %d rim texels", mode, k, bad,
+                      "%s: style %d: %d texels off sheetref_texel, %d rim texels", mode, k, bad,
                       rim);
                 rimFull = k == 0 ? rim : rimFull;
                 printf("  sheet style %s: %d rim texels, 1:1 %d off\n", names[k], rim, bad);
             }
             free(img);
         }
-        rd_SetTextureSheetStyle(sheet, &kSheetEn);
-        rd_SetTextureSheetStyle(ref, &kSheetFr); /* not a sheet: ignored */
-        const RdTexRec *rr = rd__TexRec(ref.id);
-        CHECK(rr && rr->sheet[1] == 0, "rd_SetTextureSheetStyle ignores an RGBA8 texture");
+        rd_set_texture_sheet_style(sheet, &kSheetEn);
+        rd_set_texture_sheet_style(ref, &kSheetFr); /* not a sheet: ignored */
+        const RdTexRec *rr = rd__tex_rec(ref.id);
+        CHECK(rr && rr->sheet[1] == 0, "rd_set_texture_sheet_style ignores an RGBA8 texture");
 
         testSheetOverlay(sheet, ref);
 
@@ -1393,16 +1393,16 @@ static void testSheetText(const char *mode, int scale, const char *dir)
         static const RdSheetStyle *const dumped[2] = {&kSheetFr, &kSheetFaint};
         static const uint8_t dumpedWeight[2] = {64, 21};
         for (int k = 0; k < 2; k++) {
-            rd_SetTextureSheetStyle(sheet, dumped[k]);
+            rd_set_texture_sheet_style(sheet, dumped[k]);
             sheetFrameBegin();
             sheetDraw(sheet, RD_TCC_RGBA, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
-            rd_EndFrame(0);
+            rd_end_frame(0);
             img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
             char path[1024];
             snprintf(path, sizeof(path), "%s/rd_pixel_sheet%d.rddump", dir, k);
-            CHECK(rd_DumpFrame(path), "rd_DumpFrame (sheet style %d)", k);
+            CHECK(rd_dump_frame(path), "rd_dump_frame (sheet style %d)", k);
             RdFrame f;
-            if (img && rd__LoadFrame(path, &f)) {
+            if (img && rd__load_frame(path, &f)) {
                 int sheets = 0;
                 for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                     const RdTexRec *t = &g_rd.textures[i];
@@ -1416,32 +1416,32 @@ static void testSheetText(const char *mode, int scale, const char *dir)
                 CHECK(sheets == 1, "the loaded dump has the sheet texture with style %d (%d)", k,
                       sheets);
                 static const uint8_t junk[4] = {1, 2, 3, 4};
-                rd_BeginFrame();
-                rd_SelectList(0);
-                rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 0, 0);
-                rd_EndFrame(0);
-                CHECK(rd__ReplayFrame(&f, (int)f.keep, false),
+                rd_begin_frame();
+                rd_select_list(0);
+                rd_clear_target(rd_target(RD_TARGET_SCENE), junk, 0, 0);
+                rd_end_frame(0);
+                CHECK(rd__replay_frame(&f, (int)f.keep, false),
                       "replay of the loaded sheet frame (style %d)", k);
                 uint32_t w2 = 0, h2 = 0;
                 uint8_t *again = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
                 CHECK(again && w2 == w && h2 == h && memcmp(again, img, (size_t)w * h * 4) == 0,
                       "sheet dump -> load -> replay (style %d): the same SCENE", k);
                 free(again);
-                rd__FrameFree(&f);
+                rd__frame_free(&f);
             } else {
-                CHECK(0, "rd__LoadFrame (sheet style %d)", k);
+                CHECK(0, "rd__load_frame (sheet style %d)", k);
             }
             free(img);
         }
     }
-    rd_DestroyTexture(sheet);
-    rd_DestroyTexture(ref);
+    rd_destroy_texture(sheet);
+    rd_destroy_texture(ref);
 }
 
 /* A strip rasterised at S texels a sheet texel
  * (style.scale S): sheetCov's shapes S times finer, plus a band of noise at
  * the strip's own texels (detail finer than a sheet texel), drawn 1:1 at
- * the texel centres in a 1x scene: every pixel is sheetref_Texel's at
+ * the texel centres in a 1x scene: every pixel is sheetref_texel's at
  * scale S within 1; the rim beside the solid block reaches 6.5 S pixels
  * across (ICO_SHEET_RX sheet texels, the sheets' width, and the half
  * sheet texel of the magnified ramp) and 4.5 S down; the fill's grain is
@@ -1457,7 +1457,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
  * rd_pixel_rim_s<S>.png (each pixel 4 x 4). */
 #define SCALED_MAX 4
 
-/* the coverage, and below it the rim (rd_SheetRim) */
+/* the coverage, and below it the rim (rd_sheet_rim) */
 static uint8_t s_scaledCov[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX * 2];
 /* its sheet texels' coverage, the means of the S x S cells */
 static uint8_t s_scaledCov1[SHEET_W * SHEET_H];
@@ -1518,29 +1518,29 @@ static void testSheetScaled(int S, const char *dir)
             s_scaledCov[y * W + x] = scaledCov(x, y, S);
         }
     }
-    rd_SheetRim(s_scaledCov, (uint32_t)W, (uint32_t)H, (uint32_t)S, 0, 0, W, H,
-                s_scaledCov + (size_t)W * (size_t)H);
+    rd_sheet_rim(s_scaledCov, (uint32_t)W, (uint32_t)H, (uint32_t)S, 0, 0, W, H,
+                 s_scaledCov + (size_t)W * (size_t)H);
     RdSheetStyle st = kSheetEn;
     st.scale = (uint8_t)S;
     RdTex sheet =
-        rd_CreateTextureSheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &st, "sheet S");
+        rd_create_texture_sheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &st, "sheet S");
     static uint8_t rgba[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX * 4];
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             uint8_t g, a;
-            sheetref_Texel(s_scaledCov, (uint32_t)W, (uint32_t)H, x, y, &st, &g, &a);
+            sheetref_texel(s_scaledCov, (uint32_t)W, (uint32_t)H, x, y, &st, &g, &a);
             uint8_t *q = &rgba[(y * W + x) * 4];
             q[0] = q[1] = q[2] = g;
             q[3] = a;
         }
     }
-    RdTex ref = rd_CreateTexture((uint32_t)W, (uint32_t)H, rgba, RD_TEXA_80_80, "sheet S ref");
+    RdTex ref = rd_create_texture((uint32_t)W, (uint32_t)H, rgba, RD_TEXA_80_80, "sheet S ref");
     /* the same strip in the plain style (the fill's grain),
        and the 1x strip of its sheet texels' mean coverage */
     RdSheetStyle plain = kSheetPlain;
     plain.scale = (uint8_t)S;
-    RdTex sheetPlain =
-        rd_CreateTextureSheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &plain, "sheet S plain");
+    RdTex sheetPlain = rd_create_texture_sheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &plain,
+                                               "sheet S plain");
     for (int y = 0; y < SHEET_H; y++) {
         for (int x = 0; x < SHEET_W; x++) {
             int sum = 0;
@@ -1552,8 +1552,8 @@ static void testSheetScaled(int S, const char *dir)
             s_scaledCov1[y * SHEET_W + x] = (uint8_t)((sum + S * S / 2) / (S * S));
         }
     }
-    RdTex sheet1 = rd_CreateTextureSheet(SHEET_W, SHEET_H, s_scaledCov1, &kSheetEn, "sheet S 1x");
-    const RdTexRec *sr = rd__TexRec(sheet.id);
+    RdTex sheet1 = rd_create_texture_sheet(SHEET_W, SHEET_H, s_scaledCov1, &kSheetEn, "sheet S 1x");
+    const RdTexRec *sr = rd__tex_rec(sheet.id);
     CHECK(sr && sr->sheetScale == S, "scaled sheet %d: the record's scale (%d)", S,
           sr ? sr->sheetScale : -1);
 
@@ -1564,13 +1564,13 @@ static void testSheetScaled(int S, const char *dir)
     const int yMA = yM + mh + 8;
     sheetFrameBegin();
     for (int k = 0; k < 2; k++) {
-        rd_Texture(sheet, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
+        rd_texture(sheet, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, 8 * 16, (k ? yA : 8) * 16, (8 + W) * 16, ((k ? yA : 8) + H) * 16, grey, 8,
                8, W * 16 + 8, H * 16 + 8);
     }
     for (int k = 0; k < 4; k++) {
         const int x = k & 1 ? 8 + mw + 8 : 8, y = k & 2 ? yMA : yM;
-        rd_Texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
+        rd_texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16, H * 16);
     }
     /* right of the 1:1 strip the 1x strip magnified S times, RGB
@@ -1580,14 +1580,14 @@ static void testSheetScaled(int S, const char *dir)
        reads its rim; and the plain strip 1:1 (RGBA) */
     const int x1x = 8 + W + 8, xPl = x1x + W + 8, n1 = 8 / S;
     for (int k = 0; k < 2; k++) {
-        rd_Texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
+        rd_texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + W) * 16, ((k ? yA : 8) + H) * 16, grey,
                n1, n1, SHEET_W * 16 + n1, SHEET_H * 16 + n1);
     }
-    rd_Texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(512, 512, xPl * 16, yA * 16, (xPl + W) * 16, (yA + H) * 16, grey, 8, 8, W * 16 + 8,
            H * 16 + 8);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float fsx = 1.0f, fsy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
@@ -1598,7 +1598,7 @@ static void testSheetScaled(int S, const char *dir)
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
                 uint8_t g, a;
-                sheetref_Texel(s_scaledCov, (uint32_t)W, (uint32_t)H, x, y, &st, &g, &a);
+                sheetref_texel(s_scaledCov, (uint32_t)W, (uint32_t)H, x, y, &st, &g, &a);
                 const uint8_t *pc = &img[((size_t)(8 + y) * w + (size_t)(8 + x)) * 4];
                 const uint8_t *pa = &img[((size_t)(yA + y) * w + (size_t)(8 + x)) * 4];
                 const int d[4] = {abs(pc[0] - g), abs(pc[1] - g), abs(pc[2] - g), abs(pa[3] - a)};
@@ -1608,7 +1608,7 @@ static void testSheetScaled(int S, const char *dir)
                 if (d[0] > 1 || d[1] > 1 || d[2] > 1 || d[3] > 1) {
                     const int want[4] = {g, g, g, a};
                     const uint8_t got[4] = {pc[0], pc[1], pc[2], pa[3]};
-                    bad += pixFail("scaled sheet 1:1 against sheetref_Texel", x, y, got, want);
+                    bad += pixFail("scaled sheet 1:1 against sheetref_texel", x, y, got, want);
                 }
             }
         }
@@ -1678,7 +1678,7 @@ static void testSheetScaled(int S, const char *dir)
             }
         }
         const int reachX = (2 * ICO_SHEET_RX + 1) * S / 2, reachY = (2 * ICO_SHEET_RY + 1) * S / 2;
-        printf("  scaled sheet %dx: 1:1 worst %d off sheetref_Texel and the 1x strip magnified "
+        printf("  scaled sheet %dx: 1:1 worst %d off sheetref_texel and the 1x strip magnified "
                "(%d over 1); rim %d px across (%d), %d down (%d); grain: %d texels unlike their "
                "cell's first, %d of %d cells another alpha; 1.5x worst %d (grey) %d (alpha) off "
                "the reference; outside the letters %d px (%d rim) worst %d off the 1x strip "
@@ -1686,7 +1686,7 @@ static void testSheetScaled(int S, const char *dir)
                S, worst, bad, left, reachX, up, reachY, mixed, levels, cells, wRgb, wA, out1x,
                rim1x, worst1x);
         CHECK(bad == 0,
-              "scaled sheet %d: 1:1 %d texels more than 1 off sheetref_Texel or the 1x "
+              "scaled sheet %d: 1:1 %d texels more than 1 off sheetref_texel or the 1x "
               "strip magnified",
               S, bad);
         CHECK(rim1x > 40 * S * S && worst1x <= 1,
@@ -1713,14 +1713,14 @@ static void testSheetScaled(int S, const char *dir)
             rimPngPut(img, w, 8, 8, yA, W, H, png, ow, 0);
             rimPngPut(img, w, x1x, 8, yA, W, H, png, ow, W * 4 + 16);
             snprintf(path, sizeof(path), "%s/rd_pixel_rim_s%d.png", dir, S);
-            CHECK(rd_WritePng(path, png, (uint32_t)ow, (uint32_t)oh, (uint32_t)ow * 4, 0),
+            CHECK(rd_write_png(path, png, (uint32_t)ow, (uint32_t)oh, (uint32_t)ow * 4, 0),
                   "scaled sheet %d: %s", S, path);
             free(png);
         }
         snprintf(path, sizeof(path), "%s/rd_pixel_sheet_s%d.rddump", dir, S);
-        CHECK(rd_DumpFrame(path), "rd_DumpFrame (scaled sheet %d)", S);
+        CHECK(rd_dump_frame(path), "rd_dump_frame (scaled sheet %d)", S);
         RdFrame f;
-        if (rd__LoadFrame(path, &f)) {
+        if (rd__load_frame(path, &f)) {
             int sheets = 0;
             for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                 const RdTexRec *t = &g_rd.textures[i];
@@ -1731,26 +1731,26 @@ static void testSheetScaled(int S, const char *dir)
                   "the loaded dump has the scaled sheet and its plain twin with scale %d (%d)", S,
                   sheets);
             static const uint8_t junk[4] = {1, 2, 3, 4};
-            rd_BeginFrame();
-            rd_SelectList(0);
-            rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 0, 0);
-            rd_EndFrame(0);
-            CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the scaled sheet frame");
+            rd_begin_frame();
+            rd_select_list(0);
+            rd_clear_target(rd_target(RD_TARGET_SCENE), junk, 0, 0);
+            rd_end_frame(0);
+            CHECK(rd__replay_frame(&f, (int)f.keep, false), "replay of the scaled sheet frame");
             uint32_t w2 = 0, h2 = 0;
             uint8_t *again = readScaled(RD_TARGET_SCENE, &w2, &h2, &fsx, &fsy);
             CHECK(again && w2 == w && h2 == h && memcmp(again, img, (size_t)w * h * 4) == 0,
                   "scaled sheet %d dump -> load -> replay: the same SCENE", S);
             free(again);
-            rd__FrameFree(&f);
+            rd__frame_free(&f);
         } else {
-            CHECK(0, "rd__LoadFrame (scaled sheet %d)", S);
+            CHECK(0, "rd__load_frame (scaled sheet %d)", S);
         }
     }
     free(img);
-    rd_DestroyTexture(sheet);
-    rd_DestroyTexture(sheetPlain);
-    rd_DestroyTexture(sheet1);
-    rd_DestroyTexture(ref);
+    rd_destroy_texture(sheet);
+    rd_destroy_texture(sheetPlain);
+    rd_destroy_texture(sheet1);
+    rd_destroy_texture(ref);
 }
 
 /* the same at a scene scale of the Enhanced preset */
@@ -1763,14 +1763,14 @@ static void testSheetTextAt(const char *mode, int scale)
     s.outputHeight = 480;
     s.aspect = 4.0f / 3.0f;
     s.sceneScale = (float)scale;
-    if (!rd_Init(512, 512, &s, NULL)) {
-        CHECK(0, "rd_Init (%s)", mode);
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_init (%s)", mode);
         return;
     }
     testSheetText(mode, scale, NULL);
-    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%s: %u validation errors", mode, verr);
-    rd_Shutdown();
+    rd_shutdown();
 }
 
 /* ------------------------------------------------------------- reduction */
@@ -1782,12 +1782,12 @@ static void drawScene(RdTex t)
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     static const uint8_t clr[4] = {0, 0, 0, 0};
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     opaque2D();
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     sprite(512, 512, 0, 0, 512 * 16, 512 * 16, grey, 8, 8, 512 * 16 + 8, 512 * 16 + 8);
 }
 
@@ -1801,17 +1801,17 @@ static void testReduction(const char *dir)
         s_scene[i * 4 + 2] = (uint8_t)hsh;
         s_scene[i * 4 + 3] = (uint8_t)((hsh >> 24) & 0x7F) + 0x40;
     }
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     /* tints at or below 0x80 (the game's reduction colours are of this kind) */
     const uint8_t tint[3] = {100, 128, 90};
-    rd_BeginFrame();
+    rd_begin_frame();
     drawScene(t);
-    rd_SelectList(12);
+    rd_select_list(12);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     memcpy(pp.rgba, tint, 3);
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
 
     uint32_t w, h;
     uint8_t *sc = readTarget(RD_TARGET_SCENE, &w, &h);
@@ -1863,8 +1863,8 @@ static void testReduction(const char *dir)
     printf("  reduction: worst channel error %d LSB\n", worst);
     char path[1024];
     snprintf(path, sizeof(path), "%s/rd_pixel_reduction.png", dir);
-    rd_WritePng(path, d, 512, 256, 512 * 4, 1);
-    rd_DestroyTexture(t);
+    rd_write_png(path, d, 512, 256, 512 * 4, 1);
+    rd_destroy_texture(t);
 }
 
 /* ------------------------------------------------------------------ keep */
@@ -1877,23 +1877,23 @@ static void testKeep(void)
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     memcpy(pp.rgba, white, 3);
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), col, 1, 0);
-    rd_SelectList(12);
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
-    rd_BeginFrame();
-    rd_SelectList(0); /* not replayed in a keep frame */
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), clr, 1, 0);
-    rd_SelectList(11);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), col, 1, 0);
+    rd_select_list(12);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    rd_begin_frame();
+    rd_select_list(0); /* not replayed in a keep frame */
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, 0);
+    rd_select_list(11);
     RdPostParams kp;
     memset(&kp, 0, sizeof(kp));
-    kp.dst = rd_Target(RD_TARGET_SCENE);
-    rd_Post(RD_POST_KEEP, &kp);
-    rd_SelectList(12);
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(1);
+    kp.dst = rd_target(RD_TARGET_SCENE);
+    rd_post(RD_POST_KEEP, &kp);
+    rd_select_list(12);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(1);
     uint32_t w, h;
     uint8_t *d = readTarget(RD_TARGET_DISPLAY, &w, &h);
     if (!d) {
@@ -1925,7 +1925,7 @@ static void testExact(void)
             feed[i * 4 + k] = init[k];
         }
     }
-    RdTex t = rd_CreateTexture(128, 128, NULL, RD_TEXA_80_80, "exact src");
+    RdTex t = rd_create_texture(128, 128, NULL, RD_TEXA_80_80, "exact src");
 
     static const struct {
         RdBlend eq;
@@ -1944,29 +1944,29 @@ static void testExact(void)
             src[i * 4 + 2] = (uint8_t)(hsh >> 16);
             src[i * 4 + 3] = (uint8_t)(hsh >> 24);
         }
-        rd_UpdateTexture(t, src);
+        rd_update_texture(t, src);
         const int m = fr % 4;
-        rd_BeginFrame();
-        rd_SelectList(7);
+        rd_begin_frame();
+        rd_select_list(7);
         if (fr == 0) {
-            rd_ClearTarget(rd_Target(RD_TARGET_FEED128), init, 0, 0);
+            rd_clear_target(rd_target(RD_TARGET_FEED128), init, 0, 0);
         }
-        rd_SetTarget(rd_Target(RD_TARGET_AA1), (RdTarget){0}, 128, 128, 0);
+        rd_set_target(rd_target(RD_TARGET_AA1), (RdTarget){0}, 128, 128, 0);
         opaque2D();
-        rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-        rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(128, 128, 0, 0, 128 * 16, 128 * 16, grey, 8, 8, 128 * 16 + 8, 128 * 16 + 8);
         RdPostParams pp;
         memset(&pp, 0, sizeof(pp));
-        pp.src = rd_Target(RD_TARGET_AA1);
-        pp.dst = rd_Target(RD_TARGET_FEED128);
+        pp.src = rd_target(RD_TARGET_AA1);
+        pp.dst = rd_target(RD_TARGET_FEED128);
         pp.blend = (uint8_t)modes[m].eq;
         pp.fix = modes[m].fix;
         pp.exactInt = 1;
-        rd_Post(RD_POST_COMPOSITE_FIX, &pp);
-        rd_EndFrame(0);
+        rd_post(RD_POST_COMPOSITE_FIX, &pp);
+        rd_end_frame(0);
 
-        const uint32_t reg = rd__AlphaRegister((uint8_t)modes[m].eq);
+        const uint32_t reg = rd__alpha_register((uint8_t)modes[m].eq);
         for (int i = 0; i < 128 * 128; i++) {
             const uint8_t *s = &src[i * 4];
             int *d = &feed[i * 4];
@@ -2000,46 +2000,46 @@ static void testExact(void)
     }
     CHECK(frameFails == 0, "exact blend differed in %d of 100 frames", frameFails);
     printf("  exact feedback: 100 frames, %d differing\n", frameFails);
-    rd_DestroyTexture(t);
+    rd_destroy_texture(t);
 }
 
 /* ------------------------------------------------------------------ dump */
 
 static void recordRichFrame(RdTex t)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     drawScene(t);
-    rd_SelectList(2);
+    rd_select_list(2);
     /* additive with As up to 0xFF (DF_PREMUL), then a LERP_FIX quad */
     static const uint8_t add[4] = {60, 30, 90, 0xFF};
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_Blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
-    rd_TextureOff();
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 1);
+    rd_texture_off();
     sprite(512, 512, 100 * 16, 100 * 16, 300 * 16, 200 * 16, add, 0, 0, 0, 0);
-    rd_SelectList(11);
+    rd_select_list(11);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = 0x40;
     pp.rgba[0] = 0x20;
-    rd_Post(RD_POST_FADE, &pp);
+    rd_post(RD_POST_FADE, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.fix = 0x60;
-    rd_Post(RD_POST_LETTERBOX, &pp);
+    rd_post(RD_POST_LETTERBOX, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = 5;
-    rd_Post(RD_POST_BRIGHTNESS, &pp);
-    rd_SelectList(12);
+    rd_post(RD_POST_BRIGHTNESS, &pp);
+    rd_select_list(12);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = 128;
     pp.rgba[1] = 120;
     pp.rgba[2] = 110;
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
 }
 
 static void testDump(const char *dir)
 {
-    RdTex t = rd_CreateTexture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
     recordRichFrame(t);
     uint32_t w, h;
     static uint8_t a[512 * 256 * 4];
@@ -2050,20 +2050,20 @@ static void testDump(const char *dir)
     memcpy(a, d, sizeof(a));
     char path[1024];
     snprintf(path, sizeof(path), "%s/rd_pixel_frame.rddump", dir);
-    CHECK(rd_DumpFrame(path), "rd_DumpFrame");
+    CHECK(rd_dump_frame(path), "rd_dump_frame");
     RdFrame f;
-    if (!rd__LoadFrame(path, &f)) {
-        CHECK(0, "rd__LoadFrame");
+    if (!rd__load_frame(path, &f)) {
+        CHECK(0, "rd__load_frame");
         return;
     }
     /* scribble on the targets, then replay the loaded frame */
     static const uint8_t junk[4] = {1, 2, 3, 4};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), junk, 1, 0x1234);
-    rd_ClearTarget(rd_Target(RD_TARGET_DISPLAY), junk, 0, 0);
-    rd_EndFrame(0);
-    CHECK(rd__ReplayFrame(&f, (int)f.keep, false), "replay of the loaded frame");
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), junk, 1, 0x1234);
+    rd_clear_target(rd_target(RD_TARGET_DISPLAY), junk, 0, 0);
+    rd_end_frame(0);
+    CHECK(rd__replay_frame(&f, (int)f.keep, false), "replay of the loaded frame");
     d = readTarget(RD_TARGET_DISPLAY, &w, &h);
     if (d) {
         size_t diff = 0;
@@ -2072,10 +2072,10 @@ static void testDump(const char *dir)
         }
         CHECK(diff == 0, "dump -> load -> replay: %zu bytes differ", diff);
         snprintf(path, sizeof(path), "%s/rd_pixel_frame.png", dir);
-        rd_WritePng(path, d, w, h, w * 4, 1);
+        rd_write_png(path, d, w, h, w * 4, 1);
     }
-    rd__FrameFree(&f);
-    rd_DestroyTexture(t);
+    rd__frame_free(&f);
+    rd_destroy_texture(t);
 }
 
 /* ---------------------------------------------------------------- present */
@@ -2084,7 +2084,7 @@ static void testPresent(void)
 {
     static uint8_t out[640 * 480 * 4];
     uint32_t w = 0, h = 0;
-    if (!rd__ReadPresent(out, sizeof(out), &w, &h)) {
+    if (!rd__read_present(out, sizeof(out), &w, &h)) {
         CHECK(0, "presenter output");
         return;
     }
@@ -2158,39 +2158,39 @@ static void ndQuads(uint32_t gw, uint32_t gh, int x, int y, uint32_t seed)
                          vtx(xm, ym, zHi, c[4], 0, 0), vtx(x1, ym, zLo, c[5], 0, 0),
                          vtx(xm, y1, zHi, c[6], 0, 0), vtx(x1, ym, zLo, c[5], 0, 0),
                          vtx(x1, y1, ND_SCENE_BG_Z, c[7], 0, 0), vtx(xm, y1, zHi, c[6], 0, 0)};
-    rd_ScreenPrims(RD_PRIM_TRIANGLES, v, 12, RD_SPACE_WORLD, 1, 0);
+    rd_screen_prims(RD_PRIM_TRIANGLES, v, 12, RD_SPACE_WORLD, 1, 0);
 }
 
 /* one frame: blends b0 .. b0 + nb - 1 over every other combination */
 static void ndFrame(RdTex noise, int b0, int nb)
 {
     static const uint8_t clr[4] = {0, 0, 0, 0};
-    rd_BeginFrame();
-    rd_SelectList(5);
+    rd_begin_frame();
+    rd_select_list(5);
     for (int t = 0; t < 2; t++) {
         const RdTargetId id = t ? RD_TARGET_DISPLAY : RD_TARGET_SCENE;
         const uint32_t gw = 512, gh = t ? 256 : 512;
         const int32_t ox = (2048 - (int32_t)gw / 2) * 16, oy = (2048 - (int32_t)gh / 2) * 16;
-        rd_ClearTarget(rd_Target(id), clr, !t, 0);
-        rd_SetTarget(rd_Target(id), t ? (RdTarget){0} : rd_Target(id), gw, gh, 1);
+        rd_clear_target(rd_target(id), clr, !t, 0);
+        rd_set_target(rd_target(id), t ? (RdTarget){0} : rd_target(id), gw, gh, 1);
         /* the background: noise texels 1:1, Z write at ND_SCENE_BG_Z */
-        rd_ColorMask(0);
-        rd_TestGs(RD_TEST_Z_ALWAYS);
-        rd_ZWrite(1);
-        rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-        rd_PABE(0);
-        rd_FBA(0);
-        rd_Gouraud(1);
-        rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-        rd_Texture(noise, RD_TEXFN_DECAL, RD_TCC_RGBA);
+        rd_color_mask(0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        rd_z_write(1);
+        rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+        rd_pabe(0);
+        rd_fba(0);
+        rd_gouraud(1);
+        rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        rd_texture(noise, RD_TEXFN_DECAL, RD_TCC_RGBA);
         {
             static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
             RdScreenVtx v[2] = {vtx(ox, oy, ND_SCENE_BG_Z, white, 0.0f, 0.0f),
                                 vtx(ox + (int32_t)gw * 16, oy + (int32_t)gh * 16, ND_SCENE_BG_Z,
                                     white, (float)gw * 16.0f, (float)gh * 16.0f)};
-            rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+            rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
         }
-        rd_TextureOff();
+        rd_texture_off();
         uint32_t cell = 0;
         for (int b = b0; b < b0 + nb; b++) {
             for (int pabe = 0; pabe < 2; pabe++) {
@@ -2201,12 +2201,12 @@ static void ndFrame(RdTex noise, int b0, int nb)
                                 for (int zz = 0; zz < (t ? 1 : 4); zz++, cell++) {
                                     const int x = (int)(cell % 64) * ND_CELL;
                                     const int y = (int)(cell / 64) * ND_CELL;
-                                    rd_Blend((RdBlend)b, (uint8_t)(b == 3 ? 0x50 : 0xA0), 1);
-                                    rd_PABE(pabe);
-                                    rd_FBA(fba);
-                                    rd_ColorMask(kNdMasks[m]);
-                                    rd_TestGs(ndTest(date, af, zz & 1));
-                                    rd_ZWrite((zz >> 1) & 1);
+                                    rd_blend((RdBlend)b, (uint8_t)(b == 3 ? 0x50 : 0xA0), 1);
+                                    rd_pabe(pabe);
+                                    rd_fba(fba);
+                                    rd_color_mask(kNdMasks[m]);
+                                    rd_test_gs(ndTest(date, af, zz & 1));
+                                    rd_z_write((zz >> 1) & 1);
                                     ndQuads(gw, gh, x, y, cell * 31u + (uint32_t)b);
                                 }
                             }
@@ -2215,9 +2215,9 @@ static void ndFrame(RdTex noise, int b0, int nb)
                 }
             }
         }
-        rd_ColorMask(0);
+        rd_color_mask(0);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testNoDual(void)
@@ -2229,36 +2229,36 @@ static void testNoDual(void)
         const uint32_t h = hash(i + 0x5EEDu);
         memcpy(&noiseTex[i * 4], &h, 4);
     }
-    RdTex noise = rd_CreateTexture(64, 64, noiseTex, RD_TEXA_80_80, "nodual noise");
+    RdTex noise = rd_create_texture(64, 64, noiseTex, RD_TEXA_80_80, "nodual noise");
     static uint8_t scene[2][FRAMES][512 * 512 * 4], disp[2][FRAMES][512 * 256 * 4];
     static float depth[2][FRAMES][512 * 512];
-    const bool was = rd_NoDual();
+    const bool was = rd_no_dual();
     uint32_t noDualKeys = 0;
     for (int mode = 0; mode < 2; mode++) {
-        CHECK(rd_SetNoDual(mode != 0), "rd_SetNoDual(%d) refused", mode);
+        CHECK(rd_set_no_dual(mode != 0), "rd_set_no_dual(%d) refused", mode);
         for (int f = 0; f < FRAMES; f++) {
             ndFrame(noise, f * BLENDS_PER, BLENDS_PER);
             uint32_t w = 0, h = 0, dw = 0, dh = 0;
-            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene[mode][f], sizeof(scene[0][0]),
-                                 &w, &h) &&
+            CHECK(rd__read_target(rd_target(RD_TARGET_SCENE), scene[mode][f], sizeof(scene[0][0]),
+                                  &w, &h) &&
                       w == 512 && h == 512,
                   "nodual: SCENE readback");
-            CHECK(rd__ReadTargetDepth(rd_Target(RD_TARGET_SCENE), depth[mode][f],
-                                      sizeof(depth[0][0]), &dw, &dh) &&
+            CHECK(rd__read_target_depth(rd_target(RD_TARGET_SCENE), depth[mode][f],
+                                        sizeof(depth[0][0]), &dw, &dh) &&
                       dw == 512 && dh == 512,
                   "nodual: SCENE depth readback");
-            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), disp[mode][f], sizeof(disp[0][0]),
-                                 &w, &h) &&
+            CHECK(rd__read_target(rd_target(RD_TARGET_DISPLAY), disp[mode][f], sizeof(disp[0][0]),
+                                  &w, &h) &&
                       w == 512 && h == 256,
                   "nodual: DISPLAY readback");
         }
         if (mode) {
-            for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-                noDualKeys += rd__PipelineKeyAt(i)->gs.nodual;
+            for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+                noDualKeys += rd__pipeline_key_at(i)->gs.nodual;
             }
         }
     }
-    rd_SetNoDual(was);
+    rd_set_no_dual(was);
     CHECK(noDualKeys > 0, "nodual: no *_nodual pipeline was created");
     int bad = 0, badZ = 0, badD = 0, shown = 0;
     for (int f = 0; f < FRAMES; f++) {
@@ -2301,11 +2301,11 @@ static void testNoDual(void)
     CHECK(bad == 0 && badZ == 0 && badD == 0,
           "nodual: the two-pass fallback differs from the dual-source draw (%d, %d, %d pixels)",
           bad, badZ, badD);
-    rd_DestroyTexture(noise);
+    rd_destroy_texture(noise);
     /* its states are outside the reachable set: the pipes cell checks the
      * other cells' pipelines */
-    rhi_WaitIdle();
-    rd__PipelineCacheClear();
+    rhi_wait_idle();
+    rd__pipeline_cache_clear();
 }
 
 /* -------------------------------------------------------------- pipelines */
@@ -2316,16 +2316,16 @@ static void testPipelines(void)
     /* both sets, with dual-source blending (keys) and with the
      * two-pass fallback (keysNd); the created keys are in the set of the
      * mode the test runs in */
-    const bool was = rd_NoDual();
-    rd_SetNoDual(false);
-    const uint32_t ns = rd__EnumerateReachableScreen(keys, 512);
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
-    rd_SetNoDual(true);
-    const uint32_t nNd = rd__EnumerateReachable(keysNd, 512);
-    rd_SetNoDual(was);
+    const bool was = rd_no_dual();
+    rd_set_no_dual(false);
+    const uint32_t ns = rd__enumerate_reachable_screen(keys, 512);
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
+    rd_set_no_dual(true);
+    const uint32_t nNd = rd__enumerate_reachable(keysNd, 512);
+    rd_set_no_dual(was);
     const RdPipeKeyInt *mine = was ? keysNd : keys;
     const uint32_t nMine = was ? nNd : n;
-    const uint32_t c = rd__PipelineCount();
+    const uint32_t c = rd__pipeline_count();
     printf("  pipelines: %u created, %u reachable (%u screen and post), %u with the two-pass "
            "fallback\n",
            c, n, ns, nNd);
@@ -2338,8 +2338,8 @@ static void testPipelines(void)
      * create at run time */
     {
         RdStateBlock s;
-        rd__ResetStateBlock(&s);
-        s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+        rd__reset_state_block(&s);
+        s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
         s.ds.zwrite = RD_ZWRITE_OFF;
         s.ds.abe = 1;
         s.ds.blend = RD_BLEND_LERP_AS;
@@ -2348,12 +2348,12 @@ static void testPipelines(void)
             RdDrawPass dp[2];
             const RhiFormat depth = dz ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
             for (int prim = 0; prim < 2; prim++) {
-                const int np = rd__PlanScreenDraw(&s, prim ? RD_PRIM_LINES : RD_PRIM_TRIANGLES,
-                                                  RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, depth, dp);
+                const int np = rd__plan_screen_draw(&s, prim ? RD_PRIM_LINES : RD_PRIM_TRIANGLES,
+                                                    RD_SPACE_UI, RHI_FMT_RGBA8_UNORM, depth, dp);
                 for (int i = 0; i < np; i++) {
                     int found = 0;
                     for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
                     }
                     CHECK(dp[i].key.gs.colorMask == 0x7 && found,
                           "UI draw under colour mask 7 (lines %d, depth %d) is not enumerated",
@@ -2361,7 +2361,7 @@ static void testPipelines(void)
                     dp[i].key.fs = RD_FS_FONT;
                     found = 0;
                     for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
                     }
                     CHECK(prim || found,
                           "font draw under colour mask 7 (depth %d) is not enumerated", dz);
@@ -2369,36 +2369,36 @@ static void testPipelines(void)
                     dp[i].key.fs = RD_FS_FONT_SHEET;
                     found = 0;
                     for (uint32_t j = 0; j < ns; j++) {
-                        found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                        found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
                     }
                     CHECK(prim || found,
                           "sheet text draw under colour mask 7 (depth %d) is not enumerated", dz);
                 }
             }
             s.ds.colorMask = 0xF;
-            s.ds.test = rd_TestFromGs(RD_TEST_Z_GEQUAL);
-            const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
-                                              RHI_FMT_RGBA8_UNORM, depth, dp);
+            s.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
+            const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                RHI_FMT_RGBA8_UNORM, depth, dp);
             for (int i = 0; i < np; i++) {
                 int found = 0;
-                CHECK(rd__StqPass(&dp[i]), "a plain world sprite pass takes the STQ shaders");
+                CHECK(rd__stq_pass(&dp[i]), "a plain world sprite pass takes the STQ shaders");
                 for (uint32_t j = 0; j < ns; j++) {
-                    found |= rd__PipeKeyEqual(&dp[i].key, &keys[j]);
+                    found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
                 }
                 CHECK(found, "STQ world triangle pass (depth %d) is not enumerated", dz);
             }
             s.ds.colorMask = 0x7;
-            s.ds.test = rd_TestFromGs(RD_TEST_Z_ALWAYS);
+            s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
         }
     }
     CHECK(n < RD_PIPELINE_REACHABLE_MAX,
           "reachable pipelines %u >= %d (wave 3: with the VU programs)", n,
           RD_PIPELINE_REACHABLE_MAX);
     for (uint32_t i = 0; i < c; i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < nMine && j < 512; j++) {
-            found |= rd__PipeKeyEqual(k, &mine[j]);
+            found |= rd__pipe_key_equal(k, &mine[j]);
         }
         CHECK(found,
               "created pipeline %u (prog %u blend %u vs %u fmt %u/%u z %u/%u mask %x nodual %u) is "
@@ -2429,13 +2429,13 @@ static void testPipelines(void)
 
 static uint8_t *readScaled(RdTargetId id, uint32_t *w, uint32_t *h, float *sx, float *sy)
 {
-    const RdTargetRec *t = rd__TargetRec(rd_Target(id).id);
+    const RdTargetRec *t = rd__target_rec(rd_target(id).id);
     if (!t) {
         CHECK(0, "target %d has no record", (int)id);
         return NULL;
     }
     uint8_t *buf = malloc((size_t)t->tw * t->th * 4);
-    if (!buf || !rd__ReadTarget(rd_Target(id), buf, (size_t)t->tw * t->th * 4, w, h)) {
+    if (!buf || !rd__read_target(rd_target(id), buf, (size_t)t->tw * t->th * 4, w, h)) {
         CHECK(0, "readback of target %d", (int)id);
         free(buf);
         return NULL;
@@ -2459,7 +2459,7 @@ static void auraQuad(int x0, int y0, int x1, int y1, uint32_t z, const uint8_t c
     const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
     RdScreenVtx v[2] = {vtx(ox + x0 * 16, oy + y0 * 16, z, c, 0.0f, 0.0f),
                         vtx(ox + x1 * 16, oy + y1 * 16, z, c, 256.0f, 256.0f)};
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
 }
 
 /* auraInspireBefore's clear of AURA_WORK as staticBlur.c's host path
@@ -2467,14 +2467,14 @@ static void auraQuad(int x0, int y0, int x1, int y1, uint32_t z, const uint8_t c
  * untextured RD_POST_AURA sprite over the screen in colour 0 */
 static void auraClear(void)
 {
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_PABE(1);
-    rd_BlendFunc(RD_BLEND_LERP_FIX, 0);
-    rd_TextureOff();
-    rd_ABE(0);
-    rd_Gouraud(0);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_pabe(1);
+    rd_blend_func(RD_BLEND_LERP_FIX, 0);
+    rd_texture_off();
+    rd_abe(0);
+    rd_gouraud(0);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
     p.rect[0] = (float)(0x8000 - 256 * 16);
@@ -2483,7 +2483,7 @@ static void auraClear(void)
     p.rect[3] = (float)(0x8000 + 256 * 16);
     p.scalar[2] = 1.0f;
     p.exactInt = 1;
-    rd_Post(RD_POST_AURA, &p);
+    rd_post(RD_POST_AURA, &p);
 }
 
 /* (a): the mask behind the scene */
@@ -2491,35 +2491,35 @@ static void testAuraDepth(const char *mode, RdTex white)
 {
     static const uint8_t grey[4] = {0x60, 0x60, 0x60, 0x80}, red[4] = {200, 30, 30, 0x80};
     static const uint8_t shine[4] = {0x80, 0x80, 0x80, 0x7F}; /* the queen's vertex colour */
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
     /* list 1: the face, opaque, nearer, Z write */
-    rd_SelectList(1);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(RD_TEST_Z_GEQUAL);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_TextureOff();
+    rd_select_list(1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_texture_off();
     auraQuad(100, 100, 200, 200, AURA_Z_NEAR, red);
     /* list 8: the clear, then the shine material: farther (rows 50..150),
      * and at the face's depth (rows 160..190) */
-    rd_SelectList(8);
+    rd_select_list(8);
     auraClear();
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
-    rd_TestGs(0x5346D); /* ATE GREATER 0x46, AFAIL RGB_ONLY, Z GEQUAL */
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Gouraud(1);
-    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-    rd_Texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_test_gs(0x5346D); /* ATE GREATER 0x46, AFAIL RGB_ONLY, Z GEQUAL */
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     auraQuad(50, 50, 250, 150, AURA_Z_FAR, shine);
     auraQuad(50, 160, 250, 190, AURA_Z_NEAR, shine);
-    rd_EndFrame(0);
+    rd_end_frame(0);
 
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
@@ -2575,33 +2575,33 @@ static void testAuraDepthNear(const char *mode, RdTex white)
     static const uint8_t shine[4] = {0x80, 0x80, 0x80, 0x7F};
     static const int32_t kDz[5] = {-300, -100, -17, 0, 17};
     const uint32_t face = 17000000u;
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
-    rd_SelectList(1);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(RD_TEST_Z_GEQUAL);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_TextureOff();
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_select_list(1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_texture_off();
     auraQuad(40, 40, 260, 240, face, skin);
-    rd_SelectList(8);
+    rd_select_list(8);
     auraClear();
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
-    rd_TestGs(0x5346D);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Gouraud(1);
-    rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-    rd_Texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_test_gs(0x5346D);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_texture(white, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     for (int k = 0; k < 5; k++) {
         auraQuad(50 + k * 40, 50, 80 + k * 40, 230, (uint32_t)((int32_t)face + kDz[k]), shine);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_AURA_WORK, &w, &h, &sx, &sy);
@@ -2649,27 +2649,27 @@ static void testAuraAlpha(const char *mode, int fbOnly)
             p[3] = kAuraAlphas[(x + y) & 15];
         }
     }
-    RdTex t = rd_CreateTexture(16, 16, tex, RD_TEXA_80_80, "aura alpha");
+    RdTex t = rd_create_texture(16, 16, tex, RD_TEXA_80_80, "aura alpha");
     static const uint8_t bg[4] = {10, 200, 30, 0x55}, vc[4] = {0x80, 0x80, 0x80, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(8);
-    rd_ClearTarget(rd_Target(RD_TARGET_AURA_WORK), bg, 0, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
-    rd_TestGs(fbOnly ? 0x3160D : 0x3346D); /* Z ALWAYS */
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Gouraud(1);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_begin_frame();
+    rd_select_list(8);
+    rd_clear_target(rd_target(RD_TARGET_AURA_WORK), bg, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_test_gs(fbOnly ? 0x3160D : 0x3346D); /* Z ALWAYS */
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     auraQuad(64, 64, 80, 80, 0, vc); /* 1:1 */
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_AURA_WORK, &w, &h, &sx, &sy);
     if (!img) {
-        rd_DestroyTexture(t);
+        rd_destroy_texture(t);
         return;
     }
     const int aref = fbOnly ? 0x60 : 0x46;
@@ -2707,7 +2707,7 @@ static void testAuraAlpha(const char *mode, int fbOnly)
     /* the hardware blend's lerp (not blend_int) is within 2 of the GS's */
     CHECK(rgbMax <= 2, "aura alpha (%s): RGB off the GS lerp by %d", mode, rgbMax);
     free(img);
-    rd_DestroyTexture(t);
+    rd_destroy_texture(t);
 }
 
 static void testAuraMask(const char *mode)
@@ -2717,12 +2717,12 @@ static void testAuraMask(const char *mode)
     for (int i = 0; i < 16 * 16; i++) {
         whiteTx[i * 4 + 3] = 0x80;
     }
-    RdTex white = rd_CreateTexture(16, 16, whiteTx, RD_TEXA_80_80, "aura white");
+    RdTex white = rd_create_texture(16, 16, whiteTx, RD_TEXA_80_80, "aura white");
     testAuraDepth(mode, white);
     testAuraDepthNear(mode, white);
     testAuraAlpha(mode, 0);
     testAuraAlpha(mode, 1);
-    rd_DestroyTexture(white);
+    rd_destroy_texture(white);
 }
 
 /* the mask tests again in a renderer of other display options: the
@@ -2738,14 +2738,14 @@ static void testAuraMaskAt(const char *mode, float scale, int fullHeight)
     s.aspect = 4.0f / 3.0f;
     s.sceneScale = scale;
     s.fullHeightScene = (uint8_t)fullHeight;
-    if (!rd_Init(512, 512, &s, NULL)) {
-        CHECK(0, "rd_Init (%s)", mode);
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_init (%s)", mode);
         return;
     }
     testAuraMask(mode);
-    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%s: %u validation errors", mode, verr);
-    rd_Shutdown();
+    rd_shutdown();
 }
 
 /* ------------------------------------------------------------ VU paths */
@@ -2793,7 +2793,7 @@ static void vpMeshes(void)
             md.qwPerVertex = RD_VU_QW_PRELIT;
             md.batchCount = 1;
             md.batches = &bd;
-            s_vpMesh[r][i] = rd_CreateVuMesh(&md);
+            s_vpMesh[r][i] = rd_create_vu_mesh(&md);
         }
     }
 }
@@ -2821,20 +2821,20 @@ static void vpDraw(int path, int green, double tx, double ty)
     const int cut = path == VP_36H || path == VP_36R;
     d.vu.mem[23][3] = 1.0f;
     d.vu.mem[22][2] = cut ? 1.0f / 1020000.0f : 0.0f;
-    rd_DrawVuMesh(s_vpMesh[path == VP_36R][green], &d, RD_KEY(&kVpKey, green, path));
+    rd_draw_vu_mesh(s_vpMesh[path == VP_36R][green], &d, RD_KEY(&kVpKey, green, path));
 }
 
 static void vpState(int zwrite)
 {
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(RD_TEST_Z_GEQUAL);
-    rd_ZWrite(zwrite);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_ABE(0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Gouraud(1);
-    rd_TextureOff();
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(zwrite);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_abe(0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_texture_off();
 }
 
 static const uint8_t kVpGrey[4] = {0x40, 0x40, 0x40, 0x80};
@@ -2849,14 +2849,14 @@ static int vpIsBg(const uint8_t *p)
  * failed b's depth test against a's depth */
 static void vpPair(int a, int b, double tx, double ty, int *interior, int *failed)
 {
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kVpGrey, 1, 0);
     vpState(1);
     vpDraw(a, 0, tx, ty);
     vpState(0);
     vpDraw(b, 1, tx, ty);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
@@ -2889,12 +2889,12 @@ static void vpPair(int a, int b, double tx, double ty, int *interior, int *faile
 
 static int vpEdges(int path, double tx, int *left, int *right)
 {
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kVpGrey, 1, 0);
     vpState(1);
     vpDraw(path, 0, tx, 0.0);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
@@ -3002,8 +3002,8 @@ static void testVuPaths(const char *mode, int check34)
         CHECK(maxSep == 0, "vu paths (%s): 34's edges %d pixels from 32's", mode, maxSep);
     }
     for (int r = 0; r < 2; r++) {
-        rd_DestroyVuMesh(s_vpMesh[r][0]);
-        rd_DestroyVuMesh(s_vpMesh[r][1]);
+        rd_destroy_vu_mesh(s_vpMesh[r][0]);
+        rd_destroy_vu_mesh(s_vpMesh[r][1]);
     }
 }
 
@@ -3057,9 +3057,9 @@ static RdMesh seamMesh(const float (*pos)[4], const uint8_t *start, int n, const
     md.qwPerVertex = RD_VU_QW_PRELIT;
     md.batchCount = 1;
     md.batches = &bd;
-    const RdMesh m = rd_CreateVuMesh(&md);
+    const RdMesh m = rd_create_vu_mesh(&md);
     free(qw);
-    CHECK(m.id != 0, "seam mesh: rd_CreateVuMesh");
+    CHECK(m.id != 0, "seam mesh: rd_create_vu_mesh");
     return m;
 }
 
@@ -3084,7 +3084,7 @@ static void seamVuDraw(RdMesh m, int code, double cs, double sn, double tx, doub
     d.vu.mem[19][3] = 1.0f;
     d.vu.mem[22][2] = 1.0f / 1020000.0f;
     d.vu.mem[23][3] = 1.0f;
-    rd_DrawVuMesh(m, &d, RD_KEY(&kSeamKey, code, ord));
+    rd_draw_vu_mesh(m, &d, RD_KEY(&kSeamKey, code, ord));
 }
 
 /* the GS vertex (12.4 X, Y and Z) of model point p under the identity
@@ -3131,9 +3131,9 @@ static int seamCracks(const uint8_t *img, uint32_t w, uint32_t h, float sx, floa
 
 static void seamBegin(void)
 {
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kVpGrey, 1, 0);
     vpState(1);
 }
 
@@ -3143,7 +3143,7 @@ static void seamBegin(void)
 static int seamEnd(const double (*seg)[4], int nseg, double t0, double t1, int *near,
                    const double *probe, int *probeBg)
 {
-    rd_EndFrame(0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float sx = 1.0f, sy = 1.0f;
     uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
@@ -3174,7 +3174,7 @@ static void testVuSeams(const char *mode)
     const double edge[1][4] = {{kP[1][0], kP[1][1], kP[2][0], kP[2][1]}}; /* within 1/16 GS pixel */
     int near = 0, n;
 
-    /* S1: a code-32 triangle beside a GIF triangle (rd_ScreenPrims) at the
+    /* S1: a code-32 triangle beside a GIF triangle (rd_screen_prims) at the
      * VU's ftoi4 corners; the VU on either side of the shared edge */
     for (int side = 0; side < 2; side++) {
         const int vu0 = side == 0 ? 0 : 1, gif0 = side == 0 ? 1 : 0;
@@ -3185,14 +3185,14 @@ static void testVuSeams(const char *mode)
         for (int k = 0; k < 3; k++) {
             g[k] = seamGsVtx(kP[gif0 + k], 0.0, 0.0, kSeamGreen);
         }
-        rd_ScreenPrims(RD_PRIM_TRIANGLES, g, 3, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_TRIANGLES, g, 3, RD_SPACE_WORLD, 1, 0);
         n = seamEnd(edge, 1, 0.1, 0.9, &near, NULL, NULL);
         printf("  vu seams (%s): S1 code 32 on P%d's side of a GIF triangle: %d cracks in %d "
                "pixels along the edge\n",
                mode, side == 0 ? 0 : 3, n, near);
         CHECK(n == 0 && near > 100, "vu seams (%s): S1 side %d: %d cracks (%d pixels near)", mode,
               side, n, near);
-        rd_DestroyVuMesh(m);
+        rd_destroy_vu_mesh(m);
     }
 
     /* S2: two meshes under matrices 0.01 GS pixel apart whose shared
@@ -3218,8 +3218,8 @@ static void testVuSeams(const char *mode)
         printf("  vu seams (%s): S2 two meshes 0.01 GS pixel apart: %d cracks in %d pixels\n", mode,
                n, near);
         CHECK(n == 0 && near > 100, "vu seams (%s): S2: %d cracks (%d pixels near)", mode, n, near);
-        rd_DestroyVuMesh(ma);
-        rd_DestroyVuMesh(mb);
+        rd_destroy_vu_mesh(ma);
+        rd_destroy_vu_mesh(mb);
     }
 
     /* S3: a code-36 strip v0..v3 whose first triangle is cut (v0 flagged
@@ -3249,7 +3249,7 @@ static void testVuSeams(const char *mode)
               c == 0 ? "GS Z < 0" : "w < 0", n, near);
         CHECK(!probeBg, "vu seams (%s): S3 (%s): the cut triangle left v0's side empty", mode,
               c == 0 ? "GS Z < 0" : "w < 0");
-        rd_DestroyVuMesh(m);
+        rd_destroy_vu_mesh(m);
     }
 
     /* S4: 8 x 8 quads of one mesh, each drawn under its own matrix (the
@@ -3292,7 +3292,7 @@ static void testVuSeams(const char *mode)
                "inner edges (Original 1x: %d)\n",
                mode, n, near, s_s4Ref);
         CHECK(near > 1000, "vu seams (%s): S4 saw %d pixels near the inner edges", mode, near);
-        rd_DestroyVuMesh(m);
+        rd_destroy_vu_mesh(m);
     }
 }
 
@@ -3344,7 +3344,7 @@ static RdTex ovTexture(void)
             }
         }
     }
-    return rd_CreateTexture(OV_TEX, OV_TEX, tex, RD_TEXA_80_80, "overlap lattice");
+    return rd_create_texture(OV_TEX, OV_TEX, tex, RD_TEXA_80_80, "overlap lattice");
 }
 
 /* a textured prelit mesh of one batch: corners k[0..n) of the panel, a
@@ -3380,8 +3380,8 @@ static RdMesh ovMesh(const int *k, const uint8_t *start, int n)
     md.qwPerVertex = RD_VU_QW_PRELIT;
     md.batchCount = 1;
     md.batches = &bd;
-    const RdMesh m = rd_CreateVuMesh(&md);
-    CHECK(m.id != 0, "overlap mesh: rd_CreateVuMesh");
+    const RdMesh m = rd_create_vu_mesh(&md);
+    CHECK(m.id != 0, "overlap mesh: rd_create_vu_mesh");
     return m;
 }
 
@@ -3406,20 +3406,20 @@ static void ovDraw(RdMesh m, int s, int ord)
             dr.vu.mem[16 + c][e] = (float)col[c][e];
         }
     }
-    rd_DrawVuMesh(m, &dr, RD_KEY(&kOvKey, s, ord));
+    rd_draw_vu_mesh(m, &dr, RD_KEY(&kOvKey, s, ord));
 }
 
 static void ovState(RdTex t, uint32_t test)
 {
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_TestGs(test);
-    rd_ZWrite(1);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Gouraud(1);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_test_gs(test);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
 }
 
 #define OV_TEST_GEQUAL 0x5160Du /* the railing's TEST: ATE GREATER 0x60, FB_ONLY, Z GEQUAL */
@@ -3430,16 +3430,16 @@ static uint8_t *ovFrame(RdTex t, RdMesh a, uint32_t ta, RdMesh b, uint32_t tb, i
                         uint32_t *h)
 {
     float sx = 1.0f, sy = 1.0f;
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kVpGrey, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kVpGrey, 1, 0);
     ovState(t, ta);
     ovDraw(a, s, 0);
     if (b.id) {
         ovState(t, tb);
         ovDraw(b, s, 1);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
     return readScaled(RD_TARGET_SCENE, w, h, &sx, &sy);
 }
 
@@ -3466,12 +3466,12 @@ static void testVuOverlap(const char *mode)
     const RdMesh none = {0};
     /* the marks: the back strips' three triangles (kicks 7, 8 and 11) in the
      * one mesh, none in either face alone */
-    const RdMeshRec *ma = rd__MeshRec(all.id), *mf = rd__MeshRec(front.id),
-                    *mb = rd__MeshRec(back.id);
+    const RdMeshRec *ma = rd__mesh_rec(all.id), *mf = rd__mesh_rec(front.id),
+                    *mb = rd__mesh_rec(back.id);
     if (ma && mf && mb) {
         int marks = 0, right = 0;
         for (uint32_t i = 0; i < ma->indexCount; i++) {
-            const uint32_t ix = rd__MeshDrawIndex(ma)[i], kick = (ix & ICO_VU_INDEX_MASK) / 4;
+            const uint32_t ix = rd__mesh_draw_index(ma)[i], kick = (ix & ICO_VU_INDEX_MASK) / 4;
             const int later = (ix & ICO_VU_INDEX_LATER) != 0;
             marks += later;
             right += later == (kick == 7 || kick == 8 || kick == 11);
@@ -3521,10 +3521,10 @@ static void testVuOverlap(const char *mode)
           "vu overlap (%s): %d steps where the later face does not pass over the "
           "earlier (at most %d pixels)",
           mode, bad, worst);
-    rd_DestroyVuMesh(all);
-    rd_DestroyVuMesh(front);
-    rd_DestroyVuMesh(back);
-    rd_DestroyTexture(t);
+    rd_destroy_vu_mesh(all);
+    rd_destroy_vu_mesh(front);
+    rd_destroy_vu_mesh(back);
+    rd_destroy_texture(t);
 }
 
 static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int check34)
@@ -3536,21 +3536,21 @@ static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int ch
     s.outputHeight = 480;
     s.aspect = 4.0f / 3.0f;
     s.sceneScale = scale;
-    if (!rd_Init(512, 512, &s, NULL)) {
-        CHECK(0, "rd_Init (%s)", mode);
+    if (!rd_init(512, 512, &s, NULL)) {
+        CHECK(0, "rd_init (%s)", mode);
         return;
     }
     testVuPaths(mode, check34);
     testVuSeams(mode);   /* issue 26 */
     testVuOverlap(mode); /* issue 25 */
-    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%s: %u validation errors", mode, verr);
-    rd_Shutdown();
+    rd_shutdown();
 }
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     RdSettings s;
     memset(&s, 0, sizeof(s));
@@ -3558,12 +3558,12 @@ int main(int argc, char **argv)
     s.outputWidth = 640;
     s.outputHeight = 480;
     s.aspect = 4.0f / 3.0f;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         printf("SKIP rd_pixel_test: no usable Vulkan device\n");
         return 77;
     }
-    printf("rd_pixel_test: adapter %s%s\n", rhi_AdapterName(),
-           rd_NoDual() ? " (two-pass blend fallback)" : "");
+    printf("rd_pixel_test: adapter %s%s\n", rhi_adapter_name(),
+           rd_no_dual() ? " (two-pass blend fallback)" : "");
     testNoDual(); /* first: it clears the pipeline cache */
     testOrder();
     testRailing(0);
@@ -3583,10 +3583,10 @@ int main(int argc, char **argv)
     testDump(dir);
     testPipelines();
     testAuraMask("Original 1x");
-    const uint32_t verr = rhi_vk_ValidationErrorCount();
+    const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%u validation errors", verr);
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
     testAuraMaskAt("Enhanced 4x", 4.0f, 0);
     testAuraMaskAt("Enhanced 4x, full height", 4.0f, 1);
     testSheetTextAt("Enhanced 2x", 2);

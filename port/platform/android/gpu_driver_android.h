@@ -5,18 +5,18 @@
  * port/platform/gpu_driver.h) the player added on the Settings page,
  * loaded through libadrenotools in place of the phone's driver.
  *
- * The start (window_host.c, before rd_Init):
+ * The start (window_host.c, before rd_init):
  *   ico_gpu_driver_android_start reads [video] gpu_driver (empty: the
  *   phone's own driver).  When the trial marker (gpu_driver.h) still names
  *   that driver, the last start died inside it: [video] gpu_driver_failed
  *   takes its name, gpu_driver is emptied, the config saved and a message
  *   box shown; the phone's driver is used.  Else the marker is written and
  *   the driver opened (adrenotools_open_libvulkan), its
- *   vkGetInstanceProcAddr handed to rhi_SetVulkanLoader; a driver that
+ *   vkGetInstanceProcAddr handed to rhi_set_vulkan_loader; a driver that
  *   does not open is treated as failed the same way.
- *   ico_gpu_driver_android_init_failed: rd_Init failed with that driver;
+ *   ico_gpu_driver_android_init_failed: rd_init failed with that driver;
  *   recorded as failed, the box shown, the loader back to the system's (the
- *   caller runs rd_Init again).
+ *   caller runs rd_init again).
  *   ico_gpu_driver_android_presented after each present: the marker goes
  *   after 300 (the pipelines made, a few seconds drawn).
  *
@@ -34,10 +34,10 @@
 
 #include "settings.h"
 
-/* 1 when the player's driver is in use for this start (rd_Init next), 0
+/* 1 when the player's driver is in use for this start (rd_init next), 0
    for the phone's own. */
 int ico_gpu_driver_android_start(void);
-/* rd_Init failed with the player's driver (start returned 1). */
+/* rd_init failed with the player's driver (start returned 1). */
 void ico_gpu_driver_android_init_failed(void);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);

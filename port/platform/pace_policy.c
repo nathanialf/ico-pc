@@ -5,7 +5,7 @@
  */
 #include "pace_policy.h"
 
-uint64_t pace_SlowThreshold(uint64_t refreshNs, uint64_t periodNs, bool injector)
+uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injector)
 {
     if (injector) {
         /* one refresh more than the plain threshold */
@@ -41,10 +41,10 @@ static uint64_t median(const PaceHist *h)
     return median_of(h->cost, h->count);
 }
 
-bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
-                      bool injector)
+bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t periodNs,
+                       bool injector)
 {
-    const uint64_t thr = pace_SlowThreshold(refreshNs, periodNs, injector);
+    const uint64_t thr = pace_slow_threshold(refreshNs, periodNs, injector);
     uint64_t med;
 
     h->cost[h->next] = costNs;
@@ -69,13 +69,13 @@ bool pace_SlowPresent(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_t
 }
 
 /* resolution "auto": the cost samples */
-void pace_SamplesReset(PaceSamples *s, uint64_t nowNs)
+void pace_samples_reset(PaceSamples *s, uint64_t nowNs)
 {
     s->count = s->next = 0;
     s->firstNs = s->lastNs = nowNs;
 }
 
-void pace_SamplesAdd(PaceSamples *s, uint64_t nowNs, uint64_t costNs)
+void pace_samples_add(PaceSamples *s, uint64_t nowNs, uint64_t costNs)
 {
     if (s->firstNs == 0) {
         s->firstNs = nowNs;
@@ -88,12 +88,12 @@ void pace_SamplesAdd(PaceSamples *s, uint64_t nowNs, uint64_t costNs)
     }
 }
 
-uint64_t pace_SamplesMedian(const PaceSamples *s)
+uint64_t pace_samples_median(const PaceSamples *s)
 {
     return median_of(s->cost, s->count);
 }
 
-int pace_AutoResolutionStep(const PaceSamples *s, int currentScale, float windowScale)
+int pace_auto_resolution_step(const PaceSamples *s, int currentScale, float windowScale)
 {
     if (s->count < PACE_AUTO_MIN_SAMPLES || s->lastNs - s->firstNs < PACE_AUTO_WINDOW_NS ||
         s->budgetNs == 0) {
@@ -103,7 +103,7 @@ int pace_AutoResolutionStep(const PaceSamples *s, int currentScale, float window
         return currentScale;
     }
     /* over 70 % of the budget */
-    if (pace_SamplesMedian(s) * 10 <= s->budgetNs * 7) {
+    if (pace_samples_median(s) * 10 <= s->budgetNs * 7) {
         return currentScale;
     }
     if (currentScale <= 0) {

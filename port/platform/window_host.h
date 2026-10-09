@@ -3,17 +3,17 @@
  *
  * The windowed ico_pc: one SDL3 window titled "ICO", the renderer device
  * on it ([video] backend: Vulkan, or Direct3D 12 on Windows) through
- * rd_Init with the display options, and the real-time pacing of the
+ * rd_init with the display options, and the real-time pacing of the
  * simulated vsyncs, presenting between ticks when the frame rate option
  * allows.
  * main_host.c drives it; the headless build (ICO_HEADLESS) leaves it out.
  *
- *   ico_window_open(gsW, gsH)   SDL video, the window, rd_Init; 0, or -1
+ *   ico_window_open(gsW, gsH)   SDL video, the window, rd_init; 0, or -1
  *                               with the reason logged
  *   ico_window_pump()           drains SDL events once per vsync: window
- *                               resize reaches rd_ResizeOutput; Escape or
+ *                               resize reaches rd_resize_output; Escape or
  *                               the close button returns 0 (quit), else 1;
- *                               a lost device (rhi_DeviceLost) shows one
+ *                               a lost device (rhi_device_lost) shows one
  *                               message box and returns 0
  *   ico_window_pace(hz)         presents until this vsync's deadline at hz
  *                               (50 PAL, 60 NTSC) in real time, as often as
@@ -21,7 +21,7 @@
  *                               sleeps to it; a host that falls more than
  *                               100 ms behind resynchronises instead of
  *                               running fast to catch up
- *   ico_window_close()          rd_Shutdown, the window, SDL (atexit-safe)
+ *   ico_window_close()          rd_shutdown, the window, SDL (atexit-safe)
  *   ico_window_progress(title, phase, pct)
  *                               Android's first start and its "Starting the
  *                               game" screen (main_host.c), once the window
@@ -29,10 +29,10 @@
  *                               while the graphics are prepared draws the
  *                               same way before that: drains SDL events (the quit
  *                               event, Back or Escape ask to stop; a size
- *                               change reaches rd_ResizeOutput; the rest
+ *                               change reaches rd_resize_output; the rest
  *                               go to the pad layer as ico_window_pump
  *                               passes them) and presents one frame with
- *                               no scene (rd_PresentBlank): title, then
+ *                               no scene (rd_present_blank): title, then
  *                               "phase: pct%" and a bar, or the phase alone
  *                               when pct < 0, through an overlay of its own
  *                               that replaces the registered one for that

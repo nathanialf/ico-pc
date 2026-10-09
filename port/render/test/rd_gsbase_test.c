@@ -21,7 +21,7 @@
  *            for a draw after it and ends at the anti-alias pass's FRAME
  *            write or the reduction's
  *   vu       gsb_MakeCommonMatrix's VU block and the frame camera
- *   zscale   rd__GsDepth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32, and
+ *   zscale   rd__gs_depth: 0xFFFFFF9B and 0xFFFFFFFF apart under PSMZ32, and
  *            Z 17 apart at 2^24 (the depth grows with Z)
  *   photo    photo mode's camera in the game's matrices (issue 14,
  *            port/game/photo_view.c): gsb_PushView / gsb_PopView put back
@@ -42,7 +42,7 @@
  *            framerate x alone by 4/3, y untouched; the matrices that place
  *            anything never change
  * On a Vulkan device (exit 77 without one, after the recording checks):
- *   camera   rd__CameraProbe (FrameCB through camera_probe_ps) against the
+ *   camera   rd__camera_probe (FrameCB through camera_probe_ps) against the
  *            C products and sceVu0RotTransPers through matrixptr+0x100
  *            (GS window X/Y within 1/16 pixel)
  *   depth    depth-tested UI Z above 2^24 on SCENE (PSMZ32 scale)
@@ -477,7 +477,7 @@ static void checkBgTiming(void)
     tick(); /* opens a frame whose head has 10, 20, 30 */
     gsb_SetBGColor(&db, 40, 50, 60);
     tick(); /* the flip kicks it: the PS2 cleared with 40, 50, 60 */
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     const RdCmd *c = f ? firstOf(f, 0, RDC_CLEAR) : NULL;
     CHECK(c && c->b[0] == 40 && c->b[1] == 50 && c->b[2] == 60 && c->b[3] == 0x80,
           "bg: the head clear has the flip's colour (got %u %u %u %u)", c ? c->b[0] : 0,
@@ -497,7 +497,7 @@ static void checkKeep(void)
     fbKeep = 1;
     tick(); /* gsb_Reduction computes 128 now; the frame it kicks replays 11..12 */
     fbKeep = 0;
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     if (!f) {
         CHECK(0, "keep: a frame");
         return;
@@ -536,7 +536,7 @@ static void checkKeep(void)
     RdStateBlock s = f->startState;
     int texaOk = 0;
     for (uint32_t i = 0; i < f->lists[11].count; i++) {
-        rd__ApplyState(&s, &f->lists[11].cmds[i]);
+        rd__apply_state(&s, &f->lists[11].cmds[i]);
         if (f->lists[11].cmds[i].type == RDC_SCREEN && i > 0) {
             texaOk = s.ds.texa == RD_TEXA_80_80 && s.ds.texEnabled;
         }
@@ -552,7 +552,7 @@ static void checkParity(void)
     gsb_Init(&db); /* both draw environments without the half offset */
     for (int i = 0; i < 4; i++) {
         tick();
-        got[i] = halfOf(rd__LastFrame(), 0);
+        got[i] = halfOf(rd__last_frame(), 0);
     }
     CHECK(got[0] == 0 && got[1] == 0 && got[2] == 1 && got[3] == 1,
           "parity: constant field 0 -> half offset from the third flip on (%d %d %d %d)", got[0],
@@ -560,7 +560,7 @@ static void checkParity(void)
     for (int i = 0; i < 4; i++) {
         setField(i & 1 ? 0 : 1);
         tick();
-        got[4 + i] = halfOf(rd__LastFrame(), 0);
+        got[4 + i] = halfOf(rd__last_frame(), 0);
     }
     CHECK(got[4] == 1 && got[5] == 1 && got[6] == 0 && got[7] == 1,
           "parity: a field alternating per flip -> one parity per buffer (%d %d %d %d)", got[4],
@@ -569,7 +569,7 @@ static void checkParity(void)
     tick();
     tick();
     tick();
-    CHECK(halfOf(rd__LastFrame(), 0) == 0, "parity: field 1 -> no half offset");
+    CHECK(halfOf(rd__last_frame(), 0) == 0, "parity: field 1 -> no half offset");
 }
 
 static void checkLeak(void)
@@ -581,7 +581,7 @@ static void checkLeak(void)
     fadeColor[2] = 0;
     tick();
     fadeStatus = 0;
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     if (!f) {
         CHECK(0, "leak: a frame");
         return;
@@ -591,7 +591,7 @@ static void checkLeak(void)
     int found = 0;
     for (int l = 0; l < RD_LIST_COUNT && !found; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
-            rd__ApplyState(&s, &f->lists[l].cmds[i]);
+            rd__apply_state(&s, &f->lists[l].cmds[i]);
             if (l == 11 && f->lists[l].cmds[i].type == RDC_SCREEN) {
                 const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + f->lists[l].cmds[i].u[0]);
                 if (v[1].rgba[0] == 200 && v[1].rgba[3] == 50) {
@@ -621,7 +621,7 @@ static void checkVu(void)
     gsb_SetVSMatrix(ScreenWidth, ScreenHeight, 512.0f);
     memcpy(matrixptr + 0x80, s_view, 64);
     gsb_MakeCommonMatrix();
-    const RdVuCommon *b = rd_GetVuCommon();
+    const RdVuCommon *b = rd_get_vu_common();
     CHECK(b != NULL, "vu: a block");
     if (b) {
         CHECK(memcmp(b->screenView, matrixptr + 0x100, 64) == 0, "vu: qw 4..7 = +0x100");
@@ -631,7 +631,7 @@ static void checkVu(void)
                   b->giftag[0] == 0x8000 && b->giftag[1] == 0x302EC000u && b->giftag[2] == 0x512,
               "vu: the constant head");
     }
-    const RdFrame *f = rd__RecFrame();
+    const RdFrame *f = rd__rec_frame();
     CHECK(f && f->hasCamera, "vu: the frame has a camera");
     if (f) {
         CHECK(memcmp(f->camera.view, s_view, 64) == 0, "vu: camera view = +0x80");
@@ -648,25 +648,25 @@ static void checkZScale(void)
        z * 2^-33 on a float depth buffer (the top 2^16 values apart in
        [1 - 2^-8, 1)), z * 2^-32 on D24S8 */
     const float s32 = 1.0f / 4294967296.0f, s32f = 1.0f / 8589934592.0f, s24 = 1.0f / 16777216.0f;
-    const float sScene = rd__TargetZScale(RD_TARGET_SCENE + 1);
+    const float sScene = rd__target_z_scale(RD_TARGET_SCENE + 1);
     CHECK(sScene == s32f || sScene == s32, "zscale: SCENE is PSMZ32");
-    CHECK(rd__GsDepth(0xFFFFFF9Bu, s32f) < rd__GsDepth(0xFFFFFFFFu, s32f),
+    CHECK(rd__gs_depth(0xFFFFFF9Bu, s32f) < rd__gs_depth(0xFFFFFFFFu, s32f),
           "zscale: 0xFFFFFF9B and 0xFFFFFFFF apart");
-    CHECK(rd__GsDepth(0, s32f) == 0.0f && rd__GsDepth(0xFFFFFFFFu, s32f) < 1.0f &&
-              rd__GsDepth(0xFFFEFFFFu, s32f) < rd__GsDepth(0xFFFF0000u, s32f),
+    CHECK(rd__gs_depth(0, s32f) == 0.0f && rd__gs_depth(0xFFFFFFFFu, s32f) < 1.0f &&
+              rd__gs_depth(0xFFFEFFFFu, s32f) < rd__gs_depth(0xFFFF0000u, s32f),
           "zscale: 32-bit ends and the top band");
-    CHECK(rd__GsDepth(16999983u, s32f) < rd__GsDepth(17000000u, s32f),
+    CHECK(rd__gs_depth(16999983u, s32f) < rd__gs_depth(17000000u, s32f),
           "zscale: 17 apart at 2^24 (the Queen's layers)");
-    CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32f) == rd__GsDepth(0xFFFFFF9Bu, s32f) &&
-              gs_z_to_depth(17000000u, s32f) == rd__GsDepth(17000000u, s32f),
+    CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32f) == rd__gs_depth(0xFFFFFF9Bu, s32f) &&
+              gs_z_to_depth(17000000u, s32f) == rd__gs_depth(17000000u, s32f),
           "zscale: CPU and shader formula agree");
     for (uint32_t z = 0; z < 0x1000000u; z += 4099u) {
-        if (rd__GsDepth(z, s24) != (float)z / 16777216.0f) {
+        if (rd__gs_depth(z, s24) != (float)z / 16777216.0f) {
             CHECK(0, "zscale: 24-bit exact at %u", z);
             break;
         }
     }
-    CHECK(rd__GsDepth(0x1000000u, s24) == rd__GsDepth(0xFFFFFFu, s24),
+    CHECK(rd__gs_depth(0x1000000u, s24) == rd__gs_depth(0xFFFFFFu, s24),
           "zscale: 24-bit clamps above zmax");
 }
 
@@ -690,7 +690,7 @@ static void snap(Snap *s)
         memcpy(s->m[i], matrixptr + s_slot[i], 64);
     }
     s->focus = currentFocusDistance;
-    const RdFrame *f = rd__RecFrame();
+    const RdFrame *f = rd__rec_frame();
     if (f && f->hasCamera) {
         s->hasCam = 1;
         s->cam = f->camera;
@@ -1122,13 +1122,13 @@ static void drawScene(RdTex t, RdFilter filter)
 {
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
     dl_SetDLPriority(0);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_Sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
     const int32_t o = (2048 - 256) * 16;
@@ -1139,13 +1139,13 @@ static void drawScene(RdTex t, RdFilter filter)
     v[0].q = v[1].q = 1.0f;
     memcpy(v[0].rgba, grey, 4);
     memcpy(v[1].rgba, grey, 4);
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
 }
 
 static uint8_t *readTarget(RdTargetId id, uint32_t *w, uint32_t *h)
 {
     static uint8_t buf[W * H * 4];
-    if (!rd__ReadTarget(rd_Target(id), buf, sizeof(buf), w, h)) {
+    if (!rd__read_target(rd_target(id), buf, sizeof(buf), w, h)) {
         CHECK(0, "readback of target %d", (int)id);
         return NULL;
     }
@@ -1197,7 +1197,7 @@ static int gsLerp(int cs, int cd, int f)
 
 static void checkCamera(void)
 {
-    const RdFrame *f = rd__RecFrame();
+    const RdFrame *f = rd__rec_frame();
     if (!f || !f->hasCamera) {
         CHECK(0, "camera: no camera in the open frame");
         return;
@@ -1206,7 +1206,7 @@ static void checkCamera(void)
         {100.0f, -50.0f, 800.0f, 1.0f}, {-300.0f, 40.0f, 200.0f, 1.0f}, {5.0f, 7.0f, -60.0f, 1.0f}};
     for (int n = 0; n < 3; n++) {
         float out[3][4];
-        if (!rd__CameraProbe(&f->camera, pts[n], out)) {
+        if (!rd__camera_probe(&f->camera, pts[n], out)) {
             CHECK(0, "camera: probe");
             return;
         }
@@ -1245,8 +1245,8 @@ static void checkDepthAndClear(void)
                          green[4] = {0, 200, 0, 0x80};
     gsb_SetBGColor(&db, 33, 66, 99);
     dl_SetDLPriority(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_TextureOff();
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_texture_off();
     const int32_t o = (2048 - 256) * 16;
 
     struct {
@@ -1262,20 +1262,20 @@ static void checkDepthAndClear(void)
         v[0].y = o + 16 * 16;
         v[1].x = v[0].x + 32 * 16;
         v[1].y = v[0].y + 32 * 16;
-        rd_TestGs(RD_TEST_Z_ALWAYS);
-        rd_ZWrite(1);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        rd_z_write(1);
         v[0].z = v[1].z = rg[i].za;
         memcpy(v[0].rgba, red, 4);
         memcpy(v[1].rgba, red, 4);
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
-        rd_TestGs(RD_TEST_Z_GEQUAL);
-        rd_ZWrite(0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        rd_test_gs(RD_TEST_Z_GEQUAL);
+        rd_z_write(0);
         v[0].z = v[1].z = rg[i].zb;
         memcpy(v[0].rgba, rg[i].b, 4);
         memcpy(v[1].rgba, rg[i].b, 4);
         /* depth-tested 2D prims are WORLD-tagged in the game (CPU-projected
            strips, glows); the Z values are the UI's, above 2^24 */
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
     }
     tick();
     uint32_t w, h;
@@ -1302,7 +1302,7 @@ static void checkHalf(RdTex rows)
         drawScene(rows, RD_FILTER_LINEAR);
         tick();
     }
-    CHECK(halfOf(rd__LastFrame(), 0) == 1, "half: the frame carried the half offset");
+    CHECK(halfOf(rd__last_frame(), 0) == 1, "half: the frame carried the half offset");
     uint32_t w, h;
     const uint8_t *s = readTarget(RD_TARGET_SCENE, &w, &h);
     if (s) {
@@ -1550,16 +1550,16 @@ static void checkLetterbox(void)
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
-    const uint32_t c = rd__PipelineCount();
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
+    const uint32_t c = rd__pipeline_count();
     for (uint32_t i = 0; i < c; i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         if (k->fs == RD_FS_CAMERA_PROBE) {
             continue; /* test only */
         }
         int found = 0;
         for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(k, &keys[j]);
+            found |= rd__pipe_key_equal(k, &keys[j]);
         }
         CHECK(found, "pipeline %u (blend %u fmt %u/%u z %u/%u) not in the enumerated set", i,
               k->gs.blend, k->colorFmt, k->depthFmt, k->gs.ztst, k->gs.zwrite);
@@ -1596,7 +1596,7 @@ static void maskFrame(const RdFrame *f)
 {
     memset(s_maskSeen, 0, sizeof(s_maskSeen));
     RdStateBlock st = f->startState;
-    rd__Walk(f, 0, &st, maskWalk, NULL);
+    rd__walk(f, 0, &st, maskWalk, NULL);
 }
 
 static void checkMask(void)
@@ -1604,12 +1604,12 @@ static void checkMask(void)
     for (int aa = 1; aa >= 0; aa--) {
         tick(); /* opens the frame */
         dl_SetDLPriority(10);
-        rd_ColorMask(0xFF000000u); /* the composite's FRAME PSMCT24 */
-        rd_TextureOff();           /* what a list-10 draw after it would draw with */
+        rd_color_mask(0xFF000000u); /* the composite's FRAME PSMCT24 */
+        rd_texture_off();           /* what a list-10 draw after it would draw with */
         GlobalStageSetting.antiLevel0 = aa ? 0x40 : 0;
         tick(); /* closes it: anti-alias (list 10), reduction (list 12) */
         GlobalStageSetting.antiLevel0 = 0;
-        const RdFrame *f = rd__LastFrame();
+        const RdFrame *f = rd__last_frame();
         if (!f) {
             CHECK(0, "mask: a frame");
             return;
@@ -1639,8 +1639,8 @@ static void aaWalk(void *user, int list, uint32_t index, const RdCmd *c, const R
     if (list != 10 || c->type != RDC_SCREEN) {
         return;
     }
-    const uint32_t aa0 = rd_Target(RD_TARGET_AA0).id, aa1 = rd_Target(RD_TARGET_AA1).id;
-    const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
+    const uint32_t aa0 = rd_target(RD_TARGET_AA0).id, aa1 = rd_target(RD_TARGET_AA1).id;
+    const RdTexRec *t = st->ds.texEnabled ? rd__tex_rec(st->tex) : NULL;
     const int samples = t && t->kind == RD_TEXKIND_TARGET && (t->target == aa0 || t->target == aa1);
     s_aaSprites += st->color == aa0 || st->color == aa1 || samples;
 }
@@ -1649,7 +1649,7 @@ static int aaRecords(const RdFrame *f)
 {
     s_aaSprites = 0;
     RdStateBlock st = f->startState;
-    rd__Walk(f, 0, &st, aaWalk, NULL);
+    rd__walk(f, 0, &st, aaWalk, NULL);
     return s_aaSprites;
 }
 
@@ -1666,7 +1666,7 @@ static void checkSofteningOff(void)
         GlobalStageSetting.antiLevel1 = 0x20;
         tick(); /* closes it: anti-alias (list 10) */
         GlobalStageSetting.antiLevel0 = GlobalStageSetting.antiLevel1 = 0;
-        const RdFrame *f = rd__LastFrame();
+        const RdFrame *f = rd__last_frame();
         if (!f) {
             CHECK(0, "softening: a frame");
             return;
@@ -1685,7 +1685,7 @@ static void checkSofteningOff(void)
    of the 12 call it), with the switch back on */
 static int fullScreenSprites(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     int n = 0;
     for (uint32_t i = 0; f && i < f->lists[11].count; i++) {
         const RdCmd *c = &f->lists[11].cmds[i];
@@ -1709,7 +1709,7 @@ static void checkCinematicBars(void)
         for (int i = 0; i < 10; i++) {
             tick();
         }
-        CHECK(rd__LastFrame() != NULL, "bars: a frame");
+        CHECK(rd__last_frame() != NULL, "bars: a frame");
         n[on] = fullScreenSprites();
         CHECK(s_blurCalls == 0, "bars %d: the motion blur is left alone while up (%d calls)", on,
               s_blurCalls);
@@ -1778,22 +1778,22 @@ static void recordingChecks(void)
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    const int device = rd_Init(512, 512, &st, NULL);
-    if (!device && !rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    const int device = rd_init(512, 512, &st, NULL);
+    if (!device && !rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     if (device) {
-        printf("rd_gsbase_test: adapter %s\n", rhi_AdapterName());
+        printf("rd_gsbase_test: adapter %s\n", rhi_adapter_name());
     }
     boot();
     recordingChecks();
     if (!device) {
-        rd_Shutdown();
+        rd_shutdown();
         if (failures) {
             printf("rd_gsbase_test: %d failures\n", failures);
             return 1;
@@ -1802,8 +1802,8 @@ int main(void)
         return 77;
     }
     makeScene();
-    s_tex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "gsbase scene");
-    s_noise = rd_CreateTexture(64, 64, s_noiseImg, RD_TEXA_80_80, "gsbase grain");
+    s_tex = rd_create_texture(W, H, s_img, RD_TEXA_80_80, "gsbase scene");
+    s_noise = rd_create_texture(64, 64, s_noiseImg, RD_TEXA_80_80, "gsbase grain");
     gif_HostSetTex0Resolver(resolver);
     static uint8_t rowsImg[W * H * 4];
     for (int y = 0; y < H; y++) {
@@ -1814,7 +1814,7 @@ int main(void)
             p[3] = 0x80;
         }
     }
-    RdTex rows = rd_CreateTexture(W, H, rowsImg, RD_TEXA_80_80, "gsbase rows");
+    RdTex rows = rd_create_texture(W, H, rowsImg, RD_TEXA_80_80, "gsbase rows");
     checkCamera();
     checkDepthAndClear();
     checkHalf(rows);
@@ -1827,11 +1827,11 @@ int main(void)
     checkFilmNoise();
     checkLetterbox();
     checkPipelines();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_DestroyTexture(rows);
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_destroy_texture(rows);
+    rd_shutdown();
     if (failures) {
         printf("rd_gsbase_test: %d failures\n", failures);
         return 1;

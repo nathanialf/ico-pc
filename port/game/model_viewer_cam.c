@@ -3,7 +3,7 @@
 
 #include "model_viewer_cam.h"
 
-float mv_CamStick(int v)
+float mv_cam_stick(int v)
 {
     int d = v - 128;
     if (d > -MV_STICK_DEAD && d < MV_STICK_DEAD) {
@@ -12,11 +12,11 @@ float mv_CamStick(int v)
     return (float)(d > 0 ? d - MV_STICK_DEAD : d + MV_STICK_DEAD) / (float)(128 - MV_STICK_DEAD);
 }
 
-void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4])
+void mv_cam_step(MvCam *c, unsigned now, const unsigned char ana[4])
 {
     /* ana[0], ana[1] turn the camera (yaw, pitch); ana[2], ana[3] pan it */
-    c->yaw -= mv_CamStick(ana[0]) * MV_YAW_RATE;
-    c->pitch += mv_CamStick(ana[1]) * MV_PITCH_RATE;
+    c->yaw -= mv_cam_stick(ana[0]) * MV_YAW_RATE;
+    c->pitch += mv_cam_stick(ana[1]) * MV_PITCH_RATE;
     c->pitch = c->pitch > MV_PITCH_MAX    ? MV_PITCH_MAX
                : c->pitch < -MV_PITCH_MAX ? -MV_PITCH_MAX
                                           : c->pitch;
@@ -26,11 +26,11 @@ void mv_CamStep(MvCam *c, unsigned now, const unsigned char ana[4])
     c->dist *= expf(z * MV_ZOOM_RATE);
     c->dist = c->dist < c->distMin ? c->distMin : c->dist > c->distMax ? c->distMax : c->dist;
 
-    /* mv_CamStick is negative for up and the game's y points down: up must add
+    /* mv_cam_stick is negative for up and the game's y points down: up must add
        to panY (the camera goes down, the model rises) */
-    c->panY -= mv_CamStick(ana[3]) * MV_PAN_RATE * c->dist;
+    c->panY -= mv_cam_stick(ana[3]) * MV_PAN_RATE * c->dist;
     /* stick right: the model moves right on the screen */
-    c->panX += mv_CamStick(ana[2]) * MV_PAN_RATE * c->dist;
+    c->panX += mv_cam_stick(ana[2]) * MV_PAN_RATE * c->dist;
     float lim = MV_PAN_MAX * c->dist;
     c->panY = c->panY > lim ? lim : c->panY < -lim ? -lim : c->panY;
     c->panX = c->panX > lim ? lim : c->panX < -lim ? -lim : c->panX;

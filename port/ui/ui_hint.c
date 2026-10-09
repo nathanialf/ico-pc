@@ -10,7 +10,7 @@
 #include "font.h"
 #include "menu_font.h"
 #include "strings.h"
-#include "ui_list.h" /* ui_SettingsAddRow */
+#include "ui_list.h" /* ui_settings_add_row */
 
 /* the words' box: 30 y units (15 field lines), as the Settings notes'; the
    capitals' middle is 2 y units above its centre (layout_ext.c), 6.5 field
@@ -55,12 +55,12 @@ static void setShown(int row, int on)
     if (row < 0) {
         return;
     }
-    LtProperty *p = lt_ext_Prop(row);
+    LtProperty *p = lt_ext_prop(row);
     p->defaultMask = on ? 0 : 1;
     p->masked = on ? 0 : 1;
 }
 
-void ui_HintBuild(UiHint *h, int y, float size, const UiHintItem *items, int n)
+void ui_hint_build(UiHint *h, int y, float size, const UiHintItem *items, int n)
 {
     memset(h, 0, sizeof(*h));
     h->y = y;
@@ -70,27 +70,27 @@ void ui_HintBuild(UiHint *h, int y, float size, const UiHintItem *items, int n)
     for (int i = 0; i < h->n; i++) {
         h->item[i] = items[i];
         h->shown[i] = 1;
-        h->glyphRow[i][0] = items[i].glyph >= 0 ? lt_ext_AddGlyph(items[i].glyph, 0, y, size) : -1;
+        h->glyphRow[i][0] = items[i].glyph >= 0 ? lt_ext_add_glyph(items[i].glyph, 0, y, size) : -1;
         h->glyphRow[i][1] =
-            items[i].glyph2 >= 0 ? lt_ext_AddGlyph(items[i].glyph2, 0, y, size) : -1;
-        h->textRow[i] = ui_SettingsAddRow(0, y, 100, TEXT_BOX_H, 0, -1, items[i].strId, NULL, size,
-                                          UI_ALIGN_LEFT);
+            items[i].glyph2 >= 0 ? lt_ext_add_glyph(items[i].glyph2, 0, y, size) : -1;
+        h->textRow[i] = ui_settings_add_row(0, y, 100, TEXT_BOX_H, 0, -1, items[i].strId, NULL,
+                                            size, UI_ALIGN_LEFT);
     }
-    ui_HintLayout(h);
+    ui_hint_layout(h);
 }
 
-void ui_HintShow(UiHint *h, int i, int on)
+void ui_hint_show(UiHint *h, int i, int on)
 {
     if (i >= 0 && i < h->n) {
         h->shown[i] = on ? 1 : 0;
     }
 }
 
-void ui_HintSetStr(UiHint *h, int i, int strId)
+void ui_hint_set_str(UiHint *h, int i, int strId)
 {
     if (i >= 0 && i < h->n && h->item[i].strId != strId) {
         h->item[i].strId = strId;
-        lt_ext_SetStr(h->textRow[i], strId);
+        lt_ext_set_str(h->textRow[i], strId);
     }
 }
 
@@ -109,19 +109,19 @@ static float lineWidth(const UiHint *h, float k)
             if (glyph < 0) {
                 continue;
             }
-            lt_ext_GlyphBox(glyph, h->size * k, &gw, NULL);
+            lt_ext_glyph_box(glyph, h->size * k, &gw, NULL);
             w += (float)gw + (g == 1 ? GAP_PAIR * k : 0.0f);
         }
         if (h->item[i].glyph >= 0) {
             w += GAP_GLYPH * k;
         }
-        w += ui_MeasureMenuText(h->size * k, ui_Str((UiStrId)h->item[i].strId));
+        w += ui_measure_menu_text(h->size * k, ui_str((UiStrId)h->item[i].strId));
         items++;
     }
     return items > 1 ? w + GAP_ITEM * k * (float)(items - 1) : w;
 }
 
-void ui_HintLayout(UiHint *h)
+void ui_hint_layout(UiHint *h)
 {
     float k = 1.0f;
     float w = lineWidth(h, 1.0f);
@@ -148,11 +148,11 @@ void ui_HintLayout(UiHint *h)
                 continue;
             }
             int gw, gh;
-            lt_ext_GlyphBox(glyph, h->size * k, &gw, &gh);
+            lt_ext_glyph_box(glyph, h->size * k, &gw, &gh);
             if (g == 1) {
                 x += GAP_PAIR * k;
             }
-            LtProperty *p = lt_ext_Prop(row);
+            LtProperty *p = lt_ext_prop(row);
             p->dispX = (int)(x + 0.5f);
             /* the glyph's middle on the words' capitals (dispH is in y
                units, dispY in field lines: a field line is two) */
@@ -164,10 +164,10 @@ void ui_HintLayout(UiHint *h)
         if (h->item[i].glyph >= 0) {
             x += GAP_GLYPH * k;
         }
-        const char *word = ui_Str((UiStrId)h->item[i].strId);
-        float tw = ui_MeasureMenuText(h->size * k, word);
-        LtProperty *t = lt_ext_Prop(h->textRow[i]);
-        lt_ext_SetSize(h->textRow[i], h->size * k);
+        const char *word = ui_str((UiStrId)h->item[i].strId);
+        float tw = ui_measure_menu_text(h->size * k, word);
+        LtProperty *t = lt_ext_prop(h->textRow[i]);
+        lt_ext_set_size(h->textRow[i], h->size * k);
         t->dispX = (int)(x + 0.5f);
         t->dispY = h->y;
         /* wide enough that the label is never shrunk again */

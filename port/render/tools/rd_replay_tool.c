@@ -1,4 +1,4 @@
-/* rd_replay_tool: loads an rd frame dump (rd_DumpFrame) and renders it
+/* rd_replay_tool: loads an rd frame dump (rd_dump_frame) and renders it
  * headless to a PNG, for the renderer verification plan (backend against
  * backend, before against after).
  *
@@ -12,7 +12,7 @@
  * skipped with a message (the final line counts them).
  *
  * --backend picks the RHI backend (default: the build's default,
- * port/rhi/rhi.h rhi_CreateBackend), so the same dump can be rendered on
+ * port/rhi/rhi.h rhi_create_backend), so the same dump can be rendered on
  * Vulkan and D3D12 and the PNGs compared.
  *
  * The display options: a dump does not carry them, so the replay takes them
@@ -35,7 +35,7 @@
  *                         full strength, the modes' own parameters;
  *                         --crt-strength K (0..1, after it) sets the strength
  *   --overlay-test        (with --present) registers a presentation overlay
- *                         (rd.h rd_SetPresentOverlay) drawing a test
+ *                         (rd.h rd_set_present_overlay) drawing a test
  *                         pattern after the box blit: a one-pixel white
  *                         outline on the box's edge and a 32 x 32 square,
  *                         opaque red, 16 pixels in from the box's top-left
@@ -52,7 +52,7 @@
  *                         space, vertex count, the bounding box in GS pixels
  *                         and the texel rectangle (UV, or STQ times the size)
  *   --no-device           no device: the dump is loaded into a record-only
- *                         renderer (rd__InitRecordOnly) for
+ *                         renderer (rd__init_record_only) for
  *                         --list, --mesh and --dump-textures and nothing is
  *                         rendered (<out.png> is not written); --list falls
  *                         back to it by itself when there is no device.
@@ -88,7 +88,7 @@
  *   --interp T PREV       replays the frame the presenter builds between the
  *                         dump PREV (the tick before, e.g. the game's
  *                         rd-NNNNN-prev.rddump) and <dump> at alpha T (0..1)
- *                         instead of <dump> itself: rd__InterpFrame as a
+ *                         instead of <dump> itself: rd__interp_frame as a
  *                         tick's first present; the two must be
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
@@ -132,11 +132,11 @@ static const char *targetName(uint32_t id, char buf[16])
     }
     for (int k = 0; k < RD_TARGET_COUNT; k++) {
         if (k == RD_TARGET_DATE_SNAPSHOT) {
-            if (rd_Target((RdTargetId)k).id == id) {
+            if (rd_target((RdTargetId)k).id == id) {
                 return "DATE_SNAPSHOT";
             }
         } else if (k < (int)(sizeof(kNames) / sizeof(kNames[0])) &&
-                   rd_Target((RdTargetId)k).id == id) {
+                   rd_target((RdTargetId)k).id == id) {
             return kNames[k];
         }
     }
@@ -149,7 +149,7 @@ static const char *targetName(uint32_t id, char buf[16])
  * replacement is a blank image (rd_dump.c), every byte 0 */
 static void texSummary(uint32_t id)
 {
-    const RdTexRec *t = rd__TexRec(id);
+    const RdTexRec *t = rd__tex_rec(id);
     if (!t) {
         printf(" (no record)");
         return;
@@ -159,12 +159,12 @@ static void texSummary(uint32_t id)
         printf(" target %s view %u", targetName(t->target, buf), t->view);
         return;
     }
-    if (!t->pixels || (t->format != RD_TEXEL_RGBA8 && !rd__TexelIsCoverage(t->format))) {
+    if (!t->pixels || (t->format != RD_TEXEL_RGBA8 && !rd__texel_is_coverage(t->format))) {
         printf(" no texels");
         return;
     }
     const size_t n = (size_t)t->w * t->h;
-    if (rd__TexelIsCoverage(t->format)) {
+    if (rd__texel_is_coverage(t->format)) {
         unsigned lo = 255, hi = 0;
         for (size_t k = 0; k < n; k++) {
             lo = t->pixels[k] < lo ? t->pixels[k] : lo;
@@ -199,7 +199,7 @@ static void texSummary(uint32_t id)
 static void skinnedPlace(const RdFrame *f, const RdCmd *c, const RdStateBlock *st)
 {
     RdVuPayload p;
-    const RdMeshRec *m = rd__MeshRec(c->u[0]);
+    const RdMeshRec *m = rd__mesh_rec(c->u[0]);
     if (!m || !m->stream || m->qwPerVertex < 5 ||
         (uint64_t)c->u[1] + sizeof(p) + sizeof(RdVuBlock) > f->payloadSize) {
         return;
@@ -268,7 +268,7 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
     printf("%2d:%-5u %-14s key %08x%08x", list, index,
            c->type < RDC_COUNT ? kCmdNames[c->type] : "?", c->keyHi, c->keyLo);
     if (c->type == RDC_TEXTURE) {
-        const RdTexRec *t = rd__TexRec(c->u[0]);
+        const RdTexRec *t = rd__tex_rec(c->u[0]);
         printf(" tex %u %ux%u fn %u tcc %u", c->u[0], t ? t->w : 0, t ? t->h : 0, c->b[0], c->b[1]);
         texSummary(c->u[0]);
     } else if (c->type == RDC_FILTER || c->type == RDC_WRAP) {
@@ -293,7 +293,7 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
     } else if (c->type == RDC_SCREEN &&
                c->u[0] + (uint64_t)c->u[1] * sizeof(RdScreenVtx) <= f->payloadSize) {
         const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
-        const RdTexRec *t = st->ds.texEnabled ? rd__TexRec(st->tex) : NULL;
+        const RdTexRec *t = st->ds.texEnabled ? rd__tex_rec(st->tex) : NULL;
         float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
         float u0 = 1e9f, v0 = 1e9f, u1 = -1e9f, v1 = -1e9f;
         for (uint32_t i = 0; i < c->u[1]; i++) {
@@ -359,7 +359,7 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
             texSummary(st->tex);
         }
     } else if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES) {
-        const RdMeshRec *m = rd__MeshRec(c->u[0]);
+        const RdMeshRec *m = rd__mesh_rec(c->u[0]);
         if (m) {
             printf(" mesh %s (%u vertices, %u batches)", m->name, m->vertexCount, m->batchCount);
         }
@@ -417,7 +417,7 @@ static void listMesh(const char *name)
                 for (uint32_t k = 0; k < br->indexCount; k++) {
                     const uint32_t ix = m->index[br->firstIndex + k];
                     drawn |= ix / 4 == v;
-                    later |= ix / 4 == v && rd__MeshDrawIndex(m)[br->firstIndex + k] != ix;
+                    later |= ix / 4 == v && rd__mesh_draw_index(m)[br->firstIndex + k] != ix;
                 }
                 printf("  %4u %c", v, later ? '^' : drawn ? '*' : ' ');
                 for (uint32_t q = 0; q < m->qwPerVertex; q++) {
@@ -440,18 +440,18 @@ static void dumpTextures(const char *dir)
         }
         const uint32_t id = (t->gen << 16) | (i + 1);
         snprintf(path, sizeof(path), "%s/tex-%u-%ux%u.png", dir, id, t->w, t->h);
-        if (rd__TexelIsCoverage(t->format)) {
+        if (rd__texel_is_coverage(t->format)) {
             /* coverage as grey (a sheet's too) */
             uint8_t *grey = malloc((size_t)t->w * t->h * 4);
             for (size_t k = 0; grey && k < (size_t)t->w * t->h; k++) {
                 grey[k * 4] = grey[k * 4 + 1] = grey[k * 4 + 2] = t->pixels[k];
                 grey[k * 4 + 3] = 0xFF;
             }
-            if (grey && rd_WritePng(path, grey, t->w, t->h, t->w * 4, 0)) {
+            if (grey && rd_write_png(path, grey, t->w, t->h, t->w * 4, 0)) {
                 printf("%s\n", path);
             }
             free(grey);
-        } else if (rd_WritePng(path, t->pixels, t->w, t->h, t->w * 4, 0)) {
+        } else if (rd_write_png(path, t->pixels, t->w, t->h, t->w * 4, 0)) {
             printf("%s\n", path);
         }
     }
@@ -473,7 +473,7 @@ static bool peekSize(const char *path, uint32_t *w, uint32_t *h)
     return ok;
 }
 
-/* --overlay-test: rd_OverlayPrims sprites in 12.4 output pixels */
+/* --overlay-test: rd_overlay_prims sprites in 12.4 output pixels */
 static void overlaySprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const uint8_t c[4])
 {
     RdScreenVtx v[2];
@@ -485,7 +485,7 @@ static void overlaySprite(int32_t x0, int32_t y0, int32_t x1, int32_t y1, const 
     v[0].q = v[1].q = 1.0f;
     memcpy(v[0].rgba, c, 4);
     memcpy(v[1].rgba, c, 4);
-    rd_OverlayPrims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
+    rd_overlay_prims(RD_PRIM_SPRITES, v, 2, (RdTex){0}, RD_BLEND_LERP_AS);
 }
 
 static void overlayTest(const RdOverlayCtx *ctx, void *user)
@@ -505,11 +505,11 @@ static void overlayTest(const RdOverlayCtx *ctx, void *user)
      * text through font.c's overlay mode), to see the UI under the filter */
     static const uint8_t panel[4] = {0x10, 0x10, 0x18, 0x60}, row[4] = {0xFF, 0xFF, 0xFF, 0x80},
                          dim[4] = {0xA0, 0xA0, 0xA0, 0x80};
-    ui_BeginOverlay(ctx);
-    ui_DrawRect(200.0f, 170.0f, 440.0f, 282.0f, panel);
-    ui_DrawText(320.0f, 214.0f, 27.0f, row, "Continue", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
-    ui_DrawText(320.0f, 254.0f, 27.0f, dim, "Quit Game", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
-    ui_EndOverlay();
+    ui_begin_overlay(ctx);
+    ui_draw_rect(200.0f, 170.0f, 440.0f, 282.0f, panel);
+    ui_draw_text(320.0f, 214.0f, 27.0f, row, "Continue", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_draw_text(320.0f, 254.0f, 27.0f, dim, "Quit Game", UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+    ui_end_overlay();
 }
 
 int main(int argc, char **argv)
@@ -557,7 +557,7 @@ int main(int argc, char **argv)
                 return 1;
             }
         } else if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
-            if (!rhi_CreateBackend(argv[++i])) {
+            if (!rhi_create_backend(argv[++i])) {
                 fprintf(stderr, "backend %s is not in this build\n", argv[i]);
                 return 1;
             }
@@ -626,7 +626,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "bad --crt (scanlines, consumer, trinitron, pvm or shadow)\n");
                 return 1;
             }
-            rd_CrtSettings(&s, (RdCrtMode)(m + 1), s.crtMode ? s.crtStrength : 1.0f);
+            rd_crt_settings(&s, (RdCrtMode)(m + 1), s.crtMode ? s.crtStrength : 1.0f);
         } else if (strcmp(argv[i], "--crt-strength") == 0 && i + 1 < argc) {
             char *end = NULL;
             const float k = strtof(argv[++i], &end);
@@ -683,37 +683,37 @@ int main(int argc, char **argv)
         fprintf(stderr, "--no-device renders nothing: give --list, --mesh or --dump-textures\n");
         return 1;
     }
-    if (noDevice || !rd_Init(gw, gh, &s, NULL)) {
+    if (noDevice || !rd_init(gw, gh, &s, NULL)) {
         if (!noDevice && !list) {
             fprintf(stderr, "no usable %s device\n",
-                    rhi_Backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
+                    rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan");
             return 77;
         }
         noDevice = true;
-        if (!rd__InitRecordOnly(gw, gh)) {
-            fprintf(stderr, "rd__InitRecordOnly failed\n");
+        if (!rd__init_record_only(gw, gh)) {
+            fprintf(stderr, "rd__init_record_only failed\n");
             return 1;
         }
     }
-    rd__SetNotImplementedFatal(false);
+    rd__set_not_implemented_fatal(false);
     if (overlay) {
-        rd_SetPresentOverlay(overlayTest, NULL);
+        rd_set_present_overlay(overlayTest, NULL);
     }
     RdFrame pf, f;
     memset(&pf, 0, sizeof(pf));
-    if (interpPrev && !rd__LoadFrame(interpPrev, &pf)) {
-        rd_Shutdown();
+    if (interpPrev && !rd__load_frame(interpPrev, &pf)) {
+        rd_shutdown();
         return 1;
     }
-    if (!rd__LoadFrame(dump, &f)) {
-        rd__FrameFree(&pf);
-        rd_Shutdown();
+    if (!rd__load_frame(dump, &f)) {
+        rd__frame_free(&pf);
+        rd_shutdown();
         return 1;
     }
     for (int k = 0; k < nopCount; k++) {
         const RdCmdList *cl = &f.lists[nops[k].l];
         for (uint32_t c = nops[k].a; c <= nops[k].b && c < cl->count; c++) {
-            if (!rd__CmdIsState(cl->cmds[c].type)) {
+            if (!rd__cmd_is_state(cl->cmds[c].type)) {
                 cl->cmds[c].type = RDC_NOP;
             }
         }
@@ -732,12 +732,12 @@ int main(int argc, char **argv)
     if (interpPrev) {
         /* the presenter's frame between the two */
         RdInterpStats ist;
-        rf = rd__InterpFrame(&pf, &f, interpT, 1, &ist);
+        rf = rd__interp_frame(&pf, &f, interpT, 1, &ist);
         if (!rf) {
-            fprintf(stderr, "rd__InterpFrame failed\n");
-            rd__FrameFree(&pf);
-            rd__FrameFree(&f);
-            rd_Shutdown();
+            fprintf(stderr, "rd__interp_frame failed\n");
+            rd__frame_free(&pf);
+            rd__frame_free(&f);
+            rd_shutdown();
             return 1;
         }
         printf("interp %u -> %u at %g: snap %u, %u keyed draws: %u blended, %u unmatched, %u "
@@ -748,7 +748,7 @@ int main(int argc, char **argv)
     if (list) {
         RdStateBlock st = rf->startState;
         s_listed = 0;
-        rd__Walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
+        rd__walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
         printf("listed %u commands of frame %u (%ux%u, fba/pabe/texa/date per action)\n", s_listed,
                rf->number, rf->gsW, rf->gsH);
     }
@@ -760,14 +760,14 @@ int main(int argc, char **argv)
     }
     int rc = 1;
     if (noDevice) {
-        rd__FrameFree(&f);
-        rd__FrameFree(&pf);
-        rd_Shutdown();
+        rd__frame_free(&f);
+        rd__frame_free(&pf);
+        rd_shutdown();
         return 0;
     }
-    const bool replayed = rd__ReplayFrame(rf, (int)rf->keep, pw != 0);
+    const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0);
     if (replayed && stats) {
-        /* the record rd__PerfEnd just closed (rd_PerfPop hands it out only
+        /* the record rd__perf_end just closed (rd_perf_pop hands it out only
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
@@ -782,19 +782,19 @@ int main(int argc, char **argv)
         uint32_t w = 0, h = 0;
         size_t cap = pw ? (size_t)pw * ph * 4 : (size_t)4096 * 4096 * 4;
         uint8_t *px = malloc(cap);
-        bool ok = px && (pw ? rd_ReadPresented(px, &w, &h)
-                            : rd__ReadTarget(rd_Target((RdTargetId)target), px, cap, &w, &h));
-        if (ok && rd_WritePng(png, px, w, h, w * 4, 1)) {
+        bool ok = px && (pw ? rd_read_presented(px, &w, &h)
+                            : rd__read_target(rd_target((RdTargetId)target), px, cap, &w, &h));
+        if (ok && rd_write_png(png, px, w, h, w * 4, 1)) {
             printf("%s: frame %u, %ux%u -> %s (%u commands skipped)\n", dump, f.number, w, h, png,
-                   rd__NotImplementedCount());
+                   rd__not_implemented_count());
             rc = 0;
         } else {
             fprintf(stderr, "readback or PNG write failed\n");
         }
         free(px);
     }
-    rd__FrameFree(&f);
-    rd__FrameFree(&pf);
-    rd_Shutdown();
+    rd__frame_free(&f);
+    rd__frame_free(&pf);
+    rd_shutdown();
     return rc;
 }

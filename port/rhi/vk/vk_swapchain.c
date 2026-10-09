@@ -24,17 +24,17 @@ _Static_assert(RHI_VK_TEST_OUT_OF_DATE == VK_ERROR_OUT_OF_DATE_KHR,
 static VkResult s_forcePresent = VK_SUCCESS;
 static uint32_t s_creations;
 
-void vkr_TestForcePresentResult(int32_t result)
+void vkr_test_force_present_result(int32_t result)
 {
     s_forcePresent = (VkResult)result;
 }
 
-uint32_t vkr_TestSwapchainCreations(void)
+uint32_t vkr_test_swapchain_creations(void)
 {
     return s_creations;
 }
 
-/* the surface's size polled after a present (vkr_PollSurface): when the
+/* the surface's size polled after a present (vkr_poll_surface): when the
  * swapchain was last made, when the poll last ran */
 static uint64_t s_swapMadeNs, s_pollNs;
 /* a poll rebuild whose swapchain came out at another size than the surface
@@ -42,10 +42,10 @@ static uint64_t s_swapMadeNs, s_pollNs;
  * so the same pair is not rebuilt at every present */
 static uint32_t s_pollStuckW, s_pollStuckH, s_pollMadeW, s_pollMadeH;
 
-static void vkr_DestroySwapResources(void)
+static void vkr_destroy_swap_resources(void)
 {
     for (uint32_t i = 0; i < g_vkr.swapImageCount; i++) {
-        vkr_ReleaseSwapchainImage(g_vkr.swapTextures[i]);
+        vkr_release_swapchain_image(g_vkr.swapTextures[i]);
         g_vkr.swapTextures[i] = 0;
         if (g_vkr.renderDone[i]) {
             vkDestroySemaphore(g_vkr.device, g_vkr.renderDone[i], NULL);
@@ -55,24 +55,24 @@ static void vkr_DestroySwapResources(void)
     g_vkr.swapImageCount = 0;
 }
 
-void vkr_SwapchainDestroy(void)
+void vkr_swapchain_destroy(void)
 {
     if (!g_vkr.device) {
         return;
     }
-    vkr_DestroySwapResources();
+    vkr_destroy_swap_resources();
     if (g_vkr.swapchain) {
         vkDestroySwapchainKHR(g_vkr.device, g_vkr.swapchain, NULL);
         g_vkr.swapchain = VK_NULL_HANDLE;
     }
 }
 
-/* rhi_PreferMailbox: kept across rhi_Init, which clears g_vkr */
+/* rhi_prefer_mailbox: kept across rhi_init, which clears g_vkr */
 static bool s_preferMailbox;
 
 /* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
  * the query fails): every one, no cap */
-static VkPresentModeKHR *vkr_SurfacePresentModes(uint32_t *n)
+static VkPresentModeKHR *vkr_surface_present_modes(uint32_t *n)
 {
     *n = 0;
     if (vkGetPhysicalDeviceSurfacePresentModesKHR(g_vkr.phys, g_vkr.surface, n, NULL) !=
@@ -94,12 +94,12 @@ static VkPresentModeKHR *vkr_SurfacePresentModes(uint32_t *n)
 }
 
 /* "immediate mailbox fifo fifo_relaxed": the offered modes for the log */
-static void vkr_PresentModeList(char *out, size_t size, const VkPresentModeKHR *modes, uint32_t n)
+static void vkr_present_mode_list(char *out, size_t size, const VkPresentModeKHR *modes, uint32_t n)
 {
     size_t len = 0;
     out[0] = '\0';
     for (uint32_t i = 0; i < n && len < size; i++) {
-        const char *name = vkr_PresentModeName(modes[i]);
+        const char *name = vkr_present_mode_name(modes[i]);
         int k = name ? snprintf(out + len, size - len, "%s%s", len ? " " : "", name)
                      : snprintf(out + len, size - len, "%s%d", len ? " " : "", (int)modes[i]);
         if (k < 0) {
@@ -115,9 +115,9 @@ static void vkr_PresentModeList(char *out, size_t size, const VkPresentModeKHR *
 /* An acquire's semaphore no submit waited on (an image acquired, then the
  * swapchain recreated or released before the frame was drawn): an empty
  * submit waits on it, so it is unsignalled before it is used again */
-static void vkr_DrainAcquireWait(void)
+static void vkr_drain_acquire_wait(void)
 {
-    if (g_vkr.acquireWaitPending && !vkr_SubmitEmpty()) {
+    if (g_vkr.acquireWaitPending && !vkr_submit_empty()) {
         /* the wait could not be queued: the device is idle, so recreate the
          * frame's semaphore instead of leaving it signalled */
         VkSemaphoreCreateInfo asci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -138,7 +138,7 @@ static void vkr_DrainAcquireWait(void)
     }
 }
 
-bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
+bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
 {
     if (!g_vkr.surface) {
         return false;
@@ -208,13 +208,13 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     if (count > VKR_MAX_SWAP_IMAGES) {
         count = VKR_MAX_SWAP_IMAGES;
     }
-    vkr_DrainAcquireWait();
+    vkr_drain_acquire_wait();
     /* the present mode (vk_present_mode.c) from the modes the surface
      * offers, queried once per creation */
     uint32_t nModes = 0;
-    VkPresentModeKHR *modes = vkr_SurfacePresentModes(&nModes);
+    VkPresentModeKHR *modes = vkr_surface_present_modes(&nModes);
     char offered[128];
-    vkr_PresentModeList(offered, sizeof(offered), modes, nModes);
+    vkr_present_mode_list(offered, sizeof(offered), modes, nModes);
     /* the compositor turns the picture (an Android phone held sideways
      * reports a rotated current transform); presenting in the window's own
      * orientation keeps every pass and the readbacks unrotated.  The
@@ -250,7 +250,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .preTransform = pre,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = vkr_ChoosePresentMode(modes, nModes, vsync, s_preferMailbox),
+        .presentMode = vkr_choose_present_mode(modes, nModes, vsync, s_preferMailbox),
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
@@ -263,9 +263,9 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         if (old) {
             /* the old swapchain is retired even when the creation fails, and
              * a retired one may not be passed as oldSwapchain again: drop it
-             * (the device is idle, rhi_ResizeSwapchain), so the next acquire
+             * (the device is idle, rhi_resize_swapchain), so the next acquire
              * returns id 0 and the caller's retry creates from scratch */
-            vkr_DestroySwapResources();
+            vkr_destroy_swap_resources();
             vkDestroySwapchainKHR(g_vkr.device, old, NULL);
             g_vkr.swapchain = VK_NULL_HANDLE;
             g_vkr.swapAcquired = false;
@@ -275,8 +275,8 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         return false;
     }
     s_creations++;
-    s_swapMadeNs = vkr_NowNs(); /* the poll runs at every present again */
-    vkr_DestroySwapResources();
+    s_swapMadeNs = vkr_now_ns(); /* the poll runs at every present again */
+    vkr_destroy_swap_resources();
     if (old) {
         vkDestroySwapchainKHR(g_vkr.device, old, NULL);
     }
@@ -305,7 +305,7 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     for (uint32_t i = 0; i < n; i++) {
         g_vkr.swapTextures[i] =
-            vkr_RegisterSwapchainImage(images[i], pick.format, g_vkr.swapRhiFormat, w, h);
+            vkr_register_swapchain_image(images[i], pick.format, g_vkr.swapRhiFormat, w, h);
         VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &g_vkr.renderDone[i]));
     }
     g_vkr.swapImageCount = n;
@@ -327,21 +327,21 @@ bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
         s_loggedW = w;
         s_loggedH = h;
         VKR_LOG("swapchain %ux%u, %u images, present mode %s (vsync %s%s); offered: %s", w, h, n,
-                vkr_PresentModeName(ci.presentMode), vsync ? "on" : "off",
+                vkr_present_mode_name(ci.presentMode), vsync ? "on" : "off",
                 vsync && s_preferMailbox ? ", mailbox preferred" : "", offered);
     }
     return true;
 }
 
-/* A surface on the window rhi_Init was given (or the last
- * rhi_RecreateSurface named).  The first failure of a run of them is
+/* A surface on the window rhi_init was given (or the last
+ * rhi_recreate_surface named).  The first failure of a run of them is
  * logged: on Android the window has no native surface while the app is in
  * the background, and every frame's retry would log it again. */
 #ifdef ICO_RHI_HAVE_SDL
 static bool s_surfaceFailLogged;
 #endif
 
-static bool vkr_SurfaceCreate(void)
+static bool vkr_surface_create(void)
 {
 #ifdef ICO_RHI_HAVE_SDL
     if (!g_vkr.window || !g_vkr.instance || g_vkr.surface) {
@@ -349,9 +349,9 @@ static bool vkr_SurfaceCreate(void)
     }
     VkSurfaceKHR surface = VK_NULL_HANDLE;
 #ifdef __ANDROID__
-    /* through the loader rhi_Init used (vk_surface_android.c), which logs
+    /* through the loader rhi_init used (vk_surface_android.c), which logs
        nothing while the app has no native window */
-    if (!vkr_CreateWindowSurface(g_vkr.window, &surface)) {
+    if (!vkr_create_window_surface(g_vkr.window, &surface)) {
         if (!s_surfaceFailLogged) {
             s_surfaceFailLogged = true;
             VKR_LOG("no window surface (tried again at the next frame)");
@@ -392,17 +392,17 @@ static bool vkr_SurfaceCreate(void)
 #endif
 }
 
-void rhi_ReleaseSurface(void)
+void rhi_release_surface(void)
 {
     if (!g_vkr.device || !g_vkr.surface) {
         return;
     }
-    vkr_DrainAcquireWait();
-    const uint64_t t0 = vkr_NowNs();
+    vkr_drain_acquire_wait();
+    const uint64_t t0 = vkr_now_ns();
     vkDeviceWaitIdle(g_vkr.device);
     g_vkr.stats.waitIdles++;
-    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
-    vkr_SwapchainDestroy();
+    g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;
+    vkr_swapchain_destroy();
     g_vkr.swapAcquired = false;
     g_vkr.presentSignalled = false;
     g_vkr.acquireWaitPending = false;
@@ -411,7 +411,7 @@ void rhi_ReleaseSurface(void)
     VKR_LOG("surface released; the device is kept");
 }
 
-bool rhi_RecreateSurface(void *window)
+bool rhi_recreate_surface(void *window)
 {
     if (!g_vkr.device) {
         return false;
@@ -422,16 +422,16 @@ bool rhi_RecreateSurface(void *window)
     if (!g_vkr.window) {
         return false; /* headless */
     }
-    rhi_ReleaseSurface();
-    if (!vkr_SurfaceCreate()) {
+    rhi_release_surface();
+    if (!vkr_surface_create()) {
         return false;
     }
     int w = 0, h = 0;
 #ifdef ICO_RHI_HAVE_SDL
     SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
-    if (!vkr_SwapchainCreate((uint32_t)w, (uint32_t)h, g_vkr.vsync)) {
-        /* the surface stays: rhi_ResizeSwapchain makes the swapchain at
+    if (!vkr_swapchain_create((uint32_t)w, (uint32_t)h, g_vkr.vsync)) {
+        /* the surface stays: rhi_resize_swapchain makes the swapchain at
          * the next frame */
         return false;
     }
@@ -443,15 +443,15 @@ bool rhi_RecreateSurface(void *window)
  * Android destroys the window's surface before the app hears it is in the
  * background): a new surface and swapchain, or none until the window has a
  * surface again */
-static void vkr_SurfaceLost(const char *where)
+static void vkr_surface_lost(const char *where)
 {
     VKR_LOG("surface lost at %s; making it again", where);
-    rhi_RecreateSurface(NULL);
+    rhi_recreate_surface(NULL);
 }
 
 /* The size a swapchain made now would have: the surface's current extent
  * when it has one, else the window's pixel size */
-static bool vkr_SwapTargetSize(uint32_t *w, uint32_t *h)
+static bool vkr_swap_target_size(uint32_t *w, uint32_t *h)
 {
     int ww = (int)g_vkr.swapWidth, wh = (int)g_vkr.swapHeight;
 #ifdef ICO_RHI_HAVE_SDL
@@ -469,39 +469,39 @@ static bool vkr_SwapTargetSize(uint32_t *w, uint32_t *h)
     return *w != 0 && *h != 0;
 }
 
-bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_vkr.surface) {
         /* released (the background) or lost: made again when the window
          * has a surface */
-        if (!g_vkr.device || !g_vkr.window || !vkr_SurfaceCreate()) {
+        if (!g_vkr.device || !g_vkr.window || !vkr_surface_create()) {
             return false;
         }
     }
-    const uint64_t t0 = vkr_NowNs();
+    const uint64_t t0 = vkr_now_ns();
     vkDeviceWaitIdle(g_vkr.device);
     g_vkr.stats.waitIdles++;
-    g_vkr.stats.fenceWaitNs += vkr_NowNs() - t0;
-    return vkr_SwapchainCreate(width, height, vsync);
+    g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;
+    return vkr_swapchain_create(width, height, vsync);
 }
 
-void rhi_PreferMailbox(bool on)
+void rhi_prefer_mailbox(bool on)
 {
     s_preferMailbox = on;
 }
 
-bool rhi_PresentMailbox(void)
+bool rhi_present_mailbox(void)
 {
     return g_vkr.swapchain && g_vkr.mailbox;
 }
 
-const char *rhi_PresentModeName(void)
+const char *rhi_present_mode_name(void)
 {
-    const char *name = g_vkr.swapchain ? vkr_PresentModeName(g_vkr.presentMode) : NULL;
+    const char *name = g_vkr.swapchain ? vkr_present_mode_name(g_vkr.presentMode) : NULL;
     return name ? name : "none";
 }
 
-RhiFormat rhi_SwapchainFormat(void)
+RhiFormat rhi_swapchain_format(void)
 {
     /* a window device keeps its format while the surface is released or
      * lost, so the renderer goes on presenting to it (and skips frames)
@@ -509,7 +509,7 @@ RhiFormat rhi_SwapchainFormat(void)
     return g_vkr.surface || g_vkr.window ? g_vkr.swapRhiFormat : RHI_FMT_UNKNOWN;
 }
 
-bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
 {
     if (!g_vkr.swapchain || !g_vkr.swapWidth || !g_vkr.swapHeight) {
         return false;
@@ -519,7 +519,7 @@ bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
     return true;
 }
 
-RhiTexture rhi_AcquireBackbuffer(void)
+RhiTexture rhi_acquire_backbuffer(void)
 {
     RhiTexture out = {0};
     if (!g_vkr.swapchain) {
@@ -529,19 +529,19 @@ RhiTexture rhi_AcquireBackbuffer(void)
         out.id = g_vkr.swapTextures[g_vkr.swapImage];
         return out;
     }
-    VkrFrame *f = vkr_CurFrame();
+    VkrFrame *f = vkr_cur_frame();
     uint32_t idx = 0;
-    const uint64_t t0 = vkr_NowNs();
+    const uint64_t t0 = vkr_now_ns();
     VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, UINT64_MAX, f->acquireSem,
                                        VK_NULL_HANDLE, &idx);
-    g_vkr.stats.acquireNs += vkr_NowNs() - t0;
+    g_vkr.stats.acquireNs += vkr_now_ns() - t0;
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
-        return out; /* rd_present recreates via rhi_ResizeSwapchain */
+        return out; /* rd_present recreates via rhi_resize_swapchain */
     }
     if (r == VK_ERROR_SURFACE_LOST_KHR) {
         /* this frame is skipped (the semaphore was not signalled; the
          * caller's retry acquires on the new swapchain) */
-        vkr_SurfaceLost("acquire");
+        vkr_surface_lost("acquire");
         return out;
     }
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR) {
@@ -558,7 +558,7 @@ RhiTexture rhi_AcquireBackbuffer(void)
 }
 
 /* Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
-static bool vkr_PollSurfaceOn(void)
+static bool vkr_poll_surface_on(void)
 {
 #ifdef __ANDROID__
     return true;
@@ -577,28 +577,28 @@ static bool vkr_PollSurfaceOn(void)
  * applied) while the driver goes on returning VK_SUCCESS and SDL's size
  * event comes late or never; the compositor then scales and offsets the old
  * size's image.  The surface's current extent (else the window's pixel
- * size, as vkr_SwapTargetSize) is asked at every present for the first 15 s
+ * size, as vkr_swap_target_size) is asked at every present for the first 15 s
  * after a swapchain is made, then once a second; a different size rebuilds
  * the swapchain as a suboptimal present with a size change does, and the
  * renderer's output follows it at the next acquire
- * (rd__OutputFollowSwapchain). */
-void rhi_SurfacePollRestart(void)
+ * (rd__output_follow_swapchain). */
+void rhi_surface_poll_restart(void)
 {
-    s_swapMadeNs = vkr_NowNs();
+    s_swapMadeNs = vkr_now_ns();
 }
 
-static void vkr_PollSurface(void)
+static void vkr_poll_surface(void)
 {
-    if (!vkr_PollSurfaceOn() || !g_vkr.swapchain) {
+    if (!vkr_poll_surface_on() || !g_vkr.swapchain) {
         return;
     }
-    const uint64_t now = vkr_NowNs();
+    const uint64_t now = vkr_now_ns();
     if (now - s_swapMadeNs >= VKR_POLL_ALWAYS_NS && now - s_pollNs < VKR_POLL_PERIOD_NS) {
         return;
     }
     s_pollNs = now;
     uint32_t w = 0, h = 0;
-    if (!vkr_SwapTargetSize(&w, &h) || (w == g_vkr.swapWidth && h == g_vkr.swapHeight)) {
+    if (!vkr_swap_target_size(&w, &h) || (w == g_vkr.swapWidth && h == g_vkr.swapHeight)) {
         return;
     }
     if (w == s_pollStuckW && h == s_pollStuckH && g_vkr.swapWidth == s_pollMadeW &&
@@ -606,7 +606,7 @@ static void vkr_PollSurface(void)
         return; /* this size was tried and the surface's limits gave another */
     }
     const uint32_t ow = g_vkr.swapWidth, oh = g_vkr.swapHeight;
-    if (!rhi_ResizeSwapchain(w, h, g_vkr.vsync)) {
+    if (!rhi_resize_swapchain(w, h, g_vkr.vsync)) {
         return; /* the next acquire finds no swapchain and rd_present retries */
     }
     VKR_LOG("swapchain %ux%u follows the surface (was %ux%u)", g_vkr.swapWidth, g_vkr.swapHeight,
@@ -620,14 +620,14 @@ static void vkr_PollSurface(void)
     }
 }
 
-void rhi_Present(void)
+void rhi_present(void)
 {
     if (!g_vkr.swapchain || !g_vkr.swapAcquired) {
         return;
     }
     /* the presenting list's submit signalled the semaphore already
-     * (rhi_Submit); otherwise an empty batch after the frame's work */
-    if (!g_vkr.presentSignalled && !vkr_SubmitPresentSignal()) {
+     * (rhi_submit); otherwise an empty batch after the frame's work */
+    if (!g_vkr.presentSignalled && !vkr_submit_present_signal()) {
         return;
     }
     VkPresentInfoKHR pi = {
@@ -638,9 +638,9 @@ void rhi_Present(void)
         .pSwapchains = &g_vkr.swapchain,
         .pImageIndices = &g_vkr.swapImage,
     };
-    const uint64_t t0 = vkr_NowNs();
+    const uint64_t t0 = vkr_now_ns();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
-    g_vkr.stats.presentNs += vkr_NowNs() - t0;
+    g_vkr.stats.presentNs += vkr_now_ns() - t0;
     g_vkr.stats.presents++;
     g_vkr.swapAcquired = false;
     g_vkr.presentSignalled = false;
@@ -661,22 +661,22 @@ void rhi_Present(void)
 #ifdef ICO_RHI_HAVE_SDL
         SDL_GetWindowSizeInPixels((SDL_Window *)g_vkr.window, &w, &h);
 #endif
-        rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
+        rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_vkr.vsync);
     } else if (r == VK_SUBOPTIMAL_KHR) {
         /* Android only: the image was shown.  Recreated only when the size
          * changed: with the identity transform on a rotated Android display
          * the driver reports suboptimal at every present, and a recreation
          * would change nothing */
         uint32_t w = 0, h = 0;
-        if (vkr_SwapTargetSize(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
-            rhi_ResizeSwapchain(w, h, g_vkr.vsync);
+        if (vkr_swap_target_size(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
+            rhi_resize_swapchain(w, h, g_vkr.vsync);
         }
     } else if (r == VK_ERROR_SURFACE_LOST_KHR) {
-        vkr_SurfaceLost("present");
+        vkr_surface_lost("present");
     } else if (r != VK_SUCCESS) {
         VKR_CHECK(r);
     }
     if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
-        vkr_PollSurface(); /* a size change the present did not report */
+        vkr_poll_surface(); /* a size change the present did not report */
     }
 }

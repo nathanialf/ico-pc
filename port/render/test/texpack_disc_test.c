@@ -7,7 +7,7 @@
  * member of DATA.DF's packs (df_pack.h) is parsed as Texture.c's
  * tex_makeTexturePacket and texHostTexture read it (the levels, the CLUT
  * turned into CSM1 order when the file holds it in index order) and given
- * its candidate names (texpack_Candidates) for every level the game can
+ * its candidate names (texpack_candidates) for every level the game can
  * bind, and so is every TIM2 record of the subtitle files (*.jim, loose
  * and in the packs).  They go to texpack_names.txt in the working directory, one line
  * per texture:
@@ -16,7 +16,7 @@
  *
  * with per-type counts on stdout.  PACKDIR (or ICO_TEXPACK_DIR) is a
  * PCSX2 replacements folder, read recursively: its file names are parsed
- * (texpack_ParseName) and matched against the disc's names, and the test
+ * (texpack_parse_name) and matched against the disc's names, and the test
  * prints how many of the pack's files match a texture and how many
  * textures have a file.  Nothing is written to the disc or the pack.
  */
@@ -76,7 +76,7 @@ static uint32_t tbwOf(uint32_t psm, uint32_t w)
     return psm == RDTEX_PSMT8 || psm == RDTEX_PSMT4 ? n + (n & 1) : n;
 }
 
-/* rd_tex.c rdtex_ImageBytes for the five TIM2 formats (rd_tex.c is in
+/* rd_tex.c rdtex_image_bytes for the five TIM2 formats (rd_tex.c is in
    ico_render, which needs a device library; this test does not) */
 static size_t imageBytes(uint32_t psm, uint32_t w, uint32_t h)
 {
@@ -95,13 +95,13 @@ static size_t imageBytes(uint32_t psm, uint32_t w, uint32_t h)
     }
 }
 
-/* Texture.c tex_convertClutCSM2ToCSM1 (rd_tex.c rdtex_ClutToCsm1) */
+/* Texture.c tex_convertClutCSM2ToCSM1 (rd_tex.c rdtex_clut_to_csm1) */
 static void clutToCsm1(uint8_t *clut, uint32_t entry)
 {
     uint8_t tmp[256 * 4];
     memcpy(tmp, clut, 256 * entry);
     for (uint32_t i = 0; i < 256; i++) {
-        memcpy(clut + rdtex_Csm1Index(i, 256) * entry, tmp + i * entry, entry);
+        memcpy(clut + rdtex_csm1_index(i, 256) * entry, tmp + i * entry, entry);
     }
 }
 
@@ -292,7 +292,7 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
     strcpy(s_texName[tex], member);
 
     int unstable = 0;
-    int total = texpack_Candidates(&src, 0, names, TEXPACK_MAX_CANDIDATES);
+    int total = texpack_candidates(&src, 0, names, TEXPACK_MAX_CANDIDATES);
     if (total < 0) {
         CHECK(src.cpsm == RDTEX_PSMCT24, "%s: names refused (type %s, CLUT 0x%x)", member,
               kType[type], clutType);
@@ -307,7 +307,7 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
     line[0] = 0;
     for (int i = 0; i < total; i++) {
         char nm[TEXPACK_NAME_MAX];
-        CHECK(texpack_FormatName(&names[i], nm, sizeof(nm)) > 0, "%s: name %d formats", member, i);
+        CHECK(texpack_format_name(&names[i], nm, sizeof(nm)) > 0, "%s: name %d formats", member, i);
         unstable |= names[i].unstable;
         keyAdd(&s_disc, names[i].tex0Hash, names[i].clutHash, names[i].bits, tex,
                (names[i].startLevel > 0 ? 2 : 0) + names[i].mipChain);
@@ -318,7 +318,7 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
        list, in the same order */
     for (uint32_t b = 1; b < levels; b++) {
         TexpackName sub[TEXPACK_MAX_CANDIDATES];
-        int n = texpack_Candidates(&src, b, sub, TEXPACK_MAX_CANDIDATES);
+        int n = texpack_candidates(&src, b, sub, TEXPACK_MAX_CANDIDATES);
         CHECK(n > 0 && n <= total, "%s: bound level %u gives %d names", member, b, n);
         for (int i = 0; i < n && n <= total; i++) {
             const TexpackName *x = &sub[i];
@@ -386,7 +386,7 @@ static void packFile(Pack *p, const char *base)
         p->ignored++;
         return;
     }
-    int rc = texpack_ParseName(base, &n);
+    int rc = texpack_parse_name(base, &n);
     int idx = p->count++;
     p->files = realloc(p->files, (size_t)p->count * sizeof(char *));
     p->files[idx] = malloc(strlen(base) + 1);

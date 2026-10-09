@@ -2,8 +2,8 @@
  * port/ui/menu_font.c
  *
  * The menus' text in the sheets' look (menu_font.h): the strip cache, the
- * inks and the draws.  font.c rasterises (ui__SheetRasterLine, the only
- * stb compile unit) and emits the sprites (ui__DrawTexQuads).
+ * inks and the draws.  font.c rasterises (ui__sheet_raster_line, the only
+ * stb compile unit) and emits the sprites (ui__draw_tex_quads).
  */
 #include "menu_font.h"
 
@@ -47,7 +47,7 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    first corner above are in sheet texels (s times as many strip texels).  A
    page holds strips of one scale: 1024 x 1024 at 1x; above it 1024 s x 256 s
    of coverage, at most 4096 wide, and below it as many texels of rim (rd.h
-   rd_SheetRim: the 1x rim of the sheet texels, one value over each sheet
+   rd_sheet_rim: the 1x rim of the sheet texels, one value over each sheet
    texel's texels, which the shader magnifies), so the texture is 2048 x 1024
    at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2, 4.5 and 8 MB, kept on the
    CPU and in the texture; at most MF_PAGES of a style, three styles: 96 MB of
@@ -126,7 +126,7 @@ typedef struct MfPage {
                      twice as tall above 1x */
     uint32_t tex; /* the rd sheet texture, 0 until first drawn */
     int shelfX, shelfY, shelfH;
-    uint32_t lastFrame; /* rd_FrameNumber at its last draw */
+    uint32_t lastFrame; /* rd_frame_number at its last draw */
 } MfPage;
 
 typedef struct MfStrip {
@@ -151,7 +151,7 @@ static struct {
     UiMenuStrip last;
 } s_mf = {.lightLang = -1};
 
-const UiSheetInk *ui_MenuSheetInk(int lang)
+const UiSheetInk *ui_menu_sheet_ink(int lang)
 {
     return &kSheetInk[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN];
 }
@@ -171,7 +171,7 @@ static const UiSheetInk *classInk(int cls, int lang)
     if (cls == MF_PLAIN) {
         return &kPlainInk;
     }
-    const UiSheetInk *k = ui_MenuSheetInk(lang);
+    const UiSheetInk *k = ui_menu_sheet_ink(lang);
     if (cls == MF_LIGHT) {
         return k;
     }
@@ -181,7 +181,7 @@ static const UiSheetInk *classInk(int cls, int lang)
     return &faint[l];
 }
 
-const UiSheetInk *ui_MenuItemInk(int ink, int rim, int lang)
+const UiSheetInk *ui_menu_item_ink(int ink, int rim, int lang)
 {
     return classInk(classOf(ink, rim), lang);
 }
@@ -206,7 +206,7 @@ static int splitLines(const char *utf8, const char **start, size_t *len)
     return n;
 }
 
-float ui_MeasureMenuText(float size, const char *utf8)
+float ui_measure_menu_text(float size, const char *utf8)
 {
     if (!utf8) {
         return 0.0f;
@@ -216,16 +216,16 @@ float ui_MeasureMenuText(float size, const char *utf8)
     const int n = splitLines(utf8, start, len);
     float widest = 0.0f;
     for (int i = 0; i < n; i++) {
-        const float w = ui__SheetLineWidth(size * 0.5f, 1.0f, 0.0f, start[i], len[i]);
+        const float w = ui__sheet_line_width(size * 0.5f, 1.0f, 0.0f, start[i], len[i]);
         widest = w > widest ? w : widest;
     }
     return widest;
 }
 
-void ui_MenuFontMetrics(float size, float *ascent, float *descent, float *capHeight)
+void ui_menu_font_metrics(float size, float *ascent, float *descent, float *capHeight)
 {
     float a = 0.0f, d = 0.0f, c = 0.0f;
-    ui__SheetVMetrics(size * 0.5f, &a, &d, NULL, &c);
+    ui__sheet_v_metrics(size * 0.5f, &a, &d, NULL, &c);
     if (ascent) {
         *ascent = 2.0f * a;
     }
@@ -241,7 +241,7 @@ void ui_MenuFontMetrics(float size, float *ascent, float *descent, float *capHei
 
 static float s_boldX = UI_MENU_BOLD_X, s_boldY = UI_MENU_BOLD_Y;
 
-void ui__MenuSetBold(float bx, float by)
+void ui__menu_set_bold(float bx, float by)
 {
     s_boldX = bx;
     s_boldY = by;
@@ -296,11 +296,11 @@ static void embolden(uint8_t *cov, int w, int h, int scale)
 
 /* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
    caller): the strip itemStrip caches, also the comparison test's
-   reference (ui__MenuStripRaster). */
+   reference (ui__menu_strip_raster). */
 static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int scale)
 {
     const int w = it->w * scale, hgt = it->h * scale;
-    const char *str = ui_StrIn((UiLang)lang, (UiStrId)it->str);
+    const char *str = ui_str_in((UiLang)lang, (UiStrId)it->str);
     const char *start[MF_LINES];
     size_t len[MF_LINES];
     const int n = splitLines(str, start, len);
@@ -308,7 +308,7 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
     const float wx = it->wx[lang], ax = it->x[lang], track = it->track[lang];
     float widths[MF_LINES], widest = 0.0f;
     for (int i = 0; i < n; i++) {
-        widths[i] = ui__SheetLineWidth(em, wx, track, start[i], len[i]);
+        widths[i] = ui__sheet_line_width(em, wx, track, start[i], len[i]);
         widest = widths[i] > widest ? widths[i] : widest;
     }
     /* a line longer than the rectangle is set smaller to fit, down to 60 %,
@@ -326,7 +326,7 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
         }
     }
     float cap = 0.0f;
-    ui__SheetVMetrics(em, NULL, NULL, NULL, &cap);
+    ui__sheet_v_metrics(em, NULL, NULL, NULL, &cap);
     for (int i = 0; i < n; i++) {
         float pen = ax;
         if (it->align == UI_ALIGN_CENTER) {
@@ -338,12 +338,12 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
         pen = pen > hi ? hi : pen;
         pen = pen < lo ? lo : pen;
         const float base = it->y[lang] + (float)i * it->pitch + cap * 0.5f;
-        ui__SheetRasterLine(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i], scale);
+        ui__sheet_raster_line(cov, w, hgt, w, em, wx, track, pen, base, start[i], len[i], scale);
     }
     embolden(cov, w, hgt, scale);
 }
 
-int ui__MenuStripRaster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
+int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
 {
     if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_COUNT) {
         return -1;
@@ -376,7 +376,7 @@ static int inkColour(int ink, int rim, const uint8_t rgba[4], int glow, int *cls
 }
 #endif
 
-int ui_MenuFontLastStrip(UiMenuStrip *out)
+int ui_menu_font_last_strip(UiMenuStrip *out)
 {
     if (out && s_mf.hasLast) {
         *out = s_mf.last;
@@ -384,7 +384,7 @@ int ui_MenuFontLastStrip(UiMenuStrip *out)
     return s_mf.hasLast;
 }
 
-int ui_MenuFontIsPage(uint32_t tex)
+int ui_menu_font_is_page(uint32_t tex)
 {
     for (int c = 0; tex && c < MF_CLASSES; c++) {
         for (int p = 0; p < MF_PAGES; p++) {
@@ -396,7 +396,7 @@ int ui_MenuFontIsPage(uint32_t tex)
     return 0;
 }
 
-const uint8_t *ui_MenuFontPage(int cls, int page, int *w, int *h)
+const uint8_t *ui_menu_font_page(int cls, int page, int *w, int *h)
 {
     if (cls < 0 || cls >= MF_CLASSES || page < 0 || page >= MF_PAGES ||
         !s_mf.pages[cls][page].cov) {
@@ -411,7 +411,7 @@ const uint8_t *ui_MenuFontPage(int cls, int page, int *w, int *h)
     return s_mf.pages[cls][page].cov;
 }
 
-int ui_MenuFontStripCount(void)
+int ui_menu_font_strip_count(void)
 {
     int n = 0;
     for (int i = 0; i < MF_STRIPS; i++) {
@@ -425,7 +425,7 @@ int ui_MenuFontStripCount(void)
 static int s_forceScale;
 #endif
 
-void ui__MenuForceScale(int scale)
+void ui__menu_force_scale(int scale)
 {
 #ifdef ICO_RD
     s_forceScale = scale;
@@ -458,7 +458,7 @@ static size_t pageBytes(const MfPage *p)
 
 /* the scale the strips drawn now are rasterised at: the output's pixels a
    y unit in overlay mode (the box's height / 448), else the scene's
-   texels a GS line (rd_GetSceneScale: 1 at 1x and under the CRT filter),
+   texels a GS line (rd_get_scene_scale: 1 at 1x and under the CRT filter),
    to whole strip texels a sheet texel: rounded up from a quarter past
    (2.11 for 1080 lines in the "window" resolution is 2, 2.41 is 3), 1 ..
    ICO_SHEET_SCALE_MAX (4K's 4.8 is 4).  The texels per GS pixel across are
@@ -470,13 +470,13 @@ static int mfScale(void)
         return s_forceScale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : s_forceScale;
     }
     float k = 1.0f;
-    if (ui_OverlayActive()) {
+    if (ui_overlay_active()) {
         float y0 = 0.0f, y1 = 0.0f;
-        ui_OverlayMap(0.0f, 0.0f, NULL, &y0);
-        ui_OverlayMap(0.0f, 1.0f, NULL, &y1);
+        ui_overlay_map(0.0f, 0.0f, NULL, &y0);
+        ui_overlay_map(0.0f, 1.0f, NULL, &y1);
         k = (y1 - y0) / 16.0f;
     } else {
-        rd_GetSceneScale(NULL, &k);
+        rd_get_scene_scale(NULL, &k);
     }
     const int sc = (int)ceilf(k - 0.25f);
     return sc < 1 ? 1 : (sc > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : sc);
@@ -491,12 +491,12 @@ static void freeStrip(MfStrip *s)
 static void destroyTex(MfPage *p)
 {
     if (p->tex) {
-        rd_DestroyTexture((RdTex){p->tex});
+        rd_destroy_texture((RdTex){p->tex});
         p->tex = 0;
     }
 }
 
-/* ui_FontShutdown: the pages, their textures and the strips go */
+/* ui_font_shutdown: the pages, their textures and the strips go */
 static void mfShutdown(void)
 {
     for (int c = 0; c < MF_CLASSES; c++) {
@@ -514,7 +514,7 @@ static void mfShutdown(void)
     s_mf.hasLast = 0;
 }
 
-/* ui_FontForgetTextures: rd started again, the ids are stale; the
+/* ui_font_forget_textures: rd started again, the ids are stale; the
    coverage stays and is uploaded whole at the next draw */
 static void mfForget(void)
 {
@@ -635,7 +635,7 @@ static int allocCell(int cls, int sc, int w, int h, int *page, int *x, int *y)
         h > pageH(sc) - (MF_ORIGIN + MF_GAP_Y) * sc) {
         return 0;
     }
-    const uint32_t now = rd_FrameNumber();
+    const uint32_t now = rd_frame_number();
     for (int pg = 0; pg < MF_PAGES; pg++) {
         MfPage *p = &s_mf.pages[cls][pg];
         if (p->cov && p->scale == sc && shelfFit(p, w, h, x, y)) {
@@ -681,7 +681,7 @@ static MfStrip *newStrip(void)
                 return &s_mf.strips[i];
             }
         }
-        const uint32_t now = rd_FrameNumber();
+        const uint32_t now = rd_frame_number();
         int freed = 0;
         for (int c = 0; c < MF_CLASSES && !freed; c++) {
             freed = evictOne(c, 0, now) >= 0;
@@ -709,8 +709,8 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
                cov + (size_t)r * (size_t)w, (size_t)w);
     }
     if (p->tex) {
-        rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
-                             (uint32_t)h, cov);
+        rd_update_texture_rect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
+                               (uint32_t)h, cov);
     }
     if (p->scale > 1) {
         /* the rim below, over the strip and the sheet texel round it that
@@ -719,8 +719,8 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
         uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
         const int sc = p->scale;
         const int rx = s->x - sc, ry = s->y - sc, rw = w + 2 * sc, rh = h + 2 * sc;
-        rd_SheetRim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
-                    rim);
+        rd_sheet_rim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
+                     rim);
         if (p->tex) {
             uint8_t *px = malloc((size_t)rw * (size_t)rh);
             if (px) {
@@ -728,8 +728,8 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
                     memcpy(px + (size_t)r * (size_t)rw,
                            rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx, (size_t)rw);
                 }
-                rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
-                                     (uint32_t)rw, (uint32_t)rh, px);
+                rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
+                                       (uint32_t)rw, (uint32_t)rh, px);
                 free(px);
             }
         }
@@ -752,12 +752,12 @@ static uint32_t pageTex(int cls, int page, int lang)
         } else {
             snprintf(name, sizeof(name), "ui menu text %s p%d", kName[cls], page);
         }
-        p->tex = rd_CreateTextureSheet((uint32_t)p->w, (uint32_t)(p->scale > 1 ? 2 * p->h : p->h),
-                                       p->cov, &st, name)
+        p->tex = rd_create_texture_sheet((uint32_t)p->w, (uint32_t)(p->scale > 1 ? 2 * p->h : p->h),
+                                         p->cov, &st, name)
                      .id;
-        ui__SetMenuFontHooks(mfShutdown, mfForget);
+        ui__set_menu_font_hooks(mfShutdown, mfForget);
     }
-    p->lastFrame = rd_FrameNumber();
+    p->lastFrame = rd_frame_number();
     return p->tex;
 }
 
@@ -774,7 +774,7 @@ static void styleLight(int lang)
             if (s_mf.pages[c][p].tex) {
                 const RdSheetStyle st = {k->rimOn,  k->rimLevel,  k->fillLevel,
                                          k->dither, k->rimWeight, (uint8_t)s_mf.pages[c][p].scale};
-                rd_SetTextureSheetStyle((RdTex){s_mf.pages[c][p].tex}, &st);
+                rd_set_texture_sheet_style((RdTex){s_mf.pages[c][p].tex}, &st);
             }
         }
     }
@@ -860,7 +860,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     size_t len[MF_LINES];
     const int n = splitLines(utf8, start, len);
     float asc = 0.0f, desc = 0.0f, step = 0.0f, cap = 0.0f;
-    ui__SheetVMetrics(em, &asc, &desc, &step, &cap);
+    ui__sheet_v_metrics(em, &asc, &desc, &step, &cap);
     float b0;
     switch (layout & UI_VALIGN_MASK) {
     case UI_VALIGN_MIDDLE:
@@ -875,7 +875,7 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     }
     float pen[MF_LINES], minX = 0.0f, maxX = 0.0f;
     for (int i = 0; i < n; i++) {
-        const float w = ui__SheetLineWidth(em, 1.0f, 0.0f, start[i], len[i]);
+        const float w = ui__sheet_line_width(em, 1.0f, 0.0f, start[i], len[i]);
         switch (layout & UI_ALIGN_MASK) {
         case UI_ALIGN_CENTER:
             pen[i] = -w * 0.5f;
@@ -920,8 +920,8 @@ static MfStrip *textStrip(const char *utf8, float em, unsigned layout, int cls, 
     }
     strcpy(copy, utf8);
     for (int i = 0; i < n; i++) {
-        ui__SheetRasterLine(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
-                            b0 + (float)i * step - (float)oy, start[i], len[i], sc);
+        ui__sheet_raster_line(cov, w * sc, hgt * sc, w * sc, em, 1.0f, 0.0f, pen[i] - (float)ox,
+                              b0 + (float)i * step - (float)oy, start[i], len[i], sc);
     }
     embolden(cov, w * sc, hgt * sc, sc);
     memset(s, 0, sizeof(*s));
@@ -965,17 +965,17 @@ static void noteLast(const MfStrip *s, uint32_t tex, float ax, float ay)
 
 /* ---------------------------------------------------------------- draws */
 
-void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                     unsigned flags, int ink, const UiXform *xf)
+void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                       unsigned flags, int ink, const UiXform *xf)
 {
 #ifdef ICO_RD
     int cls;
     uint8_t col[4];
-    if (!utf8 || !*utf8 || !(size > 0.0f) || !ui_FontInit() ||
+    if (!utf8 || !*utf8 || !(size > 0.0f) || !ui_font_init() ||
         !inkColour(ink, UI_RIM_FULL, rgba, (flags & UI_ADDITIVE) != 0, &cls, col)) {
         return;
     }
-    UiLang lang = ui_GetLanguage();
+    UiLang lang = ui_get_language();
     lang = (int)lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN;
     if (cls != MF_PLAIN) {
         styleLight((int)lang);
@@ -986,7 +986,7 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
         /* every page of the style holds words a recorded frame still
            draws: the plain glyphs rather than nothing, so a screen whose
            strings change every tick never goes blank */
-        ui_DrawTextXf(x, y, size, col, utf8, flags & ~(unsigned)UI_KEEP_STATE, xf);
+        ui_draw_text_xf(x, y, size, col, utf8, flags & ~(unsigned)UI_KEEP_STATE, xf);
         return;
     }
     const uint32_t tex = pageTex(s->cls, s->page, (int)lang);
@@ -1006,7 +1006,7 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     q.u1 = (float)(s->x + s->w * s->scale);
     q.v1 = (float)(s->y + s->h * s->scale);
     noteLast(s, tex, ax, ay);
-    ui__DrawTexQuads(tex, &q, 1, col, flags, xf, ui__TextKey(utf8, flags, s->page));
+    ui__draw_tex_quads(tex, &q, 1, col, flags, xf, ui__text_key(utf8, flags, s->page));
 #else
     (void)x;
     (void)y;
@@ -1020,13 +1020,13 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
 }
 
 #ifdef ICO_RD
-/* ui_MenuWordDraw with no room in the pages: the item's lines in the plain
+/* ui_menu_word_draw with no room in the pages: the item's lines in the plain
    glyphs at the item's anchor, em and pitch, mapped through the sprite's
    box (the glow pass draws nothing) */
 static void itemFallback(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
                          const uint8_t col[4], int glow)
 {
-    const char *text = ui_StrIn((UiLang)lang, (UiStrId)it->str);
+    const char *text = ui_str_in((UiLang)lang, (UiStrId)it->str);
     if (glow || !text || !*text) {
         return;
     }
@@ -1044,19 +1044,19 @@ static void itemFallback(const UiMenuTextItem *it, int lang, const int box[4], c
         const size_t k = len[i] < sizeof(line) - 1 ? len[i] : sizeof(line) - 1;
         memcpy(line, start[i], k);
         line[k] = 0;
-        ui_DrawText(x0 + it->x[lang] * sx, y0 + (it->y[lang] + (float)i * it->pitch) * sy,
-                    it->em[lang] * sy, col, line, (unsigned)it->align | UI_VALIGN_MIDDLE);
+        ui_draw_text(x0 + it->x[lang] * sx, y0 + (it->y[lang] + (float)i * it->pitch) * sy,
+                     it->em[lang] * sy, col, line, (unsigned)it->align | UI_VALIGN_MIDDLE);
     }
 }
 #endif
 
-void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
-                     const unsigned char rgba[4], int glow)
+void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
+                       const unsigned char rgba[4], int glow)
 {
 #ifdef ICO_RD
     int cls;
     uint8_t col[4];
-    if (!it || !box || !uv || uv[2] <= 0 || uv[3] <= 0 || !ui_FontInit() ||
+    if (!it || !box || !uv || uv[2] <= 0 || uv[3] <= 0 || !ui_font_init() ||
         !inkColour(it->ink, it->rim[lang >= 0 && lang < UI_LANG_COUNT ? lang : UI_LANG_EN], rgba,
                    glow, &cls, col)) {
         return;
@@ -1101,8 +1101,8 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
     /* the packet's state (the row's blend, the glow's additive one) */
     const unsigned flags = UI_KEEP_STATE | (glow ? UI_ADDITIVE : 0u);
     noteLast(s, tex, q.x0, q.y0);
-    ui__DrawTexQuads(tex, &q, 1, col, flags, NULL,
-                     ui__TextKey(ui_StrIn((UiLang)lang, (UiStrId)it->str), flags, s->page));
+    ui__draw_tex_quads(tex, &q, 1, col, flags, NULL,
+                       ui__text_key(ui_str_in((UiLang)lang, (UiStrId)it->str), flags, s->page));
 #else
     (void)it;
     (void)lang;

@@ -52,9 +52,9 @@ static RdTarget poolHostAlias; /* the named target the block is bound over */
 static void poolHostBlockBegin(int tbp)
 {
     gif_HostFlush();
-    poolHostAlias = rd_GsNamedBlock((unsigned int)tbp, 0x100, 0x100);
+    poolHostAlias = rd_gs_named_block((unsigned int)tbp, 0x100, 0x100);
     if (poolHostAlias.id != 0) {
-        rd_AliasTarget(poolHostAlias, rd_BlockTarget((unsigned int)tbp, 0x100, 0x100, 1));
+        rd_alias_target(poolHostAlias, rd_block_target((unsigned int)tbp, 0x100, 0x100, 1));
     }
 }
 
@@ -62,7 +62,7 @@ static void poolHostBlockEnd(void)
 {
     gif_HostFlush();
     if (poolHostAlias.id != 0) {
-        rd_AliasTarget(poolHostAlias, (RdTarget){0});
+        rd_alias_target(poolHostAlias, (RdTarget){0});
         poolHostAlias.id = 0;
     }
 }
@@ -79,9 +79,9 @@ static void poolHostCamera(int push)
         cam.aspect43 = 4.0f / 3.0f;
         cam.nearZ = 2.0f;
         cam.farZ = 262144.0f;
-        rd_PushCamera(&cam);
+        rd_push_camera(&cam);
     } else {
-        rd_PopCamera();
+        rd_pop_camera();
     }
 }
 

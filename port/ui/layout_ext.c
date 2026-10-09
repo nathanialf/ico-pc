@@ -39,8 +39,8 @@ typedef struct ExtRow {
     int hasLiteral;
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
-    int dim;  /* greyed (lt_ext_SetDim): the colour at half */
-    int role; /* LT_POINTER_* (lt_ext_SetPointerRole) */
+    int dim;  /* greyed (lt_ext_set_dim): the colour at half */
+    int role; /* LT_POINTER_* (lt_ext_set_pointer_role) */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -50,7 +50,7 @@ static int s_layoutCount;
 static int s_propCount;
 static int s_circleBack = 1; /* [game] circle_back's default */
 
-void lt_ext_Reset(void)
+void lt_ext_reset(void)
 {
     memset(s_layouts, 0, sizeof(s_layouts));
     memset(s_props, 0, sizeof(s_props));
@@ -59,7 +59,7 @@ void lt_ext_Reset(void)
     s_propCount = 0;
 }
 
-int lt_ext_AddLayout(const LtProp *layout)
+int lt_ext_add_layout(const LtProp *layout)
 {
     if (!layout || s_layoutCount == LT_EXT_MAX_LAYOUTS) {
         static int logged;
@@ -95,7 +95,7 @@ static void copyText(ExtRow *r, const char *utf8)
     r->hasLiteral = 1;
 }
 
-int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text)
+int lt_ext_add_property(const LtProperty *row, const LtExtText *text)
 {
     if (!row || s_propCount == LT_EXT_MAX_PROPERTIES) {
         static int logged;
@@ -127,7 +127,7 @@ int lt_ext_AddProperty(const LtProperty *row, const LtExtText *text)
     return LT_GAME_PROPERTY_COUNT + s_propCount++;
 }
 
-int lt_ext_SetText(int index, const char *utf8)
+int lt_ext_set_text(int index, const char *utf8)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
@@ -141,7 +141,7 @@ int lt_ext_SetText(int index, const char *utf8)
     return 0;
 }
 
-int lt_ext_SetSize(int index, float size)
+int lt_ext_set_size(int index, float size)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
@@ -151,7 +151,7 @@ int lt_ext_SetSize(int index, float size)
     return 0;
 }
 
-int lt_ext_SetDim(int index, int dim)
+int lt_ext_set_dim(int index, int dim)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
@@ -161,13 +161,13 @@ int lt_ext_SetDim(int index, int dim)
     return 0;
 }
 
-int lt_ext_RowDim(int index)
+int lt_ext_row_dim(int index)
 {
     ExtRow *r = rowOf(index);
     return r ? r->dim : 0;
 }
 
-int lt_ext_SetPointerRole(int index, int role)
+int lt_ext_set_pointer_role(int index, int role)
 {
     ExtRow *r = rowOf(index);
     if (!r || role < LT_POINTER_AUTO || role > LT_POINTER_STEP) {
@@ -177,13 +177,13 @@ int lt_ext_SetPointerRole(int index, int role)
     return 0;
 }
 
-int lt_ext_PointerRole(int index)
+int lt_ext_pointer_role(int index)
 {
     ExtRow *r = rowOf(index);
     return r ? r->role : LT_POINTER_AUTO;
 }
 
-int lt_ext_SetStr(int index, int strId)
+int lt_ext_set_str(int index, int strId)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
@@ -194,16 +194,16 @@ int lt_ext_SetStr(int index, int strId)
     return 0;
 }
 
-const char *lt_ext_RowText(int index)
+const char *lt_ext_row_text(int index)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
         return "";
     }
-    return r->hasLiteral ? r->literal : ui_Str((UiStrId)r->text.strId);
+    return r->hasLiteral ? r->literal : ui_str((UiStrId)r->text.strId);
 }
 
-float lt_ext_RowSize(int index)
+float lt_ext_row_size(int index)
 {
     ExtRow *r = rowOf(index);
     if (!r) {
@@ -234,7 +234,7 @@ static const struct {
     {302, 490, 150, 20, 20, 40}, /* Right */
 };
 
-int lt_ext_GlyphSource(int glyph, int uvwh[4])
+int lt_ext_glyph_source(int glyph, int uvwh[4])
 {
     if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
         return -1;
@@ -248,7 +248,7 @@ int lt_ext_GlyphSource(int glyph, int uvwh[4])
     return kGlyph[glyph].row;
 }
 
-void lt_ext_GlyphBox(int glyph, float size, int *w, int *h)
+void lt_ext_glyph_box(int glyph, float size, int *w, int *h)
 {
     float k = (size > 0.0f ? size : UI_MENU_TEXT_SIZE) / UI_MENU_TEXT_SIZE;
     if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
@@ -262,7 +262,7 @@ void lt_ext_GlyphBox(int glyph, float size, int *w, int *h)
     }
 }
 
-int lt_ext_AddGlyph(int glyph, int x, int y, float size)
+int lt_ext_add_glyph(int glyph, int x, int y, float size)
 {
     if (glyph < 0 || glyph >= LT_GLYPH_COUNT) {
         return -1;
@@ -276,7 +276,7 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size)
     r.word40 = 1;
     r.dispX = x;
     r.dispY = y;
-    lt_ext_GlyphBox(glyph, size, &r.dispW, &r.dispH);
+    lt_ext_glyph_box(glyph, size, &r.dispW, &r.dispH);
     r.texU = kGlyph[glyph].u;
     r.texV = kGlyph[glyph].v;
     r.texW = kGlyph[glyph].w;
@@ -284,7 +284,7 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size)
     /* never looked up (no stage range reaches a port row); a value of its
        own, so the fade-cancel check pairs no two glyph rows */
     r.texFileNo = 0x7000 + s_propCount;
-    int i = lt_ext_AddProperty(&r, NULL);
+    int i = lt_ext_add_property(&r, NULL);
     if (i >= 0) {
         ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
         e->kind = ROW_GLYPH;
@@ -293,20 +293,20 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size)
     return i;
 }
 
-int lt_ext_IsGlyphRow(const LtProperty *e)
+int lt_ext_is_glyph_row(const LtProperty *e)
 {
-    return lt_ext_IsPortProp(e) && s_rows[e - s_props].kind == ROW_GLYPH;
+    return lt_ext_is_port_prop(e) && s_rows[e - s_props].kind == ROW_GLYPH;
 }
 
-int lt_ext_GlyphTexNo(const LtProperty *e)
+int lt_ext_glyph_tex_no(const LtProperty *e)
 {
-    if (!lt_ext_IsGlyphRow(e)) {
+    if (!lt_ext_is_glyph_row(e)) {
         return -1;
     }
-    return lt_ext_GlyphTexture(s_rows[e - s_props].glyph);
+    return lt_ext_glyph_texture(s_rows[e - s_props].glyph);
 }
 
-int lt_ext_GlyphTexture(int g)
+int lt_ext_glyph_texture(int g)
 {
     if (g < 0 || g >= LT_GLYPH_COUNT) {
         return -1;
@@ -319,7 +319,7 @@ int lt_ext_GlyphTexture(int g)
     return src->texNo;
 }
 
-int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4])
+int lt_ext_add_rect(int x, int y, int w, int h, const unsigned char rgba[4])
 {
     LtProperty r;
     memset(&r, 0, sizeof(r));
@@ -333,7 +333,7 @@ int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4])
     r.dispW = w > 0 ? w : 1;
     r.dispH = h > 0 ? h : 1;
     r.texFileNo = 0x7000 + s_propCount; /* as a glyph row's */
-    int i = lt_ext_AddProperty(&r, NULL);
+    int i = lt_ext_add_property(&r, NULL);
     if (i >= 0) {
         ExtRow *e = &s_rows[i - LT_GAME_PROPERTY_COUNT];
         e->kind = ROW_RECT;
@@ -343,7 +343,7 @@ int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4])
     return i;
 }
 
-int lt_ext_SetFill(int index, float fill)
+int lt_ext_set_fill(int index, float fill)
 {
     ExtRow *r = rowOf(index);
     if (!r || r->kind != ROW_RECT) {
@@ -353,7 +353,7 @@ int lt_ext_SetFill(int index, float fill)
     return 0;
 }
 
-float lt_ext_RowFill(int index)
+float lt_ext_row_fill(int index)
 {
     ExtRow *r = rowOf(index);
     return r && r->kind == ROW_RECT ? r->fill : 0.0f;
@@ -375,7 +375,7 @@ static void drawRect(const ExtRow *r, const int box[4], const unsigned char rgba
     if (r->fill <= 0.0f) {
         return;
     }
-    ui_DrawRect(x0, y0, x0 + w * r->fill, y0 + h, c);
+    ui_draw_rect(x0, y0, x0 + w * r->fill, y0 + h, c);
 }
 
 /* An index that names no row gets a scratch row instead of memory outside
@@ -387,7 +387,7 @@ static void drawRect(const ExtRow *r, const int box[4], const unsigned char rgba
 static LtProp s_scratchLayout;
 static LtProperty s_scratchProp;
 
-LtProp *lt_ext_Layout(int index)
+LtProp *lt_ext_layout(int index)
 {
     int i = index - LT_GAME_LAYOUT_COUNT;
     if (i >= 0 && i < s_layoutCount) {
@@ -405,7 +405,7 @@ LtProp *lt_ext_Layout(int index)
     return &s_scratchLayout;
 }
 
-LtProperty *lt_ext_Prop(int index)
+LtProperty *lt_ext_prop(int index)
 {
     int i = index - LT_GAME_PROPERTY_COUNT;
     if (i >= 0 && i < s_propCount) {
@@ -423,7 +423,7 @@ LtProperty *lt_ext_Prop(int index)
     return &s_scratchProp;
 }
 
-int lt_ext_PropIndex(const LtProperty *e)
+int lt_ext_prop_index(const LtProperty *e)
 {
     if (e >= s_props && e < s_props + s_propCount) {
         return LT_GAME_PROPERTY_COUNT + (int)(e - s_props);
@@ -434,17 +434,17 @@ int lt_ext_PropIndex(const LtProperty *e)
     return -1;
 }
 
-int lt_ext_IsPortProp(const LtProperty *e)
+int lt_ext_is_port_prop(const LtProperty *e)
 {
     return e >= s_props && e < s_props + s_propCount;
 }
 
-int lt_ext_LayoutCount(void)
+int lt_ext_layout_count(void)
 {
     return s_layoutCount;
 }
 
-int lt_ext_PropCount(void)
+int lt_ext_prop_count(void)
 {
     return s_propCount;
 }
@@ -456,21 +456,21 @@ static uint64_t rowKey(const LtProperty *e, int glow)
     return ((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u);
 }
 
-void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
+void lt_ext_draw_row(const LtProperty *e, const int box[4], const unsigned char rgba[4], int glow)
 {
-    if (!lt_ext_IsPortProp(e)) {
+    if (!lt_ext_is_port_prop(e)) {
         return;
     }
-    ui__Sync();
+    ui__sync();
     ExtRow *r = &s_rows[e - s_props];
     if (r->kind == ROW_GLYPH) {
         return; /* a glyph without its texture (tables not PAL): nothing */
     }
     if (r->kind == ROW_RECT) {
         if (!glow) {
-            const uint64_t owner = ui_SetDrawKey(rowKey(e, 0));
+            const uint64_t owner = ui_set_draw_key(rowKey(e, 0));
             drawRect(r, box, rgba);
-            ui_SetDrawKey(owner);
+            ui_set_draw_key(owner);
         }
         return;
     }
@@ -483,7 +483,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
         grey[3] = rgba[3];
         rgba = grey;
     }
-    const char *text = r->hasLiteral ? r->literal : ui_Str((UiStrId)r->text.strId);
+    const char *text = r->hasLiteral ? r->literal : ui_str((UiStrId)r->text.strId);
     if (!glow || !r->hasBase) {
         memcpy(r->base, box, sizeof(r->base));
         r->hasBase = 1;
@@ -515,7 +515,7 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
        smaller to fit, down to 60 %; the widest line of a multi-line label
        counts */
     if (bw > 0.0f) {
-        float w = ui_MeasureMenuText(size, text);
+        float w = ui_measure_menu_text(size, text);
         if (w > bw) {
             float k = bw / w;
             size *= k < 0.6f ? 0.6f : k;
@@ -523,12 +523,12 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     }
     /* the row's draws are keyed by the row and the pass (the label,
        the glow), so a row that moves or fades blends between ticks */
-    const uint64_t owner = ui_SetDrawKey(rowKey(e, glow));
+    const uint64_t owner = ui_set_draw_key(rowKey(e, glow));
     /* the menus' text in the sheets' look, light ink
        (menu_font.h), into the scene list at 1x in every preset */
     if (!glow) {
-        ui_DrawMenuText(x, y, size, rgba, text, flags, UI_INK_LIGHT, NULL);
-        ui_SetDrawKey(owner);
+        ui_draw_menu_text(x, y, size, rgba, text, flags, UI_INK_LIGHT, NULL);
+        ui_set_draw_key(owner);
         return;
     }
     /* the glow sprite stretches the row's box: the same map for the text */
@@ -540,53 +540,53 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
     xf.offsetX = ((float)box[0] / 16.0f + UI_GRID_CX) - bx;
     xf.offsetY = ((float)box[1] / 8.0f + UI_GRID_CY) - by;
     /* the glow sprite's blend (ALPHA 0x48), which the packet holds */
-    ui_DrawMenuText(x, y, size, rgba, text, flags | UI_ADDITIVE, UI_INK_LIGHT, &xf);
-    ui_SetDrawKey(owner);
+    ui_draw_menu_text(x, y, size, rgba, text, flags | UI_ADDITIVE, UI_INK_LIGHT, &xf);
+    ui_set_draw_key(owner);
 }
 
-int lt_ext_IsTextRow(const LtProperty *e)
+int lt_ext_is_text_row(const LtProperty *e)
 {
-    if (lt_ext_IsGlyphRow(e)) {
-        return lt_ext_GlyphTexNo(e) < 0;
+    if (lt_ext_is_glyph_row(e)) {
+        return lt_ext_glyph_tex_no(e) < 0;
     }
-    return lt_ext_IsPortProp(e) || ui_MenuTextItemOf(e) != NULL;
+    return lt_ext_is_port_prop(e) || ui_menu_text_item_of(e) != NULL;
 }
 
-void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
-                        const unsigned char rgba[4], int glow)
+void lt_ext_draw_text_row(const LtProperty *e, const int box[4], const int uv[4],
+                          const unsigned char rgba[4], int glow)
 {
-    if (lt_ext_IsPortProp(e)) {
-        lt_ext_DrawRow(e, box, rgba, glow);
+    if (lt_ext_is_port_prop(e)) {
+        lt_ext_draw_row(e, box, rgba, glow);
         return;
     }
-    const UiMenuTextItem *it = ui_MenuTextItemOf(e);
+    const UiMenuTextItem *it = ui_menu_text_item_of(e);
     if (!it) {
         return;
     }
-    ui__Sync();
+    ui__sync();
     /* keyed by the row and the pass (the words, the glow), as the port's
        rows are, so the presenter blends a row that moves or fades */
-    const uint64_t owner = ui_SetDrawKey(rowKey(e, glow));
-    ui_MenuWordDraw(it, (int)ui_GetLanguage(), box, uv, rgba, glow);
-    ui_SetDrawKey(owner);
+    const uint64_t owner = ui_set_draw_key(rowKey(e, glow));
+    ui_menu_word_draw(it, (int)ui_get_language(), box, uv, rgba, glow);
+    ui_set_draw_key(owner);
 }
 
-int lt_ext_BackButtons(void)
+int lt_ext_back_buttons(void)
 {
     return LT_PAD_TRIANGLE | (s_circleBack ? LT_PAD_CIRCLE : 0);
 }
 
-void lt_ext_SetCircleBack(int on)
+void lt_ext_set_circle_back(int on)
 {
     s_circleBack = on != 0;
 }
 
-int lt_ext_CircleBack(void)
+int lt_ext_circle_back(void)
 {
     return s_circleBack;
 }
 
-int lt_ext_SetRectColor(int index, const unsigned char rgba[4])
+int lt_ext_set_rect_color(int index, const unsigned char rgba[4])
 {
     ExtRow *r = rowOf(index);
     if (!r || r->kind != ROW_RECT || !rgba) {
@@ -596,7 +596,7 @@ int lt_ext_SetRectColor(int index, const unsigned char rgba[4])
     return 0;
 }
 
-int lt_ext_RectColor(int index, unsigned char rgba[4])
+int lt_ext_rect_color(int index, unsigned char rgba[4])
 {
     ExtRow *r = rowOf(index);
     if (!r || r->kind != ROW_RECT || !rgba) {

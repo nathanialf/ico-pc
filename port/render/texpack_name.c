@@ -56,7 +56,7 @@ static int fullMask(uint32_t psm)
     return psm == RDTEX_PSMCT32 || psm == RDTEX_PSMT8 || psm == RDTEX_PSMT4;
 }
 
-int texpack_BlockSize(uint32_t psm, uint32_t *bw, uint32_t *bh)
+int texpack_block_size(uint32_t psm, uint32_t *bw, uint32_t *bh)
 {
     uint32_t w;
     uint32_t h;
@@ -96,7 +96,7 @@ int texpack_BlockSize(uint32_t psm, uint32_t *bw, uint32_t *bh)
 /* GSTables.cpp columnTable32/16/8/4 in closed form; texpack_name_test
    rebuilds the tables from GSBlock.h's column writes and compares every
    entry */
-uint32_t texpack_BlockOffset(uint32_t psm, uint32_t x, uint32_t y)
+uint32_t texpack_block_offset(uint32_t psm, uint32_t x, uint32_t y)
 {
     switch (psm) {
     case RDTEX_PSMCT32:
@@ -201,15 +201,15 @@ static int levelOk(const TexpackSource *src, uint32_t level)
     const TexpackLevel *l;
 
     if (src == NULL || src->levels < 1 || src->levels > TEXPACK_MAX_LEVELS ||
-        level >= src->levels || texpack_BlockSize(src->psm, NULL, NULL) != 0) {
+        level >= src->levels || texpack_block_size(src->psm, NULL, NULL) != 0) {
         return 0;
     }
     l = &src->lv[level];
     return l->tw <= 10 && l->th <= 10;
 }
 
-size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uint8_t *out,
-                         size_t cap)
+size_t texpack_hash_bytes(const TexpackSource *src, uint32_t level, int texa, uint8_t *out,
+                          size_t cap)
 {
     const TexpackLevel *l;
     uint32_t psm;
@@ -229,7 +229,7 @@ size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uin
     psm = src->psm;
     tw = 1u << l->tw;
     th = 1u << l->th;
-    texpack_BlockSize(psm, &bw, &bh);
+    texpack_block_size(psm, &bw, &bh);
 
     if (tw >= bw && th >= bh && fullMask(psm)) {
         /* the block path: 256-byte blocks in raster order, each as the GS
@@ -245,7 +245,7 @@ size_t texpack_HashBytes(const TexpackSource *src, uint32_t level, int texa, uin
                 for (uint32_t y = 0; y < bh; y++) {
                     for (uint32_t x = 0; x < bw; x++) {
                         uint32_t v = texel(psm, l, bx * bw + x, by * bh + y);
-                        uint32_t o = texpack_BlockOffset(psm, x, y);
+                        uint32_t o = texpack_block_offset(psm, x, y);
                         if (psm == RDTEX_PSMT4) {
                             blk[o >> 1] |= (uint8_t)(o & 1 ? v << 4 : v);
                         } else if (psm == RDTEX_PSMT8) {
@@ -301,7 +301,7 @@ static int dependsOnTexa(const TexpackSource *src)
 static int sourceOk(const TexpackSource *src)
 {
     if (src == NULL || src->levels < 1 || src->levels > TEXPACK_MAX_LEVELS ||
-        texpack_BlockSize(src->psm, NULL, NULL) != 0) {
+        texpack_block_size(src->psm, NULL, NULL) != 0) {
         return 0;
     }
     if (isPalette(src->psm)) {
@@ -316,7 +316,7 @@ static int sourceOk(const TexpackSource *src)
 }
 
 /* GSClut::Read32's m_buff32, hashed by PaletteKeyHash: index order, CSM1
-   undone (entry i is memory entry rdtex_Csm1Index(i): the same for a 16-
+   undone (entry i is memory entry rdtex_csm1_index(i): the same for a 16-
    and a 32-bit CLUT, both read as a 16x16 image of two or four blocks),
    16-bit entries through Expand16 */
 static uint64_t clutHash(const TexpackSource *src, int texa, int *unstable)
@@ -330,7 +330,7 @@ static uint64_t clutHash(const TexpackSource *src, int texa, int *unstable)
 
     texaFields(texa, &ta0, &aem, &ta1);
     for (uint32_t i = 0; i < n; i++) {
-        uint32_t m = rdtex_Csm1Index(i, src->clutColors);
+        uint32_t m = rdtex_csm1_index(i, src->clutColors);
         uint32_t v = 0;
         if (m >= src->clutColors) {
             /* past the TIM2's CLUT: stale VRAM in PCSX2 */
@@ -350,8 +350,8 @@ static uint64_t clutHash(const TexpackSource *src, int texa, int *unstable)
     return xxh3_64(buf, (size_t)n * 4);
 }
 
-int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa, int mipChain,
-                        TexpackName *out)
+int texpack_compute_name(const TexpackSource *src, uint32_t startLevel, int texa, int mipChain,
+                         TexpackName *out)
 {
     uint32_t last;
     size_t total = 0;
@@ -372,7 +372,7 @@ int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa,
     }
     last = mipChain ? src->levels - 1 : startLevel;
     for (uint32_t k = startLevel; k <= last; k++) {
-        size_t n = texpack_HashBytes(src, k, texa, NULL, 0);
+        size_t n = texpack_hash_bytes(src, k, texa, NULL, 0);
         const TexpackLevel *l = &src->lv[k];
         if (n == 0) {
             return -1;
@@ -389,7 +389,7 @@ int texpack_ComputeName(const TexpackSource *src, uint32_t startLevel, int texa,
         return -1;
     }
     for (uint32_t k = startLevel; k <= last; k++) {
-        at += texpack_HashBytes(src, k, texa, buf + at, total - at);
+        at += texpack_hash_bytes(src, k, texa, buf + at, total - at);
     }
 
     memset(out, 0, sizeof(*out));
@@ -431,7 +431,7 @@ static int addNames(const TexpackSource *src, uint32_t start, int chain, Texpack
             out[have].clutHash = clutHash(src, t, &unstable);
             out[have].texa = (uint8_t)t;
             out[have].unstable = (uint8_t)unstable;
-        } else if (texpack_ComputeName(src, start, t, chain, &out[have]) != 0) {
+        } else if (texpack_compute_name(src, start, t, chain, &out[have]) != 0) {
             return -1;
         }
         have++;
@@ -439,7 +439,7 @@ static int addNames(const TexpackSource *src, uint32_t start, int chain, Texpack
     return have;
 }
 
-int texpack_Candidates(const TexpackSource *src, uint32_t boundLevel, TexpackName *out, int max)
+int texpack_candidates(const TexpackSource *src, uint32_t boundLevel, TexpackName *out, int max)
 {
     int have = 0;
 
@@ -480,7 +480,7 @@ static size_t hexOut(char *p, uint64_t v, int width)
     return n;
 }
 
-int texpack_FormatName(const TexpackName *n, char *buf, size_t size)
+int texpack_format_name(const TexpackName *n, char *buf, size_t size)
 {
     char tmp[TEXPACK_NAME_MAX];
     size_t len = 0;
@@ -593,7 +593,7 @@ static int scanFormat(const char *s, const char *fmt, uint64_t *v)
     return *s == '.';
 }
 
-int texpack_ParseName(const char *fileName, TexpackName *out)
+int texpack_parse_name(const char *fileName, TexpackName *out)
 {
     uint64_t v[5];
     TexpackName n;

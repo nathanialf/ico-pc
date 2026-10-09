@@ -61,8 +61,8 @@ int ico_opt_debug_option(void);
 #include "GifHost.h"
 
 /* port/render/rd_png.c (rd_internal.h): 8-bit RGBA, stored deflate */
-bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
-                 int withAlpha);
+bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
+                  int withAlpha);
 
 #endif
 
@@ -2203,7 +2203,7 @@ int debug_SnapShot(int idx)
         if (rgba == NULL) {
             return -1;
         }
-        if (!rd_ReadDisplay(rgba, &sw, &sh) || sw == 0 || sh == 0) {
+        if (!rd_read_display(rgba, &sw, &sh) || sw == 0 || sh == 0) {
             free(rgba);
             fprintf(stderr, "debug: snapshot: no frame to read back\n");
             return 1;
@@ -2220,7 +2220,7 @@ int debug_SnapShot(int idx)
             fclose(fp);
         }
         if (ico_host0_path(name, path, sizeof(path), 1) == 0 &&
-            rd_WritePng(path, rgba, sw, sh, sw * 4, 0)) {
+            rd_write_png(path, rgba, sw, sh, sw * 4, 0)) {
             fprintf(stderr, "debug: snapshot %ux%u written to %s\n", (unsigned)sw, (unsigned)sh,
                     path);
         } else {

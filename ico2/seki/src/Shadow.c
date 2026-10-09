@@ -26,8 +26,8 @@
  * shadow_Draw's are DIRECT (PATH2) GIF packets.  Each function records what
  * its packet does on rd instead, where it chains the packet:
  *   shadow_Reset   its register writes as rd state; the clear of FBP 0x142
- *                  is rd_ShadowReset on the frame's count target
- *                  (rd_ShadowCountTarget) with SCENE's depth-stencil; the
+ *                  is rd_shadow_reset on the frame's count target
+ *                  (rd_shadow_count_target) with SCENE's depth-stencil; the
  *                  band it clears at FBP 0x140 first (16 lines of the pages
  *                  in front of 0x142, which no shadow pass reads) is not
  *                  drawn, and its register writes are the ones the 0x142
@@ -36,17 +36,17 @@
  *                  every strip emitVolumeStrip writes, as the eight flat
  *                  triangles its ten positions kick, each counted +1
  *                  (RGBAQ 0x04) or -1 (0xFC) by its last position, with the
- *                  strips' PRIM 0x144; one rd_ShadowTris per object, as the
+ *                  strips' PRIM 0x144; one rd_shadow_tris per object, as the
  *                  PS2 chains one packet per object
- *   shadow_Draw    rd_ShadowResolve (the count into the count target), then
+ *   shadow_Draw    rd_shadow_resolve (the count into the count target), then
  *                  the packet's register writes and sprites in order: the
  *                  256/128/64 chain into SHADOW0..2 and the three
  *                  composites into SCENE, so the state they leave leaks
  *                  into the rest of list 3 and the next lists as on the GS
  * The level-0 texture is the count target's RGBA view where the GS reads
  * PSMCT24 under TEXA 0x80 AEM: the resolve writes that expansion as alpha
- * (rd.h, rd_ShadowResolve).  The GS register decoder (GifPacket.c) never
- * sees these writes: like rd_Post's passes, they leave its per-list FRAME,
+ * (rd.h, rd_shadow_resolve).  The GS register decoder (GifPacket.c) never
+ * sees these writes: like rd_post's passes, they leave its per-list FRAME,
  * PRIM and TEX0 shadow behind (section 12). */
 
 /* the triangles of one object's strips, recorded at the end of the object
@@ -66,11 +66,11 @@ static void shadowHostFlush(void)
     if (shadowHost.n == 0) {
         return;
     }
-    rd_ABE(1); /* PRIM 0x144: strip, flat, ABE, no texture */
-    rd_Gouraud(0);
-    rd_TextureOff();
-    rd_ShadowTris(shadowHost.v, (const int8_t *)shadowHost.sign, shadowHost.n,
-                  RD_KEY(shadowHost.obj, 0, 0));
+    rd_abe(1); /* PRIM 0x144: strip, flat, ABE, no texture */
+    rd_gouraud(0);
+    rd_texture_off();
+    rd_shadow_tris(shadowHost.v, (const int8_t *)shadowHost.sign, shadowHost.n,
+                   RD_KEY(shadowHost.obj, 0, 0));
     shadowHost.n = 0;
 }
 
@@ -108,38 +108,39 @@ static void shadowHostStripPos(int i, const int *v, int plus)
 
 static void shadowHostReset(void)
 {
-    RdTarget cnt = rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+    RdTarget cnt = rd_shadow_count_target((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
 
     /* setFrame(0x142), ZBUF 0xC0 with ZMSK, TEST 0x30000, the clear sprite
        (PRIM 0x406) */
-    rd_SetTarget(cnt, rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, 0);
-    rd_ZWrite(0);
-    rd_TestGs(0x30000);
-    rd_ABE(0);
-    rd_Gouraud(0);
-    rd_TextureOff();
-    rd_ShadowReset();
+    rd_set_target(cnt, rd_target(RD_TARGET_SCENE), (uint32_t)ScreenWidth, (uint32_t)ScreenHeight,
+                  0);
+    rd_z_write(0);
+    rd_test_gs(0x30000);
+    rd_abe(0);
+    rd_gouraud(0);
+    rd_texture_off();
+    rd_shadow_reset();
     /* FBA, TEXA, TEST, ALPHA, COLCLAMP */
-    rd_FBA(0);
-    rd_TexA(RD_TEXA_80_80);
-    rd_TestGs(0x50000);
-    rd_BlendFunc(RD_BLEND_CS_FIX_ADD_CD, 0x80);
-    rd_ColClamp(0);
+    rd_fba(0);
+    rd_tex_a(RD_TEXA_80_80);
+    rd_test_gs(0x50000);
+    rd_blend_func(RD_BLEND_CS_FIX_ADD_CD, 0x80);
+    rd_col_clamp(0);
 }
 
 /* the target of blur level i: the count (FBP 0x142), then SHADOW0..2 */
 static RdTarget shadowHostLevel(int i)
 {
     if (i == 0) {
-        return rd_ShadowCountTarget((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
+        return rd_shadow_count_target((uint32_t)ScreenWidth, (uint32_t)ScreenHeight);
     }
-    return rd_Target((RdTargetId)(RD_TARGET_SHADOW0 + i - 1));
+    return rd_target((RdTargetId)(RD_TARGET_SHADOW0 + i - 1));
 }
 
 /* TEX0 of level i (TCC RGBA, MODULATE), as the packet writes it */
 static void shadowHostTex0(int i)
 {
-    rd_Texture(rd_TargetTexture(shadowHostLevel(i), RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_texture(rd_target_texture(shadowHostLevel(i), RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
 }
 
 /* spriteUV: PRIM, RGBAQ, UV and XYZ2 of each corner, Z 0xFFFFFFFF */
@@ -148,8 +149,8 @@ static void shadowHostSprite(const int *r, const int *uv, const unsigned char *c
     RdScreenVtx v[2];
     int i;
 
-    rd_ABE(abe); /* PRIM 0x116 or 0x156: sprite, flat, TME, FST */
-    rd_Gouraud(0);
+    rd_abe(abe); /* PRIM 0x116 or 0x156: sprite, flat, TME, FST */
+    rd_gouraud(0);
     memset(v, 0, sizeof(v));
     v[0].x = (r[0] + 0x8000) & 0xFFFF;
     v[0].y = (r[1] + 0x8000) & 0xFFFF;
@@ -164,22 +165,22 @@ static void shadowHostSprite(const int *r, const int *uv, const unsigned char *c
         v[i].q = 1.0f;
         memcpy(v[i].rgba, col, 4);
     }
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
 }
 
 /* shadow_Draw up to its first FRAME: the count resolved where the GS has
    it in FBP 0x142, then TEST, ZBUF, COLCLAMP, FBA, TEXA and TEX1 */
 static void shadowHostDrawBegin(void)
 {
-    rd_SetTarget(shadowHostLevel(0), rd_Target(RD_TARGET_SCENE), (uint32_t)ScreenWidth,
-                 (uint32_t)ScreenHeight, 0);
-    rd_ShadowResolve();
-    rd_TestGs(0x30000);
-    rd_ZWrite(0);
-    rd_ColClamp(1);
-    rd_FBA(0);
-    rd_TexA(RD_TEXA_80_80_AEM);
-    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_set_target(shadowHostLevel(0), rd_target(RD_TARGET_SCENE), (uint32_t)ScreenWidth,
+                  (uint32_t)ScreenHeight, 0);
+    rd_shadow_resolve();
+    rd_test_gs(0x30000);
+    rd_z_write(0);
+    rd_col_clamp(1);
+    rd_fba(0);
+    rd_tex_a(RD_TEXA_80_80_AEM);
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
 }
 
 /* one chain step: level i into level i + 1 */
@@ -187,7 +188,7 @@ static void shadowHostChain(int i, const int *r, const int *uv, const unsigned c
 {
     uint32_t w = 512u >> (i + 1);
 
-    rd_SetTarget(shadowHostLevel(i + 1), (RdTarget){0}, w, w, 0);
+    rd_set_target(shadowHostLevel(i + 1), (RdTarget){0}, w, w, 0);
     shadowHostTex0(i);
     shadowHostSprite(r, uv, col, 0);
 }
@@ -197,29 +198,29 @@ static void shadowHostChain(int i, const int *r, const int *uv, const unsigned c
    host: both setFrame calls of shadow_Draw are centred) */
 static void shadowHostCompositeBegin(void)
 {
-    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    RdTarget scene = rd_target(RD_TARGET_SCENE);
 
-    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
-    rd_BlendFunc(RD_BLEND_LERP_AS, 0);
-    rd_TestGs(0x3400D);
+    rd_set_target(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_blend_func(RD_BLEND_LERP_AS, 0);
+    rd_test_gs(0x3400D);
 }
 
 /* one composite: level i into SCENE */
 static void shadowHostComposite(int i, const int *r, const int *uv, const unsigned char *col)
 {
     shadowHostTex0(i);
-    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
     shadowHostSprite(r, uv, col, 1);
 }
 
 /* ZBUF write on, TEST 0x50000, setFrame(0x40) with screenOffsetX/Y */
 static void shadowHostDrawEnd(void)
 {
-    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    RdTarget scene = rd_target(RD_TARGET_SCENE);
 
-    rd_ZWrite(1);
-    rd_TestGs(0x50000);
-    rd_SetTarget(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
+    rd_z_write(1);
+    rd_test_gs(0x50000);
+    rd_set_target(scene, scene, (uint32_t)ScreenWidth, (uint32_t)ScreenHeight, RD_TARGET_OFFSET);
 }
 
 #endif /* ICO_RD */

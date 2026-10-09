@@ -139,7 +139,7 @@ static uint8_t *tim2Decode(const uint8_t *d, size_t n, int *w, int *h)
 static MsSheet s_sheets[MAX_SHEETS];
 static int s_nsheets;
 
-const MsSheet *ms_SheetFor(IcoVfs *vfs, const char *name)
+const MsSheet *ms_sheet_for(IcoVfs *vfs, const char *name)
 {
     for (int i = 0; i < s_nsheets; i++) {
         if (strcmp(s_sheets[i].name, name) == 0) {
@@ -172,7 +172,7 @@ const MsSheet *ms_SheetFor(IcoVfs *vfs, const char *name)
     return s;
 }
 
-void ms_SheetsFree(void)
+void ms_sheets_free(void)
 {
     for (int i = 0; i < s_nsheets; i++) {
         free(s_sheets[i].rgba);
@@ -182,7 +182,7 @@ void ms_SheetsFree(void)
 }
 
 /* the sheet of language lang for a texFile path */
-void ms_SheetName(const char *path, int lang, char *out, size_t size)
+void ms_sheet_name(const char *path, int lang, char *out, size_t size)
 {
     const char *dir = strstr(path, "menu_PAL_");
     snprintf(out, size, "%s", path);
@@ -197,7 +197,7 @@ void ms_SheetName(const char *path, int lang, char *out, size_t size)
 
 /* texFile's rows (the table descriptor's count: the array is defined in
    port/data/gen/table_defs.c, its size unknown here) */
-int ms_TexFileCount(void)
+int ms_tex_file_count(void)
 {
     for (uint32_t i = 0; i < ico_table_row_count; i++) {
         const IcoTableRow *r = &ico_table_rows[i];

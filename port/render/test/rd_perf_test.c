@@ -11,7 +11,7 @@
  *             first replay no buffer, texture or device memory is created
  *             or destroyed, no bind or fence wait-idle happens, no texture
  *             or static mesh is uploaded again, and the mean CPU time of a
- *             replay without its wait for the GPU (rhi_WaitFrame: on
+ *             replay without its wait for the GPU (rhi_wait_frame: on
  *             lavapipe that is the rasterisation) is under 20 ms; and
  *             every replay, here and below, creates one
  *             uniform bind group per uniform layout (frame, draw, VU),
@@ -19,7 +19,7 @@
  *             exactly BARRIERS_REPLAY pipeline barriers (BARRIERS_RECORD
  *             below); the screen-prim commands make
  *             SCREEN_CMDS draws one by one and SCREEN_DRAWS merged;
- *   record    200 frames recorded and closed as the game does (rd_EndFrame
+ *   record    200 frames recorded and closed as the game does (rd_end_frame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
  *             destroyed either, and only the morphing mesh is uploaded.
@@ -102,7 +102,7 @@ static void makeAssets(void)
         d.batches = &b;
         d.batchCount = 1;
         d.debugName = "perf mesh";
-        s_mesh[i] = rd_CreateVuMesh(&d);
+        s_mesh[i] = rd_create_vu_mesh(&d);
     }
     meshQw(s_morph, 99);
     static uint8_t px[64 * 64 * 4];
@@ -113,7 +113,7 @@ static void makeAssets(void)
             px[i * 4 + 2] = (uint8_t)(t * 60);
             px[i * 4 + 3] = (uint8_t)((i & 1) ? 0x80 : 0x40);
         }
-        s_tex[t] = rd_CreateTexture(64, 64, px, RD_TEXA_80_80, "perf texture");
+        s_tex[t] = rd_create_texture(64, 64, px, RD_TEXA_80_80, "perf texture");
     }
 }
 
@@ -135,15 +135,15 @@ static RdScreenVtx vtx(int x, int y, uint32_t z, float s, float t, uint8_t c, ui
 static void recordFrame(uint32_t n)
 {
     static const uint8_t bg[4] = {16, 24, 32, 0x80};
-    RdTarget scene = rd_Target(RD_TARGET_SCENE);
+    RdTarget scene = rd_target(RD_TARGET_SCENE);
 
-    rd_BeginFrame();
+    rd_begin_frame();
     /* list 0: the scene */
-    rd_SelectList(0);
-    rd_SetTarget(scene, scene, W, H, RD_TARGET_OFFSET);
-    rd_ClearTarget(scene, bg, 1, 0);
-    rd_TestGs(0x50000);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_select_list(0);
+    rd_set_target(scene, scene, W, H, RD_TARGET_OFFSET);
+    rd_clear_target(scene, bg, 1, 0);
+    rd_test_gs(0x50000);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
     for (int i = 0; i < DRAWS; i++) {
         RdVuDraw d;
         memset(&d, 0, sizeof(d));
@@ -158,56 +158,57 @@ static void recordFrame(uint32_t n)
         d.vu.mem[7][1] = 2048.0f;
         d.vu.mem[7][3] = 1.0f;
         d.batchCount = 1;
-        rd_Texture(s_tex[i & 3], RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_texture(s_tex[i & 3], RD_TEXFN_MODULATE, RD_TCC_RGBA);
         const int m = i % MESHES;
         if (m == 0 && i == 0) {
-            CHECK(rd_UpdateVuMesh(s_mesh[0], (const float (*)[4])s_morph), "a morph"); /* a morph */
+            CHECK(rd_update_vu_mesh(s_mesh[0], (const float (*)[4])s_morph),
+                  "a morph"); /* a morph */
         }
-        rd_DrawVuMesh(s_mesh[m], &d, RD_KEY(1, (uint32_t)i, 0));
+        rd_draw_vu_mesh(s_mesh[m], &d, RD_KEY(1, (uint32_t)i, 0));
     }
     /* world strips and UI sprites */
-    rd_Texture(s_tex[1], RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_texture(s_tex[1], RD_TEXFN_MODULATE, RD_TCC_RGBA);
     for (int i = 0; i < 20; i++) {
         RdScreenVtx s[8];
         for (int k = 0; k < 8; k++) {
             s[k] = vtx(20 + i * 20 + (k / 2) * 6, 40 + (k & 1) * 30, 0x1000000u + (uint32_t)i,
                        (float)k / 8.0f, (float)(k & 1), 100, 0x80);
         }
-        rd_ScreenPrims(RD_PRIM_TRIANGLE_STRIP, s, 8, RD_SPACE_WORLD, 0, RD_KEY(2, (uint32_t)i, 0));
+        rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, s, 8, RD_SPACE_WORLD, 0, RD_KEY(2, (uint32_t)i, 0));
     }
-    rd_SelectList(11);
-    rd_SetTarget(scene, scene, W, H, RD_TARGET_OFFSET);
-    rd_TestGs(0x30000);
+    rd_select_list(11);
+    rd_set_target(scene, scene, W, H, RD_TARGET_OFFSET);
+    rd_test_gs(0x30000);
     for (int i = 0; i < 60; i++) {
         RdScreenVtx s[2] = {
             vtx(10 + (i % 12) * 40, 300 + (i / 12) * 20, 0xFFFFFFFFu, 0.0f, 0.0f, 128, 0x80),
             vtx(40 + (i % 12) * 40, 316 + (i / 12) * 20, 0xFFFFFFFFu, 64.0f * 16.0f, 64.0f * 16.0f,
                 128, 0x80)};
-        rd_Texture(s_tex[i & 3], RD_TEXFN_MODULATE, RD_TCC_RGBA);
-        rd_ScreenPrims(RD_PRIM_SPRITES, s, 2, RD_SPACE_UI, 1, RD_KEY(3, (uint32_t)i, 0));
+        rd_texture(s_tex[i & 3], RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_screen_prims(RD_PRIM_SPRITES, s, 2, RD_SPACE_UI, 1, RD_KEY(3, (uint32_t)i, 0));
     }
     /* list 4: a DATE draw after alpha writes (the specular passes' TEST) */
-    rd_SelectList(4);
-    rd_SetTarget(scene, scene, W, H, RD_TARGET_OFFSET);
-    rd_TestGs(0x5C000); /* DATE on, Z GEQUAL */
+    rd_select_list(4);
+    rd_set_target(scene, scene, W, H, RD_TARGET_OFFSET);
+    rd_test_gs(0x5C000); /* DATE on, Z GEQUAL */
     for (int i = 0; i < 4; i++) {
         RdScreenVtx s[2] = {vtx(100 + i * 50, 100, 0x2000000u, 0, 0, 200, 0x80),
                             vtx(140 + i * 50, 160, 0x2000000u, 0, 0, 200, 0x80)};
-        rd_TextureOff();
-        rd_ScreenPrims(RD_PRIM_SPRITES, s, 2, RD_SPACE_WORLD, 0, 0);
+        rd_texture_off();
+        rd_screen_prims(RD_PRIM_SPRITES, s, 2, RD_SPACE_WORLD, 0, 0);
     }
     /* list 3: the shadow count on its temporary target */
-    rd_SelectList(3);
-    RdTarget cnt = rd_ShadowCountTarget(W, H);
-    rd_SetTarget(cnt, scene, W, H, 0);
-    rd_ZWrite(0);
-    rd_TestGs(0x30000);
-    rd_ABE(0);
-    rd_TextureOff();
-    rd_ShadowReset();
-    rd_TestGs(0x50000);
-    rd_BlendFunc(RD_BLEND_CS_FIX_ADD_CD, 0x80);
-    rd_ColClamp(0);
+    rd_select_list(3);
+    RdTarget cnt = rd_shadow_count_target(W, H);
+    rd_set_target(cnt, scene, W, H, 0);
+    rd_z_write(0);
+    rd_test_gs(0x30000);
+    rd_abe(0);
+    rd_texture_off();
+    rd_shadow_reset();
+    rd_test_gs(0x50000);
+    rd_blend_func(RD_BLEND_CS_FIX_ADD_CD, 0x80);
+    rd_col_clamp(0);
     {
         RdScreenVtx t[12];
         int8_t sign[4] = {1, 1, -1, 1};
@@ -215,16 +216,16 @@ static void recordFrame(uint32_t n)
             t[k] = vtx(100 + (k % 3) * 60 + (k / 3) * 10, 100 + ((k % 3) == 2) * 80, 0x3000000u, 0,
                        0, 4, 0x80);
         }
-        rd_ShadowTris(t, sign, 4, RD_KEY(4, 0, 0));
+        rd_shadow_tris(t, sign, 4, RD_KEY(4, 0, 0));
     }
-    rd_ShadowResolve();
-    rd_ColClamp(1);
+    rd_shadow_resolve();
+    rd_col_clamp(1);
     /* list 4 again: a block target with its own depth (a reflection) */
-    rd_SelectList(4);
-    RdTarget blk = rd_BlockTarget(0x2800, 256, 256, 1);
-    rd_SetTarget(blk, blk, 256, 256, 0);
-    rd_ClearTarget(blk, bg, 1, 0);
-    rd_TestGs(0x50000);
+    rd_select_list(4);
+    RdTarget blk = rd_block_target(0x2800, 256, 256, 1);
+    rd_set_target(blk, blk, 256, 256, 0);
+    rd_clear_target(blk, bg, 1, 0);
+    rd_test_gs(0x50000);
     for (int i = 0; i < 8; i++) {
         RdVuDraw d;
         memset(&d, 0, sizeof(d));
@@ -234,23 +235,23 @@ static void recordFrame(uint32_t n)
         d.vu.mem[4][0] = d.vu.mem[5][1] = d.vu.mem[6][2] = d.vu.mem[7][3] = 1.0f;
         d.vu.mem[7][0] = d.vu.mem[7][1] = 2048.0f;
         d.batchCount = 1;
-        rd_DrawVuMesh(s_mesh[(i + 3) % MESHES], &d, RD_KEY(5, (uint32_t)i, 0));
+        rd_draw_vu_mesh(s_mesh[(i + 3) % MESHES], &d, RD_KEY(5, (uint32_t)i, 0));
     }
-    rd_SetTarget(scene, scene, W, H, RD_TARGET_OFFSET);
-    rd_Texture(rd_TargetTexture(blk, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_set_target(scene, scene, W, H, RD_TARGET_OFFSET);
+    rd_texture(rd_target_texture(blk, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
     {
         RdScreenVtx s[2] = {vtx(300, 20, 0x2000000u, 0, 0, 128, 0x80),
                             vtx(428, 148, 0x2000000u, 256.0f * 16.0f, 256.0f * 16.0f, 128, 0x80)};
-        rd_ScreenPrims(RD_PRIM_SPRITES, s, 2, RD_SPACE_WORLD, 1, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, s, 2, RD_SPACE_WORLD, 1, 0);
     }
     /* list 12: the reduction */
-    rd_SelectList(12);
+    rd_select_list(12);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.src = scene;
-    pp.dst = rd_Target(RD_TARGET_DISPLAY);
+    pp.dst = rd_target(RD_TARGET_DISPLAY);
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = pp.rgba[3] = 0x80;
-    rd_Post(RD_POST_REDUCTION, &pp);
+    rd_post(RD_POST_REDUCTION, &pp);
     (void)n;
 }
 
@@ -346,7 +347,7 @@ static void print(const char *what, const Sum *s)
 static void drain(Sum *first, Sum *rest, unsigned skip, unsigned *seen)
 {
     RdPerfRecord r;
-    while (rd_PerfPop(&r)) {
+    while (rd_perf_pop(&r)) {
         add(*seen < skip ? first : rest, &r);
         (*seen)++;
     }
@@ -358,7 +359,7 @@ static uint8_t *readDisplay(void)
     const size_t cap = (size_t)W * H * 4;
     uint8_t *px = malloc(cap);
     uint32_t w = 0, h = 0;
-    if (px && !rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), px, cap, &w, &h)) {
+    if (px && !rd__read_target(rd_target(RD_TARGET_DISPLAY), px, cap, &w, &h)) {
         free(px);
         px = NULL;
     }
@@ -404,7 +405,7 @@ static void checkGroups(const char *what, const Sum *s)
  * the next pass's stencil clear, not passes of their own.  The counts are
  * vkCmdPipelineBarrier calls: the image transitions recorded together go
  * out in one call, joined to the next pass's or copy's own barrier
- * (vk_cmd.c, vkr_FlushBarriers); the global mode records each transition
+ * (vk_cmd.c, vkr_flush_barriers); the global mode records each transition
  * in a call of its own.  18 and 21 are the steady-state counts this test
  * prints. */
 #define BARRIERS_REPLAY 18
@@ -444,7 +445,7 @@ static void checkScreen(const char *what, const Sum *s)
           s->screenDrawMax, SCREEN_DRAWS);
 }
 
-/* rd_SetPipelineProgress: one call before the first pipeline and one after
+/* rd_set_pipeline_progress: one call before the first pipeline and one after
    each, done never going down and ending at the total, which is the size of
    the reachable set; cleared, no more calls */
 typedef struct PipeProgress {
@@ -470,12 +471,12 @@ static void pipeProgress(void *ctx, uint32_t done, uint32_t total)
 static void checkPipelineProgress(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
-    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
     PipeProgress p;
 
     memset(&p, 0, sizeof(p));
-    rd_SetPipelineProgress(pipeProgress, &p);
-    rd_PrecreatePipelines();
+    rd_set_pipeline_progress(pipeProgress, &p);
+    rd_precreate_pipelines();
     CHECK(p.calls == n + 1, "pipeline progress: %u calls for %u pipelines", p.calls, n);
     CHECK(p.firstDone == 0, "pipeline progress: the first call had %u done", p.firstDone);
     CHECK(p.lastDone == n && p.lastTotal == n, "pipeline progress: ended at %u of %u (want %u)",
@@ -484,8 +485,8 @@ static void checkPipelineProgress(void)
           "pipeline progress: went back %d times, total "
           "changed %d times",
           p.backwards, p.totalChanged);
-    rd_SetPipelineProgress(NULL, NULL);
-    rd_PrecreatePipelines();
+    rd_set_pipeline_progress(NULL, NULL);
+    rd_precreate_pipelines();
     CHECK(p.calls == n + 1, "pipeline progress: called %u times after it was cleared", p.calls);
 }
 
@@ -496,27 +497,27 @@ static int synthetic(void)
     st.preset = RD_PRESET_ORIGINAL;
     st.outputWidth = 640;
     st.outputHeight = 480;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("no Vulkan device: skipped\n");
         return 77;
     }
     makeAssets();
 
-    /* replay: one recording, 200 replays (rd_EndFrame replays it once) */
+    /* replay: one recording, 200 replays (rd_end_frame replays it once) */
     recordFrame(0);
-    rd_EndFrame(0);
-    const RdFrame *f = rd__LastFrame();
+    rd_end_frame(0);
+    const RdFrame *f = rd__last_frame();
     CHECK(f != NULL, "no closed frame");
     unsigned seen = 0;
     Sum first, rest;
     memset(&first, 0, sizeof(first));
     memset(&rest, 0, sizeof(rest));
     for (int i = 0; i < 200 && f; i++) {
-        rd__ReplayFrame(f, 0, true);
+        rd__replay_frame(f, 0, true);
         drain(&first, &rest, 2, &seen);
     }
     for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
-        rd__ReplayFrame(f, 0, true); /* flush the last records' timestamps */
+        rd__replay_frame(f, 0, true); /* flush the last records' timestamps */
         drain(&first, &rest, 2, &seen);
     }
     /* the pixels: the first replay of a fresh frame (pooled targets cleared,
@@ -524,14 +525,14 @@ static int synthetic(void)
     uint8_t *ref = NULL;
     {
         recordFrame(0);
-        rd_EndFrame(0);
+        rd_end_frame(0);
         ref = readDisplay();
-        rd__ReplayFrame(rd__LastFrame(), 0, true);
+        rd__replay_frame(rd__last_frame(), 0, true);
         uint8_t *again = readDisplay();
         samePixels("replayed again", ref, again);
         free(again);
         RdPerfRecord r;
-        while (rd_PerfPop(&r)) {}
+        while (rd_perf_pop(&r)) {}
     }
     print("replay (first 2)", &first);
     print("replay (steady)", &rest);
@@ -557,12 +558,12 @@ static int synthetic(void)
     seen = 0;
     for (uint32_t i = 1; i <= 200; i++) {
         recordFrame(i);
-        rd_EndFrame(0);
+        rd_end_frame(0);
         drain(&first, &rest, 4, &seen);
     }
     for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
         recordFrame(0);
-        rd_EndFrame(0);
+        rd_end_frame(0);
         drain(&first, &rest, 4, &seen);
     }
     {
@@ -591,25 +592,25 @@ static int synthetic(void)
     checkScreen("record", &rest);
 
     /* the reachable set, as the window creates it at
-       start-up (rd_PrecreatePipelines): every key makes a pipeline.
+       start-up (rd_precreate_pipelines): every key makes a pipeline.
        rd_perf_mali runs this on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=
        mali), where a key past them would be refused by the limit's name */
     {
         static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
-        const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+        const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
         uint32_t missing = 0;
 
         checkPipelineProgress();
-        rd_PrecreatePipelines();
+        rd_precreate_pipelines();
         for (uint32_t i = 0; i < n; i++) {
-            if (!rd__GetPipeline(&keys[i]).id) {
+            if (!rd__get_pipeline(&keys[i]).id) {
                 missing++;
             }
         }
         printf("reachable set: %u keys, %u without a pipeline\n", n, missing);
         CHECK(n > 0 && missing == 0, "reachable set: %u of %u keys without a pipeline", missing, n);
     }
-    rd_Shutdown();
+    rd_shutdown();
     return 0;
 }
 
@@ -659,17 +660,17 @@ static int dumpMode(int argc, char **argv)
                         ((uint32_t)hdr[27] << 24);
     const uint32_t gh = (uint32_t)hdr[28] | ((uint32_t)hdr[29] << 8) | ((uint32_t)hdr[30] << 16) |
                         ((uint32_t)hdr[31] << 24);
-    if (!rd_Init(gw, gh, &st, NULL)) {
+    if (!rd_init(gw, gh, &st, NULL)) {
         printf("no Vulkan device: skipped\n");
         return 77;
     }
-    rd__SetNotImplementedFatal(false);
+    rd__set_not_implemented_fatal(false);
     if (precreate) {
-        rd_PrecreatePipelines(); /* as the window does after rd_Init */
+        rd_precreate_pipelines(); /* as the window does after rd_init */
     }
     RdFrame f;
-    if (!rd__LoadFrame(path, &f)) {
-        rd_Shutdown();
+    if (!rd__load_frame(path, &f)) {
+        rd_shutdown();
         return 1;
     }
     unsigned seen = 0;
@@ -679,9 +680,9 @@ static int dumpMode(int argc, char **argv)
     RdPerfRecord last;
     memset(&last, 0, sizeof(last));
     for (int i = 0; i < repeat + RHI_FRAMES_IN_FLIGHT + 1; i++) {
-        rd__ReplayFrame(&f, (int)f.keep, true);
+        rd__replay_frame(&f, (int)f.keep, true);
         RdPerfRecord r;
-        while (rd_PerfPop(&r)) {
+        while (rd_perf_pop(&r)) {
             add(seen < 1 ? &first : &rest, &r);
             if (seen > 0) {
                 last = r;
@@ -708,14 +709,14 @@ static int dumpMode(int argc, char **argv)
         }
         printf(", present %.3f\n", last.gpuPresentMs);
     }
-    rd__FrameFree(&f);
-    rd_Shutdown();
+    rd__frame_free(&f);
+    rd_shutdown();
     return 0;
 }
 
 int main(int argc, char **argv)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     if (argc > 1) {
         return dumpMode(argc, argv);
     }

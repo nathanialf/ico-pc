@@ -4,7 +4,7 @@
 #include <string.h>
 #include "texpack.h"
 
-void texpack_FreeImage(TexpackImage *img)
+void texpack_free_image(TexpackImage *img)
 {
     if (img == NULL) {
         return;
@@ -13,16 +13,16 @@ void texpack_FreeImage(TexpackImage *img)
     memset(img, 0, sizeof(*img));
 }
 
-/* written by texpack_Init before the loader thread starts, read by the
+/* written by texpack_init before the loader thread starts, read by the
    loaders after: the thread's creation orders the two */
 static uint32_t s_maxSide;
 
-void texpack_SetMaxSide(uint32_t side)
+void texpack_set_max_side(uint32_t side)
 {
     s_maxSide = side;
 }
 
-uint32_t texpack_MaxSide(void)
+uint32_t texpack_max_side(void)
 {
     return s_maxSide;
 }

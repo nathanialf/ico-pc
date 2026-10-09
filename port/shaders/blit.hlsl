@@ -95,7 +95,7 @@ float4 box_reduce_ps(BlitVSOut i) : SV_Target0
     return sum / (g_param.x * g_param.y);
 }
 
-// camera_probe_ps (tests only, rd__CameraProbe): FrameCB's
+// camera_probe_ps (tests only, rd__camera_probe): FrameCB's
 // matrices applied to the point DrawCB.g_param, written as raw float bits so
 // the HLSL column_major packing can be compared with the C side. Target 4 x 3
 // RGBA8_UNORM, drawn with blit_vs: column = component, row 0 mul(g_view, p),

@@ -18,7 +18,7 @@
  *                            (a pending target change, batched primitives)
  *                            into the current list; dl_SetDLPriority and
  *                            dl_Swap call it before the list changes.
- *   gif_HostScreenPrims      rd_ScreenPrims in order with the decoder's own
+ *   gif_HostScreenPrims      rd_screen_prims in order with the decoder's own
  *                            output (DisplayFont.c's glyph sprites).
  *   gif_HostDrawKey          the RdKey the decoder's primitives carry
  *                            from here (renderer R7d): a change emits the

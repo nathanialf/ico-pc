@@ -1,5 +1,5 @@
 /* d3d12_device.c: runtime loading, adapter selection, the device and its
- * queue, the debug layer, descriptor heaps, limits, rhi_Init/rhi_Shutdown
+ * queue, the debug layer, descriptor heaps, limits, rhi_init/rhi_shutdown
  * of the D3D12 backend. */
 #include "d3d12_internal.h"
 #include "rhi_d3d12.h"
@@ -13,13 +13,13 @@
 
 DxState g_dx;
 
-static bool dx_IsLossCode(HRESULT hr)
+static bool dx_is_loss_code(HRESULT hr)
 {
     return hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET ||
            hr == DXGI_ERROR_DEVICE_HUNG || hr == DXGI_ERROR_DRIVER_INTERNAL_ERROR;
 }
 
-static const char *dx_LossName(HRESULT hr)
+static const char *dx_loss_name(HRESULT hr)
 {
     switch (hr) {
     case DXGI_ERROR_DEVICE_REMOVED:
@@ -37,7 +37,7 @@ static const char *dx_LossName(HRESULT hr)
     }
 }
 
-bool dx_Check(HRESULT hr, const char *what, const char *file, int line)
+bool dx_check(HRESULT hr, const char *what, const char *file, int line)
 {
     if (SUCCEEDED(hr)) {
         return true;
@@ -53,19 +53,19 @@ bool dx_Check(HRESULT hr, const char *what, const char *file, int line)
     /* removal shows as the call's own code (Present, Close, Signal) or as
      * another failure on a device whose removed reason is set */
     HRESULT reason = g_dx.device ? ID3D12Device_GetDeviceRemovedReason(g_dx.device) : S_OK;
-    if (dx_IsLossCode(hr) || reason != S_OK) {
+    if (dx_is_loss_code(hr) || reason != S_OK) {
         g_dx.deviceLost = true;
         fprintf(stderr,
                 "rhi_d3d12: the device was lost (%s); removed reason 0x%08lx (%s). Rendering "
                 "stops; the session ends.\n",
-                dx_LossName(hr), (unsigned long)reason, dx_LossName(reason));
+                dx_loss_name(hr), (unsigned long)reason, dx_loss_name(reason));
     }
-    dx_DrainMessages();
+    dx_drain_messages();
     return false;
 }
 
 /* ------------------------------------------------------------- debug layer */
-void dx_DrainMessages(void)
+void dx_drain_messages(void)
 {
     if (!g_dx.info) {
         return;
@@ -97,22 +97,22 @@ void dx_DrainMessages(void)
     ID3D12InfoQueue_ClearStoredMessages(g_dx.info);
 }
 
-uint32_t rhi_d3d12_DebugErrorCount(void)
+uint32_t rhi_d3d12_debug_error_count(void)
 {
     return g_dx.debugErrors;
 }
 
-bool rhi_d3d12_DebugLayerActive(void)
+bool rhi_d3d12_debug_layer_active(void)
 {
     return g_dx.info != NULL;
 }
 
-bool rhi_d3d12_IsWarp(void)
+bool rhi_d3d12_is_warp(void)
 {
     return g_dx.warp;
 }
 
-static bool dx_DebugWanted(const RhiDeviceDesc *desc)
+static bool dx_debug_wanted(const RhiDeviceDesc *desc)
 {
     bool debug = desc->debugLayers;
 #ifdef ICO_RHI_DEBUG_DEFAULT
@@ -125,7 +125,7 @@ static bool dx_DebugWanted(const RhiDeviceDesc *desc)
     return debug;
 }
 
-static void dx_SetupInfoQueue(void)
+static void dx_setup_info_queue(void)
 {
     if (FAILED(
             ID3D12Device_QueryInterface(g_dx.device, &IID_ID3D12InfoQueue, (void **)&g_dx.info))) {
@@ -158,10 +158,10 @@ typedef HRESULT(WINAPI *PFN_CreateDXGIFactory1)(REFIID, void **);
  * d3d12.dll) beside the program, which LoadLibraryA finds before the
  * system's (no SetDefaultDllDirectories).  A module whose file is outside
  * the system directory (System32; SysWOW64 for a 32-bit program) is taken
- * for it.  Kept outside g_dx: rhi_Shutdown keeps the modules loaded. */
+ * for it.  Kept outside g_dx: rhi_shutdown keeps the modules loaded. */
 static const char *s_dxInjector;
 
-static bool dx_InSystemDir(HMODULE m)
+static bool dx_in_system_dir(HMODULE m)
 {
     char file[MAX_PATH], dir[MAX_PATH];
     const DWORD n = GetModuleFileNameA(m, file, (DWORD)sizeof(file));
@@ -183,26 +183,26 @@ static bool dx_InSystemDir(HMODULE m)
     return false;
 }
 
-static void dx_ScanInjector(void)
+static void dx_scan_injector(void)
 {
     s_dxInjector = NULL;
-    if ((g_dx.dxgiDll && !dx_InSystemDir(g_dx.dxgiDll)) ||
-        (g_dx.d3d12Dll && !dx_InSystemDir(g_dx.d3d12Dll))) {
+    if ((g_dx.dxgiDll && !dx_in_system_dir(g_dx.dxgiDll)) ||
+        (g_dx.d3d12Dll && !dx_in_system_dir(g_dx.d3d12Dll))) {
         s_dxInjector = "ReShade";
     }
 }
 
-const char *rhi_InjectorName(void)
+const char *rhi_injector_name(void)
 {
     return s_dxInjector;
 }
 
-const char *rhi_OverlayName(void)
+const char *rhi_overlay_name(void)
 {
     return NULL;
 }
 
-static bool dx_LoadRuntime(bool debug)
+static bool dx_load_runtime(bool debug)
 {
     if (!g_dx.d3d12Dll) {
         g_dx.d3d12Dll = LoadLibraryA("d3d12.dll");
@@ -214,7 +214,7 @@ static bool dx_LoadRuntime(bool debug)
         DX_LOG("d3d12.dll or dxgi.dll not found (Windows 10 or later is required)");
         return false;
     }
-    dx_ScanInjector(); /* an effects program beside the executable */
+    dx_scan_injector(); /* an effects program beside the executable */
     g_dx.createDevice =
         (PFN_D3D12_CREATE_DEVICE)(void *)GetProcAddress(g_dx.d3d12Dll, "D3D12CreateDevice");
     g_dx.getDebugInterface = (PFN_D3D12_GET_DEBUG_INTERFACE)(void *)GetProcAddress(
@@ -243,7 +243,7 @@ static bool dx_LoadRuntime(bool debug)
 }
 
 /* ------------------------------------------------------- adapter selection */
-static void dx_AdapterName(IDXGIAdapter1 *a, char *out, size_t size)
+static void dx_adapter_name(IDXGIAdapter1 *a, char *out, size_t size)
 {
     DXGI_ADAPTER_DESC1 d;
     memset(&d, 0, sizeof(d));
@@ -253,7 +253,7 @@ static void dx_AdapterName(IDXGIAdapter1 *a, char *out, size_t size)
     }
 }
 
-static bool dx_AdapterOk(IDXGIAdapter1 *a)
+static bool dx_adapter_ok(IDXGIAdapter1 *a)
 {
     return SUCCEEDED(
         g_dx.createDevice((IUnknown *)a, D3D_FEATURE_LEVEL_11_0, &IID_ID3D12Device, NULL));
@@ -261,7 +261,7 @@ static bool dx_AdapterOk(IDXGIAdapter1 *a)
 
 /* The i-th hardware adapter, discrete first when DXGI 1.6 can order them
  * (EnumAdapterByGpuPreference), else in EnumAdapters1 order. */
-static IDXGIAdapter1 *dx_EnumHardware(UINT i)
+static IDXGIAdapter1 *dx_enum_hardware(UINT i)
 {
     IDXGIAdapter1 *a = NULL;
     IDXGIFactory6 *f6 = NULL;
@@ -274,7 +274,7 @@ static IDXGIAdapter1 *dx_EnumHardware(UINT i)
     return SUCCEEDED(IDXGIFactory4_EnumAdapters1(g_dx.factory, i, &a)) ? a : NULL;
 }
 
-static bool dx_IsSoftware(IDXGIAdapter1 *a)
+static bool dx_is_software(IDXGIAdapter1 *a)
 {
     DXGI_ADAPTER_DESC1 d;
     memset(&d, 0, sizeof(d));
@@ -282,7 +282,7 @@ static bool dx_IsSoftware(IDXGIAdapter1 *a)
     return (d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
 }
 
-static bool dx_PickAdapter(void)
+static bool dx_pick_adapter(void)
 {
     /* ICO_D3D12_ADAPTER=warp, an index into the list below, or a substring
      * of the adapter's name forces a pick */
@@ -291,13 +291,13 @@ static bool dx_PickAdapter(void)
     IDXGIAdapter1 *pick = NULL;
     if (!forceWarp) {
         for (UINT i = 0;; i++) {
-            IDXGIAdapter1 *a = dx_EnumHardware(i);
+            IDXGIAdapter1 *a = dx_enum_hardware(i);
             if (!a) {
                 break;
             }
             char name[128];
-            dx_AdapterName(a, name, sizeof(name));
-            bool ok = !dx_IsSoftware(a) && dx_AdapterOk(a);
+            dx_adapter_name(a, name, sizeof(name));
+            bool ok = !dx_is_software(a) && dx_adapter_ok(a);
             DX_LOG("adapter %u: %s%s", i, name,
                    ok ? "" : " (unsuitable: a software adapter, or no feature level 11_0)");
             bool forced = false;
@@ -328,13 +328,13 @@ static bool dx_PickAdapter(void)
         g_dx.warp = true;
     }
     g_dx.adapter = pick;
-    dx_AdapterName(pick, g_dx.adapterName, sizeof(g_dx.adapterName));
+    dx_adapter_name(pick, g_dx.adapterName, sizeof(g_dx.adapterName));
     return true;
 }
 
 /* --------------------------------------------------------------- heaps */
-static bool dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE type, UINT count, bool visible,
-                          ID3D12DescriptorHeap **out)
+static bool dx_create_heap(D3D12_DESCRIPTOR_HEAP_TYPE type, UINT count, bool visible,
+                           ID3D12DescriptorHeap **out)
 {
     D3D12_DESCRIPTOR_HEAP_DESC d = {
         type, count,
@@ -343,13 +343,14 @@ static bool dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE type, UINT count, bool visi
                                                       (void **)out));
 }
 
-static bool dx_CreateHeaps(void)
+static bool dx_create_heaps(void)
 {
-    if (!dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, DX_RES_HEAP_SIZE, true,
-                       &g_dx.resHeap) ||
-        !dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, DX_SMP_HEAP_SIZE, true, &g_dx.smpHeap) ||
-        !dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, DX_RTV_SLOTS, false, &g_dx.rtvHeap) ||
-        !dx_CreateHeap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DX_DSV_SLOTS, false, &g_dx.dsvHeap)) {
+    if (!dx_create_heap(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, DX_RES_HEAP_SIZE, true,
+                        &g_dx.resHeap) ||
+        !dx_create_heap(D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, DX_SMP_HEAP_SIZE, true,
+                        &g_dx.smpHeap) ||
+        !dx_create_heap(D3D12_DESCRIPTOR_HEAP_TYPE_RTV, DX_RTV_SLOTS, false, &g_dx.rtvHeap) ||
+        !dx_create_heap(D3D12_DESCRIPTOR_HEAP_TYPE_DSV, DX_DSV_SLOTS, false, &g_dx.dsvHeap)) {
         return false;
     }
     g_dx.resInc = ID3D12Device_GetDescriptorHandleIncrementSize(
@@ -366,11 +367,11 @@ static bool dx_CreateHeaps(void)
     g_dx.smpGpu = ID3D12DescriptorHeap_GetGPUDescriptorHandleForHeapStart(g_dx.smpHeap);
     g_dx.rtvCpu = ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(g_dx.rtvHeap);
     g_dx.dsvCpu = ID3D12DescriptorHeap_GetCPUDescriptorHandleForHeapStart(g_dx.dsvHeap);
-    return d3dp_SlotsInit(&g_dx.rtvSlots, DX_RTV_SLOTS) &&
-           d3dp_SlotsInit(&g_dx.dsvSlots, DX_DSV_SLOTS);
+    return d3dp_slots_init(&g_dx.rtvSlots, DX_RTV_SLOTS) &&
+           d3dp_slots_init(&g_dx.dsvSlots, DX_DSV_SLOTS);
 }
 
-static void dx_FillLimits(void)
+static void dx_fill_limits(void)
 {
     RhiLimits *o = &g_dx.limits;
     o->uniformAlign = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT; /* 256 */
@@ -382,7 +383,7 @@ static void dx_FillLimits(void)
     o->copyRowPitchAlign = D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;   /* 256 */
     o->copyOffsetAlign = D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT; /* 512 */
     /* the Enhanced filter's fields: textures carry mipLevels, every barrier spans all
-     * subresources, rhi_CmdCopyBufferToTexture writes the given level, and
+     * subresources, rhi_cmd_copy_buffer_to_texture writes the given level, and
      * samplers apply the mip filter, LOD range and anisotropy (d3d12_cmd.c,
      * d3d12_resource.c); 16x anisotropy at every feature level */
     o->textureMips = true;
@@ -399,18 +400,18 @@ static void dx_FillLimits(void)
 }
 
 /* ------------------------------------------------------------- lifecycle */
-bool rhi_Init(const RhiDeviceDesc *desc)
+bool rhi_init(const RhiDeviceDesc *desc)
 {
     if (g_dx.initialised) {
         return true;
     }
     HMODULE keepD3d = g_dx.d3d12Dll, keepDxgi = g_dx.dxgiDll;
     memset(&g_dx, 0, sizeof(g_dx));
-    g_dx.d3d12Dll = keepD3d; /* kept loaded across rhi_Shutdown */
+    g_dx.d3d12Dll = keepD3d; /* kept loaded across rhi_shutdown */
     g_dx.dxgiDll = keepDxgi;
-    bool debug = dx_DebugWanted(desc);
-    if (!dx_LoadRuntime(debug)) {
-        rhi_Shutdown();
+    bool debug = dx_debug_wanted(desc);
+    if (!dx_load_runtime(debug)) {
+        rhi_shutdown();
         return false;
     }
     if (debug) {
@@ -425,17 +426,17 @@ bool rhi_Init(const RhiDeviceDesc *desc)
                    "feature \"Graphics Tools\"); continuing without");
         }
     }
-    if (!dx_PickAdapter()) {
-        rhi_Shutdown();
+    if (!dx_pick_adapter()) {
+        rhi_shutdown();
         return false;
     }
     if (!DX_CHECK(g_dx.createDevice((IUnknown *)g_dx.adapter, D3D_FEATURE_LEVEL_11_0,
                                     &IID_ID3D12Device, (void **)&g_dx.device))) {
-        rhi_Shutdown();
+        rhi_shutdown();
         return false;
     }
     if (g_dx.debugLayer) {
-        dx_SetupInfoQueue();
+        dx_setup_info_queue();
     }
     D3D12_COMMAND_QUEUE_DESC qd = {D3D12_COMMAND_LIST_TYPE_DIRECT, 0, D3D12_COMMAND_QUEUE_FLAG_NONE,
                                    0};
@@ -443,26 +444,26 @@ bool rhi_Init(const RhiDeviceDesc *desc)
                                                   (void **)&g_dx.queue)) ||
         !DX_CHECK(ID3D12Device_CreateFence(g_dx.device, 0, D3D12_FENCE_FLAG_NONE, &IID_ID3D12Fence,
                                            (void **)&g_dx.fence))) {
-        rhi_Shutdown();
+        rhi_shutdown();
         return false;
     }
     g_dx.fenceEvent = CreateEventA(NULL, FALSE, FALSE, NULL);
-    if (!g_dx.fenceEvent || !dx_CreateHeaps()) {
-        rhi_Shutdown();
+    if (!g_dx.fenceEvent || !dx_create_heaps()) {
+        rhi_shutdown();
         return false;
     }
-    dx_FillLimits();
-    if (!d3dp_PoolInit(&g_dx.buffers, "buffer", 4096, sizeof(DxBuffer)) ||
-        !d3dp_PoolInit(&g_dx.textures, "texture", 8192, sizeof(DxTexture)) ||
-        !d3dp_PoolInit(&g_dx.samplers, "sampler", DX_SMP_PERSISTENT, sizeof(DxSampler)) ||
-        !d3dp_PoolInit(&g_dx.shaders, "shader", 512, sizeof(DxShader)) ||
-        !d3dp_PoolInit(&g_dx.layouts, "bind group layout", 64, sizeof(DxLayout)) ||
-        !d3dp_PoolInit(&g_dx.pipelines, "pipeline", 1024, sizeof(DxPipeline))) {
-        rhi_Shutdown();
+    dx_fill_limits();
+    if (!d3dp_pool_init(&g_dx.buffers, "buffer", 4096, sizeof(DxBuffer)) ||
+        !d3dp_pool_init(&g_dx.textures, "texture", 8192, sizeof(DxTexture)) ||
+        !d3dp_pool_init(&g_dx.samplers, "sampler", DX_SMP_PERSISTENT, sizeof(DxSampler)) ||
+        !d3dp_pool_init(&g_dx.shaders, "shader", 512, sizeof(DxShader)) ||
+        !d3dp_pool_init(&g_dx.layouts, "bind group layout", 64, sizeof(DxLayout)) ||
+        !d3dp_pool_init(&g_dx.pipelines, "pipeline", 1024, sizeof(DxPipeline))) {
+        rhi_shutdown();
         return false;
     }
-    if (!dx_FramesInit()) {
-        rhi_Shutdown();
+    if (!dx_frames_init()) {
+        rhi_shutdown();
         return false;
     }
     {
@@ -474,7 +475,7 @@ bool rhi_Init(const RhiDeviceDesc *desc)
         sd.MaxAnisotropy = 1;
         sd.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
         ID3D12Device_CreateSampler(g_dx.device, &sd,
-                                   dx_Cpu(g_dx.smpCpu, g_dx.smpInc, DX_SMP_DEFAULT));
+                                   dx_cpu(g_dx.smpCpu, g_dx.smpInc, DX_SMP_DEFAULT));
     }
     g_dx.initialised = true;
     if (desc->sdlWindow) {
@@ -485,47 +486,47 @@ bool rhi_Init(const RhiDeviceDesc *desc)
                                                  SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
         int pw = 0, ph = 0;
         SDL_GetWindowSizeInPixels(w, &pw, &ph);
-        if (!g_dx.hwnd || !dx_SwapchainCreate((uint32_t)pw, (uint32_t)ph, desc->vsync)) {
+        if (!g_dx.hwnd || !dx_swapchain_create((uint32_t)pw, (uint32_t)ph, desc->vsync)) {
             DX_LOG("no swapchain on the SDL window (HWND %p)", (void *)g_dx.hwnd);
-            rhi_Shutdown();
+            rhi_shutdown();
             return false;
         }
 #else
         DX_LOG("built without SDL3: no window support");
-        rhi_Shutdown();
+        rhi_shutdown();
         return false;
 #endif
     }
     DX_LOG("%s (D3D12, feature level 11_0%s)%s", g_dx.adapterName, g_dx.warp ? ", WARP" : "",
            g_dx.swapchain ? "" : ", headless");
-    dx_DrainMessages();
+    dx_drain_messages();
     return true;
 }
 
-void rhi_Shutdown(void)
+void rhi_shutdown(void)
 {
     if (g_dx.device && g_dx.queue && g_dx.fence) {
-        dx_WaitFence(dx_Signal());
+        dx_wait_fence(dx_signal());
     }
-    dx_SwapchainDestroy();
-    dx_FramesShutdown();
-    dx_ReleaseAllObjects();
-    dx_ReleaseRootSignatures();
-    d3dp_PoolFree(&g_dx.buffers);
-    d3dp_PoolFree(&g_dx.textures);
-    d3dp_PoolFree(&g_dx.samplers);
-    d3dp_PoolFree(&g_dx.shaders);
-    d3dp_PoolFree(&g_dx.layouts);
-    d3dp_PoolFree(&g_dx.pipelines);
-    d3dp_SlotsFree(&g_dx.rtvSlots);
-    d3dp_SlotsFree(&g_dx.dsvSlots);
+    dx_swapchain_destroy();
+    dx_frames_shutdown();
+    dx_release_all_objects();
+    dx_release_root_signatures();
+    d3dp_pool_free(&g_dx.buffers);
+    d3dp_pool_free(&g_dx.textures);
+    d3dp_pool_free(&g_dx.samplers);
+    d3dp_pool_free(&g_dx.shaders);
+    d3dp_pool_free(&g_dx.layouts);
+    d3dp_pool_free(&g_dx.pipelines);
+    d3dp_slots_free(&g_dx.rtvSlots);
+    d3dp_slots_free(&g_dx.dsvSlots);
     DX_RELEASE(g_dx.resHeap);
     DX_RELEASE(g_dx.smpHeap);
     DX_RELEASE(g_dx.rtvHeap);
     DX_RELEASE(g_dx.dsvHeap);
     DX_RELEASE(g_dx.fence);
     DX_RELEASE(g_dx.queue);
-    dx_DrainMessages();
+    dx_drain_messages();
     DX_RELEASE(g_dx.info);
     DX_RELEASE(g_dx.device);
     DX_RELEASE(g_dx.adapter);
@@ -543,22 +544,22 @@ void rhi_Shutdown(void)
     g_dx.dxgiDll = dxgi;
 }
 
-RhiBackendKind rhi_Backend(void)
+RhiBackendKind rhi_backend(void)
 {
     return RHI_BACKEND_D3D12;
 }
 
-const RhiLimits *rhi_Limits(void)
+const RhiLimits *rhi_limits(void)
 {
     return &g_dx.limits;
 }
 
-const char *rhi_AdapterName(void)
+const char *rhi_adapter_name(void)
 {
     return g_dx.adapterName;
 }
 
-bool rhi_DeviceLost(void)
+bool rhi_device_lost(void)
 {
     return g_dx.deviceLost;
 }
@@ -567,50 +568,50 @@ bool rhi_DeviceLost(void)
  * yet: the counters read zero, timestamps are unsupported (nothing is
  * written, nothing read back) and there is no mailbox mode (DXGI's flip
  * model with sync interval 1 is FIFO). */
-void rhi_GetStats(RhiStats *out)
+void rhi_get_stats(RhiStats *out)
 {
     if (out) {
         memset(out, 0, sizeof(*out));
     }
 }
 
-bool rhi_TimestampsSupported(void)
+bool rhi_timestamps_supported(void)
 {
     return false;
 }
 
-void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
+void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 {
     (void)cl;
     (void)index;
 }
 
-uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max)
+uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
 {
     (void)ns;
     (void)max;
     return 0;
 }
 
-void rhi_PreferMailbox(bool on)
+void rhi_prefer_mailbox(bool on)
 {
     (void)on;
 }
 
-bool rhi_PresentMailbox(void)
+bool rhi_present_mailbox(void)
 {
     return false;
 }
 
-void rhi_SetPipelineCachePath(const char *path)
+void rhi_set_pipeline_cache_path(const char *path)
 {
     (void)path; /* the driver keeps its own shader cache */
 }
 
-void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
     (void)getInstanceProcAddr; /* Vulkan only */
 }
 
-/* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
+/* The rhi_create_backend entry (port/rhi/rhi_backend.h). */
 RHI_BACKEND_DEFINE(rhi_backend_d3d12, "d3d12");

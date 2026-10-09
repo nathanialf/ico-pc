@@ -4,30 +4,30 @@
 
 float vu1ref_wideX = 1.0f;
 
-void vu1ref_SetWideX(float f)
+void vu1ref_set_wide_x(float f)
 {
     vu1ref_wideX = f;
 }
 
-void vu1ref_Init(Vu1Ref *r)
+void vu1ref_init(Vu1Ref *r)
 {
     memset(r, 0, sizeof(*r));
     r->vf[0][3] = 1.0f;
 }
 
-void vu1ref_LoadCommon(Vu1Ref *r, const float qw[16][4])
+void vu1ref_load_common(Vu1Ref *r, const float qw[16][4])
 {
     memcpy(r->mem[0], qw, 16 * sizeof(Vec4));
 }
 
-void vu1ref_SetUVOffset(Vu1Ref *r, const float qw[4])
+void vu1ref_set_uv_offset(Vu1Ref *r, const float qw[4])
 {
     /* vu1_common.h:57-62: lq vf30, 2; move.xy vf30, vf31; sq vf30, 2 */
     r->mem[2][0] = qw[0];
     r->mem[2][1] = qw[1];
 }
 
-void vu1ref_NormalSetMatrix(Vu1Ref *r, const float qw[12][4])
+void vu1ref_normal_set_matrix(Vu1Ref *r, const float qw[12][4])
 {
     /* normal_c.vsm:54-81 (normal_l.vsm:59-86 is the same) */
     for (int i = 0; i < 4; i++) {
@@ -38,14 +38,14 @@ void vu1ref_NormalSetMatrix(Vu1Ref *r, const float qw[12][4])
     v4_copy(r->vf[31], r->mem[3]);
 }
 
-void vu1ref_NormalSetLight(Vu1Ref *r, const float qw[8][4])
+void vu1ref_normal_set_light(Vu1Ref *r, const float qw[8][4])
 {
     /* normal_c.vsm:88-105 */
     memcpy(r->mem[28], qw, 8 * sizeof(Vec4));
     v4_copy(r->vf[31], qw[7]);
 }
 
-void vu1ref_ClusterSetMatrix(Vu1Ref *r, const float (*qw)[4])
+void vu1ref_cluster_set_matrix(Vu1Ref *r, const float (*qw)[4])
 {
     /* cluster.vsm:69-87: vi06 = qw[0].x; mem[2].w = qw[0].w; then a
      * do-while copies vi06 quadwords from qw[1] to mem[16..] (decrement,
@@ -72,7 +72,7 @@ void vu1ref_ClusterSetMatrix(Vu1Ref *r, const float (*qw)[4])
     r->vi[6] = 0;
 }
 
-void vu1ref_ClusterSetLight(Vu1Ref *r, const float qw[8][4])
+void vu1ref_cluster_set_light(Vu1Ref *r, const float qw[8][4])
 {
     /* cluster.vsm:98-107 */
     for (int i = 0; i < 8; i++) {
@@ -80,7 +80,7 @@ void vu1ref_ClusterSetLight(Vu1Ref *r, const float qw[8][4])
     }
 }
 
-void vu1ref_MeshSetMatrix(Vu1Ref *r, const float qw[4][4])
+void vu1ref_mesh_set_matrix(Vu1Ref *r, const float qw[4][4])
 {
     /* mesh.vsm:85-94: vf14.w = 16777214, vf13 = 0, vf14.xy = 4094 (z kept) */
     r->vf[14][3] = 16777214.0f;
@@ -92,7 +92,7 @@ void vu1ref_MeshSetMatrix(Vu1Ref *r, const float qw[4][4])
     }
 }
 
-void vu1ref_MeshSetLight(Vu1Ref *r, const float qw[8][4])
+void vu1ref_mesh_set_light(Vu1Ref *r, const float qw[8][4])
 {
     /* mesh.vsm:102-111 */
     for (int i = 0; i < 8; i++) {
@@ -100,7 +100,7 @@ void vu1ref_MeshSetLight(Vu1Ref *r, const float qw[8][4])
     }
 }
 
-void vu1ref_ParticleSetMatrix(Vu1Ref *r, const float qw[8][4])
+void vu1ref_particle_set_matrix(Vu1Ref *r, const float qw[8][4])
 {
     /* particle.vsm:43-52, then falls into BEGIN_PARTICLE (E bit) */
     for (int i = 0; i < 8; i++) {
@@ -108,7 +108,7 @@ void vu1ref_ParticleSetMatrix(Vu1Ref *r, const float qw[8][4])
     }
 }
 
-int vu1ref_Kicks(const VuBatchOut *out, int *kicks)
+int vu1ref_kicks(const VuBatchOut *out, int *kicks)
 {
     int n = 0;
     for (int k = 2; k < out->count; k++) {
@@ -119,7 +119,7 @@ int vu1ref_Kicks(const VuBatchOut *out, int *kicks)
     return n;
 }
 
-int vu1ref_StaticKicks(const float *stw, const int *batchFirst, int count, int *kicks)
+int vu1ref_static_kicks(const float *stw, const int *batchFirst, int count, int *kicks)
 {
     int n = 0;
     for (int k = 0; k < count; k++) {

@@ -1,5 +1,5 @@
 /* rd_tex.c: the texture cache, and the sheet-text textures (rd.h
- * rd_CreateTextureSheet).  rd_tex.h describes the decoding and the cache. */
+ * rd_create_texture_sheet).  rd_tex.h describes the decoding and the cache. */
 #include "rd_tex.h"
 #include <math.h>
 #include <stdlib.h>
@@ -10,7 +10,7 @@
 
 /* ------------------------------------------------------------ decoding */
 
-void rdtex_ClutToCsm1(void *clut, uint32_t colors, uint32_t entryBytes)
+void rdtex_clut_to_csm1(void *clut, uint32_t colors, uint32_t entryBytes)
 {
     uint8_t tmp[256 * 4];
     uint8_t *c = clut;
@@ -20,11 +20,11 @@ void rdtex_ClutToCsm1(void *clut, uint32_t colors, uint32_t entryBytes)
     }
     memcpy(tmp, c, 256 * entryBytes);
     for (uint32_t i = 0; i < 256; i++) {
-        memcpy(c + rdtex_Csm1Index(i, 256) * entryBytes, tmp + i * entryBytes, entryBytes);
+        memcpy(c + rdtex_csm1_index(i, 256) * entryBytes, tmp + i * entryBytes, entryBytes);
     }
 }
 
-size_t rdtex_ImageBytes(uint32_t psm, uint32_t w, uint32_t h)
+size_t rdtex_image_bytes(uint32_t psm, uint32_t w, uint32_t h)
 {
     size_t n = (size_t)w * h;
 
@@ -75,7 +75,7 @@ static void put24(uint8_t *o, const uint8_t *p)
 /* CLUT entry for index i */
 static void putClut(uint8_t *o, const RdTexImage *im, uint32_t i)
 {
-    uint32_t pos = im->clutLinear ? i : rdtex_Csm1Index(i, im->clutColors);
+    uint32_t pos = im->clutLinear ? i : rdtex_csm1_index(i, im->clutColors);
     const uint8_t *c = im->clut;
 
     switch (im->cpsm) {
@@ -110,7 +110,7 @@ static int clutSrc(uint32_t cpsm, RdTexSrc *src)
     }
 }
 
-int rdtex_Decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
+int rdtex_decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
 {
     const uint8_t *p = im->pixels;
     uint32_t pw = im->padW ? im->padW : im->w;
@@ -197,7 +197,7 @@ int rdtex_Decode(const RdTexImage *im, uint8_t *out, RdTexSrc *src)
     return 0;
 }
 
-void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode)
+void rdtex_apply_texa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode)
 {
     uint8_t ta0 = 0x80, ta1 = 0x80;
     int aem = 0;
@@ -222,7 +222,7 @@ void rdtex_ApplyTexa(uint8_t *rgba, size_t n, RdTexSrc src, RdTexA mode)
     }
 }
 
-size_t rdtex_MipChainBytes(uint32_t w, uint32_t h)
+size_t rdtex_mip_chain_bytes(uint32_t w, uint32_t h)
 {
     size_t bytes = 0;
 
@@ -234,8 +234,8 @@ size_t rdtex_MipChainBytes(uint32_t w, uint32_t h)
     return bytes;
 }
 
-uint32_t rdtex_BuildMipChain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
-                             int alphaWeighted)
+uint32_t rdtex_build_mip_chain(const uint8_t *rgba, uint32_t w, uint32_t h, uint8_t *out,
+                               int alphaWeighted)
 {
     const uint8_t *s = rgba;
     uint32_t levels = 0;
@@ -295,8 +295,8 @@ static double coverage(const uint8_t *px, size_t n, uint8_t ref, double scale)
     return n ? (double)pass / (double)n : 0.0;
 }
 
-void rdtex_KeepAlphaCoverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
-                             uint32_t levels, uint8_t ref)
+void rdtex_keep_alpha_coverage(const uint8_t *base, uint32_t w, uint32_t h, uint8_t *chain,
+                               uint32_t levels, uint8_t ref)
 {
     const double c0 = coverage(base, (size_t)w * h, ref, 1.0);
     uint8_t amax = 0;
@@ -342,7 +342,7 @@ typedef struct RdTexEntry {
     uint8_t used, src;
     uint32_t w, h; /* the rd texture's (padded) size */
     RdTex tex;
-    uint8_t replaced; /* texture packs: tex is a pack replacement (rdtex_Replace) */
+    uint8_t replaced; /* texture packs: tex is a pack replacement (rdtex_replace) */
     RdTexSampler smp;
 } RdTexEntry;
 
@@ -357,7 +357,7 @@ static struct {
     uint32_t nRetired;
     uint32_t tick;
     RdTexCacheStats stats;
-    RdTexReleaseFn release; /* texture packs: rdtex_SetReleaseHook */
+    RdTexReleaseFn release; /* texture packs: rdtex_set_release_hook */
     int bcSingleLogged;     /* "a compressed replacement without mips", once */
 } s_tc;
 
@@ -380,7 +380,7 @@ static void retire(RdTex t)
     }
     if (s_tc.nRetired == RDTEX_MAX_RETIRED) {
         /* the queue is full: the oldest goes now */
-        rd_DestroyTexture(s_tc.retired[0].tex);
+        rd_destroy_texture(s_tc.retired[0].tex);
         memmove(&s_tc.retired[0], &s_tc.retired[1],
                 (RDTEX_MAX_RETIRED - 1) * sizeof(s_tc.retired[0]));
         s_tc.nRetired--;
@@ -392,7 +392,7 @@ static void retire(RdTex t)
 }
 
 /* Texture packs: the entry gives up its texture (retired, or forgotten
- * by rdtex_Reset); a replacement's accounts are settled. */
+ * by rdtex_reset); a replacement's accounts are settled. */
 static void releaseReplaced(RdTexEntry *e)
 {
     if (e->replaced) {
@@ -411,10 +411,10 @@ static void freeEntry(RdTexEntry *e)
     s_tc.stats.entries--;
 }
 
-RdTex rdtex_Find(uint32_t id, uint32_t gen, int texa)
+RdTex rdtex_find(uint32_t id, uint32_t gen, int texa)
 {
     RdTexEntry *e = entryOf(id, texa);
-    const RdTexRec *r = e && e->gen == gen ? rd__TexRec(e->tex.id) : NULL;
+    const RdTexRec *r = e && e->gen == gen ? rd__tex_rec(e->tex.id) : NULL;
 
     if (r != NULL && e->replaced && r->refused) {
         /* the graphics card refused the replacement: the entry is
@@ -431,7 +431,7 @@ RdTex rdtex_Find(uint32_t id, uint32_t gen, int texa)
     return (RdTex){0};
 }
 
-RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
+RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
                   const RdTexSampler *smp, const char *debugName)
 {
     uint32_t pw = im->padW ? im->padW : im->w;
@@ -445,13 +445,13 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         return (RdTex){0};
     }
     px = malloc((size_t)pw * ph * 4);
-    if (px == NULL || rdtex_Decode(im, px, &src) != 0) {
+    if (px == NULL || rdtex_decode(im, px, &src) != 0) {
         free(px);
         s_tc.stats.failures++;
         return (RdTex){0};
     }
     if (texa != RDTEX_TEXA_REPLAY) {
-        rdtex_ApplyTexa(px, (size_t)pw * ph, src, (RdTexA)texa);
+        rdtex_apply_texa(px, (size_t)pw * ph, src, (RdTexA)texa);
         src = RD_TEXSRC_RGBA32;
     }
     s_tc.stats.decodes++;
@@ -463,7 +463,7 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
             }
         }
         if (e == NULL) {
-            rd__Log("the texture cache is full (%d entries)", RDTEX_MAX_ENTRIES);
+            rd__log("the texture cache is full (%d entries)", RDTEX_MAX_ENTRIES);
             free(px);
             s_tc.stats.failures++;
             return (RdTex){0};
@@ -474,18 +474,18 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         e->texa = (uint16_t)texa;
         s_tc.stats.entries++;
     }
-    if (e->tex.id != 0 && !e->replaced && rd__TexRec(e->tex.id) != NULL && e->w == pw &&
+    if (e->tex.id != 0 && !e->replaced && rd__tex_rec(e->tex.id) != NULL && e->w == pw &&
         e->h == ph && e->src == (uint8_t)src) {
         /* same shape: re-expand in place */
-        rd_UpdateTexture(e->tex, px);
+        rd_update_texture(e->tex, px);
         s_tc.stats.updates++;
     } else {
         RdTex t;
 
         if (texa != RDTEX_TEXA_REPLAY) {
-            t = rd_CreateTexture(pw, ph, px, (RdTexA)texa, debugName);
+            t = rd_create_texture(pw, ph, px, (RdTexA)texa, debugName);
         } else {
-            t = rd_CreateTextureSrc(pw, ph, px, src, debugName);
+            t = rd_create_texture_src(pw, ph, px, src, debugName);
         }
         if (t.id == 0) {
             free(px);
@@ -496,7 +496,7 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         /* a replaced entry's new generation gets a texture of the game's
            own: the replacement was for the old one */
         releaseReplaced(e);
-        if (rd__TexRec(e->tex.id) != NULL) {
+        if (rd__tex_rec(e->tex.id) != NULL) {
             retire(e->tex);
         }
         e->tex = t;
@@ -513,14 +513,14 @@ RdTex rdtex_Store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
     return e->tex;
 }
 
-const RdTexSampler *rdtex_Sampler(uint32_t id, int texa)
+const RdTexSampler *rdtex_sampler(uint32_t id, int texa)
 {
     RdTexEntry *e = entryOf(id, texa);
 
     return e ? &e->smp : NULL;
 }
 
-void rdtex_Drop(uint32_t id)
+void rdtex_drop(uint32_t id)
 {
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used && s_tc.e[i].id == id) {
@@ -529,14 +529,14 @@ void rdtex_Drop(uint32_t id)
     }
 }
 
-void rdtex_FrameTick(void)
+void rdtex_frame_tick(void)
 {
     uint32_t keep = 0;
 
     s_tc.tick++;
     for (uint32_t i = 0; i < s_tc.nRetired; i++) {
         if (s_tc.tick - s_tc.retired[i].tick >= 2) {
-            rd_DestroyTexture(s_tc.retired[i].tex);
+            rd_destroy_texture(s_tc.retired[i].tex);
         } else {
             s_tc.retired[keep++] = s_tc.retired[i];
         }
@@ -544,7 +544,7 @@ void rdtex_FrameTick(void)
     s_tc.nRetired = keep;
 }
 
-void rdtex_Reset(void)
+void rdtex_reset(void)
 {
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used) {
@@ -558,7 +558,7 @@ void rdtex_Reset(void)
 
 /* ------------------------------------------------------- texture packs */
 
-int rdtex_ReplacementMipsFrom(const TexpackImage *src, TexpackImage *dst)
+int rdtex_replacement_mips_from(const TexpackImage *src, TexpackImage *dst)
 {
     if (!src || !dst || !src->blob || src->fmt != RD_TEXEL_RGBA8 || src->levels != 1 ||
         src->w == 0 || src->h == 0 || src->lv[0].data == NULL || src->lv[0].pitch != src->w * 4u) {
@@ -566,7 +566,7 @@ int rdtex_ReplacementMipsFrom(const TexpackImage *src, TexpackImage *dst)
     }
     const uint32_t w = src->w, h = src->h;
     const size_t base = (size_t)w * h * 4;
-    const size_t chain = rdtex_MipChainBytes(w, h);
+    const size_t chain = rdtex_mip_chain_bytes(w, h);
     if (chain == 0) {
         return -1; /* 1 x 1: nothing to add */
     }
@@ -579,7 +579,7 @@ int rdtex_ReplacementMipsFrom(const TexpackImage *src, TexpackImage *dst)
        by it, as the game's own Enhanced mips.  No alpha coverage is kept:
        PCSX2 keeps none for a pack's mips and the authors tune their alpha
        for that */
-    const uint32_t n = rdtex_BuildMipChain(blob, w, h, blob + base, 1);
+    const uint32_t n = rdtex_build_mip_chain(blob, w, h, blob + base, 1);
     TexpackImage *img = dst;
     *img = *src;
     img->blob = blob;
@@ -602,11 +602,11 @@ int rdtex_ReplacementMipsFrom(const TexpackImage *src, TexpackImage *dst)
     return 0;
 }
 
-int rdtex_ReplacementMips(TexpackImage *img)
+int rdtex_replacement_mips(TexpackImage *img)
 {
     TexpackImage out;
 
-    if (rdtex_ReplacementMipsFrom(img, &out) != 0) {
+    if (rdtex_replacement_mips_from(img, &out) != 0) {
         return -1;
     }
     free(img->blob);
@@ -614,29 +614,29 @@ int rdtex_ReplacementMips(TexpackImage *img)
     return 0;
 }
 
-int rdtex_ReplacementRefused(RdTex t)
+int rdtex_replacement_refused(RdTex t)
 {
-    const RdTexRec *r = rd__TexRec(t.id);
+    const RdTexRec *r = rd__tex_rec(t.id);
 
     return r != NULL && r->replacement && r->refused;
 }
 
-RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, const char *debugName)
+RdTex rdtex_create_replacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, const char *debugName)
 {
     if (!g_rd.inited || !img || !img->blob || img->levels == 0 || img->w == 0 || img->h == 0) {
         return (RdTex){0};
     }
-    const int block = rd__TexelIsBlock(img->fmt);
+    const int block = rd__texel_is_block(img->fmt);
     if (!block && img->fmt != RD_TEXEL_RGBA8) {
         return (RdTex){0};
     }
-    if (block && (!g_rd.hasDevice || !rhi_Limits()->bcTextures)) {
+    if (block && (!g_rd.hasDevice || !rhi_limits()->bcTextures)) {
         return (RdTex){0};
     }
     if (g_rd.hasDevice &&
-        (img->w > rhi_Limits()->maxTextureSize || img->h > rhi_Limits()->maxTextureSize)) {
-        rd__Log("textures: \"%s\" is %ux%u, larger than this graphics card takes (%u)",
-                debugName ? debugName : "?", img->w, img->h, rhi_Limits()->maxTextureSize);
+        (img->w > rhi_limits()->maxTextureSize || img->h > rhi_limits()->maxTextureSize)) {
+        rd__log("textures: \"%s\" is %ux%u, larger than this graphics card takes (%u)",
+                debugName ? debugName : "?", img->w, img->h, rhi_limits()->maxTextureSize);
         return (RdTex){0};
     }
     /* the levels the device gets: never more than the full chain */
@@ -651,27 +651,27 @@ RdTex rdtex_CreateReplacement(TexpackImage *img, uint32_t uvW, uint32_t uvH, con
         if (!block) {
             /* minified replacements need levels to sample from (the pack
                is drawn mipmapped); a failure leaves one level */
-            rdtex_ReplacementMips(img);
+            rdtex_replacement_mips(img);
         } else if (!s_tc.bcSingleLogged) {
             s_tc.bcSingleLogged = 1;
-            rd__Log("textures: compressed textures without mipmaps are drawn without them "
+            rd__log("textures: compressed textures without mipmaps are drawn without them "
                     "(\"%s\" is the first)",
                     debugName ? debugName : "?");
         }
     }
-    return rd__CreateTextureReplacement(img, uvW, uvH, debugName);
+    return rd__create_texture_replacement(img, uvW, uvH, debugName);
 }
 
-int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
+int rdtex_replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
 {
     RdTexEntry *e = entryOf(id, texa);
 
-    if (e == NULL || e->gen != gen || rep.id == 0 || rd__TexRec(rep.id) == NULL) {
+    if (e == NULL || e->gen != gen || rep.id == 0 || rd__tex_rec(rep.id) == NULL) {
         return -1;
     }
     if (e->tex.id != rep.id) {
         releaseReplaced(e); /* a replacement replaced again */
-        if (rd__TexRec(e->tex.id) != NULL) {
+        if (rd__tex_rec(e->tex.id) != NULL) {
             retire(e->tex);
         }
     }
@@ -681,30 +681,30 @@ int rdtex_Replace(uint32_t id, uint32_t gen, int texa, RdTex rep)
     return 0;
 }
 
-void rdtex_RevertReplacements(void)
+void rdtex_revert_replacements(void)
 {
     for (uint32_t i = 0; i < RDTEX_MAX_ENTRIES; i++) {
         if (s_tc.e[i].used && s_tc.e[i].replaced) {
-            /* forgotten: the next bind misses (rdtex_Find) and decodes the
+            /* forgotten: the next bind misses (rdtex_find) and decodes the
                game's texture again */
             freeEntry(&s_tc.e[i]);
         }
     }
 }
 
-void rdtex_SetReleaseHook(RdTexReleaseFn fn)
+void rdtex_set_release_hook(RdTexReleaseFn fn)
 {
     s_tc.release = fn;
 }
 
-const RdTexCacheStats *rdtex_Stats(void)
+const RdTexCacheStats *rdtex_stats(void)
 {
     return &s_tc.stats;
 }
 
 /* --------------------------------------------------------------- sheet text
- * rd.h rd_CreateTextureSheet: an R8 image of coverage with the style the
- * replay hands font_sheet_ps (rd_replay.c fillDrawCB, rd__OverlayDraw). */
+ * rd.h rd_create_texture_sheet: an R8 image of coverage with the style the
+ * replay hands font_sheet_ps (rd_replay.c fillDrawCB, rd__overlay_draw). */
 
 static void sheetStyleSet(RdTexRec *t, const RdSheetStyle *style)
 {
@@ -717,12 +717,12 @@ static void sheetStyleSet(RdTexRec *t, const RdSheetStyle *style)
     t->sheetScale = s->scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : s->scale ? s->scale : 1;
 }
 
-RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
-                            const RdSheetStyle *style, const char *name)
+RdTex rd_create_texture_sheet(uint32_t w, uint32_t h, const uint8_t *coverage,
+                              const RdSheetStyle *style, const char *name)
 {
-    RdTex t = rd__CreateTextureFmt(w, h, coverage, RD_TEXEL_SHEET, RD_TEXSRC_RGBA32,
-                                   name ? name : "sheet");
-    RdTexRec *r = rd__TexRec(t.id);
+    RdTex t = rd__create_texture_fmt(w, h, coverage, RD_TEXEL_SHEET, RD_TEXSRC_RGBA32,
+                                     name ? name : "sheet");
+    RdTexRec *r = rd__tex_rec(t.id);
     if (r) {
         sheetStyleSet(r, style);
     }
@@ -731,8 +731,8 @@ RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
 
 /* The rim at sheet resolution, as the 1x shader makes it, over the sheet
    texels that the rectangle touches */
-void rd_SheetRim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int32_t x, int32_t y,
-                 int32_t rw, int32_t rh, uint8_t *rim)
+void rd_sheet_rim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int32_t x, int32_t y,
+                  int32_t rw, int32_t rh, uint8_t *rim)
 {
     static const uint32_t kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
                                                    ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
@@ -817,9 +817,9 @@ void rd_SheetRim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int
     free(hm);
 }
 
-void rd_SetTextureSheetStyle(RdTex t, const RdSheetStyle *style)
+void rd_set_texture_sheet_style(RdTex t, const RdSheetStyle *style)
 {
-    RdTexRec *r = rd__TexRec(t.id);
+    RdTexRec *r = rd__tex_rec(t.id);
     if (r && r->kind == RD_TEXKIND_IMAGE && r->format == RD_TEXEL_SHEET) {
         sheetStyleSet(r, style);
     }

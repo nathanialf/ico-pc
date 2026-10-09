@@ -6,14 +6,14 @@
  * flush around port draws, and the popups' per-vsync step.  window_host.c
  * calls these.
  *
- *   ui_HostInit()            after rd_Init: the font, the hooks, the
+ *   ui_host_init()            after rd_init: the font, the hooks, the
  *                            presentation overlay that draws the popups
- *                            (rd_SetPresentOverlay), the [dev] popup_test
+ *                            (rd_set_present_overlay), the [dev] popup_test
  *                            switch (ICO_UI_POPUP_TEST, exported by
  *                            host_config.c)
- *   ui_HostVsync(mainTick)   once per vsync after the simulation step: the
+ *   ui_host_vsync(mainTick)   once per vsync after the simulation step: the
  *                            popup test trigger and the popup clock
- *   ui_HostShutdown()        before rd_Shutdown: the overlay, the atlases'
+ *   ui_host_shutdown()        before rd_shutdown: the overlay, the atlases'
  *                            textures
  */
 #ifndef PORT_UI_HOST_H
@@ -23,9 +23,9 @@
 extern "C" {
 #endif
 
-void ui_HostInit(void);
-void ui_HostVsync(unsigned int mainTick);
-void ui_HostShutdown(void);
+void ui_host_init(void);
+void ui_host_vsync(unsigned int mainTick);
+void ui_host_shutdown(void);
 
 #ifdef __cplusplus
 }

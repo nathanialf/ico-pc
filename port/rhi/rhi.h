@@ -1,7 +1,7 @@
 /* rhi.h: the thin render hardware interface the backends implement.
  *
  * Backends: port/rhi/vk, port/rhi/d3d12 (Metal later).  A build may link
- * more than one (Windows: Vulkan and D3D12); rhi_CreateBackend at the end
+ * more than one (Windows: Vulkan and D3D12); rhi_create_backend at the end
  * picks the one the calls below go to (port/rhi/rhi_backend.h).
  * The surface is deliberately small: the game needs about a dozen shader
  * programs, under a hundred pipelines, about fifteen render targets, ring
@@ -98,7 +98,7 @@ typedef enum RhiFormat {
     RHI_FMT_BGRA8_UNORM, /* swapchain */
     /* Texture packs: block-compressed sampled textures (4x4 texel blocks,
      * 8 bytes a block for BC1, 16 for BC2/BC3/BC7), created only when
-     * RhiLimits.bcTextures is true (rhi_CreateTexture refuses them
+     * RhiLimits.bcTextures is true (rhi_create_texture refuses them
      * otherwise).  Copy-destination and sampled only, never targets. */
     RHI_FMT_BC1_UNORM,
     RHI_FMT_BC2_UNORM,
@@ -108,7 +108,7 @@ typedef enum RhiFormat {
 } RhiFormat;
 
 /* The block-compressed formats above. */
-static inline bool rhi_FormatIsBlock(RhiFormat f)
+static inline bool rhi_format_is_block(RhiFormat f)
 {
     return f == RHI_FMT_BC1_UNORM || f == RHI_FMT_BC2_UNORM || f == RHI_FMT_BC3_UNORM ||
            f == RHI_FMT_BC7_UNORM;
@@ -232,7 +232,7 @@ typedef enum RhiBindType {
     RHI_BIND_SAMPLED_TEXTURE,
     RHI_BIND_SAMPLER,
     /* A uniform buffer whose offset is given when the group is
-     * bound (rhi_CmdSetBindGroupOffsets), so one group serves every draw
+     * bound (rhi_cmd_set_bind_group_offsets), so one group serves every draw
      * that reads a block of the same size from the same buffer.  The
      * binding's offset is the base and its size (required) the range each
      * draw sees; base + bind-time offset + size must lie in the buffer.
@@ -262,7 +262,7 @@ typedef struct RhiBinding {
     uint32_t slot;
     RhiBindType type;
     RhiBuffer buffer;      /* for buffer types */
-    uint64_t offset, size; /* buffer range; uniform ranges respect rhi_Limits().uniformAlign;
+    uint64_t offset, size; /* buffer range; uniform ranges respect rhi_limits().uniformAlign;
                             * a dynamic uniform's base and per-draw range */
     RhiTexture texture;    /* for sampled textures */
     RhiViewAspect aspect;
@@ -452,7 +452,7 @@ typedef struct RhiLimits {
     uint32_t maxTextureSize;
     bool dualSourceBlend; /* optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
-    /* true when rhi_ReadbackTexture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
+    /* true when rhi_readback_texture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
      * returns float depth (frame dumps and tests that compare depth); false
      * on D24S8, where that readback fails (returns false) */
     bool depthReadback;
@@ -464,8 +464,8 @@ typedef struct RhiLimits {
     uint32_t copyRowPitchAlign;
     uint32_t copyOffsetAlign;
     /* The Enhanced texture filter.  textureMips:
-     * rhi_CreateTexture honours mipLevels > 1 for sampled RGBA8 textures,
-     * rhi_CmdCopyBufferToTexture's mip selects the level (each level is
+     * rhi_create_texture honours mipLevels > 1 for sampled RGBA8 textures,
+     * rhi_cmd_copy_buffer_to_texture's mip selects the level (each level is
      * uploaded by the caller; no GPU mip generation), and samplers apply
      * RhiSamplerDesc.mip, minLod/maxLod and maxAnisotropy.  maxAnisotropy:
      * the largest RhiSamplerDesc.maxAnisotropy that takes effect (1 = none).
@@ -483,7 +483,7 @@ typedef struct RhiLimits {
      * at least 2^27; D3D12 2^27 elements of 16 bytes). */
     uint32_t maxDynamicUniforms;
     uint64_t maxStorageRange;
-    /* Texture packs: rhi_CreateTexture takes the RHI_FMT_BC* formats
+    /* Texture packs: rhi_create_texture takes the RHI_FMT_BC* formats
      * (Vulkan textureCompressionBC with the formats' sampled and copy
      * features, every D3D12 device) and refuses them while this is false.
      * Their buffer-to-texture copies: rowPitch is the bytes of one row of
@@ -509,20 +509,20 @@ typedef enum RhiBackendKind {
     RHI_BACKEND_METAL = 2
 } RhiBackendKind;
 
-bool rhi_Init(const RhiDeviceDesc *desc);
-void rhi_Shutdown(void);
-RhiBackendKind rhi_Backend(void);
-const RhiLimits *rhi_Limits(void);
-const char *rhi_AdapterName(void);
+bool rhi_init(const RhiDeviceDesc *desc);
+void rhi_shutdown(void);
+RhiBackendKind rhi_backend(void);
+const RhiLimits *rhi_limits(void);
+const char *rhi_adapter_name(void);
 /* True once the device is gone (Vulkan VK_ERROR_DEVICE_LOST; D3D12
  * DXGI_ERROR_DEVICE_REMOVED, _RESET or _HUNG).  The backend logged the
  * reason once; every later call is a no-op or fails, and the caller ends
  * the session (port/platform/window_host.c). */
-bool rhi_DeviceLost(void);
+bool rhi_device_lost(void);
 
 /* Swapchain.  Resize is driven by rd_present from SDL window events. */
-bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync);
-RhiFormat rhi_SwapchainFormat(void);
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync);
+RhiFormat rhi_swapchain_format(void);
 /* The current swapchain's image size.  The backend rebuilds
  * the swapchain on its own (Vulkan: out of date, an Android suboptimal
  * present at another size, a lost or recreated surface; D3D12: a present
@@ -531,59 +531,59 @@ RhiFormat rhi_SwapchainFormat(void);
  * output size with this one at each acquire and follows it.  False (and
  * *w, *h left alone) when there is no swapchain (headless, the surface
  * released). */
-bool rhi_SwapchainSize(uint32_t *w, uint32_t *h);
+bool rhi_swapchain_size(uint32_t *w, uint32_t *h);
 /* The surface-size poll runs at every present again for a
  * while (as it does after a swapchain is made); called at the first game
  * frame, which can come long after the window opened (the disc import and
  * extraction on a first start), so the opening scene is covered.  A no-op
  * on backends that do not poll. */
-void rhi_SurfacePollRestart(void);
+void rhi_surface_poll_restart(void);
 /* Acquire the next backbuffer image for this frame; returns id 0 when the
  * swapchain must be recreated. */
-RhiTexture rhi_AcquireBackbuffer(void);
-/* The backbuffer's state after acquire is UNDEFINED; before rhi_Present the
+RhiTexture rhi_acquire_backbuffer(void);
+/* The backbuffer's state after acquire is UNDEFINED; before rhi_present the
  * caller moves it to RHI_STATE_PRESENT. */
-void rhi_Present(void);
+void rhi_present(void);
 /* The window's surface (the Android lifecycle).
- * rhi_ReleaseSurface waits for the GPU, destroys the swapchain and the
+ * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to
  * the background, where the system takes the window away.  Until a surface
- * is made again rhi_AcquireBackbuffer returns id 0 and rhi_Present does
- * nothing; rhi_SwapchainFormat keeps the last swapchain's format.
- * rhi_RecreateSurface makes a surface on window (an SDL_Window*; NULL: the
- * one rhi_Init was given) and a swapchain at the window's pixel size with
+ * is made again rhi_acquire_backbuffer returns id 0 and rhi_present does
+ * nothing; rhi_swapchain_format keeps the last swapchain's format.
+ * rhi_recreate_surface makes a surface on window (an SDL_Window*; NULL: the
+ * one rhi_init was given) and a swapchain at the window's pixel size with
  * the last vsync setting; a surface still there is released first.  False
  * when the window has no native surface yet (the caller tries again later)
  * or the device is headless.  Vulkan also does this itself when an acquire
  * or a present returns VK_ERROR_SURFACE_LOST_KHR (that frame is skipped),
- * and rhi_ResizeSwapchain without a surface tries to make one.  D3D12: the
+ * and rhi_resize_swapchain without a surface tries to make one.  D3D12: the
  * swapchain stays on its window; release does nothing, recreate returns
  * whether there is a swapchain. */
-void rhi_ReleaseSurface(void);
-bool rhi_RecreateSurface(void *window);
+void rhi_release_surface(void);
+bool rhi_recreate_surface(void *window);
 
 /* Resources.  Create/destroy are not frame-safe: destroy defers internally
  * until the frames in flight that may reference the handle have retired. */
-RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc);
-void rhi_DestroyBuffer(RhiBuffer b);
-void *rhi_MapBuffer(
+RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc);
+void rhi_destroy_buffer(RhiBuffer b);
+void *rhi_map_buffer(
     RhiBuffer
         b); /* UPLOAD and READBACK only; persistently mapped, returns the same pointer each time */
-void rhi_UnmapBuffer(RhiBuffer b);
+void rhi_unmap_buffer(RhiBuffer b);
 
-RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc);
-void rhi_DestroyTexture(RhiTexture t);
-RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc);
-void rhi_DestroySampler(RhiSampler s);
+RhiTexture rhi_create_texture(const RhiTextureDesc *desc);
+void rhi_destroy_texture(RhiTexture t);
+RhiSampler rhi_create_sampler(const RhiSamplerDesc *desc);
+void rhi_destroy_sampler(RhiSampler s);
 
-RhiShader rhi_CreateShader(const RhiShaderDesc *desc);
-void rhi_DestroyShader(RhiShader s);
-RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc);
-void rhi_DestroyBindGroupLayout(RhiBindGroupLayout l);
-RhiBindGroup
-rhi_CreateBindGroup(const RhiBindGroupDesc *desc); /* transient: valid for the current frame only */
-RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *desc);
-void rhi_DestroyPipeline(RhiPipeline p);
+RhiShader rhi_create_shader(const RhiShaderDesc *desc);
+void rhi_destroy_shader(RhiShader s);
+RhiBindGroupLayout rhi_create_bind_group_layout(const RhiBindGroupLayoutDesc *desc);
+void rhi_destroy_bind_group_layout(RhiBindGroupLayout l);
+RhiBindGroup rhi_create_bind_group(
+    const RhiBindGroupDesc *desc); /* transient: valid for the current frame only */
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc);
+void rhi_destroy_pipeline(RhiPipeline p);
 
 /* ------------------------------------------------------------ commands
  * One command list per frame is enough for the game; rd_core may open a
@@ -591,70 +591,71 @@ void rhi_DestroyPipeline(RhiPipeline p);
  * needed only when a texture changes state: two writes in the same state
  * (copy after copy into one texture, render pass after render pass on one
  * target) are ordered by the backend. */
-RhiCommandList rhi_BeginCommands(void);
-void rhi_EndCommands(RhiCommandList cl);
-void rhi_Submit(RhiCommandList cl);
+RhiCommandList rhi_begin_commands(void);
+void rhi_end_commands(RhiCommandList cl);
+void rhi_submit(RhiCommandList cl);
 /* Block until the GPU has finished the frame submitted RHI_FRAMES_IN_FLIGHT
  * frames ago; rd_core calls it before reusing a ring region.  It is also the
  * frame boundary: it starts a new frame, and the command lists and transient
  * bind groups of the frame that used the same slot are recycled.  Call it
  * once per frame, before recording. */
-void rhi_WaitFrame(void);
+void rhi_wait_frame(void);
 /* The frame-in-flight slot (0 .. RHI_FRAMES_IN_FLIGHT - 1) of the frame
- * rhi_WaitFrame last started: the slot whose previous use the GPU has
+ * rhi_wait_frame last started: the slot whose previous use the GPU has
  * finished.  Per-frame resources outside the RHI (upload buffers, query
  * results) are keyed by it, not by a counter of their own. */
-uint32_t rhi_FrameSlot(void);
+uint32_t rhi_frame_slot(void);
 /* Full GPU idle, for shutdown, resize and verification readbacks. */
-void rhi_WaitIdle(void);
+void rhi_wait_idle(void);
 
-void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count);
-void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass);
-void rhi_CmdEndRenderPass(RhiCommandList cl);
-void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *vp);
-void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *rect);
-void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p);
-void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
+void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count);
+void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass);
+void rhi_cmd_end_render_pass(RhiCommandList cl);
+void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *vp);
+void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *rect);
+void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p);
+void rhi_cmd_set_bind_group(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
 /* Binds a group with the offsets of its layout's
  * RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots, one per such slot in ascending slot
- * order (count = their number), each a multiple of rhi_Limits()->uniformAlign
- * and added to the binding's base offset.  rhi_CmdSetBindGroup is this call
+ * order (count = their number), each a multiple of rhi_limits()->uniformAlign
+ * and added to the binding's base offset.  rhi_cmd_set_bind_group is this call
  * with every offset 0.  Binding the group already bound with the same
  * offsets records nothing on Vulkan; D3D12 sets the group's root arguments
  * again at the next draw. */
-void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
-                                const uint32_t *offsets, uint32_t count);
-void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
-void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
-void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref);
-void rhi_CmdSetBlendConstant(RhiCommandList cl, const float rgba[4]);
-void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
-                 uint32_t instanceCount);
-void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
-                        int32_t vertexOffset, uint32_t instanceCount);
+void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                    const uint32_t *offsets, uint32_t count);
+void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
+void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32);
+void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref);
+void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4]);
+void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
+                  uint32_t instanceCount);
+void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
+                          int32_t vertexOffset, uint32_t instanceCount);
 
 /* Copies, outside render passes.  Texture<->texture copies replace the
  * game's VRAM-to-VRAM moves (gif_MoveImage, ZFog's Z copy, queen barrier's
  * framebuffer grab).  Textures must be in COPY_SRC / COPY_DST state. */
 /* Buffer copy: fills RHI_MEM_DEVICE buffers (meshes) from an UPLOAD buffer.
- * Buffers have no rhi_CmdBarrier; the backend makes the written range
+ * Buffers have no rhi_cmd_barrier; the backend makes the written range
  * visible to every later vertex, index, uniform, storage and copy read, and
  * the copy waits for every earlier read or copy of the
  * destination recorded or submitted before it, so a range the GPU may still
  * be reading for an earlier frame can be rewritten by a copy. */
-void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
-                       uint64_t dstOffset, uint64_t size);
-void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
-                                uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region);
-void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
-                        int32_t dstX, int32_t dstY);
-void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
-                                RhiRect region, RhiBuffer dst, uint64_t dstOffset,
-                                uint32_t rowPitch);
+void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
+                         uint64_t dstOffset, uint64_t size);
+void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
+                                    uint32_t rowPitch, RhiTexture dst, uint32_t mip,
+                                    RhiRect region);
+void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
+                          int32_t dstX, int32_t dstY);
+void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
+                                    RhiRect region, RhiBuffer dst, uint64_t dstOffset,
+                                    uint32_t rowPitch);
 
 /* Debug markers: no-ops without debug layers. */
-void rhi_CmdBeginLabel(RhiCommandList cl, const char *name);
-void rhi_CmdEndLabel(RhiCommandList cl);
+void rhi_cmd_begin_label(RhiCommandList cl, const char *name);
+void rhi_cmd_end_label(RhiCommandList cl);
 
 /* -------------------------------------------------- verification helpers
  * Synchronous readback of a whole texture into caller memory as tightly
@@ -663,15 +664,15 @@ void rhi_CmdEndLabel(RhiCommandList cl);
  * the format's raw bytes (BGRA order for the swapchain format).  The caller
  * puts the texture in RHI_STATE_COPY_SRC first (backends do not track
  * state); it stays there.  Work already submitted completes first. */
-bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
-                         uint32_t *outRowPitch);
+bool rhi_readback_texture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
+                          uint32_t *outRowPitch);
 
 /* ------------------------------------------------------------- performance
- * Counters since rhi_Init, cumulative: the caller takes differences
+ * Counters since rhi_init, cumulative: the caller takes differences
  * (rd_core's per-replay records).  D3D12: not implemented, every field
  * reads 0.  The
  * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
- * completion (rhi_WaitFrame, rhi_WaitIdle, readbacks), acquireNs in the
+ * completion (rhi_wait_frame, rhi_wait_idle, readbacks), acquireNs in the
  * swapchain acquire, presentNs in the present call. */
 typedef struct RhiStats {
     uint64_t buffersCreated, buffersDestroyed;
@@ -691,12 +692,12 @@ typedef struct RhiStats {
     uint64_t memoryLive, memoryPeak, memoryLiveBytes, memoryPeakBytes, memoryLimit;
 } RhiStats;
 
-void rhi_GetStats(RhiStats *out);
+void rhi_get_stats(RhiStats *out);
 
-/* GPU timestamps.  Each frame slot (rhi_WaitFrame) has RHI_MAX_TIMESTAMPS
- * of them; rhi_CmdWriteTimestamp(cl, i) records slot i when the GPU has
+/* GPU timestamps.  Each frame slot (rhi_wait_frame) has RHI_MAX_TIMESTAMPS
+ * of them; rhi_cmd_write_timestamp(cl, i) records slot i when the GPU has
  * finished everything submitted or recorded before it (inside or outside a
- * render pass).  rhi_ReadTimestamps hands back the slot rhi_WaitFrame last
+ * render pass).  rhi_read_timestamps hands back the slot rhi_wait_frame last
  * recycled, i.e. the frame RHI_FRAMES_IN_FLIGHT frames ago, which has
  * completed, so reading never waits: ns[i] in nanoseconds from an arbitrary
  * origin, 0 for an index that frame did not write; returns 1 + the highest
@@ -704,64 +705,64 @@ void rhi_GetStats(RhiStats *out);
  * Vulkan: query pools.  D3D12: not implemented yet (unsupported: the calls
  * do nothing and read 0). */
 #define RHI_MAX_TIMESTAMPS 32
-bool rhi_TimestampsSupported(void);
-void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index);
-uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max);
+bool rhi_timestamps_supported(void);
+void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
+uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
 
 /* Swapchain present mode with vsync on: mailbox (the newest
  * finished image is shown at each refresh, older ones are dropped; a present
  * never waits for the display) instead of FIFO.  Applies from the next
- * swapchain (re)creation; rhi_PresentMailbox says whether the current one
+ * swapchain (re)creation; rhi_present_mailbox says whether the current one
  * uses it (false when the surface does not offer it: FIFO is kept).  D3D12:
  * not offered (false). */
-void rhi_PreferMailbox(bool on);
-bool rhi_PresentMailbox(void);
+void rhi_prefer_mailbox(bool on);
+bool rhi_present_mailbox(void);
 /* The current swapchain's present mode, for the logs: "fifo",
  * "mailbox", "immediate", "fifo_relaxed", or "none" without a swapchain.
  * Vulkan: the mode it was created with (vsync off prefers immediate, then
  * mailbox).  D3D12: "fifo" with vsync; without, "immediate" when DXGI
  * allows tearing, else "mailbox" (a flip-model present at sync interval 0
  * replaces the queued frame). */
-const char *rhi_PresentModeName(void);
+const char *rhi_present_mode_name(void);
 
 /* A pipeline cache kept across runs: Vulkan loads a VkPipelineCache
- * blob from path at rhi_Init when its header names this device (header
+ * blob from path at rhi_init when its header names this device (header
  * version one, vendor and device ids, pipelineCacheUUID; anything else
  * starts empty), creates every pipeline through it, and writes it back at
- * rhi_Shutdown (path.tmp, then renamed over path), so a later start compiles
+ * rhi_shutdown (path.tmp, then renamed over path), so a later start compiles
  * nothing a driver without its own disk cache already compiled.  NULL or ""
- * (the default; the tests): no file.  Call before rhi_Init; the path is
+ * (the default; the tests): no file.  Call before rhi_init; the path is
  * copied.  D3D12: ignored (its drivers keep their own shader cache). */
-void rhi_SetPipelineCachePath(const char *path);
+void rhi_set_pipeline_cache_path(const char *path);
 
-/* The Vulkan loader rhi_Init uses, as its
+/* The Vulkan loader rhi_init uses, as its
  * vkGetInstanceProcAddr: a graphics driver the Android build loaded itself
  * (port/platform/android/gpu_driver_android.c, through libadrenotools).
- * NULL (the default) uses SDL's, the system's loader.  Call before rhi_Init;
- * kept across rhi_Shutdown.  On Android the window's surface is then made
+ * NULL (the default) uses SDL's, the system's loader.  Call before rhi_init;
+ * kept across rhi_shutdown.  On Android the window's surface is then made
  * through the same function (vk_surface_android.c).  D3D12: ignored. */
-void rhi_SetVulkanLoader(void *getInstanceProcAddr);
+void rhi_set_vulkan_loader(void *getInstanceProcAddr);
 
 /* Programs that hook the graphics API from outside,
- * for the logs and the pacing; valid after rhi_Init, NULL when none (and
- * before rhi_Init).
- * rhi_InjectorName: an effects program, "ReShade" or "vkBasalt".  Vulkan:
- * an instance layer of the loader (rhi_InjectorFromLayerName) switched on
- * (rhi_LayerSwitchedOn); ReShade's layer is implicit, loaded whenever it is
+ * for the logs and the pacing; valid after rhi_init, NULL when none (and
+ * before rhi_init).
+ * rhi_injector_name: an effects program, "ReShade" or "vkBasalt".  Vulkan:
+ * an instance layer of the loader (rhi_injector_from_layer_name) switched on
+ * (rhi_layer_switched_on); ReShade's layer is implicit, loaded whenever it is
  * installed, and ReShade itself decides whether it draws in this program.
  * D3D12: a dxgi.dll or d3d12.dll loaded from outside the system directory
  * (ReShade's dxgi.dll beside the program), "ReShade".
- * rhi_OverlayName: an overlay layer, "Steam overlay" or "Mesa overlay"
+ * rhi_overlay_name: an overlay layer, "Steam overlay" or "Mesa overlay"
  * (Vulkan only; D3D12: NULL). */
-const char *rhi_InjectorName(void);
-const char *rhi_OverlayName(void);
+const char *rhi_injector_name(void);
+const char *rhi_overlay_name(void);
 /* The classifiers behind them (pure, any backend, tests): an instance layer
  * name to the injector or overlay it belongs to, NULL for any other layer:
  * VK_LAYER_reshade (ReShade), VK_LAYER_VKBASALT_post_processing (vkBasalt);
  * VK_LAYER_VALVE_steam_overlay_* (Steam overlay), VK_LAYER_MESA_overlay
  * (Mesa overlay). */
-const char *rhi_InjectorFromLayerName(const char *layer);
-const char *rhi_OverlayFromLayerName(const char *layer);
+const char *rhi_injector_from_layer_name(const char *layer);
+const char *rhi_overlay_from_layer_name(const char *layer);
 /* The loader lists every installed layer (implicit or explicit, switched on
  * or not), so a listed layer is in this program only when the environment
  * leaves it on: vkBasalt (implicit) needs ENABLE_VKBASALT=1, its manifest's
@@ -771,19 +772,19 @@ const char *rhi_OverlayFromLayerName(const char *layer);
  * anything (its manifest's disable_environment: DISABLE_VK_LAYER_reshade_1,
  * DISABLE_VKBASALT, DISABLE_VK_LAYER_VALVE_steam_overlay_1).  The other layers above are implicit without an
  * enable variable: on.  env reads a variable (getenv; a table in tests). */
-bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name));
+bool rhi_layer_switched_on(const char *layer, const char *(*env)(const char *name));
 
 /* --------------------------------------------------- backend selection
- * rhi_CreateBackend selects the backend every call
+ * rhi_create_backend selects the backend every call
  * above goes to: "vulkan" or "d3d12" (case-insensitive), NULL or "" for the
  * default.  The default is the ICO_RHI_BACKEND environment variable when it
  * names a linked backend, else the first linked one (Vulkan when it is
- * linked).  Call it before rhi_Init; without a call the default is used.
+ * linked).  Call it before rhi_init; without a call the default is used.
  * Returns false, selection unchanged, for a name that is not linked into
- * this build or while a device is up (between rhi_Init and rhi_Shutdown).
- * rhi_BackendName lists the linked backends: index 0, 1, ... until NULL. */
-bool rhi_CreateBackend(const char *name);
-const char *rhi_BackendName(uint32_t index);
+ * this build or while a device is up (between rhi_init and rhi_shutdown).
+ * rhi_backend_name lists the linked backends: index 0, 1, ... until NULL. */
+bool rhi_create_backend(const char *name);
+const char *rhi_backend_name(uint32_t index);
 
 #ifdef __cplusplus
 }

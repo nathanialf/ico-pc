@@ -18,7 +18,7 @@
  * 24-bit (PSMZ24 scale, 0xFFFFFF = far after the game's own projection) or
  * 32-bit value the call site computed, UVs in texels (12.4) or STQ.  rd_core
  * records them as they are.  The replay converts them (rd_replay.c convVtx and
- * expand, and the origin rd__FrameGroupEx puts in FrameCB): it applies the GS
+ * expand, and the origin rd__frame_group_ex puts in FrameCB): it applies the GS
  * sampling rules (pixel centres at integer coordinates; the game's +8/-4
  * half-texel nudges stay in the data) and the resolution scale in force.
  *
@@ -27,7 +27,7 @@
  * gsb_SetGsDefault (GsBase.c) writes TEST/ZBUF/FBA/TEXA at the head of lists
  * 0, 1, 2, 4, 6, 7, 8, 9, 10, 11, 12 only.  Lists 3 and 5 inherit whatever
  * the previous list left.  rd_core reproduces this by applying the same
- * defaults at rd_BeginFrame (through the normal rd_* state calls, recorded
+ * defaults at rd_begin_frame (through the normal rd_* state calls, recorded
  * into those lists) and nothing else.  The defaults, from GsBase.c:638-688:
  *   normal   (0, 7-12): TEST 0x50000  ZBUF write on  FBA 0 TEXA 80/80
  *   semitr   (1, 2):    TEST 0x5140D  ZBUF write on  FBA 0 TEXA 7F/81 AEM
@@ -36,7 +36,7 @@
  *
  * Replay order and keep
  * ---------------------
- * rd_EndFrame(0) replays lists 0..12.  rd_EndFrame(1) ("fbKeep", pause and
+ * rd_end_frame(0) replays lists 0..12.  rd_end_frame(1) ("fbKeep", pause and
  * memory card screens, DisplayList.c:128) replays lists 11 and 12 only, on
  * top of the retained DISPLAY target.
  *
@@ -58,12 +58,12 @@
  *
  * Threads
  * -------
- * All rd_* calls are made from the game (simulation) fiber.  rd_EndFrame
+ * All rd_* calls are made from the game (simulation) fiber.  rd_end_frame
  * hands the finished RdFrame to the presenter, which renders it once, or
- * several times with interpolation on (rd_Present).  The game's post passes
+ * several times with interpolation on (rd_present).  The game's post passes
  * are appended from scheduler() on the PS2 (main.c:263-272); on the host
  * they are appended by the same code running inside ico_vsync before
- * rd_EndFrame, so there is one well-defined hand-off point.
+ * rd_end_frame, so there is one well-defined hand-off point.
  *
  * Every function names the seki (or other) entry points that call it.
  */
@@ -167,7 +167,7 @@ typedef enum RdTargetId {
     RD_TARGET_DISPLAY,   /* FBP 0: 512 x H/2 reduced frame; the only displayed buffer;
                           retained across frames */
     /* the three blur levels of shadow_Draw.  The count itself (FBP 0x142,
-     * scene-sized) is a per-frame target, rd_ShadowCountTarget. */
+     * scene-sized) is a per-frame target, rd_shadow_count_target. */
     RD_TARGET_SHADOW0, /* FBP 0x1C2 / TBP 0x3840: blur level 1, 256 x 256 */
     RD_TARGET_SHADOW1, /* FBP 0x1E2 / TBP 0x3C40: blur level 2, 128 x 128 */
     RD_TARGET_SHADOW2, /* FBP 0x1EA / TBP 0x3D40: blur level 3, 64 x 64 */
@@ -249,14 +249,14 @@ typedef enum RdPostKind {
     RD_POST_FILM_NOISE,    /* gsb_filmNoise */
     RD_POST_AA_DOWNSAMPLE, /* gsb_antiAlias chain step */
     RD_POST_AA_COMPOSITE,
-    RD_POST_FOG,            /* fog_DrawFog: depth-indexed LUT (see rd_Post) */
-    RD_POST_SHADOW_RESOLVE, /* reserved (no caller; rd_Post refuses it) */
-    RD_POST_BLUR,           /* reserved (no caller; rd_Post refuses it) */
+    RD_POST_FOG,            /* fog_DrawFog: depth-indexed LUT (see rd_post) */
+    RD_POST_SHADOW_RESOLVE, /* reserved (no caller; rd_post refuses it) */
+    RD_POST_BLUR,           /* reserved (no caller; rd_post refuses it) */
     RD_POST_COMPOSITE_FIX,  /* textured quad with LERP_FIX blend (motion blur, DoF planes, flare) */
     RD_POST_COPY,           /* texture-to-texture copy standing in for gif_MoveImage / VRAM grabs */
-    RD_POST_PRESENT_BLIT,   /* reserved (no caller; rd_Post refuses it) */
+    RD_POST_PRESENT_BLIT,   /* reserved (no caller; rd_post refuses it) */
     /* one GS sprite of staticBlur.c, drawn in the GS integer arithmetic
-     * (see rd_Post below); the kind names the effect it belongs to, all
+     * (see rd_post below); the kind names the effect it belongs to, all
      * six replay alike */
     RD_POST_MOTION_BLUR, /* MotionBlur: DISPLAY as RGB24, H/2 stretched to H, LERP FIX */
     RD_POST_DOF,         /* depthField: SCENE -> WORK1 -> WORK0, six blur passes, four planes */
@@ -298,22 +298,22 @@ typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPrese
 /* Every display field below applies whatever the preset.  preset is a flag
  * the host derives (RD_PRESET_ORIGINAL when the options are the PS2
  * picture); it decides only the deferred text (rd_present.c), the UI scale
- * (ui_ScaleFor) and the scene size for sceneScale 0 without a size (the
+ * (ui_scale_for) and the scene size for sceneScale 0 without a size (the
  * output's box with the Enhanced flag, else the GS size, so a zeroed
  * RdSettings is the PS2 picture). */
 typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
     float aspect;                       /* 4/3 .. 32/9 (0, a zeroed RdSettings: 4/3) */
-    uint8_t interpolate;                /* uncapped presentation (rd_Present), any preset */
+    uint8_t interpolate;                /* uncapped presentation (rd_present), any preset */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     uint8_t vsync;
     /* Texture packs ([video] texture_pack, dump_textures): replacements
      * from the pack drawn in place of the game's textures (a true -> false
-     * edge set by rd_SetSettings puts the originals back when the next
-     * frame opens, rdtex_RevertReplacements), and each texture the game
+     * edge set by rd_set_settings puts the originals back when the next
+     * frame opens, rdtex_revert_replacements), and each texture the game
      * binds written as a PNG under its PCSX2 name.  Both 0 in a zeroed
      * RdSettings. */
     uint8_t texturePack;
@@ -324,7 +324,7 @@ typedef struct RdSettings {
      * hooked into the API (ReShade) finds a depth buffer of the
      * backbuffer's size.  Near 1, far 0 (gs_z_to_depth: the depth grows
      * with GS Z): ReShade's RESHADE_DEPTH_INPUT_IS_REVERSED = 1.  Only
-     * with an effects program loaded (rhi_InjectorName), never on Android,
+     * with an effects program loaded (rhi_injector_name), never on Android,
      * not under the CRT filter.  0 in a zeroed RdSettings: no depth
      * buffer is written. */
     uint8_t effectsDepth;
@@ -347,7 +347,7 @@ typedef struct RdSettings {
      * RD_CRT_OFF (0, a zeroed RdSettings) presents with the plain box blit;
      * crtStrength 0..1 lerps the filtered picture against the plain one (0
      * presents as off).  The five overrides are the config-only crt_* keys,
-     * each < 0 for the mode's own value (rd_CrtSettings sets them so). */
+     * each < 0 for the mode's own value (rd_crt_settings sets them so). */
     uint8_t crtMode;
     uint8_t _crtPad[3];
     float crtStrength;
@@ -367,7 +367,7 @@ typedef enum RdCrtMode {
 
 /* Sets s's CRT fields: the mode, the strength (clamped to 0..1) and every
  * override to "the mode's own" (-1). */
-void rd_CrtSettings(RdSettings *s, RdCrtMode mode, float strength);
+void rd_crt_settings(RdSettings *s, RdCrtMode mode, float strength);
 
 /* RdSettings.filterUpgrade */
 typedef enum RdFilterUpgrade {
@@ -381,30 +381,30 @@ typedef enum RdFilterUpgrade {
 /* gsb_InitGSSystem / gsb_Init: creates the named targets for the given GS
  * scene size (512x512 PAL, 512x448 NTSC) and loads the shaders.  Returns
  * false if the RHI lacks stencil wrap (a device without dual-source
- * blending is not refused: rd blends in two passes, rd_SetNoDual). */
-bool rd_Init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow);
-void rd_Shutdown(void);
+ * blending is not refused: rd blends in two passes, rd_set_no_dual). */
+bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, void *sdlWindow);
+void rd_shutdown(void);
 /* gsb_Init on a 50/60 Hz switch (kanbanBoot's gsResetFunc) recreates the
  * scene-sized targets. */
-void rd_ResetScene(uint32_t gsWidth, uint32_t gsHeight);
-/* Settings menu: applies at the next rd_BeginFrame. */
-void rd_SetSettings(const RdSettings *settings);
-const RdSettings *rd_GetSettings(void);
+void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);
+/* Settings menu: applies at the next rd_begin_frame. */
+void rd_set_settings(const RdSettings *settings);
+const RdSettings *rd_get_settings(void);
 /* The scene's scale in force (rd_present.c
- * rd__ApplyDisplay, from the settings applied at the last rd_BeginFrame):
+ * rd__apply_display, from the settings applied at the last rd_begin_frame):
  * the scene-class targets' texels per GS pixel across (with a wide aspect's
- * widening) and down; 1 x 1 before rd_Init, at 1x and under the CRT
+ * widening) and down; 1 x 1 before rd_init, at 1x and under the CRT
  * filter.  The menus' text strips are rasterised to it (port/ui/menu_font.c). */
-void rd_GetSceneScale(float *sx, float *sy);
+void rd_get_scene_scale(float *sx, float *sy);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */
-void rd_BeginFrame(void);
+void rd_begin_frame(void);
 /* dl_Swap: closes the frame.  keep != 0 replays lists 11..12 only (fbKeep).
  * Hands the RdFrame to the presenter; returns immediately. */
-void rd_EndFrame(int keep);
-/* Where the GPU work the game's calls cause runs (rd_EndFrame's replay and
- * present with interpolation off, rd_BeginFrame's target re-creation, the
+void rd_end_frame(int keep);
+/* Where the GPU work the game's calls cause runs (rd_end_frame's replay and
+ * present with interpolation off, rd_begin_frame's target re-creation, the
  * FMV picture's present).  The game calls rd from a fiber with a 256 KB
  * stack; the driver (pipeline creation, present) may need far more.  The
  * window build sets
@@ -412,12 +412,12 @@ void rd_EndFrame(int keep);
  * the host FP mode and returns; NULL (the default, tests and tools) calls
  * fn directly. */
 typedef void (*RdHostCall)(void (*fn)(void *arg), void *arg);
-/* Creates every pipeline of the reachable set (rd__EnumerateReachable) now,
+/* Creates every pipeline of the reachable set (rd__enumerate_reachable) now,
  * so the first frames that use them do not stall on the driver's pipeline
  * compile; logs the count and the time.  The window calls it after
- * rd_Init; the tests do not.  Returns the number created. */
-uint32_t rd_PrecreatePipelines(void);
-/* Progress of rd_PrecreatePipelines: fn(ctx, done, total) is called with
+ * rd_init; the tests do not.  Returns the number created. */
+uint32_t rd_precreate_pipelines(void);
+/* Progress of rd_precreate_pipelines: fn(ctx, done, total) is called with
  * (0, total) before the first pipeline and (i + 1, total) after each one,
  * on the calling thread, with done never going down.  fn may present a
  * frame (the window draws its start-up screen from it); that present asks
@@ -425,32 +425,32 @@ uint32_t rd_PrecreatePipelines(void);
  * found again afterwards, so the call is safe from inside the loop.  NULL
  * clears it.  Kept across calls until cleared. */
 typedef void (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
-void rd_SetPipelineProgress(RdPipelineProgressFn fn, void *ctx);
+void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s
  * statistics line. */
-double rd_ReplayTimeMax(int reset, uint32_t *count);
-void rd_SetHostCall(RdHostCall call);
+double rd_replay_time_max(int reset, uint32_t *count);
+void rd_set_host_call(RdHostCall call);
 /* dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
- * recorded since rd_BeginFrame are dropped unreplayed, as the PS2 drops a
+ * recorded since rd_begin_frame are dropped unreplayed, as the PS2 drops a
  * display list it never kicks.  No-op when no frame is open. */
-void rd_DiscardFrame(void);
-/* True between rd_BeginFrame and rd_EndFrame / rd_DiscardFrame. */
-bool rd_FrameOpen(void);
+void rd_discard_frame(void);
+/* True between rd_begin_frame and rd_end_frame / rd_discard_frame. */
+bool rd_frame_open(void);
 /* The window's drawable size changed (SDL pixel-size event): resizes the
  * swapchain and the presenter's output box at once.  Host loop only, never
  * from inside a frame's replay. */
-void rd_ResizeOutput(uint32_t width, uint32_t height);
+void rd_resize_output(uint32_t width, uint32_t height);
 /* The backend rebuilt the swapchain at a size other than the
  * output's (out of date, a lost or recreated surface, an Android rotation
  * or unfold the window's events had not reported yet); the renderer's
- * output followed it at an acquire (as rd_ResizeOutput, without a second
+ * output followed it at an acquire (as rd_resize_output, without a second
  * rebuild).  True once per such change, with the new size in *w, *h (either
  * may be NULL): the host loop then gives the size to the options that
  * follow the window (aspect auto, resolution window). */
-bool rd_OutputFollowed(uint32_t *w, uint32_t *h);
+bool rd_output_followed(uint32_t *w, uint32_t *h);
 /* gsb_SetVSMatrix: the camera for this frame (used by Enhanced projection,
  * interpolation and the WORLD-space 2D conversion).
  * Called from gsb_MakeCommonMatrix, the point where the view
@@ -460,37 +460,37 @@ bool rd_OutputFollowed(uint32_t *w, uint32_t *h);
  * 4/3, nearZ/farZ vsParam[7]/[8].  Replay puts them in FrameCB: g_view,
  * g_proj = proj43, g_viewProj = proj43 x view, g_cameraPos = the eye from
  * the view's inverse (w = cut), g_clip = near, far, zoom, aspect. */
-void rd_SetCamera(const RdCamera *cam);
+void rd_set_camera(const RdCamera *cam);
 
 /* --------------------------------------------------------- interpolation
  * The simulation keeps its tick; with RdSettings.interpolate on (either
- * preset) rd_EndFrame only closes the frame, and the host presents as often
- * as it likes with rd_Present(alpha): the last closed frame replayed with
+ * preset) rd_end_frame only closes the frame, and the host presents as often
+ * as it likes with rd_present(alpha): the last closed frame replayed with
  * every keyed draw blended from the frame before it by alpha in [0, 1)
  * (0 = the previous frame's data, so the picture is one tick late).
  * Unkeyed draws, CLUT animation, film noise, dissolve and every other state
  * stay at the tick's values.
  *
- * rd_InterpolationActive  RdSettings.interpolate, either preset (as
- *                         applied at the last rd_BeginFrame)
- * rd_Present              replays and presents; false (nothing done) when
+ * rd_interpolation_active  RdSettings.interpolate, either preset (as
+ *                         applied at the last rd_begin_frame)
+ * rd_present              replays and presents; false (nothing done) when
  *                         interpolation is off, before the first frame, or
  *                         while an FMV picture is on the output.  Every call
  *                         of a tick draws its feedback passes (motion blur,
  *                         aura) from what the tick started from, so they
  *                         advance once a tick, as on the PS2
- * rd_FrameNumber          the last closed frame's RdFrame number, 0 before
+ * rd_frame_number          the last closed frame's RdFrame number, 0 before
  *                         the first: the host's tick clock
- * rd_CameraCut            the frame being recorded starts a new shot (a hard
+ * rd_camera_cut            the frame being recorded starts a new shot (a hard
  *                         camera cut or a stage change): it is not blended
  *                         from the one before (RdCamera.cut).  Outside an
  *                         open frame it applies to the next one.  Called by
  *                         the window from the game's cut signal
  *                         (port/game/video_options.h ico_video_camera_cut) */
-bool rd_InterpolationActive(void);
-bool rd_Present(float alpha);
-uint32_t rd_FrameNumber(void);
-void rd_CameraCut(void);
+bool rd_interpolation_active(void);
+bool rd_present(float alpha);
+uint32_t rd_frame_number(void);
+void rd_camera_cut(void);
 
 /* The present clock the host derives alpha from.  A present's
  * measured time carries the jitter of the simulation step and the sleeps
@@ -509,8 +509,8 @@ typedef struct RdPresentClock {
     uint32_t resets;
 } RdPresentClock;
 
-float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
-                           double nominalMs);
+float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
+                             double nominalMs);
 
 /* ----------------------------------------------------------- mirror mode
  * The game's mirror mode (chosen at New Game, port/game/options.h
@@ -519,42 +519,42 @@ float rd_PresentClockAlpha(RdPresentClock *c, double nowMs, double tickAtMs, dou
  * every present (Original, Enhanced, interpolated) is mirrored; RD_SPACE_UI
  * screen prims drawn into SCENE or DISPLAY are flipped about the target's
  * centre at replay, so they read normally after the present flip.  Nothing
- * else changes (winding, culling, shadows, DATE, feedback).  rd_SetMirror is
+ * else changes (winding, culling, shadows, DATE, feedback).  rd_set_mirror is
  * the run's value, independent of RdSettings (the window rebuilds those from
  * the display options); the mirror is on when either RdSettings.mirror
- * (tests, the replay tool) or rd_SetMirror's flag is set.  It applies from
+ * (tests, the replay tool) or rd_set_mirror's flag is set.  It applies from
  * the next replay or present. */
-void rd_SetMirror(int on);
-bool rd_MirrorActive(void);
+void rd_set_mirror(int on);
+bool rd_mirror_active(void);
 
 /* The two-pass blend fallback for a device without
- * dual-source blending (rd_pipeline.c rd__ExpandNoDual).  rd_Init turns it
+ * dual-source blending (rd_pipeline.c rd__expand_no_dual).  rd_init turns it
  * on when the device lacks dualSrcBlend or ICO_RD_NO_DUAL=1 is set (and logs
- * "blend: two-pass fallback (no dualSrcBlend)").  rd_SetNoDual switches it
+ * "blend: two-pass fallback (no dualSrcBlend)").  rd_set_no_dual switches it
  * for the next draws (tests: the same frame replayed both ways); turning it
  * off on a device without the feature is refused (false). */
-bool rd_SetNoDual(bool on);
-bool rd_NoDual(void);
+bool rd_set_no_dual(bool on);
+bool rd_no_dual(void);
 
 /* -------------------------------------------------- presentation overlay
  * The port's own UI (port/ui's popups) drawn on the output itself, after the
  * presenter's box
- * blit (rd_present.c rd__PresentRecord), at the output's resolution:
+ * blit (rd_present.c rd__present_record), at the output's resolution:
  * outside the game's frame, so it is never reduced, never in DISPLAY's
  * history (a keep frame cannot show it twice), never mirrored and never
  * interpolated.
  *
- * rd_SetPresentOverlay  registers fn (NULL: none; one at a time).  rd calls
+ * rd_set_present_overlay  registers fn (NULL: none; one at a time).  rd calls
  *                       fn(ctx, user) once per present that reaches an
- *                       output (rd_EndFrame's with interpolation off, each
- *                       rd_Present,
+ *                       output (rd_end_frame's with interpolation off, each
+ *                       rd_present,
  *                       the replay tool's --present), before the frame's
  *                       replay, so the textures fn creates or updates
- *                       (rd_CreateTextureR8, rd_UpdateTextureRect: the
+ *                       (rd_create_texture_r8, rd_update_texture_rect: the
  *                       font atlases) are uploaded with the frame.  Not for
  *                       the movie picture (rd_video.c).  The registration
- *                       survives rd_Shutdown / rd_Init
- * rd_OverlayPrims       valid only inside fn (ignored elsewhere): prims in
+ *                       survives rd_shutdown / rd_init
+ * rd_overlay_prims       valid only inside fn (ignored elsewhere): prims in
  *                       12.4 fixed-point OUTPUT pixels, origin at the
  *                       output's top-left corner, an integer coordinate on
  *                       a pixel's top-left edge (pixel (x, y) is the square
@@ -566,23 +566,23 @@ bool rd_NoDual(void);
  *                       1.0).  tex id 0 draws untextured; otherwise
  *                       MODULATE with TCC RGBA, the texture's alpha in GS
  *                       units (an R8 texture through font_ps, as
- *                       rd_CreateTextureR8 says), bilinear, clamped.  blend:
+ *                       rd_create_texture_r8 says), bilinear, clamped.  blend:
  *                       the GS equation (RD_BLEND_LERP_AS,
  *                       RD_BLEND_CS_AS_ADD_CD; ABE on),
  *                       no alpha test, no DATE, COLCLAMP on.  Drawn in
  *                       call order after the box blit, never flipped (the
  *                       mirror mode flips only the box blit), with no
  *                       scissor but the output
- * rd_ReadPresented      the last presented output, tightly packed RGBA8
+ * rd_read_presented      the last presented output, tightly packed RGBA8
  *                       (outputWidth x outputHeight x 4 bytes, the overlay
  *                       included): the headless output (tests, the replay
  *                       tool).  The window build presents the swapchain
  *                       image and keeps no copy, so it returns false there
- *                       (a capture copy in rd__PresentRecord is the place
+ *                       (a capture copy in rd__present_record is the place
  *                       to add one)
- * rd_GetPresentOverlay  the registered fn (NULL: none) and its user, so a
+ * rd_get_present_overlay  the registered fn (NULL: none) and its user, so a
  *                       caller can put back what it replaced
- * rd_PresentBlank       a present with no scene: the output
+ * rd_present_blank       a present with no scene: the output
  *                       (the swapchain's next image, or the headless
  *                       output) cleared to 0, the registered overlay drawn
  *                       on it (its ctx as for a frame's present, the box
@@ -593,7 +593,7 @@ bool rd_NoDual(void);
  *                       game runs (the Android first start's progress,
  *                       window_host.c ico_window_progress).  false with no
  *                       device or when the replay could not run
- * rd_SetPresentOverlayTop  a second callback, the top layer
+ * rd_set_present_overlay_top  a second callback, the top layer
  *                       (the touch controls; NULL: none).  Called after
  *                       fn at the same presents; its ctx is always the
  *                       output (outW x outH the output, box the aspect's),
@@ -601,9 +601,9 @@ bool rd_NoDual(void);
  *                       drawn on the output at its resolution: under fn's
  *                       prims without the filter, over the filtered
  *                       picture with it (fn's prims are inside that
- *                       picture).  rd_OverlayPrims as for fn.  The capture
- *                       (rd_CapturePresented) leaves both layers out.
- *                       rd_GetPresentOverlayTop as rd_GetPresentOverlay */
+ *                       picture).  rd_overlay_prims as for fn.  The capture
+ *                       (rd_capture_presented) leaves both layers out.
+ *                       rd_get_present_overlay_top as rd_get_present_overlay */
 typedef struct RdRect {
     int32_t x, y;
     uint32_t w, h;
@@ -618,31 +618,31 @@ typedef struct RdOverlayCtx {
 
 typedef void (*RdOverlayFn)(const RdOverlayCtx *ctx, void *user);
 
-void rd_SetPresentOverlay(RdOverlayFn fn, void *user);
-RdOverlayFn rd_GetPresentOverlay(void **user);
-bool rd_PresentBlank(void);
-void rd_SetPresentOverlayTop(RdOverlayFn fn, void *user);
-RdOverlayFn rd_GetPresentOverlayTop(void **user);
-void rd_OverlayPrims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
-bool rd_ReadPresented(void *dst, uint32_t *w, uint32_t *h);
+void rd_set_present_overlay(RdOverlayFn fn, void *user);
+RdOverlayFn rd_get_present_overlay(void **user);
+bool rd_present_blank(void);
+void rd_set_present_overlay_top(RdOverlayFn fn, void *user);
+RdOverlayFn rd_get_present_overlay_top(void **user);
+void rd_overlay_prims(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, RdBlend blend);
+bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h);
 
 /* -------------------------------------------------- photo mode's picture
  * The paused game draws every tick from the photo camera
  * (port/game/photo_view.c), so its frames are presented like any other; this
  * saves one of them.
  *
- * rd_CapturePresented   the next present that reaches an output (either
+ * rd_capture_presented   the next present that reaches an output (either
  *                       build: the headless output or the swapchain image)
  *                       copies the output before the presentation overlay
  *                       (the CRT filter and the deferred text applied, the
  *                       port's popups and photo HUD not) and writes it to
  *                       png (RGB, outputWidth x outputHeight) after the
  *                       submit.  false: no device or no path
- * rd_CaptureResult      1 (written) or -1 (failed) once for the last
+ * rd_capture_result      1 (written) or -1 (failed) once for the last
  *                       capture, with its path in path; 0 while it is
  *                       pending or when there is none */
-bool rd_CapturePresented(const char *png);
-int rd_CaptureResult(char *path, uint32_t pathSize);
+bool rd_capture_presented(const char *png);
+int rd_capture_result(char *path, uint32_t pathSize);
 
 /* --------------------------------------------------------- deferred text
  * Text the game shows in lists 11 and 12 (the layout's menu rows, through
@@ -654,26 +654,26 @@ int rd_CaptureResult(char *path, uint32_t pathSize);
  * skips the quads; every other replay (Original, no present, no renderer)
  * draws the quads and ignores the items, so its pixels are the quads'.
  *
- * rd_DeferredText        records an RDC_OVERLAY_TEXT item into the current
+ * rd_deferred_text        records an RDC_OVERLAY_TEXT item into the current
  *                        list, in place (the scissor and the post passes
  *                        that follow it in the lists apply to it at the
  *                        present).  key as for a draw (0: never blended)
- * rd_DeferredTextQuads   on != 0: the RDC_SCREEN draws recorded until it is
+ * rd_deferred_text_quads   on != 0: the RDC_SCREEN draws recorded until it is
  *                        called with 0 are the last item's quads, skipped
  *                        when the item is drawn deferred.  The state
  *                        commands between are kept either way
- * rd_SetDeferredTextFn   registers the renderer (NULL: none, the quads are
+ * rd_set_deferred_text_fn   registers the renderer (NULL: none, the quads are
  *                        drawn).  Called once per deferred item and region
  *                        at a present, before the replay (as the overlay's
  *                        callback), with the item as the present sees it:
  *                        blended between ticks, the colour folded through
  *                        the fades, letterbox and brightness after it.
- *                        Inside it rd_OverlayPrims adds prims to the
+ *                        Inside it rd_overlay_prims adds prims to the
  *                        deferred layer, clipped to the region (the row's
  *                        scissor, the reduction's border crop, a letterbox
  *                        band), drawn before the overlay's.  The
- *                        registration survives rd_Shutdown / rd_Init
- * rd_DeferredTextActive  whether the replay in progress draws items
+ *                        registration survives rd_shutdown / rd_init
+ * rd_deferred_text_active  whether the replay in progress draws items
  *                        deferred (inside the renderer: true) */
 #define RD_TEXT_BYTES 256
 
@@ -691,19 +691,19 @@ typedef struct RdTextItem {
 
 typedef void (*RdDeferredTextFn)(const RdOverlayCtx *ctx, const RdTextItem *item, void *user);
 
-void rd_DeferredText(const RdTextItem *item, RdKey key);
-void rd_DeferredTextQuads(int on);
-void rd_SetDeferredTextFn(RdDeferredTextFn fn, void *user);
-bool rd_DeferredTextActive(void);
+void rd_deferred_text(const RdTextItem *item, RdKey key);
+void rd_deferred_text_quads(int on);
+void rd_set_deferred_text_fn(RdDeferredTextFn fn, void *user);
+bool rd_deferred_text_active(void);
 
 /* ------------------------------------------------------- the draw filter
  * The model viewer (port/game/model_viewer.c) shows one object of a loaded
  * stage on its own:
  * every other world draw is left out of the frame where it is recorded.
  *
- * rd_SetDrawFilter     on: from now on a world draw (rd_DrawVuMesh,
- *                      rd_DrawVuGrid, rd_DrawVuParticles, rd_WorldPrims,
- *                      rd_ShadowStrip, rd_ShadowTris, and rd_ScreenPrims in
+ * rd_set_draw_filter     on: from now on a world draw (rd_draw_vu_mesh,
+ *                      rd_draw_vu_grid, rd_draw_vu_particles, rd_world_prims,
+ *                      rd_shadow_strip, rd_shadow_tris, and rd_screen_prims in
  *                      RD_SPACE_WORLD after any space override) is recorded
  *                      only when its key's object (RD_KEY's objptr: the key
  *                      shifted right by 16) is one of the set's, which
@@ -711,92 +711,92 @@ bool rd_DeferredTextActive(void);
  *                      UI and full-screen screen prims, post passes, state
  *                      and targets are never filtered.  off (the default):
  *                      every draw is recorded; the set is emptied
- * rd_DrawFilterOpen    while open (and the filter on), every world draw is
+ * rd_draw_filter_open    while open (and the filter on), every world draw is
  *                      recorded and a non-zero key's object joins the set,
  *                      so an object whose draws are keyed by several
  *                      display objects (the boy's head, body, cloth) is
  *                      learned from its own display list.  Closed by
- *                      rd_SetDrawFilter
- * rd_DrawFilterKeeps   whether a world draw with this key is recorded now
+ *                      rd_set_draw_filter
+ * rd_draw_filter_keeps   whether a world draw with this key is recorded now
  *                      (no learning; tests) */
 #define RD_DRAW_FILTER_MAX 64
-void rd_SetDrawFilter(bool on, const void *const *objs, uint32_t n);
-void rd_DrawFilterOpen(bool open);
-bool rd_DrawFilterKeeps(RdKey key);
+void rd_set_draw_filter(bool on, const void *const *objs, uint32_t n);
+void rd_draw_filter_open(bool open);
+bool rd_draw_filter_keeps(RdKey key);
 
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */
-void rd_SelectList(int list);
-int rd_CurrentList(void);
+void rd_select_list(int list);
+int rd_current_list(void);
 
 /* --------------------------------------------------------- state deltas
  * Each records a state change into the current list.  Callers:
- *   rd_Blend     gif_SetAlpha, material packets (Packet.c), raw ALPHA writes
- *   rd_Test      gif_SetZTest, gsb_set*Reg, raw TEST writes (rd_TestFromGs)
- *   rd_ZWrite    gif_SetZWrite, raw ZBUF writes
- *   rd_FBA       material packets, raw FBA writes
- *   rd_PABE      specular/reflection passes (RegistPacket.c), raw PABE writes
- *   rd_ColClamp  shadow_Reset (Shadow.c)
- *   rd_TexA      gsb_set*Reg, 2D sprite paths, raw TEXA writes
- *   rd_Sampler   tex_TransTexture (TexExt filters), raw TEX1/CLAMP writes
- *   rd_Texture   tex_TransTexture, raw TEX0 writes (hand-converted sites only)
- *   rd_UVOffset  tex_TransTexture uOfs/vOfs
- *   rd_ColorMask raw FRAME.FBMSK writes (darkVolume.c)
+ *   rd_blend     gif_SetAlpha, material packets (Packet.c), raw ALPHA writes
+ *   rd_test      gif_SetZTest, gsb_set*Reg, raw TEST writes (rd_test_from_gs)
+ *   rd_z_write    gif_SetZWrite, raw ZBUF writes
+ *   rd_fba       material packets, raw FBA writes
+ *   rd_pabe      specular/reflection passes (RegistPacket.c), raw PABE writes
+ *   rd_col_clamp  shadow_Reset (Shadow.c)
+ *   rd_tex_a      gsb_set*Reg, 2D sprite paths, raw TEXA writes
+ *   rd_sampler   tex_TransTexture (TexExt filters), raw TEX1/CLAMP writes
+ *   rd_texture   tex_TransTexture, raw TEX0 writes (hand-converted sites only)
+ *   rd_uv_offset  tex_TransTexture uOfs/vOfs
+ *   rd_color_mask raw FRAME.FBMSK writes (darkVolume.c)
  */
-void rd_Blend(RdBlend eq, uint8_t fix, int abe);
-void rd_Test(const RdTestState *test);
-void rd_TestGs(uint64_t gsTestWord); /* convenience: rd_Test(rd_TestFromGs(v)) */
-void rd_ZWrite(int on);
-void rd_FBA(int on);
-void rd_PABE(int on);
-void rd_ColClamp(int on);
-void rd_TexA(RdTexA mode);
-void rd_Sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t);
-void rd_Texture(RdTex tex, RdTexFn fn, RdTcc tcc);
-void rd_TextureOff(void);
-void rd_UVOffset(float u, float v);
-void rd_ColorMask(uint32_t fbmsk);
+void rd_blend(RdBlend eq, uint8_t fix, int abe);
+void rd_test(const RdTestState *test);
+void rd_test_gs(uint64_t gsTestWord); /* convenience: rd_test(rd_test_from_gs(v)) */
+void rd_z_write(int on);
+void rd_fba(int on);
+void rd_pabe(int on);
+void rd_col_clamp(int on);
+void rd_tex_a(RdTexA mode);
+void rd_sampler(RdFilter mag, RdFilter min, RdWrap s, RdWrap t);
+void rd_texture(RdTex tex, RdTexFn fn, RdTcc tcc);
+void rd_texture_off(void);
+void rd_uv_offset(float u, float v);
+void rd_color_mask(uint32_t fbmsk);
 
 /* For GifPacket.c's GS register decoding (raw
  * gif_SetGsReg writes set one register, never a group):
- *   rd_ABE           PRIM.ABE alone (rd_Blend sets the equation and ABE together)
- *   rd_BlendFunc     the ALPHA register alone: equation and FIX, ABE untouched
- *   rd_Scissor       SCISSOR_1, GS pixels of the bound target, inclusive
- *                    (rd_SetTarget resets it to the target's size)
- *   rd_SamplerFilter TEX1 alone (MMAG, MMIN base filter); wrap untouched
- *   rd_SamplerWrap   CLAMP alone; filters untouched
- *   rd_Gouraud       PRIM.IIP: 1 = Gouraud (the default), 0 = flat, where the
+ *   rd_abe           PRIM.ABE alone (rd_blend sets the equation and ABE together)
+ *   rd_blend_func     the ALPHA register alone: equation and FIX, ABE untouched
+ *   rd_scissor       SCISSOR_1, GS pixels of the bound target, inclusive
+ *                    (rd_set_target resets it to the target's size)
+ *   rd_sampler_filter TEX1 alone (MMAG, MMIN base filter); wrap untouched
+ *   rd_sampler_wrap   CLAMP alone; filters untouched
+ *   rd_gouraud       PRIM.IIP: 1 = Gouraud (the default), 0 = flat, where the
  *                    GS takes the colour of a primitive's last vertex
  *                    (triangles, strips, fans, lines; sprites always use the
  *                    second vertex) */
-void rd_ABE(int abe);
-void rd_BlendFunc(RdBlend eq, uint8_t fix);
-void rd_Scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
-void rd_SamplerFilter(RdFilter mag, RdFilter min);
-void rd_SamplerWrap(RdWrap s, RdWrap t);
-void rd_Gouraud(int iip);
+void rd_abe(int abe);
+void rd_blend_func(RdBlend eq, uint8_t fix);
+void rd_scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+void rd_sampler_filter(RdFilter mag, RdFilter min);
+void rd_sampler_wrap(RdWrap s, RdWrap t);
+void rd_gouraud(int iip);
 /* PRIM.AA1, the GS's edge antialiasing (0 = off, the default).  It acts on
  * lines and triangles only: their edge pixels take the coverage as As and
  * write no Z; points and sprites ignore it.  GifPacket.c sets it from PRIM
  * and returns it to 0 at the end of the packet, so the state never leaks
  * into another list. */
-void rd_AA1(int aa1);
+void rd_aa1(int aa1);
 
 /* ------------------------------------------------------------ targets */
 
 /* Named target handle; gsb_SetFrame, gif_SetDrawEnviroment with the fixed
  * TBPs (0, 0x800, 0x2800, 0x2C00, 0x3000, 0x3F00, 0x142 ...) map to these. */
-RdTarget rd_Target(RdTargetId id);
+RdTarget rd_target(RdTargetId id);
 /* tex_AllocVramAuto / per-priority VRAM bump allocation for render-to-texture
  * (puddle.c, pool.c, queen_barrier_disp.c): a target that lives until
- * rd_BeginFrame unless keepAcrossFrames is set. */
-RdTarget rd_TempTarget(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcrossFrames);
+ * rd_begin_frame unless keepAcrossFrames is set. */
+RdTarget rd_temp_target(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcrossFrames);
 /* gif_SetDrawEnviroment(tbp, psm, w, h, ...) / gsb_SetFrame: direct
  * subsequent draws in the current list to the target.  gsW/gsH are the GS
  * size the caller believes it is drawing into; useOffset applies the
  * XYOFFSET centre (2048 - w/2, 2048 - h/2) the game sets alongside. */
-void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset);
+void rd_set_target(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset);
 /* Note (from GifPacket.c gif_SetDrawEnviroment): the GS always
  * centres XYOFFSET at (2048 - w/2, 2048 - h/2); useOffset adds the
  * screenOffsetX/Y field offset on top, which the preset supplies (zero in
@@ -806,18 +806,18 @@ void rd_SetTarget(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, in
  * gif_SetDrawEnviroment writes SCISSOR_1. */
 /* gsb_UpdateGSSystem's clears / gif_Sprite full-screen clears at the frame
  * head: clear colour and optionally depth+stencil of a target. */
-void rd_ClearTarget(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z);
+void rd_clear_target(RdTarget t, const uint8_t rgba[4], int clearDepth, uint32_t z);
 /* Use a target as a texture (puddle/pool reflection, motion blur history
  * reading DISPLAY as RGB24, fog/DoF reading SCENE depth). */
-RdTex rd_TargetTexture(RdTarget t, RdTexView view);
+RdTex rd_target_texture(RdTarget t, RdTexView view);
 
 /* ------------------------------------------------------------- textures */
 
 /* tex_loadImage / TIM2 decode in Texture.c: upload an RGBA8 image.  texaMode
  * tells the cache which TEXA variant this expansion was baked with (only
  * meaningful for PSMCT16/24 sources). */
-RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMode,
-                       const char *debugName);
+RdTex rd_create_texture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMode,
+                        const char *debugName);
 
 /* A texture whose alpha byte is still the source
  * format's, expanded by the shader under the TEXA state in force at replay
@@ -827,12 +827,12 @@ RdTex rd_CreateTexture(uint32_t w, uint32_t h, const void *rgba8, RdTexA texaMod
  * equal TEXFMT_* in port/shaders/gs_math.hlsli. */
 typedef enum RdTexSrc { RD_TEXSRC_RGBA32 = 0, RD_TEXSRC_RGB24 = 1, RD_TEXSRC_RGBA16 = 2 } RdTexSrc;
 
-RdTex rd_CreateTextureSrc(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
-                          const char *debugName);
+RdTex rd_create_texture_src(uint32_t w, uint32_t h, const void *rgba8, RdTexSrc src,
+                            const char *debugName);
 /* tex_scrollClut: the CLUT changed, re-expanded pixels follow (the whole
  * texture, in its own format: w * h bytes for an R8 one). */
-void rd_UpdateTexture(RdTex t, const void *rgba8);
-void rd_DestroyTexture(RdTex t);
+void rd_update_texture(RdTex t, const void *rgba8);
+void rd_destroy_texture(RdTex t);
 
 /* A one-channel coverage texture (R8), w * h bytes (null: zero), the
  * port's font atlas pages.  A byte
@@ -842,14 +842,15 @@ void rd_DestroyTexture(RdTex t);
  * function, TCC, alpha test and output are sprite_ps's, so the pixels are
  * those of the same texels as RGBA8 (255, 255, 255, cov) at a quarter of
  * the memory.  Never mipmapped, whatever the filter option. */
-RdTex rd_CreateTextureR8(uint32_t w, uint32_t h, const uint8_t *cov, const char *debugName);
+RdTex rd_create_texture_r8(uint32_t w, uint32_t h, const uint8_t *cov, const char *debugName);
 /* Replaces the w x h texels at (x, y) of an image texture with
  * px (tightly packed rows in the texture's format: w * h bytes for R8,
  * w * h * 4 for RGBA8).  The rectangle is clipped to the texture; the
  * next replay uploads the union of the rectangles changed since the last
  * upload, not the whole texture.  An update that changes nothing is not
  * uploaded. */
-void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t h, const void *px);
+void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+                            const void *px);
 
 /* Sheet text.  The menus' words drawn in the look of
  * the game's 4-bit menu sheets (text/menu_PAL_*.tm2: light letters, a
@@ -857,7 +858,7 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  * plain coverage strip, so a font rasterised on the sheets' own texel grid
  * reads like the sheets did in every preset and scale.
  *
- * rd_CreateTextureSheet  a one-channel texture, w * h bytes of coverage
+ * rd_create_texture_sheet  a one-channel texture, w * h bytes of coverage
  *                        (null: zero): 0 none to 255 full (a rasteriser's
  *                        8-bit bitmap, not GS units), one byte a sheet
  *                        texel (1 x unit wide, one field line tall); style
@@ -897,12 +898,12 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                        multiply in as for a sheet sprite.
  *                        port/render/test/sheet_ref.c computes the same
  *                        texels and samples on the CPU (the tests' oracle)
- * rd_SetTextureSheetStyle  the style the next replays draw t with (the
+ * rd_set_texture_sheet_style  the style the next replays draw t with (the
  *                        language's rim level, without rasterising
  *                        again); ignored for any other texture.  The style
  *                        is read when a frame is replayed, not when its
  *                        draws are recorded
- * rd_UpdateTextureRect   takes a sheet texture's rectangles as R8's: w * h
+ * rd_update_texture_rect   takes a sheet texture's rectangles as R8's: w * h
  *                        bytes of coverage
  * Scaled strips: with
  *                        style.scale s > 1 the coverage holds s x s texels
@@ -938,11 +939,11 @@ void rd_UpdateTextureRect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_t 
  *                        w x h with the coverage in rows 0 .. h/2 - 1 and
  *                        R in rows h/2 .. h - 1, each sheet texel's over
  *                        its s x s texels (the caller fills them with
- *                        rd_SheetRim); the coverage and the rim are 0
+ *                        rd_sheet_rim); the coverage and the rim are 0
  *                        outside their halves, and a draw addresses the
  *                        top half.  s = 1 draws the unscaled path above
  *                        (the rim made by the shader).
- * rd_SheetRim            R of the sheet texels (s x s texels each) that
+ * rd_sheet_rim            R of the sheet texels (s x s texels each) that
  *                        the rw x rh texels at (x, y) of a w x h coverage
  *                        at scale s touch (rows packed, 0 outside it),
  *                        into rim at those sheet texels' texels (w bytes a
@@ -962,11 +963,11 @@ typedef struct RdSheetStyle {
                           above ICO_SHEET_SCALE_MAX: that */
 } RdSheetStyle;
 
-RdTex rd_CreateTextureSheet(uint32_t w, uint32_t h, const uint8_t *coverage,
-                            const RdSheetStyle *style, const char *name);
-void rd_SetTextureSheetStyle(RdTex t, const RdSheetStyle *style);
-void rd_SheetRim(const uint8_t *coverage, uint32_t w, uint32_t h, uint32_t scale, int32_t x,
-                 int32_t y, int32_t rw, int32_t rh, uint8_t *rim);
+RdTex rd_create_texture_sheet(uint32_t w, uint32_t h, const uint8_t *coverage,
+                              const RdSheetStyle *style, const char *name);
+void rd_set_texture_sheet_style(RdTex t, const RdSheetStyle *style);
+void rd_sheet_rim(const uint8_t *coverage, uint32_t w, uint32_t h, uint32_t scale, int32_t x,
+                  int32_t y, int32_t rw, int32_t rh, uint8_t *rim);
 
 /* -------------------------------------------------------------- meshes */
 
@@ -984,23 +985,23 @@ void rd_SheetRim(const uint8_t *coverage, uint32_t w, uint32_t h, uint32_t scale
  * target they rasterise continuously, without the GS-pixel snapping and the
  * UV shift.  At scale 1 it is uvFixed 1. */
 #define RD_UV_FIXED_CONTINUOUS 2
-void rd_ScreenPrims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
-                    RdKey key);
-/* While space >= 0, rd_ScreenPrims records that space instead
+void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace space, int uvFixed,
+                     RdKey key);
+/* While space >= 0, rd_screen_prims records that space instead
  * of its argument (the game marks its full-screen 2D items RD_SPACE_FULLSCREEN
  * around the gif helpers that draw them: layout_texture.c's primary sprite).
  * -1 ends it.  Returns the previous value. */
-int rd_SetSpaceOverride(int space);
+int rd_set_space_override(int space);
 /* (tests) World-space vertices with a matrix.  No game code calls it and the
- * replay has no model for its command (rd__NotImplemented); rd_filter_test
+ * replay has no model for its command (rd__not_implemented); rd_filter_test
  * records it for the draw filter. */
-void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key);
+void rd_world_prims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key);
 /* (tests) A shadow volume as one float strip: v[i] = (GS 12.4 window X, Y,
  * GS Z, unused), every triangle counted with sign (stencil increment or
  * decrement), depth-tested against SCENE, no writes to colour or depth.  No
- * game code calls it (Shadow.c uses rd_ShadowTris below); rd_state_test and
+ * game code calls it (Shadow.c uses rd_shadow_tris below); rd_state_test and
  * rd_filter_test keep the strip path recorded and replayed. */
-void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
+void rd_shadow_strip(const float (*v)[4], uint32_t count, float sign, RdKey key);
 
 /* --------------------------------------------------------------- shadows
  * Shadow.c's count.  The PS2 adds each
@@ -1010,28 +1011,28 @@ void rd_ShadowStrip(const float (*v)[4], uint32_t count, float sign, RdKey key);
  * 64 in the stencil of the bound depth target (INCR_WRAP / DECR_WRAP under
  * write mask 0x3F) and writes the same colour at the resolve.
  *
- * rd_ShadowCountTarget  the per-frame stand-in for FBP 0x142: an RGBA8
+ * rd_shadow_count_target  the per-frame stand-in for FBP 0x142: an RGBA8
  *                       target of the scene size gsW x gsH, created by the
- *                       first call in the open frame (rd_TempTarget); {0}
+ *                       first call in the open frame (rd_temp_target); {0}
  *                       outside a frame
- * rd_ShadowReset        shadow_Reset's clear of FBP 0x142: the stencil of
+ * rd_shadow_reset        shadow_Reset's clear of FBP 0x142: the stencil of
  *                       the bound depth target to 0 (the colour target is
  *                       written whole by the resolve)
- * rd_ShadowTris         shadow_RenderVolume's strips as triangles: v holds
+ * rd_shadow_tris         shadow_RenderVolume's strips as triangles: v holds
  *                       3 x triCount XYZ2 (x, y, z; the rest unused), sign[t]
  *                       > 0 for a triangle whose last vertex had the colour
  *                       0x04 (flat shading), < 0 for 0xFC.  Depth-tested
  *                       with the state's TEST against the bound depth
  *                       target, no colour or depth writes
- * rd_ShadowResolve      the count into the bound colour target: RGB =
+ * rd_shadow_resolve      the count into the bound colour target: RGB =
  *                       4 n mod 256, A = 0x80 where that is not 0, else 0
  *                       (the TEXA expansion shadow_Draw's PSMCT24 read of
  *                       FBP 0x142 applies, TA0 0x80 AEM, baked so the chain
  *                       filters expanded texels as the GS does) */
-RdTarget rd_ShadowCountTarget(uint32_t gsW, uint32_t gsH);
-void rd_ShadowReset(void);
-void rd_ShadowTris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key);
-void rd_ShadowResolve(void);
+RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH);
+void rd_shadow_reset(void);
+void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount, RdKey key);
+void rd_shadow_resolve(void);
 
 /* ------------------------------------ render-to-texture surfaces (rd_water.c)
  * puddle.c, pool.c and queen_barrier_disp.c draw into a VRAM block from
@@ -1042,50 +1043,50 @@ void rd_ShadowResolve(void);
  * 512 x 256).  These calls let the game files bind a per-frame target of the
  * block's own size in its place:
  *
- * rd_GsNamedBlock  the named target GifPacket.c's decoder maps a FRAME at
+ * rd_gs_named_block  the named target GifPacket.c's decoder maps a FRAME at
  *                  block tbp (FBP = tbp / 32) of gsW x gsH to (its
  *                  gsTargetOfFbp table: 0, 0x800, 0x2800, 0x2840, 0x2C00,
  *                  0x3000, 0x3F00); {0} when the decoder makes its own
  *                  temporary target for the block
- * rd_BlockTarget   the target standing for VRAM block tbp of gsW x gsH in
- *                  the open frame: created by the first call (rd_TempTarget,
+ * rd_block_target   the target standing for VRAM block tbp of gsW x gsH in
+ *                  the open frame: created by the first call (rd_temp_target,
  *                  with a depth buffer when withDepth), the same target for
  *                  the same (tbp, gsW, gsH) for the rest of the frame, as
  *                  the VRAM block is one block whoever draws into it; {0}
  *                  outside a frame
- * rd_AliasTarget   from here on, in the current list and the open frame,
- *                  rd_SetTarget and rd_ClearTarget of `from` and rd_Texture
- *                  of a view of `from` (rd_TargetTexture) record `to`
- *                  instead; rd_SetTarget binds `to`'s depth buffer when it
+ * rd_alias_target   from here on, in the current list and the open frame,
+ *                  rd_set_target and rd_clear_target of `from` and rd_texture
+ *                  of a view of `from` (rd_target_texture) record `to`
+ *                  instead; rd_set_target binds `to`'s depth buffer when it
  *                  was given none or `from`.  to = {0} ends it.  Recording
  *                  only: the commands name `to`, so replay and dumps see an
  *                  ordinary target.  At most 4 aliases a list
- * rd_PushCamera    the camera of the draws recorded from here until the
- *  rd_PopCamera    matching rd_PopCamera in the current list (puddle.c and
+ * rd_push_camera    the camera of the draws recorded from here until the
+ *  rd_pop_camera    matching rd_pop_camera in the current list (puddle.c and
  *                  pool.c call gsb_SetVSMatrix mid-frame for their
  *                  reflection views and restore the matrices by copying).
- *                  The frame camera (rd_SetCamera, gsb_MakeCommonMatrix) is
+ *                  The frame camera (rd_set_camera, gsb_MakeCommonMatrix) is
  *                  untouched; the scope is kept with the open frame for the
  *                  Enhanced projection and interpolation (not dumped).  The
  *                  Original preset draws from the matrices the VU packets
  *                  carry and does not read it.  Nesting depth 4, 8 scopes a
  *                  frame */
-RdTarget rd_GsNamedBlock(uint32_t tbp, uint32_t gsW, uint32_t gsH);
-RdTarget rd_BlockTarget(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth);
-void rd_AliasTarget(RdTarget from, RdTarget to);
-void rd_PushCamera(const RdCamera *cam);
-void rd_PopCamera(void);
+RdTarget rd_gs_named_block(uint32_t tbp, uint32_t gsW, uint32_t gsH);
+RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth);
+void rd_alias_target(RdTarget from, RdTarget to);
+void rd_push_camera(const RdCamera *cam);
+void rd_pop_camera(void);
 
 /* --------------------------------------------------------------- post */
 
 /* gsb_PostEffect family, staticBlur.c, ZFog.c, Shadow.c composites, and
  * gif_MoveImage: fullscreen or rectangle passes between targets.  Recorded
  * into the current list like any draw. */
-void rd_Post(RdPostKind kind, const RdPostParams *params);
+void rd_post(RdPostKind kind, const RdPostParams *params);
 /* RD_POST_FOG (fog_DrawFog): the fog sprite alone, drawn with the state in
  * force (the caller records ZFog.c's register writes as rd state first: the
  * colour target,
- * TEX0 as rd_TargetTexture(SCENE, RD_VIEW_DEPTH) with MODULATE and TCC RGBA,
+ * TEX0 as rd_target_texture(SCENE, RD_VIEW_DEPTH) with MODULATE and TCC RGBA,
  * TEX1, ALPHA, TEST, ZBUF mask, ABE).  The texel the sprite reads at UV
  * (u, v) is LUT[(Z >> 16) & 0xFF], Z the 32-bit GS Z of the depth view's
  * target at that texel (the PSMT8H read of the Z copy after ZFog.c's PSMT4
@@ -1122,9 +1123,9 @@ void rd_Post(RdPostKind kind, const RdPostParams *params);
  * AURA_*, AA0/1, FEED128, SHADOW0..2) for a scene sceneHeight texels high
  * (the 448-line frame at the scene's vertical scale): 1 at the GS height
  * or below (the literal PS2 sizes), else sceneHeight / 448, at most 2, so
- * blur radii stay a constant fraction of the screen.  rd__ApplyDisplay
+ * blur radii stay a constant fraction of the screen.  rd__apply_display
  * reads it, whatever the preset. */
-float rd_WorkTargetScale(uint32_t sceneHeight);
+float rd_work_target_scale(uint32_t sceneHeight);
 
 /* ------------------------------------------- frame lifecycle and camera */
 
@@ -1137,12 +1138,12 @@ float rd_WorkTargetScale(uint32_t sceneHeight);
  *   SCISSOR full, PRMODECONT 1, COLCLAMP 1, DTHE 0, TEST 0x50000; then
  *   TEST 0x30000, PRIM 6 (sprite, no ABE, no TME, flat), RGBAQ = the BG
  *   colour, the full-scene sprite at Z 0, TEST 0x50000.
- * rd_FrameHead records that, as rd state and an rd_ClearTarget, at the head
+ * rd_frame_head records that, as rd state and an rd_clear_target, at the head
  * of list 0 and again at the head of list 11 of the open frame (call it right
- * after rd_BeginFrame).  rd_FrameFlip, called before the frame closes, sets
+ * after rd_begin_frame).  rd_frame_flip, called before the frame closes, sets
  * what the flip actually sent: the BG colour current at the flip (the PS2
  * consumes gsb_SetBGColor's packet then, one tick after the frame opened) and
- * the half offset of the draw environment that flip sends.  rd_EndFrame keeps
+ * the half offset of the draw environment that flip sends.  rd_end_frame keeps
  * the copy in the first replayed list (11 for a keep frame, 0 otherwise) and
  * turns the other into no-ops, so a full frame's list 11 runs in whatever
  * state list 10 left, as on the GS. */
@@ -1155,12 +1156,12 @@ typedef struct RdFrameHead {
     uint8_t _pad[2];
 } RdFrameHead;
 
-void rd_FrameHead(const RdFrameHead *head);
+void rd_frame_head(const RdFrameHead *head);
 /* Rewrites the recorded head's clear colour and half offset; no-op without a
  * recorded head in the open frame. */
-void rd_FrameFlip(const uint8_t rgba[4], int halfY);
+void rd_frame_flip(const uint8_t rgba[4], int halfY);
 
-/* rd_SetTarget's useOffset, bit 1: XYOFFSET.y + 0.5 GS pixel, the
+/* rd_set_target's useOffset, bit 1: XYOFFSET.y + 0.5 GS pixel, the
  * field half offset sceGsSetHalfOffset writes into the flip's draw
  * environment.  Bit 0 keeps its meaning. */
 #define RD_TARGET_OFFSET 1
@@ -1172,11 +1173,11 @@ void rd_FrameFlip(const uint8_t rgba[4], int halfY);
  * temporary targets; PSMZ24/16 exist for completeness. */
 typedef enum RdZFormat { RD_ZFMT_32 = 0, RD_ZFMT_24 = 1, RD_ZFMT_16 = 2 } RdZFormat;
 
-void rd_SetTargetZFormat(RdTarget t, RdZFormat fmt);
+void rd_set_target_z_format(RdTarget t, RdZFormat fmt);
 /* GS Z to depth for a target's Z format: the scale FrameCB g_z.x carries
  * (PSMZ32: 2^-33 on a D32S8 depth buffer, 2^-32 on D24S8; PSMZ24 2^-24,
  * PSMZ16 2^-16). */
-float rd_TargetZScale(RdTarget t);
+float rd_target_z_scale(RdTarget t);
 
 /* gsb_MakeCommonMatrix's per-frame VU1 parameter block: the 16 quadwords
  * the packet unpacks (VIF UNPACK V4-32, 16 qw) to VU1 data memory 0..15,
@@ -1195,10 +1196,10 @@ typedef struct RdVuCommon {
     float invView[16];    /* qw 12..15: inverse of the view, +0x380 */
 } RdVuCommon;
 
-void rd_SetVuCommon(const RdVuCommon *block);
+void rd_set_vu_common(const RdVuCommon *block);
 /* The block of the open frame, else of the last closed frame; NULL before
  * the first one. */
-const RdVuCommon *rd_GetVuCommon(void);
+const RdVuCommon *rd_get_vu_common(void);
 
 /* ------------------------------------------------------- verification */
 
@@ -1206,11 +1207,11 @@ const RdVuCommon *rd_GetVuCommon(void);
  * referenced by id) so the replay tool (port/render/tools/rd_replay_tool.c)
  * can replay it headless on another backend.  Dumps contain game assets and
  * are never committed. */
-bool rd_DumpFrame(const char *path);
+bool rd_dump_frame(const char *path);
 /* Readback of the DISPLAY target (the reduced frame the presenter scales;
- * the output itself is rd_ReadPresented), tightly packed RGBA8, for
+ * the output itself is rd_read_presented), tightly packed RGBA8, for
  * screenshots and image comparison. */
-bool rd_ReadDisplay(void *dst, uint32_t *w, uint32_t *h);
+bool rd_read_display(void *dst, uint32_t *w, uint32_t *h);
 
 /* --------------------------------------------------------- statistics */
 typedef struct RdStats {
@@ -1219,11 +1220,11 @@ typedef struct RdStats {
     uint32_t tempReused; /* temporary targets that took a pooled texture */
 } RdStats;
 
-const RdStats *rd_GetStats(void);
+const RdStats *rd_get_stats(void);
 
-/* One record per replay (rd_EndFrame's, rd_Present's, the replay tool's).
- * CPU phases in ms: interp (rd__InterpFrame building the blended copy), wait
- * (rhi_WaitFrame:
+/* One record per replay (rd_end_frame's, rd_present's, the replay tool's).
+ * CPU phases in ms: interp (rd__interp_frame building the blended copy), wait
+ * (rhi_wait_frame:
  * the GPU finishing the frame RHI_FRAMES_IN_FLIGHT replays ago), acquire
  * (the swapchain image), upload (textures, meshes, temporary target clears
  * into the ring and their copies), walk (the command lists: state, geometry
@@ -1233,7 +1234,7 @@ const RdStats *rd_GetStats(void);
  * since the previous record, so they include what the recording of the
  * frame created (temporary targets, textures).  GPU times come from
  * timestamps when the backend has them (gpuValid), RHI_FRAMES_IN_FLIGHT
- * replays later; rd_PerfPop returns a record once they are in. */
+ * replays later; rd_perf_pop returns a record once they are in. */
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -1263,14 +1264,14 @@ typedef struct RdPerfRecord {
     double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
     double gpuPresentMs;             /* the present blits */
     double startMs;                  /* the replay's start (rd's monotonic ms clock) */
-    float alpha;                     /* rd_Present's alpha; -1 for a replay that is not one */
+    float alpha;                     /* rd_present's alpha; -1 for a replay that is not one */
     uint8_t firstOfTick;             /* the first present of its frame */
     uint8_t _pad2[3];
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
  * dropped when nobody pops); false when there is none. */
-bool rd_PerfPop(RdPerfRecord *out);
+bool rd_perf_pop(RdPerfRecord *out);
 
 #ifdef __cplusplus
 }

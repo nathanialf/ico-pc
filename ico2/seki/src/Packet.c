@@ -162,21 +162,21 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
         return;
     }
     /* no hash without a pack, dumping or a shot; a morph part is never replaced */
-    h = modelpack_HashWanted() && (id == 0 || !id->morph) ? rd_VuMeshDescHash(&d, 0, 0) : 0;
-    e = h != 0 ? modelpack_Lookup(h) : -1;
+    h = modelpack_hash_wanted() && (id == 0 || !id->morph) ? rd_vu_mesh_desc_hash(&d, 0, 0) : 0;
+    e = h != 0 ? modelpack_lookup(h) : -1;
     if (e >= 0) {
         if (d.qwPerVertex != RD_VU_QW_SKIN || (id != 0 && id->bones > 0)) {
-            m = modelpack_Create(e, &d, pac_hostPartName(id, name, part, sizeof(part)),
+            m = modelpack_create(e, &d, pac_hostPartName(id, name, part, sizeof(part)),
                                  (uint32_t)(id != 0 && id->bones > 0 ? id->bones : 0));
             if (m.id != 0 && id != 0 && id->skel != 0) {
-                modelpack_NoteSkeleton(e, id->skel);
+                modelpack_note_skeleton(e, id->skel);
             }
         } else if (load) {
             return; /* made at the first draw */
         }
     }
     if (m.id == 0) {
-        m = rd_CreateVuMesh(&d);
+        m = rd_create_vu_mesh(&d);
     }
     memcpy(pk->pad9C, &m.id, sizeof(m.id));
 }
@@ -186,7 +186,7 @@ unsigned int pac_HostMeshFor(PacHeader *pk, const PacHostIdent *id)
     RdMesh m;
 
     memcpy(&m.id, pk->pad9C, sizeof(m.id));
-    if (m.id == 0 || !rd_VuMeshValid(m)) {
+    if (m.id == 0 || !rd_vu_mesh_valid(m)) {
         pac_hostBuild(pk, id != 0 && id->model != 0 ? id->model : "pac", id, 0);
         memcpy(&m.id, pk->pad9C, sizeof(m.id));
     }
@@ -215,14 +215,14 @@ void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id)
     if (m.id == 0 || pac_hostCollect(pk, &nb, &qpv) == 0) {
         return;
     }
-    if (rd_UpdateVuMesh(m, (const float (*)[4])pacHostQw) || !rd_VuMeshReplaced(m)) {
+    if (rd_update_vu_mesh(m, (const float (*)[4])pacHostQw) || !rd_vu_mesh_replaced(m)) {
         return;
     }
     /* v0.4.1 (M4): a replacement cannot follow the morph: the pack's entry
        declined (logged once: the lookup fails from now on), every mesh made
        from it retired, the original built from the packet as it is now */
-    h = rd_VuMeshHash(m);
-    if (modelpack_Lookup(h) >= 0) {
+    h = rd_vu_mesh_hash(m);
+    if (modelpack_lookup(h) >= 0) {
         if (id != 0 && id->model != 0 && id->model[0] != 0) {
             fprintf(stderr,
                     "models: model %s part %d changes shape every frame; the original is used\n",
@@ -234,9 +234,9 @@ void pac_HostRefreshFor(PacHeader *pk, const PacHostIdent *id)
                     (unsigned long long)h);
         }
     }
-    modelpack_Decline(h);
+    modelpack_decline(h);
     pacHostDeclined = h;
-    rd_VuMeshRetire(pac_hostRetireDeclined, 0);
+    rd_vu_mesh_retire(pac_hostRetireDeclined, 0);
     pac_hostBuild(pk, id != 0 && id->model != 0 ? id->model : "pac", id, 0);
 }
 
@@ -258,7 +258,7 @@ int pac_HostDump(PacHeader *pk, const PacHostIdent *id)
     mi.ordinal = id != 0 ? id->ordinal : -1;
     mi.obj = id != 0 ? id->obj : 0;
     mi.buildHash = id != 0 ? id->buildHash : 0;
-    return modelpack_Dump(&d, &mi, d.qwPerVertex == RD_VU_QW_SKIN && id != 0 ? id->skel : 0);
+    return modelpack_dump(&d, &mi, d.qwPerVertex == RD_VU_QW_SKIN && id != 0 ? id->skel : 0);
 }
 
 #endif /* ICO_RD */

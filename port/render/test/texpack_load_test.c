@@ -192,7 +192,7 @@ static void ddsUncompressed(int layout, int padded)
         }
     }
     TexpackImage img;
-    const int rc = texpack_LoadDds(b.p, b.n, 1, NULL, &img);
+    const int rc = texpack_load_dds(b.p, b.n, 1, NULL, &img);
     CHECK(rc == 0 && img.fmt == RD_TEXEL_RGBA8 && img.w == W && img.h == H && img.levels == 3,
           "layout %d%s: rc %d fmt %u %ux%u levels %u", layout, padded ? " padded" : "", rc, img.fmt,
           img.w, img.h, img.levels);
@@ -213,8 +213,8 @@ static void ddsUncompressed(int layout, int padded)
         }
         CHECK(bad == 0, "layout %d level %u: %d texels differ", layout, l, bad);
     }
-    texpack_FreeImage(&img);
-    CHECK(img.blob == NULL && img.levels == 0, "texpack_FreeImage empties the image");
+    texpack_free_image(&img);
+    CHECK(img.blob == NULL && img.levels == 0, "texpack_free_image empties the image");
     free(b.p);
 }
 
@@ -300,14 +300,14 @@ static void ddsChecks(void)
     for (size_t i = 0; i < sizeof(bc) / sizeof(bc[0]); i++) {
         Buf b = ddsBc(8, 8, bc[i].fourcc, bc[i].dx10, bc[i].dxgi, 1, 4, 4, bc[i].bb);
         TexpackImage img;
-        int rc = texpack_LoadDds(b.p, b.n, 1, NULL, &img);
+        int rc = texpack_load_dds(b.p, b.n, 1, NULL, &img);
         CHECK(rc == 0 && img.fmt == bc[i].fmt, "%s: rc %d fmt %u", bc[i].name, rc, img.fmt);
         if (rc == 0) {
             checkBcLevels(bc[i].name, &img, 8, 8, 4, bc[i].bb);
         }
-        texpack_FreeImage(&img);
+        texpack_free_image(&img);
         /* the device has no BC: refused */
-        rc = texpack_LoadDds(b.p, b.n, 0, NULL, &img);
+        rc = texpack_load_dds(b.p, b.n, 0, NULL, &img);
         CHECK(rc == -1 && img.blob == NULL, "%s without BC support refused", bc[i].name);
         free(b.p);
     }
@@ -315,57 +315,57 @@ static void ddsChecks(void)
     TexpackImage img;
     /* mip count 0 with the flag: the full chain (16x4: 16x4 8x2 4x1 2x1 1x1) */
     Buf b = ddsBc(16, 4, FCC('D', 'X', 'T', '5'), 0, 0, 1, 0, 5, 16);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "mip count 0 loads");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == 0, "mip count 0 loads");
     checkBcLevels("mip count 0", &img, 16, 4, 5, 16);
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     free(b.p);
     /* no mip flag, two levels in the file: PCSX2 reads the second */
     b = ddsBc(8, 8, FCC('D', 'X', 'T', '1'), 0, 0, 0, 0, 2, 8);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "no mip flag loads");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == 0, "no mip flag loads");
     checkBcLevels("no mip flag, 2 levels stored", &img, 8, 8, 2, 8);
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     free(b.p);
     /* no mip flag, one level: one */
     b = ddsBc(8, 8, FCC('D', 'X', 'T', '1'), 0, 0, 0, 0, 1, 8);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "single level loads");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == 0, "single level loads");
     checkBcLevels("single level", &img, 8, 8, 1, 8);
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     /* larger than the graphics card takes: refused at the header */
-    texpack_SetMaxSide(4);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, "big.dds", &img) == -1 && img.blob == NULL,
+    texpack_set_max_side(4);
+    CHECK(texpack_load_dds(b.p, b.n, 1, "big.dds", &img) == -1 && img.blob == NULL,
           "a DDS wider than the card's largest texture refused");
-    texpack_SetMaxSide(8);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "a DDS at the card's largest loads");
-    texpack_FreeImage(&img);
-    texpack_SetMaxSide(0);
+    texpack_set_max_side(8);
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == 0, "a DDS at the card's largest loads");
+    texpack_free_image(&img);
+    texpack_set_max_side(0);
     free(b.p);
     /* mip count 9, three stored, the third cut short: two */
     b = ddsBc(16, 16, FCC('D', 'X', 'T', '5'), 0, 0, 1, 9, 3, 16);
     b.n -= 5;
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == 0, "levels until the file ends");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == 0, "levels until the file ends");
     checkBcLevels("mip count past the file", &img, 16, 16, 2, 16);
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     free(b.p);
     /* refusals */
     b = ddsBc(6, 8, FCC('D', 'X', 'T', '1'), 0, 0, 0, 0, 1, 8);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, "six.dds", &img) == -1 && img.blob == NULL,
+    CHECK(texpack_load_dds(b.p, b.n, 1, "six.dds", &img) == -1 && img.blob == NULL,
           "BC 6x8 refused (with a log line)");
     free(b.p);
     b = ddsBc(8, 8, FCC('D', 'X', 'T', '1'), 0, 0, 0, 0, 1, 8);
-    CHECK(texpack_LoadDds(b.p, b.n - 1, 1, NULL, &img) == -1, "BC level 0 cut short refused");
-    CHECK(texpack_LoadDds(b.p, 100, 1, NULL, &img) == -1, "a cut header refused");
-    CHECK(texpack_LoadDds(b.p, 128, 1, NULL, &img) == -1, "a header without image refused");
+    CHECK(texpack_load_dds(b.p, b.n - 1, 1, NULL, &img) == -1, "BC level 0 cut short refused");
+    CHECK(texpack_load_dds(b.p, 100, 1, NULL, &img) == -1, "a cut header refused");
+    CHECK(texpack_load_dds(b.p, 128, 1, NULL, &img) == -1, "a header without image refused");
     b.p[4] = 100; /* dwSize */
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == -1, "dwSize < 124 refused");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == -1, "dwSize < 124 refused");
     b.p[4] = 124;
     b.p[0] = 'X';
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == -1, "bad magic refused");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == -1, "bad magic refused");
     free(b.p);
     b = ddsBc(8, 8, FCC('A', 'T', 'I', '2'), 0, 0, 0, 0, 1, 16);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == -1, "an unknown fourcc refused");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == -1, "an unknown fourcc refused");
     free(b.p);
     b = ddsBc(8, 8, 0, 1, 99, 0, 0, 1, 16);
-    CHECK(texpack_LoadDds(b.p, b.n, 1, NULL, &img) == -1, "an unknown DXGI format refused");
+    CHECK(texpack_load_dds(b.p, b.n, 1, NULL, &img) == -1, "an unknown DXGI format refused");
     free(b.p);
     {
         DdsSpec s;
@@ -383,19 +383,19 @@ static void ddsChecks(void)
         uint8_t blocks[64];
         memset(blocks, 1, sizeof(blocks));
         put(&a, blocks, sizeof(blocks));
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == -1, "a DX10 array refused");
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == -1, "a DX10 array refused");
         a.p[128 + 12] = 1; /* the DX10 header (at 4 + 124): arraySize 1 */
         a.p[128 + 4] = 4;  /* 3D */
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == -1, "a DX10 3D texture refused");
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == -1, "a DX10 3D texture refused");
         a.p[128 + 4] = 3;
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == 0, "the same file as 2D loads");
-        texpack_FreeImage(&img);
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == 0, "the same file as 2D loads");
+        texpack_free_image(&img);
         a.p[4 + 4 + 2] |= 0x80; /* DDSD_DEPTH (0x800000): a volume */
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == -1, "a volume refused");
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == -1, "a volume refused");
         a.p[4 + 4 + 2] &= 0x7F;
         a.p[4 + 12] = 0; /* width 32768 */
         a.p[4 + 13] = 0x80;
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == -1, "width 32768 refused");
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == -1, "width 32768 refused");
         free(a.p);
     }
     {
@@ -410,7 +410,7 @@ static void ddsChecks(void)
         ddsHeader(&a, &s);
         uint8_t px[16] = {0};
         put(&a, px, sizeof(px));
-        CHECK(texpack_LoadDds(a.p, a.n, 1, NULL, &img) == -1, "an unknown layout refused");
+        CHECK(texpack_load_dds(a.p, a.n, 1, NULL, &img) == -1, "an unknown layout refused");
         free(a.p);
     }
 }
@@ -648,7 +648,7 @@ static void pngCase(const PngSpec *s)
 {
     Buf b = makePng(s);
     TexpackImage img;
-    const int rc = texpack_LoadPng(b.p, b.n, NULL, &img);
+    const int rc = texpack_load_png(b.p, b.n, NULL, &img);
     CHECK(rc == 0 && img.fmt == RD_TEXEL_RGBA8 && img.w == s->w && img.h == s->h &&
               img.levels == 1 && img.lv[0].pitch == s->w * 4,
           "PNG colour %u depth %u%s %ux%u: rc %d", s->colour, s->depth,
@@ -668,7 +668,7 @@ static void pngCase(const PngSpec *s)
     }
     CHECK(bad == 0, "PNG colour %u depth %u%s: %d texels differ", s->colour, s->depth,
           s->interlace ? " Adam7" : "", bad);
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     free(b.p);
 }
 
@@ -751,24 +751,24 @@ static void pngChecks(void)
         s.trnsCount = -1;
         Buf b = makePng(&s);
         TexpackImage img;
-        CHECK(texpack_LoadPng(b.p, b.n / 2, "half.png", &img) == -1 && img.blob == NULL,
+        CHECK(texpack_load_png(b.p, b.n / 2, "half.png", &img) == -1 && img.blob == NULL,
               "a PNG cut in half refused");
-        CHECK(texpack_LoadPng(b.p, b.n - 12, NULL, &img) == 0, "a PNG without IEND loads");
-        texpack_FreeImage(&img);
+        CHECK(texpack_load_png(b.p, b.n - 12, NULL, &img) == 0, "a PNG without IEND loads");
+        texpack_free_image(&img);
         /* larger than the graphics card takes: refused at the header */
-        texpack_SetMaxSide(16);
-        CHECK(texpack_LoadPng(b.p, b.n, "big.png", &img) == -1 && img.blob == NULL,
+        texpack_set_max_side(16);
+        CHECK(texpack_load_png(b.p, b.n, "big.png", &img) == -1 && img.blob == NULL,
               "a PNG wider than the card's largest texture refused");
-        texpack_SetMaxSide(32);
-        CHECK(texpack_LoadPng(b.p, b.n, NULL, &img) == 0, "a PNG at the card's largest loads");
-        texpack_FreeImage(&img);
-        texpack_SetMaxSide(0);
+        texpack_set_max_side(32);
+        CHECK(texpack_load_png(b.p, b.n, NULL, &img) == 0, "a PNG at the card's largest loads");
+        texpack_free_image(&img);
+        texpack_set_max_side(0);
         b.p[8 + 8 + 3] ^= 1; /* IHDR's width: its CRC fails */
-        CHECK(texpack_LoadPng(b.p, b.n, NULL, &img) == -1, "a bad IHDR checksum refused");
+        CHECK(texpack_load_png(b.p, b.n, NULL, &img) == -1, "a bad IHDR checksum refused");
         b.p[8 + 8 + 3] ^= 1;
         b.p[1] = 'X';
-        CHECK(texpack_LoadPng(b.p, b.n, NULL, &img) == -1, "not a PNG refused");
-        CHECK(texpack_LoadPng(b.p, 4, NULL, &img) == -1, "4 bytes refused");
+        CHECK(texpack_load_png(b.p, b.n, NULL, &img) == -1, "not a PNG refused");
+        CHECK(texpack_load_png(b.p, 4, NULL, &img) == -1, "4 bytes refused");
         free(b.p);
     }
 }
@@ -909,8 +909,8 @@ static int packChecks(const char *dir)
                 continue;
             }
             TexpackImage img;
-            const int rc = k == 3 ? texpack_LoadPng(data, n, p->path, &img)
-                                  : texpack_LoadDds(data, n, 1, p->path, &img);
+            const int rc = k == 3 ? texpack_load_png(data, n, p->path, &img)
+                                  : texpack_load_dds(data, n, 1, p->path, &img);
             free(data);
             CHECK(rc == 0, "%s: loads", p->path);
             if (rc != 0) {
@@ -926,8 +926,8 @@ static int packChecks(const char *dir)
             for (uint32_t l = 0; l < img.levels; l++) {
                 const TexpackImageLevel *lv = &img.lv[l];
                 const uint32_t w = img.w >> l ? img.w >> l : 1, h = img.h >> l ? img.h >> l : 1;
-                const uint32_t bw = rd__TexelBlockW(img.fmt);
-                const size_t rowB = (size_t)((w + bw - 1) / bw) * rd__TexelBlockBytes(img.fmt);
+                const uint32_t bw = rd__texel_block_w(img.fmt);
+                const size_t rowB = (size_t)((w + bw - 1) / bw) * rd__texel_block_bytes(img.fmt);
                 CHECK(lv->w == w && lv->h == h && lv->pitch == rowB &&
                           lv->size == rowB * ((h + bw - 1) / bw),
                       "%s level %u: %ux%u pitch %u", p->path, l, lv->w, lv->h, lv->pitch);
@@ -940,7 +940,7 @@ static int packChecks(const char *dir)
             printf("  %s: fmt %u %ux%u, %u level(s), %zu bytes (sum %08x)\n", p->path, img.fmt,
                    img.w, img.h, img.levels, img.bytes, sum);
             loaded++;
-            texpack_FreeImage(&img);
+            texpack_free_image(&img);
         }
     }
     CHECK(loaded > 0, "no pack file loaded");

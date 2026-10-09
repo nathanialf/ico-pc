@@ -35,7 +35,7 @@ static void snap(const char *name)
     char p[1100];
     uint32_t w = 0, h = 0;
     uint8_t *px = malloc(512 * 512 * 4), *out = malloc(683 * 512 * 4);
-    if (!px || !out || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h)) {
+    if (!px || !out || !rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h)) {
         CHECK(0, "SCENE readback for %s", name);
         free(px);
         free(out);
@@ -47,7 +47,7 @@ static void snap(const char *name)
         }
     }
     path(p, sizeof(p), name);
-    rd_WritePng(p, out, 683, 512, 683 * 4, 0);
+    rd_write_png(p, out, 683, 512, 683 * 4, 0);
     printf("settings_render: %s\n", p);
     free(px);
     free(out);
@@ -61,7 +61,7 @@ static void snap4(const char *name)
     uint32_t w = 0, h = 0;
     const size_t n = (size_t)2048 * 2048 * 4;
     uint8_t *px = malloc(n), *out = malloc((size_t)2731 * 2048 * 4);
-    if (!px || !out || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, n, &w, &h) || w != 2048 ||
+    if (!px || !out || !rd__read_target(rd_target(RD_TARGET_SCENE), px, n, &w, &h) || w != 2048 ||
         h != 2048) {
         CHECK(0, "4x SCENE readback for %s (%ux%u)", name, w, h);
         free(px);
@@ -75,7 +75,7 @@ static void snap4(const char *name)
         }
     }
     path(p, sizeof(p), name);
-    rd_WritePng(p, out, 2731, 2048, 2731 * 4, 0);
+    rd_write_png(p, out, 2731, 2048, 2731 * 4, 0);
     printf("settings_render: %s\n", p);
     free(px);
     free(out);
@@ -178,8 +178,8 @@ static void makeSheets(void)
     segment(m, 512, 392, 124, 392, 136, 2, white);
     segment(m, 512, 468, 124, 468, 136, 2, white);
     segment(m, 512, 392, 124, 468, 136, 2, red);
-    s_sheet[0] = rd_CreateTexture(64, 64, b, RD_TEXA_80_80, "settings_render buttons");
-    s_sheet[1] = rd_CreateTexture(512, 256, m, RD_TEXA_80_80, "settings_render menu sheet");
+    s_sheet[0] = rd_create_texture(64, 64, b, RD_TEXA_80_80, "settings_render buttons");
+    s_sheet[1] = rd_create_texture(512, 256, m, RD_TEXA_80_80, "settings_render menu sheet");
 }
 
 /* seki/src/Texture.c (the photo panel's pictures, photo_ui.c): the fake
@@ -220,29 +220,29 @@ void bindFakeSheet(int no)
 static int viewerLayout(void)
 {
     static UiHint sticks, keys;
-    int first = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
-    int name = ui_SettingsAddRow(24, 10, 360, 30, 0, -1, 0, "Ico", 24.0f, UI_ALIGN_LEFT);
-    ui_SettingsAddRow(24, 26, 360, 30, 0, -1, 0, "Animation: BOY STAND  \xC2\xB7  Loop", 19.0f,
-                      UI_ALIGN_LEFT);
-    ui_SettingsAddRow(24, 38, 360, 30, 0, -1, 0, "Frame 117 / 299", 19.0f, UI_ALIGN_LEFT);
-    ui_HintBuild(&sticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
-    ui_HintBuild(&keys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
+    int first = LT_GAME_PROPERTY_COUNT + lt_ext_prop_count();
+    int name = ui_settings_add_row(24, 10, 360, 30, 0, -1, 0, "Ico", 24.0f, UI_ALIGN_LEFT);
+    ui_settings_add_row(24, 26, 360, 30, 0, -1, 0, "Animation: BOY STAND  \xC2\xB7  Loop", 19.0f,
+                        UI_ALIGN_LEFT);
+    ui_settings_add_row(24, 38, 360, 30, 0, -1, 0, "Frame 117 / 299", 19.0f, UI_ALIGN_LEFT);
+    ui_hint_build(&sticks, 180, 19.0f, ui_hint_mv_sticks, UI_HINT_MV_STICKS_COUNT);
+    ui_hint_build(&keys, 196, 19.0f, ui_hint_mv_keys, UI_HINT_MV_KEYS_COUNT);
     LtProp l;
     memset(&l, 0, sizeof(l));
     l.first = first;
-    l.last = LT_GAME_PROPERTY_COUNT + lt_ext_PropCount();
+    l.last = LT_GAME_PROPERTY_COUNT + lt_ext_prop_count();
     l.colA = 0.0f;
     l.procFirst = 1;
     l.defaultItem = l.curItem = -1;
     l.link = -1;
     (void)name;
-    return lt_ext_AddLayout(&l);
+    return lt_ext_add_layout(&l);
 }
 
 /* the RDC_OVERLAY_TEXT items of the last frame */
 static int textItems(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     int n = 0;
     for (int l = 0; f && l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
@@ -266,14 +266,14 @@ static void snap1080(const char *name)
     const int items = textItems();
     CHECK(items == 0, "%s: %d deferred items (none)", name, items);
     uint32_t ow = 0, oh = 0;
-    if (!px || !rd_ReadPresented(px, &ow, &oh) || ow != w || oh != h) {
+    if (!px || !rd_read_presented(px, &ow, &oh) || ow != w || oh != h) {
         CHECK(0, "%s: the presented output", name);
         free(px);
         return;
     }
     snprintf(file, sizeof(file), "%s_1080.png", name);
     path(p, sizeof(p), file);
-    rd_WritePng(p, px, w, h, w * 4, 0);
+    rd_write_png(p, px, w, h, w * 4, 0);
     printf("settings_render: %s\n", p);
     free(px);
 }
@@ -343,18 +343,18 @@ static void countPageDraw(void *user, int list, uint32_t index, const RdCmd *c,
 {
     (void)list;
     (void)index;
-    if (c->type == RDC_SCREEN && st->ds.texEnabled && ui_MenuFontIsPage(st->tex)) {
+    if (c->type == RDC_SCREEN && st->ds.texEnabled && ui_menu_font_is_page(st->tex)) {
         (*(int *)user)++;
     }
 }
 
 static int menuTextDraws(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     int n = 0;
     if (f) {
         RdStateBlock s = f->startState;
-        rd__Walk(f, 0, &s, countPageDraw, &n);
+        rd__walk(f, 0, &s, countPageDraw, &n);
     }
     return n;
 }
@@ -399,11 +399,11 @@ static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *s
 
     snprintf(what, sizeof(what), "panel (%s, %s, language %d)", freeCam ? "free" : "orbit",
              keyboard ? "keys" : "pad", (int)lang);
-    ui_SetLanguage(lang);
-    ui__PhotoHudBuild(set, freeCam, keyboard, "Photo mode: Free camera, speed Normal",
-                      "Field of view 60");
+    ui_set_language(lang);
+    ui__photo_hud_build(set, freeCam, keyboard, "Photo mode: Free camera, speed Normal",
+                        "Field of view 60");
     float size = 17.0f;
-    float w = ui__PhotoHudFit(set->item, set->n, &size, UI_PHOTO_HUD_ROOM, at);
+    float w = ui__photo_hud_fit(set->item, set->n, &size, UI_PHOTO_HUD_ROOM, at);
     CHECK(w <= UI_PHOTO_HUD_ROOM + 0.5f, "%s: the widest line is %.1f of %.1f at size %.1f", what,
           (double)w, (double)UI_PHOTO_HUD_ROOM, (double)size);
     int lines[UI_HUD_LINES] = {0};
@@ -446,7 +446,7 @@ static void checkPanelLayout(int freeCam, int keyboard, UiLang lang, UiHudSet *s
 static void photoOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_PhotoDrawOverlay(ctx);
+    ui_photo_draw_overlay(ctx);
 }
 
 static void testPhotoPanel(void)
@@ -457,8 +457,8 @@ static void testPhotoPanel(void)
     /* the PAL tables' glyph rows (fakeTables): the sheets' pictures */
     stage_no = 11;
     ico_photo_reset();
-    lt_ext_Reset();
-    ui_SettingsReset();
+    lt_ext_reset();
+    ui_settings_reset();
     fakeTables();
     useConfig("version = 1\n");
     ico_input_reload_bindings(b);
@@ -469,11 +469,11 @@ static void testPhotoPanel(void)
             }
         }
     }
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
 
     /* the pad: the game's pictures where its sheets have one, the names of
        the rest */
-    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    ui__photo_hud_build(&set, 1, 0, "t", "f");
     CHECK(set.n == 13, "the free camera's panel: 13 items (%d)", set.n);
 
     static const struct {
@@ -506,23 +506,23 @@ static void testPhotoPanel(void)
         CHECK(ok, "pad item %d (\"%s\"): %d buttons, the first %d \"%s\"", kPad[i].item, it->text,
               it->nicon, it->icon[0].glyph, iconWord(&it->icon[0]));
     }
-    ui_SetLanguage(UI_LANG_DE);
-    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    ui_set_language(UI_LANG_DE);
+    ui__photo_hud_build(&set, 1, 0, "t", "f");
     CHECK(strcmp(iconWord(&set.item[1].icon[0]), "Linker Stick") == 0 &&
               strcmp(iconWord(&set.item[3].icon[1]), "Unten") == 0 &&
               strcmp(iconWord(&set.item[6].icon[0]), "L3") == 0,
           "German: \"%s\", \"%s\", \"%s\"", iconWord(&set.item[1].icon[0]),
           iconWord(&set.item[3].icon[1]), iconWord(&set.item[6].icon[0]));
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
     /* tables that are not the PAL ones: a picture's name instead */
     texProperty[182].texU++;
-    ui__PhotoHudBuild(&set, 1, 0, "t", "f");
+    ui__photo_hud_build(&set, 1, 0, "t", "f");
     CHECK(set.item[9].icon[0].glyph == -1 && strcmp(iconWord(&set.item[9].icon[0]), "Cross") == 0,
           "Cross without its PAL rectangle: the word (%s)", iconWord(&set.item[9].icon[0]));
     texProperty[182].texU--;
 
     /* the keys: W A S D for the stick, the first of "Tab, Backquote" */
-    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    ui__photo_hud_build(&set, 1, 1, "t", "f");
     const UiHudItem *move = &set.item[1], *roll = &set.item[4], *save = &set.item[9];
     CHECK(move->nicon == 1 && strcmp(iconWord(&move->icon[0]), "[W A S D]") == 0,
           "the left stick: [W A S D] (%s)", iconWord(&move->icon[0]));
@@ -533,14 +533,14 @@ static void testPhotoPanel(void)
           "Cross: [Space] (%s)", iconWord(&save->icon[0]));
     /* a key unbound: the mouse's button; neither: the pad's picture */
     memset(b->kb[ICO_T_CROSS], 0, sizeof(b->kb[ICO_T_CROSS]));
-    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    ui__photo_hud_build(&set, 1, 1, "t", "f");
     CHECK(strcmp(iconWord(&set.item[9].icon[0]), "[Mouse left]") == 0,
           "Cross without a key: the mouse (%s)", iconWord(&set.item[9].icon[0]));
     ico_bindings_clear(b, ICO_T_CROSS);
-    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    ui__photo_hud_build(&set, 1, 1, "t", "f");
     CHECK(set.item[9].icon[0].glyph == LT_GLYPH_CROSS, "Cross unbound: the pad's picture");
     memset(b->kb[ICO_T_LSTICK_DOWN], 0, sizeof(b->kb[ICO_T_LSTICK_DOWN]));
-    ui__PhotoHudBuild(&set, 1, 1, "t", "f");
+    ui__photo_hud_build(&set, 1, 1, "t", "f");
     CHECK(set.item[1].nicon == 1 && strcmp(iconWord(&set.item[1].icon[0]), "Left stick") == 0,
           "a stick with a key missing: its name (%s)", iconWord(&set.item[1].icon[0]));
     ico_input_reload_bindings(b);
@@ -548,8 +548,8 @@ static void testPhotoPanel(void)
     /* with the photo layout current the game's pause rows are not drawn
        (the deferred-text check needs the 1080p setup this runs inside) */
     ico_photo_reset();
-    lt_ext_Reset();
-    ui_SettingsReset();
+    lt_ext_reset();
+    ui_settings_reset();
     fakeTables();
     memset(pad, 0, sizeof(pad));
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
@@ -562,7 +562,7 @@ static void testPhotoPanel(void)
        strips in the scene, counted as draws on the menu text pages */
     const int pauseItems = menuTextDraws();
     CHECK(pauseItems > 0, "the pause menu has menu text (%d draws)", pauseItems);
-    const int ph = ui_SettingsPhotoRow(), pl = ui_PhotoLayout();
+    const int ph = ui_settings_photo_row(), pl = ui_photo_layout();
     texLayout[57].curItem = ph;
     press(0x40);
     CHECK(settle(pl, 60) && ico_photo_active(), "photo mode (%d)", current_layout_id);
@@ -578,14 +578,14 @@ static void testPhotoPanel(void)
     ctx.box.w = 1920;
     ctx.box.h = 1080;
     ctx.boxScale = 1080.0f / 448.0f;
-    ui__SetOverlaySink(panelSink);
+    ui__set_overlay_sink(panelSink);
     for (int keys = 0; keys < 2; keys++) {
         if (keys) {
             ico_input_note_press(ICO_SRC_KEY, 4);
         }
         s_pn = 0;
         CHECK(ico_photo_hud(), "the panel is shown");
-        ui_PhotoDrawOverlay(&ctx);
+        ui_photo_draw_overlay(&ctx);
         CHECK(s_pn > 8, "%s: %u vertices drawn", keys ? "keys" : "pad", s_pn);
         /* the first sprite is the panel's rectangle; all the rest lies on it */
         const float x0 = (float)s_pv[0].x / 16.0f - 1.0f, y0 = (float)s_pv[0].y / 16.0f - 1.0f;
@@ -613,18 +613,18 @@ static void testPhotoPanel(void)
         CHECK(pictures == (keys ? 0 : 2 * 7), "%s: %d picture vertices (%d)", keys ? "keys" : "pad",
               pictures, keys ? 0 : 2 * 7);
     }
-    ui__SetOverlaySink(NULL);
+    ui__set_overlay_sink(NULL);
 
     /* the snapshots, the panel on the output as the window draws it (the
        sheets are the stand-ins makeSheets draws) */
     void *prevUser = NULL;
-    RdOverlayFn prev = rd_GetPresentOverlay(&prevUser);
-    rd_SetPresentOverlay(photoOverlay, NULL);
+    RdOverlayFn prev = rd_get_present_overlay(&prevUser);
+    rd_set_present_overlay(photoOverlay, NULL);
     ico_input_note_press(ICO_SRC_PAD, 0);
     snap1080("settings_photo");
     ico_input_note_press(ICO_SRC_KEY, 4);
     snap1080("settings_photo_keys");
-    rd_SetPresentOverlay(prev, prevUser);
+    rd_set_present_overlay(prev, prevUser);
     ico_photo_reset();
     stage_no = 0;
 }
@@ -634,15 +634,15 @@ static int render(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("settings_render: SKIP: no usable Vulkan device\n");
         return 77;
     }
-    ui_FontForgetTextures();
+    ui_font_forget_textures();
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
-    ui_SetGsFrame(&fr);
-    ui_SetScale(1.0f);
-    ui__SetRecordHook(gif_HostFlush);
+    ui_set_gs_frame(&fr);
+    ui_set_scale(1.0f);
+    ui__set_record_hook(gif_HostFlush);
     makeSheets();
     gif_HostSetTex0Resolver(sheetResolve);
     dl_Init();
@@ -651,14 +651,14 @@ static int render(void)
 
     useConfig("version = 1\n");
     fakeTables();
-    lt_ext_Reset();
-    ui_SettingsReset();
+    lt_ext_reset();
+    ui_settings_reset();
     memset(pad, 0, sizeof(pad));
     pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
     NonLinearCameraMove = 2;
     init_layout_texture(2);
     settle(54, 4);
-    int mainL = ui_SettingsPageLayout(UI_PAGE_MAIN);
+    int mainL = ui_settings_page_layout(UI_PAGE_MAIN);
     lt_switch_layout(mainL);
     CHECK(settle(mainL, 60), "the menu");
     for (int i = 0; i < 4; i++) {
@@ -677,9 +677,9 @@ static int render(void)
                  {7, 0, "settings_achievements.png"}};
 
     int labels[16];
-    ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    ui_settings_page_rows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
     for (unsigned i = 0; i < sizeof(pages) / sizeof(pages[0]); i++) {
-        lt_ext_Layout(mainL)->curItem = labels[pages[i].row];
+        lt_ext_layout(mainL)->curItem = labels[pages[i].row];
         press(0x40);
         for (int k = 0; k < 30; k++) {
             frame(0);
@@ -698,7 +698,7 @@ static int render(void)
                           "Speakers (USB Audio Interface with a very long product name)");
     ico_config_set_string("audio.output", "mono");
     ico_opt_reload();
-    lt_ext_Layout(mainL)->curItem = labels[3];
+    lt_ext_layout(mainL)->curItem = labels[3];
     press(0x40);
     for (int k = 0; k < 30; k++) {
         frame(0);
@@ -714,11 +714,11 @@ static int render(void)
     ico_config_set_string("audio.output", "auto");
     ico_opt_reload();
     /* Controls -> Remap, then a capture in progress */
-    lt_ext_Layout(mainL)->curItem = labels[4];
+    lt_ext_layout(mainL)->curItem = labels[4];
     press(0x40);
-    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_CONTROLS), 60), "Controls");
+    CHECK(settle(ui_settings_page_layout(UI_PAGE_CONTROLS), 60), "Controls");
     press(0x40);
-    CHECK(settle(ui_SettingsPageLayout(UI_PAGE_REMAP), 60), "Remap");
+    CHECK(settle(ui_settings_page_layout(UI_PAGE_REMAP), 60), "Remap");
     frame(0);
     snap("settings_remap.png");
     NonLinearCameraMove = 3; /* French: the gamepad column's names */
@@ -732,7 +732,7 @@ static int render(void)
     snap("settings_remap_capture.png");
     /* the New Game screen, the cursor on Mirror mode's On, New Game+
        Off lit; then the cursor on New Game+ (its note), Mirror mode On lit */
-    int ml = ui_NewGameScreenEnter();
+    int ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen");
     press(0x2000);
@@ -748,7 +748,7 @@ static int render(void)
     NonLinearCameraMove = 2;
     frame(0);
     /* the quit confirmation, the cursor on Yes */
-    int ql = ui_QuitScreenLayout();
+    int ql = ui_quit_screen_layout();
     lt_switch_layout(ql);
     CHECK(settle(ql, 60), "the quit screen");
     press(0x8000);
@@ -761,37 +761,37 @@ static int render(void)
     {
         /* shown, as the title's proc (la_title) shows them once its menu
            is up */
-        const int opt = ui_SettingsEntryRow(13), quit = ui_SettingsQuitRow(13);
-        lt_ext_Prop(opt)->defaultMask = lt_ext_Prop(quit)->defaultMask = 0;
-        ui_SettingsTitleMask(0);
+        const int opt = ui_settings_entry_row(13), quit = ui_settings_quit_row(13);
+        lt_ext_prop(opt)->defaultMask = lt_ext_prop(quit)->defaultMask = 0;
+        ui_settings_title_mask(0);
         texLayout[13].curItem = opt;
         frame(0);
         snap("settings_title_entry.png");
-        lt_ext_Prop(opt)->defaultMask = lt_ext_Prop(quit)->defaultMask = 1;
-        ui_SettingsTitleMask(1);
+        lt_ext_prop(opt)->defaultMask = lt_ext_prop(quit)->defaultMask = 1;
+        ui_settings_title_mask(1);
     }
     /* the Settings and Display screens at Enhanced 4x, full height, the
        atlas at a 960-line output's scale (settings_main_4x.png,
        settings_display_4x.png) */
     {
-        RdSettings e = *rd_GetSettings();
+        RdSettings e = *rd_get_settings();
         e.preset = RD_PRESET_ENHANCED;
         e.sceneScale = 4.0f;
         e.aspect = 4.0f / 3.0f;
         e.fullHeightScene = 1;
         e.outputWidth = 1280;
         e.outputHeight = 960;
-        rd_SetSettings(&e);
-        ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+        rd_set_settings(&e);
+        ui_set_scale(ui_scale_for(1, e.outputHeight));
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 4x");
-        lt_ext_Layout(mainL)->curItem = labels[6]; /* Language: its note */
+        lt_ext_layout(mainL)->curItem = labels[6]; /* Language: its note */
         frame(0);
         frame(0);
         snap4("settings_main_4x.png");
-        lt_ext_Layout(mainL)->curItem = labels[0];
+        lt_ext_layout(mainL)->curItem = labels[0];
         press(0x40);
-        CHECK(settle(ui_SettingsPageLayout(UI_PAGE_DISPLAY), 60), "Display at 4x");
+        CHECK(settle(ui_settings_page_layout(UI_PAGE_DISPLAY), 60), "Display at 4x");
         frame(0);
         snap4("settings_display_4x.png");
     }
@@ -805,14 +805,14 @@ static int render(void)
         press(0x40);
         CHECK(settle(mainL, 60), "the menu from the title");
         int ml[16];
-        ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
-        lt_ext_Layout(mainL)->curItem = ml[7];
+        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        lt_ext_layout(mainL)->curItem = ml[7];
         frame(0);
         frame(0);
         snap4("settings_main_title_4x.png");
-        lt_ext_Layout(mainL)->curItem = ml[8];
+        lt_ext_layout(mainL)->curItem = ml[8];
         press(0x40);
-        int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+        int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
         CHECK(settle(exL, 60), "Extras at 4x");
         press(0x4000);
         press(0x4000);
@@ -820,32 +820,32 @@ static int render(void)
         snap4("settings_extras_4x.png");
         /* the music gallery over the fake engine, the cursor on an entry
            that plays */
-        gallery_SetEngine(&kFakeEngine);
-        lt_ext_Layout(exL)->curItem = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+        gallery_set_engine(&kFakeEngine);
+        lt_ext_layout(exL)->curItem = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
         frame(0);
         press(0x40);
-        int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+        int galL = ui_settings_page_layout(UI_PAGE_MUSIC);
         CHECK(settle(galL, 60), "the gallery at 4x");
         press(0x40);
         frame(0);
         snap4("settings_music_4x.png");
         press(0x10); /* Back leaves for Extras, the Music row under the cursor */
         CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
-        gallery_SetEngine(NULL);
+        gallery_set_engine(NULL);
         /* Extras > Characters at the same 4x, the colours from
            a fixed seed, the cursor on Ico's tunic, its swatch beside the
            value */
         {
             int el[8], cl[16];
-            ui_SettingsPageRows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
+            ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 8);
             ico_appearance_randomize(12345u);
-            lt_ext_Layout(exL)->curItem = el[3];
+            lt_ext_layout(exL)->curItem = el[3];
             frame(0);
             press(0x40);
-            const int chL = ui_SettingsPageLayout(UI_PAGE_CHARACTERS);
+            const int chL = ui_settings_page_layout(UI_PAGE_CHARACTERS);
             CHECK(settle(chL, 60), "Characters at 4x");
-            ui_SettingsPageRows(UI_PAGE_CHARACTERS, cl, NULL, NULL, 16);
-            lt_ext_Layout(chL)->curItem = cl[5];
+            ui_settings_page_rows(UI_PAGE_CHARACTERS, cl, NULL, NULL, 16);
+            lt_ext_layout(chL)->curItem = cl[5];
             for (int k = 0; k < 4; k++) {
                 frame(0); /* the page refreshes */
             }
@@ -857,17 +857,17 @@ static int render(void)
                drawn here: the flat colour shows where it stands) */
             static const UiCharactersHost host = {renderCharsEnter, renderCharsShown,
                                                   renderCharsSwitch, renderCharsLeave};
-            ui_SettingsSetCharactersHost(&host);
-            lt_ext_Layout(exL)->curItem = el[3];
+            ui_settings_set_characters_host(&host);
+            lt_ext_layout(exL)->curItem = el[3];
             frame(0);
             press(0x40);
             CHECK(settle(chL, 60), "Characters in the viewer at 4x");
-            lt_ext_Layout(chL)->curItem = cl[5];
+            lt_ext_layout(chL)->curItem = cl[5];
             for (int k = 0; k < 4; k++) {
                 frame(0);
             }
             snap4("settings_characters_viewer_4x.png");
-            ui_SettingsSetCharactersHost(NULL);
+            ui_settings_set_characters_host(NULL);
             ico_appearance_reset();
             lt_switch_layout(exL);
             CHECK(settle(exL, 60), "back to Extras from the viewer's Characters at 4x");
@@ -875,7 +875,7 @@ static int render(void)
     }
     /* every screen presented at Enhanced 1080p (snap1080) */
     {
-        RdSettings e = *rd_GetSettings();
+        RdSettings e = *rd_get_settings();
         e.preset = RD_PRESET_ENHANCED;
         e.sceneScale = 0.0f;
         e.sceneWidth = e.sceneHeight = 0;
@@ -883,14 +883,14 @@ static int render(void)
         e.fullHeightScene = 0;
         e.outputWidth = 1920;
         e.outputHeight = 1080;
-        rd_SetSettings(&e);
-        ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+        rd_set_settings(&e);
+        ui_set_scale(ui_scale_for(1, e.outputHeight));
         s_reduce = 1;
         int ml[16];
-        ui_SettingsPageRows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
+        ui_settings_page_rows(UI_PAGE_MAIN, ml, NULL, NULL, 16);
         lt_switch_layout(mainL);
         CHECK(settle(mainL, 60), "the menu at 1080p");
-        lt_ext_Layout(mainL)->curItem = ml[6];
+        lt_ext_layout(mainL)->curItem = ml[6];
         frame(0);
         snap1080("settings_main");
 
@@ -903,7 +903,7 @@ static int render(void)
                   {8, 2, "settings_extras"}};
 
         for (unsigned i = 0; i < sizeof(pg) / sizeof(pg[0]); i++) {
-            lt_ext_Layout(mainL)->curItem = ml[pg[i].row];
+            lt_ext_layout(mainL)->curItem = ml[pg[i].row];
             press(0x40);
             for (int k = 0; k < 30; k++) {
                 frame(0);
@@ -915,7 +915,7 @@ static int render(void)
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
         }
-        int mir = ui_NewGameScreenEnter();
+        int mir = ui_new_game_screen_enter();
         lt_switch_layout(mir);
         CHECK(settle(mir, 60), "the New Game screen at 1080p");
         snap1080("settings_new_game_screen");
@@ -959,7 +959,7 @@ static int render(void)
             ico_gs_set_sampler(NULL);
             ico_gs_reset();
         }
-        int ql = ui_QuitScreenLayout();
+        int ql = ui_quit_screen_layout();
         lt_switch_layout(ql);
         CHECK(settle(ql, 60), "the quit screen at 1080p");
         press(0x8000);
@@ -968,26 +968,26 @@ static int render(void)
            of 4:25), its bar and transport; then the model viewer's rows
            and prompts */
         {
-            gallery_SetEngine(&kFakeEngine);
+            gallery_set_engine(&kFakeEngine);
             lt_switch_layout(13);
             CHECK(settle(13, 60), "the title at 1080p");
             press(0x4000);
             press(0x40);
             CHECK(settle(mainL, 60), "the menu from the title at 1080p");
-            lt_ext_Layout(mainL)->curItem = ml[8];
+            lt_ext_layout(mainL)->curItem = ml[8];
             press(0x40);
-            int exL = ui_SettingsPageLayout(UI_PAGE_EXTRAS);
+            int exL = ui_settings_page_layout(UI_PAGE_EXTRAS);
             CHECK(settle(exL, 60), "Extras at 1080p");
-            lt_ext_Layout(exL)->curItem = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+            lt_ext_layout(exL)->curItem = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
             frame(0);
             press(0x40);
-            int galL = ui_SettingsPageLayout(UI_PAGE_MUSIC);
+            int galL = ui_settings_page_layout(UI_PAGE_MUSIC);
             CHECK(settle(galL, 60), "the gallery at 1080p");
             press(0x40);
             snap1080("settings_music");
             press(0x10);
             CHECK(settle(exL, 60), "back to Extras at 1080p");
-            gallery_SetEngine(NULL);
+            gallery_set_engine(NULL);
             int vl = viewerLayout();
             lt_switch_layout(vl);
             CHECK(settle(vl, 60), "the viewer's rows at 1080p");
@@ -1002,9 +1002,9 @@ static int render(void)
         s_reduce = 0;
     }
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
-    ui__SetRecordHook(NULL);
-    ui_FontShutdown();
-    rd_Shutdown();
+    ui__set_record_hook(NULL);
+    ui_font_shutdown();
+    rd_shutdown();
     return failures ? 1 : 0;
 }
 

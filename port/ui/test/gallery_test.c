@@ -15,7 +15,7 @@
  *     event/, the title theme) is the soundtrack, event2/ the scene sounds;
  *   - L1 and R1 step to the previous and next entry that plays;
  *   - every label, column, heading and gallery string, in the five
- *     languages, has a glyph for every character (ui_FontHasGlyph);
+ *     languages, has a glyph for every character (ui_font_has_glyph);
  *   - Left and Right jump between the groups.
  * With the disc image as well (argv[2]), the streams not on the disc are
  * left out and every listed bank's .hd and .bd are found in a pack
@@ -77,7 +77,7 @@ static int hdHas(int bank, int prog, int tone)
             size = m.size;
         }
     }
-    return hd && size ? gallery_HdHas(hd, size, prog, tone) : -1;
+    return hd && size ? gallery_hd_has(hd, size, prog, tone) : -1;
 }
 
 static int seInBank(int bank, int prog, int tone)
@@ -127,7 +127,7 @@ static unsigned glyphMissing(const char *s)
         while (more-- > 0 && *p) {
             cp = cp << 6 | (*p++ & 63);
         }
-        if (cp >= 0x20 && !ui_FontHasGlyph(cp)) {
+        if (cp >= 0x20 && !ui_font_has_glyph(cp)) {
             return cp;
         }
     }
@@ -175,35 +175,35 @@ static void timeMaths(void)
     r.sectors = 2032;
     r.pitch = 44068;
     r.channels = 2;
-    CHECK(gallery_StreamBytes(&r) == 4161536.0, "the pass of 2032 sectors");
-    double t = gallery_StreamSeconds(&r, gallery_StreamBytes(&r));
+    CHECK(gallery_stream_bytes(&r) == 4161536.0, "the pass of 2032 sectors");
+    double t = gallery_stream_seconds(&r, gallery_stream_bytes(&r));
     CHECK(t > 82.62 && t < 82.64, "battle.int's 2032 sectors at 44068 Hz: %.3f s", t);
     r.channels = 1;
     r.pitch = 18000;
-    t = gallery_StreamSeconds(&r, 16.0 * 18000.0 / 28.0 * 3.0);
+    t = gallery_stream_seconds(&r, 16.0 * 18000.0 / 28.0 * 3.0);
     CHECK(t > 2.999 && t < 3.001, "mono at 18000 Hz: %.3f s", t);
 
     GalleryStreamClock c;
-    gallery_ClockReset(&c);
+    gallery_clock_reset(&c);
     const uint32_t ring = 0x1E0000;
-    gallery_ClockStep(&c, 0x1000, ring, GALLERY_SPU_RING); /* not this ring: not keyed */
+    gallery_clock_step(&c, 0x1000, ring, GALLERY_SPU_RING); /* not this ring: not keyed */
     CHECK(!c.started && c.played == 0, "a NAX outside the ring does not start the clock");
     uint32_t nax = ring;
     unsigned long long want = 0;
     for (int i = 0; i < 1000; i++) {
         nax = ring + (nax - ring + 1008) % GALLERY_SPU_RING; /* a Main tick at 44.1 kHz */
-        gallery_ClockStep(&c, nax, ring, GALLERY_SPU_RING);
+        gallery_clock_step(&c, nax, ring, GALLERY_SPU_RING);
         want += 1008;
     }
     CHECK(c.started && c.played == want, "1000 steps of 1008 bytes over the ring's wrap: %llu",
           c.played);
-    gallery_ClockStep(&c, nax, ring, GALLERY_SPU_RING);
+    gallery_clock_step(&c, nax, ring, GALLERY_SPU_RING);
     CHECK(c.played == want && c.step == 0, "a paused voice (NAX still) plays nothing");
-    gallery_ClockStep(&c, nax - 2, ring, GALLERY_SPU_RING);
+    gallery_clock_step(&c, nax - 2, ring, GALLERY_SPU_RING);
     CHECK(c.played == want, "a voice looping one block (NAX back 2) plays nothing");
     c.played = 1000;
     c.step = 100;
-    CHECK(gallery_ClockAtEnd(&c, 2, 2100.0) && !gallery_ClockAtEnd(&c, 2, 2101.0),
+    CHECK(gallery_clock_at_end(&c, 2, 2100.0) && !gallery_clock_at_end(&c, 2, 2101.0),
           "the end within half a step");
 
     uint8_t buf[0x1800];
@@ -211,9 +211,9 @@ static void timeMaths(void)
         buf[i] = 0x0C;
         buf[i + 1] = 2;
     }
-    CHECK(gallery_StreamEndBlock(buf, sizeof(buf), 2) == -1, "no end block");
+    CHECK(gallery_stream_end_block(buf, sizeof(buf), 2) == -1, "no end block");
     buf[0x1410 + 1] = 0xFF;
-    CHECK(gallery_StreamEndBlock(buf, sizeof(buf), 2) == 0x1000, "a blank block's sector");
+    CHECK(gallery_stream_end_block(buf, sizeof(buf), 2) == 0x1000, "a blank block's sector");
 
     uint8_t hd[0x60];
     memset(hd, 0, sizeof(hd));
@@ -224,29 +224,29 @@ static void timeMaths(void)
         hd[0x40 + 2 * i] = (uint8_t)tbl[i];
         hd[0x41 + 2 * i] = (uint8_t)(tbl[i] >> 8);
     }
-    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 3) == 1 && gallery_HdHas(hd, sizeof(hd), 0, 4) == 0,
+    CHECK(gallery_hd_has(hd, sizeof(hd), 0, 3) == 1 && gallery_hd_has(hd, sizeof(hd), 0, 4) == 0,
           "program 0 has tones 0 to 3");
-    CHECK(gallery_HdHas(hd, sizeof(hd), 1, 0) == 0, "program 1 is absent");
-    CHECK(gallery_HdHas(hd, sizeof(hd), 2, 0) == 1 && gallery_HdHas(hd, sizeof(hd), 2, 1) == 0,
+    CHECK(gallery_hd_has(hd, sizeof(hd), 1, 0) == 0, "program 1 is absent");
+    CHECK(gallery_hd_has(hd, sizeof(hd), 2, 0) == 1 && gallery_hd_has(hd, sizeof(hd), 2, 1) == 0,
           "program 2 has tone 0");
-    CHECK(gallery_HdHas(hd, sizeof(hd), 3, 0) == 0, "program 3 is past the last");
+    CHECK(gallery_hd_has(hd, sizeof(hd), 3, 0) == 0, "program 3 is past the last");
     /* an SE table offset near 2^32: off + 2 must not wrap past the size check */
     hd[0x1C] = 0xFE, hd[0x1D] = 0xFF, hd[0x1E] = 0xFF, hd[0x1F] = 0xFF;
-    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 0) == 0, "a table offset of 0xFFFFFFFE is out");
+    CHECK(gallery_hd_has(hd, sizeof(hd), 0, 0) == 0, "a table offset of 0xFFFFFFFE is out");
     hd[0x1C] = 0x40, hd[0x1D] = 0, hd[0x1E] = 0, hd[0x1F] = 0;
     hd[0x0C] = 0;
-    CHECK(gallery_HdHas(hd, sizeof(hd), 0, 0) == 0, "no magic, no program");
+    CHECK(gallery_hd_has(hd, sizeof(hd), 0, 0) == 0, "no magic, no program");
 
     /* the blank tail by halving: blank from sector 37 of 100, from 0, none */
     s_blankFrom = 37;
     s_reads = 0;
-    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == 37 * 0x800 && s_reads <= 9,
+    CHECK(gallery_stream_blank_from(100 * 0x800, fakeSector, NULL) == 37 * 0x800 && s_reads <= 9,
           "blank from sector 37 (%d reads)", s_reads);
     s_blankFrom = 0;
-    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == 0, "blank from the start");
+    CHECK(gallery_stream_blank_from(100 * 0x800, fakeSector, NULL) == 0, "blank from the start");
     s_blankFrom = 100;
     s_reads = 0;
-    CHECK(gallery_StreamBlankFrom(100 * 0x800, fakeSector, NULL) == -1 && s_reads == 1,
+    CHECK(gallery_stream_blank_from(100 * 0x800, fakeSector, NULL) == -1 && s_reads == 1,
           "no blank tail: one read");
 }
 
@@ -289,17 +289,17 @@ int main(int argc, char **argv)
                        106,
                        s_vfs ? onDisc : NULL,
                        s_vfs ? seInBank : NULL};
-    int n = gallery_Build(&t);
+    int n = gallery_build(&t);
     printf("     %d items (%s)\n", n, s_vfs ? "streams checked on the disc" : "no disc image");
     CHECK(n > 100, "a list (%d items)", n);
-    CHECK(gallery_Item(n - 1)->kind == GAL_K_BACK, "Back last");
+    CHECK(gallery_item(n - 1)->kind == GAL_K_BACK, "Back last");
 
     /* keys in range, groups in order, headings, duplicates */
     int lastGroup = -1, headings[GAL_G_COUNT] = {0}, items[GAL_G_COUNT] = {0};
     int section = -1;
     char buf[160], buf2[160];
     for (int i = 0; i < n; i++) {
-        const GalleryItem *it = gallery_Item(i);
+        const GalleryItem *it = gallery_item(i);
         CHECK(it->group >= lastGroup, "item %d: group %d after %d", i, it->group, lastGroup);
         if (it->group != lastGroup && it->group != GAL_G_BACK) {
             CHECK(it->kind == GAL_K_HEADING, "item %d: group %d opens with a heading", i,
@@ -339,7 +339,7 @@ int main(int argc, char **argv)
         }
         /* no key twice in its group's section */
         for (int k = section + 1; k < i; k++) {
-            const GalleryItem *o = gallery_Item(k);
+            const GalleryItem *o = gallery_item(k);
             CHECK(!(o->kind == it->kind && o->key == it->key), "item %d: key %d twice (item %d)", i,
                   it->key, k);
         }
@@ -361,7 +361,7 @@ int main(int argc, char **argv)
        its folder gives (the title theme, event2/50.int, with the score) */
     int streams = 0;
     for (int i = 0; i < n; i++) {
-        const GalleryItem *it = gallery_Item(i);
+        const GalleryItem *it = gallery_item(i);
         if (it->kind != GAL_K_STREAM) {
             continue;
         }
@@ -374,9 +374,9 @@ int main(int argc, char **argv)
         if (dot) {
             *dot = '\0';
         }
-        CHECK(strcmp(gallery_Label(i, buf, sizeof(buf)), want) == 0,
+        CHECK(strcmp(gallery_label(i, buf, sizeof(buf)), want) == 0,
               "stream %d is named \"%s\" (\"%s\")", it->key, want, buf);
-        CHECK(gallery_ColA(i, buf2, sizeof(buf2))[0] == '\0', "stream %d has no column", it->key);
+        CHECK(gallery_col_a(i, buf2, sizeof(buf2))[0] == '\0', "stream %d has no column", it->key);
         if (it->key <= 100) {
             int scene = strstr(path, "/event2/") != NULL && it->key != 56;
             CHECK(it->group == (scene ? GAL_G_SCENE : GAL_G_SOUNDTRACK),
@@ -385,73 +385,73 @@ int main(int argc, char **argv)
         streams++;
     }
     {
-        int i47 = gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 47, -1);
-        CHECK(i47 >= 0 && strcmp(gallery_Label(i47, buf, sizeof(buf)), "event/39_8") == 0,
+        int i47 = gallery_find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 47, -1);
+        CHECK(i47 >= 0 && strcmp(gallery_label(i47, buf, sizeof(buf)), "event/39_8") == 0,
               "stream 47 is event/39_8");
-        CHECK(gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 56, -1) >= 0,
+        CHECK(gallery_find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 56, -1) >= 0,
               "the title theme in the soundtrack");
-        CHECK(gallery_Find(GAL_G_SCENE, GAL_K_STREAM, 55, -1) >= 0,
+        CHECK(gallery_find(GAL_G_SCENE, GAL_K_STREAM, 55, -1) >= 0,
               "event2/00 in the scene sounds");
     }
     printf("     %d streams named by their files\n", streams);
 
     /* L1 and R1: the previous and next entry that plays */
     {
-        int f = gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 1, -1);
+        int f = gallery_find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 1, -1);
         int lastSt = -1;
         for (int i = 0; i < n; i++) {
-            if (gallery_Item(i)->group == GAL_G_SOUNDTRACK &&
-                gallery_Item(i)->kind == GAL_K_STREAM) {
+            if (gallery_item(i)->group == GAL_G_SOUNDTRACK &&
+                gallery_item(i)->kind == GAL_K_STREAM) {
                 lastSt = i;
             }
         }
-        int nx = gallery_Step(lastSt, 1);
-        CHECK(nx >= 0 && gallery_Item(nx)->group == GAL_G_SCENE &&
-                  gallery_Item(nx)->kind == GAL_K_STREAM,
+        int nx = gallery_step(lastSt, 1);
+        CHECK(nx >= 0 && gallery_item(nx)->group == GAL_G_SCENE &&
+                  gallery_item(nx)->kind == GAL_K_STREAM,
               "R1 from the last soundtrack entry: the first scene sound (%d)", nx);
-        CHECK(gallery_Step(nx, -1) == lastSt, "L1 back over the heading");
-        int pv = gallery_Step(f, -1);
-        CHECK(pv >= 0 && gallery_Item(pv)->kind == GAL_K_SE && pv == n - 2,
+        CHECK(gallery_step(nx, -1) == lastSt, "L1 back over the heading");
+        int pv = gallery_step(f, -1);
+        CHECK(pv >= 0 && gallery_item(pv)->kind == GAL_K_SE && pv == n - 2,
               "L1 from the first entry wraps to the last effect (%d of %d)", pv, n);
-        CHECK(gallery_Step(pv, 1) == f, "R1 from the last effect wraps to the first entry");
+        CHECK(gallery_step(pv, 1) == f, "R1 from the last effect wraps to the first entry");
     }
 
     /* every text the page shows */
     for (int l = 0; l < UI_LANG_COUNT; l++) {
-        ui_SetLanguage((UiLang)l);
+        ui_set_language((UiLang)l);
         for (int i = 0; i < n; i++) {
-            unsigned cp = glyphMissing(gallery_Label(i, buf, sizeof(buf)));
+            unsigned cp = glyphMissing(gallery_label(i, buf, sizeof(buf)));
             CHECK(cp == 0, "item %d label \"%s\": U+%04X", i, buf, cp);
-            cp = glyphMissing(gallery_ColA(i, buf, sizeof(buf)));
+            cp = glyphMissing(gallery_col_a(i, buf, sizeof(buf)));
             CHECK(cp == 0, "item %d column: U+%04X", i, cp);
-            cp = glyphMissing(gallery_Asset(i, buf, sizeof(buf)));
+            cp = glyphMissing(gallery_asset(i, buf, sizeof(buf)));
             CHECK(cp == 0, "item %d asset: U+%04X", i, cp);
         }
         for (int s = UI_STR_GAL_SOUNDTRACK; s <= UI_STR_HINT_SECTION; s++) {
-            const char *txt = ui_StrIn((UiLang)l, (UiStrId)s);
+            const char *txt = ui_str_in((UiLang)l, (UiStrId)s);
             CHECK(txt[0] != '\0' && glyphMissing(txt) == 0, "string %d in language %d: \"%s\"", s,
                   l, txt);
         }
     }
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
 
     /* Left and Right between the groups */
-    int first = gallery_Find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 1, -1);
-    int scene = gallery_JumpGroup(first, 1);
-    CHECK(scene >= 0 && gallery_Item(scene)->group == GAL_G_SCENE &&
-              gallery_Item(scene - 1)->kind == GAL_K_HEADING,
+    int first = gallery_find(GAL_G_SOUNDTRACK, GAL_K_STREAM, 1, -1);
+    int scene = gallery_jump_group(first, 1);
+    CHECK(scene >= 0 && gallery_item(scene)->group == GAL_G_SCENE &&
+              gallery_item(scene - 1)->kind == GAL_K_HEADING,
           "Right: the first scene sound (%d)", scene);
-    CHECK(gallery_JumpGroup(scene, -1) == first, "Left: back to the first soundtrack entry");
-    CHECK(gallery_Item(gallery_JumpGroup(first, -1))->kind == GAL_K_BACK,
+    CHECK(gallery_jump_group(scene, -1) == first, "Left: back to the first soundtrack entry");
+    CHECK(gallery_item(gallery_jump_group(first, -1))->kind == GAL_K_BACK,
           "Left from the first: Back");
 
     /* with the disc: every listed bank's files are in a pack */
     if (s_vfs) {
         int banks = 0;
         for (int i = 0; i < n; i++) {
-            const GalleryItem *it = gallery_Item(i);
-            if (it->kind != GAL_K_SE || (i > 0 && gallery_Item(i - 1)->kind == GAL_K_SE &&
-                                         gallery_Item(i - 1)->bank == it->bank)) {
+            const GalleryItem *it = gallery_item(i);
+            if (it->kind != GAL_K_SE || (i > 0 && gallery_item(i - 1)->kind == GAL_K_SE &&
+                                         gallery_item(i - 1)->bank == it->bank)) {
                 continue;
             }
             IcoDfMember m;
@@ -469,7 +469,7 @@ int main(int argc, char **argv)
     if (s_vfs) {
         int listed = 0;
         for (int i = 0; i < n; i++) {
-            const GalleryItem *it = gallery_Item(i);
+            const GalleryItem *it = gallery_item(i);
             if (it->kind != GAL_K_SE) {
                 continue;
             }
@@ -490,14 +490,14 @@ int main(int argc, char **argv)
             if (!onDisc(no)) {
                 continue;
             }
-            long long pass = (long long)gallery_StreamBytes(&adpcmFile[no]);
+            long long pass = (long long)gallery_stream_bytes(&adpcmFile[no]);
             long long disc = (long long)ico_df_size(s_vfs, b);
             CHECK(disc == pass + 0x5C000, "stream %d (%s): %lld bytes, the pass %lld + 0x5C000", no,
                   b, disc, pass);
             unsigned char *buf = malloc((size_t)pass);
             long e = -1;
             if (buf && ico_df_read(s_vfs, b, 0, buf, (size_t)pass) == pass) {
-                e = gallery_StreamEndBlock(buf, (size_t)pass, adpcmFile[no].channels);
+                e = gallery_stream_end_block(buf, (size_t)pass, adpcmFile[no].channels);
             } else {
                 CHECK(0, "stream %d: read", no);
             }
@@ -505,12 +505,12 @@ int main(int argc, char **argv)
             if (e >= 0) {
                 ended++;
                 printf("     stream %d (%s): an end block at byte 0x%lX, %.1f s of %.1f s\n", no,
-                       adpcmFile[no].path, e, gallery_StreamSeconds(&adpcmFile[no], (double)e),
-                       gallery_StreamSeconds(&adpcmFile[no], (double)pass));
+                       adpcmFile[no].path, e, gallery_stream_seconds(&adpcmFile[no], (double)e),
+                       gallery_stream_seconds(&adpcmFile[no], (double)pass));
             }
             CHECK(e < 0 || (no == 50 && e == 0x93000), "stream %d: an end block at 0x%lX", no, e);
             /* the engine's halving from the pass's last sector finds the same */
-            CHECK(gallery_StreamBlankFrom((uint64_t)pass, discSector, (void *)b) == e,
+            CHECK(gallery_stream_blank_from((uint64_t)pass, discSector, (void *)b) == e,
                   "stream %d: the blank tail by halving at the whole scan's 0x%lX", no, e);
         }
         CHECK(ended == 1, "one stream ends early on the disc (%d)", ended);

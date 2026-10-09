@@ -324,7 +324,7 @@ static inline int getTWTH(int size) /* derived name */
  * the TEX0 is looked up in the list's own notes first.
  *
  * The UV scroll (t->uv) stays a VU1 packet: the PS2 applies it in the mesh
- * microprograms only, never to GIF sprites, so it is not rd_UVOffset (which
+ * microprograms only, never to GIF sprites, so it is not rd_uv_offset (which
  * offsets screen primitives); the mesh path reads it from the record.
  * ===================================================================== */
 #define TEX_HOST_BINDS 16
@@ -354,20 +354,20 @@ static struct { /* port */
 /* v0.4.0 (T3): texture packs.  The texture just decoded for (id, gen) as
    texpack_name.h's source (every level of the TIM2, the CLUT in CSM1
    order), so the pack's replacement under the first of its candidate
-   names is queued for the loader (texpack_Pump installs it), and with
+   names is queued for the loader (texpack_pump installs it), and with
    [video] dump_textures the level as drawn is written under its names.
    Only with a pack indexed and the option on, or the dump on. */
 static void texHostPack(int id, TexData *t, int lv, unsigned int gen, const RdTexImage *im)
 {
     static TexpackName names[TEXPACK_MAX_CANDIDATES];
-    const RdSettings *rs = rd_GetSettings();
+    const RdSettings *rs = rd_get_settings();
     TexpackSource src;
     int pack;
     int n;
     int k;
     int full;
 
-    pack = rs->texturePack && texpack_Count() > 0;
+    pack = rs->texturePack && texpack_count() > 0;
     if (!pack && !rs->dumpTextures) {
         return;
     }
@@ -404,17 +404,17 @@ static void texHostPack(int id, TexData *t, int lv, unsigned int gen, const RdTe
         src.clut = im->clut;
     }
     if (rs->dumpTextures) {
-        texpack_Dump(&src, (unsigned int)lv, im);
+        texpack_dump(&src, (unsigned int)lv, im);
     }
     if (!pack) {
         return;
     }
-    n = texpack_Candidates(&src, (unsigned int)lv, names, TEXPACK_MAX_CANDIDATES);
+    n = texpack_candidates(&src, (unsigned int)lv, names, TEXPACK_MAX_CANDIDATES);
     for (k = 0; k < n; k++) {
-        int e = texpack_Lookup(&names[k]);
+        int e = texpack_lookup(&names[k]);
 
         if (e >= 0) {
-            texpack_Request(e, (unsigned int)id, gen, RDTEX_TEXA_REPLAY, im->padW, im->padH);
+            texpack_request(e, (unsigned int)id, gen, RDTEX_TEXA_REPLAY, im->padW, im->padH);
             return;
         }
     }
@@ -453,7 +453,7 @@ static RdTex texHostTexture(int id)
         lv = 0;
     }
     gen = texHost.serial[id] * 8 + (unsigned int)lv;
-    r = rdtex_Find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
+    r = rdtex_find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
     if (r.id != 0) {
         return r;
     }
@@ -484,8 +484,8 @@ static RdTex texHostTexture(int id)
     smp.wrapS = RD_WRAP_REPEAT;
     smp.wrapT = RD_WRAP_REPEAT;
     /* v0.4.2: the characters' colours decode from a recoloured copy of the
-       CLUT (appearance.h); rdtex_Store decodes before it returns
-       (rd_tex.c rdtex_Store -> rdtex_Decode), so the copy on the stack
+       CLUT (appearance.h); rdtex_store decodes before it returns
+       (rd_tex.c rdtex_store -> rdtex_decode), so the copy on the stack
        is enough.  t->clut.addr is never written (texHostClutCheck and the
        CLUT scroll compare it), and texHostPack names and dumps the
        original */
@@ -493,14 +493,14 @@ static RdTex texHostTexture(int id)
     if (im.clut != 0 && ico_appearance_recolour(t->name, im.clut, im.clutColors, im.cpsm, clut2)) {
         draw.clut = clut2;
     }
-    r = rdtex_Store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &draw, &smp, t->name);
+    r = rdtex_store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &draw, &smp, t->name);
     if (r.id != 0) {
         RdTex now;
 
         texHostPack(id, t, lv, gen, &im);
         /* a replacement from the pack's RAM cache is in place already:
            this draw samples it */
-        now = rdtex_Find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
+        now = rdtex_find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
         if (now.id != 0) {
             r = now;
         }
@@ -1685,7 +1685,7 @@ int tex_FreeTexture(int id)
 #ifdef ICO_RD
     /* R2b: the cache entry goes (its rd texture after the frames that may
        still draw it) */
-    rdtex_Drop((unsigned int)id);
+    rdtex_drop((unsigned int)id);
     texHost.serial[id] = 0;
     {
         /* no list keeps the freed id as the texture a TEX0 means */
@@ -1760,15 +1760,15 @@ void tex_ResetVram(void)
 #ifdef ICO_RD
     /* R2b: once per frame; destroys the rd textures retired two frames
        ago */
-    rdtex_FrameTick();
+    rdtex_frame_tick();
     /* v0.4.0: the texture pack's finished loads go in; the pack (or the
        dump) switched on gives every loaded texture a new generation, so
-       each is decoded again and looked up (switched off, rd_SetSettings
+       each is decoded again and looked up (switched off, rd_set_settings
        has put the originals back) */
-    texpack_Pump();
+    texpack_pump();
     {
-        const RdSettings *rs = rd_GetSettings();
-        int on = (rs->texturePack && texpack_Count() > 0) || rs->dumpTextures;
+        const RdSettings *rs = rd_get_settings();
+        int on = (rs->texturePack && texpack_count() > 0) || rs->dumpTextures;
 
         if (texHost.packOn == 0 && on) {
             for (i = 0; i < 200; i++) {

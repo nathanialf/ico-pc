@@ -5,7 +5,7 @@
  * menu shows, the game's own (the rows of the menu text table, menu_text.h)
  * and the port's (its layout rows, popups and the photo panel), is Arimo
  * rasterised on the sheets' own texel grid and drawn with rd's sheet
- * shader (rd.h rd_CreateTextureSheet: a rim around the letters,
+ * shader (rd.h rd_create_texture_sheet: a rim around the letters,
  * the antialiasing quantised to a few levels against a fixed Bayer
  * threshold), so it reads like the sheets did in every preset and scale.
  *
@@ -14,7 +14,7 @@
  * (UI_MENU_TEXT_SIZE).  A text of em `size` y units is rasterised with
  * stb's vertical scale for an em of size / 2 texel rows and a horizontal
  * scale 2 * UI_X_PER_Y * UI_SHEET_WIDTH times that (font.c
- * ui__SheetRasterLine; the sheets' lettering is 0.8 as wide as the
+ * ui__sheet_raster_line; the sheets' lettering is 0.8 as wide as the
  * typeface, ui_internal.h), made a little heavier (UI_MENU_BOLD_X / Y),
  * whatever the output's resolution: the strip is the same 1x coverage in
  * the scene list (scaled by the replay as the sheets were) and on the
@@ -38,7 +38,7 @@
  * the rim, its anchor snapped to whole texels.
  *
  * Inks (menu_text.h UiMenuTextInk).  UI_INK_LIGHT: the rim on, its level
- * and the fill's per language (ui_MenuSheetInk, the table kSheetInk in
+ * and the fill's per language (ui_menu_sheet_ink, the table kSheetInk in
  * menu_font.c); a language change restyles the pages, nothing is
  * rasterised again.  UI_INK_DARK, PLAIN and GREY: no rim, a white fill,
  * the colour from the vertex colour (DARK black and never in the glow,
@@ -74,7 +74,7 @@ typedef struct UiSheetInk {
 
 /* The light ink's style in language lang (UiLang; out of range: English):
    kSheetInk, menu_font.c, the one place the levels live. */
-const UiSheetInk *ui_MenuSheetInk(int lang);
+const UiSheetInk *ui_menu_sheet_ink(int lang);
 
 /* The rim a game row's words have on its sheet (UiMenuTextItem.rim, per
    language): none, a faint halo (UI_MENU_FAINT_WEIGHT 64ths of the full
@@ -85,25 +85,25 @@ enum { UI_RIM_NONE = 0, UI_RIM_FAINT = 1, UI_RIM_FULL = 2 };
    (UI_RIM_*), lang (UiLang): the light ink's with its full or faint rim,
    or without one (the plain style: no rim, a white fill; the dark, plain
    and grey inks, and light words the sheet sets without a halo). */
-const UiSheetInk *ui_MenuItemInk(int ink, int rim, int lang);
+const UiSheetInk *ui_menu_item_ink(int ink, int rim, int lang);
 
 /* the widest line of utf8 at em size (y units), in x units; and the line
    metrics in y units (ascent and descent positive, the capitals' height),
    as the strips lay text out */
-float ui_MeasureMenuText(float size, const char *utf8);
-void ui_MenuFontMetrics(float size, float *ascent, float *descent, float *capHeight);
+float ui_measure_menu_text(float size, const char *utf8);
+void ui_menu_font_metrics(float size, float *ascent, float *descent, float *capHeight);
 
 /* utf8 at (x, y) on the grid, em size (y units), in ink (UiMenuTextInk),
    colour rgba (GS, 0x80 = 1.0), the flags font.h's (alignment, vertical
    alignment, UI_ADDITIVE, UI_KEEP_STATE), the quad mapped through xf (NULL:
    identity).  Into the current rd list (the scene), keyed as font.c keys
-   text (ui_SetDrawKey), or, between ui_BeginOverlay and ui_EndOverlay, on
+   text (ui_set_draw_key), or, between ui_begin_overlay and ui_end_overlay, on
    the output.  The strip is rasterised at the scene's scale (the output's
-   between ui_BeginOverlay and ui_EndOverlay; menu_font.c mfScale), so the
+   between ui_begin_overlay and ui_end_overlay; menu_font.c mfScale), so the
    letters are crisp at every resolution while the quad and the look stay
    the 1x strip's.  Without ICO_RD nothing is drawn. */
-void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                     unsigned flags, int ink, const UiXform *xf);
+void ui_draw_menu_text(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                       unsigned flags, int ink, const UiXform *xf);
 
 /* A game row's words where its sprite would be: it the row's item, lang
    its language (UiLang), box and uv the sprite's rectangle (x, y, w, h:
@@ -112,8 +112,8 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
    gif_SpriteSensitiveOffset, rgba the sprite colour.  glow != 0: the glow
    sprite (lt_glow_sprite: the stretched box, the packet's additive blend).
    The state is the packet's (UI_KEEP_STATE); the caller sets the draw key. */
-void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
-                     const unsigned char rgba[4], int glow);
+void ui_menu_word_draw(const UiMenuTextItem *it, int lang, const int box[4], const int uv[4],
+                       const unsigned char rgba[4], int glow);
 
 /* ------------------------------------------------------ introspection (tests) */
 typedef struct UiMenuStrip {
@@ -127,13 +127,13 @@ typedef struct UiMenuStrip {
 } UiMenuStrip;
 
 /* the strip the last draw used; 0 when nothing was drawn yet */
-int ui_MenuFontLastStrip(UiMenuStrip *out);
+int ui_menu_font_last_strip(UiMenuStrip *out);
 /* whether tex is one of the pages' textures */
-int ui_MenuFontIsPage(uint32_t tex);
+int ui_menu_font_is_page(uint32_t tex);
 /* a page's coverage (w x h bytes), NULL when it does not exist */
-const uint8_t *ui_MenuFontPage(int cls, int page, int *w, int *h);
+const uint8_t *ui_menu_font_page(int cls, int page, int *w, int *h);
 /* the strips cached now */
-int ui_MenuFontStripCount(void);
+int ui_menu_font_strip_count(void);
 
 #ifdef __cplusplus
 }

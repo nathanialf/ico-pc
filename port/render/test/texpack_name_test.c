@@ -3,7 +3,7 @@
  *   xxh3      xxh3_64 against xxHash v0.8.2's own sanity vectors
  *             (cli/xsum_sanity_check.c, XSUM_XXH3_testdata: seed 0, the
  *             buffer XSUM_fillTestBuffer makes)
- *   swizzle   texpack_BlockOffset against PCSX2's block layout rebuilt
+ *   swizzle   texpack_block_offset against PCSX2's block layout rebuilt
  *             here from GSBlock.h's column writes (the SSE path of
  *             WriteColumn32/16/8/4 run on an emulated 128-bit vector; the
  *             column tables of GSTables.cpp describe the same layout),
@@ -217,7 +217,7 @@ static void columnTable(uint32_t psm, uint32_t *tab)
     uint32_t bh;
     uint8_t src[256];
     uint8_t dst[256];
-    texpack_BlockSize(psm, &bw, &bh);
+    texpack_block_size(psm, &bw, &bh);
     uint32_t n = bw * bh;
     int pitch = (int)(psm == RDTEX_PSMT4     ? bw / 2
                       : psm == RDTEX_PSMT8   ? bw
@@ -280,13 +280,13 @@ static void testSwizzle(void)
         uint32_t bw = 0;
         uint32_t bh = 0;
         int bad = 0;
-        CHECK(texpack_BlockSize(kPsm[p], &bw, &bh) == 0 && bw * bh <= 512, "%s has a block",
+        CHECK(texpack_block_size(kPsm[p], &bw, &bh) == 0 && bw * bh <= 512, "%s has a block",
               kName[p]);
         columnTable(kPsm[p], tab);
         memset(seen, 0, sizeof(seen));
         for (uint32_t y = 0; y < bh; y++) {
             for (uint32_t x = 0; x < bw; x++) {
-                uint32_t o = texpack_BlockOffset(kPsm[p], x, y);
+                uint32_t o = texpack_block_offset(kPsm[p], x, y);
                 if (o != tab[y * bw + x] && bad++ < 4) {
                     CHECK(0, "%s (%u,%u): %u, PCSX2's column write puts it at %u", kName[p], x, y,
                           o, tab[y * bw + x]);
@@ -303,26 +303,26 @@ static void testSwizzle(void)
         }
         CHECK(dup == 0, "%s: a bijection onto 0..%u (%d offsets not hit once)", kName[p],
               bw * bh - 1, dup);
-        CHECK(texpack_BlockOffset(kPsm[p], bw, 0) == UINT32_MAX &&
-                  texpack_BlockOffset(kPsm[p], 0, bh) == UINT32_MAX,
+        CHECK(texpack_block_offset(kPsm[p], bw, 0) == UINT32_MAX &&
+                  texpack_block_offset(kPsm[p], 0, bh) == UINT32_MAX,
               "%s: outside the block refused", kName[p]);
     }
     /* spot values (GSTables.cpp's columnTable32/16/8/4) */
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT32, 2, 0) == 4, "CT32 (2,0) -> 4");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT32, 0, 1) == 2, "CT32 (0,1) -> 2");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT32, 7, 7) == 63, "CT32 (7,7) -> 63");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT16, 8, 0) == 1, "CT16 (8,0) -> 1");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT16, 0, 2) == 32, "CT16 (0,2) -> 32");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT8, 0, 2) == 33, "PSMT8 (0,2) -> 33");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT8, 4, 2) == 1, "PSMT8 (4,2) -> 1");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT8, 0, 4) == 96, "PSMT8 (0,4) -> 96");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT4, 0, 2) == 65, "PSMT4 (0,2) -> 65");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT4, 0, 4) == 192, "PSMT4 (0,4) -> 192");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT24, 2, 0) == 4, "CT24 is laid out as CT32");
-    CHECK(texpack_BlockOffset(RDTEX_PSMCT16S, 8, 0) == 1, "CT16S is laid out as CT16");
-    CHECK(texpack_BlockOffset(RDTEX_PSMT8H, 0, 0) == UINT32_MAX, "PSMT8H has no block path");
-    CHECK(texpack_BlockSize(RDTEX_PSMZ32, NULL, NULL) == -1, "PSMZ32 refused");
-    CHECK(texpack_BlockSize(7, NULL, NULL) == -1, "an unknown psm refused");
+    CHECK(texpack_block_offset(RDTEX_PSMCT32, 2, 0) == 4, "CT32 (2,0) -> 4");
+    CHECK(texpack_block_offset(RDTEX_PSMCT32, 0, 1) == 2, "CT32 (0,1) -> 2");
+    CHECK(texpack_block_offset(RDTEX_PSMCT32, 7, 7) == 63, "CT32 (7,7) -> 63");
+    CHECK(texpack_block_offset(RDTEX_PSMCT16, 8, 0) == 1, "CT16 (8,0) -> 1");
+    CHECK(texpack_block_offset(RDTEX_PSMCT16, 0, 2) == 32, "CT16 (0,2) -> 32");
+    CHECK(texpack_block_offset(RDTEX_PSMT8, 0, 2) == 33, "PSMT8 (0,2) -> 33");
+    CHECK(texpack_block_offset(RDTEX_PSMT8, 4, 2) == 1, "PSMT8 (4,2) -> 1");
+    CHECK(texpack_block_offset(RDTEX_PSMT8, 0, 4) == 96, "PSMT8 (0,4) -> 96");
+    CHECK(texpack_block_offset(RDTEX_PSMT4, 0, 2) == 65, "PSMT4 (0,2) -> 65");
+    CHECK(texpack_block_offset(RDTEX_PSMT4, 0, 4) == 192, "PSMT4 (0,4) -> 192");
+    CHECK(texpack_block_offset(RDTEX_PSMCT24, 2, 0) == 4, "CT24 is laid out as CT32");
+    CHECK(texpack_block_offset(RDTEX_PSMCT16S, 8, 0) == 1, "CT16S is laid out as CT16");
+    CHECK(texpack_block_offset(RDTEX_PSMT8H, 0, 0) == UINT32_MAX, "PSMT8H has no block path");
+    CHECK(texpack_block_size(RDTEX_PSMZ32, NULL, NULL) == -1, "PSMZ32 refused");
+    CHECK(texpack_block_size(7, NULL, NULL) == -1, "an unknown psm refused");
 
     /* a 64x32 PSMT8 level through the block path and back */
     enum { W = 64, H = 32 };
@@ -339,14 +339,14 @@ static void testSwizzle(void)
     s.psm = RDTEX_PSMT8, s.levels = 1;
     s.lv[0] = (TexpackLevel){6, 5, W, H, 2, img};
     s.cpsm = RDTEX_PSMCT32, s.clutColors = 256, s.clut = clut;
-    size_t n = texpack_HashBytes(&s, 0, 0, NULL, 0);
+    size_t n = texpack_hash_bytes(&s, 0, 0, NULL, 0);
     CHECK(n == W * H, "64x32 PSMT8: %zu bytes", n);
-    CHECK(texpack_HashBytes(&s, 0, 0, out, sizeof(out)) == W * H, "64x32 PSMT8 written");
+    CHECK(texpack_hash_bytes(&s, 0, 0, out, sizeof(out)) == W * H, "64x32 PSMT8 written");
     int wrong = 0;
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             size_t blk = (size_t)(y / 16) * (W / 16) + (size_t)(x / 16);
-            uint32_t o = texpack_BlockOffset(RDTEX_PSMT8, (uint32_t)x % 16, (uint32_t)y % 16);
+            uint32_t o = texpack_block_offset(RDTEX_PSMT8, (uint32_t)x % 16, (uint32_t)y % 16);
             wrong += out[blk * 256 + o] != img[y * W + x];
         }
     }
@@ -512,7 +512,7 @@ static void testClut(void)
         uint64_t prev = 0;
         for (int t = 0; t < modes; t++) {
             gsClutRead(cpsm, gs, colors, kTexa[t][0], kTexa[t][1], kTexa[t][2], buff);
-            CHECK(texpack_ComputeName(&s, 0, t, 0, &nm) == 0, "CLUT case %d computes", c);
+            CHECK(texpack_compute_name(&s, 0, t, 0, &nm) == 0, "CLUT case %d computes", c);
             CHECK(nm.clutHash == xxh3_64(buff, colors * 4),
                   "%s CLUT of %u entries, TEXA mode %d: the hash of PCSX2's m_buff32",
                   cpsm == RDTEX_PSMCT32 ? "CT32" : "CT16", colors, t);
@@ -526,12 +526,12 @@ static void testClut(void)
             prev = nm.clutHash;
         }
         /* the rule the code uses: entry i is memory entry
-           rdtex_Csm1Index(i), the middle-run swap for 256 entries (CT16
+           rdtex_csm1_index(i), the middle-run swap for 256 entries (CT16
            as well as CT32), straight for 16 */
         gsClutRead(cpsm, gs, colors, 0x80, 0, 0x80, buff);
         int bad = 0;
         for (uint32_t i = 0; i < colors; i++) {
-            uint32_t m = rdtex_Csm1Index(i, colors);
+            uint32_t m = rdtex_csm1_index(i, colors);
             if (cpsm == RDTEX_PSMCT32) {
                 bad += memcmp(buff + 4 * i, img + 4 * m, 4) != 0;
             } else {
@@ -542,7 +542,7 @@ static void testClut(void)
                 bad += g != e;
             }
         }
-        CHECK(bad == 0, "case %d: PCSX2's entry i is memory entry rdtex_Csm1Index(i) (%d off)", c,
+        CHECK(bad == 0, "case %d: PCSX2's entry i is memory entry rdtex_csm1_index(i) (%d off)", c,
               bad);
         if (colors == 256) {
             CHECK(memcmp(buff + 4 * 8, buff + 4 * 16, 4) != 0, "case %d: not the identity", c);
@@ -566,12 +566,12 @@ static void testClut(void)
     s.psm = RDTEX_PSMT4, s.levels = 1;
     s.lv[0] = (TexpackLevel){5, 4, 32, 16, 2, pix};
     s.cpsm = RDTEX_PSMCT16, s.clutColors = 16, s.clut = c16;
-    CHECK(texpack_ComputeName(&s, 0, 1, 0, &nm) == 0 && nm.clutHash == xxh3_64(want, 64),
+    CHECK(texpack_compute_name(&s, 0, 1, 0, &nm) == 0 && nm.clutHash == xxh3_64(want, 64),
           "CT16 under 7F/AEM/81: 0x0000 transparent, 0x8000 TA1");
     for (int i = 0; i < 16; i++) {
         want[4 * i + 3] = 0x80;
     }
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &nm) == 0 && nm.clutHash == xxh3_64(want, 64),
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &nm) == 0 && nm.clutHash == xxh3_64(want, 64),
           "CT16 under 80/80: every entry 0x80, 0x0000 too");
     printf("clut: CT32 and CT16, 16 and 256 entries, against GSClut's path\n");
 }
@@ -596,9 +596,9 @@ static void testExpanded(void)
     }
     s.psm = RDTEX_PSMCT32, s.levels = 1;
     s.lv[0] = (TexpackLevel){2, 2, 4, 4, 1, px};
-    CHECK(texpack_HashBytes(&s, 0, 0, buf, sizeof(buf)) == 64 && memcmp(buf, px, 64) == 0,
+    CHECK(texpack_hash_bytes(&s, 0, 0, buf, sizeof(buf)) == 64 && memcmp(buf, px, 64) == 0,
           "CT32 4x4: 64 bytes, the texels in rows");
-    CHECK(texpack_ComputeName(&s, 0, 2, 0, nm) == 0 && nm[0].tex0Hash == xxh3_64(px, 64) &&
+    CHECK(texpack_compute_name(&s, 0, 2, 0, nm) == 0 && nm[0].tex0Hash == xxh3_64(px, 64) &&
               nm[0].bits == (0u | 2u << 6 | 2u << 10) && !nm[0].hasClut &&
               nm[0].texa == TEXPACK_TEXA_ANY,
           "CT32 4x4 name: the hash of the texels, no TEXA");
@@ -608,14 +608,14 @@ static void testExpanded(void)
     s.psm = RDTEX_PSMT8, s.levels = 1;
     s.lv[0] = (TexpackLevel){3, 3, 8, 8, 2, px};
     s.cpsm = RDTEX_PSMCT32, s.clutColors = 256, s.clut = clut;
-    CHECK(texpack_HashBytes(&s, 0, 0, buf, sizeof(buf)) == 64 && memcmp(buf, px, 64) == 0,
+    CHECK(texpack_hash_bytes(&s, 0, 0, buf, sizeof(buf)) == 64 && memcmp(buf, px, 64) == 0,
           "PSMT8 8x8: 64 index bytes");
 
     /* PSMT4 16x16 (below 32x16): one byte per index, low nibble first */
     s.psm = RDTEX_PSMT4;
     s.lv[0] = (TexpackLevel){4, 4, 16, 16, 2, px};
     s.clutColors = 16;
-    CHECK(texpack_HashBytes(&s, 0, 0, buf, sizeof(buf)) == 256 && buf[0] == (px[0] & 15) &&
+    CHECK(texpack_hash_bytes(&s, 0, 0, buf, sizeof(buf)) == 256 && buf[0] == (px[0] & 15) &&
               buf[1] == (px[0] >> 4) && buf[63] == (px[31] >> 4),
           "PSMT4 16x16: 256 index bytes");
 
@@ -629,7 +629,7 @@ static void testExpanded(void)
     px[2] = 0, px[3] = 0x80; /* 0x8000 */
     s.psm = RDTEX_PSMCT16, s.levels = 1;
     s.lv[0] = (TexpackLevel){4, 3, 16, 8, 1, px};
-    CHECK(texpack_HashBytes(&s, 0, 1, buf, sizeof(buf)) == 16 * 8 * 4, "CT16 16x8: RGBA32");
+    CHECK(texpack_hash_bytes(&s, 0, 1, buf, sizeof(buf)) == 16 * 8 * 4, "CT16 16x8: RGBA32");
     CHECK(buf[3] == 0 && buf[7] == 0x81 && buf[4] == 0 && buf[11] == ((px[5] & 0x80) ? 0x81 : 0x7F),
           "CT16 under 7F/AEM/81: 0x0000 transparent, 0x8000 TA1");
     {
@@ -638,7 +638,7 @@ static void testExpanded(void)
         CHECK(v == ((c & 0x1F) << 3 | (c & 0x3E0) << 6 | (c & 0x7C00) << 9),
               "CT16 colour bits in place: %06x from %04x", v, c);
     }
-    int n = texpack_Candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES);
+    int n = texpack_candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES);
     CHECK(n == 3, "CT16 16x8: three names, one per TEXA (%d)", n);
     if (n == 3) {
         CHECK(nm[0].tex0Hash != nm[1].tex0Hash && nm[1].tex0Hash != nm[2].tex0Hash &&
@@ -657,7 +657,7 @@ static void testExpanded(void)
     px[3] = 1;
     s.psm = RDTEX_PSMCT24, s.levels = 1;
     s.lv[0] = (TexpackLevel){1, 1, 2, 2, 1, px};
-    CHECK(texpack_HashBytes(&s, 0, 2, buf, sizeof(buf)) == 16 && buf[3] == 0 && buf[4] == 1 &&
+    CHECK(texpack_hash_bytes(&s, 0, 2, buf, sizeof(buf)) == 16 && buf[3] == 0 && buf[4] == 1 &&
               buf[7] == 0x80,
           "CT24 under AEM: black transparent, the rest TA0");
     printf("expanded: CT32, PSMT8, PSMT4, CT16, CT24\n");
@@ -690,7 +690,7 @@ static void testNames(void)
     s.lv[0] = (TexpackLevel){5, 5, 32, 32, 2, l0};
     s.lv[1] = (TexpackLevel){4, 4, 16, 16, 2, l1};
     s.cpsm = RDTEX_PSMCT32, s.clutColors = 256, s.clut = clut;
-    int n = texpack_Candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES);
+    int n = texpack_candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES);
     CHECK(n == 3, "two levels bound at 0: three names (%d)", n);
     if (n == 3) {
         CHECK(nm[0].startLevel == 0 && !nm[0].mipChain && nm[1].startLevel == 0 && nm[1].mipChain &&
@@ -703,42 +703,42 @@ static void testNames(void)
                   nm[2].bits == (19u | 4u << 6 | 4u << 10),
               "bits of the start level");
         CHECK(nm[0].clutHash == nm[2].clutHash, "the CLUT hash does not depend on the level");
-        size_t a = texpack_HashBytes(&s, 0, 0, bytes, sizeof(bytes));
-        size_t b = texpack_HashBytes(&s, 1, 0, bytes + a, sizeof(bytes) - a);
+        size_t a = texpack_hash_bytes(&s, 0, 0, bytes, sizeof(bytes));
+        size_t b = texpack_hash_bytes(&s, 1, 0, bytes + a, sizeof(bytes) - a);
         CHECK(a == 1024 && b == 256 && nm[1].tex0Hash == xxh3_64(bytes, a + b) &&
                   nm[0].tex0Hash == xxh3_64(bytes, a) && nm[2].tex0Hash == xxh3_64(bytes + a, b),
               "chain = the levels' bytes one after the other");
     }
-    n = texpack_Candidates(&s, 1, nm, TEXPACK_MAX_CANDIDATES);
+    n = texpack_candidates(&s, 1, nm, TEXPACK_MAX_CANDIDATES);
     CHECK(n == 1 && nm[0].startLevel == 1, "bound at 1: level 1 alone (%d)", n);
-    CHECK(texpack_Candidates(&s, 2, nm, TEXPACK_MAX_CANDIDATES) == -1, "bound past the levels");
-    CHECK(texpack_Candidates(&s, 0, nm, 2) == 2, "max caps the list");
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == 0 && !one.unstable, "full levels: stable");
+    CHECK(texpack_candidates(&s, 2, nm, TEXPACK_MAX_CANDIDATES) == -1, "bound past the levels");
+    CHECK(texpack_candidates(&s, 0, nm, 2) == 2, "max caps the list");
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == 0 && !one.unstable, "full levels: stable");
 
     /* a level smaller than its GS size: unstable */
     s.lv[0].w = 24;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == 0 && one.unstable, "24 of 32 wide: unstable");
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == 0 && one.unstable, "24 of 32 wide: unstable");
     s.lv[0].w = 32;
 
     /* refusals */
     s.cpsm = RDTEX_PSMCT24;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == -1 &&
-              texpack_Candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES) == -1,
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == -1 &&
+              texpack_candidates(&s, 0, nm, TEXPACK_MAX_CANDIDATES) == -1,
           "a 24-bit CLUT refused");
     s.cpsm = RDTEX_PSMCT32;
     s.clut = NULL;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == -1, "a palette format without a CLUT");
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == -1, "a palette format without a CLUT");
     s.clut = clut;
     s.levels = TEXPACK_MAX_LEVELS + 1;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == -1, "more than 7 levels refused");
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == -1, "more than 7 levels refused");
     s.levels = 2;
-    CHECK(texpack_ComputeName(&s, 2, 0, 0, &one) == -1, "a start level past the levels");
+    CHECK(texpack_compute_name(&s, 2, 0, 0, &one) == -1, "a start level past the levels");
     s.psm = RDTEX_PSMZ32;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == -1, "PSMZ32 refused");
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == -1, "PSMZ32 refused");
     s.psm = RDTEX_PSMT8;
     /* a 16-entry TIM2 CLUT under PSMT8: the rest is stale VRAM */
     s.clutColors = 16;
-    CHECK(texpack_ComputeName(&s, 0, 0, 0, &one) == 0 && one.unstable,
+    CHECK(texpack_compute_name(&s, 0, 0, 0, &one) == 0 && one.unstable,
           "PSMT8 with 16 CLUT entries: unstable");
     printf("names: candidates, unstable, refusals\n");
 }
@@ -752,45 +752,45 @@ static void testText(void)
     memset(&n, 0, sizeof(n));
     n.tex0Hash = 0x0e997f3381dbc55eull, n.clutHash = 0x6050a3a10f92b8beull, n.bits = 0x1994;
     n.hasClut = 1;
-    CHECK(texpack_FormatName(&n, buf, sizeof(buf)) == 41 &&
+    CHECK(texpack_format_name(&n, buf, sizeof(buf)) == 41 &&
               strcmp(buf, "e997f3381dbc55e-6050a3a10f92b8be-00001994") == 0,
           "CLUT name, the hashes not zero-padded: %s", buf);
     n.hasClut = 0, n.tex0Hash = 0, n.bits = 0x2214;
-    CHECK(texpack_FormatName(&n, buf, sizeof(buf)) == 10 && strcmp(buf, "0-00002214") == 0,
+    CHECK(texpack_format_name(&n, buf, sizeof(buf)) == 10 && strcmp(buf, "0-00002214") == 0,
           "direct name: %s", buf);
     n.tex0Hash = UINT64_MAX, n.clutHash = UINT64_MAX, n.bits = UINT32_MAX, n.hasClut = 1;
-    CHECK(texpack_FormatName(&n, buf, sizeof(buf)) == 42, "the longest name: 42 characters");
-    CHECK(texpack_FormatName(&n, buf, 42) == -1, "no room for the terminator");
+    CHECK(texpack_format_name(&n, buf, sizeof(buf)) == 42, "the longest name: 42 characters");
+    CHECK(texpack_format_name(&n, buf, 42) == -1, "no room for the terminator");
 
     /* parse: the reference pack's names, round trips */
-    CHECK(texpack_ParseName("e997f3381dbc55e-6050a3a10f92b8be-00001994.dds", &p) == 0 &&
+    CHECK(texpack_parse_name("e997f3381dbc55e-6050a3a10f92b8be-00001994.dds", &p) == 0 &&
               p.tex0Hash == 0x0e997f3381dbc55eull && p.clutHash == 0x6050a3a10f92b8beull &&
               p.bits == 0x1994 && p.hasClut && p.regionW == 0,
           "a pack name parses");
-    CHECK(texpack_ParseName("af85949420f0ab2f-3e511c50f1b988b4-00006214.png", &p) == 0 &&
+    CHECK(texpack_parse_name("af85949420f0ab2f-3e511c50f1b988b4-00006214.png", &p) == 0 &&
               p.bits == 0x2214,
           "bit 14 (the old TCC) is cleared: %08x", p.bits);
-    CHECK(texpack_ParseName("8e193980afae08a-00001994.png", &p) == 0 && !p.hasClut &&
+    CHECK(texpack_parse_name("8e193980afae08a-00001994.png", &p) == 0 && !p.hasClut &&
               p.tex0Hash == 0x8e193980afae08aull && p.bits == 0x1994,
           "a direct name parses");
-    CHECK(texpack_ParseName("ad352332a6da418d-713c8f992e57439b-000026530.dds", &p) == -1,
+    CHECK(texpack_parse_name("ad352332a6da418d-713c8f992e57439b-000026530.dds", &p) == -1,
           "the pack's nine-digit bits name is not a name");
-    CHECK(texpack_ParseName("5a351caf28440929-563e6763219b0a0-00001dd3 - copia.dds", &p) == -1,
+    CHECK(texpack_parse_name("5a351caf28440929-563e6763219b0a0-00001dd3 - copia.dds", &p) == -1,
           "the pack's ' - copia' copy is not a name");
-    CHECK(texpack_ParseName("e997f3381dbc55e-6050a3a10f92b8be-00001994-mip1.dds", &p) == -1,
+    CHECK(texpack_parse_name("e997f3381dbc55e-6050a3a10f92b8be-00001994-mip1.dds", &p) == -1,
           "a -mip1 level file is not indexed");
-    CHECK(texpack_ParseName("e997f3381dbc55e-6050a3a10f92b8be-00001994", &p) == -1,
+    CHECK(texpack_parse_name("e997f3381dbc55e-6050a3a10f92b8be-00001994", &p) == -1,
           "no extension: no name");
-    CHECK(texpack_ParseName("Instructions.txt", &p) == -1, "a text file");
-    CHECK(texpack_ParseName("e997f3381dbc55e-6050a3a10f92b8be-r128x64-00001994.png", &p) == 1 &&
+    CHECK(texpack_parse_name("Instructions.txt", &p) == -1, "a text file");
+    CHECK(texpack_parse_name("e997f3381dbc55e-6050a3a10f92b8be-r128x64-00001994.png", &p) == 1 &&
               p.regionW == 128 && p.regionH == 64 && p.hasClut && p.bits == 0x1994,
           "a region name: 1, its size");
-    CHECK(texpack_ParseName("e997f3381dbc55e-r16x8-00000002.png", &p) == 1 && !p.hasClut &&
+    CHECK(texpack_parse_name("e997f3381dbc55e-r16x8-00000002.png", &p) == 1 && !p.hasClut &&
               p.regionW == 16 && p.regionH == 8,
           "a direct region name");
     /* the old form: SourceRegion bits, min/max X in the low 32, Y above */
-    CHECK(texpack_ParseName("e997f3381dbc55e-6050a3a10f92b8be-r00300010000a0002-00001994.png",
-                            &p) == 1 &&
+    CHECK(texpack_parse_name("e997f3381dbc55e-6050a3a10f92b8be-r00300010000a0002-00001994.png",
+                             &p) == 1 &&
               p.regionW == 0x0a - 0x02 && p.regionH == 0x30 - 0x10,
           "an old region name: %ux%u", p.regionW, p.regionH);
     for (int i = 0; i < 4; i++) {
@@ -800,9 +800,9 @@ static void testText(void)
         n.clutHash = i & 1 ? 0xfedcba9876543210ull >> i : 0;
         n.hasClut = (uint8_t)(i & 1);
         n.bits = 0x13u | (uint32_t)i << 6 | 0x80u << 24;
-        CHECK(texpack_FormatName(&n, file, TEXPACK_NAME_MAX) > 0, "round trip %d formats", i);
+        CHECK(texpack_format_name(&n, file, TEXPACK_NAME_MAX) > 0, "round trip %d formats", i);
         strcat(file, ".png");
-        CHECK(texpack_ParseName(file, &p) == 0 && p.tex0Hash == n.tex0Hash &&
+        CHECK(texpack_parse_name(file, &p) == 0 && p.tex0Hash == n.tex0Hash &&
                   p.clutHash == n.clutHash && p.bits == n.bits && p.hasClut == n.hasClut,
               "round trip %d: %s", i, file);
     }

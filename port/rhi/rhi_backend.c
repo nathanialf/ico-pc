@@ -1,5 +1,5 @@
 /* rhi_backend.c: the rhi.h entry points, forwarded to the backend
- * rhi_CreateBackend selected (rhi_backend.h describes the scheme).
+ * rhi_create_backend selected (rhi_backend.h describes the scheme).
  *
  * The backends linked into the build are listed by ICO_RHI_HAVE_VK and
  * ICO_RHI_HAVE_D3D12 (port/rhi/CMakeLists.txt), Vulkan first, so it is the
@@ -19,7 +19,7 @@ static const RhiBackendTable *const s_backends[] = {
     NULL};
 
 static const RhiBackendTable *s_sel;
-static bool s_up; /* rhi_Init succeeded and rhi_Shutdown has not run */
+static bool s_up; /* rhi_init succeeded and rhi_shutdown has not run */
 
 static bool nameEq(const char *a, const char *b)
 {
@@ -63,10 +63,10 @@ static const RhiBackendTable *defaultBackend(void)
     return t ? t : s_backends[0];
 }
 
-bool rhi_CreateBackend(const char *name)
+bool rhi_create_backend(const char *name)
 {
     if (s_up) {
-        fprintf(stderr, "rhi: rhi_CreateBackend(%s) while a device is up\n", name ? name : "");
+        fprintf(stderr, "rhi: rhi_create_backend(%s) while a device is up\n", name ? name : "");
         return false;
     }
     const RhiBackendTable *t = (name && *name) ? find(name) : defaultBackend();
@@ -79,7 +79,7 @@ bool rhi_CreateBackend(const char *name)
     return true;
 }
 
-const char *rhi_BackendName(uint32_t index)
+const char *rhi_backend_name(uint32_t index)
 {
     for (uint32_t i = 0; s_backends[i]; i++) {
         if (i == index) {
@@ -102,355 +102,355 @@ static const RhiBackendTable *be(void)
 }
 
 /* ------------------------------------------------------------- forwarders */
-bool rhi_Init(const RhiDeviceDesc *desc)
+bool rhi_init(const RhiDeviceDesc *desc)
 {
     if (s_up) {
         return true;
     }
-    s_up = be()->Init(desc);
+    s_up = be()->init(desc);
     return s_up;
 }
 
-void rhi_Shutdown(void)
+void rhi_shutdown(void)
 {
-    be()->Shutdown();
+    be()->shutdown();
     s_up = false;
 }
 
-RhiBackendKind rhi_Backend(void)
+RhiBackendKind rhi_backend(void)
 {
-    return be()->Backend();
+    return be()->backend();
 }
 
-const RhiLimits *rhi_Limits(void)
+const RhiLimits *rhi_limits(void)
 {
-    return be()->Limits();
+    return be()->limits();
 }
 
-const char *rhi_AdapterName(void)
+const char *rhi_adapter_name(void)
 {
-    return be()->AdapterName();
+    return be()->adapter_name();
 }
 
-bool rhi_DeviceLost(void)
+bool rhi_device_lost(void)
 {
-    return s_up && be()->DeviceLost();
+    return s_up && be()->device_lost();
 }
 
-bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
 {
-    return be()->ResizeSwapchain(width, height, vsync);
+    return be()->resize_swapchain(width, height, vsync);
 }
 
-RhiFormat rhi_SwapchainFormat(void)
+RhiFormat rhi_swapchain_format(void)
 {
-    return be()->SwapchainFormat();
+    return be()->swapchain_format();
 }
 
-bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
 {
-    return be()->SwapchainSize(w, h);
+    return be()->swapchain_size(w, h);
 }
 
-void rhi_SurfacePollRestart(void)
+void rhi_surface_poll_restart(void)
 {
-    be()->SurfacePollRestart();
+    be()->surface_poll_restart();
 }
 
-RhiTexture rhi_AcquireBackbuffer(void)
+RhiTexture rhi_acquire_backbuffer(void)
 {
-    return be()->AcquireBackbuffer();
+    return be()->acquire_backbuffer();
 }
 
-void rhi_Present(void)
+void rhi_present(void)
 {
-    be()->Present();
+    be()->present();
 }
 
-void rhi_ReleaseSurface(void)
+void rhi_release_surface(void)
 {
-    be()->ReleaseSurface();
+    be()->release_surface();
 }
 
-bool rhi_RecreateSurface(void *window)
+bool rhi_recreate_surface(void *window)
 {
-    return be()->RecreateSurface(window);
+    return be()->recreate_surface(window);
 }
 
-RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
+RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
 {
-    return be()->CreateBuffer(desc);
+    return be()->create_buffer(desc);
 }
 
-void rhi_DestroyBuffer(RhiBuffer b)
+void rhi_destroy_buffer(RhiBuffer b)
 {
-    be()->DestroyBuffer(b);
+    be()->destroy_buffer(b);
 }
 
-void *rhi_MapBuffer(RhiBuffer b)
+void *rhi_map_buffer(RhiBuffer b)
 {
-    return be()->MapBuffer(b);
+    return be()->map_buffer(b);
 }
 
-void rhi_UnmapBuffer(RhiBuffer b)
+void rhi_unmap_buffer(RhiBuffer b)
 {
-    be()->UnmapBuffer(b);
+    be()->unmap_buffer(b);
 }
 
-RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
+RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
-    return be()->CreateTexture(desc);
+    return be()->create_texture(desc);
 }
 
-void rhi_DestroyTexture(RhiTexture t)
+void rhi_destroy_texture(RhiTexture t)
 {
-    be()->DestroyTexture(t);
+    be()->destroy_texture(t);
 }
 
-RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
+RhiSampler rhi_create_sampler(const RhiSamplerDesc *desc)
 {
-    return be()->CreateSampler(desc);
+    return be()->create_sampler(desc);
 }
 
-void rhi_DestroySampler(RhiSampler s)
+void rhi_destroy_sampler(RhiSampler s)
 {
-    be()->DestroySampler(s);
+    be()->destroy_sampler(s);
 }
 
-RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
+RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
-    return be()->CreateShader(desc);
+    return be()->create_shader(desc);
 }
 
-void rhi_DestroyShader(RhiShader s)
+void rhi_destroy_shader(RhiShader s)
 {
-    be()->DestroyShader(s);
+    be()->destroy_shader(s);
 }
 
-RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
+RhiBindGroupLayout rhi_create_bind_group_layout(const RhiBindGroupLayoutDesc *desc)
 {
-    return be()->CreateBindGroupLayout(desc);
+    return be()->create_bind_group_layout(desc);
 }
 
-void rhi_DestroyBindGroupLayout(RhiBindGroupLayout l)
+void rhi_destroy_bind_group_layout(RhiBindGroupLayout l)
 {
-    be()->DestroyBindGroupLayout(l);
+    be()->destroy_bind_group_layout(l);
 }
 
-RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
+RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 {
-    return be()->CreateBindGroup(desc);
+    return be()->create_bind_group(desc);
 }
 
-RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *desc)
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc)
 {
-    return be()->CreatePipeline(desc);
+    return be()->create_pipeline(desc);
 }
 
-void rhi_DestroyPipeline(RhiPipeline p)
+void rhi_destroy_pipeline(RhiPipeline p)
 {
-    be()->DestroyPipeline(p);
+    be()->destroy_pipeline(p);
 }
 
-RhiCommandList rhi_BeginCommands(void)
+RhiCommandList rhi_begin_commands(void)
 {
-    return be()->BeginCommands();
+    return be()->begin_commands();
 }
 
-void rhi_EndCommands(RhiCommandList cl)
+void rhi_end_commands(RhiCommandList cl)
 {
-    be()->EndCommands(cl);
+    be()->end_commands(cl);
 }
 
-void rhi_Submit(RhiCommandList cl)
+void rhi_submit(RhiCommandList cl)
 {
-    be()->Submit(cl);
+    be()->submit(cl);
 }
 
-void rhi_WaitFrame(void)
+void rhi_wait_frame(void)
 {
-    be()->WaitFrame();
+    be()->wait_frame();
 }
 
-uint32_t rhi_FrameSlot(void)
+uint32_t rhi_frame_slot(void)
 {
-    return be()->FrameSlot();
+    return be()->frame_slot();
 }
 
-void rhi_WaitIdle(void)
+void rhi_wait_idle(void)
 {
-    be()->WaitIdle();
+    be()->wait_idle();
 }
 
-void rhi_CmdBarrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
+void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
 {
-    be()->CmdBarrier(cl, barriers, count);
+    be()->cmd_barrier(cl, barriers, count);
 }
 
-void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
+void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
-    be()->CmdBeginRenderPass(cl, pass);
+    be()->cmd_begin_render_pass(cl, pass);
 }
 
-void rhi_CmdEndRenderPass(RhiCommandList cl)
+void rhi_cmd_end_render_pass(RhiCommandList cl)
 {
-    be()->CmdEndRenderPass(cl);
+    be()->cmd_end_render_pass(cl);
 }
 
-void rhi_CmdSetViewport(RhiCommandList cl, const RhiViewport *vp)
+void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *vp)
 {
-    be()->CmdSetViewport(cl, vp);
+    be()->cmd_set_viewport(cl, vp);
 }
 
-void rhi_CmdSetScissor(RhiCommandList cl, const RhiRect *rect)
+void rhi_cmd_set_scissor(RhiCommandList cl, const RhiRect *rect)
 {
-    be()->CmdSetScissor(cl, rect);
+    be()->cmd_set_scissor(cl, rect);
 }
 
-void rhi_CmdSetPipeline(RhiCommandList cl, RhiPipeline p)
+void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
 {
-    be()->CmdSetPipeline(cl, p);
+    be()->cmd_set_pipeline(cl, p);
 }
 
-void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
+void rhi_cmd_set_bind_group(RhiCommandList cl, uint32_t group, RhiBindGroup bg)
 {
-    be()->CmdSetBindGroup(cl, group, bg);
+    be()->cmd_set_bind_group(cl, group, bg);
 }
 
-void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
-                                const uint32_t *offsets, uint32_t count)
+void rhi_cmd_set_bind_group_offsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
+                                    const uint32_t *offsets, uint32_t count)
 {
-    be()->CmdSetBindGroupOffsets(cl, group, bg, offsets, count);
+    be()->cmd_set_bind_group_offsets(cl, group, bg, offsets, count);
 }
 
-void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset)
+void rhi_cmd_set_vertex_buffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset)
 {
-    be()->CmdSetVertexBuffer(cl, binding, b, offset);
+    be()->cmd_set_vertex_buffer(cl, binding, b, offset);
 }
 
-void rhi_CmdSetIndexBuffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32)
+void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, bool u32)
 {
-    be()->CmdSetIndexBuffer(cl, b, offset, u32);
+    be()->cmd_set_index_buffer(cl, b, offset, u32);
 }
 
-void rhi_CmdSetStencilRef(RhiCommandList cl, uint8_t ref)
+void rhi_cmd_set_stencil_ref(RhiCommandList cl, uint8_t ref)
 {
-    be()->CmdSetStencilRef(cl, ref);
+    be()->cmd_set_stencil_ref(cl, ref);
 }
 
-void rhi_CmdSetBlendConstant(RhiCommandList cl, const float rgba[4])
+void rhi_cmd_set_blend_constant(RhiCommandList cl, const float rgba[4])
 {
-    be()->CmdSetBlendConstant(cl, rgba);
+    be()->cmd_set_blend_constant(cl, rgba);
 }
 
-void rhi_CmdDraw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
-                 uint32_t instanceCount)
+void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
+                  uint32_t instanceCount)
 {
-    be()->CmdDraw(cl, vertexCount, firstVertex, instanceCount);
+    be()->cmd_draw(cl, vertexCount, firstVertex, instanceCount);
 }
 
-void rhi_CmdDrawIndexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
-                        int32_t vertexOffset, uint32_t instanceCount)
+void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
+                          int32_t vertexOffset, uint32_t instanceCount)
 {
-    be()->CmdDrawIndexed(cl, indexCount, firstIndex, vertexOffset, instanceCount);
+    be()->cmd_draw_indexed(cl, indexCount, firstIndex, vertexOffset, instanceCount);
 }
 
-void rhi_CmdCopyBuffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
-                       uint64_t dstOffset, uint64_t size)
+void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, RhiBuffer dst,
+                         uint64_t dstOffset, uint64_t size)
 {
-    be()->CmdCopyBuffer(cl, src, srcOffset, dst, dstOffset, size);
+    be()->cmd_copy_buffer(cl, src, srcOffset, dst, dstOffset, size);
 }
 
-void rhi_CmdCopyBufferToTexture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
-                                uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region)
+void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset,
+                                    uint32_t rowPitch, RhiTexture dst, uint32_t mip, RhiRect region)
 {
-    be()->CmdCopyBufferToTexture(cl, src, srcOffset, rowPitch, dst, mip, region);
+    be()->cmd_copy_buffer_to_texture(cl, src, srcOffset, rowPitch, dst, mip, region);
 }
 
-void rhi_CmdCopyTexture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
-                        int32_t dstX, int32_t dstY)
+void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
+                          int32_t dstX, int32_t dstY)
 {
-    be()->CmdCopyTexture(cl, src, srcRegion, dst, dstX, dstY);
+    be()->cmd_copy_texture(cl, src, srcRegion, dst, dstX, dstY);
 }
 
-void rhi_CmdCopyTextureToBuffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
-                                RhiRect region, RhiBuffer dst, uint64_t dstOffset,
-                                uint32_t rowPitch)
+void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
+                                    RhiRect region, RhiBuffer dst, uint64_t dstOffset,
+                                    uint32_t rowPitch)
 {
-    be()->CmdCopyTextureToBuffer(cl, src, aspect, region, dst, dstOffset, rowPitch);
+    be()->cmd_copy_texture_to_buffer(cl, src, aspect, region, dst, dstOffset, rowPitch);
 }
 
-void rhi_CmdBeginLabel(RhiCommandList cl, const char *name)
+void rhi_cmd_begin_label(RhiCommandList cl, const char *name)
 {
-    be()->CmdBeginLabel(cl, name);
+    be()->cmd_begin_label(cl, name);
 }
 
-void rhi_CmdEndLabel(RhiCommandList cl)
+void rhi_cmd_end_label(RhiCommandList cl)
 {
-    be()->CmdEndLabel(cl);
+    be()->cmd_end_label(cl);
 }
 
-bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
-                         uint32_t *outRowPitch)
+bool rhi_readback_texture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t dstSize,
+                          uint32_t *outRowPitch)
 {
-    return be()->ReadbackTexture(t, aspect, dst, dstSize, outRowPitch);
+    return be()->readback_texture(t, aspect, dst, dstSize, outRowPitch);
 }
 
-void rhi_GetStats(RhiStats *out)
+void rhi_get_stats(RhiStats *out)
 {
-    be()->GetStats(out);
+    be()->get_stats(out);
 }
 
-bool rhi_TimestampsSupported(void)
+bool rhi_timestamps_supported(void)
 {
-    return be()->TimestampsSupported();
+    return be()->timestamps_supported();
 }
 
-void rhi_CmdWriteTimestamp(RhiCommandList cl, uint32_t index)
+void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 {
-    be()->CmdWriteTimestamp(cl, index);
+    be()->cmd_write_timestamp(cl, index);
 }
 
-uint32_t rhi_ReadTimestamps(uint64_t *ns, uint32_t max)
+uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
 {
-    return be()->ReadTimestamps(ns, max);
+    return be()->read_timestamps(ns, max);
 }
 
-void rhi_PreferMailbox(bool on)
+void rhi_prefer_mailbox(bool on)
 {
-    be()->PreferMailbox(on);
+    be()->prefer_mailbox(on);
 }
 
-bool rhi_PresentMailbox(void)
+bool rhi_present_mailbox(void)
 {
-    return be()->PresentMailbox();
+    return be()->present_mailbox();
 }
 
-const char *rhi_PresentModeName(void)
+const char *rhi_present_mode_name(void)
 {
-    return be()->PresentModeName();
+    return be()->present_mode_name();
 }
 
-void rhi_SetPipelineCachePath(const char *path)
+void rhi_set_pipeline_cache_path(const char *path)
 {
-    be()->SetPipelineCachePath(path);
+    be()->set_pipeline_cache_path(path);
 }
 
-void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
-    be()->SetVulkanLoader(getInstanceProcAddr);
+    be()->set_vulkan_loader(getInstanceProcAddr);
 }
 
 /* The injector and the overlay, from the backend that
- * rhi_Init brought up */
-const char *rhi_InjectorName(void)
+ * rhi_init brought up */
+const char *rhi_injector_name(void)
 {
-    return s_up ? be()->InjectorName() : NULL;
+    return s_up ? be()->injector_name() : NULL;
 }
 
-const char *rhi_OverlayName(void)
+const char *rhi_overlay_name(void)
 {
-    return s_up ? be()->OverlayName() : NULL;
+    return s_up ? be()->overlay_name() : NULL;
 }
 
 /* ------------------------------------------------ the layer classifiers
@@ -513,13 +513,13 @@ static const RhiKnownLayer *knownLayer(const char *layer)
     return NULL;
 }
 
-const char *rhi_InjectorFromLayerName(const char *layer)
+const char *rhi_injector_from_layer_name(const char *layer)
 {
     const RhiKnownLayer *k = knownLayer(layer);
     return k && !k->overlay ? k->program : NULL;
 }
 
-const char *rhi_OverlayFromLayerName(const char *layer)
+const char *rhi_overlay_from_layer_name(const char *layer)
 {
     const RhiKnownLayer *k = knownLayer(layer);
     return k && k->overlay ? k->program : NULL;
@@ -543,7 +543,7 @@ static bool listNames(const char *list, const char *layer, bool isExplicit)
     return false;
 }
 
-bool rhi_LayerSwitchedOn(const char *layer, const char *(*env)(const char *name))
+bool rhi_layer_switched_on(const char *layer, const char *(*env)(const char *name))
 {
     const RhiKnownLayer *k = knownLayer(layer);
     if (!k || !env) {

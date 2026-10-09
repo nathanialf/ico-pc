@@ -8,11 +8,11 @@
 #define VKR_H(x) ((uint64_t)(x))
 
 /* ------------------------------------------------------ the pipeline cache
- * rhi_SetPipelineCachePath (rhi.h).  Kept across rhi_Init, which clears
+ * rhi_set_pipeline_cache_path (rhi.h).  Kept across rhi_init, which clears
  * g_vkr. */
 static char s_cachePath[1024];
 
-void rhi_SetPipelineCachePath(const char *path)
+void rhi_set_pipeline_cache_path(const char *path)
 {
     s_cachePath[0] = '\0';
     if (path && strlen(path) + 5 < sizeof(s_cachePath)) {
@@ -22,7 +22,7 @@ void rhi_SetPipelineCachePath(const char *path)
 
 /* the file's blob when its header (VkPipelineCacheHeaderVersionOne: header
  * size, version, vendor id, device id, UUID) names this device; NULL else */
-static void *vkr_CacheLoad(size_t *size)
+static void *vkr_cache_load(size_t *size)
 {
     *size = 0;
     FILE *fp = s_cachePath[0] ? fopen(s_cachePath, "rb") : NULL;
@@ -59,10 +59,10 @@ static void *vkr_CacheLoad(size_t *size)
     return blob;
 }
 
-void vkr_PipelineCacheInit(void)
+void vkr_pipeline_cache_init(void)
 {
     size_t size = 0;
-    void *blob = vkr_CacheLoad(&size);
+    void *blob = vkr_cache_load(&size);
     VkPipelineCacheCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
         .initialDataSize = size,
@@ -84,7 +84,7 @@ void vkr_PipelineCacheInit(void)
     free(blob);
 }
 
-void vkr_PipelineCacheShutdown(void)
+void vkr_pipeline_cache_shutdown(void)
 {
     if (!g_vkr.pipelineCache) {
         return;
@@ -121,7 +121,7 @@ void vkr_PipelineCacheShutdown(void)
     g_vkr.pipelineCache = VK_NULL_HANDLE;
 }
 
-static VkShaderStageFlags vkr_Stages(uint32_t rhiStages)
+static VkShaderStageFlags vkr_stages(uint32_t rhiStages)
 {
     VkShaderStageFlags f = 0;
     if (rhiStages & (1u << RHI_STAGE_VERTEX)) {
@@ -134,14 +134,14 @@ static VkShaderStageFlags vkr_Stages(uint32_t rhiStages)
 }
 
 /* ----------------------------------------------------- bind group layouts */
-RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
+RhiBindGroupLayout rhi_create_bind_group_layout(const RhiBindGroupLayoutDesc *desc)
 {
     RhiBindGroupLayout out = {0};
     if (!desc || desc->slotCount > 16) {
         return out;
     }
     VkrLayout *l = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.layouts, (void **)&l);
+    uint32_t id = vkr_pool_alloc(&g_vkr.layouts, (void **)&l);
     if (!id) {
         return out;
     }
@@ -149,14 +149,14 @@ RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
     for (uint32_t i = 0; i < desc->slotCount; i++) {
         const RhiBindSlot *s = &desc->slots[i];
         if (s->type >= RHI_BIND_COUNT) {
-            vkr_PoolRelease(&g_vkr.layouts, id);
+            vkr_pool_release(&g_vkr.layouts, id);
             return out;
         }
         b[i] = (VkDescriptorSetLayoutBinding){
             .binding = s->slot + vkr_bindTypeMap[s->type].shift,
             .descriptorType = vkr_bindTypeMap[s->type].vk,
             .descriptorCount = 1,
-            .stageFlags = vkr_Stages(s->stages),
+            .stageFlags = vkr_stages(s->stages),
         };
         l->slots[i] = *s;
         if (s->type == RHI_BIND_UNIFORM_BUFFER_DYNAMIC) {
@@ -166,7 +166,7 @@ RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
     if (l->dynamicCount > RHI_MAX_DYNAMIC_OFFSETS) {
         VKR_LOG("bind group layout %s: %u dynamic uniforms (at most %d)",
                 desc->debugName ? desc->debugName : "?", l->dynamicCount, RHI_MAX_DYNAMIC_OFFSETS);
-        vkr_PoolRelease(&g_vkr.layouts, id);
+        vkr_pool_release(&g_vkr.layouts, id);
         return out;
     }
     l->slotCount = desc->slotCount;
@@ -176,29 +176,29 @@ RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
         .pBindings = b,
     };
     if (!VKR_CHECK(vkCreateDescriptorSetLayout(g_vkr.device, &ci, NULL, &l->layout))) {
-        vkr_PoolRelease(&g_vkr.layouts, id);
+        vkr_pool_release(&g_vkr.layouts, id);
         return out;
     }
     out.id = id;
     return out;
 }
 
-void rhi_DestroyBindGroupLayout(RhiBindGroupLayout h)
+void rhi_destroy_bind_group_layout(RhiBindGroupLayout h)
 {
-    VkrLayout *l = vkr_PoolGet(&g_vkr.layouts, h.id);
+    VkrLayout *l = vkr_pool_get(&g_vkr.layouts, h.id);
     if (!l) {
         return;
     }
-    vkr_Defer(VKR_GARBAGE_SET_LAYOUT, VKR_H(l->layout));
-    vkr_PoolRelease(&g_vkr.layouts, h.id);
+    vkr_defer(VKR_GARBAGE_SET_LAYOUT, VKR_H(l->layout));
+    vkr_pool_release(&g_vkr.layouts, h.id);
 }
 
 /* ---------------------------------------------------- transient bind groups
  * Allocated from the frame slot's descriptor pools, which are reset as a
- * whole when the slot is reused (rhi_WaitFrame).  The handle id is
+ * whole when the slot is reused (rhi_wait_frame).  The handle id is
  * (frame tag << 20) | (index + 1); a handle from another frame fails the
  * lookup. */
-static bool vkr_NewDescriptorPool(VkrFrame *f)
+static bool vkr_new_descriptor_pool(VkrFrame *f)
 {
     if (f->descPoolCount == VKR_DESC_POOLS_MAX) {
         VKR_LOG("descriptor pools exhausted for this frame");
@@ -226,44 +226,44 @@ static bool vkr_NewDescriptorPool(VkrFrame *f)
     return true;
 }
 
-static uint32_t vkr_FrameTag(void)
+static uint32_t vkr_frame_tag(void)
 {
     return (uint32_t)(g_vkr.frameIndex & VKR_GEN_MASK);
 }
 
-VkDescriptorSet vkr_GetBindGroup(RhiBindGroup bg)
+VkDescriptorSet vkr_get_bind_group(RhiBindGroup bg)
 {
-    VkrFrame *f = vkr_CurFrame();
+    VkrFrame *f = vkr_cur_frame();
     uint32_t idx = bg.id & VKR_INDEX_MASK;
-    if (idx == 0 || idx > f->setCount || (bg.id >> VKR_GEN_SHIFT) != vkr_FrameTag()) {
+    if (idx == 0 || idx > f->setCount || (bg.id >> VKR_GEN_SHIFT) != vkr_frame_tag()) {
         return VK_NULL_HANDLE;
     }
     return f->sets[idx - 1];
 }
 
-uint32_t vkr_BindGroupDynamicCount(RhiBindGroup bg)
+uint32_t vkr_bind_group_dynamic_count(RhiBindGroup bg)
 {
-    VkrFrame *f = vkr_CurFrame();
+    VkrFrame *f = vkr_cur_frame();
     uint32_t idx = bg.id & VKR_INDEX_MASK;
-    if (idx == 0 || idx > f->setCount || (bg.id >> VKR_GEN_SHIFT) != vkr_FrameTag()) {
+    if (idx == 0 || idx > f->setCount || (bg.id >> VKR_GEN_SHIFT) != vkr_frame_tag()) {
         return 0;
     }
     return f->setDynamic[idx - 1];
 }
 
-static VkImageLayout vkr_SampledLayout(const VkrTexture *t)
+static VkImageLayout vkr_sampled_layout(const VkrTexture *t)
 {
-    return vkr_StateLayout(RHI_STATE_SHADER_READ, t->rhiFormat);
+    return vkr_state_layout(RHI_STATE_SHADER_READ, t->rhiFormat);
 }
 
-RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
+RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 {
     RhiBindGroup out = {0};
-    VkrLayout *l = desc ? vkr_PoolGet(&g_vkr.layouts, desc->layout.id) : NULL;
+    VkrLayout *l = desc ? vkr_pool_get(&g_vkr.layouts, desc->layout.id) : NULL;
     if (!l || desc->bindingCount > 16) {
         return out;
     }
-    VkrFrame *f = vkr_CurFrame();
+    VkrFrame *f = vkr_cur_frame();
     if (f->setCount == f->setCap) {
         uint32_t cap = f->setCap ? f->setCap * 2u : 1024u;
         VkDescriptorSet *s = realloc(f->sets, cap * sizeof(*s));
@@ -281,7 +281,7 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
     if (f->setCount >= VKR_INDEX_MASK) {
         return out;
     }
-    if (f->descPoolCount == 0 && !vkr_NewDescriptorPool(f)) {
+    if (f->descPoolCount == 0 && !vkr_new_descriptor_pool(f)) {
         return out;
     }
     VkDescriptorSet set = VK_NULL_HANDLE;
@@ -302,7 +302,7 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
         }
         if (f->descPoolCur + 1 < f->descPoolCount) {
             f->descPoolCur++;
-        } else if (vkr_NewDescriptorPool(f)) {
+        } else if (vkr_new_descriptor_pool(f)) {
             f->descPoolCur = f->descPoolCount - 1;
         } else {
             return out;
@@ -329,7 +329,7 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
         case RHI_BIND_UNIFORM_BUFFER:
         case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
         case RHI_BIND_STORAGE_BUFFER: {
-            VkrBuffer *buf = vkr_GetBuffer(b->buffer);
+            VkrBuffer *buf = vkr_get_buffer(b->buffer);
             if (!buf) {
                 VKR_LOG("bind group: slot %u: invalid buffer", b->slot);
                 continue;
@@ -345,19 +345,19 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
             break;
         }
         case RHI_BIND_SAMPLED_TEXTURE: {
-            VkrTexture *t = vkr_GetTexture(b->texture);
+            VkrTexture *t = vkr_get_texture(b->texture);
             if (!t) {
                 VKR_LOG("bind group: slot %u: invalid texture", b->slot);
                 continue;
             }
             VkImageView v =
                 (b->aspect == RHI_ASPECT_DEPTH && t->depthView) ? t->depthView : t->view;
-            ii[n] = (VkDescriptorImageInfo){VK_NULL_HANDLE, v, vkr_SampledLayout(t)};
+            ii[n] = (VkDescriptorImageInfo){VK_NULL_HANDLE, v, vkr_sampled_layout(t)};
             w[n].pImageInfo = &ii[n];
             break;
         }
         case RHI_BIND_SAMPLER: {
-            VkSampler *s = vkr_PoolGet(&g_vkr.samplers, b->sampler.id);
+            VkSampler *s = vkr_pool_get(&g_vkr.samplers, b->sampler.id);
             if (!s) {
                 VKR_LOG("bind group: slot %u: invalid sampler", b->slot);
                 continue;
@@ -377,12 +377,12 @@ RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
     f->setDynamic[f->setCount] = (uint8_t)l->dynamicCount;
     f->sets[f->setCount++] = set;
     g_vkr.stats.bindGroups++;
-    out.id = (vkr_FrameTag() << VKR_GEN_SHIFT) | f->setCount;
+    out.id = (vkr_frame_tag() << VKR_GEN_SHIFT) | f->setCount;
     return out;
 }
 
 /* -------------------------------------------------------------- pipelines */
-static VkPipelineColorBlendAttachmentState vkr_Blend(const RhiBlendState *b, RhiFormat fmt)
+static VkPipelineColorBlendAttachmentState vkr_blend(const RhiBlendState *b, RhiFormat fmt)
 {
     VkPipelineColorBlendAttachmentState s = {0};
     s.colorWriteMask = (VkColorComponentFlags)(b->writeMask & 0xFu);
@@ -404,7 +404,7 @@ static VkPipelineColorBlendAttachmentState vkr_Blend(const RhiBlendState *b, Rhi
     return s;
 }
 
-static VkStencilOpState vkr_Stencil(const RhiStencilFace *f, const RhiDepthStencilState *ds)
+static VkStencilOpState vkr_stencil(const RhiStencilFace *f, const RhiDepthStencilState *ds)
 {
     VkStencilOpState s = {
         .failOp = vkr_stencilOpMap[f->fail].vk,
@@ -413,12 +413,12 @@ static VkStencilOpState vkr_Stencil(const RhiStencilFace *f, const RhiDepthStenc
         .compareOp = vkr_compareMap[f->compare].vk,
         .compareMask = ds->stencilReadMask,
         .writeMask = ds->stencilWriteMask,
-        .reference = 0, /* dynamic: rhi_CmdSetStencilRef */
+        .reference = 0, /* dynamic: rhi_cmd_set_stencil_ref */
     };
     return s;
 }
 
-static bool vkr_ValidPipelineDesc(const RhiPipelineDesc *d)
+static bool vkr_valid_pipeline_desc(const RhiPipelineDesc *d)
 {
     if (d->topology >= RHI_TOPO_COUNT || d->colorCount > RHI_MAX_COLOR_TARGETS ||
         d->depthFormat >= RHI_FMT_COUNT || d->vertexAttrCount > RHI_MAX_VERTEX_ATTRS ||
@@ -457,7 +457,7 @@ static bool vkr_ValidPipelineDesc(const RhiPipelineDesc *d)
  * failed create (its draws are skipped, rd_pipeline.c) rather than invalid
  * use of the driver.  The renderer needs 3 sets, 4 dynamic uniforms and at
  * most 2 sampled images and 1 sampler a stage. */
-static bool vkr_PipelineFits(const RhiPipelineDesc *d)
+static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
     const char *name = d->debugName ? d->debugName : "?";
@@ -471,9 +471,9 @@ static bool vkr_PipelineFits(const RhiPipelineDesc *d)
         return false;
     }
     for (uint32_t i = 0; i < d->layoutCount; i++) {
-        const VkrLayout *ly = vkr_PoolGet(&g_vkr.layouts, d->layouts[i].id);
+        const VkrLayout *ly = vkr_pool_get(&g_vkr.layouts, d->layouts[i].id);
         if (!ly) {
-            continue; /* rhi_CreatePipeline reports it */
+            continue; /* rhi_create_pipeline reports it */
         }
         for (uint32_t j = 0; j < ly->slotCount; j++) {
             const RhiBindSlot *b = &ly->slots[j];
@@ -572,24 +572,24 @@ static bool vkr_PipelineFits(const RhiPipelineDesc *d)
     return true;
 }
 
-RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
 {
     RhiPipeline out = {0};
-    if (!d || !vkr_ValidPipelineDesc(d)) {
+    if (!d || !vkr_valid_pipeline_desc(d)) {
         VKR_LOG("pipeline %s: invalid description", d && d->debugName ? d->debugName : "?");
         return out;
     }
-    if (!vkr_PipelineFits(d)) {
+    if (!vkr_pipeline_fits(d)) {
         return out;
     }
-    VkrShader *vs = vkr_PoolGet(&g_vkr.shaders, d->vertex.id);
-    VkrShader *fs = vkr_PoolGet(&g_vkr.shaders, d->fragment.id);
+    VkrShader *vs = vkr_pool_get(&g_vkr.shaders, d->vertex.id);
+    VkrShader *fs = vkr_pool_get(&g_vkr.shaders, d->fragment.id);
     if (!vs) {
         VKR_LOG("pipeline %s: no vertex shader", d->debugName ? d->debugName : "?");
         return out;
     }
     VkrPipeline *p = NULL;
-    uint32_t id = vkr_PoolAlloc(&g_vkr.pipelines, (void **)&p);
+    uint32_t id = vkr_pool_alloc(&g_vkr.pipelines, (void **)&p);
     if (!id) {
         return out;
     }
@@ -597,11 +597,11 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     /* pipeline layout: group i is descriptor set i */
     VkDescriptorSetLayout sets[RHI_MAX_BIND_SLOTS];
     for (uint32_t i = 0; i < d->layoutCount; i++) {
-        VkrLayout *l = vkr_PoolGet(&g_vkr.layouts, d->layouts[i].id);
+        VkrLayout *l = vkr_pool_get(&g_vkr.layouts, d->layouts[i].id);
         if (!l) {
             VKR_LOG("pipeline %s: invalid bind group layout %u", d->debugName ? d->debugName : "?",
                     i);
-            vkr_PoolRelease(&g_vkr.pipelines, id);
+            vkr_pool_release(&g_vkr.pipelines, id);
             return out;
         }
         sets[i] = l->layout;
@@ -612,7 +612,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         .pSetLayouts = sets,
     };
     if (!VKR_CHECK(vkCreatePipelineLayout(g_vkr.device, &lci, NULL, &p->layout))) {
-        vkr_PoolRelease(&g_vkr.pipelines, id);
+        vkr_pool_release(&g_vkr.pipelines, id);
         return out;
     }
     p->layoutCount = d->layoutCount;
@@ -683,16 +683,16 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         .depthWriteEnable = (dss->depthTest && dss->depthWrite) ? VK_TRUE : VK_FALSE,
         .depthCompareOp = vkr_compareMap[dss->depthCompare].vk,
         .stencilTestEnable = dss->stencilTest ? VK_TRUE : VK_FALSE,
-        .front = vkr_Stencil(&dss->front, dss),
-        .back = vkr_Stencil(&dss->back, dss),
+        .front = vkr_stencil(&dss->front, dss),
+        .back = vkr_stencil(&dss->back, dss),
         .minDepthBounds = 0.0f,
         .maxDepthBounds = 1.0f,
     };
     VkPipelineColorBlendAttachmentState cba[RHI_MAX_COLOR_TARGETS];
     VkFormat colorFormats[RHI_MAX_COLOR_TARGETS];
     for (uint32_t i = 0; i < d->colorCount; i++) {
-        cba[i] = vkr_Blend(&d->blend[i], d->colorFormats[i]);
-        colorFormats[i] = vkr_VkFormat(d->colorFormats[i]);
+        cba[i] = vkr_blend(&d->blend[i], d->colorFormats[i]);
+        colorFormats[i] = vkr_vk_format(d->colorFormats[i]);
     }
     VkPipelineColorBlendStateCreateInfo cb = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -707,7 +707,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         .dynamicStateCount = (uint32_t)(sizeof(dyn) / sizeof(dyn[0])),
         .pDynamicStates = dyn,
     };
-    VkFormat depthFmt = vkr_VkFormat(d->depthFormat);
+    VkFormat depthFmt = vkr_vk_format(d->depthFormat);
     VkPipelineRenderingCreateInfo ri = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = d->colorCount,
@@ -734,7 +734,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     if (!VKR_CHECK(vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &ci, NULL,
                                              &p->pipeline))) {
         vkDestroyPipelineLayout(g_vkr.device, p->layout, NULL);
-        vkr_PoolRelease(&g_vkr.pipelines, id);
+        vkr_pool_release(&g_vkr.pipelines, id);
         return out;
     }
     if (g_vkr.debugUtils && d->debugName && vkSetDebugUtilsObjectNameEXT) {
@@ -750,13 +750,13 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     return out;
 }
 
-void rhi_DestroyPipeline(RhiPipeline h)
+void rhi_destroy_pipeline(RhiPipeline h)
 {
-    VkrPipeline *p = vkr_PoolGet(&g_vkr.pipelines, h.id);
+    VkrPipeline *p = vkr_pool_get(&g_vkr.pipelines, h.id);
     if (!p) {
         return;
     }
-    vkr_Defer(VKR_GARBAGE_PIPELINE, VKR_H(p->pipeline));
-    vkr_Defer(VKR_GARBAGE_PIPELINE_LAYOUT, VKR_H(p->layout));
-    vkr_PoolRelease(&g_vkr.pipelines, h.id);
+    vkr_defer(VKR_GARBAGE_PIPELINE, VKR_H(p->pipeline));
+    vkr_defer(VKR_GARBAGE_PIPELINE_LAYOUT, VKR_H(p->layout));
+    vkr_pool_release(&g_vkr.pipelines, h.id);
 }

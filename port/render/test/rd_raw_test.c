@@ -18,7 +18,7 @@
  *   lines     Draw2DLine (flat, Z given or the vertices'), Draw2DLineG
  *             (Gouraud), the segment pair, DrawLine / DrawLineG through
  *             _getLine against a double-precision projection; PRIM.AA1:
- *             0x18A and 0x189 draw under rd_AA1(1), 0x142
+ *             0x18A and 0x189 draw under rd_aa1(1), 0x142
  *             under 0, and the packet's end returns it to 0; the
  *             particles' PRIM 0xD6 (a sprite) records no RDC_AA1
  *   dark      SetupDarkVolume and DispGameOverEffect: packet 1 hand-decoded,
@@ -50,7 +50,7 @@
  *   lightning one bolt with c = 4 (LERP As) and one with c = 5 (Cs As + Cd)
  *             over a grey SCENE against a CPU raster of the recorded
  *             triangles with the GS integer blend: 1 LSB a layer
- *   particle  particleEffect's batch against vu1_ref's sprites (vu1ref_Particle
+ *   particle  particleEffect's batch against vu1_ref's sprites (vu1ref_particle
  *             on the batch the frame drew) rasterised on the CPU with the
  *             GS blend: 1 LSB a layer
  *   lines     flat and Gouraud lines: the colour of every pixel drawn within
@@ -382,7 +382,7 @@ static void makeTexture(void)
     for (int i = 0; i < 16 * 16; i++) {
         memcpy(&px[i * 4], kTexel, 4);
     }
-    s_tex = rd_CreateTexture(16, 16, px, RD_TEXA_80_80, "rd_raw_test texture");
+    s_tex = rd_create_texture(16, 16, px, RD_TEXA_80_80, "rd_raw_test texture");
 }
 
 /* --------------------------------------------------------- the scene
@@ -444,7 +444,7 @@ static void setCommon(void)
 {
     RdVuCommon b;
     memcpy(&b, s_common, sizeof(b));
-    rd_SetVuCommon(&b);
+    rd_set_vu_common(&b);
 }
 
 /* ---------------------------------------------------------- the frame
@@ -477,10 +477,10 @@ static void walkCb(void *user, int list, uint32_t index, const RdCmd *cmd,
 
 static void collect(void)
 {
-    s_frame = rd__LastFrame();
+    s_frame = rd__last_frame();
     RdStateBlock s = s_frame->startState;
     s_nev = 0;
-    rd__Walk(s_frame, s_frame->keep, &s, walkCb, NULL);
+    rd__walk(s_frame, s_frame->keep, &s, walkCb, NULL);
 }
 
 static const RdScreenVtx *vtxOf(const RdCmd *c)
@@ -569,8 +569,8 @@ static void recordParticles(int alphaMode, int enemy, const uint8_t *bg)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(6);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
     s_pktStart = PacketBufferStruct.ptr.c;
     if (enemy) {
         /* enemy.c:312-322: its own packet code */
@@ -612,7 +612,7 @@ static void checkParticleRecording(void)
             if (s_ev[i].cmd->type == RDC_PARTICLES) {
                 seen++;
                 ok += s_ev[i].list == 6 && s_ev[i].st.ds.pabe == 0 &&
-                      rd__AlphaRegister(s_ev[i].st.ds.blend) == kAlpha[mode] &&
+                      rd__alpha_register(s_ev[i].st.ds.blend) == kAlpha[mode] &&
                       s_ev[i].st.ds.abe == 1;
             }
         }
@@ -630,7 +630,7 @@ static void checkParticleRecording(void)
     int ok = 0;
     for (int i = 0; i < s_nev; i++) {
         ok += s_ev[i].cmd->type == RDC_PARTICLES &&
-              rd__AlphaRegister(s_ev[i].st.ds.blend) == 0x44 && s_ev[i].st.ds.pabe == 0;
+              rd__alpha_register(s_ev[i].st.ds.blend) == 0x44 && s_ev[i].st.ds.pabe == 0;
     }
     CHECK(ok == 1, "enemy.c: gif_SetAlpha(1, 4, 128) then prim_DispParticle: ALPHA 0x44 (%d)", ok);
 }
@@ -648,8 +648,8 @@ static void recordLightning(int c, float seed, const uint8_t *bg, float x0, floa
     };
     dl_Clear();
     dl_SetDLPriority(6);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
     s_pktStart = PacketBufferStruct.ptr.c;
     DrawLightning2(3, v, &col, 15.0f, 25.0f, 2.0f, 4.0f, 5.0f, 20.0f, 10.0f, 8.0f, 20.0f, seed, c);
     dl_Swap();
@@ -724,7 +724,7 @@ static void checkLightningRecording(void)
         for (int i = 0; i < s_nev; i++) {
             if (s_ev[i].cmd->type == RDC_SCREEN && s_ev[i].list == 6) {
                 tris += (int)s_ev[i].cmd->u[1] / 3;
-                alphaOk &= rd__AlphaRegister(s_ev[i].st.ds.blend) == alphaReg(mode) &&
+                alphaOk &= rd__alpha_register(s_ev[i].st.ds.blend) == alphaReg(mode) &&
                            s_ev[i].st.ds.blendFix == 128 && s_ev[i].st.ds.abe == 1 &&
                            s_ev[i].st.ds.zwrite == RD_ZWRITE_OFF && s_ev[i].st.ds.texEnabled;
             }
@@ -800,8 +800,8 @@ static void recordLines(const uint8_t *bg)
 {
     dl_Clear();
     dl_SetDLPriority(2);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
     gif_StartPacketPri(2);
     gif_SetAlpha(1, 2, 128); /* LERP FIX 0x80: the colour itself */
     /* window pixel (px, py) at 12.4 (0x7000 + 16 px) */
@@ -902,10 +902,10 @@ static void checkLineRecording(void)
 static void sceneWall(const uint8_t *bg, const uint8_t *wall, uint32_t zWall, uint32_t zBg)
 {
     dl_SetDLPriority(0);
-    /* the flip's FRAME write (FBMSK 0), as rd_FrameHead records it */
-    rd_ColorMask(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, zBg);
+    /* the flip's FRAME write (FBMSK 0), as rd_frame_head records it */
+    rd_color_mask(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, zBg);
     gif_StartPacketPri(0);
     gif_SetGsReg(0x47, 0x30000);    /* Z ALWAYS */
     gif_SetGsReg(0x4E, 0x300000C0); /* Z write */
@@ -979,7 +979,7 @@ static void checkDarkRecording(void)
     CHECK(w32(c, 0) == 0x10000012u, "dark packet 1: cnt 18 (%08x)", w32(c, 0));
 
     collect();
-    const uint32_t scene = rd_Target(RD_TARGET_SCENE).id, aa0 = rd_Target(RD_TARGET_AA0).id;
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id, aa0 = rd_target(RD_TARGET_AA0).id;
     int phase = 0, clearInBlock = 0, wrapTris = 0, wrapOk = 1, compOk = 0, aa0Used = 0;
     s_block = 0;
     for (int i = 0; i < s_nev; i++) {
@@ -993,7 +993,7 @@ static void checkDarkRecording(void)
         }
         if (phase == 0) {
             /* the clear sprite: into the block, which is scene-sized */
-            const RdTargetRec *t = rd__TargetRec(e->st.color);
+            const RdTargetRec *t = rd__target_rec(e->st.color);
             clearInBlock = e->cmd->b[0] == RD_PRIM_SPRITES && e->st.color != scene && t &&
                            t->w == W && t->h == H && e->st.ds.test.ztst == RD_ZTST_ALWAYS &&
                            !e->st.ds.abe;
@@ -1002,16 +1002,16 @@ static void checkDarkRecording(void)
         } else if (phase == 1 && e->st.color == s_block) {
             wrapTris += (int)e->cmd->u[1] / 3;
             wrapOk &= e->st.depth == scene && e->st.ds.colclamp == 0 && e->st.ds.abe &&
-                      rd__AlphaRegister(e->st.ds.blend) == 0x68 && e->st.ds.blendFix == 0x80 &&
+                      rd__alpha_register(e->st.ds.blend) == 0x68 && e->st.ds.blendFix == 0x80 &&
                       e->st.ds.test.ztst == RD_ZTST_GEQUAL && e->st.ds.zwrite == RD_ZWRITE_OFF &&
-                      !e->st.gouraud && rd__WrapApplies(&e->st);
+                      !e->st.gouraud && rd__wrap_applies(&e->st);
         } else if (e->st.color == scene) {
-            const RdTexRec *tr = rd__TexRec(e->st.tex);
+            const RdTexRec *tr = rd__tex_rec(e->st.tex);
             compOk = e->cmd->b[0] == RD_PRIM_SPRITES && e->st.ds.fbmsk == 0xFF000000u &&
                      (e->st.ds.colorMask & 8) == 0 && tr && tr->kind == RD_TEXKIND_TARGET &&
                      tr->target == s_block && tr->view == RD_VIEW_RGB24_TA0 &&
                      e->st.ds.texa == RD_TEXA_80_80_AEM && e->st.ds.colclamp == 1 &&
-                     rd__AlphaRegister(e->st.ds.blend) == 0x44;
+                     rd__alpha_register(e->st.ds.blend) == 0x44;
             phase = 2;
         }
     }
@@ -1047,14 +1047,14 @@ static void checkDarkRecording(void)
         if (e->list != 10 || e->cmd->type != RDC_SCREEN) {
             continue;
         }
-        const RdTexRec *tr = rd__TexRec(e->st.tex);
+        const RdTexRec *tr = rd__tex_rec(e->st.tex);
         if (e->st.ds.test.ate && e->st.ds.test.atst == RD_ATST_NEVER &&
             e->st.ds.test.afail == RD_AFAIL_RGB_ONLY && e->st.color == scene && tr &&
             tr->kind == RD_TEXKIND_TARGET && tr->target == scene) {
             rgbOnly++;
         }
-        blocks += e->st.color != scene && rd__TargetRec(e->st.color) &&
-                  rd__TargetRec(e->st.color)->w == W;
+        blocks += e->st.color != scene && rd__target_rec(e->st.color) &&
+                  rd__target_rec(e->st.color)->w == W;
     }
     CHECK(rgbOnly == 1, "sonic: one TEST 0x33001 (RGB_ONLY) sprite reading SCENE (%d)", rgbOnly);
     CHECK(blocks > 0, "sonic: the block target again");
@@ -1121,7 +1121,7 @@ static uint8_t s_mask[W * H], s_layers[W * H];
 static int readTarget(uint32_t id, uint8_t *dst)
 {
     uint32_t w = 0, h = 0;
-    return rd__ReadTarget((RdTarget){id}, dst, W * H * 4, &w, &h) && w == W && h == H;
+    return rd__read_target((RdTarget){id}, dst, W * H * 4, &w, &h) && w == W && h == H;
 }
 
 /* the dark volume's count, on the CPU */
@@ -1240,7 +1240,7 @@ static void gpuDark(void)
           vMid, vIn);
 
     /* SCENE after the composite */
-    CHECK(readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu), "dark: SCENE readback");
+    CHECK(readTarget(rd_target(RD_TARGET_SCENE).id, s_gpu), "dark: SCENE readback");
     int badRd = 0, maxRd = 0, maxGs = 0, diffGs = 0, alphaBad = 0, cmp = 0;
     for (int y = 1; y < H; y++) {
         for (int x = 1; x < W; x++) {
@@ -1309,7 +1309,7 @@ static void gpuSonic(void)
     s_zb = (double)SO_ZBG;
     /* sonic's spheres are the COLCLAMP 0 commands before the first draw into
        SCENE in list 10, the dark volume's those after */
-    const uint32_t scene = rd_Target(RD_TARGET_SCENE).id;
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
     int group = 0;
     memset(s_cnt, 0, sizeof(s_cnt));
     memset(s_mask, 0, sizeof(s_mask));
@@ -1508,7 +1508,7 @@ static void gpuLightning(int c)
             }
         }
     }
-    CHECK(readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu), "lightning: SCENE readback");
+    CHECK(readTarget(rd_target(RD_TARGET_SCENE).id, s_gpu), "lightning: SCENE readback");
     char what[64];
     snprintf(what, sizeof(what), "lightning c = %d", c);
     compareLayers(what, 500);
@@ -1530,11 +1530,11 @@ static void gpuParticles(int alphaMode, int enemy)
     float m[8][4];
     memcpy(m[0], matrixptr + 0x100, 64);
     memcpy(m[4], matrixptr + 0xC0, 64);
-    vu1ref_Init(&r);
-    vu1ref_LoadCommon(&r, (const float (*)[4])s_common);
-    vu1ref_ParticleSetMatrix(&r, (const float (*)[4])m);
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4])s_common);
+    vu1ref_particle_set_matrix(&r, (const float (*)[4])m);
     static VuParticleOut out;
-    vu1ref_Particle(&r, (const float (*)[4])buf, (uint32_t)g->prim->objSize - 1, &out);
+    vu1ref_particle(&r, (const float (*)[4])buf, (uint32_t)g->prim->objSize - 1, &out);
     const int mode = enemy ? 4 : kMode[alphaMode];
     for (int i = 0; i < W * H; i++) {
         memcpy(&s_ref[i * 4], bg, 4);
@@ -1570,7 +1570,7 @@ static void gpuParticles(int alphaMode, int enemy)
         }
     }
     CHECK(out.count >= n / 2, "particles: the reference draws %d of %d", out.count, n);
-    CHECK(readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu), "particles: SCENE readback");
+    CHECK(readTarget(rd_target(RD_TARGET_SCENE).id, s_gpu), "particles: SCENE readback");
     char what[64];
     snprintf(what, sizeof(what), enemy ? "particles (enemy.c, mode 4)" : "particles alphaMode %d",
              alphaMode);
@@ -1581,7 +1581,7 @@ static void gpuLines(void)
 {
     static const uint8_t bg[4] = {10, 10, 10, 0x80};
     recordLines(bg);
-    CHECK(readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu), "lines: SCENE readback");
+    CHECK(readTarget(rd_target(RD_TARGET_SCENE).id, s_gpu), "lines: SCENE readback");
 
     /* row 100 (x 40..300, flat A), column 60 (y 140..400, flat B), row 200
        (x 100..420, Gouraud A to B), row 300 (x 120..380, flat B: the
@@ -1624,7 +1624,7 @@ static void gpuLines(void)
 /* ------------------------------------------------- FBMSK's extent
  * darkVolume.c's composite writes FRAME PSMCT24 (FBMSK 0xFF000000); on the
  * GS that mask holds until the next FRAME write.  rd records FBMSK
- * 0 with every FRAME write of its own (rd_FrameHead, the rd_Post passes),
+ * 0 with every FRAME write of its own (rd_frame_head, the rd_post passes),
  * and the dark volume leaves the mask in force.  Five 16 x 16 sprites into
  * SCENE (RGB and alpha their own):
  *   frame 1  the wall, the dark volume, A in list 10 after it (masked), the
@@ -1654,12 +1654,12 @@ static void maskSprite(int i)
     memcpy(v[0].rgba, kMaskCol[i], 4);
     memcpy(v[1].rgba, kMaskCol[i], 4);
     gif_HostFlush();
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_FBA(0);
-    rd_TextureOff();
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_fba(0);
+    rd_texture_off();
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
 }
 
 static void recordMaskFrame(int n)
@@ -1675,9 +1675,9 @@ static void recordMaskFrame(int n)
             RdPostParams pp;
             memset(&pp, 0, sizeof(pp));
             pp.lines = 1;
-            rd_Post(RD_POST_AA_DOWNSAMPLE, &pp);
+            rd_post(RD_POST_AA_DOWNSAMPLE, &pp);
             memset(&pp, 0, sizeof(pp));
-            rd_Post(RD_POST_AA_COMPOSITE, &pp); /* levels 0: the FRAME writes alone */
+            rd_post(RD_POST_AA_COMPOSITE, &pp); /* levels 0: the FRAME writes alone */
             maskSprite(1);
         }
     } else {
@@ -1687,7 +1687,7 @@ static void recordMaskFrame(int n)
         memset(&h, 0, sizeof(h));
         h.gsW = W;
         h.gsH = H;
-        rd_FrameHead(&h);
+        rd_frame_head(&h);
         dl_SetDLPriority(0);
         maskSprite(4);
     }
@@ -1704,7 +1704,7 @@ static void maskOf(int mask[5])
     }
     for (int k = 0; k < s_nev; k++) {
         const Ev *e = &s_ev[k];
-        if (e->cmd->type != RDC_SCREEN || e->st.color != rd_Target(RD_TARGET_SCENE).id) {
+        if (e->cmd->type != RDC_SCREEN || e->st.color != rd_target(RD_TARGET_SCENE).id) {
             continue;
         }
         const RdScreenVtx *v = vtxOf(e->cmd);
@@ -1745,13 +1745,13 @@ static void gpuMask(void)
     for (int n = 1; n <= 3; n++) {
         InitGameOverEffect();
         /* SCENE as the frame found it (frame 3 does not clear) */
-        if (!readTarget(rd_Target(RD_TARGET_SCENE).id, before)) {
+        if (!readTarget(rd_target(RD_TARGET_SCENE).id, before)) {
             CHECK(0, "mask: SCENE readback");
             return;
         }
         recordMaskFrame(n);
-        rhi_WaitIdle();
-        if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_gpu)) {
+        rhi_wait_idle();
+        if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_gpu)) {
             CHECK(0, "mask: SCENE readback");
             return;
         }
@@ -1789,10 +1789,10 @@ static void setup(void)
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     printf("rd_raw_test\n");
-    if (!rd__InitRecordOnly(W, H)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(W, H)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -1805,7 +1805,7 @@ int main(void)
     checkDarkRecording();
     checkMaskRecording();
     CHECK(gif_HostUndecodedTotal() == 0, "%u GS writes undecoded", gif_HostUndecodedTotal());
-    rd_Shutdown();
+    rd_shutdown();
     printf("  recording checks: %s\n", failures ? "FAILED" : "ok");
     if (failures) {
         printf("rd_raw_test: %d failures\n", failures);
@@ -1815,7 +1815,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("rd_raw_test: recording ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -1832,11 +1832,11 @@ int main(void)
     gpuParticles(2, 0);
     gpuParticles(0, 1);
     gpuLines();
-    printf("  wrap pipelines: %u\n", rd__WrapPipelineCount());
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    printf("  wrap pipelines: %u\n", rd__wrap_pipeline_count());
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
     if (failures) {
         printf("rd_raw_test: %d failures\n", failures);
         return 1;

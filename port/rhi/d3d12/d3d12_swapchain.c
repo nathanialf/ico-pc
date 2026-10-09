@@ -10,16 +10,16 @@
 
 #define DX_SWAP_BUFFERS 3u
 
-static void dx_ReleaseSwapBuffers(void)
+static void dx_release_swap_buffers(void)
 {
     for (uint32_t i = 0; i < g_dx.swapCount; i++) {
-        dx_ReleaseSwapchainBuffer(g_dx.swapTextures[i]);
+        dx_release_swapchain_buffer(g_dx.swapTextures[i]);
         g_dx.swapTextures[i] = 0;
     }
     g_dx.swapCount = 0;
 }
 
-static bool dx_RegisterSwapBuffers(uint32_t w, uint32_t h)
+static bool dx_register_swap_buffers(uint32_t w, uint32_t h)
 {
     for (uint32_t i = 0; i < DX_SWAP_BUFFERS; i++) {
         ID3D12Resource *res = NULL;
@@ -27,7 +27,7 @@ static bool dx_RegisterSwapBuffers(uint32_t w, uint32_t h)
                 IDXGISwapChain3_GetBuffer(g_dx.swapchain, i, &IID_ID3D12Resource, (void **)&res))) {
             return false;
         }
-        g_dx.swapTextures[i] = dx_RegisterSwapchainBuffer(res, w, h);
+        g_dx.swapTextures[i] = dx_register_swapchain_buffer(res, w, h);
         if (!g_dx.swapTextures[i]) {
             ID3D12Resource_Release(res);
             return false;
@@ -40,18 +40,18 @@ static bool dx_RegisterSwapBuffers(uint32_t w, uint32_t h)
     return true;
 }
 
-void dx_SwapchainDestroy(void)
+void dx_swapchain_destroy(void)
 {
-    dx_ReleaseSwapBuffers();
+    dx_release_swap_buffers();
     DX_RELEASE(g_dx.swapchain);
 }
 
-static UINT dx_SwapFlags(void)
+static UINT dx_swap_flags(void)
 {
     return g_dx.tearing ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u;
 }
 
-bool dx_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
+bool dx_swapchain_create(uint32_t w, uint32_t h, bool vsync)
 {
     if (!g_dx.hwnd || w == 0 || h == 0) {
         return false;
@@ -79,7 +79,7 @@ bool dx_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     d.Scaling = DXGI_SCALING_STRETCH;
     d.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     d.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-    d.Flags = dx_SwapFlags();
+    d.Flags = dx_swap_flags();
     IDXGISwapChain1 *sc1 = NULL;
     if (!DX_CHECK(IDXGIFactory4_CreateSwapChainForHwnd(g_dx.factory, (IUnknown *)g_dx.queue,
                                                        g_dx.hwnd, &d, NULL, NULL, &sc1))) {
@@ -94,10 +94,10 @@ bool dx_SwapchainCreate(uint32_t w, uint32_t h, bool vsync)
     /* SDL owns fullscreen (F11); no DXGI Alt+Enter */
     IDXGIFactory4_MakeWindowAssociation(g_dx.factory, g_dx.hwnd, DXGI_MWA_NO_ALT_ENTER);
     g_dx.vsync = vsync;
-    return dx_RegisterSwapBuffers(w, h);
+    return dx_register_swap_buffers(w, h);
 }
 
-bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
+bool rhi_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
 {
     if (!g_dx.swapchain) {
         return false;
@@ -105,22 +105,22 @@ bool rhi_ResizeSwapchain(uint32_t width, uint32_t height, bool vsync)
     if (width == 0 || height == 0) {
         return false; /* minimised: the caller retries on the next resize */
     }
-    rhi_WaitIdle();
-    dx_ReleaseSwapBuffers();
+    rhi_wait_idle();
+    dx_release_swap_buffers();
     if (!DX_CHECK(IDXGISwapChain3_ResizeBuffers(g_dx.swapchain, DX_SWAP_BUFFERS, width, height,
-                                                DXGI_FORMAT_B8G8R8A8_UNORM, dx_SwapFlags()))) {
+                                                DXGI_FORMAT_B8G8R8A8_UNORM, dx_swap_flags()))) {
         return false;
     }
     g_dx.vsync = vsync;
-    return dx_RegisterSwapBuffers(width, height);
+    return dx_register_swap_buffers(width, height);
 }
 
-RhiFormat rhi_SwapchainFormat(void)
+RhiFormat rhi_swapchain_format(void)
 {
     return g_dx.swapchain ? RHI_FMT_BGRA8_UNORM : RHI_FMT_UNKNOWN;
 }
 
-bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
+bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
 {
     if (!g_dx.swapchain || g_dx.swapCount == 0 || !g_dx.swapWidth || !g_dx.swapHeight) {
         return false;
@@ -130,12 +130,12 @@ bool rhi_SwapchainSize(uint32_t *w, uint32_t *h)
     return true;
 }
 
-void rhi_SurfacePollRestart(void)
+void rhi_surface_poll_restart(void)
 {
     /* D3D12 learns a size change from DXGI; nothing to poll */
 }
 
-RhiTexture rhi_AcquireBackbuffer(void)
+RhiTexture rhi_acquire_backbuffer(void)
 {
     RhiTexture out = {0};
     if (!g_dx.swapchain || g_dx.swapCount == 0) {
@@ -149,7 +149,7 @@ RhiTexture rhi_AcquireBackbuffer(void)
         /* rhi.h: the acquired buffer starts UNDEFINED; on D3D12 it is in
          * PRESENT (COMMON) after the previous present */
         RhiTexture h = {g_dx.swapTextures[g_dx.swapIndex]};
-        DxTexture *t = dx_GetTexture(h);
+        DxTexture *t = dx_get_texture(h);
         if (t) {
             t->state = D3DP_STATE_PRESENT;
         }
@@ -159,9 +159,9 @@ RhiTexture rhi_AcquireBackbuffer(void)
     return out;
 }
 
-/* rhi.h: what rhi_Present's sync interval and flags amount to, in the
+/* rhi.h: what rhi_present's sync interval and flags amount to, in the
  * Vulkan backend's words */
-const char *rhi_PresentModeName(void)
+const char *rhi_present_mode_name(void)
 {
     if (!g_dx.swapchain) {
         return "none";
@@ -172,7 +172,7 @@ const char *rhi_PresentModeName(void)
     return g_dx.tearing ? "immediate" : "mailbox";
 }
 
-void rhi_Present(void)
+void rhi_present(void)
 {
     if (!g_dx.swapchain || !g_dx.swapAcquired) {
         return;
@@ -186,7 +186,7 @@ void rhi_Present(void)
     g_dx.swapAcquired = false;
     if (FAILED(hr)) {
         /* DXGI_ERROR_DEVICE_REMOVED / _RESET / _HUNG mark the device lost
-         * here (dx_Check); the window loop ends the session */
+         * here (dx_check); the window loop ends the session */
         DX_CHECK(hr);
         return;
     }
@@ -199,16 +199,16 @@ void rhi_Present(void)
     }
 #endif
     if (w > 0 && h > 0 && ((uint32_t)w != g_dx.swapWidth || (uint32_t)h != g_dx.swapHeight)) {
-        rhi_ResizeSwapchain((uint32_t)w, (uint32_t)h, g_dx.vsync);
+        rhi_resize_swapchain((uint32_t)w, (uint32_t)h, g_dx.vsync);
     }
 }
 
 /* rhi.h: the Android lifecycle's surface calls.  A DXGI
  * swapchain stays on its window for the window's life, so there is nothing
  * to release; recreate reports whether the swapchain is there. */
-void rhi_ReleaseSurface(void) {}
+void rhi_release_surface(void) {}
 
-bool rhi_RecreateSurface(void *window)
+bool rhi_recreate_surface(void *window)
 {
     (void)window;
     return g_dx.swapchain != NULL;

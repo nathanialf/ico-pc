@@ -57,8 +57,8 @@ static bool chunk(FILE *fp, const char *type, const uint8_t *data, uint32_t len)
            fwrite(tail, 1, 4, fp) == 4;
 }
 
-bool rd_WritePng(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
-                 int withAlpha)
+bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
+                  int withAlpha)
 {
     /* PNG caps the image's sides and a chunk's length at 2^31 - 1 */
     if (!path || !rgba || !w || !h || w > 0x7FFFFFFFu || h > 0x7FFFFFFFu ||

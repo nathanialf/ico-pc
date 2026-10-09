@@ -33,16 +33,16 @@ extern "C" {
    outW, outH and box), from the presentation's top layer (ui_host.c),
    which is laid out on the output with or without the CRT filter.  Until
    the first call the pointer hits nothing. */
-void ui_MouseSetView(int outW, int outH, int boxX, int boxY, int boxW, int boxH);
+void ui_mouse_set_view(int outW, int outH, int boxX, int boxY, int boxW, int boxH);
 /* Once a Main tick, after the pad is read and before the layouts run
    (common/src/main.c): takes the pointer's tick (pointer.h) and acts on
    it, adding the click's and the wheel's buttons to pad[0].flags. */
-void ui_MouseTick(void);
+void ui_mouse_tick(void);
 /* Whether a menu the pointer works in is up and the pointer is not hidden
    by a key or pad press: the window shows the system pointer then. */
-int ui_MouseMenuActive(void);
+int ui_mouse_menu_active(void);
 /* Back to the start: no view, nothing hidden or queued (tests). */
-void ui_MouseReset(void);
+void ui_mouse_reset(void);
 
 #ifdef __cplusplus
 }

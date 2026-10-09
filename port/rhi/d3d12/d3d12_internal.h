@@ -44,7 +44,7 @@ typedef struct DxTexture {
     uint32_t dsv;        /* DSV heap slot + 1 (writable) */
     uint32_t dsvRO;      /* DSV heap slot + 1 (read-only depth and stencil) */
     uint32_t state;      /* tracked D3D12 state, in recording order */
-    uint64_t copySerial; /* d3dp_CopyNeedsSync mark */
+    uint64_t copySerial; /* d3dp_copy_needs_sync mark */
     bool swapchain;
 } DxTexture;
 
@@ -144,7 +144,7 @@ typedef struct DxFrame {
 
 /* Deferred releases that found their frame's garbage list unable to grow
  * (out of memory): kept with the frame slot that deferred them and released
- * with that slot's own garbage (dx_DestroyGarbage). */
+ * with that slot's own garbage (dx_destroy_garbage). */
 #define DX_GARBAGE_OVERFLOW 256
 
 typedef struct DxGarbageOverflow {
@@ -171,8 +171,8 @@ typedef struct DxState {
     ID3D12InfoQueue *info; /* debug layer present */
     uint32_t debugErrors;
     bool debugLayer;
-    /* the device was removed, reset or hung (dx_Check): reason logged once,
-     * submits and presents are skipped, rhi_DeviceLost reports it */
+    /* the device was removed, reset or hung (dx_check): reason logged once,
+     * submits and presents are skipped, rhi_device_lost reports it */
     bool deviceLost;
     uint32_t lostFailures; /* failures after the loss, not logged */
 
@@ -223,7 +223,7 @@ extern DxState g_dx;
         fprintf(stderr, "rhi_d3d12: " __VA_ARGS__);                                                \
         fputc('\n', stderr);                                                                       \
     } while (0)
-#define DX_CHECK(expr) dx_Check((expr), #expr, __FILE__, __LINE__)
+#define DX_CHECK(expr) dx_check((expr), #expr, __FILE__, __LINE__)
 /* Releases a COM object if set and clears the pointer. */
 #define DX_RELEASE(p)                                                                              \
     do {                                                                                           \
@@ -233,24 +233,24 @@ extern DxState g_dx;
         }                                                                                          \
     } while (0)
 
-bool dx_Check(HRESULT hr, const char *what, const char *file, int line);
+bool dx_check(HRESULT hr, const char *what, const char *file, int line);
 /* Prints and counts the debug layer's stored messages (errors and
- * corruption count toward rhi_d3d12_DebugErrorCount). */
-void dx_DrainMessages(void);
+ * corruption count toward rhi_d3d12_debug_error_count). */
+void dx_drain_messages(void);
 
-static inline DxFrame *dx_CurFrame(void)
+static inline DxFrame *dx_cur_frame(void)
 {
     return &g_dx.frames[g_dx.frameIndex % RHI_FRAMES_IN_FLIGHT];
 }
 
-static inline D3D12_CPU_DESCRIPTOR_HANDLE dx_Cpu(D3D12_CPU_DESCRIPTOR_HANDLE base, uint32_t inc,
+static inline D3D12_CPU_DESCRIPTOR_HANDLE dx_cpu(D3D12_CPU_DESCRIPTOR_HANDLE base, uint32_t inc,
                                                  uint32_t index)
 {
     D3D12_CPU_DESCRIPTOR_HANDLE h = {base.ptr + (SIZE_T)inc * index};
     return h;
 }
 
-static inline D3D12_GPU_DESCRIPTOR_HANDLE dx_Gpu(D3D12_GPU_DESCRIPTOR_HANDLE base, uint32_t inc,
+static inline D3D12_GPU_DESCRIPTOR_HANDLE dx_gpu(D3D12_GPU_DESCRIPTOR_HANDLE base, uint32_t inc,
                                                  uint32_t index)
 {
     D3D12_GPU_DESCRIPTOR_HANDLE h = {base.ptr + (UINT64)inc * index};
@@ -258,33 +258,33 @@ static inline D3D12_GPU_DESCRIPTOR_HANDLE dx_Gpu(D3D12_GPU_DESCRIPTOR_HANDLE bas
 }
 
 /* d3d12_resource.c */
-void dx_Defer(IUnknown *obj);
-void dx_DestroyGarbage(DxFrame *f);
-DxBuffer *dx_GetBuffer(RhiBuffer b);
-DxTexture *dx_GetTexture(RhiTexture t);
-uint32_t dx_RegisterSwapchainBuffer(ID3D12Resource *res, uint32_t w, uint32_t h);
-void dx_ReleaseSwapchainBuffer(uint32_t id);
-void dx_ReleaseAllObjects(void);
+void dx_defer(IUnknown *obj);
+void dx_destroy_garbage(DxFrame *f);
+DxBuffer *dx_get_buffer(RhiBuffer b);
+DxTexture *dx_get_texture(RhiTexture t);
+uint32_t dx_register_swapchain_buffer(ID3D12Resource *res, uint32_t w, uint32_t h);
+void dx_release_swapchain_buffer(uint32_t id);
+void dx_release_all_objects(void);
 /* Names an object for the debug layer's messages (nothing without it). */
-void dx_SetName(ID3D12Object *o, const char *name);
+void dx_set_name(ID3D12Object *o, const char *name);
 /* d3d12_pipeline.c */
-DxBindGroup *dx_GetBindGroup(uint32_t id);
+DxBindGroup *dx_get_bind_group(uint32_t id);
 /* This frame's bind group of null views for a layout (for a root parameter
  * the caller left unset); 0 on failure. */
-uint32_t dx_NullBindGroup(uint32_t layoutId);
-void dx_ReleaseRootSignatures(void);
+uint32_t dx_null_bind_group(uint32_t layoutId);
+void dx_release_root_signatures(void);
 /* d3d12_cmd.c */
-bool dx_FramesInit(void);
-void dx_FramesShutdown(void);
-DxCmdList *dx_GetCmd(RhiCommandList cl);
-void dx_WaitFence(uint64_t value);
-uint64_t dx_Signal(void);
+bool dx_frames_init(void);
+void dx_frames_shutdown(void);
+DxCmdList *dx_get_cmd(RhiCommandList cl);
+void dx_wait_fence(uint64_t value);
+uint64_t dx_signal(void);
 
-void dx_Transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t before,
+void dx_transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t before,
                    uint32_t after);
 
 /* d3d12_swapchain.c */
-bool dx_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);
-void dx_SwapchainDestroy(void);
+bool dx_swapchain_create(uint32_t w, uint32_t h, bool vsync);
+void dx_swapchain_destroy(void);
 
 #endif /* PORT_RHI_D3D12_D3D12_INTERNAL_H */

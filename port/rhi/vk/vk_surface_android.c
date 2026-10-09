@@ -1,11 +1,11 @@
 /* vk_surface_android.c: the window's surface on Android (vk_internal.h
- * vkr_CreateWindowSurface).
+ * vkr_create_window_surface).
  *
  * SDL_Vulkan_CreateSurface fetches vkCreateAndroidSurfaceKHR through SDL's
  * own loader.  With a graphics driver the program loaded itself
- * (rhi_SetVulkanLoader, port/platform/android/gpu_driver_android.c) the
+ * (rhi_set_vulkan_loader, port/platform/android/gpu_driver_android.c) the
  * instance belongs to another loader, so the surface is made here through
- * the vkGetInstanceProcAddr rhi_Init gave volk, with either driver.  The
+ * the vkGetInstanceProcAddr rhi_init gave volk, with either driver.  The
  * instance extensions are SDL's list (VK_KHR_surface and
  * VK_KHR_android_surface on Android), so the call is enabled. */
 #define VK_USE_PLATFORM_ANDROID_KHR 1
@@ -16,7 +16,7 @@
 
 #endif
 
-bool vkr_CreateWindowSurface(void *sdlWindow, VkSurfaceKHR *out)
+bool vkr_create_window_surface(void *sdlWindow, VkSurfaceKHR *out)
 {
     *out = VK_NULL_HANDLE;
 #ifndef ICO_RHI_HAVE_SDL

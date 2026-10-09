@@ -167,22 +167,22 @@ static void test_static(void)
         {.pos = pos1, .uv = uv1, .vertexCount = 3, .name = "second \"batch\""},
     };
     GltfDoc doc;
-    gltf_DocInit(&doc);
+    gltf_doc_init(&doc);
     doc.prims = prims;
     doc.primCount = 2;
     doc.meshName = "ico/part2/0";
     doc.extrasText = (char *)EXTRAS;
     fill(doc.nodeMatrix, 16, 4);
     char why[256] = "";
-    int rc = gltf_Write(tmp("static"), &doc, why, sizeof(why));
+    int rc = gltf_write(tmp("static"), &doc, why, sizeof(why));
     CHECK(rc == 0, "static write: %s", why);
     GltfDoc back;
-    rc = gltf_Read(tmp("static.gltf"), &back, why, sizeof(why));
+    rc = gltf_read(tmp("static.gltf"), &back, why, sizeof(why));
     CHECK(rc == 0, "static read: %s", why);
     if (rc == 0)
         check_equal("static", &doc, &back);
     CHECK(back.skin.count == 0, "static: no skin");
-    gltf_Free(&back);
+    gltf_free(&back);
 
     /* the JSON itself */
     size_t n;
@@ -222,33 +222,33 @@ static void test_static(void)
     free(text);
 
     /* a .bin four bytes short is refused */
-    rc = gltf_Write(tmp("trunc"), &doc, why, sizeof(why));
+    rc = gltf_write(tmp("trunc"), &doc, why, sizeof(why));
     CHECK(rc == 0, "trunc write: %s", why);
     char *bin = read_all(tmp("trunc.bin"), &n);
     if (bin) {
         write_bytes(tmp("trunc.bin"), bin, n - 4);
         free(bin);
     }
-    rc = gltf_Read(tmp("trunc.gltf"), &back, why, sizeof(why));
+    rc = gltf_read(tmp("trunc.gltf"), &back, why, sizeof(why));
     CHECK(rc != 0 && strstr(why, "truncated"), "truncated .bin: %s", why);
     CHECK(back.primCount == 0 && !back.prims, "failed read leaves the doc empty");
-    gltf_Free(&back);
+    gltf_free(&back);
 
     /* writer refusals */
     GltfPrim bad = {.pos = pos1, .vertexCount = 2};
     doc.prims = &bad;
     doc.primCount = 1;
-    CHECK(gltf_Write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "multiple of 3"),
+    CHECK(gltf_write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "multiple of 3"),
           "write non-multiple: %s", why);
     float nanpos[9] = {0, 0, 0, 1, 0, 0, 0, NAN, 0};
     GltfPrim badn = {.pos = nanpos, .vertexCount = 3};
     doc.prims = &badn;
-    CHECK(gltf_Write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "not finite"),
+    CHECK(gltf_write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "not finite"),
           "write NaN: %s", why);
     doc.prims = prims;
     doc.primCount = 2;
     doc.extrasText = (char *)"[1]";
-    CHECK(gltf_Write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "JSON object"),
+    CHECK(gltf_write(tmp("bad"), &doc, why, sizeof(why)) != 0 && strstr(why, "JSON object"),
           "write bad extras: %s", why);
 }
 
@@ -274,9 +274,9 @@ static void test_buffer_caps(void)
                       "%s{\"uri\":\"cap.bin\",\"byteLength\":36}", i ? "," : "");
     snprintf(text + n, sizeof(text) - (size_t)n, "],%s", tail);
     write_text(tmp("cap_many.gltf"), text);
-    CHECK(gltf_Read(tmp("cap_many.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most 16"),
+    CHECK(gltf_read(tmp("cap_many.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most 16"),
           "more than 16 buffers: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
 
     /* two sparse files of 160 MB: each is under the one-file cap, together over */
     for (int i = 0; i < 2; i++) {
@@ -295,9 +295,9 @@ static void test_buffer_caps(void)
         "{\"uri\":\"cap_b.bin\",\"byteLength\":36}],%s",
         tail);
     write_text(tmp("cap_total.gltf"), text);
-    CHECK(gltf_Read(tmp("cap_total.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most"),
+    CHECK(gltf_read(tmp("cap_total.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "at most"),
           "buffers over the total cap: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
     ico_remove(tmp("cap_a.bin"));
     ico_remove(tmp("cap_b.bin"));
 }
@@ -306,7 +306,7 @@ static void test_buffer_caps(void)
 
 static void trs(float m[16], float tx, float ty, float tz, float angle)
 {
-    gltf_Mat4Identity(m);
+    gltf_mat4_identity(m);
     m[0] = cosf(angle);
     m[1] = sinf(angle);
     m[4] = -sinf(angle);
@@ -327,10 +327,10 @@ static GltfDoc skinned_doc(float (*ib)[16], int *parent, GltfPrim *prim)
     parent[1] = 0;
     parent[2] = 1;
     memcpy(world[0], local[0], 64);
-    gltf_Mat4Mul(world[1], world[0], local[1]);
-    gltf_Mat4Mul(world[2], world[1], local[2]);
+    gltf_mat4_mul(world[1], world[0], local[1]);
+    gltf_mat4_mul(world[2], world[1], local[2]);
     for (int b = 0; b < 3; b++)
-        CHECK(gltf_Mat4Invert(ib[b], world[b]) == 0, "invert bone %d", b);
+        CHECK(gltf_mat4_invert(ib[b], world[b]) == 0, "invert bone %d", b);
     static float pos[6 * 3], nrm[6 * 3], uv[6 * 2], col[6 * 3], w[6 * 4];
     static uint8_t joints[6 * 4];
     static uint32_t idx[6] = {0, 1, 2, 3, 4, 5};
@@ -358,7 +358,7 @@ static GltfDoc skinned_doc(float (*ib)[16], int *parent, GltfPrim *prim)
                        .vertexCount = 6,
                        .indexCount = 6};
     GltfDoc doc;
-    gltf_DocInit(&doc);
+    gltf_doc_init(&doc);
     doc.prims = prim;
     doc.primCount = 1;
     doc.meshName = "boy/part0/1";
@@ -376,10 +376,10 @@ static void test_skinned(void)
     GltfPrim prim;
     GltfDoc doc = skinned_doc(ib, parent, &prim);
     char why[256] = "";
-    int rc = gltf_Write(tmp("skinned"), &doc, why, sizeof(why));
+    int rc = gltf_write(tmp("skinned"), &doc, why, sizeof(why));
     CHECK(rc == 0, "skinned write: %s", why);
     GltfDoc back;
-    rc = gltf_Read(tmp("skinned.gltf"), &back, why, sizeof(why));
+    rc = gltf_read(tmp("skinned.gltf"), &back, why, sizeof(why));
     CHECK(rc == 0, "skinned read: %s", why);
     if (rc == 0) {
         check_equal("skinned", &doc, &back);
@@ -389,7 +389,7 @@ static void test_skinned(void)
             CHECK(!strcmp(back.skin.names[b], want), "bone %d name %s", b, back.skin.names[b]);
         }
     }
-    gltf_Free(&back);
+    gltf_free(&back);
 
     size_t n;
     char *text = read_all(tmp("skinned.gltf"), &n);
@@ -445,21 +445,21 @@ static void test_skinned(void)
         memcpy(glb + 28 + jp, bin, bn);
         write_bytes(tmp("skinned_glb.glb"), glb, total);
         GltfDoc a, b;
-        int ra = gltf_Read(tmp("skinned.gltf"), &a, why, sizeof(why));
+        int ra = gltf_read(tmp("skinned.gltf"), &a, why, sizeof(why));
         CHECK(ra == 0, "gltf read: %s", why);
-        int rb = gltf_Read(tmp("skinned_glb.glb"), &b, why, sizeof(why));
+        int rb = gltf_read(tmp("skinned_glb.glb"), &b, why, sizeof(why));
         CHECK(rb == 0, "glb read: %s", why);
         if (ra == 0 && rb == 0)
             check_equal("glb", &a, &b);
-        gltf_Free(&a);
-        gltf_Free(&b);
+        gltf_free(&a);
+        gltf_free(&b);
         /* a GLB whose header claims more than the file has */
         uint32_t big = (uint32_t)total + 16;
         memcpy(glb + 8, &big, 4);
         write_bytes(tmp("short.glb"), glb, total);
-        CHECK(gltf_Read(tmp("short.glb"), &b, why, sizeof(why)) != 0 && strstr(why, "truncated"),
+        CHECK(gltf_read(tmp("short.glb"), &b, why, sizeof(why)) != 0 && strstr(why, "truncated"),
               "short GLB: %s", why);
-        gltf_Free(&b);
+        gltf_free(&b);
         /* the BIN chunk cut short */
         memcpy(glb + 8, &total, 4);
         write_bytes(tmp("shortbin.glb"), glb, total - bp + 8);
@@ -470,9 +470,9 @@ static void test_skinned(void)
             fwrite(&len2, 4, 1, f);
             fclose(f);
         }
-        CHECK(gltf_Read(tmp("shortbin.glb"), &b, why, sizeof(why)) != 0 && strstr(why, "truncated"),
+        CHECK(gltf_read(tmp("shortbin.glb"), &b, why, sizeof(why)) != 0 && strstr(why, "truncated"),
               "short BIN chunk: %s", why);
-        gltf_Free(&b);
+        gltf_free(&b);
         free(glb);
     }
     free(text);
@@ -601,7 +601,7 @@ static void test_blender(void)
     write_text(tmp("blender.gltf"), BLENDER_JSON);
     GltfDoc d;
     char why[256] = "";
-    int rc = gltf_Read(tmp("blender.gltf"), &d, why, sizeof(why));
+    int rc = gltf_read(tmp("blender.gltf"), &d, why, sizeof(why));
     CHECK(rc == 0, "blender read: %s", why);
     if (rc == 0) {
         CHECK(d.primCount == 2, "2 primitives");
@@ -654,14 +654,14 @@ static void test_blender(void)
             CHECK(!strcmp(d.skin.names[2], "bone_02"), "names");
         }
     }
-    gltf_Free(&d);
+    gltf_free(&d);
 
     /* no bone_NN names: skin order */
     const char *t = replaced(BLENDER_JSON, "\"bone_00\"", "\"Hips\"");
     t = replaced(t, "\"bone_01\"", "\"Spine\"");
     t = replaced(t, "\"bone_02\"", "\"Head\"");
     write_text(tmp("blender_order.gltf"), t);
-    rc = gltf_Read(tmp("blender_order.gltf"), &d, why, sizeof(why));
+    rc = gltf_read(tmp("blender_order.gltf"), &d, why, sizeof(why));
     CHECK(rc == 0, "order read: %s", why);
     if (rc == 0) {
         static const uint8_t wantJ[4] = {0, 1, 2, 0};
@@ -674,29 +674,29 @@ static void test_blender(void)
               "parents in skin order %d %d %d", d.skin.parent[0], d.skin.parent[1],
               d.skin.parent[2]);
     }
-    gltf_Free(&d);
+    gltf_free(&d);
 
     /* some named, some not */
     write_text(tmp("blender_mixed.gltf"), replaced(BLENDER_JSON, "\"bone_01\"", "\"Bone.001\""));
-    rc = gltf_Read(tmp("blender_mixed.gltf"), &d, why, sizeof(why));
+    rc = gltf_read(tmp("blender_mixed.gltf"), &d, why, sizeof(why));
     CHECK(rc != 0 && strstr(why, "name all of them"), "mixed names: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
     write_text(tmp("blender_dup.gltf"), replaced(BLENDER_JSON, "\"bone_01\"", "\"bone_00\""));
-    rc = gltf_Read(tmp("blender_dup.gltf"), &d, why, sizeof(why));
+    rc = gltf_read(tmp("blender_dup.gltf"), &d, why, sizeof(why));
     CHECK(rc != 0 && strstr(why, "two joints"), "duplicate names: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
     /* a joint index past the skin */
     write_text(tmp("blender_joint.gltf"),
                replaced(BLENDER_JSON, "\"joints\":[4,2,3]", "\"joints\":[4,2]"));
-    rc = gltf_Read(tmp("blender_joint.gltf"), &d, why, sizeof(why));
+    rc = gltf_read(tmp("blender_joint.gltf"), &d, why, sizeof(why));
     CHECK(rc != 0 && strstr(why, "uses joint 2 of 2"), "joint past the skin: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
     /* an index past the vertices */
     bbin[430] = 3;
     write_bytes(tmp("blender model.bin"), bbin, 431);
-    rc = gltf_Read(tmp("blender.gltf"), &d, why, sizeof(why));
+    rc = gltf_read(tmp("blender.gltf"), &d, why, sizeof(why));
     CHECK(rc != 0 && strstr(why, "index 3 is past"), "index past the vertices: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
     bbin[430] = 1;
     write_bytes(tmp("blender model.bin"), bbin, 431);
 }
@@ -742,12 +742,12 @@ static void expect_reject(const char *name, const Rej *r, const char *msg)
     free(s);
     GltfDoc d;
     char why[512] = "";
-    int rc = gltf_Read(tmp(file), &d, why, sizeof(why));
+    int rc = gltf_read(tmp(file), &d, why, sizeof(why));
     CHECK(rc != 0, "%s: accepted", name);
     CHECK(rc == 0 || strstr(why, msg), "%s: \"%s\" lacks \"%s\"", name, why, msg);
     if (rc != 0)
         printf("  %-14s %s\n", name, why);
-    gltf_Free(&d);
+    gltf_free(&d);
 }
 
 static void test_rejections(void)
@@ -761,10 +761,10 @@ static void test_rejections(void)
     free(s);
     GltfDoc d;
     char why[256] = "";
-    CHECK(gltf_Read(tmp("rej_ok.gltf"), &d, why, sizeof(why)) == 0 && d.primCount == 1 &&
+    CHECK(gltf_read(tmp("rej_ok.gltf"), &d, why, sizeof(why)) == 0 && d.primCount == 1 &&
               d.prims[0].vertexCount == 3 && d.prims[0].pos[3] == 1.0f && !d.prims[0].idx,
           "the template reads: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
 
     expect_reject("data_uri", &(Rej){.uri = "\"data:application/octet-stream;base64,AAAA\""},
                   "data: URI");
@@ -804,13 +804,13 @@ static void test_rejections(void)
     expect_reject("bad_json", &(Rej){.top = ",\"x\":1}"}, "bad JSON at byte");
     expect_reject("stride", &(Rej){.vlen = "36,\"byteStride\":8"}, "smaller than");
     write_text(tmp("rej_v1.gltf"), "{\"asset\":{\"version\":\"1.0\"}}");
-    CHECK(gltf_Read(tmp("rej_v1.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "2.x"),
+    CHECK(gltf_read(tmp("rej_v1.gltf"), &d, why, sizeof(why)) != 0 && strstr(why, "2.x"),
           "glTF 1: %s", why);
-    gltf_Free(&d);
-    CHECK(gltf_Read(tmp("does_not_exist.gltf"), &d, why, sizeof(why)) != 0 &&
+    gltf_free(&d);
+    CHECK(gltf_read(tmp("does_not_exist.gltf"), &d, why, sizeof(why)) != 0 &&
               strstr(why, "cannot open"),
           "missing file: %s", why);
-    gltf_Free(&d);
+    gltf_free(&d);
 }
 
 static void test_matrix(void)
@@ -819,23 +819,23 @@ static void test_matrix(void)
     trs(a, 3.0f, -4.0f, 5.0f, 0.9f);
     a[0] *= 2.0f;
     a[1] *= 2.0f;
-    CHECK(gltf_Mat4Invert(inv, a) == 0, "invertible");
-    gltf_Mat4Mul(prod, a, inv);
-    gltf_Mat4Identity(id);
+    CHECK(gltf_mat4_invert(inv, a) == 0, "invertible");
+    gltf_mat4_mul(prod, a, inv);
+    gltf_mat4_identity(id);
     for (int k = 0; k < 16; k++)
         CHECK(fabsf(prod[k] - id[k]) < 1e-6f, "a * inverse(a) [%d] = %g", k, (double)prod[k]);
     /* column-major: a * point puts the translation in elements 12..14 */
     float t[16], p[16];
-    gltf_Mat4Identity(t);
+    gltf_mat4_identity(t);
     t[12] = 7.0f;
-    gltf_Mat4Identity(p);
+    gltf_mat4_identity(p);
     p[0] = 2.0f;
-    gltf_Mat4Mul(prod, t, p); /* translate after scaling */
+    gltf_mat4_mul(prod, t, p); /* translate after scaling */
     CHECK(prod[0] == 2.0f && prod[12] == 7.0f, "T * S");
-    gltf_Mat4Mul(prod, p, t); /* scale after translating */
+    gltf_mat4_mul(prod, p, t); /* scale after translating */
     CHECK(prod[12] == 14.0f, "S * T");
     float z[16] = {0};
-    CHECK(gltf_Mat4Invert(inv, z) != 0 && inv[0] == 1.0f && inv[1] == 0.0f, "singular");
+    CHECK(gltf_mat4_invert(inv, z) != 0 && inv[0] == 1.0f && inv[1] == 0.0f, "singular");
 }
 
 int main(int argc, char **argv)

@@ -346,8 +346,8 @@ static void display_texture(LtProp *pr, LtProperty *e, KanbanCol *col)
            the sprite would be, its texture transferred as before
            (port/ui/menu_text.h) */
         KANBAN_HOST_KEY(e, 0);
-        if (lt_ext_IsTextRow(e)) {
-            lt_ext_DrawTextRow(e, r, uv, (const unsigned char *)col->b, 0);
+        if (lt_ext_is_text_row(e)) {
+            lt_ext_draw_text_row(e, r, uv, (const unsigned char *)col->b, 0);
         } else
             gif_SpriteSensitiveOffset(r, 0xFFFFFF9B, uv, col->b, 1);
         KANBAN_HOST_KEY(0, 0);

@@ -1,7 +1,7 @@
 /* modelpack.h: model packs: replacement models for the game's
  * mesh parts, and the dump that writes those parts out for pack makers.
  *
- * Identity: a part is named by its mesh hash (rd_mesh.h rd_VuMeshDescHash,
+ * Identity: a part is named by its mesh hash (rd_mesh.h rd_vu_mesh_desc_hash,
  * XXH3-64 over the part's tagless VU stream), written as 16 lower-case hex
  * digits.  The files (gltf.h has the layout and the reader's rules):
  *
@@ -20,7 +20,7 @@
  *             and one line per part in dumps/models.txt (hash, model, part,
  *             ordinal, layout, vertices, batches, bones).
  *
- * Loading: modelpack_Init reads and converts every file at once (no
+ * Loading: modelpack_init reads and converts every file at once (no
  * thread): each primitive (a triangle list) becomes VU strips, primitive i
  * drawing in the place of the original's batch i.  The conversion:
  *   strips    greedy: a triangle joins the strip when it shares the strip's
@@ -82,52 +82,52 @@ typedef struct ModelpackConfig {
 
 typedef struct ModelpackStats {
     uint32_t files;      /* .gltf / .glb files found */
-    uint32_t indexed;    /* replacements ready (modelpack_Count) */
+    uint32_t indexed;    /* replacements ready (modelpack_count) */
     uint32_t duplicates; /* a later file of a hash already indexed */
     uint32_t badNames;   /* a .gltf / .glb whose name is not a model name */
     uint32_t failed;     /* files that could not be read or converted (logged) */
-    uint32_t declined;   /* entries declined for a part (modelpack_Create, modelpack_Decline) */
+    uint32_t declined;   /* entries declined for a part (modelpack_create, modelpack_decline) */
     uint32_t created;    /* replacement meshes made */
     uint32_t dumped;     /* parts written by the dump */
     uint64_t bytes;      /* RAM the converted meshes hold */
 } ModelpackStats;
 
 /* Walks the folders, reads and converts every model file, logs what it
- * found.  Replaces a previous Init (modelpack_Shutdown first).  The pack
- * starts enabled.  Returns the number of replacements (modelpack_Count). */
-int modelpack_Init(const ModelpackConfig *c);
+ * found.  Replaces a previous Init (modelpack_shutdown first).  The pack
+ * starts enabled.  Returns the number of replacements (modelpack_count). */
+int modelpack_init(const ModelpackConfig *c);
 /* Replacements ready (0 before Init or without a pack: the Settings row
  * then says "None installed"). */
-int modelpack_Count(void);
-void modelpack_GetStats(ModelpackStats *out);
+int modelpack_count(void);
+void modelpack_get_stats(ModelpackStats *out);
 /* Frees the index and the converted meshes; the replacement meshes already
  * made stay as they are (rd owns them). */
-void modelpack_Shutdown(void);
+void modelpack_shutdown(void);
 
-/* The entry of a hash, or -1: no pack, switched off (modelpack_SetEnabled),
+/* The entry of a hash, or -1: no pack, switched off (modelpack_set_enabled),
  * no file of that hash, or declined. */
-int modelpack_Lookup(uint64_t hash);
+int modelpack_lookup(uint64_t hash);
 
 /* A mesh that draws entry's model in the place of the part orig describes
- * (rd_CreateVuMeshReplacement; name names the record, NULL: orig's).
+ * (rd_create_vu_mesh_replacement; name names the record, NULL: orig's).
  * boneCount: the object's skeleton node count (Sub15C.nodeNum) for a
  * skinned part, ignored otherwise.  Checked first: orig hashes to the
  * entry's hash, the layouts agree (a lit file serves a prelit part), the
  * file has no more primitives than orig has batches, and every bone it uses
  * is below min(boneCount, 60).  On a mismatch the entry is declined (one log
- * line) and {0} returned: the caller builds the original (rd_CreateVuMesh). */
-RdMesh modelpack_Create(int entry, const RdVuMeshDesc *orig, const char *name, uint32_t boneCount);
-/* Declines a hash's entry from now on (modelpack_Lookup returns -1), e.g.
+ * line) and {0} returned: the caller builds the original (rd_create_vu_mesh). */
+RdMesh modelpack_create(int entry, const RdVuMeshDesc *orig, const char *name, uint32_t boneCount);
+/* Declines a hash's entry from now on (modelpack_lookup returns -1), e.g.
  * for a part that changes shape every frame (the morph path cannot write a
  * replaced mesh).  The caller logs why. */
-void modelpack_Decline(uint64_t hash);
+void modelpack_decline(uint64_t hash);
 
-/* The Options switch: off retires every replaced mesh (rd_VuMeshRetire, so
+/* The Options switch: off retires every replaced mesh (rd_vu_mesh_retire, so
  * the game builds its originals again on the next draw) and makes Lookup
  * return -1; on retires every original whose hash has an entry (so the
  * replacements are made on the next draw). */
-void modelpack_SetEnabled(bool on);
-bool modelpack_Enabled(void);
+void modelpack_set_enabled(bool on);
+bool modelpack_enabled(void);
 
 /* ---------------------------------------------------------------- dumps */
 
@@ -136,9 +136,9 @@ typedef struct ModelpackIdent {
     int part;           /* the part's index (regKeyIdx) */
     int ordinal;        /* the packet's ordinal in the part (regKeyOrdinal) */
     const void *obj;    /* the drawing object (regKeyObj), for
-                          modelpack_DumpObjectOnce; may be NULL */
+                          modelpack_dump_object_once; may be NULL */
     uint64_t buildHash; /* the hash the mesh was built with (what
-                           modelpack_DumpWanted was asked); 0 if unknown.  A part
+                           modelpack_dump_wanted was asked); 0 if unknown.  A part
                            that changes shape hashes differently every frame:
                            this one is marked done too */
 } ModelpackIdent;
@@ -155,36 +155,36 @@ typedef struct ModelpackSkeleton {
 /* The game's skeleton of a skinned part whose entry was just used: logged
  * once per file if the file's own inverse bind matrices differ (they are
  * ignored; the game's are used). */
-void modelpack_NoteSkeleton(int entry, const ModelpackSkeleton *skel);
+void modelpack_note_skeleton(int entry, const ModelpackSkeleton *skel);
 
 /* Whether the draw of a part (its mesh hash, the drawing object) should
  * be dumped now: with dumping on, a hash not dumped yet this session; and
- * every part of the object modelpack_DumpObjectOnce armed, in the frame it
+ * every part of the object modelpack_dump_object_once armed, in the frame it
  * is first drawn.  Cheap: call it at every mesh draw and build the desc for
- * modelpack_Dump only when it says so. */
-bool modelpack_DumpWanted(uint64_t hash, const void *obj);
+ * modelpack_dump only when it says so. */
+bool modelpack_dump_wanted(uint64_t hash, const void *obj);
 /* Whether anything wants a mesh's hash now: a pack with files, dumping on,
  * or a shot armed. */
-bool modelpack_HashWanted(void);
+bool modelpack_hash_wanted(void);
 /* Writes the part orig describes (skel: NULL for a static part) as
  * dumps/<hash16>.gltf + .bin and appends its line to dumps/models.txt.
  * Once per hash a session, and a file already on disk is kept, except for
  * the armed object (id->obj), whose parts are written again.  The number
  * of files written (2, or 0). */
-int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
+int modelpack_dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
                    const ModelpackSkeleton *skel);
 /* Developer mode's dump switch at run time (Init takes the first value). */
-void modelpack_SetDumpEnabled(bool on);
+void modelpack_set_dump_enabled(bool on);
 /* Arms a one-shot dump of every part drawn for obj (the model viewer's
- * "Save this model's files"), dumping on or off: modelpack_DumpWanted says
+ * "Save this model's files"), dumping on or off: modelpack_dump_wanted says
  * yes for obj's parts in the first frame that draws obj.  NULL disarms. */
-void modelpack_DumpObjectOnce(const void *obj);
+void modelpack_dump_object_once(const void *obj);
 /* The shot's outcome: -1 while it is armed and its frame not finished (or
  * obj not drawn yet), else the files the last shot wrote (0 when none was
  * armed). */
-int modelpack_DumpObjectStatus(void);
+int modelpack_dump_object_status(void);
 /* The dumps folder (empty before the first dump made it). */
-const char *modelpack_DumpDir(void);
+const char *modelpack_dump_dir(void);
 
 #ifdef __cplusplus
 }

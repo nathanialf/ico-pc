@@ -11,7 +11,7 @@
  *   u32      gsW, gsH, number, keep, hasCamera
  *   RdCamera camera (raw)
  *   RdStateBlock startState, endState (version 3: without the trailing aa1,
- *            80 bytes; rd__LoadFrame reads it with AA1 off)
+ *            80 bytes; rd__load_frame reads it with AA1 off)
  *   13 x     u32 count, RdCmd[count]
  *   u32      payload size, payload bytes
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
@@ -150,7 +150,7 @@ static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps, IdSet *mesh
         }
     }
     for (uint32_t i = 0; i < texs->n; i++) {
-        RdTexRec *t = rd__TexRec(texs->ids[i]);
+        RdTexRec *t = rd__tex_rec(texs->ids[i]);
         if (t && t->kind == RD_TEXKIND_TARGET) {
             targetRef(temps, t->target);
         }
@@ -168,7 +168,7 @@ static bool wraw(FILE *fp, const void *p, size_t n)
     return n == 0 || fwrite(p, 1, n, fp) == n;
 }
 
-bool rd__DumpFrame(const RdFrame *f, const char *path)
+bool rd__dump_frame(const RdFrame *f, const char *path)
 {
     if (!f || !path) {
         return false;
@@ -178,7 +178,7 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     collectRefs(f, &texs, &temps, &meshes);
     FILE *fp = ico_fopen(path, "wb");
     if (!fp) {
-        rd__Log("dump: cannot open %s", path);
+        rd__log("dump: cannot open %s", path);
         return false;
     }
     bool ok = wraw(fp, RD_DUMP_MAGIC, 8) && w32(fp, RD_DUMP_VERSION) &&
@@ -195,11 +195,11 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     ok = ok && w32(fp, f->payloadSize) && wraw(fp, f->payload, f->payloadSize);
     uint32_t nt = 0;
     for (uint32_t i = 0; i < texs.n; i++) {
-        nt += rd__TexRec(texs.ids[i]) != NULL;
+        nt += rd__tex_rec(texs.ids[i]) != NULL;
     }
     ok = ok && w32(fp, nt);
     for (uint32_t i = 0; ok && i < texs.n; i++) {
-        RdTexRec *t = rd__TexRec(texs.ids[i]);
+        RdTexRec *t = rd__tex_rec(texs.ids[i]);
         if (!t) {
             continue;
         }
@@ -226,16 +226,16 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
              w32(fp, image ? sheetTexa(t) : t->bakedTexa) && w32(fp, t->w) && w32(fp, t->h) &&
              w32(fp, t->target) && w32(fp, image ? sheetView(t) : t->view);
         if (ok && image) {
-            ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__TexelBytes(t->format));
+            ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__texel_bytes(t->format));
         }
     }
     uint32_t nr = 0;
     for (uint32_t i = 0; i < temps.n; i++) {
-        nr += rd__TargetRec(temps.ids[i]) != NULL;
+        nr += rd__target_rec(temps.ids[i]) != NULL;
     }
     ok = ok && w32(fp, nr);
     for (uint32_t i = 0; ok && i < temps.n; i++) {
-        RdTargetRec *t = rd__TargetRec(temps.ids[i]);
+        RdTargetRec *t = rd__target_rec(temps.ids[i]);
         if (t) {
             ok = w32(fp, temps.ids[i]) && w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->withDepth) &&
                  w32(fp, t->keepAcross);
@@ -243,12 +243,12 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     }
     uint32_t nm = 0;
     for (uint32_t i = 0; i < meshes.n; i++) {
-        const RdMeshRec *m = rd__MeshRec(meshes.ids[i]);
+        const RdMeshRec *m = rd__mesh_rec(meshes.ids[i]);
         nm += m && m->vu;
     }
     ok = ok && w32(fp, nm);
     for (uint32_t i = 0; ok && i < meshes.n; i++) {
-        const RdMeshRec *m = rd__MeshRec(meshes.ids[i]);
+        const RdMeshRec *m = rd__mesh_rec(meshes.ids[i]);
         if (!m || !m->vu) {
             continue;
         }
@@ -260,7 +260,7 @@ bool rd__DumpFrame(const RdFrame *f, const char *path)
     }
     ok = fclose(fp) == 0 && ok;
     if (!ok) {
-        rd__Log("dump: write to %s failed", path);
+        rd__log("dump: write to %s failed", path);
     }
     return ok;
 }
@@ -345,7 +345,7 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
             return false;
         }
         if (c->type == RDC_GRID) {
-            /* rd_DrawVuGrid: per strip the vertices and 4 header/trailer qwords */
+            /* rd_draw_vu_grid: per strip the vertices and 4 header/trailer qwords */
             return p.vertsPerBatch >= 3 && p.qwPerVertex != 0 &&
                    (uint64_t)p.batchCount * ((uint64_t)p.vertsPerBatch * p.qwPerVertex + 4) <=
                        p.streamQw;
@@ -381,7 +381,7 @@ static bool cmdValid(const RdFrame *f, const RdCmd *c)
     }
 }
 
-/* A dumped VU mesh as rd_CreateVuMesh builds them: every index a kick
+/* A dumped VU mesh as rd_create_vu_mesh builds them: every index a kick
  * (ICO_VU_INDEX: kick * 4 + corner 0..2) whose triangle k-2, k-1, k lies in
  * the stream, every batch inside the index list and the stream. */
 static bool meshValid(uint32_t nv, uint32_t qpv, const uint32_t *ix, uint32_t ni,
@@ -405,14 +405,14 @@ static bool meshValid(uint32_t nv, uint32_t qpv, const uint32_t *ix, uint32_t ni
     return true;
 }
 
-bool rd__LoadFrame(const char *path, RdFrame *out)
+bool rd__load_frame(const char *path, RdFrame *out)
 {
     if (!g_rd.inited || !path || !out) {
         return false;
     }
     FILE *fp = ico_fopen(path, "rb");
     if (!fp) {
-        rd__Log("load: cannot open %s", path);
+        rd__log("load: cannot open %s", path);
         return false;
     }
     static IdMap texMap, tgtMap, meshMap;
@@ -428,7 +428,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
               szState == (ver == 3u ? RD_STATE_BLOCK_V3_SIZE : sizeof(RdStateBlock)) &&
               r32(fp, &szVtx) && szVtx == sizeof(RdScreenVtx);
     if (!ok) {
-        rd__Log("load: %s is not an rd dump of version 3 to %u", path, RD_DUMP_VERSION);
+        rd__log("load: %s is not an rd dump of version 3 to %u", path, RD_DUMP_VERSION);
         fclose(fp);
         return false;
     }
@@ -487,12 +487,12 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
             /* a sheet's bits 10..15 are its rim weight (16 for the faint
                class), so any value is valid there */
             ok = h.w && h.h && h.w <= 8192 && h.h <= 8192 && (sheet || h.view <= RD_TEXEL_R8);
-            const size_t bytes = (size_t)h.w * h.h * rd__TexelBytes(fmt);
+            const size_t bytes = (size_t)h.w * h.h * rd__texel_bytes(fmt);
             uint8_t *px = ok ? malloc(bytes) : NULL;
             ok = px && rraw(fp, px, bytes);
             if (ok) {
-                RdTex t = rd__CreateTextureFmt(h.w, h.h, px, fmt, (RdTexSrc)h.src, "dump");
-                RdTexRec *tr = rd__TexRec(t.id);
+                RdTex t = rd__create_texture_fmt(h.w, h.h, px, fmt, (RdTexSrc)h.src, "dump");
+                RdTexRec *tr = rd__tex_rec(t.id);
                 if (tr) {
                     tr->bakedTexa = (uint8_t)h.bakedTexa;
                     if (sheet) {
@@ -522,7 +522,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k) && w && h &&
              w <= 8192 && h <= 8192;
         if (ok) {
-            uint32_t nid = rd__TempTargetAlloc(w, h, (int)d, (int)k);
+            uint32_t nid = rd__temp_target_alloc(w, h, (int)d, (int)k);
             tgtMap.from[tgtMap.n] = id;
             tgtMap.to[tgtMap.n++] = nid;
             if (nid && out->tempCount < RD_MAX_TEMP_PER_FRAME) {
@@ -551,7 +551,7 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
         if (ok) {
             meshMap.from[meshMap.n] = id;
             meshMap.to[meshMap.n++] =
-                rd__VuMeshCreateRaw((const float (*)[4])st, nv, qpv, ix, ni, br, nb, name);
+                rd__vu_mesh_create_raw((const float (*)[4])st, nv, qpv, ix, ni, br, nb, name);
         }
         free(st);
         free(ix);
@@ -559,22 +559,22 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
     }
     fclose(fp);
     for (uint32_t i = 0; ok && i < nViews; i++) {
-        RdTex t = rd_TargetTexture((RdTarget){mapTarget(&tgtMap, views[i].target)},
-                                   (RdTexView)views[i].view);
+        RdTex t = rd_target_texture((RdTarget){mapTarget(&tgtMap, views[i].target)},
+                                    (RdTexView)views[i].view);
         texMap.from[texMap.n] = views[i].id;
         texMap.to[texMap.n++] = t.id;
     }
     if (!ok) {
-        rd__Log("load: %s is truncated or corrupt", path);
+        rd__log("load: %s is truncated or corrupt", path);
         /* what the load created in the context goes with it (the images and
          * meshes here, the temporary targets with the frame) */
         for (uint32_t i = 0; i < texMap.n; i++) {
-            rd_DestroyTexture((RdTex){texMap.to[i]});
+            rd_destroy_texture((RdTex){texMap.to[i]});
         }
         for (uint32_t i = 0; i < meshMap.n; i++) {
-            rd_DestroyVuMesh((RdMesh){meshMap.to[i]});
+            rd_destroy_vu_mesh((RdMesh){meshMap.to[i]});
         }
-        rd__FrameFree(out);
+        rd__frame_free(out);
         return false;
     }
     remapState(&out->startState, &texMap, &tgtMap);
@@ -611,26 +611,26 @@ bool rd__LoadFrame(const char *path, RdFrame *out)
 /* ------------------------------------------------------ dump on demand */
 
 /* The window build's F12 (port/platform/window_host.c): the
- * last closed frame as a dump (rd_DumpFrame) and the DISPLAY target as it
- * was last presented as a PNG (rd_ReadDisplay: a synchronous readback, so
+ * last closed frame as a dump (rd_dump_frame) and the DISPLAY target as it
+ * was last presented as a PNG (rd_read_display: a synchronous readback, so
  * for a key press, not for every frame).  Either path may be NULL.  True
  * when everything asked for was written. */
-bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath);
+bool rd_dump_on_demand(const char *dumpPath, const char *pngPath);
 
-bool rd_DumpOnDemand(const char *dumpPath, const char *pngPath)
+bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
 {
     bool ok = true;
     if (dumpPath) {
-        ok = rd_DumpFrame(dumpPath);
+        ok = rd_dump_frame(dumpPath);
     }
     if (pngPath) {
-        const RdTargetRec *t = rd__TargetRec(RD_TARGET_DISPLAY + 1);
+        const RdTargetRec *t = rd__target_rec(RD_TARGET_DISPLAY + 1);
         uint32_t w = 0, h = 0;
         uint8_t *px = t ? malloc((size_t)t->tw * t->th * 4) : NULL;
         const bool shot =
-            px && rd_ReadDisplay(px, &w, &h) && rd_WritePng(pngPath, px, w, h, w * 4, 0);
+            px && rd_read_display(px, &w, &h) && rd_write_png(pngPath, px, w, h, w * 4, 0);
         if (!shot) {
-            rd__Log("dump: no screenshot %s", pngPath);
+            rd__log("dump: no screenshot %s", pngPath);
         }
         free(px);
         ok = ok && shot;

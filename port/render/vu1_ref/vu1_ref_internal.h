@@ -123,7 +123,7 @@ static inline int vu_inside(const float *p, const float *lo, const float *hi)
            p[3] < hi[3];
 }
 
-/* vu1ref_SetWideX's factor (1 = 4:3) and the centre the wide projection
+/* vu1ref_set_wide_x's factor (1 = 4:3) and the centre the wide projection
  * squeezes x about (shader_consts.h ICO_VU_REGION_CX). */
 extern float vu1ref_wideX;
 #define VU_REGION_CX 2048.0f
@@ -177,8 +177,8 @@ static inline int vu_adc_counter(int32_t *counter, int restart, int inside)
 /* scissorcommcut.h: clip one triangle (clip-space positions, colours as
  * floats, STQ as read from the input plus the UV offset) against the six
  * planes and draw it as a fan through the viewport matrix mem[8..11]. */
-void vu1ref_ScissorCommon(Vu1Ref *r, const float pos[3][4], const float col[3][4],
-                          const float stq[3][4], VuBatchOut *out, int atVertex);
+void vu1ref_scissor_common(Vu1Ref *r, const float pos[3][4], const float col[3][4],
+                           const float stq[3][4], VuBatchOut *out, int atVertex);
 
 /* The scissor triangle loop shared by normal_c and normal_l code 36: the
  * per-vertex values are computed by the caller; this keeps vi04..vi06 and
@@ -190,6 +190,6 @@ typedef struct VuScissorVtx {
     int restart;   /* ST.w < 1 */
 } VuScissorVtx;
 
-void vu1ref_ScissorStep(Vu1Ref *r, const VuScissorVtx *win[3], VuBatchOut *out, int k);
+void vu1ref_scissor_step(Vu1Ref *r, const VuScissorVtx *win[3], VuBatchOut *out, int k);
 
 #endif

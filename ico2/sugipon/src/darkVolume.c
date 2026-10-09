@@ -317,8 +317,8 @@ static __inline__ void dvCheckPacket(char *p) /* derived name */
    know, supplied here:
      - FRAME FBP 0x140 (TBP 0x2800) at the scene's size is a scene-sized
        VRAM block, not the anti-alias buffer the decoder names for that FBP
-       (AA0, 256 x 256): rd_BlockTarget stands for it, aliased in for the
-       effect's packets (R5b's rd_GsNamedBlock / rd_AliasTarget), so the
+       (AA0, 256 x 256): rd_block_target stands for it, aliased in for the
+       effect's packets (R5b's rd_gs_named_block / rd_alias_target), so the
        clear, the spheres and the TEX0 read of 0x2800 all use it;
      - ZBUF ZBP 0xC0 is the scene's Z buffer: the spheres are Z-tested
        against SCENE's depth (the decoder binds depth only with SCENE).
@@ -331,38 +331,38 @@ static RdTarget dvHostBlock; /* derived name */
 static void dvHostBlockBegin(void) /* derived name */
 {
     static int reported;
-    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+    RdTarget named = rd_gs_named_block(0x2800, ScreenWidth, ScreenHeight);
 
     if (!reported) {
         reported = 1;
         fprintf(stderr, "darkVolume: first dark volume drawn (list 10; reported once)\n");
     }
 
-    dvHostBlock = rd_BlockTarget(0x2800, ScreenWidth, ScreenHeight, 0);
+    dvHostBlock = rd_block_target(0x2800, ScreenWidth, ScreenHeight, 0);
     if (named.id != 0 && dvHostBlock.id != 0) {
-        rd_AliasTarget(named, dvHostBlock);
+        rd_alias_target(named, dvHostBlock);
     }
 }
 
 static void dvHostSceneZ(void) /* derived name */
 {
     if (dvHostBlock.id != 0) {
-        rd_SetTarget(dvHostBlock, rd_Target(RD_TARGET_SCENE), ScreenWidth, ScreenHeight, 0);
+        rd_set_target(dvHostBlock, rd_target(RD_TARGET_SCENE), ScreenWidth, ScreenHeight, 0);
     }
 }
 
 static void dvHostBlockEnd(void) /* derived name */
 {
-    RdTarget named = rd_GsNamedBlock(0x2800, ScreenWidth, ScreenHeight);
+    RdTarget named = rd_gs_named_block(0x2800, ScreenWidth, ScreenHeight);
 
     if (named.id != 0) {
-        rd_AliasTarget(named, (RdTarget){0});
+        rd_alias_target(named, (RdTarget){0});
     }
     dvHostBlock = (RdTarget){0};
     /* The composite's FRAME is PSMCT24 (mc_HostDma: FBMSK 0xFF000000).  On
        the GS that holds until the next FRAME write, the anti-alias pass's,
        another dark volume's or the flip's; rd records FBMSK 0 with each of
-       those (rd_Post, rd_FrameHead, the decoder), so the mask is left in
+       those (rd_post, rd_frame_head, the decoder), so the mask is left in
        force here and ends where the GS's does. */
 }
 

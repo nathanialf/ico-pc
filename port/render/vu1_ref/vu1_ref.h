@@ -6,7 +6,7 @@
  * and returns what the program writes to the GS: per vertex the PACKED ST,
  * RGBAQ and XYZ2 quadwords, with the ADC bit, in output order. They are test
  * oracles for port/shaders/vu_*.hlsl; rd_mesh.c keeps its per-list VU
- * images in a Vu1Ref and runs vu1ref_Particle for the end-tag check.
+ * images in a Vu1Ref and runs vu1ref_particle for the end-tag check.
  * The code below cites the VU1 instruction lines it follows.
  *
  * Float semantics: plain C float arithmetic in the caller's rounding mode
@@ -109,39 +109,39 @@ typedef struct VuParticleOut {
 
 /* ------------------------------------------------------------- state */
 
-void vu1ref_Init(Vu1Ref *r);
+void vu1ref_init(Vu1Ref *r);
 /* gsb_MakeCommonMatrix's UNPACK of 16 qwords to VU memory 0..15
  * (RdVuCommon). */
-void vu1ref_LoadCommon(Vu1Ref *r, const float qw[16][4]);
+void vu1ref_load_common(Vu1Ref *r, const float qw[16][4]);
 /* Code 2, SET_UVOFFSET (vu1_common.h:57): mem[2].xy = qw.xy. */
-void vu1ref_SetUVOffset(Vu1Ref *r, const float qw[4]);
+void vu1ref_set_uv_offset(Vu1Ref *r, const float qw[4]);
 
 /* normal_c / normal_l code 16, SET_NORMAL_MATRIX (normal_c.vsm:54): 12 qwords
  * to vf01..vf04 and mem[16..27]; mem[3] (the common GIF tag) to mem[37]. */
-void vu1ref_NormalSetMatrix(Vu1Ref *r, const float qw[12][4]);
+void vu1ref_normal_set_matrix(Vu1Ref *r, const float qw[12][4]);
 /* normal_c / normal_l code 18, SET_NORMAL_LIGHT (normal_c.vsm:88): mem[28..35]. */
-void vu1ref_NormalSetLight(Vu1Ref *r, const float qw[8][4]);
+void vu1ref_normal_set_light(Vu1Ref *r, const float qw[8][4]);
 /* cluster code 16, SET_CLUSTER_MATRIX (cluster.vsm:69): qw[0].x (int) is the
  * count n + 1 of qwords copied from qw[1] to mem[16..]; qw[0].w goes to
  * mem[2].w; then vf09..vf12 = mem[4..7]. qw must hold n + 2 qwords (the
  * program copies one past the unpack). */
-void vu1ref_ClusterSetMatrix(Vu1Ref *r, const float (*qw)[4]);
+void vu1ref_cluster_set_matrix(Vu1Ref *r, const float (*qw)[4]);
 /* cluster code 18, SET_CLUSTER_LIGHT (cluster.vsm:98): vf13..vf20. */
-void vu1ref_ClusterSetLight(Vu1Ref *r, const float qw[8][4]);
+void vu1ref_cluster_set_light(Vu1Ref *r, const float qw[8][4]);
 /* mesh code 16, SET_MESH_MATRIX (mesh.vsm:85): vf01..vf04 and the clip
  * constants vf13 = 0, vf14.xyw = 4094, 4094, 16777214. */
-void vu1ref_MeshSetMatrix(Vu1Ref *r, const float qw[4][4]);
+void vu1ref_mesh_set_matrix(Vu1Ref *r, const float qw[4][4]);
 /* mesh code 18, SET_MESH_LIGHT (mesh.vsm:102): vf05..vf12. */
-void vu1ref_MeshSetLight(Vu1Ref *r, const float qw[8][4]);
+void vu1ref_mesh_set_light(Vu1Ref *r, const float qw[8][4]);
 /* particle code 16, SET_PARTICLE_MATRIX (particle.vsm:43): vf01..vf08. */
-void vu1ref_ParticleSetMatrix(Vu1Ref *r, const float qw[8][4]);
+void vu1ref_particle_set_matrix(Vu1Ref *r, const float qw[8][4]);
 
 /* The wide factor of the frame's world space (g_space[SPACE_WORLD].x, the
  * renderer's wideX: (4/3) / aspect on a wide scene target, 1 otherwise),
  * shared by every Vu1Ref. The region test of normal_c, normal_l and mesh
  * compares x squeezed by it about GS X 2048, as vu_common.hlsli's
  * vu_region_pos does; 1 (the default) tests the position as it is. */
-void vu1ref_SetWideX(float f);
+void vu1ref_set_wide_x(float f);
 
 /* ------------------------------------------------------------- draws
  * in = the batch at TOP: in[0] is the GIF tag (NLOOP in the low 15 bits of
@@ -150,18 +150,18 @@ void vu1ref_SetWideX(float f);
 
 /* normal_c (prelit): code 32 BEGIN_NORMAL_C (region test), 34
  * BEGIN_NORMAL_C_NOCLIP, 36 BEGIN_SCISSOR_C. Vertex: pos, ST, colour. */
-void vu1ref_NormalC(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
+void vu1ref_normal_c(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
 /* normal_l (lit): code 32 BEGIN_NORMAL_L, 34 BEGIN_NORMAL_L_SPEC, 36
  * BEGIN_SCISSOR_L, 38 BEGIN_NORMAL_REF. Vertex: pos, normal, ST, colour. */
-void vu1ref_NormalL(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
+void vu1ref_normal_l(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
 /* cluster (skinned): code 20 CLUSTER_0, 22 CLUSTER_0_SPEC, 24
  * CLUSTER_1_SPEC. Vertex: pos, normal, weights (int addr0, w0, int addr1,
  * w1), ST, colour. */
-void vu1ref_Cluster(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
+void vu1ref_cluster(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
 /* mesh (procedural grid): code 20 MESH_NOLIGHT, 22 MESH_LIGHT, 24
  * MESH_LIGHT_SPEC. in[1] is the batch colour, then per vertex pos, [normal,]
  * ST. */
-void vu1ref_Mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
+void vu1ref_mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
 /* particle: code 18 BEGIN_PARTICLE (or the fall-through from code 16) then
  * START_PARTICLE. in[0].x = count, in[1], in[2] GIF tags, in[3] clip
  * minimum, in[4] clip maximum, in[5] (size scale, du, dv, -), then two qwords
@@ -170,7 +170,7 @@ void vu1ref_Mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out);
  * (inQw - 6) / 2 particles, and an input shorter than the 6 header qwords
  * draws nothing (the game fills count from its own buffer, a corrupt or
  * over-large count must not read past it). */
-void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out);
+void vu1ref_particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleOut *out);
 
 /* ------------------------------------------------------------- helpers */
 
@@ -178,7 +178,7 @@ void vu1ref_Particle(Vu1Ref *r, const float (*in)[4], uint32_t inQw, VuParticleO
  * vertex k whose XYZ2 has ADC clear, from vertices k-2, k-1, k (the GIF
  * tag's PRE resets the vertex queue at the batch start). Writes the k of each
  * drawn triangle to kicks (at most out->count) and returns their number. */
-int vu1ref_Kicks(const VuBatchOut *out, int *kicks);
+int vu1ref_kicks(const VuBatchOut *out, int *kicks);
 
 /* The static part of the drawing kicks of a vertex stream, which rd's index
  * buffer encodes (port/render/rd_mesh.h): triangle k (vertices k-2..k) can
@@ -187,7 +187,7 @@ int vu1ref_Kicks(const VuBatchOut *out, int *kicks);
  * vertex k nor k-1 has ST.w < 1. stw = the ST.w of each vertex; NULL for the
  * mesh program (no flag). batchStart(k) is given as the first vertex index
  * of k's batch through batchFirst[k]. Returns the count written to kicks. */
-int vu1ref_StaticKicks(const float *stw, const int *batchFirst, int count, int *kicks);
+int vu1ref_static_kicks(const float *stw, const int *batchFirst, int count, int *kicks);
 
 #ifdef __cplusplus
 }

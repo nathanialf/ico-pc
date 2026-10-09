@@ -1,5 +1,5 @@
 /* texpack_png.c: PNG files of PCSX2 texture packs (texpack.h
- * texpack_LoadPng), a small reader on miniz's inflate (tinfl).
+ * texpack_load_png), a small reader on miniz's inflate (tinfl).
  *
  * PCSX2 reads packs with libpng and keeps two cases: RGBA rows as they are
  * (the file's alpha byte is the GS alpha, 0x80 = opaque) and RGB rows with
@@ -211,7 +211,7 @@ static int validDepth(uint8_t colour, uint8_t depth)
     }
 }
 
-int texpack_LoadPng(const uint8_t *data, size_t size, const char *file, TexpackImage *out)
+int texpack_load_png(const uint8_t *data, size_t size, const char *file, TexpackImage *out)
 {
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
     PngInfo pi;
@@ -260,8 +260,8 @@ int texpack_LoadPng(const uint8_t *data, size_t size, const char *file, TexpackI
             pi.interlace = body[12];
             if (pi.w == 0 || pi.h == 0 || pi.w > PNG_MAX_SIDE || pi.h > PNG_MAX_SIDE) {
                 why = "the PNG size is out of range";
-            } else if (texpack_MaxSide() &&
-                       (pi.w > texpack_MaxSide() || pi.h > texpack_MaxSide())) {
+            } else if (texpack_max_side() &&
+                       (pi.w > texpack_max_side() || pi.h > texpack_max_side())) {
                 /* before any row is allocated: a huge file costs nothing */
                 why = "the picture is larger than this graphics card can show";
             } else if (!validDepth(pi.colour, pi.depth) || body[10] != 0 || body[11] != 0 ||

@@ -1,10 +1,10 @@
 /* menu_look_test.c: the menus' Arimo text against the game's menu sheets.
  *
  * Every menu word is Arimo rasterised on the sheets' texel grid and drawn in
- * the sheets' style (menu_font.h, rd.h rd_CreateTextureSheet).  This test
+ * the sheets' style (menu_font.h, rd.h rd_create_texture_sheet).  This test
  * holds that look to the sheets it imitates: the sheets are read from the
  * player's disc (menu_sheets.c), the item strips are the ones the game draws
- * (ui__MenuStripRaster) run through the shader's CPU reference
+ * (ui__menu_strip_raster) run through the shader's CPU reference
  * (port/render/test/sheet_ref.c), and the two pictures are compared.
  *
  *   testSurvey        measures the sheets (the light-ink items of the menu
@@ -56,7 +56,7 @@
 #include "menu_font.h"
 #include "menu_sheets.h"
 #include "menu_text.h"
-#include "rd_internal.h" /* rd_WritePng */
+#include "rd_internal.h" /* rd_write_png */
 #include "sheet_ref.h"
 #include "shader_consts.h"
 #include "strings.h"
@@ -170,7 +170,7 @@ static int rowOfItem(int item)
 
 static void collect(void)
 {
-    const int texFiles = ms_TexFileCount();
+    const int texFiles = ms_tex_file_count();
     for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
         s_rect[lang] = calloc((size_t)ui_menu_text_item_count, sizeof(Rect));
         for (int i = 0; i < ui_menu_text_item_count; i++) {
@@ -185,8 +185,8 @@ static void collect(void)
                 continue;
             }
             char name[64];
-            ms_SheetName(texFile[e->texFileNo].path, lang, name, sizeof(name));
-            const MsSheet *s = ms_SheetFor(s_vfs, name);
+            ms_sheet_name(texFile[e->texFileNo].path, lang, name, sizeof(name));
+            const MsSheet *s = ms_sheet_for(s_vfs, name);
             if (!s || it->u + it->w > s->w || it->v + it->h > s->h) {
                 continue;
             }
@@ -401,7 +401,7 @@ static void testSurvey(void)
     int steps[UI_LANG_COUNT * 16], nsteps = 0;
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         survey(l, &sv[l]);
-        const UiSheetInk *ink = ui_MenuSheetInk(l);
+        const UiSheetInk *ink = ui_menu_sheet_ink(l);
         printf("menu_look: survey %s: fill %.1f rim %.1f massX %.2f massY %.2f, %d sheets, steps",
                kLang[l], sv[l].fill, sv[l].rim, sv[l].massX, sv[l].massY, sv[l].sheets);
         for (int s = 0; s < sv[l].sheets; s++) {
@@ -479,7 +479,7 @@ static void testSurvey(void)
 /* the style and the sprite colour (GS, 0x80 = 1) an ink draws with */
 static void inkOf(int ink, int rim, int lang, RdSheetStyle *st, int *col)
 {
-    const UiSheetInk *k = ui_MenuItemInk(ink, rim, lang);
+    const UiSheetInk *k = ui_menu_item_ink(ink, rim, lang);
     st->rimOn = k->rimOn;
     st->rimLevel = k->rimLevel;
     st->fillLevel = k->fillLevel;
@@ -497,7 +497,7 @@ static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uin
     if (!cov) {
         return -1;
     }
-    if (ui__MenuStripRaster(it, r->lang, cov, r->w, r->h) != 0) {
+    if (ui__menu_strip_raster(it, r->lang, cov, r->w, r->h) != 0) {
         free(cov);
         return -1;
     }
@@ -507,7 +507,7 @@ static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uin
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {
             uint8_t g, a;
-            sheetref_Texel(cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
+            sheetref_texel(cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
             const int gm = (g * col + 64) / 128;
             grey[y * r->w + x] = (uint8_t)(gm > 255 ? 255 : gm);
             const int a255 = a * 255 / 128;
@@ -944,7 +944,7 @@ static void writePair(const char *dir, const Rect *r, const uint8_t *rg, const u
     blit(img, W, r->w * s + gap, r->h * s + gap, rg, ra, r->w, r->h, s, 1);
     char path[1100];
     snprintf(path, sizeof(path), "%s/menu_look/%s/%d.png", dir, kLang[r->lang], r->row);
-    rd_WritePng(path, img, (uint32_t)W, (uint32_t)H, (uint32_t)W * 4, 1);
+    rd_write_png(path, img, (uint32_t)W, (uint32_t)H, (uint32_t)W * 4, 1);
     free(img);
 }
 
@@ -990,7 +990,7 @@ static void testCompareItems(const char *outDir)
                 continue; /* nothing of the item's words on this sheet */
             }
             total++;
-            if (!strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n')) {
+            if (!strchr(ui_str_in((UiLang)lang, (UiStrId)it->str), '\n')) {
                 geoAdd(r, &ms, &mr);
             }
             const char *rimEnv = getenv("ICO_MENU_LOOK_RIM");
@@ -1016,7 +1016,7 @@ static void testCompareItems(const char *outDir)
                        it->rim[lang]);
             }
             langN++;
-            const int multi = strchr(ui_StrIn((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
+            const int multi = strchr(ui_str_in((UiLang)lang, (UiStrId)it->str), '\n') != NULL;
             /* the figure 1 (and 10): Arimo's 1 has a foot the sheets' has not */
             const int one = it->str == UI_STR_MT_DIGIT_1 || it->str == UI_STR_MT_DIGIT_10;
             if (langN <= GEO_ITEMS) {
@@ -1090,8 +1090,8 @@ static void testCompareItems(const char *outDir)
         if (contact) {
             char path[1100];
             snprintf(path, sizeof(path), "%s/menu_look/%s/contact.png", outDir, kLang[lang]);
-            rd_WritePng(path, contact, (uint32_t)CW, (uint32_t)(cy > 0 ? cy : 1), (uint32_t)CW * 4,
-                        1);
+            rd_write_png(path, contact, (uint32_t)CW, (uint32_t)(cy > 0 ? cy : 1), (uint32_t)CW * 4,
+                         1);
             free(contact);
         }
         geoPrint(lang);
@@ -1168,8 +1168,8 @@ static double medianD(double *v, int n)
 
 static void geoFit(int fixedWidth)
 {
-    const float w0 = ui__SheetSetWidth(UI_SHEET_WIDTH);
-    ui__SheetSetWidth(w0);
+    const float w0 = ui__sheet_set_width(UI_SHEET_WIDTH);
+    ui__sheet_set_width(w0);
     double tot0 = 0.0, tot = 0.0;
     int totN = 0;
 
@@ -1349,7 +1349,7 @@ static void geoFit(int fixedWidth)
     }
     printf("menu_look: geofit total %d: err %.3f -> %.3f\n", totN, totN ? tot0 / totN : 0.0,
            totN ? tot / totN : 0.0);
-    ui__SheetSetWidth(w0);
+    ui__sheet_set_width(w0);
 }
 
 /* ------------------------------------------------------------------ fit */
@@ -1456,7 +1456,8 @@ static void fit(void)
                 continue;
             }
             uint8_t *cov = malloc((size_t)r->w * (size_t)r->h);
-            if (!cov || ui__MenuStripRaster(&ui_menu_text_items[r->item], lang, cov, r->w, r->h)) {
+            if (!cov ||
+                ui__menu_strip_raster(&ui_menu_text_items[r->item], lang, cov, r->w, r->h)) {
                 free(cov);
                 continue;
             }
@@ -1467,7 +1468,7 @@ static void fit(void)
         }
         double best = 1e9, atCurrent = 1e9;
         unsigned bl = 0, br = 0, bf = 0;
-        const UiSheetInk *cur = ui_MenuSheetInk(lang);
+        const UiSheetInk *cur = ui_menu_sheet_ink(lang);
         for (int i = 0; i < n; i++) {
             maxFilter(&fi[i]);
         }
@@ -1521,16 +1522,16 @@ static void testFitCopy(void)
     f.r = r;
     f.cov = malloc((size_t)r->w * (size_t)r->h);
     f.rim = malloc((size_t)r->w * (size_t)r->h);
-    CHECK(ui__MenuStripRaster(&ui_menu_text_items[r->item], UI_LANG_EN, f.cov, r->w, r->h) == 0,
+    CHECK(ui__menu_strip_raster(&ui_menu_text_items[r->item], UI_LANG_EN, f.cov, r->w, r->h) == 0,
           "the strip of the first item");
     maxFilter(&f);
-    const UiSheetInk *k = ui_MenuSheetInk(UI_LANG_EN);
+    const UiSheetInk *k = ui_menu_sheet_ink(UI_LANG_EN);
     RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight, 1};
     int diff = 0;
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {
             uint8_t g, a;
-            sheetref_Texel(f.cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
+            sheetref_texel(f.cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
             const unsigned c = f.cov[y * r->w + x], rm = f.rim[y * r->w + x];
             const unsigned av = c > rm ? c : rm;
             const unsigned t = av ? (c * 255u + av / 2u) / av : 0u;
@@ -1609,13 +1610,13 @@ int main(int argc, char **argv)
     if (boldEnv) {
         float bx = 0.0f, by = 0.0f;
         if (sscanf(boldEnv, "%f,%f", &bx, &by) == 2) {
-            ui__MenuSetBold(bx, by);
+            ui__menu_set_bold(bx, by);
             printf("menu_look: bold %.2f %.2f\n", bx, by);
         }
     }
     const char *widthEnv = getenv("ICO_MENU_LOOK_WIDTH");
     if (widthEnv) {
-        ui__SheetSetWidth((float)atof(widthEnv));
+        ui__sheet_set_width((float)atof(widthEnv));
     }
     if (geoEnv && (*geoEnv == '1' || *geoEnv == '2')) {
         geoFit(*geoEnv == '2');
@@ -1633,7 +1634,7 @@ int main(int argc, char **argv)
         }
         free(s_rect[l]);
     }
-    ms_SheetsFree();
+    ms_sheets_free();
     ico_vfs_unmount(s_vfs);
     printf("menu_look: %d failures\n", failures);
     return failures ? 1 : 0;

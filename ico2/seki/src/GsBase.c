@@ -184,7 +184,7 @@ void gsb_Init(void *db)
         if (rdW != ScreenWidth || rdH != ScreenHeight) {
             rdW = ScreenWidth;
             rdH = ScreenHeight;
-            rd_ResetScene((unsigned int)ScreenWidth, (unsigned int)ScreenHeight);
+            rd_reset_scene((unsigned int)ScreenWidth, (unsigned int)ScreenHeight);
         }
         gsbHostResetHalf();
     }
@@ -414,11 +414,11 @@ static void gsb_KeepFrameBuffer(void)
 
 #ifdef ICO_RD
     /* PC port (R2c): the same register writes and sprite as
-       rd_Post(RD_POST_KEEP), in list 11, in the environment in force */
+       rd_post(RD_POST_KEEP), in list 11, in the environment in force */
     (void)r0;
     (void)r1;
     dl_SetDLPriority(11);
-    rd_Post(RD_POST_KEEP, (RdPostParams *)0);
+    rd_post(RD_POST_KEEP, (RdPostParams *)0);
 #else
     gif_StartPacketPriPath1(11);
     gif_SetGsReg(0x47, 0x30000);
@@ -491,7 +491,7 @@ static void gsb_fade(void)
         fadeColor[3] = fadeLevel;
     }
 #ifdef ICO_RD
-    /* PC port (R2c): rd_Post(RD_POST_FADE) records the same writes and
+    /* PC port (R2c): rd_post(RD_POST_FADE) records the same writes and
        sprite (the scene environment, TEST, ZBUF, PABE, ALPHA 0x44, PRIM
        0x446) in list 11 */
     (void)r;
@@ -504,7 +504,7 @@ static void gsb_fade(void)
         pp.rgba[1] = fadeColor[1];
         pp.rgba[2] = fadeColor[2];
         pp.rgba[3] = fadeColor[3];
-        rd_Post(RD_POST_FADE, &pp);
+        rd_post(RD_POST_FADE, &pp);
     }
 #else
     gif_StartPacketPri(0xB);
@@ -586,7 +586,7 @@ static void gsb_scissorOnDemo(void)
            (and the subtitle dimming that rides on them); the ramp above still runs */
         if (ico_video_effect_cinematic_bars()) {
 #ifdef ICO_RD
-            /* PC port (R2c): rd_Post(RD_POST_LETTERBOX): the scene
+            /* PC port (R2c): rd_post(RD_POST_LETTERBOX): the scene
            environment, TEST 0x30000, Z write on, PABE 0, ALPHA 0x64 with
            FIX = the level, the two 58-line bars */
             (void)r;
@@ -598,7 +598,7 @@ static void gsb_scissorOnDemo(void)
                 memset(&pp, 0, sizeof(pp));
                 pp.fix = (unsigned char)(int)scissorLevel;
                 pp.lines = 58;
-                rd_Post(RD_POST_LETTERBOX, &pp);
+                rd_post(RD_POST_LETTERBOX, &pp);
             }
 #else
             gif_StartPacketPriPath1(dl_GetPri());
@@ -644,7 +644,7 @@ static void gsb_controlBrightness(void)
             debug_Printf(0x212, ScreenHeight / 2 - 8, 0xCCCCCC00, "B");
         }
 #ifdef ICO_RD
-        /* PC port (R2c): rd_Post(RD_POST_BRIGHTNESS): TEST 0x30000, Z
+        /* PC port (R2c): rd_post(RD_POST_BRIGHTNESS): TEST 0x30000, Z
            write off, gif_SetAlpha(1, 7, 0), the white sprite with the
            corners the GS receives from gif_MakeSpriteNoTexture */
         dl_SetDLPriority(0xB);
@@ -654,7 +654,7 @@ static void gsb_controlBrightness(void)
             memset(&pp, 0, sizeof(pp));
             pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 0xFF;
             pp.rgba[3] = (unsigned char)systemStatus[0x2C / 4];
-            rd_Post(RD_POST_BRIGHTNESS, &pp);
+            rd_post(RD_POST_BRIGHTNESS, &pp);
         }
 #else
         gif_StartPacketPri(0xB);
@@ -720,8 +720,8 @@ static void gsb_antiAlias(void)
         return;
     }
 #ifdef ICO_RD
-    /* PC port (R2c): rd_Post(RD_POST_AA_DOWNSAMPLE) then
-       rd_Post(RD_POST_AA_COMPOSITE) record this function's writes and
+    /* PC port (R2c): rd_post(RD_POST_AA_DOWNSAMPLE) then
+       rd_post(RD_POST_AA_COMPOSITE) record this function's writes and
        sprites in list 10, in the same order */
     (void)col;
     (void)s0;
@@ -736,11 +736,11 @@ static void gsb_antiAlias(void)
 
         memset(&pp, 0, sizeof(pp));
         pp.lines = lv[1] != 0 ? 2 : 1;
-        rd_Post(RD_POST_AA_DOWNSAMPLE, &pp);
+        rd_post(RD_POST_AA_DOWNSAMPLE, &pp);
         memset(&pp, 0, sizeof(pp));
         pp.rgba[0] = (unsigned char)lv[0];
         pp.rgba[1] = (unsigned char)lv[1];
-        rd_Post(RD_POST_AA_COMPOSITE, &pp);
+        rd_post(RD_POST_AA_COMPOSITE, &pp);
     }
     return;
 #endif
@@ -956,7 +956,7 @@ static void gsb_filmNoise(void)
 #ifdef ICO_RD
     /* PC port (R2c): one PRIM write lets the decoder bind the TEX0
        tex_TransTexture wrote (sandstorm_spr, through the texture resolver),
-       as DisplayFont.c does; rd_Post(RD_POST_FILM_NOISE) records the rest
+       as DisplayFont.c does; rd_post(RD_POST_FILM_NOISE) records the rest
        (CLAMP 0, ZBUF, TEST, PABE, ALPHA 0x44, the grain sprite) */
     gif_StartPacketPriPath1(dl_GetPri());
     gif_SetGsReg(0, 0x56);
@@ -968,7 +968,7 @@ static void gsb_filmNoise(void)
         pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 0x80;
         pp.rgba[3] = (unsigned char)GlobalStageSetting.targetCol[optionScreenMode - 1][3];
         pp.scalar[0] = scale;
-        rd_Post(RD_POST_FILM_NOISE, &pp);
+        rd_post(RD_POST_FILM_NOISE, &pp);
     }
     return;
 #endif
@@ -1068,7 +1068,7 @@ static int gsb_PostEffect(void)
 
    rd records the head when the frame opens (gsbHostFrameHead: the draw
    environment, the clear, at the head of lists 0 and 11) and patches the
-   colour and the half offset at the flip (gsbHostFlip), before rd_EndFrame
+   colour and the half offset at the flip (gsbHostFlip), before rd_end_frame
    keeps the copy of the first list the frame replays. */
 
 /* the half-offset bit each draw environment of db carries (sceGsSetHalfOffset
@@ -1092,7 +1092,7 @@ static void gsbHostFrameHead(void)
 {
     RdFrameHead h;
 
-    if (!rd_FrameOpen()) {
+    if (!rd_frame_open()) {
         return;
     }
     gif_HostFlush();
@@ -1103,7 +1103,7 @@ static void gsbHostFrameHead(void)
     h.gsH = (unsigned int)ScreenHeight;
     h.halfY = 0; /* gsbHostFlip sets what the flip sends */
     h.clear = fbClear != 0;
-    rd_FrameHead(&h);
+    rd_frame_head(&h);
 }
 
 /* between sceGsSwapDBuff and sceGsSetHalfOffset: what the flip sent */
@@ -1112,7 +1112,7 @@ static void gsbHostFlip(void)
     unsigned char bg[4];
 
     gsb_GetBGColor(bg);
-    rd_FrameFlip(bg, gsbHostHalf[buffer_ID & 1]);
+    rd_frame_flip(bg, gsbHostHalf[buffer_ID & 1]);
 }
 
 /* sceGsSetHalfOffset(draw, ..., odd_even == 0) with the field bit */
@@ -1130,7 +1130,7 @@ static void gsbHostReduction(void)
 {
     RdPostParams pp;
 
-    if (!rd_FrameOpen()) {
+    if (!rd_frame_open()) {
         return;
     }
     memset(&pp, 0, sizeof(pp));
@@ -1139,7 +1139,7 @@ static void gsbHostReduction(void)
     pp.rgba[2] = (unsigned char)reductionBlue;
     pp.rgba[3] = 0x80;
     dl_SetDLPriority(12);
-    rd_Post(RD_POST_REDUCTION, &pp);
+    rd_post(RD_POST_REDUCTION, &pp);
 }
 
 #endif
@@ -1494,13 +1494,13 @@ void gsb_SetVSMatrix(int w, int h, float d)
        scissor keeps it off the tick's own picture).  0.12 makes the
        culled frustum's half-width and half-height 1.12 times the
        screen's, the same share of the picture at every aspect.
-   The renderer's own projection widens in rd (rd__FillCameraCB, the
+   The renderer's own projection widens in rd (rd__fill_camera_cb, the
    replay's g_space); the gameplay matrices +0x80 and +0xC0
    (IsPointIsInScreen and the screen tests) never change.  puddle.c and
    pool.c call gsb_SetVSMatrix for their reflection views too, so the
    reflections' cull widens by the same factors: it only ever adds objects
    to a reflection, whose +0xC0 stays 4:3 as well; the renderer widens the
-   render-to-texture block and its draws (rd_core.c rd__TargetScaleOf), so
+   render-to-texture block and its draws (rd_core.c rd__target_scale_of), so
    those objects show at the sides of a wide frame.  A part the widened
    frustum holds whole but that crosses the screen's edge is drawn by the
    VU program for parts inside (code 34) instead of the one with the
@@ -1634,7 +1634,7 @@ static void gsbHostCommon(void)
     _CopyMatrix(b.screenView, matrixptr + 0x100);
     _CopyMatrix(b.viewport, matrixptr + 0x340);
     _CopyMatrix(b.invView, matrixptr + 0x380);
-    rd_SetVuCommon(&b);
+    rd_set_vu_common(&b);
     memset(&cam, 0, sizeof(cam));
     _CopyMatrix(cam.view, matrixptr + 0x80);
     _CopyMatrix(cam.proj43, matrixptr + 0xC0);
@@ -1642,7 +1642,7 @@ static void gsbHostCommon(void)
     cam.aspect43 = 4.0f / 3.0f;
     cam.nearZ = vsParam[7];
     cam.farZ = vsParam[8];
-    rd_SetCamera(&cam);
+    rd_set_camera(&cam);
 }
 
 #endif

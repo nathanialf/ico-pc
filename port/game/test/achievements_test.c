@@ -39,7 +39,7 @@ static char s_last_title[UI_POPUP_TEXT], s_last_body[UI_POPUP_TEXT];
 #define HISTORY 64
 static char s_hist_title[HISTORY][UI_POPUP_TEXT], s_hist_body[HISTORY][UI_POPUP_TEXT];
 
-int ui_PopupPush(const char *title, const char *body)
+int ui_popup_push(const char *title, const char *body)
 {
     if (s_push_full) {
         return -1;
@@ -564,8 +564,8 @@ static void test_each(void)
         for (i = 0; i < ico_ach_count(); i++) {
             CHECK(st(ico_ach_id(i)) == ICO_ACH_UNLOCKED); /* all unlocked above */
             for (l = 0; l < UI_LANG_COUNT; l++) {
-                CHECK(ui_StrIn((UiLang)l, (UiStrId)ico_ach_title_str(i))[0] != '\0');
-                CHECK(ui_StrIn((UiLang)l, (UiStrId)ico_ach_desc_str(i))[0] != '\0');
+                CHECK(ui_str_in((UiLang)l, (UiStrId)ico_ach_title_str(i))[0] != '\0');
+                CHECK(ui_str_in((UiLang)l, (UiStrId)ico_ach_desc_str(i))[0] != '\0');
             }
         }
     }
@@ -963,14 +963,14 @@ static void test_popups(void)
     g.stage_no = 13;
     ticks(1);
     CHECK(s_pushes == 1);
-    CHECK(strcmp(s_last_title, ui_StrIn(UI_LANG_EN, UI_STR_ACH_GATE)) == 0);
-    CHECK(strcmp(s_last_body, ui_StrIn(UI_LANG_EN, UI_STR_ACH_GATE_DESC)) == 0);
+    CHECK(strcmp(s_last_title, ui_str_in(UI_LANG_EN, UI_STR_ACH_GATE)) == 0);
+    CHECK(strcmp(s_last_body, ui_str_in(UI_LANG_EN, UI_STR_ACH_GATE_DESC)) == 0);
     CHECK(ico_ach_pending_popups() == 2);
     ticks(ICO_ACH_POPUP_GAP_TICKS - 3);
     CHECK(s_pushes == 1);
     ticks(1);
     CHECK(s_pushes == 2);
-    CHECK(strcmp(s_last_title, ui_StrIn(UI_LANG_EN, UI_STR_ACH_WINDMILL)) == 0);
+    CHECK(strcmp(s_last_title, ui_str_in(UI_LANG_EN, UI_STR_ACH_WINDMILL)) == 0);
     /* the UI queue full: kept and retried */
     s_push_full = 1;
     ticks(ICO_ACH_POPUP_GAP_TICKS * 2);
@@ -979,22 +979,22 @@ static void test_popups(void)
     ticks(1);
     CHECK(s_pushes == 3 && ico_ach_pending_popups() == 0);
     /* the language at popup time */
-    ui_SetLanguage(UI_LANG_DE);
+    ui_set_language(UI_LANG_DE);
     g.stage_no = 22;
     ticks(ICO_ACH_POPUP_GAP_TICKS);
     CHECK(strcmp(s_last_title, "Der Wasserfall") == 0);
-    ui_SetLanguage(UI_LANG_EN);
+    ui_set_language(UI_LANG_EN);
     /* a long description is broken into lines of at most 44 letters */
     {
         int i = ico_ach_find("never_taken");
-        const char *d = ui_StrIn(UI_LANG_EN, (UiStrId)ico_ach_desc_str(i));
+        const char *d = ui_str_in(UI_LANG_EN, (UiStrId)ico_ach_desc_str(i));
         const char *b;
 
         CHECK(strlen(d) > 44);
         new_game();
         ending(0, 9 * 3600);
         ticks(ICO_ACH_POPUP_GAP_TICKS * 4);
-        b = pushed_body(ui_StrIn(UI_LANG_EN, (UiStrId)ico_ach_title_str(i)));
+        b = pushed_body(ui_str_in(UI_LANG_EN, (UiStrId)ico_ach_title_str(i)));
         CHECK(b != NULL);
         if (b != NULL) {
             const char *nl = strchr(b, '\n');

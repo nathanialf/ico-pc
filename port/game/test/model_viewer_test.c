@@ -11,7 +11,7 @@
  *     are the boy and the girl;
  *   - its name, and the viewer's words, are non-empty in the five
  *     languages, different from the other models' in each, and every
- *     character has a glyph in the port font (ui_FontHasGlyph).
+ *     character has a glyph in the port font (ui_font_has_glyph).
  * Exit 0, 1 on a mismatch. */
 #include <stdint.h>
 #include <stdio.h>
@@ -79,7 +79,7 @@ static int32_t next(const char **s)
 static void checkText(int id, const char *what)
 {
     for (int l = 0; l < UI_LANG_COUNT; l++) {
-        const char *s = ui_StrIn((UiLang)l, (UiStrId)id);
+        const char *s = ui_str_in((UiLang)l, (UiStrId)id);
         CHECK(s != NULL && s[0] != '\0', "%s (%d): empty in %s", what, id, kLang[l]);
         if (s == NULL) {
             continue;
@@ -96,7 +96,7 @@ static void checkText(int id, const char *what)
             if (c == '\n') {
                 continue;
             }
-            CHECK(c >= 0x20 && ui_FontHasGlyph((uint32_t)c), "%s (%d) in %s: U+%04X has no glyph",
+            CHECK(c >= 0x20 && ui_font_has_glyph((uint32_t)c), "%s (%d) in %s: U+%04X has no glyph",
                   what, id, kLang[l], (unsigned)c);
         }
         CHECK(c == 0, "%s (%d) in %s: malformed UTF-8", what, id, kLang[l]);
@@ -110,7 +110,7 @@ static int dataStage(int s)
 
 int main(void)
 {
-    if (!ui_FontInit()) {
+    if (!ui_font_init()) {
         printf("model_viewer_test: the port font did not load\n");
         return 1;
     }
@@ -130,15 +130,15 @@ int main(void)
     CHECK(mv_modelCount >= 20 && mv_modelCount <= 40, "%d models", mv_modelCount);
     for (int i = 0; i < mv_modelCount; i++) {
         const MvModel *m = &mv_models[i];
-        const char *en = ui_StrIn(UI_LANG_EN, (UiStrId)m->nameStr);
+        const char *en = ui_str_in(UI_LANG_EN, (UiStrId)m->nameStr);
         CHECK(m->nameStr >= UI_STR_MV_ICO && m->nameStr < UI_STR_COUNT, "model %d: name id %d", i,
               m->nameStr);
         checkText(m->nameStr, en);
         /* the list's label column: 560 px at size 24 (model_viewer.c; the model
          list has no value column) */
         for (int l = 0; l < UI_LANG_COUNT; l++) {
-            const char *nm = ui_StrIn((UiLang)l, (UiStrId)m->nameStr);
-            const float w = ui_MeasureText(24.0f, nm);
+            const char *nm = ui_str_in((UiLang)l, (UiStrId)m->nameStr);
+            const float w = ui_measure_text(24.0f, nm);
             CHECK(w <= 560.0f, "%s in %s: %.1f px wide, the label column is 560", en, kLang[l], w);
         }
         CHECK(dataStage(m->stage), "%s: host stage %d", en, m->stage);
@@ -165,8 +165,8 @@ int main(void)
         for (int j = 0; j < i; j++) {
             CHECK(mv_models[j].nameStr != m->nameStr, "%s: listed twice", en);
             for (int l = 0; l < UI_LANG_COUNT; l++) {
-                CHECK(strcmp(ui_StrIn((UiLang)l, (UiStrId)mv_models[j].nameStr),
-                             ui_StrIn((UiLang)l, (UiStrId)m->nameStr)) != 0,
+                CHECK(strcmp(ui_str_in((UiLang)l, (UiStrId)mv_models[j].nameStr),
+                             ui_str_in((UiLang)l, (UiStrId)m->nameStr)) != 0,
                       "%s: the same name as model %d in %s", en, j, kLang[l]);
             }
         }
@@ -191,10 +191,10 @@ int main(void)
         UI_STR_CHAR_SWITCH_YORDA, UI_STR_CHAR_SWITCH_ICO, UI_STR_CHAR_HINT_COLOUR,
         UI_STR_CHAR_HINT_CHARACTER, UI_STR_VAL_ORIGINAL};
     for (unsigned i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
-        checkText(kWords[i], ui_StrIn(UI_LANG_EN, (UiStrId)kWords[i]));
+        checkText(kWords[i], ui_str_in(UI_LANG_EN, (UiStrId)kWords[i]));
     }
 
-    ui_FontShutdown();
+    ui_font_shutdown();
     if (failures == 0) {
         printf("model_viewer_test: %d models in %d blocks, names and words in %d languages\n",
                mv_modelCount, mv_blockCount, UI_LANG_COUNT);

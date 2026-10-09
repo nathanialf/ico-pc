@@ -581,7 +581,7 @@ static void makeTexture(void)
     for (int i = 0; i < 16 * 16; i++) {
         px[i * 4 + 0] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 0x80;
     }
-    s_tex = rd_CreateTexture(16, 16, px, RD_TEXA_80_80, "testtex");
+    s_tex = rd_create_texture(16, 16, px, RD_TEXA_80_80, "testtex");
 }
 
 /* ----------------------------------------------------------- the camera
@@ -702,7 +702,7 @@ static void setCommon(void)
 {
     RdVuCommon b;
     memcpy(&b, s_common, sizeof(b));
-    rd_SetVuCommon(&b);
+    rd_set_vu_common(&b);
     memset(&s_frameCam, 0, sizeof(s_frameCam));
     memcpy(s_frameCam.view, matrixptr + 0x80, 64);
     memcpy(s_frameCam.proj43, matrixptr + 0xC0, 64);
@@ -710,7 +710,7 @@ static void setCommon(void)
     s_frameCam.aspect43 = 4.0f / 3.0f;
     s_frameCam.nearZ = 2.0f;
     s_frameCam.farZ = 262144.0f;
-    rd_SetCamera(&s_frameCam);
+    rd_set_camera(&s_frameCam);
 }
 
 /* a double-precision product a x b of column-major 4 x 4 matrices */
@@ -859,7 +859,7 @@ static void walkFrame(const RdFrame *f)
 {
     memset(&s_fd, 0, sizeof(s_fd));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, &s_fd);
+    rd__walk(f, 0, &s, collect, &s_fd);
 }
 
 static int isNamed(uint32_t id)
@@ -889,7 +889,7 @@ static uint32_t checkBlock(const char *what, int list, uint32_t ew, uint32_t eh,
         }
         if (k->c->type == RDC_TARGET) {
             uint32_t id = k->c->u[0];
-            aa0 |= id == rd_Target(RD_TARGET_AA0).id;
+            aa0 |= id == rd_target(RD_TARGET_AA0).id;
             if (!isNamed(id)) {
                 CHECK(block == 0 || block == id, "%s: one block target in list %d", what, list);
                 block = id;
@@ -900,14 +900,14 @@ static uint32_t checkBlock(const char *what, int list, uint32_t ew, uint32_t eh,
             }
         }
         if (k->c->type == RDC_TEXTURE) {
-            const RdTexRec *t = rd__TexRec(k->c->u[0]);
-            if (t && t->kind == RD_TEXKIND_TARGET && t->target != rd_Target(RD_TARGET_SCENE).id) {
+            const RdTexRec *t = rd__tex_rec(k->c->u[0]);
+            if (t && t->kind == RD_TEXKIND_TARGET && t->target != rd_target(RD_TARGET_SCENE).id) {
                 nTex++;
                 texOk &= t->target == block && block != 0;
             }
         }
     }
-    const RdTargetRec *r = rd__TargetRec(block);
+    const RdTargetRec *r = rd__target_rec(block);
     CHECK(block != 0 && r && r->w == ew && r->h == eh && r->withDepth == (depth != 0),
           "%s: a %ux%u block target%s in list %d", what, ew, eh, depth ? " with depth" : "", list);
     CHECK(!aa0, "%s: no draw into AA0 in list %d", what, list);
@@ -965,7 +965,7 @@ static void addVtx(RTri *t, int j, const VuGsVertex *v, int tw, int th)
 static void addBatch(const VuBatchOut *out, int fw, int fh)
 {
     static int kicks[VU_BATCH_MAX];
-    int nk = vu1ref_Kicks(out, kicks);
+    int nk = vu1ref_kicks(out, kicks);
     for (int i = 0; i < nk && s_ntri < MAXTRI; i++) {
         RTri *t = &s_tris[s_ntri++];
         for (int j = 0; j < 3; j++) {
@@ -1275,14 +1275,14 @@ static void refPrelitFromCmd(const RdFrame *f, const RdCmd *c, PacHeader *pk, in
     static Vu1Ref r;
     const float *mem;
     RdVuPayload p = payloadOf(f, c, &mem);
-    vu1ref_Init(&r);
-    vu1ref_LoadCommon(&r, (const float (*)[4])mem);
-    vu1ref_NormalSetMatrix(&r, (const float (*)[4])(mem + 16 * 4));
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4])mem);
+    vu1ref_normal_set_matrix(&r, (const float (*)[4])(mem + 16 * 4));
     const float (*in[16])[4];
     int nb = packetBatches(pk, in, 16);
     static VuBatchOut out;
     for (int i = 0; i < nb; i++) {
-        vu1ref_NormalC(&r, (int)p.code, in[i], &out);
+        vu1ref_normal_c(&r, (int)p.code, in[i], &out);
         addBatch(&out, fw, fh);
         if (last) {
             *last = out;
@@ -1296,17 +1296,17 @@ static void refGridFromCmd(const RdFrame *f, const RdCmd *c, const Mesh3D *m, in
     static Vu1Ref r;
     const float *mem;
     RdVuPayload p = payloadOf(f, c, &mem);
-    vu1ref_Init(&r);
-    vu1ref_LoadCommon(&r, (const float (*)[4])mem);
-    vu1ref_MeshSetMatrix(&r, (const float (*)[4])(mem + 16 * 4));
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4])mem);
+    vu1ref_mesh_set_matrix(&r, (const float (*)[4])(mem + 16 * 4));
     if (m->lit) {
-        vu1ref_MeshSetLight(&r, (const float (*)[4])(mem + 28 * 4));
+        vu1ref_mesh_set_light(&r, (const float (*)[4])(mem + 28 * 4));
     }
     const float (*buf)[4] = (const float (*)[4])m->bufs[buffer_ID];
     const int per = m->stripLen * (m->lit + 2) + 4;
     static VuBatchOut out;
     for (int i = 0; i < m->strips; i++) {
-        vu1ref_Mesh(&r, (int)p.code, buf + i * per + 1, &out);
+        vu1ref_mesh(&r, (int)p.code, buf + i * per + 1, &out);
         addBatch(&out, fw, fh);
     }
 }
@@ -1330,7 +1330,7 @@ static void makePattern(void)
             p[3] = 0x80;
         }
     }
-    s_patternTex = rd_CreateTexture(W, H, s_pattern, RD_TEXA_80_80, "pattern");
+    s_patternTex = rd_create_texture(W, H, s_pattern, RD_TEXA_80_80, "pattern");
 }
 
 static void beginScene(void)
@@ -1339,13 +1339,13 @@ static void beginScene(void)
     dl_Clear();
     setCommon();
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), grey, 1, 0);
-    rd_TestGs(0x30000);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(s_patternTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_test_gs(0x30000);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(s_patternTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
     v[0].x = (2048 - W / 2) * 16;
@@ -1360,15 +1360,16 @@ static void beginScene(void)
         v[i].q = 1.0f;
         v[i].rgba[0] = v[i].rgba[1] = v[i].rgba[2] = v[i].rgba[3] = 0x80;
     }
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
-    rd_TestGs(0x50000);
-    rd_ZWrite(1);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    rd_test_gs(0x50000);
+    rd_z_write(1);
 }
 
 static int readTarget(uint32_t id, uint8_t *dst, uint32_t ew, uint32_t eh)
 {
     uint32_t w = 0, h = 0;
-    int ok = rd__ReadTarget((RdTarget){id}, dst, (size_t)ew * eh * 4, &w, &h) && w == ew && h == eh;
+    int ok =
+        rd__read_target((RdTarget){id}, dst, (size_t)ew * eh * 4, &w, &h) && w == ew && h == eh;
     CHECK(ok, "readback of target %u (%ux%u)", id, ew, eh);
     return ok;
 }
@@ -1462,20 +1463,20 @@ static void decoderOnlyChecks(void)
     }
     gif_EndPacket();
     dl_Swap();
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     int sawAA0 = 0, depth0 = 0, texAA0 = 0;
     for (int i = 0; i < s_fd.n; i++) {
         const RdCmd *c = s_fd.cmd[i].c;
         if (s_fd.cmd[i].list != 4) {
             continue;
         }
-        if (c->type == RDC_TARGET && c->u[0] == rd_Target(RD_TARGET_AA0).id) {
+        if (c->type == RDC_TARGET && c->u[0] == rd_target(RD_TARGET_AA0).id) {
             sawAA0 = 1;
             depth0 = c->u[1] == 0;
         }
         if (c->type == RDC_TEXTURE) {
-            const RdTexRec *t = rd__TexRec(c->u[0]);
-            texAA0 |= t && t->kind == RD_TEXKIND_TARGET && t->target == rd_Target(RD_TARGET_AA0).id;
+            const RdTexRec *t = rd__tex_rec(c->u[0]);
+            texAA0 |= t && t->kind == RD_TEXKIND_TARGET && t->target == rd_target(RD_TARGET_AA0).id;
         }
     }
     printf("  decoder alone: block 0x%x drawn as AA0 %d (no depth %d), sampled as AA0 %d\n", vram,
@@ -1483,10 +1484,10 @@ static void decoderOnlyChecks(void)
     CHECK(vram == 0x2800, "the block after tex_ResetVramPri is 0x2800 (0x%x)", vram);
     CHECK(sawAA0 && depth0 && texAA0,
           "the decoder alone maps the block to AA0 without depth (the finding R5b fixes)");
-    CHECK(rd_GsNamedBlock(0x2800, 256, 256).id == rd_Target(RD_TARGET_AA0).id &&
-              rd_GsNamedBlock(0x2800, 512, 256).id == rd_Target(RD_TARGET_AA0).id &&
-              rd_GsNamedBlock(0x2900, 256, 256).id == 0,
-          "rd_GsNamedBlock follows the decoder's table");
+    CHECK(rd_gs_named_block(0x2800, 256, 256).id == rd_target(RD_TARGET_AA0).id &&
+              rd_gs_named_block(0x2800, 512, 256).id == rd_target(RD_TARGET_AA0).id &&
+              rd_gs_named_block(0x2900, 256, 256).id == 0,
+          "rd_gs_named_block follows the decoder's table");
 }
 
 static uint32_t s_puddleBlock;
@@ -1495,7 +1496,7 @@ static int s_puddleReflIdx = -1, s_puddleSurfIdx = -1;
 
 static void checkPuddleRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     s_puddleBlock = checkBlock("puddle", 4, 256, 256, 1);
     const Cmd *vu[8];
@@ -1522,7 +1523,7 @@ static void checkPuddleRecording(void)
             }
         }
     }
-    CHECK(tgt[0] == rd_Target(RD_TARGET_SCENE).id && tgt[1] == s_puddleBlock,
+    CHECK(tgt[0] == rd_target(RD_TARGET_SCENE).id && tgt[1] == s_puddleBlock,
           "puddle: the surface draws into SCENE, the reflection into the block (%u, %u)", tgt[0],
           tgt[1]);
     /* the VuCB matrix of the reflection: +0x100 = the 230 x 230 screen x the
@@ -1549,8 +1550,8 @@ static void checkPuddleRecording(void)
     }
     CHECK(worst < 1e-5, "puddle: the surface draw's matrix is the frame camera (%g)", worst);
     /* the camera scope */
-    const RdCamera *cs = rd__CameraAt(f, 4, vu[1]->index);
-    const RdCamera *cf = rd__CameraAt(f, 4, vu[0]->index);
+    const RdCamera *cs = rd__camera_at(f, 4, vu[1]->index);
+    const RdCamera *cf = rd__camera_at(f, 4, vu[0]->index);
     float scr[16];
     screenMatrix(scr, 0xE6, 0xE6);
     CHECK(cs && memcmp(cs->proj43, scr, 64) == 0 && memcmp(cs->view, matrixptr + 0x80, 64) == 0,
@@ -1559,8 +1560,8 @@ static void checkPuddleRecording(void)
           "puddle: the surface draw sees the frame camera");
     CHECK(f->hasCamera && memcmp(&f->camera, &s_frameCam, sizeof(s_frameCam)) == 0,
           "puddle: the frame camera is untouched");
-    CHECK(rd__CameraScopes(f, NULL) == 1, "puddle: one camera scope (%u)",
-          rd__CameraScopes(f, NULL));
+    CHECK(rd__camera_scopes(f, NULL) == 1, "puddle: one camera scope (%u)",
+          rd__camera_scopes(f, NULL));
     /* the matrices are restored: +0xC0 is the frame's again */
     float frameScr[16];
     screenMatrix(frameScr, W, H);
@@ -1675,7 +1676,7 @@ static uint32_t s_poolBlock;
 
 static void checkPoolRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     s_poolBlock = checkBlock("pool", 4, 256, 256, 1);
     const Cmd *vu[8];
@@ -1687,13 +1688,13 @@ static void checkPoolRecording(void)
     }
     CHECK(vu[0]->c->type == RDC_GRID && vu[1]->c->type == RDC_MESH && vu[2]->c->type == RDC_GRID,
           "pool: grid, mesh, grid");
-    const RdCamera *cs = rd__CameraAt(f, 4, vu[1]->index);
+    const RdCamera *cs = rd__camera_at(f, 4, vu[1]->index);
     float scr[16];
     screenMatrix(scr, 0xCC, 0xCC);
     CHECK(cs && memcmp(cs->proj43, scr, 64) == 0,
           "pool: the reflection draw's camera scope holds the 204 x 204 screen matrix");
-    CHECK(rd__CameraAt(f, 4, vu[0]->index) == &f->camera &&
-              rd__CameraAt(f, 4, vu[2]->index) == &f->camera,
+    CHECK(rd__camera_at(f, 4, vu[0]->index) == &f->camera &&
+              rd__camera_at(f, 4, vu[2]->index) == &f->camera,
           "pool: the grids see the frame camera");
     CHECK(vu[1]->st.ds.zwrite == RD_ZWRITE_ON && vu[1]->st.ds.test.ztst == RD_ZTST_GEQUAL,
           "pool: the reflection pass writes and tests Z");
@@ -1798,7 +1799,7 @@ static uint32_t s_barrierBlock;
 
 static void checkBarrierRecording(void)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     s_barrierBlock = checkBlock("barrier", 10, 512, 256, 0);
     const Cmd *vu[4];
@@ -1848,7 +1849,7 @@ static void dotScreen(int i, int out[4])
 
 static void checkDotsRecording(void)
 {
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     const Cmd *pts = NULL;
     for (int i = 0; i < s_fd.n; i++) {
         if (s_fd.cmd[i].c->type == RDC_SCREEN && s_fd.cmd[i].list == 11) {
@@ -1860,7 +1861,7 @@ static void checkDotsRecording(void)
         return;
     }
     const RdScreenVtx *v =
-        (const RdScreenVtx *)(const void *)(rd__LastFrame()->payload + pts->c->u[0]);
+        (const RdScreenVtx *)(const void *)(rd__last_frame()->payload + pts->c->u[0]);
     const uint32_t n = pts->c->u[1];
     CHECK(n == NDOTS - 1, "water dots: %d points (%u)", NDOTS - 1, n);
     for (uint32_t k = 0, i = 0; k < n && i < NDOTS; i++) {
@@ -1907,7 +1908,7 @@ static int edgeDotsDrawn(float wideX)
     DispWaterDot(s_edgeDots);
     dl_Swap();
     s_wideX = 1.0f;
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     int n = 0;
     for (int i = 0; i < s_fd.n; i++) {
         if (s_fd.cmd[i].c->type == RDC_SCREEN && s_fd.cmd[i].list == 11) {
@@ -1986,7 +1987,7 @@ static void recordCloth(void)
 
 static void checkClothRecording(void)
 {
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     const Cmd *vu[4];
     int n = vuDraws(2, vu, 4);
     CHECK(n == 1 && vu[0]->c->type == RDC_GRID, "cloth: one grid in list 2 (%d)", n);
@@ -1994,7 +1995,7 @@ static void checkClothRecording(void)
         return;
     }
     const float *mem;
-    RdVuPayload p = payloadOf(rd__LastFrame(), vu[0]->c, &mem);
+    RdVuPayload p = payloadOf(rd__last_frame(), vu[0]->c, &mem);
     CHECK(p.prog == RD_PROG_GRID_LIT && p.code == 22, "cloth: mesh code 22 (prog %u code %u)",
           p.prog, p.code);
     const RdStateBlock *s = &vu[0]->st;
@@ -2012,7 +2013,7 @@ static uint8_t s_blk[512 * 256 * 4], s_blkRef[512 * 256 * 4];
 static void puddlePixels(void)
 {
     recordPuddle();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     uint32_t block = checkBlock("puddle (device)", 4, 256, 256, 1);
     if (!block || !readTarget(block, s_blk, 256, 256)) {
@@ -2104,7 +2105,7 @@ static void puddlePixels(void)
           "puddle: the block matches the reflection camera's projection");
     /* (4) SCENE: pattern, alpha 0 (baseSetup's sprite), the surface where it
      * covers (its colour, alpha 0x80), leveldown and copy where alpha >= 0x80 */
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     memcpy(s_ref, s_pattern, sizeof(s_ref));
@@ -2165,7 +2166,7 @@ static void poolPixels(void)
     s_range = 1;
     /* (1) DispLimitedPoolReflactionMesh: the copy and the grid sampling it */
     recordLimited();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     uint32_t block = checkBlock("pool limited", 4, 256, 256, 1);
     if (!block || !readTarget(block, s_blk, 256, 256)) {
@@ -2178,7 +2179,7 @@ static void poolPixels(void)
     }
     compareImg("pool: the scene copy (every second texel)", s_blk, s_blkRef, NULL, 256, 256, 0,
                65536, 1);
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     const Cmd *vu[4];
@@ -2201,11 +2202,11 @@ static void poolPixels(void)
     /* (2) PoolDL: the reflection block and the reflecting grid over the
      * refracting one */
     recordPool();
-    f = rd__LastFrame();
+    f = rd__last_frame();
     walkFrame(f);
     block = checkBlock("pool (device)", 4, 256, 256, 1);
     if (!block || !readTarget(block, s_blk, 256, 256) ||
-        !readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+        !readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     if (vuDraws(4, vu, 4) != 3) {
@@ -2296,9 +2297,9 @@ static void wide169Pixels(void)
     /* (1) the puddle: the block widened, its picture the 4:3 one compressed
      * about the block's centre */
     recordPuddle();
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     uint32_t block = checkBlock("puddle 16:9", 4, 256, 256, 1);
-    const RdTargetRec *br = rd__TargetRec(block);
+    const RdTargetRec *br = rd__target_rec(block);
     CHECK(br && br->tw == BT && br->th == 256 && br->wideBlock && br->wide,
           "16:9: the puddle block is %ux%u texels (wide %d)", br ? br->tw : 0, br ? br->th : 0,
           br ? br->wideBlock : -1);
@@ -2343,7 +2344,7 @@ static void wide169Pixels(void)
      * the 4:3 position of what the pixel shows (the copy sprite stretches,
      * the picture under it is compressed): two colours, the quad's and the
      * clear's, 54 apart in red and -51 in green (FIX 0x60) */
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_wide, WT, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_wide, WT, H)) {
         return;
     }
     int nq = 0, nc = 0, badQ = 0, badC = 0;
@@ -2397,12 +2398,12 @@ static void wide169Pixels(void)
      * by f).  Without the scaling a pixel d from the centre would read the
      * copy d / f from it. */
     recordLimited();
-    walkFrame(rd__LastFrame());
+    walkFrame(rd__last_frame());
     block = checkBlock("pool limited 16:9", 4, 256, 256, 1);
-    br = rd__TargetRec(block);
+    br = rd__target_rec(block);
     CHECK(br && br->tw == BT && br->wideBlock, "16:9: the pool block is %u texels across",
           br ? br->tw : 0);
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_wide, WT, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_wide, WT, H)) {
         return;
     }
     int n = 0, badP = 0, worst = 0;
@@ -2440,7 +2441,7 @@ static void barrierPixels(void)
 {
     s_range = 1;
     recordBarrier();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     uint32_t block = checkBlock("barrier (device)", 10, 512, 256, 0);
     if (!block || !readTarget(block, s_blk, 512, 256)) {
@@ -2452,7 +2453,7 @@ static void barrierPixels(void)
         }
     }
     compareImg("barrier: the 512 x 256 scene copy", s_blk, s_blkRef, NULL, 512, 256, 0, 131072, 1);
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     const Cmd *vu[4];
@@ -2482,7 +2483,7 @@ static void barrierPixels(void)
 static void dotPixels(void)
 {
     recordDots();
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     memcpy(s_ref, s_pattern, sizeof(s_ref));
@@ -2513,23 +2514,23 @@ static void dotPixels(void)
  * the grid draw (rd_mesh_test.c's method) */
 static void applyState(const RdStateBlock *s)
 {
-    rd_Test(&s->ds.test);
-    rd_ZWrite(s->ds.zwrite == RD_ZWRITE_ON);
-    rd_FBA(s->ds.fba);
-    rd_PABE(s->ds.pabe);
-    rd_ColClamp(s->ds.colclamp);
-    rd_TexA((RdTexA)s->ds.texa);
-    rd_Blend((RdBlend)s->ds.blend, s->ds.blendFix, s->ds.abe);
-    rd_SamplerFilter((RdFilter)s->ds.magFilter, (RdFilter)s->ds.minFilter);
-    rd_SamplerWrap((RdWrap)s->ds.wrap.s, (RdWrap)s->ds.wrap.t);
+    rd_test(&s->ds.test);
+    rd_z_write(s->ds.zwrite == RD_ZWRITE_ON);
+    rd_fba(s->ds.fba);
+    rd_pabe(s->ds.pabe);
+    rd_col_clamp(s->ds.colclamp);
+    rd_tex_a((RdTexA)s->ds.texa);
+    rd_blend((RdBlend)s->ds.blend, s->ds.blendFix, s->ds.abe);
+    rd_sampler_filter((RdFilter)s->ds.magFilter, (RdFilter)s->ds.minFilter);
+    rd_sampler_wrap((RdWrap)s->ds.wrap.s, (RdWrap)s->ds.wrap.t);
     if (s->ds.texEnabled) {
-        rd_Texture((RdTex){s->tex}, (RdTexFn)s->ds.texFn, (RdTcc)s->ds.tcc);
+        rd_texture((RdTex){s->tex}, (RdTexFn)s->ds.texFn, (RdTcc)s->ds.tcc);
     } else {
-        rd_TextureOff();
+        rd_texture_off();
     }
-    rd_Gouraud((int)s->gouraud);
-    rd_ColorMask(s->ds.fbmsk);
-    rd_UVOffset(0.0f, 0.0f);
+    rd_gouraud((int)s->gouraud);
+    rd_color_mask(s->ds.fbmsk);
+    rd_uv_offset(0.0f, 0.0f);
 }
 
 static RdScreenVtx s_sv[3 * MAXTRI];
@@ -2537,10 +2538,10 @@ static RdScreenVtx s_sv[3 * MAXTRI];
 static void clothPixels(void)
 {
     recordCloth();
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     walkFrame(f);
     const Cmd *vu[4];
     if (vuDraws(2, vu, 4) != 1) {
@@ -2553,10 +2554,10 @@ static void clothPixels(void)
     static Vu1Ref r;
     const float *mem;
     RdVuPayload p = payloadOf(f, vu[0]->c, &mem);
-    vu1ref_Init(&r);
-    vu1ref_LoadCommon(&r, (const float (*)[4])mem);
-    vu1ref_MeshSetMatrix(&r, (const float (*)[4])(mem + 16 * 4));
-    vu1ref_MeshSetLight(&r, (const float (*)[4])(mem + 28 * 4));
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4])mem);
+    vu1ref_mesh_set_matrix(&r, (const float (*)[4])(mem + 16 * 4));
+    vu1ref_mesh_set_light(&r, (const float (*)[4])(mem + 28 * 4));
     const Mesh3D *m = s_cloth.mesh;
     const float (*buf)[4] = (const float (*)[4])m->bufs[buffer_ID];
     const int per = m->stripLen * (m->lit + 2) + 4;
@@ -2564,8 +2565,8 @@ static void clothPixels(void)
     static int kicks[VU_BATCH_MAX];
     uint32_t nv = 0;
     for (int i = 0; i < m->strips; i++) {
-        vu1ref_Mesh(&r, (int)p.code, buf + i * per + 1, &out);
-        int nk = vu1ref_Kicks(&out, kicks);
+        vu1ref_mesh(&r, (int)p.code, buf + i * per + 1, &out);
+        int nk = vu1ref_kicks(&out, kicks);
         for (int k = 0; k < nk; k++) {
             for (int j = 0; j < 3; j++) {
                 const VuGsVertex *v = &out.v[kicks[k] - 2 + j];
@@ -2586,9 +2587,9 @@ static void clothPixels(void)
     beginScene();
     dl_SetDLPriority(2);
     applyState(&st);
-    rd_ScreenPrims(RD_PRIM_TRIANGLES, s_sv, nv, RD_SPACE_WORLD, 0, 0);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s_sv, nv, RD_SPACE_WORLD, 0, 0);
     dl_Swap();
-    if (!readTarget(rd_Target(RD_TARGET_SCENE).id, s_img, W, H)) {
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H)) {
         return;
     }
     int drawn = 0;
@@ -2641,16 +2642,16 @@ static void recordingChecks(void)
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
-    if (!rd__InitRecordOnly(W, H)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
+    if (!rd__init_record_only(W, H)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
     setup();
     buildAll();
     recordingChecks();
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_water_test: %d failures\n", failures);
         return 1;
@@ -2660,7 +2661,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("rd_water_test: SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -2676,28 +2677,28 @@ int main(void)
     clothPixels();
 
     static RdPipeKeyInt keys[1024];
-    const uint32_t n = rd__EnumerateReachable(keys, 1024);
-    printf("  pipelines: %u created, %u reachable\n", rd__PipelineCount(), n);
-    for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+    const uint32_t n = rd__enumerate_reachable(keys, 1024);
+    printf("  pipelines: %u created, %u reachable\n", rd__pipeline_count(), n);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < 1024; j++) {
-            found |= rd__PipeKeyEqual(&keys[j], k);
+            found |= rd__pipe_key_equal(&keys[j], k);
         }
         CHECK(found, "created pipeline %u (prog %u vs %u blend %u z %u/%u) is not enumerated", i,
               k->gs.program, k->vs, k->gs.blend, k->gs.ztst, k->gs.zwrite);
     }
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    rd_shutdown();
 
     /* widescreen reflections: the same effects at 16:9 */
     st.preset = RD_PRESET_ENHANCED;
     st.aspect = 16.0f / 9.0f;
     st.sceneScale = 1.0f;
-    if (!rd_Init(W, H, &st, NULL)) {
-        CHECK(0, "rd_Init at 16:9");
+    if (!rd_init(W, H, &st, NULL)) {
+        CHECK(0, "rd_init at 16:9");
     } else {
         gif_HostForgetTextures();
         gif_HostFrameReset();
@@ -2706,9 +2707,9 @@ int main(void)
         s_surfFba = 1;
         setupPuddle();
         wide169Pixels();
-        CHECK(rhi_vk_ValidationErrorCount() == 0, "16:9: %u validation errors",
-              rhi_vk_ValidationErrorCount());
-        rd_Shutdown();
+        CHECK(rhi_vk_validation_error_count() == 0, "16:9: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
     }
     if (failures) {
         printf("rd_water_test: %d failures\n", failures);

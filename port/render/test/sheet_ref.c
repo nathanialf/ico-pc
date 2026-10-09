@@ -114,7 +114,7 @@ static uint32_t sheetRimAt(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x
     return (m + 500000u) / 1000000u;
 }
 
-void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
+void sheetref_texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,
                     const RdSheetStyle *style, uint8_t *outGrey, uint8_t *outAlpha)
 {
     static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1};
@@ -176,7 +176,7 @@ void sheetref_Texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32
     *outAlpha = (uint8_t)floorf((am > af ? am : af) + 0.5f);
 }
 
-void sheetref_Sample(const uint8_t *cov, uint32_t w, uint32_t h, float u, float v,
+void sheetref_sample(const uint8_t *cov, uint32_t w, uint32_t h, float u, float v,
                      const RdSheetStyle *style, uint8_t rgba[4])
 {
     const float px = u * (float)w - 0.5f, py = v * (float)h - 0.5f;
@@ -187,7 +187,7 @@ void sheetref_Sample(const uint8_t *cov, uint32_t w, uint32_t h, float u, float 
     for (int ty = 0; ty < 2; ty++) {
         for (int tx = 0; tx < 2; tx++) {
             uint8_t gr, a;
-            sheetref_Texel(cov, w, h, x0 + tx, y0 + ty, style, &gr, &a);
+            sheetref_texel(cov, w, h, x0 + tx, y0 + ty, style, &gr, &a);
             g[ty][tx] = (float)gr;
             al[ty][tx] = (float)a;
         }

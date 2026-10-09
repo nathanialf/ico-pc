@@ -52,7 +52,7 @@ extern const unsigned int ui_font_ttf_size;
    texels less high: not a power of two, so the Enhanced texture filter
    never gives a page a mip chain (rd_replay.c texLevels), whose 2 x 2 box
    levels would average neighbouring glyphs across the gutter and scale
-   their alpha (rdtex_KeepAlphaCoverage). Glyph cells are GUTTER texels
+   their alpha (rdtex_keep_alpha_coverage). Glyph cells are GUTTER texels
    apart and from the page's edges: bilinear sampling inside a quad reaches
    at most one texel past the glyph's box, which is then zero coverage. */
 #define PAGE_MIN 512
@@ -71,7 +71,7 @@ extern const unsigned int ui_font_ttf_size;
 
 typedef struct Page {
     uint8_t *cov; /* pageW x pageH coverage (SizeSet) */
-    uint32_t tex; /* R8 RdTex id (rd_CreateTextureR8), 0 until the page is first drawn */
+    uint32_t tex; /* R8 RdTex id (rd_create_texture_r8), 0 until the page is first drawn */
     int shelfX, shelfY, shelfH;
 } Page;
 
@@ -84,7 +84,7 @@ typedef struct GlyphSlot {
 typedef struct SizeSet {
     int px;             /* 0: free */
     uint32_t lastUse;   /* s_font.useClock at its last lookup (least recent goes) */
-    uint32_t lastFrame; /* rd_FrameNumber at its last lookup (ICO_RD) */
+    uint32_t lastFrame; /* rd_frame_number at its last lookup (ICO_RD) */
     float scale;        /* stb scale for px */
     int pageW, pageH;
     int pageCount;
@@ -101,7 +101,7 @@ static struct {
     SizeSet sizes[MAX_SIZES];
     void (*recordHook)(void);
     void (*syncHook)(void);
-    void (*menuShutdown)(void), (*menuForget)(void); /* ui__SetMenuFontHooks */
+    void (*menuShutdown)(void), (*menuForget)(void); /* ui__set_menu_font_hooks */
     int suppress;
     int warnedSizes, warnedPages;
     uint32_t useClock;
@@ -109,7 +109,7 @@ static struct {
 
 /* --------------------------------------------------------------- UTF-8 */
 
-uint32_t ui_Utf8Next(const char **sp)
+uint32_t ui_utf8_next(const char **sp)
 {
     const unsigned char *s = (const unsigned char *)*sp;
     uint32_t c = s[0], min;
@@ -155,7 +155,7 @@ uint32_t ui_Utf8Next(const char **sp)
 
 /* ----------------------------------------------------------- lifecycle */
 
-bool ui_FontInit(void)
+bool ui_font_init(void)
 {
     if (s_font.inited) {
         return true;
@@ -189,7 +189,7 @@ static void freeSize(SizeSet *z, int destroyTex)
     for (int p = 0; p < z->pageCount; p++) {
 #ifdef ICO_RD
         if (destroyTex && z->pages[p].tex) {
-            rd_DestroyTexture((RdTex){z->pages[p].tex});
+            rd_destroy_texture((RdTex){z->pages[p].tex});
         }
 #else
         (void)destroyTex;
@@ -200,7 +200,7 @@ static void freeSize(SizeSet *z, int destroyTex)
     memset(z, 0, sizeof(*z));
 }
 
-void ui_FontShutdown(void)
+void ui_font_shutdown(void)
 {
     for (int i = 0; i < MAX_SIZES; i++) {
         if (s_font.sizes[i].px) {
@@ -215,7 +215,7 @@ void ui_FontShutdown(void)
     s_font.warnedSizes = s_font.warnedPages = 0;
 }
 
-void ui_FontForgetTextures(void)
+void ui_font_forget_textures(void)
 {
     if (s_font.menuForget) {
         s_font.menuForget();
@@ -228,62 +228,62 @@ void ui_FontForgetTextures(void)
     }
 }
 
-void ui__SetRecordHook(void (*fn)(void))
+void ui__set_record_hook(void (*fn)(void))
 {
     s_font.recordHook = fn;
 }
 
-void ui__RunRecordHook(void)
+void ui__run_record_hook(void)
 {
     if (s_font.recordHook) {
         s_font.recordHook();
     }
 }
 
-void ui__SuppressRecordHook(int delta)
+void ui__suppress_record_hook(int delta)
 {
     s_font.suppress += delta;
 }
 
-void ui__SetMenuFontHooks(void (*shutdown)(void), void (*forget)(void))
+void ui__set_menu_font_hooks(void (*shutdown)(void), void (*forget)(void))
 {
     s_font.menuShutdown = shutdown;
     s_font.menuForget = forget;
 }
 
-void ui__SetSyncHook(void (*fn)(void))
+void ui__set_sync_hook(void (*fn)(void))
 {
     s_font.syncHook = fn;
 }
 
-void ui__Sync(void)
+void ui__sync(void)
 {
     if (s_font.syncHook) {
         s_font.syncHook();
     }
 }
 
-void ui_SetGsFrame(const UiGsFrame *f)
+void ui_set_gs_frame(const UiGsFrame *f)
 {
     if (f) {
         s_font.frame = *f;
     }
 }
 
-const UiGsFrame *ui_GetGsFrame(void)
+const UiGsFrame *ui_get_gs_frame(void)
 {
     return &s_font.frame;
 }
 
-/* overlay mode (font.h ui_BeginOverlay) */
+/* overlay mode (font.h ui_begin_overlay) */
 static struct {
     int active;
     float left, top;  /* the 4:3 picture's top-left corner, output pixels */
     float sx, sy;     /* output pixels per grid unit */
-    float savedScale; /* the scale ui_EndOverlay restores */
+    float savedScale; /* the scale ui_end_overlay restores */
 } s_ov;
 
-void ui_SetScale(float scale)
+void ui_set_scale(float scale)
 {
     const float s = scale > 0.25f ? scale : 0.25f;
     if (s_ov.active) {
@@ -293,12 +293,12 @@ void ui_SetScale(float scale)
     s_font.scale = s;
 }
 
-float ui_GetScale(void)
+float ui_get_scale(void)
 {
     return s_font.scale;
 }
 
-float ui_ScaleFor(int preset, uint32_t outputHeight)
+float ui_scale_for(int preset, uint32_t outputHeight)
 {
     if (preset == 0 || outputHeight == 0) {
         return 1.0f;
@@ -313,7 +313,7 @@ float ui_ScaleFor(int preset, uint32_t outputHeight)
 static uint32_t frameNow(void)
 {
 #ifdef ICO_RD
-    return rd_FrameNumber();
+    return rd_frame_number();
 #else
     return 0;
 #endif
@@ -532,8 +532,8 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
                     gsCoverage(cell + (size_t)r * (size_t)w,
                                p->cov + (size_t)(y + r) * (size_t)z->pageW + (size_t)x, (size_t)w);
                 }
-                rd_UpdateTextureRect((RdTex){p->tex}, (uint32_t)x, (uint32_t)y, (uint32_t)w,
-                                     (uint32_t)hgt, cell);
+                rd_update_texture_rect((RdTex){p->tex}, (uint32_t)x, (uint32_t)y, (uint32_t)w,
+                                       (uint32_t)hgt, cell);
                 free(cell);
             }
         }
@@ -550,9 +550,9 @@ static const UiGlyph *glyphIn(SizeSet *z, uint32_t cp)
     return &slot->g;
 }
 
-bool ui_FontGlyph(uint32_t cp, int px, UiGlyph *out)
+bool ui_font_glyph(uint32_t cp, int px, UiGlyph *out)
 {
-    if (!ui_FontInit() || px < 1) {
+    if (!ui_font_init() || px < 1) {
         return false;
     }
     SizeSet *z = sizeSet(px);
@@ -564,16 +564,16 @@ bool ui_FontGlyph(uint32_t cp, int px, UiGlyph *out)
     return true;
 }
 
-float ui_FontKern(uint32_t a, uint32_t b, int px)
+float ui_font_kern(uint32_t a, uint32_t b, int px)
 {
-    if (!ui_FontInit() || px < 1) {
+    if (!ui_font_init() || px < 1) {
         return 0.0f;
     }
     float sc = stbtt_ScaleForMappingEmToPixels(&s_font.info, (float)px);
     return (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(a), glyphIndex(b)) * sc;
 }
 
-int ui_FontMissingSeen(uint32_t *cps, int cap)
+int ui_font_missing_seen(uint32_t *cps, int cap)
 {
     for (int i = 0; cps && i < s_missingN && i < cap; i++) {
         cps[i] = s_missing[i];
@@ -581,12 +581,12 @@ int ui_FontMissingSeen(uint32_t *cps, int cap)
     return s_missingN;
 }
 
-bool ui_FontHasGlyph(uint32_t cp)
+bool ui_font_has_glyph(uint32_t cp)
 {
-    return ui_FontInit() && stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0;
+    return ui_font_init() && stbtt_FindGlyphIndex(&s_font.info, (int)cp) != 0;
 }
 
-const uint8_t *ui_FontPage(int px, int page, int *w, int *h)
+const uint8_t *ui_font_page(int px, int page, int *w, int *h)
 {
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
@@ -599,7 +599,7 @@ const uint8_t *ui_FontPage(int px, int page, int *w, int *h)
     return NULL;
 }
 
-uint32_t ui_FontPageTex(int px, int page)
+uint32_t ui_font_page_tex(int px, int page)
 {
     for (int i = 0; i < MAX_SIZES; i++) {
         SizeSet *z = &s_font.sizes[i];
@@ -612,7 +612,7 @@ uint32_t ui_FontPageTex(int px, int page)
 
 #ifdef ICO_RD
 /* the page as rd sees it: R8, the coverage in GS alpha units (255 ->
-   0x80, rounded; rd_CreateTextureR8), drawn by font_ps as a white texel
+   0x80, rounded; rd_create_texture_r8), drawn by font_ps as a white texel
    with that alpha; created whole the first time the page is drawn, after
    that each new glyph's cell is uploaded alone (glyphIn) */
 static uint32_t pageTexture(SizeSet *z, int page)
@@ -627,7 +627,7 @@ static uint32_t pageTexture(SizeSet *z, int page)
         gsCoverage(gs, p->cov, texels);
         char name[32];
         snprintf(name, sizeof(name), "ui font %dpx p%d", z->px, page);
-        p->tex = rd_CreateTextureR8((uint32_t)z->pageW, (uint32_t)z->pageH, gs, name).id;
+        p->tex = rd_create_texture_r8((uint32_t)z->pageW, (uint32_t)z->pageH, gs, name).id;
         free(gs);
     }
     return p->tex;
@@ -648,9 +648,9 @@ static int pxFor(float size)
     return px < 1 ? 1 : px;
 }
 
-void ui_FontMetrics(float size, float *ascent, float *descent, float *capHeight)
+void ui_font_metrics(float size, float *ascent, float *descent, float *capHeight)
 {
-    if (!ui_FontInit()) {
+    if (!ui_font_init()) {
         if (ascent) {
             *ascent = 0.0f;
         }
@@ -690,7 +690,7 @@ static float layoutRun(SizeSet *z, const char *utf8, GlyphFn fn, void *user, flo
     const char *s = utf8;
     uint32_t cp;
 
-    while ((cp = ui_Utf8Next(&s)) != 0) {
+    while ((cp = ui_utf8_next(&s)) != 0) {
         if (cp == '\n') {
             if (lineWidths && line < maxLines) {
                 lineWidths[line] = penX;
@@ -745,7 +745,7 @@ static float measureRun(const char *utf8, float sc)
     float penX = 0.0f, widest = 0.0f;
     uint32_t prev = 0, cp;
     const char *s = utf8;
-    while ((cp = ui_Utf8Next(&s)) != 0) {
+    while ((cp = ui_utf8_next(&s)) != 0) {
         if (cp == '\n') {
             widest = penX > widest ? penX : widest;
             penX = 0.0f;
@@ -763,9 +763,9 @@ static float measureRun(const char *utf8, float sc)
     return penX > widest ? penX : widest;
 }
 
-float ui_MeasureText(float size, const char *utf8)
+float ui_measure_text(float size, const char *utf8)
 {
-    if (!utf8 || !ui_FontInit()) {
+    if (!utf8 || !ui_font_init()) {
         return 0.0f;
     }
     /* the font's metrics at the size's pixels, as layoutRun advances a
@@ -838,13 +838,13 @@ static void setState(unsigned flags)
         s_font.recordHook();
     }
     if (!(flags & UI_KEEP_STATE)) {
-        rd_Blend((flags & UI_ADDITIVE) ? RD_BLEND_CS_AS_ADD_CD : RD_BLEND_LERP_AS, 0, 1);
-        rd_TestGs(0x30000); /* Z test on, ALWAYS; no alpha test */
-        rd_ZWrite(0);
-        rd_FBA(0);
-        rd_PABE(0);
+        rd_blend((flags & UI_ADDITIVE) ? RD_BLEND_CS_AS_ADD_CD : RD_BLEND_LERP_AS, 0, 1);
+        rd_test_gs(0x30000); /* Z test on, ALWAYS; no alpha test */
+        rd_z_write(0);
+        rd_fba(0);
+        rd_pabe(0);
     }
-    rd_ABE(1);
+    rd_abe(1);
 }
 #endif
 
@@ -853,12 +853,12 @@ static void setState(unsigned flags)
 /* the frame's 448 lines are grid y 2 .. 450 (centre 226) */
 #define OV_GRID_TOP (UI_GRID_CY - 224.0f)
 
-int ui_OverlayActive(void)
+int ui_overlay_active(void)
 {
     return s_ov.active;
 }
 
-void ui_OverlayMap(float gx, float gy, float *x16, float *y16)
+void ui_overlay_map(float gx, float gy, float *x16, float *y16)
 {
     if (x16) {
         *x16 = (s_ov.left + gx * s_ov.sx) * 16.0f;
@@ -871,12 +871,12 @@ void ui_OverlayMap(float gx, float gy, float *x16, float *y16)
 #ifdef ICO_RD
 static UiOverlaySink s_ovSink;
 
-void ui__SetOverlaySink(UiOverlaySink fn)
+void ui__set_overlay_sink(UiOverlaySink fn)
 {
     s_ovSink = fn;
 }
 
-void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
+void ui_begin_overlay(const struct RdOverlayCtx *ctx)
 {
     if (!ctx || s_ov.active || !ctx->box.w || !ctx->box.h) {
         return;
@@ -892,7 +892,7 @@ void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
     s_ov.active = 1;
 }
 
-void ui_EndOverlay(void)
+void ui_end_overlay(void)
 {
     if (s_ov.active) {
         s_ov.active = 0;
@@ -906,7 +906,7 @@ static void ovEmit(const RdScreenVtx *v, uint32_t n, uint32_t tex, unsigned flag
     if (s_ovSink) {
         s_ovSink(RD_PRIM_SPRITES, v, n, (RdTex){tex}, blend);
     } else {
-        rd_OverlayPrims(RD_PRIM_SPRITES, v, n, (RdTex){tex}, blend);
+        rd_overlay_prims(RD_PRIM_SPRITES, v, n, (RdTex){tex}, blend);
     }
 }
 
@@ -916,18 +916,18 @@ static int32_t ovPix(float p16)
     return (int32_t)lrintf(p16 / 16.0f) * 16;
 }
 #else
-void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
+void ui_begin_overlay(const struct RdOverlayCtx *ctx)
 {
     (void)ctx;
 }
 
-void ui_EndOverlay(void) {}
+void ui_end_overlay(void) {}
 #endif
 
-/* the draws' keys (font.h ui_SetDrawKey) */
+/* the draws' keys (font.h ui_set_draw_key) */
 static uint64_t s_keyOwner;
 
-uint64_t ui_SetDrawKey(uint64_t owner)
+uint64_t ui_set_draw_key(uint64_t owner)
 {
     const uint64_t prev = s_keyOwner;
     s_keyOwner = owner;
@@ -963,7 +963,7 @@ static uint64_t rectKey(void)
 }
 #endif
 
-int ui__FontSizeSets(int *px, int cap)
+int ui__font_size_sets(int *px, int cap)
 {
     int n = 0;
     for (int i = 0; i < MAX_SIZES; i++) {
@@ -977,15 +977,15 @@ int ui__FontSizeSets(int *px, int cap)
     return n;
 }
 
-int ui__FontReusedNearest(void)
+int ui__font_reused_nearest(void)
 {
     return s_font.warnedSizes;
 }
 
-void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                   unsigned flags, const UiXform *xf)
+void ui_draw_text_xf(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                     unsigned flags, const UiXform *xf)
 {
-    if (!utf8 || !*utf8 || !ui_FontInit()) {
+    if (!utf8 || !*utf8 || !ui_font_init()) {
         return;
     }
     const int px = pxFor(size);
@@ -1061,8 +1061,8 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                 mapXf(xf, &ax, &ay);
                 mapXf(xf, &bx, &by);
                 float ax16, ay16, bx16, by16;
-                ui_OverlayMap(ax, ay, &ax16, &ay16);
-                ui_OverlayMap(bx, by, &bx16, &by16);
+                ui_overlay_map(ax, ay, &ax16, &ay16);
+                ui_overlay_map(bx, by, &bx16, &by16);
                 RdScreenVtx *a = &v[n++], *b = &v[n++];
                 memset(a, 0, sizeof(*a));
                 memset(b, 0, sizeof(*b));
@@ -1088,7 +1088,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
         RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)c.n);
         if (v) {
             setState(flags);
-            rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+            rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
             for (int page = 0; page < z->pageCount; page++) {
                 uint32_t n = 0;
                 for (int i = 0; i < c.n; i++) {
@@ -1122,10 +1122,10 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
                 if (!tex) {
                     continue;
                 }
-                rd_Texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+                rd_texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
                 /* T1: continuous quads (no GS-pixel snap on a scaled target) */
-                rd_ScreenPrims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
-                               textKey(utf8, flags, page));
+                rd_screen_prims(RD_PRIM_SPRITES, v, n, RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
+                                textKey(utf8, flags, page));
             }
             free(v);
         }
@@ -1137,10 +1137,10 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
     free(c.q);
 }
 
-void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
-                 unsigned flags)
+void ui_draw_text(float x, float y, float size, const uint8_t rgba[4], const char *utf8,
+                  unsigned flags)
 {
-    ui_DrawTextXf(x, y, size, rgba, utf8, flags, NULL);
+    ui_draw_text_xf(x, y, size, rgba, utf8, flags, NULL);
 }
 
 /* ------------------------------------------------ sheet text (ui_internal.h) */
@@ -1152,7 +1152,7 @@ void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char
    and the item's wx */
 static float s_sheetWidth = UI_SHEET_WIDTH;
 
-float ui__SheetSetWidth(float k)
+float ui__sheet_set_width(float k)
 {
     const float old = s_sheetWidth;
     s_sheetWidth = k;
@@ -1166,10 +1166,10 @@ static void sheetScales(float emRows, float wx, float *sx, float *sy)
     *sx = y * 2.0f * UI_X_PER_Y * s_sheetWidth * wx;
 }
 
-void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap)
+void ui__sheet_v_metrics(float emRows, float *ascent, float *descent, float *lineStep, float *cap)
 {
     float sx = 0.0f, sy = 0.0f;
-    const int ok = ui_FontInit();
+    const int ok = ui_font_init();
     if (ok) {
         sheetScales(emRows, 1.0f, &sx, &sy);
     }
@@ -1187,9 +1187,9 @@ void ui__SheetVMetrics(float emRows, float *ascent, float *descent, float *lineS
     }
 }
 
-float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, size_t len)
+float ui__sheet_line_width(float emRows, float wx, float track, const char *utf8, size_t len)
 {
-    if (!utf8 || !ui_FontInit()) {
+    if (!utf8 || !ui_font_init()) {
         return 0.0f;
     }
     float sx, sy;
@@ -1197,7 +1197,7 @@ float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, 
     const char *s = utf8, *end = utf8 + len;
     float pen = 0.0f;
     uint32_t prev = 0, cp;
-    while (s < end && (cp = ui_Utf8Next(&s)) != 0) {
+    while (s < end && (cp = ui_utf8_next(&s)) != 0) {
         const int g = glyphIndex(cp);
         if (prev) {
             pen += (float)stbtt_GetGlyphKernAdvance(&s_font.info, glyphIndex(prev), g) * sx + track;
@@ -1210,11 +1210,11 @@ float ui__SheetLineWidth(float emRows, float wx, float track, const char *utf8, 
     return pen;
 }
 
-void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
-                         float track, float penX, float baseY, const char *utf8, size_t len,
-                         int scale)
+void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows, float wx,
+                           float track, float penX, float baseY, const char *utf8, size_t len,
+                           int scale)
 {
-    if (!cov || !utf8 || w <= 0 || h <= 0 || scale < 1 || !ui_FontInit()) {
+    if (!cov || !utf8 || w <= 0 || h <= 0 || scale < 1 || !ui_font_init()) {
         return;
     }
     float sx, sy;
@@ -1234,7 +1234,7 @@ void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, f
     const float by = floorf(baseY), fy = baseY - by;
     uint8_t *tmp = NULL;
     size_t tmpSize = 0;
-    while (s < end && (cp = ui_Utf8Next(&s)) != 0) {
+    while (s < end && (cp = ui_utf8_next(&s)) != 0) {
         const int g = glyphIndex(cp);
         if (prev) {
             penX +=
@@ -1285,7 +1285,7 @@ void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, f
     free(tmp);
 }
 
-uint64_t ui__TextKey(const char *utf8, unsigned flags, int page)
+uint64_t ui__text_key(const char *utf8, unsigned flags, int page)
 {
 #ifdef ICO_RD
     return textKey(utf8 ? utf8 : "", flags, page);
@@ -1298,8 +1298,8 @@ uint64_t ui__TextKey(const char *utf8, unsigned flags, int page)
 }
 
 #ifdef ICO_RD
-void ui__DrawTexQuads(uint32_t tex, const UiTexQuad *q, int n, const uint8_t rgba[4],
-                      unsigned flags, const UiXform *xf, uint64_t key)
+void ui__draw_tex_quads(uint32_t tex, const UiTexQuad *q, int n, const uint8_t rgba[4],
+                        unsigned flags, const UiXform *xf, uint64_t key)
 {
     if (!tex || !q || n <= 0) {
         return;
@@ -1318,8 +1318,8 @@ void ui__DrawTexQuads(uint32_t tex, const UiTexQuad *q, int n, const uint8_t rgb
             /* magnified onto the output: continuous, the shader rebuilds
                the sheet's texels and blends them bilinearly */
             float ax16, ay16, bx16, by16;
-            ui_OverlayMap(ax, ay, &ax16, &ay16);
-            ui_OverlayMap(bx, by, &bx16, &by16);
+            ui_overlay_map(ax, ay, &ax16, &ay16);
+            ui_overlay_map(bx, by, &bx16, &by16);
             a->x = (int32_t)lrintf(ax16);
             a->y = (int32_t)lrintf(ay16);
             b->x = (int32_t)lrintf(bx16);
@@ -1343,16 +1343,16 @@ void ui__DrawTexQuads(uint32_t tex, const UiTexQuad *q, int n, const uint8_t rgb
         ovEmit(v, (uint32_t)(2 * n), tex, flags);
     } else {
         setState(flags);
-        rd_Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-        rd_Texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, (uint32_t)(2 * n), RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
-                       key);
+        rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rd_texture((RdTex){tex}, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        rd_screen_prims(RD_PRIM_SPRITES, v, (uint32_t)(2 * n), RD_SPACE_UI, RD_UV_FIXED_CONTINUOUS,
+                        key);
     }
     free(v);
 }
 #endif
 
-void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
+void ui_draw_rect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
 {
 #ifdef ICO_RD
     RdScreenVtx v[2];
@@ -1360,8 +1360,8 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
     if (s_ov.active) {
         /* both corners on whole output pixels */
         float ax, ay, bx, by;
-        ui_OverlayMap(x0, y0, &ax, &ay);
-        ui_OverlayMap(x1, y1, &bx, &by);
+        ui_overlay_map(x0, y0, &ax, &ay);
+        ui_overlay_map(x1, y1, &bx, &by);
         v[0].x = ovPix(ax);
         v[0].y = ovPix(ay);
         v[1].x = ovPix(bx);
@@ -1381,8 +1381,8 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
     memcpy(v[0].rgba, rgba, 4);
     memcpy(v[1].rgba, rgba, 4);
     setState(0);
-    rd_TextureOff();
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, rectKey());
+    rd_texture_off();
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, rectKey());
 #else
     (void)x0;
     (void)y0;

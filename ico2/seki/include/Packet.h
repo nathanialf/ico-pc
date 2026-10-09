@@ -131,8 +131,8 @@ void pac_HostRefresh(PacHeader *pk);
    pac_HostRefreshFor is pac_HostRefresh with the part named: a replaced
    mesh cannot follow the morph, so the pack's entry is declined (one log
    line naming the part) and the original built.  pac_HostDump writes the
-   packet's part to the pack's dumps (modelpack_Dump); the caller asks
-   modelpack_DumpWanted first. */
+   packet's part to the pack's dumps (modelpack_dump); the caller asks
+   modelpack_dump_wanted first. */
 struct ModelpackSkeleton;
 
 typedef struct PacHostIdent {
@@ -141,7 +141,7 @@ typedef struct PacHostIdent {
     const struct ModelpackSkeleton *skel;
     int bones;
     const void *obj;
-    uint64_t buildHash; /* the hash the mesh was built with (modelpack_DumpWanted's) */
+    uint64_t buildHash; /* the hash the mesh was built with (modelpack_dump_wanted's) */
     int morph; /* the part has morph shapes: never replaced, never dumped */
 } PacHostIdent;
 

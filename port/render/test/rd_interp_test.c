@@ -1,6 +1,6 @@
 /* rd_interp_test.c: presentation between ticks.
  *
- * Two synthetic frames with keyed draws, blended by rd__InterpFrame.
+ * Two synthetic frames with keyed draws, blended by rd__interp_frame.
  * Without a device (recording only):
  *   ends      alpha 0 gives the previous frame's draw data, alpha 1 the
  *             current frame's payload byte for byte
@@ -8,7 +8,7 @@
  *             1/16 px, the 12.4 step), its colour half way; an unkeyed one
  *             keeps the current frame's
  *   snaps     a key missing from the previous frame, a vertex count change,
- *             a jump past the screen threshold, a camera cut (rd_CameraCut),
+ *             a jump past the screen threshold, a camera cut (rd_camera_cut),
  *             a fully faded frame (the fade edge), a discarded frame between
  *             (gap), a camera turn past the threshold: the current data
  *   ordinal   the same key twice matches in order
@@ -39,7 +39,7 @@
  *             them blends; alpha 0 and 1 are the two ticks' items
  *   morph     a morphing part as RegistPacket.c draws it: two meshes
  *             of one layout drawn in alternate frames under one key, the
- *             older rewritten (rd_UpdateVuMesh) while the next frame
+ *             older rewritten (rd_update_vu_mesh) while the next frame
  *             records: the half-way frame draws a scratch mesh whose
  *             positions are half way between the two ticks' shapes (the
  *             older from the kept version), alpha 1 the current tick's
@@ -61,7 +61,7 @@
  *             copies SCENE back into it, presented twice (alpha 0.5 as the
  *             first present, 1 as a later one): the two SCENEs and
  *             FEED128s are byte-identical, and FEED128 advances once per tick
- *   present   in either preset, rd_Present does nothing with interpolate
+ *   present   in either preset, rd_present does nothing with interpolate
  *             off and presents with it on; a change of scale drops the
  *             history (the next pair snaps)
  * The shake of the glowing coffins before the Queen, without a device and
@@ -108,12 +108,12 @@ static const char kObjA, kObjB, kObjC, kObjD, kObjE;
 
 static void opaque2D(void)
 {
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_TextureOff();
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_texture_off();
 }
 
 /* a sprite x0..x1, y0..y1 in whole pixels of WORK0 */
@@ -130,15 +130,15 @@ static void sprite(int x0, int y0, int x1, int y1, const uint8_t c[4], RdKey key
     v[1].s = (float)(x0 + 7); /* differs between the frames: held at the current */
     memcpy(v[0].rgba, c, 4);
     memcpy(v[1].rgba, c, 4);
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, key);
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, key);
 }
 
 static void frameHead(void)
 {
     static const uint8_t black[4] = {0, 0, 0, 0x80};
-    rd_SelectList(0);
-    rd_SetTarget(rd_Target(RD_TARGET_WORK0), (RdTarget){0}, TW, TH, 0);
-    rd_ClearTarget(rd_Target(RD_TARGET_WORK0), black, 0, 0);
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, TW, TH, 0);
+    rd_clear_target(rd_target(RD_TARGET_WORK0), black, 0, 0);
     opaque2D();
 }
 
@@ -162,13 +162,13 @@ static const RdScreenVtx *screenVtx(const RdFrame *f, const RdCmd *c)
 static const RdInterpStats *build(float alpha, int first)
 {
     static RdInterpStats st;
-    rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, first, &st);
+    rd__interp_frame(rd__prev_frame(), rd__last_frame(), alpha, first, &st);
     return &st;
 }
 
 static const RdFrame *built(float alpha)
 {
-    return rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, 1, NULL);
+    return rd__interp_frame(rd__prev_frame(), rd__last_frame(), alpha, 1, NULL);
 }
 
 /* ----------------------------------------------------- screen sprites */
@@ -180,7 +180,7 @@ static void recordSprites(int second)
 {
     static const uint8_t c0[4] = {200, 40, 0, 0x80}, c1[4] = {100, 80, 40, 0x40};
     static const uint8_t grey[4] = {90, 90, 90, 0x80};
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     const int dx = second ? 32 : 0;
     sprite(dx, 8, dx + 32, 40, second ? c1 : c0, RD_KEY(&kObjA, 0, 0));
@@ -190,14 +190,14 @@ static void recordSprites(int second)
     if (second) {
         sprite(200, 8, 240, 40, grey, RD_KEY(&kObjC, 0, 0));
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testSprites(void)
 {
     recordSprites(0);
     recordSprites(1);
-    const RdFrame *prev = rd__PrevFrame(), *cur = rd__LastFrame();
+    const RdFrame *prev = rd__prev_frame(), *cur = rd__last_frame();
     CHECK(prev && cur && prev->number + 1 == cur->number, "two frames retained");
     if (!prev || !cur) {
         return;
@@ -255,7 +255,7 @@ static void testSpriteSnaps(void)
 {
     static const uint8_t grey[4] = {90, 90, 90, 0x80};
     for (int k = 0; k < 2; k++) {
-        rd_BeginFrame();
+        rd_begin_frame();
         frameHead();
         /* KA: 2 vertices, then 4 (two sprites in one call) */
         RdScreenVtx v[4];
@@ -265,10 +265,10 @@ static void testSpriteSnaps(void)
             v[i].y = OY + (i * 10) * 16;
             memcpy(v[i].rgba, grey, 4);
         }
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, k ? 4 : 2, RD_SPACE_UI, 0, RD_KEY(&kObjA, 1, 0));
+        rd_screen_prims(RD_PRIM_SPRITES, v, k ? 4 : 2, RD_SPACE_UI, 0, RD_KEY(&kObjA, 1, 0));
         /* KD: 300 px to the right in the second frame */
         sprite(k ? 300 : 0, 0, k ? 310 : 10, 10, grey, RD_KEY(&kObjD, 0, 0));
-        rd_EndFrame(0);
+        rd_end_frame(0);
     }
     const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->mismatch == 1 && st->jump == 1 && st->lerped == 0,
@@ -298,31 +298,31 @@ static void framePair(int what)
 {
     static const uint8_t grey[4] = {90, 90, 90, 0x80};
     for (int k = 0; k < 2; k++) {
-        rd_BeginFrame();
+        rd_begin_frame();
         frameHead();
         RdCamera cam;
         cameraYaw(&cam, what == 4 && k ? 40.0f : (k ? 5.0f : 0.0f), 0.0f);
-        rd_SetCamera(&cam);
+        rd_set_camera(&cam);
         sprite(k * 8, 0, k * 8 + 10, 10, grey, RD_KEY(&kObjA, 2, 0));
         if (what == 1 && k) {
-            rd_CameraCut();
+            rd_camera_cut();
         }
         if (what == 2 && !k) {
             RdPostParams pp;
             memset(&pp, 0, sizeof(pp));
             pp.rgba[3] = 0x80;
-            rd_SelectList(11);
-            rd_Post(RD_POST_FADE, &pp);
+            rd_select_list(11);
+            rd_post(RD_POST_FADE, &pp);
         }
         if (what == 3 && k) {
-            rd_EndFrame(0);
-            rd_BeginFrame();
-            rd_DiscardFrame(); /* a frame dropped between */
-            rd_BeginFrame();
+            rd_end_frame(0);
+            rd_begin_frame();
+            rd_discard_frame(); /* a frame dropped between */
+            rd_begin_frame();
             frameHead();
             sprite(k * 8, 0, k * 8 + 10, 10, grey, RD_KEY(&kObjA, 2, 0));
         }
-        rd_EndFrame(what == 5 && k ? 1 : 0);
+        rd_end_frame(what == 5 && k ? 1 : 0);
     }
 }
 
@@ -353,7 +353,7 @@ static void testFrameSnaps(void)
             CHECK(x == 8 * 16, "%s: the current sprite (x %d)", cases[i].name, x);
         }
         if (cases[i].what == 1) {
-            CHECK(rd__LastFrame()->camera.cut == 1, "rd_CameraCut sets RdCamera.cut");
+            CHECK(rd__last_frame()->camera.cut == 1, "rd_camera_cut sets RdCamera.cut");
         }
     }
 }
@@ -377,7 +377,7 @@ static RdMesh makeMesh(void)
     md.qwPerVertex = RD_VU_QW_PRELIT;
     md.batchCount = 1;
     md.batches = &bd;
-    return rd_CreateVuMesh(&md);
+    return rd_create_vu_mesh(&md);
 }
 
 static void identity(float (*m)[4], int at)
@@ -392,7 +392,7 @@ static void identity(float (*m)[4], int at)
 /* mesh: k = 0 / 1; teleport moves KE's origin 1000 units */
 static void recordVu(RdMesh mesh, int k, int teleport, int shadowTris)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     /* a prelit mesh: inverse view identity, model to view translated */
     RdVuDraw d;
@@ -410,10 +410,10 @@ static void recordVu(RdMesh mesh, int k, int teleport, int shadowTris)
     d.vu.mem[2][1] = k ? 0.5f : 0.25f;
     d.vu.mem[30][2] = k ? 1.0f : 0.0f; /* a light term */
     d.vu.mem[3][0] = k ? 7.0f : 3.0f;  /* the GIF tag qword: never blended */
-    rd_SelectList(0);
-    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjE, 0, 32));
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjE, 0, 32));
     d.vu.mem[19][0] = 2048.0f + (teleport && k ? 1000.0f : 0.0f); /* 10 m in the tick */
-    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjE, 1, 32));
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjE, 1, 32));
 
     /* a grid: 2 strips of 3 unlit vertices (VIF qw, tag, colour, 3 x (pos,
      * ST), MSCNT) */
@@ -440,7 +440,7 @@ static void recordVu(RdMesh mesh, int k, int teleport, int shadowTris)
     identity(gd.vu.mem, 16);
     gd.vu.mem[19][0] = 2048.0f;
     gd.vu.mem[19][1] = 2048.0f;
-    rd_DrawVuGrid(&gd, RD_KEY(&kObjE, 2, 0));
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjE, 2, 0));
 
     /* particles: 2, the second moves 100 x its size */
     static float p[6 + 4][4];
@@ -462,8 +462,8 @@ static void recordVu(RdMesh mesh, int k, int teleport, int shadowTris)
     pd.vu.mem[19][0] = 2048.0f;
     pd.vu.mem[19][1] = 2048.0f;
     pd.vu.mem[19][3] = 1.0f;
-    rd_SelectList(6);
-    rd_DrawVuParticles(&pd, 0);
+    rd_select_list(6);
+    rd_draw_vu_particles(&pd, 0);
 
     /* a shadow volume: 2 triangles, then 3 with shadowTris */
     RdScreenVtx sv[9];
@@ -474,9 +474,9 @@ static void recordVu(RdMesh mesh, int k, int teleport, int shadowTris)
         sv[i].y = OY + i * 16;
         sv[i].z = 1000u + (uint32_t)(k * 100);
     }
-    rd_SelectList(3);
-    rd_ShadowTris(sv, sign, shadowTris && k ? 3 : 2, RD_KEY(&kObjE, 3, 0));
-    rd_EndFrame(0);
+    rd_select_list(3);
+    rd_shadow_tris(sv, sign, shadowTris && k ? 3 : 2, RD_KEY(&kObjE, 3, 0));
+    rd_end_frame(0);
 }
 
 static const float (*vuBlock(const RdFrame *f, const RdCmd *c))[4]
@@ -498,7 +498,7 @@ static void testVu(void)
           "changed is moved (S2) (keyed %u lerped %u jump %u mismatch %u shifted %u)",
           st->keyed, st->lerped, st->jump, st->mismatch, st->shifted);
     const RdFrame *f = built(0.5f);
-    const RdFrame *cur = rd__LastFrame();
+    const RdFrame *cur = rd__last_frame();
     const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjE, 0, 32), 0));
     if (m) {
         CHECK(m[27][0] == 50.0f && m[19][0] == 2058.0f && m[30][2] == 0.5f,
@@ -527,7 +527,7 @@ static void testVu(void)
         }
         CHECK(ok, "grid: every vertex half way, STs, colours and tags the current");
     }
-    /* the particles (list 6, the key rd_DrawVuParticles makes) */
+    /* the particles (list 6, the key rd_draw_vu_particles makes) */
     const RdCmd *pc = NULL;
     for (uint32_t i = 0; i < f->lists[6].count; i++) {
         if (f->lists[6].cmds[i].type == RDC_PARTICLES) {
@@ -574,7 +574,7 @@ static void testVu(void)
         CHECK(v[0].x == OX + 8 * 16 && v[0].z == 1050u, "shadow: half way (%d, %u)",
               (v[0].x - OX) / 16, v[0].z);
     }
-    rd_DestroyVuMesh(mesh);
+    rd_destroy_vu_mesh(mesh);
 }
 
 /* ------------------------------------------------------- shadow prisms */
@@ -582,7 +582,7 @@ static void testVu(void)
 /* Shadow.c's volume for one caster triangle: emitVolumeStrip's ten
  * positions over the top cap (whole pixels from x0, y0) and the cap moved
  * by d, each triangle signed by the GS rule (faceZ x the running sign < 0:
- * RGBAQ 0x04), written as rd_ShadowTris takes it */
+ * RGBAQ 0x04), written as rd_shadow_tris takes it */
 static const int kTestStrip[10] = {0, 1, 3, 4, 5, 1, 2, 0, 5, 3};
 
 static double faceZOf(const double (*p)[2], int a, int b, int c)
@@ -639,8 +639,8 @@ static int recordPrisms(const int *xs, const int (*d)[2], int n, int dy, RdKey k
         const float sgn = (xs[i] / 50) & 1 ? -1.0f : 1.0f;
         inc += emitPrism(top, d[i], sgn, 1000u, &v[i * 24], &sign[i * 8]);
     }
-    rd_SelectList(3);
-    rd_ShadowTris(v, sign, (uint32_t)n * 8, key);
+    rd_select_list(3);
+    rd_shadow_tris(v, sign, (uint32_t)n * 8, key);
     return inc;
 }
 
@@ -658,7 +658,7 @@ static int closedPrisms(const RdFrame *f, RdKey k, int *closed)
     int64_t sum[8] = {0};
     for (uint32_t t = 0; t < n; t++) {
         const RdScreenVtx *a = &v[t * 3];
-        const uint32_t tag = rd__ShadowTag(a);
+        const uint32_t tag = rd__shadow_tag(a);
         if (tag == 0 || tag > n || (tag - 1) / 8 >= 8) {
             return -1;
         }
@@ -675,10 +675,10 @@ static int closedPrisms(const RdFrame *f, RdKey k, int *closed)
 
 static void prismFrame(const int *xs, const int (*d)[2], int n, int dy, int *inc)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     *inc = recordPrisms(xs, d, n, dy, RD_KEY(&kObjE, 9, 0));
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testPrisms(void)
@@ -692,14 +692,14 @@ static void testPrisms(void)
     int incP, incC;
     prismFrame(xs, dPrev, 2, 0, &incP);
     prismFrame(xs, dCur, 2, 8, &incC);
-    const RdFrame *pv = rd__PrevFrame(), *cu = rd__LastFrame();
+    const RdFrame *pv = rd__prev_frame(), *cu = rd__last_frame();
     const RdCmd *pc = findKey(pv, 3, key, 0), *cc = findKey(cu, 3, key, 0);
     int differ = 0;
     if (pc && cc) {
         const RdScreenVtx *a = (const RdScreenVtx *)(const void *)(pv->payload + pc->u[1]);
         const RdScreenVtx *b = (const RdScreenVtx *)(const void *)(cu->payload + cc->u[1]);
         for (uint32_t i = 0; i < pc->u[0] && i < cc->u[0]; i += 3) {
-            differ |= rd__ShadowTag(&a[i]) != rd__ShadowTag(&b[i]);
+            differ |= rd__shadow_tag(&a[i]) != rd__shadow_tag(&b[i]);
         }
     }
     CHECK(incP == incC && differ,
@@ -764,9 +764,9 @@ static void testPrisms(void)
     /* alpha 1 is cur's volume byte for byte */
     f = built(1.0f);
     hc = findKey(f, 3, key, 0);
-    cc = findKey(rd__LastFrame(), 3, key, 0);
+    cc = findKey(rd__last_frame(), 3, key, 0);
     CHECK(hc && cc && hc->u[0] == cc->u[0] && hc->u[3] == cc->u[3] &&
-              memcmp(f->payload + hc->u[1], rd__LastFrame()->payload + cc->u[1],
+              memcmp(f->payload + hc->u[1], rd__last_frame()->payload + cc->u[1],
                      (cc->u[0] + cc->u[3]) * sizeof(RdScreenVtx)) == 0,
           "alpha 1: the current volume");
 }
@@ -776,14 +776,14 @@ static void testPrisms(void)
 static void testFade(void)
 {
     for (int k = 0; k < 2; k++) {
-        rd_BeginFrame();
+        rd_begin_frame();
         frameHead();
         RdPostParams pp;
         memset(&pp, 0, sizeof(pp));
         pp.rgba[3] = k ? 0x20 : 0x40;
-        rd_SelectList(11);
-        rd_Post(RD_POST_FADE, &pp);
-        rd_EndFrame(0);
+        rd_select_list(11);
+        rd_post(RD_POST_FADE, &pp);
+        rd_end_frame(0);
     }
     const RdInterpStats *st = build(0.5f, 1);
     CHECK(st->snap == RD_SNAP_NONE && st->lerped == 1, "a partial fade interpolates");
@@ -805,7 +805,7 @@ static void testFade(void)
  * sprite into FEED128; always one into AURA_WORK */
 static void recordFeedback(int display, int feed)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
@@ -813,21 +813,21 @@ static void recordFeedback(int display, int feed)
     pp.blend = RD_BLEND_LERP_FIX;
     pp.scalar[2] = 1.0f;
     if (display) {
-        rd_SelectList(7);
-        rd_BlendFunc(RD_BLEND_LERP_FIX, 0x20);
-        rd_Texture(rd_TargetTexture(rd_Target(RD_TARGET_DISPLAY), RD_VIEW_RGB24_TA0),
+        rd_select_list(7);
+        rd_blend_func(RD_BLEND_LERP_FIX, 0x20);
+        rd_texture(rd_target_texture(rd_target(RD_TARGET_DISPLAY), RD_VIEW_RGB24_TA0),
                    RD_TEXFN_MODULATE, RD_TCC_RGBA);
-        rd_Post(RD_POST_MOTION_BLUR, &pp);
-        rd_TextureOff();
+        rd_post(RD_POST_MOTION_BLUR, &pp);
+        rd_texture_off();
     }
-    rd_SelectList(8);
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
-    rd_Post(RD_POST_AURA, &pp);
+    rd_select_list(8);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), (RdTarget){0}, 512, 512, 0);
+    rd_post(RD_POST_AURA, &pp);
     if (feed) {
-        rd_SetTarget(rd_Target(RD_TARGET_FEED128), (RdTarget){0}, 128, 128, 0);
-        rd_Post(RD_POST_AURA, &pp);
+        rd_set_target(rd_target(RD_TARGET_FEED128), (RdTarget){0}, 128, 128, 0);
+        rd_post(RD_POST_AURA, &pp);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 /* issue 28: the copies at the head of a present's first list:
@@ -835,10 +835,10 @@ static void recordFeedback(int display, int feed)
  * most), and the number of RDC_COPYs in the frame */
 static int headCopies(const RdFrame *f, int first, int *display, int *feed)
 {
-    const uint32_t disp = rd_Target(RD_TARGET_DISPLAY).id;
-    const uint32_t dispHeld = rd_Target(RD_TARGET_DISPLAY_HELD).id;
-    const uint32_t fd = rd_Target(RD_TARGET_FEED128).id;
-    const uint32_t fdHeld = rd_Target(RD_TARGET_FEED_HELD).id;
+    const uint32_t disp = rd_target(RD_TARGET_DISPLAY).id;
+    const uint32_t dispHeld = rd_target(RD_TARGET_DISPLAY_HELD).id;
+    const uint32_t fd = rd_target(RD_TARGET_FEED128).id;
+    const uint32_t fdHeld = rd_target(RD_TARGET_FEED_HELD).id;
     *display = *feed = 0;
     for (uint32_t i = 0; i < f->lists[0].count && i < 2; i++) {
         const RdCmd *c = &f->lists[0].cmds[i];
@@ -879,9 +879,9 @@ static void testFeedback(void)
         const int display = kCases[k].display, feed = kCases[k].feed;
         recordFeedback(display, feed);
         recordFeedback(display, feed);
-        const RdFrame *cur = rd__LastFrame();
+        const RdFrame *cur = rd__last_frame();
         for (int first = 1; first >= 0; first--) {
-            const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), cur, 0.5f, first, NULL);
+            const RdFrame *f = rd__interp_frame(rd__prev_frame(), cur, 0.5f, first, NULL);
             if (!f) {
                 CHECK(0, "feedback case %zu: the frame built", k);
                 continue;
@@ -924,7 +924,7 @@ static uint8_t *readWork0(void)
 {
     static uint8_t buf[TW * TH * 4];
     uint32_t w, h;
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_WORK0), buf, sizeof(buf), &w, &h) || w != TW ||
+    if (!rd__read_target(rd_target(RD_TARGET_WORK0), buf, sizeof(buf), &w, &h) || w != TW ||
         h != TH) {
         CHECK(0, "WORK0 readback");
         return NULL;
@@ -937,23 +937,23 @@ static void testPixels(void)
     static uint8_t img[4][TW * TH * 4];
     recordSprites(0);
     recordSprites(1);
-    const RdFrame *prev = rd__PrevFrame(), *cur = rd__LastFrame();
+    const RdFrame *prev = rd__prev_frame(), *cur = rd__last_frame();
     const uint8_t *p;
-    rd__ReplayFrame(prev, 0, false);
+    rd__replay_frame(prev, 0, false);
     if ((p = readWork0()) != NULL) {
         memcpy(img[0], p, sizeof(img[0]));
     }
-    rd__ReplayFrame(cur, 0, false);
+    rd__replay_frame(cur, 0, false);
     if ((p = readWork0()) != NULL) {
         memcpy(img[1], p, sizeof(img[1]));
     }
     /* KC (only in the current frame) is drawn at alpha 0 too: compare the
      * rows above it only where it is not: it sits at x 200..240 */
-    rd__ReplayFrame(built(0.0f), 0, false);
+    rd__replay_frame(built(0.0f), 0, false);
     if ((p = readWork0()) != NULL) {
         memcpy(img[2], p, sizeof(img[2]));
     }
-    rd__ReplayFrame(built(1.0f), 0, false);
+    rd__replay_frame(built(1.0f), 0, false);
     if ((p = readWork0()) != NULL) {
         memcpy(img[3], p, sizeof(img[3]));
     }
@@ -973,7 +973,7 @@ static void testPixels(void)
     CHECK(diff0 == 0, "alpha 0 replays as the previous frame (%d pixels differ)", diff0);
     CHECK(diff1 == 0, "alpha 1 replays as the current frame (%d pixels differ)", diff1);
     /* alpha 0.5: KA covers x 16..47 exactly */
-    rd__ReplayFrame(built(0.5f), 0, false);
+    rd__replay_frame(built(0.5f), 0, false);
     if ((p = readWork0()) != NULL) {
         const int y = 20;
         const uint8_t *l = p + ((size_t)y * TW + 15) * 4, *a = p + ((size_t)y * TW + 16) * 4;
@@ -994,17 +994,17 @@ static void testPixels(void)
 static void mirageSprite(RdTarget dst, uint32_t dw, uint32_t dh, RdTarget src, uint32_t sw,
                          uint32_t sh, const uint8_t c[4], int abe)
 {
-    rd_SetTarget(dst, (RdTarget){0}, dw, dh, 0);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_PABE(abe ? 0 : 1);
-    rd_BlendFunc(abe ? RD_BLEND_LERP_AS_ALT : RD_BLEND_LERP_FIX, 0);
-    rd_ABE(abe);
-    rd_FBA(0);
-    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
-    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(rd_TargetTexture(src, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_Gouraud(0);
+    rd_set_target(dst, (RdTarget){0}, dw, dh, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_pabe(abe ? 0 : 1);
+    rd_blend_func(abe ? RD_BLEND_LERP_AS_ALT : RD_BLEND_LERP_FIX, 0);
+    rd_abe(abe);
+    rd_fba(0);
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(rd_target_texture(src, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_gouraud(0);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
     p.rect[0] = (float)(0x8000 - (int)dw * 8);
@@ -1019,7 +1019,7 @@ static void mirageSprite(RdTarget dst, uint32_t dw, uint32_t dh, RdTarget src, u
     p.scalar[2] = 1.0f;
     p.exactInt = 1;
     memcpy(p.rgba, c, 4);
-    rd_Post(RD_POST_AURA, &p);
+    rd_post(RD_POST_AURA, &p);
 }
 
 static void mirageTick(int n)
@@ -1027,16 +1027,16 @@ static void mirageTick(int n)
     static const uint8_t half[4] = {64, 64, 64, 128}, white[4] = {128, 128, 128, 128};
     const uint8_t bg[4] = {(uint8_t)(40 + n * 30), 120, 200, 0x80};
     const uint8_t fg[4] = {230, 50, 20, 0x60};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 0);
-    rd_TestGs(RD_TEST_Z_ALWAYS);
-    rd_ZWrite(0);
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
-    rd_PABE(0);
-    rd_FBA(0);
-    rd_TextureOff();
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_texture_off();
     {
         RdScreenVtx v[2];
         memset(v, 0, sizeof(v));
@@ -1047,20 +1047,20 @@ static void mirageTick(int n)
         v[0].q = v[1].q = 1.0f;
         memcpy(v[0].rgba, fg, 4);
         memcpy(v[1].rgba, fg, 4);
-        rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, 0);
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_UI, 0, 0);
     }
-    rd_SelectList(8);
-    mirageSprite(rd_Target(RD_TARGET_SCENE), 512, 512, rd_Target(RD_TARGET_FEED128), 128, 128, half,
+    rd_select_list(8);
+    mirageSprite(rd_target(RD_TARGET_SCENE), 512, 512, rd_target(RD_TARGET_FEED128), 128, 128, half,
                  1);
-    mirageSprite(rd_Target(RD_TARGET_FEED128), 128, 128, rd_Target(RD_TARGET_SCENE), 512, 512,
+    mirageSprite(rd_target(RD_TARGET_FEED128), 128, 128, rd_target(RD_TARGET_SCENE), 512, 512,
                  white, 0);
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static int readTo(RdTargetId id, uint8_t *dst, size_t size)
 {
     uint32_t w = 0, h = 0;
-    return rd__ReadTarget(rd_Target(id), dst, size, &w, &h);
+    return rd__read_target(rd_target(id), dst, size, &w, &h);
 }
 
 static void testMiragePresents(void)
@@ -1073,9 +1073,9 @@ static void testMiragePresents(void)
         mirageTick(n);
         for (int k = 0; k < 2; k++) {
             const RdFrame *f =
-                rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), k ? 1.0f : 0.5f, k == 0, NULL);
-            CHECK(f && rd__ReplayFrame(f, 0, false), "mirage tick %d present %d: replay", n, k);
-            rhi_WaitIdle();
+                rd__interp_frame(rd__prev_frame(), rd__last_frame(), k ? 1.0f : 0.5f, k == 0, NULL);
+            CHECK(f && rd__replay_frame(f, 0, false), "mirage tick %d present %d: replay", n, k);
+            rhi_wait_idle();
             CHECK(readTo(RD_TARGET_SCENE, scene[k], sizeof(scene[k])) &&
                       readTo(RD_TARGET_FEED128, feed[k], sizeof(feed[k])),
                   "mirage tick %d present %d: readback", n, k);
@@ -1106,37 +1106,37 @@ static void testMiragePresents(void)
 
 static void testPresent(void)
 {
-    RdSettings s = *rd_GetSettings();
-    CHECK(!rd_InterpolationActive() && !rd_Present(0.5f), "Original: rd_Present does nothing");
+    RdSettings s = *rd_get_settings();
+    CHECK(!rd_interpolation_active() && !rd_present(0.5f), "Original: rd_present does nothing");
     /* the Original preset interpolates too when asked */
     s.interpolate = 1;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     recordSprites(0);
-    CHECK(rd_InterpolationActive(), "Original with interpolate");
+    CHECK(rd_interpolation_active(), "Original with interpolate");
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f; /* the GS size: no target is recreated */
     s.interpolate = 0;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     recordSprites(0);
-    CHECK(!rd_InterpolationActive() && !rd_Present(0.5f), "Enhanced, framerate original: none");
+    CHECK(!rd_interpolation_active() && !rd_present(0.5f), "Enhanced, framerate original: none");
     s.interpolate = 1;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     recordSprites(0);
     recordSprites(1);
-    CHECK(rd_InterpolationActive(), "Enhanced with interpolate");
-    CHECK(rd_Present(0.25f) && rd_Present(0.75f), "rd_Present presents");
+    CHECK(rd_interpolation_active(), "Enhanced with interpolate");
+    CHECK(rd_present(0.25f) && rd_present(0.75f), "rd_present presents");
     /* a change of scale recreates the targets: the pair across it snaps,
      * the next blends */
     s.sceneScale = 2.0f;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     recordSprites(0);
     CHECK(build(0.5f, 1)->snap == RD_SNAP_HISTORY, "history dropped after a recreate");
     recordSprites(1);
     CHECK(build(0.5f, 1)->snap == RD_SNAP_NONE, "the next pair blends again");
-    CHECK(rd_Present(0.5f), "rd_Present at 2x");
+    CHECK(rd_present(0.5f), "rd_present at 2x");
     s.preset = RD_PRESET_ORIGINAL;
     s.sceneScale = 0.0f;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     recordSprites(0);
 }
 
@@ -1151,7 +1151,7 @@ static RdKey textKeyOf(const char *s)
     return h ? h : 1;
 }
 
-/* n glyph sprites of 6 x 10 px from x, one rd_ScreenPrims call as font.c
+/* n glyph sprites of 6 x 10 px from x, one rd_screen_prims call as font.c
  * makes it */
 static void glyphs(int x, int y, int n, uint8_t alpha, RdKey key)
 {
@@ -1171,7 +1171,7 @@ static void glyphs(int x, int y, int n, uint8_t alpha, RdKey key)
         a->rgba[2] = c->rgba[2] = 128;
         a->rgba[3] = c->rgba[3] = alpha;
     }
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, (uint32_t)(2 * n), RD_SPACE_UI, 1, key);
+    rd_screen_prims(RD_PRIM_SPRITES, v, (uint32_t)(2 * n), RD_SPACE_UI, 1, key);
 }
 
 /* "NEW GAME" fading out while it slides 16 px; "OPTIONS" twice (the halo
@@ -1179,9 +1179,9 @@ static void glyphs(int x, int y, int n, uint8_t alpha, RdKey key)
  * second (a changed label) */
 static void recordText(int second)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
-    rd_SelectList(11);
+    rd_select_list(11);
     glyphs(10 + (second ? 16 : 0), 20, 8, second ? 0x00 : 0x80, textKeyOf("NEW GAME"));
     glyphs(10, 40, 7, 0x40, textKeyOf("OPTIONS"));
     glyphs(12 + (second ? 4 : 0), 40, 7, 0x40, textKeyOf("OPTIONS"));
@@ -1190,7 +1190,7 @@ static void recordText(int second)
     } else {
         glyphs(10, 60, 4, 0x80, textKeyOf("LOAD"));
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testText(void)
@@ -1202,7 +1202,7 @@ static void testText(void)
           "text: three strings blend, the changed label is unmatched (keyed %u lerped %u "
           "missing %u)",
           st->keyed, st->lerped, st->missing);
-    const RdFrame *f = built(0.5f), *cur = rd__LastFrame();
+    const RdFrame *f = built(0.5f), *cur = rd__last_frame();
     const RdScreenVtx *a = screenVtx(f, findKey(f, 11, textKeyOf("NEW GAME"), 0));
     int ok = a != NULL;
     for (int i = 0; ok && i < 8; i++) {
@@ -1237,7 +1237,7 @@ static void deferredItem(const char *str, float x, float y, uint8_t alpha, RdKey
     it.rgba[3] = alpha;
     it.hasXf = 1;
     it.xf[2] = it.xf[3] = 1.0f + (alpha == 0x80 ? 0.0f : 0.5f); /* the glow's stretch */
-    rd_DeferredText(&it, key);
+    rd_deferred_text(&it, key);
 }
 
 /* "New Game" sliding 20 grid units right and fading out with its glow
@@ -1245,9 +1245,9 @@ static void deferredItem(const char *str, float x, float y, uint8_t alpha, RdKey
  * size in the second frame (mismatch); a fade op after them in both */
 static void recordDeferred(int second)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
-    rd_SelectList(11);
+    rd_select_list(11);
     deferredItem("New Game", 300.0f + (second ? 20.0f : 0.0f), 200.0f, second ? 0x00 : 0x80,
                  RD_KEY(&kObjD, 1, 0));
     deferredItem("Options", second ? 500.0f : 100.0f, 240.0f, 0x80, RD_KEY(&kObjD, 2, 0));
@@ -1256,15 +1256,15 @@ static void recordDeferred(int second)
     snprintf(it.utf8, sizeof(it.utf8), "Load");
     it.size = second ? 20.0f : 27.0f;
     it.rgba[3] = 0x80;
-    rd_DeferredText(&it, RD_KEY(&kObjD, 3, 0));
+    rd_deferred_text(&it, RD_KEY(&kObjD, 3, 0));
     /* a row of one tick only each */
     deferredItem(second ? "Extra" : "Gone", 320.0f, 280.0f, 0x80,
                  RD_KEY(&kObjD, second ? 4 : 5, 0));
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = second ? 0x40 : 0x00;
-    rd_Post(RD_POST_FADE, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_FADE, &pp);
+    rd_end_frame(0);
 }
 
 static const RdTextItem *itemOf(const RdFrame *f, RdKey k)
@@ -1284,7 +1284,7 @@ static void testDeferredText(void)
           "deferred: items blend, a jump snaps, a changed size mismatches (lerped %u jump %u "
           "mismatch %u)",
           st->lerped, st->jump, st->mismatch);
-    const RdFrame *f = built(0.5f), *cur = rd__LastFrame(), *prev = rd__PrevFrame();
+    const RdFrame *f = built(0.5f), *cur = rd__last_frame(), *prev = rd__prev_frame();
     const RdTextItem *a = itemOf(f, RD_KEY(&kObjD, 1, 0));
     CHECK(a && a->x == 310.0f && a->y == 200.0f && a->rgba[3] == 0x40 && a->xf[2] == 1.25f &&
               strcmp(a->utf8, "New Game") == 0,
@@ -1352,14 +1352,14 @@ static RdMesh morphMesh(float x)
     md.qwPerVertex = RD_VU_QW_PRELIT;
     md.batchCount = 1;
     md.batches = &bd;
-    return rd_CreateVuMesh(&md);
+    return rd_create_vu_mesh(&md);
 }
 
 static void morphUpdate(RdMesh m, float x)
 {
     static float qw[10][4];
     morphStream(qw, x);
-    CHECK(rd_UpdateVuMesh(m, (const float (*)[4])qw), "the morph rewrote the mesh");
+    CHECK(rd_update_vu_mesh(m, (const float (*)[4])qw), "the morph rewrote the mesh");
 }
 
 static void morphDrawAt(RdMesh m, RdKey key)
@@ -1372,46 +1372,46 @@ static void morphDrawAt(RdMesh m, RdKey key)
     identity(d.vu.mem, 16);
     d.vu.mem[19][0] = 2048.0f;
     d.vu.mem[19][1] = 2048.0f;
-    rd_SelectList(0);
-    rd_DrawVuMesh(m, &d, key);
+    rd_select_list(0);
+    rd_draw_vu_mesh(m, &d, key);
 }
 
 /* vertex 1's x in the stream the n-th draw of key in f replays */
 static float morphX(const RdFrame *f, RdKey key, int nth)
 {
     const RdCmd *c = findKey(f, 0, key, nth);
-    const RdMeshRec *m = c ? rd__MeshRec(c->u[0]) : NULL;
+    const RdMeshRec *m = c ? rd__mesh_rec(c->u[0]) : NULL;
     return m ? m->stream[RD_VU_QW_PRELIT][0] : -1.0f;
 }
 
 static void testMorph(void)
 {
-    RdSettings s = *rd_GetSettings(), keep = s;
+    RdSettings s = *rd_get_settings(), keep = s;
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f;
     s.interpolate = 1;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     const RdKey kTwin = RD_KEY(&kObjD, 5, 0), kOne = RD_KEY(&kObjD, 6, 0);
     /* the twins: A in odd frames, B in even ones, rewritten before the
      * draw (reg_setShape); "one": a single mesh rewritten every frame */
     RdMesh a = morphMesh(0.0f), b = morphMesh(0.0f), one = morphMesh(0.0f);
     CHECK(a.id && b.id && one.id, "the morph meshes");
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     morphUpdate(a, 100.0f);
     morphDrawAt(a, kTwin);
     morphUpdate(one, 100.0f);
     morphDrawAt(one, kOne);
-    rd_EndFrame(0);
-    rd_BeginFrame();
+    rd_end_frame(0);
+    rd_begin_frame();
     frameHead();
     morphUpdate(b, 120.0f);
     morphDrawAt(b, kTwin);
     morphUpdate(one, 120.0f);
     morphDrawAt(one, kOne);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     /* the next tick records: A and "one" take the third shape */
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     morphUpdate(a, 200.0f);
     morphDrawAt(a, kTwin);
@@ -1435,15 +1435,15 @@ static void testMorph(void)
           "morph: alpha 0 is the previous tick's shape (%g, %g)", morphX(f, kTwin, 0),
           morphX(f, kOne, 0));
     if (g_rd.hasDevice) {
-        CHECK(rd__ReplayFrame(built(0.5f), 0, false), "morph: the half-way frame replays");
+        CHECK(rd__replay_frame(built(0.5f), 0, false), "morph: the half-way frame replays");
     }
-    rd_EndFrame(0);
-    rd_SetSettings(&keep);
-    rd_BeginFrame();
-    rd_EndFrame(0);
-    rd_DestroyVuMesh(a);
-    rd_DestroyVuMesh(b);
-    rd_DestroyVuMesh(one);
+    rd_end_frame(0);
+    rd_set_settings(&keep);
+    rd_begin_frame();
+    rd_end_frame(0);
+    rd_destroy_vu_mesh(a);
+    rd_destroy_vu_mesh(b);
+    rd_destroy_vu_mesh(one);
 }
 
 /* ------------------------------------------------ rotation-aware blend */
@@ -1473,7 +1473,7 @@ static void testRotationBlend(void)
     double p[16], c[16], o[16];
     turnZ(p, 0.0, 1.0, 0.0);
     turnZ(c, 90.0, 1.0, 100.0);
-    CHECK(rd__BlendAffine(p, c, 0.5, NULL, o), "a 90 degree turn blends");
+    CHECK(rd__blend_affine(p, c, 0.5, NULL, o), "a 90 degree turn blends");
     const double ang = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
     CHECK(fabs(ang - 45.0) < 1e-9 && fabs(colLen(o, 0) - 1.0) < 1e-12 &&
               fabs(colLen(o, 1) - 1.0) < 1e-12 && fabs(colLen(o, 2) - 1.0) < 1e-12 &&
@@ -1485,13 +1485,13 @@ static void testRotationBlend(void)
            colLen(o, 0), colLen(o, 1), colLen(o, 2));
     turnZ(p, -30.0, 2.0, 0.0);
     turnZ(c, 50.0, 3.0, 0.0);
-    CHECK(rd__BlendAffine(p, c, 0.25, NULL, o), "turn with scale blends");
+    CHECK(rd__blend_affine(p, c, 0.25, NULL, o), "turn with scale blends");
     const double ang2 = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
     CHECK(fabs(ang2 - (-10.0)) < 1e-9 && fabs(colLen(o, 0) - 2.25) < 1e-12,
           "scale lerped, rotation slerped (%.6f degrees, scale %.6f)", ang2, colLen(o, 0));
     turnZ(p, 170.0, 1.0, 0.0);
     turnZ(c, -170.0, 1.0, 0.0);
-    CHECK(rd__BlendAffine(p, c, 0.5, NULL, o) &&
+    CHECK(rd__blend_affine(p, c, 0.5, NULL, o) &&
               fabs(fabs(atan2(o[1], o[0])) * 180.0 / 3.14159265358979323846 - 180.0) < 1e-9,
           "the short way round (170 to -170 is 180 half way)");
     /* about a pivot: a limb turning 90 degrees about its joint at (100, 0,
@@ -1502,7 +1502,7 @@ static void testRotationBlend(void)
         turnZ(p, 0.0, 1.0, 0.0);
         turnZ(c, 90.0, 1.0, 100.0); /* R x + (100, -100, 0): R (x - x0) + x0 */
         c[13] = -100.0;
-        CHECK(rd__BlendAffine(p, c, 0.5, x0, o), "about a pivot");
+        CHECK(rd__blend_affine(p, c, 0.5, x0, o), "about a pivot");
         const double jx = o[0] * 100.0 + o[12], jy = o[1] * 100.0 + o[13];
         const double a2 = atan2(o[1], o[0]) * 180.0 / 3.14159265358979323846;
         CHECK(fabs(jx - 100.0) < 1e-9 && fabs(jy) < 1e-9 && fabs(a2 - 45.0) < 1e-9,
@@ -1510,12 +1510,12 @@ static void testRotationBlend(void)
     }
     turnZ(c, 10.0, 1.0, 0.0);
     c[3] = 0.25; /* projective */
-    CHECK(!rd__BlendAffine(p, c, 0.5, NULL, o),
+    CHECK(!rd__blend_affine(p, c, 0.5, NULL, o),
           "a projective matrix is left to the element-wise blend");
     turnZ(p, 0.0, 1.0, 0.0);
     turnZ(c, 10.0, 1.0, 0.0);
     c[10] = -1.0; /* a mirror */
-    CHECK(!rd__BlendAffine(p, c, 0.5, NULL, o),
+    CHECK(!rd__blend_affine(p, c, 0.5, NULL, o),
           "opposite handedness is left to the element-wise blend");
 }
 
@@ -1524,7 +1524,7 @@ static void testRotationBlend(void)
  * with one bone turning the same way */
 static void recordTurn(RdMesh mesh, RdMesh skin, double deg)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     RdVuDraw d;
     memset(&d, 0, sizeof(d));
@@ -1557,8 +1557,8 @@ static void recordTurn(RdMesh mesh, RdMesh skin, double deg)
         }
     }
     identity(d.vu.mem, 12);
-    rd_SelectList(0);
-    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjD, 0, 32));
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjD, 0, 32));
     /* skinned: one bone */
     static float bone[4][4];
     for (int cI = 0; cI < 4; cI++) {
@@ -1570,8 +1570,8 @@ static void recordTurn(RdMesh mesh, RdMesh skin, double deg)
     d.code = 20;
     d.bones = (const float (*)[4])bone;
     d.boneQw = 4;
-    rd_DrawVuMesh(skin, &d, RD_KEY(&kObjD, 1, 20));
-    rd_EndFrame(0);
+    rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjD, 1, 20));
+    rd_end_frame(0);
 }
 
 /* a cluster (skinned) layout mesh of one strip of 3 vertices */
@@ -1596,7 +1596,7 @@ static RdMesh makeSkinMesh(void)
     md.qwPerVertex = RD_VU_QW_SKIN;
     md.batchCount = 1;
     md.batches = &bd;
-    return rd_CreateVuMesh(&md);
+    return rd_create_vu_mesh(&md);
 }
 
 static void testRotationDraws(void)
@@ -1640,7 +1640,7 @@ static void testRotationDraws(void)
     recordTurn(mesh, skin, 150.0);
     build(0.5f, 1);
     f = built(0.5f);
-    const RdFrame *cur = rd__LastFrame();
+    const RdFrame *cur = rd__last_frame();
     const float (*mf)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
     const float (*mc)[4] = vuBlock(cur, findKey(cur, 0, RD_KEY(&kObjD, 0, 32), 0));
     CHECK(mf && mc && memcmp(mf[16], mc[16], 12 * 16) == 0,
@@ -1784,15 +1784,15 @@ static void s6Draw(RdMesh mesh, const double *v, const double *w, RdKey key)
             d.vu.mem[24 + c][r] = (float)vw[c * 4 + r];
         }
     }
-    rd_SelectList(s_s6List);
-    rd_DrawVuMesh(mesh, &d, key);
+    rd_select_list(s_s6List);
+    rd_draw_vu_mesh(mesh, &d, key);
 }
 
 /* one frame: the camera turned deg about the origin; mesh A (key part 0)
  * and, keyed by part bPart (0: not drawn), mesh B */
 static void s6Frame(RdMesh mesh, double deg, int bPart)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     double eye[3], v[16], p[16], wa[16], wb[16];
     s6OrbitEye(deg, eye);
@@ -1805,14 +1805,14 @@ static void s6Frame(RdMesh mesh, double deg, int bPart)
         cam.proj43[k] = (float)p[k];
     }
     cam.zoom = 500.0f;
-    rd_SetCamera(&cam);
+    rd_set_camera(&cam);
     s6Translate(wa, 0.0, 0.0, 0.0);
     s6Translate(wb, -200.0, 0.0, 150.0);
     s6Draw(mesh, v, wa, RD_KEY(&kObjS6, 0, 32));
     if (bPart) {
         s6Draw(mesh, v, wb, RD_KEY(&kObjS6, bPart, 32));
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 /* where a static point lands half way: the camera turned 14 degrees, its
@@ -1858,7 +1858,7 @@ static void testCameraBlend(void)
         s6Expected(wa, kS6PointA, 500.0, want);
         s6ProjectF(m, kS6PointA, got);
         /* the element-wise mean of the two ticks' model to screen */
-        const RdFrame *pf = rd__PrevFrame(), *cf = rd__LastFrame();
+        const RdFrame *pf = rd__prev_frame(), *cf = rd__last_frame();
         const float (*mp)[4] = vuBlock(pf, findKey(pf, 0, RD_KEY(&kObjS6, 0, 32), 0));
         const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 0, 32), 0));
         double mm[16];
@@ -1917,7 +1917,7 @@ static void testCameraBlend(void)
               gb[0], wb2[0]);
         /* without the blended camera, B would be cur's: at the 28 degree
          * camera */
-        const RdFrame *cf = rd__LastFrame();
+        const RdFrame *cf = rd__last_frame();
         const float (*mbc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
         double gc[2];
         s6ProjectF(mbc, kS6PointB, gc);
@@ -1958,7 +1958,7 @@ static void testCameraBlend(void)
     s6Frame(mesh, 10.0, 1);
     st = build(0.5f, 1);
     f = built(0.5f);
-    const RdFrame *cf = rd__LastFrame();
+    const RdFrame *cf = rd__last_frame();
     const float (*mo)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjS6, 1, 32), 0));
     const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
     CHECK(st->rebased == 0 && mo && mc && memcmp(mo, mc, 36 * 16) == 0,
@@ -1974,7 +1974,7 @@ static void testCameraBlend(void)
  * letterbox bars, the film noise */
 static void photoTick(double deg)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     double eye[3], v[16], p[16];
     s6OrbitEye(deg, eye);
@@ -1987,22 +1987,22 @@ static void photoTick(double deg)
         cam.proj43[k] = (float)p[k];
     }
     cam.zoom = 500.0f;
-    rd_SetCamera(&cam);
-    rd_SelectList(11);
+    rd_set_camera(&cam);
+    rd_select_list(11);
     RdPostParams pp;
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 0xFF;
     pp.rgba[3] = 8;
-    rd_Post(RD_POST_BRIGHTNESS, &pp);
+    rd_post(RD_POST_BRIGHTNESS, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.fix = 0x60;
     pp.lines = 58;
-    rd_Post(RD_POST_LETTERBOX, &pp);
+    rd_post(RD_POST_LETTERBOX, &pp);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[3] = 0x20;
     pp.scalar[0] = 4.0f;
-    rd_Post(RD_POST_FILM_NOISE, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_FILM_NOISE, &pp);
+    rd_end_frame(0);
 }
 
 static int countType(const RdFrame *f, int l, uint8_t type, uint8_t space)
@@ -2029,13 +2029,13 @@ static void eyeYaw(const RdCamera *c, double eye[3], double *yaw)
 /* Photo mode is the paused game drawn from the photo camera every tick:
  * two such ticks whose cameras differ (20 degrees about the origin, the
  * eye 174 of 300 units) are blended like any pair, the camera half way,
- * and list 11's full-screen passes all survive rd__InterpFrame (nothing
+ * and list 11's full-screen passes all survive rd__interp_frame (nothing
  * of the picture is dropped) */
 static void testPhoto(void)
 {
     photoTick(0.0);
     photoTick(20.0);
-    const RdFrame *pf = rd__PrevFrame(), *cf = rd__LastFrame();
+    const RdFrame *pf = rd__prev_frame(), *cf = rd__last_frame();
     const int want = countType(cf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN);
     CHECK(want == 4 && countType(pf, 11, RDC_SCREEN, RD_SPACE_FULLSCREEN) == 4,
           "photo: the tick records brightness, two letterbox bars and the noise (%d)", want);
@@ -2089,7 +2089,7 @@ static void testPresentClock(void)
         const double jit = ((double)(seed >> 8) / 16777216.0 - 0.5) * 6.0;
         const double now = truth + jit;
         const double tickAt = floor((truth - 1000.0) / tick) * tick + 1000.0 - 0.5;
-        const float a = rd_PresentClockAlpha(&c, now, tickAt, tick, gap);
+        const float a = rd_present_clock_alpha(&c, now, tickAt, tick, gap);
         double raw = (now - tickAt) / tick;
         raw = raw < 0.0 ? 0.0 : (raw > 0.999 ? 0.999 : raw);
         if (tickAt == lastTick && i > 100) {
@@ -2114,8 +2114,8 @@ static void testPresentClock(void)
     CHECK(c.resets == 1, "present clock: no reset after the first present (%u)", c.resets);
     /* a pause (the window dragged, a load): the clock restarts at the
      * measured time */
-    const float a = rd_PresentClockAlpha(&c, 1000.0 + 2000 * gap + 500.0,
-                                         1000.0 + 2000 * gap + 490.0, tick, gap);
+    const float a = rd_present_clock_alpha(&c, 1000.0 + 2000 * gap + 500.0,
+                                           1000.0 + 2000 * gap + 490.0, tick, gap);
     CHECK(c.resets == 2 && fabsf(a - (float)(10.0 / tick)) < 1e-5f,
           "present clock: a 500 ms pause resets it (alpha %.4f)", a);
 }
@@ -2148,8 +2148,8 @@ static int stateAt(const RdFrame *f, int l, RdKey k, RdStateBlock *out)
     for (int li = 0; li < RD_LIST_COUNT; li++) {
         for (uint32_t i = 0; i < f->lists[li].count; i++) {
             const RdCmd *c = &f->lists[li].cmds[i];
-            rd__ApplyState(&st, c);
-            if (li == l && c->type != RDC_NOP && !rd__CmdIsState(c->type) &&
+            rd__apply_state(&st, c);
+            if (li == l && c->type != RDC_NOP && !rd__cmd_is_state(c->type) &&
                 c->keyLo == (uint32_t)k && c->keyHi == (uint32_t)(k >> 32)) {
                 *out = st;
                 return 1;
@@ -2162,10 +2162,10 @@ static int stateAt(const RdFrame *f, int l, RdKey k, RdStateBlock *out)
 static void endStateOf(const RdFrame *f, RdStateBlock *out)
 {
     *out = f->startState;
-    rd__Walk(f, (int)f->keep, out, NULL, NULL);
+    rd__walk(f, (int)f->keep, out, NULL, NULL);
 }
 
-/* a 3-triangle volume at x0 in list 3 (untagged layout as rd_ShadowTris
+/* a 3-triangle volume at x0 in list 3 (untagged layout as rd_shadow_tris
  * records it) */
 static void volume(int x0, RdKey key)
 {
@@ -2177,7 +2177,7 @@ static void volume(int x0, RdKey key)
         sv[i].y = OY + i * 16;
         sv[i].z = 1000u;
     }
-    rd_ShadowTris(sv, sign, 3, key);
+    rd_shadow_tris(sv, sign, 3, key);
 }
 
 /* prev (second 0): KM, a fading KP (ABE on, LERP As), an opaque KQ, and
@@ -2185,19 +2185,19 @@ static void volume(int x0, RdKey key)
 static void recordUnmatched(int second)
 {
     static const uint8_t grey[4] = {90, 90, 90, 0x80};
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     sprite(second ? 4 : 0, 0, (second ? 4 : 0) + 10, 10, grey, RD_KEY(&kObjU, 0, 0)); /* KM */
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 1);
     sprite(20, 0, 30, 10, grey, RD_KEY(&kObjU, second ? 2 : 1, 0)); /* KN / KP: fade */
-    rd_Blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
     sprite(40, 0, 50, 10, grey, RD_KEY(&kObjU, second ? 4 : 3, 0)); /* KR / KQ: opaque */
-    rd_SelectList(3);
-    rd_ShadowReset();
+    rd_select_list(3);
+    rd_shadow_reset();
     volume(second ? 2 : 0, RD_KEY(&kObjU, 5, 0));  /* KS */
     volume(60, RD_KEY(&kObjU, second ? 7 : 6, 0)); /* KU / KT */
-    rd_ShadowResolve();
-    rd_EndFrame(0);
+    rd_shadow_resolve();
+    rd_end_frame(0);
 }
 
 static void testUnmatched(void)
@@ -2207,7 +2207,7 @@ static void testUnmatched(void)
     const RdKey kU = RD_KEY(&kObjU, 7, 0);
     recordUnmatched(0);
     recordUnmatched(1);
-    const RdFrame *cur = rd__LastFrame();
+    const RdFrame *cur = rd__last_frame();
     RdStateBlock endCur, endOut, at;
     endStateOf(cur, &endCur);
     /* a quarter of the way: the tick before's draws mostly */
@@ -2295,20 +2295,20 @@ static void particleBatch(const void *emitter, int n, float x, int byEmitter)
     pd.vu.mem[19][0] = 2048.0f;
     pd.vu.mem[19][1] = 2048.0f;
     pd.vu.mem[19][3] = 1.0f;
-    rd_DrawVuParticles(&pd, byEmitter ? RD_KEY(emitter, 18, 0) : 0);
+    rd_draw_vu_particles(&pd, byEmitter ? RD_KEY(emitter, 18, 0) : 0);
 }
 
 static void recordParticleOrder(int second, int byEmitter)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
-    rd_SelectList(6);
+    rd_select_list(6);
     if (second) {
         particleBatch(&kObjP3, 4, 500.0f, byEmitter); /* a new emitter, ahead of the others */
     }
     particleBatch(&kObjP1, 2, second ? 2.0f : 0.0f, byEmitter);
     particleBatch(&kObjP2, 3, second ? 12.0f : 10.0f, byEmitter);
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 /* the first particle's x of the n-th particle batch of list 6 */
@@ -2355,7 +2355,7 @@ static void testParticleOrder(void)
  * 0, 1); L2 a colour and an ambient */
 static void recordLitTurn(RdMesh mesh, double deg)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     RdVuDraw d;
     memset(&d, 0, sizeof(d));
@@ -2384,9 +2384,9 @@ static void recordLitTurn(RdMesh mesh, double deg)
     d.vu.mem[32][3] = 1.0f;
     d.vu.mem[35][0] = d.vu.mem[35][1] = d.vu.mem[35][2] = 0.25f; /* the ambient */
     d.vu.mem[35][3] = 1.0f;
-    rd_SelectList(0);
-    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjL, 0, 32));
-    rd_EndFrame(0);
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjL, 0, 32));
+    rd_end_frame(0);
 }
 
 static void testLightTurn(void)
@@ -2418,7 +2418,7 @@ static void testLightTurn(void)
     } else {
         CHECK(0, "the lit draw");
     }
-    rd_DestroyVuMesh(mesh);
+    rd_destroy_vu_mesh(mesh);
 }
 
 /* Morph limits.  A mesh rewritten twice before its draw in every frame
@@ -2430,7 +2430,7 @@ static void testLightTurn(void)
 static void morphLimitFrame(RdMesh a, RdMesh c, RdMesh d, const RdMesh *many, int n, float x,
                             int odd)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     morphUpdate(a, x - 5.0f); /* an intermediate shape no frame draws */
     morphUpdate(a, x);
@@ -2447,11 +2447,11 @@ static void morphLimitFrame(RdMesh a, RdMesh c, RdMesh d, const RdMesh *many, in
 
 static void testMorphLimits(void)
 {
-    RdSettings s = *rd_GetSettings(), keep = s;
+    RdSettings s = *rd_get_settings(), keep = s;
     s.preset = RD_PRESET_ENHANCED;
     s.sceneScale = 1.0f;
     s.interpolate = 1;
-    rd_SetSettings(&s);
+    rd_set_settings(&s);
     static RdMesh many[RD_INTERP_MORPH_MANY];
     RdMesh a = morphMesh(0.0f), c = morphMesh(0.0f), d = morphMesh(0.0f);
     for (int i = 0; i < RD_INTERP_MORPH_MANY; i++) {
@@ -2460,9 +2460,9 @@ static void testMorphLimits(void)
     /* the twins: D drawn in frame 1 with the shape set before it */
     morphUpdate(d, 100.0f);
     morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 100.0f, 0); /* draws D (100) */
-    rd_EndFrame(0);
+    rd_end_frame(0);
     morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 120.0f, 1); /* draws C (120) */
-    rd_EndFrame(0);
+    rd_end_frame(0);
     morphLimitFrame(a, c, d, many, RD_INTERP_MORPH_MANY, 200.0f, 0); /* records */
     const RdInterpStats *st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
@@ -2491,17 +2491,17 @@ static void testMorphLimits(void)
                   100.0f + (float)(RD_INTERP_MORPH_MANY - 1),
           "alpha 0: the first tick's shapes");
     if (g_rd.hasDevice) {
-        CHECK(rd__ReplayFrame(built(0.5f), 0, false), "morph limits: the half-way frame replays");
+        CHECK(rd__replay_frame(built(0.5f), 0, false), "morph limits: the half-way frame replays");
     }
-    rd_EndFrame(0);
-    rd_SetSettings(&keep);
-    rd_BeginFrame();
-    rd_EndFrame(0);
-    rd_DestroyVuMesh(a);
-    rd_DestroyVuMesh(c);
-    rd_DestroyVuMesh(d);
+    rd_end_frame(0);
+    rd_set_settings(&keep);
+    rd_begin_frame();
+    rd_end_frame(0);
+    rd_destroy_vu_mesh(a);
+    rd_destroy_vu_mesh(c);
+    rd_destroy_vu_mesh(d);
     for (int i = 0; i < RD_INTERP_MORPH_MANY; i++) {
-        rd_DestroyVuMesh(many[i]);
+        rd_destroy_vu_mesh(many[i]);
     }
 }
 
@@ -2515,7 +2515,7 @@ static void testMorphLimits(void)
  * follows the mask) */
 static void shineFrame(RdMesh mesh, double deg)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     double eye[3], v[16], p[16], w[16];
     s6OrbitEye(deg, eye);
@@ -2528,15 +2528,15 @@ static void shineFrame(RdMesh mesh, double deg)
         cam.proj43[k] = (float)p[k];
     }
     cam.zoom = 500.0f;
-    rd_SetCamera(&cam);
+    rd_set_camera(&cam);
     s6Translate(w, 0.0, 0.0, 0.0);
     s6Draw(mesh, v, w, RD_KEY(&kObjS6, 0, 0)); /* the stone, list 0 */
-    rd_SelectList(8);
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), (RdTarget){0}, TW, TH, 0);
+    rd_select_list(8);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), (RdTarget){0}, TW, TH, 0);
     s_s6List = 8;
     s6Draw(mesh, v, w, RD_KEY(&kObjS6, 0, 4)); /* the shine packet, list 8 */
     s_s6List = 0;
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testShineFollows(void)
@@ -2567,7 +2567,7 @@ static void testShineFollows(void)
                kAlpha[a], ps[0], ps[1], pg[0], pg[1], d);
     }
     CHECK(worst <= 1.0 / 16.0, "shine: the list-8 mask %.4f GS pixels from the stone", worst);
-    rd_DestroyVuMesh(mesh);
+    rd_destroy_vu_mesh(mesh);
 }
 
 /* (hypothesis 3) two emitters' batches of equal count in list 6 whose
@@ -2576,9 +2576,9 @@ static void testShineFollows(void)
  * equal counts would pair the two emitters */
 static void recordParticleSwap(int second, int byEmitter)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
-    rd_SelectList(6);
+    rd_select_list(6);
     if (second) {
         particleBatch(&kObjP2, 3, 12.0f, byEmitter);
         particleBatch(&kObjP1, 3, 2.0f, byEmitter);
@@ -2586,7 +2586,7 @@ static void recordParticleSwap(int second, int byEmitter)
         particleBatch(&kObjP1, 3, 0.0f, byEmitter);
         particleBatch(&kObjP2, 3, 10.0f, byEmitter);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void testParticleSwap(void)
@@ -2618,7 +2618,7 @@ static void testParticleSwap(void)
  * linear scroll's wrap by 2 still blends the short way */
 static void recordScroll(RdMesh mesh, float u, int sine)
 {
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
     RdVuDraw d;
     memset(&d, 0, sizeof(d));
@@ -2635,9 +2635,9 @@ static void recordScroll(RdMesh mesh, float u, int sine)
 #else
     (void)sine;
 #endif
-    rd_SelectList(0);
-    rd_DrawVuMesh(mesh, &d, RD_KEY(&kObjE, 7, 32));
-    rd_EndFrame(0);
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjE, 7, 32));
+    rd_end_frame(0);
 }
 
 static double frac1(double x)
@@ -2686,29 +2686,29 @@ static void testSineScroll(void)
                   worst);
         }
     }
-    rd_DestroyVuMesh(mesh);
+    rd_destroy_vu_mesh(mesh);
     /* the mark as the seki side sends it: Texture.c's SET_UVOFFSET quadword
      * with z (U) and w (V) nonzero for a sine axis, kept by the list until
      * the next SET_UVOFFSET or common block */
-    rd_BeginFrame();
+    rd_begin_frame();
     frameHead();
-    rd_SelectList(0);
-    rd_VuProgram(1);
+    rd_select_list(0);
+    rd_vu_program(1);
     const uint32_t mark[4] = {0x3F000000u, 0u, 0u, 1u}; /* U 0.5, V 0, V a sine */
     float uvq[1][4];
     memcpy(uvq, mark, sizeof(uvq));
-    rd_VuCall(2, (const float (*)[4])uvq, 1);
-    rd_VuCall(32, NULL, 0);
+    rd_vu_call(2, (const float (*)[4])uvq, 1);
+    rd_vu_call(32, NULL, 0);
     RdVuDraw d;
-    CHECK(rd_VuDrawFromState(&d) && d.scroll == RD_VU_SCROLL_SINE_V && d.vu.mem[2][0] == 0.5f,
+    CHECK(rd_vu_draw_from_state(&d) && d.scroll == RD_VU_SCROLL_SINE_V && d.vu.mem[2][0] == 0.5f,
           "SET_UVOFFSET's w marks V a sine scroll (scroll %u)", d.scroll);
     RdVuCommon common;
     memset(&common, 0, sizeof(common));
-    rd_SetVuCommon(&common);
-    rd_VuCall(32, NULL, 0);
-    CHECK(rd_VuDrawFromState(&d) && d.scroll == 0, "the common block clears the mark (%u)",
+    rd_set_vu_common(&common);
+    rd_vu_call(32, NULL, 0);
+    CHECK(rd_vu_draw_from_state(&d) && d.scroll == 0, "the common block clears the mark (%u)",
           d.scroll);
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 static void runCpu(void)
@@ -2739,14 +2739,14 @@ static void runCpu(void)
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
-    if (!rd__InitRecordOnly(512, 512)) {
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
+    if (!rd__init_record_only(512, 512)) {
         printf("rd_interp_test: no context\n");
         return 1;
     }
-    rd__SetNotImplementedFatal(false);
+    rd__set_not_implemented_fatal(false);
     runCpu();
-    rd_Shutdown();
+    rd_shutdown();
 
     RdSettings s;
     memset(&s, 0, sizeof(s));
@@ -2755,18 +2755,18 @@ int main(void)
     s.outputHeight = 480;
     s.aspect = 4.0f / 3.0f;
     s.vsync = 1;
-    if (!rd_Init(512, 512, &s, NULL)) {
+    if (!rd_init(512, 512, &s, NULL)) {
         printf("rd_interp_test: no usable device: the pixel and present cases skipped\n");
     } else {
-        rd__SetNotImplementedFatal(false);
+        rd__set_not_implemented_fatal(false);
         runCpu(); /* again, with the frames replayed as they close */
         testPixels();
         testMiragePresents();
         testPresent();
-        CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
-        const uint32_t verr = rhi_vk_ValidationErrorCount();
+        CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+        const uint32_t verr = rhi_vk_validation_error_count();
         CHECK(verr == 0, "%u validation errors", verr);
-        rd_Shutdown();
+        rd_shutdown();
     }
     if (failures) {
         printf("rd_interp_test: %d failures\n", failures);

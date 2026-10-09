@@ -26,7 +26,7 @@ extern int systemStatus[];
 extern int stage_no;
 extern int data_loading;
 /* port/ui/gallery_play.c: the music gallery's engine */
-void gallery_EngineInstall(void);
+void gallery_engine_install(void);
 /* port/game/credits_live.c: the Extras credits' engine */
 void ico_credits_engine_install(void);
 
@@ -59,7 +59,7 @@ void ico_host_init(void)
     ico_diag_name_func((void *)boot_main, "boot (the game's main)");
     /* the SPU2 and the SNDN2DRV host, before the game binds to it */
     ico_audio_host_init();
-    gallery_EngineInstall();
+    gallery_engine_install();
     ico_credits_engine_install();
     /* the EE timers follow the video mode (50 or 60 Hz vsyncs) */
     ico_clock_set_mode_word(systemStatus);

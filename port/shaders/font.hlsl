@@ -1,6 +1,6 @@
 // font.hlsl: font_ps, screen prims that sample an R8 coverage texture
-// (rd_CreateTextureR8: the port's font atlas pages, port/ui/font.c).
-// rd__PlanScreenDraw selects it (RD_FS_FONT) for the bound texture's format
+// (rd_create_texture_r8: the port's font atlas pages, port/ui/font.c).
+// rd__plan_screen_draw selects it (RD_FS_FONT) for the bound texture's format
 // behind sprite_ui_vs or sprite_world_vs, with sprite_ps's bind groups: the
 // atlas at t1 with its sampler, the DATE snapshot at t2.
 //
@@ -12,7 +12,7 @@
 // values).
 //
 // font_sheet_ps: screen and overlay prims that sample
-// a sheet texture (rd_CreateTextureSheet, RD_FS_FONT_SHEET): R8 coverage
+// a sheet texture (rd_create_texture_sheet, RD_FS_FONT_SHEET): R8 coverage
 // 0..255 at the same t1, the style in g_param (the rim's weight 0..64,
 // rimLevel, fillLevel, dither | (scale - 1) << 1, as rd_replay.c writes
 // them).  rd.h says what it draws;
@@ -72,7 +72,7 @@ uint4 sheet_cov4(int2 q, int2 size)
 // The four texels at p0 ..
 // p0 + (1, 1) of a strip rasterised at s texels a sheet texel
 // (2..SHEET_SCALE_MAX).  The texture's top half is the coverage, its
-// bottom half the rim rd_SheetRim made on the CPU (rd.h: the 1x dilation of
+// bottom half the rim rd_sheet_rim made on the CPU (rd.h: the 1x dilation of
 // each sheet texel's mean coverage, its value over the sheet texel's s x s
 // texels), each 0 outside its half.  The rim is drawn as a sheet drew it:
 // each sheet texel quantised against its own Bayer entry, then magnified

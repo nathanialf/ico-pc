@@ -13,19 +13,19 @@ static const char *const *const s_tables[UI_LANG_COUNT] = {
     ui_strings_en, ui_strings_fr, ui_strings_de, ui_strings_it, ui_strings_es,
 };
 
-void ui_SetLanguage(UiLang lang)
+void ui_set_language(UiLang lang)
 {
     if ((int)lang >= 0 && lang < UI_LANG_COUNT) {
         s_lang = lang;
     }
 }
 
-UiLang ui_GetLanguage(void)
+UiLang ui_get_language(void)
 {
     return s_lang;
 }
 
-UiLang ui_LangFromGame(int nonLinearCameraMove)
+UiLang ui_lang_from_game(int nonLinearCameraMove)
 {
     switch (nonLinearCameraMove) {
     case 3:
@@ -41,7 +41,7 @@ UiLang ui_LangFromGame(int nonLinearCameraMove)
     }
 }
 
-const char *ui_StrIn(UiLang lang, UiStrId id)
+const char *ui_str_in(UiLang lang, UiStrId id)
 {
     if ((int)id < 0 || id >= UI_STR_COUNT) {
         return "";
@@ -56,12 +56,12 @@ const char *ui_StrIn(UiLang lang, UiStrId id)
     return s != NULL ? s : "";
 }
 
-const char *ui_Str(UiStrId id)
+const char *ui_str(UiStrId id)
 {
-    return ui_StrIn(s_lang, id);
+    return ui_str_in(s_lang, id);
 }
 
-void ui_StringsForEach(UiStringFn fn, void *user)
+void ui_strings_for_each(UiStringFn fn, void *user)
 {
     if (!fn) {
         return;

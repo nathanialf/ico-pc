@@ -1,7 +1,7 @@
 /* rhi_vk_present_mode_test.c: the swapchain's present mode
  * (vk/vk_present_mode.c, v0.3.1) over the mode sets drivers offer.
  *
- * vkr_ChoosePresentMode is pure, so it is compiled into this test on its
+ * vkr_choose_present_mode is pure, so it is compiled into this test on its
  * own: no device, no surface, no Vulkan call.  The rules: with vsync,
  * MAILBOX when preferred and offered, else FIFO; without, IMMEDIATE when
  * offered, else MAILBOX, else FIFO.  Mesa's X11 WSI (the Deck's RADV, also
@@ -18,8 +18,8 @@ static int s_failures;
 static void expect(const char *what, const VkPresentModeKHR *modes, uint32_t n, bool vsync,
                    bool preferMailbox, VkPresentModeKHR want)
 {
-    const VkPresentModeKHR got = vkr_ChoosePresentMode(modes, n, vsync, preferMailbox);
-    const char *g = vkr_PresentModeName(got), *w = vkr_PresentModeName(want);
+    const VkPresentModeKHR got = vkr_choose_present_mode(modes, n, vsync, preferMailbox);
+    const char *g = vkr_present_mode_name(got), *w = vkr_present_mode_name(want);
 
     if (got != want) {
         printf("FAIL %s, vsync %s, mailbox %s: %s, want %s\n", what, vsync ? "on" : "off",
@@ -76,7 +76,7 @@ int main(void)
     expect("40 modes", many, COUNT_OF(many), true, true, VK_PRESENT_MODE_MAILBOX_KHR);
     expect("39 modes", many, 39, false, false, VK_PRESENT_MODE_MAILBOX_KHR);
 
-    /* the names the logs and rhi_PresentModeName use */
+    /* the names the logs and rhi_present_mode_name use */
     static const struct {
         VkPresentModeKHR m;
         const char *name;
@@ -86,14 +86,14 @@ int main(void)
                  {VK_PRESENT_MODE_FIFO_RELAXED_KHR, "fifo_relaxed"}};
 
     for (uint32_t i = 0; i < COUNT_OF(names); i++) {
-        const char *n = vkr_PresentModeName(names[i].m);
+        const char *n = vkr_present_mode_name(names[i].m);
         if (n == NULL || strcmp(n, names[i].name) != 0) {
             printf("FAIL name of mode %d: %s, want %s\n", (int)names[i].m, n ? n : "NULL",
                    names[i].name);
             s_failures++;
         }
     }
-    if (vkr_PresentModeName(VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR) != NULL) {
+    if (vkr_present_mode_name(VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR) != NULL) {
         printf("FAIL a shared mode has a name\n");
         s_failures++;
     }

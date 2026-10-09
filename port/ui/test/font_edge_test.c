@@ -2,7 +2,7 @@
  *
  * port/ui's font.c and rd on a Vulkan device (lavapipe here; exit 77 without
  * one).  A frame of black SCENE with a row of text recorded in list 11 by
- * ui_DrawText (the plain glyph path: the scene's quads) and the reduction in
+ * ui_draw_text (the plain glyph path: the scene's quads) and the reduction in
  * list 12, presented with an overlay callback that writes a second word
  * through font.c's overlay mode (as the touch labels do):
  *   edges     Enhanced, 1920 x 1080 (16:9) and 3840 x 2160: on rows through
@@ -60,28 +60,28 @@ typedef struct Frame {
 
 static void scissorAll(void)
 {
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
 }
 
 static void recordFrame(const Frame *fr)
 {
     static const uint8_t bg[4] = {0, 0, 0, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
     scissorAll();
-    rd_SelectList(11);
+    rd_select_list(11);
     scissorAll();
     if (fr->row) {
-        ui_DrawText(DEF_X, fr->rowY, WORD_SIZE, kWhite, fr->word,
-                    UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        ui_draw_text(DEF_X, fr->rowY, WORD_SIZE, kWhite, fr->word,
+                     UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
     }
     RdPostParams pp;
-    rd_SelectList(12);
+    rd_select_list(12);
     memset(&pp, 0, sizeof(pp));
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
-    rd_Post(RD_POST_REDUCTION, &pp);
-    rd_EndFrame(0);
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
 }
 
 /* the overlay: a popup-like panel and the second word */
@@ -90,15 +90,15 @@ static int s_ovWord;
 static void overlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_BeginOverlay(ctx);
+    ui_begin_overlay(ctx);
     if (s_ovWord) {
-        ui_DrawText(OVL_X, WORD_Y, WORD_SIZE, kWhite, "H", UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        ui_draw_text(OVL_X, WORD_Y, WORD_SIZE, kWhite, "H", UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
     } else {
         static const uint8_t panel[4] = {20, 30, 40, 0x60};
-        ui_DrawRect(400.0f, 380.0f, 620.0f, 440.0f, panel);
-        ui_DrawText(410.0f, 400.0f, 18.0f, kWhite, "Achievement", UI_VALIGN_TOP);
+        ui_draw_rect(400.0f, 380.0f, 620.0f, 440.0f, panel);
+        ui_draw_text(410.0f, 400.0f, 18.0f, kWhite, "Achievement", UI_VALIGN_TOP);
     }
-    ui_EndOverlay();
+    ui_end_overlay();
 }
 
 static RdSettings settingsOf(int enhanced, uint32_t w, uint32_t h, int mirror)
@@ -118,28 +118,28 @@ static RdSettings settingsOf(int enhanced, uint32_t w, uint32_t h, int mirror)
  * presented; the last output into a new buffer (NULL on failure) */
 static uint8_t *present(const RdSettings *s, int ovWord, const Frame *frames, int nFrames)
 {
-    if (!rd_Init(512, 512, s, NULL)) {
+    if (!rd_init(512, 512, s, NULL)) {
         return NULL;
     }
-    ui_FontForgetTextures();
-    ui_SetScale(ui_ScaleFor((int)s->preset, s->outputHeight));
+    ui_font_forget_textures();
+    ui_set_scale(ui_scale_for((int)s->preset, s->outputHeight));
     s_ovWord = ovWord;
-    rd_SetPresentOverlay(overlay, NULL);
+    rd_set_present_overlay(overlay, NULL);
     for (int i = 0; i < nFrames; i++) {
         recordFrame(&frames[i]);
     }
     uint8_t *px = malloc((size_t)s->outputWidth * s->outputHeight * 4);
     uint32_t w = 0, h = 0;
-    if (!px || !rd_ReadPresented(px, &w, &h) || w != s->outputWidth || h != s->outputHeight) {
+    if (!px || !rd_read_presented(px, &w, &h) || w != s->outputWidth || h != s->outputHeight) {
         CHECK(0, "the presented %ux%u output", s->outputWidth, s->outputHeight);
         free(px);
         px = NULL;
     }
-    rd_SetPresentOverlay(NULL, NULL);
-    ui_FontShutdown();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    rd_set_present_overlay(NULL, NULL);
+    ui_font_shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     return px;
 }
 
@@ -147,7 +147,7 @@ static void writePng(const char *name, const uint8_t *px, uint32_t w, uint32_t h
 {
     char p[1100];
     snprintf(p, sizeof(p), "%s/%s", s_dir, name);
-    rd_WritePng(p, px, w, h, w * 4, 0);
+    rd_write_png(p, px, w, h, w * 4, 0);
     printf("font_edge: %s\n", p);
 }
 
@@ -235,11 +235,11 @@ static int checkH(const char *what, const uint8_t *px, uint32_t w, uint32_t h, i
     return worstAll;
 }
 
-/* the grid x of a word to an output column (font.h ui_BeginOverlay) */
+/* the grid x of a word to an output column (font.h ui_begin_overlay) */
 static int colOf(const RdSettings *s, float gx)
 {
     RhiRect box;
-    rd__PresentBox(s->outputWidth, s->outputHeight, s->aspect, &box);
+    rd__present_box(s->outputWidth, s->outputHeight, s->aspect, &box);
     const float w43 = fminf((float)box.w, (float)box.h * 4.0f / 3.0f);
     return (int)((float)box.x + ((float)box.w - w43) * 0.5f + gx * w43 / 640.0f);
 }
@@ -280,12 +280,12 @@ int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     RdSettings probe = settingsOf(0, 64, 48, 0);
-    if (!rd_Init(512, 512, &probe, NULL)) {
+    if (!rd_init(512, 512, &probe, NULL)) {
         printf("font_edge_test: SKIP: no usable Vulkan device\n");
         return 77;
     }
-    printf("font_edge_test: adapter %s\n", rhi_AdapterName());
-    rd_Shutdown();
+    printf("font_edge_test: adapter %s\n", rhi_adapter_name());
+    rd_shutdown();
     checkEdgesAt(1920, 1080);
     checkEdgesAt(3840, 2160);
     if (failures) {

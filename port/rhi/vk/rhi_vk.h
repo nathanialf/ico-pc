@@ -10,29 +10,29 @@
 extern "C" {
 #endif
 
-/* Number of validation-layer errors reported since rhi_Init (still readable
- * after rhi_Shutdown).  Always 0 when the layer is not installed. */
-uint32_t rhi_vk_ValidationErrorCount(void);
+/* Number of validation-layer errors reported since rhi_init (still readable
+ * after rhi_shutdown).  Always 0 when the layer is not installed. */
+uint32_t rhi_vk_validation_error_count(void);
 
-/* For rhi_vk_swapchain_test: the next rhi_Present reports
+/* For rhi_vk_swapchain_test: the next rhi_present reports
  * `result` (a VkResult value) instead of what the driver returned, once;
  * the image is still presented.  RHI_VK_TEST_SUBOPTIMAL takes the
  * suboptimal path (a recreation only when the size changed),
  * RHI_VK_TEST_SURFACE_LOST the lost-surface path (a new surface and
- * swapchain).  vkr_TestSwapchainCreations counts the swapchains created
+ * swapchain).  vkr_test_swapchain_creations counts the swapchains created
  * since the program started. */
 #define RHI_VK_TEST_SUBOPTIMAL 1000001003      /* VK_SUBOPTIMAL_KHR */
 #define RHI_VK_TEST_SURFACE_LOST (-1000000000) /* VK_ERROR_SURFACE_LOST_KHR */
 #define RHI_VK_TEST_OUT_OF_DATE (-1000001004)  /* VK_ERROR_OUT_OF_DATE_KHR */
-void vkr_TestForcePresentResult(int32_t result);
-uint32_t vkr_TestSwapchainCreations(void);
+void vkr_test_force_present_result(int32_t result);
+uint32_t vkr_test_swapchain_creations(void);
 
 /* For rhi_vk_test's limits cell (ICO_VK_FAKE_LIMITS): the name of the
  * VkPhysicalDeviceLimits member the last pipeline, allocation or sampler
- * reached ("maxBoundDescriptorSets", ...), NULL when none since rhi_Init;
- * and the device's limits as rhi_Init left them. */
-const char *vkr_TestLastLimit(void);
-uint32_t vkr_TestLimit(const char *name);
+ * reached ("maxBoundDescriptorSets", ...), NULL when none since rhi_init;
+ * and the device's limits as rhi_init left them. */
+const char *vkr_test_last_limit(void);
+uint32_t vkr_test_limit(const char *name);
 
 #ifdef __cplusplus
 }

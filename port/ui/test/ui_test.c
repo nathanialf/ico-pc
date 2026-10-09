@@ -5,7 +5,7 @@
  *     typeface's metrics (cap height, advance, kerning through GPOS);
  *   - UTF-8 decoding of the five languages' accented letters, and of
  *     malformed input; every one has a glyph;
- *   - ui_MeasureText against the glyph advances and kerning;
+ *   - ui_measure_text against the glyph advances and kerning;
  *   - the string tables: every id in every language, valid UTF-8, drawable;
  *   - the layout extension through the real layout_texture.c (with
  *     GifPacket.c, DisplayList.c, DmaPacket.c as the window build has them):
@@ -16,7 +16,7 @@
  *     (additive) after a cursor move and the sparkle on an unselectable
  *     selected row;
  *   - the popup queue's timing and panel;
- *   - overlay mode (ui_BeginOverlay): the grid mapped onto the
+ *   - overlay mode (ui_begin_overlay): the grid mapped onto the
  *     4:3 picture of a 1080p and a 4K output (and of a 16:9 box), glyph
  *     quads on whole output pixels at the bitmap's size, rasterised at
  *     round(size * box.h / 448), rects snapped, the scale restored; a
@@ -179,7 +179,7 @@ void __assert(const char *file, int line, const char *e)
 void mc_Reset(void) {}
 
 /* init_layout_texture's Settings hook (settings_test covers it) */
-void ui_SettingsInstall(void) {}
+void ui_settings_install(void) {}
 
 /* lt_glow_sprite's pulse: sin(pi t) as the game's table gives it */
 float GetTableSin(short angle)
@@ -207,15 +207,15 @@ void sceDmaSend(void *ch, void *addr)
 
 static void testGlyphs(void)
 {
-    CHECK(ui_FontInit(), "the embedded font parses");
+    CHECK(ui_font_init(), "the embedded font parses");
     UiGlyph g;
-    CHECK(ui_FontGlyph('H', 40, &g), "glyph H at 40 px");
+    CHECK(ui_font_glyph('H', 40, &g), "glyph H at 40 px");
     /* Arimo: units per em 2048, capital height 1409 (0.688 em, 27.5 px) */
     CHECK(g.h >= 27 && g.h <= 29, "H at 40 px is %d px tall (cap height 0.688 em)", g.h);
     CHECK(g.yoff <= -27.0f && g.yoff >= -29.0f, "H sits on the baseline (top %g)", g.yoff);
     CHECK(g.advance > 20.0f && g.advance < 40.0f, "H advance %g", g.advance);
     int w, h;
-    const uint8_t *cov = ui_FontPage(40, g.page, &w, &h);
+    const uint8_t *cov = ui_font_page(40, g.page, &w, &h);
     /* 512 wide, not a power of two high (no Enhanced mip chain) */
     CHECK(cov != NULL && w == 512 && h > 256 && h < 512 && (h & (h - 1)) != 0,
           "the 40 px atlas page (%d x %d)", w, h);
@@ -239,12 +239,12 @@ static void testGlyphs(void)
         CHECK(gut == 0, "a clear two-texel gutter (%d texels)", gut);
     }
     UiGlyph s;
-    CHECK(ui_FontGlyph(' ', 40, &s) && s.w == 0 && s.advance > 0.0f, "space: no bitmap, advance");
+    CHECK(ui_font_glyph(' ', 40, &s) && s.w == 0 && s.advance > 0.0f, "space: no bitmap, advance");
     /* the same glyph twice is one atlas cell */
     UiGlyph g2;
-    CHECK(ui_FontGlyph('H', 40, &g2) && g2.x == g.x && g2.y == g.y, "the glyph is cached");
+    CHECK(ui_font_glyph('H', 40, &g2) && g2.x == g.x && g2.y == g.y, "the glyph is cached");
     /* kerning comes from GPOS pair adjustment */
-    float kAV = ui_FontKern('A', 'V', 40), kTo = ui_FontKern('T', 'o', 40);
+    float kAV = ui_font_kern('A', 'V', 40), kTo = ui_font_kern('T', 'o', 40);
     CHECK(kAV < 0.0f || kTo < 0.0f, "kerning: AV %g, To %g", kAV, kTo);
     printf("ui_test: H at 40 px %dx%d, advance %.2f; kern AV %.2f To %.2f px\n", g.w, g.h,
            g.advance, kAV, kTo);
@@ -262,12 +262,12 @@ static void testUtf8(void)
     const char *s = kAccents;
     size_t n = 0, want = sizeof(kAccentCps) / sizeof(kAccentCps[0]);
     uint32_t cp;
-    while ((cp = ui_Utf8Next(&s)) != 0) {
+    while ((cp = ui_utf8_next(&s)) != 0) {
         if (n < want) {
             CHECK(cp == kAccentCps[n], "code point %zu: U+%04X, expected U+%04X", n, cp,
                   kAccentCps[n]);
         }
-        CHECK(ui_FontHasGlyph(cp), "the font has U+%04X", cp);
+        CHECK(ui_font_has_glyph(cp), "the font has U+%04X", cp);
         n++;
     }
     CHECK(n == want, "%zu code points decoded, expected %zu", n, want);
@@ -288,43 +288,43 @@ static void testUtf8(void)
 
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         const char *p = bad[i].in;
-        uint32_t c = ui_Utf8Next(&p);
+        uint32_t c = ui_utf8_next(&p);
         CHECK(c == bad[i].first && p - bad[i].in == bad[i].used, "case %zu: U+%04X, %d bytes", i, c,
               (int)(p - bad[i].in));
     }
     const char *empty = "";
-    CHECK(ui_Utf8Next(&empty) == 0 && *empty == '\0', "the terminator");
+    CHECK(ui_utf8_next(&empty) == 0 && *empty == '\0', "the terminator");
 }
 
 static void testMeasure(void)
 {
-    ui_SetScale(1.0f);
+    ui_set_scale(1.0f);
     const float size = 40.0f;
     UiGlyph i, c, o;
-    ui_FontGlyph('I', 40, &i);
-    ui_FontGlyph('C', 40, &c);
-    ui_FontGlyph('O', 40, &o);
-    float expect = (i.advance + c.advance + o.advance + ui_FontKern('I', 'C', 40) +
-                    ui_FontKern('C', 'O', 40)) *
+    ui_font_glyph('I', 40, &i);
+    ui_font_glyph('C', 40, &c);
+    ui_font_glyph('O', 40, &o);
+    float expect = (i.advance + c.advance + o.advance + ui_font_kern('I', 'C', 40) +
+                    ui_font_kern('C', 'O', 40)) *
                    UI_X_PER_Y;
-    float got = ui_MeasureText(size, "ICO");
+    float got = ui_measure_text(size, "ICO");
     CHECK(fabsf(got - expect) < 0.01f, "ICO measures %g, expected %g", got, expect);
-    float av = ui_MeasureText(size, "AV"), a = ui_MeasureText(size, "A"),
-          v = ui_MeasureText(size, "V");
+    float av = ui_measure_text(size, "AV"), a = ui_measure_text(size, "A"),
+          v = ui_measure_text(size, "V");
     CHECK(av < a + v, "AV is kerned (%g < %g)", av, a + v);
-    float twice = ui_MeasureText(80.0f, "ICO");
+    float twice = ui_measure_text(80.0f, "ICO");
     CHECK(fabsf(twice - 2.0f * got) < 2.0f, "twice the size, twice the width (%g, %g)", twice, got);
-    CHECK(ui_MeasureText(size, "") == 0.0f, "the empty string");
-    float two = ui_MeasureText(size, "ICO\nI");
+    CHECK(ui_measure_text(size, "") == 0.0f, "the empty string");
+    float two = ui_measure_text(size, "ICO\nI");
     CHECK(fabsf(two - got) < 0.01f, "the widest line (%g)", two);
     /* scale 2 (Enhanced at 896 lines): the same width in grid units */
-    ui_SetScale(2.0f);
-    float scaled = ui_MeasureText(size, "ICO");
+    ui_set_scale(2.0f);
+    float scaled = ui_measure_text(size, "ICO");
     CHECK(fabsf(scaled - got) < 1.5f, "scale 2: %g grid units (scale 1: %g)", scaled, got);
-    ui_SetScale(1.0f);
-    CHECK(ui_ScaleFor(0, 2160) == 1.0f && ui_ScaleFor(1, 896) == 2.0f &&
-              ui_ScaleFor(1, 300) == 1.0f,
-          "ui_ScaleFor");
+    ui_set_scale(1.0f);
+    CHECK(ui_scale_for(0, 2160) == 1.0f && ui_scale_for(1, 896) == 2.0f &&
+              ui_scale_for(1, 300) == 1.0f,
+          "ui_scale_for");
     printf("ui_test: \"ICO\" at %g: %.2f grid units\n", size, got);
 }
 
@@ -332,26 +332,26 @@ static void testStrings(void)
 {
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         for (int id = 1; id < UI_STR_COUNT; id++) {
-            const char *s = ui_StrIn((UiLang)l, (UiStrId)id);
+            const char *s = ui_str_in((UiLang)l, (UiStrId)id);
             CHECK(s != NULL && s[0] != '\0', "language %d string %d is empty", l, id);
             uint32_t cp;
-            while (s && (cp = ui_Utf8Next(&s)) != 0) {
+            while (s && (cp = ui_utf8_next(&s)) != 0) {
                 if (cp == '\n') {
                     continue; /* a line break (the menu text's prompts) */
                 }
-                CHECK(cp != 0xFFFD && ui_FontHasGlyph(cp),
+                CHECK(cp != 0xFFFD && ui_font_has_glyph(cp),
                       "language %d string %d: U+%04X not drawable", l, id, cp);
             }
         }
     }
-    CHECK(ui_LangFromGame(2) == UI_LANG_EN && ui_LangFromGame(3) == UI_LANG_FR &&
-              ui_LangFromGame(4) == UI_LANG_DE && ui_LangFromGame(5) == UI_LANG_IT &&
-              ui_LangFromGame(6) == UI_LANG_ES && ui_LangFromGame(0) == UI_LANG_EN,
+    CHECK(ui_lang_from_game(2) == UI_LANG_EN && ui_lang_from_game(3) == UI_LANG_FR &&
+              ui_lang_from_game(4) == UI_LANG_DE && ui_lang_from_game(5) == UI_LANG_IT &&
+              ui_lang_from_game(6) == UI_LANG_ES && ui_lang_from_game(0) == UI_LANG_EN,
           "the game's language numbers");
-    ui_SetLanguage(UI_LANG_DE);
-    CHECK(strcmp(ui_Str(UI_STR_BACK), "Zurück") == 0, "German Back: %s", ui_Str(UI_STR_BACK));
-    ui_SetLanguage(UI_LANG_EN);
-    CHECK(strcmp(ui_Str(UI_STR_COUNT), "") == 0, "an unknown id");
+    ui_set_language(UI_LANG_DE);
+    CHECK(strcmp(ui_str(UI_STR_BACK), "Zurück") == 0, "German Back: %s", ui_str(UI_STR_BACK));
+    ui_set_language(UI_LANG_EN);
+    CHECK(strcmp(ui_str(UI_STR_COUNT), "") == 0, "an unknown id");
 }
 
 /* ------------------------------------------------- the layout extension */
@@ -377,7 +377,7 @@ static int s_rowA, s_rowB, s_layout;
 
 static void buildPortLayout(int selectable)
 {
-    lt_ext_Reset();
+    lt_ext_reset();
     LtProperty row;
     memset(&row, 0, sizeof(row));
     row.word0 = -1;
@@ -390,13 +390,13 @@ static void buildPortLayout(int selectable)
     row.dispH = 40;
     row.selectable = selectable;
     LtExtText t = {UI_STR_SECTION_DISPLAY, NULL, 0.0f, UI_ALIGN_LEFT};
-    s_rowA = lt_ext_AddProperty(&row, &t);
+    s_rowA = lt_ext_add_property(&row, &t);
     row.dispY = 80;
     t.strId = 0;
     t.text = "Éléphant";
-    s_rowB = lt_ext_AddProperty(&row, &t);
-    lt_ext_Prop(s_rowA)->downItem = s_rowB;
-    lt_ext_Prop(s_rowB)->upItem = s_rowA;
+    s_rowB = lt_ext_add_property(&row, &t);
+    lt_ext_prop(s_rowA)->downItem = s_rowB;
+    lt_ext_prop(s_rowB)->upItem = s_rowA;
     LtProp lay;
     memset(&lay, 0, sizeof(lay));
     lay.first = s_rowA;
@@ -405,13 +405,13 @@ static void buildPortLayout(int selectable)
     lay.defaultItem = s_rowA;
     lay.curItem = s_rowA;
     lay.link = -1;
-    s_layout = lt_ext_AddLayout(&lay);
+    s_layout = lt_ext_add_layout(&lay);
 }
 
 static void layoutFrame(void)
 {
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     exec_layout_texture();
     dl_Swap();
 }
@@ -419,32 +419,33 @@ static void layoutFrame(void)
 static void testLayoutExtension(void)
 {
     /* the plain lookups */
-    lt_ext_Reset();
-    CHECK(lt_ext_Prop(5) == &texProperty[5] && lt_ext_Layout(7) == &texLayout[7],
+    lt_ext_reset();
+    CHECK(lt_ext_prop(5) == &texProperty[5] && lt_ext_layout(7) == &texLayout[7],
           "game rows fall through to the game's tables");
     buildPortLayout(1);
     CHECK(s_rowA == LT_GAME_PROPERTY_COUNT && s_rowB == LT_GAME_PROPERTY_COUNT + 1,
           "port rows after the game's (%d, %d)", s_rowA, s_rowB);
     CHECK(s_layout == LT_GAME_LAYOUT_COUNT, "the port layout after the game's (%d)", s_layout);
-    CHECK(lt_ext_IsPortProp(lt_ext_Prop(s_rowB)) && !lt_ext_IsPortProp(&texProperty[3]),
+    CHECK(lt_ext_is_port_prop(lt_ext_prop(s_rowB)) && !lt_ext_is_port_prop(&texProperty[3]),
           "isPortRow");
-    CHECK(lt_ext_PropIndex(lt_ext_Prop(s_rowB)) == s_rowB && lt_ext_PropIndex(&texProperty[9]) == 9,
+    CHECK(lt_ext_prop_index(lt_ext_prop(s_rowB)) == s_rowB &&
+              lt_ext_prop_index(&texProperty[9]) == 9,
           "row indices");
-    CHECK(strcmp(lt_ext_RowText(s_rowA), "Display") == 0 &&
-              strcmp(lt_ext_RowText(s_rowB), "Éléphant") == 0,
+    CHECK(strcmp(lt_ext_row_text(s_rowA), "Display") == 0 &&
+              strcmp(lt_ext_row_text(s_rowB), "Éléphant") == 0,
           "row labels");
     LtProperty bare;
     memset(&bare, 0, sizeof(bare));
-    int r = lt_ext_AddProperty(&bare, NULL);
-    CHECK(lt_ext_Prop(r)->dispW == 400 && lt_ext_Prop(r)->dispH == 40, "default row box");
+    int r = lt_ext_add_property(&bare, NULL);
+    CHECK(lt_ext_prop(r)->dispW == 400 && lt_ext_prop(r)->dispH == 40, "default row box");
 
     /* exec_layout_texture on the port layout, recording only */
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontForgetTextures();
-    ui__SetRecordHook(gif_HostFlush);
+    ui_font_forget_textures();
+    ui__set_record_hook(gif_HostFlush);
     dl_Init();
     buildPortLayout(1);
     GlobalStageSetting.reductionCol[0] = GlobalStageSetting.reductionCol[1] =
@@ -454,20 +455,20 @@ static void testLayoutExtension(void)
     pad[0].ana[2] = pad[0].ana[3] = 128;
     pad[0].flags = 0x4000; /* down: the cursor moves to row B after drawing */
     layoutFrame();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     CHECK(s_texTransfers == 0, "no texture transfer for a port row (%d)", s_texTransfers);
-    CHECK(lt_ext_Layout(s_layout)->curItem == s_rowB, "the cursor moved to row B");
+    CHECK(lt_ext_layout(s_layout)->curItem == s_rowB, "the cursor moved to row B");
     Walk w;
     memset(&w, 0, sizeof(w));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, &w);
+    rd__walk(f, 0, &s, collect, &w);
     /* the backdrop sprite, then per row its label: one sheet strip in the
        menus' look (no halo copies) */
     CHECK(w.n == 1 + 2, "list 11 holds %d screen batches, expected 3", w.n);
     UiMenuStrip strip;
-    CHECK(ui_MenuFontLastStrip(&strip) && strip.tex != 0 && strip.cls == 0,
+    CHECK(ui_menu_font_last_strip(&strip) && strip.tex != 0 && strip.cls == 0,
           "the labels are strips of the light pages (class %d)", strip.cls);
-    const RdTexRec *page = rd__TexRec(strip.tex);
+    const RdTexRec *page = rd__tex_rec(strip.tex);
     CHECK(page && page->format == RD_TEXEL_SHEET && page->sheet[0] == 64,
           "the page is a sheet texture with the rim on");
     int labels = 0;
@@ -477,7 +478,7 @@ static void testLayoutExtension(void)
         CHECK(w.cmd[i]->b[0] == RD_PRIM_SPRITES && w.cmd[i]->b[1] == RD_SPACE_UI &&
                   w.cmd[i]->b[2] == RD_UV_FIXED_CONTINUOUS && w.cmd[i]->u[1] == 2,
               "batch %d: one UI sprite with texel UVs, continuous (T1)", i);
-        CHECK(st->ds.texEnabled && ui_MenuFontIsPage(st->tex) &&
+        CHECK(st->ds.texEnabled && ui_menu_font_is_page(st->tex) &&
                   st->ds.texFn == RD_TEXFN_MODULATE && st->ds.tcc == RD_TCC_RGBA,
               "batch %d: a menu text page, MODULATE, TCC RGBA", i);
         CHECK(st->ds.abe == 1 && st->ds.blend == RD_BLEND_LERP_AS, "batch %d: ALPHA 0x44", i);
@@ -502,20 +503,20 @@ static void testLayoutExtension(void)
     /* the next frame: row B glows (Cs * As + Cd) */
     pad[0].flags = 0;
     layoutFrame();
-    f = rd__LastFrame();
+    f = rd__last_frame();
     memset(&w, 0, sizeof(w));
     s = f->startState;
-    rd__Walk(f, 0, &s, collect, &w);
+    rd__walk(f, 0, &s, collect, &w);
     int glow = 0;
     for (int i = 0; i < w.n; i++) {
-        glow += w.st[i].ds.blend == RD_BLEND_CS_AS_ADD_CD && ui_MenuFontIsPage(w.st[i].tex);
+        glow += w.st[i].ds.blend == RD_BLEND_CS_AS_ADD_CD && ui_menu_font_is_page(w.st[i].tex);
     }
     CHECK(glow == 1, "the glow is the label, additive (%d batches)", glow);
     /* unselectable rows: the cursor sparkle on the selected one */
     buildPortLayout(0);
     current_layout_id = s_layout;
     layoutFrame();
-    f = rd__LastFrame();
+    f = rd__last_frame();
     int points = 0;
     for (uint32_t i = 0; i < f->lists[11].count; i++) {
         const RdCmd *c = &f->lists[11].cmds[i];
@@ -523,50 +524,51 @@ static void testLayoutExtension(void)
     }
     CHECK(points > 0, "the sparkle around the selected row (%d point batches)", points);
     CHECK(gif_HostUndecodedTotal() == 0, "%u undecoded writes", gif_HostUndecodedTotal());
-    ui__SetRecordHook(NULL);
-    rd_Shutdown();
-    ui_FontForgetTextures();
-    lt_ext_Reset();
+    ui__set_record_hook(NULL);
+    rd_shutdown();
+    ui_font_forget_textures();
+    lt_ext_reset();
 }
 
 /* --------------------------------------------------------------- popups */
 
 static void testPopups(void)
 {
-    ui_PopupReset();
+    ui_popup_reset();
     float r[4];
-    CHECK(!ui_PopupActive() && !ui_PopupPanel(r), "empty");
-    ui_PopupSetDevTest(1);
-    ui_PopupDevTick(99);
-    CHECK(!ui_PopupActive(), "not before tick 100");
-    ui_PopupDevTick(100);
-    CHECK(ui_PopupActive(), "the test popup at tick 100");
-    ui_PopupDevTick(101);
-    CHECK(ui_PopupPush("A", "B") == 0, "a second one queues");
-    ui_PopupDevTick(249);
-    CHECK(ui_PopupPanel(r) && r[0] >= UI_GRID_W, "starts off the right edge (%g)", r[0]);
+    CHECK(!ui_popup_active() && !ui_popup_panel(r), "empty");
+    ui_popup_set_dev_test(1);
+    ui_popup_dev_tick(99);
+    CHECK(!ui_popup_active(), "not before tick 100");
+    ui_popup_dev_tick(100);
+    CHECK(ui_popup_active(), "the test popup at tick 100");
+    ui_popup_dev_tick(101);
+    CHECK(ui_popup_push("A", "B") == 0, "a second one queues");
+    ui_popup_dev_tick(249);
+    CHECK(ui_popup_panel(r) && r[0] >= UI_GRID_W, "starts off the right edge (%g)", r[0]);
     for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
-        ui_PopupVsync();
+        ui_popup_vsync();
     }
-    CHECK(ui_PopupPanel(r) && r[2] <= UI_GRID_W && r[0] > 0.0f && r[1] > 0.0f && r[3] < 120.0f,
+    CHECK(ui_popup_panel(r) && r[2] <= UI_GRID_W && r[0] > 0.0f && r[1] > 0.0f && r[3] < 120.0f,
           "slid in: %g,%g %g,%g", r[0], r[1], r[2], r[3]);
     for (int i = 0; i < UI_POPUP_HOLD_VSYNCS + UI_POPUP_SLIDE_VSYNCS; i++) {
-        ui_PopupVsync();
+        ui_popup_vsync();
     }
-    CHECK(ui_PopupActive() && ui_PopupPanel(r) && r[0] >= UI_GRID_W, "the second waits off screen");
+    CHECK(ui_popup_active() && ui_popup_panel(r) && r[0] >= UI_GRID_W,
+          "the second waits off screen");
     for (int i = 0; i < 2 * UI_POPUP_SLIDE_VSYNCS + UI_POPUP_HOLD_VSYNCS; i++) {
-        ui_PopupVsync();
+        ui_popup_vsync();
     }
-    CHECK(!ui_PopupActive(), "both shown once");
-    ui_PopupDevTick(250);
-    CHECK(ui_PopupActive(), "the test popup again 150 ticks later");
-    ui_PopupReset();
+    CHECK(!ui_popup_active(), "both shown once");
+    ui_popup_dev_tick(250);
+    CHECK(ui_popup_active(), "the test popup again 150 ticks later");
+    ui_popup_reset();
     for (int i = 0; i < UI_POPUP_QUEUE; i++) {
-        ui_PopupPush("x", "y");
+        ui_popup_push("x", "y");
     }
-    CHECK(ui_PopupPush("x", "y") == -1, "the queue is bounded");
-    ui_PopupReset();
-    ui_PopupSetDevTest(0);
+    CHECK(ui_popup_push("x", "y") == -1, "the queue is bounded");
+    ui_popup_reset();
+    ui_popup_set_dev_test(0);
 }
 
 /* ---------------------------------------------------------- the overlay */
@@ -597,7 +599,7 @@ static void capSink(RdPrim type, const RdScreenVtx *v, uint32_t n, RdTex tex, Rd
 static RdOverlayCtx ovCtx(uint32_t w, uint32_t h, float aspect)
 {
     RhiRect b;
-    rd__PresentBox(w, h, aspect, &b);
+    rd__present_box(w, h, aspect, &b);
     RdOverlayCtx c;
     memset(&c, 0, sizeof(c));
     c.outW = w;
@@ -613,13 +615,13 @@ static void checkOverlayMap(uint32_t w, uint32_t h, float aspect)
     /* the 4:3 picture the game's UI is in */
     const float pw = (float)c.box.h * 4.0f / 3.0f;
     const float left = (float)c.box.x + ((float)c.box.w - pw) * 0.5f;
-    const float before = ui_GetScale();
-    ui_BeginOverlay(&c);
-    CHECK(ui_OverlayActive() && ui_GetScale() == c.boxScale, "%ux%u: overlay scale %g", w, h,
-          (double)ui_GetScale());
+    const float before = ui_get_scale();
+    ui_begin_overlay(&c);
+    CHECK(ui_overlay_active() && ui_get_scale() == c.boxScale, "%ux%u: overlay scale %g", w, h,
+          (double)ui_get_scale());
     float x16, y16, x16b, y16b;
-    ui_OverlayMap(0.0f, UI_GRID_CY - 224.0f, &x16, &y16);
-    ui_OverlayMap(UI_GRID_W, UI_GRID_CY + 224.0f, &x16b, &y16b);
+    ui_overlay_map(0.0f, UI_GRID_CY - 224.0f, &x16, &y16);
+    ui_overlay_map(UI_GRID_W, UI_GRID_CY + 224.0f, &x16b, &y16b);
     CHECK(fabsf(x16 - left * 16.0f) < 0.5f && fabsf(y16 - (float)c.box.y * 16.0f) < 0.5f &&
               fabsf(x16b - (left + pw) * 16.0f) < 0.5f &&
               fabsf(y16b - (float)(c.box.y + (int32_t)c.box.h) * 16.0f) < 0.5f,
@@ -627,14 +629,14 @@ static void checkOverlayMap(uint32_t w, uint32_t h, float aspect)
           (double)x16 / 16, (double)y16 / 16, (double)x16b / 16, (double)y16b / 16);
     /* a glyph: on whole pixels, the bitmap's size, a texel a pixel */
     memset(&s_cap, 0, sizeof(s_cap));
-    ui__SetOverlaySink(capSink);
+    ui__set_overlay_sink(capSink);
     static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
-    ui_DrawText(100.3f, 100.7f, 26.0f, white, "H", UI_VALIGN_BASELINE);
+    ui_draw_text(100.3f, 100.7f, 26.0f, white, "H", UI_VALIGN_BASELINE);
     const int px = (int)lrintf(26.0f * c.boxScale);
     UiGlyph g;
-    const bool have = ui_FontGlyph('H', px, &g);
+    const bool have = ui_font_glyph('H', px, &g);
     CHECK(have && s_cap.n == 1 && s_cap.type[0] == RD_PRIM_SPRITES && s_cap.count[0] == 2 &&
-              s_cap.tex[0] == ui_FontPageTex(px, g.page) && s_cap.tex[0] != 0 &&
+              s_cap.tex[0] == ui_font_page_tex(px, g.page) && s_cap.tex[0] != 0 &&
               s_cap.blend[0] == RD_BLEND_LERP_AS,
           "%ux%u: one sprite of the %d px atlas, ALPHA 0x44 (%d batches)", w, h, px, s_cap.n);
     if (have && s_cap.n == 1) {
@@ -647,68 +649,68 @@ static void checkOverlayMap(uint32_t w, uint32_t h, float aspect)
         /* where the grid puts it: the pen at 100.3, the baseline at 100.7 */
         const float xs = UI_X_PER_Y / c.boxScale, ys = 1.0f / c.boxScale;
         float ex, ey;
-        ui_OverlayMap(100.3f + g.xoff * xs, 100.7f + g.yoff * ys, &ex, &ey);
+        ui_overlay_map(100.3f + g.xoff * xs, 100.7f + g.yoff * ys, &ex, &ey);
         CHECK(fabsf((float)a->x - ex) <= 8.0f && fabsf((float)a->y - ey) <= 8.0f,
               "%ux%u: the glyph at %d,%d (12.4), the grid says %g,%g", w, h, a->x, a->y, (double)ex,
               (double)ey);
     }
     /* a rect: both corners rounded */
     memset(&s_cap, 0, sizeof(s_cap));
-    ui_DrawRect(10.2f, 20.6f, 50.5f, 30.1f, white);
+    ui_draw_rect(10.2f, 20.6f, 50.5f, 30.1f, white);
     float rx0, ry0, rx1, ry1;
-    ui_OverlayMap(10.2f, 20.6f, &rx0, &ry0);
-    ui_OverlayMap(50.5f, 30.1f, &rx1, &ry1);
+    ui_overlay_map(10.2f, 20.6f, &rx0, &ry0);
+    ui_overlay_map(50.5f, 30.1f, &rx1, &ry1);
     CHECK(s_cap.n == 1 && s_cap.tex[0] == 0 && s_cap.v[0][0].x == lrintf(rx0 / 16.0f) * 16 &&
               s_cap.v[0][0].y == lrintf(ry0 / 16.0f) * 16 &&
               s_cap.v[0][1].x == lrintf(rx1 / 16.0f) * 16 &&
               s_cap.v[0][1].y == lrintf(ry1 / 16.0f) * 16,
           "%ux%u: the rect on whole pixels", w, h);
     /* a sync while drawing changes the scale after, not now */
-    ui_SetScale(3.0f);
-    CHECK(ui_GetScale() == c.boxScale, "%ux%u: ui_SetScale defers in overlay mode", w, h);
-    ui__SetOverlaySink(NULL);
-    ui_EndOverlay();
-    CHECK(!ui_OverlayActive() && ui_GetScale() == 3.0f, "%ux%u: the deferred scale", w, h);
-    ui_SetScale(before);
+    ui_set_scale(3.0f);
+    CHECK(ui_get_scale() == c.boxScale, "%ux%u: ui_set_scale defers in overlay mode", w, h);
+    ui__set_overlay_sink(NULL);
+    ui_end_overlay();
+    CHECK(!ui_overlay_active() && ui_get_scale() == 3.0f, "%ux%u: the deferred scale", w, h);
+    ui_set_scale(before);
 }
 
 /* the popup on the overlay: nothing recorded into the game's frame */
 static void checkOverlayPopup(void)
 {
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontForgetTextures();
-    ui_PopupReset();
-    ui_PopupPush("Title", "Body line");
+    ui_font_forget_textures();
+    ui_popup_reset();
+    ui_popup_push("Title", "Body line");
     for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
-        ui_PopupVsync();
+        ui_popup_vsync();
     }
     /* a frame without the popup, then the same with it drawn */
-    rd_BeginFrame();
-    rd_SelectList(5);
-    rd_EndFrame(0);
+    rd_begin_frame();
+    rd_select_list(5);
+    rd_end_frame(0);
     uint32_t before[RD_LIST_COUNT];
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         before[l] = f ? f->lists[l].count : 0;
     }
-    rd_BeginFrame();
-    rd_SelectList(5);
+    rd_begin_frame();
+    rd_select_list(5);
     static OvCap plain;
     for (int mirror = 0; mirror < 2; mirror++) {
         RdOverlayCtx c = ovCtx(1920, 1080, 4.0f / 3.0f);
         c.mirror = mirror;
         memset(&s_cap, 0, sizeof(s_cap));
-        ui__SetOverlaySink(capSink);
-        ui_PopupDrawOverlay(&c);
-        ui__SetOverlaySink(NULL);
-        CHECK(!ui_OverlayActive(), "the popup ends overlay mode");
+        ui__set_overlay_sink(capSink);
+        ui_popup_draw_overlay(&c);
+        ui__set_overlay_sink(NULL);
+        CHECK(!ui_overlay_active(), "the popup ends overlay mode");
         /* the panel, its hairline, the title and the body (one 1x sheet
            strip each, magnified) */
         CHECK(s_cap.n == 4 && s_cap.tex[0] == 0 && s_cap.count[0] == 2 &&
-                  ui_MenuFontIsPage(s_cap.tex[2]) && ui_MenuFontIsPage(s_cap.tex[3]) &&
+                  ui_menu_font_is_page(s_cap.tex[2]) && ui_menu_font_is_page(s_cap.tex[3]) &&
                   s_cap.count[2] == 2 && s_cap.count[3] == 2,
               "the popup on the overlay: %d batches, the text on menu pages", s_cap.n);
         if (s_cap.n >= 1) {
@@ -727,16 +729,16 @@ static void checkOverlayPopup(void)
                   "the popup is drawn the same with the mirror on");
         }
     }
-    CHECK(rd_CurrentList() == 5, "the current list untouched (%d)", rd_CurrentList());
-    rd_EndFrame(0);
-    f = rd__LastFrame();
+    CHECK(rd_current_list() == 5, "the current list untouched (%d)", rd_current_list());
+    rd_end_frame(0);
+    f = rd__last_frame();
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         CHECK(f && f->lists[l].count == before[l], "list %d: %u commands, %u without the popup", l,
               f ? f->lists[l].count : 0, before[l]);
     }
-    rd_Shutdown();
-    ui_FontForgetTextures();
-    ui_PopupReset();
+    rd_shutdown();
+    ui_font_forget_textures();
+    ui_popup_reset();
 }
 
 /* the atlas pages are R8 (one-channel) coverage; a page is created whole
@@ -745,8 +747,8 @@ static void checkOverlayPopup(void)
 static void checkAtlasPage(const char *what, int px, int page)
 {
     int w = 0, h = 0;
-    const uint8_t *cov = ui_FontPage(px, page, &w, &h);
-    const RdTexRec *t = rd__TexRec(ui_FontPageTex(px, page));
+    const uint8_t *cov = ui_font_page(px, page, &w, &h);
+    const RdTexRec *t = rd__tex_rec(ui_font_page_tex(px, page));
     int bad = !cov || !t || t->format != RD_TEXEL_R8 || (int)t->w != w || (int)t->h != h;
     for (size_t i = 0; !bad && i < (size_t)w * (size_t)h; i++) {
         bad = t->pixels[i] != (cov[i] * 128 + 127) / 255;
@@ -757,14 +759,14 @@ static void checkAtlasPage(const char *what, int px, int page)
 static void checkAtlasUploads(const char *what, float size, int px)
 {
     static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
-    ui_DrawText(100.0f, 100.0f, size, white, "AB", 0);
-    CHECK(ui_FontPageTex(px, 0) != 0, "%s: the %d px page drawn", what, px);
+    ui_draw_text(100.0f, 100.0f, size, white, "AB", 0);
+    CHECK(ui_font_page_tex(px, 0) != 0, "%s: the %d px page drawn", what, px);
     const uint32_t rect0 = g_rd.texRectUpdates, full0 = g_rd.texFullUpdates;
-    ui_DrawText(100.0f, 140.0f, size, white, "CDEFG", 0);
+    ui_draw_text(100.0f, 140.0f, size, white, "CDEFG", 0);
     CHECK(g_rd.texRectUpdates - rect0 == 5 && g_rd.texFullUpdates == full0,
           "%s: 5 new glyphs, %u rectangle updates, %u whole-page updates", what,
           g_rd.texRectUpdates - rect0, g_rd.texFullUpdates - full0);
-    ui_DrawText(100.0f, 180.0f, size, white, "GFEDCBA", 0);
+    ui_draw_text(100.0f, 180.0f, size, white, "GFEDCBA", 0);
     CHECK(g_rd.texRectUpdates - rect0 == 5 && g_rd.texFullUpdates == full0,
           "%s: no new glyph, no update (%u)", what, g_rd.texRectUpdates - rect0);
     checkAtlasPage(what, px, 0);
@@ -772,46 +774,46 @@ static void checkAtlasUploads(const char *what, float size, int px)
 
 static void testAtlasUploads(void)
 {
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontForgetTextures();
-    const float before = ui_GetScale();
-    ui_SetScale(1.0f);
-    rd_BeginFrame();
-    rd_SelectList(11);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+    ui_font_forget_textures();
+    const float before = ui_get_scale();
+    ui_set_scale(1.0f);
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
     checkAtlasUploads("in the frame", 33.0f, 33);
-    rd_EndFrame(0);
+    rd_end_frame(0);
     const RdOverlayCtx c = ovCtx(1280, 720, 4.0f / 3.0f);
     memset(&s_cap, 0, sizeof(s_cap));
-    ui__SetOverlaySink(capSink);
-    ui_BeginOverlay(&c);
+    ui__set_overlay_sink(capSink);
+    ui_begin_overlay(&c);
     const int px = (int)lrintf(31.0f * c.boxScale);
     checkAtlasUploads("on the overlay", 31.0f, px);
-    CHECK(s_cap.n == 3 && s_cap.tex[0] == ui_FontPageTex(px, 0), "on the overlay: %d batches",
+    CHECK(s_cap.n == 3 && s_cap.tex[0] == ui_font_page_tex(px, 0), "on the overlay: %d batches",
           s_cap.n);
-    ui_EndOverlay();
-    ui__SetOverlaySink(NULL);
-    ui_SetScale(before);
-    rd_Shutdown();
-    ui_FontForgetTextures();
+    ui_end_overlay();
+    ui__set_overlay_sink(NULL);
+    ui_set_scale(before);
+    rd_shutdown();
+    ui_font_forget_textures();
 }
 
 static void testOverlay(void)
 {
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontForgetTextures();
+    ui_font_forget_textures();
     checkOverlayMap(1920, 1080, 4.0f / 3.0f);
     checkOverlayMap(3840, 2160, 4.0f / 3.0f);
     checkOverlayMap(1920, 1080, 16.0f / 9.0f);
     checkOverlayMap(2560, 1080, 64.0f / 27.0f);
-    rd_Shutdown();
-    ui_FontForgetTextures();
+    rd_shutdown();
+    ui_font_forget_textures();
     checkOverlayPopup();
 }
 
@@ -820,7 +822,7 @@ static void testOverlay(void)
 static void popupOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_PopupDrawOverlay(ctx);
+    ui_popup_draw_overlay(ctx);
 }
 
 static bool popupPresent(int popup, uint8_t *dst)
@@ -830,31 +832,31 @@ static bool popupPresent(int popup, uint8_t *dst)
     st.preset = RD_PRESET_ORIGINAL;
     st.outputWidth = 1920;
     st.outputHeight = 1080;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         return false;
     }
-    ui_FontForgetTextures();
-    rd_SetPresentOverlay(popupOverlay, NULL);
-    ui_PopupReset();
+    ui_font_forget_textures();
+    rd_set_present_overlay(popupOverlay, NULL);
+    ui_popup_reset();
     if (popup) {
-        ui_PopupPush("Achievement unlocked", "Éléphant, Größe, señor");
+        ui_popup_push("Achievement unlocked", "Éléphant, Größe, señor");
         for (int i = 0; i < UI_POPUP_SLIDE_VSYNCS; i++) {
-            ui_PopupVsync();
+            ui_popup_vsync();
         }
     }
     static const uint8_t grey[4] = {90, 100, 110, 0x80};
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_ClearTarget(rd_Target(RD_TARGET_DISPLAY), grey, 0, 0);
-    rd_EndFrame(0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_DISPLAY), grey, 0, 0);
+    rd_end_frame(0);
     uint32_t w = 0, h = 0;
-    const bool ok = rd_ReadPresented(dst, &w, &h) && w == 1920 && h == 1080;
+    const bool ok = rd_read_presented(dst, &w, &h) && w == 1920 && h == 1080;
     CHECK(ok, "popup: the presented output");
-    rd_SetPresentOverlay(NULL, NULL);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "popup: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    ui_FontShutdown();
-    rd_Shutdown();
+    rd_set_present_overlay(NULL, NULL);
+    CHECK(rhi_vk_validation_error_count() == 0, "popup: %u validation errors",
+          rhi_vk_validation_error_count());
+    ui_font_shutdown();
+    rd_shutdown();
     return ok;
 }
 
@@ -863,22 +865,22 @@ static void testPopupPixels(void)
     const size_t n = (size_t)1920 * 1080 * 4;
     uint8_t *plain = malloc(n), *pop = malloc(n);
     float r[4];
-    if (!plain || !pop || !popupPresent(0, plain) || !popupPresent(1, pop) || !ui_PopupPanel(r)) {
+    if (!plain || !pop || !popupPresent(0, plain) || !popupPresent(1, pop) || !ui_popup_panel(r)) {
         CHECK(0, "popup: the presents");
         free(plain);
         free(pop);
-        ui_PopupReset();
+        ui_popup_reset();
         return;
     }
     /* the panel's grid rectangle on the output (the overlay's mapping) */
     const RdOverlayCtx c = ovCtx(1920, 1080, 4.0f / 3.0f);
-    ui_BeginOverlay(&c);
+    ui_begin_overlay(&c);
     float x0, y0, x1, y1;
-    ui_FontInit();
-    ui_PopupPanel(r); /* measured at the overlay's scale */
-    ui_OverlayMap(r[0], r[1], &x0, &y0);
-    ui_OverlayMap(r[2], r[3], &x1, &y1);
-    ui_EndOverlay();
+    ui_font_init();
+    ui_popup_panel(r); /* measured at the overlay's scale */
+    ui_overlay_map(r[0], r[1], &x0, &y0);
+    ui_overlay_map(r[2], r[3], &x1, &y1);
+    ui_end_overlay();
     const int px0 = (int)lrintf(x0 / 16.0f), py0 = (int)lrintf(y0 / 16.0f);
     const int px1 = (int)lrintf(x1 / 16.0f), py1 = (int)lrintf(y1 / 16.0f);
     int outside = 0, panelPx = 0, bright = 0;
@@ -906,11 +908,11 @@ static void testPopupPixels(void)
     /* for the eye: the panel and a margin */
     const int cx0 = px0 - 8 < 0 ? 0 : px0 - 8, cy0 = py0 - 8 < 0 ? 0 : py0 - 8;
     const int cx1 = px1 + 8 > 1920 ? 1920 : px1 + 8, cy1 = py1 + 8 > 1080 ? 1080 : py1 + 8;
-    rd_WritePng("ui_test_popup.png", pop + ((size_t)cy0 * 1920 + (size_t)cx0) * 4,
-                (uint32_t)(cx1 - cx0), (uint32_t)(cy1 - cy0), 1920 * 4, 0);
+    rd_write_png("ui_test_popup.png", pop + ((size_t)cy0 * 1920 + (size_t)cx0) * 4,
+                 (uint32_t)(cx1 - cx0), (uint32_t)(cy1 - cy0), 1920 * 4, 0);
     free(plain);
     free(pop);
-    ui_PopupReset();
+    ui_popup_reset();
 }
 
 /* --------------------------------------------------------------- pixels */
@@ -944,9 +946,9 @@ typedef struct Box {
 static Box wordBox(float x, float y, float size, const char *s)
 {
     float asc, desc;
-    ui_MenuFontMetrics(size, &asc, &desc, NULL);
+    ui_menu_font_metrics(size, &asc, &desc, NULL);
     Box b;
-    float w = ui_MeasureMenuText(size, s);
+    float w = ui_measure_menu_text(size, s);
     const float mx = (float)UI_MENU_RIM_X + 1.0f, my = 2.0f * (float)UI_MENU_RIM_Y + 1.0f;
     b.x0 = toPixX(x - w * 0.5f - mx) - 1;
     b.x1 = toPixX(x + w * 0.5f + mx) + 1;
@@ -962,18 +964,18 @@ static int differs(const uint8_t *p)
 
 static void drawFrame(const uint8_t col[4], const uint8_t colI[4])
 {
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
-    rd_SelectList(11);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kBg, 1, 0);
+    rd_select_list(11);
     /* the menus' text, sheet strips in the light ink */
-    ui_DrawMenuText(160.0f, 60.0f, 60.0f, col, "ICO", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
-    ui_DrawMenuText(320.0f, 200.0f, 60.0f, col, "Éléphant", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    ui_draw_menu_text(160.0f, 60.0f, 60.0f, col, "ICO", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    ui_draw_menu_text(320.0f, 200.0f, 60.0f, col, "Éléphant", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
     /* a big I for the blend: alpha 0x80 left, 0x40 right */
-    ui_DrawMenuText(480.0f, 40.0f, 150.0f, col, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
-    ui_DrawMenuText(560.0f, 40.0f, 150.0f, colI, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
-    rd_EndFrame(0);
+    ui_draw_menu_text(480.0f, 40.0f, 150.0f, col, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    ui_draw_menu_text(560.0f, 40.0f, 150.0f, colI, "I", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
+    rd_end_frame(0);
 }
 
 static void testPixels(void)
@@ -983,22 +985,23 @@ static void testPixels(void)
     drawFrame(col, colI);
     uint32_t w = 0, h = 0;
     uint8_t *px = malloc(512 * 512 * 4);
-    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!px || !rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) ||
+        w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
         return;
     }
     /* the frame as a PNG beside the test, for a look */
-    rd_WritePng("ui_test_scene.png", px, 512, 512, 512 * 4, 0);
+    rd_write_png("ui_test_scene.png", px, 512, 512, 512 * 4, 0);
     Box ico = wordBox(160.0f, 60.0f, 60.0f, "ICO");
     Box ele = wordBox(320.0f, 200.0f, 60.0f, "Éléphant");
     int inIco = 0, inEle = 0, outside = 0, above = 0;
     float asc, cap;
-    ui_MenuFontMetrics(60.0f, &asc, NULL, &cap);
+    ui_menu_font_metrics(60.0f, &asc, NULL, &cap);
     const int capTop = toPixY(200.0f + asc - cap);
     /* the first letter's columns: only its acute rises above the capitals
        (the capitals' top less the snap and the rim, a few lines) */
-    const int eAcuteX1 = ele.x0 + 4 + (toPixX(ui_MeasureMenuText(60.0f, "É")) - toPixX(0.0f));
+    const int eAcuteX1 = ele.x0 + 4 + (toPixX(ui_measure_menu_text(60.0f, "É")) - toPixX(0.0f));
     Box iL = wordBox(480.0f, 40.0f, 150.0f, "I"), iR = wordBox(560.0f, 40.0f, 150.0f, "I");
     for (int y = 0; y < 512; y++) {
         for (int x = 0; x < 512; x++) {
@@ -1030,7 +1033,7 @@ static void testPixels(void)
     /* the stems' rows only: the capitals' top to the baseline, 3 lines in
        (the rim's band under the stem is a flat run of the rim grey too) */
     float iAsc, iCap;
-    ui_MenuFontMetrics(150.0f, &iAsc, NULL, &iCap);
+    ui_menu_font_metrics(150.0f, &iAsc, NULL, &iCap);
     const int stemY0 = toPixY(40.0f + iAsc - iCap) + 3, stemY1 = toPixY(40.0f + iAsc) - 3;
     for (int side = 0; side < 2; side++) {
         const Box *bx = side ? &iR : &iL;
@@ -1119,26 +1122,26 @@ static const float kRowSize4[] = {27.0f, 22.0f, 22.0f, 27.0f, 27.0f, 27.0f};
 
 static void drawRows4(const uint8_t bg[4], const uint8_t col[4], int ink)
 {
-    rd_BeginFrame();
-    rd_SelectList(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), bg, 1, 0);
-    rd_SelectList(11);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), bg, 1, 0);
+    rd_select_list(11);
     for (unsigned i = 0; i < sizeof(kRows4) / sizeof(kRows4[0]); i++) {
-        ui_DrawMenuText(320.0f, kRowY4[i], kRowSize4[i], col, kRows4[i],
-                        UI_ALIGN_CENTER | UI_VALIGN_MIDDLE, ink, NULL);
+        ui_draw_menu_text(320.0f, kRowY4[i], kRowSize4[i], col, kRows4[i],
+                          UI_ALIGN_CENTER | UI_VALIGN_MIDDLE, ink, NULL);
     }
-    rd_EndFrame(0);
+    rd_end_frame(0);
 }
 
 /* the frame's strip quads in SCENE texels (XYOFFSET 2048 - 256) */
 static int textQuads4(Q4 *q, int max)
 {
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     Walk w;
     memset(&w, 0, sizeof(w));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collectAll, &w);
+    rd__walk(f, 0, &s, collectAll, &w);
     int n = 0;
     for (int i = 0; i < w.n; i++) {
         const RdCmd *c = w.cmd[i];
@@ -1171,12 +1174,12 @@ static void writeCrop4(const char *name, const uint8_t *px)
     for (int y = 0; y < ch; y++) {
         memcpy(&crop[(size_t)y * cw * 4], &px[((size_t)(cy0 + y) * W4 + cx0) * 4], (size_t)cw * 4);
     }
-    rd_WritePng(name, crop, (uint32_t)cw, (uint32_t)ch, (uint32_t)cw * 4, 0);
+    rd_write_png(name, crop, (uint32_t)cw, (uint32_t)ch, (uint32_t)cw * 4, 0);
     free(crop);
 }
 
 /* the reference of the frame drawRows4 drew over bg: per channel, each
-   quad's texels through sheetref_Sample with the page's style, MODULATE
+   quad's texels through sheetref_sample with the page's style, MODULATE
    ((texel * vertex) >> 7) and the 0x44 blend; in: inside some quad */
 static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int max)
 {
@@ -1189,7 +1192,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
     }
     for (int i = 0; i < nq; i++) {
         const Q4 *g = &q[i];
-        const RdTexRec *t = rd__TexRec(g->tex);
+        const RdTexRec *t = rd__tex_rec(g->tex);
         if (!t || !t->pixels || t->format != RD_TEXEL_SHEET) {
             CHECK(0, "4x: quad %d's sheet page", i);
             continue;
@@ -1197,8 +1200,8 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
         const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2],
                                  t->sheet[3],      t->sheet[0], t->sheetScale};
         /* a scaled page's coverage is its top half; its texels under
-           the quad made once (sheetref_Texel dilates four sheet texels a texel)
-           and blended as sheetref_Sample blends them */
+           the quad made once (sheetref_texel dilates four sheet texels a texel)
+           and blended as sheetref_sample blends them */
         const uint32_t th = t->sheetScale > 1 ? t->h / 2 : t->h;
         const int tx0 = (int)floorf(g->u0) - 2, ty0 = (int)floorf(g->v0) - 2;
         const int tcw = (int)ceilf(g->u1) + 2 - tx0, tch = (int)ceilf(g->v1) + 2 - ty0;
@@ -1210,7 +1213,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
         for (int ty = 0; ty < tch; ty++) {
             for (int tx = 0; tx < tcw; tx++) {
                 uint8_t *e = &tg[((size_t)ty * (size_t)tcw + (size_t)tx) * 2];
-                sheetref_Texel(t->pixels, t->w, th, tx0 + tx, ty0 + ty, &st, &e[0], &e[1]);
+                sheetref_texel(t->pixels, t->w, th, tx0 + tx, ty0 + ty, &st, &e[0], &e[1]);
             }
         }
         for (int y = (int)floorf(g->y0); y <= (int)ceilf(g->y1); y++) {
@@ -1227,7 +1230,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
                 const float v = g->v0 + (cy - g->y0) / (g->y1 - g->y0) * (g->v1 - g->v0);
                 uint8_t texel[4];
                 {
-                    /* sheetref_Sample on the texels made above */
+                    /* sheetref_sample on the texels made above */
                     const float px = (u / (float)t->w) * (float)t->w - 0.5f;
                     const float py = (v / (float)th) * (float)th - 0.5f;
                     const float bx = floorf(px), by = floorf(py), fx = px - bx, fy = py - by;
@@ -1300,7 +1303,7 @@ static int edgeWidth4(const uint8_t *px)
 
 static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs)
 {
-    RdSettings e = *rd_GetSettings();
+    RdSettings e = *rd_get_settings();
     e.preset = RD_PRESET_ENHANCED;
     e.sceneScale = (float)S4;
     e.aspect = 4.0f / 3.0f;
@@ -1308,8 +1311,8 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
     e.filterUpgrade = (uint8_t)filter;
     e.outputWidth = outputHeight * 4 / 3;
     e.outputHeight = outputHeight;
-    rd_SetSettings(&e);
-    ui_SetScale(ui_ScaleFor(1, e.outputHeight));
+    rd_set_settings(&e);
+    ui_set_scale(ui_scale_for(1, e.outputHeight));
 
     uint8_t *px = malloc((size_t)W4 * W4 * 4);
     float *ref = calloc((size_t)W4 * W4 * 3, sizeof(float));
@@ -1328,7 +1331,7 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
         const uint8_t *bg = pass ? mid : black;
         drawRows4(bg, pass ? light : white, pass ? UI_INK_LIGHT : UI_INK_PLAIN);
         uint32_t w = 0, h = 0;
-        if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h) ||
+        if (!rd__read_target(rd_target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h) ||
             w != W4 || h != W4) {
             CHECK(0, "4x SCENE readback (%ux%u)", w, h);
             goto done;
@@ -1372,13 +1375,13 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
                (4), so a stem's edge is a texel or two wide, where the 1x
                strip magnified (forced) spreads it over its magnified texel */
             const int crisp = edgeWidth4(px);
-            ui__MenuForceScale(1);
+            ui__menu_force_scale(1);
             drawRows4(bg, white, UI_INK_PLAIN);
             int soft = -1;
-            if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
+            if (rd__read_target(rd_target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
                 soft = edgeWidth4(px);
             }
-            ui__MenuForceScale(0);
+            ui__menu_force_scale(0);
             printf("ui_test: 4x edges across (filter %d): median %d texels with the strips at 4x, "
                    "%d with the 1x strips magnified\n",
                    (int)filter, crisp, soft);
@@ -1391,12 +1394,12 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
             /* the menu look with the 1x strips magnified,
                beside ui_test_scene4x.png: the rims alike, the letters
                crisper at 4x */
-            ui__MenuForceScale(1);
+            ui__menu_force_scale(1);
             drawRows4(bg, light, UI_INK_LIGHT);
-            if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
+            if (rd__read_target(rd_target(RD_TARGET_SCENE), px, (size_t)W4 * W4 * 4, &w, &h)) {
                 writeCrop4("ui_test_scene4x_1x.png", px);
             }
-            ui__MenuForceScale(0);
+            ui__menu_force_scale(0);
         }
     }
 done:
@@ -1415,44 +1418,44 @@ static void testSizeSets(void)
     enum { N = 40, PER_FRAME = 8 };
 
     static const uint8_t white[4] = {0x80, 0x80, 0x80, 0x80};
-    if (!rd__InitRecordOnly(512, 512)) {
-        CHECK(0, "rd__InitRecordOnly");
+    if (!rd__init_record_only(512, 512)) {
+        CHECK(0, "rd__init_record_only");
         return;
     }
-    ui_FontShutdown();
-    const float before = ui_GetScale();
-    ui_SetScale(1.0f);
-    CHECK(ui_FontInit() && ui__FontSizeSets(NULL, 0) == 0, "no size set to start");
+    ui_font_shutdown();
+    const float before = ui_get_scale();
+    ui_set_scale(1.0f);
+    CHECK(ui_font_init() && ui__font_size_sets(NULL, 0) == 0, "no size set to start");
     float sizes[N];
     int pxs[N];
     for (int i = 0; i < N; i++) {
         sizes[i] = 8.0f + 2.0f * (float)i;
         pxs[i] = (int)lrintf(sizes[i]);
-        CHECK(ui_MeasureText(sizes[i], "IHL") > 0.0f, "size %.0f measured", (double)sizes[i]);
+        CHECK(ui_measure_text(sizes[i], "IHL") > 0.0f, "size %.0f measured", (double)sizes[i]);
     }
-    CHECK(ui__FontSizeSets(NULL, 0) == 0, "measuring made %d size sets (none)",
-          ui__FontSizeSets(NULL, 0));
+    CHECK(ui__font_size_sets(NULL, 0) == 0, "measuring made %d size sets (none)",
+          ui__font_size_sets(NULL, 0));
     for (int f = 0; f < N / PER_FRAME; f++) {
-        rd_BeginFrame();
-        rd_SelectList(11);
-        rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
+        rd_begin_frame();
+        rd_select_list(11);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
         for (int k = 0; k < PER_FRAME; k++) {
             const int i = f * PER_FRAME + k;
-            const float w = ui_MeasureText(sizes[i], "IHL");
-            ui_DrawText(100.0f, 100.0f, sizes[i], white, "IHL", 0);
+            const float w = ui_measure_text(sizes[i], "IHL");
+            ui_draw_text(100.0f, 100.0f, sizes[i], white, "IHL", 0);
             int w0 = 0, h0 = 0;
-            CHECK(ui_FontPage(pxs[i], 0, &w0, &h0) != NULL && ui_FontPageTex(pxs[i], 0) != 0,
+            CHECK(ui_font_page(pxs[i], 0, &w0, &h0) != NULL && ui_font_page_tex(pxs[i], 0) != 0,
                   "size %.0f: drawn from its own %d px set", (double)sizes[i], pxs[i]);
-            CHECK(ui_MeasureText(sizes[i], "IHL") == w, "size %.0f: the measure unchanged",
+            CHECK(ui_measure_text(sizes[i], "IHL") == w, "size %.0f: the measure unchanged",
                   (double)sizes[i]);
         }
-        rd_EndFrame(0);
+        rd_end_frame(0);
     }
-    const int live = ui__FontSizeSets(NULL, 0);
-    CHECK(!ui__FontReusedNearest(), "no draw reused the nearest size (%d sets alive)", live);
-    ui_SetScale(before);
-    rd_Shutdown();
-    ui_FontForgetTextures();
+    const int live = ui__font_size_sets(NULL, 0);
+    CHECK(!ui__font_reused_nearest(), "no draw reused the nearest size (%d sets alive)", live);
+    ui_set_scale(before);
+    rd_shutdown();
+    ui_font_forget_textures();
 }
 
 int main(void)
@@ -1474,24 +1477,24 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("ui_test: CPU checks ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
-    ui_FontForgetTextures();
+    ui_font_forget_textures();
     UiGsFrame fr = {512, 512, 2048.0f, 2048.0f, UI_LAYOUT_Z};
-    ui_SetGsFrame(&fr);
-    ui_SetScale(1.0f);
+    ui_set_gs_frame(&fr);
+    ui_set_scale(1.0f);
     testPixels();
     /* 4x at a 960-line output (the atlas magnified into SCENE), and
        trilinear at 2160 lines (the atlas minified: no mip chain may blur
        neighbouring glyphs in) */
     testPixels4x(RD_FILTER_UPGRADE_OFF, 960, 1);
     testPixels4x(RD_FILTER_UPGRADE_TRILINEAR, 2160, 0);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    ui_FontShutdown();
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    ui_font_shutdown();
+    rd_shutdown();
     testPopupPixels();
     if (failures) {
         printf("ui_test: %d failures\n", failures);

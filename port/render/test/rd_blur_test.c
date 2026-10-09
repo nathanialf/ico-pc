@@ -6,7 +6,7 @@
  * disc data.
  *
  * CPU only (r): every entry point is driven and its recording checked:
- *   - every sprite is an rd_Post of its effect's kind, nothing goes through
+ *   - every sprite is an rd_post of its effect's kind, nothing goes through
  *     the register decoder (no RDC_SCREEN in lists 7 and 8, nothing
  *     undecoded), and every work buffer a sprite samples was drawn earlier
  *     in the frame (FEED128, SCENE and DISPLAY excepted);
@@ -27,7 +27,7 @@
  *      field, combinations; the sun on for the eye blur's ghosts and the
  *      DATE pass), and a dump -> load -> replay of one of them;
  *   m  600 frames of motion blur feedback (DISPLAY -> SCENE, then SCENE
- *      reduced into DISPLAY by rd_Post(RD_POST_REDUCTION), tinted, the
+ *      reduced into DISPLAY by rd_post(RD_POST_REDUCTION), tinted, the
  *      whole loop in the model): FIX 0x40 on a static image,
  *      FIX 0x40 on noise, FIX 0x70 with cuts (the cases of blend exactness under feedback);
  *   a  600 frames of the aura feedback through FEED128, 200 each of modes
@@ -378,7 +378,7 @@ static void collect(void *user, int list, uint32_t index, const RdCmd *c, const 
 {
     const RdFrame *f = user;
     (void)index;
-    if (c->type == RDC_POST_STUB && rd__IsBlurKind(c->b[0])) {
+    if (c->type == RDC_POST_STUB && rd__is_blur_kind(c->b[0])) {
         if (s_nspr < MAX_SPR) {
             Spr *p = &s_spr[s_nspr++];
             p->list = list;
@@ -388,7 +388,7 @@ static void collect(void *user, int list, uint32_t index, const RdCmd *c, const 
         }
     } else if (c->type == RDC_SCREEN && (list == 7 || list == 8)) {
         s_screens78++;
-    } else if (!rd__CmdIsState(c->type) && c->type != RDC_CLEAR && c->type != RDC_NOP) {
+    } else if (!rd__cmd_is_state(c->type) && c->type != RDC_CLEAR && c->type != RDC_NOP) {
         s_others++;
     }
 }
@@ -397,7 +397,7 @@ static void collectFrame(const RdFrame *f)
 {
     s_nspr = s_screens78 = s_others = 0;
     RdStateBlock st = f->startState;
-    rd__Walk(f, 0, &st, collect, (void *)f);
+    rd__walk(f, 0, &st, collect, (void *)f);
 }
 
 static uint32_t texTarget(const RdStateBlock *s, uint8_t *view)
@@ -405,7 +405,7 @@ static uint32_t texTarget(const RdStateBlock *s, uint8_t *view)
     if (!s->ds.texEnabled) {
         return 0;
     }
-    const RdTexRec *t = rd__TexRec(s->tex);
+    const RdTexRec *t = rd__tex_rec(s->tex);
     if (!t || t->kind != RD_TEXKIND_TARGET) {
         return 0;
     }
@@ -465,7 +465,7 @@ static void checkRecordingModes(void)
         FullScreenEffectAfter();
         CHECK(gif_HostUndecodedTotal() == undec, "%s: undecoded registers", what);
         dl_Swap();
-        collectFrame(rd__LastFrame());
+        collectFrame(rd__last_frame());
         CHECK(s_screens78 == 0, "%s: %d screen prims in lists 7/8 (decoder path)", what,
               s_screens78);
         CHECK(s_others == 0, "%s: %d other actions", what, s_others);
@@ -483,11 +483,11 @@ static void checkRecordingModes(void)
             if (c == RD_TARGET_WORK1 && p->st.gsH == 256) {
                 w1big++;
             }
-            if (c == RD_TARGET_WORK2 && p->st.depth == rd_Target(RD_TARGET_SCENE).id &&
+            if (c == RD_TARGET_WORK2 && p->st.depth == rd_target(RD_TARGET_SCENE).id &&
                 p->st.gsW == W && p->st.gsH == H) {
                 w2scene++;
             }
-            if (c == RD_TARGET_AURA_WORK && p->st.depth == rd_Target(RD_TARGET_SCENE).id) {
+            if (c == RD_TARGET_AURA_WORK && p->st.depth == rd_target(RD_TARGET_SCENE).id) {
                 auraScene++;
             }
             if (c == RD_TARGET_AURA_TAP && p->st.gsW == 128) {
@@ -502,10 +502,10 @@ static void checkRecordingModes(void)
                 CHECK(p->st.ds.blend == RD_BLEND_LERP_FIX && p->st.ds.blendFix == fix &&
                           p->st.ds.abe == (planes < 3) && p->st.ds.test.ztst == RD_ZTST_GEQUAL &&
                           p->st.ds.test.zte && p->st.ds.zwrite == RD_ZWRITE_OFF &&
-                          p->st.depth == rd_Target(RD_TARGET_SCENE).id,
+                          p->st.depth == rd_target(RD_TARGET_SCENE).id,
                       "%s: DoF plane %d: LERP FIX %u (got %u), ABE %d, Z GEQUAL, ZMSK", what,
                       planes, fix, p->st.ds.blendFix, p->st.ds.abe);
-                CHECK(texTarget(&p->st, NULL) == rd_Target(RD_TARGET_WORK0).id,
+                CHECK(texTarget(&p->st, NULL) == rd_target(RD_TARGET_WORK0).id,
                       "%s: DoF plane samples WORK0", what);
                 if (planes > 0) {
                     CHECK(p->r.z > s_spr[i - 1].r.z, "%s: DoF planes at increasing Z", what);
@@ -548,7 +548,7 @@ static void recordSwitched(int post, int feed, int kinds[RD_POST_COUNT])
     FullScreenEffectBefore();
     FullScreenEffectAfter();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     memset(kinds, 0, sizeof(int) * RD_POST_COUNT);
     for (int i = 0; i < s_nspr; i++) {
         kinds[s_spr[i].kind]++;
@@ -627,12 +627,12 @@ static void checkRecordingMotionBlurOff(void)
     dl_SetDLPriority(0);
     MotionBlur();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     CHECK(s_nspr == 0, "motion blur off: no sprite (%d)", s_nspr);
     s_fx[3] = 1;
     MotionBlur();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     CHECK(s_nspr == 1 && s_spr[0].kind == RD_POST_MOTION_BLUR, "motion blur back on: one sprite");
     ScreenHeight = H;
     systemStatus[0] = 1;
@@ -648,16 +648,16 @@ static void checkRecordingMotionBlur(int h)
     dl_SetDLPriority(0);
     MotionBlur();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     CHECK(s_nspr == 1, "motion blur: one sprite (%d)", s_nspr);
     if (s_nspr == 1) {
         const Spr *p = &s_spr[0];
         uint8_t view = 0;
         CHECK(p->list == 7 && p->kind == RD_POST_MOTION_BLUR, "motion blur: list 7, its kind");
-        CHECK(texTarget(&p->st, &view) == rd_Target(RD_TARGET_DISPLAY).id &&
+        CHECK(texTarget(&p->st, &view) == rd_target(RD_TARGET_DISPLAY).id &&
                   view == RD_VIEW_RGB24_TA0 && p->st.ds.texa == RD_TEXA_80_80,
               "motion blur: DISPLAY's RGB24 view, TEXA 80/80");
-        CHECK(p->st.color == rd_Target(RD_TARGET_SCENE).id && p->st.gsH == (uint32_t)h &&
+        CHECK(p->st.color == rd_target(RD_TARGET_SCENE).id && p->st.gsH == (uint32_t)h &&
                   p->st.ds.blend == RD_BLEND_LERP_FIX && p->st.ds.blendFix == 0x40 && p->st.ds.abe,
               "motion blur: into SCENE, LERP FIX 0x40");
         CHECK(p->r.rect[3] - p->r.rect[1] == (float)(h * 16) &&
@@ -670,7 +670,7 @@ static void checkRecordingMotionBlur(int h)
               "motion blur: TEST 0x3000C, ZMSK");
     }
     /* the state left behind: ZBUF on, TEST 0x5000D */
-    const RdStateBlock *e = &rd__LastFrame()->endState;
+    const RdStateBlock *e = &rd__last_frame()->endState;
     (void)e;
     ScreenHeight = H;
     systemStatus[0] = 1;
@@ -697,7 +697,7 @@ static CpuT *cpuT(uint32_t id)
 static void cpuInit(void)
 {
     for (int i = 0; i < RD_TARGET_COUNT; i++) {
-        const RdTargetRec *t = rd__TargetRec((uint32_t)i + 1);
+        const RdTargetRec *t = rd__target_rec((uint32_t)i + 1);
         if (!t || t->format != RHI_FMT_RGBA8_UNORM) {
             continue;
         }
@@ -809,7 +809,7 @@ static void cpuSprite(const RdStateBlock *s, const RdPostRec *r)
     memset(&t, 0, sizeof(t));
     int textured = 0;
     if (d->texEnabled) {
-        const RdTexRec *tr = rd__TexRec(s->tex);
+        const RdTexRec *tr = rd__tex_rec(s->tex);
         if (tr && tr->kind == RD_TEXKIND_TARGET && tr->view != RD_VIEW_DEPTH) {
             CpuT *src = cpuT(tr->target);
             if (src) {
@@ -838,7 +838,8 @@ static void cpuSprite(const RdStateBlock *s, const RdPostRec *r)
     }
     const int tcc = d->tcc == RD_TCC_RGBA;
     const int linear = d->magFilter == RD_FILTER_LINEAR;
-    const uint32_t reg = rd__AlphaRegister(d->blend < RD_BLEND_COUNT ? d->blend : RD_BLEND_LERP_AS);
+    const uint32_t reg =
+        rd__alpha_register(d->blend < RD_BLEND_COUNT ? d->blend : RD_BLEND_LERP_AS);
     const int fix = d->blendFix;
     const int x0 = (int)r->rect[0], y0 = (int)r->rect[1], x1 = (int)r->rect[2],
               y1 = (int)r->rect[3];
@@ -963,7 +964,7 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
 {
     const RdFrame *f = user;
     (void)list, (void)index;
-    if (rd__CmdIsState(c->type) || c->type == RDC_NOP) {
+    if (rd__cmd_is_state(c->type) || c->type == RDC_NOP) {
         return;
     }
     if (c->type == RDC_CLEAR) {
@@ -979,7 +980,7 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
         }
         return;
     }
-    if (c->type == RDC_POST_STUB && rd__IsBlurKind(c->b[0])) {
+    if (c->type == RDC_POST_STUB && rd__is_blur_kind(c->b[0])) {
         RdPostRec r;
         memcpy(&r, f->payload + c->u[1], sizeof(r));
         cpuSprite(s, &r);
@@ -1017,7 +1018,7 @@ static void cpuCmd(void *user, int list, uint32_t index, const RdCmd *c, const R
 static void cpuFrame(const RdFrame *f)
 {
     RdStateBlock st = f->startState;
-    rd__Walk(f, 0, &st, cpuCmd, (void *)f);
+    rd__walk(f, 0, &st, cpuCmd, (void *)f);
 }
 
 static uint8_t s_gpu[W * H * 4];
@@ -1035,8 +1036,8 @@ static int compareAll(const char *what, int verbose)
     for (size_t k = 0; k < sizeof(kCompared) / sizeof(kCompared[0]); k++) {
         const CpuT *c = &s_cpu[kCompared[k]];
         uint32_t w = 0, h = 0;
-        rhi_WaitFrame(); /* a readback that changes the target's state takes a command list */
-        if (!rd__ReadTarget(rd_Target((RdTargetId)kCompared[k]), s_gpu, sizeof(s_gpu), &w, &h) ||
+        rhi_wait_frame(); /* a readback that changes the target's state takes a command list */
+        if (!rd__read_target(rd_target((RdTargetId)kCompared[k]), s_gpu, sizeof(s_gpu), &w, &h) ||
             (int)w != c->w || (int)h != c->h) {
             CHECK(0, "%s: read %s", what, kTargetNames[kCompared[k]]);
             continue;
@@ -1106,16 +1107,16 @@ static RdTex s_imgTex;
 static void putImage(RdTarget t, RdTarget depth, int gw, int gh, int py0, int py1, uint32_t z,
                      int zwrite)
 {
-    rd_SetTarget(t, depth, (uint32_t)gw, (uint32_t)gh, 0);
-    rd_TestGs(0x30000);
-    rd_ZWrite(zwrite);
-    rd_ABE(0);
-    rd_FBA(0);
-    rd_PABE(0);
-    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
-    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(s_imgTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_Gouraud(0);
+    rd_set_target(t, depth, (uint32_t)gw, (uint32_t)gh, 0);
+    rd_test_gs(0x30000);
+    rd_z_write(zwrite);
+    rd_abe(0);
+    rd_fba(0);
+    rd_pabe(0);
+    rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(s_imgTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_gouraud(0);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
     p.rect[0] = (float)(0x8000 - gw / 2 * 16);
@@ -1130,7 +1131,7 @@ static void putImage(RdTarget t, RdTarget depth, int gw, int gh, int py0, int py
     p.z = z;
     p.scalar[0] = p.scalar[1] = 512.0f;
     p.scalar[2] = 1.0f;
-    rd_Post(RD_POST_FLARE, &p);
+    rd_post(RD_POST_FLARE, &p);
 }
 
 /* the scene: the picture in five bands of GS Z (2^16 z for z = 50, 150,
@@ -1141,13 +1142,13 @@ static void putScene(void)
     static const uint32_t kZ[5] = {0, 150u << 16, 250u << 16, 450u << 16, 600u << 16};
     dl_SetDLPriority(0);
     for (int b = 0; b < 5; b++) {
-        putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, H, b * H / 5,
+        putImage(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H, b * H / 5,
                  (b + 1) * H / 5, b == 0 ? (50u << 16) : kZ[b], b != 0);
     }
 }
 
 /* the reduction that closes the motion blur loop: gsbHostReduction's
- * rd_Post(RD_POST_REDUCTION) in list 12 (the black clear of DISPLAY, then
+ * rd_post(RD_POST_REDUCTION) in list 12 (the black clear of DISPLAY, then
  * SCENE bilinear at u = x + 0.75, v = 2y + 1, tinted, inside the border
  * crop), drawn through the GS sprite model, so the CPU model
  * runs it as one more sprite and the loop is compared exactly */
@@ -1160,7 +1161,7 @@ static void putReductionTint(uint8_t r, uint8_t g, uint8_t b)
     p.rgba[1] = g;
     p.rgba[2] = b;
     p.rgba[3] = 0x80;
-    rd_Post(RD_POST_REDUCTION, &p);
+    rd_post(RD_POST_REDUCTION, &p);
 }
 
 static void putReduction(void)
@@ -1174,17 +1175,17 @@ static void clearAll(void)
     static const uint8_t zero[4] = {0, 0, 0, 0};
     dl_SetDLPriority(0);
     for (size_t k = 0; k < sizeof(kCompared) / sizeof(kCompared[0]); k++) {
-        rd_ClearTarget(rd_Target((RdTargetId)kCompared[k]), zero, kCompared[k] == RD_TARGET_SCENE,
-                       0);
+        rd_clear_target(rd_target((RdTargetId)kCompared[k]), zero, kCompared[k] == RD_TARGET_SCENE,
+                        0);
     }
 }
 
 static int runFrame(const char *what, int verbose)
 {
     dl_Swap();
-    rhi_WaitIdle();
+    rhi_wait_idle();
     s_unexpected = 0;
-    cpuFrame(rd__LastFrame());
+    cpuFrame(rd__last_frame());
     CHECK(s_unexpected == 0, "%s: %d commands the CPU model does not know", what, s_unexpected);
     return compareAll(what, verbose);
 }
@@ -1199,7 +1200,7 @@ static void checkEffects(void)
         snprintf(what, sizeof(what), "(e) post mode %d", post);
         setStage(post, 0, 64);
         makeImage((uint32_t)post, 0);
-        rd_UpdateTexture(s_imgTex, s_img);
+        rd_update_texture(s_imgTex, s_img);
         if (post == 1) {
             clearAll();
         }
@@ -1208,11 +1209,11 @@ static void checkEffects(void)
         FullScreenEffectBefore();
         /* a shine object of list 7 into the flare mask (WORK2, left bound) */
         dl_SetDLPriority(7);
-        putImage(rd_Target(RD_TARGET_WORK2), rd_Target(RD_TARGET_SCENE), W, H, 200, 260, 0, 0);
+        putImage(rd_target(RD_TARGET_WORK2), rd_target(RD_TARGET_SCENE), W, H, 200, 260, 0, 0);
         FullScreenEffectAfter();
         const int d = runFrame(what, 1);
         printf("  %s: max difference %d over %d sprites\n", what, d,
-               (collectFrame(rd__LastFrame()), s_nspr));
+               (collectFrame(rd__last_frame()), s_nspr));
         CHECK(post == 2 || s_fanDraws == 2, "%s: the sun is on screen (fans %d)", what, s_fanDraws);
     }
     InitializeStaticBlur(); /* sun off */
@@ -1223,22 +1224,22 @@ static void checkDump(void)
     static uint8_t first[W * H * 4], again[W * H * 4];
     uint32_t w, h;
     const char *path = "rd_blur_test.rddump";
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), first, sizeof(first), &w, &h)) {
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), first, sizeof(first), &w, &h)) {
         CHECK(0, "(d) read SCENE");
         return;
     }
-    CHECK(rd__DumpFrame(rd__LastFrame(), path), "(d) dump the frame");
+    CHECK(rd__dump_frame(rd__last_frame(), path), "(d) dump the frame");
     RdFrame g;
     memset(&g, 0, sizeof(g));
-    if (!rd__LoadFrame(path, &g)) {
+    if (!rd__load_frame(path, &g)) {
         CHECK(0, "(d) load the frame");
         return;
     }
     /* the frame read what the frame before left in the work buffers and
      * SCENE's Z: replay it on the same inputs (the CPU model's) */
-    CHECK(rd__ReplayFrame(&g, 0, false), "(d) replay the loaded frame");
-    rhi_WaitIdle();
-    if (rd__ReadTarget(rd_Target(RD_TARGET_SCENE), again, sizeof(again), &w, &h)) {
+    CHECK(rd__replay_frame(&g, 0, false), "(d) replay the loaded frame");
+    rhi_wait_idle();
+    if (rd__read_target(rd_target(RD_TARGET_SCENE), again, sizeof(again), &w, &h)) {
         int diff = 0;
         for (size_t i = 0; i < sizeof(again); i++) {
             diff += again[i] != first[i];
@@ -1246,7 +1247,7 @@ static void checkDump(void)
         printf("  (d) dump -> load -> replay of post mode 7: %d bytes of SCENE differ\n", diff);
         CHECK(diff == 0, "(d) the replayed dump equals the recorded frame");
     }
-    rd__FrameFree(&g);
+    rd__frame_free(&g);
     remove(path);
 }
 
@@ -1268,12 +1269,12 @@ static void checkMotionBlur(void)
         } else {
             makeImage((uint32_t)(n / 30), 0); /* a cut every 30 frames */
         }
-        rd_UpdateTexture(s_imgTex, s_img);
+        rd_update_texture(s_imgTex, s_img);
         putScene();
         /* the flare's TEX1 0x60 and CLAMP 5 leak into the motion blur */
         dl_SetDLPriority(7);
-        rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
-        rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+        rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
         SetMotionBlur(fix);
         MotionBlur();
         putReduction();
@@ -1335,12 +1336,12 @@ static void checkAura(void)
         setStage(0, mode, (n / 100) & 1 ? 0x40 : 0x20);
         GlobalTimer = 0;
         makeImage((uint32_t)(n / 20), 0);
-        rd_UpdateTexture(s_imgTex, s_img);
+        rd_update_texture(s_imgTex, s_img);
         putScene();
         FullScreenEffectBefore();
         /* the list-8 objects: into AURA_WORK, left bound by auraInspireBefore */
         dl_SetDLPriority(8);
-        putImage(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, H,
+        putImage(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), W, H,
                  100 + (n * 3) % 200, 160 + (n * 3) % 200, 0, 0);
         FullScreenEffectAfter();
         char what[48];
@@ -1367,7 +1368,7 @@ static void checkAura(void)
  * filling FEED128 with black at alpha 128 (auraInspireAfter's reset), and
  * pastes FEED128 over the screen before that at blurCol's alpha (128 here,
  * as in most stages).  Each tick is presented twice: as its first present
- * and as a later one (rd__InterpFrame's firstOfTick 0).  Both must draw
+ * and as a later one (rd__interp_frame's firstOfTick 0).  Both must draw
  * the same picture and leave the same FEED128; before the presenter kept
  * FEED128's input (FEED_HELD), the later present of the cut pasted the
  * black reset over the whole screen. */
@@ -1376,20 +1377,20 @@ static uint8_t s_firstScene[W * H * 4], s_firstFeed[128 * 128 * 4];
 
 static int presentTick(const char *what, int first, uint8_t *scene, uint8_t *feed)
 {
-    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), 1.0f, first, NULL);
-    if (!f || !rd__ReplayFrame(f, 0, false)) {
+    const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 1.0f, first, NULL);
+    if (!f || !rd__replay_frame(f, 0, false)) {
         CHECK(0, "%s: build and replay the present", what);
         return 0;
     }
-    rhi_WaitIdle();
+    rhi_wait_idle();
     s_unexpected = 0;
     cpuFrame(f);
     CHECK(s_unexpected == 0, "%s: %d commands the CPU model does not know", what, s_unexpected);
     const int d = compareAll(what, failures < 10);
     uint32_t w, h;
-    CHECK(rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene, W * H * 4, &w, &h) && w == W && h == H,
+    CHECK(rd__read_target(rd_target(RD_TARGET_SCENE), scene, W * H * 4, &w, &h) && w == W && h == H,
           "%s: read SCENE", what);
-    CHECK(rd__ReadTarget(rd_Target(RD_TARGET_FEED128), feed, 128 * 128 * 4, &w, &h) && w == 128 &&
+    CHECK(rd__read_target(rd_target(RD_TARGET_FEED128), feed, 128 * 128 * 4, &w, &h) && w == 128 &&
               h == 128,
           "%s: read FEED128", what);
     return d;
@@ -1399,18 +1400,18 @@ static void checkCutPresents(void)
 {
     static uint8_t scene[W * H * 4], feed[128 * 128 * 4];
     const uint8_t interpolate = g_rd.settings.interpolate;
-    g_rd.settings.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
+    g_rd.settings.interpolate = 1; /* rd_end_frame leaves the replays to the presents */
     clearAll();
     int worst = 0, black = 0;
     for (int n = 0; n < 8; n++) {
         setStage(0, 2, 0x80);
         GlobalTimer = n == 5; /* the cut */
         makeImage((uint32_t)(40 + n), 0);
-        rd_UpdateTexture(s_imgTex, s_img);
+        rd_update_texture(s_imgTex, s_img);
         putScene();
         FullScreenEffectBefore();
         dl_SetDLPriority(8);
-        putImage(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, H, 120 + n * 10,
+        putImage(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), W, H, 120 + n * 10,
                  220 + n * 10, 0, 0);
         FullScreenEffectAfter();
         dl_Swap();
@@ -1476,7 +1477,7 @@ static void nRecord(int fix)
     FullScreenEffectBefore();
     /* the aura's objects: into AURA_WORK, left bound by auraInspireBefore */
     dl_SetDLPriority(8);
-    putImage(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, H, 150, 250, 0, 0);
+    putImage(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), W, H, 150, 250, 0, 0);
     FullScreenEffectAfter();
     SetMotionBlur(fix);
     MotionBlur();
@@ -1505,8 +1506,8 @@ static double nMean(const uint8_t *d, int *sat)
  * last tick's mean and saturated channels in *mean, *sat. */
 static int nRun(int n, int legacy, double *mean, int *sat)
 {
-    const uint32_t disp = rd_Target(RD_TARGET_DISPLAY).id;
-    const uint32_t dispHeld = rd_Target(RD_TARGET_DISPLAY_HELD).id;
+    const uint32_t disp = rd_target(RD_TARGET_DISPLAY).id;
+    const uint32_t dispHeld = rd_target(RD_TARGET_DISPLAY_HELD).id;
     const int fix = legacy ? (int)(128.0 * pow(32.0 / 128.0, 1.0 / n) + 0.5) : 32;
     const CpuT *dp = &s_cpu[RD_TARGET_DISPLAY];
     int differ = 0, firstLast = 0;
@@ -1517,8 +1518,8 @@ static int nRun(int n, int legacy, double *mean, int *sat)
         static uint8_t firstDisp[N_DW * N_DH * 4];
         for (int k = 0; k < n; k++) {
             const int first = k == 0;
-            const RdFrame *f =
-                rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), (float)(k + 1) / n, first, NULL);
+            const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(),
+                                                (float)(k + 1) / n, first, NULL);
             if (f && legacy && !first) {
                 /* legacy: no DISPLAY_HELD, the present before's DISPLAY read */
                 RdCmdList *cl = (RdCmdList *)&f->lists[0];
@@ -1529,12 +1530,12 @@ static int nRun(int n, int legacy, double *mean, int *sat)
                     }
                 }
             }
-            if (!f || !rd__ReplayFrame(f, 0, false)) {
+            if (!f || !rd__replay_frame(f, 0, false)) {
                 CHECK(0, "(n) N %d%s tick %d present %d: build and replay", n,
                       legacy ? " (v0.4.2)" : "", t, k);
                 return -1;
             }
-            rhi_WaitIdle();
+            rhi_wait_idle();
             s_unexpected = 0;
             cpuFrame(f);
             CHECK(s_unexpected == 0, "(n) %d commands the CPU model does not know", s_unexpected);
@@ -1566,7 +1567,7 @@ static void checkMotionBlurPresents(void)
         return;
     }
     makeImage(5, 0);
-    rd_UpdateTexture(s_imgTex, s_img);
+    rd_update_texture(s_imgTex, s_img);
     /* the reference: each tick replayed once as it closes (Original) */
     clearAll();
     for (int t = 0; t < N_TICKS; t++) {
@@ -1586,7 +1587,7 @@ static void checkMotionBlurPresents(void)
     }
     CHECK(moved > N_DW * N_DH, "(n) the feedback changed %d channels from the first tick", moved);
     const uint8_t interpolate = g_rd.settings.interpolate;
-    g_rd.settings.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
+    g_rd.settings.interpolate = 1; /* rd_end_frame leaves the replays to the presents */
     static const int kN[] = {1, 2, 4, 10};
     double mean[4], legacyMean[4];
     int sat[4], legacySat[4], legacyDiff[4];
@@ -1658,17 +1659,17 @@ static void qShine(int n)
 {
     (void)n;
     dl_SetDLPriority(8);
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, QH, 0);
-    rd_TestGs(0x5346D);
-    rd_ZWrite(1);
-    rd_ABE(1);
-    rd_BlendFunc(RD_BLEND_LERP_AS, 0x80);
-    rd_FBA(0);
-    rd_PABE(0);
-    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
-    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_Gouraud(0);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), W, QH, 0);
+    rd_test_gs(0x5346D);
+    rd_z_write(1);
+    rd_abe(1);
+    rd_blend_func(RD_BLEND_LERP_AS, 0x80);
+    rd_fba(0);
+    rd_pabe(0);
+    rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_gouraud(0);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
     const int dx = 0;
@@ -1686,7 +1687,7 @@ static void qShine(int n)
     p.scalar[0] = p.scalar[1] = 512.0f;
     p.scalar[2] = 1.0f;
     p.exactInt = 1;
-    rd_Post(RD_POST_AURA, &p);
+    rd_post(RD_POST_AURA, &p);
 }
 
 /* one frame: the scene (Z 0, the face band rows 180..260 nearer), the
@@ -1694,8 +1695,8 @@ static void qShine(int n)
 static void qFrame(int n)
 {
     dl_SetDLPriority(0);
-    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
-    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
+    putImage(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
+    putImage(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
     FullScreenEffectBefore();
     qShine(n);
     FullScreenEffectAfter();
@@ -1714,7 +1715,7 @@ static void qCheckRecorded(void)
 {
     static const uint8_t mask[4] = {0, 0, 0, 0x80}, paste[4] = {64, 64, 64, 128},
                          zero[4] = {0, 0, 0, 0}, white[4] = {128, 128, 128, 128};
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     int reduce = 0, copyA = 0, pasted = 0, band = 0, copyF = 0;
     for (int i = 0; i < s_nspr; i++) {
         const Spr *p = &s_spr[i];
@@ -1726,15 +1727,15 @@ static void qCheckRecorded(void)
         if (c == RD_TARGET_WORK0) {
             reduce += qSame(r, 30720, 31736, 34816, 33528, 16, 16, 8208, 7184, 512, 512, mask) &&
                       p->st.ds.blend == RD_BLEND_CS_AS_ADD_CD && p->st.ds.abe &&
-                      texTarget(&p->st, NULL) == rd_Target(RD_TARGET_AURA_WORK).id;
+                      texTarget(&p->st, NULL) == rd_target(RD_TARGET_AURA_WORK).id;
         } else if (c == RD_TARGET_FEED128 && p->st.ds.texEnabled &&
-                   texTarget(&p->st, NULL) == rd_Target(RD_TARGET_WORK0).id) {
+                   texTarget(&p->st, NULL) == rd_target(RD_TARGET_WORK0).id) {
             copyA += qSame(r, 31744, 31744, 33792, 33792, 0, 0, 4096, 2048, 256, 128, mask) &&
                      p->st.ds.blend == RD_BLEND_CS_AS_ADD_CD && p->st.ds.abe;
         } else if (c == RD_TARGET_SCENE) {
             pasted += qSame(r, 28672, 29184, 36864, 36352, 8, 8, 2056, 1800, 128, 128, paste) &&
                       p->st.ds.blend == RD_BLEND_LERP_AS_ALT && p->st.ds.abe &&
-                      texTarget(&p->st, NULL) == rd_Target(RD_TARGET_FEED128).id;
+                      texTarget(&p->st, NULL) == rd_target(RD_TARGET_FEED128).id;
         } else if (c == RD_TARGET_FEED128 && !p->st.ds.texEnabled) {
             band += r->rect[0] == 31744 && r->rect[1] == 33536 && r->rect[2] == 33792 &&
                     r->rect[3] == 33792 && memcmp(r->rgba, zero, 4) == 0;
@@ -1759,15 +1760,15 @@ static void qInit(const char *what, int preset, float scale, int fullHeight)
     st.outputHeight = 480;
     st.sceneScale = scale;
     st.fullHeightScene = (uint8_t)fullHeight;
-    if (!rd_Init(W, QH, &st, NULL)) {
-        CHECK(0, "(q) rd_Init %s", what);
+    if (!rd_init(W, QH, &st, NULL)) {
+        CHECK(0, "(q) rd_init %s", what);
         return;
     }
     gif_HostForgetTextures();
     gif_HostFrameReset();
     dl_Clear();
     makeImage(7, 0);
-    s_imgTex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    s_imgTex = rd_create_texture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
     static uint8_t shine[512 * 512 * 4];
     for (int y = 0; y < 512; y++) {
         for (int x = 0; x < 512; x++) {
@@ -1777,7 +1778,7 @@ static void qInit(const char *what, int preset, float scale, int fullHeight)
             q[3] = hole ? 0x40 : 0x80;
         }
     }
-    s_qShineTex = rd_CreateTexture(512, 512, shine, RD_TEXA_80_80, "rd_blur_test shine");
+    s_qShineTex = rd_create_texture(512, 512, shine, RD_TEXA_80_80, "rd_blur_test shine");
 }
 
 static void checkQueenMirage(void)
@@ -1791,7 +1792,7 @@ static void checkQueenMirage(void)
     GlobalTimer = 0;
 
     /* 1x: the CPU model, every target */
-    rd_Shutdown();
+    rd_shutdown();
     for (int i = 0; i < RD_TARGET_COUNT; i++) {
         free(s_cpu[i].c);
         free(s_cpu[i].z);
@@ -1808,10 +1809,10 @@ static void checkQueenMirage(void)
         snprintf(what, sizeof(what), "(q) 1x frame %d", n);
         if (n == 0) {
             dl_Swap();
-            rhi_WaitIdle();
+            rhi_wait_idle();
             qCheckRecorded();
             s_unexpected = 0;
-            cpuFrame(rd__LastFrame());
+            cpuFrame(rd__last_frame());
             worst = compareAll(what, 1);
         } else {
             const int d = runFrame(what, failures < 10);
@@ -1832,7 +1833,7 @@ static void checkQueenMirage(void)
     printf("  (q) %d mirage frames at 1x (NTSC, the dumps' sprites): max difference %d LSB, %d "
            "darkened pixels in the shine's rows\n",
            Q_FRAMES, worst, masked);
-    rd_Shutdown();
+    rd_shutdown();
 
     /* 4x and full height: SCENE against the 1x model */
     static const struct {
@@ -1848,15 +1849,15 @@ static void checkQueenMirage(void)
             qFrame(n);
             dl_Swap();
         }
-        rhi_WaitIdle();
-        const RdTargetRec *t = rd__TargetRec(rd_Target(RD_TARGET_SCENE).id);
+        rhi_wait_idle();
+        const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
         uint8_t *img = t ? malloc((size_t)t->tw * t->th * 4) : NULL;
         uint32_t w = 0, h = 0;
         if (!img ||
-            !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), img, (size_t)t->tw * t->th * 4, &w, &h)) {
+            !rd__read_target(rd_target(RD_TARGET_SCENE), img, (size_t)t->tw * t->th * 4, &w, &h)) {
             CHECK(0, "(q) %s: read SCENE", kModes[m].what);
             free(img);
-            rd_Shutdown();
+            rd_shutdown();
             continue;
         }
         const float sx = (float)w / (float)W, sy = (float)h / (float)QH;
@@ -1904,9 +1905,9 @@ static void checkQueenMirage(void)
         CHECK(inBad == 0, "(q) %s: %d pixels inside the mask differ from 1x by more than 4",
               kModes[m].what, inBad);
         free(img);
-        CHECK(rhi_vk_ValidationErrorCount() == 0, "(q) %s: %u validation errors", kModes[m].what,
-              rhi_vk_ValidationErrorCount());
-        rd_Shutdown();
+        CHECK(rhi_vk_validation_error_count() == 0, "(q) %s: %u validation errors", kModes[m].what,
+              rhi_vk_validation_error_count());
+        rd_shutdown();
     }
     ScreenHeight = screenHeight;
     systemStatus[0] = status0;
@@ -1933,17 +1934,17 @@ static void qPresShine(int dx)
 {
     static const uint8_t c[4] = {0x80, 0x80, 0x80, 0x7F};
     dl_SetDLPriority(8);
-    rd_SetTarget(rd_Target(RD_TARGET_AURA_WORK), rd_Target(RD_TARGET_SCENE), W, QH, 0);
-    rd_TestGs(0x5346D);
-    rd_ZWrite(1);
-    rd_ABE(1);
-    rd_BlendFunc(RD_BLEND_LERP_AS, 0x80);
-    rd_FBA(0);
-    rd_PABE(0);
-    rd_SamplerFilter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
-    rd_SamplerWrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rd_Texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    rd_Gouraud(1);
+    rd_set_target(rd_target(RD_TARGET_AURA_WORK), rd_target(RD_TARGET_SCENE), W, QH, 0);
+    rd_test_gs(0x5346D);
+    rd_z_write(1);
+    rd_abe(1);
+    rd_blend_func(RD_BLEND_LERP_AS, 0x80);
+    rd_fba(0);
+    rd_pabe(0);
+    rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
+    rd_sampler_wrap(RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(s_qShineTex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_gouraud(1);
     const int32_t ox = (2048 - W / 2) * 16, oy = (2048 - QH / 2) * 16;
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
@@ -1957,14 +1958,14 @@ static void qPresShine(int dx)
     v[0].q = v[1].q = 1.0f;
     memcpy(v[0].rgba, c, 4);
     memcpy(v[1].rgba, c, 4);
-    rd_ScreenPrims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, RD_KEY(&kQShine, 8, 0));
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, RD_KEY(&kQShine, 8, 0));
 }
 
 static void qPresTick(int dx)
 {
     dl_SetDLPriority(0);
-    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
-    putImage(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
+    putImage(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, QH, 0, QH, 0, 1);
+    putImage(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, QH, 180, 260, Q_Z_FACE, 1);
     FullScreenEffectBefore();
     qPresShine(dx);
     FullScreenEffectAfter();
@@ -1975,7 +1976,7 @@ static void qPresTick(int dx)
  * band clear and the copy of SCENE into FEED128) made a NOP */
 static const RdFrame *qPresBuild(float alpha, int first, int probe)
 {
-    const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(), alpha, first, NULL);
+    const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), alpha, first, NULL);
     if (!f || !probe) {
         return f;
     }
@@ -1983,19 +1984,19 @@ static const RdFrame *qPresBuild(float alpha, int first, int probe)
     RdStateBlock st = f->startState;
     for (int l = 0; l < 8; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
-            rd__ApplyState(&st, &f->lists[l].cmds[i]);
+            rd__apply_state(&st, &f->lists[l].cmds[i]);
         }
     }
     int pasted = 0;
     for (uint32_t i = 0; i < cl->count; i++) {
         RdCmd *c = &cl->cmds[i];
-        if (rd__ApplyState(&st, c)) {
+        if (rd__apply_state(&st, c)) {
             continue;
         }
-        if (pasted && c->type == RDC_POST_STUB && st.color == rd_Target(RD_TARGET_FEED128).id) {
+        if (pasted && c->type == RDC_POST_STUB && st.color == rd_target(RD_TARGET_FEED128).id) {
             c->type = RDC_NOP;
         }
-        pasted |= c->type == RDC_POST_STUB && st.color == rd_Target(RD_TARGET_SCENE).id;
+        pasted |= c->type == RDC_POST_STUB && st.color == rd_target(RD_TARGET_SCENE).id;
     }
     return f;
 }
@@ -2008,9 +2009,9 @@ static void qPresCheck(const char *what, float alpha, int first)
     uint32_t w = 0, h = 0;
     /* the probe: FEED128 as the paste read it */
     const RdFrame *f = qPresBuild(alpha, 0, 1);
-    if (f && rd__ReplayFrame(f, 0, false)) {
-        rhi_WaitIdle();
-        if (rd__ReadTarget(rd_Target(RD_TARGET_FEED128), feed, sizeof(feed), &w, &h)) {
+    if (f && rd__replay_frame(f, 0, false)) {
+        rhi_wait_idle();
+        if (rd__read_target(rd_target(RD_TARGET_FEED128), feed, sizeof(feed), &w, &h)) {
             int bad = 0, set = 0;
             for (int x = 8; x < 120; x++) {
                 bad += feed[(55 * 128 + x) * 4 + 3] != 0;  /* rows 220 / 4 of the face */
@@ -2025,12 +2026,12 @@ static void qPresCheck(const char *what, float alpha, int first)
         }
     }
     f = qPresBuild(alpha, first, 0);
-    if (!f || !rd__ReplayFrame(f, 0, false)) {
+    if (!f || !rd__replay_frame(f, 0, false)) {
         CHECK(0, "(p) %s: replay", what);
         return;
     }
-    rhi_WaitIdle();
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), scene, sizeof(scene), &w, &h)) {
+    rhi_wait_idle();
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), scene, sizeof(scene), &w, &h)) {
         CHECK(0, "(p) %s: read SCENE", what);
         return;
     }
@@ -2072,9 +2073,9 @@ static void checkQueenPresents(void)
            "%d\n",
            s_qpPresents, s_qpFaceBad, s_qpFeedBad, s_qpShineSet);
     CHECK(s_qpShineSet == s_qpPresents, "(p) the shine's mask is set in every probe");
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "(p) %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "(p) %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     ScreenHeight = screenHeight;
     systemStatus[0] = status0;
 }
@@ -2102,18 +2103,18 @@ static void checkMotionBlurPresentsScaled(void)
     st.outputHeight = 480;
     st.sceneScale = 2.0f;
     st.fullHeightScene = 1;
-    st.interpolate = 1; /* rd_EndFrame leaves the replays to the presents */
-    if (!rd_Init(W, H, &st, NULL)) {
-        CHECK(0, "(n) rd_Init at 2x");
+    st.interpolate = 1; /* rd_end_frame leaves the replays to the presents */
+    if (!rd_init(W, H, &st, NULL)) {
+        CHECK(0, "(n) rd_init at 2x");
         return;
     }
     gif_HostForgetTextures();
     gif_HostFrameReset();
     dl_Clear();
     makeImage(5, 0);
-    s_imgTex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
-    const RdTargetRec *d = rd__TargetRec(rd_Target(RD_TARGET_DISPLAY).id);
-    const RdTargetRec *h = rd__TargetRec(rd_Target(RD_TARGET_DISPLAY_HELD).id);
+    s_imgTex = rd_create_texture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    const RdTargetRec *d = rd__target_rec(rd_target(RD_TARGET_DISPLAY).id);
+    const RdTargetRec *h = rd__target_rec(rd_target(RD_TARGET_DISPLAY_HELD).id);
     CHECK(d && h && d->tw == h->tw && d->th == h->th && d->sx == h->sx && d->sy == h->sy &&
               d->tw == 2 * N_DW && d->th == 4 * N_DH,
           "(n) 2x full height: DISPLAY %u x %u, DISPLAY_HELD %u x %u", d ? d->tw : 0, d ? d->th : 0,
@@ -2129,14 +2130,14 @@ static void checkMotionBlurPresentsScaled(void)
             nRecord(32);
             dl_Swap();
             for (int k = 0; k < kN[r]; k++) {
-                const RdFrame *f = rd__InterpFrame(rd__PrevFrame(), rd__LastFrame(),
-                                                   (float)(k + 1) / kN[r], k == 0, NULL);
-                CHECK(f && rd__ReplayFrame(f, 0, false), "(n) 2x N %d tick %d present %d", kN[r], t,
-                      k);
+                const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(),
+                                                    (float)(k + 1) / kN[r], k == 0, NULL);
+                CHECK(f && rd__replay_frame(f, 0, false), "(n) 2x N %d tick %d present %d", kN[r],
+                      t, k);
             }
-            rhi_WaitIdle();
+            rhi_wait_idle();
             uint32_t w = 0, hh = 0;
-            CHECK(rd__ReadTarget(rd_Target(RD_TARGET_DISPLAY), px, size, &w, &hh) &&
+            CHECK(rd__read_target(rd_target(RD_TARGET_DISPLAY), px, size, &w, &hh) &&
                       (size_t)w * hh * 4 == size,
                   "(n) 2x: read DISPLAY");
             hash[r][t] = fnv64(px, size);
@@ -2152,41 +2153,41 @@ static void checkMotionBlurPresentsScaled(void)
            "of %d ticks' DISPLAYs differ\n",
            d ? d->tw : 0, d ? d->th : 0, differ, N_TICKS);
     free(px);
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "(n) 2x: %u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "(n) 2x: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
 }
 
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
-    const uint32_t n = rd__EnumerateReachable(keys, 512);
+    const uint32_t n = rd__enumerate_reachable(keys, 512);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
     int fx = 0;
-    for (uint32_t i = 0; i < rd__PipelineCount(); i++) {
-        const RdPipeKeyInt *k = rd__PipelineKeyAt(i);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < n && j < 512; j++) {
-            found |= rd__PipeKeyEqual(&keys[j], k);
+            found |= rd__pipe_key_equal(&keys[j], k);
         }
         fx += k->fs == RD_FS_FX_SPRITE;
         CHECK(found,
               "created pipeline %u (prog %u vs %u fs %u ztst %u zwrite %u) is not enumerated", i,
               k->gs.program, k->vs, k->fs, k->gs.ztst, k->gs.zwrite);
     }
-    printf("  pipelines: %u created (%d fx), %u reachable\n", rd__PipelineCount(), fx, n);
+    printf("  pipelines: %u created (%d fx), %u reachable\n", rd__pipeline_count(), fx, n);
 }
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     printf("rd_blur_test\n");
     setMatrices();
     systemStatus[0] = 1; /* PAL: 512 lines */
 
     /* (r) recording */
-    if (!rd__InitRecordOnly(W, H)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(W, H)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -2198,11 +2199,11 @@ int main(void)
        SCENE */
     FullScreenEffectAfter();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     {
         int scene = 0, named_ = 1;
         for (int i = 0; i < s_nspr; i++) {
-            scene += s_spr[i].st.color == rd_Target(RD_TARGET_SCENE).id;
+            scene += s_spr[i].st.color == rd_target(RD_TARGET_SCENE).id;
             named_ &= named(s_spr[i].st.color) >= 0;
         }
         CHECK(s_nspr > 20 && scene == 2 && named_,
@@ -2215,13 +2216,13 @@ int main(void)
     FullScreenEffectBefore();
     FullScreenEffectAfter();
     dl_Swap();
-    collectFrame(rd__LastFrame());
+    collectFrame(rd__last_frame());
     {
         int eye = 0, date = 0;
         for (int i = 0; i < s_nspr; i++) {
             eye += s_spr[i].kind == RD_POST_EYE_BLUR;
             date += s_spr[i].st.ds.test.date == RD_DATE_DEST_ALPHA_0 &&
-                    s_spr[i].st.color == rd_Target(RD_TARGET_SCENE).id;
+                    s_spr[i].st.color == rd_target(RD_TARGET_SCENE).id;
         }
         CHECK(eye == 1 + 4 + 1 + 1 + 1,
               "eye blur with the sun: base, 4 ghosts, shrink, tint, "
@@ -2233,7 +2234,7 @@ int main(void)
     checkRecordingMotionBlur(448);
     checkRecordingMotionBlur(512);
     checkRecordingMotionBlurOff();
-    rd_Shutdown();
+    rd_shutdown();
     printf("  (r) recording checks: %s\n", failures ? "FAILED" : "ok");
     if (failures) {
         printf("rd_blur_test: %d failures\n", failures);
@@ -2243,7 +2244,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(W, H, &st, NULL)) {
+    if (!rd_init(W, H, &st, NULL)) {
         printf("rd_blur_test: CPU checks ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
@@ -2252,7 +2253,7 @@ int main(void)
     dl_Clear();
     cpuInit();
     makeImage(1, 0);
-    s_imgTex = rd_CreateTexture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    s_imgTex = rd_create_texture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
 
     checkEffects();
     checkDump();
@@ -2262,9 +2263,9 @@ int main(void)
     checkMotionBlurPresents(); /* issue 28 */
 
     checkPipelines();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     checkQueenMirage(); /* re-initialises rd (NTSC, 1x, 4x) */
     checkQueenPresents();
     checkMotionBlurPresentsScaled(); /* issue 28: re-initialises rd (2x) */

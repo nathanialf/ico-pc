@@ -7,7 +7,7 @@
  * TEXTURES a folder laid out as a "textures" folder beside the program
  * (it holds SCES-50760/replacements, e.g. build-host/tmp/texpack).  WORKDIR
  * gets a program folder whose "textures" links to TEXTURES, which
- * texpack_Init walks as the game does.  Every texture's candidates are
+ * texpack_init walks as the game does.  Every texture's candidates are
  * looked up in that index in the hook's order (the first hit is the one
  * requested), and every file reached is read with the real loaders.
  * Then the precache at its defaults (the RAM cache's automatic limit) is
@@ -103,9 +103,9 @@ int main(int argc, char **argv)
     c.programDir = prog;
     c.serial = "SCES-50760";
     c.bcSupported = 1;
-    const int indexed = texpack_Init(&c);
+    const int indexed = texpack_init(&c);
     TexpackStats st;
-    texpack_GetStats(&st);
+    texpack_get_stats(&st);
     printf("texpack_e2e_test: %d replacements indexed (%u files, %u duplicates, %u malformed)\n",
            indexed, st.files, st.duplicates, st.malformed);
 
@@ -131,10 +131,10 @@ int main(int argc, char **argv)
                 continue;
             }
             snprintf(file, sizeof(file), "%.*s.png", (int)(at - tok), tok);
-            if (texpack_ParseName(file, &tn) != 0) {
+            if (texpack_parse_name(file, &tn) != 0) {
                 continue;
             }
-            int e = texpack_Lookup(&tn);
+            int e = texpack_lookup(&tn);
             if (e >= 0) {
                 reached++;
                 if (e <= (int)st.files) {
@@ -154,26 +154,26 @@ int main(int argc, char **argv)
             continue;
         }
         entries++;
-        const char *path = texpack_EntryPath(e);
+        const char *path = texpack_entry_path(e);
         uint8_t *data;
         size_t size;
         TexpackImage img;
         int r = -1;
         if (path && readAll(path, &data, &size) == 0) {
-            r = hasExt(path, ".dds") ? texpack_LoadDds(data, size, 1, path, &img)
-                                     : texpack_LoadPng(data, size, path, &img);
+            r = hasExt(path, ".dds") ? texpack_load_dds(data, size, 1, path, &img)
+                                     : texpack_load_png(data, size, path, &img);
             free(data);
         }
         if (r == 0 && img.w > 0 && img.h > 0 && img.levels > 0) {
             loaded++;
-            texpack_FreeImage(&img);
+            texpack_free_image(&img);
         } else {
             failed++;
             printf("texpack_e2e_test: %s does not load\n", path ? path : "?");
         }
     }
     free(hit);
-    texpack_Shutdown();
+    texpack_shutdown();
     printf("texpack_e2e_test: %d textures (%d refused); %d reach a file (%d through a name other "
            "than the base level alone); %d of %d indexed files reached, %d loaded, %d failed\n",
            textures, refused, reached, firstNotSingle, entries, indexed, loaded, failed);
@@ -184,22 +184,22 @@ int main(int argc, char **argv)
     int pngs = 0, pngsCached = 0, uiPngs = 0, uiCached = 0;
     c.precache = 1;
     c.cacheMb = 0;
-    texpack_Init(&c);
+    texpack_init(&c);
     for (int waited = 0; waited < 1800 * 10; waited++) {
-        texpack_GetStats(&st);
+        texpack_get_stats(&st);
         if (st.precacheDone) {
             break;
         }
         usleep(100 * 1000);
     }
-    texpack_GetStats(&st);
+    texpack_get_stats(&st);
     for (int e = 0; e <= (int)st.files; e++) {
-        const char *path = texpack_EntryPath(e);
+        const char *path = texpack_entry_path(e);
         if (!path || !hasExt(path, ".png")) {
             continue;
         }
         const int ui = strstr(path, "/04 - UI/") != NULL;
-        const int cached = texpack_EntryCached(e);
+        const int cached = texpack_entry_cached(e);
         pngs++;
         pngsCached += cached;
         uiPngs += ui;
@@ -211,7 +211,7 @@ int main(int argc, char **argv)
            (unsigned long long)(st.cacheBytes >> 20), st.skipped, st.loadFailed,
            st.precacheDone ? "" : " (not finished)", pngsCached, pngs, uiCached, uiPngs);
     precacheOk = st.precacheDone && pngsCached == pngs;
-    texpack_Shutdown();
+    texpack_shutdown();
 #endif
     if (reached == 0 || failed > 0 || !precacheOk) {
         printf("texpack_e2e_test: FAIL\n");

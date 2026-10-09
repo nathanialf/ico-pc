@@ -5,7 +5,7 @@
  * tag's PRE starts each batch afresh. */
 #include "vu1_ref_internal.h"
 
-void vu1ref_Mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
+void vu1ref_mesh(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
 {
     int n = vu_count(in);
     int lit = code == 22 || code == 24;

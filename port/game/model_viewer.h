@@ -20,7 +20,7 @@
  * The viewer (model_viewer.c, the game side, in ico_pc only): picking a
  * model loads its host stage with ico_mv_active set (options.h): the stage's
  * scripts do not start, every other object is parked, the renderer keeps
- * only the model's draws (rd.h rd_SetDrawFilter) over a grey backdrop, and
+ * only the model's draws (rd.h rd_set_draw_filter) over a grey backdrop, and
  * a free camera orbits it.  Triangle goes back to the list, and from the
  * list to the title the way the pause menu's End Game does.
  */
@@ -81,7 +81,7 @@ int ico_mv_title_list_layout(void);
    becomes the panel beside it; shown is the character on screen (0 Ico,
    1 Yorda), -1 while a model loads or the viewer leaves, -2 outside
    Characters; switch loads the other one; leave goes back to the title,
-   where Settings opens again on Extras (ui_SettingsReopenPage) once the
+   where Settings opens again on Extras (ui_settings_reopen_page) once the
    title's menu is up (at most 10 s). */
 int ico_mv_characters_enter(void);
 int ico_mv_characters_shown(void);

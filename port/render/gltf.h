@@ -17,9 +17,9 @@
  * PS2's matrices are row-vector (p' = p M) and stored row-major, which is
  * the same 16 floats: a PS2 matrix IS its glTF matrix verbatim, never
  * transposed.  So inverseBindMatrices[i] = clusterMtx[i] as the game holds
- * it, and a PS2 product A * B (row-vector: A first) is gltf_Mat4Mul(B, A).
+ * it, and a PS2 product A * B (row-vector: A first) is gltf_mat4_mul(B, A).
  *
- * What gltf_Write writes (the dump's layout, the contract with pack
+ * What gltf_write writes (the dump's layout, the contract with pack
  * makers):
  *   asset       version "2.0", generator "ico-pc", extras = extrasText
  *               verbatim (omitted when NULL)
@@ -45,7 +45,7 @@
  *               indices, inverse binds), the primitives' data in order
  *   numbers     floats as "%.9g" (exact on read), whatever the locale
  *
- * What gltf_Read accepts:
+ * What gltf_read accepts:
  *   containers  a .gltf (JSON) whose buffers have a relative uri, read
  *               from the .gltf's folder (percent escapes decoded; no
  *               "data:" or other schemes, no absolute paths, no "..");
@@ -90,9 +90,9 @@
  *               an extensionsRequired entry, asset.version not 2.x,
  *               malformed JSON or GLB.
  *
- * Ownership: gltf_Read allocates every array, string and prim; gltf_Free
- * releases them (only for a document gltf_Read filled, after success or
- * failure: a failed read leaves *out empty).  gltf_Write only reads the
+ * Ownership: gltf_read allocates every array, string and prim; gltf_free
+ * releases them (only for a document gltf_read filled, after success or
+ * failure: a failed read leaves *out empty).  gltf_write only reads the
  * caller's document; the caller owns it.
  */
 #ifndef PORT_RENDER_GLTF_H
@@ -155,27 +155,27 @@ typedef struct GltfDoc {
 } GltfDoc;
 
 /* Zeroes *doc with nodeMatrix the identity. */
-void gltf_DocInit(GltfDoc *doc);
+void gltf_doc_init(GltfDoc *doc);
 
 /* Writes <path>.gltf and <path>.bin (path without extension; its folder
  * must exist).  0 on success; -1 with a reason in why (invalid document,
  * non-finite numbers, I/O) and neither file left behind. */
-int gltf_Write(const char *path, const GltfDoc *doc, char *why, size_t whyLen);
+int gltf_write(const char *path, const GltfDoc *doc, char *why, size_t whyLen);
 
 /* Reads a .gltf or .glb file into *out (initialised first).  0 on success;
  * -1 with a reason in why and *out empty. */
-int gltf_Read(const char *path, GltfDoc *out, char *why, size_t whyLen);
+int gltf_read(const char *path, GltfDoc *out, char *why, size_t whyLen);
 
-/* Frees what gltf_Read allocated and re-initialises *doc; NULL is fine. */
-void gltf_Free(GltfDoc *doc);
+/* Frees what gltf_read allocated and re-initialises *doc; NULL is fine. */
+void gltf_free(GltfDoc *doc);
 
 /* 4x4 helpers in the convention above (column-major, column vectors).
  * out may alias an input. */
-void gltf_Mat4Identity(float out[16]);
-void gltf_Mat4Mul(float out[16], const float a[16], const float b[16]); /* a * b */
+void gltf_mat4_identity(float out[16]);
+void gltf_mat4_mul(float out[16], const float a[16], const float b[16]); /* a * b */
 /* out = inverse(m) (computed in double); -1 and out the identity when m is
  * singular or not finite. */
-int gltf_Mat4Invert(float out[16], const float m[16]);
+int gltf_mat4_invert(float out[16], const float m[16]);
 
 #ifdef __cplusplus
 }

@@ -18,9 +18,9 @@
  *
  * Plus an RGBA8_UINT target (integer clear and integer output), R8 texture
  * copies (a whole copy, then a second copy over part of it: same-state copy
- * ordering), a device-local vertex buffer filled by rhi_CmdCopyBuffer, depth
+ * ordering), a device-local vertex buffer filled by rhi_cmd_copy_buffer, depth
  * readback, and three frames to cycle the frame slots.  Every expected
- * value is exact.  Buffer-to-texture copies use rhi_Limits()'s pitch and
+ * value is exact.  Buffer-to-texture copies use rhi_limits()'s pitch and
  * offset alignment (1/4 on Vulkan, 256/512 on D3D12). */
 #include "rhi_test_common.h"
 #include "rhi.h"
@@ -32,7 +32,7 @@
 
 FILE *g_rhiTestLog;
 
-void rhi_test_Log(const char *fmt, ...)
+void rhi_test_log(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -69,7 +69,7 @@ static void fail(const char *fmt, int a, int b, int c, const uint8_t *got, const
 {
     char where[96];
     snprintf(where, sizeof(where), fmt, a, b, c);
-    rhi_test_Log("FAIL %s: got %3u %3u %3u %3u, expected %3u %3u %3u %3u\n", where, got[0], got[1],
+    rhi_test_log("FAIL %s: got %3u %3u %3u %3u, expected %3u %3u %3u %3u\n", where, got[0], got[1],
                  got[2], got[3], want[0], want[1], want[2], want[3]);
     failures++;
 }
@@ -131,9 +131,9 @@ static RhiPipeline makePipeline(const Ctx *c, RhiShader ps, RhiFormat color, Rhi
     d.colorCount = 1;
     d.depthFormat = depth;
     d.debugName = name;
-    RhiPipeline p = rhi_CreatePipeline(&d);
+    RhiPipeline p = rhi_create_pipeline(&d);
     if (!p.id) {
-        rhi_test_Log("FAIL pipeline %s not created\n", name);
+        rhi_test_log("FAIL pipeline %s not created\n", name);
         failures++;
     }
     return p;
@@ -142,9 +142,9 @@ static RhiPipeline makePipeline(const Ctx *c, RhiShader ps, RhiFormat color, Rhi
 static RhiShader makeShader(RhiShaderStage stage, const void *code, size_t size, const char *entry)
 {
     RhiShaderDesc d = {stage, code, size, entry, entry};
-    RhiShader s = rhi_CreateShader(&d);
+    RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
-        rhi_test_Log("FAIL shader %s not created\n", entry);
+        rhi_test_log("FAIL shader %s not created\n", entry);
         failures++;
     }
     return s;
@@ -172,7 +172,7 @@ static void expectCell(const uint8_t *img, uint32_t pitch, int cell, uint8_t r, 
         }
     }
     if (failures != before) {
-        rhi_test_Log("     (cell %d)\n", cell);
+        rhi_test_log("     (cell %d)\n", cell);
     }
 }
 
@@ -200,9 +200,9 @@ static void bcBlock(uint8_t *o, uint16_t c565, int bc3, uint8_t alpha)
 
 static void bcCell(const Ctx *c)
 {
-    const RhiLimits *lim = rhi_Limits();
+    const RhiLimits *lim = rhi_limits();
     if (!lim->bcTextures) {
-        rhi_test_Log("SKIP %s: BC cell (no BC formats on this device)\n", s_label);
+        rhi_test_log("SKIP %s: BC cell (no BC formats on this device)\n", s_label);
         return;
     }
 
@@ -219,18 +219,18 @@ static void bcCell(const Ctx *c)
     uint32_t oa = lim->copyOffsetAlign ? lim->copyOffsetAlign : 1u;
     oa = oa < 16u ? 16u : oa; /* and a whole block */
 
-    RhiTexture tgt = rhi_CreateTexture(
+    RhiTexture tgt = rhi_create_texture(
         &(RhiTextureDesc){BW, BH, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "bc target"});
-    RhiTexture bc1 = rhi_CreateTexture(&(RhiTextureDesc){
+    RhiTexture bc1 = rhi_create_texture(&(RhiTextureDesc){
         8, 8, LEVELS, RHI_FMT_BC1_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "bc1"});
-    RhiTexture bc3 = rhi_CreateTexture(
+    RhiTexture bc3 = rhi_create_texture(
         &(RhiTextureDesc){4, 4, 1, RHI_FMT_BC3_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "bc3"});
     /* a block texture is never a target */
-    RhiTexture bad = rhi_CreateTexture(
+    RhiTexture bad = rhi_create_texture(
         &(RhiTextureDesc){4, 4, 1, RHI_FMT_BC1_UNORM, RHI_TEX_RENDER_TARGET, "bc target?"});
-    RhiBuffer ring = rhi_CreateBuffer(
+    RhiBuffer ring = rhi_create_buffer(
         &(RhiBufferDesc){65536, RHI_BUF_VERTEX | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "bc ring"});
-    uint8_t *map = ring.id ? rhi_MapBuffer(ring) : NULL;
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
     RhiBlendState opaque = {.writeMask = 0xF};
     RhiPipeline pipe = makePipeline(c, c->psTex, CF, RHI_FMT_UNKNOWN, &opaque, NULL, "bc");
     RhiSampler smp[LEVELS];
@@ -245,16 +245,16 @@ static void bcCell(const Ctx *c)
                              0.0f,
                              (float)l,
                              (float)l};
-        smp[l] = rhi_CreateSampler(&sd);
+        smp[l] = rhi_create_sampler(&sd);
         ok = ok && smp[l].id;
     }
     if (bad.id) {
-        rhi_test_Log("FAIL %s: a BC render target was created\n", s_label);
+        rhi_test_log("FAIL %s: a BC render target was created\n", s_label);
         failures++;
-        rhi_DestroyTexture(bad);
+        rhi_destroy_texture(bad);
     }
     if (!ok) {
-        rhi_test_Log("FAIL %s: BC cell resources\n", s_label);
+        rhi_test_log("FAIL %s: BC cell resources\n", s_label);
         failures++;
         return;
     }
@@ -267,11 +267,11 @@ static void bcCell(const Ctx *c)
     }
     memcpy(map, v, sizeof(v));
     uint64_t off = 4096;
-    RhiCommandList cl = rhi_BeginCommands();
+    RhiCommandList cl = rhi_begin_commands();
     RhiTextureBarrier up[3] = {{bc1, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                {bc3, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                {tgt, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET}};
-    rhi_CmdBarrier(cl, up, 3);
+    rhi_cmd_barrier(cl, up, 3);
     for (int l = 0; l <= LEVELS; l++) {
         const int isBc3 = l == LEVELS;
         const uint32_t w = isBc3 ? 4u : 8u >> l, h = w;
@@ -285,22 +285,22 @@ static void bcCell(const Ctx *c)
                         0x80);
             }
         }
-        rhi_CmdCopyBufferToTexture(cl, ring, off, pitch, isBc3 ? bc3 : bc1,
-                                   isBc3 ? 0u : (uint32_t)l, (RhiRect){0, 0, w, h});
+        rhi_cmd_copy_buffer_to_texture(cl, ring, off, pitch, isBc3 ? bc3 : bc1,
+                                       isBc3 ? 0u : (uint32_t)l, (RhiRect){0, 0, w, h});
         off += (uint64_t)pitch * bh;
     }
     RhiTextureBarrier rd[2] = {{bc1, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ},
                                {bc3, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ}};
-    rhi_CmdBarrier(cl, rd, 2);
+    rhi_cmd_barrier(cl, rd, 2);
     RhiRenderPassDesc rp = {0};
     rp.color[0] =
         (RhiColorAttachment){tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}, RHI_STORE_STORE};
     rp.colorCount = 1;
     rp.width = BW;
     rp.height = BH;
-    rhi_CmdBeginRenderPass(cl, &rp);
-    rhi_CmdSetPipeline(cl, pipe);
-    rhi_CmdSetVertexBuffer(cl, 0, ring, 0);
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_set_pipeline(cl, pipe);
+    rhi_cmd_set_vertex_buffer(cl, 0, ring, 0);
     for (int i = 0; i <= LEVELS; i++) {
         RhiBinding tb[2] = {{0}, {0}};
         tb[0].slot = 1;
@@ -310,19 +310,19 @@ static void bcCell(const Ctx *c)
         tb[1].type = RHI_BIND_SAMPLER;
         tb[1].sampler = smp[i == LEVELS ? 0 : i];
         RhiBindGroupDesc tbd = {c->l2, tb, 2};
-        rhi_CmdSetBindGroup(cl, 2, rhi_CreateBindGroup(&tbd));
-        rhi_CmdDraw(cl, 6, (uint32_t)i * 6u, 1);
+        rhi_cmd_set_bind_group(cl, 2, rhi_create_bind_group(&tbd));
+        rhi_cmd_draw(cl, 6, (uint32_t)i * 6u, 1);
     }
-    rhi_CmdEndRenderPass(cl);
+    rhi_cmd_end_render_pass(cl);
     RhiTextureBarrier post = {tgt, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
-    rhi_CmdBarrier(cl, &post, 1);
-    rhi_EndCommands(cl);
-    rhi_Submit(cl);
+    rhi_cmd_barrier(cl, &post, 1);
+    rhi_end_commands(cl);
+    rhi_submit(cl);
 
     static uint8_t img[BW * BH * 4];
     uint32_t pitch = 0;
-    if (!rhi_ReadbackTexture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
-        rhi_test_Log("FAIL %s: BC target readback\n", s_label);
+    if (!rhi_readback_texture(tgt, RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+        rhi_test_log("FAIL %s: BC target readback\n", s_label);
         failures++;
     } else {
         for (int i = 0; i <= LEVELS; i++) {
@@ -332,58 +332,58 @@ static void bcCell(const Ctx *c)
             }
         }
     }
-    rhi_DestroyPipeline(pipe);
+    rhi_destroy_pipeline(pipe);
     for (int l = 0; l < LEVELS; l++) {
-        rhi_DestroySampler(smp[l]);
+        rhi_destroy_sampler(smp[l]);
     }
-    rhi_DestroyTexture(bc1);
-    rhi_DestroyTexture(bc3);
-    rhi_DestroyTexture(tgt);
-    rhi_DestroyBuffer(ring);
+    rhi_destroy_texture(bc1);
+    rhi_destroy_texture(bc3);
+    rhi_destroy_texture(tgt);
+    rhi_destroy_buffer(ring);
     if (!failures) {
-        rhi_test_Log("%s: BC cell passed (BC1 8x8 with 4 levels, BC3 4x4)\n", s_label);
+        rhi_test_log("%s: BC cell passed (BC1 8x8 with 4 levels, BC3 4x4)\n", s_label);
     }
 }
 
-int rhi_test_RunCells(const RhiTestConfig *cfg)
+int rhi_test_run_cells(const RhiTestConfig *cfg)
 {
     failures = 0;
     s_label = cfg->label ? cfg->label : cfg->backend;
-    if (!rhi_CreateBackend(cfg->backend)) {
-        rhi_test_Log("SKIP %s: backend %s is not linked into this build\n", s_label, cfg->backend);
+    if (!rhi_create_backend(cfg->backend)) {
+        rhi_test_log("SKIP %s: backend %s is not linked into this build\n", s_label, cfg->backend);
         return 77;
     }
     RhiDeviceDesc dd = {NULL, false, cfg->debugLayers, s_label};
-    if (!rhi_Init(&dd)) {
-        rhi_test_Log("SKIP %s: no usable %s device (see messages above)\n", s_label, cfg->backend);
+    if (!rhi_init(&dd)) {
+        rhi_test_log("SKIP %s: no usable %s device (see messages above)\n", s_label, cfg->backend);
         return 77;
     }
     if (cfg->accept && !cfg->accept()) {
-        rhi_Shutdown();
+        rhi_shutdown();
         return 77;
     }
-    rhi_test_Log("%s: adapter %s\n", s_label, rhi_AdapterName());
-    const RhiLimits *lim = rhi_Limits();
+    rhi_test_log("%s: adapter %s\n", s_label, rhi_adapter_name());
+    const RhiLimits *lim = rhi_limits();
     if (!lim->stencilWrap || lim->uniformAlign == 0) {
-        rhi_test_Log("FAIL limits\n");
+        rhi_test_log("FAIL limits\n");
         failures++;
     }
     /* package AN-E: dual-source blending is optional; without it cells 0
      * and 1 are not drawn and keep the clear colour */
     const bool dual = lim->dualSourceBlend;
     const char *fakeD24 = getenv("ICO_VK_FAKE_D24S8"); /* rhi_vk_d24s8 */
-    if (fakeD24 && fakeD24[0] == '1' && rhi_Backend() == RHI_BACKEND_VULKAN &&
+    if (fakeD24 && fakeD24[0] == '1' && rhi_backend() == RHI_BACKEND_VULKAN &&
         (lim->depthReadback || strcmp(lim->depthStencilFormatName, "D24S8") != 0)) {
-        rhi_test_Log("FAIL ICO_VK_FAKE_D24S8 set but %s reported\n", lim->depthStencilFormatName);
+        rhi_test_log("FAIL ICO_VK_FAKE_D24S8 set but %s reported\n", lim->depthStencilFormatName);
         return 1;
     }
     const char *fake = getenv("ICO_VK_FAKE_NO_DUAL"); /* rhi_vk_nodual */
     if (dual && fake && fake[0] && fake[0] != '0') {
-        rhi_test_Log("FAIL ICO_VK_FAKE_NO_DUAL set but dualSourceBlend reported\n");
+        rhi_test_log("FAIL ICO_VK_FAKE_NO_DUAL set but dualSourceBlend reported\n");
         failures++;
     }
     if (!dual) {
-        rhi_test_Log("%s: no dual-source blending: cells 0 and 1 skipped\n", s_label);
+        rhi_test_log("%s: no dual-source blending: cells 0 and 1 skipped\n", s_label);
     }
     const uint32_t ua = lim->uniformAlign;
 
@@ -397,11 +397,11 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     RhiBindGroupLayoutDesc ld0 = {s0, 1, "group0"};
     RhiBindGroupLayoutDesc ld1 = {NULL, 0, "group1"};
     RhiBindGroupLayoutDesc ld2 = {s2, 2, "group2"};
-    c.l0 = rhi_CreateBindGroupLayout(&ld0);
-    c.l1 = rhi_CreateBindGroupLayout(&ld1);
-    c.l2 = rhi_CreateBindGroupLayout(&ld2);
+    c.l0 = rhi_create_bind_group_layout(&ld0);
+    c.l1 = rhi_create_bind_group_layout(&ld1);
+    c.l2 = rhi_create_bind_group_layout(&ld2);
     /* the blob the backend understands: DXIL for D3D12, SPIR-V otherwise */
-    const bool dxil = rhi_Backend() == RHI_BACKEND_D3D12;
+    const bool dxil = rhi_backend() == RHI_BACKEND_D3D12;
 #define BLOB(n)                                                                                    \
     (dxil ? (const void *)dxil_##n : (const void *)spv_##n),                                       \
         (dxil ? sizeof(dxil_##n) : sizeof(spv_##n))
@@ -525,32 +525,32 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     RhiBufferDesc rd = {ringSize,
                         RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC,
                         RHI_MEM_UPLOAD, "ring"};
-    RhiBuffer ring = rhi_CreateBuffer(&rd);
+    RhiBuffer ring = rhi_create_buffer(&rd);
     RhiBufferDesc vd = {sizeof(verts), RHI_BUF_VERTEX | RHI_BUF_COPY_DST, RHI_MEM_DEVICE, "verts"};
-    RhiBuffer vbuf = rhi_CreateBuffer(&vd);
-    uint8_t *map = rhi_MapBuffer(ring);
+    RhiBuffer vbuf = rhi_create_buffer(&vd);
+    uint8_t *map = rhi_map_buffer(ring);
     if (!ring.id || !vbuf.id || !map) {
-        rhi_test_Log("FAIL buffers\n");
-        rhi_Shutdown();
+        rhi_test_log("FAIL buffers\n");
+        rhi_shutdown();
         return 1;
     }
-    if (rhi_MapBuffer(ring) != map) {
-        rhi_test_Log("FAIL rhi_MapBuffer is not persistent\n");
+    if (rhi_map_buffer(ring) != map) {
+        rhi_test_log("FAIL rhi_map_buffer is not persistent\n");
         failures++;
     }
 
     /* textures */
     RhiTextureDesc td = {W, H, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "scene"};
-    RhiTexture scene = rhi_CreateTexture(&td);
+    RhiTexture scene = rhi_create_texture(&td);
     RhiTextureDesc dsd = {W, H, 1, DF, RHI_TEX_DEPTH_STENCIL | RHI_TEX_SAMPLED, "depth"};
-    RhiTexture depth = rhi_CreateTexture(&dsd);
+    RhiTexture depth = rhi_create_texture(&dsd);
     RhiTextureDesc ud = {4, 4, 1, RHI_FMT_RGBA8_UINT, RHI_TEX_RENDER_TARGET, "uint"};
-    RhiTexture utex = rhi_CreateTexture(&ud);
+    RhiTexture utex = rhi_create_texture(&ud);
     RhiTextureDesc xd = {2, 2, 1, CF, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "tex2x2"};
-    RhiTexture tex = rhi_CreateTexture(&xd);
+    RhiTexture tex = rhi_create_texture(&xd);
     RhiTextureDesc r8d = {4, 4, 1, RHI_FMT_R8_UNORM, RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST, "r8"};
-    RhiTexture r8a = rhi_CreateTexture(&r8d);
-    RhiTexture r8b = rhi_CreateTexture(&r8d);
+    RhiTexture r8a = rhi_create_texture(&r8d);
+    RhiTexture r8b = rhi_create_texture(&r8d);
     RhiSamplerDesc sd = {RHI_FILTER_NEAREST,
                          RHI_FILTER_NEAREST,
                          RHI_FILTER_NEAREST,
@@ -560,10 +560,10 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                          0.0f,
                          0.0f,
                          0.0f};
-    RhiSampler smp = rhi_CreateSampler(&sd);
+    RhiSampler smp = rhi_create_sampler(&sd);
     if (!scene.id || !depth.id || !utex.id || !tex.id || !r8a.id || !r8b.id || !smp.id) {
-        rhi_test_Log("FAIL textures\n");
-        rhi_Shutdown();
+        rhi_test_log("FAIL textures\n");
+        rhi_shutdown();
         return 1;
     }
 
@@ -571,7 +571,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                                        90, 100, 110, 120, 130, 140, 150, 160};
 
     for (int frame = 0; frame < 3; frame++) {
-        rhi_WaitFrame();
+        rhi_wait_frame();
         /* the ring is rewritten every frame, as rd_core would */
         memcpy(map + offVerts, verts, sizeof(verts));
         memcpy(map + offTexVerts, texVerts, sizeof(texVerts));
@@ -597,7 +597,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         b0.offset = offUbo;
         b0.size = sizeof(TestCB);
         RhiBindGroupDesc bd0 = {c.l0, &b0, 1};
-        const RhiBindGroup g0 = rhi_CreateBindGroup(&bd0);
+        const RhiBindGroup g0 = rhi_create_bind_group(&bd0);
         const uint32_t cbOff[3] = {0, ua, 2 * ua};
         RhiBinding tb[2] = {{0}, {0}};
         tb[0].slot = 1;
@@ -607,33 +607,34 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         tb[1].type = RHI_BIND_SAMPLER;
         tb[1].sampler = smp;
         RhiBindGroupDesc tbd = {c.l2, tb, 2};
-        RhiBindGroup g2 = rhi_CreateBindGroup(&tbd);
+        RhiBindGroup g2 = rhi_create_bind_group(&tbd);
         if (!g0.id || !g2.id) {
-            rhi_test_Log("FAIL bind groups\n");
+            rhi_test_log("FAIL bind groups\n");
             failures++;
             break;
         }
 
-        RhiCommandList cl = rhi_BeginCommands();
+        RhiCommandList cl = rhi_begin_commands();
         if (!cl.id) {
-            rhi_test_Log("FAIL command list\n");
+            rhi_test_log("FAIL command list\n");
             failures++;
             break;
         }
-        rhi_CmdBeginLabel(cl, "upload");
-        rhi_CmdCopyBuffer(cl, ring, offVerts, vbuf, 0, sizeof(verts));
+        rhi_cmd_begin_label(cl, "upload");
+        rhi_cmd_copy_buffer(cl, ring, offVerts, vbuf, 0, sizeof(verts));
         RhiTextureBarrier up[3] = {{tex, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                    {r8a, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                    {r8b, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST}};
-        rhi_CmdBarrier(cl, up, 3);
-        rhi_CmdCopyBufferToTexture(cl, ring, offTexels, pitchTex, tex, 0, (RhiRect){0, 0, 2, 2});
-        rhi_CmdCopyBufferToTexture(cl, ring, offR8, pitchR8, r8a, 0, (RhiRect){0, 0, 4, 4});
+        rhi_cmd_barrier(cl, up, 3);
+        rhi_cmd_copy_buffer_to_texture(cl, ring, offTexels, pitchTex, tex, 0,
+                                       (RhiRect){0, 0, 2, 2});
+        rhi_cmd_copy_buffer_to_texture(cl, ring, offR8, pitchR8, r8a, 0, (RhiRect){0, 0, 4, 4});
         RhiTextureBarrier r8s = {r8a, RHI_STATE_COPY_DST, RHI_STATE_COPY_SRC};
-        rhi_CmdBarrier(cl, &r8s, 1);
+        rhi_cmd_barrier(cl, &r8s, 1);
         /* full copy, then a 2x2 block from (2,2) over (0,0) */
-        rhi_CmdCopyTexture(cl, r8a, (RhiRect){0, 0, 4, 4}, r8b, 0, 0);
-        rhi_CmdCopyTexture(cl, r8a, (RhiRect){2, 2, 2, 2}, r8b, 0, 0);
-        rhi_CmdEndLabel(cl);
+        rhi_cmd_copy_texture(cl, r8a, (RhiRect){0, 0, 4, 4}, r8b, 0, 0);
+        rhi_cmd_copy_texture(cl, r8a, (RhiRect){2, 2, 2, 2}, r8b, 0, 0);
+        rhi_cmd_end_label(cl);
 
         RhiTextureBarrier pre[4] = {
             {tex, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ},
@@ -641,7 +642,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
             {depth, RHI_STATE_UNDEFINED, RHI_STATE_DEPTH_WRITE},
             {utex, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
         };
-        rhi_CmdBarrier(cl, pre, 4);
+        rhi_cmd_barrier(cl, pre, 4);
 
         RhiRenderPassDesc rp = {0};
         rp.color[0] =
@@ -654,51 +655,51 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                                         0,     false,          RHI_STORE_STORE, RHI_STORE_STORE};
         rp.width = W;
         rp.height = H;
-        rhi_CmdBeginLabel(cl, "scene");
-        rhi_CmdBeginRenderPass(cl, &rp);
-        rhi_CmdSetVertexBuffer(cl, 0, vbuf, 0);
+        rhi_cmd_begin_label(cl, "scene");
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_vertex_buffer(cl, 0, vbuf, 0);
 
         if (dual) {
-            rhi_CmdSetPipeline(cl, pDualColor);
-            rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[0], 1);
-            rhi_CmdDraw(cl, 6, Q_DUAL_COLOR * 6, 1);
-            rhi_CmdSetPipeline(cl, pDualAlpha);
-            rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[1], 1);
-            rhi_CmdDraw(cl, 6, Q_DUAL_ALPHA * 6, 1);
+            rhi_cmd_set_pipeline(cl, pDualColor);
+            rhi_cmd_set_bind_group_offsets(cl, 0, g0, &cbOff[0], 1);
+            rhi_cmd_draw(cl, 6, Q_DUAL_COLOR * 6, 1);
+            rhi_cmd_set_pipeline(cl, pDualAlpha);
+            rhi_cmd_set_bind_group_offsets(cl, 0, g0, &cbOff[1], 1);
+            rhi_cmd_draw(cl, 6, Q_DUAL_ALPHA * 6, 1);
         }
 
-        rhi_CmdSetPipeline(cl, pDecr);
-        rhi_CmdSetStencilRef(cl, 0);
-        rhi_CmdDraw(cl, 6, Q_DECR * 6, 1);
-        rhi_CmdSetPipeline(cl, pEqual);
-        rhi_CmdSetStencilRef(cl, 255);
-        rhi_CmdDraw(cl, 6, Q_DECR_EQ * 6, 1);
+        rhi_cmd_set_pipeline(cl, pDecr);
+        rhi_cmd_set_stencil_ref(cl, 0);
+        rhi_cmd_draw(cl, 6, Q_DECR * 6, 1);
+        rhi_cmd_set_pipeline(cl, pEqual);
+        rhi_cmd_set_stencil_ref(cl, 255);
+        rhi_cmd_draw(cl, 6, Q_DECR_EQ * 6, 1);
 
-        rhi_CmdSetPipeline(cl, pReplace);
-        rhi_CmdSetStencilRef(cl, 255);
-        rhi_CmdDraw(cl, 6, Q_REPLACE * 6, 1);
-        rhi_CmdSetPipeline(cl, pIncr);
-        rhi_CmdDraw(cl, 6, Q_INCR * 6, 1);
-        rhi_CmdSetPipeline(cl, pEqual);
-        rhi_CmdSetStencilRef(cl, 0);
-        rhi_CmdDraw(cl, 6, Q_INCR_EQ * 6, 1);
+        rhi_cmd_set_pipeline(cl, pReplace);
+        rhi_cmd_set_stencil_ref(cl, 255);
+        rhi_cmd_draw(cl, 6, Q_REPLACE * 6, 1);
+        rhi_cmd_set_pipeline(cl, pIncr);
+        rhi_cmd_draw(cl, 6, Q_INCR * 6, 1);
+        rhi_cmd_set_pipeline(cl, pEqual);
+        rhi_cmd_set_stencil_ref(cl, 0);
+        rhi_cmd_draw(cl, 6, Q_INCR_EQ * 6, 1);
 
-        rhi_CmdSetPipeline(cl, pDepth);
-        rhi_CmdDraw(cl, 6, Q_Z50 * 6, 1);
-        rhi_CmdDraw(cl, 6, Q_Z25 * 6, 1);
-        rhi_CmdDraw(cl, 6, Q_Z75 * 6, 1);
-        rhi_CmdDraw(cl, 6, Q_Z75_EQ * 6, 1);
+        rhi_cmd_set_pipeline(cl, pDepth);
+        rhi_cmd_draw(cl, 6, Q_Z50 * 6, 1);
+        rhi_cmd_draw(cl, 6, Q_Z25 * 6, 1);
+        rhi_cmd_draw(cl, 6, Q_Z75 * 6, 1);
+        rhi_cmd_draw(cl, 6, Q_Z75_EQ * 6, 1);
 
-        rhi_CmdSetPipeline(cl, pMask);
-        rhi_CmdDraw(cl, 6, Q_MASK * 6, 1);
+        rhi_cmd_set_pipeline(cl, pMask);
+        rhi_cmd_draw(cl, 6, Q_MASK * 6, 1);
 
-        rhi_CmdSetPipeline(cl, pTex);
-        rhi_CmdSetBindGroup(cl, 2, g2);
-        rhi_CmdSetVertexBuffer(cl, 0, ring, offTexVerts);
-        rhi_CmdSetIndexBuffer(cl, ring, offIdx, false);
-        rhi_CmdDrawIndexed(cl, 6, 0, 0, 1);
-        rhi_CmdEndRenderPass(cl);
-        rhi_CmdEndLabel(cl);
+        rhi_cmd_set_pipeline(cl, pTex);
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, offTexVerts);
+        rhi_cmd_set_index_buffer(cl, ring, offIdx, false);
+        rhi_cmd_draw_indexed(cl, 6, 0, 0, 1);
+        rhi_cmd_end_render_pass(cl);
+        rhi_cmd_end_label(cl);
 
         RhiRenderPassDesc up2 = {0};
         up2.color[0] =
@@ -706,12 +707,12 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         up2.colorCount = 1;
         up2.width = 4;
         up2.height = 4;
-        rhi_CmdBeginRenderPass(cl, &up2);
-        rhi_CmdSetPipeline(cl, pUint);
-        rhi_CmdSetBindGroupOffsets(cl, 0, g0, &cbOff[2], 1);
-        rhi_CmdSetVertexBuffer(cl, 0, vbuf, 0);
-        rhi_CmdDraw(cl, 6, Q_UINT * 6, 1);
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_begin_render_pass(cl, &up2);
+        rhi_cmd_set_pipeline(cl, pUint);
+        rhi_cmd_set_bind_group_offsets(cl, 0, g0, &cbOff[2], 1);
+        rhi_cmd_set_vertex_buffer(cl, 0, vbuf, 0);
+        rhi_cmd_draw(cl, 6, Q_UINT * 6, 1);
+        rhi_cmd_end_render_pass(cl);
 
         RhiTextureBarrier post[4] = {
             {scene, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
@@ -719,16 +720,16 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
             {utex, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
             {r8b, RHI_STATE_COPY_DST, RHI_STATE_COPY_SRC},
         };
-        rhi_CmdBarrier(cl, post, 4);
-        rhi_EndCommands(cl);
-        rhi_Submit(cl);
+        rhi_cmd_barrier(cl, post, 4);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
 
         /* --- checks --- */
         static uint8_t img[W * H * 4];
         uint32_t pitch = 0;
-        if (!rhi_ReadbackTexture(scene, RHI_ASPECT_COLOR, img, sizeof(img), &pitch) ||
+        if (!rhi_readback_texture(scene, RHI_ASPECT_COLOR, img, sizeof(img), &pitch) ||
             pitch != W * 4) {
-            rhi_test_Log("FAIL scene readback\n");
+            rhi_test_log("FAIL scene readback\n");
             failures++;
             break;
         }
@@ -757,13 +758,13 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         static float dep[W * H];
         if (!lim->depthReadback) {
             /* package AN-F: D24S8 gives no float depth; the readback must fail cleanly */
-            if (rhi_ReadbackTexture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch)) {
-                rhi_test_Log("FAIL depth readback succeeded without depthReadback\n");
+            if (rhi_readback_texture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch)) {
+                rhi_test_log("FAIL depth readback succeeded without depthReadback\n");
                 failures++;
             }
-        } else if (!rhi_ReadbackTexture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch) ||
+        } else if (!rhi_readback_texture(depth, RHI_ASPECT_DEPTH, dep, sizeof(dep), &pitch) ||
                    pitch != W * 4) {
-            rhi_test_Log("FAIL depth readback\n");
+            rhi_test_log("FAIL depth readback\n");
             failures++;
             break;
         } else {
@@ -772,7 +773,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                     int cell = (y / CELL) * 4 + x / CELL;
                     float want = cell == 4 ? 0.75f : 0.0f;
                     if (dep[y * W + x] != want) {
-                        rhi_test_Log("FAIL frame %d depth (%d,%d) = %.9g, expected %.9g\n", frame,
+                        rhi_test_log("FAIL frame %d depth (%d,%d) = %.9g, expected %.9g\n", frame,
                                      x, y, (double)dep[y * W + x], (double)want);
                         failures++;
                         y = H;
@@ -783,8 +784,8 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         }
 
         uint8_t u[4 * 4 * 4];
-        if (!rhi_ReadbackTexture(utex, RHI_ASPECT_COLOR, u, sizeof(u), &pitch) || pitch != 16) {
-            rhi_test_Log("FAIL uint readback\n");
+        if (!rhi_readback_texture(utex, RHI_ASPECT_COLOR, u, sizeof(u), &pitch) || pitch != 16) {
+            rhi_test_log("FAIL uint readback\n");
             failures++;
             break;
         }
@@ -799,8 +800,8 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
         }
 
         uint8_t r8[16];
-        if (!rhi_ReadbackTexture(r8b, RHI_ASPECT_COLOR, r8, sizeof(r8), &pitch) || pitch != 4) {
-            rhi_test_Log("FAIL r8 readback\n");
+        if (!rhi_readback_texture(r8b, RHI_ASPECT_COLOR, r8, sizeof(r8), &pitch) || pitch != 4) {
+            rhi_test_log("FAIL r8 readback\n");
             failures++;
             break;
         }
@@ -813,7 +814,7 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                 }
                 uint8_t want = (uint8_t)((sy * 4 + sx) * 16 + 1);
                 if (r8[y * 4 + x] != want) {
-                    rhi_test_Log("FAIL frame %d r8 (%d,%d) = %u, expected %u\n", frame, x, y,
+                    rhi_test_log("FAIL frame %d r8 (%d,%d) = %u, expected %u\n", frame, x, y,
                                  r8[y * 4 + x], want);
                     failures++;
                 }
@@ -825,30 +826,30 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
     }
 
     if (!failures) {
-        rhi_WaitFrame();
+        rhi_wait_frame();
         bcCell(&c);
     }
 
     /* destroys are deferred; the frames in flight retire them */
-    rhi_DestroyPipeline(pUint);
-    rhi_DestroyTexture(r8b);
-    rhi_DestroyBuffer(vbuf);
-    rhi_DestroySampler(smp);
-    rhi_DestroyShader(c.psUint);
-    rhi_WaitFrame();
-    rhi_WaitFrame();
-    rhi_WaitIdle();
-    rhi_Shutdown();
+    rhi_destroy_pipeline(pUint);
+    rhi_destroy_texture(r8b);
+    rhi_destroy_buffer(vbuf);
+    rhi_destroy_sampler(smp);
+    rhi_destroy_shader(c.psUint);
+    rhi_wait_frame();
+    rhi_wait_frame();
+    rhi_wait_idle();
+    rhi_shutdown();
 
     uint32_t verr = cfg->validationErrors ? cfg->validationErrors() : 0u;
     if (verr) {
-        rhi_test_Log("FAIL %u validation error(s)\n", verr);
+        rhi_test_log("FAIL %u validation error(s)\n", verr);
         failures++;
     }
     if (failures) {
-        rhi_test_Log("%s: %d failure(s)\n", s_label, failures);
+        rhi_test_log("%s: %d failure(s)\n", s_label, failures);
         return 1;
     }
-    rhi_test_Log("%s: all checks passed\n", s_label);
+    rhi_test_log("%s: all checks passed\n", s_label);
     return 0;
 }

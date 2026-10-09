@@ -8,7 +8,7 @@
  * (common/src/layout_texture.c): the cursor moves on the rows' item links,
  * the selected row glows, Cross on a row with a right link opens that
  * layout, and the backdrop, fades and sounds are the game's.  The values are
- * port rows whose text is set with lt_ext_SetText from the screens' procs.
+ * port rows whose text is set with lt_ext_set_text from the screens' procs.
  *
  * Entry: the pause menu's Options row (294, layout 57) opens the main page
  * (its right link repointed; the game's Options screen, layout 58, is no
@@ -16,7 +16,7 @@
  * Settings menu's entry) is chained after both title menus (12 "Continue / New
  * Game", 13 "New Game"), each in a one-row port layout on the game layout's
  * link chain; the game rows around it are repointed onto it
- * (ui_SettingsInstall):
+ * (ui_settings_install):
  *   Pause 57:    294.right -> the main page; "Photo mode" under Options
  *                (a port row in a port layout chained after 57, Back 295
  *                one pitch lower while it shows)
@@ -42,28 +42,28 @@ extern "C" {
 
 /* init_layout_texture (ICO_HOST): builds the port layouts the first time
    and (re)points the game's rows at the entry rows.  Idempotent. */
-void ui_SettingsInstall(void);
+void ui_settings_install(void);
 /* Whether item is one of the entry rows, the title's "Quit to desktop" rows
    included (the title procs leave Cross and START on them to
    default_item_select). */
-int ui_SettingsEntryItem(int item);
+int ui_settings_entry_item(int item);
 /* The title procs: masked while their own rows are (the card check). */
-void ui_SettingsTitleMask(int masked);
+void ui_settings_title_mask(int masked);
 /* Leaving Character Customization, the title runs unseen
    until its card check has decided, then Options opens on page
-   (ui_SettingsReopenPage).  TitleReturn(page) arms it, TitleReturn(-1)
+   (ui_settings_reopen_page).  TitleReturn(page) arms it, TitleReturn(-1)
    cancels; while armed every row of the title's layouts is masked and
    confirms are blocked (TitleMask, EntryItem), the logo is hidden
    (CoversTitle).  Decided: the procs' last TitleMask said the check is
    done.  ReopenPage ends the pending state. */
-void ui_SettingsTitleReturn(int page /* UiSettingsPage or -1 */);
+void ui_settings_title_return(int page /* UiSettingsPage or -1 */);
 /* whether a TitleReturn is armed (tests) */
-int ui_SettingsTitleReturnPending(void);
-int ui_SettingsTitleDecided(void);
+int ui_settings_title_return_pending(void);
+int ui_settings_title_decided(void);
 /* A Settings page opened from the title is the current layout (Extras and
    its Music page, Achievements and the remap list among them); not from
    the pause menu (port/game/title_logo.c hides the title's logo under it). */
-int ui_SettingsCoversTitle(void);
+int ui_settings_covers_title(void);
 
 /* The New Game screen: la_vibe_select (common/src/layout_action.c)
    switches to it after the vibration choice.  Two rows, Mirror mode (row
@@ -75,16 +75,16 @@ int ui_SettingsCoversTitle(void);
    the cursor on Mirror mode's "Off" and the run's value reset
    (ico_opt_mirror_reset), -1 when the menu is not built (the caller then
    starts the game as the original did). */
-int ui_NewGameScreenEnter(void);
-int ui_NewGameScreenLayout(void);
+int ui_new_game_screen_enter(void);
+int ui_new_game_screen_layout(void);
 /* row 0 (Mirror mode) or 1 (New Game+): the "Off" (on = 0) and "On"
    (on = 1) items; -1 for a row the screen does not have (tests) */
-int ui_NewGameScreenRow(int row, int on);
+int ui_new_game_screen_row(int row, int on);
 
 /* "Quit to desktop": a port row under the title's Options row (layouts 12 and 13, in the same
    chained entry layout) whose Cross opens a confirmation screen, "Quit to
    desktop?" with Yes and No (the cursor on No).  Cross on Yes writes what
-   the Settings menu has not saved yet (ui_SettingsSave) and calls the quit
+   the Settings menu has not saved yet (ui_settings_save) and calls the quit
    handler once; Cross on No, Triangle or Circle return to the title with
    the cursor on the row.  The window build's handler (ui_host.c) posts
    SDL_EVENT_QUIT, so the program ends through the path closing the window
@@ -92,35 +92,35 @@ int ui_NewGameScreenRow(int row, int on);
    the achievements, stop the audio and close the window).  Without a
    handler (the headless build) the request calls exit(0), which runs the
    same atexit handlers.  NULL restores that. */
-void ui_SettingsSetQuitHandler(void (*fn)(void));
+void ui_settings_set_quit_handler(void (*fn)(void));
 /* The Window mode row shows, and steps from, fn's answer (an ICO_WINDOW_*
    value: windowed, borderless or fullscreen) instead of the option when one
    is installed; the window host installs it so the row follows Alt+Enter and
    the window manager.  NULL removes it (headless, tests). */
-void ui_SettingsSetWindowModeQuery(int (*fn)(void));
-/* Display > Texture pack reads fn (texpack_Count, the replacements
+void ui_settings_set_window_mode_query(int (*fn)(void));
+/* Display > Texture pack reads fn (texpack_count, the replacements
    found at start) to tell an installed pack from none ("None installed",
    the row then does not step); NULL, or none installed, is none. */
-void ui_SettingsSetTexturePackCount(int (*fn)(void));
-/* Likewise the number of replacement models found (modelpack_Count): the
+void ui_settings_set_texture_pack_count(int (*fn)(void));
+/* Likewise the number of replacement models found (modelpack_count): the
    Model pack row reads "None installed" and does not step while it is 0 or
    no hook is set. */
-void ui_SettingsSetModelPackCount(int (*fn)(void));
+void ui_settings_set_model_pack_count(int (*fn)(void));
 
 /* Settings > Controls shows the touch overlay's rows (Touch
    controls, Touch size, Touch opacity) only while fn reports a touch screen
    (input_sdl.h ico_input_sdl_touch_present); NULL, or 0, hides them. */
-void ui_SettingsSetTouchQuery(int (*fn)(void));
+void ui_settings_set_touch_query(int (*fn)(void));
 
 /* The Android build's title Quit row and its confirmation
    read "Quit game" / "Quit the game?" while fn returns 1 (the phone's app is
    not a desktop program); no hook, or 0, keeps "Quit to desktop".  Asked
    when the menu is built, and again when fn is installed afterwards. */
-void ui_SettingsSetQuitIsGame(int (*fn)(void));
+void ui_settings_set_quit_is_game(int (*fn)(void));
 
 /* Settings > Graphics driver (Android).  The page and its
    link on the main page (after Effects) exist only while a host is installed
-   (ui_SettingsSetGpuDriverHost); port/ui knows nothing of the platform, the
+   (ui_settings_set_gpu_driver_host); port/ui knows nothing of the platform, the
    host (window_host.c) answers for it.  Indices run 0..count()-1 over the
    installed drivers, sorted as the host likes; -1 means the phone's own
    (built-in) driver.  Every pointer must be set.  The strings returned stay
@@ -146,11 +146,11 @@ typedef struct UiGpuDriverHost {
 } UiGpuDriverHost;
 
 /* NULL (or never called) hides the link and the page. The struct is copied. */
-void ui_SettingsSetGpuDriverHost(const UiGpuDriverHost *host);
+void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host);
 /* Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
-void ui_SettingsSetModelsHandler(int (*fn)(void));
+void ui_settings_set_models_handler(int (*fn)(void));
 
 /* Extras > Characters from the title runs inside the model viewer
    (port/game/model_viewer.c ico_mv_characters_*): the page's rows on the
@@ -166,7 +166,7 @@ void ui_SettingsSetModelsHandler(int (*fn)(void));
                Options page: the pause menu)
      switchTo  the Switch row and L1 / R1: load the other character
      leave     Triangle or Back: to the title, which then opens Settings
-               on Extras (ui_SettingsReopenPage) */
+               on Extras (ui_settings_reopen_page) */
 typedef struct UiCharactersHost {
     int (*enter)(void);
     int (*shown)(void);
@@ -174,28 +174,28 @@ typedef struct UiCharactersHost {
     void (*leave)(void);
 } UiCharactersHost;
 
-void ui_SettingsSetCharactersHost(const UiCharactersHost *host);
+void ui_settings_set_characters_host(const UiCharactersHost *host);
 /* whether the Characters page is the viewer's panel now (host->shown() is
    not -2) */
-int ui_SettingsCharactersInViewer(void);
+int ui_settings_characters_in_viewer(void);
 /* The way back from the viewer's Characters: the menu opened again
    as if from the title layout in force (current_layout_id, 12 or 13), its
    pages' cursors on the path Main > ... > page (Main on Extras, Extras on
    its Characters row); returns the page's layout to switch to, -1 when
    the menu is not built or the current layout is not a title's. */
-int ui_SettingsReopenPage(int page /* UiSettingsPage */);
+int ui_settings_reopen_page(int page /* UiSettingsPage */);
 /* the quit confirmation's layout (tests) */
-int ui_QuitScreenLayout(void);
+int ui_quit_screen_layout(void);
 /* the "Yes" (yes = 1) and "No" (yes = 0) rows (tests) */
-int ui_QuitScreenRow(int yes);
+int ui_quit_screen_row(int yes);
 /* the title's "Quit to desktop" row of layout 12 or 13, -1 otherwise
    (tests) */
-int ui_SettingsQuitRow(int gameLayout);
+int ui_settings_quit_row(int gameLayout);
 
 /* Circle in the menus: every port screen (the Settings pages, the lists,
    the mirror and quit screens) takes Circle as Triangle, always; the game's
    own menus do while [game] circle_back is on (port/ui/layout_ext.h
-   lt_ext_BackButtons, Settings > Controls). */
+   lt_ext_back_buttons, Settings > Controls). */
 
 /* --- the pages, the options and the calls on them -------------------------
    Some of these are production calls (model_viewer.c, main_host.c,
@@ -316,47 +316,47 @@ typedef enum UiSettingsOpt {
     UI_OPT_GPU_REMOVE
 } UiSettingsOpt;
 
-/* The entry rows and the menu's layouts (-1 before ui_SettingsInstall):
+/* The entry rows and the menu's layouts (-1 before ui_settings_install):
    for the pause menu (57) the game's Options row (294) and the port layout
    chained after 57 (the Photo mode row's); the title's (12, 13) port rows
    and their layouts (tests). */
-int ui_SettingsEntryRow(int gameLayout); /* 57, 12 or 13 */
-int ui_SettingsEntryLayout(int gameLayout);
+int ui_settings_entry_row(int gameLayout); /* 57, 12 or 13 */
+int ui_settings_entry_layout(int gameLayout);
 /* The pause menu's "Photo mode" row under Options (masked and stepped over
-   unless a stage runs, photo_ui.h ui_PhotoAvailable), -1 before the build
+   unless a stage runs, photo_ui.h ui_photo_available), -1 before the build
    (tests). */
-int ui_SettingsPhotoRow(void);
+int ui_settings_photo_row(void);
 /* photo_ui.c's way back: the pause menu (57) with the cursor on the row. */
-int ui_SettingsPhotoBack(void);
+int ui_settings_photo_back(void);
 /* la_key_config's OK: Settings > Controls with the cursor on Button
    configuration, or the game's Options screen (58) when the pause menu
    still opens it (before the build, or tables not the PAL ones). */
-int ui_SettingsKeyConfigBack(void);
-int ui_SettingsPageLayout(UiSettingsPage page);
+int ui_settings_key_config_back(void);
+int ui_settings_page_layout(UiSettingsPage page);
 /* A page's navigable rows in order: the label row of each, its option, its
    value row (-1 for none).  Returns the count (tests). */
-int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values, int max);
+int ui_settings_page_rows(UiSettingsPage page, int *labels, int *opts, int *values, int max);
 /* The row index of an option on a page, -1 if it has none. */
-int ui_SettingsRowOf(UiSettingsPage page, UiSettingsOpt opt);
+int ui_settings_row_of(UiSettingsPage page, UiSettingsOpt opt);
 /* the note row under a page's option, -1 for none (tests) */
-int ui_SettingsNoteRowOf(UiSettingsPage page, UiSettingsOpt opt);
+int ui_settings_note_row_of(UiSettingsPage page, UiSettingsOpt opt);
 /* The value text an option shows now (tests). */
-const char *ui_SettingsValueText(UiSettingsOpt opt);
+const char *ui_settings_value_text(UiSettingsOpt opt);
 /* Steps an option by dir (-1 left, +1 right) through its setter, as a
    left/right press on its row does (tests). */
-void ui_SettingsStep(UiSettingsOpt opt, int dir);
+void ui_settings_step(UiSettingsOpt opt, int dir);
 /* Writes what changed (ico_video_save, ico_input_write_bindings,
    ico_config_save), as leaving a screen does.  0, or -1. */
-int ui_SettingsSave(void);
+int ui_settings_save(void);
 /* What is still unwritten when the game closes (Escape, the
-   window's close button, the title's Quit to desktop): ui_SettingsSave's
+   window's close button, the title's Quit to desktop): ui_settings_save's
    pending pages, then any setting changed outside them (ico_config_dirty),
    so a change made on a page the player never left (Characters inside the
    model viewer, the pause menu's pages) is in the file at the next start.
    Logged when anything was pending.  0, or -1. */
-int ui_SettingsSaveOnQuit(void);
-/* Forgets the layouts (tests: lt_ext_Reset first). */
-void ui_SettingsReset(void);
+int ui_settings_save_on_quit(void);
+/* Forgets the layouts (tests: lt_ext_reset first). */
+void ui_settings_reset(void);
 
 /* The remap screen's capture: Cross on a target row starts it, the next
    press of a key, mouse button or gamepad source (ico_input_last_press) is
@@ -374,14 +374,14 @@ typedef struct UiRemapCapture {
 
 enum { UI_CAPTURE_IDLE = 0, UI_CAPTURE_WAITING, UI_CAPTURE_BOUND, UI_CAPTURE_TIMEOUT };
 
-void ui_RemapCaptureStart(UiRemapCapture *c, int target);
+void ui_remap_capture_start(UiRemapCapture *c, int target);
 /* Whether the remap screen is waiting for a press (or in the
    few ticks after one), when the mouse pointer leaves the menu alone so a
    click is bound rather than chosen (port/ui/ui_mouse.c) */
-int ui_SettingsCapturing(void);
+int ui_settings_capturing(void);
 /* One Main tick: UI_CAPTURE_WAITING, UI_CAPTURE_BOUND (b changed),
    UI_CAPTURE_TIMEOUT, or UI_CAPTURE_IDLE when not active. */
-int ui_RemapCaptureStep(UiRemapCapture *c, void *bindings /* IcoBindings */);
+int ui_remap_capture_step(UiRemapCapture *c, void *bindings /* IcoBindings */);
 
 #ifdef __cplusplus
 }

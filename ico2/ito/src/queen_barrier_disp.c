@@ -87,12 +87,12 @@ static void barrierHostBlock(int tbp, int begin)
 {
     gif_HostFlush();
     if (begin) {
-        barrierHostAlias = rd_GsNamedBlock((unsigned int)tbp, 512, 256);
+        barrierHostAlias = rd_gs_named_block((unsigned int)tbp, 512, 256);
         if (barrierHostAlias.id != 0) {
-            rd_AliasTarget(barrierHostAlias, rd_BlockTarget((unsigned int)tbp, 512, 256, 0));
+            rd_alias_target(barrierHostAlias, rd_block_target((unsigned int)tbp, 512, 256, 0));
         }
     } else if (barrierHostAlias.id != 0) {
-        rd_AliasTarget(barrierHostAlias, (RdTarget){0});
+        rd_alias_target(barrierHostAlias, (RdTarget){0});
         barrierHostAlias.id = 0;
     }
 }

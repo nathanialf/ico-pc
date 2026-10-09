@@ -6,7 +6,7 @@
 #   ico_rhi_d3d12   the D3D12 backend (option ICO_RHI_D3D12, default ON for
 #                   64-bit Windows: the win-x64 and win-x64-clang presets)
 #   ico_rhi         rhi_backend.c, the rhi.h entry points forwarded to the
-#                   backend rhi_CreateBackend selects; links the backends
+#                   backend rhi_create_backend selects; links the backends
 #   ico_rhi_vk      what port/render and the shader tests link (the name
 #                   predates the second backend): ico_rhi
 # Each backend is compiled with RHI_BACKEND_PREFIX (rhi_backend_names.h).
@@ -15,7 +15,7 @@
 # Vulkan-Headers and volk (the backend loads libvulkan / vulkan-1.dll at run
 # time, so nothing links against a Vulkan import library) and SDL3 for the
 # window surface. Without the Vulkan pieces the Vulkan backend is left out;
-# without SDL3 the backends are built headless-only (rhi_Init with a window
+# without SDL3 the backends are built headless-only (rhi_init with a window
 # fails). The D3D12 backend uses the mingw-w64 toolchain's own d3d12.h,
 # dxgi1_6.h and libdxguid.a, and loads d3d12.dll and dxgi.dll at run time.
 

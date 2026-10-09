@@ -88,14 +88,14 @@ static int ltHostSelectDisabled;
 
 /* Phase 6, 6C: the Settings menu's port layouts and the game rows that lead
    to them (port/ui/settings.h), built once the tables are loaded */
-void ui_SettingsInstall(void);
+void ui_settings_install(void);
 
-#define LT_LAYOUT(i) (*lt_ext_Layout(i))
-#define LT_PROP(i) (*lt_ext_Prop(i))
+#define LT_LAYOUT(i) (*lt_ext_layout(i))
+#define LT_PROP(i) (*lt_ext_prop(i))
 /* PC port (Q2): Triangle follows the selected row's left link back; with
-   [game] circle_back on, Circle does too (layout_ext.h lt_ext_BackButtons;
+   [game] circle_back on, Circle does too (layout_ext.h lt_ext_back_buttons;
    0x10 alone when it is off) */
-#define LT_BACK_BUTTONS lt_ext_BackButtons()
+#define LT_BACK_BUTTONS lt_ext_back_buttons()
 
 static void default_item_select(int no);
 
@@ -116,9 +116,9 @@ static const SprRect primarySpriteRect = {-5120, -1808, 10240, 3616}; /* derived
 /* PC port (renderer wave 7, R7a): the primary sprite is a full-screen
    backdrop, so a widescreen presentation stretches it across the width
    instead of keeping it in the centred 4:3 box with the rest of the layout
-   (rd.h rd_SetSpaceOverride, RD_SPACE_FULLSCREEN = 2; GifHost.h
+   (rd.h rd_set_space_override, RD_SPACE_FULLSCREEN = 2; GifHost.h
    gif_HostFlush emits what the decoder holds on either side). */
-extern int rd_SetSpaceOverride(int space);
+extern int rd_set_space_override(int space);
 extern void gif_HostFlush(void);
 /* renderer R7d: GifHost.h's key of the decoder's primitives, so the
    presenter matches a row's sprites between ticks by the row (its
@@ -474,8 +474,8 @@ static inline void lt_glow_sprite(SprRect *box, SprRect *ofs, int r, int g, int 
     rr.h = rr.h + s * dy * 2;
     gif_SetAlpha(1, 5, 0);
     if (ltHostTextRow != 0) {
-        lt_ext_DrawTextRow(ltHostTextRow, (const int *)&rr, (const int *)ofs,
-                           (const unsigned char *)&c, 1);
+        lt_ext_draw_text_row(ltHostTextRow, (const int *)&rr, (const int *)ofs,
+                             (const unsigned char *)&c, 1);
         return;
     }
     gif_SpriteSensitiveOffset(&rr, 0xFFFFFF9B, ofs, &c, 1);
@@ -498,7 +498,7 @@ static void display_texture(int no, LtProperty *e)
        with no cursor of its own (the Settings entry rows after the Options
        and title rows) is selected and dimmed by the current layout's
        cursor, which the item links move onto it */
-    int curNo = lt_ext_IsPortProp(e) && LT_LAYOUT(no).curItem < 0 ? current_layout_id : no;
+    int curNo = lt_ext_is_port_prop(e) && LT_LAYOUT(no).curItem < 0 ? current_layout_id : no;
 #define LT_CUR_NO curNo
 
     ofs.x = (e->texU << 4) + 8;
@@ -548,13 +548,13 @@ static void display_texture(int no, LtProperty *e)
            v0.4.2: a game row of the menu text table is drawn the same way
            as text, its texture still transferred so the VRAM and packets
            are the texture path's */
-        ltHostTextRow = lt_ext_IsTextRow(e) ? e : 0;
-        if (!lt_ext_IsPortProp(e))
+        ltHostTextRow = lt_ext_is_text_row(e) ? e : 0;
+        if (!lt_ext_is_port_prop(e))
             tex_TransTexture(e->texNo, 11);
         else if (ltHostTextRow == 0)
             /* a port glyph row: a game texture (layout_ext.h, the button
                glyphs), drawn as the game's own rows are */
-            tex_TransTexture(lt_ext_GlyphTexNo(e), 11);
+            tex_TransTexture(lt_ext_glyph_tex_no(e), 11);
 
         gif_StartPacketPri(11);
         gif_SetZTest(0);
@@ -601,8 +601,8 @@ static void display_texture(int no, LtProperty *e)
         }
         LT_HOST_KEY(e, 0);
         if (ltHostTextRow != 0) {
-            lt_ext_DrawTextRow(e, (const int *)&box, (const int *)&ofs,
-                               (const unsigned char *)&u.col, 0);
+            lt_ext_draw_text_row(e, (const int *)&box, (const int *)&ofs,
+                                 (const unsigned char *)&u.col, 0);
         } else
             gif_SpriteSensitiveOffset(&box, 0xFFFFFF9B, &ofs, &u.col, 1);
         LT_HOST_KEY(e, 1); /* the glow sprites */
@@ -637,14 +637,14 @@ static inline void lt_draw_primary_sprite(SprCol *col) /* derived name */
     r = primarySpriteRect;
 #ifdef ICO_RD
     gif_HostFlush();
-    space = rd_SetSpaceOverride(2);
+    space = rd_set_space_override(2);
 #endif
     LT_HOST_KEY(&primarySpriteRect, 0);
     gif_SpriteSensitive(&r, 0xFFFFFFFF, (void *)0, col, 1);
     LT_HOST_KEY(0, 0);
 #ifdef ICO_RD
     gif_HostFlush();
-    rd_SetSpaceOverride(space);
+    rd_set_space_override(space);
 #endif
     gif_SetZWrite(1);
     gif_SetZTest(1);
@@ -867,7 +867,7 @@ static inline void lt_init_stage_textures(int stage) /* derived name */
 
 void init_layout_texture(int stage)
 {
-    ui_SettingsInstall();
+    ui_settings_install();
     fadeCallback = 0;
     if (stage == 1) {
         gflagInit();

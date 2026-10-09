@@ -17,7 +17,7 @@
  * the movies.
  *
  * Mirror: drawn unmirrored unless the renderer's mirror mode is on
- * (rd.h rd_SetMirror); the films always follow it.
+ * (rd.h rd_set_mirror); the films always follow it.
  */
 #ifndef ICO_PORT_FMV_RD_VIDEO_H
 #define ICO_PORT_FMV_RD_VIDEO_H
@@ -31,24 +31,24 @@ extern "C" {
 
 /* The PS2 display area the pictures are placed in (movie_init's imageW x
    imageH: 720 x 576 PAL, 720 x 480 NTSC). */
-void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH);
+void rd_video_set_display(uint32_t dispW, uint32_t dispH);
 /* Shows one decoded picture: 8-bit Y (w x h), Cb and Cr ((w+1)/2 x (h+1)/2),
    pitch[0..2] bytes per row.  Uploads, converts and presents at once.
    Returns 0, or -1 without a device. */
-int rd_VideoFrame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
-                  uint32_t w, uint32_t h);
-/* The pictures rd_VideoFrame put on screen since the program started, and
+int rd_video_frame(const uint8_t *y, const uint8_t *u, const uint8_t *v, const uint32_t pitch[3],
+                   uint32_t w, uint32_t h);
+/* The pictures rd_video_frame put on screen since the program started, and
    in *failed (may be NULL) the ones it could not (no device, no swapchain
    image).  The window's 10 s statistics line and movie_proc's summary take
    differences: the only record in a player's log that a movie reached the
    screen, since its presents are not the game's frames. */
-uint32_t rd_VideoPresents(uint32_t *failed);
+uint32_t rd_video_presents(uint32_t *failed);
 /* Shows the display area filled with one colour (mv_disp.c's dispClear;
    GS RGBA, alpha ignored). */
-int rd_VideoClear(const uint8_t rgba[4]);
-/* Releases the FMV's GPU objects; call before rd_Shutdown (tests; the
+int rd_video_clear(const uint8_t rgba[4]);
+/* Releases the FMV's GPU objects; call before rd_shutdown (tests; the
    program leaves them to the device's teardown at exit). */
-void rd_VideoShutdown(void);
+void rd_video_shutdown(void);
 
 #ifdef __cplusplus
 }

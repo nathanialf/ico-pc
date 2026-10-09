@@ -5,7 +5,7 @@
  *
  *   F12   the frame shown: an rd dump of the last closed frame and a PNG of
  *         the picture, <pref>/dumps/frame-<time>-v<vsync>.rddump and .png,
- *         both paths logged (window_host.c, rd_DumpOnDemand)
+ *         both paths logged (window_host.c, rd_dump_on_demand)
  *   F11   the window: stats lines every second for 30 s instead of every
  *         10 s; again turns it off
  *

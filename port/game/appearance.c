@@ -625,8 +625,8 @@ int ico_appearance_recolour(const char *texName, const void *clut, unsigned int 
     }
     memcpy(o, in, (size_t)colors * 4);
     for (pos = 0; pos < colors; pos++) {
-        /* rdtex_Csm1Index is its own inverse: memory position -> index */
-        unsigned int idx = rdtex_Csm1Index(pos, colors);
+        /* rdtex_csm1_index is its own inverse: memory position -> index */
+        unsigned int idx = rdtex_csm1_index(pos, colors);
         const unsigned char *c = in + pos * 4;
         double orig[3];
         double mix[3] = {0.0, 0.0, 0.0};

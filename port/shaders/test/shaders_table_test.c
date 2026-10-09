@@ -62,7 +62,7 @@ int main(void)
             printf("FAIL %s: stage\n", b->name);
             failures++;
         }
-        if (!b->entry || !b->entry[0] || ico_FindShader(b->name) != b) {
+        if (!b->entry || !b->entry[0] || ico_find_shader(b->name) != b) {
             printf("FAIL %s: entry or lookup\n", b->name);
             failures++;
         }
@@ -77,14 +77,14 @@ int main(void)
                b->dxil_len);
     }
     for (unsigned i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
-        if (!ico_FindShader(expected[i])) {
+        if (!ico_find_shader(expected[i])) {
             printf("FAIL %s: not in the table\n", expected[i]);
             failures++;
         }
     }
     const size_t nNoDual = sizeof(expectedNoDual) / sizeof(expectedNoDual[0]);
     for (size_t i = 0; i < nNoDual; i++) {
-        if (!ico_FindShader(expectedNoDual[i])) {
+        if (!ico_find_shader(expectedNoDual[i])) {
             printf("FAIL %s: not in the table\n", expectedNoDual[i]);
             failures++;
         }

@@ -6,12 +6,12 @@
 #include <string.h>
 
 /* ------------------------------------------------------ deferred destroy */
-void dx_Defer(IUnknown *obj)
+void dx_defer(IUnknown *obj)
 {
     if (!obj) {
         return;
     }
-    DxFrame *f = dx_CurFrame();
+    DxFrame *f = dx_cur_frame();
     if (f->garbageCount == f->garbageCap) {
         uint32_t cap = f->garbageCap ? f->garbageCap * 2u : 64u;
         IUnknown **g = realloc(f->garbage, cap * sizeof(*g));
@@ -23,7 +23,7 @@ void dx_Defer(IUnknown *obj)
             if (g_dx.overflowCount == DX_GARBAGE_OVERFLOW) {
                 /* full: the other slots' entries are free after the GPU idles */
                 DX_LOG("out of memory for deferred destroys; waiting idle");
-                dx_WaitFence(dx_Signal());
+                dx_wait_fence(dx_signal());
                 uint32_t keep = 0;
                 for (uint32_t i = 0; i < g_dx.overflowCount; i++) {
                     DxGarbageOverflow *e = &g_dx.overflow[i];
@@ -52,13 +52,13 @@ void dx_Defer(IUnknown *obj)
     f->garbage[f->garbageCount++] = obj;
 }
 
-void dx_DestroyGarbage(DxFrame *f)
+void dx_destroy_garbage(DxFrame *f)
 {
     for (uint32_t i = 0; i < f->garbageCount; i++) {
         IUnknown_Release(f->garbage[i]);
     }
     f->garbageCount = 0;
-    /* the objects that overflowed from this slot (dx_Defer) */
+    /* the objects that overflowed from this slot (dx_defer) */
     const uint32_t slot = (uint32_t)(f - g_dx.frames);
     uint32_t keep = 0;
     for (uint32_t i = 0; i < g_dx.overflowCount; i++) {
@@ -72,7 +72,7 @@ void dx_DestroyGarbage(DxFrame *f)
     g_dx.overflowCount = keep;
 }
 
-void dx_SetName(ID3D12Object *o, const char *name)
+void dx_set_name(ID3D12Object *o, const char *name)
 {
     if (!o || !name || !g_dx.debugLayer) {
         return;
@@ -84,19 +84,19 @@ void dx_SetName(ID3D12Object *o, const char *name)
 }
 
 /* --------------------------------------------------------------- buffers */
-DxBuffer *dx_GetBuffer(RhiBuffer b)
+DxBuffer *dx_get_buffer(RhiBuffer b)
 {
-    return d3dp_PoolGet(&g_dx.buffers, b.id);
+    return d3dp_pool_get(&g_dx.buffers, b.id);
 }
 
-RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
+RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
 {
     RhiBuffer out = {0};
     if (!desc || desc->size == 0) {
         return out;
     }
     DxBuffer *b = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.buffers, (void **)&b);
+    uint32_t id = d3dp_pool_alloc(&g_dx.buffers, (void **)&b);
     if (!id) {
         DX_LOG("buffer pool full");
         return out;
@@ -121,7 +121,7 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
     }
     /* a constant buffer view covers whole 256-byte blocks: round up so a
      * view at the end of the buffer stays inside it */
-    uint64_t size = d3dp_AlignUp(desc->size, 256u);
+    uint64_t size = d3dp_align_up(desc->size, 256u);
     D3D12_RESOURCE_DESC rd;
     memset(&rd, 0, sizeof(rd));
     rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -135,7 +135,7 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
     if (!DX_CHECK(ID3D12Device_CreateCommittedResource(g_dx.device, &hp, D3D12_HEAP_FLAG_NONE, &rd,
                                                        initial, NULL, &IID_ID3D12Resource,
                                                        (void **)&b->res))) {
-        d3dp_PoolRelease(&g_dx.buffers, id);
+        d3dp_pool_release(&g_dx.buffers, id);
         return out;
     }
     b->size = size;
@@ -149,42 +149,42 @@ RhiBuffer rhi_CreateBuffer(const RhiBufferDesc *desc)
             b->mapped = NULL;
         }
     }
-    dx_SetName((ID3D12Object *)b->res, desc->debugName);
+    dx_set_name((ID3D12Object *)b->res, desc->debugName);
     out.id = id;
     return out;
 }
 
-void rhi_DestroyBuffer(RhiBuffer h)
+void rhi_destroy_buffer(RhiBuffer h)
 {
-    DxBuffer *b = dx_GetBuffer(h);
+    DxBuffer *b = dx_get_buffer(h);
     if (!b) {
         return;
     }
-    dx_Defer((IUnknown *)b->res); /* releasing the resource unmaps it */
-    d3dp_PoolRelease(&g_dx.buffers, h.id);
+    dx_defer((IUnknown *)b->res); /* releasing the resource unmaps it */
+    d3dp_pool_release(&g_dx.buffers, h.id);
 }
 
-void *rhi_MapBuffer(RhiBuffer h)
+void *rhi_map_buffer(RhiBuffer h)
 {
-    DxBuffer *b = dx_GetBuffer(h);
+    DxBuffer *b = dx_get_buffer(h);
     return b ? b->mapped : NULL;
 }
 
-void rhi_UnmapBuffer(RhiBuffer h)
+void rhi_unmap_buffer(RhiBuffer h)
 {
     (void)h; /* persistently mapped; upload heaps are write-combined and coherent */
 }
 
 /* -------------------------------------------------------------- textures */
-DxTexture *dx_GetTexture(RhiTexture t)
+DxTexture *dx_get_texture(RhiTexture t)
 {
-    return d3dp_PoolGet(&g_dx.textures, t.id);
+    return d3dp_pool_get(&g_dx.textures, t.id);
 }
 
-static bool dx_CreateRtv(DxTexture *t, DXGI_FORMAT fmt)
+static bool dx_create_rtv(DxTexture *t, DXGI_FORMAT fmt)
 {
     uint32_t slot;
-    if (!d3dp_SlotsAlloc(&g_dx.rtvSlots, &slot)) {
+    if (!d3dp_slots_alloc(&g_dx.rtvSlots, &slot)) {
         DX_LOG("RTV heap full");
         return false;
     }
@@ -193,15 +193,15 @@ static bool dx_CreateRtv(DxTexture *t, DXGI_FORMAT fmt)
     v.Format = fmt;
     v.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
     ID3D12Device_CreateRenderTargetView(g_dx.device, t->res, &v,
-                                        dx_Cpu(g_dx.rtvCpu, g_dx.rtvInc, slot));
+                                        dx_cpu(g_dx.rtvCpu, g_dx.rtvInc, slot));
     t->rtv = slot + 1u;
     return true;
 }
 
-static bool dx_CreateDsv(DxTexture *t, const DxFormatMap *fm, bool readOnly)
+static bool dx_create_dsv(DxTexture *t, const DxFormatMap *fm, bool readOnly)
 {
     uint32_t slot;
-    if (!d3dp_SlotsAlloc(&g_dx.dsvSlots, &slot)) {
+    if (!d3dp_slots_alloc(&g_dx.dsvSlots, &slot)) {
         DX_LOG("DSV heap full");
         return false;
     }
@@ -216,7 +216,7 @@ static bool dx_CreateDsv(DxTexture *t, const DxFormatMap *fm, bool readOnly)
         }
     }
     ID3D12Device_CreateDepthStencilView(g_dx.device, t->res, &v,
-                                        dx_Cpu(g_dx.dsvCpu, g_dx.dsvInc, slot));
+                                        dx_cpu(g_dx.dsvCpu, g_dx.dsvInc, slot));
     if (readOnly) {
         t->dsvRO = slot + 1u;
     } else {
@@ -225,30 +225,30 @@ static bool dx_CreateDsv(DxTexture *t, const DxFormatMap *fm, bool readOnly)
     return true;
 }
 
-static void dx_FreeViews(DxTexture *t)
+static void dx_free_views(DxTexture *t)
 {
     /* RTV/DSV descriptors are read when a command is recorded, so their
      * slots can be reused at once (the resource itself is deferred) */
     if (t->rtv) {
-        d3dp_SlotsRelease(&g_dx.rtvSlots, t->rtv - 1u);
+        d3dp_slots_release(&g_dx.rtvSlots, t->rtv - 1u);
     }
     if (t->dsv) {
-        d3dp_SlotsRelease(&g_dx.dsvSlots, t->dsv - 1u);
+        d3dp_slots_release(&g_dx.dsvSlots, t->dsv - 1u);
     }
     if (t->dsvRO) {
-        d3dp_SlotsRelease(&g_dx.dsvSlots, t->dsvRO - 1u);
+        d3dp_slots_release(&g_dx.dsvSlots, t->dsvRO - 1u);
     }
     t->rtv = t->dsv = t->dsvRO = 0;
 }
 
-RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
+RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
     RhiTexture out = {0};
     if (!desc || desc->format <= RHI_FMT_UNKNOWN || desc->format >= RHI_FMT_COUNT ||
         desc->width == 0 || desc->height == 0) {
         return out;
     }
-    if (rhi_FormatIsBlock(desc->format) &&
+    if (rhi_format_is_block(desc->format) &&
         (!g_dx.limits.bcTextures ||
          (desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL)))) {
         /* texture packs: BC needs the device feature (RhiLimits.bcTextures)
@@ -257,7 +257,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     }
     const DxFormatMap *fm = &dx_formatMap[desc->format];
     DxTexture *t = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.textures, (void **)&t);
+    uint32_t id = d3dp_pool_alloc(&g_dx.textures, (void **)&t);
     if (!id) {
         DX_LOG("texture pool full");
         return out;
@@ -290,7 +290,7 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     if (!DX_CHECK(ID3D12Device_CreateCommittedResource(g_dx.device, &hp, D3D12_HEAP_FLAG_NONE, &rd,
                                                        D3D12_RESOURCE_STATE_COMMON, NULL,
                                                        &IID_ID3D12Resource, (void **)&t->res))) {
-        d3dp_PoolRelease(&g_dx.textures, id);
+        d3dp_pool_release(&g_dx.textures, id);
         return out;
     }
     t->rhiFormat = desc->format;
@@ -302,37 +302,37 @@ RhiTexture rhi_CreateTexture(const RhiTextureDesc *desc)
     t->state = D3DP_STATE_COMMON;
     bool ok = true;
     if (rd.Flags & D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET) {
-        ok = dx_CreateRtv(t, fm->view);
+        ok = dx_create_rtv(t, fm->view);
     }
     if (ok && (rd.Flags & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL)) {
-        ok = dx_CreateDsv(t, fm, false) && dx_CreateDsv(t, fm, true);
+        ok = dx_create_dsv(t, fm, false) && dx_create_dsv(t, fm, true);
     }
     if (!ok) {
-        dx_FreeViews(t);
+        dx_free_views(t);
         ID3D12Resource_Release(t->res);
-        d3dp_PoolRelease(&g_dx.textures, id);
+        d3dp_pool_release(&g_dx.textures, id);
         return out;
     }
-    dx_SetName((ID3D12Object *)t->res, desc->debugName);
+    dx_set_name((ID3D12Object *)t->res, desc->debugName);
     out.id = id;
     return out;
 }
 
-void rhi_DestroyTexture(RhiTexture h)
+void rhi_destroy_texture(RhiTexture h)
 {
-    DxTexture *t = dx_GetTexture(h);
+    DxTexture *t = dx_get_texture(h);
     if (!t || t->swapchain) {
         return;
     }
-    dx_FreeViews(t);
-    dx_Defer((IUnknown *)t->res);
-    d3dp_PoolRelease(&g_dx.textures, h.id);
+    dx_free_views(t);
+    dx_defer((IUnknown *)t->res);
+    d3dp_pool_release(&g_dx.textures, h.id);
 }
 
-uint32_t dx_RegisterSwapchainBuffer(ID3D12Resource *res, uint32_t w, uint32_t h)
+uint32_t dx_register_swapchain_buffer(ID3D12Resource *res, uint32_t w, uint32_t h)
 {
     DxTexture *t = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.textures, (void **)&t);
+    uint32_t id = d3dp_pool_alloc(&g_dx.textures, (void **)&t);
     if (!id) {
         return 0;
     }
@@ -345,38 +345,38 @@ uint32_t dx_RegisterSwapchainBuffer(ID3D12Resource *res, uint32_t w, uint32_t h)
     t->usage = RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST;
     t->state = D3DP_STATE_PRESENT;
     t->swapchain = true;
-    if (!dx_CreateRtv(t, DXGI_FORMAT_B8G8R8A8_UNORM)) {
-        d3dp_PoolRelease(&g_dx.textures, id);
+    if (!dx_create_rtv(t, DXGI_FORMAT_B8G8R8A8_UNORM)) {
+        d3dp_pool_release(&g_dx.textures, id);
         return 0;
     }
     return id;
 }
 
-void dx_ReleaseSwapchainBuffer(uint32_t id)
+void dx_release_swapchain_buffer(uint32_t id)
 {
     RhiTexture h = {id};
-    DxTexture *t = dx_GetTexture(h);
+    DxTexture *t = dx_get_texture(h);
     if (!t) {
         return;
     }
     /* called after the GPU is idle: release now (ResizeBuffers needs every
      * reference gone) */
-    dx_FreeViews(t);
+    dx_free_views(t);
     ID3D12Resource_Release(t->res);
-    d3dp_PoolRelease(&g_dx.textures, id);
+    d3dp_pool_release(&g_dx.textures, id);
 }
 
 /* -------------------------------------------------------------- samplers
  * Each sampler's descriptor lives in the persistent part of the sampler
  * heap, at its pool index; a single-sampler table points at it directly. */
-RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
+RhiSampler rhi_create_sampler(const RhiSamplerDesc *desc)
 {
     RhiSampler out = {0};
     if (!desc) {
         return out;
     }
     DxSampler *s = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.samplers, (void **)&s);
+    uint32_t id = d3dp_pool_alloc(&g_dx.samplers, (void **)&s);
     if (!id) {
         DX_LOG("sampler pool full (%u)", DX_SMP_PERSISTENT);
         return out;
@@ -406,18 +406,18 @@ RhiSampler rhi_CreateSampler(const RhiSamplerDesc *desc)
     d.MaxLOD = desc->maxLod;
     s->desc = d;
     s->heapIndex = (id & D3DP_INDEX_MASK) - 1u;
-    ID3D12Device_CreateSampler(g_dx.device, &d, dx_Cpu(g_dx.smpCpu, g_dx.smpInc, s->heapIndex));
+    ID3D12Device_CreateSampler(g_dx.device, &d, dx_cpu(g_dx.smpCpu, g_dx.smpInc, s->heapIndex));
     out.id = id;
     return out;
 }
 
-void rhi_DestroySampler(RhiSampler h)
+void rhi_destroy_sampler(RhiSampler h)
 {
     /* A bind group of a frame in flight may still point at the persistent
      * descriptor, so the pool slot (and with it the descriptor) is released
-     * only when the current frame slot is recycled (dx_RecycleFrame). */
-    DxSampler *s = d3dp_PoolGet(&g_dx.samplers, h.id);
-    DxFrame *f = dx_CurFrame();
+     * only when the current frame slot is recycled (dx_recycle_frame). */
+    DxSampler *s = d3dp_pool_get(&g_dx.samplers, h.id);
+    DxFrame *f = dx_cur_frame();
     if (!s || s->dead || f->deadSamplerCount >= DX_SMP_PERSISTENT) {
         return;
     }
@@ -426,22 +426,22 @@ void rhi_DestroySampler(RhiSampler h)
 }
 
 /* --------------------------------------------------------------- shaders */
-RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
+RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RhiShader out = {0};
-    if (!desc || !desc->bytecode || !d3dp_IsDxbc(desc->bytecode, desc->bytecodeSize)) {
+    if (!desc || !desc->bytecode || !d3dp_is_dxbc(desc->bytecode, desc->bytecodeSize)) {
         DX_LOG("shader %s is not a DXIL (DXBC) container",
                desc && desc->debugName ? desc->debugName : "?");
         return out;
     }
     DxShader *s = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.shaders, (void **)&s);
+    uint32_t id = d3dp_pool_alloc(&g_dx.shaders, (void **)&s);
     if (!id) {
         return out;
     }
     s->code = malloc(desc->bytecodeSize);
     if (!s->code) {
-        d3dp_PoolRelease(&g_dx.shaders, id);
+        d3dp_pool_release(&g_dx.shaders, id);
         return out;
     }
     memcpy(s->code, desc->bytecode, desc->bytecodeSize);
@@ -449,7 +449,7 @@ RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
     s->stage = desc->stage;
     s->sigCount = -1;
     if (desc->stage == RHI_STAGE_VERTEX) {
-        s->sigCount = d3dp_ReadInputSignature(s->code, s->size, s->sig, DX_MAX_SIG);
+        s->sigCount = d3dp_read_input_signature(s->code, s->size, s->sig, DX_MAX_SIG);
         if (s->sigCount > DX_MAX_SIG) {
             DX_LOG("shader %s: %d vertex inputs, only %d used",
                    desc->debugName ? desc->debugName : "?", s->sigCount, DX_MAX_SIG);
@@ -460,40 +460,40 @@ RhiShader rhi_CreateShader(const RhiShaderDesc *desc)
     return out;
 }
 
-void rhi_DestroyShader(RhiShader h)
+void rhi_destroy_shader(RhiShader h)
 {
-    DxShader *s = d3dp_PoolGet(&g_dx.shaders, h.id);
+    DxShader *s = d3dp_pool_get(&g_dx.shaders, h.id);
     if (!s) {
         return;
     }
     /* bytecode is only read during pipeline creation */
     free(s->code);
-    d3dp_PoolRelease(&g_dx.shaders, h.id);
+    d3dp_pool_release(&g_dx.shaders, h.id);
 }
 
 /* ---------------------------------------------------------------- teardown */
-void dx_ReleaseAllObjects(void)
+void dx_release_all_objects(void)
 {
     for (uint32_t i = 0; i < g_dx.buffers.next; i++) {
-        DxBuffer *b = d3dp_PoolAt(&g_dx.buffers, i);
+        DxBuffer *b = d3dp_pool_at(&g_dx.buffers, i);
         if (b && b->res) {
             ID3D12Resource_Release(b->res);
         }
     }
     for (uint32_t i = 0; i < g_dx.textures.next; i++) {
-        DxTexture *t = d3dp_PoolAt(&g_dx.textures, i);
+        DxTexture *t = d3dp_pool_at(&g_dx.textures, i);
         if (t && t->res && !t->swapchain) {
             ID3D12Resource_Release(t->res);
         }
     }
     for (uint32_t i = 0; i < g_dx.shaders.next; i++) {
-        DxShader *s = d3dp_PoolAt(&g_dx.shaders, i);
+        DxShader *s = d3dp_pool_at(&g_dx.shaders, i);
         if (s) {
             free(s->code);
         }
     }
     for (uint32_t i = 0; i < g_dx.pipelines.next; i++) {
-        DxPipeline *p = d3dp_PoolAt(&g_dx.pipelines, i);
+        DxPipeline *p = d3dp_pool_at(&g_dx.pipelines, i);
         if (p && p->pso) {
             ID3D12PipelineState_Release(p->pso);
         }

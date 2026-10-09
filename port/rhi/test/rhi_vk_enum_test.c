@@ -10,7 +10,7 @@
  *
  * Package R0 (v0.4.1): rhi_backend.c's layer classifiers, compiled in with
  * no backend linked: a table of instance layer names to the injector or
- * overlay each is (or none), and rhi_LayerSwitchedOn over environments
+ * overlay each is (or none), and rhi_layer_switched_on over environments
  * given as tables. */
 #include "../vk/vk_enums.h"
 #include <stdio.h>
@@ -75,7 +75,7 @@ static int strEq(const char *a, const char *b)
     return (a == NULL && b == NULL) || (a != NULL && b != NULL && strcmp(a, b) == 0);
 }
 
-/* the environment of one rhi_LayerSwitchedOn case: "NAME=value" pairs */
+/* the environment of one rhi_layer_switched_on case: "NAME=value" pairs */
 static const char *const *s_env;
 
 static const char *tableEnv(const char *name)
@@ -114,8 +114,8 @@ static void checkLayers(void)
     };
 
     for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
-        const char *inj = rhi_InjectorFromLayerName(names[i].layer);
-        const char *ov = rhi_OverlayFromLayerName(names[i].layer);
+        const char *inj = rhi_injector_from_layer_name(names[i].layer);
+        const char *ov = rhi_overlay_from_layer_name(names[i].layer);
         if (!strEq(inj, names[i].injector) || !strEq(ov, names[i].overlay)) {
             printf("FAIL layer %s: injector %s overlay %s, expected %s and %s\n",
                    names[i].layer ? names[i].layer : "(null)", inj ? inj : "none", ov ? ov : "none",
@@ -184,15 +184,15 @@ static void checkLayers(void)
 
     for (size_t i = 0; i < sizeof(envs) / sizeof(envs[0]); i++) {
         s_env = envs[i].env;
-        if (rhi_LayerSwitchedOn(envs[i].layer, tableEnv) != envs[i].on) {
-            printf("FAIL rhi_LayerSwitchedOn(%s) case %zu: expected %s\n",
+        if (rhi_layer_switched_on(envs[i].layer, tableEnv) != envs[i].on) {
+            printf("FAIL rhi_layer_switched_on(%s) case %zu: expected %s\n",
                    envs[i].layer ? envs[i].layer : "(null)", i, envs[i].on ? "on" : "off");
             failures++;
         }
     }
     s_env = NULL;
-    if (rhi_LayerSwitchedOn("VK_LAYER_reshade", NULL)) {
-        printf("FAIL rhi_LayerSwitchedOn without an environment reader\n");
+    if (rhi_layer_switched_on("VK_LAYER_reshade", NULL)) {
+        printf("FAIL rhi_layer_switched_on without an environment reader\n");
         failures++;
     }
 }
@@ -245,16 +245,16 @@ int main(void)
     for (unsigned i = 0; i < RHI_FMT_COUNT; i++) {
         const VkFormat want =
             i == RHI_FMT_D32F_S8 ? VK_FORMAT_D24_UNORM_S8_UINT : vkr_formatMap[i].vk;
-        CHECK_EQ(vkr_VkFormatWith((RhiFormat)i, VK_FORMAT_D24_UNORM_S8_UINT), want);
+        CHECK_EQ(vkr_vk_format_with((RhiFormat)i, VK_FORMAT_D24_UNORM_S8_UINT), want);
         const VkFormat want32 = vkr_formatMap[i].vk;
-        CHECK_EQ(vkr_VkFormatWith((RhiFormat)i, VK_FORMAT_D32_SFLOAT_S8_UINT), want32);
+        CHECK_EQ(vkr_vk_format_with((RhiFormat)i, VK_FORMAT_D32_SFLOAT_S8_UINT), want32);
     }
-    CHECK_EQ(vkr_VkFormatWith(RHI_FMT_D32F, VK_FORMAT_D24_UNORM_S8_UINT), VK_FORMAT_D32_SFLOAT);
+    CHECK_EQ(vkr_vk_format_with(RHI_FMT_D32F, VK_FORMAT_D24_UNORM_S8_UINT), VK_FORMAT_D32_SFLOAT);
     CHECK_EQ(vkr_formatMap[RHI_FMT_R8_UNORM].vk, VK_FORMAT_R8_UNORM);
     CHECK_EQ(vkr_vertexFormatMap[RHI_VTX_U8x4_UNORM].vk, VK_FORMAT_R8G8B8A8_UNORM);
-    CHECK_EQ(vkr_StateLayout(RHI_STATE_SHADER_READ, RHI_FMT_D32F),
+    CHECK_EQ(vkr_state_layout(RHI_STATE_SHADER_READ, RHI_FMT_D32F),
              VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
-    CHECK_EQ(vkr_StateLayout(RHI_STATE_SHADER_READ, RHI_FMT_RGBA8_UNORM),
+    CHECK_EQ(vkr_state_layout(RHI_STATE_SHADER_READ, RHI_FMT_RGBA8_UNORM),
              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     /* the bindings of one group never collide across register classes */

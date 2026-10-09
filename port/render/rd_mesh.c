@@ -1,16 +1,16 @@
 /* rd_mesh.c: rd_mesh.h's recording half.
  *
- *   the mesh registry   rd_CreateVuMesh builds a mesh once from the VIF
+ *   the mesh registry   rd_create_vu_mesh builds a mesh once from the VIF
  *                       UNPACK payloads Packet.c packed: the vertex stream
  *                       without the batches' GIF tags and the static index
  *                       list (ICO_VU_INDEX(kick, corner), the strip rule
- *                       vu1ref_StaticKicks encodes).  Replay uploads both
+ *                       vu1ref_static_kicks encodes).  Replay uploads both
  *                       into the frame's ring once per replayed frame.
  *   the VU image        one per list, at record time: VU1 data memory and
  *                       the VF registers the SET_* routines load (a Vu1Ref,
  *                       vu1_ref.h), the resident program and the last BEGIN
  *                       code (rd_mesh.h, "VU1 state per list").
- *   the draws           rd_DrawVuMesh / rd_DrawVuGrid / rd_DrawVuParticles
+ *   the draws           rd_draw_vu_mesh / rd_draw_vu_grid / rd_draw_vu_particles
  *                       record RDC_MESH / RDC_SKINNED / RDC_GRID /
  *                       RDC_PARTICLES with the RdVuPayload layout of
  *                       rd_mesh.h; rd_replay.c draws them.
@@ -25,7 +25,7 @@
  * which keeps the common block): it would make skinned characters vanish for
  * the rest of a list on the PS2 behind any fully culled particle batch drawn
  * before them in the same list, an effect no stage is known to rely on.
- * rd_DrawVuParticles runs the CPU reference on a copy of the list image to
+ * rd_draw_vu_particles runs the CPU reference on a copy of the list image to
  * see whether a batch would have clobbered the common block, and a skinned
  * draw later in that list then logs once. */
 #include <math.h>
@@ -40,7 +40,7 @@
 
 /* ------------------------------------------------------------- registry */
 
-RdMeshRec *rd__MeshRec(uint32_t id)
+RdMeshRec *rd__mesh_rec(uint32_t id)
 {
     uint32_t slot = (id & 0xFFFF) - 1;
     if (id == 0 || slot >= RD_MAX_MESHES || !g_rd.meshes) {
@@ -147,7 +147,7 @@ static void meshGpuRelease(RdMeshRec *m)
     m->gpuOff = m->gpuIndexOff = m->gpuSize = 0;
 }
 
-bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes, uint64_t align)
+bool rd__mesh_gpu_reserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes, uint64_t align)
 {
     if (!g_rd.hasDevice) {
         return false;
@@ -167,7 +167,7 @@ bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes,
                     continue; /* existing chunks first */
                 }
                 const uint64_t size = need > RD_MESH_CHUNK ? need : RD_MESH_CHUNK;
-                c->buf = rhi_CreateBuffer(
+                c->buf = rhi_create_buffer(
                     &(RhiBufferDesc){size, RHI_BUF_INDEX | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST,
                                      RHI_MEM_DEVICE, "rd mesh arena"});
                 if (!c->buf.id) {
@@ -189,28 +189,28 @@ bool rd__MeshGpuReserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexBytes,
             }
         }
     }
-    rd__LogOnce(RD_ONCE_MESH_ARENA,
-                "mesh arena full (%u chunks): meshes past it are drawn from "
-                "the upload ring",
-                RD_MESH_CHUNKS);
+    rd__log_once(RD_ONCE_MESH_ARENA,
+                 "mesh arena full (%u chunks): meshes past it are drawn from "
+                 "the upload ring",
+                 RD_MESH_CHUNKS);
     return false;
 }
 
-RhiBuffer rd__MeshGpuBuffer(uint32_t chunk)
+RhiBuffer rd__mesh_gpu_buffer(uint32_t chunk)
 {
     return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].buf : (RhiBuffer){0};
 }
 
-uint64_t rd__MeshGpuBufferSize(uint32_t chunk)
+uint64_t rd__mesh_gpu_buffer_size(uint32_t chunk)
 {
     return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].size : 0;
 }
 
-void rd__MeshGpuShutdown(void)
+void rd__mesh_gpu_shutdown(void)
 {
     for (uint32_t i = 0; i < RD_MESH_CHUNKS; i++) {
         if (s_arena[i].buf.id && g_rd.hasDevice) {
-            rhi_DestroyBuffer(s_arena[i].buf);
+            rhi_destroy_buffer(s_arena[i].buf);
         }
         free(s_arena[i].free);
     }
@@ -224,7 +224,7 @@ void rd__MeshGpuShutdown(void)
     }
 }
 
-/* meshes rd_VuMeshRetire marked stale and not yet freed */
+/* meshes rd_vu_mesh_retire marked stale and not yet freed */
 static uint32_t s_staleCount;
 
 static void meshFree(RdMeshRec *m)
@@ -252,7 +252,7 @@ static void meshFree(RdMeshRec *m)
 
 /* Frees VU meshes no frame has drawn for a while when the registry runs
  * full: the seki side keeps the packets and builds a mesh again on its next
- * draw (rd_VuMeshValid).  Meshes drawn in the open frame or the two
+ * draw (rd_vu_mesh_valid).  Meshes drawn in the open frame or the two
  * retained ones are kept. */
 static void evict(void)
 {
@@ -266,7 +266,8 @@ static void evict(void)
             }
         }
     }
-    rd__LogOnce(RD_ONCE_VU_MESHES, "mesh registry full: %u meshes not drawn lately evicted", freed);
+    rd__log_once(RD_ONCE_VU_MESHES, "mesh registry full: %u meshes not drawn lately evicted",
+                 freed);
 }
 
 static RdMeshRec *meshAlloc(uint32_t *id)
@@ -320,7 +321,7 @@ static RdMeshRec *meshAlloc(uint32_t *id)
  * edge or a corner do not).  Only the prelit and lit layouts, whose first
  * quadword is the position the static programs transform; the
  * interpolation's scratch meshes take their source's list
- * (rd__VuMeshCopyDrawIndex), and a morph (rd_UpdateVuMesh) keeps the marks
+ * (rd__vu_mesh_copy_draw_index), and a morph (rd_update_vu_mesh) keeps the marks
  * of the creation stream. */
 
 typedef struct OvlTri {
@@ -526,7 +527,7 @@ done:
     free(seen);
 }
 
-bool rd__VuMeshCopyDrawIndex(RdMeshRec *dst, const RdMeshRec *src)
+bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src)
 {
     free(dst->drawIndex);
     dst->drawIndex = NULL;
@@ -540,9 +541,9 @@ bool rd__VuMeshCopyDrawIndex(RdMeshRec *dst, const RdMeshRec *src)
     return dst->drawIndex != NULL;
 }
 
-uint32_t rd__VuMeshCreateRaw(const float (*stream)[4], uint32_t vertexCount, uint32_t qwPerVertex,
-                             const uint32_t *index, uint32_t indexCount,
-                             const RdVuBatchRec *batches, uint32_t batchCount, const char *name)
+uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
+                                uint32_t qwPerVertex, const uint32_t *index, uint32_t indexCount,
+                                const RdVuBatchRec *batches, uint32_t batchCount, const char *name)
 {
     uint32_t id = 0;
     RdMeshRec *m = meshAlloc(&id);
@@ -591,8 +592,8 @@ static uint32_t tagPrim(const float *q)
     return (hi >> 15) & 0x7FF; /* bits 47..57 of the tag's first doubleword */
 }
 
-/* The walk of a desc (rd_CreateVuMesh, rd_VuMeshDescHash): false for a
- * desc rd_CreateVuMesh refuses; *nv the vertex count of all batches (each
+/* The walk of a desc (rd_create_vu_mesh, rd_vu_mesh_desc_hash): false for a
+ * desc rd_create_vu_mesh refuses; *nv the vertex count of all batches (each
  * batch's GIF tag holds its NLOOP). */
 static bool descCount(const RdVuMeshDesc *d, uint32_t *nv)
 {
@@ -608,7 +609,7 @@ static bool descCount(const RdVuMeshDesc *d, uint32_t *nv)
         }
         const uint32_t n = tagWord(d->qw[at]) & 0x7FFF;
         if (at + 1 + (uint64_t)n * d->qwPerVertex > d->qwCount) {
-            rd__Log("rd_CreateVuMesh(%s): batch %u runs past the stream",
+            rd__log("rd_create_vu_mesh(%s): batch %u runs past the stream",
                     d->debugName ? d->debugName : "?", b);
             return false;
         }
@@ -676,7 +677,7 @@ static uint32_t batchIndices(const float (*stream)[4], uint32_t qpv, uint32_t v,
     return ni;
 }
 
-uint64_t rd_VuMeshDescHash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW)
+uint64_t rd_vu_mesh_desc_hash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *normalW)
 {
     uint32_t nv = 0;
     uint64_t h = 0;
@@ -699,7 +700,7 @@ uint64_t rd_VuMeshDescHash(const RdVuMeshDesc *d, uint32_t *vertexCount, float *
     return h;
 }
 
-RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
+RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
 {
     uint32_t nv;
     if (!descCount(d, &nv)) {
@@ -731,9 +732,9 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
         br[b].indexCount = ni - br[b].firstIndex;
         v += n;
     }
-    uint32_t id =
-        rd__VuMeshCreateRaw(stream, nv, d->qwPerVertex, index, ni, br, d->batchCount, d->debugName);
-    RdMeshRec *m = rd__MeshRec(id);
+    uint32_t id = rd__vu_mesh_create_raw(stream, nv, d->qwPerVertex, index, ni, br, d->batchCount,
+                                         d->debugName);
+    RdMeshRec *m = rd__mesh_rec(id);
     if (m) {
         m->materialCount = d->materialCount;
         m->srcQw = d->qwCount;
@@ -745,8 +746,8 @@ RdMesh rd_CreateVuMesh(const RdVuMeshDesc *d)
     return (RdMesh){id};
 }
 
-RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
-                                  const char *name)
+RdMesh rd_create_vu_mesh_replacement(const RdVuMeshDesc *orig, const RdVuReplacement *rep,
+                                     const char *name)
 {
     uint32_t onv;
     if (!rep || !descCount(orig, &onv) || rep->qwPerVertex != orig->qwPerVertex ||
@@ -766,7 +767,7 @@ RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacemen
     if (total >= (1u << 30)) {
         return (RdMesh){0};
     }
-    const uint64_t hash = rd_VuMeshDescHash(orig, NULL, NULL);
+    const uint64_t hash = rd_vu_mesh_desc_hash(orig, NULL, NULL);
     const uint32_t nv = (uint32_t)total;
     float (*stream)[4] = malloc((size_t)(nv ? nv : 1) * qpv * 16);
     uint32_t *index = malloc((size_t)(nv ? nv : 1) * 3 * 4);
@@ -796,9 +797,9 @@ RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacemen
         br[b].indexCount = ni - br[b].firstIndex;
         v += n;
     }
-    uint32_t id = rd__VuMeshCreateRaw((const float (*)[4])stream, nv, qpv, index, ni, br,
-                                      orig->batchCount, name ? name : orig->debugName);
-    RdMeshRec *m = rd__MeshRec(id);
+    uint32_t id = rd__vu_mesh_create_raw((const float (*)[4])stream, nv, qpv, index, ni, br,
+                                         orig->batchCount, name ? name : orig->debugName);
+    RdMeshRec *m = rd__mesh_rec(id);
     if (m) {
         m->materialCount = orig->materialCount;
         m->srcQw = orig->qwCount;
@@ -820,8 +821,8 @@ RdMesh rd_CreateVuMeshReplacement(const RdVuMeshDesc *orig, const RdVuReplacemen
  * its own mesh; a mesh rewritten every frame keeps two versions. */
 static void keepVersion(RdMeshRec *m)
 {
-    const uint32_t rec = rd__RecFrame() ? g_rd.frameCounter : g_rd.frameCounter + 1;
-    if (rd_InterpolationActive() && m->lastUsed >= m->verFrame && m->lastUsed < rec &&
+    const uint32_t rec = rd__rec_frame() ? g_rd.frameCounter : g_rd.frameCounter + 1;
+    if (rd_interpolation_active() && m->lastUsed >= m->verFrame && m->lastUsed < rec &&
         m->lastUsed + 2 >= rec) {
         const int k = m->hist[0].to <= m->hist[1].to ? 0 : 1;
         const size_t size = (size_t)m->vertexCount * m->qwPerVertex * 16;
@@ -839,7 +840,7 @@ static void keepVersion(RdMeshRec *m)
     m->verFrame = rec;
 }
 
-const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4]
+const float (*rd__mesh_stream_at(const RdMeshRec *m, uint32_t frame))[4]
 {
     if (!m) {
         return NULL;
@@ -855,9 +856,9 @@ const float (*rd__MeshStreamAt(const RdMeshRec *m, uint32_t frame))[4]
     return NULL;
 }
 
-bool rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
+bool rd_update_vu_mesh(RdMesh mesh, const float (*qw)[4])
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
     if (!m || !m->vu || !qw || m->replaced) {
         return false; /* a replaced mesh: its stream is not the packet's layout */
     }
@@ -872,33 +873,33 @@ bool rd_UpdateVuMesh(RdMesh mesh, const float (*qw)[4])
     return true;
 }
 
-void rd_DestroyVuMesh(RdMesh mesh)
+void rd_destroy_vu_mesh(RdMesh mesh)
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
     if (m) {
         meshFree(m);
     }
 }
 
-bool rd_VuMeshValid(RdMesh mesh)
+bool rd_vu_mesh_valid(RdMesh mesh)
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
     return m && m->vu && !m->stale;
 }
 
-uint64_t rd_VuMeshHash(RdMesh mesh)
+uint64_t rd_vu_mesh_hash(RdMesh mesh)
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
     return m && m->vu ? m->hash : 0;
 }
 
-bool rd_VuMeshReplaced(RdMesh mesh)
+bool rd_vu_mesh_replaced(RdMesh mesh)
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
     return m && m->vu && m->replaced;
 }
 
-void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user)
+void rd_vu_mesh_retire(bool (*pred)(uint64_t hash, bool replaced, void *user), void *user)
 {
     if (!g_rd.meshes) {
         return;
@@ -915,7 +916,7 @@ void rd_VuMeshRetire(bool (*pred)(uint64_t hash, bool replaced, void *user), voi
     }
 }
 
-void rd__VuMeshSweepStale(void)
+void rd__vu_mesh_sweep_stale(void)
 {
     if (s_staleCount == 0 || !g_rd.meshes) {
         return;
@@ -929,7 +930,7 @@ void rd__VuMeshSweepStale(void)
     }
 }
 
-void rd__MeshShutdown(void)
+void rd__mesh_shutdown(void)
 {
     if (!g_rd.meshes) {
         return;
@@ -959,16 +960,16 @@ static RdVuList *s_vu;
 
 static Vu1Ref s_scratch;
 
-void rd__VuInit(void)
+void rd__vu_init(void)
 {
     free(s_vu);
     s_vu = calloc(RD_LIST_COUNT, sizeof(RdVuList));
     for (int l = 0; s_vu && l < RD_LIST_COUNT; l++) {
-        vu1ref_Init(&s_vu[l].ref);
+        vu1ref_init(&s_vu[l].ref);
     }
 }
 
-void rd__VuShutdown(void)
+void rd__vu_shutdown(void)
 {
     free(s_vu);
     s_vu = NULL;
@@ -976,23 +977,23 @@ void rd__VuShutdown(void)
 
 static RdVuList *curVu(void)
 {
-    int l = rd_CurrentList();
+    int l = rd_current_list();
     return s_vu && l >= 0 && l < RD_LIST_COUNT ? &s_vu[l] : NULL;
 }
 
-void rd__VuLoadCommon(const RdVuCommon *block)
+void rd__vu_load_common(const RdVuCommon *block)
 {
     float qw[16][4];
     _Static_assert(sizeof(RdVuCommon) == sizeof(qw), "RdVuCommon is 16 quadwords");
     memcpy(qw, block, sizeof(qw));
     for (int l = 0; s_vu && l < RD_LIST_COUNT; l++) {
-        vu1ref_LoadCommon(&s_vu[l].ref, (const float (*)[4])qw);
+        vu1ref_load_common(&s_vu[l].ref, (const float (*)[4])qw);
         s_vu[l].endTagHit = 0;
         s_vu[l].scroll = 0;
     }
 }
 
-void rd_VuProgram(int id)
+void rd_vu_program(int id)
 {
     RdVuList *v = curVu();
     if (v) {
@@ -1000,13 +1001,13 @@ void rd_VuProgram(int id)
     }
 }
 
-int rd_VuCurrentProgram(void)
+int rd_vu_current_program(void)
 {
     RdVuList *v = curVu();
     return v ? v->program : 0;
 }
 
-void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
+void rd_vu_call(int code, const float (*top)[4], uint32_t qw)
 {
     RdVuList *v = curVu();
     if (!v) {
@@ -1023,7 +1024,7 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
     Vu1Ref *r = &v->ref;
     switch (code) {
     case 2: { /* SET_UVOFFSET, every program (vu1_common.h:57) */
-        vu1ref_SetUVOffset(r, in[0]);
+        vu1ref_set_uv_offset(r, in[0]);
         uint32_t zw[2];
         memcpy(zw, &in[0][2], sizeof(zw));
         v->scroll =
@@ -1034,25 +1035,25 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
         switch (v->program) {
         case 1:
         case 2:
-            vu1ref_NormalSetMatrix(r, in);
+            vu1ref_normal_set_matrix(r, in);
             return;
         case 3: {
             /* qw[0].x is the packet's copy count: at most the qwords after
-             * qw[0] that buf holds (vu1ref_ClusterSetMatrix reads qw[1..n]) */
+             * qw[0] that buf holds (vu1ref_cluster_set_matrix reads qw[1..n]) */
             int32_t n;
             memcpy(&n, buf[0], sizeof n);
             if (n > 255) {
                 n = 255;
                 memcpy(buf[0], &n, sizeof n);
             }
-            vu1ref_ClusterSetMatrix(r, in);
+            vu1ref_cluster_set_matrix(r, in);
             return;
         }
         case 4:
-            vu1ref_MeshSetMatrix(r, in);
+            vu1ref_mesh_set_matrix(r, in);
             return;
         case 5:
-            vu1ref_ParticleSetMatrix(r, in);
+            vu1ref_particle_set_matrix(r, in);
             v->code = 18; /* falls through into BEGIN_PARTICLE (particle.vsm:43-61) */
             return;
         default:
@@ -1063,13 +1064,13 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
         switch (v->program) {
         case 1:
         case 2:
-            vu1ref_NormalSetLight(r, in);
+            vu1ref_normal_set_light(r, in);
             return;
         case 3:
-            vu1ref_ClusterSetLight(r, in);
+            vu1ref_cluster_set_light(r, in);
             return;
         case 4:
-            vu1ref_MeshSetLight(r, in);
+            vu1ref_mesh_set_light(r, in);
             return;
         case 5:
             v->code = 18; /* BEGIN_PARTICLE */
@@ -1090,8 +1091,8 @@ void rd_VuCall(int code, const float (*top)[4], uint32_t qw)
     default:
         break;
     }
-    rd__LogOnce(RD_ONCE_VU_CODE, "MSCAL code %d with program %d in list %d is not modelled", code,
-                v->program, rd_CurrentList());
+    rd__log_once(RD_ONCE_VU_CODE, "MSCAL code %d with program %d in list %d is not modelled", code,
+                 v->program, rd_current_list());
 }
 
 /* ----------------------------------------------------------- the table */
@@ -1117,7 +1118,7 @@ static const VuRow kRows[] = {
     {5, 18, RD_PROG_PARTICLE, RD_VS_VU_PARTICLE, RD_VU_CLIP_REGION},
 };
 
-bool rd__VuRow(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip)
+bool rd__vu_row(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip)
 {
     for (size_t i = 0; i < sizeof(kRows) / sizeof(kRows[0]); i++) {
         if (kRows[i].program == program && kRows[i].code == code) {
@@ -1158,17 +1159,17 @@ static void vuImage(const RdVuList *v, RdVuBlock *out)
     }
 }
 
-bool rd_VuDrawFromState(RdVuDraw *d)
+bool rd_vu_draw_from_state(RdVuDraw *d)
 {
     RdVuList *v = curVu();
     if (!d || !v) {
         return false;
     }
     uint8_t prog, vs, clip;
-    if (!rd__VuRow(v->program, v->code, &prog, &vs, &clip)) {
-        rd__LogOnce(RD_ONCE_VU_ROW,
-                    "no table row for program %d code %d (list %d): the batch is not drawn",
-                    v->program, v->code, rd_CurrentList());
+    if (!rd__vu_row(v->program, v->code, &prog, &vs, &clip)) {
+        rd__log_once(RD_ONCE_VU_ROW,
+                     "no table row for program %d code %d (list %d): the batch is not drawn",
+                     v->program, v->code, rd_current_list());
         return false;
     }
     memset(d, 0, sizeof(*d));
@@ -1181,10 +1182,10 @@ bool rd_VuDrawFromState(RdVuDraw *d)
         d->bones = (const float (*)[4])v->ref.mem[16];
         d->boneQw = 240; /* VU memory 16..255, VuBoneCB */
         if (v->endTagHit) {
-            rd__LogOnce(RD_ONCE_VU_ENDTAG,
-                        "particle end-tag quirk: a culled particle batch earlier in list %d "
-                        "would have hidden this skinned draw on the PS2 (not reproduced)",
-                        rd_CurrentList());
+            rd__log_once(RD_ONCE_VU_ENDTAG,
+                         "particle end-tag quirk: a culled particle batch earlier in list %d "
+                         "would have hidden this skinned draw on the PS2 (not reproduced)",
+                         rd_current_list());
         }
     }
     return true;
@@ -1195,9 +1196,9 @@ bool rd_VuDrawFromState(RdVuDraw *d)
 static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBlock *vu,
                      const void *bones, const void *stream, const RdMaterial *mats)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     if (!f) {
-        rd__Push(type); /* reports once */
+        rd__push(type); /* reports once */
         return NULL;
     }
     const uint32_t sizes[5] = {(uint32_t)sizeof(*p), (uint32_t)sizeof(*vu), p->boneQw * 16u,
@@ -1207,7 +1208,7 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
     for (int i = 0; i < 5; i++) {
         total += sizes[i];
     }
-    const uint32_t off = rd__FramePayload(f, NULL, total);
+    const uint32_t off = rd__frame_payload(f, NULL, total);
     uint32_t at = off;
     for (int i = 0; i < 5; i++) {
         if (parts[i] && sizes[i]) {
@@ -1215,12 +1216,12 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
         }
         at += sizes[i];
     }
-    RdCmd *c = rd__Push(type);
+    RdCmd *c = rd__push(type);
     c->b[0] = p->prog;
     c->b[1] = p->code;
     c->b[2] = p->clip;
     /* b[3]: the game draws this model as a full-screen item (RegistPacket.c
-     * reg_DispObj under rd_SetSpaceOverride(RD_SPACE_FULLSCREEN): the
+     * reg_DispObj under rd_set_space_override(RD_SPACE_FULLSCREEN): the
      * title's darkening plane), so the replay draws it across the whole
      * width of a wide target instead of the centred 4:3 part (rd_replay.c
      * doVu); 0 in every other draw and in older dumps */
@@ -1233,10 +1234,10 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
     return c;
 }
 
-void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
+void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
 {
-    RdMeshRec *m = rd__MeshRec(mesh.id);
-    if (!m || !m->vu || !d || !rd__DrawFilterPass(key)) {
+    RdMeshRec *m = rd__mesh_rec(mesh.id);
+    if (!m || !m->vu || !d || !rd__draw_filter_pass(key)) {
         return;
     }
     uint32_t first = d->firstBatch, n = d->batchCount;
@@ -1258,8 +1259,8 @@ void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
     p.boneQw = d->bones ? (d->boneQw > 240 ? 240 : d->boneQw) : 0;
     p.qwPerVertex = m->qwPerVertex;
     if (d->materials) {
-        rd__LogOnce(RD_ONCE_VU_MATERIALS,
-                    "RdVuDraw.materials is recorded, not applied: draws take the GS state");
+        rd__log_once(RD_ONCE_VU_MATERIALS,
+                     "RdVuDraw.materials is recorded, not applied: draws take the GS state");
         p.materialCount = m->materialCount;
     }
     RdCmd *c =
@@ -1269,9 +1270,9 @@ void rd_DrawVuMesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
     }
 }
 
-void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key)
+void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
 {
-    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3 || !rd__DrawFilterPass(key)) {
+    if (!d || !d->qw || d->strips == 0 || d->stripLen < 3 || !rd__draw_filter_pass(key)) {
         return;
     }
     RdVuPayload p;
@@ -1295,12 +1296,12 @@ void rd_DrawVuGrid(const RdVuGridDraw *d, RdKey key)
  * is left for a batch chained elsewhere. */
 static const char kParticleKeyTag;
 
-void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
+void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
 {
     if (key == 0) {
-        key = RD_KEY(&kParticleKeyTag, rd_CurrentList(), 18);
+        key = RD_KEY(&kParticleKeyTag, rd_current_list(), 18);
     }
-    if (!d || !d->qw || d->count == 0 || !rd__DrawFilterPass(key)) {
+    if (!d || !d->qw || d->count == 0 || !rd__draw_filter_pass(key)) {
         return;
     }
     const uint32_t count = d->count > 80 ? 80 : d->count;
@@ -1309,7 +1310,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
         /* the end-tag quirk check, on a copy (see the file comment) */
         VuParticleOut out;
         memcpy(&s_scratch, &v->ref, sizeof(s_scratch));
-        vu1ref_Particle(&s_scratch, d->qw, 6 + 2 * count, &out);
+        vu1ref_particle(&s_scratch, d->qw, 6 + 2 * count, &out);
         if (out.count == 0 && memcmp(s_scratch.mem, v->ref.mem, 2 * 16) != 0) {
             v->endTagHit = 1;
         }
@@ -1335,7 +1336,7 @@ void rd_DrawVuParticles(const RdVuParticleDraw *d, RdKey key)
  * specular, reflection and particle equations 0x44, 0x48, 0x42, 0x68, 0x62
  * (four hardware paths); SCENE's D32F_S8 (render-to-texture targets have
  * depth too).  The scissor batches' cut pass forces ABE on: the same set. */
-uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
                                       RD_TEST_DATE1_Z_GEQUAL};
@@ -1352,14 +1353,14 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
             for (int zw = 0; zw < 2; zw++) {
                 for (size_t b = 0; b < sizeof(kBlends) / sizeof(kBlends[0]); b++) {
                     RdStateBlock s;
-                    rd__ResetStateBlock(&s);
-                    s.ds.test = rd_TestFromGs(kTests[t]);
+                    rd__reset_state_block(&s);
+                    s.ds.test = rd_test_from_gs(kTests[t]);
                     s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
                     s.ds.abe = kBlends[b] >= 0;
                     s.ds.blend = (uint8_t)(kBlends[b] >= 0 ? kBlends[b] : 0);
                     RdDrawPass dp[2];
-                    int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
-                                                RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+                    int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                  RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
                     /* vu_ps and, for a 24- or 16-bit texture
                      * under AEM, vu_texa_ps */
                     for (int i = 0; i < np * 2; i++) {
@@ -1367,7 +1368,7 @@ uint32_t rd__EnumerateReachableVu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                         k.gs.program = prog;
                         k.vs = vs;
                         k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
-                        n = rd__AddPipeKey(out, max, n, &k);
+                        n = rd__add_pipe_key(out, max, n, &k);
                     }
                 }
             }

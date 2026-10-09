@@ -2,14 +2,14 @@
  *
  * A present-time pass in place of the line doubling and the box blit of
  * rd_present.c, and the last pass of the present: SCENE and DISPLAY are
- * read, never written, so frame dumps and rd_ReadDisplay are what they are
+ * read, never written, so frame dumps and rd_read_display are what they are
  * with the filter off, and with RdSettings.crtMode RD_CRT_OFF (or strength
  * 0) nothing here runs.
  *
  * The filter works on the source grid: the PS2 picture's pixels, 512
  * across at 4:3 (wider with the Enhanced aspect, as DISPLAY is) and
  * DISPLAY's lines (the PS2's field lines; 512 with full_height).  With the
- * filter on the scene renders at 1x (rd__ApplyDisplay), so DISPLAY is that
+ * filter on the scene renders at 1x (rd__apply_display), so DISPLAY is that
  * grid; a larger one is box-reduced to it all the same.  Then:
  *   0. the overlay (the port's popups, hints, photo HUD) when it has prims:
  *      the source line-doubled into a layer of the frame's lines (nearest,
@@ -26,10 +26,10 @@
  *                    source pixel lands in) passes that channel of that
  *                    pixel in full and the other two dimmed by the mask
  *                    strength, under the beam of its line at its height
- *                    (rd__CrtMaskWeight); halation and bloom from B,
+ *                    (rd__crt_mask_weight); halation and bloom from B,
  *                    mixed in rather than added, vignette, rounded
  *                    corners, a soft shoulder, gamma (the highlights:
- *                    rd__CrtStrengthAt and the functions after it).  Nothing resamples
+ *                    rd__crt_strength_at and the functions after it).  Nothing resamples
  *                    the mask: each output pixel is one source pixel seen
  *                    through one phosphor.
  */
@@ -105,7 +105,7 @@ static const RdCrtParams s_modes[RD_CRT_MODE_COUNT] = {
      .gammaOut = 2.2f},
 };
 
-void rd_CrtSettings(RdSettings *s, RdCrtMode mode, float strength)
+void rd_crt_settings(RdSettings *s, RdCrtMode mode, float strength)
 {
     if (!s) {
         return;
@@ -115,7 +115,7 @@ void rd_CrtSettings(RdSettings *s, RdCrtMode mode, float strength)
     s->crtScanlines = s->crtMask = s->crtHalation = s->crtBloom = s->crtCurvature = -1.0f;
 }
 
-bool rd__CrtPreset(RdCrtMode mode, RdCrtParams *p)
+bool rd__crt_preset(RdCrtMode mode, RdCrtParams *p)
 {
     if (mode == RD_CRT_OFF || (unsigned)mode >= RD_CRT_MODE_COUNT) {
         return false;
@@ -129,9 +129,9 @@ static float unit(float v)
     return v > 1.0f ? 1.0f : v;
 }
 
-bool rd__CrtResolve(const RdSettings *s, RdCrtParams *p)
+bool rd__crt_resolve(const RdSettings *s, RdCrtParams *p)
 {
-    if (!rd__CrtPreset((RdCrtMode)s->crtMode, p)) {
+    if (!rd__crt_preset((RdCrtMode)s->crtMode, p)) {
         return false;
     }
     /* the config-only overrides ([video] crt_*), < 0 = the mode's */
@@ -160,7 +160,7 @@ bool rd__CrtResolve(const RdSettings *s, RdCrtParams *p)
     return true;
 }
 
-float rd__CrtMaskFade(uint32_t boxH)
+float rd__crt_mask_fade(uint32_t boxH)
 {
     if (boxH <= 720) {
         return 0.0f;
@@ -169,18 +169,18 @@ float rd__CrtMaskFade(uint32_t boxH)
 }
 
 /* The geometry, per output pixel (crt.hlsl maskOf is the same).  Across a
- * source pixel of r output pixels, u = f r: the last g = rd__CrtGapColumns(r)
+ * source pixel of r output pixels, u = f r: the last g = rd__crt_gap_columns(r)
  * pixels are a gap (all three channels at 1 - gap), the rest three equal
  * stripes, R, G, B from the left, each passing its own channel in full and
  * the other two at 1 - gap (the mask strength: the leak between the
  * phosphors; at 1 each stripe passes its own channel only).
  * The light is kept per triad: the stripes' weights of a channel over the
  * output columns its source pixel actually has (2 or 3 at 1440 x 1080, the
- * stripes 1 or 2 pixels wide) average to 1 after rd__CrtTriadGain, and the
- * slot's bridges over the line after rd__CrtRowGain, so every source
+ * stripes 1 or 2 pixels wide) average to 1 after rd__crt_triad_gain, and the
+ * slot's bridges over the line after rd__crt_row_gain, so every source
  * pixel keeps its own colour and light (with one gain for the whole box
  * the triads short of a stripe would tint in bands), up to where a lit
- * stripe would pass 1: in the highlights the gains fade (rd__CrtGainFade)
+ * stripe would pass 1: in the highlights the gains fade (rd__crt_gain_fade)
  * and the triad is darker than its pixel, as on a tube.
  *   grille: the stripes run down the whole line;
  *   slot:   a bridge (all at 1 - gap) over the last third of the line,
@@ -190,7 +190,7 @@ float rd__CrtMaskFade(uint32_t boxH)
  *           triad rounded down to whole stripes (one stripe: f + 1/3, so
  *           at 3 output pixels a source pixel the stripes stay on whole
  *           pixels). */
-uint32_t rd__CrtGapColumns(float r)
+uint32_t rd__crt_gap_columns(float r)
 {
     return r >= 6.0f ? 2u : (r >= 4.0f ? 1u : 0u);
 }
@@ -207,7 +207,7 @@ static float stripeWeight(int mask, float r, float gap, float f, float v, int ch
     if (mask == RD_CRT_MASK_DOTS && v >= 0.5f) {
         f = fract(f + 1.0f / 3.0f);
     }
-    const float g = (float)rd__CrtGapColumns(r), u = f * r, leak = 1.0f - gap;
+    const float g = (float)rd__crt_gap_columns(r), u = f * r, leak = 1.0f - gap;
     if (u >= r - g) {
         return leak;
     }
@@ -216,7 +216,7 @@ static float stripeWeight(int mask, float r, float gap, float f, float v, int ch
     return s == ch ? 1.0f : leak;
 }
 
-float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd, int ch)
+float rd__crt_mask_weight(int mask, float r, float gap, float f, float v, int odd, int ch)
 {
     if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
         return 1.0f;
@@ -228,7 +228,7 @@ float rd__CrtMaskWeight(int mask, float r, float gap, float f, float v, int odd,
     return stripeWeight(mask, r, gap, f, v, ch) * dim;
 }
 
-float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch)
+float rd__crt_triad_gain(int mask, float r, float gap, int sx, float v, int ch)
 {
     if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
         return 1.0f;
@@ -247,7 +247,7 @@ float rd__CrtTriadGain(int mask, float r, float gap, int sx, float v, int ch)
     return 1.0f / (mean > RD_CRT_MEAN_MIN ? mean : RD_CRT_MEAN_MIN);
 }
 
-float rd__CrtRowGain(int mask, float gap)
+float rd__crt_row_gain(int mask, float gap)
 {
     return mask == RD_CRT_MASK_SLOT && gap < 1.0f ? 1.0f / (1.0f - gap / 3.0f) : 1.0f;
 }
@@ -268,13 +268,13 @@ static float smooth01(float e0, float e1, float x)
     return t * t * (3.0f - 2.0f * t);
 }
 
-float rd__CrtStrengthAt(float strength, const float p[3])
+float rd__crt_strength_at(float strength, const float p[3])
 {
     const float m = fmaxf(p[0], fmaxf(p[1], p[2]));
     return strength * (1.0f - 0.5f * smooth01(0.5f, 1.0f, m));
 }
 
-float rd__CrtTriadTop(int mask, float r, float gap, int sx, float v, int ch)
+float rd__crt_triad_top(int mask, float r, float gap, int sx, float v, int ch)
 {
     if (mask == RD_CRT_MASK_NONE || !(r > 0.0f)) {
         return 1.0f;
@@ -291,7 +291,7 @@ float rd__CrtTriadTop(int mask, float r, float gap, int sx, float v, int ch)
     return n ? top : 1.0f;
 }
 
-float rd__CrtGainFade(const float col[3], const float gain[3], const float top[3], float fade)
+float rd__crt_gain_fade(const float col[3], const float gain[3], const float top[3], float fade)
 {
     float t = 1.0f;
     for (int k = 0; k < 3; k++) {
@@ -303,8 +303,8 @@ float rd__CrtGainFade(const float col[3], const float gain[3], const float top[3
     return t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
 }
 
-void rd__CrtGlowMix(float col[3], const float halo[3], const float glow[3], float halation,
-                    float bloom, float st)
+void rd__crt_glow_mix(float col[3], const float halo[3], const float glow[3], float halation,
+                      float bloom, float st)
 {
     const float l = 0.299f * glow[0] + 0.587f * glow[1] + 0.114f * glow[2];
     float kh = st * halation, kb = st * bloom * smooth01(0.2f, 1.0f, l);
@@ -318,7 +318,7 @@ void rd__CrtGlowMix(float col[3], const float halo[3], const float glow[3], floa
     }
 }
 
-void rd__CrtShoulder(float c[3], float st)
+void rd__crt_shoulder(float c[3], float st)
 {
     const float m = fmaxf(c[0], fmaxf(c[1], c[2])), k = 1.0f - 0.1f * st;
     if (m <= k) {
@@ -330,7 +330,7 @@ void rd__CrtShoulder(float c[3], float st)
     }
 }
 
-float rd__CrtBeam(float c, float d, float beamMin, float beamMax)
+float rd__crt_beam(float c, float d, float beamMin, float beamMax)
 {
     const float cl = c < 0.0f ? 0.0f : (c > 1.0f ? 1.0f : c);
     const float width = beamMin + (beamMax - beamMin) * cl;
@@ -339,7 +339,7 @@ float rd__CrtBeam(float c, float d, float beamMin, float beamMax)
     return c * expf(-0.5f * d * d / (sig * sig)) / (sig * 2.5066283f);
 }
 
-void rd__CrtGrid(uint32_t *vw, uint32_t *vh)
+void rd__crt_grid(uint32_t *vw, uint32_t *vh)
 {
     const float wide = g_rd.wideX > 0.0f ? g_rd.wideX : 1.0f;
     const uint32_t gw = g_rd.gsW ? g_rd.gsW : 512, gh = g_rd.gsH ? g_rd.gsH : 512;
@@ -349,7 +349,7 @@ void rd__CrtGrid(uint32_t *vw, uint32_t *vh)
     *vh = h ? h : 1;
 }
 
-bool rd__CrtOn(void)
+bool rd__crt_on(void)
 {
     const RdSettings *s = &g_rd.settings;
     return s->crtMode != RD_CRT_OFF && s->crtMode < RD_CRT_MODE_COUNT && s->crtStrength > 0.0f;
@@ -366,11 +366,11 @@ typedef struct CrtTex {
 } CrtTex;
 
 static CrtTex s_src, s_layer, s_comp, s_glowA, s_glowB;
-/* the films' own (rd__CrtRecordFilm): their grid is not the game's, so
+/* the films' own (rd__crt_record_film): their grid is not the game's, so
  * the game's targets are not resized at every film's start and end */
 static CrtTex s_filmSrc, s_filmGlowA, s_filmGlowB;
 
-/* the tests' view of the last composite (rd__CrtLastPass) */
+/* the tests' view of the last composite (rd__crt_last_pass) */
 static uint32_t s_passes, s_lastW, s_lastH;
 
 static bool ensure(CrtTex *c, uint32_t w, uint32_t h, RhiFormat fmt, const char *name)
@@ -379,9 +379,9 @@ static bool ensure(CrtTex *c, uint32_t w, uint32_t h, RhiFormat fmt, const char 
         return true;
     }
     if (c->t.id) {
-        rhi_DestroyTexture(c->t);
+        rhi_destroy_texture(c->t);
     }
-    c->t = rhi_CreateTexture(
+    c->t = rhi_create_texture(
         &(RhiTextureDesc){w, h, 1, fmt, RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED, name});
     c->state = RHI_STATE_UNDEFINED;
     c->w = w;
@@ -390,13 +390,13 @@ static bool ensure(CrtTex *c, uint32_t w, uint32_t h, RhiFormat fmt, const char 
     return c->t.id != 0;
 }
 
-void rd__CrtShutdown(void)
+void rd__crt_shutdown(void)
 {
     CrtTex *all[8] = {&s_src,   &s_layer,   &s_comp,      &s_glowA,
                       &s_glowB, &s_filmSrc, &s_filmGlowA, &s_filmGlowB};
     for (int i = 0; i < 8; i++) {
         if (all[i]->t.id) {
-            rhi_DestroyTexture(all[i]->t);
+            rhi_destroy_texture(all[i]->t);
         }
         memset(all[i], 0, sizeof(*all[i]));
     }
@@ -412,10 +412,10 @@ static void beginPass(RhiCommandList cl, RhiTexture t, uint32_t w, uint32_t h, R
     p.colorCount = 1;
     p.width = w;
     p.height = h;
-    rhi_CmdBeginRenderPass(cl, &p);
+    rhi_cmd_begin_render_pass(cl, &p);
     RhiViewport vp = {(float)area->x, (float)area->y, (float)area->w, (float)area->h, 0.0f, 1.0f};
-    rhi_CmdSetViewport(cl, &vp);
-    rhi_CmdSetScissor(cl, area);
+    rhi_cmd_set_viewport(cl, &vp);
+    rhi_cmd_set_scissor(cl, area);
 }
 
 /* one CRT pass of fs into area of dst, CrtCB cb, t1 src, t2 glow */
@@ -423,23 +423,24 @@ static void crtPass(RhiCommandList cl, RhiPipeline pipe, uint32_t dw, uint32_t d
                     const IcoCrtCB *cb, RhiTexture src, RhiTexture glow)
 {
     const RhiSampler lin =
-        rd__Sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rhi_CmdSetPipeline(cl, pipe);
-    rd__BindUniform(cl, 0, rd__FrameGroup(dw, dh, 0.0f, 0.0f));
-    rd__BindUniform(cl, 1, rd__CrtGroup(cb));
-    rhi_CmdSetBindGroup(cl, 2, glow.id ? rd__TexGroupDate(src, lin, glow) : rd__TexGroup(src, lin));
-    rhi_CmdDraw(cl, 3, 0, 1);
+        rd__sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rhi_cmd_set_pipeline(cl, pipe);
+    rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__crt_group(cb));
+    rhi_cmd_set_bind_group(cl, 2,
+                           glow.id ? rd__tex_group_date(src, lin, glow) : rd__tex_group(src, lin));
+    rhi_cmd_draw(cl, 3, 0, 1);
 }
 
 /* the exact box average of src (sw x sh) into dst (dw x dh, RGBA8) */
 static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, CrtTex *dst)
 {
-    const RdPipeKeyInt kRed = rd__PostKey(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
-    const RhiPipeline pRed = rd__GetPipeline(&kRed);
+    const RdPipeKeyInt kRed = rd__post_key(RD_VS_BLIT, RD_FS_BOX_REDUCE, RHI_FMT_RGBA8_UNORM);
+    const RhiPipeline pRed = rd__get_pipeline(&kRed);
     if (!pRed.id) {
         return false;
     }
-    rd__Transition(cl, dst->t, &dst->state, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, dst->t, &dst->state, RHI_STATE_RENDER_TARGET);
     const RhiRect all = {0, 0, dst->w, dst->h};
     beginPass(cl, dst->t, dst->w, dst->h, RHI_LOAD_DONT_CARE, &all);
     IcoDrawCB cb;
@@ -450,15 +451,15 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     cb.param[1] = (float)sh / (float)dst->h;
     cb.param[2] = (float)sw;
     cb.param[3] = (float)sh;
-    rhi_CmdSetPipeline(cl, pRed);
-    rd__BindUniform(cl, 0, rd__FrameGroup(dst->w, dst->h, 0.0f, 0.0f));
-    rd__BindUniform(cl, 1, rd__DrawGroup(&cb));
-    rhi_CmdSetBindGroup(cl, 2,
-                        rd__TexGroup(src, rd__Sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
-                                                      RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-    rhi_CmdDraw(cl, 3, 0, 1);
-    rhi_CmdEndRenderPass(cl);
-    rd__Transition(cl, dst->t, &dst->state, RHI_STATE_SHADER_READ);
+    rhi_cmd_set_pipeline(cl, pRed);
+    rd__bind_uniform(cl, 0, rd__frame_group(dst->w, dst->h, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+    rhi_cmd_set_bind_group(cl, 2,
+                           rd__tex_group(src, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
+                                                          RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
+    rhi_cmd_draw(cl, 3, 0, 1);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, dst->t, &dst->state, RHI_STATE_SHADER_READ);
     return true;
 }
 
@@ -469,11 +470,11 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
                     uint32_t outW, uint32_t outH, const RhiRect *box, int mirror)
 {
     const RdCrtParams p = *pp;
-    const RdPipeKeyInt kBloom = rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F);
-    const RdPipeKeyInt kBlur = rd__PostKey(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F);
-    const RdPipeKeyInt kCrt = rd__PostKey(RD_VS_CRT, RD_FS_CRT, outFmt);
-    const RhiPipeline pBloom = rd__GetPipeline(&kBloom), pBlur = rd__GetPipeline(&kBlur),
-                      pCrt = rd__GetPipeline(&kCrt);
+    const RdPipeKeyInt kBloom = rd__post_key(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F);
+    const RdPipeKeyInt kBlur = rd__post_key(RD_VS_CRT, RD_FS_CRT_BLUR, RHI_FMT_RGBA16F);
+    const RdPipeKeyInt kCrt = rd__post_key(RD_VS_CRT, RD_FS_CRT, outFmt);
+    const RhiPipeline pBloom = rd__get_pipeline(&kBloom), pBlur = rd__get_pipeline(&kBlur),
+                      pCrt = rd__get_pipeline(&kCrt);
     if (!pBloom.id || !pBlur.id || !pCrt.id) {
         return false;
     }
@@ -497,10 +498,10 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     cb.beam[0] = p.scanline;
     cb.beam[1] = p.beamMin;
     cb.beam[2] = p.beamMax;
-    cb.beam[3] = (float)rd__CrtGapColumns(r);
+    cb.beam[3] = (float)rd__crt_gap_columns(r);
     cb.mask[0] = (float)p.mask;
     cb.mask[1] = unit(p.maskStrength);
-    cb.mask[2] = p.mask != RD_CRT_MASK_NONE ? rd__CrtMaskFade(box->h) : 0.0f;
+    cb.mask[2] = p.mask != RD_CRT_MASK_NONE ? rd__crt_mask_fade(box->h) : 0.0f;
     cb.mask[3] = p.halation;
     cb.glow[0] = p.bloom;
     cb.glow[1] = p.curvX;
@@ -514,41 +515,41 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
 
     /* 1. the horizontal glow, 2. the vertical */
     const RhiRect glowArea = {0, 0, gw, gh};
-    rd__Transition(cl, ga->t, &ga->state, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, ga->t, &ga->state, RHI_STATE_RENDER_TARGET);
     beginPass(cl, ga->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
     crtPass(cl, pBloom, gw, gh, &cb, src, (RhiTexture){0});
-    rhi_CmdEndRenderPass(cl);
-    rd__Transition(cl, ga->t, &ga->state, RHI_STATE_SHADER_READ);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, ga->t, &ga->state, RHI_STATE_SHADER_READ);
     cb.pass[2] = 1.0f / (float)gw;
     cb.pass[3] = 1.0f / (float)gh;
-    rd__Transition(cl, gb->t, &gb->state, RHI_STATE_RENDER_TARGET);
+    rd__transition(cl, gb->t, &gb->state, RHI_STATE_RENDER_TARGET);
     beginPass(cl, gb->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
     crtPass(cl, pBlur, gw, gh, &cb, ga->t, (RhiTexture){0});
-    rhi_CmdEndRenderPass(cl);
-    rd__Transition(cl, gb->t, &gb->state, RHI_STATE_SHADER_READ);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, gb->t, &gb->state, RHI_STATE_SHADER_READ);
 
     /* 3. the composite into the box, black around it (the caller left out
      * in RENDER_TARGET): t1 the grid, t2 the glow */
     beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
     crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
-    rhi_CmdEndRenderPass(cl);
+    rhi_cmd_end_render_pass(cl);
     s_passes++;
     s_lastW = vw;
     s_lastH = vh;
     return true;
 }
 
-bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                   uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
+bool rd__crt_record(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
+                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay)
 {
     RdCrtParams p;
-    if (!rd__CrtResolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
+    if (!rd__crt_resolve(&g_rd.settings, &p) || !disp || !disp->color.id) {
         return false;
     }
     /* the source grid: DISPLAY's GS width widened with the aspect, its
      * lines (the full-height scene's 512) */
     uint32_t vw, vh;
-    rd__CrtGrid(&vw, &vh);
+    rd__crt_grid(&vw, &vh);
     RhiTexture src = disp->color;
     if (disp->tw != vw || disp->th != vh) {
         /* a larger DISPLAY: its exact box average at the grid's size */
@@ -561,17 +562,17 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
     /* 0. the overlay into the grid: the source line-doubled (and flipped by
      * the mirror mode) into the layer of the frame's lines, the prims over
      * it, the layer reduced back; the grid is then the shown orientation */
-    if (overlay && rd__OverlayGridPending()) {
+    if (overlay && rd__overlay_grid_pending()) {
         const uint32_t lh = g_rd.gsH ? g_rd.gsH : 2 * vh;
         if (!ensure(&s_layer, vw, lh, RHI_FMT_RGBA8_UNORM, "rd crt overlay layer")) {
             return false;
         }
-        rd__Transition(cl, s_layer.t, &s_layer.state, RHI_STATE_RENDER_TARGET);
+        rd__transition(cl, s_layer.t, &s_layer.state, RHI_STATE_RENDER_TARGET);
         const RhiRect all = {0, 0, vw, lh};
-        rd__PresentBlit(cl, src, vw, vh, s_layer.t, RHI_FMT_RGBA8_UNORM, vw, lh, RHI_LOAD_DONT_CARE,
-                        &all, RD_FILTER_NEAREST, mirror);
-        rd__OverlayGridDraw(cl, s_layer.t, RHI_FMT_RGBA8_UNORM, vw, lh);
-        rd__Transition(cl, s_layer.t, &s_layer.state, RHI_STATE_SHADER_READ);
+        rd__present_blit(cl, src, vw, vh, s_layer.t, RHI_FMT_RGBA8_UNORM, vw, lh,
+                         RHI_LOAD_DONT_CARE, &all, RD_FILTER_NEAREST, mirror);
+        rd__overlay_grid_draw(cl, s_layer.t, RHI_FMT_RGBA8_UNORM, vw, lh);
+        rd__transition(cl, s_layer.t, &s_layer.state, RHI_STATE_SHADER_READ);
         if (lh == vh) {
             src = s_layer.t;
         } else {
@@ -586,19 +587,19 @@ bool rd__CrtRecord(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, R
     return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, mirror);
 }
 
-void rd__CrtFilmGrid(uint32_t dispH, uint32_t *vw, uint32_t *vh)
+void rd__crt_film_grid(uint32_t dispH, uint32_t *vw, uint32_t *vh)
 {
     const uint32_t lines = dispH ? dispH : 576;
     *vw = g_rd.gsW ? g_rd.gsW : 512;
     *vh = g_rd.fullHeight ? lines : (lines + 1) / 2;
 }
 
-bool rd__CrtRecordFilm(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_t ph, uint32_t vw,
-                       uint32_t vh, RhiTexture out, RhiFormat outFmt, uint32_t outW, uint32_t outH,
-                       const RhiRect *box)
+bool rd__crt_record_film(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_t ph, uint32_t vw,
+                         uint32_t vh, RhiTexture out, RhiFormat outFmt, uint32_t outW,
+                         uint32_t outH, const RhiRect *box)
 {
     RdCrtParams p;
-    if (!rd__CrtResolve(&g_rd.settings, &p) || !pic.id || !vw || !vh) {
+    if (!rd__crt_resolve(&g_rd.settings, &p) || !pic.id || !vw || !vh) {
         return false;
     }
     RhiTexture src = pic;
@@ -613,7 +614,7 @@ bool rd__CrtRecordFilm(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_t 
                    0);
 }
 
-uint32_t rd__CrtLastPass(uint32_t *vw, uint32_t *vh)
+uint32_t rd__crt_last_pass(uint32_t *vw, uint32_t *vh)
 {
     if (vw) {
         *vw = s_lastW;

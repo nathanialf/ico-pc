@@ -2,7 +2,7 @@
  * in the port's faces.
  *
  * CPU only: font.c's cmap, no device.  Walks
- *   - ui_StringsForEach: every entry of every language's table;
+ *   - ui_strings_for_each: every entry of every language's table;
  *   - the staff roll's port lines (ico_roll_port_line, the lines the roll
  *     draws after the disc's, with its bitmap font: ASCII only);
  *   - font_corpus/<lang>.txt: the in-game text that is not a string (save
@@ -77,7 +77,7 @@ static void checkText(int lang, const char *src, const char *what)
         CHECK(0, "%s (%s): an empty entry", what, kLangs[lang]);
         return;
     }
-    while ((cp = ui_Utf8Next(&s)) != 0) {
+    while ((cp = ui_utf8_next(&s)) != 0) {
         s_codepoints++;
         if (cp == 0xFFFD) {
             CHECK(0, "%s (%s): U+FFFD or malformed UTF-8 in \"%.40s\"", what, kLangs[lang], src);
@@ -90,7 +90,7 @@ static void checkText(int lang, const char *src, const char *what)
             }
             continue;
         }
-        if (!ui_FontHasGlyph(cp)) {
+        if (!ui_font_has_glyph(cp)) {
             CHECK(0, "%s (%s): Arimo has no U+%04X in \"%.40s\"", what, kLangs[lang], (unsigned)cp,
                   src);
         }
@@ -251,7 +251,7 @@ static void reportFaces(void)
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             any |= s_seen[l][cp];
         }
-        if (any && ui_FontHasGlyph(cp)) {
+        if (any && ui_font_has_glyph(cp)) {
             putCp(line, &n, sizeof(line), cp);
             arimo++;
         }
@@ -265,7 +265,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "usage: font_coverage_test CORPUS_DIR [BASE_ELF]\n");
         return 2;
     }
-    CHECK(ui_FontInit(), "the embedded font parses");
+    CHECK(ui_font_init(), "the embedded font parses");
     int elfRc = 0;
 #ifdef FONT_COVERAGE_ELF
     if (argc > 2 && argv[2][0]) {
@@ -273,15 +273,15 @@ int main(int argc, char **argv)
     }
 #endif
 
-    ui_StringsForEach(visit, NULL);
+    ui_strings_for_each(visit, NULL);
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         CHECK(s_visits[l] > 100, "%s: only %d strings visited", kLangs[l], s_visits[l]);
     }
-    /* every table entry of every language is present (ui_StringsForEach skips
+    /* every table entry of every language is present (ui_strings_for_each skips
        an empty one, so a hole would pass the walk) */
     for (int l = 0; l < UI_LANG_COUNT; l++) {
         for (int id = 1; id < UI_STR_COUNT; id++) {
-            checkText(l, ui_StrIn((UiLang)l, (UiStrId)id), "table entry");
+            checkText(l, ui_str_in((UiLang)l, (UiStrId)id), "table entry");
         }
     }
 
@@ -302,13 +302,13 @@ int main(int argc, char **argv)
     {
         UiGlyph q, cjk, cjk2;
         uint32_t seen[8];
-        CHECK(!ui_FontHasGlyph(0x4E2D), "U+4E2D is outside the subset (the test's probe)");
-        int before = ui_FontMissingSeen(NULL, 0);
-        CHECK(ui_FontGlyph('?', 20, &q) && ui_FontGlyph(0x4E2D, 20, &cjk), "glyphs at 20 px");
+        CHECK(!ui_font_has_glyph(0x4E2D), "U+4E2D is outside the subset (the test's probe)");
+        int before = ui_font_missing_seen(NULL, 0);
+        CHECK(ui_font_glyph('?', 20, &q) && ui_font_glyph(0x4E2D, 20, &cjk), "glyphs at 20 px");
         CHECK(cjk.w == q.w && cjk.h == q.h && cjk.advance == q.advance,
               "U+4E2D at 20 px is the '?' glyph");
-        CHECK(ui_FontGlyph(0x4E2D, 30, &cjk2), "glyph at 30 px");
-        CHECK(ui_FontMissingSeen(seen, 8) == before + 1 && seen[before] == 0x4E2D,
+        CHECK(ui_font_glyph(0x4E2D, 30, &cjk2), "glyph at 30 px");
+        CHECK(ui_font_missing_seen(seen, 8) == before + 1 && seen[before] == 0x4E2D,
               "the missing code point is recorded once, not per size or draw");
     }
 

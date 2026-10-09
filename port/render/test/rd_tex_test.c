@@ -26,28 +26,28 @@
  *            PSMCT16 sprite under TEXA 7F/81+AEM, drawn through
  *            tex_TransTexture + gif_SpriteSensitiveOrg, give the exact
  *            texels in SCENE;
- *   r8       rd_CreateTextureR8 keeps w * h bytes and the
- *            format; rd_UpdateTextureRect writes the rectangle alone,
+ *   r8       rd_create_texture_r8 keeps w * h bytes and the
+ *            format; rd_update_texture_rect writes the rectangle alone,
  *            clipped, counts only updates that change texels and keeps the
  *            union of the rectangles as the dirty one; an RGBA8 texture
  *            takes rectangles too.  On the device the texture reads back
  *            as created, and after two rectangle updates the GPU copy
  *            changed inside their union only (texels changed in the CPU
  *            copy outside it without an update stay as uploaded before).
- *            rd_CreateTextureSheet keeps w * h bytes, the
+ *            rd_create_texture_sheet keeps w * h bytes, the
  *            SHEET format (R8 on the device) and its style; rectangles as
- *            R8; rd_SetTextureSheetStyle changes a sheet's style alone.
- *   packs    (texture packs) rdtex_CreateReplacement moves the image into
+ *            R8; rd_set_texture_sheet_style changes a sheet's style alone.
+ *   packs    (texture packs) rdtex_create_replacement moves the image into
  *            the texture's pending upload with the box chain for an RGBA8
- *            image without mips, rdtex_ReplacementMips on a size that is
+ *            image without mips, rdtex_replacement_mips on a size that is
  *            not a power of two; a replacement's chain is the
  *            alpha-weighted box chain with no alpha coverage kept (a
  *            lattice's level 1 alpha is the plain average, its colour the
  *            wires'); BC refused without a device;
- *            rdtex_Replace installs it on the entry (a stale generation
- *            refused), a new store, rdtex_RevertReplacements and
- *            rdtex_Drop each give it up through the release hook, the old
- *            textures are destroyed two ticks later, rd_UpdateTexture
+ *            rdtex_replace installs it on the entry (a stale generation
+ *            refused), a new store, rdtex_revert_replacements and
+ *            rdtex_drop each give it up through the release hook, the old
+ *            textures are destroyed two ticks later, rd_update_texture
  *            leaves a replacement alone.  On the device a 2x RGBA8
  *            replacement of the PSMT8 sprite's texture (uvW/uvH the GS
  *            16x16) and a BC3 one of the PSMCT16 sprite's are drawn
@@ -303,7 +303,7 @@ static void *makeTim2(const Tim2Spec *s)
 
 static const RdTexRec *texRec(int id)
 {
-    return rd__TexRec(tex_HostTextureId(id));
+    return rd__tex_rec(tex_HostTextureId(id));
 }
 
 /* every texel of texture id against ref (w x h RGBA8), the padding zero */
@@ -553,7 +553,7 @@ static void decodeChecks(void)
             int bad = 0;
 
             memcpy(px, t->pixels, (size_t)t->w * t->h * 4);
-            rdtex_ApplyTexa(px, (size_t)t->w * t->h, RD_TEXSRC_RGBA16, (RdTexA)mode);
+            rdtex_apply_texa(px, (size_t)t->w * t->h, RD_TEXSRC_RGBA16, (RdTexA)mode);
             for (int n = 0; n < s_c16.w * s_c16.h; n++) {
                 bad += px[n * 4 + 3] != texaRef(&s_c16.ref[n * 4], RD_TEXSRC_RGBA16, (RdTexA)mode);
             }
@@ -566,7 +566,7 @@ static void decodeChecks(void)
             int bad = 0;
 
             memcpy(px, t->pixels, (size_t)t->w * t->h * 4);
-            rdtex_ApplyTexa(px, (size_t)t->w * t->h, RD_TEXSRC_RGB24, (RdTexA)mode);
+            rdtex_apply_texa(px, (size_t)t->w * t->h, RD_TEXSRC_RGB24, (RdTexA)mode);
             for (int n = 0; n < s_c24.w * s_c24.h; n++) {
                 bad += px[n * 4 + 3] != texaRef(&s_c24.ref[n * 4], RD_TEXSRC_RGB24, (RdTexA)mode);
             }
@@ -601,7 +601,7 @@ static void decodeChecks(void)
             im.clutColors = k == 0 ? 256 : 16;
             im.pixels = img;
             im.clut = clut;
-            CHECK(rdtex_Decode(&im, out, &src) == 0, "decode psm %u", psms[k]);
+            CHECK(rdtex_decode(&im, out, &src) == 0, "decode psm %u", psms[k]);
             for (int n = 0; n < 32; n++) {
                 uint8_t b = img[n * 4 + 3];
                 int idx = k == 0 ? b : k == 1 ? (b & 15) : (b >> 4);
@@ -614,8 +614,8 @@ static void decodeChecks(void)
 
 static void samplerChecks(void)
 {
-    const RdTexSampler *a = rdtex_Sampler((uint32_t)s_c32ico.id, RDTEX_TEXA_REPLAY);
-    const RdTexSampler *b = rdtex_Sampler((uint32_t)s_c32.id, RDTEX_TEXA_REPLAY);
+    const RdTexSampler *a = rdtex_sampler((uint32_t)s_c32ico.id, RDTEX_TEXA_REPLAY);
+    const RdTexSampler *b = rdtex_sampler((uint32_t)s_c32.id, RDTEX_TEXA_REPLAY);
 
     CHECK(a && a->mag == RD_FILTER_NEAREST && a->min == RD_FILTER_NEAREST,
           "ICO block SMPMAG 0 SMPMIN 0: nearest");
@@ -625,7 +625,7 @@ static void samplerChecks(void)
 
 static void scrollChecks(void)
 {
-    const RdTexCacheStats *st = rdtex_Stats();
+    const RdTexCacheStats *st = rdtex_stats();
     uint32_t before = tex_HostTextureId(s_scroll.id);
     uint32_t other = tex_HostTextureId(s_t8.id);
     uint32_t decodes = st->decodes, creates = st->creates, updates = st->updates;
@@ -678,15 +678,15 @@ static void cacheChecks(void)
     im.psm = RDTEX_PSMCT16;
     im.pixels = img;
 
-    a = rdtex_Store(1000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    a = rdtex_store(1000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "key");
     CHECK(a.id != 0, "store");
-    CHECK(rdtex_Find(1000, 1, RDTEX_TEXA_REPLAY).id == a.id, "hit on the same key");
-    CHECK(rdtex_Find(1000, 2, RDTEX_TEXA_REPLAY).id == 0, "miss on another generation");
-    CHECK(rdtex_Find(1000, 1, RD_TEXA_80_80_AEM).id == 0, "miss on another TEXA mode");
-    b = rdtex_Store(1000, 1, RD_TEXA_80_80_AEM, &im, NULL, "key baked");
+    CHECK(rdtex_find(1000, 1, RDTEX_TEXA_REPLAY).id == a.id, "hit on the same key");
+    CHECK(rdtex_find(1000, 2, RDTEX_TEXA_REPLAY).id == 0, "miss on another generation");
+    CHECK(rdtex_find(1000, 1, RD_TEXA_80_80_AEM).id == 0, "miss on another TEXA mode");
+    b = rdtex_store(1000, 1, RD_TEXA_80_80_AEM, &im, NULL, "key baked");
     CHECK(b.id != 0 && b.id != a.id, "a baked TEXA variant is its own entry");
     {
-        const RdTexRec *rb = rd__TexRec(b.id), *ra = rd__TexRec(a.id);
+        const RdTexRec *rb = rd__tex_rec(b.id), *ra = rd__tex_rec(a.id);
         int bad = 0;
         for (int n = 0; ra && rb && n < 16; n++) {
             bad += rb->pixels[n * 4 + 3] !=
@@ -695,27 +695,27 @@ static void cacheChecks(void)
         CHECK(ra && rb && rb->src == RD_TEXSRC_RGBA32 && bad == 0, "baked TEXA alphas (%d)", bad);
     }
     img[0] ^= 0xFF;
-    c = rdtex_Store(1000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    c = rdtex_store(1000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "key");
     CHECK(c.id == a.id, "a new generation of the same shape updates in place");
-    CHECK(rdtex_Find(1000, 1, RDTEX_TEXA_REPLAY).id == 0 &&
-              rdtex_Find(1000, 2, RDTEX_TEXA_REPLAY).id == a.id,
+    CHECK(rdtex_find(1000, 1, RDTEX_TEXA_REPLAY).id == 0 &&
+              rdtex_find(1000, 2, RDTEX_TEXA_REPLAY).id == a.id,
           "the entry holds the new generation");
     im.w = im.h = 8;
     im.pixels = img2;
-    d = rdtex_Store(1000, 3, RDTEX_TEXA_REPLAY, &im, NULL, "key");
+    d = rdtex_store(1000, 3, RDTEX_TEXA_REPLAY, &im, NULL, "key");
     CHECK(d.id != 0 && d.id != a.id, "a new size is a new texture");
-    CHECK(rd__TexRec(a.id) != NULL, "the old texture lives until two frame ticks");
-    rdtex_FrameTick();
-    CHECK(rd__TexRec(a.id) != NULL, "still after one");
-    rdtex_FrameTick();
-    CHECK(rd__TexRec(a.id) == NULL, "destroyed after two");
-    rdtex_Drop(1000);
-    CHECK(rdtex_Find(1000, 3, RDTEX_TEXA_REPLAY).id == 0 &&
-              rdtex_Find(1000, 1, RD_TEXA_80_80_AEM).id == 0,
+    CHECK(rd__tex_rec(a.id) != NULL, "the old texture lives until two frame ticks");
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(a.id) != NULL, "still after one");
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(a.id) == NULL, "destroyed after two");
+    rdtex_drop(1000);
+    CHECK(rdtex_find(1000, 3, RDTEX_TEXA_REPLAY).id == 0 &&
+              rdtex_find(1000, 1, RD_TEXA_80_80_AEM).id == 0,
           "dropped");
-    rdtex_FrameTick();
-    rdtex_FrameTick();
-    CHECK(rd__TexRec(d.id) == NULL && rd__TexRec(b.id) == NULL, "dropped textures destroyed");
+    rdtex_frame_tick();
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(d.id) == NULL && rd__tex_rec(b.id) == NULL, "dropped textures destroyed");
 }
 
 /* ------------------------------------------------------- texture packs */
@@ -782,13 +782,13 @@ static void replacementChecks(void)
     im.w = im.h = 8;
     im.psm = RDTEX_PSMCT32;
     im.pixels = px;
-    rdtex_SetReleaseHook(onRelease);
+    rdtex_set_release_hook(onRelease);
     s_released = 0;
 
-    const RdTex a = rdtex_Store(2000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    const RdTex a = rdtex_store(2000, 1, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
     TexpackImage img = repImage(16, 16, 2);
-    const RdTex r = rdtex_CreateReplacement(&img, 8, 8, "rep");
-    const RdTexRec *rr = rd__TexRec(r.id);
+    const RdTex r = rdtex_create_replacement(&img, 8, 8, "rep");
+    const RdTexRec *rr = rd__tex_rec(r.id);
     CHECK(r.id && rr && img.blob == NULL && img.levels == 0, "the image moved into the texture");
     CHECK(rr && rr->replacement && rr->kind == RD_TEXKIND_IMAGE && rr->format == RD_TEXEL_RGBA8 &&
               rr->src == RD_TEXSRC_RGBA32 && rr->pixels == NULL && rr->w == 16 && rr->h == 16 &&
@@ -805,50 +805,50 @@ static void replacementChecks(void)
               "the box chain's level 1");
     }
     /* a stale generation is refused, the right one installs */
-    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r) == -1, "stale generation refused");
-    CHECK(rdtex_Replace(2001, 1, RDTEX_TEXA_REPLAY, r) == -1, "unknown id refused");
-    CHECK(rdtex_Replace(2000, 1, RDTEX_TEXA_REPLAY, r) == 0, "rdtex_Replace");
-    CHECK(rdtex_Find(2000, 1, RDTEX_TEXA_REPLAY).id == r.id, "the entry binds the replacement");
-    CHECK(rdtex_Stats()->replaced >= 1 && s_released == 0, "replaced, nothing released yet");
-    rd_UpdateTexture(r, px); /* no CPU texels: ignored */
-    CHECK(rd__TexRec(r.id) && rd__TexRec(r.id)->pixels == NULL, "rd_UpdateTexture leaves it");
-    rdtex_FrameTick();
-    rdtex_FrameTick();
-    CHECK(rd__TexRec(a.id) == NULL, "the game's texture destroyed two ticks later");
+    CHECK(rdtex_replace(2000, 2, RDTEX_TEXA_REPLAY, r) == -1, "stale generation refused");
+    CHECK(rdtex_replace(2001, 1, RDTEX_TEXA_REPLAY, r) == -1, "unknown id refused");
+    CHECK(rdtex_replace(2000, 1, RDTEX_TEXA_REPLAY, r) == 0, "rdtex_replace");
+    CHECK(rdtex_find(2000, 1, RDTEX_TEXA_REPLAY).id == r.id, "the entry binds the replacement");
+    CHECK(rdtex_stats()->replaced >= 1 && s_released == 0, "replaced, nothing released yet");
+    rd_update_texture(r, px); /* no CPU texels: ignored */
+    CHECK(rd__tex_rec(r.id) && rd__tex_rec(r.id)->pixels == NULL, "rd_update_texture leaves it");
+    rdtex_frame_tick();
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(a.id) == NULL, "the game's texture destroyed two ticks later");
 
     /* a new generation (a CLUT scroll) of the same shape: a new texture of
        the game's own, the replacement released */
-    const RdTex b = rdtex_Store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    const RdTex b = rdtex_store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
     CHECK(b.id && b.id != r.id && s_released == 1 && s_lastReleased.id == r.id,
           "a new store gives the replacement up (%d)", s_released);
-    CHECK(rd__TexRec(b.id) && rd__TexRec(b.id)->pixels &&
-              memcmp(rd__TexRec(b.id)->pixels, px, 16) == 0,
+    CHECK(rd__tex_rec(b.id) && rd__tex_rec(b.id)->pixels &&
+              memcmp(rd__tex_rec(b.id)->pixels, px, 16) == 0,
           "the game's texels again");
-    rdtex_FrameTick();
-    rdtex_FrameTick();
-    CHECK(rd__TexRec(r.id) == NULL, "the replacement destroyed (pending freed with it)");
+    rdtex_frame_tick();
+    rdtex_frame_tick();
+    CHECK(rd__tex_rec(r.id) == NULL, "the replacement destroyed (pending freed with it)");
 
     /* revert: the entry forgotten, the next bind misses */
     img = repImage(16, 16, 2);
-    const RdTex r2 = rdtex_CreateReplacement(&img, 8, 8, "rep2");
-    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r2) == 0, "second replacement");
-    rdtex_RevertReplacements();
+    const RdTex r2 = rdtex_create_replacement(&img, 8, 8, "rep2");
+    CHECK(rdtex_replace(2000, 2, RDTEX_TEXA_REPLAY, r2) == 0, "second replacement");
+    rdtex_revert_replacements();
     CHECK(s_released == 2 && s_lastReleased.id == r2.id, "revert releases it");
-    CHECK(rdtex_Find(2000, 2, RDTEX_TEXA_REPLAY).id == 0, "revert: the next bind decodes again");
-    const RdTex c = rdtex_Store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
-    CHECK(c.id && rdtex_Find(2000, 2, RDTEX_TEXA_REPLAY).id == c.id, "decoded again");
+    CHECK(rdtex_find(2000, 2, RDTEX_TEXA_REPLAY).id == 0, "revert: the next bind decodes again");
+    const RdTex c = rdtex_store(2000, 2, RDTEX_TEXA_REPLAY, &im, NULL, "orig");
+    CHECK(c.id && rdtex_find(2000, 2, RDTEX_TEXA_REPLAY).id == c.id, "decoded again");
 
     /* drop */
     img = repImage(16, 16, 2);
-    const RdTex r3 = rdtex_CreateReplacement(&img, 8, 8, "rep3");
-    CHECK(rdtex_Replace(2000, 2, RDTEX_TEXA_REPLAY, r3) == 0, "third replacement");
-    rdtex_Drop(2000);
+    const RdTex r3 = rdtex_create_replacement(&img, 8, 8, "rep3");
+    CHECK(rdtex_replace(2000, 2, RDTEX_TEXA_REPLAY, r3) == 0, "third replacement");
+    rdtex_drop(2000);
     CHECK(s_released == 3 && s_lastReleased.id == r3.id, "drop releases it");
     for (int i = 0; i < 3; i++) {
-        rdtex_FrameTick();
+        rdtex_frame_tick();
     }
-    CHECK(rd__TexRec(r2.id) == NULL && rd__TexRec(r3.id) == NULL && rd__TexRec(b.id) == NULL &&
-              rd__TexRec(c.id) == NULL,
+    CHECK(rd__tex_rec(r2.id) == NULL && rd__tex_rec(r3.id) == NULL && rd__tex_rec(b.id) == NULL &&
+              rd__tex_rec(c.id) == NULL,
           "everything retired is destroyed");
 
     /* BC without a device: refused, the image untouched */
@@ -861,17 +861,17 @@ static void replacementChecks(void)
     bc.levels = 1;
     bc.lv[0] = (TexpackImageLevel){blocks, 4, 4, 8, 8};
     bc.blob = blocks;
-    CHECK(rdtex_CreateReplacement(&bc, 4, 4, "bc").id == 0 && bc.blob == blocks,
+    CHECK(rdtex_create_replacement(&bc, 4, 4, "bc").id == 0 && bc.blob == blocks,
           "BC refused without a device, image untouched");
 
     /* the chain of a size that is not a power of two: 13x5, 6x2, 3x1, 1x1 */
     img = repImage(13, 5, 0);
-    CHECK(rdtex_ReplacementMips(&img) == 0 && img.levels == 4 && img.lv[1].w == 6 &&
+    CHECK(rdtex_replacement_mips(&img) == 0 && img.levels == 4 && img.lv[1].w == 6 &&
               img.lv[1].h == 2 && img.lv[2].w == 3 && img.lv[2].h == 1 && img.lv[3].w == 1 &&
-              img.lv[3].h == 1 && img.bytes == rdtex_MipChainBytes(13, 5) + 13 * 5 * 4,
+              img.lv[3].h == 1 && img.bytes == rdtex_mip_chain_bytes(13, 5) + 13 * 5 * 4,
           "13x5 chain");
-    CHECK(rdtex_ReplacementMips(&img) == -1, "a second chain refused");
-    texpack_FreeImage(&img);
+    CHECK(rdtex_replacement_mips(&img) == -1, "a second chain refused");
+    texpack_free_image(&img);
     /* a lattice (wires every 4th row and column, (200, 180,
      * 160) alpha 0x80; holes black alpha 0): level 1 is the alpha-weighted
      * box chain exactly, with no coverage boost (the boost would raise the
@@ -887,9 +887,9 @@ static void replacementChecks(void)
             p[i * 4 + 3] = wire ? 0x80 : 0;
         }
         static uint8_t want[16 * 16 * 4];
-        const uint32_t wn = rdtex_BuildMipChain(p, 16, 16, want, 1);
-        CHECK(rdtex_ReplacementMips(&img) == 0 && img.levels == wn + 1 &&
-                  memcmp(img.lv[1].data, want, rdtex_MipChainBytes(16, 16)) == 0,
+        const uint32_t wn = rdtex_build_mip_chain(p, 16, 16, want, 1);
+        CHECK(rdtex_replacement_mips(&img) == 0 && img.levels == wn + 1 &&
+                  memcmp(img.lv[1].data, want, rdtex_mip_chain_bytes(16, 16)) == 0,
               "a replacement's chain is the alpha-weighted box chain, no coverage kept");
         const uint8_t *l1 = img.lv[1].data;
         int over = 0, top = 0, dark = 0;
@@ -906,13 +906,13 @@ static void replacementChecks(void)
               "expected), %d off the wire colour",
               over, top, dark);
     }
-    texpack_FreeImage(&img);
+    texpack_free_image(&img);
     /* a replacement destroyed before its upload frees its levels */
     img = repImage(8, 8, 0);
-    const RdTex r4 = rdtex_CreateReplacement(&img, 8, 8, "rep4");
-    CHECK(r4.id && rd__TexRec(r4.id)->pending, "pending");
-    rd_DestroyTexture(r4);
-    rdtex_SetReleaseHook(NULL);
+    const RdTex r4 = rdtex_create_replacement(&img, 8, 8, "rep4");
+    CHECK(r4.id && rd__tex_rec(r4.id)->pending, "pending");
+    rd_destroy_texture(r4);
+    rdtex_set_release_hook(NULL);
 }
 
 static void recordFrame(void);
@@ -923,7 +923,7 @@ static uint32_t entryGen(int idx)
 {
     const uint32_t want = tex_HostTextureId(idx);
     for (uint32_t gen = 1; gen < 8u * 4096u; gen++) {
-        if (rdtex_Find((uint32_t)idx, gen, RDTEX_TEXA_REPLAY).id == want) {
+        if (rdtex_find((uint32_t)idx, gen, RDTEX_TEXA_REPLAY).id == want) {
             return gen;
         }
     }
@@ -935,8 +935,8 @@ static void replacementPixels(void)
     /* the PSMT8 sprite: a 32x32 RGBA8 replacement of its 16x16 texture */
     const uint32_t g8 = entryGen(s_t8.id);
     TexpackImage img = repImage(32, 32, 2);
-    const RdTex r = rdtex_CreateReplacement(&img, 16, 16, "rep t8");
-    CHECK(g8 && r.id && rdtex_Replace((uint32_t)s_t8.id, g8, RDTEX_TEXA_REPLAY, r) == 0,
+    const RdTex r = rdtex_create_replacement(&img, 16, 16, "rep t8");
+    CHECK(g8 && r.id && rdtex_replace((uint32_t)s_t8.id, g8, RDTEX_TEXA_REPLAY, r) == 0,
           "replace the PSMT8 texture (gen %u)", g8);
     /* the PSMCT16 sprite: a BC3 16x16, one colour, alpha 0x80 */
     const uint32_t g16 = entryGen(s_c16.id);
@@ -956,8 +956,8 @@ static void replacementPixels(void)
     bc.lv[0] = (TexpackImageLevel){blocks, 16, 16, 64, 256};
     bc.blob = blocks;
     bc.bytes = 256;
-    const RdTex rb = rdtex_CreateReplacement(&bc, 16, 16, "rep c16");
-    CHECK(g16 && rb.id && rdtex_Replace((uint32_t)s_c16.id, g16, RDTEX_TEXA_REPLAY, rb) == 0,
+    const RdTex rb = rdtex_create_replacement(&bc, 16, 16, "rep c16");
+    CHECK(g16 && rb.id && rdtex_replace((uint32_t)s_c16.id, g16, RDTEX_TEXA_REPLAY, rb) == 0,
           "replace the PSMCT16 texture with BC3");
     if (failures) {
         return;
@@ -967,7 +967,8 @@ static void replacementPixels(void)
     recordFrame();
     uint32_t w = 0, h = 0;
     uint8_t *px = malloc(512 * 512 * 4);
-    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!px || !rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) ||
+        w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
         return;
@@ -1003,15 +1004,15 @@ static void replacementPixels(void)
     img = repImage(1024, 1024, 0);
     uint8_t *ref = malloc(img.lv[0].size), *got = malloc(img.lv[0].size);
     memcpy(ref, img.lv[0].data, img.lv[0].size);
-    const RdTex big = rdtex_CreateReplacement(&img, 64, 64, "rep big");
-    rd_BeginFrame();
-    rd_EndFrame(0);
-    const RdTexRec *br = rd__TexRec(big.id);
+    const RdTex big = rdtex_create_replacement(&img, 64, 64, "rep big");
+    rd_begin_frame();
+    rd_end_frame(0);
+    const RdTexRec *br = rd__tex_rec(big.id);
     CHECK(br && br->pending == NULL && br->mipLevels == 11, "the big replacement uploaded");
-    CHECK(rd__ReadTexture(big, got, 1024 * 1024 * 4, &w, &h) && w == 1024 &&
+    CHECK(rd__read_texture(big, got, 1024 * 1024 * 4, &w, &h) && w == 1024 &&
               memcmp(got, ref, 1024 * 1024 * 4) == 0,
           "the big replacement reads back");
-    rd_DestroyTexture(big);
+    rd_destroy_texture(big);
     free(ref);
     free(got);
 }
@@ -1047,8 +1048,8 @@ static void recordFrame(void)
     static const uint8_t black[4] = {0, 0, 0, 0};
 
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
     /* PSMT8, ICO block nearest */
     tex_TransTexture(s_t8.id, 11);
     gif_StartPacketPri(11);
@@ -1068,7 +1069,7 @@ static void checkRecording(const RdFrame *f)
     Walk w;
     memset(&w, 0, sizeof(w));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, &w);
+    rd__walk(f, 0, &s, collect, &w);
     CHECK(w.screens == 2, "list 11 holds %d screen batches, expected 2", w.screens);
     if (w.screens != 2) {
         return;
@@ -1096,7 +1097,8 @@ static void checkPixels(void)
     uint8_t *px = malloc(512 * 512 * 4);
     int bad = 0;
 
-    if (!px || !rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!px || !rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) ||
+        w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
         return;
@@ -1147,8 +1149,8 @@ static void r8Checks(void)
             cov[y * W + x] = r8At(x, y);
         }
     }
-    RdTex t = rd_CreateTextureR8(W, H, cov, "r8");
-    RdTexRec *r = rd__TexRec(t.id);
+    RdTex t = rd_create_texture_r8(W, H, cov, "r8");
+    RdTexRec *r = rd__tex_rec(t.id);
     CHECK(r && r->kind == RD_TEXKIND_IMAGE && r->format == RD_TEXEL_R8 && r->w == W && r->h == H,
           "R8 record");
     if (!r) {
@@ -1165,11 +1167,11 @@ static void r8Checks(void)
     uint8_t a[4 * 3], b[5 * 5];
     memset(a, 0xA5, sizeof(a));
     memset(b, 0x3C, sizeof(b));
-    rd_UpdateTextureRect(t, 2, 3, 4, 3, a);
+    rd_update_texture_rect(t, 2, 3, 4, 3, a);
     CHECK(r->dirty && r->dirtyX0 == 2 && r->dirtyY0 == 3 && r->dirtyX1 == 6 && r->dirtyY1 == 6,
           "dirty rectangle %u,%u-%u,%u", r->dirtyX0, r->dirtyY0, r->dirtyX1, r->dirtyY1);
     /* past the right and bottom edges: clipped to 3 x 2 at (34, 21) */
-    rd_UpdateTextureRect(t, 34, 21, 5, 5, b);
+    rd_update_texture_rect(t, 34, 21, 5, 5, b);
     CHECK(r->dirtyX0 == 2 && r->dirtyY0 == 3 && r->dirtyX1 == W && r->dirtyY1 == H,
           "union %u,%u-%u,%u", r->dirtyX0, r->dirtyY0, r->dirtyX1, r->dirtyY1);
     int bad = 0;
@@ -1186,48 +1188,48 @@ static void r8Checks(void)
     }
     CHECK(bad == 0, "R8 rectangles: %d texels wrong", bad);
     /* the same texels again change nothing and count nothing */
-    rd_UpdateTextureRect(t, 2, 3, 4, 3, a);
-    rd_UpdateTextureRect(t, W, 0, 1, 1, a); /* outside: ignored */
+    rd_update_texture_rect(t, 2, 3, 4, 3, a);
+    rd_update_texture_rect(t, W, 0, 1, 1, a); /* outside: ignored */
     CHECK(g_rd.texRectUpdates - rects0 == 2 && g_rd.texFullUpdates == full0,
           "rectangle updates counted %u (full %u)", g_rd.texRectUpdates - rects0,
           g_rd.texFullUpdates - full0);
-    rd_UpdateTexture(t, cov);
+    rd_update_texture(t, cov);
     CHECK(g_rd.texFullUpdates - full0 == 1 && memcmp(r->pixels, cov, sizeof(cov)) == 0 &&
               r->dirtyX0 == 0 && r->dirtyX1 == W,
-          "rd_UpdateTexture on R8: w * h bytes, dirty whole");
-    rd_DestroyTexture(t);
+          "rd_update_texture on R8: w * h bytes, dirty whole");
+    rd_destroy_texture(t);
 
     /* RGBA8 takes rectangles in its own format */
     static uint8_t rgba[8 * 8 * 4];
     memset(rgba, 0, sizeof(rgba));
-    RdTex u = rd_CreateTexture(8, 8, rgba, RD_TEXA_80_80, "rect rgba");
+    RdTex u = rd_create_texture(8, 8, rgba, RD_TEXA_80_80, "rect rgba");
     const uint8_t px[2 * 4] = {1, 2, 3, 4, 5, 6, 7, 8};
-    rd_UpdateTextureRect(u, 6, 7, 2, 1, px);
-    const RdTexRec *ur = rd__TexRec(u.id);
+    rd_update_texture_rect(u, 6, 7, 2, 1, px);
+    const RdTexRec *ur = rd__tex_rec(u.id);
     CHECK(ur && ur->format == RD_TEXEL_RGBA8 && memcmp(ur->pixels + (7 * 8 + 6) * 4, px, 8) == 0 &&
               ur->pixels[(7 * 8 + 5) * 4] == 0,
           "RGBA8 rectangle");
-    rd_DestroyTexture(u);
+    rd_destroy_texture(u);
 
     /* a sheet texture is one byte a texel, keeps its style
      * (the rim as its weight, 64 full, and dither as 0 or 1) and takes R8's
      * rectangles */
     const RdSheetStyle fr = {7, 62, 0xF0, 3, 0, 1};
-    RdTex sh = rd_CreateTextureSheet(W, H, cov, &fr, "sheet");
-    RdTexRec *sr = rd__TexRec(sh.id);
+    RdTex sh = rd_create_texture_sheet(W, H, cov, &fr, "sheet");
+    RdTexRec *sr = rd__tex_rec(sh.id);
     CHECK(sr && sr->kind == RD_TEXKIND_IMAGE && sr->format == RD_TEXEL_SHEET && sr->w == W &&
               sr->h == H && memcmp(sr->pixels, cov, sizeof(cov)) == 0 &&
-              rd__TexelBytes(sr->format) == 1 && strcmp(sr->name, "sheet") == 0,
+              rd__texel_bytes(sr->format) == 1 && strcmp(sr->name, "sheet") == 0,
           "sheet record");
     CHECK(sr && sr->sheet[0] == 64 && sr->sheet[1] == 62 && sr->sheet[2] == 0xF0 &&
               sr->sheet[3] == 1,
           "sheet style kept");
-    CHECK(rd__TexelRhiFormat(RD_TEXEL_SHEET) == RHI_FMT_R8_UNORM &&
-              rd__TexelIsCoverage(RD_TEXEL_SHEET) && !rd__TexelIsBlock(RD_TEXEL_SHEET),
+    CHECK(rd__texel_rhi_format(RD_TEXEL_SHEET) == RHI_FMT_R8_UNORM &&
+              rd__texel_is_coverage(RD_TEXEL_SHEET) && !rd__texel_is_block(RD_TEXEL_SHEET),
           "sheet texels: R8, coverage");
     if (sr) {
-        rd_UpdateTextureRect(sh, 2, 3, 4, 3, a);
-        rd_UpdateTextureRect(sh, 34, 21, 5, 5, b);
+        rd_update_texture_rect(sh, 2, 3, 4, 3, a);
+        rd_update_texture_rect(sh, 34, 21, 5, 5, b);
         bad = 0;
         for (int y = 0; y < H; y++) {
             for (int x = 0; x < W; x++) {
@@ -1243,24 +1245,24 @@ static void r8Checks(void)
         CHECK(bad == 0 && sr->dirty && sr->dirtyX0 == 0 && sr->dirtyX1 == W,
               "sheet rectangles: %d texels wrong (dirty whole since the create)", bad);
         const RdSheetStyle en = {1, 0, 0xFF, 0, 0, 1};
-        rd_SetTextureSheetStyle(sh, &en);
+        rd_set_texture_sheet_style(sh, &en);
         CHECK(sr->sheet[0] == 64 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 0,
-              "rd_SetTextureSheetStyle");
+              "rd_set_texture_sheet_style");
         const RdSheetStyle faint = {1, 0, 0xFF, 0, 21, 1};
-        rd_SetTextureSheetStyle(sh, &faint);
+        rd_set_texture_sheet_style(sh, &faint);
         CHECK(sr->sheet[0] == 21, "a faint rim's weight kept (%u)", sr->sheet[0]);
-        rd_SetTextureSheetStyle(sh, NULL);
+        rd_set_texture_sheet_style(sh, NULL);
         CHECK(sr->sheet[0] == 64 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
               "the default sheet style");
     }
-    rd_DestroyTexture(sh);
-    RdTex r8 = rd_CreateTextureR8(4, 4, NULL, "not a sheet");
+    rd_destroy_texture(sh);
+    RdTex r8 = rd_create_texture_r8(4, 4, NULL, "not a sheet");
     const RdSheetStyle grey = {1, 62, 0xFF, 1, 0, 1};
-    rd_SetTextureSheetStyle(r8, &grey);
-    const RdTexRec *r8r = rd__TexRec(r8.id);
+    rd_set_texture_sheet_style(r8, &grey);
+    const RdTexRec *r8r = rd__tex_rec(r8.id);
     CHECK(r8r && r8r->format == RD_TEXEL_R8 && r8r->sheet[1] == 0,
-          "rd_SetTextureSheetStyle ignores an R8 texture");
-    rd_DestroyTexture(r8);
+          "rd_set_texture_sheet_style ignores an R8 texture");
+    rd_destroy_texture(r8);
 }
 
 static void r8Pixels(void)
@@ -1273,14 +1275,14 @@ static void r8Pixels(void)
             cov[y * W + x] = r8At(x, y);
         }
     }
-    RdTex t = rd_CreateTextureR8(W, H, cov, "r8 gpu");
-    rd_BeginFrame();
-    rd_EndFrame(0); /* the replay uploads it */
+    RdTex t = rd_create_texture_r8(W, H, cov, "r8 gpu");
+    rd_begin_frame();
+    rd_end_frame(0); /* the replay uploads it */
     uint32_t w = 0, h = 0;
-    CHECK(rd__ReadTexture(t, got, sizeof(got), &w, &h) && w == W && h == H &&
+    CHECK(rd__read_texture(t, got, sizeof(got), &w, &h) && w == W && h == H &&
               memcmp(got, cov, sizeof(cov)) == 0,
           "R8 texture reads back as created");
-    RdTexRec *r = rd__TexRec(t.id);
+    RdTexRec *r = rd__tex_rec(t.id);
     if (!r) {
         return;
     }
@@ -1288,11 +1290,11 @@ static void r8Pixels(void)
     r->pixels[0] ^= 0xFF;
     r->pixels[(H - 1) * W + W - 1] ^= 0xFF;
     const uint8_t a[3 * 2] = {10, 20, 30, 40, 50, 60}, b[2 * 2] = {7, 8, 9, 11};
-    rd_UpdateTextureRect(t, 4, 5, 3, 2, a);
-    rd_UpdateTextureRect(t, 9, 9, 2, 2, b);
-    rd_BeginFrame();
-    rd_EndFrame(0);
-    CHECK(rd__ReadTexture(t, got, sizeof(got), &w, &h), "R8 readback after the rectangles");
+    rd_update_texture_rect(t, 4, 5, 3, 2, a);
+    rd_update_texture_rect(t, 9, 9, 2, 2, b);
+    rd_begin_frame();
+    rd_end_frame(0);
+    CHECK(rd__read_texture(t, got, sizeof(got), &w, &h), "R8 readback after the rectangles");
     int bad = 0;
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -1304,17 +1306,17 @@ static void r8Pixels(void)
     CHECK(bad == 0, "R8 rectangle upload: %d texels differ (the union 4,5-11,11 uploaded alone)",
           bad);
     CHECK(got[(5 * W) + 4] == 10 && got[(10 * W) + 10] == 11, "the rectangles' texels on the GPU");
-    rd_DestroyTexture(t);
+    rd_destroy_texture(t);
 }
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     systemStatus[1] = 1;
     GlobalStageSetting.texSampleMode = 1;
     makePalettes();
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
@@ -1328,14 +1330,14 @@ int main(void)
     dl_Clear();
     recordFrame();
     {
-        const RdFrame *f = rd__LastFrame();
+        const RdFrame *f = rd__last_frame();
         CHECK(f != NULL, "a closed frame");
         if (f) {
             checkRecording(f);
         }
     }
-    rd_Shutdown();
-    rdtex_Reset();
+    rd_shutdown();
+    rdtex_reset();
     if (failures) {
         printf("rd_tex_test: %d failures\n", failures);
         return 1;
@@ -1345,7 +1347,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("rd_tex_test: CPU checks ok; SKIP the pixel check: no usable Vulkan device\n");
         return 77;
     }
@@ -1356,10 +1358,10 @@ int main(void)
     checkPixels();
     r8Pixels();
     replacementPixels();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
-    rdtex_Reset();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    rdtex_reset();
     if (failures) {
         printf("rd_tex_test: %d failures\n", failures);
         return 1;

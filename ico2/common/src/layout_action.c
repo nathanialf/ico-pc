@@ -262,28 +262,28 @@ static int actionStarted = 0; /* derived name */
    rows; the title procs leave Cross/START on them to default_item_select,
    which opens the menu through the row's right link, and mask them with
    their own rows while the memory card check runs. */
-int ui_SettingsEntryItem(int item);
-void ui_SettingsTitleMask(int masked);
+int ui_settings_entry_item(int item);
+void ui_settings_title_mask(int masked);
 /* S1: la_key_config's OK goes back to Settings > Controls (settings.h) */
-int ui_SettingsKeyConfigBack(void);
+int ui_settings_key_config_back(void);
 
-#define LA_HOST_NOT_SETTINGS_ROW &&!ui_SettingsEntryItem(lt_current_property_item())
+#define LA_HOST_NOT_SETTINGS_ROW &&!ui_settings_entry_item(lt_current_property_item())
 
 /* PC port (Q2): the bits of the
    procs' Triangle cancels.  With [game] circle_back on (the default) Circle
-   is an alias of Triangle there (port/ui/layout_ext.h lt_ext_BackButtons);
+   is an alias of Triangle there (port/ui/layout_ext.h lt_ext_back_buttons);
    off, 0x10 alone, the PS2's checks.  Not used where Triangle is not a
    cancel (la_adjust_screen: it resets the brightness) or where Circle has
    a meaning of its own (la_key_config: it is one of the buttons assigned). */
-int lt_ext_BackButtons(void);
+int lt_ext_back_buttons(void);
 
-#define LA_BACK lt_ext_BackButtons()
+#define LA_BACK lt_ext_back_buttons()
 
 /* PC port (renderer wave 7, R7c): mirror mode, chosen on a port screen after
    the vibration choice (port/ui/settings.h ui_NewGameScreen*) and kept per
    save slot in the port config (port/game/options.h ico_mirror_slot_*). */
-int ui_NewGameScreenEnter(void);
-int ui_NewGameScreenLayout(void);
+int ui_new_game_screen_enter(void);
+int ui_new_game_screen_layout(void);
 int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
 /* port/game/achievements.h: the run state kept per save slot */
@@ -300,7 +300,7 @@ static int la_host_new_game_screen(void)
 {
     lt_set_item_select_func(0);
     actionStarted = 0;
-    return ui_NewGameScreenEnter();
+    return ui_new_game_screen_enter();
 }
 
 static int fightSoundStopped = 0; /* derived name */
@@ -731,7 +731,7 @@ int la_vibe_select(void)
             iosPadActRequestEnable = 0;
             break;
         }
-        if (ui_NewGameScreenLayout() >= 0) {
+        if (ui_new_game_screen_layout() >= 0) {
             return la_host_new_game_screen(); /* R7c: the New Game screen, then the start */
         }
         if (titleAdpcm != 0) {
@@ -823,7 +823,7 @@ int la_title_continue_or_new(int first)
         lt_mask_property(0x31, 1);
         lt_mask_property(0x32, 1);
     }
-    ui_SettingsTitleMask(continueDecided == 0);
+    ui_settings_title_mask(continueDecided == 0);
     /* PC port (6C): not on the Settings row, whose Cross default_item_select
        takes (it opens the menu) */
     if (continueDecided != 0 && (pad[0].flags & 0x840) &&
@@ -889,7 +889,7 @@ int la_title_new_game_only(int first)
         lt_item_select_disable = 1;
         lt_mask_property(51, 1);
     }
-    ui_SettingsTitleMask(newGameDecided == 0);
+    ui_settings_title_mask(newGameDecided == 0);
     /* PC port (6C): not on the Settings row, whose Cross default_item_select
        takes (it opens the menu) */
     if (newGameDecided != 0 && (pad[0].flags & 0x840) &&
@@ -2894,7 +2894,7 @@ int la_key_config(int first)
             actionStarted = 0;
             /* PC port (S1): back to Settings > Controls, which opens this
                screen now that the Options screen (58) is not reached */
-            return ui_SettingsKeyConfigBack();
+            return ui_settings_key_config_back();
         }
     }
     return -1;

@@ -40,7 +40,7 @@
 #include "video_options.h"
 
 #ifdef ICO_RD
-#include "rd.h" /* rd_SetMirror */
+#include "rd.h" /* rd_set_mirror */
 #endif
 
 /* the number of elements of an array */
@@ -82,7 +82,7 @@ extern unsigned int ico_host_main_ticks(void);
 
 /* on the port's screens Circle goes back as Triangle does, whatever
    [game] circle_back says (that switch is for the game's own menus,
-   layout_ext.h lt_ext_BackButtons): no PS2 behaviour to keep here, and
+   layout_ext.h lt_ext_back_buttons): no PS2 behaviour to keep here, and
    Circle has no other use on them (a remap capture takes it before this
    check) */
 #define PAD_BACK (LT_PAD_TRIANGLE | LT_PAD_CIRCLE)
@@ -191,7 +191,7 @@ static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1};  /* the title's "Quit to deskt
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
 static int s_quitHeader = -1;
 /* the Android build asks "Quit game" (the phone's app is not
-   a desktop program); the host says so with ui_SettingsSetQuitIsGame */
+   a desktop program); the host says so with ui_settings_set_quit_is_game */
 static int (*s_quitIsGame)(void);
 
 static int quitIsGame(void)
@@ -279,8 +279,8 @@ static const int kRemapOrder[ICO_T_COUNT] = {
 
 static int s_uid;
 
-int ui_SettingsAddRow(int x, int y, int w, int h, int selectable, int owner, int strId,
-                      const char *text, float size, int align)
+int ui_settings_add_row(int x, int y, int w, int h, int selectable, int owner, int strId,
+                        const char *text, float size, int align)
 {
     LtProperty r;
     memset(&r, 0, sizeof(r));
@@ -299,12 +299,12 @@ int ui_SettingsAddRow(int x, int y, int w, int h, int selectable, int owner, int
     r.texV = 1000 + s_uid++;
     r.selectable = selectable ? 1 : 0;
     LtExtText t = {strId, text, size, align};
-    return lt_ext_AddProperty(&r, &t);
+    return lt_ext_add_property(&r, &t);
 }
 
 static LtProperty *P(int index)
 {
-    return lt_ext_Prop(index);
+    return lt_ext_prop(index);
 }
 
 static int addLayout(int first, int last, float colA, int (*proc)(int, int), int def)
@@ -321,7 +321,7 @@ static int addLayout(int first, int last, float colA, int (*proc)(int, int), int
     l.defaultItem = def;
     l.curItem = def;
     l.link = -1;
-    return lt_ext_AddLayout(&l);
+    return lt_ext_add_layout(&l);
 }
 
 /* ------------------------------------------------------------- values */
@@ -374,7 +374,7 @@ static const int kCrtStr[ICO_CRT_MODES] = {UI_STR_VAL_CRT_SCANLINES, UI_STR_VAL_
                                            UI_STR_VAL_CRT_SHADOW};
 
 /* the CRT filter in force (a mode at a strength above 0, as
-   rd__CrtOn sees it): the scene renders at 1x, and the Resolution row reads
+   rd__crt_on sees it): the scene renders at 1x, and the Resolution row reads
    "1x (CRT)" and does not step; the file's resolution is kept and is in
    force again with the filter off */
 static int crtForcesNative(const IcoVideoOptions *o)
@@ -431,7 +431,7 @@ static const char *deviceText(char *buf, unsigned size)
 {
     const char *name = ico_config_get_string("audio.device", "");
     if (name[0] == '\0') {
-        return ui_Str(UI_STR_VAL_DEFAULT_DEVICE);
+        return ui_str(UI_STR_VAL_DEFAULT_DEVICE);
     }
     /* n bytes of the name, on a character's first byte, and "…" after a cut */
     const size_t len = strlen(name);
@@ -447,7 +447,7 @@ static const char *deviceText(char *buf, unsigned size)
     }
     for (;;) {
         snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
-        if (n == 0 || ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
+        if (n == 0 || ui_measure_menu_text(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
             break;
         }
         do {
@@ -508,7 +508,7 @@ static const char *gpuText(char *buf, unsigned size)
 {
     const int i = gpuSelected();
     if (i < 0) {
-        return ui_Str(UI_STR_VAL_GPU_BUILTIN);
+        return ui_str(UI_STR_VAL_GPU_BUILTIN);
     }
     const char *name = s_gpuHost.name(i);
     name = name != NULL ? name : "";
@@ -519,7 +519,7 @@ static const char *gpuText(char *buf, unsigned size)
     }
     for (;;) {
         snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
-        if (n == 0 || ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
+        if (n == 0 || ui_measure_menu_text(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
             break;
         }
         do {
@@ -599,11 +599,11 @@ static void gpuPoll(void)
     }
     s_gpuPending = 0;
     if (r == UI_GPU_INSTALL_ADDED) {
-        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_ADDED), "");
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_ADDED), "");
     } else if (r == UI_GPU_INSTALL_BAD) {
-        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_BAD), "");
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_BAD), "");
     } else if (r == UI_GPU_INSTALL_NOSPACE) {
-        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_NOSPACE), "");
+        ui_popup_push(ui_str(UI_STR_GPU_DRIVER_NOSPACE), "");
     } /* cancelled: nothing to say */
 }
 
@@ -618,10 +618,10 @@ static void gpuRemove(void)
     s_gpuHost.select(-1);
     s_gpuHost.remove(i);
     s_dirtyConfig = 1;
-    ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_REMOVED), "");
+    ui_popup_push(ui_str(UI_STR_GPU_DRIVER_REMOVED), "");
 }
 
-void ui_SettingsSetGpuDriverHost(const UiGpuDriverHost *host)
+void ui_settings_set_gpu_driver_host(const UiGpuDriverHost *host)
 {
     s_gpuHostSet = host != NULL && host->count != NULL && host->name != NULL &&
                    host->selected != NULL && host->select != NULL && host->lastFailed != NULL &&
@@ -641,7 +641,7 @@ static int isTouchOpt(int opt)
 /* the Touch opacity row's steps, percent */
 static const int kTouchOpacity[] = {25, 50, 75, 100};
 
-/* a texture pack was found at start (texpack_Count through the
+/* a texture pack was found at start (texpack_count through the
    host's hook; none without one) */
 static int texturePackInstalled(void)
 {
@@ -650,7 +650,7 @@ static int texturePackInstalled(void)
 
 static int (*s_modelPackCount)(void); /* replacement models installed, when known */
 
-/* a model pack was found at start (modelpack_Count through the
+/* a model pack was found at start (modelpack_count through the
    host's hook; none without one) */
 static int modelPackInstalled(void)
 {
@@ -659,7 +659,7 @@ static int modelPackInstalled(void)
 
 static const char *onOff(int v)
 {
-    return ui_Str(v ? UI_STR_ON : UI_STR_OFF);
+    return ui_str(v ? UI_STR_ON : UI_STR_OFF);
 }
 
 static const char *languageName(int game)
@@ -667,7 +667,7 @@ static const char *languageName(int game)
     static const int ids[5] = {UI_STR_LANG_EN, UI_STR_LANG_FR, UI_STR_LANG_DE, UI_STR_LANG_IT,
                                UI_STR_LANG_ES};
     int i = game - ICO_GAME_LANGUAGE_ENGLISH;
-    return ui_Str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
+    return ui_str((UiStrId)ids[i >= 0 && i < 5 ? i : 0]);
 }
 
 /* the game's brightness step as gsb_controlBrightness clamps it */
@@ -717,7 +717,7 @@ static int extrasMusic(void)
     if (!s_built || s_pages[UI_PAGE_MUSIC].layout < 0) {
         return -1;
     }
-    gallery_Enter();
+    gallery_enter();
     return s_pages[UI_PAGE_MUSIC].layout;
 }
 
@@ -726,7 +726,7 @@ static int extrasMusic(void)
 static int (*s_modelsEnter)(void);
 static int (*s_windowModeQuery)(void); /* the window's truth, when installed */
 
-void ui_SettingsSetModelsHandler(int (*fn)(void))
+void ui_settings_set_models_handler(int (*fn)(void))
 {
     s_modelsEnter = fn;
 }
@@ -751,7 +751,7 @@ static int extrasCredits(void)
     if (!onTitle()) {
         return -1;
     }
-    ui_SettingsSave();
+    ui_settings_save();
     int to = ico_credits_start();
     if (to < 0) {
         return -1;
@@ -793,7 +793,7 @@ static int extrasOpen(int opt)
  * before lighting); Randomize and Reset to original; Square on a row is
  * Original.  From the pause menu the scene behind the menu changes as the
  * colours do.  From the title the page runs inside the model viewer
- * (ui_SettingsSetCharactersHost, port/game/model_viewer.c): Extras'
+ * (ui_settings_set_characters_host, port/game/model_viewer.c): Extras'
  * Characters row loads Ico's model, and the page becomes a panel at the
  * left of the screen (charactersPlace), the model on the right, with a
  * Switch row (and L1 / R1) for the other character and a line of button
@@ -862,7 +862,7 @@ static IcoAppPart charPart(int opt)
     return (IcoAppPart)(opt - UI_OPT_CHAR_ICO_SKIN);
 }
 
-void ui_SettingsSetCharactersHost(const UiCharactersHost *host)
+void ui_settings_set_characters_host(const UiCharactersHost *host)
 {
     if (host != NULL) {
         s_charsHost = *host;
@@ -884,7 +884,7 @@ static int charsShown(void)
     return charsHosted() ? s_charsHost.shown() : -2;
 }
 
-int ui_SettingsCharactersInViewer(void)
+int ui_settings_characters_in_viewer(void)
 {
     return charsShown() != -2;
 }
@@ -915,11 +915,11 @@ static const char *charValue(int opt, char *buf, unsigned size)
     const IcoAppPart p = charPart(opt);
     const int v = ico_appearance_get(p);
     if (v <= 0 || v >= ico_appearance_choices(p)) {
-        return ui_Str(UI_STR_VAL_ORIGINAL);
+        return ui_str(UI_STR_VAL_ORIGINAL);
     }
     const int tones = ico_appearance_is_skin(p) ? ICO_APP_TONES : 0;
     if (v <= tones) {
-        const char *t = ui_Str(UI_STR_CHAR_TONE);
+        const char *t = ui_str(UI_STR_CHAR_TONE);
         const char *at = strstr(t, "%d");
         if (at != NULL) {
             snprintf(buf, size, "%.*s%d%s", (int)(at - t), t, v, at + 2);
@@ -928,10 +928,10 @@ static const char *charValue(int opt, char *buf, unsigned size)
         }
         return buf;
     }
-    return ui_Str((UiStrId)(UI_STR_COLOUR_RED + v - tones - 1));
+    return ui_str((UiStrId)(UI_STR_COLOUR_RED + v - tones - 1));
 }
 
-/* the swatch's colour for lt_ext_AddRect / lt_ext_SetRectColor: the
+/* the swatch's colour for lt_ext_add_rect / lt_ext_set_rect_color: the
    part's 8-bit colour at the GS scale (0x80 = 1.0), opaque */
 static void swatchColour(IcoAppPart p, unsigned char rgba[4])
 {
@@ -954,7 +954,7 @@ static int charsEnter(void)
                 charsHosted() ? "the page was not built" : "no viewer");
         return -1;
     }
-    ui_SettingsSave();
+    ui_settings_save();
     s_charsRows = 0; /* Ico first */
     if (s_charsHost.enter() != 0) {
         fprintf(stderr, "appearance: the viewer did not open\n");
@@ -962,7 +962,7 @@ static int charsEnter(void)
     }
     la_host_leave();
     Page *pg = &s_pages[UI_PAGE_CHARACTERS];
-    lt_ext_Layout(pg->layout)->defaultItem = pageFirstNav(pg);
+    lt_ext_layout(pg->layout)->defaultItem = pageFirstNav(pg);
     return pg->layout;
 }
 
@@ -977,7 +977,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_PRESET: {
         static const int presetStr[3] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_ENHANCED,
                                          UI_STR_VAL_CUSTOM};
-        return ui_Str(presetStr[ico_video_preset(&o)]);
+        return ui_str(presetStr[ico_video_preset(&o)]);
     }
     case UI_OPT_RESOLUTION:
         if (crtForcesNative(&o)) {
@@ -986,30 +986,30 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         if (o.resScale == ICO_RES_AUTO) {
             /* "Auto", with the scale once the window lowered it */
             if (ico_video_auto_scale() > 0) {
-                snprintf(buf, size, "%s (%dx)", ui_Str(UI_STR_VAL_AUTO), ico_video_auto_scale());
+                snprintf(buf, size, "%s (%dx)", ui_str(UI_STR_VAL_AUTO), ico_video_auto_scale());
                 return buf;
             }
-            return ui_Str(UI_STR_VAL_AUTO);
+            return ui_str(UI_STR_VAL_AUTO);
         }
         if (resolutionIndex(&o) == 0) {
-            return ui_Str(UI_STR_VAL_WINDOW);
+            return ui_str(UI_STR_VAL_WINDOW);
         }
         return ico_video_resolution_name(&o, buf, size);
     case UI_OPT_ASPECT:
-        return o.aspect == ICO_ASPECT_AUTO ? ui_Str(UI_STR_VAL_AUTO)
+        return o.aspect == ICO_ASPECT_AUTO ? ui_str(UI_STR_VAL_AUTO)
                                            : ico_video_aspect_name(o.aspect);
     case UI_OPT_WINDOW_MODE: {
         /* the window's own answer when the host installed one */
         const int m = s_windowModeQuery ? s_windowModeQuery() : o.windowMode;
 
-        return ui_Str(m == ICO_WINDOW_BORDERLESS   ? UI_STR_VAL_BORDERLESS
+        return ui_str(m == ICO_WINDOW_BORDERLESS   ? UI_STR_VAL_BORDERLESS
                       : m == ICO_WINDOW_FULLSCREEN ? UI_STR_OPT_FULLSCREEN
                                                    : UI_STR_VAL_WINDOWED);
     }
     case UI_OPT_VSYNC:
         return onOff(o.vsync);
     case UI_OPT_FILTER:
-        return ui_Str(o.filter == ICO_FILTER_TRILINEAR     ? UI_STR_VAL_TRILINEAR
+        return ui_str(o.filter == ICO_FILTER_TRILINEAR     ? UI_STR_VAL_TRILINEAR
                       : o.filter == ICO_FILTER_ANISOTROPIC ? UI_STR_VAL_ANISOTROPIC
                                                            : UI_STR_VAL_ORIGINAL);
     case UI_OPT_FULL_HEIGHT:
@@ -1017,11 +1017,11 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_TEXTURE_PACK:
         /* "None installed" while no pack is found (the row then
            does not step) */
-        return texturePackInstalled() ? onOff(o.texturePack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
+        return texturePackInstalled() ? onOff(o.texturePack) : ui_str(UI_STR_VAL_NONE_INSTALLED);
     case UI_OPT_DUMP_TEXTURES:
         return onOff(o.dumpTextures);
     case UI_OPT_MODEL_PACK:
-        return modelPackInstalled() ? onOff(o.modelPack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
+        return modelPackInstalled() ? onOff(o.modelPack) : ui_str(UI_STR_VAL_NONE_INSTALLED);
     case UI_OPT_DUMP_MODELS:
         return onOff(o.dumpModels);
     case UI_OPT_EFFECT_GLOW:
@@ -1039,16 +1039,16 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_FRAMERATE:
         /* the option as set, in force in both presets (F2) */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
-            return ui_Str(UI_STR_VAL_ORIGINAL);
+            return ui_str(UI_STR_VAL_ORIGINAL);
         }
         if (o.framerate == ICO_FRAMERATE_UNCAPPED) {
-            return ui_Str(UI_STR_VAL_UNCAPPED);
+            return ui_str(UI_STR_VAL_UNCAPPED);
         }
-        snprintf(buf, size, "%d %s", o.framerate, ui_Str(UI_STR_FPS_UNIT));
+        snprintf(buf, size, "%d %s", o.framerate, ui_str(UI_STR_FPS_UNIT));
         return buf;
     case UI_OPT_CRT:
         /* [video] crt and crt_mode as one value */
-        return ui_Str(
+        return ui_str(
             !o.crt ? UI_STR_OFF
                    : kCrtStr[o.crtMode >= 0 && o.crtMode < ICO_CRT_MODES ? o.crtMode
                                                                          : ICO_CRT_CONSUMER]);
@@ -1057,7 +1057,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_BRIGHTNESS:
         if (brightness() == BRIGHTNESS_DEFAULT) {
-            snprintf(buf, size, "%d (%s)", brightness(), ui_Str(UI_STR_MT_DEFAULT));
+            snprintf(buf, size, "%d (%s)", brightness(), ui_str(UI_STR_MT_DEFAULT));
         } else {
             snprintf(buf, size, "%d", brightness());
         }
@@ -1065,11 +1065,11 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VIDEO_MODE:
         if (!onTitle()) {
             snprintf(buf, size, "%s (%s)",
-                     ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ),
-                     ui_Str(UI_STR_VIDEO_MODE_TITLE_ONLY));
+                     ui_str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ),
+                     ui_str(UI_STR_VIDEO_MODE_TITLE_ONLY));
             return buf;
         }
-        return ui_Str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
+        return ui_str(systemStatus[0] != 0 ? UI_STR_VAL_PAL50 : UI_STR_VAL_60HZ);
     case UI_OPT_VOLUME: {
         snprintf(buf, size, "%d %%", (int)(unit01("audio.volume") * 100.0 + 0.5));
         return buf;
@@ -1084,16 +1084,16 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         /* Auto shows the game's mode in force */
         int live = soundOutputModeGet() == 1 ? UI_STR_VAL_MONO : UI_STR_VAL_STEREO;
         if (ico_opt_output_mode() == ICO_OUTPUT_AUTO) {
-            snprintf(buf, size, "%s (%s)", ui_Str(UI_STR_VAL_AUTO), ui_Str((UiStrId)live));
+            snprintf(buf, size, "%s (%s)", ui_str(UI_STR_VAL_AUTO), ui_str((UiStrId)live));
             return buf;
         }
-        return ui_Str(ico_opt_output_mode() == ICO_OUTPUT_MONO ? UI_STR_VAL_MONO
+        return ui_str(ico_opt_output_mode() == ICO_OUTPUT_MONO ? UI_STR_VAL_MONO
                                                                : UI_STR_VAL_STEREO);
     }
     case UI_OPT_DEVICE:
         return deviceText(buf, size);
     case UI_OPT_GPU_DRIVER:
-        return s_gpuHostSet ? gpuText(buf, size) : ui_Str(UI_STR_VAL_GPU_BUILTIN);
+        return s_gpuHostSet ? gpuText(buf, size) : ui_str(UI_STR_VAL_GPU_BUILTIN);
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_ACH_POPUPS:
@@ -1108,13 +1108,13 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_MOUSE_SPEED: {
         const float v = liveBindings()->mouse_camera_speed;
         if (v >= kMouseCamSpeed[N_OF(kMouseCamSpeed) - 1]) {
-            return ui_Str(UI_STR_VAL_INSTANT);
+            return ui_str(UI_STR_VAL_INSTANT);
         }
         snprintf(buf, size, "%.1fx", (double)v);
         return buf;
     }
     case UI_OPT_MOUSE_RANGE:
-        return ui_Str(liveBindings()->mouse_full_range ? UI_STR_VAL_RANGE_FULL
+        return ui_str(liveBindings()->mouse_full_range ? UI_STR_VAL_RANGE_FULL
                                                        : UI_STR_VAL_RANGE_NORMAL);
     case UI_OPT_MOUSE_RETURN:
         return onOff(liveBindings()->mouse_return);
@@ -1123,23 +1123,23 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VIBRATION:
         return onOff(iosPadActRequestEnable);
     case UI_OPT_HOLD_TYPE:
-        return ui_Str(optionControlType == 1 ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
+        return ui_str(optionControlType == 1 ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
     case UI_OPT_TOUCH_MODE: {
         static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
         const int m = liveBindings()->touch_mode;
-        return ui_Str(modeStr[m >= 0 && m < 3 ? m : 1]);
+        return ui_str(modeStr[m >= 0 && m < 3 ? m : 1]);
     }
     case UI_OPT_TOUCH_SIZE: {
         static const int sizeStr[3] = {UI_STR_VAL_SMALL, UI_STR_VAL_MEDIUM, UI_STR_VAL_LARGE};
         const int z = liveBindings()->touch_size;
-        return ui_Str(sizeStr[z >= 0 && z < 3 ? z : 1]);
+        return ui_str(sizeStr[z >= 0 && z < 3 ? z : 1]);
     }
     case UI_OPT_TOUCH_OPACITY:
         snprintf(buf, size, "%d %%", liveBindings()->touch_opacity);
         return buf;
     case UI_OPT_FILM_EFFECT:
         if (optionScreenMode <= 0 || optionScreenMode >= FILM_EFFECTS) {
-            return ui_Str(UI_STR_OFF);
+            return ui_str(UI_STR_OFF);
         }
         snprintf(buf, size, "%d", optionScreenMode);
         return buf;
@@ -1152,7 +1152,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
     case UI_OPT_EXTRAS_CREDITS:
-        return creditsUnlocked() ? "" : ui_Str(UI_STR_ACH_LOCKED);
+        return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
     default:
         return "";
     }
@@ -1186,7 +1186,7 @@ static int optShown(int opt, int link)
         return onTitle(); /* the Extras row itself shows from both */
     }
     if (opt == UI_OPT_CHAR_SWITCH) {
-        return ui_SettingsCharactersInViewer();
+        return ui_settings_characters_in_viewer();
     }
     if (isCharOpt(opt)) {
         /* in the viewer only the rows of the character shown */
@@ -1245,7 +1245,7 @@ static int canStep(int opt)
            (opt != UI_OPT_MODEL_PACK || modelPackInstalled());
 }
 
-const char *ui_SettingsValueText(UiSettingsOpt opt)
+const char *ui_settings_value_text(UiSettingsOpt opt)
 {
     char raw[sizeof(s_text)];
     snprintf(s_text, sizeof(s_text), "%s", rawValue(opt, raw, sizeof(raw)));
@@ -1282,7 +1282,7 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
     }
 }
 
-void ui_SettingsStep(UiSettingsOpt opt, int dir)
+void ui_settings_step(UiSettingsOpt opt, int dir)
 {
     IcoVideoOptions o;
     ico_video_get(&o);
@@ -1523,7 +1523,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         /* the game menus' alias, live from the next press */
         ico_opt_set_circle_back(!ico_opt_circle_back());
         ico_config_set_bool("game.circle_back", ico_opt_circle_back());
-        lt_ext_SetCircleBack(ico_opt_circle_back());
+        lt_ext_set_circle_back(ico_opt_circle_back());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_YORDA:
@@ -1537,7 +1537,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         int i = NonLinearCameraMove - ICO_GAME_LANGUAGE_ENGLISH;
         i = i < 0 || i > 4 ? 0 : stepIndex(i, 5, dir);
         NonLinearCameraMove = ICO_GAME_LANGUAGE_ENGLISH + i;
-        ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+        ui_set_language(ui_lang_from_game(NonLinearCameraMove));
         ico_sysconf_set_language(ico_game_to_scf_language(NonLinearCameraMove));
         s_dirtyConfig = 1;
         break;
@@ -1593,7 +1593,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     }
 }
 
-int ui_SettingsSave(void)
+int ui_settings_save(void)
 {
     int r = 0;
     if (s_dirtyBindings) {
@@ -1624,13 +1624,13 @@ int ui_SettingsSave(void)
     return r;
 }
 
-int ui_SettingsSaveOnQuit(void)
+int ui_settings_save_on_quit(void)
 {
     if (!(s_dirtyVideo || s_dirtyConfig || s_dirtyBindings || ico_config_dirty())) {
         return 0;
     }
     fprintf(stderr, "settings: saving the changed settings on quit\n");
-    int r = ui_SettingsSave();
+    int r = ui_settings_save();
     /* a setter outside the pages (the language the game chose, ...) */
     if (ico_config_dirty() && ico_config_save() != 0) {
         fprintf(stderr, "settings: could not write %s\n", ico_config_toml_path());
@@ -1641,7 +1641,7 @@ int ui_SettingsSaveOnQuit(void)
 
 /* ------------------------------------------------------------ capture */
 
-void ui_RemapCaptureStart(UiRemapCapture *c, int target)
+void ui_remap_capture_start(UiRemapCapture *c, int target)
 {
     memset(c, 0, sizeof(*c));
     c->active = 1;
@@ -1649,7 +1649,7 @@ void ui_RemapCaptureStart(UiRemapCapture *c, int target)
     c->seq0 = ico_input_last_press(NULL, NULL);
 }
 
-int ui_RemapCaptureStep(UiRemapCapture *c, void *bindings)
+int ui_remap_capture_step(UiRemapCapture *c, void *bindings)
 {
     int kind, code;
     if (!c->active) {
@@ -1691,22 +1691,22 @@ static void targetName(int t, char *buf, unsigned size)
         snprintf(buf, size, "R3");
         return;
     case ICO_T_TRIANGLE:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_TRIANGLE));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_TRIANGLE));
         return;
     case ICO_T_CIRCLE:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_CIRCLE));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_CIRCLE));
         return;
     case ICO_T_CROSS:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_CROSS));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_CROSS));
         return;
     case ICO_T_SQUARE:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_SQUARE));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_SQUARE));
         return;
     case ICO_T_START:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_START));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_START));
         return;
     case ICO_T_SELECT:
-        snprintf(buf, size, "%s", ui_Str(UI_STR_BTN_SELECT));
+        snprintf(buf, size, "%s", ui_str(UI_STR_BTN_SELECT));
         return;
     default:
         break;
@@ -1725,7 +1725,7 @@ static void targetName(int t, char *buf, unsigned size)
         dir = t - ICO_T_RSTICK_UP;
         what = UI_STR_STICK_RIGHT;
     }
-    snprintf(buf, size, "%s %s", ui_Str((UiStrId)what), ui_Str((UiStrId)dirs[dir & 3]));
+    snprintf(buf, size, "%s %s", ui_str((UiStrId)what), ui_str((UiStrId)dirs[dir & 3]));
 }
 
 /* gamepad sources by position (ICO_GP_*); the names are UI_STR_PAD_*, in order */
@@ -1734,7 +1734,7 @@ _Static_assert(UI_STR_PAD_RSTICK_DOWN - UI_STR_PAD_SOUTH == ICO_GP_RY_POS - ICO_
 
 static const char *padName(int src)
 {
-    return ui_Str((UiStrId)(UI_STR_PAD_SOUTH + src - ICO_GP_SOUTH));
+    return ui_str((UiStrId)(UI_STR_PAD_SOUTH + src - ICO_GP_SOUTH));
 }
 
 /* the mouse buttons, after the language's word for the mouse (the one
@@ -1759,7 +1759,7 @@ static void sourcesText(const IcoBindings *b, int t, int gamepad, char *buf, siz
                 name = ico_key_name(b->kb[t][i]);
             }
         } else if (b->mouse[t][i - ICO_BIND_MAX]) {
-            snprintf(mouse, sizeof(mouse), "%s %s", ui_Str(UI_STR_PHOTO_MOUSE_PREFIX),
+            snprintf(mouse, sizeof(mouse), "%s %s", ui_str(UI_STR_PHOTO_MOUSE_PREFIX),
                      kMouseButtons[b->mouse[t][i - ICO_BIND_MAX]]);
             name = mouse;
         }
@@ -1781,7 +1781,7 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         /* a whole UTF-8 sequence at a time: the line is measured only on a
            character's end (a cut "'" measured as U+FFFD) */
         const char *next = p;
-        ui_Utf8Next(&next);
+        ui_utf8_next(&next);
         const unsigned len = (unsigned)(next - p);
         if (n + len + 1 > outSize) {
             break;
@@ -1793,7 +1793,7 @@ static void wrapText(const char *text, float size, float width, char *out, unsig
         }
         n += len;
         p = next;
-        if (lastSpace > lineStart && ui_MeasureMenuText(size, out + lineStart) > width) {
+        if (lastSpace > lineStart && ui_measure_menu_text(size, out + lineStart) > width) {
             out[lastSpace] = '\n';
             lineStart = lastSpace + 1;
         }
@@ -1811,14 +1811,14 @@ static void setNote(int row, int strId)
     char buf[256];
     int i = row - LT_GAME_PROPERTY_COUNT;
     if (i >= 0 && i < LT_EXT_MAX_PROPERTIES && s_noteStr[i] == strId &&
-        s_noteLang[i] == (int)ui_GetLanguage() + 1) {
+        s_noteLang[i] == (int)ui_get_language() + 1) {
         return;
     }
-    wrapText(ui_Str((UiStrId)strId), NOTE_SIZE, 580.0f, buf, sizeof(buf));
-    lt_ext_SetText(row, buf);
+    wrapText(ui_str((UiStrId)strId), NOTE_SIZE, 580.0f, buf, sizeof(buf));
+    lt_ext_set_text(row, buf);
     if (i >= 0 && i < LT_EXT_MAX_PROPERTIES) {
         s_noteStr[i] = strId;
-        s_noteLang[i] = (int)ui_GetLanguage() + 1;
+        s_noteLang[i] = (int)ui_get_language() + 1;
     }
 }
 
@@ -1856,18 +1856,18 @@ static void buildGalleryBar(void)
     /* the letters' colour: the row's own */
     static const unsigned char kFill[4] = {0x80, 0x80, 0x80, 0x80};
     /* the rim a field line round the track */
-    (void)lt_ext_AddRect(GAL_BAR_X - 2, GAL_BAR_Y - 1, GAL_BAR_W + 4, GAL_BAR_H + 4, kRim);
-    (void)lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kTrack);
-    s_galFill = lt_ext_AddRect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kFill);
-    lt_ext_SetFill(s_galFill, 0.0f);
+    (void)lt_ext_add_rect(GAL_BAR_X - 2, GAL_BAR_Y - 1, GAL_BAR_W + 4, GAL_BAR_H + 4, kRim);
+    (void)lt_ext_add_rect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kTrack);
+    s_galFill = lt_ext_add_rect(GAL_BAR_X, GAL_BAR_Y, GAL_BAR_W, GAL_BAR_H, kFill);
+    lt_ext_set_fill(s_galFill, 0.0f);
     /* the times' capitals on the bar's middle line (a label's capitals sit
        6.5 field lines below its 30-unit box's top) */
     const int ty = GAL_BAR_Y + GAL_BAR_H / 4 - 6;
-    s_galTime = ui_SettingsAddRow(GAL_BAR_X - GAL_TIME_GAP - 100, ty, 100, 30, 0, -1, 0, " ",
-                                  NOTE_SIZE, UI_ALIGN_RIGHT);
-    s_galTotal = ui_SettingsAddRow(GAL_BAR_X + GAL_BAR_W + GAL_TIME_GAP, ty, 100, 30, 0, -1, 0, " ",
-                                   NOTE_SIZE, UI_ALIGN_LEFT);
-    ui_HintBuild(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
+    s_galTime = ui_settings_add_row(GAL_BAR_X - GAL_TIME_GAP - 100, ty, 100, 30, 0, -1, 0, " ",
+                                    NOTE_SIZE, UI_ALIGN_RIGHT);
+    s_galTotal = ui_settings_add_row(GAL_BAR_X + GAL_BAR_W + GAL_TIME_GAP, ty, 100, 30, 0, -1, 0,
+                                     " ", NOTE_SIZE, UI_ALIGN_LEFT);
+    ui_hint_build(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
 }
 
 /* A page's first row and pitch (field lines) for n rows shown.  Every page
@@ -1893,7 +1893,7 @@ static int pagePitch(int page, int n, int *y0)
     }
     *y0 = 40;
     if (page == UI_PAGE_CHARACTERS) {
-        if (ui_SettingsCharactersInViewer()) {
+        if (ui_settings_characters_in_viewer()) {
             /* inside the viewer: the shown character's rows, Switch,
                Randomize, Reset and Back (Ico's eleven, Yorda's six) 11
                apart from 30, Back at 140 or 85, clear of the note at 176
@@ -1932,8 +1932,8 @@ static int rowY(int page, int i)
 
 static void addHeader(Page *pg, int strId)
 {
-    pg->header =
-        ui_SettingsAddRow(20, HEADER_Y, 600, 40, 0, -1, strId, NULL, HEADER_SIZE, UI_ALIGN_CENTER);
+    pg->header = ui_settings_add_row(20, HEADER_Y, 600, 40, 0, -1, strId, NULL, HEADER_SIZE,
+                                     UI_ALIGN_CENTER);
     P(pg->header)->centerX = 1;
 }
 
@@ -1947,19 +1947,20 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
     r->link = link;
     r->note = -1;
     r->value = -1;
-    r->label = ui_SettingsAddRow(LABEL_X, y, LABEL_W, h, 1, -1, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
+    r->label =
+        ui_settings_add_row(LABEL_X, y, LABEL_W, h, 1, -1, strId, NULL, 0.0f, UI_ALIGN_RIGHT);
     if (steppable(opt)) {
         r->value =
-            ui_SettingsAddRow(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
-        const int al = ui_SettingsAddRow(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9",
-                                         0.0f, UI_ALIGN_LEFT);
-        const int ar = ui_SettingsAddRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA",
-                                         0.0f, UI_ALIGN_LEFT);
+            ui_settings_add_row(STEP_X, y, STEP_W, h, 1, r->label, 0, " ", 0.0f, UI_ALIGN_CENTER);
+        const int al = ui_settings_add_row(ARROW_L_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xB9",
+                                           0.0f, UI_ALIGN_LEFT);
+        const int ar = ui_settings_add_row(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA",
+                                           0.0f, UI_ALIGN_LEFT);
         /* the mouse pointer's clicks: the arrows are Left and
            Right, the value itself steps as Right does */
-        lt_ext_SetPointerRole(r->value, LT_POINTER_STEP);
-        lt_ext_SetPointerRole(al, LT_POINTER_LEFT);
-        lt_ext_SetPointerRole(ar, LT_POINTER_RIGHT);
+        lt_ext_set_pointer_role(r->value, LT_POINTER_STEP);
+        lt_ext_set_pointer_role(al, LT_POINTER_LEFT);
+        lt_ext_set_pointer_role(ar, LT_POINTER_RIGHT);
     }
     pg->count++;
 }
@@ -1969,7 +1970,7 @@ static void addNote(Page *pg, int opt, int strId)
     for (int i = 0; i < pg->count; i++) {
         if (pg->rows[i].opt == opt) {
             int n =
-                ui_SettingsAddRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+                ui_settings_add_row(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
             P(n)->centerX = 1;
             P(n)->defaultMask = 1;
             pg->rows[i].note = n;
@@ -2009,7 +2010,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     Page *pg = &s_pages[id];
     memset(pg, 0, sizeof(*pg));
     pg->parent = parent;
-    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     addHeader(pg, header);
     for (int i = 0; i < n; i++) {
         addOption(pg, id, opts[i], strs[i], links ? links[i] : -1);
@@ -2056,8 +2057,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         for (int i = 0; i < pg->count; i++) {
             Row *r = &pg->rows[i];
             if (r->opt == UI_OPT_EXTRAS_CREDITS) {
-                r->value = ui_SettingsAddRow(STEP_X, rowY(id, i), STEP_W, 36, 1, r->label, 0, " ",
-                                             0.0f, UI_ALIGN_CENTER);
+                r->value = ui_settings_add_row(STEP_X, rowY(id, i), STEP_W, 36, 1, r->label, 0, " ",
+                                               0.0f, UI_ALIGN_CENTER);
             }
         }
         addNote(pg, UI_OPT_EXTRAS_CREDITS, UI_STR_EXTRAS_LOCKED_NOTE);
@@ -2072,10 +2073,10 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
                 unsigned char rgba[4];
                 swatchColour(charPart(r->opt), rgba);
                 s_charSwatch[charPart(r->opt)] =
-                    lt_ext_AddRect(SWATCH_X, rowY(id, i) + SWATCH_DY, SWATCH_W, SWATCH_H, rgba);
+                    lt_ext_add_rect(SWATCH_X, rowY(id, i) + SWATCH_DY, SWATCH_W, SWATCH_H, rgba);
             }
         }
-        int n = ui_SettingsAddRow(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+        int n = ui_settings_add_row(20, NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
         P(n)->centerX = 1;
         P(n)->defaultMask = 1;
         setNote(n, UI_STR_CHAR_NOTE_TITLE);
@@ -2086,13 +2087,13 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
             }
         }
         /* inside the viewer: its prompts, the game's button glyphs */
-        ui_HintBuild(&s_charHint, NOTE_Y, NOTE_SIZE, ui_hint_chars, UI_HINT_CHAR_COUNT);
+        ui_hint_build(&s_charHint, NOTE_Y, NOTE_SIZE, ui_hint_chars, UI_HINT_CHAR_COUNT);
         break;
     }
     default:
         break;
     }
-    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     linkRows(pg);
     finishPage(pg, first, last);
 }
@@ -2103,7 +2104,7 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     memset(pg, 0, sizeof(*pg));
     pg->parent = parent;
     pg->isList = 1;
-    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     addHeader(pg, header);
     int remap = id == UI_PAGE_REMAP;
     UiListStyle st;
@@ -2111,10 +2112,10 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
     st.pitch = 18;
     if (remap) {
         /* the column heads */
-        ui_SettingsAddRow(230, 32, 180, 30, 0, -1, UI_STR_REMAP_KEYBOARD, NULL, NOTE_SIZE,
-                          UI_ALIGN_LEFT);
-        ui_SettingsAddRow(420, 32, 190, 30, 0, -1, UI_STR_REMAP_GAMEPAD, NULL, NOTE_SIZE,
-                          UI_ALIGN_LEFT);
+        ui_settings_add_row(230, 32, 180, 30, 0, -1, UI_STR_REMAP_KEYBOARD, NULL, NOTE_SIZE,
+                            UI_ALIGN_LEFT);
+        ui_settings_add_row(420, 32, 190, 30, 0, -1, UI_STR_REMAP_GAMEPAD, NULL, NOTE_SIZE,
+                            UI_ALIGN_LEFT);
         st.y0 = 50;
         st.label = (UiListCol){40, 180, 24.0f, UI_ALIGN_LEFT};
         st.colA = (UiListCol){230, 180, 21.0f, UI_ALIGN_LEFT};
@@ -2135,7 +2136,7 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.colA = (UiListCol){440, 160, 21.0f, UI_ALIGN_RIGHT};
         st.statusY = NOTE_Y;
     }
-    ui_ListBuild(&pg->list, def, NULL, &st);
+    ui_list_build(&pg->list, def, NULL, &st);
     if (id == UI_PAGE_MUSIC) {
         buildGalleryBar();
     }
@@ -2148,7 +2149,7 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         r->value = pg->list.colA[i];
         pg->count++;
     }
-    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     finishPage(pg, first, last);
 }
 
@@ -2163,7 +2164,7 @@ static void addEntryLayout(int e, int first, int last)
     l.defaultItem = -1;
     l.curItem = -1;
     l.link = -1;
-    s_entryLayout[e] = lt_ext_AddLayout(&l);
+    s_entryLayout[e] = lt_ext_add_layout(&l);
 }
 
 /* --------------------------------------------- the journey's lines */
@@ -2200,8 +2201,8 @@ static int buildStats(void)
 {
     /* the gallery rim's shade: the scene shows through */
     static const unsigned char kBack[4] = {0, 0, 0, 0x50};
-    s_statBack = lt_ext_AddRect(STATS_X - STATS_BACK_MARGIN, STATS_Y,
-                                STATS_W + 2 * STATS_BACK_MARGIN, 2 * STATS_PITCH, kBack);
+    s_statBack = lt_ext_add_rect(STATS_X - STATS_BACK_MARGIN, STATS_Y,
+                                 STATS_W + 2 * STATS_BACK_MARGIN, 2 * STATS_PITCH, kBack);
     int last = s_statBack;
     if (s_statBack >= 0) {
         P(s_statBack)->defaultMask = 1;
@@ -2209,10 +2210,10 @@ static int buildStats(void)
     for (int i = 0; i < STAT_LINES; i++) {
         const int y = STATS_Y + i * STATS_PITCH;
         s_statLabel[i] =
-            ui_SettingsAddRow(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, kStatLabel[i],
-                              kStatLabel[i] ? NULL : " ", NOTE_SIZE, UI_ALIGN_LEFT);
-        s_statValue[i] = ui_SettingsAddRow(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, 0, " ",
-                                           NOTE_SIZE, UI_ALIGN_RIGHT);
+            ui_settings_add_row(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, kStatLabel[i],
+                                kStatLabel[i] ? NULL : " ", NOTE_SIZE, UI_ALIGN_LEFT);
+        s_statValue[i] = ui_settings_add_row(STATS_X, y, STATS_W, 2 * STATS_PITCH, 0, -1, 0, " ",
+                                             NOTE_SIZE, UI_ALIGN_RIGHT);
         if (s_statLabel[i] < 0 || s_statValue[i] < 0) {
             return -1;
         }
@@ -2261,7 +2262,7 @@ static const char *areaName(int stage)
     }
     for (int i = 0; i < ui_menu_text_row_count; i++) {
         if (ui_menu_text_rows[i].row == stage + 134) {
-            return ui_Str((UiStrId)ui_menu_text_items[ui_menu_text_rows[i].item].str);
+            return ui_str((UiStrId)ui_menu_text_items[ui_menu_text_rows[i].item].str);
         }
     }
     return NULL;
@@ -2292,7 +2293,7 @@ static void pauseStats(int show)
         return;
     }
     if (show) {
-        ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+        ui_set_language(ui_lang_from_game(NonLinearCameraMove));
         const int got = achUnlocked();
         const int n = ico_ach_count();
         playTimeText(ico_gs_play_frames(), text[STAT_PLAY_TIME], sizeof(text[0]));
@@ -2317,7 +2318,7 @@ static void pauseStats(int show)
         int k = STAT_ASSIST_1;
         for (int a = 0; a < 3; a++) {
             if (assist[a]) {
-                snprintf(text[k], sizeof(text[0]), "%s", ui_Str((UiStrId)kAssistStr[a]));
+                snprintf(text[k], sizeof(text[0]), "%s", ui_str((UiStrId)kAssistStr[a]));
                 on[k++] = 1;
             }
         }
@@ -2343,14 +2344,14 @@ static void pauseStats(int show)
            label in another language is set smaller (layout_ext.c's fit)
            instead of running into the value */
         const int y = STATS_Y + shown * STATS_PITCH;
-        const float vw = text[i][0] ? ui_MeasureMenuText(NOTE_SIZE, text[i]) : 0.0f;
+        const float vw = text[i][0] ? ui_measure_menu_text(NOTE_SIZE, text[i]) : 0.0f;
         int lw = STATS_W - (int)(vw + 0.999f) - (text[i][0] ? STATS_GAP : 0);
         lw = lw < STATS_W / 3 ? STATS_W / 3 : lw;
         l->dispY = v->dispY = y;
         l->dispW = lw;
-        lt_ext_SetText(s_statValue[i], text[i][0] ? text[i] : " ");
+        lt_ext_set_text(s_statValue[i], text[i][0] ? text[i] : " ");
         if (kStatLabel[i]) {
-            lt_ext_SetStr(s_statLabel[i], kStatLabel[i]);
+            lt_ext_set_str(s_statLabel[i], kStatLabel[i]);
         }
         shown++;
     }
@@ -2372,8 +2373,8 @@ static void buildEntries(void)
        (placePause sets its place, mask and links) */
     s_entryRow[ENTRY_PAUSE] = ROW_PAUSE_OPTIONS;
     s_quitRow[ENTRY_PAUSE] = -1;
-    s_photoRow = ui_SettingsAddRow(0, 0, PAUSE_ROW_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
-                                   UI_ALIGN_LEFT);
+    s_photoRow = ui_settings_add_row(0, 0, PAUSE_ROW_W, 40, 1, -1, UI_STR_PHOTO_MODE, NULL, 0.0f,
+                                     UI_ALIGN_LEFT);
     /* the journey's lines in the same layout (the rows are contiguous),
        placed and filled by pauseStats */
     int last = buildStats();
@@ -2384,8 +2385,8 @@ static void buildEntries(void)
            look like Continue and New Game around it, centred as "Quit to
            desktop" is; the y and the height are set with the game's rows
            (placeTitle) */
-        int row = ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_MT_OPTIONS, NULL, 0.0f,
-                                    UI_ALIGN_CENTER);
+        int row = ui_settings_add_row(120, 0, 400, 40, 1, -1, UI_STR_MT_OPTIONS, NULL, 0.0f,
+                                      UI_ALIGN_CENTER);
         P(row)->centerX = 1;
         /* hidden unless the title's proc shows it, as New Game (49 to 51
            are masked by default) */
@@ -2395,7 +2396,7 @@ static void buildEntries(void)
         /* "Quit to desktop" under Settings, in the same layout (the
            rows are contiguous); Cross opens the confirmation */
         int q =
-            ui_SettingsAddRow(120, 0, 400, 40, 1, -1, quitRowStr(), NULL, 0.0f, UI_ALIGN_CENTER);
+            ui_settings_add_row(120, 0, 400, 40, 1, -1, quitRowStr(), NULL, 0.0f, UI_ALIGN_CENTER);
         P(q)->centerX = 1;
         P(q)->defaultMask = 1;
         P(q)->right = s_quitLayout;
@@ -2559,7 +2560,7 @@ static void build(void)
     _Static_assert(sizeof(charOpts) == sizeof(charStrs), "a string for each Characters row");
     _Static_assert(N_OF(charOpts) <= MAX_ROWS, "the Characters rows fit");
 
-    ui_FontInit(); /* the notes are wrapped by measuring */
+    ui_font_init(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
     /* the pages first (their layouts are the links' targets), then the
        entry rows */
@@ -2603,9 +2604,9 @@ static void build(void)
         }
     }
     /* Button configuration opens the game's own screen (la_key_config
-       comes back through ui_SettingsKeyConfigBack) */
+       comes back through ui_settings_key_config_back) */
     {
-        const int bc = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
+        const int bc = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
         if (bc >= 0) {
             P(bc)->right = LAYOUT_KEY_CONFIG;
         }
@@ -2613,21 +2614,21 @@ static void build(void)
     buildQuitScreen();
     buildEntries();
     if (s_photoRow >= 0) {
-        P(s_photoRow)->right = ui_PhotoBuild();
+        P(s_photoRow)->right = ui_photo_build();
     }
     buildNewGameScreen();
     if (ico_opt_developer_mode()) {
         /* the layout extension's budget (layout_ext.h): what Settings and
            its screens use of the tables */
         fprintf(stderr, "settings: layout extension: %d of %d properties, %d of %d layouts\n",
-                lt_ext_PropCount(), LT_EXT_MAX_PROPERTIES, lt_ext_LayoutCount(),
+                lt_ext_prop_count(), LT_EXT_MAX_PROPERTIES, lt_ext_layout_count(),
                 LT_EXT_MAX_LAYOUTS);
     }
 }
 
 /* ------------------------------------------------------ the New Game screen
  * The New Game screen, between the vibration choice and the start
- * (settings.h ui_NewGameScreenEnter): two labelled rows, "Mirror mode" and
+ * (settings.h ui_new_game_screen_enter): two labelled rows, "Mirror mode" and
  * "New Game+", each with "Off" and "On" side by side (left/right through
  * their item links, up/down between the rows), and a line of explanation
  * for the row the cursor is on, in the lower half where the vibration
@@ -2651,23 +2652,24 @@ static int newGameScreenProc(int first, int item);
 static void buildNewGameScreen(void)
 {
     static const int kLabel[2] = {UI_STR_OPT_MIRROR, UI_STR_OPT_NEWGAME_PLUS};
-    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
+    int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
     for (int r = 0; r < 2; r++) {
         const int y = NEW_GAME_ROW_Y + r * NEW_GAME_ROW_H;
         /* the label right-aligned up to x 300, Off and On after it */
-        ui_SettingsAddRow(40, y, 260, NEW_GAME_ROW_H, 0, -1, kLabel[r], NULL, 0.0f, UI_ALIGN_RIGHT);
-        s_newGameRow[r][0] = ui_SettingsAddRow(320, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_OFF, NULL,
-                                               0.0f, UI_ALIGN_CENTER);
-        s_newGameRow[r][1] = ui_SettingsAddRow(440, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_ON, NULL,
-                                               0.0f, UI_ALIGN_CENTER);
+        ui_settings_add_row(40, y, 260, NEW_GAME_ROW_H, 0, -1, kLabel[r], NULL, 0.0f,
+                            UI_ALIGN_RIGHT);
+        s_newGameRow[r][0] = ui_settings_add_row(320, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_OFF,
+                                                 NULL, 0.0f, UI_ALIGN_CENTER);
+        s_newGameRow[r][1] = ui_settings_add_row(440, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_ON,
+                                                 NULL, 0.0f, UI_ALIGN_CENTER);
         P(s_newGameRow[r][0])->rightItem = s_newGameRow[r][1];
         P(s_newGameRow[r][1])->leftItem = s_newGameRow[r][0];
     }
-    s_newGameNote =
-        ui_SettingsAddRow(20, NEW_GAME_NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE, UI_ALIGN_CENTER);
+    s_newGameNote = ui_settings_add_row(20, NEW_GAME_NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE,
+                                        UI_ALIGN_CENTER);
     P(s_newGameNote)->centerX = 1;
     setNote(s_newGameNote, UI_STR_MIRROR_SCREEN);
-    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     s_newGameLayout = addLayout(first, last + 1, 0.6f, newGameScreenProc, s_newGameRow[0][0]);
 }
 
@@ -2679,7 +2681,7 @@ static void buildNewGameScreen(void)
    cursor's row. */
 static void newGameSync(void)
 {
-    const int cur = lt_ext_Layout(s_newGameLayout)->curItem;
+    const int cur = lt_ext_layout(s_newGameLayout)->curItem;
     int curRow = 0;
     for (int r = 0; r < 2; r++) {
         for (int c = 0; c < 2; c++) {
@@ -2701,12 +2703,12 @@ static void newGameSync(void)
     setNote(s_newGameNote, curRow == 0 ? UI_STR_MIRROR_SCREEN : UI_STR_NEWGAME_PLUS_SCREEN);
 }
 
-int ui_NewGameScreenEnter(void)
+int ui_new_game_screen_enter(void)
 {
     if (!s_built || s_newGameLayout < 0) {
         return -1;
     }
-    LtProp *l = lt_ext_Layout(s_newGameLayout);
+    LtProp *l = lt_ext_layout(s_newGameLayout);
     l->defaultItem = l->curItem = s_newGameRow[0][0];
     s_newGameChosen = 0;
     /* no run until the choice: a cleared save's new game (la_load_processing
@@ -2722,12 +2724,12 @@ int ui_NewGameScreenEnter(void)
     return s_newGameLayout;
 }
 
-int ui_NewGameScreenLayout(void)
+int ui_new_game_screen_layout(void)
 {
     return s_newGameLayout;
 }
 
-int ui_NewGameScreenRow(int row, int on)
+int ui_new_game_screen_row(int row, int on)
 {
     return row == 0 || row == 1 ? s_newGameRow[row][on ? 1 : 0] : -1;
 }
@@ -2735,7 +2737,7 @@ int ui_NewGameScreenRow(int row, int on)
 static int newGameScreenProc(int first, int item)
 {
     (void)item;
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     if (first) {
         s_newGameChosen = 0;
     }
@@ -2767,7 +2769,7 @@ static int newGameScreenProc(int first, int item)
 /* ---------------------------------------------------------- the quit screen
  * "Quit to desktop?" with Yes and No side by side (left/right through
  * their item links, the cursor on No), opened by the title's Quit row
- * (settings.h ui_SettingsSetQuitHandler), laid out as the New Game screen. */
+ * (settings.h ui_settings_set_quit_handler), laid out as the New Game screen. */
 
 static int s_quitYesNo[2] = {-1, -1}; /* No, Yes */
 static int s_quitChosen;
@@ -2777,71 +2779,71 @@ static int quitScreenProc(int first, int item);
 
 static void buildQuitScreen(void)
 {
-    int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
-    int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, quitConfirmStr(), NULL, HEADER_SIZE,
-                              UI_ALIGN_CENTER);
+    int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
+    int h = ui_settings_add_row(20, 112, 600, 40, 0, -1, quitConfirmStr(), NULL, HEADER_SIZE,
+                                UI_ALIGN_CENTER);
     P(h)->centerX = 1;
     s_quitHeader = h;
     s_quitYesNo[1] =
-        ui_SettingsAddRow(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
+        ui_settings_add_row(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
     s_quitYesNo[0] =
-        ui_SettingsAddRow(330, 146, 110, 40, 1, -1, UI_STR_MT_NO, NULL, 0.0f, UI_ALIGN_CENTER);
+        ui_settings_add_row(330, 146, 110, 40, 1, -1, UI_STR_MT_NO, NULL, 0.0f, UI_ALIGN_CENTER);
     P(s_quitYesNo[1])->rightItem = s_quitYesNo[0];
     P(s_quitYesNo[0])->leftItem = s_quitYesNo[1];
-    int last = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT - 1;
+    int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
     s_quitLayout = addLayout(first, last + 1, 0.6f, quitScreenProc, s_quitYesNo[0]);
 }
 
-int ui_SettingsCapturing(void)
+int ui_settings_capturing(void)
 {
     return s_capture.active || s_capture.cooldown > 0;
 }
 
-void ui_SettingsSetWindowModeQuery(int (*fn)(void))
+void ui_settings_set_window_mode_query(int (*fn)(void))
 {
     s_windowModeQuery = fn;
 }
 
-void ui_SettingsSetModelPackCount(int (*fn)(void))
+void ui_settings_set_model_pack_count(int (*fn)(void))
 {
     s_modelPackCount = fn;
 }
 
-void ui_SettingsSetTexturePackCount(int (*fn)(void))
+void ui_settings_set_texture_pack_count(int (*fn)(void))
 {
     s_texturePackCount = fn;
 }
 
-void ui_SettingsSetTouchQuery(int (*fn)(void))
+void ui_settings_set_touch_query(int (*fn)(void))
 {
     s_touchQuery = fn;
 }
 
-void ui_SettingsSetQuitIsGame(int (*fn)(void))
+void ui_settings_set_quit_is_game(int (*fn)(void))
 {
     s_quitIsGame = fn;
     if (s_built && s_quitHeader >= 0) {
         /* installed after the build: the labels follow */
-        lt_ext_SetStr(s_quitHeader, quitConfirmStr());
+        lt_ext_set_str(s_quitHeader, quitConfirmStr());
         for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
             if (s_quitRow[e] >= 0) {
-                lt_ext_SetStr(s_quitRow[e], quitRowStr());
+                lt_ext_set_str(s_quitRow[e], quitRowStr());
             }
         }
     }
 }
 
-void ui_SettingsSetQuitHandler(void (*fn)(void))
+void ui_settings_set_quit_handler(void (*fn)(void))
 {
     s_quitHandler = fn;
 }
 
-int ui_QuitScreenLayout(void)
+int ui_quit_screen_layout(void)
 {
     return s_built ? s_quitLayout : -1;
 }
 
-int ui_QuitScreenRow(int yes)
+int ui_quit_screen_row(int yes)
 {
     return s_quitYesNo[yes ? 1 : 0];
 }
@@ -2850,7 +2852,7 @@ static void requestQuit(void)
 {
     /* what a Settings page writes when it is left, should anything be
        pending; the achievements and the audio are the atexit handlers' */
-    ui_SettingsSave();
+    ui_settings_save();
     if (s_quitHandler != NULL) {
         s_quitHandler();
         return;
@@ -2863,8 +2865,8 @@ static void requestQuit(void)
 static int quitScreenProc(int first, int item)
 {
     (void)item;
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
-    LtProp *l = lt_ext_Layout(s_quitLayout);
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
+    LtProp *l = lt_ext_layout(s_quitLayout);
     if (first) {
         s_quitChosen = 0; /* the switch put the cursor on No (the default) */
     }
@@ -2919,7 +2921,7 @@ static void placeTitle(void)
 }
 
 /* The pause menu: "Photo mode" one pitch under Options while a stage
-   runs (ui_PhotoAvailable), with Back (295) one pitch lower to make room
+   runs (ui_photo_available), with Back (295) one pitch lower to make room
    (End Game, 296, is further down in the PAL data); otherwise masked and
    stepped over through the item links (layout_texture.c's visibility skip
    does not look at masks), Back in its own place: Options -> Back and Back
@@ -2931,7 +2933,7 @@ static void placePause(void)
     if (s_photoRow < 0) {
         return;
     }
-    const int on = ui_PhotoAvailable();
+    const int on = ui_photo_available();
     LtProperty *ph = P(s_photoRow);
     ph->dispX = opt->dispX + PAUSE_LETTERS_IN;
     ph->dispY = opt->dispY + PAUSE_PITCH;
@@ -2987,7 +2989,7 @@ static void repoint(void)
             P(s_entryRow[e])->upItem = gameRow[e];
         }
         if (texLayout[g].link != s_entryLayout[e]) {
-            lt_ext_Layout(s_entryLayout[e])->link = texLayout[g].link;
+            lt_ext_layout(s_entryLayout[e])->link = texLayout[g].link;
             texLayout[g].link = s_entryLayout[e];
         }
     }
@@ -2997,14 +2999,14 @@ static void repoint(void)
 /* the renderer follows the run's mirror mode (options.h listener) */
 static void mirrorChanged(int on)
 {
-    rd_SetMirror(on);
+    rd_set_mirror(on);
 }
 #endif
 
-void ui_SettingsInstall(void)
+void ui_settings_install(void)
 {
     /* [game] circle_back, before the game's menus read a press */
-    lt_ext_SetCircleBack(ico_opt_circle_back());
+    lt_ext_set_circle_back(ico_opt_circle_back());
     /* [audio] output: an explicit stereo or mono is the game's from the
        start (the card's system file is read later: fumi/ios/mcard.c's hook) */
     applyOutputMode(0);
@@ -3018,7 +3020,7 @@ void ui_SettingsInstall(void)
     repoint();
 }
 
-void ui_SettingsReset(void)
+void ui_settings_reset(void)
 {
     s_built = 0;
     s_warned = 0;
@@ -3037,7 +3039,7 @@ void ui_SettingsReset(void)
     for (int i = 0; i < STAT_LINES; i++) {
         s_statLabel[i] = s_statValue[i] = -1;
     }
-    ui_PhotoReset();
+    ui_photo_reset();
     memset(s_pages, 0, sizeof(s_pages));
     /* the wrapped notes are set again on the rebuilt rows */
     memset(s_noteStr, 0, sizeof(s_noteStr));
@@ -3054,24 +3056,24 @@ void ui_SettingsReset(void)
     memset(&s_charHint, 0, sizeof(s_charHint));
 }
 
-void ui_SettingsTitleReturn(int page)
+void ui_settings_title_return(int page)
 {
     s_titleReturn = (page >= 0 && page < UI_PAGE_COUNT) ? page : -1;
     s_titleDecided = 0;
     s_titleHandoff = 0;
 }
 
-int ui_SettingsTitleReturnPending(void)
+int ui_settings_title_return_pending(void)
 {
     return s_titleReturn >= 0;
 }
 
-int ui_SettingsTitleDecided(void)
+int ui_settings_title_decided(void)
 {
     return s_titleDecided;
 }
 
-int ui_SettingsEntryItem(int item)
+int ui_settings_entry_item(int item)
 {
     /* a pending return: every item, so no confirm gets through */
     if (s_titleReturn >= 0) {
@@ -3086,7 +3088,7 @@ int ui_SettingsEntryItem(int item)
     return 0;
 }
 
-void ui_SettingsTitleMask(int masked)
+void ui_settings_title_mask(int masked)
 {
     const int pending = s_titleReturn >= 0;
     const int cur = current_layout_id;
@@ -3109,7 +3111,7 @@ void ui_SettingsTitleMask(int masked)
         if (isTitleLayout(cur)) {
             int n = 0;
             for (int l = cur; l >= 0 && n < 8; n++) {
-                const LtProp *lp = lt_ext_Layout(l);
+                const LtProp *lp = lt_ext_layout(l);
                 for (int r = lp->first; r < lp->last; r++) {
                     lt_mask_property(r, 1);
                 }
@@ -3130,24 +3132,24 @@ static int entryOf(int gameLayout)
     return -1;
 }
 
-int ui_SettingsEntryRow(int gameLayout)
+int ui_settings_entry_row(int gameLayout)
 {
     const int e = entryOf(gameLayout);
     return e >= 0 ? s_entryRow[e] : -1;
 }
 
-int ui_SettingsQuitRow(int gameLayout)
+int ui_settings_quit_row(int gameLayout)
 {
     const int e = entryOf(gameLayout);
     return e >= 0 ? s_quitRow[e] : -1;
 }
 
-int ui_SettingsPhotoRow(void)
+int ui_settings_photo_row(void)
 {
     return s_photoRow;
 }
 
-int ui_SettingsPhotoBack(void)
+int ui_settings_photo_back(void)
 {
     if (s_photoRow >= 0) {
         gameCursorOn(LAYOUT_PAUSE, s_photoRow);
@@ -3155,7 +3157,7 @@ int ui_SettingsPhotoBack(void)
     return LAYOUT_PAUSE;
 }
 
-int ui_SettingsReopenPage(int page)
+int ui_settings_reopen_page(int page)
 {
     const int cur = current_layout_id;
     if (!s_built || page < 0 || page >= UI_PAGE_COUNT || s_pages[page].layout < 0 ||
@@ -3169,7 +3171,7 @@ int ui_SettingsReopenPage(int page)
     s_titleReturn = -1;
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
-            lt_ext_Layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+            lt_ext_layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
         }
     }
     /* ... but the pages above this one, each on the row that leads down
@@ -3178,7 +3180,7 @@ int ui_SettingsReopenPage(int page)
         Page *up = &s_pages[s_pages[child].parent];
         for (int i = 0; i < up->count; i++) {
             if (up->rows[i].opt == UI_OPT_LINK && up->rows[i].link == child && up->layout >= 0) {
-                lt_ext_Layout(up->layout)->defaultItem = up->rows[i].label;
+                lt_ext_layout(up->layout)->defaultItem = up->rows[i].label;
             }
         }
     }
@@ -3187,38 +3189,38 @@ int ui_SettingsReopenPage(int page)
         const Page *ex = &s_pages[page];
         for (int i = 0; i < ex->count; i++) {
             if (ex->rows[i].opt == UI_OPT_LINK && ex->rows[i].link == UI_PAGE_CHARACTERS) {
-                lt_ext_Layout(ex->layout)->defaultItem = ex->rows[i].label;
+                lt_ext_layout(ex->layout)->defaultItem = ex->rows[i].label;
             }
         }
     }
     return s_pages[page].layout;
 }
 
-int ui_SettingsKeyConfigBack(void)
+int ui_settings_key_config_back(void)
 {
-    const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
+    const int row = ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
     /* the Options screen opened it when the pause menu was left as the
        game's (tables not the PAL ones: no repoint) */
     if (!s_built || row < 0 || s_pages[UI_PAGE_CONTROLS].layout < 0 ||
         texProperty[ROW_PAUSE_OPTIONS].right != s_pages[UI_PAGE_MAIN].layout) {
         return LAYOUT_GAME_OPTIONS;
     }
-    lt_ext_Layout(s_pages[UI_PAGE_CONTROLS].layout)->defaultItem = row;
+    lt_ext_layout(s_pages[UI_PAGE_CONTROLS].layout)->defaultItem = row;
     return s_pages[UI_PAGE_CONTROLS].layout;
 }
 
-int ui_SettingsEntryLayout(int gameLayout)
+int ui_settings_entry_layout(int gameLayout)
 {
     const int e = entryOf(gameLayout);
     return e >= 0 ? s_entryLayout[e] : -1;
 }
 
-int ui_SettingsPageLayout(UiSettingsPage page)
+int ui_settings_page_layout(UiSettingsPage page)
 {
     return s_built && page >= 0 && page < UI_PAGE_COUNT ? s_pages[page].layout : -1;
 }
 
-int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values, int max)
+int ui_settings_page_rows(UiSettingsPage page, int *labels, int *opts, int *values, int max)
 {
     int n = 0;
     if (page < 0 || page >= UI_PAGE_COUNT) {
@@ -3239,7 +3241,7 @@ int ui_SettingsPageRows(UiSettingsPage page, int *labels, int *opts, int *values
     return n;
 }
 
-int ui_SettingsNoteRowOf(UiSettingsPage page, UiSettingsOpt opt)
+int ui_settings_note_row_of(UiSettingsPage page, UiSettingsOpt opt)
 {
     if (page < 0 || page >= UI_PAGE_COUNT) {
         return -1;
@@ -3252,7 +3254,7 @@ int ui_SettingsNoteRowOf(UiSettingsPage page, UiSettingsOpt opt)
     return -1;
 }
 
-int ui_SettingsRowOf(UiSettingsPage page, UiSettingsOpt opt)
+int ui_settings_row_of(UiSettingsPage page, UiSettingsOpt opt)
 {
     if (page < 0 || page >= UI_PAGE_COUNT) {
         return -1;
@@ -3292,13 +3294,13 @@ static int entryProc(int first, int item)
            this entry hides, as Button configuration's OK leaves Controls') */
         for (int p = 0; p < UI_PAGE_COUNT; p++) {
             if (s_pages[p].layout >= 0 && !s_pages[p].isList) {
-                lt_ext_Layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
+                lt_ext_layout(s_pages[p].layout)->defaultItem = pageFirstNav(&s_pages[p]);
             }
         }
     }
     if (cur == LAYOUT_PAUSE) {
         placePause();
-        pauseStats(ui_PhotoAvailable() && !ico_photo_active());
+        pauseStats(ui_photo_available() && !ico_photo_active());
     }
     if (s_restoreTitle >= 0 && cur == s_restoreTitle) {
         /* the cursor came back to the row that left; the layout's own
@@ -3325,13 +3327,13 @@ static void gameCursorOn(int to, int row)
 static int leaveTo(int pageId, int to)
 {
     NEGATIVE_SE();
-    ui_SettingsSave();
+    ui_settings_save();
     la_host_leave();
     int toPage;
     if (pageOfLayout(to, &toPage)) {
         for (int i = 0; i < s_pages[toPage].count; i++) {
             if (s_pages[toPage].rows[i].link == pageId) {
-                lt_ext_Layout(to)->defaultItem = s_pages[toPage].rows[i].label;
+                lt_ext_layout(to)->defaultItem = s_pages[toPage].rows[i].label;
             }
         }
     } else if (to == LAYOUT_PAUSE) {
@@ -3367,7 +3369,7 @@ static void achFill(void *user, int d, UiListSlot *out)
     }
     IcoAchState st = ico_ach_state(d);
     int hidden = ico_ach_hidden(d) && st == ICO_ACH_LOCKED;
-    out->label = hidden ? "???" : ui_Str((UiStrId)ico_ach_title_str(d));
+    out->label = hidden ? "???" : ui_str((UiStrId)ico_ach_title_str(d));
     out->colAStr = st == ICO_ACH_UNLOCKED ? UI_STR_ACH_STATE_UNLOCKED : UI_STR_ACH_LOCKED;
 }
 
@@ -3377,16 +3379,16 @@ static void achDecorate(void *user, int d)
     (void)user;
     Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
     int n = ico_ach_count(), got = achUnlocked();
-    snprintf(s_text, sizeof(s_text), "%s   %d / %d", ui_Str(UI_STR_SECTION_ACHIEVEMENTS), got, n);
-    lt_ext_SetText(pg->header, s_text);
+    snprintf(s_text, sizeof(s_text), "%s   %d / %d", ui_str(UI_STR_SECTION_ACHIEVEMENTS), got, n);
+    lt_ext_set_text(pg->header, s_text);
     char buf[256];
     if (d >= 0 && d < n) {
         int hidden = ico_ach_hidden(d) && ico_ach_state(d) == ICO_ACH_LOCKED;
-        wrapText(hidden ? "???" : ui_Str((UiStrId)ico_ach_desc_str(d)), NOTE_SIZE, 580.0f, buf,
+        wrapText(hidden ? "???" : ui_str((UiStrId)ico_ach_desc_str(d)), NOTE_SIZE, 580.0f, buf,
                  sizeof(buf));
-        lt_ext_SetText(pg->list.status, buf);
+        lt_ext_set_text(pg->list.status, buf);
     } else {
-        lt_ext_SetText(pg->list.status, "");
+        lt_ext_set_text(pg->list.status, "");
     }
 }
 
@@ -3444,7 +3446,7 @@ static int remapInput(void *user, int d, int flags)
     Page *pg = &s_pages[UI_PAGE_REMAP];
     if (s_capture.active) {
         lt_item_select_disable = 1;
-        int r = ui_RemapCaptureStep(&s_capture, liveBindings());
+        int r = ui_remap_capture_step(&s_capture, liveBindings());
         if (r == UI_CAPTURE_BOUND) {
             s_dirtyBindings = 1;
             POSITIVE_SE();
@@ -3465,7 +3467,7 @@ static int remapInput(void *user, int d, int flags)
     if (d >= 0 && d < ICO_T_COUNT) {
         if (flags & LT_PAD_CROSS) {
             POSITIVE_SE();
-            ui_RemapCaptureStart(&s_capture, kRemapOrder[d]);
+            ui_remap_capture_start(&s_capture, kRemapOrder[d]);
             lt_item_select_disable = 1;
             return -1;
         }
@@ -3500,7 +3502,7 @@ static const UiListDef kRemapDef = {remapCount, remapFill, NULL, remapInput, rem
 static int galCount(void *user)
 {
     (void)user;
-    return gallery_Count();
+    return gallery_count();
 }
 
 static void galFill(void *user, int d, UiListSlot *out)
@@ -3509,14 +3511,14 @@ static void galFill(void *user, int d, UiListSlot *out)
     static char lab[UI_LIST_SLOTS][96], col[UI_LIST_SLOTS][96];
     static int k;
     k = (k + 1) % UI_LIST_SLOTS;
-    out->label = gallery_Label(d, lab[k], sizeof(lab[k]));
-    out->colA = gallery_ColA(d, col[k], sizeof(col[k]));
+    out->label = gallery_label(d, lab[k], sizeof(lab[k]));
+    out->colA = gallery_col_a(d, col[k], sizeof(col[k]));
 }
 
 static int galHeading(void *user, int d)
 {
     (void)user;
-    const GalleryItem *it = gallery_Item(d);
+    const GalleryItem *it = gallery_item(d);
     return it != NULL && it->kind == GAL_K_HEADING;
 }
 
@@ -3535,8 +3537,8 @@ static void galBar(void)
     if (s_galFill < 0) {
         return;
     }
-    if (gallery_Position(&el, &tot) == 0) {
-        lt_ext_SetFill(s_galFill, tot > 0.0f ? el / tot : 0.0f);
+    if (gallery_position(&el, &tot) == 0) {
+        lt_ext_set_fill(s_galFill, tot > 0.0f ? el / tot : 0.0f);
         galClock(a, sizeof(a), el);
         if (tot > 0.0f) {
             galClock(b, sizeof(b), tot);
@@ -3544,12 +3546,12 @@ static void galBar(void)
             snprintf(b, sizeof(b), "-:--");
         }
     } else {
-        lt_ext_SetFill(s_galFill, 0.0f);
+        lt_ext_set_fill(s_galFill, 0.0f);
         galClock(a, sizeof(a), 0.0f);
         galClock(b, sizeof(b), 0.0f);
     }
-    lt_ext_SetText(s_galTime, a);
-    lt_ext_SetText(s_galTotal, b);
+    lt_ext_set_text(s_galTime, a);
+    lt_ext_set_text(s_galTotal, b);
 }
 
 /* headings stand out to the left; the status line: the group, the file and
@@ -3559,44 +3561,45 @@ static void galDecorate(void *user, int d)
     (void)user;
     Page *pg = &s_pages[UI_PAGE_MUSIC];
     for (int s = 0; s < UI_LIST_SLOTS; s++) {
-        int item = ui_ListItemAt(&pg->list, s);
+        int item = ui_list_item_at(&pg->list, s);
         P(pg->list.label[s])->dispX = galHeading(NULL, item) ? 24 : 40;
     }
-    const GalleryItem *it = gallery_Item(d);
+    const GalleryItem *it = gallery_item(d);
     char asset[128];
-    if (gallery_Tables() == NULL) {
-        lt_ext_SetText(pg->list.status, ui_Str(UI_STR_GAL_EMPTY));
+    if (gallery_tables() == NULL) {
+        lt_ext_set_text(pg->list.status, ui_str(UI_STR_GAL_EMPTY));
     } else if (it == NULL || it->kind == GAL_K_BACK) {
-        lt_ext_SetText(pg->list.status, "");
+        lt_ext_set_text(pg->list.status, "");
     } else if (it->kind == GAL_K_HEADING) {
-        snprintf(s_text, sizeof(s_text), "%s", gallery_Asset(d, asset, sizeof(asset)));
-        lt_ext_SetText(pg->list.status, s_text);
+        snprintf(s_text, sizeof(s_text), "%s", gallery_asset(d, asset, sizeof(asset)));
+        lt_ext_set_text(pg->list.status, s_text);
     } else {
-        int state = gallery_Paused() == d    ? UI_STR_GAL_PAUSED
-                    : gallery_Playing() == d ? UI_STR_GAL_PLAYING
+        int state = gallery_paused() == d    ? UI_STR_GAL_PAUSED
+                    : gallery_playing() == d ? UI_STR_GAL_PLAYING
                                              : UI_STR_GAL_STOPPED;
         snprintf(s_text, sizeof(s_text), "%s  \xC2\xB7  %s  \xC2\xB7  %s",
-                 ui_Str((UiStrId)gallery_GroupStr(it->group)),
-                 gallery_Asset(d, asset, sizeof(asset)), ui_Str((UiStrId)state));
-        lt_ext_SetText(pg->list.status, s_text);
+                 ui_str((UiStrId)gallery_group_str(it->group)),
+                 gallery_asset(d, asset, sizeof(asset)), ui_str((UiStrId)state));
+        lt_ext_set_text(pg->list.status, s_text);
     }
     galBar();
     if (s_galHint.n > 0) {
         /* Cross pauses the entry under the cursor while it sounds */
-        int pausing = d >= 0 && gallery_Playing() == d && gallery_Paused() != d;
-        ui_HintSetStr(&s_galHint, UI_HINT_GAL_PLAY, pausing ? UI_STR_HINT_PAUSE : UI_STR_HINT_PLAY);
-        ui_HintLayout(&s_galHint);
+        int pausing = d >= 0 && gallery_playing() == d && gallery_paused() != d;
+        ui_hint_set_str(&s_galHint, UI_HINT_GAL_PLAY,
+                        pausing ? UI_STR_HINT_PAUSE : UI_STR_HINT_PLAY);
+        ui_hint_layout(&s_galHint);
     }
 }
 
 static int galLeave(void)
 {
-    gallery_Leave();
+    gallery_leave();
     int to = leaveTo(UI_PAGE_MUSIC, parentLayout(&s_pages[UI_PAGE_MUSIC]));
     /* back on the Music row */
-    int row = ui_SettingsRowOf(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
+    int row = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MUSIC);
     if (to == s_pages[UI_PAGE_EXTRAS].layout && row >= 0) {
-        lt_ext_Layout(to)->defaultItem = row;
+        lt_ext_layout(to)->defaultItem = row;
     }
     return to;
 }
@@ -3605,22 +3608,22 @@ static int galInput(void *user, int d, int flags)
 {
     (void)user;
     Page *pg = &s_pages[UI_PAGE_MUSIC];
-    const GalleryItem *it = gallery_Item(d);
+    const GalleryItem *it = gallery_item(d);
     if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && it != NULL && it->kind == GAL_K_BACK)) {
         return galLeave();
     }
     if ((flags & LT_PAD_CROSS) && it != NULL && it->kind != GAL_K_HEADING) {
-        gallery_Toggle(d);
+        gallery_toggle(d);
         return -1;
     }
     if (flags & LT_PAD_SQUARE) {
-        gallery_Stop();
+        gallery_stop();
         return -1;
     }
     if ((flags & (LT_PAD_L1 | LT_PAD_R1)) && d >= 0) {
         /* the previous or next entry: the cursor on it, and it plays */
-        int k = gallery_Step(d, (flags & LT_PAD_L1) ? -1 : 1);
-        int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
+        int k = gallery_step(d, (flags & LT_PAD_L1) ? -1 : 1);
+        int n = ui_list_count(&pg->list), shown = ui_list_shown(&pg->list);
         if (k >= 0) {
             if (k < pg->list.offset) {
                 pg->list.offset = k > 0 && galHeading(NULL, k - 1) ? k - 1 : k;
@@ -3628,19 +3631,19 @@ static int galInput(void *user, int d, int flags)
                 pg->list.offset = k - shown + 1;
             }
             pg->list.offset = pg->list.offset > n - shown ? n - shown : pg->list.offset;
-            lt_ext_Layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
-            gallery_Play(k);
+            lt_ext_layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
+            gallery_play(k);
         }
         return -1;
     }
     if ((flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && d >= 0) {
         /* the next or previous group, at the top of the window */
-        int k = gallery_JumpGroup(d, (flags & LT_PAD_LEFT) ? -1 : 1);
-        int n = ui_ListCount(&pg->list), shown = ui_ListShown(&pg->list);
+        int k = gallery_jump_group(d, (flags & LT_PAD_LEFT) ? -1 : 1);
+        int n = ui_list_count(&pg->list), shown = ui_list_shown(&pg->list);
         if (k >= 0) {
             int head = k > 0 && galHeading(NULL, k - 1) ? k - 1 : k;
             pg->list.offset = head > n - shown ? n - shown : head;
-            lt_ext_Layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
+            lt_ext_layout(pg->layout)->curItem = pg->list.label[k - pg->list.offset];
             CUR_SE();
         }
         return -1;
@@ -3708,7 +3711,7 @@ static void layoutPage(Page *pg, int id)
     /* a hidden row is never the cursor's: its links lead to the shown rows
        around it, and a cursor or default left on one (Button configuration's
        OK from the pause menu, then the title) moves to the first shown row */
-    LtProp *lay = pg->layout >= 0 ? lt_ext_Layout(pg->layout) : NULL;
+    LtProp *lay = pg->layout >= 0 ? lt_ext_layout(pg->layout) : NULL;
     for (int i = 0, k = 0; i < pg->count; i++) {
         Row *r = &pg->rows[i];
         if (k < n && shown[k] == i) {
@@ -3738,7 +3741,7 @@ static void placeRow(int row, int x, int w, float size)
     if (row >= 0) {
         P(row)->dispX = x;
         P(row)->dispW = w;
-        lt_ext_SetSize(row, size);
+        lt_ext_set_size(row, size);
     }
 }
 
@@ -3751,7 +3754,7 @@ static void charactersPlace(Page *pg, int viewer)
     P(pg->header)->dispY = viewer ? CV_HEADER_Y : HEADER_Y;
     P(pg->header)->dispW = viewer ? CV_HEADER_W : 600;
     P(pg->header)->centerX = viewer ? 0 : 1;
-    lt_ext_SetSize(pg->header, viewer ? CV_HEADER_SIZE : HEADER_SIZE);
+    lt_ext_set_size(pg->header, viewer ? CV_HEADER_SIZE : HEADER_SIZE);
     for (int i = 0; i < pg->count; i++) {
         const Row *r = &pg->rows[i];
         placeRow(r->label, viewer ? CV_LABEL_X : LABEL_X, viewer ? CV_LABEL_W : LABEL_W,
@@ -3775,20 +3778,20 @@ static void charactersPlace(Page *pg, int viewer)
         }
     }
     /* the model shows through: no shade over the picture */
-    lt_ext_Layout(pg->layout)->colA = viewer ? 0.0f : 0.6f;
+    lt_ext_layout(pg->layout)->colA = viewer ? 0.0f : 0.6f;
     /* the prompts only there */
     for (int i = 0; i < s_charHint.n; i++) {
-        ui_HintShow(&s_charHint, i, viewer);
+        ui_hint_show(&s_charHint, i, viewer);
     }
     if (s_charHint.n > 0) {
-        ui_HintLayout(&s_charHint);
+        ui_hint_layout(&s_charHint);
     }
 }
 
 /* the note while the viewer shows the page: only the texture pack's */
 static int charsNoteHidden(int id, const Row *r)
 {
-    return id == UI_PAGE_CHARACTERS && ui_SettingsCharactersInViewer() &&
+    return id == UI_PAGE_CHARACTERS && ui_settings_characters_in_viewer() &&
            r->noteStr != UI_STR_CHAR_NOTE_PACK;
 }
 
@@ -3814,7 +3817,8 @@ static void charactersRefresh(Page *pg)
         }
         if (r->opt == UI_OPT_CHAR_SWITCH && shown >= 0) {
             /* the character not on screen */
-            lt_ext_SetStr(r->label, shown == 1 ? UI_STR_CHAR_SWITCH_ICO : UI_STR_CHAR_SWITCH_YORDA);
+            lt_ext_set_str(r->label,
+                           shown == 1 ? UI_STR_CHAR_SWITCH_ICO : UI_STR_CHAR_SWITCH_YORDA);
         }
         if (isCharOpt(r->opt) && s_charSwatch[charPart(r->opt)] >= 0) {
             /* the swatch shows with its row (layoutPage masked the other
@@ -3823,7 +3827,7 @@ static void charactersRefresh(Page *pg)
             const int hidden = P(r->label)->defaultMask;
             unsigned char rgba[4];
             swatchColour(charPart(r->opt), rgba);
-            lt_ext_SetRectColor(sw, rgba);
+            lt_ext_set_rect_color(sw, rgba);
             P(sw)->dispY = P(r->label)->dispY + (viewer ? CV_SWATCH_DY : SWATCH_DY);
             P(sw)->defaultMask = hidden;
             lt_mask_property(sw, hidden);
@@ -3834,7 +3838,7 @@ static void charactersRefresh(Page *pg)
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
-        ui_ListRefresh(&pg->list, cur);
+        ui_list_refresh(&pg->list, cur);
         return;
     }
     layoutPage(pg, id);
@@ -3859,14 +3863,14 @@ static void refreshPage(Page *pg, int id, int cur)
         Row *r = &pg->rows[i];
         int locked = rowLocked(r);
         if (r->value >= 0) {
-            lt_ext_SetText(r->value, ui_SettingsValueText((UiSettingsOpt)r->opt));
+            lt_ext_set_text(r->value, ui_settings_value_text((UiSettingsOpt)r->opt));
         }
         if (isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION || r->opt == UI_OPT_TEXTURE_PACK ||
             r->opt == UI_OPT_MODEL_PACK) {
             /* the locked style: the label and its value greyed */
-            lt_ext_SetDim(r->label, locked);
+            lt_ext_set_dim(r->label, locked);
             if (r->value >= 0) {
-                lt_ext_SetDim(r->value, locked);
+                lt_ext_set_dim(r->value, locked);
             }
         }
         if (r->note >= 0) {
@@ -3882,20 +3886,20 @@ static int settingsProc(int first, int item)
 {
     int id;
     Page *pg = pageOfLayout(current_layout_id, &id);
-    LtProp *lay = lt_ext_Layout(current_layout_id);
+    LtProp *lay = lt_ext_layout(current_layout_id);
     (void)item;
     if (pg == NULL) {
         return -1;
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
-    ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    ui_set_language(ui_lang_from_game(NonLinearCameraMove));
     gpuPoll(); /* an install the page started, on any page */
     if (id == UI_PAGE_MUSIC) {
-        gallery_Tick(); /* the engine, once a Main tick while the page is up */
+        gallery_tick(); /* the engine, once a Main tick while the page is up */
     }
     if (first) {
         if (pg->isList) {
-            ui_ListReset(&pg->list);
+            ui_list_reset(&pg->list);
         }
         memset(&s_capture, 0, sizeof(s_capture));
     }
@@ -3905,30 +3909,30 @@ static int settingsProc(int first, int item)
     }
     lt_analog2Pad();
     int flags = pad[0].flags;
-    if (id == UI_PAGE_MUSIC && gallery_ScriptLeave()) {
+    if (id == UI_PAGE_MUSIC && gallery_script_leave()) {
         return galLeave(); /* the ICO_GALLERY_PLAY script's leave entry */
     }
     if (pg->isList) {
-        int r = ui_ListProc(&pg->list, lay, flags);
+        int r = ui_list_proc(&pg->list, lay, flags);
         refreshPage(pg, id, lay->curItem);
         return r;
     }
-    if (id == UI_PAGE_CHARACTERS && ui_SettingsCharactersInViewer()) {
+    if (id == UI_PAGE_CHARACTERS && ui_settings_characters_in_viewer()) {
         if (charsShown() < 0) {
             return -1; /* a model loading, or the viewer leaving */
         }
         const int cross = flags & LT_PAD_CROSS;
         if ((flags & PAD_BACK) ||
-            (cross && lay->curItem == ui_SettingsRowOf(UI_PAGE_CHARACTERS, UI_OPT_BACK))) {
+            (cross && lay->curItem == ui_settings_row_of(UI_PAGE_CHARACTERS, UI_OPT_BACK))) {
             /* Triangle, or Back: to the title, what changed written */
             NEGATIVE_SE();
-            ui_SettingsSave();
+            ui_settings_save();
             la_host_leave();
             s_charsHost.leave();
             return -1;
         }
         const int onSwitch =
-            cross && lay->curItem == ui_SettingsRowOf(UI_PAGE_CHARACTERS, UI_OPT_CHAR_SWITCH);
+            cross && lay->curItem == ui_settings_row_of(UI_PAGE_CHARACTERS, UI_OPT_CHAR_SWITCH);
         if ((flags & (LT_PAD_L1 | LT_PAD_R1)) || onSwitch) {
             POSITIVE_SE();
             s_charsRows = 1 - charsShown();
@@ -3946,7 +3950,7 @@ static int settingsProc(int first, int item)
             continue;
         }
         if ((flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && canStep(r->opt)) {
-            ui_SettingsStep((UiSettingsOpt)r->opt, (flags & LT_PAD_LEFT) ? -1 : 1);
+            ui_settings_step((UiSettingsOpt)r->opt, (flags & LT_PAD_LEFT) ? -1 : 1);
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
@@ -4017,7 +4021,7 @@ static int settingsProc(int first, int item)
     return -1;
 }
 
-int ui_SettingsCoversTitle(void)
+int ui_settings_covers_title(void)
 {
     if (s_titleHandoff && !isTitleLayout(current_layout_id)) {
         s_titleHandoff = 0;

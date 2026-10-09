@@ -5,19 +5,19 @@
 #include <string.h>
 
 /* ----------------------------------------------------- bind group layouts */
-RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
+RhiBindGroupLayout rhi_create_bind_group_layout(const RhiBindGroupLayoutDesc *desc)
 {
     RhiBindGroupLayout out = {0};
     if (!desc) {
         return out;
     }
     D3dpLayout l;
-    if (!d3dp_LayoutBuild(desc->slots, desc->slotCount, &l)) {
+    if (!d3dp_layout_build(desc->slots, desc->slotCount, &l)) {
         DX_LOG("bind group layout %s: invalid", desc->debugName ? desc->debugName : "?");
         return out;
     }
     DxLayout *dl = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.layouts, (void **)&dl);
+    uint32_t id = d3dp_pool_alloc(&g_dx.layouts, (void **)&dl);
     if (!id) {
         return out;
     }
@@ -26,16 +26,16 @@ RhiBindGroupLayout rhi_CreateBindGroupLayout(const RhiBindGroupLayoutDesc *desc)
     return out;
 }
 
-void rhi_DestroyBindGroupLayout(RhiBindGroupLayout h)
+void rhi_destroy_bind_group_layout(RhiBindGroupLayout h)
 {
     /* root signatures copied what they need; nothing on the GPU */
-    d3dp_PoolRelease(&g_dx.layouts, h.id);
+    d3dp_pool_release(&g_dx.layouts, h.id);
 }
 
 /* ------------------------------------------------------- root signatures
  * One root signature per distinct list of layouts (cached; rd_core has a
  * handful): group g is register space g, as descriptor tables. */
-static D3D12_SHADER_VISIBILITY dx_Visibility(uint32_t stages)
+static D3D12_SHADER_VISIBILITY dx_visibility(uint32_t stages)
 {
     const uint32_t vs = 1u << RHI_STAGE_VERTEX, fs = 1u << RHI_STAGE_FRAGMENT;
     if ((stages & (vs | fs)) == vs) {
@@ -47,7 +47,7 @@ static D3D12_SHADER_VISIBILITY dx_Visibility(uint32_t stages)
     return D3D12_SHADER_VISIBILITY_ALL;
 }
 
-static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t count)
+static DxRootSig *dx_root_signature(const RhiBindGroupLayout *layouts, uint32_t count)
 {
     for (uint32_t i = 0; i < g_dx.rootCount; i++) {
         DxRootSig *r = &g_dx.roots[i];
@@ -65,7 +65,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     }
     const D3dpLayout *ls[RHI_MAX_BIND_SLOTS] = {0};
     for (uint32_t g = 0; g < count; g++) {
-        DxLayout *dl = d3dp_PoolGet(&g_dx.layouts, layouts[g].id);
+        DxLayout *dl = d3dp_pool_get(&g_dx.layouts, layouts[g].id);
         if (!dl) {
             DX_LOG("pipeline: invalid bind group layout %u", g);
             return NULL;
@@ -74,7 +74,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     }
     DxRootSig *r = &g_dx.roots[g_dx.rootCount];
     memset(r, 0, sizeof(*r));
-    uint32_t np = d3dp_RootParams(ls, count, r->resParam, r->smpParam, r->dynParam);
+    uint32_t np = d3dp_root_params(ls, count, r->resParam, r->smpParam, r->dynParam);
 
     D3D12_ROOT_PARAMETER params[D3DP_MAX_ROOT_PARAMS];
     D3D12_DESCRIPTOR_RANGE ranges[RHI_MAX_BIND_SLOTS][D3DP_MAX_SLOTS];
@@ -91,7 +91,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
                 p->ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
                 p->Descriptor.ShaderRegister = s->slot;
                 p->Descriptor.RegisterSpace = g;
-                p->ShaderVisibility = dx_Visibility(
+                p->ShaderVisibility = dx_visibility(
                     s->stages ? s->stages
                               : ((1u << RHI_STAGE_VERTEX) | (1u << RHI_STAGE_FRAGMENT)));
                 continue;
@@ -119,14 +119,14 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
             p->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             p->DescriptorTable.NumDescriptorRanges = l->resCount;
             p->DescriptorTable.pDescriptorRanges = rr[0];
-            p->ShaderVisibility = dx_Visibility(l->resStages);
+            p->ShaderVisibility = dx_visibility(l->resStages);
         }
         if (r->smpParam[g] >= 0) {
             D3D12_ROOT_PARAMETER *p = &params[r->smpParam[g]];
             p->ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
             p->DescriptorTable.NumDescriptorRanges = l->smpCount;
             p->DescriptorTable.pDescriptorRanges = rr[1];
-            p->ShaderVisibility = dx_Visibility(l->smpStages);
+            p->ShaderVisibility = dx_visibility(l->smpStages);
         }
     }
     D3D12_ROOT_SIGNATURE_DESC rd;
@@ -163,7 +163,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     return r;
 }
 
-void dx_ReleaseRootSignatures(void)
+void dx_release_root_signatures(void)
 {
     for (uint32_t i = 0; i < g_dx.rootCount; i++) {
         DX_RELEASE(g_dx.roots[i].rs);
@@ -174,23 +174,23 @@ void dx_ReleaseRootSignatures(void)
 /* ---------------------------------------------------- transient bind groups
  * Descriptors are written straight into the frame slot's region of the
  * shader-visible heaps; the region is reset when the slot is recycled
- * (rhi_WaitFrame).  The handle id is (frame tag << 20) | (index + 1). */
-static uint32_t dx_FrameTag(void)
+ * (rhi_wait_frame).  The handle id is (frame tag << 20) | (index + 1). */
+static uint32_t dx_frame_tag(void)
 {
     return (uint32_t)(g_dx.frameIndex & D3DP_GEN_MASK);
 }
 
-DxBindGroup *dx_GetBindGroup(uint32_t id)
+DxBindGroup *dx_get_bind_group(uint32_t id)
 {
-    DxFrame *f = dx_CurFrame();
+    DxFrame *f = dx_cur_frame();
     uint32_t idx = id & D3DP_INDEX_MASK;
-    if (idx == 0 || idx > f->groupCount || (id >> D3DP_GEN_SHIFT) != dx_FrameTag()) {
+    if (idx == 0 || idx > f->groupCount || (id >> D3DP_GEN_SHIFT) != dx_frame_tag()) {
         return NULL;
     }
     return &f->groups[idx - 1];
 }
 
-static const RhiBinding *dx_FindBinding(const RhiBindGroupDesc *d, const RhiBindSlot *s)
+static const RhiBinding *dx_find_binding(const RhiBindGroupDesc *d, const RhiBindSlot *s)
 {
     for (uint32_t i = 0; i < d->bindingCount; i++) {
         if (d->bindings[i].slot == s->slot && d->bindings[i].type == s->type) {
@@ -200,7 +200,7 @@ static const RhiBinding *dx_FindBinding(const RhiBindGroupDesc *d, const RhiBind
     return NULL;
 }
 
-static void dx_NullView(const RhiBindSlot *s, D3D12_CPU_DESCRIPTOR_HANDLE h)
+static void dx_null_view(const RhiBindSlot *s, D3D12_CPU_DESCRIPTOR_HANDLE h)
 {
     if (s->type == RHI_BIND_UNIFORM_BUFFER) {
         ID3D12Device_CreateConstantBufferView(g_dx.device, NULL, h);
@@ -223,13 +223,13 @@ static void dx_NullView(const RhiBindSlot *s, D3D12_CPU_DESCRIPTOR_HANDLE h)
 
 /* Writes one resource-table descriptor; false when the binding is unusable
  * (a null view is written instead). */
-static bool dx_WriteResource(const RhiBindSlot *s, const RhiBinding *b,
-                             D3D12_CPU_DESCRIPTOR_HANDLE h)
+static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
+                              D3D12_CPU_DESCRIPTOR_HANDLE h)
 {
     switch (s->type) {
     case RHI_BIND_UNIFORM_BUFFER: {
-        DxBuffer *buf = dx_GetBuffer(b->buffer);
-        uint32_t size = buf ? d3dp_CbvSize(b->offset, b->size, buf->size) : 0;
+        DxBuffer *buf = dx_get_buffer(b->buffer);
+        uint32_t size = buf ? d3dp_cbv_size(b->offset, b->size, buf->size) : 0;
         if (!size) {
             DX_LOG("bind group: b%u: invalid buffer or range (offset %llu, size %llu)", s->slot,
                    (unsigned long long)b->offset, (unsigned long long)b->size);
@@ -241,7 +241,7 @@ static bool dx_WriteResource(const RhiBindSlot *s, const RhiBinding *b,
     }
     case RHI_BIND_STORAGE_BUFFER: {
         /* StructuredBuffer<float4> (vu_common.hlsli): 16-byte elements */
-        DxBuffer *buf = dx_GetBuffer(b->buffer);
+        DxBuffer *buf = dx_get_buffer(b->buffer);
         /* the offset is checked first: past the end, buf->size - b->offset
            wraps and a huge offset + size would pass the bound */
         uint64_t size = 0;
@@ -264,7 +264,7 @@ static bool dx_WriteResource(const RhiBindSlot *s, const RhiBinding *b,
         return true;
     }
     case RHI_BIND_SAMPLED_TEXTURE: {
-        DxTexture *t = dx_GetTexture(b->texture);
+        DxTexture *t = dx_get_texture(b->texture);
         if (!t) {
             DX_LOG("bind group: t%u: invalid texture", s->slot);
             return false;
@@ -286,36 +286,36 @@ static bool dx_WriteResource(const RhiBindSlot *s, const RhiBinding *b,
     }
 }
 
-static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet);
+static RhiBindGroup dx_create_bind_group(const RhiBindGroupDesc *desc, bool quiet);
 
-uint32_t dx_NullBindGroup(uint32_t layoutId)
+uint32_t dx_null_bind_group(uint32_t layoutId)
 {
     uint32_t slot = (layoutId & D3DP_INDEX_MASK) - 1u;
-    if (!d3dp_PoolGet(&g_dx.layouts, layoutId) || slot >= DX_MAX_LAYOUTS) {
+    if (!d3dp_pool_get(&g_dx.layouts, layoutId) || slot >= DX_MAX_LAYOUTS) {
         return 0;
     }
-    DxFrame *f = dx_CurFrame();
-    if (!dx_GetBindGroup(f->nullGroups[slot])) {
+    DxFrame *f = dx_cur_frame();
+    if (!dx_get_bind_group(f->nullGroups[slot])) {
         RhiBindGroupDesc d = {{layoutId}, NULL, 0};
-        f->nullGroups[slot] = dx_CreateBindGroup(&d, true).id;
+        f->nullGroups[slot] = dx_create_bind_group(&d, true).id;
     }
     return f->nullGroups[slot];
 }
 
-RhiBindGroup rhi_CreateBindGroup(const RhiBindGroupDesc *desc)
+RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 {
-    return dx_CreateBindGroup(desc, false);
+    return dx_create_bind_group(desc, false);
 }
 
-static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
+static RhiBindGroup dx_create_bind_group(const RhiBindGroupDesc *desc, bool quiet)
 {
     RhiBindGroup out = {0};
-    DxLayout *dl = desc ? d3dp_PoolGet(&g_dx.layouts, desc->layout.id) : NULL;
+    DxLayout *dl = desc ? d3dp_pool_get(&g_dx.layouts, desc->layout.id) : NULL;
     if (!dl) {
         return out;
     }
     const D3dpLayout *l = &dl->l;
-    DxFrame *f = dx_CurFrame();
+    DxFrame *f = dx_cur_frame();
     if (f->groupCount == f->groupCap) {
         uint32_t cap = f->groupCap ? f->groupCap * 2u : 1024u;
         DxBindGroup *g = realloc(f->groups, cap * sizeof(*g));
@@ -332,25 +332,25 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
     memset(&bg, 0, sizeof(bg));
     bg.layoutId = desc->layout.id;
     uint32_t resBase = 0, smpBase = 0;
-    if (l->resCount && !d3dp_RingAlloc(&f->resRing, l->resCount, &resBase)) {
+    if (l->resCount && !d3dp_ring_alloc(&f->resRing, l->resCount, &resBase)) {
         DX_LOG("CBV/SRV descriptor ring full for this frame (%u)", f->resRing.size);
         return out;
     }
     /* one sampler: its persistent descriptor; several: a table in the ring */
     bool ringSamplers = l->smpCount > 1;
-    if (ringSamplers && !d3dp_RingAlloc(&f->smpRing, l->smpCount, &smpBase)) {
+    if (ringSamplers && !d3dp_ring_alloc(&f->smpRing, l->smpCount, &smpBase)) {
         DX_LOG("sampler descriptor ring full for this frame (%u)", f->smpRing.size);
         return out;
     }
     bg.dynCount = l->dynCount;
     for (uint32_t i = 0; i < l->slotCount; i++) {
         const RhiBindSlot *s = &l->slots[i];
-        const RhiBinding *b = dx_FindBinding(desc, s);
+        const RhiBinding *b = dx_find_binding(desc, s);
         if (l->table[i] == D3DP_ROOT_CBV) {
             /* the base address; a root CBV has no size and no
              * null form, so a missing or bad binding leaves 0, which the
              * shader must not read (rd_core binds every one) */
-            DxBuffer *buf = b ? dx_GetBuffer(b->buffer) : NULL;
+            DxBuffer *buf = b ? dx_get_buffer(b->buffer) : NULL;
             if (buf && (b->offset & 255u) == 0 && b->size && b->size <= 65536u &&
                 b->offset + b->size <= buf->size) {
                 bg.dyn[l->offset[i]] = buf->gpu + b->offset;
@@ -360,7 +360,7 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
             continue;
         }
         if (l->table[i] == D3DP_TABLE_SAMPLER) {
-            DxSampler *smp = b ? d3dp_PoolGet(&g_dx.samplers, b->sampler.id) : NULL;
+            DxSampler *smp = b ? d3dp_pool_get(&g_dx.samplers, b->sampler.id) : NULL;
             if (!smp || smp->dead) {
                 if (!quiet) {
                     DX_LOG("bind group: s%u: invalid sampler", s->slot);
@@ -369,7 +369,7 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
             }
             if (!ringSamplers) {
                 /* a missing sampler binds the default (point, clamp) */
-                bg.smp = dx_Gpu(g_dx.smpGpu, g_dx.smpInc, smp ? smp->heapIndex : DX_SMP_DEFAULT);
+                bg.smp = dx_gpu(g_dx.smpGpu, g_dx.smpInc, smp ? smp->heapIndex : DX_SMP_DEFAULT);
                 bg.hasSmp = true;
             } else {
                 D3D12_SAMPLER_DESC d = smp ? smp->desc : (D3D12_SAMPLER_DESC){0};
@@ -380,33 +380,33 @@ static RhiBindGroup dx_CreateBindGroup(const RhiBindGroupDesc *desc, bool quiet)
                     d.MaxAnisotropy = 1;
                 }
                 ID3D12Device_CreateSampler(
-                    g_dx.device, &d, dx_Cpu(g_dx.smpCpu, g_dx.smpInc, smpBase + l->offset[i]));
+                    g_dx.device, &d, dx_cpu(g_dx.smpCpu, g_dx.smpInc, smpBase + l->offset[i]));
             }
             continue;
         }
-        D3D12_CPU_DESCRIPTOR_HANDLE h = dx_Cpu(g_dx.resCpu, g_dx.resInc, resBase + l->offset[i]);
-        if (!b || !dx_WriteResource(s, b, h)) {
+        D3D12_CPU_DESCRIPTOR_HANDLE h = dx_cpu(g_dx.resCpu, g_dx.resInc, resBase + l->offset[i]);
+        if (!b || !dx_write_resource(s, b, h)) {
             if (!b && !quiet) {
                 DX_LOG("bind group: slot %u (type %d) has no binding", s->slot, (int)s->type);
             }
-            dx_NullView(s, h);
+            dx_null_view(s, h);
         }
     }
     if (l->resCount) {
-        bg.res = dx_Gpu(g_dx.resGpu, g_dx.resInc, resBase);
+        bg.res = dx_gpu(g_dx.resGpu, g_dx.resInc, resBase);
         bg.hasRes = true;
     }
     if (ringSamplers) {
-        bg.smp = dx_Gpu(g_dx.smpGpu, g_dx.smpInc, smpBase);
+        bg.smp = dx_gpu(g_dx.smpGpu, g_dx.smpInc, smpBase);
         bg.hasSmp = true;
     }
     f->groups[f->groupCount++] = bg;
-    out.id = (dx_FrameTag() << D3DP_GEN_SHIFT) | f->groupCount;
+    out.id = (dx_frame_tag() << D3DP_GEN_SHIFT) | f->groupCount;
     return out;
 }
 
 /* -------------------------------------------------------------- pipelines */
-static D3D12_RENDER_TARGET_BLEND_DESC dx_Blend(const RhiBlendState *b, RhiFormat fmt)
+static D3D12_RENDER_TARGET_BLEND_DESC dx_blend(const RhiBlendState *b, RhiFormat fmt)
 {
     D3D12_RENDER_TARGET_BLEND_DESC s;
     memset(&s, 0, sizeof(s));
@@ -433,7 +433,7 @@ static D3D12_RENDER_TARGET_BLEND_DESC dx_Blend(const RhiBlendState *b, RhiFormat
     return s;
 }
 
-static D3D12_DEPTH_STENCILOP_DESC dx_Stencil(const RhiStencilFace *f)
+static D3D12_DEPTH_STENCILOP_DESC dx_stencil(const RhiStencilFace *f)
 {
     D3D12_DEPTH_STENCILOP_DESC s = {
         dx_stencilOpMap[f->fail].d3d,
@@ -444,7 +444,7 @@ static D3D12_DEPTH_STENCILOP_DESC dx_Stencil(const RhiStencilFace *f)
     return s;
 }
 
-static bool dx_ValidPipelineDesc(const RhiPipelineDesc *d)
+static bool dx_valid_pipeline_desc(const RhiPipelineDesc *d)
 {
     if (d->topology >= RHI_TOPO_COUNT || d->colorCount > RHI_MAX_COLOR_TARGETS ||
         d->depthFormat >= RHI_FMT_COUNT || d->vertexAttrCount > RHI_MAX_VERTEX_ATTRS ||
@@ -482,21 +482,21 @@ static bool dx_ValidPipelineDesc(const RhiPipelineDesc *d)
     return ds->depthCompare < RHI_CMP_COUNT;
 }
 
-RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
 {
     RhiPipeline out = {0};
     const char *name = d && d->debugName ? d->debugName : "?";
-    if (!d || !dx_ValidPipelineDesc(d)) {
+    if (!d || !dx_valid_pipeline_desc(d)) {
         DX_LOG("pipeline %s: invalid description", name);
         return out;
     }
-    DxShader *vs = d3dp_PoolGet(&g_dx.shaders, d->vertex.id);
-    DxShader *fs = d3dp_PoolGet(&g_dx.shaders, d->fragment.id);
+    DxShader *vs = d3dp_pool_get(&g_dx.shaders, d->vertex.id);
+    DxShader *fs = d3dp_pool_get(&g_dx.shaders, d->fragment.id);
     if (!vs) {
         DX_LOG("pipeline %s: no vertex shader", name);
         return out;
     }
-    DxRootSig *root = dx_RootSignature(d->layouts, d->layoutCount);
+    DxRootSig *root = dx_root_signature(d->layouts, d->layoutCount);
     if (!root) {
         return out;
     }
@@ -505,7 +505,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     D3D12_INPUT_ELEMENT_DESC ie[RHI_MAX_VERTEX_ATTRS];
     for (uint32_t i = 0; i < d->vertexAttrCount; i++) {
         const RhiVertexAttr *a = &d->vertexAttrs[i];
-        int e = vs->sigCount > 0 ? d3dp_LocationElement(vs->sig, vs->sigCount, a->location) : -1;
+        int e = vs->sigCount > 0 ? d3dp_location_element(vs->sig, vs->sigCount, a->location) : -1;
         if (e < 0) {
             DX_LOG("pipeline %s: the vertex shader has no input at location %u", name, a->location);
             return out;
@@ -547,7 +547,7 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         pd.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
     }
     for (uint32_t i = 0; i < d->colorCount; i++) {
-        pd.BlendState.RenderTarget[i] = dx_Blend(&d->blend[i], d->colorFormats[i]);
+        pd.BlendState.RenderTarget[i] = dx_blend(&d->blend[i], d->colorFormats[i]);
         pd.RTVFormats[i] = dx_formatMap[d->colorFormats[i]].view;
     }
     pd.SampleMask = UINT_MAX;
@@ -567,13 +567,13 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
             (dss->stencilTest && dx_formatMap[d->depthFormat].stencil) ? TRUE : FALSE;
         pd.DepthStencilState.StencilReadMask = dss->stencilReadMask;
         pd.DepthStencilState.StencilWriteMask = dss->stencilWriteMask;
-        pd.DepthStencilState.FrontFace = dx_Stencil(&dss->front);
-        pd.DepthStencilState.BackFace = dx_Stencil(&dss->back);
+        pd.DepthStencilState.FrontFace = dx_stencil(&dss->front);
+        pd.DepthStencilState.BackFace = dx_stencil(&dss->back);
         pd.DSVFormat = dx_formatMap[d->depthFormat].dsv;
     } else {
         pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        pd.DepthStencilState.FrontFace = dx_Stencil(&dss->front);
-        pd.DepthStencilState.BackFace = dx_Stencil(&dss->back);
+        pd.DepthStencilState.FrontFace = dx_stencil(&dss->front);
+        pd.DepthStencilState.BackFace = dx_stencil(&dss->back);
     }
     pd.InputLayout.pInputElementDescs = d->vertexAttrCount ? ie : NULL;
     pd.InputLayout.NumElements = d->vertexAttrCount;
@@ -582,14 +582,14 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
     pd.SampleDesc.Count = 1;
 
     DxPipeline *p = NULL;
-    uint32_t id = d3dp_PoolAlloc(&g_dx.pipelines, (void **)&p);
+    uint32_t id = d3dp_pool_alloc(&g_dx.pipelines, (void **)&p);
     if (!id) {
         return out;
     }
     if (!DX_CHECK(ID3D12Device_CreateGraphicsPipelineState(
             g_dx.device, &pd, &IID_ID3D12PipelineState, (void **)&p->pso))) {
         DX_LOG("pipeline %s not created", name);
-        d3dp_PoolRelease(&g_dx.pipelines, id);
+        d3dp_pool_release(&g_dx.pipelines, id);
         return out;
     }
     p->root = root;
@@ -598,18 +598,18 @@ RhiPipeline rhi_CreatePipeline(const RhiPipelineDesc *d)
         p->strides[d->vertexBindings[i].binding] = d->vertexBindings[i].stride;
         p->bindingMask |= 1u << d->vertexBindings[i].binding;
     }
-    dx_SetName((ID3D12Object *)p->pso, d->debugName);
-    dx_DrainMessages();
+    dx_set_name((ID3D12Object *)p->pso, d->debugName);
+    dx_drain_messages();
     out.id = id;
     return out;
 }
 
-void rhi_DestroyPipeline(RhiPipeline h)
+void rhi_destroy_pipeline(RhiPipeline h)
 {
-    DxPipeline *p = d3dp_PoolGet(&g_dx.pipelines, h.id);
+    DxPipeline *p = d3dp_pool_get(&g_dx.pipelines, h.id);
     if (!p) {
         return;
     }
-    dx_Defer((IUnknown *)p->pso);
-    d3dp_PoolRelease(&g_dx.pipelines, h.id);
+    dx_defer((IUnknown *)p->pso);
+    d3dp_pool_release(&g_dx.pipelines, h.id);
 }

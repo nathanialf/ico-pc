@@ -455,7 +455,7 @@ static void buildMap(void)
     s_mapBuilt = 1;
 }
 
-const UiMenuTextItem *ui_MenuTextItemOf(const LtProperty *e)
+const UiMenuTextItem *ui_menu_text_item_of(const LtProperty *e)
 {
     if (!e || e < texProperty || e >= texProperty + MT_GAME_ROWS) {
         return NULL;

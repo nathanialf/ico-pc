@@ -562,25 +562,25 @@ typedef enum UiStrId {
     UI_STR_COUNT
 } UiStrId;
 
-void ui_SetLanguage(UiLang lang);
-UiLang ui_GetLanguage(void);
+void ui_set_language(UiLang lang);
+UiLang ui_get_language(void);
 /* the game's language number (2..6) to a UiLang; English otherwise */
-UiLang ui_LangFromGame(int nonLinearCameraMove);
+UiLang ui_lang_from_game(int nonLinearCameraMove);
 /* the string of id in the current language; "" for an unknown id; a
    missing translation falls back to English */
-const char *ui_Str(UiStrId id);
+const char *ui_str(UiStrId id);
 /* the same in a given language (tests, the Language section) */
-const char *ui_StrIn(UiLang lang, UiStrId id);
+const char *ui_str_in(UiLang lang, UiStrId id);
 
 /* Every string the port draws from a table, for the font coverage test:
    fn(lang, utf8, user) once for each non-empty entry of each language's
    table (the Settings menu, notes, Extras, achievements, popups, the menu
-   words UI_STR_MT_*).  A missing translation is not visited (ui_StrIn
+   words UI_STR_MT_*).  A missing translation is not visited (ui_str_in
    would give the English one, which is visited under UI_LANG_EN).  The
    subtitles and the staff roll's lines are the game's pictures and data,
    not port tables. */
 typedef void (*UiStringFn)(UiLang lang, const char *utf8, void *user);
-void ui_StringsForEach(UiStringFn fn, void *user);
+void ui_strings_for_each(UiStringFn fn, void *user);
 
 /* the tables, one per strings_<lang>.c, UI_STR_COUNT entries */
 extern const char *const ui_strings_en[UI_STR_COUNT];

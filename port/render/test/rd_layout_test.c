@@ -17,7 +17,7 @@
  *   - the glow sprite's gif_SetAlpha(1, 5, 0) is ALPHA 0x48;
  *   - nothing was written to a register the decoder does not decode;
  *   - a row sprite under gif_HostDrawKey carries the key, blends half
- *     way between two frames (rd__InterpFrame), and the sprite after the
+ *     way between two frames (rd__interp_frame), and the sprite after the
  *     key ends is unkeyed and the current frame's.
  * Then on a Vulkan device (exit 77 without one; lavapipe in the container),
  * the same frame replayed: a pixel inside the untextured sprite has its
@@ -204,8 +204,8 @@ static void recordFrame(void)
     static const uint8_t black[4] = {0, 0, 0, 0x80};
 
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
     texSetTexReg(11);
     ltDrawPrimarySprite();
     displayTexture();
@@ -241,7 +241,7 @@ static void checkRecording(const RdFrame *f)
     Walk w;
     memset(&w, 0, sizeof(w));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, collect, &w);
+    rd__walk(f, 0, &s, collect, &w);
     CHECK(w.screens == 3, "list 11 holds %d screen batches, expected 3", w.screens);
     if (w.screens != 3) {
         return;
@@ -308,7 +308,7 @@ static void checkPixels(void)
         failures++;
         return;
     }
-    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), px, 512 * 512 * 4, &w, &h) || w != 512) {
         CHECK(0, "SCENE readback");
         free(px);
         return;
@@ -339,8 +339,8 @@ static void recordKeyedRow(int k)
     GifColor grey = {90, 90, 90, 0x80};
 
     dl_SetDLPriority(0);
-    rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
-    rd_ClearTarget(rd_Target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
     gif_StartPacketPri(11);
     gif_SetZTest(0);
     gif_SetZWrite(0);
@@ -369,13 +369,13 @@ static void checkKeyedRow(void)
 {
     recordKeyedRow(0);
     recordKeyedRow(1);
-    const RdFrame *prev = rd__PrevFrame(), *cur = rd__LastFrame();
+    const RdFrame *prev = rd__prev_frame(), *cur = rd__last_frame();
     CHECK(prev && cur, "two layout frames retained");
     if (!prev || !cur) {
         return;
     }
     RdInterpStats st;
-    const RdFrame *f = rd__InterpFrame(prev, cur, 0.5f, 1, &st);
+    const RdFrame *f = rd__interp_frame(prev, cur, 0.5f, 1, &st);
     CHECK(f && st.snap == RD_SNAP_NONE && st.keyed == 1 && st.lerped == 1,
           "the keyed row blends (snap %u keyed %u lerped %u)", st.snap, st.keyed, st.lerped);
     const RdCmd *r = screenCmd(f, 0), *rp = screenCmd(prev, 0), *rc = screenCmd(cur, 0);
@@ -400,21 +400,21 @@ static void checkKeyedRow(void)
 
 int main(void)
 {
-    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
+    rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     /* recording */
-    if (!rd__InitRecordOnly(512, 512)) {
-        printf("FAIL rd__InitRecordOnly\n");
+    if (!rd__init_record_only(512, 512)) {
+        printf("FAIL rd__init_record_only\n");
         return 1;
     }
     dl_Init();
     recordFrame();
-    const RdFrame *f = rd__LastFrame();
+    const RdFrame *f = rd__last_frame();
     CHECK(f != NULL, "a closed frame");
     if (f) {
         checkRecording(f);
     }
     checkKeyedRow();
-    rd_Shutdown();
+    rd_shutdown();
     if (failures) {
         printf("rd_layout_test: %d failures\n", failures);
         return 1;
@@ -424,7 +424,7 @@ int main(void)
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;
-    if (!rd_Init(512, 512, &st, NULL)) {
+    if (!rd_init(512, 512, &st, NULL)) {
         printf("rd_layout_test: recording ok; SKIP the pixel check: no usable Vulkan device\n");
         return 77;
     }
@@ -433,9 +433,9 @@ int main(void)
     dl_Clear();
     recordFrame();
     checkPixels();
-    CHECK(rhi_vk_ValidationErrorCount() == 0, "%u validation errors",
-          rhi_vk_ValidationErrorCount());
-    rd_Shutdown();
+    CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
     if (failures) {
         printf("rd_layout_test: %d failures\n", failures);
         return 1;

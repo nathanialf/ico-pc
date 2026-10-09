@@ -103,7 +103,7 @@ typedef struct RdTestState {
 } RdTestState;
 
 /* The fourteen literal TEST values written by the game, as raw register
- * words.  rd_TestFromGs() decodes any of them. */
+ * words.  rd_test_from_gs() decodes any of them. */
 enum {
     RD_TEST_Z_ALWAYS = 0x30000, /* ZTE, ZTST ALWAYS                       (20 sites; 2D, post) */
     RD_TEST_Z_GEQUAL =
@@ -128,7 +128,7 @@ enum {
     RD_TEST_OFF = 0x0 /* everything off; one site */
 };
 
-static inline RdTestState rd_TestFromGs(uint64_t v)
+static inline RdTestState rd_test_from_gs(uint64_t v)
 {
     RdTestState s;
     s.ate = (uint8_t)(v & 1);
@@ -172,7 +172,7 @@ typedef struct RdSamplerWrap {
     uint8_t t; /* RdWrap: CLAMP bits 2-3 */
 } RdSamplerWrap;
 
-static inline RdSamplerWrap rd_WrapFromGs(uint64_t clamp)
+static inline RdSamplerWrap rd_wrap_from_gs(uint64_t clamp)
 {
     RdSamplerWrap w;
     w.s = (uint8_t)((clamp & 3) ? RD_WRAP_CLAMP : RD_WRAP_REPEAT);
@@ -234,10 +234,10 @@ typedef struct RdDrawState {
 /* Pipeline key: what actually selects a GPU pipeline.  Everything in
  * RdDrawState that is not a pipeline-level property (aref, blendFix,
  * sampler settings) goes in a uniform or sampler object instead.  The tests hold the enumerated
- * reachable set under RD_PIPELINE_REACHABLE_MAX (rd__EnumerateReachable);
+ * reachable set under RD_PIPELINE_REACHABLE_MAX (rd__enumerate_reachable);
  * the runtime cache has four times that room, and a key past it (or one
  * whose creation failed) is logged once and drawn as nothing, never an
- * abort (rd_pipeline.c, rd__GetPipeline). */
+ * abort (rd_pipeline.c, rd__get_pipeline). */
 typedef struct RdPipelineKey {
     uint8_t program; /* RdProg (rd.h) */
     uint8_t blend;   /* RdBlend, or RD_BLEND_COUNT when abe == 0 */
@@ -257,7 +257,7 @@ typedef struct RdPipelineKey {
     uint8_t aa1;       /* PRIM.AA1 on a line or triangle: sprite_aa1_*_vs / sprite_aa1_ps, edge
                     coverage */
     uint8_t nodual;    /* the *_nodual fragment entry and the two-pass blend
-                          state (rd_pipeline.c rd__ExpandNoDual); 0 with dual-source blending */
+                          state (rd_pipeline.c rd__expand_no_dual); 0 with dual-source blending */
     uint8_t _pad[1];
 } RdPipelineKey;
 
@@ -269,7 +269,7 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, nodual too
  * under AEM), which roughly doubles the set; the tests keep it under this. */
 #define RD_PIPELINE_REACHABLE_MAX 512
 #define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
-/* keys whose rhi_CreatePipeline failed, remembered so they are not retried
+/* keys whose rhi_create_pipeline failed, remembered so they are not retried
  * (and logged) on every draw */
 #define RD_PIPELINE_FAIL_MAX 64
 

@@ -86,7 +86,7 @@ extern int ico_photo_left(void);
  * buffer; TFX HIGHLIGHT; the motion blur and aura feedback need the GS
  * integer blend).  The gif_* calls below are renamed to sbHost*, which
  * write the same registers in the same order as rd state (so the state the
- * passes leave behind is the GS's) and send every sprite as rd_Post of the
+ * passes leave behind is the GS's) and send every sprite as rd_post of the
  * kind of the effect it belongs to (SB_KIND), drawn by rd in the GS
  * integer arithmetic.  The game code below is unchanged; the packets are
  * still opened and closed through GifPacket.c, so the list selection and
@@ -123,7 +123,7 @@ static RdTarget sbHostFrame(unsigned int tbp, unsigned int w, RdTarget *depth)
     *depth = (RdTarget){0};
     if (tbp == 0x800) {
         id = RD_TARGET_SCENE;
-        *depth = rd_Target(RD_TARGET_SCENE);
+        *depth = rd_target(RD_TARGET_SCENE);
     } else if (tbp == 0) {
         id = RD_TARGET_DISPLAY;
     } else if (tbp == (unsigned int)workBase[0]) {
@@ -131,11 +131,11 @@ static RdTarget sbHostFrame(unsigned int tbp, unsigned int w, RdTarget *depth)
     } else if (tbp == (unsigned int)workBase[1]) {
         id = w >= (unsigned int)ScreenWidth ? RD_TARGET_AURA_WORK : RD_TARGET_WORK1;
         if (id == RD_TARGET_AURA_WORK) {
-            *depth = rd_Target(RD_TARGET_SCENE);
+            *depth = rd_target(RD_TARGET_SCENE);
         }
     } else if (tbp == (unsigned int)workBase[2]) {
         id = RD_TARGET_WORK2;
-        *depth = rd_Target(RD_TARGET_SCENE);
+        *depth = rd_target(RD_TARGET_SCENE);
     } else if (tbp == (unsigned int)workBase[3]) {
         id = RD_TARGET_WORK3;
     } else if (tbp == 0x3F00) {
@@ -145,9 +145,9 @@ static RdTarget sbHostFrame(unsigned int tbp, unsigned int w, RdTarget *depth)
     } else {
         sbHostOnce(0, "FRAME at a block with no work buffer: drawn into SCENE", tbp);
         id = RD_TARGET_SCENE;
-        *depth = rd_Target(RD_TARGET_SCENE);
+        *depth = rd_target(RD_TARGET_SCENE);
     }
-    return rd_Target(id);
+    return rd_target(id);
 }
 
 /* TEX0 to the target view it reads: TBP and TBW pick the buffer as FRAME
@@ -177,7 +177,7 @@ static RdTex sbHostTexture(unsigned long long tex0)
         sbHostOnce(1, "TEX0 at a block with no work buffer: untextured", tex0);
         return (RdTex){0};
     }
-    return rd_TargetTexture(rd_Target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
+    return rd_target_texture(rd_target(id), psm == 1 ? RD_VIEW_RGB24_TA0 : RD_VIEW_RGBA);
 }
 
 static void sbHostStartPacketPri(int pri)
@@ -200,31 +200,31 @@ static void sbHostSetGsReg(long long reg, long long data)
         break;
     case 0x08: /* CLAMP_1 */
     {
-        RdSamplerWrap w = rd_WrapFromGs(d);
+        RdSamplerWrap w = rd_wrap_from_gs(d);
 
-        rd_SamplerWrap((RdWrap)w.s, (RdWrap)w.t);
+        rd_sampler_wrap((RdWrap)w.s, (RdWrap)w.t);
         break;
     }
     case 0x14: /* TEX1_1 */
     {
         unsigned int mmin = (unsigned int)((d >> 6) & 7);
 
-        rd_SamplerFilter((d >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
-                         mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
-                                                             : RD_FILTER_NEAREST);
+        rd_sampler_filter((d >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
+                          mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
+                                                              : RD_FILTER_NEAREST);
         break;
     }
     case 0x3B: /* TEXA: 0x8000000080, the one value this file writes */
-        rd_TexA(((d >> 15) & 1) ? RD_TEXA_80_80_AEM : RD_TEXA_80_80);
+        rd_tex_a(((d >> 15) & 1) ? RD_TEXA_80_80_AEM : RD_TEXA_80_80);
         if ((d & 0xFF) != 0x80 || ((d >> 32) & 0xFF) != 0x80) {
             sbHostOnce(2, "TEXA other than 0x80/0x80", d);
         }
         break;
     case 0x47: /* TEST_1 */
-        rd_TestGs(d);
+        rd_test_gs(d);
         break;
     case 0x4A: /* FBA_1 */
-        rd_FBA((int)(d & 1));
+        rd_fba((int)(d & 1));
         break;
     default:
         sbHostOnce(3, "register write not recorded", (unsigned long long)reg);
@@ -236,8 +236,8 @@ static void sbHostSetAlpha(long long alpha, long long mode, long long fix)
 {
     /* PABE, then ALPHA_1 from alphaTable (GifPacket.c): the RdBlend values
        are the table's modes */
-    rd_PABE(alpha == 0);
-    rd_BlendFunc((RdBlend)((unsigned long long)mode < 12 ? mode : 0), (uint8_t)fix);
+    rd_pabe(alpha == 0);
+    rd_blend_func((RdBlend)((unsigned long long)mode < 12 ? mode : 0), (uint8_t)fix);
 }
 
 static void sbHostSetDrawEnviroment(unsigned long long fbp, unsigned long long psm, unsigned int w,
@@ -250,18 +250,18 @@ static void sbHostSetDrawEnviroment(unsigned long long fbp, unsigned long long p
     if (clear) {
         sbHostOnce(4, "gif_SetDrawEnviroment with clear: not recorded", fbp);
     }
-    rd_ColorMask(0); /* FRAME.FBMSK 0 */
-    rd_SetTarget(t, depth, w, h, useoffset ? RD_TARGET_OFFSET : 0);
+    rd_color_mask(0); /* FRAME.FBMSK 0 */
+    rd_set_target(t, depth, w, h, useoffset ? RD_TARGET_OFFSET : 0);
 }
 
 static void sbHostSetZTest(int on)
 {
-    rd_TestGs(on ? 0x50000 : 0x30000);
+    rd_test_gs(on ? 0x50000 : 0x30000);
 }
 
 static void sbHostSetZWrite(int on)
 {
-    rd_ZWrite(on);
+    rd_z_write(on);
 }
 
 /* gif_SpriteSensitiveOrg: PRIM (prim << 6) | 0x116 with a UV rectangle (TME,
@@ -283,10 +283,10 @@ static void sbHostSprite(void *rect, long long z, void *uvRect, void *colour, in
         unsigned int tfx = (unsigned int)((sbTex0 >> 35) & 3);
 
         if (t.id) {
-            rd_Texture(t, tfx == 1 ? RD_TEXFN_DECAL : RD_TEXFN_MODULATE,
+            rd_texture(t, tfx == 1 ? RD_TEXFN_DECAL : RD_TEXFN_MODULATE,
                        ((sbTex0 >> 34) & 1) ? RD_TCC_RGBA : RD_TCC_RGB);
         } else {
-            rd_TextureOff();
+            rd_texture_off();
         }
         p.uv[0] = (float)(uv[0] & 0x3FFF);
         p.uv[1] = (float)(uv[1] & 0x3FFF);
@@ -296,10 +296,10 @@ static void sbHostSprite(void *rect, long long z, void *uvRect, void *colour, in
         p.scalar[1] = (float)(1 << ((sbTex0 >> 30) & 0xF));
         p.lines = tfx;
     } else {
-        rd_TextureOff();
+        rd_texture_off();
     }
-    rd_ABE(prim & 1);
-    rd_Gouraud(0);
+    rd_abe(prim & 1);
+    rd_gouraud(0);
     p.rect[0] = (float)(a & 0xFFFF);
     p.rect[1] = (float)((a >> 16) & 0xFFFF);
     p.rect[2] = (float)(b & 0xFFFF);
@@ -309,7 +309,7 @@ static void sbHostSprite(void *rect, long long z, void *uvRect, void *colour, in
     p.scalar[2] = 1.0f; /* the frame-time factor: one frame (Original) */
     p.exactInt = 1;
     sbMotionDrawn |= sbKind == RD_POST_MOTION_BLUR;
-    rd_Post(sbKind, &p);
+    rd_post(sbKind, &p);
 }
 
 #define gif_StartPacketPri sbHostStartPacketPri
@@ -320,7 +320,7 @@ static void sbHostSprite(void *rect, long long z, void *uvRect, void *colour, in
 #define gif_SetZTest sbHostSetZTest
 #define gif_SetZWrite sbHostSetZWrite
 #define gif_SpriteSensitiveOrg sbHostSprite
-/* the effect the sprites that follow belong to (rd_Post's kind) */
+/* the effect the sprites that follow belong to (rd_post's kind) */
 #define SB_KIND(k) (sbKind = (k))
 #define SB_FLARE_KIND(mode) ((mode) & 2 ? RD_POST_BLOOM : RD_POST_FLARE)
 #else

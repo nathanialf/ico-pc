@@ -34,7 +34,7 @@ static void skin(Vu1Ref *r, const float *pos, const float *nrm, const float *wt,
     N[3] = 1.0f;
 }
 
-void vu1ref_Cluster(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
+void vu1ref_cluster(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
 {
     int n = vu_count(in);
     memcpy(out->tag, in[0], 16);

@@ -123,7 +123,7 @@ int font_CheckAlign(SprCol *col, unsigned char *str)
 
 #ifdef ICO_RD
 /* PC port (R2a; the names here are the port's): the glyph sprites of one font_Print, collected and drawn
-   with one gif_HostScreenPrims (rd_ScreenPrims) call.  The corners are the
+   with one gif_HostScreenPrims (rd_screen_prims) call.  The corners are the
    XYZ2 words drawOne packs, unpacked the way the GS reads them. */
 #define FONT_MAX_SPRITES 256 /* port */
 
@@ -239,10 +239,10 @@ void font_Print(unsigned int color, unsigned char *str, float x, float y, int al
        the decoder once so it binds the "font" TEX0 tex_TransTexture wrote
        (the texture seam: a placeholder until Texture.c is on rd) */
     gif_HostFlush();
-    rd_ZWrite(1);
-    rd_TestGs(0x30000);
-    rd_BlendFunc(RD_BLEND_LERP_AS, 0);
-    rd_SamplerFilter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+    rd_z_write(1);
+    rd_test_gs(0x30000);
+    rd_blend_func(RD_BLEND_LERP_AS, 0);
+    rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
     gif_SetGsReg(0, 0x156);
     fontRgba[0] = (unsigned char)r;
     fontRgba[1] = (unsigned char)g;

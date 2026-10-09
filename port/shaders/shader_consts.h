@@ -55,7 +55,7 @@ typedef struct IcoCrtCB {
     float beam[4]; /* scanline strength, beam width min, max (lines, FWHM), gap columns a
                     * source pixel */
     float mask[4]; /* type (RdCrtMask: 0 none, 1 grille, 2 slot, 3 dots), strength (1 - the
-                    * leak), fade (rd__CrtMaskFade), halation */
+                    * leak), fade (rd__crt_mask_fade), halation */
     float glow[4]; /* bloom, curvature x, curvature y, corner radius (of the box height) */
     float tone[4]; /* vignette, gamma in, gamma out, strength */
     float pass[4]; /* x mirror, y unused (the slot's row gain is per pixel: crt.hlsl
@@ -85,7 +85,7 @@ enum {
      * PABE pixel left unblended outputs c1 = 0 */
     ICO_DF_C1_DST = 32768,
     /* the two-pass blend without dual-source blending (the
-     * *_nodual entries; rd_pipeline.c rd__ExpandNoDual): the colour pass
+     * *_nodual entries; rd_pipeline.c rd__expand_no_dual): the colour pass
      * writes the blend factor into c0.a, the alpha pass the stored alpha */
     ICO_DF_NODUAL_FACTOR = 65536,
     ICO_DF_NODUAL_ALPHA_PASS = 131072
@@ -99,7 +99,7 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 
 /* font_sheet_ps's constants, SHEET_* in
  * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
- * static-asserts each pair).  rd.h rd_CreateTextureSheet says what they do.
+ * static-asserts each pair).  rd.h rd_create_texture_sheet says what they do.
  * The style reaches the shader in DrawCB.param: the rim's weight (0 off,
  * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet). */
 /* The values are the sheets' survey (the comment above kSheetInk in
@@ -138,7 +138,7 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 /* A strip rasterised at s strip texels a sheet texel across and down (the
  * scene's or the output's scale, port/ui/menu_font.c), 1..ICO_SHEET_SCALE_MAX:
  * the letters are the strip's texels, the rim is the 1x rim of the sheet
- * texels' mean coverage magnified s times (rd.h rd_SheetRim computes it
+ * texels' mean coverage magnified s times (rd.h rd_sheet_rim computes it
  * into the texture's bottom half), the Bayer cell is s x s strip texels
  * (one sheet texel), the levels are the same.  The scale reaches the
  * shader in DrawCB.param.w above the dither bit: dither | (s - 1) << 1

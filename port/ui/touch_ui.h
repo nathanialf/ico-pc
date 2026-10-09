@@ -9,8 +9,8 @@
  * resolution, only while the copy's opacity is above 0 (the fades, Touch
  * controls and Touch opacity).
  *
- * What it draws, every shape untextured triangles through rd_OverlayPrims
- * (rd.h), the labels with ui_DrawText:
+ * What it draws, every shape untextured triangles through rd_overlay_prims
+ * (rd.h), the labels with ui_draw_text:
  *   - the face buttons as discs with the PS2 symbols as strokes (a cross, a
  *     ring, a square, a triangle) in their colours;
  *   - the D-pad as four keys with an arrow each, the shoulders (L1 R1 L2
@@ -34,10 +34,10 @@ struct IcoTouchOverlay;
 
 /* Where the drawing reads the overlay from: fn fills *out and returns 1
    when there is something to draw.  NULL (the default): nothing drawn. */
-void ui_TouchSetSource(int (*fn)(struct IcoTouchOverlay *out));
+void ui_touch_set_source(int (*fn)(struct IcoTouchOverlay *out));
 
 /* The overlay on the output (ui_host.c's overlay callback). */
-void ui_TouchDrawOverlay(const struct RdOverlayCtx *ctx);
+void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx);
 
 #ifdef __cplusplus
 }

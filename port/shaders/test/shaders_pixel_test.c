@@ -75,7 +75,7 @@ static void expectCell(const char *what, const uint8_t *img, uint32_t pitch, int
 
 static RhiShader makeShader(const char *name)
 {
-    const IcoShaderBlob *b = ico_FindShader(name);
+    const IcoShaderBlob *b = ico_find_shader(name);
     if (!b) {
         printf("FAIL shader %s not in the table\n", name);
         failures++;
@@ -83,7 +83,7 @@ static RhiShader makeShader(const char *name)
     }
     RhiShaderDesc d = {b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT,
                        b->spirv, b->spirv_len, b->entry, b->name};
-    RhiShader s = rhi_CreateShader(&d);
+    RhiShader s = rhi_create_shader(&d);
     if (!s.id) {
         printf("FAIL shader %s not created\n", name);
         failures++;
@@ -122,7 +122,7 @@ static RhiPipeline makePipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLa
     d.colorCount = 1;
     d.depthFormat = RHI_FMT_UNKNOWN;
     d.debugName = name;
-    RhiPipeline p = rhi_CreatePipeline(&d);
+    RhiPipeline p = rhi_create_pipeline(&d);
     if (!p.id) {
         printf("FAIL pipeline %s not created\n", name);
         failures++;
@@ -173,14 +173,14 @@ int main(int argc, char **argv)
 {
     const int nodual = argc > 1 && strcmp(argv[1], "--nodual") == 0;
     RhiDeviceDesc dd = {NULL, false, true, "shaders_pixel_test"};
-    if (!rhi_Init(&dd)) {
+    if (!rhi_init(&dd)) {
         printf("SKIP shaders_pixel_test: no usable Vulkan device\n");
         return 77;
     }
-    printf("shaders_pixel_test: adapter %s%s\n", rhi_AdapterName(),
+    printf("shaders_pixel_test: adapter %s%s\n", rhi_adapter_name(),
            nodual ? " (two-pass blend, sprite_ps_nodual)" : "");
-    if (rhi_Limits()->uniformAlign > 512 || 512 % rhi_Limits()->uniformAlign) {
-        printf("FAIL uniformAlign %u does not divide 512\n", rhi_Limits()->uniformAlign);
+    if (rhi_limits()->uniformAlign > 512 || 512 % rhi_limits()->uniformAlign) {
+        printf("FAIL uniformAlign %u does not divide 512\n", rhi_limits()->uniformAlign);
         failures++;
     }
     const uint32_t FS = 1u << RHI_STAGE_FRAGMENT, VS = 1u << RHI_STAGE_VERTEX;
@@ -193,10 +193,12 @@ int main(int argc, char **argv)
                                        {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     static const RhiBindSlot s2b[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                        {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
-    RhiBindGroupLayout l0 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s0, 1, "frame"});
-    RhiBindGroupLayout l1 = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s1, 1, "draw"});
-    RhiBindGroupLayout l2a = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2a, 3, "texsmp"});
-    RhiBindGroupLayout l2b = rhi_CreateBindGroupLayout(&(RhiBindGroupLayoutDesc){s2b, 2, "tex2"});
+    RhiBindGroupLayout l0 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s0, 1, "frame"});
+    RhiBindGroupLayout l1 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s1, 1, "draw"});
+    RhiBindGroupLayout l2a =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s2a, 3, "texsmp"});
+    RhiBindGroupLayout l2b =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s2b, 2, "tex2"});
     const RhiBindGroupLayout layA[3] = {l0, l1, l2a}, layB[3] = {l0, l1, l2b};
 
     RhiShader svsUi = makeShader("sprite_ui_vs"), svsWorld = makeShader("sprite_world_vs");
@@ -263,7 +265,7 @@ int main(int argc, char **argv)
     RhiPipeline pBlit = makePipeline(bvs, bps, layA, 0, RHI_FMT_RGBA8_UNORM, &kOpaque, "blit");
     RhiPipeline pInt = makePipeline(nvs, nps, layB, 0, RHI_FMT_RGBA8_UINT, &kOpaque, "blendInt");
     if (failures) {
-        rhi_Shutdown();
+        rhi_shutdown();
         return 1;
     }
 
@@ -301,35 +303,35 @@ int main(int argc, char **argv)
     /* ---- resources ---- */
     const uint64_t offVerts = 0, offTex = 4096, offSrc = 4608, offDst = 5120, offUbo = 8192;
     const uint64_t ringSize = 8192 + 64 * 512; /* DrawCBs at 512: D_COUNT and their alpha twins */
-    RhiBuffer ring = rhi_CreateBuffer(&(RhiBufferDesc){
+    RhiBuffer ring = rhi_create_buffer(&(RhiBufferDesc){
         ringSize, RHI_BUF_VERTEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "ring"});
-    uint8_t *map = rhi_MapBuffer(ring);
+    uint8_t *map = rhi_map_buffer(ring);
     if (!ring.id || !map) {
         printf("FAIL ring\n");
-        rhi_Shutdown();
+        rhi_shutdown();
         return 1;
     }
     const uint32_t RT = RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC;
-    RhiTexture A = rhi_CreateTexture(
+    RhiTexture A = rhi_create_texture(
         &(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT | RHI_TEX_SAMPLED, "A"});
-    RhiTexture B = rhi_CreateTexture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "B"});
-    RhiTexture C = rhi_CreateTexture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "C"});
-    RhiTexture tex = rhi_CreateTexture(&(RhiTextureDesc){
+    RhiTexture B = rhi_create_texture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "B"});
+    RhiTexture C = rhi_create_texture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "C"});
+    RhiTexture tex = rhi_create_texture(&(RhiTextureDesc){
         2, 2, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "tex2x2"});
-    RhiTexture usrc = rhi_CreateTexture(
+    RhiTexture usrc = rhi_create_texture(
         &(RhiTextureDesc){4, 4, 1, RHI_FMT_RGBA8_UINT, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "usrc"});
-    RhiTexture udst = rhi_CreateTexture(
+    RhiTexture udst = rhi_create_texture(
         &(RhiTextureDesc){4, 4, 1, RHI_FMT_RGBA8_UINT, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "udst"});
     RhiTexture uout[3];
     for (int i = 0; i < 3; i++) {
-        uout[i] = rhi_CreateTexture(&(RhiTextureDesc){4, 4, 1, RHI_FMT_RGBA8_UINT, RT, "uout"});
+        uout[i] = rhi_create_texture(&(RhiTextureDesc){4, 4, 1, RHI_FMT_RGBA8_UINT, RT, "uout"});
     }
-    RhiSampler smp = rhi_CreateSampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
-                                                         RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
-                                                         RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
+    RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
+                                                          RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
+                                                          RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
     if (!A.id || !B.id || !C.id || !tex.id || !usrc.id || !udst.id || !uout[2].id || !smp.id) {
         printf("FAIL resources\n");
-        rhi_Shutdown();
+        rhi_shutdown();
         return 1;
     }
 
@@ -414,7 +416,7 @@ int main(int argc, char **argv)
 
     int exitCode = 0;
     for (int frame = 0; frame < 2; frame++) {
-        rhi_WaitFrame();
+        rhi_wait_frame();
         memcpy(map + offVerts, verts, sizeof(verts));
         memcpy(map + offTex, texels, sizeof(texels));
         memcpy(map + offSrc, srcInt, sizeof(srcInt));
@@ -429,7 +431,7 @@ int main(int argc, char **argv)
             b.buffer = ring;
             b.offset = at;
             b.size = sizeof(IcoDrawCB);
-            RhiBindGroup g = rhi_CreateBindGroup(&(RhiBindGroupDesc){l1, &b, 1});
+            RhiBindGroup g = rhi_create_bind_group(&(RhiBindGroupDesc){l1, &b, 1});
             if (i < D_COUNT) {
                 g1[i] = g;
             } else {
@@ -443,7 +445,7 @@ int main(int argc, char **argv)
         fb.buffer = ring;
         fb.offset = offUbo;
         fb.size = sizeof(IcoFrameCB);
-        RhiBindGroup g0 = rhi_CreateBindGroup(&(RhiBindGroupDesc){l0, &fb, 1});
+        RhiBindGroup g0 = rhi_create_bind_group(&(RhiBindGroupDesc){l0, &fb, 1});
 
         RhiBinding t2x2[3] = {{0}, {0}, {0}};
         t2x2[0].slot = 1;
@@ -455,10 +457,10 @@ int main(int argc, char **argv)
         t2x2[2].slot = 2;
         t2x2[2].type = RHI_BIND_SAMPLED_TEXTURE;
         t2x2[2].texture = tex;
-        RhiBindGroup g2tex = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, t2x2, 3});
+        RhiBindGroup g2tex = rhi_create_bind_group(&(RhiBindGroupDesc){l2a, t2x2, 3});
         RhiBinding tA[3] = {t2x2[0], t2x2[1], t2x2[2]};
         tA[0].texture = A;
-        RhiBindGroup g2A = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2a, tA, 3});
+        RhiBindGroup g2A = rhi_create_bind_group(&(RhiBindGroupDesc){l2a, tA, 3});
         RhiBinding tI[2] = {{0}, {0}};
         tI[0].slot = 1;
         tI[0].type = RHI_BIND_SAMPLED_TEXTURE;
@@ -466,9 +468,9 @@ int main(int argc, char **argv)
         tI[1].slot = 2;
         tI[1].type = RHI_BIND_SAMPLED_TEXTURE;
         tI[1].texture = udst;
-        RhiBindGroup g2int = rhi_CreateBindGroup(&(RhiBindGroupDesc){l2b, tI, 2});
+        RhiBindGroup g2int = rhi_create_bind_group(&(RhiBindGroupDesc){l2b, tI, 2});
 
-        RhiCommandList cl = rhi_BeginCommands();
+        RhiCommandList cl = rhi_begin_commands();
         if (!cl.id || !g0.id || !g2tex.id || !g2A.id || !g2int.id) {
             printf("FAIL setup\n");
             failures++;
@@ -477,10 +479,10 @@ int main(int argc, char **argv)
         RhiTextureBarrier up[3] = {{tex, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                    {usrc, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST},
                                    {udst, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST}};
-        rhi_CmdBarrier(cl, up, 3);
-        rhi_CmdCopyBufferToTexture(cl, ring, offTex, 8, tex, 0, (RhiRect){0, 0, 2, 2});
-        rhi_CmdCopyBufferToTexture(cl, ring, offSrc, 16, usrc, 0, (RhiRect){0, 0, 4, 4});
-        rhi_CmdCopyBufferToTexture(cl, ring, offDst, 16, udst, 0, (RhiRect){0, 0, 4, 4});
+        rhi_cmd_barrier(cl, up, 3);
+        rhi_cmd_copy_buffer_to_texture(cl, ring, offTex, 8, tex, 0, (RhiRect){0, 0, 2, 2});
+        rhi_cmd_copy_buffer_to_texture(cl, ring, offSrc, 16, usrc, 0, (RhiRect){0, 0, 4, 4});
+        rhi_cmd_copy_buffer_to_texture(cl, ring, offDst, 16, udst, 0, (RhiRect){0, 0, 4, 4});
         RhiTextureBarrier pre[8] = {
             {tex, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ},
             {usrc, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ},
@@ -491,9 +493,9 @@ int main(int argc, char **argv)
             {uout[0], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
             {uout[1], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
         };
-        rhi_CmdBarrier(cl, pre, 8);
+        rhi_cmd_barrier(cl, pre, 8);
         RhiTextureBarrier pre2 = {uout[2], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
-        rhi_CmdBarrier(cl, &pre2, 1);
+        rhi_cmd_barrier(cl, &pre2, 1);
 
         /* pass 1: the sprite cells; the clear (64,64,64,64) shows through
          * where nothing is drawn */
@@ -503,10 +505,10 @@ int main(int argc, char **argv)
         rp.colorCount = 1;
         rp.width = W;
         rp.height = H;
-        rhi_CmdBeginRenderPass(cl, &rp);
-        rhi_CmdSetVertexBuffer(cl, 0, ring, offVerts);
-        rhi_CmdSetBindGroup(cl, 0, g0);
-        rhi_CmdSetBindGroup(cl, 2, g2tex);
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, offVerts);
+        rhi_cmd_set_bind_group(cl, 0, g0);
+        rhi_cmd_set_bind_group(cl, 2, g2tex);
 
         /* pa: --nodual's alpha pass after the colour pass (0: one pass) */
         const RhiPipeline none = {0}, pa = nodual ? pAlpha : none;
@@ -530,18 +532,18 @@ int main(int argc, char **argv)
         };
 
         for (int i = 0; i < Q_COUNT; i++) {
-            rhi_CmdSetPipeline(cl, draws[i].p);
-            rhi_CmdSetBindGroup(cl, 1, g1[draws[i].d]);
-            rhi_CmdDraw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+            rhi_cmd_set_pipeline(cl, draws[i].p);
+            rhi_cmd_set_bind_group(cl, 1, g1[draws[i].d]);
+            rhi_cmd_draw(cl, 6, (uint32_t)draws[i].q * 6, 1);
             if (draws[i].pa.id) {
-                rhi_CmdSetPipeline(cl, draws[i].pa);
-                rhi_CmdSetBindGroup(cl, 1, g1a[draws[i].d]);
-                rhi_CmdDraw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+                rhi_cmd_set_pipeline(cl, draws[i].pa);
+                rhi_cmd_set_bind_group(cl, 1, g1a[draws[i].d]);
+                rhi_cmd_draw(cl, 6, (uint32_t)draws[i].q * 6, 1);
             }
         }
-        rhi_CmdEndRenderPass(cl);
+        rhi_cmd_end_render_pass(cl);
         RhiTextureBarrier aRead = {A, RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ};
-        rhi_CmdBarrier(cl, &aRead, 1);
+        rhi_cmd_barrier(cl, &aRead, 1);
 
         /* pass 2: blit A to B (identity tint) and to C (tinted) */
         for (int k = 0; k < 2; k++) {
@@ -550,13 +552,13 @@ int main(int argc, char **argv)
             bp.colorCount = 1;
             bp.width = W;
             bp.height = H;
-            rhi_CmdBeginRenderPass(cl, &bp);
-            rhi_CmdSetPipeline(cl, pBlit);
-            rhi_CmdSetBindGroup(cl, 0, g0);
-            rhi_CmdSetBindGroup(cl, 1, g1[D_BLIT_ID + k]);
-            rhi_CmdSetBindGroup(cl, 2, g2A);
-            rhi_CmdDraw(cl, 3, 0, 1);
-            rhi_CmdEndRenderPass(cl);
+            rhi_cmd_begin_render_pass(cl, &bp);
+            rhi_cmd_set_pipeline(cl, pBlit);
+            rhi_cmd_set_bind_group(cl, 0, g0);
+            rhi_cmd_set_bind_group(cl, 1, g1[D_BLIT_ID + k]);
+            rhi_cmd_set_bind_group(cl, 2, g2A);
+            rhi_cmd_draw(cl, 3, 0, 1);
+            rhi_cmd_end_render_pass(cl);
         }
 
         /* pass 3: three integer blends */
@@ -566,13 +568,13 @@ int main(int argc, char **argv)
             ip.colorCount = 1;
             ip.width = 4;
             ip.height = 4;
-            rhi_CmdBeginRenderPass(cl, &ip);
-            rhi_CmdSetPipeline(cl, pInt);
-            rhi_CmdSetBindGroup(cl, 0, g0);
-            rhi_CmdSetBindGroup(cl, 1, g1[D_INT0 + k]);
-            rhi_CmdSetBindGroup(cl, 2, g2int);
-            rhi_CmdDraw(cl, 3, 0, 1);
-            rhi_CmdEndRenderPass(cl);
+            rhi_cmd_begin_render_pass(cl, &ip);
+            rhi_cmd_set_pipeline(cl, pInt);
+            rhi_cmd_set_bind_group(cl, 0, g0);
+            rhi_cmd_set_bind_group(cl, 1, g1[D_INT0 + k]);
+            rhi_cmd_set_bind_group(cl, 2, g2int);
+            rhi_cmd_draw(cl, 3, 0, 1);
+            rhi_cmd_end_render_pass(cl);
         }
         RhiTextureBarrier post[6] = {{A, RHI_STATE_SHADER_READ, RHI_STATE_COPY_SRC},
                                      {B, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
@@ -580,16 +582,16 @@ int main(int argc, char **argv)
                                      {uout[0], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {uout[1], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {uout[2], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
-        rhi_CmdBarrier(cl, post, 6);
-        rhi_EndCommands(cl);
-        rhi_Submit(cl);
+        rhi_cmd_barrier(cl, post, 6);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
 
         /* ---- checks ---- */
         static uint8_t imgA[W * H * 4], imgB[W * H * 4], imgC[W * H * 4];
         uint32_t pitch = 0;
-        if (!rhi_ReadbackTexture(A, RHI_ASPECT_COLOR, imgA, sizeof(imgA), &pitch) ||
-            !rhi_ReadbackTexture(B, RHI_ASPECT_COLOR, imgB, sizeof(imgB), &pitch) ||
-            !rhi_ReadbackTexture(C, RHI_ASPECT_COLOR, imgC, sizeof(imgC), &pitch)) {
+        if (!rhi_readback_texture(A, RHI_ASPECT_COLOR, imgA, sizeof(imgA), &pitch) ||
+            !rhi_readback_texture(B, RHI_ASPECT_COLOR, imgB, sizeof(imgB), &pitch) ||
+            !rhi_readback_texture(C, RHI_ASPECT_COLOR, imgC, sizeof(imgC), &pitch)) {
             printf("FAIL readback\n");
             failures++;
             break;
@@ -655,7 +657,7 @@ int main(int argc, char **argv)
         for (int k = 0; k < 3; k++) {
             uint8_t u[4 * 4 * 4];
             uint32_t up2 = 0;
-            if (!rhi_ReadbackTexture(uout[k], RHI_ASPECT_COLOR, u, sizeof(u), &up2)) {
+            if (!rhi_readback_texture(uout[k], RHI_ASPECT_COLOR, u, sizeof(u), &up2)) {
                 printf("FAIL uint readback\n");
                 failures++;
                 break;
@@ -671,8 +673,8 @@ int main(int argc, char **argv)
             }
         }
     }
-    if (rhi_vk_ValidationErrorCount() != 0) {
-        printf("FAIL %u validation errors\n", (unsigned)rhi_vk_ValidationErrorCount());
+    if (rhi_vk_validation_error_count() != 0) {
+        printf("FAIL %u validation errors\n", (unsigned)rhi_vk_validation_error_count());
         failures++;
     }
     if (failures) {
@@ -681,6 +683,6 @@ int main(int argc, char **argv)
     } else {
         printf("shaders_pixel_test: ok\n");
     }
-    rhi_Shutdown();
+    rhi_shutdown();
     return exitCode;
 }

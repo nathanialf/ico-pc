@@ -6,7 +6,7 @@
  * pointer is free (capture mode ICO_CAPTURE_OFF, mouse_look.h): where the
  * pointer is in the window (0..1 across and down), the left button's
  * presses, the wheel and the pointer leaving the window; the menus' glue
- * (port/ui/ui_mouse.c ui_MouseTick) takes what happened once a Main tick
+ * (port/ui/ui_mouse.c ui_mouse_tick) takes what happened once a Main tick
  * and says whether a menu is up (ico_pointer_set_menu), which the device
  * layer reads to keep the left button off Cross there (a click off any
  * row must not confirm the row the cursor is on).

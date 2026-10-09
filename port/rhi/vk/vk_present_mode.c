@@ -3,7 +3,7 @@
  * test/rhi_vk_present_mode_test.c compiles it on its own. */
 #include "vk_internal.h"
 
-static bool vkr_Offered(const VkPresentModeKHR *modes, uint32_t n, VkPresentModeKHR m)
+static bool vkr_offered(const VkPresentModeKHR *modes, uint32_t n, VkPresentModeKHR m)
 {
     for (uint32_t i = 0; i < n; i++) {
         if (modes[i] == m) {
@@ -13,14 +13,14 @@ static bool vkr_Offered(const VkPresentModeKHR *modes, uint32_t n, VkPresentMode
     return false;
 }
 
-VkPresentModeKHR vkr_ChoosePresentMode(const VkPresentModeKHR *modes, uint32_t n, bool vsync,
-                                       bool preferMailbox)
+VkPresentModeKHR vkr_choose_present_mode(const VkPresentModeKHR *modes, uint32_t n, bool vsync,
+                                         bool preferMailbox)
 {
     if (vsync) {
-        /* FIFO is always available; mailbox when asked for (rhi_PreferMailbox)
+        /* FIFO is always available; mailbox when asked for (rhi_prefer_mailbox)
          * and offered: still no tearing, but a present never waits for the
          * display */
-        if (preferMailbox && vkr_Offered(modes, n, VK_PRESENT_MODE_MAILBOX_KHR)) {
+        if (preferMailbox && vkr_offered(modes, n, VK_PRESENT_MODE_MAILBOX_KHR)) {
             return VK_PRESENT_MODE_MAILBOX_KHR;
         }
         return VK_PRESENT_MODE_FIFO_KHR;
@@ -29,16 +29,16 @@ VkPresentModeKHR vkr_ChoosePresentMode(const VkPresentModeKHR *modes, uint32_t n
      * waits, and the picture tears where the compositor lets it (the Deck's
      * "Allow Tearing", KWin).  Mailbox before it made vsync off look like on
      * under Mesa, which offers both.  Then mailbox, then FIFO. */
-    if (vkr_Offered(modes, n, VK_PRESENT_MODE_IMMEDIATE_KHR)) {
+    if (vkr_offered(modes, n, VK_PRESENT_MODE_IMMEDIATE_KHR)) {
         return VK_PRESENT_MODE_IMMEDIATE_KHR;
     }
-    if (vkr_Offered(modes, n, VK_PRESENT_MODE_MAILBOX_KHR)) {
+    if (vkr_offered(modes, n, VK_PRESENT_MODE_MAILBOX_KHR)) {
         return VK_PRESENT_MODE_MAILBOX_KHR;
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-const char *vkr_PresentModeName(VkPresentModeKHR m)
+const char *vkr_present_mode_name(VkPresentModeKHR m)
 {
     switch (m) {
     case VK_PRESENT_MODE_IMMEDIATE_KHR:

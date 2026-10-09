@@ -322,7 +322,7 @@ static void makeTexture(void)
     for (int i = 0; i < 16 * 16; i++) {
         px[i * 4 + 0] = px[i * 4 + 1] = px[i * 4 + 2] = px[i * 4 + 3] = 0x80;
     }
-    s_tex = rd_CreateTexture(16, 16, px, RD_TEXA_80_80, "testtex");
+    s_tex = rd_create_texture(16, 16, px, RD_TEXA_80_80, "testtex");
 }
 
 /* --------------------------------------------------------- the scene
@@ -369,7 +369,7 @@ static void setCommon(void)
 {
     RdVuCommon b;
     memcpy(&b, s_common, sizeof(b));
-    rd_SetVuCommon(&b);
+    rd_set_vu_common(&b);
 }
 
 /* ------------------------------------------------- the packet's batches */
@@ -423,7 +423,7 @@ static void walkFrame(const RdFrame *f, Found *fd)
 {
     memset(fd, 0, sizeof(*fd));
     RdStateBlock s = f->startState;
-    rd__Walk(f, 0, &s, findVu, fd);
+    rd__walk(f, 0, &s, findVu, fd);
 }
 
 static RdVuPayload payloadOf(const RdFrame *f, const RdCmd *c, const float **mem)
@@ -437,7 +437,7 @@ static RdVuPayload payloadOf(const RdFrame *f, const RdCmd *c, const float **mem
 static int readScene(uint8_t *dst)
 {
     uint32_t w = 0, h = 0;
-    return rd__ReadTarget(rd_Target(RD_TARGET_SCENE), dst, 512 * 512 * 4, &w, &h) && w == 512 &&
+    return rd__read_target(rd_target(RD_TARGET_SCENE), dst, 512 * 512 * 4, &w, &h) && w == 512 &&
            h == 512;
 }
 

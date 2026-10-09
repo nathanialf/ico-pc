@@ -19,13 +19,13 @@ typedef struct MsSheet {
 
 /* The sheet `name` (a member of a pack on the disc, "text/menu_PAL_EG/menu_PAL_01.tm2"),
    decoded once and kept; NULL when it is not there or does not decode. */
-const MsSheet *ms_SheetFor(IcoVfs *vfs, const char *name);
+const MsSheet *ms_sheet_for(IcoVfs *vfs, const char *name);
 /* Frees every sheet. */
-void ms_SheetsFree(void);
+void ms_sheets_free(void);
 /* The sheet of language lang (UiLang order: EN FR DE IT ES) for a texFile
    path: its menu_PAL_xx folder replaced; other paths unchanged. */
-void ms_SheetName(const char *path, int lang, char *out, size_t size);
+void ms_sheet_name(const char *path, int lang, char *out, size_t size);
 /* texFile's rows (the table descriptor's count). */
-int ms_TexFileCount(void);
+int ms_tex_file_count(void);
 
 #endif /* PORT_UI_TEST_MENU_SHEETS_H */

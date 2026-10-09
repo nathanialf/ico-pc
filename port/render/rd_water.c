@@ -4,15 +4,15 @@
  * Recording only.  Three things the GS register decoder cannot know:
  *
  *   - which target a VRAM block that is also a named buffer stands for in a
- *     given list (rd_GsNamedBlock, rd_BlockTarget, rd_AliasTarget): the
+ *     given list (rd_gs_named_block, rd_block_target, rd_alias_target): the
  *     three files draw into the block tex_AllocVramAuto hands out after
  *     tex_ResetVramPri, TBP 0x2800, which the decoder maps to AA0;
  *   - that the target needs its own depth buffer (puddle and pool point ZBUF
  *     at a second block, work1Vram);
- *   - the camera of a mid-frame gsb_SetVSMatrix (rd_PushCamera).
+ *   - the camera of a mid-frame gsb_SetVSMatrix (rd_push_camera).
  *
  * The records of the open frame live here, one per frame slot (RdContext
- * keeps RD_FRAME_RING frames), and are cleared by rd__FrameReset when a slot is
+ * keeps RD_FRAME_RING frames), and are cleared by rd__frame_reset when a slot is
  * reused.  Nothing here is dumped: the commands name the block target, so a
  * dump replays as recorded. */
 #include <string.h>
@@ -57,7 +57,7 @@ static WaterFrame *waterOf(const RdFrame *f)
     return w;
 }
 
-void rd__WaterFrameReset(const RdFrame *f)
+void rd__water_frame_reset(const RdFrame *f)
 {
     if (f >= g_rd.frames && f < g_rd.frames + RD_FRAME_RING) {
         memset(&s_water[f - g_rd.frames], 0, sizeof(s_water[0]));
@@ -66,7 +66,7 @@ void rd__WaterFrameReset(const RdFrame *f)
 
 /* ----------------------------------------------------------- the blocks */
 
-RdTarget rd_GsNamedBlock(uint32_t tbp, uint32_t gsW, uint32_t gsH)
+RdTarget rd_gs_named_block(uint32_t tbp, uint32_t gsW, uint32_t gsH)
 {
     RdTargetId id;
 
@@ -100,12 +100,12 @@ RdTarget rd_GsNamedBlock(uint32_t tbp, uint32_t gsW, uint32_t gsH)
     default:
         return (RdTarget){0};
     }
-    return rd_Target(id);
+    return rd_target(id);
 }
 
-RdTarget rd_BlockTarget(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth)
+RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth)
 {
-    WaterFrame *w = waterOf(rd__RecFrame());
+    WaterFrame *w = waterOf(rd__rec_frame());
     uint32_t i;
 
     if (w == NULL || gsW == 0 || gsH == 0) {
@@ -115,15 +115,15 @@ RdTarget rd_BlockTarget(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth)
     for (i = 0; i < w->blockCount; i++) {
         const WaterBlock *b = &w->blocks[i];
         if (b->tbp == tbp && b->w == gsW && b->h == gsH && b->withDepth >= (uint32_t)withDepth &&
-            rd__TargetRec(b->id) != NULL) {
+            rd__target_rec(b->id) != NULL) {
             return (RdTarget){b->id};
         }
     }
     if (w->blockCount == RD_WATER_BLOCKS) {
-        rd__Log("rd_BlockTarget: more than %d blocks in one frame", RD_WATER_BLOCKS);
+        rd__log("rd_block_target: more than %d blocks in one frame", RD_WATER_BLOCKS);
         return (RdTarget){0};
     }
-    RdTarget t = rd_TempTarget(gsW, gsH, withDepth, 0);
+    RdTarget t = rd_temp_target(gsW, gsH, withDepth, 0);
     if (t.id != 0) {
         WaterBlock *b = &w->blocks[w->blockCount++];
         b->tbp = tbp;
@@ -135,10 +135,10 @@ RdTarget rd_BlockTarget(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth)
     return t;
 }
 
-void rd_AliasTarget(RdTarget from, RdTarget to)
+void rd_alias_target(RdTarget from, RdTarget to)
 {
-    WaterFrame *w = waterOf(rd__RecFrame());
-    int l = rd_CurrentList();
+    WaterFrame *w = waterOf(rd__rec_frame());
+    int l = rd_current_list();
     int i, freeSlot = -1;
 
     if (w == NULL || from.id == 0 || l < 0 || l >= RD_LIST_COUNT) {
@@ -161,17 +161,17 @@ void rd_AliasTarget(RdTarget from, RdTarget to)
         return;
     }
     if (freeSlot < 0) {
-        rd__Log("rd_AliasTarget: more than %d aliases in list %d", RD_WATER_ALIASES, l);
+        rd__log("rd_alias_target: more than %d aliases in list %d", RD_WATER_ALIASES, l);
         return;
     }
     w->alias[l][freeSlot].from = from.id;
     w->alias[l][freeSlot].to = to.id;
 }
 
-uint32_t rd__AliasOf(uint32_t id)
+uint32_t rd__alias_of(uint32_t id)
 {
-    RdFrame *f = rd__RecFrame();
-    int l = rd_CurrentList();
+    RdFrame *f = rd__rec_frame();
+    int l = rd_current_list();
     int i;
 
     if (f == NULL || id == 0 || l < 0 || l >= RD_LIST_COUNT) {
@@ -191,17 +191,17 @@ uint32_t rd__AliasOf(uint32_t id)
 
 /* ----------------------------------------------------------- the camera */
 
-void rd_PushCamera(const RdCamera *cam)
+void rd_push_camera(const RdCamera *cam)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     WaterFrame *w = waterOf(f);
-    int l = rd_CurrentList();
+    int l = rd_current_list();
 
     if (w == NULL || cam == NULL || l < 0 || l >= RD_LIST_COUNT) {
         return;
     }
     if (w->depth == RD_CAMERA_DEPTH || w->scopeCount == RD_CAMERA_SCOPES) {
-        rd__Log("rd_PushCamera: more than %d scopes (or %d deep) in one frame", RD_CAMERA_SCOPES,
+        rd__log("rd_push_camera: more than %d scopes (or %d deep) in one frame", RD_CAMERA_SCOPES,
                 RD_CAMERA_DEPTH);
         w->depth++; /* the pop still balances */
         return;
@@ -214,9 +214,9 @@ void rd_PushCamera(const RdCamera *cam)
     w->open[w->depth++] = (int32_t)w->scopeCount++;
 }
 
-void rd_PopCamera(void)
+void rd_pop_camera(void)
 {
-    RdFrame *f = rd__RecFrame();
+    RdFrame *f = rd__rec_frame();
     WaterFrame *w = waterOf(f);
 
     if (w == NULL || w->depth == 0) {
@@ -230,7 +230,7 @@ void rd_PopCamera(void)
     s->end = f->lists[s->list].count;
 }
 
-const RdCamera *rd__CameraAt(const RdFrame *f, int list, uint32_t index)
+const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index)
 {
     const RdCamera *cam = f != NULL && f->hasCamera ? &f->camera : NULL;
     uint32_t i;
@@ -252,7 +252,7 @@ const RdCamera *rd__CameraAt(const RdFrame *f, int list, uint32_t index)
     return cam;
 }
 
-uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes)
+uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes)
 {
     if (f == NULL || f < g_rd.frames || f >= g_rd.frames + RD_FRAME_RING) {
         return 0;
@@ -269,14 +269,14 @@ uint32_t rd__CameraScopes(const RdFrame *f, const RdCameraScope **scopes)
 
 /* ------------------------------------------------------ the pipelines
  * The screen-prim states of these files that the screen families
- * (rd__EnumerateReachableScreen) leave out, through rd__PlanScreenDraw as
+ * (rd__enumerate_reachable_screen) leave out, through rd__plan_screen_draw as
  * the replayer plans them, on SCENE's D32F_S8:
  *   puddle.c leveldown, copy, drawRipples (WORLD, list 4): TEST 0x3F001
  *   and 0x3F000 (DATE DATM 1, Z ALWAYS; AFAIL RGB_ONLY), Z write off,
  *   ALPHA modes 0 (ADD FIX), 2 (LERP FIX), 4 (LERP As, stage 34);
  *   waterDot.c (list 11 raw writes, recorded in WORLD space):
  *   TEST 0x50000, Z write off, mode 5 (ADD As). */
-uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+uint32_t rd__enumerate_reachable_water(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     static const struct {
         uint64_t test;
@@ -293,16 +293,16 @@ uint32_t rd__EnumerateReachableWater(RdPipeKeyInt *out, uint32_t max, uint32_t n
 
     for (size_t i = 0; i < sizeof(kStates) / sizeof(kStates[0]); i++) {
         RdStateBlock s;
-        rd__ResetStateBlock(&s);
-        s.ds.test = rd_TestFromGs(kStates[i].test);
+        rd__reset_state_block(&s);
+        s.ds.test = rd_test_from_gs(kStates[i].test);
         s.ds.zwrite = RD_ZWRITE_OFF;
         s.ds.abe = 1;
         s.ds.blend = (uint8_t)kStates[i].blend;
         RdDrawPass dp[2];
-        const int np = rd__PlanScreenDraw(&s, RD_PRIM_TRIANGLES, kStates[i].space,
-                                          RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+        const int np = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, kStates[i].space,
+                                            RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
         for (int k = 0; k < np; k++) {
-            n = rd__AddPipeKey(out, max, n, &dp[k].key);
+            n = rd__add_pipe_key(out, max, n, &dp[k].key);
         }
     }
     return n;

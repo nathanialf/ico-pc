@@ -149,12 +149,12 @@ static void normalCScissor(Vu1Ref *r, const float (*in)[4], VuBatchOut *out)
         w3[1] = &win[1];
         w3[2] = &win[2];
         out->count = k + 1;
-        vu1ref_ScissorStep(r, w3, out, k);
+        vu1ref_scissor_step(r, w3, out, k);
     }
     out->count = n;
 }
 
-void vu1ref_NormalC(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
+void vu1ref_normal_c(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
 {
     copyTag(out, in);
     switch (code) {
@@ -378,12 +378,12 @@ static void normalLScissor(Vu1Ref *r, const float (*in)[4], VuBatchOut *out)
         w3[1] = &win[1];
         w3[2] = &win[2];
         out->count = k + 1;
-        vu1ref_ScissorStep(r, w3, out, k);
+        vu1ref_scissor_step(r, w3, out, k);
     }
     out->count = n;
 }
 
-void vu1ref_NormalL(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
+void vu1ref_normal_l(Vu1Ref *r, int code, const float (*in)[4], VuBatchOut *out)
 {
     copyTag(out, in);
     switch (code) {
