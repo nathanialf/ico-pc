@@ -607,6 +607,8 @@ void ico_input_sdl_update(void)
     }
     if (s_touchDevice) {
         touch_step(&v);
+        /* a touch look pad stick that won the merge is not the mouse's */
+        ico_bindings_mouse_merged(&s_bind, &v);
     }
     ico_input_set_vpad(&v);
     send_rumble();

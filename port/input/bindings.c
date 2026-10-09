@@ -759,3 +759,10 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
     *out = gp;
     ico_vpad_merge(out, &kb);
 }
+
+void ico_bindings_mouse_merged(IcoBindings *b, const IcoVirtualPad *v)
+{
+    if (b->mouse_drives && (v->rx != b->mouse_x || v->ry != b->mouse_y)) {
+        b->mouse_drives = 0;
+    }
+}

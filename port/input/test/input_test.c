@@ -604,6 +604,23 @@ static void test_step(void)
     r.gamepads = 0;
     ico_bindings_step(&b, &r, &v);
     CHECK(b.mouse_drives == 1);
+    /* the touch look pad, merged after the step as ico_touch_update does:
+       a centred pad leaves the mouse in charge, a longer stick takes the
+       camera from it */
+    {
+        IcoVirtualPad touch;
+
+        memset(&touch, 0, sizeof(touch));
+        ico_vpad_merge(&v, &touch);
+        ico_bindings_mouse_merged(&b, &v);
+        CHECK(b.mouse_drives == 1);
+        touch.rx = 1.0f;
+        ico_vpad_merge(&v, &touch);
+        ico_bindings_mouse_merged(&b, &v);
+        CHECK(b.mouse_drives == 0 && v.rx == 1.0f);
+    }
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 1);
     ico_bindings_mouse_reset(&b);
     ico_bindings_step(&b, &r, &v);
     CHECK(b.mouse_drives == 0);

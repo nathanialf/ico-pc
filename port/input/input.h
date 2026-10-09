@@ -238,6 +238,11 @@ int ico_gp_from_name(const char *name);
 const char *ico_gp_name(int src);
 /* One snapshot to the virtual pad: advances the mouse stick by raw->dt. */
 void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *out);
+/* After another source was merged into ico_bindings_step's pad (the touch
+   look pad, ico_touch_update): mouse_drives stays set only while the pad's
+   right stick is still the mouse's own (mouse_x, mouse_y), so a stick that
+   came from elsewhere never gets the mouse camera's speed and range. */
+void ico_bindings_mouse_merged(IcoBindings *b, const IcoVirtualPad *v);
 /* The mouse camera's state (the look offset, its idle time and the
    stick) back to centre: the device layer calls it when the capture mode
    changes. */
