@@ -38,7 +38,9 @@
    progress (may be NULL) is called with phase "copy" once before the first
    read and after each chunk with the bytes written so far and the stream's
    size (SDL_GetIOSize; when unknown, 0 until the last call, which reports
-   done == total); a nonzero return cancels. 0 when copied; 1 when cancelled;
+   done == total); a nonzero return cancels. Once the last chunk is written
+   it is also called with phase "save" and 0 of 0, before the flush to the
+   storage and the rename (the return is not used there). 0 when copied; 1 when cancelled;
    -1 with the reason in why (a read or write error, a stream shorter than
    its size). Cancelled or failed, neither dstTmp nor the final name is
    left behind. src stays open (the caller closes it). */

@@ -653,6 +653,15 @@ static int tick(Ex *x, const char *phase, uint64_t n)
     return x->cancelled;
 }
 
+/* A step with no byte count (done and total 0). A stop asked in the reply
+   is not lost: the next tick asks again. */
+static void note_phase(Ex *x, const char *phase)
+{
+    if (x->progress != NULL) {
+        (void)x->progress(x->ctx, phase, 0, 0);
+    }
+}
+
 static size_t zip_write(void *opaque, mz_uint64 ofs, const void *buf, size_t n)
 {
     Ex *x = opaque;
@@ -919,6 +928,9 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
     x.progress = progress;
     x.ctx = ctx;
 
+    /* opening the image, reading its directory and the first megabyte of the
+       hash take a while before any byte count exists: say so, with no size */
+    note_phase(&x, "open");
     x.iso = ico_vfs_mount(&ico_vfs_iso9660, iso_path);
     if (x.iso == NULL) {
         res->unreadable = 1;
@@ -1023,7 +1035,9 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
         goto done;
     }
 
-    /* 4. meta.json, the directory, and the move into place */
+    /* 4. meta.json, the directory, and the move into place (a few seconds
+       of writing to storage with no byte count) */
+    note_phase(&x, "finish");
     write_meta(&meta, &x, res, tails);
     if (meta.bad) {
         say(why, whysize, "out of memory");

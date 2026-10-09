@@ -53,13 +53,36 @@ static int file_exists(const char *path)
 
 static int cancel_at;
 
+/* the phases in the order they were reported, one letter each: o(pen),
+   h(ash), e(xtract), f(inish); repeats are collapsed */
+static char phase_seq[16];
+
+static void note_phase(const char *phase)
+{
+    const char c = phase[0];
+    size_t n = strlen(phase_seq);
+
+    if (n == 0 || (phase_seq[n - 1] != c && n + 1 < sizeof(phase_seq))) {
+        phase_seq[n] = c;
+        phase_seq[n + 1] = '\0';
+    }
+}
+
 static int progress_cb(void *ctx, const char *phase, uint64_t done, uint64_t total)
 {
     int *calls = ctx;
 
     (*calls)++;
     CHECK(done <= total);
-    CHECK(strcmp(phase, "hash") == 0 || strcmp(phase, "extract") == 0);
+    CHECK(strcmp(phase, "open") == 0 || strcmp(phase, "hash") == 0 ||
+          strcmp(phase, "extract") == 0 || strcmp(phase, "finish") == 0);
+    /* the steps with no byte count report 0 of 0; the others have a total */
+    if (strcmp(phase, "open") == 0 || strcmp(phase, "finish") == 0) {
+        CHECK(done == 0 && total == 0);
+    } else {
+        CHECK(total > 0);
+    }
+    note_phase(phase);
     return cancel_at > 0 && *calls >= cancel_at;
 }
 
@@ -235,9 +258,12 @@ static int run_synth(const char *dir)
 
     /* 3. unverified extraction (tests only) */
     calls = 0;
+    phase_seq[0] = '\0';
     CHECK(ico_extract_archive(iso_path, ar_path, ICO_EXTRACT_NO_VERIFY, progress_cb, &calls, &res,
                               why, sizeof(why)) == 0);
     CHECK(calls > 0);
+    /* open, then hash, extract, finish (open and finish at 0 of 0) */
+    CHECK(strcmp(phase_seq, "ohef") == 0);
     CHECK(strcmp(res.rule, ICO_RULE_UNVERIFIED) == 0);
     CHECK(strcmp(res.disc_id, "SLUS-00000") == 0);
     CHECK(res.files == 3); /* SYSTEM.CNF, SLUS_000.00, DFDATAS/DATA.DF */

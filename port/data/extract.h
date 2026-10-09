@@ -39,9 +39,12 @@
 
 #define ICO_EXTRACT_NO_VERIFY 1u
 
-/* Progress: phase "hash" (the image's SHA-1) then "extract"; done and
-   total count bytes over both phases (the image's size plus the bytes
-   stored). Return nonzero to cancel. */
+/* Progress: phase "open" (reading the image's directory; done and total 0),
+   "hash" (the image's SHA-1), "extract", then "finish" (writing the archive's
+   directory and moving it into place; done and total 0).  In "hash" and
+   "extract" done and total count bytes over both phases (the image's size
+   plus the bytes stored).  Return nonzero to cancel (ignored in "open" and
+   "finish"; the next byte count asks again). */
 typedef int (*IcoExtractProgressFn)(void *ctx, const char *phase, uint64_t done, uint64_t total);
 
 typedef struct IcoExtractResult {

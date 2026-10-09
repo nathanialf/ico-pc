@@ -5,7 +5,8 @@
  * (port/platform/android/iso_import.h), on Linux with SDL's memory streams
  * standing in for the content:// stream:
  *   copy     3 MB + 1 byte from SDL_IOFromConstMem: the file byte for byte,
- *            the .tmp gone, the progress (phase "copy") never going back
+ *            the .tmp gone, the progress (phase "copy", then one "save" with no
+ *            byte count) never going back
  *            and ending at done == total == the size
  *   cancel   the callback stops it at half way: no file and no .tmp left
  *   fail     a copy into a read-only folder (as root, into a "folder" that
@@ -41,9 +42,12 @@ static int failures;
 
 typedef struct Seen {
     int calls;
-    int backwards;  /* a call whose done or total was below the one before */
-    int wrongPhase; /* a phase other than "copy" */
-    int stopAtHalf; /* return 1 once done reaches half the total */
+    int backwards;     /* a call whose done or total was below the one before */
+    int wrongPhase;    /* a phase other than "copy" and "save" */
+    int saves;         /* calls with phase "save" (done and total 0) */
+    int saveBad;       /* a "save" call with a byte count, or one before the last chunk */
+    int copyAfterSave; /* "copy" calls after the "save" one: only the last word */
+    int stopAtHalf;    /* return 1 once done reaches half the total */
     uint64_t done, total;
 } Seen;
 
@@ -51,8 +55,19 @@ static int progress(void *ctx, const char *phase, uint64_t done, uint64_t total)
 {
     Seen *s = ctx;
 
+    if (strcmp(phase, "save") == 0) {
+        /* the flush to storage, after the last chunk and before the rename */
+        s->saves++;
+        if (done != 0 || total != 0 || s->calls == 0) {
+            s->saveBad++;
+        }
+        return 0;
+    }
     if (strcmp(phase, "copy") != 0) {
         s->wrongPhase++;
+    }
+    if (s->saves > 0) {
+        s->copyAfterSave++;
     }
     if (s->calls > 0 && (done < s->done || total < s->total)) {
         s->backwards++;
@@ -103,6 +118,9 @@ static void checkCopy(const char *dir, const unsigned char *data)
     CHECK(!exists(tmp), "copy: %s is still there", tmp);
     CHECK(s.wrongPhase == 0, "copy: %d calls with another phase", s.wrongPhase);
     CHECK(s.backwards == 0, "copy: the progress went back %d times", s.backwards);
+    CHECK(s.saves == 1 && s.saveBad == 0, "copy: %d save calls (%d malformed), expected one",
+          s.saves, s.saveBad);
+    CHECK(s.copyAfterSave <= 1, "copy: %d copy calls after the save call", s.copyAfterSave);
     /* 0, then one call a chunk: 1, 2, 3 MB and the last byte */
     CHECK(s.calls >= 5, "copy: %d progress calls", s.calls);
     CHECK(s.done == SIZE && s.total == SIZE, "copy: the last call %llu of %llu",

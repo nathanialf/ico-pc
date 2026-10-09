@@ -798,12 +798,16 @@ static int use_iso_mode(const IcoIni *ini)
    drawn in it (window_host.h ico_window_progress), Back stops */
 static void progress_ui_open(void) {}
 
-/* 1 when the player asked to stop. */
+/* 1 when the player asked to stop.  pct < 0: a step with no byte count,
+   shown as its words alone with no bar. */
 static int progress_ui_update(const char *phase, int pct)
 {
-    const char *words = strcmp(phase, "hash") == 0   ? "Checking the disc image"
-                        : strcmp(phase, "copy") == 0 ? "Copying the disc image into the app"
-                                                     : "Preparing the game's data";
+    const char *words = strcmp(phase, "copy") == 0     ? "Copying the disc image into the app"
+                        : strcmp(phase, "save") == 0   ? "Saving the copy"
+                        : strcmp(phase, "open") == 0   ? "Opening the disc image"
+                        : strcmp(phase, "hash") == 0   ? "Checking the disc image"
+                        : strcmp(phase, "finish") == 0 ? "Finishing the game's data"
+                                                       : "Preparing the game's data";
 
     return ico_window_progress("Setting up ICO (first start only)", words, pct);
 }
@@ -846,8 +850,15 @@ static int progress_ui_update(const char *phase, int pct)
             progressClosed = 1;
         }
     }
-    snprintf(title, sizeof(title), "ICO: preparing the game data (first run): %s %d%%",
-             strcmp(phase, "hash") == 0 ? "checking the disc image" : "copying", pct);
+    if (pct < 0) {
+        /* a step with no byte count: its words, the bar where it was */
+        snprintf(title, sizeof(title), "ICO: preparing the game data (first run): %s",
+                 strcmp(phase, "open") == 0 ? "opening the disc image" : "finishing");
+        pct = 0;
+    } else {
+        snprintf(title, sizeof(title), "ICO: preparing the game data (first run): %s %d%%",
+                 strcmp(phase, "hash") == 0 ? "checking the disc image" : "copying", pct);
+    }
     SDL_SetWindowTitle(progressWin, title);
     if (progressRen != NULL) {
         SDL_FRect frame = {16.0f, 24.0f, 448.0f, 24.0f};
@@ -888,17 +899,21 @@ typedef struct Progress {
 static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_t total)
 {
     Progress *p = ctx;
-    int pct = total > 0 ? (int)(done * 100u / total) : 0;
+    /* -1: a step with no byte count (open, save, finish): no percentage, no bar */
+    int pct = total > 0 ? (int)(done * 100u / total) : -1;
 
     if (p->phase == NULL || strcmp(p->phase, phase) != 0) {
         p->phase = phase;
         p->logged = -1;
         fprintf(stderr, "ico_pc: first run: %s\n",
-                strcmp(phase, "hash") == 0   ? "checking the disc image's SHA-1"
-                : strcmp(phase, "copy") == 0 ? "copying the chosen disc image into the app"
-                                             : "copying the game's files into the archive");
+                strcmp(phase, "hash") == 0     ? "checking the disc image's SHA-1"
+                : strcmp(phase, "copy") == 0   ? "copying the chosen disc image into the app"
+                : strcmp(phase, "save") == 0   ? "saving the copy to the storage"
+                : strcmp(phase, "open") == 0   ? "opening the disc image"
+                : strcmp(phase, "finish") == 0 ? "writing the archive's directory"
+                                               : "copying the game's files into the archive");
     }
-    if (pct / 10 != p->logged) {
+    if (pct >= 0 && pct / 10 != p->logged) {
         p->logged = pct / 10;
         fprintf(stderr, "ico_pc: first run: %3d%% (%llu of %llu MB)\n", pct,
                 (unsigned long long)(done >> 20), (unsigned long long)(total >> 20));
@@ -1427,6 +1442,12 @@ static int host_main(int argc, char **argv)
         fprintf(stderr, "ico_pc: the first start was stopped\n");
         return 0;
     }
+#ifdef ICO_ANDROID_UI
+    /* every start, not only the first: the tables, the game's own start-up
+       and the first frame follow with nothing else on the screen; this
+       stays up until the game draws */
+    (void)ico_window_progress("ICO", "Starting the game", -1);
+#endif
     /* the data tables, from the disc's boot ELF, before anything reads one
        (port/data/tables.h) */
     {

@@ -102,6 +102,11 @@ int ico_iso_copy(SDL_IOStream *src, const char *dstTmp, IcoExtractProgressFn pro
         snprintf(b, sizeof(b), "%llu", (unsigned long long)total);
         r = fail(why, n, "the chosen file ended after %s of its %s bytes", a, b);
     }
+    if (r == 0 && progress != NULL) {
+        /* flushing the copy to the storage takes a few seconds with no byte
+           count; the stop answer is not used here */
+        (void)progress(ctx, "save", 0, 0);
+    }
     if (r == 0 && fflush(f) != 0) {
         r = fail(why, n, "cannot write %s: %s", dstTmp, strerror(errno));
     }
