@@ -332,10 +332,10 @@ static int pollSize(SDL_Window *win, RhiFormat fmt)
         printf("FAIL poll: no swapchain\n");
         return 1;
     }
-    const uint32_t aw = sw, ah = sh;
 #ifndef __ANDROID__
     /* the desktop without the switch: no new swapchain on a plain present */
     {
+        const uint32_t aw = sw, ah = sh;
         testSetEnv("ICO_VK_POLL_SURFACE", NULL);
         SDL_SetWindowSize(win, 80, 56);
         SDL_SyncWindow(win);
