@@ -290,14 +290,14 @@ static int decode_unit(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *ou
     scan_seq_header(d, au, len);
     if (!d->have_header) {
         /* the first unit opens with the sequence header: header mode reads
-           it and reports the size, frame mode decodes the rest */
-        r = decode_call(d, au, len, &op);
+           it and reports the size, frame mode decodes the rest; the size
+           check below stands in for the call's status */
+        (void)decode_call(d, au, len, &op);
         if (op.u4_pic_wd == 0 || op.u4_pic_ht == 0 || op.u4_pic_wd > ICO_M2V_MAX_W ||
             op.u4_pic_ht > ICO_M2V_MAX_H || alloc_planes(d, op.u4_pic_wd, op.u4_pic_ht) != 0) {
             d->errors++;
             return -1;
         }
-        (void)r;
         d->have_header = 1;
         set_mode(d, IVD_DECODE_FRAME);
         if (op.u4_num_bytes_consumed >= len) {
