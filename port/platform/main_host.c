@@ -1398,14 +1398,6 @@ static int host_main(int argc, char **argv)
             ico_config_write_first_run();
         }
     }
-    /* v0.4.3 AN-19d (issue 19): [dev] hand_probe, the hand-holding
-       numbers in the log (diag_host.h); on by default only in a build
-       configured with ICO_HAND_PROBE_DEFAULT (a diagnostic build) */
-#ifdef ICO_HAND_PROBE_DEFAULT
-    ico_hand_probe_start(ico_config_get_bool("dev.hand_probe", 1));
-#else
-    ico_hand_probe_start(ico_config_get_bool("dev.hand_probe", 0));
-#endif
 
 #ifdef ICO_ANDROID_UI
     /* Android: the window first, the first start's picker, copy and

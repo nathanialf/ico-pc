@@ -35,8 +35,10 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
 /* Keys a former version read and this one does not: kept in the file (as
    any unknown key is) and logged once a load.  [game] classic_menu_text and
    [game] port_font chose how the game's own words were drawn; they always
-   keep their texels now. */
-static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font"};
+   keep their texels now. [dev] hand_probe wrote the characters'
+   hand-holding numbers into the log for a bug report. */
+static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font",
+                                           "dev.hand_probe"};
 
 static void log_retired(void)
 {
@@ -360,16 +362,7 @@ static const char first_run_text[] =
     "# true starts photo mode with its help panel hidden (Square shows it).\n"
     "hide_ui = false\n"
     "# The folder for saved pictures, inside your user folder.\n"
-    "png_dir = \"screenshots\"\n"
-#ifdef ICO_HAND_PROBE_DEFAULT
-    /* v0.4.3 AN-19d: the diagnostic build (CMakeLists.txt) */
-    "\n"
-    "[dev]\n"
-    "# true writes the characters' hand-holding numbers into the log, for a\n"
-    "# bug report. This test version has it on; false turns it off.\n"
-    "hand_probe = true\n"
-#endif
-    ;
+    "png_dir = \"screenshots\"\n";
 
 int ico_config_write_first_run(void)
 {

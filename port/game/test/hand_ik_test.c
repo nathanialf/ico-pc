@@ -406,38 +406,11 @@ static void testTables(void)
     }
 }
 
-/* v0.4.3 AN-19d: the hand probe only reads: on, a frame leaves the same
-   targets, bit for bit, as off; and its value/bits field */
-static void testProbe(void)
-{
-    float a[3] = {0.0f, 100.0f, 0.0f};
-    float near[3] = {30.0f, 96.0f, 5.0f};
-    float offIco[4], offYorda[4];
-    char buf[64];
-    float v[2] = {1.5f, -2.0f};
-
-    girlGObj = &yorda.g;
-    testGrip("probe off", 1.0f, 1.0f, a, near);
-    memcpy(offIco, ico.sub.root.hand1.ikDir, sizeof offIco);
-    memcpy(offYorda, yorda.sub.root.hand0.ikDir, sizeof offYorda);
-    ico_hand_probe_start(1);
-    testGrip("probe on", 1.0f, 1.0f, a, near);
-    ico_hand_probe_start(0);
-    CHECK(memcmp(offIco, ico.sub.root.hand1.ikDir, sizeof offIco) == 0,
-          "probe: Ico's target changed");
-    CHECK(memcmp(offYorda, yorda.sub.root.hand0.ikDir, sizeof offYorda) == 0,
-          "probe: Yorda's target changed");
-    *ico_hand_probe_put(buf, buf + sizeof buf, "v", v, 2) = '\0';
-    CHECK(strcmp(buf, " v=1.5/3fc00000,-2/c0000000") == 0, "probe field \"%s\"", buf);
-    girlGObj = NULL;
-}
-
 int main(void)
 {
     InitMatrixDrive();
     testTables();
     testCases();
-    testProbe();
     if (failures != 0) {
         fprintf(stderr, "hand_ik: %d failure(s)\n", failures);
         return 1;

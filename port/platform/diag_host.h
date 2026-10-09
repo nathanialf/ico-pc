@@ -140,41 +140,6 @@ int ico_diag_float_fault(const char *site, const void *caller);
 /* The faults counted so far (tests). */
 unsigned int ico_diag_float_faults(void);
 
-/* v0.4.3 AN-19d (issue 19): the hand probe, [dev] hand_probe in the
-   settings file (main_host.c reads it; off by default, on by default in a
-   build configured with -DICO_HAND_PROBE_DEFAULT=ON). While it is on, the
-   log gets "probe:" lines with the numbers Ico and Yorda hold hands with,
-   every float as its value and its bits (value/bits) so two logs compare
-   exactly; tools/hand_probe_diff.py reads them. ico_hand_probe_on is
-   the switch the callers test first, so the probe costs one load when
-   off. */
-extern int ico_hand_probe_on;
-/* Sets the switch; on, logs "probe: on" with the format version. */
-void ico_hand_probe_start(int on);
-/* 1 when slot (0..7) has not logged in this Main tick and the tick is a
-   multiple of 30, else 0. */
-int ico_hand_probe_due(int slot);
-/* " name=v/bits[,v/bits...]" appended at p (no further than end); returns
-   the new end of the text. */
-char *ico_hand_probe_put(char *p, char *end, const char *name, const float *v, int n);
-/* ico2/sugipon/src/handManager.c: a hand record's reach (modes 5 and 6):
-   the hand record (0 or 1) and its mode, the nodes (na the own shoulder,
-   nb and nc the other object's nodes), whether the other object is
-   Yorda, the nodes' positions, the shoulder distance, the two arm
-   lengths, the two scales and the target the arm turns toward. */
-void ico_hand_probe_ik(int hand, int mode, int na, int nb, int nc, int tgt_girl, const float *own,
-                       const float *tb, const float *tc, float len, float sa, float sb, float scale,
-                       float tscale, const float *ik_dir);
-/* ico2/fumi/src/girl_act.c actGirlHand, Yorda's side: the boy's mode (and
-   GetBoyMode's p1..p3), the hand manager's distance, height and flags
-   (bit 0 still, 1 turned, 2 over 100, 3 over 125, 4 over 135, 5 under
-   90, 6 height gap), the shoulder-to-hand distance, the pull length and
-   turn, the step st, the requested and current motion, and the play
-   speed ratio reserved this frame with its priority. */
-void ico_hand_probe_girl(int boy_mode, int p1, int p2, int p3, float hand_dist, float hand_height,
-                         int flags, float dist, float pull_len, float pull_turn, int st,
-                         int request, int motion, float speed, int speed_pri);
-
 /* --- The game's hooks (#ifdef ICO_HOST calls in ico2/) ------------------------------------------------ */
 
 /* common/src/main.c: boot milestones and its static thread functions. */

@@ -158,15 +158,6 @@ if(TARGET ico_pc)
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_credits_live>)
     target_link_libraries(ico_pc PRIVATE ico_achievements)
-    # v0.4.3 AN-19d (issue 19): the hand probe's per-tick line, which reads
-    # the game's objects ([dev] hand_probe; trace_host.c calls it)
-    add_library(ico_hand_probe_live OBJECT hand_probe_live.c)
-    target_include_directories(ico_hand_probe_live PRIVATE ${_ico_gs_game_incs}
-                               "${CMAKE_SOURCE_DIR}/port/platform")
-    target_compile_definitions(ico_hand_probe_live PRIVATE ${ICO_GAME_DEFINITIONS})
-    target_compile_options(ico_hand_probe_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
-                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
-    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_hand_probe_live>)
 endif()
 
 # The view over a synthetic state, the signals, every achievement's condition
