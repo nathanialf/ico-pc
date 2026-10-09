@@ -236,10 +236,11 @@ static void clear_held(void)
     s_left_menu = 0;
 }
 
-/* I17b: whether the pointer is the menus' (free, not the camera's) */
+/* I17b: whether the pointer is the menus' (free, not the camera's; with
+   [input] mouse = false the mouse does nothing, in the menus too) */
 static int pointer_free(void)
 {
-    return s_capture == ICO_CAPTURE_OFF;
+    return s_capture == ICO_CAPTURE_OFF && s_bind.mouse_on;
 }
 
 /* I17b: the pointer's place from a window position (points), as 0..1 of
@@ -327,7 +328,7 @@ void ico_input_sdl_event(const SDL_Event *e)
         } else if (s_capture == ICO_CAPTURE_DELTA) {
             /* photo mode: its screen takes the motion each Main tick */
             ico_mouse_look_add(e->motion.xrel, e->motion.yrel);
-        } else if (e->motion.timestamp >= s_free_since + POINTER_SETTLE_NS) {
+        } else if (pointer_free() && e->motion.timestamp >= s_free_since + POINTER_SETTLE_NS) {
             /* I17b: free, the menus' pointer */
             pointer_at(e->motion.windowID, e->motion.x, e->motion.y);
         }
