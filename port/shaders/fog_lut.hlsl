@@ -11,8 +11,9 @@
 //
 // fog_lut_ps runs behind sprite_ui_vs / sprite_world_vs (the fog sprite's
 // two corners, expanded by rd_replay.c) and replaces the texture fetch:
-//   t1  a copy of the Z source's depth (D32F, sampled as depth; rd_replay.c
-//       copies it, as the GS copies the Z buffer before reading it)
+//   t1  the Z source's depth target itself (D32F, sampled as depth;
+//       rd_replay.c moves it to the depth-read state for the fog pass, which
+//       binds no depth attachment), where the GS reads a copy of the Z buffer
 //   t2  the 256x1 RGBA8 LUT in index order (ZFog.c's CLUT unswizzled from
 //       its CSM1 storage order)
 //   g_tex.xy   size of the depth source in GS pixels (the UV's texel units)
@@ -70,7 +71,7 @@ uint fog_gs_z(float d, float scale)
 DualOut fog_lut_ps(FogPSIn i)
 {
     // the texel the sprite's UV addresses, nearest (ZFog.c writes TEX1 0);
-    // R7a: in the depth copy's own texels (g_scale, 1 in Original)
+    // R7a: in the depth target's own texels (g_scale, 1 in Original)
     float2 sc = float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
     float2 fsize = g_tex.xy * sc;
     int2 size = int2(round(fsize));

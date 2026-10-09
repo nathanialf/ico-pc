@@ -816,7 +816,8 @@ int rd__FogPlan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
 /* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE);
  * appends to out[0..n). */
 uint32_t rd__EnumerateReachableFog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
-/* rd_replay.c: frees the fog's depth copy and LUT textures (rd__GpuShutdown). */
+/* rd_replay.c: frees the fog's LUT texture (rd__GpuShutdown); the fog samples
+ * the depth target itself. */
 void rd__FogShutdown(void);
 void rd__WideScissor(int32_t *x0, int32_t *x1, int32_t w, float f); /* package RSMALL */
 void rd__ShadowShutdown(void); /* package RSMALL: the reduced shadow count */
