@@ -635,76 +635,36 @@ static const char k_driver_box[] =
 static const char k_driver_next_start[] =
     "The game will use the driver package at the next start. Please close and open ICO again.";
 
-/* the window's native surface, which SDL takes away while the system's
-   file picker covers the app, back before the next rd_init; gives up after
-   30 s (rd_init then fails and the choice is offered again) */
-static void wait_native_window(void)
-{
-    for (int i = 0; i < 1500; i++) {
-        if (SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
-                                   SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL) != NULL) {
-            return;
-        }
-        SDL_PumpEvents();
-        SDL_Delay(20);
-    }
-    fprintf(stderr, "window: the app's surface did not come back\n");
-}
-
 /* No driver started and there is no device, so Options > Graphics driver
    cannot be reached: a box offers a driver package (the system's file
    picker; the package is installed, chosen and saved, and the game asks to
-   be started again), the phone's own driver again (when the player's was
-   tried or failed before), or Quit.  The package is not started in this
+   be started again) or Quit.  The phone's own driver is not offered: it
+   has just failed in this run.  The package is not started in this
    process: the phone's driver is already loaded here (the failed rd_init),
    and libadrenotools does not support loading a package after it (the
    package's namespace shares the libraries already loaded), so the next
    start loads the package first, on trial as at any start.  A file that
-   is not added, or the phone's driver failing again, brings the box back.
-   true once rd_init has made the device; false to quit (Quit, or a package
-   chosen for the next start). */
-static bool choose_driver(unsigned int gsW, unsigned int gsH, const RdSettings *rs)
+   is not added brings the box back.  Returns when the game should quit
+   (Quit, or a package chosen for the next start). */
+static void choose_driver(void)
 {
-    for (;;) {
-        const char *labels[3];
-        int count = 0, phone = -1;
-        const int choose = count;
+    static const char *const labels[2] = {"Choose a driver file", "Quit"};
+    char folder[160], why[128];
 
-        labels[count++] = "Choose a driver file";
-        if (ico_gpu_driver_android_tried()) {
-            phone = count;
-            labels[count++] = "Use the phone's driver";
+    while (ico_android_message_box_buttons(s_window, k_driver_box, labels, 2, 1) == 0) {
+        if (!ico_gpu_driver_android_choose(folder, sizeof(folder), why, sizeof(why))) {
+            fprintf(stderr, "window: no graphics driver package was added: %s\n", why);
+            ico_android_message_box(why, 1);
+            continue;
         }
-        const int quit = count;
-        labels[count++] = "Quit";
-        const int pick =
-            ico_android_message_box_buttons(s_window, k_driver_box, labels, count, quit);
-        if (pick == choose) {
-            char folder[160], why[128];
-
-            if (!ico_gpu_driver_android_choose(folder, sizeof(folder), why, sizeof(why))) {
-                fprintf(stderr, "window: no graphics driver package was added: %s\n", why);
-                ico_android_message_box(why, 1);
-                continue;
-            }
-            fprintf(stderr,
-                    "window: the graphics driver %s is used from the next start; the player "
-                    "was asked to start the game again\n",
-                    folder);
-            ico_android_message_box(k_driver_next_start, 0);
-            return false;
-        } else if (pick == phone) {
-            ico_gpu_driver_android_use_phone();
-            wait_native_window();
-            if (rd_init(gsW, gsH, rs, s_window)) {
-                fprintf(stderr, "window: started with the phone's own driver\n");
-                return true;
-            }
-        } else {
-            fprintf(stderr, "window: the player quit at the graphics driver choice\n");
-            return false;
-        }
+        fprintf(stderr,
+                "window: the graphics driver %s is used from the next start; the player was "
+                "asked to start the game again\n",
+                folder);
+        ico_android_message_box(k_driver_next_start, 0);
+        return;
     }
+    fprintf(stderr, "window: the player quit at the graphics driver choice\n");
 }
 #endif
 
@@ -801,7 +761,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 "why)\n",
                 backend);
 #ifdef __ANDROID__
-        up = choose_driver(gsW, gsH, &rs);
+        choose_driver();
 #endif
     }
     if (!up) {

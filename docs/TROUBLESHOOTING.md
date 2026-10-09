@@ -70,7 +70,6 @@ game adds it and asks you to close it and open it again: the driver is
 used from the next start. If the file is not a driver package, the box
 comes back so you can pick another one. If the driver does not start at
 the next start either, the game says so and the box comes back.
-**Use the phone's driver** goes back to the phone's own driver, and
 **Quit** closes the game. Once the game runs, you can change the driver
 later in Options > Graphics driver. See
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).

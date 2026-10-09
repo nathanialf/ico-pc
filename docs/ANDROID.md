@@ -270,8 +270,6 @@ these buttons:
   zip you downloaded (step 1 above). The game adds it and asks you to
   close it and open it again: the driver is used from the next start.
   This only works on phones with an Adreno chip.
-- **Use the phone's driver**: tries the phone's own driver again. It is
-  shown when a driver package was tried before.
 - **Quit**: closes the game.
 
 If the file is not a driver package, the game says so and the box comes

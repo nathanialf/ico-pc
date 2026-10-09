@@ -25,8 +25,6 @@
 
 static const char k_failed_box[] =
     "The graphics driver you chose did not start. The game uses the phone's own driver.";
-/* the same once the phone's own driver has failed too (the start-up choice) */
-static const char k_failed_box_no_phone[] = "The graphics driver you chose did not start.";
 
 /* --- the drivers folder and the list ----------------------------------------- */
 
@@ -85,7 +83,6 @@ static int find_folder(const char *folder)
 static int s_trial;         /* the player's driver is on trial (the marker is written) */
 static unsigned s_presents; /* presents since the start, while on trial */
 static char s_active[160];  /* its folder */
-static int s_phoneFailed;   /* the phone's own driver did not start in this run */
 
 /* a Java exception from the last call, cleared: 1 when there was one */
 static int clear_exception(JNIEnv *env)
@@ -189,7 +186,7 @@ static void driver_failed(const char *folder, const char *why)
         ico_gpu_driver_trial_ok(root);
     }
     s_trial = 0;
-    ico_android_message_box(s_phoneFailed ? k_failed_box_no_phone : k_failed_box, 1);
+    ico_android_message_box(k_failed_box, 1);
 }
 
 int ico_gpu_driver_android_start(void)
@@ -506,7 +503,6 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
 
     folder[0] = '\0';
     why[0] = '\0';
-    s_phoneFailed = 1;
     if (host_install_begin() != 0) {
         snprintf(why, whyn, "The file picker could not be opened.");
         return 0;
@@ -543,27 +539,4 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
     snprintf(folder, n, "%s", s_list[i].folder);
     fprintf(stderr, "gpu driver: %s chosen at the start, for the next start\n", folder);
     return 1;
-}
-
-void ico_gpu_driver_android_use_phone(void)
-{
-    const char *root = driver_root();
-
-    s_phoneFailed = 1;
-    rhi_set_vulkan_loader(NULL);
-    s_trial = 0;
-    s_active[0] = '\0';
-    ico_config_set_string(KEY_DRIVER, "");
-    if (ico_config_save() != 0) {
-        fprintf(stderr, "gpu driver: could not save the settings\n");
-    }
-    if (root != NULL) {
-        ico_gpu_driver_trial_ok(root);
-    }
-}
-
-int ico_gpu_driver_android_tried(void)
-{
-    const char *failed = ico_config_get_string(KEY_FAILED, "");
-    return s_active[0] != '\0' || (failed != NULL && failed[0] != '\0');
 }

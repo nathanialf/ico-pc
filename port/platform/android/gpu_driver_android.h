@@ -26,8 +26,7 @@
  * (ico_gpu_driver_android_choose: installed, chosen and saved as on the
  * Settings page, no trial marker left; the caller asks the player to start
  * the game again, since a package cannot be loaded after the phone's own
- * driver in the same process) or the phone's own driver again
- * (ico_gpu_driver_android_use_phone).
+ * driver in the same process) or Quit.
  *
  * ico_gpu_driver_android_host: the Settings page's host (settings.h
  * UiGpuDriverHost): the installed drivers (<files>/drivers/ in the app's
@@ -55,12 +54,6 @@ void ico_gpu_driver_android_init_failed(void);
    marker cleared; 0 with a sentence for the player in why (not a package,
    no space, no file chosen). */
 int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn);
-/* The start-up choice's "the phone's own driver": the choice emptied and
-   saved, the loader back to the system's. */
-void ico_gpu_driver_android_use_phone(void);
-/* 1 when this start tried the player's driver or an earlier one failed
-   ([video] gpu_driver_failed set). */
-int ico_gpu_driver_android_tried(void);
 /* After each present that reached the screen. */
 void ico_gpu_driver_android_presented(void);
 /* The Settings page's host; valid for the program's life. */
