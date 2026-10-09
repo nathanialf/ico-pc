@@ -1,8 +1,9 @@
 /*
  * port/data/archive.h
  *
- * The extracted game data, `ico.o2r`: a ZIP whose entries are stored, not compressed, written once by
- * the first-run extractor (extract.h) from the user's disc image.
+ * The extracted game data, `ico.o2r`: a ZIP whose entries are stored, not
+ * compressed, written once by the first-run extractor (extract.h) from the
+ * user's disc image.
  *
  *   disc/<PATH>   the disc file PATH ("DFDATAS/DATA.DF", "SCES_507.60"),
  *                 byte for byte
@@ -78,11 +79,10 @@ int ico_archive_read_info(const char *path, IcoArchiveInfo *out, char *why, size
    1, or 0 with the reason in why. */
 int ico_archive_info_acceptable(const IcoArchiveInfo *info, char *why, size_t whysize);
 
-/* Host file helpers shared with the extractor: fopen that takes a UTF-8
-   path on Windows (falling back to the ANSI code page when the path is not
-   valid UTF-8), 64-bit seek and tell, the size of a file, and the atomic
-   replace of `to` by `from` (MoveFileEx with MOVEFILE_REPLACE_EXISTING |
-   MOVEFILE_WRITE_THROUGH on Windows, rename elsewhere). */
+/* Host file helpers shared with the extractor: fopen, remove and the atomic
+   replace of `to` by `from` forward to port/platform/host_fs.h (ico_fopen,
+   ico_remove, ico_rename_replace: UTF-8 paths on Windows); seek and tell
+   are 64-bit, which host_fs.h does not offer. */
 FILE *ico_archive_fopen(const char *path, const char *mode);
 int ico_archive_seek(FILE *fp, uint64_t offset);
 int64_t ico_archive_tell(FILE *fp);

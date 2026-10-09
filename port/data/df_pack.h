@@ -62,7 +62,9 @@ int ico_df_find_member(IcoVfs *vfs, const char *name, IcoDfMember *out);
    0, or -1 on a read or inflate error. */
 int ico_df_read_member(IcoVfs *vfs, const IcoDfMember *m, void *dst);
 
-/* Packs indexed and members recorded (0 before the first look-up). */
+/* The index, for the tests (gallery_test.c, texpack_disc_test.c,
+   appearance_disc_test.c).  Packs indexed and members recorded (0 before
+   the first look-up). */
 int ico_df_index_packs(void);
 int ico_df_index_members(void);
 /* The name of indexed member i (0 .. ico_df_index_members() - 1), NULL. */

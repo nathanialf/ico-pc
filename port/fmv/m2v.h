@@ -8,7 +8,8 @@
  * hands back decoded pictures in display order as 4:2:0 planes, as the
  * IPU's sceMpegGetPicture did before its colour conversion.
  *
- * Single-threaded, no SIMD (the library's generic C path), for any size up
+ * Single-threaded; the library's generic C path, or its NEON routines on
+ * arm64 (port/fmv/CMakeLists.txt, ICO_LIBMPEG2_NEON); for any size up
  * to ICO_M2V_MAX_W x ICO_M2V_MAX_H (the IPU's own limit through
  * sceMpegGetPicture: 1620 macroblocks, 720 x 576).
  */

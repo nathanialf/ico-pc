@@ -1,8 +1,9 @@
 /*
  * port/data/tables.c
  *
- * The runtime loader of the 73 data tables: tables.h says what it does.  Every fact about a table
- * (its EE range, record type, fields, CRC) comes from the generated
+ * The runtime loader of the 73 data tables: tables.h says what it does.
+ * Every fact about a table (its EE range, record type, fields, CRC) comes
+ * from the generated
  * port/data/gen/table_desc.c; nothing here knows a table by name.
  */
 #include <stdio.h>
