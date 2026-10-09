@@ -35,7 +35,7 @@ static const char k_meta[] =
     "Adreno\",\"author\":\"K11MCH1\",\"packageVersion\":\"1\",\"vendor\":\"Mesa\","
     "\"driverVersion\":\"24.1\",\"minApi\":28,\"libraryName\":\"vulkan.ad07XX.so\"}";
 
-static char s_root[1024], s_work[1024];
+static char s_root[1100], s_work[1024];
 
 static void path_in(char *out, size_t n, const char *dir, const char *name)
 {
