@@ -358,14 +358,13 @@ void ico_touch_event(IcoTouchState *t, uint64_t finger, float nx, float ny, int 
 
 /* --- the step ------------------------------------------------------------- */
 
-void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *out, uint64_t nowNs)
+void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *out)
 {
     float W = (float)l->outW, H = (float)l->outH;
     float decay = t->look_decay;
     int stick = -1, look = -1;
     int i;
 
-    (void)nowNs;
     memset(out, 0, sizeof(*out));
     if (!(decay >= 0.0f)) {
         decay = 0.0f;
@@ -520,7 +519,7 @@ int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int ga
 {
     IcoVirtualPad tv;
 
-    ico_touch_step(t, l, &tv, nowNs);
+    ico_touch_step(t, l, &tv);
     if (!ico_touch_accepts(mode, gamepads)) {
         return 0;
     }

@@ -69,7 +69,7 @@ static IcoVirtualPad step(IcoTouchState *t, uint64_t now)
 {
     IcoVirtualPad v;
 
-    ico_touch_step(t, g_l, &v, now);
+    ico_touch_step(t, g_l, &v);
     return v;
 }
 
@@ -651,7 +651,7 @@ static void test_merged_frame(void)
     ev(&t, 1, 400.0f + 2.0f * R, 700.0f + 2.0f * R, ICO_TOUCH_MOVE, S);
     centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
     ev(&t, 2, x, y, ICO_TOUCH_DOWN, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     CHECK(tv.buttons == ICO_PAD_CROSS);
     CHECK(near_(tv.lx, 0.70711f, 0.002f) && near_(tv.ly, 0.70711f, 0.002f));
 
@@ -680,7 +680,7 @@ static void test_merged_frame(void)
        or more (it runs: the ring is drawn where running starts); 0.6 R is
        204, about 0.40 (it walks); 0.92 R still walks */
     ev(&t, 1, 400.0f + 2.0f * R, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
@@ -688,29 +688,29 @@ static void test_merged_frame(void)
     ico_input_vpad_to_frame(&v, 1, 0, &f);
     CHECK(f.lx == 255 && f.ly == 128);
     ev(&t, 1, 400.0f + l.runR, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
     CHECK(f.lx == 247 && f.ly == 128 && game_magnitude(f.lx, f.ly) >= 0.99f);
     ev(&t, 1, 400.0f + 0.6f * R, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
     CHECK(f.lx == 204 && near_(game_magnitude(f.lx, f.ly), 0.3958f, 0.002f));
     ev(&t, 1, 400.0f + 0.94f * R, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     ico_input_vpad_to_frame(&tv, 0, 0, &f);
     CHECK(game_magnitude(f.lx, f.ly) >= 0.99f);
     ev(&t, 1, 400.0f + 0.92f * R, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     ico_input_vpad_to_frame(&tv, 0, 0, &f);
     CHECK(game_magnitude(f.lx, f.ly) < 0.99f);
 
     /* the touch stick in its dead zone loses to the keyboard's push */
     ev(&t, 1, 400.0f + 0.03f * R, 700.0f, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
@@ -719,7 +719,7 @@ static void test_merged_frame(void)
     /* the look pad merges into the right stick */
     ev(&t, 3, 1500.0f, 200.0f, ICO_TOUCH_DOWN, S);
     ev(&t, 3, 1500.0f, 200.0f - R, ICO_TOUCH_MOVE, S);
-    ico_touch_step(&t, &l, &tv, S);
+    ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
@@ -756,7 +756,7 @@ static void test_stick_every_direction(void)
             ico_touch_reset(&t, S);
             ev(&t, 1, cx, cy, ICO_TOUCH_DOWN, S);
             ev(&t, 1, cx + dx, cy + dy, ICO_TOUCH_MOVE, S);
-            ico_touch_step(&t, &l, &tv, S);
+            ico_touch_step(&t, &l, &tv);
             /* the round pad deflected as far, with the touch dead zone */
             memset(&pad, 0, sizeof(pad));
             if (r >= ICO_TOUCH_STICK_DEADZONE) {

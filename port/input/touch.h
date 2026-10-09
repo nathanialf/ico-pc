@@ -211,7 +211,7 @@ void ico_touch_event(IcoTouchState *t, uint64_t finger, float nx, float ny, int 
 /* Once per vsync: classify new fingers against the layout, then the pad
    they hold now into *out (zeroed first: buttons, lx/ly, rx/ry), and the
    drawing's state into *t. */
-void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *out, uint64_t nowNs);
+void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *out);
 
 /* The connected gamepads' count, for the fade when it changes (the device
    layer calls it on hotplug). */
