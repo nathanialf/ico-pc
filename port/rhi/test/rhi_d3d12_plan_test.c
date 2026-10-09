@@ -318,6 +318,23 @@ static void testLayouts(void)
     const D3dpLayout *stat[1] = {&ls0};
     CHECK(d3dp_RootParams(stat, 1, rp, sp, dp) == 1 && rp[0] == 0 && dp[0] == -1,
           "static uniform root parameters");
+    /* every group full: a texture, a sampler and four root CBVs each fill the
+     * root parameter array rhi_CreatePipeline sizes with D3DP_MAX_ROOT_PARAMS */
+    const RhiBindSlot full[6] = {
+        {0, RHI_BIND_SAMPLED_TEXTURE, FS},        {0, RHI_BIND_SAMPLER, FS},
+        {0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}, {1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS},
+        {2, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}, {3, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS}};
+    D3dpLayout lf;
+    CHECK(d3dp_LayoutBuild(full, 6, &lf) && lf.resCount == 1 && lf.smpCount == 1 &&
+              lf.dynCount == RHI_MAX_DYNAMIC_OFFSETS,
+          "full layout");
+    const D3dpLayout *fullAll[RHI_MAX_BIND_SLOTS];
+    for (uint32_t g = 0; g < RHI_MAX_BIND_SLOTS; g++) {
+        fullAll[g] = &lf;
+    }
+    CHECK(d3dp_RootParams(fullAll, RHI_MAX_BIND_SLOTS, rp, sp, dp) == D3DP_MAX_ROOT_PARAMS &&
+              dp[RHI_MAX_BIND_SLOTS - 1] == D3DP_MAX_ROOT_PARAMS - RHI_MAX_DYNAMIC_OFFSETS,
+          "the most root parameters a pipeline can have");
 }
 
 /* ----------------------------------------------------------- small maths */

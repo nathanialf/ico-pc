@@ -115,6 +115,11 @@ void d3dp_RingReset(D3dpRing *r);
  * a root CBV of its own; its offset is its rank among the layout's dynamic
  * slots in ascending slot order (the order of the bind-time offsets) */
 #define D3DP_ROOT_CBV 2
+/* The most root parameters d3dp_RootParams can return: per group a resource
+ * table, a sampler table and up to RHI_MAX_DYNAMIC_OFFSETS root CBVs.  The
+ * indices it hands back are int8_t. */
+#define D3DP_MAX_ROOT_PARAMS (RHI_MAX_BIND_SLOTS * (2 + RHI_MAX_DYNAMIC_OFFSETS))
+_Static_assert(D3DP_MAX_ROOT_PARAMS <= 127, "root parameter indices are int8_t");
 
 typedef enum D3dpRegClass { D3DP_REG_B = 0, D3DP_REG_T = 1, D3DP_REG_S = 2 } D3dpRegClass;
 
@@ -142,7 +147,8 @@ int d3dp_LayoutFind(const D3dpLayout *l, uint32_t slot, RhiBindType type);
  * table and the root CBVs (package PA) of each group that has them.
  * resParam[g] / smpParam[g] receive the parameter index or -1, dynParam[g]
  * the index of the group's first root CBV (the others follow it in
- * D3dpLayout.dynSlot order) or -1.  Returns the parameter count. */
+ * D3dpLayout.dynSlot order) or -1.  Returns the parameter count, at most
+ * D3DP_MAX_ROOT_PARAMS. */
 uint32_t d3dp_RootParams(const D3dpLayout *const *layouts, uint32_t count,
                          int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
                          int8_t dynParam[RHI_MAX_BIND_SLOTS]);

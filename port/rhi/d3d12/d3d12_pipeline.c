@@ -77,7 +77,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
     memset(r, 0, sizeof(*r));
     uint32_t np = d3dp_RootParams(ls, count, r->resParam, r->smpParam, r->dynParam);
 
-    D3D12_ROOT_PARAMETER params[2 * RHI_MAX_BIND_SLOTS];
+    D3D12_ROOT_PARAMETER params[D3DP_MAX_ROOT_PARAMS];
     D3D12_DESCRIPTOR_RANGE ranges[RHI_MAX_BIND_SLOTS][D3DP_MAX_SLOTS];
     memset(params, 0, sizeof(params));
     for (uint32_t g = 0; g < count; g++) {
