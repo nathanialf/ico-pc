@@ -11,8 +11,10 @@
  *     progressive_frame, counted over the whole stream, with the first
  *     pictures' top_field_first / repeat_first_field / progressive_frame
  *     as strings (a 3:2 pulldown shows as a repeating rff cadence);
- *   - the first pictures (120, or argv[2]) are decoded and measured on the
- *     luma: d1 the mean absolute difference between adjacent lines, d2
+ *   - two stretches of pictures in display order, 0-119 (the fade-in)
+ *     and 600-719 (the film in motion), or one stretch of argv[2]
+ *     pictures from picture argv[3] (default 0), are decoded and measured
+ *     on the luma: d1 the mean absolute difference between adjacent lines, d2
  *     between lines two apart (one field's neighbours), their ratio (a
  *     smooth progressive picture has d1 < d2; the two fields of a moving
  *     interlaced one differ, so d1 > d2), and "comb" the share of pixels
@@ -30,9 +32,10 @@
  * picture whose bottom field completes it; a whole frame stays as it is).
  *
  * The output is a report for the deinterlacer's design (which movies are
- * interlaced, telecined or progressive); the checks are only that the
- * movies decode without error and that the display-order pairing of the
- * scanned headers matches the decoder's own picture types.  Exit 77 without
+ * interlaced, telecined or progressive), with a summary per stretch; the
+ * checks are only that the movies decode without error and that the
+ * scanned headers paired with each output picture name the decoder's own
+ * picture type.  Exit 77 without
  * the image.
  */
 #include <stdio.h>
@@ -168,7 +171,27 @@ static double field_motion(const uint8_t *a, const uint8_t *b, uint32_t pitch, u
 
 /* --- one movie ---------------------------------------------------------------- */
 
-static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, long want)
+typedef struct Stretch {
+    long first, count; /* pictures [first, first + count) in display order */
+} Stretch;
+
+/* the measures summed over a stretch */
+typedef struct Sums {
+    long pictures, interlaced, combed, wide; /* wide: d1 > d2 */
+    double ratio, comb, mot;
+} Sums;
+
+static void stretch_summary(const char *name, const Stretch *st, const Sums *m)
+{
+    const double n = m->pictures > 0 ? (double)m->pictures : 1.0;
+    printf("%s: STRETCH pictures %ld-%ld: %ld decoded, %ld flagged interlaced, %ld combed "
+           "(comb > 1%%), %ld with d1 > d2, mean d1/d2 %.2f, mean comb %.2f%%, mean motion %.2f\n",
+           name, st->first, st->first + st->count - 1, m->pictures, m->interlaced, m->combed,
+           m->wide, m->ratio / n, m->comb / n, m->mot / n);
+}
+
+static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, const Stretch *st,
+                  int nst)
 {
     uint8_t *buf = malloc(size);
     size_t n, pos = 0;
@@ -182,8 +205,16 @@ static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, long w
     char sTff[CADENCE + 1], sRff[CADENCE + 1], sPf[CADENCE + 1], sType[CADENCE + 1];
     int seqProg = -1, seqRate = -1, seqMixed = 0;
     /* the decoded pictures */
-    long decoded = 0, interlaced = 0, combed = 0, mismatches = 0;
-    double sumRatio = 0.0, sumComb = 0.0;
+    long decoded = 0, mismatches = 0, last = 0;
+    Sums sums[2];
+    int k;
+
+    memset(sums, 0, sizeof(sums));
+    for (k = 0; k < nst; k++) {
+        if (st[k].first + st[k].count > last) {
+            last = st[k].first + st[k].count;
+        }
+    }
 
     printf("\n== %s: %u bytes at sector %u\n", name, size, lsn);
     if (buf == NULL) {
@@ -269,11 +300,11 @@ static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, long w
     printf("%s:                          rff  %s\n", name, sRff);
     printf("%s:                          pf   %s\n", name, sPf);
 
-    /* the first pictures decoded and measured */
+    /* the pictures up to the last stretch decoded, the stretches measured */
     d = ico_m2v_create();
     CHECK(d != NULL, "%s: decoder", name);
     pos = 0;
-    while (d != NULL && pos < es.n && decoded < want) {
+    while (d != NULL && pos < es.n && decoded < last) {
         long s0 = ico_pss_es_find_start(es.p + pos, es.n - pos), e;
         IcoM2vFrame fr;
         int r;
@@ -311,13 +342,27 @@ static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, long w
                 memcpy(prev + (size_t)y * w, fr.y + (size_t)y * fr.pitch[0], w);
             }
         }
+        if (fr.out_type != 0 && fr.out_type != fr.scan.coding_type) {
+            mismatches++;
+        }
         {
             /* the current luma packed at pitch w beside the previous one */
             static uint8_t cur[ICO_M2V_MAX_W * ICO_M2V_MAX_H];
             double d1, d2, ratio, c, tp, pt, mot;
+            int in = -1;
 
             for (uint32_t y = 0; y < h; y++) {
                 memcpy(cur + (size_t)y * w, fr.y + (size_t)y * fr.pitch[0], w);
+            }
+            for (k = 0; k < nst; k++) {
+                if (decoded >= st[k].first && decoded < st[k].first + st[k].count) {
+                    in = k;
+                }
+            }
+            if (in < 0) {
+                memcpy(prev, cur, (size_t)w * h);
+                decoded++;
+                continue;
             }
             line_diffs(cur, w, w, h, &d1, &d2);
             ratio = d2 > 0.0 ? d1 / d2 : 0.0;
@@ -331,24 +376,24 @@ static void movie(FILE *f, const char *name, uint32_t lsn, uint32_t size, long w
                    struct_char(fr.scan.picture_structure), fr.scan.progressive_sequence,
                    fr.scan.progressive_frame, fr.scan.top_field_first, fr.scan.repeat_first_field,
                    fr.interlaced, d1, d2, ratio, c, tp, pt, mot);
-            if (fr.out_type != 0 && fr.out_type != fr.scan.coding_type) {
-                mismatches++;
-            }
-            interlaced += fr.interlaced;
-            combed += c > 1.0;
-            sumRatio += ratio;
-            sumComb += c;
+            sums[in].pictures++;
+            sums[in].interlaced += fr.interlaced;
+            sums[in].combed += c > 1.0;
+            sums[in].wide += d1 > d2;
+            sums[in].ratio += ratio;
+            sums[in].comb += c;
+            sums[in].mot += mot;
             memcpy(prev, cur, (size_t)w * h);
         }
         decoded++;
     }
+    for (k = 0; k < nst; k++) {
+        stretch_summary(name, &st[k], &sums[k]);
+    }
     printf("%s: SUMMARY %u x %u, frame_rate_code %d, progressive_sequence %d; %ld of %ld units "
-           "progressive_frame, %ld rff; first %ld decoded: %ld flagged interlaced, %ld combed "
-           "(comb > 1%%), mean d1/d2 %.2f, mean comb %.2f%%, %ld display-order type mismatches, "
-           "%u decoder errors\n",
-           name, w, h, seqRate, seqProg, pf, units, rff, decoded, interlaced, combed,
-           decoded ? sumRatio / (double)decoded : 0.0, decoded ? sumComb / (double)decoded : 0.0,
-           mismatches, ico_m2v_errors(d));
+           "progressive_frame, %ld rff; %ld decoded, %ld output pictures whose scanned type is "
+           "not the decoder's, %u decoder errors\n",
+           name, w, h, seqRate, seqProg, pf, units, rff, decoded, mismatches, ico_m2v_errors(d));
     CHECK(decoded > 0, "%s: nothing decoded", name);
     CHECK(ico_m2v_errors(d) == 0, "%s: %u decoder errors", name, ico_m2v_errors(d));
     CHECK(mismatches == 0, "%s: %ld pictures whose scanned type is not the decoder's", name,
@@ -412,7 +457,8 @@ static void test_match(void)
 int main(int argc, char **argv)
 {
     FILE *f = argc > 1 ? fopen(argv[1], "rb") : NULL;
-    long want = argc > 2 ? strtol(argv[2], NULL, 10) : 120;
+    Stretch st[2] = {{0, 120}, {600, 120}};
+    int nst = 2;
     uint8_t hdr[4];
     uint32_t count, i, movies = 0;
 
@@ -426,8 +472,10 @@ int main(int argc, char **argv)
         printf("SKIP fmv_fields_test: no disc image\n");
         return failures != 0 ? 1 : 77;
     }
-    if (want <= 0) {
-        want = 120;
+    if (argc > 2 && strtol(argv[2], NULL, 10) > 0) {
+        st[0].count = strtol(argv[2], NULL, 10);
+        st[0].first = argc > 3 && strtol(argv[3], NULL, 10) > 0 ? strtol(argv[3], NULL, 10) : 0;
+        nst = 1;
     }
     fseek(f, (long)DF_LSN * 2048, SEEK_SET);
     if (fread(hdr, 1, 4, f) != 4 || (count = le32(hdr)) == 0 || count > 4096) {
@@ -461,7 +509,7 @@ int main(int argc, char **argv)
         return 77;
     }
     for (i = 0; i < movies; i++) {
-        movie(f, list[i].name, list[i].lsn, list[i].size, want);
+        movie(f, list[i].name, list[i].lsn, list[i].size, st, nst);
     }
     fclose(f);
     if (failures != 0) {

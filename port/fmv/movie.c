@@ -117,9 +117,9 @@ static struct {
     /* an interlaced picture is shown a field a vsync (rd_video_field),
        each field deinterlaced against the pictures around it: prev is the
        picture shown before the one on screen (its slot is reused once
-       freed).  Off unless ICO_FMV_DEINTERLACE=1 while the deinterlacer is
-       being measured. */
-    int deint;
+       freed).  The disc's films are all interlaced (fmv_fields_test: every
+       picture a frame picture, progressive_frame 0, top field first, no
+       repeated fields); a progressive picture goes out whole as before. */
     int loggedFields;
     Slot prev;
     uint32_t decodedFrames;
@@ -688,7 +688,7 @@ static void slot_picture(const Slot *s, RdVideoPicture *p)
 /* Whether the picture on screen goes out a field a vsync. */
 static int shows_fields(const Slot *s)
 {
-    return mv.deint && s->valid && s->interlaced;
+    return s->valid && s->interlaced;
 }
 
 /* One field of the picture on screen (field 0 at its even vblank, 1 at
@@ -715,8 +715,13 @@ static void show_field(int field, int has_next)
     if (hn) {
         slot_picture(nx, &pn);
     }
-    rd_video_field(hp ? &pp : NULL, &pc, hn ? &pn : NULL, cur->w, cur->h, field, cur->top_first,
-                   RD_VIDEO_DEINTERLACE);
+    if (rd_video_field(hp ? &pp : NULL, &pc, hn ? &pn : NULL, cur->w, cur->h, field, cur->top_first,
+                       RD_VIDEO_DEINTERLACE) != 0 &&
+        field == 0) {
+        /* the field pass could not be set up: the picture whole, as a
+           progressive one goes out */
+        show_slot(cur);
+    }
 #else
     (void)field;
     (void)has_next;
@@ -726,10 +731,11 @@ static void show_field(int field, int has_next)
 /* The picture leaving the screen becomes the previous one. */
 static void keep_prev(const Slot *s)
 {
+#ifdef ICO_RD
     size_t need = (size_t)s->w * s->h + 2 * (size_t)((s->w + 1) / 2) * ((s->h + 1) / 2);
 
     mv.prev.valid = 0;
-    if (!mv.deint || !s->valid) {
+    if (!s->valid || !s->interlaced) {
         return;
     }
     if (mv.prev.cap < need) {
@@ -746,6 +752,10 @@ static void keep_prev(const Slot *s)
     mv.prev.interlaced = s->interlaced;
     mv.prev.top_first = s->top_first;
     mv.prev.valid = 1;
+#else
+    /* no display: nothing is deinterlaced */
+    (void)s;
+#endif
 }
 
 /* --- the entry points ------------------------------------------------------------ */
@@ -806,8 +816,6 @@ int movie_init(char *name, int imageW, int imageH, int dbx, int dby, int mono, i
     mv.mono = mono;
     env = getenv("ICO_FMV_DECODE");
     mv.decode = !(env != NULL && strcmp(env, "0") == 0);
-    env = getenv("ICO_FMV_DEINTERLACE");
-    mv.deint = env != NULL && strcmp(env, "1") == 0;
     ico_movie_pace_init(&mv.pace);
     mv.pace.on_show = ico_diag_note_progress;
 

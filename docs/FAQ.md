@@ -56,6 +56,16 @@ would get its own dark lines, and the whole screen would look like a fine
 mesh, a bit like looking through a screen door. So the filter keeps the
 original resolution on purpose. Texture packs still show through it.
 
+## Why did the movies show comb lines on moving edges?
+
+The movies on the disc are stored the way a TV shows them: each frame is
+two half-pictures, one made of the even lines and one of the odd lines,
+taken a moment apart. Shown together, anything that moves between the two
+gets jagged comb lines along its edges. The game now shows the two halves
+one after the other and fills in the missing lines of each, so moving
+edges stay smooth and still parts keep their full detail.
+(Reported in [issue 41](https://github.com/nathanialf/ico-pc/issues/41).)
+
 ## Where are my saves?
 
 In a folder the game makes in your user folder, not beside the program.

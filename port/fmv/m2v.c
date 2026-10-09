@@ -27,6 +27,10 @@
 #include "ivd.h"
 #include "impeg2d.h"
 
+/* the pictures in flight whose scans are kept: the decoder holds at most
+   a reference back and a picture behind it */
+#define M2V_STAMPS 16
+
 struct IcoM2v {
     iv_obj_t *codec;
     iv_mem_rec_t *recs;
@@ -37,10 +41,17 @@ struct IcoM2v {
     uint32_t plane_size[3];
     uint32_t frames, errors, resets;
     int flushing;
-    /* the header scan (ico_m2v_scan_unit) in display order: the scan of
-       the unit just given, the reference picture the decoder holds back,
-       the picture its next output is */
-    IcoM2vScan scan, held, next_out;
+    /* the header scan (ico_m2v_scan_unit) paired with the output: each
+       picture's scan is kept under a number the decoder carries with the
+       picture (its time stamp, ivd's u4_ts in and out) and read back by
+       the number of the picture that comes out.  The library puts a
+       picture out one call later than the I/P/B reordering alone would
+       (fmv_fields on the disc's streams: the first output is the I
+       picture at the third unit), so the pairing follows the stamp, not
+       an order rule. */
+    IcoM2vScan scan;
+    IcoM2vScan stamped[M2V_STAMPS];
+    uint32_t stamp; /* the number of the newest picture scanned */
     int field_open; /* a first field was scanned; its second is next */
 };
 
@@ -315,10 +326,9 @@ int ico_m2v_scan_unit(const uint8_t *au, size_t len, IcoM2vScan *scan)
     return picture;
 }
 
-/* The scan of the unit about to be decoded, paired with the decoder's
-   display order: a B picture comes out as it is decoded, an I or P picture
-   when the next reference arrives (the held one goes out then); the second
-   field of a field pair belongs to its first field's picture. */
+/* The scan of the unit about to be decoded, kept under the next stamp;
+   the second field of a field pair belongs to its first field's picture
+   (same stamp). */
 static void note_unit(IcoM2v *d, const uint8_t *au, size_t len)
 {
     IcoM2vScan s = d->scan;
@@ -334,12 +344,8 @@ static void note_unit(IcoM2v *d, const uint8_t *au, size_t len)
         return;
     }
     d->field_open = s.picture_structure != ICO_M2V_FRAME_PICTURE;
-    if (s.coding_type == 3) {
-        d->next_out = s;
-    } else {
-        d->next_out = d->held;
-        d->held = s;
-    }
+    d->stamp++;
+    d->stamped[d->stamp % M2V_STAMPS] = s;
 }
 
 static void fill_scan(IcoM2vFrame *out, const IcoM2vScan *s, const ivd_video_decode_op_t *op)
@@ -386,6 +392,7 @@ static IV_API_CALL_STATUS_T decode_call(IcoM2v *d, const uint8_t *p, size_t len,
     ip.e_cmd = IVD_CMD_VIDEO_DECODE;
     ip.pv_stream_buffer = (void *)p;
     ip.u4_num_Bytes = (UWORD32)len;
+    ip.u4_ts = d->stamp;
     ip.s_out_buffer.u4_num_bufs = 3;
     ip.s_out_buffer.pu1_bufs[0] = d->planes[0];
     ip.s_out_buffer.pu1_bufs[1] = d->planes[1];
@@ -464,7 +471,7 @@ static int decode_unit(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *ou
     }
     if (op.u4_output_present) {
         fill_out(d, &op, out);
-        fill_scan(out, &d->next_out, &op);
+        fill_scan(out, &d->stamped[op.u4_ts % M2V_STAMPS], &op);
         return 1;
     }
     return 0;
@@ -502,8 +509,7 @@ int ico_m2v_flush(IcoM2v *d, IcoM2vFrame *out)
     }
     if (decode_call(d, NULL, 0, &op) == IV_SUCCESS && op.u4_output_present) {
         fill_out(d, &op, out);
-        /* the flush puts out the reference held back */
-        fill_scan(out, &d->held, &op);
+        fill_scan(out, &d->stamped[op.u4_ts % M2V_STAMPS], &op);
         return 1;
     }
     return 0;

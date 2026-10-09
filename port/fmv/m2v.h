@@ -49,15 +49,14 @@ typedef struct IcoM2vFrame {
     const uint8_t *y, *u, *v; /* u = Cb, v = Cr */
     uint32_t pitch[3];        /* bytes per row of y, u, v */
     uint32_t w, h;            /* luma size; chroma is (w + 1) / 2 x (h + 1) / 2 */
-    /* this picture's headers (display order: the held reference's own
-       when an I or P picture comes out) */
+    /* this picture's own headers (paired by the time stamp the decoder
+       carries with each picture) */
     IcoM2vScan scan;
     /* the picture's two fields are from different instants: neither the
        sequence nor the picture says progressive */
     uint8_t interlaced;
     /* the decoder's own picture type of this output (1 I, 2 P, 3 B, 0
-       unknown): equal to scan.coding_type when the display-order pairing
-       holds */
+       unknown): equal to scan.coding_type when the pairing holds */
     uint8_t out_type;
 } IcoM2vFrame;
 
