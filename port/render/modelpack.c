@@ -81,14 +81,6 @@ static uint32_t mixHash(uint64_t h)
     return (uint32_t)h;
 }
 
-static int joinPath(char *out, size_t size, const char *a, const char *b)
-{
-    size_t la = strlen(a);
-    const char *sep = la > 0 && a[la - 1] != '/' && a[la - 1] != '\\' ? "/" : "";
-    int n = snprintf(out, size, "%s%s%s", a, sep, b);
-    return n < 0 || (size_t)n >= size ? -1 : 0;
-}
-
 static float bitsF(uint32_t u)
 {
     float f;
@@ -781,18 +773,18 @@ int modelpack_Init(const ModelpackConfig *cfg)
     char tail[64];
     snprintf(tail, sizeof(tail), "models/%s/replacements", s_mp.serial);
     for (int i = 0; i < nRoots; i++) {
-        if (joinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
+        if (rd__JoinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
             walkFolder(std[nStd], MODELPACK_WALK_DEPTH);
             nStd++;
         }
     }
     for (int i = 0; i < nRoots; i++) {
-        if (joinPath(dirs[0], sizeof(dirs[0]), uniq[i], "models/replacements") == 0) {
+        if (rd__JoinPath(dirs[0], sizeof(dirs[0]), uniq[i], "models/replacements") == 0) {
             walkFolder(dirs[0], MODELPACK_WALK_DEPTH);
         }
         /* files directly under models/ only: below it are the serial
            folders (walked above) and the dumps */
-        if (joinPath(dirs[1], sizeof(dirs[1]), uniq[i], "models") == 0) {
+        if (rd__JoinPath(dirs[1], sizeof(dirs[1]), uniq[i], "models") == 0) {
             walkFolder(dirs[1], 0);
         }
     }
@@ -1169,9 +1161,9 @@ static int ensureDumpDir(void)
     char p[1100], q[1100];
     s_mp.dumpDirReady = -1;
     if (!s_mp.inited || s_mp.userDir[0] == '\0' ||
-        joinPath(p, sizeof(p), s_mp.userDir, "models") != 0 ||
-        joinPath(q, sizeof(q), p, s_mp.serial) != 0 ||
-        joinPath(s_mp.dumpDir, sizeof(s_mp.dumpDir), q, "dumps") != 0) {
+        rd__JoinPath(p, sizeof(p), s_mp.userDir, "models") != 0 ||
+        rd__JoinPath(q, sizeof(q), p, s_mp.serial) != 0 ||
+        rd__JoinPath(s_mp.dumpDir, sizeof(s_mp.dumpDir), q, "dumps") != 0) {
         s_mp.dumpDir[0] = '\0';
         return -1;
     }
@@ -1304,7 +1296,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     }
     char base[1200], path[1210], hex[17];
     snprintf(hex, sizeof(hex), "%016llx", (unsigned long long)hash);
-    if (joinPath(base, sizeof(base), s_mp.dumpDir, hex) != 0) {
+    if (rd__JoinPath(base, sizeof(base), s_mp.dumpDir, hex) != 0) {
         return 0;
     }
     snprintf(path, sizeof(path), "%s.gltf", base);
@@ -1513,7 +1505,7 @@ int modelpack_Dump(const RdVuMeshDesc *orig, const ModelpackIdent *id,
     s_mp.stats.dumped++;
     if (!existed) {
         char list[1210];
-        if (joinPath(list, sizeof(list), s_mp.dumpDir, "models.txt") == 0) {
+        if (rd__JoinPath(list, sizeof(list), s_mp.dumpDir, "models.txt") == 0) {
             const int fresh = ico_path_kind(list, NULL, NULL) < 0;
             FILE *f = ico_fopen(list, "ab");
             if (f) {

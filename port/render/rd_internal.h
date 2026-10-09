@@ -41,6 +41,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include "rd.h"
 #include "rhi.h"
 
@@ -1208,6 +1210,17 @@ enum {
     /* v0.4.1 (R1) */
     RD_ONCE_EFFECTS_DEPTH_CRT /* RdSettings.effectsDepth under the CRT filter: none */
 };
+
+/* a + "/" + b into out (no separator added when a is empty or already ends
+ * in '/' or '\\'); -1 when it does not fit, 0 otherwise.  The texture and
+ * model packs' folder paths. */
+static inline int rd__JoinPath(char *out, size_t size, const char *a, const char *b)
+{
+    size_t la = strlen(a);
+    const char *sep = la > 0 && a[la - 1] != '/' && a[la - 1] != '\\' ? "/" : "";
+    int n = snprintf(out, size, "%s%s%s", a, sep, b);
+    return n < 0 || (size_t)n >= size ? -1 : 0;
+}
 
 void rd__Log(const char *fmt, ...);
 void rd__LogOnce(int bit, const char *fmt, ...);

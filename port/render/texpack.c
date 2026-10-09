@@ -325,15 +325,6 @@ static int addFile(const char *path, const char *name, void *user)
     return 0;
 }
 
-/* a/b; 0, or -1 when it does not fit */
-static int joinPath(char *out, size_t size, const char *a, const char *b)
-{
-    size_t la = strlen(a);
-    const char *sep = la > 0 && a[la - 1] != '/' && a[la - 1] != '\\' ? "/" : "";
-    int n = snprintf(out, size, "%s%s%s", a, sep, b);
-    return n < 0 || (size_t)n >= size ? -1 : 0;
-}
-
 /* walks one folder (depth levels down) into the index and logs what it
    added */
 static void walkFolder(const char *dir, int depth)
@@ -707,18 +698,18 @@ int texpack_Init(const TexpackConfig *cfg)
     char tail[64];
     snprintf(tail, sizeof(tail), "textures/%s/replacements", s_tp.serial);
     for (int i = 0; i < nRoots; i++) {
-        if (joinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
+        if (rd__JoinPath(std[nStd], sizeof(std[0]), uniq[i], tail) == 0) {
             walkFolder(std[nStd], TEXPACK_WALK_DEPTH);
             nStd++;
         }
     }
     for (int i = 0; i < nRoots; i++) {
-        if (joinPath(dirs[0], sizeof(dirs[0]), uniq[i], "textures/replacements") == 0) {
+        if (rd__JoinPath(dirs[0], sizeof(dirs[0]), uniq[i], "textures/replacements") == 0) {
             walkFolder(dirs[0], TEXPACK_WALK_DEPTH);
         }
         /* files directly under textures/ only: below it are the serial
            folders (walked above) and the dumps */
-        if (joinPath(dirs[1], sizeof(dirs[1]), uniq[i], "textures") == 0) {
+        if (rd__JoinPath(dirs[1], sizeof(dirs[1]), uniq[i], "textures") == 0) {
             walkFolder(dirs[1], 0);
         }
     }
@@ -1192,16 +1183,16 @@ static int ensureDumpDir(void)
     char p[1100];
     s_tp.dumpDirReady = -1;
     if (!s_tp.inited || s_tp.userDir[0] == '\0' ||
-        joinPath(p, sizeof(p), s_tp.userDir, "textures") != 0) {
+        rd__JoinPath(p, sizeof(p), s_tp.userDir, "textures") != 0) {
         return -1;
     }
     (void)ico_mkdir(p);
-    if (joinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, s_tp.serial) != 0) {
+    if (rd__JoinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, s_tp.serial) != 0) {
         return -1;
     }
     (void)ico_mkdir(s_tp.dumpDir);
     snprintf(p, sizeof(p), "%s", s_tp.dumpDir);
-    if (joinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, "dumps") != 0) {
+    if (rd__JoinPath(s_tp.dumpDir, sizeof(s_tp.dumpDir), p, "dumps") != 0) {
         return -1;
     }
     (void)ico_mkdir(s_tp.dumpDir);
@@ -1240,7 +1231,7 @@ int texpack_Dump(const TexpackSource *src, uint32_t boundLevel, const RdTexImage
             continue;
         }
         snprintf(file, sizeof(file), "%s.png", base);
-        if (joinPath(path, sizeof(path), s_tp.dumpDir, file) != 0 ||
+        if (rd__JoinPath(path, sizeof(path), s_tp.dumpDir, file) != 0 ||
             ico_path_kind(path, NULL, NULL) >= 0) {
             continue;
         }
