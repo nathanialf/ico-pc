@@ -142,8 +142,9 @@ SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VE
 SDL3_LINUX="$DEST/sdl3/linux-$ICO_HOST_ARCH"
 # "+audio": the build with the ALSA/PulseAudio headers; a tree
 # stamped by an older run of this script (X11 only, no audio backend) is
-# rebuilt. "+wayland+kmsdrm": the arm64 build's video backends.
-SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio$(by_arch "" "+wayland+kmsdrm")"
+# rebuilt. "+wayland+kmsdrm": the arm64 build's video backends;
+# "+wlnotices": the Wayland protocols' notices are copied beside it.
+SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio$(by_arch "" "+wayland+kmsdrm+wlnotices")"
 SDL3_LINUX_VIDEO=()
 if [[ "$ICO_HOST_ARCH" == "arm64" ]]; then
     SDL3_LINUX_VIDEO=(-DSDL_X11=ON -DSDL_WAYLAND=ON -DSDL_KMSDRM=ON)
@@ -254,6 +255,35 @@ else
     "$CMAKE_BIN" --build "$TMP/sdl3-build" --parallel
     "$CMAKE_BIN" --install "$TMP/sdl3-build"
     cp "$TMP/SDL3-${SDL3_VERSION}/LICENSE.txt" "$SDL3_LINUX/"
+    # The Wayland backend compiles code generated from every protocol file in
+    # SDL's wayland-protocols/ into the library, and most of those files ask
+    # for their notice in every copy: each file's <copyright> block, in one
+    # file the arm64 package's NOTICES.txt takes (tools/notices/manifest.json)
+    if [[ "$ICO_HOST_ARCH" == "arm64" ]]; then
+        wl_notices="$SDL3_LINUX/wayland-protocols/NOTICES.txt"
+        mkdir -p "${wl_notices%/*}"
+        : >"$wl_notices"
+        wl_count=0
+        while IFS= read -r xml; do
+            {
+                echo "${xml##*/}"
+                echo
+                if grep -q '<copyright>' "$xml"; then
+                    sed -n '/<copyright>/,/<\/copyright>/p' "$xml" |
+                        sed -e '/<\/\{0,1\}copyright>/d' -e 's/^    //'
+                else
+                    echo "(this file carries no copyright notice)"
+                fi
+                echo
+            } >>"$wl_notices"
+            wl_count=$((wl_count + 1))
+        done < <(find "$TMP/SDL3-${SDL3_VERSION}/wayland-protocols" -name '*.xml' | LC_ALL=C sort)
+        if [[ "$wl_count" -eq 0 ]]; then
+            echo "fetch_deps: no Wayland protocol files in SDL3 ${SDL3_VERSION}" >&2
+            exit 1
+        fi
+        echo "==> the notices of $wl_count Wayland protocol files at $wl_notices"
+    fi
     echo "$SDL3_LINUX_ID" > "$SDL3_LINUX/.ico-release"
     echo "==> SDL3 ${SDL3_VERSION} (linux-$ICO_HOST_ARCH) at $SDL3_LINUX"
 fi

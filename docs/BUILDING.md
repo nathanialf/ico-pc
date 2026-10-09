@@ -93,9 +93,10 @@ What differs from an x86-64 host:
   are for x86-64 hosts.
 - `tools/fetch_deps.sh` builds SDL3 into `deps/sdl3/linux-arm64/` with the
   Wayland and KMSDRM video backends as well as X11 (it stops when SDL's
-  configure leaves either out), and takes the arm64 builds of the pinned
-  Debian packages (the X11 and audio headers when the host has none, the
-  validation layer).
+  configure leaves either out), writes the Wayland protocol files' notices
+  beside it for the package's `NOTICES.txt`, and takes the arm64 builds of
+  the pinned Debian packages (the X11 and audio headers when the host has
+  none, the validation layer).
 - Microsoft publishes no aarch64 Linux DXC, so `tools/fetch_deps.sh` builds
   the pinned release's tag from source (the commit id and the SHA-256 of its
   `git archive` checked, as libmpeg2's and libchdr's, and the same two checks

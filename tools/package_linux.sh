@@ -114,7 +114,8 @@ chmod 755 "$stage/libSDL3.so.0"
 # THIRD_PARTY.md says where each comes from
 rm -f "$stage/NOTICES.txt"
 cp "$wt/LICENSE" "$stage/LICENSE"
-run python3 "$wt/tools/gen_notices.py" --platform linux --root "$wt" --out "$stage/NOTICES.txt"
+run python3 "$wt/tools/gen_notices.py" --platform linux --arch "$arch" --root "$wt" \
+    --out "$stage/NOTICES.txt"
 cp "$wt/docs/THIRD_PARTY.md" "$stage/THIRD_PARTY.md"
 # the textures, models and reshade folders, each with a note in it
 pkg_stage_folder_notes "$stage" lf
