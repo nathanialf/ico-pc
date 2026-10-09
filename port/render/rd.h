@@ -457,6 +457,15 @@ typedef void (*RdHostCall)(void (*fn)(void *arg), void *arg);
  * compile; logs the count and the time.  The window calls it after
  * rd_Init; the tests do not.  Returns the number created. */
 uint32_t rd_PrecreatePipelines(void);
+/* Progress of rd_PrecreatePipelines: fn(ctx, done, total) is called with
+ * (0, total) before the first pipeline and (i + 1, total) after each one,
+ * on the calling thread, with done never going down.  fn may present a
+ * frame (the window draws its start-up screen from it); that present asks
+ * the pipeline cache for its own few pipelines, which are created once and
+ * found again afterwards, so the call is safe from inside the loop.  NULL
+ * clears it.  Kept across calls until cleared. */
+typedef void (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
+void rd_SetPipelineProgress(RdPipelineProgressFn fn, void *ctx);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

@@ -447,6 +447,51 @@ static void checkScreen(const char *what, const Sum *s)
           s->screenDrawMax, SCREEN_DRAWS);
 }
 
+/* rd_SetPipelineProgress: one call before the first pipeline and one after
+   each, done never going down and ending at the total, which is the size of
+   the reachable set; cleared, no more calls */
+typedef struct PipeProgress {
+    uint32_t calls, firstDone, lastDone, lastTotal;
+    int backwards, totalChanged;
+} PipeProgress;
+
+static void pipeProgress(void *ctx, uint32_t done, uint32_t total)
+{
+    PipeProgress *p = ctx;
+
+    if (p->calls == 0) {
+        p->firstDone = done;
+        p->lastTotal = total;
+    } else {
+        p->backwards += done < p->lastDone;
+        p->totalChanged += total != p->lastTotal;
+    }
+    p->lastDone = done;
+    p->calls++;
+}
+
+static void checkPipelineProgress(void)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
+    PipeProgress p;
+
+    memset(&p, 0, sizeof(p));
+    rd_SetPipelineProgress(pipeProgress, &p);
+    rd_PrecreatePipelines();
+    CHECK(p.calls == n + 1, "pipeline progress: %u calls for %u pipelines", p.calls, n);
+    CHECK(p.firstDone == 0, "pipeline progress: the first call had %u done", p.firstDone);
+    CHECK(p.lastDone == n && p.lastTotal == n, "pipeline progress: ended at %u of %u (want %u)",
+          p.lastDone, p.lastTotal, n);
+    CHECK(p.backwards == 0 && p.totalChanged == 0,
+          "pipeline progress: went back %d times, total "
+          "changed %d times",
+          p.backwards, p.totalChanged);
+    rd_SetPipelineProgress(NULL, NULL);
+    rd_PrecreatePipelines();
+    CHECK(p.calls == n + 1, "pipeline progress: called %u times after it was cleared", p.calls);
+}
+
 static int synthetic(void)
 {
     RdSettings st;
@@ -557,6 +602,7 @@ static int synthetic(void)
         const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
         uint32_t missing = 0;
 
+        checkPipelineProgress();
         rd_PrecreatePipelines();
         for (uint32_t i = 0; i < n; i++) {
             if (!rd__GetPipeline(&keys[i]).id) {

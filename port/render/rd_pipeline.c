@@ -733,6 +733,15 @@ void rd__PipelineCacheClear(void)
     memset(s_hash, 0, sizeof(s_hash));
 }
 
+static RdPipelineProgressFn s_progressFn;
+static void *s_progressCtx;
+
+void rd_SetPipelineProgress(RdPipelineProgressFn fn, void *ctx)
+{
+    s_progressFn = fn;
+    s_progressCtx = fn != NULL ? ctx : NULL;
+}
+
 uint32_t rd_PrecreatePipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
@@ -745,9 +754,15 @@ uint32_t rd_PrecreatePipelines(void)
     const uint32_t before = s_count;
     const uint32_t n = rd__EnumerateReachable(keys, RD_PIPELINE_CACHE_MAX);
     uint32_t failed = 0;
+    if (s_progressFn != NULL) {
+        s_progressFn(s_progressCtx, 0, n);
+    }
     for (uint32_t i = 0; i < n; i++) {
         if (!rd__GetPipeline(&keys[i]).id) {
             failed++;
+        }
+        if (s_progressFn != NULL) {
+            s_progressFn(s_progressCtx, i + 1, n);
         }
     }
     const double ms = rd__NowMs() - t0;

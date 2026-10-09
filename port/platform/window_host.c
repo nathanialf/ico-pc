@@ -609,6 +609,15 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
     return true;
 }
 
+/* the start-up screen's state and callback (the callback is below, with the
+   progress view) */
+typedef struct PipeScreen {
+    uint64_t startNs, lastNs;
+    int drawn;
+} PipeScreen;
+
+static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -711,7 +720,15 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        after rd_Init, which makes the device: F2 called it before, where it
        created nothing, and every pipeline was compiled by the replay that
        first drew with it (tens of ms each on a GPU driver) */
-    rd_PrecreatePipelines();
+    {
+        static PipeScreen screen;
+
+        /* a start with a cold driver cache can take many seconds: say what
+           is going on (nothing is drawn when it is quick) */
+        rd_SetPipelineProgress(pipeline_progress, &screen);
+        rd_PrecreatePipelines();
+        rd_SetPipelineProgress(NULL, NULL);
+    }
     {
         IcoVideoOptions o;
         char res[32], fr[16];
@@ -1162,6 +1179,7 @@ typedef struct ProgressView {
     const char *title;
     const char *phase;
     int pct;
+    int allowCancel; /* the bar's "how to stop" line is shown */
 } ProgressView;
 
 /* the layout grid's 4:3 picture (port/ui/font.h): the title, the phase
@@ -1199,15 +1217,23 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
         ui_DrawRect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
                     y1 - 2.0f, fill);
 #ifdef __ANDROID__
-        ui_DrawText(UI_GRID_CX, 300.0f, 16.0f, body,
-                    "Press Back to stop (you can start again later)",
-                    UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+        if (v->allowCancel) {
+            ui_DrawText(UI_GRID_CX, 300.0f, 16.0f, body,
+                        "Press Back to stop (you can start again later)",
+                        UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+        }
 #endif
     }
     ui_EndOverlay();
 }
 
-int ico_window_progress(const char *title, const char *phase, int pct)
+/* Draws one progress screen and handles the events that came in.  Works
+   before the game's window loop is open (s_open), as long as the renderer
+   is up: the start-up screen is drawn while the graphics are prepared.
+   Before that point the events only keep the window alive: the size and
+   the pads are left to the code that opens the window.  Returns 1 when the
+   player asked to stop and allowCancel is set (or the device was lost). */
+static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
 {
     static int s_cancelLogged;
     SDL_Event e;
@@ -1216,9 +1242,6 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     RdOverlayFn prev, prevTop;
     ProgressView v;
 
-    if (!s_open) {
-        return 0;
-    }
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
         case SDL_EVENT_QUIT:
@@ -1232,7 +1255,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
             }
             break;
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            if (e.window.data1 > 0 && e.window.data2 > 0) {
+            if (s_open && e.window.data1 > 0 && e.window.data2 > 0) {
                 fprintf(stderr, "window: %dx%d pixels\n", e.window.data1, e.window.data2);
                 window_pixel_size(e.window.data1, e.window.data2);
             }
@@ -1240,13 +1263,20 @@ int ico_window_progress(const char *title, const char *phase, int pct)
         default:
             /* the pads plugged in at the start, and the rest: as the game's
                pump would pass them on */
-            ico_input_sdl_event(&e);
+            if (s_open) {
+                ico_input_sdl_event(&e);
+            }
             break;
         }
     }
-    first_pump_recheck(); /* v0.4.2 N4 */
+    if (s_open) {
+        first_pump_recheck(); /* v0.4.2 N4 */
+    }
     if (device_lost_quit()) {
         return 1;
+    }
+    if (!allowCancel) {
+        cancel = 0;
     }
     if (cancel && !s_cancelLogged) {
         s_cancelLogged = 1;
@@ -1255,6 +1285,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     v.title = title;
     v.phase = phase;
     v.pct = pct;
+    v.allowCancel = allowCancel;
     prev = rd_GetPresentOverlay(&prevUser);
     /* package AN-T: the touch controls' layer off too, as when they shared
        the overlay this replaces */
@@ -1265,6 +1296,46 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     rd_SetPresentOverlay(prev, prevUser);
     rd_SetPresentOverlayTop(prevTop, prevTopUser);
     return cancel;
+}
+
+int ico_window_progress(const char *title, const char *phase, int pct)
+{
+    if (!s_open) {
+        return 0;
+    }
+    return progress_present(title, phase, pct, 1);
+}
+
+/* The start-up screen while the graphics are prepared (rd_SetPipelineProgress).
+   With the graphics already prepared (the driver's saved cache, a start that
+   follows another) this takes a few tens of milliseconds and nothing is
+   drawn: the screen appears only when the wait is already noticeable, and
+   then at most ten times a second. */
+#define PIPE_SCREEN_AFTER_MS 250.0
+#define PIPE_SCREEN_EVERY_MS 100.0
+
+static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
+{
+    PipeScreen *p = ctx;
+    const uint64_t now = SDL_GetTicksNS();
+    char phase[64];
+
+    if (done == 0) {
+        p->startNs = now;
+        p->drawn = 0;
+        return;
+    }
+    if ((double)(now - p->startNs) / 1e6 < PIPE_SCREEN_AFTER_MS ||
+        (p->drawn && (double)(now - p->lastNs) / 1e6 < PIPE_SCREEN_EVERY_MS)) {
+        return;
+    }
+    snprintf(phase, sizeof(phase), "Preparing graphics (%u of %u)", (unsigned)done,
+             (unsigned)total);
+    p->drawn = 1;
+    progress_present("Starting ICO", phase, total > 0 ? (int)((uint64_t)done * 100u / total) : -1,
+                     0);
+    /* the present itself took time: the next draw is measured from its end */
+    p->lastNs = SDL_GetTicksNS();
 }
 
 /* P1: logs/ico-pc-perf.csv, opened on the first record when [dev] perf_log
