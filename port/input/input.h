@@ -54,12 +54,12 @@ void ico_input_vpad_to_frame(const IcoVirtualPad *v, int stick_fix, int mirror, 
    Off by default so the headless build keeps the scripted / empty pad; the
    window build turns it on. A script, when loaded, wins over live sources. */
 void ico_input_set_live(int on);
-int ico_input_live(void);
 /* The binding layer's output for this vsync. */
 void ico_input_set_vpad(const IcoVirtualPad *v);
-/* [gameplay] stick_fix (default off; on under Android, options.h
-   ico_opt_stick_fix_default) and the mirror mode hook (Phase 6): negate stick X, both sticks, of the live sources (a script is bytes and is
-   left as written). */
+/* [gameplay] stick_fix (off by default on every platform, options.h
+   ico_opt_stick_fix_default) and the mirror mode: negate stick X, both
+   sticks, of the live sources (a script is bytes and is left as
+   written). */
 void ico_input_set_stick_fix(int on);
 int ico_input_stick_fix_enabled(void);
 void ico_input_set_mirror(int on);

@@ -77,11 +77,6 @@ void ico_input_set_live(int on)
     }
 }
 
-int ico_input_live(void)
-{
-    return s_live;
-}
-
 void ico_input_set_vpad(const IcoVirtualPad *v)
 {
     s_vpad = *v;
