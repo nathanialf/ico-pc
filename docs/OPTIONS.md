@@ -131,8 +131,14 @@ A change takes effect the next time you start the game.
   [More about the mouse camera](CONTROLS.md#look-around-with-the-mouse).
 - **Mouse sensitivity** is how fast the mouse turns the camera, in play and
   in photo mode.
-- **Invert mouse up/down** swaps up and down for the mouse. The three
-  mouse rows do not show on phones and tablets.
+- **Invert mouse up/down** swaps up and down for the mouse.
+- **Mouse camera speed** is how quickly the camera reaches where you point
+  it. 1.0x is the normal speed; Instant moves it at once.
+- **Mouse camera range** Normal keeps each area's own limit on how far the
+  camera turns. Full lets you look all the way around.
+- **Camera swings back** Off keeps the camera where you left it until you
+  move the mouse again. The six mouse rows do not show on phones and
+  tablets.
 - **Circle goes back** makes Circle leave menus, like Triangle.
 - **Touch controls, Touch size and Touch opacity** set up the buttons on a
   touch screen. They only show up on a device with one.
@@ -308,6 +314,9 @@ Under `[input]`, for the mouse camera:
 | Line | What it does |
 | --- | --- |
 | `mouse_camera = true`, `mouse_sensitivity = 1.0`, `mouse_invert_y = false` | The three mouse rows of the Controls page. |
+| `mouse_camera_speed = 1.0` | The Mouse camera speed row, from 0.5 to 10. 10 is Instant. |
+| `mouse_full_range = false` | The Mouse camera range row. `true` is Full. |
+| `mouse_return = true` | The Camera swings back row. |
 | `mouse_hold = 0.75` | How many seconds the mouse must stay still before the camera swings back behind Ico. |
 
 Under `[characters]`, for the Character Customization page. A line that is missing means

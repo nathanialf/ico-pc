@@ -52,8 +52,19 @@ You can change how it feels in **Options > Controls**:
 - **Mouse sensitivity** sets how far the camera turns for the same move of
   the mouse.
 - **Invert mouse up/down** swaps up and down.
+- **Mouse camera speed** is how quickly the camera reaches the place you
+  point it at. 1.0x is how the camera always moved; a higher number is
+  quicker, a lower one is slower, and Instant moves it at once.
+- **Mouse camera range** Normal keeps each area's own limit on how far the
+  camera can turn. Full lets you look all the way around. In scenes where
+  the game steers the camera itself, Full can show what the camera was
+  kept from showing.
+- **Camera swings back** Off keeps the camera where you left it until you
+  move the mouse again, instead of swinging back behind Ico.
 
-These rows are not shown on phones and tablets.
+These rows are not shown on phones and tablets. The speed and the range
+only apply while the mouse is turning the camera; a controller or the
+keys move it the way they always did.
 
 ## Use the mouse in menus
 
