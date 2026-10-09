@@ -36,7 +36,7 @@ fi
 cc="$dir/compile_commands.json"
 [ -f "$cc" ] || { echo "check_android_flags: no $cc (configure the android-arm64 build first)"; exit 1; }
 
-python3 - "$cc" "$dir" <<'EOF'
+python3 -I - "$cc" "$dir" <<'EOF'
 import json, os, shlex, sys
 cc, build = sys.argv[1], os.path.realpath(sys.argv[2])
 # compiled with the library's own options, not the game's: libmpeg2's thread
