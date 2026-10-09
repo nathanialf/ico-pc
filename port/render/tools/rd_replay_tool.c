@@ -369,6 +369,9 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
             memcpy(&p, f->payload + c->u[1], sizeof(p));
             printf(" code %u clip %u batches %u+%u", p.code, p.clip, p.firstBatch, p.batchCount);
         }
+        if (c->b[3]) {
+            printf(" stretch"); /* drawn across a wide target (rd_mesh.c pushVu) */
+        }
         if (c->type == RDC_SKINNED) {
             skinnedPlace(f, c, st);
         }

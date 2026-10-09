@@ -58,3 +58,18 @@ int ico_title_logo_skip(const char *model)
 {
     return s_hidden && ico_title_logo_model(model);
 }
+
+int ico_title_stretch_model(const char *model)
+{
+    /* the title stage's models built to cover the 4:3 screen */
+    static const char *const kModels[] = {"title_back"};
+    if (stage_no != TITLE_STAGE) {
+        return 0;
+    }
+    for (unsigned i = 0; i < sizeof(kModels) / sizeof(kModels[0]); i++) {
+        if (strcmp(model, kModels[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}

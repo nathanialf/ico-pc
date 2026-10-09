@@ -12,6 +12,9 @@
  *             neither) keep it hidden until the stage changes, and the next
  *             visit to the title starts with it shown
  *   pause     the pause menu's Settings, on any other stage, hides nothing
+ *   stretch   title_back is the title's full-screen model on the title's
+ *             stage and on no other; no other model is, the logo's
+ *             included
  */
 #include <stdio.h>
 #include <string.h>
@@ -142,12 +145,35 @@ static void testPause(void)
           "a step on another stage clears the state");
 }
 
+static void testStretch(void)
+{
+    static const char *const other[] = {"I",         "O_sd",       "st26a_p1", "title_back2",
+                                        "title_bac", "Title_back", "title",    ""};
+    stage_no = TITLE;
+    CHECK(ico_title_stretch_model("title_back"), "title_back on the title: stretched");
+    for (unsigned i = 0; i < sizeof(other) / sizeof(other[0]); i++) {
+        CHECK(!ico_title_stretch_model(other[i]), "\"%s\" on the title: not stretched", other[i]);
+    }
+    static const int stages[] = {0, 2, 6, 26, 46};
+    for (unsigned i = 0; i < sizeof(stages) / sizeof(stages[0]); i++) {
+        stage_no = stages[i];
+        CHECK(!ico_title_stretch_model("title_back"), "title_back on stage %d: not stretched",
+              stages[i]);
+    }
+    /* the logo's hidden state does not enter into it */
+    frame(TITLE, PAGE, 1);
+    CHECK(!s_logoShown && ico_title_stretch_model("title_back"),
+          "title_back under a Settings page: still stretched");
+    frame(TITLE, 12, 0);
+}
+
 int main(void)
 {
     testModels();
     testTitle();
     testExtras();
     testPause();
+    testStretch();
     if (failures) {
         printf("title_logo_test: %d failure(s)\n", failures);
         return 1;

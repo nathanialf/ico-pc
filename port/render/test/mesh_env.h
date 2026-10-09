@@ -220,6 +220,15 @@ int ico_title_logo_skip(const char *model)
     return 0;
 }
 
+/* port/game/title_logo.c: reg_DispObj's full-width title models; the
+   model a case names (none unless one does) */
+static const char *s_stretchModel;
+
+int ico_title_stretch_model(const char *model)
+{
+    return s_stretchModel != NULL && strcmp(model, s_stretchModel) == 0;
+}
+
 int ico_arena_contains(const void *p, __SIZE_TYPE__ n)
 {
     const unsigned char *c = p;

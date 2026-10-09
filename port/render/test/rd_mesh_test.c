@@ -19,6 +19,14 @@
  *            prim_DispMesh3D (mesh code 20)
  *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
  *            batch keyed by its emitter (package I1)
+ *   stretch  the prelit model named a full-screen title model
+ *            (title_logo.c ico_title_stretch_model, stubbed): reg_DispObj
+ *            records its draw with the stretch byte (b[3] 1, 0 for any
+ *            other model) and ends the space override; on the device at
+ *            4:3 its picture is byte-identical to the unflagged draw's, at
+ *            16:9 it is drawn 4/3 wider than the unflagged (scene) draw
+ *            about the centre, and three times as wide it covers both edge
+ *            columns of the wide target
  *   strip order  the title logo's strips Packet.c draws in another order of
  *            their entries (pac_HostStrips): the table, the I's through
  *            p2o_MakePacket, and with the disc image given as the argument
@@ -650,6 +658,109 @@ static void refPrelit36(void)
 static void refClusterA(void)
 {
     refCluster(packetB());
+}
+
+/* ------------------------------------------------------------- stretch */
+
+static void checkStretchRecording(void)
+{
+    Found fd;
+    s_stretchModel = NULL;
+    recordPrelit(&s_objA, 1);
+    walkFrame(rd__LastFrame(), &fd);
+    CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 0, "stretch: an ordinary model's draw is not flagged");
+    s_stretchModel = "test_prelit";
+    recordPrelit(&s_objA, 1);
+    walkFrame(rd__LastFrame(), &fd);
+    CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 1, "stretch: the title model's draw is flagged");
+    CHECK(rd_SetSpaceOverride(-1) == -1, "stretch: reg_DispObj ends the space override");
+    s_stretchModel = NULL;
+    recordPrelit(&s_objA, 1);
+    walkFrame(rd__LastFrame(), &fd);
+    CHECK(fd.n == 1 && fd.cmd[0]->b[3] == 0, "stretch: the next draw is not flagged");
+}
+
+/* at 4:3 the flag changes nothing */
+static void stretchSamePixels(void)
+{
+    s_stretchModel = NULL;
+    recordPrelit(&s_objA, 1);
+    const int a = readScene(s_imgA);
+    s_stretchModel = "test_prelit";
+    recordPrelit(&s_objA, 1);
+    const int b = readScene(s_imgB);
+    s_stretchModel = NULL;
+    CHECK(a && b, "stretch 4:3: SCENE readback");
+    int cover = 0;
+    for (int i = 0; i < 512 * 512; i++) {
+        cover += s_imgA[i * 4] != 40 || s_imgA[i * 4 + 1] != 40 || s_imgA[i * 4 + 2] != 60;
+    }
+    CHECK(a && b && cover >= 2000 && memcmp(s_imgA, s_imgB, sizeof(s_imgA)) == 0,
+          "stretch 4:3: the flagged draw's picture is the unflagged one's (%d pixels drawn)",
+          cover);
+}
+
+#define WT 683 /* SCENE's texels across at 16:9, 1x */
+
+static uint8_t s_wideImg[WT * 512 * 4];
+
+/* the first and last columns of SCENE at 16:9 with a pixel drawn */
+static int wideColumns(int *x0, int *x1)
+{
+    uint32_t w = 0, h = 0;
+    if (!rd__ReadTarget(rd_Target(RD_TARGET_SCENE), s_wideImg, sizeof(s_wideImg), &w, &h) ||
+        w != WT || h != 512) {
+        return 0;
+    }
+    *x0 = WT;
+    *x1 = -1;
+    for (int y = 0; y < 512; y++) {
+        for (int x = 0; x < WT; x++) {
+            const uint8_t *p = &s_wideImg[(y * WT + x) * 4];
+            if (p[0] != 40 || p[1] != 40 || p[2] != 60) {
+                *x0 = x < *x0 ? x : *x0;
+                *x1 = x > *x1 ? x : *x1;
+            }
+        }
+    }
+    return *x1 >= *x0;
+}
+
+/* at 16:9 the scene is drawn compressed about the centre by 3/4, the
+   flagged model is not */
+static void stretchWidePixels(void)
+{
+    CHECK(fabsf(g_rd.wideX - 0.75f) < 1e-6f, "stretch 16:9: the wide factor (%g)",
+          (double)g_rd.wideX);
+    int a0 = 0, a1 = 0, b0 = 0, b1 = 0;
+    s_stretchModel = NULL;
+    recordPrelit(&s_objA, 1);
+    const int a = wideColumns(&a0, &a1);
+    s_stretchModel = "test_prelit";
+    recordPrelit(&s_objA, 1);
+    const int b = wideColumns(&b0, &b1);
+    CHECK(a && b, "stretch 16:9: SCENE readback with pixels drawn");
+    if (a && b) {
+        const double c = WT / 2.0;
+        const double la = c - a0, ra = a1 + 1 - c, lb = c - b0, rb = b1 + 1 - c;
+        printf("  stretch 16:9: scene draw columns %d..%d, stretched %d..%d\n", a0, a1, b0, b1);
+        CHECK(la > 50.0 && ra > 50.0 && fabs(lb - la * 4.0 / 3.0) <= 2.5 &&
+                  fabs(rb - ra * 4.0 / 3.0) <= 2.5,
+              "stretch 16:9: the flagged draw spans 4/3 of the scene draw about the centre "
+              "(left %.1f vs %.1f, right %.1f vs %.1f)",
+              lb, la, rb, ra);
+    }
+    /* three times as wide (past the 4:3 screen's edges): across the whole
+       wide target */
+    const float keep = s_modelA.nodeMtx[0][0];
+    s_modelA.nodeMtx[0][0] = 3.0f;
+    recordPrelit(&s_objA, 1);
+    const int w = wideColumns(&b0, &b1);
+    s_modelA.nodeMtx[0][0] = keep;
+    s_stretchModel = NULL;
+    CHECK(w && b0 == 0 && b1 == WT - 1,
+          "stretch 16:9: the wide plane covers both edge columns (columns %d..%d of %d)", b0, b1,
+          WT);
 }
 
 /* -------------------------------------------------------- strip order */
@@ -1449,6 +1560,7 @@ static void recordingChecks(void)
     checkGridRecording();
     recordParticles();
     checkParticleRecording();
+    checkStretchRecording();
     stripTableChecks();
     stripPacketChecks();
     modelPackChecks();
@@ -1488,6 +1600,7 @@ int main(int argc, char **argv)
     gpuCase("cluster 20", recordCluster, refClusterA, RD_PRIM_TRIANGLES, 2000);
     gpuCase("grid 20", recordGrid, refGrid, RD_PRIM_TRIANGLES, 2000);
     gpuCase("particle 18", recordParticles, refParticles, RD_PRIM_SPRITES, 200);
+    stretchSamePixels();
 
     /* every pipeline created is in the enumerated reachable set */
     static RdPipeKeyInt keys[512];
@@ -1510,6 +1623,23 @@ int main(int argc, char **argv)
           rhi_vk_ValidationErrorCount());
     CHECK(rd__NotImplementedCount() == 0, "no stubbed command replayed");
     rd_Shutdown();
+
+    /* a full-screen title model at 16:9 */
+    st.preset = RD_PRESET_ENHANCED;
+    st.aspect = 16.0f / 9.0f;
+    st.sceneScale = 1.0f;
+    if (!rd_Init(512, 512, &st, NULL)) {
+        CHECK(0, "rd_Init at 16:9");
+    } else {
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        setup();
+        buildScene();
+        stretchWidePixels();
+        CHECK(rhi_vk_ValidationErrorCount() == 0, "16:9: %u validation errors",
+              rhi_vk_ValidationErrorCount());
+        rd_Shutdown();
+    }
     if (failures) {
         printf("rd_mesh_test: %d failures\n", failures);
         return 1;

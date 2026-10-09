@@ -1219,6 +1219,12 @@ static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBl
     c->b[0] = p->prog;
     c->b[1] = p->code;
     c->b[2] = p->clip;
+    /* b[3]: the game draws this model as a full-screen item (RegistPacket.c
+     * reg_DispObj under rd_SetSpaceOverride(RD_SPACE_FULLSCREEN): the
+     * title's darkening plane), so the replay draws it across the whole
+     * width of a wide target instead of the centred 4:3 part (rd_replay.c
+     * doVu); 0 in every other draw and in older dumps */
+    c->b[3] = (uint8_t)(g_rd.spaceOverride - 1 == RD_SPACE_FULLSCREEN);
     c->u[1] = off;
     c->u[2] = total;
     c->keyLo = (uint32_t)key;

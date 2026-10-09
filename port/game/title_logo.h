@@ -14,6 +14,12 @@
  * is back or the stage changes, so Extras > Credits and a model's stage
  * load do not show it again while the title fades out.  The pause menu's
  * Settings (any other stage) never hides anything.
+ *
+ * The title's full-screen models: title_back, the plane that darkens the
+ * picture behind the logo as it brightens, is built for the 4:3 screen.
+ * Drawn like the rest of the scene on a wide picture it would cover only a
+ * centred part of it, so RegistPacket.c draws it stretched across the whole
+ * width, as the renderer stretches a full-screen sprite.
  */
 #ifndef PORT_GAME_TITLE_LOGO_H
 #define PORT_GAME_TITLE_LOGO_H
@@ -30,6 +36,12 @@ void ico_title_logo_update(void);
    when the object's model (its name) is the logo's and the logo is hidden
    (as the tick's ico_title_logo_update left it). */
 int ico_title_logo_skip(const char *model);
+
+/* seki/src/RegistPacket.c reg_DispObj, for every object it draws: nonzero
+   when the object's model (its name) is one of the title stage's
+   full-screen models, which are drawn across the whole width of a wide
+   picture instead of the centred 4:3 part (rd.h RD_SPACE_FULLSCREEN). */
+int ico_title_stretch_model(const char *model);
 
 /* The parts, for the test: whether `model` names one of the logo's nine
    models, and one step of the hidden state (*hidden) for the stage, the

@@ -345,6 +345,14 @@ int ico_title_logo_skip(const char *model)
     return 0;
 }
 
+/* port/game/title_logo.c: reg_DispObj's full-width title models; none
+   here */
+int ico_title_stretch_model(const char *model)
+{
+    (void)model;
+    return 0;
+}
+
 /* port/game/video_options.c: how much wider than 4:3 the picture is
    (waterDot.c's window); 1 unless a case sets it */
 static float s_wideX = 1.0f;

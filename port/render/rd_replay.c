@@ -3010,6 +3010,10 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDraw(r, &ds, NULL)) {
         return;
     }
+    /* a model the game draws as a full-screen item (rd_mesh.c pushVu's
+     * b[3]) is stretched across a wide target like a full-screen sprite
+     * (screenStretch): no wide x scale, the whole width's scissor */
+    r->stretch = c->b[3] && g_rd.wideX != 1.0f && ds.tc->wide;
     const uint64_t ua = rhi_Limits()->uniformAlign;
     /* bones: VuBoneCB (VU memory 16..255); a zero block for the others */
     uint64_t bonesOff;

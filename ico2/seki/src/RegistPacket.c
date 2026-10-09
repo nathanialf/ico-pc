@@ -2199,12 +2199,28 @@ void reg_DispMultiPri(Sub15C *o, int pri)
 /* PC port (package L1): the title's logo is not drawn while a Settings or
    Extras page opened from the title covers it (port/game/title_logo.c) */
 extern int ico_title_logo_skip(const char *model);
+/* PC port: the title's darkening plane is built for the 4:3 screen; on a
+   wide picture it is drawn across the whole width, as the renderer draws a
+   full-screen sprite (port/game/title_logo.c, rd.h RD_SPACE_FULLSCREEN:
+   the mesh draws record it, rd_mesh.c) */
+extern int ico_title_stretch_model(const char *model);
 
 void reg_DispObj(Sub15C *o)
 {
+#ifdef ICO_RD
+    int stretch;
+    int space = -1;
+#endif
+
     if (ico_title_logo_skip(o->model->name)) {
         return;
     }
+#ifdef ICO_RD
+    stretch = ico_title_stretch_model(o->model->name);
+    if (stretch) {
+        space = rd_SetSpaceOverride(RD_SPACE_FULLSCREEN);
+    }
+#endif
     if (o->dispType == 2) {
         unsigned short type = o->model->mode.bits >> 16;
 
@@ -2228,6 +2244,11 @@ void reg_DispObj(Sub15C *o)
             break;
         }
     }
+#ifdef ICO_RD
+    if (stretch) {
+        rd_SetSpaceOverride(space);
+    }
+#endif
 }
 
 void reg_DispObj2(Sub15C *o, int idx)
