@@ -3461,6 +3461,356 @@ static void testInstances(void)
     rd_destroy_vu_mesh(mesh);
 }
 
+/* ------------------------------------------- wading in shallow water */
+
+/* The wading splash of an issue report's F12 dump (shallow water, v0.4.5:
+ * frame-20261009-210725-v10576), list 5, prog 0 code 34: the common block
+ * (qw 4..15) and each draw's model matrices (qw 16..27).  Each step enters
+ * a stage animation (frameDependSequence.c, EntryStageMultiBgaManager) of
+ * four hamon parts and two splash_mini parts, each still in the world, and
+ * two splash_shibuki parts (the spray), whose height changes with its age.
+ * kWadeRipple: the seven draws of hamon part 1 (key 02c68798d4a00100,
+ * 5:83 the oldest .. 5:516 the newest), then hamon part 2 of the newest
+ * step (5:527), the newcomer standing at the other foot.  kWadeSpray: the
+ * two draws of splash_shibuki part 0 (5:481 older, 5:564 newer). */
+static const float kWadeCommon[48] = {
+    -1121.67017f,  -1244.37891f,  2848.18701f,  -0.695522785f, 869.721313f,
+    1369.32825f,   -1739.03101f,  0.42466861f,  1550.11084f,   1036.69629f,
+    -2372.83423f,  0.579442382f,  2129370.5f,   2169264.5f,    1.06853274e+09f,
+    1274.01587f,   1499.99988f,   0.0f,         0.0f,          0.0f,
+    0.0f,          1749.99963f,   0.0f,         0.0f,          0.0f,
+    0.0f,          -268435424.0f, 0.0f,         2048.0f,       2048.0f,
+    268435440.0f,  1.0f,          0.640049934f, 0.0f,          0.768271923f,
+    0.0f,          0.326260954f,  0.905308127f, -0.271809101f, 0.0f,
+    -0.695522785f, 0.42466861f,   0.579442382f, 0.0f,          1795.4209f,
+    180.634338f,   -175.596252f,  1.0f};
+static const float kWadeRipple[8][48] = {
+    {347.324036f,   719.612122f,  -1647.07849f,   0.40221402f,   1199.08533f,   1887.8938f,
+     -2397.60327f,  0.585490882f, -2097.0f,       -1646.61633f,  3768.84497f,   -0.920346022f,
+     705930.5f,     685821.375f,  1.0724569e+09f, 315.736511f,   -0.317606807f, -0.0594983548f,
+     0.40222013f,   0.40221402f,  0.0f,           0.393604845f,  0.585499823f,  0.585490882f,
+     -0.14142096f,  0.136144131f, -0.920360029f,  -0.920346022f, 39.5348511f,   22.3959351f,
+     311.741211f,   315.736511f,  -1.00715363f,   -0.188673511f, 0.40221402f,   0.0f,
+     0.0f,          1.24814892f,  0.585490882f,   0.0f,          -0.4484559f,   0.431722701f,
+     -0.920346022f, 0.0f,         125.367798f,    71.019104f,    315.736511f,   1.0f}, /* 5:83 */
+    {-1782.68713f,  -1301.0415f,   2977.87866f,   -0.727193296f, 1103.1875f,
+     1736.90784f,   -2205.85278f,  0.538665771f,  -770.812256f,  -1005.64978f,
+     2301.77368f,   -0.562089503f, 834080.25f,    784713.375f,   1.07223053e+09f,
+     371.010376f,   -0.195596889f, 0.107571602f,  -0.727204382f, -0.727193296f,
+     0.0f,          0.362125963f,  0.538673997f,  0.538665771f,  0.253564626f,
+     0.0831482708f, -0.562098026f, -0.562089503f, 49.5006714f,   14.2194214f,
+     367.016052f,   371.010376f,   -0.620251596f, 0.341117173f,  -0.727193296f,
+     0.0f,          0.0f,          1.14832711f,   0.538665771f,  0.0f,
+     0.804071486f,  0.263669074f,  -0.562089503f, 0.0f,          156.969971f,
+     45.0908203f,   371.010376f,   1.0f}, /* 5:153 */
+    {-1609.94812f,  -1333.26379f,   3051.63037f,   -0.745203316f, 916.755798f,
+     1443.38147f,   -1833.07776f,   0.447634667f,  61.5209961f,   -289.200989f,
+     661.935425f,   -0.161643624f,  949634.0f,     899977.625f,   1.07196672e+09f,
+     435.435303f,   -0.0558477864f, 0.11023578f,   -0.745214701f, -0.745203316f,
+     0.0f,          0.30092898f,    0.447641492f,  0.447634667f,  0.261711359f,
+     0.0239114687f, -0.161646098f,  -0.161643624f, 38.5751343f,   4.6892395f,
+     431.441833f,   435.435303f,    -0.177097321f, 0.349565476f,  -0.745203316f,
+     0.0f,          0.0f,           0.954267144f,  0.447634667f,  0.0f,
+     0.829905331f,  0.075824976f,   -0.161643624f, 0.0f,          122.324585f,
+     14.8699951f,   435.435303f,    1.0f}, /* 5:223 */
+    {-1509.2395f,   -1263.84436f,   2892.74048f,   -0.706402659f, 860.446533f,
+     1354.72559f,   -1720.48584f,   0.420139909f,  124.900818f,   -215.625793f,
+     493.533569f,   -0.120520145f,  975835.625f,   929564.75f,    1.07189901e+09f,
+     451.972473f,   -0.0416845679f, 0.104496107f,  -0.706413448f, -0.706402659f,
+     0.0f,          0.282445222f,   0.420146316f,  0.420139909f,  0.247817338f,
+     0.0178281926f, -0.120521963f,  -0.120520145f, 33.4640503f,   2.24293518f,
+     447.979248f,   451.972473f,    -0.132184744f, 0.331364572f,  -0.706402659f,
+     0.0f,          0.0f,           0.895653844f,  0.420139909f,  0.0f,
+     0.785846353f,  0.0565344691f,  -0.120520145f, 0.0f,          106.116821f,
+     7.11254883f,   451.972473f,    1.0f}, /* 5:293 */
+    {-903.861755f,   -852.6521f,     1951.58618f,   -0.476574272f, 593.585571f,
+     934.567749f,    -1186.89014f,   0.289836705f,  531.089417f,   246.73703f,
+     -564.742065f,   0.137909099f,   1026227.0f,    1002995.5f,    1.07173094e+09f,
+     493.015198f,    0.0481081903f,  0.0704982504f, -0.476581514f, -0.476574272f,
+     0.0f,           0.194846973f,   0.289841115f,  0.289836705f,  0.165767685f,
+     -0.0204005018f, 0.137911215f,   0.137909099f,  11.0213013f,   -3.82836914f,
+     489.022583f,    493.015198f,    0.152554482f,  0.223554969f,  -0.476574272f,
+     0.0f,           0.0f,           0.617873609f,  0.289836705f,  0.0f,
+     0.525661051f,   -0.0646914169f, 0.137909099f,  0.0f,          34.9493408f,
+     -12.1400757f,   493.015198f,    1.0f}, /* 5:363 */
+    {78.5832901f,
+     35.6086693f,
+     -81.5026398f,
+     0.019902816f,
+     85.4004517f,
+     134.458298f,
+     -170.760483f,
+     0.0416994393f,
+     143.676834f,
+     134.984589f,
+     -308.958435f,
+     0.0754471645f,
+     908974.0f,
+     924762.0f,
+     1.07191002e+09f,
+     449.288025f,
+     0.0252148826f,
+     -0.00294416607f,
+     0.0199031197f,
+     0.019902816f,
+     0.0f,
+     0.0280330591f,
+     0.0417000726f,
+     0.0416994393f,
+     -0.00722596329f,
+     -0.0111606801f,
+     0.0754483119f,
+     0.0754471645f,
+     -7.44515991f,
+     2.64006042f,
+     445.294739f,
+     449.288025f,
+     0.0799581856f,
+     -0.00933615956f,
+     0.019902816f,
+     0.0f,
+     0.0f,
+     0.0888948217f,
+     0.0416994393f,
+     0.0f,
+     -0.0229140408f,
+     -0.0353913084f,
+     0.0754471645f,
+     0.0f,
+     -23.6090698f,
+     8.37176514f,
+     449.288025f,
+     1.0f}, /* 5:433 */
+    {0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        864130.875f, 890281.125f,  1.07198893e+09f,
+     430.015564f, 0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        -11.0271912f, 5.4909668f,
+     426.022095f, 430.015564f, 0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         -34.9679565f,
+     17.4122314f, 430.015564f, 1.0f}, /* 5:516 */
+    {0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        767149.375f, 807323.125f,  1.07217882e+09f,
+     383.647766f, 0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        -12.3739624f, 12.3500366f,
+     379.653503f, 383.647766f, 0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         -39.2387695f,
+     39.1628418f, 383.647766f, 1.0f}, /* 5:527 */
+};
+static const float kWadeSpray[2][48] = {
+    {318.628021f,   0.0f,         0.0f,          0.0f,           0.0f,
+     371.7789f,     0.0f,         0.0f,          1384.34912f,    1384.34912f,
+     -2768.04297f,  0.675951719f, 901064.0f,     913585.875f,    1.07192422e+09f,
+     445.817566f,   0.212418661f, 0.0f,          0.0f,           0.0f,
+     0.0f,          0.21244511f,  0.0f,          0.0f,           0.0f,
+     0.0f,          0.675962031f, 0.675951719f,  -7.98022127f,   0.315177649f,
+     441.82431f,    445.817566f,  -0.456220448f, -0.0615602806f, 0.131234139f,
+     0.0f,          0.0f,         0.235959664f,  0.110685699f,   0.0f,
+     -0.145000711f, 0.193795905f, -0.413133919f, 0.0f,           -39.9914551f,
+     30.4671021f,   405.1521f,    1.0f}, /* 5:481 */
+    {236.521667f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     275.984772f,
+     0.0f,
+     0.0f,
+     1039.68848f,
+     1039.68848f,
+     -2078.88477f,
+     0.507660389f,
+     853293.438f,
+     874987.625f,
+     1.07200902e+09f,
+     425.103516f,
+     0.157681093f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.157705605f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.507668078f,
+     0.507660389f,
+     -11.5456839f,
+     2.50036454f,
+     421.109955f,
+     425.103516f,
+     -0.128535137f,
+     -0.00351484679f,
+     0.00749294832f,
+     0.0f,
+     0.0f,
+     0.153612673f,
+     0.0720577687f,
+     0.0f,
+     -0.0082766749f,
+     0.0545847788f,
+     -0.116363779f,
+     0.0f,
+     -38.9780273f,
+     40.565979f,
+     383.623474f,
+     1.0f}, /* 5:564 */
+};
+
+static const char kObjW, kObjWs;
+
+/* one wading draw; dy moves it dy world units along y (qw 19 + dy S's y
+ * column: the only place the pairing reads) */
+static void wadeDraw(RdMesh mesh, const float *inst, float dy, RdKey key)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    memcpy(d.vu.mem[4], kWadeCommon, sizeof(kWadeCommon));
+    memcpy(d.vu.mem[16], inst, 48 * sizeof(float));
+    for (int k = 0; k < 4; k++) {
+        d.vu.mem[19][k] += dy * kWadeCommon[4 + k];
+    }
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+/* ripples first .. first + n - 1, then the newcomer when asked */
+static void wadeRipples(RdMesh mesh, int first, int n, int newcomer)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = first; i < first + n; i++) {
+        wadeDraw(mesh, kWadeRipple[i], 0.0f, RD_KEY(&kObjW, 1, 34));
+    }
+    if (newcomer) {
+        wadeDraw(mesh, kWadeRipple[7], 0.0f, RD_KEY(&kObjW, 1, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* the spray draws picked by which (0 older, 1 newer, 2 a newcomer: the
+ * newest step's other foot), each lifted by dy */
+static void wadeSpray(RdMesh mesh, const int *which, int n, float dy)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < n; i++) {
+        wadeDraw(mesh, which[i] < 2 ? kWadeSpray[which[i]] : kWadeRipple[7],
+                 which[i] < 2 ? dy : 0.0f, RD_KEY(&kObjWs, 0, 34));
+    }
+    rd_end_frame(0);
+}
+
+static double dist3d(const double *a, const double *b)
+{
+    const double x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2];
+    return sqrt(x * x + y * y + z * z);
+}
+
+/* the origin of the n-th draw of key k in list 5 of f */
+static bool wadeOrigin(const RdFrame *f, RdKey k, int nth, double out[3])
+{
+    const float (*m)[4] = vuBlock(f, findKey(f, 5, k, nth));
+    return m && worldOriginOf(m, out);
+}
+
+static void testWading(void)
+{
+    RdMesh mesh = makeMesh();
+    const RdKey kr = RD_KEY(&kObjW, 1, 34), ks = RD_KEY(&kObjWs, 0, 34);
+
+    /* the ripples: the oldest gone and a new one in the tick; by ordinal
+     * each would blend from the place of the one before it */
+    wadeRipples(mesh, 0, 7, 0);
+    const RdFrame *prevF = rd__last_frame();
+    double gap = 1.0e9;
+    for (int i = 0; i + 1 < 7; i++) {
+        double a[3], b[3];
+        if (wadeOrigin(prevF, kr, i, a) && wadeOrigin(prevF, kr, i + 1, b)) {
+            gap = fmin(gap, dist3d(a, b));
+        }
+    }
+    CHECK(gap > 10.0 && gap < 300.0,
+          "the dump's ripples stand %.1f or more units apart, under the jump limit", gap);
+    wadeRipples(mesh, 1, 6, 1);
+    const RdInterpStats *st = build(0.5f, 1);
+    const RdFrame *f = built(0.5f);
+    const RdFrame *cur = rd__last_frame();
+    CHECK(st->lerped == 6 && st->missing == 1,
+          "wading ripples: the 6 that stay blend, the new one is the tick's (%u, %u)", st->lerped,
+          st->missing);
+    for (int i = 0; i < 7; i++) {
+        double o[3], oc[3];
+        if (!wadeOrigin(f, kr, i, o) || !wadeOrigin(cur, kr, i, oc)) {
+            CHECK(0, "wading ripple %d", i);
+            continue;
+        }
+        CHECK(dist3d(o, oc) < 0.5, "wading ripple %d stays at its place (%.2f %.2f %.2f, %.3f off)",
+              i, o[0], o[1], o[2], dist3d(o, oc));
+    }
+    const float (*mn)[4] = vuBlock(f, findKey(f, 5, kr, 6));
+    const float (*mc)[4] = vuBlock(cur, findKey(cur, 5, kr, 6));
+    CHECK(mn && mc && memcmp(mn[16], mc[16], 12 * 16) == 0,
+          "the new ripple is the tick's draw, not blended");
+
+    /* the spray rises (a 1 unit step: its height changes with its age, the
+     * rate is not in one dump): no draw stays at its place, so the pairing
+     * keeps their order and leaves out the draws that keep the pairs
+     * nearest */
+    double older[3], newer[3], newer2[3];
+    {
+        const int both[2] = {0, 1}, one[1] = {1};
+        wadeSpray(mesh, both, 2, 0.0f);
+        const bool okP = wadeOrigin(rd__last_frame(), ks, 0, older) &&
+                         wadeOrigin(rd__last_frame(), ks, 1, newer);
+        wadeSpray(mesh, one, 1, -1.0f);
+        const bool okC = wadeOrigin(rd__last_frame(), ks, 0, newer2);
+        st = build(0.5f, 1);
+        f = built(0.5f);
+        double o[3];
+        const bool okB = wadeOrigin(f, ks, 0, o);
+        const double mid[3] = {(newer[0] + newer2[0]) * 0.5, (newer[1] + newer2[1]) * 0.5,
+                               (newer[2] + newer2[2]) * 0.5};
+        CHECK(okP && okC && okB && st->lerped == 1 && dist3d(o, mid) < 0.05 &&
+                  dist3d(older, newer) > 10.0,
+              "the older spray gone: the newer blends with itself (%.3f from its half way; the "
+              "older stood %.1f away; lerped %u)",
+              okB ? dist3d(o, mid) : -1.0, dist3d(older, newer), st->lerped);
+    }
+    /* a new spray drawn first (the ring of 30 wrapped) and the two rising */
+    {
+        const int both[2] = {0, 1}, three[3] = {2, 0, 1};
+        wadeSpray(mesh, both, 2, 0.0f);
+        wadeSpray(mesh, three, 3, -1.0f);
+        st = build(0.5f, 1);
+        f = built(0.5f);
+        cur = rd__last_frame();
+        int ok = 0;
+        for (int i = 1; i < 3; i++) {
+            double o[3], oc[3];
+            ok += wadeOrigin(f, ks, i, o) && wadeOrigin(cur, ks, i, oc) && dist3d(o, oc) < 0.51 &&
+                  dist3d(o, oc) > 0.49;
+        }
+        const float (*a)[4] = vuBlock(f, findKey(f, 5, ks, 0));
+        const float (*b)[4] = vuBlock(cur, findKey(cur, 5, ks, 0));
+        CHECK(st->lerped == 2 && st->missing == 1 && ok == 2 && a && b &&
+                  memcmp(a[16], b[16], 12 * 16) == 0,
+              "a new spray drawn first is the tick's, the two rising blend with themselves "
+              "(lerped %u, unmatched %u, %d of 2 half a unit from the tick's)",
+              st->lerped, st->missing, ok);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
 /* -------------------------------------------- screen-space grid STs */
 
 /* two unlit grids, one sampling WORK1 (the pool's surface sampling the
@@ -3563,6 +3913,7 @@ static void runCpu(void)
     testSineScroll();
     testLightSlots();
     testInstances();
+    testWading();
     testGridScreenSt();
 }
 

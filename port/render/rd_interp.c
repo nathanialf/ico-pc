@@ -19,7 +19,8 @@
  * draw of a key prev drew more than once pairs with prev's draw at the same
  * place in the world; when some of the key's draws stand still, a draw with
  * no draw of prev at its place is a new one and is cur's, and when none
- * does, the ordinal decides (placeSlot).  What blends, per command:
+ * does, the ordinal decides, or their order and nearness when the number
+ * of draws changed (placeSlot).  What blends, per command:
  *
  *   RDC_MESH, RDC_SKINNED   the VU block (VuCB.mem): qw 2 (the UV scroll
  *                           SET_UVOFFSET left, with Texture.c's wrap of
@@ -1354,6 +1355,8 @@ typedef struct CurNode {
     uint32_t index; /* in s_out's list */
     int32_t next;
     int32_t pick; /* the prev Node it is paired with, -1 none */
+    int32_t org;  /* placeSlot: 1 the draw's origin is in at, -1 it has none */
+    float at[3];
 } CurNode;
 
 static CurNode *s_curNodes;
@@ -1483,19 +1486,24 @@ static bool buildIndex(const RdFrame *prev)
 
 /* Same-key instances.  The game keys a packet by its object and part
  * (RegistPacket.c), not by the instance, so objects drawn many times share
- * one key: the swim ripples (hamon, wfrip1: a ring of up to 30 spawned by
- * the swimming, each fixed in the world where it was spawned), the fog
+ * one key: the ripples of swimming and wading (hamon, wfrip1, splash_mini:
+ * a ring of up to 30 stage animations entered by the boy's steps and
+ * strokes, each fixed in the world where it was entered), the fog
  * billboards (fog1).  Paired by ordinal, when the oldest instance goes
  * every later one would blend from the place and size of the one before
  * it, a jump back and forth once per spawn.  So the VU meshes and grids
  * of a key prev drew two or more times are paired by their model
  * origin in the world (vuWorldOrigin; the camera's motion cancels) first:
  * each draw of cur with the first unpaired draw of prev at the same origin
- * (sameOrigin).  When none is at the same origin (the instances move), the
- * pairing is the ordinal one.  When some are, the slot's instances stand
+ * (sameOrigin).  When some are, the slot's instances stand
  * still and a draw of cur without its origin in prev is a new instance:
  * it is the tick's (unmatched), not blended from another instance's place;
- * a draw of prev left over is one that went. */
+ * a draw of prev left over is one that went.  When none is (the instances
+ * move: the wading splash's spray, splash_shibuki, rises and falls with its
+ * age) and their number holds, the pairing is the ordinal one; when one
+ * went or came the ordinal would cross instances, so they are paired in
+ * order, the draws of the longer side left out being those that keep the
+ * pairs nearest (alignSlot). */
 static bool canPlace(const RdCmd *c)
 {
     /* not particles: MicroCode.c keys their batches by emitter */
@@ -1557,6 +1565,7 @@ static bool indexCur(void)
             s_curNodes[k].index = i;
             s_curNodes[k].next = -1;
             s_curNodes[k].pick = -1;
+            s_curNodes[k].org = 0;
             if (s->curTail >= 0) {
                 s_curNodes[s->curTail].next = k;
             } else {
@@ -1566,6 +1575,71 @@ static bool indexCur(void)
         }
     }
     return true;
+}
+
+/* the most occurrences of a key alignSlot pairs; beyond, the ordinal */
+#define ALIGN_MAX 64
+
+/* Pairs the moving occurrences of slot s, prev's s->count and cur's m of
+ * them, every one with its origin, when the counts differ: in their order
+ * (the game draws a ring of instances in slot order, so the ones that stay
+ * keep theirs), leaving out of the longer side the draws that make the
+ * pairs' summed distance the least.  The pairs' count, 0 when it cannot. */
+static uint32_t alignSlot(Slot *s, uint32_t m)
+{
+    static int32_t pn[ALIGN_MAX], cn[ALIGN_MAX];
+    static double cost[(ALIGN_MAX + 1) * (ALIGN_MAX + 1)];
+    static uint8_t take[(ALIGN_MAX + 1) * (ALIGN_MAX + 1)];
+    const uint32_t n = s->count;
+    if (n > ALIGN_MAX || m > ALIGN_MAX || n == m) {
+        return 0;
+    }
+    uint32_t i = 0;
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        if (s_nodes[k].org <= 0) {
+            return 0;
+        }
+        pn[i++] = k;
+    }
+    i = 0;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        if (s_curNodes[j].org <= 0) {
+            return 0;
+        }
+        cn[i++] = j;
+    }
+    /* short side a (each of its draws paired) in the long side b */
+    const bool curShort = m < n;
+    const uint32_t na = curShort ? m : n, nb = curShort ? n : m, w = nb + 1;
+    for (uint32_t b = 0; b <= nb; b++) {
+        cost[b] = 0.0;
+    }
+    for (uint32_t a = 1; a <= na; a++) {
+        for (uint32_t b = a; b <= nb; b++) {
+            const float *pa = curShort ? s_curNodes[cn[a - 1]].at : s_nodes[pn[a - 1]].at;
+            const float *pb = curShort ? s_nodes[pn[b - 1]].at : s_curNodes[cn[b - 1]].at;
+            const double pair = cost[(a - 1) * w + b - 1] + (double)dist3(pa, pb);
+            /* b > a: b's draw may be left out */
+            if (b > a && cost[a * w + b - 1] < pair) {
+                cost[a * w + b] = cost[a * w + b - 1];
+                take[a * w + b] = 0;
+            } else {
+                cost[a * w + b] = pair;
+                take[a * w + b] = 1;
+            }
+        }
+    }
+    for (uint32_t a = na, b = nb; a > 0; b--) {
+        if (take[a * w + b]) {
+            if (curShort) {
+                s_curNodes[cn[a - 1]].pick = pn[b - 1];
+            } else {
+                s_curNodes[cn[b - 1]].pick = pn[a - 1];
+            }
+            a--;
+        }
+    }
+    return na;
 }
 
 /* pairs the occurrences of slot s (see above) into CurNode.pick */
@@ -1579,15 +1653,17 @@ static void placeSlot(const RdFrame *prev, Slot *s)
     }
     /* the draws at the same origin; out marks the prev draws taken (reset
      * below: matchOf sets it) */
-    uint32_t same = 0;
+    uint32_t same = 0, m = 0;
     for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
-        float at[3];
-        if (!drawOrigin(&s_out, &cl->cmds[s_curNodes[j].index], at)) {
+        CurNode *cn = &s_curNodes[j];
+        m++;
+        cn->org = drawOrigin(&s_out, &cl->cmds[cn->index], cn->at) ? 1 : -1;
+        if (cn->org < 0) {
             continue;
         }
         for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
-            if (s_nodes[k].out < 0 && s_nodes[k].org > 0 && sameOrigin(s_nodes[k].at, at)) {
-                s_curNodes[j].pick = k;
+            if (s_nodes[k].out < 0 && s_nodes[k].org > 0 && sameOrigin(s_nodes[k].at, cn->at)) {
+                cn->pick = k;
                 s_nodes[k].out = 0;
                 same++;
                 break;
@@ -1597,9 +1673,12 @@ static void placeSlot(const RdFrame *prev, Slot *s)
     for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
         s_nodes[k].out = -1;
     }
+    if (same == 0) {
+        same = alignSlot(s, m);
+    }
     /* o: the ordinal's pick */
     for (int32_t j = s->curHead, o = s->head; j >= 0; j = s_curNodes[j].next) {
-        if (same == 0) { /* none still: the ordinal pairing */
+        if (same == 0) { /* none still or aligned: the ordinal pairing */
             s_curNodes[j].pick = o;
         } else {
             s_placed += s_curNodes[j].pick != o;
