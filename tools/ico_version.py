@@ -4,9 +4,9 @@ One branch per target:
 
     branch   slug   link order                    base files
     ------   ----   ---------------------------   -----------------------------
-    main     pal    config/link_order.pal.txt     baserom/pal/baseelf.{elf,rom}
-    ntsc     us     (the ntsc branch's config)    baserom/baseelf.{elf,rom}
-    aug6     aug6   (the aug6 branch's config)    baserom/aug6/baseelf.{elf,rom}
+    main     pal    config/link_order.pal.txt     baserom/pal/baseelf.elf
+    ntsc     us     (the ntsc branch's config)    baserom/baseelf.elf
+    aug6     aug6   (the aug6 branch's config)    baserom/aug6/baseelf.elf
 
 `us` keeps its base files at the top of `baserom/` (it was the first target);
 every other slug gets its own `baserom/<slug>/` subdirectory. `baserom/` is
@@ -45,16 +45,10 @@ def baseelf_path(repo_root: Path, version: str) -> Path:
     return baserom_dir(repo_root, version) / "baseelf.elf"
 
 
-def rom_path(repo_root: Path, version: str) -> Path:
-    """The `objcopy -O binary` view of the base ELF, the ROM SHA-1's subject."""
-    return baserom_dir(repo_root, version) / "baseelf.rom"
-
-
 _KEYS = {
     "version": lambda root, v: v,
     "baserom_dir": lambda root, v: baserom_dir(root, v).relative_to(root),
     "baseelf": lambda root, v: baseelf_path(root, v).relative_to(root),
-    "rom": lambda root, v: rom_path(root, v).relative_to(root),
 }
 
 

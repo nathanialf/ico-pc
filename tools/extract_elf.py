@@ -7,10 +7,10 @@ Version-aware (tools/ico_version.py picks the branch's target):
 
     slug  disc image the user supplies   outputs
     ----  ----------------------------   -----------------------------------
-    pal   baserom/Ico_PAL.iso            baserom/pal/baseelf.{elf,rom}
+    pal   baserom/Ico_PAL.iso            baserom/pal/baseelf.elf
           (plain 2048-byte-sector ISO)   + MAIN.MAP SRCFILE.TXT TRFILE.TXT
                                            SYSTEM.CNF (disc reference files)
-    us    baserom/Ico_USA.bin + .cue     baserom/baseelf.{elf,rom}
+    us    baserom/Ico_USA.bin + .cue     baserom/baseelf.elf
           (raw MODE1/2352 or MODE2/2352)
 
 The boot ELF's name is never hard-coded: it comes from the disc's SYSTEM.CNF
@@ -38,7 +38,7 @@ import pycdlib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ico_version import (  # noqa: E402
-    detect_version, baserom_dir, baseelf_path, rom_path,
+    detect_version, baserom_dir, baseelf_path,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -50,7 +50,6 @@ DISC_DIR = REPO_ROOT / "baserom"
 # otherwise (see tools/ico_version.py).
 OUT_DIR = baserom_dir(REPO_ROOT, VERSION)
 ELF = baseelf_path(REPO_ROOT, VERSION)
-ROM = rom_path(REPO_ROOT, VERSION)     # objcopy -O binary view, the ROM SHA-1's subject
 SHA1SUMS = REPO_ROOT / "config" / "sha1sums.txt"
 
 # Per-target disc recipe.
@@ -77,12 +76,6 @@ DISCS = {
         "extras": (),
     },
 }
-
-OBJCOPY_CANDIDATES = (
-    "mips64r5900el-ps2-elf-objcopy",
-    "mips-linux-gnu-objcopy",
-    "objcopy",
-)
 
 SYSTEM_CNF = "SYSTEM.CNF"
 
@@ -353,39 +346,15 @@ def main() -> int:
         return 4
     print(f"==> SHA-1 recorded/verified in {SHA1SUMS.relative_to(REPO_ROOT)}")
 
-    # 4. produce baseelf.rom (objcopy -O binary view), whose SHA-1 the build checks
-    if not ROM.exists() or ROM.stat().st_mtime < ELF.stat().st_mtime:
-        import shutil as _sh
-        import subprocess as _sp
-        objcopy = next((c for c in OBJCOPY_CANDIDATES if _sh.which(c)), None)
-        if objcopy is None:
-            print(
-                "extract_elf: no objcopy on PATH; install binutils-mips-linux-gnu",
-                file=sys.stderr,
-            )
-            return 5
-        print(f"==> {objcopy} -O binary --gap-fill=0x00 {ELF.name} {ROM.name}")
-        _sp.run(
-            [objcopy, "-O", "binary", "--gap-fill=0x00", str(ELF), str(ROM)],
-            check=True,
-        )
-    rom_sha1 = sha1_of(ROM)
-    print(f"==> {ROM.name} SHA-1: {rom_sha1}")
-    rom_mismatch = update_sha1sums("baseelf.rom", rom_sha1)
-    if rom_mismatch is not None:
-        print(f"extract_elf: .rom SHA-1 mismatch! recorded={rom_mismatch} actual={rom_sha1}",
-              file=sys.stderr)
-        return 6
-
-    # 5. disc reference files (linker map / source listings / SYSTEM.CNF)
+    # 4. disc reference files (linker map / source listings / SYSTEM.CNF)
     if disc["extras"]:
         copy_reference_files(iso, disc["extras"])
 
-    # 6. compiler fingerprint hint
+    # 5. compiler fingerprint hint
     dump_comment_section(ELF)
 
     print()
-    print(f"extract_elf: done. ELF at {ELF}, ROM at {ROM}")
+    print(f"extract_elf: done. ELF at {ELF}")
     return 0
 
 
