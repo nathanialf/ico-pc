@@ -328,6 +328,38 @@ void ico_android_message_box(const char *text, int error)
     }
 }
 
+int ico_android_message_box_buttons(void *window, const char *text, const char *const *labels,
+                                    int count, int quit)
+{
+    SDL_MessageBoxButtonData buttons[4];
+    SDL_MessageBoxData box;
+    int chosen = quit;
+
+    __android_log_write(ANDROID_LOG_ERROR, LOG_TAG, text);
+    if (count < 1 || count > (int)SDL_arraysize(buttons) || quit < 0 || quit >= count) {
+        return quit;
+    }
+    for (int i = 0; i < count; i++) {
+        buttons[i].flags = i == quit ? SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT |
+                                           SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT
+                                     : 0;
+        buttons[i].buttonID = i;
+        buttons[i].text = labels[i];
+    }
+    SDL_zero(box);
+    box.flags = SDL_MESSAGEBOX_ERROR;
+    box.window = (SDL_Window *)window;
+    box.title = "ICO PC";
+    box.message = text;
+    box.numbuttons = count;
+    box.buttons = buttons;
+    if (!SDL_ShowMessageBox(&box, &chosen)) {
+        __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "message box: %s", SDL_GetError());
+        return quit;
+    }
+    return chosen >= 0 && chosen < count ? chosen : quit;
+}
+
 void ico_android_log_version(void)
 {
     SDL_IOStream *io = SDL_IOFromFile("VERSION.txt", "rb");
