@@ -3,8 +3,8 @@
  * rhi.h includes this file when RHI_BACKEND_PREFIX is defined (each backend
  * library is compiled with it: vk, d3d12), so a backend's definition of
  * rhi_Init becomes rhi_<prefix>_Init and so on; port/rhi/rhi_backend.h
- * describes the scheme.  Every entry point of rhi.h must be listed here and
- * in RHI_BACKEND_FUNCS (rhi_backend.h).
+ * describes the scheme.  Every entry point a backend implements
+ * (RHI_BACKEND_FUNCS, rhi_backend.h) must be listed here.
  */
 #ifndef PORT_RHI_RHI_BACKEND_NAMES_H
 #define PORT_RHI_RHI_BACKEND_NAMES_H

@@ -2,8 +2,8 @@
  * rhi_CreateBackend selected (rhi_backend.h describes the scheme).
  *
  * The backends linked into the build are listed by ICO_RHI_HAVE_VK and
- * ICO_RHI_HAVE_D3D12 (port/rhi/CMakeLists.txt), Vulkan first: it stays the
- * default until the Windows presets switch. */
+ * ICO_RHI_HAVE_D3D12 (port/rhi/CMakeLists.txt), Vulkan first, so it is the
+ * default; [video] backend or ICO_RHI_BACKEND picks another. */
 #include "rhi_backend.h"
 #include <stdio.h>
 #include <stdlib.h>

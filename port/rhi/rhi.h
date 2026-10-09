@@ -15,7 +15,8 @@
  *    (rd_core) knows the frame graph; backends do not track state.
  *  - All handles are opaque 32-bit ids with a generation; 0 is null.
  *  - Byte layouts (vertex formats, uniform blocks) are fixed by rd_core
- *    and shared with the shaders through port/shaders/common.hlsli.
+ *    and shared with the shaders through port/shaders/shader_consts.h and
+ *    its HLSL twins (common.hlsli, vu_common.hlsli).
  */
 #ifndef PORT_RHI_RHI_H
 #define PORT_RHI_RHI_H
@@ -213,14 +214,15 @@ typedef struct RhiShaderDesc {
     RhiShaderStage stage;
     const void *bytecode;
     size_t bytecodeSize;
-    const char *entryPoint; /* "main" */
+    const char *entryPoint; /* the entry's name (IcoShaderBlob.entry); Vulkan only */
     const char *debugName;
 } RhiShaderDesc;
 
 /* --------------------------------------------------------- bind groups
  * Fixed slot model shared by all programs (see port/shaders/common.hlsli):
  *  group 0: per-frame uniforms   (b0)
- *  group 1: per-draw uniforms    (b1), bone/particle storage (t0)
+ *  group 1: per-draw uniforms    (b1; the VU programs' b2, b3), the VU
+ *           vertex stream (t0)
  *  group 2: textures t1..t4 and samplers s1..s4
  * Backends map these onto descriptor sets / root parameters / argument
  * buffers; rd_core never sees the mapping. */
@@ -618,7 +620,8 @@ void rhi_CmdSetBindGroup(RhiCommandList cl, uint32_t group, RhiBindGroup bg);
  * order (count = their number), each a multiple of rhi_Limits()->uniformAlign
  * and added to the binding's base offset.  rhi_CmdSetBindGroup is this call
  * with every offset 0.  Binding the group already bound with the same
- * offsets records nothing. */
+ * offsets records nothing on Vulkan; D3D12 sets the group's root arguments
+ * again at the next draw. */
 void rhi_CmdSetBindGroupOffsets(RhiCommandList cl, uint32_t group, RhiBindGroup bg,
                                 const uint32_t *offsets, uint32_t count);
 void rhi_CmdSetVertexBuffer(RhiCommandList cl, uint32_t binding, RhiBuffer b, uint64_t offset);
@@ -665,7 +668,8 @@ bool rhi_ReadbackTexture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t d
 
 /* ------------------------------------------------------------- performance
  * Counters since rhi_Init, cumulative: the caller takes differences
- * (rd_core's per-replay records).  The
+ * (rd_core's per-replay records).  D3D12: not implemented, every field
+ * reads 0.  The
  * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
  * completion (rhi_WaitFrame, rhi_WaitIdle, readbacks), acquireNs in the
  * swapchain acquire, presentNs in the present call. */
