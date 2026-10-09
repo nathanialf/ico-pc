@@ -327,7 +327,8 @@ fi
 # built from source: the tag's commit, checked like libmpeg2 below (the
 # commit id, then the SHA-256 of `git archive --format=tar` of it, taken
 # 2026-10-09), with the three submodules the compiler needs at the commits
-# that tree records (googletest is left out with the tests). The dxc target
+# that tree records, each checked the same way (googletest is left out with
+# the tests). The dxc target
 # alone, Release, with the host's g++ and Ninja; about 5 minutes on 8 cores.
 # bin/dxc loads lib/libdxcompiler.so through its $ORIGIN/../lib run path, as
 # in the x86-64 release. No libdxil.so: the arm64 presets compile no DXIL
@@ -379,6 +380,23 @@ else
     git -C "$src" -c advice.detachedHead=false checkout -q "$DXC_COMMIT"
     git -C "$src" submodule update -q --init --depth 1 \
         external/SPIRV-Headers external/SPIRV-Tools external/DirectX-Headers
+    # the submodules the tree records, each checked like the tree itself: the
+    # commit, then the SHA-256 of `git archive --format=tar` of it (taken
+    # 2026-10-09)
+    for entry in \
+        "external/SPIRV-Headers 496543121ce6419f23d6fa5d7194ba66c36212d2 c44aa584944201e4bb4ea5a301cd735c41b7fedeb717e8625b97cd9d7315a4b8" \
+        "external/SPIRV-Tools ef96ed763b43b59b33b31b362f09a02b729fa1c9 a3e5d1f5dbefc057022d1c9c29315e887cb4c491dffb3ee850cbfaa3725ac9c1" \
+        "external/DirectX-Headers 980971e835876dc0cde415e8f9bc646e64667bf7 f7f5d15365443cbd8137445c3aedf8ccd31c3402f72c0fa7c16e7bf1c7977139"; do
+        read -r sub_path sub_commit sub_sum <<<"$entry"
+        got="$(git -C "$src/$sub_path" rev-parse HEAD)"
+        if [[ "$got" != "$sub_commit" ]]; then
+            echo "fetch_deps: DXC $sub_path is $got, expected $sub_commit" >&2
+            exit 1
+        fi
+        git -C "$src/$sub_path" archive --format=tar -o "$TMP/dxc-sub.tar" "$sub_commit"
+        echo "${sub_sum}  $TMP/dxc-sub.tar" | sha256sum -c -
+        rm -f "$TMP/dxc-sub.tar"
+    done
     gen=()
     if command -v ninja >/dev/null 2>&1 || [[ -x "$ROOT/.venv/bin/ninja" ]]; then
         gen=(-G Ninja)

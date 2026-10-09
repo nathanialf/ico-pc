@@ -93,7 +93,8 @@ What differs from an x86-64 host:
   validation layer).
 - Microsoft publishes no aarch64 Linux DXC, so `tools/fetch_deps.sh` builds
   the pinned release's tag from source (the commit id and the SHA-256 of its
-  `git archive` checked, as libmpeg2's and libchdr's) into `deps/dxc/` with the
+  `git archive` checked, as libmpeg2's and libchdr's, and the same two checks
+  on each of its three submodules) into `deps/dxc/` with the
   host's g++: about 5 minutes on 8 cores. It builds the `dxc` program and
   `libdxcompiler.so` only; there is no `libdxil.so`, and the arm64 preset
   compiles no DXIL (`ICO_SHADERS_DXIL=OFF`).
