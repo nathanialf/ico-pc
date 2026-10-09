@@ -5,6 +5,7 @@
 - Android: the touch controls make the phone vibrate the way a controller would rumble.
 - Options > Gameplay > Achievement pop-ups turns the pop-ups off.
 - Android: smoother play, with fewer stalls in busy rooms.
+- Android: when the phone's own graphics driver cannot start the game, the game offers to use a graphics driver package you choose (Adreno phones).
 
 ## Fixed
 

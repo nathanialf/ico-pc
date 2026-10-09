@@ -61,6 +61,18 @@ the graphics driver usually fixes it. On a phone, install the latest
 system update. The lines in the log that mention Vulkan say what is
 missing.
 
+**"ICO could not start the game's graphics with this phone's driver."**
+(on a phone) The phone's own graphics driver cannot run the game. The box
+offers **Choose a driver file**: on a phone with an Adreno (Qualcomm
+Snapdragon) chip, pick a graphics driver package, a zip file such as
+Turnip from the "AdrenoToolsDrivers" releases by K11MCH1 on GitHub, and
+the game starts with it. If the file is not a driver package, or the
+driver does not start either, the box comes back so you can pick another
+one. **Use the phone's driver** goes back to the phone's own driver, and
+**Quit** closes the game. Once the game runs, you can change the driver
+later in Options > Graphics driver. See
+[Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
+
 **"No disc image was chosen."** (on a phone) You left the file picker
 without choosing a file. Start the game again and choose your ICO disc
 image.

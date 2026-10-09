@@ -11,7 +11,10 @@
 
 - **A 64-bit Android phone or tablet with Android 10 or later.** Its
   graphics must support Vulkan 1.2, which most phones and tablets from
-  2022 or newer do. If yours does not, the game tells you when it starts.
+  2022 or newer do. If yours does not, the game tells you when it starts,
+  and on a phone with an Adreno chip it offers to use a graphics driver
+  package instead (see
+  [Using a different graphics driver](#using-a-different-graphics-driver)).
 - **Your own disc image of ICO, PAL version (SCES-50760)**, as a `.iso` or
   `.chd` file, copied onto the phone or tablet.
 - **Free space** for the first start: the size of the disc image plus
@@ -256,11 +259,32 @@ If a driver does not start, the game falls back to the phone's own driver
 and tells you so. You can still play. The driver is not removed, so you can
 try another one or remove it yourself.
 
+### When the game cannot start with the phone's driver
+
+On some phones the phone's own graphics driver cannot run the game at all,
+so the Options menu is never reached. The game then shows a box that says
+it could not start the game's graphics with this phone's driver, with
+these buttons:
+
+- **Choose a driver file**: the file picker opens. Pick a driver package
+  zip you downloaded (step 1 above). The game adds it and starts with it.
+  This only works on phones with an Adreno chip.
+- **Use the phone's driver**: tries the phone's own driver again. It is
+  shown when a driver package was tried before.
+- **Quit**: closes the game.
+
+If the file is not a driver package, or the driver does not start either,
+the game says so and the box comes back, so you can try another one. Once
+the game runs, the choice stays for the next start, and you can change it
+later in **Options > Graphics driver**.
+
 ## Known limits
 
 - The game needs a graphics chip that supports Vulkan 1.2 (Vulkan is how
   the game talks to the graphics). Older or cheaper devices may not have
-  it, and a system update does not always add it.
+  it, and a system update does not always add it. On a phone with an
+  Adreno chip, a graphics driver package can help; see
+  [When the game cannot start with the phone's driver](#when-the-game-cannot-start-with-the-phones-driver).
 - The file picker cannot hide files that are not disc images. If you pick
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
