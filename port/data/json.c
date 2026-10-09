@@ -74,7 +74,7 @@ static void jws(JParse *j)
     }
 }
 
-static int hexval(char c)
+int ico_json_hexval(char c)
 {
     if (c >= '0' && c <= '9') {
         return c - '0';
@@ -92,7 +92,7 @@ static int hex4(const char *s, unsigned *out)
 {
     unsigned v = 0;
     for (int i = 0; i < 4; i++) {
-        int h = hexval(s[i]);
+        int h = ico_json_hexval(s[i]);
         if (h < 0) {
             return -1;
         }

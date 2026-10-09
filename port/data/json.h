@@ -135,6 +135,11 @@ int ico_json_i64(const IcoJsonNode *node, int64_t *out);
 int ico_json_double(const IcoJsonNode *node, double *out);
 int ico_json_bool(const IcoJsonNode *node);
 
+/* The value of one hexadecimal digit (0-9, a-f, A-F), -1 for any other
+ * character; the parser's own \u escape helper, shared with the callers
+ * that check hex strings. */
+int ico_json_hexval(char c);
+
 #ifdef __cplusplus
 }
 #endif

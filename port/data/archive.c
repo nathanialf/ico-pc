@@ -70,20 +70,6 @@ static void say(char *why, size_t n, const char *fmt, ...)
 
 /* --- meta.json through json.h ---------------------------------------------- */
 
-static int hexval(char c)
-{
-    if (c >= '0' && c <= '9') {
-        return c - '0';
-    }
-    if (c >= 'a' && c <= 'f') {
-        return c - 'a' + 10;
-    }
-    if (c >= 'A' && c <= 'F') {
-        return c - 'A' + 10;
-    }
-    return -1;
-}
-
 static const char *jget_str(const IcoJsonNode *obj, const char *key)
 {
     return ico_json_str(ico_json_get(obj, key));
@@ -139,7 +125,7 @@ static int is_hex40(const char *s)
     int i;
 
     for (i = 0; i < 40; i++) {
-        if (hexval(s[i]) < 0) {
+        if (ico_json_hexval(s[i]) < 0) {
             return 0;
         }
     }
