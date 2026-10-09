@@ -81,7 +81,7 @@ if bad:
 print("check_android_flags: %d sources carry %s" % (seen, " ".join(need)))
 EOF
 
-# v0.4.4 AN-19e (issue 19): no game unit writes an object it declares const
+# No game unit writes an object it declares const (issue 19)
 # (tools/check_const_writes.py): clang deletes those stores where gcc keeps
 # them, so only the clang builds, this one among them, would show it.
 python3 "$root/tools/check_const_writes.py" --build "$dir"

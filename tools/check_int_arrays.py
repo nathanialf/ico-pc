@@ -85,7 +85,7 @@ EXEMPT = {
     "texture (metrics; the texture itself is loaded from the disc).",
     ("ico2/common/src/debug.c", "fontBitmap"): _ICO2
     + "the 8x8 1bpp debug-overlay font (256 glyphs). Glyph bitmaps are the "
-    "closest thing to an asset on this list: flagged for review in F2; "
+    "closest thing to an asset on this list: flagged for review; "
     "replacing it with a port-owned font is the fix if the review says so.",
     # port/: the PC port's own code. (port/data/extract.c's DATA.DF manifest,
     # dfMembers, is an array of DfMember structs, offsets, sizes and CRC-32s

@@ -1,4 +1,4 @@
-# port/save: the memory card (Phase 4D): libmc over a
+# port/save: the memory card: libmc over a
 # host folder (mc_host.c), replacing port/null's empty card. The game's own
 # fumi/ios/mcard.c runs on it unchanged but for one ICO_HOST line, the
 # [audio] output hook (port/game/options.h ico_opt_output_card).
@@ -16,7 +16,7 @@ if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_save)
 endif()
 
-# Package S1: ICO's save out of a raw card image (.ps2/.bin) or a .psu into a
+# ICO's save out of a raw card image (.ps2/.bin) or a .psu into a
 # card folder, and its command line,
 # tools/mc_import.c. Needs only the UTF-8 file calls.
 add_library(ico_save_import STATIC mc_import.c)

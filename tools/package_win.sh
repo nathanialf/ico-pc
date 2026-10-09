@@ -102,8 +102,8 @@ cp "$wt/README.md" "$stage/README.md"
 pkg_stage_docs "$wt" "$stage" || fail "stage: a player guide is missing"
 printf 'ico-pc %s\r\nbuilt %s\r\ncommit %s\r\n' "$label" "$date_str" "$commit" > "$stage/VERSION.txt"
 
-# zip, root dir ico-pc-<label>/. The files staged above and nothing else
-# (not linux/ or a retired x86/): the stage folder is also where the build
+# zip, root dir ico-pc-<label>/. The files staged above and nothing else:
+# the stage folder is also where the build
 # is tried, so it can hold Ico_PAL.iso (found beside the exe), dumps\
 # (frames from the disc) and logs\, none of which may be shipped.
 rm -f "$zip"

@@ -528,9 +528,8 @@ class Layout:
 SYMBOL_LISTS = [ROOT / "config/symbol_addrs.pal.txt", ROOT / "config/symbol_addrs.pal.data.txt"]
 
 # Globals a data member points at that neither symbol list names, at the
-# address the layout link gives them (the fact `nm build/ico.layout.elf`
-# prints). Each entry belongs in config/symbol_addrs.pal.data.txt; it is here
-# until that file, which another work package owns, takes it.
+# address the period layout link gave them. Each entry belongs in
+# config/symbol_addrs.pal.data.txt and stays here until it moves there.
 SUPPLEMENT = [
     ("scpDummyGObj", 0x0063AA20, False),  # ico2/script/src/script.c .sdata
 ]

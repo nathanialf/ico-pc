@@ -47,12 +47,12 @@ if(ICO_RUN_TESTS)
         if(_env)
             set_tests_properties(shaders_pixel PROPERTIES ENVIRONMENT "${_env}")
         endif()
-        # package AN-E: the two-pass blend on a device made without dualSrcBlend
+        # the two-pass blend on a device made without dualSrcBlend
         add_test(NAME shaders_pixel_nodual COMMAND shaders_pixel_test --nodual)
         set(_env_nodual ${_env} "ICO_VK_FAKE_NO_DUAL=1")
         set_tests_properties(shaders_pixel_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_env_nodual}")
-        # v0.4.2 (Android): on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=mali)
+        # on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=mali), as a phone has them
         add_test(NAME shaders_pixel_mali COMMAND shaders_pixel_test)
         set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
         set_tests_properties(shaders_pixel_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT

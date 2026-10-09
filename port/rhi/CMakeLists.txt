@@ -140,7 +140,7 @@ if(_ico_have_vk)
     set(_ico_vk_sources vk/vk_cmd.c vk/vk_device.c vk/vk_pipeline.c vk/vk_present_mode.c
                         vk/vk_resource.c vk/vk_swapchain.c)
     if(ANDROID)
-        # v0.4.3 AN-22a: the window's surface through the loader in use (a
+        # the window's surface through the loader in use (a
         # driver the program loaded, or the system's)
         list(APPEND _ico_vk_sources vk/vk_surface_android.c)
     endif()
@@ -211,7 +211,7 @@ if(_ico_have_vk)
     set(_ico_vk_test_env "")
     # Every rhi.h enumeration maps to a Vulkan value (static asserts plus a
     # run over the tables). Needs only the headers.
-    # Package R0: with rhi_backend.c's layer classifiers (no backend linked).
+    # With rhi_backend.c's layer classifiers (no backend linked).
     add_executable(rhi_vk_enum_test test/rhi_vk_enum_test.c rhi_backend.c)
     target_include_directories(rhi_vk_enum_test PRIVATE "${ICO_VULKAN_INCLUDE_DIR}")
     target_compile_options(rhi_vk_enum_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -271,7 +271,7 @@ if(_ico_have_vk)
         if(_ico_vk_test_env)
             set_tests_properties(rhi_vk PROPERTIES ENVIRONMENT "${_ico_vk_test_env}")
         endif()
-        # package AN-E: the same cells on a device made without dualSrcBlend
+        # the same cells on a device made without dualSrcBlend
         # (the hook clears the feature at device creation); its own directory
         # for the pipeline cache file, which rhi_vk writes beside itself
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/nodual")
@@ -280,14 +280,14 @@ if(_ico_have_vk)
         set(_ico_vk_nodual_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_DUAL=1")
         set_tests_properties(rhi_vk_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nodual_env}")
-        # package AN-F: the D24S8 depth-stencil fallback (ICO_VK_FAKE_D24S8=1)
+        # the D24S8 depth-stencil fallback (ICO_VK_FAKE_D24S8=1)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
         add_test(NAME rhi_vk_d24s8 COMMAND rhi_vk_test
                  WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
         set(_ico_vk_d24s8_env ${_ico_vk_test_env} "ICO_VK_FAKE_D24S8=1")
         set_tests_properties(rhi_vk_d24s8 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_d24s8_env}")
-        # v0.4.2 (Android): the cells on a Mali-G68's limits
+        # the cells on a Mali-G68's limits, as a phone has them
         # (ICO_VK_FAKE_LIMITS=mali), then the limits cell: what goes past
         # them is refused by the limit's name
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/mali")
@@ -310,8 +310,8 @@ endif()
 # rhi_d3d12_test.exe: the same cells on D3D12, first on WARP, then on the
 # hardware adapter, then the swapchain on a hidden window. Double-clicked it
 # needs no console and no flags: it writes rhi_d3d12_test.log beside itself
-# and shows the verdict in a message box. Not run by ctest here (Windows
-# binary; no Windows host or Wine in the build container).
+# and shows the verdict in a message box. ctest runs it only on a native
+# Windows build (ICO_RUN_TESTS).
 if(_ico_have_d3d12)
     add_executable(rhi_d3d12_test test/rhi_d3d12_test.c ${_ico_rhi_test_common})
     target_include_directories(rhi_d3d12_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")

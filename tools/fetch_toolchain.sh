@@ -15,7 +15,7 @@
 # It also builds tools/toolchain/mingw-gcc from pinned Debian packages
 # (dpkg-deb -x, no root): Debian's x86_64 mingw-w64 gcc for the GCC-family
 # Windows presets (section 3 says why). The i386 sysroot and the i686
-# mingw-gcc of the retired 32-bit presets are gone (Phase 2 exit, 36a1d73e).
+# mingw-gcc of the 32-bit presets went with them (36a1d73e).
 #
 # Section 4 unpacks Kitware's CMake release (BSD-3-Clause) into
 # tools/toolchain/cmake, the CMake the presets' documented invocation uses

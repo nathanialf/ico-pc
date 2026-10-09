@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """tools/gen_data_desc.py -- the runtime table loader's descriptors.
 
-The host build holds no disc data (plan "Game data", docs/LEGAL.md): the 73
-data-only members tools/gen_data_c.py writes as C for the PS2 build are, on
-the host, empty arrays that port/data/tables.c fills at boot from the ELF on
-the user's disc. This script writes what that loader needs to know, all of it
-types, offsets, sizes and names, from the same inputs gen_data_c.py reads:
+The host build holds no disc data (docs/LEGAL.md): the 73 data-only
+members (tools/gen_data_c.py writes them as C for the loader test's
+reference copy) are, on the host, empty arrays that port/data/tables.c
+fills at boot from the ELF on the user's disc. This script writes what
+that loader needs to know, all of it types, offsets, sizes and names, from
+the same inputs gen_data_c.py reads:
 
   config/data_members.pal.txt   each member's rows: section and EE range
   config/data_schema.pal.txt    each row's record type, header and count

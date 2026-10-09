@@ -6,32 +6,32 @@ include(${CMAKE_SOURCE_DIR}/cmake/IcoShaders.cmake)
 ico_add_shader(sprite_ui_vs sprite.hlsl sprite_ui_vs vertex)
 ico_add_shader(sprite_world_vs sprite.hlsl sprite_world_vs vertex)
 ico_add_shader(sprite_ps sprite.hlsl sprite_ps fragment)
-# package TEXA: TEXA per texel before the bilinear filter (24- and 16-bit textures under AEM)
+# TEXA per texel before the bilinear filter (24- and 16-bit textures under AEM)
 ico_add_shader(sprite_texa_ps sprite.hlsl sprite_texa_ps fragment)
 ico_add_shader(date_snap_ps sprite.hlsl date_snap_ps fragment)
-# package AA1: PRIM.AA1 lines and triangles
+# PRIM.AA1 lines and triangles
 ico_add_shader(sprite_aa1_ui_vs sprite.hlsl sprite_aa1_ui_vs vertex)
 ico_add_shader(sprite_aa1_world_vs sprite.hlsl sprite_aa1_world_vs vertex)
 ico_add_shader(sprite_aa1_ps sprite.hlsl sprite_aa1_ps fragment)
 ico_add_shader(blit_vs blit.hlsl blit_vs vertex)
 ico_add_shader(blit_ps blit.hlsl blit_ps fragment)
 ico_add_shader(blit_fix_ps blit.hlsl blit_fix_ps fragment)
-# v0.4.1 (R1): the present's box blit with the scene's depth (rd_present.c)
+# the present's box blit with the scene's depth (rd_present.c)
 ico_add_shader(blit_depth_ps blit.hlsl blit_depth_ps fragment)
-# package RSMALL: the shadow count box-reduced to the GS size (rd_replay.c doShadowResolve)
+# the shadow count box-reduced to the GS size (rd_replay.c doShadowResolve)
 ico_add_shader(box_reduce_ps blit.hlsl box_reduce_ps fragment)
-# wave 2 (R2c): tests only, rd__CameraProbe
+# tests only, rd__CameraProbe
 ico_add_shader(camera_probe_ps blit.hlsl camera_probe_ps fragment)
 ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
 ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
-# wave 4 placeholder
+# the depth fog's CLUT lookup (rd_replay.c doFog)
 ico_add_shader(fog_lut_vs fog_lut.hlsl fog_lut_vs vertex)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
-# package R8: R8 coverage textures (the font atlas) behind the sprite vertex shaders
+# R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
-# v0.4.2 (package F-A): sheet text, coverage strips drawn in the menu sheets' style
+# sheet text, coverage strips drawn in the menu sheets' style
 ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment)
-# wave 3 (R3c): the VU1 microprograms
+# the VU1 microprograms
 ico_add_shader(vu_prelit_vs vu_prelit.hlsl vu_prelit_vs vertex)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment)
 ico_add_shader(vu_texa_ps vu_prelit.hlsl vu_texa_ps fragment)
@@ -45,28 +45,28 @@ ico_add_shader(vu_grid_vs vu_grid.hlsl vu_grid_vs vertex)
 ico_add_shader(vu_grid_lit_vs vu_grid.hlsl vu_grid_lit_vs vertex)
 ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
-# Phase 4E: the FMV picture (port/render/rd_video.c)
+# the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
-# wave 5 (R5a): staticBlur.c's sprites in the GS integer arithmetic
+# staticBlur.c's sprites in the GS integer arithmetic
 # (port/render/rd_blur.c)
 ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)
 ico_add_shader(fx_sprite_ps fx_sprite.hlsl fx_sprite_ps fragment)
-# wave 5 (R5c): COLCLAMP 0 screen prims (darkVolume.c)
+# COLCLAMP 0 screen prims (darkVolume.c)
 ico_add_shader(wrap_acc_ps raw_wrap.hlsl wrap_acc_ps fragment)
 ico_add_shader(wrap_resolve_ps raw_wrap.hlsl wrap_resolve_ps fragment)
-# package RSMALL: perspective-correct STQ on screen prims
+# perspective-correct STQ on screen prims
 ico_add_shader(sprite_stq_ui_vs sprite.hlsl sprite_stq_ui_vs vertex)
 ico_add_shader(sprite_stq_world_vs sprite.hlsl sprite_stq_world_vs vertex)
 ico_add_shader(sprite_stq_ps sprite.hlsl sprite_stq_ps fragment)
-# package CRT: the CRT filter (port/render/rd_crt.c)
+# the CRT filter (port/render/rd_crt.c)
 ico_add_shader(crt_vs crt.hlsl crt_vs vertex)
 ico_add_shader(crt_bloom_ps crt.hlsl crt_bloom_ps fragment)
 ico_add_shader(crt_blur_ps crt.hlsl crt_blur_ps fragment)
 ico_add_shader(crt_ps crt.hlsl crt_ps fragment)
 # tests only: the probe output of vu1_test (VU_F_PROBE)
 ico_add_shader(vu_probe_ps vu_prelit.hlsl vu_probe_ps fragment)
-# package AN-E: the entries that call gs_dual_out, without the second output,
+# the entries that call gs_dual_out, without the second output,
 # for a device without dual-source blending (rd_pipeline.c rd__ExpandNoDual)
 foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
     ico_add_shader(${_e} sprite.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)

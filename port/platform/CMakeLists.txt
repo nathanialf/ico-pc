@@ -1,4 +1,4 @@
-# port/platform/CMakeLists.txt: package 1B's part of the platform layer (the
+# port/platform/CMakeLists.txt: the platform layer's sources (the
 # fiber scheduler, the EE kernel calls, the EE RAM arena, the host loop and
 # the headless graphics seam) and its tests.
 
@@ -26,7 +26,7 @@ endif()
 if(TARGET ico_pc)
     target_sources(ico_pc PRIVATE host_loop.c)
 endif()
-# Package Q1: the commit the program was built from (ICO_BUILD_COMMIT in the
+# The commit the program was built from (ICO_BUILD_COMMIT in the
 # generated ico_build_commit.h, "git describe --always --dirty"), for the pad
 # recording's header (main_host.c). Checked at every build; the header only
 # changes when the commit does.
@@ -75,7 +75,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME android_paths COMMAND android_paths_test)
 endif()
 
-# v0.4.3 AN-22a: the Android build's graphics driver packages (gpu_driver.c),
+# The Android build's graphics driver packages (gpu_driver.c),
 # pure C over host_fs, miniz and json.h, so it is tested on the native builds;
 # it writes under the build folder
 add_executable(gpu_driver_test test/gpu_driver_test.c gpu_driver.c)
@@ -85,7 +85,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME gpu_driver COMMAND gpu_driver_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# host_fs.h on a non-ASCII (UTF-8) path in the build tree (F2, B1)
+# host_fs.h on a non-ASCII (UTF-8) path in the build tree
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(host_fs_test PRIVATE ico_platform)
@@ -127,7 +127,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME ios_chain COMMAND ios_chain_test)
 endif()
 
-# v0.3.1 (P3): the fullscreen request's readback (window_video.c) on SDL's
+# The fullscreen request's readback (window_video.c) on SDL's
 # offscreen video driver. SDL3 is found by port/rhi, configured after this
 # directory, so the test is defined once the top level is done; exit 77
 # (skipped) without the offscreen driver.

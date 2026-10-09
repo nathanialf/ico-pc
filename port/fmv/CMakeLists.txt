@@ -1,5 +1,5 @@
-# port/fmv: the FMV player (Phase 4E). The ito/mpeg player
-# stays in the PS2 build; on the host movie_init/movie_proc/movie_end are
+# port/fmv: the FMV player. The game's ito/mpeg player is not compiled on
+# the host (ICO_EE_ONLY_SOURCES); movie_init/movie_proc/movie_end are
 # movie.c's, on a PSS demuxer (pss.c) and Ittiam libmpeg2 (m2v.c).
 #
 # libmpeg2 comes from tools/fetch_deps.sh as a source tree
@@ -7,7 +7,7 @@
 # preset's own compiler into a static library: the generic C decoder (the
 # library's riscv function selectors, which pick the generic C routines and
 # nothing else), no SIMD, its pthread layer replaced by ithread_single.c.
-# v0.4.2 (N2): on arm64 Android/Linux (ICO_LIBMPEG2_NEON, the top
+# On arm64 Android/Linux (ICO_LIBMPEG2_NEON, the top
 # CMakeLists.txt) the library's NEON assembly and its armv8 selectors
 # instead, as Android's own build of the library has them (ARMV8,
 # DEFAULT_ARCH D_ARCH_ARMV8_GENERIC): the phone decodes movies several times
@@ -117,7 +117,7 @@ if(TARGET ico_pc)
     # own definitions carry ICO_HEADLESS only (the game's ICO_RD is in
     # ICO_GAME_DEFINITIONS, on the game libraries), so the window build
     # names it here; without it the film played its sound and showed no
-    # picture (package V1).
+    # picture.
     if(NOT ICO_HEADLESS)
         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/movie.c" TARGET_DIRECTORY ico_pc
                                     PROPERTIES COMPILE_DEFINITIONS ICO_RD=1)
@@ -156,13 +156,13 @@ if(TARGET ico_render)
         if(_env)
             set_tests_properties(rd_video PROPERTIES ENVIRONMENT "${_env}")
         endif()
-        # v0.4.2 (Android): on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=mali)
+        # on a Mali-G68's limits (ICO_VK_FAKE_LIMITS=mali), as a phone has them
         add_test(NAME rd_video_mali COMMAND rd_video_test)
         set(_env_mali ${_env} "ICO_VK_FAKE_LIMITS=mali")
         set_tests_properties(rd_video_mali PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_env_mali}")
     endif()
-    # v0.4.2 N1: rd on a window (SDL's offscreen driver): the output follows
+    # rd on a window (SDL's offscreen driver): the output follows
     # a swapchain the backend rebuilt at another size on its own
     if(TARGET ico_rhi_vulkan AND TARGET SDL3::SDL3-shared)
         add_executable(rd_video_window_test test/rd_video_window_test.c)

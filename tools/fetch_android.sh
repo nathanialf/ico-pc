@@ -26,7 +26,7 @@
 #                            LICENSE.txt
 #   tools/toolchain/deps/adrenotools/<commit>/
 #                          libadrenotools (BSD-2-Clause), the loader of the
-#                          player's own graphics driver (v0.4.3, AN-22a),
+#                          player's own graphics driver,
 #                          from the pinned GitHub commit tarball, with its
 #                          submodule lib/linkernsbypass (BSD-2-Clause) filled
 #                          from that project's tarball at the commit the

@@ -10,15 +10,13 @@
 #   -ffp-contract=off       no fused multiply-add: the EE rounds each step.
 #   -fno-fast-math          IEEE ordering; the EE semantics are added by
 #                           port/math, never by the compiler.
-#   -fsigned-char           ee-gcc's MIPS default is signed char. Package 0C
-#                           verifies this against the period compiler's
-#                           specs; until then it is assumed.
+#   -fsigned-char           ee-gcc's MIPS default is signed char.
 #   -fno-common             the game was built -fno-common.
 #   -fgnu89-inline          ee-gcc 2.9's `inline`: a plain `inline` function
 #                           definition is also the external one (script.h
 #                           declares scpFadeIn and others `inline` and other
 #                           TUs call them). C99 semantics would leave them
-#                           undefined at link (package 0C counts 1,253
+#                           undefined at link (the game has 1,253
 #                           non-static inline definitions).
 set(ICO_SEMANTIC_OPTIONS
     -fno-strict-aliasing
@@ -30,7 +28,7 @@ set(ICO_SEMANTIC_OPTIONS
     -fgnu89-inline
 )
 
-# Record layout of the game and data TUs only (package 0C).
+# Record layout of the game and data TUs only.
 # port/ code keeps the platform ABI, since SDL's and the Windows SDK's
 # structs assume it. A record the game and port/ both read must not depend
 # on either option.
@@ -41,9 +39,9 @@ if(WIN32)
     list(APPEND ICO_GAME_LAYOUT_OPTIONS -mno-ms-bitfields)
 endif()
 
-# The three diagnostics the plan makes errors (plan "Verification: Static").
-# ICO_STRICT_WARNINGS=ON turns them into errors; it stays OFF until the tree
-# compiles clean with it (the build logs count the warnings).
+# Three diagnostics of the game sources: warnings by default (the game's
+# C89-era code still raises them; the build logs count them), errors with
+# ICO_STRICT_WARNINGS=ON.
 option(ICO_STRICT_WARNINGS "Treat -Wreturn-type, -Wimplicit-function-declaration and -Wstrict-prototypes as errors" OFF)
 
 set(ICO_GAME_WARNINGS -Wreturn-type -Wimplicit-function-declaration -Wstrict-prototypes)
@@ -54,8 +52,8 @@ if(ICO_STRICT_WARNINGS)
         -Werror=strict-prototypes)
 else()
     # Modern compilers make several C89-era diagnostics errors by default.
-    # Until package 0B's front-end pass lands, they stay warnings so every
-    # file that can compile does, and the logs count them.
+    # The game's C89-era code raises them; they stay warnings so every file
+    # compiles, and the logs count them.
     # Each flag only when this compiler knows it (CheckCCompilerFlag): gcc
     # 13 (the ubuntu-24.04 runner's default) has no -Wreturn-mismatch or
     # -Wdeclaration-missing-parameter-type and rejects -Wno-error= of them.

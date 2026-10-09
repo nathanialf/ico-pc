@@ -59,7 +59,7 @@ target_compile_options(ico_libchdr PRIVATE
 target_compile_options(ico_libchdr PRIVATE -w)
 set_target_properties(ico_libchdr PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# ico_json (v0.4.1, M1): json.h's RFC 8259 reader, no dependencies; read
+# ico_json: json.h's RFC 8259 reader, no dependencies; read
 # by archive.c (meta.json) and port/render's glTF loader.
 add_library(ico_json STATIC json.c)
 target_include_directories(ico_json PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -87,7 +87,7 @@ add_library(ico_port_data STATIC
     sif_host.c
     sifdev_host.c
     vfs.c)
-# port/platform is searched for package 1B's host_loop.h (the vsync
+# port/platform is searched for host_loop.h (the vsync
 # callback list cdvd_host.c registers with when it exists).
 target_include_directories(ico_port_data
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -134,7 +134,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(archive_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
 endif()
 
-# iso_import_test (v0.4.1, AN-C): the Android first start's copy of the
+# iso_import_test: the Android first start's copy of the
 # chosen disc image (port/platform/android/iso_import.c), on Linux with SDL's
 # memory streams for the content:// one: the copy byte for byte with its
 # progress, a cancel leaving nothing, a write failure's reason, the space

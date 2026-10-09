@@ -278,7 +278,8 @@ jobs:
                    lib/arm64-v8a/libfile_redirect_hook.so assets/VERSION.txt assets/NOTICES.txt; do
             grep -q " $f\$" apk.lst || { echo "APK lacks $f"; exit 1; }
           done
-          # v0.4.3 AN-22a: libadrenotools' three hook libraries, no more
+          # libadrenotools' three hook libraries (the graphics driver loader),
+          # no more
           hooks=$(grep -c ' lib/arm64-v8a/lib[^/]*hook[^/]*\.so$' apk.lst || true)
           [ "$hooks" -eq 3 ] || { echo "APK holds $hooks hook libraries, expected 3"; exit 1; }
 
@@ -307,7 +308,7 @@ jobs:
           grep -q 'resizeableActivity.*true' manifest.txt
           if grep -q 'resizeableActivity.*false' manifest.txt; then echo "resizeableActivity is false"; exit 1; fi
           grep -q 'android:theme' manifest.txt
-          # v0.4.3 AN-22a: the libraries are unpacked at install
+          # the libraries are unpacked at install
           # (useLegacyPackaging), where libadrenotools loads its hooks from
           grep -q 'extractNativeLibs.*true' manifest.txt
           if grep -q 'extractNativeLibs.*false' manifest.txt; then echo "extractNativeLibs is false"; exit 1; fi

@@ -4,7 +4,7 @@
 # (ico_rhi_vk); without either it is left out with a status message, like
 # the other fetched dependencies.
 
-# ico_vu1_ref (wave 3, R3c): CPU references of the five VU1 microprograms, the oracle of port/shaders/test/vu1_test.c.
+# ico_vu1_ref: CPU references of the five VU1 microprograms, the oracle of port/shaders/test/vu1_test.c.
 # Plain C on port/math's ps2float helpers; built in every configuration.
 add_library(ico_vu1_ref STATIC
     vu1_ref/vu1_ref.c
@@ -18,7 +18,7 @@ target_include_directories(ico_vu1_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vu1_r
 target_compile_options(ico_vu1_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_vu1_ref PUBLIC ico_math)
 
-# ico_sheet_ref (v0.4.2, F-A): font_sheet_ps on the CPU (test/sheet_ref.h),
+# ico_sheet_ref: font_sheet_ps on the CPU (test/sheet_ref.h),
 # the oracle of rd_pixel_test's sheet text and the menu text comparisons.
 # Plain C; built in every configuration.
 add_library(ico_sheet_ref STATIC test/sheet_ref.c)
@@ -29,7 +29,7 @@ if(NOT WIN32)
     target_link_libraries(ico_sheet_ref PUBLIC m) # floorf
 endif()
 
-# ico_texpack_name (v0.4.0, T1): the names PCSX2 gives textures
+# ico_texpack_name: the names PCSX2 gives textures
 # (texpack_name.h) and the XXH3-64 they are made with (xxh3.c, a
 # reimplementation of xxHash's algorithm, BSD-2-Clause, docs/THIRD_PARTY.md).
 # CPU only, built in every configuration.
@@ -51,7 +51,7 @@ add_executable(texpack_disc_test test/texpack_disc_test.c)
 target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
 
-# ico_gltf (v0.4.1, M2): glTF 2.0 for model packs (gltf.h), the dump's
+# ico_gltf: glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
 add_library(ico_gltf STATIC gltf.c)
@@ -94,15 +94,15 @@ if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
 endif()
 
 add_library(ico_render STATIC
-    rd_blur.c # wave 5 (R5a): staticBlur.c's sprites
+    rd_blur.c # staticBlur.c's sprites
     rd_core.c
-    rd_crt.c # package CRT: the CRT filter at present time
+    rd_crt.c # the CRT filter at present time
     rd_dump.c
     rd_frame.c
-    rd_interp.c # wave 7 (R7b): interpolation between the retained frames
+    rd_interp.c # interpolation between the retained frames
     rd_mesh.c
-    modelpack.c # v0.4.1 (M3): model packs, the index, the glTF conversion, the dump
-    rd_perf.c # package P1: per-replay performance records
+    modelpack.c # model packs, the index, the glTF conversion, the dump
+    rd_perf.c # per-replay performance records
     rd_pipeline.c
     rd_png.c
     rd_post.c
@@ -110,12 +110,12 @@ add_library(ico_render STATIC
     rd_replay.c
     rd_shadow.c
     rd_tex.c
-    rd_water.c # wave 5 (R5b): block targets, aliases, camera scopes
-    rd_video.c # Phase 4E: the FMV picture (port/fmv/rd_video.h)
+    rd_water.c # block targets, aliases, camera scopes
+    rd_video.c # the FMV picture (port/fmv/rd_video.h)
     texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
     texpack_image.c
     texpack_png.c
-    texpack.c) # v0.4.0 (T3): texture packs, the index, the loader thread, the budget
+    texpack.c) # texture packs, the index, the loader thread, the budget
 target_include_directories(ico_render
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
@@ -144,21 +144,17 @@ target_compile_options(rd_replay_tool PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_link_libraries(rd_replay_tool PRIVATE ico_render)
 
 # --- Tests ----------------------------------------------------------------------
-#   rd_state  lists, state leakage, keep frames, recording of the stubbed
-#             commands, dump round trip of the recording, pipeline
-#             enumeration (CPU only)
-#   rd_pixel  GS sprite rasterisation, reduction against a CPU reference,
-#             blend_int feedback over 100 frames, dump -> load -> replay,
-#             pipeline count (Vulkan; exit 77 without a device)
-#   rd_replay_tool  rd_pixel's dump rendered to a PNG through the presenter
-#   rd_replay_tool_list  the same dump listed without a device (package QUEEN)
-#   rd_shadow  Shadow.c's host path and the stencil count (wave 4, below)
-#   rd_fog     ZFog.c's host path and the depth fog (wave 4, below)
+# rd_state_test: lists, state leakage, keep frames, recording of the stubbed
+# commands, dump round trip of the recording, pipeline enumeration (CPU only)
 add_executable(rd_state_test test/rd_state_test.c)
 target_compile_options(rd_state_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_state_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_link_libraries(rd_state_test PRIVATE ico_render)
 
+# rd_pixel_test: GS sprite rasterisation, reduction against a CPU reference,
+# blend_int feedback over 100 frames, dump -> load -> replay, pipeline count
+# (Vulkan; exit 77 without a device). rd_replay_tool renders its dump to a PNG
+# through the presenter (the rd_replay_tool test, below).
 add_executable(rd_pixel_test test/rd_pixel_test.c)
 target_include_directories(rd_pixel_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders"
                            "${CMAKE_SOURCE_DIR}/port/shaders/test" "${CMAKE_SOURCE_DIR}/port/rhi")
@@ -186,7 +182,7 @@ target_link_libraries(rd_layout_test PRIVATE ico_render ico_math)
 # files above, fed synthetic TIM2 files; decode, CLUT scroll, cache keys and
 # the decoder's binding on the recording, one sprite per format's texels on
 # a device (77 without one). ico_options: Texture.c's CLUT recolour
-# (port/game/appearance.c, v0.4.2), whose config store needs host_config.c
+# (port/game/appearance.c), whose config store needs host_config.c
 add_executable(rd_tex_test test/rd_tex_test.c
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/Texture.c"
     "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
@@ -201,7 +197,7 @@ target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_tex_test PRIVATE ico_render ico_math ico_options)
 
-# rd_gsbase_test (wave 2, R2c): GsBase.c's host path with the 2D layer
+# rd_gsbase_test: GsBase.c's host path with the 2D layer
 # (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
 # the rest of the game stubbed: frame lifecycle, field parity, camera
 # packing, Z scale and the post passes against CPU references; with
@@ -220,11 +216,11 @@ target_include_directories(rd_gsbase_test PRIVATE ${_ico_seki_incs}
 target_compile_definitions(rd_gsbase_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_gsbase_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-# ico_options: GsBase.c's widescreen hook reads the display options (R7a),
+# ico_options: GsBase.c's widescreen hook reads the display options,
 # whose config store needs host_config.c (above)
 target_link_libraries(rd_gsbase_test PRIVATE ico_render ico_math ico_options)
 
-# rd_present_test (wave 7, R7a): the display options.  GsBase.c as
+# rd_present_test: the display options.  GsBase.c as
 # rd_gsbase_test has it (the widened cull, +0x80/+0xC0 untouched) and the
 # options module with its config (port/platform/host_config.c): the Original
 # preset bit-exact against recorded frames, the Enhanced scene resolution,
@@ -245,7 +241,7 @@ target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 
-# rd_crt_test (package CRT): the CRT filter (rd_crt.c, crt.hlsl): its [video]
+# rd_crt_test: the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
 # a device the presents: off is rd_present's bytes, each mode's recorded hash,
 # black outside the box, the brightness, the mask's period and its fade.
@@ -255,14 +251,14 @@ target_include_directories(rd_crt_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders
 target_compile_options(rd_crt_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_crt_test PRIVATE ico_render ico_options)
 
-# rd_filter_test (package MV): the draw filter (rd.h rd_SetDrawFilter) on
+# rd_filter_test: the draw filter (rd.h rd_SetDrawFilter) on
 # synthetic keys, recorded without a device.
 add_executable(rd_filter_test test/rd_filter_test.c)
 target_compile_options(rd_filter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_filter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_filter_test PRIVATE ico_render)
 
-# rd_interp_test (wave 7, R7b): the presenter's interpolation between the
+# rd_interp_test: the presenter's interpolation between the
 # retained frames (rd_interp.c): keyed draws blend by alpha, the snap rules,
 # the feedback FIX at dt; on a device the replays at alpha 0 and 1 against
 # the frames' own, the half-way pixels, rd_Present.
@@ -271,7 +267,7 @@ target_compile_options(rd_interp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_include_directories(rd_interp_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_interp_test PRIVATE ico_render)
 
-# rd_mirror_test (wave 7, R7c): the mirror mode: the present is the exact
+# rd_mirror_test: the mirror mode: the present is the exact
 # flip with it on (Original, Enhanced, interpolated), UI prims land on the
 # same output pixels (the replay's flip cancels the present's), SCENE's UI
 # flipped about the centre.
@@ -280,7 +276,7 @@ target_compile_options(rd_mirror_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_include_directories(rd_mirror_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_mirror_test PRIVATE ico_render)
 
-# rd_perf_test (package P1): a synthetic game-shaped frame replayed 200
+# rd_perf_test: a synthetic game-shaped frame replayed 200
 # times and recorded 200 times: no resource is created or destroyed and no
 # texture or static mesh uploaded again in steady state, and the CPU time of
 # a replay stays under 20 ms on lavapipe; with --dump FILE it times a dump's
@@ -290,7 +286,7 @@ target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_W
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_perf_test PRIVATE ico_render)
 
-# rd_mesh_test (wave 3, R3ab): the mesh path.  Packet.c, RegistPacket.c,
+# rd_mesh_test: the mesh path.  Packet.c, RegistPacket.c,
 # MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
 # as the window build has them, fed synthetic p2o-decoded models, a grid and
 # a particle batch: the meshes, the recorded draws and VuCB, the GS state;
@@ -317,7 +313,7 @@ target_compile_options(rd_mesh_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 # (df_pack.h); without it that part is skipped
 target_link_libraries(rd_mesh_test PRIVATE ico_render ico_vu1_ref ico_math ico_port_data)
 
-# modelpack_test (v0.4.1, M3): model packs.  The same game files as
+# modelpack_test: model packs.  The same game files as
 # rd_mesh_test (test/mesh_env.h stubs the rest): the folder index on a fake
 # tree, the dump of a strip stream read back and converted (the triangles
 # the same), the bone packing, a cluster packet from vu_models.h dumped,
@@ -343,7 +339,7 @@ target_compile_options(modelpack_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(modelpack_test PRIVATE ico_render ico_vu1_ref ico_math)
 
-# rd_shadow_test (wave 4, R4b): the shadow count on the stencil.  Shadow.c
+# rd_shadow_test: the shadow count on the stencil.  Shadow.c
 # with the 2D layer and Matrix.c, as the window build has them, the rest of
 # the game stubbed: the count against the wrapped colour sum, the blur chain
 # and the composites against CPU references, the DATE receiver mask, and
@@ -363,7 +359,7 @@ target_compile_options(rd_shadow_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_shadow_test PRIVATE ico_render ico_math)
 
-# rd_fog_test (wave 4, R4c): the depth fog.  ZFog.c with the 2D layer, as
+# rd_fog_test: the depth fog.  ZFog.c with the 2D layer, as
 # the window build has it, the rest of the game stubbed: the Z byte the
 # PSMT8H read of the Z copy selects (a CPU model of the GS swizzle), the
 # CLUT order, the recording, and on a device quads at known Z fogged
@@ -381,7 +377,7 @@ target_compile_options(rd_fog_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_fog_test PRIVATE ico_render ico_math)
 
-# rd_blur_test (wave 5, R5a): the full-screen effects of staticBlur.c.
+# rd_blur_test: the full-screen effects of staticBlur.c.
 # staticBlur.c with the 2D layer and Matrix.c, as the window build has
 # them, the rest of the game stubbed: the commands each entry point records,
 # then on a device every effect against a CPU model of the same GS
@@ -402,7 +398,7 @@ target_compile_options(rd_blur_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_blur_test PRIVATE ico_render ico_math)
 
-# rd_water_test (wave 5, R5b): the render-to-texture surfaces.  puddle.c,
+# rd_water_test: the render-to-texture surfaces.  puddle.c,
 # pool.c, queen_barrier_disp.c, waterDot.c and clothAnimation.c with the
 # mesh path, the 2D layer and matrixDrive.c, as the window build has them,
 # the rest of the game stubbed: the block targets, aliases and camera scopes
@@ -433,7 +429,7 @@ target_compile_options(rd_water_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_water_test PRIVATE ico_render ico_vu1_ref ico_math)
 
-# rd_raw_test (wave 5, R5c): the raw packet builders outside seki.
+# rd_raw_test: the raw packet builders outside seki.
 # darkVolume.c, particleEffect.c, lineManager.c and lightning.c with the
 # VU1 chain reader (MicroCode.c), Primitive.c, the 2D layer and Matrix.c, as
 # the window build has them, the rest of the game stubbed: the packets
@@ -461,7 +457,7 @@ target_compile_options(rd_raw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_raw_test PRIVATE ico_render ico_vu1_ref ico_math)
 
-# rd_debug_test (wave 6, R6a): common/src/debug.c on the host, with the 2D
+# rd_debug_test: common/src/debug.c on the host, with the 2D
 # layer as the window build has them and port/data/sifdev_host.c for host0:,
 # the rest of the game stubbed: the debug font's points (the VU1 routine
 # debug.c runs on the host), the debug menu and option page drawn in
@@ -483,7 +479,7 @@ target_compile_options(rd_debug_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_
 # sifdev_host.c opens host0: files through host_fs (ico_widen, ico_mkdir)
 target_link_libraries(rd_debug_test PRIVATE ico_render ico_math ico_host_fs)
 
-# rd_mip_test (F2 C1): rdtex_MipChainBytes against the level sum and
+# rd_mip_test: rdtex_MipChainBytes against the level sum and
 # rdtex_BuildMipChain inside it for non-square textures (128x4, 512x2).
 # CPU only.
 add_executable(rd_mip_test test/rd_mip_test.c)
@@ -499,7 +495,7 @@ add_executable(texpack_load_test test/texpack_load_test.c)
 target_compile_options(texpack_load_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_load_test PRIVATE ico_render ico_miniz)
 
-# texpack_test (v0.4.0, T3): the pack's index on a folder tree of fake
+# texpack_test: the pack's index on a folder tree of fake
 # files (both roots, the tolerant layouts, duplicates, -mip and region
 # files, malformed names) and the loader thread against a fake texture
 # cache (request, pump, a changed generation dropped, the RAM cache, the
@@ -515,7 +511,7 @@ if(TARGET SDL3::SDL3-shared)
     target_compile_definitions(texpack_test PRIVATE ICO_TEXPACK_THREAD=1)
 endif()
 
-# texpack_e2e_test (v0.4.0, T3 integration): the disc's names
+# texpack_e2e_test: the disc's names
 # (texpack_disc_test's texpack_names.txt) looked up in the index texpack_Init
 # builds from a real pack's folder, in the hook's order, and every file
 # reached read with the real loaders.  77 without the disc's names or the
@@ -563,7 +559,7 @@ if(ICO_RUN_TESTS)
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool.png" --present 640x480)
     set_tests_properties(rd_replay_tool PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
-    # package QUEEN: the same dump listed without a device (--list --no-device)
+    # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
@@ -604,7 +600,7 @@ if(ICO_RUN_TESTS)
                              rd_shadow rd_fog rd_blur rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_perf PROPERTIES ENVIRONMENT
                                                                            "${_env}")
     endif()
-    # package AN-E: the same tests and expectations in the two-pass blend
+    # the same tests and expectations in the two-pass blend
     # fallback (ICO_RD_NO_DUAL=1: lavapipe has dualSrcBlend, so it is forced)
     set(_env_nodual ${_env} "ICO_RD_NO_DUAL=1")
     set(_nd "${CMAKE_CURRENT_BINARY_DIR}/nodual") # their files apart from the one-pass runs
@@ -621,7 +617,7 @@ if(ICO_RUN_TESTS)
                          rd_water_nodual rd_raw_nodual rd_mirror_nodual rd_interp_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
-    # v0.4.2 (Android): the same tests and expectations on a device with a
+    # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage
     # offsets, 4096 memory allocations): a pipeline or an allocation the

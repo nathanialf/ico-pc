@@ -11,8 +11,8 @@ include(cmake/IcoExclusions.cmake)
 # ICO_HEADLESS=OFF (the default) is the windowed ico_pc: the seki layer
 # draws through port/render (ICO_RD) into an SDL3 window. ON is the headless
 # build of the trace and test runs: the original packet code, no window, no
-# Vulkan. CMakePresets.json keeps the Linux
-# presets headless and builds the Windows presets windowed.
+# Vulkan. In CMakePresets.json every preset but win-x64 and android-arm64 is
+# headless.
 option(ICO_HEADLESS "Build the headless ico_pc (no window, no renderer)" OFF)
 option(ICO_FPTRAP "Unmask float divide-by-zero and invalid in simulation mode" OFF)
 option(ICO_BUILD_BLOCKED "Also compile the sources cmake/IcoExclusions.cmake blocks" OFF)
@@ -52,7 +52,7 @@ set(ICO_GAME_DEFINITIONS ICO_HOST=1)
 if(ICO_HEADLESS)
     list(APPEND ICO_GAME_DEFINITIONS ICO_HEADLESS=1)
 else()
-    # the seki layer's host path onto rd.h (renderer wave 2)
+    # the seki layer's host path onto rd.h
     list(APPEND ICO_GAME_DEFINITIONS ICO_RD=1)
 endif()
 if(ICO_FPTRAP)
@@ -79,7 +79,7 @@ set(ICO_GAME_OBJECT_LIBS "")
 set(ICO_COMPILED_COUNT 0)
 foreach(prog ${ICO_PROGRAMMERS})
     set(srcs ${ICO_SOURCES_${prog}})
-    # One host source list since renderer wave 6 (R6a): every game source
+    # One host source list: every game source
     # but ICO_EE_ONLY_SOURCES (ito/mpeg, replaced by port/fmv) is compiled
     # in both the headless and the window build.
     if(NOT ICO_BUILD_BLOCKED)
@@ -177,7 +177,7 @@ set_target_properties(ico_game PROPERTIES LINKER_LANGUAGE C)
 
 if(ICO_LINK_EXE)
     # main_host.c: the program's main and its options; trace_host.c: the
-    # per-Main-tick trace (package 2A replaces it); host_config.c: the exe
+    # per-Main-tick trace; host_config.c: the exe
     # directory, ico-pc.ini, the ISO check, the log and the Windows dialogs.
     set(_ico_pc_sources port/platform/main_host.c port/platform/trace_host.c
                         port/platform/host_config.c)
@@ -206,7 +206,7 @@ if(ICO_LINK_EXE)
     # wait, libdma, and libgcc's fptodp. Both builds: the window build draws
     # through rd above it. In the program itself rather than a library, since
     # they call back into the game. debug.c and debug_exception.c are game
-    # sources since renderer wave 6 (R6a).
+    # sources (cmake/IcoSources.cmake).
     target_sources(ico_pc PRIVATE port/null/gfx_null.c port/null/libgcc_null.c)
     set_source_files_properties(port/null/gfx_null.c port/null/libgcc_null.c TARGET_DIRECTORY
                                 ico_pc PROPERTIES INCLUDE_DIRECTORIES "${ICO_COMPAT_DIR}")
@@ -271,7 +271,7 @@ if(ICO_BASH AND NOT CMAKE_CROSSCOMPILING)
     add_test(NAME package_textures COMMAND ${ICO_BASH} ${CMAKE_SOURCE_DIR}/tools/test/package_textures_test.sh)
 endif()
 
-# v0.4.2 (N2): on arm64 Android (and arm64 Linux) the movie decoder
+# On arm64 Android (and arm64 Linux) the movie decoder
 # (port/fmv, Ittiam libmpeg2) uses the library's own NEON routines, which are
 # assembly: the language is enabled here, in the top directory, as CMake
 # asks.  Apple and Windows arm64 keep the C routines (the library's
@@ -308,7 +308,7 @@ add_subdirectory(port/math)
 add_subdirectory(port/data)
 add_subdirectory(port/null)
 
-# --- Package 1B: scheduler, kernel calls, arena, host loop and their tests --
+# --- The port's modules -----------------------------------------------------
 add_subdirectory(port/platform)
 add_subdirectory(port/test)
 add_subdirectory(port/rhi)
@@ -321,9 +321,9 @@ add_subdirectory(port/input)
 add_subdirectory(port/config)
 add_subdirectory(port/save)
 add_subdirectory(port/fmv)
-add_subdirectory(port/ui) # Phase 6, 6B: runtime text, layout extension, popups
+add_subdirectory(port/ui) # runtime text, layout extension, popups, the menus
 
-# --- The window build: ico_pc on port/render (renderer wave 2) ---------------
+# --- The window build: ico_pc on port/render --------------------------------
 if(TARGET ico_pc AND NOT ICO_HEADLESS)
     if(NOT TARGET ico_render OR NOT TARGET SDL3::SDL3-shared)
         message(FATAL_ERROR "The window build of ico_pc needs port/render (DXC, Vulkan-Headers, "
@@ -333,7 +333,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_video.c)
     target_link_libraries(ico_pc PRIVATE ico_render SDL3::SDL3-shared)
     if(ANDROID)
-        # v0.4.3 AN-22a: the player's own graphics driver (Options > Graphics
+        # The player's own graphics driver (Options > Graphics
         # driver), loaded with libadrenotools (BSD-2-Clause, Billy Laws;
         # with liblinkernsbypass, docs/THIRD_PARTY.md), the source
         # tools/fetch_android.sh pins (ICO_ADRENOTOOLS_SRC in

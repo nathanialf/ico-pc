@@ -19,8 +19,8 @@ directly from disc or ELF bytes: frozen) or `save` (serialised into the save
 image or the card files: frozen). On the host (x64) only overlay and save
 structs are asserted. The runtime structs' asserts are documentation of the
 EE layout, compiled only with -DICO_LAYOUT_EE=1 (on an EE-layout build; the
-32-bit host that ran them every build was retired at Phase 2 exit, commit
-36a1d73e). `pending=<package>` holds a frozen struct's 64-bit asserts back
+32-bit host build that ran them was retired, commit 36a1d73e).
+`pending=<package>` holds a frozen struct's 64-bit asserts back
 until that package has converted its pointer fields (define
 ICO_LAYOUT_PENDING to compile them anyway). `nosize` drops a size taken from
 the struct's comment (when the comment means something else); `base=0xNN`

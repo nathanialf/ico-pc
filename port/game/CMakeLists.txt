@@ -1,12 +1,13 @@
-# port/game: the port's gameplay options (Phase 6A) and
-# achievements (6E, below).
+# port/game: the port's gameplay options and
+# achievements (below).
 # One module holds stick_fix, yorda_safe and mirror; ico_input, ico_sndn2 and
 # the game's hooks (ico2/, under ICO_HOST) read it. The config reader is
 # port/config's; host_config.c is compiled by ico_pc and the tests.
-# video_options.c: the display options (renderer wave 7, R7a)
-# photo_mode.c: photo mode's state and camera (package PHOTO); it uses rd.h's RdCamera struct only, so port/render is on
-# the include path of the headless build too (nothing of rd is linked)
-# appearance.c (v0.4.2, package K): the characters' colours, their
+# video_options.c: the display options
+# photo_mode.c: photo mode's state and camera; it uses rd.h's RdCamera struct
+# only, so port/render is on the include path of the headless build too
+# (nothing of rd is linked)
+# appearance.c: the characters' colours, their
 # [characters] keys and the CLUT recolour Texture.c applies (ICO_RD); rd_tex.h
 # for its constants and CLUT order only (nothing of rd is linked)
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c)
@@ -34,7 +35,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# Photo mode's state and camera (package PHOTO): the orbit, the clamps, the
+# Photo mode's state and camera: the orbit, the clamps, the
 # zoom, the keys, the capture's name; the basis kept from the game camera at
 # enter, the field of view now and the step limit (issue 14). CPU only.
 add_executable(photo_test test/photo_test.c ../platform/host_config.c)
@@ -48,7 +49,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME photo COMMAND photo_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# The characters' colours (v0.4.2, package K): the rule table over
+# The characters' colours: the rule table over
 # synthetic CLUTs (Original is the identity, the coverage, b_mantle's masks,
 # the alpha, the formats, the anchors and the weights), the [characters]
 # keys, Randomize and Reset. CPU only.
@@ -88,7 +89,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME kanban_boot COMMAND kanban_boot_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# v0.4.3 AN-19 (issue 19): the hand records Ico and Yorda hold hands with
+# The hand records Ico and Yorda hold hands with (issue 19)
 # (ico2/sugipon/src/handManager.c, compiled into the test) and the arc-cosine
 # table's NaN guard (tableSin.c, quaternion.c and matrixDrive.c as the game
 # has them; ico_platform for the fault log). CPU only.
@@ -107,7 +108,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME hand_ik COMMAND hand_ik_test)
 endif()
 
-# --- Achievements (Phase 6E) -----------------------
+# --- Achievements -----------------------------------
 # ico_gamestate.h (port/include) is the read-only game-state view and the
 # signal queue; the game's one-line hooks (ICO_HOST) include it from common,
 # fumi, script and sugipon. gamestate.c is built twice: with ICO_GS_LIVE into
@@ -115,7 +116,7 @@ endif()
 # include path and record layout), and without it into the test (a synthetic
 # sampler). achievements.c is port code: the table, the checks, the file and
 # the popups (port/ui's strings and queue, which ico_pc holds).
-# credits.c (package CRED): the Extras
+# credits.c: the Extras
 # credits' flag, lock and start, and the staff roll's port credit lines, in
 # the same library (gamestate.c suspends the achievements on its flag);
 # credits_live.c, the playback's engine, reads and writes the game's state,
@@ -182,9 +183,9 @@ if(ICO_RUN_TESTS)
     add_test(NAME achievements COMMAND achievements_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# --- The model viewer (package MV) -----------------------
+# --- The model viewer -----------------------------------
 if(TARGET ico_pc)
-    # title_logo.c (package L1): the title's logo hidden under Settings and
+    # title_logo.c: the title's logo hidden under Settings and
     # Extras, asked by seki/src/RegistPacket.c
     add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
@@ -215,7 +216,7 @@ if(TARGET ico_pc)
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_photo_view_live>)
 endif()
-# title_logo_test (package L1): the title's logo hidden under Settings and
+# title_logo_test: the title's logo hidden under Settings and
 # Extras from the title, never by the pause menu's, and shown again on the
 # title's menu; the game's globals and the menus' answers stubbed. CPU only.
 add_executable(title_logo_test test/title_logo_test.c title_logo.c)
@@ -241,7 +242,7 @@ if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
                          SKIP_REGULAR_EXPRESSION "model_viewer_headless: skipped")
 endif()
 
-# credits_test (package CRED): the game's staffroll.c over a short table in the disc's forms,
+# credits_test: the game's staffroll.c over a short table in the disc's forms,
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
 # roll's forms, and the roll ends after them; then the lock ([dev]

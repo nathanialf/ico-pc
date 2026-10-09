@@ -11,7 +11,8 @@
 #       the calling directory. <name> is the lookup key in the table.
 #   ico_add_shader(<name> <file.hlsl> <entry> <stage> DEFINES <D=V>... SUFFIX <s>)
 #       the same entry compiled with the macros given (DXC -D); the table key
-#       is <name><s> (package AN-E: the *_nodual entries, ICO_NO_DUAL=1).
+#       is <name><s> (the *_nodual entries of the two-pass blend fallback,
+#       ICO_NO_DUAL=1).
 #   ico_shaders_library(<target>)
 #       after the last ico_add_shader: builds the static library <target>
 #       holding shaders_gen.c, with shaders_gen.h on its public include path.

@@ -1,10 +1,10 @@
-# port/input: the input layers (Phase 4C): the libpad
+# port/input: the input layers: the libpad
 # subset (pad_host.c), the pad script reader (pad_script.c, the headless and
 # test source), the virtual pad's arithmetic (vpad.c), the binding layer
 # (bindings.c, input_config.c), the touch overlay's mapper (touch.c) and the
 # mouse camera's capture rule and photo look accumulator (mouse_look.c), the
 # camera speed and range the game's hand camera asks for (mouse_camera.c) and
-# the menus' mouse pointer (pointer.c, v0.4.3 I17b). The SDL3 device layer
+# the menus' mouse pointer (pointer.c). The SDL3 device layer
 # (input_sdl.c) is part of the window build only; the headless build has no
 # SDL dependency.
 add_library(ico_input STATIC
@@ -42,7 +42,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME input COMMAND input_test)
 endif()
 
-# package Q1: the pad recording (input_record.c): its format, the round trip
+# the pad recording (input_record.c): its format, the round trip
 # through the pad script reader, and the sample point in scePadRead
 add_executable(input_record_test test/input_record_test.c ../platform/host_config.c)
 target_include_directories(input_record_test PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
@@ -52,7 +52,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME input_record COMMAND input_record_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
-# package AN-G: the touch overlay's mapper (touch.c): layouts, the floating
+# the touch overlay's mapper (touch.c): layouts, the floating
 # stick, buttons under several fingers, the look pad, visibility and fades,
 # and the merged pad through ico_input_vpad_to_frame
 add_executable(touch_test test/touch_test.c)

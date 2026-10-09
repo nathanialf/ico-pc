@@ -132,7 +132,7 @@ SDL3_BASE="https://github.com/libsdl-org/SDL/releases/download/release-${SDL3_VE
 # missing. SDL loads its video and audio backends with dlopen, so the
 # library runs on hosts with more or fewer of them.
 SDL3_LINUX="$DEST/sdl3/linux-x64"
-# "+audio": the build with the ALSA/PulseAudio headers (Phase 4B); a tree
+# "+audio": the build with the ALSA/PulseAudio headers; a tree
 # stamped by an older run of this script (X11 only, no audio backend) is
 # rebuilt.
 SDL3_LINUX_ID="SDL3-${SDL3_VERSION}+audio"
@@ -169,7 +169,7 @@ else
         )
         unpack_debs "$X11DEV" "${X11_DEBS[@]}"
     fi
-    # Audio backend headers (Phase 4B): SDL
+    # Audio backend headers: SDL
     # builds a backend only when its headers are found and dlopens the
     # library by soname at run time. ALSA is the one this port needs (it
     # also reaches PulseAudio and PipeWire through their ALSA plugins);
@@ -300,7 +300,7 @@ else
     echo "$DXC_VERSION-$DXC_LINUX_FILE" > "$DXC_DIR/.ico-release"
     echo "==> DXC ${DXC_VERSION} at $DXC_DIR"
 fi
-# --- 5. Ittiam libmpeg2 (the FMV decoder, Phase 4E) ------------------------------
+# --- 5. Ittiam libmpeg2 (the FMV decoder) ---------------------------------------
 #
 # AOSP platform/external/libmpeg2 (Apache-2.0), tag android-16.0.0_r4 =
 # commit a97c2a1f0a796dc32bed80d3353c69c5fc07c750. googlesource's +archive
@@ -310,7 +310,8 @@ fi
 # the commit id, and the SHA-256 of `git archive --format=tar` of it (the
 # tree with fixed mtimes; taken 2026-10-05). The source tree is installed;
 # port/fmv/CMakeLists.txt compiles it as a static library with each
-# preset's own compiler (linux-x64, win-x64 mingw, asan), generic C only.
+# preset's own compiler (linux-x64, win-x64 mingw, asan): generic C, and
+# the library's NEON assembly on arm64.
 # docs/THIRD_PARTY.md has the versions.
 LIBMPEG2_TAG="${LIBMPEG2_TAG:-android-16.0.0_r4}"
 LIBMPEG2_COMMIT="${LIBMPEG2_COMMIT:-a97c2a1f0a796dc32bed80d3353c69c5fc07c750}"

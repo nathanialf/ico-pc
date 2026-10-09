@@ -5,9 +5,8 @@ The decompiled game reached its records through offsets the ROM's loads and
 stores used: `*(T *)((char *)p + 0x230)`, `((int *)p)[9]`, `f[81]` over a
 `float *` view of a record, `ICO_RAW(T, p, 0x230, field)`. On the EE those
 offsets are the records' layout. On a 64-bit host every pointer field before
-the offset moves what follows, so a raw offset can land on another field. The
-2D-2F sweeps fixed what the boot ran; this audit looks at every site the host
-compiles, whether it runs or not.
+the offset moves what follows, so a raw offset can land on another field.
+This audit looks at every site the host compiles, whether it runs or not.
 
 Method:
 
@@ -2704,7 +2703,7 @@ UNPROTO_PASS = [None]  # set by main: the -std= of the unprototyped-call pass
 
 
 
-# --- Pointer-wide values held in 32 bits (package X4) ----------------------
+# --- Pointer-wide values held in 32 bits -----------------------------------
 # A pointer, an ICO_WORD (intptr_t) or a pointer-wide integer converted to
 # int, unsigned int or narrower loses its upper 32 bits on x64; on the EE
 # both are 32 bits wide, so nothing in the source marks it (BoxWork.colData). gcc's early SSA dump (-fdump-tree-ssa-lineno) spells

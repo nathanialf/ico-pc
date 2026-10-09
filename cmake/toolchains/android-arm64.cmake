@@ -2,7 +2,7 @@
 # android-arm64 and the Gradle build, android/app/build.gradle) with the
 # NDK tools/fetch_android.sh installs: the NDK's own toolchain file, API
 # level 29 (Android 10), the static C++ runtime (the program is C; the
-# graphics driver loader, libadrenotools, is C++; v0.4.3 AN-22a), 16 KB-aligned
+# graphics driver loader, libadrenotools, is C++), 16 KB-aligned
 # segments, position-independent code (the program is libmain.so, which
 # SDL's Java side loads).
 #

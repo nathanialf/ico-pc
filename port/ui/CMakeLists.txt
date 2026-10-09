@@ -1,12 +1,11 @@
-# port/ui: the port's runtime text, layout extension, strings and popups
-# (Phase 6, package 6B).
+# port/ui: the port's runtime text, layout extension, strings and popups.
 #
 #   ico_ui       the game's copy, compiled into ico_pc: ICO_RD in the window
 #                build (draws through port/render), measure-only headless;
 #                ui_host.c (the game's globals, the decoder flush) in the
 #                window build only
 #   ico_ui_rd    the same sources with ICO_RD for ui_test (needs ico_render)
-#   settings.c, ui_list.c, ui_hint.c   the Settings menu (6C), its list
+#   settings.c, ui_list.c, ui_hint.c   the Settings menu, its list
 #                pages and its button prompts, in ico_ui and settings_test: it
 #                reads the port's option modules (port/game, port/input,
 #                port/config) and the game's layout globals
@@ -68,7 +67,7 @@ target_include_directories(ico_common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # programs link the libraries)
 set(_ui_settings_deps ico_achievements ico_audio ico_input ico_options ico_config)
 function(ico_ui_settings name)
-    # v0.4.3 I17b: the mouse pointer in the menus (ui_mouse.c, its arithmetic
+    # the mouse pointer in the menus (ui_mouse.c, its arithmetic
     # in ui_mouse_geom.c; the pointer's state is port/input's pointer.c)
     target_sources(${name} PRIVATE settings.c ui_list.c ui_hint.c gallery.c photo_ui.c ui_mouse.c
                                    ui_mouse_geom.c)
@@ -80,11 +79,11 @@ endfunction()
 
 if(TARGET ico_pc)
     if(NOT ICO_HEADLESS AND TARGET ico_render)
-        # AN-G: touch_ui.c, the touch overlay's drawing (reads port/input's
+        # touch_ui.c, the touch overlay's drawing (reads port/input's
         # touch.h through ico_ui_settings' include path)
         ico_ui_library(ico_ui ON ui_host.c touch_ui.c)
         if(TARGET SDL3::SDL3-shared)
-            # Q2: ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
+            # ui_host.c posts SDL_EVENT_QUIT for the title's "Quit to
             # desktop" (the headers only; ico_pc links SDL3)
             target_compile_definitions(ico_ui PRIVATE ICO_UI_HAVE_SDL=1)
             target_include_directories(ico_ui PRIVATE
@@ -148,7 +147,7 @@ function(ico_settings_test name main_c)
 endfunction()
 ico_settings_test(settings_test test/settings_test.c)
 
-# settings_extra_test: the tests v0.4.3 added to the Settings menu, over the same
+# settings_extra_test: the newer Settings menu tests, over the same
 # fixture (settings_fixture.c) and sources as settings_test; settings_test.c is
 # close to the source size cap, so new settings tests go in settings_extra_test.c
 ico_settings_test(settings_extra_test test/settings_extra_test.c)
@@ -194,7 +193,7 @@ if(ICO_RUN_TESTS)
     if(TARGET ico_pc AND ICO_HEADLESS AND Python3_EXECUTABLE)
         # every stream, three effects of every bank and one entry of each
         # group through the gallery in one headless run (gallery_sweep.py,
-        # package MUS3; headless_common.py): each stream once to its end with
+        # with headless_common.py): each stream once to its end with
         # its total, R1 and L1, each group under its name and sounding, the
         # title restored; the table in gallery_sweep/table.md
         add_test(NAME gallery_sweep
@@ -215,7 +214,7 @@ if(ICO_RUN_TESTS)
     endif()
 endif()
 
-# model_viewer_test (package MV, port/game/test): the model viewer's table
+# model_viewer_test (port/game/test): the model viewer's table
 # (port/game/model_viewer_table.c) against its motion-kind blocks and the
 # game's table sizes, and its names and words in the five languages with a
 # glyph for every character in the port font. CPU only.
@@ -234,7 +233,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME model_viewer COMMAND model_viewer_test)
 endif()
 
-# model_viewer_cam (package A, port/game/test): the viewer's camera step
+# model_viewer_cam (port/game/test): the viewer's camera step
 # (port/game/model_viewer_cam.c): L2/R2 zoom, the left stick's vertical move,
 # the clamps and the dead zone. CPU only.
 add_executable(model_viewer_cam_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_cam_test.c"
@@ -248,7 +247,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
 endif()
 
-# ui_mouse_test (v0.4.3 I17b): the mouse pointer's arithmetic in the menus
+# ui_mouse_test: the mouse pointer's arithmetic in the menus
 # (ui_mouse_geom.c): the pointer into the layouts' grid (4:3 and a
 # pillarboxed 1920 x 1080), the rows' boxes and the hit test. CPU only.
 add_executable(ui_mouse_test test/ui_mouse_test.c ui_mouse_geom.c)
@@ -264,7 +263,7 @@ if(NOT TARGET ico_render)
 endif()
 
 # font.c and the embedded font alone, with ICO_RD: rd_present_test's overlay
-# check (package OV, port/render/CMakeLists.txt) draws a glyph through its
+# check (port/render/CMakeLists.txt) draws a glyph through its
 # overlay mode; rd_replay_tool's overlay test draws text through it;
 # font_edge_test (below) draws both
 add_library(ico_ui_font_rd OBJECT font.c "${_ui_font_c}")
@@ -300,7 +299,7 @@ target_include_directories(ui_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_
 target_compile_definitions(ui_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(ui_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-# v0.4.2 (package F-B): the menus' sheet strips checked against
+# the menus' sheet strips checked against
 # font_sheet_ps's CPU reference (port/render/test/sheet_ref.h)
 target_link_libraries(ui_test PRIVATE ico_render ico_math ico_sheet_ref)
 
@@ -326,7 +325,7 @@ target_compile_options(settings_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(settings_render PRIVATE ico_render ico_math ${_ui_settings_deps}
                       ico_platform)
-# menu_text_test (P3, TXT2): the menu text table (against the disc's
+# menu_text_test: the menu text table (against the disc's
 # texProperty when the image is there), the strings, the hook through the real
 # layout_texture.c (the table's rows a text strip, the others their texture
 # sprite) on the recording, then a port row into SCENE on a Vulkan device
@@ -385,7 +384,7 @@ if(ICO_RUN_TESTS)
                      ${_ico_cov_elf})
     set_tests_properties(font_coverage PROPERTIES SKIP_RETURN_CODE 77)
 endif()
-# menu_look (v0.4.2, package F-C): the menus' Arimo text against the game's
+# menu_look: the menus' Arimo text against the game's
 # menu sheets: the sheets read from the disc (test/menu_sheets.c, the TIM2
 # reader the game face's builder had), the item strips (menu_font.c
 # ui__MenuStripRaster) through the shader's CPU reference (ico_sheet_ref),
@@ -424,7 +423,7 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
         set_tests_properties(menu_look PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
-# font_edge_test (package DEF): an overlay line of text presented at Enhanced
+# font_edge_test: an overlay line of text presented at Enhanced
 # 1920 x 1080 and 3840 x 2160, each glyph edge at most one pixel between
 # background and ink, and the mirror mode
 add_executable(font_edge_test test/font_edge_test.c $<TARGET_OBJECTS:ico_ui_font_rd>)

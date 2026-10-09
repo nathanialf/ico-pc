@@ -1,6 +1,6 @@
-# port/audio: the software SPU2 (Phase 4A). Integer-only
-# code with no platform dependencies; Phase 4B adds the sndn2 host and the
-# SDL output on top (ico_sndn2, below).
+# port/audio: the software SPU2. Integer-only
+# code with no platform dependencies; the sndn2 host and the SDL output sit
+# on top of it (ico_sndn2, below).
 add_library(ico_audio STATIC
     adpcm.c
     spu2.c
@@ -42,7 +42,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME spu2 COMMAND spu2_test)
 endif()
 
-# --- Phase 4B: the Sg sequencer, the SNDN2DRV host and the output ------------
+# --- The Sg sequencer, the SNDN2DRV host and the output ---------------------
 # sce/libsndn2/sound.c is the EE sequencer the game calls (the decomp's
 # libsndn2.a(sound.o) with its ICO_HOST seams, kept upstream like ico2/); it
 # is decomp-shaped game code, so it takes the game's warning set and ICO_HOST.
@@ -94,7 +94,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME libsd_irx COMMAND libsd_irx_test)
 endif()
 
-# pan_test (renderer wave 7, R7c): the mirror mode's left/right swap of the
+# pan_test: the mirror mode's left/right swap of the
 # rendered blocks (ico_audio_pan_mirror) and the option it reads
 # (host_config.c: the toml writer behind ico_config, as options_test has it)
 add_executable(pan_test test/pan_test.c "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
@@ -105,7 +105,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME audio_pan COMMAND pan_test)
 endif()
 
-# spu2_bench (package S3): `--check` is the 10 s
+# spu2_bench: `--check` is the 10 s
 # render CRC test of four scenes against the frame-by-frame renderer's
 # golden values; without arguments it times the render per vsync.
 # spu2_prof is the same harness over a copy of the SPU2 built with

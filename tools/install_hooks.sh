@@ -44,7 +44,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 # Staged C must be clang-formatted. Fix with: tools/format.sh FILE
 "$ROOT/tools/format.sh" --check --staged
 
-# The generators need pyelftools (tools/requirements.txt): the venv's python.
+# gen_data_desc.py needs pyelftools (tools/requirements.txt): the venv's python.
 PY="$ROOT/.venv/bin/python"
 [[ -x "$PY" ]] || PY=python3
 for gen in gen_data_desc gen_layout_asserts gen_sources; do

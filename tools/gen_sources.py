@@ -10,8 +10,8 @@ microprograms (ico2/vusrc/, replaced by shaders).
 Each C source lands in one list per programmer directory (the directory
 decides its include path, as the period build had it), or in
 ICO_EE_ONLY_SOURCES when port/ replaces it for good (the ito/mpeg movie
-player: port/fmv). Since renderer wave 6 (package R6a) there is one host
-source list: the renderer-owned files the renderer waves rewrote (all of
+player: port/fmv). There is one host source list: the renderer-owned
+files the port's renderer rewrote (all of
 seki/src, the sugipon and ito effect files, common/src/debug.c and
 debug_exception.c) compile like every other game source, in both the
 headless and the window build (docs/BUILDING.md, "How the game is compiled").
@@ -30,10 +30,9 @@ OUT = ROOT / "cmake" / "IcoSources.cmake"
 
 PROGRAMMERS = ["common", "fumi", "ito", "omori", "script", "seki", "sugipon"]
 
-# Sources the host build never compiles because port/ replaces them for good
-# (they stay in the PS2 build): the ito/mpeg movie player, replaced by
-# port/fmv (Phase 4E). Listed in ICO_EE_ONLY_SOURCES so the
-# inventory stays complete.
+# Sources the host build never compiles because port/ replaces them for
+# good: the ito/mpeg movie player, replaced by port/fmv. Listed in
+# ICO_EE_ONLY_SOURCES so the inventory stays complete.
 EE_ONLY_DIRS = ("ico2/ito/mpeg/",)
 
 

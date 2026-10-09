@@ -1,4 +1,6 @@
-# tools/package_textures_lib.sh: the textures folder of the release packages,
+# shellcheck shell=bash
+# tools/package_textures_lib.sh: the folder notes of the release packages
+# (textures, models, reshade), the zip writer and the archive checks,
 # sourced by package_win.sh and package_linux.sh and by
 # tools/test/package_textures_test.sh. Functions only.
 
