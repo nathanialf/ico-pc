@@ -23,10 +23,11 @@ BOOT_LAST = 400
 class PadScript:
     def __init__(self, boot_src, start=560):
         self.lines = []
-        for ln in open(boot_src):
-            f = ln.split("#")[0].split()
-            if f and f[0].isdigit() and int(f[0]) <= BOOT_LAST:
-                self.lines.append("%s %s" % (f[0], f[1]))
+        with open(boot_src) as src:
+            for ln in src:
+                f = ln.split("#")[0].split()
+                if f and f[0].isdigit() and int(f[0]) <= BOOT_LAST:
+                    self.lines.append("%s %s" % (f[0], f[1]))
         self.t = start
         self.out = []
 

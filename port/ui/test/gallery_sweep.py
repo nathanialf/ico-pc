@@ -32,13 +32,15 @@ not restored, or on any "gallery: failed".
 Exit 77 without the disc image.
 """
 
+import argparse
 import os
 import re
 import subprocess
 import sys
 import time
 
-from headless_common import PadScript, fresh_work, rms_after
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works under python -I too
+from headless_common import PadScript, fresh_work, rms_after  # noqa: E402
 
 DWELL = 95          # seconds a stream may play (longer ones are cut there)
 SE_DWELL = 10       # an effect's
@@ -209,21 +211,18 @@ def judge_stream(it, dwell, blank, fixed):
 
 
 def main():
-    args = sys.argv[1:]
-    report = None
-    if "--report" in args:
-        i = args.index("--report")
-        report = args[i + 1]
-        del args[i:i + 2]
-    reread = "--reread" in args  # judge a finished run's folder again, no run
-    if reread:
-        args.remove("--reread")
-    only = None
-    if "--play" in args:  # a developer's run of some entries only (no checks)
-        i = args.index("--play")
-        only = args[i + 1].split(",")
-        del args[i:i + 2]
-    exe, iso, work = args[:3]
+    ap = argparse.ArgumentParser(description="The gallery's every entry in one headless run.")
+    ap.add_argument("exe", help="the headless ico_pc")
+    ap.add_argument("iso", help="the disc image")
+    ap.add_argument("work", help="the work folder")
+    ap.add_argument("--report", help="write the table (Markdown) here")
+    ap.add_argument("--reread", action="store_true",
+                    help="judge a finished run's folder again, no run")
+    ap.add_argument("--play",
+                    help="a developer's run of these entries only (comma list; no checks)")
+    args = ap.parse_args()
+    exe, iso, work, report, reread = args.exe, args.iso, args.work, args.report, args.reread
+    only = args.play.split(",") if args.play is not None else None
     if not os.path.isfile(iso):
         print("gallery_sweep: no disc image at %s; skipped" % iso)
         return 77
@@ -282,7 +281,8 @@ def main():
 def judge(work, stopped, rc, report, keep):
     """Reads the run's log and dump; prints the tables; 0 or 1."""
     logp = os.path.join(work, "logs", "ico-pc.log")
-    log = open(logp, errors="replace").read()
+    with open(logp, errors="replace") as f:
+        log = f.read()
     items, misc, absent, blank = parse(log)
     wav = os.path.join(work, "audio.wav")
     for it in items:

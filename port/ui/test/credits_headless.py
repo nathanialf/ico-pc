@@ -25,12 +25,14 @@ folder), compared by name and content.
 Exit 77 without the disc image.
 """
 
+import argparse
 import hashlib
 import os
 import subprocess
 import sys
 
-from headless_common import PadScript, fresh_work
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # works under python -I too
+from headless_common import PadScript, fresh_work  # noqa: E402
 
 # the boot: port/input/pad-boot.txt's presses up to the opening demo's skip
 # (the title shows at about Main tick 399), then Down to Settings, Cross, Down six
@@ -84,12 +86,18 @@ def run(exe, iso, work, ticks, pad, unlock):
                  os.path.join(work, "pad.txt"), "unlock_credits=1\n" if unlock else ""))
     r = subprocess.run([exe_copy], cwd=work,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=450)
-    log = open(os.path.join(work, "logs", "ico-pc.log"), errors="replace").read()
+    with open(os.path.join(work, "logs", "ico-pc.log"), errors="replace") as f:
+        log = f.read()
     return r.returncode, log, listing(os.path.join(work, "saves"))
 
 
 def main():
-    exe, iso, work = sys.argv[1:4]
+    ap = argparse.ArgumentParser(description="Extras > Credits in the headless game.")
+    ap.add_argument("exe", help="the headless ico_pc")
+    ap.add_argument("iso", help="the disc image")
+    ap.add_argument("work", help="the work folder")
+    args = ap.parse_args()
+    exe, iso, work = args.exe, args.iso, args.work
     if not os.path.isfile(iso):
         print("credits_headless: no disc image at %s; skipped" % iso)
         return 77
