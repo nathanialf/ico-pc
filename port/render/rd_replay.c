@@ -1320,10 +1320,10 @@ static void noteMipUse(RdTexRec *t, const RdDrawState *d)
 
 /* The target's colour copied into its snapshot texture (created on first
  * use) at the same texels, area only: the copy ends the open pass and
- * leaves the snapshot readable.  tc->snapRect is the area it holds now; the
- * rest of the snapshot is older content, which no draw reads (each reads
- * inside the area it asked for: snapHolds).  False when there is no
- * snapshot texture. */
+ * leaves the snapshot readable.  The rest of the snapshot is older content:
+ * a caller copies an area that holds every texel its draw reads (the whole
+ * target, or blurSnapArea's bound for a staticBlur sprite), so no draw reads
+ * a stale texel.  False when there is no snapshot texture. */
 static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
 {
     endPass(r);
@@ -1339,20 +1339,7 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
     rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
     rhi_CmdCopyTexture(s_cl, tc->color, area, tc->snap, area.x, area.y);
     rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
-    tc->snapRect = area;
     return true;
-}
-
-static bool rectHolds(RhiRect outer, RhiRect inner);
-
-/* Whether the snapshot holds every texel a draw reads (need); if not, the
- * whole target is copied, so a draw never reads a stale texel. */
-static bool snapHolds(Replay *r, RdTargetRec *tc, RhiRect need)
-{
-    if (rectHolds(tc->snapRect, need)) {
-        return true;
-    }
-    return takeSnap(r, tc, (RhiRect){0, 0, tc->tw, tc->th});
 }
 
 /* The texture a draw samples, after any state change it needs.  Returns the
@@ -1407,7 +1394,11 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
         /* the GS reads the buffer it is drawing into: sample a copy, whole
          * (the sampler, the mip choice and a perspective STQ leave the
          * texels it reads unbounded here) */
-        takeSnap(r, src, (RhiRect){0, 0, src->tw, src->th});
+        if (!takeSnap(r, src, (RhiRect){0, 0, src->tw, src->th})) {
+            *textured = 0;
+            *w = *h = 1;
+            return g_rd.dummy; /* no snapshot texture: untextured */
+        }
         return src->snap;
     }
     if (src->colorState != RHI_STATE_SHADER_READ) {
@@ -2769,17 +2760,10 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
     }
-    /* the destination before the command */
-    endPass(r);
-    if (!tc->snap.id) {
-        tc->snap = rhi_CreateTexture(&(RhiTextureDesc){
-            tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap"});
-        tc->snapState = RHI_STATE_UNDEFINED;
+    /* the destination before the command, whole */
+    if (!takeSnap(r, tc, (RhiRect){0, 0, tc->tw, tc->th})) {
+        return;
     }
-    rd__Transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
-    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
-    rhi_CmdCopyTexture(s_cl, tc->color, (RhiRect){0, 0, tc->tw, tc->th}, tc->snap, 0, 0);
-    rd__Transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
     if (ds.textured && ds.tex.id == tc->color.id) {
         ds.tex = tc->snap; /* the GS reads the buffer it draws into */
     }
@@ -3895,7 +3879,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
         /* the texels the sprite reads from the snapshot: the destination
          * at its own fragments, the texture at its UVs (blurSnapArea) */
         blurSnapArea(r, tc, &p, uv, dstRead, selfSample, &need);
-        if (!takeSnap(r, tc, need) || !snapHolds(r, tc, need)) {
+        if (!takeSnap(r, tc, need)) {
             return;
         }
     }

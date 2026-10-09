@@ -308,15 +308,12 @@ typedef struct RdTargetRec {
     RhiFormat format;
     RhiTexture color, depth;
     RhiState colorState, depthState;
-    RhiTexture snap; /* copy used when a draw samples the target it renders to */
+    /* copy used when a draw samples the target it renders to, or reads its
+     * destination (rd_replay.c takeSnap: only the area a draw reads is fresh) */
+    RhiTexture snap;
     RhiState snapState;
-    /* the texels of snap copied from the target by the latest copy (the
-     * rest holds older content): a draw reads snap only inside it */
-    RhiRect snapRect;
-    uint32_t snapFor;    /* replay counter at which snap was taken */
     uint32_t viewTex[3]; /* RdTex ids of rd_TargetTexture, per RdTexView */
-    uint32_t ownerFrame;
-    uint8_t zFormat; /* RdZFormat of the depth buffer (R2c); 0 = PSMZ32 */
+    uint8_t zFormat;     /* RdZFormat of the depth buffer (R2c); 0 = PSMZ32 */
     /* package P1: a freed temporary target kept with its textures for the
      * next of its size (rd__TempTargetAlloc); a taken one is cleared
      * (rd_replay.c clearNewTargets: colour 0, depth 1.0) at the next replay
