@@ -16,7 +16,7 @@
 #include "pointer.h"
 #include "touch.h"
 #ifdef __ANDROID__
-#include "host_android.h"
+#include "android/host_android.h" /* port/platform/android: the phone vibrator */
 #else
 /* no phone vibrator here: a controller is the only rumble */
 static void ico_host_vibrate(int amplitude, int ms)
