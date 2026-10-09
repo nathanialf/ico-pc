@@ -24,6 +24,10 @@
    the pad's byte 0 = up). */
 typedef struct IcoVirtualPad {
     unsigned int buttons;
+    /* The same frame as the menus see it: the gamepad's face buttons and
+       d-pad by position whatever Remap controls says, everything else (the
+       other gamepad buttons, keyboard, mouse, touch) as in buttons. */
+    unsigned int menu_buttons;
     float lx, ly, rx, ry;
 } IcoVirtualPad;
 
@@ -67,6 +71,10 @@ int ico_input_mirror(void);
 /* The frame scePadRead hands out now: the script's if one is loaded, else
    the live pad, else a centred, released frame. */
 void ico_input_frame(IcoPadFrame *out);
+/* The menus' button word (active high) out of a 32-byte libpad read buffer:
+   bytes 20 and 21, active low. fumi/ios/pad.c reads the default table's
+   buttons through it. */
+unsigned int ico_pad_menu_word(const void *libpad_buf);
 
 /* Rumble. act = the 6 bytes scePadSetActDirect gets, align = the bytes
    scePadSetActAlign set (align[i] = the actuator data byte i drives: 0 the
@@ -271,9 +279,17 @@ unsigned int ico_input_last_press(int *kind, int *code);
 
 /* Bind target to one source of its kind: that device's row for target is
    replaced by the source alone, and the source is taken off every other
-   target of the same device (one key, one action). The other devices' rows
-   are kept. 0, or -1 for a bad target, kind or code. */
+   target of the same device (one key, one action). When the source was on
+   another target, that target swaps in: it receives target's previous row
+   on this device (appended to what it has left, at most ICO_BIND_MAX
+   sources; an empty previous row leaves it empty). Assigning a source to
+   the target that already holds it touches no other target. The other devices'
+   rows are kept. 0, or -1 for a bad target, kind or code. */
 int ico_bindings_assign(IcoBindings *b, int target, int kind, int code);
+/* The target a gamepad source (ICO_GP_*) has in the shipped defaults, as an
+   ICO_PAD_* bit; 0 for a stick half-axis. The menus' per-source rule uses it
+   (IcoVirtualPad menu_buttons). */
+unsigned int ico_bindings_gp_default_target(int src);
 /* Clear every device's sources of target. */
 void ico_bindings_clear(IcoBindings *b, int target);
 /* A device's row of target as config text: "Space", "Tab, Backquote",

@@ -9,6 +9,7 @@
  * iosPadRead's button arithmetic (pad.c:369-386).
  */
 #include "pad_script.h"
+#include "input.h"
 #include <libpad.h>
 #include <stdio.h>
 #include <string.h>
@@ -350,6 +351,69 @@ static void test_scripted_pad(void)
     ico_pad_script_clear();
 }
 
+/* The menus' word (bytes 20,21) as iosPadRead reads it for the default
+   table, with the same prev/cur edge detection as the play word: a script
+   gives one word for both; a live pad can give two. */
+static void menu_edges(const unsigned char *prev, const unsigned char *cur, unsigned int *now,
+                       unsigned int *trg)
+{
+    const unsigned int p = ico_pad_menu_word(prev);
+    const unsigned int c = ico_pad_menu_word(cur);
+
+    *now = c;
+    *trg = (c ^ p) & c;
+}
+
+static void play_edges(const unsigned char *prev, const unsigned char *cur, unsigned int *now,
+                       unsigned int *trg)
+{
+    const unsigned int p = ((unsigned int)(prev[2] << 8) | prev[3]) ^ 0xFFFFu;
+    const unsigned int c = ((unsigned int)(cur[2] << 8) | cur[3]) ^ 0xFFFFu;
+
+    *now = c;
+    *trg = (c ^ p) & c;
+}
+
+static void test_pad_menu_words(void)
+{
+    unsigned char buf[2][32];
+    IcoVirtualPad v;
+    unsigned int mnow, mtrg, pnow, ptrg;
+
+    /* a script: the two words are the same, with the same edges */
+    CHECK(ico_pad_script_parse("0 0000\n3 0040\n", "menu") == 0);
+    CHECK(scePadInit(0) == 1);
+    ico_pad_script_set_tick(0);
+    CHECK(scePadRead(0, 0, buf[0]) == 32);
+    ico_pad_script_set_tick(3);
+    CHECK(scePadRead(0, 0, buf[1]) == 32);
+    menu_edges(buf[0], buf[1], &mnow, &mtrg);
+    play_edges(buf[0], buf[1], &pnow, &ptrg);
+    CHECK(mnow == ICO_PAD_CROSS && mtrg == ICO_PAD_CROSS && pnow == mnow && ptrg == mtrg);
+    ico_pad_script_clear();
+
+    /* a live pad with Cross and Triangle swapped: south is Triangle in play
+       and Cross in the menus, each with its own edge, and a held button
+       triggers once in both */
+    ico_input_set_live(1);
+    memset(&v, 0, sizeof(v));
+    ico_input_set_vpad(&v);
+    CHECK(scePadRead(0, 0, buf[0]) == 32);
+    v.buttons = ICO_PAD_TRIANGLE;
+    v.menu_buttons = ICO_PAD_CROSS;
+    ico_input_set_vpad(&v);
+    CHECK(scePadRead(0, 0, buf[1]) == 32);
+    menu_edges(buf[0], buf[1], &mnow, &mtrg);
+    play_edges(buf[0], buf[1], &pnow, &ptrg);
+    CHECK(mnow == ICO_PAD_CROSS && mtrg == ICO_PAD_CROSS);
+    CHECK(pnow == ICO_PAD_TRIANGLE && ptrg == ICO_PAD_TRIANGLE);
+    CHECK(scePadRead(0, 0, buf[0]) == 32);
+    menu_edges(buf[1], buf[0], &mnow, &mtrg);
+    play_edges(buf[1], buf[0], &pnow, &ptrg);
+    CHECK(mnow == ICO_PAD_CROSS && mtrg == 0 && pnow == ICO_PAD_TRIANGLE && ptrg == 0);
+    ico_input_set_live(0);
+}
+
 int main(void)
 {
     test_parse();
@@ -357,6 +421,7 @@ int main(void)
     test_load();
     test_no_controller();
     test_scripted_pad();
+    test_pad_menu_words();
     printf("pad_script_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

@@ -418,6 +418,8 @@ void ico_touch_step(IcoTouchState *t, const IcoTouchLayout *l, IcoVirtualPad *ou
             out->buttons |= l->button[i].pad;
         }
     }
+    /* the glyphs are pictures of positions, so the menus see the same word */
+    out->menu_buttons = out->buttons;
 
     /* the left stick */
     t->lx = t->ly = 0.0f;

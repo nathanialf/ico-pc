@@ -118,6 +118,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Teclado",
     [UI_STR_REMAP_GAMEPAD] = "Mando",
     [UI_STR_REMAP_HINT] = "Equis: cambiar    Cuadrado: borrar    Triángulo: volver",
+    [UI_STR_REMAP_MENU_NOTE] = "En los menús, los botones del mando siempre van por su posición.",
     [UI_STR_REMAP_PRESS] = "Pulsa una tecla o un botón…",
     [UI_STR_REMAP_RESET] = "Restablecer valores predeterminados",
     [UI_STR_OPT_TOUCH_MODE] = "Controles táctiles",
@@ -372,7 +373,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "A: la mano de Yorda sigue cogida mientras mantienes R1. B: pulsa R1 para soltar su mano.",
     [UI_STR_PLAYERS_NOTE] = "2: un segundo mando controla a Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
-        "La disposición de botones del juego, guardada en la partida. Configurar controles ajusta teclado y mando.",
+        "La disposición de botones del juego, guardada en la partida. Se aplica además de Configurar controles.",
     [UI_STR_OPT_TEXTURE_PACK] = "Paquete de texturas",
     [UI_STR_VAL_NONE_INSTALLED] = "Ninguno instalado",
     [UI_STR_TEXTURE_PACK_NOTE] = "Paquetes PCSX2: copia SCES-50760 en textures.",

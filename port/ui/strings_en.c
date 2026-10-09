@@ -117,6 +117,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Keyboard",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
     [UI_STR_REMAP_HINT] = "Cross: change    Square: clear    Triangle: back",
+    [UI_STR_REMAP_MENU_NOTE] = "In the menus the gamepad buttons always go by position.",
     [UI_STR_REMAP_PRESS] = "Press a key or button…",
     [UI_STR_REMAP_RESET] = "Reset to defaults",
     [UI_STR_OPT_TOUCH_MODE] = "Touch controls",
@@ -369,7 +370,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "A: Yorda’s hand stays held while R1 is held down. B: press R1 to let go of her hand.",
     [UI_STR_PLAYERS_NOTE] = "2: a second controller controls Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
-        "The game’s button layout, kept in your save. Remap controls sets the keys and pad buttons.",
+        "The game’s button layout, kept in your save. It applies on top of Remap controls.",
     [UI_STR_OPT_TEXTURE_PACK] = "Texture pack",
     [UI_STR_VAL_NONE_INSTALLED] = "None installed",
     [UI_STR_TEXTURE_PACK_NOTE] = "PCSX2 packs: copy SCES-50760 into textures.",

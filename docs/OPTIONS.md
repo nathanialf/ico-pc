@@ -136,7 +136,9 @@ A change takes effect the next time you start the game.
 
 ## Controls
 
-- **Remap controls** lets you change which button or key does what.
+- **Remap controls** lets you change which button or key does what. Giving
+  a button to another action swaps the two. In the menus the gamepad's face
+  buttons and d-pad always go by position.
 - **Mouse camera** lets the mouse move the camera while you play, with
   the pointer hidden. It is on unless you turn it off.
   [More about the mouse camera](CONTROLS.md#look-around-with-the-mouse).

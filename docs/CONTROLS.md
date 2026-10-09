@@ -8,7 +8,11 @@ A gamepad, the keyboard and the mouse all work, even at the same time.
 
 Gamepad buttons go by where they sit, not by what is printed on them. The
 bottom face button is always Cross, whether your pad is an Xbox,
-PlayStation or Switch pad.
+PlayStation or Switch pad. In the menus the gamepad's four face buttons
+and the d-pad always go by position, even after you change them under
+Remap controls: the bottom button confirms, the top button goes back, and
+the d-pad moves. Start, Select, the shoulder buttons, the triggers and the
+stick presses follow your changes everywhere.
 
 | PS2 button | Gamepad | Keyboard | Mouse |
 | --- | --- | --- | --- |
@@ -39,7 +43,9 @@ A few more keys on a PC:
   early. It is for problem reports about slow play.
 
 Escape, F11 and F12 cannot be changed. Everything else can be, in
-**Options > Controls > Remap controls**.
+**Options > Controls > Remap controls**. When you give a button or key to
+another action, the two actions swap, so neither is left without one.
+The game's own **Button configuration** applies on top of your changes.
 
 ## Look around with the mouse
 

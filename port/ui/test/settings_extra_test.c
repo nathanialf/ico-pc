@@ -1204,6 +1204,75 @@ static void testAchievementPopups(void)
     ico_ach_set_popups(1);
 }
 
+/* Remap controls: giving a source to a held target swaps the two rows
+   (through the capture flow), device by device. Square clears a row outright,
+   and a cleared row takes a source back with nothing to swap. */
+static void testRemapSwap(void)
+{
+    IcoBindings *b = ico_input_live_bindings();
+    UiRemapCapture c;
+
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    ui_remap_capture_start(&c, ICO_T_TRIANGLE);
+    ico_input_note_press(ICO_SRC_PAD, ICO_GP_SOUTH);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND, "swap: bound");
+    CHECK(b->gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b->gp[ICO_T_CROSS][0] == ICO_GP_NORTH,
+          "swap: south on Triangle, Cross has north (%d, %d)", b->gp[ICO_T_TRIANGLE][0],
+          b->gp[ICO_T_CROSS][0]);
+    CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_SPACE, "swap: the keyboard rows are kept");
+    /* a keyboard press swaps the keyboard rows only */
+    ui_remap_capture_start(&c, ICO_T_CIRCLE);
+    ico_input_note_press(ICO_SRC_KEY, ICO_KEY_SPACE);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND, "swap: key bound");
+    CHECK(b->kb[ICO_T_CIRCLE][0] == ICO_KEY_SPACE && b->kb[ICO_T_CROSS][0] == ICO_KEY_E,
+          "swap: Space on Circle, Cross has E");
+    CHECK(b->gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH, "swap: the pad rows are kept");
+    /* Square clears a row; a source nobody holds then fills it with no swap */
+    ico_bindings_clear(b, ICO_T_SQUARE);
+    CHECK(b->gp[ICO_T_SQUARE][0] == 0, "cleared");
+    ui_remap_capture_start(&c, ICO_T_SQUARE);
+    ico_input_note_press(ICO_SRC_PAD, ICO_GP_WEST);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND && b->gp[ICO_T_SQUARE][0] == ICO_GP_WEST,
+          "a cleared row takes its source back");
+    ico_input_reload_bindings(b);
+}
+
+/* The Remap controls page says the menus keep the gamepad by position: one
+   row on the page, a text in every language */
+static void testRemapMenuNote(void)
+{
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_DE, UI_LANG_ES, UI_LANG_FR, UI_LANG_IT};
+    const char *seen[5];
+    int found = 0;
+
+    useConfig("version = 1\n");
+    enterMain(0);
+    for (int i = 0; i < 5; i++) {
+        ui_set_language(kLangs[i]);
+        seen[i] = ui_str(UI_STR_REMAP_MENU_NOTE);
+        CHECK(seen[i] != NULL && seen[i][0] != '\0', "menu note in language %d", i);
+        for (int j = 0; j < i; j++) {
+            CHECK(strcmp(seen[i], seen[j]) != 0, "menu note differs between languages %d, %d", i,
+                  j);
+        }
+    }
+    ui_set_language(UI_LANG_EN);
+    CHECK(strcmp(ui_str(UI_STR_REMAP_MENU_NOTE),
+                 "In the menus the gamepad buttons always go by position.") == 0,
+          "menu note text");
+    for (int i = LT_GAME_PROPERTY_COUNT; i < LT_GAME_PROPERTY_COUNT + lt_ext_prop_count(); i++) {
+        const char *t = lt_ext_row_text(i);
+
+        if (t != NULL && strcmp(t, ui_str(UI_STR_REMAP_MENU_NOTE)) == 0) {
+            found++;
+        }
+    }
+    CHECK(found == 1, "the Remap page has the menu note row (%d)", found);
+    CHECK(strstr(ui_str(UI_STR_BUTTON_CONFIG_NOTE), "on top of Remap controls") != NULL,
+          "the Button configuration note says it applies on top");
+}
+
 /* Escape outside play presses Triangle, never Start (mouse_look.h
    ico_escape_target): on the New Game screen, reached from the title,
    Start confirms and starts the game while Triangle goes back to the
@@ -1259,6 +1328,9 @@ int main(int argc, char **argv)
     testPointer();
     /* Gameplay > Achievement pop-ups */
     testAchievementPopups();
+    /* Remap controls: swap on conflict, the menu note */
+    testRemapSwap();
+    testRemapMenuNote();
     /* Escape's button on the New Game screen */
     testEscapeNewGame();
     if (failures) {

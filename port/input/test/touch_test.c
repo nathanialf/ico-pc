@@ -373,6 +373,7 @@ static void test_buttons(void)
         ev(&t, 1, x, y, ICO_TOUCH_DOWN, 1 * S);
         v = step(&t, 1 * S);
         CHECK(v.buttons == l.button[z].pad);
+        CHECK(v.menu_buttons == l.button[z].pad); /* the glyphs are positions */
         ev(&t, 1, x, y, ICO_TOUCH_UP, 1 * S);
         CHECK(step(&t, 1 * S).buttons == 0);
     }

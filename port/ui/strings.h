@@ -149,6 +149,7 @@ typedef enum UiStrId {
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
     UI_STR_REMAP_HINT,
+    UI_STR_REMAP_MENU_NOTE, /* Remap controls: the menus keep the gamepad's buttons by position */
     UI_STR_REMAP_PRESS,
     UI_STR_REMAP_RESET,
     /* Settings > Controls, the touch overlay's rows (shown

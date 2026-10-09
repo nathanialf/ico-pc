@@ -118,6 +118,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Tastatur",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
     [UI_STR_REMAP_HINT] = "Kreuz: ändern    Quadrat: löschen    Dreieck: zurück",
+    [UI_STR_REMAP_MENU_NOTE] = "In den Menüs gelten die Gamepad-Tasten immer nach ihrer Position.",
     [UI_STR_REMAP_PRESS] = "Taste oder Knopf drücken …",
     [UI_STR_REMAP_RESET] = "Standardwerte wiederherstellen",
     [UI_STR_OPT_TOUCH_MODE] = "Touch-Steuerung",
@@ -374,7 +375,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "A: Yordas Hand bleibt gehalten, solange R1 gedrückt bleibt. B: R1 drücken, um ihre Hand loszulassen.",
     [UI_STR_PLAYERS_NOTE] = "2: Ein zweiter Controller steuert Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
-        "Die Tastenbelegung des Spiels, im Spielstand gespeichert. Tastatur und Gamepad: unter Tastenbelegung.",
+        "Die Tastenbelegung des Spiels, im Spielstand gespeichert. Sie gilt zusätzlich zur Tastenbelegung.",
     [UI_STR_OPT_TEXTURE_PACK] = "Texturpaket",
     [UI_STR_VAL_NONE_INSTALLED] = "Keines installiert",
     [UI_STR_TEXTURE_PACK_NOTE] = "PCSX2-Pakete: SCES-50760 nach textures kopieren.",

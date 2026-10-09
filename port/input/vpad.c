@@ -37,6 +37,7 @@ void ico_vpad_merge(IcoVirtualPad *dst, const IcoVirtualPad *src)
     float a, b;
 
     dst->buttons |= src->buttons;
+    dst->menu_buttons |= src->menu_buttons;
     a = dst->lx * dst->lx + dst->ly * dst->ly;
     b = src->lx * src->lx + src->ly * src->ly;
     if (b > a) {

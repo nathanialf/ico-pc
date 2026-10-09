@@ -2130,6 +2130,10 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.colA = (UiListCol){230, 180, 21.0f, UI_ALIGN_LEFT};
         st.colB = (UiListCol){420, 190, 21.0f, UI_ALIGN_LEFT};
         st.statusY = 198;
+        /* under the hint: the menus keep the gamepad's buttons by position */
+        P(ui_settings_add_row(20, 214, 600, 14, 0, -1, UI_STR_REMAP_MENU_NOTE, NULL, 17.0f,
+                              UI_ALIGN_CENTER))
+            ->centerX = 1;
     } else if (id == UI_PAGE_MUSIC) {
         /* the label (the asset's name), an ambience's stage at the right,
            in the list pages' sizes on a closer pitch; the status, the

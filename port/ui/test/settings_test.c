@@ -1885,7 +1885,7 @@ static void testCapture(void)
     CHECK(ui_remap_capture_step(&c, &b) == UI_CAPTURE_WAITING, "waiting");
     ico_input_note_press(ICO_SRC_PAD, ICO_GP_SOUTH);
     CHECK(ui_remap_capture_step(&c, &b) == UI_CAPTURE_BOUND && !c.active, "bound");
-    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b.gp[ICO_T_CROSS][0] == 0,
+    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b.gp[ICO_T_CROSS][0] == ICO_GP_NORTH,
           "south moves from Cross to Triangle");
     CHECK(b.kb[ICO_T_TRIANGLE][0] == ICO_KEY_R, "the keyboard row is kept");
     CHECK(c.cooldown == UI_REMAP_COOLDOWN_TICKS, "cooldown");

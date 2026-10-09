@@ -526,8 +526,11 @@ static void test_merge(void)
     a.rx = 0.5f;
     b.rx = 0.2f;
     b.ry = 0.2f;
+    a.menu_buttons = ICO_PAD_TRIANGLE;
+    b.menu_buttons = ICO_PAD_START | ICO_PAD_L1;
     ico_vpad_merge(&a, &b);
     CHECK(a.buttons == (ICO_PAD_CROSS | ICO_PAD_START));
+    CHECK(a.menu_buttons == (ICO_PAD_TRIANGLE | ICO_PAD_START | ICO_PAD_L1));
     CHECK(a.lx == -0.9f && a.ly == 0.0f); /* the larger magnitude */
     CHECK(a.rx == 0.5f && a.ry == 0.0f);
     /* a tie keeps dst */
@@ -804,6 +807,167 @@ static void test_step(void)
 
 /* The menus' pointer (pointer.c): its place, the clicks and the wheel
    between two takes, and leaving the window */
+/* one gamepad source held on its own: the (play, menu) words it gives */
+static void gp_press(IcoBindings *b, int src, unsigned int *play, unsigned int *menu)
+{
+    IcoInputRaw r;
+    IcoVirtualPad v;
+
+    blank(&r);
+    r.gp[src] = 1.0f;
+    ico_bindings_step(b, &r, &v);
+    *play = v.buttons;
+    *menu = v.menu_buttons;
+}
+
+static void test_menu_word(void)
+{
+    IcoBindings b, def;
+    IcoInputRaw r;
+    IcoVirtualPad v;
+    unsigned int play, menu;
+    int s, t;
+
+    /* the default-target table is the shipped gamepad rows */
+    ico_bindings_defaults(&def);
+    for (s = 1; s < ICO_GP_COUNT; s++) {
+        unsigned int want = 0;
+
+        for (t = 0; t < ICO_T_BUTTONS; t++) {
+            if (has_key(def.gp[t], s)) {
+                want |= 1u << t;
+            }
+        }
+        CHECK(ico_bindings_gp_default_target(s) == want);
+    }
+    CHECK(ico_bindings_gp_default_target(ICO_GP_LX_NEG) == 0);
+
+    /* defaults: both words are the same for every source */
+    ico_bindings_defaults(&b);
+    for (s = 1; s < ICO_GP_COUNT; s++) {
+        gp_press(&b, s, &play, &menu);
+        CHECK(play == menu);
+    }
+
+    /* Cross and Triangle swapped: south plays Triangle, the menus keep Cross */
+    ico_bindings_assign(&b, ICO_T_TRIANGLE, ICO_SRC_PAD, ICO_GP_SOUTH);
+    gp_press(&b, ICO_GP_SOUTH, &play, &menu);
+    CHECK(play == ICO_PAD_TRIANGLE && menu == ICO_PAD_CROSS);
+    gp_press(&b, ICO_GP_NORTH, &play, &menu);
+    CHECK(play == ICO_PAD_CROSS && menu == ICO_PAD_TRIANGLE);
+
+    /* south on R1, the right shoulder on Cross: no two bits from one press */
+    ico_bindings_defaults(&b);
+    memset(b.gp[ICO_T_R1], 0, ICO_BIND_MAX);
+    memset(b.gp[ICO_T_CROSS], 0, ICO_BIND_MAX);
+    b.gp[ICO_T_R1][0] = ICO_GP_SOUTH;
+    b.gp[ICO_T_CROSS][0] = ICO_GP_RSHOULDER;
+    gp_press(&b, ICO_GP_SOUTH, &play, &menu);
+    CHECK(play == ICO_PAD_R1 && menu == ICO_PAD_CROSS);
+    gp_press(&b, ICO_GP_RSHOULDER, &play, &menu);
+    CHECK(play == ICO_PAD_CROSS && menu == ICO_PAD_R1);
+
+    /* a d-pad source moved off its direction still navigates the menus */
+    ico_bindings_defaults(&b);
+    memset(b.gp[ICO_T_L1], 0, ICO_BIND_MAX);
+    b.gp[ICO_T_L1][0] = ICO_GP_DPUP;
+    gp_press(&b, ICO_GP_DPUP, &play, &menu);
+    CHECK(play == ICO_PAD_L1 && menu == ICO_PAD_UP);
+
+    /* a stick half-axis on a face button has no default: nothing in the menus */
+    ico_bindings_defaults(&b);
+    memset(b.gp[ICO_T_SQUARE], 0, ICO_BIND_MAX);
+    b.gp[ICO_T_SQUARE][0] = ICO_GP_LX_POS;
+    blank(&r);
+    r.axis[0] = 1.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK((v.buttons & ICO_PAD_SQUARE) != 0 && v.menu_buttons == 0);
+
+    /* Start and the triggers follow the remap in both words */
+    ico_bindings_defaults(&b);
+    ico_bindings_assign(&b, ICO_T_START, ICO_SRC_PAD, ICO_GP_BACK);
+    gp_press(&b, ICO_GP_BACK, &play, &menu);
+    CHECK(play == ICO_PAD_START && menu == ICO_PAD_START);
+
+    /* gamepad off: nothing from it in either word */
+    ico_bindings_defaults(&b);
+    b.gamepad = 0;
+    gp_press(&b, ICO_GP_SOUTH, &play, &menu);
+    CHECK(play == 0 && menu == 0);
+
+    /* keyboard: Space moved to R1 is R1 in both words */
+    ico_bindings_defaults(&b);
+    memset(b.kb[ICO_T_CROSS], 0, ICO_BIND_MAX);
+    memset(b.kb[ICO_T_R1], 0, ICO_BIND_MAX);
+    b.kb[ICO_T_R1][0] = ICO_KEY_SPACE;
+    blank(&r);
+    r.key[ICO_KEY_SPACE] = 1;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.buttons == ICO_PAD_R1 && v.menu_buttons == ICO_PAD_R1);
+    /* and with a swapped pad pressed too, the words OR */
+    ico_bindings_assign(&b, ICO_T_TRIANGLE, ICO_SRC_PAD, ICO_GP_SOUTH);
+    r.gp[ICO_GP_SOUTH] = 1.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(v.buttons == (ICO_PAD_R1 | ICO_PAD_TRIANGLE));
+    CHECK(v.menu_buttons == (ICO_PAD_R1 | ICO_PAD_CROSS));
+}
+
+static void test_assign_swap(void)
+{
+    IcoBindings b, def;
+    int i;
+
+    ico_bindings_defaults(&def);
+
+    /* south to Triangle: Cross receives Triangle's old source */
+    b = def;
+    CHECK(ico_bindings_assign(&b, ICO_T_TRIANGLE, ICO_SRC_PAD, ICO_GP_SOUTH) == 0);
+    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b.gp[ICO_T_TRIANGLE][1] == 0);
+    CHECK(b.gp[ICO_T_CROSS][0] == ICO_GP_NORTH && b.gp[ICO_T_CROSS][1] == 0);
+    CHECK(memcmp(b.kb, def.kb, sizeof(b.kb)) == 0); /* keyboard rows untouched */
+    CHECK(memcmp(b.mouse, def.mouse, sizeof(b.mouse)) == 0);
+
+    /* a source nobody holds: no loser */
+    b = def;
+    CHECK(ico_bindings_assign(&b, ICO_T_CROSS, ICO_SRC_PAD, ICO_GP_LY_NEG) == 0);
+    CHECK(b.gp[ICO_T_CROSS][0] == ICO_GP_LY_NEG && b.gp[ICO_T_CROSS][1] == 0);
+    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_NORTH);
+
+    /* the target's previous row is empty: the loser ends up empty */
+    b = def;
+    memset(b.gp[ICO_T_L2], 0, ICO_BIND_MAX);
+    CHECK(ico_bindings_assign(&b, ICO_T_L2, ICO_SRC_PAD, ICO_GP_RTRIGGER) == 0);
+    CHECK(b.gp[ICO_T_L2][0] == ICO_GP_RTRIGGER && b.gp[ICO_T_R2][0] == 0);
+
+    /* several sources on the target: all go to the loser, capped */
+    b = def;
+    for (i = 0; i < ICO_BIND_MAX; i++) {
+        b.gp[ICO_T_L1][i] = (unsigned char)(ICO_GP_DPUP + i);
+    }
+    b.gp[ICO_T_R1][1] = ICO_GP_LX_POS; /* the loser keeps this one besides */
+    CHECK(ico_bindings_assign(&b, ICO_T_L1, ICO_SRC_PAD, ICO_GP_RSHOULDER) == 0);
+    CHECK(b.gp[ICO_T_L1][0] == ICO_GP_RSHOULDER && b.gp[ICO_T_L1][1] == 0);
+    CHECK(b.gp[ICO_T_R1][0] == ICO_GP_LX_POS && b.gp[ICO_T_R1][1] == ICO_GP_DPUP &&
+          b.gp[ICO_T_R1][2] == ICO_GP_DPDOWN && b.gp[ICO_T_R1][3] == ICO_GP_DPLEFT);
+
+    /* the mouse swaps the same way */
+    b = def;
+    CHECK(ico_bindings_assign(&b, ICO_T_CIRCLE, ICO_SRC_MOUSE, 1) == 0);
+    CHECK(b.mouse[ICO_T_CIRCLE][0] == 1 && b.mouse[ICO_T_CROSS][0] == 2);
+    CHECK(memcmp(b.gp, def.gp, sizeof(b.gp)) == 0);
+
+    /* the same source on the same target: no other row moves */
+    b = def;
+    CHECK(ico_bindings_assign(&b, ICO_T_CROSS, ICO_SRC_PAD, ICO_GP_SOUTH) == 0);
+    CHECK(memcmp(b.gp, def.gp, sizeof(b.gp)) == 0);
+
+    /* a keyboard assign leaves the pad rows alone and swaps the keys */
+    b = def;
+    CHECK(ico_bindings_assign(&b, ICO_T_CIRCLE, ICO_SRC_KEY, ICO_KEY_SPACE) == 0);
+    CHECK(b.kb[ICO_T_CIRCLE][0] == ICO_KEY_SPACE && b.kb[ICO_T_CROSS][0] == ICO_KEY_E);
+    CHECK(memcmp(b.gp, def.gp, sizeof(b.gp)) == 0);
+}
+
 static void test_pointer(void)
 {
     IcoPointerTick t;
@@ -916,6 +1080,10 @@ static void test_libpad(void)
     /* nothing feeding it: no controller */
     CHECK(scePadGetState(0, 0) == 0 && scePadRead(0, 0, d) == 0);
     CHECK(scePadInfoMode(0, 0, 1, 0) == 0 && scePadSetMainMode(0, 0, 1, 3) == 0);
+    /* the menus' word of a missing pad: nothing held (0xFF, active low) */
+    memset(d, 0, sizeof(d));
+    CHECK(scePadRead(0, 0, d) == 0 && d[20] == 0xFF && d[21] == 0xFF);
+    CHECK(ico_pad_menu_word(d) == 0);
 
     ico_input_set_live(1);
     CHECK(scePadGetState(0, 0) == 6 && scePadGetState(1, 0) == 0);
@@ -932,6 +1100,8 @@ static void test_libpad(void)
 
     memset(&v, 0, sizeof(v));
     v.buttons = ICO_PAD_CROSS | ICO_PAD_START | ICO_PAD_LEFT;
+    /* Cross and Triangle swapped under Remap controls: the menu word differs */
+    v.menu_buttons = ICO_PAD_TRIANGLE | ICO_PAD_START | ICO_PAD_LEFT;
     v.lx = 1.0f;
     v.ly = -1.0f;
     v.rx = 0.0f;
@@ -945,12 +1115,16 @@ static void test_libpad(void)
            right x, right y, left x, left y */
         unsigned char want[32] = {0x00, 0x73, 0x77, 0xBF, 128, 255, 255, 0};
 
+        /* bytes 20,21: the menu word ~(TRIANGLE | START | LEFT) = 0x77 0xEF */
+        want[20] = 0x77;
+        want[21] = 0xEF;
         /* hand-written: START 0x0800, LEFT 0x8000 in byte 2 high: 0x88 */
         expect_frame(d, want, __LINE__);
     }
     /* pad.c's own decode of that: ((hi << 8) | lo) ^ 0xFFFF is the logical word */
     CHECK((unsigned)(((d[2] << 8) | d[3]) ^ 0xFFFF) ==
           (ICO_PAD_CROSS | ICO_PAD_START | ICO_PAD_LEFT));
+    CHECK(ico_pad_menu_word(d) == (ICO_PAD_TRIANGLE | ICO_PAD_START | ICO_PAD_LEFT));
 
     /* digital mode: id 0x41, sticks centred */
     CHECK(scePadSetMainMode(0, 0, 0, 2) == 1);
@@ -958,6 +1132,8 @@ static void test_libpad(void)
     {
         unsigned char want[32] = {0x00, 0x41, 0x77, 0xBF, 128, 128, 128, 128};
 
+        want[20] = 0x77;
+        want[21] = 0xEF;
         expect_frame(d, want, __LINE__);
     }
     CHECK(scePadInfoMode(0, 0, 1, 0) == 4);
@@ -967,6 +1143,7 @@ static void test_libpad(void)
     CHECK(scePadSetMainMode(0, 0, 1, 3) == 1);
     CHECK(scePadEnterPressMode(0, 0) == 1);
     v.buttons = ICO_PAD_CROSS | ICO_PAD_LEFT | ICO_PAD_R2;
+    v.menu_buttons = v.buttons;
     ico_input_set_vpad(&v);
     CHECK(scePadRead(0, 0, d) == 32);
     {
@@ -977,6 +1154,8 @@ static void test_libpad(void)
         want[9] = 0xFF;  /* left */
         want[14] = 0xFF; /* cross */
         want[19] = 0xFF; /* R2 */
+        want[20] = want[2];
+        want[21] = want[3];
         expect_frame(d, want, __LINE__);
     }
     CHECK(scePadInit(0) == 1); /* power cycle: back to digital, no pressure */
@@ -988,6 +1167,8 @@ static void test_libpad(void)
     CHECK(ico_pad_script_parse("0 0001 10 20 30 40\n", "t") == 0);
     scePadRead(0, 0, d);
     CHECK(d[1] == 0x73 && d[3] == 0xFE && d[4] == 30 && d[5] == 40 && d[6] == 10 && d[7] == 20);
+    /* a script has one word: the menus see what the play word is */
+    CHECK(d[20] == d[2] && d[21] == d[3] && ico_pad_menu_word(d) == 0x0001);
     ico_pad_script_clear();
     scePadRead(0, 0, d);
     CHECK(d[6] == 0 && d[7] == 0); /* live again, mirrored: lx 1 -> 0, ly -1 -> 0 */
@@ -1046,6 +1227,8 @@ int main(void)
     test_stick_fix();
     test_merge();
     test_step();
+    test_menu_word();
+    test_assign_swap();
     test_mouse_capture();
     test_escape();
     test_pointer();

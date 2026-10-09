@@ -195,6 +195,11 @@ int scePadGetReqState(int port, int slot)
            leaves them centred)
      8-19  pressure, 0x79 only: right left up down triangle circle cross
            square L1 R1 L2 R2, 0 or 255 (the sources are digital)
+     20,21 the menus' view of the buttons, active low like 2,3 (high byte
+           first): the gamepad's face buttons and d-pad by position whatever
+           Remap controls says. Equal to 2,3 for a script. 0xFF 0xFF when
+           disconnected. Read with ico_pad_menu_word; the port's own bytes,
+           the SCE layout has nothing here.
    The rest of the 32 bytes is zero. */
 int scePadRead(int port, int slot, void *data)
 {
@@ -209,6 +214,7 @@ int scePadRead(int port, int slot, void *data)
             d[2] = 0xFF;
             d[3] = 0xFF;
             d[4] = d[5] = d[6] = d[7] = 0x80;
+            d[20] = d[21] = 0xFF;
         }
         return 0;
     }
@@ -223,6 +229,13 @@ int scePadRead(int port, int slot, void *data)
         d[1] = s_analog ? (s_press ? 0x79 : 0x73) : 0x41;
         d[2] = (unsigned char)(raw >> 8);
         d[3] = (unsigned char)raw;
+        {
+            const unsigned int menu = ico_pad_script_active() ? f.buttons : s_vpad.menu_buttons;
+            const unsigned int mraw = ~menu & 0xFFFFu;
+
+            d[20] = (unsigned char)(mraw >> 8);
+            d[21] = (unsigned char)mraw;
+        }
         d[4] = d[5] = d[6] = d[7] = ICO_PAD_STICK_CENTRE;
         if (s_analog) {
             static const unsigned int order[12] = {ICO_PAD_RIGHT, ICO_PAD_LEFT,     ICO_PAD_UP,
@@ -243,6 +256,13 @@ int scePadRead(int port, int slot, void *data)
         }
     }
     return PAD_READ_SIZE;
+}
+
+unsigned int ico_pad_menu_word(const void *libpad_buf)
+{
+    const unsigned char *d = libpad_buf;
+
+    return ((((unsigned int)d[20] << 8) | d[21]) ^ 0xFFFFu) & 0xFFFFu;
 }
 
 int scePadInfoMode(int port, int slot, int term, int index)
