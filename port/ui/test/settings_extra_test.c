@@ -710,17 +710,21 @@ static void testTitleReturn(void)
 }
 
 /* v0.4.3 I17b: the mouse pointer in the menus (ui_mouse.h), through the real
-   layout code: a view of 640 x 448 at 0,0, so a point of the grid is the
-   pointer at (gx, gy - 2) */
+   layout code: a 4:3 view of 640 x 480 at 0,0 (the grid's 640 x 448 is the
+   4:3 picture, font.h), so a point of the grid is the pointer at gx / 640
+   across and (gy - 2) / 448 down */
 static int s_i17bDeciding;
 
 /* a title proc as layout_action.c's while the memory card check runs: the
-   item select off, the row shown */
+   item select off; the rows shown (the real procs mask the Settings rows
+   too while deciding, ui_SettingsTitleMask, which would hide the flag's
+   effect here) */
 static int i17bTitleProc(int first, int item)
 {
     (void)first;
     (void)item;
     lt_mask_property(51, 0);
+    ui_SettingsTitleMask(0);
     if (s_i17bDeciding) {
         lt_item_select_disable = 1;
     }
@@ -750,7 +754,7 @@ static void pointAtOff(int j, float dx)
     const int h = e->dispH ? e->dispH : e->texH;
     const float gx = (e->centerX ? 320.0f : (float)e->dispX + (float)w * 0.5f) + dx;
     const float gy = 2.0f * (float)e->dispY + (float)h * 0.5f;
-    ico_pointer_move(gx / 640.0f, (gy - 2.0f) / 448.0f);
+    ico_pointer_move(gx / 640.0f, (gy - 2.0f) / 448.0f); /* a 640 x 480 view */
 }
 
 static void pointAt(int j)
@@ -795,7 +799,7 @@ static void testPointer(void)
     int labels[16];
 
     ui_MouseReset();
-    ui_MouseSetView(640, 448, 0, 0, 640, 448);
+    ui_MouseSetView(640, 480, 0, 0, 640, 480);
 
     /* play (layout 54) is no menu */
     useConfig("version = 1\n");
@@ -963,6 +967,8 @@ static void testPointer(void)
     ui_MouseTick();
     CHECK(pad[0].flags == 0x4000, "then Down (0x%x)", (unsigned)pad[0].flags);
     frame(pad[0].flags);
+    frame(0); /* the two frames after a move clear the pad */
+    frame(0);
     press(0x10);
     CHECK(settle(mainL, 60), "Achievements: back");
 
