@@ -160,9 +160,6 @@ The first two are off unless you turn them on, on a phone too.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows.
   [Why this is needed](FAQ.md#ico-walks-instead-of-running).
-- **Achievement pop-ups** is on until you turn it off. Off stops the
-  pop-up when you earn an achievement. You still earn them, and the list
-  under Achievements shows them.
 
 ## Language
 
@@ -176,6 +173,11 @@ area.
 The list of achievements and what each one asks. Secret ones show as ???
 until you earn them. You cannot earn achievements while Developer mode is
 on.
+
+**Achievement pop-ups**, near the end of the list just above Back, is on
+until you turn it off. Off stops the pop-up when you earn an achievement.
+You still earn them, and the list shows them. From the top of the list,
+press Up twice to reach it.
 
 ## Extras
 

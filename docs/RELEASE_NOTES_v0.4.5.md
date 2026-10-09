@@ -3,7 +3,7 @@
 - On PC, Options > Controls has three more mouse camera rows: Mouse camera speed, Mouse camera range and Camera swings back.
 - Android: the first start shows what the game is doing at each step, and so does the first start after an update.
 - Android: the touch controls make the phone vibrate the way a controller would rumble.
-- Options > Gameplay > Achievement pop-ups turns the pop-ups off.
+- Options > Achievements has a row that turns the achievement pop-ups off.
 - Android: smoother play, with fewer stalls in busy rooms.
 - Android: when the phone's own graphics driver cannot start the game, the game offers to use a graphics driver package you choose (Adreno phones).
 
