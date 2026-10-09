@@ -2543,11 +2543,10 @@ static void build(void)
     static const int ctlLinks[] = {
         UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA,   UI_OPT_STICK_FIX,  UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS, UI_OPT_ACH_POPUPS, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,       UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,
-                                   UI_STR_OPT_ACH_POPUPS,  UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
@@ -3354,16 +3353,23 @@ static int parentLayout(const Page *pg)
  * Achievements and the remap targets: what each page's items are; the
  * window, the scrolling and the rows are ui_list.c's. */
 
+/* the items: the achievements, the pop-ups switch, then Back */
 static int achCount(void *user)
 {
     (void)user;
-    return ico_ach_count() + 1; /* the achievements, then Back */
+    return ico_ach_count() + 2;
 }
 
 static void achFill(void *user, int d, UiListSlot *out)
 {
     (void)user;
-    if (d == ico_ach_count()) {
+    const int n = ico_ach_count();
+    if (d == n) {
+        out->labelStr = UI_STR_OPT_ACH_POPUPS;
+        out->colA = onOff(ico_ach_popups_enabled());
+        return;
+    }
+    if (d == n + 1) {
         out->labelStr = UI_STR_BACK;
         return;
     }
@@ -3373,7 +3379,9 @@ static void achFill(void *user, int d, UiListSlot *out)
     out->colAStr = st == ICO_ACH_UNLOCKED ? UI_STR_ACH_STATE_UNLOCKED : UI_STR_ACH_LOCKED;
 }
 
-/* the header carries the count; the status line is the cursor's description */
+/* the header carries the count; the status line is the cursor's
+   description; the pop-ups switch's value steps on a click, as an Options
+   row's value does */
 static void achDecorate(void *user, int d)
 {
     (void)user;
@@ -3390,14 +3398,25 @@ static void achDecorate(void *user, int d)
     } else {
         lt_ext_set_text(pg->list.status, "");
     }
+    const int s = n - pg->list.offset;
+    if (s >= 0 && s < UI_LIST_SLOTS) {
+        lt_ext_set_pointer_role(pg->list.colA[s], LT_POINTER_STEP);
+    }
 }
 
+/* Left and Right flip the pop-ups switch, as on an Options row */
 static int achInput(void *user, int d, int flags)
 {
     (void)user;
     Page *pg = &s_pages[UI_PAGE_ACHIEVEMENTS];
-    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && d == ico_ach_count())) {
+    const int n = ico_ach_count();
+    if ((flags & PAD_BACK) || ((flags & LT_PAD_CROSS) && d == n + 1)) {
         return leaveTo(UI_PAGE_ACHIEVEMENTS, parentLayout(pg));
+    }
+    if (d == n && (flags & (LT_PAD_LEFT | LT_PAD_RIGHT))) {
+        ui_settings_step(UI_OPT_ACH_POPUPS, (flags & LT_PAD_LEFT) ? -1 : 1);
+        CUR_SE();
+        return -1;
     }
     return UI_LIST_PASS;
 }

@@ -1106,22 +1106,42 @@ static void testPointer(void)
     ui_mouse_reset();
 }
 
-/* Gameplay > Achievement pop-ups: the last switch before Back, On by
-   default, a step flips the pop-ups live, ui_settings_save writes [game]
-   achievements only after a change, and a step back reads On again */
+/* Achievements > Achievement pop-ups: the list's item before Back, not on
+   Gameplay; Up from the first slot wraps to Back and Up again lands on it,
+   On by default, its value clicks as a step; Right flips the pop-ups live,
+   leaving the page writes [game] achievements only after a change, and Left
+   reads On again */
 static void testAchievementPopups(void)
 {
-    int rows[16], opts[16];
+    int labels[16], values[16];
     char p[1100];
     IcoToml *t;
 
     useConfig("version = 1\n");
     ico_ach_set_popups(1);
-    enterMain(0);
-    const int n = ui_settings_page_rows(UI_PAGE_GAMEPLAY, rows, opts, NULL, 16);
-    CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_ACH_POPUPS &&
-              opts[n - 3] == UI_OPT_PLAYERS,
-          "pop-ups: the row sits after Players, before Back (%d rows)", n);
+    const int mainL = enterMain(0);
+    CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_ACH_POPUPS) < 0, "pop-ups: no Gameplay row");
+    const int iAch = i17bMainIndex(UI_STR_SECTION_ACHIEVEMENTS);
+    const int n = ico_ach_count();
+    CHECK(iAch >= 0 && n + 2 > UI_LIST_SLOTS, "pop-ups: the list scrolls (%d achievements)", n);
+    const int achL = openPage(mainL, iAch, UI_PAGE_ACHIEVEMENTS);
+    const int c = ui_settings_page_rows(UI_PAGE_ACHIEVEMENTS, labels, NULL, values, 16);
+    CHECK(c == UI_LIST_SLOTS && lt_ext_layout(achL)->curItem == labels[0],
+          "pop-ups: the page opens on its first slot (%d slots)", c);
+    press(LT_PAD_UP);
+    CHECK(lt_ext_layout(achL)->curItem == labels[UI_LIST_SLOTS - 1] &&
+              strcmp(lt_ext_row_text(labels[UI_LIST_SLOTS - 1]), ui_str(UI_STR_BACK)) == 0,
+          "pop-ups: Up wraps to Back (\"%s\")", lt_ext_row_text(labels[UI_LIST_SLOTS - 1]));
+    press(LT_PAD_UP);
+    const int s = UI_LIST_SLOTS - 2;
+    CHECK(lt_ext_layout(achL)->curItem == labels[s] &&
+              strcmp(lt_ext_row_text(labels[s]), ui_str(UI_STR_OPT_ACH_POPUPS)) == 0 &&
+              strcmp(lt_ext_row_text(values[s]), "On") == 0,
+          "pop-ups: Up again, the switch before Back (\"%s\" \"%s\")", lt_ext_row_text(labels[s]),
+          lt_ext_row_text(values[s]));
+    CHECK(lt_ext_pointer_role(values[s]) == LT_POINTER_STEP &&
+              lt_ext_pointer_role(values[0]) == LT_POINTER_AUTO,
+          "pop-ups: its value steps on a click, an achievement's does not");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On by default");
     CHECK(ui_settings_save() == 0, "pop-ups: save without a change");
     path(p, sizeof(p), "settings_test.toml");
@@ -1130,10 +1150,17 @@ static void testAchievementPopups(void)
         CHECK(!ico_toml_has(t, "game.achievements"), "pop-ups: no key written unchanged");
         ico_toml_free(t);
     }
-    ui_settings_step(UI_OPT_ACH_POPUPS, 1);
+    press(LT_PAD_RIGHT);
+    CHECK(lt_ext_layout(achL)->curItem == labels[s] &&
+              strcmp(lt_ext_row_text(values[s]), "Off") == 0,
+          "pop-ups: Right shows Off on the row (\"%s\")", lt_ext_row_text(values[s]));
     CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "Off") == 0, "pop-ups: Off");
     CHECK(ico_ach_popups_enabled() == 0, "pop-ups: the getter reads Off at once");
-    CHECK(ui_settings_save() == 0, "pop-ups: save");
+    press(LT_PAD_TRIANGLE);
+    int mainLabels[16];
+    ui_settings_page_rows(UI_PAGE_MAIN, mainLabels, NULL, NULL, 16);
+    CHECK(settle(mainL, 60) && lt_ext_layout(mainL)->curItem == mainLabels[iAch],
+          "pop-ups: Triangle back to the menu, on Achievements");
     t = ico_toml_load(p);
     CHECK(t != NULL, "pop-ups: config");
     if (t) {
@@ -1142,9 +1169,25 @@ static void testAchievementPopups(void)
               "pop-ups: [game] achievements false");
         ico_toml_free(t);
     }
-    ui_settings_step(UI_OPT_ACH_POPUPS, -1);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On again");
+    openPage(mainL, iAch, UI_PAGE_ACHIEVEMENTS);
+    CHECK(lt_ext_layout(achL)->curItem == labels[0],
+          "pop-ups: the page opens on its first slot again");
+    press(LT_PAD_UP);
+    press(LT_PAD_UP);
+    press(LT_PAD_LEFT);
+    CHECK(strcmp(lt_ext_row_text(values[s]), "On") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_ACH_POPUPS), "On") == 0,
+          "pop-ups: Left reads On again (\"%s\")", lt_ext_row_text(values[s]));
     CHECK(ico_ach_popups_enabled() == 1, "pop-ups: the getter reads On again");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(mainL, 60), "pop-ups: back to the menu again");
+    t = ico_toml_load(p);
+    if (t) {
+        CHECK(ico_toml_get_bool(t, "game.achievements", 0) == 1,
+              "pop-ups: [game] achievements true");
+        ico_toml_free(t);
+    }
+    ui_settings_reset();
     useConfig("version = 1\n");
     ico_ach_set_popups(1);
 }
