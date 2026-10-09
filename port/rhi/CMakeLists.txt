@@ -26,8 +26,6 @@ if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 option(ICO_RHI_D3D12 "Build the D3D12 backend of port/rhi (ico_rhi_d3d12; Windows only)"
        ${_ico_d3d12_default})
-set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
-    "Prefix of the dependencies tools/fetch_deps.sh installs")
 
 # --- The D3D12 plan test (CPU only, every target) ------------------------------
 # The D3D12 backend's header-free bookkeeping (d3d12/d3d12_plan.c): state

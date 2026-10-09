@@ -24,8 +24,6 @@
 # overrides the path. Without a compiler the shaders are left out
 # (ICO_SHADERS_AVAILABLE is false), as the other fetched dependencies are.
 
-set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
-    "Prefix of the dependencies tools/fetch_deps.sh installs")
 set(ICO_DXC "" CACHE FILEPATH "DXC executable (default: tools/toolchain/deps/dxc/bin/dxc)")
 option(ICO_SHADERS_DXIL "Also compile the shaders to DXIL for the D3D12 backend" ON)
 

@@ -251,6 +251,8 @@ set(ICO_RUN_TESTS OFF)
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     set(ICO_RUN_TESTS ON)
+    set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
+        "The PAL disc image (SCES-50760) the disc tests read, never committed")
 endif()
 add_executable(fpenv_test port/platform/fpenv_test.c)
 target_compile_options(fpenv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -280,6 +282,10 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|AARCH64)$" AND NOT APPLE AND NOT WI
 else()
     set(ICO_LIBMPEG2_NEON OFF)
 endif()
+
+# The libraries, DXC and the validation layer tools/fetch_deps.sh fetches
+set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
+    "Prefix of the dependencies tools/fetch_deps.sh installs")
 
 # --- port/math: the VU0 maths in C and the newlib copies ---------------------
 add_subdirectory(port/math)

@@ -68,10 +68,6 @@ target_compile_options(appearance_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${IC
 target_link_libraries(appearance_disc_test PRIVATE ico_options ico_port_data)
 if(ICO_RUN_TESTS)
     add_test(NAME appearance COMMAND appearance_test "${CMAKE_CURRENT_BINARY_DIR}")
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     add_test(NAME appearance_disc COMMAND appearance_disc_test "${ICO_DISC_IMAGE}")
     set_tests_properties(appearance_disc PROPERTIES SKIP_RETURN_CODE 77)
 endif()
@@ -236,10 +232,6 @@ endif()
 # log checked (test/model_viewer_headless.cmake). The
 # disc image is needed (skipped without it); one game run, so alone.
 if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     add_test(NAME model_viewer_headless
              COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
                      "-DPAD=${CMAKE_CURRENT_SOURCE_DIR}/test/model_viewer_pad.txt"

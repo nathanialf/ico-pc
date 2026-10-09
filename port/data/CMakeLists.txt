@@ -26,9 +26,6 @@ target_compile_options(ico_miniz PRIVATE -w)
 # files, gives that copy's exported functions a chdr_ prefix; its LZMA is
 # already prefixed (CHDR_) and nothing else in the port defines zstd's or
 # libchdr's names.
-if(NOT DEFINED ICO_DEPS_DIR)
-    set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps")
-endif()
 set(ICO_LIBCHDR_DIR "${ICO_DEPS_DIR}/libchdr" CACHE PATH "libchdr source tree (tools/fetch_deps.sh)")
 if(NOT EXISTS "${ICO_LIBCHDR_DIR}/include/libchdr/chd.h")
     message(FATAL_ERROR "port/data needs libchdr at ${ICO_LIBCHDR_DIR}: run tools/fetch_deps.sh")
@@ -117,8 +114,6 @@ if(ICO_RUN_TESTS)
     # a synthetic image built by the test: runs everywhere, no disc needed
     add_test(NAME vfs_synthetic COMMAND vfs_test synth "${CMAKE_CURRENT_BINARY_DIR}")
     # the user's disc, read at run time; skipped (77) when it is absent
-    set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-        "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME vfs_disc COMMAND vfs_test disc "${ICO_DISC_IMAGE}")
     set_tests_properties(vfs_disc PROPERTIES SKIP_RETURN_CODE 77)
 endif()

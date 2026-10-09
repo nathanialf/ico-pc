@@ -82,8 +82,6 @@ target_compile_options(sndn2_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WAR
 target_link_libraries(sndn2_test PRIVATE ico_sndn2)
 if(ICO_RUN_TESTS)
     # the disc's pitch table is checked when the image is there (else skipped)
-    set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-        "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME sndn2 COMMAND sndn2_test "${ICO_DISC_IMAGE}")
 endif()
 

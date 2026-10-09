@@ -195,10 +195,6 @@ if(NOT WIN32)
     target_link_libraries(gallery_test PRIVATE m)
 endif()
 if(ICO_RUN_TESTS)
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     add_test(NAME gallery COMMAND gallery_test "${ICO_BASE_ELF}" "${ICO_DISC_IMAGE}")
     set_tests_properties(gallery PROPERTIES SKIP_RETURN_CODE 77)
     # the gallery in the headless game: needs the disc image and the
@@ -392,10 +388,6 @@ if(DEFINED ICO_BASE_ELF AND EXISTS "${ICO_BASE_ELF}")
     target_link_libraries(font_coverage_test PRIVATE ico_port_data)
 endif()
 if(ICO_RUN_TESTS)
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     add_test(NAME font_coverage
              COMMAND font_coverage_test "${CMAKE_CURRENT_SOURCE_DIR}/test/font_corpus"
                      ${_ico_cov_elf})
@@ -468,10 +460,6 @@ if(ICO_RUN_TESTS)
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(settings_render PROPERTIES RESOURCE_LOCK settings_toml)
     set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     add_test(NAME menu_text COMMAND menu_text_test "${ICO_DISC_IMAGE}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(menu_text PROPERTIES SKIP_RETURN_CODE 77)

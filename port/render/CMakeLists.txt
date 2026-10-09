@@ -70,10 +70,6 @@ target_compile_options(gltf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARN
 target_link_libraries(gltf_test PRIVATE ico_gltf)
 
 if(ICO_RUN_TESTS)
-    if(NOT DEFINED ICO_DISC_IMAGE)
-        set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-            "The PAL disc image (SCES-50760) the disc tests read, never committed")
-    endif()
     # a PCSX2 pack's replacements folder (never committed); the match is
     # reported only when it exists
     set(ICO_TEXPACK_DIR "${CMAKE_SOURCE_DIR}/build-host/tmp/texpack/SCES-50760/replacements"

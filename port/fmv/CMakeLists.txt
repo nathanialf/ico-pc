@@ -12,9 +12,6 @@
 # instead, as Android's own build of the library has them (ARMV8,
 # DEFAULT_ARCH D_ARCH_ARMV8_GENERIC): the phone decodes movies several times
 # faster.  x86 and the rest are unchanged.
-if(NOT DEFINED ICO_DEPS_DIR)
-    set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps")
-endif()
 set(ICO_LIBMPEG2_DIR "${ICO_DEPS_DIR}/libmpeg2" CACHE PATH
     "Ittiam libmpeg2 source tree (tools/fetch_deps.sh)")
 
@@ -134,8 +131,6 @@ target_include_directories(fmv_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(fmv_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(fmv_test PRIVATE ico_fmv)
 if(ICO_RUN_TESTS)
-    set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
-        "The PAL disc image (SCES-50760) the disc tests read, never committed")
     add_test(NAME fmv COMMAND fmv_test "${ICO_DISC_IMAGE}")
 endif()
 
