@@ -557,10 +557,13 @@ static void testQuitGame(void)
           "no hook: back to the desktop words");
 }
 
-/* v0.4.3 I17a: Controls' Mouse camera and Invert mouse up/down rows: On
-   and Off on the live table, saved as [input] mouse_camera and
-   mouse_invert_y; the three mouse rows after Hold type, hidden on Android;
-   twelve rows (the pause menu with a touch screen) fit 13 lines apart */
+/* Controls' mouse rows: Mouse camera and Invert mouse up/down are On and
+   Off on the live table, saved as [input] mouse_camera and mouse_invert_y;
+   Mouse camera speed, Mouse camera range and Camera swings back follow
+   Invert (mouse_camera_speed, mouse_full_range, mouse_return, written only
+   when changed); the six mouse rows come after Hold type, hidden on
+   Android; fifteen rows (the pause menu with a touch screen) fit 11 lines
+   apart */
 static int s_i17aTouch;
 
 static int i17aTouch(void)
@@ -570,8 +573,9 @@ static int i17aTouch(void)
 
 static void testMouseCamera(void)
 {
-    static const UiSettingsOpt kMouse[3] = {UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
-                                            UI_OPT_MOUSE_INVERT};
+    static const UiSettingsOpt kMouse[6] = {UI_OPT_MOUSE_CAMERA, UI_OPT_MOUSE_SENS,
+                                            UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,
+                                            UI_OPT_MOUSE_RANGE,  UI_OPT_MOUSE_RETURN};
     IcoBindings *b = ico_input_live_bindings();
     char p[1100];
 
@@ -585,6 +589,16 @@ static void testMouseCamera(void)
           "values: On, Off (%s)", ui_SettingsValueText(UI_OPT_MOUSE_CAMERA));
     CHECK(strcmp(ui_Str(UI_STR_OPT_MOUSE_INVERT), "Invert mouse up/down") == 0,
           "the Invert row's label");
+    CHECK(b->mouse_camera_speed == 1.0f && b->mouse_full_range == 0 && b->mouse_return == 1,
+          "defaults: speed 1, normal range, swings back");
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), "1.0x") == 0 &&
+              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RANGE), "Normal") == 0 &&
+              strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RETURN), "On") == 0,
+          "values: 1.0x, Normal, On");
+    CHECK(strcmp(ui_Str(UI_STR_OPT_MOUSE_SPEED), "Mouse camera speed") == 0 &&
+              strcmp(ui_Str(UI_STR_OPT_MOUSE_RANGE), "Mouse camera range") == 0 &&
+              strcmp(ui_Str(UI_STR_OPT_MOUSE_RETURN), "Camera swings back") == 0,
+          "the three new labels");
 
     /* each step flips the live table at once; the save writes both keys */
     ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
@@ -600,12 +614,59 @@ static void testMouseCamera(void)
               ico_toml_get_bool(t, "input.mouse_invert_y", 0) == 1,
           "saved: mouse_camera = false, mouse_invert_y = true");
     CHECK(t && ico_toml_get(t, "input.mouse_hold") == NULL, "the hold not written (default)");
+    CHECK(t && ico_toml_get(t, "input.mouse_camera_speed") == NULL &&
+              ico_toml_get(t, "input.mouse_full_range") == NULL &&
+              ico_toml_get(t, "input.mouse_return") == NULL,
+          "the three new keys not written (defaults)");
     ico_toml_free(t);
     ico_input_reload_bindings(b);
     CHECK(b->mouse_camera == 0 && b->mouse_invert_y == 1, "read back");
     ui_SettingsStep(UI_OPT_MOUSE_CAMERA, 1);
     ui_SettingsStep(UI_OPT_MOUSE_INVERT, 1);
     CHECK(b->mouse_camera == 1 && b->mouse_invert_y == 0, "stepped back");
+
+    /* the speed steps 0.5, 1, 1.5, 2, 3, 5, Instant and stops at the ends */
+    {
+        static const char *const kText[7] = {"0.5x", "1.0x", "1.5x",   "2.0x",
+                                             "3.0x", "5.0x", "Instant"};
+        for (int i = 2; i < 7; i++) {
+            ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
+            CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
+                  "speed step up to %s (%s)", kText[i], ui_SettingsValueText(UI_OPT_MOUSE_SPEED));
+        }
+        CHECK(b->mouse_camera_speed == 10.0f, "Instant is 10");
+        ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
+        CHECK(b->mouse_camera_speed == 10.0f, "speed stops at Instant");
+        for (int i = 5; i >= 0; i--) {
+            ui_SettingsStep(UI_OPT_MOUSE_SPEED, -1);
+            CHECK(strcmp(ui_SettingsValueText(UI_OPT_MOUSE_SPEED), kText[i]) == 0,
+                  "speed step down to %s (%s)", kText[i], ui_SettingsValueText(UI_OPT_MOUSE_SPEED));
+        }
+        ui_SettingsStep(UI_OPT_MOUSE_SPEED, -1);
+        CHECK(b->mouse_camera_speed == 0.5f, "speed stops at 0.5x");
+        ui_SettingsStep(UI_OPT_MOUSE_RANGE, 1);
+        ui_SettingsStep(UI_OPT_MOUSE_RETURN, 1);
+        CHECK(b->mouse_full_range == 1 && b->mouse_return == 0 &&
+                  strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RANGE), "Full") == 0 &&
+                  strcmp(ui_SettingsValueText(UI_OPT_MOUSE_RETURN), "Off") == 0,
+              "range Full, swings back Off");
+        CHECK(ui_SettingsSave() == 0, "save the three");
+        t = ico_toml_load(p);
+        CHECK(t && ico_toml_get_float(t, "input.mouse_camera_speed", 1.0f) == 0.5f &&
+                  ico_toml_get_bool(t, "input.mouse_full_range", 0) == 1 &&
+                  ico_toml_get_bool(t, "input.mouse_return", 1) == 0,
+              "saved: mouse_camera_speed = 0.5, mouse_full_range = true, mouse_return = false");
+        ico_toml_free(t);
+        ico_input_reload_bindings(b);
+        CHECK(b->mouse_camera_speed == 0.5f && b->mouse_full_range == 1 && b->mouse_return == 0,
+              "the three read back");
+        /* back to the defaults: the keys the file now names are kept */
+        ui_SettingsStep(UI_OPT_MOUSE_SPEED, 1);
+        ui_SettingsStep(UI_OPT_MOUSE_RANGE, 1);
+        ui_SettingsStep(UI_OPT_MOUSE_RETURN, 1);
+        CHECK(b->mouse_camera_speed == 1.0f && b->mouse_full_range == 0 && b->mouse_return == 1,
+              "the three back at their defaults");
+    }
 
     /* the rows: after Hold type from the pause menu, after Remap on the
        title; hidden on Android */
@@ -615,7 +676,7 @@ static void testMouseCamera(void)
             ui_SettingsSetTouchQuery(NULL);
             const int mainL = enterMain(title);
             const int ctlL = openPage(mainL, 4, UI_PAGE_CONTROLS);
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 6; i++) {
                 const int row = ui_SettingsRowOf(UI_PAGE_CONTROLS, kMouse[i]);
                 const int shown =
                     row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
@@ -635,6 +696,17 @@ static void testMouseCamera(void)
                           ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_MOUSE_CAMERA),
                       "pause: Mouse camera after Hold type");
             }
+            if (!android) {
+                /* Invert, then Speed, Range, Swings back, then Circle back */
+                static const UiSettingsOpt kOrder[5] = {UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,
+                                                        UI_OPT_MOUSE_RANGE, UI_OPT_MOUSE_RETURN,
+                                                        UI_OPT_CIRCLE_BACK};
+                for (int i = 0; i < 4; i++) {
+                    CHECK(lt_ext_Prop(ui_SettingsRowOf(UI_PAGE_CONTROLS, kOrder[i]))->downItem ==
+                              ui_SettingsRowOf(UI_PAGE_CONTROLS, kOrder[i + 1]),
+                          "title %d: row order after mouse row %d", title, i);
+                }
+            }
             (void)ctlL;
             press(0x10);
             CHECK(settle(mainL, 60), "Controls: back");
@@ -642,8 +714,8 @@ static void testMouseCamera(void)
     }
     ico_video_set_android(0);
 
-    /* twelve rows with a touch screen from the pause menu: 13 lines apart
-       from 40, the last box inside the 226 lines */
+    /* fifteen rows with a touch screen from the pause menu: 11 lines apart
+       from 30, the last box inside the 226 lines */
     s_i17aTouch = 1;
     ui_SettingsSetTouchQuery(i17aTouch);
     const int mainL = enterMain(0);
@@ -658,15 +730,15 @@ static void testMouseCamera(void)
         if (r->defaultMask) {
             continue;
         }
-        CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 13,
-              "twelve rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
+        CHECK(prev < 0 ? r->dispY >= 28 : r->dispY >= prev + 11,
+              "fifteen rows: row %d at y %d (the one above at %d)", i, r->dispY, prev);
         prev = r->dispY;
         last = labels[i];
         n++;
     }
-    CHECK(n == 12, "twelve rows shown (%d)", n);
+    CHECK(n == 15, "fifteen rows shown (%d)", n);
     CHECK(last >= 0 && lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
-          "twelve rows: the last box ends at %d",
+          "fifteen rows: the last box ends at %d",
           last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
     press(0x10);
     CHECK(settle(mainL, 60), "Controls: back");

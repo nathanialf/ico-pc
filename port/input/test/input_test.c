@@ -189,6 +189,27 @@ static void test_bindings_config(void)
     CHECK(ico_input_apply_toml(&b, t) == 0);
     CHECK(b.mouse_camera == 0 && near_(b.mouse_hold, 1.5f, 1e-6f) && b.mouse_invert_y == 1);
     ico_toml_free(t);
+
+    /* the speed, range and swing back keys: the defaults, the speed's range
+       0.5..10 */
+    ico_bindings_defaults(&b);
+    CHECK(b.mouse_camera_speed == 1.0f && b.mouse_full_range == 0 && b.mouse_return == 1);
+    CHECK(strstr(ico_bindings_default_text(), "mouse_camera_speed = 1.0\n") != NULL &&
+          strstr(ico_bindings_default_text(), "mouse_full_range = false\n") != NULL &&
+          strstr(ico_bindings_default_text(), "mouse_return = true\n") != NULL);
+    CHECK(ico_bindings_set(&b, "mouse_camera_speed", "0.5") == 0 && b.mouse_camera_speed == 0.5f);
+    CHECK(ico_bindings_set(&b, "mouse_camera_speed", "10") == 0 && b.mouse_camera_speed == 10.0f);
+    CHECK(ico_bindings_set(&b, "mouse_camera_speed", "0.4") == -1 && b.mouse_camera_speed == 10.0f);
+    CHECK(ico_bindings_set(&b, "mouse_camera_speed", "11") == -1 && b.mouse_camera_speed == 10.0f);
+    CHECK(ico_bindings_set(&b, "mouse_full_range", "true") == 0 && b.mouse_full_range == 1);
+    CHECK(ico_bindings_set(&b, "mouse_full_range", "maybe") == -1 && b.mouse_full_range == 1);
+    CHECK(ico_bindings_set(&b, "mouse_return", "false") == 0 && b.mouse_return == 0);
+    t = ico_toml_parse("[input]\nmouse_camera_speed = 3\nmouse_full_range = true\n"
+                       "mouse_return = false\n");
+    ico_bindings_defaults(&b);
+    CHECK(ico_input_apply_toml(&b, t) == 0);
+    CHECK(b.mouse_camera_speed == 3.0f && b.mouse_full_range == 1 && b.mouse_return == 0);
+    ico_toml_free(t);
 }
 
 /* I17a: the capture rule (mouse_look.c) and photo mode's accumulator */
@@ -546,6 +567,54 @@ static void test_step(void)
     ico_bindings_step(&b, &r, &v);
     CHECK(v.rx == 0.0f && v.buttons == ICO_PAD_CROSS);
     b.mouse_camera = 1;
+    /* swings back off: the offset stays past the hold, until the next motion */
+    ico_bindings_mouse_reset(&b);
+    b.mouse_return = 0;
+    r.mouse[1] = 0;
+    r.mouse_dx = 100.0f;
+    r.dt = 0.05f;
+    ico_bindings_step(&b, &r, &v);
+    r.mouse_dx = 0.0f;
+    for (i = 0; i < 100; i++) { /* five seconds still */
+        ico_bindings_step(&b, &r, &v);
+    }
+    CHECK(near_(b.look_x, 0.25f, 1e-6f) && near_(v.rx, (48.5f + 71.5f * 0.25f) / 127.5f, 1e-4f));
+    r.mouse_dx = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(near_(b.look_x, 0.5f, 1e-6f));
+    b.mouse_return = 1;
+    r.mouse_dx = 0.0f;
+    for (i = 0; i < 100; i++) { /* swinging back on again: it relaxes to centre */
+        ico_bindings_step(&b, &r, &v);
+    }
+    CHECK(b.look_x == 0.0f && v.rx == 0.0f);
+    r.dt = 0.0f;
+    /* the mouse drives the camera only while its stick beats the keys' and the
+       gamepad's (a tie goes to them) */
+    ico_bindings_mouse_reset(&b);
+    r.mouse_dx = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 1);
+    r.mouse_dx = 0.0f;
+    r.gamepads = 1;
+    r.axis[2] = 1.0f; /* the pad's right stick fully over */
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 0 && near_(v.rx, 1.0f, 1e-4f));
+    r.axis[2] = 0.0f;
+    r.gamepads = 0;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 1);
+    ico_bindings_mouse_reset(&b);
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 0);
+    b.mouse_camera = 0;
+    r.mouse_dx = 100.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.mouse_drives == 0);
+    b.mouse_camera = 1;
+    ico_bindings_mouse_reset(&b);
+    r.mouse[1] = 1;
+    r.mouse_dx = 100.0f;
     /* mouse off: neither */
     b.mouse_on = 0;
     ico_bindings_step(&b, &r, &v);
