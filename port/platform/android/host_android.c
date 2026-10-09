@@ -318,8 +318,8 @@ void ico_android_fatal_box(const char *text)
 void ico_android_message_box(const char *text, int error)
 {
     __android_log_write(error ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO, LOG_TAG, text);
-    if (!SDL_ShowSimpleMessageBox(error ? SDL_MESSAGEBOX_ERROR : SDL_MESSAGEBOX_INFORMATION, "ICO",
-                                  text, NULL)) {
+    if (!SDL_ShowSimpleMessageBox(error ? SDL_MESSAGEBOX_ERROR : SDL_MESSAGEBOX_INFORMATION,
+                                  "ICO PC", text, NULL)) {
         __android_log_print(ANDROID_LOG_WARN, LOG_TAG, "message box: %s", SDL_GetError());
     }
 }
