@@ -274,14 +274,20 @@ jobs:
 
           # the files the app needs
           unzip -l "$apk" > apk.lst
-          for f in lib/arm64-v8a/libmain.so lib/arm64-v8a/libSDL3.so assets/VERSION.txt assets/NOTICES.txt; do
+          for f in lib/arm64-v8a/libmain.so lib/arm64-v8a/libSDL3.so \
+                   lib/arm64-v8a/libmain_hook.so lib/arm64-v8a/libhook_impl.so \
+                   lib/arm64-v8a/libfile_redirect_hook.so assets/VERSION.txt assets/NOTICES.txt; do
             grep -q " $f\$" apk.lst || { echo "APK lacks $f"; exit 1; }
           done
+          # v0.4.3 AN-22a: libadrenotools' three hook libraries, no more
+          hooks=$(grep -c ' lib/arm64-v8a/lib[^/]*hook[^/]*\.so$' apk.lst || true)
+          [ "$hooks" -eq 3 ] || { echo "APK holds $hooks hook libraries, expected 3"; exit 1; }
 
-          # 16 KB pages: every LOAD segment of both libraries aligned to 0x4000
+          # 16 KB pages: every LOAD segment of every library (libmain, SDL3 and
+          # the three hook libraries) aligned to 0x4000
           mkdir -p apk-libs
           unzip -o -q "$apk" 'lib/arm64-v8a/*.so' -d apk-libs
-          for lib in apk-libs/lib/arm64-v8a/libmain.so apk-libs/lib/arm64-v8a/libSDL3.so; do
+          for lib in apk-libs/lib/arm64-v8a/*.so; do
             "$llvm/llvm-readelf" -lW "$lib" | awk -v lib="$lib" '
               $1 == "LOAD" { n++; if ($NF != "0x4000") { print lib ": LOAD align " $NF; bad = 1 } }
               END { if (n == 0) { print lib ": no LOAD segment"; bad = 1 } exit bad }'
@@ -302,6 +308,10 @@ jobs:
           grep -q 'resizeableActivity.*true' manifest.txt
           if grep -q 'resizeableActivity.*false' manifest.txt; then echo "resizeableActivity is false"; exit 1; fi
           grep -q 'android:theme' manifest.txt
+          # v0.4.3 AN-22a: the libraries are unpacked at install
+          # (useLegacyPackaging), where libadrenotools loads its hooks from
+          grep -q 'extractNativeLibs.*true' manifest.txt
+          if grep -q 'extractNativeLibs.*false' manifest.txt; then echo "extractNativeLibs is false"; exit 1; fi
           grep -q 'density' android/app/src/main/AndroidManifest.xml
           # the APK's own: configChanges is there, and when aapt2 prints it as
           # a mask, the density bit (0x1000) is set

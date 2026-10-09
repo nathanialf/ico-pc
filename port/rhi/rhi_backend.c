@@ -436,6 +436,11 @@ void rhi_SetPipelineCachePath(const char *path)
     be()->SetPipelineCachePath(path);
 }
 
+void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+{
+    be()->SetVulkanLoader(getInstanceProcAddr);
+}
+
 /* v0.4.1 (package R0): the injector and the overlay, from the backend that
  * rhi_Init brought up */
 const char *rhi_InjectorName(void)

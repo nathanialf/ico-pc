@@ -334,6 +334,15 @@ VkPresentModeKHR vkr_ChoosePresentMode(const VkPresentModeKHR *modes, uint32_t n
 const char *vkr_PresentModeName(VkPresentModeKHR m);
 
 /* vk_swapchain.c */
+#ifdef __ANDROID__
+/* vk_surface_android.c (v0.4.3 AN-22a): a VkSurfaceKHR on the SDL window's
+ * ANativeWindow, made with vkCreateAndroidSurfaceKHR from the instance's own
+ * vkGetInstanceProcAddr (SDL_Vulkan_CreateSurface would take SDL's loader's,
+ * which a driver the program loaded does not answer to).  false (logged
+ * once per failure kind) when the window has no native window (the app in
+ * the background) or the call fails. */
+bool vkr_CreateWindowSurface(void *sdlWindow, VkSurfaceKHR *out);
+#endif
 bool vkr_SwapchainCreate(uint32_t w, uint32_t h, bool vsync);
 void vkr_SwapchainDestroy(void);
 

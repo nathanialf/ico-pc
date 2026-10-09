@@ -478,6 +478,42 @@ static void test_first_run(void)
     remove(toml);
 }
 
+/* v0.4.3 AN-22a: [video] gpu_driver and gpu_driver_failed (the Android
+   graphics driver, port/platform/android/gpu_driver_android.c): in the
+   Android first-run file, empty; both round trip through a save */
+static void test_gpu_driver_keys(void)
+{
+    char toml[ICO_PATH_MAX];
+
+    path_in(toml, "gpu-driver.toml");
+    remove(toml);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_write_first_run() == 0);
+    ico_config_reset(toml, "no-such.ini");
+#ifdef __ANDROID__
+    CHECK_STR(ico_config_get_string("video.gpu_driver", "?"), "");
+    CHECK_STR(ico_config_get_string("video.gpu_driver_failed", "?"), "");
+#else
+    CHECK_STR(ico_config_get_string("video.gpu_driver", "?"), "?");
+    CHECK_STR(ico_config_get_string("video.gpu_driver_failed", "?"), "?");
+#endif
+    CHECK(ico_config_set_string("video.gpu_driver", "Turnip-24.1") == 0);
+    CHECK(ico_config_set_string("video.gpu_driver_failed", "Adreno_615-0.615.0") == 0);
+    CHECK(ico_config_save() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK_STR(ico_config_get_string("video.gpu_driver", "?"), "Turnip-24.1");
+    CHECK_STR(ico_config_get_string("video.gpu_driver_failed", "?"), "Adreno_615-0.615.0");
+    /* the phone's own again: both empty */
+    CHECK(ico_config_set_string("video.gpu_driver", "") == 0);
+    CHECK(ico_config_set_string("video.gpu_driver_failed", "") == 0);
+    CHECK(ico_config_save() == 0);
+    ico_config_reset(toml, "no-such.ini");
+    CHECK_STR(ico_config_get_string("video.gpu_driver", "?"), "");
+    CHECK_STR(ico_config_get_string("video.gpu_driver_failed", "?"), "");
+    CHECK_STR(ico_config_get_string("video.preset", "?"), "original"); /* the rest kept */
+    remove(toml);
+}
+
 /* dump_interp (R7d): handed to the renderer as ICO_RD_DUMP_INTERP with
    dump_every, so the ini or config.toml decides, 0 when absent */
 static void test_dump_interp(void)
@@ -738,6 +774,7 @@ int main(int argc, char **argv)
     test_precedence();
     test_ini_layer();
     test_first_run();
+    test_gpu_driver_keys();
     test_dump_interp();
     test_fixed_clock_rule();
     test_language();

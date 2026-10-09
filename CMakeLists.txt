@@ -292,6 +292,38 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     endif()
     target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_video.c)
     target_link_libraries(ico_pc PRIVATE ico_render SDL3::SDL3-shared)
+    if(ANDROID)
+        # v0.4.3 AN-22a: the player's own graphics driver (Options > Graphics
+        # driver), loaded with libadrenotools (BSD-2-Clause, Billy Laws;
+        # with liblinkernsbypass, docs/THIRD_PARTY.md), the source
+        # tools/fetch_android.sh pins (ICO_ADRENOTOOLS_SRC in
+        # tools/toolchain/android.env). It is C++: the program links the
+        # NDK's static C++ runtime (ANDROID_STL c++_static in the toolchain
+        # file and android/app/build.gradle). Its hook libraries (main_hook,
+        # hook_impl, file_redirect_hook) are their own .so files, built
+        # because Gradle names them as targets and packed beside libmain.so.
+        # -DICO_ADRENOTOOLS_SRC=<dir> overrides; else android.env's, read at
+        # every configure so a new pin is picked up
+        if(NOT ICO_ADRENOTOOLS_SRC)
+            set(_ico_android_env "${CMAKE_SOURCE_DIR}/tools/toolchain/android.env")
+            if(EXISTS "${_ico_android_env}")
+                file(STRINGS "${_ico_android_env}" _ico_adt_line REGEX "^ICO_ADRENOTOOLS_SRC=")
+                string(REGEX REPLACE "^ICO_ADRENOTOOLS_SRC=\"?([^\"]*)\"?$" "\\1"
+                                     ICO_ADRENOTOOLS_SRC "${_ico_adt_line}")
+            endif()
+        endif()
+        if(NOT EXISTS "${ICO_ADRENOTOOLS_SRC}/CMakeLists.txt"
+           OR NOT EXISTS "${ICO_ADRENOTOOLS_SRC}/lib/linkernsbypass/CMakeLists.txt")
+            message(FATAL_ERROR "The Android build needs libadrenotools at "
+                                "\"${ICO_ADRENOTOOLS_SRC}\": run tools/fetch_android.sh")
+        endif()
+        enable_language(CXX)
+        add_subdirectory("${ICO_ADRENOTOOLS_SRC}" adrenotools EXCLUDE_FROM_ALL)
+        target_sources(ico_pc PRIVATE port/platform/gpu_driver.c
+                                      port/platform/android/gpu_driver_android.c)
+        target_link_libraries(ico_pc PRIVATE adrenotools ico_json ico_miniz)
+        set_target_properties(ico_pc PROPERTIES LINKER_LANGUAGE CXX)
+    endif()
     if(WIN32)
         # SDL3.dll beside the program
         add_custom_command(TARGET ico_pc POST_BUILD

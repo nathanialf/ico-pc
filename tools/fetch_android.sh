@@ -24,6 +24,20 @@
 #                            java/org/libsdl/app/       SDL's Java glue (the
 #                                                       same release)
 #                            LICENSE.txt
+#   tools/toolchain/deps/adrenotools/<commit>/
+#                          libadrenotools (BSD-2-Clause), the loader of the
+#                          player's own graphics driver (v0.4.3, AN-22a),
+#                          from the pinned GitHub commit tarball, with its
+#                          submodule lib/linkernsbypass (BSD-2-Clause) filled
+#                          from that project's tarball at the commit the
+#                          submodule names; the game's CMake builds it
+#                          (ICO_ADRENOTOOLS_SRC below). tools/notices/
+#                          manifest.json names the folder: change both pins
+#                          together
+#   tools/toolchain/deps/ndk/NOTICE.toolchain
+#                          the NDK's notices, for the licence of its C++
+#                          runtime (libc++), linked into the app with
+#                          libadrenotools (tools/notices/manifest.json)
 #   tools/toolchain/android.env
 #                          KEY="value" lines, sourceable by a shell and read
 #                          by cmake/toolchains/android-arm64.cmake and
@@ -35,13 +49,16 @@
 # android.env keys: ANDROID_HOME, ANDROID_SDK_ROOT, ANDROID_NDK_ROOT,
 # ANDROID_NDK_HOME, ICO_ANDROID_NDK_VERSION, ICO_ANDROID_PLATFORM,
 # ICO_ANDROID_BUILD_TOOLS (the build-tools directory), ICO_ANDROID_CMAKE_DIR,
-# ICO_ANDROID_CMAKE_VERSION, ICO_SDL3_ANDROID (the SDL3 prefix above).
+# ICO_ANDROID_CMAKE_VERSION, ICO_SDL3_ANDROID (the SDL3 prefix above),
+# ICO_ADRENOTOOLS_SRC (the libadrenotools tree above).
 #
 # Overrides:
 #   ANDROID_HOME (else ANDROID_SDK_ROOT, else ~/Android/Sdk)
 #   ICO_ANDROID_NDK_VERSION, ICO_ANDROID_BUILD_TOOLS_VERSION,
 #   ICO_ANDROID_COMPILE_SDK
 #   SDL3_VERSION, SDL3_SRC_SHA256 (the same pins as tools/fetch_deps.sh)
+#   ADRENOTOOLS_COMMIT, ADRENOTOOLS_SHA256, LINKERNSBYPASS_COMMIT,
+#   LINKERNSBYPASS_SHA256   the libadrenotools pins
 #   SKIP_SDK_INSTALL=1      only check the SDK packages, never install
 #   ICO_CMAKE               the CMake for the SDL3 build and for Gradle
 #   ICO_JOBS                build parallelism (default 2)
@@ -184,8 +201,50 @@ else
     echo "==> SDL3 ${SDL3_VERSION} (android-arm64) at $SDL3_ANDROID"
 fi
 
-# --- 4. android.env and android/local.properties -------------------------------
-for v in "$SDK" "$NDK" "$ACMAKE" "$SDL3_ANDROID"; do
+# --- 4. libadrenotools ---------------------------------------------------------
+#
+# bylaws/libadrenotools at a pinned master commit (2024-09-10, "Update
+# linkernsbypass") and bylaws/liblinkernsbypass at the commit that commit's
+# lib/linkernsbypass submodule points to (GitHub's contents API for the
+# submodule path). GitHub's commit tarballs, SHA-256 checked. Nothing is
+# built here: the game's CMake adds the tree (CMakeLists.txt, Android).
+ADRENOTOOLS_COMMIT="${ADRENOTOOLS_COMMIT:-8fae8ce254dfc1344527e05301e43f37dea2df80}"
+ADRENOTOOLS_SHA256="${ADRENOTOOLS_SHA256:-ceffce971676d4cfdf348a082df06fc92a1dca6d95bea892a480d63f200961cb}"
+LINKERNSBYPASS_COMMIT="${LINKERNSBYPASS_COMMIT:-aa3975893d83ef1bc84c321ec60c65fbf1287887}"
+LINKERNSBYPASS_SHA256="${LINKERNSBYPASS_SHA256:-da1128c8aa771c4d24766b53a47822d0717baa5c536ca8491220402942b80638}"
+ADRENOTOOLS_SRC="$DEST/adrenotools/$ADRENOTOOLS_COMMIT"
+ADRENOTOOLS_ID="libadrenotools-${ADRENOTOOLS_COMMIT}+liblinkernsbypass-${LINKERNSBYPASS_COMMIT}"
+if stamped "$ADRENOTOOLS_SRC" "$ADRENOTOOLS_ID"; then
+    echo "==> libadrenotools ${ADRENOTOOLS_COMMIT:0:12} already at $ADRENOTOOLS_SRC"
+else
+    fetch "https://github.com/bylaws/libadrenotools/archive/${ADRENOTOOLS_COMMIT}.tar.gz" \
+        "$ADRENOTOOLS_SHA256" "$TMP/adrenotools.tar.gz"
+    fetch "https://github.com/bylaws/liblinkernsbypass/archive/${LINKERNSBYPASS_COMMIT}.tar.gz" \
+        "$LINKERNSBYPASS_SHA256" "$TMP/linkernsbypass.tar.gz"
+    mkdir -p "$TMP/adt" "$TMP/lnb"
+    tar -C "$TMP/adt" -xzf "$TMP/adrenotools.tar.gz"
+    tar -C "$TMP/lnb" -xzf "$TMP/linkernsbypass.tar.gz"
+    adt="$TMP/adt/libadrenotools-${ADRENOTOOLS_COMMIT}"
+    lnb="$TMP/lnb/liblinkernsbypass-${LINKERNSBYPASS_COMMIT}"
+    [[ -f "$adt/CMakeLists.txt" && -f "$adt/src/hook/CMakeLists.txt" ]] ||
+        die "no CMakeLists.txt in the libadrenotools tarball"
+    [[ -f "$lnb/CMakeLists.txt" && -f "$lnb/LICENSE" ]] ||
+        die "no CMakeLists.txt in the liblinkernsbypass tarball"
+    rm -rf "$adt/lib/linkernsbypass"
+    mkdir -p "$adt/lib"
+    mv "$lnb" "$adt/lib/linkernsbypass"
+    rm -rf "$ADRENOTOOLS_SRC"
+    mkdir -p "$DEST/adrenotools"
+    mv "$adt" "$ADRENOTOOLS_SRC"
+    echo "$ADRENOTOOLS_ID" > "$ADRENOTOOLS_SRC/.ico-release"
+    echo "==> libadrenotools ${ADRENOTOOLS_COMMIT:0:12} at $ADRENOTOOLS_SRC"
+fi
+# the NDK's notices (its libc++ is linked into the app statically)
+mkdir -p "$DEST/ndk"
+cp "$NDK/NOTICE.toolchain" "$DEST/ndk/NOTICE.toolchain"
+
+# --- 5. android.env and android/local.properties -------------------------------
+for v in "$SDK" "$NDK" "$ACMAKE" "$SDL3_ANDROID" "$ADRENOTOOLS_SRC"; do
     [[ "$v" != *[\"\\\$\`[:space:]]* ]] || die "path with a quote, space or \$ not supported: $v"
 done
 cat > "$TC/android.env.tmp" <<ENV
@@ -200,6 +259,7 @@ ICO_ANDROID_BUILD_TOOLS="$SDK/build-tools/$BUILD_TOOLS_VERSION"
 ICO_ANDROID_CMAKE_DIR="$ACMAKE"
 ICO_ANDROID_CMAKE_VERSION="$CMAKE_VERSION_GOT"
 ICO_SDL3_ANDROID="$SDL3_ANDROID"
+ICO_ADRENOTOOLS_SRC="$ADRENOTOOLS_SRC"
 ENV
 mv "$TC/android.env.tmp" "$TC/android.env"
 echo "==> $TC/android.env"

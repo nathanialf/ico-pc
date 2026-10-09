@@ -729,6 +729,14 @@ const char *rhi_PresentModeName(void);
  * copied.  D3D12: ignored (its drivers keep their own shader cache). */
 void rhi_SetPipelineCachePath(const char *path);
 
+/* v0.4.3 (AN-22a): the Vulkan loader rhi_Init uses, as its
+ * vkGetInstanceProcAddr: a graphics driver the Android build loaded itself
+ * (port/platform/android/gpu_driver_android.c, through libadrenotools).
+ * NULL (the default) uses SDL's, the system's loader.  Call before rhi_Init;
+ * kept across rhi_Shutdown.  On Android the window's surface is then made
+ * through the same function (vk_surface_android.c).  D3D12: ignored. */
+void rhi_SetVulkanLoader(void *getInstanceProcAddr);
+
 /* Programs that hook the graphics API from outside (v0.4.1, package R0),
  * for the logs and the pacing; valid after rhi_Init, NULL when none (and
  * before rhi_Init).

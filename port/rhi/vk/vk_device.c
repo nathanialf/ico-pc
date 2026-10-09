@@ -773,6 +773,15 @@ static void vkr_FillLimits(void)
 }
 
 /* ------------------------------------------------------------- lifecycle */
+/* v0.4.3 AN-22a: rhi_SetVulkanLoader's function; outside g_vkr, which
+ * rhi_Init clears */
+static PFN_vkGetInstanceProcAddr s_loaderGipa;
+
+void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+{
+    s_loaderGipa = (PFN_vkGetInstanceProcAddr)getInstanceProcAddr;
+}
+
 bool rhi_Init(const RhiDeviceDesc *desc)
 {
     if (g_vkr.initialised) {
@@ -780,21 +789,23 @@ bool rhi_Init(const RhiDeviceDesc *desc)
     }
     memset(&g_vkr, 0, sizeof(g_vkr));
     VkResult vr;
+    /* AN-22a: a driver the program loaded (rhi_SetVulkanLoader) first */
+    PFN_vkGetInstanceProcAddr gipa = s_loaderGipa;
 #ifdef ICO_RHI_HAVE_SDL
-    if (desc->sdlWindow) {
+    if (!gipa && desc->sdlWindow) {
         /* SDL loaded the Vulkan loader for the window (SDL_WINDOW_VULKAN);
          * share it so both see the same instance functions */
-        PFN_vkGetInstanceProcAddr gipa =
-            (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
+        gipa = (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
         if (!gipa) {
             VKR_LOG("SDL_Vulkan_GetVkGetInstanceProcAddr: %s", SDL_GetError());
             return false;
         }
+    }
+#endif
+    if (gipa) {
         volkInitializeCustom(gipa);
         vr = VK_SUCCESS;
-    } else
-#endif
-    {
+    } else {
         vr = volkInitialize();
     }
     if (vr != VK_SUCCESS) {
@@ -809,12 +820,22 @@ bool rhi_Init(const RhiDeviceDesc *desc)
     if (desc->sdlWindow) {
 #ifdef ICO_RHI_HAVE_SDL
         g_vkr.window = desc->sdlWindow;
+#ifdef __ANDROID__
+        /* AN-22a: SDL's surface call goes through its own loader, which is
+           not the one a driver the program loaded answers to */
+        if (!vkr_CreateWindowSurface(desc->sdlWindow, &g_vkr.surface)) {
+            VKR_LOG("no surface on the window (no native window yet, or the call failed)");
+            rhi_Shutdown();
+            return false;
+        }
+#else
         if (!SDL_Vulkan_CreateSurface((SDL_Window *)desc->sdlWindow, g_vkr.instance, NULL,
                                       &g_vkr.surface)) {
             VKR_LOG("SDL_Vulkan_CreateSurface: %s", SDL_GetError());
             rhi_Shutdown();
             return false;
         }
+#endif
 #endif
     }
     if (!vkr_PickDevice() || !vkr_CreateDevice()) {

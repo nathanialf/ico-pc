@@ -614,5 +614,10 @@ void rhi_SetPipelineCachePath(const char *path)
     (void)path; /* the driver keeps its own shader cache */
 }
 
+void rhi_SetVulkanLoader(void *getInstanceProcAddr)
+{
+    (void)getInstanceProcAddr; /* v0.4.3 AN-22a: Vulkan only */
+}
+
 /* The rhi_CreateBackend entry (port/rhi/rhi_backend.h). */
 RHI_BACKEND_DEFINE(rhi_backend_d3d12, "d3d12");

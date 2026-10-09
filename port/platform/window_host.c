@@ -41,6 +41,7 @@
 #include "window_lifecycle.h"
 #include "window_video.h"
 #ifdef __ANDROID__
+#include "android/gpu_driver_android.h"
 #include "android/host_android.h"
 #endif
 
@@ -473,6 +474,14 @@ static void first_pump_recheck(void)
 /* The window's flags. Android (package AN-D): fullscreen always, which is
    immersive there (no status or navigation bar), and not resizable; the
    system decides the size. */
+#ifdef __ANDROID__
+/* v0.4.3 AN-22a: settings.h ui_SettingsSetQuitIsGame */
+static int quit_is_game(void)
+{
+    return 1;
+}
+#endif
+
 static SDL_WindowFlags window_flags(int mode)
 {
     const SDL_WindowFlags vk = rhi_Backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
@@ -672,7 +681,20 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     WINDOW_PIX_NOTE(w, h); /* v0.4.2 N4: window_size_recheck compares against it */
     video_settings(&rs, w, h);
-    if (!rd_Init(gsW, gsH, &rs, s_window)) {
+#ifdef __ANDROID__
+    /* v0.4.3 AN-22a: the player's graphics driver (Options > Graphics
+       driver), or the phone's own; one that does not start falls back to
+       the phone's with a message */
+    const int customDriver = ico_gpu_driver_android_start();
+#endif
+    bool up = rd_Init(gsW, gsH, &rs, s_window);
+#ifdef __ANDROID__
+    if (!up && customDriver) {
+        ico_gpu_driver_android_init_failed();
+        up = rd_Init(gsW, gsH, &rs, s_window);
+    }
+#endif
+    if (!up) {
         fprintf(stderr,
                 "window: no usable %s device (rd_Init failed; the rhi lines above say "
                 "why)\n",
@@ -735,6 +757,13 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     ui_SettingsSetWindowModeQuery(window_mode_now);
     /* v0.4.0: Display > Texture pack says "None installed" without one */
     ui_SettingsSetTexturePackCount(texpack_Count);
+#ifdef __ANDROID__
+    /* v0.4.3 AN-22a: the Graphics driver page, and "Quit game" for the
+       title's Quit row (a phone has no desktop to quit to); both before the
+       game's first frame builds the menus */
+    ui_SettingsSetGpuDriverHost(ico_gpu_driver_android_host());
+    ui_SettingsSetQuitIsGame(quit_is_game);
+#endif
     {
         char dir[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
@@ -1740,6 +1769,9 @@ static void pace(int hz)
         s_pres.lastPresent = t0;
         s_pres.presentedFrame = s_pres.frame;
         s_pres.statPresents++;
+#ifdef __ANDROID__
+        ico_gpu_driver_android_presented(); /* AN-22a: the driver's trial */
+#endif
     }
     now = SDL_GetTicksNS();
     pace_log(now);
@@ -1762,6 +1794,10 @@ void ico_window_close(void)
     ui_SettingsSetWindowModeQuery(NULL);
     ui_SettingsSetTexturePackCount(NULL);
     ui_SettingsSetTouchQuery(NULL);
+#ifdef __ANDROID__
+    ui_SettingsSetGpuDriverHost(NULL);
+    ui_SettingsSetQuitIsGame(NULL);
+#endif
     ui_TouchSetSource(NULL);
     ui_HostShutdown();
     rd_SetHostCall(NULL);

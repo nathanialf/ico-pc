@@ -1,7 +1,8 @@
 # cmake/toolchains/android-arm64.cmake: Android arm64-v8a (preset
 # android-arm64 and the Gradle build, android/app/build.gradle) with the
 # NDK tools/fetch_android.sh installs: the NDK's own toolchain file, API
-# level 29 (Android 10), no C++ runtime (the program is C), 16 KB-aligned
+# level 29 (Android 10), the static C++ runtime (the program is C; the
+# graphics driver loader, libadrenotools, is C++; v0.4.3 AN-22a), 16 KB-aligned
 # segments, position-independent code (the program is libmain.so, which
 # SDL's Java side loads).
 #
@@ -31,7 +32,7 @@ set(ANDROID_ABI arm64-v8a)
 if(NOT ANDROID_PLATFORM)
     set(ANDROID_PLATFORM android-29)
 endif()
-set(ANDROID_STL none)
+set(ANDROID_STL c++_static)
 include("${ANDROID_NDK}/build/cmake/android.toolchain.cmake")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

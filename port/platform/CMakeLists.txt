@@ -81,6 +81,16 @@ if(_ico_run_tests)
     add_test(NAME android_paths COMMAND android_paths_test)
 endif()
 
+# v0.4.3 AN-22a: the Android build's graphics driver packages (gpu_driver.c),
+# pure C over host_fs, miniz and json.h, so it is tested on the native builds;
+# it writes under the build folder
+add_executable(gpu_driver_test test/gpu_driver_test.c gpu_driver.c)
+target_compile_options(gpu_driver_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(gpu_driver_test PRIVATE ico_host_fs ico_json ico_miniz)
+if(_ico_run_tests)
+    add_test(NAME gpu_driver COMMAND gpu_driver_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree (F2, B1)
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

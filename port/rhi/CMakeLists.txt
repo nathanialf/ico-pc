@@ -149,6 +149,11 @@ endif()
 if(_ico_have_vk)
     set(_ico_vk_sources vk/vk_cmd.c vk/vk_device.c vk/vk_pipeline.c vk/vk_present_mode.c
                         vk/vk_resource.c vk/vk_swapchain.c)
+    if(ANDROID)
+        # v0.4.3 AN-22a: the window's surface through the loader in use (a
+        # driver the program loaded, or the system's)
+        list(APPEND _ico_vk_sources vk/vk_surface_android.c)
+    endif()
     add_library(ico_rhi_vulkan STATIC ${_ico_vk_sources} "${ICO_VOLK_DIR}/volk.c")
     target_include_directories(ico_rhi_vulkan
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"

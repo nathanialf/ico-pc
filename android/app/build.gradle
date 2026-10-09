@@ -104,7 +104,7 @@ android {
                 // code is built optimised in both variants
                 arguments "-DCMAKE_TOOLCHAIN_FILE=${repoRoot}/cmake/toolchains/android-arm64.cmake",
                         '-DCMAKE_BUILD_TYPE=RelWithDebInfo',
-                        '-DANDROID_STL=none',
+                        '-DANDROID_STL=c++_static',
                         '-DICO_HEADLESS=OFF',
                         '-DICO_LINK_EXE=ON',
                         '-DICO_RHI_D3D12=OFF',
@@ -112,7 +112,9 @@ android {
                         "-DCMAKE_JOB_POOLS=compile=${nativeJobs};link=1",
                         '-DCMAKE_JOB_POOL_COMPILE=compile',
                         '-DCMAKE_JOB_POOL_LINK=link'
-                targets 'ico_pc'
+                // libmain.so and libadrenotools' hook libraries, which load
+                // the player's graphics driver (CMakeLists.txt, v0.4.3 AN-22a)
+                targets 'ico_pc', 'main_hook', 'hook_impl', 'file_redirect_hook'
                 abiFilters 'arm64-v8a'
             }
         }
@@ -147,8 +149,12 @@ android {
 
     packaging {
         jniLibs {
-            // stored uncompressed and page-aligned, loaded from the APK
-            useLegacyPackaging = false
+            // unpacked into the app's library folder at install
+            // (extractNativeLibs true): libadrenotools loads its hook
+            // libraries from that folder (nativeLibraryDir) into a linker
+            // namespace of its own, which cannot read them inside the APK
+            // (v0.4.3 AN-22a; adrenotools/driver.h)
+            useLegacyPackaging = true
         }
     }
 

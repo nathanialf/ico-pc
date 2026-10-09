@@ -83,6 +83,7 @@
     X(PresentMailbox)                                                                              \
     X(PresentModeName)                                                                             \
     X(SetPipelineCachePath)                                                                        \
+    X(SetVulkanLoader)                                                                             \
     X(InjectorName)                                                                                \
     X(OverlayName)
 

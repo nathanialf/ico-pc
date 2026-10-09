@@ -327,6 +327,14 @@ static const char first_run_text[] =
     "# Depth for an effects program such as ReShade: true lets its depth\n"
     "# effects see how far away things are (not with the CRT filter).\n"
     "effects_depth = true\n"
+#ifdef __ANDROID__
+    "# The graphics driver: empty is the phone's own; else the folder of a\n"
+    "# driver added in Options > Graphics driver. Used from the next start.\n"
+    "gpu_driver = \"\"\n"
+    "# The driver that did not start last time (the game went back to the\n"
+    "# phone's own); written by the game.\n"
+    "gpu_driver_failed = \"\"\n"
+#endif
     "\n"
     "[audio]\n"
     "# volume, music and effects are 0.0 to 1.0; output is \"auto\" (the memory\n"

@@ -20,6 +20,33 @@
       "texts": [{"file": "tools/toolchain/deps/sdl3/android-arm64/LICENSE.txt"}]
     },
     {
+      "name": "libadrenotools",
+      "version": "commit 8fae8ce254dfc1344527e05301e43f37dea2df80 (2024-09-10), unmodified",
+      "licence": "BSD-2-Clause",
+      "used_for": "loading a graphics driver the player adds on an Adreno phone; compiled into libmain.so, with its hook libraries libmain_hook.so, libhook_impl.so and libfile_redirect_hook.so beside it",
+      "platforms": ["android"],
+      "texts": [{"file": "tools/toolchain/deps/adrenotools/8fae8ce254dfc1344527e05301e43f37dea2df80/LICENSE"}]
+    },
+    {
+      "name": "liblinkernsbypass",
+      "version": "commit aa3975893d83ef1bc84c321ec60c65fbf1287887 (libadrenotools' submodule), unmodified",
+      "licence": "BSD-2-Clause",
+      "used_for": "libadrenotools' access to Android's library namespaces, compiled into libmain.so and the hook libraries",
+      "platforms": ["android"],
+      "texts": [{"file": "tools/toolchain/deps/adrenotools/8fae8ce254dfc1344527e05301e43f37dea2df80/lib/linkernsbypass/LICENSE"}]
+    },
+    {
+      "name": "LLVM libc++ (the Android NDK's C++ runtime)",
+      "version": "NDK r28c (28.2.13676358), linked statically (c++_static)",
+      "licence": "Apache-2.0 WITH LLVM-exception; older parts University of Illinois/NCSA or MIT",
+      "used_for": "the C++ runtime of libadrenotools, linked into libmain.so and the hook libraries",
+      "platforms": ["android"],
+      "texts": [
+        {"extract": {"file": "tools/toolchain/deps/ndk/NOTICE.toolchain", "from": "The libc++ library is dual licensed", "to": "THE SOFTWARE."}},
+        {"extract": {"file": "tools/toolchain/deps/ndk/NOTICE.toolchain", "from": "---- LLVM Exceptions to the Apache 2.0 License ----", "to": "Software."}}
+      ]
+    },
+    {
       "name": "volk",
       "version": "vulkan-sdk-1.4.363.0",
       "licence": "MIT",

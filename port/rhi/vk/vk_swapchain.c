@@ -345,6 +345,17 @@ static bool vkr_SurfaceCreate(void)
         return g_vkr.surface != VK_NULL_HANDLE;
     }
     VkSurfaceKHR surface = VK_NULL_HANDLE;
+#ifdef __ANDROID__
+    /* AN-22a: through the loader rhi_Init used (vk_surface_android.c),
+       which logs nothing while the app has no native window */
+    if (!vkr_CreateWindowSurface(g_vkr.window, &surface)) {
+        if (!s_surfaceFailLogged) {
+            s_surfaceFailLogged = true;
+            VKR_LOG("no window surface (tried again at the next frame)");
+        }
+        return false;
+    }
+#else
     if (!SDL_Vulkan_CreateSurface((SDL_Window *)g_vkr.window, g_vkr.instance, NULL, &surface)) {
         if (!s_surfaceFailLogged) {
             s_surfaceFailLogged = true;
@@ -352,6 +363,7 @@ static bool vkr_SurfaceCreate(void)
         }
         return false;
     }
+#endif
     /* the queue presents to the old surface; a new one is asked again */
     VkBool32 present = VK_FALSE;
     if (g_vkr.phys) {
