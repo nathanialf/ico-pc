@@ -11,7 +11,7 @@
  *  - Nothing Vulkan-only: no input attachments, no framebuffer feedback
  *    loops, no push descriptors.  Anything added must be expressible in
  *    D3D12 and Metal.
- *  - Resource state transitions are explicit (rhi_Barrier).  The caller
+ *  - Resource state transitions are explicit (rhi_cmd_barrier).  The caller
  *    (rd_core) knows the frame graph; backends do not track state.
  *  - All handles are opaque 32-bit ids with a generation; 0 is null.
  *  - Byte layouts (vertex formats, uniform blocks) are fixed by rd_core

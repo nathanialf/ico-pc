@@ -4,7 +4,7 @@
  * Runtime text on rd (font.h): the embedded Arimo Regular
  * through stb_truetype into per-size R8 atlases, drawn as GS sprites; and
  * the menus' coverage strips on the sheets' texel grid that menu_font.c
- * caches and draws (ui_internal.h, ui__Sheet*).
+ * caches and draws (ui_internal.h, ui__sheet_*).
  */
 #include "font.h"
 

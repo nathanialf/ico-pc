@@ -48,7 +48,7 @@ void ico_opt_set_yorda_safe(int on);
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
    (rd.h rd_set_mirror, through the listener below).
    The value is the run's: [gameplay] mirror (default false) until the
-   player picks at New Game (port/ui/settings.h ui_NewGameScreen*) or loads a
+   player picks at New Game (port/ui/settings.h ui_new_game_screen_*) or loads a
    save, whose slot's flag the port config keeps (below). */
 int ico_opt_mirror(void);
 void ico_opt_set_mirror(int on);
