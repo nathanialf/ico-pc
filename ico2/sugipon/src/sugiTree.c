@@ -21,8 +21,8 @@ inline void SugiLeafGeo(GObj *gobj)
     short *ang = p->work;
 
     CopyMatrix(MatrixDrive_GetMatrix(), &p->matrix);
-    MatrixDrive_RotMatrixY(GetTableSin(*ang) * 256.0f);
-    MatrixDrive_RotMatrixX(GetTableSin(*ang * 2) * 256.0f);
+    MatrixDrive_RotMatrixY((short)(int)(GetTableSin(*ang) * 256.0f));
+    MatrixDrive_RotMatrixX((short)(int)(GetTableSin(*ang * 2) * 256.0f));
     CopyMatrix((void *)p->nodeMtx, MatrixDrive_GetMatrix());
     *ang += 128;
 }

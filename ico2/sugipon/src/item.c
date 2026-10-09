@@ -866,7 +866,7 @@ int ReviveAllCarryableItemsWithRandomVelocity(float up, float horz)
 
     for (g = isysGObjSearchFromObjKindID_begin(19); g != 0;
          g = isysGObjSearchFromObjKindID_next(g)) {
-        short ang = random_unit() * 65536.0f;
+        short ang = (short)(int)(random_unit() * 65536.0f);
 
         if (CheckCarryableItemInline(g)) {
             ItemWork *p = (ItemWork *)GOBJ_SUB(g)->work;

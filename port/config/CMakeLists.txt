@@ -13,9 +13,9 @@ target_link_libraries(ico_config PUBLIC ico_platform)
 
 # the window build: SDL's preferred locales and preference folder
 # (SDL3 is found by port/render, which comes first)
-if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3-shared)
+if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_compile_definitions(ico_config PRIVATE ICO_CONFIG_SDL=1)
-    target_link_libraries(ico_config PUBLIC SDL3::SDL3-shared)
+    target_link_libraries(ico_config PUBLIC SDL3::SDL3)
     if(TARGET ico_pc)
         target_compile_definitions(ico_pc PRIVATE ICO_HOST_SDL_PREFPATH=1)
     endif()

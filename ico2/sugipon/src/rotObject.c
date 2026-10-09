@@ -236,7 +236,7 @@ RotObjWork *InitRotObjectGeo(GObj *gobj, SObjSimpleSetting *src)
     CopyVector(p->pos, src->pos);
     p->kind = src->obj;
     p->pos[3] = 1.0f;
-    p->angle = src->rot[1] * 32768.0f / 180.0f;
+    p->angle = (short)(int)(src->rot[1] * 32768.0f / 180.0f);
     p->turnCount = 0;
     p->limitMax = p->limitMin = 0.0f;
     p->lock = 0;

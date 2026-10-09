@@ -64,10 +64,10 @@ static void interp_vector_sa(float *dst, float *a, float *b, float sa)
     }
 
     rate = sa / ang;
-    sceVu0ScaleVectorXYZ(va, na, GetTableSin((short)((1.0f - rate) * ang * 10430.378f)));
-    sceVu0ScaleVectorXYZ(vb, nb, GetTableSin((short)(rate * ang * 10430.378f)));
+    sceVu0ScaleVectorXYZ(va, na, GetTableSin((short)(int)((1.0f - rate) * ang * 10430.378f)));
+    sceVu0ScaleVectorXYZ(vb, nb, GetTableSin((short)(int)(rate * ang * 10430.378f)));
     sceVu0AddVector(sum, va, vb);
-    sceVu0DivVector(dst, sum, GetTableSin((short)(ang * 10430.378f)));
+    sceVu0DivVector(dst, sum, GetTableSin((short)(int)(ang * 10430.378f)));
 }
 
 void birdBeforeFunc(GObj *self)

@@ -13,7 +13,7 @@
 #include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 #include "host_loop.h"
 #endif
 
@@ -113,8 +113,8 @@ void ico_audio_host_init(void)
     fprintf(stderr, "audio: headless build: the driver runs, the output is %s\n",
             wav != NULL ? "only dumped" : "discarded");
 #endif
-#ifdef __ANDROID__
-    /* Android: Quit returns from ico_host_main, which runs this */
+#if defined(__ANDROID__) || defined(ICO_IOS)
+    /* Mobile: Quit returns from ico_host_main, which runs this */
     ico_host_at_shutdown(ico_audio_host_shutdown);
 #else
     atexit(ico_audio_host_shutdown);

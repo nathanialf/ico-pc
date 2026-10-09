@@ -1246,8 +1246,8 @@ void gsb_UpdateGSSystem(int keep)
     } else {
         draw = &db.draw0;
     }
-    sceGsSetHalfOffset(draw, (short)((float)screen_offset_x + 2048.0f),
-                       (short)((float)screen_offset_y + 2048.0f), odd_even == 0);
+    sceGsSetHalfOffset(draw, (short)(int)((float)screen_offset_x + 2048.0f),
+                       (short)(int)((float)screen_offset_y + 2048.0f), odd_even == 0);
 #ifdef ICO_RD
     gsbHostSetHalfOffset();
 #endif
@@ -1298,8 +1298,8 @@ void gsb_ResetGSSystem(void)
     } else {
         draw = &db.draw0;
     }
-    sceGsSetHalfOffset(draw, (short)((float)screen_offset_x + 2048.0f),
-                       (short)((float)screen_offset_y + 2048.0f), odd_even == 0);
+    sceGsSetHalfOffset(draw, (short)(int)((float)screen_offset_x + 2048.0f),
+                       (short)(int)((float)screen_offset_y + 2048.0f), odd_even == 0);
 #ifdef ICO_RD
     gsbHostSetHalfOffset();
 #endif

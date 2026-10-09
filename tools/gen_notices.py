@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/gen_notices.py --platform {linux,windows,android} --out NOTICES.txt [--root DIR] [--manifest FILE]
+"""tools/gen_notices.py --platform {linux,windows,android,ios,macos} --out NOTICES.txt [--root DIR] [--manifest FILE]
 
 Writes the third-party notices file a package ships beside the program:
 every component in tools/notices/manifest.json for that platform, with its
@@ -56,7 +56,7 @@ def text_of(root, t):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--platform", required=True, choices=["linux", "windows", "android"])
+    ap.add_argument("--platform", required=True, choices=["linux", "windows", "android", "ios", "macos"])
     ap.add_argument("--out", required=True)
     ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
     ap.add_argument("--manifest", default=None,
@@ -67,7 +67,7 @@ def main():
     manifest = a.manifest or os.path.join(root, "tools", "notices", "manifest.json")
     with open(manifest, encoding="utf-8") as f:
         comps = json.load(f)["components"]
-    comps = [c for c in comps if a.platform in c.get("platforms", ["linux", "windows", "android"])]
+    comps = [c for c in comps if a.platform in c.get("platforms", ["linux", "windows", "android", "ios", "macos"])]
 
     parts = [
         "ICO PC port: third-party notices\n",

@@ -883,8 +883,8 @@ static void sound3DParamSet(SeSlot *self)
         volL = 1.0f;
     }
     n = (int)(vol * 4096.0f * front);
-    self->level0 = (float)n * volR;
-    self->level1 = (float)n * volL;
+    self->level0 = (short)(int)((float)n * volR);
+    self->level1 = (short)(int)((float)n * volL);
     soundSeVolSet(self);
 }
 

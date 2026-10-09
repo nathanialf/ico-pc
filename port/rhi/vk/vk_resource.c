@@ -135,7 +135,7 @@ static bool vkr_allocate(const VkMemoryRequirements *req, RhiMemory kind, VkDevi
 
 static void vkr_set_name(VkObjectType type, uint64_t handle, const char *name)
 {
-    if (!g_vkr.debugUtils || !name || !vkSetDebugUtilsObjectNameEXT) {
+    if (!g_vkr.debugUtils || !name || !VKR_FUNCTION_AVAILABLE(vkSetDebugUtilsObjectNameEXT)) {
         return;
     }
     VkDebugUtilsObjectNameInfoEXT ni = {

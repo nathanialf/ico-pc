@@ -1573,10 +1573,11 @@ static void tex_textureAnimation(void)
 
         if (e->animated != 0) {
             if (e->file.ampU != 0.0f) {
-                uv->uOfs = e->file.ampU *
-                           GetTableSin((short)(e->frame * 3.1415927f * e->file.scrlU /
-                                               ((60 - systemStatus[0] * 10) / systemStatus[1]) *
-                                               10430.378f));
+                uv->uOfs =
+                    e->file.ampU *
+                    GetTableSin((short)(int)(e->frame * 3.1415927f * e->file.scrlU /
+                                             ((60 - systemStatus[0] * 10) / systemStatus[1]) *
+                                             10430.378f));
             } else {
                 uv->uOfs = uv->uOfs + e->file.scrlU;
                 if (0.0f < e->file.scrlU) {
@@ -1599,10 +1600,11 @@ static void tex_textureAnimation(void)
             }
 
             if (e->file.ampV != 0.0f) {
-                uv->vOfs = e->file.ampV *
-                           GetTableSin((short)(e->frame * 3.1415927f * e->file.scrlV /
-                                               ((60 - systemStatus[0] * 10) / systemStatus[1]) *
-                                               10430.378f));
+                uv->vOfs =
+                    e->file.ampV *
+                    GetTableSin((short)(int)(e->frame * 3.1415927f * e->file.scrlV /
+                                             ((60 - systemStatus[0] * 10) / systemStatus[1]) *
+                                             10430.378f));
             } else {
                 uv->vOfs = uv->vOfs + e->file.scrlV;
                 if (0.0f < e->file.scrlV) {
@@ -2048,18 +2050,18 @@ static int tex_Tool(int *tno)
         } else {
             if (pad[0].rep & 0x2000) {
                 *(short *)m[toolRow].var =
-                    (short)((float)*(short *)m[toolRow].var + m[toolRow].step * stepScale);
+                    (short)(int)((float)*(short *)m[toolRow].var + m[toolRow].step * stepScale);
                 chg = 1;
             } else if (pad[0].rep & 0x8000) {
                 *(short *)m[toolRow].var =
-                    (short)((float)*(short *)m[toolRow].var - m[toolRow].step * stepScale);
+                    (short)(int)((float)*(short *)m[toolRow].var - m[toolRow].step * stepScale);
                 chg = -1;
             }
             if (m[toolRow].max < (float)*(short *)m[toolRow].var) {
-                *(short *)m[toolRow].var = (short)m[toolRow].min;
+                *(short *)m[toolRow].var = (short)(int)m[toolRow].min;
             }
             if ((float)*(short *)m[toolRow].var < m[toolRow].min) {
-                *(short *)m[toolRow].var = (short)m[toolRow].max;
+                *(short *)m[toolRow].var = (short)(int)m[toolRow].max;
             }
         }
         if (chg != 0) {

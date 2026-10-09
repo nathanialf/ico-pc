@@ -16,7 +16,7 @@
 #include "ico_gamestate.h"
 #include "popup.h"
 #include "strings.h"
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 #include "host_loop.h"
 #endif
 
@@ -727,8 +727,8 @@ void ico_ach_init(const char *path)
     ico_diag_log("achievements: %d of %d unlocked, popups %s, %s", n, ACH_COUNT,
                  s_popups ? "on" : "off", s_path);
     if (!s_inited) {
-#ifdef __ANDROID__
-        /* Android: Quit returns from ico_host_main, which runs this */
+#if defined(__ANDROID__) || defined(ICO_IOS)
+        /* Mobile: Quit returns from ico_host_main, which runs this */
         ico_host_at_shutdown(ico_ach_flush);
 #else
         atexit(ico_ach_flush);

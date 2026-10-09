@@ -18,6 +18,11 @@ SDL3_SRC_SHA256="${SDL3_SRC_SHA256:-9c75cf16330322c217dedd2e0609f1124f1b54b8633e
 DEB_SNAPSHOT="${DEB_SNAPSHOT:-https://snapshot.debian.org/archive/debian/20261004T000000Z}"
 
 # fetch <url> <sha256> <file>: download and verify.
+# macOS provides shasum instead of GNU sha256sum.
+if ! command -v sha256sum >/dev/null 2>&1; then
+    sha256sum() { shasum -a 256 "$@"; }
+fi
+
 fetch() {
     echo "==> fetching $1"
     curl -fL --retry 3 -o "$3" "$1"

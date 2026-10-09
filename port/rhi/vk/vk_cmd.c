@@ -1211,7 +1211,7 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
 void rhi_cmd_begin_label(RhiCommandList cl, const char *name)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !g_vkr.debugUtils || !vkCmdBeginDebugUtilsLabelEXT) {
+    if (!c || !g_vkr.debugUtils || !VKR_FUNCTION_AVAILABLE(vkCmdBeginDebugUtilsLabelEXT)) {
         return;
     }
     VkDebugUtilsLabelEXT l = {.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT, .pLabelName = name};
@@ -1222,7 +1222,7 @@ void rhi_cmd_begin_label(RhiCommandList cl, const char *name)
 void rhi_cmd_end_label(RhiCommandList cl)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !g_vkr.debugUtils || !vkCmdEndDebugUtilsLabelEXT) {
+    if (!c || !g_vkr.debugUtils || !VKR_FUNCTION_AVAILABLE(vkCmdEndDebugUtilsLabelEXT)) {
         return;
     }
     vkr_flush_barriers(c);

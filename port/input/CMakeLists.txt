@@ -26,9 +26,9 @@ target_compile_options(ico_input PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARN
 target_link_libraries(ico_input PUBLIC ico_options)
 # input_record.c opens its file through host_fs (UTF-8 paths on Windows)
 target_link_libraries(ico_input PRIVATE ico_host_fs)
-if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3-shared)
+if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_sources(ico_input PRIVATE input_sdl.c)
-    target_link_libraries(ico_input PUBLIC SDL3::SDL3-shared)
+    target_link_libraries(ico_input PUBLIC SDL3::SDL3)
 endif()
 
 # binding resolution, quantisation, the stick fix, merging, the libpad buffer

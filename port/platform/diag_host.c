@@ -57,7 +57,14 @@
 #undef ICO_WANT_LIBC_SCHED
 
 #include <time.h>
+#ifdef __APPLE__
+#include <sys/ucontext.h>
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#else
 #include <ucontext.h>
+#endif
 #include <unistd.h>
 #ifdef __ANDROID__
 
@@ -1168,7 +1175,13 @@ ICO_ENTRY static void sample_handler(int sig, siginfo_t *si, void *ucv)
     uintptr_t hi;
     (void)sig;
     (void)si;
-#if defined(__x86_64__)
+#if defined(__APPLE__) && defined(__aarch64__)
+    sample_pc = (uintptr_t)uc->uc_mcontext->__ss.__pc;
+    sample_sp = (uintptr_t)uc->uc_mcontext->__ss.__sp;
+#elif defined(__APPLE__) && defined(__x86_64__)
+    sample_pc = (uintptr_t)uc->uc_mcontext->__ss.__rip;
+    sample_sp = (uintptr_t)uc->uc_mcontext->__ss.__rsp;
+#elif defined(__x86_64__)
     sample_pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     sample_sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
 #elif defined(__aarch64__)
@@ -1698,7 +1711,13 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
     }
     crash.what = signal_name(sig);
     crash.code = (unsigned long)sig;
-#if defined(__x86_64__)
+#if defined(__APPLE__) && defined(__aarch64__)
+    crash.pc = (uintptr_t)uc->uc_mcontext->__ss.__pc;
+    crash.sp = (uintptr_t)uc->uc_mcontext->__ss.__sp;
+#elif defined(__APPLE__) && defined(__x86_64__)
+    crash.pc = (uintptr_t)uc->uc_mcontext->__ss.__rip;
+    crash.sp = (uintptr_t)uc->uc_mcontext->__ss.__rsp;
+#elif defined(__x86_64__)
     crash.pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
     crash.sp = (uintptr_t)uc->uc_mcontext.gregs[REG_RSP];
 #elif defined(__aarch64__)
@@ -1791,6 +1810,38 @@ static void exe_range(void)
 
 #else
 
+#ifdef __APPLE__
+static void exe_range(void)
+{
+    Dl_info info;
+    if (!dladdr((const void *)ico_diag_init, &info)) {
+        return;
+    }
+    /* Locate this image, which LiveContainer loads alongside its own executable. */
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const struct mach_header_64 *h = (const struct mach_header_64 *)_dyld_get_image_header(i);
+        if ((const void *)h != info.dli_fbase || h->magic != MH_MAGIC_64) {
+            continue;
+        }
+        const struct load_command *c = (const struct load_command *)(h + 1);
+        const intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        for (uint32_t j = 0; j < h->ncmds; j++) {
+            if (c->cmd == LC_SEGMENT_64) {
+                const struct segment_command_64 *seg = (const struct segment_command_64 *)c;
+                if (strcmp(seg->segname, SEG_TEXT) == 0) {
+                    exe_lo = (uintptr_t)(seg->vmaddr + slide);
+                    exe_hi = exe_lo + (uintptr_t)seg->vmsize;
+                    break;
+                }
+            }
+            c = (const struct load_command *)((const char *)c + c->cmdsize);
+        }
+        break;
+    }
+    const char *name = strrchr(info.dli_fname, '/');
+    snprintf(exe_name, sizeof(exe_name), "%.63s", name ? name + 1 : info.dli_fname);
+}
+#else
 extern char __executable_start[] __attribute__((weak));
 extern char etext[] __attribute__((weak));
 
@@ -1810,6 +1861,8 @@ static void exe_range(void)
         snprintf(exe_name, sizeof exe_name, "%.63s", b != NULL ? b + 1 : path);
     }
 }
+
+#endif
 
 #endif
 
@@ -1836,10 +1889,16 @@ static void install_handlers(void)
     const int *sigs = crash_sigs;
     struct sigaction sa;
     stack_t st;
+#ifndef __APPLE__
     pthread_attr_t attr;
+#endif
     size_t i;
 
     main_thread = pthread_self();
+#ifdef __APPLE__
+    main_stack_hi = (uintptr_t)pthread_get_stackaddr_np(main_thread);
+    main_stack_lo = main_stack_hi - pthread_get_stacksize_np(main_thread);
+#else
     if (pthread_getattr_np(main_thread, &attr) == 0) {
         void *addr;
         size_t size;
@@ -1849,6 +1908,7 @@ static void install_handlers(void)
         }
         pthread_attr_destroy(&attr);
     }
+#endif
     memset(&st, 0, sizeof st);
     st.ss_sp = alt_stack;
     st.ss_size = sizeof alt_stack;

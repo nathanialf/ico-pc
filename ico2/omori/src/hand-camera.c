@@ -135,7 +135,7 @@ static void HandyCamera_TargetMoveType(void *eye, void *at)
     SetIdentityQuaternion(q);
 
     SetIdentityQuaternion(q2);
-    SetQuaternionByAxisRotate(q2, -(p[1] * 32768.0f / 3.1415927f), 0.0f, 1.0f, 0.0f);
+    SetQuaternionByAxisRotate(q2, (short)(int)(-(p[1] * 32768.0f / 3.1415927f)), 0.0f, 1.0f, 0.0f);
     MultiQuaternion(q, q, q2);
 
     v0[0] = d[0];
@@ -150,7 +150,7 @@ static void HandyCamera_TargetMoveType(void *eye, void *at)
         sceVu0ScaleVector(n, n, -1.0f);
 
     SetIdentityQuaternion(q3);
-    SetQuaternionByAxisRotate(q3, -(p[0] * 32768.0f / 3.1415927f), n[0], n[1], n[2]);
+    SetQuaternionByAxisRotate(q3, (short)(int)(-(p[0] * 32768.0f / 3.1415927f)), n[0], n[1], n[2]);
     MultiQuaternion(q, q, q3);
 
     GetMatrixFromQuaternionPos(m, q, eye);

@@ -740,7 +740,8 @@ void rhi_set_pipeline_cache_path(const char *path);
  * (port/platform/android/gpu_driver_android.c, through libadrenotools).
  * NULL (the default) uses SDL's, the system's loader.  Call before rhi_init;
  * kept across rhi_shutdown.  On Android the window's surface is then made
- * through the same function (vk_surface_android.c).  D3D12: ignored. */
+ * through the same function (vk_surface_android.c). MoltenVK builds use the
+ * linked driver; rhi_init rejects a different loader. D3D12: ignored. */
 void rhi_set_vulkan_loader(void *getInstanceProcAddr);
 
 /* Programs that hook the graphics API from outside,

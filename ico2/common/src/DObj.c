@@ -212,15 +212,15 @@ static void initMatrixDObj(Sub15C *self, SObjSimpleSetting *lay)
     v[3] = 1.0f;
     _UnitMatrix(MatrixDrive_GetMatrix());
     MatrixDrive_TransMatrixV(v);
-    MatrixDrive_RotMatrixY((short)(lay->rot[1] * 32768.0f / d));
-    MatrixDrive_RotMatrixX((short)(lay->rot[0] * 32768.0f / d));
-    MatrixDrive_RotMatrixZ((short)(lay->rot[2] * 32768.0f / d));
+    MatrixDrive_RotMatrixY((short)(int)(lay->rot[1] * 32768.0f / d));
+    MatrixDrive_RotMatrixX((short)(int)(lay->rot[0] * 32768.0f / d));
+    MatrixDrive_RotMatrixZ((short)(int)(lay->rot[2] * 32768.0f / d));
     CopyMatrix(self->matrix, MatrixDrive_GetMatrix());
 
     SetIdentityQuaternion(self->quat);
-    RotQuaternionY(self->quat, (short)(lay->rot[1] * 32768.0f / d));
-    RotQuaternionX(self->quat, (short)(lay->rot[0] * 32768.0f / d));
-    RotQuaternionZ(self->quat, (short)(lay->rot[2] * 32768.0f / d));
+    RotQuaternionY(self->quat, (short)(int)(lay->rot[1] * 32768.0f / d));
+    RotQuaternionX(self->quat, (short)(int)(lay->rot[0] * 32768.0f / d));
+    RotQuaternionZ(self->quat, (short)(int)(lay->rot[2] * 32768.0f / d));
     MatrixDrive_PopMatrix();
 }
 

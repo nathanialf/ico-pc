@@ -17,7 +17,11 @@ target_link_libraries(ico_platform PUBLIC Threads::Threads)
 if(TARGET ico_pc)
     # A link map beside the program, shipped with test builds, to turn the
     # crash report's executable offsets into symbols.
-    target_link_options(ico_pc PRIVATE "LINKER:-Map=$<TARGET_FILE_DIR:ico_pc>/ico_pc.map")
+    if(APPLE)
+        target_link_options(ico_pc PRIVATE "LINKER:-map,$<TARGET_FILE_DIR:ico_pc>/ico_pc.map")
+    else()
+        target_link_options(ico_pc PRIVATE "LINKER:-Map=$<TARGET_FILE_DIR:ico_pc>/ico_pc.map")
+    endif()
 endif()
 # host_loop.c calls into the game (its main, ico_vsync, systemStatus), so it
 # goes into the program beside main_host.c, ahead of the game library on the

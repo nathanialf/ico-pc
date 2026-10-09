@@ -127,7 +127,7 @@ void drawSenpuukiHaneUnit(float scale)
         drawLinesInline((char *)haneLines);
     }
 
-    fanAngle = (short)(fanAngle + scale * 4864.0f);
+    fanAngle = (short)(int)(fanAngle + scale * 4864.0f);
 }
 
 /* The motor housing: two 20 by 40 rectangles 20 apart in Y, joined at the

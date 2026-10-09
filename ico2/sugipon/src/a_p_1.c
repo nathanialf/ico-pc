@@ -717,7 +717,7 @@ static void calcSubMission(GObj *self)
             {
                 float f = t * 49152.0f + -32768.0f;
 
-                MatrixDrive_RotMatrixY((short)(i == 0 ? -f : f));
+                MatrixDrive_RotMatrixY((short)(int)(i == 0 ? -f : f));
             }
             _ApplyMatrix(&v, MatrixDrive_GetMatrix(), &part->home);
             v.m[3] = 1.0f;
@@ -825,11 +825,11 @@ static void updateMatrix(GObj *self)
     GetRootPosition(pos, self);
     GetRootQuaternion(quat, self);
 
-    RotQuaternionX(quat, (short)(p->sink * 8192.0f));
-    RotQuaternionX(quat, (short)(p->tilt * 4096.0f));
+    RotQuaternionX(quat, (short)(int)(p->sink * 8192.0f));
+    RotQuaternionX(quat, (short)(int)(p->tilt * 4096.0f));
     GetMatrixFromQuaternionPos(mtx, quat, pos);
     _ApplyMatrix(pos, mtx, ap1BodyPos);
-    RotQuaternionZ(quat, (short)(-p->roll * 2048.0f));
+    RotQuaternionZ(quat, (short)(int)(-p->roll * 2048.0f));
     _InterVectorXYZ(&p->pos, pos, &p->pos, 0.5f);
     GetSlerpQuaternion(&p->quat, quat, &p->quat, 0.1f);
     GetMatrixFromQuaternionPos(p->mtx, &p->quat, &p->pos);

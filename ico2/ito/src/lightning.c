@@ -437,7 +437,7 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
         f = s - (float)seg;
         lim = (float)(num - 1) - half;
         if (s < half) {
-            sc = GetTableSin((short)(s * two * 1.5707964f * 10430.378f));
+            sc = GetTableSin((short)(int)(s * two * 1.5707964f * 10430.378f));
         } else if (lim <= s) {
             /* cvt.w.s: past a zero-length segment s is Fmax (above), the
                product overflows (-Fmax on the EE, -Inf here) and the
@@ -460,8 +460,8 @@ void DrawLightning2(int num, LightningVtx *v, LightningColor *col, float stepMin
             amp = sway * sc;
             ang +=
                 random_sign(random_range(degrees_to_radians(turnMin), degrees_to_radians(turnMax)));
-            sceVu0ScaleVectorXYZ(&sa, &a, GetTableCos((short)(ang * 10430.378f)) * amp);
-            sceVu0ScaleVectorXYZ(&sb, &b, GetTableSin((short)(ang * 10430.378f)) * amp);
+            sceVu0ScaleVectorXYZ(&sa, &a, GetTableCos((short)(int)(ang * 10430.378f)) * amp);
+            sceVu0ScaleVectorXYZ(&sb, &b, GetTableSin((short)(int)(ang * 10430.378f)) * amp);
             sceVu0AddVector(&q, &pos, &sa);
             sceVu0AddVector(&q, &q, &sb);
         }

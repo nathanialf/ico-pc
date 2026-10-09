@@ -427,9 +427,9 @@ void modeMessage(void)
         viewObj->dobj->root.twistRate = 1.0f;
     }
     if (pad[0].now & 0x8000) {
-        viewObj->dobj->root.twist = rdata[9] / 255.0f * 8192.0f;
+        viewObj->dobj->root.twist = (short)(int)(rdata[9] / 255.0f * 8192.0f);
     } else if (pad[0].now & 0x2000) {
-        viewObj->dobj->root.twist = rdata[8] / 255.0f * -8192.0f;
+        viewObj->dobj->root.twist = (short)(int)(rdata[8] / 255.0f * -8192.0f);
     } else {
         viewObj->dobj->root.twist = 0;
     }
@@ -502,9 +502,9 @@ static void lookAtTest(MvVec *pos, float rad, void *colAxis, void *colRing, shor
     p1[2] -= cx;
     DrawLineG(p0, colAxis, p1, colAxis, 0);
 
-    MatrixDrive_RotMatrixX(random_unit() * 65536.0f);
-    MatrixDrive_RotMatrixY(random_unit() * 65536.0f);
-    MatrixDrive_RotMatrixZ(random_unit() * 65536.0f);
+    MatrixDrive_RotMatrixX((short)(int)(random_unit() * 65536.0f));
+    MatrixDrive_RotMatrixY((short)(int)(random_unit() * 65536.0f));
+    MatrixDrive_RotMatrixZ((short)(int)(random_unit() * 65536.0f));
     MatrixDrive_ScaleMatrix(random_unit() * 3.0f + 1.0f, random_unit() * 3.0f + 1.0f,
                             random_unit() * 3.0f + 1.0f);
     for (a = 0; a < 3; a++) {
@@ -630,8 +630,8 @@ int MotionViewer(void)
             break;
 
         case 1:
-            lookAtTest(&p, 50.0f, &testAxisColor, &testRingColor, (pad[1].ana[1] - 128) * 2.0f,
-                       -pad[1].ana[0] * 256);
+            lookAtTest(&p, 50.0f, &testAxisColor, &testRingColor,
+                       (short)(int)((pad[1].ana[1] - 128) * 2.0f), -pad[1].ana[0] * 256);
             CopyVector(viewObj->dobj->root.lookPos, &p);
             mode = testMode;
             break;
@@ -640,8 +640,8 @@ int MotionViewer(void)
             testCount++;
             lookAtTest(&p, 50.0f, &testAxisColor, &testRingColor, testDy, testAng);
             if (testCount > 100) {
-                testDy = random_signed() * 256.0f;
-                testAng = random_signed() * 32768.0f;
+                testDy = (short)(int)(random_signed() * 256.0f);
+                testAng = (short)(int)(random_signed() * 32768.0f);
                 lookAtTest(&p, 50.0f, &testAxisColor, &testRingColor, testDy, testAng);
                 CopyVector(viewObj->dobj->root.lookPos, &p);
                 testCount = 0;
@@ -703,7 +703,7 @@ int MotionViewer(void)
         viewObj->dobj->root.hand1.ikMode = lookMode;
         if (lookMode != 0) {
             int n;
-            lookAtTest(&look, lookRadius, &p, &q.v, (pad[1].ana[1] - 128) * 2.0f,
+            lookAtTest(&look, lookRadius, &p, &q.v, (short)(int)((pad[1].ana[1] - 128) * 2.0f),
                        -pad[1].ana[0] * 256);
             CopyVector(viewObj->dobj->root.hand1.ikDir, &look);
             gif_StartPacketPri(11);
@@ -715,7 +715,7 @@ int MotionViewer(void)
         viewObj->dobj->root.hand0.ikMode = headMode;
         if (headMode != 0) {
             int n;
-            lookAtTest(&head, lookRadius, &p, &q.v, (pad[1].ana[1] - 128) * 2.0f,
+            lookAtTest(&head, lookRadius, &p, &q.v, (short)(int)((pad[1].ana[1] - 128) * 2.0f),
                        -pad[1].ana[0] * 256);
             CopyVector(viewObj->dobj->root.hand0.ikDir, &head);
             gif_StartPacketPri(11);

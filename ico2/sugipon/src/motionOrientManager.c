@@ -1096,7 +1096,7 @@ static void getMotionGeometry(void *self)
             if (debug_now_motion_viewer == 0) {
                 float t = 60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 0.2f;
 
-                mo->twist = (short)((float)mo->twist * (1.0f - t)) + r * t;
+                mo->twist = (short)(int)((short)(int)((float)mo->twist * (1.0f - t)) + r * t);
             }
             if (w->rootUpdateMode == 20) {
                 Vec16 up;

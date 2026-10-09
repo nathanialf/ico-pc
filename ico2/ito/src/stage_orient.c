@@ -99,7 +99,7 @@ static inline void MakeStageOrientMatrix(float *m, const StageOrientDef *p) /* d
     MatrixDrive_PushMatrix();
     _UnitMatrix(MatrixDrive_GetMatrix());
     MatrixDrive_TransMatrixV(&v);
-    MatrixDrive_RotMatrixY((short)(p->angle * 10430.37793f));
+    MatrixDrive_RotMatrixY((short)(int)(p->angle * 10430.37793f));
     CopyMatrix(m, MatrixDrive_GetMatrix());
     MatrixDrive_PopMatrix();
 }

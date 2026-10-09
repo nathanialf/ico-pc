@@ -2,7 +2,15 @@
 #ifndef PORT_RHI_VK_VK_INTERNAL_H
 #define PORT_RHI_VK_VK_INTERNAL_H
 
+#ifdef ICO_RHI_MOLTENVK
+#define VK_ENABLE_BETA_EXTENSIONS 1
+#include <vulkan/vulkan.h>
+/* Directly linked functions exist; extension support is checked separately. */
+#define VKR_FUNCTION_AVAILABLE(fn) true
+#else
 #include "volk.h"
+#define VKR_FUNCTION_AVAILABLE(fn) ((fn) != NULL)
+#endif
 #include "../rhi.h"
 #include "vk_enums.h"
 #include <stdio.h>
