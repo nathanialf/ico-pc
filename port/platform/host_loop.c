@@ -8,6 +8,7 @@
 #include "../audio/audio_host.h"
 #include "../data/cdvd_host.h"
 #include "../game/achievements.h"
+#include "../include/ico_credits.h"
 #include "../save/mc_host.h"
 #include "arena.h"
 #include "diag_host.h"
@@ -28,7 +29,6 @@ extern int data_loading;
 void gallery_EngineInstall(void);
 /* port/game/credits_live.c: the Extras credits' engine */
 void ico_credits_engine_install(void);
-void ico_credits_host_poll(void);
 
 static unsigned int vsyncs;
 
