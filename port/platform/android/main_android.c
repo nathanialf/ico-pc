@@ -42,8 +42,9 @@ int main(int argc, char *argv[])
     SDL_Thread *t;
 
     /* before anything reads them: landscape either way up; Back arrives as
-       a key (the pause menu) instead of finishing the activity; touches are
-       not mice and mice not touches (the touch overlay reads fingers);
+       a key (Start in play, back in the menus: window_host.c) instead of
+       finishing the activity; touches are not mice and mice not touches
+       (the touch overlay reads fingers);
        quitting ends the process, so the next start is a fresh one (the EE
        RAM arena must load at the same address, arena.c); the app's name.
        SDL_HINT_VIDEO_ALLOW_SCREENSAVER stays unset: SDL then keeps the

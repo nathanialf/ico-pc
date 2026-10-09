@@ -4,10 +4,10 @@
  * The keyboard keys a binding can name, as KEY(ID, "config name", SDL
  * scancode): bindings.c uses the first two (SDL-free), input_sdl.c the
  * third. Physical positions (scancodes), so WASD stays WASD on any layout.
- * Names are case-insensitive in config.toml. Escape (quits) and Alt+Enter
- * (fullscreen) are reserved and not listed. Back is Android's back button
- * (SDL_HINT_ANDROID_TRAP_BACK_BUTTON, main_android.c), bound to Start there
- * (ico_bindings_android_defaults).
+ * Names are case-insensitive in config.toml. Escape, Android's Back button
+ * and Alt+Enter (fullscreen) are reserved and not listed: Escape and Back
+ * press Start in play and Triangle elsewhere (window_host.c escape_event,
+ * mouse_look.h ico_escape_target).
  */
 KEY(A, "A", SDL_SCANCODE_A)
 KEY(B, "B", SDL_SCANCODE_B)
@@ -93,4 +93,3 @@ KEY(F1, "F1", SDL_SCANCODE_F1)
 KEY(F2, "F2", SDL_SCANCODE_F2)
 KEY(F3, "F3", SDL_SCANCODE_F3)
 KEY(F4, "F4", SDL_SCANCODE_F4)
-KEY(AC_BACK, "Back", SDL_SCANCODE_AC_BACK)

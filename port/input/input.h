@@ -217,12 +217,8 @@ typedef struct IcoBindings {
     int touch_mode, touch_size, touch_opacity;
 } IcoBindings;
 
-/* The defaults. On Android they include ico_bindings_android_defaults. */
+/* The defaults, the same on every platform. */
 void ico_bindings_defaults(IcoBindings *b);
-/* Android's back button (the Back key, keys.def) added to
-   the keyboard row of Start, so Back opens the pause menu (where Quit is);
-   nothing when the row has it already. Plain C, tested on every build. */
-void ico_bindings_android_defaults(IcoBindings *b);
 /* The default bindings as config text, for documentation and tests. */
 const char *ico_bindings_default_text(void);
 /* One [input] setting: key is relative to "input." ("kb.cross", "deadzone",

@@ -11,8 +11,9 @@
  *   ico_window_open(gsW, gsH)   SDL video, the window, rd_init; 0, or -1
  *                               with the reason logged
  *   ico_window_pump()           drains SDL events once per vsync: window
- *                               resize reaches rd_resize_output; Escape or
- *                               the close button returns 0 (quit), else 1;
+ *                               resize reaches rd_resize_output; the close
+ *                               button returns 0 (quit), else 1 (Escape is
+ *                               Start in play, Triangle elsewhere);
  *                               a lost device (rhi_device_lost) shows one
  *                               message box and returns 0
  *   ico_window_pace(hz)         presents until this vsync's deadline at hz

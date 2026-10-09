@@ -3,7 +3,8 @@
  *
  * The input layers on the CPU (no SDL): binding resolution from config
  * text, the dead zone and quantisation, the stick fix, merging, the libpad
- * read buffer against a hand-written DualShock 2 frame, and rumble.
+ * read buffer against a hand-written DualShock 2 frame, rumble, and
+ * Escape's button.
  */
 #include <libpad.h>
 #include <stdio.h>
@@ -92,34 +93,12 @@ static void test_bindings_defaults(void)
     CHECK(has_key(b.gp[ICO_T_L2], ICO_GP_LTRIGGER) && has_key(b.gp[ICO_T_R3], ICO_GP_RSTICK));
     CHECK(has_key(b.gp[ICO_T_START], ICO_GP_START) && has_key(b.gp[ICO_T_SELECT], ICO_GP_BACK));
     CHECK(near_(b.deadzone, 0.12f, 1e-6f) && near_(b.walk_scale, 0.5f, 1e-6f));
-    /* Android's Back key joins Start, once, and nothing else
-       changes */
-    {
-        IcoBindings a = b;
-        unsigned char row[ICO_BIND_MAX];
-
-#ifdef __ANDROID__
-        CHECK(has_key(b.kb[ICO_T_START], ICO_KEY_AC_BACK));
-#else
-        CHECK(!has_key(b.kb[ICO_T_START], ICO_KEY_AC_BACK));
-#endif
-        ico_bindings_android_defaults(&a);
-        CHECK(has_key(a.kb[ICO_T_START], ICO_KEY_AC_BACK) &&
-              has_key(a.kb[ICO_T_START], ICO_KEY_RETURN));
-        memcpy(row, a.kb[ICO_T_START], sizeof(row));
-        ico_bindings_android_defaults(&a);
-        CHECK(memcmp(row, a.kb[ICO_T_START], sizeof(row)) == 0);
-        memcpy(a.kb[ICO_T_START], b.kb[ICO_T_START], sizeof(row));
-        CHECK(memcmp(a.kb, b.kb, sizeof(a.kb)) == 0 && memcmp(a.gp, b.gp, sizeof(a.gp)) == 0 &&
-              memcmp(a.mouse, b.mouse, sizeof(a.mouse)) == 0);
-        /* a full row: Back takes the last slot */
-        memset(a.kb[ICO_T_START], ICO_KEY_A, sizeof(row));
-        ico_bindings_android_defaults(&a);
-        CHECK(a.kb[ICO_T_START][ICO_BIND_MAX - 1] == ICO_KEY_AC_BACK &&
-              a.kb[ICO_T_START][0] == ICO_KEY_A);
-        CHECK(ico_key_from_name("back") == ICO_KEY_AC_BACK);
-        CHECK(strcmp(ico_key_name(ICO_KEY_AC_BACK), "Back") == 0);
-    }
+    /* Escape and Android's Back are not bindable (keys.def): they press
+       Start or Triangle outside the bindings (test_escape), so Start's
+       keyboard row is Enter alone, on Android too */
+    CHECK(b.kb[ICO_T_START][0] == ICO_KEY_RETURN && b.kb[ICO_T_START][1] == ICO_KEY_NONE);
+    CHECK(ico_key_from_name("back") == ICO_KEY_NONE);
+    CHECK(ico_key_from_name("escape") == ICO_KEY_NONE);
     /* names round trip */
     CHECK(ico_key_from_name("left shift") == ICO_KEY_LSHIFT);
     CHECK(ico_key_from_name("LSHIFT") == ICO_KEY_LSHIFT);
@@ -282,6 +261,87 @@ static void test_mouse_capture(void)
     ico_mouse_look_add(7.0f, 7.0f);
     ico_mouse_look_reset();
     CHECK(ico_mouse_look_take(&dx, &dy) == 0);
+}
+
+/* Escape's button (mouse_look.c): Start in play, so the pause menu opens,
+   Triangle (back) anywhere else, chosen at the press and kept while held */
+static void test_escape(void)
+{
+    IcoCaptureState play, c;
+    IcoEscapeLatch l;
+    const unsigned start = 1u << ICO_T_START, triangle = 1u << ICO_T_TRIANGLE;
+
+    memset(&play, 0, sizeof(play));
+    play.boy = 1;
+    play.stage = 11;
+    play.layout = ICO_CAPTURE_LAYOUT_PLAY;
+    CHECK(ico_escape_target(&play) == ICO_T_START);
+    c = play;
+    c.layout = ICO_CAPTURE_LAYOUT_SCENE;
+    CHECK(ico_escape_target(&c) == ICO_T_START);
+    /* neither the focus nor the mouse camera matters */
+    c = play;
+    c.focus = 1;
+    c.look = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_START);
+    /* the pause menu and its pages: back */
+    c = play;
+    c.paused = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    /* the title and its pages (New Game confirms on Start) */
+    c = play;
+    c.stage = 1;
+    c.layout = 13;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.layout = 57; /* another layout */
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.photo = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c.paused = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.boy = 0;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.loading = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.movie = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.viewer = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    c = play;
+    c.credits = 1;
+    CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
+    CHECK(ico_escape_target(NULL) == ICO_T_TRIANGLE);
+
+    /* held in play: Start each step, still Start once the pause menu is
+       open (a held Escape does not close what it opened) */
+    memset(&l, 0, sizeof(l));
+    CHECK(ico_escape_take(&l) == 0);
+    ico_escape_latch(&l, 1, &play);
+    CHECK(ico_escape_take(&l) == start);
+    c = play;
+    c.paused = 1;
+    ico_escape_latch(&l, 1, &c); /* a second down while held: no change */
+    CHECK(ico_escape_take(&l) == start);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == 0);
+    /* the next press, paused: Triangle, kept after the menu closes */
+    ico_escape_latch(&l, 1, &c);
+    CHECK(ico_escape_take(&l) == triangle);
+    ico_escape_latch(&l, 1, &play);
+    CHECK(ico_escape_take(&l) == triangle);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == 0);
+    /* a press and release between two steps still reaches one step */
+    ico_escape_latch(&l, 1, &play);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == start);
+    CHECK(ico_escape_take(&l) == 0);
 }
 
 static void test_quantise(void)
@@ -930,6 +990,7 @@ int main(void)
     test_merge();
     test_step();
     test_mouse_capture();
+    test_escape();
     test_pointer();
     test_frame();
     test_libpad();

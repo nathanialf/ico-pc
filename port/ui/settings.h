@@ -348,8 +348,8 @@ void ui_settings_step(UiSettingsOpt opt, int dir);
 /* Writes what changed (ico_video_save, ico_input_write_bindings,
    ico_config_save), as leaving a screen does.  0, or -1. */
 int ui_settings_save(void);
-/* What is still unwritten when the game closes (Escape, the
-   window's close button, the title's Quit to desktop): ui_settings_save's
+/* What is still unwritten when the game closes (the window's close
+   button, the title's Quit to desktop): ui_settings_save's
    pending pages, then any setting changed outside them (ico_config_dirty),
    so a change made on a page the player never left (Characters inside the
    model viewer, the pause menu's pages) is in the file at the next start.

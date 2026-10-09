@@ -1,12 +1,22 @@
 /*
  * port/input/mouse_look.c
  *
- * The mouse camera's capture rule and photo mode's look accumulator
- * (mouse_look.h).
+ * The mouse camera's capture rule, Escape's button and photo mode's look
+ * accumulator (mouse_look.h).
  */
 #include "mouse_look.h"
+#include "input.h"
 
 static float s_dx, s_dy;
+
+/* play: the boy in a stage past the title, on the play or scene layout,
+   nothing paused, loading or playing a movie, no viewer and no credits */
+static int in_play(const IcoCaptureState *s)
+{
+    return s->boy && s->stage != 1 &&
+           (s->layout == ICO_CAPTURE_LAYOUT_PLAY || s->layout == ICO_CAPTURE_LAYOUT_SCENE) &&
+           !s->paused && !s->loading && !s->movie && !s->viewer && !s->credits;
+}
 
 int ico_mouse_capture_rule(const IcoCaptureState *s)
 {
@@ -16,12 +26,38 @@ int ico_mouse_capture_rule(const IcoCaptureState *s)
     if (s->photo) {
         return ICO_CAPTURE_DELTA;
     }
-    if (s->boy && s->stage != 1 &&
-        (s->layout == ICO_CAPTURE_LAYOUT_PLAY || s->layout == ICO_CAPTURE_LAYOUT_SCENE) &&
-        !s->paused && !s->loading && !s->movie && !s->viewer && !s->credits) {
+    if (in_play(s)) {
         return ICO_CAPTURE_STICK;
     }
     return ICO_CAPTURE_OFF;
+}
+
+int ico_escape_target(const IcoCaptureState *s)
+{
+    if (s == 0 || s->photo || !in_play(s)) {
+        return ICO_T_TRIANGLE;
+    }
+    return ICO_T_START;
+}
+
+void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s)
+{
+    if (!down) {
+        l->held = 0;
+        return;
+    }
+    if (!l->held) {
+        l->held = l->tapped = 1;
+        l->target = ico_escape_target(s);
+    }
+}
+
+unsigned ico_escape_take(IcoEscapeLatch *l)
+{
+    const int on = l->held || l->tapped;
+
+    l->tapped = 0;
+    return on ? 1u << l->target : 0u;
 }
 
 void ico_mouse_look_add(float dx, float dy)

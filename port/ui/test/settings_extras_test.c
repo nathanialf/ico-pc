@@ -416,7 +416,7 @@ static const char *savedChar(IcoToml *t, int part)
 }
 
 /* the end of a run and a new start: what main_host calls when the window
-   closes (Escape, the close button, Quit to desktop's event), then a new
+   closes (the close button, Quit to desktop's event), then a new
    process's config: the file read again, the options and the colours
    forgotten (ico_opt_reload -> ico_appearance_reload) */
 static void quitGame(char *log, size_t n)
@@ -501,10 +501,10 @@ static void checkSecondStart(const char *p, const char *who)
    game closes, start 2 has them.  The file each start begins with is the
    one a first run writes (ico_config_write_first_run), so [characters] is
    a table the file does not have yet.  Four ways the first start ends:
-   the viewer's Triangle then Escape at the title; Escape inside the
-   viewer (no Triangle: before the quit save the picks were never written);
-   the pause menu's Characters left with Back; Escape on the pause menu's
-   Characters page. */
+   the viewer's Triangle then the window closed at the title; the window
+   closed inside the viewer (no Triangle: before the quit save the picks
+   were never written); the pause menu's Characters left with Back; the
+   window closed on the pause menu's Characters page. */
 static void testCharactersRestart(void)
 {
     char p[1100], log[512];
@@ -512,8 +512,8 @@ static void testCharactersRestart(void)
     path(p, sizeof(p), "settings_test.toml");
 
     for (int way = 0; way < 4; way++) {
-        static const char *const kWho[4] = {"viewer, Triangle", "viewer, Escape", "pause, Back",
-                                            "pause, Escape"};
+        static const char *const kWho[4] = {"viewer, Triangle", "viewer, close", "pause, Back",
+                                            "pause, close"};
         const char *who = kWho[way];
         const int viewer = way < 2;
         const int leave = way == 0 || way == 2;

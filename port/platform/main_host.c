@@ -8,8 +8,8 @@
  * The window build (ICO_HEADLESS=OFF) opens a window titled "ICO"
  * (window_host.h): the game draws through rd into it, one simulated vsync
  * per real 20 ms (PAL; 16.7 ms at 60 Hz), presented at the frame rate and
- * with the vsync the display options choose, and Escape or closing the
- * window ends the run. The headless build (CMake ICO_HEADLESS=ON: the trace and test
+ * with the vsync the display options choose, and closing the window (or
+ * the title's quit row) ends the run. The headless build (CMake ICO_HEADLESS=ON: the trace and test
  * runs) has no window and simulates vsyncs as fast as it can.
  *
  * Run with no arguments (a double-click), everything comes from the
@@ -1692,7 +1692,7 @@ static int host_main(int argc, char **argv)
         ico_fpenv_host_enter();
         if (!ico_window_pump()) {
             exit_reason = "the window was closed";
-            /* Escape or the close button can end the run on a
+            /* the close button can end the run on a
                Settings page that was never left (Characters in the model
                viewer, the pause menu's pages): its changes are written now,
                not lost */

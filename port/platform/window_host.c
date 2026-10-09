@@ -878,25 +878,52 @@ static void pointer_visibility(void)
 #endif
 }
 
-/* The game's state for the capture rule, once a pump */
-static int capture_mode(void)
+/* The game's state now, for the capture rule (once a pump) and Escape's
+   button (at its press) */
+static void capture_state(IcoCaptureState *c)
 {
     const IcoBindings *b = ico_input_live_bindings();
+
+    memset(c, 0, sizeof(*c));
+    c->focus = (SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+    c->look = b->mouse_on && b->mouse_camera;
+    c->photo = ico_photo_active();
+    c->boy = boyGObj != NULL;
+    c->stage = stage_no;
+    c->layout = current_layout_id;
+    c->paused = systemStatus[5] != 0;
+    c->loading = data_loading != 0;
+    c->movie = mpegPlay != 0;
+    c->viewer = ico_mv_active != 0;
+    c->credits = ico_credits_active();
+}
+
+static int capture_mode(void)
+{
     IcoCaptureState c;
 
-    memset(&c, 0, sizeof(c));
-    c.focus = (SDL_GetWindowFlags(s_window) & SDL_WINDOW_INPUT_FOCUS) != 0;
-    c.look = b->mouse_on && b->mouse_camera;
-    c.photo = ico_photo_active();
-    c.boy = boyGObj != NULL;
-    c.stage = stage_no;
-    c.layout = current_layout_id;
-    c.paused = systemStatus[5] != 0;
-    c.loading = data_loading != 0;
-    c.movie = mpegPlay != 0;
-    c.viewer = ico_mv_active != 0;
-    c.credits = ico_credits_active();
+    capture_state(&c);
     return ico_mouse_capture_rule(&c);
+}
+
+/* Escape, and Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON): never a
+   quit; Start in play (the pause menu opens), Triangle anywhere else
+   (ico_escape_target). Neither reaches the bindings. */
+static int escape_key(SDL_Keycode key)
+{
+    return key == SDLK_ESCAPE || key == SDLK_AC_BACK;
+}
+
+static void escape_event(const SDL_Event *e)
+{
+    IcoCaptureState c;
+
+    if (e->type == SDL_EVENT_KEY_UP) {
+        ico_input_escape(0, NULL);
+    } else if (!e->key.repeat) {
+        capture_state(&c);
+        ico_input_escape(1, &c);
+    }
 }
 
 static void toggle_fullscreen(void)
@@ -1107,17 +1134,20 @@ int ico_window_pump(void)
                 stats_fast_toggle();
             } else if (e.key.key == SDLK_F11 || e.key.key == SDLK_F12) {
                 /* a held key's repeats: nothing */
-#ifndef __ANDROID__
-                /* Android: Back is the pause menu, where Quit
-                   is; an Escape from a keyboard is an unbound key there */
-            } else if (e.key.key == SDLK_ESCAPE) {
-                quit = 1;
-#endif
+            } else if (escape_key(e.key.key)) {
+                escape_event(&e);
             } else if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) &&
                        (e.key.mod & SDL_KMOD_ALT) != 0) {
                 if (!e.key.repeat) {
                     toggle_fullscreen();
                 }
+            } else {
+                ico_input_sdl_event(&e);
+            }
+            break;
+        case SDL_EVENT_KEY_UP:
+            if (escape_key(e.key.key)) {
+                escape_event(&e);
             } else {
                 ico_input_sdl_event(&e);
             }

@@ -41,6 +41,8 @@ static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
 static unsigned char s_sdl_to_key[SDL_SCANCODE_COUNT];
 static int s_capture; /* ICO_CAPTURE_* (mouse_look.h) */
+/* Escape or Android's Back, and the button it holds (ico_input_escape) */
+static IcoEscapeLatch s_escape;
 static float s_acc_dx, s_acc_dy;
 static unsigned short s_last_high, s_last_low;
 static int s_rumble_age;
@@ -246,6 +248,7 @@ static void clear_held(void)
     memset(s_raw.mouse, 0, sizeof(s_raw.mouse));
     s_acc_dx = s_acc_dy = 0.0f;
     s_left_menu = 0;
+    ico_escape_latch(&s_escape, 0, NULL);
 }
 
 /* whether the pointer is the menus' (free, not the camera's; with
@@ -572,6 +575,14 @@ static void touch_step(IcoVirtualPad *v)
         ico_touch_mode_opacity(&s_touch, mode, s_raw.gamepads, now) * (float)pct / 100.0f;
 }
 
+void ico_input_escape(int down, const IcoCaptureState *s)
+{
+    if (!s_ready) {
+        return;
+    }
+    ico_escape_latch(&s_escape, down, s);
+}
+
 void ico_input_sdl_update(void)
 {
     IcoVirtualPad v;
@@ -605,6 +616,8 @@ void ico_input_sdl_update(void)
         ico_bindings_step(&s_bind, &s_raw, &v);
         s_raw.mouse[1] = left;
     }
+    /* Escape (Back on Android): Start or Triangle, outside the bindings */
+    v.buttons |= ico_escape_take(&s_escape);
     if (s_touchDevice) {
         touch_step(&v);
         /* a touch look pad stick that won the merge is not the mouse's */

@@ -47,7 +47,8 @@ int main(void)
     /* SDL3: SDLK_F11/F12 = scancode 68/69 | SDLK_SCANCODE_MASK (1 << 30) */
     CHECK(ICO_HOTKEY_KEY_F11 == (68u | (1u << 30)));
     CHECK(ICO_HOTKEY_KEY_F12 == (69u | (1u << 30)));
-    /* nothing else */
+    /* nothing else (Escape is the pad's Start in play, Triangle elsewhere:
+       window_host.c escape_event) */
     CHECK(ico_hotkey_for(K_ESCAPE, 0) == ICO_HOTKEY_NONE);
     CHECK(ico_hotkey_for(K_RETURN, 0) == ICO_HOTKEY_NONE);
     CHECK(ico_hotkey_for(K_F1, 0) == ICO_HOTKEY_NONE);

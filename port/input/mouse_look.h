@@ -16,6 +16,9 @@
  *                      (port/ui/photo_ui.c) takes once a Main tick and
  *                      turns into degrees of the photo camera
  *
+ * The same state decides what Escape (and Android's Back) presses: Start
+ * in play, so the pause menu opens, Triangle (back) everywhere else.
+ *
  * The game runs on a fiber of the window's thread, so the accumulator needs
  * no lock.
  */
@@ -53,6 +56,30 @@ typedef struct IcoCaptureState {
    ICO_CAPTURE_OFF; always OFF without the focus or with the mouse camera
    off. */
 int ico_mouse_capture_rule(const IcoCaptureState *s);
+
+/* The pad button Escape and Android's Back press: ICO_T_START in play (the
+   same test as ICO_CAPTURE_STICK, without the focus and mouse camera
+   conditions), ICO_T_TRIANGLE anywhere else (the pause menu, the title,
+   the port's pages, photo mode). The quit is the title's row or the
+   window's close button, never Escape. */
+int ico_escape_target(const IcoCaptureState *s);
+
+/* The key held: the target is chosen at the press and kept until the
+   release, so a held Escape that opens the pause menu does not turn into
+   Triangle on the next vsync (now paused) and close it again. A press
+   released before the next step still reaches that step (tapped). */
+typedef struct IcoEscapeLatch {
+    int held;
+    int tapped;
+    int target;
+} IcoEscapeLatch;
+
+/* A press (down 1) latches ico_escape_target(s) unless already held; a
+   release (down 0) lets go. */
+void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s);
+/* Once a step: the latched target as a pad button bit (1u << target) while
+   held or pressed since the last call, else 0. */
+unsigned ico_escape_take(IcoEscapeLatch *l);
 
 /* Photo mode's accumulator: the device layer adds the captured motion
    (mouse counts, y down), the photo screen takes it all once a Main tick

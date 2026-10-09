@@ -18,6 +18,13 @@
  *                               motion goes to ico_mouse_look_add); OFF
  *                               drops it. A change starts the look from
  *                               centre.
+ *   ico_input_escape(down, s)   Escape or Android's Back went down (1, not
+ *                               a repeat) or up (0); s is the game's state
+ *                               at that moment (mouse_look.h): the button
+ *                               it presses (Start in play, else Triangle)
+ *                               is chosen at the press and held until the
+ *                               release. Neither key is bindable
+ *                               (keys.def).
  *   ico_input_sdl_update()      once per vsync: snapshot -> bindings ->
  *                               virtual pad; rumble to the gamepads
  *   ico_input_sdl_shutdown()
@@ -42,11 +49,13 @@
 #define ICO_PORT_INPUT_INPUT_SDL_H
 
 #include <SDL3/SDL.h>
+#include "mouse_look.h"
 #include "touch.h"
 
 void ico_input_sdl_init(const char *config_path);
 void ico_input_sdl_event(const SDL_Event *e);
 void ico_input_sdl_set_capture(int mode);
+void ico_input_escape(int down, const IcoCaptureState *s);
 void ico_input_sdl_update(void);
 void ico_input_sdl_shutdown(void);
 void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh);
