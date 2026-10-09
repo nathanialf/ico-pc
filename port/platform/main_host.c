@@ -1254,24 +1254,27 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
    already records into rd.  512 x 512 is the PAL frame; gsb_Init resizes
    the scene targets if the game switches to 60 Hz.  On Android before the
    game data is mounted (ico_window_open needs only the config, rd and
-   port/ui's own font).  1 when the player chose Quit in the graphics
-   driver box (Android; the box said why, so no second one). */
+   port/ui's own font).  1 when the graphics did not start and the
+   graphics driver box ended the run (Android: the player chose Quit, or a
+   driver package for the next start; the box said why, so no second
+   one). */
 static int open_window(void)
 {
     const int r = ico_window_open(512, 512);
 
     if (r == -2) {
-        fprintf(stderr, "ico_pc: the graphics did not start; the player chose Quit\n");
+        /* the summary is not registered yet: the reason is logged here */
+        exit_reason = "the graphics did not start; the player quit at the graphics driver "
+                      "choice or chose a driver package for the next start";
+        fprintf(stderr, "ico_pc: %s\n", exit_reason);
         return 1;
     }
     if (r != 0) {
 #ifdef ICO_ANDROID_UI
         ico_host_fatal(log_file(), "Could not start the game's graphics.\n"
                                    "ICO needs a device whose graphics support Vulkan 1.2 (most "
-                                   "phones and tablets from 2022 on). When the phone's own "
-                                   "driver cannot run the game, the game offers to use a "
-                                   "graphics driver package you choose (Adreno phones). Install "
-                                   "the latest system update and try again; the log says why.");
+                                   "phones and tablets from 2022 on). Install the latest system "
+                                   "update and try again; the log says why.");
 #else
         ico_host_fatal(log_file(), "Could not open the game window.\n"
                                    "The game needs a graphics driver with Vulkan 1.2 or later. "
@@ -1596,8 +1599,7 @@ static int host_main(int argc, char **argv)
     /* Android: the window first, the first start's picker, copy and
        progress are shown in it (SDL has one window there) */
     if (open_window() != 0) {
-        exit_reason = "the player quit at the graphics driver choice";
-        return 0;
+        return 0; /* open_window set and logged the reason */
     }
 #endif
     /* the disc goes in before boot, so a missing image fails here rather
