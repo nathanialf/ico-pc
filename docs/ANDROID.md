@@ -267,16 +267,18 @@ it could not start the game's graphics with this phone's driver, with
 these buttons:
 
 - **Choose a driver file**: the file picker opens. Pick a driver package
-  zip you downloaded (step 1 above). The game adds it and starts with it.
+  zip you downloaded (step 1 above). The game adds it and asks you to
+  close it and open it again: the driver is used from the next start.
   This only works on phones with an Adreno chip.
 - **Use the phone's driver**: tries the phone's own driver again. It is
   shown when a driver package was tried before.
 - **Quit**: closes the game.
 
-If the file is not a driver package, or the driver does not start either,
-the game says so and the box comes back, so you can try another one. Once
-the game runs, the choice stays for the next start, and you can change it
-later in **Options > Graphics driver**.
+If the file is not a driver package, the game says so and the box comes
+back, so you can try another one. If the driver does not start at the next
+start either, the game says so and shows the box again. Once the game runs,
+the driver stays chosen, and you can change it later in **Options >
+Graphics driver**.
 
 ## Known limits
 

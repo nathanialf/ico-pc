@@ -534,8 +534,14 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
     if (ico_config_save() != 0) {
         fprintf(stderr, "gpu driver: could not save the settings\n");
     }
+    /* the next start loads it on trial and writes its own marker: none
+       is left from this run */
+    s_trial = 0;
+    if (driver_root() != NULL) {
+        ico_gpu_driver_trial_ok(s_root);
+    }
     snprintf(folder, n, "%s", s_list[i].folder);
-    fprintf(stderr, "gpu driver: %s chosen at the start\n", folder);
+    fprintf(stderr, "gpu driver: %s chosen at the start, for the next start\n", folder);
     return 1;
 }
 

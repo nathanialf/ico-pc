@@ -24,8 +24,10 @@
  * no device, so the Settings page cannot be reached): a box offers a
  * driver package from the system's file picker
  * (ico_gpu_driver_android_choose: installed, chosen and saved as on the
- * Settings page; the caller then starts again as above) or the phone's
- * own driver again (ico_gpu_driver_android_use_phone).
+ * Settings page, no trial marker left; the caller asks the player to start
+ * the game again, since a package cannot be loaded after the phone's own
+ * driver in the same process) or the phone's own driver again
+ * (ico_gpu_driver_android_use_phone).
  *
  * ico_gpu_driver_android_host: the Settings page's host (settings.h
  * UiGpuDriverHost): the installed drivers (<files>/drivers/ in the app's
@@ -49,8 +51,9 @@ int ico_gpu_driver_android_start(void);
 void ico_gpu_driver_android_init_failed(void);
 /* The start-up choice: the system's file picker, waited for with SDL's
    events pumped (nothing drawn).  1 with the installed package's folder
-   in folder, chosen and the config saved; 0 with a sentence for the player
-   in why (not a package, no space, no file chosen). */
+   in folder, chosen and the config saved for the next start, the trial
+   marker cleared; 0 with a sentence for the player in why (not a package,
+   no space, no file chosen). */
 int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn);
 /* The start-up choice's "the phone's own driver": the choice emptied and
    saved, the loader back to the system's. */

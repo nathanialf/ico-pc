@@ -65,10 +65,12 @@ missing.
 (on a phone) The phone's own graphics driver cannot run the game. The box
 offers **Choose a driver file**: on a phone with an Adreno (Qualcomm
 Snapdragon) chip, pick a graphics driver package, a zip file such as
-Turnip from the "AdrenoToolsDrivers" releases by K11MCH1 on GitHub, and
-the game starts with it. If the file is not a driver package, or the
-driver does not start either, the box comes back so you can pick another
-one. **Use the phone's driver** goes back to the phone's own driver, and
+Turnip from the "AdrenoToolsDrivers" releases by K11MCH1 on GitHub. The
+game adds it and asks you to close it and open it again: the driver is
+used from the next start. If the file is not a driver package, the box
+comes back so you can pick another one. If the driver does not start at
+the next start either, the game says so and the box comes back.
+**Use the phone's driver** goes back to the phone's own driver, and
 **Quit** closes the game. Once the game runs, you can change the driver
 later in Options > Graphics driver. See
 [Using a different graphics driver](ANDROID.md#using-a-different-graphics-driver).
