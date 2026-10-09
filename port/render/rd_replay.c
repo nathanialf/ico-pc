@@ -1898,6 +1898,21 @@ static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
     return true;
 }
 
+/* Full pixel: a draw that samples a render target (a screen-space lookup,
+ * such as the mirror floors' copy of the scene and the reflections) clamps
+ * at the target's edges.  The game leaves those draws on REPEAT, and at the
+ * frame's outer columns the lookup wraps to the far side of the picture,
+ * which the PS2's black border hid; with the border open it showed as a
+ * strip of the far edge's colour.  Image textures keep their wrap. */
+static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w)
+{
+    if (w == RD_WRAP_CLAMP || !g_rd.settings.fullPixel || !ds->textured || !r->st.ds.texEnabled) {
+        return w;
+    }
+    const RdTexRec *t = rd__tex_rec(r->st.tex);
+    return t && t->kind == RD_TEXKIND_TARGET ? RD_WRAP_CLAMP : w;
+}
+
 /* The scissor, the pass and FrameCB; returns the texture group, id 0 when
  * the scissor leaves nothing to draw.  With scOut the scissor is returned
  * (doScreen sets it when it draws) instead of set, and the sampler's id
@@ -1910,9 +1925,10 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
     if (!scissorRect(r, tc, &sc)) {
         return (RhiBindGroup){0};
     }
-    RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds->mipmapped,
-                                ds->replacement);
+    RhiSampler smp =
+        texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                   drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
+                   drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
     RhiBindGroup g2 = rd__tex_group_date(ds->tex, smp, ds->dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId) {
@@ -2897,7 +2913,8 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.param[0] = (float)wrapEquation(&r->st);
     RhiSampler smp =
         texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                   (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped, ds.replacement);
+                   drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
+                   drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
     rhi_cmd_set_pipeline(s_cl, pa);
     rd__bind_uniform(s_cl, 0,
                      rd__frame_group_ex(tc->w, tc->h, ox, oy, rd__target_z_scale(ds.tdId),

@@ -1943,6 +1943,64 @@ static uint8_t *clampRun(int full, float scale, int fullHeight, int mirror, int 
     return p && *w >= 512 && *h >= 64 ? p : NULL;
 }
 
+/* A draw that samples a render target clamps at its edges with the option
+ * on: SCENE blue with red from column 8 on, drawn into WORK0 (256 x 128)
+ * through a sprite whose u starts at -8, so WORK0's columns 0..7 read
+ * SCENE's wrapped right side (red) with the option off and the clamped blue
+ * column 0 with it on.  The game leaves such screen-space lookups on REPEAT
+ * and the PS2's border hid where they wrapped. */
+static void checkFullPixelTargetWrap(void)
+{
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80},
+                         white[4] = {0x80, 0x80, 0x80, 0x80};
+    for (int full = 0; full < 2; full++) {
+        RdSettings s = originalSettings();
+        s.fullPixel = (uint8_t)full;
+        if (!rd_init(512, 512, &s, NULL)) {
+            return;
+        }
+        rd_begin_frame();
+        rd_select_list(0);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), blue, 1, 0);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+        opaque2D();
+        rd_texture_off();
+        sprite(RD_SPACE_WORLD, 8 * 16, 0, 512 * 16, 512 * 16, red, 0, 0, 0, 0);
+        /* WORK0's pixel 0 sits at GS 1920, 1984: 128 and 192 past the
+           helper's 512-target origin; u = -8 .. 248 texels, in sixteenths, over
+           its 256 columns */
+        rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+        rd_texture(rd_target_texture(rd_target(RD_TARGET_SCENE), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+                   RD_TCC_RGBA);
+        rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        sprite(RD_SPACE_WORLD, 128 * 16, 192 * 16, (128 + 256) * 16, (192 + 128) * 16, white,
+               -8 * 16, 0, 248 * 16, 128 * 16);
+        rd_end_frame(0);
+        uint32_t w = 0, h = 0;
+        uint8_t *p = readTarget(RD_TARGET_WORK0, &w, &h);
+        if (p && w >= 256 && h >= 128) {
+            const uint8_t *c = &p[((size_t)(h / 2) * w + 2) * 4];
+            const uint8_t *in = &p[((size_t)(h / 2) * w + 64) * 4];
+            CHECK(in[0] >= 250 && in[2] <= 2, "target wrap %s: the inside reads red (%u %u %u)",
+                  full ? "on" : "off", in[0], in[1], in[2]);
+            if (full) {
+                CHECK(c[2] >= 250 && c[0] <= 2,
+                      "target wrap on: the edge clamps to SCENE's own column (%u %u %u)", c[0],
+                      c[1], c[2]);
+            } else {
+                CHECK(c[0] >= 250 && c[2] <= 2,
+                      "target wrap off: the edge wraps to the far side as the GS does (%u %u %u)",
+                      c[0], c[1], c[2]);
+            }
+        } else {
+            CHECK(0, "target wrap: WORK0 readback (%ux%u)", w, h);
+        }
+        CHECK(rhi_vk_validation_error_count() == 0, "target wrap: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    }
+}
+
 /* the reduction's edges read their own colour, not the opposite edge's: SCENE
  * red with a blue column 0 and a blue row 0.  With the option on DISPLAY's
  * last column and last row hold no blue (a lost clamp wraps column 0 and row
@@ -3291,6 +3349,7 @@ int main(int argc, char **argv)
     checkFullPixelSharp(960, 720);
     checkFullPixelSharp(1440, 1080);
     checkFullPixelClamp();
+    checkFullPixelTargetWrap();
     checkFullPixelBands();
     checkFullPixelCrtOverlay();
     checkMips();
