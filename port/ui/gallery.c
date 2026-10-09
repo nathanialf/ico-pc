@@ -13,8 +13,6 @@
 
 #include "strings.h"
 
-/* op.c: the title theme, actTitleShortCut's request (kind 56, titleAdpcm) */
-#define TITLE_THEME 56
 /* the streams: 1..100 music and scenes, 101..104 Yorda's hint voices */
 #define LAST_MUSIC_STREAM 100
 #define FIRST_VOICE_STREAM 101
@@ -93,7 +91,7 @@ static int streamListed(const GalleryTables *t, int no)
    op.c's titleAdpcm, the title's music */
 static int isSceneStream(const GalleryTables *t, int no)
 {
-    if (no == TITLE_THEME) {
+    if (no == GALLERY_TITLE_THEME) {
         return 0;
     }
     return strstr(t->adpcm[no].path, "/event2/") != NULL;
@@ -502,8 +500,8 @@ int gallery_ClockAtEnd(const GalleryStreamClock *c, int channels, double bytes)
 
 long gallery_StreamEndBlock(const uint8_t *buf, size_t n, int channels)
 {
-    for (size_t sec = 0; sec + 0x800 <= n; sec += 0x800) {
-        for (size_t b = 0; b < 0x800; b += 16) {
+    for (size_t sec = 0; sec + GALLERY_SECTOR <= n; sec += GALLERY_SECTOR) {
+        for (size_t b = 0; b < GALLERY_SECTOR; b += 16) {
             if (buf[sec + b + 1] & 1) {
                 return (long)sec;
             }
@@ -590,7 +588,6 @@ static int ticksPerSecond(void)
     return (systemStatus[0] ? 50 : 60) / step;
 }
 
-#define TICKS_PER_S ticksPerSecond()
 static char s_scriptKind[SCRIPT_MAX][8];
 static int s_scriptVal[SCRIPT_MAX], s_scriptVal2[SCRIPT_MAX];
 static int s_scriptN, s_scriptPos, s_scriptTick, s_scriptDone, s_scriptLeave;
@@ -709,14 +706,14 @@ static int dwellOver(void)
     } else if (s_dwellSeen) {
         s_dwellGone++;
     }
-    if (s_dwellSeen && s_dwellGone >= TICKS_PER_S) {
+    if (s_dwellSeen && s_dwellGone >= ticksPerSecond()) {
         return 1;
     }
-    if (!s_dwellSeen && s_dwellTick >= 15 * TICKS_PER_S) {
+    if (!s_dwellSeen && s_dwellTick >= 15 * ticksPerSecond()) {
         fprintf(stderr, "gallery: failed %s %d: never sounded\n", kindToken(it), it->key);
         return 1;
     }
-    if (s_dwellTick >= s_dwell * TICKS_PER_S) {
+    if (s_dwellTick >= s_dwell * ticksPerSecond()) {
         float el = 0.0f, tot = 0.0f;
         gallery_Position(&el, &tot);
         fprintf(stderr, "gallery: %s %d cut at %.1f s of %.1f s (dwell %d s)\n", kindToken(it),
@@ -892,7 +889,7 @@ void gallery_Tick(void)
         s_track = i;
         s_trackEl = el;
         s_trackTot = tot;
-        if (++s_logTick >= (s_dwell > 0 ? TICKS_PER_S : LOG_TICKS)) {
+        if (++s_logTick >= (s_dwell > 0 ? ticksPerSecond() : LOG_TICKS)) {
             s_logTick = 0;
             fprintf(stderr, "gallery: %s %d at %.1f s of %.1f s%s\n", kindToken(&s_items[i]),
                     s_items[i].key, el, tot, s_paused == i ? " (paused)" : "");

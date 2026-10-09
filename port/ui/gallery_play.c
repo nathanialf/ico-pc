@@ -88,7 +88,6 @@ extern struct IosMemPart *ios_partition_seki;
 extern void *iosMallocDebugNoAssert(struct IosMemPart *part, int size, const char *file, int line);
 extern void iosFree(void *p);
 
-#define TITLE_THEME 56
 #define FADE_STEP 1024       /* op.c's step when the demo leaves the title */
 #define SE_BANK 11           /* SqEntry.bank of an effect bank */
 #define STREAM_BANK 17       /* of a stream */
@@ -279,7 +278,7 @@ static void titleFade(void)
     if (s_titleState != 0) {
         return;
     }
-    if (titleAdpcm != NULL && entryIs(titleAdpcm, TITLE_THEME, STREAM_BANK) &&
+    if (titleAdpcm != NULL && entryIs(titleAdpcm, GALLERY_TITLE_THEME, STREAM_BANK) &&
         scpAdpcmCloseChkFunc(&titleAdpcm) != 0) {
         s_titleWas = 1;
         scpAdpcmFadeCloseFunc(&titleAdpcm, FADE_STEP);
@@ -601,9 +600,7 @@ static void stopAll(void)
     }
     s_seTotal = 0.0f;
     s_seLoops = 0;
-    if (s_wantStream) {
-        s_wantStream = 0;
-    }
+    s_wantStream = 0;
     if (s_streamPending && s_stream == NULL) {
         scpAdpcmCloseFunc(&s_stream); /* cancels the request the daemon holds */
     } else if (streamAlive()) {
@@ -645,7 +642,7 @@ static void leave(void)
         fprintf(stderr, "gallery: the title theme's fade cut short on leaving\n");
     }
     if (s_titleWas) {
-        scpAdpcmPlayRequestFunc(TITLE_THEME, &titleAdpcm, 0, 0, 1);
+        scpAdpcmPlayRequestFunc(GALLERY_TITLE_THEME, &titleAdpcm, 0, 0, 1);
         fprintf(stderr, "gallery: the title theme is requested again\n");
     }
     s_titleState = 0;
