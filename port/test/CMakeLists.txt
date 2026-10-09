@@ -66,3 +66,19 @@ if(Python3_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_CROSSCOMPILING)
                      --build "${CMAKE_BINARY_DIR}")
     set_tests_properties(template_audit PROPERTIES TIMEOUT 900)
 endif()
+
+# v0.4.4 AN-19e (issue 19): const_write_audit, no game unit writes an object
+# it declares const. The PS2 build keeps tables the game writes in .rodata
+# (no page protection on the EE); gcc keeps those stores, clang deletes them
+# (motionLimitDef's rows stayed unsorted on Android and the held hands' arms
+# went straight up). It compiles the game units of this build's
+# compile_commands.json to unoptimised LLVM IR with the build's own
+# compiler, so it runs on native clang builds (CI's linux-x64-clang;
+# tools/check_android_flags.sh runs it for the Android build).
+if(Python3_FOUND AND CMAKE_EXPORT_COMPILE_COMMANDS AND NOT CMAKE_CROSSCOMPILING
+   AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    add_test(NAME const_write_audit
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/check_const_writes.py"
+                     --build "${CMAKE_BINARY_DIR}")
+    set_tests_properties(const_write_audit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+endif()

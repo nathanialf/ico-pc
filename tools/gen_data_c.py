@@ -50,12 +50,14 @@ A NAME the member does not define is ignored (CMakeLists.txt passes one list
 to every member), but every NAME must be a symbol of
 config/data_members.pal.txt. When a writable symbol is defined, its name is
 #defined to NAME_header_decl around the member's #includes, so a header's
-`extern const` declaration of it (motionOrientManager.h declares
-motionLimitDef so) declares a different, unused name instead of conflicting
-with the non-const definition. The PS2 build never passes --writable: the
-object would put the table in .data, and --check, which compares sections
-with the ROM's, would fail. CMakeLists.txt holds the list and the evidence
-for each entry.
+`extern const` declaration of it declares a different, unused name instead
+of conflicting with the non-const definition. (A TU that writes the table
+must not see a const declaration at all: clang deletes the stores, issue 19.
+motionOrientManager.h declares motionLimitDef without const for that, and
+--c with --symbol-map writes a table its header declares so without const
+too.) The PS2 build never passes --writable: the object would put the table
+in .data, and --check, which compares sections with the ROM's, would fail.
+CMakeLists.txt holds the list and the evidence for each entry.
 
 The record type is read from the header the schema row names: a typedef of a
 struct, or a struct tag (`struct Name { ... };`, which the C then spells
@@ -776,8 +778,27 @@ def c_type(ty, spelled):
     return getattr(ty, "name", None) or spelled, "", ""
 
 
+def declared_writable(header, name):
+    """Whether header declares name `extern` without const: a .rodata table
+    the game writes, which the host declares writable where it is written
+    (motionOrientManager.h's motionLimitDef: clang deletes stores to an
+    object declared const, issue 19). Its host definition must agree."""
+    toks = Header(header).toks
+    for i, t in enumerate(toks):
+        if t != "extern":
+            continue
+        j = i
+        while j < len(toks) and toks[j] != ";":
+            j += 1
+        decl = toks[i:j]
+        if name in decl and "(" not in decl:
+            return "const" not in decl
+    return False
+
+
 def write_c(member, rows, datas, layout, writable=frozenset()):
     pool = [(r["lo"], r["hi"], datas[r["section"]]) for _, r in rows]
+    host = isinstance(layout, SymbolMap)
     defs, headers, funcs, objs = [], [], {}, {}
     arrays = {}
     unconst = []  # the writable symbols this member defines in .rodata
@@ -811,7 +832,10 @@ def write_c(member, rows, datas, layout, writable=frozenset()):
         bounds = [i for _, i in s["syms"]] + [n]
         tname, star, dims = c_type(ty, s["type"])
         for (name, first), last in zip(s["syms"], bounds[1:]):
-            const = "const " if row["section"] == "rodata" and name not in writable else ""
+            # the host's own declaration without const (declared_writable)
+            # needs no rename: the definition drops const to agree with it
+            const = ("const " if row["section"] == "rodata" and name not in writable and
+                     not (host and declared_writable(s["header"], name)) else "")
             if row["section"] == "rodata" and name in writable:
                 unconst.append(name)
             if s["count"] is None:

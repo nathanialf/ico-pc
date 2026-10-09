@@ -5,8 +5,9 @@
 # Checks that the Android build compiles the game the way every other host
 # does: the semantics options of cmake/IcoFlags.cmake (ICO_SEMANTIC_OPTIONS)
 # reach the NDK clang for every ico2/ and port/ source, no game or
-# port/math object holds a fused multiply-add, and no game or port object
-# stores onto its stack protector's guard (tools/check_stack_guard.py).
+# port/math object holds a fused multiply-add, no game or port object
+# stores onto its stack protector's guard (tools/check_stack_guard.py), and
+# no game unit writes an object it declares const (tools/check_const_writes.py).
 # aarch64 has fmadd/fmsub and clang contracts a * b + c into them unless
 # -ffp-contract=off, which rounds once where the EE rounds twice; x86-64 at
 # the default target has no FMA, so only an arm64 build would show it.
@@ -80,6 +81,11 @@ if bad:
 print("check_android_flags: %d sources carry %s" % (seen, " ".join(need)))
 EOF
 
+# v0.4.4 AN-19e (issue 19): no game unit writes an object it declares const
+# (tools/check_const_writes.py): clang deletes those stores where gcc keeps
+# them, so only the clang builds, this one among them, would show it.
+python3 "$root/tools/check_const_writes.py" --build "$dir"
+
 # no fused multiply-add in the game's objects and port/math's
 if [ -z "${ANDROID_NDK_ROOT:-}" ] && [ -f "$root/tools/toolchain/android.env" ]; then
     # shellcheck disable=SC1091
@@ -117,3 +123,4 @@ guarded=$(find "$dir" -name '*.o' \( -path '*/ico2/*' -o -path '*/port/*' \) -no
     -not -path '*third_party*' -not -path '*/deps/*' 2>/dev/null || true)
 # shellcheck disable=SC2086
 python3 "$root/tools/check_stack_guard.py" "$objdump" $guarded
+

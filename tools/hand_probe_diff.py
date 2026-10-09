@@ -102,6 +102,16 @@ def finite(rec):
     return True
 
 
+def elevation(frm, to):
+    """Degrees from frm up to to; the game's world has -y up (the shoulders
+    are about 100 below the root's y), so a smaller y is higher."""
+    dx, dy, dz = to[0] - frm[0], to[1] - frm[1], to[2] - frm[2]
+    n = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if n <= 0:
+        return float("nan")
+    return math.degrees(math.asin(max(-1.0, min(1.0, -dy / n))))
+
+
 def stats(xs):
     xs = [x for x in xs if math.isfinite(x)]
     if not xs:
@@ -145,10 +155,7 @@ def summarise(name, recs):
                 lift_code.append(math.degrees(math.acos(max(-1.0, min(1.0, c)))))
             own, ik = vec(r, "own"), vec(r, "ikdir")
             if len(own) == 3 and len(ik) == 3:
-                dx, dy, dz = ik[0] - own[0], ik[1] - own[1], ik[2] - own[2]
-                n = math.sqrt(dx * dx + dy * dy + dz * dz)
-                if n > 0:
-                    lift_seen.append(math.degrees(math.asin(max(-1.0, min(1.0, dy / n)))))
+                lift_seen.append(elevation(own, ik))
         print("  Ico's reach for Yorda (%d samples):" % len(reach))
         print("    shoulder distance len: %s" % stats(lens))
         print("    both arms' reach sa+sb: %s" % stats(sums))
@@ -156,7 +163,20 @@ def summarise(name, recs):
         print("    Yorda within a fifth of the reach (at Ico's shoulder): %d of %d" %
               (near, len(reach)))
         print("    arm angle the code works out (0 level, 90 straight up or down): %s" % stats(lift_code))
-        print("    hand target above the shoulder, degrees: %s" % stats(lift_seen))
+        print("    hand target above the shoulder, degrees (below if negative): %s" %
+              stats(lift_seen))
+        # Yorda's line of the same tick: what she reaches for is Ico's hand
+        # (his focus-6 node, the wrist), so it says where his arm really is
+        hand = []
+        for r in reach:
+            for y in iks:
+                if y.get("mode") == "6" and y.get("t") == r.get("t") and y.get("girl") == "0":
+                    own, tb = vec(r, "own"), vec(y, "tb")
+                    if len(own) == 3 and len(tb) == 3:
+                        hand.append(elevation(own, tb))
+        if hand:
+            print("    Ico's hand (what Yorda reaches for) above his shoulder, degrees "
+                  "(below if negative): %s" % stats(hand))
         sc = sorted({(f1(r, "scale"), f1(r, "tscale")) for r in reach})
         print("    scales (Ico, Yorda): %s" % ", ".join("%.4g %.4g" % s for s in sc[:4]))
         tg = sorted({r.get("girl") for r in reach})

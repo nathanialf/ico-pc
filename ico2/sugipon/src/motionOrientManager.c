@@ -1446,6 +1446,12 @@ void ExecMotionOrient(void *self)
     }
 }
 
+/* PC port (AN-19e): the rows are reordered in place below. A const
+   declaration of the table lets clang delete these stores as writes to
+   constant memory (motionOrientManager.h, issue 19). */
+_Static_assert(__builtin_types_compatible_p(__typeof__(&motionLimitDef[0]), MotOriLimit *),
+               "motionLimitDef must be declared writable");
+
 void SetNodeRotationLimitDataTable(void *self, int from, int to)
 {
     int i;

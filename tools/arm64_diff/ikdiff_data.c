@@ -24,7 +24,7 @@ GenGeo objLayout[4];
 int systemStatus[12] = {0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7};
 PadState pad[16];
 GObj *boyGObj;
-float ropeInterRate;
+/* ropeInterRate: motionOrientManager.c, linked for SetNodeRotationLimitDataTable */
 
 int debug_now_motion_viewer;
 int debug_face_rot_w_ratio;

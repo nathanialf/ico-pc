@@ -28,7 +28,6 @@
 #define motEffCondKind motEffCondKind_header_decl
 #define motSECondKind motSECondKind_header_decl
 #define motionEffKind motionEffKind_header_decl
-#define motionLimitDef motionLimitDef_header_decl
 #define objTableScene objTableScene_header_decl
 #define objTrigger objTrigger_header_decl
 #define objTriggerDef objTriggerDef_header_decl
@@ -105,7 +104,6 @@
 #undef motEffCondKind
 #undef motSECondKind
 #undef motionEffKind
-#undef motionLimitDef
 #undef objTableScene
 #undef objTrigger
 #undef objTriggerDef

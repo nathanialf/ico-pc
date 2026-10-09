@@ -411,35 +411,71 @@ static void syntheticLimits(void)
     }
 }
 
-/* SetNodeRotationLimitDataTable's row reordering (motionOrientManager.c),
-   once for the whole table as the boy's (0..12) and the girl's (12..24)
-   calls and the rest leave it */
-static void orderLimits(void)
+/* SetNodeRotationLimitDataTable's row reordering (motionOrientManager.c)
+   as this harness expects it, on a copy: the reference the game's own
+   reordering is checked against */
+static void orderLimits(MotOriLimit *t)
 {
     int i;
 
     for (i = 0; i + 2 < 48; i += 3) {
         MotOriLimit tmp;
 
-        if (LIMITS[i].mid.y < LIMITS[i + 2].mid.y) {
-            tmp = LIMITS[i];
-            LIMITS[i] = LIMITS[i + 2];
-            LIMITS[i + 2] = tmp;
+        if (t[i].mid.y < t[i + 2].mid.y) {
+            tmp = t[i];
+            t[i] = t[i + 2];
+            t[i + 2] = tmp;
         }
-        if (LIMITS[i + 1].hi.x < LIMITS[i + 1].lo.x) {
+        if (t[i + 1].hi.x < t[i + 1].lo.x) {
             int j;
 
             for (j = 0; j < 3; j++) {
-                tmp.lo = LIMITS[i + j].hi;
-                tmp.mid = LIMITS[i + j].mid;
-                tmp.hi = LIMITS[i + j].lo;
-                tmp.node = LIMITS[i + j].node;
-                tmp.float28 = LIMITS[i + j].float28;
-                tmp.word2C = LIMITS[i + j].word2C;
-                LIMITS[i + j] = tmp;
+                tmp.lo = t[i + j].hi;
+                tmp.mid = t[i + j].mid;
+                tmp.hi = t[i + j].lo;
+                tmp.node = t[i + j].node;
+                tmp.float28 = t[i + j].float28;
+                tmp.word2C = t[i + j].word2C;
+                t[i + j] = tmp;
             }
         }
     }
+}
+
+/* v0.4.4 AN-19e (issue 19): the game's own reordering, through
+   SetNodeRotationLimitDataTable as built for this target (clang deleted
+   its stores while the header declared the table const, and the arms of
+   the held hands went straight up on Android): once over the whole table,
+   as the boy's (0..12), the girl's (12..24) and the enemies' (24..36) calls
+   together leave it, on an object whose every focus id is node 0. Every
+   row is printed, and whether the result is the reference's. */
+void SetNodeRotationLimitDataTable(void *self, int from, int to);
+
+static void gameOrderLimits(void)
+{
+    static GObj g;
+    static Sub15C sub;
+    static char focus[64];
+    static int limit[64];
+    static MotOriLimit ref[48];
+    int i;
+
+    memcpy(ref, LIMITS, sizeof ref);
+    orderLimits(ref);
+    g.self = &g;
+    g.dobj = &sub;
+    sub.focusNodes = focus;
+    sub.nodeLimit = limit;
+    SetNodeRotationLimitDataTable(&g, 0, 48);
+    fprintf(out, "# SetNodeRotationLimitDataTable over the table%s\n",
+            limitsFromElf ? " (the ELF's limits)" : " (synthetic limits)");
+    for (i = 0; i < 48; i++) {
+        fprintf(out, "limits %d", i);
+        pfv(&LIMITS[i].lo.x, 9);
+        pi(LIMITS[i].node);
+        fprintf(out, "\n");
+    }
+    fprintf(out, "limits-ordered %d\n", memcmp(ref, LIMITS, sizeof ref) == 0);
 }
 
 /* --- the exported helpers ---------------------------------------------- */
@@ -1238,7 +1274,7 @@ int main(int argc, char **argv)
     if (!limitsFromElf) {
         syntheticLimits();
     }
-    orderLimits();
+    gameOrderLimits();
     InitMatrixDrive();
     if (verbose < 0) {
         sweepTables();

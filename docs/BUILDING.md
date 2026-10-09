@@ -317,7 +317,9 @@ build's, the NDK clang's for x86-64 and, when that preset is configured, the
 linux-x64-clang build's; runs them over the same inputs in the game's
 rounding mode (the arm64 one under qemu); and diffs the outputs line by
 line: the turn, table, quaternion and matrix helpers over every angle and
-thousands of directions, the joint limits over every row of the game's table
+thousands of directions, the game's own reordering of its joint limit table
+(`SetNodeRotationLimitDataTable` from the real `motionOrientManager.c`; every
+row is printed), the joint limits over every row of that table
 (read from `ICO_BASE_ELF`, else synthetic rows), and 4000 stretches of 16
 frames of both characters' hand and arm updates. A second program,
 `tools/arm64_diff/followdiff.c`, does the same for Yorda following Ico by the
@@ -386,7 +388,7 @@ structure; the game is not run:
 | `tools/fetch_android.sh` | NDK, platform, build-tools and SDL3 for arm64, in the runner's preinstalled SDK |
 | `tools/check_no_rom.sh` | the IP scan |
 | `./gradlew --no-daemon assembleDebug -PicoLabel=ci` | the debug APK |
-| `tools/check_android_flags.sh` | the game's semantics options reach the NDK clang for every `ico2/` and `port/` source; no game or `port/math` object holds a fused multiply-add; no object stores onto its stack protector's guard (`tools/check_stack_guard.py`: only the Android build has `-fstack-protector-strong`, so a write past a local array ends the run on a phone alone) |
+| `tools/check_android_flags.sh` | the game's semantics options reach the NDK clang for every `ico2/` and `port/` source; no game unit writes an object it declares const (`tools/check_const_writes.py`: clang deletes such stores where gcc keeps them; the `const_write_audit` test runs it on native clang builds); no game or `port/math` object holds a fused multiply-add; no object stores onto its stack protector's guard (`tools/check_stack_guard.py`: only the Android build has `-fstack-protector-strong`, so a write past a local array ends the run on a phone alone) |
 | APK checks | `lib/arm64-v8a/libmain.so`, `libSDL3.so`, `assets/VERSION.txt` and `assets/NOTICES.txt` are in the APK; every `LOAD` segment of both libraries has alignment `0x4000` (`llvm-readelf -lW`); `zipalign -c -P 16 -v 4`; `aapt2 dump badging` shows `minSdkVersion:'29'` and `targetSdkVersion:'35'`; `libmain.so` exports `SDL_main` (`llvm-nm -D`); `strings libmain.so` finds no `DXBC` |
 | artifact `ico-pc-android-debug` | the APK, the unstripped `libmain.so` and `ico_pc.map`, kept 14 days |
 

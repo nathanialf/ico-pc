@@ -128,7 +128,10 @@ set_source_files_properties("${CMAKE_SOURCE_DIR}/ico2/common/src/main.c" TARGET_
 # writes three of the PS2 build's const .rodata tables (stageTable,
 # motionLimitDef, seDef) which worked on the EE (no page
 # protection). The generated definitions rename a header's `extern const`
-# declaration around the #includes; no header changes.
+# declaration around the #includes. A table the game writes must not be
+# declared const where it is written either: clang deletes stores to an
+# object declared const (motionLimitDef's header lost its const for that,
+# issue 19; tools/check_const_writes.py looks for others).
 set(ICO_DATA_GEN_DIR "${CMAKE_SOURCE_DIR}/port/data/gen")
 add_library(ico_data OBJECT
     "${ICO_DATA_GEN_DIR}/table_defs.c"

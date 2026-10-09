@@ -6,7 +6,8 @@
 # for x86-64 and for arm64, each with its own build's compile flags, run over
 # the same inputs; the outputs are diffed.  A difference is game code whose
 # result depends on the target (issue 19: Ico and Yorda's arms raised on
-# Android only).  tools/arm64_diff/ikdiff.c runs the arm IK;
+# Android only).  tools/arm64_diff/ikdiff.c runs the arm IK (after the
+# game's own reordering of the joint limit table, motionOrientManager.c);
 # tools/arm64_diff/followdiff.c runs Yorda following Ico by the hand
 # (actGirlHand on a fiber, the hand manager, the steering helpers) and the
 # hand target it leads to.  A developer tool, not a test: the arm64 programs
@@ -134,6 +135,9 @@ echo "arm64_diff: x86-64 game flags: $game_x64"
 echo "arm64_diff: arm64 game flags: $game_a64"
 
 game_src="ico2/sugipon/src/handManager.c ico2/sugipon/src/matrixDrive.c ico2/sugipon/src/quaternion.c ico2/sugipon/src/tableSin.c"
+# the IK harness only: the joint limit table's reordering
+# (SetNodeRotationLimitDataTable, v0.4.4 AN-19e)
+ik_src="ico2/sugipon/src/motionOrientManager.c"
 math_src="port/platform/fpenv.c port/math/libvu0.c port/math/matrix.c port/math/matrix_drive.c port/math/matrix_stack.c port/math/ps2float.c port/math/quaternion.c port/math/softdouble.c port/math/newlib/ico_libm.c"
 
 # build <name> <game-cc+flags> <math-cc+flags> <link-extra>
@@ -141,7 +145,7 @@ build() {
     local name=$1 game=$2 math=$3 ldx=$4 d=$out/$1 s o objs
     mkdir -p "$d"
     objs=""
-    for s in $game_src tools/arm64_diff/ikdiff_data.c; do
+    for s in $game_src $ik_src tools/arm64_diff/ikdiff_data.c; do
         o=$d/$(echo "$s" | tr '/' '_').o
         eval "$game -w -c $root/$s -o $o"
         objs="$objs $o"
@@ -269,7 +273,10 @@ if [ -n "$game_x64c" ] && [ -n "$math_x64c" ]; then
     names="$names x64-clang"
 fi
 
-# Lines are tagged by their first word.  Three tags differ by design:
+# Lines are tagged by their first word; "limits" and "limits-ordered" are
+# the joint limit table after the game's SetNodeRotationLimitDataTable
+# (issue 19: a build that drops its stores leaves the rows unsorted and the
+# arms of the held hands straight up).  Three tags differ by design:
 #   md-turnobj  MatrixDrive_Turn*ObjectMatrix* keep their first angle in a
 #               local the turn leaves alone for a direction on its axis: the
 #               stack word the build left there (none of them is on the
