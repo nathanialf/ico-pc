@@ -10,7 +10,7 @@
  * screen), and photo mode's help panel is laid out in every language. */
 #include "settings_fixture.h"
 
-/* package K-D: model_viewer.c's characters calls for the viewer's panel
+/* model_viewer.c's characters calls for the viewer's panel
    (Ico on screen; the model itself needs the game) */
 static int renderCharsEnter(void)
 {
@@ -53,7 +53,7 @@ static void snap(const char *name)
     free(out);
 }
 
-/* T1: SCENE at the Enhanced 4x scale (2048 x 2048) to a PNG at 4:3,
+/* SCENE at the Enhanced 4x scale (2048 x 2048) to a PNG at 4:3,
    2731 x 2048: the port font's rows as a 4x output shows them */
 static void snap4(const char *name)
 {
@@ -239,7 +239,7 @@ static int viewerLayout(void)
     return lt_ext_AddLayout(&l);
 }
 
-/* package DEF: the RDC_OVERLAY_TEXT items of the last frame */
+/* the RDC_OVERLAY_TEXT items of the last frame */
 static int textItems(void)
 {
     const RdFrame *f = rd__LastFrame();
@@ -254,7 +254,7 @@ static int textItems(void)
 }
 
 /* the screen presented at Enhanced 1920 x 1080 (16:9) to name_1080.png.
-   v0.4.2 (package F-B): nothing is deferred any more, the port's rows and
+   Nothing is deferred: the port's rows and
    the game's menu words alike are sheet strips in the scene list at 1x, so
    the frame records no RDC_OVERLAY_TEXT item */
 static void snap1080(const char *name)
@@ -281,8 +281,8 @@ static void snap1080(const char *name)
 /* the save screen's values: layout 14's
    slot numbers (files 1, 2 and 5 used, the others empty) and layout 15's
    play time "12:34:56", at the PAL rows' places, their texel rectangles the
-   menu text table's, everything else of the two layouts masked.  v0.4.2
-   (package F-B): rows of the menu text table, so sheet strips in their
+   menu text table's, everything else of the two layouts masked.  They are
+   rows of the menu text table, so sheet strips in their
    inks (the fake tables need no sheet for them) */
 static void fakeSaveRows(void)
 {
@@ -335,7 +335,7 @@ static void fakeSaveRows(void)
     texLayout[14].fadeInTime = texLayout[15].fadeInTime = 0.0f;
 }
 
-/* ------------------------------------------------ package PHOTO: the panel */
+/* ------------------------------------------------ photo mode: the panel */
 
 /* the last frame's draws on the menu text pages (menu_font.h) */
 static void countPageDraw(void *user, int list, uint32_t index, const RdCmd *c,
@@ -558,7 +558,7 @@ static void testPhotoPanel(void)
     lt_switch_layout(57);
     CHECK(settle(57, 60), "the pause menu");
     frame(0);
-    /* v0.4.2 (package F): nothing is deferred; the rows are menu text
+    /* nothing is deferred; the rows are menu text
        strips in the scene, counted as draws on the menu text pages */
     const int pauseItems = menuTextDraws();
     CHECK(pauseItems > 0, "the pause menu has menu text (%d draws)", pauseItems);
@@ -595,7 +595,7 @@ static void testPhotoPanel(void)
                   y1 <= 1080.0f,
               "%s: the panel is x %.0f .. %.0f, y %.0f .. %.0f", keys ? "keys" : "pad", (double)x0,
               (double)x1, (double)y0, (double)y1);
-        /* v0.4.2 (package F): the words are menu text strips, whose quads
+        /* the words are menu text strips, whose quads
            carry a transparent margin round the ink (ceil(0.12 em) plus
            UI_MENU_RIM_X / UI_MENU_RIM_Y texels: 7 field lines, 14 units, at
            the panel's size), so a word's quad may pass the panel by 16
@@ -730,7 +730,7 @@ static int render(void)
     press(0x40);
     frame(0);
     snap("settings_remap_capture.png");
-    /* R7c: the New Game screen, the cursor on Mirror mode's On, New Game+
+    /* the New Game screen, the cursor on Mirror mode's On, New Game+
        Off lit; then the cursor on New Game+ (its note), Mirror mode On lit */
     int ml = ui_NewGameScreenEnter();
     lt_switch_layout(ml);
@@ -747,7 +747,7 @@ static int render(void)
     snap("settings_new_game_screen_ngp_fr.png");
     NonLinearCameraMove = 2;
     frame(0);
-    /* Q2: the quit confirmation, the cursor on Yes */
+    /* the quit confirmation, the cursor on Yes */
     int ql = ui_QuitScreenLayout();
     lt_switch_layout(ql);
     CHECK(settle(ql, 60), "the quit screen");
@@ -755,7 +755,7 @@ static int render(void)
     frame(0);
     snap("settings_quit_screen.png");
     /* the title (New Game only): Options (the sheets' word as text in the
-       menus' look, v0.4.2) centred, Quit to desktop under it */
+       menus' look) centred, Quit to desktop under it */
     lt_switch_layout(13);
     CHECK(settle(13, 60), "the title");
     {
@@ -770,7 +770,7 @@ static int render(void)
         lt_ext_Prop(opt)->defaultMask = lt_ext_Prop(quit)->defaultMask = 1;
         ui_SettingsTitleMask(1);
     }
-    /* T1: the Settings and Display screens at Enhanced 4x, full height, the
+    /* the Settings and Display screens at Enhanced 4x, full height, the
        atlas at a 960-line output's scale (settings_main_4x.png,
        settings_display_4x.png) */
     {
@@ -832,7 +832,7 @@ static int render(void)
         press(0x10); /* Back leaves for Extras, the Music row under the cursor */
         CHECK(settle(exL, 60), "back to Extras from the gallery at 4x");
         gallery_SetEngine(NULL);
-        /* v0.4.2 (K): Extras > Characters at the same 4x, the colours from
+        /* Extras > Characters at the same 4x, the colours from
            a fixed seed, the cursor on Ico's tunic, its swatch beside the
            value */
         {
@@ -852,7 +852,7 @@ static int render(void)
             snap4("settings_characters_4x.png");
             press(0x10);
             CHECK(settle(exL, 60), "back to Extras from Characters at 4x");
-            /* package K-D: the same page from the title inside the model
+            /* the same page from the title inside the model
                viewer, a panel at the left (the model, the game's, is not
                drawn here: the flat colour shows where it stands) */
             static const UiCharactersHost host = {renderCharsEnter, renderCharsShown,
@@ -921,7 +921,7 @@ static int render(void)
         snap1080("settings_new_game_screen");
         press(0x4000);
         snap1080("settings_new_game_screen_ngp");
-        /* P6: the pause menu with the journey's lines on its right (a
+        /* the pause menu with the journey's lines on its right (a
            stage running, an assist on, New Game+ on), then in French (the
            longest labels) */
         {
@@ -993,7 +993,7 @@ static int render(void)
             CHECK(settle(vl, 60), "the viewer's rows at 1080p");
             snap1080("settings_viewer");
         }
-        /* package TXT: the save screen's slot numbers and play time */
+        /* the save screen's slot numbers and play time */
         fakeSaveRows();
         lt_switch_layout(14);
         CHECK(settle(14, 60), "the save screen at 1080p");

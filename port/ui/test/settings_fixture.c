@@ -1,5 +1,5 @@
-/* settings_fixture.c: the fakes and helpers shared by settings_test.c and
- * settings_extra_test.c (see settings_fixture.h). */
+/* settings_fixture.c: the fakes and helpers the settings test programs
+ * share (see settings_fixture.h). */
 #include "settings_fixture.h"
 
 int failures;
@@ -43,9 +43,9 @@ StageSetting GlobalStageSetting;
 
 int gFlagGameClear;
 
-int stage_no; /* package PHOTO: 0 here, a stage number in testPhoto */
+int stage_no; /* 0 here, a stage number in testPhoto */
 
-/* package PHOTO: photo mode's pivot (photo_ui.c): no camera target here */
+/* photo mode's pivot (photo_ui.c): no camera target here */
 void *default_cameratarget_gobj;
 
 void GetRootPosition(void *pos, void *obj)
@@ -135,13 +135,13 @@ int ico_audio_sdl_reopen(const char *name)
     return 0;
 }
 
-/* layout_action.c (R7c): the New Game screen's confirm starts the game */
+/* layout_action.c: the New Game screen's confirm starts the game */
 void la_host_new_game_go(void)
 {
     s_newGames++;
 }
 
-/* S1: the game's Options screen's settings (common/src/main.c,
+/* the game's Options screen's settings, now on the port's pages (common/src/main.c,
    fumi/ios/pad.c), and layout_action.c's film effect (la_game_option's
    stage animations), which records the mode it was given */
 int optionScreenMode, optionControlType, girlControlMode;
@@ -386,7 +386,7 @@ void fakeTables(void)
     setLayout(58, 297, 333, 308, -1);
     setLayout(59, 333, 392, 336, -1); /* the game's button configuration */
     setRow(336, -1, -1, -1, -1, -1, -1, 52);
-    /* the pause menu (S1): Options (opens 58 in the PAL data), Back, End
+    /* the pause menu: Options (opens 58 in the PAL data), Back, End
        Game, their letters 7 texels into rectangles at x 40 */
     setRow(294, -1, -1, 295, -1, -1, 58, 50);
     setRow(295, -1, -1, 296, 294, -1, -1, 70);
@@ -397,7 +397,7 @@ void fakeTables(void)
     setLayout(11, 48, 49, -1, -1);
     setLayout(12, 49, 51, 49, 11);
     setLayout(13, 51, 52, 51, 11);
-    setLayout(9, 44, 46, 44, -1); /* the vibration screen (R7c's Triangle) */
+    setLayout(9, 44, 46, 44, -1); /* the vibration screen (its Triangle goes back) */
     setRow(44, -1, -1, 45, -1, -1, -1, 100);
     setRow(45, -1, -1, -1, 44, -1, -1, 120);
     /* Options: 300 screen mode and 325 girl control are shown only after
@@ -453,7 +453,7 @@ void fakeTables(void)
 /* a mid-tone like the fogged title, under the layout's dark backdrop */
 static const uint8_t kBg[4] = {150, 140, 120, 0x80};
 
-/* package DEF: the frames end with the reduction, so a present shows them */
+/* the frames end with the reduction, so a present shows them */
 int s_reduce;
 
 #endif

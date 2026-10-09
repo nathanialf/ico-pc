@@ -1,5 +1,4 @@
-/* menu_look_test.c: the menus' Arimo text against the game's menu sheets
- * (v0.4.2, package F-C).
+/* menu_look_test.c: the menus' Arimo text against the game's menu sheets.
  *
  * Every menu word is Arimo rasterised on the sheets' texel grid and drawn in
  * the sheets' style (menu_font.h, rd.h rd_CreateTextureSheet).  This test
@@ -38,8 +37,10 @@
  * values came from it.  ICO_MENU_LOOK_BOLD=x,y and ICO_MENU_LOOK_WIDTH=k
  * set the letters' weight and the menus' width for a run (the fit's
  * grids).  ICO_MENU_LOOK_GEOM=1 prints every item's ink box and capitals
- * against the sheet's; the medians per sheet and the limits' measures per
- * language are always printed.
+ * against the sheet's; ICO_MENU_LOOK_RIM=1 prints each item's halo opacity
+ * (the sheet's, the strip's with the full halo and as drawn: what the
+ * table's rim values were set from).  The medians per sheet and the limits'
+ * measures per language are always printed.
  *
  * Exit 0, 1 on a failure, 77 without the ELF or the disc image (so it runs
  * where the disc is: main's release validation, never in a worktree).
@@ -66,7 +67,7 @@
 
 /* ------------------------------------------------------------- limits */
 /* The limits of testCompareItems, set from the run on main after the
-   geometry fit (v0.4.2: the sheets' width UI_SHEET_WIDTH, the letters'
+   geometry fit (the sheets' width UI_SHEET_WIDTH, the letters'
    weight, the table's em, anchor, capital middle, width and spacing per
    language fitted to each sheet, the halo per item, 8 levels; 100 items a
    language with ink on the sheet, 500 in all): the largest measure over the
@@ -116,7 +117,7 @@
 #define MIN_INK_AMOUNT 6.0f /* a sheet rectangle with less ink than this is not compared */
 
 /* The survey's expectations (testSurvey): what the scratch survey measured on
-   the PAL sheets (package F-C1), per language EN FR DE IT ES. */
+   the PAL sheets, per language EN FR DE IT ES. */
 static const float kExpFill[UI_LANG_COUNT] = {254.7f, 253.7f, 253.3f, 254.4f, 253.5f};
 static const float kExpRim[UI_LANG_COUNT] = {23.9f, 61.1f, 55.7f, 60.8f, 61.7f};
 /* the first six texels' alpha, summed: left and right averaged, above and below averaged */

@@ -1,20 +1,17 @@
-/* settings_extra_test.c: the Settings menu's tests added from v0.4.3 on, over
- * the shared fixture (settings_fixture.h: fake tables, frame/settle/press,
- * useConfig, labelsAre, enterMain/openPage).  settings_test.c sits close to
+/* settings_extra_test.c: the newer Settings menu tests, over the shared
+ * fixture (settings_fixture.h: fake tables, frame/settle/press, useConfig,
+ * labelsAre, enterMain/openPage).  Each settings test file stays well under
  * the source size cap (tools/check_no_rom.sh), so new settings tests go here.
  *
- * Each v0.4.3 package appends, in this order:
- *   - above main: a comment headed "v0.4.3 <pkg>" holding ONE test
- *     function (void test<Name>(void));
- *   - in main: one call to it, under the same heading comment.
- * Adjacent blocks from different packages merge cleanly; keep both sides.
+ * One test function per feature, headed by what it tests, with its call in
+ * main in the same order.
  */
 #include "settings_fixture.h"
 #include "popup.h"
 #include "pointer.h"
 #include "ui_mouse.h"
 
-/* v0.4.3 ST-SPLIT: the fixture builds a layout and the menu opens */
+/* the fixture builds a layout and the menu opens */
 static void testFixture(void)
 {
     useConfig("version = 1\n");
@@ -25,7 +22,7 @@ static void testFixture(void)
     CHECK(viaPause == mainL, "pause menu: the main page (%d)", viaPause);
 }
 
-/* v0.4.3 I17c: the Display > Window mode row */
+/* the Display > Window mode row */
 static int s_i17cAnswer;
 
 static int fakeI17cMode(void)
@@ -107,7 +104,7 @@ static void testWindowMode(void)
     CHECK(i17cDisplayHasWindowMode(), "the row shows again");
 }
 
-/* v0.4.3 R27: Effects > Cinematic bars, the last switch before Back, On by
+/* Effects > Cinematic bars, the last switch before Back, On by
    default, a step flips it live and ui_SettingsSave writes the key; the other
    effects keep their value */
 static void testCinematicBars(void)
@@ -142,7 +139,7 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
 }
 
-/* v0.4.3 AN-20: default_item_select hands the select callback the current
+/* default_item_select hands the select callback the current
    item (issue 20: it passed nothing, and la_mc_saved_file_select indexed the
    card's file table with whatever the argument register held) */
 static int s_an20Calls, s_an20Arg, s_an20Ret;
@@ -190,7 +187,7 @@ static void testItemSelectArg(void)
     }
 }
 
-/* v0.4.3 AN-22b: Settings > Graphics driver (a fake host), the Quit game label */
+/* Settings > Graphics driver (a fake host), the Quit game label */
 static int s_gpuN = 0, s_gpuSel = -1, s_gpuFailed = -1, s_gpuAdreno = 1;
 static int s_gpuBegins, s_gpuPolls, s_gpuRemoved = -99, s_gpuSelects;
 static int s_gpuResult[8], s_gpuResultN, s_gpuResultAt;
@@ -745,7 +742,7 @@ static void testMouseCamera(void)
     ui_SettingsSetTouchQuery(NULL);
 }
 
-/* v0.4.3 UI-D: the title run unseen while Options is to reopen */
+/* the title run unseen while Options is to reopen */
 static int rowsMasked(int layout, int want)
 {
     const LtProp *lp = lt_ext_Layout(layout);
@@ -815,7 +812,7 @@ static void testTitleReturn(void)
     }
 }
 
-/* v0.4.3 I17b: the mouse pointer in the menus (ui_mouse.h), through the real
+/* the mouse pointer in the menus (ui_mouse.h), through the real
    layout code: a 4:3 view of 640 x 480 at 0,0 (the grid's 640 x 448 is the
    4:3 picture, font.h), so a point of the grid is the pointer at gx / 640
    across and (gy - 2) / 448 down */
@@ -1149,22 +1146,21 @@ int main(int argc, char **argv)
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
     setEnv("LC_ALL", NULL);
     setEnv("LANG", "en_GB.UTF-8");
-    /* v0.4.3 ST-SPLIT */
     testFixture();
-    /* v0.4.3 I17c */
+    /* Display > Window mode */
     testWindowMode();
-    /* v0.4.3 R27 */
+    /* Effects > Cinematic bars */
     testCinematicBars();
-    /* v0.4.3 AN-20 */
+    /* the select callback's argument */
     testItemSelectArg();
-    /* v0.4.3 AN-22b */
+    /* Settings > Graphics driver, the Quit game label */
     testGpuDriver();
     testQuitGame();
-    /* v0.4.3 I17a */
+    /* Controls > the mouse camera rows */
     testMouseCamera();
-    /* v0.4.3 UI-D */
+    /* the title kept unseen while Options reopens */
     testTitleReturn();
-    /* v0.4.3 I17b */
+    /* the mouse pointer in the menus */
     testPointer();
     /* Gameplay > Achievement pop-ups */
     testAchievementPopups();

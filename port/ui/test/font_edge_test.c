@@ -12,9 +12,8 @@
  *             scene's "H" (reduced and scaled with the scene) has more
  *   mirror    the mirror mode leaves the overlay's text where it was (with
  *             the scene black, the output equal to the unmirrored one)
- * v0.4.2: the deferred menu rows, their halo, fold and glow checks are
- * gone with the deferral (packages F-B, F-C); the
- * menus' text is the sheet strips (menu_font.h; ui_test, menu_text_test).
+ * The menus' text is the sheet strips (menu_font.h), checked by ui_test and
+ * menu_text_test.
  *
  * Usage: font_edge_test [dir]  (dir: where the PNGs go)
  * Exit 0, 1 on a failure, 77 without a device.

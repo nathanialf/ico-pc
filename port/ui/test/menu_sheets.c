@@ -4,8 +4,8 @@
  * The game's menu sheets for the menu_look test: TIM2 pictures read from the
  * player's disc (DATA.DF's packs, df_pack.h) and decoded to RGBA8 (grey and
  * the GS alpha scaled to 0..255), by name, with the sheet of a language for a
- * texFile path.  Test-only: the port itself no longer reads the sheets (v0.4.2
- * menus are drawn in Arimo; the reader was the game face's, game_font_disc.c).
+ * texFile path.  Test-only: the port itself does not read the sheets (the
+ * menus are drawn in Arimo).
  *
  * Which sheet a rectangle is on: the table's first texProperty row that draws
  * it names a texFile row (its texFileNo); that path's language folder

@@ -34,7 +34,7 @@ static void errRelease(char *out, size_t n)
     }
 }
 
-/* package MV: a stand-in for the model viewer's list (ui_SettingsSetModelsHandler) */
+/* a stand-in for the model viewer's list (ui_SettingsSetModelsHandler) */
 static int s_modelsCalls;
 
 static int fakeModels(void)
@@ -43,7 +43,7 @@ static int fakeModels(void)
     return ui_SettingsPageLayout(UI_PAGE_ACHIEVEMENTS);
 }
 
-/* package CRED: the Credits row unlocked by [dev] unlock_credits (the
+/* the Credits row unlocked by [dev] unlock_credits (the
    ending achievement is the player's way; credits_test and achievements_test
    check those), its locked look gone, and Cross with an engine that starts:
    the menu leaves for the game's empty layout (55) with the flag on and the
@@ -104,7 +104,7 @@ static void testCredits(int mainL, int exL)
 }
 
 /* Settings > Extras: a row of the main page after Achievements, from both
-   entries (v0.4.2: Characters); Music, Models, Credits (from the title
+   entries; Music, Models, Credits (from the title
    only), Characters and Back; the entries are placeholders that log;
    Credits shows the locked style. */
 static void testExtras(void)
@@ -121,7 +121,7 @@ static void testExtras(void)
                 idx = i;
             }
         }
-        /* v0.4.0: Dump textures (developer mode only, hidden here) before
+        /* Dump textures (developer mode only, hidden here) before
            Back */
         CHECK(n == 13 && idx == 8, "Extras is the row after Achievements (index %d of %d)", idx, n);
         CHECK(lt_ext_Prop(ex)->right == ui_SettingsPageLayout(UI_PAGE_EXTRAS), "Extras opens");
@@ -199,7 +199,7 @@ static void testExtras(void)
             CHECK(k != 2 || (strstr(log, "credits: locked") != NULL && !ico_credits_active()),
                   "Cross on the locked Credits: \"%s\"", log);
         }
-        /* package MV: with the model viewer's handler (port/game/
+        /* with the model viewer's handler (port/game/
            model_viewer.c registers its list), Models opens the layout it
            returns; here the achievements page stands in for the list */
         s_modelsCalls = 0;
@@ -273,7 +273,7 @@ static void testExtras(void)
     CHECK(strstr(log, want_line) != NULL, "developer mode prints the budget (\"%s\")", log);
 }
 
-/* package L1: ui_SettingsCoversTitle, which hides the title's logo
+/* ui_SettingsCoversTitle, which hides the title's logo
    (port/game/title_logo.c): every page opened from the title, Extras and
    its Music page among them; not the title's own layouts, the mirror or
    quit screens, nor any page opened from the pause menu */
@@ -308,10 +308,10 @@ static void testCoversTitle(void)
 }
 
 /* ------------------------------------------------------ Characters
- * v0.4.2 package K: Settings > Extras > Characters (port/game/appearance.h
+ * Settings > Extras > Characters (port/game/appearance.h
  * under nine stepped rows with a swatch each, Randomize, Reset to original,
- * a note), the title's Characters inside the model viewer (package K-D:
- * a fake UiCharactersHost stands in for model_viewer.c), and Extras on the
+ * a note), the title's Characters inside the model viewer (a fake
+ * UiCharactersHost stands in for model_viewer.c), and Extras on the
  * pause menu with Characters and Back only. */
 static const char *const kColourNames[ICO_APP_COLOURS] = {
     "Red",  "Crimson", "Rose", "Pink",  "Magenta", "Plum",  "Violet", "Indigo",
@@ -496,7 +496,7 @@ static void checkSecondStart(const char *p, const char *who)
     s_hostShown = -2;
 }
 
-/* v0.4.2 (K-E): the player's report "the colours are not kept after a
+/* the player's report "the colours are not kept after a
    restart": start 1 picks Ico's tunic Red and Yorda's dress Gold, the
    game closes, start 2 has them.  The file each start begins with is the
    one a first run writes (ico_config_write_first_run), so [characters] is
@@ -647,7 +647,7 @@ static void testCharacters(void)
             CHECK(sw >= 0, "%s: row %d has a swatch", who, i);
         }
 
-        /* Ico: Skin: Original, Tone 1 ... Tone 12, Red ... Black (K-F),
+        /* Ico: Skin: Original, Tone 1 ... Tone 12, Red ... Black,
            Original; Left wraps */
         for (int k = 1; k <= ICO_APP_TONES + ICO_APP_COLOURS; k++) {
             charStep(l, lb[0], 1);
@@ -819,7 +819,7 @@ static void testCharacters(void)
         ico_toml_free(t);
     }
 
-    /* package K-D: Characters from the title inside the model viewer.
+    /* Characters from the title inside the model viewer.
        Extras' Characters row calls the host's enter and opens the page as
        the viewer's panel; it takes no input while a model loads; Left /
        Right, Square, Randomize and Reset as on the Options page; Switch

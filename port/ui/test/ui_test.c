@@ -1,4 +1,4 @@
-/* ui_test.c: the port's runtime text (Phase 6, 6B).
+/* ui_test.c: the port's runtime text.
  *
  * Without a device:
  *   - the embedded font parses; glyph bitmaps land in the atlas with the
@@ -11,19 +11,19 @@
  *     GifPacket.c, DisplayList.c, DmaPacket.c as the window build has them):
  *     the fall-through lookups, a port layout with two port rows run by
  *     exec_layout_texture, its labels recorded as one sheet strip each
- *     (v0.4.2, menu_font.h) in list 11 with the colours the texture path
+ *     (menu_font.h) in list 11 with the colours the texture path
  *     would have used, no texture lookup for a port row, the glow
  *     (additive) after a cursor move and the sparkle on an unselectable
  *     selected row;
  *   - the popup queue's timing and panel;
- *   - package OV, overlay mode (ui_BeginOverlay): the grid mapped onto the
+ *   - overlay mode (ui_BeginOverlay): the grid mapped onto the
  *     4:3 picture of a 1080p and a 4K output (and of a 16:9 box), glyph
  *     quads on whole output pixels at the bitmap's size, rasterised at
  *     round(size * box.h / 448), rects snapped, the scale restored; a
  *     popup drawn on the overlay (its text one magnified strip a line)
  *     records nothing into the open frame's lists (list 12 included), sits
  *     at the 4:3 picture's right, and is the same with the mirror on;
- *   - the size sets (review finding 2): 40 sizes of "IHL" measured (no
+ *   - the size sets: 40 sizes of "IHL" measured (no
  *     set made) and then drawn over five frames: each draw has its own
  *     set, the least recently drawn sets go, "the nearest" is never reused.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): "ICO" and
@@ -34,7 +34,7 @@
  * an Enhanced 4x scene against font_sheet_ps's CPU reference (sheet_ref.c),
  * plain and light ink.
  *
- * Last, package OV: a popup on the presentation overlay of a 1920 x 1080
+ * Last: a popup on the presentation overlay of a 1920 x 1080
  * Original present: at the 4:3 picture's right, text pixels in the panel,
  * nothing changed outside it (ui_test_popup.png, the panel's crop).
  *
@@ -178,7 +178,7 @@ void __assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
-/* init_layout_texture's Settings hook (6C; settings_test covers it) */
+/* init_layout_texture's Settings hook (settings_test covers it) */
 void ui_SettingsInstall(void) {}
 
 /* lt_glow_sprite's pulse: sin(pi t) as the game's table gives it */
@@ -216,7 +216,7 @@ static void testGlyphs(void)
     CHECK(g.advance > 20.0f && g.advance < 40.0f, "H advance %g", g.advance);
     int w, h;
     const uint8_t *cov = ui_FontPage(40, g.page, &w, &h);
-    /* T1: 512 wide, not a power of two high (no Enhanced mip chain) */
+    /* 512 wide, not a power of two high (no Enhanced mip chain) */
     CHECK(cov != NULL && w == 512 && h > 256 && h < 512 && (h & (h - 1)) != 0,
           "the 40 px atlas page (%d x %d)", w, h);
     if (cov) {
@@ -228,7 +228,7 @@ static void testGlyphs(void)
             }
         }
         CHECK(full > 50 && sum > full, "H has solid stems (%d full, %d covered texels)", full, sum);
-        /* T1: the gutter, two texels on every side of the cell, is empty */
+        /* the gutter, two texels on every side of the cell, is empty */
         int gut = 0;
         for (int y = g.y - 2; y < g.y + g.h + 2; y++) {
             for (int x = g.x - 2; x < g.x + g.w + 2; x++) {
@@ -337,7 +337,7 @@ static void testStrings(void)
             uint32_t cp;
             while (s && (cp = ui_Utf8Next(&s)) != 0) {
                 if (cp == '\n') {
-                    continue; /* a line break (the menu text's prompts, P3) */
+                    continue; /* a line break (the menu text's prompts) */
                 }
                 CHECK(cp != 0xFFFD && ui_FontHasGlyph(cp),
                       "language %d string %d: U+%04X not drawable", l, id, cp);
@@ -462,7 +462,7 @@ static void testLayoutExtension(void)
     RdStateBlock s = f->startState;
     rd__Walk(f, 0, &s, collect, &w);
     /* the backdrop sprite, then per row its label: one sheet strip in the
-       menus' look (v0.4.2, package F-B: no halo copies) */
+       menus' look (no halo copies) */
     CHECK(w.n == 1 + 2, "list 11 holds %d screen batches, expected 3", w.n);
     UiMenuStrip strip;
     CHECK(ui_MenuFontLastStrip(&strip) && strip.tex != 0 && strip.cls == 0,
@@ -569,7 +569,7 @@ static void testPopups(void)
     ui_PopupSetDevTest(0);
 }
 
-/* ------------------------------------------- the overlay (package OV) */
+/* ---------------------------------------------------------- the overlay */
 
 typedef struct OvCap {
     int n;
@@ -705,8 +705,8 @@ static void checkOverlayPopup(void)
         ui_PopupDrawOverlay(&c);
         ui__SetOverlaySink(NULL);
         CHECK(!ui_OverlayActive(), "the popup ends overlay mode");
-        /* the panel, its hairline, the title and the body (v0.4.2: one 1x
-           sheet strip each, magnified) */
+        /* the panel, its hairline, the title and the body (one 1x sheet
+           strip each, magnified) */
         CHECK(s_cap.n == 4 && s_cap.tex[0] == 0 && s_cap.count[0] == 2 &&
                   ui_MenuFontIsPage(s_cap.tex[2]) && ui_MenuFontIsPage(s_cap.tex[3]) &&
                   s_cap.count[2] == 2 && s_cap.count[3] == 2,
@@ -739,7 +739,7 @@ static void checkOverlayPopup(void)
     ui_PopupReset();
 }
 
-/* package R8: the atlas pages are R8 coverage; a page is created whole
+/* the atlas pages are R8 (one-channel) coverage; a page is created whole
    when first drawn, then each new glyph is one rectangle update and no page
    is uploaded whole again, in the frame and on the overlay */
 static void checkAtlasPage(const char *what, int px, int page)
@@ -815,7 +815,7 @@ static void testOverlay(void)
     checkOverlayPopup();
 }
 
-/* The popup on the device (package OV): a 1920 x 1080 Original present
+/* The popup on the device: a 1920 x 1080 Original present
    with and without the popup, the overlay registered as ui_host.c does. */
 static void popupOverlay(const RdOverlayCtx *ctx, void *user)
 {
@@ -967,7 +967,7 @@ static void drawFrame(const uint8_t col[4], const uint8_t colI[4])
     rd_SetTarget(rd_Target(RD_TARGET_SCENE), rd_Target(RD_TARGET_SCENE), 512, 512, 1);
     rd_ClearTarget(rd_Target(RD_TARGET_SCENE), kBg, 1, 0);
     rd_SelectList(11);
-    /* v0.4.2 (package F-B): the menus' text, sheet strips in the light ink */
+    /* the menus' text, sheet strips in the light ink */
     ui_DrawMenuText(160.0f, 60.0f, 60.0f, col, "ICO", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
     ui_DrawMenuText(320.0f, 200.0f, 60.0f, col, "Éléphant", UI_ALIGN_CENTER, UI_INK_LIGHT, NULL);
     /* a big I for the blend: alpha 0x80 left, 0x40 right */
@@ -1076,11 +1076,11 @@ static void testPixels(void)
     free(px);
 }
 
-/* ------------------------------------------------- pixels at 4x (T1)
+/* ------------------------------------------------------- pixels at 4x
  *
  * The Enhanced preset at 4x (SCENE 2048 x 2048 for the 512 x 512 GS frame),
  * full height: the menu rows as the title and the vibration screen draw
- * them (size 27 and 22), v0.4.2 (package F-B) as sheet strips, the same 1x
+ * them (size 27 and 22) as sheet strips, the same 1x
  * coverage whatever the output (menu_font.h).  Checked against the CPU
  * reference of font_sheet_ps (port/render/test/sheet_ref.c): each SCENE
  * texel whose centre lies in a strip's quad samples the page at its own
@@ -1196,7 +1196,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
         }
         const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2],
                                  t->sheet[3],      t->sheet[0], t->sheetScale};
-        /* F-G: a scaled page's coverage is its top half; its texels under
+        /* a scaled page's coverage is its top half; its texels under
            the quad made once (sheetref_Texel dilates four sheet texels a texel)
            and blended as sheetref_Sample blends them */
         const uint32_t th = t->sheetScale > 1 ? t->h / 2 : t->h;
@@ -1262,7 +1262,7 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
     return nq;
 }
 
-/* v0.4.2 (F-G): the median width of the letters' edges across, in SCENE
+/* the median width of the letters' edges across, in SCENE
    texels: on every row, the texels strictly between one at most 10 % of
    the full white (255) and the next at least 90 %, or back (a stem's left
    and right edge), the run in between neither */
@@ -1368,7 +1368,7 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
         CHECK(bleed == 0, "4x: %d texels painted outside the strips' quads (bleed)", bleed);
         CHECK(bad == 0, "4x: %d texels differ from the reference (clipped or shifted strips)", bad);
         if (pass == 0) {
-            /* v0.4.2 (F-G): the strips are rasterised at the scene's scale
+            /* the strips are rasterised at the scene's scale
                (4), so a stem's edge is a texel or two wide, where the 1x
                strip magnified (forced) spreads it over its magnified texel */
             const int crisp = edgeWidth4(px);
@@ -1388,7 +1388,7 @@ static void testPixels4x(RdFilterUpgrade filter, uint32_t outputHeight, int pngs
                   soft, crisp);
         }
         if (pass == 1 && pngs) {
-            /* v0.4.3 (RIM): the menu look with the 1x strips magnified,
+            /* the menu look with the 1x strips magnified,
                beside ui_test_scene4x.png: the rims alike, the letters
                crisper at 4x */
             ui__MenuForceScale(1);
@@ -1406,10 +1406,10 @@ done:
     free(q);
 }
 
-/* The size sets (review finding 2): 40 sizes of "IHL" measured (no Arimo
+/* The size sets: 40 sizes of "IHL" measured (no Arimo
    set made) and then drawn over five frames: each draw has its own set at
    its exact pixel size, the least recently drawn sets go and "the nearest"
-   is never reused.  (v0.4.2: the plain glyph path alone.) */
+   is never reused (the plain glyph path alone). */
 static void testSizeSets(void)
 {
     enum { N = 40, PER_FRAME = 8 };
@@ -1483,7 +1483,7 @@ int main(void)
     ui_SetGsFrame(&fr);
     ui_SetScale(1.0f);
     testPixels();
-    /* T1: 4x at a 960-line output (the atlas magnified into SCENE), and
+    /* 4x at a 960-line output (the atlas magnified into SCENE), and
        trilinear at 2160 lines (the atlas minified: no mip chain may blur
        neighbouring glyphs in) */
     testPixels4x(RD_FILTER_UPGRADE_OFF, 960, 1);

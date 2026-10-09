@@ -1,5 +1,5 @@
 /* menu_text_test.c: the game's menu words and the port's rows drawn as text
- * in the sheets' look (packages P3, TXT2; v0.4.2 F-B).
+ * in the sheets' look.
  *
  * Without a device:
  *   - the table (menu_text.h): every row a
@@ -11,8 +11,8 @@
  *   - every string id exists in all five languages and is drawable;
  *   - the hook through the real layout_texture.c (GifPacket.c,
  *     DisplayList.c, DmaPacket.c as the window build has them, the rest of
- *     the game stubbed, rows shaped like the PAL title's), v0.4.2 (package
- *     F-B): every table row draws a sheet strip (menu_font.h) and no
+ *     the game stubbed, rows shaped like the PAL title's): every table row
+ *     draws a sheet strip (menu_font.h) and no
  *     texture sprite, a row outside the table (the copyright line) or with
  *     another rectangle keeps its sprite, every row's texture is still
  *     transferred; the port rows are strips too; the save screens' figures
@@ -223,7 +223,7 @@ static void testTable(void)
         CHECK(it->w > 0 && it->h > 0 && it->u + it->w <= 512 && it->v + it->h <= 256,
               "item %d: a non-empty rectangle on a sheet (%u,%u %ux%u)", i, it->u, it->v, it->w,
               it->h);
-        /* package TXT: a digit tile's figure fills it (capitals 13 of 15
+        /* a digit tile's figure fills it (capitals 13 of 15
            texels: an em of 18) */
         for (int l = 0; l < UI_LANG_COUNT; l++) {
             CHECK(it->x[l] >= 0.0f && it->x[l] <= (float)it->w && it->em[l] > 0.0f &&
@@ -529,7 +529,7 @@ static void countSprites(int *strips, int *texture, uint8_t cols[][4], int maxCo
     free(w);
 }
 
-/* ------------------------------------ scaled strips (v0.4.2, package F-G) */
+/* ------------------------------------------------------ scaled strips */
 
 typedef struct StripQuad {
     int32_t x0, y0, x1, y1; /* GS 12.4 */
@@ -604,7 +604,7 @@ static void testScaledStrips(void)
     lt_ext_Reset();
 }
 
-/* ------------------------------------- no deferral (v0.4.2, package F-B) */
+/* -------------------------------------------------------- no deferral */
 
 typedef struct TextWalk {
     int items, ops, tagged, atlas;
@@ -815,7 +815,7 @@ static void testHook(void)
     pad[0].ana[2] = pad[0].ana[3] = 128;
     pad[0].flags = 0;
 
-    /* v0.4.2 (package F-B): every table row is a sheet strip and no texture
+    /* every table row is a sheet strip and no texture
        sprite; the copyright line (not in the table) keeps its sprite; every
        row's texture is still transferred */
     buildTitle(1);

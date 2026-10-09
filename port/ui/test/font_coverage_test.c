@@ -9,13 +9,14 @@
  *     screen values, the gallery's asset names, the roll's '@' and '\' signs);
  *   - with a base ELF: the seDef and adpcmFile names the gallery shows.
  * Only the text the port draws with its font: the game's own text (its
- * subtitles, the disc's roll lines, its menu words) keeps its texels.
+ * subtitles, the disc's roll lines) keeps its texels; its menu words are
+ * the UI_STR_MT_* strings above.
  * It fails on a code point with no glyph, U+FFFD or malformed UTF-8, a C0 or
  * C1 control other than '\n', an empty entry, a corpus file that is missing.
  * The fallback ('?' for a missing glyph, logged once) is checked last.
  *
- * Arimo is the only face (v0.4.2: the menus' text is Arimo in the sheets'
- * look); the report lists the characters it serves.
+ * Arimo is the only face (the menus' text is Arimo in the sheets' look);
+ * the report lists the characters it serves.
  *
  *   font_coverage_test CORPUS_DIR [BASE_ELF]
  * Exit 0, 1 on a failure, 77 for a BASE_ELF that is named and absent.

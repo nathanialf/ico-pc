@@ -1,8 +1,8 @@
 /*
  * port/ui/test/ui_mouse_test.c
  *
- * The mouse pointer's arithmetic in the menus (ui_mouse_geom.h, v0.4.3
- * I17b) on the CPU: the pointer into the layouts' grid for a 4:3 picture
+ * The mouse pointer's arithmetic in the menus (ui_mouse_geom.h) on the
+ * CPU: the pointer into the layouts' grid for a 4:3 picture
  * and a pillarboxed 1920 x 1080 one, the rows' boxes (display_texture's
  * fallbacks, the label box lt_ext_DrawRow draws in), and the hit test (a
  * label is Cross, a value Right on its owner, the arrows Left and Right with

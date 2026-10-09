@@ -1,9 +1,9 @@
-/* settings_test.c: the Settings menu (Phase 6, 6C).  CPU only.
+/* settings_test.c: the Settings menu.  CPU only.
  *
  *   - the menu builds over fake game tables shaped like the PAL ones: the
  *     pages and their rows, in order, with the expected labels;
  *   - the navigation repoint: the pause menu's Options (294) opens the
- *     menu (S1), the title's 50/51 lead to the entry rows, the link
+ *     menu, the title's 50/51 lead to the entry rows, the link
  *     chains, idempotence;
  *   - the entry rows' places from the table data: the title's evenly
  *     spaced between New Game and the copyright line, masked by default as
@@ -11,7 +11,7 @@
  *   - through the real layout_texture.c: the cursor in layout 57 moves onto
  *     Options, Cross opens the menu, a right press on Language changes the
  *     language, Triangle goes back to 57 with the cursor on Options;
- *   - the game's Options screen's settings on the pages (S1): their game
+ *   - the game's Options screen's settings on the pages: their game
  *     variables, the pause-only and cleared-only rows, Button
  *     configuration's way to the game's screen and back;
  *   - value cycling: each option's setter and its text;
@@ -116,7 +116,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 13), "main page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
     {
-        /* v0.4.2: Characters (a link) before Back */
+        /* Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
                                          UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK, UI_OPT_BACK};
         static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
@@ -152,7 +152,7 @@ static void testBuild(void)
     /* the Gameplay page holds the stick fix beside Yorda's */
     CHECK(ui_SettingsRowOf(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
     CHECK(ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) < 0, "not on Controls");
-    /* package TXT2: no Menu text or Font row (one behaviour: the game's
+    /* no Menu text or Font row (one behaviour: the game's
        words are the table's text, the port's own Arimo) */
     {
         int rows[16];
@@ -194,7 +194,7 @@ static void testBuild(void)
         }
     }
 
-    /* R7d: the Frame rate row in either preset, its value from the file */
+    /* the Frame rate row in either preset, its value from the file */
     useConfig("[video]\npreset = \"enhanced\"\nframerate = \"144\"\n");
     lt_ext_Reset();
     ui_SettingsReset();
@@ -306,7 +306,7 @@ static void testBudget(void)
           "the game's last row is the game's");
 }
 
-/* R7d: the Frame rate row steps original, uncapped, 60, 120, 144, 240 */
+/* the Frame rate row steps original, uncapped, 60, 120, 144, 240 */
 static void testFramerate(void)
 {
     static const int want[] = {ICO_FRAMERATE_UNCAPPED, 60, 120, 144, 240, ICO_FRAMERATE_ORIGINAL};
@@ -334,7 +334,7 @@ static void testFramerate(void)
     ico_video_get(&o);
     CHECK(o.framerate == 240, "Left from original wraps to 240");
     /* the preset is not changed by the row; the rate is in force in the
-       Original preset too (F2) */
+       Original preset too */
     CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && ico_video_framerate() == 240,
           "Original preset: the row's rate in force");
 
@@ -380,7 +380,7 @@ static void testFramerate(void)
     ico_toml_free(t);
 }
 
-/* P2: the Preset row reads Original, Enhanced or Custom, and its step is the
+/* the Preset row reads Original, Enhanced or Custom, and its step is the
    shortcut; the CRT note under Resolution; the Window mode row's query */
 static int s_fsAnswer, s_fsAsked;
 
@@ -519,7 +519,7 @@ static void testRepoint(void)
     CHECK(s57 == 294 && ph >= LT_GAME_PROPERTY_COUNT && s12 > ph && s13 > s12, "entry rows");
     CHECK(ui_SettingsEntryRow(58) == -1 && ui_SettingsEntryLayout(58) == -1,
           "nothing on the Options screen");
-    /* S1: the pause menu's Options opens the menu, not the Options screen */
+    /* the pause menu's Options opens the menu, not the Options screen */
     CHECK(texProperty[294].right == mainL, "294: Cross opens the menu (%d)",
           texProperty[294].right);
     CHECK(texLayout[57].link == ui_SettingsEntryLayout(57) &&
@@ -631,7 +631,7 @@ static void testPlacement(void)
         CHECK(ng->defaultMask && s->defaultMask && q->defaultMask,
               "title %d: masked by default as New Game", g);
     }
-    /* S1: the pause menu's Photo mode row one pitch under Options while a
+    /* the pause menu's Photo mode row one pitch under Options while a
        stage runs, Back one pitch lower, End Game where it was; its letters
        start where Options' do (display_texture's box: x from dispX + 1/4;
        the game row's letters at dispX - 1/4 + the item's left anchor) */
@@ -678,7 +678,7 @@ static void testNavigation(void)
     init_layout_texture(2); /* installs; layout 54 */
     CHECK(ui_SettingsEntryLayout(57) >= 0, "installed by init_layout_texture");
     settle(54, 4);
-    /* S1: the pause menu opens on Back (295); Up is Options, whose Cross
+    /* the pause menu opens on Back (295); Up is Options, whose Cross
        opens the Settings menu */
     lt_switch_layout(57);
     CHECK(settle(57, 40), "the pause menu");
@@ -762,7 +762,7 @@ static void testNavigation(void)
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
 }
 
-/* Package PHOTO (S1: in the pause menu): the "Photo mode" row exists only
+/* Photo mode (in the pause menu): the "Photo mode" row exists only
  * while a stage runs (masked and stepped over on stage 0 or 1, the
  * title's); with one, it sits under Options, Cross opens the photo layout
  * (no dimming, the row masked), whose proc turns the left stick into an
@@ -846,7 +846,7 @@ static void testPhoto(void)
     stage_no = 0;
 }
 
-/* P6: the journey's lines on the pause menu's right.  The game state comes
+/* the journey's lines on the pause menu's right.  The game state comes
  * through the view's sampler (ico_gamestate.h) as the program's comes from
  * the game: twelve minutes 34 s of play, three game overs, a capture, five
  * enemies defeated and a save in this run.  Shown while a stage runs, the
@@ -1114,7 +1114,7 @@ static void testPauseStats(void)
     ico_gs_reset();
 }
 
-/* R7c: the New Game screen, run by the real layout code: two rows, Mirror
+/* the New Game screen, run by the real layout code: two rows, Mirror
  * mode and New Game+.  The cursor starts on Mirror mode's Off, Right moves
  * to On, Down to New Game+'s choice and Up back to Mirror mode's; each row
  * keeps its own choice, the other row's choice stays lit, and the note
@@ -1233,7 +1233,7 @@ static void testNewGameScreen(void)
     CHECK(ui_NewGameScreenEnter() == -1 && ui_NewGameScreenLayout() == -1, "not built: -1");
 }
 
-/* Q2: the title's "Quit to desktop" row under Settings (layouts 12 and 13,
+/* the title's "Quit to desktop" row under Settings (layouts 12 and 13,
  * in the entry layout), its confirmation screen run by the real layout
  * code: the cursor starts on No; Cross on No, Triangle and Circle return
  * to the title with the cursor on the row and the title's own default
@@ -1343,7 +1343,7 @@ static void testQuit(void)
     ui_SettingsSetQuitHandler(NULL);
 }
 
-/* Q2: Circle leaves every port screen as Triangle does, even with the game
+/* Circle leaves every port screen as Triangle does, even with the game
  * menus' alias off ([game] circle_back = false): the Settings pages, the
  * two lists, the menu itself (to the pause menu) and the New Game screen
  * (the quit screen: testQuit). */
@@ -1406,8 +1406,8 @@ static void testCirclePortScreens(void)
     CHECK(s_newGames == games, "no game started");
 }
 
-/* Q2: the game's own menus through the real layout_texture.c: the Options
- * screen's rows (S1: no longer reached, its links the PAL data's) go back
+/* the game's own menus through the real layout_texture.c: the Options
+ * screen's rows (no longer reached, its links the PAL data's) go back
  * to the pause menu (57) through their left link, which
  * default_item_select follows on Triangle, and on Circle while [game]
  * circle_back is on (the default); off, Circle does nothing there and
@@ -1474,7 +1474,7 @@ static void testValues(void)
     ui_SettingsStep(UI_OPT_RESOLUTION, -1);
     ui_SettingsStep(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    /* v0.4.2 (N2): Auto after 4x (Left from Window wraps to it) */
+    /* Auto after 4x (Left from Window wraps to it) */
     CHECK(o.resScale == ICO_RES_AUTO &&
               strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "Auto") == 0,
           "resolution wraps to Auto (%s)", ui_SettingsValueText(UI_OPT_RESOLUTION));
@@ -1519,8 +1519,8 @@ static void testValues(void)
           "the toggles");
     CHECK(strstr(ui_SettingsValueText(UI_OPT_VSYNC), "Off") != NULL, "vsync Off");
 
-    /* package CRT: the CRT filter row cycles Off, Scanlines, Consumer TV,
-       Trinitron, PVM, (CRT2) Shadow mask and around, setting [video] crt and
+    /* the CRT filter row cycles Off, Scanlines, Consumer TV,
+       Trinitron, PVM, Shadow mask and around, setting [video] crt and
        crt_mode together; the strength steps in tens, clamped at 0 and 100 % */
     {
         static const char *const names[7] = {"Off", "Scanlines",   "Consumer TV", "Trinitron",
@@ -1566,7 +1566,7 @@ static void testValues(void)
             ui_SettingsStep(UI_OPT_CRT_STRENGTH, 1);
         }
 
-        /* package CRT2: under the filter the Resolution row reads "1x (CRT)"
+        /* under the filter the Resolution row reads "1x (CRT)"
            and does not step; the file's 4x is kept and back with it off */
         CHECK(strcmp(ui_SettingsValueText(UI_OPT_RESOLUTION), "1x (CRT)") == 0,
               "resolution under the CRT filter: \"%s\"", ui_SettingsValueText(UI_OPT_RESOLUTION));
@@ -1616,7 +1616,7 @@ static void testValues(void)
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");
     ui_SettingsStep(UI_OPT_MOUSE_SENS, 1);
     CHECK(ico_input_live_bindings()->mouse_sens == 1.25f, "mouse sensitivity 1.25");
-    /* Q2: Circle goes back, on by default; the step turns the game menus'
+    /* Circle goes back, on by default; the step turns the game menus'
        alias off at once and sets the key */
     CHECK(ico_opt_circle_back() == 1 && lt_ext_CircleBack() == 1 &&
               strcmp(ui_SettingsValueText(UI_OPT_CIRCLE_BACK), "On") == 0 &&
@@ -1732,8 +1732,8 @@ static void testAudio(void)
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_EFFECTS), "30 %") == 0, "effects 30 %% (%s)",
           ui_SettingsValueText(UI_OPT_EFFECTS));
 
-    /* output: Auto shows the game's mode; Stereo and Mono set it and (S1,
-       what the Options screen's Sound row did) make it the game's own, so
+    /* output: Auto shows the game's mode; Stereo and Mono set it and (as
+       the Options screen's Sound row did) make it the game's own, so
        Auto keeps the last one chosen */
     CHECK(strcmp(ui_SettingsValueText(UI_OPT_OUTPUT), "Auto (Stereo)") == 0, "output Auto (%s)",
           ui_SettingsValueText(UI_OPT_OUTPUT));
@@ -1947,7 +1947,7 @@ static void testBootSkip(void)
 
 static int rowShown(UiSettingsPage page, UiSettingsOpt opt);
 
-/* U1: the Video mode row changes only when Settings was opened from the
+/* the Video mode row changes only when Settings was opened from the
    title; from the pause menu Left and Right leave it. Pad names and the
    frame-rate words are translated. */
 static void testVideoGate(void)
@@ -1981,7 +1981,7 @@ static void testVideoGate(void)
         int n = ui_SettingsPageRows(UI_PAGE_DISPLAY, labels, opts, NULL, 16);
         int vm = 0, downs = 0;
         if (!title) {
-            /* v0.4.0: from the pause menu the row is not shown (it cannot
+            /* from the pause menu the row is not shown (it cannot
                step there, and the page has no room once Texture pack is
                in); its value still says why */
             CHECK(!rowShown(UI_PAGE_DISPLAY, UI_OPT_VIDEO_MODE), "pause: no Video mode row");
@@ -1991,7 +1991,7 @@ static void testVideoGate(void)
             continue;
         }
         while (vm < n && opts[vm] != UI_OPT_VIDEO_MODE) {
-            /* S1: Brightness, from the pause menu only, is above it */
+            /* Brightness, from the pause menu only, is above it */
             downs += !lt_ext_Prop(labels[vm])->defaultMask;
             vm++;
         }
@@ -2153,7 +2153,7 @@ static void testGlyphSources(void)
     }
 }
 
-/* The title's Options rows (v0.4.2, package F-B): a text row in the menus'
+/* The title's Options rows: a text row in the menus'
    look with the sheets' own word (UI_STR_MT_OPTIONS, each language's),
    centred in a game row's box height as Continue and New Game are; no
    glyph row, no texture */
@@ -2354,7 +2354,7 @@ static void testListWrap(int count)
           count, s_sounds[0] + s_moveSounds - snd);
 }
 
-/* --------------------------------------- the game's settings (S1) */
+/* ---------------------------------------------- the game's settings */
 
 static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
 {
@@ -2362,7 +2362,7 @@ static int rowShown(UiSettingsPage page, UiSettingsOpt opt)
     return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
 }
 
-/* S1: the game's Options screen's settings on the pages.  Brightness
+/* the game's Options screen's settings on the pages.  Brightness
  * (Display), Button configuration, Vibration and Hold type (Controls) show
  * from the pause menu only, Film effect and Players (Gameplay) only there
  * once the game is cleared; the hidden rows are stepped over and the pages
@@ -2692,7 +2692,7 @@ static void testList(void)
     CHECK(l.offset == off && lay.curItem == cur, "Cross does not scroll");
 }
 
-/* v0.4.0: Display > Texture pack ("None installed" without a pack, the
+/* Display > Texture pack ("None installed" without a pack, the
    step then doing nothing; On/Off with one), its note, Dump textures on
    the main page in developer mode only, and the [video] keys' round trip
    through the config. */
@@ -2867,7 +2867,7 @@ static void testTexturePack(void)
     useConfig("version = 1\n");
 }
 
-/* v0.4.1: Display > Model pack (title only; "None installed" without the
+/* Display > Model pack (title only; "None installed" without the
    hook or with a count of 0, the step then doing nothing; On/Off with
    one), its note, Dump models on the main page in developer mode only
    (switched off with it), and the [video] keys' round trip. */
@@ -3021,7 +3021,7 @@ static void testEffects(void)
     useConfig("version = 1\n");
 }
 
-/* package AN-G: Settings > Controls, the touch overlay's rows.  Hidden
+/* Settings > Controls, the touch overlay's rows.  Hidden
    without a touch screen (no query, or one that says none), shown with
    one on both entries, the page still fitting; Auto, Medium and 75 % by
    default; a step changes the live table and ui_SettingsSave writes
