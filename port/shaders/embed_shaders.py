@@ -10,7 +10,10 @@ declaration) and shaders_gen.c (the byte arrays and the table). Also checks
 the blobs: SPIR-V must start with its magic number, DXIL must be a DXBC
 container whose hash is not zero (an unsigned container has a zero hash:
 D3D12 would refuse it without experimental shader models).
+
+usage: embed_shaders.py MANIFEST OUTDIR VERSION
 """
+import argparse
 import struct
 import sys
 
@@ -75,16 +78,28 @@ def array(name, data):
     return "\n".join(lines)
 
 
+def read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
 def main():
-    manifest, outdir, version = sys.argv[1], sys.argv[2], sys.argv[3]
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("manifest", help="one shader per line: name|stage|entry|spirv-file|dxil-file")
+    ap.add_argument("outdir", help="where shaders_gen.c and shaders_gen.h are written")
+    ap.add_argument("version", help="the version string the generated files name")
+    a = ap.parse_args()
+    manifest, outdir, version = a.manifest, a.outdir, a.version
     rows = []
-    for line in open(manifest, encoding="utf-8"):
+    with open(manifest, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    for line in lines:
         line = line.strip()
         if not line:
             continue
         name, stage, entry, spv_path, dxil_path = line.split("|")
-        spv = open(spv_path, "rb").read()
-        dxil = None if dxil_path == "-" else open(dxil_path, "rb").read()
+        spv = read_bytes(spv_path)
+        dxil = None if dxil_path == "-" else read_bytes(dxil_path)
         check(name, spv, dxil)
         rows.append((name, STAGES[stage], entry, spv, dxil))
     rows.sort(key=lambda r: r[0])
@@ -123,4 +138,5 @@ def main():
         f.write("\n".join(out) + "\n")
 
 
-main()
+if __name__ == "__main__":
+    main()
