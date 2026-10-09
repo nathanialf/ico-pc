@@ -260,6 +260,30 @@ static void checkNeed(void)
         CHECK(ico_iso_is_cue("content://p/document/1234", text, sizeof(text)),
               "cue: text starting FILE");
         CHECK(ico_iso_is_cue(NULL, "rem GENRE", 9), "cue: text starting rem");
+        CHECK(ico_iso_is_cue(NULL,
+                             "\xEF\xBB\xBF"
+                             "FILE \"Ico.bin\" BINARY",
+                             24),
+              "cue: FILE after a UTF-8 byte order mark");
+        CHECK(ico_iso_is_cue("content://p/document/msf%3A1234", "TITLE \"ICO\"\r\n", 13),
+              "cue: text starting TITLE, a name that says nothing");
+        CHECK(ico_iso_is_cue(NULL, "\xEF\xBB\xBF\r\n  catalog 0000000000000", 28),
+              "cue: catalog after a byte order mark and a blank line");
+        CHECK(ico_iso_is_cue(NULL, "PERFORMER \"Sony\"", 16), "cue: text starting PERFORMER");
+        CHECK(ico_iso_is_cue(NULL, "\tCDTEXTFILE \"x.cdt\"", 19), "cue: CDTEXTFILE after a tab");
+        CHECK(ico_iso_is_cue(NULL, "SONGWRITER", 10), "cue: a command ending the bytes read");
+        {
+            static const char *const words[] = {"FLAGS DCP",       "INDEX 01 00:00:00",
+                                                "ISRC X",          "POSTGAP 00:02:00",
+                                                "PREGAP 00:02:00", "TRACK 01 MODE2/2352"};
+            for (size_t i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+                CHECK(ico_iso_is_cue(NULL, words[i], strlen(words[i])), "cue: text starting %s",
+                      words[i]);
+            }
+        }
+        CHECK(!ico_iso_is_cue(NULL, "FILES", 5), "cue: a longer word is not a command");
+        CHECK(!ico_iso_is_cue(NULL, "\xEF\xBB\xBF", 3), "cue: a byte order mark alone");
+        CHECK(!ico_iso_is_cue(NULL, "MComprHD", 8), "cue: a CHD header is not a sheet");
     }
 }
 

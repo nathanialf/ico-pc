@@ -192,31 +192,56 @@ const char *ico_iso_ext_for(const char *name, const void *head, size_t headLen)
     return name_has_ext(name, "bin") ? "bin" : "iso";
 }
 
-/* whether the first bytes spell `word`, in any case */
-static int head_word(const char *h, size_t headLen, const char *word)
+/* whether h (n bytes) starts with `word` in any case, followed by a space,
+   a tab, a line end or the end of the bytes read */
+static int head_word(const char *h, size_t n, const char *word)
 {
-    size_t i, n = strlen(word);
+    size_t i, len = strlen(word);
 
-    if (headLen < n) {
+    if (n < len) {
         return 0;
     }
-    for (i = 0; i < n; i++) {
+    for (i = 0; i < len; i++) {
         if (toupper((unsigned char)h[i]) != word[i]) {
             return 0;
         }
     }
-    return 1;
+    return n == len || h[len] == ' ' || h[len] == '\t' || h[len] == '\r' || h[len] == '\n';
 }
 
 int ico_iso_is_cue(const char *name, const void *head, size_t headLen)
 {
+    /* every command a cue sheet's line can start with */
+    static const char *const words[] = {"CATALOG",    "CDTEXTFILE", "FILE",    "FLAGS",  "INDEX",
+                                        "ISRC",       "PERFORMER",  "POSTGAP", "PREGAP", "REM",
+                                        "SONGWRITER", "TITLE",      "TRACK"};
     const char *h = head;
+    size_t i;
 
     if (name_has_ext(name, "cue")) {
         return 1;
     }
-    /* a cue sheet is text that opens with FILE (or a REM comment) */
-    return h != NULL && (head_word(h, headLen, "FILE") || head_word(h, headLen, "REM"));
+    if (h == NULL) {
+        return 0;
+    }
+    /* picker addresses often carry no name, so the text decides: a UTF-8
+       byte order mark (Windows editors write one) and blank space skipped,
+       then any of the commands */
+    if (headLen >= 3 && (unsigned char)h[0] == 0xEF && (unsigned char)h[1] == 0xBB &&
+        (unsigned char)h[2] == 0xBF) {
+        h += 3;
+        headLen -= 3;
+    }
+    while (headLen > 0 && (*h == ' ' || *h == '\t' || *h == '\r' || *h == '\n')) {
+        h++;
+        headLen--;
+    }
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+        if (head_word(h, headLen, words[i])) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 #ifdef __ANDROID__
@@ -226,7 +251,7 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
 {
     const IcoAndroidPaths *p = ico_android_paths();
     char tmp[PATH_MAX_LEN + 8], copyWhy[512];
-    unsigned char head[16];
+    unsigned char head[64]; /* a cue sheet's first command after a mark and blank lines */
     size_t headLen;
     SDL_IOStream *io;
     Sint64 size;

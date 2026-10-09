@@ -66,8 +66,10 @@ void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t fre
 const char *ico_iso_ext_for(const char *name, const void *head, size_t headLen);
 
 /* Whether the chosen file is a .cue sheet: its name ends in ".cue" in any
-   case, or its first bytes are text starting with FILE or REM.  A sheet
-   only lists the .bin, so the import refuses it. */
+   case, or its first bytes are text that starts (after a UTF-8 byte order
+   mark and blank space) with a cue command (FILE, REM, TITLE, CATALOG,
+   PERFORMER, TRACK and the rest), in any case.  A sheet only lists the
+   .bin, so the import refuses it. */
 int ico_iso_is_cue(const char *name, const void *head, size_t headLen);
 
 #ifdef __ANDROID__
