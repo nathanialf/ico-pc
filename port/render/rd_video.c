@@ -62,37 +62,14 @@ void rd_VideoSetDisplay(uint32_t dispW, uint32_t dispH)
     s_v.dispH = dispH ? dispH : 576;
 }
 
-static RhiShader makeShader(const char *name)
-{
-    const IcoShaderBlob *b = ico_FindShader(name);
-    RhiShaderDesc d;
-
-    if (!b) {
-        rd__Log("rd_video: shader %s missing from the table", name);
-        return (RhiShader){0};
-    }
-    memset(&d, 0, sizeof(d));
-    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
-    if (rhi_Backend() == RHI_BACKEND_D3D12) {
-        d.bytecode = b->dxil;
-        d.bytecodeSize = b->dxil_len;
-    } else {
-        d.bytecode = b->spirv;
-        d.bytecodeSize = b->spirv_len;
-    }
-    d.entryPoint = b->entry;
-    d.debugName = b->name;
-    return rhi_CreateShader(&d);
-}
-
 static bool ensureInit(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;
     }
     if (!s_v.ready) {
-        s_v.vs = makeShader("yuv_vs");
-        s_v.fs = makeShader("yuv_ps");
+        s_v.vs = rd__MakeShader("yuv_vs");
+        s_v.fs = rd__MakeShader("yuv_ps");
         s_v.ready = s_v.vs.id && s_v.fs.id;
     }
     return s_v.ready;

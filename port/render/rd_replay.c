@@ -100,7 +100,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps",
 
 /* ------------------------------------------------------------------ init */
 
-static RhiShader makeShader(const char *name)
+RhiShader rd__MakeShader(const char *name)
 {
     const IcoShaderBlob *b = ico_FindShader(name);
     if (!b) {
@@ -172,7 +172,7 @@ bool rd__GpuInit(void *sdlWindow)
     bool ok = g_rd.layoutFrame.id && g_rd.layoutDraw.id && g_rd.layoutTex.id && g_rd.layoutInt.id &&
               g_rd.layoutVu.id;
     for (int i = 0; i < RD_VS_COUNT; i++) {
-        g_rd.vs[i] = makeShader(s_vsNames[i]);
+        g_rd.vs[i] = rd__MakeShader(s_vsNames[i]);
         ok = ok && g_rd.vs[i].id;
     }
     for (int i = 0; i < RD_FS_COUNT; i++) {
@@ -182,13 +182,13 @@ bool rd__GpuInit(void *sdlWindow)
         if (rd__FsHasNoDual((uint8_t)i)) {
             char name[64];
             snprintf(name, sizeof(name), "%s_nodual", s_fsNames[i]);
-            g_rd.fsNoDual[i] = makeShader(name);
+            g_rd.fsNoDual[i] = rd__MakeShader(name);
             ok = ok && g_rd.fsNoDual[i].id;
             if (!lim->dualSourceBlend) {
                 continue;
             }
         }
-        g_rd.fs[i] = makeShader(s_fsNames[i]);
+        g_rd.fs[i] = rd__MakeShader(s_fsNames[i]);
         ok = ok && g_rd.fs[i].id;
     }
     /* set 0: the Original samplers (one level); wave 7 (R7a) sets 1 and 2:

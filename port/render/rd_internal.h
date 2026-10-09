@@ -1354,6 +1354,10 @@ uint64_t rd__OverlayRingBytes(void);
 void rd__OverlayDraw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t prim,
                      const RdScreenVtx *v, uint32_t n, uint32_t tex, uint8_t blend);
 void rd__OverlayState(RdStateBlock *s, uint8_t blend);
+/* The RHI shader for a compiled entry point of the shader table
+ * (shaders_gen.h), DXIL or SPIR-V as the backend takes; id 0 (logged) when
+ * the table has no such entry.  The replay's shaders and the films'. */
+RhiShader rd__MakeShader(const char *name);
 /* Moves a texture to a state with a barrier when needed (outside passes).
  * A clear or shadow reset the replay has not recorded yet (RdPendingClear,
  * RdStencilWindow) on t is recorded first, into the replay's list: only when
