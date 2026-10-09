@@ -801,6 +801,12 @@ void rhi_CmdBeginRenderPass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                 vkr_loadOpMap[pass->depth.stencilLoad < RHI_LOAD_COUNT ? pass->depth.stencilLoad
                                                                        : 0]
                     .vk;
+            /* the stencil's own store op; zero (STORE) keeps it, as before
+             * when the stencil followed the depth's */
+            stencil.storeOp = pass->depth.readOnlyDepth ? VK_ATTACHMENT_STORE_OP_NONE
+                              : pass->depth.stencilStore == RHI_STORE_DONT_CARE
+                                  ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+                                  : VK_ATTACHMENT_STORE_OP_STORE;
         }
         if (g_vkr.apiVersion < VK_API_VERSION_1_3 && pass->depth.readOnlyDepth) {
             /* STORE_OP_NONE is core in 1.3 only */

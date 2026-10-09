@@ -424,7 +424,8 @@ typedef struct RhiDepthAttachment {
     uint8_t clearStencil;
     bool
         readOnlyDepth; /* depth test without write and the same texture bound for sampling is NOT allowed; use a copy */
-    RhiStoreOp store; /* v0.4.2 (N2): depth and stencil */
+    RhiStoreOp store;        /* the depth aspect */
+    RhiStoreOp stencilStore; /* the stencil aspect (a format with one); zero stores it */
 } RhiDepthAttachment;
 
 typedef struct RhiRenderPassDesc {

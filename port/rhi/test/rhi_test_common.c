@@ -650,8 +650,8 @@ int rhi_test_RunCells(const RhiTestConfig *cfg)
                                  {64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f, 64.0f / 255.0f},
                                  RHI_STORE_STORE};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR, 0.0f,
-                                        0,     false,          RHI_STORE_STORE};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR,  0.0f,
+                                        0,     false,          RHI_STORE_STORE, RHI_STORE_STORE};
         rp.width = W;
         rp.height = H;
         rhi_CmdBeginLabel(cl, "scene");

@@ -870,8 +870,8 @@ static void testPassOps(void)
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     CHECK(RHI_STORE_STORE == 0 && p.color[0].store == RHI_STORE_STORE &&
-              p.depth.store == RHI_STORE_STORE,
-          "pass ops: a zeroed pass stores colour and depth");
+              p.depth.store == RHI_STORE_STORE && p.depth.stencilStore == RHI_STORE_STORE,
+          "pass ops: a zeroed pass stores colour, depth and stencil");
 
     /* the cases that keep their loads */
     RdPendingClear pc;
