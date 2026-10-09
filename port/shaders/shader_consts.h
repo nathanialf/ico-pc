@@ -2,8 +2,11 @@
  * rd_core fills these; the static asserts pin each offset to the HLSL
  * cbuffer packing (every member is a 16-byte register or a 64-byte matrix,
  * so there is no packing ambiguity). Change this file and common.hlsli
- * together; a constant mirrored from an .hlsli (ICO_SHEET_*: sheet_text.hlsli)
- * holds the same value as its HLSL twin. */
+ * together. The constants mirrored from an .hlsli (ICO_DF_*, ICO_SPACE_*:
+ * common.hlsli; ICO_TEXFMT_*: gs_math.hlsli; ICO_VU_*: vu_common.hlsli;
+ * ICO_SHEET_*: sheet_text.hlsli) hold the same values as their HLSL twins;
+ * ICO_SHEET_* and ICO_TEXFMT_* are static-asserted (port/render/test/
+ * sheet_ref.c, port/shaders/test/gs_math_test.c). */
 #ifndef PORT_SHADERS_SHADER_CONSTS_H
 #define PORT_SHADERS_SHADER_CONSTS_H
 

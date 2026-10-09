@@ -13,8 +13,9 @@
 //
 // font_sheet_ps: screen and overlay prims that sample
 // a sheet texture (rd_CreateTextureSheet, RD_FS_FONT_SHEET): R8 coverage
-// 0..255 at the same t1, the style in g_param (rimOn, rimLevel, fillLevel,
-// dither, as rd_replay.c writes them).  rd.h says what it draws;
+// 0..255 at the same t1, the style in g_param (the rim's weight 0..64,
+// rimLevel, fillLevel, dither | (scale - 1) << 1, as rd_replay.c writes
+// them).  rd.h says what it draws;
 // sheet_text.hlsli holds the texel arithmetic.
 #include "common.hlsli"
 #include "sheet_text.hlsli"

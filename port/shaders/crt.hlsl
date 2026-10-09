@@ -230,11 +230,6 @@ float2 warpOf(float2 px)
     return c * 0.5 + 0.5;
 }
 
-// 1 over the mean stripe weight, per channel, over the box pixels of px's
-// row whose warped positions fall in source pixel sx (rd_crt.c
-// rd__CrtTriadGain; the mean floored at 0.1): each triad keeps its own
-// pixel's light whether its stripes are 1 or 2 output pixels wide. Only
-// under x curvature (the flat face counts, stripeGainFlat).
 // The flat face (no x curvature: c_glow.y 0), without the loop. Output
 // column j (centre j + 0.5) lies at u = j + 0.5 - sx r across source pixel
 // sx, r = c_box.x / c_src.x output pixels wide. Every stripe, the gap and
@@ -309,6 +304,11 @@ float3 stripeGainFlat(float j, int sx, float v, float strength, out float3 gain,
     return lerp(float3(leak, leak, leak), float3(1.0, 1.0, 1.0), float3(k0.y, k1.y, k2.y));
 }
 
+// 1 over the mean stripe weight, per channel, over the box pixels of px's
+// row whose warped positions fall in source pixel sx (rd_crt.c
+// rd__CrtTriadGain; the mean floored at 0.1): each triad keeps its own
+// pixel's light whether its stripes are 1 or 2 output pixels wide. Only
+// under x curvature (the flat face counts, stripeGainFlat).
 float3 triadGain(float2 px, int sx, float v, float strength, out float3 top)
 {
     int k0 = int(ceil(c_box.x * c_src.z)) + 1;

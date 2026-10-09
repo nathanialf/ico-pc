@@ -1,5 +1,6 @@
 // blend_int.hlsl: the GS integer blend between two RGBA8_UINT textures, for
-// feedback passes (motion blur, aura, dissolve, flare accumulation). Fullscreen, 1:1 texels, no sampler.
+// feedback passes (motion blur, aura, dissolve, flare accumulation).
+// Fullscreen, 1:1 texels, no sampler.
 //   t1  source Cs (RGBA8_UINT), alpha is As
 //   t2  destination Cd (RGBA8_UINT)
 //   target RGBA8_UINT, no hardware blending

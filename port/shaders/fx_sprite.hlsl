@@ -67,8 +67,7 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
     return uint4(floor(t.Load(int3(c, 0)) * 255.0 + 0.5));
 }
 
-// One texel at integer texel coordinates: CLAMP or REPEAT on the TEX0 size,
-// then clamped to the texture that backs it, then TEXA.
+// t1 texels per GS texel, 1 when unset.
 float2 fx_src_scale()
 {
     return float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
@@ -81,6 +80,8 @@ int fx_wrap(int c, int n)
     return ((c % n) + n) % n;
 }
 
+// One texel at integer texel coordinates: CLAMP or REPEAT on the TEX0 size,
+// then clamped to the texture that backs it, then TEXA.
 uint4 fx_texel(int2 c, uint flags)
 {
     int2 lsz = max(int2(round(g_tex.xy * fx_src_scale())), int2(1, 1));

@@ -1,13 +1,13 @@
 // common.hlsli: what every ICO shader shares. The byte layouts below are
 // mirrored by port/shaders/shader_consts.h (C); change both together.
 //
-// Binding scheme: the register
-// space is the RHI bind group, the register number is the RHI slot. DXC is
-// run with -fvk-b-shift 0, -fvk-t-shift 16, -fvk-s-shift 32 so Vulkan
-// bindings come out as slot + 0 / 16 / 32.
+// Binding scheme: the register space is the RHI bind group, the register
+// number is the RHI slot. DXC is run with -fvk-b-shift 0, -fvk-t-shift 16,
+// -fvk-s-shift 32 so Vulkan bindings come out as slot + 0 / 16 / 32.
 //   group 0  b0            FrameCB, once per frame
 //   group 1  b1            DrawCB, per draw (or per post pass)
-//            t0            storage buffer (bones, particles; later waves)
+//            b2, b3        the VU programs' VuCB and VuBoneCB (vu_common.hlsli)
+//            t0            the VU vertex stream (vu_common.hlsli)
 //   group 2  t1..t4, s1..s4 textures and samplers
 // Clip space is D3D: x, y in -1..1 with +y up, depth 0..1, reversed-Z
 // (near = 1, far = 0, depth test GEQUAL).
@@ -61,8 +61,8 @@ cbuffer FrameCB : register(b0, space0)
 //            y = FIX 0..255, z = COLCLAMP
 //   g_uvRect source rectangle in texels (u0, v0, u1, v1), blit passes
 //   g_tex    xy = size of the t1 texture in texels, zw = 1 / size
-//   g_param  kind-specific: blend_int source offset in pixels (xy);
-//            fog_lut strength (x)
+//   g_param  kind-specific: each entry's header says what it reads (e.g.
+//            blend_int's source offset in pixels, xy)
 //   g_scale  xy t1 texels per GS texel: 1 for images and unscaled targets,
 //            the target's scale for a scaled one; zw the x addressing
 //            of a widened render-to-texture block, u' = u * z + w (0, 0:
@@ -78,10 +78,9 @@ cbuffer DrawCB : register(b1, space1)
     float4 g_scale;
 };
 
-// Widescreen reflections: a
-// draw that samples a render-to-texture block widened by the display aspect
-// maps its 4:3 u into the block (rd_replay.c fillDrawCB). z = 0 everywhere
-// else, which returns uv as it is.
+// Widescreen reflections: a draw that samples a render-to-texture block
+// widened by the display aspect maps its 4:3 u into the block (rd_replay.c
+// fillDrawCB). z = 0 everywhere else, which returns uv as it is.
 float2 gs_block_uv(float2 uv)
 {
     return g_scale.z != 0.0 ? float2(uv.x * g_scale.z + g_scale.w, uv.y) : uv;
@@ -159,8 +158,9 @@ uint4 gs_texa_expand(uint4 t, uint mode, uint fmt)
     return uint4(t.rgb, gs_texa_alpha(t.r, t.g, t.b, t.a, mode, fmt));
 }
 
-// TEXA before filtering (sprite_texa_ps, vu_texa_ps): the texel of a PSMCT24 or PSMCT16 texture (or one with a
-// 24- or 16-bit CLUT) under TEXA with AEM, filtered as the GS filters it.
+// TEXA before filtering (sprite_texa_ps, vu_texa_ps): the texel of a
+// PSMCT24 or PSMCT16 texture (or one with a 24- or 16-bit CLUT) under TEXA
+// with AEM, filtered as the GS filters it.
 // The GS expands TEXA per texel and then filters; the sampler would filter
 // RGB and the A bit first, so where texels of different alpha meet (AEM's
 // black, 7F/81's two A values) a bilinear edge differs. Here each of the
