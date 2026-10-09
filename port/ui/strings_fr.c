@@ -120,7 +120,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_REMAP_GAMEPAD] = "Manette",
     [UI_STR_REMAP_HINT] = "Croix : modifier    Carré : effacer    Triangle : retour",
     [UI_STR_REMAP_MENU_NOTE] =
-        "Dans les menus, les boutons de la manette suivent toujours leur position.",
+        "Dans les menus, les boutons de face et la croix directionnelle de la manette suivent "
+        "toujours leur position.",
     [UI_STR_REMAP_PRESS] = "Appuyez sur une touche ou un bouton…",
     [UI_STR_REMAP_RESET] = "Rétablir les valeurs par défaut",
     [UI_STR_OPT_TOUCH_MODE] = "Commandes tactiles",

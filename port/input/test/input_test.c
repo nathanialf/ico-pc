@@ -805,8 +805,6 @@ static void test_step(void)
     CHECK(v.buttons == 0 && v.lx == 0.0f);
 }
 
-/* The menus' pointer (pointer.c): its place, the clicks and the wheel
-   between two takes, and leaving the window */
 /* one gamepad source held on its own: the (play, menu) words it gives */
 static void gp_press(IcoBindings *b, int src, unsigned int *play, unsigned int *menu)
 {
@@ -967,6 +965,8 @@ static void test_assign_swap(void)
     CHECK(memcmp(b.gp, def.gp, sizeof(b.gp)) == 0);
 }
 
+/* The menus' pointer (pointer.c): its place, the clicks and the wheel
+   between two takes, and leaving the window */
 static void test_pointer(void)
 {
     IcoPointerTick t;

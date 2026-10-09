@@ -1335,7 +1335,24 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         }
         /* Window, the scales, then Auto (index RES_STEPS + 1) */
         int i = o.resScale == ICO_RES_AUTO ? RES_STEPS + 1 : resolutionIndex(&o);
-        i = i < 0 ? (dir > 0 ? 0 : RES_STEPS) : stepIndex(i, RES_STEPS + 2, dir);
+        if (i < 0 && o.resW == 0 && o.resH == 0 && o.resScale > 0) {
+            /* a scale from the file that is not in the list (5x, 9x): the
+               nearest entry in the direction pressed */
+            i = dir > 0 ? RES_STEPS + 1 : 0;
+            for (int k = 0; k < RES_STEPS; k++) {
+                if (dir > 0 && kResScales[k] > o.resScale) {
+                    i = k + 1;
+                    break;
+                }
+                if (dir < 0 && kResScales[k] < o.resScale) {
+                    i = k + 1;
+                }
+            }
+        } else if (i < 0) {
+            i = dir > 0 ? 0 : RES_STEPS; /* a WxH: Window on Right, the top scale on Left */
+        } else {
+            i = stepIndex(i, RES_STEPS + 2, dir);
+        }
         o.resW = o.resH = 0;
         o.resScale = i == RES_STEPS + 1 ? ICO_RES_AUTO : (i == 0 ? 0 : kResScales[i - 1]);
         video = 1;

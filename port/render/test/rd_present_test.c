@@ -1533,7 +1533,10 @@ static void checkSceneLimit(void)
     if (!rd_init(512, 512, &s, NULL)) {
         return;
     }
-    const float lim = (float)rhi_limits()->maxTextureSize;
+    float lim = (float)rhi_limits()->maxRenderTargetSize;
+    if (rhi_limits()->tiler && lim > 4096.0f) {
+        lim = 4096.0f; /* a phone GPU's cap (rd__apply_display) */
+    }
     float ew = 20000.0f, eh = 15000.0f;
     if (ew > lim) {
         eh *= lim / ew;
@@ -1554,6 +1557,13 @@ static void checkSceneLimit(void)
           "limit: the scene is held to the device's %g, shape kept (%g x %g)", (double)lim,
           (double)(g_rd.sceneSx * 512.0f), (double)(g_rd.sceneSy * 512.0f));
     rd_shutdown();
+
+    if (rhi_backend() != RHI_BACKEND_VULKAN) {
+        /* the failure hook is the Vulkan backend's: the fallback checks below
+           have nothing to drive on another backend */
+        printf("rd_present: scene fallback checks skipped (backend is not Vulkan)\n");
+        return;
+    }
 
     /* 16x asked, the device holds nothing over 3 million texels: 16x, 8x
        and 4x fail, 2x is made.  Nothing big is ever allocated. */
@@ -1581,6 +1591,42 @@ static void checkSceneLimit(void)
         rd_shutdown();
     } else {
         CHECK(0, "fallback: rd_init");
+    }
+    vkr_test_fail_texels_above(0);
+
+    /* a scene-sized texture that fails after the targets were made (4x fits;
+       then the device holds nothing over 3 million texels, and the shadow
+       count's target does not): the next frame halves the scale and makes
+       the targets again */
+    s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 4.0f;
+    s.aspect = 4.0f / 3.0f;
+    if (rd_init(512, 512, &s, NULL)) {
+        CHECK(g_rd.sceneSx == 4.0f && rd_scene_scale_lowered() == 0, "pressure: 4x is made");
+        vkr_test_fail_texels_above(3000000);
+        const uint32_t id = rd__temp_target_alloc(512, 512, 0, 0);
+        CHECK(g_rd.scenePressure, "pressure: a scene-sized allocation that fails is noted");
+        rd__temp_target_free(id);
+        rd_begin_frame();
+        const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+        CHECK(!g_rd.scenePressure && g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f &&
+                  rd_scene_scale_lowered() == 2,
+              "pressure: the next frame halves 4x to 2x (%g, lowered %d)", (double)g_rd.sceneSx,
+              rd_scene_scale_lowered());
+        CHECK(t && t->color.id != 0 && t->tw == 1024, "pressure: the scene target is remade at 2x");
+        rd_shutdown();
+    } else {
+        CHECK(0, "pressure: rd_init");
+    }
+    /* at 1x there is nothing to give back: no flag */
+    vkr_test_fail_texels_above(100000);
+    s.sceneScale = 1.0f;
+    if (rd_init(512, 512, &s, NULL)) {
+        const uint32_t id = rd__temp_target_alloc(512, 512, 0, 0);
+        CHECK(!g_rd.scenePressure, "pressure: none at 1x");
+        rd__temp_target_free(id);
+        rd_shutdown();
     }
     vkr_test_fail_texels_above(0);
 }

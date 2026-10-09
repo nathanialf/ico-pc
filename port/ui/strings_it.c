@@ -118,7 +118,8 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Tastiera",
     [UI_STR_REMAP_GAMEPAD] = "Controller",
     [UI_STR_REMAP_HINT] = "Croce: cambia    Quadrato: cancella    Triangolo: indietro",
-    [UI_STR_REMAP_MENU_NOTE] = "Nei menu i pulsanti del gamepad seguono sempre la loro posizione.",
+    [UI_STR_REMAP_MENU_NOTE] =
+        "Nei menu i pulsanti frontali e la croce direzionale del controller seguono sempre la loro posizione.",
     [UI_STR_REMAP_PRESS] = "Premi un tasto o un pulsante…",
     [UI_STR_REMAP_RESET] = "Ripristina predefiniti",
     [UI_STR_OPT_TOUCH_MODE] = "Comandi touch",

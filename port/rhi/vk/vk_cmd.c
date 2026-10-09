@@ -189,6 +189,12 @@ void rhi_wait_idle(void)
     }
 }
 
+void rhi_collect_garbage_now(void)
+{
+    rhi_wait_idle();
+    vkr_destroy_garbage(vkr_cur_frame());
+}
+
 static void vkr_open_barrier(VkCommandBuffer cb);
 static void vkr_flush_barriers(VkrCmdList *c);
 

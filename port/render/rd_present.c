@@ -206,9 +206,13 @@ bool rd__apply_display(void)
         w = gw;
         h = gh;
     }
-    /* from the GS size up to the GPU's largest texture, both axes scaled
+    /* from the GS size up to the GPU's largest render target, both axes scaled
      * together so the shape is kept (16384 where there is no device) */
-    const float lim = g_rd.hasDevice ? (float)rhi_limits()->maxTextureSize : 16384.0f;
+    float lim = g_rd.hasDevice ? (float)rhi_limits()->maxRenderTargetSize : 16384.0f;
+    if (g_rd.hasDevice && rhi_limits()->tiler && lim > 4096.0f) {
+        lim = 4096.0f; /* phones share memory with the system: a big scene could
+                          get the app killed before the allocation reports failure */
+    }
     if (w > lim) {
         h *= lim / w;
         w = lim;
@@ -428,6 +432,11 @@ static struct {
     int failLogged;
     RdDepthCopy copy; /* SCENE's depth with g_rd.depthCopy */
 } s_depth;
+
+void rd__effects_depth_free(void)
+{
+    rd__depth_copy_free(&s_depth.copy);
+}
 
 static void depthShutdown(void)
 {

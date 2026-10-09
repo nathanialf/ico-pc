@@ -399,9 +399,11 @@ const RdSettings *rd_get_settings(void);
  * widening) and down; 1 x 1 before rd_init, at 1x and under the CRT
  * filter.  The menus' text strips are rasterised to it (port/ui/menu_font.c). */
 void rd_get_scene_scale(float *sx, float *sy);
-/* The scene's vertical scale (a whole number, rounded down) when the GPU
- * could not hold the scale the options asked for and the targets were made
- * smaller (rd_core.c createNamedTargets); 0 when they are as asked.  The
+/* The scene's vertical scale (a whole number, rounded down) when it is below
+ * the scale the settings asked for, because the GPU's size limit held it
+ * (rd_present.c rd__apply_display) or its memory could not hold the targets
+ * and they were made smaller (rd_core.c createNamedTargets, and a later
+ * allocation that failed); 0 when they are as asked.  The
  * Resolution row shows it after the asked scale, "16x (8x)". */
 int rd_scene_scale_lowered(void);
 

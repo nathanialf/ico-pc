@@ -38,15 +38,15 @@ How the picture looks.
 - **Resolution** is how sharp the picture is: 1x is the PS2's, up to 16x,
   or the size of your window. Very high values need a lot of graphics
   memory; when your graphics card cannot hold the picture, the game lowers
-  it on its own and the row shows both, for example **16x (8x)**. **Auto** starts at the size of your window
-  and steps down (3x, then 2x, then 1x) when your computer or phone
-  cannot draw the pictures in time. It never steps back up while the
-  game runs; the row then reads, for example, **Auto (2x)**. On Android,
+  it on its own and the row shows both, for example **16x (8x)**. **Auto**
+  starts at the size of your window and steps down (3x, then 2x, then 1x)
+  when your computer or phone cannot draw the pictures in time. It never
+  steps back up while the game runs; the row then reads, for example, **Auto (2x)**. On Android,
   the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on:
   the filter draws the PS2's own picture dots with dark lines between them,
   and over a sharper picture it would look like a fine mesh.
   [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution).
-  The menus' lettering follows it too: at 2x and above it is drawn that
+  The menus' lettering follows it too: from 2x up to 4x it is drawn that
   much finer, so it stays crisp, in the same style.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9, 32:9 or 48:9. **Auto** follows the shape of your window or screen,

@@ -752,6 +752,15 @@ static void vkr_fill_limits(void)
     }
     o->uniformAlign = align < 16u ? 16u : align;
     o->maxTextureSize = l->maxImageDimension2D;
+    {
+        uint32_t rt = l->maxImageDimension2D;
+        const uint32_t lims[4] = {l->maxFramebufferWidth, l->maxFramebufferHeight,
+                                  l->maxViewportDimensions[0], l->maxViewportDimensions[1]};
+        for (int i = 0; i < 4; i++) {
+            rt = lims[i] < rt ? lims[i] : rt;
+        }
+        o->maxRenderTargetSize = rt;
+    }
     o->dualSourceBlend = g_vkr.dualSrcBlend; /* optional */
     o->stencilWrap = true;                   /* core Vulkan */
     /* a D24 depth copies out as packed 24-bit words, not floats */
@@ -784,6 +793,7 @@ static void vkr_fill_limits(void)
     if (g_vkr.fakeMinLimits) { /* read in vkr_fake_limits */
         o->uniformAlign = o->uniformAlign > 256u ? o->uniformAlign : 256u;
         o->maxTextureSize = o->maxTextureSize < 4096u ? o->maxTextureSize : 4096u;
+        o->maxRenderTargetSize = o->maxRenderTargetSize < 4096u ? o->maxRenderTargetSize : 4096u;
         o->maxDynamicUniforms = o->maxDynamicUniforms < 8u ? o->maxDynamicUniforms : 8u;
         o->maxStorageRange =
             o->maxStorageRange < (1ull << 27) ? o->maxStorageRange : (uint64_t)1 << 27;

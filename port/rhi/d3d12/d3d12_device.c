@@ -376,6 +376,7 @@ static void dx_fill_limits(void)
     RhiLimits *o = &g_dx.limits;
     o->uniformAlign = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT; /* 256 */
     o->maxTextureSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;         /* 16384 */
+    o->maxRenderTargetSize = D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;    /* 16384 */
     o->dualSourceBlend = true; /* every D3D12 device (feature level 11_0) */
     o->stencilWrap = true;
     o->depthReadback = true;

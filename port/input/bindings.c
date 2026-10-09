@@ -556,7 +556,7 @@ static unsigned int gp_menu_word(const IcoInputRaw *raw, const IcoBindings *b)
     for (s = 1; s < ICO_GP_COUNT; s++) {
         const unsigned int def = gp_default_target[s];
 
-        if (gp_value(raw, s) < BUTTON_ON) {
+        if (!(gp_value(raw, s) >= BUTTON_ON)) {
             continue;
         }
         if (def & POSITIONAL_BITS) {

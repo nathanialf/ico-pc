@@ -117,7 +117,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Keyboard",
     [UI_STR_REMAP_GAMEPAD] = "Gamepad",
     [UI_STR_REMAP_HINT] = "Cross: change    Square: clear    Triangle: back",
-    [UI_STR_REMAP_MENU_NOTE] = "In the menus the gamepad buttons always go by position.",
+    [UI_STR_REMAP_MENU_NOTE] =
+        "In the menus the gamepad's face buttons and d-pad always go by position.",
     [UI_STR_REMAP_PRESS] = "Press a key or button…",
     [UI_STR_REMAP_RESET] = "Reset to defaults",
     [UI_STR_OPT_TOUCH_MODE] = "Touch controls",

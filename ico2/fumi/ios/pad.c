@@ -375,7 +375,10 @@ int iosPadRead(IosPadCtx *ctx)
 
     /* PC port (issue 46): the default table is the menus' view of the pad:
        bytes 20-21 of the read buffer, where the port keeps the gamepad's face
-       buttons and d-pad by position whatever Remap controls says */
+       buttons and d-pad by position whatever Remap controls says. Readers
+       of pad[0] in play see this view, as with the game's own Button
+       configuration: a shoulder moved onto a face button still acts as the
+       shoulder there (Yorda's escape-mode check of R1, girl_act.c) */
     if (ctx->conf == &iosPadConfDefault) {
         pbits = ico_pad_menu_word(prev);
         cbits = ico_pad_menu_word(cur);

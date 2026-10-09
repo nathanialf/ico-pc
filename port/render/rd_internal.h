@@ -365,6 +365,17 @@ void rd__temp_target_free(uint32_t id);
 /* Destroys the parked temporary targets' textures (a scale
  * change, shutdown). */
 void rd__temp_target_pool_clear(void);
+/* A scene-sized allocation failed: asks for a lower scene scale at the next
+ * rd_begin_frame, when the scene is above 1x (nothing to give back at 1x). */
+void rd__note_scene_pressure(void);
+/* The same for a target's own texture (a snapshot): only a scene-sized one
+ * counts, a work buffer does not shrink with the scene. */
+void rd__note_target_pressure(const RdTargetRec *t);
+/* The scene-sized textures kept between frames (fog and effects depth copies,
+ * the wrap accumulator), freed so a recreate of the targets starts without
+ * them; each is made again at the new size when next needed. */
+void rd__scene_caches_free(void);
+void rd__effects_depth_free(void);
 #define RD_TEMP_PARKED 24 /* parked temporary targets kept at most */
 
 /* ------------------------------------------------------------ textures */
@@ -1179,6 +1190,11 @@ typedef struct RdContext {
      * to fall back (sceneFellBack) */
     float sceneReqSx, sceneReqSy;
     bool sceneFellBack;
+    /* a scene-sized texture made after the named targets (a shadow count, a
+     * depth copy, a snapshot, the wrap accumulator) could not be allocated
+     * while the scene scale was above 1: rd_begin_frame then halves the
+     * scale (rd__note_scene_pressure) */
+    bool scenePressure;
     uint8_t filterUpgrade, fullHeight;
     int spaceOverride; /* rd_set_space_override + 1; 0 = none */
     uint32_t vsyncApplied;

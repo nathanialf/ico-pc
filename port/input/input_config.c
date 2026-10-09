@@ -181,7 +181,12 @@ int ico_bindings_assign(IcoBindings *b, int target, int kind, int code)
 
         for (o = 0; o < ICO_BIND_MAX && row[o] != 0; o++) {}
         for (i = 0; i < ICO_BIND_MAX && o < ICO_BIND_MAX; i++) {
-            if (prev[i] != 0 && prev[i] != code) {
+            int have = 0, k;
+
+            for (k = 0; k < o; k++) {
+                have |= row[k] == prev[i];
+            }
+            if (prev[i] != 0 && prev[i] != code && !have) {
                 row[o++] = prev[i];
             }
         }

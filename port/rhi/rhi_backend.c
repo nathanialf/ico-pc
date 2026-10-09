@@ -282,6 +282,11 @@ void rhi_wait_idle(void)
     be()->wait_idle();
 }
 
+void rhi_collect_garbage_now(void)
+{
+    be()->collect_garbage_now();
+}
+
 void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count)
 {
     be()->cmd_barrier(cl, barriers, count);

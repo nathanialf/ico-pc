@@ -25,8 +25,10 @@
 typedef struct IcoVirtualPad {
     unsigned int buttons;
     /* The same frame as the menus see it: the gamepad's face buttons and
-       d-pad by position whatever Remap controls says, everything else (the
-       other gamepad buttons, keyboard, mouse, touch) as in buttons. */
+       d-pad by position whatever Remap controls says; every other gamepad
+       button as in buttons, except that one bound to a face button or d-pad
+       target means its own default target (a shoulder moved onto Cross still
+       works as a shoulder); keyboard, mouse and touch as in buttons. */
     unsigned int menu_buttons;
     float lx, ly, rx, ry;
 } IcoVirtualPad;
@@ -283,8 +285,9 @@ unsigned int ico_input_last_press(int *kind, int *code);
    another target, that target swaps in: it receives target's previous row
    on this device (appended to what it has left, at most ICO_BIND_MAX
    sources; an empty previous row leaves it empty). Assigning a source to
-   the target that already holds it touches no other target. The other devices'
-   rows are kept. 0, or -1 for a bad target, kind or code. */
+   the target that already holds it changes no other target, unless a
+   hand-edited config also lists the source on another one. The other devices' rows
+   are kept. 0, or -1 for a bad target, kind or code. */
 int ico_bindings_assign(IcoBindings *b, int target, int kind, int code);
 /* The target a gamepad source (ICO_GP_*) has in the shipped defaults, as an
    ICO_PAD_* bit; 0 for a stick half-axis. The menus' per-source rule uses it

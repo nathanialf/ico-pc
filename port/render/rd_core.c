@@ -581,6 +581,7 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
         copy->h = t->th;
     }
     if (!copy->tex.id) {
+        rd__note_scene_pressure();
         return (RhiTexture){0};
     }
     rd__transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
@@ -661,6 +662,17 @@ static bool createNamedPass(bool stopOnSceneFail)
  * change it (rd__apply_display), and rd_scene_scale_lowered reports it. */
 static void createNamedTargets(void)
 {
+    if (g_rd.hasDevice) {
+        /* what the last scale holds goes first, and really: a deferred free
+           would still count against the allocations below */
+        for (int i = 0; i < RD_TARGET_COUNT; i++) {
+            rd__target_destroy_gpu(&g_rd.targets[i]);
+        }
+        rd__temp_target_pool_clear();
+        rd__scene_caches_free();
+        rd__effects_depth_free();
+        rhi_collect_garbage_now();
+    }
     for (;;) {
         const bool canLower = g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f);
 
@@ -671,6 +683,7 @@ static void createNamedTargets(void)
         for (int i = 0; i < RD_TARGET_COUNT; i++) {
             rd__target_destroy_gpu(&g_rd.targets[i]);
         }
+        rhi_collect_garbage_now(); /* the next, smaller try must find this memory free */
         const float nx = g_rd.sceneSx * 0.5f < 1.0f ? 1.0f : g_rd.sceneSx * 0.5f;
         const float ny = g_rd.sceneSy * 0.5f < 1.0f ? 1.0f : g_rd.sceneSy * 0.5f;
 
@@ -679,6 +692,23 @@ static void createNamedTargets(void)
         g_rd.sceneSx = nx;
         g_rd.sceneSy = ny;
         g_rd.sceneFellBack = true;
+    }
+}
+
+void rd__note_scene_pressure(void)
+{
+    if (g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f)) {
+        g_rd.scenePressure = true;
+    }
+}
+
+void rd__note_target_pressure(const RdTargetRec *t)
+{
+    const int idx = (int)(t - g_rd.targets);
+    const int scene = idx >= 0 && idx < RD_TARGET_COUNT ? sceneClass(idx)
+                                                        : (t->w == g_rd.gsW && t->h == g_rd.gsH);
+    if (scene) {
+        rd__note_scene_pressure();
     }
 }
 
@@ -750,8 +780,8 @@ uint32_t rd__temp_target_alloc(uint32_t w, uint32_t h, int withDepth, int keepAc
         t->snap = keep.snap;
         t->snapState = keep.snapState;
         g_rd.stats.tempReused++;
-    } else {
-        rd__target_create_gpu(t, "temp target");
+    } else if (!rd__target_create_gpu(t, "temp target")) {
+        rd__note_target_pressure(t); /* the shadow count, a screen-size alias */
     }
     t->clearPending = 1;
     g_rd.stats.tempTargets++;
@@ -1325,7 +1355,9 @@ void rd_get_scene_scale(float *sx, float *sy)
 
 int rd_scene_scale_lowered(void)
 {
-    if (!g_rd.sceneFellBack) {
+    /* below what was asked, whether the GPU's size limit or the allocation
+       fallback brought it down */
+    if (g_rd.settings.sceneScale <= 0.0f || g_rd.sceneSy + 0.5f >= g_rd.settings.sceneScale) {
         return 0;
     }
     return g_rd.sceneSy < 1.0f ? 1 : (int)g_rd.sceneSy;
@@ -1425,6 +1457,7 @@ void rd_begin_frame(void)
     if (g_rd.recIndex >= 0) {
         rd__log("rd_begin_frame without rd_end_frame: the open frame is discarded");
     }
+    bool recreated = false;
     if (g_rd.settingsPending) {
         /* the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_revert_replacements) */
@@ -1452,6 +1485,25 @@ void rd_begin_frame(void)
             rd__on_host(recreateTargets, NULL);
             /* the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */
+            g_rd.interpFloor = g_rd.frameCounter + 1;
+            recreated = true;
+        }
+    }
+    /* A scene-sized texture made since the last frame did not fit
+     * (rd__note_scene_pressure): the scale comes down by half here, between
+     * frames, and the targets are made again at it.  Targets just made at a
+     * new request get their own try first. */
+    if (g_rd.scenePressure) {
+        g_rd.scenePressure = false;
+        if (!recreated && g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f)) {
+            const float nx = g_rd.sceneSx * 0.5f < 1.0f ? 1.0f : g_rd.sceneSx * 0.5f;
+            const float ny = g_rd.sceneSy * 0.5f < 1.0f ? 1.0f : g_rd.sceneSy * 0.5f;
+            rd__log("display: scene %gx%g does not fit this GPU, falling back to %gx%g",
+                    (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)nx, (double)ny);
+            g_rd.sceneSx = nx;
+            g_rd.sceneSy = ny;
+            g_rd.sceneFellBack = true;
+            rd__on_host(recreateTargets, NULL);
             g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }

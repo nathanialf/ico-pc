@@ -1487,7 +1487,7 @@ static void testValues(void)
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    /* Auto after 4x (Left from Window wraps to it) */
+    /* Auto, past the last scale (Left from Window wraps to it) */
     CHECK(o.resScale == ICO_RES_AUTO &&
               strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "Auto") == 0,
           "resolution wraps to Auto (%s)", ui_settings_value_text(UI_OPT_RESOLUTION));

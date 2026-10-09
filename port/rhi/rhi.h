@@ -450,6 +450,10 @@ typedef struct RhiRect {
 typedef struct RhiLimits {
     uint32_t uniformAlign; /* 256 on D3D12, usually 64..256 on Vulkan: rd_core aligns to this */
     uint32_t maxTextureSize;
+    /* the largest width or height of a render target: the smallest of the
+     * image, framebuffer and viewport limits (16384 on D3D12).  Can be below
+     * maxTextureSize; the scene is held to it. */
+    uint32_t maxRenderTargetSize;
     bool dualSourceBlend; /* optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
     /* true when rhi_readback_texture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
@@ -612,6 +616,11 @@ void rhi_wait_frame(void);
 uint32_t rhi_frame_slot(void);
 /* Full GPU idle, for shutdown, resize and verification readbacks. */
 void rhi_wait_idle(void);
+/* Full GPU idle, then every deferred destroy is carried out now, the current
+ * frame's included (rhi_wait_idle leaves that slot's).  For a caller that is
+ * about to ask for a large allocation after freeing textures, so the memory is
+ * really back.  Only with no command list open (between frames). */
+void rhi_collect_garbage_now(void);
 
 void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count);
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass);

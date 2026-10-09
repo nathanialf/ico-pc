@@ -1359,6 +1359,7 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
         tc->snapState = RHI_STATE_UNDEFINED;
     }
     if (!tc->snap.id) {
+        rd__note_target_pressure(tc);
         return false;
     }
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
@@ -2785,6 +2786,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         s_wrapW = tc->tw;
         s_wrapH = tc->th;
         if (!s_wrapAcc.id) {
+            rd__note_scene_pressure();
             return;
         }
     }
@@ -3655,6 +3657,16 @@ static RhiTexture s_fogLut;
 static RhiState s_fogLutState;
 
 static RdDepthCopy s_fogDepth; /* the depth's copy with g_rd.depthCopy */
+
+void rd__scene_caches_free(void)
+{
+    if (s_wrapAcc.id) {
+        rhi_destroy_texture(s_wrapAcc);
+    }
+    s_wrapAcc = (RhiTexture){0};
+    s_wrapW = s_wrapH = 0;
+    rd__depth_copy_free(&s_fogDepth);
+}
 
 void rd__fog_shutdown(void)
 {
