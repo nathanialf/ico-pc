@@ -300,6 +300,9 @@ enum { INSTALL_IDLE = 0, INSTALL_PICKING, INSTALL_COPYING, INSTALL_DONE };
 static SDL_AtomicInt s_installState;
 static SDL_AtomicInt s_installResult; /* UI_GPU_INSTALL_* once DONE */
 static SDL_AtomicInt s_pickGen;
+/* the last pick ended because the picker could not be opened (set before
+   install_done) */
+static SDL_AtomicInt s_pickFailed;
 static char s_uri[2048];
 /* the folder the last install made; written before install_done, read once
    the state says DONE */
@@ -368,6 +371,7 @@ static void SDLCALL pick_done(void *user, const char *const *files, int filter)
     }
     if (files == NULL) {
         fprintf(stderr, "gpu driver: the file picker failed: %s\n", SDL_GetError());
+        SDL_SetAtomicInt(&s_pickFailed, 1);
         install_done(UI_GPU_INSTALL_BAD);
         return;
     }
@@ -440,6 +444,7 @@ static int host_install_begin(void)
         return -1;
     }
     SDL_SetAtomicInt(&s_installResult, UI_GPU_INSTALL_PENDING);
+    SDL_SetAtomicInt(&s_pickFailed, 0);
     s_installed[0] = '\0';
     SDL_SetAtomicInt(&s_installState, INSTALL_PICKING);
     const int gen = SDL_AddAtomicInt(&s_pickGen, 1) + 1;
@@ -528,9 +533,10 @@ int ico_gpu_driver_android_choose(char *folder, size_t n, char *why, size_t whyn
     }
     if (r != UI_GPU_INSTALL_ADDED) {
         snprintf(why, whyn, "%s",
-                 r == UI_GPU_INSTALL_NOSPACE     ? "Not enough free space."
-                 : r == UI_GPU_INSTALL_CANCELLED ? "No file was chosen."
-                                                 : "That file is not a graphics driver package.");
+                 r == UI_GPU_INSTALL_NOSPACE       ? "Not enough free space."
+                 : r == UI_GPU_INSTALL_CANCELLED   ? "No file was chosen."
+                 : SDL_GetAtomicInt(&s_pickFailed) ? "The file picker could not be opened."
+                                                   : "That file is not a graphics driver package.");
         return 0;
     }
     const int i = find_folder(s_installed); /* host_install_poll refreshed the list */
