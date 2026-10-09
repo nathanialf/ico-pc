@@ -39,24 +39,33 @@ copy the `memcard` folder out to a computer.
 
 ## The first start
 
-1. The game opens your phone's file picker. Find your disc image and tap
+1. The first time the game opens, and again after each update, the screen
+   says **Starting ICO** and **Preparing graphics**, with a count and a bar.
+   This takes a few seconds, and up to about ten on some phones. Later starts
+   skip it or show it only for a moment.
+2. The game opens your phone's file picker. Find your disc image and tap
    it. The picker shows every file, so make sure you pick the `.iso` or
    `.chd`.
-2. The game copies the image into its own folder. A bar shows how far it
-   has got. With a big image this can take a few minutes.
-3. Then it copies the game's files out of the image, with another bar.
-4. The game starts.
+3. The game copies the image into its own folder. The screen says **Copying
+   the disc image into the app**, with a bar. With a big image this can take
+   a few minutes. At the end it says **Saving the copy** for a few seconds
+   while the phone finishes writing the file.
+4. Then it says **Opening the disc image** and **Checking the disc image**
+   (a bar), then **Preparing the game's data** (a bar) and **Finishing the
+   game's data**.
+5. **Starting the game** shows on every start. A few seconds of black can
+   follow it, until the game's own logo appears.
 
-The first start has long quiet stretches: before the picker opens, between
-the two bars, and before the game appears, the screen may not change for a
-while. The game is still working. Leave it open and do not switch away;
-the next version will show what it is doing during those stretches.
+The screen always says what the game is doing. Where it shows no bar, the
+step is short and its length cannot be told in advance. Leave the game open
+and do not switch away.
 
 If there is not enough free space, the game tells you how much it needs
 and how much is free. Free some space and start it again.
 
-To stop at any point, during either bar, press **Back**. The game deletes
-the copy it made, so nothing is left behind, and the next start asks again.
+To stop while a bar with "Press Back to stop" is showing, press **Back**.
+The game deletes the copy it made, so nothing is left behind, and the next
+start asks again.
 
 Once the game is set up, it deletes its copy of the disc image to give the
 space back. Your own file, where you picked it from, is not touched.
