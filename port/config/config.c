@@ -258,8 +258,9 @@ int ico_config_save(void)
     return 0;
 }
 
-/* the file a first run leaves: every key ico_config_save adds, at its
-   default, and a line per section */
+/* the file a first run leaves: every key ico_config_save adds and more
+   (the packs, the effects, [photo], Android's driver keys), at their
+   defaults, and a line per section */
 static const char first_run_text[] =
     "# ico-pc settings. Every key below is at its default; edit and restart.\n"
     "# The Options menu rewrites only the lines it changes, so comments and\n"

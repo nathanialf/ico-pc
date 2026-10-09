@@ -34,8 +34,9 @@ int ico_config_save(void);
    saved (the Android lifecycle saves on termination only then), else 0. */
 int ico_config_dirty(void);
 
-/* The first run: when config.toml does not exist, writes it with the keys
-   ico_config_save adds at their defaults and a comment per section. Never
+/* The first run: when config.toml does not exist, writes the commented
+   template first_run_text (config.c; a superset of the keys
+   ico_config_save adds, at their defaults). Never
    replaces an existing file. 0 written, 1 it exists already, -1 it cannot be
    written (the log says why). */
 int ico_config_write_first_run(void);

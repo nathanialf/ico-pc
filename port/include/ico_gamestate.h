@@ -59,7 +59,8 @@ void ico_gs_signal(int event, int arg);
 /* This tick's signals: how many of event, and the last one's arg. */
 int ico_gs_signaled(IcoGsEvent event);
 int ico_gs_signal_arg(IcoGsEvent event);
-/* signals dropped because the queue was full (diagnostics) */
+/* signals dropped because the queue was full (diagnostics; the tests read
+   it) */
 unsigned int ico_gs_signals_dropped(void);
 
 /* --- the snapshot ------------------------------------------------------- */

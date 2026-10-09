@@ -113,8 +113,8 @@ void sceSifExecRequest(struct sceSifServeData *sd);
 void sceSifExitCmd(void);
 int sceSifFreeIopHeap(int addr);
 
-unsigned int
-sceSifGetReg(unsigned int reg); /* the register number is unsigned, see sceSifResetIop */
+/* the register number is unsigned, see sceSifResetIop */
+unsigned int sceSifGetReg(unsigned int reg);
 
 int sceSifInitIopHeap(void);
 void sceSifInitRpc(int mode);
@@ -122,7 +122,7 @@ int sceSifLoadFileReset(void);
 int sceSifLoadModule(void *name, int arglen, int args);
 int sceSifRebootIop(const char *img);
 int sceSifSetDma(struct sceSifDmaData *sdd, int len);
-unsigned int sceSifSetReg(int reg, int val); /* returns a value */
+unsigned int sceSifSetReg(int reg, int val);
 int sceSifSyncIop(void);
 void sceSifWriteBackDCache(void *addr, int len);
 void sceSifExitRpc(void);
