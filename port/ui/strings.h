@@ -35,7 +35,6 @@ typedef enum UiStrId {
     UI_STR_SECTION_CONTROLS,
     UI_STR_SECTION_GAMEPLAY,
     UI_STR_SECTION_LANGUAGE,
-    UI_STR_SECTION_DEVELOPER,
     UI_STR_BACK,
     /* values */
     UI_STR_ON,
@@ -48,15 +47,12 @@ typedef enum UiStrId {
     UI_STR_OPT_RESOLUTION,
     UI_STR_OPT_ASPECT,
     UI_STR_OPT_VSYNC,
-    UI_STR_OPT_INTERPOLATION,
     UI_STR_OPT_FILTERING,
     UI_STR_OPT_FULL_HEIGHT,
     UI_STR_OPT_MIRROR,
     /* Controls */
     UI_STR_OPT_REMAP,
     UI_STR_OPT_MOUSE_CAMERA,
-    UI_STR_OPT_INVERT_X,
-    UI_STR_OPT_INVERT_Y,
     UI_STR_OPT_VIBRATION,
     /* Gameplay */
     UI_STR_OPT_STICK_FIX,
@@ -68,14 +64,12 @@ typedef enum UiStrId {
     UI_STR_LANG_DE,
     UI_STR_LANG_IT,
     UI_STR_LANG_ES,
-    UI_STR_OPT_SKIP_BOOT,
     /* Developer mode */
     UI_STR_OPT_DEVELOPER_MODE,
     UI_STR_DEVELOPER_NOTE,
     /* popups */
     UI_STR_POPUP_TEST_TITLE,
     UI_STR_POPUP_TEST_BODY,
-    UI_STR_ACHIEVEMENT_UNLOCKED,
     /* achievements (package 6E): title and
        description of each, in port/game/achievements.c's order */
     UI_STR_ACH_OPENING,
@@ -146,7 +140,6 @@ typedef enum UiStrId {
     UI_STR_OPT_VIDEO_MODE,
     UI_STR_VAL_PAL50,
     UI_STR_VAL_60HZ,
-    UI_STR_VIDEO_MODE_NOTE,
     UI_STR_OPT_FRAMERATE,
     UI_STR_VAL_WINDOW,
     UI_STR_VAL_AUTO,
