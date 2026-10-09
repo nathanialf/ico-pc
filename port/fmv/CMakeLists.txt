@@ -98,7 +98,7 @@ endif()
 set_target_properties(ico_libmpeg2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # The demuxer and the decoder wrapper: no game symbols, so a library.
-add_library(ico_fmv STATIC pss.c m2v.c field_match.c)
+add_library(ico_fmv STATIC pss.c m2v.c)
 target_include_directories(ico_fmv PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_fmv PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_fmv PUBLIC ico_libmpeg2)
@@ -135,7 +135,9 @@ if(ICO_RUN_TESTS)
 endif()
 # The disc's movies field by field (scan headers, line-difference and comb
 # measures of the first pictures): a report, skipped without the image.
-add_executable(fmv_fields_test test/fmv_fields_test.c)
+# field_match.c (inverse telecine) is the report's alone: the player does
+# not use it.
+add_executable(fmv_fields_test test/fmv_fields_test.c field_match.c)
 target_include_directories(fmv_fields_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(fmv_fields_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(fmv_fields_test PRIVATE ico_fmv)

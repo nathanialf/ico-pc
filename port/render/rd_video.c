@@ -379,7 +379,7 @@ static void drawField(RhiCommandList cl, uint32_t w, uint32_t h, RhiBuffer buf, 
 #define YUV_FIELD_ODD 2u    /* the field's rows are the odd ones */
 #define YUV_FIELD_SECOND 4u /* the picture's second field in time */
 #define YUV_CONVERTED 8u    /* yuv_ps: t1 is yuv_field_ps's target */
-#define YUV_FILL_SHIFT 4u   /* RdVideoFill */
+#define YUV_WEAVE 16u       /* the other rows the picture's own (RD_VIDEO_WEAVE_CUR) */
 
 /* One present: the picture (pics != NULL: one picture, or with field
  * flags (yuv.hlsl g_mode.w, YUV_FIELD set) the previous, current and next)
@@ -612,7 +612,7 @@ int rd_video_field(const RdVideoPicture *prev, const RdVideoPicture *cur,
     const bool odd = (field != 0) == (top_first != 0);
     const uint32_t flags = YUV_FIELD | (odd ? YUV_FIELD_ODD : 0u) |
                            (field != 0 ? YUV_FIELD_SECOND : 0u) |
-                           ((uint32_t)fill & 3u) << YUV_FILL_SHIFT;
+                           (fill == RD_VIDEO_WEAVE_CUR ? YUV_WEAVE : 0u);
     const int r = presentVideoOnHost(pics, w, h, flags, NULL);
     if (r == 0) {
         s_presents++;

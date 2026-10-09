@@ -44,12 +44,12 @@ typedef struct RdVideoPicture {
     uint32_t pitch[3];
 } RdVideoPicture;
 
-/* How rd_video_field fills the rows of the other field. */
+/* How rd_video_field fills the rows of the other field.  The player uses
+   RD_VIDEO_DEINTERLACE; the weave is rd_video_test's reference, the combed
+   picture the deinterlacer has to clean up. */
 typedef enum RdVideoFill {
     RD_VIDEO_DEINTERLACE = 0, /* from the field itself and the pictures around it */
-    RD_VIDEO_WEAVE_PREV = 1,  /* the previous picture's rows (field matching) */
-    RD_VIDEO_WEAVE_NEXT = 2,  /* the next picture's rows */
-    RD_VIDEO_WEAVE_CUR = 3    /* the picture's own rows: the frame as decoded */
+    RD_VIDEO_WEAVE_CUR = 1    /* the picture's own rows: the frame as decoded */
 } RdVideoFill;
 
 /* Shows one field of an interlaced picture, cur, as a whole picture:

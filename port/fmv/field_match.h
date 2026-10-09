@@ -5,9 +5,11 @@
  * pictures: a picture whose two fields come from different film frames is
  * combed as decoded, but its own field woven with the other field of the
  * previous or the next picture is the film frame again.  This picks, per
- * picture, which of the three makes the least combed whole picture, for
- * rd_video_field's RD_VIDEO_WEAVE_* fills (the values match).  Luma only,
- * every second column: a few hundred thousand byte compares per picture.
+ * picture, which of the three makes the least combed whole picture.  Luma
+ * only, every second column: a few hundred thousand byte compares per
+ * picture.  The disc's movies carry no telecined film (fmv_fields_test's
+ * report), so the player does not use it: it is built into that test only,
+ * kept for its report.
  */
 #ifndef ICO_PORT_FMV_FIELD_MATCH_H
 #define ICO_PORT_FMV_FIELD_MATCH_H

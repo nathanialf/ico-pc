@@ -14,9 +14,9 @@
 //   g_mode.w   bit 0 a field of the current picture is shown (the three
 //              pictures are there); bit 1 its rows are the odd ones (the
 //              bottom field); bit 2 it is the picture's second field in
-//              time; bits 4-5 how the other rows are filled: 0 by the
-//              deinterlacer (deint), 1 2 3 woven from the previous, the
-//              next or the current picture (field matching)
+//              time; bit 4 the other rows are the picture's own, woven as
+//              decoded (rd_video_test's combed reference), else the
+//              deinterlacer fills them
 //              bit 3 (yuv_ps only): t1 is not the planes but the field
 //              already converted, w x h RGBA8 (yuv_field_ps's output)
 //   g_param.x  1 = mirror (flip x)
@@ -78,7 +78,7 @@ int field_texel(int k, int x, int y, int x0, int r0, int pw, int n)
 }
 
 // The sample at (x, y) of one plane for the field shown: the field's own
-// rows as decoded; the other rows woven from a matched picture, or
+// rows as decoded; the other rows the picture's own (bit 4), or
 // deinterlaced the way yadif does it (FFmpeg vf_yadif, mode 0: an
 // edge-directed interpolation within the field, limited by how much the
 // missing row changes between the pictures around this field's instant),
@@ -92,10 +92,8 @@ int field_sample(int x, int y, int x0, int r0, int pw, int n)
     if ((y & 1) == keep) {
         return field_texel(1, x, y, x0, r0, pw, n);
     }
-    uint match = (flags >> 4) & 3u;
-    if (match != 0u) {
-        int k = match == 1u ? 0 : match == 2u ? 2 : 1;
-        return field_texel(k, x, y, x0, r0, pw, n);
+    if ((flags & 16u) != 0u) {
+        return field_texel(1, x, y, x0, r0, pw, n);
     }
     // the pictures around this field's instant: the missing rows of the
     // first field fall between the previous picture and this one, those of
