@@ -319,12 +319,22 @@ rounding mode (the arm64 one under qemu); and diffs the outputs line by
 line: the turn, table, quaternion and matrix helpers over every angle and
 thousands of directions, the joint limits over every row of the game's table
 (read from `ICO_BASE_ELF`, else synthetic rows), and 4000 stretches of 16
-frames of both characters' hand and arm updates. The flags come from each
-preset's `compile_commands.json` under `build-host/` (or `CC_DB_X64`,
-`CC_DB_A64`, `CC_DB_X64_CLANG`), with built-in copies when a preset is not
-configured; `NDK` and `QEMU` name the tools when they are not found. It
-exits 0 when the only differences are the three it knows (listed at the end
-of the script).
+frames of both characters' hand and arm updates. A second program,
+`tools/arm64_diff/followdiff.c`, does the same for Yorda following Ico by the
+hand: the real `girl_act.c`, `act-game.c`, `commonact.c`, `fieldCollision.c`,
+`geometryManager.c`, `motionManager2.c`, `gv.c` and the arm IK's files, the
+data table loader (the game's tables from `ICO_BASE_ELF`, else zero rows) and
+`port/platform/fiber.c`, on which `actGirlHand` runs as the game runs an
+actor; it sweeps the steering helpers, the motion direction setters and the
+hand manager, then walks the two through 42 scripted stretches (standing,
+walking, running, turning, stopping) and prints every frame's motion request,
+play speed, direction, hand distance flags and Ico's hand target. Calls
+nothing answers stop it with their name; objects nothing defines read as
+zero. The flags come from each preset's `compile_commands.json` under
+`build-host/` (or `CC_DB_X64`, `CC_DB_A64`, `CC_DB_X64_CLANG`), with built-in
+copies when a preset is not configured; `NDK` and `QEMU` name the tools when
+they are not found. It exits 0 when the only differences are the three it
+knows (listed at the end of the script).
 
 ## Continuous integration
 
