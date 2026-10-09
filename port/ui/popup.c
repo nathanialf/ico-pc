@@ -177,6 +177,11 @@ static int panel(Panel *pn)
     return 1;
 }
 
+const char *ui_PopupTitle(void)
+{
+    return s_count > 0 ? s_queue[s_head].title : "";
+}
+
 int ui_PopupPanel(float rect[4])
 {
     Panel pn;

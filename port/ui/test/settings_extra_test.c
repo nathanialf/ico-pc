@@ -10,6 +10,7 @@
  * Adjacent blocks from different packages merge cleanly; keep both sides.
  */
 #include "settings_fixture.h"
+#include "popup.h"
 
 /* v0.4.3 ST-SPLIT: the fixture builds a layout and the menu opens */
 static void testFixture(void)
@@ -187,6 +188,327 @@ static void testItemSelectArg(void)
     }
 }
 
+/* v0.4.3 AN-22b: Settings > Graphics driver (a fake host), the Quit game label */
+static int s_gpuN = 0, s_gpuSel = -1, s_gpuFailed = -1, s_gpuAdreno = 1;
+static int s_gpuBegins, s_gpuPolls, s_gpuRemoved = -99, s_gpuSelects;
+static int s_gpuResult[8], s_gpuResultN, s_gpuResultAt;
+static const char *const kGpuNames[3] = {"Turnip 24.1", "Turnip 25.0", "Mesa"};
+
+static int gpuCount(void)
+{
+    return s_gpuN;
+}
+
+static const char *gpuName(int i)
+{
+    return kGpuNames[i];
+}
+
+static int gpuSelected(void)
+{
+    return s_gpuSel;
+}
+
+static void gpuSelect(int i)
+{
+    s_gpuSel = i;
+    s_gpuSelects++;
+}
+
+static int gpuLastFailed(int i)
+{
+    return i == s_gpuFailed;
+}
+
+static int gpuAdreno(void)
+{
+    return s_gpuAdreno;
+}
+
+static int gpuBegin(void)
+{
+    s_gpuBegins++;
+    return 0;
+}
+
+static int gpuPoll(void)
+{
+    s_gpuPolls++;
+    return s_gpuResultAt < s_gpuResultN ? s_gpuResult[s_gpuResultAt++] : UI_GPU_INSTALL_PENDING;
+}
+
+static void gpuRemove(int i)
+{
+    s_gpuRemoved = i;
+    s_gpuN--;
+}
+
+static const UiGpuDriverHost kGpuHost = {gpuCount,  gpuName,  gpuSelected, gpuSelect, gpuLastFailed,
+                                         gpuAdreno, gpuBegin, gpuPoll,     gpuRemove};
+
+static int an22bShown(UiSettingsPage page, UiSettingsOpt opt)
+{
+    const int row = ui_SettingsRowOf(page, opt);
+    return row >= 0 && !lt_ext_Prop(row)->defaultMask && !lt_ext_Prop(row)->masked;
+}
+
+/* the main page's Graphics driver link: its row, -1 */
+static int an22bLink(void)
+{
+    int labels[16];
+    const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+    for (int i = 0; i < n; i++) {
+        if (strcmp(lt_ext_RowText(labels[i]), "Graphics driver") == 0) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
+static void an22bResult(int a, int b)
+{
+    s_gpuResult[0] = a;
+    s_gpuResult[1] = b;
+    s_gpuResultN = 2;
+    s_gpuResultAt = 0;
+}
+
+static int s_an22bQuits;
+static int s_an22bGame;
+
+static void an22bQuit(void)
+{
+    s_an22bQuits++;
+}
+
+static int an22bIsGame(void)
+{
+    return s_an22bGame;
+}
+
+/* the text of a row of layout l starting with prefix, -1 */
+static int an22bTextIn(int l, const char *text)
+{
+    const LtProp *lay = lt_ext_Layout(l);
+    for (int j = lay->first; j < lay->last; j++) {
+        if (strcmp(lt_ext_RowText(j), text) == 0) {
+            return j;
+        }
+    }
+    return -1;
+}
+
+static void testGpuDriver(void)
+{
+    ui_SettingsSetGpuDriverHost(NULL);
+    ui_PopupReset();
+
+    /* no host: no link; the Main page is the twelve it was */
+    enterMain(1);
+    frame(0);
+    CHECK(an22bLink() >= 0 && lt_ext_Prop(an22bLink())->defaultMask,
+          "no host: the Graphics driver link is hidden");
+
+    /* a host: the link shows after Effects and opens the page */
+    s_gpuN = 2;
+    s_gpuSel = -1;
+    s_gpuFailed = -1;
+    s_gpuAdreno = 1;
+    ui_SettingsSetGpuDriverHost(&kGpuHost);
+    int mainL = enterMain(1);
+    frame(0);
+    {
+        int labels[16];
+        ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        const int link = an22bLink();
+        CHECK(link == labels[2] && !lt_ext_Prop(link)->defaultMask,
+              "host: the link shows after Effects (%d)", link);
+        CHECK(lt_ext_Prop(link)->right == ui_SettingsPageLayout(UI_PAGE_GPU_DRIVER),
+              "the link opens the page");
+    }
+    const int gpuL = openPage(mainL, 2, UI_PAGE_GPU_DRIVER);
+    const int driver = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Built-in") == 0, "Built-in at first");
+    CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "Add shows on an Adreno");
+    CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove is hidden on Built-in");
+
+    /* Right steps Built-in, the first, the second, around; each choice goes to the host */
+    lt_ext_Layout(gpuL)->curItem = driver;
+    press(0x2000);
+    CHECK(s_gpuSel == 0 && strcmp(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 24.1") == 0,
+          "Right: the first driver (%d)", s_gpuSel);
+    CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove shows on a driver");
+    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    CHECK(s_gpuSel == 1, "Right: the second driver (%d)", s_gpuSel);
+    ui_SettingsStep(UI_OPT_GPU_DRIVER, 1);
+    CHECK(s_gpuSel == -1, "Right wraps to Built-in (%d)", s_gpuSel);
+    ui_SettingsStep(UI_OPT_GPU_DRIVER, -1);
+    CHECK(s_gpuSel == 1, "Left wraps to the last driver (%d)", s_gpuSel);
+
+    /* the one that did not start says so after its name */
+    s_gpuFailed = 1;
+    CHECK(strstr(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Turnip 25.0") != NULL &&
+              strstr(ui_SettingsValueText(UI_OPT_GPU_DRIVER), "Did not start last time") != NULL,
+          "failed: %s", ui_SettingsValueText(UI_OPT_GPU_DRIVER));
+    s_gpuFailed = -1;
+
+    /* Add: the picker opens, the page polls every frame until it answers */
+    frame(0);
+    const int add = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD);
+    lt_ext_Layout(gpuL)->curItem = add;
+    s_gpuBegins = s_gpuPolls = 0;
+    an22bResult(UI_GPU_INSTALL_PENDING, UI_GPU_INSTALL_ADDED);
+    press(0x40);
+    CHECK(s_gpuBegins == 1, "Cross on Add opens the picker (%d)", s_gpuBegins);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(s_gpuPolls == 2, "polled until the answer, then stopped (%d)", s_gpuPolls);
+    CHECK(strcmp(ui_PopupTitle(), "Driver added") == 0, "added: \"%s\"", ui_PopupTitle());
+
+    static const struct {
+        int result;
+        const char *title;
+    } kAnswers[] = {{UI_GPU_INSTALL_BAD, "This file is not a driver package."},
+                    {UI_GPU_INSTALL_NOSPACE, "Not enough space to add this driver."},
+                    {UI_GPU_INSTALL_CANCELLED, ""}};
+
+    for (unsigned i = 0; i < sizeof(kAnswers) / sizeof(kAnswers[0]); i++) {
+        ui_PopupReset();
+        an22bResult(kAnswers[i].result, kAnswers[i].result);
+        press(0x40);
+        frame(0);
+        frame(0);
+        CHECK(strcmp(ui_PopupTitle(), kAnswers[i].title) == 0, "answer %d: \"%s\"",
+              kAnswers[i].result, ui_PopupTitle());
+        CHECK((kAnswers[i].title[0] != '\0') == ui_PopupActive(), "answer %d: popup or silence",
+              kAnswers[i].result);
+    }
+
+    /* Remove: Built-in is chosen, the host deletes the chosen one, a box says so */
+    ui_PopupReset();
+    s_gpuSel = 1;
+    frame(0);
+    lt_ext_Layout(gpuL)->curItem = ui_SettingsRowOf(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE);
+    press(0x40);
+    CHECK(s_gpuRemoved == 1 && s_gpuSel == -1, "Remove: driver 1 deleted, Built-in chosen (%d %d)",
+          s_gpuRemoved, s_gpuSel);
+    CHECK(strcmp(ui_PopupTitle(), "Driver removed") == 0, "removed: \"%s\"", ui_PopupTitle());
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_REMOVE), "Remove hides again");
+
+    /* a phone without Adreno graphics: no Add, the rest stays */
+    s_gpuAdreno = 0;
+    frame(0);
+    CHECK(!an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_ADD), "non-Adreno: Add is hidden");
+    CHECK(an22bShown(UI_PAGE_GPU_DRIVER, UI_OPT_GPU_DRIVER), "non-Adreno: Driver stays");
+    s_gpuBegins = 0;
+    lt_ext_Layout(gpuL)->curItem = add;
+    press(0x40);
+    CHECK(s_gpuBegins == 0, "a hidden Add does nothing");
+    s_gpuAdreno = 1;
+    press(0x10);
+    CHECK(settle(mainL, 60), "Triangle: back to the menu");
+
+    /* the Main page with the link and Developer mode: thirteen rows fit */
+    ico_opt_set_developer_mode(1);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    {
+        int labels[16], prev = -1, shown = 0, last = -1;
+        const int n = ui_SettingsPageRows(UI_PAGE_MAIN, labels, NULL, NULL, 16);
+        for (int i = 0; i < n; i++) {
+            const LtProperty *r = lt_ext_Prop(labels[i]);
+            if (r->defaultMask) {
+                continue;
+            }
+            CHECK(prev < 0 ? r->dispY >= 34 : r->dispY >= prev + 12, "row %d at y %d after %d", i,
+                  r->dispY, prev);
+            prev = r->dispY;
+            last = labels[i];
+            shown++;
+        }
+        CHECK(shown == 13, "thirteen rows shown (%d)", shown);
+        CHECK(last >= 0 && lt_ext_Prop(last)->dispY == 40 + 12 * 12 &&
+                  lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH <= 226,
+              "Back at %d ends at %d", last >= 0 ? lt_ext_Prop(last)->dispY : -1,
+              last >= 0 ? lt_ext_Prop(last)->dispY + lt_ext_Prop(last)->dispH : -1);
+    }
+    ico_opt_set_developer_mode(0);
+    ui_SettingsSetGpuDriverHost(NULL);
+    frame(0);
+    CHECK(lt_ext_Prop(an22bLink())->defaultMask, "the host removed: the link hides again");
+
+    /* the strings, in all five languages */
+    static const UiStrId kIds[] = {
+        UI_STR_SECTION_GPU_DRIVER, UI_STR_OPT_GPU_DRIVER,     UI_STR_VAL_GPU_BUILTIN,
+        UI_STR_GPU_DRIVER_ADD,     UI_STR_GPU_DRIVER_REMOVE,  UI_STR_GPU_DRIVER_NOTE,
+        UI_STR_GPU_DRIVER_ADDED,   UI_STR_GPU_DRIVER_BAD,     UI_STR_GPU_DRIVER_REMOVED,
+        UI_STR_GPU_DRIVER_FAILED,  UI_STR_GPU_DRIVER_NOSPACE, UI_STR_QUIT_GAME,
+        UI_STR_QUIT_GAME_CONFIRM};
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    for (int l = 0; l < 5; l++) {
+        for (unsigned i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+            CHECK(ui_StrIn(kLangs[l], kIds[i])[0] != '\0', "language %d, string %d", l, kIds[i]);
+        }
+    }
+    CHECK(strcmp(ui_StrIn(UI_LANG_ES, UI_STR_QUIT_GAME_CONFIRM), "\xC2\xBFSalir del juego?") == 0,
+          "Spanish question");
+}
+
+static void testQuitGame(void)
+{
+    static const char *const kAsk[2] = {"Quit to desktop?", "Quit the game?"};
+    static const char *const kRow[2] = {"Quit to desktop", "Quit game"};
+
+    for (int game = 0; game < 2; game++) {
+        useConfig("version = 1\n");
+        fakeTables();
+        lt_ext_Reset();
+        ui_SettingsReset();
+        memset(pad, 0, sizeof(pad));
+        pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+        NonLinearCameraMove = 2;
+        s_an22bQuits = 0;
+        s_an22bGame = game;
+        ui_SettingsSetQuitHandler(an22bQuit);
+        ui_SettingsSetQuitIsGame(game ? an22bIsGame : NULL);
+        init_layout_texture(2);
+        settle(54, 4);
+        const int q13 = ui_SettingsQuitRow(13), ql = ui_QuitScreenLayout();
+        CHECK(strcmp(lt_ext_RowText(q13), kRow[game]) == 0, "game %d: the row is \"%s\"", game,
+              lt_ext_RowText(q13));
+        CHECK(an22bTextIn(ql, kAsk[game]) >= 0, "game %d: the question \"%s\"", game, kAsk[game]);
+
+        lt_switch_layout(13);
+        CHECK(settle(13, 60), "the title");
+        press(0x4000);
+        press(0x4000);
+        press(0x40);
+        CHECK(settle(ql, 60), "the confirmation");
+        press(0x8000); /* Yes */
+        press(0x40);
+        CHECK(s_an22bQuits == 1, "game %d: Yes still quits (%d)", game, s_an22bQuits);
+    }
+
+    /* a hook installed after the menu was built: the labels follow */
+    const int q13 = ui_SettingsQuitRow(13), ql = ui_QuitScreenLayout();
+    s_an22bGame = 0;
+    ui_SettingsSetQuitIsGame(an22bIsGame);
+    CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0 &&
+              an22bTextIn(ql, "Quit to desktop?") >= 0,
+          "a hook answering 0 keeps the desktop words");
+    s_an22bGame = 1;
+    ui_SettingsSetQuitIsGame(an22bIsGame);
+    CHECK(strcmp(lt_ext_RowText(q13), "Quit game") == 0 && an22bTextIn(ql, "Quit the game?") >= 0,
+          "a late hook answering 1 changes the words");
+    ui_SettingsSetQuitIsGame(NULL);
+    ui_SettingsSetQuitHandler(NULL);
+    CHECK(strcmp(lt_ext_RowText(q13), "Quit to desktop") == 0,
+          "no hook: back to the desktop words");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -200,6 +522,9 @@ int main(int argc, char **argv)
     testCinematicBars();
     /* v0.4.3 AN-20 */
     testItemSelectArg();
+    /* v0.4.3 AN-22b */
+    testGpuDriver();
+    testQuitGame();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

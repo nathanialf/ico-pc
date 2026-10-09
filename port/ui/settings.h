@@ -99,6 +99,42 @@ void ui_SettingsSetModelPackCount(int (*fn)(void));
    controls, Touch size, Touch opacity) only while fn reports a touch screen
    (input_sdl.h ico_input_sdl_touch_present); NULL, or 0, hides them. */
 void ui_SettingsSetTouchQuery(int (*fn)(void));
+
+/* v0.4.3 AN-22b: the Android build's title Quit row and its confirmation
+   read "Quit game" / "Quit the game?" while fn returns 1 (the phone's app is
+   not a desktop program); no hook, or 0, keeps "Quit to desktop".  Asked
+   when the menu is built, and again when fn is installed afterwards. */
+void ui_SettingsSetQuitIsGame(int (*fn)(void));
+
+/* v0.4.3 AN-22b: Settings > Graphics driver (Android).  The page and its
+   link on the main page (after Effects) exist only while a host is installed
+   (ui_SettingsSetGpuDriverHost); port/ui knows nothing of the platform, the
+   host (window_host.c) answers for it.  Indices run 0..count()-1 over the
+   installed drivers, sorted as the host likes; -1 means the phone's own
+   (built-in) driver.  Every pointer must be set.  The strings returned stay
+   valid until the next call into the host. */
+#define UI_GPU_INSTALL_PENDING 0   /* the file picker or the copy is still running */
+#define UI_GPU_INSTALL_ADDED 1     /* a driver was installed (count() grew) */
+#define UI_GPU_INSTALL_BAD 2       /* the file is not a usable driver package */
+#define UI_GPU_INSTALL_CANCELLED 3 /* the picker was dismissed; the page says nothing */
+#define UI_GPU_INSTALL_NOSPACE 4   /* the device ran out of space */
+
+typedef struct UiGpuDriverHost {
+    int (*count)(void);         /* drivers installed */
+    const char *(*name)(int i); /* display name of driver i */
+    int (*selected)(void);      /* index chosen for the next start, -1 built-in */
+    void (*select)(int i);      /* choose i (-1 built-in) for the next start; the host
+                                        stores it (config key), the page marks the config
+                                        dirty so it is written on leaving */
+    int (*lastFailed)(int i);   /* nonzero: driver i did not start at the last start */
+    int (*adreno)(void);        /* nonzero: the GPU is an Adreno (Add a driver shows) */
+    int (*installBegin)(void);  /* open the picker; 0 started, -1 could not start */
+    int (*installPoll)(void);   /* UI_GPU_INSTALL_*; called every frame while pending */
+    void (*remove)(int i);      /* delete driver i (the page then selects built-in) */
+} UiGpuDriverHost;
+
+/* NULL (or never called) hides the link and the page. The struct is copied. */
+void ui_SettingsSetGpuDriverHost(const UiGpuDriverHost *host);
 /* Package MV: Settings > Extras > Models opens the layout fn returns
    (port/game/model_viewer.c's model list), or nothing when it returns -1 or
    none is set ("extras: models not available" in the log). */
@@ -163,6 +199,7 @@ typedef enum UiSettingsPage {
     /* v0.4.2: Extras > Characters, the characters' colours (port/game/
        appearance.h): nine stepped colour rows, Randomize, Reset, Back */
     UI_PAGE_CHARACTERS,
+    UI_PAGE_GPU_DRIVER, /* v0.4.3 AN-22b: Graphics driver (Android; main page link needs a host) */
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -248,7 +285,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_CHAR_RANDOMIZE,
     UI_OPT_CHAR_RESET,
     /* v0.4.2: the viewer's Characters only: load the other character */
-    UI_OPT_CHAR_SWITCH
+    UI_OPT_CHAR_SWITCH,
+    /* v0.4.3 AN-22b: Graphics driver page: the stepped Driver row, Add a
+       driver (file picker), Remove this driver */
+    UI_OPT_GPU_DRIVER,
+    UI_OPT_GPU_ADD,
+    UI_OPT_GPU_REMOVE
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_SettingsInstall):

@@ -473,4 +473,18 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Senza bordi",
     /* v0.4.3 R27 */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bande cinema",
+    /* v0.4.3 AN-22b */
+    [UI_STR_SECTION_GPU_DRIVER] = "Driver grafico",
+    [UI_STR_OPT_GPU_DRIVER] = "Driver",
+    [UI_STR_VAL_GPU_BUILTIN] = "Integrato",
+    [UI_STR_GPU_DRIVER_ADD] = "Aggiungi un driver",
+    [UI_STR_GPU_DRIVER_REMOVE] = "Rimuovi questo driver",
+    [UI_STR_GPU_DRIVER_NOTE] = "Solo per grafica Adreno. Si applica al prossimo avvio.",
+    [UI_STR_GPU_DRIVER_ADDED] = "Driver aggiunto",
+    [UI_STR_GPU_DRIVER_BAD] = "Questo file non è un pacchetto driver.",
+    [UI_STR_GPU_DRIVER_REMOVED] = "Driver rimosso",
+    [UI_STR_GPU_DRIVER_FAILED] = "Non si è avviato l'ultima volta",
+    [UI_STR_GPU_DRIVER_NOSPACE] = "Spazio insufficiente per aggiungere questo driver.",
+    [UI_STR_QUIT_GAME] = "Esci dal gioco",
+    [UI_STR_QUIT_GAME_CONFIRM] = "Uscire dal gioco?",
 };

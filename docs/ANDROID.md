@@ -123,8 +123,8 @@ left, a look pad at the top right, the four face buttons at the bottom
 right, a D-pad, the shoulder buttons in the top corners, and Start and
 Select at the top. They fade away when you stop touching the screen and
 come back when you touch it. [The full description](CONTROLS.md#touch-controls-phones-and-tablets).
-On a phone the stick fix (**Options > Gameplay > Analogue stick fix**)
-starts On, so Ico runs in every direction you push the on-screen stick.
+If Ico does not run in every direction you push the on-screen stick, turn
+on **Options > Gameplay > Analogue stick fix**.
 
 **Back.** The phone's Back button or gesture opens the pause menu, like
 Start.
@@ -221,6 +221,30 @@ Options > Display > Aspect ratio decides how the picture fits:
 - The normal 4:3 setting shows bars at the sides, as on the PS2.
 - On a folding screen that is nearly square, the picture keeps its 4:3
   shape with bars above and below. It is not cropped.
+
+## Using a different graphics driver
+
+This is optional, and it only works on phones with an Adreno graphics chip
+(most Qualcomm Snapdragon phones). If the game looks wrong or runs badly on
+your phone, a newer graphics driver from the community can sometimes fix
+it. If you do not have a problem, you can skip this.
+
+1. On your phone, download a driver package. The community shares them on
+   GitHub as zip files, in the "AdrenoToolsDrivers" releases by K11MCH1.
+   Leave the file as a zip. Do not unpack it.
+2. In the game, open **Options > Graphics driver** and choose **Add a
+   driver**. Pick the zip file you downloaded. The game says when the
+   driver has been added, or that the file is not a driver package.
+3. In the same page, set the **Driver** row to the driver you added.
+4. Close the game completely and start it again. The new driver is used from
+   that start.
+
+To go back to the phone's own driver, set **Driver** to **Built-in**, or
+choose **Remove this driver** to delete it. Restart the game after either.
+
+If a driver does not start, the game falls back to the phone's own driver
+and tells you so. You can still play. The driver is not removed, so you can
+try another one or remove it yourself.
 
 ## Known limits
 

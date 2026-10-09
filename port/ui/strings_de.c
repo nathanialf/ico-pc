@@ -475,4 +475,18 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Randlos",
     /* v0.4.3 R27 */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
+    /* v0.4.3 AN-22b */
+    [UI_STR_SECTION_GPU_DRIVER] = "Grafiktreiber",
+    [UI_STR_OPT_GPU_DRIVER] = "Treiber",
+    [UI_STR_VAL_GPU_BUILTIN] = "Eingebaut",
+    [UI_STR_GPU_DRIVER_ADD] = "Treiber hinzufügen",
+    [UI_STR_GPU_DRIVER_REMOVE] = "Diesen Treiber entfernen",
+    [UI_STR_GPU_DRIVER_NOTE] = "Nur für Adreno-Grafik. Gilt ab dem nächsten Start.",
+    [UI_STR_GPU_DRIVER_ADDED] = "Treiber hinzugefügt",
+    [UI_STR_GPU_DRIVER_BAD] = "Diese Datei ist kein Treiberpaket.",
+    [UI_STR_GPU_DRIVER_REMOVED] = "Treiber entfernt",
+    [UI_STR_GPU_DRIVER_FAILED] = "Startete beim letzten Mal nicht",
+    [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
+    [UI_STR_QUIT_GAME] = "Spiel beenden",
+    [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
 };

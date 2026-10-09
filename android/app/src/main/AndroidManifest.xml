@@ -5,11 +5,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     android:installLocation="auto">
 
-    <!-- Vulkan 1.1 (0x401000) or later; the renderer itself asks the driver
-         for 1.2 with dynamic rendering at start -->
+    <!-- Vulkan 1.2 (0x402000) or later: the renderer refuses a loader or a
+         GPU below 1.2 (port/rhi/vk/vk_device.c) and needs dynamic rendering,
+         which is core in 1.3 and an extension on 1.2 -->
     <uses-feature
         android:name="android.hardware.vulkan.version"
-        android:version="0x401000"
+        android:version="0x402000"
         android:required="true" />
     <uses-feature
         android:name="android.hardware.touchscreen"

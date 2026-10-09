@@ -93,6 +93,23 @@ gives you, and that is how the game starts.
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
 
+## Graphics driver
+
+This page only exists on Android phones and tablets. It is for phones with
+an Adreno graphics chip (most Qualcomm Snapdragon phones), and it lets you
+try a different graphics driver instead of the one that came with the
+phone. [How to get one and add it](ANDROID.md#using-a-different-graphics-driver).
+
+- **Driver** picks the driver for the next start. **Built-in** is the
+  phone's own driver. Every driver you added is listed after it. If a
+  driver did not start last time, its name says so.
+- **Add a driver** opens the file picker so you can choose a driver's zip
+  file. It is hidden on phones without an Adreno chip.
+- **Remove this driver** deletes the driver you have chosen. It only shows
+  while one of your own drivers is chosen.
+
+A change takes effect the next time you start the game.
+
 ## Audio
 
 - **Volume, Music volume and Effects volume** set how loud everything is.
@@ -115,8 +132,7 @@ Both of these are off unless you turn them on.
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
-  not only the eight the original game knows. On a phone the stick fix
-  starts On.
+  not only the eight the original game knows.
   [Why this is needed](FAQ.md#ico-walks-instead-of-running).
 
 ## Language

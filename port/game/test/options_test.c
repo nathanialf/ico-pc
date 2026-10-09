@@ -97,15 +97,11 @@ static void test_defaults(void)
 {
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
-    /* v0.4.2: the stick fix starts on on Android (a touch stick is round),
-       off elsewhere; with no config.toml the option is that default */
-    CHECK(ico_opt_stick_fix_default_for(1) == 1);
+    /* v0.4.3: the stick fix starts off on every platform (v0.4.2's Android
+       On was reverted); with no config.toml the option is that default */
+    CHECK(ico_opt_stick_fix_default_for(1) == 0);
     CHECK(ico_opt_stick_fix_default_for(0) == 0);
-#ifdef __ANDROID__
-    CHECK(ico_opt_stick_fix_default() == 1);
-#else
     CHECK(ico_opt_stick_fix_default() == 0);
-#endif
     CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default());
     CHECK(ico_opt_yorda_safe() == 0);
     CHECK(ico_opt_mirror() == 0);

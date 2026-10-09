@@ -32,6 +32,7 @@
 #include "options.h"
 #include "photo_mode.h"
 #include "photo_ui.h"
+#include "popup.h"
 #include "strings.h"
 #include "sysconf.h"
 #include "ui_hint.h"
@@ -197,6 +198,26 @@ static int s_warned;
 static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1}; /* [ENTRY_PAUSE]: 294, once installed */
 static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1};  /* Q2: the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
+static int s_quitHeader = -1;
+/* v0.4.3 AN-22b: the Android build asks "Quit game" (the phone's app is not
+   a desktop program); the host says so with ui_SettingsSetQuitIsGame */
+static int (*s_quitIsGame)(void);
+
+static int quitIsGame(void)
+{
+    return s_quitIsGame != NULL && s_quitIsGame() == 1;
+}
+
+static UiStrId quitRowStr(void)
+{
+    return quitIsGame() ? UI_STR_QUIT_GAME : UI_STR_QUIT_DESKTOP;
+}
+
+static UiStrId quitConfirmStr(void)
+{
+    return quitIsGame() ? UI_STR_QUIT_GAME_CONFIRM : UI_STR_QUIT_CONFIRM;
+}
+
 /* package PHOTO (S1: in the pause menu): "Photo mode" under Options, in a
    port layout chained after 57; opens photo_ui.c's layout (only while a
    stage runs: placePause) */
@@ -461,6 +482,123 @@ static int (*s_touchQuery)(void);       /* AN-G: a touch screen exists, when kno
 static int touchPresent(void)
 {
     return s_touchQuery != NULL && s_touchQuery() != 0;
+}
+
+/* v0.4.3 AN-22b: the host's graphics-driver hooks (settings.h) */
+static UiGpuDriverHost s_gpuHost;
+static int s_gpuHostSet;
+static int s_gpuPending; /* an install is running: installPoll every frame */
+
+static int gpuSelected(void)
+{
+    const int n = s_gpuHost.count();
+    const int i = s_gpuHost.selected();
+    return i >= 0 && i < n ? i : -1;
+}
+
+/* the Driver row's text: Built-in or the chosen name; "(Did not start last
+   time)" after the name of the driver that failed, the name cut to leave
+   the box room for it (the shrink to fit does the rest) */
+static const char *gpuText(char *buf, unsigned size)
+{
+    const int i = gpuSelected();
+    if (i < 0) {
+        return ui_Str(UI_STR_VAL_GPU_BUILTIN);
+    }
+    const char *name = s_gpuHost.name(i);
+    name = name != NULL ? name : "";
+    const char *tail = s_gpuHost.lastFailed(i) ? ui_Str(UI_STR_GPU_DRIVER_FAILED) : "";
+    const size_t len = strlen(name);
+    size_t n = len;
+    if (size < 8) {
+        return "";
+    }
+    for (;;) {
+        if (tail[0] != '\0') {
+            snprintf(buf, size, "%.*s%s (%s)", (int)n, name, n < len ? "\xE2\x80\xA6" : "", tail);
+        } else {
+            snprintf(buf, size, "%.*s%s", (int)n, name, n < len ? "\xE2\x80\xA6" : "");
+        }
+        if (n == 0 || ui_MeasureMenuText(UI_MENU_TEXT_SIZE * 0.6f, buf) <= (float)(STEP_W - 8)) {
+            break;
+        }
+        do {
+            n--;
+        } while (n > 0 && ((unsigned char)name[n] & 0xC0u) == 0x80u);
+    }
+    return buf;
+}
+
+/* Driver: Built-in, then each installed driver, around; the host stores the
+   choice, the config is written on leaving the page */
+static void stepGpuDriver(int dir)
+{
+    if (!s_gpuHostSet) {
+        return;
+    }
+    const int cur = gpuSelected();
+    const int to = stepIndex(cur + 1, s_gpuHost.count() + 1, dir) - 1;
+    if (to != cur) {
+        s_gpuHost.select(to);
+        s_dirtyConfig = 1;
+    }
+}
+
+/* Add a driver: the host opens its file picker and copies the file in the
+   background; gpuPoll takes the result */
+static void gpuAdd(void)
+{
+    if (s_gpuPending || !s_gpuHostSet || !s_gpuHost.adreno()) {
+        return;
+    }
+    if (s_gpuHost.installBegin() == 0) {
+        s_gpuPending = 1;
+    }
+}
+
+static void gpuPoll(void)
+{
+    if (!s_gpuPending || !s_gpuHostSet) {
+        return;
+    }
+    const int r = s_gpuHost.installPoll();
+    if (r == UI_GPU_INSTALL_PENDING) {
+        return;
+    }
+    s_gpuPending = 0;
+    if (r == UI_GPU_INSTALL_ADDED) {
+        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_ADDED), "");
+    } else if (r == UI_GPU_INSTALL_BAD) {
+        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_BAD), "");
+    } else if (r == UI_GPU_INSTALL_NOSPACE) {
+        ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_NOSPACE), "");
+    } /* cancelled: nothing to say */
+}
+
+/* Remove this driver: the built-in one is chosen first, then the host
+   deletes the files */
+static void gpuRemove(void)
+{
+    const int i = s_gpuHostSet ? gpuSelected() : -1;
+    if (i < 0) {
+        return;
+    }
+    s_gpuHost.select(-1);
+    s_gpuHost.remove(i);
+    s_dirtyConfig = 1;
+    ui_PopupPush(ui_Str(UI_STR_GPU_DRIVER_REMOVED), "");
+}
+
+void ui_SettingsSetGpuDriverHost(const UiGpuDriverHost *host)
+{
+    s_gpuHostSet = host != NULL && host->count != NULL && host->name != NULL &&
+                   host->selected != NULL && host->select != NULL && host->lastFailed != NULL &&
+                   host->adreno != NULL && host->installBegin != NULL &&
+                   host->installPoll != NULL && host->remove != NULL;
+    if (s_gpuHostSet) {
+        s_gpuHost = *host;
+    }
+    s_gpuPending = 0;
 }
 
 static int isTouchOpt(int opt)
@@ -923,6 +1061,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
     case UI_OPT_DEVICE:
         return deviceText(buf, size);
+    case UI_OPT_GPU_DRIVER:
+        return s_gpuHostSet ? gpuText(buf, size) : ui_Str(UI_STR_VAL_GPU_BUILTIN);
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
     case UI_OPT_MOUSE_SENS:
@@ -980,7 +1120,15 @@ static int isGameOpt(int opt)
 
 static int optShown(int opt, int link)
 {
-    (void)link;
+    if (opt == UI_OPT_LINK && link == UI_PAGE_GPU_DRIVER) {
+        return s_gpuHostSet; /* v0.4.3 AN-22b: only where a host answers for the driver */
+    }
+    if (opt == UI_OPT_GPU_ADD) {
+        return s_gpuHostSet && s_gpuHost.adreno() != 0;
+    }
+    if (opt == UI_OPT_GPU_REMOVE) {
+        return s_gpuHostSet && gpuSelected() >= 0;
+    }
     if (isExtrasOpt(opt)) {
         return onTitle(); /* v0.4.2: the Extras row itself shows from both */
     }
@@ -1019,7 +1167,8 @@ static int optShown(int opt, int link)
 
 static int steppable(int opt)
 {
-    return opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER; /* includes the Effects rows */
+    return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
+           opt == UI_OPT_GPU_DRIVER;
 }
 
 static int resolutionLocked(void)
@@ -1216,6 +1365,9 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     }
     case UI_OPT_DEVICE:
         stepDevice(dir);
+        break;
+    case UI_OPT_GPU_DRIVER:
+        stepGpuDriver(dir);
         break;
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
@@ -1622,7 +1774,9 @@ static void buildGalleryBar(void)
    Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  v0.4.2: the pause menu
    shows Extras too (Characters), so its main page has the title's counts:
    ten 15, twelve (developer mode) 13.  Characters: twelve rows 13 apart
-   from 40, Back at 183, its box to 219. */
+   from 40, Back at 183, its box to 219.  v0.4.3: the Graphics driver link
+   (Android) makes the developer-mode main page thirteen rows: 12 apart,
+   Back at 184, the box to 224 (as the Controls page's Back at 184). */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
@@ -1643,7 +1797,7 @@ static int pagePitch(int page, int n, int *y0)
         return 13;
     }
     if (page == UI_PAGE_MAIN) {
-        return n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
+        return n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
         /* AN-G: with the touch rows from the pause menu, ten rows 16 apart
@@ -1760,6 +1914,16 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_EFFECTS:
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
+        break;
+    case UI_PAGE_GPU_DRIVER:
+        /* one note under the page, on every row but Back */
+        addNote(pg, UI_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_NOTE);
+        for (int i = 1; i < pg->count; i++) {
+            if (pg->rows[i].opt != UI_OPT_BACK) {
+                pg->rows[i].note = pg->rows[0].note;
+                pg->rows[i].noteStr = UI_STR_GPU_DRIVER_NOTE;
+            }
+        }
         break;
     case UI_PAGE_CONTROLS:
         addNote(pg, UI_OPT_BUTTON_CONFIG, UI_STR_BUTTON_CONFIG_NOTE);
@@ -2106,8 +2270,8 @@ static void buildEntries(void)
         s_entryRow[e] = row;
         /* Q2: "Quit to desktop" under Settings, in the same layout (the
            rows are contiguous); Cross opens the confirmation */
-        int q = ui_SettingsAddRow(120, 0, 400, 40, 1, -1, UI_STR_QUIT_DESKTOP, NULL, 0.0f,
-                                  UI_ALIGN_CENTER);
+        int q =
+            ui_SettingsAddRow(120, 0, 400, 40, 1, -1, quitRowStr(), NULL, 0.0f, UI_ALIGN_CENTER);
         P(q)->centerX = 1;
         P(q)->defaultMask = 1;
         P(q)->right = s_quitLayout;
@@ -2123,17 +2287,26 @@ static void build(void)
     /* Extras (after Achievements); v0.4.2: from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
     /* v0.4.0: Dump textures under Developer mode, shown while it is on */
-    static const int mainOpts[] = {UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LANGUAGE,
-                                   UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_DEVELOPER,
-                                   UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
-    static const int mainStrs[] = {
-        UI_STR_SECTION_DISPLAY,      UI_STR_SECTION_EFFECTS,  UI_STR_SECTION_AUDIO,
-        UI_STR_SECTION_CONTROLS,     UI_STR_SECTION_GAMEPLAY, UI_STR_SECTION_LANGUAGE,
-        UI_STR_SECTION_ACHIEVEMENTS, UI_STR_EXTRAS,           UI_STR_OPT_DEVELOPER_MODE,
-        UI_STR_OPT_DUMP_TEXTURES,    UI_STR_OPT_DUMP_MODELS,  UI_STR_BACK};
+    static const int mainOpts[] = {
+        UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
+        UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
+        UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS, UI_OPT_BACK};
+    static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
+                                   UI_STR_SECTION_EFFECTS,
+                                   UI_STR_SECTION_GPU_DRIVER,
+                                   UI_STR_SECTION_AUDIO,
+                                   UI_STR_SECTION_CONTROLS,
+                                   UI_STR_SECTION_GAMEPLAY,
+                                   UI_STR_SECTION_LANGUAGE,
+                                   UI_STR_SECTION_ACHIEVEMENTS,
+                                   UI_STR_EXTRAS,
+                                   UI_STR_OPT_DEVELOPER_MODE,
+                                   UI_STR_OPT_DUMP_TEXTURES,
+                                   UI_STR_OPT_DUMP_MODELS,
+                                   UI_STR_BACK};
     static const int mainLinks[] = {UI_PAGE_DISPLAY,
                                     UI_PAGE_EFFECTS,
+                                    UI_PAGE_GPU_DRIVER,
                                     UI_PAGE_AUDIO,
                                     UI_PAGE_CONTROLS,
                                     UI_PAGE_GAMEPLAY,
@@ -2144,6 +2317,11 @@ static void build(void)
                                     -1,
                                     -1,
                                     -1};
+    /* v0.4.3 AN-22b: Android's Graphics driver page (its link needs a host) */
+    static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_REMOVE,
+                                  UI_OPT_BACK};
+    static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
+                                  UI_STR_GPU_DRIVER_REMOVE, UI_STR_BACK};
     static const int fxOpts[] = {UI_OPT_CRT,
                                  UI_OPT_CRT_STRENGTH,
                                  UI_OPT_EFFECT_GLOW,
@@ -2245,6 +2423,7 @@ static void build(void)
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
     _Static_assert(sizeof(fxOpts) == sizeof(fxStrs), "a string for each Effects row");
+    _Static_assert(sizeof(gpuOpts) == sizeof(gpuStrs), "a string for each Graphics driver row");
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs), "a string for each Gameplay row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
                        sizeof(extrasOpts) == sizeof(extrasLinks),
@@ -2270,6 +2449,8 @@ static void build(void)
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
                     UI_PAGE_MAIN);
+    buildOptionPage(UI_PAGE_GPU_DRIVER, UI_STR_SECTION_GPU_DRIVER, gpuOpts, gpuStrs, NULL,
+                    N_OF(gpuOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks,
                     N_OF(extrasOpts), UI_PAGE_MAIN);
     /* v0.4.2: the layout extension's budget: the Characters page adds 50
@@ -2474,9 +2655,10 @@ static int quitScreenProc(int first, int item);
 static void buildQuitScreen(void)
 {
     int first = lt_ext_PropCount() + LT_GAME_PROPERTY_COUNT;
-    int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, UI_STR_QUIT_CONFIRM, NULL, HEADER_SIZE,
+    int h = ui_SettingsAddRow(20, 112, 600, 40, 0, -1, quitConfirmStr(), NULL, HEADER_SIZE,
                               UI_ALIGN_CENTER);
     P(h)->centerX = 1;
+    s_quitHeader = h;
     s_quitYesNo[1] =
         ui_SettingsAddRow(200, 146, 110, 40, 1, -1, UI_STR_MT_YES, NULL, 0.0f, UI_ALIGN_CENTER);
     s_quitYesNo[0] =
@@ -2505,6 +2687,20 @@ void ui_SettingsSetTexturePackCount(int (*fn)(void))
 void ui_SettingsSetTouchQuery(int (*fn)(void))
 {
     s_touchQuery = fn;
+}
+
+void ui_SettingsSetQuitIsGame(int (*fn)(void))
+{
+    s_quitIsGame = fn;
+    if (s_built && s_quitHeader >= 0) {
+        /* installed after the build: the labels follow */
+        lt_ext_SetStr(s_quitHeader, quitConfirmStr());
+        for (int e = ENTRY_TITLE12; e <= ENTRY_TITLE13; e++) {
+            if (s_quitRow[e] >= 0) {
+                lt_ext_SetStr(s_quitRow[e], quitRowStr());
+            }
+        }
+    }
 }
 
 void ui_SettingsSetQuitHandler(void (*fn)(void))
@@ -3505,6 +3701,7 @@ static int settingsProc(int first, int item)
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
+    gpuPoll(); /* v0.4.3 AN-22b: an install the page started, on any page */
     if (id == UI_PAGE_MUSIC) {
         gallery_Tick(); /* the engine, once a Main tick while the page is up */
     }
@@ -3607,6 +3804,15 @@ static int settingsProc(int first, int item)
                 POSITIVE_SE();
                 return to;
             }
+        }
+        if ((flags & PAD_CROSS) && r->opt == UI_OPT_GPU_ADD) {
+            POSITIVE_SE();
+            gpuAdd();
+        }
+        if ((flags & PAD_CROSS) && r->opt == UI_OPT_GPU_REMOVE) {
+            POSITIVE_SE();
+            gpuRemove();
+            refreshPage(pg, id, lay->curItem);
         }
         if ((flags & PAD_CROSS) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));

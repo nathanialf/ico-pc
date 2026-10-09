@@ -40,10 +40,12 @@ static int get(int *v, const char *path)
 
 int ico_opt_stick_fix_default_for(int android)
 {
-    /* v0.4.2: on a phone the touch stick is round, so its diagonals stop
-       short of the DualShock 2's square corners, where Ico runs diagonally
-       at full speed; the stick fix gives them back */
-    return android ? 1 : 0;
+    /* v0.4.2 made this On on Android (the touch stick is round, so its
+       diagonals stop short of the DualShock 2's square corners); v0.4.3
+       reverted that: a file without the key reads Off on every platform, and
+       a file where the player chose a value keeps it (no file is rewritten) */
+    (void)android;
+    return 0;
 }
 
 int ico_opt_stick_fix_default(void)

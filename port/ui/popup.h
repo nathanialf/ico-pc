@@ -49,6 +49,8 @@ void ui_PopupReset(void);
 /* The current popup's panel in the layout grid (font.h) at this vsync, for
    tests: x0, y0, x1, y1; 0 when none is showing. */
 int ui_PopupPanel(float rect[4]);
+/* The current popup's title (tests); "" when none is showing. */
+const char *ui_PopupTitle(void);
 
 #ifdef __cplusplus
 }
