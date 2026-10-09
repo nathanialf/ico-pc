@@ -13,3 +13,8 @@
 - The shadow creatures rise out of their pools again instead of appearing above them.
 - Android: the fog no longer covers the whole picture on some phones.
 - The scenery no longer shows for a moment before the Sony sign when the game starts.
+
+## Known issues
+
+- On the platform with the save bench by the sea, a dark patch on the floor in the back corner flickers while the camera turns.
+- Some water surfaces shimmer while the camera moves.
