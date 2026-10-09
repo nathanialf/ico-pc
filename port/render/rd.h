@@ -114,7 +114,7 @@ typedef enum RdProg {
     RD_PROG_SKIN,          /* cluster: code 20 */
     RD_PROG_SKIN_SPEC,     /* cluster: code 22 (24 is the debug variant) */
     RD_PROG_GRID,          /* mesh: unlit */
-    RD_PROG_GRID_LIT,      /* mesh: lit, specular variant selected by RdLights.specular */
+    RD_PROG_GRID_LIT,      /* mesh: lit, with the specular variant */
     RD_PROG_PARTICLE,      /* particle */
     RD_PROG_SCREEN,        /* 2D sprites, lines, points in GS window space (gif_* helpers) */
     RD_PROG_WORLD_PRIM,    /* CPU-projected prims with a matrix (darkVolume, lightning, sun) */
@@ -210,32 +210,6 @@ typedef struct RdXform {
         [16]; /* model to GS clip, 4:3; the renderer substitutes its own projection in Enhanced */
 } RdXform;
 
-typedef struct RdLights {
-    float dir[3][4]; /* three directional lights in model space, as the VU block holds them */
-    float col[3][4];
-    float ambient[4];
-    float specular[4]; /* specular colour/power; .w = 0 means no specular */
-    float eye[4];      /* eye position in model space for specular/reflection */
-    float reflectParams[4];
-} RdLights;
-
-typedef struct RdMeshDesc {
-    uint32_t vertexCount;
-    const float (*pos)[4];       /* required */
-    const float (*nrm)[4];       /* optional */
-    const float (*uv)[4];        /* s, t, q, 0; optional */
-    const uint8_t (*col)[4];     /* optional; GS RGBA (0x80 = 1.0) */
-    const uint8_t (*cluster)[4]; /* bone indices for RD_PROG_SKIN; optional */
-    const float (*weight)[4];    /* bone weights; optional */
-    uint32_t stripCount;
-    const uint16_t *stripStart; /* per strip: first vertex */
-    const uint16_t *stripLen;   /* per strip: vertex count (>= 3) */
-    uint32_t materialCount;
-    const uint16_t
-        *stripMaterial; /* per strip: material index into the owner's PObjMaterial table */
-    const char *debugName;
-} RdMeshDesc;
-
 /* Per-material state that the mesh draw applies for each strip range.
  * Built from PObjMaterial.attr by Packet.c and passed at draw time because
  * the dissolve and shadow modes override it per frame. */
@@ -264,21 +238,6 @@ typedef struct RdWorldVtx {
     float st[2];
     uint8_t rgba[4];
 } RdWorldVtx;
-
-typedef struct RdParticleBatch {
-    uint32_t count;
-    const float (*pos)[4];
-    const float (*size)[2];
-    const uint8_t (*rgba)[4];
-    const float (*uvRect)[4];
-    RdTex tex;
-    const float *viewMtx; /* billboard basis */
-    uint8_t blend, abe, zwrite, _pad;
-} RdParticleBatch;
-
-/* Mesh3D is the game's procedural grid (cloth, water, flags); declared in
- * ico2/seki/include/Primitive.h.  rd reads vertex arrays through it. */
-struct Mesh3D;
 
 typedef enum RdPostKind {
     RD_POST_REDUCTION = 0, /* SCENE -> DISPLAY, bilinear, tint, border crop; gsb_Reduction */
@@ -1002,29 +961,8 @@ void rd_SheetRim(const uint8_t *coverage, uint32_t w, uint32_t h, uint32_t scale
 
 /* -------------------------------------------------------------- meshes */
 
-/* Wave 3 (R3ab): the mesh path is rd_mesh.h's (the VU1 program shaders on
- * the packets the game builds).  The
- * four semantic draw calls below are kept for an Enhanced path and record
- * nothing; rd_CreateMesh keeps a record without geometry. */
-
-/* pac_MakePacket (Packet.c): one RdMesh per PObjPart, built once at load. */
-RdMesh rd_CreateMesh(const RdMeshDesc *desc);
-void rd_DestroyMesh(RdMesh m);
-/* reg_dispNObj / reg_dispLObj / reg_dispCObj paths (RegistPacket.c): the
- * static or lit mesh draw.  materials has desc->materialCount entries. */
-void rd_DrawMesh(RdMesh m, RdProg prog, const RdXform *xf, const RdLights *lights,
-                 const RdMaterial *materials, RdKey key);
-/* reg_setCMatrixPacket path: skinned draw with bone matrices (model space,
- * as the cluster microprogram received them). */
-void rd_DrawSkinned(RdMesh m, RdProg prog, const RdXform *xf, const float (*bones)[16],
-                    uint32_t boneCount, const RdLights *lights, const RdMaterial *materials,
-                    RdKey key);
-/* prim_DispMesh3D (Primitive.c): procedural grid; vertex arrays are read
- * from the Mesh3D at call time and copied into the frame. */
-void rd_DrawGrid(const struct Mesh3D *grid, const RdXform *xf, const RdLights *lights,
-                 const RdMaterial *mat, RdKey key);
-/* prim_DispParticle (Primitive.c) and particleEffect.c after conversion. */
-void rd_DrawParticles(const RdParticleBatch *batch, RdKey key);
+/* The mesh path is rd_mesh.h's: the VU1 program shaders on the packets the
+ * game builds. */
 
 /* --------------------------------------------------- immediate prims */
 

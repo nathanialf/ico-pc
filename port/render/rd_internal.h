@@ -1180,12 +1180,11 @@ enum {
     RD_ONCE_TEMP_FULL,
     RD_ONCE_DATE_SIZE,
     /* wave 3 (R3ab) */
-    RD_ONCE_VU_ROW,        /* a (program, code) pair without a table row */
-    RD_ONCE_VU_ENDTAG,     /* the particle end-tag quirk would have hidden a skinned draw */
-    RD_ONCE_VU_MATERIALS,  /* RdVuDraw.materials given: recorded, not applied */
-    RD_ONCE_VU_MESHES,     /* the mesh registry evicted meshes */
-    RD_ONCE_VU_CODE,       /* an MSCAL code rd_VuCall does not model (debug font) */
-    RD_ONCE_SEMANTIC_MESH, /* the wave-0 semantic mesh calls: not recorded */
+    RD_ONCE_VU_ROW,       /* a (program, code) pair without a table row */
+    RD_ONCE_VU_ENDTAG,    /* the particle end-tag quirk would have hidden a skinned draw */
+    RD_ONCE_VU_MATERIALS, /* RdVuDraw.materials given: recorded, not applied */
+    RD_ONCE_VU_MESHES,    /* the mesh registry evicted meshes */
+    RD_ONCE_VU_CODE,      /* an MSCAL code rd_VuCall does not model (debug font) */
     /* wave 4 (R4b) */
     RD_ONCE_SHADOW, /* a shadow command without a depth-stencil target of the colour's size */
     /* wave 4 (R4c) */

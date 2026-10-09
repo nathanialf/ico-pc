@@ -1034,43 +1034,6 @@ RdTex rd_TargetTexture(RdTarget target, RdTexView view)
     return (RdTex){id};
 }
 
-/* ----------------------------------------------------------------- meshes */
-
-RdMesh rd_CreateMesh(const RdMeshDesc *desc)
-{
-    if (!g_rd.meshes || !desc) {
-        return (RdMesh){0};
-    }
-    for (uint32_t i = 0; i < RD_MAX_MESHES; i++) {
-        RdMeshRec *m = &g_rd.meshes[i];
-        if (m->live) {
-            continue;
-        }
-        uint32_t gen = (m->gen + 1) & 0xFFFF;
-        memset(m, 0, sizeof(*m));
-        m->gen = gen ? gen : 1;
-        m->live = 1;
-        m->vertexCount = desc->vertexCount;
-        m->stripCount = desc->stripCount;
-        m->materialCount = desc->materialCount;
-        /* wave 3 (R3ab): the seki layer builds VU meshes (rd_CreateVuMesh,
-           rd_mesh.h); this semantic description is kept for an Enhanced
-           path and holds no geometry */
-        return (RdMesh){(m->gen << 16) | (i + 1)};
-    }
-    return (RdMesh){0};
-}
-
-void rd_DestroyMesh(RdMesh mesh)
-{
-    RdMeshRec *m = rd__MeshRec(mesh.id);
-    if (m && m->vu) {
-        rd_DestroyVuMesh(mesh);
-    } else if (m) {
-        m->live = 0;
-    }
-}
-
 /* ------------------------------------------------------------- lifecycle */
 
 static void initCommon(uint32_t gsW, uint32_t gsH, const RdSettings *settings)
@@ -1881,43 +1844,6 @@ static RdCmd *pushStub(uint8_t type, RdKey key, const void *const *parts, const 
     setKey(c, key);
     g_rd.stats.draws++;
     return c;
-}
-
-/* The wave-0 semantic mesh calls (rd.h): superseded by rd_mesh.h's exact
- * path in wave 3 (R3ab), whose payload RDC_MESH and the other three now
- * carry.  Kept declared for an Enhanced path; they record nothing. */
-static void semanticMesh(const char *what)
-{
-    rd__LogOnce(RD_ONCE_SEMANTIC_MESH, "%s is not recorded: the mesh path is rd_mesh.h's", what);
-}
-
-void rd_DrawMesh(RdMesh m, RdProg prog, const RdXform *xf, const RdLights *lights,
-                 const RdMaterial *materials, RdKey key)
-{
-    (void)m, (void)prog, (void)xf, (void)lights, (void)materials, (void)key;
-    semanticMesh("rd_DrawMesh");
-}
-
-void rd_DrawSkinned(RdMesh m, RdProg prog, const RdXform *xf, const float (*bones)[16],
-                    uint32_t boneCount, const RdLights *lights, const RdMaterial *materials,
-                    RdKey key)
-{
-    (void)m, (void)prog, (void)xf, (void)bones, (void)boneCount, (void)lights, (void)materials;
-    (void)key;
-    semanticMesh("rd_DrawSkinned");
-}
-
-void rd_DrawGrid(const struct Mesh3D *grid, const RdXform *xf, const RdLights *lights,
-                 const RdMaterial *mat, RdKey key)
-{
-    (void)grid, (void)xf, (void)lights, (void)mat, (void)key;
-    semanticMesh("rd_DrawGrid");
-}
-
-void rd_DrawParticles(const RdParticleBatch *b, RdKey key)
-{
-    (void)b, (void)key;
-    semanticMesh("rd_DrawParticles");
 }
 
 void rd_WorldPrims(RdPrim type, const RdWorldVtx *v, uint32_t count, const float *mtx, RdKey key)
