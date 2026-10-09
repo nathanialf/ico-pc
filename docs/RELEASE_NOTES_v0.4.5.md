@@ -19,7 +19,4 @@
 
 ## Known issues
 
-- When the game starts, the scenery can show for a moment before the Sony sign.
-- On a very wide picture (21:9 or 32:9) the dark bands above and below the picture can flash white while a save loads.
-
-Both will be looked at in the next version.
+- When the game starts, the scenery can show for a moment before the Sony sign. This will be looked at in the next version.
