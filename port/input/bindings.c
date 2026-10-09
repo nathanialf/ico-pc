@@ -166,6 +166,9 @@ static const char default_text[] = "[input]\n"
                                    "mouse_invert_y = false\n"
                                    "mouse_camera = true\n"
                                    "mouse_hold = 0.75\n"
+                                   "mouse_camera_speed = 1.0\n"
+                                   "mouse_full_range = false\n"
+                                   "mouse_return = true\n"
                                    "rumble = true\n"
                                    "touch_mode = \"auto\"\n"
                                    "touch_size = \"medium\"\n"
@@ -257,6 +260,8 @@ void ico_bindings_defaults(IcoBindings *b)
     b->mouse_decay = 0.80f;
     b->mouse_camera = 1;
     b->mouse_hold = 0.75f;
+    b->mouse_camera_speed = 1.0f;
+    b->mouse_return = 1;
     b->touch_mode = ICO_TOUCH_MODE_AUTO;
     b->touch_size = ICO_TOUCH_MEDIUM;
     b->touch_opacity = 75;
@@ -421,6 +426,13 @@ int ico_bindings_set(IcoBindings *b, const char *key, const char *value)
             b->mouse_camera = on;
         } else if (strcmp(key, "mouse_hold") == 0 && parse_float(value, 0.0f, 10.0f, &f) == 0) {
             b->mouse_hold = f;
+        } else if (strcmp(key, "mouse_camera_speed") == 0 &&
+                   parse_float(value, 0.5f, 10.0f, &f) == 0) {
+            b->mouse_camera_speed = f;
+        } else if (strcmp(key, "mouse_full_range") == 0 && parse_bool(value, &on) == 0) {
+            b->mouse_full_range = on;
+        } else if (strcmp(key, "mouse_return") == 0 && parse_bool(value, &on) == 0) {
+            b->mouse_return = on;
         } else if (strcmp(key, "deadzone") == 0 && parse_float(value, 0.0f, 0.9f, &f) == 0) {
             b->deadzone = f;
         } else if (strcmp(key, "walk_scale") == 0 && parse_float(value, 0.05f, 1.0f, &f) == 0) {
@@ -598,6 +610,7 @@ void ico_bindings_mouse_reset(IcoBindings *b)
 {
     b->look_x = b->look_y = b->look_idle = 0.0f;
     b->mouse_x = b->mouse_y = 0.0f;
+    b->mouse_drives = 0;
 }
 
 /* I17a: the mouse camera's stick from this snapshot's motion (input.h):
@@ -620,7 +633,8 @@ static void mouse_look(IcoBindings *b, const IcoInputRaw *raw)
             b->look_x = b->look_y = 0.0f;
         }
         b->look_idle = 0.0f;
-    } else {
+    } else if (b->mouse_return) {
+        /* with the swing back off, the offset stays until the next motion */
         const float before = b->look_idle;
 
         b->look_idle += dt;
@@ -731,6 +745,15 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
         }
         dirs(d[4], d[5], d[6], d[7], &kb.rx, &kb.ry);
         merge_stick(&kb.rx, &kb.ry, b->mouse_x, b->mouse_y);
+        /* the mouse's stick is what moves the camera when it is not centred
+           and is strictly longer than both the keys' and the gamepad's (a tie
+           goes to them, as in ico_vpad_merge) */
+        {
+            const float m = b->mouse_x * b->mouse_x + b->mouse_y * b->mouse_y;
+
+            b->mouse_drives = m > 0.0f && kb.rx == b->mouse_x && kb.ry == b->mouse_y &&
+                              m > gp.rx * gp.rx + gp.ry * gp.ry;
+        }
     }
 
     *out = gp;

@@ -192,6 +192,20 @@ typedef struct IcoBindings {
        ([input] mouse still drives the buttons). */
     int mouse_camera;
     float mouse_hold;
+    /* Three more ways to tune the mouse camera ([input] mouse_camera_speed,
+       0.5..10, default 1; mouse_full_range, default off; mouse_return,
+       default on). Speed scales how fast the game's camera follows the
+       mouse's stick (10 is at once); full range lets the mouse turn the
+       camera past the area's own angle limits; with mouse_return off the
+       held look offset stays where it is until the next motion instead of
+       relaxing to centre. At the defaults the camera behaves exactly as
+       before. */
+    float mouse_camera_speed;
+    int mouse_full_range;
+    int mouse_return;
+    /* set each step: the mouse's stick won the merge with the keys and the
+       gamepad, so it is what moves the camera (mouse_camera.h) */
+    int mouse_drives;
     int rumble;
     float mouse_x, mouse_y; /* the mouse's stick, state between steps */
     float look_x, look_y;   /* the held look offset, unit circle */
@@ -280,7 +294,8 @@ extern const char *const ico_mouse_names[ICO_MOUSE_BUTTONS];
    [input.pad] for each target whose row differs from the default or is
    already in the file, as a string ("Space", "Tab, Backquote", "none";
    bindings.c splits a comma list like an array), mouse_sensitivity,
-   mouse_camera, mouse_invert_y, mouse_hold, and touch_mode, touch_size
+   mouse_camera, mouse_invert_y, mouse_hold, mouse_camera_speed,
+   mouse_full_range, mouse_return, and touch_mode, touch_size
    and touch_opacity, each when it differs from the default or is already
    in the file. Returns the number of keys set, or
    -1. */

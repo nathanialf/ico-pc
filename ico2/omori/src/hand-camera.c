@@ -8,6 +8,14 @@
 #include <libvu0.h>
 #include "main.h"
 
+/* PC port: port/input/mouse_camera.c. The factor on the follow speed (exactly
+   1.0f unless the mouse's stick is moving the camera) and whether the mouse
+   may turn the camera past the area's angle limits. */
+extern float ico_mouse_camera_speed(void);
+extern int ico_mouse_camera_full_range(void);
+/* PC port: the step toward the target for a speed other than 1 */
+extern void ico_mouse_camera_step(float *da, float *db, float d, float spd, float k);
+
 /* the correction rate scaled by the frame budget, and the correction mode
    HandCameraCorrect is called with */
 static float handCameraRate; /* derived name */
@@ -29,6 +37,7 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     float db;
     float t;
     float d;
+    float k;
 
     _ApplyRyGV(v, -ang);
     x = v[0];
@@ -44,6 +53,11 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
     else
         spd = handCameraRate * 0.008726646f * _ACTGame_GetParamF(17);
 
+    /* PC port: the mouse camera speed; a factor of 1 leaves spd untouched */
+    k = ico_mouse_camera_speed();
+    if (k != 1.0f)
+        spd *= k;
+
     db = x * (p[5] * 3.1415927f / 180.0f) - *yaw;
 
     if (y > 0.0f) {
@@ -57,7 +71,10 @@ static void RotateAccordingToStick_PatternThree(float *pitch, float *yaw, float 
 
     d = FSqrt(da * da + db * db);
 
-    if (d < spd * 10.0f) {
+    if (k != 1.0f) {
+        /* PC port: the same step for the mouse camera's other speeds */
+        ico_mouse_camera_step(&da, &db, d, spd, k);
+    } else if (d < spd * 10.0f) {
         da = da / 10.0f;
         db = db / 10.0f;
     } else if (spd < d) {
@@ -182,13 +199,28 @@ inline void SetLimitHandCameraCorrect(float limitP, float limitV)
 void HandCameraCorrect(void *eye, void *at, int mode, float stickX, float stickZ, float rate)
 {
     float *p = handCameraWork;
+    float savedYawLimit = p[5];
+    float savedPitchLimit = p[6];
 
     handCameraRate = rate;
     handCameraMode = mode;
+
+    /* PC port: the mouse camera's full range lets the mouse look all the way
+       around and up to the pitch stop, never less than the area's own limits */
+    if (ico_mouse_camera_full_range()) {
+        if (p[5] < 180.0f)
+            p[5] = 180.0f;
+        if (p[6] < 85.0f)
+            p[6] = 85.0f;
+    }
 
     SetCurrentInfo(eye, at);
 
     RotateAccordingToStick_PatternThree(p, p + 1, stickX, -stickZ);
 
     HandyCamera_TargetMoveType(eye, at);
+
+    /* PC port: the area's own limits again */
+    p[5] = savedYawLimit;
+    p[6] = savedPitchLimit;
 }

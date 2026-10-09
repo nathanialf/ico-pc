@@ -16,11 +16,23 @@
 #include "input.h"
 #include "options.h"
 
-static const char *const scalar_keys[] = {
-    "keyboard",       "mouse",        "gamepad",           "rumble",
-    "deadzone",       "walk_scale",   "mouse_sensitivity", "mouse_decay",
-    "mouse_invert_y", "mouse_camera", "mouse_hold",        "touch_mode",
-    "touch_size",     "touch_opacity"};
+static const char *const scalar_keys[] = {"keyboard",
+                                          "mouse",
+                                          "gamepad",
+                                          "rumble",
+                                          "deadzone",
+                                          "walk_scale",
+                                          "mouse_sensitivity",
+                                          "mouse_decay",
+                                          "mouse_invert_y",
+                                          "mouse_camera",
+                                          "mouse_hold",
+                                          "touch_mode",
+                                          "touch_size",
+                                          "touch_opacity",
+                                          "mouse_camera_speed",
+                                          "mouse_full_range",
+                                          "mouse_return"};
 
 static const char *const dev_prefix[3] = {"kb.", "mouse.", "pad."};
 
@@ -258,6 +270,28 @@ int ico_input_write_bindings(const IcoBindings *b)
     if (b->mouse_hold != def.mouse_hold ||
         ico_config_get_string("input.mouse_hold", NULL) != NULL) {
         if (ico_config_set_float("input.mouse_hold", b->mouse_hold) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    /* the mouse camera's speed, range and swing back rows */
+    if (b->mouse_camera_speed != def.mouse_camera_speed ||
+        ico_config_get_string("input.mouse_camera_speed", NULL) != NULL) {
+        if (ico_config_set_float("input.mouse_camera_speed", b->mouse_camera_speed) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->mouse_full_range != def.mouse_full_range ||
+        ico_config_get_string("input.mouse_full_range", NULL) != NULL) {
+        if (ico_config_set_bool("input.mouse_full_range", b->mouse_full_range != 0) != 0) {
+            return -1;
+        }
+        n++;
+    }
+    if (b->mouse_return != def.mouse_return ||
+        ico_config_get_string("input.mouse_return", NULL) != NULL) {
+        if (ico_config_set_bool("input.mouse_return", b->mouse_return != 0) != 0) {
             return -1;
         }
         n++;

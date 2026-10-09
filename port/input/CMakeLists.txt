@@ -2,7 +2,8 @@
 # subset (pad_host.c), the pad script reader (pad_script.c, the headless and
 # test source), the virtual pad's arithmetic (vpad.c), the binding layer
 # (bindings.c, input_config.c), the touch overlay's mapper (touch.c) and the
-# mouse camera's capture rule and photo look accumulator (mouse_look.c) and
+# mouse camera's capture rule and photo look accumulator (mouse_look.c), the
+# camera speed and range the game's hand camera asks for (mouse_camera.c) and
 # the menus' mouse pointer (pointer.c, v0.4.3 I17b). The SDL3 device layer
 # (input_sdl.c) is part of the window build only; the headless build has no
 # SDL dependency.
@@ -10,6 +11,7 @@ add_library(ico_input STATIC
     bindings.c
     input_config.c
     input_record.c
+    mouse_camera.c
     mouse_look.c
     pad_host.c
     pad_script.c
@@ -64,4 +66,17 @@ target_compile_options(touch_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WAR
 target_link_libraries(touch_test PRIVATE ico_input)
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME touch COMMAND touch_test)
+endif()
+
+# the mouse camera's speed and range for the hand camera: the step arithmetic
+# and the gating on the mouse's stick driving the camera
+add_executable(mouse_camera_test test/mouse_camera_test.c ../platform/host_config.c)
+target_include_directories(mouse_camera_test PRIVATE "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(mouse_camera_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(mouse_camera_test PRIVATE ico_input)
+if(WIN32)
+    target_link_libraries(mouse_camera_test PRIVATE comdlg32 user32)
+endif()
+if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
+    add_test(NAME mouse_camera COMMAND mouse_camera_test)
 endif()
