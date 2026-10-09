@@ -17,8 +17,8 @@
 #                          as a CMake package (lib/cmake/SDL3); X11 video and
 #                          ALSA (and PulseAudio when the host has libpulse)
 #                          audio backends, loaded with dlopen
-#   deps/sdl3/mingw/       SDL's own mingw development release: the
-#                          x86_64-w64-mingw32 and i686-w64-mingw32 prefixes
+#   deps/sdl3/mingw/       SDL's own mingw development release: its
+#                          x86_64-w64-mingw32 prefix
 #   deps/vulkan-validation/ the Khronos validation layer (Apache-2.0) from
 #                          Debian 13, for the RHI tests only; never shipped
 #   deps/dxc/              DirectX Shader Compiler (Linux x86-64 release, NCSA):
@@ -228,7 +228,7 @@ else
 fi
 
 # Windows: SDL's prebuilt mingw development release. It holds one prefix per
-# target (x86_64-w64-mingw32/, i686-w64-mingw32/) with lib/cmake/SDL3, the
+# target; the x86_64-w64-mingw32/ one has lib/cmake/SDL3, the
 # import library and SDL3.dll; it is built against the UCRT-neutral mingw
 # runtime and links with both mingw-gcc and llvm-mingw.
 SDL3_MINGW="$DEST/sdl3/mingw"
@@ -241,11 +241,11 @@ else
     fetch "${SDL3_BASE}/SDL3-devel-${SDL3_VERSION}-mingw.tar.gz" "$SDL3_MINGW_SHA256" \
         "$TMP/SDL3-mingw.tar.gz"
     tar -C "$TMP" -xzf "$TMP/SDL3-mingw.tar.gz"
-    # Keep the two target prefixes and the licence; the tarball also carries
-    # the full source tree, which the build does not use.
+    # Keep the 64-bit prefix and the licence; the tarball also carries the
+    # 32-bit prefix and the full source tree, which the build does not use.
     rm -rf "$SDL3_MINGW"
     mkdir -p "$SDL3_MINGW"
-    for d in x86_64-w64-mingw32 i686-w64-mingw32 LICENSE.txt; do
+    for d in x86_64-w64-mingw32 LICENSE.txt; do
         mv "$TMP/SDL3-${SDL3_VERSION}/$d" "$SDL3_MINGW/"
     done
     echo "$SDL3_MINGW_ID" > "$SDL3_MINGW/.ico-release"

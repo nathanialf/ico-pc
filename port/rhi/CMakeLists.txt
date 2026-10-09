@@ -61,8 +61,6 @@ endif()
 set(_ico_sdl3_prefix "")
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/mingw/x86_64-w64-mingw32")
-elseif(WIN32)
-    set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/mingw/i686-w64-mingw32")
 elseif(ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     # tools/fetch_android.sh's NDK build
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/android-arm64")
