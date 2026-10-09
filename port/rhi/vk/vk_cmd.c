@@ -508,6 +508,17 @@ void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint3
     if (!c) {
         return;
     }
+    if (!c->recording) {
+        /* after rhi_end_commands nothing more is recorded: the barrier
+           would sit in the pending set unrecorded while the texture's
+           state and hazards said it happened */
+        static bool s_logged;
+        if (!s_logged) {
+            s_logged = true;
+            VKR_LOG("rhi_cmd_barrier on a list already ended: ignored (logged once)");
+        }
+        return;
+    }
     for (uint32_t i = 0; i < count; i++) {
         VkrTexture *t = vkr_get_texture(barriers[i].texture);
         if (!t || barriers[i].before >= RHI_STATE_COUNT || barriers[i].after >= RHI_STATE_COUNT) {
