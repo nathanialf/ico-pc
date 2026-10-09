@@ -441,18 +441,7 @@ target_include_directories(font_edge_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
 target_compile_definitions(font_edge_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(font_edge_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(font_edge_test PRIVATE ico_render)
-if(WIN32 AND SDL3_FOUND)
-    add_custom_command(TARGET font_edge_test POST_BUILD
-                       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                               "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:font_edge_test>"
-                       VERBATIM)
-endif()
-if(WIN32 AND SDL3_FOUND)
-    add_custom_command(TARGET ui_test POST_BUILD
-                       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                               "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:ui_test>"
-                       VERBATIM)
-endif()
+ico_copy_sdl3_dll(font_edge_test ui_test)
 if(ICO_RUN_TESTS)
     add_test(NAME ui COMMAND ui_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)

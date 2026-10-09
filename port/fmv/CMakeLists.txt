@@ -171,13 +171,7 @@ if(TARGET ico_render)
         target_compile_options(rd_video_window_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                                ${ICO_PORT_WARNINGS})
         target_link_libraries(rd_video_window_test PRIVATE ico_render SDL3::SDL3-shared)
-        if(WIN32)
-            add_custom_command(TARGET rd_video_window_test POST_BUILD
-                               COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                       "$<TARGET_FILE:SDL3::SDL3-shared>"
-                                       "$<TARGET_FILE_DIR:rd_video_window_test>"
-                               VERBATIM)
-        endif()
+        ico_copy_sdl3_dll(rd_video_window_test)
         if(ICO_RUN_TESTS)
             add_test(NAME rd_video_window COMMAND rd_video_window_test)
             set_tests_properties(rd_video_window PROPERTIES SKIP_RETURN_CODE 77)

@@ -283,6 +283,21 @@ else()
     set(ICO_LIBMPEG2_NEON OFF)
 endif()
 
+# ico_copy_sdl3_dll(<target>...): on Windows, SDL3.dll beside each program
+# after it is linked, so it runs from the build directory. SDL3::SDL3-shared
+# is found by port/rhi and made global there, so call this after port/rhi
+# is configured (or from a deferred function).
+function(ico_copy_sdl3_dll)
+    if(WIN32 AND TARGET SDL3::SDL3-shared)
+        foreach(t IN LISTS ARGN)
+            add_custom_command(TARGET ${t} POST_BUILD
+                               COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                                       "$<TARGET_FILE:SDL3::SDL3-shared>" "$<TARGET_FILE_DIR:${t}>"
+                               VERBATIM)
+        endforeach()
+    endif()
+endfunction()
+
 # The libraries, DXC and the validation layer tools/fetch_deps.sh fetches
 set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
     "Prefix of the dependencies tools/fetch_deps.sh installs")
@@ -349,13 +364,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         target_link_libraries(ico_pc PRIVATE adrenotools ico_json ico_miniz)
         set_target_properties(ico_pc PROPERTIES LINKER_LANGUAGE CXX)
     endif()
-    if(WIN32)
-        # SDL3.dll beside the program
-        add_custom_command(TARGET ico_pc POST_BUILD
-                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                   "$<TARGET_FILE:SDL3::SDL3-shared>" "$<TARGET_FILE_DIR:ico_pc>"
-                           VERBATIM)
-    endif()
+    ico_copy_sdl3_dll(ico_pc)
 endif()
 
 # --- host_fs for every target that compiles host_config.c -------------------

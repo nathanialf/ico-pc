@@ -244,15 +244,9 @@ if(_ico_have_vk)
         target_link_libraries(rhi_vk_swapchain_test PRIVATE ico_rhi SDL3::SDL3)
     endif()
 
-    # Windows: put SDL3.dll beside the test programs so they run from the
-    # build directory.
-    if(WIN32 AND SDL3_FOUND)
-        foreach(t rhi_vk_test rhi_vk_swapchain_test)
-            add_custom_command(TARGET ${t} POST_BUILD
-                               COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                       "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
-                               VERBATIM)
-        endforeach()
+    # Windows: SDL3.dll beside the test programs
+    if(SDL3_FOUND)
+        ico_copy_sdl3_dll(rhi_vk_test rhi_vk_swapchain_test)
     endif()
 
     if(ICO_RUN_TESTS)
@@ -329,10 +323,7 @@ if(_ico_have_d3d12)
     if(SDL3_FOUND)
         target_compile_definitions(rhi_d3d12_test PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(rhi_d3d12_test PRIVATE SDL3::SDL3)
-        add_custom_command(TARGET rhi_d3d12_test POST_BUILD
-                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                   "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:rhi_d3d12_test>"
-                           VERBATIM)
+        ico_copy_sdl3_dll(rhi_d3d12_test)
     endif()
     if(ICO_RUN_TESTS)
         add_test(NAME rhi_d3d12 COMMAND rhi_d3d12_test --console)

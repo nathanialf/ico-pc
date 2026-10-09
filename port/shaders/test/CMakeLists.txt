@@ -19,12 +19,7 @@ if(TARGET ico_rhi_vk)
     target_include_directories(shaders_pixel_test PRIVATE "${ICO_SHADER_DIR}")
     target_compile_options(shaders_pixel_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(shaders_pixel_test PRIVATE ico_shaders ico_rhi_vk)
-    if(WIN32 AND SDL3_FOUND)
-        add_custom_command(TARGET shaders_pixel_test POST_BUILD
-                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                   "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:shaders_pixel_test>"
-                           VERBATIM)
-    endif()
+    ico_copy_sdl3_dll(shaders_pixel_test)
 endif()
 
 if(TARGET ico_rhi_vk)
@@ -32,12 +27,7 @@ if(TARGET ico_rhi_vk)
     target_include_directories(vu1_test PRIVATE "${ICO_SHADER_DIR}" "${CMAKE_SOURCE_DIR}/port/render")
     target_compile_options(vu1_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(vu1_test PRIVATE ico_shaders ico_rhi_vk ico_vu1_ref)
-    if(WIN32 AND SDL3_FOUND)
-        add_custom_command(TARGET vu1_test POST_BUILD
-                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                   "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:vu1_test>"
-                           VERBATIM)
-    endif()
+    ico_copy_sdl3_dll(vu1_test)
 endif()
 
 if(ICO_RUN_TESTS)

@@ -426,12 +426,6 @@ target_compile_definitions(rd_water_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_water_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_water_test PRIVATE ico_render ico_vu1_ref ico_math)
-if(WIN32 AND SDL3_FOUND)
-    add_custom_command(TARGET rd_water_test POST_BUILD
-                       COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                               "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:rd_water_test>"
-                       VERBATIM)
-endif()
 
 # rd_raw_test (wave 5, R5c): the raw packet builders outside seki.
 # darkVolume.c, particleEffect.c, lineManager.c and lightning.c with the
@@ -524,17 +518,12 @@ add_executable(texpack_e2e_test test/texpack_e2e_test.c)
 target_compile_options(texpack_e2e_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 
-if(WIN32 AND SDL3_FOUND)
-    foreach(t texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test rd_layout_test rd_tex_test rd_gsbase_test
-              rd_mesh_test modelpack_test rd_shadow_test rd_fog_test rd_blur_test rd_raw_test rd_debug_test
-              rd_present_test rd_interp_test rd_mirror_test rd_mip_test rd_perf_test rd_crt_test
-              texpack_load_test)
-        add_custom_command(TARGET ${t} POST_BUILD
-                           COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                                   "$<TARGET_FILE:SDL3::SDL3>" "$<TARGET_FILE_DIR:${t}>"
-                           VERBATIM)
-    endforeach()
-endif()
+# Windows: SDL3.dll beside the programs
+ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
+                  rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
+                  rd_shadow_test rd_fog_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
+                  rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_mip_test
+                  rd_perf_test rd_crt_test texpack_load_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
