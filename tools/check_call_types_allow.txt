@@ -1,0 +1,31 @@
+# tools/check_call_types.py allow list: symbol  reason
+# Each entry is a finding checked by hand and found harmless (a dead caller, an
+# argument the callee never reads or re-wraps, a result nobody uses).  The
+# symbol is the extern's name or the function a cast call reaches.
+ClipWall                           ClipWallRD (fieldCollision.c) casts ClipWall to void(void) and calls it with no argument; ClipWallRD has no callers (dead debug helper)
+GetChainNodeID                     rope.c declares it with the parameter record alone as the ROM calls it; only HoldRope calls it and HoldRope has no callers (dead)
+IsWallLeverStatus                  script.c declares it (void) as the ROM calls it; only scpIsWallLever2On calls it and that has no caller in ico2/ or port/ (dead)
+GetTableSin                        quaternion.c passes an int angle; the callee takes short and re-wraps it (sxth), same value
+GetTableCos                        quaternion.c passes an int angle; the callee takes short and re-wraps it (sxth), same value
+RotQuaternionY                     a_p_1.c passes the angle as int; the callee takes short and re-wraps it
+SetQuaternionByAxisRotateV         a_p_1.c passes the angle as int; the callee takes short and re-wraps it (sbfx)
+GetTableArcTan2                    a_p_1.c declares the return short; the callee returns int holding a short value, and every caller casts or stores into short
+gif_Sprite                         debug.c passes z as unsigned int (lui/ori) where GifPacket.c takes long long; the 32-bit value is zero-extended by the call, same as the ROM's
+gif_Line                           debug.c passes z0/z1 as unsigned int where GifPacket.c takes long long; the 32-bit value is zero-extended by the call
+ActSendMail_WithAdditionalData     declared void here, defined int; the caller ignores the result
+iosThreadSleep                     camera-editor.c passes the thread record, thread.c reads none; an extra argument is ignored by the callee
+iosThreadWakeup                    declared void here, defined int; the caller ignores the result
+SetFlag4PointFixID                 windmill.c declares an int result, flag.c returns void; the caller ignores the result
+debug_SelectCsvWindowWithLine      motionViewer.c passes an eleventh argument the debug.c definition (ten) never reads; an extra argument is ignored by the callee
+iosMcChdirProduct                  declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcDelete                        declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcFormat                        declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcGetBlockSaveInfo              declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcGetDir                        declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcGetInfo                       declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcLoadGameBlock                 declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcLoadProductBlock              declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcSaveGameBlock                 declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcSaveIconBlock                 declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcSaveProductBlock              declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result
+iosMcUnformat                      declared void in the debug and card menus, defined int in ios/mcard.c; no caller uses the result

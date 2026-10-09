@@ -141,6 +141,54 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
 }
 
+/* v0.4.3 AN-20: default_item_select hands the select callback the current
+   item (issue 20: it passed nothing, and la_mc_saved_file_select indexed the
+   card's file table with whatever the argument register held) */
+static int s_an20Calls, s_an20Arg, s_an20Ret;
+
+static int an20Spy(int item)
+{
+    s_an20Calls++;
+    s_an20Arg = item;
+    return s_an20Ret;
+}
+
+static void testItemSelectArg(void)
+{
+    /* the vibration screen's layout: rows 44 and 45 are its own, no proc */
+    const int layout = 9;
+    const int items[3] = {44, 45, 46};
+
+    fakeTables();
+    lt_ext_Reset();
+    init_layout_texture(2);
+    settle(54, 4);
+    lt_switch_layout(layout);
+    CHECK(settle(layout, 60), "item select: the layout settles (%d)", current_layout_id);
+    for (int i = 0; i < 3; i++) {
+        const int item = items[i];
+        const int ret = items[(i + 1) % 3];
+
+        texLayout[layout].curItem = item;
+        frame(0); /* no callback: ltCurrentItem follows curItem */
+        CHECK(texLayout[layout].curItem == item, "item select: idle frame keeps %d", item);
+        const int before = lt_current_property_item();
+        CHECK(before == item && before != layout, "item select: current item %d (%d)", item,
+              before);
+        s_an20Calls = 0;
+        s_an20Arg = -12345;
+        s_an20Ret = ret;
+        lt_set_item_select_func(an20Spy);
+        frame(0);
+        CHECK(s_an20Calls == 1, "item select: the spy ran once (%d)", s_an20Calls);
+        CHECK(s_an20Arg == before, "item select: the spy got %d, not %d", s_an20Arg, before);
+        CHECK(texLayout[layout].curItem == ret, "item select: curItem is the spy's %d (%d)", ret,
+              texLayout[layout].curItem);
+        frame(0);
+        CHECK(s_an20Calls == 1, "item select: the callback was cleared (%d calls)", s_an20Calls);
+    }
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -152,6 +200,8 @@ int main(int argc, char **argv)
     testWindowMode();
     /* v0.4.3 R27 */
     testCinematicBars();
+    /* v0.4.3 AN-20 */
+    testItemSelectArg();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

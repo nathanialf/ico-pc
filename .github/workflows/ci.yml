@@ -89,6 +89,11 @@ jobs:
           python3 tools/stack_overread_audit.py --selftest
           python3 tools/stack_overread_audit.py
 
+      # a call that passes fewer arguments than its target reads, an extern
+      # that disagrees with its definition (issue 20)
+      - name: Calls and declarations agree with the definitions
+        run: python3 tools/check_call_types.py
+
       - name: Generated files are fresh
         run: |
           .venv/bin/python tools/gen_data_desc.py --check
