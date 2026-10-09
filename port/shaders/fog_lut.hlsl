@@ -34,19 +34,6 @@ struct FogPSIn
     VK_LOC(1) float2 uv : TEXCOORD0; // normalised by g_tex.zw
 };
 
-// A fullscreen triangle with the same outputs (vertex colour 0x80 grey);
-// rd draws the fog with the sprite vertex shaders, this entry stays for
-// the shader table.
-FogPSIn fog_lut_vs(uint id : SV_VertexID)
-{
-    FogPSIn o;
-    float2 t;
-    fullscreen_triangle(id, o.pos, t);
-    o.col = float4(128.0, 128.0, 128.0, 128.0);
-    o.uv = t;
-    return o;
-}
-
 Texture2D<float> g_fogDepth : register(t1, space2);
 Texture2D<float4> g_fogLut : register(t2, space2);
 

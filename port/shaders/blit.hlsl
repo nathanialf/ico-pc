@@ -3,8 +3,6 @@
 // the source rectangle is DrawCB.g_uvRect in texels of t1. No vertex buffer:
 // draw 3 vertices.
 //   blit_ps      single colour output; colour = texture function(texel, tint)
-//   blit_fix_ps  dual-source output (factor from FIX or the texel alpha), for
-//                passes that blend with LERP_FIX or LERP_AS in hardware
 //   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
 //                effects depth, package R1)
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
@@ -43,11 +41,6 @@ uint4 blit_color(float2 uv)
 float4 blit_ps(BlitVSOut i) : SV_Target0
 {
     return float4(blit_color(i.uv)) * (1.0 / 255.0);
-}
-
-DualOut blit_fix_ps(BlitVSOut i)
-{
-    return gs_dual_out(blit_color(i.uv), g_mode.x, g_blend.y);
 }
 
 // blit_depth_ps (v0.4.1, package R1; rd_present.c): blit_ps's colour, and

@@ -36,7 +36,6 @@ YuvVSOut yuv_vs(uint id : SV_VertexID)
 }
 
 Texture2D<float4> g_texture : register(t1, space2);
-SamplerState g_sampler : register(s1, space2);
 
 int plane_texel(int x, int y)
 {
