@@ -16,8 +16,6 @@
  *             Original flag, its zero-size fallback; 2x, WxH, the window's
  *             box, the 4K cap, the work buffers' scale, full height
  *   boxes     rd__present_box at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
- *   picture rect  rd__picture_rect with full pixel on at 448 and 512 lines:
- *             the same growth on both axes, centred, the border outside the box
  *   coverage  rdtex_keep_alpha_coverage keeps an alpha-tested texture's share;
  *             a lattice (wires alpha 0x80, black holes alpha 0)
  *             keeps its wire colour down the alpha-weighted chain and no
@@ -39,11 +37,12 @@
  *             one two pixels short stays boxed
  *   present info  with interpolation off, rd_last_present_info names the
  *             frame rd_end_frame presented
- *   full pixel  the reduction's border off the box's edges, black around
- *             it, no validation errors; a square's width and height grow by
- *             the same factor at 512 lines; with the CRT filter the overlay
- *             is laid out in the part of the grid the box shows, so its top
- *             and bottom lines are in the output
+ *   full pixel  the reduction draws the whole frame: the box's edges show
+ *             the picture (also on a scaled target), black around the box, no
+ *             validation errors; a square is the same size on and off, a
+ *             one-pixel line lands on the same output pixels, the last
+ *             column does not wrap to the first; with the CRT filter the
+ *             overlay's top and bottom lines are in the output
  *   mips      the trilinear filter: a mipmapped game texture, minified,
  *             samples its average; a lattice drawn as the
  *             railings are (TEST 0x5160D, ALPHA 0x44 with ABE) minified 8:1
@@ -1269,52 +1268,6 @@ static void checkBoxes(void)
           "boxes: 4:3 in a 1080x2400 portrait phone (%d,%d %ux%u)", b.x, b.y, b.w, b.h);
 }
 
-/* rd__picture_rect with full pixel on: at 448 lines (60 Hz) and 512 (50 Hz)
- * both axes grow by the same factor, the larger of the columns' W / (W - 4)
- * and the rows' half / (half - 2 crop), so a square stays square, and the
- * reduction's filled part still covers the box on both axes */
-static void checkPictureRect(void)
-{
-    static const RhiRect boxes[3] = {{0, 0, 960, 720}, {240, 0, 1440, 1080}, {0, 0, 1920, 1080}};
-    static const uint32_t lines[2] = {448, 512};
-    const uint8_t keep = g_rd.settings.fullPixel;
-    g_rd.settings.fullPixel = 1;
-    for (int l = 0; l < 2; l++) {
-        const float W = 512.0f, half = (float)lines[l] * 0.5f;
-        const float crop = (float)rd__reduction_crop(lines[l]);
-        const float sx = W / (W - 4.0f), sy = half / (half - 2.0f * crop);
-        const float want = sx > sy ? sx : sy;
-        for (int k = 0; k < 3; k++) {
-            const RhiRect *b = &boxes[k];
-            RhiRect pic;
-            rd__picture_rect(b, 512, lines[l], &pic);
-            const float gx = (float)pic.w / (float)b->w, gy = (float)pic.h / (float)b->h;
-            /* each side rounds up and adds one pixel: up to 4 pixels an axis */
-            const float slack = 4.0f / (float)b->h + 1e-4f;
-            CHECK(fabsf(gx - gy) <= slack,
-                  "picture rect %u lines, box %ux%u: the same growth on both axes (x %.4f, y %.4f)",
-                  lines[l], b->w, b->h, (double)gx, (double)gy);
-            CHECK(gx >= want - 1e-4f && gy >= want - 1e-4f && gx <= want + slack,
-                  "picture rect %u lines, box %ux%u: grown by %.4f (x %.4f, y %.4f)", lines[l],
-                  b->w, b->h, (double)want, (double)gx, (double)gy);
-            CHECK(2 * (b->x - pic.x) + (int32_t)b->w == (int32_t)pic.w &&
-                      2 * (b->y - pic.y) + (int32_t)b->h == (int32_t)pic.h,
-                  "picture rect %u lines, box %ux%u: centred on the box", lines[l], b->w, b->h);
-            /* the filled part (W - 4 columns, half - 2 crop rows) covers the box */
-            CHECK((float)pic.w * (W - 4.0f) / W >= (float)b->w &&
-                      (float)pic.h * (half - 2.0f * crop) / half >= (float)b->h,
-                  "picture rect %u lines, box %ux%u: the border outside the box", lines[l], b->w,
-                  b->h);
-        }
-    }
-    g_rd.settings.fullPixel = 0;
-    RhiRect pic;
-    rd__picture_rect(&boxes[0], 512, 512, &pic);
-    CHECK(pic.x == 0 && pic.y == 0 && pic.w == 960 && pic.h == 720,
-          "picture rect: off, the box itself");
-    g_rd.settings.fullPixel = keep;
-}
-
 static void checkCoverage(void)
 {
     /* 16 x 16, alpha 0x80 on a sparse grid (1 texel in 4 per row and
@@ -1730,9 +1683,11 @@ static void checkWide169(void)
 
 /* Full pixel: SCENE red through the reduction pass (which leaves its border
  * black), presented into w x h.  The box's edge columns and rows are red
- * with the option on and, with it off, the border shows. */
+ * with the option on, the reduction drawing the whole frame, and, with it
+ * off, the border shows.  scale above 1 runs the reduction on a scaled
+ * target. */
 static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int fullHeight,
-                         uint8_t *dst, uint32_t *ow, uint32_t *oh)
+                         float scale, uint8_t *dst, uint32_t *ow, uint32_t *oh)
 {
     RdSettings s = originalSettings();
     s.aspect = aspect;
@@ -1740,8 +1695,11 @@ static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int ful
     s.outputHeight = h;
     s.fullPixel = (uint8_t)full;
     s.fullHeightScene = (uint8_t)fullHeight;
-    if (aspect > 4.0f / 3.0f + 0.01f) {
+    if (aspect > 4.0f / 3.0f + 0.01f || scale > 1.0f) {
         s.preset = RD_PRESET_ENHANCED;
+    }
+    if (scale > 1.0f) {
+        s.sceneScale = scale; /* a scaled target: the reduction's hardware sprite */
     }
     if (!rd_init(512, 512, &s, NULL)) {
         return false;
@@ -1764,12 +1722,12 @@ static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int ful
 }
 
 static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint32_t h,
-                               int fullHeight)
+                               int fullHeight, float scale)
 {
     static uint8_t off[960 * 540 * 4], on[960 * 540 * 4];
     uint32_t ow = 0, oh = 0;
-    if (!fullPixelRun(aspect, w, h, 0, fullHeight, off, &ow, &oh) ||
-        !fullPixelRun(aspect, w, h, 1, fullHeight, on, &ow, &oh)) {
+    if (!fullPixelRun(aspect, w, h, 0, fullHeight, scale, off, &ow, &oh) ||
+        !fullPixelRun(aspect, w, h, 1, fullHeight, scale, on, &ow, &oh)) {
         CHECK(0, "%s: present readback", name);
         return;
     }
@@ -1796,7 +1754,7 @@ static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint3
     CHECK(RED(PXO(on, cx, y0)) && RED(PXO(on, cx, y1)), "%s: on: the edge rows are red", name);
     CHECK(RED(PXO(on, x0, y0)) && RED(PXO(on, x1, y1)), "%s: on: the corners are red", name);
     CHECK(memcmp(PXO(on, cx, cy), PXO(off, cx, cy), 4) == 0, "%s: the centre is unchanged", name);
-    /* outside the box stays black, the scissor holding the grown picture */
+    /* outside the box stays black */
     int outside = 1;
     if (x0 > 0) {
         for (uint32_t y = 0; y < h; y += 7) {
@@ -1859,9 +1817,8 @@ static bool squareRun(int full, uint32_t *sw, uint32_t *sh)
     return true;
 }
 
-/* full pixel at 512 lines grows the picture about 7 % on both axes: the
- * square's width and height grow by the same factor (they used to grow
- * 0.8 % and 6.7 %) */
+/* full pixel no longer enlarges the picture: at 512 lines the square is the
+ * same size on and off, on both axes */
 static void checkFullPixelSquare(void)
 {
     uint32_t w0 = 0, h0 = 0, w1 = 0, h1 = 0;
@@ -1869,14 +1826,119 @@ static void checkFullPixelSquare(void)
         CHECK(0, "full pixel square: present readback");
         return;
     }
-    const double gx = w0 ? (double)w1 / w0 : 0.0, gy = h0 ? (double)h1 / h0 : 0.0;
-    printf("  full pixel square: off %u x %u, on %u x %u (x %.4f, y %.4f)\n", w0, h0, w1, h1, gx,
-           gy);
+    printf("  full pixel square: off %u x %u, on %u x %u\n", w0, h0, w1, h1);
     CHECK(w0 > 200 && h0 > 150, "full pixel square: drawn (%u x %u)", w0, h0);
-    /* a pixel either way on each edge: 2 of the 180 rows */
-    CHECK(fabs(gx - gy) < 0.02, "full pixel square: the same growth both ways (x %.4f, y %.4f)", gx,
-          gy);
-    CHECK(gy > 1.04 && gx > 1.04, "full pixel square: grown about 7 %% (x %.4f, y %.4f)", gx, gy);
+    CHECK(w0 == w1 && h0 == h1, "full pixel square: the same size on and off (%u x %u, %u x %u)",
+          w0, h0, w1, h1);
+}
+
+/* a one-pixel white column at GS x = 256 (and a one-pixel white row at GS
+ * y = 256) on black through the reduction, presented into w x h */
+static bool lineRun(int full, uint32_t w, uint32_t h, uint8_t *out)
+{
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    static const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {255, 255, 255, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    opaque2D();
+    rd_texture_off();
+    sprite(RD_SPACE_UI, 256 * 16, 0, 257 * 16, 512 * 16, white, 0, 0, 0, 0);
+    sprite(RD_SPACE_UI, 0, 256 * 16, 512 * 16, 257 * 16, white, 0, 0, 0, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, (size_t)w * h * 4, &ow, &oh) && ow == w && oh == h;
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel lines: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return ok;
+}
+
+/* the reduction is native with the option on: the picture inside the box
+ * is the same pixels as with it off, not resampled, so a one-pixel line
+ * lands on the same output pixels with the same values */
+static void checkFullPixelSharp(uint32_t w, uint32_t h)
+{
+    static uint8_t off[1440 * 1080 * 4], on[1440 * 1080 * 4];
+    if (!lineRun(0, w, h, off) || !lineRun(1, w, h, on)) {
+        CHECK(0, "full pixel sharp %ux%u: present readback", w, h);
+        return;
+    }
+    RhiRect box;
+    rd__present_box(w, h, 4.0f / 3.0f, &box);
+    /* inside the border's reach: an eighth in from each side */
+    const uint32_t x0 = (uint32_t)box.x + box.w / 8, x1 = (uint32_t)box.x + box.w - box.w / 8;
+    const uint32_t y0 = (uint32_t)box.y + box.h / 8, y1 = (uint32_t)box.y + box.h - box.h / 8;
+    int same = 1, lit = 0;
+    for (uint32_t y = y0; y < y1; y++) {
+        same &= memcmp(&off[((size_t)y * w + x0) * 4], &on[((size_t)y * w + x0) * 4],
+                       (size_t)(x1 - x0) * 4) == 0;
+    }
+    for (uint32_t x = x0; x < x1; x++) {
+        lit += off[((size_t)(h / 2 - 40) * w + x) * 4] > 128;
+    }
+    CHECK(lit > 0, "full pixel sharp %ux%u: the line is drawn", w, h);
+    CHECK(same, "full pixel sharp %ux%u: the same output pixels on and off", w, h);
+}
+
+/* the reduction's last column reads its own colour, not a quarter of the
+ * first: SCENE red with a blue column 0, DISPLAY's column 511 stays red with
+ * the option on (the game's wrap would blend blue into it) */
+static void checkFullPixelClamp(void)
+{
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80};
+    for (int full = 0; full < 2; full++) {
+        RdSettings s = originalSettings();
+        s.fullPixel = (uint8_t)full;
+        if (!rd_init(512, 512, &s, NULL)) {
+            return;
+        }
+        rd_begin_frame();
+        rd_select_list(0);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+        opaque2D();
+        rd_texture_off();
+        sprite(RD_SPACE_WORLD, 0, 0, 16, 512 * 16, blue, 0, 0, 0, 0);
+        rd_select_list(12);
+        RdPostParams pp;
+        memset(&pp, 0, sizeof(pp));
+        pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+        rd_post(RD_POST_REDUCTION, &pp);
+        rd_end_frame(0);
+        uint32_t w = 0, h = 0;
+        uint8_t *p = readTarget(RD_TARGET_DISPLAY, &w, &h);
+        if (p && w == 512 && h >= 64) {
+            const uint8_t *r = &p[((size_t)(h / 2) * w + 511) * 4];
+            const uint8_t *l = &p[((size_t)(h / 2) * w) * 4];
+            if (full) {
+                CHECK(r[0] >= 250 && r[1] <= 2 && r[2] <= 2,
+                      "full pixel clamp: column 511 is red (%u %u %u)", r[0], r[1], r[2]);
+                CHECK(l[2] >= 250 && l[0] <= 2, "full pixel clamp: column 0 is blue (%u %u %u)",
+                      l[0], l[1], l[2]);
+            } else {
+                CHECK(r[0] < 8 && r[1] < 8 && r[2] < 8 && l[0] < 8 && l[1] < 8 && l[2] < 8,
+                      "full pixel clamp: off, the border columns stay black");
+            }
+        } else {
+            CHECK(0, "full pixel clamp: DISPLAY readback (%ux%u)", w, h);
+        }
+        CHECK(rhi_vk_validation_error_count() == 0, "full pixel clamp: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    }
 }
 
 /* with interpolation off rd_end_frame presents each frame once, and
@@ -1906,11 +1968,12 @@ static void checkPresentInfo(void)
 
 static void checkFullPixel(void)
 {
-    checkFullPixelCase("fullpixel 4:3 640x480", 4.0f / 3.0f, 640, 480, 0);
-    checkFullPixelCase("fullpixel 4:3 full height", 4.0f / 3.0f, 640, 480, 1);
-    checkFullPixelCase("fullpixel 4:3 in 16:9 (pillars)", 4.0f / 3.0f, 960, 540, 0);
-    checkFullPixelCase("fullpixel pillars, full height", 4.0f / 3.0f, 960, 540, 1);
-    checkFullPixelCase("fullpixel 16:9", 16.0f / 9.0f, 960, 540, 0);
+    checkFullPixelCase("fullpixel 4:3 640x480", 4.0f / 3.0f, 640, 480, 0, 1.0f);
+    checkFullPixelCase("fullpixel 4:3 full height", 4.0f / 3.0f, 640, 480, 1, 1.0f);
+    checkFullPixelCase("fullpixel 4:3 in 16:9 (pillars)", 4.0f / 3.0f, 960, 540, 0, 1.0f);
+    checkFullPixelCase("fullpixel pillars, full height", 4.0f / 3.0f, 960, 540, 1, 1.0f);
+    checkFullPixelCase("fullpixel 16:9", 16.0f / 9.0f, 960, 540, 0, 1.0f);
+    checkFullPixelCase("fullpixel 16:9 Enhanced 2x", 16.0f / 9.0f, 960, 540, 0, 2.0f);
 }
 
 static void checkMips(void)
@@ -2306,10 +2369,8 @@ static void edgeCallback(const RdOverlayCtx *ctx, void *user)
 }
 
 /* the CRT filter with full pixel at 512 lines (50 Hz), 960 x 720: the
- * filter draws the grid into the grown picture and keeps only the box, so
- * the overlay is laid out in the part of the grid that lands on the box:
- * its top and bottom lines show inside the output (they were cut off), and
- * no scissor starts outside the target (validation) */
+ * filter draws the whole grid into the box, so the overlay is laid out on
+ * the whole grid and its top and bottom lines show inside the output */
 static void checkFullPixelCrtOverlay(void)
 {
     const uint32_t w = 960, h = 720;
@@ -2348,11 +2409,10 @@ static void checkFullPixelCrtOverlay(void)
     printf("  full pixel crt overlay: grid %ux%u, box %d,%d %ux%u\n", s_edgeCtx.outW,
            s_edgeCtx.outH, b.x, b.y, b.w, b.h);
     CHECK(s_edgeCalls == 1, "full pixel crt overlay: one callback (%d)", s_edgeCalls);
-    CHECK(s_edgeCtx.outH == 512 && b.x > 0 && b.y > 0 &&
-              b.x + (int32_t)b.w < (int32_t)s_edgeCtx.outW &&
-              b.y + (int32_t)b.h < (int32_t)s_edgeCtx.outH,
-          "full pixel crt overlay: the box is inside the grid (%d,%d %ux%u of %ux%u)", b.x, b.y,
-          b.w, b.h, s_edgeCtx.outW, s_edgeCtx.outH);
+    CHECK(s_edgeCtx.outH == 512 && b.x == 0 && b.y == 0 && b.w == s_edgeCtx.outW &&
+              b.h == s_edgeCtx.outH,
+          "full pixel crt overlay: the box is the whole grid (%d,%d %ux%u of %ux%u)", b.x, b.y, b.w,
+          b.h, s_edgeCtx.outW, s_edgeCtx.outH);
     /* the centre column: the top and bottom bands lit within the output's
      * first and last 12 rows (4 grid lines are about 5.6 output rows) */
     int top = 0, bottom = 0;
@@ -3071,7 +3131,6 @@ int main(int argc, char **argv)
     const char *dir = argc > 1 ? argv[1] : ".";
     checkOptions(dir);
     checkBoxes();
-    checkPictureRect();
     checkCoverage();
     RdSettings st = originalSettings();
     st.outputWidth = st.outputHeight = 0;
@@ -3101,6 +3160,9 @@ int main(int argc, char **argv)
     checkPresentInfo();
     checkFullPixel();
     checkFullPixelSquare();
+    checkFullPixelSharp(960, 720);
+    checkFullPixelSharp(1440, 1080);
+    checkFullPixelClamp();
     checkFullPixelCrtOverlay();
     checkMips();
     checkLatticeMips(0);

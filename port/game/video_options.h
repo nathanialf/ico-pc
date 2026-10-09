@@ -21,9 +21,9 @@
  *   [video] vsync           true
  *   [video] texture_filter  "original"  "original" | "trilinear" | "anisotropic"
  *   [video] full_height     false
- *   [video] full_pixel      false       enlarge the picture so it fills the box (hides the
- *                                       PS2's thin black border), both axes alike: about
- *                                       2 % at 448 lines (60 Hz), 7 % at 512 (50 Hz); any
+ *   [video] full_pixel      false       show the strip the PS2's thin black border hid:
+ *                                       the reduction draws the whole frame, nothing is
+ *                                       cut or enlarged; any
  *                                       preset, not part of them
  *   [video] framerate       "uncapped"  "original" | "uncapped" | N (30..1000)
  *                                       (60 on Android)
@@ -124,7 +124,7 @@ typedef struct IcoVideoOptions {
     int vsync;      /* the swapchain waits for the vertical blank */
     int filter;     /* ICO_FILTER_* */
     int fullHeight; /* skip the reduction's vertical halving */
-    int fullPixel;  /* fill the box: the picture enlarged past the reduction's border */
+    int fullPixel;  /* the reduction draws the whole frame, with no black border */
     int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second */
     /* the CRT filter: applied whatever the preset */
     int crt;           /* the filter on */

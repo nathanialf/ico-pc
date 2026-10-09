@@ -940,13 +940,11 @@ void rd__crt_grid(uint32_t *vw, uint32_t *vh);
  * grid (rd__overlay_grid_draw), through the glow passes, then the composite
  * (the phosphors per output pixel) into box of out (cleared outside it),
  * out left in RENDER_TARGET.  overlay false: the grid without the overlay
- * (the photo capture's pass).  box is the rectangle the tube is
- * drawn into and scissor the part kept (box, except with full pixel).  False when it could not draw
+ * (the photo capture's pass).  False when it could not draw
  * (no pipeline): the caller falls back to the box blit and draws the
  * overlay on the output. */
 bool rd__crt_record(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, RhiFormat outFmt,
-                    uint32_t outW, uint32_t outH, const RhiRect *box, const RhiRect *scissor,
-                    int mirror, bool overlay);
+                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool overlay);
 /* The films under the filter.  rd__crt_film_grid is a film's
  * grid: the game's tube (its 512 triads across the 4:3 box: GS width) and
  * the film's field lines in its PS2 display area (dispH / 2, every line
@@ -1344,7 +1342,8 @@ void rd__present_record(RhiCommandList cl);
 void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box);
 /* The reduction pass's border crop: columns at each side and rows of
  * DISPLAY's gsH / 2 at the top and bottom (GsBase.c) that it leaves black.
- * Shared with the presenter's full pixel crop-and-scale. */
+ * Shared with the presenter's deferred text, which keeps off that border
+ * unless full pixel is on (the reduction then draws the whole frame). */
 uint32_t rd__reduction_crop(uint32_t gsH);
 /* The widest aspect the presenter shows: ICO_ASPECT_MAX in
  * port/game/video_options.h (4/3 times ICO_WIDE_X_MAX, the factor the
@@ -1369,10 +1368,6 @@ void rd__output_follow_swapchain(void);
  * is recorded; false before the first */
 void rd__note_present_box(uint32_t outW, uint32_t outH, const RhiRect *box);
 bool rd__last_present_box(uint32_t *outW, uint32_t *outH, RhiRect *box);
-/* The rectangle the picture is drawn into for box: box itself, or with
- * the full pixel option box grown evenly so the reduction's border falls
- * outside it (rd_present.c) */
-void rd__picture_rect(const RhiRect *box, uint32_t gsW, uint32_t gsH, RhiRect *pic);
 void rd__present_finish(void);
 void rd__present_shutdown(void);
 

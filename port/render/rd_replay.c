@@ -3950,7 +3950,7 @@ static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, in
  * it draws into, the target is first copied into its snapshot, which the
  * shader reads as the destination (t2) and, sampling itself, as the
  * texture: the GS reads both before it writes. */
-static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdPostRec p;
     memcpy(&p, f->payload + c->u[1], sizeof(p));
@@ -4097,6 +4097,40 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     if (key.gs.colorMask & 8) {
         r->writeSerial++;
     }
+}
+
+/* The reduction's textured sprite with Full pixel on.  The game draws it
+ * inside a scissor two columns and a few rows in from the frame's edge (the
+ * black border), and with the wrap it never sets to CLAMP, so the last
+ * column also blends in a quarter of the first.  Here the scissor is the
+ * whole target and both axes clamp, so the border shows the picture SCENE
+ * holds under it and the edges read their own texels.  The recorded scissor
+ * and wrap stay in the frame (and in the dumps); this replaces them for this
+ * one draw and puts them back after it, whichever way it returns.  The black
+ * clear sprite before it is not textured and covers everything already. */
+static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    if (!g_rd.settings.fullPixel || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
+        doBlurSpriteDraw(r, f, c);
+        return;
+    }
+    const RdTargetRec *tc = rd__target_rec(r->st.color);
+    if (!tc) {
+        doBlurSpriteDraw(r, f, c);
+        return;
+    }
+    int32_t scissor[4];
+    memcpy(scissor, r->st.scissor, sizeof(scissor));
+    const RdSamplerWrap wrap = r->st.ds.wrap;
+    r->st.scissor[0] = 0;
+    r->st.scissor[1] = 0;
+    r->st.scissor[2] = (int32_t)tc->w - 1;
+    r->st.scissor[3] = (int32_t)tc->h - 1;
+    r->st.ds.wrap.s = RD_WRAP_CLAMP;
+    r->st.ds.wrap.t = RD_WRAP_CLAMP;
+    doBlurSpriteDraw(r, f, c);
+    memcpy(r->st.scissor, scissor, sizeof(scissor));
+    r->st.ds.wrap = wrap;
 }
 
 /* ----------------------------------------------------------------- frame */

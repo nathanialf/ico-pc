@@ -747,8 +747,6 @@ static void checkFullPixel(void)
         if (!present(&s, 0)) {
             return;
         }
-        /* the grown picture starts left of and above the target: only the
-         * viewport may, the scissor is the box */
         CHECK(rhi_vk_validation_error_count() == 0, "full pixel %s: %u validation errors",
               on ? "on" : "off", rhi_vk_validation_error_count());
         const uint32_t cx = (uint32_t)b.x + b.w / 2, cy = (uint32_t)b.y + b.h / 2;

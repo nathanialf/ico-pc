@@ -102,11 +102,10 @@ gives you, and that is how the game starts.
 
 The last row is not one of the game's effects:
 
-- **Full pixel (no border)** fills the picture box by enlarging the
-  picture, hiding the thin black border the PS2 drew around it. With Video
-  mode at 60 Hz it grows about 2%, at 50 Hz about 7%. It keeps its shape,
-  so a little of the picture goes past the edges of the box.
-  Off by default. It works with every Preset and with the CRT filter.
+- **Full pixel (no border)** shows the whole picture the game draws,
+  including the strip the PS2 hid under its thin black border. Nothing is
+  cut off or enlarged, and the picture stays as sharp as it is without the
+  option. Off by default. It works with every Preset and with the CRT filter.
 
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
