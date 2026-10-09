@@ -984,6 +984,16 @@ enum {
     RD_SNAP_COUNT
 };
 
+/* S2: what made a matched keyed draw snap as mismatched */
+enum {
+    RD_MISMATCH_SIZE = 0, /* payload size, vertex or primitive count */
+    RD_MISMATCH_MESH,     /* the mesh ids are of different layouts (sameMesh) */
+    RD_MISMATCH_STATE,    /* program, code or clip mode (b[0..2]) */
+    RD_MISMATCH_HEADER,   /* batch range, bones, stream, layout (RdVuPayload) */
+    RD_MISMATCH_TOPOLOGY, /* a shadow volume's triangle counts */
+    RD_MISMATCH_COUNT
+};
+
 typedef struct RdInterpStats {
     uint32_t snap;     /* RD_SNAP_* of the frame */
     uint32_t keyed;    /* keyed draws in cur */
@@ -994,7 +1004,7 @@ typedef struct RdInterpStats {
     uint32_t morph;    /* R7d: mesh draws given a kept or blended vertex stream */
     /* S2: why the mismatched draws snapped (RD_MISMATCH_*), and the mesh
      * draws whose model matrices or bones blended as rotations */
-    uint32_t why[5];
+    uint32_t why[RD_MISMATCH_COUNT];
     uint32_t rotated;
     uint32_t turned;  /* of them, turning more than 10 degrees in the tick */
     float maxTurn;    /* the largest turn of a model or bone in the tick, degrees */
@@ -1006,15 +1016,6 @@ typedef struct RdInterpStats {
     uint32_t rebased;
     uint32_t rebasedCur;
 } RdInterpStats;
-
-/* S2: what made a matched keyed draw snap as mismatched */
-enum {
-    RD_MISMATCH_SIZE = 0, /* payload size, vertex or primitive count */
-    RD_MISMATCH_MESH,     /* the mesh ids are of different layouts (sameMesh) */
-    RD_MISMATCH_STATE,    /* program, code or clip mode (b[0..2]) */
-    RD_MISMATCH_HEADER,   /* batch range, bones, stream, layout (RdVuPayload) */
-    RD_MISMATCH_TOPOLOGY  /* a shadow volume's triangle counts */
-};
 
 /* S2: rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
  * 1): the 3 x 3 polar-decomposed into a rotation (slerped) and a stretch

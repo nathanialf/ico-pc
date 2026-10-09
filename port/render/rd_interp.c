@@ -3057,7 +3057,8 @@ static void flapFree(void)
 static uint32_t flapReport(void)
 {
     static const char code[4] = {'L', 'M', 'J', 'U'};
-    static const char *const why[5] = {"size", "mesh", "state", "header", "topology"};
+    static const char *const why[RD_MISMATCH_COUNT] = {"size", "mesh", "state", "header",
+                                                       "topology"};
     uint32_t n = 0;
     if (!s_flap) {
         return 0;
@@ -3086,7 +3087,8 @@ static uint32_t flapReport(void)
                 "last %s (oldest first; L blended, M mismatched, J jumped, U unmatched), "
                 "mismatch %s, program %u, mesh %u -> %u",
                 best->hi, best->lo, best->type, best->list, best->ord, best->changes, best->frames,
-                h, why[best->why < 5 ? best->why : 0], best->prog, best->meshP, best->meshC);
+                h, why[best->why < RD_MISMATCH_COUNT ? best->why : 0], best->prog, best->meshP,
+                best->meshC);
         best->changes = 0; /* listed */
     }
     memset(s_flap, 0, RD_FLAP_CAP * sizeof(FlapEnt));
@@ -3377,7 +3379,7 @@ const RdFrame *rd__InterpFrame(const RdFrame *prev, const RdFrame *cur, float al
                 st.mismatch += r == R_MISMATCH;
                 st.jump += r == R_JUMP;
                 if (r == R_MISMATCH) {
-                    st.why[s_why < 5 ? s_why : 0]++;
+                    st.why[s_why < RD_MISMATCH_COUNT ? s_why : 0]++;
                 }
                 if (r == R_LERP && s_rotated && (c->type == RDC_MESH || c->type == RDC_SKINNED)) {
                     st.rotated++;
@@ -3434,7 +3436,7 @@ static struct {
     uint64_t keyed, lerped, missing, mismatch, jump, morph;
     /* S2: mismatch reasons, rotation blends, frames whose snap differs
      * from the frame before's (whole-frame flaps) */
-    uint64_t why[5], rotated, turned, shifted;
+    uint64_t why[RD_MISMATCH_COUNT], rotated, turned, shifted;
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* S6 */
@@ -3459,7 +3461,7 @@ static void presentLog(void)
     s_pres.mismatch += st->mismatch;
     s_pres.jump += st->jump;
     s_pres.morph += st->morph;
-    for (int k = 0; k < 5; k++) {
+    for (int k = 0; k < RD_MISMATCH_COUNT; k++) {
         s_pres.why[k] += st->why[k];
     }
     s_pres.rotated += st->rotated;
