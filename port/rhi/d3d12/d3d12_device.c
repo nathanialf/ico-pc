@@ -398,14 +398,6 @@ static void dx_FillLimits(void)
 }
 
 /* ------------------------------------------------------------- lifecycle */
-#define DX_RELEASE(p)                                                                              \
-    do {                                                                                           \
-        if (p) {                                                                                   \
-            IUnknown_Release((IUnknown *)(p));                                                     \
-            (p) = NULL;                                                                            \
-        }                                                                                          \
-    } while (0)
-
 bool rhi_Init(const RhiDeviceDesc *desc)
 {
     if (g_dx.initialised) {

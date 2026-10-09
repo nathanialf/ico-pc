@@ -78,23 +78,13 @@ void dx_FramesShutdown(void)
         free(f->garbage);
         free(f->groups);
         for (uint32_t j = 0; j < DX_MAX_CMD_LISTS; j++) {
-            if (f->lists[j].cl) {
-                ID3D12GraphicsCommandList_Release(f->lists[j].cl);
-            }
-            if (f->lists[j].alloc) {
-                ID3D12CommandAllocator_Release(f->lists[j].alloc);
-            }
+            DX_RELEASE(f->lists[j].cl);
+            DX_RELEASE(f->lists[j].alloc);
         }
         memset(f, 0, sizeof(*f));
     }
-    if (g_dx.oneShotList) {
-        ID3D12GraphicsCommandList_Release(g_dx.oneShotList);
-        g_dx.oneShotList = NULL;
-    }
-    if (g_dx.oneShotAlloc) {
-        ID3D12CommandAllocator_Release(g_dx.oneShotAlloc);
-        g_dx.oneShotAlloc = NULL;
-    }
+    DX_RELEASE(g_dx.oneShotList);
+    DX_RELEASE(g_dx.oneShotAlloc);
 }
 
 /* Recycles a frame slot once the GPU is done with it. */

@@ -224,6 +224,14 @@ extern DxState g_dx;
         fputc('\n', stderr);                                                                       \
     } while (0)
 #define DX_CHECK(expr) dx_Check((expr), #expr, __FILE__, __LINE__)
+/* Releases a COM object if set and clears the pointer. */
+#define DX_RELEASE(p)                                                                              \
+    do {                                                                                           \
+        if (p) {                                                                                   \
+            IUnknown_Release((IUnknown *)(p));                                                     \
+            (p) = NULL;                                                                            \
+        }                                                                                          \
+    } while (0)
 
 bool dx_Check(HRESULT hr, const char *what, const char *file, int line);
 /* Prints and counts the debug layer's stored messages (errors and

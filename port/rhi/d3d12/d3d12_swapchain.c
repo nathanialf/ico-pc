@@ -43,10 +43,7 @@ static bool dx_RegisterSwapBuffers(uint32_t w, uint32_t h)
 void dx_SwapchainDestroy(void)
 {
     dx_ReleaseSwapBuffers();
-    if (g_dx.swapchain) {
-        IDXGISwapChain3_Release(g_dx.swapchain);
-        g_dx.swapchain = NULL;
-    }
+    DX_RELEASE(g_dx.swapchain);
 }
 
 static UINT dx_SwapFlags(void)

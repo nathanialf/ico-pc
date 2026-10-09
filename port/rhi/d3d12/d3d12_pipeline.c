@@ -167,9 +167,7 @@ static DxRootSig *dx_RootSignature(const RhiBindGroupLayout *layouts, uint32_t c
 void dx_ReleaseRootSignatures(void)
 {
     for (uint32_t i = 0; i < g_dx.rootCount; i++) {
-        if (g_dx.roots[i].rs) {
-            ID3D12RootSignature_Release(g_dx.roots[i].rs);
-        }
+        DX_RELEASE(g_dx.roots[i].rs);
     }
     g_dx.rootCount = 0;
 }
