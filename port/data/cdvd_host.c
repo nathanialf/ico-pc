@@ -42,8 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* The host loop's vsync callback list (package 1B, port/platform/
-   host_loop.h).  The fallback keeps this file building without it: then
+/* The host loop's vsync callback list (port/platform/host_loop.h).  The fallback keeps this file building without it: then
    sceCdInit registers nothing and whoever drives the vsyncs must call
    ico_cdvd_host_vsync itself. */
 #if defined(__has_include)

@@ -12,13 +12,13 @@
  *            chroma), bit for bit
  *   mirror   the same picture with the mirror mode on: flipped with the FMV
  *            toggle on, unflipped with it off
- *   crt      (package C1) a 720 x 576 film at an 800 x 480 output: with the
+ *   crt      a 720 x 576 film at an 800 x 480 output: with the
  *            CRT filter off no CRT pass is drawn and the box is the flat
  *            picture; on (scanlines), each frame and each clear frame is
  *            one CRT pass on the film's grid (512 triads, 288 field lines),
  *            the box shows the beam's lines, keeps the picture's light and
  *            stays black around it; off again, the plain picture
- *   fit      (v0.4.2 N1) a 720 x 576 picture in a 720 x 480 display area
+ *   fit      a 720 x 576 picture in a 720 x 480 display area
  *            (a 576-line film under the 60 Hz video mode) at a 240 x 108
  *            output: the picture is fitted into the 144 x 108 box, its top
  *            band on the box's first rows and its bottom band on the last
@@ -187,7 +187,7 @@ static void testMirror(void)
     }
 }
 
-/* ------------------------------------------- the CRT filter (package C1) */
+/* ------------------------------------------------------- the CRT filter */
 
 #define CW 800
 #define CH 480
@@ -297,7 +297,7 @@ static void testCrt(void)
     setCrt(RD_CRT_OFF, OW, OH);
 }
 
-/* ------------------------------- a picture taller than the area (N1) */
+/* ------------------------------------ a picture taller than the area */
 
 #define FW 240
 #define FH 108

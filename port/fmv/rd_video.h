@@ -13,11 +13,11 @@
  * integer CSC.  The picture sits in the PS2
  * display area as mv_videodec.c placed it: centred, (dispW - w) / 2 and
  * (dispH - h) / 2, the display area filling the 4:3 box.  The box stays
- * 4:3 whatever the display options (renderer wave 7):
- * a widescreen presentation pillarboxes the movies.
+ * 4:3 whatever the display options: a widescreen presentation pillarboxes
+ * the movies.
  *
  * Mirror: drawn unmirrored unless the renderer's mirror mode is on
- * (rd.h rd_SetMirror, renderer wave 7 R7c); the films always follow it.
+ * (rd.h rd_SetMirror); the films always follow it.
  */
 #ifndef ICO_PORT_FMV_RD_VIDEO_H
 #define ICO_PORT_FMV_RD_VIDEO_H

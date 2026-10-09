@@ -36,8 +36,8 @@ void ico_cdvd_host_eject(void);
 
 /* The disc image sceCdInit loads when no disc is in the drive yet: the
    ICO_ISO environment variable, else baserom/Ico_PAL.iso under the working
-   directory (dev mode; Phase 5 hands the extracted archive in through
-   ico_vfs_set_disc instead). */
+   directory (dev mode; a normal start hands the extracted archive in
+   through ico_vfs_set_disc instead). */
 const char *ico_cdvd_host_default_iso(void);
 
 /* The boot file SYSTEM.CNF's BOOT2 line names, without device and version

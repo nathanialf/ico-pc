@@ -63,8 +63,8 @@
 #include "rd_video.h"
 
 #elif !defined(ICO_HEADLESS)
-/* package V1: a window build that compiled this file without ICO_RD
-   dropped every picture (port/fmv/CMakeLists.txt gives it the define) */
+/* a window build that compiled this file without ICO_RD would drop every
+   picture (port/fmv/CMakeLists.txt gives it the define) */
 #error "movie.c: neither ICO_RD (window build) nor ICO_HEADLESS is defined"
 #endif
 

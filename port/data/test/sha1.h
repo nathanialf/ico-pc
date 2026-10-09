@@ -2,7 +2,8 @@
  * port/data/test/sha1.h
  *
  * SHA-1 (FIPS 180-4, section 6.1) for the tests' hash checks.  Test-only:
- * the port itself verifies the disc in Phase 5 with its own code.
+ * the port itself verifies the disc with its own code (host_config.c
+ * ico_sha1_*).
  */
 #ifndef ICO_PORT_TEST_SHA1_H
 #define ICO_PORT_TEST_SHA1_H

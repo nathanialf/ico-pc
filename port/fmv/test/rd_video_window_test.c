@@ -1,7 +1,7 @@
 /*
  * port/fmv/test/rd_video_window_test.c
  *
- * v0.4.2 N1: the renderer's output follows the swapchain.  rd on a window
+ * The renderer's output follows the swapchain.  rd on a window
  * (SDL's "offscreen" video driver, whose Vulkan surface is
  * VK_EXT_headless_surface; lavapipe in the container): a movie frame at the
  * window's first size, then the window resized WITHOUT rd_ResizeOutput (the
@@ -12,7 +12,7 @@
  * rd_OutputFollowed once), a pending settings change must not take it back,
  * and the validation layer must report nothing.
  *
- * v0.4.2 N4: with ICO_VK_POLL_SURFACE=1 (always on Android) the window
+ * The surface poll: with ICO_VK_POLL_SURFACE=1 (always on Android) the window
  * resized again and a frame presented with nothing reported (lavapipe's
  * headless surface returns VK_SUCCESS): that present rebuilds the
  * swapchain at the new size, and the next frame's output and box are the
@@ -115,7 +115,7 @@ static void run(SDL_Window *win)
           rd_GetSettings()->outputHeight);
     CHECK(!rd_OutputFollowed(NULL, NULL), "no second change at the same size");
 
-    /* N4: size C (wider than 4:3, so the box is pillarboxed) without
+    /* the surface poll: size C (wider than 4:3, so the box is pillarboxed) without
        rd_ResizeOutput or a forced result: the poll rebuilds the swapchain
        at the present that follows the resize */
     testSetEnv("ICO_VK_POLL_SURFACE", "1");
