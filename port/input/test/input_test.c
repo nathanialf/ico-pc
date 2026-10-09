@@ -317,6 +317,15 @@ static void test_escape(void)
     c.credits = 1;
     CHECK(ico_escape_target(&c) == ICO_T_TRIANGLE);
     CHECK(ico_escape_target(NULL) == ICO_T_TRIANGLE);
+    /* the game's Button configuration screen: no button, in or out of the
+       pause menu (Triangle would be assigned to the highlighted action) */
+    c = play;
+    c.layout = ICO_CAPTURE_LAYOUT_KEY_CONFIG;
+    CHECK(ico_escape_target(&c) == ICO_ESCAPE_NONE);
+    c.paused = 1;
+    CHECK(ico_escape_target(&c) == ICO_ESCAPE_NONE);
+    c.stage = 1;
+    CHECK(ico_escape_target(&c) == ICO_ESCAPE_NONE);
 
     /* held in play: Start each step, still Start once the pause menu is
        open (a held Escape does not close what it opened) */
@@ -373,6 +382,23 @@ static void test_escape(void)
     ico_escape_latch(&l, 0, NULL);
     CHECK(ico_escape_take(&l) == triangle);
     CHECK(ico_escape_take(&l) == 0);
+    /* on the Button configuration screen a press, held or tapped, puts
+       nothing on the pad, and a press after it chooses again */
+    c = play;
+    c.layout = ICO_CAPTURE_LAYOUT_KEY_CONFIG;
+    ico_escape_latch(&l, 1, &c);
+    CHECK(ico_escape_take(&l) == 0);
+    CHECK(ico_escape_take(&l) == 0);
+    CHECK(ico_escape_take(&l) == 0);
+    ico_escape_latch(&l, 0, NULL);
+    ico_escape_latch(&l, 1, &c);
+    ico_escape_latch(&l, 0, NULL);
+    CHECK(ico_escape_take(&l) == 0);
+    CHECK(ico_escape_take(&l) == 0);
+    c.layout = 57;
+    ico_escape_latch(&l, 1, &c);
+    CHECK(ico_escape_take(&l) == triangle);
+    ico_escape_latch(&l, 0, NULL);
 }
 
 static void test_quantise(void)

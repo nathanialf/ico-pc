@@ -34,6 +34,9 @@ int ico_mouse_capture_rule(const IcoCaptureState *s)
 
 int ico_escape_target(const IcoCaptureState *s)
 {
+    if (s != 0 && s->layout == ICO_CAPTURE_LAYOUT_KEY_CONFIG) {
+        return ICO_ESCAPE_NONE;
+    }
     if (s == 0 || s->photo || !in_play(s)) {
         return ICO_T_TRIANGLE;
     }
@@ -64,7 +67,7 @@ unsigned ico_escape_take(IcoEscapeLatch *l)
     if (l->tapped > 0) {
         l->tapped--;
     }
-    return on ? 1u << l->target : 0u;
+    return on && l->target != ICO_ESCAPE_NONE ? 1u << l->target : 0u;
 }
 
 void ico_mouse_look_add(float dx, float dy)

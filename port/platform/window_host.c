@@ -992,7 +992,8 @@ static int capture_mode(void)
 }
 
 /* Escape, and Android's Back (SDL_HINT_ANDROID_TRAP_BACK_BUTTON): never a
-   quit; Start in play (the pause menu opens), Triangle anywhere else
+   quit; Start in play (the pause menu opens), nothing on the game's
+   Button configuration screen, Triangle anywhere else
    (ico_escape_target). Neither reaches the bindings. */
 static int escape_key(SDL_Keycode key)
 {

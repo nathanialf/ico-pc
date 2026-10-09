@@ -17,7 +17,8 @@
  *                      turns into degrees of the photo camera
  *
  * The same state decides what Escape (and Android's Back) presses: Start
- * in play, so the pause menu opens, Triangle (back) everywhere else.
+ * in play, so the pause menu opens, nothing on the game's Button
+ * configuration screen, Triangle (back) everywhere else.
  *
  * The game runs on a fiber of the window's thread, so the accumulator needs
  * no lock.
@@ -35,6 +36,10 @@ enum { ICO_CAPTURE_OFF = 0, ICO_CAPTURE_STICK = 1, ICO_CAPTURE_DELTA = 2 };
    the one of its scenes. */
 #define ICO_CAPTURE_LAYOUT_PLAY 54
 #define ICO_CAPTURE_LAYOUT_SCENE 55
+/* The game's Button configuration screen (la_key_config): any single
+   button there is assigned to the highlighted action, and the screen is
+   left through its OK row. */
+#define ICO_CAPTURE_LAYOUT_KEY_CONFIG 59
 
 typedef struct IcoCaptureState {
     int focus;   /* the window has the keyboard focus */
@@ -63,10 +68,15 @@ int ico_mouse_capture_rule(const IcoCaptureState *s);
    last two steps to be seen. */
 #define ICO_ESCAPE_TAP_STEPS 2
 
-/* The pad button Escape and Android's Back press: ICO_T_START in play (the
-   same test as ICO_CAPTURE_STICK, without the focus and mouse camera
-   conditions), ICO_T_TRIANGLE anywhere else (the pause menu, the title,
-   the port's pages, photo mode). The quit is the title's row or the
+/* No button: ico_escape_target's answer where Escape presses nothing. */
+#define ICO_ESCAPE_NONE (-1)
+
+/* The pad button Escape and Android's Back press: ICO_ESCAPE_NONE on the
+   Button configuration screen (ICO_CAPTURE_LAYOUT_KEY_CONFIG, where
+   Triangle would be assigned to the highlighted action), ICO_T_START in
+   play (the same test as ICO_CAPTURE_STICK, without the focus and mouse
+   camera conditions), ICO_T_TRIANGLE anywhere else (the pause menu, the
+   title, the port's pages, photo mode). The quit is the title's row or the
    window's close button, never Escape. */
 int ico_escape_target(const IcoCaptureState *s);
 
@@ -86,7 +96,8 @@ typedef struct IcoEscapeLatch {
    still on the pad; a release (down 0) lets go. */
 void ico_escape_latch(IcoEscapeLatch *l, int down, const IcoCaptureState *s);
 /* Once a step: the latched target as a pad button bit (1u << target) while
-   held or within ICO_ESCAPE_TAP_STEPS steps of the press, else 0. */
+   held or within ICO_ESCAPE_TAP_STEPS steps of the press, else 0 (always
+   0 for ICO_ESCAPE_NONE). */
 unsigned ico_escape_take(IcoEscapeLatch *l);
 
 /* Photo mode's accumulator: the device layer adds the captured motion
