@@ -15,16 +15,30 @@
 # SDL3 ships as a shared library (libSDL3.so.0) beside the program, found
 # through an $ORIGIN run path, so the archive runs wherever it is unpacked.
 # libvulkan and the C library are the host's.
+#
+# The package is for the build host's architecture. On an arm64 (aarch64)
+# host the preset is linux-arm64 (the window build is its default), and the
+# names take -arm64: dist/ico-pc-<label>-linux-arm64.tar.gz, staged under
+# dist/stage/linux-arm64/, logged to build-host/pkg-linux-arm64-<label>.log.
+# The x86-64 names are as above.
 set -euo pipefail
 
 pkg_name=package_linux
 # shellcheck source=package_common_lib.sh
 . "$(dirname "${BASH_SOURCE[0]}")/package_common_lib.sh"
 pkg_begin "${1:-}"
-log="$root/build-host/pkg-linux-$label.log"
-wt="$root/build-host/pkg-linux-wt"
-stage="$root/dist/stage/linux"
-tgz="$root/dist/ico-pc-$label-linux.tar.gz"
+case "$(uname -m)" in
+    x86_64) arch=x64 suffix=linux preset=linux-x64 ldso=ld-linux-x86-64.so.2 ;;
+    aarch64 | arm64) arch=arm64 suffix=linux-arm64 preset=linux-arm64 ldso=ld-linux-aarch64.so.1 ;;
+    *)
+        echo "package_linux: no Linux package for $(uname -m) hosts" >&2
+        exit 1
+        ;;
+esac
+log="$root/build-host/pkg-$suffix-$label.log"
+wt="$root/build-host/pkg-$suffix-wt"
+stage="$root/dist/stage/$suffix"
+tgz="$root/dist/ico-pc-$label-$suffix.tar.gz"
 cmake="$root/tools/toolchain/cmake/bin/cmake"
 [[ -x "$cmake" ]] || cmake="$(command -v cmake || true)"
 : > "$log"
@@ -32,8 +46,8 @@ cmake="$root/tools/toolchain/cmake/bin/cmake"
 trap cleanup EXIT
 
 [[ -n "$cmake" ]] || fail "no cmake: run tools/fetch_toolchain.sh"
-[[ -f "$root/tools/toolchain/deps/sdl3/linux-x64/lib/libSDL3.so.0" ]] ||
-    fail "no SDL3 for linux-x64: run tools/fetch_toolchain.sh"
+[[ -f "$root/tools/toolchain/deps/sdl3/linux-$arch/lib/libSDL3.so.0" ]] ||
+    fail "no SDL3 for linux-$arch: run tools/fetch_toolchain.sh"
 
 commit="$(git rev-parse HEAD)"
 echo "package_linux: $label from $commit" >>"$log"
@@ -52,12 +66,12 @@ export PATH="$wt/.venv/bin:$PATH"
 cd "$wt"
 # $ORIGIN run path: libSDL3.so.0 is found beside the program. The build-tree
 # run path (the toolchain's absolute lib dir) is left out of the binary.
-run "$cmake" --preset linux-x64 -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
+run "$cmake" --preset "$preset" -DICO_HEADLESS=OFF -DICO_LINK_EXE=ON \
     -DCMAKE_SKIP_BUILD_RPATH=ON "-DCMAKE_EXE_LINKER_FLAGS=-Wl,-rpath,'\$ORIGIN'"
-run "$cmake" --build build-host/linux-x64 --target ico_pc mc_import
-b="$wt/build-host/linux-x64"
-[[ -f "$b/ico_pc" ]] || fail "linux-x64 did not produce ico_pc"
-[[ -f "$b/port/save/mc_import" ]] || fail "linux-x64 did not produce mc_import"
+run "$cmake" --build "build-host/$preset" --target ico_pc mc_import
+b="$wt/build-host/$preset"
+[[ -f "$b/ico_pc" ]] || fail "$preset did not produce ico_pc"
+[[ -f "$b/port/save/mc_import" ]] || fail "$preset did not produce mc_import"
 cd "$root"
 
 # the binary must need only SDL3 and system libraries, and find SDL3 beside itself
@@ -65,7 +79,7 @@ needed="$(readelf -d "$b/ico_pc" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '
 echo "package_linux: NEEDED: $needed" >>"$log"
 for n in $needed; do
     case "$n" in
-        libSDL3.so.0|libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|ld-linux-x86-64.so.2) ;;
+        libSDL3.so.0|libc.so.6|libm.so.6|libdl.so.2|libpthread.so.0|librt.so.1|"$ldso") ;;
         *) fail "unexpected shared library dependency $n" ;;
     esac
 done
@@ -92,7 +106,7 @@ mkdir -p "$stage/tools"
 cp "$b/port/save/mc_import" "$stage/tools/mc_import"
 chmod 755 "$stage/tools/mc_import"
 [[ -f "$b/ico_pc.map" ]] && cp "$b/ico_pc.map" "$stage/ico_pc.map"
-sdl="$root/tools/toolchain/deps/sdl3/linux-x64/lib"
+sdl="$root/tools/toolchain/deps/sdl3/linux-$arch/lib"
 cp -L "$sdl/libSDL3.so.0" "$stage/libSDL3.so.0"
 chmod 755 "$stage/libSDL3.so.0"
 # licences: the program's (LICENSE, MIT) and every third-party component's

@@ -468,6 +468,10 @@ Run the same steps locally before pushing.
 the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 `dist/ico-pc-<label>-linux.tar.gz`). Neither contains game data; both carry
 the README, the player guides, the licence files and the save importer.
+`tools/package_linux.sh` packages for the host's architecture: on an arm64
+host it builds `linux-arm64` into `dist/ico-pc-<label>-linux-arm64.tar.gz`
+(stage `dist/stage/linux-arm64/`, log `build-host/pkg-linux-arm64-<label>.log`),
+the same contents with the aarch64 program and SDL3.
 The three package scripts share `tools/package_common_lib.sh` (the label
 check, the log, `fail` and `run`, and the clean worktree with the
 `ICO_PKG_FILES` overlay); the guides and the package's `ico-pc.ini` (its
