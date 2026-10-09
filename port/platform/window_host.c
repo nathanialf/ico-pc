@@ -627,6 +627,82 @@ typedef struct PipeScreen {
 } PipeScreen;
 
 static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+
+static const char k_driver_box[] =
+    "ICO could not start the game's graphics with this phone's driver. It needs Vulkan 1.2. "
+    "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver package "
+    "instead (a .zip file, for example Turnip).";
+
+/* the window's native surface, which SDL takes away while the system's
+   file picker covers the app, back before the next rd_init; gives up after
+   30 s (rd_init then fails and the choice is offered again) */
+static void wait_native_window(void)
+{
+    for (int i = 0; i < 1500; i++) {
+        if (SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
+                                   SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, NULL) != NULL) {
+            return;
+        }
+        SDL_PumpEvents();
+        SDL_Delay(20);
+    }
+    fprintf(stderr, "window: the app's surface did not come back\n");
+}
+
+/* No driver started and there is no device, so Options > Graphics driver
+   cannot be reached: a box offers a driver package (the system's file
+   picker, then a start with it as at any start, its trial included), the
+   phone's own driver again (when the player's was tried or failed before),
+   or Quit.  A choice that does not start brings the box back.  true once
+   rd_init has made the device; false for Quit. */
+static bool choose_driver(unsigned int gsW, unsigned int gsH, const RdSettings *rs)
+{
+    for (;;) {
+        const char *labels[3];
+        int count = 0, phone = -1;
+        const int choose = count;
+
+        labels[count++] = "Choose a driver file";
+        if (ico_gpu_driver_android_tried()) {
+            phone = count;
+            labels[count++] = "Use the phone's driver";
+        }
+        const int quit = count;
+        labels[count++] = "Quit";
+        const int pick =
+            ico_android_message_box_buttons(s_window, k_driver_box, labels, count, quit);
+        if (pick == choose) {
+            char folder[160], why[128];
+
+            if (!ico_gpu_driver_android_choose(folder, sizeof(folder), why, sizeof(why))) {
+                fprintf(stderr, "window: no graphics driver package was added: %s\n", why);
+                ico_android_message_box(why, 1);
+                continue;
+            }
+            wait_native_window();
+            /* 0: the package did not load (its box was shown); the
+               phone's driver already failed, so it is not tried again */
+            if (!ico_gpu_driver_android_start()) {
+                continue;
+            }
+            if (rd_init(gsW, gsH, rs, s_window)) {
+                fprintf(stderr, "window: started with the graphics driver %s\n", folder);
+                return true;
+            }
+            ico_gpu_driver_android_init_failed();
+        } else if (pick == phone) {
+            ico_gpu_driver_android_use_phone();
+            wait_native_window();
+            if (rd_init(gsW, gsH, rs, s_window)) {
+                fprintf(stderr, "window: started with the phone's own driver\n");
+                return true;
+            }
+        } else {
+            fprintf(stderr, "window: the player quit at the graphics driver choice\n");
+            return false;
+        }
+    }
+}
 #endif
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
@@ -721,10 +797,19 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                 "window: no usable %s device (rd_init failed; the rhi lines above say "
                 "why)\n",
                 backend);
+#ifdef __ANDROID__
+        up = choose_driver(gsW, gsH, &rs);
+#endif
+    }
+    if (!up) {
         SDL_DestroyWindow(s_window);
         s_window = NULL;
         SDL_Quit();
+#ifdef __ANDROID__
+        return -2; /* the player chose Quit in the box, which said why */
+#else
         return -1;
+#endif
     }
     /* the whole reachable pipeline set before the first frame and after
        rd_init (which makes the device), so the game never waits on a
