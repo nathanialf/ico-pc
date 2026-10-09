@@ -2,15 +2,14 @@
  * port/audio/spu2_sd.h
  *
  * A libsd-shaped front end on the software SPU2: the calls SNDN2DRV.IRX
- * makes, with
- * libsd's argument encodings, turned into SPU2 register writes.  Phase 4B's
- * sndn2 host drives the SPU2 through these.
+ * makes, with libsd's argument encodings, turned into SPU2 register writes.
+ * The sndn2 host (sndn2_host.c, stream.c) drives the SPU2 through these.
  *
  * The encodings (SD_VPARAM_*, SD_PARAM_*, SD_SWITCH_*, SD_ADDR_*,
  * SD_CORE_*, the effect modes) are libsd's public ABI as ps2sdk's
  * common/include/libsd-common.h spells it; the values are restated here
  * so the port does not depend on the ps2sdk headers.  Behaviour follows
- * R1 where it read the IRX and ps2sdk's clean-room libsd (freesd.c,
+ * the IRX's code where it was read and ps2sdk's clean-room libsd (freesd.c,
  * effect.c, voice.c) elsewhere; what is still to check against the disc's
  * LIBSD.IRX is noted where it applies.
  *
@@ -58,7 +57,7 @@
 #define SPU2_SD_SWITCH_VMIXER (0x1B << 8)
 
 /* Addresses are byte addresses.  Sony's IRX sets 0x40 on the voice
-   address selectors (R1, command 0x03); it is ignored. */
+   address selectors (command 0x03); it is ignored. */
 #define SPU2_SD_ADDR_ESA (0x1C << 8)
 #define SPU2_SD_ADDR_EEA (0x1D << 8)
 #define SPU2_SD_ADDR_TSA (0x1E << 8)

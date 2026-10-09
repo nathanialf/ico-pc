@@ -37,9 +37,9 @@ void ico_audio_host_vsync(int hz);
 int ico_audio_host_frames(int hz, unsigned int vsync_index);
 
 /* Mirror mode: the option is port/game/options.c's (ico_opt_mirror).  While
-   it is on ico_audio_host_vsync swaps left and right in each rendered block
-   (renderer wave 7, R7c): the device and the WAV dump hear the mirrored
-   pan; the SPU2 and the driver are untouched. */
+   it is on ico_audio_host_vsync swaps left and right in each rendered block:
+   the device and the WAV dump hear the mirrored pan; the SPU2 and the
+   driver are untouched. */
 /* frames: `count` interleaved stereo S16 frames, swapped in place when
    mirror is non-zero (pure; the unit test's entry) */
 void ico_audio_pan_mirror(int16_t *frames, int count, int mirror);
@@ -94,8 +94,8 @@ int ico_audio_sdl_reopen(const char *name);
    setting stays, for the next start).  The default device needs nothing:
    SDL follows the system's default itself. */
 void ico_audio_sdl_device_removed(uint32_t which);
-/* Package AN-D (the Android lifecycle): 1 stops the output device (the
-   app goes to the background), 0 starts it again with the stream's queue
+/* The Android lifecycle: 1 stops the output device (the app goes to the
+   background), 0 starts it again with the stream's queue
    emptied, so no stale audio plays on return. Nothing without an open
    stream; a stub without the SDL output. */
 void ico_audio_sdl_pause(int paused);

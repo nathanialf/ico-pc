@@ -8,7 +8,7 @@
  *                        the driver reads after every vsync, the callbacks
  *                        and their times, the final sound RAM) with golden
  *                        values taken from the frame-by-frame renderer
- *                        (before S3's optimisation; retaken for the disc's
+ *                        (before the chunked renderer; retaken for the disc's
  *                        sceSdInit); then renders 24 random
  *                        2 s scenes both chunked and frame by frame
  *                        (spu2_set_exact) and compares those.  ctest
@@ -327,7 +327,7 @@ enum { SCENE_IDLE, SCENE_GAME, SCENE_HAZARD, SCENE_FULL48, SCENE_FULL24, SCENES 
 static const char *const scene_name[SCENES] = {"idle", "game", "hazard", "full48", "full24"};
 
 /* Golden CRCs, from the frame-by-frame renderer (`--print`).  First taken
-   before S3 (commit a0a98982's spu2.c and adpcm.c); retaken when
+   before the chunked renderer (commit a0a98982's spu2.c and adpcm.c); retaken when
    spu2_sd_init became the disc's sceSdInit (the idle block 16 x 0x07, the
    cold-init ESA) and the hazard scene gained a voice
    across the end of sound RAM. */

@@ -67,7 +67,7 @@ float ps2_div_nonzero(uint32_t a, uint32_t b)
         quotient >>= 1;
     }
     if (e > 254) {
-        return ps2_bits_float(sign | 0x7F7FFFFFu); /* Fmax (F3) */
+        return ps2_bits_float(sign | 0x7F7FFFFFu); /* Fmax */
     }
     if (e < 1) {
         return ps2_bits_float(sign);
@@ -117,8 +117,7 @@ float ps2_rsqrt(float a, float b)
 {
     if (ps2_is_zero(b)) {
         if (ps2_is_zero(a)) {
-            /* PCSX2's vrsqrt 0/0: a signed zero (float-semantics.md, open
-               question 5). */
+            /* PCSX2's vrsqrt 0/0: a signed zero (not checked on hardware). */
             return ps2_bits_float((ps2_float_bits(a) ^ ps2_float_bits(b)) & 0x80000000u);
         }
         return ps2_fmax_signed(a, b);

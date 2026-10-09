@@ -129,7 +129,7 @@ void ico_audio_host_vsync(int hz)
         ico_audio_host_init();
     }
     spu2_render(out, frames);
-    /* mirror mode (R7c): left and right swapped where the stereo output is
+    /* mirror mode: left and right swapped where the stereo output is
        produced, for the device and the dump alike; the SPU2 is untouched */
     ico_audio_pan_mirror(out, frames, ico_opt_mirror());
     if (wav != NULL) {
@@ -182,9 +182,7 @@ void ico_audio_sdl_pause(int paused)
 }
 #endif
 
-/* Mirror mode (Phase 6A): the option lives in
-   port/game/options.c; ico_audio_host_vsync swaps the channels of each
-   rendered block while it is on (renderer wave 7, R7c). */
+/* Left and right swapped in place (mirror mode, audio_host.h). */
 void ico_audio_pan_mirror(int16_t *frames, int count, int mirror)
 {
     int i;

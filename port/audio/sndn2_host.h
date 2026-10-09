@@ -22,7 +22,7 @@
 #define ICO_SNDN2_RPC_INIT 0x65
 #define ICO_SNDN2_REPLY_SIZE 0x200
 
-/* The reply page (R1, "Mailbox"). */
+/* The reply page. */
 #define ICO_SNDN2_REPLY_ENVX 0x000   /* 48 words: ENVX & 0x7FFF, slot = core * 24 + voice */
 #define ICO_SNDN2_REPLY_STREAM 0x0C0 /* 48 words: ADPCM stream IOP read offsets */
 #define ICO_SNDN2_REPLY_PCM 0x180    /* 16 words: PCM channel read offsets */
@@ -45,11 +45,12 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
 /* The page the last tick returned (tests). */
 const uint8_t *ico_sndn2_host_last_reply(void);
 
-/* --- The pitch table (R1, "Pitch") ------------------------------------------
+/* --- The pitch table ---------------------------------------------------------
    608 u16 in 1/16-semitone steps, T[208] = 0x1000.  It is data in the
    user's SNDN2DRV.IRX (file offset 0x3900, 0x4C0 bytes) and is read from
    the disc at registration; without it the driver uses floor(4096 *
-   2^((i - 208) / 192)), which R1 found 1 low or high in 32 entries. */
+   2^((i - 208) / 192)), which is 1 low or high in 32 entries of the disc's
+   table. */
 #define ICO_SNDN2_PITCH_IRX 1
 #define ICO_SNDN2_PITCH_FORMULA 2
 
@@ -67,7 +68,7 @@ uint16_t ico_sndn2_pitch_compute(uint32_t w2, uint32_t w3);
 unsigned ico_sndn2_pitch_clamps(void);
 
 /* The IRX's 0x2000-byte staging buffer (ADPCM fills and the PCM AutoDMA
-   ring share it, R1), for tests. */
+   ring share it, as in the IRX), for tests. */
 const uint8_t *ico_sndn2_staging(void);
 
 #endif

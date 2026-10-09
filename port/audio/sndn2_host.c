@@ -3,8 +3,8 @@
  *
  * SNDN2DRV.IRX on the host (sndn2_host.h): the RPC entry points, the packet
  * dispatcher, the reply page and the pitch table.  Every command and its
- * libsd calls are as R1 read them off the user's
- * own IRX (the handler addresses in the comments below are R1's), turned
+ * libsd calls are as read off the code of the user's own SNDN2DRV.IRX (PAL
+ * disc; the handler addresses in the comments below are the IRX's), turned
  * into calls on the software SPU2's libsd front end (spu2_sd.h).  The
  * stream engines are in stream.c.  Clean-room: no code from the IRX, no
  * emulator code.
@@ -25,8 +25,8 @@
 #include "spu2_sd.h"
 #include "vfs.h"
 
-/* SNDN2DRV.IRX on the PAL disc (R1, "What was examined"); the table's file
-   offset and size (R1, "Pitch"). */
+/* SNDN2DRV.IRX on the PAL disc, its size, and the pitch table's file
+   offset and size in it. */
 #define IRX_PATH "SNDN2DRV.IRX"
 #define IRX_SIZE 20941u
 #define IRX_PITCH_OFFSET 0x3900u
@@ -39,7 +39,7 @@ static struct {
     uint32_t xfer_counter;                  /* 0x3D2C */
     uint8_t ret_page[ICO_SNDN2_REPLY_SIZE]; /* 0x7140 and zeros (a non-tick reply) */
     const uint8_t *last_reply;
-    spu2_sd_effect_attr attr; /* the dispatcher frame's attr (R1 notes) */
+    spu2_sd_effect_attr attr; /* the dispatcher frame's attr */
     uint16_t pitch[ICO_SNDN2_PITCH_ENTRIES];
     int pitch_source;
     unsigned pitch_clamps;
@@ -146,10 +146,11 @@ unsigned ico_sndn2_pitch_clamps(void)
     return H.pitch_clamps;
 }
 
-/* R1, "Pitch".  The arithmetic is the IRX's 32-bit unsigned arithmetic
-   (the 441/480 step by multiply-high); the table index is not checked by
-   the IRX, which then reads its neighbouring .data/.bss: here it is clamped
-   and counted (R1 open question 4). */
+/* Command 0x04's pitch.  The arithmetic is the IRX's 32-bit unsigned
+   arithmetic (the 441/480 step by multiply-high); the table index is not
+   checked by the IRX, which then reads its neighbouring .data/.bss: here it
+   is clamped and counted.  Whether the game ever indexes outside the table
+   is not known. */
 uint16_t ico_sndn2_pitch_compute(uint32_t w2, uint32_t w3)
 {
     int base = (int)(w2 >> 24);
@@ -217,7 +218,7 @@ static void voice_trans(uint32_t w1, uint32_t w2, uint32_t w3, int read)
         return;
     }
     buf = ico_iop_ptr(iop);
-    /* the IRX does not check the result: a busy channel drops it (R1) */
+    /* the IRX does not check the result: a busy channel drops it */
     (void)spu2_sd_voice_trans(0, read ? SPU2_SD_TRANS_READ : SPU2_SD_TRANS_WRITE, buf, spu, size);
 }
 
@@ -293,7 +294,7 @@ static void dispatch(const uint8_t *pk)
         spu2_sd_set_param((uint16_t)(SPU2_SD_PARAM_EVOLL | core), (uint16_t)w2);
         spu2_sd_set_param((uint16_t)(SPU2_SD_PARAM_EVOLR | core), (uint16_t)w3);
         break;
-    case 0x17: /* never sent by the game (R1): the last 0x15 attr, re-applied */
+    case 0x17: /* never sent by the game: the last 0x15 attr, re-applied */
     case 0x18:
         if (cmd == 0x17) {
             H.attr.delay = (int)w2;
@@ -336,7 +337,7 @@ static void dispatch(const uint8_t *pk)
     case 0x21:
         voice_trans(id, w2, w3, 1);
         break;
-    case 0x22: /* never sent by the EE (R1): the status into the return word */
+    case 0x22: /* never sent by the EE: the status into the return word */
         wr32(H.ret_page, (uint32_t)spu2_sd_voice_trans_status(0, (int16_t)id));
         break;
 

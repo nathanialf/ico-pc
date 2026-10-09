@@ -16,7 +16,7 @@
 #define SNDN2_PCM_CHANNELS 16
 #define SNDN2_STAGING_SIZE 0x2000
 
-/* libsd's voice selector for a slot (R1's V(x)): `param | core | voice << 1`. */
+/* libsd's voice selector for a slot (the IRX's V(x)): `param | core | voice << 1`. */
 static inline uint16_t vsel(uint32_t slot, uint16_t param)
 {
     return (uint16_t)(param | SPU2_SD_VOICE(slot / 24, slot % 24));
@@ -28,7 +28,7 @@ uint8_t *sndn2_staging_buf(void);
 /* One diagnostic line per kind of anomaly, then silence. */
 void sndn2_log_once(int *flag, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
-/* --- ADPCM streams (stream.c; R1 "ADPCM streams") --------------------------- */
+/* --- ADPCM streams (stream.c) ----------------------------------------------- */
 void st_adpcm_reset(void);                                   /* power-on (tests) */
 void st_adpcm_init(void);                                    /* 0x3C */
 void st_adpcm_open(uint32_t w1, uint32_t w2, uint32_t w3);   /* 0x3E */
@@ -41,7 +41,7 @@ void st_adpcm_stop(uint32_t m0, uint32_t m1);                /* 0x43 */
 void st_adpcm_tick(void);
 uint32_t st_adpcm_read_off(int slot);
 
-/* --- PCM streams (stream.c; R1 "PCM streams") ------------------------------- */
+/* --- PCM streams (stream.c) ------------------------------------------------- */
 void st_pcm_init(void);                                          /* 0x46 */
 void st_pcm_quit(void);                                          /* 0x47 */
 void st_pcm_open(uint32_t id, uint32_t w2, uint32_t w3);         /* 0x48 */

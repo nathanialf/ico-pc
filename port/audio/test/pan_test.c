@@ -1,4 +1,4 @@
-/* pan_test.c: the mirror mode's pan swap (renderer wave 7, R7c).
+/* pan_test.c: the mirror mode's pan swap.
  *
  *   swap    ico_audio_pan_mirror swaps left and right of every frame when
  *           mirror is set, in place, and leaves the block alone when not

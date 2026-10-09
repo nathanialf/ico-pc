@@ -146,7 +146,7 @@ static inline uint64_t ps2_mul_mantissa(uint32_t a, uint32_t b)
    field), after PCSX2 PR #12001's PS2Float::Mul/DoMul: the product above
    truncated to 24 bits. Not commutative (ps2_mul_mantissa); pass the
    operands in the instruction's order. A zero or denormal operand gives a
-   zero with the sign of a XOR b; an overflow gives +-Fmax (0x7F7FFFFF, F3),
+   zero with the sign of a XOR b; an overflow gives +-Fmax (0x7F7FFFFF),
    an underflow a signed zero. */
 static inline float ps2_mul(float fa, float fb)
 {

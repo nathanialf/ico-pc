@@ -1,9 +1,9 @@
 /*
  * port/audio/stream.c
  *
- * SNDN2DRV's two stream engines on the host (the handler addresses in the comments
- * are R1's).  Both read their data where the game put it, in the IOP RAM
- * stand-in (port/data/iop_ram.h): the ADPCM `.int` rings the game fills
+ * SNDN2DRV's two stream engines on the host (the handler addresses in the
+ * comments are the IRX's).  Both read their data where the game put it, in
+ * the IOP RAM stand-in (port/data/iop_ram.h): the ADPCM `.int` rings the game fills
  * with sceCdReadIOPm through its background reader (fumi/sound/
  * adpcm_init.c, fumi/ios/cdvd.c), and the movie player's PCM buffer it
  * fills by SIF DMA (ito/mpeg/mv_audiodec.c).

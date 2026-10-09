@@ -53,8 +53,8 @@
  * Not reproduced: the EE FPU's own division (the copies use the host's
  * IEEE division, under the simulation's rounding mode) and its lack of
  * infinities and NaNs, except in acosf's and asinf's domain errors
- * (ico_domain_error). The rest is package 1A's port/math helpers' concern;
- * these functions see only finite inputs in the game.
+ * (ico_domain_error). The rest is ps2float.h's concern (the EE division
+ * and operand helpers); these functions see only finite inputs in the game.
  */
 #include <stdint.h>
 

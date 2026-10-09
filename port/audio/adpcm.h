@@ -1,8 +1,8 @@
 /*
  * port/audio/adpcm.h
  *
- * The SPU ("VAG") ADPCM block decoder, shared by the software SPU2
- * (spu2.c) and the stream code of Phase 4B (.int files).
+ * The SPU ("VAG") ADPCM block decoder of the software SPU2 (spu2.c); the
+ * .int streams are decoded there too, as SPU2 voices.
  *
  * A block is 16 bytes and decodes to 28 signed 16-bit samples:
  *
