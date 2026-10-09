@@ -24,7 +24,7 @@ VuVtx vu_grid_vertex(uint v, uint variant, bool full)
     // mesh.vsm:172-175 M * pos (vf00.w), :179 div, :188 mulq
     o.h = vu_matm(16u, pos, 1.0);
     float q = vu_divide(o);
-    o.inside = vu_inside(o.p, VU_LO0, VU_HI4094);
+    o.inside = vu_inside(vu_region_pos(o.p), VU_LO0, VU_HI4094);
     if (full) {
         float4 col = vu_stream[vu_batch_qw(v) + vu_batch.x - 1u]; // the last header qword
         if (lit) {

@@ -22,7 +22,7 @@ VuVtx vu_prelit_vertex(uint v, uint mode, bool full)
     }
     float q = vu_divide(o);
     if (mode == VU_CLIP_REGION) {
-        o.inside = vu_inside(o.p, VU_LO0, VU_HI4094);
+        o.inside = vu_inside(vu_region_pos(o.p), VU_LO0, VU_HI4094);
     }
     if (full) {
         // :157 add.xyz vf21 = ST + (UV offset xy, 0); :172 mulq.xyz

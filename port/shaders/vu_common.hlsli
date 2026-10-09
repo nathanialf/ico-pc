@@ -154,6 +154,35 @@ bool vu_inside(float4 p, float4 lo, float4 hi)
 static const float4 VU_LO0 = float4(0.0, 0.0, 0.0, 0.0);
 static const float4 VU_HI4094 = float4(4094.0, 4094.0, 0.0, 16777214.0);
 
+// The centre the wide projection squeezes x about: the scene's XYOFFSET is
+// 2048 - w/2, so 2048 is the middle of the picture (ICO_VU_REGION_CX).
+static const float VU_REGION_CX = 2048.0;
+
+// The position the region test compares (vu_inside with VU_LO0 and
+// VU_HI4094: normal_c code 32, normal_l 32, 34 and 38, the grid program).
+// On a wide screen a scene draw is squeezed in x by g_space[SPACE_WORLD].x
+// about the centre, so the picture reaches far past the 4:3 frame and a
+// triangle near its sides can have a vertex beyond GS X 4094: the whole
+// triangle was dropped although most of it was on screen (water near the
+// edges popped in and out). The test takes x where the squeezed picture
+// puts it instead, so the GS window keeps the same share of the picture as
+// at 4:3. Only the test uses it; the drawn position is p unchanged (no
+// 16-bit wrap in this mode, vu_triangle_out). A scale of exactly 1 (4:3,
+// the Original preset, stretched draws, targets that are not wide) returns
+// p untouched: (x - 2048) * 1 + 2048 is not exact for every float x (a tiny
+// positive x rounds to 0 and would fail 0 < x). precise: the CPU reference
+// (vu1_ref_internal.h vu_region_x) rounds the subtract, the multiply and
+// the add one at a time.
+float4 vu_region_pos(float4 p)
+{
+    float f = g_space[SPACE_WORLD].x;
+    if (f != 1.0) {
+        precise float x = (p.x - VU_REGION_CX) * f + VU_REGION_CX;
+        p.x = x;
+    }
+    return p;
+}
+
 // -------------------------------------------------------------- the stream
 
 // The first qword of vertex v and of its batch.

@@ -265,6 +265,11 @@ enum {
     ICO_VU_KICK_ONLY = 64 /* scissor: only the triangles the strip kicks (second draw) */
 };
 
+/* The region test's centre on a wide screen (vu_common.hlsli VU_REGION_CX,
+ * vu_region_pos): the test compares x squeezed by the frame's world x scale
+ * about GS X 2048, the middle of the scene's GS window. */
+#define ICO_VU_REGION_CX 2048.0f
+
 /* The index value of an indexed VU draw: kick * 4 + corner (corner 0..2 =
  * vertex kick - 2 + corner); vertexOffset must be 0. */
 #define ICO_VU_INDEX(kick, corner) ((uint32_t)(kick) * 4u + (uint32_t)(corner))

@@ -76,7 +76,7 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant, bool full)
     }
     float q = vu_divide(o);
     if (!scissor) {
-        o.inside = vu_inside(o.p, VU_LO0, VU_HI4094);
+        o.inside = vu_inside(vu_region_pos(o.p), VU_LO0, VU_HI4094);
     }
     if (full) {
         if (variant == VU_REFLECT) {
