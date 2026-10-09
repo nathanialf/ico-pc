@@ -38,10 +38,9 @@
         },
         {
             "name": "asan",
-            "inherits": "base",
+            "inherits": "linux-x64",
             "displayName": "Linux x86-64, AddressSanitizer + UBSan, host GCC",
             "cacheVariables": {
-                "CMAKE_C_COMPILER": "gcc",
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_C_FLAGS_DEBUG": "-g -O1",
                 "ICO_SANITIZE": "address,undefined"
