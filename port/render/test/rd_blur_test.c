@@ -2179,6 +2179,7 @@ static void checkPipelines(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     printf("rd_blur_test\n");
     setMatrices();
     systemStatus[0] = 1; /* PAL: 512 lines */

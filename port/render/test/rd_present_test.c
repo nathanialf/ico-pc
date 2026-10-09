@@ -671,6 +671,7 @@ static RdSettings originalSettings(void)
  * hashes of this file's own frame (they must equal the constants above) */
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     makeNoiseScene();
     RdSettings s = originalSettings();
     FrameHashes h;
@@ -2608,6 +2609,7 @@ static void checkBlank(void)
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     checkOptions(dir);
     checkBoxes();

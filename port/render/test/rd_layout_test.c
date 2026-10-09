@@ -400,6 +400,7 @@ static void checkKeyedRow(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     /* recording */
     if (!rd__InitRecordOnly(512, 512)) {
         printf("FAIL rd__InitRecordOnly\n");

@@ -1176,6 +1176,7 @@ static void checkTopLayer(void)
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     checkOptions(dir);
     checkResolve();

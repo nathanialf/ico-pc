@@ -715,6 +715,7 @@ static int dumpMode(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     if (argc > 1) {
         return dumpMode(argc, argv);
     }

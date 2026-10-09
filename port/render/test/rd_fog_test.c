@@ -804,6 +804,7 @@ static void checkPipelines(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     printf("rd_fog_test\n");
     checkSwizzle();
 

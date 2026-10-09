@@ -1789,6 +1789,7 @@ static void setup(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     printf("rd_raw_test\n");
     if (!rd__InitRecordOnly(W, H)) {
         printf("FAIL rd__InitRecordOnly\n");

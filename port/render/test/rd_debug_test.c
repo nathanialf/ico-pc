@@ -760,6 +760,7 @@ static void checkPixels(const char *root)
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     char root[1024];
 
     snprintf(root, sizeof(root), "%s/rd_debug_host0", argc > 1 ? argv[1] : ".");

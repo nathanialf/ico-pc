@@ -1092,6 +1092,7 @@ static void deviceCase(const char *what, Sub15C *o, PacHeader *pk, const PkDesc 
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     snprintf(s_base, sizeof(s_base), "%s/modelpack_tmp", argc > 1 ? argv[1] : ".");
     (void)ico_mkdir(s_base);
     if (!rd__InitRecordOnly(512, 512)) {

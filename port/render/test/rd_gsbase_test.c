@@ -1778,6 +1778,7 @@ static void recordingChecks(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     RdSettings st;
     memset(&st, 0, sizeof(st));
     st.preset = RD_PRESET_ORIGINAL;

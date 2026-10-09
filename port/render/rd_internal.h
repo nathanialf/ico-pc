@@ -1224,16 +1224,18 @@ static inline int rd__JoinPath(char *out, size_t size, const char *a, const char
 
 void rd__Log(const char *fmt, ...);
 void rd__LogOnce(int bit, const char *fmt, ...);
-/* A recorded command whose replay belongs to a later wave.  Prints and
- * aborts unless rd__SetNotImplementedFatal(false) (tests). */
+/* A recorded command the replay does not model (RDC_WORLD_PRIMS, or a post
+ * kind recorded as a stub): counted, and skipped with one log line for the
+ * run.  With rd__SetNotImplementedFatal(true), which the render tests set,
+ * it is logged every time and aborts. */
 void rd__NotImplemented(const char *what);
 void rd__SetNotImplementedFatal(bool fatal);
+uint32_t rd__NotImplementedCount(void);
 
 /* Package PC: merging consecutive screen-prim commands into one draw
  * (rd_replay.c doScreen); on by default, off
  * for the tests that compare a merged run with sequential draws. */
 void rd__SetScreenMerge(bool on);
-uint32_t rd__NotImplementedCount(void);
 
 /* Recording helpers rd_post.c uses for the GS writes that have no public
  * rd_* call of their own. */

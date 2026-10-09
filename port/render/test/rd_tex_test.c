@@ -1309,6 +1309,7 @@ static void r8Pixels(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     systemStatus[1] = 1;
     GlobalStageSetting.texSampleMode = 1;
     makePalettes();

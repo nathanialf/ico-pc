@@ -22,7 +22,6 @@
 
 #endif
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +66,10 @@ void rd__OnHost(void (*fn)(void *arg), void *arg)
     }
 }
 
-static bool s_notImplementedFatal = true;
+/* false in the game: a stub command is logged once and skipped; the tests
+ * set it (rd__SetNotImplementedFatal(true)) so a stub replayed stops them */
+static bool s_notImplementedFatal = false;
+static bool s_notImplementedLogged;
 
 static uint32_t s_notImplementedCount;
 
@@ -100,10 +102,13 @@ void rd__LogOnce(int bit, const char *fmt, ...)
 void rd__NotImplemented(const char *what)
 {
     s_notImplementedCount++;
-    fprintf(stderr, "rd: replay of %s is not implemented yet\n", what);
     if (s_notImplementedFatal) {
-        assert(!"rd: command not implemented in this wave");
+        fprintf(stderr, "rd: replay of %s is not implemented yet\n", what);
         abort();
+    }
+    if (!s_notImplementedLogged) {
+        s_notImplementedLogged = true;
+        fprintf(stderr, "rd: replay of %s is not implemented yet: skipped (reported once)\n", what);
     }
 }
 

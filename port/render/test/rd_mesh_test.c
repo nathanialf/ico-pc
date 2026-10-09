@@ -1568,6 +1568,7 @@ static void recordingChecks(void)
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     if (!rd__InitRecordOnly(512, 512)) {
         printf("FAIL rd__InitRecordOnly\n");
         return 1;

@@ -3550,6 +3550,7 @@ static void testVuPathsAt(const char *mode, RdPreset preset, float scale, int ch
 
 int main(int argc, char **argv)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     RdSettings s;
     memset(&s, 0, sizeof(s));

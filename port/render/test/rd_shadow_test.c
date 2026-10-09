@@ -1013,6 +1013,7 @@ static void checkScaledIntegral(void)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     static const int kAll[4] = {0, kBlend[1], kBlend[2], kBlend[3]};
     setMatrices();
     buildModel();

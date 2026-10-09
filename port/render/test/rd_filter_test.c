@@ -103,6 +103,7 @@ static int worldDraws(RdKey key)
 
 int main(void)
 {
+    rd__SetNotImplementedFatal(true); /* a stub command replayed stops the test */
     if (!rd__InitRecordOnly(512, 512)) {
         printf("rd_filter_test: no context\n");
         return 1;
