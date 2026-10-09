@@ -11,18 +11,14 @@
 #include "appearance.h"
 #include "config.h"
 
-/* -1: not read yet; 0 or 1 */
-/* package MV (options.h): the model viewer is up */
+/* options.h: the model viewer is up */
 int ico_mv_active;
 
+/* -1: not read yet; 0 or 1 */
 static int s_stick_fix = -1;
-
 static int s_yorda_safe = -1;
-
 static int s_mirror = -1;
-
 static int s_developer_mode = -1;
-
 static int s_circle_back = -1;
 
 static int get_or(int *v, const char *path, int def)
@@ -40,10 +36,9 @@ static int get(int *v, const char *path)
 
 int ico_opt_stick_fix_default_for(int android)
 {
-    /* v0.4.2 made this On on Android (the touch stick is round, so its
-       diagonals stop short of the DualShock 2's square corners); v0.4.3
-       reverted that: a file without the key reads Off on every platform, and
-       a file where the player chose a value keeps it (no file is rewritten) */
+    /* Off on every platform, Android included (where a touch stick is
+       round); a file where the player chose a value keeps it (no file is
+       rewritten) */
     (void)android;
     return 0;
 }
@@ -251,6 +246,6 @@ void ico_opt_reload(void)
 {
     s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_circle_back = -1;
     s_output = -2;
-    /* v0.4.2: the characters' colours ([characters], appearance.h) */
+    /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();
 }

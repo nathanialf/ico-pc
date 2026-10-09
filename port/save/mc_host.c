@@ -165,7 +165,7 @@ static int list_dir(const char *path, char (*names)[MC_NAME_MAX + 1], int max);
 
 static int kind_of(const char *path, unsigned long *size, time_t *mtime);
 
-/* v0.4.2: on a file system that tells case apart (Linux, Android's app
+/* On a file system that tells case apart (Linux, Android's app
    folder outside the shared storage) a card folder copied or renamed with
    other capitals ("besces-50760ICO") is still the game's: a component that
    does not exist as spelled takes the name of the one entry of its
@@ -926,7 +926,7 @@ int sceMcOpen(int port, int slot, char *name, int flags)
         }
     }
     if (game_file(rel)) {
-        /* v0.4.2: a save's game file is read (a Continue's load) or written
+        /* a save's game file is read (a Continue's load) or written
            (a save): one line each, so a log that stops there says so */
         fprintf(stderr, "mc: %s %s/%s%s\n", (mode & SCE_WRONLY) ? "writing" : "reading",
                 mc.root[port], rel, fp == NULL ? ": refused" : "");

@@ -1,5 +1,5 @@
-# port/game/test/model_viewer_pad.txt: the model_viewer_headless test's pad
-# (package MV). Format:
+# port/game/test/model_viewer_pad.txt: the model_viewer_headless test's pad.
+# Format:
 # port/input/pad_script.h. Buttons: CROSS 0040, TRIANGLE 0010, START 0800,
 # DOWN 4000, LEFT 8000.
 #

@@ -507,8 +507,8 @@ int ico_gs_start_stage_used(void)
 
 int ico_gs_achievements_suspended(void)
 {
-    /* package MV: the model viewer's stages are not play; package CRED: nor
-       the Extras credits' playback of the ending */
+    /* the model viewer's stages are not play, nor the Extras credits'
+       playback of the ending */
     return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
            ico_credits_active();
 }

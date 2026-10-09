@@ -1,8 +1,7 @@
 /*
  * port/game/appearance.h
  *
- * The characters' colours (Options > Extras > Characters, v0.4.2 package
- * K): nine parts of Ico and Yorda, each Original or one target colour, and
+ * The characters' colours (Settings > Extras > Characters): nine parts of Ico and Yorda, each Original or one target colour, and
  * the recolour of the characters' CLUTs that the game's texture upload
  * (ico2/seki/src/Texture.c texHostTexture, ICO_RD) applies to a copy of
  * the CLUT before the decode.  No renderer or UI dependency: rd_tex.h is

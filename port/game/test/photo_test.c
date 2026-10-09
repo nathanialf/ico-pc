@@ -1,5 +1,5 @@
-/* photo_test.c: photo mode's state and camera (port/game/photo_mode.c,
- * package PHOTO; v0.4.1 the free camera).  CPU only.
+/* photo_test.c: photo mode's state and camera (port/game/photo_mode.c),
+ * the free camera included.  CPU only.
  *
  *   identity  nothing moved: the override is the game camera, byte for byte
  *   free      the camera at enter, the HUD shown: a second of the left stick
@@ -32,7 +32,7 @@
  *   step      at stick_speed 10, a tick moves the eye 250 and turns the view
  *             25 degrees at most (the renderer blends below 300 and 30);
  *             Select still jumps
- *   mouse     (I17a) ico_photo_mouse_look: the free camera's yaw grows by the
+ *   mouse     (issue 17) ico_photo_mouse_look: the free camera's yaw grows by the
  *             degrees given, its pitch stops at 85 degrees, a big move
  *             turns 25 degrees a tick at most; the orbit camera's yaw and
  *             pitch, its dolly and pan left alone; nothing while inactive
@@ -492,7 +492,7 @@ int main(int argc, char **argv)
     CHECK(memcmp(&out, &game, sizeof(game)) == 0, "step: Select jumps back to the game camera");
     ico_photo_exit();
 
-    /* I17a: the mouse's look */
+    /* the mouse's look (issue 17) */
     {
         writeConfig(path, "version = 1\n[photo]\nstick_speed = 1.0\n");
         IcoPhotoState was, now;

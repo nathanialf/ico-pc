@@ -97,8 +97,8 @@ static void test_defaults(void)
 {
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
-    /* v0.4.3: the stick fix starts off on every platform (v0.4.2's Android
-       On was reverted); with no config.toml the option is that default */
+    /* the stick fix starts off on every platform; with no config.toml the
+       option is that default */
     CHECK(ico_opt_stick_fix_default_for(1) == 0);
     CHECK(ico_opt_stick_fix_default_for(0) == 0);
     CHECK(ico_opt_stick_fix_default() == 0);
@@ -142,7 +142,7 @@ static void test_config(const char *dir)
     CHECK(ico_opt_stick_fix() == 1);
     CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_mirror() == 1);
-    /* renderer wave 6 (R6a): developer mode and the debug option file switch */
+    /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);
     CHECK(ico_opt_debug_option() == 1);
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
@@ -235,7 +235,7 @@ static void test_brain(void)
     ico_opt_set_yorda_safe(0);
 }
 
-/* --- mirror mode per save slot (renderer wave 7, R7c) -------------------- */
+/* --- mirror mode per save slot ------------------------------------------- */
 static int s_heard = -1, s_heard_count;
 
 static void listener(int on)
@@ -413,7 +413,7 @@ static void test_video_effects(const char *dir)
     ico_video_reload();
 }
 
-/* v0.4.1 (R1): [video] effects_depth, on by default, read, sanitized,
+/* [video] effects_depth, on by default, read, sanitized,
    saved when off or already in the file, outside the preset, through
    ico_video_effects_depth */
 static void test_video_effects_depth(const char *dir)
@@ -467,7 +467,7 @@ static void test_video_effects_depth(const char *dir)
     ico_video_reload();
 }
 
-/* v0.4.1: [video] model_pack (default on) and dump_models (default off):
+/* [video] model_pack (default on) and dump_models (default off):
    the defaults, the file read, the round trip, and the preset untouched */
 static void test_video_models(const char *dir)
 {
@@ -529,7 +529,7 @@ static void test_video_models(const char *dir)
     ico_video_reload();
 }
 
-/* v0.4.2 (N2): resolution "auto" (parsed, named, read, saved and read
+/* Resolution "auto" (parsed, named, read, saved and read
    back, kept by sanitize) on any build; the Android rules (checked here on
    any computer through ico_video_set_android / ico_video_defaults_for): the
    frame rate default 60, Enhanced's resolution "auto" both ways (the

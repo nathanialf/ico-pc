@@ -1,8 +1,7 @@
 /*
  * port/game/photo_mode.h
  *
- * Photo mode's state (package PHOTO): a
- * free camera over the paused picture.  The pause menu's "Photo mode" row
+ * Photo mode's state: a free camera over the paused picture.  The pause menu's "Photo mode" row
  * opens a port layout (port/ui/photo_ui.c) whose proc calls
  * ico_photo_enter, then ico_photo_update once a Main tick with the pad, and
  * ico_photo_exit on the way back.  Each paused tick port/game/photo_view.c
@@ -146,7 +145,7 @@ void ico_photo_set_left(int left);
    the pad asks to leave (Triangle, Circle, Start pressed), else 0.  Does
    nothing (0) while inactive. */
 int ico_photo_update(const IcoPhotoPad *pad);
-/* I17a (issue 17): the mouse's look for this tick, degrees, signed as its
+/* Issue 17: the mouse's look for this tick, degrees, signed as its
    stick pushed right and up: the free camera's fyaw and fpitch (turns
    right, looks up), the orbit camera's yaw and pitch (the eye goes right
    and rises), each with its stick's limit on the pitch, the

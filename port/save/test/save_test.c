@@ -862,7 +862,7 @@ static void driver(void *arg)
     CHECK(req.result == 0 && req.dirCount == 0 && req.mask == 0);
     CHECK(file_size(CARD_B "/" PRODUCT "/game.001") < 0);
 
-    /* v0.4.2 (Android issue 20): saves as they reach a phone.
+    /* Saves as they reach a phone (Android, issue 20).
        A save folder copied or renamed with other capitals: on a file
        system that tells case apart (Linux; Android's app folder) it is
        still found (mc_host.c fold_case), and the load reads it whole. */

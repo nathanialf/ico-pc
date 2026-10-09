@@ -1,7 +1,7 @@
 /*
  * port/game/model_viewer.h
  *
- * Settings > Extras > Models (package MV): a viewer
+ * Settings > Extras > Models: a viewer
  * for the game's character and object models, on the game's own motion
  * system.
  *
@@ -75,7 +75,7 @@ int ico_mv_models_enter(void);
 /* The model list's layout while it is opened from the title (the viewer
    off), or -1 (port/game/title_logo.c hides the logo under it) */
 int ico_mv_title_list_layout(void);
-/* v0.4.2: Settings > Extras > Characters from the title runs in the viewer
+/* Settings > Extras > Characters from the title runs in the viewer
    (settings.h UiCharactersHost, registered at the first tick): enter loads
    Ico's model (0, or -1 unless the viewer is off) and the Characters page
    becomes the panel beside it; shown is the character on screen (0 Ico,

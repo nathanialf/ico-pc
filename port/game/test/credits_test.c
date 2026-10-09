@@ -1,7 +1,7 @@
 /*
  * port/game/test/credits_test.c
  *
- * The staff roll's port credit and the Extras credits' lock (package CRED), CPU only.
+ * The staff roll's port credit and the Extras credits' lock, CPU only.
  *
  * The game's staffroll.c (its only path: every line, the port's included,
  * through font_Print's bitmap font) runs over a short table in the disc's
@@ -304,7 +304,7 @@ static void test_roll(void)
     CHECK(ICO_ROLL_PORT_NAME - ICO_ROLL_PORT_HEADING == 5);
     /* the copyright line, centred by the disc's {C}, stays as it was */
     CHECK(s_align[n - 1] == 0);
-    /* every line is drawn by the roll's own bitmap font (package TXT2): the
+    /* every line is drawn by the roll's own bitmap font: the
        disc's and the port's */
     printf("roll: %d font_Print calls\n", s_printed);
     CHECK(s_printed > 0 && s_printedDisc && s_printedHeading && s_printedName);

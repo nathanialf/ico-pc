@@ -50,7 +50,7 @@
  *   MV_LEAVING  until the title is up: then the filter is off and
  *               ico_mv_active clear
  *
- * v0.4.2: Settings > Extras > Characters from the title runs in the viewer
+ * Settings > Extras > Characters from the title runs in the viewer
  * (s_chars; settings.h UiCharactersHost): Ico's model is loaded as picking
  * it in the list does, and once it is up the Settings page of Characters is
  * the layout shown, as a panel at the left (settings.c charactersPlace),
@@ -118,7 +118,7 @@ extern GenGeo objLayout[]; /* the layout rows (gamesys.h) */
 extern void POSITIVE_SE(void);
 extern void NEGATIVE_SE(void);
 
-/* v0.4.1: the two "face shadow" textures of the Queen (face_sadow_sd and
+/* The two "face shadow" textures of the Queen (face_sadow_sd and
    face_sadow_sd_00) carry an endless UV scroll in their TIM2 header (0.25 U
    and 1/16 V a frame), and every scene that shows her stops it at once with
    tex_SetUVScroll(..., 0.8, 0.8, 1) / (..., 0.45, 0.45, 1) (script.c:199,
@@ -176,15 +176,14 @@ unsigned int ico_host_main_ticks(void); /* trace_host.c */
 /* how far the model sits left of the middle, in distances */
 #define MODEL_SHIFT 0.16f
 /* in Characters it sits right of the middle, clear of the panel at the
-   left (settings.c CV_*: the panel ends at x 348 of 640); v0.4.2 K-F: a
-   little nearer the middle than the first -0.22 */
+   left (settings.c CV_*: the panel ends at x 348 of 640) */
 #define MODEL_SHIFT_CHARS -0.16f
 #define LOAD_TIMEOUT_TICKS 3000u
 /* the title's stage back after End Game (a few hundred ticks); past this
    the viewer lets go of the game anyway */
 #define LEAVE_TIMEOUT_TICKS 3000u
 #define LOG_EVERY_TICKS 25u
-/* v0.4.2: the title's menu after Characters (10 s at 25 ticks a second):
+/* the title's menu after Characters (10 s at 25 ticks a second):
    past this Settings is not opened again (a log line) */
 #define RETURN_TIMEOUT_TICKS 250u
 #define LAYOUT_TITLE_CONTINUE 12
@@ -195,8 +194,8 @@ enum { MV_OFF, MV_LOADING, MV_VIEW, MV_LIST, MV_LEAVING };
 static int s_state = MV_OFF;
 static int s_pauseSaved = 1;    /* enable_game_pause on the title, put back there */
 static int s_model = -1;        /* the table row viewed or loading */
-static int s_chars;             /* v0.4.2: Settings > Extras > Characters runs here */
-static int s_returnExtras;      /* v0.4.2: back from Characters: Settings on Extras */
+static int s_chars;             /* Settings > Extras > Characters runs here */
+static int s_returnExtras;      /* back from Characters: Settings on Extras */
 static int s_sawChange;         /* the stage change has begun (systemStatus[6]) */
 static unsigned int s_since;    /* the Main tick the state began */
 static GObj *s_obj;             /* the object viewed */
@@ -493,7 +492,7 @@ int ico_mv_title_list_layout(void)
 
 int ico_mv_characters_enter(void)
 {
-    /* v0.4.2: each refusal says why (Extras' Characters row then stays) */
+    /* each refusal says why (Extras' Characters row then stays) */
     if (s_state != MV_OFF) {
         fprintf(stderr, "model_viewer: characters not opened: the viewer is still %s\n",
                 s_state == MV_LEAVING ? "leaving" : "running");
@@ -611,7 +610,7 @@ static void mvToTitle(void)
        once the title is back */
     s_returnExtras = s_chars;
     if (s_chars) {
-        /* v0.4.3: the title comes up with no menu and no logo until its
+        /* the title comes up with no menu and no logo until its
            card check has decided (settings.h ui_SettingsTitleReturn) */
         ui_SettingsTitleReturn(UI_PAGE_EXTRAS);
         /* Characters' colours, however the viewer is left (Triangle has
@@ -1173,7 +1172,7 @@ void ico_mv_tick(void)
     switch (s_state) {
     case MV_OFF:
         if (s_returnExtras) {
-            /* v0.4.2: back from Characters: Settings on Extras (its
+            /* back from Characters: Settings on Extras (its
                Characters row) once the title's menu is up and faded in
                (lt_switch_layout works only then) */
             if (stage_no == TITLE_STAGE && lt_fade_status() == 2 && ui_SettingsTitleDecided() &&

@@ -3,7 +3,7 @@
  *
  * The port's gameplay options: one place that holds
  * them, so that the game hooks, the input layer, the audio layer and the
- * Settings menu (package 6B) all read and write the same values.
+ * Settings menu all read and write the same values.
  *
  * Each option is read once from config.toml ([gameplay], via
  * ico_config_get_bool) the first time it is asked for, and can be set at run
@@ -28,7 +28,7 @@
 #ifndef ICO_PORT_GAME_OPTIONS_H
 #define ICO_PORT_GAME_OPTIONS_H
 
-/* Package MV: the model viewer is up (port/game/model_viewer.h), from the
+/* The model viewer is up (port/game/model_viewer.h), from the
    model's choice until the title is back.  While it is set, a loading
    stage other than the title starts no script (common/src/sceneManager.c)
    and the achievements are suspended (gamestate.c); nothing else reads it. */
@@ -45,7 +45,7 @@ int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
-   (rd.h rd_SetMirror, through the listener below; renderer wave 7, R7c).
+   (rd.h rd_SetMirror, through the listener below).
    The value is the run's: [gameplay] mirror (default false) until the
    player picks at New Game (port/ui/settings.h ui_NewGameScreen*) or loads a
    save, whose slot's flag the port config keeps (below). */
@@ -59,7 +59,8 @@ void ico_opt_set_mirror_listener(void (*fn)(int on));
    value goes back to [gameplay] mirror (default false). */
 void ico_opt_mirror_reset(void);
 
-/* The mirror flag of each save slot (R7c), kept in config.toml, never in the card files:
+/* The mirror flag of each save slot, kept in config.toml, never in the card
+   files:
      [mirror] slot_N = true/false     the run's flag when slot N was saved
               slot_N_sum = <uint32>   that save's game-block checksum
    N is the save file's number (game.00N, 0..9).  The checksum ties the
@@ -73,10 +74,10 @@ int ico_mirror_slot_saved(int slot, unsigned int sum);
 int ico_mirror_slot_loaded(int slot, unsigned int sum);
 /* The stored entry: 1 or 0, -1 when there is none or its sum differs. */
 int ico_mirror_slot_get(int slot, unsigned int sum);
-/* Developer mode (renderer wave 6, R6a): Main calls debug_Menu each tick
+/* Developer mode: Main calls debug_Menu each tick
    (SELECT opens it), the retail build's dummy debug prints draw through the
-   debug font, and debug_VariableInit may load a saved option table.  The
-   achievements package suspends achievements while it is on; the trace
+   debug font, and debug_VariableInit may load a saved option table.
+   Achievements are suspended while it is on; the trace
    records it in its header. */
 int ico_opt_developer_mode(void);
 void ico_opt_set_developer_mode(int on);
@@ -86,7 +87,7 @@ void ico_opt_set_developer_mode(int on);
    load <pref>/dev/thisIsYourDebugOption, the file the Debug Mode page's
    TRIANGLE writes. */
 int ico_opt_debug_option(void);
-/* [game] circle_back (package Q2): 1 (the default) makes Circle an alias of
+/* [game] circle_back: 1 (the default) makes Circle an alias of
    the game menus' Triangle back action (common/src/layout_action.c,
    layout_texture.c default_item_select, through port/ui/layout_ext.h
    lt_ext_BackButtons); 0 is the PS2's behaviour.  The Settings module hands
@@ -117,7 +118,7 @@ int ico_opt_output_resolve(int current);
    force (the key's when explicit). */
 int ico_opt_output_card(int card_mode);
 /* The Options screen hook (common/src/layout_action.c, the Stereo/Mono
-   row; since S1 Settings > Audio > Output's Stereo and Mono, the Options
+   row; now Settings > Audio > Output's Stereo and Mono, the Options
    screen being no longer reached): records the new mode as the game's own; with an explicit key the
    key follows it and config.toml is saved at once, so the file and the
    card (which the game writes from soundOutputModeGet) never disagree. */

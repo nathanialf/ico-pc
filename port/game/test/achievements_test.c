@@ -531,7 +531,7 @@ static void test_each(void)
     ticks(1);
     ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
     ticks(1);
-    /* Extras > Credits (package CRED) opens once "finish" is unlocked */
+    /* Extras > Credits opens once "finish" is unlocked */
     CHECK(!ico_credits_unlocked());
     ending(0, 4 * 3600);
     CHECK(st("finish") == ICO_ACH_UNLOCKED);
@@ -600,8 +600,8 @@ static void test_suspended(void)
     CHECK(st("windmill") == ICO_ACH_UNLOCKED && st("first_shadow") == ICO_ACH_UNLOCKED);
     CHECK(stats().enemies == 1 && file_count("[unlocked.windmill]") == 1);
     CHECK(s_pushes == 1 && strstr(s_last_body, "Assisted") == NULL);
-    /* the Extras credits' playback of the ending suspends too (package
-       CRED), for the rest of the run, as developer mode does */
+    /* the Extras credits' playback of the ending suspends too, for the rest
+       of the run, as developer mode does */
     new_game();
     ico_credits_set_active(1);
     stage(39);

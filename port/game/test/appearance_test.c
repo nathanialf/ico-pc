@@ -1,5 +1,5 @@
-/* appearance_test.c: the characters' colours (port/game/appearance.c,
- * v0.4.2 package K).  CPU only; every CLUT here is synthetic (no colour
+/* appearance_test.c: the characters' colours (port/game/appearance.c).
+ * CPU only; every CLUT here is synthetic (no colour
  * of the disc, docs/LEGAL.md).
  *
  *   identity    every part Original: recolour returns 0, out untouched

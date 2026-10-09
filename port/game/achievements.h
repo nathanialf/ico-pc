@@ -1,8 +1,8 @@
 /*
  * port/game/achievements.h
  *
- * The port's built-in achievements (Phase 6, package 6E).  A data table of achievements whose conditions
- * read the game-state view (port/include/ico_gamestate.h), checked once per
+ * The port's built-in achievements.  A data table of achievements whose
+ * conditions read the game-state view (port/include/ico_gamestate.h), checked once per
  * Main tick; unlocks persist in <pref>/achievements.toml and show a popup
  * (port/ui/popup.h) unless [game] achievements = false.
  *
