@@ -9,6 +9,8 @@
 ## Fixed
 
 - The railing nearest the camera no longer shimmers (issue 25).
+- With Frame rate above Original, the picture no longer brightens and blows out: the motion blur builds up once per game frame, as on the PS2 (issue 28).
+- At higher resolutions the dark border around menu words looks like the original border made bigger, while the letters stay sharp.
 - Bright dots along seams at higher resolutions are gone (issue 26).
 - Android: Continue on the title screen no longer closes the game (issue 20).
 - Android: Ico's and Yorda's arms should no longer stretch straight up when they hold hands (issue 19).
