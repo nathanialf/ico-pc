@@ -104,10 +104,11 @@ static void testBuild(void)
         UI_STR_OPT_MOUSE_INVERT, UI_STR_OPT_MOUSE_SPEED,   UI_STR_OPT_MOUSE_RANGE,
         UI_STR_OPT_MOUSE_RETURN, UI_STR_OPT_CIRCLE_BACK,   UI_STR_OPT_TOUCH_MODE,
         UI_STR_OPT_TOUCH_SIZE,   UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,   UI_OPT_STICK_FIX,  UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS, UI_OPT_ACH_POPUPS, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,       UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,
+                                   UI_STR_OPT_ACH_POPUPS,  UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -133,7 +134,7 @@ static void testBuild(void)
           "display rows (Frame rate without a framerate key)");
     CHECK(labelsAre(UI_PAGE_AUDIO, audioOpts, audioStrs, 6), "audio rows");
     CHECK(labelsAre(UI_PAGE_CONTROLS, ctlOpts, ctlStrs, 15), "controls rows");
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 5), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 6), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
 

@@ -374,6 +374,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_OPT_BUTTON_CONFIG] = "Configuration des touches",
     [UI_STR_OPT_FILM_EFFECT] = "Effet séquence",
     [UI_STR_OPT_PLAYERS] = "Joueurs",
+    [UI_STR_OPT_ACH_POPUPS] = "Notifications de succès",
     [UI_STR_VAL_HOLD_A] = "A (maintenir)",
     [UI_STR_VAL_HOLD_B] = "B (bascule)",
     [UI_STR_HOLD_TYPE_NOTE] =

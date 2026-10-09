@@ -1109,6 +1109,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return s_gpuHostSet ? gpuText(buf, size) : ui_Str(UI_STR_VAL_GPU_BUILTIN);
     case UI_OPT_STICK_FIX:
         return onOff(ico_opt_stick_fix());
+    case UI_OPT_ACH_POPUPS:
+        return onOff(ico_ach_popups_enabled());
     case UI_OPT_MOUSE_SENS:
         snprintf(buf, size, "%.2f", (double)liveBindings()->mouse_sens);
         return buf;
@@ -1440,6 +1442,11 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     case UI_OPT_STICK_FIX:
         ico_opt_set_stick_fix(!ico_opt_stick_fix());
         ico_config_set_bool("gameplay.stick_fix", ico_opt_stick_fix());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_ACH_POPUPS:
+        ico_ach_set_popups(!ico_ach_popups_enabled());
+        ico_config_set_bool("game.achievements", ico_ach_popups_enabled());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_MOUSE_SENS: {
@@ -2532,10 +2539,11 @@ static void build(void)
     static const int ctlLinks[] = {
         UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* S1: the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,   UI_OPT_STICK_FIX,  UI_OPT_FILM_EFFECT,
+                                   UI_OPT_PLAYERS, UI_OPT_ACH_POPUPS, UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,       UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,
+                                   UI_STR_OPT_ACH_POPUPS,  UI_STR_BACK};
 #define N_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
@@ -2586,7 +2594,9 @@ static void build(void)
        two arrows each): with Effects' Cinematic bars (4), about 443 in
        all.  Controls' Mouse camera speed, Mouse camera range and Camera
        swings back rows add 12 more (label, value and the two arrows
-       each): about 455 of the table's 768 (layout_ext.h) */
+       each): about 455 of the table's 768 (layout_ext.h).  Gameplay's
+       Achievement pop-ups row adds 4 more (label, value and the two
+       arrows): about 459 */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
 #undef N_OF

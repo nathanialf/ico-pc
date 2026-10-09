@@ -1101,6 +1101,49 @@ static void testPointer(void)
     ui_MouseReset();
 }
 
+/* Gameplay > Achievement pop-ups: the last switch before Back, On by
+   default, a step flips the pop-ups live, ui_SettingsSave writes [game]
+   achievements only after a change, and a step back reads On again */
+static void testAchievementPopups(void)
+{
+    int rows[16], opts[16];
+    char p[1100];
+    IcoToml *t;
+
+    useConfig("version = 1\n");
+    ico_ach_set_popups(1);
+    enterMain(0);
+    const int n = ui_SettingsPageRows(UI_PAGE_GAMEPLAY, rows, opts, NULL, 16);
+    CHECK(n >= 2 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_ACH_POPUPS &&
+              opts[n - 3] == UI_OPT_PLAYERS,
+          "pop-ups: the row sits after Players, before Back (%d rows)", n);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On by default");
+    CHECK(ui_SettingsSave() == 0, "pop-ups: save without a change");
+    path(p, sizeof(p), "settings_test.toml");
+    t = ico_toml_load(p);
+    if (t) {
+        CHECK(!ico_toml_has(t, "game.achievements"), "pop-ups: no key written unchanged");
+        ico_toml_free(t);
+    }
+    ui_SettingsStep(UI_OPT_ACH_POPUPS, 1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "Off") == 0, "pop-ups: Off");
+    CHECK(ico_ach_popups_enabled() == 0, "pop-ups: the getter reads Off at once");
+    CHECK(ui_SettingsSave() == 0, "pop-ups: save");
+    t = ico_toml_load(p);
+    CHECK(t != NULL, "pop-ups: config");
+    if (t) {
+        CHECK(ico_toml_has(t, "game.achievements") &&
+                  ico_toml_get_bool(t, "game.achievements", 1) == 0,
+              "pop-ups: [game] achievements false");
+        ico_toml_free(t);
+    }
+    ui_SettingsStep(UI_OPT_ACH_POPUPS, -1);
+    CHECK(strcmp(ui_SettingsValueText(UI_OPT_ACH_POPUPS), "On") == 0, "pop-ups: On again");
+    CHECK(ico_ach_popups_enabled() == 1, "pop-ups: the getter reads On again");
+    useConfig("version = 1\n");
+    ico_ach_set_popups(1);
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1123,6 +1166,8 @@ int main(int argc, char **argv)
     testTitleReturn();
     /* v0.4.3 I17b */
     testPointer();
+    /* Gameplay > Achievement pop-ups */
+    testAchievementPopups();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

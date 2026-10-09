@@ -425,6 +425,7 @@ typedef enum UiStrId {
     UI_STR_OPT_BUTTON_CONFIG,
     UI_STR_OPT_FILM_EFFECT,
     UI_STR_OPT_PLAYERS,
+    UI_STR_OPT_ACH_POPUPS, /* Gameplay: the achievement pop-ups, On/Off */
     UI_STR_VAL_HOLD_A,
     UI_STR_VAL_HOLD_B,
     UI_STR_HOLD_TYPE_NOTE,

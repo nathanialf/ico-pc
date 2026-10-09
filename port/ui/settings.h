@@ -265,6 +265,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_YORDA,
     UI_OPT_FILM_EFFECT, /* S1: the game's optionScreenMode 0..4, once cleared */
     UI_OPT_PLAYERS,     /* S1: the game's girlControlMode, 1 or 2, once cleared */
+    UI_OPT_ACH_POPUPS,  /* [game] achievements, On/Off: the achievement pop-ups */
     /* Main */
     UI_OPT_LANGUAGE,
     UI_OPT_DUMP_TEXTURES, /* [video] dump_textures, for pack authors (developer mode) */
