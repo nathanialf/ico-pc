@@ -16,4 +16,10 @@
 - The button remap screen names the mouse buttons in the menu's language.
 - On Windows, saving a picture of the frame with F12 works when the user folder has accented characters.
 - Escape no longer closes the game: it opens the pause menu while you play and goes back in the menus, and on Android the Back button does the same.
-- The scenery no longer flashes for a moment before the Sony sign when the game starts.
+
+## Known issues
+
+- When the game starts, the scenery can show for a moment before the Sony sign.
+- On a very wide picture (21:9 or 32:9) the dark bands above and below the picture can flash white while a save loads.
+
+Both will be looked at in the next version.
