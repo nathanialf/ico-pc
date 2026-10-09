@@ -1,8 +1,7 @@
 /*
  * port/ui/ui_mouse_geom.c
  *
- * The mouse pointer's arithmetic in the menus (ui_mouse_geom.h; v0.4.3
- * I17b).
+ * The mouse pointer's arithmetic in the menus (ui_mouse_geom.h).
  */
 #include "ui_mouse_geom.h"
 

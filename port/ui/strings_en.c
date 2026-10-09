@@ -187,7 +187,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Circle goes back",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Circle (gamepad B) also backs out of the game’s menus, as Triangle does.",
-    /* the game's menu words (P3), as the PAL sheets have them: drawn as
+    /* the game's menu words, as the PAL sheets have them: drawn as
        text in the sheets' look by the rows of menu_text.h's table */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
@@ -457,13 +457,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_CHAR_SWITCH_ICO] = "Switch to Ico",
     [UI_STR_CHAR_HINT_COLOUR] = "Colour",
     [UI_STR_CHAR_HINT_CHARACTER] = "Character",
-    /* v0.4.3 I17c */
+    /* Display > Window mode */
     [UI_STR_OPT_WINDOW_MODE] = "Window mode",
     [UI_STR_VAL_WINDOWED] = "Windowed",
     [UI_STR_VAL_BORDERLESS] = "Borderless",
-    /* v0.4.3 R27 */
+    /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",
-    /* v0.4.3 AN-22b */
+    /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Graphics driver",
     [UI_STR_OPT_GPU_DRIVER] = "Driver",
     [UI_STR_VAL_GPU_BUILTIN] = "Built-in",
@@ -478,7 +478,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "Not enough space to add this driver.",
     [UI_STR_QUIT_GAME] = "Quit game",
     [UI_STR_QUIT_GAME_CONFIRM] = "Quit the game?",
-    /* v0.4.3 I17a */
+    /* Controls > the mouse camera rows */
     [UI_STR_OPT_MOUSE_INVERT] = "Invert mouse up/down",
     [UI_STR_OPT_MOUSE_SPEED] = "Mouse camera speed",
     [UI_STR_OPT_MOUSE_RANGE] = "Mouse camera range",

@@ -35,23 +35,23 @@ extern int NonLinearCameraMove; /* the language the boot screen chose, 2..6 */
 #ifdef ICO_RD
 extern void gif_HostFlush(void); /* GifHost.h */
 
-/* package OV: the presenter's overlay, at every present (rd.h
+/* the presenter's overlay, at every present (rd.h
    rd_SetPresentOverlay): the popup on the output (inside the picture under
    the CRT filter) */
 static void hostOverlay(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    ui_PhotoDrawOverlay(ctx); /* package PHOTO: the HUD, under the popups */
+    ui_PhotoDrawOverlay(ctx); /* the photo mode HUD, under the popups */
     ui_PopupDrawOverlay(ctx);
 }
 
-/* package AN-T: the touch controls (package AN-G) on the presenter's top
+/* the touch controls on the presenter's top
    layer (rd.h rd_SetPresentOverlayTop): on the output at its resolution,
    never through the CRT filter; under the HUD and the popups without it */
 static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
 {
     (void)user;
-    /* v0.4.3 I17b: where the picture is on the output, for the mouse
+    /* where the picture is on the output, for the mouse
        pointer's hit test: this layer's ctx is always the output and its
        box, where the overlay's is the CRT filter's grid under the filter
        (the pointer's place is a fraction of the window) */
@@ -87,7 +87,7 @@ static int truthy(const char *v)
 
 #ifdef ICO_UI_HAVE_SDL
 
-/* Q2: the title's "Quit to desktop" (settings.h): the event closing the
+/* the title's "Quit to desktop" (settings.h): the event closing the
    window posts, so ico_window_pump ends the run the same way (main returns,
    the atexit handlers flush the achievements, stop the audio, close the
    window) */

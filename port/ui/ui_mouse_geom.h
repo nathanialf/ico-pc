@@ -1,7 +1,7 @@
 /*
  * port/ui/ui_mouse_geom.h
  *
- * The mouse pointer's arithmetic in the menus (package I17b, issue 17):
+ * The mouse pointer's arithmetic in the menus (issue 17):
  * where a pointer on the output falls in the layouts' grid, the box a
  * layout row covers there, and which row a point hits.  Plain C with no
  * game or renderer headers, so ui_mouse_test runs it alone; the glue

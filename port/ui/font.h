@@ -1,10 +1,9 @@
 /*
  * port/ui/font.h
  *
- * The port's own text (Phase 6, package 6B): Arimo
- * Regular (SIL OFL 1.1, port/assets/fonts/; 6C replaced EB Garamond), embedded in the program,
- * rasterised at run time by stb_truetype into glyph atlases and drawn
- * through rd as GS sprites in UI space.
+ * The port's own text: Arimo Regular (SIL OFL 1.1, port/assets/fonts/),
+ * embedded in the program, rasterised at run time by stb_truetype into
+ * glyph atlases and drawn through rd as GS sprites in UI space.
  *
  * Coordinates: the layout grid.  layout_texture.c places its rows on a
  * 640-pixel-wide, 226-field-line-high screen centred on (320, 113)
@@ -129,19 +128,17 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
 /* one untextured sprite (the popup panel), x0, y0, x1, y1 in the grid; the
    blend is 0x44 with the state set as ui_DrawText sets it */
 void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4]);
-/* Renderer R7d: the owner the
-   next draws are keyed by, so the presenter blends them between two ticks.
-   A string's draw is keyed by a hash of the string, its alignment flags,
+/* The owner the next draws are keyed by, so the presenter blends them
+   between two ticks.  A string's draw is keyed by a hash of the string, its alignment flags,
    its atlas page and the owner (0: the string alone); the n-th draw of one
    key matches the n-th of the frame before, and the glyphs within a draw
    match in order.  A rect is keyed only under an owner (owner and the rect
-   ordinal; 0: unkeyed, as before).  Returns the previous owner. */
+   ordinal; 0: unkeyed).  Returns the previous owner. */
 uint64_t ui_SetDrawKey(uint64_t owner);
 
-/* Package OV: the presentation overlay (port/render/rd.h
-   rd_SetPresentOverlay).  Between
-   ui_BeginOverlay(ctx) and ui_EndOverlay(), inside an rd overlay callback,
-   ui_DrawText, ui_DrawTextXf and ui_DrawRect draw on the output through
+/* The presentation overlay (port/render/rd.h rd_SetPresentOverlay).
+   Between ui_BeginOverlay(ctx) and ui_EndOverlay(), inside an rd overlay
+   callback, ui_DrawText, ui_DrawTextXf and ui_DrawRect draw on the output through
    rd_OverlayPrims instead of recording into the current rd list:
    - the grid maps onto the 4:3 picture in ctx->box (the box itself in 4:3,
      its centred 4:3 part when the box is wider, where the game's UI is):

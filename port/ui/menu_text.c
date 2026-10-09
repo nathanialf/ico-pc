@@ -4,7 +4,7 @@
  * The table of the game's menu words (menu_text.h): each item names a
  * word rectangle of the sheets, its transcribed words and where the
  * lettering sits in it; the rows the layout draws from it are drawn as
- * text in the sheets' look (v0.4.2, package F-B; menu_font.c).
+ * text in the sheets' look (menu_font.c).
  *
  * Each item is one texel rectangle of a sheet that holds text; the rows
  * list every texProperty row that draws that rectangle (several rows share
@@ -16,26 +16,27 @@
  * texels less the 0.7 texel of antialiasing, over Arimo's 0.688; the
  * 20-texel menu rows give 13.5 texels, 27 y units, UI_MENU_TEXT_SIZE), the
  * line pitch, and the ink's left, centre and right edges over the five
- * languages: the alignment is the edge that stays put.  v0.4.2: the em,
- * the anchor, the capital middle, the width (wx, against the menus'
- * UI_SHEET_WIDTH) and the spacing (track) per language are then fitted, each item on each sheet,
- * to the sheet's lettering (ctest menu_look, ICO_MENU_LOOK_GEOFIT: the
- * smallest difference between the strip's fill and the sheet's after a 3 x
- * 3 blur), since the five sheets were lettered apart; the digit tiles of
- * one set share their em, capital middle, width and spacing (the median of the
- * set's), so a figure does not stand taller than its neighbours; the black
- * digits and prompts (no fill to compare on black) keep the measured em
+ * languages: the alignment is the edge that stays put.  The em, the
+ * anchor, the capital middle, the width (wx, against the menus'
+ * UI_SHEET_WIDTH) and the spacing (track) per language are then fitted,
+ * each item on each sheet, to the sheet's lettering (ctest menu_look,
+ * ICO_MENU_LOOK_GEOFIT: the smallest difference between the strip's fill
+ * and the sheet's after a 3 x 3 blur), since the five sheets were lettered
+ * apart; the digit tiles of one set share their em, capital middle, width
+ * and spacing (the median of the set's), so a figure does not stand taller
+ * than its neighbours; the black digits and prompts (no fill to compare on black) keep the measured em
  * and the width 1.  The halo of the light ink differs too: menu_PAL_02,
  * the title sheet, scei and the panels' prompts of 01 and 04 have none,
  * most English words of 03 and a few of 01 and 04 a faint one, the rest
  * the full one; rim is the halo's opacity on the sheet against the strip's
  * full one (ctest menu_look, ICO_MENU_LOOK_RIM=1): under 0.15 none, under
- * 0.55 faint, else full (the dark, plain and grey inks have none).  The strings are the
- * sheets' words, transcribed with their wording, capitalisation and
- * punctuation (strings_*.c, UI_STR_MT_*), line breaks where the sheet breaks.
+ * 0.55 faint, else full (the dark, plain and grey inks have none).  The
+ * strings are the sheets' words, transcribed with their wording,
+ * capitalisation and punctuation (strings_*.c, UI_STR_MT_*), line breaks
+ * where the sheet breaks.
  *
- * Package TXT added the digit and letter tiles (one glyph a tile, the same
- * on the five sheets): the save screens' slot numbers (grey for an empty
+ * The digit and letter tiles (one glyph a tile, the same on the five
+ * sheets): the save screens' slot numbers (grey for an empty
  * file, black for a used one), the preview's play time and colons (white
  * without a rim; layout_action.c _la_set_preview_info picks a row per
  * figure), and the Options values (the film effect's 0..4, the hold type's

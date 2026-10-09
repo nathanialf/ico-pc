@@ -40,7 +40,7 @@ typedef struct ExtRow {
     int base[4]; /* the last plain box (the glow maps from it) */
     int hasBase;
     int dim;  /* greyed (lt_ext_SetDim): the colour at half */
-    int role; /* v0.4.3 I17b: LT_POINTER_* (lt_ext_SetPointerRole) */
+    int role; /* LT_POINTER_* (lt_ext_SetPointerRole) */
 } ExtRow;
 
 static LtProp s_layouts[LT_EXT_MAX_LAYOUTS];
@@ -215,10 +215,10 @@ float lt_ext_RowSize(int index)
 /* The glyphs' sources in the PAL tables (texProperty rows, checked against
    the boot ELF's table: rows 182 and 184 are the save prompts' Cross and
    Triangle beside OK (181) and Back (183), 343 and 344 the key config
-   screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2 labels, 301 and 302
-   the Options screen's value arrows) and the height each has beside the
-   game's 27-unit labels (dispH, y units; the width is the rectangle's, a
-   pixel a texel). */
+   screen's Square and Circle, 349, 346, 348 and 347 its L1, R1, L2 and R2
+   labels, 301 and 302 the Options screen's value arrows) and the height
+   each has beside the game's 27-unit labels (dispH, y units; the width is
+   the rectangle's, a pixel a texel). */
 static const struct {
     short row, u, v, w, h, dispH;
 } kGlyph[LT_GLYPH_COUNT] = {
@@ -504,9 +504,9 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
         break;
     }
     float size = r->text.size > 0.0f ? r->text.size : UI_MENU_TEXT_SIZE;
-    /* 6C: a label wider than its box (a long option, another language) is
-       set smaller to fit, down to 60 %;
-       the widest line of a multi-line label counts */
+    /* a label wider than its box (a long option, another language) is set
+       smaller to fit, down to 60 %; the widest line of a multi-line label
+       counts */
     if (bw > 0.0f) {
         float w = ui_MeasureMenuText(size, text);
         if (w > bw) {
@@ -514,11 +514,11 @@ void lt_ext_DrawRow(const LtProperty *e, const int box[4], const unsigned char r
             size *= k < 0.6f ? 0.6f : k;
         }
     }
-    /* R7d: the row's draws are keyed by the row and the pass (the label,
+    /* the row's draws are keyed by the row and the pass (the label,
        the glow), so a row that moves or fades blends between ticks */
     const uint64_t owner =
         ui_SetDrawKey(((uint64_t)(uintptr_t)e << 2) ^ (uint64_t)(glow ? 2u : 1u));
-    /* v0.4.2 (package F-B): the menus' text in the sheets' look, light ink
+    /* the menus' text in the sheets' look, light ink
        (menu_font.h), into the scene list at 1x in every preset */
     if (!glow) {
         ui_DrawMenuText(x, y, size, rgba, text, flags, UI_INK_LIGHT, NULL);

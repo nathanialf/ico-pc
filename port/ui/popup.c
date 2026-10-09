@@ -143,7 +143,7 @@ static int panel(Panel *pn)
     }
     const Popup *p = &s_queue[s_head];
     float ta, td, ba, bd;
-    /* v0.4.2 (package F-B): the menus' text (menu_font.h), measured as its
+    /* the menus' text (menu_font.h), measured as its
        strips lay it out */
     ui_MenuFontMetrics(TITLE_SIZE, &ta, &td, NULL);
     ui_MenuFontMetrics(BODY_SIZE, &ba, &bd, NULL);
@@ -211,7 +211,7 @@ void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
     if (s_count == 0 || !ctx || !ui_FontInit()) {
         return;
     }
-    /* package OV: on the output (font.h ui_BeginOverlay), at this present;
+    /* on the output (font.h ui_BeginOverlay), at this present;
        measured at the overlay's scale, so the panel fits its text */
     ui_BeginOverlay(ctx);
     Panel pn;
@@ -224,7 +224,7 @@ void ui_PopupDrawOverlay(const struct RdOverlayCtx *ctx)
         ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y1, c);
         scaled(c, 0x5E, 0x58, 0x4C, 0x80, pn.alpha);
         ui_DrawRect(pn.x0, pn.y0, pn.x1, pn.y0 + 1.5f, c);
-        /* v0.4.2 (package F-B): in the menus' look, the same 1x strip as
+        /* in the menus' look, the same 1x strip as
            the scene's text magnified onto the output */
         scaled(c, 0x80, 0x7C, 0x70, 0x80, pn.alpha);
         ui_DrawMenuText(pn.x0 + PAD_X, pn.titleBase, TITLE_SIZE, c, p->title, UI_VALIGN_BASELINE,

@@ -1,8 +1,7 @@
 /*
  * port/ui/menu_text.h
  *
- * The table of the game's menu words (package P3; drawn again since
- * v0.4.2, package F-B).
+ * The table of the game's menu words.
  *
  * The PS2 game draws every menu word as a sprite from a pre-rendered sheet
  * (text/menu_PAL_{EG,FR,GR,IT,SP}/menu_PAL_0N.tm2, scei.tm2, title.tm2): a

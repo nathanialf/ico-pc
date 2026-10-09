@@ -1,11 +1,11 @@
 /*
  * port/ui/menu_font.h
  *
- * The menus' text in the look of the game's menu sheets (v0.4.2, package
- * F-B).  Every word a menu shows, the game's own (the rows of the menu text
- * table, menu_text.h) and the port's (its layout rows, popups and the photo
- * panel), is Arimo rasterised on the sheets' own texel grid and drawn with
- * rd's sheet shader (rd.h rd_CreateTextureSheet: a rim around the letters,
+ * The menus' text in the look of the game's menu sheets.  Every word a
+ * menu shows, the game's own (the rows of the menu text table, menu_text.h)
+ * and the port's (its layout rows, popups and the photo panel), is Arimo
+ * rasterised on the sheets' own texel grid and drawn with rd's sheet
+ * shader (rd.h rd_CreateTextureSheet: a rim around the letters,
  * the antialiasing quantised to a few levels against a fixed Bayer
  * threshold), so it reads like the sheets did in every preset and scale.
  *
@@ -16,9 +16,9 @@
  * scale 2 * UI_X_PER_Y * UI_SHEET_WIDTH times that (font.c
  * ui__SheetRasterLine; the sheets' lettering is 0.8 as wide as the
  * typeface, ui_internal.h), made a little heavier (UI_MENU_BOLD_X / Y),
- * whatever the output's resolution: the strip is the same 1x coverage in the scene list
- * (scaled by the replay as the sheets were) and on the presentation overlay
- * (magnified onto the output).
+ * whatever the output's resolution: the strip is the same 1x coverage in
+ * the scene list (scaled by the replay as the sheets were) and on the
+ * presentation overlay (magnified onto the output).
  *
  * Strips.  A drawn text is one coverage strip in a cache of 1024 x 1024
  * pages (four per style, 1 MB each, 12 MB for the three styles), shelf
@@ -31,8 +31,8 @@
  * frame of the last EVICT_FRAMES can still name it.  A game row's strip is
  * its item's rectangle (it->w x it->h texels) with the item's words where
  * the sheet has its lettering (the language's em, width and anchor with
- * it->align, the first line's capital middle it->y[lang], the line pitch); drawn with the
- * sprite's own box and texel rectangle relative to the item's, it lands
+ * it->align, the first line's capital middle it->y[lang], the line pitch);
+ * drawn with the sprite's own box and texel rectangle relative to the item's, it lands
  * where the sheet's texels would have, insets and half-texel offsets
  * included.  A port text's strip is its measured lines plus a margin for
  * the rim, its anchor snapped to whole texels.
@@ -119,7 +119,7 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
 typedef struct UiMenuStrip {
     int cls;                /* 0 the light ink's pages, 1 its faint-rim pages, 2 the plain ones */
     int page, x, y, w, h;   /* where the strip is, the page's texels */
-    int scale;              /* the page's texels a sheet texel (F-G: the scene's or the
+    int scale;              /* the page's texels a sheet texel (the scene's or the
                                output's scale; w / scale the sheet texels across) */
     uint32_t tex;           /* the page's rd texture (0 until drawn) */
     float anchorX, anchorY; /* a port text's anchor as drawn (snapped to whole

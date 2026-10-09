@@ -1,7 +1,8 @@
 /*
  * port/ui/ui_internal.h
  *
- * What port/ui's files share and the tests reach.
+ * font.c's and menu_font.c's internals (the record and sync hooks, the
+ * sheet text, the overlay sink), shared with ui_host.c and the tests.
  */
 #ifndef PORT_UI_INTERNAL_H
 #define PORT_UI_INTERNAL_H
@@ -40,7 +41,7 @@ void ui__Sync(void);
 int ui__FontSizeSets(int *px, int cap);
 int ui__FontReusedNearest(void);
 
-/* v0.4.2 (package F-B): sheet text, font.c's half of menu_font.c.  The
+/* Sheet text, font.c's half of menu_font.c.  The
    menus' words are rasterised on the sheets' own texel grid: a texel
    column is an x unit, a texel row a field line (two y units), so an em of
    size y units is size / 2 rows and stb's horizontal scale is the
@@ -59,7 +60,7 @@ int ui__FontReusedNearest(void);
                        fractional: each glyph at its fractional pen
                        (stbtt_MakeGlyphBitmapSubpixel), overlaps keeping
                        the larger coverage, clipped to the strip; with
-                       scale s > 1 (v0.4.2 F-G) cov has s x s texels a
+                       scale s > 1 cov has s x s texels a
                        sheet texel (w, h and stride in them) and the em,
                        the pen, the baseline and track stay in sheet
                        texels, so the letters are the same, s times finer
@@ -100,7 +101,7 @@ uint64_t ui__TextKey(const char *utf8, unsigned flags, int page);
    item's. */
 struct UiMenuTextItem;
 int ui__MenuStripRaster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
-/* Tests (F-G): the menus' strips rasterised at scale strip texels a sheet
+/* Tests: the menus' strips rasterised at scale strip texels a sheet
    texel (1 .. ICO_SHEET_SCALE_MAX) whatever the scene's or the output's
    scale; 0 goes back to those (menu_font.c mfScale) */
 void ui__MenuForceScale(int scale);

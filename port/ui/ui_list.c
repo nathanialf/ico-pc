@@ -2,8 +2,7 @@
  * port/ui/ui_list.c
  *
  * The scrolling list pages (ui_list.h): building the slots, filling them
- * from the page's items, the heading skip and the scrolling.  Moved out of
- * settings.c unchanged in behaviour (the achievements and remap pages).
+ * from the page's items, the heading skip and the scrolling.
  */
 #include "ui_list.h"
 
@@ -124,7 +123,7 @@ void ui_ListRefresh(UiList *l, int cursorRow)
         setCell(l->label[s], out.label, out.labelStr);
         setCell(l->colA[s], out.colA, out.colAStr);
         setCell(l->colB[s], out.colB, out.colBStr);
-        /* v0.4.3 I17b: the mouse pointer never picks a heading or an empty
+        /* the mouse pointer never picks a heading or an empty
            slot (the cursor would only skip on from it) */
         const int role = d >= n || isHeading(l, d, n) ? LT_POINTER_NONE : LT_POINTER_AUTO;
         lt_ext_SetPointerRole(l->label[s], role);

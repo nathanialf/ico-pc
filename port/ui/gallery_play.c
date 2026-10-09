@@ -1,9 +1,9 @@
 /*
  * port/ui/gallery_play.c
  *
- * The music gallery's engine (gallery.h GalleryEngine): the game's own stream and effect calls, made from the
- * gallery page's layout proc on the simulation thread, while the title is
- * up.
+ * The music gallery's engine (gallery.h GalleryEngine): the game's own
+ * stream and effect calls, made from the gallery page's layout proc on the
+ * simulation thread, while the title is up.
  *
  * Streams.  The game has two stream records and two IOP rings
  * (fumi/sound/adpcm_init.c).  The title theme (op.c actTitleShortCut,
@@ -188,9 +188,10 @@ static int seInBank(int b, int prog, int tone)
 
 /* The bytes of stream `no` that play: its pass (sectors * 2048), or less
    when the disc's file is blank (blocks with the end flag) from a sector
-   inside it to the pass's end (only event/40.int, blank from byte 0x93000).  Found once per stream, at its first play, from
-   the pass's last sector back (gallery_StreamBlankFrom: a dozen sector
-   reads, not the file). */
+   inside it to the pass's end (only event/40.int, blank from byte
+   0x93000).  Found once per stream, at its first play, from the pass's
+   last sector back (gallery_StreamBlankFrom: a dozen sector reads, not the
+   file). */
 static int readSector(void *user, uint64_t off, uint8_t *buf)
 {
     const char *base = user;
@@ -717,7 +718,7 @@ static void streamTick(void)
 
 /* a stream that does not open: why, logged, and the item stops */
 static int s_waitTicks;
-#define OPEN_TIMEOUT 250 /* Main ticks (10 s) */
+#define OPEN_TIMEOUT 250 /* Main ticks (10 s at 25 ticks a second, 8.3 s at 30) */
 
 static void streamFailed(const char *why)
 {

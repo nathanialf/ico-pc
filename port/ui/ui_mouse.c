@@ -1,7 +1,7 @@
 /*
  * port/ui/ui_mouse.c
  *
- * The mouse pointer in the menus (ui_mouse.h; v0.4.3 I17b): the game's
+ * The mouse pointer in the menus (ui_mouse.h): the game's
  * layouts read through the layout extension's lookups, the pointer's tick
  * (port/input/pointer.h), the hit test (ui_mouse_geom.h).
  */

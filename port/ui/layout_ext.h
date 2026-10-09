@@ -1,7 +1,7 @@
 /*
  * port/ui/layout_ext.h
  *
- * Port-owned rows in the game's layout system (Phase 6, 6B).
+ * Port-owned rows in the game's layout system.
  *
  * The game's tables are runtime-loaded arrays of fixed size
  * (port/data/gen/table_defs.c): texLayout[80] and texProperty[436].  Every
@@ -23,8 +23,8 @@
  * for a port row.  A port row draws its label in the menus' look where the
  * texture path would draw the texture (lt_ext_DrawTextRow, called from
  * display_texture), with the colour, fade, dimming, cursor sparkle and glow
- * the game computes for any row; since v0.4.2 so does a game row of the
- * menu text table (menu_text.h), its texture still transferred.
+ * the game computes for any row; so does a game row of the menu text
+ * table (menu_text.h), its texture still transferred.
  *
  * Link fields (up/down/left/right, the item links, link) may name game or
  * port indices freely: they are only ever used as table indices.
@@ -42,7 +42,7 @@ extern "C" {
 #define LT_GAME_PROPERTY_COUNT 436
 #define LT_EXT_MAX_LAYOUTS 32
 #define LT_EXT_MAX_PROPERTIES                                                                      \
-    768 /* v0.4.3: 512 before; the mouse rows, Cinematic bars and the Android driver page */
+    768 /* room for every page's rows, the mouse rows and the Android driver page among them */
 
 /* The label of a port row. */
 typedef struct LtExtText {
@@ -71,24 +71,25 @@ int lt_ext_SetSize(int index, float size);
 /* Greys a port row (its colour at half, whatever the cursor does): the
    "locked" style of Settings > Extras.  Cleared by lt_ext_Reset. */
 int lt_ext_SetDim(int index, int dim);
+/* whether a port row is greyed (tests) */
 int lt_ext_RowDim(int index);
-/* the label as it would be drawn now */
+/* the label as it would be drawn now (tests) */
 const char *lt_ext_RowText(int index);
 /* the label's size before any shrink to fit (UI_MENU_TEXT_SIZE for 0), 0
-   if index is not a port row */
+   if index is not a port row (tests) */
 float lt_ext_RowSize(int index);
 
-/* The game's button glyphs on a port row.  A glyph row draws one of the game's own sprites, the texture
-   path of display_texture unchanged: the texture is the one a game row of
-   the PAL tables draws the glyph from (its texNo, which the stage's texture
-   set-up fills for every stage, since every stage's layout range covers
-   the menus), the texel rectangle that row's.  The face buttons are
-   text/buttons.tm2's four (the save prompts' OK and Back, the key config
-   screen's columns), L1, R1, L2 and R2 the key config screen's labels
-   (menu_PAL_02), Left and Right the Options values' arrows (menu_PAL_01).
-   When the loaded tables are not the PAL ones (the row's rectangle
-   differs) the glyph draws nothing.  (The title's Options word is a text
-   row since v0.4.2: words are text, glyph rows are icons.) */
+/* The game's button glyphs on a port row.  A glyph row draws one of the
+   game's own sprites, the texture path of display_texture unchanged: the
+   texture is the one a game row of the PAL tables draws the glyph from (its
+   texNo, which the stage's texture set-up fills for every stage, since
+   every stage's layout range covers the menus), the texel rectangle that
+   row's.  The face buttons are text/buttons.tm2's four (the save prompts'
+   OK and Back, the key config screen's columns), L1, R1, L2 and R2 the key
+   config screen's labels (menu_PAL_02), Left and Right the Options values'
+   arrows (menu_PAL_01).  When the loaded tables are not the PAL ones (the
+   row's rectangle differs) the glyph draws nothing.  Words are text rows
+   (the title's Options word among them); glyph rows are icons. */
 typedef enum LtExtGlyph {
     LT_GLYPH_CROSS = 0,
     LT_GLYPH_CIRCLE,
@@ -110,15 +111,17 @@ int lt_ext_AddGlyph(int glyph, int x, int y, float size);
 /* The box (dispW pixels, dispH y units) of a glyph beside a label of em
    size, without adding it (layout). */
 void lt_ext_GlyphBox(int glyph, float size, int *w, int *h);
-/* whether e is a glyph row; the texture it draws (texProperty's texNo of
-   its game row), -1 when the tables are not the PAL ones */
+/* whether e is a glyph row (tests; layout_ext.c uses it too); the texture
+   it draws (texProperty's texNo of its game row), -1 when the tables are
+   not the PAL ones */
 int lt_ext_IsGlyphRow(const LtProperty *e);
 int lt_ext_GlyphTexNo(const LtProperty *e);
 /* the same for a glyph by itself (the photo panel draws the glyphs on the
    presentation overlay from that texture) */
 int lt_ext_GlyphTexture(int glyph);
 /* The PAL texProperty row a glyph is drawn from and its texel rectangle
-   (u, v, w, h), for tests that build fake tables. */
+   (u, v, w, h): the photo panel draws from it, and the tests build fake
+   tables with it. */
 int lt_ext_GlyphSource(int glyph, int uvwh[4]);
 
 /* A filled rectangle on a port row (the music gallery's progress bar): the
@@ -128,6 +131,7 @@ int lt_ext_GlyphSource(int glyph, int uvwh[4]);
    full. */
 int lt_ext_AddRect(int x, int y, int w, int h, const unsigned char rgba[4]);
 int lt_ext_SetFill(int index, float fill);
+/* the fill a rect row has (tests) */
 float lt_ext_RowFill(int index);
 
 /* The table lookups layout_texture.c makes through LT_LAYOUT/LT_PROP: the
@@ -136,7 +140,7 @@ float lt_ext_RowFill(int index);
    scratch row, never memory outside the tables (logged once unless -1). */
 LtProp *lt_ext_Layout(int index);
 LtProperty *lt_ext_Prop(int index);
-/* whether e is a port row, and its index */
+/* whether e is a port row, and its index (tests) */
 int lt_ext_IsPortProp(const LtProperty *e);
 int lt_ext_PropIndex(const LtProperty *e);
 int lt_ext_LayoutCount(void);
@@ -169,33 +173,32 @@ int lt_ext_IsTextRow(const LtProperty *e);
 void lt_ext_DrawTextRow(const LtProperty *e, const int box[4], const int uv[4],
                         const unsigned char rgba[4], int glow);
 
-/* Q2: the pad bits that take
-   the game menus' back action, where the game checks Triangle for it
-   (default_item_select's left link in layout_texture.c, the la_* procs'
-   cancels in layout_action.c, both under ICO_HOST).  Triangle (0x10), plus
-   Circle (0x20) while the alias is on ([game] circle_back, default on; the
-   Settings module sets it from port/game/options.h at install and on a
-   change).  Off, it is 0x10 alone: the PS2's checks exactly. */
+/* The pad bits that take the game menus' back action, where the game
+   checks Triangle for it (default_item_select's left link in
+   layout_texture.c, the la_* procs' cancels in layout_action.c).  Triangle
+   (0x10), plus Circle (0x20) while the alias is on ([game] circle_back,
+   default on; the Settings module sets it from port/game/options.h at
+   install and on a change).  Off, it is 0x10 alone: the PS2's checks
+   exactly.  lt_ext_CircleBack reads the alias back (tests). */
 #define LT_PAD_TRIANGLE 0x0010
 #define LT_PAD_CIRCLE 0x0020
 int lt_ext_BackButtons(void);
 void lt_ext_SetCircleBack(int on);
 int lt_ext_CircleBack(void);
 
-/* v0.4.2: a rect row's colour changed after it was added (Settings >
+/* A rect row's colour changed after it was added (Settings >
    Extras > Characters' swatches): rgba as lt_ext_AddRect takes it (GS,
    0x80 = 1.0, times the row's colour when drawn).  0, or -1 for an index
    that is not a rect row.  lt_ext_RectColor reads it back (tests). */
 int lt_ext_SetRectColor(int index, const unsigned char rgba[4]);
 int lt_ext_RectColor(int index, unsigned char rgba[4]);
 
-/* v0.4.3 I17b: what a click of the mouse pointer on a port row does
+/* What a click of the mouse pointer on a port row does
    (port/ui/ui_mouse.h).  AUTO (every row to begin with, and every game
    row): an item (a row with item links, one the pad can reach, or one lit
    with an owner item) is pointed at and a click is Cross on it, on its
    owner item when it has no item links of its own; any other row is not
-   hit.  NONE:
-   never hit (a list's heading or empty slot).  LEFT / RIGHT: a value's
+   hit.  NONE: never hit (a list's heading or empty slot).  LEFT / RIGHT: a value's
    arrows, a click is Left / Right on the owner item (their boxes padded so
    the small arrows are easy to hit).  STEP: a stepped value, a click is
    Right on the owner item (Cross does nothing on a stepped row).  Cleared

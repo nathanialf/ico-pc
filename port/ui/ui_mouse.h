@@ -1,7 +1,7 @@
 /*
  * port/ui/ui_mouse.h
  *
- * The mouse pointer in the menus (package I17b, issue 17): the port's pages
+ * The mouse pointer in the menus (issue 17): the port's pages
  * and lists, Extras, the title's and the pause menu's rows, the memory card
  * and save screens, any layout the game's layout code runs with a cursor.
  *

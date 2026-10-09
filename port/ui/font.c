@@ -3,8 +3,8 @@
  *
  * Runtime text on rd (font.h): the embedded Arimo Regular
  * through stb_truetype into per-size R8 atlases, drawn as GS sprites; and
- * (v0.4.2, package F-B) the menus' coverage strips on the sheets' texel
- * grid that menu_font.c caches and draws (ui_internal.h, ui__Sheet*).
+ * the menus' coverage strips on the sheets' texel grid that menu_font.c
+ * caches and draws (ui_internal.h, ui__Sheet*).
  */
 #include "font.h"
 
@@ -275,7 +275,7 @@ const UiGsFrame *ui_GetGsFrame(void)
     return &s_font.frame;
 }
 
-/* package OV: overlay mode (font.h ui_BeginOverlay) */
+/* overlay mode (font.h ui_BeginOverlay) */
 static struct {
     int active;
     float left, top;  /* the 4:3 picture's top-left corner, output pixels */
@@ -848,7 +848,7 @@ static void setState(unsigned flags)
 }
 #endif
 
-/* ------------------------------------------------ overlay (package OV) */
+/* ------------------------------------------------------------ overlay */
 
 /* the frame's 448 lines are grid y 2 .. 450 (centre 226) */
 #define OV_GRID_TOP (UI_GRID_CY - 224.0f)
@@ -924,7 +924,7 @@ void ui_BeginOverlay(const struct RdOverlayCtx *ctx)
 void ui_EndOverlay(void) {}
 #endif
 
-/* R7d: the draws' keys (font.h ui_SetDrawKey) */
+/* the draws' keys (font.h ui_SetDrawKey) */
 static uint64_t s_keyOwner;
 
 uint64_t ui_SetDrawKey(uint64_t owner)
@@ -1047,7 +1047,7 @@ void ui_DrawTextXf(float x, float y, float size, const uint8_t rgba[4], const ch
     }
 #ifdef ICO_RD
     if (c.n > 0 && s_ov.active) {
-        /* package OV: on the output, each quad's corner on a whole pixel,
+        /* on the output, each quad's corner on a whole pixel,
            its size kept (a texel a pixel) */
         RdScreenVtx *v = malloc(sizeof(RdScreenVtx) * 2 * (size_t)c.n);
         for (int page = 0; v && page < z->pageCount; page++) {
@@ -1143,7 +1143,7 @@ void ui_DrawText(float x, float y, float size, const uint8_t rgba[4], const char
     ui_DrawTextXf(x, y, size, rgba, utf8, flags, NULL);
 }
 
-/* ------------------------------- sheet text (v0.4.2, package F-B; ui_internal.h) */
+/* ------------------------------------------------ sheet text (ui_internal.h) */
 
 /* stb's scales of a sheet em of emRows texel rows: a texel row is a field
    line (two y units) and a texel column an x unit, so the horizontal scale
@@ -1219,7 +1219,7 @@ void ui__SheetRasterLine(uint8_t *cov, int w, int h, int stride, float emRows, f
     }
     float sx, sy;
     sheetScales(emRows, wx, &sx, &sy);
-    /* F-G: scale texels a sheet texel: the em, the pen, the baseline and
+    /* scale texels a sheet texel: the em, the pen, the baseline and
        the tracking in the strip's own texels (1: as they are) */
     if (scale > 1) {
         const float k = (float)scale;
@@ -1358,7 +1358,7 @@ void ui_DrawRect(float x0, float y0, float x1, float y1, const uint8_t rgba[4])
     RdScreenVtx v[2];
     memset(v, 0, sizeof(v));
     if (s_ov.active) {
-        /* package OV: both corners on whole output pixels */
+        /* both corners on whole output pixels */
         float ax, ay, bx, by;
         ui_OverlayMap(x0, y0, &ax, &ay);
         ui_OverlayMap(x1, y1, &bx, &by);

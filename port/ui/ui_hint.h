@@ -1,10 +1,10 @@
 /*
  * port/ui/ui_hint.h
  *
- * A line of button prompts on a port page: each item the game's own button glyph (layout_ext.h
- * LtExtGlyph; two for a pair such as L1 / R1, none for a word alone such as
- * "Left stick: turn") followed by its word, the line centred across the
- * screen.  The words are port rows like every Settings label (the port
+ * A line of button prompts on a port page: each item the game's own button
+ * glyph (layout_ext.h LtExtGlyph; two for a pair such as L1 / R1, none for
+ * a word alone such as "Left stick: turn") followed by its word, the line
+ * centred across the screen.  The words are port rows like every Settings label (the port
  * font, the light letters with the dark rim, drawn deferred at the output's
  * resolution in Enhanced), the glyphs glyph rows (the game's sprites).  The
  * music gallery's transport and the model viewer's hints use it.
@@ -71,7 +71,7 @@ enum {
     UI_HINT_MV_KEYS_COUNT
 };
 
-/* v0.4.2: Characters inside the model viewer (settings.c): the right
+/* Characters inside the model viewer (settings.c): the right
    stick turns, L2 / R2 zoom, Left / Right a colour, Square its Original,
    L1 / R1 the other character, Triangle back */
 enum {

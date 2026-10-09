@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "font.h"
-#include "input.h" /* I17a: the mouse's sensitivity and invert */
+#include "input.h" /* the mouse's sensitivity and invert */
 #include "layout_ext.h"
 #include "menu_font.h"
 #include "mouse_look.h"
@@ -29,12 +29,12 @@
 extern unsigned int tex_HostTextureId(int idx);
 #endif
 
-/* I17a: the photo camera's degrees per mouse count at sensitivity 1 */
+/* the photo camera's degrees per mouse count at sensitivity 1 */
 #define PHOTO_MOUSE_DEG 0.08f
 
 /* the game's side */
 extern PadState pad[16];
-extern int stage_no;            /* common/src/StageManager.c: 1 is the boot and title */
+extern int stage_no;            /* common/src/main.c: 1 is the boot and title */
 extern int NonLinearCameraMove; /* the language, 2..6 */
 extern int systemStatus[12];    /* [0]: 1 PAL 50 Hz, 0 60 Hz; [1]: the frame step */
 extern void NEGATIVE_SE(void);
@@ -106,7 +106,7 @@ static int photoProc(int first, int item)
         }
         ico_photo_enter();
     }
-    /* I17a: the mouse's motion since the last tick (the window captures it
+    /* the mouse's motion since the last tick (the window captures it
        while photo mode is open), taken every tick and dropped while the
        screen fades */
     float mdx, mdy;
@@ -520,7 +520,7 @@ void ui_PhotoDrawOverlay(const struct RdOverlayCtx *ctx)
             }
         }
         if (it->text && it->text[0]) {
-            /* v0.4.2 (package F-B): the menus' look, the 1x strip magnified */
+            /* the menus' look, the 1x strip magnified */
             ui_DrawMenuText(HUD_X + at[i].textX, mid, size, it->line == 0 ? titleCol : body,
                             it->text, UI_VALIGN_MIDDLE, UI_INK_LIGHT, NULL);
         }

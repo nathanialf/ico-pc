@@ -41,25 +41,23 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    it at every scale, so its quad is the same) */
 #define MF_MAX_W (MF_PAGE - MF_ORIGIN - MF_GAP_X)
 #define MF_MAX_H (MF_PAGE - MF_ORIGIN - MF_GAP_Y)
-/* v0.4.2 (package F-G): the strips are rasterised at s strip texels a sheet
-   texel (mfScale: the scene's scale, or the output's in overlay mode, 1 ..
-   ICO_SHEET_SCALE_MAX), so the letters are as crisp as the picture; the
-   gaps, the alignment and the first corner above are in sheet texels (s
-   times as many strip texels).  A page holds strips of one scale: 1024 x
-   1024 at 1x; above it 1024 s x 256 s of coverage, at most 4096 wide, and
-   below it as many texels of rim (rd.h rd_SheetRim: the 1x rim of the
-   sheet texels, one value over each sheet texel's texels, which the shader
-   magnifies; v0.4.3 RIM), so the
-   texture is 2048 x 1024 at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2,
-   4.5 and 8 MB, kept on the CPU and in the texture; at most MF_PAGES of a
-   style, three styles: 96 MB of textures at 4x if every page of every style
-   were in use, two pages, 16 MB, for a menu).  A page is 1009 sheet texels
-   wide at every scale (the longest notes fit) and 243 tall (the 1x page
-   1011: a menu's rows are 15 to 30 texels).
-   Pages of another scale than a draw's are emptied once no frame can name
-   them (MF_EVICT_FRAMES), so a resolution change re-rasterises the words
-   it shows within a few frames and a popup on the output (a scale of its
-   own) can share a style's pages with the scene's words. */
+/* The strips are rasterised at s strip texels a sheet texel (mfScale: the
+   scene's scale, or the output's in overlay mode, 1 .. ICO_SHEET_SCALE_MAX),
+   so the letters are as crisp as the picture; the gaps, the alignment and the
+   first corner above are in sheet texels (s times as many strip texels).  A
+   page holds strips of one scale: 1024 x 1024 at 1x; above it 1024 s x 256 s
+   of coverage, at most 4096 wide, and below it as many texels of rim (rd.h
+   rd_SheetRim: the 1x rim of the sheet texels, one value over each sheet
+   texel's texels, which the shader magnifies), so the texture is 2048 x 1024
+   at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2, 4.5 and 8 MB, kept on the
+   CPU and in the texture; at most MF_PAGES of a style, three styles: 96 MB of
+   textures at 4x if every page of every style were in use, two pages, 16 MB,
+   for a menu).  A page is 1009 sheet texels wide at every scale (the longest
+   notes fit) and 243 tall (the 1x page 1011: a menu's rows are 15 to 30
+   texels). Pages of another scale than a draw's are emptied once no frame can
+   name them (MF_EVICT_FRAMES), so a resolution change re-rasterises the words
+   it shows within a few frames and a popup on the output (a scale of its own)
+   can share a style's pages with the scene's words. */
 #define MF_PAGE_MAX 4096
 #define MF_PAGES 4        /* pages per style */
 #define MF_STRIPS 1024    /* strips cached at once */
@@ -78,10 +76,10 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
    rimLevel, fillLevel, dither.  The one table to retune.
 
-   Measured on the game's sheets (package F-C1: the PAL sheets menu_PAL_01..04,
-   scei and title, the 79 light-ink items of the menu text table, texels as
-   (grey, alpha) with the GS alpha 0x80 = 1; ctest menu_look testSurvey
-   re-measures them and pins this table, RX, RY and LEVELS):
+   Measured on the game's sheets (the PAL sheets menu_PAL_01..04, scei and
+   title, the 79 light-ink items of the menu text table, texels as (grey,
+   alpha) with the GS alpha 0x80 = 1; ctest menu_look testSurvey re-measures
+   them and pins this table, RX, RY and LEVELS):
      fill   the letters are white: palette entries ffffff at alpha 0x80 on
             every sheet; the fill texels (grey >= 200, alpha >= 0.7) average
             251 (EN) and 249 (FR DE IT ES), so the fill level is 255.
@@ -106,13 +104,9 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
      steps  the white texels' alpha takes three steps between none and full
             (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
             0x5E then 0x7E): five levels; ICO_SHEET_LEVELS is 8, which
-            matched the sheets better once the geometry was fitted
+            matches the sheets better with the fitted geometry
             (shader_consts.h).
-   The first run of the comparison test on main kept them: its survey
-   re-measures these numbers within 0.1.  (Its ink fit ran to the edges of
-   its grid then, lowering the contrast because the strips' letters sat
-   beside the sheets': Arimo was set 1.25 times too wide, see ui_internal.h
-   UI_SHEET_WIDTH.) */
+   ctest menu_look's survey re-measures these numbers within 0.1. */
 static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
     {1, 24, 255, 1, 0}, /* English */
     {1, 61, 255, 1, 0}, /* French */
@@ -127,7 +121,7 @@ static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0};
 typedef struct MfPage {
     uint8_t *cov; /* w x h coverage, NULL while unused; above 1x the rim
                      below it (w x h more) */
-    int scale;    /* strip texels a sheet texel (F-G) */
+    int scale;    /* strip texels a sheet texel */
     int w, h;     /* the coverage's texels (pageW, pageH); the texture is
                      twice as tall above 1x */
     uint32_t tex; /* the rd sheet texture, 0 until first drawn */
@@ -142,7 +136,7 @@ typedef struct MfStrip {
     int item, lang;      /* an item's index and language; -1 for a port text */
     float em;            /* texel rows */
     unsigned layout;     /* a port text's alignment flags */
-    int scale;           /* strip texels a sheet texel (F-G) */
+    int scale;           /* strip texels a sheet texel */
     int cls, page, x, y; /* the page's texels */
     int w, h;            /* sheet texels (w * scale x h * scale on the page) */
     int ox, oy;          /* a port text's top-left from its snapped anchor: texels, rows */
@@ -253,14 +247,15 @@ void ui__MenuSetBold(float bx, float by)
     s_boldY = by;
 }
 
-/* the strip's letters made heavier (ui_internal.h UI_MENU_BOLD_X / Y): each texel gains half the strength of
-   its two neighbours' coverage across (bx) and down (by), clamped; a stem
-   or a bar grows by about the strength in texels, centred.  At scale s
-   (F-G) the growth is the same in sheet texels, s times as many strip
-   texels: half the strength times s a side, its whole part n as n
-   neighbours a side added whole (the texels within n of a letter fill) and
-   its fraction as at 1x from the neighbours n + 1 away, so the edge stays
-   one strip texel wide (1x: n = 0, the sum above) */
+/* the strip's letters made heavier (ui_internal.h UI_MENU_BOLD_X / Y): each
+   texel gains half the strength of its two neighbours' coverage across (bx)
+   and down (by), clamped; a stem or a bar grows by about the strength in
+   texels, centred.  At scale s the growth is the same in sheet texels, s times
+   as many strip texels: half the strength times s a side, its whole part n as
+   n neighbours a side added whole (the texels within n of a letter fill) and
+   its fraction as at 1x from the neighbours n + 1 away, so the edge stays one
+   strip texel wide (1x: n = 0, the sum above)
+ */
 static void embolden(uint8_t *cov, int w, int h, int scale)
 {
     const float k[2] = {s_boldX * 0.5f * (float)scale, s_boldY * 0.5f * (float)scale};
@@ -719,7 +714,7 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
     }
     if (p->scale > 1) {
         /* the rim below, over the strip and the sheet texel round it that
-           the magnified rim's bilinear read takes (v0.4.3 RIM: one value a
+           the magnified rim's bilinear read takes (one value a
            sheet texel; the gaps keep other strips' rims out) */
         uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
         const int sc = p->scale;
@@ -1005,7 +1000,7 @@ void ui_DrawMenuText(float x, float y, float size, const uint8_t rgba[4], const 
     q.y0 = ay + 2.0f * (float)s->oy;
     q.x1 = q.x0 + (float)s->w;
     q.y1 = q.y0 + 2.0f * (float)s->h;
-    /* the whole strip, scale times the quad's texels (F-G) */
+    /* the whole strip, scale times the quad's texels */
     q.u0 = (float)s->x;
     q.v0 = (float)s->y;
     q.u1 = (float)(s->x + s->w * s->scale);
@@ -1091,7 +1086,7 @@ void ui_MenuWordDraw(const UiMenuTextItem *it, int lang, const int box[4], const
     q.x1 = q.x0 + (float)box[2] / 16.0f;
     q.y1 = q.y0 + (float)box[3] / 8.0f;
     if (s->scale > 1) {
-        /* the strip's texels scale times the item's (F-G) */
+        /* the strip's texels scale times the item's */
         const float k = (float)s->scale;
         q.u0 = (float)s->x + ((float)uv[0] / 16.0f - (float)it->u) * k;
         q.v0 = (float)s->y + ((float)uv[1] / 16.0f - (float)it->v) * k;

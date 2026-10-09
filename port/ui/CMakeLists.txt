@@ -1,14 +1,22 @@
-# port/ui: the port's runtime text, layout extension, strings and popups.
+# port/ui: the port's runtime text, layout extension, strings, popups and
+# menus.
 #
-#   ico_ui       the game's copy, compiled into ico_pc: ICO_RD in the window
-#                build (draws through port/render), measure-only headless;
-#                ui_host.c (the game's globals, the decoder flush) in the
-#                window build only
-#   ico_ui_rd    the same sources with ICO_RD for ui_test (needs ico_render)
-#   settings.c, ui_list.c, ui_hint.c   the Settings menu, its list
-#                pages and its button prompts, in ico_ui and settings_test: it
-#                reads the port's option modules (port/game, port/input,
-#                port/config) and the game's layout globals
+#   ico_ui              the game's copy, compiled into ico_pc: ICO_RD in the
+#                       window build (draws through port/render, with
+#                       ui_host.c and touch_ui.c), measure-only headless;
+#                       with the Settings menu's sources (ico_ui_settings:
+#                       settings.c, ui_list.c, ui_hint.c, gallery.c,
+#                       photo_ui.c, ui_mouse.c, ui_mouse_geom.c)
+#   ico_gallery_live    gallery_play.c, the music gallery's engine (the
+#                       game's sound calls), in ico_pc
+#   ico_ui_cpu          the CPU copy with the Settings sources, for the
+#                       settings tests
+#   ico_ui_rd           the sources with ICO_RD for ui_test and
+#                       menu_text_test (needs ico_render)
+#   ico_ui_settings_rd  ico_ui_rd with the Settings sources, for
+#                       settings_render
+#   ico_ui_font_rd      font.c alone with ICO_RD, for the render tests and
+#                       rd_replay_tool
 #
 # The font file is embedded as a C array generated at build time
 # (embed_font.cmake), so the program needs no file beside it.
@@ -207,8 +215,8 @@ if(ICO_RUN_TESTS)
                          --report "${CMAKE_CURRENT_BINARY_DIR}/gallery_sweep/table.md")
         set_tests_properties(gallery_sweep PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE
                              TIMEOUT 3600)
-        # Extras > Credits in the headless game (credits_headless.py, package
-        # CRED): the ending's staff scenes from the title and back, no save
+        # Extras > Credits in the headless game (credits_headless.py): the
+        # ending's staff scenes from the title and back, no save
         add_test(NAME credits_headless
                  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/test/credits_headless.py"
                          "$<TARGET_FILE:ico_pc>" "${ICO_DISC_IMAGE}"
@@ -390,8 +398,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(font_coverage PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 # menu_look: the menus' Arimo text against the game's
-# menu sheets: the sheets read from the disc (test/menu_sheets.c, the TIM2
-# reader the game face's builder had), the item strips (menu_font.c
+# menu sheets: the sheets read from the disc (test/menu_sheets.c, a TIM2
+# reader), the item strips (menu_font.c
 # ui__MenuStripRaster) through the shader's CPU reference (ico_sheet_ref),
 # compared per item in the five languages, with the survey that pinned the
 # sheet constants.  Needs the base ELF to configure, and the disc image to

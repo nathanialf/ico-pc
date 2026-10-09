@@ -1,7 +1,7 @@
 /*
  * port/ui/touch_ui.h
  *
- * The touch overlay's drawing (package AN-G): the buttons, the stick and
+ * The touch overlay's drawing: the buttons, the stick and
  * the look pad of port/input/touch.h on the output, from the copy the
  * device layer takes once per vsync (input_sdl.h ico_input_sdl_touch_overlay,
  * which the window host installs as the source).  Drawn by ui_host.c's

@@ -1,12 +1,12 @@
 /*
  * port/ui/strings.h
  *
- * The port's own UI strings in the game's five languages (Phase 6, 6B).  One table per language,
- * port/ui/strings_<lang>.c, indexed by UiStrId; UTF-8.  Only what the
- * Settings menu (6C) and the popups need: the plan's Settings sections
- * (Display, Controls, Gameplay, Language, Developer mode), the gameplay
- * options (stick_fix, yorda_safe, mirror) and the rd
- * settings; 6C renames or adds ids as it needs.
+ * The port's UI strings in the game's five languages: one table per
+ * language (port/ui/strings_<lang>.c), indexed by UiStrId, UTF-8. Every
+ * word the port draws (the Settings menu, the popups, the achievements, the
+ * galleries, photo mode, the model viewer, Characters, the Graphics driver
+ * page), and the menus' words transcribed from the PAL sheets
+ * (UI_STR_MT_*).
  */
 #ifndef PORT_UI_STRINGS_H
 #define PORT_UI_STRINGS_H
@@ -70,7 +70,7 @@ typedef enum UiStrId {
     /* popups */
     UI_STR_POPUP_TEST_TITLE,
     UI_STR_POPUP_TEST_BODY,
-    /* achievements (package 6E): title and
+    /* achievements: title and
        description of each, in port/game/achievements.c's order */
     UI_STR_ACH_OPENING,
     UI_STR_ACH_OPENING_DESC,
@@ -132,7 +132,7 @@ typedef enum UiStrId {
     UI_STR_ACH_FAST_DESC,
     UI_STR_ACH_SECRET,
     UI_STR_ACH_SECRET_DESC,
-    /* the Settings menu (6C) */
+    /* the Settings menu */
     UI_STR_SECTION_AUDIO,
     UI_STR_SECTION_ACHIEVEMENTS,
     UI_STR_OPT_VOLUME,
@@ -151,7 +151,7 @@ typedef enum UiStrId {
     UI_STR_REMAP_HINT,
     UI_STR_REMAP_PRESS,
     UI_STR_REMAP_RESET,
-    /* package AN-G: Settings > Controls, the touch overlay's rows (shown
+    /* Settings > Controls, the touch overlay's rows (shown
        with a touch screen), their values and the note */
     UI_STR_OPT_TOUCH_MODE,
     UI_STR_OPT_TOUCH_SIZE,
@@ -204,28 +204,28 @@ typedef enum UiStrId {
     UI_STR_VIDEO_MODE_TITLE_ONLY,
     UI_STR_ACH_LOCKED,
     UI_STR_ACH_STATE_UNLOCKED,
-    /* mirror mode (renderer wave 7, R7c) */
+    /* mirror mode */
     UI_STR_MIRROR_SCREEN, /* the New Game screen's explanation of Mirror mode */
     /* New Game+: the New Game screen's second row and its explanation */
     UI_STR_OPT_NEWGAME_PLUS,
     UI_STR_NEWGAME_PLUS_SCREEN,
-    /* package CRT: Settings > Display, "CRT filter" and "CRT strength" */
+    /* Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,
     UI_STR_VAL_CRT_SCANLINES,
     UI_STR_VAL_CRT_CONSUMER,
     UI_STR_VAL_CRT_TRINITRON,
     UI_STR_VAL_CRT_PVM,
-    UI_STR_VAL_CRT_SHADOW, /* package CRT2 */
+    UI_STR_VAL_CRT_SHADOW,
     UI_STR_VAL_CUSTOM,
     UI_STR_RESOLUTION_CRT_NOTE,
-    /* Q2: the title's "Quit to desktop" row and its confirmation, and
+    /* the title's "Quit to desktop" row and its confirmation, and
        Settings > Controls, "Circle goes back" ([game] circle_back) */
     UI_STR_QUIT_DESKTOP,
     UI_STR_QUIT_CONFIRM,
     UI_STR_OPT_CIRCLE_BACK,
     UI_STR_CIRCLE_BACK_NOTE,
-    /* P3: the game's menu text, transcribed from the PAL sheets
+    /* the game's menu text, transcribed from the PAL sheets
        (text/menu_PAL_xx, scei.tm2, title.tm2) with their wording and
        capitalisation; menu_text.c maps the texProperty rows to them, and
        the rows are drawn as these words in the sheets' look (menu_font.h) */
@@ -355,7 +355,7 @@ typedef enum UiStrId {
     UI_STR_HINT_PREV,
     UI_STR_HINT_NEXT,
     UI_STR_HINT_SECTION,
-    /* Extras > Models (package MV): the viewer's words,
+    /* Extras > Models: the viewer's words,
        then the model names (port/game/model_viewer_table.c) */
     UI_STR_MV_ANIMATION,
     UI_STR_MV_LOOP,
@@ -395,14 +395,13 @@ typedef enum UiStrId {
     UI_STR_MV_SWORD,
     UI_STR_MV_MAGIC_SWORD,
     UI_STR_MV_COUCH,
-    /* the pause menu's Photo mode (package PHOTO; S1 moved the row from
-       the Options screen to the pause menu): the row, the HUD's lines, the
+    /* the pause menu's Photo mode: the row, the HUD's lines, the
        capture's popup; FOV takes the vertical field of view in degrees (%d) */
     UI_STR_PHOTO_MODE,
     UI_STR_PHOTO_FOV,
     UI_STR_PHOTO_SAVED,
     UI_STR_PHOTO_FAILED,
-    /* v0.4.1: the HUD title's camera and speed
+    /* the HUD title's camera and speed
        (SPEED takes the speed's word, %s) */
     UI_STR_PHOTO_CAM_FREE,
     UI_STR_PHOTO_CAM_ORBIT,
@@ -410,7 +409,7 @@ typedef enum UiStrId {
     UI_STR_PHOTO_SPEED_SLOW,
     UI_STR_PHOTO_SPEED_NORMAL,
     UI_STR_PHOTO_SPEED_FAST,
-    /* package S1: the game's Options screen's settings on the Settings
+    /* the game's Options screen's settings on the Settings
        pages (the labels in the game's own words; Vibration is
        UI_STR_OPT_VIBRATION above), Hold type's values and the notes */
     UI_STR_OPT_BRIGHTNESS,
@@ -457,7 +456,7 @@ typedef enum UiStrId {
     UI_STR_STATS_ENEMIES,
     UI_STR_STATS_ASSISTS,
     UI_STR_STATS_AREA,
-    /* v0.4.2: the photo panel's action words, each beside its button
+    /* the photo panel's action words, each beside its button
        picture or key (photo_ui.c) */
     UI_STR_PHOTO_ACT_MOVE,
     UI_STR_PHOTO_ACT_LOOK,
@@ -478,7 +477,7 @@ typedef enum UiStrId {
        pictures have no up or down arrow) */
     UI_STR_PHOTO_UP,
     UI_STR_PHOTO_DOWN,
-    /* v0.4.2: Options > Extras > Characters (settings.c, port/game/
+    /* Options > Extras > Characters (settings.c, port/game/
        appearance.h): the page, its nine colour rows, Randomize and Reset,
        a skin tone's value ("%d" is the tone's number), the page's note
        (from the title, from the pause menu, with a texture pack on) and
@@ -523,19 +522,19 @@ typedef enum UiStrId {
     UI_STR_COLOUR_WHITE,
     UI_STR_COLOUR_GREY,
     UI_STR_COLOUR_BLACK,
-    /* v0.4.2: Characters inside the model viewer (title screen): the row
+    /* Characters inside the model viewer (title screen): the row
        that loads the other character, and two of its button prompts */
     UI_STR_CHAR_SWITCH_YORDA,
     UI_STR_CHAR_SWITCH_ICO,
     UI_STR_CHAR_HINT_COLOUR,
     UI_STR_CHAR_HINT_CHARACTER,
-    /* v0.4.3 I17c: Display > Window mode (Fullscreen reuses UI_STR_OPT_FULLSCREEN) */
+    /* Display > Window mode (Fullscreen reuses UI_STR_OPT_FULLSCREEN) */
     UI_STR_OPT_WINDOW_MODE,
     UI_STR_VAL_WINDOWED,
     UI_STR_VAL_BORDERLESS,
-    /* v0.4.3 R27: Effects > Cinematic bars */
+    /* Effects > Cinematic bars */
     UI_STR_OPT_EFFECT_CINEMATIC_BARS,
-    /* v0.4.3 AN-22b: Settings > Graphics driver (Android), Quit game */
+    /* Settings > Graphics driver (Android), Quit game */
     UI_STR_SECTION_GPU_DRIVER,
     UI_STR_OPT_GPU_DRIVER,
     UI_STR_VAL_GPU_BUILTIN,
@@ -549,7 +548,7 @@ typedef enum UiStrId {
     UI_STR_GPU_DRIVER_NOSPACE,
     UI_STR_QUIT_GAME,
     UI_STR_QUIT_GAME_CONFIRM,
-    /* v0.4.3 I17a: Controls > Invert mouse up/down (the mouse camera's
+    /* Controls > Invert mouse up/down (the mouse camera's
        up and down swapped, in play and in photo mode) */
     UI_STR_OPT_MOUSE_INVERT,
     /* Controls > Mouse camera speed, Mouse camera range and Camera swings

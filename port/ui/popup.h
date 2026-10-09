@@ -1,14 +1,14 @@
 /*
  * port/ui/popup.h
  *
- * Notification popups (achievements from package 6E; a developer test
- * now): a queue of (title, body) shown one at a time, sliding in from the
- * right edge of the 4:3 picture, held, and sliding out, timed in vsyncs.
+ * Notification popups (achievements, photo mode, the model viewer, the
+ * Graphics driver page, and the [dev] popup_test switch): a queue of
+ * (title, body) shown one at a time, sliding in from the right edge of the
+ * 4:3 picture, held, and sliding out, timed in vsyncs.
  *
- * Where they are drawn (package OV).  On the presentation overlay
- * (port/render/rd.h rd_SetPresentOverlay): the
- * presenter calls ui_host.c's overlay function at every present, which
- * calls ui_PopupDrawOverlay, so the popup is drawn on the output after the
+ * Where they are drawn.  On the presentation overlay (port/render/rd.h
+ * rd_SetPresentOverlay): the presenter calls ui_host.c's overlay function
+ * at every present, which calls ui_PopupDrawOverlay, so the popup is drawn on the output after the
  * box blit, at the output's resolution, outside the game's frame (never
  * reduced, never in DISPLAY's history, so a keep frame cannot show it
  * twice), never mirrored, and at each present's state of the queue.
@@ -31,7 +31,7 @@ extern "C" {
 int ui_PopupPush(const char *title, const char *body);
 /* One vsync passed: advances the current popup. */
 void ui_PopupVsync(void);
-/* whether a popup is showing or waiting */
+/* whether a popup is showing or waiting (tests) */
 int ui_PopupActive(void);
 /* Draws the current popup on the output (above): inside an rd overlay
    callback, ctx the callback's RdOverlayCtx (rd.h).  No-op without a

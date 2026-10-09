@@ -190,7 +190,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Kreis für Zurück",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Kreis (B am Gamepad) verlässt auch die Menüs des Spiels, wie Dreieck.",
-    /* the game's menu words (P3), as the PAL sheets have them: drawn as
+    /* the game's menu words, as the PAL sheets have them: drawn as
        text in the sheets' look by the rows of menu_text.h's table */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
@@ -462,13 +462,13 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_CHAR_SWITCH_ICO] = "Zu Ico wechseln",
     [UI_STR_CHAR_HINT_COLOUR] = "Farbe",
     [UI_STR_CHAR_HINT_CHARACTER] = "Figur",
-    /* v0.4.3 I17c */
+    /* Display > Window mode */
     [UI_STR_OPT_WINDOW_MODE] = "Anzeigemodus",
     [UI_STR_VAL_WINDOWED] = "Fenster",
     [UI_STR_VAL_BORDERLESS] = "Randlos",
-    /* v0.4.3 R27 */
+    /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
-    /* v0.4.3 AN-22b */
+    /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Grafiktreiber",
     [UI_STR_OPT_GPU_DRIVER] = "Treiber",
     [UI_STR_VAL_GPU_BUILTIN] = "Eingebaut",
@@ -483,7 +483,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "Nicht genug Speicherplatz für diesen Treiber.",
     [UI_STR_QUIT_GAME] = "Spiel beenden",
     [UI_STR_QUIT_GAME_CONFIRM] = "Spiel beenden?",
-    /* v0.4.3 I17a */
+    /* Controls > the mouse camera rows */
     [UI_STR_OPT_MOUSE_INVERT] = "Maus: oben/unten umkehren",
     [UI_STR_OPT_MOUSE_SPEED] = "Mauskamera-Tempo",
     [UI_STR_OPT_MOUSE_RANGE] = "Mauskamera-Bereich",

@@ -3,7 +3,7 @@
  *
  * The scrolling list pages of the port's menus:
  * a window of UI_LIST_SLOTS rows over a list of N items.  The Settings
- * achievements and remap pages use it, and the Extras galleries will.
+ * menu's Achievements, Remap and Extras > Music pages use it.
  *
  * A page owns a UiList and describes its data in a UiListDef:
  *   count    how many items there are (read every tick, so it may change)

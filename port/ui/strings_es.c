@@ -189,7 +189,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_CIRCLE_BACK] = "Círculo para volver",
     [UI_STR_CIRCLE_BACK_NOTE] =
         "Círculo (B en el mando) también sale de los menús del juego, como Triángulo.",
-    /* the game's menu words (P3), as the PAL sheets have them: drawn as
+    /* the game's menu words, as the PAL sheets have them: drawn as
        text in the sheets' look by the rows of menu_text.h's table */
     [UI_STR_MT_LANG_ENGLISH] = "ENGLISH",
     [UI_STR_MT_LANG_FRANCAIS] = "FRANÇAIS",
@@ -460,13 +460,13 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_CHAR_SWITCH_ICO] = "Cambiar a Ico",
     [UI_STR_CHAR_HINT_COLOUR] = "Color",
     [UI_STR_CHAR_HINT_CHARACTER] = "Personaje",
-    /* v0.4.3 I17c */
+    /* Display > Window mode */
     [UI_STR_OPT_WINDOW_MODE] = "Modo de pantalla",
     [UI_STR_VAL_WINDOWED] = "Ventana",
     [UI_STR_VAL_BORDERLESS] = "Sin bordes",
-    /* v0.4.3 R27 */
+    /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
-    /* v0.4.3 AN-22b */
+    /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Controlador gráfico",
     [UI_STR_OPT_GPU_DRIVER] = "Controlador",
     [UI_STR_VAL_GPU_BUILTIN] = "Integrado",
@@ -481,7 +481,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_GPU_DRIVER_NOSPACE] = "No hay espacio suficiente para este controlador.",
     [UI_STR_QUIT_GAME] = "Salir del juego",
     [UI_STR_QUIT_GAME_CONFIRM] = "¿Salir del juego?",
-    /* v0.4.3 I17a */
+    /* Controls > the mouse camera rows */
     [UI_STR_OPT_MOUSE_INVERT] = "Ratón: invertir arriba/abajo",
     [UI_STR_OPT_MOUSE_SPEED] = "Velocidad de cámara con ratón",
     [UI_STR_OPT_MOUSE_RANGE] = "Alcance de cámara con ratón",

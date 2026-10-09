@@ -7,7 +7,7 @@
  * the screens' procs: the value texts, left/right on a value, Cross on an
  * action, Triangle or Circle back, the scrolling lists, the remap capture,
  * the saves when a screen is left, and the title's "Quit to desktop" row
- * with its confirmation (Q2).
+ * with its confirmation.
  */
 #include "settings.h"
 
@@ -40,7 +40,7 @@
 #include "video_options.h"
 
 #ifdef ICO_RD
-#include "rd.h" /* rd_SetMirror (R7c) */
+#include "rd.h" /* rd_SetMirror */
 #endif
 
 /* the number of elements of an array */
@@ -61,10 +61,10 @@ extern void la_host_leave(void); /* layout_action.c (ICO_HOST) */
 /* fumi/sound/s_init.c: the PS2's stereo (0) or mono (1) output */
 extern int soundOutputModeGet(void);
 extern void soundOutputModeSet(int mode);
-/* layout_action.c (ICO_HOST, R7c): what la_vibe_select's confirm did after
+/* layout_action.c: what la_vibe_select's confirm did after
    the vibration choice, gflagOn(382): the new game starts */
 extern void la_host_new_game_go(void);
-/* S1: the game's Options screen's settings (common/src/main.c,
+/* the game's Options screen's settings (common/src/main.c,
    fumi/ios/pad.c): its film effect 0..4 (only once the game is cleared),
    hold type A 0 or B 1, players 1 (0) or 2 (1), and the vibration switch;
    the brightness step is systemStatus[11].  The game's saves write them
@@ -73,7 +73,7 @@ extern int optionScreenMode;
 extern int optionControlType;
 extern int girlControlMode;
 extern int iosPadActRequestEnable;
-/* layout_action.c (ICO_HOST, S1): a film effect in force with the stage
+/* layout_action.c: a film effect in force with the stage
    animations la_game_option starts and stops for it */
 extern void la_host_film_effect(int mode);
 /* port/platform/trace_host.h (ico_pc): the Main ticks so far, with the
@@ -92,7 +92,7 @@ extern unsigned int ico_host_main_ticks(void);
 #define PAD_RIGHT 0x2000
 #define PAD_DOWN 0x4000
 #define PAD_LEFT 0x8000
-/* Q2: on the port's screens Circle goes back as Triangle does, whatever
+/* on the port's screens Circle goes back as Triangle does, whatever
    [game] circle_back says (that switch is for the game's own menus,
    layout_ext.h lt_ext_BackButtons): no PS2 behaviour to keep here, and
    Circle has no other use on them (a remap capture takes it before this
@@ -103,7 +103,7 @@ extern unsigned int ico_host_main_ticks(void);
 #define LAYOUT_PAUSE 57
 #define LAYOUT_TITLE_CONTINUE 12
 #define LAYOUT_TITLE_NEW 13
-/* the game's Options screen (no longer reached, S1) and its button
+/* the game's Options screen (no longer reached) and its button
    configuration screen (Settings > Controls opens it) */
 #define LAYOUT_GAME_OPTIONS 58
 #define LAYOUT_KEY_CONFIG 59
@@ -199,10 +199,10 @@ static Page s_pages[UI_PAGE_COUNT];
 static int s_built;
 static int s_warned;
 static int s_entryRow[ENTRY_COUNT] = {-1, -1, -1}; /* [ENTRY_PAUSE]: 294, once installed */
-static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1};  /* Q2: the title's "Quit to desktop" */
+static int s_quitRow[ENTRY_COUNT] = {-1, -1, -1};  /* the title's "Quit to desktop" */
 static int s_entryLayout[ENTRY_COUNT] = {-1, -1, -1};
 static int s_quitHeader = -1;
-/* v0.4.3 AN-22b: the Android build asks "Quit game" (the phone's app is not
+/* the Android build asks "Quit game" (the phone's app is not
    a desktop program); the host says so with ui_SettingsSetQuitIsGame */
 static int (*s_quitIsGame)(void);
 
@@ -221,7 +221,7 @@ static UiStrId quitConfirmStr(void)
     return quitIsGame() ? UI_STR_QUIT_GAME_CONFIRM : UI_STR_QUIT_CONFIRM;
 }
 
-/* package PHOTO (S1: in the pause menu): "Photo mode" under Options, in a
+/* the pause menu's "Photo mode" under Options, in a
    port layout chained after 57; opens photo_ui.c's layout (only while a
    stage runs: placePause) */
 static int s_photoRow = -1;
@@ -259,7 +259,7 @@ static int onTitle(void)
     return s_origin == LAYOUT_TITLE_CONTINUE || s_origin == LAYOUT_TITLE_NEW;
 }
 
-/* v0.4.3 UI-D: the title is up invisibly while Options is to open on a page
+/* the title is up invisibly while Options is to open on a page
    (Characters' way back, model_viewer.c): s_titleReturn is the page (-1 for
    none), s_titleDecided whether the title's card check has decided (its
    procs' last TitleMask(0)), s_titleHandoff the frames of the switch to the
@@ -347,7 +347,7 @@ static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 
 /* the Mouse camera speed row's steps; the last one is "Instant" */
 static const float kMouseCamSpeed[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f, 10.0f};
 
-/* R7d: the Frame rate row's values, in the order Right steps them
+/* the Frame rate row's values, in the order Right steps them
    (ico_video_parse_framerate / ico_video_framerate_name: "original",
    "uncapped" or N presents a second) */
 static const int kFramerates[] = {
@@ -380,12 +380,12 @@ static int stepFramerate(int fr, int dir)
     return ICO_FRAMERATE_UNCAPPED;
 }
 
-/* package CRT: the CRT filter row's names of the modes (ICO_CRT_* order) */
+/* the CRT filter row's names of the modes (ICO_CRT_* order) */
 static const int kCrtStr[ICO_CRT_MODES] = {UI_STR_VAL_CRT_SCANLINES, UI_STR_VAL_CRT_CONSUMER,
                                            UI_STR_VAL_CRT_TRINITRON, UI_STR_VAL_CRT_PVM,
                                            UI_STR_VAL_CRT_SHADOW};
 
-/* package CRT2: the CRT filter in force (a mode at a strength above 0, as
+/* the CRT filter in force (a mode at a strength above 0, as
    rd__CrtOn sees it): the scene renders at 1x, and the Resolution row reads
    "1x (CRT)" and does not step; the file's resolution is kept and is in
    force again with the filter off */
@@ -493,15 +493,15 @@ static void stepDevice(int dir)
     s_dirtyConfig = 1;
 }
 
-static int (*s_texturePackCount)(void); /* v0.4.0: replacements installed, when known */
-static int (*s_touchQuery)(void);       /* AN-G: a touch screen exists, when known */
+static int (*s_texturePackCount)(void); /* replacements installed, when known */
+static int (*s_touchQuery)(void);       /* a touch screen exists, when known */
 
 static int touchPresent(void)
 {
     return s_touchQuery != NULL && s_touchQuery() != 0;
 }
 
-/* v0.4.3 AN-22b: the host's graphics-driver hooks (settings.h) */
+/* the host's graphics-driver hooks (settings.h) */
 static UiGpuDriverHost s_gpuHost;
 static int s_gpuHostSet;
 static int s_gpuPending; /* an install is running: installPoll every frame */
@@ -650,19 +650,19 @@ static int isTouchOpt(int opt)
     return opt == UI_OPT_TOUCH_MODE || opt == UI_OPT_TOUCH_SIZE || opt == UI_OPT_TOUCH_OPACITY;
 }
 
-/* AN-G: the Touch opacity row's steps, percent */
+/* the Touch opacity row's steps, percent */
 static const int kTouchOpacity[] = {25, 50, 75, 100};
 
-/* v0.4.0: a texture pack was found at start (texpack_Count through the
+/* a texture pack was found at start (texpack_Count through the
    host's hook; none without one) */
 static int texturePackInstalled(void)
 {
     return s_texturePackCount != NULL && s_texturePackCount() > 0;
 }
 
-static int (*s_modelPackCount)(void); /* v0.4.1: replacement models installed, when known */
+static int (*s_modelPackCount)(void); /* replacement models installed, when known */
 
-/* v0.4.1: a model pack was found at start (modelpack_Count through the
+/* a model pack was found at start (modelpack_Count through the
    host's hook; none without one) */
 static int modelPackInstalled(void)
 {
@@ -705,7 +705,7 @@ static int resolutionIndex(const IcoVideoOptions *o)
  * show from the title only (masked and skipped by the cursor from the
  * pause menu); each row's hook returns the layout to open, or -1 when it
  * cannot open (not built, off the title, locked: a log line, nothing
- * else).  v0.4.2: Characters (the characters' colours) shows from both
+ * else).  Characters (the characters' colours) shows from both
  * entries, so the pause menu has the Extras row too, with Characters and
  * Back on its page. */
 
@@ -715,7 +715,7 @@ static int isExtrasOpt(int opt)
            opt == UI_OPT_EXTRAS_CREDITS;
 }
 
-/* package CRED: true once the ending has been reached: the port's ending
+/* true once the ending has been reached: the port's ending
    achievement or its clear count, or [dev] unlock_credits (credits.c,
    ico_credits_unlocked) */
 static int creditsUnlocked(void)
@@ -733,7 +733,7 @@ static int extrasMusic(void)
     return s_pages[UI_PAGE_MUSIC].layout;
 }
 
-/* package MV: the model viewer's list (port/game/model_viewer.c registers
+/* the model viewer's list (port/game/model_viewer.c registers
    it), -1 without one */
 static int (*s_modelsEnter)(void);
 static int (*s_windowModeQuery)(void); /* the window's truth, when installed */
@@ -748,9 +748,9 @@ static int extrasModels(void)
     return s_modelsEnter != NULL ? s_modelsEnter() : -1;
 }
 
-/* package CRED: the credits: the ending from the staff roll's first scene
-   (ico_credits.h).  The menu closes on the
-   game's empty layout while the stage changes, as leaving it saves first;
+/* the credits: the ending from the staff roll's first scene
+   (ico_credits.h).  The menu closes on the game's empty layout while the
+   stage changes, as leaving it saves first;
    the title comes back with the cursor on Settings.  Locked: nothing. */
 static void gameCursorOn(int to, int row);
 
@@ -798,7 +798,7 @@ static int extrasOpen(int opt)
 }
 
 /* --------------------------------------------------------- Characters
- * v0.4.2: Settings > Extras > Characters, the characters' colours
+ * Settings > Extras > Characters, the characters' colours
  * (port/game/appearance.h): a stepped row per part (UI_OPT_CHAR_ICO_SKIN +
  * the part), its value Original, a palette colour's name or "Tone N", and
  * a swatch right of its arrows (the part's colour as the texture holds it,
@@ -996,7 +996,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
             return "1x (CRT)";
         }
         if (o.resScale == ICO_RES_AUTO) {
-            /* v0.4.2 (N2): "Auto", with the scale once the window lowered it */
+            /* "Auto", with the scale once the window lowered it */
             if (ico_video_auto_scale() > 0) {
                 snprintf(buf, size, "%s (%dx)", ui_Str(UI_STR_VAL_AUTO), ico_video_auto_scale());
                 return buf;
@@ -1027,7 +1027,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_FULL_HEIGHT:
         return onOff(o.fullHeight);
     case UI_OPT_TEXTURE_PACK:
-        /* v0.4.0: "None installed" while no pack is found (the row then
+        /* "None installed" while no pack is found (the row then
            does not step) */
         return texturePackInstalled() ? onOff(o.texturePack) : ui_Str(UI_STR_VAL_NONE_INSTALLED);
     case UI_OPT_DUMP_TEXTURES:
@@ -1059,7 +1059,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         snprintf(buf, size, "%d %s", o.framerate, ui_Str(UI_STR_FPS_UNIT));
         return buf;
     case UI_OPT_CRT:
-        /* package CRT: [video] crt and crt_mode as one value */
+        /* [video] crt and crt_mode as one value */
         return ui_Str(
             !o.crt ? UI_STR_OFF
                    : kCrtStr[o.crtMode >= 0 && o.crtMode < ICO_CRT_MODES ? o.crtMode
@@ -1170,7 +1170,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
 }
 
-/* S1: the game's settings, shown from the pause menu only (as its Options
+/* the game's settings, shown from the pause menu only (as its Options
    screen was: a load sets them from the save, so a change on the title
    would not last); the film effect and players once the game is cleared
    (layout_texture.c lt_property_visible) */
@@ -1183,9 +1183,9 @@ static int isGameOpt(int opt)
 static int optShown(int opt, int link)
 {
     if (opt == UI_OPT_LINK && link == UI_PAGE_GPU_DRIVER) {
-        /* v0.4.3 AN-22b: only where a host answers for the driver, and only
-           on an Adreno chip, the one kind a driver package exists for
-           (user: the page is hidden elsewhere) */
+        /* only where a host answers for the driver, and only on an Adreno
+           chip, the one kind a driver package exists for (the page is
+           hidden elsewhere) */
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
     if (opt == UI_OPT_GPU_ADD) {
@@ -1195,13 +1195,13 @@ static int optShown(int opt, int link)
         return s_gpuHostSet && gpuSelected() >= 0;
     }
     if (isExtrasOpt(opt)) {
-        return onTitle(); /* v0.4.2: the Extras row itself shows from both */
+        return onTitle(); /* the Extras row itself shows from both */
     }
     if (opt == UI_OPT_CHAR_SWITCH) {
         return ui_SettingsCharactersInViewer();
     }
     if (isCharOpt(opt)) {
-        /* v0.4.2: in the viewer only the rows of the character shown */
+        /* in the viewer only the rows of the character shown */
         const int c = charsRowsFor();
         return c < 0 || ico_appearance_character(charPart(opt)) == c;
     }
@@ -1212,23 +1212,23 @@ static int optShown(int opt, int link)
         return gFlagGameClear != 0;
     }
     if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
-        return ico_opt_developer_mode(); /* v0.4.0: for pack authors */
+        return ico_opt_developer_mode(); /* for pack authors */
     }
     if (isTouchOpt(opt)) {
-        return touchPresent(); /* AN-G: a phone, a tablet, a touch screen */
+        return touchPresent(); /* a phone, a tablet, a touch screen */
     }
     if (opt == UI_OPT_WINDOW_MODE) {
-        return !ico_video_android(); /* v0.4.3: the phone's window is the screen */
+        return !ico_video_android(); /* the phone's window is the screen */
     }
     if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
         opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
-        return !ico_video_android(); /* v0.4.3 I17a: no mouse camera on a phone */
+        return !ico_video_android(); /* no mouse camera on a phone */
     }
     if (opt == UI_OPT_VIDEO_MODE || opt == UI_OPT_MODEL_PACK) {
-        /* v0.4.0: it changes only from the title (onTitle); the pause
-           menu's Display page has no room for a row that cannot step once
-           Texture pack is there (fourteen rows do not fit 13 lines apart); Model
-           pack (v0.4.1) is the title's too, for the same reason */
+        /* it changes only from the title (onTitle); the pause menu's
+           Display page has no room for a row that cannot step once Texture
+           pack is there (fourteen rows do not fit 13 lines apart); Model
+           pack is the title's too, for the same reason */
         return onTitle();
     }
     return 1;
@@ -1300,7 +1300,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     ico_video_get(&o);
     int video = 0;
     if (isCharOpt(opt)) {
-        /* v0.4.2: Original, then the colours or tones, around; the
+        /* Original, then the colours or tones, around; the
            textures follow within a frame (Texture.c reads the serial) */
         const IcoAppPart p = charPart(opt);
         ico_appearance_set(p, stepIndex(ico_appearance_get(p), ico_appearance_choices(p), dir));
@@ -1323,9 +1323,9 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_RESOLUTION: {
         if (crtForcesNative(&o)) {
-            return; /* package CRT2: 1x while the CRT filter is on */
+            return; /* 1x while the CRT filter is on */
         }
-        /* Window, 1x .. 4x, then Auto (v0.4.2 N2: index 5) */
+        /* Window, 1x .. 4x, then Auto (index 5) */
         int i = o.resScale == ICO_RES_AUTO ? 5 : resolutionIndex(&o);
         i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 6, dir);
         o.resW = o.resH = 0;
@@ -1382,8 +1382,8 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     case UI_OPT_CRT: {
-        /* package CRT: Off, Scanlines, Consumer TV, Trinitron, PVM, (CRT2)
-           Shadow mask, around */
+        /* Off, Scanlines, Consumer TV, Trinitron, PVM, Shadow mask,
+           around */
         int i = o.crt ? o.crtMode + 1 : 0;
         i = stepIndex(i, ICO_CRT_MODES + 1, dir);
         o.crt = i != 0;
@@ -1428,7 +1428,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_config_set_string("audio.output", ico_opt_output_name(m));
         applyOutputMode(1);
         if (m != ICO_OUTPUT_AUTO) {
-            /* S1: the rest of what the Options screen's Sound row (308)
+            /* the rest of what the Options screen's Sound row (308)
                did (applyOutputMode set the mode): the game's own mode, the
                one its saves write and Auto shows, is this one too.  The
                key is saved with the page's others on leaving, not at each
@@ -1469,7 +1469,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_MOUSE_CAMERA:
-        /* v0.4.3 I17a: live from the next vsync (the window reads the
+        /* live from the next vsync (the window reads the
            table for the capture, input_sdl.c steps it) */
         liveBindings()->mouse_camera = !liveBindings()->mouse_camera;
         s_dirtyBindings = 1;
@@ -1501,7 +1501,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         s_dirtyBindings = 1;
         break;
     case UI_OPT_TOUCH_MODE: {
-        /* AN-G: live from the next vsync (input_sdl.c reads the table) */
+        /* live from the next vsync (input_sdl.c reads the table) */
         IcoBindings *b = liveBindings();
         b->touch_mode =
             stepIndex(b->touch_mode >= 0 && b->touch_mode < 3 ? b->touch_mode : 1, 3, dir);
@@ -1532,7 +1532,7 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         break;
     }
     case UI_OPT_CIRCLE_BACK:
-        /* Q2: the game menus' alias, live from the next press */
+        /* the game menus' alias, live from the next press */
         ico_opt_set_circle_back(!ico_opt_circle_back());
         ico_config_set_bool("game.circle_back", ico_opt_circle_back());
         lt_ext_SetCircleBack(ico_opt_circle_back());
@@ -1583,12 +1583,13 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
         s_dirtyConfig = 1;
         if (!ico_opt_developer_mode() && o.dumpModels) {
-            /* v0.4.1: the same for Dump models */
+            /* Dump models is switched off with developer mode, as Dump
+               textures is below */
             o.dumpModels = 0;
             video = 1;
         }
         if (!ico_opt_developer_mode() && o.dumpTextures) {
-            /* v0.4.0: Dump textures lives under Developer mode; with its row
+            /* Dump textures lives under Developer mode; with its row
                hidden it is switched off too, or the dumps would go on being
                written on every start with no row to stop them */
             o.dumpTextures = 0;
@@ -1878,21 +1879,20 @@ static void buildGalleryBar(void)
     ui_HintBuild(&s_galHint, GAL_HINT_Y, NOTE_SIZE, ui_hint_gallery, UI_HINT_GAL_COUNT);
 }
 
-/* A page's first row and pitch for n rows shown.  Display: at most
-   twelve rows shown (TXT2: no Menu text row; the CRT filter and its
-   strength are on the Effects page), 14 field lines apart from 36, so
-   Back ends inside the 226 lines (Video mode and Model pack are the
-   title's, Brightness the pause menu's).  Main: the nine of the title on a 17
-   line pitch so Back stays above the notes, the eight of the pause menu on
-   the original 19, ten (v0.4.0: Dump textures in developer mode) 15; with
-   the Effects link (issue 11) one more each: the ten of the title 15, the
-   nine 17, eleven (developer mode) 14: Back at 180, the box to 220; with
-   Dump models (v0.4.1) twelve 13: Back at 183, the box to 223.  v0.4.2: the pause menu
-   shows Extras too (Characters), so its main page has the title's counts:
-   ten 15, twelve (developer mode) 13.  Characters: twelve rows 13 apart
-   from 40, Back at 183, its box to 219.  v0.4.3: the Graphics driver link
-   (Android) makes the developer-mode main page thirteen rows: 12 apart,
-   Back at 184, the box to 224 (as the Controls page's Back at 184). */
+/* A page's first row and pitch (field lines) for n rows shown.  Every page
+   keeps Back's box inside the 226 lines and above the notes:
+     Display      from 36, 14 apart (at most twelve rows shown; Video mode
+                  and Model pack are the title's, Brightness the pause
+                  menu's)
+     Characters   from 40, 13 apart (twelve rows: Back at 183, its box to
+                  219); inside the model viewer CV_ROW_Y0 and CV_ROW_PITCH
+     Main         from 40: up to 8 rows 19 apart, 9 rows 17, 10 rows 15,
+                  11 rows 14, 12 rows 13, 13 or more 12 (thirteen rows:
+                  Back at 184, its box to 224)
+     Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 or
+                  13 rows 13 (Back at 183, its box to 219); 14 or more from
+                  30, 11 apart (Back at 184, its box to 220)
+     the others   from 40, 18 apart */
 static int pagePitch(int page, int n, int *y0)
 {
     if (page == UI_PAGE_DISPLAY) {
@@ -1916,13 +1916,8 @@ static int pagePitch(int page, int n, int *y0)
         return n > 12 ? 12 : n > 11 ? 13 : n > 10 ? 14 : n > 9 ? 15 : n > 8 ? 17 : 19;
     }
     if (page == UI_PAGE_CONTROLS && n > 9) {
-        /* With the touch rows from the pause menu, ten rows 16 apart (Back
-           at 184, its box to 220); with the three mouse rows too (a touch
-           screen on a computer), twelve 13 apart (Back at 183, its box to
-           219); with the mouse camera's three more rows, twelve from the
-           title (or nine from the pause menu) stay 13 apart, and the
-           fifteen of the pause menu with a touch screen start at 30 and
-           are 11 apart (Back at 184, its box to 220) */
+        /* the touch rows, the mouse rows and the game's pause-menu rows
+           make the page longer than the others (the table above) */
         if (n > 13) {
             *y0 = 30;
             return 11;
@@ -1969,7 +1964,7 @@ static void addOption(Page *pg, int pageId, int opt, int strId, int link)
                                          0.0f, UI_ALIGN_LEFT);
         const int ar = ui_SettingsAddRow(ARROW_R_X, y, ARROW_W, h, 1, r->label, 0, "\xE2\x80\xBA",
                                          0.0f, UI_ALIGN_LEFT);
-        /* v0.4.3 I17b: the mouse pointer's clicks: the arrows are Left and
+        /* the mouse pointer's clicks: the arrows are Left and
            Right, the value itself steps as Right does */
         lt_ext_SetPointerRole(r->value, LT_POINTER_STEP);
         lt_ext_SetPointerRole(al, LT_POINTER_LEFT);
@@ -2313,8 +2308,8 @@ static void pauseStats(int show)
             on[i] = i < STAT_ASSISTS;
         }
         if (ico_gs_run_partial()) {
-            /* a save from before v0.4.0 kept no count of these: hidden
-               rather than counted from the load, until a New Game */
+            /* an older save kept no count of these: hidden rather than
+               counted from the load, until a New Game */
             on[STAT_SAVES] = on[STAT_ENEMIES] = 0;
         }
         const int assist[3] = {ico_opt_yorda_safe(), ico_opt_stick_fix(), ico_opt_developer_mode()};
@@ -2398,7 +2393,7 @@ static void buildEntries(void)
         P(row)->defaultMask = 1;
         P(row)->right = s_pages[UI_PAGE_MAIN].layout;
         s_entryRow[e] = row;
-        /* Q2: "Quit to desktop" under Settings, in the same layout (the
+        /* "Quit to desktop" under Settings, in the same layout (the
            rows are contiguous); Cross opens the confirmation */
         int q =
             ui_SettingsAddRow(120, 0, 400, 40, 1, -1, quitRowStr(), NULL, 0.0f, UI_ALIGN_CENTER);
@@ -2414,9 +2409,9 @@ static void buildEntries(void)
 
 static void build(void)
 {
-    /* Extras (after Achievements); v0.4.2: from both entries (its Music,
+    /* Extras (after Achievements), from both entries (its Music,
        Models and Credits only from the title, layoutPage) */
-    /* v0.4.0: Dump textures under Developer mode, shown while it is on */
+    /* Dump textures under Developer mode, shown while it is on */
     static const int mainOpts[] = {
         UI_OPT_LINK,          UI_OPT_LINK,        UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK,
         UI_OPT_LINK,          UI_OPT_LANGUAGE,    UI_OPT_LINK, UI_OPT_LINK, UI_OPT_DEVELOPER,
@@ -2447,7 +2442,7 @@ static void build(void)
                                     -1,
                                     -1,
                                     -1};
-    /* v0.4.3 AN-22b: Android's Graphics driver page (its link needs a host) */
+    /* Android's Graphics driver page (its link needs a host) */
     static const int gpuOpts[] = {UI_OPT_GPU_DRIVER, UI_OPT_GPU_ADD, UI_OPT_GPU_REMOVE,
                                   UI_OPT_BACK};
     static const int gpuStrs[] = {UI_STR_OPT_GPU_DRIVER, UI_STR_GPU_DRIVER_ADD,
@@ -2470,14 +2465,14 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
-    /* v0.4.2: Characters after Credits (from both entries; the other three
+    /* Characters after Credits (from both entries; the other three
        from the title only) */
     static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
                                      UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK, UI_OPT_BACK};
     static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC, UI_STR_EXTRAS_MODELS,
                                      UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS, UI_STR_BACK};
     static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1};
-    /* v0.4.2: the characters' colours, one row per IcoAppPart; Switch shows
+    /* the characters' colours, one row per IcoAppPart; Switch shows
        only inside the model viewer */
     static const int charOpts[] = {UI_OPT_CHAR_ICO_SKIN,
                                    UI_OPT_CHAR_ICO_PONCHO_NAVY,
@@ -2505,9 +2500,9 @@ static void build(void)
                                    UI_STR_CHAR_RANDOMIZE,
                                    UI_STR_CHAR_RESET,
                                    UI_STR_BACK};
-    /* R7d: every Display row always shown, Frame rate included (S1:
-       Brightness from the pause menu) */
-    /* v0.4.0: Texture pack after Texture filter */
+    /* every Display row always shown, Frame rate included (Brightness
+       from the pause menu) */
+    /* Texture pack after Texture filter */
     static const int dispOpts[] = {UI_OPT_PRESET,       UI_OPT_RESOLUTION, UI_OPT_ASPECT,
                                    UI_OPT_WINDOW_MODE,  UI_OPT_VSYNC,      UI_OPT_FILTER,
                                    UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_FULL_HEIGHT,
@@ -2530,10 +2525,10 @@ static void build(void)
                                     UI_OPT_OUTPUT, UI_OPT_DEVICE, UI_OPT_BACK};
     static const int audioStrs[] = {UI_STR_OPT_VOLUME, UI_STR_OPT_MUSIC_VOL, UI_STR_OPT_EFFECTS_VOL,
                                     UI_STR_OPT_OUTPUT, UI_STR_OPT_DEVICE,    UI_STR_BACK};
-    /* S1: the game's Button configuration, Vibration and Hold type after
-       Remap, from the pause menu; AN-G: the touch overlay's three rows
-       before Back, with a touch screen; v0.4.3 I17a: the mouse camera's
-       three rows (not on Android) */
+    /* the game's Button configuration, Vibration and Hold type after
+       Remap, from the pause menu; the touch overlay's three rows before
+       Back, with a touch screen; the mouse camera's rows (not on
+       Android) */
     static const int ctlOpts[] = {UI_OPT_LINK,         UI_OPT_BUTTON_CONFIG, UI_OPT_VIBRATION,
                                   UI_OPT_HOLD_TYPE,    UI_OPT_MOUSE_CAMERA,  UI_OPT_MOUSE_SENS,
                                   UI_OPT_MOUSE_INVERT, UI_OPT_MOUSE_SPEED,   UI_OPT_MOUSE_RANGE,
@@ -2547,7 +2542,7 @@ static void build(void)
         UI_STR_OPT_TOUCH_SIZE,   UI_STR_OPT_TOUCH_OPACITY, UI_STR_BACK};
     static const int ctlLinks[] = {
         UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-    /* S1: the game's Film effect and Players, once the game is cleared */
+    /* the game's Film effect and Players, once the game is cleared */
     static const int gameOpts[] = {UI_OPT_YORDA,   UI_OPT_STICK_FIX,  UI_OPT_FILM_EFFECT,
                                    UI_OPT_PLAYERS, UI_OPT_ACH_POPUPS, UI_OPT_BACK};
     static const int gameStrs[] = {UI_STR_OPT_YORDA,       UI_STR_OPT_STICK_FIX,
@@ -2587,24 +2582,13 @@ static void build(void)
                     N_OF(gpuOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_EXTRAS, UI_STR_EXTRAS, extrasOpts, extrasStrs, extrasLinks,
                     N_OF(extrasOpts), UI_PAGE_MAIN);
-    /* v0.4.2: the layout extension's budget: the Characters page adds 50
-       rows (its heading, nine colour rows of four: label, value and the
-       two arrows, Randomize, Reset, Back, nine swatches, the note) and
-       Extras' Characters row one, 51 in all: with the model viewer's,
-       about 431 of the 512 (380 before, settings_test's last count), under
-       the 448 settings_test's budget cell allowed (64 kept spare; v0.4.3
-       raised the table to 768 for the mouse rows, Cinematic bars and the
-       Android driver page, the same 64 spare); and one
-       layout (19 of 32, 4 kept spare).  The viewer's panel (package K-D)
-       is this page: 15 more rows (Switch, and the prompt line's six
-       words and eight glyphs), no layout.  v0.4.3 I17a: Controls' Mouse
-       camera and Invert mouse up/down rows add 8 (label, value and the
-       two arrows each): with Effects' Cinematic bars (4), about 443 in
-       all.  Controls' Mouse camera speed, Mouse camera range and Camera
-       swings back rows add 12 more (label, value and the two arrows
-       each): about 455 of the table's 768 (layout_ext.h).  Gameplay's
-       Achievement pop-ups row adds 4 more (label, value and the two
-       arrows): about 459 */
+    /* the layout extension's budget (layout_ext.h): the Characters page
+       is 50 rows (its heading, nine colour rows of four: label, value and
+       the two arrows, Randomize, Reset, Back, nine swatches, the note) and
+       one layout, and the model viewer's panel on it 15 more (Switch, the
+       prompt line's six words and eight glyphs).  settings_test's
+       testBudget keeps 64 rows and 4 layouts spare; developer mode logs
+       the count at install */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
@@ -2619,7 +2603,7 @@ static void build(void)
             }
         }
     }
-    /* S1: Button configuration opens the game's own screen (la_key_config
+    /* Button configuration opens the game's own screen (la_key_config
        comes back through ui_SettingsKeyConfigBack) */
     {
         const int bc = ui_SettingsRowOf(UI_PAGE_CONTROLS, UI_OPT_BUTTON_CONFIG);
@@ -2642,7 +2626,7 @@ static void build(void)
     }
 }
 
-/* ------------------------------------------------- the New Game screen (R7c)
+/* ------------------------------------------------------ the New Game screen
  * The New Game screen, between the vibration choice and the start
  * (settings.h ui_NewGameScreenEnter): two labelled rows, "Mirror mode" and
  * "New Game+", each with "Off" and "On" side by side (left/right through
@@ -2781,7 +2765,7 @@ static int newGameScreenProc(int first, int item)
     return -1;
 }
 
-/* ------------------------------------------------- the quit screen (Q2)
+/* ---------------------------------------------------------- the quit screen
  * "Quit to desktop?" with Yes and No side by side (left/right through
  * their item links, the cursor on No), opened by the title's Quit row
  * (settings.h ui_SettingsSetQuitHandler), laid out as the New Game screen. */
@@ -2811,7 +2795,7 @@ static void buildQuitScreen(void)
 
 int ui_SettingsCapturing(void)
 {
-    return s_capture.active || s_capture.cooldown > 0; /* v0.4.3 I17b */
+    return s_capture.active || s_capture.cooldown > 0;
 }
 
 void ui_SettingsSetWindowModeQuery(int (*fn)(void))
@@ -2991,7 +2975,7 @@ static void repoint(void)
         return;
     }
     placeTitle();
-    /* S1: the pause menu's Options opens Settings (the game's Options
+    /* the pause menu's Options opens Settings (the game's Options
        screen, 58, is no longer reached: its settings are on the pages) */
     texProperty[ROW_PAUSE_OPTIONS].right = s_pages[UI_PAGE_MAIN].layout;
     placePause();
@@ -3010,7 +2994,7 @@ static void repoint(void)
 }
 
 #ifdef ICO_RD
-/* R7c: the renderer follows the run's mirror mode (options.h listener) */
+/* the renderer follows the run's mirror mode (options.h listener) */
 static void mirrorChanged(int on)
 {
     rd_SetMirror(on);
@@ -3019,7 +3003,7 @@ static void mirrorChanged(int on)
 
 void ui_SettingsInstall(void)
 {
-    /* Q2: [game] circle_back, before the game's menus read a press */
+    /* [game] circle_back, before the game's menus read a press */
     lt_ext_SetCircleBack(ico_opt_circle_back());
     /* [audio] output: an explicit stereo or mono is the game's from the
        start (the card's system file is read later: fumi/ios/mcard.c's hook) */
@@ -3674,10 +3658,10 @@ static const UiListDef kGalDef = {galCount, galFill, galHeading, galInput, galDe
 static int rowLocked(const Row *r)
 {
     if (r->opt == UI_OPT_RESOLUTION) {
-        return resolutionLocked(); /* package CRT2 */
+        return resolutionLocked(); /* under the CRT filter */
     }
     if (r->opt == UI_OPT_TEXTURE_PACK) {
-        return !texturePackInstalled(); /* v0.4.0: "None installed" */
+        return !texturePackInstalled(); /* "None installed" */
     }
     if (r->opt == UI_OPT_MODEL_PACK) {
         return !modelPackInstalled();
@@ -3686,7 +3670,7 @@ static int rowLocked(const Row *r)
 }
 
 /* A page's rows as the entry in force shows them (optShown): Extras'
-   Music, Models and Credits only from the title, the game's settings (S1) only
+   Music, Models and Credits only from the title, the game's settings only
    from the pause menu, its Film effect and Players once the game is
    cleared.  The visible rows are spaced evenly (pagePitch), linked in a
    loop that skips the hidden ones, and the hidden ones are masked with
@@ -3752,11 +3736,7 @@ static int lockedNote(const Row *r)
     return isExtrasOpt(r->opt) || r->opt == UI_OPT_RESOLUTION;
 }
 
-/* v0.4.2: Characters' note and swatches, on their rows.  With a texture
-   pack on, the note says its pictures of Ico and Yorda, if it has any,
-   replace the colours: a pack names its files by the texture's hash
-   (texpack_name.h), so which textures it covers is known only once each
-   is loaded, not from this page */
+/* a row's x, width and text size (0: the page's) */
 static void placeRow(int row, int x, int w, float size)
 {
     if (row >= 0) {
@@ -3816,6 +3796,11 @@ static int charsNoteHidden(int id, const Row *r)
            r->noteStr != UI_STR_CHAR_NOTE_PACK;
 }
 
+/* Characters' note and swatches, on their rows.  With a texture pack on,
+   the note says its pictures of Ico and Yorda, if it has any, replace the
+   colours: a pack names its files by the texture's hash (texpack_name.h),
+   so which textures it covers is known only once each is loaded, not from
+   this page */
 static void charactersRefresh(Page *pg)
 {
     IcoVideoOptions o;
@@ -3908,7 +3893,7 @@ static int settingsProc(int first, int item)
     }
     /* the port's strings follow the game's language (ui_host.c does too) */
     ui_SetLanguage(ui_LangFromGame(NonLinearCameraMove));
-    gpuPoll(); /* v0.4.3 AN-22b: an install the page started, on any page */
+    gpuPoll(); /* an install the page started, on any page */
     if (id == UI_PAGE_MUSIC) {
         gallery_Tick(); /* the engine, once a Main tick while the page is up */
     }
@@ -3976,7 +3961,7 @@ static int settingsProc(int first, int item)
             refreshPage(pg, id, lay->curItem);
         }
         if ((flags & PAD_SQUARE) && isCharOpt(r->opt)) {
-            /* v0.4.2: the part's Original, as Brightness's Default */
+            /* the part's Original, as Brightness's Default */
             ico_appearance_set(charPart(r->opt), 0);
             s_dirtyConfig = 1;
             CUR_SE();
@@ -3984,7 +3969,7 @@ static int settingsProc(int first, int item)
         }
         if ((flags & PAD_CROSS) &&
             (r->opt == UI_OPT_CHAR_RANDOMIZE || r->opt == UI_OPT_CHAR_RESET)) {
-            /* v0.4.2: in the viewer only the character shown, from the
+            /* in the viewer only the character shown, from the
                pause menu both */
             const int c = charsRowsFor();
             if (r->opt == UI_OPT_CHAR_RANDOMIZE) {
@@ -4005,7 +3990,7 @@ static int settingsProc(int first, int item)
         }
         if ((flags & PAD_CROSS) && r->opt == UI_OPT_LINK && r->link == UI_PAGE_CHARACTERS &&
             onTitle() && charsHosted()) {
-            /* v0.4.2: Characters from the title, inside the model viewer */
+            /* Characters from the title, inside the model viewer */
             int to = charsEnter();
             if (to >= 0) {
                 POSITIVE_SE();
@@ -4036,13 +4021,12 @@ static int settingsProc(int first, int item)
     return -1;
 }
 
-/* package L1: settings.h */
 int ui_SettingsCoversTitle(void)
 {
     if (s_titleHandoff && !isTitleLayout(current_layout_id)) {
         s_titleHandoff = 0;
     }
-    /* v0.4.3 UI-D: from the first frame of a pending return to the switch
+    /* from the first frame of a pending return to the switch
        to its page, the logo is down too */
     if (s_built && (s_titleReturn >= 0 || s_titleHandoff)) {
         return 1;

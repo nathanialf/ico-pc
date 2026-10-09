@@ -12,15 +12,14 @@
  *                  the title theme (event2/50, op.c's titleAdpcm)
  *   Scene sounds   the other streams: the event2/ machinery stingers
  *                  (gondolas, gates, idols, lifts)
- * Every entry is named by its asset: a stream by its file under
- * sound/ICO_ADPCM/ without the .int (event/39_8), an effect by its seDef
- * name.
  *   Ambience       the stage sound environments (seEnv), one entry per
  *                  sound, from the stages of the game (stageData 1..39)
  *   Voice          Yorda's hint voices (streams 101..104) and the com_v bank
  *   Sound effects  one headed group per bank (seFile, deduplicated by file),
  *                  the effects by their seDef names
- * then Back.  Headings are shown, never selected (ui_list.h).  The PAL disc
+ * Every entry is named by its asset: a stream by its file under
+ * sound/ICO_ADPCM/ without the .int (event/39_8), an effect by its seDef
+ * name; then Back.  Headings are shown, never selected (ui_list.h).  The PAL disc
  * has no sequenced music: no stage keeps a BGM bank (stageData seSegData1
  * and 2 are 0 everywhere) and no pack holds a .sq, so there is no sequence
  * group.
