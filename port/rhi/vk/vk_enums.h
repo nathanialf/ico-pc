@@ -187,8 +187,15 @@ typedef struct VkrStateMap {
 
 #define VKR_DEPTH_STAGES                                                                           \
     (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)
-#define VKR_SHADER_STAGES                                                                          \
-    (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+/* The stages that sample an image: fragment shaders only.  No vertex
+ * shader of port/shaders (the *_vs entry points) or of the RHI tests'
+ * rhi_test.hlsl (vs_main) reads a texture; they read uniforms and the VU
+ * stream, a buffer, whose copies keep their own vertex-stage barriers
+ * (rhi_CmdCopyBuffer).  So a barrier into or out of SHADER_READ or
+ * DEPTH_READ does not hold the next pass's vertex work back for the
+ * earlier pass's fragments.  A vertex shader that samples an image needs
+ * VK_PIPELINE_STAGE_VERTEX_SHADER_BIT added here. */
+#define VKR_SAMPLE_STAGES VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 
 static const VkrStateMap vkr_stateMap[RHI_STATE_COUNT] = {
     [RHI_STATE_UNDEFINED] = {true, VK_IMAGE_LAYOUT_UNDEFINED, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, 0},
@@ -201,10 +208,10 @@ static const VkrStateMap vkr_stateMap[RHI_STATE_COUNT] = {
                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT},
     [RHI_STATE_DEPTH_READ] = {true, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
-                              VKR_DEPTH_STAGES | VKR_SHADER_STAGES,
+                              VKR_DEPTH_STAGES | VKR_SAMPLE_STAGES,
                               VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
                                   VK_ACCESS_SHADER_READ_BIT},
-    [RHI_STATE_SHADER_READ] = {true, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VKR_SHADER_STAGES,
+    [RHI_STATE_SHADER_READ] = {true, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VKR_SAMPLE_STAGES,
                                VK_ACCESS_SHADER_READ_BIT},
     [RHI_STATE_COPY_SRC] = {true, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT},
