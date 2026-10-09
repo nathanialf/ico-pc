@@ -166,6 +166,9 @@ endif()
 if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
    OR CMAKE_SYSTEM_NAME STREQUAL CMAKE_HOST_SYSTEM_NAME)
     add_test(NAME settings_extra COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}")
+    # the three settings executables write the same settings_test.toml in
+    # this directory: never in parallel
+    set_tests_properties(settings settings_extra PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
 # --- gallery_test (CPU) --------------------------------------------------------
@@ -470,6 +473,7 @@ if(NOT CMAKE_CROSSCOMPILING OR CMAKE_CROSSCOMPILING_EMULATOR
     set_tests_properties(ui PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME settings_render COMMAND settings_render "${CMAKE_CURRENT_BINARY_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(settings_render PROPERTIES RESOURCE_LOCK settings_toml)
     set_tests_properties(settings_render PROPERTIES SKIP_RETURN_CODE 77)
     if(NOT DEFINED ICO_DISC_IMAGE)
         set(ICO_DISC_IMAGE "${CMAKE_SOURCE_DIR}/baserom/Ico_PAL.iso" CACHE FILEPATH
