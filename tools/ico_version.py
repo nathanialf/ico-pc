@@ -15,9 +15,6 @@ gitignored and can hold all three targets' files side by side.
 An explicit `VERSION` environment variable wins; otherwise the slug is the
 first one whose `config/link_order.<slug>.txt` exists. A working tree only
 carries its own target's link order.
-
-tools/ico_version.sh is the shell twin of this module (same detection order,
-same paths). Keep the two in sync.
 """
 from __future__ import annotations
 import os
