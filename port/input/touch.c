@@ -46,11 +46,6 @@ static float sqrtf_(float v)
     return x;
 }
 
-static float clamp01(float v)
-{
-    return v > 1.0f ? 1.0f : v > 0.0f ? v : 0.0f; /* NaN -> 0 */
-}
-
 static IcoTouchRect rect(float x, float y, float w, float h)
 {
     IcoTouchRect r;
@@ -309,8 +304,8 @@ void ico_touch_event(IcoTouchState *t, uint64_t finger, float nx, float ny, int 
     IcoTouchFinger *f;
     int i;
 
-    nx = clamp01(nx);
-    ny = clamp01(ny);
+    nx = ico_clamp01f(nx);
+    ny = ico_clamp01f(ny);
     if (kind == ICO_TOUCH_CANCEL) {
         release_all(t);
         if (t->seen) {

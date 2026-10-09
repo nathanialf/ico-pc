@@ -305,4 +305,11 @@ int ico_input_write_bindings(const IcoBindings *b);
    a write, or ico_input_apply_toml over the config in use. */
 void ico_input_reload_bindings(IcoBindings *b);
 
+/* v clamped to 0..1, NaN to 0: a pointer or a finger's place on the
+   screen (pointer.c, touch.c) */
+static inline float ico_clamp01f(float v)
+{
+    return v > 1.0f ? 1.0f : v > 0.0f ? v : 0.0f;
+}
+
 #endif /* ICO_PORT_INPUT_INPUT_H */

@@ -3,6 +3,7 @@
  *
  * The mouse pointer in the menus (pointer.h; package I17b).
  */
+#include "input.h"
 #include "pointer.h"
 
 #include <string.h>
@@ -17,16 +18,11 @@ static struct {
     int menu;
 } s_p;
 
-static float clamp01(float v)
-{
-    return v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
-}
-
 void ico_pointer_move(float nx, float ny)
 {
     s_p.valid = 1;
-    s_p.x = clamp01(nx);
-    s_p.y = clamp01(ny);
+    s_p.x = ico_clamp01f(nx);
+    s_p.y = ico_clamp01f(ny);
     s_p.moved = 1;
     s_p.activity = 1;
 }
