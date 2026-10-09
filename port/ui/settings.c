@@ -43,6 +43,9 @@
 #include "rd.h" /* rd_SetMirror (R7c) */
 #endif
 
+/* the number of elements of an array */
+#define N_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
+
 /* --- the game's side (common/; layout_texture.h declares the lt_* calls) -- */
 
 extern PadState pad[16];
@@ -341,17 +344,14 @@ static int stepIndex(int i, int n, int dir)
 }
 
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
-#define MOUSE_SENS_N ((int)(sizeof(kMouseSens) / sizeof(kMouseSens[0])))
 /* the Mouse camera speed row's steps; the last one is "Instant" */
 static const float kMouseCamSpeed[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 5.0f, 10.0f};
-#define MOUSE_CAM_SPEED_N ((int)(sizeof(kMouseCamSpeed) / sizeof(kMouseCamSpeed[0])))
 
 /* R7d: the Frame rate row's values, in the order Right steps them
    (ico_video_parse_framerate / ico_video_framerate_name: "original",
    "uncapped" or N presents a second) */
 static const int kFramerates[] = {
     ICO_FRAMERATE_ORIGINAL, ICO_FRAMERATE_UNCAPPED, 60, 120, 144, 240};
-#define FRAMERATE_N ((int)(sizeof(kFramerates) / sizeof(kFramerates[0])))
 
 /* The next value from fr: a listed value steps (and wraps) in the list; a
    cap the list does not hold (framerate = 100 in the file) steps to the
@@ -359,20 +359,20 @@ static const int kFramerates[] = {
    "original" (Right) or "uncapped" (Left) */
 static int stepFramerate(int fr, int dir)
 {
-    for (int i = 0; i < FRAMERATE_N; i++) {
+    for (int i = 0; i < N_OF(kFramerates); i++) {
         if (kFramerates[i] == fr) {
-            return kFramerates[stepIndex(i, FRAMERATE_N, dir)];
+            return kFramerates[stepIndex(i, N_OF(kFramerates), dir)];
         }
     }
     if (dir > 0) {
-        for (int i = 2; i < FRAMERATE_N; i++) {
+        for (int i = 2; i < N_OF(kFramerates); i++) {
             if (kFramerates[i] > fr) {
                 return kFramerates[i];
             }
         }
         return ICO_FRAMERATE_ORIGINAL;
     }
-    for (int i = FRAMERATE_N - 1; i >= 2; i--) {
+    for (int i = N_OF(kFramerates) - 1; i >= 2; i--) {
         if (kFramerates[i] < fr) {
             return kFramerates[i];
         }
@@ -652,7 +652,6 @@ static int isTouchOpt(int opt)
 
 /* AN-G: the Touch opacity row's steps, percent */
 static const int kTouchOpacity[] = {25, 50, 75, 100};
-#define TOUCH_OPACITY_N ((int)(sizeof(kTouchOpacity) / sizeof(kTouchOpacity[0])))
 
 /* v0.4.0: a texture pack was found at start (texpack_Count through the
    host's hook; none without one) */
@@ -785,7 +784,7 @@ static int extrasOpen(int opt)
                    {UI_OPT_EXTRAS_MODELS, "models", extrasModels},
                    {UI_OPT_EXTRAS_CREDITS, "credits", extrasCredits}};
 
-    for (unsigned i = 0; i < sizeof(kExtras) / sizeof(kExtras[0]); i++) {
+    for (int i = 0; i < N_OF(kExtras); i++) {
         if (kExtras[i].opt == opt) {
             int to = kExtras[i].open();
             /* a locked Credits press has logged "credits: locked" */
@@ -1120,7 +1119,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(liveBindings()->mouse_invert_y);
     case UI_OPT_MOUSE_SPEED: {
         const float v = liveBindings()->mouse_camera_speed;
-        if (v >= kMouseCamSpeed[MOUSE_CAM_SPEED_N - 1]) {
+        if (v >= kMouseCamSpeed[N_OF(kMouseCamSpeed) - 1]) {
             return ui_Str(UI_STR_VAL_INSTANT);
         }
         snprintf(buf, size, "%.1fx", (double)v);
@@ -1452,13 +1451,13 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     case UI_OPT_MOUSE_SENS: {
         IcoBindings *b = liveBindings();
         int i, best = 3;
-        for (i = 0; i < MOUSE_SENS_N; i++) {
+        for (i = 0; i < N_OF(kMouseSens); i++) {
             if (kMouseSens[i] <= b->mouse_sens + 0.001f) {
                 best = i;
             }
         }
         best += dir;
-        best = best < 0 ? 0 : best >= MOUSE_SENS_N ? MOUSE_SENS_N - 1 : best;
+        best = best < 0 ? 0 : best >= N_OF(kMouseSens) ? N_OF(kMouseSens) - 1 : best;
         b->mouse_sens = kMouseSens[best];
         s_dirtyBindings = 1;
         break;
@@ -1476,13 +1475,13 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
     case UI_OPT_MOUSE_SPEED: {
         IcoBindings *b = liveBindings();
         int i, best = 1;
-        for (i = 0; i < MOUSE_CAM_SPEED_N; i++) {
+        for (i = 0; i < N_OF(kMouseCamSpeed); i++) {
             if (kMouseCamSpeed[i] <= b->mouse_camera_speed + 0.001f) {
                 best = i;
             }
         }
         best += dir;
-        best = best < 0 ? 0 : best >= MOUSE_CAM_SPEED_N ? MOUSE_CAM_SPEED_N - 1 : best;
+        best = best < 0 ? 0 : best >= N_OF(kMouseCamSpeed) ? N_OF(kMouseCamSpeed) - 1 : best;
         b->mouse_camera_speed = kMouseCamSpeed[best];
         s_dirtyBindings = 1;
         break;
@@ -1515,14 +1514,14 @@ void ui_SettingsStep(UiSettingsOpt opt, int dir)
         /* the step nearest the value (a file may say 60), then around */
         IcoBindings *b = liveBindings();
         int i, best = 0;
-        for (i = 1; i < TOUCH_OPACITY_N; i++) {
+        for (i = 1; i < N_OF(kTouchOpacity); i++) {
             const int d = kTouchOpacity[i] - b->touch_opacity,
                       db = kTouchOpacity[best] - b->touch_opacity;
             if ((d < 0 ? -d : d) < (db < 0 ? -db : db)) {
                 best = i;
             }
         }
-        b->touch_opacity = kTouchOpacity[stepIndex(best, TOUCH_OPACITY_N, dir)];
+        b->touch_opacity = kTouchOpacity[stepIndex(best, N_OF(kTouchOpacity), dir)];
         s_dirtyBindings = 1;
         break;
     }
@@ -2548,7 +2547,6 @@ static void build(void)
     static const int gameStrs[] = {UI_STR_OPT_YORDA,       UI_STR_OPT_STICK_FIX,
                                    UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,
                                    UI_STR_OPT_ACH_POPUPS,  UI_STR_BACK};
-#define N_OF(a) ((int)(sizeof(a) / sizeof((a)[0])))
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");
@@ -2559,7 +2557,7 @@ static void build(void)
                        sizeof(extrasOpts) == sizeof(extrasLinks),
                    "a string and a link for each Extras row");
     _Static_assert(sizeof(charOpts) == sizeof(charStrs), "a string for each Characters row");
-    _Static_assert(sizeof(charOpts) / sizeof(charOpts[0]) <= MAX_ROWS, "the Characters rows fit");
+    _Static_assert(N_OF(charOpts) <= MAX_ROWS, "the Characters rows fit");
 
     ui_FontInit(); /* the notes are wrapped by measuring */
     memset(s_pages, 0, sizeof(s_pages));
@@ -2603,7 +2601,6 @@ static void build(void)
        arrows): about 459 */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
-#undef N_OF
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
     buildListPage(UI_PAGE_MUSIC, UI_STR_EXTRAS_MUSIC, &kGalDef, UI_PAGE_EXTRAS);
