@@ -428,6 +428,58 @@ allocations; `rhi_vk_mali` also checks that what goes past them is refused
 by the limit's name, and `rd_perf_mali` creates the whole reachable pipeline
 set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
+## Frame captures (F12)
+
+F12 in the running game saves the frame on the screen, for a bug report or
+for renderer work. Three files go in `dumps/` under the user folder
+(`<pref>/dumps`; [where that is](PORTABLE_MODE.md#where-your-saves-are)),
+named `frame-<yyyymmdd-hhmmss>-v<N>`, where `<N>` is the count of vertical
+syncs since start:
+
+| file | holds |
+| --- | --- |
+| `.rddump` | the frame as the renderer saw it (`port/render/rd_dump.c`, format version 9, `RD_DUMP_VERSION`) |
+| `.png` | the picture on the screen at that moment (optional for a report; large at a high Resolution) |
+| `.zip` | the `.rddump` and a copy of `logs/ico-pc.log`, for a GitHub issue, which refuses `.rddump` files. With no log file (the program started with `--console`) it holds the dump alone |
+
+The `.rddump` holds the frame's draw lists with their state, the textures
+and meshes the frame used, and the camera. It has no display options: the
+resolution, aspect ratio and filtering of a replay are given on the
+command line. A replacement texture from a texture pack is stored blank
+(the dump carries the game's own textures, which are the disc's, so keep
+dumps out of the repository and public places). The version number is
+checked on load; versions 3 to 9 are read.
+
+`rd_replay_tool` (`port/render/tools/rd_replay_tool.c`, built with the
+`ico_render` library; its usage comment lists every switch) renders a dump
+headless to a PNG, or inspects it without a graphics device. The switches
+used most:
+
+- `--list` prints every command of the replayed lists (list, index, type,
+  texture, bounding box); with `--no-device` nothing is rendered and no
+  device is needed. `--nop L:A[-B]` turns commands A to B of list L into
+  no-ops, to find the draw behind a pixel.
+- `--aspect A`, `--resolution Nx` (or `WxH`), `--full-height` and
+  `--enhanced` give the replay the display options the dump does not carry;
+  without them it renders the PS2 picture.
+- `--interp T PREV` replays the frame between the dump PREV and the dump at
+  alpha T; `--dump-textures DIR` writes every texture of the dump as a PNG;
+  `--mesh NAME` prints the vertices of the meshes of that name.
+
+Two examples. List a dump's commands without a graphics device, then render
+the same dump at 48:9 and 4x with the full-height picture:
+
+```sh
+rd_replay_tool frame-20261010-083039-v7967.rddump out.png --list --no-device
+rd_replay_tool frame-20261010-083039-v7967.rddump out.png --enhanced \
+    --aspect 48:9 --resolution 4x --full-height
+```
+
+To find which draw makes a wrong pixel, repeat the render with
+`--nop 0:120-130` (list 0, commands 120 to 130 removed) and compare the
+two PNGs. Exit status 77 means no graphics device or no dump file, as in the
+ctest skip convention.
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every push to main, every pull request and
