@@ -811,6 +811,8 @@ typedef struct Case {
     int tagless;  /* the GPU stream is the vertices only, as rd_create_vu_mesh keeps them */
     float wide;   /* the world x scale of the draw (g_space[0].x): 1, or 0.375 for 32:9 */
     int depart;   /* DEPART_*: input made to show the port's departure from the VU */
+    int light;    /* the draw only adds light (ICO_VU_LIGHT_ONLY): what the VU drops and
+                     reaches into the 4:3 picture is not drawn beside it either */
 } Case;
 
 /* DEPART_EYE: vertex 7 of each batch behind the eye (model (0, 0, -1), w =
@@ -877,6 +879,25 @@ static int besideOrFree(const Case *c, int x)
     return freeCamera(c) || x < x0 || x >= x1;
 }
 
+/* The texel columns (continuous, of the RT-wide target) of the 4:3
+ * picture under the world x scale wide: -wide .. wide in clip space, the
+ * band vu_cut_reaches_picture meets a dropped triangle's extent with. */
+static void pictureSpan(float wide, float *l, float *r)
+{
+    const float c = RT * 0.5f;
+    *l = c - wide * c;
+    *r = c + wide * c;
+}
+
+/* Whether a light-only case leaves out something the VU drops that spans
+ * texel columns lo .. hi: it reaches into the 4:3 picture. */
+static int lightDrops(const Case *c, float lo, float hi)
+{
+    float l, r;
+    pictureSpan(c->wide, &l, &r);
+    return c->light && !freeCamera(c) && lo < r && hi > l;
+}
+
 /* the CPU side of one case */
 typedef struct CaseRef {
     int nv;
@@ -892,6 +913,7 @@ typedef struct CaseRef {
      * 4:3 picture only */
     int sideOnly[MAXV];
     int sideTexels, bandTexels; /* those sprites' texel columns beside and inside the picture */
+    int lightDropped;           /* sprites a light-only draw leaves out (lightDrops) */
 } CaseRef;
 
 static uint32_t rngState = 12345u;
@@ -1088,7 +1110,8 @@ static void makeVuCB(const Case *c, const Vu1Ref *r, IcoVuCB *cb, IcoVuBoneCB *b
     }
     cb->draw[0] = base;
     cb->draw[1] = (uint32_t)c->vq;
-    cb->draw[2] = (uint32_t)c->clip | (freeCamera(c) ? ICO_VU_BEHIND_EYE : 0u);
+    cb->draw[2] = (uint32_t)c->clip | (freeCamera(c) ? ICO_VU_BEHIND_EYE : 0u) |
+                  (c->light ? ICO_VU_LIGHT_ONLY : 0u);
     cb->draw[3] = c->prog == P_PARTICLE || c->tagless ? 0u : (uint32_t)c->vpb;
     cb->batch[0] = c->tagless ? 0u : (uint32_t)c->hdr;
     cb->batch[1] = (uint32_t)c->trail;
@@ -1177,6 +1200,10 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
                             cr->bandTexels++;
                         }
                     }
+                }
+                if (lightDrops(c, l < r ? l : r, l < r ? r : l)) {
+                    cr->lightDropped++;
+                    continue;
                 }
             }
             cr->sideOnly[cr->ntri / 2] = side;
@@ -1454,25 +1481,38 @@ static float insideBy(const float (*poly)[2], int n, float x, float y)
 /* The third target (the triangles the port draws and the VU drops) against
  * the polygons: a pixel centre more than one pixel inside one of them is
  * drawn when it is beside the 4:3 picture (besideOrFree), one more than a
- * pixel outside all of them or inside the picture is not. Returns the
+ * pixel outside all of them or inside the picture is not. A light-only
+ * case's polygons that reach into the picture (lightDrops) are not drawn
+ * at all: they are left out of the set and counted in *dropped. Returns the
  * pixels clearly inside and drawn; *held counts those clearly inside but in
  * the picture (not drawn); *bad counts the mismatches, or is -1 when a
  * triangle cannot be predicted (portPolygon; none of the cases has one, so
  * the caller fails it). */
 static int checkPortTriangles(const Case *c, const CaseRef *cr, const uint32_t *idx, int first,
-                              int count, const uint8_t *img, uint32_t pitch, int *bad, int *held)
+                              int count, const uint8_t *img, uint32_t pitch, int *bad, int *held,
+                              int *dropped)
 {
     static float polys[MAXV][4][2];
     static int pn[MAXV];
     int np = 0;
     *bad = 0;
     *held = 0;
+    *dropped = 0;
     for (int i = 0; i < count; i += 3) {
         const int k = (int)((idx[first + i] & ICO_VU_INDEX_MASK) >> 2);
         pn[np] = portPolygon(c, cr, k, polys[np]);
         if (pn[np] < 0) {
             *bad = -1;
             return 0;
+        }
+        float lo = 1e30f, hi = -1e30f;
+        for (int j = 0; j < pn[np]; j++) {
+            lo = polys[np][j][0] < lo ? polys[np][j][0] : lo;
+            hi = polys[np][j][0] > hi ? polys[np][j][0] : hi;
+        }
+        if (pn[np] >= 3 && lightDrops(c, lo, hi)) {
+            (*dropped)++;
+            continue;
         }
         np++;
     }
@@ -1498,82 +1538,100 @@ static int checkPortTriangles(const Case *c, const CaseRef *cr, const uint32_t *
 
 static const Case kCases[] = {
     {"prelit 32", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"prelit 34", "vu_prelit_vs", P_NORMALC, 34, ICO_VU_CLIP_NONE, 3, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"prelit 36", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"prelit 36 near", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 8, 1, 0, 0,
-     1.0f, DEPART_NONE},
+     1.0f, DEPART_NONE, 0},
     {"lit 32 tagless", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 2, 12, 0, 0, 1, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"lit 36", "vu_lit_vs", P_NORMALL, 36, ICO_VU_CLIP_SCISSOR, 4, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"lit spec 34", "vu_lit_spec_vs", P_NORMALL, 34, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"reflect 38", "vu_reflect_vs", P_NORMALL, 38, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"skin 20 tagless", "vu_skin_vs", P_CLUSTER, 20, ICO_VU_CLIP_REGION, 5, 1, 2, 12, 0, 0, 1, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"skin 22", "vu_skin_spec_vs", P_CLUSTER, 22, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"skin 24", "vu_skin_debug_vs", P_CLUSTER, 24, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"grid 20", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 3, 10, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     /* as prim_makePacketMesh3D lays the buffer out: VIF qword, tag, colour,
      * vertices, MSCNT */
     {"grid 22 raw", "vu_grid_lit_vs", P_MESH, 22, ICO_VU_CLIP_REGION, 3, 3, 3, 10, 0, 1, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"grid 24", "vu_grid_spec_vs", P_MESH, 24, ICO_VU_CLIP_REGION, 3, 2, 2, 10, 0, 0, 0, 1.0f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     /* a wide scene draw at 32:9: the region test compares the squeezed x */
     {"prelit 32 wide", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f, DEPART_NONE},
+     0.375f, DEPART_NONE, 0},
     {"lit 32 wide", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_NONE},
+     DEPART_NONE, 0},
     {"grid 20 wide", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 2, 10, 0, 0, 0, 0.375f,
-     DEPART_NONE},
-    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f, DEPART_NONE},
+     DEPART_NONE, 0},
+    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f, DEPART_NONE, 0},
     /* the port's departures from the VU (DEPART_*): a strip with a vertex
      * behind the eye, a particle past the window */
     {"prelit 32 eye", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f,
-     DEPART_EYE},
+     DEPART_EYE, 0},
     {"lit 32 eye", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_EYE},
+     DEPART_EYE, 0},
     /* the same under photo mode's free camera: drawn, GPU-clipped */
     {"prelit 32 free", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     1.0f, DEPART_EYE_FREE},
+     1.0f, DEPART_EYE_FREE, 0},
     {"lit 32 free", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_EYE_FREE},
+     DEPART_EYE_FREE, 0},
     {"particle past", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_SPRITE},
+     DEPART_SPRITE, 0},
     /* on a wide target (32:9): what the VU drops is drawn beside the 4:3
      * picture only; the wide cases above cut it at the picture's edge */
     {"prelit wide in", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f, DEPART_BAND_IN},
+     0.375f, DEPART_BAND_IN, 0},
     {"prelit wide out", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f, DEPART_BAND_OUT},
+     0.375f, DEPART_BAND_OUT, 0},
     {"lit wide eye", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_EYE},
+     DEPART_EYE, 0},
     {"lit wide free", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_EYE_FREE},
+     DEPART_EYE_FREE, 0},
     /* a vertex behind the eye on a wide target: what is in front of the
      * near plane is drawn beside the 4:3 picture, nothing inside it */
     {"prelit eye side", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f, DEPART_EYE_SIDE},
+     0.375f, DEPART_EYE_SIDE, 0},
     {"lit eye side", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_EYE_SIDE},
+     DEPART_EYE_SIDE, 0},
     {"prelit eye cross", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f, DEPART_EYE_CROSS},
+     0.375f, DEPART_EYE_CROSS, 0},
     {"lit eye cross", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_EYE_CROSS},
+     DEPART_EYE_CROSS, 0},
     {"particle wide", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_SPRITE},
+     DEPART_SPRITE, 0},
     {"particle side", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
-     DEPART_SPRITE_SIDE},
+     DEPART_SPRITE_SIDE, 0},
     {"particle free", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f,
-     DEPART_SPRITE_FREE},
+     DEPART_SPRITE_FREE, 0},
+    /* a draw that only adds light (ICO_VU_LIGHT_ONLY, issue 57's mist):
+     * what the VU drops and reaches into the 4:3 picture is not drawn
+     * beside it either (the wide case's triangles from the middle to X
+     * 8000, the eye cross, the particle across the edge); what lies wholly
+     * beside it is drawn as before (the eye side, the strip right of the
+     * picture, the particle left of it) */
+    {"lit light wide", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_NONE, 1},
+    {"prelit light x", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f, DEPART_EYE_CROSS, 1},
+    {"prelit light eye", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f, DEPART_EYE_SIDE, 1},
+    {"prelit light out", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f, DEPART_BAND_OUT, 1},
+    {"particle light", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_SPRITE, 1},
+    {"particle light s", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_SPRITE_SIDE, 1},
 };
 
 #define NCASES ((int)(sizeof(kCases) / sizeof(kCases[0])))
@@ -1961,9 +2019,9 @@ static int gpuTests(void)
          * picture, clipped at the near plane, where the CPU puts them, a
          * vertex behind the eye or not; under the free camera everywhere */
         if (nidx > nkept) {
-            int pbad = 0, held = 0;
-            const int pin =
-                checkPortTriangles(c, &cr, idx, nkept, nidx - nkept, pa, pitch, &pbad, &held);
+            int pbad = 0, held = 0, dropped = 0;
+            const int pin = checkPortTriangles(c, &cr, idx, nkept, nidx - nkept, pa, pitch, &pbad,
+                                               &held, &dropped);
             int pcov = 0;
             for (int i = 0; i < RT * RT; i++) {
                 pcov += pa[i * 4] != 16 || pa[i * 4 + 1] != 32 || pa[i * 4 + 2] != 48;
@@ -2011,12 +2069,24 @@ static int gpuTests(void)
                           eye, (nidx - nkept) / 3);
                 }
             }
+            /* a light-only draw: across the picture's edge nothing is drawn
+             * (pbad above checks every pixel), wholly beside it as before */
+            const int lightCross = c->light && (c->depart == DEPART_EYE_CROSS ||
+                                                (c->depart == DEPART_NONE && c->wide != 1.0f));
+            if (lightCross && (dropped == 0 || pcov != 0)) {
+                FAILF("%s: %d triangles reaching the picture left out, %d pixels drawn: the "
+                      "light-only draw's dropped triangles expected left out everywhere\n",
+                      c->name, dropped, pcov);
+            }
+            if (c->light && !lightCross && dropped != 0) {
+                FAILF("%s: %d triangles wholly beside the picture left out\n", c->name, dropped);
+            }
             if (c->depart == DEPART_EYE_SIDE && (pin == 0 || held != 0)) {
                 FAILF("%s: %d pixels beside the picture, %d inside: the triangles with a vertex "
                       "behind the eye wholly beside it expected\n",
                       c->name, pin, held);
             }
-            if (c->depart == DEPART_EYE_CROSS && (pin == 0 || held == 0)) {
+            if (c->depart == DEPART_EYE_CROSS && !lightCross && (pin == 0 || held == 0)) {
                 FAILF("%s: %d pixels beside the picture, %d inside: the triangles with a vertex "
                       "behind the eye across its edge expected\n",
                       c->name, pin, held);
@@ -2040,7 +2110,8 @@ static int gpuTests(void)
             }
             /* (the grid's one dropped triangle is a wedge thinner than a
              * pixel there) */
-            if (c->depart == DEPART_NONE && wide && c->prog != P_MESH && (pin == 0 || held == 0)) {
+            if (c->depart == DEPART_NONE && wide && !lightCross && c->prog != P_MESH &&
+                (pin == 0 || held == 0)) {
                 FAILF("%s: %d pixels beside the picture, %d inside: a triangle across its "
                       "edge expected\n",
                       c->name, pin, held);
@@ -2060,6 +2131,11 @@ static int gpuTests(void)
             FAILF("%s: particle 0 does not cross the picture's edge (%d texels beside, %d "
                   "inside)\n",
                   c->name, cr.sideTexels, cr.bandTexels);
+        }
+        if (c->light && c->prog == P_PARTICLE &&
+            (cr.lightDropped != (c->depart == DEPART_SPRITE ? 1 : 0))) {
+            FAILF("%s: %d sprites left out by the light-only draw, expected %d\n", c->name,
+                  cr.lightDropped, c->depart == DEPART_SPRITE ? 1 : 0);
         }
         if (c->depart == DEPART_SPRITE_SIDE && (cr.sideTexels == 0 || cr.bandTexels != 0)) {
             FAILF("%s: particle 0 is not beside the picture (%d texels beside, %d inside)\n",

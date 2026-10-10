@@ -112,6 +112,16 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     if (beside && !vu_has_beside()) {
         return o;
     }
+    // A light-only draw (VU_F_LIGHT_ONLY) leaves such a sprite out beside
+    // the picture too when it reaches into it, as vu_triangle_out does
+    if (beside && (vu_draw.z & VU_F_LIGHT_ONLY) != 0u) {
+        float x0 = vu_gs_position(s.c0, false).x;
+        float x1 = vu_gs_position(s.c1, false).x;
+        float f = g_space[SPACE_WORLD].x;
+        if (min(x0, x1) < f && max(x0, x1) > -f) {
+            return o;
+        }
+    }
     o.beside = beside ? 1u : 0u;
     // corners of the two triangles: (0,0) (1,0) (0,1), (0,1) (1,0) (1,1)
     uint c = vid % 6u;

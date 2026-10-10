@@ -3370,6 +3370,33 @@ static int vuWideParts(const Replay *r, const DrawSetup *ds, const RdMeshRec *m,
     return n;
 }
 
+/* Whether a draw's blend only adds light to the picture or takes it away:
+ * Cs or Cd scaled, plus or minus Cd (rd_state.h's modes 0, 1, 5, 6, 8, 9
+ * and 11), with ABE on and PABE off (PABE writes a pixel whose alpha has its
+ * top bit clear as Cs, unblended).  Where such a draw leaves a triangle out
+ * the picture under it shows unchanged, so the region test's triangles that
+ * reach into the 4:3 picture are left out beside it too (ICO_VU_LIGHT_ONLY,
+ * vu_common.hlsli vu_triangle_out): drawn only there, their light stopped
+ * at the picture's edges (issue 57, the waterfall's mist). */
+static int lightOnlyBlend(const RdDrawState *d)
+{
+    if (!d->abe || d->pabe) {
+        return 0;
+    }
+    switch (d->blend) {
+    case RD_BLEND_CS_FIX_ADD_CD:
+    case RD_BLEND_CD_SUB_CS_FIX:
+    case RD_BLEND_CS_AS_ADD_CD:
+    case RD_BLEND_CD_SUB_CS_AS:
+    case RD_BLEND_CS_AD_ADD_CD:
+    case RD_BLEND_CD_SUB_CS_AD:
+    case RD_BLEND_CD_AS_ADD_CD:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdVuPayload p;
@@ -3453,6 +3480,9 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     if (f->camera.freeCamera) {
         /* photo mode: behind-eye triangles clipped, not dropped */
         vcb.draw[2] |= ICO_VU_BEHIND_EYE;
+    }
+    if (lightOnlyBlend(&r->st.ds)) {
+        vcb.draw[2] |= ICO_VU_LIGHT_ONLY;
     }
 
     if (c->type == RDC_GRID) {

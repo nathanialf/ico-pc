@@ -262,18 +262,23 @@ typedef struct IcoVuBoneCB {
 /* IcoVuCB.draw[2] (VU_* in vu_common.hlsli). */
 enum {
     ICO_VU_CLIP_REGION = 0,  /* region test: a failing triangle is dropped in the 4:3
-                              * picture and, with all w > 0, GPU-clipped beside it */
+                              * picture and GPU-clipped beside it (not with
+                              * ICO_VU_LIGHT_ONLY when it reaches the picture) */
     ICO_VU_CLIP_NONE = 1,    /* normal_c code 34: no test, X/Y wrap to 16 bits */
     ICO_VU_CLIP_SCISSOR = 2, /* code 36: clip-space flags, trivial reject, GPU clipping */
     ICO_VU_CLIP_MASK = 3,
-    ICO_VU_PROBE = 16,      /* tests: one value per pixel of a 16-wide RGBA8_UINT target */
-    ICO_VU_CUT_ONLY = 32,   /* scissor: only the triangles SCISSOR_COMMON draws (first draw) */
-    ICO_VU_KICK_ONLY = 64,  /* scissor: only the triangles the strip kicks (second draw) */
-    ICO_VU_DROP_WIDE = 128, /* the triangles marked ICO_VU_INDEX_WIDE are not drawn (the
-                             * parts of a wide target outside the 4:3 picture) */
-    ICO_VU_BEHIND_EYE = 256 /* region test and particle window: a failing triangle or
-                             * sprite is GPU-clipped everywhere, not dropped (photo
-                             * mode's free camera, RdCamera.freeCamera) */
+    ICO_VU_PROBE = 16,       /* tests: one value per pixel of a 16-wide RGBA8_UINT target */
+    ICO_VU_CUT_ONLY = 32,    /* scissor: only the triangles SCISSOR_COMMON draws (first draw) */
+    ICO_VU_KICK_ONLY = 64,   /* scissor: only the triangles the strip kicks (second draw) */
+    ICO_VU_DROP_WIDE = 128,  /* the triangles marked ICO_VU_INDEX_WIDE are not drawn (the
+                              * parts of a wide target outside the 4:3 picture) */
+    ICO_VU_BEHIND_EYE = 256, /* region test and particle window: a failing triangle or
+                              * sprite is GPU-clipped everywhere, not dropped (photo
+                              * mode's free camera, RdCamera.freeCamera) */
+    ICO_VU_LIGHT_ONLY = 512  /* the draw's blend only adds light to the picture or takes
+                              * it away (rd_replay.c lightOnlyBlend): a failing triangle
+                              * or sprite that reaches into the 4:3 picture is not
+                              * drawn beside it either */
 };
 
 /* The region test's centre on a wide screen (vu_common.hlsli VU_REGION_CX,

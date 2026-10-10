@@ -77,6 +77,11 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // GPU-clipped over the whole picture, a vertex behind the eye or not
 // (vu_triangle_out, vu_particle_vs)
 #define VU_F_BEHIND_EYE 256u
+// The draw's blend only adds light to the picture or takes it away (Cs or
+// Cd scaled, plus or minus Cd; rd_replay.c lightOnlyBlend): where it draws
+// nothing the picture under it shows unchanged, so a triangle left out of
+// it never opens a hole (vu_triangle_out, vu_particle_vs)
+#define VU_F_LIGHT_ONLY 512u
 // Issue 25: the index bit of a triangle that overlaps an earlier triangle of
 // its mesh in the same plane (shader_consts.h ICO_VU_INDEX_LATER; static
 // prelit and lit meshes, rd_mesh.c markLaterOverlaps); vu_later_out
@@ -395,10 +400,58 @@ bool vu_in_picture(float x)
 // that rule exactly (scenery the camera sits inside, like the tree trunk
 // over the opening cutscene, stays out of the picture); beside it, where
 // the PS2 showed nothing, it draws such a triangle clipped by the GPU so
-// the edges of a wide screen have no holes.
+// the edges of a wide screen have no holes (not one of a light-only draw
+// that reaches into the picture: vu_triangle_out).
 bool vu_beside_discard(VuVSOut i)
 {
     return i.beside != 0u && vu_in_picture(i.pos.x);
+}
+
+// Corners p[0..n) of a convex polygon in clip space cut to
+// dot(plane, v) >= 0 (Sutherland-Hodgman). A triangle cut by two planes has
+// at most five corners.
+void vu_clip_corners(inout float4 p[5], inout uint n, float4 plane)
+{
+    float4 q[5] = p;
+    uint m = 0u;
+    for (uint i = 0u; i < n; i++) {
+        float4 a = p[i];
+        float4 b = p[i + 1u < n ? i + 1u : 0u];
+        float da = dot(plane, a);
+        float db = dot(plane, b);
+        if (da >= 0.0 && m < 5u) {
+            q[m] = a;
+            m++;
+        }
+        if ((da >= 0.0) != (db >= 0.0) && m < 5u) {
+            q[m] = lerp(a, b, da / (da - db));
+            m++;
+        }
+    }
+    p = q;
+    n = m;
+}
+
+// Whether what the GPU draws of the triangle with clip-space corners a, b
+// and c (vu_cut_position) reaches the columns of the 4:3 picture: the
+// triangle cut to 0 <= z <= w as the GPU clips it, its x extent met with
+// the picture's, -f .. f in clip space (the columns vu_in_picture takes).
+bool vu_cut_reaches_picture(float4 a, float4 b, float4 c)
+{
+    float4 p[5] = {a, b, c, c, c};
+    uint n = 3u;
+    vu_clip_corners(p, n, float4(0.0, 0.0, 1.0, 0.0));
+    vu_clip_corners(p, n, float4(0.0, 0.0, -1.0, 1.0));
+    float lo = 1e30;
+    float hi = -1e30;
+    for (uint i = 0u; i < n; i++) {
+        // a corner left at w = 0 (z = 0 there too) lies at infinity on its x's side
+        float x = p[i].w > 0.0 ? p[i].x / p[i].w : (p[i].x >= 0.0 ? 1e30 : -1e30);
+        lo = min(lo, x);
+        hi = max(hi, x);
+    }
+    float f = g_space[SPACE_WORLD].x;
+    return n >= 3u && lo < f && hi > -f;
 }
 
 // The triangle k-2, k-1, k: what the GS draws of it. me is the corner this invocation outputs.
@@ -456,11 +509,25 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         // cut rim; and vu_later_out's bias needs all three GS positions, so
         // a later-marked triangle with a corner saturated or below GS Z 0
         // is drawn without it.
+        // A draw that only adds light or takes it away (VU_F_LIGHT_ONLY:
+        // mist, glows, light shafts) leaves no hole where a triangle is
+        // missing, only the light it would have added. Such a triangle
+        // that reaches into the 4:3 picture is missing there, so drawn
+        // beside it its light stopped at the picture's edges: the
+        // waterfall's mist billboards (st02a wf_smoke1, close to the
+        // camera) made the 4:3 picture 4 to 11 levels darker than the
+        // sides with a straight seam at both edges (issue 57). It is left
+        // out beside the picture too; one wholly beside it is still drawn.
         if (a.inside && b.inside && c.inside) {
             o.pos = vu_vtx_position(me);
         } else if ((vu_draw.z & VU_F_BEHIND_EYE) != 0u) {
             o.pos = vu_cut_position(me);
         } else if (vu_has_beside()) {
+            if ((vu_draw.z & VU_F_LIGHT_ONLY) != 0u &&
+                vu_cut_reaches_picture(vu_cut_position(a), vu_cut_position(b),
+                                       vu_cut_position(c))) {
+                return o;
+            }
             o.pos = vu_cut_position(me);
             o.beside = 1u;
         }
