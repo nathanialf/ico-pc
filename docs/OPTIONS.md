@@ -202,7 +202,7 @@ The first three are off unless you turn them on, on a phone too.
 Two more rows are the game's own, and only show up in the pause menu's
 Options once you have finished the game:
 
-- **Film effect** is Off or 1 to 4, the game's own film tint over the picture.
+- **Film effect** is Off or 1 to 4, the game's own film look (a colour tint and grain) over the picture.
 - **Players** is 1 or 2. With 2, a second controller controls Yorda.
 ## Language
 
