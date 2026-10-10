@@ -4906,7 +4906,9 @@ static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *si
  * keyed VU mesh); in list 6 the strip on the wall as lightning draws it
  * (key 0) and a keyed one moving 4 units along the wall in the tick, marked
  * (rd_frame_projected); in list 4 a strip marked inside a pushed
- * reflection camera; in list 3 the prism standing on the wall, marked */
+ * reflection camera; in list 3 the prism standing on the wall, marked; in
+ * list 11 a water dot (waterDot.c DispWaterDot: points, key 0, marked) at
+ * the strip's first corner */
 static void rpFrame(RdMesh mesh, int k, int still)
 {
     rd_begin_frame();
@@ -4931,6 +4933,13 @@ static void rpFrame(RdMesh mesh, int k, int still)
     rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
     rpStrip(v, q, -60.0 + 4.0 * k, 40.0, s);
     rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, RD_KEY(&kObjRp, 2, 0));
+    rd_frame_projected(0);
+    rd_select_list(11);
+    rd_frame_projected(1);
+    rpCpuVertex(v, q, (const double[3]){-20.0, 0.0, 300.0}, 0.0f, 0.0f, &s[0]);
+    s[0].s = s[0].t = 0.0f;
+    s[0].q = 1.0f;
+    rd_screen_prims(RD_PRIM_POINTS, s, 1, RD_SPACE_WORLD, 1, 0);
     rd_frame_projected(0);
     rd_select_list(4);
     RdCamera refl = cam;
@@ -5043,6 +5052,18 @@ static void testReproject(void)
                   "reprojection: the strip's corner at the blended camera's %.3f, %.3f (%.3f, "
                   "%.3f)",
                   want[0], want[1], v[0].x / 16.0, v[0].y / 16.0);
+            /* the water dot on that corner: there too, not at the tick's
+             * position */
+            const RdCmd *dc = rpScreen(f, 11, 0);
+            const RdScreenVtx *dv = dc ? screenVtx(f, dc) : NULL;
+            const RdCmd *tdc = rpScreen(rd__last_frame(), 11, 0);
+            const RdScreenVtx *tdv = tdc ? screenVtx(rd__last_frame(), tdc) : NULL;
+            CHECK(dv && tdv && tdc->b[4] == RD_SCREEN_FRAME_CAMERA &&
+                      fabs(dv[0].x / 16.0 - want[0]) < 0.2 &&
+                      fabs(dv[0].y / 16.0 - want[1]) < 0.2 &&
+                      (dv[0].x != tdv[0].x || dv[0].y != tdv[0].y),
+                  "reprojection: the water dot at the blended camera's %.3f, %.3f (%.3f, %.3f)",
+                  want[0], want[1], dv ? dv[0].x / 16.0 : -1.0, dv ? dv[0].y / 16.0 : -1.0);
             /* ST over Q at the vertex unchanged (u 0, v 0 there; corner 1:
              * u 1), Q the new 1 / w */
             const RdScreenVtx *t1 = screenVtx(rd__last_frame(), rpScreen(rd__last_frame(), 6, 0));

@@ -31,7 +31,8 @@
  *             for the scene copy and the barrier grid; the refraction STs
  *             against a double-precision recomputation of makeRefractST
  *   waterdot  DispWaterDot: points in list 11 at the game's ftoi4
- *             positions, colour (128, 128, 128, life), ABE, ALPHA 0x48;
+ *             positions, marked as projected by the frame camera, colour
+ *             (128, 128, 128, life), ABE, ALPHA 0x48;
  *             dots 600 GS pixels left and right of the centre are dropped
  *             at 4:3 (the game's 400 pixel window) and drawn at 32:9
  *   cloth     DispClothMesh: a lit, textured grid in list 2 (ALPHA 0x44
@@ -1877,6 +1878,8 @@ static void checkDotsRecording(void)
         }
     }
     CHECK(pts && pts->c->b[0] == RD_PRIM_POINTS, "water dots: points in list 11");
+    CHECK(pts && pts->c->b[4] == RD_SCREEN_FRAME_CAMERA,
+          "water dots: marked as projected by the frame camera (re-projected while it moves)");
     if (!pts) {
         return;
     }

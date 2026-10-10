@@ -10,6 +10,12 @@
 #include "ios.h"
 #include "windField.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+#endif
+
 /* the registered emitters; InitializeWaterDot clears all five */
 static WaterDotWork *waterDots[5]; /* derived name */
 
@@ -164,6 +170,14 @@ void DispWaterDot(WaterDotWork *w)
     gif_SetZTest(1);
     gif_SetZWrite(0);
     gif_SetAlpha(1, 5, 128);
+#ifdef ICO_RD
+    /* PC port: getWaterDotScreenPos projects through the frame camera
+       (+0x100, then x, y and z over w to 12.4, the form rotTransPers has),
+       so the presenter may move the dots with its blended camera: a dot an
+       earlier camera saw lands where that picture shows it, and the dots
+       stay on the water while the camera moves */
+    gif_HostFrameProjected(1);
+#endif
 
     for (i = 0; i < w->num; i++, p++) {
         if (p->used != 0) {
@@ -185,6 +199,9 @@ void DispWaterDot(WaterDotWork *w)
             }
         }
     }
+#ifdef ICO_RD
+    gif_HostFrameProjected(0);
+#endif
 
     gif_EndPacket();
 
