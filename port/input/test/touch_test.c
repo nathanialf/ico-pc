@@ -1,8 +1,9 @@
 /*
  * port/input/test/touch_test.c
  *
- * The touch overlay's mapper (touch.c) on the CPU: the layouts at three
- * phone sizes (one with a notch inset), the floating left stick (centre,
+ * The touch overlay's mapper (touch.c) on the CPU: the layouts over a table
+ * of screens (phones, a notch inset, foldables open, bent and split, a
+ * tablet, monitors) at every size, the hinge rule's edges, the floating left stick (centre,
  * deflection, dead zone, the run ring), the D-pad, face buttons under two
  * fingers, a finger sliding off a button, cancel, the look pad's decay,
  * hiding after 5 s and with a gamepad, the fades, and the merged pad
@@ -79,144 +80,541 @@ static void centre_of(const IcoTouchLayout *l, int z, float *x, float *y)
     *y = l->button[z].rect.y + 0.5f * l->button[z].rect.h;
 }
 
+static int in_area(const IcoTouchRect *r, float x, float y)
+{
+    return x >= r->x && x < r->x + r->w && y >= r->y && y < r->y + r->h;
+}
+
 static int rect_inside(const IcoTouchRect *in, const IcoTouchRect *out)
 {
     return in->x >= out->x - 0.01f && in->y >= out->y - 0.01f &&
            in->x + in->w <= out->x + out->w + 0.01f && in->y + in->h <= out->y + out->h + 0.01f;
 }
 
-static int buttons_overlap(const IcoTouchButton *a, const IcoTouchButton *b)
+static float maxf(float a, float b)
 {
-    if (a->round && b->round) {
-        float ra = 0.5f * a->rect.w, rb = 0.5f * b->rect.w;
-        float dx = (a->rect.x + ra) - (b->rect.x + rb), dy = (a->rect.y + ra) - (b->rect.y + rb);
-
-        return dx * dx + dy * dy < (ra + rb) * (ra + rb);
-    }
-    return a->rect.x < b->rect.x + b->rect.w && b->rect.x < a->rect.x + a->rect.w &&
-           a->rect.y < b->rect.y + b->rect.h && b->rect.y < a->rect.y + a->rect.h;
+    return a > b ? a : b;
 }
 
-/* every size: inside the safe area, no two buttons overlapping, every pad
-   bit once, the areas where touch.h says */
+static float right_of(const IcoTouchRect *r)
+{
+    return r->x + r->w;
+}
+
+static float bottom_of(const IcoTouchRect *r)
+{
+    return r->y + r->h;
+}
+
+/* the gap between a disc (centre, radius) and a rect: 0 or less overlaps */
+static float disc_rect_gap(float cx, float cy, float r, const IcoTouchRect *b)
+{
+    float dx = maxf(maxf(b->x - cx, cx - right_of(b)), 0.0f);
+    float dy = maxf(maxf(b->y - cy, cy - bottom_of(b)), 0.0f);
+
+    return sqrt_(dx * dx + dy * dy) - r;
+}
+
+/* the gap between two buttons, pixels (negative: they overlap) */
+static float button_gap(const IcoTouchButton *a, const IcoTouchButton *b)
+{
+    float ra = 0.5f * a->rect.w, rb = 0.5f * b->rect.w;
+
+    if (a->round && b->round) {
+        float dx = (a->rect.x + ra) - (b->rect.x + rb), dy = (a->rect.y + ra) - (b->rect.y + rb);
+
+        return sqrt_(dx * dx + dy * dy) - ra - rb;
+    }
+    if (a->round) {
+        return disc_rect_gap(a->rect.x + ra, a->rect.y + ra, ra, &b->rect);
+    }
+    if (b->round) {
+        return disc_rect_gap(b->rect.x + rb, b->rect.y + rb, rb, &a->rect);
+    }
+    return maxf(maxf(b->rect.x - right_of(&a->rect), a->rect.x - right_of(&b->rect)),
+                maxf(b->rect.y - bottom_of(&a->rect), a->rect.y - bottom_of(&b->rect)));
+}
+
+static int is_dpad(int z)
+{
+    return z == ICO_TOUCH_B_UP || z == ICO_TOUCH_B_DOWN || z == ICO_TOUCH_B_LEFT ||
+           z == ICO_TOUCH_B_RIGHT;
+}
+
+static float cx_of(const IcoTouchLayout *l, int z)
+{
+    return l->button[z].rect.x + 0.5f * l->button[z].rect.w;
+}
+
+static float cy_of(const IcoTouchLayout *l, int z)
+{
+    return l->button[z].rect.y + 0.5f * l->button[z].rect.h;
+}
+
+/* how far (x, y) is from a button's edge, pixels (negative: on it) */
+static float point_gap(const IcoTouchButton *b, float x, float y)
+{
+    if (b->round) {
+        float r = 0.5f * b->rect.w, dx = x - (b->rect.x + r), dy = y - (b->rect.y + r);
+
+        return sqrt_(dx * dx + dy * dy) - r;
+    }
+    return disc_rect_gap(x, y, 0.0f, &b->rect);
+}
+
+/* A point in area at least 1q inside its edges and 1q from every button
+   (a grid scan in quarter units); 0 when there is none. */
+static int free_point(const IcoTouchLayout *l, IcoTouchRect area, float *x, float *y)
+{
+    const float q = l->unit, step = 0.25f * l->unit;
+    float px, py;
+    int z;
+
+    for (py = area.y + q; py <= area.y + area.h - q; py += step) {
+        for (px = area.x + q; px <= area.x + area.w - q; px += step) {
+            for (z = 0; z < ICO_TOUCH_BUTTONS && point_gap(&l->button[z], px, py) >= q; z++) {}
+            if (z == ICO_TOUCH_BUTTONS) {
+                *x = px;
+                *y = py;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* the screen below the look pad between the stick's area and Square: no
+   zone at all */
+static IcoTouchRect gap_area(const IcoTouchLayout *l)
+{
+    IcoTouchRect r;
+
+    r.x = right_of(&l->stickArea);
+    r.y = bottom_of(&l->lookArea);
+    r.w = l->button[ICO_TOUCH_B_SQUARE].rect.x - r.x;
+    r.h = bottom_of(&l->region) - r.y;
+    return r;
+}
+
+/* every shape and size: the controls inside the region, every pad bit once,
+   no two buttons nearer than 2q (the D-pad's keys are one control), the
+   arrangement touch.c's table gives, and the fold rule's sides */
 static void check_layout_common(const IcoTouchLayout *l)
 {
-    const IcoTouchRect *s = &l->safeRect;
+    const IcoTouchRect *R = &l->region;
+    const IcoTouchButton *b = l->button;
+    const float q = l->unit, c = R->x + 0.5f * R->w;
     unsigned int bits = 0;
-    int i, j;
+    float hx0 = 0.0f, hx1 = 0.0f;
+    int i, j, fails = failures;
 
+    CHECK(q > 0.0f);
     for (i = 0; i < ICO_TOUCH_BUTTONS; i++) {
-        CHECK(rect_inside(&l->button[i].rect, s));
-        CHECK((bits & l->button[i].pad) == 0);
-        bits |= l->button[i].pad;
+        CHECK(rect_inside(&b[i].rect, R));
+        CHECK((bits & b[i].pad) == 0);
+        bits |= b[i].pad;
         for (j = i + 1; j < ICO_TOUCH_BUTTONS; j++) {
-            if (buttons_overlap(&l->button[i], &l->button[j])) {
-                fprintf(stderr, "  %ux%u size %d: zones %d and %d overlap\n", l->outW, l->outH,
-                        l->size, i, j);
+            if (is_dpad(i) && is_dpad(j)) {
+                continue;
+            }
+            if (button_gap(&b[i], &b[j]) < 2.0f * q - 0.01f) {
+                fprintf(stderr, "  %ux%u size %d rule %d: zones %d and %d %.2f apart (q %.2f)\n",
+                        l->outW, l->outH, l->size, l->rule, i, j, (double)button_gap(&b[i], &b[j]),
+                        (double)q);
                 CHECK(0);
             }
         }
     }
     CHECK(bits == 0xF9FFu); /* everything but L3 and R3 */
-    CHECK(near_(l->stickArea.x, s->x, 0.01f));
-    CHECK(near_(l->stickArea.w, 0.4f * s->w, 0.01f));
-    CHECK(near_(l->stickArea.y + l->stickArea.h, s->y + s->h, 0.01f));
-    CHECK(near_(l->stickArea.h, 0.7f * s->h, 0.01f));
-    CHECK(near_(l->lookArea.x + l->lookArea.w, s->x + s->w, 0.01f));
-    CHECK(near_(l->lookArea.w, 0.6f * s->w, 0.01f));
-    CHECK(near_(l->lookArea.y, s->y, 0.01f));
-    CHECK(near_(l->lookArea.h, 0.45f * s->h, 0.01f));
-    CHECK(near_(l->runR, 0.94f * l->stickR, 0.01f));
-    /* the stick's home ring fits in its area */
-    CHECK(l->stickHomeX - l->stickR >= l->stickArea.x);
-    CHECK(l->stickHomeY + l->stickR <= l->stickArea.y + l->stickArea.h);
-    CHECK(l->stickHomeY - l->stickR >= l->stickArea.y);
-    /* shoulders in the corners, L left of R; D-pad left half, above the
-       stick's home; Start right of Select, centred */
-    CHECK(l->button[ICO_TOUCH_B_L1].rect.x < s->x + 0.1f * s->w);
-    CHECK(l->button[ICO_TOUCH_B_R1].rect.x + l->button[ICO_TOUCH_B_R1].rect.w > s->x + 0.9f * s->w);
-    CHECK(l->button[ICO_TOUCH_B_L2].rect.y > l->button[ICO_TOUCH_B_L1].rect.y);
-    CHECK(l->button[ICO_TOUCH_B_R2].rect.y > l->button[ICO_TOUCH_B_R1].rect.y);
-    CHECK(l->dpadX < s->x + 0.4f * s->w && l->dpadY < l->stickHomeY - l->stickR);
-    CHECK(near_(l->button[ICO_TOUCH_B_START].rect.x - (s->x + 0.5f * s->w),
-                s->x + 0.5f * s->w -
-                    (l->button[ICO_TOUCH_B_SELECT].rect.x + l->button[ICO_TOUCH_B_SELECT].rect.w),
-                0.01f));
-    /* the diamond: Cross below, Circle right, Square left, Triangle above */
-    CHECK(l->button[ICO_TOUCH_B_CROSS].rect.y > l->button[ICO_TOUCH_B_TRIANGLE].rect.y);
-    CHECK(l->button[ICO_TOUCH_B_CIRCLE].rect.x > l->button[ICO_TOUCH_B_SQUARE].rect.x);
-    CHECK(
-        near_(l->button[ICO_TOUCH_B_CROSS].rect.x, l->button[ICO_TOUCH_B_TRIANGLE].rect.x, 0.01f));
-    CHECK(l->faceX > s->x + 0.7f * s->w && l->faceY > s->y + 0.6f * s->h);
+    CHECK(b[ICO_TOUCH_B_CROSS].round && b[ICO_TOUCH_B_R1].round && !b[ICO_TOUCH_B_UP].round &&
+          !b[ICO_TOUCH_B_R2].round);
+    CHECK(rect_inside(R, &l->safeRect));
+
+    /* the stick: R = 11q, its home disc inside its area and clear of every
+       button */
+    CHECK(near_(l->stickR, ICO_TOUCH_STICK_MM * q, 0.01f));
+    CHECK(near_(l->runR, ICO_TOUCH_RUN_RING * l->stickR, 0.01f));
+    CHECK(near_(l->lookR, l->stickR, 0.01f));
+    CHECK(rect_inside(&l->stickArea, R));
+    CHECK(l->stickHomeX - l->stickR >= l->stickArea.x - 0.01f);
+    CHECK(l->stickHomeX + l->stickR <= right_of(&l->stickArea) + 0.01f);
+    CHECK(l->stickHomeY - l->stickR >= l->stickArea.y - 0.01f);
+    CHECK(l->stickHomeY + l->stickR <= bottom_of(&l->stickArea) + 0.01f);
+    for (i = 0; i < ICO_TOUCH_BUTTONS; i++) {
+        IcoTouchButton home;
+
+        home.rect.x = l->stickHomeX - l->stickR;
+        home.rect.y = l->stickHomeY - l->stickR;
+        home.rect.w = home.rect.h = 2.0f * l->stickR;
+        home.round = 1;
+        CHECK(button_gap(&home, &b[i]) >= 2.0f * q - 0.01f);
+    }
+
+    /* the fit clamp */
+    CHECK(q <= R->h / ICO_TOUCH_BUDGET_H + 1e-3f);
+    if (l->rule == ICO_TOUCH_RULE_SPLIT) {
+        hx0 = l->band.x;
+        hx1 = right_of(&l->band);
+        CHECK(l->band.w >= 0.0f && hx0 > R->x && hx1 < right_of(R));
+        CHECK(q <= (hx0 - R->x) / ICO_TOUCH_BUDGET_WL + 1e-3f);
+        CHECK(q <= (right_of(R) - hx1) / ICO_TOUCH_BUDGET_WR + 1e-3f);
+    } else {
+        CHECK(q <= R->w / ICO_TOUCH_BUDGET_W + 1e-3f);
+    }
+
+    /* the arrangement: L2 above L1 on the left, R2 top right, Select left
+       of Start, the diamond, R1 straight over Circle under R2, the D-pad
+       beside the shoulders and above the stick's area */
+    CHECK(bottom_of(&b[ICO_TOUCH_B_L2].rect) < b[ICO_TOUCH_B_L1].rect.y);
+    CHECK(near_(b[ICO_TOUCH_B_L2].rect.x, R->x + 3.0f * q, 0.01f));
+    CHECK(near_(b[ICO_TOUCH_B_L2].rect.y, R->y + 3.0f * q, 0.01f));
+    CHECK(right_of(&b[ICO_TOUCH_B_L1].rect) < c);
+    CHECK(near_(right_of(&b[ICO_TOUCH_B_R2].rect), right_of(R) - 3.0f * q, 0.01f));
+    CHECK(near_(b[ICO_TOUCH_B_R2].rect.y, R->y + 3.0f * q, 0.01f));
+    CHECK(b[ICO_TOUCH_B_R2].rect.x > c);
+    CHECK(right_of(&b[ICO_TOUCH_B_SELECT].rect) < b[ICO_TOUCH_B_START].rect.x);
+    CHECK(near_(b[ICO_TOUCH_B_SELECT].rect.y, R->y + 3.0f * q, 0.01f));
+    CHECK(near_(b[ICO_TOUCH_B_START].rect.y, R->y + 3.0f * q, 0.01f));
+    CHECK(cy_of(l, ICO_TOUCH_B_CROSS) > cy_of(l, ICO_TOUCH_B_CIRCLE));
+    CHECK(near_(cy_of(l, ICO_TOUCH_B_CIRCLE), cy_of(l, ICO_TOUCH_B_SQUARE), 0.01f));
+    CHECK(cy_of(l, ICO_TOUCH_B_TRIANGLE) < cy_of(l, ICO_TOUCH_B_CIRCLE));
+    CHECK(cx_of(l, ICO_TOUCH_B_CIRCLE) > cx_of(l, ICO_TOUCH_B_CROSS));
+    CHECK(cx_of(l, ICO_TOUCH_B_SQUARE) < cx_of(l, ICO_TOUCH_B_CROSS));
+    CHECK(near_(cx_of(l, ICO_TOUCH_B_CROSS), cx_of(l, ICO_TOUCH_B_TRIANGLE), 0.01f));
+    CHECK(near_(cx_of(l, ICO_TOUCH_B_CROSS), l->faceX, 0.01f));
+    CHECK(near_(cx_of(l, ICO_TOUCH_B_R1), cx_of(l, ICO_TOUCH_B_CIRCLE), 0.01f));
+    CHECK(b[ICO_TOUCH_B_R1].rect.y > bottom_of(&b[ICO_TOUCH_B_R2].rect));
+    CHECK(bottom_of(&b[ICO_TOUCH_B_R1].rect) < b[ICO_TOUCH_B_CIRCLE].rect.y);
+    CHECK(b[ICO_TOUCH_B_R1].rect.w > b[ICO_TOUCH_B_CIRCLE].rect.w);
+    CHECK(b[ICO_TOUCH_B_LEFT].rect.x > right_of(&b[ICO_TOUCH_B_L1].rect));
+    CHECK(bottom_of(&b[ICO_TOUCH_B_DOWN].rect) <= l->stickArea.y + 0.01f);
+    CHECK(l->dpadX < c && l->dpadY < l->stickHomeY - l->stickR);
+
+    /* the look pad: from the top, right of the stick's area, to the right
+       edge, ending 2q above Triangle */
+    CHECK(near_(l->lookArea.y, R->y, 0.01f));
+    CHECK(l->lookArea.x >= right_of(&l->stickArea) - 0.01f);
+    CHECK(near_(right_of(&l->lookArea), right_of(R), 0.01f));
+    CHECK(bottom_of(&l->lookArea) <= b[ICO_TOUCH_B_TRIANGLE].rect.y - 2.0f * q + 0.01f);
+    CHECK(near_(bottom_of(&l->stickArea), bottom_of(R), 0.01f));
+
+    if (l->rule == ICO_TOUCH_RULE_SPLIT) {
+        static const int left[] = {ICO_TOUCH_B_L1,    ICO_TOUCH_B_L2,   ICO_TOUCH_B_UP,
+                                   ICO_TOUCH_B_DOWN,  ICO_TOUCH_B_LEFT, ICO_TOUCH_B_RIGHT,
+                                   ICO_TOUCH_B_SELECT};
+        static const int right[] = {ICO_TOUCH_B_R1,      ICO_TOUCH_B_R2,     ICO_TOUCH_B_START,
+                                    ICO_TOUCH_B_CROSS,   ICO_TOUCH_B_CIRCLE, ICO_TOUCH_B_SQUARE,
+                                    ICO_TOUCH_B_TRIANGLE};
+
+        for (i = 0; i < (int)(sizeof(left) / sizeof(left[0])); i++) {
+            CHECK(right_of(&b[left[i]].rect) <= hx0 + 0.01f);
+        }
+        for (i = 0; i < (int)(sizeof(right) / sizeof(right[0])); i++) {
+            CHECK(b[right[i]].rect.x >= hx1 - 0.01f);
+        }
+        CHECK(l->lookArea.x >= hx1 - 0.01f);
+        CHECK(right_of(&l->stickArea) <= hx0 + 0.01f);
+        CHECK(near_(l->region.x, l->safeRect.x, 0.01f) && near_(l->region.w, l->safeRect.w, 0.01f));
+    } else if (l->rule == ICO_TOUCH_RULE_TABLETOP) {
+        const float y = bottom_of(&l->band);
+
+        for (i = 0; i < ICO_TOUCH_BUTTONS; i++) {
+            CHECK(b[i].rect.y >= y - 0.01f);
+        }
+        CHECK(near_(R->y, y, 0.01f) && l->stickArea.y >= y && l->lookArea.y >= y - 0.01f);
+        CHECK(near_(bottom_of(R), bottom_of(&l->safeRect), 0.01f));
+    } else {
+        CHECK(l->rule == ICO_TOUCH_RULE_FULL);
+        CHECK(l->band.x == 0.0f && l->band.y == 0.0f && l->band.w == 0.0f && l->band.h == 0.0f);
+        CHECK(near_(R->x, l->safeRect.x, 0.01f) && near_(R->y, l->safeRect.y, 0.01f) &&
+              near_(R->w, l->safeRect.w, 0.01f) && near_(R->h, l->safeRect.h, 0.01f));
+        CHECK(near_(cx_of(l, ICO_TOUCH_B_START) - c, c - cx_of(l, ICO_TOUCH_B_SELECT), 0.01f));
+    }
+
+    /* a free point exists in the look pad and in the gap below it, and is
+       in no zone (the tests below put fingers there) */
+    {
+        float x, y;
+        IcoTouchRect g = gap_area(l);
+
+        CHECK(free_point(l, l->lookArea, &x, &y));
+        CHECK(free_point(l, g, &x, &y));
+    }
+    if (failures != fails) {
+        fprintf(stderr, "  in the layout %ux%u size %d rule %d q %.3f\n", l->outW, l->outH, l->size,
+                l->rule, (double)q);
+    }
+}
+
+/* a test screen: its pixels, insets, density and fold, and the rule it
+   should give at Small, Medium and Large */
+typedef struct Shape {
+    uint32_t w, h;
+    IcoTouchInsets insets;
+    float dpi; /* 0 unknown */
+    IcoTouchFold fold;
+    int rule[3];
+} Shape;
+
+#define NOFOLD {ICO_TOUCH_FOLD_NONE, 0, 0, {0.0f, 0.0f, 0.0f, 0.0f}}
+#define FULL3 {ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL}
+
+static const Shape s_shapes[] = {
+    {1920, 1080, {0, 0, 0, 0}, 0.0f, NOFOLD, FULL3},     /* desktop, density unknown */
+    {2340, 1080, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* a 19.5:9 phone */
+    {2400, 1080, {100, 0, 0, 0}, 450.0f, NOFOLD, FULL3}, /* a notch on the left */
+    {2176, 1812, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* a foldable open */
+    {1812, 2176, {0, 0, 0, 0}, 420.0f, NOFOLD, FULL3},   /* the same, portrait */
+    {2560, 1600, {0, 0, 0, 0}, 320.0f, NOFOLD, FULL3},   /* a 16:10 tablet */
+    {960, 540, {0, 0, 0, 0}, 0.0f, NOFOLD, FULL3},       /* a small window */
+    {3840, 2160, {0, 0, 0, 0}, 96.0f, NOFOLD, FULL3},    /* a 4K monitor */
+    {2208,
+     1840,
+     {0, 0, 0, 0},
+     420.0f,
+     {ICO_TOUCH_FOLD_VERTICAL, 0, 0, {1104.0f, 0.0f, 0.0f, 1840.0f}},
+     {ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT}}, /* flat, zero wide */
+    {2176,
+     1812,
+     {0, 0, 0, 0},
+     420.0f,
+     {ICO_TOUCH_FOLD_HORIZONTAL, 1, 1, {0.0f, 906.0f, 2176.0f, 0.0f}},
+     {ICO_TOUCH_RULE_TABLETOP, ICO_TOUCH_RULE_TABLETOP, ICO_TOUCH_RULE_TABLETOP}}, /* bent */
+    {2176,
+     1812,
+     {0, 0, 0, 0},
+     420.0f,
+     {ICO_TOUCH_FOLD_HORIZONTAL, 0, 0, {0.0f, 906.0f, 2176.0f, 0.0f}},
+     /* flat: the crease misses every button until Large puts R1 on it */
+     {ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_FULL, ICO_TOUCH_RULE_TABLETOP}},
+    {2784,
+     1800,
+     {0, 0, 0, 0},
+     401.0f,
+     {ICO_TOUCH_FOLD_VERTICAL, 0, 1, {1350.0f, 0.0f, 84.0f, 1800.0f}},
+     {ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT, ICO_TOUCH_RULE_SPLIT}}, /* two screens */
+};
+
+static IcoTouchLayout shape_layout(const Shape *s, int size)
+{
+    IcoTouchEnv env;
+
+    env.pxPerMm = ico_touch_px_per_mm(s->dpi);
+    env.fold = s->fold;
+    return ico_touch_layout_env(s->w, s->h, s->insets, size, &env);
+}
+
+static IcoTouchEnv env_of(float dpi, int orientation, int half, int sep, float x, float y, float w,
+                          float h)
+{
+    IcoTouchEnv e;
+
+    e.pxPerMm = ico_touch_px_per_mm(dpi);
+    e.fold.orientation = orientation;
+    e.fold.halfOpened = half;
+    e.fold.separating = sep;
+    e.fold.bounds.x = x;
+    e.fold.bounds.y = y;
+    e.fold.bounds.w = w;
+    e.fold.bounds.h = h;
+    return e;
 }
 
 static void test_layouts(void)
 {
-    static const uint32_t size[3][2] = {{1920, 1080}, {2400, 1080}, {2340, 1080}};
+    const float k420 = 420.0f / 25.4f;
     IcoTouchInsets in;
     IcoTouchLayout l;
+    IcoTouchEnv e;
     int r, sz;
 
-    for (r = 0; r < 3; r++) {
+    for (r = 0; r < (int)(sizeof(s_shapes) / sizeof(s_shapes[0])); r++) {
         for (sz = 0; sz < 3; sz++) {
-            in = no_insets();
-            if (r == 1) {
-                in.left = 100.0f;
+            l = shape_layout(&s_shapes[r], sz);
+            if (l.rule != s_shapes[r].rule[sz]) {
+                fprintf(stderr, "  shape %d size %d: rule %d, not %d\n", r, sz, l.rule,
+                        s_shapes[r].rule[sz]);
+                CHECK(0);
             }
-            l = ico_touch_layout(size[r][0], size[r][1], in, sz);
             check_layout_common(&l);
         }
     }
 
-    /* 1920 x 1080 medium, by the numbers (u = 1080) */
-    l = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM);
-    CHECK(near_(l.unit, 1080.0f, 0.01f));
-    CHECK(near_(l.stickR, 129.6f, 0.01f));
-    CHECK(near_(l.runR, 121.824f, 0.01f));
-    CHECK(near_(l.stickArea.x, 0.0f, 0.01f) && near_(l.stickArea.y, 324.0f, 0.01f));
-    CHECK(near_(l.stickArea.w, 768.0f, 0.01f) && near_(l.stickArea.h, 756.0f, 0.01f));
-    CHECK(near_(l.lookArea.x, 768.0f, 0.01f) && near_(l.lookArea.w, 1152.0f, 0.01f));
-    CHECK(near_(l.lookArea.h, 486.0f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.x, 43.2f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_R1].rect.x + l.button[ICO_TOUCH_B_R1].rect.w, 1876.8f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_CROSS].rect.y + l.button[ICO_TOUCH_B_CROSS].rect.h, 1036.8f,
-                0.01f));
-    CHECK(l.button[ICO_TOUCH_B_CROSS].round && !l.button[ICO_TOUCH_B_UP].round);
+    /* the density */
+    CHECK(near_(ico_touch_px_per_mm(160.0f), 6.2992f, 1e-3f));
+    CHECK(near_(ico_touch_px_per_mm(420.0f), 16.535f, 1e-3f));
+    CHECK(ico_touch_px_per_mm(0.0f) == 0.0f && ico_touch_px_per_mm(-1.0f) == 0.0f);
 
-    /* sizes scale R */
-    CHECK(near_(ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_SMALL).stickR, 129.6f * 0.85f,
-                0.01f));
-    CHECK(near_(ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_LARGE).stickR, 129.6f * 1.2f,
-                0.01f));
+    /* 2560 x 1600 at 320 dpi: real millimetres, nothing clamps */
+    e = env_of(320.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    l = ico_touch_layout_env(2560, 1600, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(near_(l.unit, 12.598f, 1e-2f) && near_(l.pxPerMm, 12.598f, 1e-2f));
+    CHECK(near_(l.stickR, 11.0f * 12.598f, 0.05f));
+    CHECK(near_(l.button[ICO_TOUCH_B_CROSS].rect.w, 11.0f * l.unit, 0.01f));
+    CHECK(near_(ico_touch_layout_env(2560, 1600, no_insets(), ICO_TOUCH_SMALL, &e).unit,
+                0.85f * l.unit, 0.01f));
+    CHECK(near_(ico_touch_layout_env(2560, 1600, no_insets(), ICO_TOUCH_LARGE, &e).unit,
+                1.2f * l.unit, 0.01f));
+
+    /* 2340 x 1080 at 420 dpi: Medium real, Large capped by the height */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    l = ico_touch_layout_env(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(near_(l.unit, k420, 1e-3f) && l.rule == ICO_TOUCH_RULE_FULL);
+    CHECK(near_(ico_touch_layout_env(2340, 1080, no_insets(), ICO_TOUCH_LARGE, &e).unit,
+                1080.0f / 64.0f, 1e-3f));
+
+    /* 2176 x 1812 at 420: Large capped by the width; portrait by the width
+       at Medium too, Select still clear of the D-pad */
+    CHECK(near_(ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_LARGE, &e).unit,
+                2176.0f / 114.0f, 1e-3f));
+    l = ico_touch_layout_env(1812, 2176, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(near_(l.unit, 1812.0f / 114.0f, 1e-3f));
+    CHECK(l.button[ICO_TOUCH_B_SELECT].rect.x >=
+          right_of(&l.button[ICO_TOUCH_B_RIGHT].rect) + 2.0f * l.unit);
+
+    /* unknown density: the short side over 68 mm, the old look */
+    l = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM);
+    CHECK(near_(l.unit, 1080.0f / 68.0f, 1e-3f) && near_(l.pxPerMm, 1080.0f / 68.0f, 1e-3f));
+    CHECK(near_(l.stickArea.x, 0.0f, 0.01f) && near_(l.stickArea.y, 29.0f * l.unit, 0.01f));
+    CHECK(near_(l.stickArea.w, 768.0f, 0.01f)); /* 0.4 of the width */
+    CHECK(near_(l.lookArea.x, 768.0f, 0.01f) && near_(l.lookArea.w, 1152.0f, 0.01f));
+    CHECK(near_(l.lookArea.h, 1080.0f - 37.0f * l.unit, 0.01f));
+    CHECK(near_(l.stickHomeX, 24.0f * l.unit, 0.01f) &&
+          near_(l.stickHomeY, 1080.0f - 21.0f * l.unit, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L2].rect.x, 3.0f * l.unit, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.y, 13.0f * l.unit, 0.01f));
+    CHECK(near_(right_of(&l.button[ICO_TOUCH_B_R1].rect), 1920.0f - 4.0f * l.unit, 0.01f));
+    CHECK(near_(bottom_of(&l.button[ICO_TOUCH_B_CROSS].rect), 1080.0f - 5.0f * l.unit, 0.01f));
+    CHECK(near_(l.faceX, 1920.0f - 20.0f * l.unit, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_SELECT].rect.x, 960.0f - 13.0f * l.unit, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_START].rect.x, 960.0f + l.unit, 0.01f));
+    {
+        IcoTouchLayout n = ico_touch_layout_env(1920, 1080, no_insets(), ICO_TOUCH_MEDIUM, NULL);
+
+        CHECK(memcmp(&n, &l, sizeof(l)) == 0);
+    }
     CHECK(ico_touch_layout(1920, 1080, no_insets(), 7).size == ICO_TOUCH_MEDIUM);
+
+    /* a big monitor's density is too low for a thumb: the short side over
+       160 instead */
+    e = env_of(96.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    CHECK(near_(ico_touch_layout_env(3840, 2160, no_insets(), ICO_TOUCH_MEDIUM, &e).unit,
+                2160.0f / 160.0f, 1e-3f));
+
+    /* a vertical fold at 1104 of 2208 (zero wide): the clusters beside its
+       4 mm band, Select ending 3q before it and Start 3q after */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 1104.0f, 0.0f, 0.0f, 1840.0f);
+    l = ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_SPLIT && near_(l.unit, k420, 1e-3f));
+    CHECK(near_(l.band.x, 1104.0f - 2.0f * k420, 0.01f) && near_(l.band.w, 4.0f * k420, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_SELECT].rect.x, 1104.0f - 17.0f * k420, 0.02f)); /* 823 */
+    CHECK(near_(right_of(&l.button[ICO_TOUCH_B_SELECT].rect), 1104.0f - 5.0f * k420, 0.02f));
+    CHECK(near_(l.button[ICO_TOUCH_B_START].rect.x, 1104.0f + 5.0f * k420, 0.02f)); /* 1187 */
+    CHECK(near_(right_of(&l.button[ICO_TOUCH_B_START].rect), 1104.0f + 17.0f * k420, 0.02f));
+    CHECK(near_(right_of(&l.stickArea), l.band.x, 0.01f));
+    CHECK(near_(l.lookArea.x, right_of(&l.band), 0.01f));
+
+    /* a horizontal fold half opened at 906 of 1812: everything below its
+       band, the unit from the height left */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_HORIZONTAL, 1, 0, 0.0f, 906.0f, 2176.0f, 0.0f);
+    l = ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP);
+    CHECK(near_(l.region.y, 906.0f + 2.0f * k420, 0.01f));
+    CHECK(near_(l.unit, (1812.0f - 906.0f - 2.0f * k420) / 64.0f, 1e-3f)); /* 13.64 */
 
     /* 2400 x 1080 with a 100 px notch on the left: everything moves in */
     in = no_insets();
     in.left = 100.0f;
     l = ico_touch_layout(2400, 1080, in, ICO_TOUCH_MEDIUM);
     CHECK(near_(l.safeRect.x, 100.0f, 0.01f) && near_(l.safeRect.w, 2300.0f, 0.01f));
+    CHECK(near_(l.region.x, 100.0f, 0.01f));
     CHECK(near_(l.stickArea.x, 100.0f, 0.01f) && near_(l.stickArea.w, 920.0f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.x, 143.2f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_L2].rect.x, 143.2f, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.x, 100.0f + 3.0f * l.unit, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L2].rect.x, 100.0f + 3.0f * l.unit, 0.01f));
     CHECK(near_(l.lookArea.x, 1020.0f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_SELECT].rect.x + l.button[ICO_TOUCH_B_SELECT].rect.w,
-                1250.0f - 16.2f, 0.01f));
-    CHECK(near_(l.button[ICO_TOUCH_B_R1].rect.x + l.button[ICO_TOUCH_B_R1].rect.w, 2356.8f, 0.01f));
-
-    /* 2340 x 1080 */
-    l = ico_touch_layout(2340, 1080, no_insets(), ICO_TOUCH_MEDIUM);
-    CHECK(near_(l.button[ICO_TOUCH_B_START].rect.x, 1170.0f + 16.2f, 0.01f));
-    CHECK(near_(l.faceX, 2340.0f - 43.2f - 145.8f - 81.0f, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_SELECT].rect.x, 1250.0f - 13.0f * l.unit, 0.01f));
+    CHECK(near_(right_of(&l.button[ICO_TOUCH_B_R2].rect), 2400.0f - 3.0f * l.unit, 0.01f));
 
     /* insets that leave nothing are ignored; negative ones are zero */
     in.left = 1500.0f;
     in.right = 1000.0f;
     l = ico_touch_layout(2400, 1080, in, ICO_TOUCH_MEDIUM);
     CHECK(near_(l.safeRect.x, 0.0f, 0.01f) && near_(l.safeRect.w, 2400.0f, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L1].rect.x, 3.0f * l.unit, 0.01f));
     in = no_insets();
     in.top = -20.0f;
     l = ico_touch_layout(1920, 1080, in, ICO_TOUCH_MEDIUM);
     CHECK(near_(l.safeRect.y, 0.0f, 0.01f));
+    CHECK(near_(l.button[ICO_TOUCH_B_L2].rect.y, 3.0f * l.unit, 0.01f));
+}
+
+/* The hinge rule's edges: folds it ignores, and a flat crease that would
+   cross a button laying the controls out below it instead. */
+static void test_fold_rules(void)
+{
+    const float k420 = 420.0f / 25.4f;
+    IcoTouchLayout l, full;
+    IcoTouchEnv e;
+    IcoTouchInsets in;
+    float y;
+
+    e = env_of(420.0f, ICO_TOUCH_FOLD_NONE, 0, 0, 0, 0, 0, 0);
+    full = ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(full.rule == ICO_TOUCH_RULE_FULL && near_(full.pxPerMm, k420, 1e-3f));
+
+    /* a band touching the left edge: a side of nothing, ignored */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_VERTICAL, 1, 1, 0.0f, 0.0f, 10.0f, 1840.0f);
+    l = ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_FULL && memcmp(&l, &full, sizeof(l)) == 0);
+    /* a side under a quarter of the safe area (left of 0.2 of the width) */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_VERTICAL, 0, 0, 0.2f * 2208.0f, 0.0f, 0.0f, 1840.0f);
+    CHECK(ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e).rule ==
+          ICO_TOUCH_RULE_FULL);
+    /* at 0.3 of the width both sides are wide enough */
+    e.fold.bounds.x = 0.3f * 2208.0f;
+    l = ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_SPLIT);
+    check_layout_common(&l);
+    /* bounds right of the output, and bounds in an inset only */
+    e.fold.bounds.x = 3000.0f;
+    CHECK(ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e).rule ==
+          ICO_TOUCH_RULE_FULL);
+    in = no_insets();
+    in.left = 200.0f;
+    e.fold.bounds.x = 100.0f;
+    CHECK(ico_touch_layout_env(2208, 1840, in, ICO_TOUCH_MEDIUM, &e).rule == ICO_TOUCH_RULE_FULL);
+    /* a horizontal band half opened at 0.2 of the height: ignored */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_HORIZONTAL, 1, 0, 0.0f, 0.2f * 1812.0f, 2176.0f, 0.0f);
+    CHECK(ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e).rule ==
+          ICO_TOUCH_RULE_FULL);
+    /* an unknown orientation */
+    e = env_of(420.0f, 7, 1, 1, 1000.0f, 0.0f, 0.0f, 1812.0f);
+    CHECK(ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e).rule ==
+          ICO_TOUCH_RULE_FULL);
+
+    /* vertical, bent: split as when flat */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_VERTICAL, 1, 1, 1104.0f, 0.0f, 0.0f, 1840.0f);
+    l = ico_touch_layout_env(2208, 1840, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_SPLIT);
+    /* horizontal, flat but separating (two screens): below the band */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_HORIZONTAL, 0, 1, 0.0f, 900.0f, 2176.0f, 12.0f);
+    l = ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP && near_(l.region.y, 912.0f + 2.0f * k420, 0.01f));
+    check_layout_common(&l);
+
+    /* flat at 906: the crease crosses only the stick and look areas */
+    e = env_of(420.0f, ICO_TOUCH_FOLD_HORIZONTAL, 0, 0, 0.0f, 906.0f, 2176.0f, 0.0f);
+    l = ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_FULL && near_(l.unit, k420, 1e-3f));
+    CHECK(l.stickArea.y < 906.0f && bottom_of(&l.lookArea) > 906.0f);
+    /* flat through R1's centre: below the band instead */
+    y = cy_of(&l, ICO_TOUCH_B_R1);
+    e.fold.bounds.y = y;
+    l = ico_touch_layout_env(2176, 1812, no_insets(), ICO_TOUCH_MEDIUM, &e);
+    CHECK(l.rule == ICO_TOUCH_RULE_TABLETOP);
+    CHECK(near_(l.region.y, y + 2.0f * k420, 0.01f));
+    CHECK(near_(l.unit, (1812.0f - y - 2.0f * k420) / 64.0f, 1e-3f));
+    check_layout_common(&l);
 }
 
 static void test_stick(void)
@@ -225,7 +623,8 @@ static void test_stick(void)
     IcoTouchState t;
     IcoTouchDrawInfo d;
     IcoVirtualPad v;
-    float R = l.stickR, cx = 300.0f, cy = 700.0f;
+    const float R = l.stickR, cx = l.stickHomeX, cy = l.stickHomeY;
+    float x, y;
 
     g_l = &l;
     memset(&t, 0, sizeof(t));
@@ -277,14 +676,15 @@ static void test_stick(void)
     CHECK(near_(absf(d.knobX - d.stickCX), d.runR, 0.05f));
 
     /* a second finger in the stick's area does not take the stick */
-    ev(&t, 8, 600.0f, 900.0f, ICO_TOUCH_DOWN, 1 * S);
+    CHECK(in_area(&l.stickArea, cx + R, cy));
+    ev(&t, 8, cx + R, cy, ICO_TOUCH_DOWN, 1 * S);
     v = step(&t, 1 * S);
     d = ico_touch_draw_info(&t, &l);
     CHECK(near_(d.stickCX, cx, 0.01f) && near_(v.lx, -0.94f, 0.002f));
-    ev(&t, 8, 600.0f, 900.0f, ICO_TOUCH_UP, 1 * S);
+    ev(&t, 8, cx + R, cy, ICO_TOUCH_UP, 1 * S);
 
     /* the stick follows a finger that leaves its area */
-    ev(&t, 7, cx + 0.5f * R, 100.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 7, cx + 0.5f * R, cy - 3.0f * R, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.ly < -0.9f && step(&t, 1 * S).buttons == 0);
 
@@ -294,17 +694,23 @@ static void test_stick(void)
     d = ico_touch_draw_info(&t, &l);
     CHECK(v.lx == 0.0f && v.ly == 0.0f && !d.stickActive);
     CHECK(near_(d.stickCX, l.stickHomeX, 0.01f));
-    ev(&t, 9, 500.0f, 800.0f, ICO_TOUCH_DOWN, 1 * S);
-    ev(&t, 9, 500.0f, 800.0f + R, ICO_TOUCH_MOVE, 1 * S);
+    x = cx + 0.5f * R;
+    y = cy - 0.5f * R;
+    CHECK(in_area(&l.stickArea, x, y));
+    ev(&t, 9, x, y, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 9, x, y + R, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.ly, 1.0f, 0.002f) && near_(v.lx, 0.0f, 0.002f));
     d = ico_touch_draw_info(&t, &l);
-    CHECK(near_(d.stickCX, 500.0f, 0.01f) && near_(d.stickCY, 800.0f, 0.01f));
+    CHECK(near_(d.stickCX, x, 0.01f) && near_(d.stickCY, y, 0.01f));
 
-    /* a finger outside every zone does nothing */
+    /* a finger outside every zone does nothing, even moved onto the look
+       pad */
     memset(&t, 0, sizeof(t));
-    ev(&t, 1, 1100.0f, 900.0f, ICO_TOUCH_DOWN, 1 * S); /* bottom middle */
-    ev(&t, 1, 1300.0f, 700.0f, ICO_TOUCH_MOVE, 1 * S);
+    CHECK(free_point(&l, gap_area(&l), &x, &y)); /* bottom middle */
+    ev(&t, 1, x, y, ICO_TOUCH_DOWN, 1 * S);
+    CHECK(free_point(&l, l.lookArea, &x, &y));
+    ev(&t, 1, x, y, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.buttons == 0 && v.lx == 0.0f && v.rx == 0.0f && v.ry == 0.0f);
 }
@@ -361,11 +767,13 @@ static void test_buttons(void)
     IcoTouchLayout l = ico_touch_layout(1920, 1080, no_insets(), ICO_TOUCH_LARGE);
     IcoTouchState t;
     IcoVirtualPad v;
-    float x, y, x2, y2;
+    float x, y, x2, y2, gx, gy, px, py;
     int z;
 
     g_l = &l;
     memset(&t, 0, sizeof(t));
+    CHECK(free_point(&l, gap_area(&l), &gx, &gy)); /* no zone */
+    CHECK(free_point(&l, l.lookArea, &px, &py));   /* the look pad */
 
     /* every button by its centre */
     for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
@@ -385,8 +793,8 @@ static void test_buttons(void)
     ev(&t, 1, 0, 0, ICO_TOUCH_UP, 1 * S);
 
     /* the stick and Cross at once */
-    ev(&t, 10, 250.0f, 800.0f, ICO_TOUCH_DOWN, 1 * S);
-    ev(&t, 10, 250.0f + l.stickR, 800.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 10, l.stickHomeX, l.stickHomeY, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 10, l.stickHomeX + l.stickR, l.stickHomeY, ICO_TOUCH_MOVE, 1 * S);
     centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
     ev(&t, 11, x, y, ICO_TOUCH_DOWN, 1 * S);
     v = step(&t, 1 * S);
@@ -405,7 +813,7 @@ static void test_buttons(void)
 
     /* slide out: Circle's finger moves to empty screen, released; the stick
        finger is not affected */
-    ev(&t, 12, 1300.0f, 800.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 12, gx, gy, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.buttons == 0 && near_(v.lx, 1.0f, 0.002f));
     /* and back onto a button (Square): a button finger presses what it is on */
@@ -413,7 +821,7 @@ static void test_buttons(void)
     ev(&t, 12, x, y, ICO_TOUCH_MOVE, 1 * S);
     CHECK(step(&t, 1 * S).buttons == ICO_PAD_SQUARE);
     /* sliding onto the look pad does not turn it into a look finger */
-    ev(&t, 12, 1300.0f, 300.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 12, px, py, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.buttons == 0 && v.rx == 0.0f && v.ry == 0.0f);
 
@@ -421,15 +829,15 @@ static void test_buttons(void)
     centre_of(&l, ICO_TOUCH_B_R1, &x, &y);
     CHECK(x >= l.lookArea.x && y < l.lookArea.y + l.lookArea.h);
     ev(&t, 13, x, y, ICO_TOUCH_DOWN, 1 * S);
-    ev(&t, 13, x - 400.0f, y, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 13, x - 2.0f * l.button[ICO_TOUCH_B_R1].rect.w, y, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.buttons == 0 && v.rx == 0.0f); /* moved off before the step: nothing */
     ev(&t, 13, x, y, ICO_TOUCH_MOVE, 1 * S);
     CHECK(step(&t, 1 * S).buttons & ICO_PAD_R1);
 
     /* cancel: everything released at once */
-    ev(&t, 14, 1400.0f, 200.0f, ICO_TOUCH_DOWN, 1 * S); /* the look pad */
-    ev(&t, 14, 1400.0f + l.lookR, 200.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 14, px, py, ICO_TOUCH_DOWN, 1 * S); /* the look pad */
+    ev(&t, 14, px + l.lookR, py, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, 1.0f, 0.002f) && near_(v.lx, 1.0f, 0.002f) && (v.buttons & ICO_PAD_R1));
     ico_touch_event(&t, 0, 0.0f, 0.0f, ICO_TOUCH_CANCEL, 1 * S);
@@ -437,7 +845,7 @@ static void test_buttons(void)
     CHECK(v.buttons == 0 && v.lx == 0.0f && v.ly == 0.0f && v.rx == 0.0f && v.ry == 0.0f);
     CHECK(ico_touch_draw_info(&t, &l).pressed == 0 && !ico_touch_draw_info(&t, &l).stickActive);
     /* the fingers are gone: their moves and lifts do nothing */
-    ev(&t, 10, 250.0f + l.stickR, 900.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 10, l.stickHomeX + l.stickR, l.stickHomeY + l.stickR, ICO_TOUCH_MOVE, 1 * S);
     ev(&t, 11, x, y, ICO_TOUCH_UP, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.buttons == 0 && v.lx == 0.0f && v.ly == 0.0f);
@@ -445,7 +853,7 @@ static void test_buttons(void)
     /* more fingers than slots: the extra ones are ignored */
     centre_of(&l, ICO_TOUCH_B_START, &x, &y);
     for (z = 0; z < ICO_TOUCH_FINGERS; z++) {
-        ev(&t, 100 + (uint64_t)z, 1100.0f, 900.0f, ICO_TOUCH_DOWN, 1 * S);
+        ev(&t, 100 + (uint64_t)z, gx, gy, ICO_TOUCH_DOWN, 1 * S);
     }
     ev(&t, 200, x, y, ICO_TOUCH_DOWN, 1 * S);
     CHECK(step(&t, 1 * S).buttons == 0);
@@ -460,36 +868,36 @@ static void test_look(void)
     IcoTouchState t;
     IcoTouchDrawInfo d;
     IcoVirtualPad v;
-    float R = l.lookR;
+    float R = l.lookR, lx = 0.0f, ly = 0.0f;
 
     g_l = &l;
+    CHECK(free_point(&l, l.lookArea, &lx, &ly));
     memset(&t, 0, sizeof(t));
     ico_touch_reset(&t, 1 * S);
     CHECK(near_(t.look_decay, 0.80f, 1e-6f));
 
-    ev(&t, 1, 1200.0f, 250.0f, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 1, lx, ly, ICO_TOUCH_DOWN, 1 * S);
     v = step(&t, 1 * S);
     CHECK(v.rx == 0.0f && v.ry == 0.0f && v.lx == 0.0f);
-    ev(&t, 1, 1200.0f + 0.5f * R, 250.0f - 0.25f * R, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 1, lx + 0.5f * R, ly - 0.25f * R, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, 0.5f, 0.002f) && near_(v.ry, -0.25f, 0.002f));
     d = ico_touch_draw_info(&t, &l);
-    CHECK(d.lookActive && near_(d.lookCX, 1200.0f, 0.01f) &&
-          near_(d.lookFX, 1200.0f + 0.5f * R, 0.01f));
+    CHECK(d.lookActive && near_(d.lookCX, lx, 0.01f) && near_(d.lookFX, lx + 0.5f * R, 0.01f));
     /* held still: the deflection holds (a stick, not mouse motion) */
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, 0.5f, 0.002f));
     /* clamped to the unit circle */
-    ev(&t, 1, 1200.0f - 2.0f * R, 250.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 1, lx - 2.0f * R, ly, ICO_TOUCH_MOVE, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, -1.0f, 0.002f) && near_(v.ry, 0.0f, 0.002f));
     /* a second finger on the pad does nothing */
-    ev(&t, 2, 1500.0f, 300.0f, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 2, lx, ly, ICO_TOUCH_DOWN, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, -1.0f, 0.002f));
-    ev(&t, 2, 1500.0f, 300.0f, ICO_TOUCH_UP, 1 * S);
+    ev(&t, 2, lx, ly, ICO_TOUCH_UP, 1 * S);
     /* released: decays like the mouse look, 0.8 per step */
-    ev(&t, 1, 1200.0f - 2.0f * R, 250.0f, ICO_TOUCH_UP, 1 * S);
+    ev(&t, 1, lx - 2.0f * R, ly, ICO_TOUCH_UP, 1 * S);
     v = step(&t, 1 * S);
     CHECK(near_(v.rx, -0.8f, 0.002f));
     CHECK(!ico_touch_draw_info(&t, &l).lookActive);
@@ -505,17 +913,17 @@ static void test_look(void)
     CHECK(v.rx == 0.0f && v.ry == 0.0f);
     /* the bindings' mouse_decay carried over */
     t.look_decay = 0.5f;
-    ev(&t, 3, 1200.0f, 250.0f, ICO_TOUCH_DOWN, 1 * S);
-    ev(&t, 3, 1200.0f + R, 250.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 3, lx, ly, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 3, lx + R, ly, ICO_TOUCH_MOVE, 1 * S);
     step(&t, 1 * S);
-    ev(&t, 3, 1200.0f + R, 250.0f, ICO_TOUCH_UP, 1 * S);
+    ev(&t, 3, lx + R, ly, ICO_TOUCH_UP, 1 * S);
     CHECK(near_(step(&t, 1 * S).rx, 0.5f, 0.002f));
     /* a zeroed state centres at once */
     memset(&t, 0, sizeof(t));
-    ev(&t, 3, 1200.0f, 250.0f, ICO_TOUCH_DOWN, 1 * S);
-    ev(&t, 3, 1200.0f + R, 250.0f, ICO_TOUCH_MOVE, 1 * S);
+    ev(&t, 3, lx, ly, ICO_TOUCH_DOWN, 1 * S);
+    ev(&t, 3, lx + R, ly, ICO_TOUCH_MOVE, 1 * S);
     CHECK(near_(step(&t, 1 * S).rx, 1.0f, 0.002f));
-    ev(&t, 3, 1200.0f + R, 250.0f, ICO_TOUCH_UP, 1 * S);
+    ev(&t, 3, lx + R, ly, ICO_TOUCH_UP, 1 * S);
     CHECK(step(&t, 1 * S).rx == 0.0f);
 }
 
@@ -636,9 +1044,11 @@ static void test_merged_frame(void)
     IcoTouchState t;
     IcoVirtualPad bind, tv, v;
     IcoPadFrame f;
-    float R = l.stickR, x, y;
+    const float R = l.stickR, hx = l.stickHomeX, hy = l.stickHomeY;
+    float x, y, px = 0.0f, py = 0.0f;
 
     g_l = &l;
+    CHECK(free_point(&l, l.lookArea, &px, &py));
     memset(&t, 0, sizeof(t));
     ico_touch_reset(&t, S);
 
@@ -648,8 +1058,8 @@ static void test_merged_frame(void)
     bind.lx = -0.3f;
 
     /* touch: the stick full down-right at 45 degrees, Cross */
-    ev(&t, 1, 400.0f, 700.0f, ICO_TOUCH_DOWN, S);
-    ev(&t, 1, 400.0f + 2.0f * R, 700.0f + 2.0f * R, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx, hy, ICO_TOUCH_DOWN, S);
+    ev(&t, 1, hx + 2.0f * R, hy + 2.0f * R, ICO_TOUCH_MOVE, S);
     centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
     ev(&t, 2, x, y, ICO_TOUCH_DOWN, S);
     ico_touch_step(&t, &l, &tv);
@@ -680,7 +1090,7 @@ static void test_merged_frame(void)
        (0.94 R) is a deflection of 0.94 -> 247, which the game reads as 0.99
        or more (it runs: the ring is drawn where running starts); 0.6 R is
        204, about 0.40 (it walks); 0.92 R still walks */
-    ev(&t, 1, 400.0f + 2.0f * R, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + 2.0f * R, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
@@ -688,29 +1098,29 @@ static void test_merged_frame(void)
     CHECK(f.lx == 255 && f.ly == 128 && game_magnitude(f.lx, f.ly) == 1.0f);
     ico_input_vpad_to_frame(&v, 1, 0, &f);
     CHECK(f.lx == 255 && f.ly == 128);
-    ev(&t, 1, 400.0f + l.runR, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + l.runR, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
     CHECK(f.lx == 247 && f.ly == 128 && game_magnitude(f.lx, f.ly) >= 0.99f);
-    ev(&t, 1, 400.0f + 0.6f * R, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + 0.6f * R, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
     ico_input_vpad_to_frame(&v, 0, 0, &f);
     CHECK(f.lx == 204 && near_(game_magnitude(f.lx, f.ly), 0.3958f, 0.002f));
-    ev(&t, 1, 400.0f + 0.94f * R, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + 0.94f * R, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     ico_input_vpad_to_frame(&tv, 0, 0, &f);
     CHECK(game_magnitude(f.lx, f.ly) >= 0.99f);
-    ev(&t, 1, 400.0f + 0.92f * R, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + 0.92f * R, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     ico_input_vpad_to_frame(&tv, 0, 0, &f);
     CHECK(game_magnitude(f.lx, f.ly) < 0.99f);
 
     /* the touch stick in its dead zone loses to the keyboard's push */
-    ev(&t, 1, 400.0f + 0.03f * R, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + 0.03f * R, hy, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
@@ -718,8 +1128,8 @@ static void test_merged_frame(void)
     CHECK(near_(v.lx, -0.3f, 1e-6f) && f.lx == ico_input_quantise(-0.3f) && f.ly == 128);
 
     /* the look pad merges into the right stick */
-    ev(&t, 3, 1500.0f, 200.0f, ICO_TOUCH_DOWN, S);
-    ev(&t, 3, 1500.0f, 200.0f - R, ICO_TOUCH_MOVE, S);
+    ev(&t, 3, px, py, ICO_TOUCH_DOWN, S);
+    ev(&t, 3, px, py - R, ICO_TOUCH_MOVE, S);
     ico_touch_step(&t, &l, &tv);
     v = bind;
     ico_vpad_merge(&v, &tv);
@@ -741,7 +1151,7 @@ static void test_stick_every_direction(void)
     IcoTouchState t;
     IcoVirtualPad tv, pad;
     IcoPadFrame f, g;
-    const float R = l.stickR, cx = 420.0f, cy = 760.0f;
+    const float R = l.stickR, cx = l.stickHomeX, cy = l.stickHomeY;
     const double c1 = 0.99984769515639124, s1 = 0.017452406437283512; /* 1 degree */
     double c = 1.0, s = 0.0;
     int a, k, fix, diff = 0, outside = 0, over = 0;
@@ -824,8 +1234,8 @@ static void test_gamepad_drop(void)
     ico_touch_set_gamepads(&t, 1, S);
     centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
     ev(&t, 1, x, y, ICO_TOUCH_DOWN, S);
-    ev(&t, 2, 400.0f, 700.0f, ICO_TOUCH_DOWN, S);
-    ev(&t, 2, 400.0f + l.stickR, 700.0f, ICO_TOUCH_MOVE, S);
+    ev(&t, 2, l.stickHomeX, l.stickHomeY, ICO_TOUCH_DOWN, S);
+    ev(&t, 2, l.stickHomeX + l.stickR, l.stickHomeY, ICO_TOUCH_MOVE, S);
     memset(&v, 0, sizeof(v));
     CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_AUTO, 1, &v, S) == 0);
     CHECK(v.buttons == 0 && v.lx == 0.0f && v.ly == 0.0f && v.rx == 0.0f && v.ry == 0.0f);
@@ -840,7 +1250,7 @@ static void test_gamepad_drop(void)
     CHECK(ico_touch_update(&t, &l, ICO_TOUCH_MODE_OFF, 0, &v, S) == 0 && v.buttons == 0);
     CHECK(ico_touch_mode_opacity(&t, ICO_TOUCH_MODE_OFF, 0, 2 * S) == 0.0f);
     ev(&t, 1, x, y, ICO_TOUCH_UP, S);
-    ev(&t, 2, 400.0f, 700.0f, ICO_TOUCH_UP, S);
+    ev(&t, 2, l.stickHomeX, l.stickHomeY, ICO_TOUCH_UP, S);
 
     /* a tap while dropped: down and up between two steps, not replayed
        after the gamepad goes */
@@ -864,6 +1274,7 @@ static void test_gamepad_drop(void)
 int main(void)
 {
     test_layouts();
+    test_fold_rules();
     test_stick();
     test_dpad();
     test_buttons();
