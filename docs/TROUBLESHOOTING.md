@@ -133,3 +133,10 @@ row in Options says.
 
 With Vertical sync off, the picture only tears if the Deck's "Allow
 Tearing" setting is on.
+
+## Android
+
+If the fog looks wrong on your phone, for example if it covers the whole
+picture, the log has lines that begin `rd: fog:`. They say which way the
+game took to draw the fog and what it found, so attach the log to your
+report.
