@@ -7,22 +7,35 @@
  * layer feeds it events, the overlay drawing (port/ui) reads its zones and
  * its state.
  *
- * The layout, in output pixels inside the safe area (u = the safe area's
- * height times the size setting's scale: 0.85 small, 1.0 medium, 1.2 large):
+ * The layout. Everything is a fixed multiple of one unit q, output pixels
+ * per layout millimetre, measured from an edge of the layout's region (the
+ * safe area, or the part of it a fold leaves), so whether two controls
+ * overlap never depends on the screen's shape; q is clamped so the whole
+ * layout fits (ICO_TOUCH_BUDGET_*). A PlayStation pad's arrangement, with
+ * the often used controls where the thumbs rest (the lower corners) and the
+ * rare ones in the upper corners:
  *
- *   L1  [Select][Start]  R1     shoulders in the top corners, L2/R2 under
- *   L2   up               R2    them; Start and Select at the top centre
- *     left  right   . . . . .   the D-pad cluster right of L1/L2, above
- *        down       look pad    the stick; the look pad covers the right
- *   . . . . . . .   . . . . .   60 % x top 45 % (buttons on it win)
- *   :  left stick :      /\     the left stick's area: the left 40 % x
- *   :  (centre    :    []  ()   bottom 70 %; the face buttons as a diamond
- *   :  floats)    :      X      in the bottom right corner
+ *   [L2]    up     [Select][Start]    [R2]   shoulders L2 over L1 in the
+ *   [L1] left right   . . . . . . . . . .    upper left, the D-pad beside
+ *          down       .   look pad      .    them (menus); Select/Start at
+ *   . . . . . . . .   .            (R1) .    the top centre, R2 top right;
+ *   .  left stick  .  .              /\      R1 (hold Yorda's hand) a disc
+ *   .  (floats,    .               []  ()    on the right edge above Circle;
+ *   .   home ( ) ) .                 X       the face diamond bottom right
+ *
+ * q is the screen's density (IcoTouchEnv.pxPerMm) when known, else the
+ * short side over ICO_TOUCH_FALLBACK_MM (a phone-sized guess), at least
+ * the short side over 160, times the size setting's scale (0.85 small, 1.0
+ * medium, 1.2 large), then clamped to fit. A fold (IcoTouchEnv.fold) picks
+ * the rule: a vertical hinge splits the layout into a left and a right
+ * cluster beside it (SPLIT); a horizontal hinge half opened (or two
+ * screens) puts the layout below it (TABLETOP); a flat horizontal fold
+ * keeps the full layout unless a button would sit on the crease.
  *
  * Left stick: the first finger down in its area (not on a button) is the
  * stick's centre for as long as it stays down; its offset from there is the
- * deflection, magnitude clamp(distance / R), R = 12 % of the safe height at
- * medium. Under ICO_TOUCH_STICK_DEADZONE * R it is centred (finger jitter);
+ * deflection, magnitude clamp(distance / R), R = ICO_TOUCH_STICK_MM * q.
+ * Under ICO_TOUCH_STICK_DEADZONE * R it is centred (finger jitter);
  * past that the vector is not rescaled, so the game's own reading decides
  * walk and run like a real stick (fumi/ios/pad.c iosPadNormalizeStick: a
  * centred dead zone of 48 of 127.5, full at 120 after the off-axis divisor;
@@ -53,7 +66,8 @@
  * or the app goes to the background, steps the mapper once per vsync
  * (ico_touch_update) and merges its pad before the stick fix, the mirror
  * and the quantisation, so touch is treated like every other source;
- * window_host.c hands it the output's size and safe area, and the overlay
+ * window_host.c hands it the output's size, safe area, density and fold
+ * (ico_input_sdl_set_touch_layout, ico_input_sdl_set_touch_env), and the overlay
  * (port/ui/touch_ui.c) draws from the copy input_sdl.c takes at the step.
  */
 #ifndef ICO_PORT_INPUT_TOUCH_H
@@ -94,12 +108,33 @@ enum {
 };
 
 #define ICO_TOUCH_FINGERS 10
-#define ICO_TOUCH_STICK_RADIUS 0.12f   /* of the safe height, at medium */
+#define ICO_TOUCH_STICK_MM 11.0f       /* the stick's radius R, in q */
 #define ICO_TOUCH_RUN_RING 0.94f       /* of the stick radius, drawn: where the game runs */
 #define ICO_TOUCH_STICK_DEADZONE 0.05f /* of the stick radius */
 #define ICO_TOUCH_LOOK_DECAY 0.80f     /* bindings.c's default mouse_decay */
 #define ICO_TOUCH_HIDE_NS 5000000000ull
 #define ICO_TOUCH_FADE_NS 300000000ull
+
+/* the hinge band: the fold's bounds grown by this on each side, mm */
+#define ICO_TOUCH_FOLD_PAD_MM 2.0f
+/* an unknown screen's short side, mm: treated as a phone's */
+#define ICO_TOUCH_FALLBACK_MM 68.0f
+/* the layout's extent in q, the fit clamp: a region at least BUDGET_H high
+   and BUDGET_W wide (SPLIT: BUDGET_WL left of the hinge band and BUDGET_WR
+   right of it) holds every control with its margins and gaps */
+#define ICO_TOUCH_BUDGET_H 64
+#define ICO_TOUCH_BUDGET_W 114
+#define ICO_TOUCH_BUDGET_WL 58
+#define ICO_TOUCH_BUDGET_WR 40
+
+/* IcoTouchFold.orientation: the hinge's line (VERTICAL: top to bottom,
+   the screen's halves left and right) */
+enum { ICO_TOUCH_FOLD_NONE = 0, ICO_TOUCH_FOLD_VERTICAL = 1, ICO_TOUCH_FOLD_HORIZONTAL = 2 };
+
+/* IcoTouchLayout.rule: FULL the whole region; SPLIT a cluster each side of
+   a vertical hinge band; TABLETOP everything below a horizontal band (the
+   region is the part below it, fingers above do nothing) */
+enum { ICO_TOUCH_RULE_FULL = 0, ICO_TOUCH_RULE_SPLIT = 1, ICO_TOUCH_RULE_TABLETOP = 2 };
 
 /* the safe area's insets from each edge of the output, pixels */
 typedef struct IcoTouchInsets {
@@ -111,9 +146,24 @@ typedef struct IcoTouchRect {
     float x, y, w, h;
 } IcoTouchRect;
 
+/* a folding screen's hinge, as the platform reports it (Android's
+   FoldingFeature); bounds in output pixels, possibly zero wide */
+typedef struct IcoTouchFold {
+    int orientation; /* ICO_TOUCH_FOLD_* */
+    int halfOpened;  /* bent, not flat */
+    int separating;  /* the hinge splits the content (two screens, or bent) */
+    IcoTouchRect bounds;
+} IcoTouchFold;
+
+/* what the layout knows of the screen besides its pixels */
+typedef struct IcoTouchEnv {
+    float pxPerMm; /* output pixels per millimetre; 0 unknown */
+    IcoTouchFold fold;
+} IcoTouchEnv;
+
 typedef struct IcoTouchButton {
     IcoTouchRect rect; /* the hit box; a round button's bounding square */
-    int round;         /* 1: a disc of radius rect.w / 2 (the face buttons) */
+    int round;         /* 1: a disc of radius rect.w / 2 (the faces, R1) */
     unsigned int pad;  /* its ICO_PAD_* bit */
 } IcoTouchButton;
 
@@ -121,8 +171,12 @@ typedef struct IcoTouchLayout {
     uint32_t outW, outH;
     IcoTouchInsets safe;
     int size;               /* ICO_TOUCH_SMALL..LARGE */
-    float unit;             /* u: the safe height times the size's scale */
+    float unit;             /* q: output pixels per layout millimetre */
+    float pxPerMm;          /* the density used (the env's, else the guess) */
+    int rule;               /* ICO_TOUCH_RULE_* */
     IcoTouchRect safeRect;  /* the output less the insets */
+    IcoTouchRect region;    /* where the controls are: safeRect, or below the band */
+    IcoTouchRect band;      /* the hinge band (SPLIT, TABLETOP); zero for FULL */
     IcoTouchRect stickArea; /* where a finger down starts the stick */
     float stickR;           /* R: full deflection */
     float runR;             /* the run ring, ICO_TOUCH_RUN_RING * R */
@@ -192,9 +246,19 @@ typedef struct IcoTouchOverlay {
     float opacity; /* 0..1; nothing is drawn at 0 */
 } IcoTouchOverlay;
 
-/* The zones for an output of outW x outH pixels with the safe area's insets
-   and a size (ICO_TOUCH_SMALL..LARGE; out of range is medium). Insets that
-   leave nothing are ignored. */
+/* Output pixels per millimetre for a screen's dots per inch: dpi / 25.4;
+   0 unless dpi > 0. */
+float ico_touch_px_per_mm(float dpi);
+
+/* The zones for an output of outW x outH pixels with the safe area's insets,
+   a size (ICO_TOUCH_SMALL..LARGE; out of range is medium) and what is known
+   of the screen (NULL: unknown density, no fold). Insets that leave nothing
+   are ignored; so is a fold outside the safe area or leaving a side under a
+   quarter of it. */
+IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                                    const IcoTouchEnv *env);
+
+/* ico_touch_layout_env(outW, outH, safe, size, NULL) */
 IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size);
 
 /* Clear every finger and output, look_decay to ICO_TOUCH_LOOK_DECAY (set

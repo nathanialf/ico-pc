@@ -38,6 +38,12 @@
  *                               on open and when the size or safe area
  *                               changes (the Touch size row is followed
  *                               here)
+ *   ico_input_sdl_set_touch_env(env)  the screen's density and fold
+ *                               (touch.h IcoTouchEnv, output pixels; NULL:
+ *                               unknown density, no fold); rebuilds the
+ *                               zones. window_host.c calls it before the
+ *                               layout and whenever density or posture
+ *                               changes
  *   ico_input_sdl_touch_present()  1 once a direct touch screen is known
  *                               (at start, or its first touch): the
  *                               Settings rows show
@@ -59,6 +65,7 @@ void ico_input_escape(int down, const IcoCaptureState *s);
 void ico_input_sdl_update(void);
 void ico_input_sdl_shutdown(void);
 void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh);
+void ico_input_sdl_set_touch_env(const IcoTouchEnv *env);
 int ico_input_sdl_touch_present(void);
 int ico_input_sdl_touch_overlay(IcoTouchOverlay *out);
 

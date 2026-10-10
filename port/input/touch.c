@@ -69,12 +69,14 @@ static void face(IcoTouchLayout *l, int z, float cx, float cy, float r, unsigned
     button(l, z, rect(cx - r, cy - r, 2.0f * r, 2.0f * r), 1, pad);
 }
 
-IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size)
+IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
+                                    const IcoTouchEnv *env)
 {
     IcoTouchLayout l;
     float W = (float)outW, H = (float)outH;
     float sx, sy, sw, sh, u, m, k, w;
 
+    (void)env;
     memset(&l, 0, sizeof(l));
     if (size < ICO_TOUCH_SMALL || size > ICO_TOUCH_LARGE) {
         size = ICO_TOUCH_MEDIUM;
@@ -109,7 +111,7 @@ IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets saf
 
     /* left stick: the left 40 % x bottom 70 % */
     l.stickArea = rect(sx, sy + 0.3f * sh, 0.4f * sw, 0.7f * sh);
-    l.stickR = ICO_TOUCH_STICK_RADIUS * u;
+    l.stickR = 0.12f * u;
     l.runR = ICO_TOUCH_RUN_RING * l.stickR;
     l.stickHomeX = sx + 0.4f * l.stickArea.w;
     l.stickHomeY = sy + sh - m - 1.6f * l.stickR;
@@ -157,6 +159,16 @@ IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets saf
     face(&l, ICO_TOUCH_B_SQUARE, l.faceX - k, l.faceY, w, ICO_PAD_SQUARE);
     face(&l, ICO_TOUCH_B_TRIANGLE, l.faceX, l.faceY - k, w, ICO_PAD_TRIANGLE);
     return l;
+}
+
+IcoTouchLayout ico_touch_layout(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size)
+{
+    return ico_touch_layout_env(outW, outH, safe, size, NULL);
+}
+
+float ico_touch_px_per_mm(float dpi)
+{
+    return dpi > 0.0f ? dpi / 25.4f : 0.0f;
 }
 
 static int in_rect(const IcoTouchRect *r, float x, float y)
