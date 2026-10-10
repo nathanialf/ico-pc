@@ -69,8 +69,14 @@ static void shadowHostFlush(void)
     rd_abe(1); /* PRIM 0x144: strip, flat, ABE, no texture */
     rd_gouraud(0);
     rd_texture_off();
+    /* the volumes are projected through the frame camera (the vertices in
+       its view space, +0xC0 the screen matrix: clipVolumeEdge), so the
+       presenter may blend them in the world as it does the floor they
+       fall on */
+    rd_frame_projected(1);
     rd_shadow_tris(shadowHost.v, (const int8_t *)shadowHost.sign, shadowHost.n,
                    RD_KEY(shadowHost.obj, 0, 0));
+    rd_frame_projected(0);
     shadowHost.n = 0;
 }
 

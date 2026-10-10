@@ -1542,7 +1542,17 @@ static void reg_dispPoint(PacLine *node, float alpha, int idx, int flag)
             PacketBufferStruct.ptr.c = q + 0xC;
             ((GifPkWord *)(q + 8))->w[1] = 0;
             PacketBufferStruct.ptr.c = q + 0x10;
+#ifdef ICO_RD
+            /* with flag, both ends are this tick's projection through the
+               frame camera (+0x100); without it the line starts at a
+               screen point an earlier tick stored, which no camera of this
+               tick moves */
+            gif_HostFrameProjected(flag != 0);
+#endif
             dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+#ifdef ICO_RD
+            gif_HostFrameProjected(0);
+#endif
             dl_CloseDma();
         }
     }
@@ -1683,7 +1693,14 @@ static void reg_dispLine(PacLine *node, float alpha)
         PacketBufferStruct.ptr.c = q + 0xC;
         ((GifPkWord *)(q + 8))->w[1] = 0;
         PacketBufferStruct.ptr.c = q + 0x10;
+#ifdef ICO_RD
+        /* both ends projected through the frame camera (+0x100), ST = uv / w */
+        gif_HostFrameProjected(1);
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+#ifdef ICO_RD
+        gif_HostFrameProjected(0);
+#endif
         dl_CloseDma();
     }
 }

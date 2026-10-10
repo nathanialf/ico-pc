@@ -6,6 +6,12 @@
 #include "main.h"
 #include "matrixDrive.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+#endif
+
 /* the GS PRIM values the plain line, the line strip and the gouraud line are
    drawn with */
 static int linePrim = 0x142; /* derived name */
@@ -218,7 +224,15 @@ void DrawLine(void *from, void *to, void *color, int z)
         return;
     _FTOI4Vector(t2, t0);
     _FTOI4Vector(t3, t1);
+#ifdef ICO_RD
+    /* z 0 keeps the Z _getLine projected through the frame camera; any
+       other z is a fixed depth that is no point's */
+    gif_HostFrameProjected(z == 0);
+#endif
     Draw2DLine(t2, t3, color, z);
+#ifdef ICO_RD
+    gif_HostFrameProjected(0);
+#endif
 }
 
 void DrawLineG(void *from, void *fromColor, void *to, void *toColor, int z)
@@ -236,9 +250,15 @@ void DrawLineG(void *from, void *fromColor, void *to, void *toColor, int z)
     }
     _FTOI4Vector(t2, t0);
     _FTOI4Vector(t3, t1);
+#ifdef ICO_RD
+    gif_HostFrameProjected(z == 0); /* as in DrawLine */
+#endif
     if (r != 0) {
         Draw2DLineG(t3, fromColor, t2, toColor, z);
     } else {
         Draw2DLineG(t2, fromColor, t3, toColor, z);
     }
+#ifdef ICO_RD
+    gif_HostFrameProjected(0);
+#endif
 }

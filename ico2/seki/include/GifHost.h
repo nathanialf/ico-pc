@@ -66,6 +66,14 @@ void gif_HostWriteRegs(const unsigned long long *ad, unsigned int n);
    the string s (DisplayFont.c's font_Print). */
 void gif_HostDrawKey(const void *obj, int part, int ordinal);
 void gif_HostDrawKeyText(const char *s, int part);
+/* PC port: on != 0 until called with 0, the primitives decoded were
+   projected on the CPU through the frame camera (+0x80 then +0xC0, or
+   +0x100), with their real projected Z: rd_screen_prims marks them
+   (rd.h rd_frame_projected) unless a reflection camera is pushed, and the
+   presenter sees them through the camera it blends between ticks, as it
+   does the VU draws around them.  The GIF_SP_WORLD helpers of GifPacket.c
+   (rotTransPers) are marked without it. */
+void gif_HostFrameProjected(int on);
 
 #endif /* ICO_RD */
 
