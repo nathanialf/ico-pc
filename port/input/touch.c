@@ -2,9 +2,9 @@
  * port/input/touch.c
  *
  * The touch overlay's input mapper (touch.h): the zones from the output's
- * size, fingers to roles (a button, the left stick, the look pad), the
- * virtual pad they hold, and the overlay's visibility and fade. No SDL and
- * no libm (a Newton square root, as vpad.c).
+ * size, density and fold, fingers to roles (a button, the left stick, the
+ * look pad), the virtual pad they hold, and the overlay's visibility and
+ * fade. No SDL and no libm (a Newton square root, as vpad.c).
  */
 #include "touch.h"
 
@@ -12,18 +12,58 @@
 
 enum { ROLE_PENDING = 0, ROLE_BUTTON, ROLE_STICK, ROLE_LOOK, ROLE_IGNORED };
 
-/* the layout's proportions, in u (the safe height times the size's scale) */
-#define M_MARGIN 0.04f /* from the safe area's edges */
-#define M_SHOULDER_W 0.22f
-#define M_SHOULDER_H 0.10f
-#define M_SHOULDER_GAP 0.025f
-#define M_DPAD_KEY 0.085f /* one D-pad rect's side */
-#define M_DPAD_GAP 0.05f  /* between the shoulder column and the cluster */
-#define M_MENU_W 0.13f    /* Start and Select */
-#define M_MENU_H 0.075f
-#define M_MENU_GAP 0.03f
-#define M_FACE_R 0.075f /* a face button's radius */
-#define M_FACE_D 0.135f /* its centre from the diamond's centre */
+/*
+ * The layout, in q (output pixels per layout millimetre; touch.h). Every
+ * control is a fixed multiple of q from an edge of the region R (L, T, Rt,
+ * B its left, top, right and bottom; W, H its size in q; c its centre x),
+ * with a margin of 3 from the edges and a gap of 2 between controls:
+ *
+ *   L2        (L+3, T+3)  12 x 8      R2   (Rt-15, T+3) 12 x 8
+ *   L1        (L+3, T+13) 12 x 8      Select (c-13, T+3), Start (c+1, T+3),
+ *   D-pad     centre (L+29, T+15),         12 x 8; SPLIT: Select ends 3
+ *             keys 8 x 8: Up (L+25, T+3),  before the band, Start starts 3
+ *             Left (L+17, T+11), Right     after it
+ *             (L+33, T+11), Down (L+25, T+19)
+ *   stick     home (L+24, B-21), R 11     faces centre (Rt-20, B-20), each
+ *   R1        a disc, radius 6.5, centred  9.5 from it, radius 5.5
+ *             (faceX+9.5, faceY-23.5): straight above Circle, on the right
+ *             edge where the thumb's arc goes up (hold Yorda's hand, the
+ *             most used button: larger than the faces, no reach across them)
+ *
+ * The stick's area starts below the D-pad (T+29) at the left edge, down to
+ * the bottom: FULL/TABLETOP 0.4 of the width but at least 47 and at most up
+ * to Square's left less the gap; SPLIT up to the band. The look pad is the
+ * rest of the upper right: from the stick area's right (SPLIT: the band's
+ * right) to the right edge, from the top down to the gap above Triangle
+ * (faceY - 15 - 2); the buttons on it win the hit test.
+ *
+ * Why nothing overlaps, whatever the shape (the fit clamp keeps H >= 64 and
+ * W >= 114, SPLIT left of the band >= 58 and right of it >= 40):
+ *   - the upper-left block (y <= 27, x <= 41) against the stick's ring
+ *     (y >= H-32): 27 + 2 <= H - 32 needs H >= 61;
+ *   - R2's bottom (11) against R1's top (H-50) with the gap: H >= 63, the
+ *     tightest, hence the budget of 64;
+ *   - the D-pad's right (41) + 2 <= Select's left (c-13): W >= 112 (114);
+ *   - Start's right (c+13) + 2 <= R2's left (W-15): W >= 60;
+ *   - adjacent faces 9.5 * sqrt 2 = 13.43 apart >= 5.5 + 5.5 + 2 = 13;
+ *   - R1 against Circle 23.5 apart, against Triangle sqrt(9.5^2 + 14^2) =
+ *     16.92 apart, both >= 6.5 + 5.5 + 2 = 14;
+ *   - every control is at least 3 inside the region (R1 4 from the right,
+ *     Circle 5, Cross 5 from the bottom);
+ *   - SPLIT, left of the band: 3 + 12 + 2 + 24 + 2 + 12 + 3 = 58 (L1, the
+ *     D-pad, Select); right of it: Start and R2 need 3 + 12 + 2 + 12 + 3 =
+ *     32, Square's left (Rt-35) 3 from the band needs 38 (40).
+ */
+#define Q_MARGIN 3.0f
+#define Q_GAP 2.0f
+#define Q_RECT_W 12.0f /* L1, L2, R2, Select, Start */
+#define Q_RECT_H 8.0f
+#define Q_DPAD_KEY 8.0f
+#define Q_FACE_D 9.5f /* a face's centre from the diamond's */
+#define Q_FACE_R 5.5f
+#define Q_R1_R 6.5f
+#define Q_STICK_MIN_W 47.0f
+#define Q_FLOOR_MM 160.0f /* q is at least the short side over this */
 
 static const float s_scale[3] = {0.85f, 1.0f, 1.2f};
 
@@ -69,14 +109,184 @@ static void face(IcoTouchLayout *l, int z, float cx, float cy, float r, unsigned
     button(l, z, rect(cx - r, cy - r, 2.0f * r, 2.0f * r), 1, pad);
 }
 
+static float minf_(float a, float b)
+{
+    return a < b ? a : b;
+}
+
+static float maxf_(float a, float b)
+{
+    return a > b ? a : b;
+}
+
+/* the rects share a point (touching counts) */
+static int touches(IcoTouchRect a, IcoTouchRect b)
+{
+    return a.x <= b.x + b.w && b.x <= a.x + a.w && a.y <= b.y + b.h && b.y <= a.y + a.h;
+}
+
+/* Every control in l->region at the unit q under l->rule (SPLIT reads
+   l->band); the multiples are the table above. */
+static void place(IcoTouchLayout *l, float q)
+{
+    const IcoTouchRect R = l->region;
+    const float L = R.x, T = R.y, Rt = R.x + R.w, B = R.y + R.h, c = R.x + 0.5f * R.w;
+    const float m = Q_MARGIN * q, g = Q_GAP * q, w = Q_RECT_W * q, h = Q_RECT_H * q;
+    const float k = Q_DPAD_KEY * q, d = Q_FACE_D * q, r = Q_FACE_R * q;
+    const int split = l->rule == ICO_TOUCH_RULE_SPLIT;
+    float x0, sw;
+
+    l->unit = q;
+
+    /* the shoulders and R2: the rare ones, in the upper corners */
+    button(l, ICO_TOUCH_B_L2, rect(L + m, T + m, w, h), 0, ICO_PAD_L2);
+    button(l, ICO_TOUCH_B_L1, rect(L + m, T + 13.0f * q, w, h), 0, ICO_PAD_L1);
+    button(l, ICO_TOUCH_B_R2, rect(Rt - 15.0f * q, T + m, w, h), 0, ICO_PAD_R2);
+
+    /* the D-pad beside them, above the stick (menus) */
+    l->dpadX = L + 29.0f * q;
+    l->dpadY = T + 15.0f * q;
+    button(l, ICO_TOUCH_B_UP, rect(l->dpadX - 0.5f * k, l->dpadY - 1.5f * k, k, k), 0, ICO_PAD_UP);
+    button(l, ICO_TOUCH_B_DOWN, rect(l->dpadX - 0.5f * k, l->dpadY + 0.5f * k, k, k), 0,
+           ICO_PAD_DOWN);
+    button(l, ICO_TOUCH_B_LEFT, rect(l->dpadX - 1.5f * k, l->dpadY - 0.5f * k, k, k), 0,
+           ICO_PAD_LEFT);
+    button(l, ICO_TOUCH_B_RIGHT, rect(l->dpadX + 0.5f * k, l->dpadY - 0.5f * k, k, k), 0,
+           ICO_PAD_RIGHT);
+
+    /* Select and Start at the top centre, or each beside the hinge */
+    if (split) {
+        button(l, ICO_TOUCH_B_SELECT, rect(l->band.x - 15.0f * q, T + m, w, h), 0, ICO_PAD_SELECT);
+        button(l, ICO_TOUCH_B_START, rect(l->band.x + l->band.w + m, T + m, w, h), 0,
+               ICO_PAD_START);
+    } else {
+        button(l, ICO_TOUCH_B_SELECT, rect(c - 13.0f * q, T + m, w, h), 0, ICO_PAD_SELECT);
+        button(l, ICO_TOUCH_B_START, rect(c + q, T + m, w, h), 0, ICO_PAD_START);
+    }
+
+    /* the face diamond in the lower right, R1 above Circle on the edge */
+    l->faceX = Rt - 20.0f * q;
+    l->faceY = B - 20.0f * q;
+    face(l, ICO_TOUCH_B_CROSS, l->faceX, l->faceY + d, r, ICO_PAD_CROSS);
+    face(l, ICO_TOUCH_B_CIRCLE, l->faceX + d, l->faceY, r, ICO_PAD_CIRCLE);
+    face(l, ICO_TOUCH_B_SQUARE, l->faceX - d, l->faceY, r, ICO_PAD_SQUARE);
+    face(l, ICO_TOUCH_B_TRIANGLE, l->faceX, l->faceY - d, r, ICO_PAD_TRIANGLE);
+    face(l, ICO_TOUCH_B_R1, l->faceX + d, l->faceY - 23.5f * q, Q_R1_R * q, ICO_PAD_R1);
+
+    /* the left stick: floating, its home in the lower left */
+    l->stickR = ICO_TOUCH_STICK_MM * q;
+    l->runR = ICO_TOUCH_RUN_RING * l->stickR;
+    l->lookR = l->stickR;
+    l->stickHomeX = L + 24.0f * q;
+    l->stickHomeY = B - 21.0f * q;
+    if (split) {
+        sw = l->band.x - L;
+    } else {
+        sw = minf_(maxf_(0.4f * R.w, Q_STICK_MIN_W * q), l->faceX - d - r - g - L);
+    }
+    l->stickArea = rect(L, T + 29.0f * q, sw, B - (T + 29.0f * q));
+
+    /* the look pad: the rest of the upper right */
+    x0 = split ? l->band.x + l->band.w : l->stickArea.x + l->stickArea.w;
+    l->lookArea = rect(x0, T, Rt - x0, (l->faceY - d - r - g) - T);
+}
+
+/* the largest q (at most q0) that fits the region under the rule */
+static float fit(const IcoTouchLayout *l, float q0)
+{
+    const IcoTouchRect R = l->region;
+    float q = minf_(q0, R.h / ICO_TOUCH_BUDGET_H);
+
+    if (l->rule == ICO_TOUCH_RULE_SPLIT) {
+        q = minf_(q, (l->band.x - R.x) / ICO_TOUCH_BUDGET_WL);
+        q = minf_(q, (R.x + R.w - (l->band.x + l->band.w)) / ICO_TOUCH_BUDGET_WR);
+    } else {
+        q = minf_(q, R.w / ICO_TOUCH_BUDGET_W);
+    }
+    return q > 0.0f ? q : 0.0f;
+}
+
+/* any button, or the idle stick's square, shares a point with the rect */
+static int controls_touch(const IcoTouchLayout *l, IcoTouchRect band)
+{
+    int z;
+
+    for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+        if (touches(l->button[z].rect, band)) {
+            return 1;
+        }
+    }
+    return touches(rect(l->stickHomeX - l->stickR, l->stickHomeY - l->stickR, 2.0f * l->stickR,
+                        2.0f * l->stickR),
+                   band);
+}
+
+enum { FOLD_IGNORE = 0, FOLD_SPLIT, FOLD_TABLETOP, FOLD_FLAT };
+
+/* The hinge rule: which way the fold lays the controls out, and its band
+   (the bounds grown by ICO_TOUCH_FOLD_PAD_MM each side across the hinge,
+   kPhys pixels per mm, cut to the safe rect S; along the hinge it spans S).
+   Ignored with no fold, bounds missing S, or a side under a quarter of S. */
+static int fold_apply(const IcoTouchEnv *env, IcoTouchRect S, float kPhys, IcoTouchRect *band)
+{
+    const float pad = ICO_TOUCH_FOLD_PAD_MM * kPhys;
+    const float Sx1 = S.x + S.w, Sy1 = S.y + S.h;
+    IcoTouchRect b;
+    float a0, a1;
+
+    if (env == NULL || !(S.w > 0.0f && S.h > 0.0f)) {
+        return FOLD_IGNORE;
+    }
+    b = env->fold.bounds;
+    if (!(b.w >= 0.0f)) {
+        b.w = 0.0f;
+    }
+    if (!(b.h >= 0.0f)) {
+        b.h = 0.0f;
+    }
+    if (!(b.x + b.w >= S.x && b.x <= Sx1 && b.y + b.h >= S.y && b.y <= Sy1)) {
+        return FOLD_IGNORE; /* outside the safe rect (or not a number) */
+    }
+    if (env->fold.orientation == ICO_TOUCH_FOLD_VERTICAL) {
+        a0 = maxf_(b.x - pad, S.x);
+        a1 = minf_(b.x + b.w + pad, Sx1);
+        if (a0 - S.x < 0.25f * S.w || Sx1 - a1 < 0.25f * S.w) {
+            return FOLD_IGNORE;
+        }
+        *band = rect(a0, S.y, a1 - a0, S.h);
+        return FOLD_SPLIT; /* flat or bent: a cluster each side */
+    }
+    if (env->fold.orientation == ICO_TOUCH_FOLD_HORIZONTAL) {
+        a0 = maxf_(b.y - pad, S.y);
+        a1 = minf_(b.y + b.h + pad, Sy1);
+        if (a0 - S.y < 0.25f * S.h || Sy1 - a1 < 0.25f * S.h) {
+            return FOLD_IGNORE;
+        }
+        *band = rect(S.x, a0, S.w, a1 - a0);
+        return env->fold.halfOpened || env->fold.separating ? FOLD_TABLETOP : FOLD_FLAT;
+    }
+    return FOLD_IGNORE;
+}
+
+/* the region below a horizontal band */
+static void tabletop(IcoTouchLayout *l, IcoTouchRect band)
+{
+    const float y = band.y + band.h;
+
+    l->rule = ICO_TOUCH_RULE_TABLETOP;
+    l->band = band;
+    l->region = rect(l->safeRect.x, y, l->safeRect.w, l->safeRect.y + l->safeRect.h - y);
+}
+
 IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets safe, int size,
                                     const IcoTouchEnv *env)
 {
     IcoTouchLayout l;
+    IcoTouchRect band = {0.0f, 0.0f, 0.0f, 0.0f};
     float W = (float)outW, H = (float)outH;
-    float sx, sy, sw, sh, u, m, k, w;
+    float minS, qPhys, q0;
+    int fold;
 
-    (void)env;
     memset(&l, 0, sizeof(l));
     if (size < ICO_TOUCH_SMALL || size > ICO_TOUCH_LARGE) {
         size = ICO_TOUCH_MEDIUM;
@@ -100,64 +310,32 @@ IcoTouchLayout ico_touch_layout_env(uint32_t outW, uint32_t outH, IcoTouchInsets
     l.outH = outH;
     l.safe = safe;
     l.size = size;
-    sx = safe.left;
-    sy = safe.top;
-    sw = W - safe.left - safe.right;
-    sh = H - safe.top - safe.bottom;
-    l.safeRect = rect(sx, sy, sw, sh);
-    u = sh * s_scale[size];
-    l.unit = u;
-    m = M_MARGIN * u;
+    l.safeRect = rect(safe.left, safe.top, W - safe.left - safe.right, H - safe.top - safe.bottom);
 
-    /* left stick: the left 40 % x bottom 70 % */
-    l.stickArea = rect(sx, sy + 0.3f * sh, 0.4f * sw, 0.7f * sh);
-    l.stickR = 0.12f * u;
-    l.runR = ICO_TOUCH_RUN_RING * l.stickR;
-    l.stickHomeX = sx + 0.4f * l.stickArea.w;
-    l.stickHomeY = sy + sh - m - 1.6f * l.stickR;
+    /* the unit: the real millimetre when the density is known, else a
+       phone's (an unknown screen's short side taken as 68 mm, close to the
+       old look on a desktop); at least the short side over 160, which
+       guards a wrong density on a big monitor; then the size's scale */
+    minS = minf_(l.safeRect.w, l.safeRect.h);
+    qPhys = env != NULL && env->pxPerMm > 0.0f ? env->pxPerMm : minS / ICO_TOUCH_FALLBACK_MM;
+    l.pxPerMm = qPhys;
+    q0 = maxf_(qPhys, minS / Q_FLOOR_MM) * s_scale[size];
 
-    /* look pad: the right 60 % x top 45 % */
-    l.lookArea = rect(sx + 0.4f * sw, sy, 0.6f * sw, 0.45f * sh);
-    l.lookR = l.stickR;
-
-    /* shoulders in the top corners, L2/R2 under them */
-    w = M_SHOULDER_W * u;
-    k = M_SHOULDER_H * u;
-    button(&l, ICO_TOUCH_B_L1, rect(sx + m, sy + m, w, k), 0, ICO_PAD_L1);
-    button(&l, ICO_TOUCH_B_L2, rect(sx + m, sy + m + k + M_SHOULDER_GAP * u, w, k), 0, ICO_PAD_L2);
-    button(&l, ICO_TOUCH_B_R1, rect(sx + sw - m - w, sy + m, w, k), 0, ICO_PAD_R1);
-    button(&l, ICO_TOUCH_B_R2, rect(sx + sw - m - w, sy + m + k + M_SHOULDER_GAP * u, w, k), 0,
-           ICO_PAD_R2);
-
-    /* the D-pad cluster: right of the shoulder column, above the stick */
-    k = M_DPAD_KEY * u;
-    l.dpadX = sx + m + w + M_DPAD_GAP * u + 1.5f * k;
-    l.dpadY = sy + m + 1.5f * k;
-    button(&l, ICO_TOUCH_B_UP, rect(l.dpadX - 0.5f * k, l.dpadY - 1.5f * k, k, k), 0, ICO_PAD_UP);
-    button(&l, ICO_TOUCH_B_DOWN, rect(l.dpadX - 0.5f * k, l.dpadY + 0.5f * k, k, k), 0,
-           ICO_PAD_DOWN);
-    button(&l, ICO_TOUCH_B_LEFT, rect(l.dpadX - 1.5f * k, l.dpadY - 0.5f * k, k, k), 0,
-           ICO_PAD_LEFT);
-    button(&l, ICO_TOUCH_B_RIGHT, rect(l.dpadX + 0.5f * k, l.dpadY - 0.5f * k, k, k), 0,
-           ICO_PAD_RIGHT);
-
-    /* Select and Start at the top centre */
-    w = M_MENU_W * u;
-    k = M_MENU_H * u;
-    button(&l, ICO_TOUCH_B_SELECT, rect(sx + 0.5f * sw - 0.5f * M_MENU_GAP * u - w, sy + m, w, k),
-           0, ICO_PAD_SELECT);
-    button(&l, ICO_TOUCH_B_START, rect(sx + 0.5f * sw + 0.5f * M_MENU_GAP * u, sy + m, w, k), 0,
-           ICO_PAD_START);
-
-    /* the face buttons' diamond in the bottom right corner */
-    k = M_FACE_D * u;
-    w = M_FACE_R * u;
-    l.faceX = sx + sw - m - k - w;
-    l.faceY = sy + sh - m - k - w;
-    face(&l, ICO_TOUCH_B_CROSS, l.faceX, l.faceY + k, w, ICO_PAD_CROSS);
-    face(&l, ICO_TOUCH_B_CIRCLE, l.faceX + k, l.faceY, w, ICO_PAD_CIRCLE);
-    face(&l, ICO_TOUCH_B_SQUARE, l.faceX - k, l.faceY, w, ICO_PAD_SQUARE);
-    face(&l, ICO_TOUCH_B_TRIANGLE, l.faceX, l.faceY - k, w, ICO_PAD_TRIANGLE);
+    l.rule = ICO_TOUCH_RULE_FULL;
+    l.region = l.safeRect;
+    fold = fold_apply(env, l.safeRect, qPhys, &band);
+    if (fold == FOLD_SPLIT) {
+        l.rule = ICO_TOUCH_RULE_SPLIT;
+        l.band = band;
+    } else if (fold == FOLD_TABLETOP) {
+        tabletop(&l, band);
+    }
+    place(&l, fit(&l, q0));
+    if (fold == FOLD_FLAT && controls_touch(&l, band)) {
+        /* a flat crease under a button: below it instead */
+        tabletop(&l, band);
+        place(&l, fit(&l, q0));
+    }
     return l;
 }
 

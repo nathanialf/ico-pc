@@ -60,15 +60,16 @@ static Uint64 s_free_since;
 #define POINTER_SETTLE_NS 100000000ull
 
 /* the touch overlay: the mapper's state and zones, whether a direct touch
-   screen exists, the output and safe area the zones were built for, and the
-   copy the presenter's overlay draws from (taken at the vsync step; the
-   presenter runs on this thread, between pumps, but never reads the
-   mapper while events write it) */
+   screen exists, the output, safe area, density and fold the zones were
+   built for, and the copy the presenter's overlay draws from (taken at the
+   vsync step; the presenter runs on this thread, between pumps, but never
+   reads the mapper while events write it) */
 static IcoTouchState s_touch;
 static IcoTouchLayout s_touchLayout;
 static int s_touchDevice;
 static int s_touchW, s_touchH;
 static int s_safeX, s_safeY, s_safeW, s_safeH; /* s_safeW 0: the whole output */
+static IcoTouchEnv s_touchEnv;                 /* zero: unknown density, no fold */
 static IcoTouchOverlay s_touchSnap;
 
 static void open_pad(SDL_JoystickID id)
@@ -119,7 +120,8 @@ static void touch_rebuild(void)
         in.right = in.right > 0.0f ? in.right : 0.0f;
         in.bottom = in.bottom > 0.0f ? in.bottom : 0.0f;
     }
-    s_touchLayout = ico_touch_layout((uint32_t)s_touchW, (uint32_t)s_touchH, in, s_bind.touch_size);
+    s_touchLayout = ico_touch_layout_env((uint32_t)s_touchW, (uint32_t)s_touchH, in,
+                                         s_bind.touch_size, &s_touchEnv);
 }
 
 /* a direct touch screen is there: the overlay shows for 5 s from now */
@@ -208,6 +210,16 @@ void ico_input_sdl_set_touch_layout(int w, int h, int sx, int sy, int sw, int sh
     s_safeY = sy;
     s_safeW = sw;
     s_safeH = sh;
+    touch_rebuild();
+}
+
+void ico_input_sdl_set_touch_env(const IcoTouchEnv *env)
+{
+    if (env != NULL) {
+        s_touchEnv = *env;
+    } else {
+        memset(&s_touchEnv, 0, sizeof(s_touchEnv));
+    }
     touch_rebuild();
 }
 
