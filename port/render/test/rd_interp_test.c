@@ -5228,7 +5228,9 @@ static void s7Tri(const double *v, const double *q, double x0, RdScreenVtx *o)
 
 /* tick k of lockCamera's moving camera (the eye from z 0 to -60): in list
  * 3, marked, a prism only in tick 0 (part 0) whose top cap's plane the eye
- * crosses at z -5, and one only in tick 1 (part 1) crossed at z -52; in
+ * crosses at z -5, and one only in tick 1 (part 1) crossed at z -52,
+ * between a stencil reset and its resolve as shadow_Draw records them
+ * (prev's volume is inserted before the resolve: umPlace); in
  * list 7, marked, two key-0 triangles of tick 1, the second with a vertex
  * at Z 0, then two keyed ones (parts 2, 3) in both ticks, the second with a
  * vertex at Z 0 */
@@ -5251,8 +5253,12 @@ static void s7Frame(int k)
     int8_t sign[8];
     s7Prism(v, q, k ? -52.0 : -5.0, pv, sign);
     rd_select_list(3);
+    rd_shadow_reset();
     rd_frame_projected(1);
     rd_shadow_tris(pv, sign, 8, RD_KEY(&kObjS7, k, 0));
+    rd_frame_projected(0);
+    rd_shadow_resolve();
+    rd_frame_projected(1);
     rd_select_list(7);
     for (int n = 0; n < 4; n++) {
         if (n < 2 && k == 0) {
