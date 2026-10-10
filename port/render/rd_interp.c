@@ -42,8 +42,11 @@
  *                           normal when lit), and its ST when the grid
  *                           samples a target (the pool's surface: the STs
  *                           are screen positions through the tick's
- *                           camera); the strip headers, colours and an
- *                           image's STs are cur's
+ *                           camera); a grid that carries pool.c's formula
+ *                           (rd_grid_screen_st) has its STs computed again
+ *                           through the blended camera while the camera
+ *                           moves (gridCameraSts); the strip headers,
+ *                           colours and an image's STs are cur's
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
  *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's.
@@ -1454,6 +1457,129 @@ static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
 
+/* ------------------------------------------- the pool's screen-space STs
+ *
+ * pool.c makes the STs of its grids, which sample the scene copied into a
+ * work target, as each vertex's screen position through the tick's camera
+ * (updatePoolGeo, SetLimitedPoolReflactionMesh,
+ * SetLayoutedPoolReflactionMesh; rd.h rd_grid_screen_st gives the formula,
+ * the scales and each vertex's wave height).  Blending the two ticks' STs
+ * puts the reflection off by a growing amount the further the vertex: its
+ * ST is (x + 1000 d) 0.8 / ScreenWidth, d the screen offset of a point one
+ * unit along the reflected ray, so a far vertex's ST is a steep function of
+ * the camera and the straight line between two ticks' values is not where
+ * the blended camera sees the reflection (the distant water's shimmer while
+ * the camera moves).  While the camera moves the STs are computed again
+ * from the blended vertex, its blended height, the draw's blended world to
+ * screen (qw 16..19) and the blended camera's eye.  In double precision: in
+ * floats the reflection's 1000 times scaled difference of two screen
+ * positions carries the positions' rounding, up to 0.01 in ST in the pool
+ * dumps (the game's own STs scatter that much about the exact values), and
+ * a new rounding every present would make the far water sparkle.  With the
+ * camera still the blend of the ticks' STs stays, so such a frame is the
+ * same as before. */
+
+static void gridProject(const float (*m)[4], const double p[4], double o[4])
+{
+    for (int r = 0; r < 4; r++) {
+        o[r] = (double)m[0][r] * p[0] + (double)m[1][r] * p[1] + (double)m[2][r] * p[2] +
+               (double)m[3][r] * p[3];
+    }
+}
+
+bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], float sx, float sy,
+                        const float pos[4], float h, float out[2])
+{
+    if (kind == RD_GRID_ST_NONE || kind >= RD_GRID_ST_COUNT || !(sx > 0.0f) || !(sy > 0.0f)) {
+        return false;
+    }
+    const double q[4] = {pos[0], pos[1], pos[2], pos[3]};
+    double o[4];
+    gridProject(m, q, o);
+    if (!(fabs(o[3]) > 1e-9)) {
+        return false;
+    }
+    const double iw = 1.0 / o[3];
+    const double px = o[0] * iw - 2048.0, py = o[1] * iw - 2048.0;
+    double s, t;
+    if (kind == RD_GRID_ST_REFLECT) {
+        /* the ray from the eye to the vertex, reflected about the wave's
+         * normal, its y negated (updatePoolGeo's second loop) */
+        double d[3] = {q[0] - eye[0], q[1] - eye[1], q[2] - eye[2]};
+        const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (!(len > 0.0)) {
+            return false;
+        }
+        for (int k = 0; k < 3; k++) {
+            d[k] /= len;
+        }
+        const double nh = (double)h * 0.1;
+        const double n[3] = {nh, -1.0, nh};
+        const double k2 = (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) * -2.0;
+        const double r[3] = {d[0] + n[0] * k2, -(d[1] + n[1] * k2), d[2] + n[2] * k2};
+        const double q2[4] = {q[0] + r[0], q[1] + r[1], q[2] + r[2], q[3]};
+        double o2[4];
+        gridProject(m, q2, o2);
+        if (!(fabs(o2[3]) > 1e-9)) {
+            return false;
+        }
+        const double dx = o2[0] / o2[3] - o[0] * iw, dy = o2[1] / o2[3] - o[1] * iw;
+        /* usc and vsc: 1 / ScreenWidth (sx, as the game rounded it) times 0.8 */
+        s = (px + dx * 1000.0) * (double)(sx * 0.8f) + 0.5;
+        t = (py + dy * 1000.0) * (double)(sy * 0.8f) + 0.5;
+    } else {
+        const double k = kind == RD_GRID_ST_SURFACE ? 30.0 : 50.0;
+        s = px * sx + 0.5 + (double)h * k * iw;
+        t = py * sy + 0.5 + (double)h * k * iw;
+        if (kind == RD_GRID_ST_RIPPLE_CLAMPED) {
+            s = s < 0.0 ? 0.0 : s;
+            t = 1.0 < t ? 1.0 : t;
+        }
+    }
+    if (!isfinite(s) || !isfinite(t) || fabs(s) > 3.0e38 || fabs(t) > 3.0e38) {
+        return false;
+    }
+    out[0] = (float)s;
+    out[1] = (float)t;
+    return true;
+}
+
+static int s_gridStCam; /* grids whose STs the formula made, this present */
+
+/* The STs of grid c (its payload op, as blended or re-based: qw 16..19 and
+ * the stream) through the blended camera, when it carries a formula and
+ * the camera moves; false when it does not apply */
+static bool gridCameraSts(const RdCmd *c, uint8_t *op)
+{
+    const uint8_t kind = c->b[5];
+    if (c->type != RDC_GRID || kind == RD_GRID_ST_NONE || kind >= RD_GRID_ST_COUNT || !s_cam.on ||
+        s_cam.still || c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return false;
+    }
+    RdVuPayload hc;
+    memcpy(&hc, op, sizeof(hc));
+    const uint32_t qpv = hc.qwPerVertex, len = hc.vertsPerBatch;
+    const uint64_t need =
+        sizeof(RdVuPayload) + sizeof(RdVuBlock) + ((uint64_t)hc.boneQw + hc.streamQw) * 16u;
+    if (qpv < 2u || len == 0 || need > c->u[2]) {
+        return false;
+    }
+    const float (*vo)[4] = (const float (*)[4])(const void *)(op + sizeof(RdVuPayload));
+    float (*so)[4] =
+        (float (*)[4])(void *)(op + sizeof(RdVuPayload) + sizeof(RdVuBlock)) + hc.boneQw;
+    const double eye[3] = {s_cam.it[12], s_cam.it[13], s_cam.it[14]};
+    const uint32_t per = len * qpv + 4;
+    for (uint32_t b = 0; b < hc.batchCount && (b + 1) * per <= hc.streamQw; b++) {
+        for (uint32_t k = 0; k < len; k++) {
+            const uint32_t at = b * per + 3 + k * qpv;
+            float *st = so[at + qpv - 1u];
+            rd__grid_screen_st(kind, vo + 16, eye, c->f[0], c->f[1], so[at], st[3], st);
+        }
+    }
+    s_gridStCam++;
+    return true;
+}
+
 /* A draw that is cur's (unmatched, mismatched, jumped, unkeyed): cur's
  * object through the blended camera */
 static void camCurDraw(RdCmd *c)
@@ -1488,6 +1614,9 @@ static void camCurDraw(RdCmd *c)
                   how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL, s_cam.vc, vuView(c))) {
         s_rebased++;
         s_rebasedCur++;
+        /* the pool's grids: their STs through the camera they are now drawn
+         * with, as a matched one's */
+        gridCameraSts(c, op);
     }
 }
 
@@ -2127,11 +2256,13 @@ static bool sameMesh(uint32_t a, uint32_t b)
  * its state: its STs are screen positions.  pool.c makes the pool surface's
  * STs (its refraction and reflection grids, sampling the scene copied into
  * a work target) by projecting each vertex with the tick's camera
- * (pool.c:549-550, 590-591).  The camera and the copied scene blend, so
- * with cur's STs the image under the water would stand a tick ahead of the
- * scene and jump back at every tick; blended with the positions it follows
- * the blended camera.  A grid with an image keeps cur's STs (its texture's
- * own coordinates, the UV scroll in qw 2 blending instead). */
+ * (updatePoolGeo).  The camera and the copied scene blend, so with cur's
+ * STs the image under the water would stand a tick ahead of the scene and
+ * jump back at every tick; blended with the positions it follows the
+ * blended camera, and with the formula in the command (gridCameraSts) it
+ * is where the blended camera sees it.  A grid with an image keeps cur's
+ * STs (its texture's own coordinates, the UV scroll in qw 2 blending
+ * instead). */
 static bool s_gridScreenSt;
 
 static int s_gridSt; /* grids whose STs blended (s_gridScreenSt), this present */
@@ -2273,8 +2404,9 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         const uint32_t lerpQw = qpv == RD_VU_QW_GRID_LIT ? 2u : 1u; /* pos (, normal) */
         /* the ST, the vertex's last qword, too when it is a projection of the
          * vertex through the tick's camera into a target the frame drew
-         * (s_gridScreenSt: the pool's refraction and reflection) */
-        const bool st = s_gridScreenSt && qpv >= 2u;
+         * (s_gridScreenSt, or a formula in b[5]: the pool's refraction and
+         * reflection); its w is the wave height of a grid with a formula */
+        const bool st = (s_gridScreenSt || cc->b[5] != RD_GRID_ST_NONE) && qpv >= 2u;
         for (uint32_t s = 0; s < hc.batchCount && (s + 1) * per <= hc.streamQw; s++) {
             for (uint32_t k = 0; k < len; k++) {
                 const uint32_t at = s * per + 3 + k * qpv;
@@ -2288,7 +2420,11 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
                 }
             }
         }
-        s_gridSt += st;
+        /* with the camera moving, a formula's STs from the blended vertices
+         * through the blended camera (gridCameraSts) replace the blend */
+        if (!(st && gridCameraSts(cc, op))) {
+            s_gridSt += st;
+        }
     } else if (cc->type == RDC_PARTICLES && hc.streamQw >= 6) {
         /* 6 header qwords, then (x, y, z, size), (u, v, grey, alpha) each */
         const uint32_t n = (hc.streamQw - 6) / 2;
@@ -4513,7 +4649,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
     s_umPrevKept = s_umPrevHeld = 0;
     s_lightRot = 0;
-    s_lightPair = s_placed = s_gridSt = 0;
+    s_lightPair = s_placed = s_gridSt = s_gridStCam = 0;
     s_pivotMesh = 0; /* the pivots are recomputed per present */
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
@@ -4656,6 +4792,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.placed = (uint32_t)s_placed;
     st.gridSt = (uint32_t)s_gridSt;
     st.reprojected = s_reproj;
+    st.gridStCamera = (uint32_t)s_gridStCam;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -4683,8 +4820,9 @@ static struct {
     uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
     /* lit draws whose previous lights were re-paired (pairLights), draws of
      * a key drawn several times paired by their place (placeSlot), grids
-     * whose screen-space STs blended (s_gridScreenSt) */
-    uint64_t lightPaired, placed, gridSt;
+     * whose screen-space STs blended (s_gridScreenSt) and those pool.c's
+     * formula made through the blended camera (gridCameraSts) */
+    uint64_t lightPaired, placed, gridSt, gridStCamera;
     /* unmatched keyed draws by reason, draws paired with a draw of another
      * place, VU draws of the tick before alone kept and held */
     uint64_t unmatchedWhy[RD_UNMATCHED_COUNT], apart, prevKept, prevHeld;
@@ -4723,6 +4861,7 @@ static void presentLog(void)
     s_pres.lightPaired += st->lightPaired;
     s_pres.placed += st->placed;
     s_pres.gridSt += st->gridSt;
+    s_pres.gridStCamera += st->gridStCamera;
     for (int k = 0; k < RD_UNMATCHED_COUNT; k++) {
         s_pres.unmatchedWhy[k] += st->unmatchedWhy[k];
     }
@@ -4775,9 +4914,10 @@ static void presentLog(void)
      * screen-space STs */
     rd__log("interp: %llu lit draws whose previous lights were re-paired by direction; %llu draws "
             "of a key drawn several times paired by their place in the world instead of their "
-            "order; %llu grids sampling a target whose STs blended",
+            "order; %llu grids sampling a target whose STs blended, %llu whose STs the pool's "
+            "formula made through the blended camera",
             (unsigned long long)s_pres.lightPaired, (unsigned long long)s_pres.placed,
-            (unsigned long long)s_pres.gridSt);
+            (unsigned long long)s_pres.gridSt, (unsigned long long)s_pres.gridStCamera);
     /* a fifth line: why keyed draws stayed unmatched, and the VU draws of
      * the tick before alone */
     const uint64_t *u = s_pres.unmatchedWhy;

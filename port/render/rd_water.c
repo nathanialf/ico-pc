@@ -14,7 +14,11 @@
  * The records of the open frame live here, one per frame slot (RdContext
  * keeps RD_FRAME_RING frames), and are cleared by rd__frame_reset when a slot is
  * reused.  Nothing here is dumped: the commands name the block target, so a
- * dump replays as recorded. */
+ * dump replays as recorded.
+ *
+ * Also the screen-space STs of pool.c's grids (rd_grid_screen_st): the
+ * formula and scales wait here for the next rd_draw_vu_grid, which writes
+ * them into its command (so dumps carry them). */
 #include <string.h>
 #include "rd_internal.h"
 
@@ -285,6 +289,30 @@ uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes)
         *scopes = w->scopes;
     }
     return w->scopeCount;
+}
+
+/* --------------------------------------------- the grids' screen STs */
+
+/* rd_grid_screen_st's kind and scales, waiting for the next grid draw */
+static struct {
+    uint8_t kind;
+    float sx, sy;
+} s_gridSt;
+
+void rd_grid_screen_st(RdGridSt kind, float sx, float sy)
+{
+    const bool ok = kind > RD_GRID_ST_NONE && kind < RD_GRID_ST_COUNT && sx > 0.0f && sy > 0.0f;
+    s_gridSt.kind = ok ? (uint8_t)kind : (uint8_t)RD_GRID_ST_NONE;
+    s_gridSt.sx = ok ? sx : 0.0f;
+    s_gridSt.sy = ok ? sy : 0.0f;
+}
+
+void rd__grid_screen_st_take(uint8_t *kind, float *sx, float *sy)
+{
+    *kind = s_gridSt.kind;
+    *sx = s_gridSt.sx;
+    *sy = s_gridSt.sy;
+    memset(&s_gridSt, 0, sizeof(s_gridSt));
 }
 
 /* ------------------------------------------------------ the pipelines

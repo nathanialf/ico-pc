@@ -772,10 +772,11 @@ int main(int argc, char **argv)
         }
         printf("interp %u -> %u at %g: snap %u, %u keyed draws: %u blended, %u unmatched, %u "
                "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations; %u lights "
-               "re-paired; %u paired by place; %u grid STs blended\n",
+               "re-paired; %u paired by place; %u grid STs blended, %u through the blended "
+               "camera\n",
                pf.number, f.number, (double)interpT, ist.snap, ist.keyed, ist.lerped, ist.missing,
                ist.mismatch, ist.jump, ist.morph, ist.rotated, ist.lightPaired, ist.placed,
-               ist.gridSt);
+               ist.gridSt, ist.gridStCamera);
         printf("interp: unmatched %u not drawn before, %u fewer before, %u left by the place "
                "pairing, %u payload; %u paired with another place; %u of the tick before kept, "
                "%u held; %u CPU-projected draws re-projected\n",

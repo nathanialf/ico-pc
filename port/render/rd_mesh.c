@@ -1394,7 +1394,17 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
     p.qwPerVertex = d->lit ? RD_VU_QW_GRID_LIT : RD_VU_QW_GRID;
     /* Mesh3D.qwc: per strip the VIF qword, tag, colour, the vertices, MSCNT */
     p.streamQw = d->strips * (d->stripLen * p.qwPerVertex + 4);
-    pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
+    uint8_t kind = 0;
+    float sx = 0.0f, sy = 0.0f;
+    rd__grid_screen_st_take(&kind, &sx, &sy);
+    RdCmd *c = pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
+    if (c && kind) {
+        /* b[5]: the RdGridSt formula of the STs (rd.h rd_grid_screen_st),
+         * f[0], f[1] its sx and sy; 0 in other grids and in older dumps */
+        c->b[5] = kind;
+        c->f[0] = sx;
+        c->f[1] = sy;
+    }
 }
 
 /* A particle batch drawn with key 0 is keyed here by list and the

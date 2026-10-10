@@ -1112,7 +1112,18 @@ void rd_shadow_resolve(void);
  *                  Enhanced projection and interpolation (not dumped).  The
  *                  Original preset draws from the matrices the VU packets
  *                  carry and does not read it.  Nesting depth 4, 8 scopes a
- *                  frame */
+ *                  frame
+ * rd_grid_screen_st the next grid draw (rd_draw_vu_grid, from
+ *                  prim_DispMesh3D) has STs that pool.c computed as a screen
+ *                  position of each vertex through the frame's world to
+ *                  screen matrix (an RdGridSt formula below), with sx = 1 /
+ *                  ScreenWidth and sy = 1 / ScreenHeight as the game had
+ *                  them and each vertex's wave height in its ST's w.  While
+ *                  pictures are blended and the camera moves, the
+ *                  interpolation computes those STs again through the
+ *                  blended camera instead of blending the two ticks' STs
+ *                  (rd_interp.c).  Recorded in the grid's command (b[5],
+ *                  f[0], f[1]), so dumps keep it; it applies to one draw */
 RdTarget rd_gs_named_block(uint32_t tbp, uint32_t gsW, uint32_t gsH);
 RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth);
 void rd_alias_target(RdTarget from, RdTarget to);
@@ -1131,6 +1142,30 @@ void rd_pop_camera(void);
  *                    reflection's camera).  Recording only; off by default */
 int rd_camera_depth(void);
 void rd_frame_projected(int on);
+
+/* rd_grid_screen_st's formulas, pool.c's per vertex q (h its wave height in
+ * ST.w, M the grid's world to GS screen, (x, y) = (M q).xy / w its GS
+ * position, iw = 1 / w):
+ *   SURFACE        updatePoolGeo's refracting surface:
+ *                  s = (x - 2048) sx + 0.5 + 30 h iw, t the same with y, sy
+ *   REFLECT        updatePoolGeo's reflecting surface: the ray from the eye
+ *                  to q reflected about the normal (0.1 h, -1, 0.1 h), its y
+ *                  negated, is r; d is the GS position of q + r less (x, y);
+ *                  s = (x - 2048 + 1000 d.x) 0.8 sx + 0.5, t the same with
+ *                  y, d.y, sy
+ *   RIPPLE         SetLimitedPoolReflactionMesh: SURFACE with 50 h iw
+ *   RIPPLE_CLAMPED SetLayoutedPoolReflactionMesh: RIPPLE, s at least 0 and
+ *                  t at most 1 */
+typedef enum RdGridSt {
+    RD_GRID_ST_NONE = 0,
+    RD_GRID_ST_SURFACE = 1,
+    RD_GRID_ST_REFLECT = 2,
+    RD_GRID_ST_RIPPLE = 3,
+    RD_GRID_ST_RIPPLE_CLAMPED = 4,
+    RD_GRID_ST_COUNT
+} RdGridSt;
+
+void rd_grid_screen_st(RdGridSt kind, float sx, float sy);
 
 /* --------------------------------------------------------------- post */
 

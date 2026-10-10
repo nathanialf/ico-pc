@@ -86,7 +86,7 @@ typedef enum RdCmdType {
     RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size,
                        * b[4] RD_VU_VIEW_* (rd_mesh.h; 0 in older dumps) */
     RDC_SKINNED,      /* same, plus bones in the payload */
-    RDC_GRID,         /* u[1] payload offset, u[2] size */
+    RDC_GRID,         /* u[1] payload offset, u[2] size; b[5] RdGridSt, f[0], f[1] its sx, sy */
     RDC_PARTICLES,    /* u[1] payload offset, u[2] size */
     RDC_WORLD_PRIMS,  /* b[0] RdPrim, u[0] count, u[1] payload offset, u[2] size */
     RDC_SHADOW_STRIP, /* b[1] RD_SHADOW_FRAME_CAMERA;
@@ -1069,6 +1069,9 @@ typedef struct RdInterpStats {
     uint32_t lightPaired;
     uint32_t placed;
     uint32_t gridSt;
+    /* grids whose STs pool.c's formula (rd.h rd_grid_screen_st) computed
+     * through the blended camera instead */
+    uint32_t gridStCamera;
     /* the unmatched draws (missing) by RD_UNMATCHED_*; draws of a key drawn
      * several times paired with a free draw of another place (not the
      * nearest of each other) and so drawn as the tick's (counted in jump) */
@@ -1108,6 +1111,14 @@ int rd__interp_snap(const RdFrame *prev, const RdFrame *cur);
  * default; rd_interp.c): off, they blend in screen space as before (the
  * tests' and the replay tool's before/after switch). */
 void rd__interp_set_reproject(bool on);
+/* One vertex's ST by the RdGridSt formula kind (rd.h; pool.c's statements in
+ * double precision): m the grid's model to GS screen (VU qw 16..19), eye the
+ * camera's eye in the world (REFLECT), sx and sy the command's f[0] and
+ * f[1], pos the vertex and h its wave height (its ST's w).  False (out
+ * untouched) for kind NONE or an unknown one, a vertex at w 0 or a result
+ * that is not finite. */
+bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], float sx, float sy,
+                        const float pos[4], float h, float out[2]);
 /* rd_last_present_info's record for rd_end_frame's present of f
  * (interpolation off; rd_interp.c) */
 void rd__note_frame_present(const RdFrame *f);
@@ -1745,6 +1756,9 @@ typedef struct RdCameraScope {
 
 void rd__water_frame_reset(const RdFrame *f);
 uint32_t rd__alias_of(uint32_t id);
+/* rd_grid_screen_st's formula and scales for the grid draw being recorded,
+ * and none for the draws after it (rd_mesh.c rd_draw_vu_grid) */
+void rd__grid_screen_st_take(uint8_t *kind, float *sx, float *sy);
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index);
 uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes);
 bool rd__frame_projected(void);
