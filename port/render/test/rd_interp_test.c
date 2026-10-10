@@ -85,9 +85,19 @@
  *             light, and the shading of normals all round between the two
  *             ticks' shading
  *   instances still instances under one key, the first gone: each blends
- *             with itself; one gone and one new: the new one is the tick's;
- *             moving instances pair by ordinal; the pool's ripples (two F12
- *             dumps' blocks) each stay at their place
+ *             with itself; one gone and one new: the two are paired, the
+ *             new one drawn as the tick's; moving instances pair by
+ *             ordinal; the pool's ripples (two F12 dumps' blocks) each stay
+ *             at their place
+ *   paired    a moved instance beside still ones under one key pairs with
+ *             its own draw (no draw unmatched while one of its key is
+ *             free); an emitter's batch count changing keeps every batch
+ *             paired or drawn; the camera turning 28 degrees: a mesh of the
+ *             tick before alone that left the picture is drawn at alpha
+ *             0.25, 0.5 and 0.75 where the blended camera sees it, one still
+ *             in the picture is not, nor one whose object and part the
+ *             current tick draws; with a still camera such a draw leaves the
+ *             frame byte for byte as it was
  *   grid STs  a grid sampling a target blends its STs half way; a grid
  *             with an image keeps the tick's
  *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
@@ -3413,19 +3423,21 @@ static void testInstances(void)
           "a still instance gone: the others blend with themselves (x %.2f %.2f, ordinal 20 60; "
           "lerped %u, placed %u)",
           (double)instanceX(f, 0), (double)instanceX(f, 1), st->lerped, st->placed);
-    /* the first gone and a new one at 120 in the same tick: the new one is
-     * the tick's, not blended from the one that went */
+    /* the first gone and a new one at 120 in the same tick: the two are
+     * paired (no draw unmatched beside a free one of its key), and as they
+     * are not each other's nearest (80 is nearer to 120) the new one is the
+     * tick's, not blended from the one that went */
     const float bcd[3] = {40.0f, 80.0f, 120.0f};
     instanceFrame(mesh, abc, 3);
     instanceFrame(mesh, bcd, 3);
     st = build(0.5f, 1);
     f = built(0.5f);
-    CHECK(st->lerped == 2 && st->missing == 1 && instanceX(f, 0) == 40.0f &&
-              instanceX(f, 1) == 80.0f && instanceX(f, 2) == 120.0f,
-          "one gone, one new: the new one is the tick's (x %.2f %.2f %.2f; lerped %u, unmatched "
-          "%u)",
+    CHECK(st->lerped == 2 && st->missing == 0 && st->apart == 1 && st->jump == 1 &&
+              instanceX(f, 0) == 40.0f && instanceX(f, 1) == 80.0f && instanceX(f, 2) == 120.0f,
+          "one gone, one new: paired apart, the new one is the tick's (x %.2f %.2f %.2f; lerped "
+          "%u, unmatched %u, apart %u)",
           (double)instanceX(f, 0), (double)instanceX(f, 1), (double)instanceX(f, 2), st->lerped,
-          st->missing);
+          st->missing, st->apart);
     /* moving instances (none at a place of the tick before): by ordinal */
     const float ab[2] = {0.0f, 40.0f}, ab2[2] = {10.0f, 50.0f};
     instanceFrame(mesh, ab, 2);
@@ -3443,8 +3455,9 @@ static void testInstances(void)
     st = build(0.5f, 1);
     f = built(0.5f);
     const RdFrame *cur = rd__last_frame();
-    CHECK(st->lerped == 4 && st->missing == 1,
-          "ripples: 4 blend, the new one is the tick's (%u, %u)", st->lerped, st->missing);
+    CHECK(st->lerped == 4 && st->missing == 0 && st->apart == 1,
+          "ripples: 4 blend, the new one is paired apart and the tick's (%u, %u, %u)", st->lerped,
+          st->missing, st->apart);
     for (int i = 0; i < 5; i++) {
         const float (*m)[4] = vuBlock(f, findKey(f, 5, RD_KEY(&kObjR, 1, 34), i));
         const float (*mc)[4] = vuBlock(cur, findKey(cur, 5, RD_KEY(&kObjR, 1, 34), i));
@@ -3745,9 +3758,10 @@ static void testWading(void)
     const RdInterpStats *st = build(0.5f, 1);
     const RdFrame *f = built(0.5f);
     const RdFrame *cur = rd__last_frame();
-    CHECK(st->lerped == 6 && st->missing == 1,
-          "wading ripples: the 6 that stay blend, the new one is the tick's (%u, %u)", st->lerped,
-          st->missing);
+    CHECK(st->lerped == 6 && st->missing == 0 && st->apart == 1,
+          "wading ripples: the 6 that stay blend, the new one is paired apart and the tick's (%u, "
+          "%u, %u)",
+          st->lerped, st->missing, st->apart);
     for (int i = 0; i < 7; i++) {
         double o[3], oc[3];
         if (!wadeOrigin(f, kr, i, o) || !wadeOrigin(cur, kr, i, oc)) {
@@ -3885,6 +3899,247 @@ static void testGridScreenSt(void)
     rd_destroy_texture(image);
 }
 
+/* ------------------------------------------ every draw paired or kept */
+
+/* an emitter's n batches of 2 particles in list 6, keyed by the emitter
+ * (MicroCode.c: one key for all its batches), moved dx */
+static void batchFrame(int n, float dx)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(6);
+    for (int b = 0; b < n; b++) {
+        particleBatch(&kObjP1, 2, (float)(b * 10) + dx, 1);
+    }
+    rd_end_frame(0);
+}
+
+static int typeCount(const RdFrame *f, int l, uint8_t type)
+{
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        n += f->lists[l].cmds[i].type == type;
+    }
+    return n;
+}
+
+static const char kObjAl;
+
+/* the s6 camera turned deg; mesh A (W = I) and, when b is not NULL, mesh B
+ * (key part 2) with its origin at world b; with bOther, a draw of B's
+ * object and part under another ordinal byte at A's place */
+static void aloneFrame(RdMesh mesh, double deg, const double *b, int bOther)
+{
+    rd_begin_frame();
+    frameHead();
+    double eye[3], v[16], p[16], w[16];
+    s6OrbitEye(deg, eye);
+    s6View(deg, eye, v);
+    s6Proj(p);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int k = 0; k < 16; k++) {
+        cam.view[k] = (float)v[k];
+        cam.proj43[k] = (float)p[k];
+    }
+    cam.zoom = 500.0f;
+    rd_set_camera(&cam);
+    s6Translate(w, 0.0, 0.0, 0.0);
+    s6Draw(mesh, v, w, RD_KEY(&kObjAl, 0, 32));
+    if (b) {
+        s6Translate(w, b[0], b[1], b[2]);
+        s6Draw(mesh, v, w, RD_KEY(&kObjAl, 2, 32));
+    }
+    if (bOther) {
+        s6Translate(w, 0.0, 0.0, 0.0);
+        s6Draw(mesh, v, w, RD_KEY(&kObjAl, 2, 33));
+    }
+    rd_end_frame(0);
+}
+
+/* where the blended camera at t of the turn 0 -> 28 degrees (the rotation
+ * slerped: the yaw 28 t; the eye on the line between the ticks' eyes) puts
+ * the world point x */
+static void aloneExpected(double t, const double x[3], double out[2])
+{
+    double e0[3], e1[3], eye[3], v[16], p[16], s[16], w[16], m[16];
+    s6OrbitEye(0.0, e0);
+    s6OrbitEye(28.0, e1);
+    for (int k = 0; k < 3; k++) {
+        eye[k] = (1.0 - t) * e0[k] + t * e1[k];
+    }
+    s6View(28.0 * t, eye, v);
+    s6Proj(p);
+    mul4(p, v, s);
+    s6Translate(w, x[0], x[1], x[2]);
+    mul4(s, w, m);
+    s6Project(m, kS6PointB, out);
+}
+
+/* a frame's lists and payload, for a byte comparison */
+typedef struct FrameCopy {
+    uint32_t count[RD_LIST_COUNT];
+    RdCmd *cmds[RD_LIST_COUNT];
+    uint8_t *payload;
+    uint32_t payloadSize;
+} FrameCopy;
+
+static void frameCopy(const RdFrame *f, FrameCopy *c)
+{
+    memset(c, 0, sizeof(*c));
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        c->count[l] = f->lists[l].count;
+        c->cmds[l] = malloc((size_t)f->lists[l].count * sizeof(RdCmd) + 1);
+        if (c->cmds[l] && f->lists[l].count) {
+            memcpy(c->cmds[l], f->lists[l].cmds, (size_t)f->lists[l].count * sizeof(RdCmd));
+        }
+    }
+    if (f) {
+        c->payloadSize = f->payloadSize;
+        c->payload = malloc((size_t)f->payloadSize + 1);
+        if (c->payload && f->payloadSize) {
+            memcpy(c->payload, f->payload, f->payloadSize);
+        }
+    }
+}
+
+static bool frameSame(const FrameCopy *c, const RdFrame *f)
+{
+    if (!f || !c->payload || c->payloadSize != f->payloadSize ||
+        memcmp(c->payload, f->payload, f->payloadSize) != 0) {
+        return false;
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        if (!c->cmds[l] || c->count[l] != f->lists[l].count ||
+            (c->count[l] &&
+             memcmp(c->cmds[l], f->lists[l].cmds, (size_t)c->count[l] * sizeof(RdCmd)) != 0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void frameCopyFree(FrameCopy *c)
+{
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        free(c->cmds[l]);
+    }
+    free(c->payload);
+    memset(c, 0, sizeof(*c));
+}
+
+static void testPairedOrKept(void)
+{
+    RdMesh mesh = makeMesh();
+    RdInterpStats st;
+    const RdFrame *f;
+
+    /* (a) three instances under one key, two still and the third moved 10
+     * units: its origins fail sameOrigin, yet the two are each other's
+     * nearest and pair (before: the moved one unmatched, the one it was
+     * free) */
+    {
+        const float before[3] = {0.0f, 40.0f, 80.0f}, after[3] = {0.0f, 40.0f, 90.0f};
+        instanceFrame(mesh, before, 3);
+        instanceFrame(mesh, after, 3);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        uint32_t why = 0;
+        for (int k = 0; k < RD_UNMATCHED_COUNT; k++) {
+            why += st.unmatchedWhy[k];
+        }
+        CHECK(f && st.lerped == 3 && st.missing == 0 && st.apart == 0 && why == 0 &&
+                  fabsf(instanceX(f, 2) - 85.0f) < 1e-3f && instanceX(f, 0) == 0.0f &&
+                  instanceX(f, 1) == 40.0f,
+              "a moved instance beside still ones pairs with its own (x %.3f, want 85; lerped "
+              "%u, unmatched %u, apart %u)",
+              f ? (double)instanceX(f, 2) : -1.0, st.lerped, st.missing, st.apart);
+    }
+
+    /* (b) an emitter's batch count changes: every batch of cur is paired or
+     * drawn as the tick's, and the reason of an unmatched one is the count */
+    batchFrame(2, 0.0f);
+    batchFrame(3, 1.0f);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.lerped == 2 && st.missing == 1 && st.unmatchedWhy[RD_UNMATCHED_FEWER] == 1 &&
+              st.unmatchedWhy[RD_UNMATCHED_UNPLACED] == 0 && typeCount(f, 6, RDC_PARTICLES) == 3,
+          "batches 2 -> 3: two blend, the third is the tick's for its count (lerped %u, "
+          "unmatched %u, fewer %u, drawn %d)",
+          st.lerped, st.missing, st.unmatchedWhy[RD_UNMATCHED_FEWER],
+          f ? typeCount(f, 6, RDC_PARTICLES) : -1);
+    batchFrame(3, 0.0f);
+    batchFrame(2, 1.0f);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.lerped == 2 && st.missing == 0 && st.prevKept == 0 &&
+              typeCount(f, 6, RDC_PARTICLES) == 2,
+          "batches 3 -> 2: both blend, the key is drawn in cur so nothing of the tick before is "
+          "added (lerped %u, unmatched %u, kept %u, drawn %d)",
+          st.lerped, st.missing, st.prevKept, f ? typeCount(f, 6, RDC_PARTICLES) : -1);
+
+    /* (c) the camera turns 28 degrees and leaves B (at x 250, z 100: GS x
+     * 2256 at 0 degrees, 2332 at 28, past the picture's 2304) behind: B is
+     * of prev alone, outside cur's picture, and is drawn through the
+     * blended camera at every t */
+    const RdKey kb = RD_KEY(&kObjAl, 2, 32);
+    const double bOut[3] = {250.0, 0.0, 100.0}, bIn[3] = {-200.0, 0.0, 150.0};
+    aloneFrame(mesh, 0.0, bOut, 0);
+    aloneFrame(mesh, 28.0, NULL, 0);
+    for (int i = 1; i <= 3; i++) {
+        const double t = 0.25 * i;
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), (float)t, 1, &st);
+        const RdCmd *c = f ? findKey(f, 0, kb, 0) : NULL;
+        const RdCmd *a = f ? findKey(f, 0, RD_KEY(&kObjAl, 0, 32), 0) : NULL;
+        const float (*m)[4] = c ? vuBlock(f, c) : NULL;
+        double got[2] = {0.0, 0.0}, want[2];
+        if (m) {
+            s6ProjectF(m, kS6PointB, got);
+        }
+        aloneExpected(t, bOut, want);
+        CHECK(m && a && c > a && st.prevKept == 1 && st.prevHeld == 0 &&
+                  drawsOf(f, 0, kb, RDC_MESH) == 1 &&
+                  hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
+              "t %.2f: B of the tick before alone, outside the picture, drawn after A at %.3f "
+              "%.3f (want %.3f %.3f; kept %u, held %u)",
+              t, got[0], got[1], want[0], want[1], st.prevKept, st.prevHeld);
+    }
+
+    /* (d) B still inside cur's picture (x -200, z 150: GS x 1975 at 28
+     * degrees): the game dropped it for another reason, it is not drawn;
+     * nor is B outside the picture while cur draws its object and part
+     * under another ordinal byte */
+    aloneFrame(mesh, 0.0, bIn, 0);
+    aloneFrame(mesh, 28.0, NULL, 0);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.prevKept == 0 && drawsOf(f, 0, kb, RDC_MESH) == 0,
+          "B of the tick before alone inside the picture is not drawn (kept %u, drawn %d)",
+          st.prevKept, f ? drawsOf(f, 0, kb, RDC_MESH) : -1);
+    aloneFrame(mesh, 0.0, bOut, 0);
+    aloneFrame(mesh, 28.0, NULL, 1);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.prevKept == 0 && drawsOf(f, 0, kb, RDC_MESH) == 0,
+          "B of the tick before is not drawn beside its object and part (kept %u, drawn %d)",
+          st.prevKept, f ? drawsOf(f, 0, kb, RDC_MESH) : -1);
+
+    /* (e) a still camera: B of the tick before alone (x 350, z -100: past
+     * the picture's right edge at 10 degrees) changes nothing; the frame is
+     * byte for byte the one built without B */
+    {
+        const double bFar[3] = {350.0, 0.0, -100.0};
+        FrameCopy ref;
+        aloneFrame(mesh, 10.0, NULL, 0);
+        aloneFrame(mesh, 10.0, NULL, 0);
+        frameCopy(rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st), &ref);
+        aloneFrame(mesh, 10.0, bFar, 0);
+        aloneFrame(mesh, 10.0, NULL, 0);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        CHECK(frameSame(&ref, f) && st.prevKept == 0 && st.prevHeld == 0,
+              "still camera: the unpaired draw of the tick before changes nothing (kept %u, held "
+              "%u)",
+              st.prevKept, st.prevHeld);
+        frameCopyFree(&ref);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -3915,6 +4170,7 @@ static void runCpu(void)
     testInstances();
     testWading();
     testGridScreenSt();
+    testPairedOrKept();
 }
 
 int main(void)

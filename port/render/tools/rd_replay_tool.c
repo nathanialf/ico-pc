@@ -750,6 +750,12 @@ int main(int argc, char **argv)
                pf.number, f.number, (double)interpT, ist.snap, ist.keyed, ist.lerped, ist.missing,
                ist.mismatch, ist.jump, ist.morph, ist.rotated, ist.lightPaired, ist.placed,
                ist.gridSt);
+        printf("interp: unmatched %u not drawn before, %u fewer before, %u left by the place "
+               "pairing, %u payload; %u paired with another place; %u of the tick before kept, "
+               "%u held\n",
+               ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
+               ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
+               ist.apart, ist.prevKept, ist.prevHeld);
     }
     if (list) {
         RdStateBlock st = rf->startState;

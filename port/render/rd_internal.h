@@ -1019,6 +1019,15 @@ enum {
     RD_MISMATCH_COUNT
 };
 
+/* Why a keyed draw of cur stayed unmatched (RdInterpStats.unmatchedWhy) */
+enum {
+    RD_UNMATCHED_ABSENT = 0, /* the previous frame has no draw of its key, type and list */
+    RD_UNMATCHED_FEWER,      /* the previous frame drew the key fewer times, every one paired */
+    RD_UNMATCHED_UNPLACED,   /* left by the pairing by place while a previous draw stayed free */
+    RD_UNMATCHED_PAYLOAD,    /* its payload is out of the frame's range */
+    RD_UNMATCHED_COUNT
+};
+
 typedef struct RdInterpStats {
     uint32_t snap;     /* RD_SNAP_* of the frame */
     uint32_t keyed;    /* keyed draws in cur */
@@ -1048,6 +1057,17 @@ typedef struct RdInterpStats {
     uint32_t lightPaired;
     uint32_t placed;
     uint32_t gridSt;
+    /* the unmatched draws (missing) by RD_UNMATCHED_*; draws of a key drawn
+     * several times paired with a free draw of another place (not the
+     * nearest of each other) and so drawn as the tick's (counted in jump) */
+    uint32_t unmatchedWhy[RD_UNMATCHED_COUNT];
+    uint32_t apart;
+    /* VU draws of the previous frame alone, their object and part not drawn
+     * in the current frame's list and outside its camera's picture: drawn
+     * through the blended camera (kept), or not drawn because they could
+     * not be placed, their state reached or their block re-based (held) */
+    uint32_t prevKept;
+    uint32_t prevHeld;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
