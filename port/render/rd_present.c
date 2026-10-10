@@ -1311,6 +1311,7 @@ void rd__present_record(RhiCommandList cl)
                          "effects depth is not available with the CRT filter");
         }
         rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        rd__perf_post(cl, RD_PERF_POST_CRT); /* the GPU timing's CRT stretch */
         const bool ui = rd__overlay_grid_pending();
         bool capOk = true;
         if (ui && rd__capture_armed()) {
@@ -1328,6 +1329,7 @@ void rd__present_record(RhiCommandList cl)
         filtered =
             capOk && rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
         uiInPicture = filtered && ui;
+        rd__perf_post(cl, -1);
     }
     /* the full-height scene: DISPLAY already has every line */
     if (!filtered && pr->lineDouble && !g_rd.fullHeight) {

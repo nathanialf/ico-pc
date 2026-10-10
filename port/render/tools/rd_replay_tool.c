@@ -80,7 +80,13 @@
  *                         groups created (rd's uniform and texture groups
  *                         apart), bind group and pipeline binds, ring bytes,
  *                         pipeline barriers and copies, the screen-prim
- *                         draws one per command and merged
+ *                         draws one per command and merged; on a device
+ *                         with GPU timestamps, after the picture is written,
+ *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
+ *                         more times and the last replay's GPU times are
+ *                         printed: the uploads, each list, each picture
+ *                         effect (rd.h RD_PERF_POST_*, inside the lists'
+ *                         times) and the present
  *   --no-aa1              replays with PRIM.AA1 off: every RDC_AA1 a NOP and
  *                         the start state's bit clear, the frame as the
  *                         renderer drew it before AA1 was decoded (a
@@ -804,6 +810,37 @@ int main(int argc, char **argv)
             fprintf(stderr, "readback or PNG write failed\n");
         }
         free(px);
+    }
+    if (replayed && stats && rhi_timestamps_supported()) {
+        /* a record's GPU times come in RHI_FRAMES_IN_FLIGHT replays later:
+           replays of the same frame after the picture was read, the last
+           complete record printed (a warm replay) */
+        RdPerfRecord pr, last;
+        bool have = false;
+        memset(&last, 0, sizeof(last));
+        for (int k = 0; k < RHI_FRAMES_IN_FLIGHT + 2; k++) {
+            rd__replay_frame(rf, (int)rf->keep, pw != 0);
+            while (rd_perf_pop(&pr)) {
+                if (pr.gpuValid) {
+                    last = pr;
+                    have = true;
+                }
+            }
+        }
+        if (have) {
+            printf("%s: gpu: %.3f ms: uploads %.3f; lists", dump, last.gpuMs, last.gpuUploadMs);
+            for (int l = 0; l < RD_LIST_COUNT; l++) {
+                printf(" %.3f", last.gpuListMs[l]);
+            }
+            printf("; effects:");
+            for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+                printf("%s %s %.3f", p ? "," : "", rd_perf_post_name(p), last.gpuPostMs[p]);
+            }
+            printf("%s; present %.3f\n", last.gpuPostPartial ? " (not all timed apart)" : "",
+                   last.gpuPresentMs);
+        } else {
+            printf("%s: gpu: no timestamps came back\n", dump);
+        }
     }
     rd__frame_free(&f);
     rd__frame_free(&pf);

@@ -180,6 +180,8 @@ static struct {
     double total, maxTotal, interp, wait, acquire, upload, walk, bind, submit, present, readback,
         fence;
     double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent;
+    double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
+    unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
@@ -1519,7 +1521,17 @@ static void perf_csv_open(void)
     for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(s_perf.csv, ",gpu_list%d_ms", l);
     }
-    fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick\n");
+    fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick");
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        /* the effect's name with '_' for ' ' */
+        char name[32];
+        snprintf(name, sizeof(name), "%s", rd_perf_post_name(p));
+        for (char *c = name; *c; c++) {
+            *c = *c == ' ' ? '_' : *c;
+        }
+        fprintf(s_perf.csv, ",gpu_%s_ms", name);
+    }
+    fprintf(s_perf.csv, ",gpu_effects_partial\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -1541,8 +1553,11 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(f, ",%.3f", r->gpuListMs[l]);
     }
-    fprintf(f, ",%.3f,%.3f,%.4f,%u\n", r->gpuPresentMs, r->startMs, (double)r->alpha,
-            r->firstOfTick);
+    fprintf(f, ",%.3f,%.3f,%.4f,%u", r->gpuPresentMs, r->startMs, (double)r->alpha, r->firstOfTick);
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        fprintf(f, ",%.3f", r->gpuPostMs[p]);
+    }
+    fprintf(f, ",%u\n", r->gpuPostPartial);
 }
 
 /* A presented replay's cost for resolution "auto": its GPU
@@ -1607,6 +1622,10 @@ static void perf_drain(void)
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
+            for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+                s_perf.gpuPost[p] += r.gpuPostMs[p];
+            }
+            s_perf.gpuPostPartial += r.gpuPostPartial;
         }
         s_perf.draws += r.draws;
         s_perf.passes += r.renderPasses;
@@ -1675,6 +1694,29 @@ static void perf_log(void)
             s_perf.acquire / n, s_perf.upload / n, s_perf.walk / n, s_perf.bind / n,
             s_perf.submit / n, s_perf.present / n, s_perf.readback / n, s_perf.fence / n, gpu,
             s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs);
+    if (s_perf.gpuN) {
+        /* the GPU time per replay by list and by picture effect (each
+           effect's time is inside its list's, the CRT filter's inside the
+           present's) */
+        char lists[160], posts[256], partial[64] = "";
+        int at = 0;
+
+        for (int l = 0; l < GPU_LISTS && at < (int)sizeof(lists); l++) {
+            at += snprintf(lists + at, sizeof(lists) - (size_t)at, "%s%.2f", l ? " " : "",
+                           s_perf.gpuList[l] / g);
+        }
+        at = 0;
+        for (int p = 0; p < RD_PERF_POST_COUNT && at < (int)sizeof(posts); p++) {
+            at += snprintf(posts + at, sizeof(posts) - (size_t)at, "%s%s %.2f", p ? ", " : "",
+                           rd_perf_post_name(p), s_perf.gpuPost[p] / g);
+        }
+        if (s_perf.gpuPostPartial) {
+            snprintf(partial, sizeof(partial), " (not all timed apart in %u replays)",
+                     s_perf.gpuPostPartial);
+        }
+        fprintf(stderr, "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f\n",
+                lists, posts, partial, s_perf.gpuPresent / g);
+    }
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
             "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "

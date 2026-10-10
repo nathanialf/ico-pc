@@ -693,6 +693,10 @@ typedef struct Replay {
     uint32_t dateSerial;  /* writeSerial when it was taken */
     RhiRect dateArea;     /* the texels it holds (dateSnapshot) */
     ScreenRun run;        /* the screen-prim run not drawn yet */
+    /* the GPU timing's picture effect (rd__perf_post): the one the target
+       in force or the last post sprite belongs to, and a change waiting for
+       the open run's draw (the run's draws belong to the effect before) */
+    int perfPost, perfPending, perfPendingPost;
 } Replay;
 
 static void flushScreenRun(Replay *r);
@@ -2275,6 +2279,43 @@ static void flushScreenRun(Replay *r)
         g_rdPerf.screenDraws++; /* one draw of the run, however many passes */
     }
     q->count = 0;
+    if (r->perfPending) {
+        r->perfPending = 0;
+        rd__perf_post(s_cl, r->perfPendingPost);
+    }
+}
+
+/* The GPU work recorded from here on belongs to effect post (RD_PERF_POST_*,
+   -1 none); with a screen-prim run open, from its draw on.  Timestamps only:
+   nothing drawn changes. */
+static void perfPost(Replay *r, int post)
+{
+    if (r->run.count) {
+        r->perfPending = 1;
+        r->perfPendingPost = post;
+        return;
+    }
+    r->perfPending = 0;
+    rd__perf_post(s_cl, post);
+}
+
+/* The effect a TARGET command's pass belongs to by its colour target: the
+   screen softening's AA0 and AA1 and its composite (the pass into SCENE
+   that follows them, rd_post.c AA_COMPOSITE), the aura's own targets;
+   otherwise the effect the next post sprite names, or none */
+static int perfTargetPost(const Replay *r, const RdCmd *c)
+{
+    const uint32_t col = c->u[0];
+    const uint32_t aa0 = rd_target(RD_TARGET_AA0).id, aa1 = rd_target(RD_TARGET_AA1).id;
+    if (col == aa0 || col == aa1 ||
+        (col == rd_target(RD_TARGET_SCENE).id && (r->st.color == aa0 || r->st.color == aa1))) {
+        return RD_PERF_POST_SOFTEN;
+    }
+    if (col == rd_target(RD_TARGET_AURA_WORK).id || col == rd_target(RD_TARGET_AURA_TAP).id ||
+        col == rd_target(RD_TARGET_FEED128).id) {
+        return RD_PERF_POST_AURA;
+    }
+    return -1;
 }
 
 /* whether a command drawing with these bindings joins the open run: the
@@ -4794,16 +4835,26 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     Replay r;
     memset(&r, 0, sizeof(r));
     r.st = f->startState;
+    r.perfPost = -1;
     memset(&s_pend, 0, sizeof(s_pend)); /* no clear pending from another replay */
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            if (c->type == RDC_TARGET) {
+                r.perfPost = perfTargetPost(&r, c); /* before the state takes the new target */
+            }
             if (rd__apply_state(&r.st, c)) {
                 continue;
             }
             if (c->type != RDC_SCREEN && c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
                 flushScreenRun(&r); /* the run's draw before this action's */
+            }
+            if (c->type == RDC_POST_STUB && rd__perf_post_of_kind(c->b[0]) >= 0) {
+                r.perfPost = rd__perf_post_of_kind(c->b[0]);
+            }
+            if (c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
+                perfPost(&r, r.perfPost); /* the GPU timing's effect for this action */
             }
             switch (c->type) {
             case RDC_NOP:

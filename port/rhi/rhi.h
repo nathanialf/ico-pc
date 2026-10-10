@@ -717,8 +717,15 @@ void rhi_get_stats(RhiStats *out);
  * origin, 0 for an index that frame did not write; returns 1 + the highest
  * index written (0 = none, or timestamps unsupported).
  * Vulkan: query pools.  D3D12: not implemented yet (unsupported: the calls
- * do nothing and read 0). */
+ * do nothing and read 0).
+ *
+ * RHI_TIMESTAMP_KEEP_BARRIERS or-ed into the index: the image barriers the
+ * backend holds back to send with the next command (vk_cmd.c
+ * vkr_image_barrier) stay held back, as a timestamp needs none of them; so
+ * the barriers recorded are those of a list without the timestamp.  Without
+ * it they go out before the timestamp. */
 #define RHI_MAX_TIMESTAMPS 32
+#define RHI_TIMESTAMP_KEEP_BARRIERS 0x80000000u
 bool rhi_timestamps_supported(void);
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);

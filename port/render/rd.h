@@ -1265,6 +1265,32 @@ const RdStats *rd_get_stats(void);
  * frame created (temporary targets, textures).  GPU times come from
  * timestamps when the backend has them (gpuValid), RHI_FRAMES_IN_FLIGHT
  * replays later; rd_perf_pop returns a record once they are in. */
+
+/* The picture effects RdPerfRecord.gpuPostMs times apart.  Each is part of
+ * the list (or, for the CRT filter, the present) it runs in, so their times
+ * are also inside gpuListMs and gpuPresentMs.  The replay tells them by the
+ * effect a post sprite names and by the target a pass draws into:
+ * REDUCTION the scene shrunk into the shown picture (gsb_Reduction), FOG,
+ * MOTION_BLUR (the motion blur), AURA (the feedback blur of the aura: its
+ * own targets AURA_WORK, AURA_TAP, FEED128 and its sprites), GLOW (flare,
+ * bloom and the sun's eye blur), DOF (depth of field), SOFTEN (the screen
+ * softening: the AA0/AA1 passes and the pass into SCENE right after them),
+ * CRT (the CRT filter's passes in the present). */
+enum {
+    RD_PERF_POST_REDUCTION = 0,
+    RD_PERF_POST_FOG,
+    RD_PERF_POST_MOTION_BLUR,
+    RD_PERF_POST_AURA,
+    RD_PERF_POST_GLOW,
+    RD_PERF_POST_DOF,
+    RD_PERF_POST_SOFTEN,
+    RD_PERF_POST_CRT,
+    RD_PERF_POST_COUNT
+};
+
+/* A RD_PERF_POST_* in plain words ("reduction", "depth of field", ...) */
+const char *rd_perf_post_name(int post);
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -1293,10 +1319,16 @@ typedef struct RdPerfRecord {
     double gpuUploadMs;              /* the upload copies at the head */
     double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
     double gpuPresentMs;             /* the present blits */
-    double startMs;                  /* the replay's start (rd's monotonic ms clock) */
-    float alpha;                     /* rd_present's alpha; -1 for a replay that is not one */
-    uint8_t firstOfTick;             /* the first present of its frame */
-    uint8_t _pad2[3];
+    /* per picture effect (RD_PERF_POST_*), inside the times above */
+    double gpuPostMs[RD_PERF_POST_COUNT];
+    double startMs;      /* the replay's start (rd's monotonic ms clock) */
+    float alpha;         /* rd_present's alpha; -1 for a replay that is not one */
+    uint8_t firstOfTick; /* the first present of its frame */
+    /* the replay changed effect more often than there were timestamps:
+       the later changes were not timed apart (their time stayed with the
+       effect, or the scene, before them) */
+    uint8_t gpuPostPartial;
+    uint8_t _pad2[2];
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
