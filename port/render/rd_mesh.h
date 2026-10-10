@@ -60,7 +60,8 @@ extern "C" {
 typedef enum RdVuClip {
     RD_VU_CLIP_REGION = 0, /* ICO_VU_CLIP_REGION: a vertex outside the GS window (x, y in
                              * 0..4094 exclusive, 0 < w < 16777214; cluster: mem[0]..mem[1])
-                             * keeps every triangle that uses it from being drawn */
+                             * kept every triangle that uses it from being drawn on the PS2;
+                             * the port draws those triangles clipped by the GPU */
     RD_VU_CLIP_NONE = 1,   /* ICO_VU_CLIP_NONE: normal_c 34, everything drawn, X/Y wrap */
     RD_VU_CLIP_SCISSOR = 2 /* ICO_VU_CLIP_SCISSOR: code 36, clip in mem[20..23]'s space */
 } RdVuClip;

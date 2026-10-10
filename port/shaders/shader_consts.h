@@ -257,7 +257,7 @@ typedef struct IcoVuBoneCB {
 
 /* IcoVuCB.draw[2] (VU_* in vu_common.hlsli). */
 enum {
-    ICO_VU_CLIP_REGION = 0,  /* region test: a triangle with a vertex outside is not drawn */
+    ICO_VU_CLIP_REGION = 0,  /* region test: a triangle with a vertex outside is GPU-clipped */
     ICO_VU_CLIP_NONE = 1,    /* normal_c code 34: no test, X/Y wrap to 16 bits */
     ICO_VU_CLIP_SCISSOR = 2, /* code 36: clip-space flags, trivial reject, GPU clipping */
     ICO_VU_CLIP_MASK = 3,
