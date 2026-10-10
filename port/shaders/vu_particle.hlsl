@@ -17,7 +17,7 @@ struct VuSprite
     uint4 rgba;
     float4 st;   // u0, v0, u1, v1
     bool drawn;  // the VU's test: alpha non-zero and both corners inside the clip window
-    bool shown;  // what the port draws: alpha non-zero and w inside the window
+    bool shown;  // what the port draws somewhere: alpha non-zero and w inside the window
 };
 
 VuSprite vu_particle(uint i)
@@ -44,11 +44,12 @@ VuSprite vu_particle(uint i)
     o.drawn = !alphaZero && vu_inside(float4(p0, h.w), clipMin, clipMax) &&
               vu_inside(float4(p1, h.w), clipMin, clipMax);
     // The port keeps the alpha test and the w window (the particle in
-    // front of the eye and before the far limit) but not the x/y window
-    // (1024..3071, prim_InitParticleByPartition): the GPU clips the quad.
-    // That window is fixed in GS pixels, so on a wide picture it ended at
-    // the frame's edge at 48:9 and inside it at 60:9, and a sprite with a
-    // corner past it vanished whole.
+    // front of the eye and before the far limit) everywhere, and the x/y
+    // window (1024..3071, prim_InitParticleByPartition) inside the 4:3
+    // picture; beside it a sprite outside the window is drawn and the GPU
+    // clips the quad (vu_particle_vs). That window is fixed in GS pixels,
+    // so on a wide picture it ended at the frame's edge at 48:9 and inside
+    // it at 60:9, and a sprite with a corner past it vanished whole.
     o.shown = !alphaZero && clipMin.w < h.w && h.w < clipMax.w;
     o.c0 = int3(vu_ftoi4(p0.x), vu_ftoi4(p0.y), vu_ftoi4(p0.z));
     o.c1 = int3(vu_ftoi4(p1.x), vu_ftoi4(p1.y), vu_ftoi4(p1.z));
@@ -104,6 +105,14 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     if (!s.shown) {
         return o;
     }
+    // A sprite the PS2 skips for its x/y window is drawn only beside the
+    // 4:3 picture (vu_beside_discard), as the region test's triangles are;
+    // under photo mode's free camera everywhere
+    bool beside = !s.drawn && (vu_draw.z & VU_F_BEHIND_EYE) == 0u;
+    if (beside && !vu_has_beside()) {
+        return o;
+    }
+    o.beside = beside ? 1u : 0u;
     // corners of the two triangles: (0,0) (1,0) (0,1), (0,1) (1,0) (1,1)
     uint c = vid % 6u;
     bool right = c == 1u || c == 4u || c == 5u;

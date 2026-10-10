@@ -261,8 +261,8 @@ typedef struct IcoVuBoneCB {
 
 /* IcoVuCB.draw[2] (VU_* in vu_common.hlsli). */
 enum {
-    ICO_VU_CLIP_REGION = 0,  /* region test: a triangle with a vertex past the window is
-                              * GPU-clipped, one with a vertex behind the eye dropped */
+    ICO_VU_CLIP_REGION = 0,  /* region test: a failing triangle is dropped in the 4:3
+                              * picture and, with all w > 0, GPU-clipped beside it */
     ICO_VU_CLIP_NONE = 1,    /* normal_c code 34: no test, X/Y wrap to 16 bits */
     ICO_VU_CLIP_SCISSOR = 2, /* code 36: clip-space flags, trivial reject, GPU clipping */
     ICO_VU_CLIP_MASK = 3,
@@ -271,9 +271,9 @@ enum {
     ICO_VU_KICK_ONLY = 64,  /* scissor: only the triangles the strip kicks (second draw) */
     ICO_VU_DROP_WIDE = 128, /* the triangles marked ICO_VU_INDEX_WIDE are not drawn (the
                              * parts of a wide target outside the 4:3 picture) */
-    ICO_VU_BEHIND_EYE = 256 /* region test: a triangle with a vertex behind the eye is
-                             * GPU-clipped, not dropped (photo mode's free camera,
-                             * RdCamera.freeCamera) */
+    ICO_VU_BEHIND_EYE = 256 /* region test and particle window: a failing triangle or
+                             * sprite is GPU-clipped everywhere, not dropped (photo
+                             * mode's free camera, RdCamera.freeCamera) */
 };
 
 /* The region test's centre on a wide screen (vu_common.hlsli VU_REGION_CX,
