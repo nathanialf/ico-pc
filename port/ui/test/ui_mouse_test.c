@@ -197,6 +197,20 @@ static void testHits(void)
     rows[0].masked = 1;
     CHECK(!ui_mouse_hit_test(rows, n, 200.0f, 90.0f, &h), "a masked label is not hit");
     rows[0].masked = 0;
+    /* a picture with no links, not reachable and no owner is no item; lit with
+       its owner (a Save slot's picture) it is the owner, a Cross; a masked
+       item row over the same box changes nothing */
+    UiMouseRow pic = row(55, 310, 70, 40, 30);
+    pic.itemLinks = 0;
+    CHECK(!ui_mouse_hit_test(&pic, 1, 330.0f, 155.0f, &h), "a plain picture is not hit");
+    pic.ownerItem = 65;
+    CHECK(ui_mouse_hit_test(&pic, 1, 330.0f, 155.0f, &h) && h.row == 55 && h.item == 65 &&
+              h.action == UI_MOUSE_ACT_CROSS,
+          "a picture lit with its owner is the owner (%d %d)", h.row, h.item);
+    UiMouseRow pair[2] = {pic, row(65, 310, 70, 40, 30)};
+    pair[1].masked = 1;
+    CHECK(ui_mouse_hit_test(pair, 2, 330.0f, 155.0f, &h) && h.row == 55 && h.item == 65,
+          "a masked item row over it changes nothing (%d %d)", h.row, h.item);
     rows[0].visible = 0;
     CHECK(!ui_mouse_hit_test(rows, n, 200.0f, 90.0f, &h), "a hidden label is not hit");
     rows[0].visible = 1;

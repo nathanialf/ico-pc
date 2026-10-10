@@ -293,6 +293,7 @@ void ico_opt_mirror_reset(void);
 /* port/game/options.h: the Stereo/Mono row's choice, for [audio] output */
 void ico_opt_output_toggled(int mode);
 void la_host_new_game_go(void);
+int la_host_mc_slot_pickable(int slot);
 
 /* la_vibe_select's confirm: the New Game screen in place of the start, which
    its confirm runs (la_host_new_game_go, after la_vibe_select) */
@@ -771,6 +772,17 @@ void la_host_new_game_go(void)
     keyconfig_reset();
     systemStatus[4] = 0;
     gflagOn(382);
+}
+
+/* PC port: whether the mouse may pick file slot 0..9 on the memory card
+   screen, even when the slot is empty.  The SAVE screen installs no filter
+   on the cursor and its Cross saves into an empty slot, so an empty slot's
+   picture is as good a target as a used one's; the LOAD screen
+   (la_mc_saved_file_select) steps the cursor past empty slots and ignores
+   Cross on them, so there the mouse gets no more than the pad */
+int la_host_mc_slot_pickable(int slot)
+{
+    return mcLoadMode == 0 && slot >= 0 && slot < 10;
 }
 
 inline int la_scei_logo(int first)

@@ -1118,6 +1118,105 @@ static void testPointer(void)
     ui_mouse_reset();
 }
 
+/* the memory card file select (layout 14) with files 1, 2 and 5 used: the
+   proc records the item a Cross lands on */
+static int s_slotCross;
+
+static int slotProc(int first, int item)
+{
+    (void)first;
+    (void)item;
+    if (pad[0].flags & 0x40) {
+        s_slotCross = texLayout[14].curItem;
+    }
+    return -1;
+}
+
+/* the Save screen's empty slots: the game masks an empty slot's item row
+   62 + i and shows its picture row 52 + i in the same place.  On Save the
+   mouse picks the picture as the item (the pad can reach and save in it); on
+   Load it does not (the pad steps past it) */
+static void testSaveSlotPointer(void)
+{
+    static const int slotX[5] = {210, 260, 310, 360, 410};
+
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    init_layout_texture(2);
+    settle(54, 4);
+    for (int r = 52; r < 74; r++) {
+        setRow(r, -1, -1, -1, -1, -1, -1, 0);
+        texProperty[r].masked = texProperty[r].defaultMask = 1;
+        texProperty[r].selectable = 0;
+    }
+    for (int i = 0; i < 10; i++) {
+        const int used = i == 0 || i == 1 || i == 4;
+        LtProperty *item = &texProperty[62 + i];
+        LtProperty *pic = &texProperty[52 + i];
+        setRow(62 + i, -1, -1, -1, -1, -1, -1, i < 5 ? 70 : 90);
+        setRow(52 + i, -1, -1, -1, -1, -1, -1, i < 5 ? 70 : 90);
+        item->dispX = pic->dispX = slotX[i % 5];
+        item->dispW = pic->dispW = 40;
+        item->dispH = pic->dispH = 30;
+        item->leftItem = i % 5 > 0 ? 62 + i - 1 : -1;
+        item->rightItem = i % 5 < 4 ? 62 + i + 1 : -1;
+        item->upItem = i >= 5 ? 62 + i - 5 : -1;
+        item->downItem = i < 5 ? 62 + i + 5 : -1;
+        pic->selectable = 0;
+        item->masked = item->defaultMask = used ? 0 : 1;
+        pic->masked = pic->defaultMask = used ? 1 : 0;
+    }
+    setLayout(14, 52, 74, 62, -1);
+    texLayout[14].fadeInTime = 0.0f;
+    texLayout[14].proc = slotProc;
+    lt_switch_layout(14);
+    CHECK(settle(14, 60), "save slots: the screen (%d)", current_layout_id);
+    mouseFrame();
+    mouseFrame();
+
+    /* Save: the empty slot 4's picture is item 65 */
+    s_mcSaveSlots = 1;
+    s_slotCross = -1;
+    pointAt(55);
+    mouseFrame();
+    CHECK(texLayout[14].curItem == 65, "save: the cursor on the empty slot (%d)",
+          texLayout[14].curItem);
+    click();
+    mouseFrame();
+    CHECK(s_slotCross == 65, "save: a click is Cross on it (%d)", s_slotCross);
+    s_slotCross = -1;
+    pointAt(63);
+    mouseFrame();
+    CHECK(texLayout[14].curItem == 63, "save: a used slot still lands on its item (%d)",
+          texLayout[14].curItem);
+
+    /* Load: the empty slot gives nothing, the used one works */
+    s_mcSaveSlots = 0;
+    texLayout[14].curItem = 62;
+    s_slotCross = -1;
+    pointAt(55);
+    click();
+    mouseFrame();
+    CHECK(texLayout[14].curItem == 62 && s_slotCross == -1,
+          "load: the empty slot is no target (%d, %d)", texLayout[14].curItem, s_slotCross);
+    pointAt(63);
+    click();
+    mouseFrame();
+    CHECK(texLayout[14].curItem == 63 && s_slotCross == 63, "load: the used slot works (%d, %d)",
+          texLayout[14].curItem, s_slotCross);
+
+    texLayout[14].proc = NULL;
+    s_mcSaveSlots = 0;
+    ui_settings_reset();
+    ui_mouse_reset();
+}
+
 /* Achievements > Achievement pop-ups: the list's item before Back, not on
    Gameplay; Up from the first slot wraps to Back and Up again lands on it,
    On by default, its value clicks as a step; Right flips the pop-ups live,
@@ -1389,6 +1488,7 @@ int main(int argc, char **argv)
     testTitleReturn();
     /* the mouse pointer in the menus */
     testPointer();
+    testSaveSlotPointer();
     /* Gameplay > Achievement pop-ups */
     testAchievementPopups();
     /* Remap controls: swap on conflict, the menu note */

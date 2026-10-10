@@ -23,10 +23,16 @@ _Static_assert((int)UI_MOUSE_ROLE_AUTO == (int)LT_POINTER_AUTO &&
 
 /* the game's side (common/; layout_texture.h declares the lt_* calls) */
 extern PadState pad[16];
+/* layout_action.c: whether the memory card screen takes the pointer on file
+   slot 0..9 although its item row is masked (an empty slot on the Save screen) */
+extern int la_host_mc_slot_pickable(int slot);
 
 /* play and its scenes (layout_texture.c init_layout_texture; mouse_look.h) */
 #define LAYOUT_PLAY 54
 #define LAYOUT_SCENE 55
+/* the memory card file select (layout_action.c): file i's picture is row 52 + i,
+   its item row 62 + i */
+#define LAYOUT_MC_FILES 14
 
 #define CHAIN_MAX 16
 #define ROWS_MAX (LT_EXT_MAX_PROPERTIES + LT_GAME_PROPERTY_COUNT)
@@ -137,6 +143,12 @@ static int gatherRows(void)
             r->itemLinks =
                 e->upItem >= 0 || e->downItem >= 0 || e->leftItem >= 0 || e->rightItem >= 0;
             r->ownerItem = e->ownerItem;
+            /* on the Save screen an empty slot's item row is masked but its picture
+               is shown, and the pad saves there: the picture is that item */
+            if (owner == LAYOUT_MC_FILES && j >= 52 && j < 62 && r->ownerItem < 0 && !r->masked &&
+                la_host_mc_slot_pickable(j - 52)) {
+                r->ownerItem = j + 10;
+            }
         }
     }
     /* reachable: the pad can put the cursor there (a row with layout links

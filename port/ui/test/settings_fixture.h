@@ -77,6 +77,7 @@ extern int optionScreenMode, optionControlType, girlControlMode;
 extern int iosPadActRequestEnable;
 extern int s_resets, s_sounds[3], s_leaves;
 extern int s_newGames;
+extern int s_mcSaveSlots; /* 1: the Save screen (empty slots pickable), 0: Load */
 extern int s_outputMode, s_outputSets;
 extern int s_devCount;
 extern const char *s_devNames[3];

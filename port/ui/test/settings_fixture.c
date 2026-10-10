@@ -98,6 +98,7 @@ void la_host_leave(void)
 }
 
 int s_newGames;
+int s_mcSaveSlots;
 
 /* fumi/sound/s_init.c: the game's stereo (0) or mono (1) output */
 int s_outputMode, s_outputSets;
@@ -139,6 +140,12 @@ int ico_audio_sdl_reopen(const char *name)
 void la_host_new_game_go(void)
 {
     s_newGames++;
+}
+
+/* layout_action.c: the memory card screen's mouse pick of a slot, on the Save screen only */
+int la_host_mc_slot_pickable(int slot)
+{
+    return s_mcSaveSlots && slot >= 0 && slot < 10;
 }
 
 /* the game's Options screen's settings, now on the port's pages (common/src/main.c,
