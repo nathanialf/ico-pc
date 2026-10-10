@@ -36,6 +36,10 @@
  *   (RDC_MESH's b[4], RD_VU_VIEW_*, rd_mesh.h: 0 in the dumps from before
  *   it, which the interpolation takes for a part placed through the view,
  *   as it always did; the version is unchanged)
+ *   (RDC_SCREEN's b[4] RD_SCREEN_FRAME_CAMERA and RDC_SHADOW_STRIP's b[1]
+ *   RD_SHADOW_FRAME_CAMERA, rd_internal.h: 0 in the dumps from before them,
+ *   whose CPU-projected draws the interpolation blends in screen space as
+ *   it did; the version is unchanged)
  *   u32      VU mesh count (from version 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list

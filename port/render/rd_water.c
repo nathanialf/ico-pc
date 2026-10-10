@@ -230,6 +230,26 @@ void rd_pop_camera(void)
     s->end = f->lists[s->list].count;
 }
 
+int rd_camera_depth(void)
+{
+    const WaterFrame *w = waterOf(rd__rec_frame());
+    return w != NULL ? (int)w->depth : 0;
+}
+
+/* rd_frame_projected's switch: the recording thread's, like the rest of the
+ * recorder's state */
+static int s_frameProjected;
+
+void rd_frame_projected(int on)
+{
+    s_frameProjected = on != 0;
+}
+
+bool rd__frame_projected(void)
+{
+    return s_frameProjected && rd_camera_depth() == 0;
+}
+
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index)
 {
     const RdCamera *cam = f != NULL && f->hasCamera ? &f->camera : NULL;

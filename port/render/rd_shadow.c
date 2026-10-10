@@ -109,6 +109,7 @@ void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount,
         return;
     }
     c->b[0] = RD_SHADOW_TRIS;
+    c->b[1] = rd__frame_projected() ? RD_SHADOW_FRAME_CAMERA : 0;
     c->u[0] = inc * 3;
     c->u[1] = off;
     c->u[2] = n * (uint32_t)sizeof(RdScreenVtx);

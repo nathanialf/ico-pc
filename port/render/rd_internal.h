@@ -76,8 +76,8 @@ typedef enum RdCmdType {
     RDC_STATE_LAST = RDC_SHADE,
     /* actions */
     RDC_CLEAR,       /* u[0] target, b[0..3] rgba, b[4] clearDepth, u[1] GS z */
-    RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed; u[0] payload offset of
-                      * RdScreenVtx[u[1]] */
+    RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed, b[3] RD_SCREEN_TEXT_QUADS,
+                      * b[4] RD_SCREEN_FRAME_CAMERA; u[0] payload offset of RdScreenVtx[u[1]] */
     RDC_EXACT_BLEND, /* u[0] src target, u[1] dst target: the GS integer blend of the state
                       * block's ALPHA/FIX/COLCLAMP through blend_int (RdPostParams.exactInt) */
     RDC_COPY,        /* u[0] src target, u[1] dst target, u[2] payload offset of RdCopyRec */
@@ -89,7 +89,8 @@ typedef enum RdCmdType {
     RDC_GRID,         /* u[1] payload offset, u[2] size */
     RDC_PARTICLES,    /* u[1] payload offset, u[2] size */
     RDC_WORLD_PRIMS,  /* b[0] RdPrim, u[0] count, u[1] payload offset, u[2] size */
-    RDC_SHADOW_STRIP, /* b[0] 0: rd_shadow_strip, u[0] count, u[1] payload offset of float[4]
+    RDC_SHADOW_STRIP, /* b[1] RD_SHADOW_FRAME_CAMERA;
+                       * b[0] 0: rd_shadow_strip, u[0] count, u[1] payload offset of float[4]
                        * x count, f[0] sign; b[0] RD_SHADOW_TRIS: rd_shadow_tris,
                        * u[1] payload offset of RdScreenVtx[u[0] + u[3]], the triangles that
                        * increment (u[0] vertices) then those that decrement (u[3]) */
@@ -129,6 +130,14 @@ enum { RD_OTEXT_ITEM = 0, RD_OTEXT_OP = 1 };
  * RDC_OVERLAY_TEXT item (rd.h rd_deferred_text_quads), skipped by a replay that
  * draws the items deferred; 0 in every other draw and every older dump. */
 #define RD_SCREEN_TEXT_QUADS 1
+
+/* RDC_SCREEN's b[4] and RDC_SHADOW_STRIP's b[1]: the draw's vertices were
+ * projected on the CPU by the frame's camera (rd.h rd_frame_projected), so
+ * rd_interp.c may take them back into the world through the tick's camera
+ * and project them with the blended one.  0 in every other draw and in the
+ * dumps recorded before the mark (they keep the screen-space blend). */
+#define RD_SCREEN_FRAME_CAMERA 1
+#define RD_SHADOW_FRAME_CAMERA 1
 
 /* A post pass recorded after deferred text (rd_post.c), as the present folds
  * it into the items before it: FADE and BRIGHTNESS lerp the whole frame to
@@ -1716,7 +1725,10 @@ bool rd__load_frame(const char *path, RdFrame *out);
  *   rd__camera_at       the camera of command index in list of f: the innermost
  *                      rd_push_camera scope that holds it, else the frame camera
  *                      (NULL when the frame has none)
- *   rd__camera_scopes   the number of scopes recorded in f */
+ *   rd__camera_scopes   the number of scopes recorded in f
+ *   rd__frame_projected rd_frame_projected is on and no rd_push_camera scope
+ *                      is open: the draw recorded now gets
+ *                      RD_SCREEN_FRAME_CAMERA / RD_SHADOW_FRAME_CAMERA */
 typedef struct RdCameraScope {
     int32_t list;
     uint32_t start, end; /* command indices [start, end) of the list; end is
@@ -1728,6 +1740,7 @@ void rd__water_frame_reset(const RdFrame *f);
 uint32_t rd__alias_of(uint32_t id);
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index);
 uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes);
+bool rd__frame_projected(void);
 /* the pipelines of these files' screen-prim states that the screen families
  * leave out (rd__enumerate_reachable adds them) */
 uint32_t rd__enumerate_reachable_water(RdPipeKeyInt *out, uint32_t max, uint32_t n);

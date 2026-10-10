@@ -1933,6 +1933,7 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
     c->u[0] = off;
     c->u[1] = count;
     c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* deferred text's quads */
+    c->b[4] = rd__frame_projected() ? RD_SCREEN_FRAME_CAMERA : 0;
     setKey(c, key);
     g_rd.stats.draws++;
 }

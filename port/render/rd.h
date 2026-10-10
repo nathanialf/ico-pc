@@ -1118,6 +1118,19 @@ RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth
 void rd_alias_target(RdTarget from, RdTarget to);
 void rd_push_camera(const RdCamera *cam);
 void rd_pop_camera(void);
+/* rd_camera_depth     the rd_push_camera scopes open in the frame being
+ *                    recorded (0 outside a frame)
+ * rd_frame_projected  while on, the screen prims (rd_screen_prims) and
+ *                    shadow volumes (rd_shadow_tris) recorded are marked as
+ *                    projected on the CPU by the frame camera (rd_set_camera:
+ *                    GsBase.c's +0x80 view and +0xC0 screen matrix, whose
+ *                    product is +0x100): their GS X, Y and Z are a world
+ *                    point seen through that camera, so the presenter may
+ *                    see the point through the camera it blends between
+ *                    ticks.  Never inside an rd_push_camera scope (a
+ *                    reflection's camera).  Recording only; off by default */
+int rd_camera_depth(void);
+void rd_frame_projected(int on);
 
 /* --------------------------------------------------------------- post */
 
