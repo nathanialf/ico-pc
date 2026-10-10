@@ -432,4 +432,55 @@ void ico_host_vibrate(int amplitude, int ms)
     (*env)->DeleteLocalRef(env, act);
 }
 
+/* --- the screen's density and fold ---------------------------------------- */
+
+/* Written by the activity's thread (the Java UI thread), read by SDL's main
+   thread: the copy is guarded by the spin lock and the count goes up after
+   it, so a reader that sees a new count finds the new values. */
+static IcoAndroidScreen s_screen;
+static SDL_SpinLock s_screenLock;
+static SDL_AtomicInt s_screenGen;
+
+int ico_android_screen(IcoAndroidScreen *out)
+{
+    int gen;
+
+    if (out == NULL) {
+        return SDL_GetAtomicInt(&s_screenGen);
+    }
+    SDL_LockSpinlock(&s_screenLock);
+    gen = SDL_GetAtomicInt(&s_screenGen);
+    if (gen > 0) {
+        *out = s_screen;
+    }
+    SDL_UnlockSpinlock(&s_screenLock);
+    return gen;
+}
+
+/* IcoActivity.nativeScreen (a static native method): the activity's report.
+   It may come before SDL's main thread starts, or while it is paused; the
+   values only wait here for the next layout. */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeScreen(JNIEnv *env, jclass cls,
+                                                                     jint dpi, jint fold, jint half,
+                                                                     jint sep, jint l, jint t,
+                                                                     jint r, jint b, jint winW,
+                                                                     jint winH)
+{
+    (void)env;
+    (void)cls;
+    SDL_LockSpinlock(&s_screenLock);
+    s_screen.densityDpi = (int)dpi;
+    s_screen.fold = (int)fold;
+    s_screen.halfOpened = half != 0;
+    s_screen.separating = sep != 0;
+    s_screen.l = (int)l;
+    s_screen.t = (int)t;
+    s_screen.r = (int)r;
+    s_screen.b = (int)b;
+    s_screen.winW = (int)winW;
+    s_screen.winH = (int)winH;
+    SDL_AddAtomicInt(&s_screenGen, 1);
+    SDL_UnlockSpinlock(&s_screenLock);
+}
+
 #endif /* __ANDROID__ */

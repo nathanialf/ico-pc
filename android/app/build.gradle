@@ -164,6 +164,19 @@ android {
     }
 }
 
+// Jetpack WindowManager: where a foldable's fold or hinge is and how far it
+// is bent, for the touch controls' layout (IcoActivity). window-java is its
+// callback form for Java code. androidx.core is already one of its runtime
+// libraries; it is named here at the same version because the listener
+// type (androidx.core.util.Consumer) is needed to compile IcoActivity.
+// window 1.4.0 needs compileSdk 34 or later (its AAR metadata). The
+// libraries' licences: tools/notices/manifest.json, docs/THIRD_PARTY.md.
+dependencies {
+    implementation 'androidx.window:window:1.4.0'
+    implementation 'androidx.window:window-java:1.4.0'
+    implementation 'androidx.core:core:1.8.0'
+}
+
 androidComponents {
     onVariants(selector().all()) { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(icoAssets) { it.outputDir }

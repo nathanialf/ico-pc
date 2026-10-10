@@ -3,7 +3,8 @@
  *
  * The Android side of the host layer (host_android.c): the app's folders
  * (the layout is android_paths.h's), free space, the log mirror and the
- * message box. Compiled into libmain.so only.
+ * message box, the screen's density and fold. Compiled into libmain.so
+ * only.
  */
 #ifndef ICO_PLATFORM_HOST_ANDROID_H
 #define ICO_PLATFORM_HOST_ANDROID_H
@@ -64,6 +65,26 @@ int ico_android_message_box_buttons(void *window, const char *text, const char *
    (the host loop's), the thread SDL_GetAndroidJNIEnv answers for. Does
    nothing when the phone has no vibrator or the call is not available. */
 void ico_host_vibrate(int amplitude, int ms);
+
+/* The screen as the activity last reported it (IcoActivity.sendScreen,
+   from the system's window-layout callbacks and every configuration
+   change): densityDpi is the screen's density in dots per inch; fold is
+   the first hinge or fold the system lists, 0 none, 1 vertical (a
+   left/right split), 2 horizontal (top/bottom); halfOpened is 1 when it is
+   bent part way, separating 1 when the system says it splits the screen in
+   two (a hinge with a gap, or bent part way); l, t, r, b its bounds in the
+   window's pixels as the activity sees them, and winW, winH that window's
+   size, so the bounds can be scaled to SDL's pixel size. */
+typedef struct IcoAndroidScreen {
+    int densityDpi, fold, halfOpened, separating, l, t, r, b, winW, winH;
+} IcoAndroidScreen;
+
+/* Copies the last report into out (when out is not NULL) and returns how
+   many reports came in, 0 when none did yet (out is then left as it is).
+   A change of the count tells the window loop to lay the touch controls
+   out again: folding or unfolding does not always resize the window. Any
+   thread. */
+int ico_android_screen(IcoAndroidScreen *out);
 
 /* Logs the APK's assets/VERSION.txt (a relative SDL_IOFromFile path reads
    the assets) to stderr. */

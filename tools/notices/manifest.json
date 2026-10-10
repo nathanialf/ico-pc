@@ -56,6 +56,14 @@
       ]
     },
     {
+      "name": "AndroidX Window (Jetpack WindowManager) and the libraries it brings: AndroidX Core, Annotation, Collection, Lifecycle, Arch Core, Concurrent and VersionedParcelable; the Kotlin standard library; kotlinx.coroutines; JetBrains annotations; JSpecify",
+      "version": "androidx.window window and window-java 1.4.0, the others at the versions Gradle resolves for them (android/app/build.gradle), unmodified",
+      "licence": "Apache-2.0",
+      "used_for": "finding a foldable's fold or hinge for the touch controls' layout; compiled into the app's Java code",
+      "platforms": ["android"],
+      "texts": [{"file": "tools/toolchain/deps/vulkan-headers/LICENSES/Apache-2.0.txt"}]
+    },
+    {
       "name": "volk",
       "version": "vulkan-sdk-1.4.363.0",
       "licence": "MIT",
