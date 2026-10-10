@@ -46,6 +46,14 @@
 #include "motionManager2.h"
 #include "box.h"
 
+/* PC port (issue 53, [gameplay] door_fix): port/game/door_grace.c, the
+   doorway fix's arm and arrival grace */
+extern void ico_door_grace_arm(int from_stage, int to_stage, int holding_hands);
+extern int ico_door_grace_begin(int stage, int frames);
+extern int ico_door_grace_active(void);
+extern void ico_door_grace_tick(void);
+extern int ico_door_grace_holds(int dest_stage);
+
 typedef struct { /* field names derived */
     int a, b, c;
 } S12; /* derived name */
@@ -581,6 +589,11 @@ static void CheckCollisionAttr(void *self)
     int flag = 1;
     int esc = 0;
 
+    /* PC port (issue 53, [gameplay] door_fix): the arrival grace counts every
+       frame of the check, before the returns below */
+    if (ico_door_grace_active()) {
+        ico_door_grace_tick();
+    }
     if (_ACTGame_GetParamF(2) < stage->ctrl.groundHeight) {
         return;
     }
@@ -598,6 +611,19 @@ static void CheckCollisionAttr(void *self)
             int *w = (int *)boyInfo;
 
             flag = 0;
+            /* PC port (issue 53, [gameplay] door_fix): during the grace after
+               an arrival holding hands, an exit floor leading back to the
+               stage just left is only remembered, as the game remembers the
+               first floor touched after an arrival (below), so a push onto
+               it does not send Ico and Yorda straight back */
+            {
+                short e = stageData[stage_no].ent[i - 1];
+
+                if (e != 0 && ico_door_grace_holds(exitData[e].nextStage)) {
+                    w[4] = i;
+                    return;
+                }
+            }
             if (w[4] < 0) {
                 w[4] = i;
                 return;
@@ -612,9 +638,21 @@ static void CheckCollisionAttr(void *self)
                 }
                 if (esc) {
                     boyInfo[1] |= 0x800000000LL;
-                    RequestStageChange(i, boyGObj, girlGObj, 1.0f, 8.0f);
+                    /* PC port (issue 53, [gameplay] door_fix): an exit that
+                       fires arms the grace for the stage start it leads to;
+                       stage_no is still the stage being left */
+                    if (RequestStageChange(i, boyGObj, girlGObj, 1.0f, 8.0f)) {
+                        ico_door_grace_arm(stage_no,
+                                           exitData[stageData[stage_no].ent[i - 1]].nextStage,
+                                           ACTGame_FLAG_TETSUNAGI());
+                    }
                 } else {
-                    RequestStageChange(i, boyGObj, 0, 1.0f, 8.0f);
+                    /* PC port (issue 53, [gameplay] door_fix): as above */
+                    if (RequestStageChange(i, boyGObj, 0, 1.0f, 8.0f)) {
+                        ico_door_grace_arm(stage_no,
+                                           exitData[stageData[stage_no].ent[i - 1]].nextStage,
+                                           ACTGame_FLAG_TETSUNAGI());
+                    }
                 }
                 itemWatchOff = 1;
             }
@@ -3248,6 +3286,10 @@ void actBoyStart(GObj *self)
     BOYINFO.escort = 0;
 
     ((int *)boyInfo)[4] = -1;
+    /* PC port (issue 53, [gameplay] door_fix): an exit taken holding hands
+       into this stage starts the arrival grace, 3 seconds of game frames
+       (the frame rate expression the game uses below) */
+    ico_door_grace_begin(stage_no, 3 * ((60 - systemStatus[0] * 10) / systemStatus[1]));
 
     ableBoyControl = 0;
     startWithGirl = 0;
