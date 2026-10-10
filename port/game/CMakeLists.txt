@@ -10,7 +10,9 @@
 # appearance.c: the characters' colours, their
 # [characters] keys and the CLUT recolour Texture.c applies (ICO_RD); rd_tex.h
 # for its constants and CLUT order only (nothing of rd is linked)
-add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c)
+# door_grace.c: the doorway fix's arm and arrival grace ([gameplay] door_fix),
+# called by the exit check in ico2/fumi/src/boyact.c
+add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -33,6 +35,18 @@ target_compile_options(options_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 target_link_libraries(options_test PRIVATE ico_options)
 if(ICO_RUN_TESTS)
     add_test(NAME options COMMAND options_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The doorway fix (issue 53): the arm and the grace with the option off and
+# on, holding hands or not, the stage it leads to, the frame count, and a copy
+# of the exit check's guard driven through an arrival frame by frame. CPU
+# only, no game sources.
+add_executable(door_grace_test test/door_grace_test.c ../platform/host_config.c)
+target_include_directories(door_grace_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(door_grace_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(door_grace_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME door_grace COMMAND door_grace_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # Photo mode's state and camera: the orbit, the clamps, the

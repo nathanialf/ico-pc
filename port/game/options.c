@@ -17,6 +17,7 @@ int ico_mv_active;
 /* -1: not read yet; 0 or 1 */
 static int s_stick_fix = -1;
 static int s_yorda_safe = -1;
+static int s_door_fix = -1;
 static int s_mirror = -1;
 static int s_developer_mode = -1;
 static int s_circle_back = -1;
@@ -70,6 +71,16 @@ int ico_opt_yorda_safe(void)
 void ico_opt_set_yorda_safe(int on)
 {
     s_yorda_safe = on != 0;
+}
+
+int ico_opt_door_fix(void)
+{
+    return get(&s_door_fix, "gameplay.door_fix");
+}
+
+void ico_opt_set_door_fix(int on)
+{
+    s_door_fix = on != 0;
 }
 
 int ico_opt_mirror(void)
@@ -244,7 +255,7 @@ void ico_opt_output_toggled(int mode)
 
 void ico_opt_reload(void)
 {
-    s_stick_fix = s_yorda_safe = s_mirror = s_developer_mode = s_circle_back = -1;
+    s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
     s_output = -2;
     /* the characters' colours ([characters], appearance.h) */
     ico_appearance_reload();

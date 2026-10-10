@@ -12,6 +12,9 @@
  *
  *   [gameplay] stick_fix   false  the stick fix (off on every platform)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
+ *   [gameplay] door_fix    false  holding hands, an arrival does not send
+ *                                 Ico and Yorda straight back through the
+ *                                 door they came in by (door_grace.h)
  *   [gameplay] mirror      false  mirrored play (negated stick X, swapped pan)
  *   [gameplay] developer_mode
  *                          false  the development build's debug menu and
@@ -23,7 +26,8 @@
  *                                 debug option table the Debug Mode page saves
  *
  * Game code (ico2/) reads ico_opt_yorda_safe() and ico_opt_developer_mode()
- * under #ifdef ICO_HOST only.
+ * under #ifdef ICO_HOST only; door_fix is read by door_grace.c, which the
+ * game's exit check calls.
  */
 #ifndef ICO_PORT_GAME_OPTIONS_H
 #define ICO_PORT_GAME_OPTIONS_H
@@ -44,6 +48,9 @@ int ico_opt_stick_fix_default_for(int android);
 int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
+/* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
+int ico_opt_door_fix(void);
+void ico_opt_set_door_fix(int on);
 /* Mirror mode: ico_input negates the stick X (ico_input_mirror), the audio
    host swaps the pan (ico_audio_pan_mirror), the renderer flips the picture
    (rd.h rd_set_mirror, through the listener below).

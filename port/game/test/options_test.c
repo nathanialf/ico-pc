@@ -104,9 +104,16 @@ static void test_defaults(void)
     CHECK(ico_opt_stick_fix_default() == 0);
     CHECK(ico_opt_stick_fix() == ico_opt_stick_fix_default());
     CHECK(ico_opt_yorda_safe() == 0);
+    CHECK(ico_opt_door_fix() == 0);
     CHECK(ico_opt_mirror() == 0);
     CHECK(ico_opt_developer_mode() == 0);
     CHECK(ico_opt_debug_option() == 0);
+    /* the doorway fix: off by default, the setter keeps 0 or 1, a reload
+       goes back to the config's (absent: off) */
+    ico_opt_set_door_fix(7);
+    CHECK(ico_opt_door_fix() == 1);
+    ico_opt_reload();
+    CHECK(ico_opt_door_fix() == 0);
     ico_opt_set_developer_mode(3);
     CHECK(ico_opt_developer_mode() == 1);
     ico_opt_set_yorda_safe(5);
@@ -133,7 +140,7 @@ static void test_config(const char *dir)
         failures++;
         return;
     }
-    fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\nmirror = true\n"
+    fputs("[gameplay]\nstick_fix = true\nyorda_safe = true\ndoor_fix = true\nmirror = true\n"
           "developer_mode = true\n[dev]\ndebug_option = 1\n",
           f);
     fclose(f);
@@ -141,6 +148,7 @@ static void test_config(const char *dir)
     ico_opt_reload();
     CHECK(ico_opt_stick_fix() == 1);
     CHECK(ico_opt_yorda_safe() == 1);
+    CHECK(ico_opt_door_fix() == 1);
     CHECK(ico_opt_mirror() == 1);
     /* developer mode and the debug option file switch */
     CHECK(ico_opt_developer_mode() == 1);

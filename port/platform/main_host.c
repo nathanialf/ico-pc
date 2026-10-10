@@ -378,7 +378,7 @@ static void timestamp(char *out, size_t size, const char *fmt)
    header and compared when a recording is replayed as the pad script. */
 static const char *const record_keys[] = {
     "video.video_mode",    "game.language",           "gameplay.mirror", "gameplay.stick_fix",
-    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage",
+    "gameplay.yorda_safe", "gameplay.developer_mode", "dev.start_stage", "gameplay.door_fix",
 };
 
 #define RECORD_MAGIC "# ico-pc input recording"
