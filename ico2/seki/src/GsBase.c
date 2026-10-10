@@ -122,6 +122,9 @@ extern float ico_video_wide_x(void);
 /* port/game/video_options.c: 1 when pictures are blended between ticks (a
    framerate other than Original) */
 extern int ico_video_interpolate(void);
+/* port/game/video_options.c: the count of the game's hard camera cuts and
+   stage changes (ico_video_camera_cut) */
+extern unsigned ico_video_cut_serial(void);
 /* port/game/video_options.c: the Screen softening switch (issue 11), 1 = on */
 extern int ico_video_effect_softening(void);
 /* port/game/video_options.c: the Cinematic bars switch (issue 27), 1 = on */
@@ -1675,7 +1678,7 @@ static void gsbHostCommon(void)
    presenter draws each tick's parts through cameras between the camera of
    the tick before and this tick's (rd_interp.c camSetup: the rotation
    slerped, the eye lerped, up to RD_INTERP_CAMERA_TURN degrees and
-   RD_INTERP_CAMERA_MOVE units apart, rd_internal.h).  A part culled against
+   RD_INTERP_CAMERA_MOVE units apart, rd_camera_blend.h).  A part culled against
    this tick's camera alone is missing from those pictures wherever the
    earlier cameras would show it: at the screen's edges while the camera
    turns or moves, worse the wider the picture (issue 29).  So while
@@ -1723,8 +1726,17 @@ static void gsbHostCommon(void)
    through rounding), and for the parts locked to the camera (node flag 2:
    RegistPacket.c reg_setMMatrixPacket culls them through the 500 unit
    pair's +0x680; they move with the camera, so its earlier places mean
-   nothing to them).  No camera cut is looked for: the union only ever adds
-   parts, and the presenter does not blend across a cut. */
+   nothing to them).  It is also one camera, as the pictures are, across a
+   cut the presenter does not blend over: a hard cut or stage change the
+   game signalled since the flip (ico_video_camera_cut), and a camera that
+   turned more than RD_INTERP_CAMERA_TURN or whose eye moved more than
+   RD_INTERP_CAMERA_MOVE since the tick before (rdcb_camera_jump, the
+   presenter's own rule on the same two views).  Without that limit a cut
+   kept everything in the swath between the two eyes for one tick, more
+   packets than the banks hold.  The sweep is never longer than
+   RD_INTERP_CAMERA_MOVE either.  When the views are not known (gsb_PopView
+   put a saved +0x280 back) the step cannot be measured: the tick before's
+   camera is added without the sweep, at most one more frustum. */
 typedef struct GsbCullCam {
     int valid;
     int hasVP; /* v and p are the view and projection c was made from */
@@ -1736,6 +1748,9 @@ typedef struct GsbCullCam {
 static GsbCullCam gsbCullBuilt; /* port */
 
 static GsbCullCam gsbCullPrev; /* port */
+
+/* ico_video_cut_serial at the flip: a cut since is a different value */
+static unsigned int gsbCullCutSerial; /* port */
 
 /* bumped by every change of gsbCullPrev, so gsbCullR is rebuilt */
 static unsigned int gsbCullGen = 1; /* port */
@@ -1780,6 +1795,7 @@ static void gsbHostCullFlip(void)
         memcpy(gsbCullPrev.p, gsbCullBuilt.p, sizeof(gsbCullPrev.p));
     }
     gsbCullPrev.valid = 1;
+    gsbCullCutSerial = ico_video_cut_serial();
     gsbCullGen++;
 }
 
@@ -1818,6 +1834,9 @@ static int gsbHostCullViews(void)
     if (!ico_video_interpolate() || !gsbCullPrev.valid) {
         return 1;
     }
+    if (ico_video_cut_serial() != gsbCullCutSerial) {
+        return 1; /* a cut since the flip: the pictures snap to this tick */
+    }
     if (gsbCullR.gen == gsbCullGen && memcmp(gsbCullR.cur, cur, sizeof(gsbCullR.cur)) == 0) {
         return gsbCullR.views;
     }
@@ -1830,6 +1849,11 @@ static int gsbHostCullViews(void)
     gsbHostLoad16(cur, c);
     if (!rdcb_invert4d(c, ic)) {
         return 1;
+    }
+    if (gsbCullPrev.hasVP && gsbCullBuilt.valid &&
+        memcmp(gsbCullBuilt.c, cur, sizeof(gsbCullBuilt.c)) == 0 &&
+        rdcb_camera_jump(gsbCullPrev.v, gsbCullBuilt.v)) {
+        return 1; /* past the presenter's limits: the pictures snap */
     }
     gsbHostLoad16(gsbCullPrev.c, gsbCullR.c[0]);
     rdcb_mul4d(gsbCullR.c[0], ic, gsbCullR.r[0]);
@@ -1844,13 +1868,21 @@ static int gsbHostCullViews(void)
         gsbHostLoad16(gsbCullPrev.p, pp);
         gsbHostLoad16(gsbCullBuilt.p, pc);
         if (rdcb_blend_view(vp, vc, 0.5, vt) && rdcb_invert4d(vp, ivp) && rdcb_invert4d(vc, ivc)) {
-            /* the eye's step: the inverse views' translations */
-            const double d[4] = {ivc[12] - ivp[12], ivc[13] - ivp[13], ivc[14] - ivp[14], 0.0};
+            /* the eye's step: the inverse views' translations, at most
+               RD_INTERP_CAMERA_MOVE long */
+            double d[4] = {ivc[12] - ivp[12], ivc[13] - ivp[13], ivc[14] - ivp[14], 0.0};
+            const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
             const double *cam[3] = {c, gsbCullR.c[0], gsbCullR.c[1]};
             static const double ends[3][2] = {{0.0, 1.0}, {0.0, -1.0}, {-0.5, 0.5}};
             int v;
             int e;
             int i;
+
+            if (len > (double)RD_INTERP_CAMERA_MOVE) {
+                for (i = 0; i < 3; i++) {
+                    d[i] *= (double)RD_INTERP_CAMERA_MOVE / len;
+                }
+            }
 
             rdcb_blend_proj(pp, pc, 0.5, pt);
             rdcb_mul4d(pt, vt, gsbCullR.c[1]);

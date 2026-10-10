@@ -15,7 +15,7 @@
  *            window wider than 60:9, clamped to ICO_ASPECT_MAX), pairs of
  *            cameras a tick apart, the eye moved up to 300 units in any
  *            direction and the view turned up to 30 degrees (yaw and
- *            pitch), as far as the presenter blends (rd_internal.h
+ *            pitch), as far as the presenter blends (rd_camera_blend.h
  *            RD_INTERP_CAMERA_MOVE, RD_INTERP_CAMERA_TURN); boxes around
  *            points the pictures at t = 0.25, 0.5 and 0.75 show (the turn
  *            slerped and the eye lerped, as rd_interp.c camSetup, computed
@@ -35,6 +35,12 @@
  *            -x, +y corner (left, and down on the screen) at t = 0.25, 300
  *            units out, outside the three cameras' frustums: kept by the
  *            eye's sweep.
+ *   cut      a cut the presenter does not blend over: the eye moved 2000
+ *            units and the view turned 90 degrees, or a hard cut the game
+ *            signalled (ico_video_camera_cut) since the flip: one camera,
+ *            every result the PS2's.  At the limits: a step of 299 units or
+ *            a turn of 29 degrees three cameras, 301 units or 31 degrees
+ *            one.
  *   still    the camera the same matrix bitwise as the tick before: one
  *            camera, every result the PS2's single-camera test.
  *   first    a stage's first tick (gsb_InitGSSystem) and after
@@ -930,6 +936,91 @@ static void checkOneCamera(const char *what, const Cam *c)
           views ? "more than one camera" : "one camera");
 }
 
+/* the cameras gsb_ClipBox uses for a box ahead of camera c */
+static int viewsAhead(const Cam *c)
+{
+    double r[3][3], p[3];
+    rotOf(c->q, r);
+    for (int i = 0; i < 3; i++) {
+        p[i] = c->e[i] + r[i][2] * 500.0;
+    }
+    Box bx = boxOf(p, 5.0);
+    clipBox(&bx);
+    return gsb_HostCullViewsUsed();
+}
+
+/* the cameras for a tick from a to b (the eye moved by step along the
+   view's x, the view turned by yaw degrees) */
+static int viewsAcross(double step, double yaw)
+{
+    Cam a, b;
+    camTurn(&a, 0.4, 0.05);
+    a.e[0] = 120.0;
+    a.e[1] = 40.0;
+    a.e[2] = -300.0;
+    b = a;
+    camTurn(&b, 0.4 + yaw * DEG, 0.05);
+    {
+        double r[3][3];
+        rotOf(a.q, r);
+        for (int i = 0; i < 3; i++) {
+            b.e[i] = a.e[i] + r[i][0] * step;
+        }
+    }
+    setCamera(&a);
+    tick();
+    setCamera(&b);
+    return viewsAhead(&b);
+}
+
+static void checkCut(void)
+{
+    setOptions(ICO_FRAMERATE_UNCAPPED, 3200, 900);
+    /* a cutscene's cut: the eye 2000 units on, the view turned 90 degrees */
+    {
+        Cam a, b;
+        camTurn(&a, 0.2, 0.0);
+        a.e[0] = a.e[1] = a.e[2] = 0.0;
+        b = a;
+        camTurn(&b, 0.2 + 90.0 * DEG, 0.0);
+        b.e[0] = 2000.0;
+        setCamera(&a);
+        tick();
+        setCamera(&b);
+        checkOneCamera("a cut (2000 units, 90 degrees)", &b);
+    }
+    /* the limits: RD_INTERP_CAMERA_MOVE 300 units, RD_INTERP_CAMERA_TURN 30
+       degrees */
+    CHECK(viewsAcross(299.0, 0.0) == 3, "cut: a step of 299 units culls against 3 cameras (%d)",
+          gsb_HostCullViewsUsed());
+    CHECK(viewsAcross(301.0, 0.0) == 1, "cut: a step of 301 units culls against 1 camera (%d)",
+          gsb_HostCullViewsUsed());
+    CHECK(viewsAcross(0.0, 29.0) == 3, "cut: a turn of 29 degrees culls against 3 cameras (%d)",
+          gsb_HostCullViewsUsed());
+    CHECK(viewsAcross(0.0, 31.0) == 1, "cut: a turn of 31 degrees culls against 1 camera (%d)",
+          gsb_HostCullViewsUsed());
+    CHECK(viewsAcross(299.0, 29.0) == 3, "cut: both just inside the limits: 3 cameras (%d)",
+          gsb_HostCullViewsUsed());
+    /* a hard cut the game signalled: one camera until the next flip */
+    {
+        Cam a, b;
+        camTurn(&a, -0.3, 0.0);
+        a.e[0] = a.e[1] = a.e[2] = 0.0;
+        b = nextCam(&a, -0.3, 0.0, 0);
+        setCamera(&a);
+        tick();
+        setCamera(&b);
+        CHECK(viewsAhead(&b) == 3, "cut: a step inside the limits: 3 cameras (%d)",
+              gsb_HostCullViewsUsed());
+        ico_video_camera_cut();
+        checkOneCamera("a signalled cut", &b);
+        tick();
+        setCamera(&a);
+        CHECK(viewsAhead(&a) == 3, "cut: the tick after a signalled cut: 3 cameras again (%d)",
+              gsb_HostCullViewsUsed());
+    }
+}
+
 static void checkStill(void)
 {
     setOptions(ICO_FRAMERATE_UNCAPPED, 3200, 900);
@@ -1140,6 +1231,7 @@ int main(void)
     checkMoving("32:9", 3200, 900);
     checkMoving("the widest", 8000, 900);
     checkCorner();
+    checkCut();
     checkStill();
     checkFirst();
     checkOriginal();

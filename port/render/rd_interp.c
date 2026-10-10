@@ -4441,40 +4441,11 @@ static uint32_t flapReport(void)
 
 /* ------------------------------------------------------------ the frame */
 
-static float frob(const float *a, const float *b)
-{
-    float s = 0.0f;
-    for (int c = 0; c < 3; c++) {
-        for (int r = 0; r < 3; r++) {
-            s += a[c * 4 + r] * b[c * 4 + r];
-        }
-    }
-    return s;
-}
-
-/* the eye of a column-major view matrix: -R^T t */
-static void viewEye(const float *v, float eye[3])
-{
-    for (int j = 0; j < 3; j++) {
-        eye[j] = -(v[j * 4 + 0] * v[12] + v[j * 4 + 1] * v[13] + v[j * 4 + 2] * v[14]);
-    }
-}
-
+/* the camera turned or moved past RD_INTERP_CAMERA_TURN / _MOVE in the tick
+ * (rd_camera_blend.h, the rule the game's cull shares) */
 static bool cameraJump(const RdCamera *p, const RdCamera *c)
 {
-    const float fp = frob(p->view, p->view), fc = frob(c->view, c->view);
-    if (!(fp > 0.0f) || !(fc > 0.0f)) {
-        return false;
-    }
-    /* cos of the turn between the two rotations, scale removed */
-    const float cosT = (3.0f * frob(p->view, c->view) / sqrtf(fp * fc) - 1.0f) * 0.5f;
-    if (cosT < cosf(RD_INTERP_CAMERA_TURN * 3.14159265f / 180.0f)) {
-        return true;
-    }
-    float a[3], b[3];
-    viewEye(p->view, a);
-    viewEye(c->view, b);
-    return dist3(a, b) > RD_INTERP_CAMERA_MOVE;
+    return rdcb_camera_jump(p->view, c->view) != 0;
 }
 
 int rd__interp_snap(const RdFrame *prev, const RdFrame *cur)

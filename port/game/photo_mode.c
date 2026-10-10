@@ -30,7 +30,7 @@
 #define MIN_FOV 10.0f
 #define MAX_FOV 100.0f
 /* the most a tick's stick input moves the eye and turns the view: under the
-   renderer's camera cut thresholds (rd_internal.h RD_INTERP_CAMERA_MOVE 300,
+   renderer's camera cut thresholds (rd_camera_blend.h RD_INTERP_CAMERA_MOVE 300,
    RD_INTERP_CAMERA_TURN 30 degrees), so the presenter blends every step of a
    fast move instead of snapping to it */
 #define STEP_MOVE 250.0f

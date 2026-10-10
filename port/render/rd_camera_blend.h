@@ -21,6 +21,15 @@
 #include <math.h>
 #include <string.h>
 
+/* The presenter's limits for one tick's camera step (world units are the
+ * game's centimetres): a camera that turned further or whose eye moved
+ * further in a tick is a cut, and the pictures snap to the tick instead of
+ * blending (rd_interp.c rd__interp_snap).  The game's cull uses the same
+ * limits: past them it culls against the tick's camera alone, as the
+ * pictures are drawn with that camera alone. */
+#define RD_INTERP_CAMERA_MOVE 300.0f /* the eye, per tick */
+#define RD_INTERP_CAMERA_TURN 30.0f  /* degrees, per tick */
+
 /* The inverse of a column-major 4 x 4 (cofactors); 0 when singular */
 static inline int rdcb_invert4d(const double *a, double *o)
 {
@@ -345,6 +354,60 @@ static inline void rdcb_blend_proj(const double *pp, const double *pc, double t,
     for (i = 0; i < 16; i++) {
         pt[i] = (1.0 - t) * pp[i] + t * pc[i];
     }
+}
+
+/* The sum of the products of the two upper-left 3 x 3s' elements */
+static inline float rdcb_frob3(const float *a, const float *b)
+{
+    float s = 0.0f;
+    int c, r;
+
+    for (c = 0; c < 3; c++) {
+        for (r = 0; r < 3; r++) {
+            s += a[c * 4 + r] * b[c * 4 + r];
+        }
+    }
+    return s;
+}
+
+/* The eye of a column-major view matrix: -R^T t */
+static inline void rdcb_view_eye(const float *v, float eye[3])
+{
+    int j;
+
+    for (j = 0; j < 3; j++) {
+        eye[j] = -(v[j * 4 + 0] * v[12] + v[j * 4 + 1] * v[13] + v[j * 4 + 2] * v[14]);
+    }
+}
+
+/* 1 when the camera turned more than RD_INTERP_CAMERA_TURN or its eye moved
+ * more than RD_INTERP_CAMERA_MOVE between the views vp and vc (world to
+ * view, column-major): the presenter's cut rule (rd_interp.c cameraJump),
+ * in float as it computes it, so the cull and the presenter agree on the
+ * same two matrices.  0 when either view's 3 x 3 is zero.  The float square
+ * root and cosine go through the double functions: the game's files map
+ * sqrtf and cosf to their own (port/compat/ico_libc.h), the renderer's do
+ * not, and a float's square root rounded from the double's is the float
+ * square root. */
+static inline int rdcb_camera_jump(const float *vp, const float *vc)
+{
+    const float fp = rdcb_frob3(vp, vp), fc = rdcb_frob3(vc, vc);
+    float cosT, a[3], b[3], x, y, z;
+
+    if (!(fp > 0.0f) || !(fc > 0.0f)) {
+        return 0;
+    }
+    /* cos of the turn between the two rotations, scale removed */
+    cosT = (3.0f * rdcb_frob3(vp, vc) / (float)sqrt((double)(fp * fc)) - 1.0f) * 0.5f;
+    if (cosT < (float)cos((double)(RD_INTERP_CAMERA_TURN * 3.14159265f / 180.0f))) {
+        return 1;
+    }
+    rdcb_view_eye(vp, a);
+    rdcb_view_eye(vc, b);
+    x = a[0] - b[0];
+    y = a[1] - b[1];
+    z = a[2] - b[2];
+    return (float)sqrt((double)(x * x + y * y + z * z)) > RD_INTERP_CAMERA_MOVE;
 }
 
 #endif /* PORT_RENDER_RD_CAMERA_BLEND_H */

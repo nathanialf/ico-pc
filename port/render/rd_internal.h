@@ -44,6 +44,7 @@
 #include <string.h>
 #include "rd.h"
 #include "rhi.h"
+#include "rd_camera_blend.h"
 
 #ifdef __cplusplus
 
@@ -1135,8 +1136,9 @@ void rd__capture_finish(void);
 /* The thresholds (world units are the game's centimetres) */
 #define RD_INTERP_JUMP_WORLD 300.0f  /* an object's or bone's origin, per tick */
 #define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */
-#define RD_INTERP_CAMERA_MOVE 300.0f /* the eye, per tick */
-#define RD_INTERP_CAMERA_TURN 30.0f  /* degrees, per tick */
+/* RD_INTERP_CAMERA_MOVE and RD_INTERP_CAMERA_TURN, the camera's step and
+ * turn per tick past which the pictures snap: rd_camera_blend.h, which the
+ * game's cull shares */
 /* A model matrix or bone turning further than this in a tick (3600
  * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's */
 #define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
