@@ -921,6 +921,29 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
 
 /* ---------------------------------------------------------------- actions */
 
+/* A clear of target t (id), its colour col and with depth its depth at GS
+ * Z z.  It is not recorded yet: the next pass on the target takes it as its
+ * load op (beginPass), else it is recorded as its own pass before anything
+ * else touches the target (endPass, rd__transition).  The pass open now and
+ * an earlier pending clear go first. */
+static void pendClear(Replay *r, uint32_t id, RdTargetRec *t, const float col[4], int depth,
+                      uint32_t z)
+{
+    r->writeSerial++;
+    endPass(r);
+    rd__transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
+    if (depth) {
+        rd__transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
+    }
+    s_pend.r = r;
+    s_pend.p.target = id;
+    s_pend.p.depth = (uint8_t)(depth != 0);
+    memcpy(s_pend.p.color, col, sizeof(s_pend.p.color));
+    s_pend.p.clearDepth = rd__gs_depth(z, rd__target_z_scale(id));
+    s_pend.colorTex = t->color.id;
+    s_pend.depthTex = depth ? t->depth.id : 0;
+}
+
 static void doClear(Replay *r, const RdCmd *c)
 {
     RdTargetRec *t = rd__target_rec(c->u[0]);
@@ -931,24 +954,7 @@ static void doClear(Replay *r, const RdCmd *c)
     for (int i = 0; i < 4; i++) {
         col[i] = t->format == RHI_FMT_RGBA8_UINT ? (float)c->b[i] : (float)c->b[i] / 255.0f;
     }
-    const int depth = c->b[4] && t->withDepth;
-    r->writeSerial++;
-    /* the clear is not recorded yet: the next pass on the target takes it
-     * as its load op (beginPass), else it is recorded as its own pass
-     * before anything else touches the target (endPass, rd__transition).
-     * The pass open now and an earlier pending clear go first. */
-    endPass(r);
-    rd__transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
-    if (depth) {
-        rd__transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
-    }
-    s_pend.r = r;
-    s_pend.p.target = c->u[0];
-    s_pend.p.depth = (uint8_t)(depth != 0);
-    memcpy(s_pend.p.color, col, sizeof(col));
-    s_pend.p.clearDepth = rd__gs_depth(c->u[1], rd__target_z_scale(c->u[0]));
-    s_pend.colorTex = t->color.id;
-    s_pend.depthTex = depth ? t->depth.id : 0;
+    pendClear(r, c->u[0], t, col, c->b[4] && t->withDepth, c->u[1]);
 }
 
 /* Built in a local and stored whole, so writing straight into
@@ -4061,6 +4067,42 @@ static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, in
     return fl;
 }
 
+/* Whether a staticBlur sprite writes its own colour into every texel of
+ * its target and touches nothing else: untextured, without blend, alpha
+ * test, DATE, destination read or depth, all four channels written whole,
+ * and its rect and the scissor holding the whole target.  fx_sprite_ps then
+ * returns RGBAQ (alpha with FBA's bit) / 255 at every texel, which a clear
+ * to the same value stores byte for byte.  The aura's buffer is cleared
+ * this way every frame (auraInspireBefore: a black sprite over AURA_WORK,
+ * a scene-sized target).  Coverage as fx_sprite_ps has it: texel px stands
+ * for GS pixel floor(px / s), at window coordinate origin + 16 that, kept
+ * when inside [x0, x1); the last texel's GS pixel is held a hundredth of
+ * a pixel inside the target so the GPU's division cannot round it out. */
+static bool blurSpriteClears(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                             int textured, int dstRead, int useDepth)
+{
+    const RdDrawState *d = &r->st.ds;
+    if (textured || dstRead || useDepth || d->abe || d->test.date != RD_DATE_OFF ||
+        (d->test.ate && d->test.atst != RD_ATST_ALWAYS) || d->colorMask != 0xF || d->fbmsk != 0 ||
+        r->st.useOffset != 0 || r->st.gsW != tc->w || r->st.gsH != tc->h || tc->w == 0 ||
+        tc->h == 0 || tc->tw == 0 || tc->th == 0 || !(tc->sx > 0.0f) || !(tc->sy > 0.0f)) {
+        return false;
+    }
+    if ((float)(tc->tw - 1) / tc->sx + 0.01f >= (float)tc->w ||
+        (float)(tc->th - 1) / tc->sy + 0.01f >= (float)tc->h) {
+        return false;
+    }
+    const int32_t ox = 16 * (2048 - (int32_t)(r->st.gsW >> 1));
+    const int32_t oy = 16 * (2048 - (int32_t)(r->st.gsH >> 1));
+    if ((int32_t)p->rect[0] > ox || (int32_t)p->rect[1] > oy ||
+        (int32_t)p->rect[2] <= ox + 16 * ((int32_t)tc->w - 1) ||
+        (int32_t)p->rect[3] <= oy + 16 * ((int32_t)tc->h - 1)) {
+        return false;
+    }
+    RhiRect sc;
+    return scissorRect(r, tc, &sc) && sc.x == 0 && sc.y == 0 && sc.w == tc->tw && sc.h == tc->th;
+}
+
 /* ------------------------------------------------------------ staticBlur
  * RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR and the reduction's sprites
  * (RD_POST_REDUCTION): one GS sprite through fx_rect_vs and fx_sprite_ps
@@ -4147,6 +4189,14 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     r->mirror = 0;
     r->uiPrim = 0;
     r->blockCs = 0.5f;
+    if (blurSpriteClears(r, tc, &p, textured, dstRead, useDepth)) {
+        /* a clear instead of a full-target draw (blurSpriteClears) */
+        const uint32_t a = p.rgba[3] | (d->fba ? 0x80u : 0u);
+        const float col[4] = {(float)p.rgba[0] / 255.0f, (float)p.rgba[1] / 255.0f,
+                              (float)p.rgba[2] / 255.0f, (float)(a & 0xFFu) / 255.0f};
+        pendClear(r, r->st.color, tc, col, 0, 0);
+        return;
+    }
     float uv[4];
     rd__blur_uv_rect(c->b[0], &p, uv); /* the reduction's UVs under the mirror */
     RhiRect need = {0, 0, tc->tw, tc->th};
