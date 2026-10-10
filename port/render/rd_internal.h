@@ -538,12 +538,14 @@ typedef struct RdTexRec {
      * (0 in a texture that is no sheet) */
     uint8_t sheetScale;
     /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
-     * (rdtex_store_levels): gsLevels counts them with the base (0 or 1:
-     * none), gsChain holds levels 1.. as RGBA8 one after the other, level l
-     * max(w >> l, 1) x max(h >> l, 1) texels.  These are the TIM2's own
-     * pictures, not filtered copies of the base: some textures keep a dark
-     * base and brighter small levels on purpose, so the GS's choice of level
-     * by distance fades them (the fog puffs, the light shafts).  Uploaded
+     * and whose levels are authored (rdtex_store_levels): gsLevels counts
+     * them with the base (0 or 1: none), gsChain holds levels 1.. as RGBA8
+     * one after the other, level l max(w >> l, 1) x max(h >> l, 1) texels.
+     * These are the TIM2's own pictures, not reductions of the base: some
+     * textures keep a dark base and brighter small levels on purpose, so the
+     * GS's choice of level by distance fades them (the fog puffs, the light
+     * shafts, the mists).  Textures whose levels are reductions keep none
+     * and draw as before.  Uploaded
      * as the texture's mips whatever the filter option (uploadMips) and
      * sampled at the GS's level (DF_GS_LOD) */
     uint8_t gsLevels;

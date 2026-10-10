@@ -52,14 +52,16 @@
  *            reference, outside the letters it is the 1x strip of its sheet
  *            texels magnified S times within 1 (the rim is the sheets'
  *            look magnified), and its dump keeps the scale
- *   gs lod   a texture with three GS levels (flat red, green, blue)
+ *   gs lod   a TIM2 picture with three authored levels (a dark base,
+ *            then flat green and blue: rdtex_store_levels keeps them)
  *            drawn in strips of one Q each through the STQ shaders under
  *            TEX1 words of every mipmap kind (MMIN 2 to 5, LCM 0 and 1,
  *            L 0 and 1, K positive and negative): each strip has the
  *            colour of the level the GS formula picks, rounded or blended,
  *            never past MXL, level 0 when magnified or not mipmapped; a
- *            single-level texture draws the same bytes under a mipmapping
- *            TEX1 as under none
+ *            picture whose levels are reductions of its base keeps no GS
+ *            levels and draws the bytes of its base alone under a TEX1
+ *            that does not mipmap
  *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
@@ -171,6 +173,7 @@
 #include "sheet_ref.h"
 #include "shader_consts.h"
 #include "rd_mesh.h"
+#include "rd_tex.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -1140,23 +1143,44 @@ static uint64_t gsTex1(int mmin, int lcm, int l, int k)
            ((uint64_t)(k & 0xFFF) << 32);
 }
 
+/* An 8x8 PSMCT32 TIM2 picture of three levels, each flat or a checker of
+ * two colours, through rdtex_store_levels as Texture.c hands them over */
+static RdTex gsLodStore(uint32_t id, const uint8_t c[3][2][4], const char *name)
+{
+    static uint8_t px[3][8 * 8 * 4];
+    RdTexImage ims[3];
+    memset(ims, 0, sizeof(ims));
+    for (int l = 0; l < 3; l++) {
+        const uint32_t n = 8u >> l;
+        for (uint32_t y = 0; y < n; y++) {
+            for (uint32_t x = 0; x < n; x++) {
+                memcpy(px[l] + (y * n + x) * 4, c[l][(x + y) & 1], 4);
+            }
+        }
+        ims[l].w = ims[l].h = n;
+        ims[l].psm = RDTEX_PSMCT32;
+        ims[l].pixels = px[l];
+    }
+    return rdtex_store_levels(id, 1, RDTEX_TEXA_REPLAY, ims, 3, NULL, name);
+}
+
 static void testGsLod(void)
 {
-    static const int lv[3][3] = {{240, 0, 0}, {0, 240, 0}, {0, 0, 240}};
+    /* authored levels: a dark base, then brighter levels of other colours
+       (brightness 16.7, 66.7, 80: the first step is 3.8 times, past
+       RDTEX_AUTHORED_RATIO) */
+    static const int lv[3][3] = {{30, 10, 10}, {0, 200, 0}, {0, 0, 240}};
+    static const uint8_t authored[3][2][4] = {{{30, 10, 10, 0x80}, {30, 10, 10, 0x80}},
+                                              {{0, 200, 0, 0x80}, {0, 200, 0, 0x80}},
+                                              {{0, 0, 240, 0x80}, {0, 0, 240, 0x80}}};
+    /* reductions: a red and black checker, then its 2x2 box (half red) */
+    static const uint8_t reduced[3][2][4] = {{{240, 0, 0, 0x80}, {0, 0, 0, 0x80}},
+                                             {{120, 0, 0, 0x80}, {120, 0, 0, 0x80}},
+                                             {{120, 0, 0, 0x80}, {120, 0, 0, 0x80}}};
     static const double qs[10] = {2.0, 0.9, 0.72, 0.69, 0.6, 0.5, 0.4, 0.33, 0.25, 0.125};
-    static uint8_t base[8 * 8 * 4], chain[4 * 4 * 4 + 2 * 2 * 4];
-    for (int i = 0; i < 64; i++) {
-        memcpy(base + i * 4, (const uint8_t[4]){240, 0, 0, 0x80}, 4);
-    }
-    for (int i = 0; i < 16; i++) {
-        memcpy(chain + i * 4, (const uint8_t[4]){0, 240, 0, 0x80}, 4);
-    }
-    for (int i = 0; i < 4; i++) {
-        memcpy(chain + 64 + i * 4, (const uint8_t[4]){0, 0, 240, 0x80}, 4);
-    }
-    RdTex t = rd_create_texture(8, 8, base, RD_TEXA_80_80, "gs lod");
-    rd__tex_set_levels(t, chain, 3);
-    CHECK(rd__tex_rec(t.id) && rd__tex_rec(t.id)->gsLevels == 3, "gs lod: three GS levels");
+    RdTex t = gsLodStore(9001, authored, "gs lod authored");
+    CHECK(rd__tex_rec(t.id) && rd__tex_rec(t.id)->gsLevels == 3,
+          "gs lod: authored levels kept as three GS levels");
 
     static const struct {
         int mmin, lcm, l, k;
@@ -1198,9 +1222,17 @@ static void testGsLod(void)
             }
         }
     }
-    /* a single-level texture: its base, and the bytes of the same strips
-       under a TEX1 that does not mipmap */
-    RdTex one = rd_create_texture(8, 8, base, RD_TEXA_80_80, "gs lod one");
+    /* levels that are reductions of the base: no GS levels, and the bytes
+       of the same strips from the base alone (rd_create_texture) under a
+       TEX1 that does not mipmap */
+    RdTex red = gsLodStore(9002, reduced, "gs lod reduced");
+    CHECK(rd__tex_rec(red.id) && rd__tex_rec(red.id)->gsLevels == 0,
+          "gs lod: reductions of the base keep no GS levels");
+    static uint8_t base[8 * 8 * 4];
+    for (int i = 0; i < 64; i++) {
+        memcpy(base + i * 4, reduced[0][((i % 8) + (i / 8)) & 1], 4);
+    }
+    RdTex one = rd_create_texture_src(8, 8, base, RD_TEXSRC_RGBA32, "gs lod one");
     static uint8_t ref[512 * 512 * 4];
     uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
     gsLodStrips(one, 0, 0);
@@ -1208,19 +1240,14 @@ static void testGsLod(void)
     if (img) {
         memcpy(ref, img, (size_t)w * h * 4);
     }
-    gsLodStrips(one, gsTex1(5, 0, 0, 0), 1);
+    gsLodStrips(red, gsTex1(5, 0, 0, 0), 1);
     img = readTarget(RD_TARGET_WORK1, &w2, &h2);
     CHECK(img && w == w2 && h == h2 && memcmp(ref, img, (size_t)w * h * 4) == 0,
-          "gs lod: a single-level texture draws the same bytes whatever TEX1 says");
-    if (img) {
-        const uint8_t *p = img + ((size_t)(7 + 8 * 9) * w + 32) * 4;
-        CHECK(p[0] == 240 && p[1] == 0 && p[2] == 0,
-              "gs lod: a single-level texture's base at "
-              "Q 0.125 (got %u %u %u)",
-              p[0], p[1], p[2]);
-    }
+          "gs lod: a texture whose levels are reductions draws its base's bytes whatever TEX1 "
+          "says");
     rd_destroy_texture(one);
-    rd_destroy_texture(t);
+    rdtex_drop(9001);
+    rdtex_drop(9002);
 }
 
 /* ------------------------------------------------------------------ font */

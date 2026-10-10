@@ -177,10 +177,15 @@ RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
 /* rdtex_store for a texture the GS samples mipmapped (TEX1's MMIN 2..5
  * with MXL above 0): ims[0] is the base, ims[1..n-1] the TIM2's further
  * levels as they sit in host memory, each half the size of the one before
- * (padW, padH halved too).  The levels are decoded as the base is and kept
- * as the texture's GS levels (RdTexRec.gsLevels), which the replay uploads
- * as its mips and samples at the GS's level instead of building box mips.
- * A level that fails to decode ends the chain there.  n 1 is rdtex_store.
+ * (padW, padH halved too).  The levels are decoded as the base is.  When
+ * they are authored, pictures of their own and not reductions of the base
+ * (a level's brightness more than RDTEX_AUTHORED_RATIO from the level
+ * above's: the fog puffs, the light shafts, the mists; rd_tex.c), they are
+ * kept as the texture's GS levels (RdTexRec.gsLevels), which the replay
+ * uploads as its mips and samples at the GS's level; otherwise the texture
+ * is exactly what rdtex_store makes of ims[0].  Each texture's decision is
+ * logged once.  A level that fails to decode ends the chain there.  n 1 is
+ * rdtex_store.
  * texa must be RDTEX_TEXA_REPLAY or a mode; the levels get the same.
  * Texture packs: a replacement for such a texture keeps the pack's own
  * levels and is sampled as every replacement is (trilinear, PCSX2's way),
