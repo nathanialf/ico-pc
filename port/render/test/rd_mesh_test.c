@@ -397,9 +397,18 @@ static void checkParticleRecording(void)
     CHECK(fd.st[0].ds.abe == 1, "PRIM 0xD6: ABE");
     /* keyed by its emitter (mc_HostParticleKey), so the
      * presenter matches it whatever other emitters draw before it */
-    const RdKey k = RD_KEY(s_part, 18, 0);
+    const RdKey k = RD_KEY(s_part, 18, prim_HostParticleGen(s_part));
     CHECK(fd.cmd[0]->keyLo == (uint32_t)k && fd.cmd[0]->keyHi == (uint32_t)(k >> 32),
           "the batch is keyed by its emitter (%08x%08x)", fd.cmd[0]->keyHi, fd.cmd[0]->keyLo);
+    /* a new emitter in the same slot (a one-shot effect freed, another
+     * created at its address) is stamped anew and so keyed differently:
+     * the presenter must not pair the two */
+    const unsigned int gen = prim_HostParticleGen(s_part);
+    prim_HostParticleStamp(s_part);
+    CHECK(gen != 0 && prim_HostParticleGen(s_part) != gen &&
+              RD_KEY(s_part, 18, prim_HostParticleGen(s_part)) != k,
+          "a reused emitter slot gets a fresh key (gen %u -> %u)", gen,
+          prim_HostParticleGen(s_part));
 }
 
 /* ------------------------------------------------------ the reference */

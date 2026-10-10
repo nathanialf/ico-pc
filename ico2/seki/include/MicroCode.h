@@ -27,8 +27,11 @@ void mc_HostDma(int id, const void *addr, int qwc);
 /* Package I1: the emitter (prim_DispParticle's PrimParticle) whose particle
    batches the next mc_HostDma calls draw, keyed by it for the presenter's
    matching; 0 when its chain is done (a
-   batch from elsewhere takes rd_mesh.c's list key). */
-void mc_HostParticleKey(const void *emitter);
+   batch from elsewhere takes rd_mesh.c's list key).  gen is the life of the
+   emitter's slot (prim_HostParticleGen): a new emitter in a freed one's
+   place has a different gen, so the two are not paired.  It is the key's
+   ordinal byte. */
+void mc_HostParticleKey(const void *emitter, unsigned int gen);
 #endif
 
 #endif /* MICROCODE_H */
