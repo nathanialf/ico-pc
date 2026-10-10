@@ -391,6 +391,10 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         if (c->b[3]) {
             printf(" stretch"); /* drawn across a wide target (rd_mesh.c pushVu) */
         }
+        if (c->type == RDC_GRID && c->b[5]) {
+            /* pool.c's ST formula (rd.h rd_grid_screen_st) and its scales */
+            printf(" screen st %u (%g, %g)", c->b[5], (double)c->f[0], (double)c->f[1]);
+        }
         if (c->type == RDC_SKINNED) {
             skinnedPlace(f, c, st);
         }
