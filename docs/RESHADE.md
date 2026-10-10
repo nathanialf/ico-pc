@@ -77,7 +77,7 @@ Some things to know:
 
 - With the 4:3 picture, the black bars at the sides count as "very far
   away". Effects may tint them a little.
-- The CRT filter (Options > Display) switches the depth information off.
+- The CRT filter (Options > Effects) switches the depth information off.
   Depth effects do nothing while it is on.
 - The game's own menus and messages are already part of the picture when
   ReShade adds its effects, so the effects show on them too.

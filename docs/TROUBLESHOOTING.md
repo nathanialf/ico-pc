@@ -16,6 +16,13 @@ The log records your display settings, every change you make to them, and
 every 10 seconds how fast the game is running (every second for 30 seconds
 after you press F11). When something goes wrong, it says what.
 
+## The screen stays black
+
+If the screen stays black but you can hear the game, the game is running
+and only the picture is missing. See
+[The screen stays black but I hear the game](FAQ.md#the-screen-stays-black-but-i-hear-the-game):
+updating the graphics driver usually fixes it.
+
 ## Send a problem report
 
 1. Open a report on the
@@ -28,10 +35,21 @@ after you press F11). When something goes wrong, it says what.
 ## Save a picture of a problem
 
 If something looks wrong on screen, press **F12** while it is showing. The
-game saves a picture of that moment, plus a file that lets the developers
-see exactly how it was drawn. Both go in a `dumps` folder in the folder
-with your saves. They contain pictures from your disc, so send them
-privately when asked, and do not post them in public.
+game saves three files in a `dumps` folder in the folder with your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)), all named
+`frame-` and the date and time:
+
+- a `.zip` file with a file that lets the developers see exactly how that
+  moment was drawn, and a copy of the log (`ico-pc.log`);
+- a `.rddump` file, the same drawing file on its own;
+- a `.png` picture of that moment.
+
+Attach the `.zip` to your report on the issues page. GitHub does not accept
+`.rddump` files, which is why the `.zip` exists. The picture is optional,
+and can be very large when the Resolution is high.
+
+The files contain pictures from your disc, so use them only for a bug
+report, and do not share them anywhere else.
 
 ## Error messages
 

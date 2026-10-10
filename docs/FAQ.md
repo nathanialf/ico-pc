@@ -18,6 +18,35 @@ direction, open **Options > Gameplay** and turn on **Analogue stick fix**.
 [issue 5, "Controller Stick Issue"](https://github.com/nathanialf/ico-pc/issues/5)
 and [issue 6, "Ico can't run"](https://github.com/nathanialf/ico-pc/issues/6).)
 
+## Ico and Yorda come straight back out of a doorway
+
+**When I take Yorda's hand through the door at the top of the ladder in the
+East Reflector, the screen goes black and we both walk straight back out.
+Alone it works. Why?**
+
+That is a bug in the original game, and it happens on a real PS2 too. When
+Ico leads Yorda through that door, the game sends you both straight back
+out as soon as you arrive.
+
+To go through, open **Options > Gameplay** and turn on **Doorway fix**. For a
+few seconds after you come through a door holding her hand, that door does
+not take you back. It is off unless you turn it on, because the original
+game does not do this.
+
+(People reported this in
+[issue 53](https://github.com/nathanialf/ico-pc/issues/53).)
+
+## The screen stays black but I hear the game
+
+**The window or screen stays black, but the music and sounds play. What is
+wrong?**
+
+The game is running and only the picture is missing. That points to the
+graphics driver. Update it from the maker's site (NVIDIA, AMD or Intel),
+then start the game again. If the picture is still black, send a report as
+described in [When something goes wrong](TROUBLESHOOTING.md#send-a-problem-report)
+and attach the log.
+
 ## How do I use a texture pack?
 
 A texture pack is a set of sharper pictures that fans made to replace the

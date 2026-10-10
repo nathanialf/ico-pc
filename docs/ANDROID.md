@@ -4,8 +4,7 @@
 
 > [!NOTE]
 > Android support is experimental in this version. It plays, but it can be
-> slower than on a PC, and the touch layout is a first draft. See
-> [Known limits](#known-limits).
+> slower than on a PC. See [Known limits](#known-limits).
 
 ## What you need
 
@@ -131,13 +130,20 @@ own copy of `memcard` too.
 
 ## Controls
 
-**Touch.** Buttons are drawn on the screen over the game: a stick on the
-left, a look pad at the top right, the four face buttons at the bottom
-right, a D-pad, the shoulder buttons in the top corners, and Start and
-Select at the top. They fade away when you stop touching the screen and
+**Touch.** Buttons are drawn on the screen over the game, laid out like a
+PlayStation controller with the game's own button pictures: a stick in the
+lower left, the D-pad above it beside L1 and L2 in the top left corner, the
+four face buttons in the lower right with R1 just above them, R2 in the top
+right, Start and Select at the top in the middle, and a look pad on the rest
+of the upper right. They have the same real size on every screen and never
+cover each other. They fade away when you stop touching the screen and
 come back when you touch it. [The full description](CONTROLS.md#touch-controls-phones-and-tablets).
 If Ico does not run in every direction you push the on-screen stick, turn
 on **Options > Gameplay > Analogue stick fix**.
+
+**Foldables.** The buttons keep clear of the fold. With a foldable opened
+flat, each hand's buttons stay on its own side of the fold. Half-folded like
+a laptop, all the buttons move to the lower half of the screen.
 
 **Back.** The phone's Back button or gesture opens the pause menu while
 you play, like Start. In the menus it goes back, like Triangle.
@@ -290,8 +296,8 @@ Graphics driver**.
   the wrong file, the game says so and asks again at the next start.
 - The game runs slower than on a PC, especially at a high Resolution in
   Options > Display. See [If the game stutters](#if-the-game-stutters).
-- The on-screen buttons are a first layout. Their size and placement will
-  change with feedback; Options > Controls lets you change the size now.
+- Options > Controls has Touch size and Touch opacity for the on-screen
+  buttons.
 
 Android is **experimental** in this version: it works, but expect rough
 edges, and tell us what you find on the

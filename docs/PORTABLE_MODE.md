@@ -95,9 +95,7 @@ a save that is already there unless you add `--overwrite`.
 From a PCSX2 memory card kept as a folder, you do not need the tool. Copy
 the `BESCES-50760ico` folder into `memcard`.
 
-The tool was written from the public description of the memory card
-format and has not been tried on a real card file yet. After importing,
-check that the game lists the save.
+After importing, check that the game lists the save.
 
 ## A second memory card
 

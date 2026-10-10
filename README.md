@@ -5,7 +5,10 @@ a Windows or Linux PC, the Steam Deck, 64-bit ARM Linux handhelds, and
 Android phones and tablets. It
 runs the game's own code, so it plays, sounds and feels like the PAL
 PlayStation 2 game. There are extras, such as a sharper picture,
-widescreen and smoother motion, but they stay off until you turn them on.
+widescreen and smoother motion. The sharper picture, widescreen and the
+other picture extras stay off until you turn them on, and the frame rate is
+not held to the PS2's unless you choose Original. The mouse camera starts
+on.
 
 > [!IMPORTANT]
 > This project is not connected to Sony Interactive Entertainment or Team
@@ -26,7 +29,7 @@ widescreen and smoother motion, but they stay off until you turn them on.
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
   - a Steam Deck;
   - a 64-bit ARM Linux handheld or board with an up-to-date graphics
-    driver (new in this version, and tested on one handheld so far);
+    driver (tested on one handheld so far);
   - or a 64-bit Android phone or tablet with Android 10 or later, usually
     one from 2022 or newer. Android support is experimental in this
     version. [More about Android](docs/ANDROID.md).
@@ -59,8 +62,8 @@ Mode. [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
 On a 64-bit ARM Linux handheld or board, download the file whose name ends
 in `-linux-arm64.tar.gz` instead and follow the same steps. It also needs
-a fairly new system: Debian 13, Ubuntu 24.04 or newer. This download is new
-in this version and has been tested on one handheld so far.
+a fairly new system: Debian 13, Ubuntu 24.04 or newer. This download has
+been tested on one handheld so far.
 
 **Android**
 
@@ -83,7 +86,7 @@ what the game is doing the whole time
 ([the Android guide](docs/ANDROID.md#the-first-start) has the steps).
 
 You can skip the question. Put the disc image beside the program and name
-it `Ico_PAL.iso` (or `Ico_PAL.chd`, or `Ico_PAL.bin`). On Windows, "beside the program"
+it `Ico_PAL.iso` (or `Ico_PAL.chd`, `Ico_PAL.bin` or `Ico_PAL.cue`). On Windows, "beside the program"
 means inside the `x64` folder.
 
 ## Questions people ask first

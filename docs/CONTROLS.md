@@ -39,13 +39,14 @@ A few more keys on a PC:
   screen, or close the window.
 - **Alt+Enter** switches between a window and the whole screen (the
   Borderless or Fullscreen choice you made under Window mode).
-- **F12** saves a picture of the current moment for a bug report. See
+- **F12** saves a picture of the current moment, and a zip file to attach
+  to a bug report. See
   [When something goes wrong](TROUBLESHOOTING.md#save-a-picture-of-a-problem).
 - **F11** makes the game write its speed numbers into the log every second
   for 30 seconds, instead of every 10 seconds. Press it again to stop
   early. It is for problem reports about slow play.
 
-Escape, F11 and F12 cannot be changed. Everything else can be, in
+Escape, Alt+Enter, F11 and F12 cannot be changed. Everything else can be, in
 **Options > Controls > Remap controls**. When you give a button or key to
 another action, the two actions swap. If the action you changed had no
 button on that device, the other action is left without one.
@@ -205,22 +206,29 @@ invert_y = true
 
 ## Touch controls (phones and tablets)
 
-On a phone or tablet, buttons are drawn on the screen over the game:
+On a phone or tablet, buttons are drawn on the screen over the game, laid
+out like a PlayStation controller. They carry the game's own button
+pictures:
 
-- **The stick** is on the left. Put your thumb down anywhere in the lower
-  left part of the screen, and that spot becomes the middle of the stick.
-  Slide your thumb to walk. Slide it out to the ring around the stick to
-  run.
+- **The stick** is in the lower left. Put your thumb down anywhere in the
+  lower left part of the screen, and that spot becomes the middle of the
+  stick. Slide your thumb to walk. Slide it out to the ring around the
+  stick to run.
   As with a real stick, running between the eight main directions
   needs **Options > Gameplay > Analogue stick fix**.
-- **The look pad** is the upper right part of the screen. Slide a finger
-  there to look around, as you would with the right stick.
-- **Cross, Circle, Square and Triangle** sit in the lower right corner,
-  with the PlayStation symbols on them.
-- **The D-pad** sits above the stick.
-- **L1 and L2** are in the top left corner, **R1 and R2** in the top
-  right.
+- **The D-pad** is above the stick, beside the L1 and L2 buttons in the
+  top left corner, with L2 at the top. It moves around the menus.
+- **Cross, Circle, Square and Triangle** are in the lower right corner.
+- **R1** is the big button just above them. It holds Yorda's hand.
+- **R2** is in the top right corner.
 - **Start and Select** are at the top in the middle.
+- **The look pad** is the rest of the upper right part of the screen.
+  Slide a finger there to look around, as you would with the right stick.
+
+The buttons have the same real size on every phone and tablet. On a small
+screen they shrink a little so nothing overlaps. On a foldable, nothing
+sits on the fold: opened flat, each hand's buttons stay on its own side;
+half-folded like a laptop, all the buttons move to the lower half.
 
 You can use several fingers at once, for example the stick and a button.
 
@@ -238,7 +246,8 @@ on a device with a touch screen.
 - **Touch controls:** Auto is the normal choice and works as described
   above. Always keeps the buttons on the screen all the time, and they
   keep working with a gamepad connected. Off turns them off.
-- **Touch size:** Small, Medium or Large.
+- **Touch size:** Small, Medium or Large. Medium is about the size of a
+  gamepad's buttons; on small phones Large cannot grow much.
 - **Touch opacity:** how see-through they are, from 25 % (faint) to 100 %
   (solid).
 
