@@ -33,7 +33,7 @@ unsigned long long ico_stats_fast_toggle(unsigned long long now, unsigned long l
 }
 
 int ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync, char *dump,
-                         size_t dump_size, char *png, size_t png_size)
+                         size_t dump_size, char *png, size_t png_size, char *zip, size_t zip_size)
 {
     const size_t n = strlen(dir);
 #ifdef _WIN32
@@ -45,12 +45,18 @@ int ico_frame_dump_paths(const char *dir, const char *stamp, unsigned int vsync,
     const int a = snprintf(dump, dump_size, "%s%sframe-%s-v%u.rddump", dir, sep, stamp, vsync);
     const int b = snprintf(png, png_size, "%s%sframe-%s-v%u.png", dir, sep, stamp, vsync);
 
-    if (a < 0 || (size_t)a >= dump_size || b < 0 || (size_t)b >= png_size) {
+    const int c = snprintf(zip, zip_size, "%s%sframe-%s-v%u.zip", dir, sep, stamp, vsync);
+
+    if (a < 0 || (size_t)a >= dump_size || b < 0 || (size_t)b >= png_size || c < 0 ||
+        (size_t)c >= zip_size) {
         if (dump_size > 0) {
             dump[0] = '\0';
         }
         if (png_size > 0) {
             png[0] = '\0';
+        }
+        if (zip_size > 0) {
+            zip[0] = '\0';
         }
         return -1;
     }

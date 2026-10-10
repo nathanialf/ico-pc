@@ -12,6 +12,7 @@
 #include "audio_host.h"
 #include "config.h"
 #include "diag_host.h"
+#include "dump_zip.h"
 #include "font.h" /* port/ui: ico_window_progress's text and bar */
 #include "host_config.h"
 #include "host_fs.h"
@@ -1082,10 +1083,15 @@ static int device_lost_quit(void)
 }
 
 /* F12, the frame on the screen as an rd dump and a PNG in
-   <pref>/dumps, for a bug report */
+   <pref>/dumps, for a bug report, and a zip of the dump and a copy of the
+   log (GitHub issues refuse .rddump files but take a .zip; the PNG stays
+   out, it is too big at high scales). The log is logs/ico-pc.log, a file on
+   Android too; with --console there is none and the zip holds the dump
+   alone. */
 static void frame_dump(void)
 {
-    char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX];
+    char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
+        zip[ICO_PATH_MAX], why[160];
     char stamp[32];
     const time_t now = time(NULL);
     const struct tm *tm = localtime(&now);
@@ -1099,16 +1105,31 @@ static void frame_dump(void)
         return;
     }
     if (ico_frame_dump_paths(dir, stamp, ico_host_vsync_count(), dump, sizeof(dump), png,
-                             sizeof(png)) != 0) {
+                             sizeof(png), zip, sizeof(zip)) != 0) {
         fprintf(stderr, "window: F12: the dumps folder %s is too deep for the file names\n", dir);
         return;
     }
     const int ok = rd_dump_on_demand(dump, png);
     /* the recording up to this moment, for the same report */
     ico_input_record_flush();
-    fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s and %s\n",
+    /* the zip is made after the dump is closed; its failure does not fail
+       the capture. With --console the "path" is not a file, so the zip
+       holds the dump alone. */
+    const char *log = ico_diag_log_path();
+    int zr = -1;
+
+    snprintf(why, sizeof(why), "no dump");
+    if (ok) {
+        ico_host_log_flush();
+        zr = ico_frame_dump_zip(zip, dump, log, why, sizeof(why));
+    }
+    if (zr < 0) {
+        fprintf(stderr, "window: dump: zip not written: %s\n", why);
+    }
+    fprintf(stderr, "window: F12 at vsync %u, Main tick %u, frame %u: %s %s and %s%s%s\n",
             ico_host_vsync_count(), ico_host_main_ticks(), (unsigned)rd_frame_number(),
-            ok ? "wrote" : "could not write all of", dump, png);
+            ok ? "wrote" : "could not write all of", dump, png, zr >= 0 ? " and " : "",
+            zr >= 0 ? zip : "");
 }
 
 /* Cross in photo mode: the picture shown at the next present into

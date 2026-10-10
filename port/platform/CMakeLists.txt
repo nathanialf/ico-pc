@@ -84,6 +84,15 @@ if(ICO_RUN_TESTS)
     add_test(NAME gpu_driver COMMAND gpu_driver_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# F12's zip (dump_zip.c): the dump and the log in one archive, read back
+# with miniz's reader; it writes under the build folder
+add_executable(dump_zip_test test/dump_zip_test.c dump_zip.c)
+target_compile_options(dump_zip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(dump_zip_test PRIVATE ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    add_test(NAME dump_zip COMMAND dump_zip_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # host_fs.h on a non-ASCII (UTF-8) path in the build tree
 add_executable(host_fs_test test/host_fs_test.c)
 target_compile_options(host_fs_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

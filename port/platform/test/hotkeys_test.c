@@ -37,7 +37,7 @@ int main(void)
 {
     const unsigned long long s = 1000000000ull;
     unsigned long long until;
-    char dump[256], png[256];
+    char dump[256], png[256], zip[256];
 
     /* the two keys, once per press */
     CHECK(ico_hotkey_for(ICO_HOTKEY_KEY_F12, 0) == ICO_HOTKEY_FRAME_DUMP);
@@ -71,22 +71,24 @@ int main(void)
 
     /* F12's files */
     CHECK(ico_frame_dump_paths("/p/dumps", "20261005-073732", 1234, dump, sizeof(dump), png,
-                               sizeof(png)) == 0);
+                               sizeof(png), zip, sizeof(zip)) == 0);
 #ifdef _WIN32
     CHECK(strcmp(dump, "/p/dumps\\frame-20261005-073732-v1234.rddump") == 0);
 #else
     CHECK(strcmp(dump, "/p/dumps/frame-20261005-073732-v1234.rddump") == 0);
     CHECK(strcmp(png, "/p/dumps/frame-20261005-073732-v1234.png") == 0);
+    CHECK(strcmp(zip, "/p/dumps/frame-20261005-073732-v1234.zip") == 0);
 #endif
-    ico_frame_dump_paths("/p/dumps/", "x", 1, dump, sizeof(dump), png, sizeof(png));
+    ico_frame_dump_paths("/p/dumps/", "x", 1, dump, sizeof(dump), png, sizeof(png), zip,
+                         sizeof(zip));
     CHECK(strcmp(dump, "/p/dumps/frame-x-v1.rddump") == 0);
     /* a path that does not fit: refused, both empty, not cut short */
     {
         char small[24];
 
-        CHECK(ico_frame_dump_paths("/p/dumps", "x", 1, small, sizeof(small), png, sizeof(png)) ==
-              -1);
-        CHECK(small[0] == '\0' && png[0] == '\0');
+        CHECK(ico_frame_dump_paths("/p/dumps", "x", 1, small, sizeof(small), png, sizeof(png), zip,
+                                   sizeof(zip)) == -1);
+        CHECK(small[0] == '\0' && png[0] == '\0' && zip[0] == '\0');
     }
 
     printf("hotkeys_test: %s\n", fails ? "FAILED" : "ok");
