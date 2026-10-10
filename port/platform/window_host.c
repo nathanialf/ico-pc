@@ -1555,6 +1555,9 @@ static void perf_csv_open(void)
     char dir[ICO_PATH_MAX], logs[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
     s_perf.csvTried = 1;
+#ifdef ICO_IOS
+    return;
+#endif
     if (!ico_config_get_bool("dev.perf_log", 0)) {
         return;
     }
@@ -1655,6 +1658,9 @@ static void perf_drain(void)
 
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
+#ifdef ICO_IOS
+        continue; /* Keep automatic resolution's samples without benchmark output. */
+#endif
         if (!s_perf.csvTried) {
             perf_csv_open();
         }
@@ -1732,6 +1738,10 @@ static void perf_reset(void)
 /* The block's second line: where a replay's time went, on average */
 static void perf_log(void)
 {
+#ifdef ICO_IOS
+    perf_reset();
+    return;
+#endif
     const double n = s_perf.n ? (double)s_perf.n : 1.0;
     const double g = s_perf.gpuN ? (double)s_perf.gpuN : 1.0;
     char gpu[160] = "no GPU timestamps";
@@ -1848,12 +1858,19 @@ static void pace_log(Uint64 now)
     if (now - s_pres.statAt < ico_stats_period_ns(now, s_pres.fastUntil)) {
         return;
     }
+#ifndef ICO_IOS
     const double sec = (double)(now - s_pres.statAt) / 1e9;
+#endif
     uint32_t replays = 0;
+#ifndef ICO_IOS
     const double maxMs = rd_replay_time_max(1, &replays);
+#else
+    rd_replay_time_max(1, &replays);
+#endif
     const uint32_t fn = rd_frame_number();
     uint32_t movieFail;
     const uint32_t movie = rd_video_presents(&movieFail);
+#ifndef ICO_IOS
     char movieFailed[32] = "";
 
     if (!rd_interpolation_active()) {
@@ -1886,6 +1903,7 @@ static void pace_log(Uint64 now)
             dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
                                                   : 0.0,
             pw, ph, window_fullscreen() ? " fullscreen" : "");
+#endif
     perf_drain();
     perf_log();
     s_pres.statAt = now;

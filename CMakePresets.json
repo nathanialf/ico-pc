@@ -135,6 +135,7 @@
             "inherits": "ios-moltenvk",
             "displayName": "ICO iOS app (unsigned, ARM64)",
             "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
                 "ICO_LINK_EXE": "ON",
                 "ICO_DXC": "${sourceDir}/tools/toolchain/deps/dxc-build/bin/dxc"
             }

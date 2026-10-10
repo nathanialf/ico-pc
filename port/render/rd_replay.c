@@ -4250,9 +4250,8 @@ static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, in
  * when inside [x0, x1); the last texel's GS pixel is held a hundredth of
  * a pixel inside the target so the GPU's division cannot round it out. */
 static bool blurSpriteClears(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
-                             int textured, int dstRead, int useDepth)
+                             const RdDrawState *d, int textured, int dstRead, int useDepth)
 {
-    const RdDrawState *d = &r->st.ds;
     if (textured || dstRead || useDepth || d->abe || d->test.date != RD_DATE_OFF ||
         (d->test.ate && d->test.atst != RD_ATST_ALWAYS) || d->colorMask != 0xF || d->fbmsk != 0 ||
         r->st.useOffset != 0 || r->st.gsW != tc->w || r->st.gsH != tc->h || tc->w == 0 ||
@@ -4307,7 +4306,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__log_once(RD_ONCE_BLUR, "staticBlur sprite without an RGBA8 colour target: skipped");
         return;
     }
-    const RdDrawState *d = &r->st.ds;
+    RdDrawState draw = r->st.ds;
+    /* GS FIX 128: ((Cs - Cd) * 128 >> 7) + Cd is Cs, even with PABE.
+     * Normalize this draw only; later packets still inherit the GS state. */
+    draw.abe = draw.abe && !(draw.blend == RD_BLEND_LERP_FIX && draw.blendFix == 128);
+    const RdDrawState *d = &draw;
     RdTargetRec *td = rd__target_rec(r->st.depth);
     if (td && (!td->withDepth || !td->depth.id || td->tw != tc->tw || td->th != tc->th)) {
         td = NULL;
@@ -4360,7 +4363,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     r->mirror = 0;
     r->uiPrim = 0;
     r->blockCs = 0.5f;
-    if (blurSpriteClears(r, tc, &p, textured, dstRead, useDepth)) {
+    if (blurSpriteClears(r, tc, &p, d, textured, dstRead, useDepth)) {
         /* a clear instead of a full-target draw (blurSpriteClears) */
         const uint32_t a = p.rgba[3] | (d->fba ? 0x80u : 0u);
         const float col[4] = {(float)p.rgba[0] / 255.0f, (float)p.rgba[1] / 255.0f,
