@@ -5,7 +5,7 @@
 
 ## Fixed
 
-- Scenery no longer vanishes near the edges of wide screens or close to the camera, and no longer leaves gaps in photo mode.
+- Scenery no longer vanishes near the edges of wide screens, and no longer leaves gaps in photo mode.
 - The wall at the end of the long walkway no longer disappears in the corner.
 - Effects on the main gate (the beams, the glowing orbs and the gate's glow) now stay while the camera moves.
 - At the old bridge save bench, the dark patch on the floor no longer flickers while the camera turns.
