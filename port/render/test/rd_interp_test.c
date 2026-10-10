@@ -4140,6 +4140,393 @@ static void testPairedOrKept(void)
     rd_destroy_vu_mesh(mesh);
 }
 
+/* ------------------------------------------------- CPU-projected draws */
+
+static const char kObjRp;
+
+/* GsBase.c's screen matrix (gsb_SetVSMatrixSub) at focal LOCK_ZOOM: x =
+ * 2048 + f x_v / z_v, y the same, z / w = zf / z_v + zn for its Z range 1
+ * .. 536870880 over the depths 2 .. 262144, w = z_v */
+static void rpProj(double *p)
+{
+    const double v5 = 1.0, v6 = 536870880.0, v7 = 2.0, v8 = 262144.0;
+    memset(p, 0, 16 * sizeof(double));
+    p[0] = p[5] = LOCK_ZOOM;
+    p[8] = p[9] = 2048.0;
+    p[10] = (-v6 * v7 + v5 * v8) / (-v7 + v8); /* zn */
+    p[11] = 1.0;
+    p[14] = v8 * v7 * (-v5 + v6) / (-v7 + v8); /* zf */
+}
+
+/* c0 x + c1 y + c2 z + c3 in float, each step rounded (the VU's order) */
+static void rpApply(const float *m, const float *in, float *out)
+{
+    for (int r = 0; r < 4; r++) {
+        float a = m[r] * in[0];
+        a = a + m[4 + r] * in[1];
+        a = a + m[8 + r] * in[2];
+        a = a + m[12 + r];
+        out[r] = a;
+    }
+}
+
+/* the world point w projected on the CPU as lightning.c set_vertex and
+ * Shadow.c do: the view, then the screen matrix, in float; ftoi4 of x, y, z
+ * over w; ST = (u, t) q and Q = q = 1 / w */
+static void rpCpuVertex(const double *v, const double *q, const double w[3], float u, float t,
+                        RdScreenVtx *o)
+{
+    float vf[16], qf[16], a[4], b[4];
+    const float e[3] = {(float)w[0], (float)w[1], (float)w[2]};
+    for (int i = 0; i < 16; i++) {
+        vf[i] = (float)v[i];
+        qf[i] = (float)q[i];
+    }
+    rpApply(vf, e, a);
+    rpApply(qf, a, b);
+    const float r = 1.0f / b[3];
+    memset(o, 0, sizeof(*o));
+    o->x = (int32_t)(b[0] * r * 16.0f);
+    o->y = (int32_t)(b[1] * r * 16.0f);
+    o->z = (uint32_t)(int32_t)(b[2] * r * 16.0f);
+    o->s = u * r;
+    o->t = t * r;
+    o->q = r;
+    o->rgba[0] = o->rgba[1] = o->rgba[2] = 0x80;
+    o->rgba[3] = 0x80;
+}
+
+/* the world point w through a VU block's model to screen matrix (qw 16..19,
+ * W the identity) the VU's way (vu_mat, vu_divide, vu_ftoi4): GS X, Y, Z */
+static void rpVuVertex(const float (*m)[4], const double w[3], double gs[3])
+{
+    const float x = (float)w[0], y = (float)w[1], z = (float)w[2];
+    float h[4];
+    for (int r = 0; r < 4; r++) {
+        float a = m[16][r] * x;
+        a = a + m[17][r] * y;
+        a = a + m[18][r] * z;
+        a = a + m[19][r] * 1.0f;
+        h[r] = a;
+    }
+    const float q = 1.0f / h[3];
+    gs[0] = (double)(int32_t)(h[0] * q * 16.0f);
+    gs[1] = (double)(int32_t)(h[1] * q * 16.0f);
+    gs[2] = (double)(int32_t)(h[2] * q * 16.0f);
+}
+
+/* the depth a triangle of GS vertices a, b, c has at GS (x, y), as the GS
+ * interpolates Z across it, and the depth's change for one 12.4 step in x
+ * and one in y */
+static double rpPlaneZ(const double *a, const double *b, const double *c, double x, double y,
+                       double *slope)
+{
+    const double d = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+    const double dzdx = ((b[2] - a[2]) * (c[1] - a[1]) - (c[2] - a[2]) * (b[1] - a[1])) / d;
+    const double dzdy = ((c[2] - a[2]) * (b[0] - a[0]) - (b[2] - a[2]) * (c[0] - a[0])) / d;
+    *slope = fabs(dzdx) + fabs(dzdy);
+    return a[2] + dzdx * (x - a[0]) + dzdy * (y - a[1]);
+}
+
+/* one GS Z step of the VU's depth at z: its float's resolution (z / 16 is
+ * the float the VU divides out, ftoi4 multiplies it by 16), at least 1,
+ * plus what a vertex's X and Y truncation to the 12.4 grid moves the
+ * surface's depth (once for the surface's vertices, once for the prim's) */
+static double rpStep(double z, double slope)
+{
+    const float f = (float)(z / 16.0);
+    const double ulp = 16.0 * (double)(nextafterf(f, INFINITY) - f);
+    return (ulp > 1.0 ? ulp : 1.0) + 2.0 * slope;
+}
+
+/* the wall at z 300 facing the camera, a world mesh: the strip lies on it
+ * and the prism's base stands on it (a surface the camera looks at, as it
+ * looks down at the bench's floor; on a floor seen edge on the depth's
+ * slope across one 12.4 step outweighs what the camera's motion moves) */
+static const double kRpWall[3][3] = {
+    {-150.0, -100.0, 300.0}, {150.0, -100.0, 300.0}, {0.0, 120.0, 300.0}};
+
+/* a quad of the wall from (x0, y0) to (x0 + 40, y0 + 20) as two triangles */
+static void rpStrip(const double *v, const double *q, double x0, double y0, RdScreenVtx *o)
+{
+    static const int kCorner[6] = {0, 1, 2, 1, 3, 2};
+    for (int i = 0; i < 6; i++) {
+        const int k = kCorner[i];
+        const double w[3] = {x0 + (k & 1 ? 40.0 : 0.0), y0 + (k & 2 ? 20.0 : 0.0), 300.0};
+        rpCpuVertex(v, q, w, (float)(k & 1), (float)(k >> 1), &o[i]);
+    }
+}
+
+/* Shadow.c's prism for a caster triangle at z 260 and its base on the wall
+ * (z 300), through the tick's camera: emitVolumeStrip's ten positions
+ * (kTestStrip), each triangle signed by the GS rule, as rd_shadow_tris
+ * takes it */
+static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *sign)
+{
+    static const double kCap[3][2] = {{-20.0, 0.0}, {20.0, 0.0}, {0.0, 40.0}};
+    RdScreenVtx p[6];
+    double s[6][2];
+    for (int k = 0; k < 6; k++) {
+        const double w[3] = {kCap[k % 3][0], kCap[k % 3][1], k < 3 ? 260.0 : 300.0};
+        rpCpuVertex(v, q, w, 0.0f, 0.0f, &p[k]);
+        p[k].s = p[k].t = 0.0f;
+        p[k].q = 1.0f;
+        s[k][0] = p[k].x / 16.0;
+        s[k][1] = p[k].y / 16.0;
+    }
+    double fz[10];
+    float sgn = 1.0f;
+    for (int i = 0; i < 10; i++, sgn = -sgn) {
+        static const int abc[10][3] = {{0},       {0}, {0, 1, 3}, {0},       {3, 4, 5},
+                                       {4, 5, 1}, {0}, {1, 2, 0}, {2, 0, 5}, {0}};
+        fz[i] = i < 2 ? 1.0
+                      : (i == 3 || i == 6 || i == 9 ? -fz[i - 1]
+                                                    : faceZOf(s, abc[i][0], abc[i][1], abc[i][2]));
+        if (i < 2) {
+            continue;
+        }
+        sign[i - 2] = fz[i] * sgn < 0.0 ? 1 : -1;
+        for (int k = 0; k < 3; k++) {
+            o[(i - 2) * 3 + k] = p[kTestStrip[i - 2 + k]];
+        }
+    }
+}
+
+/* tick k of the camera backing 60 units and turning 8 degrees in the tick
+ * (lockCamera; still: tick 0's camera in both): in list 0 the wall (a
+ * keyed VU mesh); in list 6 the strip on the wall as lightning draws it
+ * (key 0) and a keyed one moving 4 units along the wall in the tick, marked
+ * (rd_frame_projected); in list 4 a strip marked inside a pushed
+ * reflection camera; in list 3 the prism standing on the wall, marked */
+static void rpFrame(RdMesh mesh, int k, int still)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], qv[16];
+    lockCamera(still ? 0.0 : (double)k, v);
+    rpProj(q);
+    mul4(q, v, qv);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    lockDraw(mesh, q, v, qv, v, RD_VU_VIEW_WORLD, RD_KEY(&kObjRp, 0, 0));
+    RdScreenVtx s[6];
+    rd_select_list(6);
+    rd_frame_projected(1);
+    rpStrip(v, q, -20.0, 0.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rpStrip(v, q, -60.0 + 4.0 * k, 40.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, RD_KEY(&kObjRp, 2, 0));
+    rd_frame_projected(0);
+    rd_select_list(4);
+    RdCamera refl = cam;
+    double vr[16];
+    lockCamera(0.3, vr);
+    for (int i = 0; i < 16; i++) {
+        refl.view[i] = (float)vr[i];
+    }
+    rd_push_camera(&refl);
+    CHECK(rd_camera_depth() == 1, "reprojection: one camera pushed (%d)", rd_camera_depth());
+    rd_frame_projected(1);
+    rpStrip(vr, q, -20.0, 0.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rd_frame_projected(0);
+    rd_pop_camera();
+    CHECK(rd_camera_depth() == 0, "reprojection: the camera popped (%d)", rd_camera_depth());
+    RdScreenVtx pv[24];
+    int8_t sign[8];
+    rpPrism(v, q, pv, sign);
+    rd_select_list(3);
+    rd_frame_projected(1);
+    rd_shadow_tris(pv, sign, 8, RD_KEY(&kObjRp, 3, 0));
+    rd_frame_projected(0);
+    rd_end_frame(0);
+}
+
+/* the nth RDC_SCREEN of list l in f */
+static const RdCmd *rpScreen(const RdFrame *f, int l, int nth)
+{
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        const RdCmd *c = &f->lists[l].cmds[i];
+        if (c->type == RDC_SCREEN && nth-- == 0) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+/* the worst depth gap (in steps, rpStep) between the vertices of the
+ * strip c of f and the wall through the VU block m; *below: a vertex
+ * nearer than 0 GS units in front of the wall fails GEQUAL by more than a
+ * step */
+static double rpWallGap(const RdFrame *f, const RdCmd *c, const float (*m)[4], int *below)
+{
+    double a[3], b[3], d[3], worst = 0.0;
+    rpVuVertex(m, kRpWall[0], a);
+    rpVuVertex(m, kRpWall[1], b);
+    rpVuVertex(m, kRpWall[2], d);
+    const RdScreenVtx *v = screenVtx(f, c);
+    *below = 0;
+    for (uint32_t i = 0; v && i < c->u[1]; i++) {
+        double slope;
+        const double z = rpPlaneZ(a, b, d, v[i].x, v[i].y, &slope);
+        const double gap = ((double)v[i].z - z) / rpStep(z, slope);
+        *below |= gap < -1.0;
+        worst = fmax(worst, fabs(gap));
+    }
+    return worst;
+}
+
+static void testReproject(void)
+{
+    RdMesh mesh = makeMesh();
+    RdInterpStats st;
+    const RdFrame *f;
+    const RdKey kWall = RD_KEY(&kObjRp, 0, 0);
+    const RdKey kPrism = RD_KEY(&kObjRp, 3, 0);
+
+    /* (a) the strips on the wall: at the tick within a step of the wall;
+     * half way through the blended camera within a step again, the key-0
+     * strip (cur's points) and the keyed one (the two ticks' points
+     * blended); the tick's own depth, which the blended frame kept before,
+     * lies more than a step behind the wall the camera brought nearer and
+     * fails GEQUAL there */
+    rpFrame(mesh, 0, 0);
+    rpFrame(mesh, 1, 0);
+    {
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *wc = findKey(cu, 0, kWall, 0);
+        int below = 0;
+        const double g = wc ? rpWallGap(cu, rpScreen(cu, 6, 0), vuBlock(cu, wc), &below) : 99.0;
+        CHECK(cu && rpScreen(cu, 6, 0) && rpScreen(cu, 6, 0)->b[4] == RD_SCREEN_FRAME_CAMERA &&
+                  g <= 1.0,
+              "reprojection: the tick's strip is marked and lies on the tick's wall (%.2f steps)",
+              g);
+    }
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    {
+        const RdCmd *wc = findKey(f, 0, kWall, 0);
+        const float (*m)[4] = wc ? vuBlock(f, wc) : NULL;
+        for (int n = 0; n < 2; n++) {
+            const RdCmd *c = rpScreen(f, 6, n);
+            int below = 1;
+            const double g = m && c ? rpWallGap(f, c, m, &below) : 99.0;
+            CHECK(g <= 1.0 && !below,
+                  "reprojection: half way the %s strip stays on the wall (%.2f steps; %u draws "
+                  "re-projected)",
+                  n ? "keyed" : "key-0", g, st.reprojected);
+        }
+        /* the strip's X and Y: its world point through the blended camera */
+        const RdCmd *c = rpScreen(f, 6, 0);
+        if (c) {
+            double vt[16], q[16], qv[16], want[2];
+            lockCamera(0.5, vt);
+            rpProj(q);
+            mul4(q, vt, qv);
+            s6Project(qv, (const double[3]){-20.0, 0.0, 300.0}, want);
+            const RdScreenVtx *v = screenVtx(f, c);
+            CHECK(fabs(v[0].x / 16.0 - want[0]) < 0.2 && fabs(v[0].y / 16.0 - want[1]) < 0.2,
+                  "reprojection: the strip's corner at the blended camera's %.3f, %.3f (%.3f, "
+                  "%.3f)",
+                  want[0], want[1], v[0].x / 16.0, v[0].y / 16.0);
+            /* ST over Q at the vertex unchanged (u 0, v 0 there; corner 1:
+             * u 1), Q the new 1 / w */
+            const RdScreenVtx *t1 = screenVtx(rd__last_frame(), rpScreen(rd__last_frame(), 6, 0));
+            CHECK(t1 && fabs(v[1].s / v[1].q - t1[1].s / t1[1].q) < 1e-4 && v[1].q > t1[1].q,
+                  "reprojection: S / Q kept (%.5f, the tick's %.5f), Q nearer (%.6f > %.6f)",
+                  (double)(v[1].s / v[1].q), t1 ? (double)(t1[1].s / t1[1].q) : -1.0,
+                  (double)v[1].q, t1 ? (double)t1[1].q : -1.0);
+        }
+        /* before: the tick's depth half way */
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *tc = rpScreen(cu, 6, 0);
+        int below = 0;
+        const double g = m && tc ? rpWallGap(cu, tc, m, &below) : 0.0;
+        CHECK(below && g > 10.0,
+              "reprojection: the tick's depth half way fails GEQUAL against the wall (%.0f steps)",
+              g);
+    }
+
+    /* (b) the strip marked inside a pushed reflection camera is recorded
+     * unmarked and drawn as the tick drew it */
+    {
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *rc = rpScreen(cu, 4, 0), *oc = rpScreen(f, 4, 0);
+        CHECK(rc && oc && rc->b[4] == 0 && oc->u[1] == rc->u[1] &&
+                  memcmp(screenVtx(f, oc), screenVtx(cu, rc), rc->u[1] * sizeof(RdScreenVtx)) == 0,
+              "reprojection: the reflection camera's strip is unmarked (%d) and the tick's",
+              rc ? rc->b[4] : -1);
+    }
+
+    /* (d) the prism standing on the wall: half way, its base on the wall
+     * within a step and the prism closed; blended in screen space (the
+     * frame before) the base leaves the wall by thousands of steps, the
+     * faces and the surface disagreeing as the bench's patch did */
+    for (int on = 1; on >= 0; on--) {
+        rd__interp_set_reproject(on != 0);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        rd__interp_set_reproject(true);
+        const RdCmd *fc = findKey(f, 0, kWall, 0), *sc = findKey(f, 3, kPrism, 0);
+        double a[3], b[3], d[3], worst = 0.0;
+        int closed = 0, n = 0;
+        if (fc && sc && sc->b[0] == RD_SHADOW_TRIS) {
+            const float (*m)[4] = vuBlock(f, fc);
+            rpVuVertex(m, kRpWall[0], a);
+            rpVuVertex(m, kRpWall[1], b);
+            rpVuVertex(m, kRpWall[2], d);
+            const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + sc->u[1]);
+            const uint32_t tris = (sc->u[0] + sc->u[3]) / 3;
+            for (uint32_t t = 0; t < tris; t++) {
+                const uint32_t tag = rd__shadow_tag(&v[t * 3]);
+                const int i = (int)((tag - 1) % RD_SHADOW_PRISM_TRIS) + 2;
+                for (int k = 0; k < 3; k++) {
+                    if (tag == 0 || kTestStrip[i - 2 + k] < 3) {
+                        continue; /* the top cap */
+                    }
+                    double slope;
+                    const RdScreenVtx *p = &v[t * 3 + (uint32_t)k];
+                    const double z = rpPlaneZ(a, b, d, p->x, p->y, &slope);
+                    worst = fmax(worst, fabs(((double)p->z - z) / rpStep(z, slope)));
+                    n++;
+                }
+            }
+            closedPrisms(f, kPrism, &closed);
+        }
+        if (on) {
+            CHECK(n > 0 && worst <= 1.0 && closed == 1,
+                  "reprojection: half way the prism's base is on the wall (%.2f steps over %d "
+                  "vertices), closed %d",
+                  worst, n, closed);
+        } else {
+            CHECK(n > 0 && worst > 100.0,
+                  "reprojection: blended in screen space the base leaves the wall (%.1f steps)",
+                  worst);
+        }
+    }
+
+    /* (c) a still camera: the frame is byte for byte the one built without
+     * the re-projection (the strip moved along the wall blends in screen
+     * space either way) */
+    {
+        FrameCopy ref;
+        rpFrame(mesh, 0, 1);
+        rpFrame(mesh, 1, 1);
+        rd__interp_set_reproject(false);
+        frameCopy(rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st), &ref);
+        rd__interp_set_reproject(true);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        CHECK(frameSame(&ref, f) && st.reprojected == 0,
+              "reprojection: a still camera changes nothing (%u re-projected)", st.reprojected);
+        frameCopyFree(&ref);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -4171,6 +4558,7 @@ static void runCpu(void)
     testWading();
     testGridScreenSt();
     testPairedOrKept();
+    testReproject();
 }
 
 int main(void)
