@@ -439,11 +439,14 @@ void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
 /* The depth fog's self-test (rd_fog_path.c): a frame of its own (never
  * recorded, never presented, no frame number) draws a grid of cells at
  * known GS Z on SCENE at its real size and scale and fogs it with a known
- * LUT, once per way of reading the depth (in place, a copy, a buffer);
- * the fogged pixels are read back and compared with the GS arithmetic.
- * The first way that passes, in the platform's order, is the one the fog
- * takes from then on (an ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY override
- * stays); one log line, "fog: depth path", names it with every result.
+ * LUT, through one way of reading the depth (in place, a copy, a buffer)
+ * after another in the platform's order, stopping at the first that
+ * passes; the fogged pixels are read back and compared with the GS
+ * arithmetic.  That first way is the one the fog takes from then on (an
+ * ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY override is tried first and
+ * stays); the ways after it are not tried, unless ICO_RD_FOG_PATH=test (a
+ * developer switch) asks for every one.  One log line, "fog: depth path",
+ * names it with every result ("not tried" for the rest).
  * The window calls it after rd_precreate_pipelines; after that it runs
  * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
  * whether the path in force passed. */

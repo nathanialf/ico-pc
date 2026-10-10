@@ -52,6 +52,7 @@ static const uint8_t kOrderTiler[RD_FOG_PATH_COUNT] = {RD_FOG_COPY, RD_FOG_INPLA
 /* the environment, read at rd__fog_path_init */
 static int s_override = -1; /* the path ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY names */
 static const char *s_overrideWhy;
+static bool s_testAll;     /* ICO_RD_FOG_PATH=test: the self-test tries every path */
 static uint8_t s_sabotage; /* ICO_RD_FOG_SABOTAGE: a bit per path */
 
 /* the buffer path's objects, at the size of the depth last read */
@@ -141,14 +142,18 @@ void rd__fog_path_init(void)
 {
     s_override = -1;
     s_overrideWhy = NULL;
+    s_testAll = false;
     s_sabotage = 0;
     const char *fp = getenv("ICO_RD_FOG_PATH");
     const char *dc = getenv("ICO_RD_DEPTH_COPY");
     const char *sb = getenv("ICO_RD_FOG_SABOTAGE");
-    if (fp && fp[0]) {
+    if (fp && strcmp(fp, "test") == 0) {
+        s_testAll = true;
+        rd__log("fog: ICO_RD_FOG_PATH=test: the self-test tries every path");
+    } else if (fp && fp[0]) {
         s_override = pathOf(fp, strlen(fp));
         if (s_override < 0) {
-            rd__log("fog: ICO_RD_FOG_PATH=%s is not inplace, copy or buffer: ignored", fp);
+            rd__log("fog: ICO_RD_FOG_PATH=%s is not inplace, copy, buffer or test: ignored", fp);
         } else {
             s_overrideWhy = "ICO_RD_FOG_PATH";
         }
@@ -754,16 +759,34 @@ static bool runSelftest(void)
         rd__log("fog: self-test: could not build its frame");
         return false;
     }
-    const uint8_t *order = platformOrder();
+    /* the platform's order, an override's path first */
+    uint8_t order[RD_FOG_PATH_COUNT];
+    memcpy(order, platformOrder(), sizeof(order));
+    if (s_override >= 0) {
+        for (int i = RD_FOG_PATH_COUNT - 1; i > 0; i--) {
+            if (order[i] == s_override) {
+                order[i] = order[i - 1];
+                order[i - 1] = (uint8_t)s_override;
+            }
+        }
+    }
     const int before = g_rd.fogPath;
 
-    enum { ST_UNSUPPORTED, ST_ERROR, ST_FAIL, ST_OK };
+    enum { ST_NOT_TRIED, ST_UNSUPPORTED, ST_ERROR, ST_FAIL, ST_OK };
 
+    /* the paths in order up to the first that passes: a path past it is
+       not tried (each one copies the depth its own way, and a device need
+       not run a way it does not use), unless ICO_RD_FOG_PATH=test */
     int result[RD_FOG_PATH_COUNT], err[RD_FOG_PATH_COUNT], worst[RD_FOG_PATH_COUNT];
+    bool found = false;
     s_st.running = true;
     for (int i = 0; i < RD_FOG_PATH_COUNT; i++) {
         const int p = order[i];
         err[p] = worst[p] = 0;
+        if (found && !s_testAll) {
+            result[p] = ST_NOT_TRIED;
+            continue;
+        }
         if (!rd__fog_path_supported(p)) {
             result[p] = ST_UNSUPPORTED;
             continue;
@@ -774,6 +797,7 @@ static bool runSelftest(void)
         } else {
             result[p] = err[p] <= ST_TOLERANCE ? ST_OK : ST_FAIL;
         }
+        found = found || result[p] == ST_OK;
     }
     s_st.running = false;
     rd__frame_free(&f);
@@ -815,6 +839,10 @@ static bool runSelftest(void)
         case ST_ERROR:
             n +=
                 (size_t)snprintf(res + n, sizeof(res) - n, "%s%s error", sep, rd__fog_path_name(p));
+            break;
+        case ST_NOT_TRIED:
+            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s not tried", sep,
+                                  rd__fog_path_name(p));
             break;
         default:
             n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s unsupported", sep,

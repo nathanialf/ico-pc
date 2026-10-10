@@ -743,12 +743,18 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_fog_buffer_d24s8
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_fb24}"
                                     ENVIRONMENT "${_env_buf_d24}")
-    # the fog's self-test and probe (rd_fog_path.c): every path passes on
-    # lavapipe and the depth read in place is taken; with the in-place and
-    # copy reads made to give 0 (ICO_RD_FOG_SABOTAGE, a phone whose depth
-    # reads come back empty) both fail and the buffer path is taken, its
-    # fogged grid matching
+    # the fog's self-test and probe (rd_fog_path.c): the depth read in place
+    # passes on lavapipe and is taken, the other two not tried; with
+    # ICO_RD_FOG_PATH=test every path is tried and passes, in place taken;
+    # with the in-place and copy reads made to give 0 (ICO_RD_FOG_SABOTAGE,
+    # a phone whose depth reads come back empty) both fail and the buffer
+    # path is taken, its fogged grid matching
     add_test(NAME rd_fog_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=inplace
+                     "-DRESULTS=inplace ok [0-2], copy not tried, buffer not tried"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    add_test(NAME rd_fog_selftest_all
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
                      -DFOG_PATH=inplace "-DRESULTS=inplace ok [0-2], copy ok [0-2], buffer ok [0-2]"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
@@ -757,10 +763,12 @@ if(ICO_RUN_TESTS)
                      -DFOG_PATH=buffer
                      "-DRESULTS=inplace fail [0-9]+, copy fail [0-9]+, buffer ok [0-2]"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
-    set_tests_properties(rd_fog_selftest rd_fog_selftest_fallback
+    set_tests_properties(rd_fog_selftest rd_fog_selftest_all rd_fog_selftest_fallback
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set(_env_sab ${_env} "ICO_RD_FOG_SABOTAGE=inplace,copy")
     set_tests_properties(rd_fog_selftest_fallback PROPERTIES ENVIRONMENT "${_env_sab}")
+    set(_env_all ${_env} "ICO_RD_FOG_PATH=test")
+    set_tests_properties(rd_fog_selftest_all PROPERTIES ENVIRONMENT "${_env_all}")
     if(_env)
         set_tests_properties(rd_fog_selftest PROPERTIES ENVIRONMENT "${_env}")
     endif()

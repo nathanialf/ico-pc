@@ -1541,7 +1541,8 @@ void rd__set_fog_path(int path);
 /* rd_init, before the targets are made: the platform's path (in place on
  * a desktop GPU; the copy on a tile-based GPU and on D24S8), or the one
  * ICO_RD_FOG_PATH (inplace, copy, buffer) or ICO_RD_DEPTH_COPY (1 copy,
- * 0 in place) names; ICO_RD_FOG_SABOTAGE (a comma list of paths) makes
+ * 0 in place) names (ICO_RD_FOG_PATH=test names none: the self-test then
+ * tries every path, not only up to the first that passes); ICO_RD_FOG_SABOTAGE (a comma list of paths) makes
  * those paths read a depth of 0, as a device that returns nothing would
  * (tests).  Arms the probe. */
 void rd__fog_path_init(void);

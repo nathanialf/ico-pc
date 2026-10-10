@@ -1,7 +1,10 @@
-# rd_fog_selftest, rd_fog_selftest_fallback: rd_fog_selftest_test run, its
-# exit code checked and its log matched (rd_fog_path.c):
+# rd_fog_selftest, rd_fog_selftest_all, rd_fog_selftest_fallback:
+# rd_fog_selftest_test run, its exit code checked and its log matched
+# (rd_fog_path.c):
 #   "fog: depth path <path> (self-test: <results> ...)" once at the start
-#   and once more after the scene is made at a new size, and
+#   and once more after the scene is made at a new size (the results in
+#   the platform's order up to the first path that passes, "not tried" for
+#   the rest, every path with ICO_RD_FOG_PATH=test), and
 #   "fog: probe <path> z=<5 x GS Z> idx=<centre>,0,15,240,255 out=<5 x RGBA>"
 #   once for each of the two sizes (the centre cell and the four corner
 #   cells of the self-test's grid; the centre texel can sit on the edge of
