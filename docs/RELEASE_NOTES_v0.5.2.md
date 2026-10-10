@@ -11,5 +11,5 @@
 - At the old bridge save bench, the dark patch on the floor no longer flickers while the camera turns.
 - Distant water no longer shimmers while the camera moves.
 - The grey haze over the sea at the old bridge no longer cuts through the water while the camera moves.
-- Android: the fog no longer covers the whole picture on some phones, and shows at its proper distance.
+- Android: on phones where the fog covered the whole picture, the game now tries each way of drawing the fog when it starts and keeps the one that works on that phone.
 - An effect that starts right after another one ends no longer slides over from where the old one was.
