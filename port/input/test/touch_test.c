@@ -183,6 +183,21 @@ static int free_point(const IcoTouchLayout *l, IcoTouchRect area, float *x, floa
     return 0;
 }
 
+/* A free point of the look pad with room for the tests' moves: 2R from
+   its left and right and R below its top, so a finger moved by up to 2R
+   sideways or R up stays on the output (ico_touch_event clamps to it,
+   which would shorten the move). */
+static int look_point(const IcoTouchLayout *l, float *x, float *y)
+{
+    IcoTouchRect a = l->lookArea;
+
+    a.x += 2.0f * l->lookR;
+    a.w -= 4.0f * l->lookR;
+    a.y += l->lookR;
+    a.h -= l->lookR;
+    return free_point(l, a, x, y);
+}
+
 /* the screen below the look pad between the stick's area and Square: no
    zone at all */
 static IcoTouchRect gap_area(const IcoTouchLayout *l)
@@ -773,7 +788,7 @@ static void test_buttons(void)
     g_l = &l;
     memset(&t, 0, sizeof(t));
     CHECK(free_point(&l, gap_area(&l), &gx, &gy)); /* no zone */
-    CHECK(free_point(&l, l.lookArea, &px, &py));   /* the look pad */
+    CHECK(look_point(&l, &px, &py));               /* the look pad */
 
     /* every button by its centre */
     for (z = 0; z < ICO_TOUCH_BUTTONS; z++) {
@@ -871,7 +886,7 @@ static void test_look(void)
     float R = l.lookR, lx = 0.0f, ly = 0.0f;
 
     g_l = &l;
-    CHECK(free_point(&l, l.lookArea, &lx, &ly));
+    CHECK(look_point(&l, &lx, &ly));
     memset(&t, 0, sizeof(t));
     ico_touch_reset(&t, 1 * S);
     CHECK(near_(t.look_decay, 0.80f, 1e-6f));
@@ -1048,7 +1063,7 @@ static void test_merged_frame(void)
     float x, y, px = 0.0f, py = 0.0f;
 
     g_l = &l;
-    CHECK(free_point(&l, l.lookArea, &px, &py));
+    CHECK(look_point(&l, &px, &py));
     memset(&t, 0, sizeof(t));
     ico_touch_reset(&t, S);
 
@@ -1059,7 +1074,7 @@ static void test_merged_frame(void)
 
     /* touch: the stick full down-right at 45 degrees, Cross */
     ev(&t, 1, hx, hy, ICO_TOUCH_DOWN, S);
-    ev(&t, 1, hx + 2.0f * R, hy + 2.0f * R, ICO_TOUCH_MOVE, S);
+    ev(&t, 1, hx + R, hy + R, ICO_TOUCH_MOVE, S); /* 1.41 R: clamped, on the output */
     centre_of(&l, ICO_TOUCH_B_CROSS, &x, &y);
     ev(&t, 2, x, y, ICO_TOUCH_DOWN, S);
     ico_touch_step(&t, &l, &tv);
