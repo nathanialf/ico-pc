@@ -2,12 +2,14 @@
  * port/ui/touch_ui.c
  *
  * The touch overlay's drawing (touch_ui.h): shapes as untextured triangles
- * in output pixels, the labels through the font's overlay mode.
+ * in output pixels, the game's button pictures as sprites in output pixels,
+ * the words through the font's overlay mode.
  */
 #include "touch_ui.h"
 
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "touch.h"
 
@@ -15,7 +17,12 @@
 #include <math.h>
 
 #include "font.h"
+#include "layout_ext.h"
 #include "rd.h"
+#include "strings.h"
+
+/* seki/src/Texture.c: the rd texture of a texture table entry (0: none) */
+extern unsigned int tex_HostTextureId(int idx);
 #endif
 
 static int (*s_source)(struct IcoTouchOverlay *out);
@@ -151,75 +158,56 @@ static void line(float x0, float y0, float x1, float y1, float th, const uint8_t
     quad(x0 - dy, y0 + dx, x1 - dy, y1 + dx, x1 + dy, y1 - dx, x0 + dy, y0 - dx, c);
 }
 
-/* the PS2 symbols, s the half size */
-static void symbol(int zone, float cx, float cy, float s, float th, const uint8_t c[4])
+/* The game's own picture for a zone (layout_ext.h LtExtGlyph), -1 for
+   the zones that have none: Up, Down, Start and Select are words. */
+static int glyphOf(int zone)
 {
     switch (zone) {
     case ICO_TOUCH_B_CROSS:
-        line(cx - s, cy - s, cx + s, cy + s, th, c);
-        line(cx - s, cy + s, cx + s, cy - s, th, c);
-        break;
+        return LT_GLYPH_CROSS;
     case ICO_TOUCH_B_CIRCLE:
-        ring(cx, cy, s, th, c);
-        break;
+        return LT_GLYPH_CIRCLE;
     case ICO_TOUCH_B_SQUARE:
-        frame(cx - s * 0.85f, cy - s * 0.85f, cx + s * 0.85f, cy + s * 0.85f, th, c);
-        break;
-    case ICO_TOUCH_B_TRIANGLE: {
-        const float top = cy - s, base = cy + s * 0.7f, half = s * 1.0f;
-        line(cx, top, cx + half, base, th, c);
-        line(cx + half, base, cx - half, base, th, c);
-        line(cx - half, base, cx, top, th, c);
-        break;
-    }
-    default:
-        break;
-    }
-}
-
-/* a D-pad key's arrow, pointing away from the cluster's centre */
-static void arrow(int zone, float cx, float cy, float s, const uint8_t c[4])
-{
-    switch (zone) {
-    case ICO_TOUCH_B_UP:
-        tri(cx, cy - s, cx + s, cy + s * 0.6f, cx - s, cy + s * 0.6f, c);
-        break;
-    case ICO_TOUCH_B_DOWN:
-        tri(cx, cy + s, cx - s, cy - s * 0.6f, cx + s, cy - s * 0.6f, c);
-        break;
+        return LT_GLYPH_SQUARE;
+    case ICO_TOUCH_B_TRIANGLE:
+        return LT_GLYPH_TRIANGLE;
+    case ICO_TOUCH_B_L1:
+        return LT_GLYPH_L1;
+    case ICO_TOUCH_B_R1:
+        return LT_GLYPH_R1;
+    case ICO_TOUCH_B_L2:
+        return LT_GLYPH_L2;
+    case ICO_TOUCH_B_R2:
+        return LT_GLYPH_R2;
     case ICO_TOUCH_B_LEFT:
-        tri(cx - s, cy, cx + s * 0.6f, cy - s, cx + s * 0.6f, cy + s, c);
-        break;
+        return LT_GLYPH_LEFT;
     case ICO_TOUCH_B_RIGHT:
-        tri(cx + s, cy, cx - s * 0.6f, cy + s, cx - s * 0.6f, cy - s, c);
-        break;
+        return LT_GLYPH_RIGHT;
     default:
-        break;
+        return -1;
     }
 }
 
-/* the face buttons' colours, GS units (0x80 = 1.0) */
-static const uint8_t *symbolColour(int zone)
-{
-    static const uint8_t cross[4] = {0x50, 0x6C, 0x80, 0x80}, circle[4] = {0x80, 0x48, 0x48, 0x80},
-                         square[4] = {0x80, 0x5C, 0x78, 0x80},
-                         triangle[4] = {0x40, 0x80, 0x68, 0x80};
-
-    switch (zone) {
-    case ICO_TOUCH_B_CROSS:
-        return cross;
-    case ICO_TOUCH_B_CIRCLE:
-        return circle;
-    case ICO_TOUCH_B_SQUARE:
-        return square;
-    default:
-        return triangle;
-    }
-}
-
+/* the word on a zone that has no picture on screen (yet) */
 static const char *labelOf(int zone)
 {
     switch (zone) {
+    case ICO_TOUCH_B_UP:
+        return ui_str(UI_STR_PHOTO_UP);
+    case ICO_TOUCH_B_DOWN:
+        return ui_str(UI_STR_PHOTO_DOWN);
+    case ICO_TOUCH_B_LEFT:
+        return ui_str(UI_STR_TOUCH_LEFT);
+    case ICO_TOUCH_B_RIGHT:
+        return ui_str(UI_STR_TOUCH_RIGHT);
+    case ICO_TOUCH_B_CROSS:
+        return ui_str(UI_STR_BTN_CROSS);
+    case ICO_TOUCH_B_CIRCLE:
+        return ui_str(UI_STR_BTN_CIRCLE);
+    case ICO_TOUCH_B_SQUARE:
+        return ui_str(UI_STR_BTN_SQUARE);
+    case ICO_TOUCH_B_TRIANGLE:
+        return ui_str(UI_STR_BTN_TRIANGLE);
     case ICO_TOUCH_B_L1:
         return "L1";
     case ICO_TOUCH_B_R1:
@@ -240,8 +228,8 @@ static const char *labelOf(int zone)
 /* the colours: a resting fill and outline, a held one brighter */
 static const uint8_t kFill[4] = {0x60, 0x60, 0x64, 0x28}, kFillHeld[4] = {0x80, 0x80, 0x80, 0x58},
                      kEdge[4] = {0x80, 0x80, 0x80, 0x60}, kEdgeHeld[4] = {0x80, 0x80, 0x80, 0x80},
-                     kMark[4] = {0x80, 0x80, 0x80, 0x70}, kRun[4] = {0x80, 0x80, 0x80, 0x38},
-                     kRunLit[4] = {0x80, 0x78, 0x50, 0x70}, kKnob[4] = {0x80, 0x80, 0x80, 0x50};
+                     kRun[4] = {0x80, 0x80, 0x80, 0x38}, kRunLit[4] = {0x80, 0x78, 0x50, 0x70},
+                     kKnob[4] = {0x80, 0x80, 0x80, 0x50};
 
 static void drawButtons(const IcoTouchOverlay *o, float th)
 {
@@ -260,14 +248,9 @@ static void drawButtons(const IcoTouchOverlay *o, float th)
             const float r = b->rect.w * 0.5f;
             disc(cx, cy, r, held ? kFillHeld : kFill);
             ring(cx, cy, r - th * 0.5f, th, held ? kEdgeHeld : kEdge);
-            symbol(z, cx, cy, r * 0.42f, th * 1.3f, symbolColour(z));
         } else {
             rect(x0, y0, x1, y1, held ? kFillHeld : kFill);
             frame(x0, y0, x1, y1, th, held ? kEdgeHeld : kEdge);
-            if (z <= ICO_TOUCH_B_RIGHT) {
-                const float s = (b->rect.w < b->rect.h ? b->rect.w : b->rect.h) * 0.25f;
-                arrow(z, cx, cy, s, held ? kEdgeHeld : kMark);
-            }
         }
     }
 }
@@ -291,15 +274,108 @@ static void drawSticks(const IcoTouchOverlay *o, float th)
     }
 }
 
-/* the names on the shoulders and on Start and Select, in the font's
-   overlay grid (font.h: x' = left + gx W / 640, y' = box.y + (gy - 2)
-   box.h / 448) */
-static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o)
+/* the game's button pictures on the discs and keys, each zone that has one
+   (glyphOf) and whose sheet is loaded.  The sprites are in 12.4 output
+   pixels as the menus' glyphs are (font.c ovEmit), the texel rectangle half
+   a texel in on each side as display_texture samples it; zones on one
+   texture go in one draw.  Returns the mask of the zones drawn. */
+static uint32_t drawGlyphs(const IcoTouchOverlay *o)
+{
+    unsigned tex[ICO_TOUCH_BUTTONS];
+    uint32_t drawn = 0, done = 0;
+
+    for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
+        const int g = glyphOf(z);
+        const int no = g >= 0 ? lt_ext_glyph_texture(g) : -1;
+
+        tex[z] = no >= 0 ? tex_HostTextureId(no) : 0u;
+    }
+    for (int first = 0; first < ICO_TOUCH_BUTTONS; first++) {
+        RdScreenVtx v[2 * ICO_TOUCH_BUTTONS];
+        uint32_t n = 0;
+
+        if (!tex[first] || ((done >> first) & 1u)) {
+            continue;
+        }
+        for (int z = first; z < ICO_TOUCH_BUTTONS; z++) {
+            const IcoTouchButton *b = &o->layout.button[z];
+            const int held = (o->info.pressed >> z) & 1u;
+            int uvwh[4], gw = 0, gh = 0;
+
+            if (tex[z] != tex[first] || b->rect.w <= 0.0f || b->rect.h <= 0.0f) {
+                continue;
+            }
+            done |= 1u << z;
+            if (lt_ext_glyph_source(glyphOf(z), uvwh) < 0) {
+                continue;
+            }
+            lt_ext_glyph_box(glyphOf(z), 27.0f, &gw, &gh);
+            if (gw <= 0 || gh <= 0) {
+                continue;
+            }
+            /* the grid's x unit is 14/15 of its y unit on screen */
+            const float a = (float)gw * 14.0f / (15.0f * (float)gh);
+            float bw, bh;
+            if (b->round) {
+                bw = bh = b->rect.w * 0.78f;
+            } else if (z <= ICO_TOUCH_B_RIGHT) {
+                bw = b->rect.w * 0.6f;
+                bh = b->rect.h * 0.6f;
+            } else {
+                bw = b->rect.w * 0.8f;
+                bh = b->rect.h * 0.7f;
+            }
+            /* bw and bh are in layout pixels; the fit is made in output
+               pixels so the glyph keeps its proportions when kx != ky */
+            bw *= s_d.kx;
+            bh *= s_d.ky;
+            const float w = bw < bh * a ? bw : bh * a, h = w / a;
+            const float cx = (b->rect.x + b->rect.w * 0.5f) * s_d.kx;
+            const float cy = (b->rect.y + b->rect.h * 0.5f) * s_d.ky;
+            float al = (float)(held ? 0x80 : 0x70) * s_d.opacity;
+            RdScreenVtx *p = &v[n++], *q = &v[n++];
+
+            al = al > 128.0f ? 128.0f : al;
+            memset(p, 0, sizeof(*p) * 2);
+            p->x = fix16(cx - w * 0.5f, s_d.maxX);
+            p->y = fix16(cy - h * 0.5f, s_d.maxY);
+            q->x = fix16(cx + w * 0.5f, s_d.maxX);
+            q->y = fix16(cy + h * 0.5f, s_d.maxY);
+            p->s = ((float)uvwh[0] + 0.5f) * 16.0f;
+            p->t = ((float)uvwh[1] + 0.5f) * 16.0f;
+            q->s = ((float)(uvwh[0] + uvwh[2]) - 0.5f) * 16.0f;
+            q->t = ((float)(uvwh[1] + uvwh[3]) - 0.5f) * 16.0f;
+            p->q = q->q = 1.0f;
+            p->rgba[0] = p->rgba[1] = p->rgba[2] = q->rgba[0] = q->rgba[1] = q->rgba[2] = 0x80;
+            p->rgba[3] = q->rgba[3] = (uint8_t)(al + 0.5f);
+            drawn |= 1u << z;
+        }
+        if (n > 0) {
+            rd_overlay_prims(RD_PRIM_SPRITES, v, n, (RdTex){tex[first]}, RD_BLEND_LERP_AS);
+        }
+    }
+    return drawn;
+}
+
+/* an output pixel to the font's overlay grid: the inverse of
+   font.h's x' = left + gx W / 640, y' = box.y + (gy - 2) box.h / 448 */
+static void pxToGrid(const RdOverlayCtx *ctx, float px, float py, float *gx, float *gy)
 {
     const float bw = (float)ctx->box.w, bh = (float)ctx->box.h;
     const float W = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
-    const float left = (float)ctx->box.x + (bw - W) * 0.5f, top = (float)ctx->box.y;
-    const float sx = W / 640.0f, sy = bh / 448.0f;
+    const float left = (float)ctx->box.x + (bw - W) * 0.5f;
+
+    *gx = (px - left) * 640.0f / W;
+    *gy = (py - (float)ctx->box.y) * 448.0f / bh + 2.0f;
+}
+
+/* the words: on the zones without a picture (Up, Down, Start, Select; the
+   others while their sheet is not loaded), centred on the zone, about 45 %
+   of its short side tall and shrunk to fit 85 % of its width */
+static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o, uint32_t withGlyph)
+{
+    const float bw = (float)ctx->box.w, bh = (float)ctx->box.h;
+    const float W = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
 
     if (ctx->box.w == 0 || ctx->box.h == 0 || !ui_font_init()) {
         return;
@@ -307,7 +383,7 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o)
     ui_begin_overlay(ctx);
     for (int z = 0; z < ICO_TOUCH_BUTTONS; z++) {
         const IcoTouchButton *b = &o->layout.button[z];
-        const char *name = labelOf(z);
+        const char *name = ((withGlyph >> z) & 1u) ? NULL : labelOf(z);
         const int held = (o->info.pressed >> z) & 1u;
         float a = (held ? 128.0f : 104.0f) * o->opacity;
         uint8_t c[4] = {0x80, 0x80, 0x80, 0};
@@ -316,13 +392,17 @@ static void drawLabels(const RdOverlayCtx *ctx, const IcoTouchOverlay *o)
             continue;
         }
         c[3] = (uint8_t)(a > 128.0f ? 128.0f : a + 0.5f);
-        /* the box's middle and a height of about 45 % of it, in output
-           pixels, then in the grid */
+        const float wPx = b->rect.w * s_d.kx, hBox = b->rect.h * s_d.ky;
         const float px = (b->rect.x + b->rect.w * 0.5f) * s_d.kx;
         const float py = (b->rect.y + b->rect.h * 0.5f) * s_d.ky;
-        const float hPx = b->rect.h * s_d.ky * (name[1] == '\0' || name[2] == '\0' ? 0.5f : 0.38f);
-        ui_draw_text((px - left) / sx, (py - top) / sy + 2.0f, hPx / sy, c, name,
-                     UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
+        float size = 0.45f * (wPx < hBox ? wPx : hBox) * 448.0f / bh; /* grid y units */
+        for (int i = 0;
+             i < 24 && size > 4.0f && ui_measure_text(size, name) * W / 640.0f > 0.85f * wPx; i++) {
+            size *= 0.92f;
+        }
+        float gx, gy;
+        pxToGrid(ctx, px, py, &gx, &gy);
+        ui_draw_text(gx, gy, size, c, name, UI_ALIGN_CENTER | UI_VALIGN_MIDDLE);
     }
     ui_end_overlay();
 }
@@ -344,12 +424,13 @@ void ui_touch_draw_overlay(const struct RdOverlayCtx *ctx)
     s_d.ky = (float)ctx->outH / (float)o.layout.outH;
     s_d.maxX = (float)(ctx->outW < 4095u ? ctx->outW : 4095u) * 16.0f;
     s_d.maxY = (float)(ctx->outH < 4095u ? ctx->outH : 4095u) * 16.0f;
-    float th = o.layout.unit * 0.006f;
+    float th = o.layout.unit * 0.4f;
     th = th < 2.0f ? 2.0f : th;
     drawSticks(&o, th);
     drawButtons(&o, th);
     flush();
-    drawLabels(ctx, &o);
+    const uint32_t withGlyph = drawGlyphs(&o);
+    drawLabels(ctx, &o, withGlyph);
 }
 
 #else

@@ -9,12 +9,17 @@
  * resolution, only while the copy's opacity is above 0 (the fades, Touch
  * controls and Touch opacity).
  *
- * What it draws, every shape untextured triangles through rd_overlay_prims
- * (rd.h), the labels with ui_draw_text:
- *   - the face buttons as discs with the PS2 symbols as strokes (a cross, a
- *     ring, a square, a triangle) in their colours;
- *   - the D-pad as four keys with an arrow each, the shoulders (L1 R1 L2
- *     R2) and Start and Select as boxes with their names;
+ * What it draws:
+ *   - every button as a plain translucent disc (the face buttons and R1) or
+ *     key (the rest), untextured triangles through rd_overlay_prims (rd.h);
+ *   - on them the game's own button pictures (layout_ext.h LtExtGlyph: the
+ *     four face buttons, L1 R1 L2 R2 and the arrows of Left and Right) as
+ *     sprites in output pixels from the game's button sheets, fitted to the
+ *     disc or key with the picture's proportions; the port draws no symbol
+ *     of its own;
+ *   - the words, with ui_draw_text placed in output pixels, on the zones
+ *     with no picture (Up, Down, Select, Start), and on any zone whose
+ *     sheet is not loaded yet (before a stage's textures are set up);
  *   - the left stick: its ring where it rests (or where the finger went
  *     down), the run ring inside it at ICO_TOUCH_RUN_RING of the radius
  *     (lit while the push is past it), and the knob under the finger;

@@ -492,4 +492,6 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_RANGE_NORMAL] = "Normal",
     [UI_STR_VAL_RANGE_FULL] = "Total",
     [UI_STR_VAL_INSTANT] = "Instantánea",
+    [UI_STR_TOUCH_LEFT] = "Izquierda",
+    [UI_STR_TOUCH_RIGHT] = "Derecha",
 };
