@@ -27,12 +27,13 @@
  *      the GS LERP with As, alpha As) within 1 LSB per blend; with
  *      fogOffsetA the flat quad on top within 2;
  *   d  the fog frame dumped, loaded and replayed again gives the same pixels;
- *      replayed once more with the depth copy forced on (rd__force_depth_copy:
- *      the fog samples a copy of the depth, the path of tile-based GPUs and
- *      D24S8) it gives the same pixels byte for byte as the depth sampled in
- *      place; case 1 then runs on the copy.  rd_fog_depth_copy runs the whole
- *      test with the copy from the start (ICO_RD_DEPTH_COPY=1: the target
- *      depths are not even sampleable), and the D24S8 runs start in place
+ *      replayed once more on each other way of reading the depth the device
+ *      has (rd_fog_path.c: in place, a copy of the depth, the path of
+ *      tile-based GPUs and D24S8, and the depth's words through a buffer)
+ *      it gives the same pixels byte for byte.  rd_fog_depth_copy runs the
+ *      whole test with the copy from the start (ICO_RD_DEPTH_COPY=1),
+ *      rd_fog_buffer and rd_fog_buffer_d24s8 with the buffer path
+ *      (ICO_RD_FOG_PATH=buffer), and the D24S8 runs start in place
  *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too.
  * The same checks and tolerances hold on a 24-bit depth buffer
  * (rd_fog_d24s8 and rd_fog_nodual_d24s8: ICO_VK_FAKE_D24S8=1, the Vulkan
@@ -792,21 +793,28 @@ static void checkDump(void)
         printf("  (d) dump -> load -> replay: %d bytes differ\n", diff);
         CHECK(diff == 0, "the replayed dump equals the recorded frame");
     }
-    if (g_rd.depthCopy) {
-        printf("  (d) the depth copy is on from the start: no in-place replay to compare\n");
-    } else {
-        rd__force_depth_copy();
-        CHECK(rd__replay_frame(&g, 0, false), "replay the loaded frame on the depth copy");
+    /* the other ways of reading the depth: the same pixels */
+    const int start = g_rd.fogPath;
+    for (int p = 0; p < RD_FOG_PATH_COUNT; p++) {
+        if (p == start || !rd__fog_path_supported(p)) {
+            continue;
+        }
+        rd__set_fog_path(p);
+        CHECK(rd__replay_frame(&g, 0, false), "replay the loaded frame on the %s path",
+              rd__fog_path_name(p));
         rhi_wait_idle();
         if (readScene(again)) {
             int diff = 0;
             for (size_t i = 0; i < sizeof(again); i++) {
                 diff += again[i] != s_px[i];
             }
-            printf("  (d) the fog on a copy of the depth: %d bytes differ from in place\n", diff);
-            CHECK(diff == 0, "the fog on the depth copy equals the fog on the depth in place");
+            printf("  (d) the fog on the %s path: %d bytes differ from %s\n", rd__fog_path_name(p),
+                   diff, rd__fog_path_name(start));
+            CHECK(diff == 0, "the fog on the %s path equals the fog on %s", rd__fog_path_name(p),
+                  rd__fog_path_name(start));
         }
     }
+    rd__set_fog_path(start);
     rd__frame_free(&g);
     remove(path);
 }
@@ -816,7 +824,7 @@ static void checkPipelines(void)
     static RdPipeKeyInt keys[512];
     const uint32_t n = rd__enumerate_reachable(keys, 512);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
-    int fog = 0;
+    int fog = 0, fogWords = 0;
     for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
@@ -824,14 +832,21 @@ static void checkPipelines(void)
             found |= rd__pipe_key_equal(&keys[j], k);
         }
         fog += k->fs == RD_FS_FOG;
+        fogWords += k->fs == RD_FS_FOG_BUFFER;
         CHECK(found, "created pipeline %u (prog %u vs %u fs %u blend %u) is not enumerated", i,
               k->gs.program, k->vs, k->fs, k->gs.blend);
     }
-    printf("  pipelines: %u created (%d fog), %u reachable\n", rd__pipeline_count(), fog, n);
+    printf("  pipelines: %u created (%d fog, %d fog on the buffer path), %u reachable\n",
+           rd__pipeline_count(), fog, fogWords, n);
     /* the fog's LERP takes a colour and an alpha pass in the
-     * two-pass blend fallback (rd_fog_nodual) */
+     * two-pass blend fallback (rd_fog_nodual), with either fragment shader
+     * the paths case d replayed took */
     const int wantFog = rd_no_dual() ? 2 : 1;
-    CHECK(fog == wantFog, "%d fog pipeline(s), %d expected", fog, wantFog);
+    const bool sampled =
+        rd__fog_path_supported(RD_FOG_INPLACE) || rd__fog_path_supported(RD_FOG_COPY);
+    CHECK(fog == (sampled ? wantFog : 0), "%d fog pipeline(s), %d expected", fog, wantFog);
+    CHECK(fogWords == (rd__fog_path_supported(RD_FOG_BUFFER) ? wantFog : 0),
+          "%d fog pipeline(s) on the buffer path, %d expected", fogWords, wantFog);
 }
 
 int main(void)
@@ -876,14 +891,26 @@ int main(void)
             CHECK(rd__depth_unorm_steps() == (d24 ? 16777215.0f : 0.0f), "%s: the fog compares %s",
                   ds ? ds : "?", d24 ? "24-bit steps" : "float depths");
         }
-        /* the depth copy: as ICO_RD_DEPTH_COPY says, else on D24S8 and on a
-         * tile-based GPU */
+        /* the fog's path: as ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY says,
+         * else the copy on D24S8 and on a tile-based GPU, in place on the
+         * others; the depth copy (stencil kept) with every path but in place */
+        const char *fp = getenv("ICO_RD_FOG_PATH");
         const char *dc = getenv("ICO_RD_DEPTH_COPY");
         const bool d24 = ds && strcmp(ds, "D24S8") == 0;
-        const bool wantCopy = dc && dc[0] ? dc[0] != '0' : d24 || rhi_limits()->tiler;
-        printf("  depth copy %s\n", g_rd.depthCopy ? "on" : "off");
-        CHECK(g_rd.depthCopy == wantCopy, "the depth copy is %s, %s expected",
-              g_rd.depthCopy ? "on" : "off", wantCopy ? "on" : "off");
+        int want = d24 || rhi_limits()->tiler ? RD_FOG_COPY : RD_FOG_INPLACE;
+        if (fp && fp[0]) {
+            want = strcmp(fp, "buffer") == 0 ? RD_FOG_BUFFER
+                   : strcmp(fp, "copy") == 0 ? RD_FOG_COPY
+                                             : RD_FOG_INPLACE;
+        } else if (dc && dc[0]) {
+            want = dc[0] != '0' ? RD_FOG_COPY : RD_FOG_INPLACE;
+        }
+        printf("  fog path %s, depth copy %s\n", rd__fog_path_name(g_rd.fogPath),
+               g_rd.depthCopy ? "on" : "off");
+        CHECK(g_rd.fogPath == want, "the fog path is %s, %s expected",
+              rd__fog_path_name(g_rd.fogPath), rd__fog_path_name(want));
+        CHECK(g_rd.depthCopy == (want != RD_FOG_INPLACE), "the depth copy is %s",
+              g_rd.depthCopy ? "on" : "off");
     }
     gif_HostForgetTextures();
     gif_HostFrameReset();
