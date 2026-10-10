@@ -1104,7 +1104,7 @@ static void calcWallFittingGeometry(void)
     _ApplyMatrix(&v, mtx, &v);
     v.f[0] = 0.0f;
     _NormalizeVector(&v, &v);
-    ang = (short)(atan2f(v.f[1], -v.f[2]) * 10430.378f);
+    ang = (short)(int)(atan2f(v.f[1], -v.f[2]) * 10430.378f);
     RotQuaternionX(skelRoot->quat, ang);
     MatrixDrive_PushMatrix();
     _ApplyMatrix(&base, MatrixDrive_GetMatrix(), rootMove);

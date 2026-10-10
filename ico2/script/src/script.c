@@ -1131,8 +1131,8 @@ void scpGirlHintVoiceTickProc(void *cam)
             adeg = 180 - adeg;
         r = (float)adeg * -0.01f + 1.0f;
     }
-    snd->volL[0] = vol * 16383.0f * lr * l;
-    snd->volR[1] = vol * 16383.0f * lr * r;
+    snd->volL[0] = (short)(int)(vol * 16383.0f * lr * l);
+    snd->volR[1] = (short)(int)(vol * 16383.0f * lr * r);
     AdpcmInterStereoVolumeSet(snd, 0);
 }
 

@@ -22,10 +22,10 @@ static unsigned s_serial;
 
 static int s_winW, s_winH;
 
-/* The Android rules (a 60 a second frame rate default, and
+/* The mobile rules (a 60 a second frame rate default, and
    Enhanced's resolution "auto"); the build's, or a test's
    (ico_video_set_android) */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 static int s_android = 1;
 #else
 static int s_android = 0;

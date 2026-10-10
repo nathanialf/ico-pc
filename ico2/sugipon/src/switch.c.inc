@@ -137,7 +137,7 @@ void FloorLeverGeo(GObj *lev)
     if (p->state != 0) {
         p->timer = p->timer + 1;
         if (p->timer <= (60 - systemStatus[0] * 10) / systemStatus[1]) {
-            p->shake = (short)(random_signed() * 128.0f);
+            p->shake = (short)(int)(random_signed() * 128.0f);
             if (p->timer == (60 - systemStatus[0] * 10) / systemStatus[1]) {
                 switchReleaseSE(lev);
             }
@@ -146,7 +146,7 @@ void FloorLeverGeo(GObj *lev)
             }
         } else if (p->angle != 0) {
             p->shake = 0;
-            p->angle = (short)((float)p->angle * 0.2f);
+            p->angle = (short)(int)((float)p->angle * 0.2f);
         } else {
             float q[4];
 
@@ -279,13 +279,13 @@ void WallLeverGeo(GObj *lev)
     if (p->state != 0) {
         p->timer = p->timer + 1;
         if (p->timer <= (60 - systemStatus[0] * 10) / systemStatus[1]) {
-            p->shake = (short)(random_signed() * 128.0f);
+            p->shake = (short)(int)(random_signed() * 128.0f);
             if (p->timer == (60 - systemStatus[0] * 10) / systemStatus[1]) {
                 switchReleaseSE(lev);
             }
         } else if (p->angle != 0) {
             p->shake = 0;
-            p->angle = (short)((float)p->angle * 0.2f);
+            p->angle = (short)(int)((float)p->angle * 0.2f);
         } else {
             float q[4];
 

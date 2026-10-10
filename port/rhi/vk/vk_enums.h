@@ -5,7 +5,7 @@
  * silently mapping to Vulkan's zero value. */
 #ifndef PORT_RHI_VK_VK_ENUMS_H
 #define PORT_RHI_VK_VK_ENUMS_H
-#ifndef VK_NO_PROTOTYPES
+#if !defined(VK_NO_PROTOTYPES) && !defined(ICO_RHI_MOLTENVK)
 #define VK_NO_PROTOTYPES
 #endif
 

@@ -93,6 +93,52 @@
                 "ICO_RHI_D3D12": "OFF",
                 "ICO_SHADERS_DXIL": "OFF"
             }
+        },
+        {
+            "name": "ios-moltenvk",
+            "inherits": "base",
+            "displayName": "iOS ARM64 Vulkan through MoltenVK (renderer libraries)",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_SYSTEM_NAME": "iOS",
+                "CMAKE_OSX_SYSROOT": "iphoneos",
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
+                "ICO_HEADLESS": "OFF",
+                "ICO_LINK_EXE": "OFF",
+                "ICO_RHI_VULKAN": "ON",
+                "ICO_RHI_MOLTENVK": "ON",
+                "ICO_RHI_D3D12": "OFF",
+                "ICO_SHADERS_DXIL": "OFF"
+            }
+        },
+        {
+            "name": "macos-moltenvk",
+            "inherits": "base",
+            "displayName": "macOS ARM64 Vulkan through MoltenVK (renderer libraries)",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_SYSTEM_NAME": "Darwin",
+                "CMAKE_OSX_SYSROOT": "macosx",
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "12.0",
+                "ICO_HEADLESS": "OFF",
+                "ICO_LINK_EXE": "OFF",
+                "ICO_RHI_VULKAN": "ON",
+                "ICO_RHI_MOLTENVK": "ON",
+                "ICO_RHI_D3D12": "OFF",
+                "ICO_SHADERS_DXIL": "OFF"
+            }
+        },
+        {
+            "name": "ios-app",
+            "inherits": "ios-moltenvk",
+            "displayName": "ICO iOS app (unsigned, ARM64)",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "ICO_LINK_EXE": "ON",
+                "ICO_DXC": "${sourceDir}/tools/toolchain/deps/dxc-build/bin/dxc"
+            }
         }
     ],
     "buildPresets": [
@@ -127,6 +173,21 @@
         {
             "name": "android-arm64",
             "configurePreset": "android-arm64",
+            "targets": ["ico_pc"]
+        },
+        {
+            "name": "ios-moltenvk",
+            "configurePreset": "ios-moltenvk",
+            "targets": ["ico_rhi"]
+        },
+        {
+            "name": "macos-moltenvk",
+            "configurePreset": "macos-moltenvk",
+            "targets": ["ico_rhi"]
+        },
+        {
+            "name": "ios-app",
+            "configurePreset": "ios-app",
             "targets": ["ico_pc"]
         }
     ],

@@ -1338,7 +1338,7 @@ static inline unsigned char ropeSpecialWallHit(RsVec4 *p1, ClimbCol *hit) /* der
     for (i = 0; i < 4; i++) {
         sceVu0UnitMatrix((void *)MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(p1->f[0], p1->f[1] + 0.0f, p1->f[2]);
-        MatrixDrive_RotMatrixY((short)((float)i * 0.7853982f * 32768.0f / 3.1415927f));
+        MatrixDrive_RotMatrixY((short)(int)((float)i * 0.7853982f * 32768.0f / 3.1415927f));
         sceVu0ApplyMatrix(work.pt[0], (void *)MatrixDrive_GetMatrix(), va);
         sceVu0ApplyMatrix(work.pt[1], (void *)MatrixDrive_GetMatrix(), vb);
         ClipWall(&work);

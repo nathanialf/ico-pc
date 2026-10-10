@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/gen_notices.py --platform {linux,windows,android} [--arch {x64,arm64}] --out NOTICES.txt [--root DIR] [--manifest FILE]
+"""tools/gen_notices.py --platform {linux,windows,android,ios,macos} [--arch {x64,arm64}] --out NOTICES.txt [--root DIR] [--manifest FILE]
 
 Writes the third-party notices file a package ships beside the program:
 every component in tools/notices/manifest.json for that platform (and, for
@@ -58,7 +58,7 @@ def text_of(root, t):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--platform", required=True, choices=["linux", "windows", "android"])
+    ap.add_argument("--platform", required=True, choices=["linux", "windows", "android", "ios", "macos"])
     ap.add_argument("--arch", default=None, choices=["x64", "arm64"],
                     help="the package's architecture, for entries limited to one (default: none)")
     ap.add_argument("--out", required=True)
@@ -71,7 +71,7 @@ def main():
     manifest = a.manifest or os.path.join(root, "tools", "notices", "manifest.json")
     with open(manifest, encoding="utf-8") as f:
         comps = json.load(f)["components"]
-    comps = [c for c in comps if a.platform in c.get("platforms", ["linux", "windows", "android"])]
+    comps = [c for c in comps if a.platform in c.get("platforms", ["linux", "windows", "android", "ios", "macos"])]
     comps = [c for c in comps if "arch" not in c or a.arch in c["arch"]]
 
     parts = [

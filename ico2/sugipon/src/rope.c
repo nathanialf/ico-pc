@@ -129,7 +129,7 @@ void *InitRopeGeo(GObj *o, const float *p)
         memset(&cw, 0, sizeof(cw));
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(p[0], p[1] + 10.0f, p[2]);
-        MatrixDrive_RotMatrixY(p[5] * 10430.378f);
+        MatrixDrive_RotMatrixY((short)(int)(p[5] * 10430.378f));
         sceVu0ApplyMatrix(cw.pt[0], MatrixDrive_GetMatrix(), &v0);
         sceVu0ApplyMatrix(cw.pt[1], MatrixDrive_GetMatrix(), &v1);
         ClipWall(&cw);

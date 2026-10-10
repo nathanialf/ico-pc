@@ -50,6 +50,10 @@
 #                    pinned one in tools/toolchain/cmake, else the PATH's)
 # =============================================================================
 set -euo pipefail
+if [[ $# -gt 1 || ($# -eq 1 && "${1:-}" != --game-only) ]]; then
+    echo 'Usage: tools/fetch_deps.sh [--game-only]' >&2
+    exit 1
+fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/tools/toolchain/deps"
@@ -88,6 +92,8 @@ unpack_debs() {
     done
 }
 
+# Apple builds use MoltenVK/SDL and a host DXC, but share the game dependencies below.
+if [[ "${1:-}" != --game-only ]]; then
 # --- 1. Vulkan-Headers and volk ----------------------------------------------
 #
 # Both are taken at the same Vulkan SDK tag so volk's generated entry points
@@ -461,6 +467,8 @@ else
     echo "$DXC_ID" > "$DXC_DIR/.ico-release"
     echo "==> DXC ${DXC_VERSION} (built from source) at $DXC_DIR"
 fi
+fi
+
 # --- 5. Ittiam libmpeg2 (the FMV decoder) ---------------------------------------
 #
 # AOSP platform/external/libmpeg2 (Apache-2.0), tag android-16.0.0_r4 =

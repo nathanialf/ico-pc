@@ -1,14 +1,14 @@
 {
-  "comment": "Third-party components in the shipped program, one entry each, with where its licence text comes from. tools/gen_notices.py turns this into NOTICES.txt for a package (docs/THIRD_PARTY.md, 'Binary-release obligations'). A text is a file ('file'), the first existing of several ('any_of'), or the lines of a source comment from the line holding 'from' to the line holding 'to', with the comment's leading ' * ' removed ('extract'). A missing file is an error. 'platforms' limits an entry to linux, windows or android packages (default: all three); 'arch' limits it further to the packages of those architectures (x64, arm64; gen_notices.py --arch), and an entry with 'arch' is left out when no --arch is given.",
+  "comment": "Third-party components in the shipped program, one entry each, with where its licence text comes from. tools/gen_notices.py turns this into NOTICES.txt for a package (docs/THIRD_PARTY.md, 'Binary-release obligations'). A text is a file ('file'), the first existing of several ('any_of'), or the lines of a source comment from the line holding 'from' to the line holding 'to', with the comment's leading ' * ' removed ('extract'). A missing file is an error. 'platforms' limits an entry to linux, windows, android, ios or macos packages (default: all five); 'arch' limits it further to the packages of those architectures (x64, arm64; gen_notices.py --arch), and an entry with 'arch' is left out when no --arch is given.",
   "components": [
     {
       "name": "SDL3",
       "version": "3.4.18",
       "licence": "zlib",
-      "used_for": "window, input, audio output; shipped as libSDL3.so.0 / SDL3.dll beside the program",
-      "platforms": ["linux", "windows"],
+      "used_for": "window, input, audio output; shipped as libSDL3.so.0 / SDL3.dll beside the program; statically linked on Apple platforms",
+      "platforms": ["linux", "windows", "ios", "macos"],
       "texts": [
-        {"any_of": ["tools/toolchain/deps/sdl3/linux-x64/LICENSE.txt", "tools/toolchain/deps/sdl3/linux-arm64/LICENSE.txt", "tools/toolchain/deps/sdl3/mingw/LICENSE.txt"]}
+        {"any_of": ["tools/toolchain/deps/sdl3/linux-x64/LICENSE.txt", "tools/toolchain/deps/sdl3/mingw/LICENSE.txt", "tools/toolchain/deps/sdl3/ios-arm64/LICENSE.txt", "tools/toolchain/deps/sdl3/macos-arm64/LICENSE.txt", "tools/toolchain/deps/sdl3/linux-arm64/LICENSE.txt"]}
       ]
     },
     {
@@ -60,14 +60,16 @@
       "version": "vulkan-sdk-1.4.363.0",
       "licence": "MIT",
       "used_for": "the Vulkan meta-loader, compiled into the program",
-      "texts": [{"file": "tools/toolchain/deps/volk/LICENSE.md"}]
+      "texts": [{"file": "tools/toolchain/deps/volk/LICENSE.md"}],
+      "platforms": ["linux", "windows", "android"]
     },
     {
       "name": "Vulkan-Headers",
       "version": "vulkan-sdk-1.4.363.0",
       "licence": "Apache-2.0 OR MIT; MIT chosen",
       "used_for": "the Vulkan API declarations the renderer compiles against",
-      "texts": [{"file": "tools/toolchain/deps/vulkan-headers/LICENSES/MIT.txt"}]
+      "texts": [{"file": "tools/toolchain/deps/vulkan-headers/LICENSES/MIT.txt"}],
+      "platforms": ["linux", "windows", "android"]
     },
     {
       "name": "Ittiam libmpeg2 (AOSP platform/external/libmpeg2)",
@@ -193,6 +195,46 @@
           "tools/toolchain/llvm-mingw/x86_64-w64-mingw32/share/mingw32/COPYING.MinGW-w64-runtime.txt",
           "tools/toolchain/mingw-gcc/usr/share/doc/mingw-w64-x86-64-dev/copyright"
         ]}
+      ]
+    },
+    {
+      "name": "MoltenVK",
+      "version": "v1.4.2",
+      "licence": "Apache-2.0",
+      "used_for": "Vulkan over Metal on Apple platforms",
+      "platforms": ["ios", "macos"],
+      "texts": [
+        {"any_of": ["tools/toolchain/deps/moltenvk/ios/MoltenVK/LICENSE", "tools/toolchain/deps/moltenvk/macos/MoltenVK/LICENSE"]}
+      ]
+    },
+    {
+      "name": "SPIRV-Cross (inside MoltenVK)",
+      "version": "6c09849fe88c48eaed08413aa022aaa136a3a057",
+      "licence": "Apache-2.0",
+      "used_for": "SPIR-V to Metal shader translation inside MoltenVK",
+      "platforms": ["ios", "macos"],
+      "texts": [
+        {"any_of": ["tools/toolchain/deps/moltenvk/ios/licenses/SPIRV-Cross-LICENSE.txt", "tools/toolchain/deps/moltenvk/macos/licenses/SPIRV-Cross-LICENSE.txt"]}
+      ]
+    },
+    {
+      "name": "SPIRV-Tools (inside MoltenVK)",
+      "version": "0d6fd73ca73830ccab5fa1f00ed5ed40124e2c55",
+      "licence": "Apache-2.0",
+      "used_for": "SPIR-V processing inside MoltenVK",
+      "platforms": ["ios", "macos"],
+      "texts": [
+        {"any_of": ["tools/toolchain/deps/moltenvk/ios/licenses/SPIRV-Tools-LICENSE.txt", "tools/toolchain/deps/moltenvk/macos/licenses/SPIRV-Tools-LICENSE.txt"]}
+      ]
+    },
+    {
+      "name": "Vulkan-Headers (MoltenVK release)",
+      "version": "e3b1eec08173d6b825cd3ac88c885a63b621504a",
+      "licence": "Apache-2.0 OR MIT; MIT chosen",
+      "used_for": "Apple Vulkan API declarations bundled with MoltenVK",
+      "platforms": ["ios", "macos"],
+      "texts": [
+        {"any_of": ["tools/toolchain/deps/moltenvk/ios/licenses/Vulkan-Headers-LICENSE.txt", "tools/toolchain/deps/moltenvk/macos/licenses/Vulkan-Headers-LICENSE.txt"]}
       ]
     }
   ]

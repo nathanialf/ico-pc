@@ -182,9 +182,9 @@ int ReleaseWeaponWithFumbleSequential(GObj *g)
         float quat[4] = {0.0f, 0.0f, 0.0f, 1.0f};
         float rot[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
-        RotQuaternionY(quat, (short)(FUMBLE_ROW(i, w)->rotY * 182.04445f));
-        RotQuaternionX(quat, (short)(-FUMBLE_ROW(i, w)->rotX * 182.04445f));
-        RotQuaternionZ(quat, (short)(FUMBLE_ROW(i, w)->rotZ * 182.04445f));
+        RotQuaternionY(quat, (short)(int)(FUMBLE_ROW(i, w)->rotY * 182.04445f));
+        RotQuaternionX(quat, (short)(int)(-FUMBLE_ROW(i, w)->rotX * 182.04445f));
+        RotQuaternionZ(quat, (short)(int)(FUMBLE_ROW(i, w)->rotZ * 182.04445f));
         RotQuaternionX(rot, 8192);
         ReleaseWeaponWithFumbleTargetPos(g, &pos, quat, rot, 2.0f);
     }
@@ -783,7 +783,7 @@ static void calcBlur(GObj *g, float t)
     for (i = 0; i < 11; i++) {
         float rr = (float)i / 10.0f;
 
-        SetQuaternionByAxisRotateVWithNoRegularize(q2, (short)(ang * (float)i / 10.0f), n);
+        SetQuaternionByAxisRotateVWithNoRegularize(q2, (short)(int)(ang * (float)i / 10.0f), n);
         sceVu0InterVector(p, e->root.pos, d, rr);
         GetMatrixFromQuaternionPos(m, q2, p);
         CopyVector(base + i * 32, m[3]);
@@ -900,7 +900,7 @@ void WeaponGeo(GObj *g)
         sceVu0ApplyMatrix(v, MatrixDrive_GetMatrix(), v);
         a = -atan2f(v[1], _Sqrt(1.0f - v[1] * v[1]));
         ((WeaponMatrix *)MatrixDrive_GetMatrix())->f[3][1] -=
-            GetTableSin((short)(a * 10430.378f)) * 70.0f;
+            GetTableSin((short)(int)(a * 10430.378f)) * 70.0f;
         CopyMatrix((char *)GOBJ_SUB(g)->nodeMtx, MatrixDrive_GetMatrix());
     }
 }

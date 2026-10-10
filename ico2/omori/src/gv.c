@@ -25,13 +25,13 @@ void GetMatrixDirectionToZ(float *out, float *dir)
     MatrixDrive_PushMatrix();
     v[1] = -atan2f(dir[0], dir[2]);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
-    MatrixDrive_RotMatrixY((short)(v[1] * 32768.0f / d));
+    MatrixDrive_RotMatrixY((short)(int)(v[1] * 32768.0f / d));
     dir[3] = 0.0f;
     sceVu0ApplyMatrix(w, MatrixDrive_GetMatrix(), dir);
     v[0] = atan2f(w[1], w[2]);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
-    MatrixDrive_RotMatrixX((short)(v[0] * 32768.0f / d));
-    MatrixDrive_RotMatrixY((short)(v[1] * 32768.0f / d));
+    MatrixDrive_RotMatrixX((short)(int)(v[0] * 32768.0f / d));
+    MatrixDrive_RotMatrixY((short)(int)(v[1] * 32768.0f / d));
     CopyMatrix(out, MatrixDrive_GetMatrix());
     MatrixDrive_PopMatrix();
 }

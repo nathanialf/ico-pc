@@ -203,8 +203,8 @@ void MakeCameraMatrix(CameraSet2 *cs)
     MatrixDrive_PushMatrix();
     CopyMatrix(MatrixDrive_GetMatrix(), mat);
     gsb_SetVSMatrix(ScreenWidth, ScreenHeight,
-                    GetTableCos(cs->fov * 32768.0f / 180.0f) * 1024.0f /
-                        GetTableSin(cs->fov * 32768.0f / 180.0f));
+                    GetTableCos((short)(int)(cs->fov * 32768.0f / 180.0f)) * 1024.0f /
+                        GetTableSin((short)(int)(cs->fov * 32768.0f / 180.0f)));
     sceVu0CopyMatrix(matrixptr + 0x80, MatrixDrive_GetMatrix());
     MatrixDrive_PopMatrix();
     gsb_MakeCommonMatrix();
@@ -665,8 +665,8 @@ void SetCameraMatrix(GObj *self)
         zoom = cameraZoom;
         if (zoom == 0.0f) {
             if (zoom == 0.0f) {
-                zoom = GetTableCos(cameraSet.fov * 32768.0f / 180.0f) * 1024.0f /
-                       GetTableSin(cameraSet.fov * 32768.0f / 180.0f);
+                zoom = GetTableCos((short)(int)(cameraSet.fov * 32768.0f / 180.0f)) * 1024.0f /
+                       GetTableSin((short)(int)(cameraSet.fov * 32768.0f / 180.0f));
             }
             cameraZoom = zoom;
             cameraFov = cameraSet.fov;

@@ -519,7 +519,8 @@ static inline void updateBoxWheelAngle(GObj *self) /* derived name */
     BoxWork *p = GOBJ_SUB(self)->work;
 
     if (p->wheelDObj != 0) {
-        p->wheelAngle = (short)((float)p->wheelAngle - p->vel[2] * 10430.3779f / p->wheelRadius);
+        p->wheelAngle =
+            (short)(int)((float)p->wheelAngle - p->vel[2] * 10430.3779f / p->wheelRadius);
     }
 }
 
@@ -904,7 +905,8 @@ static int onPath(GObj *self)
     hitFront = getNearestPosition(front.f, (int *)&p->frontPoint, (int *)&p->route);
     hitRear = getNearestPosition(rear.f, (int *)&p->rearPoint, (int *)&p->route);
 
-    RotQuaternionY(q, (short)(atan2f(front.f[0] - rear.f[0], front.f[2] - rear.f[2]) * 10430.378f));
+    RotQuaternionY(
+        q, (short)(int)(atan2f(front.f[0] - rear.f[0], front.f[2] - rear.f[2]) * 10430.378f));
     SetRootQuaternion(self, q);
 
     if (hitFront != 0 || hitRear != 0) {
@@ -1084,7 +1086,7 @@ int MoveFloatingBox(GObj *self, GObj *other, float *dst, void *src, float lim)
         ax = px - ox;
         az = pz - oz;
         d = FSqrt(ax * ax + az * az) * 32768.0f;
-        ang = (short)(ox * az - oz * ax < 0.0f ? d / l1 * 0.31830987f : -d / l1 * 0.31830987f);
+        ang = (short)(int)(ox * az - oz * ax < 0.0f ? d / l1 * 0.31830987f : -d / l1 * 0.31830987f);
 
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_RotMatrixY(
@@ -1255,7 +1257,7 @@ static void execFloating(GObj *self)
         CopyQuaternion(q, IdentityQuaternion);
         RotQuaternionY(q,
                        GetTableArcTan2(GOBJ_SUB(self)->ctrl.dir[0], GOBJ_SUB(self)->ctrl.dir[2]));
-        SetQuaternionByAxisRotateV(rot, (short)(VectorLength(w->tilt) * 20.48f / 50.0f), axis);
+        SetQuaternionByAxisRotateV(rot, (short)(int)(VectorLength(w->tilt) * 20.48f / 50.0f), axis);
         MultiQuaternion(q, q, rot);
         SetRootQuaternion(self, q);
         GetMatrixFromQuaternion(m, rot);
@@ -2096,7 +2098,7 @@ BoxWork *InitBoxGeo(GObj *self, SObjSimpleSetting *lay)
             memset(&q, 0, 16);
             q.f[3] = 1.0f;
             RotQuaternionY(
-                &q, (short)(accessary[GOBJ_SUB(self)->accessary].subRotY * 32768.0f / 180.0f));
+                &q, (short)(int)(accessary[GOBJ_SUB(self)->accessary].subRotY * 32768.0f / 180.0f));
             CopyVector(GOBJ_SUB(o)->root.quat, &q);
 
             SetSwitchTriggerFunc(o, moveBoxAutoMatic);

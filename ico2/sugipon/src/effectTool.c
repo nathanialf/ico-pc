@@ -506,8 +506,8 @@ static void moveEffectToolGeometry(int idx)
         if (padCtx.now & 2) {
             effectToolPos[1] += st1.dz * st1.mag * 16.0f;
         } else {
-            viewRotY = viewRotY + st1.dx * 256.0f * st1.mag;
-            viewRotX = viewRotX + st1.dz * 256.0f * st1.mag;
+            viewRotY = (short)(int)(viewRotY + st1.dx * 256.0f * st1.mag);
+            viewRotX = (short)(int)(viewRotX + st1.dz * 256.0f * st1.mag);
             if (viewRotX < -0x4000) {
                 viewRotX = -0x4000;
             }

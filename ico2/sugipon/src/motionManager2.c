@@ -228,9 +228,9 @@ void SetMotionDirectionWithLimit(GObj *self, float *dir, float lim0, float lim1)
         return;
     }
     if (ang < 0) {
-        RotQuaternionY(q, -(lim0 * 32768.0f / 180.0f));
+        RotQuaternionY(q, (short)(int)(-(lim0 * 32768.0f / 180.0f)));
     } else {
-        RotQuaternionY(q, lim0 * 32768.0f / 180.0f);
+        RotQuaternionY(q, (short)(int)(lim0 * 32768.0f / 180.0f));
     }
     GetMatrixFromQuaternion(m, q);
     sceVu0ApplyMatrix(v, m, ZUnitVector);
@@ -378,7 +378,7 @@ static int calcFootIK(SkelNode *skel, char *arg, int node, float scale, float ra
 
     dstq = arg + node * 32 + 16;
     CopyQuaternion(dstq, q0);
-    RotQuaternionZ(dstq, (short)((float)ang * ratio));
+    RotQuaternionZ(dstq, (short)(int)((float)ang * ratio));
     RotQuaternionY(dstq, ang2);
     MultiQuaternion(dstq, dstq, qt);
 

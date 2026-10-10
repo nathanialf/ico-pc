@@ -114,7 +114,7 @@ char *InitCageGeo(char *self, SObjSimpleSetting *lay)
     w->chains = InitChains(ch);
     w->upperNode = SetChainExtendedWeight(w->chains->nodes, 1, 0.0f, 600.0f);
     w->lowerNode = SetChainExtendedWeight(w->chains->nodes, 1, 500.0f, 1400.0f);
-    w->angle = (short)(-lay->rot[1] * 10430.378f);
+    w->angle = (short)(int)(-lay->rot[1] * 10430.378f);
     w->rideable = 1;
     one = 1.0f;
     {
@@ -265,7 +265,7 @@ static inline void SetCageChainQuaternion(void *q, void *a, void *b) /* derived 
     n[1] = 0.0f;
     sceVu0OuterProduct(axis, cageDown, n);
     SetQuaternionByAxisRotateV(
-        q, (short)(atan2f(FSqrt(d[0] * d[0] + d[2] * d[2]), d[1]) * 10430.378f), axis);
+        q, (short)(int)(atan2f(FSqrt(d[0] * d[0] + d[2] * d[2]), d[1]) * 10430.378f), axis);
 }
 
 static inline void AddCageWindForce(ExW *n, float k) /* derived name */

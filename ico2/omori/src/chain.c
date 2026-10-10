@@ -516,7 +516,7 @@ void correct_vector(float *out, float *v)
 
     a[1] = -atan2f(v[0], v[2]);
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
-    MatrixDrive_RotMatrixY((short)(a[1] * 32768.0f / 3.1415927f));
+    MatrixDrive_RotMatrixY((short)(int)(a[1] * 32768.0f / 3.1415927f));
 
     v[3] = 0.0f;
     sceVu0ApplyMatrix(u, MatrixDrive_GetMatrix(), v);
@@ -524,8 +524,8 @@ void correct_vector(float *out, float *v)
     a[0] = atan2f(u[1], u[2]);
 
     sceVu0UnitMatrix(MatrixDrive_GetMatrix());
-    MatrixDrive_RotMatrixX((short)(a[0] * 32768.0f / 3.1415927f));
-    MatrixDrive_RotMatrixY((short)(a[1] * 32768.0f / 3.1415927f));
+    MatrixDrive_RotMatrixX((short)(int)(a[0] * 32768.0f / 3.1415927f));
+    MatrixDrive_RotMatrixY((short)(int)(a[1] * 32768.0f / 3.1415927f));
 
     out[3] = 0.0f;
     sceVu0ApplyMatrix(u, MatrixDrive_GetMatrix(), out);
@@ -730,7 +730,7 @@ ChainRecord *InitChainGeo(GObj *gobj, ChainGeoReq *req)
         memset(&w, 0, sizeof(w));
         sceVu0UnitMatrix(MatrixDrive_GetMatrix());
         MatrixDrive_TransMatrix(req->pos[0], req->pos[1] + 10.0f, req->pos[2]);
-        MatrixDrive_RotMatrixY((short)(req->wallDir * 32768.0f / 3.1415927f));
+        MatrixDrive_RotMatrixY((short)(int)(req->wallDir * 32768.0f / 3.1415927f));
         sceVu0ApplyMatrix(w.pt[0], MatrixDrive_GetMatrix(), p0);
         sceVu0ApplyMatrix(w.pt[1], MatrixDrive_GetMatrix(), p1);
         ClipWall(&w);

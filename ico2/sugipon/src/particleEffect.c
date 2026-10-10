@@ -152,8 +152,10 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
     spreadVector[2] = pkg->speed * (pkg->speedRand * sugiSignedRandom() + 1.0f);
     CopyMatrix(MatrixDrive_GetMatrix(), m);
     if (pkg->spread != 0) {
-        MatrixDrive_RotMatrixY((short)((float)pkg->spread * (sugiRandom() - 0.5f) * 182.04445f));
-        MatrixDrive_RotMatrixX((short)((float)pkg->spread * (sugiRandom() - 0.5f) * 182.04445f));
+        MatrixDrive_RotMatrixY(
+            (short)(int)((float)pkg->spread * (sugiRandom() - 0.5f) * 182.04445f));
+        MatrixDrive_RotMatrixX(
+            (short)(int)((float)pkg->spread * (sugiRandom() - 0.5f) * 182.04445f));
     }
     sceVu0ApplyMatrix(w->vel, MatrixDrive_GetMatrix(), spreadVector);
     n = (int)((float)(unsigned int)pkg->emit * (pkg->emitRand * sugiSignedRandom() + 1.0f));
@@ -163,8 +165,8 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
     w->sizeStep = pkg->sizeStep * (pkg->sizeStepRand * sugiSignedRandom() + 1.0f);
     if (pkg->spinY != 0) {
         w->spin = 1;
-        w->spinX = (short)((float)pkg->spinX * (pkg->spinXRand * sugiSignedRandom() + 1.0f));
-        w->spinY = (short)((float)pkg->spinY * (pkg->spinYRand * sugiSignedRandom() + 1.0f));
+        w->spinX = (short)(int)((float)pkg->spinX * (pkg->spinXRand * sugiSignedRandom() + 1.0f));
+        w->spinY = (short)(int)((float)pkg->spinY * (pkg->spinYRand * sugiSignedRandom() + 1.0f));
     } else {
         w->spin = 0;
     }
@@ -319,7 +321,7 @@ static inline int updateParticle(PEGeo *self, float *m) /* derived name */
     PEWORK.sizeStep = PEWORK.sizeStep * pkg->sizeStepDecay;
     if (PEWORK.spin != 0) {
         PEWORK.spinX = PEWORK.spinX + PEWORK.spinY;
-        PEWORK.spinY = (short)((float)PEWORK.spinY * pkg->spinYDecay);
+        PEWORK.spinY = (short)(int)((float)PEWORK.spinY * pkg->spinYDecay);
     }
     PEWORK.life = PEWORK.life - 1;
     if (PEWORK.life < 0) {

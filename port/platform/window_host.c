@@ -368,7 +368,7 @@ static void video_apply(int force)
     if (o.windowMode != ICO_WINDOW_WINDOWED) {
         s_lastFullMode = o.windowMode;
     }
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     /* Android: always fullscreen (immersive, the window's creation
        flag); the option follows the window (window_fullscreen_event) */
     request = 0;
@@ -433,7 +433,7 @@ static void touch_layout_update(void)
 /* The window's pixel size the renderer was opened at or last
    given (the size event's path, window_pixel_size); read by
    window_size_recheck, which only Android needs */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 static int s_pixW, s_pixH;
 #define WINDOW_PIX_NOTE(w, h) (s_pixW = (w), s_pixH = (h))
 #else
@@ -458,7 +458,7 @@ static void window_pixel_size(int w, int h)
    through the size event's path, with a line */
 static void window_size_recheck(const char *when)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     int w = 0, h = 0;
 
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
@@ -485,7 +485,7 @@ static void first_pump_recheck(void)
     }
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 /* settings.h ui_settings_set_quit_is_game: Android's Quit ends the game */
 static int quit_is_game(void)
 {
@@ -500,9 +500,13 @@ static SDL_WindowFlags window_flags(int mode)
 {
     const SDL_WindowFlags vk = rhi_backend() == RHI_BACKEND_VULKAN ? SDL_WINDOW_VULKAN : 0;
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     (void)mode;
-    return vk | SDL_WINDOW_FULLSCREEN;
+    SDL_WindowFlags flags = vk | SDL_WINDOW_FULLSCREEN;
+#ifdef ICO_IOS
+    flags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
+#endif
+    return flags;
 #else
     return vk | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
            (mode == ICO_WINDOW_FULLSCREEN ? SDL_WINDOW_FULLSCREEN : 0) |
@@ -610,18 +614,48 @@ static const IcoLifecycleOps k_lifecycle_ops = {
 
 /* SDL's event watch: the four lifecycle events as they arrive (the queue
    would see them after SDL blocked the pump in the background) */
+#ifdef ICO_IOS
+static int s_background;
+
+static void wait_foreground(void)
+{
+    /* Keep UIKit responsive while simulation and Metal work are paused. */
+    while (s_background && !s_quitLatched) {
+        SDL_PumpEvents();
+        SDL_Delay(20);
+    }
+}
+#endif
+
 static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
 {
     const IcoLifecycleEvent e = ico_lifecycle_from_sdl(event->type);
 
     (void)userdata;
-    if (e != ICO_LIFECYCLE_NONE && s_open) {
+#ifdef ICO_IOS
+    const int ready = s_window != NULL;
+#else
+    const int ready = s_open;
+#endif
+    if (e != ICO_LIFECYCLE_NONE && ready) {
+#ifdef ICO_IOS
+        if (e == ICO_LIFECYCLE_WILL_ENTER_BACKGROUND) {
+            s_background = 1;
+            if (ico_config_dirty()) {
+                ico_config_save();
+            }
+        } else if (e == ICO_LIFECYCLE_DID_ENTER_FOREGROUND) {
+            s_background = 0;
+        } else if (e == ICO_LIFECYCLE_TERMINATING) {
+            s_quitLatched = 1;
+        }
+#endif
         ico_lifecycle_on(e, &k_lifecycle_ops);
     }
     return true;
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 /* the start-up screen's state and callback (the callback is below, with the
    progress view) */
 typedef struct PipeScreen {
@@ -630,7 +664,9 @@ typedef struct PipeScreen {
 } PipeScreen;
 
 static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+#endif
 
+#ifdef __ANDROID__
 static const char k_driver_box[] =
     "ICO could not start the game's graphics with this phone's driver. It needs Vulkan 1.2. "
     "On a phone with an Adreno (Qualcomm) chip you can choose a graphics driver package "
@@ -730,7 +766,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
     s_fullscreen = window_fullscreen();
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (start.windowMode == ICO_WINDOW_BORDERLESS) {
         /* the frameless window over its display (Wayland: maximised) */
         ico_window_video_mode(s_window, ICO_WINDOW_BORDERLESS, NULL, NULL);
@@ -779,11 +815,17 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         return -1;
 #endif
     }
+#ifdef ICO_IOS
+    s_background = 0;
+    if (!SDL_AddEventWatch(lifecycle_watch, NULL)) {
+        fprintf(stderr, "window: SDL_AddEventWatch: %s\n", SDL_GetError());
+    }
+#endif
     /* the whole reachable pipeline set before the first frame and after
        rd_init (which makes the device), so the game never waits on a
        pipeline compile (tens of ms each on a GPU driver); the time is
        logged */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     {
         static PipeScreen screen;
 
@@ -852,6 +894,8 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        title's Quit row (a phone has no desktop to quit to); both before the
        game's first frame builds the menus */
     ui_settings_set_gpu_driver_host(ico_gpu_driver_android_host());
+#endif
+#if defined(__ANDROID__) || defined(ICO_IOS)
     ui_settings_set_quit_is_game(quit_is_game);
 #endif
     {
@@ -883,7 +927,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
    the motion by mode */
 static void set_capture(int mode)
 {
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     /* Android: no mouse to capture; touches and pads drive the camera */
     mode = ICO_CAPTURE_OFF;
 #endif
@@ -910,7 +954,7 @@ static void pointer_visibility(void)
     if (mpegPlay != 0) {
         ico_pointer_set_menu(0);
     }
-#ifndef __ANDROID__
+#if !defined(__ANDROID__) && !defined(ICO_IOS)
     static int s_shown = -1; /* -1: not managed (at the start, mouse off) */
     int want;
 
@@ -988,7 +1032,7 @@ static void toggle_fullscreen(void)
     /* the window mode option flips between Windowed and the last other mode
        (in memory, not saved; the Settings menu sees it): video_apply asks
        SDL and the presenter boxes the picture (rd_resize_output follows) */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     /* the window is always the whole screen there and the Window mode row
        is not applied: Alt+Enter from a keyboard does nothing */
 #else
@@ -1233,7 +1277,7 @@ int ico_window_pump(void)
             int fs = window_fullscreen() ? 1 : 0;
             Uint64 now = SDL_GetTicksNS();
             int print = fs != s_sizeFs || now - s_sizeAt >= 1000000000ull;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
             print = 1; /* every change (no drags there) */
 #endif
             if (print) {
@@ -1260,6 +1304,14 @@ int ico_window_pump(void)
             break;
         }
     }
+#ifdef ICO_IOS
+    if (!quit) {
+        wait_foreground();
+    }
+    if (s_quitLatched) {
+        return 1;
+    }
+#endif
     first_pump_recheck();
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
@@ -1407,6 +1459,12 @@ static int progress_present(const char *title, const char *phase, int pct, int a
             }
         }
     }
+#ifdef ICO_IOS
+    wait_foreground();
+    if (s_quitLatched) {
+        return 1;
+    }
+#endif
     if (s_open) {
         first_pump_recheck();
     }
@@ -1456,7 +1514,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     return stop || s_quitLatched;
 }
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 /* The start-up screen while the graphics are prepared (rd_set_pipeline_progress).
    With the graphics already prepared (the driver's saved cache, a start that
    follows another) this takes a few tens of milliseconds and nothing is
@@ -1497,6 +1555,9 @@ static void perf_csv_open(void)
     char dir[ICO_PATH_MAX], logs[ICO_PATH_MAX], path[ICO_PATH_MAX];
 
     s_perf.csvTried = 1;
+#ifdef ICO_IOS
+    return;
+#endif
     if (!ico_config_get_bool("dev.perf_log", 0)) {
         return;
     }
@@ -1597,6 +1658,9 @@ static void perf_drain(void)
 
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
+#ifdef ICO_IOS
+        continue; /* Keep automatic resolution's samples without benchmark output. */
+#endif
         if (!s_perf.csvTried) {
             perf_csv_open();
         }
@@ -1674,6 +1738,10 @@ static void perf_reset(void)
 /* The block's second line: where a replay's time went, on average */
 static void perf_log(void)
 {
+#ifdef ICO_IOS
+    perf_reset();
+    return;
+#endif
     const double n = s_perf.n ? (double)s_perf.n : 1.0;
     const double g = s_perf.gpuN ? (double)s_perf.gpuN : 1.0;
     char gpu[160] = "no GPU timestamps";
@@ -1790,12 +1858,19 @@ static void pace_log(Uint64 now)
     if (now - s_pres.statAt < ico_stats_period_ns(now, s_pres.fastUntil)) {
         return;
     }
+#ifndef ICO_IOS
     const double sec = (double)(now - s_pres.statAt) / 1e9;
+#endif
     uint32_t replays = 0;
+#ifndef ICO_IOS
     const double maxMs = rd_replay_time_max(1, &replays);
+#else
+    rd_replay_time_max(1, &replays);
+#endif
     const uint32_t fn = rd_frame_number();
     uint32_t movieFail;
     const uint32_t movie = rd_video_presents(&movieFail);
+#ifndef ICO_IOS
     char movieFailed[32] = "";
 
     if (!rd_interpolation_active()) {
@@ -1828,6 +1903,7 @@ static void pace_log(Uint64 now)
             dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
                                                   : 0.0,
             pw, ph, window_fullscreen() ? " fullscreen" : "");
+#endif
     perf_drain();
     perf_log();
     s_pres.statAt = now;
@@ -2149,8 +2225,10 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
     SDL_RemoveEventWatch(lifecycle_watch, NULL);
+#endif
+#ifdef __ANDROID__
     /* a normal end: a driver package still on trial did not crash, so the
        next start does not treat it as failed */
     ico_gpu_driver_android_end();
@@ -2162,6 +2240,8 @@ void ico_window_close(void)
     ui_settings_set_touch_query(NULL);
 #ifdef __ANDROID__
     ui_settings_set_gpu_driver_host(NULL);
+#endif
+#if defined(__ANDROID__) || defined(ICO_IOS)
     ui_settings_set_quit_is_game(NULL);
 #endif
     ui_touch_set_source(NULL);

@@ -1,0 +1,36 @@
+# The release's static XCFramework slice; iOS apps cannot load a system Vulkan driver.
+if(NOT APPLE OR NOT ICO_RHI_VULKAN)
+    message(FATAL_ERROR "ICO_RHI_MOLTENVK requires an Apple target and ICO_RHI_VULKAN=ON")
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    if(CMAKE_OSX_SYSROOT MATCHES "iphonesimulator")
+        message(FATAL_ERROR "The pinned MoltenVK iOS package contains the device slice only")
+    endif()
+    set(_ico_mvk_platform ios)
+    set(_ico_mvk_slice ios-arm64)
+    set(_ico_mvk_ui UIKit)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(_ico_mvk_platform macos)
+    set(_ico_mvk_slice macos-arm64_x86_64)
+    set(_ico_mvk_ui AppKit IOKit)
+else()
+    message(FATAL_ERROR "MoltenVK is configured for macOS and iPhone devices only")
+endif()
+set(ICO_MOLTENVK_ROOT "${ICO_DEPS_DIR}/moltenvk/${_ico_mvk_platform}/MoltenVK" CACHE PATH
+    "MoltenVK release root (contains MoltenVK/static and MoltenVK/include)")
+set(_ico_mvk_library "${ICO_MOLTENVK_ROOT}/MoltenVK/static/MoltenVK.xcframework/${_ico_mvk_slice}/libMoltenVK.a")
+if(NOT EXISTS "${_ico_mvk_library}" OR NOT EXISTS "${ICO_MOLTENVK_ROOT}/MoltenVK/include/vulkan/vulkan.h")
+    message(FATAL_ERROR "MoltenVK is missing at ${ICO_MOLTENVK_ROOT}: run tools/fetch_moltenvk.sh ${_ico_mvk_platform}")
+endif()
+add_library(ico_moltenvk STATIC IMPORTED GLOBAL)
+set_target_properties(ico_moltenvk PROPERTIES
+    IMPORTED_LOCATION "${_ico_mvk_library}"
+    INTERFACE_INCLUDE_DIRECTORIES "${ICO_MOLTENVK_ROOT}/MoltenVK/include")
+target_link_libraries(ico_moltenvk INTERFACE c++ "-framework Metal" "-framework Foundation"
+    "-framework QuartzCore" "-framework CoreGraphics" "-framework IOSurface")
+foreach(_framework IN LISTS _ico_mvk_ui)
+    target_link_libraries(ico_moltenvk INTERFACE "-framework ${_framework}")
+endforeach()
+# SDL finds the linked entry point with dlsym(RTLD_DEFAULT).
+target_link_options(ico_moltenvk INTERFACE "LINKER:-exported_symbol,_vkGetInstanceProcAddr")
+message(STATUS "ico: MoltenVK from ${_ico_mvk_library}")

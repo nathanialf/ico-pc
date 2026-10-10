@@ -217,7 +217,7 @@ static void disp(GObj *act)
                     MatrixDrive_PushMatrix();
                     MatrixDrive_RotMatrixY(k);
                     MatrixDrive_TransMatrix(0.0f, 0.0f, -5.0f);
-                    MatrixDrive_RotMatrixX(w->ratio * 32768.0f);
+                    MatrixDrive_RotMatrixX((short)(int)(w->ratio * 32768.0f));
                     gif_SetAlpha(1, 7, 128);
                     DrawLine(col, c1.f, c2.f, 0);
                     MatrixDrive_PopMatrix();

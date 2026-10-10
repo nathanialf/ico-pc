@@ -67,10 +67,10 @@ target_link_libraries(ico_sndn2 PUBLIC ico_audio ico_port_data ico_platform ico_
 if(NOT WIN32)
     target_link_libraries(ico_sndn2 PUBLIC m) # exp2 for the pitch table fallback
 endif()
-if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3-shared)
+if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_sources(ico_sndn2 PRIVATE out_sdl.c)
     target_compile_definitions(ico_sndn2 PRIVATE ICO_AUDIO_SDL=1)
-    target_link_libraries(ico_sndn2 PUBLIC SDL3::SDL3-shared)
+    target_link_libraries(ico_sndn2 PUBLIC SDL3::SDL3)
 endif()
 if(TARGET ico_pc)
     target_link_libraries(ico_pc PRIVATE ico_sndn2)

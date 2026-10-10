@@ -91,9 +91,10 @@ Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int 
 
     first = q;
     for (i = 0; i < n; i++) {
-        q->x = r * GetTableCos((short)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) +
+        q->x = r * GetTableCos((short)(int)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) +
                pos[0] + center_X;
-        q->y = r * GetTableSin((short)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) * 0.5f +
+        q->y = r * GetTableSin((short)(int)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) *
+                   0.5f +
                pos[1] + center_Y;
         q->z = -pos[2];
         q->w = 1.0f;
@@ -129,9 +130,9 @@ void prim_SetFan2D(Fan2D *f, float r, float *pos, unsigned int cc, unsigned int 
 
     first = q;
     for (i = 0; i < f->n; i++) {
-        q->x = r * GetTableCos((short)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) +
+        q->x = r * GetTableCos((short)(int)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) +
                pos[0] + center_X;
-        q->y = r * GetTableSin((short)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) *
+        q->y = r * GetTableSin((short)(int)((float)i * 6.2831855f / (float)f->n * 10430.3779f)) *
                    ((float)ScreenHeight * 4.0f / ((float)ScreenWidth * 3.0f)) +
                pos[1] + center_Y;
         q->z = -pos[2];
@@ -393,7 +394,7 @@ Mesh3D *prim_InitMesh3D(int nx, int ny, int rot, long long col, unsigned int col
     m->bufs[1] = iosMallocDebug(ios_partition_seki, m->qwc * 16, "src/Primitive.c", 598);
 
     _InitCurrentMatrix();
-    _RotCurrentMatrixZ((short)((float)(rot % 4) * 3.1415927f * 0.5f * 10430.3779f));
+    _RotCurrentMatrixZ((short)(int)((float)(rot % 4) * 3.1415927f * 0.5f * 10430.3779f));
     _GetCurrentMatrix(m->mtx);
 
     m->prim = col;
@@ -1013,9 +1014,9 @@ static void drawDisc(float rr, float yy, float st, void *col, int flag)
     Prim3DVec c = {0.0f, yy, 0.0f, 1.0f};
 
     for (a = 0.0f; a < 65536.0f; a += st) {
-        Prim3DVec q0 = {rr * GetTableSin((short)a), yy, rr * GetTableCos((short)a), 1.0f};
-        Prim3DVec q1 = {rr * GetTableSin((short)(a + st)), yy, rr * GetTableCos((short)(a + st)),
-                        1.0f};
+        Prim3DVec q0 = {rr * GetTableSin((short)(int)a), yy, rr * GetTableCos((short)(int)a), 1.0f};
+        Prim3DVec q1 = {rr * GetTableSin((short)(int)(a + st)), yy,
+                        rr * GetTableCos((short)(int)(a + st)), 1.0f};
 
         DrawLineG(&q0, col, &q1, col, flag);
         DrawLineG(&q0, col, &c, col, flag);
@@ -1028,7 +1029,7 @@ static inline void drawSide(float rr, float ya, float yb, float st, void *col,
     float a;
 
     for (a = 0.0f; a < 65536.0f; a += st) {
-        Prim3DVec p0 = {rr * GetTableSin((short)a), ya, rr * GetTableCos((short)a), 1.0f};
+        Prim3DVec p0 = {rr * GetTableSin((short)(int)a), ya, rr * GetTableCos((short)(int)a), 1.0f};
         Prim3DVec p1 = {p0.x, yb, p0.z, 1.0f};
 
         DrawLineG(&p0, col, &p1, col, flag);
@@ -1053,14 +1054,15 @@ void prim_DispWireSphere(float r, void *col, int nu, int nv)
 
     for (v = -16384.0f; v < 16384.0f; v += vs) {
         for (u = 0.0f; u < 65536.0f; u += us) {
-            Prim3DVec p0 = {GetTableSin((short)u) * GetTableCos((short)v), GetTableSin((short)v),
-                            GetTableCos((short)u) * GetTableCos((short)v), 1.0f};
-            Prim3DVec p1 = {GetTableSin((short)(u + us)) * GetTableCos((short)v),
-                            GetTableSin((short)v),
-                            GetTableCos((short)(u + us)) * GetTableCos((short)v), 1.0f};
-            Prim3DVec p2 = {GetTableSin((short)u) * GetTableCos((short)(v + vs)),
-                            GetTableSin((short)(v + vs)),
-                            GetTableCos((short)u) * GetTableCos((short)(v + vs)), 1.0f};
+            Prim3DVec p0 = {GetTableSin((short)(int)u) * GetTableCos((short)(int)v),
+                            GetTableSin((short)(int)v),
+                            GetTableCos((short)(int)u) * GetTableCos((short)(int)v), 1.0f};
+            Prim3DVec p1 = {GetTableSin((short)(int)(u + us)) * GetTableCos((short)(int)v),
+                            GetTableSin((short)(int)v),
+                            GetTableCos((short)(int)(u + us)) * GetTableCos((short)(int)v), 1.0f};
+            Prim3DVec p2 = {GetTableSin((short)(int)u) * GetTableCos((short)(int)(v + vs)),
+                            GetTableSin((short)(int)(v + vs)),
+                            GetTableCos((short)(int)u) * GetTableCos((short)(int)(v + vs)), 1.0f};
 
             _ScaleVectorXYZ(&p0, &p0, r);
             _ScaleVectorXYZ(&p1, &p1, r);

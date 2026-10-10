@@ -279,6 +279,9 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
 
 void rd__perf_post(RhiCommandList cl, int post)
 {
+#ifdef ICO_IOS
+    return; /* Automatic resolution needs frame timings, not per-effect timestamps. */
+#endif
     if (post == s_post || !g_rd.hasDevice) {
         return;
     }

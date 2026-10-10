@@ -206,10 +206,10 @@ static inline short limitInterpAngle(MotLimAng *info, short ang) /* derived name
         lo = info[4].h * 32768.0f / 180.0f;
         hi = info[6].h * 32768.0f / 180.0f;
         if ((float)ang < lo) {
-            return (short)lo;
+            return (short)(int)lo;
         }
         if (hi < (float)ang) {
-            return (short)hi;
+            return (short)(int)hi;
         }
     }
     return 0;
@@ -471,7 +471,7 @@ static void _getFinalMatrix(int id)
         {
             float r[4];
 
-            RotQuaternionX(GetCurrentQuaternion(), -skelRoot->twist * 2.5f);
+            RotQuaternionX(GetCurrentQuaternion(), (short)(int)(-skelRoot->twist * 2.5f));
             MultiQuaternion(r, GetCurrentQuaternion(), dq);
             GetSlerpQuaternion(GetCurrentQuaternion(), ik->q, r, ik->rate);
             MultiQuaternion(GetCurrentQuaternion(), twistQuatHigh, GetCurrentQuaternion());
@@ -581,14 +581,15 @@ static void _getFinalMatrix(int id)
                 DivQuaternion(ik->offset, ik->q, GetCurrentQuaternion());
             }
             ik->pitchSpeed =
-                ik->pitchSpeed +
-                ((pb - ik->pitch) * (skelRoot->ikRate1 * 30.0f / MOT_FPS) - ik->pitchSpeed) *
-                    (skelRoot->ikRate2 * 30.0f / MOT_FPS);
+                (short)(int)(ik->pitchSpeed +
+                             ((pb - ik->pitch) * (skelRoot->ikRate1 * 30.0f / MOT_FPS) -
+                              ik->pitchSpeed) *
+                                 (skelRoot->ikRate2 * 30.0f / MOT_FPS));
             ik->pitch += ik->pitchSpeed;
-            skelRoot->b = ik->pitch * ik->rate;
+            skelRoot->b = (short)(int)(ik->pitch * ik->rate);
         }
         {
-            RotQuaternionX(GetCurrentQuaternion(), skelRoot->twist * 2.5f);
+            RotQuaternionX(GetCurrentQuaternion(), (short)(int)(skelRoot->twist * 2.5f));
             GetSlerpQuaternion(GetCurrentQuaternion(), ik->q, GetCurrentQuaternion(), ik->rate);
             MultiQuaternion(GetCurrentQuaternion(), skelRoot->armTwist, GetCurrentQuaternion());
             GetMatrixFromQuaternionRotElem(MatrixDrive_GetMatrix(), GetCurrentQuaternion());
@@ -710,7 +711,8 @@ static void _getFinalMatrix(int id)
                 if (skelRoot->handIK == 2 && d + 0.0f > len[0] + len[1]) {
                     float rq[4];
 
-                    SetQuaternionByAxisRotateV(rq, (d + 0.0f - (len[0] + len[1])) * 208.60756f, p);
+                    SetQuaternionByAxisRotateV(
+                        rq, (short)(int)((d + 0.0f - (len[0] + len[1])) * 208.60756f), p);
                     GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, rq, 0.6f);
                 } else {
                     GetSlerpQuaternion(skelRoot->armTwist, skelRoot->armTwist, IdentityQuaternion,
@@ -1009,7 +1011,7 @@ static void _getFinalMatrix(int id)
             sceVu0ApplyMatrix(p, m, p);
             sceVu0Normalize(p, p);
             ikRotZ = asinf(p[1]) * 10430.378f;
-            ikRotY = -asinf(p[2]) * 10430.378f;
+            ikRotY = (short)(int)(-asinf(p[2]) * 10430.378f);
             aa = len[0] * len[0];
             bb = len[1] * len[1];
             d2 = d + d;
@@ -1144,10 +1146,10 @@ static void getFinalMatrix(int id)
     MatrixDrive_PushMatrix();
     _ApplyMatrix(v, MatrixDrive_GetMatrix(), ZUnitVector);
     SetQuaternionByAxisRotateV(twistQuat, skelRoot->twist, v);
-    SetQuaternionByAxisRotateV(twistQuatLow, skelRoot->twist * (skelRoot->twistRate - 1.0f - 0.5f),
-                               v);
-    SetQuaternionByAxisRotateV(twistQuatHigh, skelRoot->twist * (skelRoot->twistRate - 1.0f + 0.5f),
-                               v);
+    SetQuaternionByAxisRotateV(
+        twistQuatLow, (short)(int)(skelRoot->twist * (skelRoot->twistRate - 1.0f - 0.5f)), v);
+    SetQuaternionByAxisRotateV(
+        twistQuatHigh, (short)(int)(skelRoot->twist * (skelRoot->twistRate - 1.0f + 0.5f)), v);
     MatrixDrive_PopMatrix();
     getFinalMatrixCore(id);
 }

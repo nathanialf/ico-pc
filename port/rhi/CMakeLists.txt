@@ -10,6 +10,9 @@
 #   ico_rhi_vk      what port/render and the shader tests link (the name
 #                   predates the second backend): ico_rhi
 # Each backend is compiled with RHI_BACKEND_PREFIX (rhi_backend_names.h).
+# Apple targets link MoltenVK directly, with its bundled Vulkan headers,
+# instead of compiling volk. cmake/IcoMoltenVK.cmake selects the SDK slice;
+# tools/fetch_moltenvk.sh also builds the target's static SDL3.
 #
 # Dependencies come from tools/fetch_deps.sh (tools/toolchain/deps/):
 # Vulkan-Headers and volk (the backend loads libvulkan / vulkan-1.dll at run
@@ -20,6 +23,10 @@
 # dxgi1_6.h and libdxguid.a, and loads d3d12.dll and dxgi.dll at run time.
 
 option(ICO_RHI_VULKAN "Build the Vulkan backend of port/rhi (ico_rhi_vulkan)" ON)
+option(ICO_RHI_MOLTENVK "Link the Vulkan backend to MoltenVK on Apple platforms" ${APPLE})
+if(ICO_RHI_MOLTENVK)
+    include("${CMAKE_SOURCE_DIR}/cmake/IcoMoltenVK.cmake")
+endif()
 set(_ico_d3d12_default OFF)
 if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_d3d12_default ON)
@@ -59,7 +66,9 @@ endif()
 # so the cross toolchains' CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY does not
 # hide the user-local prefix.
 set(_ico_sdl3_prefix "")
-if(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+if(ICO_RHI_MOLTENVK)
+    set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/${_ico_mvk_platform}-arm64")
+elseif(WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(_ico_sdl3_prefix "${ICO_DEPS_DIR}/sdl3/mingw/x86_64-w64-mingw32")
 elseif(ANDROID AND CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     # tools/fetch_android.sh's NDK build
@@ -72,13 +81,13 @@ endif()
 if(NOT SDL3_DIR AND _ico_sdl3_prefix AND EXISTS "${_ico_sdl3_prefix}/lib/cmake/SDL3/SDL3Config.cmake")
     set(SDL3_DIR "${_ico_sdl3_prefix}/lib/cmake/SDL3" CACHE PATH "SDL3 CMake package directory")
 endif()
-find_package(SDL3 CONFIG QUIET COMPONENTS SDL3-shared)
+if(ICO_RHI_MOLTENVK)
+    find_package(SDL3 CONFIG REQUIRED GLOBAL COMPONENTS SDL3-static)
+else()
+    find_package(SDL3 CONFIG QUIET GLOBAL COMPONENTS SDL3-shared)
+endif()
 if(SDL3_FOUND)
     message(STATUS "ico: SDL3 ${SDL3_VERSION} from ${SDL3_DIR}")
-    # the windowed ico_pc (top-level CMakeLists.txt) links and copies it too
-    if(TARGET SDL3::SDL3-shared)
-        set_target_properties(SDL3::SDL3-shared PROPERTIES IMPORTED_GLOBAL TRUE)
-    endif()
 else()
     message(STATUS "ico: SDL3 not found for this target (run tools/fetch_deps.sh); the RHI "
                    "backends are built headless-only")
@@ -89,8 +98,12 @@ endif()
 # into the mingw sysroot.
 set(_ico_have_vk OFF)
 if(ICO_RHI_VULKAN)
-    set(ICO_VULKAN_INCLUDE_DIR "${ICO_DEPS_DIR}/vulkan-headers/include" CACHE PATH
-        "Vulkan-Headers include directory")
+    if(ICO_RHI_MOLTENVK)
+        set(ICO_VULKAN_INCLUDE_DIR "${ICO_MOLTENVK_ROOT}/MoltenVK/include")
+    else()
+        set(ICO_VULKAN_INCLUDE_DIR "${ICO_DEPS_DIR}/vulkan-headers/include" CACHE PATH
+            "Vulkan-Headers include directory")
+    endif()
     set(ICO_VOLK_DIR "${ICO_DEPS_DIR}/volk" CACHE PATH "volk source directory")
     if(NOT EXISTS "${ICO_VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h")
         set(ICO_VULKAN_INCLUDE_DIR "")
@@ -98,7 +111,7 @@ if(ICO_RHI_VULKAN)
     if(NOT EXISTS "${ICO_VOLK_DIR}/volk.c")
         set(ICO_VOLK_DIR "")
     endif()
-    if(ICO_VULKAN_INCLUDE_DIR AND ICO_VOLK_DIR)
+    if(ICO_VULKAN_INCLUDE_DIR AND (ICO_VOLK_DIR OR ICO_RHI_MOLTENVK))
         set(_ico_have_vk ON)
     else()
         message(STATUS "ico: Vulkan RHI not built: Vulkan-Headers or volk missing under "
@@ -146,12 +159,21 @@ if(_ico_have_vk)
         # driver the program loaded, or the system's)
         list(APPEND _ico_vk_sources vk/vk_surface_android.c)
     endif()
-    add_library(ico_rhi_vulkan STATIC ${_ico_vk_sources} "${ICO_VOLK_DIR}/volk.c")
+    if(NOT ICO_RHI_MOLTENVK)
+        set(_ico_vk_loader_sources "${ICO_VOLK_DIR}/volk.c")
+    endif()
+    add_library(ico_rhi_vulkan STATIC ${_ico_vk_sources} ${_ico_vk_loader_sources})
     target_include_directories(ico_rhi_vulkan
         PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
         PRIVATE "${ICO_VOLK_DIR}" "${ICO_VULKAN_INCLUDE_DIR}")
-    target_compile_definitions(ico_rhi_vulkan PRIVATE VK_NO_PROTOTYPES RHI_BACKEND_PREFIX=vk
+    target_compile_definitions(ico_rhi_vulkan PRIVATE RHI_BACKEND_PREFIX=vk
                                ${_ico_rhi_debug_default})
+    if(ICO_RHI_MOLTENVK)
+        target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_RHI_MOLTENVK=1)
+        target_link_libraries(ico_rhi_vulkan PUBLIC ico_moltenvk)
+    else()
+        target_compile_definitions(ico_rhi_vulkan PRIVATE VK_NO_PROTOTYPES)
+    endif()
     target_compile_options(ico_rhi_vulkan PRIVATE ${ICO_SEMANTIC_OPTIONS})
     set_source_files_properties(${_ico_vk_sources} PROPERTIES COMPILE_OPTIONS
                                 "${ICO_PORT_WARNINGS}")
@@ -224,7 +246,11 @@ if(_ico_have_vk)
                    vk/vk_present_mode.c)
     target_include_directories(rhi_vk_present_mode_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                "${ICO_VOLK_DIR}" "${ICO_VULKAN_INCLUDE_DIR}")
-    target_compile_definitions(rhi_vk_present_mode_test PRIVATE VK_NO_PROTOTYPES)
+    if(ICO_RHI_MOLTENVK)
+        target_compile_definitions(rhi_vk_present_mode_test PRIVATE ICO_RHI_MOLTENVK=1)
+    else()
+        target_compile_definitions(rhi_vk_present_mode_test PRIVATE VK_NO_PROTOTYPES)
+    endif()
     target_compile_options(rhi_vk_present_mode_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_PORT_WARNINGS})
 

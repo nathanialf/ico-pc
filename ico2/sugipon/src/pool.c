@@ -449,8 +449,8 @@ static inline void addRippleToGrid(PoolWork *w, PoolRipple *c, float **grid) /* 
                         continue;
                     }
 
-                    row[iz] +=
-                        GetTableCos((t - 1.0f) * r * 512.0f) * 80.0f / (c->age * 2.0f + 10.0f);
+                    row[iz] += GetTableCos((short)(int)((t - 1.0f) * r * 512.0f)) * 80.0f /
+                               (c->age * 2.0f + 10.0f);
                 }
             }
         }
@@ -809,8 +809,8 @@ void PoolDL(GObj *self)
     DispMultiBgaManagerWithKind(499, w->splash, 2);
     if (systemStatus[5] == 0) {
         w->phase =
-            (short)((float)w->phase +
-                    60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 2000.0f);
+            (short)(int)((float)w->phase +
+                         60.0f / (float)((60 - systemStatus[0] * 10) / systemStatus[1]) * 2000.0f);
     }
     if (w->hasGrid != 0) {
         updatePoolGeo(self);

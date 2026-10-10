@@ -143,7 +143,8 @@ static void makeRefractST(float k)
 
             sceVu0CopyVector(&v, &barrierMesh->nrm[idx]);
             v.f[2] = 0.0f;
-            f = GetTableSin((short)(_GetNorm(&v) * 4.0f * 65536.0f + (float)ripplePhase)) * 60.0f;
+            f = GetTableSin((short)(int)(_GetNorm(&v) * 4.0f * 65536.0f + (float)ripplePhase)) *
+                60.0f;
 
             _ScaleVectorXYZ(&w, &barrierMesh->nrm[idx], f * t);
 
@@ -250,8 +251,9 @@ void queen_barrier_disp_init(void)
 
     for (i = 0, x = -16384.0f; x < 16384.0f; i++, x += step) {
         for (j = 0, y = 16384.0f; y < 49152.0f; j++, y += step) {
-            QVec v = {{GetTableSin((short)y) * GetTableCos((short)x), GetTableSin((short)x),
-                       GetTableCos((short)y) * GetTableCos((short)x), 1.0f}};
+            QVec v = {{GetTableSin((short)(int)y) * GetTableCos((short)(int)x),
+                       GetTableSin((short)(int)x),
+                       GetTableCos((short)(int)y) * GetTableCos((short)(int)x), 1.0f}};
 
             pos = barrierMesh->pos;
             nrm = barrierMesh->nrm;

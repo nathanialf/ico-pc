@@ -24,10 +24,13 @@
 #define ICO_HOST_ANDROID 1
 #include "android/host_android.h"
 #endif
-#ifdef ICO_HOST_SDL_PREFPATH
+#if defined(ICO_HOST_SDL_PREFPATH) || defined(ICO_IOS)
 
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
+#ifdef ICO_IOS
+#include <SDL3/SDL_messagebox.h>
+#endif
 
 #endif
 #ifdef _WIN32
@@ -63,7 +66,15 @@ static void copy(char *out, size_t size, const char *s)
 
 int ico_host_exe_dir(char *out, size_t size)
 {
-#ifdef ICO_HOST_ANDROID
+#ifdef ICO_IOS
+    const char *documents = SDL_GetUserFolder(SDL_FOLDER_DOCUMENTS);
+    if (!documents || strlen(documents) >= size || ico_make_dir(documents) != 0) {
+        copy(out, size, ".");
+        return -1;
+    }
+    copy(out, size, documents);
+    return 0;
+#elif defined(ICO_HOST_ANDROID)
     /* no folder of its own: the app's files folder */
     if (ico_android_files_dir(out, size) != 0) {
         copy(out, size, ".");
@@ -958,6 +969,9 @@ void ico_host_message_box(const char *text, int error)
 #if defined(ICO_HOST_ANDROID)
     flush_all();
     ico_android_message_box(text, error);
+#elif defined(ICO_IOS)
+    SDL_ShowSimpleMessageBox(error ? SDL_MESSAGEBOX_ERROR : SDL_MESSAGEBOX_INFORMATION, "ICO", text,
+                             NULL);
 #elif defined(_WIN32)
     wchar_t *w = ico_widen(text);
 
@@ -996,7 +1010,7 @@ void ico_host_fatal(const char *log_path, const char *fmt, ...)
     }
     flush_all();
     _exit(1);
-#elif defined(_WIN32)
+#elif defined(_WIN32) || defined(ICO_IOS)
     {
         char box[3072];
 

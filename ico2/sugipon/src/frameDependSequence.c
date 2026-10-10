@@ -211,9 +211,9 @@ static void playEff(int no)
     }
     MatrixDrive_TransMatrix(-motionEffKind[no].x, -motionEffKind[no].y, -motionEffKind[no].z);
     CopyVector(pos, (float *)(MatrixDrive_GetMatrix()[3]));
-    RotQuaternionY(q, motionEffKind[no].ry * -32768.0f / 180.0f);
-    RotQuaternionX(q, motionEffKind[no].rx * -32768.0f / 180.0f);
-    RotQuaternionZ(q, motionEffKind[no].rz * -32768.0f / 180.0f);
+    RotQuaternionY(q, (short)(int)(motionEffKind[no].ry * -32768.0f / 180.0f));
+    RotQuaternionX(q, (short)(int)(motionEffKind[no].rx * -32768.0f / 180.0f));
+    RotQuaternionZ(q, (short)(int)(motionEffKind[no].rz * -32768.0f / 180.0f));
     p = &motionEffKind[no];
     flags = p->flags;
     if ((flags >> 1) & 1) {

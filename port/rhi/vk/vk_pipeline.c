@@ -737,7 +737,7 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
         vkr_pool_release(&g_vkr.pipelines, id);
         return out;
     }
-    if (g_vkr.debugUtils && d->debugName && vkSetDebugUtilsObjectNameEXT) {
+    if (g_vkr.debugUtils && d->debugName && VKR_FUNCTION_AVAILABLE(vkSetDebugUtilsObjectNameEXT)) {
         VkDebugUtilsObjectNameInfoEXT ni = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
             .objectType = VK_OBJECT_TYPE_PIPELINE,

@@ -250,6 +250,7 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 {
     const char *exts[16];
     uint32_t extCount = 0;
+    VkInstanceCreateFlags flags = 0;
     const char *layers[1];
     uint32_t layerCount = 0;
 
@@ -270,6 +271,10 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
 #endif
     }
     g_vkr.debugUtils = false;
+    if (vkr_has_instance_ext(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+        exts[extCount++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+        flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    }
     bool debug = desc->debugLayers;
 #ifdef ICO_RHI_DEBUG_DEFAULT
     debug = true;
@@ -290,7 +295,14 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
         }
     }
 
+#ifdef ICO_RHI_MOLTENVK
+    uint32_t loaderVersion = VK_API_VERSION_1_0;
+    if (!VKR_CHECK(vkEnumerateInstanceVersion(&loaderVersion))) {
+        return false;
+    }
+#else
     uint32_t loaderVersion = volkGetInstanceVersion();
+#endif
     if (loaderVersion < VK_API_VERSION_1_2) {
         VKR_LOG("the Vulkan loader is %u.%u; 1.2 or later is required",
                 VK_API_VERSION_MAJOR(loaderVersion), VK_API_VERSION_MINOR(loaderVersion));
@@ -302,10 +314,11 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
         .applicationVersion = 1,
         .pEngineName = "ico rhi",
         .engineVersion = 1,
-        .apiVersion = VK_API_VERSION_1_3,
+        .apiVersion = loaderVersion < VK_API_VERSION_1_3 ? loaderVersion : VK_API_VERSION_1_3,
     };
     VkInstanceCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .flags = flags,
         .pApplicationInfo = &app,
         .enabledLayerCount = layerCount,
         .ppEnabledLayerNames = layers,
@@ -315,7 +328,9 @@ static bool vkr_create_instance(const RhiDeviceDesc *desc)
     if (!VKR_CHECK(vkCreateInstance(&ci, NULL, &g_vkr.instance))) {
         return false;
     }
+#ifndef ICO_RHI_MOLTENVK
     volkLoadInstanceOnly(g_vkr.instance);
+#endif
 
     if (g_vkr.debugUtils) {
         VkDebugUtilsMessengerCreateInfoEXT mci = {
@@ -616,6 +631,10 @@ static bool vkr_create_device(void)
     if (!core13) {
         exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME;
     }
+    const bool portability = vkr_device_has_ext(g_vkr.phys, "VK_KHR_portability_subset");
+    if (portability) {
+        exts[extCount++] = "VK_KHR_portability_subset";
+    }
 
     VkPhysicalDeviceFeatures avail;
     vkGetPhysicalDeviceFeatures(g_vkr.phys, &avail);
@@ -661,6 +680,20 @@ static bool vkr_create_device(void)
                 .textureCompressionBC = g_vkr.bc ? VK_TRUE : VK_FALSE,
             },
     };
+#ifdef ICO_RHI_MOLTENVK
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR subset = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR,
+    };
+    if (portability) {
+        VkPhysicalDeviceFeatures2 query = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &subset,
+        };
+        vkGetPhysicalDeviceFeatures2(g_vkr.phys, &query);
+        subset.pNext = &f12;
+        f2.pNext = &subset;
+    }
+#endif
     float prio = 1.0f;
     VkDeviceQueueCreateInfo qci = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
@@ -679,7 +712,9 @@ static bool vkr_create_device(void)
     if (!VKR_CHECK(vkCreateDevice(g_vkr.phys, &ci, NULL, &g_vkr.device))) {
         return false;
     }
+#ifndef ICO_RHI_MOLTENVK
     volkLoadDevice(g_vkr.device);
+#endif
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
     {
         /* GPU timestamps when the queue writes them */
@@ -843,12 +878,21 @@ bool rhi_init(const RhiDeviceDesc *desc)
         }
     }
 #endif
+#ifdef ICO_RHI_MOLTENVK
+    /* SDL's surface and the backend must use the same statically linked driver. */
+    if (gipa && gipa != vkGetInstanceProcAddr) {
+        VKR_LOG("the Vulkan loader differs from the linked MoltenVK driver");
+        return false;
+    }
+    vr = VK_SUCCESS;
+#else
     if (gipa) {
         volkInitializeCustom(gipa);
         vr = VK_SUCCESS;
     } else {
         vr = volkInitialize();
     }
+#endif
     if (vr != VK_SUCCESS) {
         VKR_LOG("no Vulkan loader (libvulkan / vulkan-1.dll) found");
         return false;

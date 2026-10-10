@@ -137,6 +137,91 @@ for a compile check without Gradle. The unstripped `libmain.so` is under
 and the link map `ico_pc.map` under
 `android/app/.cxx/RelWithDebInfo/<hash>/arm64-v8a/`.
 
+## Apple Vulkan renderer (MoltenVK)
+
+Xcode, CMake and Ninja are required on the Mac building these targets.
+The dependency script installs SHA-256-pinned MoltenVK 1.4.2 and builds
+SDL3 3.4.18 as a static library for the selected SDK:
+
+```sh
+tools/fetch_moltenvk.sh ios
+cmake --preset ios-moltenvk
+cmake --build --preset ios-moltenvk
+```
+
+Use `macos` and the `macos-moltenvk` preset for a native Apple silicon
+renderer build. These presets build `ico_rhi`, with the existing Vulkan
+backend linked to MoltenVK; they do not produce an app or IPA. The iOS
+package targets ARM64 devices, iOS 15 or newer; the macOS target is ARM64,
+macOS 12 or newer. The pinned iOS package has no simulator slice.
+
+To compile the shared renderer and its existing HLSL shaders too, supply
+a **macOS host** DXC executable (it runs during the build, even for iOS):
+
+```sh
+cmake --preset ios-moltenvk -DICO_DXC=/absolute/path/to/dxc
+cmake --build build-host/ios-moltenvk --target ico_render
+```
+
+The app includes `SDL3/SDL_main.h` and creates an `SDL_WINDOW_VULKAN`
+window. SDL uses the exported, linked
+`vkGetInstanceProcAddr` to create its Metal-backed Vulkan surface; the
+backend enables portability enumeration and the device's portability
+subset. No custom Metal backend is used. `ICO_MOLTENVK_ROOT` can override
+the extracted release root. Apple package notices can be generated with
+`tools/gen_notices.py --platform ios --out NOTICES.txt` (or `macos`).
+
+### iPhone IPA for LiveContainer
+
+Build the current working checkout into an unsigned IPA:
+
+```sh
+tools/package_ios.sh -DICO_DXC=/absolute/path/to/macos/host/dxc
+```
+
+The `ios-app` preset defaults to the host DXC at
+`tools/toolchain/deps/dxc-build/bin/dxc`; omit the argument if it exists.
+The script builds the app and writes `dist/ico-pc-ios-unsigned.ipa`, with
+licenses inside the bundle and a separate `dist/ico-pc-ios.map` for crash
+offsets. No provisioning profile or signing identity is required.
+The dependency fetch also installs the pinned libchdr and libmpeg2 source
+trees, using `tools/fetch_deps.sh --game-only`.
+
+For a Mac without a host DXC, build it once from source (requires Git,
+Xcode, CMake and Ninja; this is a substantial LLVM build):
+
+```sh
+git clone --depth 1 --branch v1.9.2602 --recurse-submodules \
+  https://github.com/microsoft/DirectXShaderCompiler tools/toolchain/deps/dxc-src
+cmake -S tools/toolchain/deps/dxc-src -B tools/toolchain/deps/dxc-build -G Ninja \
+  -C tools/toolchain/deps/dxc-src/cmake/caches/PredefinedParams.cmake \
+  -DCMAKE_BUILD_TYPE=Release -DENABLE_SPIRV_CODEGEN=ON \
+  -DHLSL_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF -DCLANG_INCLUDE_TESTS=OFF \
+  -DSPIRV_BUILD_TESTS=OFF \
+  -DCMAKE_CXX_FLAGS=-Wno-invalid-specialization
+cmake --build tools/toolchain/deps/dxc-build --target dxc --parallel 6
+```
+
+Import the IPA into LiveContainer. Copy your own extracted `ico.o2r` into
+the guest app's **Documents** folder through LiveContainer's data-folder
+access, then launch ICO. A PAL `Ico_PAL.iso` or `Ico_PAL.chd` in that folder
+can also be extracted on first launch. Game data is not included in the IPA.
+Settings, saves and logs also live in Documents. The app uses the existing
+touch controls and controller input, runs fullscreen in landscape, and
+pauses audio/rendering while in the background. iOS uses the existing mobile
+defaults: a 60 FPS cap and adaptive resolution for the Enhanced preset.
+Selecting a fixed resolution such as 2× keeps that resolution; choose
+Auto to let the existing GPU-cost controller lower it when necessary.
+At 2× the scene contains roughly four times the pixels of 1×. For a
+performance report, enable `[dev] perf_log = true` in `ico-pc.ini` and
+include `logs/ico-pc-perf.csv` along with the normal log.
+
+The wrapper uses SDL's UIKit entry point and a guarded 32 MB coroutine
+stack on the main thread. Shared game angle conversions explicitly go
+through `int` before `short`, preserving the EE's halfword wrapping on
+ARM64. Git uses `EUC-JP-MS` for Japanese source files to preserve C
+backslashes with macOS iconv.
+
 ## Presets
 
 ```sh
@@ -314,8 +399,9 @@ without one.
 
 Some game sources carry Japanese text in EUC-JP, and their string literals
 are the ROM's bytes. `.gitattributes` lists each of them with
-`working-tree-encoding=EUC-JP`: git stores the file as UTF-8 and checks it
-out as EUC-JP, which is what the compiler reads. An editor or a pipe that
+`working-tree-encoding=EUC-JP-MS`: git stores the file as UTF-8 and checks it
+out as EUC-JP-MS, which is what the compiler reads. This variant preserves
+ASCII C backslashes with macOS iconv. An editor or a pipe that
 rewrites one of these files as UTF-8 changes its bytes; change them with an
 ASCII patch and `git apply`.
 
