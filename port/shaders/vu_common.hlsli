@@ -72,6 +72,9 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // VU_F_DROP_WIDE: a triangle marked VU_INDEX_WIDE (a stage closing plane,
 // rd_mesh.c markWideHidden) is not drawn there (vu_wide_dropped)
 #define VU_F_DROP_WIDE 128u
+// Photo mode's free camera (RdCamera.freeCamera): the region test's failing
+// triangles with a vertex behind the eye are GPU-clipped too (vu_triangle_out)
+#define VU_F_BEHIND_EYE 256u
 // Issue 25: the index bit of a triangle that overlaps an earlier triangle of
 // its mesh in the same plane (shader_consts.h ICO_VU_INDEX_LATER; static
 // prelit and lit meshes, rd_mesh.c markLaterOverlaps); vu_later_out
@@ -384,7 +387,9 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         // dropped triangles left holes (a wall with one vertex past the
         // window). A triangle with a vertex behind the eye (w <= 0) stays
         // dropped, as on the PS2: the game's cameras pass through and
-        // beside scenery that relies on it. The opening after the Sony
+        // beside scenery that relies on it. Photo mode's free camera
+        // (VU_F_BEHIND_EYE) has no such placing, so there it is drawn too
+        // (a walkway low under the camera left a hole). The opening after the Sony
         // sign films the castle from inside a cliff (st26a_p1); drawing
         // those triangles (some 2400 a frame there, with the sky and
         // cloud domes and the sea) covered the castle with stretched
@@ -406,7 +411,8 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
         // is drawn without it.
         if (a.inside && b.inside && c.inside) {
             o.pos = vu_vtx_position(me);
-        } else if (a.h.w > 0.0 && b.h.w > 0.0 && c.h.w > 0.0) {
+        } else if ((a.h.w > 0.0 && b.h.w > 0.0 && c.h.w > 0.0) ||
+                   (vu_draw.z & VU_F_BEHIND_EYE) != 0u) {
             o.pos = vu_cut_position(me);
         }
         return o;

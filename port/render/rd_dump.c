@@ -40,6 +40,8 @@
  *   RD_SHADOW_FRAME_CAMERA, rd_internal.h: 0 in the dumps from before them,
  *   whose CPU-projected draws the interpolation blends in screen space as
  *   it did; the version is unchanged)
+ *   (RdCamera.freeCamera, photo mode's free camera: the byte was padding,
+ *   0 in the dumps from before it; the version is unchanged)
  *   (RDC_GRID's b[5], f[0] and f[1], rd.h rd_grid_screen_st: 0 in the dumps
  *   from before them, whose pool grids blend their STs as they always did;
  *   the version is unchanged)

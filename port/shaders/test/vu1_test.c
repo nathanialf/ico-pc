@@ -811,10 +811,12 @@ typedef struct Case {
 
 /* DEPART_EYE: vertex 7 of each batch behind the eye (model (0, 0, -1), w =
  * -1): the VU drops its three triangles and so does the port (a triangle
- * with a vertex at w <= 0 stays dropped: vu_triangle_out). DEPART_SPRITE: particle 0 is a 1040-pixel sprite
+ * with a vertex at w <= 0 stays dropped: vu_triangle_out). DEPART_EYE_FREE:
+ * the same input drawn with ICO_VU_BEHIND_EYE (photo mode's free camera):
+ * the port draws what of them is in front of the near plane. DEPART_SPRITE: particle 0 is a 1040-pixel sprite
  * from X 2040 (inside the target) to 3080 (past the window's 3071): the VU
  * skips it, the port draws it. */
-enum { DEPART_NONE, DEPART_EYE, DEPART_SPRITE };
+enum { DEPART_NONE, DEPART_EYE, DEPART_EYE_FREE, DEPART_SPRITE };
 
 /* the CPU side of one case */
 typedef struct CaseRef {
@@ -934,7 +936,7 @@ static int makeInput(const Case *c, float (*in)[4])
             if (c->wide != 1.0f && c->clip == ICO_VU_CLIP_REGION) {
                 out = k == 7 ? 2 : k == 9 ? 3 : 0;
             }
-            if (c->depart == DEPART_EYE && k == 7) {
+            if ((c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE) && k == 7) {
                 out = 4;
             }
             int zmode = c->measured ? 2 : scissor ? 1 : 0;
@@ -993,7 +995,7 @@ static void makeVuCB(const Case *c, const Vu1Ref *r, IcoVuCB *cb, IcoVuBoneCB *b
     }
     cb->draw[0] = base;
     cb->draw[1] = (uint32_t)c->vq;
-    cb->draw[2] = (uint32_t)c->clip;
+    cb->draw[2] = (uint32_t)c->clip | (c->depart == DEPART_EYE_FREE ? ICO_VU_BEHIND_EYE : 0u);
     cb->draw[3] = c->prog == P_PARTICLE || c->tagless ? 0u : (uint32_t)c->vpb;
     cb->batch[0] = c->tagless ? 0u : (uint32_t)c->hdr;
     cb->batch[1] = (uint32_t)c->trail;
@@ -1250,7 +1252,8 @@ static int vuDraws(const Case *c, const CaseRef *cr, int k)
  * the reference's GS X and Y (any program); a triangle with one behind
  * is projected with M itself, so only for normal_c and normal_l (the
  * cluster's bones move it). A triangle with a vertex behind the eye
- * (model z <= 0, w <= 0) is not drawn, as on the VU. Returns the corner
+ * (model z <= 0, w <= 0) is not drawn, as on the VU, except with
+ * ICO_VU_BEHIND_EYE (DEPART_EYE_FREE). Returns the corner
  * count, 0 when nothing is left, -1 when it cannot be predicted. */
 /* Whether triangle k has a vertex behind the eye (w' = model z <= 0 under
  * the scene's M) */
@@ -1282,7 +1285,7 @@ static int portPolygon(const Case *c, const CaseRef *cr, int k, float poly[4][2]
     if (c->prog != P_NORMALC && c->prog != P_NORMALL) {
         return -1;
     }
-    if (behindEye(cr, k)) {
+    if (c->depart != DEPART_EYE_FREE && behindEye(cr, k)) {
         return 0;
     }
     int n = 0;
@@ -1421,6 +1424,11 @@ static const Case kCases[] = {
      DEPART_EYE},
     {"lit 32 eye", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
      DEPART_EYE},
+    /* the same under photo mode's free camera: drawn, GPU-clipped */
+    {"prelit 32 free", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     1.0f, DEPART_EYE_FREE},
+    {"lit 32 free", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_EYE_FREE},
     {"particle past", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f,
      DEPART_SPRITE},
 };
@@ -1800,18 +1808,24 @@ static int gpuTests(void)
                 FAILF("%s: the dropped triangles drawn: %d pixels against the clipped polygons\n",
                       c->name, pbad);
             }
-            if (c->depart == DEPART_EYE) {
+            if (c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE) {
                 int eye = 0;
                 for (int i = nkept; i < nidx; i += 3) {
                     eye += behindEye(&cr, (int)((idx[i] & ICO_VU_INDEX_MASK) >> 2));
                 }
-                /* pbad above: none of their pixels is drawn */
+                /* pbad above: DEPART_EYE draws none of their pixels,
+                 * DEPART_EYE_FREE draws them clipped */
                 if (eye == 0) {
                     FAILF("%s: no dropped triangle has a vertex behind the eye\n", c->name);
                 }
             }
+            if (c->depart == DEPART_EYE_FREE && pin == 0) {
+                FAILF("%s: the free camera's triangles with a vertex behind the eye are not "
+                      "drawn\n",
+                      c->name);
+            }
             portIn += c->depart == DEPART_NONE ? pin : 0;
-        } else if (c->depart == DEPART_EYE) {
+        } else if (c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE) {
             FAILF("%s: no triangle failed the region test\n", c->name);
         }
         if (c->depart == DEPART_SPRITE &&

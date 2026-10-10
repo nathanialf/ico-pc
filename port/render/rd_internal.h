@@ -272,6 +272,9 @@ typedef struct RdFrame {
      * fade rd_post(RD_POST_FADE) recorded, 1 + its alpha (0: none) */
     uint32_t cut;
     uint32_t fade;
+    /* rd_free_camera while the frame was open (rd_end_frame copies it into
+     * camera.freeCamera) */
+    uint32_t freeCamera;
     /* not dumped: RDC_OVERLAY_TEXT items recorded so far (the
      * post passes record their ops only after one) */
     uint32_t textItems;
@@ -1260,6 +1263,7 @@ typedef struct RdContext {
      * (rd_video.c), so rd_present leaves the output alone */
     uint32_t interpFloor;
     uint8_t cutPending, videoShown;
+    uint8_t freeCameraPending; /* rd_free_camera between frames */
     /* rd_set_mirror's flag (the run's mirror mode); the
      * effective mirror is this or settings.mirror (rd__mirror_on) */
     uint8_t mirrorRun;

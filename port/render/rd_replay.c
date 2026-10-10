@@ -3391,6 +3391,10 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint8_t vs = vuVs(p.prog, p.code);
     vcb.draw[0] = 0;
     vcb.draw[2] = p.clip;
+    if (f->camera.freeCamera) {
+        /* photo mode: behind-eye triangles clipped, not dropped */
+        vcb.draw[2] |= ICO_VU_BEHIND_EYE;
+    }
 
     if (c->type == RDC_GRID) {
         /* the Mesh3D buffer as it is: per strip the VIF qword, tag and colour

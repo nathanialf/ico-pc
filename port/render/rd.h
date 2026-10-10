@@ -290,7 +290,12 @@ typedef struct RdCamera {
                      vertical FOV */
     float nearZ, farZ;
     uint8_t cut; /* 1 on a camera cut this tick; disables interpolation for the frame */
-    uint8_t _pad[3];
+    /* 1: the port's own free camera drew this tick (photo mode, rd_free_camera):
+     * the VU draws keep the triangles with a vertex behind the eye, GPU-clipped
+     * (vu_common.hlsli VU_F_BEHIND_EYE); 0 in the game's cameras and in older
+     * dumps (the byte was padding, always zero) */
+    uint8_t freeCamera;
+    uint8_t _pad[2];
 } RdCamera;
 
 typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPreset;
@@ -516,6 +521,11 @@ bool rd_interpolation_active(void);
 bool rd_present(float alpha);
 uint32_t rd_frame_number(void);
 void rd_camera_cut(void);
+/* rd_free_camera: the frame being recorded is drawn from the port's own free
+ * camera (photo mode, port/game/photo_view.c), not a camera the game's
+ * artists placed: RdCamera.freeCamera.  Outside an open frame it applies to
+ * the next one. */
+void rd_free_camera(void);
 
 /* What the last present showed (rd_present's, or with interpolation off
  * rd_end_frame's one present of the frame), for the window's start-up log: the

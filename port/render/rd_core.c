@@ -273,6 +273,7 @@ void rd__frame_reset(RdFrame *f)
     f->hasVu = 0;
     f->headValid = 0;
     f->cut = 0;
+    f->freeCamera = 0;
     f->fade = 0;
     f->textItems = 0;
     f->closed = 0;
@@ -1531,6 +1532,8 @@ void rd_begin_frame(void)
     g_rd.stats.draws = 0;
     f->cut = g_rd.cutPending; /* rd_camera_cut between frames */
     g_rd.cutPending = 0;
+    f->freeCamera = g_rd.freeCameraPending; /* rd_free_camera between frames */
+    g_rd.freeCameraPending = 0;
     recordDefaults();
 }
 
@@ -1544,6 +1547,7 @@ void rd_end_frame(int keep)
     if (f->cut) {
         f->camera.cut = 1;
     }
+    f->camera.freeCamera = f->freeCamera ? 1 : 0;
     rd__frame_head_resolve(f, f->keep); /* the flip's head in the first replayed list */
     f->closed = 1;
     RdStateBlock s = f->startState;
@@ -1622,6 +1626,16 @@ void rd_camera_cut(void)
         f->cut = 1;
     } else {
         g_rd.cutPending = 1;
+    }
+}
+
+void rd_free_camera(void)
+{
+    RdFrame *f = rd__rec_frame();
+    if (f) {
+        f->freeCamera = 1;
+    } else {
+        g_rd.freeCameraPending = 1;
     }
 }
 
