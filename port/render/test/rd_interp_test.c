@@ -4191,8 +4191,12 @@ static void poolFrame(int k, int still)
  * eye at lockCamera(t)'s, the block's blended world to screen, the
  * blended vertices and heights), which at 0.5 differ from the blend of the
  * ticks' STs (the twins without the formula) by more than 1e-3 (4.7e-3 in
- * the reflection's second vertex); with the camera still the grids blend
- * their STs and the two are byte for byte the same */
+ * the reflection's second vertex).  With the camera still the grids with
+ * the formula take its STs too (no jump in the reflection when the camera
+ * starts or stops): byte for byte rd__grid_screen_st of the blended
+ * vertices and heights through the still camera, while their twins blend
+ * the ticks' STs; the tick's own picture (what a present without
+ * interpolation draws, t = 1) keeps the game's STs byte for byte */
 static void testPoolStCamera(void)
 {
     static const RdGridSt kKinds[2] = {RD_GRID_ST_SURFACE, RD_GRID_ST_REFLECT};
@@ -4260,20 +4264,45 @@ static void testPoolStCamera(void)
             }
         }
     }
-    /* the camera still: the ticks' STs blend, as without the formula */
+    /* the camera still: the formula's STs through it, the twins blended */
     poolFrame(0, 1);
     poolFrame(1, 1);
     const RdInterpStats *st = build(0.5f, 1);
-    CHECK(st->gridStCamera == 0 && st->gridSt == 4,
-          "pool still: every grid's STs blended (%u through the camera, %u blended)",
-          st->gridStCamera, st->gridSt);
+    CHECK(st->gridStCamera == 2 && st->gridSt == 2,
+          "pool still: two grids through the camera, two blended (%u, %u)", st->gridStCamera,
+          st->gridSt);
     const RdFrame *o = built(0.5f);
+    const double still[3] = {0.0, 0.0, 0.0}; /* lockCamera(0)'s eye */
     for (int n = 0; n < 2; n++) {
         const RdCmd *cf = findKey(o, 4, RD_KEY(&kObjPool, n * 2, 20), 0);
-        const RdCmd *cl = findKey(o, 4, RD_KEY(&kObjPool, n * 2 + 1, 20), 0);
-        CHECK(cf && cl && cf->u[2] == cl->u[2] &&
-                  memcmp(o->payload + cf->u[1], o->payload + cl->u[1], cf->u[2]) == 0,
-              "pool still: grid %d with the formula is byte for byte the one without", n);
+        const float (*b)[4] = cf ? vuBlock(o, cf) : NULL;
+        const float (*sf)[4] = gridStream(o, RD_KEY(&kObjPool, n * 2, 20));
+        if (!cf || !b || !sf) {
+            CHECK(0, "pool still: grid %d drawn", n);
+            continue;
+        }
+        int same = 0;
+        for (int i = 0; i < POOL_VERTS; i++) {
+            const float *pf = sf[3 + i * 2], *tf = sf[4 + i * 2];
+            float want[2] = {-1.0f, -1.0f};
+            same +=
+                rd__grid_screen_st(kKinds[n], b + 16, still, cf->f[0], cf->f[1], pf, tf[3], want) &&
+                memcmp(tf, want, sizeof(want)) == 0;
+        }
+        CHECK(same == POOL_VERTS,
+              "pool still: grid %d's STs are the formula's through the still camera, byte for "
+              "byte (%d of %d)",
+              n, same, POOL_VERTS);
+    }
+    /* the tick's own picture: the game's STs */
+    const RdFrame *own = built(1.0f);
+    const RdFrame *tick = rd__last_frame();
+    for (int n = 0; n < 4; n++) {
+        const RdCmd *co = findKey(own, 4, RD_KEY(&kObjPool, n, 20), 0);
+        const RdCmd *ct = findKey(tick, 4, RD_KEY(&kObjPool, n, 20), 0);
+        CHECK(co && ct && co->u[2] == ct->u[2] &&
+                  memcmp(own->payload + co->u[1], tick->payload + ct->u[1], co->u[2]) == 0,
+              "pool still: at t 1 grid %d is the tick's, byte for byte", n);
     }
 }
 

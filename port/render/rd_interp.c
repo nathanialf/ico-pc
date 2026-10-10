@@ -44,8 +44,8 @@
  *                           are screen positions through the tick's
  *                           camera); a grid that carries pool.c's formula
  *                           (rd_grid_screen_st) has its STs computed again
- *                           through the blended camera while the camera
- *                           moves (gridCameraSts); the strip headers,
+ *                           through the blended camera, moving or still
+ *                           (gridCameraSts); the strip headers,
  *                           colours and an image's STs are cur's
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
@@ -1233,15 +1233,19 @@ static int s_rebasedCur; /* of them, draws that are cur's */
  * unit along the reflected ray, so a far vertex's ST is a steep function of
  * the camera and the straight line between two ticks' values is not where
  * the blended camera sees the reflection (the distant water's shimmer while
- * the camera moves).  While the camera moves the STs are computed again
- * from the blended vertex, its blended height, the draw's blended world to
- * screen (qw 16..19) and the blended camera's eye.  In double precision: in
- * floats the reflection's 1000 times scaled difference of two screen
- * positions carries the positions' rounding, up to 0.01 in ST in the pool
- * dumps (the game's own STs scatter that much about the exact values), and
- * a new rounding every present would make the far water sparkle.  With the
- * camera still the blend of the ticks' STs stays, so such a frame is the
- * same as before. */
+ * the camera moves).  So the STs are computed again from the blended
+ * vertex, its blended height, the draw's blended world to screen (qw
+ * 16..19) and the blended camera's eye.  In double precision: in floats the
+ * reflection's 1000 times scaled difference of two screen positions carries
+ * the positions' rounding, up to 0.01 in ST in the pool dumps (the game's
+ * own STs scatter that much about the exact values), and a new rounding
+ * every present would make the far water sparkle.  The formula applies with
+ * the camera still too: with the game's STs on still presents and the
+ * formula's on moving ones, distant reflection detail jumped by up to that
+ * 0.01 (some 5 GS pixels) when the camera started or stopped.  So a still
+ * blended present differs from the tick's own picture by up to 0.01 in ST
+ * on these grids alone; without interpolation (the Original framerate)
+ * nothing goes through here and the game's STs are drawn. */
 
 static void gridProject(const float (*m)[4], const double p[4], double o[4])
 {
@@ -1311,13 +1315,13 @@ bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], 
 static int s_gridStCam; /* grids whose STs the formula made, this present */
 
 /* The STs of grid c (its payload op, as blended or re-based: qw 16..19 and
- * the stream) through the blended camera, when it carries a formula and
- * the camera moves; false when it does not apply */
+ * the stream) through the blended camera, moving or still, when it carries
+ * a formula; false when it does not apply */
 static bool gridCameraSts(const RdCmd *c, uint8_t *op)
 {
     const uint8_t kind = c->b[5];
     if (c->type != RDC_GRID || kind == RD_GRID_ST_NONE || kind >= RD_GRID_ST_COUNT || !s_cam.on ||
-        s_cam.still || c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
         return false;
     }
     RdVuPayload hc;
@@ -1348,7 +1352,18 @@ static bool gridCameraSts(const RdCmd *c, uint8_t *op)
  * object through the blended camera */
 static void camCurDraw(RdCmd *c)
 {
-    if (!s_cam.on || s_cam.still) {
+    if (!s_cam.on) {
+        return;
+    }
+    if (s_cam.still) {
+        /* nothing to re-base; the pool's grids take the formula's STs as
+         * on every blended present (gridCameraSts) */
+        if (c->type == RDC_GRID) {
+            uint8_t *op = outPayload(c);
+            if (op) {
+                (void)gridCameraSts(c, op);
+            }
+        }
         return;
     }
     if (frameProjected(c)) {
@@ -2184,8 +2199,8 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
                 }
             }
         }
-        /* with the camera moving, a formula's STs from the blended vertices
-         * through the blended camera (gridCameraSts) replace the blend */
+        /* a formula's STs from the blended vertices through the blended
+         * camera (gridCameraSts) replace the blend */
         if (!(st && gridCameraSts(cc, op))) {
             s_gridSt += st;
         }
