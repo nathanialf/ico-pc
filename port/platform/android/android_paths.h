@@ -50,7 +50,7 @@ typedef struct IcoAndroidPaths {
    files folder or inside it (the system may empty the cache). */
 int ico_android_layout(const char *files, const char *cache, IcoAndroidPaths *out);
 
-/* <files>/Ico_PAL.<ext> ("iso" or "chd"): where the picker's copy of the
+/* <files>/Ico_PAL.<ext> ("iso", "chd" or "bin"): where the picker's copy of the
    disc image goes. 0, or -1 (out emptied) when it does not fit. */
 int ico_android_image_path(const IcoAndroidPaths *p, const char *ext, char *out, size_t size);
 

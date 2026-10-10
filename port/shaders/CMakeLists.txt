@@ -25,6 +25,8 @@ ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
 ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
 # the depth fog's CLUT lookup (rd_replay.c doFog)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
+# the same, reading the depth from an R32_UINT copy of it (rd_fog_path.c)
+ico_add_shader(fog_lut_buffer_ps fog_lut.hlsl fog_lut_ps fragment DEFINES FOG_BUFFER=1)
 # R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
 # sheet text, coverage strips drawn in the menu sheets' style
@@ -46,6 +48,8 @@ ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
 # the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)
+# a movie's field deinterlaced and converted at the picture's size
+ico_add_shader(yuv_field_ps yuv.hlsl yuv_field_ps fragment)
 # staticBlur.c's sprites in the GS integer arithmetic
 # (port/render/rd_blur.c)
 ico_add_shader(fx_rect_vs fx_sprite.hlsl fx_rect_vs vertex)
@@ -70,6 +74,8 @@ foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
     ico_add_shader(${_e} sprite.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 endforeach()
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(fog_lut_buffer_ps fog_lut.hlsl fog_lut_ps fragment
+               DEFINES FOG_BUFFER=1 ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)

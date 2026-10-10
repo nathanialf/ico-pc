@@ -2,6 +2,13 @@
  *
  *   order    the same pixel drawn from list 5 (recorded first) and list 1:
  *            list 5 wins, it replays later
+ *   half     the frame head's half pixel on SCENE: a sprite of list 5,
+ *            whose SCENE target the game set again with the screen offset
+ *            alone, covers the rows of the same sprite in list 0; lists 8
+ *            (no screen offset) and 11 (the UI) keep their own rows, and so
+ *            do the screen-space passes of the later lists (a sprite
+ *            sampling a render target in list 10, a full-screen sprite in
+ *            list 5)
  *   railing  the stair railings' state, TEST 0x5160D (ATE
  *            GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL) and ALPHA 0x44 with ABE
  *            and Z write, on a lattice texture whose holes have alpha 0,
@@ -45,6 +52,16 @@
  *            reference, outside the letters it is the 1x strip of its sheet
  *            texels magnified S times within 1 (the rim is the sheets'
  *            look magnified), and its dump keeps the scale
+ *   gs lod   a TIM2 picture with three authored levels (a dark base,
+ *            then flat green and blue: rdtex_store_levels keeps them)
+ *            drawn in strips of one Q each through the STQ shaders under
+ *            TEX1 words of every mipmap kind (MMIN 2 to 5, LCM 0 and 1,
+ *            L 0 and 1, K positive and negative): each strip has the
+ *            colour of the level the GS formula picks, rounded or blended,
+ *            never past MXL, level 0 when magnified or not mipmapped; a
+ *            picture whose levels are reductions of its base keeps no GS
+ *            levels and draws the bytes of its base alone under a TEX1
+ *            that does not mipmap
  *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
@@ -156,6 +173,7 @@
 #include "sheet_ref.h"
 #include "shader_consts.h"
 #include "rd_mesh.h"
+#include "rd_tex.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -258,6 +276,88 @@ static void testOrder(void)
     if (img) {
         CHECK(img[0] == 200 && img[2] == 0, "list 5 replays after list 1 (got %u,%u,%u)", img[0],
               img[1], img[2]);
+    }
+}
+
+/* ------------------------------------------------------------ half */
+
+/* The field's half pixel (issue 29, rd_replay.c sceneKeepsHalf): list 0's
+ * SCENE target with the frame head's half offset (RD_TARGET_OFFSET |
+ * RD_TARGET_HALF_Y), then SCENE set again with the screen offset alone in
+ * list 5 (the shadow pass's gif_SetDrawEnviroment), in list 8 without the
+ * screen offset (a full-target pass) and in list 11 (the UI).  The same
+ * sprite, y from 20.25 to 30.25 pixels, covers rows 20..29 under the half
+ * offset (the GS rule: row y when y0 <= y + 0.5 < y1) and 21..30 without:
+ * list 5 lands on list 0's rows, lists 8 and 11 keep their own.  A sprite
+ * that copies a render target (here WORK0, as the softening's composite
+ * copies AA0 and AA1 in list 10) and a sprite the game marks full-screen
+ * (the fog's fogOffsetA sheet in list 4) are screen-space passes, not
+ * geometry: they keep the plain offset, rows 21..30, so their texel
+ * lookups stay on the target's grid (rd_replay.c drawOffset). */
+static void halfRows(const uint8_t *img, uint32_t w, int x, int *first, int *last)
+{
+    *first = *last = -1;
+    for (int y = 0; y < 64; y++) {
+        if (img[((size_t)y * w + (size_t)x) * 4 + 3] != 0) {
+            *first = *first < 0 ? y : *first;
+            *last = y;
+        }
+    }
+}
+
+static void testHalfOffset(void)
+{
+    static const uint8_t clr[4] = {0, 0, 0, 0}, c[4] = {200, 100, 50, 0x80};
+    static const uint8_t work[4] = {50, 150, 250, 0x80};
+
+    enum { N = 6 };
+
+    static const int kList[N] = {0, 5, 8, 11, 10, 5};
+    static const int kUse[N] = {RD_TARGET_OFFSET | RD_TARGET_HALF_Y,
+                                RD_TARGET_OFFSET,
+                                0,
+                                RD_TARGET_OFFSET,
+                                RD_TARGET_OFFSET,
+                                RD_TARGET_OFFSET};
+    static const int kFirst[N] = {20, 20, 21, 21, 21, 21};
+    /* 0 untextured, 1 sampling WORK0, 2 untextured and marked full-screen */
+    static const int kKind[N] = {0, 0, 0, 0, 1, 2};
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 224) * 16;
+    rd_begin_frame();
+    for (int k = 0; k < N; k++) {
+        rd_select_list(kList[k]);
+        if (k == 0) {
+            rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 0, 0);
+        }
+        if (kKind[k] == 1) {
+            rd_clear_target(rd_target(RD_TARGET_WORK0), work, 0, 0);
+        }
+        rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, 512, 448, kUse[k]);
+        opaque2D();
+        if (kKind[k] == 1) {
+            rd_texture(rd_target_texture(rd_target(RD_TARGET_WORK0), RD_VIEW_RGBA),
+                       RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        } else {
+            rd_texture_off();
+        }
+        RdScreenVtx v[2] = {
+            vtx(ox + (10 + 20 * k) * 16, oy + 20 * 16 + 4, 0, c, 8.0f, 8.0f),
+            vtx(ox + (20 + 20 * k) * 16, oy + 30 * 16 + 4, 0, c, 8.0f + 160.0f, 8.0f + 160.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, kKind[k] == 2 ? RD_SPACE_FULLSCREEN : RD_SPACE_WORLD,
+                        1, 0);
+    }
+    rd_end_frame(0);
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
+    if (!img) {
+        return;
+    }
+    for (int k = 0; k < N; k++) {
+        int first, last;
+        halfRows(img, w, 15 + 20 * k, &first, &last);
+        CHECK(first == kFirst[k] && last == kFirst[k] + 9,
+              "half offset: the sprite %d of list %d covers rows %d..%d (want %d..%d)", k, kList[k],
+              first, last, kFirst[k], kFirst[k] + 9);
     }
 }
 
@@ -963,6 +1063,191 @@ static void testStq(void)
         }
     }
     rd_destroy_texture(t);
+}
+
+/* ---------------------------------------------------------------- gs lod */
+
+/* The GS's level of detail (rd_state.h rd_tex1_lod) for a pixel with Q q */
+static double gsLodRef(double q, int lcm, int l, int k)
+{
+    return lcm ? k / 16.0 : -log2(q) * (double)(1 << l) + k / 16.0;
+}
+
+/* The colour the GS samples from flat levels lv[0..mxl] at that LOD */
+static void gsLodWant(double lod, int mmin, int mxl, const int lv[3][3], int want[4])
+{
+    double c[3];
+    int a = 0, b = 0;
+    double f = 0.0;
+    if (lod > 0.0 && (mmin == 2 || mmin == 4)) {
+        a = b = (int)fmin(floor(lod + 0.5), (double)mxl);
+    } else if (lod > 0.0 && (mmin == 3 || mmin == 5)) {
+        const double s = fmin(lod, (double)mxl);
+        a = (int)floor(s);
+        b = a < mxl ? a + 1 : a;
+        f = s - a;
+    }
+    for (int i = 0; i < 3; i++) {
+        c[i] = lv[a][i] * (1.0 - f) + lv[b][i] * f;
+        want[i] = (int)floor(c[i] + 0.5);
+    }
+    want[3] = 0x80;
+}
+
+/* Strips of one Q each, through the STQ shaders, from a texture whose
+ * three GS levels are flat colours (the base red, then green, then blue),
+ * under TEX1 words of every mipmap kind: the colour of each strip is the
+ * level the GS formula picks (rounded for MMIN 2 and 4, the two levels
+ * around the LOD blended for 3 and 5, K alone with LCM, never past MXL,
+ * level 0 at a LOD of 0 or below).  The same strips from a texture without
+ * GS levels draw its base everywhere, byte for byte as with a TEX1 that
+ * does not mipmap. */
+static void gsLodStrips(RdTex t, uint64_t tex1, int useTex1)
+{
+    static const double qs[10] = {2.0, 0.9, 0.72, 0.69, 0.6, 0.5, 0.4, 0.33, 0.25, 0.125};
+    static const uint8_t black[4] = {0, 0, 0, 0}, white[4] = {0x80, 0x80, 0x80, 0x80};
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_abe(0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    if (useTex1) {
+        rd_sampler_tex1(tex1);
+    }
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    const int32_t ox = (2048 - 128) * 16, oy = (2048 - 128) * 16;
+    for (int i = 0; i < 10; i++) {
+        const float q = (float)qs[i];
+        const int32_t y0 = (4 + 8 * i) * 16, y1 = (10 + 8 * i) * 16;
+        /* S = T = 0.5 Q: the texture's centre at every pixel */
+        RdScreenVtx v[4] = {vtx(ox + 16 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 16 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 48 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 48 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q)};
+        for (int k = 0; k < 4; k++) {
+            v[k].q = q;
+        }
+        rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
+    }
+    rd_end_frame(0);
+}
+
+static uint64_t gsTex1(int mmin, int lcm, int l, int k)
+{
+    return (uint64_t)lcm | (2ull << 2) | (1ull << 5) | ((uint64_t)mmin << 6) | ((uint64_t)l << 19) |
+           ((uint64_t)(k & 0xFFF) << 32);
+}
+
+/* An 8x8 PSMCT32 TIM2 picture of three levels, each flat or a checker of
+ * two colours, through rdtex_store_levels as Texture.c hands them over */
+static RdTex gsLodStore(uint32_t id, const uint8_t c[3][2][4], const char *name)
+{
+    static uint8_t px[3][8 * 8 * 4];
+    RdTexImage ims[3];
+    memset(ims, 0, sizeof(ims));
+    for (int l = 0; l < 3; l++) {
+        const uint32_t n = 8u >> l;
+        for (uint32_t y = 0; y < n; y++) {
+            for (uint32_t x = 0; x < n; x++) {
+                memcpy(px[l] + (y * n + x) * 4, c[l][(x + y) & 1], 4);
+            }
+        }
+        ims[l].w = ims[l].h = n;
+        ims[l].psm = RDTEX_PSMCT32;
+        ims[l].pixels = px[l];
+    }
+    return rdtex_store_levels(id, 1, RDTEX_TEXA_REPLAY, ims, 3, NULL, name);
+}
+
+static void testGsLod(void)
+{
+    /* authored levels: a dark base, then brighter levels of other colours
+       (brightness 16.7, 66.7, 80: the first step is 3.8 times, past
+       RDTEX_AUTHORED_RATIO) */
+    static const int lv[3][3] = {{30, 10, 10}, {0, 200, 0}, {0, 0, 240}};
+    static const uint8_t authored[3][2][4] = {{{30, 10, 10, 0x80}, {30, 10, 10, 0x80}},
+                                              {{0, 200, 0, 0x80}, {0, 200, 0, 0x80}},
+                                              {{0, 0, 240, 0x80}, {0, 0, 240, 0x80}}};
+    /* reductions: a red and black checker, then its 2x2 box (half red) */
+    static const uint8_t reduced[3][2][4] = {{{240, 0, 0, 0x80}, {0, 0, 0, 0x80}},
+                                             {{120, 0, 0, 0x80}, {120, 0, 0, 0x80}},
+                                             {{120, 0, 0, 0x80}, {120, 0, 0, 0x80}}};
+    static const double qs[10] = {2.0, 0.9, 0.72, 0.69, 0.6, 0.5, 0.4, 0.33, 0.25, 0.125};
+    RdTex t = gsLodStore(9001, authored, "gs lod authored");
+    CHECK(rd__tex_rec(t.id) && rd__tex_rec(t.id)->gsLevels == 3,
+          "gs lod: authored levels kept as three GS levels");
+
+    static const struct {
+        int mmin, lcm, l, k;
+        const char *what;
+    } cases[] = {
+        {4, 0, 0, 0, "LINEAR_MIPMAP_NEAREST"},
+        {5, 0, 0, 0, "LINEAR_MIPMAP_LINEAR"},
+        {2, 0, 1, -26, "NEAREST_MIPMAP_NEAREST, L 1, K -1.625"},
+        {3, 0, 1, -26, "NEAREST_MIPMAP_LINEAR, L 1, K -1.625"},
+        {5, 1, 0, 20, "LCM, K 1.25, linear"},
+        {4, 1, 0, 24, "LCM, K 1.5, nearest"},
+        {4, 1, 0, -8, "LCM, K -0.5 (magnified)"},
+        {1, 0, 0, 0, "LINEAR (no mipmapping)"},
+    };
+
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        gsLodStrips(t, gsTex1(cases[c].mmin, cases[c].lcm, cases[c].l, cases[c].k), 1);
+        uint32_t w, h;
+        const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+        if (!img) {
+            continue;
+        }
+        const int linear = cases[c].mmin == 3 || cases[c].mmin == 5;
+        for (int i = 0; i < 10; i++) {
+            const double lod = gsLodRef(qs[i], cases[c].lcm, cases[c].l, cases[c].k);
+            int want[4];
+            gsLodWant(lod, cases[c].mmin, 2, lv, want);
+            const int x = 32, y = 7 + 8 * i;
+            const uint8_t *p = img + ((size_t)y * w + (size_t)x) * 4;
+            /* the device's blend between levels has as few as 4 bits
+               (Vulkan's mipmapPrecisionBits): 240 / 32 */
+            const int tol = linear ? 8 : 1;
+            if (abs((int)p[0] - want[0]) > tol || abs((int)p[1] - want[1]) > tol ||
+                abs((int)p[2] - want[2]) > tol) {
+                char what[96];
+                snprintf(what, sizeof(what), "gs lod %s, Q %.3f (LOD %.3f)", cases[c].what, qs[i],
+                         lod);
+                pixFail(what, x, y, p, want);
+            }
+        }
+    }
+    /* levels that are reductions of the base: no GS levels, and the bytes
+       of the same strips from the base alone (rd_create_texture) under a
+       TEX1 that does not mipmap */
+    RdTex red = gsLodStore(9002, reduced, "gs lod reduced");
+    CHECK(rd__tex_rec(red.id) && rd__tex_rec(red.id)->gsLevels == 0,
+          "gs lod: reductions of the base keep no GS levels");
+    static uint8_t base[8 * 8 * 4];
+    for (int i = 0; i < 64; i++) {
+        memcpy(base + i * 4, reduced[0][((i % 8) + (i / 8)) & 1], 4);
+    }
+    RdTex one = rd_create_texture_src(8, 8, base, RD_TEXSRC_RGBA32, "gs lod one");
+    static uint8_t ref[512 * 512 * 4];
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    gsLodStrips(one, 0, 0);
+    const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (img) {
+        memcpy(ref, img, (size_t)w * h * 4);
+    }
+    gsLodStrips(red, gsTex1(5, 0, 0, 0), 1);
+    img = readTarget(RD_TARGET_WORK1, &w2, &h2);
+    CHECK(img && w == w2 && h == h2 && memcmp(ref, img, (size_t)w * h * 4) == 0,
+          "gs lod: a texture whose levels are reductions draws its base's bytes whatever TEX1 "
+          "says");
+    rd_destroy_texture(one);
+    rdtex_drop(9001);
+    rdtex_drop(9002);
 }
 
 /* ------------------------------------------------------------------ font */
@@ -3565,6 +3850,7 @@ int main(int argc, char **argv)
            rd_no_dual() ? " (two-pass blend fallback)" : "");
     testNoDual(); /* first: it clears the pipeline cache */
     testOrder();
+    testHalfOffset();
     testRailing(0);
     testRailing(1); /* as the game's materials draw it */
     testDateFlat();
@@ -3574,6 +3860,7 @@ int main(int argc, char **argv)
     testFont(dir);
     testSheetText("Original 1x", 1, dir);
     testStq();
+    testGsLod();
     testAa1();
     testReduction(dir);
     testPresent();

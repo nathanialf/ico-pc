@@ -70,7 +70,9 @@ DualOut sprite_ps(SpriteVSOut i)
     }
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = uint4(floor(g_texture.Sample(g_sampler, gs_block_uv(i.uv)) * 255.0 + 0.5));
+        // UV primitives: the GS's level of detail with Q = 1 (gs_sample)
+        const float4 tf = gs_sample(g_texture, g_sampler, gs_block_uv(i.uv), 1.0);
+        uint4 t = uint4(floor(tf * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);
     }
@@ -94,7 +96,9 @@ DualOut sprite_texa_ps(SpriteVSOut i)
     }
     uint4 col = uint4(floor(i.col + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = gs_texa_texture(g_texture, g_sampler, gs_block_uv(i.uv), g_mode.x);
+        uint4 t = (g_mode.x & DF_GS_LOD) != 0u
+                      ? gs_texa_texture_lod(g_texture, gs_block_uv(i.uv), 1.0, g_mode.x)
+                      : gs_texa_texture(g_texture, g_sampler, gs_block_uv(i.uv), g_mode.x);
         col = gs_texture_function(t, col, g_mode.x);
     }
     if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
@@ -108,7 +112,7 @@ DualOut sprite_texa_ps(SpriteVSOut i)
 // sprite_ps's DATE, texture function and TEXA: the fragment's colour before
 // the alpha test, or a discard. (sprite_ps keeps its own copy, so that its
 // SPIR-V and DXIL stay what they were.)
-uint4 sprite_colour(float4 pos, float4 vcol, float2 uv)
+uint4 sprite_colour(float4 pos, float4 vcol, float2 uv, float q)
 {
     if ((g_mode.x & DF_DATE) != 0u) {
         if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(pos.xy), 0)))) {
@@ -117,7 +121,7 @@ uint4 sprite_colour(float4 pos, float4 vcol, float2 uv)
     }
     uint4 col = uint4(floor(vcol + 0.5));
     if ((g_mode.x & DF_TEXTURED) != 0u) {
-        uint4 t = uint4(floor(g_texture.Sample(g_sampler, gs_block_uv(uv)) * 255.0 + 0.5));
+        uint4 t = uint4(floor(gs_sample(g_texture, g_sampler, gs_block_uv(uv), q) * 255.0 + 0.5));
         t = gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
         col = gs_texture_function(t, col, g_mode.x);
     }
@@ -169,7 +173,7 @@ SpriteAa1VSOut sprite_aa1_world_vs(SpriteAa1VSIn i)
 // blend's As and the alpha written.
 DualOut sprite_aa1_ps(SpriteAa1VSOut i)
 {
-    uint4 col = sprite_colour(i.pos, i.col, i.uv);
+    uint4 col = sprite_colour(i.pos, i.col, i.uv, 1.0);
     uint a = 0x80u;
     if (i.cov < 1.5) {
         a = uint(floor(saturate(i.cov) * 65535.0)) >> 9;
@@ -229,7 +233,7 @@ SpriteStqVSOut sprite_stq_world_vs(SpriteStqVSIn i)
 
 DualOut sprite_stq_ps(SpriteStqVSOut i)
 {
-    uint4 col = sprite_colour(i.pos, i.col, i.stq.xy / i.stq.z);
+    uint4 col = sprite_colour(i.pos, i.col, i.stq.xy / i.stq.z, i.stq.z);
     if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
         discard;
     }

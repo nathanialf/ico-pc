@@ -429,8 +429,8 @@ static void vkr_fake_limits(void)
 /* The format behind RHI_FMT_D32F_S8.  The spec guarantees one of
  * D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
  * preferred.  Either is taken only with the sampled and transfer uses too:
- * the fog and the effects depth sample the scene's depth in place
- * (rd_replay.c doFog, rd_present.c depthBlit), and the tests' depth
+ * the fog and the effects depth sample the scene's depth or a copy of it
+ * (rd_core.c rd__sampled_depth; on D24S8 the copy first), and the tests' depth
  * readbacks copy it out (rd_replay.c rd__read_target_depth).  When
  * neither has them all, D32 unless only D24 is an attachment.
  * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests:
@@ -609,6 +609,8 @@ static bool vkr_pick_device(void)
     snprintf(g_vkr.adapterName, sizeof(g_vkr.adapterName), "%s", g_vkr.props.deviceName);
     bool fake = false;
     g_vkr.dsFormat = vkr_choose_depth_stencil(g_vkr.phys, &fake);
+    g_vkr.dsSampled =
+        vkr_format_ok(g_vkr.phys, g_vkr.dsFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
     if (g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT) {
         VKR_LOG("depth-stencil: D24S8 in use%s, 24-bit depth (the scene depth has less precision "
                 "than the 32-bit float of D32S8)",
@@ -759,6 +761,24 @@ static bool vkr_create_device(void)
     return VKR_CHECK(vkCreateCommandPool(g_vkr.device, &pci, NULL, &g_vkr.oneShotPool));
 }
 
+/* The PCI vendor ids of the tile-based GPUs: Qualcomm Adreno (and Mesa's
+ * Turnip, which reports Qualcomm's id), ARM Mali, Imagination PowerVR,
+ * Samsung Xclipse, Apple (MoltenVK) and Broadcom VideoCore */
+static bool vkr_is_tiler(uint32_t vendor)
+{
+    switch (vendor) {
+    case 0x5143: /* Qualcomm */
+    case 0x13B5: /* ARM */
+    case 0x1010: /* Imagination */
+    case 0x144D: /* Samsung */
+    case 0x106B: /* Apple */
+    case 0x14E4: /* Broadcom */
+        return true;
+    default:
+        return false;
+    }
+}
+
 static void vkr_fill_limits(void)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
@@ -769,11 +789,28 @@ static void vkr_fill_limits(void)
     }
     o->uniformAlign = align < 16u ? 16u : align;
     o->maxTextureSize = l->maxImageDimension2D;
+    {
+        uint32_t rt = l->maxImageDimension2D;
+        const uint32_t lims[4] = {l->maxFramebufferWidth, l->maxFramebufferHeight,
+                                  l->maxViewportDimensions[0], l->maxViewportDimensions[1]};
+        for (int i = 0; i < 4; i++) {
+            rt = lims[i] < rt ? lims[i] : rt;
+        }
+        o->maxRenderTargetSize = rt;
+    }
     o->dualSourceBlend = g_vkr.dualSrcBlend; /* optional */
     o->stencilWrap = true;                   /* core Vulkan */
     /* a D24 depth copies out as packed 24-bit words, not floats */
     o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
     o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
+    o->depthSampled = g_vkr.dsSampled;
+    o->tiler = vkr_is_tiler(g_vkr.props.vendorID);
+#ifdef __ANDROID__
+    /* every Android GPU counts as tile-based, whatever its vendor id: the
+     * list above names the known ones, and a phone GPU missing from it
+     * would otherwise take the desktop defaults */
+    o->tiler = true;
+#endif
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
     /* images carry mipLevels, views and barriers span every level, and
@@ -800,6 +837,7 @@ static void vkr_fill_limits(void)
     if (g_vkr.fakeMinLimits) { /* read in vkr_fake_limits */
         o->uniformAlign = o->uniformAlign > 256u ? o->uniformAlign : 256u;
         o->maxTextureSize = o->maxTextureSize < 4096u ? o->maxTextureSize : 4096u;
+        o->maxRenderTargetSize = o->maxRenderTargetSize < 4096u ? o->maxRenderTargetSize : 4096u;
         o->maxDynamicUniforms = o->maxDynamicUniforms < 8u ? o->maxDynamicUniforms : 8u;
         o->maxStorageRange =
             o->maxStorageRange < (1ull << 27) ? o->maxStorageRange : (uint64_t)1 << 27;

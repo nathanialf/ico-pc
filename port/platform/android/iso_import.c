@@ -159,23 +159,89 @@ void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t fre
              (unsigned long long)(have / 10), (unsigned long long)(have % 10));
 }
 
+/* whether name ends in a dot and the three letters of `ext`, in any case */
+static int name_has_ext(const char *name, const char *ext)
+{
+    size_t len;
+
+    if (name == NULL) {
+        return 0;
+    }
+    len = strlen(name);
+    return len >= 4 && name[len - 4] == '.' && tolower((unsigned char)name[len - 3]) == ext[0] &&
+           tolower((unsigned char)name[len - 2]) == ext[1] &&
+           tolower((unsigned char)name[len - 1]) == ext[2];
+}
+
 const char *ico_iso_ext_for(const char *name, const void *head, size_t headLen)
 {
     static const char magic[8] = {'M', 'C', 'o', 'm', 'p', 'r', 'H', 'D'};
+    static const unsigned char sync[12] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff,
+                                           0xff, 0xff, 0xff, 0xff, 0xff, 0x00};
 
     if (head != NULL && headLen >= sizeof(magic)) {
-        return memcmp(head, magic, sizeof(magic)) == 0 ? "chd" : "iso";
-    }
-    if (name != NULL) {
-        size_t len = strlen(name);
-
-        if (len >= 4 && name[len - 4] == '.' && tolower((unsigned char)name[len - 3]) == 'c' &&
-            tolower((unsigned char)name[len - 2]) == 'h' &&
-            tolower((unsigned char)name[len - 1]) == 'd') {
+        if (memcmp(head, magic, sizeof(magic)) == 0) {
             return "chd";
         }
+        /* a raw CD image starts with the 12-byte sector sync (iso9660.c) */
+        return headLen >= 16 && memcmp(head, sync, sizeof(sync)) == 0 ? "bin" : "iso";
     }
-    return "iso";
+    if (name_has_ext(name, "chd")) {
+        return "chd";
+    }
+    return name_has_ext(name, "bin") ? "bin" : "iso";
+}
+
+/* whether h (n bytes) starts with `word` in any case, followed by a space,
+   a tab, a line end or the end of the bytes read */
+static int head_word(const char *h, size_t n, const char *word)
+{
+    size_t i, len = strlen(word);
+
+    if (n < len) {
+        return 0;
+    }
+    for (i = 0; i < len; i++) {
+        if (toupper((unsigned char)h[i]) != word[i]) {
+            return 0;
+        }
+    }
+    return n == len || h[len] == ' ' || h[len] == '\t' || h[len] == '\r' || h[len] == '\n';
+}
+
+int ico_iso_is_cue(const char *name, const void *head, size_t headLen)
+{
+    /* every command a cue sheet's line can start with */
+    static const char *const words[] = {"CATALOG",    "CDTEXTFILE", "FILE",    "FLAGS",  "INDEX",
+                                        "ISRC",       "PERFORMER",  "POSTGAP", "PREGAP", "REM",
+                                        "SONGWRITER", "TITLE",      "TRACK"};
+    const char *h = head;
+    size_t i;
+
+    if (name_has_ext(name, "cue")) {
+        return 1;
+    }
+    if (h == NULL) {
+        return 0;
+    }
+    /* picker addresses often carry no name, so the text decides: a UTF-8
+       byte order mark (Windows editors write one) and blank space skipped,
+       then any of the commands */
+    if (headLen >= 3 && (unsigned char)h[0] == 0xEF && (unsigned char)h[1] == 0xBB &&
+        (unsigned char)h[2] == 0xBF) {
+        h += 3;
+        headLen -= 3;
+    }
+    while (headLen > 0 && (*h == ' ' || *h == '\t' || *h == '\r' || *h == '\n')) {
+        h++;
+        headLen--;
+    }
+    for (i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+        if (head_word(h, headLen, words[i])) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 #ifdef __ANDROID__
@@ -185,7 +251,7 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
 {
     const IcoAndroidPaths *p = ico_android_paths();
     char tmp[PATH_MAX_LEN + 8], copyWhy[512];
-    unsigned char head[8];
+    unsigned char head[64]; /* a cue sheet's first command after a mark and blank lines */
     size_t headLen;
     SDL_IOStream *io;
     Sint64 size;
@@ -208,13 +274,13 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
         fprintf(stderr, "ico_pc: cannot open %s: %s\n", uri, SDL_GetError());
         snprintf(why, n,
                  "The chosen file cannot be opened.\n"
-                 "Start the game again and choose your ICO disc image (a .iso or .chd file), "
-                 "or copy it as Ico_PAL.iso into %s with a USB cable or the Files app.",
+                 "Start the game again and choose your ICO disc image (a .iso, .chd or .bin "
+                 "file), or copy it as Ico_PAL.iso into %s with a USB cable or the Files app.",
                  p->files);
         return ICO_ISO_IMPORT_FAILED;
     }
     size = SDL_GetIOSize(io);
-    /* the first bytes say .chd or .iso; read again from the start */
+    /* the first bytes say .chd, .bin or .iso; read again from the start */
     headLen = SDL_ReadIO(io, head, sizeof(head));
     if (SDL_SeekIO(io, 0, SDL_IO_SEEK_SET) != 0) {
         SDL_CloseIO(io);
@@ -229,21 +295,28 @@ int ico_iso_import(const char *uri, char *out, size_t outSize, IcoExtractProgres
             return ICO_ISO_IMPORT_FAILED;
         }
     }
+    if (ico_iso_is_cue(uri, head, headLen)) {
+        SDL_CloseIO(io);
+        snprintf(why, n,
+                 "Choose the .bin file, not the .cue (a .cue only lists the .bin).\n"
+                 "Start the game again and choose your ICO disc image.");
+        return ICO_ISO_IMPORT_FAILED;
+    }
     if (ico_android_image_path(p, ico_iso_ext_for(uri, head, headLen), out, outSize) != 0 ||
         snprintf(tmp, sizeof(tmp), "%s.tmp", out) >= (int)sizeof(tmp)) {
         SDL_CloseIO(io);
         snprintf(why, n, "The app's folder %s has too long a path for the disc image.", p->files);
         return ICO_ISO_IMPORT_FAILED;
     }
-    /* an earlier start's, stopped half way: the .iso's and the .chd's, so a
-       copy of the other kind does not stay behind */
+    /* an earlier start's, stopped half way: the .iso's, .chd's and .bin's,
+       so a copy of the other kind does not stay behind */
     {
-        static const char *const exts[2] = {"iso", "chd"};
+        static const char *const exts[] = {"iso", "chd", "bin"};
         char other[ICO_ANDROID_PATH_MAX];
         char otherTmp[ICO_ANDROID_PATH_MAX + 8];
         int i;
 
-        for (i = 0; i < 2; i++) {
+        for (i = 0; i < (int)(sizeof(exts) / sizeof(exts[0])); i++) {
             if (ico_android_image_path(p, exts[i], other, sizeof(other)) == 0 &&
                 snprintf(otherTmp, sizeof(otherTmp), "%s.tmp", other) < (int)sizeof(otherTmp)) {
                 remove(otherTmp);

@@ -38,6 +38,11 @@
    lock and log files) have no declaration otherwise, so their results
    would be read as int */
 #include <string.h>
+/* PC port: the presenter's blended camera (slerped rotation, lerped eye),
+   shared with port/render/rd_interp.c so the cull below builds the same
+   half-way camera the pictures are drawn with; header only, in every
+   build */
+#include "../../../port/render/rd_camera_blend.h"
 
 /* GsBase.c's globals, tentative definitions: the frame buffer flags, the
    screen centre and size, then the XYOFFSET adjustment and the frame size
@@ -105,12 +110,21 @@ static void gsbHostCommon(void);
    build (the headless one too, so a headless run proves the widened cull
    leaves the game's logic alone); defined after gsb_SetVSMatrix */
 static void gsbHostWidenCull(float *projHalf);
+/* PC port: the cull against the cameras of the blended pictures, defined
+   with gsb_ClipBox: the camera gsb_MakeCommonMatrix built, the camera at
+   each flip, and forgetting it at a stage's start */
+static void gsbHostCullBuilt(void);
+static void gsbHostCullFlip(void);
+static void gsbHostCullForget(void);
 /* port/game/video_options.c: the presentation's aspect / (4/3), 1 in the
    Original preset */
 extern float ico_video_wide_x(void);
 /* port/game/video_options.c: 1 when pictures are blended between ticks (a
    framerate other than Original) */
 extern int ico_video_interpolate(void);
+/* port/game/video_options.c: the count of the game's hard camera cuts and
+   stage changes (ico_video_camera_cut) */
+extern unsigned ico_video_cut_serial(void);
 /* port/game/video_options.c: the Screen softening switch (issue 11), 1 = on */
 extern int ico_video_effect_softening(void);
 /* port/game/video_options.c: the Cinematic bars switch (issue 27), 1 = on */
@@ -849,6 +863,8 @@ void gsb_MakeCommonMatrix(void)
     _MulMatrix(matrixptr + 0x100, matrixptr + 0xC0, matrixptr + 0x80);
     _MulMatrix(matrixptr + 0x200, matrixptr + 0x1C0, matrixptr + 0x80);
     _MulMatrix(matrixptr + 0x280, matrixptr + 0x240, matrixptr + 0x80);
+    /* PC port: the cull's matrix and the view and projection it is made of */
+    gsbHostCullBuilt();
     _InversMatrix(matrixptr + 0x380, matrixptr + 0x80);
     p = (GifPkWord *)PacketBufferStruct.ptr.d;
     PacketBufferStruct.gif.c = 0;
@@ -1151,6 +1167,8 @@ void gsb_InitGSSystem(void)
 {
     screen_offset_y = 0;
     screen_offset_x = 0;
+    /* PC port: a stage's first tick has no earlier camera to cull against */
+    gsbHostCullForget();
     if (firstGsInit != 0) {
         sceGsResetPath();
         sceVpu0Reset();
@@ -1241,6 +1259,9 @@ void gsb_UpdateGSSystem(int keep)
 #ifdef ICO_RD
     gsbHostFlip();
 #endif
+    /* PC port: the camera of the tick just ended, the next tick's cull's
+       earlier camera */
+    gsbHostCullFlip();
     if (buffer_ID != 0) {
         draw = &db.draw1;
     } else {
@@ -1285,6 +1306,8 @@ void gsb_ResetGSSystem(void)
     sceVpu0Reset();
     dma_init();
     sceGsResetGraph(0, systemStatus[1] == 1, (unsigned short)systemStatus[0] + 2, 1);
+    /* PC port: no earlier camera across a reset between stages */
+    gsbHostCullForget();
     frame_count++;
     buffer_ID = frame_count & 1;
     odd_even = 0; /* GS_CSR field bit: no GS on the host */
@@ -1493,7 +1516,10 @@ void gsb_SetVSMatrix(int w, int h, float d)
        margin a part just past the edge is still drawn at the tick (the
        scissor keeps it off the tick's own picture).  0.12 makes the
        culled frustum's half-width and half-height 1.12 times the
-       screen's, the same share of the picture at every aspect.
+       screen's, the same share of the picture at every aspect.  The
+       margin alone covers a small turn only: gsb_ClipBox also culls
+       against the earlier cameras of the blended pictures (the block
+       before it), each frustum with this margin.
    The renderer's own projection widens in rd (rd__fill_camera_cb, the
    replay's g_space); the gameplay matrices +0x80 and +0xC0
    (IsPointIsInScreen and the screen tests) never change.  puddle.c and
@@ -1647,6 +1673,384 @@ static void gsbHostCommon(void)
 
 #endif
 
+/* PC port: the cull against every camera a blended picture is drawn with.
+   With pictures blended between ticks (ico_video_interpolate) the
+   presenter draws each tick's parts through cameras between the camera of
+   the tick before and this tick's (rd_interp.c camSetup: the rotation
+   slerped, the eye lerped, up to RD_INTERP_CAMERA_TURN degrees and
+   RD_INTERP_CAMERA_MOVE units apart, rd_camera_blend.h).  A part culled against
+   this tick's camera alone is missing from those pictures wherever the
+   earlier cameras would show it: at the screen's edges while the camera
+   turns or moves, worse the wider the picture (issue 29).  So while
+   pictures are blended a box is culled only when it is outside three
+   cameras: this tick's, the tick before's and the half-way one, built with
+   the presenter's own blend (port/render/rd_camera_blend.h, the same
+   functions rd_interp.c uses), each frustum with GSB_CULL_MARGIN.  Three
+   turned frustums with the margin hold everything an in-between turn
+   shows, but three eyes do not hold what an in-between eye shows: moving
+   300 units across and up, the corner of the picture between two of the
+   eyes sees parts within some 1000 units that no one of the three sees.
+   So each camera also tests the box moved along the eye's path: the
+   camera at eye e and an in-between eye e' see the same thing when the
+   box moves by e - e', so the box is swept over that range (the hull of
+   its corners at the two ends, which holds every place in between), for
+   this tick's camera from the box to the box plus the eye's step d, for
+   the tick before's from the box to the box minus d, for the half-way
+   one from minus to plus half the step.  An in-between camera's turn is
+   then held by one of the three turns, its eye by the sweep.
+
+   The cull's matrix C is +0x280 (+0x240 x +0x80, gsb_MakeCommonMatrix),
+   and RegistPacket.c culls with C x model (or +0x240 x a view-space matrix
+   for the billboards, the same thing for a point of the world), so a
+   corner r = C x model x v is seen by another camera C' as
+   (C' x C^-1) x r: two matrices per camera, not per box.
+     - gsbCullBuilt: the C gsb_MakeCommonMatrix made last, with the view
+       (+0x80) and projection (+0x240) it made it from.
+     - gsbCullPrev: the C in force at the flip (gsb_UpdateGSSystem), the
+       camera of the tick the presenter blends from next.  Taken at the
+       flip, not in gsb_MakeCommonMatrix, which photo mode calls twice on
+       leaving and which returns at once while game_pause is 0.  Forgotten
+       at gsb_InitGSSystem and gsb_ResetGSSystem: a stage's first tick has
+       no earlier camera.
+     - gsbCullR: R_prev = C_prev x C^-1 and R_mid = C_mid x C^-1, with
+       C_mid the half-way projection (lerped, as the presenter's for the
+       easing zoom) times the half-way view, and each camera's sweep, its
+       C times the eye's step (w 0); built the first time a box is culled
+       under a +0x280 other than the one they were built for.  The
+       half-way camera and the sweep need both views; when +0x280 is not
+       the one gsb_MakeCommonMatrix made (gsb_PopView put a saved one back)
+       only R_prev is used, without the sweep.
+   The result is exactly the PS2's (one camera) with the Original
+   framerate, on a stage's first tick, while the camera stands still (C
+   bitwise the tick before's: a still camera must not change a result
+   through rounding), and for the parts locked to the camera (node flag 2:
+   RegistPacket.c reg_setMMatrixPacket culls them through the 500 unit
+   pair's +0x680; they move with the camera, so its earlier places mean
+   nothing to them).  It is also one camera, as the pictures are, across a
+   cut the presenter does not blend over: a hard cut or stage change the
+   game signalled since the flip (ico_video_camera_cut), and a camera that
+   turned more than RD_INTERP_CAMERA_TURN or whose eye moved more than
+   RD_INTERP_CAMERA_MOVE since the tick before (rdcb_camera_jump, the
+   presenter's own rule on the same two views).  Without that limit a cut
+   kept everything in the swath between the two eyes for one tick, more
+   packets than the banks hold.  The sweep is never longer than
+   RD_INTERP_CAMERA_MOVE either.  When the views are not known (gsb_PopView
+   put a saved +0x280 back) the step cannot be measured: the tick before's
+   camera is added without the sweep, at most one more frustum. */
+typedef struct GsbCullCam {
+    int valid;
+    int hasVP; /* v and p are the view and projection c was made from */
+    float c[16];
+    float v[16];
+    float p[16];
+} GsbCullCam; /* port */
+
+static GsbCullCam gsbCullBuilt; /* port */
+
+static GsbCullCam gsbCullPrev; /* port */
+
+/* ico_video_cut_serial at the flip: a cut since is a different value */
+static unsigned int gsbCullCutSerial; /* port */
+
+/* bumped by every change of gsbCullPrev, so gsbCullR is rebuilt */
+static unsigned int gsbCullGen = 1; /* port */
+
+static struct {
+    unsigned int gen; /* the gsbCullGen they were built under; 0 never */
+    float cur[16];    /* the +0x280 they were built for */
+    int views;        /* 1: this tick's camera only; 2: and R_prev; 3: and R_mid */
+    double r[2][16];  /* R_prev, R_mid */
+    double c[2][16];  /* C_prev, C_mid (the water dots test world points) */
+    /* per camera (this tick's, the tick before's, the half-way one), the
+       two ends of the sweep added to a corner in its clip space: 0 and
+       C d; 0 and -C_prev d; +-C_mid d / 2 (all 0 without the sweep) */
+    float sweep[3][2][4];
+} gsbCullR; /* port */
+
+/* 1 while RegistPacket.c culls a part locked to the camera */
+static int gsbCullLocked; /* port */
+
+/* the cameras the last gsb_ClipBox tested (the tests read it) */
+static int gsbCullLastViews = 1; /* port */
+
+static void gsbHostCullBuilt(void)
+{
+    memcpy(gsbCullBuilt.c, matrixptr + 0x280, sizeof(gsbCullBuilt.c));
+    memcpy(gsbCullBuilt.v, matrixptr + 0x80, sizeof(gsbCullBuilt.v));
+    memcpy(gsbCullBuilt.p, matrixptr + 0x240, sizeof(gsbCullBuilt.p));
+    gsbCullBuilt.valid = 1;
+    gsbCullBuilt.hasVP = 1;
+}
+
+static void gsbHostCullFlip(void)
+{
+    if (matrixptr == 0) {
+        return;
+    }
+    memcpy(gsbCullPrev.c, matrixptr + 0x280, sizeof(gsbCullPrev.c));
+    gsbCullPrev.hasVP =
+        gsbCullBuilt.valid && memcmp(gsbCullBuilt.c, gsbCullPrev.c, sizeof(gsbCullPrev.c)) == 0;
+    if (gsbCullPrev.hasVP) {
+        memcpy(gsbCullPrev.v, gsbCullBuilt.v, sizeof(gsbCullPrev.v));
+        memcpy(gsbCullPrev.p, gsbCullBuilt.p, sizeof(gsbCullPrev.p));
+    }
+    gsbCullPrev.valid = 1;
+    gsbCullCutSerial = ico_video_cut_serial();
+    gsbCullGen++;
+}
+
+static void gsbHostCullForget(void)
+{
+    gsbCullPrev.valid = 0;
+    gsbCullGen++;
+}
+
+void gsb_HostCullCameraLocked(int on)
+{
+    gsbCullLocked = on != 0;
+}
+
+int gsb_HostCullViewsUsed(void)
+{
+    return gsbCullLastViews;
+}
+
+static void gsbHostLoad16(const float *f, double *d)
+{
+    int i;
+
+    for (i = 0; i < 16; i++) {
+        d[i] = f[i];
+    }
+}
+
+/* The cameras a box is culled against now (1, 2 or 3), gsbCullR built
+   for the +0x280 in force when it was not yet */
+static int gsbHostCullViews(void)
+{
+    const float *cur = (const float *)(matrixptr + 0x280);
+    double c[16], ic[16];
+
+    if (!ico_video_interpolate() || !gsbCullPrev.valid) {
+        return 1;
+    }
+    if (ico_video_cut_serial() != gsbCullCutSerial) {
+        return 1; /* a cut since the flip: the pictures snap to this tick */
+    }
+    if (gsbCullR.gen == gsbCullGen && memcmp(gsbCullR.cur, cur, sizeof(gsbCullR.cur)) == 0) {
+        return gsbCullR.views;
+    }
+    gsbCullR.gen = gsbCullGen;
+    memcpy(gsbCullR.cur, cur, sizeof(gsbCullR.cur));
+    gsbCullR.views = 1;
+    if (memcmp(gsbCullPrev.c, cur, sizeof(gsbCullPrev.c)) == 0) {
+        return 1; /* the camera stands still */
+    }
+    gsbHostLoad16(cur, c);
+    if (!rdcb_invert4d(c, ic)) {
+        return 1;
+    }
+    if (gsbCullPrev.hasVP && gsbCullBuilt.valid &&
+        memcmp(gsbCullBuilt.c, cur, sizeof(gsbCullBuilt.c)) == 0 &&
+        rdcb_camera_jump(gsbCullPrev.v, gsbCullBuilt.v)) {
+        return 1; /* past the presenter's limits: the pictures snap */
+    }
+    gsbHostLoad16(gsbCullPrev.c, gsbCullR.c[0]);
+    rdcb_mul4d(gsbCullR.c[0], ic, gsbCullR.r[0]);
+    memset(gsbCullR.sweep, 0, sizeof(gsbCullR.sweep));
+    gsbCullR.views = 2;
+    if (gsbCullPrev.hasVP && gsbCullBuilt.valid &&
+        memcmp(gsbCullBuilt.c, cur, sizeof(gsbCullBuilt.c)) == 0) {
+        double vp[16], vc[16], vt[16], pp[16], pc[16], pt[16], ivp[16], ivc[16];
+
+        gsbHostLoad16(gsbCullPrev.v, vp);
+        gsbHostLoad16(gsbCullBuilt.v, vc);
+        gsbHostLoad16(gsbCullPrev.p, pp);
+        gsbHostLoad16(gsbCullBuilt.p, pc);
+        if (rdcb_blend_view(vp, vc, 0.5, vt) && rdcb_invert4d(vp, ivp) && rdcb_invert4d(vc, ivc)) {
+            /* the eye's step: the inverse views' translations, at most
+               RD_INTERP_CAMERA_MOVE long */
+            double d[4] = {ivc[12] - ivp[12], ivc[13] - ivp[13], ivc[14] - ivp[14], 0.0};
+            const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+            const double *cam[3] = {c, gsbCullR.c[0], gsbCullR.c[1]};
+            static const double ends[3][2] = {{0.0, 1.0}, {0.0, -1.0}, {-0.5, 0.5}};
+            int v;
+            int e;
+            int i;
+
+            if (len > (double)RD_INTERP_CAMERA_MOVE) {
+                for (i = 0; i < 3; i++) {
+                    d[i] *= (double)RD_INTERP_CAMERA_MOVE / len;
+                }
+            }
+
+            rdcb_blend_proj(pp, pc, 0.5, pt);
+            rdcb_mul4d(pt, vt, gsbCullR.c[1]);
+            rdcb_mul4d(gsbCullR.c[1], ic, gsbCullR.r[1]);
+            for (v = 0; v < 3; v++) {
+                for (i = 0; i < 4; i++) {
+                    const double cd =
+                        cam[v][i] * d[0] + cam[v][4 + i] * d[1] + cam[v][8 + i] * d[2];
+
+                    for (e = 0; e < 2; e++) {
+                        gsbCullR.sweep[v][e][i] = (float)(cd * ends[v][e]);
+                    }
+                }
+            }
+            gsbCullR.views = 3;
+        }
+    }
+    return gsbCullR.views;
+}
+
+/* gsb_clipCorner's flags for a transformed corner r against |cw| */
+static int gsbHostClipFlags(const float *r, float cw)
+{
+    float w = __builtin_fabsf(cw);
+    int f = 0;
+
+    f |= (r[0] > w) << 0;
+    f |= (r[0] < -w) << 1;
+    f |= (r[1] > w) << 2;
+    f |= (r[1] < -w) << 3;
+    f |= (r[2] > w) << 4;
+    f |= (r[2] < -w) << 5;
+    return f;
+}
+
+/* o = the double matrix m applied to the float r (all four fields) */
+static void gsbHostApply(float *o, const double *m, const float *r)
+{
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        o[i] = (float)(m[i] * r[0] + m[4 + i] * r[1] + m[8 + i] * r[2] + m[12 + i] * r[3]);
+    }
+}
+
+/* gsb_ClipBox under views cameras: 0 when every camera has a plane all
+   eight corners (at both ends of its sweep) are outside, -1 when no camera
+   clips any of them, else 2 when one is closer than the near plane under
+   any camera (the presenter's cameras lie between them, so one of the
+   pictures can cross it), 1 when none is */
+static int gsbHostClipBoxViews(const float *p, int views)
+{
+    int all[3] = {0x3F, 0x3F, 0x3F};
+    int any[3] = {0, 0, 0};
+    int nearCorner = 0;
+    int culled = 1;
+    int inside = 1;
+    int i;
+    int v;
+
+    for (i = 0; i < 8; p += 4, i++) {
+        float r[4];
+
+        ico_apply_matrix_w1(r, (const float (*)[4])ico_current_matrix, p);
+        for (v = 0; v < views; v++) {
+            float o[4];
+            int e;
+
+            if (v == 0) {
+                memcpy(o, r, sizeof(o));
+            } else {
+                gsbHostApply(o, gsbCullR.r[v - 1], r);
+            }
+            for (e = 0; e < 2; e++) {
+                const float *a = gsbCullR.sweep[v][e];
+                float s[4];
+                int f;
+
+                s[0] = o[0] + a[0];
+                s[1] = o[1] + a[1];
+                s[2] = o[2] + a[2];
+                s[3] = o[3] + a[3];
+                f = gsbHostClipFlags(s, s[3]);
+                all[v] &= f;
+                any[v] |= f;
+                nearCorner |= gsbHostClipFlags(s, 0.99f) & 0x20;
+            }
+        }
+    }
+    for (v = 0; v < views; v++) {
+        culled &= (all[v] & 0x2F) != 0;
+        inside &= (any[v] & 0x2F) == 0;
+    }
+    if (culled) {
+        return 0;
+    }
+    if (inside) {
+        return -1;
+    }
+    return nearCorner ? 2 : 1;
+}
+
+/* PC port: the water dots' window (waterDot.c DispWaterDot), in the GS's
+   1/16 pixels about the centre 32768: GSB_DOT_MARGIN pixels past the
+   picture's sides and its top and bottom.  At width 1 the sides are 400
+   pixels out, the PS2's window; the PS2's top and bottom were 200 pixels,
+   inside the picture (dots near the top and bottom edges were not drawn).
+   The widest picture (ICO_WIDE_X_MAX 5) keeps the window inside the 16
+   bits the dot's x is packed in: 32768 + (1280 + 144) x 16 = 55552. */
+#define GSB_DOT_MARGIN 144.0f
+
+/* 1 when the world point pos is in front of the cull matrix c and inside
+   its x and y planes */
+static int gsbHostPointIn(const double *c, const float *pos)
+{
+    double r[4];
+    int i;
+
+    for (i = 0; i < 4; i++) {
+        r[i] = c[i] * pos[0] + c[4 + i] * pos[1] + c[8 + i] * pos[2] + c[12 + i];
+    }
+    return r[3] > 0.0 && fabs(r[0]) <= r[3] && fabs(r[1]) <= r[3];
+}
+
+int gsb_HostDotVisible(const int *ip, const float *pos)
+{
+    const float k = gsbHostWideX();
+    const int hx = (int)(((float)(ScreenWidth / 2) * k + GSB_DOT_MARGIN) * 16.0f);
+    const int hy = (int)(((float)(ScreenHeight / 2) + GSB_DOT_MARGIN) * 16.0f);
+    int views;
+    int v;
+
+    if (ip[0] >= 32768 - hx && ip[0] <= 32768 + hx && ip[1] >= 32768 - hy && ip[1] <= 32768 + hy) {
+        return 1;
+    }
+    /* seen by an earlier camera of the blended pictures (the cull's
+       frustum, which carries GSB_CULL_MARGIN); only where the tick's GS
+       position still packs into 16 bits */
+    if (ip[0] < 0 || ip[0] > 0xFFFF || ip[1] < 0 || ip[1] > 0xFFFF) {
+        return 0;
+    }
+    views = gsbHostCullViews();
+    for (v = 1; v < views; v++) {
+        if (gsbHostPointIn(gsbCullR.c[v - 1], pos)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* PC port: lineManager.c _getLine's x clip, k times the 4:3 half-width
+   (exactly the PS2's vsWidth * 0.5 at width 1).  At width 5 a 512 wide
+   view reaches 2048 +- 1280, inside the GS's 0..4095. */
+float gsb_HostLineHalfWidth(void)
+{
+    return (float)vsWidth * 0.5f * gsbHostWideX();
+}
+
+/* PC port: Shadow.c's edge clip, +-ScreenWidth about the centre on the
+   PS2, k times that on a wide picture, at most 2047 pixels so a clipped
+   end stays inside the 16-bit GS window (2048 +- 2047) */
+float gsb_HostShadowClipX(void)
+{
+    float x = (float)ScreenWidth * gsbHostWideX();
+
+    return x > 2047.0f ? 2047.0f : x;
+}
+
 /* Clip a box against the current matrix: transform its eight corners with the
  * matrix in $vf4 to $vf7 and read the clip flags out of $vi18.  All eight
  * corners outside one plane gives 0, no corner clipped at all gives -1, and
@@ -1683,6 +2087,18 @@ int gsb_ClipBox(float *p)
     float *q = p;
     int i;
 
+    /* PC port: while pictures are blended, the cameras they are drawn
+       with (above) */
+    if (!gsbCullLocked) {
+        int views = gsbHostCullViews();
+
+        gsbCullLastViews = views;
+        if (views > 1) {
+            return gsbHostClipBoxViews(p, views);
+        }
+    } else {
+        gsbCullLastViews = 1;
+    }
     for (i = 0; i < 8; q += 4, i++) {
         int cf;
 

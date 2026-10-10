@@ -61,15 +61,33 @@ typedef struct IcoVfsBackend {
 typedef struct IcoVfs IcoVfs;
 
 /* The ISO9660 backend (port/data/iso9660.c).  Its location is a disc
-   image: a plain .iso, or a .chd (MAME's compressed hunks, what PCSX2 users
+   image: a plain .iso; a .chd (MAME's compressed hunks, what PCSX2 users
    keep) holding one, either a DVD CHD or a CD CHD whose first track is the
-   data track. */
+   data track; or a raw CD image, a .bin (found by the sync pattern at its
+   start) or the .cue sheet that names one. */
 extern const IcoVfsBackend ico_vfs_iso9660;
 
 /* A disc image's logical bytes, whatever the container: an .iso file as it
-   is, or the ISO image a .chd holds (its SHA-1 and size are the ISO's).
+   is, or the ISO image a .chd or .bin holds (its SHA-1 and size are the
+   ISO's).
    The first-run hash and the start-up check read through this. */
 typedef struct IcoDiscImage IcoDiscImage;
+
+/* The first track of a cue sheet, what the image needs from it. */
+typedef struct {
+    char file[512];      /* the FILE name, quotes removed */
+    char type[32];       /* the TRACK type, e.g. MODE2/2352 */
+    uint32_t unit_bytes; /* the number after the type's slash */
+    uint32_t data_off;   /* where a frame's 2048 user bytes start */
+    uint32_t first_unit; /* INDEX 01 in frames: where the track's sector 0 sits in the file */
+} IcoCueTrack;
+
+/* Parse cue sheet text (not NUL-terminated): the first `FILE "x" BINARY`
+   (quoted or bare), the first `TRACK nn TYPE` and its `INDEX 01 mm:ss:ff`;
+   keywords in any case, any line ending.  A second FILE, a first track that
+   is audio, and a type outside the data types are refused.  0, or -1 with
+   the reason in `err`. */
+int ico_cue_parse(const char *text, size_t len, IcoCueTrack *out, char *err, size_t errsz);
 
 /* NULL on failure, the reason in the log (stderr). */
 IcoDiscImage *ico_disc_image_open(const char *path);

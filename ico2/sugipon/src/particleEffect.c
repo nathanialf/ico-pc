@@ -184,9 +184,15 @@ static void _setParticleEffect(PEPartRec *out, PEPackage *pkg, char *m, float k)
     *out = particleWork;
 }
 
+/* PC port: port/game/video_options.c, how much wider than 4:3 the picture
+   is (1 in the Original preset) */
+extern float ico_video_wide_x(void);
+
 /* Project the effect's origin through the current camera matrix and report
-   whether the result falls outside the screen box. */
-static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
+   whether the result falls outside the screen box.  PC port: k is the
+   picture's width as a multiple of the 4:3 one; the box's x is taken k
+   times as wide about the centre 2048 (exactly the PS2's test at 1). */
+static inline int particleEffectOffScreen(PEGeo *geo, float k) /* derived name */
 {
     float v[4];
 
@@ -195,6 +201,9 @@ static inline int particleEffectOffScreen(PEGeo *geo) /* derived name */
         /* PC port: w is 0 for an origin on the camera plane (seen at
            stage 7, Main tick 115 of a start_stage boot) */
         sceVu0ScaleVectorXYZ(v, v, ps2_div(1.0f, v[3]));
+        if (k != 1.0f) {
+            v[0] = (v[0] - 2048.0f) / k + 2048.0f;
+        }
         if (v[2] < 0.0f || v[0] < 0.0f || 4095.0f < v[0] || v[1] < 0.0f || 4095.0f < v[1]) {
             return 1;
         }
@@ -344,7 +353,12 @@ static int execParticleEffect(PEGeo *self)
 
     d0 = (PEVtx *)self->prim->vtx;
     flags = 0;
-    if (particleEffectOffScreen(self)) {
+    /* PC port: the update keeps the PS2's 4:3 box (k = 1) whatever the
+       picture's width: skipping the update can end the effect (mode 1)
+       and the update draws from the shared _GetRandom, so it is game
+       logic, and an input trace must play the same at every aspect.  Only
+       the drawing (dispParticleEffect) widens. */
+    if (particleEffectOffScreen(self, 1.0f)) {
         return self->pkg->mode == 1;
     }
     GetMatrixFromQuaternionPos(m, self->quat, self->pos);
@@ -401,7 +415,10 @@ static void dispParticleEffect(PEGeo *geo)
     char *p;
     char *q;
 
-    if (particleEffectOffScreen(geo)) {
+    /* PC port: drawn wherever a wide picture can show the origin, k times
+       the 4:3 box across (an effect past the 4:3 box's sides is drawn as
+       its last update left it; see execParticleEffect's gate) */
+    if (particleEffectOffScreen(geo, ico_video_wide_x())) {
         return;
     }
     dl_SetDLPriority(6);

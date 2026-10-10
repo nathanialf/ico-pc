@@ -34,7 +34,8 @@ typedef struct IcoFrameCB {
 typedef struct IcoDrawCB {
     uint32_t col[4];   /* RGBA 0..255 */
     uint32_t mode[4];  /* flags, texa | texfmt << 8, atst | ate << 8 | split << 16, aref */
-    uint32_t blend[4]; /* ALPHA register, FIX, COLCLAMP, 0 */
+    uint32_t blend[4]; /* ALPHA register, FIX, COLCLAMP, TEX1's mipmap fields with
+                        * ICO_DF_GS_LOD (rd_state.h rd_tex1_lod), else 0 */
     float uvRect[4];   /* u0, v0, u1, v1 in texels */
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
     float param[4];    /* kind specific */
@@ -88,7 +89,10 @@ enum {
      * *_nodual entries; rd_pipeline.c rd__expand_no_dual): the colour pass
      * writes the blend factor into c0.a, the alpha pass the stored alpha */
     ICO_DF_NODUAL_FACTOR = 65536,
-    ICO_DF_NODUAL_ALPHA_PASS = 131072
+    ICO_DF_NODUAL_ALPHA_PASS = 131072,
+    /* the texture has its GS mipmap levels: sample at the GS's level from
+     * Q and TEX1's fields in DrawCB.blend[3] (common.hlsli gs_lod) */
+    ICO_DF_GS_LOD = 262144
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
@@ -257,13 +261,19 @@ typedef struct IcoVuBoneCB {
 
 /* IcoVuCB.draw[2] (VU_* in vu_common.hlsli). */
 enum {
-    ICO_VU_CLIP_REGION = 0,  /* region test: a triangle with a vertex outside is not drawn */
+    ICO_VU_CLIP_REGION = 0,  /* region test: a failing triangle is dropped in the 4:3
+                              * picture and, with all w > 0, GPU-clipped beside it */
     ICO_VU_CLIP_NONE = 1,    /* normal_c code 34: no test, X/Y wrap to 16 bits */
     ICO_VU_CLIP_SCISSOR = 2, /* code 36: clip-space flags, trivial reject, GPU clipping */
     ICO_VU_CLIP_MASK = 3,
-    ICO_VU_PROBE = 16,    /* tests: one value per pixel of a 16-wide RGBA8_UINT target */
-    ICO_VU_CUT_ONLY = 32, /* scissor: only the triangles SCISSOR_COMMON draws (first draw) */
-    ICO_VU_KICK_ONLY = 64 /* scissor: only the triangles the strip kicks (second draw) */
+    ICO_VU_PROBE = 16,      /* tests: one value per pixel of a 16-wide RGBA8_UINT target */
+    ICO_VU_CUT_ONLY = 32,   /* scissor: only the triangles SCISSOR_COMMON draws (first draw) */
+    ICO_VU_KICK_ONLY = 64,  /* scissor: only the triangles the strip kicks (second draw) */
+    ICO_VU_DROP_WIDE = 128, /* the triangles marked ICO_VU_INDEX_WIDE are not drawn (the
+                             * parts of a wide target outside the 4:3 picture) */
+    ICO_VU_BEHIND_EYE = 256 /* region test and particle window: a failing triangle or
+                             * sprite is GPU-clipped everywhere, not dropped (photo
+                             * mode's free camera, RdCamera.freeCamera) */
 };
 
 /* The region test's centre on a wide screen (vu_common.hlsli VU_REGION_CX,
@@ -277,9 +287,15 @@ enum {
 /* Issue 25: set on the three indices of a triangle that overlaps an earlier
  * triangle of its mesh in the same plane (RdMeshRec.drawIndex; static
  * prelit and lit meshes only), which vu_later_out draws in front of it;
- * vu_common.hlsli's VU_INDEX_LATER and VU_INDEX_MASK */
+ * vu_common.hlsli's VU_INDEX_LATER and VU_INDEX_MASK.  The kick stays
+ * below 2^27 for either mark (rd_mesh.c marks no larger mesh) */
 #define ICO_VU_INDEX_LATER 0x40000000u
-#define ICO_VU_INDEX_MASK 0x3FFFFFFFu
+/* Set on the three indices of a triangle of a stage closing plane
+ * (rd_mesh.c markWideHidden): a draw with ICO_VU_DROP_WIDE skips it, which
+ * rd_replay.c does only beside the 4:3 picture of a wide target;
+ * vu_common.hlsli's VU_INDEX_WIDE */
+#define ICO_VU_INDEX_WIDE 0x20000000u
+#define ICO_VU_INDEX_MASK 0x1FFFFFFFu
 #define ICO_VU_PROBE_FIELDS 16
 
 _Static_assert(offsetof(IcoVuCB, mem) == 0, "vu mem");

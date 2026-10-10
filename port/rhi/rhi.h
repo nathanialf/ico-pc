@@ -104,6 +104,10 @@ typedef enum RhiFormat {
     RHI_FMT_BC2_UNORM,
     RHI_FMT_BC3_UNORM,
     RHI_FMT_BC7_UNORM,
+    /* 32-bit unsigned words: the scene depth's bits copied out of its depth
+     * aspect through a buffer, for the fog to read where a depth read fails
+     * (rd_fog_path.c).  Sampled (Load only) and copied, never a target. */
+    RHI_FMT_R32_UINT,
     RHI_FMT_COUNT
 } RhiFormat;
 
@@ -450,6 +454,10 @@ typedef struct RhiRect {
 typedef struct RhiLimits {
     uint32_t uniformAlign; /* 256 on D3D12, usually 64..256 on Vulkan: rd_core aligns to this */
     uint32_t maxTextureSize;
+    /* the largest width or height of a render target: the smallest of the
+     * image, framebuffer and viewport limits (16384 on D3D12).  Can be below
+     * maxTextureSize; the scene is held to it. */
+    uint32_t maxRenderTargetSize;
     bool dualSourceBlend; /* optional; without it rd blends in two passes */
     bool stencilWrap;     /* must be true */
     /* true when rhi_readback_texture(RHI_ASPECT_DEPTH) of a D32F_S8 texture
@@ -458,6 +466,9 @@ typedef struct RhiLimits {
     bool depthReadback;
     /* what backs RHI_FMT_D32F_S8: "D32S8", or "D24S8" (Vulkan fallback) */
     const char *depthStencilFormatName;
+    /* RHI_FMT_D32F_S8 textures can be created with RHI_TEX_SAMPLED (the
+     * format the device chose has the sampled-image feature) */
+    bool depthSampled;
     /* Buffer<->texture copies: the row pitch and the buffer offset must be
      * multiples of these (D3D12: 256 and 512; Vulkan: 1 and 4).  rd_core
      * rounds the pitch up to copyRowPitchAlign from width * texel size. */
@@ -493,6 +504,11 @@ typedef struct RhiLimits {
      * of 4 or reaching the level's edge (a level under 4 x 4 passes its
      * real size). */
     bool bcTextures;
+    /* A tile-based phone GPU (Vulkan vendor Qualcomm, ARM, Imagination,
+     * Samsung, Apple or Broadcom, and every Android device; false on
+     * D3D12).  The fog then reads a copy of the scene depth first, before
+     * the depth itself (rd_fog_path.c). */
+    bool tiler;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {
@@ -607,6 +623,11 @@ void rhi_wait_frame(void);
 uint32_t rhi_frame_slot(void);
 /* Full GPU idle, for shutdown, resize and verification readbacks. */
 void rhi_wait_idle(void);
+/* Full GPU idle, then every deferred destroy is carried out now, the current
+ * frame's included (rhi_wait_idle leaves that slot's).  For a caller that is
+ * about to ask for a large allocation after freeing textures, so the memory is
+ * really back.  Only with no command list open (between frames). */
+void rhi_collect_garbage_now(void);
 
 void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint32_t count);
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass);
@@ -703,8 +724,15 @@ void rhi_get_stats(RhiStats *out);
  * origin, 0 for an index that frame did not write; returns 1 + the highest
  * index written (0 = none, or timestamps unsupported).
  * Vulkan: query pools.  D3D12: not implemented yet (unsupported: the calls
- * do nothing and read 0). */
+ * do nothing and read 0).
+ *
+ * RHI_TIMESTAMP_KEEP_BARRIERS or-ed into the index: the image barriers the
+ * backend holds back to send with the next command (vk_cmd.c
+ * vkr_image_barrier) stay held back, as a timestamp needs none of them; so
+ * the barriers recorded are those of a list without the timestamp.  Without
+ * it they go out before the timestamp. */
 #define RHI_MAX_TIMESTAMPS 32
+#define RHI_TIMESTAMP_KEEP_BARRIERS 0x80000000u
 bool rhi_timestamps_supported(void);
 void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);

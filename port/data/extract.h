@@ -14,7 +14,7 @@
  * How it accepts the image, in order (the rule goes into meta.json and the
  * log):
  *   iso-sha1            the whole image's SHA-1 is ICO_DISC_ISO_SHA1 (for
- *                       a .chd, the SHA-1 of the ISO it holds)
+ *                       a .chd or .bin, the SHA-1 of the ISO it holds)
  *   elf-sha1+datadf-crc SCES_507.60 hashes to ICO_DISC_ELF_SHA1 and DATA.DF
  *                       has the PAL disc's size, directory and members: the
  *                       CRC-32 of its directory and of each of its 193
@@ -62,9 +62,9 @@ typedef struct IcoExtractResult {
     double extract_seconds;
     int cancelled;
     /* why a refusal happened, for the message a player sees: unreadable,
-       the file is not a disc image this program reads (not an .iso or a
-       .chd made from one, a .bin, a .chd that needs its parent, a damaged
-       file); wrong_disc, it reads but is not the PAL disc (another region
+       the file is not a disc image this program reads (not an .iso, a
+       .bin or .cue, or a .chd made from one; a .chd that needs its parent,
+       a damaged file); wrong_disc, it reads but is not the PAL disc (another region
        or edition, or a modified image).  Both 0 for the other failures
        (no space, a write error, a cancel). */
     int unreadable;
@@ -77,7 +77,7 @@ int ico_extract_archive(const char *iso_path, const char *out_path, unsigned fla
                         size_t whysize);
 
 /* The SHA-1 (lower-case hex) and size of a disc image's logical bytes: an
-   .iso file as it is, the ISO a .chd holds, so both give the ISO's values
+   .iso file as it is, the ISO a .chd or .bin holds, so both give the ISO's values
    (vfs.h, IcoDiscImage). 0, or -1 with the reason in why. */
 int ico_extract_image_sha1(const char *iso_path, char hex[41], uint64_t *bytes, char *why,
                            size_t whysize);

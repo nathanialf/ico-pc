@@ -17,6 +17,19 @@
  *           sprite_ps (rd_screen_prims' shaders); every pixel within 1 LSB.
  *           Scissor triangles that cross a Z plane go through GPU clipping
  *           and are measured and reported, not asserted.
+ *           (3) the port's departure from the VU: a triangle the region
+ *           test drops (the probe's region field still says outside, as
+ *           the reference) is not drawn inside the 4:3 picture, but on a
+ *           wide target it is drawn beside it, clipped by the GPU (under
+ *           photo mode's free camera everywhere); a particle outside the
+ *           x/y window likewise. The strip in (2) is drawn without those
+ *           triangles and must match the reference; they are drawn on
+ *           their own into a third target, whose coverage is checked
+ *           against the triangles clipped at the near plane on the CPU and
+ *           cut to the parts beside the 4:3 picture. Particles: the
+ *           reference image gets the sprites the port adds (field 12 of
+ *           the probe: the port draws it somewhere), each scissored to the
+ *           parts beside the 4:3 picture unless the camera is free.
  *   part c  RdVuCommon (rd.h) against the VU parameter block:
  *           the qword map,
  *           and the VuCB mirror.
@@ -797,7 +810,62 @@ typedef struct Case {
     int trail;    /* qwords after each batch's vertices (a Mesh3D buffer's MSCNT) */
     int tagless;  /* the GPU stream is the vertices only, as rd_create_vu_mesh keeps them */
     float wide;   /* the world x scale of the draw (g_space[0].x): 1, or 0.375 for 32:9 */
+    int depart;   /* DEPART_*: input made to show the port's departure from the VU */
 } Case;
+
+/* DEPART_EYE: vertex 7 of each batch behind the eye (model (0, 0, -1), w =
+ * -1): the VU drops its three triangles and so does the port (a triangle
+ * with a vertex at w <= 0 stays dropped: vu_triangle_out). DEPART_EYE_FREE:
+ * the same input drawn with ICO_VU_BEHIND_EYE (photo mode's free camera):
+ * the port draws what of them is in front of the near plane, inside the
+ * 4:3 picture too. DEPART_BAND_IN (wide): vertex 7 past the window below
+ * the picture (model (0, 600, 2), Y 6848), so what is seen of its
+ * triangles lies inside the 4:3 picture: not drawn. DEPART_BAND_OUT
+ * (wide): the strip's vertices right of the 4:3 picture (GS X 2088..2128,
+ * texels 47..62 of 64 at 0.375) and vertex 7 past the window (X 8000):
+ * drawn. DEPART_SPRITE: particle 0 is a 1040-pixel sprite from X 2040
+ * (inside the target) to 3080 (past the window's 3071): the VU skips it;
+ * the port draws nothing of it at 4:3 and, on a wide target, the part
+ * beside the 4:3 picture. DEPART_SPRITE_SIDE (wide): particle 0 from X 900
+ * (before the window's 1024) to 2000, all of it seen beside the picture
+ * (texels 0..13): drawn. DEPART_SPRITE_FREE: DEPART_SPRITE with
+ * ICO_VU_BEHIND_EYE, drawn whole, and particle 1 behind the eye (model z
+ * -2), which the w window still skips. */
+enum {
+    DEPART_NONE,
+    DEPART_EYE,
+    DEPART_EYE_FREE,
+    DEPART_BAND_IN,
+    DEPART_BAND_OUT,
+    DEPART_SPRITE,
+    DEPART_SPRITE_SIDE,
+    DEPART_SPRITE_FREE
+};
+
+/* photo mode's free camera: the draw carries ICO_VU_BEHIND_EYE */
+static int freeCamera(const Case *c)
+{
+    return c->depart == DEPART_EYE_FREE || c->depart == DEPART_SPRITE_FREE;
+}
+
+/* The texels [*x0, *x1) of the RT-wide target that the 4:3 picture covers
+ * under the world x scale wide (vu_common.hlsli vu_in_picture, the target's
+ * texels per GS pixel 1): the whole target at 1. */
+static void pictureTexels(float wide, int *x0, int *x1)
+{
+    const float c = RT * 0.5f, fc = wide * c;
+    *x0 = (int)floorf(c - fc);
+    *x1 = (int)ceilf(c + fc);
+}
+
+/* Whether the port draws texel column x of what the VU drops: beside the
+ * 4:3 picture, or anywhere under the free camera. */
+static int besideOrFree(const Case *c, int x)
+{
+    int x0, x1;
+    pictureTexels(c->wide, &x0, &x1);
+    return freeCamera(c) || x < x0 || x >= x1;
+}
 
 /* the CPU side of one case */
 typedef struct CaseRef {
@@ -805,9 +873,15 @@ typedef struct CaseRef {
     VuGsVertex v[MAXV];
     float stw[MAXV];
     int first[MAXV];
+    float pos[MAXV][4]; /* each vertex's model position (the input's first qword) */
     IcoSpriteVertex tri[MAXV * 3 * 3];
     int ntri;
     VuParticleOut po;
+    int shown[MAXV]; /* particles: the port draws it somewhere (alpha and the w window only) */
+    /* particles: sprite j of tri (triangles 2j, 2j + 1) is drawn beside the
+     * 4:3 picture only */
+    int sideOnly[MAXV];
+    int sideTexels, bandTexels; /* those sprites' texel columns beside and inside the picture */
 } CaseRef;
 
 static uint32_t rngState = 12345u;
@@ -827,12 +901,24 @@ static float rnd(float lo, float hi)
  * x = 600 (X = 6848, outside the region test). The wide cases (Case.wide
  * 0.375) use out 2: x = 255.875 (X 4095, outside at 4:3, inside the wide
  * test, and below 4096 so the reference's 16-bit sprite X is the same
- * point), and out 3: x = 744 (X 8000, outside both). */
+ * point), and out 3: x = 744 (X 8000, outside both). out 4 (DEPART_EYE):
+ * (0, 0, -1), behind the eye. out 5 (DEPART_BAND_IN): (0, 600, 2), Y 6848,
+ * below the window. out 6 (DEPART_BAND_OUT): not past the window but GS X
+ * 2088..2128, right of the 4:3 picture at 0.375. */
 static void makeVertex(int prog, float (*v)[4], int k, int start, int out, int zmode, int scissor)
 {
     float z = zmode == 2 ? (k & 1 ? 0.5f : 2.0f) : zmode == 1 ? 2.0f : rnd(1.8f, 2.4f);
     float x = rnd(-3.5f, 3.5f) * z / 2.0f, y = rnd(-3.5f, 3.5f) * z / 2.0f;
-    if (out) {
+    if (out == 4) {
+        x = y = 0.0f;
+        z = -1.0f;
+    } else if (out == 5) {
+        x = 0.0f;
+        y = 600.0f;
+        z = 2.0f;
+    } else if (out == 6) {
+        x = rnd(40.0f, 80.0f) * z / 16.0f;
+    } else if (out) {
         x = scissor ? 150.0f : out == 2 ? 255.875f : out == 3 ? 744.0f : 600.0f;
         z = 2.0f;
     }
@@ -884,7 +970,23 @@ static int makeInput(const Case *c, float (*in)[4])
             qw(in[7 + 2 * i], rnd(0, 1), rnd(0, 1), (float)(int)rnd(0, 255.9f),
                i == 3 ? 0.0f : (float)(int)rnd(1, 128));
         }
-        qw(in[6], 300, 0, 4, 2); /* outside the window: skipped */
+        qw(in[6], 300, 0, 4, 2); /* outside the window: skipped by the VU, drawn by the port */
+        if (c->depart == DEPART_SPRITE || c->depart == DEPART_SPRITE_FREE) {
+            /* h = (5120, 4096, 3 * 2^20, 2), half extent 16 * 65 / 2 = 520:
+             * corners (2040, 1528) and (3080, 2568) */
+            qw(in[6], 64, 0, 2, 65);
+            qw(in[7], 0.25f, 0.5f, 128, 64);
+        }
+        if (c->depart == DEPART_SPRITE_SIDE) {
+            /* h = (2900, 4096, 3 * 2^20, 2), half extent 16 * 68.75 / 2 =
+             * 550: corners (900, 1498) and (2000, 2598) */
+            qw(in[6], -74.75f, 0, 2, 68.75f);
+            qw(in[7], 0.25f, 0.5f, 128, 64);
+        }
+        if (c->depart == DEPART_SPRITE_FREE) {
+            qw(in[8], 0, 0, -2, 1); /* w = -2: behind the eye */
+            qw(in[9], 0.25f, 0.5f, 128, 64);
+        }
         return 6 + 2 * n;
     }
     for (int b = 0; b < c->nbatch; b++) {
@@ -904,6 +1006,15 @@ static int makeInput(const Case *c, float (*in)[4])
             int out = c->clip != ICO_VU_CLIP_NONE && (k == 7) && !c->measured;
             if (c->wide != 1.0f && c->clip == ICO_VU_CLIP_REGION) {
                 out = k == 7 ? 2 : k == 9 ? 3 : 0;
+            }
+            if ((c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE) && k == 7) {
+                out = 4;
+            }
+            if (c->depart == DEPART_BAND_IN) {
+                out = k == 7 ? 5 : 0;
+            }
+            if (c->depart == DEPART_BAND_OUT) {
+                out = k == 7 ? 3 : 6;
             }
             int zmode = c->measured ? 2 : scissor ? 1 : 0;
             makeVertex(c->prog, v, k, start, out, zmode, scissor);
@@ -961,7 +1072,7 @@ static void makeVuCB(const Case *c, const Vu1Ref *r, IcoVuCB *cb, IcoVuBoneCB *b
     }
     cb->draw[0] = base;
     cb->draw[1] = (uint32_t)c->vq;
-    cb->draw[2] = (uint32_t)c->clip;
+    cb->draw[2] = (uint32_t)c->clip | (freeCamera(c) ? ICO_VU_BEHIND_EYE : 0u);
     cb->draw[3] = c->prog == P_PARTICLE || c->tagless ? 0u : (uint32_t)c->vpb;
     cb->batch[0] = c->tagless ? 0u : (uint32_t)c->hdr;
     cb->batch[1] = (uint32_t)c->trail;
@@ -980,6 +1091,36 @@ static IcoSpriteVertex spriteV(const VuGsVertex *v)
     return s;
 }
 
+/* Particle i as the port draws it somewhere (vu_particle.hlsl: the alpha
+ * test and the w window of qw 3/4, not the x/y window), with the scene's M as both
+ * particle matrices (stateParticle): returns whether it is drawn and fills
+ * s. The inputs that use it are exact in float (DEPART_SPRITE, makeInput's
+ * particle 0). */
+static int portSprite(const float (*in)[4], int i, VuGsSprite *s)
+{
+    const float *a = in[6 + 2 * i], *b = in[7 + 2 * i];
+    float h[4], e[4];
+    for (int j = 0; j < 4; j++) {
+        h[j] = sceneCommon[4][j] * a[0] + sceneCommon[5][j] * a[1] + sceneCommon[6][j] * a[2] +
+               sceneCommon[7][j];
+        const float sz = a[3] * in[5][0];
+        e[j] = sceneCommon[4][j] * sz + sceneCommon[5][j] * sz + sceneCommon[7][j];
+    }
+    memset(s, 0, sizeof(*s));
+    s->index = i;
+    const float q = 1.0f / h[3];
+    for (int c = 0; c < 2; c++) {
+        const float sg = c ? 1.0f : -1.0f;
+        s->xyz[c][0] = (int32_t)((h[0] + sg * e[0]) * q * 16.0f);
+        s->xyz[c][1] = (int32_t)((h[1] + sg * e[1]) * q * 16.0f);
+        s->xyz[c][2] = (int32_t)(h[2] * q * 16.0f);
+    }
+    s->rgba[0] = s->rgba[1] = s->rgba[2] = (int32_t)b[2];
+    s->rgba[3] = (int32_t)b[3];
+    const int alphaZero = (ubits(b[3]) & 0x7F800000u) == 0u;
+    return !alphaZero && in[3][3] < h[3] && h[3] < in[4][3];
+}
+
 /* Run the reference over the case and collect vertices and the triangles
  * the GS would draw (kicks and fans) as sprite vertices. */
 static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
@@ -989,8 +1130,40 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
     memset(cr, 0, sizeof(*cr));
     if (c->prog == P_PARTICLE) {
         vu1ref_particle(&r, in, (uint32_t)nq, &cr->po);
-        for (int i = 0; i < cr->po.count; i++) {
-            const VuGsSprite *s = &cr->po.s[i];
+        /* the sprites in input order: the reference's, and between them the
+         * ones only the port draws: beside the 4:3 picture (sideOnly, none
+         * at 4:3), or whole under the free camera */
+        static VuGsSprite added;
+        int x0, x1;
+        pictureTexels(c->wide, &x0, &x1);
+        for (int k = 0, pi = 0; k < c->vpb; k++) {
+            const VuGsSprite *s = 0;
+            int side = 0;
+            cr->shown[k] = portSprite(in, k, &added);
+            if (pi < cr->po.count && cr->po.s[pi].index == k) {
+                s = &cr->po.s[pi++];
+            } else if (cr->shown[k] && (freeCamera(c) || x0 > 0 || x1 < RT)) {
+                s = &added;
+                side = !freeCamera(c);
+            } else {
+                continue;
+            }
+            if (side) {
+                /* the texel columns the sprite covers in the target */
+                const float half = RT / 2;
+                const float l = half + ((float)s->xyz[0][0] / 16.0f - 2048.0f) * c->wide;
+                const float r = half + ((float)s->xyz[1][0] / 16.0f - 2048.0f) * c->wide;
+                for (int x = 0; x < RT; x++) {
+                    if ((float)x + 0.5f > l + 1.0f && (float)x + 0.5f < r - 1.0f) {
+                        if (x < x0 || x >= x1) {
+                            cr->sideTexels++;
+                        } else {
+                            cr->bandTexels++;
+                        }
+                    }
+                }
+            }
+            cr->sideOnly[cr->ntri / 2] = side;
             VuGsVertex a, b;
             memset(&a, 0, sizeof(a));
             memset(&b, 0, sizeof(b));
@@ -1002,8 +1175,8 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
             cTR.xyz[0] = b.xyz[0];
             cBL.xyz[1] = b.xyz[1];
             const VuGsVertex *q6[6] = {&a, &cTR, &cBL, &cBL, &cTR, &cBR};
-            for (int k = 0; k < 6; k++) {
-                cr->tri[cr->ntri * 3 + k] = spriteV(q6[k]);
+            for (int j = 0; j < 6; j++) {
+                cr->tri[cr->ntri * 3 + j] = spriteV(q6[j]);
             }
             cr->ntri += 2;
         }
@@ -1031,6 +1204,7 @@ static void runRef(const Case *c, const float (*in)[4], int nq, CaseRef *cr)
             cr->v[v0 + k] = big.v[k];
             const float *st = in[at + c->hdr + k * c->vq + (c->vq - 2)];
             cr->stw[v0 + k] = st[3];
+            memcpy(cr->pos[v0 + k], in[at + c->hdr + k * c->vq], 16);
             cr->first[v0 + k] = v0;
         }
         /* fans first: they are kicked during the loop, before the batch */
@@ -1073,6 +1247,10 @@ static void compareProbe(const Case *c, const CaseRef *cr, const uint8_t *img, u
         }
         if (c->prog == P_PARTICLE) {
             const VuGsSprite *s = pi < cr->po.count && cr->po.s[pi].index == k ? &cr->po.s[pi] : 0;
+            if ((f[12] != 0) != (cr->shown[k] != 0)) {
+                FAILF("%s particle %d drawn by the port %u, expected %d\n", c->name, k, f[12],
+                      cr->shown[k]);
+            }
             if ((f[10] != 0) != (s != 0)) {
                 FAILF("%s particle %d drawn %u, reference %d\n", c->name, k, f[10], s != 0);
                 continue;
@@ -1156,32 +1334,222 @@ static int compareImages(const uint8_t *a, const uint8_t *b, uint32_t pitch, int
     return bad;
 }
 
+/* Whether the VU draws triangle k (vertices k-2..k): with the region test,
+ * only when all three are inside (the ADC counter); the other modes draw
+ * every static kick. */
+static int vuDraws(const Case *c, const CaseRef *cr, int k)
+{
+    return c->clip != ICO_VU_CLIP_REGION ||
+           (cr->v[k - 2].inside && cr->v[k - 1].inside && cr->v[k].inside);
+}
+
+/* Triangle k as the port draws it when the region test drops it, as a
+ * polygon in pixels of the RT x RT target: clipped to model z >= 1, which
+ * is GS Z >= 0 under the scene's M (z' = 3 * 2^20 (z - 1), w' = z), where
+ * the GPU clips it (0 <= z); then projected. Vertices in front of that use
+ * the reference's GS X and Y (any program); a triangle with one behind
+ * is projected with M itself, so only for normal_c and normal_l (the
+ * cluster's bones move it). A triangle with a vertex behind the eye
+ * (model z <= 0, w <= 0) is not drawn, as on the VU, except with
+ * ICO_VU_BEHIND_EYE (DEPART_EYE_FREE). Returns the corner
+ * count, 0 when nothing is left, -1 when it cannot be predicted. */
+/* Whether triangle k has a vertex behind the eye (w' = model z <= 0 under
+ * the scene's M) */
+static int behindEye(const CaseRef *cr, int k)
+{
+    for (int j = 0; j < 3; j++) {
+        if (cr->pos[k - 2 + j][2] <= 0.0f) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int portPolygon(const Case *c, const CaseRef *cr, int k, float poly[4][2])
+{
+    const float half = RT / 2;
+    int front = 0;
+    for (int j = 0; j < 3; j++) {
+        front += cr->pos[k - 2 + j][2] >= 1.0f;
+    }
+    if (front == 3) {
+        for (int j = 0; j < 3; j++) {
+            const VuGsVertex *v = &cr->v[k - 2 + j];
+            poly[j][0] = half + ((float)v->xyz[0] / 16.0f - 2048.0f) * c->wide;
+            poly[j][1] = half + ((float)v->xyz[1] / 16.0f - 2048.0f);
+        }
+        return 3;
+    }
+    if (c->prog != P_NORMALC && c->prog != P_NORMALL) {
+        return -1;
+    }
+    if (c->depart != DEPART_EYE_FREE && behindEye(cr, k)) {
+        return 0;
+    }
+    int n = 0;
+    for (int j = 0; j < 3; j++) {
+        const float *a = cr->pos[k - 2 + j], *b = cr->pos[k - 2 + (j + 1) % 3];
+        float m[3];
+        if (a[2] >= 1.0f) {
+            memcpy(m, a, sizeof(m));
+            poly[n][0] = half + 16.0f * m[0] / m[2] * c->wide;
+            poly[n][1] = half + 16.0f * m[1] / m[2];
+            n++;
+        }
+        if ((a[2] >= 1.0f) != (b[2] >= 1.0f)) {
+            const float t = (1.0f - a[2]) / (b[2] - a[2]);
+            for (int i = 0; i < 3; i++) {
+                m[i] = a[i] + (b[i] - a[i]) * t;
+            }
+            poly[n][0] = half + 16.0f * m[0] * c->wide; /* m[2] = 1 */
+            poly[n][1] = half + 16.0f * m[1];
+            n++;
+        }
+    }
+    return n;
+}
+
+/* How far pixel centre (x, y) is inside the convex polygon (the smallest
+ * distance to an edge, negative outside); a very large negative value for
+ * a polygon of no area. */
+static float insideBy(const float (*poly)[2], int n, float x, float y)
+{
+    float area = 0.0f;
+    for (int i = 0; i < n; i++) {
+        const float *a = poly[i], *b = poly[(i + 1) % n];
+        area += a[0] * b[1] - b[0] * a[1];
+    }
+    if (n < 3 || fabsf(area) < 1e-3f) {
+        return -1e30f;
+    }
+    const float sg = area > 0.0f ? 1.0f : -1.0f;
+    float d = 1e30f;
+    for (int i = 0; i < n; i++) {
+        const float *a = poly[i], *b = poly[(i + 1) % n];
+        const float ex = b[0] - a[0], ey = b[1] - a[1];
+        const float len = sqrtf(ex * ex + ey * ey);
+        if (len <= 0.0f) {
+            continue;
+        }
+        const float e = sg * (ex * (y - a[1]) - ey * (x - a[0])) / len;
+        d = e < d ? e : d;
+    }
+    return d;
+}
+
+/* The third target (the triangles the port draws and the VU drops) against
+ * the polygons: a pixel centre more than one pixel inside one of them is
+ * drawn when it is beside the 4:3 picture (besideOrFree), one more than a
+ * pixel outside all of them or inside the picture is not. Returns the
+ * pixels clearly inside and drawn; *held counts those clearly inside but in
+ * the picture (not drawn); *bad counts the mismatches, or is -1 when a
+ * triangle cannot be predicted (portPolygon; none of the cases has one, so
+ * the caller fails it). */
+static int checkPortTriangles(const Case *c, const CaseRef *cr, const uint32_t *idx, int first,
+                              int count, const uint8_t *img, uint32_t pitch, int *bad, int *held)
+{
+    static float polys[MAXV][4][2];
+    static int pn[MAXV];
+    int np = 0;
+    *bad = 0;
+    *held = 0;
+    for (int i = 0; i < count; i += 3) {
+        const int k = (int)((idx[first + i] & ICO_VU_INDEX_MASK) >> 2);
+        pn[np] = portPolygon(c, cr, k, polys[np]);
+        if (pn[np] < 0) {
+            *bad = -1;
+            return 0;
+        }
+        np++;
+    }
+    int in = 0;
+    for (int y = 0; y < RT; y++) {
+        for (int x = 0; x < RT; x++) {
+            float d = -1e30f;
+            for (int p = 0; p < np; p++) {
+                const float e =
+                    insideBy((const float (*)[2])polys[p], pn[p], (float)x + 0.5f, (float)y + 0.5f);
+                d = e > d ? e : d;
+            }
+            const uint8_t *q = img + (size_t)y * pitch + (size_t)x * 4;
+            const int drawn = q[0] != 16 || q[1] != 32 || q[2] != 48;
+            const int beside = besideOrFree(c, x);
+            in += d > 1.0f && beside;
+            *held += d > 1.0f && !beside;
+            *bad += (d > 1.0f && beside && !drawn) || ((d < -1.0f || !beside) && drawn);
+        }
+    }
+    return in;
+}
+
 static const Case kCases[] = {
-    {"prelit 32", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f},
-    {"prelit 34", "vu_prelit_vs", P_NORMALC, 34, ICO_VU_CLIP_NONE, 3, 1, 1, 12, 0, 0, 0, 1.0f},
-    {"prelit 36", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 12, 0, 0, 0, 1.0f},
+    {"prelit 32", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"prelit 34", "vu_prelit_vs", P_NORMALC, 34, ICO_VU_CLIP_NONE, 3, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"prelit 36", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
     {"prelit 36 near", "vu_prelit_vs", P_NORMALC, 36, ICO_VU_CLIP_SCISSOR, 3, 1, 1, 8, 1, 0, 0,
-     1.0f},
-    {"lit 32 tagless", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 2, 12, 0, 0, 1, 1.0f},
-    {"lit 36", "vu_lit_vs", P_NORMALL, 36, ICO_VU_CLIP_SCISSOR, 4, 1, 1, 12, 0, 0, 0, 1.0f},
-    {"lit spec 34", "vu_lit_spec_vs", P_NORMALL, 34, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0,
-     1.0f},
-    {"reflect 38", "vu_reflect_vs", P_NORMALL, 38, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f},
-    {"skin 20 tagless", "vu_skin_vs", P_CLUSTER, 20, ICO_VU_CLIP_REGION, 5, 1, 2, 12, 0, 0, 1,
-     1.0f},
-    {"skin 22", "vu_skin_spec_vs", P_CLUSTER, 22, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f},
-    {"skin 24", "vu_skin_debug_vs", P_CLUSTER, 24, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f},
-    {"grid 20", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 3, 10, 0, 0, 0, 1.0f},
+     1.0f, DEPART_NONE},
+    {"lit 32 tagless", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 2, 12, 0, 0, 1, 1.0f,
+     DEPART_NONE},
+    {"lit 36", "vu_lit_vs", P_NORMALL, 36, ICO_VU_CLIP_SCISSOR, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"lit spec 34", "vu_lit_spec_vs", P_NORMALL, 34, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"reflect 38", "vu_reflect_vs", P_NORMALL, 38, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"skin 20 tagless", "vu_skin_vs", P_CLUSTER, 20, ICO_VU_CLIP_REGION, 5, 1, 2, 12, 0, 0, 1, 1.0f,
+     DEPART_NONE},
+    {"skin 22", "vu_skin_spec_vs", P_CLUSTER, 22, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"skin 24", "vu_skin_debug_vs", P_CLUSTER, 24, ICO_VU_CLIP_REGION, 5, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_NONE},
+    {"grid 20", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 3, 10, 0, 0, 0, 1.0f,
+     DEPART_NONE},
     /* as prim_makePacketMesh3D lays the buffer out: VIF qword, tag, colour,
      * vertices, MSCNT */
-    {"grid 22 raw", "vu_grid_lit_vs", P_MESH, 22, ICO_VU_CLIP_REGION, 3, 3, 3, 10, 0, 1, 0, 1.0f},
-    {"grid 24", "vu_grid_spec_vs", P_MESH, 24, ICO_VU_CLIP_REGION, 3, 2, 2, 10, 0, 0, 0, 1.0f},
+    {"grid 22 raw", "vu_grid_lit_vs", P_MESH, 22, ICO_VU_CLIP_REGION, 3, 3, 3, 10, 0, 1, 0, 1.0f,
+     DEPART_NONE},
+    {"grid 24", "vu_grid_spec_vs", P_MESH, 24, ICO_VU_CLIP_REGION, 3, 2, 2, 10, 0, 0, 0, 1.0f,
+     DEPART_NONE},
     /* a wide scene draw at 32:9: the region test compares the squeezed x */
     {"prelit 32 wide", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
-     0.375f},
-    {"lit 32 wide", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f},
-    {"grid 20 wide", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 2, 10, 0, 0, 0, 0.375f},
-    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f},
+     0.375f, DEPART_NONE},
+    {"lit 32 wide", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_NONE},
+    {"grid 20 wide", "vu_grid_vs", P_MESH, 20, ICO_VU_CLIP_REGION, 2, 2, 2, 10, 0, 0, 0, 0.375f,
+     DEPART_NONE},
+    {"particle", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f, DEPART_NONE},
+    /* the port's departures from the VU (DEPART_*): a strip with a vertex
+     * behind the eye, a particle past the window */
+    {"prelit 32 eye", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0, 1.0f,
+     DEPART_EYE},
+    {"lit 32 eye", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_EYE},
+    /* the same under photo mode's free camera: drawn, GPU-clipped */
+    {"prelit 32 free", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     1.0f, DEPART_EYE_FREE},
+    {"lit 32 free", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_EYE_FREE},
+    {"particle past", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_SPRITE},
+    /* on a wide target (32:9): what the VU drops is drawn beside the 4:3
+     * picture only; the wide cases above cut it at the picture's edge */
+    {"prelit wide in", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f, DEPART_BAND_IN},
+    {"prelit wide out", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
+     0.375f, DEPART_BAND_OUT},
+    {"lit wide eye", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_EYE},
+    {"lit wide free", "vu_lit_vs", P_NORMALL, 32, ICO_VU_CLIP_REGION, 4, 1, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_EYE_FREE},
+    {"particle wide", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_SPRITE},
+    {"particle side", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 0.375f,
+     DEPART_SPRITE_SIDE},
+    {"particle free", "vu_particle_vs", P_PARTICLE, 18, 0, 2, 6, 1, 12, 0, 0, 0, 1.0f,
+     DEPART_SPRITE_FREE},
 };
 
 #define NCASES ((int)(sizeof(kCases) / sizeof(kCases[0])))
@@ -1306,18 +1674,23 @@ static int gpuTests(void)
         rhi_create_texture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "vu"});
     RhiTexture imgRef =
         rhi_create_texture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "ref"});
+    RhiTexture imgPort =
+        rhi_create_texture(&(RhiTextureDesc){RT, RT, 1, RHI_FMT_RGBA8_UNORM, RTU, "port"});
     RhiTexture dummy = rhi_create_texture(&(RhiTextureDesc){
         2, 2, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "dummy"});
     RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
                                                           RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
                                                           RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
     if (failures != setupFailures || !ring.id || !map || !probe.id || !imgVu.id || !imgRef.id ||
-        !dummy.id || !smp.id) {
+        !imgPort.id || !dummy.id || !smp.id) {
         FAILF("GPU setup\n");
         rhi_shutdown();
         return 1;
     }
     RhiState stProbe = RHI_STATE_UNDEFINED, stVu = RHI_STATE_UNDEFINED, stRef = RHI_STATE_UNDEFINED;
+    RhiState stPort = RHI_STATE_UNDEFINED;
+    int portIn = 0;   /* pixels clearly inside the triangles past the window the port draws */
+    int portHeld = 0; /* and those inside the 4:3 picture, which it does not */
     RhiState stDummy = RHI_STATE_UNDEFINED;
 
     static float in[1024][4];
@@ -1344,17 +1717,25 @@ static int gpuTests(void)
         } else {
             memcpy(map + OFF_STREAM, in, (size_t)nq * 16);
         }
-        /* indices: the static kicks, kick * 4 + corner */
+        /* indices: the static kicks, kick * 4 + corner; first those the VU
+         * draws (nkept), then those its region test drops, which the port
+         * draws too (drawn on their own, into imgPort) */
         uint32_t *idx = (uint32_t *)(map + OFF_INDEX);
-        int nidx = 0;
+        int nidx = 0, nkept = 0;
         int nvert = c->prog == P_PARTICLE ? c->vpb : cr.nv;
         if (c->prog != P_PARTICLE) {
             int kicks[MAXV];
             int nk = vu1ref_static_kicks(c->prog == P_MESH ? NULL : cr.stw, cr.first, cr.nv, kicks);
-            for (int i = 0; i < nk; i++) {
-                for (int j = 0; j < 3; j++) {
-                    idx[nidx++] = ICO_VU_INDEX(kicks[i], j);
+            for (int pass = 0; pass < 2; pass++) {
+                for (int i = 0; i < nk; i++) {
+                    if (vuDraws(c, &cr, kicks[i]) != !pass) {
+                        continue;
+                    }
+                    for (int j = 0; j < 3; j++) {
+                        idx[nidx++] = ICO_VU_INDEX(kicks[i], j);
+                    }
                 }
+                nkept = pass == 0 ? nidx : nkept;
             }
         }
         memcpy(map + OFF_SPRITE, cr.tri, (size_t)cr.ntri * 3 * sizeof(IcoSpriteVertex));
@@ -1435,11 +1816,12 @@ static int gpuTests(void)
         RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){l2, b2, 3});
 
         RhiCommandList cl = rhi_begin_commands();
-        RhiTextureBarrier pre[4] = {{probe, stProbe, RHI_STATE_RENDER_TARGET},
+        RhiTextureBarrier pre[5] = {{probe, stProbe, RHI_STATE_RENDER_TARGET},
                                     {imgVu, stVu, RHI_STATE_RENDER_TARGET},
                                     {imgRef, stRef, RHI_STATE_RENDER_TARGET},
+                                    {imgPort, stPort, RHI_STATE_RENDER_TARGET},
                                     {dummy, stDummy, RHI_STATE_SHADER_READ}};
-        rhi_cmd_barrier(cl, pre, stDummy == RHI_STATE_SHADER_READ ? 3 : 4);
+        rhi_cmd_barrier(cl, pre, stDummy == RHI_STATE_SHADER_READ ? 4 : 5);
         stDummy = RHI_STATE_SHADER_READ;
 
         RhiRenderPassDesc rp = {0};
@@ -1455,9 +1837,11 @@ static int gpuTests(void)
         rhi_cmd_draw(cl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
         rhi_cmd_end_render_pass(cl);
 
-        for (int pass = 0; pass < 2; pass++) {
+        for (int pass = 0; pass < 3; pass++) {
             RhiRenderPassDesc dp = {0};
-            dp.color[0] = (RhiColorAttachment){pass ? imgRef : imgVu,
+            dp.color[0] = (RhiColorAttachment){pass == 2 ? imgPort
+                                               : pass    ? imgRef
+                                                         : imgVu,
                                                RHI_LOAD_CLEAR,
                                                {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
                                                RHI_STORE_STORE};
@@ -1477,10 +1861,37 @@ static int gpuTests(void)
                     rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
                     rhi_cmd_set_bind_group(cl, 1, g1Kick);
                     rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
-                } else if (nidx) {
+                } else if (nkept) {
                     rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
-                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
+                    rhi_cmd_draw_indexed(cl, (uint32_t)nkept, 0, 0, 1);
                 }
+            } else if (pass == 2) {
+                if (nidx > nkept) {
+                    rhi_cmd_set_pipeline(cl, pDraw[ci]);
+                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
+                    rhi_cmd_draw_indexed(cl, (uint32_t)(nidx - nkept), (uint32_t)nkept, 0, 1);
+                }
+            } else if (cr.ntri && c->prog == P_PARTICLE) {
+                /* sprite by sprite in order, the ones the port adds only
+                 * beside the 4:3 picture (scissored to each side) */
+                rhi_cmd_set_pipeline(cl, pSprite);
+                rhi_cmd_set_vertex_buffer(cl, 0, ring, OFF_SPRITE);
+                int x0, x1;
+                pictureTexels(c->wide, &x0, &x1);
+                const RhiRect all = {0, 0, RT, RT};
+                const RhiRect side[2] = {{0, 0, (uint32_t)x0, RT},
+                                         {x1, 0, (uint32_t)(RT - x1), RT}};
+                for (int j = 0; j < cr.ntri / 2; j++) {
+                    for (int h = 0; h < (cr.sideOnly[j] ? 2 : 1); h++) {
+                        const RhiRect *sc = cr.sideOnly[j] ? &side[h] : &all;
+                        if (sc->w == 0) {
+                            continue;
+                        }
+                        rhi_cmd_set_scissor(cl, sc);
+                        rhi_cmd_draw(cl, 6, (uint32_t)j * 6, 1);
+                    }
+                }
+                rhi_cmd_set_scissor(cl, &all);
             } else if (cr.ntri) {
                 rhi_cmd_set_pipeline(cl, pSprite);
                 rhi_cmd_set_vertex_buffer(cl, 0, ring, OFF_SPRITE);
@@ -1488,19 +1899,22 @@ static int gpuTests(void)
             }
             rhi_cmd_end_render_pass(cl);
         }
-        RhiTextureBarrier post[3] = {{probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+        RhiTextureBarrier post[4] = {{probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
-                                     {imgRef, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
-        rhi_cmd_barrier(cl, post, 3);
-        stProbe = stVu = stRef = RHI_STATE_COPY_SRC;
+                                     {imgRef, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                     {imgPort, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
+        rhi_cmd_barrier(cl, post, 4);
+        stProbe = stVu = stRef = stPort = RHI_STATE_COPY_SRC;
         rhi_end_commands(cl);
         rhi_submit(cl);
 
         static uint8_t pimg[ICO_VU_PROBE_FIELDS * MAXV * 4], a[RT * RT * 4], b[RT * RT * 4];
+        static uint8_t pa[RT * RT * 4];
         uint32_t ppitch = 0, pitch = 0;
         if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, pimg, sizeof(pimg), &ppitch) ||
             !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, a, sizeof(a), &pitch) ||
-            !rhi_readback_texture(imgRef, RHI_ASPECT_COLOR, b, sizeof(b), &pitch)) {
+            !rhi_readback_texture(imgRef, RHI_ASPECT_COLOR, b, sizeof(b), &pitch) ||
+            !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, pa, sizeof(pa), &pitch)) {
             FAILF("%s readback\n", c->name);
             break;
         }
@@ -1519,6 +1933,87 @@ static int gpuTests(void)
             statSet = 0;
         }
         vu1ref_set_wide_x(1.0f);
+        /* the triangles the region test drops: drawn beside the 4:3
+         * picture, clipped at the near plane, where the CPU puts them,
+         * unless a vertex is behind the eye; under the free camera
+         * everywhere */
+        if (nidx > nkept) {
+            int pbad = 0, held = 0;
+            const int pin =
+                checkPortTriangles(c, &cr, idx, nkept, nidx - nkept, pa, pitch, &pbad, &held);
+            int pcov = 0;
+            for (int i = 0; i < RT * RT; i++) {
+                pcov += pa[i * 4] != 16 || pa[i * 4 + 1] != 32 || pa[i * 4 + 2] != 48;
+            }
+            printf("  %-15s %2d triangles the VU drops: %4d pixels drawn, %4d clearly inside "
+                   "beside the picture, %4d inside it, %d mismatches\n",
+                   c->name, (nidx - nkept) / 3, pcov, pin, held, pbad);
+            if (pbad != 0) {
+                FAILF("%s: the dropped triangles drawn: %d pixels against the clipped polygons\n",
+                      c->name, pbad);
+            }
+            if (c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE) {
+                int eye = 0;
+                for (int i = nkept; i < nidx; i += 3) {
+                    eye += behindEye(&cr, (int)((idx[i] & ICO_VU_INDEX_MASK) >> 2));
+                }
+                /* pbad above: DEPART_EYE draws none of their pixels,
+                 * DEPART_EYE_FREE draws them clipped */
+                if (eye == 0) {
+                    FAILF("%s: no dropped triangle has a vertex behind the eye\n", c->name);
+                }
+            }
+            if (c->depart == DEPART_EYE_FREE && pin == 0) {
+                FAILF("%s: the free camera's triangles with a vertex behind the eye are not "
+                      "drawn\n",
+                      c->name);
+            }
+            /* pbad above: (a) nothing inside the 4:3 picture (at 4:3 the
+             * whole target), (b) beside it drawn, (c) one crossing its edge
+             * only beside; here, that each kind is there */
+            const int wide = c->wide != 1.0f;
+            if (c->depart == DEPART_BAND_IN && (held == 0 || pin != 0)) {
+                FAILF("%s: %d pixels inside the picture, %d beside: expected some, none\n", c->name,
+                      held, pin);
+            }
+            if (c->depart == DEPART_BAND_OUT && (pin == 0 || held != 0)) {
+                FAILF("%s: %d pixels beside the picture, %d inside: expected some, none\n", c->name,
+                      pin, held);
+            }
+            /* (the grid's one dropped triangle is a wedge thinner than a
+             * pixel there) */
+            if (c->depart == DEPART_NONE && wide && c->prog != P_MESH && (pin == 0 || held == 0)) {
+                FAILF("%s: %d pixels beside the picture, %d inside: a triangle across its "
+                      "edge expected\n",
+                      c->name, pin, held);
+            }
+            portIn += c->depart == DEPART_NONE ? pin : 0;
+            portHeld += c->depart == DEPART_NONE ? held : 0;
+        } else if (c->depart == DEPART_EYE || c->depart == DEPART_EYE_FREE ||
+                   c->depart == DEPART_BAND_IN || c->depart == DEPART_BAND_OUT) {
+            FAILF("%s: no triangle failed the region test\n", c->name);
+        }
+        if (c->prog == P_PARTICLE && c->depart != DEPART_NONE && !cr.shown[0]) {
+            FAILF("%s: particle 0 is not drawn by the port\n", c->name);
+        }
+        if (c->depart == DEPART_SPRITE && c->wide != 1.0f &&
+            (cr.sideTexels == 0 || cr.bandTexels == 0)) {
+            FAILF("%s: particle 0 does not cross the picture's edge (%d texels beside, %d "
+                  "inside)\n",
+                  c->name, cr.sideTexels, cr.bandTexels);
+        }
+        if (c->depart == DEPART_SPRITE_SIDE && (cr.sideTexels == 0 || cr.bandTexels != 0)) {
+            FAILF("%s: particle 0 is not beside the picture (%d texels beside, %d inside)\n",
+                  c->name, cr.sideTexels, cr.bandTexels);
+        }
+        if (c->depart == DEPART_SPRITE_FREE && cr.shown[1]) {
+            FAILF("%s: particle 1 behind the eye is drawn\n", c->name);
+        }
+        if ((c->depart == DEPART_SPRITE || c->depart == DEPART_SPRITE_SIDE ||
+             c->depart == DEPART_SPRITE_FREE) &&
+            ((cr.po.count > 0 && cr.po.s[0].index == 0) || !cr.shown[0])) {
+            FAILF("%s: particle 0 is not one only the port draws\n", c->name);
+        }
         int maxd = 0, covered = 0;
         int bad = compareImages(a, b, pitch, &maxd);
         for (int i = 0; i < RT * RT; i++) {
@@ -1545,6 +2040,11 @@ static int gpuTests(void)
                "covered, max diff %d %s\n",
                c->name, nvert, c->prog == P_PARTICLE ? cr.po.count * 2 : nidx / 3, cr.ntri, covered,
                maxd, failures == before ? "ok" : "FAILED");
+    }
+    if (portIn == 0 || portHeld == 0) {
+        FAILF("triangles past the region window: %d pixels drawn beside the picture, %d held "
+              "inside it\n",
+              portIn, portHeld);
     }
     for (int i = 0; i < 2; i++) {
         printf("  largest probe differences, reference rounding %s: X/Y %d/16 pixel, Z %.2g "

@@ -137,6 +137,12 @@ void rhi_wait_idle(void)
     dx_drain_messages();
 }
 
+void rhi_collect_garbage_now(void)
+{
+    rhi_wait_idle();
+    dx_destroy_garbage(dx_cur_frame());
+}
+
 /* ---------------------------------------------------------- command lists
  * Handle id: (frame tag << 20) | (list index + 1).  Each list has its own
  * allocator, so several can be recorded at once within a frame. */

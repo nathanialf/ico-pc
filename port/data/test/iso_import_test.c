@@ -238,6 +238,53 @@ static void checkNeed(void)
     CHECK(strcmp(ico_iso_ext_for("content://p/document/1234", NULL, 0), "iso") == 0,
           "ext: a name that says nothing");
     CHECK(strcmp(ico_iso_ext_for(NULL, NULL, 0), "iso") == 0, "ext: nothing known");
+    {
+        static const unsigned char sync[16] = {0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                                               0xff, 0xff, 0xff, 0x00, 0x00, 0x02, 0x00, 0x02};
+        static const unsigned char text[16] = {'F', 'I', 'L', 'E', ' ', '"', 'x', '"',
+                                               ' ', 'B', 'I', 'N', 'A', 'R', 'Y', '\n'};
+
+        CHECK(strcmp(ico_iso_ext_for(NULL, sync, sizeof(sync)), "bin") == 0,
+              "ext: a raw CD image's sync head");
+        CHECK(strcmp(ico_iso_ext_for("x.iso", sync, sizeof(sync)), "bin") == 0,
+              "ext: the sync head wins over the name");
+        CHECK(strcmp(ico_iso_ext_for(NULL, sync, 8), "iso") == 0,
+              "ext: eight bytes cannot show the sync");
+        CHECK(strcmp(ico_iso_ext_for("content://p/document/primary%3AIco_PAL.BIN", NULL, 0),
+                     "bin") == 0,
+              "ext: a .BIN name without a header");
+        CHECK(!ico_iso_is_cue(NULL, sync, sizeof(sync)), "cue: a raw image is not a sheet");
+        CHECK(!ico_iso_is_cue(NULL, iso, sizeof(iso)), "cue: an .iso head is not a sheet");
+        CHECK(ico_iso_is_cue("content://p/document/primary%3AIco_PAL.CUE", NULL, 0),
+              "cue: a .CUE name");
+        CHECK(ico_iso_is_cue("content://p/document/1234", text, sizeof(text)),
+              "cue: text starting FILE");
+        CHECK(ico_iso_is_cue(NULL, "rem GENRE", 9), "cue: text starting rem");
+        CHECK(ico_iso_is_cue(NULL,
+                             "\xEF\xBB\xBF"
+                             "FILE \"Ico.bin\" BINARY",
+                             24),
+              "cue: FILE after a UTF-8 byte order mark");
+        CHECK(ico_iso_is_cue("content://p/document/msf%3A1234", "TITLE \"ICO\"\r\n", 13),
+              "cue: text starting TITLE, a name that says nothing");
+        CHECK(ico_iso_is_cue(NULL, "\xEF\xBB\xBF\r\n  catalog 0000000000000", 28),
+              "cue: catalog after a byte order mark and a blank line");
+        CHECK(ico_iso_is_cue(NULL, "PERFORMER \"Sony\"", 16), "cue: text starting PERFORMER");
+        CHECK(ico_iso_is_cue(NULL, "\tCDTEXTFILE \"x.cdt\"", 19), "cue: CDTEXTFILE after a tab");
+        CHECK(ico_iso_is_cue(NULL, "SONGWRITER", 10), "cue: a command ending the bytes read");
+        {
+            static const char *const words[] = {"FLAGS DCP",       "INDEX 01 00:00:00",
+                                                "ISRC X",          "POSTGAP 00:02:00",
+                                                "PREGAP 00:02:00", "TRACK 01 MODE2/2352"};
+            for (size_t i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+                CHECK(ico_iso_is_cue(NULL, words[i], strlen(words[i])), "cue: text starting %s",
+                      words[i]);
+            }
+        }
+        CHECK(!ico_iso_is_cue(NULL, "FILES", 5), "cue: a longer word is not a command");
+        CHECK(!ico_iso_is_cue(NULL, "\xEF\xBB\xBF", 3), "cue: a byte order mark alone");
+        CHECK(!ico_iso_is_cue(NULL, "MComprHD", 8), "cue: a CHD header is not a sheet");
+    }
 }
 
 int main(int argc, char **argv)

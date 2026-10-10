@@ -18,7 +18,11 @@
  *   grid     a Mesh3D through prim_InitMesh3D / prim_UpdateMesh3D /
  *            prim_DispMesh3D (mesh code 20)
  *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
- *            batch keyed by its emitter
+ *            batch keyed by its emitter and the life of its slot: a new
+ *            emitter at a deleted one's address (prim_DeleteParticle) gets
+ *            a new count, and a live emitter drawn every tick keeps its
+ *            count while 8192 other emitters are stamped (three in four
+ *            deleted, the rest never drawn again)
  *   stretch  the prelit model named a full-screen title model
  *            (title_logo.c ico_title_stretch_model, stubbed): reg_DispObj
  *            records its draw with the stretch byte (b[3] 1, 0 for any
@@ -397,9 +401,53 @@ static void checkParticleRecording(void)
     CHECK(fd.st[0].ds.abe == 1, "PRIM 0xD6: ABE");
     /* keyed by its emitter (mc_HostParticleKey), so the
      * presenter matches it whatever other emitters draw before it */
-    const RdKey k = RD_KEY(s_part, 18, 0);
+    const RdKey k = RD_KEY(s_part, 18, prim_HostParticleGen(s_part));
     CHECK(fd.cmd[0]->keyLo == (uint32_t)k && fd.cmd[0]->keyHi == (uint32_t)(k >> 32),
           "the batch is keyed by its emitter (%08x%08x)", fd.cmd[0]->keyHi, fd.cmd[0]->keyLo);
+    /* a new emitter in the same slot (a one-shot effect freed, another
+     * created at its address) is stamped anew and so keyed differently:
+     * the presenter must not pair the two */
+    const unsigned int gen = prim_HostParticleGen(s_part);
+    prim_HostParticleStamp(s_part);
+    CHECK(gen != 0 && prim_HostParticleGen(s_part) != gen &&
+              RD_KEY(s_part, 18, prim_HostParticleGen(s_part)) != k,
+          "a reused emitter slot gets a fresh key (gen %u -> %u)", gen,
+          prim_HostParticleGen(s_part));
+    /* an emitter deleted and another created at its address: the count
+     * goes on from the deleted one's */
+    {
+        PrimParticle *e =
+            prim_InitParticleByPartition(4, 1.0f, 0.25f, 0.25f, 0, "testtex", 0, NULL);
+        CHECK(e != NULL, "a second emitter");
+        if (e != NULL) {
+            const unsigned int g1 = prim_HostParticleGen(e);
+            prim_DeleteParticle(e);
+            prim_HostParticleStamp(e); /* the next init at its address */
+            const unsigned int g2 = prim_HostParticleGen(e);
+            CHECK(g1 != 0 && g2 != 0 && g2 != g1,
+                  "stamp, delete, stamp: the count goes on (gen %u -> %u)", g1, g2);
+        }
+    }
+    /* a live emitter, drawn every tick, keeps its count while other
+     * emitters come and go: three in four deleted, the rest left in the
+     * table and never drawn (a partition freed whole), more than the table
+     * holds, every slot's run of probes filled many times over (the
+     * addresses are only hashed, never read) */
+    {
+        static __attribute__((aligned(16))) char fake[16 * 8192];
+        const unsigned int ga = prim_HostParticleGen(s_part);
+        int changed = 0;
+        for (int i = 0; i < 8192; i++) {
+            const PrimParticle *f = (const PrimParticle *)(const void *)(fake + 16 * i);
+            prim_HostParticleStamp(f);
+            if (i % 4 != 0) {
+                prim_HostParticleForget(f);
+            }
+            changed += prim_HostParticleGen(s_part) != ga;
+        }
+        CHECK(ga != 0 && changed == 0,
+              "a live emitter keeps its count (gen %u, changed on %d of 8192 ticks)", ga, changed);
+    }
 }
 
 /* ------------------------------------------------------ the reference */
@@ -761,6 +809,239 @@ static void stretchWidePixels(void)
     CHECK(w && b0 == 0 && b1 == WT - 1,
           "stretch 16:9: the wide plane covers both edge columns (columns %d..%d of %d)", b0, b1,
           WT);
+}
+
+/* ------------------------------------------------------ closing planes */
+/* rd_mesh.c markWideHidden and rd_replay.c vuWideParts: the top of the
+ * listed closing box (st08a_p4, four black corners of the list) as a mesh
+ * of its own, as the stage has it.
+ *   recording: its two triangles carry ICO_VU_INDEX_WIDE in the draw's
+ *     index list (the mesh's own list untouched) and the mesh is marked;
+ *     the same quad grey, or black but moved half a unit, is not; the
+ *     interpolation's copy of the list takes the mark with it
+ *   16:9: drawn inside the 4:3 picture it shows; beside it (GS X 2310..2378,
+ *     past the 4:3 picture's 2304 and inside the wide one's 2389) it does
+ *     not, while the grey and the moved quads there do; across the 4:3
+ *     picture's edge its part inside is the unmarked mesh's to the bit and
+ *     nothing of it shows beside
+ *   4:3: the marked and unmarked meshes' pictures are the same, byte for
+ *     byte, inside the picture and across its edge */
+
+static const uint32_t kBoxTop[4][3] = {{0xc518a521u, 0xc5696b2bu, 0xc431a218u},
+                                       {0xc4c78446u, 0xc5696b2bu, 0xc42abb35u},
+                                       {0xc518a521u, 0xc5696b2bu, 0xc4a092d2u},
+                                       {0xc4c78446u, 0xc5696b2bu, 0xc45c93adu}};
+
+static const char kClosingKey;
+
+/* the box's top as a prelit mesh of one strip, its colour rgb, x moved by
+   shift; unmark: the marks taken off (the mesh as it was before them) */
+static RdMesh closingMesh(const uint8_t rgb[3], float shift, int unmark)
+{
+    float qw[1 + 4 * 3][4];
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8000u | 4u; /* NLOOP 4, EOP */
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 4; k++) {
+        memcpy(qw[1 + k * 3], kBoxTop[k], 12);
+        qw[1 + k * 3][0] += shift;
+        qw[1 + k * 3][3] = 1.0f;
+        qw[2 + k * 3][0] = (float)(k & 1);
+        qw[2 + k * 3][2] = 1.0f;
+        qw[2 + k * 3][3] = k == 0 ? 0.0f : 1.0f; /* the strip starts at vertex 0 */
+        for (int i = 0; i < 4; i++) {
+            qw[3 + k * 3][i] = i < 3 ? (float)rgb[i] : 127.0f;
+        }
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 1 + 4 * 3;
+    md.qwPerVertex = RD_VU_QW_PRELIT;
+    md.batchCount = 1;
+    md.batches = &bd;
+    md.materialCount = 1;
+    md.debugName = "closing";
+    const RdMesh m = rd_create_vu_mesh(&md);
+    RdMeshRec *r = rd__mesh_rec(m.id);
+    CHECK(r != NULL, "closing planes: rd_create_vu_mesh");
+    if (r && unmark) {
+        free(r->drawIndex);
+        r->drawIndex = NULL;
+        r->wideHidden = 0;
+    }
+    return m;
+}
+
+static const uint8_t kClosingBlack[3] = {0, 0, 0}, kClosingGrey[3] = {90, 90, 90};
+
+static void closingPlaneChecks(void)
+{
+    const RdMesh black = closingMesh(kClosingBlack, 0.0f, 0);
+    const RdMesh grey = closingMesh(kClosingGrey, 0.0f, 0);
+    const RdMesh moved = closingMesh(kClosingBlack, 0.5f, 0);
+    RdMeshRec *a = rd__mesh_rec(black.id), *g = rd__mesh_rec(grey.id);
+    RdMeshRec *mv = rd__mesh_rec(moved.id);
+    if (!a || !g || !mv) {
+        return;
+    }
+    CHECK(a->indexCount == 6 && a->wideHidden && a->drawIndex != NULL,
+          "closing planes: the black box top is marked (%u indices, marked %u)", a->indexCount,
+          a->wideHidden);
+    for (uint32_t i = 0; a->drawIndex && i < a->indexCount; i++) {
+        CHECK(a->drawIndex[i] == (a->index[i] | ICO_VU_INDEX_WIDE) &&
+                  (a->index[i] & ICO_VU_INDEX_WIDE) == 0,
+              "closing planes: index %u is %08x in the draw's list, %08x in the mesh's", i,
+              a->drawIndex[i], a->index[i]);
+    }
+    CHECK(!g->wideHidden && !g->drawIndex, "closing planes: the grey quad is not marked");
+    CHECK(!mv->wideHidden && !mv->drawIndex, "closing planes: the moved black quad is not marked");
+    CHECK(rd__vu_mesh_copy_draw_index(g, a) && g->wideHidden && g->drawIndex &&
+              memcmp(g->drawIndex, a->drawIndex, 6 * 4) == 0,
+          "closing planes: a copy of the list takes the mark");
+    CHECK(rd__vu_mesh_copy_draw_index(g, mv) && !g->wideHidden && !g->drawIndex,
+          "closing planes: a copy of an unmarked list drops it");
+    rd_destroy_vu_mesh(black);
+    rd_destroy_vu_mesh(grey);
+    rd_destroy_vu_mesh(moved);
+}
+
+/* one frame: SCENE cleared grey, mesh m by code 32 at x = 0.08 x + tx,
+   y = 0.08 z + 2103 GS window coordinates (GS Z 16000) */
+static void closingDraw(RdMesh m, float tx)
+{
+    static const uint8_t grey[4] = {40, 40, 60, 0x80};
+    dl_Clear();
+    dl_SetDLPriority(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), grey, 1, 0);
+    rd_test_gs(RD_TEST_Z_GEQUAL);
+    rd_z_write(1);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_abe(0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_gouraud(1);
+    rd_texture_off();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    d.clip = RD_VU_CLIP_REGION;
+    d.vu.mem[16][0] = 0.08f;
+    d.vu.mem[18][1] = 0.08f;
+    d.vu.mem[19][0] = tx;
+    d.vu.mem[19][1] = 2103.0f;
+    d.vu.mem[19][2] = 1000.0f;
+    d.vu.mem[19][3] = 1.0f;
+    rd_draw_vu_mesh(m, &d, RD_KEY(&kClosingKey, 0, 32));
+    dl_Swap();
+}
+
+static uint8_t s_closingA[WT * 512 * 4], s_closingB[WT * 512 * 4];
+
+static int closingRead(uint8_t *img, uint32_t *w)
+{
+    uint32_t h = 0;
+    return rd__read_target(rd_target(RD_TARGET_SCENE), img, WT * 512 * 4, w, &h) && h == 512 &&
+           *w <= WT;
+}
+
+/* the texels drawn (not the grey clear) in columns x0..x1 - 1 */
+static int closingCount(const uint8_t *img, uint32_t w, int x0, int x1)
+{
+    int n = 0;
+    for (int y = 0; y < 512; y++) {
+        for (int x = x0 < 0 ? 0 : x0; x < x1 && x < (int)w; x++) {
+            const uint8_t *p = &img[((size_t)y * w + (size_t)x) * 4];
+            n += p[0] != 40 || p[1] != 40 || p[2] != 60;
+        }
+    }
+    return n;
+}
+
+#define CLOSING_IN 2196.0f     /* GS X 2000..2068: inside the 4:3 picture */
+#define CLOSING_BESIDE 2506.0f /* 2310..2378: beside it at 16:9 */
+#define CLOSING_ACROSS 2466.0f /* 2270..2338: across its right edge (2304) */
+
+static void closingPixels(int wide)
+{
+    const char *at = wide ? "16:9" : "4:3";
+    const RdMesh black = closingMesh(kClosingBlack, 0.0f, 0);
+    const RdMesh plain = closingMesh(kClosingBlack, 0.0f, 1);
+    const RdMesh grey = closingMesh(kClosingGrey, 0.0f, 0);
+    const RdMesh moved = closingMesh(kClosingBlack, 0.5f, 0);
+    const RdTargetRec *tc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    if (!tc) {
+        CHECK(0, "closing planes %s: SCENE has no record", at);
+        return;
+    }
+    /* the 4:3 picture's texels, as vuWideParts rounds them */
+    const float f = wide ? g_rd.wideX : 1.0f, c = (float)tc->w * 0.5f;
+    const int bx0 = (int)floorf((c - f * c) * tc->sx), bx1 = (int)ceilf((c + f * c) * tc->sx);
+    uint32_t wa = 0, wb = 0;
+    if (wide) {
+        CHECK(fabsf(f - 0.75f) < 1e-6f, "closing planes 16:9: the wide factor (%g)", (double)f);
+        closingDraw(black, CLOSING_IN);
+        const int okIn = closingRead(s_closingA, &wa);
+        const int in = okIn ? closingCount(s_closingA, wa, bx0, bx1) : 0;
+        const int inOut =
+            okIn ? closingCount(s_closingA, wa, 0, bx0) + closingCount(s_closingA, wa, bx1, (int)wa)
+                 : -1;
+        CHECK(okIn && in >= 1500 && inOut == 0,
+              "closing planes 16:9: inside the 4:3 picture it is drawn (%d texels, %d beside)", in,
+              inOut);
+        int beside[3];
+        const RdMesh which[3] = {black, grey, moved};
+        for (int i = 0; i < 3; i++) {
+            closingDraw(which[i], CLOSING_BESIDE);
+            beside[i] =
+                closingRead(s_closingA, &wa) ? closingCount(s_closingA, wa, 0, (int)wa) : -1;
+        }
+        printf("  closing planes 16:9: 4:3 picture texels %d..%d of %u; beside it: black box "
+               "%d texels, grey %d, moved %d\n",
+               bx0, bx1 - 1, wa, beside[0], beside[1], beside[2]);
+        CHECK(beside[0] == 0, "closing planes 16:9: beside the 4:3 picture it is not drawn (%d)",
+              beside[0]);
+        CHECK(beside[1] >= 1500 && beside[2] >= 1500,
+              "closing planes 16:9: the grey and the moved quads are drawn there (%d, %d)",
+              beside[1], beside[2]);
+        closingDraw(black, CLOSING_ACROSS);
+        const int okA = closingRead(s_closingA, &wa);
+        closingDraw(plain, CLOSING_ACROSS);
+        const int okB = closingRead(s_closingB, &wb);
+        int same = okA && okB && wa == wb;
+        for (int y = 0; same && y < 512; y++) {
+            same = memcmp(&s_closingA[(size_t)y * wa * 4], &s_closingB[(size_t)y * wb * 4],
+                          (size_t)bx1 * 4) == 0;
+        }
+        const int ina = okA ? closingCount(s_closingA, wa, bx0, bx1) : 0;
+        const int outa = okA ? closingCount(s_closingA, wa, bx1, (int)wa) : -1;
+        const int outb = okB ? closingCount(s_closingB, wb, bx1, (int)wb) : 0;
+        CHECK(same && ina >= 500 && outa == 0 && outb >= 500,
+              "closing planes 16:9: across the edge the part inside is the unmarked mesh's "
+              "(same %d, %d texels) and none beside (%d; unmarked %d)",
+              same, ina, outa, outb);
+    } else {
+        const float txs[2] = {CLOSING_IN, CLOSING_ACROSS};
+        for (int i = 0; i < 2; i++) {
+            closingDraw(black, txs[i]);
+            const int okA = closingRead(s_closingA, &wa);
+            closingDraw(plain, txs[i]);
+            const int okB = closingRead(s_closingB, &wb);
+            const int n = okA ? closingCount(s_closingA, wa, 0, (int)wa) : 0;
+            CHECK(okA && okB && wa == wb && n >= 500 &&
+                      memcmp(s_closingA, s_closingB, (size_t)wa * 512 * 4) == 0,
+                  "closing planes 4:3: the marked mesh's picture is the unmarked one's (%s, "
+                  "%d texels)",
+                  i == 0 ? "inside" : "across the edge", n);
+        }
+    }
+    rd_destroy_vu_mesh(black);
+    rd_destroy_vu_mesh(plain);
+    rd_destroy_vu_mesh(grey);
+    rd_destroy_vu_mesh(moved);
 }
 
 /* -------------------------------------------------------- strip order */
@@ -1564,6 +1845,7 @@ static void recordingChecks(void)
     recordParticles();
     checkParticleRecording();
     checkStretchRecording();
+    closingPlaneChecks();
     stripTableChecks();
     stripPacketChecks();
     modelPackChecks();
@@ -1623,6 +1905,7 @@ int main(int argc, char **argv)
         CHECK(found, "created pipeline %u (prog %u vs %u blend %u z %u/%u) is not enumerated", i,
               k->gs.program, k->vs, k->gs.blend, k->gs.ztst, k->gs.zwrite);
     }
+    closingPixels(0);
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
@@ -1640,6 +1923,7 @@ int main(int argc, char **argv)
         setup();
         buildScene();
         stretchWidePixels();
+        closingPixels(1);
         CHECK(rhi_vk_validation_error_count() == 0, "16:9: %u validation errors",
               rhi_vk_validation_error_count());
         rd_shutdown();

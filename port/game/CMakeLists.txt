@@ -76,7 +76,9 @@ endif()
 # The boot's card check and signs (ico2/common/src/kanbanBoot.c, compiled
 # into the test) for a first and a later boot: no reload of stage 1, no
 # gsResetFunc, no second card check, and the language and 60 Hz main.c sets
-# from the config in force throughout. CPU only.
+# from the config in force throughout; over stage 1's load, keep frames from
+# the check's start to the Sony sign's frame, at the start-up log's ticks.
+# CPU only.
 add_executable(kanban_boot_test test/kanban_boot_test.c ../platform/host_config.c)
 ico_include_dirs(common _ico_kanban_boot_incs)
 target_include_directories(kanban_boot_test PRIVATE ${_ico_kanban_boot_incs}
@@ -106,6 +108,30 @@ target_compile_options(hand_ik_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_L
 target_link_libraries(hand_ik_test PRIVATE ico_math ico_platform)
 if(ICO_RUN_TESTS)
     add_test(NAME hand_ik COMMAND hand_ik_test)
+endif()
+
+# The shadows' start in their pools: the generator's enemy kind
+# read from the setting its constructor is handed (ico2/omori/src/generator.c
+# compiled in, run through Generator_Call and GeneratorGeo), and with the disc
+# EN1 START's rise from that start through the game's motion decode
+# (motionFileManager.c, motionManager2.c); without the disc the rise part is
+# skipped and the generator part runs. CPU only.
+add_executable(shadow_spawn_test test/shadow_spawn_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/omori/src/generator.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionManager2.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/motionFileManager.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c")
+ico_include_dirs(omori _ico_shadow_spawn_incs)
+target_include_directories(shadow_spawn_test PRIVATE ${_ico_shadow_spawn_incs}
+    "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(shadow_spawn_test PRIVATE ${ICO_GAME_DEFINITIONS})
+target_compile_options(shadow_spawn_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(shadow_spawn_test PRIVATE ico_math ico_platform ico_port_data)
+if(ICO_RUN_TESTS)
+    add_test(NAME shadow_spawn COMMAND shadow_spawn_test "${ICO_DISC_IMAGE}")
 endif()
 
 # --- Achievements -----------------------------------

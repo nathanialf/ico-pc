@@ -518,6 +518,62 @@ static float gp_value(const IcoInputRaw *raw, int src)
     return ((src - ICO_GP_LX_NEG) & 1) ? (v > 0.0f ? v : 0.0f) : (v < 0.0f ? -v : 0.0f);
 }
 
+/* The target each gamepad source has in the shipped defaults (the [input.pad]
+   rows above), by ICO_GP_*; 0 for a source with none (the stick half-axes).
+   The menus go by these for the face buttons and d-pad (gp_menu_word). */
+static const unsigned int gp_default_target[ICO_GP_COUNT] = {
+    [ICO_GP_SOUTH] = ICO_PAD_CROSS,  [ICO_GP_EAST] = ICO_PAD_CIRCLE,
+    [ICO_GP_WEST] = ICO_PAD_SQUARE,  [ICO_GP_NORTH] = ICO_PAD_TRIANGLE,
+    [ICO_GP_BACK] = ICO_PAD_SELECT,  [ICO_GP_START] = ICO_PAD_START,
+    [ICO_GP_LSTICK] = ICO_PAD_L3,    [ICO_GP_RSTICK] = ICO_PAD_R3,
+    [ICO_GP_LSHOULDER] = ICO_PAD_L1, [ICO_GP_RSHOULDER] = ICO_PAD_R1,
+    [ICO_GP_DPUP] = ICO_PAD_UP,      [ICO_GP_DPDOWN] = ICO_PAD_DOWN,
+    [ICO_GP_DPLEFT] = ICO_PAD_LEFT,  [ICO_GP_DPRIGHT] = ICO_PAD_RIGHT,
+    [ICO_GP_LTRIGGER] = ICO_PAD_L2,  [ICO_GP_RTRIGGER] = ICO_PAD_R2,
+};
+
+unsigned int ico_bindings_gp_default_target(int src)
+{
+    return src > 0 && src < ICO_GP_COUNT ? gp_default_target[src] : 0;
+}
+
+/* the face buttons and the d-pad: what the menus keep by position */
+#define POSITIONAL_BITS                                                                            \
+    (ICO_PAD_CROSS | ICO_PAD_CIRCLE | ICO_PAD_SQUARE | ICO_PAD_TRIANGLE | ICO_PAD_UP |             \
+     ICO_PAD_DOWN | ICO_PAD_LEFT | ICO_PAD_RIGHT)
+
+/* The gamepad's buttons as the menus see them. Per source that is down: the
+   eight face and d-pad sources always mean their default target, whatever
+   they are bound to. Any other source bound to a face or d-pad target (a
+   shoulder swapped onto Cross, say) means its own default target, so a
+   shoulder still works in the menus and one press never makes two bits. A
+   source bound to anything else means that target, as in play. */
+static unsigned int gp_menu_word(const IcoInputRaw *raw, const IcoBindings *b)
+{
+    unsigned int menu = 0;
+    int s, t, i;
+
+    for (s = 1; s < ICO_GP_COUNT; s++) {
+        const unsigned int def = gp_default_target[s];
+
+        if (!(gp_value(raw, s) >= BUTTON_ON)) {
+            continue;
+        }
+        if (def & POSITIONAL_BITS) {
+            menu |= def;
+            continue;
+        }
+        for (t = 0; t < ICO_T_BUTTONS; t++) {
+            for (i = 0; i < ICO_BIND_MAX; i++) {
+                if (b->gp[t][i] == s) {
+                    menu |= ((1u << t) & POSITIONAL_BITS) ? def : (1u << t);
+                }
+            }
+        }
+    }
+    return menu;
+}
+
 static int gp_down(const IcoInputRaw *raw, const unsigned char *row)
 {
     int i;
@@ -732,6 +788,10 @@ void ico_bindings_step(IcoBindings *b, const IcoInputRaw *raw, IcoVirtualPad *ou
         }
     }
 
+    kb.menu_buttons = kb.buttons;
+    if (b->gamepad) {
+        gp.menu_buttons = gp_menu_word(raw, b);
+    }
     *out = gp;
     ico_vpad_merge(out, &kb);
 }

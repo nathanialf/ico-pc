@@ -271,11 +271,11 @@ static const char first_run_text[] =
     "version = 1\n"
     "\n"
     "[paths]\n"
-    "# The disc image, a .iso or a .chd; empty asks on the first start.\n"
+    "# The disc image, a .iso, .chd, .bin or .cue; empty asks on the first start.\n"
     "iso = \"\"\n"
 #ifdef __ANDROID__
     "# true keeps the copy of the disc image the first start makes in this\n"
-    "# folder (Ico_PAL.iso or .chd); false deletes it once the game is ready,\n"
+    "# folder (Ico_PAL.iso, .chd, .bin or .cue); false deletes it once the game is ready,\n"
     "# which gives its space back.\n"
     "keep_image = false\n"
 #endif

@@ -149,6 +149,7 @@ typedef enum UiStrId {
     UI_STR_REMAP_KEYBOARD,
     UI_STR_REMAP_GAMEPAD,
     UI_STR_REMAP_HINT,
+    UI_STR_REMAP_MENU_NOTE, /* Remap controls: the menus keep the gamepad's buttons by position */
     UI_STR_REMAP_PRESS,
     UI_STR_REMAP_RESET,
     /* Settings > Controls, the touch overlay's rows (shown
@@ -534,6 +535,8 @@ typedef enum UiStrId {
     UI_STR_VAL_BORDERLESS,
     /* Effects > Cinematic bars */
     UI_STR_OPT_EFFECT_CINEMATIC_BARS,
+    /* Effects > Full pixel */
+    UI_STR_OPT_FULL_PIXEL,
     /* Settings > Graphics driver (Android), Quit game */
     UI_STR_SECTION_GPU_DRIVER,
     UI_STR_OPT_GPU_DRIVER,

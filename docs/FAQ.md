@@ -40,6 +40,17 @@ the PS2 gives. [What each one does](OPTIONS.md#effects).
 
 (Asked for in [issue 11](https://github.com/nathanialf/ico-pc/issues/11).)
 
+## Why is there a thin black border around the picture?
+
+The PS2 itself drew a thin black border around the picture, a few dots wide
+at the sides and a little more at the top and bottom, and the game keeps
+it. To hide it, turn on **Full pixel (no border)** in **Options > Effects**.
+It shows the strip of picture the PS2 hid under the border, so the picture
+fills the box. Nothing is cut off or enlarged, and the picture stays as
+sharp as it is without the option. With Video mode at 50 Hz the strip at
+the top and bottom is a little taller.
+[What it does](OPTIONS.md#effects).
+
 ## Why does the CRT filter switch the picture back to the original resolution?
 
 The CRT filter draws the PS2's own picture dots with dark lines between
@@ -47,6 +58,16 @@ them, like a tube television. Drawn over a sharper picture, every tiny dot
 would get its own dark lines, and the whole screen would look like a fine
 mesh, a bit like looking through a screen door. So the filter keeps the
 original resolution on purpose. Texture packs still show through it.
+
+## Why did the movies show comb lines on moving edges?
+
+The movies on the disc are stored the way a TV shows them: each frame is
+two half-pictures, one made of the even lines and one of the odd lines,
+taken a moment apart. Shown together, anything that moves between the two
+gets jagged comb lines along its edges. The game now shows the two halves
+one after the other and fills in the missing lines of each, so moving
+edges stay smooth and still parts keep their full detail.
+(Reported in [issue 41](https://github.com/nathanialf/ico-pc/issues/41).)
 
 ## Where are my saves?
 
@@ -79,8 +100,8 @@ it.
 
 ## Which disc image works?
 
-Only the PAL version of ICO, numbered SCES-50760, as a `.iso` or `.chd`
-file. The US, Japanese and later editions do not work. If the image is not
+Only the PAL version of ICO, numbered SCES-50760, as a `.iso`, `.chd` or
+`.bin` file (a `.cue` file that points to the `.bin` works too). The US, Japanese and later editions do not work. If the image is not
 the right one, the game says so when you start it.
 
 ## How do I take a photo?

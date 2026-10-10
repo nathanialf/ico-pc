@@ -78,6 +78,57 @@
  *             linear scroll's unwrap put it half a repeat off at 0.25 and
  *             0.75); SET_UVOFFSET's quadword w marks V, the common block
  *             clears the mark
+ *   lights    the boy's lights in the dark hall (two F12 dumps), two of
+ *             which change slots between the ticks: on a skinned draw, a lit
+ *             mesh and a lit grid, every light's direction and colour at
+ *             alpha 0.5 lies between the two ticks' values of the same
+ *             light, and the shading of normals all round between the two
+ *             ticks' shading
+ *   instances still instances under one key, the first gone: each blends
+ *             with itself; one gone and one new: the two are paired, the
+ *             new one drawn as the tick's; moving instances pair by
+ *             ordinal; the pool's ripples (two F12 dumps' blocks) each stay
+ *             at their place
+ *   paired    a moved instance beside still ones under one key pairs with
+ *             its own draw (no draw unmatched while one of its key is
+ *             free); an emitter's batch count changing keeps every batch
+ *             paired or drawn; the camera turning 28 degrees: a mesh of the
+ *             tick before alone that left the picture is drawn at alpha
+ *             0.25, 0.5 and 0.75 where the blended camera sees it, one still
+ *             in the picture is not, nor one whose object and part the
+ *             current tick draws; with a still camera such a draw leaves the
+ *             frame byte for byte as it was
+ *   grid STs  a grid sampling a target blends its STs half way; a grid
+ *             with an image keeps the tick's
+ *   pool STs  pool.c's formula (rd.h rd_grid_screen_st) gives the STs of two
+ *             F12 dumps' pool grids at their camera (within the game's float
+ *             rounding); the camera backing away 60 units and turning 8
+ *             degrees, the grids with the formula have its STs through the
+ *             blended camera at alpha 0.25, 0.5 and 0.75, not the blend of
+ *             the ticks' STs; the camera still, they are byte for byte the
+ *             grids without it
+ *   sea       the old bridge's sea (v2277): with both lists on the frame
+ *             head's half pixel the wave layer sea_ud_far1 stays in front of
+ *             the grey layer umi by the blended camera's gap at alpha 0.25,
+ *             0.5 and 0.75, matched and drawn as the tick's; half a pixel
+ *             apart (the replay before) umi was in front
+ *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
+ *             degrees in the tick (a shadow climbing out of its pool, its
+ *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
+ *             0.75 it blends as a rotation, the bone's origin stays between
+ *             the ticks' heights and the skin's centroid on the line between
+ *             its two places
+ *   locked    the camera backs away 60 units and turns 8 degrees in the
+ *             tick: at alpha 0.25 and 0.5 a part locked to the camera (node
+ *             flag 2, RD_VU_VIEW_LOCKED: the 500 unit screen times its place
+ *             in view space, as reg_setMMatrixPacket builds it), matched or
+ *             the tick's alone, stays where the tick put it on the screen;
+ *             a billboard (node flag 4, RD_VU_VIEW_FACING), matched or the
+ *             tick's alone, is where the blended camera sees its world
+ *             point and faces that camera (no turn about the view's axes);
+ *             the same locked part of the tick alone recorded as a world
+ *             object (the re-base before node flags reached it) is carried
+ *             behind the eye or off the screen
  */
 #include <math.h>
 #include <stdio.h>
@@ -1653,6 +1704,133 @@ static void testRotationDraws(void)
           "a 150 degree turn in a tick keeps the tick's bone");
 }
 
+/* A shadow coming out of its pool: the root climbs up to 13
+ * units a tick in EN1 START (shadow_spawn_test's rise) while the hips
+ * turn.  A skinned draw whose bone 0 rises 40 units (Y down: 100 to 60) and
+ * turns 30 degrees about x in the tick, its three vertices at (0, -100, 0),
+ * (10, -100, 0) and (0, -90, 0), so the bone's pivot (their centroid) is
+ * 97 units from its origin. */
+static RdMesh makeRisingSkinMesh(void)
+{
+    static float qw[1 + 3 * 5][4];
+    static const float pos[3][3] = {
+        {0.0f, -100.0f, 0.0f}, {10.0f, -100.0f, 0.0f}, {0.0f, -90.0f, 0.0f}};
+    memset(qw, 0, sizeof(qw));
+    const uint32_t tag = 0x8003u;
+    memcpy(&qw[0][0], &tag, 4);
+    for (int k = 0; k < 3; k++) {
+        qw[1 + k * 5][0] = pos[k][0];
+        qw[1 + k * 5][1] = pos[k][1];
+        qw[1 + k * 5][2] = pos[k][2];
+        qw[1 + k * 5][3] = 1.0f;
+        qw[1 + k * 5 + 3][3] = k == 0 ? 0.0f : 1.0f; /* ST.w: the strip flag */
+        const uint32_t addr = 16u;                   /* bone 0, weight 1 */
+        memcpy(&qw[1 + k * 5 + 2][0], &addr, 4);
+        qw[1 + k * 5 + 2][1] = 1.0f;
+        memcpy(&qw[1 + k * 5 + 2][2], &addr, 4);
+    }
+    const RdVuBatchDesc bd = {0, 0, 0};
+    RdVuMeshDesc md;
+    memset(&md, 0, sizeof(md));
+    md.qw = (const float (*)[4])qw;
+    md.qwCount = 16;
+    md.qwPerVertex = RD_VU_QW_SKIN;
+    md.batchCount = 1;
+    md.batches = &bd;
+    return rd_create_vu_mesh(&md);
+}
+
+/* bone 0 of the rising draw: turned deg about x, its origin at (5, y, -20) */
+static void risingBone(float (*b)[4], double deg, double y)
+{
+    const double a = deg * 3.14159265358979323846 / 180.0;
+    memset(b, 0, 16 * sizeof(float));
+    b[0][0] = 1.0f;
+    b[1][1] = (float)cos(a);
+    b[1][2] = (float)sin(a);
+    b[2][1] = (float)-sin(a);
+    b[2][2] = (float)cos(a);
+    b[3][0] = 5.0f;
+    b[3][1] = (float)y;
+    b[3][2] = -20.0f;
+    b[3][3] = 1.0f;
+}
+
+static void recordRise(RdMesh skin, double deg, double y)
+{
+    rd_begin_frame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    static float bone[4][4];
+    risingBone(bone, deg, y);
+    d.prog = RD_PROG_SKIN;
+    d.code = 24;
+    d.bones = (const float (*)[4])bone;
+    d.boneQw = 4;
+    rd_select_list(0);
+    rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjE, 2, 24));
+    rd_end_frame(0);
+}
+
+/* p's image through the bone b (column-major rows: b[3] the origin) */
+static void boneApply(const float (*b)[4], const double p[3], double o[3])
+{
+    for (int r = 0; r < 3; r++) {
+        o[r] = b[0][r] * p[0] + b[1][r] * p[1] + b[2][r] * p[2] + b[3][r];
+    }
+}
+
+static void testRisingBone(void)
+{
+    RdMesh skin = makeRisingSkinMesh();
+    const double pivot[3] = {10.0 / 3.0, -290.0 / 3.0, 0.0};
+    float bp[4][4], bc[4][4];
+    double ip[3], ic[3];
+    risingBone(bp, 0.0, 100.0);
+    risingBone(bc, 30.0, 60.0);
+    boneApply((const float (*)[4])bp, pivot, ip);
+    boneApply((const float (*)[4])bc, pivot, ic);
+    recordRise(skin, 0.0, 100.0);
+    recordRise(skin, 30.0, 60.0);
+    static const float alphas[3] = {0.25f, 0.5f, 0.75f};
+    for (int i = 0; i < 3; i++) {
+        const float t = alphas[i];
+        const RdInterpStats *st = build(t, 1);
+        CHECK(st->rotated == 1 && st->jump == 0,
+              "alpha %.2f: the bone blends as a rotation, "
+              "no jump (%u rotated, %u jumped)",
+              t, st->rotated, st->jump);
+        const RdFrame *f = built(t);
+        const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjE, 2, 24), 0);
+        if (!sk) {
+            CHECK(0, "alpha %.2f: the rising draw", t);
+            continue;
+        }
+        const float (*b)[4] = (const float (*)[4])(
+            const void *)(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+        double im[3];
+        boneApply(b, pivot, im);
+        const double want[3] = {ip[0] + (ic[0] - ip[0]) * t, ip[1] + (ic[1] - ip[1]) * t,
+                                ip[2] + (ic[2] - ip[2]) * t};
+        CHECK(b[3][1] <= 100.0f + 1e-3f && b[3][1] >= 60.0f - 1e-3f,
+              "alpha %.2f: the bone's origin at Y %.4f, outside the ticks' 100 and 60", t, b[3][1]);
+        CHECK(fabs(im[0] - want[0]) < 1e-3 && fabs(im[1] - want[1]) < 1e-3 &&
+                  fabs(im[2] - want[2]) < 1e-3,
+              "alpha %.2f: the skin's centroid at %.4f %.4f %.4f, want %.4f %.4f %.4f on the "
+              "line between the ticks",
+              t, im[0], im[1], im[2], want[0], want[1], want[2]);
+        printf("rd_interp_test: rising bone at alpha %.2f: origin Y %.4f, centroid Y %.4f "
+               "(ticks %.4f and %.4f)\n",
+               t, b[3][1], im[1], ip[1], ic[1]);
+    }
+}
+
 /* ---------------------------------------------------- the blended camera */
 
 static void mul4(const double *a, const double *b, double *o)
@@ -1963,6 +2141,208 @@ static void testCameraBlend(void)
     const float (*mc)[4] = vuBlock(cf, findKey(cf, 0, RD_KEY(&kObjS6, 1, 32), 0));
     CHECK(st->rebased == 0 && mo && mc && memcmp(mo, mc, 36 * 16) == 0,
           "still camera: nothing re-based, the unmatched mesh is the tick's (%u)", st->rebased);
+}
+
+/* ------------------------------------------- parts that follow the camera */
+
+static const char kObjLk;
+
+/* a prelit draw of mesh with the common block of the camera v (world to
+ * screen q v, the inverse view), the model matrices m16 (qw 16..19 and
+ * 20..23) and m24, view RD_VU_VIEW_* */
+static void lockDraw(RdMesh mesh, const double *q, const double *v, const double *m16,
+                     const double *m24, uint8_t view, RdKey key)
+{
+    double s[16], iv[16];
+    mul4(q, v, s);
+    memset(iv, 0, sizeof(iv));
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            iv[c * 4 + r] = v[r * 4 + c];
+        }
+    }
+    for (int r = 0; r < 3; r++) {
+        iv[12 + r] = -(iv[r] * v[12] + iv[4 + r] * v[13] + iv[8 + r] * v[14]);
+    }
+    iv[15] = 1.0;
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    d.clip = RD_VU_CLIP_NONE;
+    d.view = view;
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
+            d.vu.mem[12 + c][r] = (float)iv[c * 4 + r];
+            d.vu.mem[16 + c][r] = (float)m16[c * 4 + r];
+            d.vu.mem[20 + c][r] = (float)m16[c * 4 + r];
+            d.vu.mem[24 + c][r] = (float)m24[c * 4 + r];
+        }
+    }
+    rd_select_list(0);
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+#define LOCK_ZOOM 512.0 /* the screen matrix's focal length (GsBase.c vs[0]) */
+
+static const double kLockPlace[2][3] = {{10.0, 0.0, 30.0}, {-15.0, 5.0, 20.0}}; /* view space */
+
+static const double kLockWorld[2][3] = {{100.0, 0.0, 300.0}, {-80.0, 20.0, 250.0}}; /* world */
+
+/* the two ticks' cameras: the eye backs away 60 units, the view turns 8
+ * degrees (under the cut thresholds, RD_INTERP_CAMERA_MOVE and _TURN) */
+static void lockCamera(double t, double *v)
+{
+    const double eye[3] = {0.0, 0.0, -60.0 * t};
+    s6View(8.0 * t, eye, v);
+}
+
+/* the screen matrix at focal length f (s6Proj's) */
+static void lockProj(double f, double *p)
+{
+    const double keep = s6Focal;
+    s6Focal = f;
+    s6Proj(p);
+    s6Focal = keep;
+}
+
+/* a billboard at the world point o seen through v: q T(v o) x 20 */
+static void lockBillboard(const double *q, const double *v, const double o[3], double *m16,
+                          double *x)
+{
+    double vo[3];
+    for (int r = 0; r < 3; r++) {
+        vo[r] = v[r] * o[0] + v[4 + r] * o[1] + v[8 + r] * o[2] + v[12 + r];
+    }
+    s6Translate(x, vo[0], vo[1], vo[2]);
+    x[0] = x[5] = x[10] = 20.0;
+    mul4(q, x, m16);
+}
+
+/* tick k (0, 1): the locked part (part 0) and the billboard (part 1) in
+ * both ticks; in tick 1 a second locked part (2) and billboard (3) of that
+ * tick only, and the first locked part again recorded as a world object of
+ * that tick only (part 4: a matched pair of it would land within a fraction
+ * of a pixel, the two ticks' errors cancelling in the blend; the tick's
+ * alone is cur's object through the blended camera) */
+static void lockFrame(RdMesh mesh, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], f[16];
+    lockCamera((double)k, v);
+    lockProj(LOCK_ZOOM, q);
+    lockProj(500.0, f); /* +0x640: the 500 unit screen */
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    double l[16], m[16], x[16], stale[16];
+    s6Translate(stale, 0.0, 0.0, 0.0); /* +0x80 x +0x40, another draw's */
+    for (int n = 0; n < (k ? 2 : 1); n++) {
+        s6Translate(l, kLockPlace[n][0], kLockPlace[n][1], kLockPlace[n][2]);
+        mul4(f, l, m);
+        lockDraw(mesh, q, v, m, stale, RD_VU_VIEW_LOCKED, RD_KEY(&kObjLk, n * 2, 0));
+        if (n == 0 && k) {
+            lockDraw(mesh, q, v, m, stale, RD_VU_VIEW_WORLD, RD_KEY(&kObjLk, 4, 0));
+        }
+        lockBillboard(q, v, kLockWorld[n], m, x);
+        lockDraw(mesh, q, v, m, x, RD_VU_VIEW_FACING, RD_KEY(&kObjLk, n * 2 + 1, 0));
+    }
+    rd_end_frame(0);
+}
+
+/* the model origin through a block's qw 16..19: GS X, Y and w */
+static void lockOrigin(const float (*m)[4], double out[3])
+{
+    const float *c = m[19];
+    out[0] = c[0] / c[3];
+    out[1] = c[1] / c[3];
+    out[2] = c[3];
+}
+
+/* a billboard's turn about the view's y axis in degrees: its x axis (qw 16)
+ * through the screen matrix q of focal length f is (f x + 2048 z, 0, z, z) */
+static double lockTilt(const float (*m)[4], double f)
+{
+    const double z = m[16][3], x = (m[16][0] - 2048.0 * z) / f;
+    return atan2(z, x) * 180.0 / 3.14159265358979323846;
+}
+
+static void testCameraLocked(void)
+{
+    RdMesh mesh = makeMesh();
+    double f[16], q[16];
+    lockProj(500.0, f);
+    lockProj(LOCK_ZOOM, q);
+    static const float kAlphas[2] = {0.25f, 0.5f};
+    for (int a = 0; a < 2; a++) {
+        const float t = kAlphas[a];
+        lockFrame(mesh, 0);
+        lockFrame(mesh, 1);
+        const RdInterpStats *st = build(t, 1);
+        CHECK(st->snap == RD_SNAP_NONE, "locked %.2f: the pair blends (snap %u)", (double)t,
+              st->snap);
+        const RdFrame *o = built(t);
+        double vt[16];
+        lockCamera((double)t, vt); /* the blended camera: the turn and the eye's step at t */
+        for (int n = 0; n < 2; n++) {
+            /* the locked part: where the tick put it */
+            const float (*m)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, n * 2, 0), 0));
+            double l[16], fl[16], want[2], got[3];
+            s6Translate(l, kLockPlace[n][0], kLockPlace[n][1], kLockPlace[n][2]);
+            mul4(f, l, fl);
+            s6Project(fl, (const double[3]){0.0, 0.0, 0.0}, want);
+            if (m) {
+                lockOrigin(m, got);
+                CHECK(got[2] > 0.0 && hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
+                      "locked %.2f: the %s part at the tick's place on the screen (%.3f, %.3f; "
+                      "want %.3f, %.3f; w %.2f)",
+                      (double)t, n ? "tick's own" : "matched", got[0], got[1], want[0], want[1],
+                      got[2]);
+            } else {
+                CHECK(0, "locked %.2f: locked part %d drawn", (double)t, n);
+            }
+            /* the billboard: its world point through the blended camera,
+             * facing that camera */
+            const float (*b)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, n * 2 + 1, 0), 0));
+            double qv[16], wp[2];
+            mul4(q, vt, qv);
+            s6Project(qv, kLockWorld[n], wp);
+            if (b) {
+                lockOrigin(b, got);
+                const double tilt = lockTilt(b, LOCK_ZOOM);
+                CHECK(hypot(got[0] - wp[0], got[1] - wp[1]) < 0.01 && fabs(tilt) < 1e-3,
+                      "locked %.2f: the %s billboard at its world point (%.3f, want %.3f) facing "
+                      "the blended camera (turned %.4f degrees)",
+                      (double)t, n ? "tick's own" : "matched", got[0], wp[0], tilt);
+            } else {
+                CHECK(0, "locked %.2f: billboard %d drawn", (double)t, n);
+            }
+        }
+        /* the same locked part, the tick's alone, taken for a world object
+         * is carried with the blended camera: behind the eye at 0.25 (w
+         * -14), at GS X 6224 at 0.5 */
+        const float (*w)[4] = vuBlock(o, findKey(o, 0, RD_KEY(&kObjLk, 4, 0), 0));
+        if (w) {
+            double l[16], fl[16], want[2], got[3];
+            s6Translate(l, kLockPlace[0][0], kLockPlace[0][1], kLockPlace[0][2]);
+            mul4(f, l, fl);
+            s6Project(fl, (const double[3]){0.0, 0.0, 0.0}, want);
+            lockOrigin(w, got);
+            CHECK(!(got[2] > 0.0) || hypot(got[0] - want[0], got[1] - want[1]) > 5.0,
+                  "locked %.2f: as a world object the part leaves its place (%.3f, w %.2f; the "
+                  "tick's %.3f)",
+                  (double)t, got[0], got[2], want[0]);
+        } else {
+            CHECK(0, "locked %.2f: the world copy drawn", (double)t);
+        }
+    }
 }
 
 /* ------------------------------------------------------------ photo mode */
@@ -2711,11 +3091,2263 @@ static void testSineScroll(void)
     rd_end_frame(0);
 }
 
+/* ------------------------------------------------ the near lights' slots */
+
+static const char kObjN, kObjR, kObjG;
+
+/* The boy's lights in the dark hall: qw 28..35 of the VU block of boymodel
+ * (SKINNED, key 016f5fd1fb600000, prog 5, code 24, list 0) in the F12 dumps
+ * frame-20261009-083248-v13836 and -v13847.  Light 0 is the torch; lights
+ * A (direction (+0.151, -0.531, +0.834), grey 0.252) and B ((+0.947,
+ * -0.251, -0.200), colour (0.238, 0.205, 0.178) then (0.292, 0.252,
+ * 0.219)) are in slots 1 and 2 in the first and in slots 2 and 1 in the
+ * second (Light.c light_getNearLight orders them by strength). */
+static const float kHallLights[2][8][4] = {
+    {{-0.739586651f, 0.150836766f, 0.947048664f, 0.0f},
+     {-0.526257157f, -0.531259656f, -0.251055896f, 0.0f},
+     {-0.419600993f, 0.833673537f, -0.20017457f, 0.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.672120154f, 0.579868317f, 0.503431141f, 1.0f},
+     {0.252478987f, 0.252478987f, 0.252478987f, 1.0f},
+     {0.238166645f, 0.205477074f, 0.178391472f, 1.0f},
+     {0.478431344f, 0.505882323f, 0.521568596f, 1.0f}},
+    {{-0.739988029f, 0.946839809f, 0.150774419f, 0.0f},
+     {-0.52592051f, -0.251541257f, -0.531289577f, 0.0f},
+     {-0.419315368f, -0.200553343f, 0.833665729f, 0.0f},
+     {0.0f, 0.0f, 0.0f, 1.0f},
+     {0.822243273f, 0.709386289f, 0.615876257f, 1.0f},
+     {0.29238373f, 0.252252609f, 0.219001129f, 1.0f},
+     {0.252479583f, 0.252479583f, 0.252479583f, 1.0f},
+     {0.478431344f, 0.505882323f, 0.521568596f, 1.0f}},
+};
+
+/* the hall's lights k on a skinned draw (prog 5, code 24, one bone at
+ * rest), a lit mesh (normal_l) and a lit grid (code 22), still */
+static void recordHallLights(RdMesh mesh, RdMesh skin, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    memcpy(d.vu.mem[28], kHallLights[k], sizeof(kHallLights[k]));
+    static float bone[4][4];
+    identity(bone, 0);
+    d.prog = RD_PROG_SKIN_SPEC;
+    d.code = 24;
+    d.bones = (const float (*)[4])bone;
+    d.boneQw = 4;
+    rd_select_list(0);
+    rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjN, 0, 24));
+    d.prog = RD_PROG_LIT;
+    d.code = 32;
+    d.bones = NULL;
+    d.boneQw = 0;
+    rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjN, 1, 32));
+    /* one strip of 3 lit vertices: VIF qword, tag, colour, 3 x (pos,
+     * normal, ST), MSCNT */
+    static float g[3 * 3 + 4][4];
+    memset(g, 0, sizeof(g));
+    g[1][0] = 7.0f;
+    g[2][0] = g[2][1] = g[2][2] = 128.0f;
+    for (int v = 0; v < 3; v++) {
+        g[3 + v * 3][0] = (float)(v * 10);
+        g[3 + v * 3][3] = 1.0f;
+        g[4 + v * 3][1] = 1.0f;
+        g[5 + v * 3][0] = 0.5f;
+    }
+    RdVuGridDraw gd;
+    memset(&gd, 0, sizeof(gd));
+    gd.qw = (const float (*)[4])g;
+    gd.strips = 1;
+    gd.stripLen = 3;
+    gd.lit = 1;
+    gd.code = 22;
+    gd.vu = d.vu;
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjN, 2, 22));
+    rd_end_frame(0);
+}
+
+/* normal_l's and cluster's colour for the unit normal n (vu_skin.hlsl,
+ * vu_lit.hlsl: c = L2 max0(L1 n) with the ambient column) */
+/* the shader's lighting of normal n from eight rows: L1's four rows (qw
+ * 28..31) then L2's four (qw 32..35); a VU block is passed as block + 28 */
+static void lightShade(const float (*m)[4], const double n[3], double out[3])
+{
+    double l[3];
+    for (int i = 0; i < 3; i++) {
+        const double v = m[0][i] * n[0] + m[1][i] * n[1] + m[2][i] * n[2] + m[3][i];
+        l[i] = v > 0.0 ? v : 0.0;
+    }
+    for (int ch = 0; ch < 3; ch++) {
+        out[ch] = m[4][ch] * l[0] + m[5][ch] * l[1] + m[6][ch] * l[2] + m[7][ch];
+    }
+}
+
+static bool within(double v, double a, double b, double tol)
+{
+    return v >= fmin(a, b) - tol && v <= fmax(a, b) + tol;
+}
+
+static void testLightSlots(void)
+{
+    RdMesh mesh = makeMesh(), skin = makeSkinMesh();
+    recordHallLights(mesh, skin, 0);
+    recordHallLights(mesh, skin, 1);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->lerped == 3 && st->lightPaired == 3,
+          "the skinned draw, the lit mesh and the lit grid blend with their lights re-paired "
+          "(lerped %u, re-paired %u)",
+          st->lerped, st->lightPaired);
+    const RdFrame *f = built(0.5f);
+    const RdKey keys[3] = {RD_KEY(&kObjN, 0, 24), RD_KEY(&kObjN, 1, 32), RD_KEY(&kObjN, 2, 22)};
+    const int same[3] = {0, 2, 1}; /* cur's slot i is prev's slot same[i] */
+    const float (*p)[4] = kHallLights[0], (*c)[4] = kHallLights[1];
+    for (int d = 0; d < 3; d++) {
+        const float (*m)[4] = vuBlock(f, findKey(f, 0, keys[d], 0));
+        if (!m) {
+            CHECK(0, "the lit draw %d", d);
+            continue;
+        }
+        int rows = 0;
+        for (int i = 0; i < 3; i++) {
+            for (int k = 0; k < 4; k++) {
+                /* L1's row i (qw 28..31 element i) and L2's column i */
+                rows += within(m[28 + k][i], p[k][same[i]], c[k][i], 1e-6) &&
+                        within(m[32 + i][k], p[4 + same[i]][k], c[4 + i][k], 1e-6);
+            }
+        }
+        CHECK(rows == 12,
+              "draw %d: every light's direction and colour lies between the two ticks' values of "
+              "the same light (%d of 12)",
+              d, rows);
+        /* the shading of normals all round stays between the two ticks' */
+        double worst = 0.0;
+        int out = 0;
+        for (int a = 0; a < 360; a += 10) {
+            for (int b = -80; b <= 80; b += 10) {
+                const double ra = a * 3.14159265358979323846 / 180.0;
+                const double rb = b * 3.14159265358979323846 / 180.0;
+                const double n[3] = {cos(rb) * cos(ra), sin(rb), cos(rb) * sin(ra)};
+                double sp[3], sc[3], so[3];
+                lightShade(p, n, sp);
+                lightShade(c, n, sc);
+                lightShade(m + 28, n, so);
+                for (int ch = 0; ch < 3; ch++) {
+                    const double lo = fmin(sp[ch], sc[ch]);
+                    if (!within(so[ch], sp[ch], sc[ch], 1e-4 + 1e-3 * fmax(sp[ch], sc[ch]))) {
+                        out++;
+                        if (lo > 0.0 && (lo - so[ch]) / lo > worst) {
+                            worst = (lo - so[ch]) / lo;
+                        }
+                    }
+                }
+            }
+        }
+        CHECK(out == 0,
+              "draw %d: the half-way shading stays between the two ticks' (%d channels out, the "
+              "darkest %.1f %% under)",
+              d, out, worst * 100.0);
+        if (d == 0) {
+            printf("rd_interp_test: hall lights at alpha 0.5: %d shaded channels outside the two "
+                   "ticks' range\n",
+                   out);
+        }
+    }
+    /* recorded in the same order: nothing to re-pair */
+    recordHallLights(mesh, skin, 1);
+    recordHallLights(mesh, skin, 1);
+    st = build(0.5f, 1);
+    CHECK(st->lightPaired == 0, "lights in the same slots stay (%u)", st->lightPaired);
+    rd_destroy_vu_mesh(mesh);
+    rd_destroy_vu_mesh(skin);
+}
+
+/* ------------------------------------------------- same-key instances */
+
+/* a still prelit instance at world x (S identity: the origin is qw 19) */
+static void instanceAt(RdMesh mesh, float x, RdKey key)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    identity(d.vu.mem, 4);
+    identity(d.vu.mem, 12);
+    identity(d.vu.mem, 16);
+    identity(d.vu.mem, 20);
+    identity(d.vu.mem, 24);
+    d.vu.mem[19][0] = d.vu.mem[23][0] = d.vu.mem[27][0] = x;
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+static void instanceFrame(RdMesh mesh, const float *xs, int n)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < n; i++) {
+        instanceAt(mesh, xs[i], RD_KEY(&kObjR, 0, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* the blended x of the n-th instance */
+static float instanceX(const RdFrame *f, int nth)
+{
+    const float (*m)[4] = vuBlock(f, findKey(f, 5, RD_KEY(&kObjR, 0, 34), nth));
+    return m ? m[19][0] : -1.0e9f;
+}
+
+/* The pool's ripples (hamon, list 5, key 016f5fc525f00100, prog 0 code 34)
+ * in the F12 dumps frame-20261009-083502-v21878 and -083503-v21889, six
+ * ticks apart: the common block's world to screen (qw 4..7) and each
+ * instance's model to screen (qw 16..19).  The ripples stand still and grow;
+ * in the second the oldest (world x 971.5) is gone and a new one of scale 0
+ * (x 1093.8) is the last, so by ordinal each would blend from the place of
+ * the one before it (12 to 55 units away). */
+static const float kPoolS[2][16] = {
+    {1981.80237f, 1517.66699f, -3606.70361f, 0.880751312f, 816.943115f, 1501.67151f, -1633.49951f,
+     0.398898005f, -92.4732056f, 439.468201f, -1044.38696f, 0.255037636f, -818977.938f, -836864.25f,
+     1.074736e+09f, -240.81897f},
+    {1983.39221f, 1529.83594f, -3628.23999f, 0.886010468f, 809.374817f, 1495.43274f, -1618.36658f,
+     0.395202547f, -121.36026f, 418.298096f, -992.057922f, 0.242258981f, -831610.0f, -847413.25f,
+     1.07476006e+09f, -246.694855f},
+};
+
+static const float kPoolM[2][5][16] = {
+    {{1874.01575f, 902.704102f, -2145.25732f, 0.523868442f, 1126.32007f, 2070.35547f, -2252.10693f,
+      0.549960971f, 2003.4657f, 1996.24194f, -4744.02686f, 1.15848386f, 1844667.25f, 1969408.75f,
+      1.06980672e+09f, 962.892334f},
+     {2001.3844f, 1097.10242f, -2607.24097f, 0.63668412f, 1055.20361f, 1939.6322f, -2109.90771f,
+      0.515236139f, 1606.77881f, 1726.98633f, -4104.14648f, 1.00222611f, 1899899.75f, 1997198.5f,
+      1.06974067e+09f, 979.019531f},
+     {1818.97156f, 1047.61047f, -2489.62451f, 0.60796237f, 912.326721f, 1677.00183f, -1824.22168f,
+      0.445472032f, 1266.85815f, 1425.10852f, -3386.74048f, 0.827036619f, 1915560.0f, 2004579.5f,
+      1.06972314e+09f, 983.302979f},
+     {1005.3338f, 583.225281f, -1386.02258f, 0.338464528f, 498.67334f, 916.640991f, -997.110596f,
+      0.243492842f, 678.531738f, 769.373413f, -1828.39978f, 0.446492314f, 2005382.75f, 2056413.0f,
+      1.0696e+09f, 1013.38379f},
+     {262.342651f, 144.094528f, -342.437622f, 0.0836227238f, 132.216156f, 243.034348f, -264.36972f,
+      0.0645586699f, 215.981873f, 232.509155f, -552.553101f, 0.134932593f, 2043516.5f, 2078757.5f,
+      1.06954688e+09f, 1026.35083f}},
+    {{2117.1814f, 1176.86133f, -2791.10693f, 0.681583822f, 1092.07373f, 2017.7583f, -2183.63062f,
+      0.533239126f, 1659.13611f, 1802.86584f, -4275.77246f, 1.04413688f, 1884069.0f, 1994665.25f,
+      1.06975322e+09f, 975.963318f},
+     {2022.44604f, 1179.13367f, -2796.49609f, 0.682899952f, 992.304871f, 1833.42139f, -1984.14001f,
+      0.484523863f, 1357.4093f, 1545.72791f, -3665.93042f, 0.895214379f, 1900002.75f, 2002328.75f,
+      1.06973504e+09f, 980.40155f},
+     {1357.06116f, 796.834229f, -1889.81409f, 0.461489618f, 657.341858f, 1214.53064f, -1314.37256f,
+      0.320967704f, 888.8255f, 1020.53302f, -2420.35034f, 0.591045737f, 1990854.5f, 2055398.5f,
+      1.06960915e+09f, 1011.13702f},
+     {773.140381f, 430.522247f, -1021.04938f, 0.249338627f, 398.079865f, 735.507996f, -795.971313f,
+      0.194374934f, 597.141785f, 649.852905f, -1541.22546f, 0.376364827f, 2029406.25f, 2078254.0f,
+      1.06955494e+09f, 1024.3739f},
+     {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2083245.0f,
+      2109330.5f, 1.06948128e+09f, 1042.37207f}},
+};
+
+static void rippleFrame(RdMesh mesh, int k)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < 5; i++) {
+        RdVuDraw d;
+        memset(&d, 0, sizeof(d));
+        d.prog = RD_PROG_PRELIT;
+        d.code = 34;
+        identity(d.vu.mem, 12);
+        memcpy(d.vu.mem[4], kPoolS[k], sizeof(kPoolS[k]));
+        for (int a = 16; a < 28; a += 4) {
+            memcpy(d.vu.mem[a], kPoolM[k][i], sizeof(kPoolM[k][i]));
+        }
+        rd_draw_vu_mesh(mesh, &d, RD_KEY(&kObjR, 1, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* a block's model origin in the world, S^-1 (qw 19), in double */
+static bool worldOriginOf(const float (*m)[4], double out[3])
+{
+    double a[4][8];
+    for (int r = 0; r < 4; r++) {
+        for (int c = 0; c < 4; c++) {
+            a[r][c] = m[4 + c][r];
+            a[r][4 + c] = r == c ? 1.0 : 0.0;
+        }
+    }
+    for (int i = 0; i < 4; i++) {
+        int piv = i;
+        for (int r = i + 1; r < 4; r++) {
+            piv = fabs(a[r][i]) > fabs(a[piv][i]) ? r : piv;
+        }
+        for (int c = 0; c < 8; c++) {
+            const double t = a[i][c];
+            a[i][c] = a[piv][c];
+            a[piv][c] = t;
+        }
+        if (!(fabs(a[i][i]) > 1e-30)) {
+            return false;
+        }
+        const double d = a[i][i];
+        for (int c = 0; c < 8; c++) {
+            a[i][c] /= d;
+        }
+        for (int r = 0; r < 4; r++) {
+            if (r != i) {
+                const double f = a[r][i];
+                for (int c = 0; c < 8; c++) {
+                    a[r][c] -= f * a[i][c];
+                }
+            }
+        }
+    }
+    double w[4];
+    for (int r = 0; r < 4; r++) {
+        w[r] = 0.0;
+        for (int k = 0; k < 4; k++) {
+            w[r] += a[r][4 + k] * m[19][k];
+        }
+    }
+    for (int j = 0; j < 3; j++) {
+        out[j] = w[j] / w[3];
+    }
+    return fabs(w[3]) > 1e-12;
+}
+
+static void testInstances(void)
+{
+    RdMesh mesh = makeMesh();
+    /* three still instances, the first gone in the tick: each blends with
+     * itself (by ordinal, B from A's place and C from B's) */
+    const float abc[3] = {0.0f, 40.0f, 80.0f}, bc[2] = {40.0f, 80.0f};
+    instanceFrame(mesh, abc, 3);
+    instanceFrame(mesh, bc, 2);
+    const RdInterpStats *st = build(0.5f, 1);
+    const RdFrame *f = built(0.5f);
+    CHECK(st->lerped == 2 && st->placed == 2 && instanceX(f, 0) == 40.0f &&
+              instanceX(f, 1) == 80.0f,
+          "a still instance gone: the others blend with themselves (x %.2f %.2f, ordinal 20 60; "
+          "lerped %u, placed %u)",
+          (double)instanceX(f, 0), (double)instanceX(f, 1), st->lerped, st->placed);
+    /* the first gone and a new one at 120 in the same tick: the two are
+     * paired (no draw unmatched beside a free one of its key), and as they
+     * are not each other's nearest (80 is nearer to 120) the new one is the
+     * tick's, not blended from the one that went */
+    const float bcd[3] = {40.0f, 80.0f, 120.0f};
+    instanceFrame(mesh, abc, 3);
+    instanceFrame(mesh, bcd, 3);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    CHECK(st->lerped == 2 && st->missing == 0 && st->apart == 1 && st->jump == 1 &&
+              instanceX(f, 0) == 40.0f && instanceX(f, 1) == 80.0f && instanceX(f, 2) == 120.0f,
+          "one gone, one new: paired apart, the new one is the tick's (x %.2f %.2f %.2f; lerped "
+          "%u, unmatched %u, apart %u)",
+          (double)instanceX(f, 0), (double)instanceX(f, 1), (double)instanceX(f, 2), st->lerped,
+          st->missing, st->apart);
+    /* moving instances (none at a place of the tick before): by ordinal */
+    const float ab[2] = {0.0f, 40.0f}, ab2[2] = {10.0f, 50.0f};
+    instanceFrame(mesh, ab, 2);
+    instanceFrame(mesh, ab2, 2);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    CHECK(st->lerped == 2 && st->placed == 0 && fabsf(instanceX(f, 0) - 5.0f) < 1e-4f &&
+              fabsf(instanceX(f, 1) - 45.0f) < 1e-4f,
+          "moving instances pair by ordinal (x %.2f %.2f, placed %u)", (double)instanceX(f, 0),
+          (double)instanceX(f, 1), st->placed);
+
+    /* the pool's ripples, the two dumps' blocks as two ticks */
+    rippleFrame(mesh, 0);
+    rippleFrame(mesh, 1);
+    st = build(0.5f, 1);
+    f = built(0.5f);
+    const RdFrame *cur = rd__last_frame();
+    CHECK(st->lerped == 4 && st->missing == 0 && st->apart == 1,
+          "ripples: 4 blend, the new one is paired apart and the tick's (%u, %u, %u)", st->lerped,
+          st->missing, st->apart);
+    for (int i = 0; i < 5; i++) {
+        const float (*m)[4] = vuBlock(f, findKey(f, 5, RD_KEY(&kObjR, 1, 34), i));
+        const float (*mc)[4] = vuBlock(cur, findKey(cur, 5, RD_KEY(&kObjR, 1, 34), i));
+        double o[3], oc[3];
+        if (!m || !mc || !worldOriginOf(m, o) || !worldOriginOf(mc, oc)) {
+            CHECK(0, "ripple %d", i);
+            continue;
+        }
+        const double dx = o[0] - oc[0], dy = o[1] - oc[1], dz = o[2] - oc[2];
+        const double off = sqrt(dx * dx + dy * dy + dz * dz);
+        CHECK(off < 0.5, "ripple %d stays at its place (%.2f %.2f %.2f, %.3f units off)", i, o[0],
+              o[1], o[2], off);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* ------------------------------------------- wading in shallow water */
+
+/* The wading splash of an issue report's F12 dump (shallow water, v0.4.5:
+ * frame-20261009-210725-v10576), list 5, prog 0 code 34: the common block
+ * (qw 4..15) and each draw's model matrices (qw 16..27).  Each step enters
+ * a stage animation (frameDependSequence.c, EntryStageMultiBgaManager) of
+ * four hamon parts and two splash_mini parts, each still in the world, and
+ * two splash_shibuki parts (the spray), whose height changes with its age.
+ * kWadeRipple: the seven draws of hamon part 1 (key 02c68798d4a00100,
+ * 5:83 the oldest .. 5:516 the newest), then hamon part 2 of the newest
+ * step (5:527), the newcomer standing at the other foot.  kWadeSpray: the
+ * two draws of splash_shibuki part 0 (5:481 older, 5:564 newer). */
+static const float kWadeCommon[48] = {
+    -1121.67017f,  -1244.37891f,  2848.18701f,  -0.695522785f, 869.721313f,
+    1369.32825f,   -1739.03101f,  0.42466861f,  1550.11084f,   1036.69629f,
+    -2372.83423f,  0.579442382f,  2129370.5f,   2169264.5f,    1.06853274e+09f,
+    1274.01587f,   1499.99988f,   0.0f,         0.0f,          0.0f,
+    0.0f,          1749.99963f,   0.0f,         0.0f,          0.0f,
+    0.0f,          -268435424.0f, 0.0f,         2048.0f,       2048.0f,
+    268435440.0f,  1.0f,          0.640049934f, 0.0f,          0.768271923f,
+    0.0f,          0.326260954f,  0.905308127f, -0.271809101f, 0.0f,
+    -0.695522785f, 0.42466861f,   0.579442382f, 0.0f,          1795.4209f,
+    180.634338f,   -175.596252f,  1.0f};
+static const float kWadeRipple[8][48] = {
+    {347.324036f,   719.612122f,  -1647.07849f,   0.40221402f,   1199.08533f,   1887.8938f,
+     -2397.60327f,  0.585490882f, -2097.0f,       -1646.61633f,  3768.84497f,   -0.920346022f,
+     705930.5f,     685821.375f,  1.0724569e+09f, 315.736511f,   -0.317606807f, -0.0594983548f,
+     0.40222013f,   0.40221402f,  0.0f,           0.393604845f,  0.585499823f,  0.585490882f,
+     -0.14142096f,  0.136144131f, -0.920360029f,  -0.920346022f, 39.5348511f,   22.3959351f,
+     311.741211f,   315.736511f,  -1.00715363f,   -0.188673511f, 0.40221402f,   0.0f,
+     0.0f,          1.24814892f,  0.585490882f,   0.0f,          -0.4484559f,   0.431722701f,
+     -0.920346022f, 0.0f,         125.367798f,    71.019104f,    315.736511f,   1.0f}, /* 5:83 */
+    {-1782.68713f,  -1301.0415f,   2977.87866f,   -0.727193296f, 1103.1875f,
+     1736.90784f,   -2205.85278f,  0.538665771f,  -770.812256f,  -1005.64978f,
+     2301.77368f,   -0.562089503f, 834080.25f,    784713.375f,   1.07223053e+09f,
+     371.010376f,   -0.195596889f, 0.107571602f,  -0.727204382f, -0.727193296f,
+     0.0f,          0.362125963f,  0.538673997f,  0.538665771f,  0.253564626f,
+     0.0831482708f, -0.562098026f, -0.562089503f, 49.5006714f,   14.2194214f,
+     367.016052f,   371.010376f,   -0.620251596f, 0.341117173f,  -0.727193296f,
+     0.0f,          0.0f,          1.14832711f,   0.538665771f,  0.0f,
+     0.804071486f,  0.263669074f,  -0.562089503f, 0.0f,          156.969971f,
+     45.0908203f,   371.010376f,   1.0f}, /* 5:153 */
+    {-1609.94812f,  -1333.26379f,   3051.63037f,   -0.745203316f, 916.755798f,
+     1443.38147f,   -1833.07776f,   0.447634667f,  61.5209961f,   -289.200989f,
+     661.935425f,   -0.161643624f,  949634.0f,     899977.625f,   1.07196672e+09f,
+     435.435303f,   -0.0558477864f, 0.11023578f,   -0.745214701f, -0.745203316f,
+     0.0f,          0.30092898f,    0.447641492f,  0.447634667f,  0.261711359f,
+     0.0239114687f, -0.161646098f,  -0.161643624f, 38.5751343f,   4.6892395f,
+     431.441833f,   435.435303f,    -0.177097321f, 0.349565476f,  -0.745203316f,
+     0.0f,          0.0f,           0.954267144f,  0.447634667f,  0.0f,
+     0.829905331f,  0.075824976f,   -0.161643624f, 0.0f,          122.324585f,
+     14.8699951f,   435.435303f,    1.0f}, /* 5:223 */
+    {-1509.2395f,   -1263.84436f,   2892.74048f,   -0.706402659f, 860.446533f,
+     1354.72559f,   -1720.48584f,   0.420139909f,  124.900818f,   -215.625793f,
+     493.533569f,   -0.120520145f,  975835.625f,   929564.75f,    1.07189901e+09f,
+     451.972473f,   -0.0416845679f, 0.104496107f,  -0.706413448f, -0.706402659f,
+     0.0f,          0.282445222f,   0.420146316f,  0.420139909f,  0.247817338f,
+     0.0178281926f, -0.120521963f,  -0.120520145f, 33.4640503f,   2.24293518f,
+     447.979248f,   451.972473f,    -0.132184744f, 0.331364572f,  -0.706402659f,
+     0.0f,          0.0f,           0.895653844f,  0.420139909f,  0.0f,
+     0.785846353f,  0.0565344691f,  -0.120520145f, 0.0f,          106.116821f,
+     7.11254883f,   451.972473f,    1.0f}, /* 5:293 */
+    {-903.861755f,   -852.6521f,     1951.58618f,   -0.476574272f, 593.585571f,
+     934.567749f,    -1186.89014f,   0.289836705f,  531.089417f,   246.73703f,
+     -564.742065f,   0.137909099f,   1026227.0f,    1002995.5f,    1.07173094e+09f,
+     493.015198f,    0.0481081903f,  0.0704982504f, -0.476581514f, -0.476574272f,
+     0.0f,           0.194846973f,   0.289841115f,  0.289836705f,  0.165767685f,
+     -0.0204005018f, 0.137911215f,   0.137909099f,  11.0213013f,   -3.82836914f,
+     489.022583f,    493.015198f,    0.152554482f,  0.223554969f,  -0.476574272f,
+     0.0f,           0.0f,           0.617873609f,  0.289836705f,  0.0f,
+     0.525661051f,   -0.0646914169f, 0.137909099f,  0.0f,          34.9493408f,
+     -12.1400757f,   493.015198f,    1.0f}, /* 5:363 */
+    {78.5832901f,
+     35.6086693f,
+     -81.5026398f,
+     0.019902816f,
+     85.4004517f,
+     134.458298f,
+     -170.760483f,
+     0.0416994393f,
+     143.676834f,
+     134.984589f,
+     -308.958435f,
+     0.0754471645f,
+     908974.0f,
+     924762.0f,
+     1.07191002e+09f,
+     449.288025f,
+     0.0252148826f,
+     -0.00294416607f,
+     0.0199031197f,
+     0.019902816f,
+     0.0f,
+     0.0280330591f,
+     0.0417000726f,
+     0.0416994393f,
+     -0.00722596329f,
+     -0.0111606801f,
+     0.0754483119f,
+     0.0754471645f,
+     -7.44515991f,
+     2.64006042f,
+     445.294739f,
+     449.288025f,
+     0.0799581856f,
+     -0.00933615956f,
+     0.019902816f,
+     0.0f,
+     0.0f,
+     0.0888948217f,
+     0.0416994393f,
+     0.0f,
+     -0.0229140408f,
+     -0.0353913084f,
+     0.0754471645f,
+     0.0f,
+     -23.6090698f,
+     8.37176514f,
+     449.288025f,
+     1.0f}, /* 5:433 */
+    {0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        864130.875f, 890281.125f,  1.07198893e+09f,
+     430.015564f, 0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        -11.0271912f, 5.4909668f,
+     426.022095f, 430.015564f, 0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         -34.9679565f,
+     17.4122314f, 430.015564f, 1.0f}, /* 5:516 */
+    {0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        767149.375f, 807323.125f,  1.07217882e+09f,
+     383.647766f, 0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        -12.3739624f, 12.3500366f,
+     379.653503f, 383.647766f, 0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         0.0f,
+     0.0f,        0.0f,        0.0f,        0.0f,         -39.2387695f,
+     39.1628418f, 383.647766f, 1.0f}, /* 5:527 */
+};
+static const float kWadeSpray[2][48] = {
+    {318.628021f,   0.0f,         0.0f,          0.0f,           0.0f,
+     371.7789f,     0.0f,         0.0f,          1384.34912f,    1384.34912f,
+     -2768.04297f,  0.675951719f, 901064.0f,     913585.875f,    1.07192422e+09f,
+     445.817566f,   0.212418661f, 0.0f,          0.0f,           0.0f,
+     0.0f,          0.21244511f,  0.0f,          0.0f,           0.0f,
+     0.0f,          0.675962031f, 0.675951719f,  -7.98022127f,   0.315177649f,
+     441.82431f,    445.817566f,  -0.456220448f, -0.0615602806f, 0.131234139f,
+     0.0f,          0.0f,         0.235959664f,  0.110685699f,   0.0f,
+     -0.145000711f, 0.193795905f, -0.413133919f, 0.0f,           -39.9914551f,
+     30.4671021f,   405.1521f,    1.0f}, /* 5:481 */
+    {236.521667f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     275.984772f,
+     0.0f,
+     0.0f,
+     1039.68848f,
+     1039.68848f,
+     -2078.88477f,
+     0.507660389f,
+     853293.438f,
+     874987.625f,
+     1.07200902e+09f,
+     425.103516f,
+     0.157681093f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.157705605f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.0f,
+     0.507668078f,
+     0.507660389f,
+     -11.5456839f,
+     2.50036454f,
+     421.109955f,
+     425.103516f,
+     -0.128535137f,
+     -0.00351484679f,
+     0.00749294832f,
+     0.0f,
+     0.0f,
+     0.153612673f,
+     0.0720577687f,
+     0.0f,
+     -0.0082766749f,
+     0.0545847788f,
+     -0.116363779f,
+     0.0f,
+     -38.9780273f,
+     40.565979f,
+     383.623474f,
+     1.0f}, /* 5:564 */
+};
+
+static const char kObjW, kObjWs;
+
+/* one wading draw; dy moves it dy world units along y (qw 19 + dy S's y
+ * column: the only place the pairing reads) */
+static void wadeDraw(RdMesh mesh, const float *inst, float dy, RdKey key)
+{
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 34;
+    memcpy(d.vu.mem[4], kWadeCommon, sizeof(kWadeCommon));
+    memcpy(d.vu.mem[16], inst, 48 * sizeof(float));
+    for (int k = 0; k < 4; k++) {
+        d.vu.mem[19][k] += dy * kWadeCommon[4 + k];
+    }
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+/* ripples first .. first + n - 1, then the newcomer when asked */
+static void wadeRipples(RdMesh mesh, int first, int n, int newcomer)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = first; i < first + n; i++) {
+        wadeDraw(mesh, kWadeRipple[i], 0.0f, RD_KEY(&kObjW, 1, 34));
+    }
+    if (newcomer) {
+        wadeDraw(mesh, kWadeRipple[7], 0.0f, RD_KEY(&kObjW, 1, 34));
+    }
+    rd_end_frame(0);
+}
+
+/* the spray draws picked by which (0 older, 1 newer, 2 a newcomer: the
+ * newest step's other foot), each lifted by dy */
+static void wadeSpray(RdMesh mesh, const int *which, int n, float dy)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(5);
+    for (int i = 0; i < n; i++) {
+        wadeDraw(mesh, which[i] < 2 ? kWadeSpray[which[i]] : kWadeRipple[7],
+                 which[i] < 2 ? dy : 0.0f, RD_KEY(&kObjWs, 0, 34));
+    }
+    rd_end_frame(0);
+}
+
+static double dist3d(const double *a, const double *b)
+{
+    const double x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2];
+    return sqrt(x * x + y * y + z * z);
+}
+
+/* the origin of the n-th draw of key k in list 5 of f */
+static bool wadeOrigin(const RdFrame *f, RdKey k, int nth, double out[3])
+{
+    const float (*m)[4] = vuBlock(f, findKey(f, 5, k, nth));
+    return m && worldOriginOf(m, out);
+}
+
+static void testWading(void)
+{
+    RdMesh mesh = makeMesh();
+    const RdKey kr = RD_KEY(&kObjW, 1, 34), ks = RD_KEY(&kObjWs, 0, 34);
+
+    /* the ripples: the oldest gone and a new one in the tick; by ordinal
+     * each would blend from the place of the one before it */
+    wadeRipples(mesh, 0, 7, 0);
+    const RdFrame *prevF = rd__last_frame();
+    double gap = 1.0e9;
+    for (int i = 0; i + 1 < 7; i++) {
+        double a[3], b[3];
+        if (wadeOrigin(prevF, kr, i, a) && wadeOrigin(prevF, kr, i + 1, b)) {
+            gap = fmin(gap, dist3d(a, b));
+        }
+    }
+    CHECK(gap > 10.0 && gap < 300.0,
+          "the dump's ripples stand %.1f or more units apart, under the jump limit", gap);
+    wadeRipples(mesh, 1, 6, 1);
+    const RdInterpStats *st = build(0.5f, 1);
+    const RdFrame *f = built(0.5f);
+    const RdFrame *cur = rd__last_frame();
+    CHECK(st->lerped == 6 && st->missing == 0 && st->apart == 1,
+          "wading ripples: the 6 that stay blend, the new one is paired apart and the tick's (%u, "
+          "%u, %u)",
+          st->lerped, st->missing, st->apart);
+    for (int i = 0; i < 7; i++) {
+        double o[3], oc[3];
+        if (!wadeOrigin(f, kr, i, o) || !wadeOrigin(cur, kr, i, oc)) {
+            CHECK(0, "wading ripple %d", i);
+            continue;
+        }
+        CHECK(dist3d(o, oc) < 0.5, "wading ripple %d stays at its place (%.2f %.2f %.2f, %.3f off)",
+              i, o[0], o[1], o[2], dist3d(o, oc));
+    }
+    const float (*mn)[4] = vuBlock(f, findKey(f, 5, kr, 6));
+    const float (*mc)[4] = vuBlock(cur, findKey(cur, 5, kr, 6));
+    CHECK(mn && mc && memcmp(mn[16], mc[16], 12 * 16) == 0,
+          "the new ripple is the tick's draw, not blended");
+
+    /* the spray rises (a 1 unit step: its height changes with its age, the
+     * rate is not in one dump): no draw stays at its place, so the pairing
+     * keeps their order and leaves out the draws that keep the pairs
+     * nearest */
+    double older[3], newer[3], newer2[3];
+    {
+        const int both[2] = {0, 1}, one[1] = {1};
+        wadeSpray(mesh, both, 2, 0.0f);
+        const bool okP = wadeOrigin(rd__last_frame(), ks, 0, older) &&
+                         wadeOrigin(rd__last_frame(), ks, 1, newer);
+        wadeSpray(mesh, one, 1, -1.0f);
+        const bool okC = wadeOrigin(rd__last_frame(), ks, 0, newer2);
+        st = build(0.5f, 1);
+        f = built(0.5f);
+        double o[3];
+        const bool okB = wadeOrigin(f, ks, 0, o);
+        const double mid[3] = {(newer[0] + newer2[0]) * 0.5, (newer[1] + newer2[1]) * 0.5,
+                               (newer[2] + newer2[2]) * 0.5};
+        CHECK(okP && okC && okB && st->lerped == 1 && dist3d(o, mid) < 0.05 &&
+                  dist3d(older, newer) > 10.0,
+              "the older spray gone: the newer blends with itself (%.3f from its half way; the "
+              "older stood %.1f away; lerped %u)",
+              okB ? dist3d(o, mid) : -1.0, dist3d(older, newer), st->lerped);
+    }
+    /* a new spray drawn first (the ring of 30 wrapped) and the two rising */
+    {
+        const int both[2] = {0, 1}, three[3] = {2, 0, 1};
+        wadeSpray(mesh, both, 2, 0.0f);
+        wadeSpray(mesh, three, 3, -1.0f);
+        st = build(0.5f, 1);
+        f = built(0.5f);
+        cur = rd__last_frame();
+        int ok = 0;
+        for (int i = 1; i < 3; i++) {
+            double o[3], oc[3];
+            ok += wadeOrigin(f, ks, i, o) && wadeOrigin(cur, ks, i, oc) && dist3d(o, oc) < 0.51 &&
+                  dist3d(o, oc) > 0.49;
+        }
+        const float (*a)[4] = vuBlock(f, findKey(f, 5, ks, 0));
+        const float (*b)[4] = vuBlock(cur, findKey(cur, 5, ks, 0));
+        CHECK(st->lerped == 2 && st->missing == 1 && ok == 2 && a && b &&
+                  memcmp(a[16], b[16], 12 * 16) == 0,
+              "a new spray drawn first is the tick's, the two rising blend with themselves "
+              "(lerped %u, unmatched %u, %d of 2 half a unit from the tick's)",
+              st->lerped, st->missing, ok);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* -------------------------------------------- screen-space grid STs */
+
+/* two unlit grids, one sampling WORK1 (the pool's surface sampling the
+ * scene's copy), one an image; their STs u0 + v * 0.1 */
+static void gridStFrame(RdTex image, float u0)
+{
+    rd_begin_frame();
+    frameHead();
+    static float g[3 * 2 + 4][4];
+    memset(g, 0, sizeof(g));
+    g[1][0] = 7.0f;
+    g[2][0] = 128.0f;
+    for (int v = 0; v < 3; v++) {
+        g[3 + v * 2][0] = (float)(v * 10);
+        g[3 + v * 2][3] = 1.0f;
+        g[4 + v * 2][0] = u0 + (float)v * 0.1f;
+        g[4 + v * 2][1] = u0;
+        g[4 + v * 2][2] = 1.0f;
+    }
+    RdVuGridDraw gd;
+    memset(&gd, 0, sizeof(gd));
+    gd.qw = (const float (*)[4])g;
+    gd.strips = 1;
+    gd.stripLen = 3;
+    gd.code = 20;
+    identity(gd.vu.mem, 4);
+    identity(gd.vu.mem, 16);
+    rd_select_list(4);
+    rd_texture(rd_target_texture(rd_target(RD_TARGET_WORK1), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+               RD_TCC_RGBA);
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjG, 0, 20));
+    rd_texture(image, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    rd_draw_vu_grid(&gd, RD_KEY(&kObjG, 1, 20));
+    rd_texture_off();
+    rd_end_frame(0);
+}
+
+static const float (*gridStream(const RdFrame *f, RdKey k))[4]
+{
+    const RdCmd *c = findKey(f, 4, k, 0);
+    return c ? (const float (*)[4])(const void *)(f->payload + c->u[1] + sizeof(RdVuPayload) +
+                                                  sizeof(RdVuBlock))
+             : NULL;
+}
+
+static void testGridScreenSt(void)
+{
+    static const uint8_t px[4 * 4 * 4] = {0};
+    RdTex image = rd_create_texture(4, 4, px, RD_TEXA_7F_81_AEM, "grid image");
+    gridStFrame(image, 0.25f);
+    gridStFrame(image, 0.75f);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->lerped == 2 && st->gridSt == 1, "both grids blend, one with its STs (%u, %u)",
+          st->lerped, st->gridSt);
+    const RdFrame *f = built(0.5f);
+    const float (*a)[4] = gridStream(f, RD_KEY(&kObjG, 0, 20));
+    const float (*b)[4] = gridStream(f, RD_KEY(&kObjG, 1, 20));
+    if (a && b) {
+        int mid = 0, held = 0;
+        for (int v = 0; v < 3; v++) {
+            mid += fabsf(a[4 + v * 2][0] - (0.5f + (float)v * 0.1f)) < 1e-6f &&
+                   fabsf(a[4 + v * 2][1] - 0.5f) < 1e-6f;
+            held += b[4 + v * 2][0] == 0.75f + (float)v * 0.1f && b[4 + v * 2][1] == 0.75f;
+        }
+        CHECK(mid == 3, "the grid sampling a target: STs half way (%d of 3; s %.4f)", mid,
+              (double)a[4][0]);
+        CHECK(held == 3, "the grid with an image keeps the tick's STs (%d of 3; s %.4f)", held,
+              (double)b[4][0]);
+    } else {
+        CHECK(0, "the two grids");
+    }
+    rd_destroy_texture(image);
+}
+
+/* ------------------------------- the pool's STs through the blended camera */
+
+/* pool.c's STs (rd.h RdGridSt) of the vertex pos with wave height h through
+ * the model to GS screen m (column-major), the eye at eye: updatePoolGeo's
+ * and SetLimitedPoolReflactionMesh's statements one by one, in double */
+static void poolStRef(int kind, const double *m, const double eye[3], const double pos[4], double h,
+                      float sx, float sy, double out[2])
+{
+    double o[4], pc[4], sub[2];
+    for (int r = 0; r < 4; r++) {
+        o[r] = m[r] * pos[0] + m[4 + r] * pos[1] + m[8 + r] * pos[2] + m[12 + r] * pos[3];
+    }
+    const double iw = 1.0 / o[3];
+    for (int r = 0; r < 3; r++) {
+        pc[r] = o[r] * iw;
+    }
+    if (kind != RD_GRID_ST_REFLECT) {
+        /* uv = (pc - (2048, 2048)) (sx, sy) + 0.5 + h k iw */
+        const double k = kind == RD_GRID_ST_SURFACE ? 30.0 : 50.0;
+        out[0] = (pc[0] - 2048.0) * sx + 0.5 + h * k * iw;
+        out[1] = (pc[1] - 2048.0) * sy + 0.5 + h * k * iw;
+        return;
+    }
+    /* nrm = (0.1 h, -1, 0.1 h); dir = |pos - eye|; ref = dir - 2 (dir.nrm) nrm,
+     * its y negated; sub = the GS position of pos + ref less pc */
+    double dir[3], nrm[3] = {h * 0.1, -1.0, h * 0.1}, ref[3], p2[4], o2[4];
+    double l = 0.0;
+    for (int k = 0; k < 3; k++) {
+        dir[k] = pos[k] - eye[k];
+        l += dir[k] * dir[k];
+    }
+    l = sqrt(l);
+    double dn = 0.0;
+    for (int k = 0; k < 3; k++) {
+        dir[k] /= l;
+        dn += dir[k] * nrm[k];
+    }
+    for (int k = 0; k < 3; k++) {
+        ref[k] = dir[k] + nrm[k] * (dn * -2.0);
+    }
+    ref[1] = -ref[1];
+    for (int k = 0; k < 3; k++) {
+        p2[k] = pos[k] + ref[k];
+    }
+    p2[3] = pos[3];
+    for (int r = 0; r < 4; r++) {
+        o2[r] = m[r] * p2[0] + m[4 + r] * p2[1] + m[8 + r] * p2[2] + m[12 + r] * p2[3];
+    }
+    for (int r = 0; r < 2; r++) {
+        sub[r] = o2[r] / o2[3] - pc[r];
+    }
+    out[0] = (pc[0] - 2048.0 + sub[0] * 1000.0) * (double)(sx * 0.8f) + 0.5;
+    out[1] = (pc[1] - 2048.0 + sub[1] * 1000.0) * (double)(sy * 0.8f) + 0.5;
+}
+
+/* Two of the pool swim's F12 dumps (frames 10934, v21878, and v22378), list
+ * 4: the refracting surface (key 016f5f0bd0b00400, RD_GRID_ST_SURFACE) and
+ * the reflecting one (key 016f5f0c55e00400, RD_GRID_ST_REFLECT), drawn with
+ * one world to screen (qw 16..19 below), ScreenWidth 512 and ScreenHeight
+ * 448; the eye as MatrixDrive_SetTransposeMatrix gives it from the frame's
+ * view; nine vertices of each grid (x, y, z) with the STs the game wrote.
+ * The pool lies at height 900, so a vertex's wave height (which these dumps
+ * do not carry: pool.c keeps it in the ST's w since) is (y - 900) / 30. */
+typedef struct PoolDumpGrid {
+    float m[4][4];
+    double eye[3];
+    float v[9][5]; /* x, y, z, s, t */
+} PoolDumpGrid;
+
+static const PoolDumpGrid kPoolDump[2][2] = {
+    {{{{1981.80237f, 1517.66699f, -3606.70361f, 0.880751312f},
+       {816.943115f, 1501.67151f, -1633.49951f, 0.398898005f},
+       {-92.4732056f, 439.468201f, -1044.38696f, 0.255037636f},
+       {-818977.938f, -836864.25f, 1.074736e+09f, -240.81897f}},
+      {177.333862, 518.067139, -478.528015},
+      {{650.0f, 898.508606f, -700.0f, 1.3381443f, 1.12362564f},
+       {600.0f, 905.054138f, -250.0f, 0.29069075f, 0.986038923f},
+       {650.0f, 901.456665f, 150.0f, -0.307306439f, 0.732047558f},
+       {1000.0f, 901.489258f, -700.0f, 1.17409039f, 0.625492871f},
+       {950.0f, 895.962341f, -250.0f, 0.488959759f, 0.542459607f},
+       {1000.0f, 904.102905f, 150.0f, 0.0527672172f, 0.454225004f},
+       {1350.0f, 898.589233f, -700.0f, 1.09588778f, 0.386690289f},
+       {1300.0f, 897.360718f, -250.0f, 0.594524503f, 0.347942144f},
+       {1350.0f, 897.371826f, 150.0f, 0.239934355f, 0.285708994f}}},
+     {{{1981.80237f, 1517.66699f, -3606.70361f, 0.880751312f},
+       {816.943115f, 1501.67151f, -1633.49951f, 0.398898005f},
+       {-92.4732056f, 439.468201f, -1044.38696f, 0.255037636f},
+       {-818977.938f, -836864.25f, 1.074736e+09f, -240.81897f}},
+      {177.333862, 518.067139, -478.528015},
+      {{650.0f, 898.508606f, -700.0f, 1.1873436f, 1.02303112f},
+       {600.0f, 905.054138f, -250.0f, 0.304086685f, 0.779466391f},
+       {650.0f, 901.456665f, 150.0f, -0.151638746f, 0.660062492f},
+       {1000.0f, 901.489258f, -700.0f, 1.03400648f, 0.586300194f},
+       {950.0f, 895.962341f, -250.0f, 0.504335761f, 0.589042842f},
+       {1000.0f, 904.102905f, 150.0f, 0.13199693f, 0.412918091f},
+       {1350.0f, 898.589233f, -700.0f, 0.979999542f, 0.419943899f},
+       {1300.0f, 897.360718f, -250.0f, 0.580433249f, 0.403221786f},
+       {1350.0f, 897.371826f, 150.0f, 0.296563148f, 0.353673249f}}}},
+    {{{{1376.90747f, 515.997009f, -1731.71875f, 0.422882974f},
+       {1506.00647f, 2022.89441f, -3011.30005f, 0.735354722f},
+       {676.205811f, 645.991394f, -2167.98828f, 0.529419303f},
+       {-1653100.88f, -918623.688f, 1.0751337e+09f, -337.953766f}},
+      {1154.96582, 449.713623, -908.908264},
+      {{650.0f, 898.816772f, -700.0f, -2.45533419f, 3.61139417f},
+       {600.0f, 900.552917f, -250.0f, -1.91998708f, 1.19502938f},
+       {650.0f, 900.506104f, 150.0f, -1.48578668f, 0.322061121f},
+       {1000.0f, 898.75415f, -700.0f, -0.359531909f, 1.65531611f},
+       {950.0f, 901.65802f, -250.0f, -0.724867702f, 0.564978957f},
+       {1000.0f, 898.67334f, 150.0f, -0.711883307f, 0.0174742937f},
+       {1350.0f, 899.733643f, -700.0f, 0.552788258f, 0.809445083f},
+       {1300.0f, 899.315796f, -250.0f, -0.0147161325f, 0.176131502f},
+       {1350.0f, 901.832947f, 150.0f, -0.163913459f, -0.181544632f}}},
+     {{{1376.90747f, 515.997009f, -1731.71875f, 0.422882974f},
+       {1506.00647f, 2022.89441f, -3011.30005f, 0.735354722f},
+       {676.205811f, 645.991394f, -2167.98828f, 0.529419303f},
+       {-1653100.88f, -918623.688f, 1.0751337e+09f, -337.953766f}},
+      {1154.96582, 449.713623, -908.908264},
+      {{650.0f, 898.816772f, -700.0f, -1.93744564f, 3.08875656f},
+       {600.0f, 900.552917f, -250.0f, -1.42973435f, 1.04761958f},
+       {650.0f, 900.506104f, 150.0f, -1.08884466f, 0.352910519f},
+       {1000.0f, 898.75415f, -700.0f, -0.197939456f, 1.47268534f},
+       {950.0f, 901.65802f, -250.0f, -0.477929294f, 0.526209772f},
+       {1000.0f, 898.67334f, 150.0f, -0.465740979f, 0.130306393f},
+       {1350.0f, 899.733643f, -700.0f, 0.543018699f, 0.754502177f},
+       {1300.0f, 899.315796f, -250.0f, 0.0887752473f, 0.252761215f},
+       {1350.0f, 901.832947f, 150.0f, -0.0345413089f, -0.0683192015f}}}},
+};
+
+/* The formula against the game's own STs at the tick's camera.  Not to the
+ * ulp: the game's floats round each projected position by up to about
+ * 1e-3 GS pixels (the dumps' matrices are not proj43 x view to the ulp
+ * either), and the reflection scales the difference of two of them by 1000
+ * x 0.8 / 512.  Over every vertex of the 17 pool dumps (v21878..v22043,
+ * v22359..v22378) the formula in double is within 8.6e-6 of the refracting
+ * surface's STs and 1.2e-2 of the reflecting one's (about 4.8e-4 in the
+ * median); these 36 vertices within 1.9e-6 and 1.4e-3. */
+static void testPoolStDumps(void)
+{
+    static const uint8_t kKind[2] = {RD_GRID_ST_SURFACE, RD_GRID_ST_REFLECT};
+    static const float kTol[2] = {1e-5f, 4e-3f};
+    for (int d = 0; d < 2; d++) {
+        for (int g = 0; g < 2; g++) {
+            const PoolDumpGrid *pg = &kPoolDump[d][g];
+            float worst = 0.0f;
+            int ok = 0;
+            for (int i = 0; i < 9; i++) {
+                const float *v = pg->v[i];
+                const float pos[4] = {v[0], v[1], v[2], 1.0f};
+                const float h = (v[1] - 900.0f) / 30.0f;
+                float st[2] = {0.0f, 0.0f};
+                if (rd__grid_screen_st(kKind[g], (const float (*)[4])pg->m, pg->eye, 1.0f / 512.0f,
+                                       1.0f / 448.0f, pos, h, st)) {
+                    const float e = fmaxf(fabsf(st[0] - v[3]), fabsf(st[1] - v[4]));
+                    worst = fmaxf(worst, e);
+                    ok += e <= kTol[g];
+                }
+            }
+            CHECK(ok == 9,
+                  "pool dump %d, %s: the formula gives the game's STs (%d of 9 within %g; "
+                  "worst %.3g)",
+                  d, g ? "reflection" : "refraction", ok, (double)kTol[g], (double)worst);
+        }
+    }
+    float st[2] = {0.0f, 0.0f};
+    const float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    CHECK(!rd__grid_screen_st(RD_GRID_ST_NONE, (const float (*)[4])kPoolDump[0][0].m,
+                              kPoolDump[0][0].eye, 1.0f / 512.0f, 1.0f / 448.0f, pos, 0.0f, st),
+          "no formula: no STs");
+}
+
+static const char kObjPool;
+
+#define POOL_VERTS 6
+
+/* a strip of six vertices running away from the camera (the water at
+ * height 40, z 300 to 2400), tick k's: one unit lower and other wave
+ * heights in tick 1 */
+static void poolVertex(int k, int i, double pos[4], double *h)
+{
+    static const double kXZ[POOL_VERTS][2] = {{-60.0, 300.0}, {60.0, 300.0},    {-90.0, 900.0},
+                                              {90.0, 900.0},  {-120.0, 2400.0}, {120.0, 2400.0}};
+    static const double kH[2][POOL_VERTS] = {{0.3, -0.2, 0.1, 0.4, -0.3, 0.2},
+                                             {0.2, -0.1, 0.3, 0.2, -0.1, 0.4}};
+    pos[0] = kXZ[i][0];
+    pos[1] = 40.0 + 1.5 * k;
+    pos[2] = kXZ[i][1];
+    pos[3] = 1.0;
+    *h = kH[k][i];
+}
+
+/* the grid's block: the camera v and the screen matrix q of lockCamera's
+ * frames, the model matrix the world to screen itself (pool.c draws the
+ * grids under +0x100) */
+static void poolBlock(const double *q, const double *v, RdVuBlock *vu, double *s)
+{
+    double iv[16];
+    mul4(q, v, s);
+    memset(iv, 0, sizeof(iv));
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            iv[c * 4 + r] = v[r * 4 + c];
+        }
+    }
+    for (int r = 0; r < 3; r++) {
+        iv[12 + r] = -(iv[r] * v[12] + iv[4 + r] * v[13] + iv[8 + r] * v[14]);
+    }
+    iv[15] = 1.0;
+    memset(vu, 0, sizeof(*vu));
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            vu->mem[4 + c][r] = (float)s[c * 4 + r];
+            vu->mem[12 + c][r] = (float)iv[c * 4 + r];
+            vu->mem[16 + c][r] = (float)s[c * 4 + r];
+        }
+    }
+}
+
+/* Tick k (0, 1) of the 60 unit, 8 degree camera (lockCamera; with still,
+ * tick 0's camera in both): per formula (SURFACE, REFLECT) an unlit grid
+ * sampling WORK1 with pool.c's STs at the tick's camera, its wave heights
+ * in the STs' w, drawn with rd_grid_screen_st (key part 2 * n), and the same
+ * grid without it (part 2 * n + 1) */
+static void poolFrame(int k, int still)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], s[16];
+    lockCamera(still ? 0.0 : (double)k, v);
+    lockProj(LOCK_ZOOM, q);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    RdVuGridDraw gd;
+    memset(&gd, 0, sizeof(gd));
+    poolBlock(q, v, &gd.vu, s);
+    const double eye[3] = {0.0, 0.0, still ? 0.0 : -60.0 * k};
+    static float g[POOL_VERTS * 2 + 4][4];
+    gd.qw = (const float (*)[4])g;
+    gd.strips = 1;
+    gd.stripLen = POOL_VERTS;
+    gd.code = 20;
+    rd_select_list(4);
+    rd_texture(rd_target_texture(rd_target(RD_TARGET_WORK1), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+               RD_TCC_RGBA);
+    static const RdGridSt kKinds[2] = {RD_GRID_ST_SURFACE, RD_GRID_ST_REFLECT};
+    for (int n = 0; n < 2; n++) {
+        memset(g, 0, sizeof(g));
+        g[1][0] = 7.0f;
+        g[2][0] = 128.0f;
+        for (int i = 0; i < POOL_VERTS; i++) {
+            double pos[4], h, st[2];
+            poolVertex(k, i, pos, &h);
+            poolStRef(kKinds[n], s, eye, pos, h, 1.0f / 512.0f, 1.0f / 448.0f, st);
+            for (int c = 0; c < 4; c++) {
+                g[3 + i * 2][c] = (float)pos[c];
+            }
+            g[4 + i * 2][0] = (float)st[0];
+            g[4 + i * 2][1] = (float)st[1];
+            g[4 + i * 2][2] = 1.0f;
+            g[4 + i * 2][3] = (float)h;
+        }
+        rd_grid_screen_st(kKinds[n], 1.0f / 512.0f, 1.0f / 448.0f);
+        rd_draw_vu_grid(&gd, RD_KEY(&kObjPool, n * 2, 20));
+        rd_draw_vu_grid(&gd, RD_KEY(&kObjPool, n * 2 + 1, 20)); /* the formula went with the draw */
+    }
+    rd_texture_off();
+    rd_end_frame(0);
+}
+
+/* The camera backs away 60 units and turns 8 degrees in the tick (issue
+ * 35's known shimmer): at alpha 0.25, 0.5 and 0.75 the grids with pool.c's
+ * formula have the STs the formula gives through the blended camera (its
+ * eye at lockCamera(t)'s, the block's blended world to screen, the
+ * blended vertices and heights), which at 0.5 differ from the blend of the
+ * ticks' STs (the twins without the formula) by more than 1e-3 (4.7e-3 in
+ * the reflection's second vertex).  With the camera still the grids with
+ * the formula take its STs too (no jump in the reflection when the camera
+ * starts or stops): byte for byte rd__grid_screen_st of the blended
+ * vertices and heights through the still camera, while their twins blend
+ * the ticks' STs; the tick's own picture (what a present without
+ * interpolation draws, t = 1) keeps the game's STs byte for byte */
+static void testPoolStCamera(void)
+{
+    static const RdGridSt kKinds[2] = {RD_GRID_ST_SURFACE, RD_GRID_ST_REFLECT};
+    static const float kAlphas[3] = {0.25f, 0.5f, 0.75f};
+    for (int a = 0; a < 3; a++) {
+        const float t = kAlphas[a];
+        poolFrame(0, 0);
+        poolFrame(1, 0);
+        const RdInterpStats *st = build(t, 1);
+        CHECK(st->snap == RD_SNAP_NONE && st->gridStCamera == 2 && st->gridSt == 2,
+              "pool %.2f: two grids through the camera, two blended (snap %u, %u, %u)", (double)t,
+              st->snap, st->gridStCamera, st->gridSt);
+        const RdFrame *o = built(t);
+        double vt[16];
+        lockCamera((double)t, vt);
+        const double eye[3] = {0.0, 0.0, -60.0 * (double)t};
+        for (int n = 0; n < 2; n++) {
+            const RdCmd *cf = findKey(o, 4, RD_KEY(&kObjPool, n * 2, 20), 0);
+            const RdCmd *cl = findKey(o, 4, RD_KEY(&kObjPool, n * 2 + 1, 20), 0);
+            const float (*b)[4] = vuBlock(o, cf);
+            const float (*sf)[4] = gridStream(o, RD_KEY(&kObjPool, n * 2, 20));
+            const float (*sl)[4] = gridStream(o, RD_KEY(&kObjPool, n * 2 + 1, 20));
+            if (!cf || !cl || !b || !sf || !sl) {
+                CHECK(0, "pool %.2f: grids %d drawn", (double)t, n);
+                continue;
+            }
+            CHECK(cf->b[5] == kKinds[n] && cl->b[5] == RD_GRID_ST_NONE,
+                  "pool %.2f: the formula recorded with its draw only (%u, %u)", (double)t,
+                  cf->b[5], cl->b[5]);
+            double m[16], q[16], qv[16];
+            for (int c = 0; c < 4; c++) {
+                for (int r = 0; r < 4; r++) {
+                    m[c * 4 + r] = b[16 + c][r];
+                }
+            }
+            lockProj(LOCK_ZOOM, q);
+            mul4(q, vt, qv);
+            float worst = 0.0f, apart = 0.0f;
+            int placed = 0;
+            for (int i = 0; i < POOL_VERTS; i++) {
+                const float *pf = sf[3 + i * 2], *tf = sf[4 + i * 2], *tl = sl[4 + i * 2];
+                const double pos[4] = {pf[0], pf[1], pf[2], pf[3]};
+                double want[2], gs[2], gb[2];
+                /* the block draws through the blended camera */
+                s6Project(qv, pos, gs);
+                s6Project(m, pos, gb);
+                placed += hypot(gs[0] - gb[0], gs[1] - gb[1]) < 0.01;
+                poolStRef(kKinds[n], m, eye, pos, (double)tf[3], 1.0f / 512.0f, 1.0f / 448.0f,
+                          want);
+                worst = fmaxf(worst,
+                              fmaxf(fabsf(tf[0] - (float)want[0]), fabsf(tf[1] - (float)want[1])));
+                apart = fmaxf(apart, fmaxf(fabsf(tf[0] - tl[0]), fabsf(tf[1] - tl[1])));
+            }
+            CHECK(placed == POOL_VERTS, "pool %.2f: grid %d through the blended camera (%d of %d)",
+                  (double)t, n, placed, POOL_VERTS);
+            CHECK(worst < 1e-5f,
+                  "pool %.2f: grid %d's STs are the formula's through the blended camera "
+                  "(worst %.3g)",
+                  (double)t, n, (double)worst);
+            if (a == 1) {
+                CHECK(apart > 1e-3f,
+                      "pool 0.50: grid %d's STs are not the blend of the ticks' (at most %.3g "
+                      "apart)",
+                      n, (double)apart);
+            }
+        }
+    }
+    /* the camera still: the formula's STs through it, the twins blended */
+    poolFrame(0, 1);
+    poolFrame(1, 1);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->gridStCamera == 2 && st->gridSt == 2,
+          "pool still: two grids through the camera, two blended (%u, %u)", st->gridStCamera,
+          st->gridSt);
+    const RdFrame *o = built(0.5f);
+    const double still[3] = {0.0, 0.0, 0.0}; /* lockCamera(0)'s eye */
+    for (int n = 0; n < 2; n++) {
+        const RdCmd *cf = findKey(o, 4, RD_KEY(&kObjPool, n * 2, 20), 0);
+        const float (*b)[4] = cf ? vuBlock(o, cf) : NULL;
+        const float (*sf)[4] = gridStream(o, RD_KEY(&kObjPool, n * 2, 20));
+        if (!cf || !b || !sf) {
+            CHECK(0, "pool still: grid %d drawn", n);
+            continue;
+        }
+        int same = 0;
+        for (int i = 0; i < POOL_VERTS; i++) {
+            const float *pf = sf[3 + i * 2], *tf = sf[4 + i * 2];
+            float want[2] = {-1.0f, -1.0f};
+            same +=
+                rd__grid_screen_st(kKinds[n], b + 16, still, cf->f[0], cf->f[1], pf, tf[3], want) &&
+                memcmp(tf, want, sizeof(want)) == 0;
+        }
+        CHECK(same == POOL_VERTS,
+              "pool still: grid %d's STs are the formula's through the still camera, byte for "
+              "byte (%d of %d)",
+              n, same, POOL_VERTS);
+    }
+    /* the tick's own picture: the game's STs */
+    const RdFrame *own = built(1.0f);
+    const RdFrame *tick = rd__last_frame();
+    for (int n = 0; n < 4; n++) {
+        const RdCmd *co = findKey(own, 4, RD_KEY(&kObjPool, n, 20), 0);
+        const RdCmd *ct = findKey(tick, 4, RD_KEY(&kObjPool, n, 20), 0);
+        CHECK(co && ct && co->u[2] == ct->u[2] &&
+                  memcmp(own->payload + co->u[1], tick->payload + ct->u[1], co->u[2]) == 0,
+              "pool still: at t 1 grid %d is the tick's, byte for byte", n);
+    }
+}
+
+/* -------------------------------- the old bridge's sea and its grey layer */
+
+/* The sea by the old bridge's bench (st17a; the F12 dump v2277, frame 1134):
+ * list 2's umi (key 016f5f09d3400000), a grey layer that writes Z where its
+ * texture's alpha passes (ZWRITE on, ATST GREATER 96, AFAIL FB_ONLY), at
+ * height 8750 (its model matrix the identity), and list 5's sea_ud_1 and
+ * sea_ud_far1..3 (sea_ud_far1: key 016f5fb98a400000), additive wave layers
+ * that write no Z and test GEQUAL against it, each a disc at local height
+ * 6750 placed 1997.5, 1995, 1992.5 and 1990 units down, so 2.5 to 10 units
+ * nearer the eye than umi: 29 to 37 GS Z units at the three points below,
+ * 13000 to 16500 units from the eye.  The frame's camera (view and proj43
+ * as dumped); the tick before turned 8 degrees about the world's y axis and
+ * 60 units further back along the view.  Both are static world meshes
+ * through the frame's camera: at alpha 0.25, 0.5 and 0.75 the blended
+ * blocks keep sea_ud_far1 in front of umi by the gap the blended camera
+ * gives (within 2 %), matched, and drawn as the tick's alone (the layer
+ * not drawn the tick before: camCurDraw) beside a matched umi. */
+static const float kSeaView[16] = {
+    0.728298903f, 0.437191516f,  -0.527545571f, 0.0f, 0.0f,         0.76992625f, 0.63805902f, 0.0f,
+    0.685189784f, -0.464697659f, 0.560736418f,  0.0f, -2198.42871f, 1647.17383f, 1765.59192f, 1.0f};
+
+static const float kSeaProj[16] = {
+    573.654846f, 0.0f,         0.0f, 0.0f, 0.0f, 669.263855f,     0.0f, 0.0f, 2048.0f,
+    2048.0f,     -4095.03076f, 1.0f, 0.0f, 0.0f, 1.07374989e+09f, 0.0f};
+
+static const double kSeaPoints[3][2] = {{-5406.1, 11326.1}, {981.2, 12511.7}, {-2000.0, 9000.0}};
+
+static const char kObjSea;
+
+/* the camera at t: the dumped camera (t = 1) turned 8 (1 - t) degrees about
+ * the world's y axis and its eye 60 (1 - t) units back along its view */
+static void seaCamera(double t, double *v)
+{
+    double r[3][3], eye[3], rt[3][3];
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            r[i][j] = kSeaView[j * 4 + i];
+        }
+    }
+    for (int j = 0; j < 3; j++) {
+        eye[j] = -(r[0][j] * kSeaView[12] + r[1][j] * kSeaView[13] + r[2][j] * kSeaView[14]);
+    }
+    const double a = 8.0 * (1.0 - t) * 3.14159265358979323846 / 180.0;
+    const double ry[3][3] = {{cos(a), 0.0, sin(a)}, {0.0, 1.0, 0.0}, {-sin(a), 0.0, cos(a)}};
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            rt[i][j] = r[i][0] * ry[0][j] + r[i][1] * ry[1][j] + r[i][2] * ry[2][j];
+        }
+        eye[i] -= 60.0 * (1.0 - t) * r[2][i];
+    }
+    memset(v, 0, 16 * sizeof(double));
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            v[j * 4 + i] = rt[i][j];
+        }
+        v[12 + i] = -(rt[i][0] * eye[0] + rt[i][1] * eye[1] + rt[i][2] * eye[2]);
+    }
+    v[15] = 1.0;
+}
+
+/* a prelit static mesh with model to world w through the camera v and the
+ * projection p (s6Draw with the projection given) */
+static void seaDraw(RdMesh mesh, const double *p, const double *v, const double *w, int list,
+                    RdKey key)
+{
+    double s[16], m[16], vw[16], iv[16];
+    mul4(p, v, s);
+    mul4(s, w, m);
+    mul4(v, w, vw);
+    memset(iv, 0, sizeof(iv));
+    for (int r = 0; r < 3; r++) {
+        for (int c = 0; c < 3; c++) {
+            iv[c * 4 + r] = v[r * 4 + c];
+        }
+    }
+    for (int r = 0; r < 3; r++) {
+        iv[12 + r] = -(iv[r] * v[12] + iv[4 + r] * v[13] + iv[8 + r] * v[14]);
+    }
+    iv[15] = 1.0;
+    RdVuDraw d;
+    memset(&d, 0, sizeof(d));
+    d.prog = RD_PROG_PRELIT;
+    d.code = 32;
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            d.vu.mem[4 + c][r] = (float)s[c * 4 + r];
+            d.vu.mem[12 + c][r] = (float)iv[c * 4 + r];
+            d.vu.mem[16 + c][r] = (float)m[c * 4 + r];
+            d.vu.mem[20 + c][r] = (float)m[c * 4 + r];
+            d.vu.mem[24 + c][r] = (float)vw[c * 4 + r];
+        }
+    }
+    rd_select_list(list);
+    rd_draw_vu_mesh(mesh, &d, key);
+}
+
+/* tick k: umi in list 2 and, unless farAlone and k is 0, sea_ud_far1 in
+ * list 5 */
+static void seaFrame(RdMesh mesh, int k, int farAlone)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], p[16], w[16];
+    seaCamera((double)k, v);
+    for (int i = 0; i < 16; i++) {
+        p[i] = kSeaProj[i];
+    }
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = kSeaProj[i];
+    }
+    cam.zoom = kSeaProj[0];
+    cam.aspect43 = 4.0f / 3.0f;
+    rd_set_camera(&cam);
+    s6Translate(w, 0.0, 0.0, 0.0);
+    seaDraw(mesh, p, v, w, 2, RD_KEY(&kObjSea, 0, 32));
+    if (k || !farAlone) {
+        s6Translate(w, 0.0, 1995.0, 0.0);
+        seaDraw(mesh, p, v, w, 5, RD_KEY(&kObjSea, 1, 32));
+    }
+    rd_end_frame(0);
+}
+
+/* GS Z of the point on the plane at local height y0 of the model to screen
+ * m (column-major) seen at GS (x, y); false without one */
+static bool seaZAt(const double *m, double y0, double x, double y, double *z)
+{
+    const double a1 = m[0] - x * m[3], b1 = m[8] - x * m[11];
+    const double c1 = (m[4] - x * m[7]) * y0 + m[12] - x * m[15];
+    const double a2 = m[1] - y * m[3], b2 = m[9] - y * m[11];
+    const double c2 = (m[5] - y * m[7]) * y0 + m[13] - y * m[15];
+    const double det = a1 * b2 - a2 * b1;
+    if (!(fabs(det) > 1e-12)) {
+        return false;
+    }
+    const double lx = (-c1 * b2 + c2 * b1) / det, lz = (-a1 * c2 + a2 * c1) / det;
+    const double w = m[3] * lx + m[7] * y0 + m[11] * lz + m[15];
+    if (!(w > 0.0)) {
+        return false;
+    }
+    *z = (m[2] * lx + m[6] * y0 + m[10] * lz + m[14]) / w;
+    return true;
+}
+
+/* the gap far1 - umi in GS Z at the pixel where umi's point (x, 8750, z) is
+ * seen, through the model to screen matrices mu (umi) and mf (far1, local
+ * height 6750), each surface read du and df GS pixels lower: the replay
+ * draws a list whose SCENE target has the field's half offset half a pixel
+ * up, so the pixel samples its surface at GS Y + 0.5 (rd_replay.c
+ * sceneKeepsHalf) */
+static bool seaGap(const double *mu, const double *mf, double x, double z, double du, double df,
+                   double *gap)
+{
+    const double h[4] = {mu[0] * x + mu[4] * 8750.0 + mu[8] * z + mu[12],
+                         mu[1] * x + mu[5] * 8750.0 + mu[9] * z + mu[13],
+                         mu[2] * x + mu[6] * 8750.0 + mu[10] * z + mu[14],
+                         mu[3] * x + mu[7] * 8750.0 + mu[11] * z + mu[15]};
+    double zu, zf;
+    if (!(h[3] > 0.0) || !seaZAt(mu, 8750.0, h[0] / h[3], h[1] / h[3] + du, &zu) ||
+        !seaZAt(mf, 6750.0, h[0] / h[3], h[1] / h[3] + df, &zf)) {
+        return false;
+    }
+    *gap = zf - zu;
+    return true;
+}
+
+static void testSeaLayers(void)
+{
+    RdMesh mesh = makeMesh();
+    static const float kAlphas[3] = {0.25f, 0.5f, 0.75f};
+    for (int alone = 0; alone < 2; alone++) {
+        for (int a = 0; a < 3; a++) {
+            const float t = kAlphas[a];
+            seaFrame(mesh, 0, alone);
+            seaFrame(mesh, 1, alone);
+            const RdInterpStats *st = build(t, 1);
+            CHECK(st->snap == RD_SNAP_NONE && st->missing == (uint32_t)alone,
+                  "sea %s %.2f: the pair blends (snap %u, %u unmatched)",
+                  alone ? "far1 the tick's" : "matched", (double)t, st->snap, st->missing);
+            const RdFrame *o = built(t);
+            const float (*bu)[4] = vuBlock(o, findKey(o, 2, RD_KEY(&kObjSea, 0, 32), 0));
+            const float (*bf)[4] = vuBlock(o, findKey(o, 5, RD_KEY(&kObjSea, 1, 32), 0));
+            if (!bu || !bf) {
+                CHECK(0, "sea %.2f: both layers drawn", (double)t);
+                continue;
+            }
+            double mu[16], mf[16], v[16], p[16], s[16], w[16], ef[16];
+            for (int c = 0; c < 4; c++) {
+                for (int r = 0; r < 4; r++) {
+                    mu[c * 4 + r] = bu[16 + c][r];
+                    mf[c * 4 + r] = bf[16 + c][r];
+                }
+            }
+            seaCamera((double)t, v);
+            for (int i = 0; i < 16; i++) {
+                p[i] = kSeaProj[i];
+            }
+            mul4(p, v, s);
+            s6Translate(w, 0.0, 1995.0, 0.0);
+            mul4(s, w, ef);
+            /* umi's list 2 has the frame head's half offset; list 5 has it
+             * too with the replay's rule (both read 0.5 lower), and had not
+             * before it (umi 0.5 lower, far1 not) */
+            int kept = 0, lost = 0;
+            double worst = 0.0;
+            for (int i = 0; i < 3; i++) {
+                double got = 0.0, want = 0.0, before = 0.0;
+                if (seaGap(mu, mf, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.5, &got) &&
+                    seaGap(s, ef, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.5, &want) &&
+                    want > 0.0) {
+                    const double e = fabs(got - want) / want;
+                    worst = fmax(worst, e);
+                    kept += got > 0.0 && e < 0.02;
+                }
+                lost += seaGap(mu, mf, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.0, &before) &&
+                        before < 0.0;
+            }
+            CHECK(kept == 3,
+                  "sea %s %.2f: sea_ud_far1 stays in front of umi by the blended camera's gap, "
+                  "both lists with the half offset (%d of 3; worst %.3g of the gap)",
+                  alone ? "far1 the tick's" : "matched", (double)t, kept, worst);
+            CHECK(lost == 3,
+                  "sea %s %.2f: with list 5 half a pixel off list 2 umi was in front (%d of 3: "
+                  "the grey band)",
+                  alone ? "far1 the tick's" : "matched", (double)t, lost);
+        }
+    }
+}
+
+/* ------------------------------------------ every draw paired or kept */
+
+/* an emitter's n batches of 2 particles in list 6, keyed by the emitter
+ * (MicroCode.c: one key for all its batches), moved dx */
+static void batchFrame(int n, float dx)
+{
+    rd_begin_frame();
+    frameHead();
+    rd_select_list(6);
+    for (int b = 0; b < n; b++) {
+        particleBatch(&kObjP1, 2, (float)(b * 10) + dx, 1);
+    }
+    rd_end_frame(0);
+}
+
+static int typeCount(const RdFrame *f, int l, uint8_t type)
+{
+    int n = 0;
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        n += f->lists[l].cmds[i].type == type;
+    }
+    return n;
+}
+
+static const char kObjAl;
+
+/* the s6 camera turned deg; mesh A (W = I) and, when b is not NULL, mesh B
+ * (key part 2) with its origin at world b; with bOther, a draw of B's
+ * object and part under another ordinal byte at A's place */
+static void aloneFrame(RdMesh mesh, double deg, const double *b, int bOther)
+{
+    rd_begin_frame();
+    frameHead();
+    double eye[3], v[16], p[16], w[16];
+    s6OrbitEye(deg, eye);
+    s6View(deg, eye, v);
+    s6Proj(p);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int k = 0; k < 16; k++) {
+        cam.view[k] = (float)v[k];
+        cam.proj43[k] = (float)p[k];
+    }
+    cam.zoom = 500.0f;
+    rd_set_camera(&cam);
+    s6Translate(w, 0.0, 0.0, 0.0);
+    s6Draw(mesh, v, w, RD_KEY(&kObjAl, 0, 32));
+    if (b) {
+        s6Translate(w, b[0], b[1], b[2]);
+        s6Draw(mesh, v, w, RD_KEY(&kObjAl, 2, 32));
+    }
+    if (bOther) {
+        s6Translate(w, 0.0, 0.0, 0.0);
+        s6Draw(mesh, v, w, RD_KEY(&kObjAl, 2, 33));
+    }
+    rd_end_frame(0);
+}
+
+/* where the blended camera at t of the turn 0 -> 28 degrees (the rotation
+ * slerped: the yaw 28 t; the eye on the line between the ticks' eyes) puts
+ * the world point x */
+static void aloneExpected(double t, const double x[3], double out[2])
+{
+    double e0[3], e1[3], eye[3], v[16], p[16], s[16], w[16], m[16];
+    s6OrbitEye(0.0, e0);
+    s6OrbitEye(28.0, e1);
+    for (int k = 0; k < 3; k++) {
+        eye[k] = (1.0 - t) * e0[k] + t * e1[k];
+    }
+    s6View(28.0 * t, eye, v);
+    s6Proj(p);
+    mul4(p, v, s);
+    s6Translate(w, x[0], x[1], x[2]);
+    mul4(s, w, m);
+    s6Project(m, kS6PointB, out);
+}
+
+/* a frame's lists and payload, for a byte comparison */
+typedef struct FrameCopy {
+    uint32_t count[RD_LIST_COUNT];
+    RdCmd *cmds[RD_LIST_COUNT];
+    uint8_t *payload;
+    uint32_t payloadSize;
+} FrameCopy;
+
+static void frameCopy(const RdFrame *f, FrameCopy *c)
+{
+    memset(c, 0, sizeof(*c));
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        c->count[l] = f->lists[l].count;
+        c->cmds[l] = malloc((size_t)f->lists[l].count * sizeof(RdCmd) + 1);
+        if (c->cmds[l] && f->lists[l].count) {
+            memcpy(c->cmds[l], f->lists[l].cmds, (size_t)f->lists[l].count * sizeof(RdCmd));
+        }
+    }
+    if (f) {
+        c->payloadSize = f->payloadSize;
+        c->payload = malloc((size_t)f->payloadSize + 1);
+        if (c->payload && f->payloadSize) {
+            memcpy(c->payload, f->payload, f->payloadSize);
+        }
+    }
+}
+
+static bool frameSame(const FrameCopy *c, const RdFrame *f)
+{
+    if (!f || !c->payload || c->payloadSize != f->payloadSize ||
+        memcmp(c->payload, f->payload, f->payloadSize) != 0) {
+        return false;
+    }
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        if (!c->cmds[l] || c->count[l] != f->lists[l].count ||
+            (c->count[l] &&
+             memcmp(c->cmds[l], f->lists[l].cmds, (size_t)c->count[l] * sizeof(RdCmd)) != 0)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void frameCopyFree(FrameCopy *c)
+{
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        free(c->cmds[l]);
+    }
+    free(c->payload);
+    memset(c, 0, sizeof(*c));
+}
+
+static void testPairedOrKept(void)
+{
+    RdMesh mesh = makeMesh();
+    RdInterpStats st;
+    const RdFrame *f;
+
+    /* (a) three instances under one key, two still and the third moved 10
+     * units: its origins fail sameOrigin, yet the two are each other's
+     * nearest and pair (before: the moved one unmatched, the one it was
+     * free) */
+    {
+        const float before[3] = {0.0f, 40.0f, 80.0f}, after[3] = {0.0f, 40.0f, 90.0f};
+        instanceFrame(mesh, before, 3);
+        instanceFrame(mesh, after, 3);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        uint32_t why = 0;
+        for (int k = 0; k < RD_UNMATCHED_COUNT; k++) {
+            why += st.unmatchedWhy[k];
+        }
+        CHECK(f && st.lerped == 3 && st.missing == 0 && st.apart == 0 && why == 0 &&
+                  fabsf(instanceX(f, 2) - 85.0f) < 1e-3f && instanceX(f, 0) == 0.0f &&
+                  instanceX(f, 1) == 40.0f,
+              "a moved instance beside still ones pairs with its own (x %.3f, want 85; lerped "
+              "%u, unmatched %u, apart %u)",
+              f ? (double)instanceX(f, 2) : -1.0, st.lerped, st.missing, st.apart);
+    }
+
+    /* (b) an emitter's batch count changes: every batch of cur is paired or
+     * drawn as the tick's, and the reason of an unmatched one is the count */
+    batchFrame(2, 0.0f);
+    batchFrame(3, 1.0f);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.lerped == 2 && st.missing == 1 && st.unmatchedWhy[RD_UNMATCHED_FEWER] == 1 &&
+              st.unmatchedWhy[RD_UNMATCHED_UNPLACED] == 0 && typeCount(f, 6, RDC_PARTICLES) == 3,
+          "batches 2 -> 3: two blend, the third is the tick's for its count (lerped %u, "
+          "unmatched %u, fewer %u, drawn %d)",
+          st.lerped, st.missing, st.unmatchedWhy[RD_UNMATCHED_FEWER],
+          f ? typeCount(f, 6, RDC_PARTICLES) : -1);
+    batchFrame(3, 0.0f);
+    batchFrame(2, 1.0f);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.lerped == 2 && st.missing == 0 && st.prevKept == 0 &&
+              typeCount(f, 6, RDC_PARTICLES) == 2,
+          "batches 3 -> 2: both blend, the key is drawn in cur so nothing of the tick before is "
+          "added (lerped %u, unmatched %u, kept %u, drawn %d)",
+          st.lerped, st.missing, st.prevKept, f ? typeCount(f, 6, RDC_PARTICLES) : -1);
+
+    /* (c) the camera turns 28 degrees and leaves B (at x 250, z 100: GS x
+     * 2256 at 0 degrees, 2332 at 28, past the picture's 2304) behind: B is
+     * of prev alone, outside cur's picture, and is drawn through the
+     * blended camera at every t */
+    const RdKey kb = RD_KEY(&kObjAl, 2, 32);
+    const double bOut[3] = {250.0, 0.0, 100.0}, bIn[3] = {-200.0, 0.0, 150.0};
+    aloneFrame(mesh, 0.0, bOut, 0);
+    aloneFrame(mesh, 28.0, NULL, 0);
+    for (int i = 1; i <= 3; i++) {
+        const double t = 0.25 * i;
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), (float)t, 1, &st);
+        const RdCmd *c = f ? findKey(f, 0, kb, 0) : NULL;
+        const RdCmd *a = f ? findKey(f, 0, RD_KEY(&kObjAl, 0, 32), 0) : NULL;
+        const float (*m)[4] = c ? vuBlock(f, c) : NULL;
+        double got[2] = {0.0, 0.0}, want[2];
+        if (m) {
+            s6ProjectF(m, kS6PointB, got);
+        }
+        aloneExpected(t, bOut, want);
+        CHECK(m && a && c > a && st.prevKept == 1 && st.prevHeld == 0 &&
+                  drawsOf(f, 0, kb, RDC_MESH) == 1 &&
+                  hypot(got[0] - want[0], got[1] - want[1]) < 0.01,
+              "t %.2f: B of the tick before alone, outside the picture, drawn after A at %.3f "
+              "%.3f (want %.3f %.3f; kept %u, held %u)",
+              t, got[0], got[1], want[0], want[1], st.prevKept, st.prevHeld);
+    }
+
+    /* (d) B still inside cur's picture (x -200, z 150: GS x 1975 at 28
+     * degrees): the game dropped it for another reason, it is not drawn;
+     * nor is B outside the picture while cur draws its object and part
+     * under another ordinal byte */
+    aloneFrame(mesh, 0.0, bIn, 0);
+    aloneFrame(mesh, 28.0, NULL, 0);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.prevKept == 0 && drawsOf(f, 0, kb, RDC_MESH) == 0,
+          "B of the tick before alone inside the picture is not drawn (kept %u, drawn %d)",
+          st.prevKept, f ? drawsOf(f, 0, kb, RDC_MESH) : -1);
+    aloneFrame(mesh, 0.0, bOut, 0);
+    aloneFrame(mesh, 28.0, NULL, 1);
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    CHECK(f && st.prevKept == 0 && drawsOf(f, 0, kb, RDC_MESH) == 0,
+          "B of the tick before is not drawn beside its object and part (kept %u, drawn %d)",
+          st.prevKept, f ? drawsOf(f, 0, kb, RDC_MESH) : -1);
+
+    /* (e) a still camera: B of the tick before alone (x 350, z -100: past
+     * the picture's right edge at 10 degrees) changes nothing; the frame is
+     * byte for byte the one built without B */
+    {
+        const double bFar[3] = {350.0, 0.0, -100.0};
+        FrameCopy ref;
+        aloneFrame(mesh, 10.0, NULL, 0);
+        aloneFrame(mesh, 10.0, NULL, 0);
+        frameCopy(rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st), &ref);
+        aloneFrame(mesh, 10.0, bFar, 0);
+        aloneFrame(mesh, 10.0, NULL, 0);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        CHECK(frameSame(&ref, f) && st.prevKept == 0 && st.prevHeld == 0,
+              "still camera: the unpaired draw of the tick before changes nothing (kept %u, held "
+              "%u)",
+              st.prevKept, st.prevHeld);
+        frameCopyFree(&ref);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* ------------------------------------------------- CPU-projected draws */
+
+static const char kObjRp;
+
+/* GsBase.c's screen matrix (gsb_SetVSMatrixSub) at focal LOCK_ZOOM: x =
+ * 2048 + f x_v / z_v, y the same, z / w = zf / z_v + zn for its Z range 1
+ * .. 536870880 over the depths 2 .. 262144, w = z_v */
+static void rpProj(double *p)
+{
+    const double v5 = 1.0, v6 = 536870880.0, v7 = 2.0, v8 = 262144.0;
+    memset(p, 0, 16 * sizeof(double));
+    p[0] = p[5] = LOCK_ZOOM;
+    p[8] = p[9] = 2048.0;
+    p[10] = (-v6 * v7 + v5 * v8) / (-v7 + v8); /* zn */
+    p[11] = 1.0;
+    p[14] = v8 * v7 * (-v5 + v6) / (-v7 + v8); /* zf */
+}
+
+/* c0 x + c1 y + c2 z + c3 in float, each step rounded (the VU's order) */
+static void rpApply(const float *m, const float *in, float *out)
+{
+    for (int r = 0; r < 4; r++) {
+        float a = m[r] * in[0];
+        a = a + m[4 + r] * in[1];
+        a = a + m[8 + r] * in[2];
+        a = a + m[12 + r];
+        out[r] = a;
+    }
+}
+
+/* the world point w projected on the CPU as lightning.c set_vertex and
+ * Shadow.c do: the view, then the screen matrix, in float; ftoi4 of x, y, z
+ * over w; ST = (u, t) q and Q = q = 1 / w */
+static void rpCpuVertex(const double *v, const double *q, const double w[3], float u, float t,
+                        RdScreenVtx *o)
+{
+    float vf[16], qf[16], a[4], b[4];
+    const float e[3] = {(float)w[0], (float)w[1], (float)w[2]};
+    for (int i = 0; i < 16; i++) {
+        vf[i] = (float)v[i];
+        qf[i] = (float)q[i];
+    }
+    rpApply(vf, e, a);
+    rpApply(qf, a, b);
+    const float r = 1.0f / b[3];
+    memset(o, 0, sizeof(*o));
+    o->x = (int32_t)(b[0] * r * 16.0f);
+    o->y = (int32_t)(b[1] * r * 16.0f);
+    o->z = (uint32_t)(int32_t)(b[2] * r * 16.0f);
+    o->s = u * r;
+    o->t = t * r;
+    o->q = r;
+    o->rgba[0] = o->rgba[1] = o->rgba[2] = 0x80;
+    o->rgba[3] = 0x80;
+}
+
+/* the world point w through a VU block's model to screen matrix (qw 16..19,
+ * W the identity) the VU's way (vu_mat, vu_divide, vu_ftoi4): GS X, Y, Z */
+static void rpVuVertex(const float (*m)[4], const double w[3], double gs[3])
+{
+    const float x = (float)w[0], y = (float)w[1], z = (float)w[2];
+    float h[4];
+    for (int r = 0; r < 4; r++) {
+        float a = m[16][r] * x;
+        a = a + m[17][r] * y;
+        a = a + m[18][r] * z;
+        a = a + m[19][r] * 1.0f;
+        h[r] = a;
+    }
+    const float q = 1.0f / h[3];
+    gs[0] = (double)(int32_t)(h[0] * q * 16.0f);
+    gs[1] = (double)(int32_t)(h[1] * q * 16.0f);
+    gs[2] = (double)(int32_t)(h[2] * q * 16.0f);
+}
+
+/* the depth a triangle of GS vertices a, b, c has at GS (x, y), as the GS
+ * interpolates Z across it, and the depth's change for one 12.4 step in x
+ * and one in y */
+static double rpPlaneZ(const double *a, const double *b, const double *c, double x, double y,
+                       double *slope)
+{
+    const double d = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]);
+    const double dzdx = ((b[2] - a[2]) * (c[1] - a[1]) - (c[2] - a[2]) * (b[1] - a[1])) / d;
+    const double dzdy = ((c[2] - a[2]) * (b[0] - a[0]) - (b[2] - a[2]) * (c[0] - a[0])) / d;
+    *slope = fabs(dzdx) + fabs(dzdy);
+    return a[2] + dzdx * (x - a[0]) + dzdy * (y - a[1]);
+}
+
+/* one GS Z step of the VU's depth at z: its float's resolution (z / 16 is
+ * the float the VU divides out, ftoi4 multiplies it by 16), at least 1,
+ * plus what a vertex's X and Y truncation to the 12.4 grid moves the
+ * surface's depth (once for the surface's vertices, once for the prim's) */
+static double rpStep(double z, double slope)
+{
+    const float f = (float)(z / 16.0);
+    const double ulp = 16.0 * (double)(nextafterf(f, INFINITY) - f);
+    return (ulp > 1.0 ? ulp : 1.0) + 2.0 * slope;
+}
+
+/* the wall at z 300 facing the camera, a world mesh: the strip lies on it
+ * and the prism's base stands on it (a surface the camera looks at, as it
+ * looks down at the bench's floor; on a floor seen edge on the depth's
+ * slope across one 12.4 step outweighs what the camera's motion moves) */
+static const double kRpWall[3][3] = {
+    {-150.0, -100.0, 300.0}, {150.0, -100.0, 300.0}, {0.0, 120.0, 300.0}};
+
+/* a quad of the wall from (x0, y0) to (x0 + 40, y0 + 20) as two triangles */
+static void rpStrip(const double *v, const double *q, double x0, double y0, RdScreenVtx *o)
+{
+    static const int kCorner[6] = {0, 1, 2, 1, 3, 2};
+    for (int i = 0; i < 6; i++) {
+        const int k = kCorner[i];
+        const double w[3] = {x0 + (k & 1 ? 40.0 : 0.0), y0 + (k & 2 ? 20.0 : 0.0), 300.0};
+        rpCpuVertex(v, q, w, (float)(k & 1), (float)(k >> 1), &o[i]);
+    }
+}
+
+/* Shadow.c's prism for a caster triangle at z 260 and its base on the wall
+ * (z 300), through the tick's camera: emitVolumeStrip's ten positions
+ * (kTestStrip), each triangle signed by the GS rule, as rd_shadow_tris
+ * takes it */
+static void rpPrismAt(const double *v, const double *q, const double (*wv)[3], RdScreenVtx *o,
+                      int8_t *sign)
+{
+    RdScreenVtx p[6];
+    double s[6][2];
+    for (int k = 0; k < 6; k++) {
+        rpCpuVertex(v, q, wv[k], 0.0f, 0.0f, &p[k]);
+        p[k].s = p[k].t = 0.0f;
+        p[k].q = 1.0f;
+        s[k][0] = p[k].x / 16.0;
+        s[k][1] = p[k].y / 16.0;
+    }
+    double fz[10];
+    float sgn = 1.0f;
+    for (int i = 0; i < 10; i++, sgn = -sgn) {
+        static const int abc[10][3] = {{0},       {0}, {0, 1, 3}, {0},       {3, 4, 5},
+                                       {4, 5, 1}, {0}, {1, 2, 0}, {2, 0, 5}, {0}};
+        fz[i] = i < 2 ? 1.0
+                      : (i == 3 || i == 6 || i == 9 ? -fz[i - 1]
+                                                    : faceZOf(s, abc[i][0], abc[i][1], abc[i][2]));
+        if (i < 2) {
+            continue;
+        }
+        sign[i - 2] = fz[i] * sgn < 0.0 ? 1 : -1;
+        for (int k = 0; k < 3; k++) {
+            o[(i - 2) * 3 + k] = p[kTestStrip[i - 2 + k]];
+        }
+    }
+}
+
+static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *sign)
+{
+    static const double kCap[3][2] = {{-20.0, 0.0}, {20.0, 0.0}, {0.0, 40.0}};
+    double w[6][3];
+    for (int k = 0; k < 6; k++) {
+        w[k][0] = kCap[k % 3][0];
+        w[k][1] = kCap[k % 3][1];
+        w[k][2] = k < 3 ? 260.0 : 300.0;
+    }
+    rpPrismAt(v, q, (const double (*)[3])w, o, sign);
+}
+
+/* tick k of the camera backing 60 units and turning 8 degrees in the tick
+ * (lockCamera; still: tick 0's camera in both): in list 0 the wall (a
+ * keyed VU mesh); in list 6 the strip on the wall as lightning draws it
+ * (key 0) and a keyed one moving 4 units along the wall in the tick, marked
+ * (rd_frame_projected); in list 4 a strip marked inside a pushed
+ * reflection camera; in list 3 the prism standing on the wall, marked; in
+ * list 11 a water dot (waterDot.c DispWaterDot: points, key 0, marked) at
+ * the strip's first corner */
+static void rpFrame(RdMesh mesh, int k, int still)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16], qv[16];
+    lockCamera(still ? 0.0 : (double)k, v);
+    rpProj(q);
+    mul4(q, v, qv);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    lockDraw(mesh, q, v, qv, v, RD_VU_VIEW_WORLD, RD_KEY(&kObjRp, 0, 0));
+    RdScreenVtx s[6];
+    rd_select_list(6);
+    rd_frame_projected(1);
+    rpStrip(v, q, -20.0, 0.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rpStrip(v, q, -60.0 + 4.0 * k, 40.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, RD_KEY(&kObjRp, 2, 0));
+    rd_frame_projected(0);
+    rd_select_list(11);
+    rd_frame_projected(1);
+    rpCpuVertex(v, q, (const double[3]){-20.0, 0.0, 300.0}, 0.0f, 0.0f, &s[0]);
+    s[0].s = s[0].t = 0.0f;
+    s[0].q = 1.0f;
+    rd_screen_prims(RD_PRIM_POINTS, s, 1, RD_SPACE_WORLD, 1, 0);
+    rd_frame_projected(0);
+    rd_select_list(4);
+    RdCamera refl = cam;
+    double vr[16];
+    lockCamera(0.3, vr);
+    for (int i = 0; i < 16; i++) {
+        refl.view[i] = (float)vr[i];
+    }
+    rd_push_camera(&refl);
+    CHECK(rd_camera_depth() == 1, "reprojection: one camera pushed (%d)", rd_camera_depth());
+    rd_frame_projected(1);
+    rpStrip(vr, q, -20.0, 0.0, s);
+    rd_screen_prims(RD_PRIM_TRIANGLES, s, 6, RD_SPACE_WORLD, 0, 0);
+    rd_frame_projected(0);
+    rd_pop_camera();
+    CHECK(rd_camera_depth() == 0, "reprojection: the camera popped (%d)", rd_camera_depth());
+    RdScreenVtx pv[24];
+    int8_t sign[8];
+    rpPrism(v, q, pv, sign);
+    rd_select_list(3);
+    rd_frame_projected(1);
+    rd_shadow_tris(pv, sign, 8, RD_KEY(&kObjRp, 3, 0));
+    rd_frame_projected(0);
+    rd_end_frame(0);
+}
+
+/* the nth RDC_SCREEN of list l in f */
+static const RdCmd *rpScreen(const RdFrame *f, int l, int nth)
+{
+    for (uint32_t i = 0; f && i < f->lists[l].count; i++) {
+        const RdCmd *c = &f->lists[l].cmds[i];
+        if (c->type == RDC_SCREEN && nth-- == 0) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+/* the worst depth gap (in steps, rpStep) between the vertices of the
+ * strip c of f and the wall through the VU block m; *below: a vertex
+ * nearer than 0 GS units in front of the wall fails GEQUAL by more than a
+ * step */
+static double rpWallGap(const RdFrame *f, const RdCmd *c, const float (*m)[4], int *below)
+{
+    double a[3], b[3], d[3], worst = 0.0;
+    rpVuVertex(m, kRpWall[0], a);
+    rpVuVertex(m, kRpWall[1], b);
+    rpVuVertex(m, kRpWall[2], d);
+    const RdScreenVtx *v = screenVtx(f, c);
+    *below = 0;
+    for (uint32_t i = 0; v && i < c->u[1]; i++) {
+        double slope;
+        const double z = rpPlaneZ(a, b, d, v[i].x, v[i].y, &slope);
+        const double gap = ((double)v[i].z - z) / rpStep(z, slope);
+        *below |= gap < -1.0;
+        worst = fmax(worst, fabs(gap));
+    }
+    return worst;
+}
+
+static void testReproject(void)
+{
+    RdMesh mesh = makeMesh();
+    RdInterpStats st;
+    const RdFrame *f;
+    const RdKey kWall = RD_KEY(&kObjRp, 0, 0);
+    const RdKey kPrism = RD_KEY(&kObjRp, 3, 0);
+
+    /* (a) the strips on the wall: at the tick within a step of the wall;
+     * half way through the blended camera within a step again, the key-0
+     * strip (cur's points) and the keyed one (the two ticks' points
+     * blended); the tick's own depth, which the blended frame kept before,
+     * lies more than a step behind the wall the camera brought nearer and
+     * fails GEQUAL there */
+    rpFrame(mesh, 0, 0);
+    rpFrame(mesh, 1, 0);
+    {
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *wc = findKey(cu, 0, kWall, 0);
+        int below = 0;
+        const double g = wc ? rpWallGap(cu, rpScreen(cu, 6, 0), vuBlock(cu, wc), &below) : 99.0;
+        CHECK(cu && rpScreen(cu, 6, 0) && rpScreen(cu, 6, 0)->b[4] == RD_SCREEN_FRAME_CAMERA &&
+                  g <= 1.0,
+              "reprojection: the tick's strip is marked and lies on the tick's wall (%.2f steps)",
+              g);
+    }
+    f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+    {
+        const RdCmd *wc = findKey(f, 0, kWall, 0);
+        const float (*m)[4] = wc ? vuBlock(f, wc) : NULL;
+        for (int n = 0; n < 2; n++) {
+            const RdCmd *c = rpScreen(f, 6, n);
+            int below = 1;
+            const double g = m && c ? rpWallGap(f, c, m, &below) : 99.0;
+            CHECK(g <= 1.0 && !below,
+                  "reprojection: half way the %s strip stays on the wall (%.2f steps; %u draws "
+                  "re-projected)",
+                  n ? "keyed" : "key-0", g, st.reprojected);
+        }
+        /* the strip's X and Y: its world point through the blended camera */
+        const RdCmd *c = rpScreen(f, 6, 0);
+        if (c) {
+            double vt[16], q[16], qv[16], want[2];
+            lockCamera(0.5, vt);
+            rpProj(q);
+            mul4(q, vt, qv);
+            s6Project(qv, (const double[3]){-20.0, 0.0, 300.0}, want);
+            const RdScreenVtx *v = screenVtx(f, c);
+            CHECK(fabs(v[0].x / 16.0 - want[0]) < 0.2 && fabs(v[0].y / 16.0 - want[1]) < 0.2,
+                  "reprojection: the strip's corner at the blended camera's %.3f, %.3f (%.3f, "
+                  "%.3f)",
+                  want[0], want[1], v[0].x / 16.0, v[0].y / 16.0);
+            /* the water dot on that corner: there too, not at the tick's
+             * position */
+            const RdCmd *dc = rpScreen(f, 11, 0);
+            const RdScreenVtx *dv = dc ? screenVtx(f, dc) : NULL;
+            const RdCmd *tdc = rpScreen(rd__last_frame(), 11, 0);
+            const RdScreenVtx *tdv = tdc ? screenVtx(rd__last_frame(), tdc) : NULL;
+            CHECK(dv && tdv && tdc->b[4] == RD_SCREEN_FRAME_CAMERA &&
+                      fabs(dv[0].x / 16.0 - want[0]) < 0.2 &&
+                      fabs(dv[0].y / 16.0 - want[1]) < 0.2 &&
+                      (dv[0].x != tdv[0].x || dv[0].y != tdv[0].y),
+                  "reprojection: the water dot at the blended camera's %.3f, %.3f (%.3f, %.3f)",
+                  want[0], want[1], dv ? dv[0].x / 16.0 : -1.0, dv ? dv[0].y / 16.0 : -1.0);
+            /* ST over Q at the vertex unchanged (u 0, v 0 there; corner 1:
+             * u 1), Q the new 1 / w */
+            const RdScreenVtx *t1 = screenVtx(rd__last_frame(), rpScreen(rd__last_frame(), 6, 0));
+            CHECK(t1 && fabs(v[1].s / v[1].q - t1[1].s / t1[1].q) < 1e-4 && v[1].q > t1[1].q,
+                  "reprojection: S / Q kept (%.5f, the tick's %.5f), Q nearer (%.6f > %.6f)",
+                  (double)(v[1].s / v[1].q), t1 ? (double)(t1[1].s / t1[1].q) : -1.0,
+                  (double)v[1].q, t1 ? (double)t1[1].q : -1.0);
+        }
+        /* before: the tick's depth half way */
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *tc = rpScreen(cu, 6, 0);
+        int below = 0;
+        const double g = m && tc ? rpWallGap(cu, tc, m, &below) : 0.0;
+        CHECK(below && g > 10.0,
+              "reprojection: the tick's depth half way fails GEQUAL against the wall (%.0f steps)",
+              g);
+    }
+
+    /* (b) the strip marked inside a pushed reflection camera is recorded
+     * unmarked and drawn as the tick drew it */
+    {
+        const RdFrame *cu = rd__last_frame();
+        const RdCmd *rc = rpScreen(cu, 4, 0), *oc = rpScreen(f, 4, 0);
+        CHECK(rc && oc && rc->b[4] == 0 && oc->u[1] == rc->u[1] &&
+                  memcmp(screenVtx(f, oc), screenVtx(cu, rc), rc->u[1] * sizeof(RdScreenVtx)) == 0,
+              "reprojection: the reflection camera's strip is unmarked (%d) and the tick's",
+              rc ? rc->b[4] : -1);
+    }
+
+    /* (d) the prism standing on the wall: half way, its base on the wall
+     * within a step and the prism closed; blended in screen space (the
+     * frame before) the base leaves the wall by thousands of steps, the
+     * faces and the surface disagreeing as the bench's patch did */
+    for (int on = 1; on >= 0; on--) {
+        rd__interp_set_reproject(on != 0);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        rd__interp_set_reproject(true);
+        const RdCmd *fc = findKey(f, 0, kWall, 0), *sc = findKey(f, 3, kPrism, 0);
+        double a[3], b[3], d[3], worst = 0.0;
+        int closed = 0, n = 0;
+        if (fc && sc && sc->b[0] == RD_SHADOW_TRIS) {
+            const float (*m)[4] = vuBlock(f, fc);
+            rpVuVertex(m, kRpWall[0], a);
+            rpVuVertex(m, kRpWall[1], b);
+            rpVuVertex(m, kRpWall[2], d);
+            const RdScreenVtx *v = (const RdScreenVtx *)(const void *)(f->payload + sc->u[1]);
+            const uint32_t tris = (sc->u[0] + sc->u[3]) / 3;
+            for (uint32_t t = 0; t < tris; t++) {
+                const uint32_t tag = rd__shadow_tag(&v[t * 3]);
+                const int i = (int)((tag - 1) % RD_SHADOW_PRISM_TRIS) + 2;
+                for (int k = 0; k < 3; k++) {
+                    if (tag == 0 || kTestStrip[i - 2 + k] < 3) {
+                        continue; /* the top cap */
+                    }
+                    double slope;
+                    const RdScreenVtx *p = &v[t * 3 + (uint32_t)k];
+                    const double z = rpPlaneZ(a, b, d, p->x, p->y, &slope);
+                    worst = fmax(worst, fabs(((double)p->z - z) / rpStep(z, slope)));
+                    n++;
+                }
+            }
+            closedPrisms(f, kPrism, &closed);
+        }
+        if (on) {
+            CHECK(n > 0 && worst <= 1.0 && closed == 1,
+                  "reprojection: half way the prism's base is on the wall (%.2f steps over %d "
+                  "vertices), closed %d",
+                  worst, n, closed);
+        } else {
+            CHECK(n > 0 && worst > 100.0,
+                  "reprojection: blended in screen space the base leaves the wall (%.1f steps)",
+                  worst);
+        }
+    }
+
+    /* (c) a still camera: the frame is byte for byte the one built without
+     * the re-projection (the strip moved along the wall blends in screen
+     * space either way) */
+    {
+        FrameCopy ref;
+        rpFrame(mesh, 0, 1);
+        rpFrame(mesh, 1, 1);
+        rd__interp_set_reproject(false);
+        frameCopy(rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st), &ref);
+        rd__interp_set_reproject(true);
+        f = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.5f, 1, &st);
+        CHECK(frameSame(&ref, f) && st.reprojected == 0,
+              "reprojection: a still camera changes nothing (%u re-projected)", st.reprojected);
+        frameCopyFree(&ref);
+    }
+    rd_destroy_vu_mesh(mesh);
+}
+
+/* ------------------------------------- shadow volumes and primitives of
+ * one tick through the blended camera (rd_interp.c reprojShadow,
+ * reprojPrim) */
+static const char kObjS7;
+
+/* a prism of world points: the top cap in the plane z = zc + 14 x (the
+ * eye, on the z axis, crosses it at z zc), the bottom cap 10 units along x
+ * (lockCamera's eye never crosses its other faces' planes) */
+static void s7Prism(const double *v, const double *q, double zc, RdScreenVtx *o, int8_t *sign)
+{
+    static const double kTop[3][2] = {{20.0, 5.0}, {22.0, 5.0}, {20.0, 35.0}};
+    double w[6][3];
+    for (int k = 0; k < 6; k++) {
+        w[k][0] = kTop[k % 3][0] + (k < 3 ? 0.0 : 10.0);
+        w[k][1] = kTop[k % 3][1];
+        w[k][2] = zc + 14.0 * kTop[k % 3][0];
+    }
+    rpPrismAt(v, q, (const double (*)[3])w, o, sign);
+}
+
+/* a triangle of the wall at z 300 (x0 its left corner) */
+static void s7Tri(const double *v, const double *q, double x0, RdScreenVtx *o)
+{
+    const double w[3][3] = {{x0, 0.0, 300.0}, {x0 + 20.0, 0.0, 300.0}, {x0, 20.0, 300.0}};
+    for (int k = 0; k < 3; k++) {
+        rpCpuVertex(v, q, w[k], 0.0f, 0.0f, &o[k]);
+    }
+}
+
+/* tick k of lockCamera's moving camera (the eye from z 0 to -60): in list
+ * 3, marked, a prism only in tick 0 (part 0) whose top cap's plane the eye
+ * crosses at z -5, and one only in tick 1 (part 1) crossed at z -52,
+ * between a stencil reset and its resolve as shadow_Draw records them
+ * (prev's volume is inserted before the resolve: umPlace); in
+ * list 7, marked, two key-0 triangles of tick 1, the second with a vertex
+ * at Z 0, then two keyed ones (parts 2, 3) in both ticks, the second with a
+ * vertex at Z 0 */
+static void s7Frame(int k)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16];
+    lockCamera((double)k, v);
+    rpProj(q);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    RdScreenVtx pv[24];
+    int8_t sign[8];
+    s7Prism(v, q, k ? -52.0 : -5.0, pv, sign);
+    rd_select_list(3);
+    rd_shadow_reset();
+    rd_frame_projected(1);
+    rd_shadow_tris(pv, sign, 8, RD_KEY(&kObjS7, k, 0));
+    rd_frame_projected(0);
+    rd_shadow_resolve();
+    rd_frame_projected(1);
+    rd_select_list(7);
+    for (int n = 0; n < 4; n++) {
+        if (n < 2 && k == 0) {
+            continue;
+        }
+        RdScreenVtx t[3];
+        s7Tri(v, q, -60.0 + 30.0 * n, t);
+        if (n & 1) {
+            t[2].z = 0;
+        }
+        rd_screen_prims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_WORLD, 0,
+                        n < 2 ? 0 : RD_KEY(&kObjS7, n, 0));
+    }
+    rd_frame_projected(0);
+    rd_end_frame(0);
+}
+
+static void testReprojectOneTick(void)
+{
+    RdInterpStats st;
+    s7Frame(0);
+    s7Frame(1);
+    const RdFrame *pv = rd__prev_frame(), *cu = rd__last_frame();
+    /* (a) a prism of one tick through the blended camera, its faces signed
+     * again: the top cap turned its other side to the eye, so it counts the
+     * other way, and the prism stays closed.  prev's at t 0.25 (inserted),
+     * cur's at t 0.75 (drawn from half way) */
+    for (int k = 0; k < 2; k++) {
+        const float t = k ? 0.75f : 0.25f;
+        const RdKey key = RD_KEY(&kObjS7, k, 0);
+        const RdCmd *tc = findKey(k ? cu : pv, 3, key, 0);
+        const RdFrame *f = rd__interp_frame(pv, cu, t, 1, &st);
+        const RdCmd *oc = findKey(f, 3, key, 0);
+        int closed = 0;
+        const int n = closedPrisms(f, key, &closed);
+        CHECK(tc && oc && n == 1 && closed == 1 && oc->u[0] != tc->u[0] &&
+                  oc->u[0] + oc->u[3] == tc->u[0] + tc->u[3],
+              "one tick's prism at %.2f: closed (%d of %d) with the cap's sign turned (%u "
+              "increment vertices, the tick's %u)",
+              (double)t, closed, n, oc ? oc->u[0] : 0u, tc ? tc->u[0] : 0u);
+    }
+    /* (b) primitives, all or none: half way the whole key-0 triangle moves
+     * with the blended camera, the one with a vertex at Z 0 stays whole
+     * where its tick put it; the matched whole one blends in the world, the
+     * matched one with a vertex at Z 0 in screen space, whole */
+    const RdFrame *f = rd__interp_frame(pv, cu, 0.5f, 1, &st);
+    const RdScreenVtx *o[4], *c[4], *p[4] = {NULL, NULL, NULL, NULL};
+    for (int n = 0; n < 4; n++) {
+        o[n] = screenVtx(f, rpScreen(f, 7, n));
+        c[n] = screenVtx(cu, rpScreen(cu, 7, n));
+        if (n >= 2) {
+            p[n] = screenVtx(pv, rpScreen(pv, 7, n - 2));
+        }
+    }
+    if (!o[0] || !o[1] || !o[2] || !o[3] || !c[0] || !c[1] || !c[2] || !c[3] || !p[2] || !p[3]) {
+        CHECK(0, "primitives of one tick: the triangles drawn");
+        return;
+    }
+    int moved0 = 0, kept1 = 0, world2 = 0, screen3 = 0;
+    for (int i = 0; i < 3; i++) {
+        moved0 += o[0][i].x != c[0][i].x || o[0][i].y != c[0][i].y;
+        kept1 += o[1][i].x == c[1][i].x && o[1][i].y == c[1][i].y && o[1][i].z == c[1][i].z;
+        const int32_t lx2 = (int32_t)floor(0.5 * p[2][i].x + 0.5 * c[2][i].x + 0.5);
+        const int32_t ly2 = (int32_t)floor(0.5 * p[2][i].y + 0.5 * c[2][i].y + 0.5);
+        world2 += o[2][i].x != lx2 || o[2][i].y != ly2;
+        const int32_t lx = p[3][i].x == c[3][i].x
+                               ? c[3][i].x
+                               : (int32_t)floor(0.5 * p[3][i].x + 0.5 * c[3][i].x + 0.5);
+        const int32_t ly = p[3][i].y == c[3][i].y
+                               ? c[3][i].y
+                               : (int32_t)floor(0.5 * p[3][i].y + 0.5 * c[3][i].y + 0.5);
+        screen3 += o[3][i].x == lx && o[3][i].y == ly;
+    }
+    CHECK(moved0 == 3, "key-0 triangle: every vertex through the blended camera (%d of 3)", moved0);
+    CHECK(kept1 == 3, "key-0 triangle with a vertex at Z 0: the tick's, whole (%d of 3)", kept1);
+    CHECK(world2 > 0, "matched triangle: blended in the world (%d of 3 off the screen blend)",
+          world2);
+    CHECK(screen3 == 3,
+          "matched triangle with a vertex at Z 0: blended in screen space, whole (%d of 3)",
+          screen3);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
     testRotationDraws();
+    testRisingBone();
     testCameraBlend();
+    testCameraLocked();
     testPhoto();
     testPresentClock();
     testSprites();
@@ -2735,6 +5367,16 @@ static void runCpu(void)
     testShineFollows();
     testParticleSwap();
     testSineScroll();
+    testLightSlots();
+    testInstances();
+    testWading();
+    testGridScreenSt();
+    testPoolStDumps();
+    testPoolStCamera();
+    testSeaLayers();
+    testPairedOrKept();
+    testReproject();
+    testReprojectOneTick();
 }
 
 int main(void)

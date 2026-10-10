@@ -73,6 +73,17 @@ static unsigned int dlHostPeak[13];
 
 static unsigned long long dlHostSink[2] __attribute__((aligned(16)));
 
+/* PC port: a list whose pad is full too drops tags, and with each a draw.
+   The bytes dropped in the frame so far, per list (dl_Clear starts them
+   again), and the run's largest need: what the list would have held with
+   nothing dropped.  The first drop of a list is logged with its need, and
+   each further 1 KB of the run's peak need, so a list the host's pad is
+   too small for (a wide picture records more parts than the PS2) shows in
+   logs/ico-pc.log with the size it wants. */
+static unsigned int dlHostDropped[13];
+
+static unsigned int dlHostNeedPeak[13];
+
 /* 1 when the tag about to open must be dropped */
 static int dlHostFull(const DlEntry *entry, int id)
 {
@@ -93,7 +104,23 @@ static int dlHostFull(const DlEntry *entry, int id)
         }
         dlHostPeak[dlPriority] = used;
     }
-    return id != 1 && id != 7 && used > ee + DL_HOST_PAD - 0x10;
+    if (id != 1 && id != 7 && used > ee + DL_HOST_PAD - 0x10) {
+        unsigned int need = used + dlHostDropped[dlPriority];
+        unsigned int peak = dlHostNeedPeak[dlPriority];
+
+        dlHostDropped[dlPriority] += 0x10;
+        if (need > peak) {
+            if (peak == 0 || (need >> 10) != (peak >> 10)) {
+                fprintf(stderr,
+                        "dl: list %d full (the EE's %u bytes and the host's %u): draws "
+                        "dropped, the frame needed %u bytes (logged per 1 KB of peak)\n",
+                        dlPriority, ee, (unsigned int)DL_HOST_PAD, need);
+            }
+            dlHostNeedPeak[dlPriority] = need;
+        }
+        return 1;
+    }
+    return 0;
 }
 
 void dl_Init(void)
@@ -146,6 +173,8 @@ void dl_Clear(void)
         dst->start = v;
         dst++;
     }
+    /* PC port: a new frame has dropped nothing yet */
+    __builtin_memset(dlHostDropped, 0, sizeof(dlHostDropped));
     dpk_SwapBuffer();
     gif_Init();
     mc_Reset();

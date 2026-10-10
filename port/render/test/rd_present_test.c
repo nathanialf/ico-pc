@@ -35,6 +35,14 @@
  *             width (58 lines), the present fills a 16:9 output; a UI
  *             band one pixel short at each side (the menus' bars) stretches,
  *             one two pixels short stays boxed
+ *   present info  with interpolation off, rd_last_present_info names the
+ *             frame rd_end_frame presented
+ *   full pixel  the reduction draws the whole frame: the box's edges show
+ *             the picture (also on a scaled target), black around the box, no
+ *             validation errors; a square is the same size on and off, a
+ *             one-pixel line lands on the same output pixels, the last
+ *             column does not wrap to the first; with the CRT filter the
+ *             overlay's top and bottom lines are in the output
  *   mips      the trilinear filter: a mipmapped game texture, minified,
  *             samples its average; a lattice drawn as the
  *             railings are (TEST 0x5160D, ALPHA 0x44 with ABE) minified 8:1
@@ -833,6 +841,10 @@ static void checkOptions(const char *dir)
     ico_video_set(&p);
     CHECK(near(ico_video_aspect(), 32.0f / 9.0f) && near(ico_video_wide_x(), 8.0f / 3.0f),
           "options: 32:9 widens by 8/3");
+    p.aspect = ICO_ASPECT_48_9;
+    ico_video_set(&p);
+    CHECK(near(ico_video_aspect(), 48.0f / 9.0f) && near(ico_video_wide_x(), 4.0f),
+          "options: 48:9 widens by 4");
     p.aspect = ICO_ASPECT_AUTO;
     ico_video_set(&p);
     ico_video_set_window(0, 0);
@@ -842,8 +854,13 @@ static void checkOptions(const char *dir)
     ico_video_set_window(3440, 1440);
     CHECK(near(ico_video_aspect(), 3440.0f / 1440.0f), "options: auto passes 3440x1440 through");
     ico_video_set_window(5760, 1080);
-    CHECK(near(ico_video_aspect(), 32.0f / 9.0f), "options: auto clamps at 32:9");
-    CHECK(near(ico_video_wide_x(), 32.0f / 12.0f), "options: auto at 32:9 widens by 8/3");
+    CHECK(near(ico_video_aspect(), 48.0f / 9.0f), "options: auto passes 5760x1080 (48:9) through");
+    CHECK(near(ico_video_wide_x(), 4.0f), "options: auto at 48:9 widens by 4");
+    ico_video_set_window(9600, 1080);
+    CHECK(ico_video_aspect() == ICO_ASPECT_MAX && near(ico_video_wide_x(), ICO_WIDE_X_MAX),
+          "options: auto clamps at the maximum (20:3), 9600x1080");
+    /* the renderer's mirror of the maximum (rd_internal.h) */
+    CHECK(RD_ASPECT_MAX == ICO_ASPECT_MAX, "options: RD_ASPECT_MAX equals ICO_ASPECT_MAX");
     ico_video_set_window(1280, 1024);
     CHECK(ico_video_aspect() == 4.0f / 3.0f, "options: auto clamps at 4:3");
     ico_video_set_window(2400, 1080);
@@ -918,12 +935,17 @@ static void checkOptions(const char *dir)
     CHECK(ico_video_parse_resolution("3840x2160", &q) == 0 && q.resW == 3840 && q.resH == 2160,
           "options: WxH");
     CHECK(ico_video_parse_resolution("2xx", &q) != 0 && ico_video_parse_resolution("0x", &q) != 0 &&
-              ico_video_parse_resolution("10x", &q) != 0 && q.resW == 3840,
+              ico_video_parse_resolution("17x", &q) != 0 && q.resW == 3840,
           "options: bad resolutions rejected, value kept");
+    CHECK(ico_video_parse_resolution("10x", &q) == 0 && q.resScale == 10 &&
+              ico_video_parse_resolution("16x", &q) == 0 && q.resScale == 16,
+          "options: 10x and 16x");
+    ico_video_parse_resolution("3840x2160", &q);
     int a = -1;
     CHECK(ico_video_parse_aspect("16:10", &a) == 0 && a == ICO_ASPECT_16_10 &&
               ico_video_parse_aspect("21:9", &a) == 0 && a == ICO_ASPECT_21_9 &&
               ico_video_parse_aspect("32:9", &a) == 0 && a == ICO_ASPECT_32_9 &&
+              ico_video_parse_aspect("48:9", &a) == 0 && a == ICO_ASPECT_48_9 &&
               ico_video_parse_aspect("21:10", &a) != 0,
           "options: aspect parser");
     char buf[32];
@@ -1164,8 +1186,25 @@ static void checkScales(void)
     s.sceneWidth = 7680;
     s.sceneHeight = 4320;
     applyWith(&s);
-    CHECK(near(g_rd.sceneSx * 512.0f, 3840.0f) && near(g_rd.sceneSy * 512.0f, 2160.0f),
-          "scales: capped at 4K");
+    CHECK(near(g_rd.sceneSx * 512.0f, 7680.0f) && near(g_rd.sceneSy * 512.0f, 4320.0f),
+          "scales: 8K is no longer held to 4K");
+    s.sceneWidth = 20000;
+    s.sceneHeight = 15000;
+    applyWith(&s);
+    CHECK(near(g_rd.sceneSx * 512.0f, 16384.0f) && near(g_rd.sceneSy * 512.0f, 12288.0f),
+          "scales: capped at the texture limit, shape kept (%g x %g)",
+          (double)(g_rd.sceneSx * 512.0f), (double)(g_rd.sceneSy * 512.0f));
+    /* 48:9 in a 5760x1080 window with Window resolution: the box itself */
+    s.sceneWidth = s.sceneHeight = 0;
+    s.outputWidth = 5760;
+    s.outputHeight = 1080;
+    s.aspect = 48.0f / 9.0f;
+    applyWith(&s);
+    CHECK(near(g_rd.sceneSx * 512.0f, 5760.0f) && near(g_rd.sceneSy * 512.0f, 1080.0f),
+          "scales: 48:9 in 5760x1080 renders 5760x1080");
+    s.aspect = 10.0f;
+    applyWith(&s);
+    CHECK(g_rd.outAspect == RD_ASPECT_MAX, "scales: the aspect is held to the maximum");
     s.sceneWidth = s.sceneHeight = 0;
     s.outputWidth = 320;
     s.outputHeight = 240;
@@ -1436,6 +1475,115 @@ static void checkScale2(void)
     rd_shutdown();
 }
 
+/* The scene cap follows the device's texture limit (4096 under
+ * ICO_VK_FAKE_LIMITS=min), and a scale the device cannot allocate falls back
+ * by halves.  The settings are applied without recreating the targets for
+ * the cap (a 16384 texture is not worth allocating); the fallback test makes
+ * texture creates above a size fail instead of allocating the big ones. */
+static void checkSceneLimit(void)
+{
+    RdSettings s = originalSettings();
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    float lim = (float)rhi_limits()->maxRenderTargetSize;
+    if (rhi_limits()->tiler && lim > 4096.0f) {
+        lim = 4096.0f; /* a phone GPU's cap (rd__apply_display) */
+    }
+    float ew = 20000.0f, eh = 15000.0f;
+    if (ew > lim) {
+        eh *= lim / ew;
+        ew = lim;
+    }
+    if (eh > lim) {
+        ew *= lim / eh;
+        eh = lim;
+    }
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 0.0f; /* the size below, not a scale */
+    s.sceneWidth = 20000;
+    s.sceneHeight = 15000;
+    s.outputWidth = s.outputHeight = 0;
+    g_rd.settings = s;
+    rd__apply_display();
+    CHECK(near(g_rd.sceneSx * 512.0f, ew) && near(g_rd.sceneSy * 512.0f, eh),
+          "limit: the scene is held to the device's %g, shape kept (%g x %g)", (double)lim,
+          (double)(g_rd.sceneSx * 512.0f), (double)(g_rd.sceneSy * 512.0f));
+    rd_shutdown();
+
+    if (rhi_backend() != RHI_BACKEND_VULKAN) {
+        /* the failure hook is the Vulkan backend's: the fallback checks below
+           have nothing to drive on another backend */
+        printf("rd_present: scene fallback checks skipped (backend is not Vulkan)\n");
+        return;
+    }
+
+    /* 16x asked, the device holds nothing over 3 million texels: 16x, 8x
+       and 4x fail, 2x is made.  Nothing big is ever allocated. */
+    s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 16.0f;
+    s.aspect = 4.0f / 3.0f;
+    vkr_test_fail_texels_above(3000000);
+    if (rd_init(512, 512, &s, NULL)) {
+        const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+        CHECK(g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f && rd_scene_scale_lowered() == 2,
+              "fallback: 16x lands at 2x (%g x %g, lowered %d)", (double)g_rd.sceneSx,
+              (double)g_rd.sceneSy, rd_scene_scale_lowered());
+        CHECK(t && t->color.id != 0 && t->tw == 1024 && t->th == 1024,
+              "fallback: the scene target exists at 2x");
+        /* the same options again do not recreate the targets or raise it */
+        g_rd.settings = s;
+        CHECK(!rd__apply_display() && g_rd.sceneSx == 2.0f && rd_scene_scale_lowered() == 2,
+              "fallback: unchanged options keep the lowered scale");
+        /* a new request is tried afresh */
+        s.sceneScale = 1.0f;
+        g_rd.settings = s;
+        CHECK(rd__apply_display() && rd_scene_scale_lowered() == 0 && g_rd.sceneSx == 1.0f,
+              "fallback: a new scale starts from what is asked");
+        rd_shutdown();
+    } else {
+        CHECK(0, "fallback: rd_init");
+    }
+    vkr_test_fail_texels_above(0);
+
+    /* a scene-sized texture that fails after the targets were made (4x fits;
+       then the device holds nothing over 3 million texels, and the shadow
+       count's target does not): the next frame halves the scale and makes
+       the targets again */
+    s = originalSettings();
+    s.preset = RD_PRESET_ENHANCED;
+    s.sceneScale = 4.0f;
+    s.aspect = 4.0f / 3.0f;
+    if (rd_init(512, 512, &s, NULL)) {
+        CHECK(g_rd.sceneSx == 4.0f && rd_scene_scale_lowered() == 0, "pressure: 4x is made");
+        vkr_test_fail_texels_above(3000000);
+        const uint32_t id = rd__temp_target_alloc(512, 512, 0, 0);
+        CHECK(g_rd.scenePressure, "pressure: a scene-sized allocation that fails is noted");
+        rd__temp_target_free(id);
+        rd_begin_frame();
+        const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+        CHECK(!g_rd.scenePressure && g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f &&
+                  rd_scene_scale_lowered() == 2,
+              "pressure: the next frame halves 4x to 2x (%g, lowered %d)", (double)g_rd.sceneSx,
+              rd_scene_scale_lowered());
+        CHECK(t && t->color.id != 0 && t->tw == 1024, "pressure: the scene target is remade at 2x");
+        rd_shutdown();
+    } else {
+        CHECK(0, "pressure: rd_init");
+    }
+    /* at 1x there is nothing to give back: no flag */
+    vkr_test_fail_texels_above(100000);
+    s.sceneScale = 1.0f;
+    if (rd_init(512, 512, &s, NULL)) {
+        const uint32_t id = rd__temp_target_alloc(512, 512, 0, 0);
+        CHECK(!g_rd.scenePressure, "pressure: none at 1x");
+        rd__temp_target_free(id);
+        rd_shutdown();
+    }
+    vkr_test_fail_texels_above(0);
+}
+
 static void checkWide169(void)
 {
     RdSettings s = originalSettings();
@@ -1531,6 +1679,472 @@ static void checkWide169(void)
     CHECK(rhi_vk_validation_error_count() == 0, "wide169: %u validation errors",
           rhi_vk_validation_error_count());
     rd_shutdown();
+}
+
+/* Full pixel: SCENE red through the reduction pass (which leaves its border
+ * black), presented into w x h.  The box's edge columns and rows are red
+ * with the option on, the reduction drawing the whole frame, and, with it
+ * off, the border shows.  scale above 1 runs the reduction on a scaled
+ * target. */
+static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int fullHeight,
+                         float scale, uint8_t *dst, uint32_t *ow, uint32_t *oh)
+{
+    RdSettings s = originalSettings();
+    s.aspect = aspect;
+    s.outputWidth = w;
+    s.outputHeight = h;
+    s.fullPixel = (uint8_t)full;
+    s.fullHeightScene = (uint8_t)fullHeight;
+    if (aspect > 4.0f / 3.0f + 0.01f || scale > 1.0f) {
+        s.preset = RD_PRESET_ENHANCED;
+    }
+    if (scale > 1.0f) {
+        s.sceneScale = scale; /* a scaled target: the reduction's hardware sprite */
+    }
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    static const uint8_t red[4] = {255, 0, 0, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    const bool ok = rd__read_present(dst, (size_t)w * h * 4, ow, oh) && *ow == w && *oh == h;
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return ok;
+}
+
+static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint32_t h,
+                               int fullHeight, float scale)
+{
+    static uint8_t off[960 * 540 * 4], on[960 * 540 * 4];
+    uint32_t ow = 0, oh = 0;
+    if (!fullPixelRun(aspect, w, h, 0, fullHeight, scale, off, &ow, &oh) ||
+        !fullPixelRun(aspect, w, h, 1, fullHeight, scale, on, &ow, &oh)) {
+        CHECK(0, "%s: present readback", name);
+        return;
+    }
+    RhiRect box;
+    rd__present_box(w, h, aspect, &box);
+    const uint32_t bw = box.w, bh = box.h;
+    const uint32_t x0 = (uint32_t)box.x, x1 = x0 + bw - 1, y0 = (uint32_t)box.y, y1 = y0 + bh - 1;
+#define PXO(b, x, y) (&(b)[((size_t)(y) * w + (x)) * 4])
+#define RED(q) ((q)[0] > 200 && (q)[1] < 60 && (q)[2] < 60)
+#define BLACK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
+    const uint32_t cx = w / 2, cy = h / 2;
+    /* off: the reduction's border at the box edge (2 of 512 columns, 8 of
+     * DISPLAY's 256 rows), red inside */
+    CHECK(BLACK(PXO(off, x0, cy)) && BLACK(PXO(off, x0 + 1, cy)) && BLACK(PXO(off, x1, cy)) &&
+              BLACK(PXO(off, x1 - 1, cy)),
+          "%s: off: the side columns are black", name);
+    CHECK(BLACK(PXO(off, cx, y0)) && BLACK(PXO(off, cx, y0 + 3)) && BLACK(PXO(off, cx, y1)) &&
+              BLACK(PXO(off, cx, y1 - 3)),
+          "%s: off: the top and bottom rows are black", name);
+    CHECK(RED(PXO(off, cx, cy)) && RED(PXO(off, x0 + bw / 8, cy)) && RED(PXO(off, cx, y0 + bh / 8)),
+          "%s: off: red inside", name);
+    /* on: the picture reaches the box's edge */
+    CHECK(RED(PXO(on, x0, cy)) && RED(PXO(on, x1, cy)), "%s: on: the edge columns are red", name);
+    CHECK(RED(PXO(on, cx, y0)) && RED(PXO(on, cx, y1)), "%s: on: the edge rows are red", name);
+    CHECK(RED(PXO(on, x0, y0)) && RED(PXO(on, x1, y1)), "%s: on: the corners are red", name);
+    CHECK(memcmp(PXO(on, cx, cy), PXO(off, cx, cy), 4) == 0, "%s: the centre is unchanged", name);
+    /* outside the box stays black */
+    int outside = 1;
+    if (x0 > 0) {
+        for (uint32_t y = 0; y < h; y += 7) {
+            outside &= BLACK(PXO(on, x0 - 1, y)) && BLACK(PXO(on, x1 + 1, y)) &&
+                       BLACK(PXO(on, 0, y)) && BLACK(PXO(on, w - 1, y));
+        }
+    }
+    if (y0 > 0) {
+        for (uint32_t x = 0; x < w; x += 7) {
+            outside &= BLACK(PXO(on, x, y0 - 1)) && BLACK(PXO(on, x, y1 + 1));
+        }
+    }
+    CHECK(outside, "%s: on: nothing outside the box", name);
+#undef PXO
+#undef RED
+#undef BLACK
+}
+
+/* a white square (GS 192..320 both ways) on black through the reduction at
+ * 512 lines (50 Hz), presented at 960 x 720 with full pixel off or on; its
+ * width and height in output pixels along the centre row and column */
+static bool squareRun(int full, uint32_t *sw, uint32_t *sh)
+{
+    const uint32_t w = 960, h = 720;
+    static uint8_t out[960 * 720 * 4];
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    static const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {255, 255, 255, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    opaque2D();
+    rd_texture_off();
+    sprite(RD_SPACE_UI, 192 * 16, 192 * 16, 320 * 16, 320 * 16, white, 0, 0, 0, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, sizeof(out), &ow, &oh) && ow == w && oh == h;
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel square: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    if (!ok) {
+        return false;
+    }
+    *sw = *sh = 0;
+    for (uint32_t x = 0; x < w; x++) {
+        *sw += out[((size_t)(h / 2) * w + x) * 4] > 128;
+    }
+    for (uint32_t y = 0; y < h; y++) {
+        *sh += out[((size_t)y * w + w / 2) * 4] > 128;
+    }
+    return true;
+}
+
+/* full pixel no longer enlarges the picture: at 512 lines the square is the
+ * same size on and off, on both axes */
+static void checkFullPixelSquare(void)
+{
+    uint32_t w0 = 0, h0 = 0, w1 = 0, h1 = 0;
+    if (!squareRun(0, &w0, &h0) || !squareRun(1, &w1, &h1)) {
+        CHECK(0, "full pixel square: present readback");
+        return;
+    }
+    printf("  full pixel square: off %u x %u, on %u x %u\n", w0, h0, w1, h1);
+    CHECK(w0 > 200 && h0 > 150, "full pixel square: drawn (%u x %u)", w0, h0);
+    CHECK(w0 == w1 && h0 == h1, "full pixel square: the same size on and off (%u x %u, %u x %u)",
+          w0, h0, w1, h1);
+}
+
+/* a one-pixel white column at GS x = 256 (and a one-pixel white row at GS
+ * y = 256) on black through the reduction, presented into w x h */
+static bool lineRun(int full, uint32_t w, uint32_t h, uint8_t *out)
+{
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    s.outputWidth = w;
+    s.outputHeight = h;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return false;
+    }
+    static const uint8_t black[4] = {0, 0, 0, 0x80}, white[4] = {255, 255, 255, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    opaque2D();
+    rd_texture_off();
+    sprite(RD_SPACE_UI, 256 * 16, 0, 257 * 16, 512 * 16, white, 0, 0, 0, 0);
+    sprite(RD_SPACE_UI, 0, 256 * 16, 512 * 16, 257 * 16, white, 0, 0, 0, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, (size_t)w * h * 4, &ow, &oh) && ow == w && oh == h;
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel lines: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return ok;
+}
+
+/* the reduction is native with the option on: the picture inside the box
+ * is the same pixels as with it off, not resampled, so a one-pixel line
+ * lands on the same output pixels with the same values.  Only the interior
+ * is compared (an eighth in from each side): the strip itself is the same
+ * reduction draw either way, so it cannot show a resample. */
+static void checkFullPixelSharp(uint32_t w, uint32_t h)
+{
+    static uint8_t off[1440 * 1080 * 4], on[1440 * 1080 * 4];
+    if (!lineRun(0, w, h, off) || !lineRun(1, w, h, on)) {
+        CHECK(0, "full pixel sharp %ux%u: present readback", w, h);
+        return;
+    }
+    RhiRect box;
+    rd__present_box(w, h, 4.0f / 3.0f, &box);
+    /* inside the border's reach: an eighth in from each side */
+    const uint32_t x0 = (uint32_t)box.x + box.w / 8, x1 = (uint32_t)box.x + box.w - box.w / 8;
+    const uint32_t y0 = (uint32_t)box.y + box.h / 8, y1 = (uint32_t)box.y + box.h - box.h / 8;
+    int same = 1, lit = 0;
+    for (uint32_t y = y0; y < y1; y++) {
+        same &= memcmp(&off[((size_t)y * w + x0) * 4], &on[((size_t)y * w + x0) * 4],
+                       (size_t)(x1 - x0) * 4) == 0;
+    }
+    for (uint32_t x = x0; x < x1; x++) {
+        lit += off[((size_t)(h / 2 - 40) * w + x) * 4] > 128;
+    }
+    CHECK(lit > 0, "full pixel sharp %ux%u: the line is drawn", w, h);
+    CHECK(same, "full pixel sharp %ux%u: the same output pixels on and off", w, h);
+}
+
+/* SCENE (red, with the extras the case draws) through the reduction with
+ * Full pixel on or off, DISPLAY read back; scale above 1 puts the reduction
+ * on the scaled target (the hardware sprite, where the clamp on the rows
+ * matters), fullHeight doubles the rows, mirror flips the UI sprite.
+ * bandTest 0: a blue column 0 and a blue row 0 in the scene.  1: a black
+ * band, GS 1..511 across and the middle half of the rows, as the pause
+ * menu's bars are drawn. */
+static uint8_t *clampRun(int full, float scale, int fullHeight, int mirror, int bandTest,
+                         uint32_t *w, uint32_t *h)
+{
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80},
+                         black[4] = {0, 0, 0, 0x80};
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    s.fullHeightScene = (uint8_t)fullHeight;
+    s.mirror = (uint8_t)mirror;
+    if (scale > 1.0f) {
+        s.preset = RD_PRESET_ENHANCED;
+        s.sceneScale = scale;
+    }
+    if (!rd_init(512, 512, &s, NULL)) {
+        return NULL;
+    }
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), red, 1, 0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    opaque2D();
+    rd_texture_off();
+    if (bandTest) {
+        sprite(RD_SPACE_UI, 4, 128 * 16, 511 * 16 + 7, 384 * 16, black, 0, 0, 0, 0);
+    } else {
+        sprite(RD_SPACE_WORLD, 0, 0, 16, 512 * 16, blue, 0, 0, 0, 0);
+        sprite(RD_SPACE_WORLD, 0, 0, 512 * 16, 16, blue, 0, 0, 0, 0);
+    }
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint8_t *p = readTarget(RD_TARGET_DISPLAY, w, h);
+    CHECK(rhi_vk_validation_error_count() == 0, "full pixel clamp: %u validation errors",
+          rhi_vk_validation_error_count());
+    rd_shutdown();
+    return p && *w >= 512 && *h >= 64 ? p : NULL;
+}
+
+/* A draw that samples a render target clamps at its edges with the option
+ * on: SCENE blue with red from column 8 on, drawn into WORK0 (256 x 128)
+ * through a sprite whose u starts at -8, so WORK0's columns 0..7 read
+ * SCENE's wrapped right side (red) with the option off and the clamped blue
+ * column 0 with it on.  The game leaves such screen-space lookups on REPEAT
+ * and the PS2's border hid where they wrapped. */
+static void checkFullPixelTargetWrap(void)
+{
+    static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80},
+                         white[4] = {0x80, 0x80, 0x80, 0x80};
+    for (int full = 0; full < 2; full++) {
+        RdSettings s = originalSettings();
+        s.fullPixel = (uint8_t)full;
+        if (!rd_init(512, 512, &s, NULL)) {
+            return;
+        }
+        rd_begin_frame();
+        rd_select_list(0);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), blue, 1, 0);
+        rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+        opaque2D();
+        rd_texture_off();
+        sprite(RD_SPACE_WORLD, 8 * 16, 0, 512 * 16, 512 * 16, red, 0, 0, 0, 0);
+        /* WORK0's pixel 0 sits at GS 1920, 1984: 128 and 192 past the
+           helper's 512-target origin; u = -8 .. 248 texels, in sixteenths, over
+           its 256 columns */
+        rd_set_target(rd_target(RD_TARGET_WORK0), (RdTarget){0}, 256, 128, 0);
+        rd_texture(rd_target_texture(rd_target(RD_TARGET_SCENE), RD_VIEW_RGBA), RD_TEXFN_MODULATE,
+                   RD_TCC_RGBA);
+        rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_REPEAT, RD_WRAP_REPEAT);
+        sprite(RD_SPACE_WORLD, 128 * 16, 192 * 16, (128 + 256) * 16, (192 + 128) * 16, white,
+               -8 * 16, 0, 248 * 16, 128 * 16);
+        rd_end_frame(0);
+        uint32_t w = 0, h = 0;
+        uint8_t *p = readTarget(RD_TARGET_WORK0, &w, &h);
+        if (p && w >= 256 && h >= 128) {
+            const uint8_t *c = &p[((size_t)(h / 2) * w + 2) * 4];
+            const uint8_t *in = &p[((size_t)(h / 2) * w + 64) * 4];
+            CHECK(in[0] >= 250 && in[2] <= 2, "target wrap %s: the inside reads red (%u %u %u)",
+                  full ? "on" : "off", in[0], in[1], in[2]);
+            if (full) {
+                CHECK(c[2] >= 250 && c[0] <= 2,
+                      "target wrap on: the edge clamps to SCENE's own column (%u %u %u)", c[0],
+                      c[1], c[2]);
+            } else {
+                CHECK(c[0] >= 250 && c[2] <= 2,
+                      "target wrap off: the edge wraps to the far side as the GS does (%u %u %u)",
+                      c[0], c[1], c[2]);
+            }
+        } else {
+            CHECK(0, "target wrap: WORK0 readback (%ux%u)", w, h);
+        }
+        CHECK(rhi_vk_validation_error_count() == 0, "target wrap: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    }
+}
+
+/* the reduction's edges read their own colour, not the opposite edge's: SCENE
+ * red with a blue column 0 and a blue row 0.  With the option on DISPLAY's
+ * last column and last row hold no blue (a lost clamp wraps column 0 and row
+ * 0 into them; on the scaled target and with full height the last row's
+ * bilinear taps reach past the scene's rows, where only the clamp matters),
+ * and with the mirror on the left column, which then samples past the other
+ * edge, is red.  The plain 1x case also keeps the exact value of column 0. */
+static void checkFullPixelClamp(void)
+{
+    static const struct {
+        float scale;
+        int fullHeight, mirror;
+        const char *name;
+    } cases[] = {
+        {1.0f, 0, 0, "1x"},        {1.0f, 1, 0, "1x full height"},
+        {2.0f, 0, 0, "2x"},        {2.0f, 1, 0, "2x full height"},
+        {1.0f, 0, 1, "1x mirror"}, {2.0f, 0, 1, "2x mirror"},
+    };
+
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        for (int full = 0; full < 2; full++) {
+            const char *nm = cases[k].name;
+            uint32_t w = 0, h = 0;
+            uint8_t *p =
+                clampRun(full, cases[k].scale, cases[k].fullHeight, cases[k].mirror, 0, &w, &h);
+            if (!p) {
+                CHECK(0, "full pixel clamp %s: DISPLAY readback (%ux%u)", nm, w, h);
+                continue;
+            }
+#define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
+#define NOBLUE(q) ((q)[0] >= 250 && (q)[1] <= 2 && (q)[2] <= 2)
+            const uint8_t *r = PX(w - 1, h / 2), *l = PX(0, h / 2);
+            if (full) {
+                const uint8_t *bot = PX(w / 2, h - 1), *corner = PX(w - 1, h - 1);
+                CHECK(NOBLUE(bot) && NOBLUE(corner),
+                      "full pixel clamp %s: the last row is red (%u %u %u, corner %u %u %u)", nm,
+                      bot[0], bot[1], bot[2], corner[0], corner[1], corner[2]);
+                if (cases[k].mirror) {
+                    /* the mirror flips at the present, not in DISPLAY: the
+                       mirrored reduction samples column 0 at u = 0.25, which
+                       the clamp keeps on its own blue texel (the wrap would
+                       blend the red column 511 in) */
+                    CHECK(l[2] >= 250 && l[0] <= 2,
+                          "full pixel clamp %s: the left column is its own blue (%u %u %u)", nm,
+                          l[0], l[1], l[2]);
+                    CHECK(NOBLUE(r), "full pixel clamp %s: the last column is red (%u %u %u)", nm,
+                          r[0], r[1], r[2]);
+                    continue;
+                }
+                CHECK(NOBLUE(r), "full pixel clamp %s: the last column is red (%u %u %u)", nm, r[0],
+                      r[1], r[2]);
+                if (cases[k].scale == 1.0f && !cases[k].fullHeight) {
+                    /* the GS samples column 0 at u = 0.75: three quarters of
+                       the blue texel and a quarter of the red one beside it */
+                    CHECK(l[2] >= 180 && l[2] <= 200 && l[0] >= 55 && l[0] <= 75 && l[1] <= 2,
+                          "full pixel clamp %s: column 0 is three quarters blue (%u %u %u)", nm,
+                          l[0], l[1], l[2]);
+                }
+            } else {
+                CHECK(r[0] < 8 && r[1] < 8 && r[2] < 8 && l[0] < 8 && l[1] < 8 && l[2] < 8,
+                      "full pixel clamp %s: off, the border columns stay black", nm);
+            }
+#undef NOBLUE
+#undef PX
+        }
+    }
+}
+
+/* the layout's full-width bands (the pause and End Game bars, GS pixels 1
+ * to 511 of 512) reach the frame's edge with the option on: the strip it
+ * shows beside the bar is the bar, not a column of the scene under it.
+ * Rows outside the band keep the scene's red at the edge, and with the
+ * option off the border stays black as it was. */
+static void checkFullPixelBands(void)
+{
+    static const struct {
+        float scale;
+        int mirror;
+        const char *name;
+    } cases[] = {{1.0f, 0, "1x"}, {2.0f, 0, "2x"}, {1.0f, 1, "1x mirror"}, {2.0f, 1, "2x mirror"}};
+
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        for (int full = 0; full < 2; full++) {
+            const char *nm = cases[k].name;
+            uint32_t w = 0, h = 0;
+            uint8_t *p = clampRun(full, cases[k].scale, 0, cases[k].mirror, 1, &w, &h);
+            if (!p) {
+                CHECK(0, "full pixel bands %s: DISPLAY readback (%ux%u)", nm, w, h);
+                continue;
+            }
+#define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
+#define DARK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
+            const uint8_t *l = PX(0, h / 2), *r = PX(w - 1, h / 2), *m = PX(w / 2, h / 2);
+            if (full) {
+                const uint8_t *lo = PX(0, h / 8), *ro = PX(w - 1, h / 8);
+                CHECK(DARK(l) && DARK(r) && DARK(m),
+                      "full pixel bands %s: the band is black to both edges (%u %u %u, %u %u %u)",
+                      nm, l[0], l[1], l[2], r[0], r[1], r[2]);
+                CHECK(lo[0] >= 250 && lo[1] <= 2 && lo[2] <= 2 && ro[0] >= 250 && ro[1] <= 2 &&
+                          ro[2] <= 2,
+                      "full pixel bands %s: rows outside the band are red at the edge", nm);
+            } else {
+                CHECK(DARK(l) && DARK(r) && DARK(m),
+                      "full pixel bands %s: off, the border columns stay black", nm);
+            }
+#undef DARK
+#undef PX
+        }
+    }
+}
+
+/* with interpolation off rd_end_frame presents each frame once, and
+ * rd_last_present_info (the window's start-up log) names that present */
+static void checkPresentInfo(void)
+{
+    RdSettings s = originalSettings();
+    s.interpolate = 0;
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    RdPresentInfo pi;
+    CHECK(!rd_last_present_info(&pi), "present info: none before the first present");
+    makeNoiseScene();
+    RdTex t = rd_create_texture(512, 512, s_scene, RD_TEXA_80_80, "scene");
+    for (int k = 0; k < 2; k++) {
+        recordRichFrame(t, 1);
+        memset(&pi, 0, sizeof(pi));
+        CHECK(rd_last_present_info(&pi) && pi.frame == rd_frame_number() && pi.firstOfTick &&
+                  !pi.keep,
+              "present info: frame %u's present noted (frame %u, first %u, keep %u)",
+              rd_frame_number(), pi.frame, pi.firstOfTick, pi.keep);
+    }
+    rd_destroy_texture(t);
+    rd_shutdown();
+}
+
+static void checkFullPixel(void)
+{
+    checkFullPixelCase("fullpixel 4:3 640x480", 4.0f / 3.0f, 640, 480, 0, 1.0f);
+    checkFullPixelCase("fullpixel 4:3 full height", 4.0f / 3.0f, 640, 480, 1, 1.0f);
+    checkFullPixelCase("fullpixel 4:3 in 16:9 (pillars)", 4.0f / 3.0f, 960, 540, 0, 1.0f);
+    checkFullPixelCase("fullpixel pillars, full height", 4.0f / 3.0f, 960, 540, 1, 1.0f);
+    checkFullPixelCase("fullpixel 16:9", 16.0f / 9.0f, 960, 540, 0, 1.0f);
+    checkFullPixelCase("fullpixel 16:9 Enhanced 2x", 16.0f / 9.0f, 960, 540, 0, 2.0f);
 }
 
 static void checkMips(void)
@@ -1906,6 +2520,96 @@ static void checkOverlay(uint64_t presentNoOverlay)
         CHECK(!s_llvmpipe || h.present == GOLD_PRESENT,
               "overlay: without a callback the present is the recorded one");
     }
+}
+
+/* the overlay's frame drawn in white along its ctx box's top and bottom
+ * lines (4 grid lines each) */
+static RdOverlayCtx s_edgeCtx;
+static int s_edgeCalls;
+
+static void edgeCallback(const RdOverlayCtx *ctx, void *user)
+{
+    (void)user;
+    s_edgeCtx = *ctx;
+    s_edgeCalls++;
+    static const uint8_t white[4] = {255, 255, 255, 0x80};
+    const int32_t x0 = ctx->box.x, x1 = ctx->box.x + (int32_t)ctx->box.w;
+    const int32_t y0 = ctx->box.y, y1 = ctx->box.y + (int32_t)ctx->box.h;
+    ovRect(x0, y0, x1, y0 + 4, white);
+    ovRect(x0, y1 - 4, x1, y1, white);
+}
+
+/* the CRT filter at 512 lines (50 Hz), 960 x 720, full pixel on or off: the
+ * filter draws the whole grid into the box, so the overlay is laid out on
+ * the whole grid and its top and bottom lines show inside the output.
+ * boxOut gets the overlay's box. */
+static void crtOverlayRun(int full, RdRect *boxOut)
+{
+    const uint32_t w = 960, h = 720;
+    static uint8_t out[960 * 720 * 4];
+    RdSettings s = originalSettings();
+    s.fullPixel = (uint8_t)full;
+    rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+    s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+    s.crtScanlines = 0.0f; /* a flat beam: every output row of a lit line lit */
+    if (!rd_init(512, 512, &s, NULL)) {
+        return;
+    }
+    s_edgeCalls = 0;
+    rd_set_present_overlay(edgeCallback, NULL);
+    static const uint8_t black[4] = {0, 0, 0, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), black, 1, 0);
+    rd_select_list(12);
+    RdPostParams pp;
+    memset(&pp, 0, sizeof(pp));
+    pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
+    rd_post(RD_POST_REDUCTION, &pp);
+    rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, sizeof(out), &ow, &oh) && ow == w && oh == h;
+    rd_set_present_overlay(NULL, NULL);
+    CHECK(rhi_vk_validation_error_count() == 0, "crt overlay (full pixel %d): %u validation errors",
+          full, rhi_vk_validation_error_count());
+    rd_shutdown();
+    if (!ok) {
+        CHECK(0, "crt overlay (full pixel %d): present readback", full);
+        return;
+    }
+    const RdRect b = s_edgeCtx.box;
+    printf("  full pixel crt overlay: grid %ux%u, box %d,%d %ux%u\n", s_edgeCtx.outW,
+           s_edgeCtx.outH, b.x, b.y, b.w, b.h);
+    CHECK(s_edgeCalls == 1, "crt overlay (full pixel %d): one callback (%d)", full, s_edgeCalls);
+    CHECK(s_edgeCtx.outH == 512 && b.x == 0 && b.y == 0 && b.w == s_edgeCtx.outW &&
+              b.h == s_edgeCtx.outH,
+          "crt overlay (full pixel %d): the box is the whole grid (%d,%d %ux%u of %ux%u)", full,
+          b.x, b.y, b.w, b.h, s_edgeCtx.outW, s_edgeCtx.outH);
+    /* the centre column: the top and bottom bands lit within the output's
+     * first and last 12 rows (4 grid lines are about 5.6 output rows) */
+    int top = 0, bottom = 0;
+    for (uint32_t y = 0; y < 12; y++) {
+        top |= out[((size_t)y * w + w / 2) * 4] > 128;
+        bottom |= out[((size_t)(h - 1 - y) * w + w / 2) * 4] > 128;
+    }
+    CHECK(top && bottom, "crt overlay (full pixel %d): the overlay's top (%d) and bottom (%d) show",
+          full, top, bottom);
+    /* the middle row stays the black scene */
+    CHECK(out[((size_t)(h / 2) * w + w / 2) * 4] < 16, "crt overlay (full pixel %d): black between",
+          full);
+    *boxOut = b;
+}
+
+/* the overlay's box does not depend on the option: it is the whole grid
+ * either way */
+static void checkFullPixelCrtOverlay(void)
+{
+    RdRect off = {0}, on = {0};
+    crtOverlayRun(0, &off);
+    crtOverlayRun(1, &on);
+    CHECK(off.x == on.x && off.y == on.y && off.w == on.w && off.h == on.h,
+          "crt overlay: the box is the same with full pixel off (%d,%d %ux%u) and on (%d,%d %ux%u)",
+          off.x, off.y, off.w, off.h, on.x, on.y, on.w, on.h);
 }
 
 /* the overlay drawn into the CRT filter's grid */
@@ -2637,7 +3341,17 @@ int main(int argc, char **argv)
     rd_shutdown();
     checkOriginal();
     checkScale2();
+    checkSceneLimit();
     checkWide169();
+    checkPresentInfo();
+    checkFullPixel();
+    checkFullPixelSquare();
+    checkFullPixelSharp(960, 720);
+    checkFullPixelSharp(1440, 1080);
+    checkFullPixelClamp();
+    checkFullPixelTargetWrap();
+    checkFullPixelBands();
+    checkFullPixelCrtOverlay();
     checkMips();
     checkLatticeMips(0);
     checkLatticeMips(1); /* as the game's materials draw it */

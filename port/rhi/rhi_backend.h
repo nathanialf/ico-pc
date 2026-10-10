@@ -54,6 +54,7 @@
     X(wait_frame)                                                                                  \
     X(frame_slot)                                                                                  \
     X(wait_idle)                                                                                   \
+    X(collect_garbage_now)                                                                         \
     X(cmd_barrier)                                                                                 \
     X(cmd_begin_render_pass)                                                                       \
     X(cmd_end_render_pass)                                                                         \

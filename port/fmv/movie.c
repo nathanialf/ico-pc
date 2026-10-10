@@ -87,6 +87,8 @@ typedef struct ByteBuf {
 
 typedef struct Slot {
     int valid;
+    int interlaced; /* the decoder's flag: fields from two instants */
+    int top_first;  /* top_field_first */
     uint32_t w, h;
     uint8_t *planes; /* y (w * h), u, v ((w+1)/2 * (h+1)/2 each), tightly packed */
     size_t cap;
@@ -112,6 +114,14 @@ static struct {
     int decFlushed;
     Slot slots[ICO_MOVIE_SLOTS];
     int slotPut, slotShow;
+    /* an interlaced picture is shown a field a vsync (rd_video_field),
+       each field deinterlaced against the pictures around it: prev is the
+       picture shown before the one on screen (its slot is reused once
+       freed).  The disc's films are all interlaced (fmv_fields_test: every
+       picture a frame picture, progressive_frame 0, top field first, no
+       repeated fields); a progressive picture goes out whole as before. */
+    int loggedFields;
+    Slot prev;
     uint32_t decodedFrames;
     int loggedPicture; /* the first picture's size logged */
     /* audio (mv_audiodec.c's AudioDec) */
@@ -481,6 +491,8 @@ static void keep_frame(Slot *s, const IcoM2vFrame *f)
     }
     s->w = f->w;
     s->h = f->h;
+    s->interlaced = f->interlaced;
+    s->top_first = f->scan.top_field_first;
     s->valid = 1;
 }
 
@@ -659,6 +671,93 @@ static void show_slot(const Slot *s)
 #endif
 }
 
+#ifdef ICO_RD
+static void slot_picture(const Slot *s, RdVideoPicture *p)
+{
+    uint32_t cw = (s->w + 1) / 2, ch = (s->h + 1) / 2;
+
+    p->y = s->planes;
+    p->u = p->y + (size_t)s->w * s->h;
+    p->v = p->u + (size_t)cw * ch;
+    p->pitch[0] = s->w;
+    p->pitch[1] = cw;
+    p->pitch[2] = cw;
+}
+#endif
+
+/* Whether the picture on screen goes out a field a vsync. */
+static int shows_fields(const Slot *s)
+{
+    return s->valid && s->interlaced;
+}
+
+/* One field of the picture on screen (field 0 at its even vblank, 1 at
+   the odd one), against the picture before it and, when it is in the
+   ring (has_next), the one after it. */
+static void show_field(int field, int has_next)
+{
+#ifdef ICO_RD
+    const Slot *cur = &mv.slots[mv.slotShow];
+    const Slot *nx = &mv.slots[(mv.slotShow + 1) % ICO_MOVIE_SLOTS];
+    RdVideoPicture pp, pc, pn;
+    int hp = mv.prev.valid && mv.prev.w == cur->w && mv.prev.h == cur->h;
+    int hn = has_next && nx->valid && nx->w == cur->w && nx->h == cur->h;
+
+    if (!mv.loggedFields) {
+        mv.loggedFields = 1;
+        ico_diag_log("fmv: interlaced pictures (%s field first): a field a vsync, deinterlaced",
+                     cur->top_first ? "top" : "bottom");
+    }
+    slot_picture(cur, &pc);
+    if (hp) {
+        slot_picture(&mv.prev, &pp);
+    }
+    if (hn) {
+        slot_picture(nx, &pn);
+    }
+    if (rd_video_field(hp ? &pp : NULL, &pc, hn ? &pn : NULL, cur->w, cur->h, field, cur->top_first,
+                       RD_VIDEO_DEINTERLACE) != 0 &&
+        field == 0) {
+        /* the field pass could not be set up: the picture whole, as a
+           progressive one goes out */
+        show_slot(cur);
+    }
+#else
+    (void)field;
+    (void)has_next;
+#endif
+}
+
+/* The picture leaving the screen becomes the previous one. */
+static void keep_prev(const Slot *s)
+{
+#ifdef ICO_RD
+    size_t need = (size_t)s->w * s->h + 2 * (size_t)((s->w + 1) / 2) * ((s->h + 1) / 2);
+
+    mv.prev.valid = 0;
+    if (!s->valid || !s->interlaced) {
+        return;
+    }
+    if (mv.prev.cap < need) {
+        uint8_t *np = realloc(mv.prev.planes, need);
+        if (np == NULL) {
+            return;
+        }
+        mv.prev.planes = np;
+        mv.prev.cap = need;
+    }
+    memcpy(mv.prev.planes, s->planes, need);
+    mv.prev.w = s->w;
+    mv.prev.h = s->h;
+    mv.prev.interlaced = s->interlaced;
+    mv.prev.top_first = s->top_first;
+    mv.prev.valid = 1;
+#else
+    /* no display: nothing is deinterlaced */
+    (void)s;
+#endif
+}
+
 /* --- the entry points ------------------------------------------------------------ */
 
 static void close_all(void)
@@ -693,6 +792,8 @@ static void close_all(void)
         free(mv.slots[i].planes);
         memset(&mv.slots[i], 0, sizeof(mv.slots[i]));
     }
+    free(mv.prev.planes);
+    memset(&mv.prev, 0, sizeof(mv.prev));
     mv.open = 0;
 }
 
@@ -828,8 +929,19 @@ static int readMpeg(int (*poll)(void))
         int ev = ico_movie_pace_vblank(&mv.pace, field);
 
         if (ev == ICO_PACE_SHOW) {
-            show_slot(&mv.slots[mv.slotShow]);
+            if (shows_fields(&mv.slots[mv.slotShow])) {
+                show_field(0, mv.pace.count > 1);
+            } else {
+                show_slot(&mv.slots[mv.slotShow]);
+            }
         } else if (ev == ICO_PACE_FREE) {
+            /* the odd vblank: an interlaced picture's second field (the
+               slot is freed, but nothing is decoded into it before
+               fill_slots below) */
+            if (shows_fields(&mv.slots[mv.slotShow])) {
+                show_field(1, mv.pace.count > 0);
+            }
+            keep_prev(&mv.slots[mv.slotShow]);
             mv.slotShow = (mv.slotShow + 1) % ICO_MOVIE_SLOTS;
         }
         if (ico_movie_pace_poll_due(&mv.pace) && poll != NULL && poll() != 0) {

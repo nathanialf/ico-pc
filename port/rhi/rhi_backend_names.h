@@ -51,6 +51,7 @@
 #define rhi_wait_frame           RHI__NAME(wait_frame)
 #define rhi_frame_slot           RHI__NAME(frame_slot)
 #define rhi_wait_idle            RHI__NAME(wait_idle)
+#define rhi_collect_garbage_now  RHI__NAME(collect_garbage_now)
 #define rhi_cmd_barrier          RHI__NAME(cmd_barrier)
 #define rhi_cmd_begin_render_pass  RHI__NAME(cmd_begin_render_pass)
 #define rhi_cmd_end_render_pass    RHI__NAME(cmd_end_render_pass)

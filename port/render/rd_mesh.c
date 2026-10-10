@@ -426,7 +426,7 @@ static void markLaterOverlaps(RdMeshRec *m)
     free(m->drawIndex);
     m->drawIndex = NULL;
     const uint32_t nt = m->indexCount / 3, qpv = m->qwPerVertex;
-    if (nt < 2 || (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT)) {
+    if (nt < 2 || (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT) || m->vertexCount >= (1u << 27)) {
         return;
     }
     /* a corner position (its float bits) to the triangles at it so far */
@@ -527,16 +527,121 @@ done:
     free(seen);
 }
 
+/* ------------------------------------------ closing planes beside 4:3
+ *
+ * A stage is modelled for the PS2's 4:3 picture, and a few of its faces are
+ * closing planes that picture never reaches: black faces (vertex colour
+ * 0, 0, 0, which MODULATE turns black whatever the texel, and the fog then
+ * a flat grey) that seal the model where the camera was not meant to look.
+ * A wide picture shows more on either side, and one such plane showed
+ * there as a flat grey block through the arch at the end of the long
+ * walkway (st08a_p4): a box 846 units wide, its top a four-vertex mesh of
+ * its own and its two sides the last eight vertices of the next one, with
+ * the textured stonework drawn behind it.  The triangles of such a plane
+ * carry ICO_VU_INDEX_WIDE, and rd_replay.c draws the mesh twice on a wide
+ * target: everything inside the 4:3 picture, as before, and beside it
+ * without them.
+ *
+ * Black vertex colour alone does not tell a closing plane: the stages also
+ * use it for faces in full shade, the same flat fogged colour, that the
+ * 4:3 picture shows as well.  In the player's 32:9 dumps opaque black
+ * triangles reach past the 4:3 picture's edges in 37 of 46 frames (69 to
+ * 369 a frame by the bench, st17a, 67 to 108 at the pool, st09a), and by
+ * the bench they are the shaded faces of the statues' pedestals (dropping
+ * that draw leaves the walkway seen through them), with the same faces of
+ * the pillar beside them inside the 4:3 picture.  So the planes are listed by their
+ * corners, the position bits of the stream (prelit and lit layouts), and a
+ * triangle is marked when its three vertices are black and are corners of
+ * one listed plane: a model pack's replacement or any other geometry never
+ * matches by accident. */
+
+typedef struct ClosingPlane {
+    const char *model; /* where it is, for the reader */
+    uint32_t count;
+    uint32_t corner[8][3]; /* x, y, z float bits */
+} ClosingPlane;
+
+static const ClosingPlane kClosingPlanes[] = {
+    {"st08a_p4: the box through the arch at the walkway's end",
+     7,
+     {{0xc518a521u, 0xc51a5cc4u, 0xc431a218u},   /* -2442.32 -2469.80  -710.53 */
+      {0xc518a521u, 0xc5696b2bu, 0xc431a218u},   /* -2442.32 -3734.70  -710.53 */
+      {0xc518a521u, 0xc51a5cc4u, 0xc4a092d2u},   /* -2442.32 -2469.80 -1284.59 */
+      {0xc518a521u, 0xc5696b2bu, 0xc4a092d2u},   /* -2442.32 -3734.70 -1284.59 */
+      {0xc4c78446u, 0xc51a5cc4u, 0xc42abb35u},   /* -1596.13 -2469.80  -682.93 */
+      {0xc4c78446u, 0xc5696b2bu, 0xc42abb35u},   /* -1596.13 -3734.70  -682.93 */
+      {0xc4c78446u, 0xc5696b2bu, 0xc45c93adu}}}, /* -1596.13 -3734.70  -882.31 */
+};
+
+/* the listed closing plane that vertex v of m is a black corner of (-1: none) */
+static int closingPlaneOf(const RdMeshRec *m, uint32_t v)
+{
+    const float *q = m->stream[(size_t)v * m->qwPerVertex];
+    const float *col = m->stream[(size_t)v * m->qwPerVertex + m->qwPerVertex - 1u];
+    if (col[0] != 0.0f || col[1] != 0.0f || col[2] != 0.0f) {
+        return -1;
+    }
+    uint32_t bits[3];
+    memcpy(bits, q, sizeof(bits));
+    for (int p = 0; p < (int)(sizeof(kClosingPlanes) / sizeof(kClosingPlanes[0])); p++) {
+        for (uint32_t c = 0; c < kClosingPlanes[p].count; c++) {
+            if (memcmp(bits, kClosingPlanes[p].corner[c], sizeof(bits)) == 0) {
+                return p;
+            }
+        }
+    }
+    return -1;
+}
+
+/* ICO_VU_INDEX_WIDE into m->drawIndex (a copy of m->index made when
+ * markLaterOverlaps left none) on every triangle of a listed closing plane;
+ * m->wideHidden when there is one.  The colour is the layout's last
+ * quadword (prelit 2, lit 3). */
+static void markWideHidden(RdMeshRec *m)
+{
+    m->wideHidden = 0;
+    const uint32_t nt = m->indexCount / 3, qpv = m->qwPerVertex;
+    if (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT) {
+        return;
+    }
+    if (m->vertexCount >= (1u << 27)) {
+        return;
+    }
+    for (uint32_t t = 0; t < nt; t++) {
+        const uint32_t kick = (m->index[t * 3] & ICO_VU_INDEX_MASK) / 4u;
+        if (kick < 2 || kick >= m->vertexCount) {
+            continue;
+        }
+        const int p = closingPlaneOf(m, kick - 2u);
+        if (p < 0 || closingPlaneOf(m, kick - 1u) != p || closingPlaneOf(m, kick) != p) {
+            continue;
+        }
+        if (!m->drawIndex) {
+            m->drawIndex = malloc((size_t)m->indexCount * 4);
+            if (!m->drawIndex) {
+                return;
+            }
+            memcpy(m->drawIndex, m->index, (size_t)m->indexCount * 4);
+        }
+        for (int c = 0; c < 3; c++) {
+            m->drawIndex[t * 3 + (uint32_t)c] |= ICO_VU_INDEX_WIDE;
+        }
+        m->wideHidden = 1;
+    }
+}
+
 bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src)
 {
     free(dst->drawIndex);
     dst->drawIndex = NULL;
+    dst->wideHidden = 0;
     if (!src->drawIndex || dst->indexCount != src->indexCount) {
         return !src->drawIndex;
     }
     dst->drawIndex = malloc((size_t)src->indexCount * 4);
     if (dst->drawIndex) {
         memcpy(dst->drawIndex, src->drawIndex, (size_t)src->indexCount * 4);
+        dst->wideHidden = src->wideHidden;
     }
     return dst->drawIndex != NULL;
 }
@@ -575,6 +680,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     }
     snprintf(m->name, sizeof(m->name), "%s", name ? name : "vu mesh");
     markLaterOverlaps(m); /* issue 25 */
+    markWideHidden(m);
     return id;
 }
 
@@ -1267,6 +1373,9 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
         pushVu(d->bones ? RDC_SKINNED : RDC_MESH, key, &p, &d->vu, d->bones, NULL, d->materials);
     if (c) {
         c->u[0] = mesh.id;
+        /* b[4]: RD_VU_VIEW_*, how the model matrices follow the camera
+         * (rd_interp.c's re-base); 0 in older dumps */
+        c->b[4] = d->bones ? 0 : d->view;
     }
 }
 
@@ -1285,7 +1394,17 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
     p.qwPerVertex = d->lit ? RD_VU_QW_GRID_LIT : RD_VU_QW_GRID;
     /* Mesh3D.qwc: per strip the VIF qword, tag, colour, the vertices, MSCNT */
     p.streamQw = d->strips * (d->stripLen * p.qwPerVertex + 4);
-    pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
+    uint8_t kind = 0;
+    float sx = 0.0f, sy = 0.0f;
+    rd__grid_screen_st_take(&kind, &sx, &sy);
+    RdCmd *c = pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
+    if (c && kind) {
+        /* b[5]: the RdGridSt formula of the STs (rd.h rd_grid_screen_st),
+         * f[0], f[1] its sx and sy; 0 in other grids and in older dumps */
+        c->b[5] = kind;
+        c->f[0] = sx;
+        c->f[1] = sy;
+    }
 }
 
 /* A particle batch drawn with key 0 is keyed here by list and the

@@ -720,6 +720,136 @@ void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex)
 #endif
 }
 
+#ifdef ICO_RD
+
+/* PC port: which life of its slot a particle emitter is in.  The presenter
+   pairs a draw with the previous tick's by its key, and an emitter is keyed
+   by its address.  Emitters come from a first-fit heap partition and a
+   one-shot effect (footstep dust) frees its emitter when it ends, so a new
+   effect created a tick later usually takes the same address: it would share
+   the dead one's key and its sprites would blend in from where the dead
+   one's were.  So each init stamps the slot: a count of the inits at this
+   address, kept here in a host-side table (the PrimParticle layout is fixed
+   by the layout asserts, so no field is added).  The count goes into the
+   key's ordinal byte (prim_DispParticle -> mc_HostParticleKey), which the
+   presenter does not read: it matches whole keys, and looks only at the
+   pointer (key >> 16) and the part (key >> 8).  A byte repeats after 256
+   inits at one address, far longer than a tick.
+
+   The table keeps an address after its emitter is deleted
+   (prim_DeleteParticle, or an init that failed after the stamp), marked
+   dead, so the next init there still counts on from it.  A new address
+   takes an empty slot of its run of probes, else the dead entry used
+   longest ago, else the entry used longest ago (an emitter whose partition
+   was freed whole, never deleted, is no longer drawn).  So a live emitter,
+   drawn every tick, keeps its slot and its count while it lives: losing it
+   would change its key for a tick, and that present would draw it
+   unpaired. */
+#define PRIM_HOST_GEN_SLOTS 1024
+#define PRIM_HOST_GEN_PROBES 8
+
+static struct {
+    const void *emitter;
+    unsigned int used; /* primHostGenClock at its last stamp or draw */
+    unsigned char gen;
+    unsigned char dead; /* deleted: the first to go for a new address */
+} primHostGen[PRIM_HOST_GEN_SLOTS];
+
+/* counts every stamp and draw: which entry was used longest ago */
+static unsigned int primHostGenClock;
+
+/* a new address's first count: varied, so an evicted address that comes
+   back is unlikely to repeat the count it had */
+static unsigned char primHostGenSeed;
+
+static unsigned int primHostGenHome(const void *p)
+{
+    unsigned long long v = (unsigned long long)(size_t)p >> 4;
+    return (unsigned int)((v ^ (v >> 10)) % PRIM_HOST_GEN_SLOTS);
+}
+
+/* the emitter's entry in the table, -1 if it has none */
+static int primHostGenFind(const void *p)
+{
+    unsigned int h = primHostGenHome(p);
+    unsigned int i;
+
+    for (i = 0; i < PRIM_HOST_GEN_PROBES; i++) {
+        unsigned int k = (h + i) % PRIM_HOST_GEN_SLOTS;
+        if (primHostGen[k].emitter == p) {
+            return (int)k;
+        }
+    }
+    return -1;
+}
+
+/* the slot a new address takes in its run of probes: the first empty one,
+   else the dead one used longest ago, else the one used longest ago */
+static int primHostGenVictim(const void *p)
+{
+    unsigned int h = primHostGenHome(p);
+    int best = -1;
+    int bestDead = 0;
+    unsigned int i;
+
+    for (i = 0; i < PRIM_HOST_GEN_PROBES; i++) {
+        unsigned int k = (h + i) % PRIM_HOST_GEN_SLOTS;
+        int dead = primHostGen[k].dead != 0;
+        if (primHostGen[k].emitter == 0) {
+            return (int)k;
+        }
+        if (best < 0 || (dead && !bestDead) ||
+            (dead == bestDead &&
+             primHostGenClock - primHostGen[k].used > primHostGenClock - primHostGen[best].used)) {
+            best = (int)k;
+            bestDead = dead;
+        }
+    }
+    return best;
+}
+
+/* a new life of the emitter's slot: a different count from the last */
+void prim_HostParticleStamp(const PrimParticle *p)
+{
+    int k = primHostGenFind(p);
+
+    if (k < 0) {
+        k = primHostGenVictim(p);
+        primHostGen[k].emitter = p;
+        primHostGen[k].gen = primHostGenSeed++;
+    }
+    primHostGen[k].gen = (unsigned char)(primHostGen[k].gen + 1);
+    if (primHostGen[k].gen == 0) {
+        primHostGen[k].gen = 1; /* 0 is "not in the table" */
+    }
+    primHostGen[k].dead = 0;
+    primHostGen[k].used = ++primHostGenClock;
+}
+
+/* the count of the emitter's current life (0 if not in the table) */
+unsigned int prim_HostParticleGen(const PrimParticle *p)
+{
+    int k = primHostGenFind(p);
+
+    if (k < 0) {
+        return 0;
+    }
+    primHostGen[k].used = ++primHostGenClock;
+    return primHostGen[k].gen;
+}
+
+/* the emitter is freed: its entry is the first to go, its count kept */
+void prim_HostParticleForget(const PrimParticle *p)
+{
+    int k = primHostGenFind(p);
+
+    if (k >= 0) {
+        primHostGen[k].dead = 1;
+    }
+}
+
+#endif
+
 /* One 16-byte constant packet template, copied to the stack. */
 typedef struct { /* field names derived */
     long long d[2];
@@ -747,6 +877,9 @@ PrimParticle *prim_InitParticleByPartition(int num, float x, float y, float z, i
     if (p == 0) {
         return 0;
     }
+#ifdef ICO_RD
+    prim_HostParticleStamp(p); /* a reused address is a new emitter to the presenter */
+#endif
     p->buf[0].head[0] = 0;
     p->buf[0].head[1] = 0;
     p->buf[0].head[2] = 0;
@@ -776,12 +909,18 @@ PrimParticle *prim_InitParticleByPartition(int num, float x, float y, float z, i
     p->objs[0] =
         (PrimParticleObj *)iosMallocDebugNoAssert(heap, p->objSize, "src/Primitive.c", 944);
     if (p->objs[0] == 0) {
+#ifdef ICO_RD
+        prim_HostParticleForget(p);
+#endif
         iosFree(p);
         return 0;
     }
     p->objs[1] =
         (PrimParticleObj *)iosMallocDebugNoAssert(heap, p->objSize, "src/Primitive.c", 949);
     if (p->objs[1] == 0) {
+#ifdef ICO_RD
+        prim_HostParticleForget(p);
+#endif
         iosFree(p->objs[0]);
         iosFree(p);
         return 0;
@@ -845,9 +984,10 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
             dl_OpenDma(2, p->objs[p->cur], p->objSize);
             dl_CloseDma();
 #ifdef ICO_RD
-            mc_HostParticleKey(p); /* package I1: the batch keyed by its emitter */
+            /* the batch keyed by its emitter and the life of its slot */
+            mc_HostParticleKey(p, prim_HostParticleGen(p));
             mc_HostDma(2, p->objs[p->cur], p->objSize);
-            mc_HostParticleKey(0);
+            mc_HostParticleKey(0, 0);
 #endif
             if (systemStatus[5] == 0) {
                 p->cur ^= 1;
@@ -860,6 +1000,9 @@ void prim_DispParticle(PrimParticle *p, void *mtx)
 
 void prim_DeleteParticle(PrimParticle *p)
 {
+#ifdef ICO_RD
+    prim_HostParticleForget(p); /* the next emitter at this address counts on */
+#endif
     EntryDelayFree(p->objs[1]);
     EntryDelayFree(p->objs[0]);
     EntryDelayFree(p);

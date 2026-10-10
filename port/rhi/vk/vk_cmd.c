@@ -189,6 +189,12 @@ void rhi_wait_idle(void)
     }
 }
 
+void rhi_collect_garbage_now(void)
+{
+    rhi_wait_idle();
+    vkr_destroy_garbage(vkr_cur_frame());
+}
+
 static void vkr_open_barrier(VkCommandBuffer cb);
 static void vkr_flush_barriers(VkrCmdList *c);
 
@@ -1336,11 +1342,15 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     VkrFrame *f = vkr_cur_frame();
+    const bool keep = (index & RHI_TIMESTAMP_KEEP_BARRIERS) != 0;
+    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
     if (!c || !f->queryPool || !f->tsReset || index >= RHI_MAX_TIMESTAMPS ||
         (f->tsWritten & (1u << index))) {
         return;
     }
-    vkr_flush_barriers(c);
+    if (!keep) {
+        vkr_flush_barriers(c);
+    }
     vkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f->queryPool, index);
     f->tsWritten |= 1u << index;
 }

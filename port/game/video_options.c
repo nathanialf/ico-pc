@@ -12,6 +12,7 @@
 #define ASPECT_16_9 (16.0f / 9.0f)
 #define ASPECT_21_9 (64.0f / 27.0f)
 #define ASPECT_32_9 (32.0f / 9.0f)
+#define ASPECT_48_9 (48.0f / 9.0f)
 
 static IcoVideoOptions s_opt;
 
@@ -21,10 +22,10 @@ static unsigned s_serial;
 
 static int s_winW, s_winH;
 
-/* The Android rules (a 60 a second frame rate default, and
+/* The mobile rules (a 60 a second frame rate default, and
    Enhanced's resolution "auto"); the build's, or a test's
    (ico_video_set_android) */
-#ifdef __ANDROID__
+#if defined(__ANDROID__) || defined(ICO_IOS)
 static int s_android = 1;
 #else
 static int s_android = 0;
@@ -57,9 +58,8 @@ int ico_video_auto_scale(void)
 
 int ico_video_default_framerate(int android)
 {
-    /* "uncapped"; 60 on Android, where "uncapped" in
-       mailbox mode presented twice a display refresh (window_host.c pace),
-       two full replays a refresh on the one thread that also runs the game */
+    /* "uncapped"; 60 on Android, where every present is a full replay on
+       the one thread that also runs the game */
     return android ? 60 : ICO_FRAMERATE_UNCAPPED;
 }
 
@@ -130,7 +130,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
         return 0;
     }
     if (sscanf(s, "%u%c%c", &n, &tail, &tail) == 2 && (tail == 'x' || tail == 'X') && n >= 1 &&
-        n <= 8) {
+        n <= ICO_RES_SCALE_MAX) {
         o->resW = o->resH = 0;
         o->resScale = (int)n;
         return 0;
@@ -138,7 +138,7 @@ int ico_video_parse_resolution(const char *s, IcoVideoOptions *o)
     return -1;
 }
 
-static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "auto"};
+static const char *const kAspect[] = {"4:3", "16:10", "16:9", "21:9", "32:9", "48:9", "auto"};
 
 static const char *const kWindowMode[] = {"windowed", "borderless", "fullscreen"};
 static const char *const kFilter[] = {"original", "trilinear", "anisotropic"};
@@ -336,7 +336,7 @@ static void sanitize(IcoVideoOptions *o)
     }
     if (o->resScale == ICO_RES_AUTO) {
         o->resW = o->resH = 0;
-    } else if (o->resScale < 0 || o->resScale > 8 || o->resW < 0 || o->resH < 0) {
+    } else if (o->resScale < 0 || o->resScale > ICO_RES_SCALE_MAX || o->resW < 0 || o->resH < 0) {
         o->resScale = o->resW = o->resH = 0;
     }
     if (o->windowMode < 0 || o->windowMode >= ICO_WINDOW_COUNT) {
@@ -344,6 +344,7 @@ static void sanitize(IcoVideoOptions *o)
     }
     o->vsync = o->vsync != 0;
     o->fullHeight = o->fullHeight != 0;
+    o->fullPixel = o->fullPixel != 0;
     if (o->framerate != ICO_FRAMERATE_ORIGINAL && o->framerate != ICO_FRAMERATE_UNCAPPED &&
         (o->framerate < FRAMERATE_MIN || o->framerate > FRAMERATE_MAX)) {
         o->framerate = d.framerate;
@@ -427,6 +428,7 @@ static void read_config(void)
     }
     o.vsync = ico_config_get_bool("video.vsync", 1) != 0;
     o.fullHeight = ico_config_get_bool("video.full_height", 0) != 0;
+    o.fullPixel = ico_config_get_bool("video.full_pixel", 0) != 0;
     {
         /* no key: the default (60 on Android, else "uncapped") */
         char dfr[16];
@@ -552,6 +554,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.vsync", o.vsync);
     r |= ico_config_set_string("video.texture_filter", ico_video_filter_name(o.filter));
     r |= ico_config_set_bool("video.full_height", o.fullHeight);
+    r |= ico_config_set_bool("video.full_pixel", o.fullPixel);
     r |= ico_config_set_string("video.framerate",
                                ico_video_framerate_name(o.framerate, fr, sizeof(fr)));
     r |= ico_config_set_bool("video.crt", o.crt);
@@ -628,12 +631,14 @@ float ico_video_aspect(void)
         return ASPECT_21_9;
     case ICO_ASPECT_32_9:
         return ASPECT_32_9;
+    case ICO_ASPECT_48_9:
+        return ASPECT_48_9;
     case ICO_ASPECT_AUTO:
         if (s_winW <= 0 || s_winH <= 0) {
             return ASPECT_4_3;
         }
         a = (float)s_winW / (float)s_winH;
-        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ASPECT_32_9 ? ASPECT_32_9 : a);
+        return a < ASPECT_4_3 ? ASPECT_4_3 : (a > ICO_ASPECT_MAX ? ICO_ASPECT_MAX : a);
     default:
         return ASPECT_4_3;
     }

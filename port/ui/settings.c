@@ -677,15 +677,23 @@ static int brightness(void)
     return v < 0 ? 0 : v > BRIGHTNESS_MAX ? BRIGHTNESS_MAX : v;
 }
 
+/* The Resolution row's cycle: Window, then these scales, then Auto.  A
+   scale from the file that is not in the list (5x, 7x) or a WxH reads -1. */
+static const int kResScales[] = {1, 2, 3, 4, 6, 8, 12, 16};
+#define RES_STEPS ((int)N_OF(kResScales))
+
+/* the position in the cycle: 0 Window, 1..RES_STEPS the scales, -1 neither */
 static int resolutionIndex(const IcoVideoOptions *o)
 {
-    if (o->resScale >= 1 && o->resScale <= 4) {
-        return o->resScale;
+    for (int i = 0; i < RES_STEPS; i++) {
+        if (o->resScale == kResScales[i]) {
+            return i + 1;
+        }
     }
     if (o->resW == 0 && o->resScale == 0) {
         return 0;
     }
-    return -1; /* a WxH or a larger N from the file */
+    return -1; /* a WxH or another N from the file */
 }
 
 /* ------------------------------------------------------------- Extras
@@ -994,6 +1002,14 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         if (resolutionIndex(&o) == 0) {
             return ui_str(UI_STR_VAL_WINDOW);
         }
+#ifdef ICO_RD
+        if (o.resScale > 0 && rd_scene_scale_lowered() > 0 &&
+            rd_scene_scale_lowered() < o.resScale) {
+            /* the graphics card could not hold it: the scale in use after it */
+            snprintf(buf, size, "%dx (%dx)", o.resScale, rd_scene_scale_lowered());
+            return buf;
+        }
+#endif
         return ico_video_resolution_name(&o, buf, size);
     case UI_OPT_ASPECT:
         return o.aspect == ICO_ASPECT_AUTO ? ui_str(UI_STR_VAL_AUTO)
@@ -1036,6 +1052,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.effectFog);
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
+    case UI_OPT_FULL_PIXEL:
+        return onOff(o.fullPixel);
     case UI_OPT_FRAMERATE:
         /* the option as set, in force in both presets */
         if (o.framerate == ICO_FRAMERATE_ORIGINAL) {
@@ -1277,6 +1295,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectFog;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
+    case UI_OPT_FULL_PIXEL:
+        return &o->fullPixel;
     default:
         return NULL;
     }
@@ -1313,11 +1333,28 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         if (crtForcesNative(&o)) {
             return; /* 1x while the CRT filter is on */
         }
-        /* Window, 1x .. 4x, then Auto (index 5) */
-        int i = o.resScale == ICO_RES_AUTO ? 5 : resolutionIndex(&o);
-        i = i < 0 ? (dir > 0 ? 0 : 4) : stepIndex(i, 6, dir);
+        /* Window, the scales, then Auto (index RES_STEPS + 1) */
+        int i = o.resScale == ICO_RES_AUTO ? RES_STEPS + 1 : resolutionIndex(&o);
+        if (i < 0 && o.resW == 0 && o.resH == 0 && o.resScale > 0) {
+            /* a scale from the file that is not in the list (5x, 9x): the
+               nearest entry in the direction pressed */
+            i = dir > 0 ? RES_STEPS + 1 : 0;
+            for (int k = 0; k < RES_STEPS; k++) {
+                if (dir > 0 && kResScales[k] > o.resScale) {
+                    i = k + 1;
+                    break;
+                }
+                if (dir < 0 && kResScales[k] < o.resScale) {
+                    i = k + 1;
+                }
+            }
+        } else if (i < 0) {
+            i = dir > 0 ? 0 : RES_STEPS; /* a WxH: Window on Right, the top scale on Left */
+        } else {
+            i = stepIndex(i, RES_STEPS + 2, dir);
+        }
         o.resW = o.resH = 0;
-        o.resScale = i == 5 ? ICO_RES_AUTO : i;
+        o.resScale = i == RES_STEPS + 1 ? ICO_RES_AUTO : (i == 0 ? 0 : kResScales[i - 1]);
         video = 1;
         break;
     }
@@ -1358,7 +1395,8 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_SOFTENING:
     case UI_OPT_EFFECT_MOTION_BLUR:
     case UI_OPT_EFFECT_FOG:
-    case UI_OPT_EFFECT_CINEMATIC_BARS: {
+    case UI_OPT_EFFECT_CINEMATIC_BARS:
+    case UI_OPT_FULL_PIXEL: {
         /* the plain On/Off display rows */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
@@ -1883,6 +1921,7 @@ static void buildGalleryBar(void)
      Controls     from 40, up to 9 rows 18 apart, 10 or 11 rows 16, 12 or
                   13 rows 13 (Back at 183, its box to 219); 14 or more from
                   30, 11 apart (Back at 184, its box to 220)
+     Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220)
      the others   from 40, 18 apart */
 static int pagePitch(int page, int n, int *y0)
 {
@@ -1892,6 +1931,9 @@ static int pagePitch(int page, int n, int *y0)
         return 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_EFFECTS && n > 9) {
+        return 16; /* ten rows: Back at 184, its box to 220 */
+    }
     if (page == UI_PAGE_CHARACTERS) {
         if (ui_settings_characters_in_viewer()) {
             /* inside the viewer: the shown character's rows, Switch,
@@ -2121,6 +2163,10 @@ static void buildListPage(int id, int header, const UiListDef *def, int parent)
         st.colA = (UiListCol){230, 180, 21.0f, UI_ALIGN_LEFT};
         st.colB = (UiListCol){420, 190, 21.0f, UI_ALIGN_LEFT};
         st.statusY = 198;
+        /* under the hint: the menus keep the gamepad's buttons by position */
+        P(ui_settings_add_row(20, 214, 600, 14, 0, -1, UI_STR_REMAP_MENU_NOTE, NULL, 17.0f,
+                              UI_ALIGN_CENTER))
+            ->centerX = 1;
     } else if (id == UI_PAGE_MUSIC) {
         /* the label (the asset's name), an ambience's stage at the right,
            in the list pages' sizes on a closer pitch; the status, the
@@ -2455,6 +2501,7 @@ static void build(void)
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -2464,6 +2511,7 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only) */

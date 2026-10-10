@@ -104,6 +104,9 @@ VuVSOut vu_lit_main(uint vid, uint variant)
         VuVtx v = vu_lit_vertex(vu_probe_vertex(vid), mode, variant, true);
         return vu_probe_out(vid, vu_probe_field(v, (vid / 3u) % VU_PROBE_FIELDS));
     }
+    if (vu_wide_dropped(vid)) {
+        return vu_out_init();
+    }
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     uint corner = vid & 3u;
     VuVtx a = vu_lit_vertex(kick - 2u, mode, variant, false);

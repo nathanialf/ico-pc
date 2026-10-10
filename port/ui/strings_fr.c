@@ -119,6 +119,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_REMAP_KEYBOARD] = "Clavier",
     [UI_STR_REMAP_GAMEPAD] = "Manette",
     [UI_STR_REMAP_HINT] = "Croix : modifier    Carré : effacer    Triangle : retour",
+    [UI_STR_REMAP_MENU_NOTE] =
+        "Dans les menus, les boutons de face et la croix de la manette suivent leur position.",
     [UI_STR_REMAP_PRESS] = "Appuyez sur une touche ou un bouton…",
     [UI_STR_REMAP_RESET] = "Rétablir les valeurs par défaut",
     [UI_STR_OPT_TOUCH_MODE] = "Commandes tactiles",
@@ -373,7 +375,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
         "A : la main de Yorda reste tenue tant que R1 est maintenu. B : appuyez sur R1 pour lâcher sa main.",
     [UI_STR_PLAYERS_NOTE] = "2 : une deuxième manette dirige Yorda.",
     [UI_STR_BUTTON_CONFIG_NOTE] =
-        "La disposition des touches du jeu, gardée dans la sauvegarde. Configurer les touches règle clavier et manette.",
+        "La disposition des touches du jeu, gardée dans la sauvegarde. Elle s’applique en plus de Configurer les touches.",
     [UI_STR_OPT_TEXTURE_PACK] = "Pack de textures",
     [UI_STR_VAL_NONE_INSTALLED] = "Aucun installé",
     [UI_STR_TEXTURE_PACK_NOTE] = "Packs PCSX2 : copiez SCES-50760 dans textures.",
@@ -467,6 +469,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] = {
     [UI_STR_VAL_BORDERLESS] = "Sans bordure",
     /* Effects > Cinematic bars */
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bandes cinéma",
+    [UI_STR_OPT_FULL_PIXEL] = "Image sans bordure",
     /* Settings > Graphics driver (Android), Quit game */
     [UI_STR_SECTION_GPU_DRIVER] = "Pilote graphique",
     [UI_STR_OPT_GPU_DRIVER] = "Pilote",

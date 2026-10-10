@@ -203,6 +203,7 @@ bool rd__apply_state(RdStateBlock *s, const RdCmd *c)
     case RDC_FILTER:
         d->magFilter = c->b[0];
         d->minFilter = c->b[1];
+        s->tex1Lod = c->u[0];
         return true;
     case RDC_WRAP:
         d->wrap.s = c->b[0];
@@ -273,6 +274,7 @@ void rd__frame_reset(RdFrame *f)
     f->hasVu = 0;
     f->headValid = 0;
     f->cut = 0;
+    f->freeCamera = 0;
     f->fade = 0;
     f->textItems = 0;
     f->closed = 0;
@@ -547,13 +549,63 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
     t->color = rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {
-        /* sampled: the fog reads it in place (rd_replay.c doFog) */
-        t->depth = rhi_create_texture(
-            &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8,
-                              RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | RHI_TEX_SAMPLED, name});
+        /* every use the device allows, whichever way the fog reads it
+         * (rd_fog_path.c): sampled in place, a copy source for its copy and
+         * for the buffer path, so a change of path needs no new targets */
+        const bool sampled = rhi_limits()->depthSampled;
+        const uint32_t dsUsage =
+            RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | (sampled ? (uint32_t)RHI_TEX_SAMPLED : 0u);
+        t->depth =
+            rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8, dsUsage, name});
         t->depthState = RHI_STATE_UNDEFINED;
+        t->depthSampled = sampled;
     }
     return t->color.id != 0 && (!t->withDepth || t->depth.id != 0);
+}
+
+RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy, const char *name)
+{
+    if (!g_rd.depthCopy && t->depthSampled) {
+        rd__transition(cl, t->depth, &t->depthState, RHI_STATE_DEPTH_READ);
+        return t->depth;
+    }
+    /* the whole depth, both aspects, into a texture that is only ever
+     * sampled: the read goes through a transfer, after the depth's last
+     * pass has stored it, never through the attachment itself */
+    if (!copy->tex.id || copy->w != t->tw || copy->h != t->th) {
+        rd__depth_copy_free(copy);
+        /* the depth-stencil usage: Vulkan's sampled depth layout
+         * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it; a copy source for
+         * the fog's probe (rd_fog_path.c) */
+        copy->tex = rhi_create_texture(&(RhiTextureDesc){
+            t->tw, t->th, 1, RHI_FMT_D32F_S8,
+            RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC, name});
+        copy->state = RHI_STATE_UNDEFINED;
+        copy->w = t->tw;
+        copy->h = t->th;
+    }
+    if (!copy->tex.id) {
+        rd__note_scene_pressure();
+        return (RhiTexture){0};
+    }
+    rd__transition(cl, t->depth, &t->depthState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, copy->tex, &copy->state, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_texture(cl, t->depth, (RhiRect){0, 0, t->tw, t->th}, copy->tex, 0, 0);
+    rd__transition(cl, copy->tex, &copy->state, RHI_STATE_SHADER_READ);
+    return copy->tex;
+}
+
+void rd__depth_copy_free(RdDepthCopy *copy)
+{
+    if (copy->tex.id) {
+        rhi_destroy_texture(copy->tex);
+    }
+    memset(copy, 0, sizeof(*copy));
+}
+
+void rd__force_depth_copy(void)
+{
+    rd__set_fog_path(RD_FOG_COPY);
 }
 
 void rd__target_destroy_gpu(RdTargetRec *t)
@@ -573,7 +625,10 @@ void rd__target_destroy_gpu(RdTargetRec *t)
     t->color = t->depth = t->snap = (RhiTexture){0};
 }
 
-static void createNamedTargets(void)
+/* One pass over the named targets at the scale in force.  True when a
+ * scene-class target could not be created (the pass stops there: the caller
+ * may retry smaller); any other failure is only logged, as it always was. */
+static bool createNamedPass(bool stopOnSceneFail)
 {
     for (int i = 0; i < RD_TARGET_COUNT; i++) {
         RdTargetRec *t = &g_rd.targets[i];
@@ -589,6 +644,9 @@ static void createNamedTargets(void)
         namedTargetDesc(i, g_rd.gsW, g_rd.gsH, &t->w, &t->h, &t->format, &t->withDepth);
         rd__target_scale_of(t, i);
         if (!rd__target_create_gpu(t, s_targetNames[i])) {
+            if (stopOnSceneFail && sceneClass(i)) {
+                return true;
+            }
             rd__log("could not create target %s", s_targetNames[i]);
         }
         /* cleared at the first replay (rd_replay.c clearNewTargets): a new
@@ -596,6 +654,65 @@ static void createNamedTargets(void)
            first frames of a start sample DISPLAY (the game's kept frame
            buffer) before anything has drawn into it */
         t->clearPending = 1;
+    }
+    return false;
+}
+
+/* The named targets at the scene scale the options asked for.  A scene
+ * scale the GPU cannot hold (16x of a wide picture is hundreds of megabytes
+ * a target) would leave the scene targets without a texture and the picture
+ * black, so the scale is halved, both axes together, until they fit or it
+ * reaches 1x.  The scale in force then stays lowered until the options
+ * change it (rd__apply_display), and rd_scene_scale_lowered reports it. */
+static void createNamedTargets(void)
+{
+    if (g_rd.hasDevice) {
+        /* what the last scale holds goes first, and really: a deferred free
+           would still count against the allocations below */
+        for (int i = 0; i < RD_TARGET_COUNT; i++) {
+            rd__target_destroy_gpu(&g_rd.targets[i]);
+        }
+        rd__temp_target_pool_clear();
+        rd__scene_caches_free();
+        rd__effects_depth_free();
+        rhi_collect_garbage_now();
+    }
+    for (;;) {
+        const bool canLower = g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f);
+
+        if (!createNamedPass(canLower)) {
+            return;
+        }
+        /* give back what this pass made before asking for less */
+        for (int i = 0; i < RD_TARGET_COUNT; i++) {
+            rd__target_destroy_gpu(&g_rd.targets[i]);
+        }
+        rhi_collect_garbage_now(); /* the next, smaller try must find this memory free */
+        const float nx = g_rd.sceneSx * 0.5f < 1.0f ? 1.0f : g_rd.sceneSx * 0.5f;
+        const float ny = g_rd.sceneSy * 0.5f < 1.0f ? 1.0f : g_rd.sceneSy * 0.5f;
+
+        rd__log("display: scene %gx%g does not fit this GPU, falling back to %gx%g",
+                (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)nx, (double)ny);
+        g_rd.sceneSx = nx;
+        g_rd.sceneSy = ny;
+        g_rd.sceneFellBack = true;
+    }
+}
+
+void rd__note_scene_pressure(void)
+{
+    if (g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f)) {
+        g_rd.scenePressure = true;
+    }
+}
+
+void rd__note_target_pressure(const RdTargetRec *t)
+{
+    const int idx = (int)(t - g_rd.targets);
+    const int scene = idx >= 0 && idx < RD_TARGET_COUNT ? sceneClass(idx)
+                                                        : (t->w == g_rd.gsW && t->h == g_rd.gsH);
+    if (scene) {
+        rd__note_scene_pressure();
     }
 }
 
@@ -667,8 +784,8 @@ uint32_t rd__temp_target_alloc(uint32_t w, uint32_t h, int withDepth, int keepAc
         t->snap = keep.snap;
         t->snapState = keep.snapState;
         g_rd.stats.tempReused++;
-    } else {
-        rd__target_create_gpu(t, "temp target");
+    } else if (!rd__target_create_gpu(t, "temp target")) {
+        rd__note_target_pressure(t); /* the shadow count, a screen-size alias */
     }
     t->clearPending = 1;
     g_rd.stats.tempTargets++;
@@ -951,6 +1068,55 @@ void rd_update_texture(RdTex tex, const void *rgba8)
     g_rd.texFullUpdates++;
 }
 
+size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels)
+{
+    size_t n = 0;
+    for (uint32_t l = 1; l < levels; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        n += (size_t)w * h * 4;
+    }
+    return n;
+}
+
+void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels)
+{
+    RdTexRec *t = rd__tex_rec(tex.id);
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->format != RD_TEXEL_RGBA8) {
+        return;
+    }
+    if (!chain || levels < 2) {
+        if (t->gsLevels > 1 || t->gsChain) {
+            free(t->gsChain);
+            t->gsChain = NULL;
+            t->gsLevels = 0;
+            texDirtyAll(t);
+        }
+        return;
+    }
+    /* never past the full chain of the base */
+    uint32_t full = 1;
+    for (uint32_t m = t->w > t->h ? t->w : t->h; m > 1; m >>= 1) {
+        full++;
+    }
+    if (levels > full) {
+        levels = full;
+    }
+    const size_t bytes = rd__gs_chain_bytes(t->w, t->h, levels);
+    if (t->gsChain && t->gsLevels == levels && memcmp(t->gsChain, chain, bytes) == 0) {
+        return; /* the same levels again: nothing to upload */
+    }
+    uint8_t *copy = malloc(bytes);
+    if (!copy) {
+        return;
+    }
+    memcpy(copy, chain, bytes);
+    free(t->gsChain);
+    t->gsChain = copy;
+    t->gsLevels = (uint8_t)levels;
+    texDirtyAll(t);
+}
+
 void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                             const void *px)
 {
@@ -1010,6 +1176,7 @@ void rd_destroy_texture(RdTex tex)
         g_rd.texDirtyCount--;
     }
     free(t->pixels);
+    free(t->gsChain);
     rd__free_pending(t); /* a replacement destroyed before its upload */
     uint32_t gen = t->gen;
     memset(t, 0, sizeof(*t));
@@ -1132,6 +1299,8 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
+    /* the fog's depth path (RdContext.fogPath, depthCopy) */
+    rd__fog_path_init();
     rd__apply_display(); /* the scales the named targets take */
     createNamedTargets();
     readDumpConfig();
@@ -1162,6 +1331,7 @@ void rd_shutdown(void)
                 rhi_destroy_texture(t->rhi);
             }
             free(t->pixels);
+            free(t->gsChain);
             rd__free_pending(t);
         }
     }
@@ -1176,6 +1346,12 @@ void rd_shutdown(void)
     free(g_rd.textures);
     free(g_rd.meshes);
     memset(&g_rd, 0, sizeof(g_rd));
+}
+
+static void fogSceneRemade(void *arg)
+{
+    (void)arg;
+    rd__fog_scene_remade();
 }
 
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
@@ -1200,6 +1376,9 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
             }
         }
     }
+    if (g_rd.hasDevice) {
+        rd__on_host(fogSceneRemade, NULL); /* a new SCENE size: the fog's probe and self-test */
+    }
 }
 
 void rd_set_settings(const RdSettings *settings)
@@ -1223,6 +1402,16 @@ void rd_get_scene_scale(float *sx, float *sy)
     if (sy) {
         *sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
     }
+}
+
+int rd_scene_scale_lowered(void)
+{
+    /* below what was asked, whether the GPU's size limit or the allocation
+       fallback brought it down */
+    if (g_rd.settings.sceneScale <= 0.0f || g_rd.sceneSy + 0.5f >= g_rd.settings.sceneScale) {
+        return 0;
+    }
+    return g_rd.sceneSy < 1.0f ? 1 : (int)g_rd.sceneSy;
 }
 
 void rd_set_mirror(int on)
@@ -1297,6 +1486,13 @@ static void recreateTargets(void *arg)
     rhi_wait_idle();
     createNamedTargets();
     rd__temp_target_pool_clear(); /* the parked textures have the old scale */
+    rd__fog_scene_remade();       /* a new SCENE size: the fog's probe and self-test */
+}
+
+static void fogProbeFinish(void *arg)
+{
+    (void)arg;
+    rd__fog_probe_finish();
 }
 
 typedef struct ReplayCall {
@@ -1307,6 +1503,7 @@ typedef struct ReplayCall {
 static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
+    rd__note_frame_present(c->f); /* rd_last_present_info, as rd_present notes its own */
     rd__replay_frame(c->f, c->keep, true);
 }
 
@@ -1318,6 +1515,12 @@ void rd_begin_frame(void)
     if (g_rd.recIndex >= 0) {
         rd__log("rd_begin_frame without rd_end_frame: the open frame is discarded");
     }
+    /* the fog probe a replay recorded since the last frame: read back and
+     * logged (once per start and new scene size) */
+    if (rd__fog_probe_pending()) {
+        rd__on_host(fogProbeFinish, NULL);
+    }
+    bool recreated = false;
     if (g_rd.settingsPending) {
         /* the texture pack switched off: the originals back (once
          * per edge; rd_tex.h rdtex_revert_replacements) */
@@ -1346,6 +1549,25 @@ void rd_begin_frame(void)
             /* the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */
             g_rd.interpFloor = g_rd.frameCounter + 1;
+            recreated = true;
+        }
+    }
+    /* A scene-sized texture made since the last frame did not fit
+     * (rd__note_scene_pressure): the scale comes down by half here, between
+     * frames, and the targets are made again at it.  Targets just made at a
+     * new request get their own try first. */
+    if (g_rd.scenePressure) {
+        g_rd.scenePressure = false;
+        if (!recreated && g_rd.hasDevice && (g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f)) {
+            const float nx = g_rd.sceneSx * 0.5f < 1.0f ? 1.0f : g_rd.sceneSx * 0.5f;
+            const float ny = g_rd.sceneSy * 0.5f < 1.0f ? 1.0f : g_rd.sceneSy * 0.5f;
+            rd__log("display: scene %gx%g does not fit this GPU, falling back to %gx%g",
+                    (double)g_rd.sceneSx, (double)g_rd.sceneSy, (double)nx, (double)ny);
+            g_rd.sceneSx = nx;
+            g_rd.sceneSy = ny;
+            g_rd.sceneFellBack = true;
+            rd__on_host(recreateTargets, NULL);
+            g_rd.interpFloor = g_rd.frameCounter + 1;
         }
     }
     /* the slot after the last closed frame, which is neither it nor
@@ -1362,6 +1584,8 @@ void rd_begin_frame(void)
     g_rd.stats.draws = 0;
     f->cut = g_rd.cutPending; /* rd_camera_cut between frames */
     g_rd.cutPending = 0;
+    f->freeCamera = g_rd.freeCameraPending; /* rd_free_camera between frames */
+    g_rd.freeCameraPending = 0;
     recordDefaults();
 }
 
@@ -1375,6 +1599,7 @@ void rd_end_frame(int keep)
     if (f->cut) {
         f->camera.cut = 1;
     }
+    f->camera.freeCamera = f->freeCamera ? 1 : 0;
     rd__frame_head_resolve(f, f->keep); /* the flip's head in the first replayed list */
     f->closed = 1;
     RdStateBlock s = f->startState;
@@ -1453,6 +1678,16 @@ void rd_camera_cut(void)
         f->cut = 1;
     } else {
         g_rd.cutPending = 1;
+    }
+}
+
+void rd_free_camera(void)
+{
+    RdFrame *f = rd__rec_frame();
+    if (f) {
+        f->freeCamera = 1;
+    } else {
+        g_rd.freeCameraPending = 1;
     }
 }
 
@@ -1660,6 +1895,18 @@ void rd_sampler_filter(RdFilter mag, RdFilter min)
     rd__rec_filter(mag, min);
 }
 
+void rd_sampler_tex1(uint64_t tex1)
+{
+    const uint32_t mmin = (uint32_t)((tex1 >> 6) & 7u);
+    RdCmd *c = rd__push(RDC_FILTER);
+    if (c) {
+        c->b[0] = (uint8_t)((tex1 >> 5) & 1u ? RD_FILTER_LINEAR : RD_FILTER_NEAREST);
+        c->b[1] = (uint8_t)(mmin == 1u || mmin == 4u || mmin == 5u ? RD_FILTER_LINEAR
+                                                                   : RD_FILTER_NEAREST);
+        c->u[0] = rd_tex1_lod(tex1);
+    }
+}
+
 void rd_sampler_wrap(RdWrap s, RdWrap t)
 {
     RdCmd *c = rd__push(RDC_WRAP);
@@ -1764,6 +2011,7 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
     c->u[0] = off;
     c->u[1] = count;
     c->b[3] = g_rd.textQuads ? RD_SCREEN_TEXT_QUADS : 0; /* deferred text's quads */
+    c->b[4] = rd__frame_projected() ? RD_SCREEN_FRAME_CAMERA : 0;
     setKey(c, key);
     g_rd.stats.draws++;
 }

@@ -89,7 +89,6 @@ typedef struct RdPresentPreset {
 } RdPresentPreset;
 
 #define RD_ASPECT_43 (4.0f / 3.0f)
-#define RD_ASPECT_MAX (32.0f / 9.0f)
 
 void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
 {
@@ -118,6 +117,11 @@ void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box)
     box->y = (int32_t)((outH - h) / 2);
     box->w = w ? w : 1;
     box->h = h ? h : 1;
+}
+
+static int32_t roundPx(float v)
+{
+    return (int32_t)floorf(v + 0.5f);
 }
 
 /* one for every preset: the display options apply on their own
@@ -171,14 +175,20 @@ bool rd__apply_display(void)
         w = gw;
         h = gh;
     }
-    /* from the GS size up to 4K (3840 x 2160) */
-    if (w > 3840.0f) {
-        h *= 3840.0f / w;
-        w = 3840.0f;
+    /* from the GS size up to the GPU's largest render target, both axes scaled
+     * together so the shape is kept (16384 where there is no device) */
+    float lim = g_rd.hasDevice ? (float)rhi_limits()->maxRenderTargetSize : 16384.0f;
+    if (g_rd.hasDevice && rhi_limits()->tiler && lim > 4096.0f) {
+        lim = 4096.0f; /* phones share memory with the system: a big scene could
+                          get the app killed before the allocation reports failure */
     }
-    if (h > 2160.0f) {
-        w *= 2160.0f / h;
-        h = 2160.0f;
+    if (w > lim) {
+        h *= lim / w;
+        w = lim;
+    }
+    if (h > lim) {
+        w *= lim / h;
+        h = lim;
     }
     const float sx = w / gw < 1.0f ? 1.0f : w / gw;
     const float sy = h / gh < 1.0f ? 1.0f : h / gh;
@@ -189,7 +199,10 @@ bool rd__apply_display(void)
     }
     const uint8_t full = st->fullHeightScene != 0;
     const uint32_t vs = st->vsync ? 2u : 1u;
-    const bool changed = sx != g_rd.sceneSx || sy != g_rd.sceneSy || work != g_rd.workScale ||
+    /* compared with what the options asked for last time, not with what the
+     * allocation fallback (createNamedTargets) settled on, so an unrelated
+     * change does not recreate the targets just to fail the same way again */
+    const bool changed = sx != g_rd.sceneReqSx || sy != g_rd.sceneReqSy || work != g_rd.workScale ||
                          full != g_rd.fullHeight;
     /* one line when what the options give differs from what was in force:
      * this runs on a settings change or a resize (rd_begin_frame's
@@ -200,8 +213,13 @@ bool rd__apply_display(void)
                 (double)sx, (double)sy, crtLock ? " (CRT: 1x)" : "", (double)work, (double)aspect,
                 (unsigned)filter, full ? "full" : "half", st->vsync ? "on" : "off");
     }
-    g_rd.sceneSx = sx;
-    g_rd.sceneSy = sy;
+    if (changed) {
+        g_rd.sceneReqSx = sx;
+        g_rd.sceneReqSy = sy;
+        g_rd.sceneSx = sx;
+        g_rd.sceneSy = sy;
+        g_rd.sceneFellBack = false;
+    }
     g_rd.workScale = work;
     g_rd.wideX = wide;
     g_rd.outAspect = aspect;
@@ -217,6 +235,13 @@ bool rd__apply_display(void)
     g_rd.vsyncApplied = vs;
     return changed;
 }
+
+/* rd_display_probe's texture: one texel per point, DISPLAY's format */
+static struct {
+    RhiTexture tex;
+    RhiState state;
+    RhiFormat format;
+} s_probe;
 
 static RhiTexture s_backbuffer;
 
@@ -332,8 +357,8 @@ void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
  * by blit_depth_ps: the colour exactly as blit_ps, and SV_Depth the scene's
  * depth at the same normalised source position (SCENE and DISPLAY cover
  * the same GS frame; a mirrored box flips both), read nearest from SCENE's
- * depth where it is, in RHI_STATE_DEPTH_READ, as rd_replay.c doFog reads
- * it (every target depth is created sampleable).  Outside the box the
+ * depth as rd_replay.c doFog reads it (rd__sampled_depth: in place, or a
+ * copy with g_rd.depthCopy).  Outside the box the
  * clear stays, so the bars read as far.  The point is an effects program
  * hooked into the API (ReShade, vkBasalt): it looks for a depth buffer of
  * the backbuffer's size among the render passes, and the scene's is the
@@ -373,13 +398,20 @@ static struct {
     RhiState outState;
     uint32_t outW, outH;
     int failLogged;
+    RdDepthCopy copy; /* SCENE's depth with g_rd.depthCopy */
 } s_depth;
+
+void rd__effects_depth_free(void)
+{
+    rd__depth_copy_free(&s_depth.copy);
+}
 
 static void depthShutdown(void)
 {
     if (s_depth.out.id) {
         rhi_destroy_texture(s_depth.out);
     }
+    rd__depth_copy_free(&s_depth.copy);
     memset(&s_depth, 0, sizeof(s_depth));
 }
 
@@ -416,7 +448,11 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
         }
         return false;
     }
-    rd__transition(cl, ts->depth, &ts->depthState, RHI_STATE_DEPTH_READ);
+    /* SCENE's depth in place, or its copy (g_rd.depthCopy) */
+    const RhiTexture zTex = rd__sampled_depth(cl, ts, &s_depth.copy, "rd effects depth copy");
+    if (!zTex.id) {
+        return false;
+    }
     rd__transition(cl, s_depth.out, &s_depth.outState, RHI_STATE_DEPTH_WRITE);
 
     RhiRenderPassDesc p;
@@ -458,7 +494,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     b[1].sampler = rd__sampler(filter, filter, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
     b[2].slot = 2;
     b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[2].texture = ts->depth;
+    b[2].texture = zTex;
     b[2].aspect = RHI_ASPECT_DEPTH;
     const RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
     if (g2.id) {
@@ -798,17 +834,13 @@ static void textWalk(void *user, int list, uint32_t index, const RdCmd *c, const
     }
 }
 
-static int32_t roundPx(float v)
-{
-    return (int32_t)floorf(v + 0.5f);
-}
-
 /* the region of segment g of t on the output: its scissor, its lines and
- * the reduction's crop, inside the box; false when empty */
+ * the reduction's crop (full pixel off), inside the box; false when empty */
 static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
 {
     const RdRect *b = &s_ov.ctx.box;
-    const float bx = (float)b->x, by = (float)b->y, bw = (float)b->w, bh = (float)b->h;
+    const RhiRect real = {b->x, b->y, (uint32_t)b->w, (uint32_t)b->h};
+    const float bx = (float)real.x, by = (float)real.y, bw = (float)real.w, bh = (float)real.h;
     const float W = (float)t->gsW, H = (float)t->gsH;
     /* the 4:3 picture the UI is drawn in (font.h ui_begin_overlay) */
     const float w43 = bw < bh * (4.0f / 3.0f) ? bw : bh * (4.0f / 3.0f);
@@ -820,12 +852,17 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     float y0 = by + (float)t->sc[1] * bh / H;
     float y1 = by + (float)(t->sc[3] + 1) * bh / H;
     /* the reduction's crop (rd_post.c postReduction): 2 pixels left and
-     * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512) */
-    const float crop = t->gsH >= 512 ? 8.0f : 2.0f, half = H * 0.5f;
-    x0 = fmaxf(x0, bx + bw * 2.0f / W);
-    x1 = fminf(x1, bx + bw * (W - 2.0f) / W);
-    y0 = fmaxf(y0, by + bh * crop / half);
-    y1 = fminf(y1, by + bh * (half - crop) / half);
+     * right, 8 lines of DISPLAY's H / 2 top and bottom (2 below 512), which
+     * the picture holds black.  With full pixel on the reduction draws
+     * the whole frame (rd_replay.c), so there is no black strip to keep
+     * the text out of */
+    if (!g_rd.settings.fullPixel) {
+        const float crop = (float)rd__reduction_crop(t->gsH), half = H * 0.5f;
+        x0 = fmaxf(x0, bx + bw * 2.0f / W);
+        x1 = fminf(x1, bx + bw * (W - 2.0f) / W);
+        y0 = fmaxf(y0, by + bh * crop / half);
+        y1 = fminf(y1, by + bh * (half - crop) / half);
+    }
     /* the segment */
     y0 = fmaxf(y0, by + g->y0 * bh / H);
     y1 = fminf(y1, by + g->y1 * bh / H);
@@ -1274,6 +1311,7 @@ void rd__present_record(RhiCommandList cl)
                          "effects depth is not available with the CRT filter");
         }
         rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+        rd__perf_post(cl, RD_PERF_POST_CRT); /* the GPU timing's CRT stretch */
         const bool ui = rd__overlay_grid_pending();
         bool capOk = true;
         if (ui && rd__capture_armed()) {
@@ -1291,6 +1329,7 @@ void rd__present_record(RhiCommandList cl)
         filtered =
             capOk && rd__crt_record(cl, disp, out, s_outFormat, s_outW, s_outH, &box, mirror, true);
         uiInPicture = filtered && ui;
+        rd__perf_post(cl, -1);
     }
     /* the full-height scene: DISPLAY already has every line */
     if (!filtered && pr->lineDouble && !g_rd.fullHeight) {
@@ -1391,6 +1430,10 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
+    if (s_probe.tex.id) {
+        rhi_destroy_texture(s_probe.tex); /* rd_display_probe's */
+    }
+    memset(&s_probe, 0, sizeof(s_probe));
     depthShutdown();    /* the effects depth */
     rd__crt_shutdown(); /* the CRT filter */
     /* the overlay's prims (the registration stays), the deferred text's list */
@@ -1403,6 +1446,58 @@ void rd__present_shutdown(void)
     s_ov.b = NULL;
     s_ov.vCap = s_ov.bCap = 0;
     overlayForget();
+}
+
+bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4])
+{
+    RdTargetRec *disp = rd__target_rec(rd_target(RD_TARGET_DISPLAY).id);
+    if (!g_rd.hasDevice || !rgba || !disp || !disp->color.id || disp->tw < 4 || disp->th < 4 ||
+        disp->format == RHI_FMT_R8_UNORM) {
+        return false;
+    }
+    if (s_probe.tex.id && s_probe.format != disp->format) {
+        rhi_wait_idle();
+        rhi_destroy_texture(s_probe.tex);
+        s_probe.tex = (RhiTexture){0};
+    }
+    if (!s_probe.tex.id) {
+        s_probe.tex = rhi_create_texture(
+            &(RhiTextureDesc){RD_DISPLAY_PROBE_POINTS, 1, 1, disp->format,
+                              RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC, "rd display probe"});
+        s_probe.state = RHI_STATE_UNDEFINED;
+        s_probe.format = disp->format;
+        if (!s_probe.tex.id) {
+            return false;
+        }
+    }
+    const uint32_t w = disp->tw, h = disp->th;
+    const uint32_t xs[RD_DISPLAY_PROBE_POINTS] = {w / 2, w / 4, 3 * w / 4, w / 4, 3 * w / 4};
+    const uint32_t ys[RD_DISPLAY_PROBE_POINTS] = {h / 2, h / 4, h / 4, 3 * h / 4, 3 * h / 4};
+    RhiCommandList cl = rhi_begin_commands();
+    if (!cl.id) {
+        return false;
+    }
+    rd__transition(cl, disp->color, &disp->colorState, RHI_STATE_COPY_SRC);
+    rd__transition(cl, s_probe.tex, &s_probe.state, RHI_STATE_COPY_DST);
+    for (int k = 0; k < RD_DISPLAY_PROBE_POINTS; k++) {
+        const RhiRect r = {(int32_t)xs[k], (int32_t)ys[k], 1, 1};
+        rhi_cmd_copy_texture(cl, disp->color, r, s_probe.tex, k, 0);
+    }
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    uint8_t px[RD_DISPLAY_PROBE_POINTS * 4];
+    if (!rd__read_rhi_texture(s_probe.tex, &s_probe.state, RD_DISPLAY_PROBE_POINTS, 1, px,
+                              sizeof(px))) {
+        return false;
+    }
+    const bool bgra = disp->format == RHI_FMT_BGRA8_UNORM;
+    for (int k = 0; k < RD_DISPLAY_PROBE_POINTS; k++) {
+        rgba[k][0] = px[k * 4 + (bgra ? 2 : 0)];
+        rgba[k][1] = px[k * 4 + 1];
+        rgba[k][2] = px[k * 4 + (bgra ? 0 : 2)];
+        rgba[k][3] = px[k * 4 + 3];
+    }
+    return true;
 }
 
 bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h)

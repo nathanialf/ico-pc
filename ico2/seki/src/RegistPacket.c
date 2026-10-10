@@ -63,11 +63,28 @@ static PObjGroup *regKeyGrp;
 
 static int regKeyIdx;
 
+/* RdVuDraw.view of the part's draws (rd_mesh.h RD_VU_VIEW_*) */
+static unsigned char regKeyView;
+
 static void regKeyPart(Sub15C *o, PObjGroup *grp, int part)
 {
     regKeyObj = o;
     regKeyGrp = grp;
     regKeyIdx = part;
+    regKeyView = RD_VU_VIEW_WORLD;
+}
+
+/* regKeyPart for the walks after reg_setMMatrixPacket(o, node), which
+   builds a node with flag 2 in the camera's space and one with flag 4
+   facing the camera, flag 2 first */
+static void regKeyPartM(Sub15C *o, PObjGroup *grp, int node)
+{
+    regKeyPart(o, grp, node);
+    if ((o->nodes[node].flags.ll & 2) != 0) {
+        regKeyView = RD_VU_VIEW_LOCKED;
+    } else if ((o->nodes[node].flags.ll & 4) != 0) {
+        regKeyView = RD_VU_VIEW_FACING;
+    }
 }
 
 static int regKeyOrdinal(PacHeader *pk)
@@ -169,6 +186,7 @@ static void regHostMesh(PacHeader *pk, int pass)
     prim[1] = 0;
     gif_HostWriteRegs(prim, 1);
     if (rd_vu_draw_from_state(&d)) {
+        d.view = regKeyView;
         rd_draw_vu_mesh(m, &d,
                         n >= 0 ? RD_KEY(regKeyObj, regKeyIdx, n * 4 + pass)
                                : RD_KEY(pk, rd_current_list(), d.code));
@@ -538,6 +556,9 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
     }
     _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    /* PC port: a world part, culled against every camera of the blended
+       pictures (GsBase.c) */
+    gsb_HostCullCameraLocked(0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {
@@ -716,6 +737,10 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
         _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
         _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     }
+    /* PC port: a part locked to the camera (flag 2, culled through +0x680)
+       moves with it, so gsb_ClipBox tests it against this tick's camera
+       only; the node's packets (reg_clipPacketBoundingBox) follow suit */
+    gsb_HostCullCameraLocked((w->flags.ll & 2) != 0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {
@@ -1194,7 +1219,7 @@ static void reg_dispMObj(Sub15C *o)
                 pkt = grp->packets;
             }
 #ifdef ICO_RD
-            regKeyPart(o, grp, i); /* R7d: the draws' keys */
+            regKeyPartM(o, grp, i); /* R7d: the draws' keys */
 #endif
             while (pkt != 0) {
                 r = reg_clipPacketBoundingBox(pkt);
@@ -1285,7 +1310,7 @@ static void reg_dispSObj(Sub15C *o, int idx)
             }
         }
 #ifdef ICO_RD
-        regKeyPart(o, grp, idx); /* R7d: the draws' keys */
+        regKeyPartM(o, grp, idx); /* R7d: the draws' keys */
 #endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);
@@ -1517,7 +1542,17 @@ static void reg_dispPoint(PacLine *node, float alpha, int idx, int flag)
             PacketBufferStruct.ptr.c = q + 0xC;
             ((GifPkWord *)(q + 8))->w[1] = 0;
             PacketBufferStruct.ptr.c = q + 0x10;
+#ifdef ICO_RD
+            /* with flag, both ends are this tick's projection through the
+               frame camera (+0x100); without it the line starts at a
+               screen point an earlier tick stored, which no camera of this
+               tick moves */
+            gif_HostFrameProjected(flag != 0);
+#endif
             dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+#ifdef ICO_RD
+            gif_HostFrameProjected(0);
+#endif
             dl_CloseDma();
         }
     }
@@ -1658,7 +1693,14 @@ static void reg_dispLine(PacLine *node, float alpha)
         PacketBufferStruct.ptr.c = q + 0xC;
         ((GifPkWord *)(q + 8))->w[1] = 0;
         PacketBufferStruct.ptr.c = q + 0x10;
+#ifdef ICO_RD
+        /* both ends projected through the frame camera (+0x100), ST = uv / w */
+        gif_HostFrameProjected(1);
+#endif
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
+#ifdef ICO_RD
+        gif_HostFrameProjected(0);
+#endif
         dl_CloseDma();
     }
 }
@@ -1794,6 +1836,9 @@ static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
     }
     _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    /* PC port: a world part, culled against every camera of the blended
+       pictures (GsBase.c) */
+    gsb_HostCullCameraLocked(0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {
@@ -2135,7 +2180,7 @@ void reg_DispMultiPri(Sub15C *o, int pri)
             pkt = grp->packets;
         }
 #ifdef ICO_RD
-        regKeyPart(o, grp, i); /* R7d: the draws' keys */
+        regKeyPartM(o, grp, i); /* R7d: the draws' keys */
 #endif
         while (pkt != 0) {
             r = reg_clipPacketBoundingBox(pkt);

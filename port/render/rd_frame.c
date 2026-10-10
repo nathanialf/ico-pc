@@ -128,6 +128,19 @@ float rd__target_z_scale(uint32_t id)
     }
 }
 
+float rd__depth_unorm_steps(void)
+{
+    /* every target's depth is RHI_FMT_D32F_S8 (rd_core.c), backed by
+       D24_UNORM_S8_UINT on the Vulkan fallback */
+    if (g_rd.hasDevice) {
+        const char *ds = rhi_limits()->depthStencilFormatName;
+        if (ds && strcmp(ds, "D24S8") == 0) {
+            return 16777215.0f;
+        }
+    }
+    return 0.0f;
+}
+
 float rd_target_z_scale(RdTarget t)
 {
     return rd__target_z_scale(t.id);

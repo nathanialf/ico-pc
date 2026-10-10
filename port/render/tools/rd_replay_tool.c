@@ -22,11 +22,13 @@
  *                         the four options below apply without it, but a
  *                         replay at a scale above 1x still wants it for the
  *                         game's picture
- *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9 or
- *                         a number (w / h)
+ *   --aspect A            4:3 (default), 16:10, 16:9, 21:9 (64/27), 32:9, 48:9
+ *                         (the widest the game allows is 20:3) or a number
+ *                         (w / h)
  *   --resolution R        the scene's resolution: WxH or Nx (default: the
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
+ *   --full-pixel          the reduction draws the whole frame: no black border
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -78,7 +80,13 @@
  *                         groups created (rd's uniform and texture groups
  *                         apart), bind group and pipeline binds, ring bytes,
  *                         pipeline barriers and copies, the screen-prim
- *                         draws one per command and merged
+ *                         draws one per command and merged; on a device
+ *                         with GPU timestamps, after the picture is written,
+ *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
+ *                         more times and the last replay's GPU times are
+ *                         printed: the uploads, each list, each picture
+ *                         effect (rd.h RD_PERF_POST_*, inside the lists'
+ *                         times) and the present
  *   --no-aa1              replays with PRIM.AA1 off: every RDC_AA1 a NOP and
  *                         the start state's bit clear, the frame as the
  *                         renderer drew it before AA1 was decoded (a
@@ -92,6 +100,17 @@
  *                         tick's first present; the two must be
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
+ *   --interp-any          (with --interp) PREV is taken for the tick right
+ *                         before <dump> whatever their frame numbers (dumps
+ *                         saved some ticks apart, as the F12 sets are): no
+ *                         gap snap; the other snaps (a camera past the cut
+ *                         thresholds) still apply
+ *   --no-reproject        (with --interp) the draws the frame camera
+ *                         projected on the CPU (lightning, lines, shadow
+ *                         volumes) blend in screen space instead of being
+ *                         seen through the blended camera
+ *                         (rd__interp_set_reproject): the before of a
+ *                         before/after pair from one build
  *
  * Exit: 0 written (or, with --no-device, listed), 1 error, 77 no device or no dump file. */
 #include <stdio.h>
@@ -190,6 +209,9 @@ static void texSummary(uint32_t id)
     printf(" alpha %02x..%02x below80 %.1f%% black %.1f%%", lo, hi,
            n ? 100.0 * (double)below / (double)n : 0.0,
            n ? 100.0 * (double)black / (double)n : 0.0);
+    if (t->gsLevels > 1) {
+        printf(" gs levels %u", t->gsLevels);
+    }
 }
 
 /* --list, RDC_SKINNED: the drawn vertices' place as cluster.vsm computes it
@@ -273,6 +295,11 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         texSummary(c->u[0]);
     } else if (c->type == RDC_FILTER || c->type == RDC_WRAP) {
         printf(" %u %u", c->b[0], c->b[1]);
+        if (c->type == RDC_FILTER && c->u[0]) {
+            /* TEX1's mipmap fields (rd_tex1_lod) */
+            printf(" mmin %u mxl %u lcm %u l %u k %d", RD_TEX1_MMIN(c->u[0]), RD_TEX1_MXL(c->u[0]),
+                   RD_TEX1_LCM(c->u[0]), RD_TEX1_L(c->u[0]), (int)RD_TEX1_K(c->u[0]));
+        }
     } else if (c->type == RDC_TARGET) {
         printf(" colour %s depth %s gs %ux%u offset %u", targetName(c->u[0], nb[0]),
                targetName(c->u[1], nb[1]), c->u[2] & 0xFFFF, c->u[2] >> 16, c->b[0]);
@@ -371,6 +398,10 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         }
         if (c->b[3]) {
             printf(" stretch"); /* drawn across a wide target (rd_mesh.c pushVu) */
+        }
+        if (c->type == RDC_GRID && c->b[5]) {
+            /* pool.c's ST formula (rd.h rd_grid_screen_st) and its scales */
+            printf(" screen st %u (%g, %g)", c->b[5], (double)c->f[0], (double)c->f[1]);
         }
         if (c->type == RDC_SKINNED) {
             skinnedPlace(f, c, st);
@@ -517,9 +548,10 @@ int main(int argc, char **argv)
     if (argc < 3) {
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
-                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--filter F] "
+                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n"
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV "
+                "[--interp-any] [--no-reproject]]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
                 argv[0]);
@@ -534,6 +566,7 @@ int main(int argc, char **argv)
     bool noDevice = false;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
+    bool interpAny = false;
 
     struct {
         unsigned l, a, b;
@@ -565,6 +598,8 @@ int main(int argc, char **argv)
             s.preset = RD_PRESET_ENHANCED;
         } else if (strcmp(argv[i], "--full-height") == 0) {
             s.fullHeightScene = 1;
+        } else if (strcmp(argv[i], "--full-pixel") == 0) {
+            s.fullPixel = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
@@ -603,6 +638,10 @@ int main(int argc, char **argv)
             stats = true;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
+        } else if (strcmp(argv[i], "--interp-any") == 0) {
+            interpAny = true;
+        } else if (strcmp(argv[i], "--no-reproject") == 0) {
+            rd__interp_set_reproject(false);
         } else if (strcmp(argv[i], "--interp") == 0 && i + 2 < argc) {
             char *end = NULL;
             interpT = strtof(argv[++i], &end);
@@ -732,6 +771,9 @@ int main(int argc, char **argv)
     if (interpPrev) {
         /* the presenter's frame between the two */
         RdInterpStats ist;
+        if (interpAny) {
+            pf.number = f.number - 1; /* the tick before, whatever was saved between */
+        }
         rf = rd__interp_frame(&pf, &f, interpT, 1, &ist);
         if (!rf) {
             fprintf(stderr, "rd__interp_frame failed\n");
@@ -741,9 +783,18 @@ int main(int argc, char **argv)
             return 1;
         }
         printf("interp %u -> %u at %g: snap %u, %u keyed draws: %u blended, %u unmatched, %u "
-               "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations\n",
+               "mismatched, %u jumped; %u mesh streams blended; %u blended as rotations; %u lights "
+               "re-paired; %u paired by place; %u grid STs blended, %u through the blended "
+               "camera\n",
                pf.number, f.number, (double)interpT, ist.snap, ist.keyed, ist.lerped, ist.missing,
-               ist.mismatch, ist.jump, ist.morph, ist.rotated);
+               ist.mismatch, ist.jump, ist.morph, ist.rotated, ist.lightPaired, ist.placed,
+               ist.gridSt, ist.gridStCamera);
+        printf("interp: unmatched %u not drawn before, %u fewer before, %u left by the place "
+               "pairing, %u payload; %u paired with another place; %u of the tick before kept, "
+               "%u held; %u CPU-projected draws re-projected\n",
+               ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
+               ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
+               ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected);
     }
     if (list) {
         RdStateBlock st = rf->startState;
@@ -792,6 +843,37 @@ int main(int argc, char **argv)
             fprintf(stderr, "readback or PNG write failed\n");
         }
         free(px);
+    }
+    if (replayed && stats && rhi_timestamps_supported()) {
+        /* a record's GPU times come in RHI_FRAMES_IN_FLIGHT replays later:
+           replays of the same frame after the picture was read, the last
+           complete record printed (a warm replay) */
+        RdPerfRecord pr, last;
+        bool have = false;
+        memset(&last, 0, sizeof(last));
+        for (int k = 0; k < RHI_FRAMES_IN_FLIGHT + 2; k++) {
+            rd__replay_frame(rf, (int)rf->keep, pw != 0);
+            while (rd_perf_pop(&pr)) {
+                if (pr.gpuValid) {
+                    last = pr;
+                    have = true;
+                }
+            }
+        }
+        if (have) {
+            printf("%s: gpu: %.3f ms: uploads %.3f; lists", dump, last.gpuMs, last.gpuUploadMs);
+            for (int l = 0; l < RD_LIST_COUNT; l++) {
+                printf(" %.3f", last.gpuListMs[l]);
+            }
+            printf("; effects:");
+            for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+                printf("%s %s %.3f", p ? "," : "", rd_perf_post_name(p), last.gpuPostMs[p]);
+            }
+            printf("%s; present %.3f\n", last.gpuPostPartial ? " (not all timed apart)" : "",
+                   last.gpuPresentMs);
+        } else {
+            printf("%s: gpu: no timestamps came back\n", dump);
+        }
     }
     rd__frame_free(&f);
     rd__frame_free(&pf);

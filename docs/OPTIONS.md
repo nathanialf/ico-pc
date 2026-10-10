@@ -35,19 +35,22 @@ How the picture looks.
   window, fits it to the window's shape, smooths the textures and shows
   the full-height picture. Once you change one of the four rows yourself, it says
   **Custom**. The Preset does not touch the Effects page.
-- **Resolution** is how sharp the picture is: 1x is the PS2's, up to 4x,
-  or the size of your window. **Auto** starts at the size of your window
-  and steps down (3x, then 2x, then 1x) when your computer or phone
-  cannot draw the pictures in time. It never steps back up while the
-  game runs; the row then reads, for example, **Auto (2x)**. On Android,
+- **Resolution** is how sharp the picture is: 1x is the PS2's, up to 16x,
+  or the size of your window. Very high values need a lot of graphics
+  memory; when your graphics card cannot hold the picture, the game lowers
+  it on its own and the row shows both, for example **16x (8x)**. **Auto**
+  starts at the size of your window and steps down (3x, then 2x, then 1x)
+  when your computer or phone cannot draw the pictures in time. It never
+  steps back up while the game runs; the row then reads, for example, **Auto (2x)**. On Android,
   the Enhanced preset uses Auto. It stays at 1x while the CRT filter is on:
   the filter draws the PS2's own picture dots with dark lines between them,
   and over a sharper picture it would look like a fine mesh.
   [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution).
-  The menus' lettering follows it too: at 2x and above it is drawn that
+  The menus' lettering follows it too: from 2x up to 4x it is drawn that
   much finer, so it stays crisp, in the same style.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
-  21:9 or 32:9. **Auto** follows the shape of your window or screen.
+  21:9, 32:9 or 48:9. **Auto** follows the shape of your window or screen,
+  up to 60:9.
   On a wider picture you see more of the world to the sides. Menus,
   subtitles and movies stay in a 4:3 box in the middle.
 - **Window mode** is **Windowed** (a normal window), **Borderless** (a
@@ -66,7 +69,10 @@ How the picture looks.
 - **Full-height picture** shows every line of the picture. The PS2 showed
   half of them, which looks a little softer.
 - **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit
-  up to 240 frames a second. On Android it starts at 60.
+  up to 240 frames a second. With Vertical sync on, Uncapped follows your
+  screen: one new picture each time the screen shows one (and never
+  fewer than sixty a second where the screen can take them). With it off,
+  Uncapped draws as fast as your computer can. On Android it starts at 60.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options.
 
@@ -96,6 +102,15 @@ gives you, and that is how the game starts.
 - **Cinematic bars:** the black bars at the top and bottom of the picture
   during cutscenes. With them Off you see the whole picture, and the
   subtitles are not dimmed.
+
+The last row is not one of the game's effects:
+
+- **Full pixel (no border)** shows the whole picture the game draws,
+  including the strip the PS2 hid under its thin black border. Nothing is
+  cut off or enlarged, and the picture stays as sharp as it is without the
+  option. With Video mode at 50 Hz the strip at the top and bottom is a
+  little taller. Off by default. It works with every Preset and with the CRT
+  filter.
 
 The Preset on the Display page does not change these. Changes you make
 here show in photo mode at once.
@@ -128,7 +143,9 @@ A change takes effect the next time you start the game.
 
 ## Controls
 
-- **Remap controls** lets you change which button or key does what.
+- **Remap controls** lets you change which button or key does what. Giving
+  a button to another action swaps the two. In the menus the gamepad's face
+  buttons and d-pad always go by position.
 - **Mouse camera** lets the mouse move the camera while you play, with
   the pointer hidden. It is on unless you turn it off.
   [More about the mouse camera](CONTROLS.md#look-around-with-the-mouse).

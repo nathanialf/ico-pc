@@ -12,6 +12,11 @@
  * every tick, the value that tick read. A vsync sampler would also write
  * values no tick read, which a tick-keyed script cannot place.
  *
+ * The recording carries the play word only (the buttons the boy and the
+ * camera read). The menus' word, which keeps the gamepad's face buttons and
+ * d-pad by position, is the same as the play word in a script and is not
+ * recorded.
+ *
  * File: the caller's header lines (each starting with '#'), then
  *
  *     <tick> <buttons-hex> lx ly rx ry

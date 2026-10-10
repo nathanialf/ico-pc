@@ -746,9 +746,10 @@ static int image_sha1(const char *path, char hex[41], uint64_t *bytes)
     return 0;
 }
 
-/* Mount a .chd made from the synthetic ISO and compare it with the ISO. */
-static void check_chd_volume(const char *chd, const unsigned char *iso, size_t isosize,
-                             const char *isohex)
+/* Mount a .chd, .bin or .cue made from the synthetic ISO and compare it with
+   the ISO. */
+static void check_image_volume(const char *chd, const unsigned char *iso, size_t isosize,
+                               const char *isohex)
 {
     unsigned char sec[2 * ICO_VFS_SECTOR];
     char hex[41];
@@ -802,7 +803,7 @@ static void test_chd(const char *dir, const char *isopath)
        so the last hunk is partly past the end */
     CHECK(write_chd(chd, iso, isosize, 3 * ICO_VFS_SECTOR, ICO_VFS_SECTOR, NULL, CHD_PLAIN) == 0);
     CHECK(chdZeroHunks > 0); /* the system area: map entries of both kinds */
-    check_chd_volume(chd, iso, isosize, isohex);
+    check_image_volume(chd, iso, isosize, isohex);
 
     /* the same bytes with the magic changed: not a CHD, and no ISO9660
        volume either, so it is refused */
@@ -842,7 +843,7 @@ static void test_chd(const char *dir, const char *isopath)
                  (unsigned)SYN_SECTORS);
         CHECK(write_chd(chd, cd, (uint64_t)frames * CHD_CD_FRAME, 8 * CHD_CD_FRAME, CHD_CD_FRAME,
                         meta, CHD_PLAIN) == 0);
-        check_chd_volume(chd, iso, isosize, isohex);
+        check_image_volume(chd, iso, isosize, isohex);
 
         /* an audio first track holds no data */
         snprintf(meta, sizeof(meta),
@@ -855,6 +856,224 @@ static void test_chd(const char *dir, const char *isopath)
         free(cd);
     }
     remove(chd);
+    free(iso);
+}
+
+/* --- raw CD images (.bin) and cue sheets ---------------------------------- */
+
+#define BIN_FRAME 2352u
+
+static int write_file(const char *path, const void *data, size_t n)
+{
+    FILE *f = fopen(path, "wb");
+    int ok;
+
+    if (f == NULL) {
+        return -1;
+    }
+    ok = fwrite(data, 1, n, f) == n;
+    return fclose(f) == 0 && ok ? 0 : -1;
+}
+
+/* The synthetic ISO as raw 2352-byte frames after `lead` zero frames:
+   mode 1 (user data at 16) or mode 2 form 1 (subheader, user data at 24).
+   `form2_first` marks sector 0's subheader as form 2.  `extra` zero bytes
+   follow the last frame.  Returns the buffer and its size in *n. */
+static unsigned char *build_bin(const unsigned char *iso, int mode, unsigned lead, int form2_first,
+                                size_t extra, size_t *n)
+{
+    size_t total = ((size_t)lead + SYN_SECTORS) * BIN_FRAME + extra;
+    unsigned char *bin = calloc(1, total);
+    uint32_t s;
+    int i;
+
+    if (bin == NULL) {
+        return NULL;
+    }
+    for (s = 0; s < SYN_SECTORS; s++) {
+        unsigned char *fr = bin + ((size_t)lead + s) * BIN_FRAME;
+
+        for (i = 1; i < 11; i++) {
+            fr[i] = 0xff;
+        }
+        fr[15] = (unsigned char)mode;
+        if (mode == 2) {
+            fr[18] = fr[22] = (s == 0 && form2_first) ? 0x20 : 0x08;
+            memcpy(fr + 24, iso + (size_t)s * ICO_VFS_SECTOR, ICO_VFS_SECTOR);
+        } else {
+            memcpy(fr + 16, iso + (size_t)s * ICO_VFS_SECTOR, ICO_VFS_SECTOR);
+        }
+    }
+    *n = total;
+    return bin;
+}
+
+static void check_cue_text(const char *text, int ok, const char *file, const char *type,
+                           uint32_t first_unit, const char *what)
+{
+    IcoCueTrack t;
+    char err[160];
+    int rc = ico_cue_parse(text, strlen(text), &t, err, sizeof(err));
+
+    if (rc != (ok ? 0 : -1) || (ok && (strcmp(t.file, file) != 0 || strcmp(t.type, type) != 0 ||
+                                       t.first_unit != first_unit))) {
+        fprintf(stderr, "cue case failed: %s (rc %d, file \"%s\", type %s, first %u, \"%s\")\n",
+                what, rc, t.file, t.type, (unsigned)t.first_unit, err);
+        failures++;
+    }
+}
+
+static void test_cue_parse(void)
+{
+    IcoCueTrack t;
+    char err[160];
+    const char *p = "FILE \"a b.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 01 00:00:00\n";
+
+    check_cue_text(p, 1, "a b.bin", "MODE2/2352", 0, "quoted name with a space");
+    check_cue_text("FILE x.bin BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n", 1, "x.bin",
+                   "MODE1/2352", 0, "bare name");
+    check_cue_text("FILE \"x.bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\n", 1,
+                   "x.bin", "MODE2/2352", 0, "CRLF and indentation");
+    check_cue_text("file \"x.bin\" binary\ntrack 01 mode2/2352\nindex 01 00:00:00", 1, "x.bin",
+                   "mode2/2352", 0, "lower case, no final newline");
+    check_cue_text("REM COMMENT x\nFILE \"x.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 00 00:00:00\n"
+                   "INDEX 01 01:02:03\n",
+                   1, "x.bin", "MODE2/2352", (1 * 60 + 2) * 75 + 3, "MSF to frames");
+    check_cue_text("\xef\xbb\xbf"
+                   "FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:02\n",
+                   1, "x.bin", "MODE1/2352", 2, "byte-order mark");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n"
+                   "TRACK 02 AUDIO\nINDEX 01 50:00:00\n",
+                   1, "x.bin", "MODE1/2352", 0, "later tracks are ignored");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n"
+                   "FILE \"y.bin\" BINARY\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n",
+                   0, NULL, NULL, 0, "two files");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n", 0, NULL, NULL, 0,
+                   "audio first");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE9/2352\nINDEX 01 00:00:00\n", 0, NULL, NULL,
+                   0, "unknown type");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1\nINDEX 01 00:00:00\n", 0, NULL, NULL, 0,
+                   "type with no unit size");
+    check_cue_text("FILE \"x.wav\" WAVE\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n", 0, NULL, NULL,
+                   0, "not a binary file");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:75\n", 0, NULL, NULL,
+                   0, "frame 75");
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\n", 0, NULL, NULL, 0, "no INDEX 01");
+    check_cue_text("", 0, NULL, NULL, 0, "empty");
+    CHECK(ico_cue_parse(p, strlen(p), &t, err, sizeof(err)) == 0 && t.unit_bytes == 2352 &&
+          t.data_off == 24);
+    check_cue_text("FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n", 1, "x.bin",
+                   "MODE1/2352", 0, "again");
+    {
+        const char *cooked = "FILE \"x.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n";
+
+        CHECK(ico_cue_parse(cooked, strlen(cooked), &t, err, sizeof(err)) == 0 &&
+              t.unit_bytes == 2048 && t.data_off == 0);
+    }
+}
+
+static void test_bin(const char *dir, const char *isopath)
+{
+    char binp[1024], cuep[1024], isohex[41], text[512];
+    unsigned char *iso, *bin;
+    size_t isosize, n;
+    Sha1 sha;
+
+    test_cue_parse();
+    iso = read_whole(isopath, &isosize);
+    CHECK(iso != NULL && isosize == (size_t)SYN_SECTORS * ICO_VFS_SECTOR);
+    if (iso == NULL) {
+        return;
+    }
+    sha1_init(&sha);
+    sha1_update(&sha, iso, isosize);
+    sha1_final_hex(&sha, isohex);
+    snprintf(binp, sizeof(binp), "%s/vfs_test_synthetic.bin", dir);
+    snprintf(cuep, sizeof(cuep), "%s/vfs_test_synthetic.CUE", dir);
+
+    /* a bare .bin is found by its sync pattern: mode 1, data at 16 */
+    bin = build_bin(iso, 1, 0, 0, 0, &n);
+    CHECK(bin != NULL && write_file(binp, bin, n) == 0);
+    check_image_volume(binp, iso, isosize, isohex);
+    free(bin);
+
+    /* a size that is not whole frames: the stray bytes are ignored */
+    bin = build_bin(iso, 1, 0, 0, 100, &n);
+    CHECK(bin != NULL && write_file(binp, bin, n) == 0);
+    check_image_volume(binp, iso, isosize, isohex);
+    free(bin);
+
+    /* mode 2 form 1: data at 24 after the subheader */
+    bin = build_bin(iso, 2, 0, 0, 0, &n);
+    CHECK(bin != NULL && write_file(binp, bin, n) == 0);
+    check_image_volume(binp, iso, isosize, isohex);
+
+    /* a cue beside it (upper-case extension, CRLF) */
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 "
+             "00:00:00\r\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    check_image_volume(cuep, iso, isosize, isohex);
+
+    /* the cue's type and the sector header must agree */
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+
+    /* a cue naming a .bin that is not there */
+    snprintf(text, sizeof(text),
+             "FILE \"no_such_image.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+
+    /* two files, an audio first track, an unknown type */
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 01 00:00:00\n"
+             "FILE \"second.bin\" BINARY\nTRACK 02 AUDIO\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 AUDIO\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 MODE9/2352\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+    free(bin);
+
+    /* two frames come before the track's sector 0 (INDEX 01 00:00:02) */
+    bin = build_bin(iso, 2, 2, 0, 0, &n);
+    CHECK(bin != NULL && write_file(binp, bin, n) == 0);
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 00 00:00:00\n"
+             "INDEX 01 00:00:02\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    check_image_volume(cuep, iso, isosize, isohex);
+    free(bin);
+
+    /* a form 2 sector 0 holds no disc data; with or without a cue */
+    bin = build_bin(iso, 2, 0, 1, 0, &n);
+    CHECK(bin != NULL && write_file(binp, bin, n) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, binp) == NULL);
+    CHECK(ico_disc_image_open(binp) == NULL);
+    snprintf(text, sizeof(text),
+             "FILE \"vfs_test_synthetic.bin\" BINARY\nTRACK 01 MODE2/2352\nINDEX 01 00:00:00\n");
+    CHECK(write_file(cuep, text, strlen(text)) == 0);
+    CHECK(ico_vfs_mount(&ico_vfs_iso9660, cuep) == NULL);
+    free(bin);
+
+    /* sector mode 0 (or any other) is refused */
+    bin = build_bin(iso, 1, 0, 0, 0, &n);
+    if (bin != NULL) {
+        bin[15] = 0;
+        CHECK(write_file(binp, bin, n) == 0);
+        CHECK(ico_vfs_mount(&ico_vfs_iso9660, binp) == NULL);
+        free(bin);
+    }
+    remove(binp);
+    remove(cuep);
     free(iso);
 }
 
@@ -883,6 +1102,7 @@ static int run_synthetic(const char *dir)
     ico_vfs_unmount(vfs);
     test_no_disc();
     test_chd(dir, path);
+    test_bin(dir, path);
     remove(path);
     printf("vfs_test synth: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

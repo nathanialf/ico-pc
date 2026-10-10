@@ -59,6 +59,7 @@ cbuffer FrameCB : register(b0, space0)
 //            w = AREF
 //   g_blend  x = ALPHA register (A | B << 2 | C << 4 | D << 6)
 //            y = FIX 0..255, z = COLCLAMP
+//            w = with DF_GS_LOD, TEX1's mipmap fields (gs_lod), else 0
 //   g_uvRect source rectangle in texels (u0, v0, u1, v1), blit passes
 //   g_tex    xy = size of the t1 texture in texels, zw = 1 / size
 //   g_param  kind-specific: each entry's header says what it reads (e.g.
@@ -109,6 +110,10 @@ float2 gs_block_uv(float2 uv)
 #define DF_TEXA_CLAMP_T 8192u     // CLAMP on t (else REPEAT)
 #define DF_TEXA_MIN_SAMPLED 16384u // a minified pixel takes the bound sampler (the Enhanced
                                    // trilinear or anisotropic filter over the mips), TEXA after
+// The texture has its GS mipmap levels (the TIM2's own, not box filtered):
+// sample at the GS's level of detail (gs_lod_level) with TEX1's fields in
+// g_blend.w. Every entry that samples a game texture honours it.
+#define DF_GS_LOD 262144u
 
 // TEST.DATE. snap is the R8 DATE snapshot (1.0 where the destination alpha
 // had its MSB set when the snapshot was taken). Returns true when the
@@ -206,6 +211,114 @@ uint4 gs_texa_texture(Texture2D<float4> tex, SamplerState smp, float2 uvn, uint 
     const uint4 d = gs_texa_load(tex, i0 + int2(1, 1), size, flags);
     return (a * ((16u - fu) * (16u - fv)) + b * (fu * (16u - fv)) + c * ((16u - fu) * fv) +
             d * (fu * fv)) >> 8;
+}
+
+// ------------------------------------------------------- GS mipmapping
+// TEX1's mipmap fields in g_blend.w (rd_state.h rd_tex1_lod): bits 0..2
+// MMIN, 3..5 MXL (already no further than the texture's levels), 6 LCM,
+// 7..8 L, 16..27 K (12-bit signed, sixteenths of a level).
+
+// The GS's level of detail at a pixel whose interpolated Q is q:
+// LOD = (log2(1 / |Q|) << L) + K, or K alone with LCM.
+float gs_lod(float q)
+{
+    const uint p = g_blend.w;
+    const float k = float(int(p << 4u) >> 20) * (1.0 / 16.0);
+    if (((p >> 6u) & 1u) != 0u) {
+        return k;
+    }
+    const float l = float(1u << ((p >> 7u) & 3u));
+    return -log2(max(abs(q), 1.0e-30)) * l + k;
+}
+
+// The level SampleLevel takes for the pixel, with the sampler the replay
+// binds for these draws (rd_replay.c gsLodSampler: linear between levels
+// for MMIN 3 and 5, nearest otherwise). A LOD of 0 or below magnifies:
+// level 0 with MMAG. Above 0 MMIN picks it, never past MXL: the nearest
+// level for 2 and 4 (rounded half up), the LOD itself for 3 and 5 (the
+// sampler blends the two levels around it), level 0 for 0 and 1. A
+// minified pixel at level 0 gets a level just above 0, so the sampler takes
+// the MMIN filter there as the GS does.
+float gs_lod_level(float q)
+{
+    const float lod = gs_lod(q);
+    if (!(lod > 0.0)) {
+        return 0.0;
+    }
+    const uint p = g_blend.w;
+    const uint mmin = p & 7u;
+    const float mxl = float((p >> 3u) & 7u);
+    float lv = 0.0;
+    if (mmin == 3u || mmin == 5u) {
+        lv = min(lod, mxl);
+    } else if (mmin == 2u || mmin == 4u) {
+        lv = min(floor(lod + 0.5), mxl);
+    }
+    return max(lv, 1.0 / 256.0);
+}
+
+// The texel at uv: at the GS's level with DF_GS_LOD, else as the sampler
+// takes it (q unused).
+float4 gs_sample(Texture2D<float4> tex, SamplerState smp, float2 uv, float q)
+{
+    if ((g_mode.x & DF_GS_LOD) != 0u) {
+        return tex.SampleLevel(smp, uv, gs_lod_level(q));
+    }
+    return tex.Sample(smp, uv);
+}
+
+// gs_texa_load at mip level lv of t1.
+uint4 gs_texa_load_lv(Texture2D<float4> tex, int2 c, int2 size, uint lv, uint flags)
+{
+    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1)
+                                          : ((c.x % size.x) + size.x) % size.x;
+    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1)
+                                          : ((c.y % size.y) + size.y) % size.y;
+    uint4 t = uint4(floor(tex.Load(int3(c, int(lv))) * 255.0 + 0.5));
+    return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
+}
+
+// gs_texa_texture's four taps at mip level lv (filtered: bilinear with the
+// GS's 4-bit fractions, else the nearest texel).
+uint4 gs_texa_level(Texture2D<float4> tex, float2 uvn, uint lv, bool filtered, uint flags)
+{
+    uint w, h, n;
+    tex.GetDimensions(lv, w, h, n);
+    const int2 size = max(int2(int(w), int(h)), int2(1, 1));
+    const float2 tc = uvn * float2(size);
+    if (!filtered) {
+        return gs_texa_load_lv(tex, int2(floor(tc)), size, lv, flags);
+    }
+    const int2 q = int2(floor(tc * 16.0 + 0.5)) - int2(8, 8);
+    const int2 i0 = q >> 4;
+    const uint fu = uint(q.x & 15), fv = uint(q.y & 15);
+    const uint4 a = gs_texa_load_lv(tex, i0, size, lv, flags);
+    const uint4 b = gs_texa_load_lv(tex, i0 + int2(1, 0), size, lv, flags);
+    const uint4 c = gs_texa_load_lv(tex, i0 + int2(0, 1), size, lv, flags);
+    const uint4 d = gs_texa_load_lv(tex, i0 + int2(1, 1), size, lv, flags);
+    return (a * ((16u - fu) * (16u - fv)) + b * (fu * (16u - fv)) + c * ((16u - fu) * fv) +
+            d * (fu * fv)) >> 8;
+}
+
+// gs_texa_texture with DF_GS_LOD: the level (or the two levels, blended by
+// the LOD's fraction in 256ths, for MMIN 3 and 5) by gs_lod_level, the
+// filter within a level MMAG or MMIN by the LOD's sign.
+uint4 gs_texa_texture_lod(Texture2D<float4> tex, float2 uvn, float q, uint flags)
+{
+    const bool minified = gs_lod(q) > 0.0;
+    const bool filtered = (flags & (minified ? DF_TEXA_MIN_LINEAR : DF_TEXA_MAG_LINEAR)) != 0u;
+    const float lv = gs_lod_level(q);
+    const uint l0 = uint(floor(lv));
+    uint4 t = gs_texa_level(tex, uvn, l0, filtered, flags);
+    const uint mmin = g_blend.w & 7u;
+    if (minified && (mmin == 3u || mmin == 5u)) {
+        const uint f = uint(floor((lv - float(l0)) * 256.0));
+        if (f > 0u) {
+            const uint4 u = gs_texa_level(tex, uvn, l0 + 1u, filtered, flags);
+            t = (t * (256u - f) + u * f) >> 8;
+        }
+    }
+    return t;
 }
 
 // The integer blend per channel with the ALPHA register, for feedback

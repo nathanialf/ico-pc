@@ -6,6 +6,12 @@
 #include "main.h"
 #include "matrixDrive.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+#endif
+
 /* the GS PRIM values the plain line, the line strip and the gouraud line are
    drawn with */
 static int linePrim = 0x142; /* derived name */
@@ -165,6 +171,10 @@ int _getLine(float *o1, float *o2, float *from, float *to)
     float r0[4];
     float r1[4];
     int rev = 0;
+    /* PC port: the x clip at the picture's sides, k times the 4:3
+       half-width on a wide picture (GsBase.c; vsWidth * 0.5 at 4:3, the
+       PS2's), so a line (Ico's light lines) is not cut at the 4:3 edge */
+    float hw = gsb_HostLineHalfWidth();
     VECTOR w0 = {from[0], from[1], from[2], 1.0f};
     VECTOR w1 = {to[0], to[1], to[2], 1.0f};
 
@@ -182,14 +192,14 @@ int _getLine(float *o1, float *o2, float *from, float *to)
 
     if (sortByX(o1, o2))
         rev = !rev;
-    if (2048.0f + vsWidth * 0.5f <= o1[0])
+    if (2048.0f + hw <= o1[0])
         return -1;
-    if (o2[0] <= 2048.0f - vsWidth * 0.5f)
+    if (o2[0] <= 2048.0f - hw)
         return -1;
-    if (o1[0] < 2048.0f - vsWidth * 0.5f)
-        clipAtX(o1, o1, o2, 2048.0f - vsWidth * 0.5f);
-    if (2048.0f + vsWidth * 0.5f < o2[0])
-        clipAtX(o2, o1, o2, 2048.0f + vsWidth * 0.5f);
+    if (o1[0] < 2048.0f - hw)
+        clipAtX(o1, o1, o2, 2048.0f - hw);
+    if (2048.0f + hw < o2[0])
+        clipAtX(o2, o1, o2, 2048.0f + hw);
 
     if (sortByY(o1, o2))
         rev = !rev;
@@ -214,7 +224,15 @@ void DrawLine(void *from, void *to, void *color, int z)
         return;
     _FTOI4Vector(t2, t0);
     _FTOI4Vector(t3, t1);
+#ifdef ICO_RD
+    /* z 0 keeps the Z _getLine projected through the frame camera; any
+       other z is a fixed depth that is no point's */
+    gif_HostFrameProjected(z == 0);
+#endif
     Draw2DLine(t2, t3, color, z);
+#ifdef ICO_RD
+    gif_HostFrameProjected(0);
+#endif
 }
 
 void DrawLineG(void *from, void *fromColor, void *to, void *toColor, int z)
@@ -232,9 +250,15 @@ void DrawLineG(void *from, void *fromColor, void *to, void *toColor, int z)
     }
     _FTOI4Vector(t2, t0);
     _FTOI4Vector(t3, t1);
+#ifdef ICO_RD
+    gif_HostFrameProjected(z == 0); /* as in DrawLine */
+#endif
     if (r != 0) {
         Draw2DLineG(t3, fromColor, t2, toColor, z);
     } else {
         Draw2DLineG(t2, fromColor, t3, toColor, z);
     }
+#ifdef ICO_RD
+    gif_HostFrameProjected(0);
+#endif
 }

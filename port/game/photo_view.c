@@ -14,6 +14,7 @@
 
 #include "photo_mode.h"
 #include "photo_view.h"
+#include "rd.h"
 #include "video_options.h"
 
 static struct {
@@ -90,4 +91,10 @@ void ico_photo_view_tick(void)
     memcpy(matrixptr + 0x80, ov.view, sizeof(ov.view));
     gsb_SetVSMatrix(ScreenWidth, ScreenHeight, v.d * k);
     gsb_MakeCommonMatrix();
+#ifdef ICO_RD
+    /* the renderer keeps the triangles with a vertex behind this camera
+       (RdCamera.freeCamera): the game's cameras rely on them being dropped,
+       a free camera does not; the headless build has no renderer */
+    rd_free_camera();
+#endif
 }

@@ -14,7 +14,16 @@
  * key (RdKey, RD_KEY at the call sites; 0 = never) and prev has a draw of
  * the same type in the same list with the same key; the n-th occurrence of
  * a key in cur matches the n-th in prev (the "call ordinal" for packets
- * drawn more than once).  What blends, per command:
+ * drawn more than once).  Objects the game draws many times under one key
+ * (the swim ripples, the fog billboards) are paired by place first: a VU
+ * draw of a key prev drew more than once pairs with prev's draw at the same
+ * place in the world; when some of the key's draws stand still, the draws
+ * left over pair nearest first, a pair that are not each other's nearest
+ * being a new draw and one that went (the new one is cur's), and when none
+ * does, the ordinal decides, or their order and nearness when the number
+ * of draws changed (placeSlot).  No draw of cur stays unmatched while a
+ * draw of prev with its key, type and list is free.  What blends, per
+ * command:
  *
  *   RDC_MESH, RDC_SKINNED   the VU block (VuCB.mem): qw 2 (the UV scroll
  *                           SET_UVOFFSET left, with Texture.c's wrap of
@@ -22,17 +31,32 @@
  *                           cluster fade alpha), qw 4..15 (the common
  *                           block's world to screen, viewport and inverse
  *                           view matrices), 16..27 (the model matrices),
- *                           28..35 (the light matrices; a lit program's
- *                           L1 turns with the model, rotateLight); the
- *                           bones; not qw 0, 1, 3 (constants and the GIF tag)
+ *                           28..35 (the light matrices: in a lit draw,
+ *                           prev's three lights first take the slots of
+ *                           cur's lights they are nearest in direction,
+ *                           as the game orders them by strength,
+ *                           pairLights; a lit program's L1 then turns with
+ *                           the model, rotateLight); the bones; not qw 0,
+ *                           1, 3 (constants and the GIF tag)
  *   RDC_GRID                the VU block and each vertex's position (and
- *                           normal when lit); the strip headers, colours
- *                           and STs are cur's
+ *                           normal when lit), and its ST when the grid
+ *                           samples a target (the pool's surface: the STs
+ *                           are screen positions through the tick's
+ *                           camera); a grid that carries pool.c's formula
+ *                           (rd_grid_screen_st) has its STs computed again
+ *                           through the blended camera, moving or still
+ *                           (gridCameraSts); the strip headers,
+ *                           colours and an image's STs are cur's
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
- *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
+ *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's.
+ *                           A prim the frame camera projected on the CPU
+ *                           (RD_SCREEN_FRAME_CAMERA) blends its vertices'
+ *                           world points and is seen through the blended
+ *                           camera ("CPU-projected draws" below)
  *   RDC_SHADOW_STRIP        XY and Z of each vertex; Shadow.c's volumes
- *                           prism by prism (blendPrisms)
+ *                           prism by prism (blendPrisms), in the world when
+ *                           marked RD_SHADOW_FRAME_CAMERA
  *   RDC_OVERLAY_TEXT        an item's anchor, glow stretch and colour
  *                           (string, size and flags must be equal); an
  *                           op's colour and level (blendText)
@@ -40,7 +64,9 @@
  * The RDC_SCREEN and RDC_SHADOW_STRIP draws of one tick only fade in or out
  * with t, or switch at t = 0.5 (unmatchedPass); prev's are inserted into
  * the output.  So do the RDC_OVERLAY_TEXT items (their alpha), as the quads
- * they stand for.
+ * they stand for.  A VU draw of prev only is drawn for the interval through
+ * the blended camera when the camera left it behind: its object and part
+ * not drawn in cur's list and its bounds outside cur's picture (prevAlone).
  * Matrices blend element by element, except a normal program's model
  * matrices and a skinned draw's bones, which blend as a slerped rotation
  * and a lerped stretch about a pivot (rotateModel, rotateBone): element by
@@ -107,6 +133,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include "rd_camera_blend.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 
@@ -278,50 +305,13 @@ static float dist3(const float a[3], const float b[3])
     return sqrtf(x * x + y * y + z * z);
 }
 
+/* The camera blend's matrix helpers are rd_camera_blend.h's, which the
+ * game's cull (GsBase.c) uses too: one implementation */
+
 /* The inverse of a column-major 4 x 4 (cofactors), false when singular */
 static bool invert4d(const double *a, double *o)
 {
-    double inv[16];
-    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] +
-             a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
-    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] -
-             a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
-    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] +
-             a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
-    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] -
-              a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
-    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] -
-             a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
-    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] +
-             a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
-    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] -
-             a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
-    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] +
-              a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
-    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] +
-             a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
-    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] -
-             a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
-    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] +
-              a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
-    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] -
-              a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
-    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] -
-             a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
-    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] +
-             a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
-    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] -
-              a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
-    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] +
-              a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
-    const double det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
-    if (!(fabs(det) > 1e-30) || !isfinite(det)) {
-        return false;
-    }
-    for (int i = 0; i < 16; i++) {
-        o[i] = inv[i] / det;
-    }
-    return true;
+    return rdcb_invert4d(a, o) != 0;
 }
 
 static bool invert4(const float *m, double *o)
@@ -338,132 +328,7 @@ static bool invert4(const float *m, double *o)
 /* o = a b, column-major 4 x 4 (o may not alias a or b) */
 static void mul4d(const double *a, const double *b, double *o)
 {
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) {
-            double v = 0.0;
-            for (int k = 0; k < 4; k++) {
-                v += a[k * 4 + r] * b[c * 4 + k];
-            }
-            o[c * 4 + r] = v;
-        }
-    }
-}
-
-static double det3(const double m[3][3])
-{
-    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-           m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-           m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-}
-
-/* The rotation of the polar decomposition A = R S (Higham's iteration R <-
- * (R + R^-T) / 2), m[row][col]; false when singular or not converged */
-static bool polarRotation(const double a[3][3], double r[3][3])
-{
-    memcpy(r, a, sizeof(double) * 9);
-    for (int it = 0; it < 64; it++) {
-        const double d = det3(r);
-        if (!(fabs(d) > 1e-30) || !isfinite(d)) {
-            return false;
-        }
-        double it_[3][3]; /* (R^-1)^T = cofactor matrix / det */
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                const int i1 = (i + 1) % 3, i2 = (i + 2) % 3, j1 = (j + 1) % 3, j2 = (j + 2) % 3;
-                it_[i][j] = (r[i1][j1] * r[i2][j2] - r[i1][j2] * r[i2][j1]) / d;
-            }
-        }
-        double diff = 0.0;
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                const double v = 0.5 * (r[i][j] + it_[i][j]);
-                diff += fabs(v - r[i][j]);
-                r[i][j] = v;
-            }
-        }
-        if (diff < 1e-13) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void quatFromRot(const double m[3][3], double q[4])
-{
-    const double tr = m[0][0] + m[1][1] + m[2][2];
-    if (tr > 0.0) {
-        const double s = sqrt(tr + 1.0) * 2.0;
-        q[3] = 0.25 * s;
-        q[0] = (m[2][1] - m[1][2]) / s;
-        q[1] = (m[0][2] - m[2][0]) / s;
-        q[2] = (m[1][0] - m[0][1]) / s;
-    } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
-        const double s = sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2.0;
-        q[3] = (m[2][1] - m[1][2]) / s;
-        q[0] = 0.25 * s;
-        q[1] = (m[0][1] + m[1][0]) / s;
-        q[2] = (m[0][2] + m[2][0]) / s;
-    } else if (m[1][1] > m[2][2]) {
-        const double s = sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2.0;
-        q[3] = (m[0][2] - m[2][0]) / s;
-        q[0] = (m[0][1] + m[1][0]) / s;
-        q[1] = 0.25 * s;
-        q[2] = (m[1][2] + m[2][1]) / s;
-    } else {
-        const double s = sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2.0;
-        q[3] = (m[1][0] - m[0][1]) / s;
-        q[0] = (m[0][2] + m[2][0]) / s;
-        q[1] = (m[1][2] + m[2][1]) / s;
-        q[2] = 0.25 * s;
-    }
-}
-
-static void rotFromQuat(const double q[4], double m[3][3])
-{
-    const double x = q[0], y = q[1], z = q[2], w = q[3];
-    m[0][0] = 1.0 - 2.0 * (y * y + z * z);
-    m[0][1] = 2.0 * (x * y - z * w);
-    m[0][2] = 2.0 * (x * z + y * w);
-    m[1][0] = 2.0 * (x * y + z * w);
-    m[1][1] = 1.0 - 2.0 * (x * x + z * z);
-    m[1][2] = 2.0 * (y * z - x * w);
-    m[2][0] = 2.0 * (x * z - y * w);
-    m[2][1] = 2.0 * (y * z + x * w);
-    m[2][2] = 1.0 - 2.0 * (x * x + y * y);
-}
-
-static void slerp(const double a[4], const double b0[4], double t, double o[4])
-{
-    double b[4] = {b0[0], b0[1], b0[2], b0[3]};
-    double d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-    if (d < 0.0) { /* the short way */
-        d = -d;
-        for (int i = 0; i < 4; i++) {
-            b[i] = -b[i];
-        }
-    }
-    double wa = 1.0 - t, wb = t;
-    if (d < 0.9999) {
-        const double th = acos(d), s = sin(th);
-        wa = sin((1.0 - t) * th) / s;
-        wb = sin(t * th) / s;
-    }
-    double n = 0.0;
-    for (int i = 0; i < 4; i++) {
-        o[i] = wa * a[i] + wb * b[i];
-        n += o[i] * o[i];
-    }
-    n = sqrt(n);
-    for (int i = 0; i < 4; i++) {
-        o[i] /= n;
-    }
-}
-
-static bool isAffine(const double *m)
-{
-    const double s = fabs(m[0]) + fabs(m[5]) + fabs(m[10]) + 1.0;
-    return fabs(m[3]) < 1e-5 * s && fabs(m[7]) < 1e-5 * s && fabs(m[11]) < 1e-5 * s &&
-           fabs(m[15] - 1.0) < 1e-5;
+    rdcb_mul4d(a, b, o);
 }
 
 /* the turn between the two rotations of the last rd__blend_affine, degrees */
@@ -471,82 +336,7 @@ static double s_turnDeg;
 
 bool rd__blend_affine(const double *p, const double *c, double t, const double *pivot, double *o)
 {
-    s_turnDeg = 0.0;
-    if (!isAffine(p) || !isAffine(c)) {
-        return false;
-    }
-    double ap[3][3], ac[3][3], rp[3][3], rc[3][3];
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            ap[i][j] = p[j * 4 + i];
-            ac[i][j] = c[j * 4 + i];
-        }
-    }
-    if (!polarRotation(ap, rp) || !polarRotation(ac, rc)) {
-        return false;
-    }
-    const double dp = det3(rp), dc = det3(rc);
-    if ((dp < 0.0) != (dc < 0.0)) {
-        return false; /* a mirror between the two: no rotation joins them */
-    }
-    const double sign = dp < 0.0 ? -1.0 : 1.0; /* A = (sign R) (sign S) */
-    double sp[3][3], sc[3][3], qp[4], qc[4], qt[4], rt[3][3];
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            rp[i][j] *= sign;
-            rc[i][j] *= sign;
-        }
-    }
-    for (int i = 0; i < 3; i++) { /* S = R^T A (with the sign folded in) */
-        for (int j = 0; j < 3; j++) {
-            double vp = 0.0, vc = 0.0;
-            for (int k = 0; k < 3; k++) {
-                vp += rp[k][i] * ap[k][j];
-                vc += rc[k][i] * ac[k][j];
-            }
-            sp[i][j] = vp;
-            sc[i][j] = vc;
-        }
-    }
-    quatFromRot(rp, qp);
-    quatFromRot(rc, qc);
-    {
-        const double d = fabs(qp[0] * qc[0] + qp[1] * qc[1] + qp[2] * qc[2] + qp[3] * qc[3]);
-        s_turnDeg = 2.0 * acos(d > 1.0 ? 1.0 : d) * 180.0 / 3.14159265358979323846;
-    }
-    slerp(qp, qc, t, qt);
-    rotFromQuat(qt, rt);
-    double out[16];
-    const double x0[3] = {pivot ? pivot[0] : 0.0, pivot ? pivot[1] : 0.0, pivot ? pivot[2] : 0.0};
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            double v = 0.0;
-            for (int k = 0; k < 3; k++) {
-                v += rt[i][k] * ((1.0 - t) * sp[k][j] + t * sc[k][j]);
-            }
-            out[j * 4 + i] = v;
-        }
-    }
-    /* the pivot's image follows the straight line between its two ticks'
-     * images; the blended 3 x 3 turns the rest about it */
-    for (int i = 0; i < 3; i++) {
-        double yp = p[12 + i], yc = c[12 + i], ax = 0.0;
-        for (int j = 0; j < 3; j++) {
-            yp += p[j * 4 + i] * x0[j];
-            yc += c[j * 4 + i] * x0[j];
-            ax += out[j * 4 + i] * x0[j];
-        }
-        out[12 + i] = (1.0 - t) * yp + t * yc - ax;
-    }
-    out[3] = out[7] = out[11] = 0.0;
-    out[15] = 1.0;
-    for (int i = 0; i < 16; i++) {
-        if (!isfinite(out[i])) {
-            return false;
-        }
-    }
-    memcpy(o, out, sizeof(out));
-    return true;
+    return rdcb_blend_affine(p, c, t, pivot, o, &s_turnDeg) != 0;
 }
 
 bool rd__s2_legacy(void)
@@ -743,6 +533,122 @@ static bool rotateLight(float (*o)[4], const float (*p)[4], const float (*c)[4],
     return true;
 }
 
+/* The near lights' slots.  Light.c's light_getNearLight fills L1's rows 0..2
+ * and L2's columns 0..2 with the three lights nearest the object, ordered by
+ * strength (falloff, scale and mean colour), so two lights whose strengths
+ * cross between ticks change slots: in the dark hall a pulsing light passes
+ * a steady one and slots 1 and 2 of the boy's lights swap.  Blended slot by
+ * slot, the half-way frame would light him from a direction between the two
+ * lights, with a mix of their colours: some normals a quarter darker in red
+ * than in either tick (rd_interp_test's hall lights).  Before the blend,
+ * prev's three lights are put in the slots of the lights of cur they are
+ * nearest in direction: light i is element i of qw 28..31 (L1's row i) and
+ * qw 32 + i (L2's column i); qw 35, the ambient, stays.  The shading of
+ * prev's block is the same in any order (the program sums the three lights'
+ * terms).  A zero row (no light) pairs with a zero row.  The order changes
+ * only when another pairing is closer than the recorded one. */
+static int s_lightPair; /* lit draws whose previous lights were re-paired, this present */
+
+static bool isLitDraw(uint8_t type, uint8_t prog)
+{
+    switch (type) {
+    case RDC_MESH:
+        return prog == RD_PROG_LIT || prog == RD_PROG_LIT_SPEC;
+    case RDC_SKINNED:
+        return prog == RD_PROG_SKIN || prog == RD_PROG_SKIN_SPEC;
+    case RDC_GRID:
+        return prog == RD_PROG_GRID_LIT;
+    default:
+        return false;
+    }
+}
+
+/* the three lights' unit directions in the world, for the pairing: a draw
+ * with a model matrix (normal_l, the grid: L1 is in the model's space)
+ * through its model to world W = S^-1 M (qw 4..7, 16..19), Ln = L1 W^-1 as
+ * rotateLight has it, so a turn of the object between the ticks does not
+ * move them; a skinned draw's L1 as it is (cluster turns the normals by
+ * the bones, which are in the world), and as it is when W is singular.
+ * zero[i]: the row is zero (no light) */
+static void lightDirs(const float (*m)[4], bool model, double d[3][3], bool zero[3])
+{
+    double iw[16];
+    bool world = false;
+    if (model) {
+        double s[16], is[16], mm[16], w[16];
+        loadQw4(m, 4, s);
+        loadQw4(m, 16, mm);
+        if (invert4d(s, is)) {
+            mul4d(is, mm, w);
+            world = invert4d(w, iw);
+        }
+    }
+    for (int i = 0; i < 3; i++) {
+        double len = 0.0;
+        for (int j = 0; j < 3; j++) {
+            double v = 0.0;
+            if (world) {
+                for (int k = 0; k < 3; k++) {
+                    v += (double)m[28 + k][i] * iw[j * 4 + k];
+                }
+            } else {
+                v = m[28 + j][i];
+            }
+            d[i][j] = v;
+            len += v * v;
+        }
+        len = sqrt(len);
+        zero[i] = !(len > 1e-6) || !isfinite(len);
+        for (int j = 0; j < 3; j++) {
+            d[i][j] = zero[i] ? 0.0 : d[i][j] / len;
+        }
+    }
+}
+
+/* p (prev's block, a copy) with its lights moved into the slots of cur's
+ * (c) they pair with; false: the recorded order is the nearest */
+static bool pairLights(float (*p)[4], const float (*c)[4], bool model)
+{
+    static const int perms[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2},
+                                    {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    double dp[3][3], dc[3][3], score[3][3];
+    bool zp[3], zc[3];
+    lightDirs((const float (*)[4])p, model, dp, zp);
+    lightDirs(c, model, dc, zc);
+    for (int i = 0; i < 3; i++) { /* cur's light i, prev's light j */
+        for (int j = 0; j < 3; j++) {
+            if (zc[i] || zp[j]) {
+                score[i][j] = zc[i] == zp[j] ? 2.0 : -2.0;
+            } else {
+                score[i][j] = dc[i][0] * dp[j][0] + dc[i][1] * dp[j][1] + dc[i][2] * dp[j][2];
+            }
+        }
+    }
+    int best = 0;
+    double bestScore = score[0][0] + score[1][1] + score[2][2];
+    const double keep = bestScore;
+    for (int k = 1; k < 6; k++) {
+        const double s = score[0][perms[k][0]] + score[1][perms[k][1]] + score[2][perms[k][2]];
+        if (s > bestScore) {
+            bestScore = s;
+            best = k;
+        }
+    }
+    if (best == 0 || !(bestScore > keep + 1e-3)) {
+        return false;
+    }
+    float was[8][4];
+    memcpy(was, p[28], sizeof(was));
+    for (int i = 0; i < 3; i++) {
+        const int j = perms[best][i];
+        for (int k = 0; k < 4; k++) {
+            p[28 + k][i] = was[k][j]; /* L1's row */
+        }
+        memcpy(p[32 + i], was[4 + j], sizeof(p[0])); /* L2's column */
+    }
+    return true;
+}
+
 /* A normal program's model matrices (qw 16..19 model to screen, 20..23
  * model to clip, 24..27 model to view) are each a camera part times the
  * object's model to world W.  W = S^-1 (qw 16..19), S the common block's
@@ -822,9 +728,24 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
  * parts agree and only the object moves); an unmatched, mismatched, jumped
  * or unkeyed one is cur's object through Vt, so it stays with its neighbours
  * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
- * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space
- * (unmatched, the fade or half-way switch, unmatchedPass); draws under
- * another camera (a reflection's) keep the element-wise blend. */
+ * RDC_SHADOW_STRIP) hold GS positions: those the frame camera projected
+ * (marked at the game's projection sites) are taken through the world onto
+ * the blended camera too (reprojDraw, reprojBlend), the rest keep their
+ * blend in screen space; unmatched, both fade or switch half way
+ * (unmatchedPass); draws under another camera (a reflection's) keep the
+ * element-wise blend.
+ *
+ * Two kinds of part carry the frame's camera block but are not placed
+ * through the view (RdVuDraw.view, the command's b[4], from the game's node
+ * flags; reg_setMMatrixPacket): a part locked to the camera (flag 2, its
+ * model matrices the 500 unit screen times its place in view space) is
+ * already where the camera puts it, so only its camera block is re-based
+ * and its model matrices stay the ticks' (moving it as a world object
+ * would carry it across the screen, or behind the eye, with every step of
+ * the blended camera); a billboard (flag 4, the screen matrix times a
+ * matrix whose rotation is the view's) keeps its rotation in view space and
+ * moves only its place, the world point, onto the blended camera, so it
+ * faces that camera (camRebase's view). */
 static bool isNormalProg(uint8_t prog);
 static uint8_t *outPayload(const RdCmd *c);
 
@@ -837,6 +758,9 @@ typedef struct CamBlend {
     double pc[16];         /* cur's projection (RdCamera.proj43) */
     double lc[16];         /* Pt Pc^-1: cur's projection to the blended one */
     int zoom;              /* the projections differ (the zoom eases) */
+    double pp[16];         /* prev's projection */
+    double lp[16];         /* Pt Pp^-1, valid with zoomPrev: for a draw of prev alone */
+    int zoomPrev;
     float itf[16];
 } CamBlend;
 
@@ -885,7 +809,13 @@ static void camSetup(const RdFrame *prev, const RdFrame *cur, float t)
         mul4d(pt, ipc, s_cam.lc);
         s_cam.zoom = 1;
         s_cam.still = 0;
+        double ipp[16];
+        s_cam.zoomPrev = invert4d(pp, ipp);
+        if (s_cam.zoomPrev) {
+            mul4d(pt, ipp, s_cam.lp);
+        }
     }
+    memcpy(s_cam.pp, pp, sizeof(pp));
     for (int i = 0; i < 16; i++) {
         s_cam.itf[i] = (float)s_cam.it[i];
     }
@@ -968,13 +898,30 @@ static int camModelMats(uint8_t type, uint8_t prog)
     return type == RDC_GRID || type == RDC_PARTICLES ? 1 : 0;
 }
 
-/* m (a VU block, 36 qw) re-based from its tick's view onto Vt by e (Vp^-1 Vt
- * or Vc^-1 Vt); false (m untouched) when a matrix is singular or the result
- * is not finite */
-static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
+/* The view a VU draw's model matrices are built in (rd_mesh.h
+ * RD_VU_VIEW_*): only a normal program's mesh has one */
+static int vuView(const RdCmd *c)
+{
+    if (c->type != RDC_MESH || !isNormalProg(c->b[0]) || c->b[4] > RD_VU_VIEW_FACING) {
+        return RD_VU_VIEW_WORLD;
+    }
+    return c->b[4];
+}
+
+/* m (a VU block, 36 qw) re-based from its tick's view v onto Vt by e (v^-1
+ * Vt: Vp^-1 Vt or Vc^-1 Vt), its model matrices by their view (vuView):
+ * through the view, as the world seen by Vt; locked to the camera, kept;
+ * facing the camera, the place moved as a world point and the rotation
+ * kept in view space; false (m untouched) when a matrix is singular or the
+ * result is not finite */
+static bool camRebase(float (*m)[4], const double *e, int mats, const double *l, const double *v,
+                      int view)
 {
     double s[16], is[16], se[16], w[16], iw[16], k[16], tmp[16], x[16];
     float out[16][4];
+    if (view == RD_VU_VIEW_LOCKED) {
+        mats = 0;
+    }
     loadQw4(m, 4, s);
     mul4d(s, e, se);
     if (l) {
@@ -993,7 +940,39 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
         if (!invert4d(w, iw)) {
             return false;
         }
-        mul4d(iw, e, tmp);
+        double eb[16];
+        const double *ek = e;
+        if (view == RD_VU_VIEW_FACING) {
+            /* X = v W, the billboard in view space: its place p moves by D p
+             * - p (D = v e v^-1 = Vt v^-1, the view-space step to the blended
+             * camera), its rotation stays; E_b = v^-1 T(D p - p) v */
+            double iv[16], vw[16], d[16], tr[16];
+            if (!invert4d(v, iv)) {
+                return false;
+            }
+            mul4d(v, w, vw);
+            if (!(fabs(vw[15]) > 1e-12)) {
+                return false;
+            }
+            mul4d(v, e, tmp);
+            mul4d(tmp, iv, d);
+            double pv[3], dp[3];
+            for (int r = 0; r < 3; r++) {
+                pv[r] = vw[12 + r] / vw[15];
+            }
+            for (int r = 0; r < 3; r++) {
+                dp[r] = d[r] * pv[0] + d[4 + r] * pv[1] + d[8 + r] * pv[2] + d[12 + r];
+            }
+            memset(tr, 0, sizeof(tr));
+            tr[0] = tr[5] = tr[10] = tr[15] = 1.0;
+            for (int r = 0; r < 3; r++) {
+                tr[12 + r] = dp[r] - pv[r];
+            }
+            mul4d(iv, tr, tmp);
+            mul4d(tmp, v, eb);
+            ek = eb;
+        }
+        mul4d(iw, ek, tmp);
         mul4d(tmp, w, k); /* W^-1 E W */
     }
     float model[12][4];
@@ -1029,15 +1008,447 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l)
     return true;
 }
 
+/* ------------------------------------------------ CPU-projected draws
+ *
+ * A screen prim marked RD_SCREEN_FRAME_CAMERA or a shadow volume marked
+ * RD_SHADOW_FRAME_CAMERA holds vertices the game projected on the CPU
+ * through its tick's camera (lightning.c set_vertex, lineManager.c,
+ * Shadow.c's volumes, GifPacket.c's rotTransPers strips, RegistPacket.c's
+ * lines): GS X / 16, Y / 16 and Z / 16 are x / w, y / w and z / w of the
+ * world point through S = proj43 view (RdCamera; GsBase.c's +0x100), which
+ * inverts.  While the camera moves, each vertex is taken back into the
+ * world through its tick's S^-1 and projected with the blended camera St =
+ * Pt Vt, the camera every VU draw is re-based on (camSetup, camRebase), in
+ * the VU's float order (vu_common.hlsli vu_matm: c0 x + c1 y + c2 z + c3
+ * each step rounded; vu_divide: q = 1 / w, x q, y q, z q; vu_ftoi4), so a
+ * decal or a bolt lying on a wall keeps the wall's depth instead of the
+ * tick's, which a GEQUAL test failed while the camera moved and passed
+ * when it stopped.  A matched pair blends its two world points; a draw of
+ * one tick is that tick's points through St.  STQ (the tick's own) is
+ * scaled by w_tick / w_new: S / Q stays at each vertex and the texture
+ * follows the new depth across the prim.  A primitive (a point, a line, a
+ * triangle) stays where its tick put it (matched: blended in screen space
+ * as before), whole, when one of its vertices has Z 0 or Z saturated by
+ * ftoi4, is not in front of its tick's camera, or is not seen by St in
+ * front with a GS position: re-projecting the others would distort it
+ * (reprojPrim).  In a shadow prism a vertex with no world point (a
+ * sentinel, a clamped Z) keeps the screen-space rule alone, and a vertex
+ * St cannot draw puts the whole prism on it; a prism that moved has its
+ * faces signed again for the blended camera, matched or of one tick
+ * (prismSigns, reprojShadow).  Nothing is re-projected with a still
+ * camera (s_cam.still) or outside a blend, so those frames are byte for
+ * byte what they were.  The reflection prims recorded under rd_push_camera
+ * are never marked. */
+typedef struct ReprojCam {
+    int on;
+    double ip[16], ic[16]; /* (Pp Vp)^-1 and (Pc Vc)^-1: the ticks' GS screen to world */
+    float st[16];          /* Pt Vt, world to GS screen, columns as a VU block holds them */
+} ReprojCam;
+
+static ReprojCam s_rp;
+
+static bool s_rpOff; /* rd__interp_set_reproject(false) */
+
+static uint32_t s_reproj; /* draws re-projected, this present */
+
+void rd__interp_set_reproject(bool on)
+{
+    s_rpOff = !on;
+}
+
+/* s_rp for the camera camSetup blended at t */
+static void reprojSetup(float t)
+{
+    memset(&s_rp, 0, sizeof(s_rp));
+    if (s_rpOff || !s_cam.on || s_cam.still) {
+        return;
+    }
+    double sp[16], sc[16], pt[16], st[16];
+    mul4d(s_cam.pp, s_cam.vp, sp);
+    mul4d(s_cam.pc, s_cam.vc, sc);
+    if (!invert4d(sp, s_rp.ip) || !invert4d(sc, s_rp.ic)) {
+        return;
+    }
+    for (int i = 0; i < 16; i++) {
+        pt[i] = s_cam.zoom ? (1.0 - t) * s_cam.pp[i] + t * s_cam.pc[i] : s_cam.pc[i];
+    }
+    mul4d(pt, s_cam.vt, st);
+    for (int i = 0; i < 16; i++) {
+        if (!isfinite(st[i]) || fabs(st[i]) > 3.0e38) {
+            return;
+        }
+        s_rp.st[i] = (float)st[i];
+    }
+    s_rp.on = 1;
+}
+
+/* whether c is a draw the frame camera projected that this file re-projects */
+static bool frameProjected(const RdCmd *c)
+{
+    if (c->type == RDC_SCREEN) {
+        return c->b[4] == RD_SCREEN_FRAME_CAMERA && c->b[1] == RD_SPACE_WORLD &&
+               c->b[0] != RD_PRIM_SPRITES && c->b[3] == 0;
+    }
+    return c->type == RDC_SHADOW_STRIP && c->b[0] == RD_SHADOW_TRIS &&
+           c->b[1] == RD_SHADOW_FRAME_CAMERA;
+}
+
+/* v's world point p through inv (a tick's S^-1) and its w there; false when
+ * Z is 0 or saturated by ftoi4, or the point is not in front of the camera */
+static bool reprojUnproject(const double *inv, const RdScreenVtx *v, double p[3], double *w)
+{
+    if (v->z == 0 || v->z >= 0x7FFFFFFFu) {
+        return false;
+    }
+    const double s[3] = {(double)v->x / 16.0, (double)v->y / 16.0, (double)v->z / 16.0};
+    double h[4];
+    for (int r = 0; r < 4; r++) {
+        h[r] = inv[r] * s[0] + inv[4 + r] * s[1] + inv[8 + r] * s[2] + inv[12 + r];
+    }
+    if (!(h[3] > 0.0) || !isfinite(h[3])) {
+        return false; /* h[3] = 1 / w */
+    }
+    for (int k = 0; k < 3; k++) {
+        p[k] = h[k] / h[3];
+        if (!isfinite(p[k])) {
+            return false;
+        }
+    }
+    *w = 1.0 / h[3];
+    return true;
+}
+
+/* the world point p through St as the VU computes a vertex (vu_mat with w
+ * 1, vu_divide, vu_ftoi4) into o's X, Y and Z, and its w; false (o
+ * untouched) when w is not positive, X or Y leaves the GS's 16-bit window
+ * or Z the ftoi4 range */
+static bool reprojProject(const double p[3], RdScreenVtx *o, double *w)
+{
+    const float *m = s_rp.st;
+    const float x = (float)p[0], y = (float)p[1], z = (float)p[2];
+    float h[4];
+    for (int r = 0; r < 4; r++) {
+        float a = m[r] * x;
+        a = a + m[4 + r] * y;
+        a = a + m[8 + r] * z;
+        a = a + m[12 + r] * 1.0f;
+        h[r] = a;
+    }
+    if (!(h[3] > 0.0f) || !isfinite(h[3])) {
+        return false;
+    }
+    const float q = 1.0f / h[3];
+    const float gx = h[0] * q * 16.0f, gy = h[1] * q * 16.0f, gz = h[2] * q * 16.0f;
+    if (!(gx >= 0.0f && gx < 65536.0f) || !(gy >= 0.0f && gy < 65536.0f) ||
+        !(gz >= 1.0f && gz < 2147483648.0f)) {
+        return false;
+    }
+    o->x = (int32_t)gx; /* ftoi4: truncation */
+    o->y = (int32_t)gy;
+    o->z = (uint32_t)(int32_t)gz;
+    *w = h[3];
+    return true;
+}
+
+/* STQ times w / wNew (the tick's w over the new one) */
+static void reprojStq(RdScreenVtx *v, double w, double wNew)
+{
+    const double k = w / wNew;
+    v->s = (float)((double)v->s * k);
+    v->t = (float)((double)v->t * k);
+    v->q = (float)((double)v->q * k);
+}
+
+/* why a vertex was not re-projected: it has no world point (Z 0 or
+ * saturated, not in front of its tick's camera), or St cannot draw its
+ * point (not in front, or past the GS's 16-bit window or ftoi4's range) */
+enum { RP_NO_POINT = 1, RP_NO_PROJECTION = 2 };
+
+/* v (a vertex of the tick whose S^-1 is inv) moved by d in the world and
+ * through St; false (v untouched) where it cannot be, the reason in *why
+ * when why is given */
+static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, bool stq, int *why)
+{
+    double p[3], w, wNew;
+    RdScreenVtx o = *v;
+    if (!reprojUnproject(inv, v, p, &w)) {
+        if (why) {
+            *why = RP_NO_POINT;
+        }
+        return false;
+    }
+    if (d) {
+        for (int k = 0; k < 3; k++) {
+            p[k] += d[k];
+        }
+    }
+    if (!reprojProject(p, &o, &wNew)) {
+        if (why) {
+            *why = RP_NO_PROJECTION;
+        }
+        return false;
+    }
+    if (stq) {
+        reprojStq(&o, w, wNew);
+    }
+    *v = o;
+    return true;
+}
+
+/* a matched pair's vertex: o (cur's) becomes the blend at t of the world
+ * points of p (prev's) and o through St, cur's STQ scaled; false (o
+ * untouched) where either has no world point or St cannot draw it, the
+ * reason in *why when why is given */
+static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq, int *why)
+{
+    double a[3], b[3], m[3], wp, wc, wNew;
+    RdScreenVtx r = *o;
+    if (!reprojUnproject(s_rp.ip, p, a, &wp) || !reprojUnproject(s_rp.ic, o, b, &wc)) {
+        if (why) {
+            *why = RP_NO_POINT;
+        }
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        m[k] = (1.0 - (double)t) * a[k] + (double)t * b[k];
+    }
+    if (!reprojProject(m, &r, &wNew)) {
+        if (why) {
+            *why = RP_NO_PROJECTION;
+        }
+        return false;
+    }
+    if (stq) {
+        reprojStq(&r, wc, wNew);
+    }
+    *o = r;
+    return true;
+}
+
+/* The vertices of one primitive of a screen draw: a point, a line, a
+ * triangle; a strip or a fan shares its vertices between its primitives,
+ * so the whole draw is one (the GIF layer records points, lines and
+ * triangles; strips do not reach here in practice) */
+static uint32_t primVerts(uint8_t prim, uint32_t n)
+{
+    switch (prim) {
+    case RD_PRIM_POINTS:
+        return 1;
+    case RD_PRIM_LINES:
+        return 2;
+    case RD_PRIM_TRIANGLES:
+        return 3;
+    default:
+        return n;
+    }
+}
+
+/* The m vertices v of one primitive of a tick through St (moved by d in
+ * the world), all or none: when one of them cannot be re-projected the
+ * primitive stays as its tick drew it, undistorted, instead of mixing the
+ * blended camera's positions with the tick's.  False when it stays. */
+static bool reprojPrim(const double *inv, RdScreenVtx *v, uint32_t m, const double *d, bool stq)
+{
+    RdScreenVtx o[3];
+    if (m <= 3) {
+        for (uint32_t i = 0; i < m; i++) {
+            o[i] = v[i];
+            if (!reprojVertex(inv, &o[i], d, stq, NULL)) {
+                return false;
+            }
+        }
+        memcpy(v, o, m * sizeof(*v));
+        return true;
+    }
+    for (uint32_t i = 0; i < m; i++) {
+        o[0] = v[i];
+        if (!reprojVertex(inv, &o[0], d, stq, NULL)) {
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < m; i++) {
+        (void)reprojVertex(inv, &v[i], d, stq, NULL);
+    }
+    return true;
+}
+
+static void reprojShadow(RdCmd *c, RdScreenVtx *v, const double *inv);
+
+/* the vertices of c (a draw of one tick, frameProjected) in payload v, of
+ * the tick whose S^-1 is inv, through St, primitive by primitive
+ * (reprojPrim); a shadow volume's triangles are signed again
+ * (reprojShadow), which may change c's split into increments and
+ * decrements */
+static void reprojDraw(RdCmd *c, uint8_t *v, const double *inv)
+{
+    if (!s_rp.on || !v || !frameProjected(c)) {
+        return;
+    }
+    RdScreenVtx *o = (RdScreenVtx *)(void *)v;
+    if (c->type == RDC_SCREEN) {
+        const uint32_t n = c->u[1];
+        const uint32_t m = primVerts(c->b[0], n);
+        const bool stq = c->b[2] == 0;
+        for (uint32_t i = 0; m > 0 && i + m <= n; i += m) {
+            (void)reprojPrim(inv, &o[i], m, NULL, stq);
+        }
+    } else {
+        reprojShadow(c, o, inv);
+    }
+    s_reproj++;
+}
+
 static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
+
+/* ------------------------------------------- the pool's screen-space STs
+ *
+ * pool.c makes the STs of its grids, which sample the scene copied into a
+ * work target, as each vertex's screen position through the tick's camera
+ * (updatePoolGeo, SetLimitedPoolReflactionMesh,
+ * SetLayoutedPoolReflactionMesh; rd.h rd_grid_screen_st gives the formula,
+ * the scales and each vertex's wave height).  Blending the two ticks' STs
+ * puts the reflection off by a growing amount the further the vertex: its
+ * ST is (x + 1000 d) 0.8 / ScreenWidth, d the screen offset of a point one
+ * unit along the reflected ray, so a far vertex's ST is a steep function of
+ * the camera and the straight line between two ticks' values is not where
+ * the blended camera sees the reflection (the distant water's shimmer while
+ * the camera moves).  So the STs are computed again from the blended
+ * vertex, its blended height, the draw's blended world to screen (qw
+ * 16..19) and the blended camera's eye.  In double precision: in floats the
+ * reflection's 1000 times scaled difference of two screen positions carries
+ * the positions' rounding, up to 0.01 in ST in the pool dumps (the game's
+ * own STs scatter that much about the exact values), and a new rounding
+ * every present would make the far water sparkle.  The formula applies with
+ * the camera still too: with the game's STs on still presents and the
+ * formula's on moving ones, distant reflection detail jumped by up to that
+ * 0.01 (some 5 GS pixels) when the camera started or stopped.  So a still
+ * blended present differs from the tick's own picture by up to 0.01 in ST
+ * on these grids alone; without interpolation (the Original framerate)
+ * nothing goes through here and the game's STs are drawn. */
+
+static void gridProject(const float (*m)[4], const double p[4], double o[4])
+{
+    for (int r = 0; r < 4; r++) {
+        o[r] = (double)m[0][r] * p[0] + (double)m[1][r] * p[1] + (double)m[2][r] * p[2] +
+               (double)m[3][r] * p[3];
+    }
+}
+
+bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], float sx, float sy,
+                        const float pos[4], float h, float out[2])
+{
+    if (kind == RD_GRID_ST_NONE || kind >= RD_GRID_ST_COUNT || !(sx > 0.0f) || !(sy > 0.0f)) {
+        return false;
+    }
+    const double q[4] = {pos[0], pos[1], pos[2], pos[3]};
+    double o[4];
+    gridProject(m, q, o);
+    if (!(fabs(o[3]) > 1e-9)) {
+        return false;
+    }
+    const double iw = 1.0 / o[3];
+    const double px = o[0] * iw - 2048.0, py = o[1] * iw - 2048.0;
+    double s, t;
+    if (kind == RD_GRID_ST_REFLECT) {
+        /* the ray from the eye to the vertex, reflected about the wave's
+         * normal, its y negated (updatePoolGeo's second loop) */
+        double d[3] = {q[0] - eye[0], q[1] - eye[1], q[2] - eye[2]};
+        const double len = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+        if (!(len > 0.0)) {
+            return false;
+        }
+        for (int k = 0; k < 3; k++) {
+            d[k] /= len;
+        }
+        const double nh = (double)h * 0.1;
+        const double n[3] = {nh, -1.0, nh};
+        const double k2 = (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) * -2.0;
+        const double r[3] = {d[0] + n[0] * k2, -(d[1] + n[1] * k2), d[2] + n[2] * k2};
+        const double q2[4] = {q[0] + r[0], q[1] + r[1], q[2] + r[2], q[3]};
+        double o2[4];
+        gridProject(m, q2, o2);
+        if (!(fabs(o2[3]) > 1e-9)) {
+            return false;
+        }
+        const double dx = o2[0] / o2[3] - o[0] * iw, dy = o2[1] / o2[3] - o[1] * iw;
+        /* usc and vsc: 1 / ScreenWidth (sx, as the game rounded it) times 0.8 */
+        s = (px + dx * 1000.0) * (double)(sx * 0.8f) + 0.5;
+        t = (py + dy * 1000.0) * (double)(sy * 0.8f) + 0.5;
+    } else {
+        const double k = kind == RD_GRID_ST_SURFACE ? 30.0 : 50.0;
+        s = px * sx + 0.5 + (double)h * k * iw;
+        t = py * sy + 0.5 + (double)h * k * iw;
+        if (kind == RD_GRID_ST_RIPPLE_CLAMPED) {
+            s = s < 0.0 ? 0.0 : s;
+            t = 1.0 < t ? 1.0 : t;
+        }
+    }
+    if (!isfinite(s) || !isfinite(t) || fabs(s) > 3.0e38 || fabs(t) > 3.0e38) {
+        return false;
+    }
+    out[0] = (float)s;
+    out[1] = (float)t;
+    return true;
+}
+
+static int s_gridStCam; /* grids whose STs the formula made, this present */
+
+/* The STs of grid c (its payload op, as blended or re-based: qw 16..19 and
+ * the stream) through the blended camera, moving or still, when it carries
+ * a formula; false when it does not apply */
+static bool gridCameraSts(const RdCmd *c, uint8_t *op)
+{
+    const uint8_t kind = c->b[5];
+    if (c->type != RDC_GRID || kind == RD_GRID_ST_NONE || kind >= RD_GRID_ST_COUNT || !s_cam.on ||
+        c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return false;
+    }
+    RdVuPayload hc;
+    memcpy(&hc, op, sizeof(hc));
+    const uint32_t qpv = hc.qwPerVertex, len = hc.vertsPerBatch;
+    const uint64_t need =
+        sizeof(RdVuPayload) + sizeof(RdVuBlock) + ((uint64_t)hc.boneQw + hc.streamQw) * 16u;
+    if (qpv < 2u || len == 0 || need > c->u[2]) {
+        return false;
+    }
+    const float (*vo)[4] = (const float (*)[4])(const void *)(op + sizeof(RdVuPayload));
+    float (*so)[4] =
+        (float (*)[4])(void *)(op + sizeof(RdVuPayload) + sizeof(RdVuBlock)) + hc.boneQw;
+    const double eye[3] = {s_cam.it[12], s_cam.it[13], s_cam.it[14]};
+    const uint32_t per = len * qpv + 4;
+    for (uint32_t b = 0; b < hc.batchCount && (b + 1) * per <= hc.streamQw; b++) {
+        for (uint32_t k = 0; k < len; k++) {
+            const uint32_t at = b * per + 3 + k * qpv;
+            float *st = so[at + qpv - 1u];
+            rd__grid_screen_st(kind, vo + 16, eye, c->f[0], c->f[1], so[at], st[3], st);
+        }
+    }
+    s_gridStCam++;
+    return true;
+}
 
 /* A draw that is cur's (unmatched, mismatched, jumped, unkeyed): cur's
  * object through the blended camera */
 static void camCurDraw(RdCmd *c)
 {
-    if (!s_cam.on || s_cam.still) {
+    if (!s_cam.on) {
+        return;
+    }
+    if (s_cam.still) {
+        /* nothing to re-base; the pool's grids take the formula's STs as
+         * on every blended present (gridCameraSts) */
+        if (c->type == RDC_GRID) {
+            uint8_t *op = outPayload(c);
+            if (op) {
+                (void)gridCameraSts(c, op);
+            }
+        }
+        return;
+    }
+    if (frameProjected(c)) {
+        reprojDraw(c, outPayload(c), s_rp.ic); /* cur's points through the blended camera */
         return;
     }
     switch (c->type) {
@@ -1058,10 +1469,14 @@ static void camCurDraw(RdCmd *c)
     }
     float (*vo)[4] = (float (*)[4])(void *)(op + sizeof(RdVuPayload));
     const int how = camOf((const float (*)[4])vo, s_cam.vc, s_cam.pc);
-    if (how != CAM_NONE && camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
-                                     how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL)) {
+    if (how != CAM_NONE &&
+        camRebase(vo, s_cam.ec, camModelMats(c->type, c->b[0]),
+                  how == CAM_FULL && s_cam.zoom ? s_cam.lc : NULL, s_cam.vc, vuView(c))) {
         s_rebased++;
         s_rebasedCur++;
+        /* the pool's grids: their STs through the camera they are now drawn
+         * with, as a matched one's */
+        gridCameraSts(c, op);
     }
 }
 
@@ -1144,15 +1559,37 @@ static bool vtxJump(const RdScreenVtx *p, const RdScreenVtx *c, uint32_t n)
 
 typedef struct Slot {
     uint32_t lo, hi;
-    uint8_t type, list, used, _pad;
-    int32_t head, tail, cursor; /* prev's occurrences, in order (Node.next) */
+    uint8_t type, list, used;
+    uint8_t placed;                      /* cur's occurrences are paired (placeSlot) */
+    int32_t head, tail, cursor;          /* prev's occurrences, in order (Node.next) */
+    uint32_t count;                      /* of them */
+    int32_t curHead, curTail, curCursor; /* cur's, when prev has two or more (CurNode) */
+    uint32_t spare;                      /* placeSlot: prev's occurrences no draw of cur picked */
 } Slot;
 
 typedef struct Node {
     uint32_t list, index;
     int32_t next;
     int32_t out; /* the index of its match in s_out's list, -1: unmatched */
+    int32_t org; /* placeSlot: 1 the draw's origin is in at, -1 it has none, 0 not known */
+    float at[3]; /* its model origin in the world (vuWorldOrigin) */
 } Node;
+
+/* cur's occurrence of a key prev drew two or more times (placeSlot) */
+typedef struct CurNode {
+    uint32_t index; /* in s_out's list */
+    int32_t next;
+    int32_t pick;  /* the prev Node it is paired with, -1 none */
+    int32_t org;   /* placeSlot: 1 the draw's origin is in at, -1 it has none */
+    int32_t apart; /* paired with a draw of another place: drawn as the tick's */
+    float at[3];
+} CurNode;
+
+static CurNode *s_curNodes;
+
+static uint32_t s_curCap, s_curCount;
+
+static int s_placed; /* draws paired by their place in the world, not by their ordinal */
 
 static Slot *s_slots;
 
@@ -1207,6 +1644,7 @@ static Slot *slotFind(const RdCmd *c, int list, bool insert)
             s->type = c->type;
             s->list = (uint8_t)list;
             s->head = s->tail = s->cursor = -1;
+            s->curHead = s->curTail = s->curCursor = -1;
             return s;
         }
         if (s->lo == c->keyLo && s->hi == c->keyHi && s->type == c->type && s->list == list) {
@@ -1259,6 +1697,8 @@ static bool buildIndex(const RdFrame *prev)
             s_nodes[k].index = i;
             s_nodes[k].next = -1;
             s_nodes[k].out = -1;
+            s_nodes[k].org = 0;
+            s->count++;
             if (s->tail >= 0) {
                 s_nodes[s->tail].next = k;
             } else {
@@ -1270,11 +1710,359 @@ static bool buildIndex(const RdFrame *prev)
     return true;
 }
 
+/* Same-key instances.  The game keys a packet by its object and part
+ * (RegistPacket.c), not by the instance, so objects drawn many times share
+ * one key: the ripples of swimming and wading (hamon, wfrip1, splash_mini:
+ * a ring of up to 30 stage animations entered by the boy's steps and
+ * strokes, each fixed in the world where it was entered), the fog
+ * billboards (fog1).  Paired by ordinal, when the oldest instance goes
+ * every later one would blend from the place and size of the one before
+ * it, a jump back and forth once per spawn.  So the VU meshes and grids
+ * of a key prev drew two or more times are paired by their model
+ * origin in the world (vuWorldOrigin; the camera's motion cancels) first:
+ * each draw of cur with the first unpaired draw of prev at the same origin
+ * (sameOrigin).  When some are, the slot's instances stand
+ * still, and the draws of the two ticks left over are paired with each
+ * other, the nearest first, then in order (pairLeftovers), so that no draw
+ * of cur stays unmatched while a draw of prev with its key is free: two
+ * that are each other's nearest among all the slot's draws of the other
+ * tick are one instance that moved and blend; any other pair is a new
+ * instance and one that went, and the new one is drawn as the tick's
+ * (CurNode.apart), not blended from the other's place.  When none is (the
+ * instances move: the wading splash's spray, splash_shibuki, rises and falls
+ * with its age) and their number holds, the pairing is the ordinal one;
+ * when one went or came the ordinal would cross instances, so they are
+ * paired in order, the draws of the longer side left out being those that
+ * keep the pairs nearest (alignSlot). */
+static bool canPlace(const RdCmd *c)
+{
+    /* not particles: MicroCode.c keys their batches by emitter */
+    return c->type == RDC_MESH || c->type == RDC_GRID;
+}
+
+static bool sameOrigin(const float a[3], const float b[3])
+{
+    /* the origins of a still object, inverted from two ticks' matrices
+     * through different cameras, agree to about 1e-6 of their distance from
+     * the world's origin (the pool's ripples, 1000 units out, six ticks
+     * apart: within 1e-3); instances of one key stand apart by many units
+     * (the ripples by 11 or more) */
+    const float m = fmaxf(fmaxf(fabsf(a[0]), fabsf(a[1])), fmaxf(fabsf(a[2]), 1.0f));
+    return dist3(a, b) <= 0.01f + 2e-5f * m;
+}
+
+static bool growTo(void **p, uint32_t *cap, uint32_t n, size_t size);
+
+static const void *payloadAt(const RdFrame *f, uint32_t off, uint32_t size);
+
+/* the model origin of draw c of frame f (prev's or s_out), false without one */
+static bool drawOrigin(const RdFrame *f, const RdCmd *c, float out[3])
+{
+    if (c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return false;
+    }
+    const uint8_t *p = payloadAt(f, c->u[1], c->u[2]);
+    if (!p) {
+        return false;
+    }
+    float m[36][4];
+    memcpy(m, p + sizeof(RdVuPayload), sizeof(m));
+    return vuWorldOrigin((const float (*)[4])m, out);
+}
+
+/* cur's (s_out's) occurrences of the keys prev drew two or more times, in
+ * order; false on out of memory (the pairing is then the ordinal one) */
+static bool indexCur(void)
+{
+    s_curCount = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
+            const RdCmd *c = &s_out.lists[l].cmds[i];
+            if (!isKeyedDraw(c) || !canPlace(c)) {
+                continue;
+            }
+            Slot *s = slotFind(c, l, false);
+            if (!s || s->count < 2) {
+                continue;
+            }
+            if (!growTo((void **)&s_curNodes, &s_curCap, s_curCount + 1, sizeof(CurNode))) {
+                for (uint32_t k = 0; k < s_slotCap; k++) {
+                    s_slots[k].curHead = s_slots[k].curTail = s_slots[k].curCursor = -1;
+                }
+                return false;
+            }
+            const int32_t k = (int32_t)s_curCount++;
+            s_curNodes[k].index = i;
+            s_curNodes[k].next = -1;
+            s_curNodes[k].pick = -1;
+            s_curNodes[k].org = 0;
+            s_curNodes[k].apart = 0;
+            if (s->curTail >= 0) {
+                s_curNodes[s->curTail].next = k;
+            } else {
+                s->curHead = s->curCursor = k;
+            }
+            s->curTail = k;
+        }
+    }
+    return true;
+}
+
+/* the most occurrences of a key alignSlot pairs; beyond, the ordinal */
+#define ALIGN_MAX 64
+
+/* Pairs the moving occurrences of slot s, prev's s->count and cur's m of
+ * them, every one with its origin, when the counts differ: in their order
+ * (the game draws a ring of instances in slot order, so the ones that stay
+ * keep theirs), leaving out of the longer side the draws that make the
+ * pairs' summed distance the least.  The pairs' count, 0 when it cannot. */
+static uint32_t alignSlot(Slot *s, uint32_t m)
+{
+    static int32_t pn[ALIGN_MAX], cn[ALIGN_MAX];
+    static double cost[(ALIGN_MAX + 1) * (ALIGN_MAX + 1)];
+    static uint8_t take[(ALIGN_MAX + 1) * (ALIGN_MAX + 1)];
+    const uint32_t n = s->count;
+    if (n > ALIGN_MAX || m > ALIGN_MAX || n == m) {
+        return 0;
+    }
+    uint32_t i = 0;
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        if (s_nodes[k].org <= 0) {
+            return 0;
+        }
+        pn[i++] = k;
+    }
+    i = 0;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        if (s_curNodes[j].org <= 0) {
+            return 0;
+        }
+        cn[i++] = j;
+    }
+    /* short side a (each of its draws paired) in the long side b */
+    const bool curShort = m < n;
+    const uint32_t na = curShort ? m : n, nb = curShort ? n : m, w = nb + 1;
+    for (uint32_t b = 0; b <= nb; b++) {
+        cost[b] = 0.0;
+    }
+    for (uint32_t a = 1; a <= na; a++) {
+        for (uint32_t b = a; b <= nb; b++) {
+            const float *pa = curShort ? s_curNodes[cn[a - 1]].at : s_nodes[pn[a - 1]].at;
+            const float *pb = curShort ? s_nodes[pn[b - 1]].at : s_curNodes[cn[b - 1]].at;
+            const double pair = cost[(a - 1) * w + b - 1] + (double)dist3(pa, pb);
+            /* b > a: b's draw may be left out */
+            if (b > a && cost[a * w + b - 1] < pair) {
+                cost[a * w + b] = cost[a * w + b - 1];
+                take[a * w + b] = 0;
+            } else {
+                cost[a * w + b] = pair;
+                take[a * w + b] = 1;
+            }
+        }
+    }
+    for (uint32_t a = na, b = nb; a > 0; b--) {
+        if (take[a * w + b]) {
+            if (curShort) {
+                s_curNodes[cn[a - 1]].pick = pn[b - 1];
+            } else {
+                s_curNodes[cn[b - 1]].pick = pn[a - 1];
+            }
+            a--;
+        }
+    }
+    return na;
+}
+
+/* the slot's draw of the other tick nearest to at (every one with its
+ * origin, paired or not): a prev Node with prevSide, else a CurNode; -1
+ * when none has an origin */
+static int32_t nearestOf(const Slot *s, const float at[3], bool prevSide)
+{
+    int32_t best = -1;
+    float bd = 0.0f;
+    if (prevSide) {
+        for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+            const float d = s_nodes[k].org > 0 ? dist3(s_nodes[k].at, at) : -1.0f;
+            if (d >= 0.0f && (best < 0 || d < bd)) {
+                best = k;
+                bd = d;
+            }
+        }
+    } else {
+        for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+            const float d = s_curNodes[j].org > 0 ? dist3(s_curNodes[j].at, at) : -1.0f;
+            if (d >= 0.0f && (best < 0 || d < bd)) {
+                best = j;
+                bd = d;
+            }
+        }
+    }
+    return best;
+}
+
+/* cur's draw j paired with prev's k: apart unless both have origins and
+ * each is the other's nearest (the same instance, moved) */
+static void pairLeft(const Slot *s, int32_t j, int32_t k)
+{
+    CurNode *cn = &s_curNodes[j];
+    const Node *nd = &s_nodes[k];
+    cn->pick = k;
+    cn->apart = cn->org > 0 && nd->org > 0 &&
+                (nearestOf(s, cn->at, true) != k || nearestOf(s, nd->at, false) != j);
+}
+
+/* The draws of slot s left without a pair once some are paired by their
+ * place (the still instances): cur's with prev's, by the nearest origins
+ * first, then in order (draws without an origin, or more than ALIGN_MAX
+ * on a side).  Node.out marks the prev draws taken while it runs and is
+ * reset after. */
+static void pairLeftovers(Slot *s)
+{
+    uint32_t nc = 0, np = 0;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        if (s_curNodes[j].pick >= 0) {
+            s_nodes[s_curNodes[j].pick].out = 0;
+        } else {
+            nc++;
+        }
+    }
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        np += s_nodes[k].out < 0;
+    }
+    if (nc > 0 && np > 0 && nc <= ALIGN_MAX && np <= ALIGN_MAX) {
+        for (;;) {
+            int32_t bj = -1, bk = -1;
+            float bd = 0.0f;
+            for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+                const CurNode *cn = &s_curNodes[j];
+                if (cn->pick >= 0 || cn->org <= 0) {
+                    continue;
+                }
+                for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+                    if (s_nodes[k].out >= 0 || s_nodes[k].org <= 0) {
+                        continue;
+                    }
+                    const float d = dist3(cn->at, s_nodes[k].at);
+                    if (bj < 0 || d < bd) {
+                        bj = j;
+                        bk = k;
+                        bd = d;
+                    }
+                }
+            }
+            if (bj < 0) {
+                break;
+            }
+            pairLeft(s, bj, bk);
+            s_nodes[bk].out = 0;
+        }
+    }
+    /* the rest in order */
+    int32_t k = s->head;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        if (s_curNodes[j].pick >= 0) {
+            continue;
+        }
+        while (k >= 0 && s_nodes[k].out >= 0) {
+            k = s_nodes[k].next;
+        }
+        if (k < 0) {
+            break;
+        }
+        pairLeft(s, j, k);
+        s_nodes[k].out = 0;
+    }
+    for (int32_t q = s->head; q >= 0; q = s_nodes[q].next) {
+        s_nodes[q].out = -1;
+    }
+}
+
+/* pairs the occurrences of slot s (see above) into CurNode.pick */
+static void placeSlot(const RdFrame *prev, Slot *s)
+{
+    s->placed = 1;
+    const RdCmdList *cl = &s_out.lists[s->list];
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        Node *nd = &s_nodes[k];
+        nd->org = drawOrigin(prev, &prev->lists[nd->list].cmds[nd->index], nd->at) ? 1 : -1;
+    }
+    /* the draws at the same origin; out marks the prev draws taken (reset
+     * below: matchOf sets it) */
+    uint32_t same = 0, m = 0;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        CurNode *cn = &s_curNodes[j];
+        m++;
+        cn->org = drawOrigin(&s_out, &cl->cmds[cn->index], cn->at) ? 1 : -1;
+        if (cn->org < 0) {
+            continue;
+        }
+        for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+            if (s_nodes[k].out < 0 && s_nodes[k].org > 0 && sameOrigin(s_nodes[k].at, cn->at)) {
+                cn->pick = k;
+                s_nodes[k].out = 0;
+                same++;
+                break;
+            }
+        }
+    }
+    for (int32_t k = s->head; k >= 0; k = s_nodes[k].next) {
+        s_nodes[k].out = -1;
+    }
+    if (same == 0) {
+        same = alignSlot(s, m);
+    } else {
+        pairLeftovers(s); /* the still instances' leftovers */
+    }
+    /* o: the ordinal's pick */
+    for (int32_t j = s->curHead, o = s->head; j >= 0; j = s_curNodes[j].next) {
+        if (same == 0) { /* none still or aligned: the ordinal pairing */
+            s_curNodes[j].pick = o;
+        } else {
+            s_placed += s_curNodes[j].pick != o;
+        }
+        o = o >= 0 ? s_nodes[o].next : -1;
+    }
+    /* prev's draws no draw of cur picked (matchOf's reason for a draw of
+     * cur left unpaired) */
+    s->spare = s->count;
+    for (int32_t j = s->curHead; j >= 0; j = s_curNodes[j].next) {
+        s->spare -= s_curNodes[j].pick >= 0 && s->spare > 0;
+    }
+}
+
+/* matchOf's last answer: why it found no match (RD_UNMATCHED_*), and
+ * whether its match is a draw of another place (CurNode.apart) */
+static int s_unWhy;
+
+static bool s_matchApart;
+
 /* the next unmatched occurrence in prev of cur's draw c, index i in list l */
 static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t i)
 {
+    s_matchApart = false;
+    s_unWhy = RD_UNMATCHED_ABSENT;
     Slot *s = slotFind(c, l, false);
-    if (!s || s->cursor < 0) {
+    if (!s) {
+        return NULL;
+    }
+    if (s->curCursor >= 0 && s_curNodes[s->curCursor].index == i) {
+        if (!s->placed) {
+            placeSlot(prev, s);
+        }
+        const int32_t k = s_curNodes[s->curCursor].pick;
+        s_matchApart = s_curNodes[s->curCursor].apart != 0;
+        s->curCursor = s_curNodes[s->curCursor].next;
+        if (k < 0) {
+            /* pairLeftovers leaves none while a draw of prev is free */
+            s_unWhy = s->spare ? RD_UNMATCHED_UNPLACED : RD_UNMATCHED_FEWER;
+            s_matchApart = false;
+            return NULL;
+        }
+        s_nodes[k].out = (int32_t)i;
+        return &prev->lists[s_nodes[k].list].cmds[s_nodes[k].index];
+    }
+    if (s->cursor < 0) {
+        s_unWhy = RD_UNMATCHED_FEWER;
         return NULL;
     }
     Node *nd = &s_nodes[s->cursor];
@@ -1324,6 +2112,21 @@ static bool sameMesh(uint32_t a, uint32_t b)
            x->indexCount == y->indexCount;
 }
 
+/* The grid draw blendVu is given samples a target (RD_TEXKIND_TARGET) under
+ * its state: its STs are screen positions.  pool.c makes the pool surface's
+ * STs (its refraction and reflection grids, sampling the scene copied into
+ * a work target) by projecting each vertex with the tick's camera
+ * (updatePoolGeo).  The camera and the copied scene blend, so with cur's
+ * STs the image under the water would stand a tick ahead of the scene and
+ * jump back at every tick; blended with the positions it follows the
+ * blended camera, and with the formula in the command (gridCameraSts) it
+ * is where the blended camera sees it.  A grid with an image keeps cur's
+ * STs (its texture's own coordinates, the UV scroll in qw 2 blending
+ * instead). */
+static bool s_gridScreenSt;
+
+static int s_gridSt; /* grids whose STs blended (s_gridScreenSt), this present */
+
 static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCmd *cc, float t)
 {
     s_rotated = 0;
@@ -1334,7 +2137,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     /* the program must match; the MSCAL code and clip mode (b[1], b[2])
      * change when a part crosses the edge of the screen (REGION against
      * SCISSOR, reg_clipPacketBoundingBox) and say nothing about the data */
-    if (pc->b[0] != cc->b[0] ||
+    if (pc->b[0] != cc->b[0] || vuView(pc) != vuView(cc) ||
         (rd__s2_legacy() && (pc->b[1] != cc->b[1] || pc->b[2] != cc->b[2]))) {
         return mismatch(RD_MISMATCH_STATE);
     }
@@ -1367,7 +2170,9 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     /* the jump tests, on cur's data before it is blended */
     switch (cc->type) {
     case RDC_MESH:
-        if (isNormalProg(cc->b[0]) && worldJump(vp, (const float (*)[4])vc)) {
+        /* a part locked to the camera has no place in the world */
+        if (isNormalProg(cc->b[0]) && vuView(cc) != RD_VU_VIEW_LOCKED &&
+            worldJump(vp, (const float (*)[4])vc)) {
             return R_JUMP;
         }
         break;
@@ -1397,11 +2202,23 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         memcpy(vpr, vp, sizeof(vpr));
         memcpy(vcr, vc, sizeof(vcr));
         /* the projections blend with the block (linear in them) */
-        if (camRebase(vpr, s_cam.ep, mats, NULL) && camRebase(vcr, s_cam.ec, mats, NULL)) {
+        const int view = vuView(cc);
+        if (camRebase(vpr, s_cam.ep, mats, NULL, s_cam.vp, view) &&
+            camRebase(vcr, s_cam.ec, mats, NULL, s_cam.vc, view)) {
             memcpy(vc, vcr, sizeof(vc));
             memcpy(vo[4], vc[4], 24 * sizeof(vo[0])); /* qw 4..27 */
             vp = (const float (*)[4])vpr;
             s_rebased++;
+        }
+    }
+    /* prev's lights in the slots of the lights of cur they pair with, before
+     * the blend and the light's turn (pairLights, rotateLight) */
+    float vpl[36][4];
+    if (isLitDraw(cc->type, cc->b[0])) {
+        memcpy(vpl, vp, sizeof(vpl));
+        if (pairLights(vpl, (const float (*)[4])vc, cc->type != RDC_SKINNED)) {
+            vp = (const float (*)[4])vpl;
+            s_lightPair++;
         }
     }
     lerpVuBlock(vo, vp, (const float (*)[4])vc, t, hc.scroll);
@@ -1445,15 +2262,28 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
         const uint32_t qpv = hc.qwPerVertex, len = hc.vertsPerBatch;
         const uint32_t per = len * qpv + 4;
         const uint32_t lerpQw = qpv == RD_VU_QW_GRID_LIT ? 2u : 1u; /* pos (, normal) */
+        /* the ST, the vertex's last qword, too when it is a projection of the
+         * vertex through the tick's camera into a target the frame drew
+         * (s_gridScreenSt, or a formula in b[5]: the pool's refraction and
+         * reflection); its w is the wave height of a grid with a formula */
+        const bool st = (s_gridScreenSt || cc->b[5] != RD_GRID_ST_NONE) && qpv >= 2u;
         for (uint32_t s = 0; s < hc.batchCount && (s + 1) * per <= hc.streamQw; s++) {
             for (uint32_t k = 0; k < len; k++) {
                 const uint32_t at = s * per + 3 + k * qpv;
                 float tmp[4];
-                for (uint32_t q = 0; q < lerpQw; q++) {
+                for (uint32_t q = 0; q < qpv; q++) {
+                    if (q >= lerpQw && !(st && q == qpv - 1u)) {
+                        continue;
+                    }
                     memcpy(tmp, so[at + q], sizeof(tmp));
                     lerpFloats(so[at + q], sp[at + q], tmp, 4, t);
                 }
             }
+        }
+        /* a formula's STs from the blended vertices through the blended
+         * camera (gridCameraSts) replace the blend */
+        if (!(st && gridCameraSts(cc, op))) {
+            s_gridSt += st;
         }
     } else if (cc->type == RDC_PARTICLES && hc.streamQw >= 6) {
         /* 6 header qwords, then (x, y, z, size), (u, v, grey, alpha) each */
@@ -1491,14 +2321,30 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     if (vtxJump(p, o, n)) {
         return R_JUMP;
     }
-    for (uint32_t i = 0; i < n; i++) {
-        o[i].x = lerpI(p[i].x, o[i].x, t);
-        o[i].y = lerpI(p[i].y, o[i].y, t);
-        o[i].z = lerpU(p[i].z, o[i].z, t);
-        for (int k = 0; k < 4; k++) {
-            o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
+    /* both projected by their tick's camera: blended in the world,
+     * primitive by primitive, all or none (reprojPrim's rule): a primitive
+     * with a vertex that cannot be blends in screen space whole */
+    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
+    const uint32_t m = primVerts(cc->b[0], n);
+    for (uint32_t i0 = 0; m > 0 && i0 < n; i0 += m) {
+        const uint32_t e = i0 + m <= n ? i0 + m : n;
+        bool all = world && i0 + m <= n;
+        for (uint32_t i = i0; all && i < e; i++) {
+            RdScreenVtx r = o[i];
+            all = reprojBlend(&r, &p[i], t, cc->b[2] == 0, NULL);
+        }
+        for (uint32_t i = i0; i < e; i++) {
+            if (!all || !reprojBlend(&o[i], &p[i], t, cc->b[2] == 0, NULL)) {
+                o[i].x = lerpI(p[i].x, o[i].x, t);
+                o[i].y = lerpI(p[i].y, o[i].y, t);
+                o[i].z = lerpU(p[i].z, o[i].z, t);
+            }
+            for (int k = 0; k < 4; k++) {
+                o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
+            }
         }
     }
+    s_reproj += world;
     return R_LERP;
 }
 
@@ -1678,8 +2524,15 @@ static double *s_sel;
 
 static uint32_t s_selCap;
 
+static double *s_wpt;
+
+static uint32_t s_wptCap;
+
 static void prismFree(void)
 {
+    free(s_wpt);
+    s_wpt = NULL;
+    s_wptCap = 0;
     for (int k = 0; k < 2; k++) {
         free(s_prism[k]);
         s_prism[k] = NULL;
@@ -1834,6 +2687,9 @@ static double prismCost(const ShPrism *a, const ShPrism *b, const double *shift)
     return sum / (3.0 * 256.0); /* square GS pixels */
 }
 
+/* the element of rank m / 2 of s_sel[0..m - 1] (m > 0; reordered) */
+static double selectMedian(uint32_t m);
+
 /* the median of field k (0 x, 1 y, 2 z) of the six vertices of s_prism[s]'s
  * n prisms, by selection (the volume's shift; a sort of every triangle's
  * vertices cost a millisecond a present) */
@@ -1849,6 +2705,41 @@ static bool prismMedian(int s, uint32_t n, int k, double *out)
             s_sel[p * 6 + (uint32_t)i] = k == 0 ? v->x : (k == 1 ? v->y : (double)v->z);
         }
     }
+    *out = selectMedian(m);
+    return true;
+}
+
+/* the median of the world points (x, y, z apart) of the six vertices of
+ * s_prism[s]'s n prisms through inv (that tick's S^-1), the vertices with
+ * no world point left out; false when none has one */
+static bool worldMedian(int s, uint32_t n, const double *inv, double out[3])
+{
+    const uint32_t m = n * 6;
+    if (m == 0 || !growTo((void **)&s_wpt, &s_wptCap, m * 3, sizeof(double)) ||
+        !growTo((void **)&s_sel, &s_selCap, m, sizeof(double))) {
+        return false;
+    }
+    uint32_t got = 0;
+    for (uint32_t p = 0; p < n; p++) {
+        for (int i = 0; i < 6; i++) {
+            double w;
+            got += reprojUnproject(inv, &s_prism[s][p].v[i], &s_wpt[got * 3], &w);
+        }
+    }
+    if (got == 0) {
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        for (uint32_t j = 0; j < got; j++) {
+            s_sel[j] = s_wpt[j * 3 + (uint32_t)k];
+        }
+        out[k] = selectMedian(got);
+    }
+    return true;
+}
+
+static double selectMedian(uint32_t m)
+{
     /* Hoare's selection of the element of rank m / 2 */
     uint32_t a = 0, b = m - 1;
     const uint32_t r = m / 2;
@@ -1881,8 +2772,7 @@ static bool prismMedian(int s, uint32_t n, int k, double *out)
             break;
         }
     }
-    *out = s_sel[r];
-    return true;
+    return s_sel[r];
 }
 
 /* s_prism[0] (np, prev) against s_prism[1] (nc, cur): sets .match; false
@@ -1996,6 +2886,106 @@ static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
     return (RdScreenVtx *)(void *)(s_out.payload + off);
 }
 
+/* prism b's eight triangles, signed plus, as the o-th prism of
+ * s_prismOut (tagged in output order); the increments among them */
+static uint32_t prismEmit(const ShPrism *b, const int8_t *plus, uint32_t o)
+{
+    uint32_t inc = 0;
+    for (int i = 2; i < 10; i++) {
+        const uint32_t n = o * RD_SHADOW_PRISM_TRIS + (uint32_t)i - 2;
+        RdScreenVtx *tri = &s_prismOut[(size_t)n * 3];
+        tri[0] = b->v[kStripVtx[i - 2]];
+        tri[1] = b->v[kStripVtx[i - 1]];
+        tri[2] = b->v[kStripVtx[i]];
+        for (int k = 0; k < 3; k++) {
+            rd__set_shadow_tag(&tri[k], n + 1);
+        }
+        s_prismOutSign[n] = plus[i - 2];
+        inc += plus[i - 2] != 0;
+    }
+    return inc;
+}
+
+/* s_prismOut's tris triangles into dst, the inc increments first */
+static void prismStore(RdScreenVtx *dst, uint32_t tris, uint32_t inc)
+{
+    uint32_t a = 0, d = inc;
+    for (uint32_t k = 0; k < tris; k++) {
+        const uint32_t at = s_prismOutSign[k] ? a++ : d++;
+        memcpy(&dst[(size_t)at * 3], &s_prismOut[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
+    }
+}
+
+/* A shadow volume of one tick (frameProjected; payload v, the tick's S^-1
+ * inv) through St, as blendPrisms moves a prism of one tick: Shadow.c's
+ * prisms one by one, a vertex with no world point (a sentinel, a clamped
+ * Z) where its tick put it, the whole prism where its tick put it when the
+ * blended camera cannot draw one of its vertices; then each moved prism's
+ * faces signed again for the blended camera (prismSigns), as a matched
+ * prism's are: a face near edge on may turn its other side to the new
+ * camera and must then count the other way.  An untagged volume goes
+ * triangle by triangle, all or none, a triangle whose winding turned over
+ * changing its sign.  c's split into increments and decrements follows. */
+static void reprojShadow(RdCmd *c, RdScreenVtx *v, const double *inv)
+{
+    const uint32_t nv = c->u[0] + c->u[3];
+    if (c->b[0] != RD_SHADOW_TRIS || nv % 3 != 0 || c->u[0] % 3 != 0 || nv == 0) {
+        return;
+    }
+    const uint32_t tris = nv / 3;
+    if (!growTo((void **)&s_prismOut, &s_prismOutCap, nv, sizeof(RdScreenVtx)) ||
+        !growTo((void **)&s_prismOutSign, &s_prismOutSignCap, tris, 1)) {
+        return;
+    }
+    uint32_t inc = 0;
+    if (prismsOf(v, c->u[0] / 3, tris, 0)) {
+        const uint32_t np = tris / RD_SHADOW_PRISM_TRIS;
+        for (uint32_t q = 0; q < np; q++) {
+            ShPrism b = s_prism[0][q];
+            int8_t plus[8];
+            memcpy(plus, b.plus, sizeof(plus));
+            RdScreenVtx r[6];
+            bool ok[6], drawn = true, moved = false;
+            for (int k = 0; k < 6; k++) {
+                int why = 0;
+                r[k] = b.v[k];
+                ok[k] = reprojVertex(inv, &r[k], NULL, false, &why);
+                drawn &= why != RP_NO_PROJECTION;
+            }
+            for (int k = 0; drawn && k < 6; k++) {
+                if (ok[k]) {
+                    moved |= !sameXyz(&r[k], &b.v[k]);
+                    b.v[k] = r[k];
+                }
+            }
+            if (moved && b.s0 != 0) {
+                prismSigns(&b, plus);
+            }
+            inc += prismEmit(&b, plus, q);
+        }
+        prismStore(v, tris, inc);
+    } else {
+        const uint32_t inc0 = c->u[0] / 3;
+        for (uint32_t k = 0; k < tris; k++) {
+            RdScreenVtx *tri = &s_prismOut[(size_t)k * 3];
+            memcpy(tri, &v[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
+            const int64_t w0 = windingOf(&tri[0], &tri[1], &tri[2]);
+            int8_t plus = (int8_t)(k < inc0);
+            if (reprojPrim(inv, tri, 3, NULL, false)) {
+                const int64_t w1 = windingOf(&tri[0], &tri[1], &tri[2]);
+                if ((w0 > 0 && w1 < 0) || (w0 < 0 && w1 > 0)) {
+                    plus = (int8_t)!plus;
+                }
+            }
+            s_prismOutSign[k] = plus;
+            inc += plus != 0;
+        }
+        prismStore(v, tris, inc);
+    }
+    c->u[0] = inc * 3;
+    c->u[3] = nv - inc * 3;
+}
+
 /* R_LERP, R_JUMP, or -1 when the volumes are not tagged prisms (the caller
  * then blends them vertex by vertex or, across a topology change, moves
  * cur's by the median shift: shiftShadow) */
@@ -2044,6 +3034,16 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
     const int32_t dx = (int32_t)floor(w * (mc[0] - mp[0]) + 0.5);
     const int32_t dy = (int32_t)floor(w * (mc[1] - mp[1]) + 0.5);
     const double dz = floor(w * (mc[2] - mp[2]) + 0.5);
+    /* both volumes projected by their tick's camera: the prisms blend in
+     * the world and are seen through the blended camera (the floor they
+     * fall on is), a prism of one tick only moved by the volume's shift in
+     * the world; a vertex with no world point keeps the screen-space rule */
+    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
+    double wp[3], wc[3], wd[3];
+    const bool wShift = world && worldMedian(0, np, s_rp.ip, wp) && worldMedian(1, nc, s_rp.ic, wc);
+    for (int k = 0; k < 3; k++) {
+        wd[k] = wShift ? w * (wc[k] - wp[k]) : 0.0;
+    }
     uint32_t inc = 0, o = 0;
     for (int pass = 0; pass < 2; pass++) {
         for (uint32_t q = 0; q < (pass ? np : nc); q++) {
@@ -2057,13 +3057,28 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
             ShPrism b = *src;
             int8_t plus[8];
             memcpy(plus, src->plus, sizeof(plus));
+            /* in the world: a vertex with no world point (a sentinel, a
+             * clamped Z) keeps the screen-space rule alone; a vertex the
+             * blended camera cannot draw puts the whole prism on it */
+            RdScreenVtx r[6];
+            bool ok[6], drawn = true;
             if (src->match >= 0) {
                 const ShPrism *a = &s_prism[0][src->match];
+                for (int k = 0; k < 6; k++) {
+                    int why = 0;
+                    r[k] = b.v[k];
+                    ok[k] = world && reprojBlend(&r[k], &a->v[k], t, false, &why);
+                    drawn &= why != RP_NO_PROJECTION;
+                }
                 bool moved = false;
                 for (int k = 0; k < 6; k++) {
-                    b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
-                    b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
-                    b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
+                    if (drawn && ok[k]) {
+                        b.v[k] = r[k];
+                    } else {
+                        b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
+                        b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
+                        b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
+                    }
                     moved |= !sameXyz(&b.v[k], &src->v[k]);
                 }
                 if (moved && b.s0 != 0) {
@@ -2071,24 +3086,29 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
                 }
             } else {
                 for (int k = 0; k < 6; k++) {
+                    int why = 0;
+                    r[k] = b.v[k];
+                    ok[k] =
+                        wShift && reprojVertex(pass ? s_rp.ip : s_rp.ic, &r[k], wd, false, &why);
+                    drawn &= why != RP_NO_PROJECTION;
+                }
+                bool turned = false;
+                for (int k = 0; k < 6; k++) {
+                    if (drawn && ok[k]) {
+                        b.v[k] = r[k];
+                        turned = true;
+                        continue;
+                    }
                     b.v[k].x += dx;
                     b.v[k].y += dy;
                     const double z = (double)b.v[k].z + dz;
                     b.v[k].z = z < 0.0 ? 0u : (z > 4294967295.0 ? 0xFFFFFFFFu : (uint32_t)z);
                 }
-            }
-            for (int i = 2; i < 10; i++) {
-                const uint32_t n = o * RD_SHADOW_PRISM_TRIS + (uint32_t)i - 2;
-                RdScreenVtx *tri = &s_prismOut[(size_t)n * 3];
-                tri[0] = b.v[kStripVtx[i - 2]];
-                tri[1] = b.v[kStripVtx[i - 1]];
-                tri[2] = b.v[kStripVtx[i]];
-                for (int k = 0; k < 3; k++) {
-                    rd__set_shadow_tag(&tri[k], n + 1);
+                if (turned && b.s0 != 0) {
+                    prismSigns(&b, plus); /* the faces' facing through the blended camera */
                 }
-                s_prismOutSign[n] = plus[i - 2];
-                inc += plus[i - 2] != 0;
             }
+            inc += prismEmit(&b, plus, o);
             o++;
         }
     }
@@ -2097,14 +3117,11 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
         return -1;
     }
     const uint32_t tris = out * RD_SHADOW_PRISM_TRIS;
-    uint32_t a = 0, d = inc;
-    for (uint32_t k = 0; k < tris; k++) {
-        const uint32_t at = s_prismOutSign[k] ? a++ : d++;
-        memcpy(&dst[(size_t)at * 3], &s_prismOut[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
-    }
+    prismStore(dst, tris, inc);
     cc->u[0] = inc * 3;
     cc->u[3] = (tris - inc) * 3;
     s_shifted = alone > 0;
+    s_reproj += world;
     return R_LERP;
 }
 
@@ -2366,6 +3383,7 @@ typedef struct UmIns {
     uint32_t seq;       /* prev's order, the tie break */
     float weight;       /* alpha weight, 1: whole */
     uint32_t cmds;      /* the commands it adds: the bracket and the draw */
+    uint32_t inc;       /* a shadow volume's increment vertices, signed again (reprojDraw) */
     RdStateBlock want;  /* prev's state at the draw */
     RdStateBlock have;  /* cur's at pos */
 } UmIns;
@@ -2402,6 +3420,15 @@ static uint32_t s_umCmdsCap;
  * prev's not placed */
 static uint32_t s_umFadeIn, s_umFadeOut, s_umHalfIn, s_umHalfOut, s_umHeld;
 
+/* this present: VU draws of prev alone drawn (prevAlone), and those that
+ * could not be (not placed, state not reachable, block not re-based) */
+static uint32_t s_umPrevKept, s_umPrevHeld;
+
+/* per s_nodes entry: 1 when it is a VU draw of prev alone to draw */
+static uint8_t *s_umVu;
+
+static uint32_t s_umVuCap;
+
 static void umFree(void)
 {
     free(s_umCur);
@@ -2411,6 +3438,9 @@ static void umFree(void)
     free(s_umNext);
     free(s_umCmds);
     free(s_umWant);
+    free(s_umVu);
+    s_umVu = NULL;
+    s_umVuCap = 0;
     s_umWant = NULL;
     s_umWantCap = 0;
     s_umCur = NULL;
@@ -2574,10 +3604,11 @@ static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, 
             out[k++] = c;
         }
     }
-    if (x->magFilter != y->magFilter || x->minFilter != y->minFilter) {
+    if (x->magFilter != y->magFilter || x->minFilter != y->minFilter || a->tex1Lod != b->tex1Lod) {
         RdCmd c = stateCmd(RDC_FILTER);
         c.b[0] = y->magFilter;
         c.b[1] = y->minFilter;
+        c.u[0] = b->tex1Lod; /* TEX1's mipmap fields */
         out[k++] = c;
     }
     if (x->wrap.s != y->wrap.s || x->wrap.t != y->wrap.t) {
@@ -2707,16 +3738,244 @@ static uint32_t umPlace(const RdFrame *prev, uint32_t k, int32_t lastOut)
     return resolveOf(nd->list);
 }
 
-/* the unmatched screen prims and shadow volumes at t (see above);
- * after the blends and the morph pass, which keep command indices */
+/* ------------------------------------------ VU draws of the tick before
+ *
+ * A VU draw of prev with no match in cur is not drawn between the ticks
+ * unless it went because of the camera: the game culls against the tick's
+ * camera, so an object the turning camera leaves behind is drawn in prev and
+ * not in cur, and would vanish at the interval's start while the blended
+ * camera still sees it.  Such a draw (prevAlone) is drawn for the whole
+ * interval, prev's object through the blended camera (camRebase with Vp^-1
+ * Vt, and Pt Pp^-1 while the zoom eases), when
+ *
+ *   the camera moves (s_cam on and not still: a still camera leaves nothing
+ *   behind, and the frame stays as it was);
+ *   it is a mesh (a normal program's, not locked to the camera), a skinned
+ *   mesh, a grid or particles, drawn through the frame's camera (camOf);
+ *   no draw of cur in its list has its object and part (the key without
+ *   its last byte, RD_KEY's ordinal: n * 4 + pass at RegistPacket.c), so it
+ *   is never drawn beside its own object;
+ *   a sphere holding it is wholly outside cur's picture (outsideCur): the
+ *   model to world matrix (S^-1 M: qw 4..7 inverted times qw 16..19; a
+ *   skinned draw's bones) applied to the farthest of its vertices from the
+ *   model's origin (the mesh's stream, a grid's or the particles' copied
+ *   stream, a particle's size added), tested against the planes of cur's
+ *   world to GS screen (Pc Vc) at the picture's edges.
+ *
+ * It goes in with unmatchedPass's insertion (umPlace, prev's state through
+ * stateDiff), with prev's mesh stream (morphDraw); one that cannot be
+ * placed, whose state cannot be reached or whose block cannot be re-based
+ * is not drawn (held). */
+static bool isVuDraw(const RdCmd *c)
+{
+    return c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID ||
+           c->type == RDC_PARTICLES;
+}
+
+static double len3d(const float *v)
+{
+    return sqrt((double)v[0] * v[0] + (double)v[1] * v[1] + (double)v[2] * v[2]);
+}
+
+/* the longest of the 3 x 3's columns of a column-major 4 x 4: how far it
+ * carries a point at distance 1 from the origin, at most */
+static double colScale(const double *m)
+{
+    double s = 0.0;
+    for (int c = 0; c < 3; c++) {
+        s = fmax(s, sqrt(m[c * 4] * m[c * 4] + m[c * 4 + 1] * m[c * 4 + 1] +
+                         m[c * 4 + 2] * m[c * 4 + 2]));
+    }
+    return s;
+}
+
+/* a sphere (centre c, radius r, world units) holding draw pc of prev,
+ * payload p (see above); false when it cannot be bounded */
+static bool prevSphere(const RdFrame *prev, const RdCmd *pc, const uint8_t *p, double c[3],
+                       double *r)
+{
+    const uint32_t after = (uint32_t)(sizeof(RdVuPayload) + sizeof(RdVuBlock));
+    RdVuPayload h;
+    memcpy(&h, p, sizeof(h));
+    const uint32_t extra = (pc->u[2] - after) / 16u;
+    if (h.boneQw > extra || h.streamQw > extra - h.boneQw) {
+        return false;
+    }
+    float m[36][4];
+    memcpy(m, p + sizeof(RdVuPayload), sizeof(m));
+    const float (*bones)[4] = (const float (*)[4])(const void *)(p + after);
+    const float (*stream)[4] = bones + h.boneQw;
+    double reach = 0.0;
+    if (pc->type == RDC_MESH || pc->type == RDC_SKINNED) {
+        const RdMeshRec *mr = rd__mesh_rec(pc->u[0]);
+        if (!mr || !mr->vu || mr->qwPerVertex == 0) {
+            return false;
+        }
+        const float (*vs)[4] = rd__mesh_stream_at(mr, prev->number);
+        if (!vs) {
+            vs = (const float (*)[4])mr->stream;
+        }
+        if (!vs && mr->vertexCount) {
+            return false;
+        }
+        for (uint32_t v = 0; v < mr->vertexCount; v++) {
+            reach = fmax(reach, len3d(vs[(size_t)v * mr->qwPerVertex]));
+        }
+    } else if (pc->type == RDC_GRID) {
+        /* per strip: the VIF qword, tag, colour, stripLen vertices, MSCNT */
+        const uint32_t qpv = h.qwPerVertex ? h.qwPerVertex : 1u, len = h.vertsPerBatch;
+        const uint32_t per = len * qpv + 4u;
+        for (uint32_t st = 0; st < h.batchCount && (st + 1u) * per <= h.streamQw; st++) {
+            for (uint32_t k = 0; k < len; k++) {
+                reach = fmax(reach, len3d(stream[st * per + 3u + k * qpv]));
+            }
+        }
+    } else if (h.streamQw >= 6u) {
+        /* 6 header qwords, then (x, y, z, size), (u, v, grey, alpha) each */
+        for (uint32_t i = 0; i < (h.streamQw - 6u) / 2u; i++) {
+            const float *q = stream[6u + 2u * i];
+            reach = fmax(reach, len3d(q) + fabs((double)q[3]));
+        }
+    }
+    if (!isfinite(reach)) {
+        return false;
+    }
+    if (pc->type == RDC_SKINNED) {
+        /* the bones are in the world (camModelMats): each one's place and
+         * reach */
+        if (h.boneQw < 4u) {
+            return false;
+        }
+        double b0[16];
+        loadQw4(bones, 0, b0);
+        for (int j = 0; j < 3; j++) {
+            c[j] = b0[12 + j];
+        }
+        double rr = 0.0;
+        for (uint32_t q = 0; q + 4u <= h.boneQw; q += 4u) {
+            double b[16];
+            loadQw4(bones, (int)q, b);
+            const double dx = b[12] - c[0], dy = b[13] - c[1], dz = b[14] - c[2];
+            rr = fmax(rr, sqrt(dx * dx + dy * dy + dz * dz) + reach * colScale(b));
+        }
+        *r = rr;
+    } else {
+        double sm[16], is[16], mm[16], w[16];
+        loadQw4((const float (*)[4])m, 4, sm);
+        loadQw4((const float (*)[4])m, 16, mm);
+        if (!invert4d(sm, is)) {
+            return false;
+        }
+        mul4d(is, mm, w); /* the model to world */
+        if (!(fabs(w[15]) > 1e-12)) {
+            return false;
+        }
+        for (int j = 0; j < 3; j++) {
+            c[j] = w[12 + j] / w[15];
+        }
+        *r = reach * colScale(w) / fabs(w[15]);
+    }
+    return isfinite(c[0]) && isfinite(c[1]) && isfinite(c[2]) && isfinite(*r);
+}
+
+/* whether the sphere is wholly outside cur's picture: beyond one of the
+ * planes of S = Pc Vc (world to GS screen) through the picture's edges,
+ * GS 2048 (GsBase.c's centre) +- the half width (gsW / 2 widened by the
+ * display's aspect: rd_replay.c's wide x scale g_rd.wideX) and +- gsH / 2,
+ * or behind the eye (w <= 0) */
+static bool outsideCur(const double c[3], double r)
+{
+    double sc[16];
+    mul4d(s_cam.pc, s_cam.vc, sc);
+    const float wide = g_rd.wideX > 0.0f && g_rd.wideX < 1.0f ? g_rd.wideX : 1.0f;
+    const double hw = 0.5 * (double)(s_out.gsW ? s_out.gsW : 512u) / (double)wide;
+    const double hh = 0.5 * (double)(s_out.gsH ? s_out.gsH : 448u);
+    double pl[5][4];
+    for (int k = 0; k < 4; k++) {
+        const double x = sc[k * 4], y = sc[k * 4 + 1], w = sc[k * 4 + 3];
+        pl[0][k] = x - (2048.0 - hw) * w;
+        pl[1][k] = (2048.0 + hw) * w - x;
+        pl[2][k] = y - (2048.0 - hh) * w;
+        pl[3][k] = (2048.0 + hh) * w - y;
+        pl[4][k] = w;
+    }
+    for (int i = 0; i < 5; i++) {
+        const double n = sqrt(pl[i][0] * pl[i][0] + pl[i][1] * pl[i][1] + pl[i][2] * pl[i][2]);
+        const double d = pl[i][0] * c[0] + pl[i][1] * c[1] + pl[i][2] * c[2] + pl[i][3];
+        if (n > 0.0 && d < -r * n) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* whether s_out's list l has a keyed draw of pc's object and part */
+static bool partInCur(uint32_t l, const RdCmd *pc)
+{
+    const uint64_t part = ((uint64_t)pc->keyHi << 32 | pc->keyLo) >> 8;
+    const RdCmdList *cl = &s_out.lists[l];
+    for (uint32_t i = 0; i < cl->count; i++) {
+        const RdCmd *c = &cl->cmds[i];
+        if (isKeyedDraw(c) && ((uint64_t)c->keyHi << 32 | c->keyLo) >> 8 == part) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* whether prev's unmatched draw of node k is a VU draw of prev alone to
+ * draw (see above) */
+static bool prevAlone(const RdFrame *prev, uint32_t k)
+{
+    const Node *nd = &s_nodes[k];
+    const RdCmd *pc = &prev->lists[nd->list].cmds[nd->index];
+    if (!s_cam.on || s_cam.still || !isVuDraw(pc) ||
+        pc->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock)) {
+        return false;
+    }
+    if (pc->type == RDC_MESH && (!isNormalProg(pc->b[0]) || vuView(pc) == RD_VU_VIEW_LOCKED)) {
+        return false;
+    }
+    const uint8_t *p = payloadAt(prev, pc->u[1], pc->u[2]);
+    if (!p) {
+        return false;
+    }
+    float m[36][4];
+    memcpy(m, p + sizeof(RdVuPayload), sizeof(m));
+    double c[3], r = 0.0;
+    return camOfUncached((const float (*)[4])m, s_cam.vp, s_cam.pp) != CAM_NONE &&
+           prevSphere(prev, pc, p, c, &r) && outsideCur(c, r) && !partInCur(nd->list, pc);
+}
+
+/* prev's VU block m (its copy in s_out) through the blended camera */
+static bool rebasePrev(float (*m)[4], const RdCmd *pc)
+{
+    const int how = camOfUncached((const float (*)[4])m, s_cam.vp, s_cam.pp);
+    const bool proj = how == CAM_FULL && s_cam.zoom;
+    if (how == CAM_NONE || (proj && !s_cam.zoomPrev)) {
+        return false;
+    }
+    return camRebase(m, s_cam.ep, camModelMats(pc->type, pc->b[0]), proj ? s_cam.lp : NULL,
+                     s_cam.vp, vuView(pc));
+}
+
+/* the unmatched screen prims and shadow volumes at t (see above), and the
+ * VU draws of prev alone (prevAlone); after the blends and the morph pass,
+ * which keep command indices */
 static void unmatchedPass(const RdFrame *prev, float t)
 {
     s_umInsN = 0;
     /* prev's unplaced draws and their anchors: s_nodes is in list order */
     uint32_t cand = 0;
+    const bool vuAlone = s_cam.on && !s_cam.still &&
+                         growTo((void **)&s_umVu, &s_umVuCap, s_nodeCount ? s_nodeCount : 1u, 1);
     for (uint32_t k = 0; k < s_nodeCount; k++) {
         const Node *nd = &s_nodes[k];
-        cand += nd->out < 0 && isProjected(&prev->lists[nd->list].cmds[nd->index]);
+        const RdCmd *pc = &prev->lists[nd->list].cmds[nd->index];
+        if (vuAlone) {
+            s_umVu[k] = nd->out < 0 && prevAlone(prev, k);
+        }
+        cand += nd->out < 0 && (isProjected(pc) || (vuAlone && s_umVu[k]));
     }
     if (cand == 0 && s_umCurN == 0) {
         return;
@@ -2746,13 +4005,18 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 lastOut = nd->out;
                 continue;
             }
-            if (!isProjected(&prev->lists[nd->list].cmds[nd->index])) {
+            const bool vu = vuAlone && s_umVu[k];
+            if (!vu && !isProjected(&prev->lists[nd->list].cmds[nd->index])) {
                 continue;
             }
             const uint32_t pos = umPlace(prev, k, lastOut);
             if (pos == ~0u || pos > s_out.lists[nd->list].count ||
                 !growTo((void **)&s_umIns, &s_umInsCap, s_umInsN + 1, sizeof(UmIns))) {
-                s_umHeld++;
+                if (vu) {
+                    s_umPrevHeld++;
+                } else {
+                    s_umHeld++;
+                }
                 continue;
             }
             UmIns *in = &s_umIns[s_umInsN++];
@@ -2761,6 +4025,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
             in->node = k;
             in->seq = k;
             in->weight = 1.0f;
+            in->inc = 0;
         }
     }
     /* the states: cur's at its unmatched draws and at the insertions,
@@ -2783,7 +4048,14 @@ static void unmatchedPass(const RdFrame *prev, float t)
     }
     const RdStateBlock *have = s_umSt + s_umCurN; /* cur's at each insertion */
     if (s_umInsN && !growTo((void **)&s_umWant, &s_umWantCap, s_umInsN, sizeof(RdStateBlock))) {
-        s_umHeld += s_umInsN;
+        for (uint32_t i = 0; i < s_umInsN; i++) {
+            const Node *nd = &s_nodes[s_umIns[i].node];
+            if (isVuDraw(&prev->lists[nd->list].cmds[nd->index])) {
+                s_umPrevHeld++;
+            } else {
+                s_umHeld++;
+            }
+        }
         s_umInsN = 0;
     }
     const RdStateBlock *want = s_umWant;
@@ -2820,10 +4092,17 @@ static void unmatchedPass(const RdFrame *prev, float t)
         RdCmd tmp[RD_STATE_DIFF_MAX];
         uint32_t n0 = 0, n1 = 0;
         if (!stateDiff(&have[i], &in.want, tmp, &n0) || !stateDiff(&in.want, &have[i], tmp, &n1)) {
-            s_umHeld++;
+            if (isVuDraw(pc)) {
+                s_umPrevHeld++;
+            } else {
+                s_umHeld++;
+            }
             continue;
         }
-        if ((pc->type == RDC_SCREEN && alphaFades(&in.want)) || pc->type == RDC_OVERLAY_TEXT) {
+        if (isVuDraw(pc)) {
+            /* prev alone (prevAlone): the whole interval, whole */
+        } else if ((pc->type == RDC_SCREEN && alphaFades(&in.want)) ||
+                   pc->type == RDC_OVERLAY_TEXT) {
             in.weight = 1.0f - t;
             s_umFadeOut++;
         } else if (t < 0.5f) {
@@ -2845,7 +4124,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
         const RdCmd *pc = &prev->lists[in->list].cmds[s_nodes[in->node].index];
         const uint32_t from = pc->type == RDC_SCREEN ? pc->u[0] : pc->u[1];
         const uint32_t size = pc->type == RDC_SCREEN ? pc->u[1] * (uint32_t)sizeof(RdScreenVtx)
-                              : pc->type == RDC_OVERLAY_TEXT ? pc->u[2]
+                              : pc->type == RDC_OVERLAY_TEXT || isVuDraw(pc) ? pc->u[2]
                               : pc->b[0] == RD_SHADOW_TRIS
                                   ? (pc->u[0] + pc->u[3]) * (uint32_t)sizeof(RdScreenVtx)
                                   : pc->u[0] * 16u;
@@ -2857,6 +4136,14 @@ static void unmatchedPass(const RdFrame *prev, float t)
             continue;
         }
         memcpy(dst, src, size);
+        RdCmd rc = *pc;
+        reprojDraw(&rc, dst, s_rp.ip); /* prev's points through the blended camera */
+        in->inc = rc.u[0];
+        if (isVuDraw(pc) && !rebasePrev((float (*)[4])(void *)(dst + sizeof(RdVuPayload)), pc)) {
+            in->node = ~0u; /* held: not through the blended camera */
+            s_umPrevHeld++;
+            continue;
+        }
         if (pc->type == RDC_SCREEN && in->weight < 1.0f) {
             scaleAlpha((RdScreenVtx *)(void *)dst, pc->u[1], in->weight);
         }
@@ -2878,7 +4165,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
             i = j;
             continue;
         }
-        uint32_t o = 0, src = 0;
+        uint32_t o = 0, src = 0, kept = 0;
         for (uint32_t k = i; k < j; k++) {
             const UmIns *in = &s_umIns[k];
             if (in->node == ~0u) {
@@ -2900,6 +4187,15 @@ static void unmatchedPass(const RdFrame *prev, float t)
             } else {
                 c.u[1] = in->seq;
             }
+            if (c.type == RDC_SHADOW_STRIP && c.b[0] == RD_SHADOW_TRIS) {
+                const uint32_t nv = c.u[0] + c.u[3];
+                c.u[0] = in->inc; /* the faces' signs through the blended camera */
+                c.u[3] = nv - in->inc;
+            }
+            if (c.type == RDC_MESH || c.type == RDC_SKINNED) {
+                (void)morphDraw(&c, NULL, NULL, prev, 1.0f); /* the stream prev drew */
+            }
+            kept += isVuDraw(&c);
             s_umCmds[o++] = c;
             if (c.type == RDC_OVERLAY_TEXT && c.b[0] == RD_OTEXT_ITEM) {
                 s_out.textItems++; /* rd_present.c textCollect skips a frame with none */
@@ -2921,6 +4217,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
         }
         memcpy(cl->cmds, s_umCmds, (size_t)o * sizeof(RdCmd));
         cl->count = o;
+        s_umPrevKept += kept;
         i = j;
     }
 }
@@ -2935,8 +4232,18 @@ static void unmatchedPass(const RdFrame *prev, float t)
  * draws with that key; the table restarts with each log block.  The block's
  * log line counts the flapping draws (4 or more changes in the block) and
  * names the worst RD_FLAP_LINES with their last outcomes, mismatch reason,
- * program and mesh ids. */
-enum { O_LERP = 0, O_MISMATCH, O_JUMP, O_UNMATCHED };
+ * the reason of their last unmatched outcome (RD_UNMATCHED_*), program and
+ * mesh ids.  A frame without a note between two that have one (the draw
+ * not drawn, or the whole frame snapped; less than RD_FLAP_SPAN apart) is
+ * in the outcomes too: an unmatched outcome after one is the draw coming
+ * back, not a draw left unpaired beside its match. */
+enum { O_LERP = 0, O_MISMATCH, O_JUMP, O_UNMATCHED, O_ABSENT };
+
+/* the outcomes the history holds, 3 bits each */
+#define RD_FLAP_SPAN 16u
+
+/* the RD_UNMATCHED_* of the next O_UNMATCHED note */
+static int s_noteWhy;
 
 #define RD_FLAP_CAP 8192u
 #define RD_FLAP_MIN 4u
@@ -2948,8 +4255,10 @@ typedef struct FlapEnt {
     uint16_t ord, changes;
     uint8_t why, prog;
     uint32_t frame;
-    uint32_t hist; /* 2 bits per frame, newest in the low bits */
+    uint64_t hist; /* 3 bits per frame (O_*), newest in the low bits */
     uint32_t meshP, meshC, frames;
+    uint8_t span;  /* the frames hist holds, RD_FLAP_SPAN at most */
+    uint8_t unWhy; /* RD_UNMATCHED_* of the last O_UNMATCHED */
 } FlapEnt;
 
 static FlapEnt *s_flap;
@@ -3033,7 +4342,21 @@ static void flapNote(const RdCmd *c, int list, int outcome, const RdCmd *pc, uin
     if (!e) {
         return;
     }
-    e->hist = e->frame + 1u == frame ? (e->hist << 2 | (uint32_t)outcome) : (uint32_t)outcome;
+    /* frames since the last note in which the draw was not drawn */
+    const uint32_t gap = e->frames && frame > e->frame ? frame - e->frame - 1u : RD_FLAP_SPAN;
+    if (gap < RD_FLAP_SPAN) {
+        for (uint32_t g = 0; g < gap; g++) {
+            e->hist = e->hist << 3 | (uint64_t)O_ABSENT;
+        }
+        e->hist = e->hist << 3 | (uint64_t)outcome;
+        e->span = (uint8_t)(e->span + gap + 1u < RD_FLAP_SPAN ? e->span + gap + 1u : RD_FLAP_SPAN);
+    } else {
+        e->hist = (uint64_t)outcome;
+        e->span = 1;
+    }
+    if (outcome == O_UNMATCHED) {
+        e->unWhy = (uint8_t)s_noteWhy;
+    }
     e->last = (uint8_t)outcome;
     e->frame = frame;
     e->frames++;
@@ -3058,9 +4381,12 @@ static void flapFree(void)
 /* the block's flapping draws into the log; the table restarts */
 static uint32_t flapReport(void)
 {
-    static const char code[4] = {'L', 'M', 'J', 'U'};
+    static const char code[8] = {'L', 'M', 'J', 'U', '-', '?', '?', '?'};
     static const char *const why[RD_MISMATCH_COUNT] = {"size", "mesh", "state", "header",
                                                        "topology"};
+    static const char *const unWhy[RD_UNMATCHED_COUNT] = {
+        "not drawn the tick before", "drawn fewer times the tick before",
+        "left by the pairing by place", "payload out of range"};
     uint32_t n = 0;
     if (!s_flap) {
         return 0;
@@ -3079,17 +4405,19 @@ static uint32_t flapReport(void)
         if (!best) {
             break;
         }
-        char h[17];
-        const uint32_t k = best->frames < 16u ? best->frames : 16u;
+        char h[RD_FLAP_SPAN + 1u];
+        const uint32_t k = best->span < RD_FLAP_SPAN ? best->span : RD_FLAP_SPAN;
         for (uint32_t j = 0; j < k; j++) {
-            h[j] = code[(best->hist >> (2u * (k - 1u - j))) & 3u];
+            h[j] = code[(best->hist >> (3u * (k - 1u - j))) & 7u];
         }
         h[k] = '\0';
         rd__log("interp: flapping draw key %08x%08x type %u list %u #%u: %u changes in %u frames, "
-                "last %s (oldest first; L blended, M mismatched, J jumped, U unmatched), "
-                "mismatch %s, program %u, mesh %u -> %u",
+                "last %s (oldest first; L blended, M mismatched, J jumped or paired with a draw "
+                "of another place, U unmatched, - not drawn or the frame snapped), mismatch %s, "
+                "unmatched %s, program %u, mesh %u -> %u",
                 best->hi, best->lo, best->type, best->list, best->ord, best->changes, best->frames,
-                h, why[best->why < RD_MISMATCH_COUNT ? best->why : 0], best->prog, best->meshP,
+                h, why[best->why < RD_MISMATCH_COUNT ? best->why : 0],
+                unWhy[best->unWhy < RD_UNMATCHED_COUNT ? best->unWhy : 0], best->prog, best->meshP,
                 best->meshC);
         best->changes = 0; /* listed */
     }
@@ -3100,40 +4428,11 @@ static uint32_t flapReport(void)
 
 /* ------------------------------------------------------------ the frame */
 
-static float frob(const float *a, const float *b)
-{
-    float s = 0.0f;
-    for (int c = 0; c < 3; c++) {
-        for (int r = 0; r < 3; r++) {
-            s += a[c * 4 + r] * b[c * 4 + r];
-        }
-    }
-    return s;
-}
-
-/* the eye of a column-major view matrix: -R^T t */
-static void viewEye(const float *v, float eye[3])
-{
-    for (int j = 0; j < 3; j++) {
-        eye[j] = -(v[j * 4 + 0] * v[12] + v[j * 4 + 1] * v[13] + v[j * 4 + 2] * v[14]);
-    }
-}
-
+/* the camera turned or moved past RD_INTERP_CAMERA_TURN / _MOVE in the tick
+ * (rd_camera_blend.h, the rule the game's cull shares) */
 static bool cameraJump(const RdCamera *p, const RdCamera *c)
 {
-    const float fp = frob(p->view, p->view), fc = frob(c->view, c->view);
-    if (!(fp > 0.0f) || !(fc > 0.0f)) {
-        return false;
-    }
-    /* cos of the turn between the two rotations, scale removed */
-    const float cosT = (3.0f * frob(p->view, c->view) / sqrtf(fp * fc) - 1.0f) * 0.5f;
-    if (cosT < cosf(RD_INTERP_CAMERA_TURN * 3.14159265f / 180.0f)) {
-        return true;
-    }
-    float a[3], b[3];
-    viewEye(p->view, a);
-    viewEye(c->view, b);
-    return dist3(a, b) > RD_INTERP_CAMERA_MOVE;
+    return rdcb_camera_jump(p->view, c->view) != 0;
 }
 
 int rd__interp_snap(const RdFrame *prev, const RdFrame *cur)
@@ -3205,6 +4504,13 @@ static int readsTarget(const RdCmd *c, const RdStateBlock *st, uint32_t id)
         return t && t->kind == RD_TEXKIND_TARGET && t->target == id;
     }
     }
+}
+
+/* Does a draw under the state st sample a target (any)? */
+static bool readsAnyTarget(const RdStateBlock *st)
+{
+    const RdTexRec *t = st->ds.texEnabled ? rd__tex_rec(st->tex) : NULL;
+    return t && t->kind == RD_TEXKIND_TARGET;
 }
 
 /* an RDC_COPY of all of from into to (one size and scale) at the head of
@@ -3299,16 +4605,24 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_doneCount = 0;
     s_umCurN = 0;
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
+    s_umPrevKept = s_umPrevHeld = 0;
     s_lightRot = 0;
+    s_lightPair = s_placed = s_gridSt = s_gridStCam = 0;
     s_pivotMesh = 0; /* the pivots are recomputed per present */
     if (s_track) {
         memset(s_ord, 0, sizeof(s_ord));
     }
     const bool blend = st.snap == RD_SNAP_NONE && t < 1.0f && buildIndex(prev);
+    if (blend) {
+        (void)indexCur(); /* false: the ordinal pairing for every key */
+    }
     s_cam.on = 0;
+    s_rp.on = 0;
     s_rebased = s_rebasedCur = 0;
+    s_reproj = 0;
     if (blend) {
         camSetup(prev, cur, t); /* the blended camera */
+        reprojSetup(t);         /* and the CPU-projected draws' */
         if (prev->hasCamera && cur->hasCamera) {
             lerpCamera(&s_out.camera, &prev->camera, &cur->camera, t);
             if (s_cam.on) {
@@ -3336,9 +4650,13 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 memcpy(s_out.vu.invView, s_cam.itf, sizeof(s_cam.itf));
             }
         }
+        RdStateBlock rs = s_out.startState; /* the state each draw replays under */
         for (int l = 0; l < RD_LIST_COUNT; l++) {
             for (uint32_t i = 0; i < s_out.lists[l].count; i++) {
                 RdCmd *c = &s_out.lists[l].cmds[i];
+                if (rd__apply_state(&rs, c)) {
+                    continue;
+                }
                 if (!isKeyedDraw(c)) {
                     camCurDraw(c); /* unkeyed, cur's through the blended camera */
                     continue;
@@ -3346,12 +4664,15 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                 const RdCmd *pc = matchOf(prev, c, l, i);
                 uint8_t *op = outPayload(c);
                 if (!pc || !op) {
+                    const int why = pc ? RD_UNMATCHED_PAYLOAD : s_unWhy;
                     st.missing++;
+                    st.unmatchedWhy[why < RD_UNMATCHED_COUNT ? why : 0]++;
                     camCurDraw(c);
                     if (!pc && isProjected(c)) {
                         umCurOnly((uint32_t)l, i); /* faded in, or from half way */
                     }
                     if (s_track) {
+                        s_noteWhy = why;
                         flapNote(c, l, O_UNMATCHED, NULL, cur->number);
                     }
                     continue;
@@ -3370,9 +4691,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     r = blendText(op, prev, pc, c, t);
                     break;
                 default:
-                    r = blendVu(op, prev, pc, c, t);
+                    s_gridScreenSt = c->type == RDC_GRID && readsAnyTarget(&rs);
+                    r = s_matchApart ? R_JUMP : blendVu(op, prev, pc, c, t);
+                    s_gridScreenSt = false;
                     break;
                 }
+                st.apart += s_matchApart; /* a draw of another place: the tick's */
                 if (r != R_LERP) {
                     camCurDraw(c); /* the tick's draw, through the blended camera */
                 }
@@ -3418,8 +4742,15 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     if (blend) {
         unmatchedPass(prev, t); /* inserts commands, so after the passes above */
     }
+    st.prevKept = s_umPrevKept;
+    st.prevHeld = s_umPrevHeld;
     st.rebased = (uint32_t)s_rebased;
     st.rebasedCur = (uint32_t)s_rebasedCur;
+    st.lightPaired = (uint32_t)s_lightPair;
+    st.placed = (uint32_t)s_placed;
+    st.gridSt = (uint32_t)s_gridSt;
+    st.reprojected = s_reproj;
+    st.gridStCamera = (uint32_t)s_gridStCam;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
@@ -3445,6 +4776,14 @@ static struct {
      * switched at half way, cur's and prev's; prev's not placed), lit draws
      * whose light matrix turned with the model */
     uint64_t fadeIn, fadeOut, halfIn, halfOut, held, lightRot;
+    /* lit draws whose previous lights were re-paired (pairLights), draws of
+     * a key drawn several times paired by their place (placeSlot), grids
+     * whose screen-space STs blended (s_gridScreenSt) and those pool.c's
+     * formula made through the blended camera (gridCameraSts) */
+    uint64_t lightPaired, placed, gridSt, gridStCamera;
+    /* unmatched keyed draws by reason, draws paired with a draw of another
+     * place, VU draws of the tick before alone kept and held */
+    uint64_t unmatchedWhy[RD_UNMATCHED_COUNT], apart, prevKept, prevHeld;
     uint32_t scratchMax;      /* the most scratch meshes a present used */
     uint64_t scratchBytesMax; /* and the most bytes they held */
 } s_pres;
@@ -3477,6 +4816,16 @@ static void presentLog(void)
     s_pres.halfOut += s_umHalfOut;
     s_pres.held += s_umHeld;
     s_pres.lightRot += (uint64_t)s_lightRot;
+    s_pres.lightPaired += st->lightPaired;
+    s_pres.placed += st->placed;
+    s_pres.gridSt += st->gridSt;
+    s_pres.gridStCamera += st->gridStCamera;
+    for (int k = 0; k < RD_UNMATCHED_COUNT; k++) {
+        s_pres.unmatchedWhy[k] += st->unmatchedWhy[k];
+    }
+    s_pres.apart += st->apart;
+    s_pres.prevKept += st->prevKept;
+    s_pres.prevHeld += st->prevHeld;
     s_pres.scratchMax = s_scratchUsed > s_pres.scratchMax ? s_scratchUsed : s_pres.scratchMax;
     s_pres.scratchBytesMax =
         s_scratchBytes > s_pres.scratchBytesMax ? s_scratchBytes : s_pres.scratchBytesMax;
@@ -3519,14 +4868,60 @@ static void presentLog(void)
             (unsigned long long)s_pres.halfIn, (unsigned long long)s_pres.halfOut,
             (unsigned long long)s_pres.held, (unsigned long long)s_pres.lightRot, s_pres.scratchMax,
             RD_INTERP_SCRATCH, (unsigned long long)s_pres.scratchBytesMax);
+    /* a fourth line: the lights' slots, the same-key instances, the pool's
+     * screen-space STs */
+    rd__log("interp: %llu lit draws whose previous lights were re-paired by direction; %llu draws "
+            "of a key drawn several times paired by their place in the world instead of their "
+            "order; %llu grids sampling a target whose STs blended, %llu whose STs the pool's "
+            "formula made through the blended camera",
+            (unsigned long long)s_pres.lightPaired, (unsigned long long)s_pres.placed,
+            (unsigned long long)s_pres.gridSt, (unsigned long long)s_pres.gridStCamera);
+    /* a fifth line: why keyed draws stayed unmatched, and the VU draws of
+     * the tick before alone */
+    const uint64_t *u = s_pres.unmatchedWhy;
+    rd__log("interp: unmatched keyed draws: %llu not drawn the tick before, %llu drawn fewer "
+            "times the tick before, %llu left by the pairing by place, %llu payload out of "
+            "range; %llu paired with a draw of another place (drawn as the tick's); VU draws of "
+            "the tick before alone, outside the camera's picture: %llu of the tick before kept, "
+            "%llu held",
+            (unsigned long long)u[RD_UNMATCHED_ABSENT], (unsigned long long)u[RD_UNMATCHED_FEWER],
+            (unsigned long long)u[RD_UNMATCHED_UNPLACED],
+            (unsigned long long)u[RD_UNMATCHED_PAYLOAD], (unsigned long long)s_pres.apart,
+            (unsigned long long)s_pres.prevKept, (unsigned long long)s_pres.prevHeld);
     const uint32_t number = s_pres.number;
     memset(&s_pres, 0, sizeof(s_pres));
     s_pres.number = number;
 }
 
+/* rd_last_present_info's record; valid once a present ran */
+static RdPresentInfo s_info;
+static bool s_infoValid;
+
 static void presentReset(void)
 {
     memset(&s_pres, 0, sizeof(s_pres));
+    memset(&s_info, 0, sizeof(s_info));
+    s_infoValid = false;
+}
+
+/* with interpolation off rd_end_frame presents each frame once, whole */
+void rd__note_frame_present(const RdFrame *f)
+{
+    s_info.frame = f->number;
+    s_info.keep = f->keep;
+    s_info.fade = f->fade;
+    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), f);
+    s_info.firstOfTick = 1;
+    s_infoValid = true;
+}
+
+bool rd_last_present_info(RdPresentInfo *out)
+{
+    if (!out || !s_infoValid) {
+        return false;
+    }
+    *out = s_info;
+    return true;
 }
 
 bool rd_interpolation_active(void)
@@ -3557,6 +4952,12 @@ bool rd_present(float alpha)
     const int first = cur->number != s_pres.number;
     s_pres.number = cur->number;
     s_pres.presents++;
+    s_info.frame = cur->number;
+    s_info.keep = cur->keep;
+    s_info.fade = cur->fade;
+    s_info.snap = (uint32_t)rd__interp_snap(rd__prev_frame(), cur);
+    s_info.firstOfTick = (uint32_t)first;
+    s_infoValid = true;
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */

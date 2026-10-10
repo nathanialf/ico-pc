@@ -15,8 +15,8 @@
   and on a phone with an Adreno chip it offers to use a graphics driver
   package instead (see
   [Using a different graphics driver](#using-a-different-graphics-driver)).
-- **Your own disc image of ICO, PAL version (SCES-50760)**, as a `.iso` or
-  `.chd` file, copied onto the phone or tablet.
+- **Your own disc image of ICO, PAL version (SCES-50760)**, as a `.iso`,
+  `.chd` or `.bin` file, copied onto the phone or tablet.
 - **Free space** for the first start: the size of the disc image plus
   about 1.2 GB. Once the game is set up, it needs about 1 GB.
 
@@ -47,8 +47,9 @@ copy the `memcard` folder out to a computer.
    This takes a few seconds, and up to about ten on some phones. Later starts
    skip it or show it only for a moment.
 2. The game opens your phone's file picker. Find your disc image and tap
-   it. The picker shows every file, so make sure you pick the `.iso` or
-   `.chd`.
+   it. The picker shows every file, so make sure you pick the `.iso`,
+   `.chd` or `.bin`. If you have a `.bin` and a `.cue`, pick the `.bin`; the
+   `.cue` only lists it and is not accepted here.
 3. The game copies the image into its own folder. The screen says **Copying
    the disc image into the app**, with a bar. With a big image this can take
    a few minutes. At the end it says **Saving the copy** for a few seconds
@@ -74,7 +75,7 @@ Once the game is set up, it deletes its copy of the disc image to give the
 space back. Your own file, where you picked it from, is not touched.
 
 **Skipping the picker.** You can also copy the disc image into the game's
-folder yourself, named `Ico_PAL.iso` (or `Ico_PAL.chd`). The game then
+folder yourself, named `Ico_PAL.iso` (or `Ico_PAL.chd` or `Ico_PAL.bin`). The game then
 uses it without asking. It deletes that file too once it is set up.
 
 **Keeping the copy.** Most people do not need this. If you want the disc

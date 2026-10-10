@@ -510,7 +510,139 @@ RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         e->smp = *smp;
     }
     free(px);
+    /* stored as one level: GS levels an earlier store gave the same
+       texture go (rdtex_store_levels adds them back after this) */
+    rd__tex_set_levels(e->tex, NULL, 0);
     return e->tex;
+}
+
+/* Authored levels: a TIM2's further levels are drawn at the GS's level only
+ * when they are pictures of their own, not reductions of the base.  The
+ * test is the brightness: each level's mean (R + G + B) / 3 over its texels
+ * against the mean of the level above over the texels it reduces from (the
+ * mean of its 2x2 box reduction), as (b + 1) / (a + 1) either way up; past
+ * RDTEX_AUTHORED_RATIO on any level the levels are authored.  On the disc's
+ * 294 mipmapped TIM2 pictures (841 files) the ratio splits in two: the fog
+ * puffs (fog1, st25a_fog1: 12.1), the light shafts (fractal and its copies:
+ * 9.0, then 2.0) and the waterfall and room mists (taki_fog, fog: 2.2), and
+ * everything else at 1.52 or below (st13a_renga_wall 1.52, penki_rain 1.47,
+ * the walls about 1.3), most under 1.1.  A per-texel difference does not
+ * split them: the walls' own reductions are sharpened and differ from a
+ * box by up to 24 per texel against fog1's 14.  1.8 sits in the gap. */
+#define RDTEX_AUTHORED_RATIO 1.8
+
+/* The mean (R + G + B) / 3 of the w x h texels at px, rows of pitch texels */
+static double meanRgb(const uint8_t *px, uint32_t pitch, uint32_t w, uint32_t h)
+{
+    uint64_t sum = 0;
+    for (uint32_t y = 0; y < h; y++) {
+        const uint8_t *row = px + (size_t)y * pitch * 4;
+        for (uint32_t x = 0; x < w; x++) {
+            sum += (uint64_t)row[x * 4] + row[x * 4 + 1] + row[x * 4 + 2];
+        }
+    }
+    return w && h ? (double)sum / (3.0 * (double)w * (double)h) : 0.0;
+}
+
+/* Whether the levels 1..levels-1 in chain (each padded as rdtex_store_levels
+ * lays them out under the base's padded w x h at base) are authored; *worst
+ * gets the largest ratio.  ims: their sizes in the TIM2. */
+static int levelsAuthored(const uint8_t *base, uint32_t w, uint32_t h, const uint8_t *chain,
+                          uint32_t levels, const RdTexImage *ims, double *worst)
+{
+    const uint8_t *above = base;
+    uint32_t aw = w, ah = h;
+    *worst = 1.0;
+    for (uint32_t l = 1; l < levels; l++) {
+        const uint32_t lw = aw > 1 ? aw / 2 : 1, lh = ah > 1 ? ah / 2 : 1;
+        const uint32_t iw = ims[l].w, ih = ims[l].h;
+        const uint32_t rw = 2 * iw < ims[l - 1].w ? 2 * iw : ims[l - 1].w;
+        const uint32_t rh = 2 * ih < ims[l - 1].h ? 2 * ih : ims[l - 1].h;
+        const double a = meanRgb(above, aw, rw, rh), b = meanRgb(chain, lw, iw, ih);
+        double r = (b + 1.0) / (a + 1.0);
+        r = r < 1.0 ? 1.0 / r : r;
+        *worst = r > *worst ? r : *worst;
+        above = chain;
+        chain += (size_t)lw * lh * 4;
+        aw = lw;
+        ah = lh;
+    }
+    return *worst > RDTEX_AUTHORED_RATIO;
+}
+
+/* Each texture's decision named once in the log */
+static void logAuthored(const char *name, int authored, double worst, uint32_t levels)
+{
+    static uint32_t seen[256];
+    static uint32_t nSeen;
+    uint32_t hash = 2166136261u;
+    for (const char *c = name ? name : "?"; *c; c++) {
+        hash = (hash ^ (uint8_t)*c) * 16777619u;
+    }
+    for (uint32_t i = 0; i < nSeen; i++) {
+        if (seen[i] == hash) {
+            return;
+        }
+    }
+    if (nSeen < 256) {
+        seen[nSeen++] = hash;
+    }
+    rd__log("textures: \"%s\" %u mipmap levels, brightness ratio %.2f: %s", name ? name : "?",
+            levels, worst,
+            authored ? "authored, drawn at the GS's level"
+                     : "reductions of the base, drawn as before");
+}
+
+RdTex rdtex_store_levels(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
+                         const RdTexSampler *smp, const char *debugName)
+{
+    if (!ims || n == 0) {
+        return (RdTex){0};
+    }
+    RdTex t = rdtex_store(id, gen, texa, &ims[0], smp, debugName);
+    const RdTexRec *r = rd__tex_rec(t.id);
+    if (!r || n < 2 || r->format != RD_TEXEL_RGBA8 || r->replacement || !r->pixels) {
+        rd__tex_set_levels(t, NULL, 0);
+        return t;
+    }
+    /* each level padded as the base is: the GS addresses level l at
+       2^(TW - l) x 2^(TH - l), the base's padded size halved */
+    const size_t bytes = rd__gs_chain_bytes(r->w, r->h, n);
+    uint8_t *chain = malloc(bytes ? bytes : 1);
+    if (!chain) {
+        rd__tex_set_levels(t, NULL, 0);
+        return t;
+    }
+    uint32_t w = r->w, h = r->h, levels = 1;
+    uint8_t *at = chain;
+    for (uint32_t l = 1; l < n; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        RdTexImage im = ims[l];
+        RdTexSrc src;
+        im.padW = w;
+        im.padH = h;
+        if (im.w > w || im.h > h || im.w == 0 || im.h == 0 || rdtex_decode(&im, at, &src) != 0) {
+            break;
+        }
+        if (texa != RDTEX_TEXA_REPLAY) {
+            rdtex_apply_texa(at, (size_t)w * h, src, (RdTexA)texa);
+        }
+        at += (size_t)w * h * 4;
+        levels++;
+    }
+    /* only authored levels take the GS's level; reductions of the base keep
+       the texture as rdtex_store left it (one level; the Enhanced filter's
+       box mips) */
+    double worst = 1.0;
+    const int authored =
+        levels > 1 && levelsAuthored(r->pixels, r->w, r->h, chain, levels, ims, &worst);
+    if (levels > 1) {
+        logAuthored(debugName, authored, worst, levels);
+    }
+    rd__tex_set_levels(t, authored ? chain : NULL, authored ? levels : 0);
+    free(chain);
+    return t;
 }
 
 const RdTexSampler *rdtex_sampler(uint32_t id, int texa)

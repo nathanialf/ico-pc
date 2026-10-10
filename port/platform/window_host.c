@@ -180,6 +180,8 @@ static struct {
     double total, maxTotal, interp, wait, acquire, upload, walk, bind, submit, present, readback,
         fence;
     double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent;
+    double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
+    unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
@@ -204,6 +206,7 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->vsync = (uint8_t)(o.vsync != 0);
     rs->filterUpgrade = (uint8_t)o.filter;
     rs->fullHeightScene = (uint8_t)(o.fullHeight != 0);
+    rs->fullPixel = (uint8_t)(o.fullPixel != 0);
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
@@ -836,6 +839,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 #else
     rd_precreate_pipelines();
 #endif
+    /* which way of reading the depth gives the fog its distances on this
+       GPU, tried on the real scene size; logged ("fog: depth path") */
+    rd_fog_selftest();
     {
         IcoVideoOptions o;
         char res[32], fr[16];
@@ -1576,7 +1582,17 @@ static void perf_csv_open(void)
     for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(s_perf.csv, ",gpu_list%d_ms", l);
     }
-    fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick\n");
+    fprintf(s_perf.csv, ",gpu_present_ms,start_ms,alpha,first_of_tick");
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        /* the effect's name with '_' for ' ' */
+        char name[32];
+        snprintf(name, sizeof(name), "%s", rd_perf_post_name(p));
+        for (char *c = name; *c; c++) {
+            *c = *c == ' ' ? '_' : *c;
+        }
+        fprintf(s_perf.csv, ",gpu_%s_ms", name);
+    }
+    fprintf(s_perf.csv, ",gpu_effects_partial\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -1598,8 +1614,11 @@ static void perf_csv_line(const RdPerfRecord *r)
     for (int l = 0; l < GPU_LISTS; l++) {
         fprintf(f, ",%.3f", r->gpuListMs[l]);
     }
-    fprintf(f, ",%.3f,%.3f,%.4f,%u\n", r->gpuPresentMs, r->startMs, (double)r->alpha,
-            r->firstOfTick);
+    fprintf(f, ",%.3f,%.3f,%.4f,%u", r->gpuPresentMs, r->startMs, (double)r->alpha, r->firstOfTick);
+    for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+        fprintf(f, ",%.3f", r->gpuPostMs[p]);
+    }
+    fprintf(f, ",%u\n", r->gpuPostPartial);
 }
 
 /* A presented replay's cost for resolution "auto": its GPU
@@ -1664,6 +1683,10 @@ static void perf_drain(void)
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
+            for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
+                s_perf.gpuPost[p] += r.gpuPostMs[p];
+            }
+            s_perf.gpuPostPartial += r.gpuPostPartial;
         }
         s_perf.draws += r.draws;
         s_perf.passes += r.renderPasses;
@@ -1732,6 +1755,29 @@ static void perf_log(void)
             s_perf.acquire / n, s_perf.upload / n, s_perf.walk / n, s_perf.bind / n,
             s_perf.submit / n, s_perf.present / n, s_perf.readback / n, s_perf.fence / n, gpu,
             s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs);
+    if (s_perf.gpuN) {
+        /* the GPU time per replay by list and by picture effect (each
+           effect's time is inside its list's, the CRT filter's inside the
+           present's) */
+        char lists[160], posts[256], partial[64] = "";
+        int at = 0;
+
+        for (int l = 0; l < GPU_LISTS && at < (int)sizeof(lists); l++) {
+            at += snprintf(lists + at, sizeof(lists) - (size_t)at, "%s%.2f", l ? " " : "",
+                           s_perf.gpuList[l] / g);
+        }
+        at = 0;
+        for (int p = 0; p < RD_PERF_POST_COUNT && at < (int)sizeof(posts); p++) {
+            at += snprintf(posts + at, sizeof(posts) - (size_t)at, "%s%s %.2f", p ? ", " : "",
+                           rd_perf_post_name(p), s_perf.gpuPost[p] / g);
+        }
+        if (s_perf.gpuPostPartial) {
+            snprintf(partial, sizeof(partial), " (not all timed apart in %u replays)",
+                     s_perf.gpuPostPartial);
+        }
+        fprintf(stderr, "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f\n",
+                lists, posts, partial, s_perf.gpuPresent / g);
+    }
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
             "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
@@ -1830,14 +1876,16 @@ static void pace_log(Uint64 now)
             "%.1f s: %.1f "
             "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
             "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms; framerate %s, present "
-            "%s, display %.1f Hz, window %dx%d%s\n",
+            "%s, display %.1f Hz (%.2f presents a refresh), window %dx%d%s\n",
             s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
             fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
             s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
             (double)s_pres.statDropped / 1e6, maxMs, replays, s_pres.slowSteps, s_pres.slowMs,
             ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_present_mode_name(),
-            dm != NULL ? (double)dm->refresh_rate : 0.0, pw, ph,
-            window_fullscreen() ? " fullscreen" : "");
+            dm != NULL ? (double)dm->refresh_rate : 0.0,
+            dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
+                                                  : 0.0,
+            pw, ph, window_fullscreen() ? " fullscreen" : "");
     perf_drain();
     perf_log();
     s_pres.statAt = now;
@@ -1847,6 +1895,60 @@ static void pace_log(Uint64 now)
     s_pres.statMovie = movie;
     s_pres.statMovieFail = movieFail;
     s_pres.slowSteps = s_pres.slowLogged = 0;
+}
+
+/* The start-up's presents, one log line each: the boot shows black (keep
+   frames, then stage 1 under a full fade) until the first sign's backdrop,
+   and this names any present that was not.  For game frames BOOT_LOG_FIRST
+   to BOOT_LOG_LAST, and the first BOOT_LOG_AFTER_FULL after the first frame
+   that is not a keep frame: the frame, its keep flag, the fade it recorded
+   (1 + alpha), its snap, the present's alpha, DISPLAY at its centre and
+   its quarters' centres (a readback, so only in that window; never again
+   once past it) and "first" on a tick's first present. */
+#define BOOT_LOG_FIRST 100u
+#define BOOT_LOG_LAST 130u
+#define BOOT_LOG_AFTER_FULL 12u
+
+static struct {
+    uint32_t firstFull; /* the first frame that is not a keep frame, 0 before it */
+    int done;
+} s_bootLog;
+
+static void boot_log(float alpha)
+{
+    RdPresentInfo pi;
+    uint8_t px[RD_DISPLAY_PROBE_POINTS][4];
+    char pts[RD_DISPLAY_PROBE_POINTS * 20] = "";
+    size_t n = 0;
+
+    if (s_bootLog.done || !rd_last_present_info(&pi)) {
+        return;
+    }
+    if (!pi.keep && !s_bootLog.firstFull) {
+        s_bootLog.firstFull = pi.frame;
+    }
+    const int inFixed = pi.frame >= BOOT_LOG_FIRST && pi.frame <= BOOT_LOG_LAST;
+    const int inFull = s_bootLog.firstFull && pi.frame <= s_bootLog.firstFull + BOOT_LOG_AFTER_FULL;
+
+    if (!inFixed && !inFull) {
+        if (pi.frame > BOOT_LOG_LAST && s_bootLog.firstFull &&
+            pi.frame > s_bootLog.firstFull + BOOT_LOG_AFTER_FULL) {
+            s_bootLog.done = 1;
+        }
+        return;
+    }
+    if (rd_display_probe(px)) {
+        for (int k = 0; k < RD_DISPLAY_PROBE_POINTS && n < sizeof(pts); k++) {
+            const int w =
+                snprintf(pts + n, sizeof(pts) - n, " (%u,%u,%u)", px[k][0], px[k][1], px[k][2]);
+
+            n += w > 0 ? (size_t)w : 0;
+        }
+    } else {
+        snprintf(pts, sizeof(pts), " unread");
+    }
+    fprintf(stderr, "boot: frame %u keep %u fade %u snap %u t %.3f display%s%s\n", pi.frame,
+            pi.keep, pi.fade, pi.snap, (double)alpha, pts, pi.firstOfTick ? " first" : "");
 }
 
 /* The pacer more than RESYNC_NS behind: the lag is dropped (counted) */
@@ -1950,12 +2052,15 @@ static void pace(int hz)
     const Uint64 period = hz == 50 ? 20000000ull : 16683333ull;
     Uint64 now;
 
+    int newFrame = 0;
+
     s_deadline += period;
     s_pres.statVsyncs++;
     {
         const uint32_t fn = rd_frame_number();
 
         if (fn != s_pres.frame) {
+            newFrame = 1;
             s_pres.frame = fn;
             s_pres.tickPrev = s_pres.tickAt;
             s_pres.tickAt = s_deadline - period;
@@ -1970,7 +2075,11 @@ static void pace(int hz)
     }
     if (!rd_interpolation_active()) {
         /* framerate "original": rd_end_frame presented the frame once; the
-           picture is held until the next */
+           picture is held until the next.  That present's start-up log line
+           (the frame whole: t 1), its readback inside the wait */
+        if (newFrame) {
+            boot_log(1.0f);
+        }
         now = SDL_GetTicksNS();
         if (now < s_deadline) {
             SDL_DelayPrecise(s_deadline - now);
@@ -1995,29 +2104,23 @@ static void pace(int hz)
        hysteresis, and the limit is higher with an effects program
        loaded). */
     Uint64 refresh = period;
-    Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
+    Uint64 gap;
     {
         const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
         refresh = dm != NULL && dm->refresh_rate > 1.0f ? (Uint64)(1e9 / (double)dm->refresh_rate)
                                                         : period;
 
-        /* "uncapped" with vsync on.  In mailbox mode (rhi_prefer_mailbox)
-           a present never waits for the display; two presents a refresh keep
-           every refresh supplied with a fresh picture without drawing many
-           that are never shown.  Under FIFO (no mailbox) one a refresh: the
-           display's own rate, so a present rarely finds the queue full and
-           waits.  Without vsync "uncapped" is back to back. */
-        if (s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox) {
-            gap = rhi_present_mailbox() ? refresh / 2 : refresh - refresh / 16;
-#if defined(__ANDROID__) || defined(ICO_IOS)
-            /* one a refresh in mailbox mode too: two full
-               replays a refresh on the thread that also runs the game left
-               a phone too little time for the game and kept its GPU busy */
-            if (rhi_present_mailbox()) {
-                gap = refresh;
-            }
-#endif
-        }
+        /* "uncapped" with vsync on (s_pres.mailbox: rhi_prefer_mailbox):
+           a little less than one display refresh between presents, in
+           mailbox mode as under FIFO, so the presents average about one a
+           refresh (the log's "presents a refresh" figure).
+           Two a refresh in mailbox mode drew a picture the display never
+           showed for every one it did, which kept a handheld's GPU near its
+           limit; a phone also lost the time for the game.  Without vsync
+           "uncapped" is back to back (pace_policy.h pace_present_gap) */
+        gap = pace_present_gap(s_pres.framerate,
+                               s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox,
+                               rhi_present_mailbox(), refresh);
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
@@ -2074,6 +2177,8 @@ static void pace(int hz)
                a present is slower with an effects program loaded */
             s_pres.paceSlow = pace_slow_present(&s_pres.paceHist, s_pres.cost, refresh, period,
                                                 rhi_injector_name() != NULL);
+            /* after the cost: the start-up log's readback is not the present's */
+            boot_log(a);
         }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */

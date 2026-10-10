@@ -22,9 +22,9 @@ extern const SafePosOffset generatorSubPosition[];
 
 struct GObj;
 
-struct GenGeo;
+struct SObjSimpleSetting;
 
-struct GenWork *InitGeneratorGeo(struct GObj *gobj, struct GenGeo *src);
+struct GenWork *InitGeneratorGeo(struct GObj *gobj, struct SObjSimpleSetting *src);
 void Generator_Call(struct GObj *gobj);
 void Generator_ResetCount(struct GObj *gobj);
 void Generator_Mask(struct GObj *gobj);

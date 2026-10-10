@@ -1,7 +1,8 @@
 # ico-pc
 
 This is **ICO** (Sony Computer Entertainment, 2001) made to run natively on
-a Windows or Linux PC, the Steam Deck, and Android phones and tablets. It
+a Windows or Linux PC, the Steam Deck, 64-bit ARM Linux handhelds, and
+Android phones and tablets. It
 runs the game's own code, so it plays, sounds and feels like the PAL
 PlayStation 2 game. There are extras, such as a sharper picture,
 widescreen and smoother motion, but they stay off until you turn them on.
@@ -17,12 +18,15 @@ widescreen and smoother motion, but they stay off until you turn them on.
 ## What you need
 
 - **Your own disc image of ICO, PAL version (SCES-50760).** A disc image is
-  one file that holds the whole disc. It ends in `.iso` or `.chd`. Other
-  regions and editions do not work.
+  one file that holds the whole disc. It ends in `.iso`, `.chd` or `.bin` (a
+  `.bin` can come with a `.cue` file, which also works). Other regions and
+  editions do not work.
 - **Something to play on:**
   - a 64-bit Windows 10 or 11 PC, or a Linux PC, with an up-to-date
     graphics driver (any recent NVIDIA, AMD or Intel graphics card works);
   - a Steam Deck;
+  - a 64-bit ARM Linux handheld or board with an up-to-date graphics
+    driver (new in this version, and tested on one handheld so far);
   - or a 64-bit Android phone or tablet with Android 10 or later, usually
     one from 2022 or newer. Android support is experimental in this
     version. [More about Android](docs/ANDROID.md).
@@ -53,6 +57,11 @@ once there so it can ask for the disc image, then
 add `ico_pc` to Steam with Steam > Add a Non-Steam Game and play in Game
 Mode. [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
+On a 64-bit ARM Linux handheld or board, download the file whose name ends
+in `-linux-arm64.tar.gz` instead and follow the same steps. It also needs
+a fairly new system: Debian 13, Ubuntu 24.04 or newer. This download is new
+in this version and has been tested on one handheld so far.
+
 **Android**
 
 1. Download the file whose name ends in `-android.apk` on your phone or
@@ -74,7 +83,7 @@ what the game is doing the whole time
 ([the Android guide](docs/ANDROID.md#the-first-start) has the steps).
 
 You can skip the question. Put the disc image beside the program and name
-it `Ico_PAL.iso` (or `Ico_PAL.chd`). On Windows, "beside the program"
+it `Ico_PAL.iso` (or `Ico_PAL.chd`, or `Ico_PAL.bin`). On Windows, "beside the program"
 means inside the `x64` folder.
 
 ## Questions people ask first

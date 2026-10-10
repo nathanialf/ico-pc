@@ -44,6 +44,7 @@
 #include <string.h>
 #include "rd.h"
 #include "rhi.h"
+#include "rd_camera_blend.h"
 
 #ifdef __cplusplus
 
@@ -62,7 +63,7 @@ typedef enum RdCmdType {
     RDC_PABE,        /* b[0] */
     RDC_COLCLAMP,    /* b[0] */
     RDC_TEXA,        /* b[0] RdTexA */
-    RDC_FILTER,      /* b[0] mag, b[1] min (TEX1) */
+    RDC_FILTER,      /* b[0] mag, b[1] min (TEX1); u[0] TEX1's mipmap fields (rd_tex1_lod) */
     RDC_WRAP,        /* b[0] s, b[1] t (CLAMP) */
     RDC_TEXTURE,     /* u[0] RdTex id, b[0] RdTexFn, b[1] RdTcc; TME on */
     RDC_TEXTURE_OFF, /* TME off */
@@ -76,19 +77,21 @@ typedef enum RdCmdType {
     RDC_STATE_LAST = RDC_SHADE,
     /* actions */
     RDC_CLEAR,       /* u[0] target, b[0..3] rgba, b[4] clearDepth, u[1] GS z */
-    RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed; u[0] payload offset of
-                      * RdScreenVtx[u[1]] */
+    RDC_SCREEN,      /* b[0] RdPrim, b[1] RdSpace, b[2] uvFixed, b[3] RD_SCREEN_TEXT_QUADS,
+                      * b[4] RD_SCREEN_FRAME_CAMERA; u[0] payload offset of RdScreenVtx[u[1]] */
     RDC_EXACT_BLEND, /* u[0] src target, u[1] dst target: the GS integer blend of the state
                       * block's ALPHA/FIX/COLCLAMP through blend_int (RdPostParams.exactInt) */
     RDC_COPY,        /* u[0] src target, u[1] dst target, u[2] payload offset of RdCopyRec */
     /* the VU draws, the world prims (recorded only: replay calls
      * rd__not_implemented), the shadow count and the post records */
-    RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size */
+    RDC_MESH,         /* u[0] mesh, b[0] RdProg, u[1] payload offset, u[2] payload size,
+                       * b[4] RD_VU_VIEW_* (rd_mesh.h; 0 in older dumps) */
     RDC_SKINNED,      /* same, plus bones in the payload */
-    RDC_GRID,         /* u[1] payload offset, u[2] size */
+    RDC_GRID,         /* u[1] payload offset, u[2] size; b[5] RdGridSt, f[0], f[1] its sx, sy */
     RDC_PARTICLES,    /* u[1] payload offset, u[2] size */
     RDC_WORLD_PRIMS,  /* b[0] RdPrim, u[0] count, u[1] payload offset, u[2] size */
-    RDC_SHADOW_STRIP, /* b[0] 0: rd_shadow_strip, u[0] count, u[1] payload offset of float[4]
+    RDC_SHADOW_STRIP, /* b[1] RD_SHADOW_FRAME_CAMERA;
+                       * b[0] 0: rd_shadow_strip, u[0] count, u[1] payload offset of float[4]
                        * x count, f[0] sign; b[0] RD_SHADOW_TRIS: rd_shadow_tris,
                        * u[1] payload offset of RdScreenVtx[u[0] + u[3]], the triangles that
                        * increment (u[0] vertices) then those that decrement (u[3]) */
@@ -128,6 +131,14 @@ enum { RD_OTEXT_ITEM = 0, RD_OTEXT_OP = 1 };
  * RDC_OVERLAY_TEXT item (rd.h rd_deferred_text_quads), skipped by a replay that
  * draws the items deferred; 0 in every other draw and every older dump. */
 #define RD_SCREEN_TEXT_QUADS 1
+
+/* RDC_SCREEN's b[4] and RDC_SHADOW_STRIP's b[1]: the draw's vertices were
+ * projected on the CPU by the frame's camera (rd.h rd_frame_projected), so
+ * rd_interp.c may take them back into the world through the tick's camera
+ * and project them with the blended one.  0 in every other draw and in the
+ * dumps recorded before the mark (they keep the screen-space blend). */
+#define RD_SCREEN_FRAME_CAMERA 1
+#define RD_SHADOW_FRAME_CAMERA 1
 
 /* A post pass recorded after deferred text (rd_post.c), as the present folds
  * it into the items before it: FADE and BRIGHTNESS lerp the whole frame to
@@ -210,12 +221,18 @@ typedef struct RdStateBlock {
     int32_t scissor[4]; /* x0, y0, x1, y1 inclusive */
     uint32_t gouraud;   /* PRIM.IIP (rd_gouraud), 1 = Gouraud */
     uint32_t aa1;       /* PRIM.AA1 (rd_aa1); a version 3 dump loads it as 0 */
+    /* TEX1's mipmap fields, packed by rd_tex1_lod (rd_state.h): the level
+     * the GS samples a texture with GS levels at (RdTexRec.gsLevels).  0 in
+     * the dumps before version 9: level 0, as they were drawn */
+    uint32_t tex1Lod;
 } RdStateBlock;
 
 _Static_assert(sizeof(RdDrawState) == 28, "RdDrawState layout");
-_Static_assert(sizeof(RdStateBlock) == 84, "RdStateBlock is dumped as raw bytes");
+_Static_assert(sizeof(RdStateBlock) == 88, "RdStateBlock is dumped as raw bytes");
 /* The state block of a version 3 dump: the same fields without aa1. */
 #define RD_STATE_BLOCK_V3_SIZE 80u
+/* The state block of a version 4 to 8 dump: without tex1Lod. */
+#define RD_STATE_BLOCK_V8_SIZE 84u
 
 /* Applies a state command to s.  Returns false (s untouched) for actions. */
 bool rd__apply_state(RdStateBlock *s, const RdCmd *c);
@@ -261,6 +278,9 @@ typedef struct RdFrame {
      * fade rd_post(RD_POST_FADE) recorded, 1 + its alpha (0: none) */
     uint32_t cut;
     uint32_t fade;
+    /* rd_free_camera while the frame was open (rd_end_frame copies it into
+     * camera.freeCamera) */
+    uint32_t freeCamera;
     /* not dumped: RDC_OVERLAY_TEXT items recorded so far (the
      * post passes record their ops only after one) */
     uint32_t textItems;
@@ -310,6 +330,7 @@ typedef struct RdTargetRec {
     RhiFormat format;
     RhiTexture color, depth;
     RhiState colorState, depthState;
+    uint8_t depthSampled; /* depth made sampleable (rd__sampled_depth reads it in place) */
     /* copy used when a draw samples the target it renders to, or reads its
      * destination (rd_replay.c takeSnap: only the area a draw reads is fresh) */
     RhiTexture snap;
@@ -346,6 +367,10 @@ bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held,
  * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli
  * GS_ZSCALE_32F: the top Z values mapped apart) and 2^-32 on D24S8. */
 float rd__target_z_scale(uint32_t id);
+/* 2^24 - 1 when the targets' depth is 24-bit fixed point (the Vulkan
+ * D24S8 fallback), 0 when it is float: the fog shader compares depths in
+ * the steps the buffer stores (fog_lut.hlsl) */
+float rd__depth_unorm_steps(void);
 /* gs_z_to_depth on the CPU (clears): the same formula as gs_math.hlsli. */
 float rd__gs_depth(uint32_t z, float scale);
 
@@ -359,6 +384,17 @@ void rd__temp_target_free(uint32_t id);
 /* Destroys the parked temporary targets' textures (a scale
  * change, shutdown). */
 void rd__temp_target_pool_clear(void);
+/* A scene-sized allocation failed: asks for a lower scene scale at the next
+ * rd_begin_frame, when the scene is above 1x (nothing to give back at 1x). */
+void rd__note_scene_pressure(void);
+/* The same for a target's own texture (a snapshot): only a scene-sized one
+ * counts, a work buffer does not shrink with the scene. */
+void rd__note_target_pressure(const RdTargetRec *t);
+/* The scene-sized textures kept between frames (fog and effects depth copies,
+ * the wrap accumulator), freed so a recreate of the targets starts without
+ * them; each is made again at the new size when next needed. */
+void rd__scene_caches_free(void);
+void rd__effects_depth_free(void);
 #define RD_TEMP_PARKED 24 /* parked temporary targets kept at most */
 
 /* ------------------------------------------------------------ textures */
@@ -501,6 +537,19 @@ typedef struct RdTexRec {
     /* Its RdSheetStyle.scale, 1..ICO_SHEET_SCALE_MAX
      * (0 in a texture that is no sheet) */
     uint8_t sheetScale;
+    /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
+     * and whose levels are authored (rdtex_store_levels): gsLevels counts
+     * them with the base (0 or 1: none), gsChain holds levels 1.. as RGBA8
+     * one after the other, level l max(w >> l, 1) x max(h >> l, 1) texels.
+     * These are the TIM2's own pictures, not reductions of the base: some
+     * textures keep a dark base and brighter small levels on purpose, so the
+     * GS's choice of level by distance fades them (the fog puffs, the light
+     * shafts, the mists).  Textures whose levels are reductions keep none
+     * and draw as before.  Uploaded
+     * as the texture's mips whatever the filter option (uploadMips) and
+     * sampled at the GS's level (DF_GS_LOD) */
+    uint8_t gsLevels;
+    uint8_t *gsChain;
 } RdTexRec;
 
 /* RdTexRec.mipUse bits */
@@ -510,6 +559,14 @@ enum {
 };
 
 RdTexRec *rd__tex_rec(uint32_t id);
+/* Gives an image texture its GS levels (RdTexRec.gsLevels, gsChain): levels
+ * counts the base, chain holds levels 1.. as RGBA8, level l
+ * max(w >> l, 1) x max(h >> l, 1) texels (copied).  levels 0 or 1 (or a
+ * null chain) takes them away.  The texture is uploaded again when they
+ * change. */
+void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels);
+/* The bytes of levels 1..levels-1 of a w x h image's GS chain. */
+size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels);
 /* An image texture of format (RD_TEXEL_*), texels copied from px
  * (w * h * rd__texel_bytes bytes) or zero; rd_create_texture_src and
  * rd_create_texture_r8 are this, and the dump loader. */
@@ -554,8 +611,12 @@ typedef struct RdMeshRec {
     /* issue 25: the index list the device draws, index with
      * ICO_VU_INDEX_LATER on each triangle that overlaps an earlier
      * triangle of the mesh in its plane (rd_mesh.c markLaterOverlaps);
-     * NULL when none does (rd__mesh_draw_index) */
+     * NULL when none does (rd__mesh_draw_index); also ICO_VU_INDEX_WIDE
+     * on each triangle of a stage closing plane (rd_mesh.c markWideHidden) */
     uint32_t *drawIndex;
+    /* drawIndex holds an ICO_VU_INDEX_WIDE triangle: rd_replay.c draws
+     * the mesh beside the 4:3 picture of a wide target without them */
+    uint8_t wideHidden;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -622,8 +683,8 @@ static inline const uint32_t *rd__mesh_draw_index(const RdMeshRec *m)
     return m->drawIndex ? m->drawIndex : m->index;
 }
 
-/* dst's drawIndex becomes a copy of src's (none when src has none): the
- * interpolation's scratch meshes draw their source's (rd_interp.c);
+/* dst's drawIndex (and wideHidden) becomes a copy of src's (none when src
+ * has none): the interpolation's scratch meshes draw their source's (rd_interp.c);
  * false on no memory (dst then has none) */
 bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src);
 /* rd_mesh.c: the per-list VU images (rd_set_vu_common updates all 13). */
@@ -699,6 +760,9 @@ typedef enum RdFsId {
     /* blit_depth_ps, the present's box blit with the scene's
      * depth into the output-size effects depth (rd_present.c) */
     RD_FS_BLIT_DEPTH,
+    /* fog_lut_buffer_ps: fog_lut_ps reading the depth's bits from an
+     * R32_UINT texture (RD_FOG_BUFFER, rd_fog_path.c) */
+    RD_FS_FOG_BUFFER,
     RD_FS_COUNT
 } RdFsId;
 
@@ -816,10 +880,10 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
 /* The depth fog: the draws of an RD_POST_FOG under state s, as
  * rd__plan_screen_draw plans a fullscreen sprite without a depth attachment
  * (fog_lut_ps does the Z test against the depth it reads), with fog_lut_ps
- * as the fragment shader. */
-int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
-/* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE);
- * appends to out[0..n). */
+ * as the fragment shader, or fog_lut_buffer_ps with buffer (RD_FOG_BUFFER). */
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int buffer, RdDrawPass out[2]);
+/* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE),
+ * with both fragment shaders; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* rd_replay.c: frees the fog's LUT texture (rd__gpu_shutdown); the fog samples
  * the depth target itself. */
@@ -998,6 +1062,15 @@ enum {
     RD_MISMATCH_COUNT
 };
 
+/* Why a keyed draw of cur stayed unmatched (RdInterpStats.unmatchedWhy) */
+enum {
+    RD_UNMATCHED_ABSENT = 0, /* the previous frame has no draw of its key, type and list */
+    RD_UNMATCHED_FEWER,      /* the previous frame drew the key fewer times, every one paired */
+    RD_UNMATCHED_UNPLACED,   /* left by the pairing by place while a previous draw stayed free */
+    RD_UNMATCHED_PAYLOAD,    /* its payload is out of the frame's range */
+    RD_UNMATCHED_COUNT
+};
+
 typedef struct RdInterpStats {
     uint32_t snap;     /* RD_SNAP_* of the frame */
     uint32_t keyed;    /* keyed draws in cur */
@@ -1019,13 +1092,39 @@ typedef struct RdInterpStats {
      * unkeyed) those re-based */
     uint32_t rebased;
     uint32_t rebasedCur;
+    /* lit draws whose previous tick's lights were put in the slots of the
+     * current tick's lights they pair with by direction; draws of a key
+     * drawn several times paired by their place in the world instead of
+     * their order (unpaired new instances included); grids sampling a
+     * target whose screen-space STs blended */
+    uint32_t lightPaired;
+    uint32_t placed;
+    uint32_t gridSt;
+    /* grids whose STs pool.c's formula (rd.h rd_grid_screen_st) computed
+     * through the blended camera instead */
+    uint32_t gridStCamera;
+    /* the unmatched draws (missing) by RD_UNMATCHED_*; draws of a key drawn
+     * several times paired with a free draw of another place (not the
+     * nearest of each other) and so drawn as the tick's (counted in jump) */
+    uint32_t unmatchedWhy[RD_UNMATCHED_COUNT];
+    uint32_t apart;
+    /* VU draws of the previous frame alone, their object and part not drawn
+     * in the current frame's list and outside its camera's picture: drawn
+     * through the blended camera (kept), or not drawn because they could
+     * not be placed, their state reached or their block re-based (held) */
+    uint32_t prevKept;
+    uint32_t prevHeld;
+    /* draws projected on the CPU by their tick's camera (RD_SCREEN_FRAME_CAMERA,
+     * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera */
+    uint32_t reprojected;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
  * 1): the 3 x 3 polar-decomposed into a rotation (slerped) and a stretch
  * (lerped); the image of pivot (x, y, z; NULL: the origin) lerped, so the
  * blended matrix turns about it.  False (o untouched) when either matrix
- * is not affine, is singular, or the two have opposite handedness. */
+ * is not affine, is singular, or the two have opposite handedness.
+ * rd_camera_blend.h rdcb_blend_affine, the turn kept for rd_interp.c. */
 bool rd__blend_affine(const double *p, const double *c, double t, const double *pivot, double *o);
 /* ICO_RD_S2_LEGACY=1 in the environment (a developer A/B switch, read
  * once) turns off the finer blending: rotation-aware blends, the blended
@@ -1040,6 +1139,21 @@ bool rd__s2_legacy(void);
 bool rd__vu_off_grid(void);
 
 int rd__interp_snap(const RdFrame *prev, const RdFrame *cur);
+/* The CPU-projected draws' re-projection onto the blended camera (on by
+ * default; rd_interp.c): off, they blend in screen space as before (the
+ * tests' and the replay tool's before/after switch). */
+void rd__interp_set_reproject(bool on);
+/* One vertex's ST by the RdGridSt formula kind (rd.h; pool.c's statements in
+ * double precision): m the grid's model to GS screen (VU qw 16..19), eye the
+ * camera's eye in the world (REFLECT), sx and sy the command's f[0] and
+ * f[1], pos the vertex and h its wave height (its ST's w).  False (out
+ * untouched) for kind NONE or an unknown one, a vertex at w 0 or a result
+ * that is not finite. */
+bool rd__grid_screen_st(uint8_t kind, const float (*m)[4], const double eye[3], float sx, float sy,
+                        const float pos[4], float h, float out[2]);
+/* rd_last_present_info's record for rd_end_frame's present of f
+ * (interpolation off; rd_interp.c) */
+void rd__note_frame_present(const RdFrame *f);
 const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float alpha,
                                 int firstOfTick, RdInterpStats *stats);
 void rd__interp_shutdown(void);
@@ -1053,8 +1167,9 @@ void rd__capture_finish(void);
 /* The thresholds (world units are the game's centimetres) */
 #define RD_INTERP_JUMP_WORLD 300.0f  /* an object's or bone's origin, per tick */
 #define RD_INTERP_JUMP_SCREEN 256.0f /* GS pixels: screen prims, shadows, grids, particles */
-#define RD_INTERP_CAMERA_MOVE 300.0f /* the eye, per tick */
-#define RD_INTERP_CAMERA_TURN 30.0f  /* degrees, per tick */
+/* RD_INTERP_CAMERA_MOVE and RD_INTERP_CAMERA_TURN, the camera's step and
+ * turn per tick past which the pictures snap: rd_camera_blend.h, which the
+ * game's cull shares */
 /* A model matrix or bone turning further than this in a tick (3600
  * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's */
 #define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
@@ -1083,8 +1198,12 @@ enum {
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
 /* The Enhanced filter's samplers, the same 16 with linear mips
- * (trilinear) and again with the device's anisotropy */
-#define RD_SAMPLER_SETS 3
+ * (trilinear) and again with the device's anisotropy; a fourth set with
+ * nearest mips for the GS's nearest-level mipmapping (DF_GS_LOD; the GS's
+ * linear-between-levels mipmapping takes the trilinear set) */
+#define RD_SAMPLER_SETS 4
+#define RD_SAMPLER_SET_MIP_LINEAR 1
+#define RD_SAMPLER_SET_MIP_NEAREST 3
 #define RD_SCRATCH_COUNT 6
 
 typedef struct RdScratch {
@@ -1121,6 +1240,16 @@ typedef struct RdContext {
      * ICO_RD_NO_DUAL or rd_set_no_dual) */
     RhiShader fsNoDual[RD_FS_COUNT];
     bool noDual;
+    /* The scene depth is read through a copy (rd__sampled_depth) and every
+     * pass keeps its stencil (loaded and stored), as up to v0.4.4: whenever
+     * the fog's depth path (fogPath) is not RD_FOG_INPLACE.  Off, the fog
+     * and the effects depth sample the depth target itself, and the stencil
+     * is kept inside the shadow window only. */
+    bool depthCopy;
+    /* RdFogPath: how the fog reads the depth (rd_fog_path.c): chosen at
+     * rd_init from the platform and the overrides, then by the fog's
+     * self-test (rd_fog_selftest) */
+    uint8_t fogPath;
     RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;
@@ -1144,6 +1273,16 @@ typedef struct RdContext {
      * into scene-class targets (1 in Original), the output aspect, and the
      * texture filter upgrade in force */
     float sceneSx, sceneSy, workScale, wideX, outAspect;
+    /* the scene scale the options asked for (rd__apply_display); sceneSx/Sy
+     * are what the targets were made at, lower when createNamedTargets had
+     * to fall back (sceneFellBack) */
+    float sceneReqSx, sceneReqSy;
+    bool sceneFellBack;
+    /* a scene-sized texture made after the named targets (a shadow count, a
+     * depth copy, a snapshot, the wrap accumulator) could not be allocated
+     * while the scene scale was above 1: rd_begin_frame then halves the
+     * scale (rd__note_scene_pressure) */
+    bool scenePressure;
     uint8_t filterUpgrade, fullHeight;
     int spaceOverride; /* rd_set_space_override + 1; 0 = none */
     uint32_t vsyncApplied;
@@ -1155,6 +1294,7 @@ typedef struct RdContext {
      * (rd_video.c), so rd_present leaves the output alone */
     uint32_t interpFloor;
     uint8_t cutPending, videoShown;
+    uint8_t freeCameraPending; /* rd_free_camera between frames */
     /* rd_set_mirror's flag (the run's mirror mode); the
      * effective mirror is this or settings.mirror (rd__mirror_on) */
     uint8_t mirrorRun;
@@ -1262,7 +1402,15 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present);
  * the replay), rd__perf_end closes it with the RhiStats deltas and queues it
  * for its GPU times, which rd__perf_collect_gpu attaches right after the
  * rhi_wait_frame RHI_FRAMES_IN_FLIGHT replays later.  rd__perf_stamp writes
- * timestamp i (RD_PERF_TS_*) into the replay's command list. */
+ * timestamp i (RD_PERF_TS_*) into the replay's command list.
+ *
+ * rd__perf_post(cl, post) says that the GPU work recorded from now on
+ * belongs to the picture effect post (RD_PERF_POST_*; -1: none, the scene
+ * or the present's own blits): when that changes, a timestamp from the
+ * indices above RD_PERF_TS_COUNT ends the time of the one before.  Every
+ * RD_PERF_TS_* stamp ends it too and starts the next stretch with none.
+ * When those indices run out the effect is not changed (the record says
+ * so: RdPerfRecord.gpuPostPartial). */
 enum {
     RD_PERF_TS_BEGIN = 0, /* after rhi_wait_frame, before the uploads */
     RD_PERF_TS_LISTS = 1, /* the uploads done, list 0 starts */
@@ -1277,6 +1425,10 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present);
 void rd__perf_collect_gpu(void);
 void rd__perf_end(void);
 void rd__perf_stamp(RhiCommandList cl, uint32_t index);
+void rd__perf_post(RhiCommandList cl, int post);
+/* the effect an RDC_POST_STUB of kind RdPostKind belongs to (RD_PERF_POST_*),
+   -1 for a kind that is none of them */
+int rd__perf_post_of_kind(uint32_t kind);
 /* rd_present's interpolation time, charged to the replay that follows */
 void rd__perf_interp_ms(double ms);
 void rd__perf_alpha(float alpha, int firstOfTick); /* the next replay is a present at alpha */
@@ -1291,6 +1443,17 @@ void rd__present_record(RhiCommandList cl);
 /* The presentation box of aspect (4:3: the Original integer
  * box) centred in outW x outH; rd_video.c's movie box is the 4:3 one. */
 void rd__present_box(uint32_t outW, uint32_t outH, float aspect, RhiRect *box);
+/* The reduction pass's border crop: columns at each side and rows of
+ * DISPLAY's gsH / 2 at the top and bottom (GsBase.c) that it leaves black.
+ * Shared with the presenter's deferred text, which keeps off that border
+ * unless full pixel is on (the reduction then draws the whole frame). */
+uint32_t rd__reduction_crop(uint32_t gsH);
+/* The widest aspect the presenter shows: ICO_ASPECT_MAX in
+ * port/game/video_options.h (4/3 times ICO_WIDE_X_MAX, the factor the
+ * water's dot window can be widened by).  Mirrored here because the
+ * renderer is built without the game's options module; rd_present_test
+ * checks the two are equal. */
+#define RD_ASPECT_MAX (4.0f / 3.0f * 5.0f)
 /* g_rd.settings -> g_rd.sceneSx/Sy, workScale, wideX,
  * outAspect, filterUpgrade, fullHeight (and the swapchain's vsync).  True
  * when a target scale changed (the caller recreates the named targets). */
@@ -1369,6 +1532,91 @@ RhiShader rd__make_shader(const char *name);
  * nothing pending on t, which is asserted; the replay's last endPass records
  * whatever is pending before its list ends. */
 void rd__transition(RhiCommandList cl, RhiTexture t, RhiState *cur, RhiState want);
+
+/* A copy of a target's depth for a pass to sample (g_rd.depthCopy) */
+typedef struct RdDepthCopy {
+    RhiTexture tex;
+    RhiState state;
+    uint32_t w, h;
+} RdDepthCopy;
+
+/* The texture a pass samples t's depth from (RHI_ASPECT_DEPTH), left in a
+ * sampled state, outside any pass: t's depth itself in
+ * RHI_STATE_DEPTH_READ, or with g_rd.depthCopy a whole copy of it in *copy
+ * (made or resized here) in RHI_STATE_SHADER_READ.  Id 0 when the copy
+ * cannot be made. */
+RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
+                             const char *name);
+void rd__depth_copy_free(RdDepthCopy *copy);
+/* Turns g_rd.depthCopy on (the fog's path RD_FOG_COPY; tests: the copy
+ * against the depth read in place, in one run). */
+void rd__force_depth_copy(void);
+
+/* ------------------------------------------------------- the fog's depth
+ * rd_fog_path.c.  The three ways the fog can read the scene depth: the
+ * depth target sampled in place, a whole copy of it sampled (vkCmdCopyImage
+ * into a second depth-stencil texture), or its depth aspect copied into a
+ * buffer and from there into an R32_UINT colour texture the fog reads as
+ * words (Vulkan only).  Every target depth is made with the sampled and the
+ * copy-source uses the device allows, so a switch needs no new targets. */
+typedef enum RdFogPath {
+    RD_FOG_INPLACE = 0,
+    RD_FOG_COPY = 1,
+    RD_FOG_BUFFER = 2,
+    RD_FOG_PATH_COUNT
+} RdFogPath;
+
+/* "inplace", "copy", "buffer" */
+const char *rd__fog_path_name(int path);
+/* The device can take the path (in place: a sampleable depth; buffer:
+ * the Vulkan backend). */
+bool rd__fog_path_supported(int path);
+/* Sets g_rd.fogPath, and g_rd.depthCopy with it (on unless in place). */
+void rd__set_fog_path(int path);
+/* rd_init, before the targets are made: the platform's path (in place on
+ * a desktop GPU; the copy on a tile-based GPU and on D24S8), or the one
+ * ICO_RD_FOG_PATH (inplace, copy, buffer) or ICO_RD_DEPTH_COPY (1 copy,
+ * 0 in place) names (ICO_RD_FOG_PATH=test names none: the self-test then
+ * tries every path, not only up to the first that passes); ICO_RD_FOG_SABOTAGE (a comma list of paths) makes
+ * those paths read a depth of 0, as a device that returns nothing would
+ * (tests).  Arms the probe. */
+void rd__fog_path_init(void);
+
+/* The texture the fog reads t's depth from, by g_rd.fogPath, left in a
+ * sampled state outside any pass; *state tracks it (the probe copies from
+ * it).  aspect is RHI_ASPECT_DEPTH, or RHI_ASPECT_COLOR for the buffer
+ * path's R32_UINT texture (buffer set).  False when it cannot be made. */
+typedef struct RdFogSource {
+    RhiTexture tex;
+    RhiState *state;
+    RhiViewAspect aspect;
+    uint8_t buffer;
+    uint8_t sabotaged; /* ICO_RD_FOG_SABOTAGE names the path: the shader reads 0 */
+} RdFogSource;
+
+bool rd__fog_source(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy, RdFogSource *out);
+/* The buffer path's buffer and texture (SCENE's caches: freed with them). */
+void rd__fog_buffer_free(void);
+
+/* The probe: on the first fogged replay after start and after the scene
+ * targets are made again at a new size, doFog asks rd__fog_probe_wanted
+ * and, after the fog's draw, rd__fog_probe_record copies five texels
+ * (centre, and the corners 8 pixels in) of the depth the fog read and of
+ * the fogged colour target into small textures; rd__fog_probe_finish (the
+ * next rd_begin_frame) reads them back and logs one line, "fog: probe".
+ * zid: the depth's target id (its GS Z scale). */
+bool rd__fog_probe_wanted(void);
+void rd__fog_probe_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
+                          const RdFogSource *src, RdTargetRec *tc);
+void rd__fog_probe_finish(void);
+/* Copies recorded and not read back yet (rd_begin_frame then calls
+ * rd__fog_probe_finish on the host). */
+bool rd__fog_probe_pending(void);
+/* rd_core.c, after the named targets were made again: a new SCENE size arms
+ * the probe and, once rd_fog_selftest has run, runs the self-test again. */
+void rd__fog_scene_remade(void);
+/* rd__gpu_shutdown: the probe's and the buffer path's objects. */
+void rd__fog_path_shutdown(void);
 
 /* A target clear the replay has not recorded yet
  * (rd_replay.c doClear): the next pass on the target takes it as its load op
@@ -1520,9 +1768,10 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * 5 RDC_OVERLAY_TEXT and RDC_SCREEN's RD_SCREEN_TEXT_QUADS; 6
  * RD_TARGET_FEED_HELD, a 17th fixed target; 7 RD_TEXEL_SHEET images, the
  * style in the view word; 8 RD_TARGET_DISPLAY_HELD, an 18th fixed target
- * (issue 28).  rd__dump_frame writes this version; rd__load_frame reads 3 to
- * it. */
-#define RD_DUMP_VERSION 8u
+ * (issue 28); 9 RdStateBlock.tex1Lod, RDC_FILTER's u[0] and an image's GS
+ * levels (RdTexRec.gsLevels) after its texels.  rd__dump_frame writes this
+ * version; rd__load_frame reads 3 to it. */
+#define RD_DUMP_VERSION 9u
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);
 
@@ -1534,7 +1783,10 @@ bool rd__load_frame(const char *path, RdFrame *out);
  *   rd__camera_at       the camera of command index in list of f: the innermost
  *                      rd_push_camera scope that holds it, else the frame camera
  *                      (NULL when the frame has none)
- *   rd__camera_scopes   the number of scopes recorded in f */
+ *   rd__camera_scopes   the number of scopes recorded in f
+ *   rd__frame_projected rd_frame_projected is on and no rd_push_camera scope
+ *                      is open: the draw recorded now gets
+ *                      RD_SCREEN_FRAME_CAMERA / RD_SHADOW_FRAME_CAMERA */
 typedef struct RdCameraScope {
     int32_t list;
     uint32_t start, end; /* command indices [start, end) of the list; end is
@@ -1544,8 +1796,12 @@ typedef struct RdCameraScope {
 
 void rd__water_frame_reset(const RdFrame *f);
 uint32_t rd__alias_of(uint32_t id);
+/* rd_grid_screen_st's formula and scales for the grid draw being recorded,
+ * and none for the draws after it (rd_mesh.c rd_draw_vu_grid) */
+void rd__grid_screen_st_take(uint8_t *kind, float *sx, float *sy);
 const RdCamera *rd__camera_at(const RdFrame *f, int list, uint32_t index);
 uint32_t rd__camera_scopes(const RdFrame *f, const RdCameraScope **scopes);
+bool rd__frame_projected(void);
 /* the pipelines of these files' screen-prim states that the screen families
  * leave out (rd__enumerate_reachable adds them) */
 uint32_t rd__enumerate_reachable_water(RdPipeKeyInt *out, uint32_t max, uint32_t n);

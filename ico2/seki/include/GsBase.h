@@ -52,5 +52,18 @@ int gsb_StageSetting(void);
 void gsb_PushView(void);
 void gsb_PopView(void);
 float gsb_ViewFocus(void);
+/* PC port (issue 29): the cull against the cameras of the blended
+   pictures.  RegistPacket.c says whether the part it culls next is locked
+   to the camera (node flag 2: culled against this tick's camera only);
+   gsb_HostCullViewsUsed is how many cameras the last gsb_ClipBox tested
+   (1, 2 or 3; the tests read it).  The windows that scale with the
+   picture's width: the water dots' (waterDot.c; ip the dot's GS position
+   in 1/16 pixels, pos its world position), the lines' x clip
+   (lineManager.c) and the shadow volumes' edge clip (Shadow.c). */
+void gsb_HostCullCameraLocked(int on);
+int gsb_HostCullViewsUsed(void);
+int gsb_HostDotVisible(const int *ip, const float *pos);
+float gsb_HostLineHalfWidth(void);
+float gsb_HostShadowClipX(void);
 
 #endif /* GSBASE_H */

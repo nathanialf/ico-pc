@@ -429,12 +429,16 @@ static RdTex texHostTexture(int id)
     RdTexImage draw;
     unsigned char clut2[1024];
     RdTexSampler smp;
+    RdTexImage ims[7];
     RdTex r;
     unsigned int gen;
     unsigned int mmin;
+    unsigned int tex1Lod;
     int lv;
     int tw;
     int th;
+    int mips;
+    int k;
 
     if (id < 0 || id >= texCount) {
         return (RdTex){0};
@@ -452,7 +456,26 @@ static RdTex texHostTexture(int id)
     if (lv >= t->levelNum || lv >= 7) {
         lv = 0;
     }
+    /* a TEX1 that asks for mipmapping (MMIN 2..5, MXL above 0) samples the
+       TIM2's own levels after the drawn one at the GS's level by distance,
+       so they are decoded too; the top bit of the generation keeps the two
+       kinds of entry apart, so a TEX1 that changes its mind
+       (tex_RemakeRegistersSampleMin) decodes the texture again */
+    tex1Lod = rd_tex1_lod((unsigned long long)t->pkt.tex1.data);
+    mips = 1;
+    if (rd_tex1_mipmapped(tex1Lod)) {
+        mips = t->levelNum - lv;
+        if (mips > 7 - lv) {
+            mips = 7 - lv;
+        }
+        if (mips < 1) {
+            mips = 1;
+        }
+    }
     gen = texHost.serial[id] * 8 + (unsigned int)lv;
+    if (mips > 1) {
+        gen |= 0x80000000u;
+    }
     r = rdtex_find((unsigned int)id, gen, RDTEX_TEXA_REPLAY);
     if (r.id != 0) {
         return r;
@@ -483,6 +506,7 @@ static RdTex texHostTexture(int id)
     smp.min = mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST;
     smp.wrapS = RD_WRAP_REPEAT;
     smp.wrapT = RD_WRAP_REPEAT;
+    smp.tex1Lod = tex1Lod;
     /* v0.4.2: the characters' colours decode from a recoloured copy of the
        CLUT (appearance.h); rdtex_store decodes before it returns
        (rd_tex.c rdtex_store -> rdtex_decode), so the copy on the stack
@@ -493,7 +517,24 @@ static RdTex texHostTexture(int id)
     if (im.clut != 0 && ico_appearance_recolour(t->name, im.clut, im.clutColors, im.cpsm, clut2)) {
         draw.clut = clut2;
     }
-    r = rdtex_store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &draw, &smp, t->name);
+    if (mips > 1) {
+        /* the further levels: each half the one before, the same CLUT */
+        ims[0] = draw;
+        for (k = 1; k < mips; k++) {
+            if (t->lv[lv + k].addr == 0 || (t->pic.imageWidth >> (lv + k)) == 0 ||
+                (t->pic.imageHeight >> (lv + k)) == 0) {
+                break;
+            }
+            ims[k] = draw;
+            ims[k].w = (unsigned int)(t->pic.imageWidth >> (lv + k));
+            ims[k].h = (unsigned int)(t->pic.imageHeight >> (lv + k));
+            ims[k].pixels = (char *)t->lv[lv + k].addr + 32;
+        }
+        r = rdtex_store_levels((unsigned int)id, gen, RDTEX_TEXA_REPLAY, ims, (unsigned int)k, &smp,
+                               t->name);
+    } else {
+        r = rdtex_store((unsigned int)id, gen, RDTEX_TEXA_REPLAY, &draw, &smp, t->name);
+    }
     if (r.id != 0) {
         RdTex now;
 

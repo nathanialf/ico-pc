@@ -15,7 +15,10 @@
  *   13 x     u32 count, RdCmd[count]
  *   u32      payload size, payload bytes
  *   u32      texture count; per texture: u32 id, kind, src, bakedTexa, w, h,
- *            target, view; then the texels for images.  An image has no
+ *            target, view; then the texels for images (version 9: then u32
+ *            levels, 1 or the GS levels' count, and with more than 1 the
+ *            levels after the base, RGBA8, each half the one before:
+ *            RdTexRec.gsChain).  An image has no
  *            view: its view word holds the texel format (RD_TEXEL_*;
  *            0 RGBA8 in the dumps from before R8 images), and its texels
  *            are w*h*4 RGBA8 bytes or w*h R8 bytes.  Version 7: a sheet
@@ -33,6 +36,18 @@
  *   slots start one later; an older dump's temps start at low half 17)
  *   (version 8: RD_TARGET_DISPLAY_HELD appended, the same again; a
  *   version 6 or 7 dump's temps start at low half 18)
+ *   (RDC_MESH's b[4], RD_VU_VIEW_*, rd_mesh.h: 0 in the dumps from before
+ *   it, which the interpolation takes for a part placed through the view,
+ *   as it always did; the version is unchanged)
+ *   (RDC_SCREEN's b[4] RD_SCREEN_FRAME_CAMERA and RDC_SHADOW_STRIP's b[1]
+ *   RD_SHADOW_FRAME_CAMERA, rd_internal.h: 0 in the dumps from before them,
+ *   whose CPU-projected draws the interpolation blends in screen space as
+ *   it did; the version is unchanged)
+ *   (RdCamera.freeCamera, photo mode's free camera: the byte was padding,
+ *   0 in the dumps from before it; the version is unchanged)
+ *   (RDC_GRID's b[5], f[0] and f[1], rd.h rd_grid_screen_st: 0 in the dumps
+ *   from before them, whose pool grids blend their STs as they always did;
+ *   the version is unchanged)
  *   u32      VU mesh count (from version 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
@@ -220,6 +235,7 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
                 ok = wraw(fp, zero, n);
                 left -= n;
             }
+            ok = ok && w32(fp, 1); /* one level */
             continue;
         }
         ok = w32(fp, texs.ids[i]) && w32(fp, t->kind) && w32(fp, t->src) &&
@@ -227,6 +243,10 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
              w32(fp, t->target) && w32(fp, image ? sheetView(t) : t->view);
         if (ok && image) {
             ok = wraw(fp, t->pixels, (size_t)t->w * t->h * rd__texel_bytes(t->format));
+            /* version 9: the GS levels (RdTexRec.gsLevels), 1 for none */
+            const uint32_t nl = t->gsLevels > 1 && t->gsChain ? t->gsLevels : 1u;
+            ok = ok && w32(fp, nl) &&
+                 (nl < 2 || wraw(fp, t->gsChain, rd__gs_chain_bytes(t->w, t->h, nl)));
         }
     }
     uint32_t nr = 0;
@@ -421,11 +441,15 @@ bool rd__load_frame(const char *path, RdFrame *out)
     char magic[8];
     uint32_t ver = 0, szCmd = 0, szState = 0, szVtx = 0;
     /* version 3 (before RDC_AA1 and RdStateBlock.aa1) loads with
-     * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes */
+     * AA1 off; its state blocks are the first RD_STATE_BLOCK_V3_SIZE bytes.
+     * Versions 4 to 8 (before RdStateBlock.tex1Lod) load without TEX1's
+     * mipmap fields and their textures without GS levels: level 0, as they
+     * were drawn */
+    const uint32_t wantState[] = {RD_STATE_BLOCK_V3_SIZE, RD_STATE_BLOCK_V8_SIZE,
+                                  (uint32_t)sizeof(RdStateBlock)};
     bool ok = rraw(fp, magic, 8) && memcmp(magic, RD_DUMP_MAGIC, 8) == 0 && r32(fp, &ver) &&
               ver >= 3u && ver <= RD_DUMP_VERSION && r32(fp, &szCmd) && szCmd == sizeof(RdCmd) &&
-              r32(fp, &szState) &&
-              szState == (ver == 3u ? RD_STATE_BLOCK_V3_SIZE : sizeof(RdStateBlock)) &&
+              r32(fp, &szState) && szState == wantState[ver == 3u ? 0 : (ver <= 8u ? 1 : 2)] &&
               r32(fp, &szVtx) && szVtx == sizeof(RdScreenVtx);
     if (!ok) {
         rd__log("load: %s is not an rd dump of version 3 to %u", path, RD_DUMP_VERSION);
@@ -490,8 +514,22 @@ bool rd__load_frame(const char *path, RdFrame *out)
             const size_t bytes = (size_t)h.w * h.h * rd__texel_bytes(fmt);
             uint8_t *px = ok ? malloc(bytes) : NULL;
             ok = px && rraw(fp, px, bytes);
+            /* version 9: the GS levels after the texels (1: none) */
+            uint32_t nl = 1;
+            uint8_t *chain = NULL;
+            if (ok && ver >= 9u) {
+                ok = r32(fp, &nl) && nl >= 1u && nl <= 16u && (nl < 2 || fmt == RD_TEXEL_RGBA8);
+                if (ok && nl > 1) {
+                    const size_t cb = rd__gs_chain_bytes(h.w, h.h, nl);
+                    chain = malloc(cb);
+                    ok = chain && rraw(fp, chain, cb);
+                }
+            }
             if (ok) {
                 RdTex t = rd__create_texture_fmt(h.w, h.h, px, fmt, (RdTexSrc)h.src, "dump");
+                if (nl > 1) {
+                    rd__tex_set_levels(t, chain, nl);
+                }
                 RdTexRec *tr = rd__tex_rec(t.id);
                 if (tr) {
                     tr->bakedTexa = (uint8_t)h.bakedTexa;
@@ -511,6 +549,7 @@ bool rd__load_frame(const char *path, RdFrame *out)
                 texMap.to[texMap.n++] = t.id;
             }
             free(px);
+            free(chain);
         } else {
             views[nViews++] = h;
         }

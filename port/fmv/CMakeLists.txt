@@ -133,6 +133,18 @@ target_link_libraries(fmv_test PRIVATE ico_fmv)
 if(ICO_RUN_TESTS)
     add_test(NAME fmv COMMAND fmv_test "${ICO_DISC_IMAGE}")
 endif()
+# The disc's movies field by field (scan headers, line-difference and comb
+# measures of the first pictures): a report, skipped without the image.
+# field_match.c (inverse telecine) is the report's alone: the player does
+# not use it.
+add_executable(fmv_fields_test test/fmv_fields_test.c field_match.c)
+target_include_directories(fmv_fields_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(fmv_fields_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(fmv_fields_test PRIVATE ico_fmv)
+if(ICO_RUN_TESTS)
+    add_test(NAME fmv_fields COMMAND fmv_fields_test "${ICO_DISC_IMAGE}")
+    set_tests_properties(fmv_fields PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # The YUV blit on the GPU (port/render/rd_video.c): rd's headless device
 # (lavapipe in the container), as port/render's own tests run.

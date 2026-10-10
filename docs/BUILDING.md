@@ -34,9 +34,9 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 
 | directory | what | from |
 | --- | --- | --- |
-| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned |
-| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
-| `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz`, SHA-256 pinned |
+| `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned (not fetched on an arm64 host unless `SKIP_LLVM_MINGW=0`, which takes the pinned `-aarch64` build) |
+| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+| `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz` (`-linux-aarch64` on an arm64 host), SHA-256 pinned |
 | `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, libmpeg2 and libchdr | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
 The pins the fetch scripts share (the SDL3 version and its SHA-256,
@@ -51,6 +51,65 @@ lists its other overrides. The toolchain files take `ICO_LLVM_MINGW` and
 The Linux presets use the host's gcc 14 and glibc. Ninja comes from
 `.venv/bin` (`tools/requirements.txt`) or the `PATH`. Any CMake 3.25 or later
 on the `PATH` works in place of the pinned one.
+
+The host is x86-64 or arm64 (aarch64) Linux; `tools/fetch_common.sh` names it
+(`ICO_HOST_ARCH`) and picks the pin of each pair. An arm64 host is described
+under ["Linux arm64"](#linux-arm64).
+
+## Linux arm64
+
+The `linux-arm64` preset builds on an arm64 Linux host with its own gcc 14
+(no cross toolchain): a Raspberry Pi 5 class machine, an arm64 container
+(`docker run --platform linux/arm64 ubuntu:24.04`, native on Apple silicon,
+under qemu-user elsewhere) or GitHub's `ubuntu-24.04-arm` runner. The program
+needs the glibc of its build host or newer, so build on the oldest system the
+package must run on (Ubuntu 24.04 is glibc 2.39). Besides the quickstart's
+packages it needs the Wayland and KMSDRM headers and `wayland-scanner`:
+
+```sh
+sudo apt-get install build-essential gcc-14 g++ git curl xz-utils python3 python3-venv \
+    libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev \
+    libxfixes-dev libxrender-dev libasound2-dev libpulse-dev \
+    libwayland-dev wayland-protocols libxkbcommon-dev libdecor-0-dev \
+    libdrm-dev libgbm-dev libegl-dev
+python3 -m venv .venv && .venv/bin/pip install -r tools/requirements.txt
+tools/fetch_toolchain.sh          # builds DXC from source: a few minutes
+CMAKE=tools/toolchain/cmake/bin
+$CMAKE/cmake --preset linux-arm64 -DCMAKE_C_COMPILER=gcc-14
+$CMAKE/cmake --build --preset linux-arm64
+$CMAKE/ctest --preset linux-arm64
+```
+
+Use a separate clone for an arm64 host or container, not the checkout an
+x86-64 host uses: `tools/toolchain/`, `.venv/` and `build-host/` hold
+programs for the machine that made them, and `tools/fetch_toolchain.sh` on
+one architecture replaces the other's CMake and DXC in place.
+
+What differs from an x86-64 host:
+
+- `tools/fetch_toolchain.sh` takes the aarch64 build of the same CMake
+  release and leaves out `llvm-mingw/` and `mingw-gcc/`: the presets that
+  use them (`win-x64`, `win-x64-clang`, `linux-x64-clang`) build for x86-64
+  and are for x86-64 hosts, and mingw-gcc's Debian packages are amd64
+  programs. `SKIP_LLVM_MINGW=0` and `SKIP_MINGW_GCC=0` fetch them anyway.
+- `tools/fetch_deps.sh` builds SDL3 into `deps/sdl3/linux-arm64/` with the
+  Wayland and KMSDRM video backends as well as X11 (it stops when SDL's
+  configure leaves either out), writes the Wayland protocol files' notices
+  beside it for the package's `NOTICES.txt`, and takes the arm64 builds of
+  the pinned Debian packages (the X11 and audio headers when the host has
+  none, the validation layer). SDL picks the backend at run time. Wayland
+  is reported working on one handheld (Sway on ROCKNIX); KMSDRM, with no
+  desktop at all, is untested.
+- Microsoft publishes no aarch64 Linux DXC, so `tools/fetch_deps.sh` builds
+  the pinned release's tag from source (the commit id and the SHA-256 of its
+  `git archive` checked, as libmpeg2's and libchdr's, and the same two checks
+  on each of its three submodules) into `deps/dxc/` with the
+  host's g++: a few minutes on 8 cores. It builds the `dxc` program and
+  `libdxcompiler.so` only; there is no `libdxil.so`, and the arm64 preset
+  compiles no DXIL (`ICO_SHADERS_DXIL=OFF`).
+- The preset is the window build with the program linked, Vulkan only
+  (`ICO_RHI_D3D12=OFF`), as `android-arm64`. The movie decoder uses
+  libmpeg2's NEON routines, as on Android.
 
 ## Android: `tools/fetch_android.sh`
 
@@ -149,7 +208,13 @@ access, then launch ICO. A PAL `Ico_PAL.iso` or `Ico_PAL.chd` in that folder
 can also be extracted on first launch. Game data is not included in the IPA.
 Settings, saves and logs also live in Documents. The app uses the existing
 touch controls and controller input, runs fullscreen in landscape, and
-pauses audio/rendering while in the background.
+pauses audio/rendering while in the background. iOS uses the existing mobile
+defaults: a 60 FPS cap and adaptive resolution for the Enhanced preset.
+Selecting a fixed resolution such as 2× keeps that resolution; choose
+Auto to let the existing GPU-cost controller lower it when necessary.
+At 2× the scene contains roughly four times the pixels of 1×. For a
+performance report, enable `[dev] perf_log = true` in `ico-pc.ini` and
+include `logs/ico-pc-perf.csv` along with the normal log.
 
 The wrapper uses SDL's UIKit entry point and a guarded 32 MB coroutine
 stack on the main thread. Shared game angle conversions explicitly go
@@ -177,15 +242,16 @@ how several configurations of one preset live side by side under
 | `asan` | Linux x86-64, `-fsanitize=address,undefined`, `-O1` | host gcc 14 |
 | `fptrap` | `linux-x64` with float divide-by-zero and invalid unmasked in the simulation | host gcc 14 |
 | `linux-x64-clang`, `win-x64-clang` | the same two targets, headless | llvm-mingw clang 23 (the host glibc for Linux) |
+| `linux-arm64` | Linux arm64 (aarch64), built on an arm64 host ([below](#linux-arm64)); window build, `ICO_LINK_EXE=ON`, no Direct3D 12 and no DXIL shaders | host gcc 14 |
 | `android-arm64` | Android arm64-v8a, `libmain.so` alone: a compile check without Gradle (`tools/fetch_android.sh` first); window build, `ICO_LINK_EXE=ON`, no Direct3D 12 and no DXIL shaders | NDK clang |
 
-The port targets x86-64 (Windows and Linux) and arm64 (Android).
+The port targets x86-64 (Windows and Linux) and arm64 (Linux and Android).
 
 ### Options
 
 | cache variable | default | effect |
 | --- | --- | --- |
-| `ICO_HEADLESS` | `ON` on every preset except `win-x64` and `android-arm64` | `OFF` is the window build: the game draws through `port/render` (`ICO_RD=1`) into an SDL3 window. `ON` is the headless build for trace and test runs: no window and no renderer, `ICO_HEADLESS=1`. Both compile the same game sources |
+| `ICO_HEADLESS` | `ON` on every preset except `win-x64`, `linux-arm64` and `android-arm64` | `OFF` is the window build: the game draws through `port/render` (`ICO_RD=1`) into an SDL3 window. `ON` is the headless build for trace and test runs: no window and no renderer, `ICO_HEADLESS=1`. Both compile the same game sources |
 | `ICO_LINK_EXE` | `OFF` | links `ico_pc` (`port/platform/main_host.c`), the game's program. Without it only the libraries and the tests are built |
 | `ICO_STRICT_WARNINGS` | `OFF` | makes `-Wreturn-type`, `-Wimplicit-function-declaration` and `-Wstrict-prototypes` errors. While it is off, the C89-era diagnostics that modern compilers make errors by default (implicit declarations and int, int/pointer conversions, incompatible pointers, return mismatches) are warnings |
 | `ICO_BUILD_BLOCKED` | `OFF` | also compiles the sources `cmake/IcoExclusions.cmake` leaves out (the list is empty today; it is the place to park a game source that stops compiling) |
@@ -450,12 +516,14 @@ set). On a device, the log is mirrored to logcat: `adb logcat -s ico-pc`.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every push and pull request: two Linux
-jobs (`ubuntu-24.04`) and the `android` job side by side, no secrets, no disc
-image. `linux` runs the steps below in order; `extra` is a matrix of three
-runners, each with the same host packages, venv and (restored, never saved)
-toolchain cache, that builds one more preset; `android` is described after
-the table.
+`.github/workflows/ci.yml` runs on every push to main, every pull request and
+every pushed `v*` tag (which also packages for arm64, see
+[Packages](#packages)): two Linux
+jobs (`ubuntu-24.04`), the `linux-arm64` job (`ubuntu-24.04-arm`) and the
+`android` job side by side, no secrets, no disc image. `linux` runs the steps
+below in order; `extra` is a matrix of three runners, each with the same host
+packages, venv and (restored, never saved) toolchain cache, that builds one
+more preset; `linux-arm64` and `android` are described after the table.
 
 | step | what |
 | --- | --- |
@@ -474,6 +542,25 @@ the table.
 | `extra`: `asan` | AddressSanitizer + UBSan (Debug, `-O1`), headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `extra`: `fptrap` | float divide-by-zero and invalid trap, headless with `-DICO_LINK_EXE=ON`, build, `ctest` |
 | `extra`: `win-x64-clang` | cross-compile the window build (`-DICO_HEADLESS=OFF`) with llvm-mingw clang; `ico_pc.exe` and `SDL3.dll` must exist |
+
+The `linux-arm64` job builds the `linux-arm64` preset on GitHub's arm64
+runner and runs its tests, with its own toolchain cache
+(`toolchain-arm64-...`, the same four scripts; a cold fetch builds DXC from
+source) that it saves. Its host packages are `linux`'s plus the Wayland and
+KMSDRM headers, `g++` and `git` ([Linux arm64](#linux-arm64)). The hygiene
+checks are `linux`'s alone. The gating `ctest` leaves out the render tests
+that compare filtered pixels with a tolerance of 1 or 2 (`rd_pixel`,
+`rd_gsbase`, `rd_present`, `rd_crt` and every variant of them, such as
+`rd_present_depth_copy` and the `_nodual`, `_minlimits` and `_mali` runs, and
+`rd_replay_tool` and `rd_replay_tool_list`, which need `rd_pixel`'s dump):
+lavapipe on an arm64 host filters a step differently from lavapipe on
+x86-64 and misses them by an LSB or two. A second step runs those tests
+alone and does not gate (`continue-on-error`), so their output is still in
+the log. The rest gate as on `linux`: `fog_lut` runs natively,
+`fog_lut_arm64` skips (it looks for an x86-64 NDK and qemu), and the tests
+that need the disc or saved frames (`shadow_spawn`, `fmv_fields`,
+`rd_boot_present`, `rd_fog_depth_copy_dump`) skip. On an Adreno 650 (Turnip)
+all of the left-out tests but `rd_pixel`'s sheet-magnification check pass.
 
 The `android` job (90 minutes at most) builds the debug APK and checks its
 structure; the game is not run:
@@ -498,6 +585,37 @@ Run the same steps locally before pushing.
 the packages for HEAD in a clean worktree (`dist/ico-pc-<label>-win.zip`,
 `dist/ico-pc-<label>-linux.tar.gz`). Neither contains game data; both carry
 the README, the player guides, the licence files and the save importer.
+`tools/package_linux.sh` packages for the host's architecture: on an arm64
+host it builds `linux-arm64` into `dist/ico-pc-<label>-linux-arm64.tar.gz`
+(stage `dist/stage/linux-arm64/`, log `build-host/pkg-linux-arm64-<label>.log`),
+the same contents with the aarch64 program and SDL3 (and, in
+`NOTICES.txt`, the notices of the Wayland protocol files SDL3 is built
+with). On either architecture it fails when a shipped binary (`ico_pc`,
+`tools/mc_import`, `libSDL3.so.0`) needs a glibc symbol version newer than
+2.39, Ubuntu 24.04's and the oldest system the README names; the log has
+each binary's newest.
+
+The release's arm64 archive is built by CI, since the maintainer's machine
+is x86-64. Pushing a `v*` tag runs `ci.yml`, and its `linux-arm64` job,
+once its gating tests pass, runs `tools/package_linux.sh <tag>` and uploads
+the archive, its `.sha256` and the packaging log as the artifact
+`ico-pc-<tag>-linux-arm64` (kept 30 days). Pull requests and pushes to main
+never package. To fetch it (the artifact keeps the `dist/` and
+`build-host/` folders):
+
+```sh
+gh run list --workflow ci.yml --branch <tag> --limit 1     # the tag's run id
+gh run download <run-id> -n ico-pc-<tag>-linux-arm64 -D build-host/tmp/ci-arm64
+mv build-host/tmp/ci-arm64/dist/ico-pc-<tag>-linux-arm64.tar.gz* dist/
+(cd dist && sha256sum -c ico-pc-<tag>-linux-arm64.tar.gz.sha256)
+tar -xzOf dist/ico-pc-<tag>-linux-arm64.tar.gz ico-pc-<tag>/VERSION.txt  # the tag's commit
+```
+
+Ask someone with an arm64 handheld to try that archive before attaching it
+to the release (first start from a disc image, play, sound, gamepad,
+quit). Its `ico_pc.map` symbolizes aarch64 crash addresses with a
+symbolizer that reads aarch64, such as llvm-mingw's `llvm-symbolizer` or
+`llvm-addr2line` on the x86-64 host.
 The three package scripts share `tools/package_common_lib.sh` (the label
 check, the log, `fail` and `run`, and the clean worktree with the
 `ICO_PKG_FILES` overlay); the guides and the package's `ico-pc.ini` (its

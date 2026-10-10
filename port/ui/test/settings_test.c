@@ -42,6 +42,7 @@ static void testBuild(void)
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
     static const int fxStrs[] = {UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
@@ -51,6 +52,7 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
+                                 UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_EFFECTS,
@@ -113,7 +115,7 @@ static void testBuild(void)
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 13), "main page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 9), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
     {
         /* Characters (a link) before Back */
         static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC, UI_OPT_EXTRAS_MODELS,
@@ -747,7 +749,8 @@ static void testNavigation(void)
     frame(0);
     IcoBindings *b = ico_input_live_bindings();
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K && b->kb[ICO_T_CROSS][1] == 0, "Cross is K");
-    CHECK(b->kb[ICO_T_RSTICK_DOWN][0] == 0, "K is off the right stick");
+    CHECK(b->kb[ICO_T_RSTICK_DOWN][0] == ICO_KEY_SPACE && b->kb[ICO_T_RSTICK_DOWN][1] == 0,
+          "K and Space swap: the right stick takes Space");
     frame(0);
     frame(0);
     frame(0);
@@ -763,8 +766,8 @@ static void testNavigation(void)
     press(0x10); /* back to Controls: the bindings are written */
     CHECK(settle(ctlL, 60), "Triangle: Controls");
     CHECK(strcmp(ico_config_get_string("input.kb.cross", ""), "K") == 0, "input.kb.cross = K");
-    CHECK(strcmp(ico_config_get_string("input.kb.rstick_down", ""), "none") == 0,
-          "input.kb.rstick_down = none");
+    CHECK(strcmp(ico_config_get_string("input.kb.rstick_down", ""), "Space") == 0,
+          "input.kb.rstick_down = Space");
     CHECK(ico_config_get_string("input.kb.circle", NULL) == NULL, "unchanged rows not written");
     ico_input_reload_bindings(b);
     CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_K, "reloaded from the config");
@@ -1484,7 +1487,7 @@ static void testValues(void)
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    /* Auto after 4x (Left from Window wraps to it) */
+    /* Auto, past the last scale (Left from Window wraps to it) */
     CHECK(o.resScale == ICO_RES_AUTO &&
               strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "Auto") == 0,
           "resolution wraps to Auto (%s)", ui_settings_value_text(UI_OPT_RESOLUTION));
@@ -1494,8 +1497,14 @@ static void testValues(void)
     ico_video_set_auto_scale(0);
     ui_settings_step(UI_OPT_RESOLUTION, -1);
     ico_video_get(&o);
-    CHECK(o.resScale == 4, "resolution: Left from Auto is 4x");
-    /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9 */
+    CHECK(o.resScale == 16, "resolution: Left from Auto is 16x");
+    /* 12x, 8x, 6x, 4x: the CRT block below expects 4x */
+    for (int i = 0; i < 4; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, -1);
+    }
+    ico_video_get(&o);
+    CHECK(o.resScale == 4, "resolution: four Lefts reach 4x (%d)", o.resScale);
+    /* Enhanced's aspect is Auto: Right wraps to 4:3, then 16:10, 16:9, 21:9, 32:9, 48:9 */
     ui_settings_step(UI_OPT_ASPECT, 1);
     ui_settings_step(UI_OPT_ASPECT, 1);
     ui_settings_step(UI_OPT_ASPECT, 1);
@@ -1510,6 +1519,10 @@ static void testValues(void)
     ico_video_get(&o);
     CHECK(o.aspect == ICO_ASPECT_32_9 && strstr(ui_settings_value_text(UI_OPT_ASPECT), "32:9"),
           "aspect 32:9");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9 && strstr(ui_settings_value_text(UI_OPT_ASPECT), "48:9"),
+          "aspect 48:9");
     ui_settings_step(UI_OPT_ASPECT, 1);
     CHECK(strstr(ui_settings_value_text(UI_OPT_ASPECT), "Auto") != NULL, "aspect Auto");
     /* Enhanced's filter is anisotropic, its height full */
@@ -1594,8 +1607,7 @@ static void testValues(void)
               ui_settings_value_text(UI_OPT_RESOLUTION));
         ui_settings_step(UI_OPT_RESOLUTION, 1);
         ico_video_get(&o);
-        CHECK(o.resScale == ICO_RES_AUTO, "resolution steps again with the filter off (%d)",
-              o.resScale);
+        CHECK(o.resScale == 6, "resolution steps again with the filter off (%d)", o.resScale);
         ui_settings_step(UI_OPT_RESOLUTION, -1);
         ui_settings_step(UI_OPT_CRT, -1); /* Shadow mask */
         ui_settings_step(UI_OPT_CRT, -1); /* PVM */
@@ -1883,7 +1895,7 @@ static void testCapture(void)
     CHECK(ui_remap_capture_step(&c, &b) == UI_CAPTURE_WAITING, "waiting");
     ico_input_note_press(ICO_SRC_PAD, ICO_GP_SOUTH);
     CHECK(ui_remap_capture_step(&c, &b) == UI_CAPTURE_BOUND && !c.active, "bound");
-    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b.gp[ICO_T_CROSS][0] == 0,
+    CHECK(b.gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b.gp[ICO_T_CROSS][0] == ICO_GP_NORTH,
           "south moves from Cross to Triangle");
     CHECK(b.kb[ICO_T_TRIANGLE][0] == ICO_KEY_R, "the keyboard row is kept");
     CHECK(c.cooldown == UI_REMAP_COOLDOWN_TICKS, "cooldown");

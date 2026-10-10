@@ -98,6 +98,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crt.c # the CRT filter at present time
     rd_dump.c
+    rd_fog_path.c # how the fog reads the depth: the paths, the probe, the self-test
     rd_frame.c
     rd_interp.c # interpolation between the retained frames
     rd_mesh.c
@@ -241,6 +242,28 @@ target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 
+# gsb_cull_test: the game's cull against the cameras of the blended
+# pictures (GsBase.c gsb_ClipBox, issue 29) and the windows that scale with
+# the picture's width (the water dots, the lines, the shadow volumes).
+# GsBase.c as rd_present_test has it, with the display options; synthetic
+# cameras a tick apart (moves to 300 units, turns to 30 degrees) at three
+# widths: a box an in-between picture shows is never culled.  Records
+# only: no device.
+add_executable(gsb_cull_test test/gsb_cull_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(gsb_cull_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(gsb_cull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(gsb_cull_test PRIVATE ico_render ico_math ico_options)
+
 # rd_crt_test: the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
 # a device the presents: off is rd_present's bytes, each mode's recorded hash,
@@ -285,6 +308,21 @@ add_executable(rd_perf_test test/rd_perf_test.c)
 target_compile_options(rd_perf_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_perf_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_perf_test PRIVATE ico_render)
+
+# rd_boot_present_test: a saved start-up (rd-NNNNN.rddump, dump_every=1)
+# through the window's present path in order, several presents a tick, each
+# read back: the frames before the first sign must present black, and draw
+# no scenery (keep frames).  The dump folder is ICO_BOOT_DUMP_DIR (or the
+# ICO_BOOT_DUMPS environment variable); skipped without it, as in CI.  A
+# start-up dumped before the card check kept its frames to the first sign
+# (v0.4.5 and older: frames 118 to 120 draw stage 1) needs ICO_BOOT_DUMP_OLD
+# (the test's ICO_BOOT_OLD=1).
+set(ICO_BOOT_DUMP_DIR "" CACHE PATH "A start-up's frame dumps for rd_boot_present_test")
+option(ICO_BOOT_DUMP_OLD "ICO_BOOT_DUMP_DIR is a start-up from v0.4.5 or older" OFF)
+add_executable(rd_boot_present_test test/rd_boot_present_test.c)
+target_compile_options(rd_boot_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_boot_present_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_boot_present_test PRIVATE ico_render)
 
 # rd_mesh_test: the mesh path.  Packet.c, RegistPacket.c,
 # MicroCode.c, DisplayP2O.c and Primitive.c with the 2D layer and Matrix.c,
@@ -376,6 +414,29 @@ target_compile_definitions(rd_fog_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_fog_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_fog_test PRIVATE ico_render ico_math)
+
+# rd_fog_selftest_test: the fog's self-test and probe (rd_fog_path.c) on a
+# wide, scaled scene: the path it picks, a fog frame recorded through the
+# renderer's calls fogged and probed, and both again at a new scene size
+# (the log lines are matched by test/rd_fog_selftest.cmake).
+add_executable(rd_fog_selftest_test test/rd_fog_selftest_test.c)
+target_compile_options(rd_fog_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_fog_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_fog_selftest_test PRIVATE ico_render)
+
+# fog_lut_test: the depth fog's game side alone, ZFog.c with the renderer
+# calls stubbed: the fog tables and sprites of three player dumps byte for
+# byte, and a sweep of the stage parameters against the integer formula.
+# tools/fog_arm64_diff.sh builds the same program for arm64 (the Android
+# build's compiler and flags), runs it under qemu-aarch64 and compares its
+# output with this build's (77 without an NDK or qemu).
+add_executable(fog_lut_test test/fog_lut_test.c "${CMAKE_SOURCE_DIR}/ico2/seki/src/ZFog.c")
+target_include_directories(fog_lut_test PRIVATE ${_ico_seki_incs} "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi")
+target_compile_definitions(fog_lut_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(fog_lut_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
 
 # rd_blur_test: the full-screen effects of staticBlur.c.
 # staticBlur.c with the 2D layer and Matrix.c, as the window build has
@@ -523,9 +584,9 @@ target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
-                  rd_shadow_test rd_fog_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
+                  rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_mip_test
-                  rd_perf_test rd_crt_test texpack_load_test)
+                  rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -543,6 +604,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME gsb_cull COMMAND gsb_cull_test)
     add_test(NAME rd_mesh COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME modelpack COMMAND modelpack_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -551,6 +613,17 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_shadow PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_fog COMMAND rd_fog_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_fog PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME fog_lut COMMAND fog_lut_test)
+    if(CMAKE_HOST_UNIX AND NOT CMAKE_CROSSCOMPILING)
+        find_program(ICO_QEMU_AARCH64 qemu-aarch64)
+        add_test(NAME fog_lut_arm64
+                 COMMAND "${CMAKE_SOURCE_DIR}/tools/fog_arm64_diff.sh" $<TARGET_FILE:fog_lut_test>
+                         "${CMAKE_CURRENT_BINARY_DIR}/fog-arm64")
+        set_tests_properties(fog_lut_arm64 PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+        if(ICO_QEMU_AARCH64)
+            set_tests_properties(fog_lut_arm64 PROPERTIES ENVIRONMENT "QEMU=${ICO_QEMU_AARCH64}")
+        endif()
+    endif()
     add_test(NAME rd_blur COMMAND rd_blur_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_blur PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
     set_tests_properties(rd_pixel PROPERTIES SKIP_RETURN_CODE 77 FIXTURES_SETUP rd_dump)
@@ -582,6 +655,11 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_boot_present COMMAND rd_boot_present_test "${ICO_BOOT_DUMP_DIR}")
+    set_tests_properties(rd_boot_present PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1500)
+    if(ICO_BOOT_DUMP_OLD)
+        set_tests_properties(rd_boot_present PROPERTIES ENVIRONMENT "ICO_BOOT_OLD=1")
+    endif()
     add_test(NAME texpack_load COMMAND texpack_load_test)
     add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
     set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)
@@ -617,6 +695,103 @@ if(ICO_RUN_TESTS)
                          rd_water_nodual rd_raw_nodual rd_mirror_nodual rd_interp_nodual
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_nd}"
                                     ENVIRONMENT "${_env_nodual}")
+    # the fog on the 24-bit depth buffer a phone GPU without a sampled
+    # D32S8 gets (ICO_VK_FAKE_D24S8=1, port/rhi/vk/vk_device.c): the same
+    # pixels as on D32S8, one-pass and two-pass blends
+    # (each in its own directory: the test writes its dump file there)
+    # (started with the depth read in place, ICO_RD_DEPTH_COPY=0, so the
+    # test's compare against the depth copy D24S8 takes by default runs on
+    # the 24-bit depth too)
+    set(_env_d24s8 ${_env} "ICO_VK_FAKE_D24S8=1" "ICO_RD_DEPTH_COPY=0")
+    set(_env_d24s8_nodual ${_env_d24s8} "ICO_RD_NO_DUAL=1")
+    set(_d24 "${CMAKE_CURRENT_BINARY_DIR}/d24s8")
+    set(_d24nd "${CMAKE_CURRENT_BINARY_DIR}/d24s8_nodual")
+    file(MAKE_DIRECTORY "${_d24}" "${_d24nd}")
+    add_test(NAME rd_fog_d24s8 COMMAND rd_fog_test)
+    add_test(NAME rd_fog_nodual_d24s8 COMMAND rd_fog_test)
+    set_tests_properties(rd_fog_d24s8 PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_d24}"
+                                                 ENVIRONMENT "${_env_d24s8}")
+    set_tests_properties(rd_fog_nodual_d24s8
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_d24nd}"
+                                    ENVIRONMENT "${_env_d24s8_nodual}")
+    # the fog and the effects depth on a copy of the scene depth, with the
+    # stencil kept by every pass (ICO_RD_DEPTH_COPY=1: what a tile-based
+    # phone GPU and D24S8 get, rd_core.c rd__sampled_depth): the same
+    # expectations
+    set(_env_dcopy ${_env} "ICO_RD_DEPTH_COPY=1")
+    set(_dc "${CMAKE_CURRENT_BINARY_DIR}/depth_copy")
+    file(MAKE_DIRECTORY "${_dc}")
+    add_test(NAME rd_fog_depth_copy COMMAND rd_fog_test)
+    add_test(NAME rd_present_depth_copy COMMAND rd_present_test "${_dc}")
+    set_tests_properties(rd_fog_depth_copy rd_present_depth_copy
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_dc}"
+                                    ENVIRONMENT "${_env_dcopy}")
+    # the fog on the depth's words copied out through a buffer
+    # (ICO_RD_FOG_PATH=buffer, rd_fog_path.c: the fallback of a device whose
+    # depth reads fail), on D32S8 and on D24S8 (the top byte masked off):
+    # the same expectations, and case d's replays on the other paths the
+    # same pixels byte for byte
+    set(_env_buf ${_env} "ICO_RD_FOG_PATH=buffer")
+    set(_env_buf_d24 ${_env_buf} "ICO_VK_FAKE_D24S8=1")
+    set(_fb "${CMAKE_CURRENT_BINARY_DIR}/fog_buffer")
+    set(_fb24 "${CMAKE_CURRENT_BINARY_DIR}/fog_buffer_d24s8")
+    file(MAKE_DIRECTORY "${_fb}" "${_fb24}")
+    add_test(NAME rd_fog_buffer COMMAND rd_fog_test)
+    add_test(NAME rd_fog_buffer_d24s8 COMMAND rd_fog_test)
+    set_tests_properties(rd_fog_buffer PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_fb}"
+                                                  ENVIRONMENT "${_env_buf}")
+    set_tests_properties(rd_fog_buffer_d24s8
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_fb24}"
+                                    ENVIRONMENT "${_env_buf_d24}")
+    # the fog's self-test and probe (rd_fog_path.c): the depth read in place
+    # passes on lavapipe and is taken, the other two not tried; with
+    # ICO_RD_FOG_PATH=test every path is tried and passes, in place taken;
+    # with the in-place and copy reads made to give 0 (ICO_RD_FOG_SABOTAGE,
+    # a phone whose depth reads come back empty) both fail and the buffer
+    # path is taken, its fogged grid matching
+    add_test(NAME rd_fog_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=inplace
+                     "-DRESULTS=inplace ok [0-2], copy not tried, buffer not tried"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    add_test(NAME rd_fog_selftest_all
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=inplace "-DRESULTS=inplace ok [0-2], copy ok [0-2], buffer ok [0-2]"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    add_test(NAME rd_fog_selftest_fallback
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test>
+                     -DFOG_PATH=buffer
+                     "-DRESULTS=inplace fail [0-9]+, copy fail [0-9]+, buffer ok [0-2]"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    set_tests_properties(rd_fog_selftest rd_fog_selftest_all rd_fog_selftest_fallback
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set(_env_sab ${_env} "ICO_RD_FOG_SABOTAGE=inplace,copy")
+    set_tests_properties(rd_fog_selftest_fallback PROPERTIES ENVIRONMENT "${_env_sab}")
+    set(_env_all ${_env} "ICO_RD_FOG_PATH=test")
+    set_tests_properties(rd_fog_selftest_all PROPERTIES ENVIRONMENT "${_env_all}")
+    if(_env)
+        set_tests_properties(rd_fog_selftest PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # a player dump with the fog (the dark hall) replayed with the depth in
+    # place and with its copy: SCENE byte for byte the same, on D32S8 and
+    # on D24S8.  Not Run without the dump (dist/dumps is not in the tree)
+    set(ICO_FOG_DUMP "${CMAKE_SOURCE_DIR}/dist/dumps/frame-20261009-083248-v13836.rddump"
+        CACHE FILEPATH "a player dump with the depth fog, for rd_fog_depth_copy_dump")
+    add_test(NAME rd_fog_depth_copy_dump
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
+    add_test(NAME rd_fog_depth_copy_dump_d24s8
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${ICO_FOG_DUMP}" "-DOUT=${_dc}/dump_d24s8"
+                     "-DEXTRA_ENV=ICO_VK_FAKE_D24S8=1" -DNO_BUFFER=1
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_depth_copy_dump.cmake")
+    set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 600)
+    if(_env)
+        set_tests_properties(rd_fog_depth_copy_dump rd_fog_depth_copy_dump_d24s8
+                             PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # the same tests and expectations on a device with a
     # phone GPU's limits (ICO_VK_FAKE_LIMITS=mali, port/rhi/vk/vk_device.c:
     # four descriptor sets, 16 sampled images a stage, 256-byte storage

@@ -14,7 +14,20 @@
  *     steps after the screens (102, 190..202), and with the Sony presents
  *     sign (kanbanReqAdd 2) shown once;
  *   - the values main.c set are the ones in force at the end, also when the
- *     card's system file holds others (a later boot: language 5, PAL).
+ *     card's system file holds others (a later boot: language 5, PAL);
+ *   - with stage 1's load running into the check (systemStatus[6] until a
+ *     set tick, as in a start-up's log: the load ends at Main tick 117, steps
+ *     101, 300 and -1 are logged at 118, 119 and 120 and bootStep 3 at 121),
+ *     every frame from the check's step 2 to the tick that asks for the Sony
+ *     presents sign is a keep frame (fbKeep 1 at the frame's kick, after the
+ *     tick and after the stage manager's end of the load), and that tick's
+ *     frame is not: it carries the sign's backdrop (kanbanExec runs after
+ *     kanbanBootMain in the tick, icoMisc.c).  The stage manager's end of the
+ *     load is StageManager.c's fadeOut 0 path as the port has it (fadeStatus
+ *     0, fbKeep 0 unless ico_kanban_boot_holds_keep), run before the tick
+ *     that sees the load's end and, the other order the threads can take,
+ *     between the tick before it and that tick's kick.  The step ticks are
+ *     the log's.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,6 +63,9 @@ McProductFile IosMcProductFile[2];
 static struct {
     int reloads, layoutSwitches, gsResets, chdirs, loads, adds[8], badStep, ticks;
     int savePresent;
+    /* the tick each step was first logged at (kanbanBootMain's entry), -1
+       before: card steps 100, 101, 300 and -1, bootStep 3 */
+    int at100, at101, at300, atEnd, atBoot3;
 } s;
 
 static Kanban s_signs[16];
@@ -135,12 +151,23 @@ void isysGObjActiveLink(int bit, int set)
     (void)bit, (void)set;
 }
 
+static void firstAt(int *at, int cond)
+{
+    if (cond && *at < 0) {
+        *at = s.ticks;
+    }
+}
+
 void test_kanban_step(int boot_step, int mc_check_step)
 {
-    (void)boot_step;
     if (mc_check_step == 102 || (mc_check_step >= 190 && mc_check_step <= 202)) {
         s.badStep++;
     }
+    firstAt(&s.at100, boot_step == 2 && mc_check_step == 100);
+    firstAt(&s.at101, boot_step == 2 && mc_check_step == 101);
+    firstAt(&s.at300, boot_step == 2 && mc_check_step == 300);
+    firstAt(&s.atEnd, boot_step == 2 && mc_check_step == -1);
+    firstAt(&s.atBoot3, boot_step == 3);
 }
 
 /* --- the runs ------------------------------------------------------------ */
@@ -157,6 +184,7 @@ static void writeFile(const char *path, const char *text)
 static void boot(const char *what, int savePresent)
 {
     memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
     s.savePresent = savePresent;
     memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
     /* kanbanBoot.c's .sdata as the program starts */
@@ -198,6 +226,98 @@ static void boot(const char *what, int savePresent)
            s.chdirs, s.loads, s.reloads, s.gsResets);
 }
 
+/* --- the start-up's frames over stage 1's load ------------------------- */
+
+/* StageManager.c's fadeOut 0 path once the load thread has cleared
+   systemStatus[6], as the port has it */
+static void stageManagerLoadEnd(void)
+{
+    systemStatus[6] = 0;
+    fadeStatus = 0;
+    if (ico_kanban_boot_holds_keep() == 0) {
+        fbKeep = 0;
+    }
+}
+
+#define LOAD_END_TICK 117 /* the start-up log's: step 101 is logged at 118 */
+#define LOAD_TICKS 400    /* the presents sign alone holds 150 ticks at 60 Hz */
+
+/* releaseLate: the stage manager ends the load after the tick before
+   LOAD_END_TICK has run and before its frame is kicked (the threads'
+   other order); else before the tick LOAD_END_TICK */
+static void bootOverLoad(const char *what, int releaseLate)
+{
+    int kickKeep[LOAD_TICKS];
+    int signTick = -1, step2Tick = -1;
+
+    memset(&s, 0, sizeof(s));
+    s.at100 = s.at101 = s.at300 = s.atEnd = s.atBoot3 = -1;
+    s.savePresent = 1; /* a later boot: steps 95 and 96, then 100 */
+    memset(IosMcProductFile, 0, sizeof(IosMcProductFile));
+    bootStep = mcCheckStep = bootStarted = bootKanbanDone = 0;
+    mcRetryCount = 10;
+    systemStatus[0] = ico_boot_video_mode();
+    NonLinearCameraMove = ico_boot_language();
+    /* main.c's stgmgrForceSwitchWithFade(1, 255.0f, 0.0f): StageManager.c's
+       command 1 keeps the frame buffer and starts the load */
+    fbKeep = 1;
+    fadeStatus = 1;
+    systemStatus[6] = 1;
+    kanbanBootInit();
+    kanbanBootStart();
+    while (!kanbanBootEnd && s.ticks < LOAD_TICKS) {
+        if (!releaseLate && s.ticks == LOAD_END_TICK) {
+            stageManagerLoadEnd();
+        }
+        const int signs = s.adds[2] + s.adds[5];
+        kanbanBootMain();
+        if (releaseLate && s.ticks == LOAD_END_TICK - 1) {
+            stageManagerLoadEnd();
+        }
+        if (step2Tick < 0 && bootStep == 2 && mcCheckStep > 2) {
+            step2Tick = s.ticks;
+        }
+        if (signTick < 0 && s.adds[2] + s.adds[5] != signs) {
+            signTick = s.ticks;
+        }
+        kickKeep[s.ticks] = fbKeep; /* the scheduler's kick at the next vsync */
+        s.ticks++;
+    }
+    CHECK(kanbanBootEnd, "%s: the boot ends (%d ticks)", what, s.ticks);
+    CHECK(s.adds[2] == 1 && s.adds[5] == 0, "%s: the presents sign once, no card warning (%d, %d)",
+          what, s.adds[2], s.adds[5]);
+    CHECK(s.at101 == LOAD_END_TICK + 1 && s.at300 == LOAD_END_TICK + 2 &&
+              s.atEnd == LOAD_END_TICK + 3 && s.atBoot3 == LOAD_END_TICK + 4,
+          "%s: steps 101, 300, -1 and bootStep 3 at ticks %d, %d, %d, %d (the log's %d to %d)",
+          what, s.at101, s.at300, s.atEnd, s.atBoot3, LOAD_END_TICK + 1, LOAD_END_TICK + 4);
+    CHECK(step2Tick >= 0 && signTick == LOAD_END_TICK + 3,
+          "%s: the card check from tick %d, the presents sign asked for at tick %d (want %d)", what,
+          step2Tick, signTick, LOAD_END_TICK + 3);
+    if (step2Tick < 0 || signTick < 0) {
+        return;
+    }
+    int leaks = 0;
+    for (int t = step2Tick; t < signTick; t++) {
+        if (!kickKeep[t]) {
+            leaks++;
+            CHECK(0, "%s: tick %d (card step logged %s): the frame is not a keep frame", what, t,
+                  t == LOAD_END_TICK       ? "100, the load's end"
+                  : t == LOAD_END_TICK + 1 ? "101"
+                  : t == LOAD_END_TICK + 2 ? "300"
+                  : t < LOAD_END_TICK      ? "100, before the load's end is seen"
+                                           : "later");
+        }
+    }
+    CHECK(!kickKeep[signTick], "%s: the sign's tick %d is a keep frame (its backdrop unseen)", what,
+          signTick);
+    CHECK(fbKeep == 0 && fadeStatus == 0, "%s: fbKeep %d, fadeStatus %d at the end", what, fbKeep,
+          fadeStatus);
+    printf("  %s: load ends at tick %d; steps 101/300/-1 and bootStep 3 at %d/%d/%d/%d; keep "
+           "frames from tick %d to %d (%d not kept), the sign's frame at %d\n",
+           what, LOAD_END_TICK, s.at101, s.at300, s.atEnd, s.atBoot3, step2Tick, signTick - 1,
+           leaks, signTick);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -208,6 +328,8 @@ int main(int argc, char **argv)
     ico_sysconf_reset();
     boot("first boot (no save)", 0);
     boot("later boot (a save)", 1);
+    bootOverLoad("over the load, the stage manager first", 0);
+    bootOverLoad("over the load, the stage manager after the tick", 1);
     remove(p);
     if (failures) {
         printf("kanban_boot_test: %d failures\n", failures);

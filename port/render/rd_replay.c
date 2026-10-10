@@ -104,7 +104,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_
                                                    "crt_ps",
                                                    "sprite_texa_ps",
                                                    "vu_texa_ps",
-                                                   "blit_depth_ps"};
+                                                   "blit_depth_ps",
+                                                   "fog_lut_buffer_ps"};
 
 /* ------------------------------------------------------------------ init */
 
@@ -201,14 +202,15 @@ bool rd__gpu_init(void *sdlWindow)
     }
     /* set 0: the Original samplers (one level); sets 1 and 2: the Enhanced
      * filter's trilinear and anisotropic ones over the generated mips
-     * (uploadTextures) */
+     * (uploadTextures); set 1 is also the GS's linear-between-levels
+     * mipmapping (gsLodSampler), set 3 its nearest-level one */
     for (int i = 0; i < RD_SAMPLER_COUNT * RD_SAMPLER_SETS; i++) {
         const int set = i / RD_SAMPLER_COUNT, k = i % RD_SAMPLER_COUNT;
         RhiSamplerDesc sd;
         memset(&sd, 0, sizeof(sd));
         sd.mag = (k & 1) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
         sd.min = (k & 2) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
-        sd.mip = set ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.mip = set == 1 || set == 2 ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
         sd.s = (k & 4) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
         sd.t = (k & 8) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
         sd.maxAnisotropy = 1.0f;
@@ -686,6 +688,7 @@ typedef struct Replay {
     int stretch;          /* the draw being bound is full-screen (no wide x scale) */
     int mirror;           /* the draw being bound is a flipped UI draw (scissor too) */
     int uiPrim;    /* the draw being bound is a UI screen prim (its scissor gets the wide scale) */
+    int halfAdded; /* sceneKeepsHalf gave the target in force the frame head's half pixel */
     float blockCs; /* a stretched draw's u at the target's centre (blockCentre) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
@@ -693,6 +696,10 @@ typedef struct Replay {
     uint32_t dateSerial;  /* writeSerial when it was taken */
     RhiRect dateArea;     /* the texels it holds (dateSnapshot) */
     ScreenRun run;        /* the screen-prim run not drawn yet */
+    /* the GPU timing's picture effect (rd__perf_post): the one the target
+       in force or the last post sprite belongs to, and a change waiting for
+       the open run's draw (the run's draws belong to the effect before) */
+    int perfPost, perfPending, perfPendingPost;
 } Replay;
 
 static void flushScreenRun(Replay *r);
@@ -783,6 +790,23 @@ bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp d
     return false;
 }
 
+/* rd__stencil_ops, and with g_rd.depthCopy the stencil loaded with the
+ * depth and stored outside the window too, as up to v0.4.4: no pass on a
+ * packed depth-stencil then asks for its depth and its stencil
+ * differently */
+static bool stencilOps(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
+                       RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
+{
+    const bool took = rd__stencil_ops(w, depth, whole, depthLoad, stencilLoad, stencilStore);
+    if (g_rd.depthCopy) {
+        *stencilStore = RHI_STORE_STORE;
+        if (*stencilLoad == RHI_LOAD_DONT_CARE) {
+            *stencilLoad = depthLoad;
+        }
+    }
+    return took;
+}
+
 /* A shadow reset no pass took, recorded as a pass of its own: the colour
  * and depth loaded and kept, the stencil cleared to 0 and stored (the
  * depth is live: only the end of a resolve's pass leaves the window, and
@@ -811,8 +835,9 @@ static void flushStencilClear(void)
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
-    p.depth.stencilStore =
-        rd__stencil_live(&s_stencil.w, depthTex) ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    p.depth.stencilStore = g_rd.depthCopy || rd__stencil_live(&s_stencil.w, depthTex)
+                               ? RHI_STORE_STORE
+                               : RHI_STORE_DONT_CARE;
     p.width = tc->tw;
     p.height = tc->th;
     rhi_cmd_begin_render_pass(s_cl, &p);
@@ -861,8 +886,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
      * shadow window only (RdStencilWindow) */
     RhiLoadOp stencilLoad = depthLoad;
     RhiStoreOp stencilStore = RHI_STORE_STORE;
-    if (d && rd__stencil_ops(&s_stencil.w, d->depth.id, c->tw == d->tw && c->th == d->th, depthLoad,
-                             &stencilLoad, &stencilStore)) {
+    if (d && stencilOps(&s_stencil.w, d->depth.id, c->tw == d->tw && c->th == d->th, depthLoad,
+                        &stencilLoad, &stencilStore)) {
         s_stencil.colorTex = s_stencil.depthTex = 0;
     }
     endPass(r);
@@ -899,6 +924,29 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
 
 /* ---------------------------------------------------------------- actions */
 
+/* A clear of target t (id), its colour col and with depth its depth at GS
+ * Z z.  It is not recorded yet: the next pass on the target takes it as its
+ * load op (beginPass), else it is recorded as its own pass before anything
+ * else touches the target (endPass, rd__transition).  The pass open now and
+ * an earlier pending clear go first. */
+static void pendClear(Replay *r, uint32_t id, RdTargetRec *t, const float col[4], int depth,
+                      uint32_t z)
+{
+    r->writeSerial++;
+    endPass(r);
+    rd__transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
+    if (depth) {
+        rd__transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
+    }
+    s_pend.r = r;
+    s_pend.p.target = id;
+    s_pend.p.depth = (uint8_t)(depth != 0);
+    memcpy(s_pend.p.color, col, sizeof(s_pend.p.color));
+    s_pend.p.clearDepth = rd__gs_depth(z, rd__target_z_scale(id));
+    s_pend.colorTex = t->color.id;
+    s_pend.depthTex = depth ? t->depth.id : 0;
+}
+
 static void doClear(Replay *r, const RdCmd *c)
 {
     RdTargetRec *t = rd__target_rec(c->u[0]);
@@ -909,24 +957,7 @@ static void doClear(Replay *r, const RdCmd *c)
     for (int i = 0; i < 4; i++) {
         col[i] = t->format == RHI_FMT_RGBA8_UINT ? (float)c->b[i] : (float)c->b[i] / 255.0f;
     }
-    const int depth = c->b[4] && t->withDepth;
-    r->writeSerial++;
-    /* the clear is not recorded yet: the next pass on the target takes it
-     * as its load op (beginPass), else it is recorded as its own pass
-     * before anything else touches the target (endPass, rd__transition).
-     * The pass open now and an earlier pending clear go first. */
-    endPass(r);
-    rd__transition(s_cl, t->color, &t->colorState, RHI_STATE_RENDER_TARGET);
-    if (depth) {
-        rd__transition(s_cl, t->depth, &t->depthState, RHI_STATE_DEPTH_WRITE);
-    }
-    s_pend.r = r;
-    s_pend.p.target = c->u[0];
-    s_pend.p.depth = (uint8_t)(depth != 0);
-    memcpy(s_pend.p.color, col, sizeof(col));
-    s_pend.p.clearDepth = rd__gs_depth(c->u[1], rd__target_z_scale(c->u[0]));
-    s_pend.colorTex = t->color.id;
-    s_pend.depthTex = depth ? t->depth.id : 0;
+    pendClear(r, c->u[0], t, col, c->b[4] && t->withDepth, c->u[1]);
 }
 
 /* Built in a local and stored whole, so writing straight into
@@ -1291,8 +1322,8 @@ static int mipBoost(const RdTexRec *t, uint8_t *ref)
  * rises). */
 static void noteMipUse(RdTexRec *t, const RdDrawState *d)
 {
-    if (t->mipLevels < 2 || t->replacement || d->tcc != RD_TCC_RGBA) {
-        return;
+    if (t->mipLevels < 2 || t->replacement || t->gsLevels > 1 || d->tcc != RD_TCC_RGBA) {
+        return; /* GS levels are uploaded as they are: no coverage to keep */
     }
     uint8_t use = t->mipUse, ref = t->mipRef;
     if (blendsByAs(d)) {
@@ -1341,6 +1372,7 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
         tc->snapState = RHI_STATE_UNDEFINED;
     }
     if (!tc->snap.id) {
+        rd__note_target_pressure(tc);
         return false;
     }
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
@@ -1679,6 +1711,24 @@ static float wideFor(const RdTargetRec *tc, int stretch)
     return tc->wide && !stretch ? g_rd.wideX : 1.0f;
 }
 
+/* A sprite (vertices i and i + 1) the layout draws as a full-width band:
+ * the first and last pixel it covers (ceil(x0), ceil(x1) - 1 in the target's
+ * pixels) are within one of the target's two edges.  True for such a band. */
+static int bandSprite(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v, uint32_t i,
+                      int32_t *first, int32_t *last)
+{
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    int32_t a = v[i].x, b = v[i + 1].x;
+    if (a > b) {
+        const int32_t t = a;
+        a = b;
+        b = t;
+    }
+    *first = -floorDiv16(-a) - ox;
+    *last = -floorDiv16(-b) - 1 - ox;
+    return *first <= 1 && *last >= (int32_t)tc->w - 2;
+}
+
 /* Whether a screen-prim command is full-screen: tagged so, or sprites that
  * cover the target's whole width (in GS pixels, after XYOFFSET).  A sprite
  * covers the pixels p with x0 <= p < x1 (the GS's top-left rule on the 1/16
@@ -1698,21 +1748,66 @@ static int screenStretch(const Replay *r, const RdTargetRec *tc, const RdScreenV
     if (prim != RD_PRIM_SPRITES || n < 2) {
         return 0;
     }
-    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
     for (uint32_t i = 0; i + 1 < n; i += 2) {
-        int32_t a = v[i].x, b = v[i + 1].x;
-        if (a > b) {
-            const int32_t t = a;
-            a = b;
-            b = t;
-        }
-        /* the first and last pixel covered: ceil(x0), ceil(x1) - 1 */
-        const int32_t first = -floorDiv16(-a) - ox, last = -floorDiv16(-b) - 1 - ox;
-        if (first <= 1 && last >= (int32_t)tc->w - 2) {
+        int32_t first, last;
+        if (bandSprite(r, tc, v, i, &first, &last)) {
             return 1;
         }
     }
     return 0;
+}
+
+/* Full pixel: the screen bands one pixel short of the target's edge
+ * (bandSprite) reach the edge, so the strip the option shows beside them
+ * is not a column of the picture under the bar.  Only the sprite's x
+ * moves; its u stays, so the added pixel reads the sprite's own end texel
+ * and the texture is never extrapolated.  Returns v, or a copy with the
+ * bands moved (the recorded frame is never written).  Off, a
+ * full-screen-space prim, a block target or no short band: v itself. */
+static const RdScreenVtx *widenBands(const Replay *r, const RdTargetRec *tc, const RdScreenVtx *v,
+                                     uint32_t n, uint8_t prim, uint8_t space)
+{
+    static RdScreenVtx *s_wv;
+    static uint32_t s_wvCap;
+    if (!g_rd.settings.fullPixel || !tc || !tc->wide || tc->wideBlock ||
+        space == RD_SPACE_FULLSCREEN || prim != RD_PRIM_SPRITES || n < 2) {
+        return v;
+    }
+    const RdScreenVtx *src = v;
+    const int32_t ox = 2048 - (int32_t)(r->st.gsW >> 1);
+    for (uint32_t i = 0; i + 1 < n; i += 2) {
+        int32_t first, last;
+        if (!bandSprite(r, tc, v, i, &first, &last) || (first <= 0 && last >= (int32_t)tc->w - 1)) {
+            continue;
+        }
+        if (src == v) {
+            if (n > s_wvCap) {
+                RdScreenVtx *p = realloc(s_wv, (size_t)n * sizeof(*p));
+                if (!p) {
+                    return v;
+                }
+                s_wv = p;
+                s_wvCap = n;
+            }
+            memcpy(s_wv, v, (size_t)n * sizeof(*v));
+            src = s_wv;
+        }
+        /* the smaller x is the left edge; the pixel 0 starts at ox * 16,
+         * the one past the last at (ox + w) * 16 */
+        RdScreenVtx *lo = &s_wv[i], *hi = &s_wv[i + 1];
+        if (lo->x > hi->x) {
+            RdScreenVtx *t = lo;
+            lo = hi;
+            hi = t;
+        }
+        if (first > 0) {
+            lo->x = ox * 16;
+        }
+        if (last < (int32_t)tc->w - 1) {
+            hi->x = (ox + (int32_t)tc->w) * 16;
+        }
+    }
+    return src;
 }
 
 /* What a draw binds besides its geometry: doScreen and the VU draws. */
@@ -1726,6 +1821,9 @@ typedef struct DrawSetup {
     int mipmapped;   /* the image texture has generated mips */
     int wideBlock;   /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
     int replacement; /* texture packs: the image texture is a pack replacement */
+    int gsLevels;    /* the image texture's GS levels as uploaded (RdTexRec.gsLevels), 0 none:
+                        sampled at the GS's level (DF_GS_LOD) */
+    int screenCopy;  /* a screen-space pass, not geometry (screenCopy): no added half pixel */
 } DrawSetup;
 
 /* Widescreen reflections: whether the draw samples a block that
@@ -1741,6 +1839,40 @@ static int samplesWideBlock(const Replay *r, const DrawSetup *ds)
     }
     const RdTargetRec *src = rd__target_rec(t->target);
     return src && src->wideBlock;
+}
+
+/* Whether a screen prim is a screen-space pass rather than geometry: a
+ * sprite whose texture is a render target (the shadow pass's and the
+ * softening's composites into SCENE, the reduction's fallback sprite), or a
+ * sprite the game marks full-screen (the fog's fogOffsetA sheet, rd_post.c's
+ * passes).  Such a sprite maps target texels onto screen pixels one for
+ * one, or covers the whole target, so it keeps the offset its target was
+ * recorded with (sceneKeepsHalf).  Triangles and lines that sample a target
+ * are geometry and take the half pixel. */
+static int screenCopy(const Replay *r, const DrawSetup *ds, uint8_t prim, uint8_t space)
+{
+    if (prim != RD_PRIM_SPRITES) {
+        return 0;
+    }
+    if (space == RD_SPACE_FULLSCREEN) {
+        return 1;
+    }
+    if (!ds->textured || !r->st.ds.texEnabled) {
+        return 0;
+    }
+    const RdTexRec *t = rd__tex_rec(r->st.tex);
+    return t && t->kind == RD_TEXKIND_TARGET;
+}
+
+/* The draw offset a draw is positioned with (RD_TARGET_OFFSET,
+ * RD_TARGET_HALF_Y): the target's, without the half pixel sceneKeepsHalf
+ * added when the draw is a screen-space pass (DrawSetup.screenCopy). */
+static uint32_t drawOffset(const Replay *r, const DrawSetup *ds)
+{
+    if (r->halfAdded && ds->screenCopy) {
+        return r->st.useOffset & ~(uint32_t)RD_TARGET_HALF_Y;
+    }
+    return r->st.useOffset;
 }
 
 /* The u (normalised) a stretched draw that samples a widened block has at
@@ -1785,6 +1917,20 @@ static void replacementUv(uint32_t tex, DrawSetup *ds)
     }
 }
 
+/* The GS levels the draw's texture has on the device (RdTexRec.gsLevels,
+ * uploaded: mipLevels), 0 for every other texture.  A pack replacement
+ * keeps the pack's own levels and its sampling (texSampler), whatever the
+ * TIM2 it replaces had. */
+static int drawGsLevels(const Replay *r, const DrawSetup *ds)
+{
+    const RdTexRec *t = ds->textured && r->st.ds.texEnabled ? rd__tex_rec(r->st.tex) : NULL;
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->gsLevels < 2 ||
+        ds->tex.id != t->rhi.id || t->mipLevels < 2) {
+        return 0;
+    }
+    return t->mipLevels < t->gsLevels ? t->mipLevels : t->gsLevels;
+}
+
 /* The target, the DATE snapshot and the texture (each may end the open
  * pass: they run before the draw's pass begins).  dateArea: the texels the
  * draw can touch, for the DATE snapshot (NULL: the whole target) */
@@ -1813,7 +1959,29 @@ static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
                              &ds->mipmapped);
     replacementUv(r->st.tex, ds);
     ds->wideBlock = samplesWideBlock(r, ds);
+    ds->gsLevels = drawGsLevels(r, ds);
     return true;
+}
+
+/* A texture with GS levels: the level is the shader's (DF_GS_LOD, given to
+ * SampleLevel), the sampler the TEX1 filters within a level, linear between
+ * levels for MMIN 3 and 5 (RD_SAMPLER_SET_MIP_LINEAR), nearest for the
+ * others (RD_SAMPLER_SET_MIP_NEAREST), never the Enhanced filter's. */
+static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
+
+/* Full pixel: a draw that samples a render target (a screen-space lookup,
+ * such as the mirror floors' copy of the scene and the reflections) clamps
+ * at the target's edges.  The game leaves those draws on REPEAT, and at the
+ * frame's outer columns the lookup wraps to the far side of the picture,
+ * which the PS2's black border hid; with the border open it showed as a
+ * strip of the far edge's colour.  Image textures keep their wrap. */
+static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w)
+{
+    if (w == RD_WRAP_CLAMP || !g_rd.settings.fullPixel || !ds->textured || !r->st.ds.texEnabled) {
+        return w;
+    }
+    const RdTexRec *t = rd__tex_rec(r->st.tex);
+    return t && t->kind == RD_TEXKIND_TARGET ? RD_WRAP_CLAMP : w;
 }
 
 /* The scissor, the pass and FrameCB; returns the texture group, id 0 when
@@ -1828,23 +1996,27 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
     if (!scissorRect(r, tc, &sc)) {
         return (RhiBindGroup){0};
     }
-    RhiSampler smp = texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                                (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds->mipmapped,
-                                ds->replacement);
+    RhiSampler smp =
+        ds->gsLevels
+            ? gsLodSampler(r, ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
     RhiBindGroup g2 = rd__tex_group_date(ds->tex, smp, ds->dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId) {
         beginPass(r, tc, ds->tdId ? rd__target_rec(ds->tdId) : NULL, r->st.color, ds->tdId,
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
     }
-    const uint32_t fk[6] = {r->st.color,     r->st.gsW,     r->st.gsH,
-                            r->st.useOffset, r->passSerial, (uint32_t)r->stretch};
+    const uint32_t useOffset = drawOffset(r, ds);
+    const uint32_t fk[6] = {r->st.color, r->st.gsW,     r->st.gsH,
+                            useOffset,   r->passSerial, (uint32_t)r->stretch};
     if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
         /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
          * when useOffset; zero in Original) */
         float ox = 2048.0f - (float)(r->st.gsW >> 1);
         float oy = 2048.0f - (float)(r->st.gsH >> 1);
-        if (r->st.useOffset & RD_TARGET_HALF_Y) {
+        if (useOffset & RD_TARGET_HALF_Y) {
             oy += 0.5f; /* the flip's sceGsSetHalfOffset */
         }
         r->frameBG = rd__frame_group_ex(tc->w, tc->h, ox, oy, rd__target_z_scale(ds->tdId),
@@ -1863,6 +2035,32 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
 static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
 {
     return bindDrawEx(r, ds, NULL, NULL);
+}
+
+static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds)
+{
+    const uint32_t mmin = RD_TEX1_MMIN(r->st.tex1Lod);
+    const int set =
+        mmin == 3u || mmin == 5u ? RD_SAMPLER_SET_MIP_LINEAR : RD_SAMPLER_SET_MIP_NEAREST;
+    const int i = (r->st.ds.magFilter ? 1 : 0) | (r->st.ds.minFilter ? 2 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? 4 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? 8 : 0);
+    return g_rd.samplers[set * RD_SAMPLER_COUNT + i];
+}
+
+/* DrawCB.blend[3] for a draw with GS levels: the state's TEX1 mipmap
+ * fields (rd_tex1_lod) with MXL no further than the levels the texture
+ * has, and none at all (level 0) when TEX1 asks for no mipmapping. */
+static uint32_t gsLodWord(const Replay *r, const DrawSetup *ds)
+{
+    uint32_t p = r->st.tex1Lod;
+    uint32_t mxl = RD_TEX1_MXL(p);
+    if (!rd_tex1_mipmapped(p)) {
+        mxl = 0;
+    } else if (mxl > (uint32_t)ds->gsLevels - 1u) {
+        mxl = (uint32_t)ds->gsLevels - 1u;
+    }
+    return (p & ~(7u << 3)) | (mxl << 3);
 }
 
 /* font_sheet_ps's style in DrawCB.param (the rim's weight, rimLevel,
@@ -1906,9 +2104,14 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
                        (d->minFilter == RD_FILTER_LINEAR ? ICO_DF_TEXA_MIN_LINEAR : 0u) |
                        (d->wrap.s != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S : 0u) |
                        (d->wrap.t != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
-        if (texSamplerUpgraded((RdFilter)d->minFilter, ds->mipmapped, ds->replacement)) {
+        if (!ds->gsLevels &&
+            texSamplerUpgraded((RdFilter)d->minFilter, ds->mipmapped, ds->replacement)) {
             cb->mode[0] |= ICO_DF_TEXA_MIN_SAMPLED;
         }
+    }
+    if (ds->textured && ds->gsLevels) {
+        cb->mode[0] |= ICO_DF_GS_LOD;
+        cb->blend[3] = gsLodWord(r, ds);
     }
     cb->mode[2] = dp->modeZ;
     cb->mode[3] = dp->aref;
@@ -2177,6 +2380,97 @@ static void flushScreenRun(Replay *r)
         g_rdPerf.screenDraws++; /* one draw of the run, however many passes */
     }
     q->count = 0;
+    if (r->perfPending) {
+        r->perfPending = 0;
+        rd__perf_post(s_cl, r->perfPendingPost);
+    }
+}
+
+/* The GPU work recorded from here on belongs to effect post (RD_PERF_POST_*,
+   -1 none); with a screen-prim run open, from its draw on.  Timestamps only:
+   nothing drawn changes. */
+static void perfPost(Replay *r, int post)
+{
+    if (r->run.count) {
+        r->perfPending = 1;
+        r->perfPendingPost = post;
+        return;
+    }
+    r->perfPending = 0;
+    rd__perf_post(s_cl, post);
+}
+
+/* The field's half pixel on SCENE (issue 29, the old bridge's sea).  The
+ * frame head's draw environment carries the flip's half offset (GsBase.c
+ * sceGsSetHalfOffset, RD_TARGET_HALF_Y): XYOFFSET.y + 0.5 pixel for the
+ * scenery drawn first.  The shadow pass sets SCENE again with
+ * gif_SetDrawEnviroment(useoffset = 1) (GifPacket.c), whose XYOFFSET is the
+ * screen offset alone: the game's own register write drops the field's half
+ * offset for every later list (on a PS2 in one field of two).  Two surfaces
+ * drawn on either side of that write, the sea's grey layer umi (list 2,
+ * writing Z) and the wave layers over it (list 5, testing it), stand half
+ * a pixel apart on the screen, and on that grazing water half a pixel is
+ * some 800 GS Z units, more than the 5 units between them: umi won over the
+ * waves in a band that shifted with every sub-pixel step of the camera.  So
+ * a SCENE target set with the screen offset (RD_TARGET_OFFSET) in lists 0
+ * to 10 takes the half offset the frame head's SCENE target has: every
+ * later list moves half a pixel to match the first ones.  At replay, so the
+ * dumps recorded before show it too.  Targets set without the screen offset
+ * (the full-target passes: the shadow maps, the aura's copies into SCENE)
+ * and the UI's lists 11 and 12 keep what they recorded.
+ *
+ * The half pixel moves geometry only.  A screen-space copy of a render
+ * target keeps the plain offset its target was recorded with (drawOffset,
+ * DrawSetup.screenCopy): the fog sprite (list 4), which reads the depth
+ * texel under each pixel by its UVs, and its full-screen fogOffsetA sheet;
+ * the softening's composite (list 10) and the shadow pass's composite
+ * (list 3), sprites that sample a target; the post sprites
+ * (doBlurSpriteDraw).  Moved half a pixel, their lookups fall half a texel
+ * off the target's grid: at 2x the fog's edge stood one row above the
+ * geometry's, two rows at 4x.  On a PS2 these passes have no half offset
+ * either.  VU draws (meshes, skinned, grids, particles),
+ * shadow strips, and screen triangles and lines take the half pixel even
+ * when they sample a target: their positions are projected geometry. */
+static uint32_t sceneHeadHalf(const RdFrame *f)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const RdCmdList *l0 = &f->lists[0];
+    for (uint32_t i = 0; i < l0->count; i++) {
+        const RdCmd *c = &l0->cmds[i];
+        if (c->type == RDC_TARGET && c->u[0] == scene) {
+            return c->b[0] & RD_TARGET_HALF_Y;
+        }
+    }
+    return 0;
+}
+
+static int sceneKeepsHalf(RdStateBlock *st, int list, uint32_t headHalf)
+{
+    if (headHalf && list <= 10 && st->color == rd_target(RD_TARGET_SCENE).id &&
+        (st->useOffset & RD_TARGET_OFFSET) && !(st->useOffset & RD_TARGET_HALF_Y)) {
+        st->useOffset |= RD_TARGET_HALF_Y;
+        return 1;
+    }
+    return 0;
+}
+
+/* The effect a TARGET command's pass belongs to by its colour target: the
+   screen softening's AA0 and AA1 and its composite (the pass into SCENE
+   that follows them, rd_post.c AA_COMPOSITE), the aura's own targets;
+   otherwise the effect the next post sprite names, or none */
+static int perfTargetPost(const Replay *r, const RdCmd *c)
+{
+    const uint32_t col = c->u[0];
+    const uint32_t aa0 = rd_target(RD_TARGET_AA0).id, aa1 = rd_target(RD_TARGET_AA1).id;
+    if (col == aa0 || col == aa1 ||
+        (col == rd_target(RD_TARGET_SCENE).id && (r->st.color == aa0 || r->st.color == aa1))) {
+        return RD_PERF_POST_SOFTEN;
+    }
+    if (col == rd_target(RD_TARGET_AURA_WORK).id || col == rd_target(RD_TARGET_AURA_TAP).id ||
+        col == rd_target(RD_TARGET_FEED128).id) {
+        return RD_PERF_POST_AURA;
+    }
+    return -1;
 }
 
 /* whether a command drawing with these bindings joins the open run: the
@@ -2261,11 +2555,13 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    v = widenBands(r, rd__target_rec(r->st.color), v, n, c->b[0], c->b[1]);
     RhiRect dateArea;
     const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
     if (!prepareDraw(r, &ds, dateAt)) {
         return;
     }
+    ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
 
     /* geometry */
     r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
@@ -2704,6 +3000,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDraw(r, &ds, NULL)) {
         return;
     }
+    ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
     RdTargetRec *tc = ds.tc;
     RdTargetRec *td = ds.tdId ? rd__target_rec(ds.tdId) : NULL;
     r->stretch = screenStretch(r, tc, (const RdScreenVtx *)(f->payload + c->u[0]), c->u[1], c->b[0],
@@ -2767,6 +3064,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         s_wrapW = tc->tw;
         s_wrapH = tc->th;
         if (!s_wrapAcc.id) {
+            rd__note_scene_pressure();
             return;
         }
     }
@@ -2793,8 +3091,8 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
         p.depth.depthLoad = RHI_LOAD_LOAD;
         /* the stencil as beginPass has it (a pending reset was flushed by
          * the endPass above) */
-        rd__stencil_ops(&s_stencil.w, td->depth.id, false, RHI_LOAD_LOAD, &p.depth.stencilLoad,
-                        &p.depth.stencilStore);
+        stencilOps(&s_stencil.w, td->depth.id, false, RHI_LOAD_LOAD, &p.depth.stencilLoad,
+                   &p.depth.stencilStore);
     }
     p.width = tc->tw;
     p.height = tc->th;
@@ -2804,7 +3102,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     rhi_cmd_set_scissor(s_cl, &sc);
     float ox = 2048.0f - (float)(r->st.gsW >> 1);
     float oy = 2048.0f - (float)(r->st.gsH >> 1);
-    if (r->st.useOffset & RD_TARGET_HALF_Y) {
+    if (drawOffset(r, &ds) & RD_TARGET_HALF_Y) {
         oy += 0.5f;
     }
     IcoDrawCB cb;
@@ -2812,8 +3110,11 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
     RhiSampler smp =
-        texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                   (RdWrap)r->st.ds.wrap.s, (RdWrap)r->st.ds.wrap.t, ds.mipmapped, ds.replacement);
+        ds.gsLevels
+            ? gsLodSampler(r, &ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
     rhi_cmd_set_pipeline(s_cl, pa);
     rd__bind_uniform(s_cl, 0,
                      rd__frame_group_ex(tc->w, tc->h, ox, oy, rd__target_z_scale(ds.tdId),
@@ -3029,6 +3330,46 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     r->st = saved;
 }
 
+/* The parts of a draw of mesh m that has closing planes (RdMeshRec.wideHidden,
+ * rd_mesh.c markWideHidden) on a target under the wide x scale f: the 4:3
+ * picture, GS pixels 0..w of the target before the scale, which lands on
+ * texels (w/2)(1 - f) sx .. (w/2)(1 + f) sx (rounded outwards, so a texel
+ * the 4:3 picture touches stays in it), and the two sides beside it, each
+ * met with the draw's scissor.  dropWide[k] is set for the sides, which
+ * draw without the planes (ICO_VU_DROP_WIDE).  Every texel is in one part,
+ * and a part draws its triangles in the same order as the single draw:
+ * inside the 4:3 picture the result is that draw's, bit for bit.  0 (draw
+ * once, the scissor as bound) for a mesh without planes, f 1 (4:3, the
+ * Original preset, a stretched draw, a target that is not wide) or an
+ * empty scissor. */
+static int vuWideParts(const Replay *r, const DrawSetup *ds, const RdMeshRec *m, RhiRect *part,
+                       int *dropWide)
+{
+    const RdTargetRec *tc = ds->tc;
+    const float f = wideFor(tc, r->stretch);
+    RhiRect sc;
+    if (!m || !m->wideHidden || f == 1.0f || !scissorRect(r, tc, &sc)) {
+        return 0;
+    }
+    const float c = (float)tc->w * 0.5f;
+    int64_t x0 = (int64_t)floorf((c - f * c) * tc->sx);
+    int64_t x1 = (int64_t)ceilf((c + f * c) * tc->sx);
+    x0 = x0 < 0 ? 0 : (x0 > (int64_t)tc->tw ? (int64_t)tc->tw : x0);
+    x1 = x1 < x0 ? x0 : (x1 > (int64_t)tc->tw ? (int64_t)tc->tw : x1);
+    const RhiRect side[3] = {
+        {(int32_t)x0, 0, (uint32_t)(x1 - x0), tc->th},
+        {0, 0, (uint32_t)x0, tc->th},
+        {(int32_t)x1, 0, (uint32_t)((int64_t)tc->tw - x1), tc->th},
+    };
+    int n = 0;
+    for (int i = 0; i < 3; i++) {
+        if (side[i].w && rectMeet(side[i], sc, &part[n])) {
+            dropWide[n++] = i != 0;
+        }
+    }
+    return n;
+}
+
 static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdVuPayload p;
@@ -3109,6 +3450,10 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint8_t vs = vuVs(p.prog, p.code);
     vcb.draw[0] = 0;
     vcb.draw[2] = p.clip;
+    if (f->camera.freeCamera) {
+        /* photo mode: behind-eye triangles clipped, not dropped */
+        vcb.draw[2] |= ICO_VU_BEHIND_EYE;
+    }
 
     if (c->type == RDC_GRID) {
         /* the Mesh3D buffer as it is: per strip the VIF qword, tag and colour
@@ -3159,23 +3504,43 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
     }
-    if (p.clip != RD_VU_CLIP_SCISSOR) {
-        const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
-               &vcb, bonesOff, 1, b0->firstIndex, b1->firstIndex + b1->indexCount - b0->firstIndex);
-        return;
+    /* a mesh with closing planes on a wide target: once per part of the
+     * scissor, the 4:3 picture with every triangle and the sides beside it
+     * without the planes (vuWideParts); else once as it is */
+    RhiRect part[3];
+    int dropWide[3];
+    const int nParts = vuWideParts(r, &ds, m, part, dropWide);
+    for (int k = 0; k < (nParts > 0 ? nParts : 1); k++) {
+        IcoVuCB pv = vcb;
+        if (nParts > 0) {
+            rhi_cmd_set_scissor(s_cl, &part[k]);
+            if (dropWide[k]) {
+                pv.draw[2] |= ICO_VU_DROP_WIDE;
+            }
+        }
+        if (p.clip != RD_VU_CLIP_SCISSOR) {
+            const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
+            vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+                   &pv, bonesOff, 1, b0->firstIndex,
+                   b1->firstIndex + b1->indexCount - b0->firstIndex);
+            continue;
+        }
+        IcoVuCB cut = pv, kick = pv;
+        cut.draw[2] |= ICO_VU_CUT_ONLY;
+        kick.draw[2] |= ICO_VU_KICK_ONLY;
+        RdStateBlock fan = r->st;
+        fan.ds.abe = 1; /* the fans' PRIM is the common block's 0x5D: ABE on */
+        for (uint32_t b = p.firstBatch; b < last; b++) {
+            const RdVuBatchRec *br = &m->batches[b];
+            vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+                   &cut, bonesOff, 1, br->firstIndex, br->indexCount);
+            vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
+                   &kick, bonesOff, 1, br->firstIndex, br->indexCount);
+        }
     }
-    IcoVuCB cut = vcb, kick = vcb;
-    cut.draw[2] |= ICO_VU_CUT_ONLY;
-    kick.draw[2] |= ICO_VU_KICK_ONLY;
-    RdStateBlock fan = r->st;
-    fan.ds.abe = 1; /* the fans' PRIM is the common block's 0x5D: ABE on */
-    for (uint32_t b = p.firstBatch; b < last; b++) {
-        const RdVuBatchRec *br = &m->batches[b];
-        vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize, &cut,
-               bonesOff, 1, br->firstIndex, br->indexCount);
-        vuDraw(r, &r->st, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize,
-               &kick, bonesOff, 1, br->firstIndex, br->indexCount);
+    RhiRect sc;
+    if (nParts > 0 && scissorRect(r, ds.tc, &sc)) {
+        rhi_cmd_set_scissor(s_cl, &sc); /* the draw's own, as bindDraw set it */
     }
 }
 
@@ -3562,8 +3927,12 @@ static void doShadowResolve(Replay *r)
  * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
  * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:
  * the Z source's depth (the target of the bound depth view, else the state's
- * depth target; every target depth is created sampleable, rd_core.c) is
- * sampled where it is, in RHI_STATE_DEPTH_READ, the LUT is uploaded into
+ * depth target) is read the way g_rd.fogPath says (rd__fog_source): sampled
+ * where it is, in RHI_STATE_DEPTH_READ, through a whole copy of it
+ * (rd__sampled_depth: tile-based GPUs and D24S8 by default; the same
+ * values, ctest rd_fog_depth_copy_dump), or as words copied out through a
+ * buffer into an R32_UINT texture (fog_lut_buffer_ps), whichever passed
+ * the fog's self-test (rd_fog_selftest); the LUT is uploaded into
  * s_fogLut, and the sprite is drawn through the sprite vertex shader and
  * fog_lut_ps, which reconstructs the GS Z, takes bits 16..23 as the index,
  * applies the texture function and the Z test, and blends with the state
@@ -3574,12 +3943,27 @@ static RhiTexture s_fogLut;
 
 static RhiState s_fogLutState;
 
+static RdDepthCopy s_fogDepth; /* the depth's copy on the RD_FOG_COPY path */
+
+void rd__scene_caches_free(void)
+{
+    if (s_wrapAcc.id) {
+        rhi_destroy_texture(s_wrapAcc);
+    }
+    s_wrapAcc = (RhiTexture){0};
+    s_wrapW = s_wrapH = 0;
+    rd__depth_copy_free(&s_fogDepth);
+    rd__fog_buffer_free();
+}
+
 void rd__fog_shutdown(void)
 {
     if (s_fogLut.id) {
         rhi_destroy_texture(s_fogLut);
     }
     s_fogLut = (RhiTexture){0};
+    rd__depth_copy_free(&s_fogDepth);
+    rd__fog_path_shutdown(); /* the buffer path's objects and the probe's */
 }
 
 static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -3598,7 +3982,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     RdDrawPass pl[2], dp[4];
-    const int np = rd__expand_no_dual(pl, rd__fog_plan(&r->st, tc->format, pl), dp);
+    const int buffer = g_rd.fogPath == RD_FOG_BUFFER;
+    const int np = rd__expand_no_dual(pl, rd__fog_plan(&r->st, tc->format, buffer, pl), dp);
     if (np == 0) {
         return;
     }
@@ -3640,9 +4025,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!s_fogLut.id) {
         return;
     }
-    /* the GS's BITBLT of the Z buffer to 0x2800: the depth read in place
-     * (the pass below binds the colour target alone) */
-    rd__transition(s_cl, tz->depth, &tz->depthState, RHI_STATE_DEPTH_READ);
+    /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
+     * copy, or its words (g_rd.fogPath); the pass below binds the colour
+     * target alone whichever it is */
+    RdFogSource src;
+    if (!rd__fog_source(s_cl, tz, &s_fogDepth, &src) || src.buffer != buffer) {
+        return;
+    }
     rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
     rhi_cmd_copy_buffer_to_texture(s_cl, g_rd.ring[s_slot], lOff, lutPitch, s_fogLut, 0,
                                    (RhiRect){0, 0, 256, 1});
@@ -3657,7 +4046,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tz->w;
     ds.th = tz->h;
     ds.textured = 1;
-    r->stretch = 1; /* the fog sprite covers the screen */
+    ds.screenCopy = 1; /* it reads the depth texel under each pixel */
+    r->stretch = 1;    /* the fog sprite covers the screen */
     /* no prepareDraw here: the per-draw flags it resets are reset here, so
      * the previous draw's mirror (scissorRect) is not inherited */
     r->mirror = 0;
@@ -3670,8 +4060,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
     b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[0].texture = tz->depth;
-    b[0].aspect = RHI_ASPECT_DEPTH;
+    b[0].texture = src.tex;
+    b[0].aspect = src.aspect;
     b[1].slot = 1;
     b[1].type = RHI_BIND_SAMPLER;
     b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
@@ -3694,7 +4084,9 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         cb.col[0] = p.z;
         cb.col[1] = r->st.ds.test.zte ? r->st.ds.test.ztst : RD_ZTST_ALWAYS;
         cb.param[0] = rd__target_z_scale(zid);
-        cb.scale[0] = tz->sx; /* the depth's texels per GS pixel */
+        cb.param[1] = rd__depth_unorm_steps();
+        cb.param[2] = src.sabotaged ? 1.0f : 0.0f; /* ICO_RD_FOG_SABOTAGE: reads give 0 */
+        cb.scale[0] = tz->sx;                      /* the depth's texels per GS pixel */
         cb.scale[1] = tz->sy;
         rhi_cmd_set_pipeline(s_cl, pipe);
         rd__bind_uniform(s_cl, 0, r->frameBG);
@@ -3707,6 +4099,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }
+    }
+    /* the first fogged replay after start or a new scene size: what the
+     * fog read and what it drew, for the log (after the draw, so the read
+     * itself is the frame's own) */
+    if (rd__fog_probe_wanted()) {
+        endPass(r);
+        rd__fog_probe_record(s_cl, tz, zid, &src, tc);
     }
     (void)topo;
 }
@@ -3839,6 +4238,42 @@ static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, in
     return fl;
 }
 
+/* Whether a staticBlur sprite writes its own colour into every texel of
+ * its target and touches nothing else: untextured, without blend, alpha
+ * test, DATE, destination read or depth, all four channels written whole,
+ * and its rect and the scissor holding the whole target.  fx_sprite_ps then
+ * returns RGBAQ (alpha with FBA's bit) / 255 at every texel, which a clear
+ * to the same value stores byte for byte.  The aura's buffer is cleared
+ * this way every frame (auraInspireBefore: a black sprite over AURA_WORK,
+ * a scene-sized target).  Coverage as fx_sprite_ps has it: texel px stands
+ * for GS pixel floor(px / s), at window coordinate origin + 16 that, kept
+ * when inside [x0, x1); the last texel's GS pixel is held a hundredth of
+ * a pixel inside the target so the GPU's division cannot round it out. */
+static bool blurSpriteClears(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                             int textured, int dstRead, int useDepth)
+{
+    const RdDrawState *d = &r->st.ds;
+    if (textured || dstRead || useDepth || d->abe || d->test.date != RD_DATE_OFF ||
+        (d->test.ate && d->test.atst != RD_ATST_ALWAYS) || d->colorMask != 0xF || d->fbmsk != 0 ||
+        r->st.useOffset != 0 || r->st.gsW != tc->w || r->st.gsH != tc->h || tc->w == 0 ||
+        tc->h == 0 || tc->tw == 0 || tc->th == 0 || !(tc->sx > 0.0f) || !(tc->sy > 0.0f)) {
+        return false;
+    }
+    if ((float)(tc->tw - 1) / tc->sx + 0.01f >= (float)tc->w ||
+        (float)(tc->th - 1) / tc->sy + 0.01f >= (float)tc->h) {
+        return false;
+    }
+    const int32_t ox = 16 * (2048 - (int32_t)(r->st.gsW >> 1));
+    const int32_t oy = 16 * (2048 - (int32_t)(r->st.gsH >> 1));
+    if ((int32_t)p->rect[0] > ox || (int32_t)p->rect[1] > oy ||
+        (int32_t)p->rect[2] <= ox + 16 * ((int32_t)tc->w - 1) ||
+        (int32_t)p->rect[3] <= oy + 16 * ((int32_t)tc->h - 1)) {
+        return false;
+    }
+    RhiRect sc;
+    return scissorRect(r, tc, &sc) && sc.x == 0 && sc.y == 0 && sc.w == tc->tw && sc.h == tc->th;
+}
+
 /* ------------------------------------------------------------ staticBlur
  * RD_POST_MOTION_BLUR .. RD_POST_EYE_BLUR and the reduction's sprites
  * (RD_POST_REDUCTION): one GS sprite through fx_rect_vs and fx_sprite_ps
@@ -3850,7 +4285,7 @@ static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, in
  * it draws into, the target is first copied into its snapshot, which the
  * shader reads as the destination (t2) and, sampling itself, as the
  * texture: the GS reads both before it writes. */
-static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdPostRec p;
     memcpy(&p, f->payload + c->u[1], sizeof(p));
@@ -3925,6 +4360,14 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     r->mirror = 0;
     r->uiPrim = 0;
     r->blockCs = 0.5f;
+    if (blurSpriteClears(r, tc, &p, textured, dstRead, useDepth)) {
+        /* a clear instead of a full-target draw (blurSpriteClears) */
+        const uint32_t a = p.rgba[3] | (d->fba ? 0x80u : 0u);
+        const float col[4] = {(float)p.rgba[0] / 255.0f, (float)p.rgba[1] / 255.0f,
+                              (float)p.rgba[2] / 255.0f, (float)(a & 0xFFu) / 255.0f};
+        pendClear(r, r->st.color, tc, col, 0, 0);
+        return;
+    }
     float uv[4];
     rd__blur_uv_rect(c->b[0], &p, uv); /* the reduction's UVs under the mirror */
     RhiRect need = {0, 0, tc->tw, tc->th};
@@ -3958,6 +4401,7 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tw;
     ds.th = th;
     ds.textured = textured;
+    ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
     const RhiBindGroup g2 = bindDraw(r, &ds);
     if (!g2.id) {
         return;
@@ -3999,6 +4443,40 @@ static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
+/* The reduction's textured sprite with Full pixel on.  The game draws it
+ * inside a scissor two columns and a few rows in from the frame's edge (the
+ * black border), and with the wrap it never sets to CLAMP, so the last
+ * column also blends in a quarter of the first.  Here the scissor is the
+ * whole target and both axes clamp, so the border shows the picture SCENE
+ * holds under it and the edges read their own texels.  The recorded scissor
+ * and wrap stay in the frame (and in the dumps); this replaces them for this
+ * one draw and puts them back after it, whichever way it returns.  The black
+ * clear sprite before it is not textured and covers everything already. */
+static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    if (!g_rd.settings.fullPixel || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
+        doBlurSpriteDraw(r, f, c);
+        return;
+    }
+    const RdTargetRec *tc = rd__target_rec(r->st.color);
+    if (!tc) {
+        doBlurSpriteDraw(r, f, c);
+        return;
+    }
+    int32_t scissor[4];
+    memcpy(scissor, r->st.scissor, sizeof(scissor));
+    const RdSamplerWrap wrap = r->st.ds.wrap;
+    r->st.scissor[0] = 0;
+    r->st.scissor[1] = 0;
+    r->st.scissor[2] = (int32_t)tc->w - 1;
+    r->st.scissor[3] = (int32_t)tc->h - 1;
+    r->st.ds.wrap.s = RD_WRAP_CLAMP;
+    r->st.ds.wrap.t = RD_WRAP_CLAMP;
+    doBlurSpriteDraw(r, f, c);
+    memcpy(r->st.scissor, scissor, sizeof(scissor));
+    r->st.ds.wrap = wrap;
+}
+
 /* ----------------------------------------------------------------- frame */
 
 /* The levels a game texture gets: the full chain with the
@@ -4007,6 +4485,9 @@ static uint8_t texLevels(const RdTexRec *t)
 {
     if (t->replacement) {
         return t->mipLevels; /* texture packs: the image's own levels, whatever the filter */
+    }
+    if (t->gsLevels > 1 && t->gsChain) {
+        return t->gsLevels; /* the TIM2's own levels, whatever the filter */
     }
     if (!g_rd.filterUpgrade || rd__texel_is_coverage(t->format) || t->w < 2 || t->h < 2 ||
         (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
@@ -4156,28 +4637,40 @@ bool rd__begin_own_frame(uint64_t ringBytes)
     return ensureRing(ringBytes);
 }
 
-/* Levels 1.. of a game texture: 2x2 box filtered from the base
- * (rdtex_build_mip_chain; colour weighted by alpha when the alpha byte is
- * the draws' alpha), alpha coverage kept (rdtex_keep_alpha_coverage)
+/* Levels 1.. of a game texture: its GS levels when it has them
+ * (RdTexRec.gsChain, the TIM2's own pictures), else 2x2 box filtered from
+ * the base (rdtex_build_mip_chain; colour weighted by alpha when the alpha
+ * byte is the draws' alpha), alpha coverage kept (rdtex_keep_alpha_coverage)
  * for the textures mipBoost names, at their draws' reference, each level
  * copied into the ring and onto its subresource. */
 static void uploadMips(RdTexRec *t, uint8_t levels)
 {
     const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
     const uint32_t offA = rhi_limits()->copyOffsetAlign;
-    uint8_t *chain = malloc(rdtex_mip_chain_bytes(t->w, t->h) + 4);
-    if (!chain) {
-        return;
+    uint8_t *chain = NULL;
+    const uint8_t *src;
+    uint32_t n;
+    if (t->gsLevels > 1 && t->gsChain) {
+        /* the TIM2's own levels (rdtex_store_levels), as the GS has them:
+           no box filter, no alpha coverage kept */
+        src = t->gsChain;
+        n = t->gsLevels - 1u;
+        t->mipBuiltBoost = 0;
+        t->mipBuiltRef = 0;
+    } else {
+        chain = malloc(rdtex_mip_chain_bytes(t->w, t->h) + 4);
+        if (!chain) {
+            return;
+        }
+        n = rdtex_build_mip_chain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
+        uint8_t ref;
+        t->mipBuiltBoost = (uint8_t)mipBoost(t, &ref);
+        t->mipBuiltRef = ref;
+        if (t->mipBuiltBoost) {
+            rdtex_keep_alpha_coverage(t->pixels, t->w, t->h, chain, n, ref);
+        }
+        src = chain;
     }
-    const uint32_t n =
-        rdtex_build_mip_chain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
-    uint8_t ref;
-    t->mipBuiltBoost = (uint8_t)mipBoost(t, &ref);
-    t->mipBuiltRef = ref;
-    if (t->mipBuiltBoost) {
-        rdtex_keep_alpha_coverage(t->pixels, t->w, t->h, chain, n, ref);
-    }
-    const uint8_t *src = chain;
     uint32_t w = t->w, h = t->h;
     for (uint32_t l = 1; l < levels && l <= n; l++) {
         w = w > 1 ? w / 2 : 1;
@@ -4469,8 +4962,8 @@ static void clearNewTargets(void)
             p.depth.clearDepth = 1.0f; /* above every GS Z (gs_z_to_depth) */
             /* the stencil cleared, and stored only inside a shadow window
              * (none is open before the walk) */
-            rd__stencil_ops(&s_stencil.w, t->depth.id, true, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
-                            &p.depth.stencilStore);
+            stencilOps(&s_stencil.w, t->depth.id, true, RHI_LOAD_CLEAR, &p.depth.stencilLoad,
+                       &p.depth.stencilStore);
         }
         p.width = t->tw;
         p.height = t->th;
@@ -4579,16 +5072,30 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     Replay r;
     memset(&r, 0, sizeof(r));
     r.st = f->startState;
+    r.perfPost = -1;
     memset(&s_pend, 0, sizeof(s_pend)); /* no clear pending from another replay */
+    const uint32_t headHalf = sceneHeadHalf(f);
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            if (c->type == RDC_TARGET) {
+                r.perfPost = perfTargetPost(&r, c); /* before the state takes the new target */
+            }
             if (rd__apply_state(&r.st, c)) {
+                if (c->type == RDC_TARGET) {
+                    r.halfAdded = sceneKeepsHalf(&r.st, l, headHalf);
+                }
                 continue;
             }
             if (c->type != RDC_SCREEN && c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
                 flushScreenRun(&r); /* the run's draw before this action's */
+            }
+            if (c->type == RDC_POST_STUB && rd__perf_post_of_kind(c->b[0]) >= 0) {
+                r.perfPost = rd__perf_post_of_kind(c->b[0]);
+            }
+            if (c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {
+                perfPost(&r, r.perfPost); /* the GPU timing's effect for this action */
             }
             switch (c->type) {
             case RDC_NOP:

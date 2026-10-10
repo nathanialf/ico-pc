@@ -617,7 +617,12 @@ void ico_input_sdl_update(void)
         s_raw.mouse[1] = left;
     }
     /* Escape (Back on Android): Start or Triangle, outside the bindings */
-    v.buttons |= ico_escape_take(&s_escape);
+    {
+        const unsigned int esc = ico_escape_take(&s_escape);
+
+        v.buttons |= esc;
+        v.menu_buttons |= esc;
+    }
     if (s_touchDevice) {
         touch_step(&v);
         /* a touch look pad stick that won the merge is not the mouse's */

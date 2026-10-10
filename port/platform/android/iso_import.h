@@ -4,7 +4,7 @@
  * The Android first start: the disc image the player chose in
  * the system's file picker (a content:// address, which SDL_IOFromFile opens
  * through the content resolver as a seekable stream) copied into the app's
- * files folder as Ico_PAL.iso or Ico_PAL.chd (android_paths.h), where the
+ * files folder as Ico_PAL.iso, Ico_PAL.chd or Ico_PAL.bin (android_paths.h), where the
  * first-run extractor (port/data/extract.h) reads it like any file.
  * main_host.c deletes the copy once the game's data is mounted, unless
  * keep_image=1 is in ico-pc.ini.
@@ -58,10 +58,19 @@ void ico_iso_space_text(char *out, size_t size, uint64_t needBytes, uint64_t fre
                         const char *folder);
 
 /* "chd" when the first bytes of the file (head, headLen; may be NULL) are a
-   CHD header ("MComprHD"), or when they are not known and name (the
-   picker's address or file name; may be NULL) ends in ".chd" in any case;
-   else "iso". The extractor checks the header itself anyway. */
+   CHD header ("MComprHD"), "bin" when 16 or more of them start with a raw
+   CD image's 12-byte sync pattern; when the bytes are not known, by name
+   (the picker's address or file name; may be NULL) ending in ".chd" or
+   ".bin" in any case; else "iso". The extractor checks the header itself
+   anyway. */
 const char *ico_iso_ext_for(const char *name, const void *head, size_t headLen);
+
+/* Whether the chosen file is a .cue sheet: its name ends in ".cue" in any
+   case, or its first bytes are text that starts (after a UTF-8 byte order
+   mark and blank space) with a cue command (FILE, REM, TITLE, CATALOG,
+   PERFORMER, TRACK and the rest), in any case.  A sheet only lists the
+   .bin, so the import refuses it. */
+int ico_iso_is_cue(const char *name, const void *head, size_t headLen);
 
 #ifdef __ANDROID__
 

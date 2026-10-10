@@ -15,6 +15,12 @@
 #include <stdio.h>
 #include "MicroCode.h"
 
+#ifdef ICO_RD
+
+#include "GifHost.h"
+
+#endif
+
 /* PC port (wave 5, R5c).  The
    strip packet below is a VIF DIRECT block (path 2) of GIF REGLIST packets:
    mc_HostDma reads it as the GIF would and the GS register decoder draws it,
@@ -519,7 +525,12 @@ end:
         dl_OpenDma(5, PacketBufferStruct.dma.c, 0);
         dl_CloseDma();
 #ifdef ICO_RD
+        /* set_vertex projected the strip through the frame camera (+0x80
+           then +0xC0, ST = uv q, Q = 1/w), so the presenter may see it
+           through its blended camera with the walls it lies on */
+        gif_HostFrameProjected(1);
         mc_HostDma(5, PacketBufferStruct.dma.c, 0);
+        gif_HostFrameProjected(0);
         {
             static int reported;
 

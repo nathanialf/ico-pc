@@ -290,7 +290,12 @@ typedef struct RdCamera {
                      vertical FOV */
     float nearZ, farZ;
     uint8_t cut; /* 1 on a camera cut this tick; disables interpolation for the frame */
-    uint8_t _pad[3];
+    /* 1: the port's own free camera drew this tick (photo mode, rd_free_camera):
+     * the VU draws keep the triangles with a vertex behind the eye, GPU-clipped
+     * (vu_common.hlsli VU_F_BEHIND_EYE); 0 in the game's cameras and in older
+     * dumps (the byte was padding, always zero) */
+    uint8_t freeCamera;
+    uint8_t _pad[2];
 } RdCamera;
 
 typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPreset;
@@ -304,11 +309,14 @@ typedef enum RdPreset { RD_PRESET_ORIGINAL = 0, RD_PRESET_ENHANCED = 1 } RdPrese
 typedef struct RdSettings {
     RdPreset preset;
     uint32_t outputWidth, outputHeight; /* window/backbuffer */
-    float aspect;                       /* 4/3 .. 32/9 (0, a zeroed RdSettings: 4/3) */
+    float aspect;                       /* 4/3 .. 20/3 (0, a zeroed RdSettings: 4/3) */
     uint8_t interpolate;                /* uncapped presentation (rd_present), any preset */
     uint8_t mirror;                     /* mirror mode: final blit flips x, UI pre-flipped */
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
+    /* the reduction pass draws the whole frame, with no black border and no
+     * wrap at the edge (rd_replay.c doBlurSprite) */
+    uint8_t fullPixel;
     uint8_t vsync;
     /* Texture packs ([video] texture_pack, dump_textures): replacements
      * from the pack drawn in place of the game's textures (a true -> false
@@ -396,6 +404,13 @@ const RdSettings *rd_get_settings(void);
  * widening) and down; 1 x 1 before rd_init, at 1x and under the CRT
  * filter.  The menus' text strips are rasterised to it (port/ui/menu_font.c). */
 void rd_get_scene_scale(float *sx, float *sy);
+/* The scene's vertical scale (a whole number, rounded down) when it is below
+ * the scale the settings asked for, because the GPU's size limit held it
+ * (rd_present.c rd__apply_display) or its memory could not hold the targets
+ * and they were made smaller (rd_core.c createNamedTargets, and a later
+ * allocation that failed); 0 when they are as asked.  The
+ * Resolution row shows it after the asked scale, "16x (8x)". */
+int rd_scene_scale_lowered(void);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */
@@ -426,6 +441,21 @@ uint32_t rd_precreate_pipelines(void);
  * clears it.  Kept across calls until cleared. */
 typedef void (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
 void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
+/* The depth fog's self-test (rd_fog_path.c): a frame of its own (never
+ * recorded, never presented, no frame number) draws a grid of cells at
+ * known GS Z on SCENE at its real size and scale and fogs it with a known
+ * LUT, through one way of reading the depth (in place, a copy, a buffer)
+ * after another in the platform's order, stopping at the first that
+ * passes; the fogged pixels are read back and compared with the GS
+ * arithmetic.  That first way is the one the fog takes from then on (an
+ * ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY override is tried first and
+ * stays); the ways after it are not tried, unless ICO_RD_FOG_PATH=test (a
+ * developer switch) asks for every one.  One log line, "fog: depth path",
+ * names it with every result ("not tried" for the rest).
+ * The window calls it after rd_precreate_pipelines; after that it runs
+ * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
+ * whether the path in force passed. */
+bool rd_fog_selftest(void);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s
@@ -491,6 +521,31 @@ bool rd_interpolation_active(void);
 bool rd_present(float alpha);
 uint32_t rd_frame_number(void);
 void rd_camera_cut(void);
+/* rd_free_camera: the frame being recorded is drawn from the port's own free
+ * camera (photo mode, port/game/photo_view.c), not a camera the game's
+ * artists placed: RdCamera.freeCamera.  Outside an open frame it applies to
+ * the next one. */
+void rd_free_camera(void);
+
+/* What the last present showed (rd_present's, or with interpolation off
+ * rd_end_frame's one present of the frame), for the window's start-up log: the
+ * frame's number, its keep flag, the strongest fade it recorded (1 + the
+ * fade's alpha, GS 0x80 = 1.0; 0 for none), the frame-level snap against
+ * the frame before (rd_internal.h RD_SNAP_*: 0 blended) and whether it was
+ * the tick's first present.  False before the first present. */
+typedef struct RdPresentInfo {
+    uint32_t frame, keep, fade, snap, firstOfTick;
+} RdPresentInfo;
+
+bool rd_last_present_info(RdPresentInfo *out);
+
+/* DISPLAY's colour (RGBA, as stored) at RD_DISPLAY_PROBE_POINTS points: the
+ * centre, then the centres of the top-left, top-right, bottom-left and
+ * bottom-right quarters.  Five single-texel copies and a readback that
+ * waits for the GPU: for a diagnostic over a few frames, never per frame
+ * in play.  False without a device or DISPLAY. */
+#define RD_DISPLAY_PROBE_POINTS 5
+bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4]);
 
 /* The present clock the host derives alpha from.  A present's
  * measured time carries the jitter of the simulation step and the sleeps
@@ -764,7 +819,12 @@ void rd_color_mask(uint32_t fbmsk);
  *   rd_blend_func     the ALPHA register alone: equation and FIX, ABE untouched
  *   rd_scissor       SCISSOR_1, GS pixels of the bound target, inclusive
  *                    (rd_set_target resets it to the target's size)
- *   rd_sampler_filter TEX1 alone (MMAG, MMIN base filter); wrap untouched
+ *   rd_sampler_filter TEX1 alone (MMAG, MMIN base filter); wrap untouched;
+ *                    no mipmapping (a texture with GS levels draws level 0)
+ *   rd_sampler_tex1   the whole TEX1 word: the filters as rd_sampler_filter
+ *                    takes them from it, and its mipmap fields (MXL, MMIN,
+ *                    LCM, L, K: rd_tex1_lod), which pick the level a texture
+ *                    with GS levels is drawn at (rdtex_store_levels)
  *   rd_sampler_wrap   CLAMP alone; filters untouched
  *   rd_gouraud       PRIM.IIP: 1 = Gouraud (the default), 0 = flat, where the
  *                    GS takes the colour of a primitive's last vertex
@@ -774,6 +834,7 @@ void rd_abe(int abe);
 void rd_blend_func(RdBlend eq, uint8_t fix);
 void rd_scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
 void rd_sampler_filter(RdFilter mag, RdFilter min);
+void rd_sampler_tex1(uint64_t tex1);
 void rd_sampler_wrap(RdWrap s, RdWrap t);
 void rd_gouraud(int iip);
 /* PRIM.AA1, the GS's edge antialiasing (0 = off, the default).  It acts on
@@ -1070,12 +1131,60 @@ void rd_shadow_resolve(void);
  *                  Enhanced projection and interpolation (not dumped).  The
  *                  Original preset draws from the matrices the VU packets
  *                  carry and does not read it.  Nesting depth 4, 8 scopes a
- *                  frame */
+ *                  frame
+ * rd_grid_screen_st the next grid draw (rd_draw_vu_grid, from
+ *                  prim_DispMesh3D) has STs that pool.c computed as a screen
+ *                  position of each vertex through the frame's world to
+ *                  screen matrix (an RdGridSt formula below), with sx = 1 /
+ *                  ScreenWidth and sy = 1 / ScreenHeight as the game had
+ *                  them and each vertex's wave height in its ST's w.  While
+ *                  pictures are blended and the camera moves, the
+ *                  interpolation computes those STs again through the
+ *                  blended camera instead of blending the two ticks' STs
+ *                  (rd_interp.c).  Recorded in the grid's command (b[5],
+ *                  f[0], f[1]), so dumps keep it; it applies to one draw */
 RdTarget rd_gs_named_block(uint32_t tbp, uint32_t gsW, uint32_t gsH);
 RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth);
 void rd_alias_target(RdTarget from, RdTarget to);
 void rd_push_camera(const RdCamera *cam);
 void rd_pop_camera(void);
+/* rd_camera_depth     the rd_push_camera scopes open in the frame being
+ *                    recorded (0 outside a frame)
+ * rd_frame_projected  while on, the screen prims (rd_screen_prims) and
+ *                    shadow volumes (rd_shadow_tris) recorded are marked as
+ *                    projected on the CPU by the frame camera (rd_set_camera:
+ *                    GsBase.c's +0x80 view and +0xC0 screen matrix, whose
+ *                    product is +0x100): their GS X, Y and Z are a world
+ *                    point seen through that camera, so the presenter may
+ *                    see the point through the camera it blends between
+ *                    ticks.  Never inside an rd_push_camera scope (a
+ *                    reflection's camera).  Recording only; off by default */
+int rd_camera_depth(void);
+void rd_frame_projected(int on);
+
+/* rd_grid_screen_st's formulas, pool.c's per vertex q (h its wave height in
+ * ST.w, M the grid's world to GS screen, (x, y) = (M q).xy / w its GS
+ * position, iw = 1 / w):
+ *   SURFACE        updatePoolGeo's refracting surface:
+ *                  s = (x - 2048) sx + 0.5 + 30 h iw, t the same with y, sy
+ *   REFLECT        updatePoolGeo's reflecting surface: the ray from the eye
+ *                  to q reflected about the normal (0.1 h, -1, 0.1 h), its y
+ *                  negated, is r; d is the GS position of q + r less (x, y);
+ *                  s = (x - 2048 + 1000 d.x) 0.8 sx + 0.5, t the same with
+ *                  y, d.y, sy
+ *   RIPPLE         SetLimitedPoolReflactionMesh: SURFACE with 50 h iw
+ *   RIPPLE_CLAMPED SetLayoutedPoolReflactionMesh: RIPPLE, s at least 0 and
+ *                  t at most 1 */
+typedef enum RdGridSt {
+    RD_GRID_ST_NONE = 0,
+    RD_GRID_ST_SURFACE = 1,
+    RD_GRID_ST_REFLECT = 2,
+    RD_GRID_ST_RIPPLE = 3,
+    RD_GRID_ST_RIPPLE_CLAMPED = 4,
+    RD_GRID_ST_COUNT
+} RdGridSt;
+
+void rd_grid_screen_st(RdGridSt kind, float sx, float sy);
 
 /* --------------------------------------------------------------- post */
 
@@ -1235,6 +1344,32 @@ const RdStats *rd_get_stats(void);
  * frame created (temporary targets, textures).  GPU times come from
  * timestamps when the backend has them (gpuValid), RHI_FRAMES_IN_FLIGHT
  * replays later; rd_perf_pop returns a record once they are in. */
+
+/* The picture effects RdPerfRecord.gpuPostMs times apart.  Each is part of
+ * the list (or, for the CRT filter, the present) it runs in, so their times
+ * are also inside gpuListMs and gpuPresentMs.  The replay tells them by the
+ * effect a post sprite names and by the target a pass draws into:
+ * REDUCTION the scene shrunk into the shown picture (gsb_Reduction), FOG,
+ * MOTION_BLUR (the motion blur), AURA (the feedback blur of the aura: its
+ * own targets AURA_WORK, AURA_TAP, FEED128 and its sprites), GLOW (flare,
+ * bloom and the sun's eye blur), DOF (depth of field), SOFTEN (the screen
+ * softening: the AA0/AA1 passes and the pass into SCENE right after them),
+ * CRT (the CRT filter's passes in the present). */
+enum {
+    RD_PERF_POST_REDUCTION = 0,
+    RD_PERF_POST_FOG,
+    RD_PERF_POST_MOTION_BLUR,
+    RD_PERF_POST_AURA,
+    RD_PERF_POST_GLOW,
+    RD_PERF_POST_DOF,
+    RD_PERF_POST_SOFTEN,
+    RD_PERF_POST_CRT,
+    RD_PERF_POST_COUNT
+};
+
+/* A RD_PERF_POST_* in plain words ("reduction", "depth of field", ...) */
+const char *rd_perf_post_name(int post);
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -1263,10 +1398,16 @@ typedef struct RdPerfRecord {
     double gpuUploadMs;              /* the upload copies at the head */
     double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
     double gpuPresentMs;             /* the present blits */
-    double startMs;                  /* the replay's start (rd's monotonic ms clock) */
-    float alpha;                     /* rd_present's alpha; -1 for a replay that is not one */
-    uint8_t firstOfTick;             /* the first present of its frame */
-    uint8_t _pad2[3];
+    /* per picture effect (RD_PERF_POST_*), inside the times above */
+    double gpuPostMs[RD_PERF_POST_COUNT];
+    double startMs;      /* the replay's start (rd's monotonic ms clock) */
+    float alpha;         /* rd_present's alpha; -1 for a replay that is not one */
+    uint8_t firstOfTick; /* the first present of its frame */
+    /* the replay changed effect more often than there were timestamps:
+       the later changes were not timed apart (their time stayed with the
+       effect, or the scene, before them) */
+    uint8_t gpuPostPartial;
+    uint8_t _pad2[2];
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

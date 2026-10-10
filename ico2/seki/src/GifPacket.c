@@ -912,6 +912,12 @@ typedef struct GsShim { /* port */
     /* renderer R7d: the RdKey the batch's primitives carry
        (gif_HostDrawKey) */
     RdKey key;
+    /* PC port: whether the vertices decoded now were projected on the CPU
+       by the frame camera (gif_HostFrameProjected, or one of the
+       GIF_SP_WORLD helpers, whose rotTransPers is that projection), and
+       whether the open batch's were: a change ends the batch, which
+       rd_screen_prims then marks (rd_frame_projected) */
+    int proj, bProj;
     /* GIF_ENTER scopes */
     int depth, space;
     /* raw A+D bytes callers put in the open packet: decoded from here */
@@ -1055,7 +1061,9 @@ void gif_HostSetTex0Resolver(GifTex0Resolver fn)
 static void gsFlushBatch(void)
 {
     if (gs.nb != 0) {
+        rd_frame_projected(gs.bProj);
         rd_screen_prims((RdPrim)gs.bType, gs.batch, gs.nb, (RdSpace)gs.bSpace, gs.bFixed, gs.key);
+        rd_frame_projected(0);
         gs.nb = 0;
     }
 }
@@ -1371,16 +1379,18 @@ static void gsEmit(RdPrim type, const RdScreenVtx *v, int n)
 {
     int space;
     int fixed = (int)((gs.primL[gsList()] >> 8) & 1);
+    int proj = gs.proj || gs.space == GIF_SP_WORLD;
 
     gsSyncEnv();
     space = gsSpace();
     if (gs.nb != 0 && (gs.bType != (int)type || gs.bSpace != space || gs.bFixed != fixed ||
-                       gs.nb + (unsigned int)n > GS_BATCH_MAX)) {
+                       gs.bProj != proj || gs.nb + (unsigned int)n > GS_BATCH_MAX)) {
         gsFlushBatch();
     }
     gs.bType = (int)type;
     gs.bSpace = space;
     gs.bFixed = fixed;
+    gs.bProj = proj;
     memcpy(&gs.batch[gs.nb], v, (size_t)n * sizeof(*v));
     gs.nb += (unsigned int)n;
 }
@@ -1584,15 +1594,9 @@ static void gsWrite(unsigned long long reg, unsigned long long data)
         rd_sampler_wrap((RdWrap)w.s, (RdWrap)w.t);
         return;
     }
-    case 0x14: /* TEX1_1 */
-    {
-        unsigned int mmin = (unsigned int)((data >> 6) & 7);
-
-        rd_sampler_filter((data >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
-                          mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
-                                                              : RD_FILTER_NEAREST);
+    case 0x14: /* TEX1_1: the filters and the mipmap fields */
+        rd_sampler_tex1((unsigned long long)data);
         return;
-    }
     case 0x18: /* XYOFFSET_1 */
         gs.xyoffsetL[gsList()] = data;
         gs.haveXyoffsetL[gsList()] = 1;
@@ -1737,6 +1741,12 @@ void gif_HostDrawKey(const void *obj, int part, int ordinal)
     gs.key = k;
 }
 
+void gif_HostFrameProjected(int on)
+{
+    gsRawFlush(); /* what callers wrote before belongs to the old setting */
+    gs.proj = on != 0;
+}
+
 void gif_HostDrawKeyText(const char *s, int part)
 {
     unsigned long long h = 0xCBF29CE484222325ull; /* FNV-1a, 64 bits */
@@ -1782,6 +1792,7 @@ void gif_HostFrameReset(void)
     gs.depth = 0;
     gs.space = GIF_SP_AUTO;
     gs.key = 0;
+    gs.proj = 0;
 }
 
 #endif /* ICO_RD */

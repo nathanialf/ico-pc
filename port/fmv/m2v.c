@@ -14,7 +14,10 @@
  *     as they are coded, and the game's streams are frame pictures;
  *   - shared display buffers off: the library copies each output picture
  *     into the three planes this file owns (IV_YUV_420P);
- *   - one core, threads not kept (ithread_single.c).
+ *   - one core, threads not kept (ithread_single.c);
+ *   - the interlace flags (progressive_sequence, progressive_frame,
+ *     top_field_first, ...) read from the units here (ico_m2v_scan_unit):
+ *     the library reports progressive_frame as 1 whatever the stream says.
  */
 #include "m2v.h"
 #include <stdlib.h>
@@ -23,6 +26,10 @@
 #include "iv.h"
 #include "ivd.h"
 #include "impeg2d.h"
+
+/* the pictures in flight whose scans are kept: the decoder holds at most
+   a reference back and a picture behind it */
+#define M2V_STAMPS 16
 
 struct IcoM2v {
     iv_obj_t *codec;
@@ -34,6 +41,18 @@ struct IcoM2v {
     uint32_t plane_size[3];
     uint32_t frames, errors, resets;
     int flushing;
+    /* the header scan (ico_m2v_scan_unit) paired with the output: each
+       picture's scan is kept under a number the decoder carries with the
+       picture (its time stamp, ivd's u4_ts in and out) and read back by
+       the number of the picture that comes out.  The library puts a
+       picture out one call later than the I/P/B reordering alone would
+       (fmv_fields on the disc's streams: the first output is the I
+       picture at the third unit), so the pairing follows the stamp, not
+       an order rule. */
+    IcoM2vScan scan;
+    IcoM2vScan stamped[M2V_STAMPS];
+    uint32_t stamp; /* the number of the newest picture scanned */
+    int field_open; /* a first field was scanned; its second is next */
 };
 
 /* --- aligned allocation (the library asks for its records' alignment) ---- */
@@ -240,6 +259,115 @@ static void scan_seq_header(IcoM2v *d, const uint8_t *p, size_t len)
     }
 }
 
+/* --- the headers the library does not report -------------------------------- */
+
+/* A start code's payload at p[4..]: the bytes there, or 0 past the unit. */
+static unsigned at(const uint8_t *p, size_t len, size_t i)
+{
+    return i < len ? p[i] : 0u;
+}
+
+int ico_m2v_scan_unit(const uint8_t *au, size_t len, IcoM2vScan *scan)
+{
+    size_t i;
+    int picture = 0;
+
+    if (au == NULL || scan == NULL) {
+        return 0;
+    }
+    for (i = 0; i + 4 <= len; i++) {
+        unsigned code;
+
+        if (au[i] != 0 || au[i + 1] != 0 || au[i + 2] != 1) {
+            continue;
+        }
+        code = au[i + 3];
+        if (code == 0xB3) {
+            /* sequence header: 12 bits width, 12 height, 4 aspect, 4 rate */
+            scan->frame_rate_code = (uint8_t)(at(au, len, i + 7) & 0x0F);
+            /* an MPEG-1 sequence has no extension: progressive until one
+               says otherwise */
+            scan->progressive_sequence = 1;
+        } else if (code == 0x00) {
+            /* picture header: 10 bits temporal_reference, 3 coding type */
+            scan->coding_type = (uint8_t)((at(au, len, i + 5) >> 3) & 7);
+            scan->picture_structure = ICO_M2V_FRAME_PICTURE;
+            scan->top_field_first = 0;
+            scan->repeat_first_field = 0;
+            scan->progressive_frame = 1;
+            scan->extensions = 0;
+            picture = 1;
+        } else if (code == 0xB5) {
+            const unsigned id = at(au, len, i + 4) >> 4;
+
+            if (id == 1) {
+                /* sequence extension: 4 id, 8 profile_and_level,
+                   1 progressive_sequence */
+                scan->progressive_sequence = (uint8_t)((at(au, len, i + 5) >> 3) & 1);
+            } else if (id == 8 && picture) {
+                /* picture coding extension: 4 id, 4 x 4 f_code,
+                   2 intra_dc_precision, 2 picture_structure,
+                   1 top_field_first, 1 frame_pred_frame_dct,
+                   1 concealment_motion_vectors, 1 q_scale_type,
+                   1 intra_vlc_format, 1 alternate_scan,
+                   1 repeat_first_field, 1 chroma_420_type,
+                   1 progressive_frame */
+                const unsigned b7 = at(au, len, i + 7);
+
+                scan->picture_structure = (uint8_t)(at(au, len, i + 6) & 3);
+                scan->top_field_first = (uint8_t)(b7 >> 7);
+                scan->repeat_first_field = (uint8_t)((b7 >> 1) & 1);
+                scan->progressive_frame = (uint8_t)(at(au, len, i + 8) >> 7);
+                scan->extensions = 1;
+            }
+        }
+        i += 3;
+    }
+    return picture;
+}
+
+/* The scan of the unit about to be decoded, kept under the next stamp;
+   the second field of a field pair belongs to its first field's picture
+   (same stamp). */
+static void note_unit(IcoM2v *d, const uint8_t *au, size_t len)
+{
+    IcoM2vScan s = d->scan;
+
+    if (!ico_m2v_scan_unit(au, len, &s)) {
+        d->scan.frame_rate_code = s.frame_rate_code;
+        d->scan.progressive_sequence = s.progressive_sequence;
+        return;
+    }
+    d->scan = s;
+    if (d->field_open && s.picture_structure != ICO_M2V_FRAME_PICTURE) {
+        d->field_open = 0;
+        return;
+    }
+    d->field_open = s.picture_structure != ICO_M2V_FRAME_PICTURE;
+    d->stamp++;
+    d->stamped[d->stamp % M2V_STAMPS] = s;
+}
+
+static void fill_scan(IcoM2vFrame *out, const IcoM2vScan *s, const ivd_video_decode_op_t *op)
+{
+    out->scan = *s;
+    out->interlaced = (uint8_t)(s->extensions && !s->progressive_sequence && !s->progressive_frame);
+    switch (op->e_pic_type) {
+    case IV_I_FRAME:
+        out->out_type = 1;
+        break;
+    case IV_P_FRAME:
+        out->out_type = 2;
+        break;
+    case IV_B_FRAME:
+        out->out_type = 3;
+        break;
+    default:
+        out->out_type = 0;
+        break;
+    }
+}
+
 static void fill_out(IcoM2v *d, const ivd_video_decode_op_t *op, IcoM2vFrame *out)
 {
     out->y = d->planes[0];
@@ -264,6 +392,7 @@ static IV_API_CALL_STATUS_T decode_call(IcoM2v *d, const uint8_t *p, size_t len,
     ip.e_cmd = IVD_CMD_VIDEO_DECODE;
     ip.pv_stream_buffer = (void *)p;
     ip.u4_num_Bytes = (UWORD32)len;
+    ip.u4_ts = d->stamp;
     ip.s_out_buffer.u4_num_bufs = 3;
     ip.s_out_buffer.pu1_bufs[0] = d->planes[0];
     ip.s_out_buffer.pu1_bufs[1] = d->planes[1];
@@ -342,6 +471,7 @@ static int decode_unit(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *ou
     }
     if (op.u4_output_present) {
         fill_out(d, &op, out);
+        fill_scan(out, &d->stamped[op.u4_ts % M2V_STAMPS], &op);
         return 1;
     }
     return 0;
@@ -349,6 +479,9 @@ static int decode_unit(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *ou
 
 int ico_m2v_decode(IcoM2v *d, const uint8_t *au, size_t len, IcoM2vFrame *out)
 {
+    if (d != NULL && au != NULL && len > 0) {
+        note_unit(d, au, len);
+    }
     return decode_unit(d, au, len, out, 0);
 }
 
@@ -376,6 +509,7 @@ int ico_m2v_flush(IcoM2v *d, IcoM2vFrame *out)
     }
     if (decode_call(d, NULL, 0, &op) == IV_SUCCESS && op.u4_output_present) {
         fill_out(d, &op, out);
+        fill_scan(out, &d->stamped[op.u4_ts % M2V_STAMPS], &op);
         return 1;
     }
     return 0;

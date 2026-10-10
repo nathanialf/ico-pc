@@ -26,7 +26,28 @@
  *      (index = Z >> 16 where Z <= 0xFFFFFF, LUT, MODULATE by the strength,
  *      the GS LERP with As, alpha As) within 1 LSB per blend; with
  *      fogOffsetA the flat quad on top within 2;
- *   d  the fog frame dumped, loaded and replayed again gives the same pixels.
+ *   d  the fog frame dumped, loaded and replayed again gives the same pixels;
+ *      replayed once more on each other way of reading the depth the device
+ *      has (rd_fog_path.c: in place, a copy of the depth, the path of
+ *      tile-based GPUs and D24S8, and the depth's words through a buffer)
+ *      it gives the same pixels byte for byte.  rd_fog_depth_copy runs the
+ *      whole test with the copy from the start (ICO_RD_DEPTH_COPY=1),
+ *      rd_fog_buffer and rd_fog_buffer_d24s8 with the buffer path
+ *      (ICO_RD_FOG_PATH=buffer), and the D24S8 runs start in place
+ *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too;
+ *   e  the edge at 2x: list 0's SCENE target carries the frame head's half
+ *      pixel (RD_TARGET_HALF_Y, as on PC every frame), a near band over the
+ *      far clear, fog_DrawFog in list 4; the fogged pixels are exactly the
+ *      clear's pixels of the same frame drawn without the fog, so the fog's
+ *      edge sits on the geometry's row at both edges of the band (the fog
+ *      sprite reads the depth texel under each pixel: with the half pixel
+ *      it stood one row off at 2x).
+ * The same checks and tolerances hold on a 24-bit depth buffer
+ * (rd_fog_d24s8 and rd_fog_nodual_d24s8: ICO_VK_FAKE_D24S8=1, the Vulkan
+ * fallback of a phone GPU without a sampled D32S8): there Z is stored in
+ * steps of 256 GS units (2^-32 scale), so bits 16..23 survive except
+ * within one step of an index boundary, which the cells stay 0x400 away
+ * from; the tie and a Z 64 below it round (to nearest) up to the step at 2^24.
  * Every pipeline created is enumerated; no validation errors; no stubbed
  * command replayed. */
 #include <math.h>
@@ -621,8 +642,10 @@ static const uint8_t kClear[4] = {30, 60, 90, 0x80};
 
 /* cell Z: indices 0..255 spread over most cells, the low 16 bits kept
  * 0x400 away from the index boundaries (the D32F depth carries Z to 256
- * near 2^24); some cells above 0xFFFFFF (not fogged), one at the 0xFFFFFF
- * tie (fogged: GEQUAL), a few left at the clear's Z 0 (index 0) */
+ * near 2^24, D24S8 to 256 everywhere); some cells above 0xFFFFFF (not
+ * fogged), one at the 0xFFFFFF tie and one 64 below it (fogged: GEQUAL;
+ * on D24S8 both round to the step at 2^24, above the tie), a few left at
+ * the clear's Z 0 (index 0) */
 static void buildCells(void)
 {
     for (int k = 0; k < CELLS * CELLS; k++) {
@@ -632,6 +655,8 @@ static void buildCells(void)
             z = 0x01000400u + (h & 0x0FFFFF00u); /* above 0xFFFFFF */
         } else if (k == 200) {
             z = 0xFFFFFFu; /* the tie */
+        } else if (k == 201) {
+            z = 0xFFFFC0u; /* below the tie, in its 24-bit step */
         } else if (k % 31 == 3) {
             z = 0; /* not drawn: the clear */
         } else {
@@ -775,8 +800,119 @@ static void checkDump(void)
         printf("  (d) dump -> load -> replay: %d bytes differ\n", diff);
         CHECK(diff == 0, "the replayed dump equals the recorded frame");
     }
+    /* the other ways of reading the depth: the same pixels */
+    const int start = g_rd.fogPath;
+    for (int p = 0; p < RD_FOG_PATH_COUNT; p++) {
+        if (p == start || !rd__fog_path_supported(p)) {
+            continue;
+        }
+        rd__set_fog_path(p);
+        CHECK(rd__replay_frame(&g, 0, false), "replay the loaded frame on the %s path",
+              rd__fog_path_name(p));
+        rhi_wait_idle();
+        if (readScene(again)) {
+            int diff = 0;
+            for (size_t i = 0; i < sizeof(again); i++) {
+                diff += again[i] != s_px[i];
+            }
+            printf("  (d) the fog on the %s path: %d bytes differ from %s\n", rd__fog_path_name(p),
+                   diff, rd__fog_path_name(start));
+            CHECK(diff == 0, "the fog on the %s path equals the fog on %s", rd__fog_path_name(p),
+                  rd__fog_path_name(start));
+        }
+    }
+    rd__set_fog_path(start);
     rd__frame_free(&g);
     remove(path);
+}
+
+/* ============================================ (e) the edge at 2x */
+#define EDGE_S 2
+#define EDGE_Z 0x40000000u /* above 0xFFFFFF: not fogged */
+
+static uint8_t s_edge[2][W * EDGE_S * H * EDGE_S * 4];
+
+/* a near band over the clear, under the frame head's half pixel, and the
+ * fog of case 0 when fog is set */
+static void recordEdge(int fog)
+{
+    static const uint8_t band[4] = {220, 40, 40, 0x80};
+    dl_SetDLPriority(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H,
+                  RD_TARGET_OFFSET | RD_TARGET_HALF_Y);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kClear, 1, 0);
+    rd_texture_off();
+    rd_abe(0);
+    rd_test_gs(0x30000);
+    rd_z_write(1);
+    rd_fba(0);
+    RdScreenVtx v[2] = {sv(64, 100, EDGE_Z, band), sv(448, 200, EDGE_Z, band)};
+    v[0].y += 4; /* rows from 100.25 to 200.25 GS pixels */
+    v[1].y += 4;
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
+    s_fogSwitch = fog;
+    setFog(0);
+    fog_MakeFogClut();
+    dl_SetDLPriority(3);
+    fog_DrawFog();
+    dl_Swap();
+    s_fogSwitch = 1;
+}
+
+static bool readEdge(uint8_t *dst)
+{
+    uint32_t w = 0, h = 0;
+    const bool ok = rd__read_target(rd_target(RD_TARGET_SCENE), dst,
+                                    (size_t)W * EDGE_S * H * EDGE_S * 4, &w, &h) &&
+                    w == W * EDGE_S && h == H * EDGE_S;
+    CHECK(ok, "SCENE readback at %dx (%ux%u)", EDGE_S, w, h);
+    return ok;
+}
+
+static void checkEdge(void)
+{
+    recordEdge(0);
+    if (!readEdge(s_edge[0])) {
+        return;
+    }
+    recordEdge(1);
+    if (!readEdge(s_edge[1])) {
+        return;
+    }
+    const uint32_t tw = W * EDGE_S, th = H * EDGE_S;
+    int bad = 0, top = -1, bottom = -1, fogTop = -1, fogBottom = -1;
+    for (uint32_t y = 0; y < th; y++) {
+        for (uint32_t x = 0; x < tw; x++) {
+            const uint8_t *a = &s_edge[0][(y * tw + x) * 4];
+            const uint8_t *b = &s_edge[1][(y * tw + x) * 4];
+            const int clear = a[0] == kClear[0] && a[1] == kClear[1] && a[2] == kClear[2];
+            const int fogged = memcmp(a, b, 4) != 0;
+            if (x == tw / 2) {
+                if (!clear) {
+                    top = top < 0 ? (int)y : top;
+                    bottom = (int)y;
+                }
+                if (!fogged) {
+                    fogTop = fogTop < 0 ? (int)y : fogTop;
+                    fogBottom = (int)y;
+                }
+            }
+            if (clear != fogged) {
+                if (bad < 5) {
+                    printf("  (e) pixel (%u,%u): %s, %s\n", x, y, clear ? "the clear" : "the band",
+                           fogged ? "fogged" : "not fogged");
+                }
+                bad++;
+            }
+        }
+    }
+    printf("  (e) %dx: the band covers rows %d..%d, the unfogged rows are %d..%d\n", EDGE_S, top,
+           bottom, fogTop, fogBottom);
+    CHECK(top >= 0 && fogTop == top && fogBottom == bottom,
+          "%dx: the fog's edge rows %d..%d, the band's %d..%d", EDGE_S, fogTop, fogBottom, top,
+          bottom);
+    CHECK(bad == 0, "%dx: %d pixels fogged where the band is or unfogged where the clear is",
+          EDGE_S, bad);
 }
 
 static void checkPipelines(void)
@@ -784,7 +920,7 @@ static void checkPipelines(void)
     static RdPipeKeyInt keys[512];
     const uint32_t n = rd__enumerate_reachable(keys, 512);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u", n);
-    int fog = 0;
+    int fog = 0, fogWords = 0;
     for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
@@ -792,14 +928,21 @@ static void checkPipelines(void)
             found |= rd__pipe_key_equal(&keys[j], k);
         }
         fog += k->fs == RD_FS_FOG;
+        fogWords += k->fs == RD_FS_FOG_BUFFER;
         CHECK(found, "created pipeline %u (prog %u vs %u fs %u blend %u) is not enumerated", i,
               k->gs.program, k->vs, k->fs, k->gs.blend);
     }
-    printf("  pipelines: %u created (%d fog), %u reachable\n", rd__pipeline_count(), fog, n);
+    printf("  pipelines: %u created (%d fog, %d fog on the buffer path), %u reachable\n",
+           rd__pipeline_count(), fog, fogWords, n);
     /* the fog's LERP takes a colour and an alpha pass in the
-     * two-pass blend fallback (rd_fog_nodual) */
+     * two-pass blend fallback (rd_fog_nodual), with either fragment shader
+     * the paths case d replayed took */
     const int wantFog = rd_no_dual() ? 2 : 1;
-    CHECK(fog == wantFog, "%d fog pipeline(s), %d expected", fog, wantFog);
+    const bool sampled =
+        rd__fog_path_supported(RD_FOG_INPLACE) || rd__fog_path_supported(RD_FOG_COPY);
+    CHECK(fog == (sampled ? wantFog : 0), "%d fog pipeline(s), %d expected", fog, wantFog);
+    CHECK(fogWords == (rd__fog_path_supported(RD_FOG_BUFFER) ? wantFog : 0),
+          "%d fog pipeline(s) on the buffer path, %d expected", fogWords, wantFog);
 }
 
 int main(void)
@@ -830,6 +973,41 @@ int main(void)
         printf("rd_fog_test: CPU checks ok; SKIP the pixel checks: no usable Vulkan device\n");
         return 77;
     }
+    {
+        /* the D24S8 runs must really have the 24-bit depth */
+        const char *fake = getenv("ICO_VK_FAKE_D24S8");
+        const char *ds = rhi_limits()->depthStencilFormatName;
+        printf("  depth-stencil format %s\n", ds ? ds : "?");
+        if (fake && fake[0] && fake[0] != '0') {
+            CHECK(ds && strcmp(ds, "D24S8") == 0, "ICO_VK_FAKE_D24S8 set but %s in use",
+                  ds ? ds : "?");
+            CHECK(rd__depth_unorm_steps() == 16777215.0f, "D24S8: the fog compares 24-bit steps");
+        } else {
+            const bool d24 = ds && strcmp(ds, "D24S8") == 0;
+            CHECK(rd__depth_unorm_steps() == (d24 ? 16777215.0f : 0.0f), "%s: the fog compares %s",
+                  ds ? ds : "?", d24 ? "24-bit steps" : "float depths");
+        }
+        /* the fog's path: as ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY says,
+         * else the copy on D24S8 and on a tile-based GPU, in place on the
+         * others; the depth copy (stencil kept) with every path but in place */
+        const char *fp = getenv("ICO_RD_FOG_PATH");
+        const char *dc = getenv("ICO_RD_DEPTH_COPY");
+        const bool d24 = ds && strcmp(ds, "D24S8") == 0;
+        int want = d24 || rhi_limits()->tiler ? RD_FOG_COPY : RD_FOG_INPLACE;
+        if (fp && fp[0]) {
+            want = strcmp(fp, "buffer") == 0 ? RD_FOG_BUFFER
+                   : strcmp(fp, "copy") == 0 ? RD_FOG_COPY
+                                             : RD_FOG_INPLACE;
+        } else if (dc && dc[0]) {
+            want = dc[0] != '0' ? RD_FOG_COPY : RD_FOG_INPLACE;
+        }
+        printf("  fog path %s, depth copy %s\n", rd__fog_path_name(g_rd.fogPath),
+               g_rd.depthCopy ? "on" : "off");
+        CHECK(g_rd.fogPath == want, "the fog path is %s, %s expected",
+              rd__fog_path_name(g_rd.fogPath), rd__fog_path_name(want));
+        CHECK(g_rd.depthCopy == (want != RD_FOG_INPLACE), "the depth copy is %s",
+              g_rd.depthCopy ? "on" : "off");
+    }
     gif_HostForgetTextures();
     gif_HostFrameReset();
     dl_Clear();
@@ -850,6 +1028,25 @@ int main(void)
           rhi_vk_validation_error_count());
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     rd_shutdown();
+
+    /* (e) the edge at 2x, in Enhanced */
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.aspect = 4.0f / 3.0f;
+    st.sceneScale = (float)EDGE_S;
+    if (rd_init(W, H, &st, NULL)) {
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        dl_Clear();
+        checkEdge();
+        CHECK(rhi_vk_validation_error_count() == 0, "%dx: %u validation errors", EDGE_S,
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    } else {
+        CHECK(0, "rd_init at %dx", EDGE_S);
+    }
     if (failures) {
         printf("rd_fog_test: %d failures\n", failures);
         return 1;

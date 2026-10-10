@@ -14,6 +14,28 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
+uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs)
+{
+    if (uncappedVsync) {
+        /* one present a refresh, but never fewer than sixty a second: a
+           display can report a refresh it is not running at (a 4K screen
+           the user plays at 60 Hz reported 30.0 Hz, and one present per
+           reported refresh halved what the screen showed), and sixty a
+           second on a true 30 Hz screen only costs what v0.5.1 spent on
+           every screen. A sixteenth of a refresh early: the sleep's
+           overshoot and a game step that a due present lands in only make
+           a present later, and the gap counts from the last present's
+           start, so a gap of exactly one refresh averaged more than one */
+        /* Only in mailbox mode, where a present never blocks: under FIFO a
+           present past the screen's own rate waits for the next refresh and
+           would hold the game's step with it. */
+        const uint64_t sixty = 16666667ull;
+        const uint64_t r = mailbox && refreshNs > sixty ? sixty : refreshNs;
+        return r - r / 16;
+    }
+    return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;
+}
+
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
 static uint64_t median_of(const uint64_t *cost, unsigned n)
 {

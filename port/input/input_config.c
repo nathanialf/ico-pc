@@ -142,6 +142,8 @@ static unsigned char *row_of(IcoBindings *b, int kind, int target)
 int ico_bindings_assign(IcoBindings *b, int target, int kind, int code)
 {
     int t, i, o;
+    int loser = -1;
+    unsigned char prev[ICO_BIND_MAX];
     int limit = kind == ICO_SRC_KEY     ? ICO_KEY_COUNT
                 : kind == ICO_SRC_MOUSE ? ICO_MOUSE_BUTTONS
                 : kind == ICO_SRC_PAD   ? ICO_GP_COUNT
@@ -150,13 +152,18 @@ int ico_bindings_assign(IcoBindings *b, int target, int kind, int code)
     if (target < 0 || target >= ICO_T_COUNT || code <= 0 || code >= limit) {
         return -1;
     }
-    /* one source, one action: take it off the device's other targets */
+    memcpy(prev, row_of(b, kind, target), ICO_BIND_MAX);
+    /* one source, one action: take it off the device's other targets. The
+       first target that held it is swapped in below, as the game's own
+       Button configuration does, so no action is left without a button */
     for (t = 0; t < ICO_T_COUNT; t++) {
         unsigned char *row = row_of(b, kind, t);
 
         for (i = o = 0; i < ICO_BIND_MAX; i++) {
             if (row[i] != code) {
                 row[o++] = row[i];
+            } else if (t != target && loser < 0) {
+                loser = t;
             }
         }
         while (o < ICO_BIND_MAX) {
@@ -168,6 +175,21 @@ int ico_bindings_assign(IcoBindings *b, int target, int kind, int code)
 
         memset(row, 0, ICO_BIND_MAX);
         row[0] = (unsigned char)code;
+    }
+    if (loser >= 0) {
+        unsigned char *row = row_of(b, kind, loser);
+
+        for (o = 0; o < ICO_BIND_MAX && row[o] != 0; o++) {}
+        for (i = 0; i < ICO_BIND_MAX && o < ICO_BIND_MAX; i++) {
+            int have = 0, k;
+
+            for (k = 0; k < o; k++) {
+                have |= row[k] == prev[i];
+            }
+            if (prev[i] != 0 && prev[i] != code && !have) {
+                row[o++] = prev[i];
+            }
+        }
     }
     return 0;
 }

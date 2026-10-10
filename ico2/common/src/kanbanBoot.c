@@ -62,7 +62,26 @@ extern void iosMcLoadProductBlock(McMgr *mp);
    the end of the check, so steps 102 and 190 to 202 never run: no reload
    of stage 1 for the language's textures, no gsResetFunc, no second card
    check. On the PS2 the signs' black backdrop covered those frames; the
-   host draws no sign there, and they showed as flashes. */
+   host draws no sign there, and they showed as flashes.
+
+   So the card check keeps the frame buffer it took at step 2 (fbKeep 1:
+   the frame replays lists 11 and 12 only, over the black DISPLAY of the
+   load) until it lets go with the first sign of its own, in the same tick
+   as on the PS2: the Sony presents sign (the default case, which returns
+   to bootStep 2's kanbanReqAdd(2, 1); kanbanExec draws its backdrop in
+   that tick's frame, icoMisc.c) or the card warning (step 301).  On the
+   PS2 the stage manager let go of it as stage 1's load ended
+   (StageManager.c, the fadeOut 0 path), and the next frames drew stage 1
+   with only the loading layout's black (alpha 127 of 128) and then the
+   language sign's backdrop over it; here those frames (the step 100 to
+   101 tick, 101 and 300) had the loading layout's black alone.  The stage
+   manager asks ico_kanban_boot_holds_keep before it lets go.  No step
+   waits on fbKeep, so every step keeps its tick. */
+
+int ico_kanban_boot_holds_keep(void)
+{
+    return bootStep == 2;
+}
 
 static int kanbanBootMcCheck(void)
 {

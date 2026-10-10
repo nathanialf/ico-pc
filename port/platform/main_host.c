@@ -31,12 +31,13 @@
  *                            image directly instead: the default of the
  *                            headless build, so trace runs and tests read
  *                            the ISO as before
- *   disc image               Ico_PAL.iso or Ico_PAL.chd beside the
+ *   disc image               Ico_PAL.iso, .chd, .bin or .cue beside the
  *                            executable, else ini iso=, else $ICO_ISO, else
- *                            baserom/Ico_PAL.iso or .chd under the working
+ *                            baserom/Ico_PAL.iso (or .chd, .bin, .cue) under the working
  *                            folder, else a (Windows: native; Linux window build: SDL3)
  *                            file-open dialog whose answer is saved as iso=
- *                            in ico-pc.ini. A .chd is read as the ISO it
+ *                            in ico-pc.ini. A .chd or .bin (or the .cue
+ *                            that names it) is read as the ISO it
  *                            holds (port/data/iso9660.c). With use_iso its
  *                            SHA-1 is checked against the SCES-50760
  *                            image's (ini
@@ -75,7 +76,7 @@
  * box and ends the process with _exit, and the end-of-run steps run from
  * ico_host_shutdown before ico_host_main returns instead of atexit.
  * The window opens before the game data is mounted (SDL has one window
- * there), and the disc image is Ico_PAL.iso or .chd in the files folder,
+ * there), and the disc image is Ico_PAL.iso, .chd, .bin or .cue in the files folder,
  * else ini iso= when that file exists, else the one chosen in the system's
  * file picker, copied into the files folder first
  * (port/platform/android/iso_import.h); the copy's and the extraction's
@@ -576,7 +577,7 @@ static int pick_iso_sdl(char *out, size_t size)
         /* the window keeps drawing behind the picker; Back while it shows
            (the picker did not come up) gives up */
         if (ico_window_progress("Setting up ICO (first start only)",
-                                "Choose your ICO disc image (.iso or .chd)", -1)) {
+                                "Choose your ICO disc image (.iso, .chd, .bin or .cue)", -1)) {
             pick_abandon();
             fprintf(stderr, "ico_pc: stopped while waiting for the file picker\n");
             return -1;
@@ -596,7 +597,7 @@ static int pick_iso_sdl(char *out, size_t size)
 static int pick_iso_sdl(char *out, size_t size)
 {
     static const SDL_DialogFileFilter filters[] = {
-        {"ICO disc image (*.iso, *.chd)", "iso;chd"},
+        {"ICO disc image (*.iso, *.chd, *.bin, *.cue)", "iso;chd;bin;cue"},
         {"All files", "*"},
     };
     SDL_Event ev;
@@ -637,7 +638,9 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
 /* The disc image's names beside the program (Android: in the app's files
    folder), the plain image first: of two copies, the one read without
    decoding. */
-static const char *const image_names[2] = {"Ico_PAL.iso", "Ico_PAL.chd"};
+static const char *const image_names[] = {"Ico_PAL.iso", "Ico_PAL.chd", "Ico_PAL.bin",
+                                          "Ico_PAL.cue"};
+#define IMAGE_NAME_COUNT ((int)(sizeof(image_names) / sizeof(image_names[0])))
 
 /* iso= into ico-pc.ini when the image was picked (the dialog, the Android
    picker), so the next start finds it */
@@ -669,7 +672,7 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
     (void)i;
     return find_iso_android(ini, exe_dir, iso, picked);
 #else
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
         ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image beside the executable: %s\n", iso);
@@ -690,7 +693,7 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         fprintf(stderr, "ico_pc: disc image from ICO_ISO: %s\n", iso);
         return 0;
     }
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
         snprintf(iso, ICO_PATH_MAX, "baserom/%s", image_names[i]);
         if (ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image from the working folder: %s\n", iso);
@@ -712,8 +715,10 @@ static int find_iso(const Args *a, const IcoIni *ini, const char *exe_dir, char 
         *picked = 1;
         return 0;
     }
-    ico_host_fatal(log_file(), "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
-                               "Ico_PAL.chd next to the program, or set iso=<path> in ico-pc.ini.");
+    ico_host_fatal(log_file(),
+                   "No ICO disc image was found or chosen. Put Ico_PAL.iso or "
+                   "Ico_PAL.chd (or .bin or .cue) next to the program, or set iso=<path> in "
+                   "ico-pc.ini.");
 #endif
     return 0;
 #endif
@@ -727,15 +732,16 @@ static void verify_iso(const char *iso)
     clock_t start = clock();
     double secs;
 
-    /* the ISO's bytes, also for a .chd (extract.h) */
+    /* the ISO's bytes, also for a .chd or .bin (extract.h) */
     fprintf(stderr, "ico_pc: checking the disc image's SHA-1...\n");
     if (ico_extract_image_sha1(iso, hex, &bytes, why, sizeof(why)) != 0) {
         fprintf(stderr, "ico_pc: %s\n", why);
-        ico_host_fatal(log_file(),
-                       "Cannot read the disc image %s.\n"
-                       "Check that the file is complete and is a .iso or .chd copy of the PAL "
-                       "disc. The log says why.",
-                       iso);
+        ico_host_fatal(
+            log_file(),
+            "Cannot read the disc image %s.\n"
+            "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the PAL "
+            "disc. The log says why.",
+            iso);
     }
     secs = (double)(clock() - start) / CLOCKS_PER_SEC;
     fprintf(stderr, "ico_pc: SHA-1 %s, %llu bytes, %.1f s\n", hex, (unsigned long long)bytes, secs);
@@ -929,7 +935,7 @@ static int extract_progress(void *ctx, const char *phase, uint64_t done, uint64_
 
 #ifdef ICO_ANDROID_UI
 
-/* Android's find_iso: Ico_PAL.iso or .chd in the app's files folder (a
+/* Android's find_iso: Ico_PAL.iso (or .chd, .bin, .cue) in the app's files folder (a
    copy kept with keep_image=1, or one put there with a cable or the Files
    app), then ini iso= when that file is there, else the system's picker
    and a copy of the chosen file into the files folder (iso_import.h). */
@@ -941,7 +947,7 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     Progress prog;
     int i, r;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
         if (ico_path_join(iso, ICO_PATH_MAX, exe_dir, image_names[i]) == 0 &&
             ico_file_exists(iso)) {
             fprintf(stderr, "ico_pc: disc image in the app's folder: %s\n", iso);
@@ -959,7 +965,7 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     if (pick_iso_sdl(uri, sizeof(uri)) != 0) {
         ico_host_fatal(log_file(),
                        "No disc image was chosen.\n"
-                       "Start the game again and choose your ICO disc image (a .iso or .chd "
+                       "Start the game again and choose your ICO disc image (a .iso, .chd or .bin "
                        "copy of the PAL disc), or copy it as Ico_PAL.iso into %s with a USB "
                        "cable or the Files app.",
                        exe_dir);
@@ -977,13 +983,13 @@ static int find_iso_android(const IcoIni *ini, const char *exe_dir, char *iso, i
     return 0;
 }
 
-/* whether iso is the app's own Ico_PAL.iso or .chd in the files folder */
+/* whether iso is one of the app's own Ico_PAL images in the files folder */
 static int android_own_image(const char *exe_dir, const char *iso)
 {
     char own[ICO_PATH_MAX];
     int i;
 
-    for (i = 0; i < 2; i++) {
+    for (i = 0; i < IMAGE_NAME_COUNT; i++) {
         if (ico_path_join(own, sizeof(own), exe_dir, image_names[i]) == 0 &&
             strcmp(own, iso) == 0) {
             return 1;
@@ -1029,7 +1035,7 @@ static void android_drop_cancelled_copy(const IcoIni *ini, const char *exe_dir, 
 }
 
 /* After the game's data is mounted: the app's own copy of the image
-   (Ico_PAL.iso or .chd in the files folder) is deleted, which gives back
+   (Ico_PAL.iso, .chd, .bin or .cue in the files folder) is deleted, which gives back
    its space, unless ini keep_image=1; iso= is saved only for an image that
    stays. */
 static void android_image_done(const IcoIni *ini, const char *ini_path, const char *exe_dir,
@@ -1209,11 +1215,12 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
                            iso);
         }
         if (res.unreadable) {
-            ico_host_fatal(log_file(),
-                           "Cannot read the disc image %s.\n"
-                           "Check that the file is complete and is a .iso or .chd copy of the PAL "
-                           "disc. The log says why.",
-                           iso);
+            ico_host_fatal(
+                log_file(),
+                "Cannot read the disc image %s.\n"
+                "Check that the file is complete and is a .iso, .chd, .bin or .cue copy of the PAL "
+                "disc. The log says why.",
+                iso);
         }
         ico_host_fatal(log_file(),
                        "Could not extract the game's data from %s into %s.\n"

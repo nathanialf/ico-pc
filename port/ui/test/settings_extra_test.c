@@ -118,9 +118,21 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
     enterMain(0);
     const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    CHECK(n >= 3 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_EFFECT_CINEMATIC_BARS &&
-              opts[n - 3] == UI_OPT_EFFECT_FOG,
-          "bars: the row sits after Fog, before Back (%d rows)", n);
+    CHECK(n >= 4 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_FULL_PIXEL &&
+              opts[n - 3] == UI_OPT_EFFECT_CINEMATIC_BARS && opts[n - 4] == UI_OPT_EFFECT_FOG,
+          "bars: the row sits after Fog, before Full pixel and Back (%d rows)", n);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0,
+          "full pixel: Off by default");
+    ui_settings_step(UI_OPT_FULL_PIXEL, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "On") == 0, "full pixel: On");
+    CHECK(ui_settings_save() == 0, "full pixel: save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *fp = ico_toml_load(p);
+    CHECK(fp != NULL && ico_toml_get_bool(fp, "video.full_pixel", 0) == 1,
+          "full pixel: [video] full_pixel true");
+    ico_toml_free(fp);
+    ui_settings_step(UI_OPT_FULL_PIXEL, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0, "full pixel: Off again");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
           "bars: On by default");
     CHECK(ico_video_effect_cinematic_bars() == 1, "bars: the getter reads On");
@@ -1192,6 +1204,75 @@ static void testAchievementPopups(void)
     ico_ach_set_popups(1);
 }
 
+/* Remap controls: giving a source to a held target swaps the two rows
+   (through the capture flow), device by device. Square clears a row outright,
+   and a cleared row takes a source back with nothing to swap. */
+static void testRemapSwap(void)
+{
+    IcoBindings *b = ico_input_live_bindings();
+    UiRemapCapture c;
+
+    useConfig("version = 1\n");
+    ico_input_reload_bindings(b);
+    ui_remap_capture_start(&c, ICO_T_TRIANGLE);
+    ico_input_note_press(ICO_SRC_PAD, ICO_GP_SOUTH);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND, "swap: bound");
+    CHECK(b->gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH && b->gp[ICO_T_CROSS][0] == ICO_GP_NORTH,
+          "swap: south on Triangle, Cross has north (%d, %d)", b->gp[ICO_T_TRIANGLE][0],
+          b->gp[ICO_T_CROSS][0]);
+    CHECK(b->kb[ICO_T_CROSS][0] == ICO_KEY_SPACE, "swap: the keyboard rows are kept");
+    /* a keyboard press swaps the keyboard rows only */
+    ui_remap_capture_start(&c, ICO_T_CIRCLE);
+    ico_input_note_press(ICO_SRC_KEY, ICO_KEY_SPACE);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND, "swap: key bound");
+    CHECK(b->kb[ICO_T_CIRCLE][0] == ICO_KEY_SPACE && b->kb[ICO_T_CROSS][0] == ICO_KEY_E,
+          "swap: Space on Circle, Cross has E");
+    CHECK(b->gp[ICO_T_TRIANGLE][0] == ICO_GP_SOUTH, "swap: the pad rows are kept");
+    /* Square clears a row; a source nobody holds then fills it with no swap */
+    ico_bindings_clear(b, ICO_T_SQUARE);
+    CHECK(b->gp[ICO_T_SQUARE][0] == 0, "cleared");
+    ui_remap_capture_start(&c, ICO_T_SQUARE);
+    ico_input_note_press(ICO_SRC_PAD, ICO_GP_WEST);
+    CHECK(ui_remap_capture_step(&c, b) == UI_CAPTURE_BOUND && b->gp[ICO_T_SQUARE][0] == ICO_GP_WEST,
+          "a cleared row takes its source back");
+    ico_input_reload_bindings(b);
+}
+
+/* The Remap controls page says the menus keep the gamepad by position: one
+   row on the page, a text in every language */
+static void testRemapMenuNote(void)
+{
+    static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_DE, UI_LANG_ES, UI_LANG_FR, UI_LANG_IT};
+    const char *seen[5];
+    int found = 0;
+
+    useConfig("version = 1\n");
+    enterMain(0);
+    for (int i = 0; i < 5; i++) {
+        ui_set_language(kLangs[i]);
+        seen[i] = ui_str(UI_STR_REMAP_MENU_NOTE);
+        CHECK(seen[i] != NULL && seen[i][0] != '\0', "menu note in language %d", i);
+        for (int j = 0; j < i; j++) {
+            CHECK(strcmp(seen[i], seen[j]) != 0, "menu note differs between languages %d, %d", i,
+                  j);
+        }
+    }
+    ui_set_language(UI_LANG_EN);
+    CHECK(strcmp(ui_str(UI_STR_REMAP_MENU_NOTE),
+                 "In the menus the gamepad's face buttons and d-pad always go by position.") == 0,
+          "menu note text");
+    for (int i = LT_GAME_PROPERTY_COUNT; i < LT_GAME_PROPERTY_COUNT + lt_ext_prop_count(); i++) {
+        const char *t = lt_ext_row_text(i);
+
+        if (t != NULL && strcmp(t, ui_str(UI_STR_REMAP_MENU_NOTE)) == 0) {
+            found++;
+        }
+    }
+    CHECK(found == 1, "the Remap page has the menu note row (%d)", found);
+    CHECK(strstr(ui_str(UI_STR_BUTTON_CONFIG_NOTE), "on top of Remap controls") != NULL,
+          "the Button configuration note says it applies on top");
+}
+
 /* Escape outside play presses Triangle, never Start (mouse_look.h
    ico_escape_target): on the New Game screen, reached from the title,
    Start confirms and starts the game while Triangle goes back to the
@@ -1224,6 +1305,69 @@ static void testEscapeNewGame(void)
     CHECK(s_newGames == games + 1, "Start: the game starts");
 }
 
+/* Display > Resolution cycles Window, 1x, 2x, 3x, 4x, 6x, 8x, 12x, 16x,
+   Auto; a scale from the file that is not on the list steps to its neighbours.
+   Aspect goes 32:9, 48:9, Auto */
+static void testResolutionCycle(void)
+{
+    static const int want[] = {1, 2, 3, 4, 6, 8, 12, 16};
+    IcoVideoOptions o;
+
+    useConfig("version = 1\n[video]\npreset = \"custom\"\nresolution = \"5x\"\n"
+              "aspect = \"32:9\"\n");
+    enterMainKeep(0);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "5x") == 0,
+          "5x from the file reads 5x");
+    /* 5x is not in the list: Right goes to the next entry above it, 6x,
+       then on through the list */
+    for (int i = 4; i < 8; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, 1);
+        ico_video_get(&o);
+        CHECK(o.resScale == want[i], "Right: step %d is %dx (%d)", i, want[i], o.resScale);
+    }
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_RESOLUTION), "16x") == 0, "16x reads 16x");
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == ICO_RES_AUTO, "Right from 16x is Auto (%d)", o.resScale);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0, "Right from Auto wraps to Window (%d)", o.resScale);
+
+    useConfig("version = 1\n[video]\npreset = \"custom\"\nresolution = \"5x\"\n"
+              "aspect = \"32:9\"\n");
+    enterMainKeep(0);
+    ui_settings_step(UI_OPT_RESOLUTION, -1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 4, "Left from 5x is the entry below it, 4x (%d)", o.resScale);
+    /* Window, then the whole list from 1x */
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ui_settings_step(UI_OPT_RESOLUTION, 1);
+    ico_video_get(&o);
+    CHECK(o.resScale == 0 && o.resW == 0, "Right from 16x, Auto, then Window (%d)", o.resScale);
+    for (int i = 0; i < 8; i++) {
+        ui_settings_step(UI_OPT_RESOLUTION, 1);
+        ico_video_get(&o);
+        CHECK(o.resScale == want[i], "Right from Window: step %d is %dx (%d)", i, want[i],
+              o.resScale);
+    }
+
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_ASPECT), "32:9") == 0, "aspect 32:9 from the file");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9 && strcmp(ui_settings_value_text(UI_OPT_ASPECT), "48:9") == 0,
+          "Right from 32:9 is 48:9");
+    ui_settings_step(UI_OPT_ASPECT, 1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_AUTO, "Right from 48:9 is Auto");
+    ui_settings_step(UI_OPT_ASPECT, -1);
+    ico_video_get(&o);
+    CHECK(o.aspect == ICO_ASPECT_48_9, "Left from Auto is 48:9");
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1247,8 +1391,13 @@ int main(int argc, char **argv)
     testPointer();
     /* Gameplay > Achievement pop-ups */
     testAchievementPopups();
+    /* Remap controls: swap on conflict, the menu note */
+    testRemapSwap();
+    testRemapMenuNote();
     /* Escape's button on the New Game screen */
     testEscapeNewGame();
+    /* Display > Resolution and Aspect ratio cycles */
+    testResolutionCycle();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;
