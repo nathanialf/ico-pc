@@ -100,6 +100,17 @@
  *                         tick's first present; the two must be
  *                         consecutive frames.  The meshes' kept versions are
  *                         not in a dump: each frame's own mesh is its stream
+ *   --interp-any          (with --interp) PREV is taken for the tick right
+ *                         before <dump> whatever their frame numbers (dumps
+ *                         saved some ticks apart, as the F12 sets are): no
+ *                         gap snap; the other snaps (a camera past the cut
+ *                         thresholds) still apply
+ *   --no-reproject        (with --interp) the draws the frame camera
+ *                         projected on the CPU (lightning, lines, shadow
+ *                         volumes) blend in screen space instead of being
+ *                         seen through the blended camera
+ *                         (rd__interp_set_reproject): the before of a
+ *                         before/after pair from one build
  *
  * Exit: 0 written (or, with --no-device, listed), 1 error, 77 no device or no dump file. */
 #include <stdio.h>
@@ -527,7 +538,8 @@ int main(int argc, char **argv)
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
-                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV]\n"
+                "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--interp T PREV "
+                "[--interp-any] [--no-reproject]]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n",
                 argv[0]);
@@ -542,6 +554,7 @@ int main(int argc, char **argv)
     bool noDevice = false;
     const char *texDir = NULL, *meshName = NULL, *interpPrev = NULL;
     float interpT = 1.0f;
+    bool interpAny = false;
 
     struct {
         unsigned l, a, b;
@@ -613,6 +626,10 @@ int main(int argc, char **argv)
             stats = true;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
+        } else if (strcmp(argv[i], "--interp-any") == 0) {
+            interpAny = true;
+        } else if (strcmp(argv[i], "--no-reproject") == 0) {
+            rd__interp_set_reproject(false);
         } else if (strcmp(argv[i], "--interp") == 0 && i + 2 < argc) {
             char *end = NULL;
             interpT = strtof(argv[++i], &end);
@@ -742,6 +759,9 @@ int main(int argc, char **argv)
     if (interpPrev) {
         /* the presenter's frame between the two */
         RdInterpStats ist;
+        if (interpAny) {
+            pf.number = f.number - 1; /* the tick before, whatever was saved between */
+        }
         rf = rd__interp_frame(&pf, &f, interpT, 1, &ist);
         if (!rf) {
             fprintf(stderr, "rd__interp_frame failed\n");
@@ -758,10 +778,10 @@ int main(int argc, char **argv)
                ist.gridSt);
         printf("interp: unmatched %u not drawn before, %u fewer before, %u left by the place "
                "pairing, %u payload; %u paired with another place; %u of the tick before kept, "
-               "%u held\n",
+               "%u held; %u CPU-projected draws re-projected\n",
                ist.unmatchedWhy[RD_UNMATCHED_ABSENT], ist.unmatchedWhy[RD_UNMATCHED_FEWER],
                ist.unmatchedWhy[RD_UNMATCHED_UNPLACED], ist.unmatchedWhy[RD_UNMATCHED_PAYLOAD],
-               ist.apart, ist.prevKept, ist.prevHeld);
+               ist.apart, ist.prevKept, ist.prevHeld, ist.reprojected);
     }
     if (list) {
         RdStateBlock st = rf->startState;
