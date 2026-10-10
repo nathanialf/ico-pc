@@ -132,41 +132,40 @@ static void testAutoResolution(void)
     }
 }
 
-/* pace_present_gap: "uncapped" with vsync presents once a display refresh
-   in mailbox mode as under FIFO (a little early there), on every platform;
-   a limit is its own period; "uncapped" without vsync has no gap */
+/* pace_present_gap: "uncapped" with vsync presents a sixteenth of a refresh
+   early, in mailbox mode as under FIFO, on every platform; a limit is its own
+   period; "uncapped" without vsync has no gap */
 static void testPresentGap(void)
 {
     static const struct {
         int cap;
-        bool uncappedVsync, mailbox;
+        bool uncappedVsync;
         uint64_t refresh, gap;
     } t[] = {
         /* 60 Hz, 90 Hz (a Steam Deck OLED), 144 Hz */
-        {-1, true, true, 16666667ull, 16666667ull},
-        {-1, true, true, 11111111ull, 11111111ull},
-        {-1, true, true, 6944444ull, 6944444ull},
-        {-1, true, false, 16666667ull, 16666667ull - 16666667ull / 16},
-        {-1, true, false, 11111111ull, 11111111ull - 11111111ull / 16},
-        {-1, false, true, 11111111ull, 0},
-        {-1, false, false, 11111111ull, 0},
-        {0, false, false, 16666667ull, 0},
-        {120, false, true, 11111111ull, 8333333ull},
-        {60, false, false, 6944444ull, 16666666ull},
+        {-1, true, 16666667ull, 16666667ull - 16666667ull / 16},
+        {-1, true, 11111111ull, 11111111ull - 11111111ull / 16},
+        {-1, true, 6944444ull, 6944444ull - 6944444ull / 16},
+        {-1, false, 11111111ull, 0},
+        {0, false, 16666667ull, 0},
+        {120, false, 11111111ull, 8333333ull},
+        {60, false, 6944444ull, 16666666ull},
     };
 
     for (unsigned i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
-        const uint64_t g =
-            pace_present_gap(t[i].cap, t[i].uncappedVsync, t[i].mailbox, t[i].refresh);
+        const uint64_t g = pace_present_gap(t[i].cap, t[i].uncappedVsync, t[i].refresh);
         if (g != t[i].gap) {
             printf("FAIL present gap row %u: %llu, want %llu\n", i, (unsigned long long)g,
                    (unsigned long long)t[i].gap);
             fails++;
         }
     }
-    /* never more than one present a refresh in mailbox mode */
+    /* a little under a refresh: never more than 16 presents in 15 refreshes,
+       and a late present still leaves the next refresh a new picture */
     for (uint64_t r = 4000000ull; r <= 33333334ull; r += 1234567ull) {
-        CHECK(pace_present_gap(-1, true, true, r) >= r);
+        const uint64_t g = pace_present_gap(-1, true, r);
+        CHECK(g >= r * 15 / 16);
+        CHECK(g < r);
     }
 }
 

@@ -39,13 +39,16 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
 
 /* The least time between two presents while the window presents between
  * game frames.  cap > 0: a frame rate limit, one present per 1/cap s.
- * uncappedVsync: frame rate "uncapped" with vsync on.  Then one present per
- * display refresh (refreshNs) when the swapchain is in mailbox mode (a
- * present never waits there, so a faster rate drew pictures the display
- * never showed), and slightly less than a refresh under FIFO (the display's
- * own rate, so a present rarely finds the queue full and waits).  0 (no
- * gap: back to back) otherwise, i.e. "uncapped" without vsync. */
-uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs);
+ * uncappedVsync: frame rate "uncapped" with vsync on.  Then a sixteenth of
+ * a refresh less than one display refresh (refreshNs), in mailbox mode and
+ * under FIFO alike.  The gap counts from the start of the last present, and
+ * late wake-ups and game steps only ever add to it, so the presents average
+ * about one a refresh: under FIFO a present rarely finds the queue full and
+ * waits, and in mailbox mode every refresh gets a new picture with few drawn
+ * that the display never shows (a gap of exactly one refresh averaged a
+ * little more than a refresh, and the display showed some pictures twice).
+ * 0 (no gap: back to back) otherwise, i.e. "uncapped" without vsync. */
+uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs);
 
 /* Resolution "auto" (video_options.h ICO_RES_AUTO).  The window
  * feeds each present's cost (the GPU time of a replay when the backend has

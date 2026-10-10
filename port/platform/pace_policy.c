@@ -14,10 +14,14 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
-uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs)
+uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs)
 {
     if (uncappedVsync) {
-        return mailbox ? refreshNs : refreshNs - refreshNs / 16;
+        /* a sixteenth of a refresh early: the sleep's overshoot and a game
+           step that a due present lands in only make a present later, and
+           the gap counts from the last present's start, so a gap of exactly
+           one refresh averaged more than a refresh */
+        return refreshNs - refreshNs / 16;
     }
     return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;
 }
