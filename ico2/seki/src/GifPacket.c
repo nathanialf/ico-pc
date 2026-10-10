@@ -1594,15 +1594,9 @@ static void gsWrite(unsigned long long reg, unsigned long long data)
         rd_sampler_wrap((RdWrap)w.s, (RdWrap)w.t);
         return;
     }
-    case 0x14: /* TEX1_1 */
-    {
-        unsigned int mmin = (unsigned int)((data >> 6) & 7);
-
-        rd_sampler_filter((data >> 5) & 1 ? RD_FILTER_LINEAR : RD_FILTER_NEAREST,
-                          mmin == 1 || mmin == 4 || mmin == 5 ? RD_FILTER_LINEAR
-                                                              : RD_FILTER_NEAREST);
+    case 0x14: /* TEX1_1: the filters and the mipmap fields */
+        rd_sampler_tex1((unsigned long long)data);
         return;
-    }
     case 0x18: /* XYOFFSET_1 */
         gs.xyoffsetL[gsList()] = data;
         gs.haveXyoffsetL[gsList()] = 1;
