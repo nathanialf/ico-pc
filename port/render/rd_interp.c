@@ -1026,13 +1026,19 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l,
  * when it stopped.  A matched pair blends its two world points; a draw of
  * one tick is that tick's points through St.  STQ (the tick's own) is
  * scaled by w_tick / w_new: S / Q stays at each vertex and the texture
- * follows the new depth across the prim.  A vertex stays where its tick
- * put it (matched: blended in screen space as before) when its Z is 0 or
- * saturated by ftoi4, when it is not in front of its tick's camera, or when
- * St does not see it in front with a GS position.  Nothing is re-projected
- * with a still camera (s_cam.still) or outside a blend, so those frames
- * are byte for byte what they were.  The reflection prims recorded under
- * rd_push_camera are never marked. */
+ * follows the new depth across the prim.  A primitive (a point, a line, a
+ * triangle) stays where its tick put it (matched: blended in screen space
+ * as before), whole, when one of its vertices has Z 0 or Z saturated by
+ * ftoi4, is not in front of its tick's camera, or is not seen by St in
+ * front with a GS position: re-projecting the others would distort it
+ * (reprojPrim).  In a shadow prism a vertex with no world point (a
+ * sentinel, a clamped Z) keeps the screen-space rule alone, and a vertex
+ * St cannot draw puts the whole prism on it; a prism that moved has its
+ * faces signed again for the blended camera, matched or of one tick
+ * (prismSigns, reprojShadow).  Nothing is re-projected with a still
+ * camera (s_cam.still) or outside a blend, so those frames are byte for
+ * byte what they were.  The reflection prims recorded under rd_push_camera
+ * are never marked. */
 typedef struct ReprojCam {
     int on;
     double ip[16], ic[16]; /* (Pp Vp)^-1 and (Pc Vc)^-1: the ticks' GS screen to world */
@@ -1153,13 +1159,22 @@ static void reprojStq(RdScreenVtx *v, double w, double wNew)
     v->q = (float)((double)v->q * k);
 }
 
+/* why a vertex was not re-projected: it has no world point (Z 0 or
+ * saturated, not in front of its tick's camera), or St cannot draw its
+ * point (not in front, or past the GS's 16-bit window or ftoi4's range) */
+enum { RP_NO_POINT = 1, RP_NO_PROJECTION = 2 };
+
 /* v (a vertex of the tick whose S^-1 is inv) moved by d in the world and
- * through St; false (v untouched) where it cannot be */
-static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, bool stq)
+ * through St; false (v untouched) where it cannot be, the reason in *why
+ * when why is given */
+static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, bool stq, int *why)
 {
     double p[3], w, wNew;
     RdScreenVtx o = *v;
     if (!reprojUnproject(inv, v, p, &w)) {
+        if (why) {
+            *why = RP_NO_POINT;
+        }
         return false;
     }
     if (d) {
@@ -1168,6 +1183,9 @@ static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, boo
         }
     }
     if (!reprojProject(p, &o, &wNew)) {
+        if (why) {
+            *why = RP_NO_PROJECTION;
+        }
         return false;
     }
     if (stq) {
@@ -1179,18 +1197,25 @@ static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, boo
 
 /* a matched pair's vertex: o (cur's) becomes the blend at t of the world
  * points of p (prev's) and o through St, cur's STQ scaled; false (o
- * untouched) where either has no world point or St cannot draw it */
-static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq)
+ * untouched) where either has no world point or St cannot draw it, the
+ * reason in *why when why is given */
+static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq, int *why)
 {
     double a[3], b[3], m[3], wp, wc, wNew;
     RdScreenVtx r = *o;
     if (!reprojUnproject(s_rp.ip, p, a, &wp) || !reprojUnproject(s_rp.ic, o, b, &wc)) {
+        if (why) {
+            *why = RP_NO_POINT;
+        }
         return false;
     }
     for (int k = 0; k < 3; k++) {
         m[k] = (1.0 - (double)t) * a[k] + (double)t * b[k];
     }
     if (!reprojProject(m, &r, &wNew)) {
+        if (why) {
+            *why = RP_NO_PROJECTION;
+        }
         return false;
     }
     if (stq) {
@@ -1200,19 +1225,75 @@ static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq)
     return true;
 }
 
+/* The vertices of one primitive of a screen draw: a point, a line, a
+ * triangle; a strip or a fan shares its vertices between its primitives,
+ * so the whole draw is one (the GIF layer records points, lines and
+ * triangles; strips do not reach here in practice) */
+static uint32_t primVerts(uint8_t prim, uint32_t n)
+{
+    switch (prim) {
+    case RD_PRIM_POINTS:
+        return 1;
+    case RD_PRIM_LINES:
+        return 2;
+    case RD_PRIM_TRIANGLES:
+        return 3;
+    default:
+        return n;
+    }
+}
+
+/* The m vertices v of one primitive of a tick through St (moved by d in
+ * the world), all or none: when one of them cannot be re-projected the
+ * primitive stays as its tick drew it, undistorted, instead of mixing the
+ * blended camera's positions with the tick's.  False when it stays. */
+static bool reprojPrim(const double *inv, RdScreenVtx *v, uint32_t m, const double *d, bool stq)
+{
+    RdScreenVtx o[3];
+    if (m <= 3) {
+        for (uint32_t i = 0; i < m; i++) {
+            o[i] = v[i];
+            if (!reprojVertex(inv, &o[i], d, stq, NULL)) {
+                return false;
+            }
+        }
+        memcpy(v, o, m * sizeof(*v));
+        return true;
+    }
+    for (uint32_t i = 0; i < m; i++) {
+        o[0] = v[i];
+        if (!reprojVertex(inv, &o[0], d, stq, NULL)) {
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < m; i++) {
+        (void)reprojVertex(inv, &v[i], d, stq, NULL);
+    }
+    return true;
+}
+
+static void reprojShadow(RdCmd *c, RdScreenVtx *v, const double *inv);
+
 /* the vertices of c (a draw of one tick, frameProjected) in payload v, of
- * the tick whose S^-1 is inv, through St */
-static void reprojDraw(const RdCmd *c, uint8_t *v, const double *inv)
+ * the tick whose S^-1 is inv, through St, primitive by primitive
+ * (reprojPrim); a shadow volume's triangles are signed again
+ * (reprojShadow), which may change c's split into increments and
+ * decrements */
+static void reprojDraw(RdCmd *c, uint8_t *v, const double *inv)
 {
     if (!s_rp.on || !v || !frameProjected(c)) {
         return;
     }
     RdScreenVtx *o = (RdScreenVtx *)(void *)v;
-    const bool screen = c->type == RDC_SCREEN;
-    const uint32_t n = screen ? c->u[1] : c->u[0] + c->u[3];
-    const bool stq = screen && c->b[2] == 0;
-    for (uint32_t i = 0; i < n; i++) {
-        (void)reprojVertex(inv, &o[i], NULL, stq);
+    if (c->type == RDC_SCREEN) {
+        const uint32_t n = c->u[1];
+        const uint32_t m = primVerts(c->b[0], n);
+        const bool stq = c->b[2] == 0;
+        for (uint32_t i = 0; m > 0 && i + m <= n; i += m) {
+            (void)reprojPrim(inv, &o[i], m, NULL, stq);
+        }
+    } else {
+        reprojShadow(c, o, inv);
     }
     s_reproj++;
 }
@@ -2240,16 +2321,27 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     if (vtxJump(p, o, n)) {
         return R_JUMP;
     }
-    /* both projected by their tick's camera: blended in the world */
+    /* both projected by their tick's camera: blended in the world,
+     * primitive by primitive, all or none (reprojPrim's rule): a primitive
+     * with a vertex that cannot be blends in screen space whole */
     const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
-    for (uint32_t i = 0; i < n; i++) {
-        if (!world || !reprojBlend(&o[i], &p[i], t, cc->b[2] == 0)) {
-            o[i].x = lerpI(p[i].x, o[i].x, t);
-            o[i].y = lerpI(p[i].y, o[i].y, t);
-            o[i].z = lerpU(p[i].z, o[i].z, t);
+    const uint32_t m = primVerts(cc->b[0], n);
+    for (uint32_t i0 = 0; m > 0 && i0 < n; i0 += m) {
+        const uint32_t e = i0 + m <= n ? i0 + m : n;
+        bool all = world && i0 + m <= n;
+        for (uint32_t i = i0; all && i < e; i++) {
+            RdScreenVtx r = o[i];
+            all = reprojBlend(&r, &p[i], t, cc->b[2] == 0, NULL);
         }
-        for (int k = 0; k < 4; k++) {
-            o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
+        for (uint32_t i = i0; i < e; i++) {
+            if (!all || !reprojBlend(&o[i], &p[i], t, cc->b[2] == 0, NULL)) {
+                o[i].x = lerpI(p[i].x, o[i].x, t);
+                o[i].y = lerpI(p[i].y, o[i].y, t);
+                o[i].z = lerpU(p[i].z, o[i].z, t);
+            }
+            for (int k = 0; k < 4; k++) {
+                o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
+            }
         }
     }
     s_reproj += world;
@@ -2794,6 +2886,106 @@ static RdScreenVtx *shadowOut(RdCmd *cc, uint8_t *op, uint32_t n)
     return (RdScreenVtx *)(void *)(s_out.payload + off);
 }
 
+/* prism b's eight triangles, signed plus, as the o-th prism of
+ * s_prismOut (tagged in output order); the increments among them */
+static uint32_t prismEmit(const ShPrism *b, const int8_t *plus, uint32_t o)
+{
+    uint32_t inc = 0;
+    for (int i = 2; i < 10; i++) {
+        const uint32_t n = o * RD_SHADOW_PRISM_TRIS + (uint32_t)i - 2;
+        RdScreenVtx *tri = &s_prismOut[(size_t)n * 3];
+        tri[0] = b->v[kStripVtx[i - 2]];
+        tri[1] = b->v[kStripVtx[i - 1]];
+        tri[2] = b->v[kStripVtx[i]];
+        for (int k = 0; k < 3; k++) {
+            rd__set_shadow_tag(&tri[k], n + 1);
+        }
+        s_prismOutSign[n] = plus[i - 2];
+        inc += plus[i - 2] != 0;
+    }
+    return inc;
+}
+
+/* s_prismOut's tris triangles into dst, the inc increments first */
+static void prismStore(RdScreenVtx *dst, uint32_t tris, uint32_t inc)
+{
+    uint32_t a = 0, d = inc;
+    for (uint32_t k = 0; k < tris; k++) {
+        const uint32_t at = s_prismOutSign[k] ? a++ : d++;
+        memcpy(&dst[(size_t)at * 3], &s_prismOut[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
+    }
+}
+
+/* A shadow volume of one tick (frameProjected; payload v, the tick's S^-1
+ * inv) through St, as blendPrisms moves a prism of one tick: Shadow.c's
+ * prisms one by one, a vertex with no world point (a sentinel, a clamped
+ * Z) where its tick put it, the whole prism where its tick put it when the
+ * blended camera cannot draw one of its vertices; then each moved prism's
+ * faces signed again for the blended camera (prismSigns), as a matched
+ * prism's are: a face near edge on may turn its other side to the new
+ * camera and must then count the other way.  An untagged volume goes
+ * triangle by triangle, all or none, a triangle whose winding turned over
+ * changing its sign.  c's split into increments and decrements follows. */
+static void reprojShadow(RdCmd *c, RdScreenVtx *v, const double *inv)
+{
+    const uint32_t nv = c->u[0] + c->u[3];
+    if (c->b[0] != RD_SHADOW_TRIS || nv % 3 != 0 || c->u[0] % 3 != 0 || nv == 0) {
+        return;
+    }
+    const uint32_t tris = nv / 3;
+    if (!growTo((void **)&s_prismOut, &s_prismOutCap, nv, sizeof(RdScreenVtx)) ||
+        !growTo((void **)&s_prismOutSign, &s_prismOutSignCap, tris, 1)) {
+        return;
+    }
+    uint32_t inc = 0;
+    if (prismsOf(v, c->u[0] / 3, tris, 0)) {
+        const uint32_t np = tris / RD_SHADOW_PRISM_TRIS;
+        for (uint32_t q = 0; q < np; q++) {
+            ShPrism b = s_prism[0][q];
+            int8_t plus[8];
+            memcpy(plus, b.plus, sizeof(plus));
+            RdScreenVtx r[6];
+            bool ok[6], drawn = true, moved = false;
+            for (int k = 0; k < 6; k++) {
+                int why = 0;
+                r[k] = b.v[k];
+                ok[k] = reprojVertex(inv, &r[k], NULL, false, &why);
+                drawn &= why != RP_NO_PROJECTION;
+            }
+            for (int k = 0; drawn && k < 6; k++) {
+                if (ok[k]) {
+                    moved |= !sameXyz(&r[k], &b.v[k]);
+                    b.v[k] = r[k];
+                }
+            }
+            if (moved && b.s0 != 0) {
+                prismSigns(&b, plus);
+            }
+            inc += prismEmit(&b, plus, q);
+        }
+        prismStore(v, tris, inc);
+    } else {
+        const uint32_t inc0 = c->u[0] / 3;
+        for (uint32_t k = 0; k < tris; k++) {
+            RdScreenVtx *tri = &s_prismOut[(size_t)k * 3];
+            memcpy(tri, &v[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
+            const int64_t w0 = windingOf(&tri[0], &tri[1], &tri[2]);
+            int8_t plus = (int8_t)(k < inc0);
+            if (reprojPrim(inv, tri, 3, NULL, false)) {
+                const int64_t w1 = windingOf(&tri[0], &tri[1], &tri[2]);
+                if ((w0 > 0 && w1 < 0) || (w0 < 0 && w1 > 0)) {
+                    plus = (int8_t)!plus;
+                }
+            }
+            s_prismOutSign[k] = plus;
+            inc += plus != 0;
+        }
+        prismStore(v, tris, inc);
+    }
+    c->u[0] = inc * 3;
+    c->u[3] = nv - inc * 3;
+}
+
 /* R_LERP, R_JUMP, or -1 when the volumes are not tagged prisms (the caller
  * then blends them vertex by vertex or, across a topology change, moves
  * cur's by the median shift: shiftShadow) */
@@ -2865,11 +3057,24 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
             ShPrism b = *src;
             int8_t plus[8];
             memcpy(plus, src->plus, sizeof(plus));
+            /* in the world: a vertex with no world point (a sentinel, a
+             * clamped Z) keeps the screen-space rule alone; a vertex the
+             * blended camera cannot draw puts the whole prism on it */
+            RdScreenVtx r[6];
+            bool ok[6], drawn = true;
             if (src->match >= 0) {
                 const ShPrism *a = &s_prism[0][src->match];
+                for (int k = 0; k < 6; k++) {
+                    int why = 0;
+                    r[k] = b.v[k];
+                    ok[k] = world && reprojBlend(&r[k], &a->v[k], t, false, &why);
+                    drawn &= why != RP_NO_PROJECTION;
+                }
                 bool moved = false;
                 for (int k = 0; k < 6; k++) {
-                    if (!world || !reprojBlend(&b.v[k], &a->v[k], t, false)) {
+                    if (drawn && ok[k]) {
+                        b.v[k] = r[k];
+                    } else {
                         b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
                         b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
                         b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
@@ -2880,9 +3085,17 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
                     prismSigns(&b, plus);
                 }
             } else {
+                for (int k = 0; k < 6; k++) {
+                    int why = 0;
+                    r[k] = b.v[k];
+                    ok[k] =
+                        wShift && reprojVertex(pass ? s_rp.ip : s_rp.ic, &r[k], wd, false, &why);
+                    drawn &= why != RP_NO_PROJECTION;
+                }
                 bool turned = false;
                 for (int k = 0; k < 6; k++) {
-                    if (wShift && reprojVertex(pass ? s_rp.ip : s_rp.ic, &b.v[k], wd, false)) {
+                    if (drawn && ok[k]) {
+                        b.v[k] = r[k];
                         turned = true;
                         continue;
                     }
@@ -2895,18 +3108,7 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
                     prismSigns(&b, plus); /* the faces' facing through the blended camera */
                 }
             }
-            for (int i = 2; i < 10; i++) {
-                const uint32_t n = o * RD_SHADOW_PRISM_TRIS + (uint32_t)i - 2;
-                RdScreenVtx *tri = &s_prismOut[(size_t)n * 3];
-                tri[0] = b.v[kStripVtx[i - 2]];
-                tri[1] = b.v[kStripVtx[i - 1]];
-                tri[2] = b.v[kStripVtx[i]];
-                for (int k = 0; k < 3; k++) {
-                    rd__set_shadow_tag(&tri[k], n + 1);
-                }
-                s_prismOutSign[n] = plus[i - 2];
-                inc += plus[i - 2] != 0;
-            }
+            inc += prismEmit(&b, plus, o);
             o++;
         }
     }
@@ -2915,11 +3117,7 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
         return -1;
     }
     const uint32_t tris = out * RD_SHADOW_PRISM_TRIS;
-    uint32_t a = 0, d = inc;
-    for (uint32_t k = 0; k < tris; k++) {
-        const uint32_t at = s_prismOutSign[k] ? a++ : d++;
-        memcpy(&dst[(size_t)at * 3], &s_prismOut[(size_t)k * 3], 3 * sizeof(RdScreenVtx));
-    }
+    prismStore(dst, tris, inc);
     cc->u[0] = inc * 3;
     cc->u[3] = (tris - inc) * 3;
     s_shifted = alone > 0;
@@ -3185,6 +3383,7 @@ typedef struct UmIns {
     uint32_t seq;       /* prev's order, the tie break */
     float weight;       /* alpha weight, 1: whole */
     uint32_t cmds;      /* the commands it adds: the bracket and the draw */
+    uint32_t inc;       /* a shadow volume's increment vertices, signed again (reprojDraw) */
     RdStateBlock want;  /* prev's state at the draw */
     RdStateBlock have;  /* cur's at pos */
 } UmIns;
@@ -3825,6 +4024,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
             in->node = k;
             in->seq = k;
             in->weight = 1.0f;
+            in->inc = 0;
         }
     }
     /* the states: cur's at its unmatched draws and at the insertions,
@@ -3935,7 +4135,9 @@ static void unmatchedPass(const RdFrame *prev, float t)
             continue;
         }
         memcpy(dst, src, size);
-        reprojDraw(pc, dst, s_rp.ip); /* prev's points through the blended camera */
+        RdCmd rc = *pc;
+        reprojDraw(&rc, dst, s_rp.ip); /* prev's points through the blended camera */
+        in->inc = rc.u[0];
         if (isVuDraw(pc) && !rebasePrev((float (*)[4])(void *)(dst + sizeof(RdVuPayload)), pc)) {
             in->node = ~0u; /* held: not through the blended camera */
             s_umPrevHeld++;
@@ -3983,6 +4185,11 @@ static void unmatchedPass(const RdFrame *prev, float t)
                 c.u[0] = in->seq;
             } else {
                 c.u[1] = in->seq;
+            }
+            if (c.type == RDC_SHADOW_STRIP && c.b[0] == RD_SHADOW_TRIS) {
+                const uint32_t nv = c.u[0] + c.u[3];
+                c.u[0] = in->inc; /* the faces' signs through the blended camera */
+                c.u[3] = nv - in->inc;
             }
             if (c.type == RDC_MESH || c.type == RDC_SKINNED) {
                 (void)morphDraw(&c, NULL, NULL, prev, 1.0f); /* the stream prev drew */

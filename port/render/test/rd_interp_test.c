@@ -4899,14 +4899,13 @@ static void rpStrip(const double *v, const double *q, double x0, double y0, RdSc
  * (z 300), through the tick's camera: emitVolumeStrip's ten positions
  * (kTestStrip), each triangle signed by the GS rule, as rd_shadow_tris
  * takes it */
-static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *sign)
+static void rpPrismAt(const double *v, const double *q, const double (*wv)[3], RdScreenVtx *o,
+                      int8_t *sign)
 {
-    static const double kCap[3][2] = {{-20.0, 0.0}, {20.0, 0.0}, {0.0, 40.0}};
     RdScreenVtx p[6];
     double s[6][2];
     for (int k = 0; k < 6; k++) {
-        const double w[3] = {kCap[k % 3][0], kCap[k % 3][1], k < 3 ? 260.0 : 300.0};
-        rpCpuVertex(v, q, w, 0.0f, 0.0f, &p[k]);
+        rpCpuVertex(v, q, wv[k], 0.0f, 0.0f, &p[k]);
         p[k].s = p[k].t = 0.0f;
         p[k].q = 1.0f;
         s[k][0] = p[k].x / 16.0;
@@ -4928,6 +4927,18 @@ static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *si
             o[(i - 2) * 3 + k] = p[kTestStrip[i - 2 + k]];
         }
     }
+}
+
+static void rpPrism(const double *v, const double *q, RdScreenVtx *o, int8_t *sign)
+{
+    static const double kCap[3][2] = {{-20.0, 0.0}, {20.0, 0.0}, {0.0, 40.0}};
+    double w[6][3];
+    for (int k = 0; k < 6; k++) {
+        w[k][0] = kCap[k % 3][0];
+        w[k][1] = kCap[k % 3][1];
+        w[k][2] = k < 3 ? 260.0 : 300.0;
+    }
+    rpPrismAt(v, q, (const double (*)[3])w, o, sign);
 }
 
 /* tick k of the camera backing 60 units and turning 8 degrees in the tick
@@ -5186,6 +5197,144 @@ static void testReproject(void)
     rd_destroy_vu_mesh(mesh);
 }
 
+/* ------------------------------------- shadow volumes and primitives of
+ * one tick through the blended camera (rd_interp.c reprojShadow,
+ * reprojPrim) */
+static const char kObjS7;
+
+/* a prism of world points: the top cap in the plane z = zc + 14 x (the
+ * eye, on the z axis, crosses it at z zc), the bottom cap 10 units along x
+ * (lockCamera's eye never crosses its other faces' planes) */
+static void s7Prism(const double *v, const double *q, double zc, RdScreenVtx *o, int8_t *sign)
+{
+    static const double kTop[3][2] = {{20.0, 5.0}, {22.0, 5.0}, {20.0, 35.0}};
+    double w[6][3];
+    for (int k = 0; k < 6; k++) {
+        w[k][0] = kTop[k % 3][0] + (k < 3 ? 0.0 : 10.0);
+        w[k][1] = kTop[k % 3][1];
+        w[k][2] = zc + 14.0 * kTop[k % 3][0];
+    }
+    rpPrismAt(v, q, (const double (*)[3])w, o, sign);
+}
+
+/* a triangle of the wall at z 300 (x0 its left corner) */
+static void s7Tri(const double *v, const double *q, double x0, RdScreenVtx *o)
+{
+    const double w[3][3] = {{x0, 0.0, 300.0}, {x0 + 20.0, 0.0, 300.0}, {x0, 20.0, 300.0}};
+    for (int k = 0; k < 3; k++) {
+        rpCpuVertex(v, q, w[k], 0.0f, 0.0f, &o[k]);
+    }
+}
+
+/* tick k of lockCamera's moving camera (the eye from z 0 to -60): in list
+ * 3, marked, a prism only in tick 0 (part 0) whose top cap's plane the eye
+ * crosses at z -5, and one only in tick 1 (part 1) crossed at z -52; in
+ * list 7, marked, two key-0 triangles of tick 1, the second with a vertex
+ * at Z 0, then two keyed ones (parts 2, 3) in both ticks, the second with a
+ * vertex at Z 0 */
+static void s7Frame(int k)
+{
+    rd_begin_frame();
+    frameHead();
+    double v[16], q[16];
+    lockCamera((double)k, v);
+    rpProj(q);
+    RdCamera cam;
+    memset(&cam, 0, sizeof(cam));
+    for (int i = 0; i < 16; i++) {
+        cam.view[i] = (float)v[i];
+        cam.proj43[i] = (float)q[i];
+    }
+    cam.zoom = (float)LOCK_ZOOM;
+    rd_set_camera(&cam);
+    RdScreenVtx pv[24];
+    int8_t sign[8];
+    s7Prism(v, q, k ? -52.0 : -5.0, pv, sign);
+    rd_select_list(3);
+    rd_frame_projected(1);
+    rd_shadow_tris(pv, sign, 8, RD_KEY(&kObjS7, k, 0));
+    rd_select_list(7);
+    for (int n = 0; n < 4; n++) {
+        if (n < 2 && k == 0) {
+            continue;
+        }
+        RdScreenVtx t[3];
+        s7Tri(v, q, -60.0 + 30.0 * n, t);
+        if (n & 1) {
+            t[2].z = 0;
+        }
+        rd_screen_prims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_WORLD, 0,
+                        n < 2 ? 0 : RD_KEY(&kObjS7, n, 0));
+    }
+    rd_frame_projected(0);
+    rd_end_frame(0);
+}
+
+static void testReprojectOneTick(void)
+{
+    RdInterpStats st;
+    s7Frame(0);
+    s7Frame(1);
+    const RdFrame *pv = rd__prev_frame(), *cu = rd__last_frame();
+    /* (a) a prism of one tick through the blended camera, its faces signed
+     * again: the top cap turned its other side to the eye, so it counts the
+     * other way, and the prism stays closed.  prev's at t 0.25 (inserted),
+     * cur's at t 0.75 (drawn from half way) */
+    for (int k = 0; k < 2; k++) {
+        const float t = k ? 0.75f : 0.25f;
+        const RdKey key = RD_KEY(&kObjS7, k, 0);
+        const RdCmd *tc = findKey(k ? cu : pv, 3, key, 0);
+        const RdFrame *f = rd__interp_frame(pv, cu, t, 1, &st);
+        const RdCmd *oc = findKey(f, 3, key, 0);
+        int closed = 0;
+        const int n = closedPrisms(f, key, &closed);
+        CHECK(tc && oc && n == 1 && closed == 1 && oc->u[0] != tc->u[0] &&
+                  oc->u[0] + oc->u[3] == tc->u[0] + tc->u[3],
+              "one tick's prism at %.2f: closed (%d of %d) with the cap's sign turned (%u "
+              "increment vertices, the tick's %u)",
+              (double)t, closed, n, oc ? oc->u[0] : 0u, tc ? tc->u[0] : 0u);
+    }
+    /* (b) primitives, all or none: half way the whole key-0 triangle moves
+     * with the blended camera, the one with a vertex at Z 0 stays whole
+     * where its tick put it; the matched whole one blends in the world, the
+     * matched one with a vertex at Z 0 in screen space, whole */
+    const RdFrame *f = rd__interp_frame(pv, cu, 0.5f, 1, &st);
+    const RdScreenVtx *o[4], *c[4], *p[4] = {NULL, NULL, NULL, NULL};
+    for (int n = 0; n < 4; n++) {
+        o[n] = screenVtx(f, rpScreen(f, 7, n));
+        c[n] = screenVtx(cu, rpScreen(cu, 7, n));
+        if (n >= 2) {
+            p[n] = screenVtx(pv, rpScreen(pv, 7, n - 2));
+        }
+    }
+    if (!o[0] || !o[1] || !o[2] || !o[3] || !c[0] || !c[1] || !c[2] || !c[3] || !p[2] || !p[3]) {
+        CHECK(0, "primitives of one tick: the triangles drawn");
+        return;
+    }
+    int moved0 = 0, kept1 = 0, world2 = 0, screen3 = 0;
+    for (int i = 0; i < 3; i++) {
+        moved0 += o[0][i].x != c[0][i].x || o[0][i].y != c[0][i].y;
+        kept1 += o[1][i].x == c[1][i].x && o[1][i].y == c[1][i].y && o[1][i].z == c[1][i].z;
+        const int32_t lx2 = (int32_t)floor(0.5 * p[2][i].x + 0.5 * c[2][i].x + 0.5);
+        const int32_t ly2 = (int32_t)floor(0.5 * p[2][i].y + 0.5 * c[2][i].y + 0.5);
+        world2 += o[2][i].x != lx2 || o[2][i].y != ly2;
+        const int32_t lx = p[3][i].x == c[3][i].x
+                               ? c[3][i].x
+                               : (int32_t)floor(0.5 * p[3][i].x + 0.5 * c[3][i].x + 0.5);
+        const int32_t ly = p[3][i].y == c[3][i].y
+                               ? c[3][i].y
+                               : (int32_t)floor(0.5 * p[3][i].y + 0.5 * c[3][i].y + 0.5);
+        screen3 += o[3][i].x == lx && o[3][i].y == ly;
+    }
+    CHECK(moved0 == 3, "key-0 triangle: every vertex through the blended camera (%d of 3)", moved0);
+    CHECK(kept1 == 3, "key-0 triangle with a vertex at Z 0: the tick's, whole (%d of 3)", kept1);
+    CHECK(world2 > 0, "matched triangle: blended in the world (%d of 3 off the screen blend)",
+          world2);
+    CHECK(screen3 == 3,
+          "matched triangle with a vertex at Z 0: blended in screen space, whole (%d of 3)",
+          screen3);
+}
+
 static void runCpu(void)
 {
     testRotationBlend();
@@ -5221,6 +5370,7 @@ static void runCpu(void)
     testSeaLayers();
     testPairedOrKept();
     testReproject();
+    testReprojectOneTick();
 }
 
 int main(void)
