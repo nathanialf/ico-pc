@@ -2,6 +2,10 @@
  *
  *   order    the same pixel drawn from list 5 (recorded first) and list 1:
  *            list 5 wins, it replays later
+ *   half     the frame head's half pixel on SCENE: a sprite of list 5,
+ *            whose SCENE target the game set again with the screen offset
+ *            alone, covers the rows of the same sprite in list 0; lists 8
+ *            (no screen offset) and 11 (the UI) keep their own rows
  *   railing  the stair railings' state, TEST 0x5160D (ATE
  *            GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL) and ALPHA 0x44 with ABE
  *            and Z write, on a lattice texture whose holes have alpha 0,
@@ -258,6 +262,63 @@ static void testOrder(void)
     if (img) {
         CHECK(img[0] == 200 && img[2] == 0, "list 5 replays after list 1 (got %u,%u,%u)", img[0],
               img[1], img[2]);
+    }
+}
+
+/* ------------------------------------------------------------ half */
+
+/* The field's half pixel (issue 29, rd_replay.c sceneKeepsHalf): list 0's
+ * SCENE target with the frame head's half offset (RD_TARGET_OFFSET |
+ * RD_TARGET_HALF_Y), then SCENE set again with the screen offset alone in
+ * list 5 (the shadow pass's gif_SetDrawEnviroment), in list 8 without the
+ * screen offset (a full-target pass) and in list 11 (the UI).  The same
+ * sprite, y from 20.25 to 30.25 pixels, covers rows 20..29 under the half
+ * offset (the GS rule: row y when y0 <= y + 0.5 < y1) and 21..30 without:
+ * list 5 lands on list 0's rows, lists 8 and 11 keep their own. */
+static void halfRows(const uint8_t *img, uint32_t w, int x, int *first, int *last)
+{
+    *first = *last = -1;
+    for (int y = 0; y < 64; y++) {
+        if (img[((size_t)y * w + (size_t)x) * 4 + 3] != 0) {
+            *first = *first < 0 ? y : *first;
+            *last = y;
+        }
+    }
+}
+
+static void testHalfOffset(void)
+{
+    static const uint8_t clr[4] = {0, 0, 0, 0}, c[4] = {200, 100, 50, 0x80};
+    static const int kList[4] = {0, 5, 8, 11};
+    static const int kUse[4] = {RD_TARGET_OFFSET | RD_TARGET_HALF_Y, RD_TARGET_OFFSET, 0,
+                                RD_TARGET_OFFSET};
+    static const int kFirst[4] = {20, 20, 21, 21};
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 224) * 16;
+    rd_begin_frame();
+    for (int k = 0; k < 4; k++) {
+        rd_select_list(kList[k]);
+        if (k == 0) {
+            rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 0, 0);
+        }
+        rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, 512, 448, kUse[k]);
+        opaque2D();
+        rd_texture_off();
+        RdScreenVtx v[2] = {vtx(ox + (10 + 20 * k) * 16, oy + 20 * 16 + 4, 0, c, 0.0f, 0.0f),
+                            vtx(ox + (20 + 20 * k) * 16, oy + 30 * 16 + 4, 0, c, 0.0f, 0.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_end_frame(0);
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
+    if (!img) {
+        return;
+    }
+    for (int k = 0; k < 4; k++) {
+        int first, last;
+        halfRows(img, w, 15 + 20 * k, &first, &last);
+        CHECK(first == kFirst[k] && last == kFirst[k] + 9,
+              "half offset: the sprite of list %d covers rows %d..%d (want %d..%d)", kList[k],
+              first, last, kFirst[k], kFirst[k] + 9);
     }
 }
 
@@ -3565,6 +3626,7 @@ int main(int argc, char **argv)
            rd_no_dual() ? " (two-pass blend fallback)" : "");
     testNoDual(); /* first: it clears the pipeline cache */
     testOrder();
+    testHalfOffset();
     testRailing(0);
     testRailing(1); /* as the game's materials draw it */
     testDateFlat();

@@ -2306,6 +2306,45 @@ static void perfPost(Replay *r, int post)
     rd__perf_post(s_cl, post);
 }
 
+/* The field's half pixel on SCENE (issue 29, the old bridge's sea).  The
+ * frame head's draw environment carries the flip's half offset (GsBase.c
+ * sceGsSetHalfOffset, RD_TARGET_HALF_Y): XYOFFSET.y + 0.5 pixel for the
+ * scenery drawn first.  The shadow pass sets SCENE again with
+ * gif_SetDrawEnviroment(useoffset = 1) (GifPacket.c), whose XYOFFSET is the
+ * screen offset alone: the game's own register write drops the field's half
+ * offset for every later list (on a PS2 in one field of two).  Two surfaces
+ * drawn on either side of that write, the sea's grey layer umi (list 2,
+ * writing Z) and the wave layers over it (list 5, testing it), stand half
+ * a pixel apart on the screen, and on that grazing water half a pixel is
+ * some 800 GS Z units, more than the 5 units between them: umi won over the
+ * waves in a band that shifted with every sub-pixel step of the camera.  So
+ * a SCENE target set with the screen offset (RD_TARGET_OFFSET) in lists 0
+ * to 10 takes the half offset the frame head's SCENE target has: every
+ * later list moves half a pixel to match the first ones.  At replay, so the
+ * dumps recorded before show it too.  Targets set without the screen offset
+ * (the full-target passes: the shadow maps, the aura's copies into SCENE)
+ * and the UI's lists 11 and 12 keep what they recorded. */
+static uint32_t sceneHeadHalf(const RdFrame *f)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const RdCmdList *l0 = &f->lists[0];
+    for (uint32_t i = 0; i < l0->count; i++) {
+        const RdCmd *c = &l0->cmds[i];
+        if (c->type == RDC_TARGET && c->u[0] == scene) {
+            return c->b[0] & RD_TARGET_HALF_Y;
+        }
+    }
+    return 0;
+}
+
+static void sceneKeepsHalf(RdStateBlock *st, int list, uint32_t headHalf)
+{
+    if (headHalf && list <= 10 && st->color == rd_target(RD_TARGET_SCENE).id &&
+        (st->useOffset & RD_TARGET_OFFSET)) {
+        st->useOffset |= RD_TARGET_HALF_Y;
+    }
+}
+
 /* The effect a TARGET command's pass belongs to by its colour target: the
    screen softening's AA0 and AA1 and its composite (the pass into SCENE
    that follows them, rd_post.c AA_COMPOSITE), the aura's own targets;
@@ -4901,6 +4940,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     r.st = f->startState;
     r.perfPost = -1;
     memset(&s_pend, 0, sizeof(s_pend)); /* no clear pending from another replay */
+    const uint32_t headHalf = sceneHeadHalf(f);
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         const RdCmdList *list = &f->lists[l];
         for (uint32_t i = 0; i < list->count; i++) {
@@ -4909,6 +4949,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 r.perfPost = perfTargetPost(&r, c); /* before the state takes the new target */
             }
             if (rd__apply_state(&r.st, c)) {
+                if (c->type == RDC_TARGET) {
+                    sceneKeepsHalf(&r.st, l, headHalf);
+                }
                 continue;
             }
             if (c->type != RDC_SCREEN && c->type != RDC_NOP && c->type != RDC_OVERLAY_TEXT) {

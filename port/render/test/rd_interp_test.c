@@ -107,9 +107,11 @@
  *             blended camera at alpha 0.25, 0.5 and 0.75, not the blend of
  *             the ticks' STs; the camera still, they are byte for byte the
  *             grids without it
- *   sea       the old bridge's sea (v2277): the wave layer sea_ud_far1 stays
- *             in front of the grey layer umi by the blended camera's gap at
- *             alpha 0.25, 0.5 and 0.75, matched and drawn as the tick's
+ *   sea       the old bridge's sea (v2277): with both lists on the frame
+ *             head's half pixel the wave layer sea_ud_far1 stays in front of
+ *             the grey layer umi by the blended camera's gap at alpha 0.25,
+ *             0.5 and 0.75, matched and drawn as the tick's; half a pixel
+ *             apart (the replay before) umi was in front
  *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
  *             degrees in the tick (a shadow climbing out of its pool, its
  *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
@@ -4421,19 +4423,25 @@ static bool seaZAt(const double *m, double y0, double x, double y, double *z)
     return true;
 }
 
-/* the gap far1 - umi in GS Z where umi's point (x, 8750, z) is seen, through
- * the model to screen matrices mu (umi) and mf (far1, local height 6750) */
-static bool seaGap(const double *mu, const double *mf, double x, double z, double *gap)
+/* the gap far1 - umi in GS Z at the pixel where umi's point (x, 8750, z) is
+ * seen, through the model to screen matrices mu (umi) and mf (far1, local
+ * height 6750), each surface read du and df GS pixels lower: the replay
+ * draws a list whose SCENE target has the field's half offset half a pixel
+ * up, so the pixel samples its surface at GS Y + 0.5 (rd_replay.c
+ * sceneKeepsHalf) */
+static bool seaGap(const double *mu, const double *mf, double x, double z, double du, double df,
+                   double *gap)
 {
     const double h[4] = {mu[0] * x + mu[4] * 8750.0 + mu[8] * z + mu[12],
                          mu[1] * x + mu[5] * 8750.0 + mu[9] * z + mu[13],
                          mu[2] * x + mu[6] * 8750.0 + mu[10] * z + mu[14],
                          mu[3] * x + mu[7] * 8750.0 + mu[11] * z + mu[15]};
-    double zf;
-    if (!(h[3] > 0.0) || !seaZAt(mf, 6750.0, h[0] / h[3], h[1] / h[3], &zf)) {
+    double zu, zf;
+    if (!(h[3] > 0.0) || !seaZAt(mu, 8750.0, h[0] / h[3], h[1] / h[3] + du, &zu) ||
+        !seaZAt(mf, 6750.0, h[0] / h[3], h[1] / h[3] + df, &zf)) {
         return false;
     }
-    *gap = zf - h[2] / h[3];
+    *gap = zf - zu;
     return true;
 }
 
@@ -4471,21 +4479,31 @@ static void testSeaLayers(void)
             mul4(p, v, s);
             s6Translate(w, 0.0, 1995.0, 0.0);
             mul4(s, w, ef);
-            int kept = 0;
+            /* umi's list 2 has the frame head's half offset; list 5 has it
+             * too with the replay's rule (both read 0.5 lower), and had not
+             * before it (umi 0.5 lower, far1 not) */
+            int kept = 0, lost = 0;
             double worst = 0.0;
             for (int i = 0; i < 3; i++) {
-                double got = 0.0, want = 0.0;
-                if (seaGap(mu, mf, kSeaPoints[i][0], kSeaPoints[i][1], &got) &&
-                    seaGap(s, ef, kSeaPoints[i][0], kSeaPoints[i][1], &want) && want > 0.0) {
+                double got = 0.0, want = 0.0, before = 0.0;
+                if (seaGap(mu, mf, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.5, &got) &&
+                    seaGap(s, ef, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.5, &want) &&
+                    want > 0.0) {
                     const double e = fabs(got - want) / want;
                     worst = fmax(worst, e);
                     kept += got > 0.0 && e < 0.02;
                 }
+                lost += seaGap(mu, mf, kSeaPoints[i][0], kSeaPoints[i][1], 0.5, 0.0, &before) &&
+                        before < 0.0;
             }
             CHECK(kept == 3,
-                  "sea %s %.2f: sea_ud_far1 stays in front of umi by the blended camera's gap "
-                  "(%d of 3; worst %.3g of the gap)",
+                  "sea %s %.2f: sea_ud_far1 stays in front of umi by the blended camera's gap, "
+                  "both lists with the half offset (%d of 3; worst %.3g of the gap)",
                   alone ? "far1 the tick's" : "matched", (double)t, kept, worst);
+            CHECK(lost == 3,
+                  "sea %s %.2f: with list 5 half a pixel off list 2 umi was in front (%d of 3: "
+                  "the grey band)",
+                  alone ? "far1 the tick's" : "matched", (double)t, lost);
         }
     }
 }
