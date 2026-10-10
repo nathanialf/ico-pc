@@ -829,22 +829,24 @@ static inline float clipVolumeEdge(VECTOR *pa, VECTOR *pb, float sgn) /* derived
         }
     }
 
+    /* PC port: the edge clip at +-ScreenWidth about the centre across, k
+       times that on a wide picture so a shadow at its sides is not cut
+       (GsBase.c; at most 2047 pixels, inside the 16-bit GS window; the
+       PS2's 512 at 4:3) */
+    fw = gsb_HostShadowClipX();
     rate[0] = rate[1] = 1.0f;
     /* a wholly visible edge returns at once */
-    if (-ScreenWidth < oa.x && oa.x < ScreenWidth && -ScreenWidth < ob.x && ob.x < ScreenWidth &&
-        -ScreenHeight < oa.y && oa.y < ScreenHeight && -ScreenHeight < ob.y &&
-        ob.y < ScreenHeight) {
+    if (-fw < oa.x && oa.x < fw && -fw < ob.x && ob.x < fw && -ScreenHeight < oa.y &&
+        oa.y < ScreenHeight && -ScreenHeight < ob.y && ob.y < ScreenHeight) {
         return dot * sgn;
     }
-    if ((oa.x <= -ScreenWidth && ob.x <= -ScreenWidth) ||
-        (ScreenWidth <= oa.x && ScreenWidth <= ob.x) ||
+    if ((oa.x <= -fw && ob.x <= -fw) || (fw <= oa.x && fw <= ob.x) ||
         (oa.y <= -ScreenHeight && ob.y <= -ScreenHeight) ||
         (ScreenHeight <= oa.y && ScreenHeight <= ob.y)) {
         pb->w = -1.0f;
         pa->w = -1.0f;
         return -1.0f;
     }
-    fw = ScreenWidth;
     fh = ScreenHeight;
     t0 = t1 = 1.0f;
     if (fw < oa.x && ob.x <= fw) {

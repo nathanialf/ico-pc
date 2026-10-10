@@ -314,6 +314,19 @@ void InitTableSin(void) {}
 
 void InitQuaternionDrive(void) {}
 
+/* port/game/video_options.c: the picture's width over 4:3, 1 here
+   (particleEffect.c's draw gate) */
+float ico_video_wide_x(void)
+{
+    return 1.0f;
+}
+
+/* GsBase.c: lineManager.c _getLine's x clip, the 4:3 half-width here */
+float gsb_HostLineHalfWidth(void)
+{
+    return vsWidth * 0.5f;
+}
+
 short GetTableArcTan2(float y, float x)
 {
     return (short)(atan2f(y, x) * (32768.0f / 3.14159265f));

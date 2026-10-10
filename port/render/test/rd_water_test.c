@@ -327,6 +327,13 @@ int gsb_ClipBox(float *p)
     return 1;
 }
 
+/* GsBase.c: RegistPacket.c says whether the next part is locked to the
+   camera; the stub cull above ignores it */
+void gsb_HostCullCameraLocked(int on)
+{
+    (void)on;
+}
+
 static unsigned char s_arena[1 << 16] __attribute__((aligned(16)));
 
 unsigned char *ico_arena_cached_base = s_arena;
@@ -359,6 +366,19 @@ static float s_wideX = 1.0f;
 float ico_video_wide_x(void)
 {
     return s_wideX;
+}
+
+/* GsBase.c gsb_HostDotVisible's window (waterDot.c), with no earlier
+   camera (the pictures are not blended here): the picture's half-width,
+   s_wideX times the 4:3 one, and its half-height, each plus 144 pixels;
+   gsb_cull_test checks the real one */
+int gsb_HostDotVisible(const int *ip, const float *pos)
+{
+    const int hx = (int)(((float)(ScreenWidth / 2) * s_wideX + 144.0f) * 16.0f);
+    const int hy = (int)(((float)(ScreenHeight / 2) + 144.0f) * 16.0f);
+
+    (void)pos;
+    return ip[0] >= 32768 - hx && ip[0] <= 32768 + hx && ip[1] >= 32768 - hy && ip[1] <= 32768 + hy;
 }
 
 int ico_arena_contains(const void *p, __SIZE_TYPE__ n)
@@ -1881,10 +1901,12 @@ static void checkDotsRecording(void)
           "water dots: ABE, ALPHA 0x48, no Z write");
 }
 
-/* The water dots' window across (DispWaterDot): 400 GS pixels either side
- * of the centre at 4:3, that times the wide factor on a wider picture.  Two
- * dots placed through the game's projection 600 pixels left and right of
- * the centre, on the centre row: none drawn at 4:3, both at 32:9 (8/3). */
+/* The water dots' window across (DispWaterDot, GsBase.c
+ * gsb_HostDotVisible): 400 GS pixels either side of the centre at 4:3 (the
+ * 256 pixel half-width plus 144), the half-width times the wide factor plus
+ * 144 on a wider picture (827 at 32:9).  Two dots placed through the
+ * game's projection 600 pixels left and right of the centre, on the centre
+ * row: none drawn at 4:3, both at 32:9 (8/3). */
 static WaterDotWork *s_edgeDots;
 
 /* the x that +0x100 projects to GS x gx (pixels) at y, z: the projection is

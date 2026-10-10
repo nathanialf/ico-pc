@@ -144,6 +144,12 @@ void ico_assert(const char *file, int line, const char *e)
 
 void mc_Reset(void) {}
 
+/* GsBase.c: Shadow.c's edge clip across, ScreenWidth at 4:3 */
+float gsb_HostShadowClipX(void)
+{
+    return (float)ScreenWidth;
+}
+
 float GetTableSin(short angle)
 {
     return sinf((float)angle * (3.14159265f / 32768.0f));

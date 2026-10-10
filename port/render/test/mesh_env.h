@@ -202,6 +202,13 @@ int gsb_ClipBox(float *p)
     return s_clipRet;
 }
 
+/* GsBase.c: RegistPacket.c says whether the next part is locked to the
+   camera; the stub cull above ignores it */
+void gsb_HostCullCameraLocked(int on)
+{
+    (void)on;
+}
+
 /* the EE word arena (eeword.h): the cluster tables' bone lists live in it */
 static unsigned char s_arena[1 << 16] __attribute__((aligned(16)));
 

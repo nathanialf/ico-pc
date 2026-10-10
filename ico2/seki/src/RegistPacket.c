@@ -556,6 +556,9 @@ static char *reg_setNMatrixPacket(Sub15C *o, int idx)
     }
     _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    /* PC port: a world part, culled against every camera of the blended
+       pictures (GsBase.c) */
+    gsb_HostCullCameraLocked(0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {
@@ -734,6 +737,10 @@ static char *reg_setMMatrixPacket(Sub15C *o, int idx)
         _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
         _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     }
+    /* PC port: a part locked to the camera (flag 2, culled through +0x680)
+       moves with it, so gsb_ClipBox tests it against this tick's camera
+       only; the node's packets (reg_clipPacketBoundingBox) follow suit */
+    gsb_HostCullCameraLocked((w->flags.ll & 2) != 0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {
@@ -1812,6 +1819,9 @@ static char *reg_setNMatrixPacketNoLightCalc(Sub15C *o, Sub15C *src, int idx)
     }
     _MulMatrix(matrixptr + 0x300, matrixptr + 0x280, matrixptr + 0x40);
     _MulMatrix(matrixptr + 0x140, matrixptr + 0x100, matrixptr + 0x40);
+    /* PC port: a world part, culled against every camera of the blended
+       pictures (GsBase.c) */
+    gsb_HostCullCameraLocked(0);
     box = o->model->box[0];
     _SetCurrentMatrix(matrixptr + 0x300);
     if (gsb_ClipBox(box) == 0) {

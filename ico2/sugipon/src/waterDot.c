@@ -146,21 +146,16 @@ static inline void getWaterDotScreenPos(int *out, VECTOR *pos) /* derived name *
     _FTOI4Vector(out, &v);
 }
 
-/* PC port: port/game/video_options.c, how much wider than 4:3 the picture
-   is (1 in the Original preset) */
-extern float ico_video_wide_x(void);
+/* PC port: GsBase.c, whether a dot at GS position ip (1/16 pixels) and
+   world position pos is drawn: inside a window that scales with the
+   picture's width, or seen by an earlier camera of the blended pictures */
+extern int gsb_HostDotVisible(const int *ip, const float *pos);
 
 void DispWaterDot(WaterDotWork *w)
 {
     int ip[4];
     WaterDot *p;
     int i;
-    /* PC port: the dots are drawn within 400 GS pixels of the screen's
-       centre across (26368 .. 39168 in 1/16 pixels), which is past the 4:3
-       picture's edges; a wider picture widens the window by the same
-       factor so the dots at its sides are drawn too.  At 1 the window is
-       26368 .. 39168 exactly. */
-    int halfX = (int)(6400.0f * ico_video_wide_x());
 
     gif_StartPacketPri(11);
 
@@ -174,13 +169,19 @@ void DispWaterDot(WaterDotWork *w)
         if (p->used != 0) {
             getWaterDotScreenPos(ip, &p->pos);
 
-            if (ip[0] >= 32768 - halfX && ip[0] <= 32768 + halfX) {
-                if (ip[1] >= 29568 && ip[1] <= 35968) {
-                    gif_SetGsReg(1, 0x80LL | (0x80LL << 8) | (0x80LL << 16) |
-                                        ((long long)p->life << 24) | (0x3F800000LL << 32));
-                    gif_SetGsReg(5, (long long)ip[0] | ((long long)ip[1] << 16) |
-                                        ((long long)ip[2] << 32));
-                }
+            /* PC port: the PS2 drew a dot within 400 GS pixels of the
+               screen's centre across and 200 up and down (x 26368 .. 39168,
+               y 29568 .. 35968 in 1/16 pixels), which cut dots near the
+               top and bottom of the picture and the sides of a wide one.
+               GsBase.c's window is the picture's half-width (k times the
+               4:3 one) and half-height plus 144 pixels, 400 across at 4:3
+               as before, and while pictures are blended a dot an earlier
+               camera saw is drawn too. */
+            if (gsb_HostDotVisible(ip, &p->pos.x)) {
+                gif_SetGsReg(1, 0x80LL | (0x80LL << 8) | (0x80LL << 16) |
+                                    ((long long)p->life << 24) | (0x3F800000LL << 32));
+                gif_SetGsReg(5, (long long)ip[0] | ((long long)ip[1] << 16) |
+                                    ((long long)ip[2] << 32));
             }
         }
     }
