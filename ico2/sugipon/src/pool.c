@@ -85,6 +85,22 @@ static void poolHostCamera(int push)
     }
 }
 
+/* PC port: the STs of the pool's grids are screen positions through the
+   tick's camera.  While pictures are blended between ticks the renderer
+   computes them again through the camera it draws with (rd.h
+   rd_grid_screen_st) from the formula named here, the game's scales and
+   each vertex's wave height, which the ST loops below keep in the ST's w
+   (read by neither the mesh microcode nor the GS).  The kind applies to the
+   next grid draw only, so it is cleared after the draw. */
+static void poolHostGridSt(RdGridSt kind)
+{
+    rd_grid_screen_st(kind, 1.0f / (float)ScreenWidth, 1.0f / (float)ScreenHeight);
+}
+
+/* the formula SetLimitedPoolReflactionMesh or SetLayoutedPoolReflactionMesh
+   last used, for DispLimitedPoolReflactionMesh */
+static RdGridSt poolHostRippleSt = RD_GRID_ST_RIPPLE;
+
 #endif
 
 static void falldownSE(GObj *self)
@@ -552,6 +568,9 @@ static void updatePoolGeo(GObj *self)
             _SubVector(out, pc, pb);
             uv->x = out[0] * sx + 0.5f + h * 30.0f * iw;
             uv->y = out[1] * sy + 0.5f + h * 30.0f * iw;
+#ifdef ICO_RD
+            uv->w = h; /* PC port: the wave height (poolHostGridSt) */
+#endif
         }
     }
 
@@ -600,6 +619,9 @@ static void updatePoolGeo(GObj *self)
 
             uv2->x = (out[0] + sub[0] * 1000.0f) * usc + 0.5f;
             uv2->y = (out[1] + sub[1] * 1000.0f) * vsc + 0.5f;
+#ifdef ICO_RD
+            uv2->w = *row2; /* PC port: the wave height (poolHostGridSt) */
+#endif
         }
     }
 
@@ -665,7 +687,13 @@ static void dispPool(GObj *self)
 
     _SetCurrentMatrix(matrixptr + 0x100);
 
+#ifdef ICO_RD
+    poolHostGridSt(RD_GRID_ST_SURFACE);
+#endif
     prim_DispMesh3D(w->surface, dispLightColor, dispLightNormal, -1);
+#ifdef ICO_RD
+    poolHostGridSt(RD_GRID_ST_NONE);
+#endif
 
     CopyMatrix((char *)GOBJ_SUB(self)->lightMtx + 0x40, workLightColor);
     CopyMatrix((char *)GOBJ_SUB(self)->lightMtx, workLightNormal);
@@ -747,7 +775,13 @@ static void dispPool(GObj *self)
 
     _SetCurrentMatrix(matrixptr + 0x100);
 
+#ifdef ICO_RD
+    poolHostGridSt(RD_GRID_ST_REFLECT);
+#endif
     prim_DispMesh3D(w->reflect, dispLightColor, dispLightNormal, -1);
+#ifdef ICO_RD
+    poolHostGridSt(RD_GRID_ST_NONE);
+#endif
 
     gif_StartPacketPri(4);
     gif_SetDrawEnviroment(0x800, 0, ScreenWidth, ScreenHeight, 1, 0);
@@ -856,10 +890,16 @@ void SetLayoutedPoolReflactionMesh(PoolMesh *refl)
             uv->x = t < 0.0f ? 0.0f : t;
             t = out[1] * sy + 0.5f + h * 50.0f * iw;
             uv->y = 1.0f < t ? 1.0f : t;
+#ifdef ICO_RD
+            uv->w = h; /* PC port: the wave height (poolHostGridSt) */
+#endif
             q++;
             uv++;
         }
     }
+#ifdef ICO_RD
+    poolHostRippleSt = RD_GRID_ST_RIPPLE_CLAMPED;
+#endif
     prim_UpdateMesh3D(mesh, 9, buffer_ID);
 }
 
@@ -939,10 +979,16 @@ void SetLimitedPoolReflactionMesh(PoolMesh *refl, GObj *pool, GObj *obj)
             _SubVector(out, tmp, base);
             uv->x = out[0] * sx + 0.5f + h * 50.0f * iw;
             uv->y = out[1] * sy + 0.5f + h * 50.0f * iw;
+#ifdef ICO_RD
+            uv->w = h; /* PC port: the wave height (poolHostGridSt) */
+#endif
             q++;
             uv++;
         }
     }
+#ifdef ICO_RD
+    poolHostRippleSt = RD_GRID_ST_RIPPLE;
+#endif
     prim_UpdateMesh3D(mesh, 9, buffer_ID);
 }
 
@@ -958,7 +1004,13 @@ void DispLimitedPoolReflactionMesh(PoolMesh *refl)
     gif_SetAlpha(0, 4, 0x80);
     gif_EndPacket();
     _SetCurrentMatrix(matrixptr + 0x100);
+#ifdef ICO_RD
+    poolHostGridSt(poolHostRippleSt);
+#endif
     prim_DispMesh3D(refl->mesh, dispLightColor, dispLightNormal, -1);
+#ifdef ICO_RD
+    poolHostGridSt(RD_GRID_ST_NONE);
+#endif
 #ifdef ICO_RD
     poolHostBlockEnd();
 #endif
