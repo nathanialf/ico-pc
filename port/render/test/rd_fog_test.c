@@ -34,7 +34,14 @@
  *      whole test with the copy from the start (ICO_RD_DEPTH_COPY=1),
  *      rd_fog_buffer and rd_fog_buffer_d24s8 with the buffer path
  *      (ICO_RD_FOG_PATH=buffer), and the D24S8 runs start in place
- *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too.
+ *      (ICO_RD_DEPTH_COPY=0), so the compare runs on the 24-bit depth too;
+ *   e  the edge at 2x: list 0's SCENE target carries the frame head's half
+ *      pixel (RD_TARGET_HALF_Y, as on PC every frame), a near band over the
+ *      far clear, fog_DrawFog in list 4; the fogged pixels are exactly the
+ *      clear's pixels of the same frame drawn without the fog, so the fog's
+ *      edge sits on the geometry's row at both edges of the band (the fog
+ *      sprite reads the depth texel under each pixel: with the half pixel
+ *      it stood one row off at 2x).
  * The same checks and tolerances hold on a 24-bit depth buffer
  * (rd_fog_d24s8 and rd_fog_nodual_d24s8: ICO_VK_FAKE_D24S8=1, the Vulkan
  * fallback of a phone GPU without a sampled D32S8): there Z is stored in
@@ -819,6 +826,95 @@ static void checkDump(void)
     remove(path);
 }
 
+/* ============================================ (e) the edge at 2x */
+#define EDGE_S 2
+#define EDGE_Z 0x40000000u /* above 0xFFFFFF: not fogged */
+
+static uint8_t s_edge[2][W * EDGE_S * H * EDGE_S * 4];
+
+/* a near band over the clear, under the frame head's half pixel, and the
+ * fog of case 0 when fog is set */
+static void recordEdge(int fog)
+{
+    static const uint8_t band[4] = {220, 40, 40, 0x80};
+    dl_SetDLPriority(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), W, H,
+                  RD_TARGET_OFFSET | RD_TARGET_HALF_Y);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kClear, 1, 0);
+    rd_texture_off();
+    rd_abe(0);
+    rd_test_gs(0x30000);
+    rd_z_write(1);
+    rd_fba(0);
+    RdScreenVtx v[2] = {sv(64, 100, EDGE_Z, band), sv(448, 200, EDGE_Z, band)};
+    v[0].y += 4; /* rows from 100.25 to 200.25 GS pixels */
+    v[1].y += 4;
+    rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
+    s_fogSwitch = fog;
+    setFog(0);
+    fog_MakeFogClut();
+    dl_SetDLPriority(3);
+    fog_DrawFog();
+    dl_Swap();
+    s_fogSwitch = 1;
+}
+
+static bool readEdge(uint8_t *dst)
+{
+    uint32_t w = 0, h = 0;
+    const bool ok = rd__read_target(rd_target(RD_TARGET_SCENE), dst,
+                                    (size_t)W * EDGE_S * H * EDGE_S * 4, &w, &h) &&
+                    w == W * EDGE_S && h == H * EDGE_S;
+    CHECK(ok, "SCENE readback at %dx (%ux%u)", EDGE_S, w, h);
+    return ok;
+}
+
+static void checkEdge(void)
+{
+    recordEdge(0);
+    if (!readEdge(s_edge[0])) {
+        return;
+    }
+    recordEdge(1);
+    if (!readEdge(s_edge[1])) {
+        return;
+    }
+    const uint32_t tw = W * EDGE_S, th = H * EDGE_S;
+    int bad = 0, top = -1, bottom = -1, fogTop = -1, fogBottom = -1;
+    for (uint32_t y = 0; y < th; y++) {
+        for (uint32_t x = 0; x < tw; x++) {
+            const uint8_t *a = &s_edge[0][(y * tw + x) * 4];
+            const uint8_t *b = &s_edge[1][(y * tw + x) * 4];
+            const int clear = a[0] == kClear[0] && a[1] == kClear[1] && a[2] == kClear[2];
+            const int fogged = memcmp(a, b, 4) != 0;
+            if (x == tw / 2) {
+                if (!clear) {
+                    top = top < 0 ? (int)y : top;
+                    bottom = (int)y;
+                }
+                if (!fogged) {
+                    fogTop = fogTop < 0 ? (int)y : fogTop;
+                    fogBottom = (int)y;
+                }
+            }
+            if (clear != fogged) {
+                if (bad < 5) {
+                    printf("  (e) pixel (%u,%u): %s, %s\n", x, y, clear ? "the clear" : "the band",
+                           fogged ? "fogged" : "not fogged");
+                }
+                bad++;
+            }
+        }
+    }
+    printf("  (e) %dx: the band covers rows %d..%d, the unfogged rows are %d..%d\n", EDGE_S, top,
+           bottom, fogTop, fogBottom);
+    CHECK(top >= 0 && fogTop == top && fogBottom == bottom,
+          "%dx: the fog's edge rows %d..%d, the band's %d..%d", EDGE_S, fogTop, fogBottom, top,
+          bottom);
+    CHECK(bad == 0, "%dx: %d pixels fogged where the band is or unfogged where the clear is",
+          EDGE_S, bad);
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[512];
@@ -932,6 +1028,25 @@ int main(void)
           rhi_vk_validation_error_count());
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     rd_shutdown();
+
+    /* (e) the edge at 2x, in Enhanced */
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.aspect = 4.0f / 3.0f;
+    st.sceneScale = (float)EDGE_S;
+    if (rd_init(W, H, &st, NULL)) {
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        dl_Clear();
+        checkEdge();
+        CHECK(rhi_vk_validation_error_count() == 0, "%dx: %u validation errors", EDGE_S,
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    } else {
+        CHECK(0, "rd_init at %dx", EDGE_S);
+    }
     if (failures) {
         printf("rd_fog_test: %d failures\n", failures);
         return 1;

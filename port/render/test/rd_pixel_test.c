@@ -5,7 +5,10 @@
  *   half     the frame head's half pixel on SCENE: a sprite of list 5,
  *            whose SCENE target the game set again with the screen offset
  *            alone, covers the rows of the same sprite in list 0; lists 8
- *            (no screen offset) and 11 (the UI) keep their own rows
+ *            (no screen offset) and 11 (the UI) keep their own rows, and so
+ *            do the screen-space passes of the later lists (a sprite
+ *            sampling a render target in list 10, a full-screen sprite in
+ *            list 5)
  *   railing  the stair railings' state, TEST 0x5160D (ATE
  *            GREATER 0x60, AFAIL FB_ONLY, Z GEQUAL) and ALPHA 0x44 with ABE
  *            and Z write, on a lattice texture whose holes have alpha 0,
@@ -274,7 +277,12 @@ static void testOrder(void)
  * screen offset (a full-target pass) and in list 11 (the UI).  The same
  * sprite, y from 20.25 to 30.25 pixels, covers rows 20..29 under the half
  * offset (the GS rule: row y when y0 <= y + 0.5 < y1) and 21..30 without:
- * list 5 lands on list 0's rows, lists 8 and 11 keep their own. */
+ * list 5 lands on list 0's rows, lists 8 and 11 keep their own.  A sprite
+ * that copies a render target (here WORK0, as the softening's composite
+ * copies AA0 and AA1 in list 10) and a sprite the game marks full-screen
+ * (the fog's fogOffsetA sheet in list 4) are screen-space passes, not
+ * geometry: they keep the plain offset, rows 21..30, so their texel
+ * lookups stay on the target's grid (rd_replay.c drawOffset). */
 static void halfRows(const uint8_t *img, uint32_t w, int x, int *first, int *last)
 {
     *first = *last = -1;
@@ -289,23 +297,43 @@ static void halfRows(const uint8_t *img, uint32_t w, int x, int *first, int *las
 static void testHalfOffset(void)
 {
     static const uint8_t clr[4] = {0, 0, 0, 0}, c[4] = {200, 100, 50, 0x80};
-    static const int kList[4] = {0, 5, 8, 11};
-    static const int kUse[4] = {RD_TARGET_OFFSET | RD_TARGET_HALF_Y, RD_TARGET_OFFSET, 0,
+    static const uint8_t work[4] = {50, 150, 250, 0x80};
+
+    enum { N = 6 };
+
+    static const int kList[N] = {0, 5, 8, 11, 10, 5};
+    static const int kUse[N] = {RD_TARGET_OFFSET | RD_TARGET_HALF_Y,
+                                RD_TARGET_OFFSET,
+                                0,
+                                RD_TARGET_OFFSET,
+                                RD_TARGET_OFFSET,
                                 RD_TARGET_OFFSET};
-    static const int kFirst[4] = {20, 20, 21, 21};
+    static const int kFirst[N] = {20, 20, 21, 21, 21, 21};
+    /* 0 untextured, 1 sampling WORK0, 2 untextured and marked full-screen */
+    static const int kKind[N] = {0, 0, 0, 0, 1, 2};
     const int32_t ox = (2048 - 256) * 16, oy = (2048 - 224) * 16;
     rd_begin_frame();
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < N; k++) {
         rd_select_list(kList[k]);
         if (k == 0) {
             rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 0, 0);
         }
+        if (kKind[k] == 1) {
+            rd_clear_target(rd_target(RD_TARGET_WORK0), work, 0, 0);
+        }
         rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, 512, 448, kUse[k]);
         opaque2D();
-        rd_texture_off();
-        RdScreenVtx v[2] = {vtx(ox + (10 + 20 * k) * 16, oy + 20 * 16 + 4, 0, c, 0.0f, 0.0f),
-                            vtx(ox + (20 + 20 * k) * 16, oy + 30 * 16 + 4, 0, c, 0.0f, 0.0f)};
-        rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 1, 0);
+        if (kKind[k] == 1) {
+            rd_texture(rd_target_texture(rd_target(RD_TARGET_WORK0), RD_VIEW_RGBA),
+                       RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        } else {
+            rd_texture_off();
+        }
+        RdScreenVtx v[2] = {
+            vtx(ox + (10 + 20 * k) * 16, oy + 20 * 16 + 4, 0, c, 8.0f, 8.0f),
+            vtx(ox + (20 + 20 * k) * 16, oy + 30 * 16 + 4, 0, c, 8.0f + 160.0f, 8.0f + 160.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 2, kKind[k] == 2 ? RD_SPACE_FULLSCREEN : RD_SPACE_WORLD,
+                        1, 0);
     }
     rd_end_frame(0);
     uint32_t w, h;
@@ -313,11 +341,11 @@ static void testHalfOffset(void)
     if (!img) {
         return;
     }
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < N; k++) {
         int first, last;
         halfRows(img, w, 15 + 20 * k, &first, &last);
         CHECK(first == kFirst[k] && last == kFirst[k] + 9,
-              "half offset: the sprite of list %d covers rows %d..%d (want %d..%d)", kList[k],
+              "half offset: the sprite %d of list %d covers rows %d..%d (want %d..%d)", k, kList[k],
               first, last, kFirst[k], kFirst[k] + 9);
     }
 }

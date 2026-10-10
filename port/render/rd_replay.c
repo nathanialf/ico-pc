@@ -687,6 +687,7 @@ typedef struct Replay {
     int stretch;          /* the draw being bound is full-screen (no wide x scale) */
     int mirror;           /* the draw being bound is a flipped UI draw (scissor too) */
     int uiPrim;    /* the draw being bound is a UI screen prim (its scissor gets the wide scale) */
+    int halfAdded; /* sceneKeepsHalf gave the target in force the frame head's half pixel */
     float blockCs; /* a stretched draw's u at the target's centre (blockCentre) */
     uint32_t passSerial;
     uint32_t writeSerial; /* bumped by every action that may change a target's alpha */
@@ -1819,6 +1820,7 @@ typedef struct DrawSetup {
     int mipmapped;   /* the image texture has generated mips */
     int wideBlock;   /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
     int replacement; /* texture packs: the image texture is a pack replacement */
+    int screenCopy;  /* a screen-space pass, not geometry (screenCopy): no added half pixel */
 } DrawSetup;
 
 /* Widescreen reflections: whether the draw samples a block that
@@ -1834,6 +1836,40 @@ static int samplesWideBlock(const Replay *r, const DrawSetup *ds)
     }
     const RdTargetRec *src = rd__target_rec(t->target);
     return src && src->wideBlock;
+}
+
+/* Whether a screen prim is a screen-space pass rather than geometry: a
+ * sprite whose texture is a render target (the shadow pass's and the
+ * softening's composites into SCENE, the reduction's fallback sprite), or a
+ * sprite the game marks full-screen (the fog's fogOffsetA sheet, rd_post.c's
+ * passes).  Such a sprite maps target texels onto screen pixels one for
+ * one, or covers the whole target, so it keeps the offset its target was
+ * recorded with (sceneKeepsHalf).  Triangles and lines that sample a target
+ * are geometry and take the half pixel. */
+static int screenCopy(const Replay *r, const DrawSetup *ds, uint8_t prim, uint8_t space)
+{
+    if (prim != RD_PRIM_SPRITES) {
+        return 0;
+    }
+    if (space == RD_SPACE_FULLSCREEN) {
+        return 1;
+    }
+    if (!ds->textured || !r->st.ds.texEnabled) {
+        return 0;
+    }
+    const RdTexRec *t = rd__tex_rec(r->st.tex);
+    return t && t->kind == RD_TEXKIND_TARGET;
+}
+
+/* The draw offset a draw is positioned with (RD_TARGET_OFFSET,
+ * RD_TARGET_HALF_Y): the target's, without the half pixel sceneKeepsHalf
+ * added when the draw is a screen-space pass (DrawSetup.screenCopy). */
+static uint32_t drawOffset(const Replay *r, const DrawSetup *ds)
+{
+    if (r->halfAdded && ds->screenCopy) {
+        return r->st.useOffset & ~(uint32_t)RD_TARGET_HALF_Y;
+    }
+    return r->st.useOffset;
 }
 
 /* The u (normalised) a stretched draw that samples a widened block has at
@@ -1946,14 +1982,15 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
         beginPass(r, tc, ds->tdId ? rd__target_rec(ds->tdId) : NULL, r->st.color, ds->tdId,
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f);
     }
-    const uint32_t fk[6] = {r->st.color,     r->st.gsW,     r->st.gsH,
-                            r->st.useOffset, r->passSerial, (uint32_t)r->stretch};
+    const uint32_t useOffset = drawOffset(r, ds);
+    const uint32_t fk[6] = {r->st.color, r->st.gsW,     r->st.gsH,
+                            useOffset,   r->passSerial, (uint32_t)r->stretch};
     if (memcmp(fk, r->frameKey, sizeof(fk)) != 0) {
         /* XYOFFSET = (2048 - w/2, 2048 - h/2) (+ the preset's field offset
          * when useOffset; zero in Original) */
         float ox = 2048.0f - (float)(r->st.gsW >> 1);
         float oy = 2048.0f - (float)(r->st.gsH >> 1);
-        if (r->st.useOffset & RD_TARGET_HALF_Y) {
+        if (useOffset & RD_TARGET_HALF_Y) {
             oy += 0.5f; /* the flip's sceGsSetHalfOffset */
         }
         r->frameBG = rd__frame_group_ex(tc->w, tc->h, ox, oy, rd__target_z_scale(ds->tdId),
@@ -2323,7 +2360,20 @@ static void perfPost(Replay *r, int post)
  * later list moves half a pixel to match the first ones.  At replay, so the
  * dumps recorded before show it too.  Targets set without the screen offset
  * (the full-target passes: the shadow maps, the aura's copies into SCENE)
- * and the UI's lists 11 and 12 keep what they recorded. */
+ * and the UI's lists 11 and 12 keep what they recorded.
+ *
+ * The half pixel moves geometry only.  A screen-space copy of a render
+ * target keeps the plain offset its target was recorded with (drawOffset,
+ * DrawSetup.screenCopy): the fog sprite (list 4), which reads the depth
+ * texel under each pixel by its UVs, and its full-screen fogOffsetA sheet;
+ * the softening's composite (list 10) and the shadow pass's composite
+ * (list 3), sprites that sample a target; the post sprites
+ * (doBlurSpriteDraw).  Moved half a pixel, their lookups fall half a texel
+ * off the target's grid: at 2x the fog's edge stood one row above the
+ * geometry's, two rows at 4x.  On a PS2 these passes have no half offset
+ * either.  VU draws (meshes, skinned, grids, particles),
+ * shadow strips, and screen triangles and lines take the half pixel even
+ * when they sample a target: their positions are projected geometry. */
 static uint32_t sceneHeadHalf(const RdFrame *f)
 {
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
@@ -2337,12 +2387,14 @@ static uint32_t sceneHeadHalf(const RdFrame *f)
     return 0;
 }
 
-static void sceneKeepsHalf(RdStateBlock *st, int list, uint32_t headHalf)
+static int sceneKeepsHalf(RdStateBlock *st, int list, uint32_t headHalf)
 {
     if (headHalf && list <= 10 && st->color == rd_target(RD_TARGET_SCENE).id &&
-        (st->useOffset & RD_TARGET_OFFSET)) {
+        (st->useOffset & RD_TARGET_OFFSET) && !(st->useOffset & RD_TARGET_HALF_Y)) {
         st->useOffset |= RD_TARGET_HALF_Y;
+        return 1;
     }
+    return 0;
 }
 
 /* The effect a TARGET command's pass belongs to by its colour target: the
@@ -2452,6 +2504,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDraw(r, &ds, dateAt)) {
         return;
     }
+    ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
 
     /* geometry */
     r->stretch = screenStretch(r, ds.tc, v, n, c->b[0], c->b[1]);
@@ -2890,6 +2943,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDraw(r, &ds, NULL)) {
         return;
     }
+    ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
     RdTargetRec *tc = ds.tc;
     RdTargetRec *td = ds.tdId ? rd__target_rec(ds.tdId) : NULL;
     r->stretch = screenStretch(r, tc, (const RdScreenVtx *)(f->payload + c->u[0]), c->u[1], c->b[0],
@@ -2991,7 +3045,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     rhi_cmd_set_scissor(s_cl, &sc);
     float ox = 2048.0f - (float)(r->st.gsW >> 1);
     float oy = 2048.0f - (float)(r->st.gsH >> 1);
-    if (r->st.useOffset & RD_TARGET_HALF_Y) {
+    if (drawOffset(r, &ds) & RD_TARGET_HALF_Y) {
         oy += 0.5f;
     }
     IcoDrawCB cb;
@@ -3929,7 +3983,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tz->w;
     ds.th = tz->h;
     ds.textured = 1;
-    r->stretch = 1; /* the fog sprite covers the screen */
+    ds.screenCopy = 1; /* it reads the depth texel under each pixel */
+    r->stretch = 1;    /* the fog sprite covers the screen */
     /* no prepareDraw here: the per-draw flags it resets are reset here, so
      * the previous draw's mirror (scissorRect) is not inherited */
     r->mirror = 0;
@@ -4283,6 +4338,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.tw = tw;
     ds.th = th;
     ds.textured = textured;
+    ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
     const RhiBindGroup g2 = bindDraw(r, &ds);
     if (!g2.id) {
         return;
@@ -4950,7 +5006,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             }
             if (rd__apply_state(&r.st, c)) {
                 if (c->type == RDC_TARGET) {
-                    sceneKeepsHalf(&r.st, l, headHalf);
+                    r.halfAdded = sceneKeepsHalf(&r.st, l, headHalf);
                 }
                 continue;
             }
