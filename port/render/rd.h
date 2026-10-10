@@ -436,6 +436,18 @@ uint32_t rd_precreate_pipelines(void);
  * clears it.  Kept across calls until cleared. */
 typedef void (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
 void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
+/* The depth fog's self-test (rd_fog_path.c): a frame of its own (never
+ * recorded, never presented, no frame number) draws a grid of cells at
+ * known GS Z on SCENE at its real size and scale and fogs it with a known
+ * LUT, once per way of reading the depth (in place, a copy, a buffer);
+ * the fogged pixels are read back and compared with the GS arithmetic.
+ * The first way that passes, in the platform's order, is the one the fog
+ * takes from then on (an ICO_RD_FOG_PATH or ICO_RD_DEPTH_COPY override
+ * stays); one log line, "fog: depth path", names it with every result.
+ * The window calls it after rd_precreate_pipelines; after that it runs
+ * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
+ * whether the path in force passed. */
+bool rd_fog_selftest(void);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

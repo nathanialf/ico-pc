@@ -547,15 +547,16 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
     t->color = rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {
-        /* sampled when the fog and the effects depth read it in place
-         * (rd__sampled_depth); with g_rd.depthCopy they read a copy, and the
-         * depth is an attachment and a copy source only, as up to v0.4.4 */
-        const uint32_t dsUsage = RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC |
-                                 (g_rd.depthCopy ? 0u : (uint32_t)RHI_TEX_SAMPLED);
+        /* every use the device allows, whichever way the fog reads it
+         * (rd_fog_path.c): sampled in place, a copy source for its copy and
+         * for the buffer path, so a change of path needs no new targets */
+        const bool sampled = rhi_limits()->depthSampled;
+        const uint32_t dsUsage =
+            RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_SRC | (sampled ? (uint32_t)RHI_TEX_SAMPLED : 0u);
         t->depth =
             rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8, dsUsage, name});
         t->depthState = RHI_STATE_UNDEFINED;
-        t->depthSampled = !g_rd.depthCopy;
+        t->depthSampled = sampled;
     }
     return t->color.id != 0 && (!t->withDepth || t->depth.id != 0);
 }
@@ -572,10 +573,11 @@ RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *cop
     if (!copy->tex.id || copy->w != t->tw || copy->h != t->th) {
         rd__depth_copy_free(copy);
         /* the depth-stencil usage: Vulkan's sampled depth layout
-         * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it */
-        copy->tex = rhi_create_texture(
-            &(RhiTextureDesc){t->tw, t->th, 1, RHI_FMT_D32F_S8,
-                              RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST, name});
+         * (DEPTH_STENCIL_READ_ONLY_OPTIMAL) requires it; a copy source for
+         * the fog's probe (rd_fog_path.c) */
+        copy->tex = rhi_create_texture(&(RhiTextureDesc){
+            t->tw, t->th, 1, RHI_FMT_D32F_S8,
+            RHI_TEX_SAMPLED | RHI_TEX_DEPTH_STENCIL | RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC, name});
         copy->state = RHI_STATE_UNDEFINED;
         copy->w = t->tw;
         copy->h = t->th;
@@ -601,7 +603,7 @@ void rd__depth_copy_free(RdDepthCopy *copy)
 
 void rd__force_depth_copy(void)
 {
-    g_rd.depthCopy = true;
+    rd__set_fog_path(RD_FOG_COPY);
 }
 
 void rd__target_destroy_gpu(RdTargetRec *t)
@@ -1245,21 +1247,8 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
-    /* the depth copy (RdContext.depthCopy), before the targets are made */
-    const char *depthCopy = getenv("ICO_RD_DEPTH_COPY");
-    const char *ds = rhi_limits()->depthStencilFormatName;
-    const bool d24 = ds && strcmp(ds, "D24S8") == 0;
-    if (depthCopy && depthCopy[0]) {
-        g_rd.depthCopy = depthCopy[0] != '0';
-    } else {
-        g_rd.depthCopy = rhi_limits()->tiler || d24;
-    }
-    rd__log("depth: the fog reads %s (%s)",
-            g_rd.depthCopy ? "a copy of the scene depth" : "the scene depth in place",
-            depthCopy && depthCopy[0] ? "ICO_RD_DEPTH_COPY"
-            : rhi_limits()->tiler     ? "tile-based GPU"
-            : d24                     ? "D24S8"
-                                      : "desktop GPU");
+    /* the fog's depth path (RdContext.fogPath, depthCopy) */
+    rd__fog_path_init();
     rd__apply_display(); /* the scales the named targets take */
     createNamedTargets();
     readDumpConfig();
@@ -1306,6 +1295,12 @@ void rd_shutdown(void)
     memset(&g_rd, 0, sizeof(g_rd));
 }
 
+static void fogSceneRemade(void *arg)
+{
+    (void)arg;
+    rd__fog_scene_remade();
+}
+
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
 {
     if (!g_rd.inited) {
@@ -1327,6 +1322,9 @@ void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight)
                 t->h = g_rd.targets[i].h;
             }
         }
+    }
+    if (g_rd.hasDevice) {
+        rd__on_host(fogSceneRemade, NULL); /* a new SCENE size: the fog's probe and self-test */
     }
 }
 
@@ -1435,6 +1433,13 @@ static void recreateTargets(void *arg)
     rhi_wait_idle();
     createNamedTargets();
     rd__temp_target_pool_clear(); /* the parked textures have the old scale */
+    rd__fog_scene_remade();       /* a new SCENE size: the fog's probe and self-test */
+}
+
+static void fogProbeFinish(void *arg)
+{
+    (void)arg;
+    rd__fog_probe_finish();
 }
 
 typedef struct ReplayCall {
@@ -1456,6 +1461,11 @@ void rd_begin_frame(void)
     }
     if (g_rd.recIndex >= 0) {
         rd__log("rd_begin_frame without rd_end_frame: the open frame is discarded");
+    }
+    /* the fog probe a replay recorded since the last frame: read back and
+     * logged (once per start and new scene size) */
+    if (rd__fog_probe_pending()) {
+        rd__on_host(fogProbeFinish, NULL);
     }
     bool recreated = false;
     if (g_rd.settingsPending) {

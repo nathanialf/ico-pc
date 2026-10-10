@@ -98,6 +98,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crt.c # the CRT filter at present time
     rd_dump.c
+    rd_fog_path.c # how the fog reads the depth: the paths, the probe, the self-test
     rd_frame.c
     rd_interp.c # interpolation between the retained frames
     rd_mesh.c

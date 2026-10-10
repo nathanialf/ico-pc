@@ -402,6 +402,7 @@ bool rd__fs_has_no_dual(uint8_t fs)
     case RD_FS_FONT:
     case RD_FS_FONT_SHEET:
     case RD_FS_FOG:
+    case RD_FS_FOG_BUFFER:
     case RD_FS_VU:
     case RD_FS_VU_TEXA:
         return true;
@@ -883,13 +884,13 @@ uint32_t rd__enumerate_reachable_crt(RdPipeKeyInt *out, uint32_t max, uint32_t n
 
 /* ------------------------------------------------------------------- fog */
 
-int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2])
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int buffer, RdDrawPass out[2])
 {
     const int np = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_FULLSCREEN, colorFmt,
                                         RHI_FMT_UNKNOWN, out);
     for (int i = 0; i < np; i++) {
         out[i].key.gs.program = RD_PROG_POST;
-        out[i].key.fs = RD_FS_FOG;
+        out[i].key.fs = buffer ? RD_FS_FOG_BUFFER : RD_FS_FOG;
     }
     return np;
 }
@@ -904,10 +905,13 @@ uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n
     s.ds.zwrite = RD_ZWRITE_OFF;
     s.ds.abe = 1;
     s.ds.blend = RD_BLEND_LERP_AS;
-    RdDrawPass dp[2];
-    const int np = rd__fog_plan(&s, RHI_FMT_RGBA8_UNORM, dp);
-    for (int i = 0; i < np; i++) {
-        n = rd__add_pipe_key(out, max, n, &dp[i].key);
+    /* the shader of the path the self-test picks, or the override */
+    for (int buffer = 0; buffer < 2; buffer++) {
+        RdDrawPass dp[2];
+        const int np = rd__fog_plan(&s, RHI_FMT_RGBA8_UNORM, buffer, dp);
+        for (int i = 0; i < np; i++) {
+            n = rd__add_pipe_key(out, max, n, &dp[i].key);
+        }
     }
     return n;
 }

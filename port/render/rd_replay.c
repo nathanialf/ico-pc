@@ -104,7 +104,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_
                                                    "crt_ps",
                                                    "sprite_texa_ps",
                                                    "vu_texa_ps",
-                                                   "blit_depth_ps"};
+                                                   "blit_depth_ps",
+                                                   "fog_lut_buffer_ps"};
 
 /* ------------------------------------------------------------------ init */
 
@@ -3770,10 +3771,12 @@ static void doShadowResolve(Replay *r)
  * through a PSMT4 view, and draws one sprite reading the copy as PSMT8H
  * through the fog CLUT, Z-tested GEQUAL at the sprite's Z under ZMSK.  Here:
  * the Z source's depth (the target of the bound depth view, else the state's
- * depth target) is sampled where it is, in RHI_STATE_DEPTH_READ, or with
- * g_rd.depthCopy through a whole copy of it (rd__sampled_depth: tile-based
- * GPUs and D24S8, where only the copy is trusted to see the stored depth;
- * the same values, ctest rd_fog_depth_copy_dump), the LUT is uploaded into
+ * depth target) is read the way g_rd.fogPath says (rd__fog_source): sampled
+ * where it is, in RHI_STATE_DEPTH_READ, through a whole copy of it
+ * (rd__sampled_depth: tile-based GPUs and D24S8 by default; the same
+ * values, ctest rd_fog_depth_copy_dump), or as words copied out through a
+ * buffer into an R32_UINT texture (fog_lut_buffer_ps), whichever passed
+ * the fog's self-test (rd_fog_selftest); the LUT is uploaded into
  * s_fogLut, and the sprite is drawn through the sprite vertex shader and
  * fog_lut_ps, which reconstructs the GS Z, takes bits 16..23 as the index,
  * applies the texture function and the Z test, and blends with the state
@@ -3784,7 +3787,7 @@ static RhiTexture s_fogLut;
 
 static RhiState s_fogLutState;
 
-static RdDepthCopy s_fogDepth; /* the depth's copy with g_rd.depthCopy */
+static RdDepthCopy s_fogDepth; /* the depth's copy on the RD_FOG_COPY path */
 
 void rd__scene_caches_free(void)
 {
@@ -3794,6 +3797,7 @@ void rd__scene_caches_free(void)
     s_wrapAcc = (RhiTexture){0};
     s_wrapW = s_wrapH = 0;
     rd__depth_copy_free(&s_fogDepth);
+    rd__fog_buffer_free();
 }
 
 void rd__fog_shutdown(void)
@@ -3803,6 +3807,7 @@ void rd__fog_shutdown(void)
     }
     s_fogLut = (RhiTexture){0};
     rd__depth_copy_free(&s_fogDepth);
+    rd__fog_path_shutdown(); /* the buffer path's objects and the probe's */
 }
 
 static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -3821,7 +3826,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     RdDrawPass pl[2], dp[4];
-    const int np = rd__expand_no_dual(pl, rd__fog_plan(&r->st, tc->format, pl), dp);
+    const int buffer = g_rd.fogPath == RD_FOG_BUFFER;
+    const int np = rd__expand_no_dual(pl, rd__fog_plan(&r->st, tc->format, buffer, pl), dp);
     if (np == 0) {
         return;
     }
@@ -3863,11 +3869,11 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!s_fogLut.id) {
         return;
     }
-    /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, or
-     * its copy (g_rd.depthCopy); the pass below binds the colour target
-     * alone either way */
-    const RhiTexture zTex = rd__sampled_depth(s_cl, tz, &s_fogDepth, "rd fog depth");
-    if (!zTex.id) {
+    /* the GS's BITBLT of the Z buffer to 0x2800: the depth in place, its
+     * copy, or its words (g_rd.fogPath); the pass below binds the colour
+     * target alone whichever it is */
+    RdFogSource src;
+    if (!rd__fog_source(s_cl, tz, &s_fogDepth, &src) || src.buffer != buffer) {
         return;
     }
     rd__transition(s_cl, s_fogLut, &s_fogLutState, RHI_STATE_COPY_DST);
@@ -3897,8 +3903,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
     b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-    b[0].texture = zTex;
-    b[0].aspect = RHI_ASPECT_DEPTH;
+    b[0].texture = src.tex;
+    b[0].aspect = src.aspect;
     b[1].slot = 1;
     b[1].type = RHI_BIND_SAMPLER;
     b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
@@ -3922,7 +3928,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         cb.col[1] = r->st.ds.test.zte ? r->st.ds.test.ztst : RD_ZTST_ALWAYS;
         cb.param[0] = rd__target_z_scale(zid);
         cb.param[1] = rd__depth_unorm_steps();
-        cb.scale[0] = tz->sx; /* the depth's texels per GS pixel */
+        cb.param[2] = src.sabotaged ? 1.0f : 0.0f; /* ICO_RD_FOG_SABOTAGE: reads give 0 */
+        cb.scale[0] = tz->sx;                      /* the depth's texels per GS pixel */
         cb.scale[1] = tz->sy;
         rhi_cmd_set_pipeline(s_cl, pipe);
         rd__bind_uniform(s_cl, 0, r->frameBG);
@@ -3935,6 +3942,13 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
         }
+    }
+    /* the first fogged replay after start or a new scene size: what the
+     * fog read and what it drew, for the log (after the draw, so the read
+     * itself is the frame's own) */
+    if (rd__fog_probe_wanted()) {
+        endPass(r);
+        rd__fog_probe_record(s_cl, tz, zid, &src, tc);
     }
     (void)topo;
 }

@@ -797,6 +797,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 #else
     rd_precreate_pipelines();
 #endif
+    /* which way of reading the depth gives the fog its distances on this
+       GPU, tried on the real scene size; logged ("fog: depth path") */
+    rd_fog_selftest();
     {
         IcoVideoOptions o;
         char res[32], fr[16];

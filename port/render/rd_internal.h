@@ -720,6 +720,9 @@ typedef enum RdFsId {
     /* blit_depth_ps, the present's box blit with the scene's
      * depth into the output-size effects depth (rd_present.c) */
     RD_FS_BLIT_DEPTH,
+    /* fog_lut_buffer_ps: fog_lut_ps reading the depth's bits from an
+     * R32_UINT texture (RD_FOG_BUFFER, rd_fog_path.c) */
+    RD_FS_FOG_BUFFER,
     RD_FS_COUNT
 } RdFsId;
 
@@ -837,10 +840,10 @@ uint32_t rd__enumerate_reachable_shadow(RdPipeKeyInt *out, uint32_t max, uint32_
 /* The depth fog: the draws of an RD_POST_FOG under state s, as
  * rd__plan_screen_draw plans a fullscreen sprite without a depth attachment
  * (fog_lut_ps does the Z test against the depth it reads), with fog_lut_ps
- * as the fragment shader. */
-int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, RdDrawPass out[2]);
-/* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE);
- * appends to out[0..n). */
+ * as the fragment shader, or fog_lut_buffer_ps with buffer (RD_FOG_BUFFER). */
+int rd__fog_plan(const RdStateBlock *s, RhiFormat colorFmt, int buffer, RdDrawPass out[2]);
+/* The fog under ZFog.c's state (TEST 0x50000, ZMSK, ALPHA 0x44 with ABE),
+ * with both fragment shaders; appends to out[0..n). */
 uint32_t rd__enumerate_reachable_fog(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* rd_replay.c: frees the fog's LUT texture (rd__gpu_shutdown); the fog samples
  * the depth target itself. */
@@ -1174,12 +1177,15 @@ typedef struct RdContext {
     RhiShader fsNoDual[RD_FS_COUNT];
     bool noDual;
     /* The scene depth is read through a copy (rd__sampled_depth) and every
-     * pass keeps its stencil (loaded and stored), as up to v0.4.4: on a
-     * tile-based GPU (RhiLimits.tiler), on D24S8, or ICO_RD_DEPTH_COPY=1
-     * (=0 reads the depth in place everywhere).  Off, the fog and the
-     * effects depth sample the depth target itself, and the stencil is
-     * kept inside the shadow window only. */
+     * pass keeps its stencil (loaded and stored), as up to v0.4.4: whenever
+     * the fog's depth path (fogPath) is not RD_FOG_INPLACE.  Off, the fog
+     * and the effects depth sample the depth target itself, and the stencil
+     * is kept inside the shadow window only. */
     bool depthCopy;
+    /* RdFogPath: how the fog reads the depth (rd_fog_path.c): chosen at
+     * rd_init from the platform and the overrides, then by the fog's
+     * self-test (rd_fog_selftest) */
+    uint8_t fogPath;
     RhiSampler samplers[RD_SAMPLER_COUNT * RD_SAMPLER_SETS]; /* [set * 16 + index] */
     RhiTexture dummy;
     RhiState dummyState;
@@ -1477,10 +1483,74 @@ typedef struct RdDepthCopy {
 RhiTexture rd__sampled_depth(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy,
                              const char *name);
 void rd__depth_copy_free(RdDepthCopy *copy);
-/* Turns g_rd.depthCopy on for the targets made so far (tests: the copy
- * against the depth read in place, in one run).  One way: a target made
- * with the copy on has no sampled depth. */
+/* Turns g_rd.depthCopy on (the fog's path RD_FOG_COPY; tests: the copy
+ * against the depth read in place, in one run). */
 void rd__force_depth_copy(void);
+
+/* ------------------------------------------------------- the fog's depth
+ * rd_fog_path.c.  The three ways the fog can read the scene depth: the
+ * depth target sampled in place, a whole copy of it sampled (vkCmdCopyImage
+ * into a second depth-stencil texture), or its depth aspect copied into a
+ * buffer and from there into an R32_UINT colour texture the fog reads as
+ * words (Vulkan only).  Every target depth is made with the sampled and the
+ * copy-source uses the device allows, so a switch needs no new targets. */
+typedef enum RdFogPath {
+    RD_FOG_INPLACE = 0,
+    RD_FOG_COPY = 1,
+    RD_FOG_BUFFER = 2,
+    RD_FOG_PATH_COUNT
+} RdFogPath;
+
+/* "inplace", "copy", "buffer" */
+const char *rd__fog_path_name(int path);
+/* The device can take the path (in place: a sampleable depth; buffer:
+ * the Vulkan backend). */
+bool rd__fog_path_supported(int path);
+/* Sets g_rd.fogPath, and g_rd.depthCopy with it (on unless in place). */
+void rd__set_fog_path(int path);
+/* rd_init, before the targets are made: the platform's path (in place on
+ * a desktop GPU; the copy on a tile-based GPU and on D24S8), or the one
+ * ICO_RD_FOG_PATH (inplace, copy, buffer) or ICO_RD_DEPTH_COPY (1 copy,
+ * 0 in place) names; ICO_RD_FOG_SABOTAGE (a comma list of paths) makes
+ * those paths read a depth of 0, as a device that returns nothing would
+ * (tests).  Arms the probe. */
+void rd__fog_path_init(void);
+
+/* The texture the fog reads t's depth from, by g_rd.fogPath, left in a
+ * sampled state outside any pass; *state tracks it (the probe copies from
+ * it).  aspect is RHI_ASPECT_DEPTH, or RHI_ASPECT_COLOR for the buffer
+ * path's R32_UINT texture (buffer set).  False when it cannot be made. */
+typedef struct RdFogSource {
+    RhiTexture tex;
+    RhiState *state;
+    RhiViewAspect aspect;
+    uint8_t buffer;
+    uint8_t sabotaged; /* ICO_RD_FOG_SABOTAGE names the path: the shader reads 0 */
+} RdFogSource;
+
+bool rd__fog_source(RhiCommandList cl, RdTargetRec *t, RdDepthCopy *copy, RdFogSource *out);
+/* The buffer path's buffer and texture (SCENE's caches: freed with them). */
+void rd__fog_buffer_free(void);
+
+/* The probe: on the first fogged replay after start and after the scene
+ * targets are made again at a new size, doFog asks rd__fog_probe_wanted
+ * and, after the fog's draw, rd__fog_probe_record copies five texels
+ * (centre, and the corners 8 pixels in) of the depth the fog read and of
+ * the fogged colour target into small textures; rd__fog_probe_finish (the
+ * next rd_begin_frame) reads them back and logs one line, "fog: probe".
+ * zid: the depth's target id (its GS Z scale). */
+bool rd__fog_probe_wanted(void);
+void rd__fog_probe_record(RhiCommandList cl, const RdTargetRec *tz, uint32_t zid,
+                          const RdFogSource *src, RdTargetRec *tc);
+void rd__fog_probe_finish(void);
+/* Copies recorded and not read back yet (rd_begin_frame then calls
+ * rd__fog_probe_finish on the host). */
+bool rd__fog_probe_pending(void);
+/* rd_core.c, after the named targets were made again: a new SCENE size arms
+ * the probe and, once rd_fog_selftest has run, runs the self-test again. */
+void rd__fog_scene_remade(void);
+/* rd__gpu_shutdown: the probe's and the buffer path's objects. */
+void rd__fog_path_shutdown(void);
 
 /* A target clear the replay has not recorded yet
  * (rd_replay.c doClear): the next pass on the target takes it as its load op
