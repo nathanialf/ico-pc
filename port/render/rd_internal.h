@@ -1080,6 +1080,9 @@ typedef struct RdInterpStats {
      * not be placed, their state reached or their block re-based (held) */
     uint32_t prevKept;
     uint32_t prevHeld;
+    /* draws projected on the CPU by their tick's camera (RD_SCREEN_FRAME_CAMERA,
+     * RD_SHADOW_FRAME_CAMERA) taken through the world onto the blended camera */
+    uint32_t reprojected;
 } RdInterpStats;
 
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0
@@ -1101,6 +1104,10 @@ bool rd__s2_legacy(void);
 bool rd__vu_off_grid(void);
 
 int rd__interp_snap(const RdFrame *prev, const RdFrame *cur);
+/* The CPU-projected draws' re-projection onto the blended camera (on by
+ * default; rd_interp.c): off, they blend in screen space as before (the
+ * tests' and the replay tool's before/after switch). */
+void rd__interp_set_reproject(bool on);
 /* rd_last_present_info's record for rd_end_frame's present of f
  * (interpolation off; rd_interp.c) */
 void rd__note_frame_present(const RdFrame *f);

@@ -46,9 +46,14 @@
  *                           image's STs are cur's
  *   RDC_PARTICLES           the VU block and each particle's position and
  *                           size; UV, grey and alpha are cur's
- *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's
+ *   RDC_SCREEN              XY, Z and colour of each vertex; STQ is cur's.
+ *                           A prim the frame camera projected on the CPU
+ *                           (RD_SCREEN_FRAME_CAMERA) blends its vertices'
+ *                           world points and is seen through the blended
+ *                           camera ("CPU-projected draws" below)
  *   RDC_SHADOW_STRIP        XY and Z of each vertex; Shadow.c's volumes
- *                           prism by prism (blendPrisms)
+ *                           prism by prism (blendPrisms), in the world when
+ *                           marked RD_SHADOW_FRAME_CAMERA
  *   RDC_OVERLAY_TEXT        an item's anchor, glow stretch and colour
  *                           (string, size and flags must be equal); an
  *                           op's colour and level (blendText)
@@ -956,9 +961,12 @@ static bool rotateModel(float (*o)[4], const float (*p)[4], const float (*c)[4],
  * parts agree and only the object moves); an unmatched, mismatched, jumped
  * or unkeyed one is cur's object through Vt, so it stays with its neighbours
  * instead of standing a tick ahead of them.  CPU-projected draws (RDC_SCREEN,
- * RDC_SHADOW_STRIP) hold GS positions and keep their blend in screen space
- * (unmatched, the fade or half-way switch, unmatchedPass); draws under
- * another camera (a reflection's) keep the element-wise blend.
+ * RDC_SHADOW_STRIP) hold GS positions: those the frame camera projected
+ * (marked at the game's projection sites) are taken through the world onto
+ * the blended camera too (reprojDraw, reprojBlend), the rest keep their
+ * blend in screen space; unmatched, both fade or switch half way
+ * (unmatchedPass); draws under another camera (a reflection's) keep the
+ * element-wise blend.
  *
  * Two kinds of part carry the frame's camera block but are not placed
  * through the view (RdVuDraw.view, the command's b[4], from the game's node
@@ -1233,6 +1241,215 @@ static bool camRebase(float (*m)[4], const double *e, int mats, const double *l,
     return true;
 }
 
+/* ------------------------------------------------ CPU-projected draws
+ *
+ * A screen prim marked RD_SCREEN_FRAME_CAMERA or a shadow volume marked
+ * RD_SHADOW_FRAME_CAMERA holds vertices the game projected on the CPU
+ * through its tick's camera (lightning.c set_vertex, lineManager.c,
+ * Shadow.c's volumes, GifPacket.c's rotTransPers strips, RegistPacket.c's
+ * lines): GS X / 16, Y / 16 and Z / 16 are x / w, y / w and z / w of the
+ * world point through S = proj43 view (RdCamera; GsBase.c's +0x100), which
+ * inverts.  While the camera moves, each vertex is taken back into the
+ * world through its tick's S^-1 and projected with the blended camera St =
+ * Pt Vt, the camera every VU draw is re-based on (camSetup, camRebase), in
+ * the VU's float order (vu_common.hlsli vu_matm: c0 x + c1 y + c2 z + c3
+ * each step rounded; vu_divide: q = 1 / w, x q, y q, z q; vu_ftoi4), so a
+ * decal or a bolt lying on a wall keeps the wall's depth instead of the
+ * tick's, which a GEQUAL test failed while the camera moved and passed
+ * when it stopped.  A matched pair blends its two world points; a draw of
+ * one tick is that tick's points through St.  STQ (the tick's own) is
+ * scaled by w_tick / w_new: S / Q stays at each vertex and the texture
+ * follows the new depth across the prim.  A vertex stays where its tick
+ * put it (matched: blended in screen space as before) when its Z is 0 or
+ * saturated by ftoi4, when it is not in front of its tick's camera, or when
+ * St does not see it in front with a GS position.  Nothing is re-projected
+ * with a still camera (s_cam.still) or outside a blend, so those frames
+ * are byte for byte what they were.  The reflection prims recorded under
+ * rd_push_camera are never marked. */
+typedef struct ReprojCam {
+    int on;
+    double ip[16], ic[16]; /* (Pp Vp)^-1 and (Pc Vc)^-1: the ticks' GS screen to world */
+    float st[16];          /* Pt Vt, world to GS screen, columns as a VU block holds them */
+} ReprojCam;
+
+static ReprojCam s_rp;
+
+static bool s_rpOff; /* rd__interp_set_reproject(false) */
+
+static uint32_t s_reproj; /* draws re-projected, this present */
+
+void rd__interp_set_reproject(bool on)
+{
+    s_rpOff = !on;
+}
+
+/* s_rp for the camera camSetup blended at t */
+static void reprojSetup(float t)
+{
+    memset(&s_rp, 0, sizeof(s_rp));
+    if (s_rpOff || !s_cam.on || s_cam.still) {
+        return;
+    }
+    double sp[16], sc[16], pt[16], st[16];
+    mul4d(s_cam.pp, s_cam.vp, sp);
+    mul4d(s_cam.pc, s_cam.vc, sc);
+    if (!invert4d(sp, s_rp.ip) || !invert4d(sc, s_rp.ic)) {
+        return;
+    }
+    for (int i = 0; i < 16; i++) {
+        pt[i] = s_cam.zoom ? (1.0 - t) * s_cam.pp[i] + t * s_cam.pc[i] : s_cam.pc[i];
+    }
+    mul4d(pt, s_cam.vt, st);
+    for (int i = 0; i < 16; i++) {
+        if (!isfinite(st[i]) || fabs(st[i]) > 3.0e38) {
+            return;
+        }
+        s_rp.st[i] = (float)st[i];
+    }
+    s_rp.on = 1;
+}
+
+/* whether c is a draw the frame camera projected that this file re-projects */
+static bool frameProjected(const RdCmd *c)
+{
+    if (c->type == RDC_SCREEN) {
+        return c->b[4] == RD_SCREEN_FRAME_CAMERA && c->b[1] == RD_SPACE_WORLD &&
+               c->b[0] != RD_PRIM_SPRITES && c->b[3] == 0;
+    }
+    return c->type == RDC_SHADOW_STRIP && c->b[0] == RD_SHADOW_TRIS &&
+           c->b[1] == RD_SHADOW_FRAME_CAMERA;
+}
+
+/* v's world point p through inv (a tick's S^-1) and its w there; false when
+ * Z is 0 or saturated by ftoi4, or the point is not in front of the camera */
+static bool reprojUnproject(const double *inv, const RdScreenVtx *v, double p[3], double *w)
+{
+    if (v->z == 0 || v->z >= 0x7FFFFFFFu) {
+        return false;
+    }
+    const double s[3] = {(double)v->x / 16.0, (double)v->y / 16.0, (double)v->z / 16.0};
+    double h[4];
+    for (int r = 0; r < 4; r++) {
+        h[r] = inv[r] * s[0] + inv[4 + r] * s[1] + inv[8 + r] * s[2] + inv[12 + r];
+    }
+    if (!(h[3] > 0.0) || !isfinite(h[3])) {
+        return false; /* h[3] = 1 / w */
+    }
+    for (int k = 0; k < 3; k++) {
+        p[k] = h[k] / h[3];
+        if (!isfinite(p[k])) {
+            return false;
+        }
+    }
+    *w = 1.0 / h[3];
+    return true;
+}
+
+/* the world point p through St as the VU computes a vertex (vu_mat with w
+ * 1, vu_divide, vu_ftoi4) into o's X, Y and Z, and its w; false (o
+ * untouched) when w is not positive, X or Y leaves the GS's 16-bit window
+ * or Z the ftoi4 range */
+static bool reprojProject(const double p[3], RdScreenVtx *o, double *w)
+{
+    const float *m = s_rp.st;
+    const float x = (float)p[0], y = (float)p[1], z = (float)p[2];
+    float h[4];
+    for (int r = 0; r < 4; r++) {
+        float a = m[r] * x;
+        a = a + m[4 + r] * y;
+        a = a + m[8 + r] * z;
+        a = a + m[12 + r] * 1.0f;
+        h[r] = a;
+    }
+    if (!(h[3] > 0.0f) || !isfinite(h[3])) {
+        return false;
+    }
+    const float q = 1.0f / h[3];
+    const float gx = h[0] * q * 16.0f, gy = h[1] * q * 16.0f, gz = h[2] * q * 16.0f;
+    if (!(gx >= 0.0f && gx < 65536.0f) || !(gy >= 0.0f && gy < 65536.0f) ||
+        !(gz >= 1.0f && gz < 2147483648.0f)) {
+        return false;
+    }
+    o->x = (int32_t)gx; /* ftoi4: truncation */
+    o->y = (int32_t)gy;
+    o->z = (uint32_t)(int32_t)gz;
+    *w = h[3];
+    return true;
+}
+
+/* STQ times w / wNew (the tick's w over the new one) */
+static void reprojStq(RdScreenVtx *v, double w, double wNew)
+{
+    const double k = w / wNew;
+    v->s = (float)((double)v->s * k);
+    v->t = (float)((double)v->t * k);
+    v->q = (float)((double)v->q * k);
+}
+
+/* v (a vertex of the tick whose S^-1 is inv) moved by d in the world and
+ * through St; false (v untouched) where it cannot be */
+static bool reprojVertex(const double *inv, RdScreenVtx *v, const double *d, bool stq)
+{
+    double p[3], w, wNew;
+    RdScreenVtx o = *v;
+    if (!reprojUnproject(inv, v, p, &w)) {
+        return false;
+    }
+    if (d) {
+        for (int k = 0; k < 3; k++) {
+            p[k] += d[k];
+        }
+    }
+    if (!reprojProject(p, &o, &wNew)) {
+        return false;
+    }
+    if (stq) {
+        reprojStq(&o, w, wNew);
+    }
+    *v = o;
+    return true;
+}
+
+/* a matched pair's vertex: o (cur's) becomes the blend at t of the world
+ * points of p (prev's) and o through St, cur's STQ scaled; false (o
+ * untouched) where either has no world point or St cannot draw it */
+static bool reprojBlend(RdScreenVtx *o, const RdScreenVtx *p, float t, bool stq)
+{
+    double a[3], b[3], m[3], wp, wc, wNew;
+    RdScreenVtx r = *o;
+    if (!reprojUnproject(s_rp.ip, p, a, &wp) || !reprojUnproject(s_rp.ic, o, b, &wc)) {
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        m[k] = (1.0 - (double)t) * a[k] + (double)t * b[k];
+    }
+    if (!reprojProject(m, &r, &wNew)) {
+        return false;
+    }
+    if (stq) {
+        reprojStq(&r, wc, wNew);
+    }
+    *o = r;
+    return true;
+}
+
+/* the vertices of c (a draw of one tick, frameProjected) in payload v, of
+ * the tick whose S^-1 is inv, through St */
+static void reprojDraw(const RdCmd *c, uint8_t *v, const double *inv)
+{
+    if (!s_rp.on || !v || !frameProjected(c)) {
+        return;
+    }
+    RdScreenVtx *o = (RdScreenVtx *)(void *)v;
+    const bool screen = c->type == RDC_SCREEN;
+    const uint32_t n = screen ? c->u[1] : c->u[0] + c->u[3];
+    const bool stq = screen && c->b[2] == 0;
+    for (uint32_t i = 0; i < n; i++) {
+        (void)reprojVertex(inv, &o[i], NULL, stq);
+    }
+    s_reproj++;
+}
+
 static int s_rebased; /* VU draws re-based on the blended camera, this frame */
 
 static int s_rebasedCur; /* of them, draws that are cur's */
@@ -1242,6 +1459,10 @@ static int s_rebasedCur; /* of them, draws that are cur's */
 static void camCurDraw(RdCmd *c)
 {
     if (!s_cam.on || s_cam.still) {
+        return;
+    }
+    if (frameProjected(c)) {
+        reprojDraw(c, outPayload(c), s_rp.ic); /* cur's points through the blended camera */
         return;
     }
     switch (c->type) {
@@ -2104,14 +2325,19 @@ static int blendScreen(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const 
     if (vtxJump(p, o, n)) {
         return R_JUMP;
     }
+    /* both projected by their tick's camera: blended in the world */
+    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
     for (uint32_t i = 0; i < n; i++) {
-        o[i].x = lerpI(p[i].x, o[i].x, t);
-        o[i].y = lerpI(p[i].y, o[i].y, t);
-        o[i].z = lerpU(p[i].z, o[i].z, t);
+        if (!world || !reprojBlend(&o[i], &p[i], t, cc->b[2] == 0)) {
+            o[i].x = lerpI(p[i].x, o[i].x, t);
+            o[i].y = lerpI(p[i].y, o[i].y, t);
+            o[i].z = lerpU(p[i].z, o[i].z, t);
+        }
         for (int k = 0; k < 4; k++) {
             o[i].rgba[k] = lerpB(p[i].rgba[k], o[i].rgba[k], t);
         }
     }
+    s_reproj += world;
     return R_LERP;
 }
 
@@ -2291,8 +2517,15 @@ static double *s_sel;
 
 static uint32_t s_selCap;
 
+static double *s_wpt;
+
+static uint32_t s_wptCap;
+
 static void prismFree(void)
 {
+    free(s_wpt);
+    s_wpt = NULL;
+    s_wptCap = 0;
     for (int k = 0; k < 2; k++) {
         free(s_prism[k]);
         s_prism[k] = NULL;
@@ -2447,6 +2680,9 @@ static double prismCost(const ShPrism *a, const ShPrism *b, const double *shift)
     return sum / (3.0 * 256.0); /* square GS pixels */
 }
 
+/* the element of rank m / 2 of s_sel[0..m - 1] (m > 0; reordered) */
+static double selectMedian(uint32_t m);
+
 /* the median of field k (0 x, 1 y, 2 z) of the six vertices of s_prism[s]'s
  * n prisms, by selection (the volume's shift; a sort of every triangle's
  * vertices cost a millisecond a present) */
@@ -2462,6 +2698,41 @@ static bool prismMedian(int s, uint32_t n, int k, double *out)
             s_sel[p * 6 + (uint32_t)i] = k == 0 ? v->x : (k == 1 ? v->y : (double)v->z);
         }
     }
+    *out = selectMedian(m);
+    return true;
+}
+
+/* the median of the world points (x, y, z apart) of the six vertices of
+ * s_prism[s]'s n prisms through inv (that tick's S^-1), the vertices with
+ * no world point left out; false when none has one */
+static bool worldMedian(int s, uint32_t n, const double *inv, double out[3])
+{
+    const uint32_t m = n * 6;
+    if (m == 0 || !growTo((void **)&s_wpt, &s_wptCap, m * 3, sizeof(double)) ||
+        !growTo((void **)&s_sel, &s_selCap, m, sizeof(double))) {
+        return false;
+    }
+    uint32_t got = 0;
+    for (uint32_t p = 0; p < n; p++) {
+        for (int i = 0; i < 6; i++) {
+            double w;
+            got += reprojUnproject(inv, &s_prism[s][p].v[i], &s_wpt[got * 3], &w);
+        }
+    }
+    if (got == 0) {
+        return false;
+    }
+    for (int k = 0; k < 3; k++) {
+        for (uint32_t j = 0; j < got; j++) {
+            s_sel[j] = s_wpt[j * 3 + (uint32_t)k];
+        }
+        out[k] = selectMedian(got);
+    }
+    return true;
+}
+
+static double selectMedian(uint32_t m)
+{
     /* Hoare's selection of the element of rank m / 2 */
     uint32_t a = 0, b = m - 1;
     const uint32_t r = m / 2;
@@ -2494,8 +2765,7 @@ static bool prismMedian(int s, uint32_t n, int k, double *out)
             break;
         }
     }
-    *out = s_sel[r];
-    return true;
+    return s_sel[r];
 }
 
 /* s_prism[0] (np, prev) against s_prism[1] (nc, cur): sets .match; false
@@ -2657,6 +2927,16 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
     const int32_t dx = (int32_t)floor(w * (mc[0] - mp[0]) + 0.5);
     const int32_t dy = (int32_t)floor(w * (mc[1] - mp[1]) + 0.5);
     const double dz = floor(w * (mc[2] - mp[2]) + 0.5);
+    /* both volumes projected by their tick's camera: the prisms blend in
+     * the world and are seen through the blended camera (the floor they
+     * fall on is), a prism of one tick only moved by the volume's shift in
+     * the world; a vertex with no world point keeps the screen-space rule */
+    const bool world = s_rp.on && frameProjected(pc) && frameProjected(cc);
+    double wp[3], wc[3], wd[3];
+    const bool wShift = world && worldMedian(0, np, s_rp.ip, wp) && worldMedian(1, nc, s_rp.ic, wc);
+    for (int k = 0; k < 3; k++) {
+        wd[k] = wShift ? w * (wc[k] - wp[k]) : 0.0;
+    }
     uint32_t inc = 0, o = 0;
     for (int pass = 0; pass < 2; pass++) {
         for (uint32_t q = 0; q < (pass ? np : nc); q++) {
@@ -2674,20 +2954,30 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
                 const ShPrism *a = &s_prism[0][src->match];
                 bool moved = false;
                 for (int k = 0; k < 6; k++) {
-                    b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
-                    b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
-                    b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
+                    if (!world || !reprojBlend(&b.v[k], &a->v[k], t, false)) {
+                        b.v[k].x = lerpI(a->v[k].x, src->v[k].x, t);
+                        b.v[k].y = lerpI(a->v[k].y, src->v[k].y, t);
+                        b.v[k].z = lerpU(a->v[k].z, src->v[k].z, t);
+                    }
                     moved |= !sameXyz(&b.v[k], &src->v[k]);
                 }
                 if (moved && b.s0 != 0) {
                     prismSigns(&b, plus);
                 }
             } else {
+                bool turned = false;
                 for (int k = 0; k < 6; k++) {
+                    if (wShift && reprojVertex(pass ? s_rp.ip : s_rp.ic, &b.v[k], wd, false)) {
+                        turned = true;
+                        continue;
+                    }
                     b.v[k].x += dx;
                     b.v[k].y += dy;
                     const double z = (double)b.v[k].z + dz;
                     b.v[k].z = z < 0.0 ? 0u : (z > 4294967295.0 ? 0xFFFFFFFFu : (uint32_t)z);
+                }
+                if (turned && b.s0 != 0) {
+                    prismSigns(&b, plus); /* the faces' facing through the blended camera */
                 }
             }
             for (int i = 2; i < 10; i++) {
@@ -2718,6 +3008,7 @@ static int blendPrisms(uint8_t *op, const RdFrame *prev, const RdCmd *pc, RdCmd 
     cc->u[0] = inc * 3;
     cc->u[3] = (tris - inc) * 3;
     s_shifted = alone > 0;
+    s_reproj += world;
     return R_LERP;
 }
 
@@ -3729,6 +4020,7 @@ static void unmatchedPass(const RdFrame *prev, float t)
             continue;
         }
         memcpy(dst, src, size);
+        reprojDraw(pc, dst, s_rp.ip); /* prev's points through the blended camera */
         if (isVuDraw(pc) && !rebasePrev((float (*)[4])(void *)(dst + sizeof(RdVuPayload)), pc)) {
             in->node = ~0u; /* held: not through the blended camera */
             s_umPrevHeld++;
@@ -4231,9 +4523,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
         (void)indexCur(); /* false: the ordinal pairing for every key */
     }
     s_cam.on = 0;
+    s_rp.on = 0;
     s_rebased = s_rebasedCur = 0;
+    s_reproj = 0;
     if (blend) {
         camSetup(prev, cur, t); /* the blended camera */
+        reprojSetup(t);         /* and the CPU-projected draws' */
         if (prev->hasCamera && cur->hasCamera) {
             lerpCamera(&s_out.camera, &prev->camera, &cur->camera, t);
             if (s_cam.on) {
@@ -4360,6 +4655,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     st.lightPaired = (uint32_t)s_lightPair;
     st.placed = (uint32_t)s_placed;
     st.gridSt = (uint32_t)s_gridSt;
+    st.reprojected = s_reproj;
     feedback(firstOfTick);
     if (stats) {
         *stats = st;
