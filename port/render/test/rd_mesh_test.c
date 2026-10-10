@@ -18,7 +18,11 @@
  *   grid     a Mesh3D through prim_InitMesh3D / prim_UpdateMesh3D /
  *            prim_DispMesh3D (mesh code 20)
  *   particle prim_InitParticleByPartition / prim_DispParticle (code 18), the
- *            batch keyed by its emitter
+ *            batch keyed by its emitter and the life of its slot: a new
+ *            emitter at a deleted one's address (prim_DeleteParticle) gets
+ *            a new count, and a live emitter drawn every tick keeps its
+ *            count while 8192 other emitters are stamped (three in four
+ *            deleted, the rest never drawn again)
  *   stretch  the prelit model named a full-screen title model
  *            (title_logo.c ico_title_stretch_model, stubbed): reg_DispObj
  *            records its draw with the stretch byte (b[3] 1, 0 for any
@@ -409,6 +413,41 @@ static void checkParticleRecording(void)
               RD_KEY(s_part, 18, prim_HostParticleGen(s_part)) != k,
           "a reused emitter slot gets a fresh key (gen %u -> %u)", gen,
           prim_HostParticleGen(s_part));
+    /* an emitter deleted and another created at its address: the count
+     * goes on from the deleted one's */
+    {
+        PrimParticle *e =
+            prim_InitParticleByPartition(4, 1.0f, 0.25f, 0.25f, 0, "testtex", 0, NULL);
+        CHECK(e != NULL, "a second emitter");
+        if (e != NULL) {
+            const unsigned int g1 = prim_HostParticleGen(e);
+            prim_DeleteParticle(e);
+            prim_HostParticleStamp(e); /* the next init at its address */
+            const unsigned int g2 = prim_HostParticleGen(e);
+            CHECK(g1 != 0 && g2 != 0 && g2 != g1,
+                  "stamp, delete, stamp: the count goes on (gen %u -> %u)", g1, g2);
+        }
+    }
+    /* a live emitter, drawn every tick, keeps its count while other
+     * emitters come and go: three in four deleted, the rest left in the
+     * table and never drawn (a partition freed whole), more than the table
+     * holds, every slot's run of probes filled many times over (the
+     * addresses are only hashed, never read) */
+    {
+        static __attribute__((aligned(16))) char fake[16 * 8192];
+        const unsigned int ga = prim_HostParticleGen(s_part);
+        int changed = 0;
+        for (int i = 0; i < 8192; i++) {
+            const PrimParticle *f = (const PrimParticle *)(const void *)(fake + 16 * i);
+            prim_HostParticleStamp(f);
+            if (i % 4 != 0) {
+                prim_HostParticleForget(f);
+            }
+            changed += prim_HostParticleGen(s_part) != ga;
+        }
+        CHECK(ga != 0 && changed == 0,
+              "a live emitter keeps its count (gen %u, changed on %d of 8192 ticks)", ga, changed);
+    }
 }
 
 /* ------------------------------------------------------ the reference */

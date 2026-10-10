@@ -101,9 +101,11 @@ typedef struct { /* field names derived */
 void prim_DeleteParticle(PrimParticle *p);
 #ifdef ICO_RD
 /* PC port: the life of a particle emitter's slot, for the presenter's key
-   (Primitive.c); prim_InitParticleByPartition stamps a new one */
+   (Primitive.c); prim_InitParticleByPartition stamps a new one,
+   prim_DeleteParticle forgets it (the count kept for the next) */
 void prim_HostParticleStamp(const PrimParticle *p);
 unsigned int prim_HostParticleGen(const PrimParticle *p);
+void prim_HostParticleForget(const PrimParticle *p);
 #endif
 void prim_DispFan2D(Fan2D *f, int mode);
 void prim_DispMesh3D(Mesh3D *m, void *la, void *lb, int tex);
