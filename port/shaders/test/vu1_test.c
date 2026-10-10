@@ -810,8 +810,8 @@ typedef struct Case {
 } Case;
 
 /* DEPART_EYE: vertex 7 of each batch behind the eye (model (0, 0, -1), w =
- * -1): the VU drops its three triangles, the port draws what of them is in
- * front of the near plane. DEPART_SPRITE: particle 0 is a 1040-pixel sprite
+ * -1): the VU drops its three triangles and so does the port (a triangle
+ * with a vertex at w <= 0 stays dropped: vu_triangle_out). DEPART_SPRITE: particle 0 is a 1040-pixel sprite
  * from X 2040 (inside the target) to 3080 (past the window's 3071): the VU
  * skips it, the port draws it. */
 enum { DEPART_NONE, DEPART_EYE, DEPART_SPRITE };
@@ -1249,8 +1249,21 @@ static int vuDraws(const Case *c, const CaseRef *cr, int k)
  * the GPU clips it (0 <= z); then projected. Vertices in front of that use
  * the reference's GS X and Y (any program); a triangle with one behind
  * is projected with M itself, so only for normal_c and normal_l (the
- * cluster's bones move it). Returns the corner count, 0 when nothing is
- * left, -1 when it cannot be predicted. */
+ * cluster's bones move it). A triangle with a vertex behind the eye
+ * (model z <= 0, w <= 0) is not drawn, as on the VU. Returns the corner
+ * count, 0 when nothing is left, -1 when it cannot be predicted. */
+/* Whether triangle k has a vertex behind the eye (w' = model z <= 0 under
+ * the scene's M) */
+static int behindEye(const CaseRef *cr, int k)
+{
+    for (int j = 0; j < 3; j++) {
+        if (cr->pos[k - 2 + j][2] <= 0.0f) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int portPolygon(const Case *c, const CaseRef *cr, int k, float poly[4][2])
 {
     const float half = RT / 2;
@@ -1268,6 +1281,9 @@ static int portPolygon(const Case *c, const CaseRef *cr, int k, float poly[4][2]
     }
     if (c->prog != P_NORMALC && c->prog != P_NORMALL) {
         return -1;
+    }
+    if (behindEye(cr, k)) {
+        return 0;
     }
     int n = 0;
     for (int j = 0; j < 3; j++) {
@@ -1769,7 +1785,7 @@ static int gpuTests(void)
         }
         vu1ref_set_wide_x(1.0f);
         /* the triangles the region test drops: drawn, clipped at the near
-         * plane, where the CPU puts them */
+         * plane, where the CPU puts them, unless a vertex is behind the eye */
         if (nidx > nkept) {
             int pbad = 0;
             const int pin = checkPortTriangles(c, &cr, idx, nkept, nidx - nkept, pa, pitch, &pbad);
@@ -1784,8 +1800,15 @@ static int gpuTests(void)
                 FAILF("%s: the dropped triangles drawn: %d pixels against the clipped polygons\n",
                       c->name, pbad);
             }
-            if (c->depart == DEPART_EYE && pin == 0) {
-                FAILF("%s: the triangles with a vertex behind the eye are not drawn\n", c->name);
+            if (c->depart == DEPART_EYE) {
+                int eye = 0;
+                for (int i = nkept; i < nidx; i += 3) {
+                    eye += behindEye(&cr, (int)((idx[i] & ICO_VU_INDEX_MASK) >> 2));
+                }
+                /* pbad above: none of their pixels is drawn */
+                if (eye == 0) {
+                    FAILF("%s: no dropped triangle has a vertex behind the eye\n", c->name);
+                }
             }
             portIn += c->depart == DEPART_NONE ? pin : 0;
         } else if (c->depart == DEPART_EYE) {

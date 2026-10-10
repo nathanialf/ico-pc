@@ -379,27 +379,34 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     if (mode == VU_CLIP_REGION) {
         // On the PS2 any vertex outside the region sets ADC on itself and
         // the next two, and the triangle is not drawn. The port draws it
-        // and lets the GPU clip it at 0 <= z <= w instead: on a wide
-        // picture, in photo mode and with a camera low over a surface the
-        // dropped triangles left holes (a strip with one vertex behind the
-        // eye, a wall with one vertex past the window). A triangle with all
-        // three vertices inside is drawn exactly as before (vu_vtx_position,
-        // on the ftoi4 grid); one with a vertex outside takes code 36's
-        // corner rule (vu_cut_position: the GS position where the vertex
-        // has one, the homogeneous form of h behind the eye or saturated;
-        // every program computes h before the test). The region test itself
-        // still runs (VuVtx.inside, the tests' probe field), as the PS2's.
+        // and lets the GPU clip it at 0 <= z <= w instead when all three
+        // vertices are in front of the eye (w > 0): on a wide picture the
+        // dropped triangles left holes (a wall with one vertex past the
+        // window). A triangle with a vertex behind the eye (w <= 0) stays
+        // dropped, as on the PS2: the game's cameras pass through and
+        // beside scenery that relies on it. The opening after the Sony
+        // sign films the castle from inside a cliff (st26a_p1); drawing
+        // those triangles (some 2400 a frame there, with the sky and
+        // cloud domes and the sea) covered the castle with stretched
+        // rock. A triangle with all three vertices inside is drawn
+        // exactly as before (vu_vtx_position, on the ftoi4 grid); a
+        // drawn one with a vertex outside takes code 36's corner rule
+        // (vu_cut_position: the GS position where the vertex has one, the
+        // homogeneous form of h where it is saturated or below GS Z 0;
+        // every program computes h before the test). The region test
+        // itself still runs (VuVtx.inside, the tests' probe field), as the
+        // PS2's.
         // Two differences from a code-36 draw of the same triangle remain:
         // code 36's clipped triangles go through their own earlier pass
         // with ABE forced on (rd_replay.c draws them as the VU's fans,
         // PRIM 0x5D), which a code-32 draw does not, so a mesh whose clip
         // code flips between 32 and 36 still changes the blending along its
         // cut rim; and vu_later_out's bias needs all three GS positions, so
-        // a later-marked triangle with a corner behind the eye is drawn
-        // without it.
+        // a later-marked triangle with a corner saturated or below GS Z 0
+        // is drawn without it.
         if (a.inside && b.inside && c.inside) {
             o.pos = vu_vtx_position(me);
-        } else {
+        } else if (a.h.w > 0.0 && b.h.w > 0.0 && c.h.w > 0.0) {
             o.pos = vu_cut_position(me);
         }
         return o;
