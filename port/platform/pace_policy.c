@@ -17,11 +17,18 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
 uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs)
 {
     if (uncappedVsync) {
-        /* a sixteenth of a refresh early: the sleep's overshoot and a game
-           step that a due present lands in only make a present later, and
-           the gap counts from the last present's start, so a gap of exactly
-           one refresh averaged more than a refresh */
-        return refreshNs - refreshNs / 16;
+        /* one present a refresh, but never fewer than sixty a second: a
+           display can report a refresh it is not running at (a 4K screen
+           the user plays at 60 Hz reported 30.0 Hz, and one present per
+           reported refresh halved what the screen showed), and sixty a
+           second on a true 30 Hz screen only costs what v0.5.1 spent on
+           every screen. A sixteenth of a refresh early: the sleep's
+           overshoot and a game step that a due present lands in only make
+           a present later, and the gap counts from the last present's
+           start, so a gap of exactly one refresh averaged more than one */
+        const uint64_t sixty = 16666667ull;
+        const uint64_t r = refreshNs < sixty ? refreshNs : sixty;
+        return r - r / 16;
     }
     return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;
 }

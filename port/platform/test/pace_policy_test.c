@@ -133,8 +133,9 @@ static void testAutoResolution(void)
 }
 
 /* pace_present_gap: "uncapped" with vsync presents a sixteenth of a refresh
-   early, in mailbox mode as under FIFO, on every platform; a limit is its own
-   period; "uncapped" without vsync has no gap */
+   early, in mailbox mode as under FIFO, on every platform, and never fewer
+   than sixty a second whatever refresh the display reports; a limit is its
+   own period; "uncapped" without vsync has no gap */
 static void testPresentGap(void)
 {
     static const struct {
@@ -146,6 +147,8 @@ static void testPresentGap(void)
         {-1, true, 16666667ull, 16666667ull - 16666667ull / 16},
         {-1, true, 11111111ull, 11111111ull - 11111111ull / 16},
         {-1, true, 6944444ull, 6944444ull - 6944444ull / 16},
+        /* a screen reported at 30 Hz presents as if it ran at 60 */
+        {-1, true, 33333333ull, 16666667ull - 16666667ull / 16},
         {-1, false, 11111111ull, 0},
         {0, false, 16666667ull, 0},
         {120, false, 11111111ull, 8333333ull},
@@ -164,8 +167,9 @@ static void testPresentGap(void)
        and a late present still leaves the next refresh a new picture */
     for (uint64_t r = 4000000ull; r <= 33333334ull; r += 1234567ull) {
         const uint64_t g = pace_present_gap(-1, true, r);
-        CHECK(g >= r * 15 / 16);
-        CHECK(g < r);
+        const uint64_t e = r < 16666667ull ? r : 16666667ull;
+        CHECK(g >= e * 15 / 16);
+        CHECK(g < e);
     }
 }
 
