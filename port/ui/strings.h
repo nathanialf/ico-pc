@@ -566,6 +566,9 @@ typedef enum UiStrId {
        while the game's arrow pictures are not loaded */
     UI_STR_TOUCH_LEFT,
     UI_STR_TOUCH_RIGHT,
+    /* Gameplay > Doorway fix ([gameplay] door_fix) and its explanation */
+    UI_STR_OPT_DOOR_FIX,
+    UI_STR_OPT_DOOR_FIX_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

@@ -494,4 +494,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_INSTANT] = "Istantanea",
     [UI_STR_TOUCH_LEFT] = "Sinistra",
     [UI_STR_TOUCH_RIGHT] = "Destra",
+    [UI_STR_OPT_DOOR_FIX] = "Correzione delle porte",
+    [UI_STR_OPT_DOOR_FIX_NOTE] =
+        "Mano nella mano, Ico e Yorda non tornano più subito fuori da una porta.",
 };

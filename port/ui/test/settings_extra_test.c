@@ -1467,6 +1467,62 @@ static void testResolutionCycle(void)
     CHECK(o.aspect == ICO_ASPECT_48_9, "Left from Auto is 48:9");
 }
 
+/* Gameplay > Doorway fix ([gameplay] door_fix): a row from the title and
+   the pause menu, Off by default; a step turns it on and sets the key, the
+   saved file has it, its note shows on the cursor, and the page with the
+   game finished (every row shown) still fits */
+static void testDoorFix(void)
+{
+    char p[1100];
+
+    gFlagGameClear = 0;
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        const int mainL = enterMain(title);
+        openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+        const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_DOOR_FIX);
+        CHECK(row >= 0 && !lt_ext_prop(row)->defaultMask && !lt_ext_prop(row)->masked,
+              "title %d: the Doorway fix row", title);
+        CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Doorway fix") == 0,
+              "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
+        CHECK(ico_opt_door_fix() == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_DOOR_FIX), "Off") == 0,
+              "title %d: Off by default", title);
+        press(0x10);
+        CHECK(settle(mainL, 60), "Gameplay: back");
+    }
+
+    /* the game finished, from the pause menu: all six rows and Back */
+    gFlagGameClear = 1;
+    stage_no = 11;
+    const int mainL = enterMain(0);
+    const int gameL = openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+    checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared, with Doorway fix)");
+    const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_DOOR_FIX);
+    lt_ext_layout(gameL)->curItem = row;
+    press(0x2000);
+    CHECK(ico_opt_door_fix() == 1 && strcmp(ui_settings_value_text(UI_OPT_DOOR_FIX), "On") == 0 &&
+              ico_config_get_bool("gameplay.door_fix", 0) == 1,
+          "Right: Doorway fix On and the key set");
+    const int note = noteStarting(UI_PAGE_GAMEPLAY, "Holding hands");
+    CHECK(note >= 0 && !lt_ext_prop(note)->masked, "the Doorway fix note on the cursor");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "gameplay.door_fix", 0) == 1,
+          "saved: gameplay.door_fix = true");
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+    press(0x8000);
+    CHECK(ico_opt_door_fix() == 0 && ico_config_get_bool("gameplay.door_fix", 1) == 0,
+          "Left: Doorway fix Off again");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Gameplay: back");
+    ico_opt_set_door_fix(0);
+    gFlagGameClear = 0;
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1498,6 +1554,8 @@ int main(int argc, char **argv)
     testEscapeNewGame();
     /* Display > Resolution and Aspect ratio cycles */
     testResolutionCycle();
+    /* Gameplay > Doorway fix */
+    testDoorFix();
     if (failures) {
         printf("settings_extra_test: %d failure(s)\n", failures);
         return 1;

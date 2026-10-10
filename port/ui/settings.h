@@ -271,6 +271,7 @@ typedef enum UiSettingsOpt {
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
+    UI_OPT_DOOR_FIX,    /* [gameplay] door_fix, the doorway fix */
     UI_OPT_FILM_EFFECT, /* the game's optionScreenMode 0..4, once cleared */
     UI_OPT_PLAYERS,     /* the game's girlControlMode, 1 or 2, once cleared */
     UI_OPT_ACH_POPUPS,  /* [game] achievements, On/Off: the achievement pop-ups, on the

@@ -1165,6 +1165,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return girlControlMode != 0 ? "2" : "1";
     case UI_OPT_YORDA:
         return onOff(ico_opt_yorda_safe());
+    case UI_OPT_DOOR_FIX:
+        return onOff(ico_opt_door_fix());
     case UI_OPT_LANGUAGE:
         return languageName(NonLinearCameraMove);
     case UI_OPT_DEVELOPER:
@@ -1567,6 +1569,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_YORDA:
         ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
         ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
+        s_dirtyConfig = 1;
+        break;
+    case UI_OPT_DOOR_FIX:
+        ico_opt_set_door_fix(!ico_opt_door_fix());
+        ico_config_set_bool("gameplay.door_fix", ico_opt_door_fix());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_LANGUAGE: {
@@ -2092,6 +2099,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GAMEPLAY:
         addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
+        addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
         break;
     case UI_PAGE_EXTRAS:
@@ -2591,10 +2599,11 @@ static void build(void)
     static const int ctlLinks[] = {
         UI_PAGE_REMAP, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
     /* the game's Film effect and Players, once the game is cleared */
-    static const int gameOpts[] = {UI_OPT_YORDA, UI_OPT_STICK_FIX, UI_OPT_FILM_EFFECT,
-                                   UI_OPT_PLAYERS, UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX, UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS, UI_STR_BACK};
+    static const int gameOpts[] = {UI_OPT_YORDA,       UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_YORDA,    UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX, UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,  UI_STR_BACK};
     _Static_assert(sizeof(dispOpts) == sizeof(dispStrs), "a string for each Display row");
     _Static_assert(sizeof(ctlOpts) == sizeof(ctlStrs) && sizeof(ctlOpts) == sizeof(ctlLinks),
                    "a string and a link for each Controls row");

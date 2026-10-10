@@ -491,4 +491,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_INSTANT] = "Instant",
     [UI_STR_TOUCH_LEFT] = "Left",
     [UI_STR_TOUCH_RIGHT] = "Right",
+    [UI_STR_OPT_DOOR_FIX] = "Doorway fix",
+    [UI_STR_OPT_DOOR_FIX_NOTE] =
+        "Holding hands, Ico and Yorda no longer come straight back out of a doorway.",
 };
