@@ -407,18 +407,67 @@ static void video_apply(int force)
     }
 }
 
-/* The touch overlay's zones from the window's pixel size and
-   its safe area (a notch, rounded corners, the system bars), which SDL
-   gives in points: scaled to pixels.  On open and when either changes; the
-   Touch size row is followed by input_sdl.c. */
+/* What the touch layout knows of the screen besides its pixels (touch.h
+   IcoTouchEnv): its density, so the controls keep a size in millimetres,
+   and on Android a foldable's fold, so nothing sits on it.  Android: the
+   activity's own report (ico_android_screen), whose fold bounds are in the
+   window's pixels as Java sees them, scaled here to SDL's pixel size pw x
+   ph (the same numbers when the surface fills the window).  Elsewhere, or
+   before the first report: the display scale SDL gives, as dots per inch
+   over a base of 96 (160 on Android, its density for scale 1). */
+static void touch_env_build(IcoTouchEnv *env, int pw, int ph)
+{
+    float scale;
+#ifdef __ANDROID__
+    IcoAndroidScreen a;
+
+    if (ico_android_screen(&a) > 0 && a.densityDpi > 0) {
+        const float kx = a.winW > 0 ? (float)pw / (float)a.winW : 1.0f;
+        const float ky = a.winH > 0 ? (float)ph / (float)a.winH : 1.0f;
+
+        SDL_zerop(env);
+        env->pxPerMm = ico_touch_px_per_mm((float)a.densityDpi) * kx;
+        if ((a.fold == ICO_TOUCH_FOLD_VERTICAL || a.fold == ICO_TOUCH_FOLD_HORIZONTAL) &&
+            a.winW > 0 && a.winH > 0 && a.r >= a.l && a.b >= a.t) {
+            env->fold.orientation = a.fold;
+            env->fold.halfOpened = a.halfOpened;
+            env->fold.separating = a.separating;
+            env->fold.bounds.x = (float)a.l * kx;
+            env->fold.bounds.y = (float)a.t * ky;
+            env->fold.bounds.w = (float)(a.r - a.l) * kx;
+            env->fold.bounds.h = (float)(a.b - a.t) * ky;
+        }
+        return;
+    }
+#endif
+    SDL_zerop(env);
+    scale = SDL_GetWindowDisplayScale(s_window);
+#ifdef __ANDROID__
+    env->pxPerMm = ico_touch_px_per_mm(scale * 160.0f);
+#else
+    env->pxPerMm = ico_touch_px_per_mm(scale * 96.0f);
+#endif
+}
+
+/* The touch overlay's zones from the window's pixel size, its safe area (a
+   notch, rounded corners, the system bars), which SDL gives in points:
+   scaled to pixels, and the screen's density and fold (touch_env_build).
+   On open, when the size, the safe area or the display scale changes, and
+   on Android when the activity reports a new density or fold
+   (ico_window_pump); the Touch size row is followed by input_sdl.c.  The
+   screen goes first: each call lays the zones out again, and the second
+   one has everything. */
 static void touch_layout_update(void)
 {
     int pw = 0, ph = 0, ww = 0, wh = 0;
     SDL_Rect r;
+    IcoTouchEnv env;
 
     if (s_window == NULL || !SDL_GetWindowSizeInPixels(s_window, &pw, &ph) || pw <= 0 || ph <= 0) {
         return;
     }
+    touch_env_build(&env, pw, ph);
+    ico_input_sdl_set_touch_env(&env);
     if (SDL_GetWindowSize(s_window, &ww, &wh) && ww > 0 && wh > 0 &&
         SDL_GetWindowSafeArea(s_window, &r) && r.w > 0 && r.h > 0) {
         const double kx = (double)pw / ww, ky = (double)ph / wh;
@@ -1255,11 +1304,28 @@ int ico_window_pump(void)
         case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
             touch_layout_update(); /* a notch or the system bars moved */
             break;
+        case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+            touch_layout_update(); /* another density: the controls' size */
+            break;
         default:
             ico_input_sdl_event(&e);
             break;
         }
     }
+#ifdef __ANDROID__
+    {
+        /* the activity's density and fold reports (IcoActivity): folding,
+           unfolding or bending the screen does not always resize the
+           window, so a new report lays the touch controls out again */
+        static int s_screenGen;
+        const int gen = ico_android_screen(NULL);
+
+        if (gen != s_screenGen) {
+            s_screenGen = gen;
+            touch_layout_update();
+        }
+    }
+#endif
     first_pump_recheck();
     /* the Settings menu's changes; forced when the
        renderer's output followed a swapchain rebuilt at another size, so
