@@ -6,15 +6,13 @@
  * polar decomposition into a rotation, slerped, and a stretch, lerped, and
  * the eye lerped; the projection is lerped element by element.  The game's
  * cull (ico2/seki/src/GsBase.c) has to know that camera too, so that a part
- * the blended pictures show is not culled at the tick: both include this
- * header, so the two cannot drift apart.
+ * the blended pictures show is not culled at the tick.  These functions are
+ * the only implementation: rd_interp.c's rd__blend_affine, invert4d and
+ * mul4d call them, and GsBase.c calls them directly.
  *
  * Header only (static inline), no renderer dependency: the game's files
  * include it in every build, the headless one too.  Matrices are
- * column-major 4 x 4 (m[c * 4 + r]), as the game's and the renderer's.
- * rdcb_blend_affine is rd_interp.c rd__blend_affine's body; rd_interp.c
- * keeps its own copy for now (it also records the turn for its snap rule,
- * which rdcb_blend_affine returns through turnDeg). */
+ * column-major 4 x 4 (m[c * 4 + r]), as the game's and the renderer's. */
 #ifndef PORT_RENDER_RD_CAMERA_BLEND_H
 #define PORT_RENDER_RD_CAMERA_BLEND_H
 

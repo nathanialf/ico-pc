@@ -1093,7 +1093,8 @@ typedef struct RdInterpStats {
  * 1): the 3 x 3 polar-decomposed into a rotation (slerped) and a stretch
  * (lerped); the image of pivot (x, y, z; NULL: the origin) lerped, so the
  * blended matrix turns about it.  False (o untouched) when either matrix
- * is not affine, is singular, or the two have opposite handedness. */
+ * is not affine, is singular, or the two have opposite handedness.
+ * rd_camera_blend.h rdcb_blend_affine, the turn kept for rd_interp.c. */
 bool rd__blend_affine(const double *p, const double *c, double t, const double *pivot, double *o);
 /* ICO_RD_S2_LEGACY=1 in the environment (a developer A/B switch, read
  * once) turns off the finer blending: rotation-aware blends, the blended

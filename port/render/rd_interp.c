@@ -133,6 +133,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include "rd_camera_blend.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 
@@ -304,50 +305,13 @@ static float dist3(const float a[3], const float b[3])
     return sqrtf(x * x + y * y + z * z);
 }
 
+/* The camera blend's matrix helpers are rd_camera_blend.h's, which the
+ * game's cull (GsBase.c) uses too: one implementation */
+
 /* The inverse of a column-major 4 x 4 (cofactors), false when singular */
 static bool invert4d(const double *a, double *o)
 {
-    double inv[16];
-    inv[0] = a[5] * a[10] * a[15] - a[5] * a[11] * a[14] - a[9] * a[6] * a[15] +
-             a[9] * a[7] * a[14] + a[13] * a[6] * a[11] - a[13] * a[7] * a[10];
-    inv[4] = -a[4] * a[10] * a[15] + a[4] * a[11] * a[14] + a[8] * a[6] * a[15] -
-             a[8] * a[7] * a[14] - a[12] * a[6] * a[11] + a[12] * a[7] * a[10];
-    inv[8] = a[4] * a[9] * a[15] - a[4] * a[11] * a[13] - a[8] * a[5] * a[15] +
-             a[8] * a[7] * a[13] + a[12] * a[5] * a[11] - a[12] * a[7] * a[9];
-    inv[12] = -a[4] * a[9] * a[14] + a[4] * a[10] * a[13] + a[8] * a[5] * a[14] -
-              a[8] * a[6] * a[13] - a[12] * a[5] * a[10] + a[12] * a[6] * a[9];
-    inv[1] = -a[1] * a[10] * a[15] + a[1] * a[11] * a[14] + a[9] * a[2] * a[15] -
-             a[9] * a[3] * a[14] - a[13] * a[2] * a[11] + a[13] * a[3] * a[10];
-    inv[5] = a[0] * a[10] * a[15] - a[0] * a[11] * a[14] - a[8] * a[2] * a[15] +
-             a[8] * a[3] * a[14] + a[12] * a[2] * a[11] - a[12] * a[3] * a[10];
-    inv[9] = -a[0] * a[9] * a[15] + a[0] * a[11] * a[13] + a[8] * a[1] * a[15] -
-             a[8] * a[3] * a[13] - a[12] * a[1] * a[11] + a[12] * a[3] * a[9];
-    inv[13] = a[0] * a[9] * a[14] - a[0] * a[10] * a[13] - a[8] * a[1] * a[14] +
-              a[8] * a[2] * a[13] + a[12] * a[1] * a[10] - a[12] * a[2] * a[9];
-    inv[2] = a[1] * a[6] * a[15] - a[1] * a[7] * a[14] - a[5] * a[2] * a[15] + a[5] * a[3] * a[14] +
-             a[13] * a[2] * a[7] - a[13] * a[3] * a[6];
-    inv[6] = -a[0] * a[6] * a[15] + a[0] * a[7] * a[14] + a[4] * a[2] * a[15] -
-             a[4] * a[3] * a[14] - a[12] * a[2] * a[7] + a[12] * a[3] * a[6];
-    inv[10] = a[0] * a[5] * a[15] - a[0] * a[7] * a[13] - a[4] * a[1] * a[15] +
-              a[4] * a[3] * a[13] + a[12] * a[1] * a[7] - a[12] * a[3] * a[5];
-    inv[14] = -a[0] * a[5] * a[14] + a[0] * a[6] * a[13] + a[4] * a[1] * a[14] -
-              a[4] * a[2] * a[13] - a[12] * a[1] * a[6] + a[12] * a[2] * a[5];
-    inv[3] = -a[1] * a[6] * a[11] + a[1] * a[7] * a[10] + a[5] * a[2] * a[11] -
-             a[5] * a[3] * a[10] - a[9] * a[2] * a[7] + a[9] * a[3] * a[6];
-    inv[7] = a[0] * a[6] * a[11] - a[0] * a[7] * a[10] - a[4] * a[2] * a[11] + a[4] * a[3] * a[10] +
-             a[8] * a[2] * a[7] - a[8] * a[3] * a[6];
-    inv[11] = -a[0] * a[5] * a[11] + a[0] * a[7] * a[9] + a[4] * a[1] * a[11] - a[4] * a[3] * a[9] -
-              a[8] * a[1] * a[7] + a[8] * a[3] * a[5];
-    inv[15] = a[0] * a[5] * a[10] - a[0] * a[6] * a[9] - a[4] * a[1] * a[10] + a[4] * a[2] * a[9] +
-              a[8] * a[1] * a[6] - a[8] * a[2] * a[5];
-    const double det = a[0] * inv[0] + a[1] * inv[4] + a[2] * inv[8] + a[3] * inv[12];
-    if (!(fabs(det) > 1e-30) || !isfinite(det)) {
-        return false;
-    }
-    for (int i = 0; i < 16; i++) {
-        o[i] = inv[i] / det;
-    }
-    return true;
+    return rdcb_invert4d(a, o) != 0;
 }
 
 static bool invert4(const float *m, double *o)
@@ -364,132 +328,7 @@ static bool invert4(const float *m, double *o)
 /* o = a b, column-major 4 x 4 (o may not alias a or b) */
 static void mul4d(const double *a, const double *b, double *o)
 {
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) {
-            double v = 0.0;
-            for (int k = 0; k < 4; k++) {
-                v += a[k * 4 + r] * b[c * 4 + k];
-            }
-            o[c * 4 + r] = v;
-        }
-    }
-}
-
-static double det3(const double m[3][3])
-{
-    return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-           m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-           m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-}
-
-/* The rotation of the polar decomposition A = R S (Higham's iteration R <-
- * (R + R^-T) / 2), m[row][col]; false when singular or not converged */
-static bool polarRotation(const double a[3][3], double r[3][3])
-{
-    memcpy(r, a, sizeof(double) * 9);
-    for (int it = 0; it < 64; it++) {
-        const double d = det3(r);
-        if (!(fabs(d) > 1e-30) || !isfinite(d)) {
-            return false;
-        }
-        double it_[3][3]; /* (R^-1)^T = cofactor matrix / det */
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                const int i1 = (i + 1) % 3, i2 = (i + 2) % 3, j1 = (j + 1) % 3, j2 = (j + 2) % 3;
-                it_[i][j] = (r[i1][j1] * r[i2][j2] - r[i1][j2] * r[i2][j1]) / d;
-            }
-        }
-        double diff = 0.0;
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                const double v = 0.5 * (r[i][j] + it_[i][j]);
-                diff += fabs(v - r[i][j]);
-                r[i][j] = v;
-            }
-        }
-        if (diff < 1e-13) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static void quatFromRot(const double m[3][3], double q[4])
-{
-    const double tr = m[0][0] + m[1][1] + m[2][2];
-    if (tr > 0.0) {
-        const double s = sqrt(tr + 1.0) * 2.0;
-        q[3] = 0.25 * s;
-        q[0] = (m[2][1] - m[1][2]) / s;
-        q[1] = (m[0][2] - m[2][0]) / s;
-        q[2] = (m[1][0] - m[0][1]) / s;
-    } else if (m[0][0] > m[1][1] && m[0][0] > m[2][2]) {
-        const double s = sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2.0;
-        q[3] = (m[2][1] - m[1][2]) / s;
-        q[0] = 0.25 * s;
-        q[1] = (m[0][1] + m[1][0]) / s;
-        q[2] = (m[0][2] + m[2][0]) / s;
-    } else if (m[1][1] > m[2][2]) {
-        const double s = sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2.0;
-        q[3] = (m[0][2] - m[2][0]) / s;
-        q[0] = (m[0][1] + m[1][0]) / s;
-        q[1] = 0.25 * s;
-        q[2] = (m[1][2] + m[2][1]) / s;
-    } else {
-        const double s = sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2.0;
-        q[3] = (m[1][0] - m[0][1]) / s;
-        q[0] = (m[0][2] + m[2][0]) / s;
-        q[1] = (m[1][2] + m[2][1]) / s;
-        q[2] = 0.25 * s;
-    }
-}
-
-static void rotFromQuat(const double q[4], double m[3][3])
-{
-    const double x = q[0], y = q[1], z = q[2], w = q[3];
-    m[0][0] = 1.0 - 2.0 * (y * y + z * z);
-    m[0][1] = 2.0 * (x * y - z * w);
-    m[0][2] = 2.0 * (x * z + y * w);
-    m[1][0] = 2.0 * (x * y + z * w);
-    m[1][1] = 1.0 - 2.0 * (x * x + z * z);
-    m[1][2] = 2.0 * (y * z - x * w);
-    m[2][0] = 2.0 * (x * z - y * w);
-    m[2][1] = 2.0 * (y * z + x * w);
-    m[2][2] = 1.0 - 2.0 * (x * x + y * y);
-}
-
-static void slerp(const double a[4], const double b0[4], double t, double o[4])
-{
-    double b[4] = {b0[0], b0[1], b0[2], b0[3]};
-    double d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-    if (d < 0.0) { /* the short way */
-        d = -d;
-        for (int i = 0; i < 4; i++) {
-            b[i] = -b[i];
-        }
-    }
-    double wa = 1.0 - t, wb = t;
-    if (d < 0.9999) {
-        const double th = acos(d), s = sin(th);
-        wa = sin((1.0 - t) * th) / s;
-        wb = sin(t * th) / s;
-    }
-    double n = 0.0;
-    for (int i = 0; i < 4; i++) {
-        o[i] = wa * a[i] + wb * b[i];
-        n += o[i] * o[i];
-    }
-    n = sqrt(n);
-    for (int i = 0; i < 4; i++) {
-        o[i] /= n;
-    }
-}
-
-static bool isAffine(const double *m)
-{
-    const double s = fabs(m[0]) + fabs(m[5]) + fabs(m[10]) + 1.0;
-    return fabs(m[3]) < 1e-5 * s && fabs(m[7]) < 1e-5 * s && fabs(m[11]) < 1e-5 * s &&
-           fabs(m[15] - 1.0) < 1e-5;
+    rdcb_mul4d(a, b, o);
 }
 
 /* the turn between the two rotations of the last rd__blend_affine, degrees */
@@ -497,82 +336,7 @@ static double s_turnDeg;
 
 bool rd__blend_affine(const double *p, const double *c, double t, const double *pivot, double *o)
 {
-    s_turnDeg = 0.0;
-    if (!isAffine(p) || !isAffine(c)) {
-        return false;
-    }
-    double ap[3][3], ac[3][3], rp[3][3], rc[3][3];
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            ap[i][j] = p[j * 4 + i];
-            ac[i][j] = c[j * 4 + i];
-        }
-    }
-    if (!polarRotation(ap, rp) || !polarRotation(ac, rc)) {
-        return false;
-    }
-    const double dp = det3(rp), dc = det3(rc);
-    if ((dp < 0.0) != (dc < 0.0)) {
-        return false; /* a mirror between the two: no rotation joins them */
-    }
-    const double sign = dp < 0.0 ? -1.0 : 1.0; /* A = (sign R) (sign S) */
-    double sp[3][3], sc[3][3], qp[4], qc[4], qt[4], rt[3][3];
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            rp[i][j] *= sign;
-            rc[i][j] *= sign;
-        }
-    }
-    for (int i = 0; i < 3; i++) { /* S = R^T A (with the sign folded in) */
-        for (int j = 0; j < 3; j++) {
-            double vp = 0.0, vc = 0.0;
-            for (int k = 0; k < 3; k++) {
-                vp += rp[k][i] * ap[k][j];
-                vc += rc[k][i] * ac[k][j];
-            }
-            sp[i][j] = vp;
-            sc[i][j] = vc;
-        }
-    }
-    quatFromRot(rp, qp);
-    quatFromRot(rc, qc);
-    {
-        const double d = fabs(qp[0] * qc[0] + qp[1] * qc[1] + qp[2] * qc[2] + qp[3] * qc[3]);
-        s_turnDeg = 2.0 * acos(d > 1.0 ? 1.0 : d) * 180.0 / 3.14159265358979323846;
-    }
-    slerp(qp, qc, t, qt);
-    rotFromQuat(qt, rt);
-    double out[16];
-    const double x0[3] = {pivot ? pivot[0] : 0.0, pivot ? pivot[1] : 0.0, pivot ? pivot[2] : 0.0};
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 3; j++) {
-            double v = 0.0;
-            for (int k = 0; k < 3; k++) {
-                v += rt[i][k] * ((1.0 - t) * sp[k][j] + t * sc[k][j]);
-            }
-            out[j * 4 + i] = v;
-        }
-    }
-    /* the pivot's image follows the straight line between its two ticks'
-     * images; the blended 3 x 3 turns the rest about it */
-    for (int i = 0; i < 3; i++) {
-        double yp = p[12 + i], yc = c[12 + i], ax = 0.0;
-        for (int j = 0; j < 3; j++) {
-            yp += p[j * 4 + i] * x0[j];
-            yc += c[j * 4 + i] * x0[j];
-            ax += out[j * 4 + i] * x0[j];
-        }
-        out[12 + i] = (1.0 - t) * yp + t * yc - ax;
-    }
-    out[3] = out[7] = out[11] = 0.0;
-    out[15] = 1.0;
-    for (int i = 0; i < 16; i++) {
-        if (!isfinite(out[i])) {
-            return false;
-        }
-    }
-    memcpy(o, out, sizeof(out));
-    return true;
+    return rdcb_blend_affine(p, c, t, pivot, o, &s_turnDeg) != 0;
 }
 
 bool rd__s2_legacy(void)
