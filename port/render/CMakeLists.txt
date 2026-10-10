@@ -241,6 +241,28 @@ target_compile_options(rd_present_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAM
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_present_test PRIVATE ico_render ico_math ico_options)
 
+# gsb_cull_test: the game's cull against the cameras of the blended
+# pictures (GsBase.c gsb_ClipBox, issue 29) and the windows that scale with
+# the picture's width (the water dots, the lines, the shadow volumes).
+# GsBase.c as rd_present_test has it, with the display options; synthetic
+# cameras a tick apart (moves to 300 units, turns to 30 degrees) at three
+# widths: a box an in-between picture shows is never culled.  Records
+# only: no device.
+add_executable(gsb_cull_test test/gsb_cull_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GsBase.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(gsb_cull_test PRIVATE ${_ico_seki_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/shaders/test"
+                           "${CMAKE_SOURCE_DIR}/port/math" "${CMAKE_SOURCE_DIR}/port/rhi"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(gsb_cull_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(gsb_cull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(gsb_cull_test PRIVATE ico_render ico_math ico_options)
+
 # rd_crt_test: the CRT filter (rd_crt.c, crt.hlsl): its [video]
 # options with their config (host_config.c), the modes and overrides, and on
 # a device the presents: off is rd_present's bytes, each mode's recorded hash,
@@ -554,7 +576,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_mip_test
-                  rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test)
+                  rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -572,6 +594,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_tex PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_gsbase COMMAND rd_gsbase_test)
     set_tests_properties(rd_gsbase PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME gsb_cull COMMAND gsb_cull_test)
     add_test(NAME rd_mesh COMMAND rd_mesh_test "${ICO_DISC_IMAGE}")
     set_tests_properties(rd_mesh PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME modelpack COMMAND modelpack_test "${CMAKE_CURRENT_BINARY_DIR}")
