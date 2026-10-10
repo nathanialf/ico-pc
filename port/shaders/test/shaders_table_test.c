@@ -23,6 +23,11 @@ static const char *const expected[] = {
     "yuv_ps",          "yuv_vs",
 };
 
+/* the same entries compiled with other macros: the fog reading the
+ * depth's words (FOG_BUFFER, rd_fog_path.c), with and without the second
+ * output */
+static const char *const expectedVariants[] = {"fog_lut_buffer_ps", "fog_lut_buffer_ps_nodual"};
+
 /* the gs_dual_out entries without the second output (ICO_NO_DUAL) */
 static const char *const expectedNoDual[] = {
     "sprite_ps_nodual",     "sprite_texa_ps_nodual", "sprite_aa1_ps_nodual",
@@ -89,9 +94,16 @@ int main(void)
             failures++;
         }
     }
-    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0]) + nNoDual) {
+    const size_t nVariants = sizeof(expectedVariants) / sizeof(expectedVariants[0]);
+    for (size_t i = 0; i < nVariants; i++) {
+        if (!ico_find_shader(expectedVariants[i])) {
+            printf("FAIL %s: not in the table\n", expectedVariants[i]);
+            failures++;
+        }
+    }
+    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0]) + nNoDual + nVariants) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount,
-               sizeof(expected) / sizeof(expected[0]) + nNoDual);
+               sizeof(expected) / sizeof(expected[0]) + nNoDual + nVariants);
         failures++;
     }
     printf("shaders_table_test: %s\n", failures ? "FAILED" : "ok");

@@ -23,6 +23,14 @@
 //              depth buffer, 2^-32 on D24S8; rd__target_z_scale)
 //   g_param.y  2^24 - 1 when the depth source is 24-bit UNORM (D24S8),
 //              0 on a float one
+//   g_param.z  1: the depth read is replaced by 0 (a test switch,
+//              ICO_RD_FOG_SABOTAGE: the reads of a device that returns
+//              nothing), else 0
+// fog_lut_buffer_ps (FOG_BUFFER) reads t1 as an R32_UINT colour texture
+// instead: the depth aspect copied out to a buffer and back into a colour
+// texture (rd_fog_path.c), for a device whose depth reads fail.  The words
+// are the depth's bits: a float on D32S8, and on D24S8 the 24-bit step in
+// the low bits with the top byte undefined, so it is masked off.
 // The Z test is done here because the depth buffer being read cannot also be
 // the bound attachment; it compares the same depth values the pipeline
 // would (gs_z_to_depth of the sprite Z against the stored depth).
@@ -36,7 +44,11 @@ struct FogPSIn
     VK_LOC(1) float2 uv : TEXCOORD0; // normalised by g_tex.zw
 };
 
+#ifdef FOG_BUFFER
+Texture2D<uint> g_fogDepth : register(t1, space2);
+#else
 Texture2D<float> g_fogDepth : register(t1, space2);
+#endif
 Texture2D<float4> g_fogLut : register(t2, space2);
 
 #define FOG_ZTST_NEVER 0u
@@ -65,7 +77,17 @@ DualOut fog_lut_ps(FogPSIn i)
     float2 fsize = g_tex.xy * sc;
     int2 size = int2(round(fsize));
     int2 tc = clamp(int2(floor(i.uv * fsize)), int2(0, 0), size - 1);
+#ifdef FOG_BUFFER
+    uint raw = g_fogDepth.Load(int3(tc, 0));
+    // the step as the sampled UNORM depth gives it (raw / (2^24 - 1)), or
+    // the float's own bits
+    float d = g_param.y > 0.0 ? float(raw & 0xFFFFFFu) / 16777215.0 : asfloat(raw);
+#else
     float d = g_fogDepth.Load(int3(tc, 0));
+#endif
+    if (g_param.z > 0.5) {
+        d = 0.0;
+    }
     uint ztst = g_col.y;
     uint z = fog_gs_z(d, g_param.x);
     if (ztst != FOG_ZTST_ALWAYS) {

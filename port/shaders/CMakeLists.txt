@@ -25,6 +25,8 @@ ico_add_shader(blend_int_vs blend_int.hlsl blend_int_vs vertex)
 ico_add_shader(blend_int_ps blend_int.hlsl blend_int_ps fragment)
 # the depth fog's CLUT lookup (rd_replay.c doFog)
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment)
+# the same, reading the depth from an R32_UINT copy of it (rd_fog_path.c)
+ico_add_shader(fog_lut_buffer_ps fog_lut.hlsl fog_lut_ps fragment DEFINES FOG_BUFFER=1)
 # R8 coverage textures (the font atlas) behind the sprite vertex shaders
 ico_add_shader(font_ps font.hlsl font_ps fragment)
 # sheet text, coverage strips drawn in the menu sheets' style
@@ -72,6 +74,8 @@ foreach(_e sprite_ps sprite_texa_ps sprite_aa1_ps sprite_stq_ps)
     ico_add_shader(${_e} sprite.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 endforeach()
 ico_add_shader(fog_lut_ps fog_lut.hlsl fog_lut_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+ico_add_shader(fog_lut_buffer_ps fog_lut.hlsl fog_lut_ps fragment
+               DEFINES FOG_BUFFER=1 ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_ps font.hlsl font_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(font_sheet_ps font.hlsl font_sheet_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
 ico_add_shader(vu_ps vu_prelit.hlsl vu_ps fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
