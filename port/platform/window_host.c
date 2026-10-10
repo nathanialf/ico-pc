@@ -1773,14 +1773,16 @@ static void pace_log(Uint64 now)
             "%.1f s: %.1f "
             "presented fps, %.1f game fps; %u vsyncs (%.1f Hz simulated), %u resyncs dropping "
             "%.0f ms; longest replay %.1f ms of %u; %u steps over %.0f ms; framerate %s, present "
-            "%s, display %.1f Hz, window %dx%d%s\n",
+            "%s, display %.1f Hz (%.2f presents a refresh), window %dx%d%s\n",
             s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
             fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
             s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
             (double)s_pres.statDropped / 1e6, maxMs, replays, s_pres.slowSteps, s_pres.slowMs,
             ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)), rhi_present_mode_name(),
-            dm != NULL ? (double)dm->refresh_rate : 0.0, pw, ph,
-            window_fullscreen() ? " fullscreen" : "");
+            dm != NULL ? (double)dm->refresh_rate : 0.0,
+            dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
+                                                  : 0.0,
+            pw, ph, window_fullscreen() ? " fullscreen" : "");
     perf_drain();
     perf_log();
     s_pres.statAt = now;
@@ -1999,29 +2001,22 @@ static void pace(int hz)
        hysteresis, and the limit is higher with an effects program
        loaded). */
     Uint64 refresh = period;
-    Uint64 gap = s_pres.framerate > 0 ? 1000000000ull / (Uint64)s_pres.framerate : 0;
+    Uint64 gap;
     {
         const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(s_window));
         refresh = dm != NULL && dm->refresh_rate > 1.0f ? (Uint64)(1e9 / (double)dm->refresh_rate)
                                                         : period;
 
-        /* "uncapped" with vsync on.  In mailbox mode (rhi_prefer_mailbox)
-           a present never waits for the display; two presents a refresh keep
-           every refresh supplied with a fresh picture without drawing many
-           that are never shown.  Under FIFO (no mailbox) one a refresh: the
-           display's own rate, so a present rarely finds the queue full and
-           waits.  Without vsync "uncapped" is back to back. */
-        if (s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox) {
-            gap = rhi_present_mailbox() ? refresh / 2 : refresh - refresh / 16;
-#ifdef __ANDROID__
-            /* one a refresh in mailbox mode too: two full
-               replays a refresh on the thread that also runs the game left
-               a phone too little time for the game and kept its GPU busy */
-            if (rhi_present_mailbox()) {
-                gap = refresh;
-            }
-#endif
-        }
+        /* "uncapped" with vsync on (s_pres.mailbox: rhi_prefer_mailbox):
+           one present a display refresh in mailbox mode, a little less
+           than one under FIFO.
+           Two a refresh in mailbox mode drew a picture the display never
+           showed for every one it did, which kept a handheld's GPU near its
+           limit; a phone also lost the time for the game.  Without vsync
+           "uncapped" is back to back (pace_policy.h pace_present_gap) */
+        gap = pace_present_gap(s_pres.framerate,
+                               s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox,
+                               rhi_present_mailbox(), refresh);
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);

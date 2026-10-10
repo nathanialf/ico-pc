@@ -14,6 +14,14 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
+uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs)
+{
+    if (uncappedVsync) {
+        return mailbox ? refreshNs : refreshNs - refreshNs / 16;
+    }
+    return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;
+}
+
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
 static uint64_t median_of(const uint64_t *cost, unsigned n)
 {

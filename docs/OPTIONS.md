@@ -69,7 +69,9 @@ How the picture looks.
 - **Full-height picture** shows every line of the picture. The PS2 showed
   half of them, which looks a little softer.
 - **Frame rate** is Original (as on the PS2), Uncapped, or a fixed limit
-  up to 240 frames a second. On Android it starts at 60.
+  up to 240 frames a second. With Vertical sync on, Uncapped follows your
+  screen: one new picture each time the screen shows one. With it off,
+  Uncapped draws as fast as your computer can. On Android it starts at 60.
 - **Video mode** is PAL 50 Hz or 60 Hz. The normal choice is 60 Hz. This
   row is only on the title screen's Options.
 

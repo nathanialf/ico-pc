@@ -58,9 +58,8 @@ int ico_video_auto_scale(void)
 
 int ico_video_default_framerate(int android)
 {
-    /* "uncapped"; 60 on Android, where "uncapped" in
-       mailbox mode presented twice a display refresh (window_host.c pace),
-       two full replays a refresh on the one thread that also runs the game */
+    /* "uncapped"; 60 on Android, where every present is a full replay on
+       the one thread that also runs the game */
     return android ? 60 : ICO_FRAMERATE_UNCAPPED;
 }
 

@@ -4,7 +4,8 @@
  * The slow-present decision (pace_policy.h): the threshold, entering after 3
  * presents above it and leaving below 80 % of it, no flicker on a borderline
  * sequence, one spike changing nothing, the injector's higher threshold.
- * Resolution "auto"'s steps (testAutoResolution).
+ * Resolution "auto"'s steps (testAutoResolution).  The gap between presents
+ * (testPresentGap).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -131,6 +132,44 @@ static void testAutoResolution(void)
     }
 }
 
+/* pace_present_gap: "uncapped" with vsync presents once a display refresh
+   in mailbox mode as under FIFO (a little early there), on every platform;
+   a limit is its own period; "uncapped" without vsync has no gap */
+static void testPresentGap(void)
+{
+    static const struct {
+        int cap;
+        bool uncappedVsync, mailbox;
+        uint64_t refresh, gap;
+    } t[] = {
+        /* 60 Hz, 90 Hz (a Steam Deck OLED), 144 Hz */
+        {-1, true, true, 16666667ull, 16666667ull},
+        {-1, true, true, 11111111ull, 11111111ull},
+        {-1, true, true, 6944444ull, 6944444ull},
+        {-1, true, false, 16666667ull, 16666667ull - 16666667ull / 16},
+        {-1, true, false, 11111111ull, 11111111ull - 11111111ull / 16},
+        {-1, false, true, 11111111ull, 0},
+        {-1, false, false, 11111111ull, 0},
+        {0, false, false, 16666667ull, 0},
+        {120, false, true, 11111111ull, 8333333ull},
+        {60, false, false, 6944444ull, 16666666ull},
+    };
+
+    for (unsigned i = 0; i < sizeof(t) / sizeof(t[0]); i++) {
+        const uint64_t g =
+            pace_present_gap(t[i].cap, t[i].uncappedVsync, t[i].mailbox, t[i].refresh);
+        if (g != t[i].gap) {
+            printf("FAIL present gap row %u: %llu, want %llu\n", i, (unsigned long long)g,
+                   (unsigned long long)t[i].gap);
+            fails++;
+        }
+    }
+    /* never more than one present a refresh in mailbox mode */
+    for (uint64_t r = 4000000ull; r <= 33333334ull; r += 1234567ull) {
+        CHECK(pace_present_gap(-1, true, true, r) >= r);
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
@@ -234,6 +273,7 @@ int main(void)
     CHECK(h.slow);
 
     testAutoResolution();
+    testPresentGap();
 
     if (fails) {
         printf("pace_policy_test: %d failures\n", fails);
