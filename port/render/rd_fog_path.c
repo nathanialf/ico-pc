@@ -629,10 +629,17 @@ static int stLerp(int cs, int cd, int a)
     return v < 0 ? 0 : (v > 255 ? 255 : v);
 }
 
-/* the sample points in SCENE's texels: the probe's five, then the centre
- * of every cell; *cell the cell each lies in */
+/* The sample points in SCENE's texels: the probe's five, then the centre
+ * of every cell; cell[k] the cells sample k may lie in.  A texel whose
+ * centre is within one texel of a cell edge (the probe's centre is exactly
+ * on one whenever the texel count is odd: texel 853 of 1707 is GS x 320.0,
+ * the edge of cells 7 and 8) is drawn by whichever sprite the rasteriser's
+ * fill rule and the field offset give it, so both neighbours count; a cell
+ * centre has one. */
+#define ST_CANDIDATES 4
+
 static void stSamples(const RdTargetRec *t, uint32_t xs[ST_SAMPLES], uint32_t ys[ST_SAMPLES],
-                      int cell[ST_SAMPLES])
+                      int cell[ST_SAMPLES][ST_CANDIDATES])
 {
     probePoints(t->tw, t->th, xs, ys);
     for (int c = 0; c < ST_CELLS * ST_CELLS; c++) {
@@ -645,11 +652,16 @@ static void stSamples(const RdTargetRec *t, uint32_t xs[ST_SAMPLES], uint32_t ys
         xs[PROBE_POINTS + c] = (uint32_t)(gx * t->tw / t->w);
         ys[PROBE_POINTS + c] = (uint32_t)(gy * t->th / t->h);
     }
+    /* one texel in GS pixels */
+    const double dx = (double)t->w / t->tw, dy = (double)t->h / t->th;
     for (int k = 0; k < ST_SAMPLES; k++) {
-        /* the texel's centre in GS pixels */
-        const uint32_t gx = (uint32_t)(((double)xs[k] + 0.5) * t->w / t->tw);
-        const uint32_t gy = (uint32_t)(((double)ys[k] + 0.5) * t->h / t->th);
-        cell[k] = stCellAt(t->w, t->h, gx, gy);
+        /* the texel's centre in GS pixels, one texel either side */
+        const double cx = ((double)xs[k] + 0.5) * dx, cy = ((double)ys[k] + 0.5) * dy;
+        const double gx[2] = {cx - dx < 0.0 ? 0.0 : cx - dx, cx + dx};
+        const double gy[2] = {cy - dy < 0.0 ? 0.0 : cy - dy, cy + dy};
+        for (int j = 0; j < ST_CANDIDATES; j++) {
+            cell[k][j] = stCellAt(t->w, t->h, (uint32_t)gx[j & 1], (uint32_t)gy[j >> 1]);
+        }
     }
 }
 
@@ -675,7 +687,7 @@ static bool stRun(const RdFrame *f, RdTargetRec *t, int *maxErr, int *worst)
         }
     }
     uint32_t xs[ST_SAMPLES], ys[ST_SAMPLES];
-    int cell[ST_SAMPLES];
+    static int cell[ST_SAMPLES][ST_CANDIDATES];
     stSamples(t, xs, ys, cell);
     RhiCommandList cl = rhi_begin_commands();
     if (!cl.id) {
@@ -696,22 +708,29 @@ static bool stRun(const RdFrame *f, RdTargetRec *t, int *maxErr, int *worst)
     int m = 0;
     *worst = 0;
     for (int k = 0; k < ST_SAMPLES; k++) {
-        uint8_t lut[4], cd[4];
-        stLut(cell[k], lut);
-        stCellColor(cell[k], cd);
-        /* MODULATE by (0x80, 0x80, 0x80, strength 0x80), the LERP with As */
-        const int as = (lut[3] * 0x80) >> 7;
-        int want[4];
-        for (int ch = 0; ch < 3; ch++) {
-            want[ch] = stLerp((lut[ch] * 0x80) >> 7, cd[ch], as > 0x80 ? 0x80 : as);
-        }
-        want[3] = as;
-        for (int ch = 0; ch < 4; ch++) {
-            const int e = abs((int)px[k * 4 + ch] - want[ch]);
-            if (e > m) {
-                m = e;
-                *worst = k;
+        /* the closest of the cells the texel may lie in */
+        int best = 256;
+        for (int j = 0; j < ST_CANDIDATES; j++) {
+            uint8_t lut[4], cd[4];
+            stLut(cell[k][j], lut);
+            stCellColor(cell[k][j], cd);
+            /* MODULATE by (0x80, 0x80, 0x80, strength 0x80), the LERP with As */
+            const int as = (lut[3] * 0x80) >> 7;
+            int want[4];
+            for (int ch = 0; ch < 3; ch++) {
+                want[ch] = stLerp((lut[ch] * 0x80) >> 7, cd[ch], as > 0x80 ? 0x80 : as);
             }
+            want[3] = as;
+            int e = 0;
+            for (int ch = 0; ch < 4; ch++) {
+                const int d = abs((int)px[k * 4 + ch] - want[ch]);
+                e = d > e ? d : e;
+            }
+            best = e < best ? e : best;
+        }
+        if (best > m) {
+            m = best;
+            *worst = k;
         }
     }
     *maxErr = m;
@@ -815,10 +834,10 @@ static bool runSelftest(void)
         const int p = order[i];
         if (result[p] == ST_FAIL) {
             uint32_t xs[ST_SAMPLES], ys[ST_SAMPLES];
-            int cell[ST_SAMPLES];
+            static int cell[ST_SAMPLES][ST_CANDIDATES];
             stSamples(t, xs, ys, cell);
             rd__log("fog: self-test: %s differs most (%d) at texel %u,%u (index %d)",
-                    rd__fog_path_name(p), err[p], xs[worst[p]], ys[worst[p]], cell[worst[p]]);
+                    rd__fog_path_name(p), err[p], xs[worst[p]], ys[worst[p]], cell[worst[p]][0]);
         }
     }
     return result[chosen] == ST_OK;

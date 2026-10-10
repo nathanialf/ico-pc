@@ -2,9 +2,10 @@
 # exit code checked and its log matched (rd_fog_path.c):
 #   "fog: depth path <path> (self-test: <results> ...)" once at the start
 #   and once more after the scene is made at a new size, and
-#   "fog: probe <path> z=<5 x GS Z> idx=136,0,15,240,255 out=<5 x RGBA>"
+#   "fog: probe <path> z=<5 x GS Z> idx=<centre>,0,15,240,255 out=<5 x RGBA>"
 #   once for each of the two sizes (the centre cell and the four corner
-#   cells of the self-test's grid).
+#   cells of the self-test's grid; the centre texel can sit on the edge of
+#   cells 7 and 8 across or down, so the centre is 119, 120, 135 or 136).
 # -DTOOL=<rd_fog_selftest_test> -DFOG_PATH=<inplace|copy|buffer>
 # -DRESULTS=<regex of the self-test's results>
 execute_process(COMMAND "${TOOL}" "${FOG_PATH}" RESULT_VARIABLE rc OUTPUT_VARIABLE out
@@ -26,11 +27,11 @@ if(NOT npaths EQUAL 2)
 endif()
 set(hex "[0-9A-F]+")
 string(REGEX MATCHALL
-       "fog: probe ${FOG_PATH} z=${hex}(,${hex})(,${hex})(,${hex})(,${hex}) idx=136,0,15,240,255 out=${hex}(,${hex})(,${hex})(,${hex})(,${hex})"
+       "fog: probe ${FOG_PATH} z=${hex}(,${hex})(,${hex})(,${hex})(,${hex}) idx=(119|120|135|136),0,15,240,255 out=${hex}(,${hex})(,${hex})(,${hex})(,${hex})"
        probes "${err}")
 list(LENGTH probes nprobes)
 if(NOT nprobes EQUAL 2)
-  message(FATAL_ERROR "${nprobes} \"fog: probe ${FOG_PATH} ... idx=136,0,15,240,255\" lines, "
+  message(FATAL_ERROR "${nprobes} \"fog: probe ${FOG_PATH} ... idx=<centre>,0,15,240,255\" lines, "
                       "2 expected:\n${err}")
 endif()
 message(STATUS "rd_fog_selftest ${FOG_PATH}: the path, the self-test's results and the probe "

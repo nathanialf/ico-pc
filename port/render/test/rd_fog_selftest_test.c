@@ -11,8 +11,9 @@
  *   2. a frame recorded through the renderer's own calls (not the game's
  *      fog code) draws the self-test's grid, cell n at GS Z (n << 16) |
  *      0x8000, and fogs it: the first fogged replay records the probe, the
- *      next rd_begin_frame logs it ("fog: probe <path> ... idx=136,0,15,
- *      240,255": the centre cell and the four corner cells), and the fogged
+ *      next rd_begin_frame logs it ("fog: probe <path> ... idx=135,0,15,
+ *      240,255": the centre cell, 119, 120, 135 or 136 as the centre texel
+ *      falls by the cells' edges, and the four corner cells), and the fogged
  *      pixels at every cell centre equal the GS arithmetic;
  *   3. the scene made again at another GS size runs the self-test again
  *      and arms the probe again (a second pair of lines).
