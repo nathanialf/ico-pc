@@ -195,6 +195,7 @@ typedef struct VkrState {
     /* the Vulkan format behind RHI_FMT_D32F_S8 (D32_SFLOAT_S8_UINT, or
      * D24_UNORM_S8_UINT without it or under ICO_VK_FAKE_D24S8) */
     VkFormat dsFormat;
+    bool dsSampled;    /* dsFormat has the sampled-image feature (RhiLimits.depthSampled) */
     bool dualSrcBlend; /* the feature enabled (RhiLimits.dualSourceBlend) */
     /* texture packs: textureCompressionBC enabled and the four BC formats
      * sampleable and copyable (RhiLimits.bcTextures) */

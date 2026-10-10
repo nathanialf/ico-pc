@@ -415,7 +415,7 @@ static void vkr_fake_limits(void)
  * D32_SFLOAT_S8_UINT and D24_UNORM_S8_UINT as an attachment; D32 is
  * preferred.  Either is taken only with the sampled and transfer uses too:
  * the fog and the effects depth sample the scene's depth or a copy of it
- * (rd_core.c rd__sampled_depth; on D24S8 always the copy), and the tests' depth
+ * (rd_core.c rd__sampled_depth; on D24S8 the copy first), and the tests' depth
  * readbacks copy it out (rd_replay.c rd__read_target_depth).  When
  * neither has them all, D32 unless only D24 is an attachment.
  * ICO_VK_FAKE_D24S8=1 takes D24 where the device has it (tests:
@@ -594,6 +594,8 @@ static bool vkr_pick_device(void)
     snprintf(g_vkr.adapterName, sizeof(g_vkr.adapterName), "%s", g_vkr.props.deviceName);
     bool fake = false;
     g_vkr.dsFormat = vkr_choose_depth_stencil(g_vkr.phys, &fake);
+    g_vkr.dsSampled =
+        vkr_format_ok(g_vkr.phys, g_vkr.dsFormat, VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
     if (g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT) {
         VKR_LOG("depth-stencil: D24S8 in use%s, 24-bit depth (the scene depth has less precision "
                 "than the 32-bit float of D32S8)",
@@ -766,7 +768,14 @@ static void vkr_fill_limits(void)
     /* a D24 depth copies out as packed 24-bit words, not floats */
     o->depthReadback = g_vkr.dsFormat == VK_FORMAT_D32_SFLOAT_S8_UINT;
     o->depthStencilFormatName = g_vkr.dsFormat == VK_FORMAT_D24_UNORM_S8_UINT ? "D24S8" : "D32S8";
+    o->depthSampled = g_vkr.dsSampled;
     o->tiler = vkr_is_tiler(g_vkr.props.vendorID);
+#ifdef __ANDROID__
+    /* every Android GPU counts as tile-based, whatever its vendor id: the
+     * list above names the known ones, and a phone GPU missing from it
+     * would otherwise take the desktop defaults */
+    o->tiler = true;
+#endif
     o->copyRowPitchAlign = 1; /* bufferRowLength is in texels; the pitch is width * texel size */
     o->copyOffsetAlign = 4;   /* bufferOffset: texel size, and 4 for depth/stencil */
     /* images carry mipLevels, views and barriers span every level, and

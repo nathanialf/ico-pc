@@ -104,6 +104,10 @@ typedef enum RhiFormat {
     RHI_FMT_BC2_UNORM,
     RHI_FMT_BC3_UNORM,
     RHI_FMT_BC7_UNORM,
+    /* 32-bit unsigned words: the scene depth's bits copied out of its depth
+     * aspect through a buffer, for the fog to read where a depth read fails
+     * (rd_fog_path.c).  Sampled (Load only) and copied, never a target. */
+    RHI_FMT_R32_UINT,
     RHI_FMT_COUNT
 } RhiFormat;
 
@@ -462,6 +466,9 @@ typedef struct RhiLimits {
     bool depthReadback;
     /* what backs RHI_FMT_D32F_S8: "D32S8", or "D24S8" (Vulkan fallback) */
     const char *depthStencilFormatName;
+    /* RHI_FMT_D32F_S8 textures can be created with RHI_TEX_SAMPLED (the
+     * format the device chose has the sampled-image feature) */
+    bool depthSampled;
     /* Buffer<->texture copies: the row pitch and the buffer offset must be
      * multiples of these (D3D12: 256 and 512; Vulkan: 1 and 4).  rd_core
      * rounds the pitch up to copyRowPitchAlign from width * texel size. */
@@ -498,9 +505,9 @@ typedef struct RhiLimits {
      * real size). */
     bool bcTextures;
     /* A tile-based phone GPU (Vulkan vendor Qualcomm, ARM, Imagination,
-     * Samsung, Apple or Broadcom; false on D3D12).  The renderer then samples
-     * copies of the scene depth rather than the depth itself (rd_core.c
-     * rd__sampled_depth). */
+     * Samsung, Apple or Broadcom, and every Android device; false on
+     * D3D12).  The fog then reads a copy of the scene depth first, before
+     * the depth itself (rd_fog_path.c). */
     bool tiler;
 } RhiLimits;
 
