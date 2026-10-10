@@ -425,29 +425,29 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
     if (mode == VU_CLIP_REGION) {
         // On the PS2 any vertex outside the region sets ADC on itself and
         // the next two, and the triangle is not drawn. Inside the 4:3
-        // picture the port does the same: the game's cameras pass through
-        // and beside scenery that relies on it (the opening after the Sony
-        // sign films the castle from inside a cliff, st26a_p1, and the
-        // forest shot after it from inside a tree card, st26a_near; drawn,
-        // they covered the picture with stretched rock and a dark trunk).
-        // Beside the 4:3 picture of a wide target, where the PS2 showed
-        // nothing, such a triangle with all three vertices in front of the
-        // eye (w > 0) is drawn and clipped by the GPU at 0 <= z <= w, and
-        // its pixels inside the picture are discarded (VuVSOut.beside,
-        // vu_beside_discard): there the dropped triangles left holes (a
-        // wall with one vertex past the window). A triangle with a vertex
-        // behind the eye (w <= 0) stays dropped everywhere. Photo mode's
-        // free camera (VU_F_BEHIND_EYE) has no such placing, so there every
-        // failing triangle is drawn, clipped, everywhere (a walkway low
-        // under the camera left a hole). A triangle with all three
-        // vertices inside is drawn exactly as before (vu_vtx_position, on
-        // the ftoi4 grid); a drawn one with a vertex outside takes code
-        // 36's corner rule
-        // (vu_cut_position: the GS position where the vertex has one, the
-        // homogeneous form of h where it is saturated or below GS Z 0;
-        // every program computes h before the test). The region test
-        // itself still runs (VuVtx.inside, the tests' probe field), as the
-        // PS2's.
+        // picture the port keeps that rule exactly: the game's cameras pass
+        // through and beside scenery that relies on it (the opening after
+        // the Sony sign films the castle from inside a cliff, st26a_p1, and
+        // the forest shot after it from inside a tree card, st26a_near;
+        // drawn there, they covered the picture with stretched rock and a
+        // dark trunk). Beside the 4:3 picture of a wide target, where the
+        // PS2 showed nothing, every such triangle is drawn and clipped by
+        // the GPU at 0 <= z <= w, a vertex behind the eye (w <= 0) or not,
+        // and its pixels inside the picture are discarded (VuVSOut.beside,
+        // vu_beside_discard), so the picture itself is the PS2's. Beside it
+        // the dropped triangles left holes: a wall with one vertex past the
+        // window, and at 48:9 a patch of the sea at the far left of the old
+        // bridge whose only triangles there have a vertex behind the eye.
+        // Photo mode's free camera (VU_F_BEHIND_EYE) has no such placing,
+        // so there every failing triangle is drawn, clipped, everywhere (a
+        // walkway low under the camera left a hole). A triangle with all
+        // three vertices inside is drawn exactly as before (vu_vtx_position,
+        // on the ftoi4 grid); a drawn one with a vertex outside takes code
+        // 36's corner rule (vu_cut_position: the GS position where the
+        // vertex has one, the homogeneous form of h where it is behind the
+        // eye, saturated or below GS Z 0; every program computes h before
+        // the test). The region test itself still runs (VuVtx.inside, the
+        // tests' probe field), as the PS2's.
         // Two differences from a code-36 draw of the same triangle remain:
         // code 36's clipped triangles go through their own earlier pass
         // with ABE forced on (rd_replay.c draws them as the VU's fans,
@@ -460,7 +460,7 @@ VuVSOut vu_triangle_out(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode)
             o.pos = vu_vtx_position(me);
         } else if ((vu_draw.z & VU_F_BEHIND_EYE) != 0u) {
             o.pos = vu_cut_position(me);
-        } else if (a.h.w > 0.0 && b.h.w > 0.0 && c.h.w > 0.0 && vu_has_beside()) {
+        } else if (vu_has_beside()) {
             o.pos = vu_cut_position(me);
             o.beside = 1u;
         }
