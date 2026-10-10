@@ -13,3 +13,4 @@
 - The grey haze over the sea at the old bridge no longer cuts through the water while the camera moves.
 - Android: on phones where the fog covered the whole picture, the game now tries each way of drawing the fog when it starts and keeps the one that works on that phone.
 - An effect that starts right after another one ends no longer slides over from where the old one was.
+- Mist and beams of light that fade in with distance now show, as on the PS2.

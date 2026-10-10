@@ -14,7 +14,7 @@ uint64_t pace_slow_threshold(uint64_t refreshNs, uint64_t periodNs, bool injecto
     return (refreshNs > periodNs ? refreshNs : periodNs) + periodNs / 2;
 }
 
-uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs)
+uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs)
 {
     if (uncappedVsync) {
         /* one present a refresh, but never fewer than sixty a second: a
@@ -26,8 +26,11 @@ uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs)
            overshoot and a game step that a due present lands in only make
            a present later, and the gap counts from the last present's
            start, so a gap of exactly one refresh averaged more than one */
+        /* Only in mailbox mode, where a present never blocks: under FIFO a
+           present past the screen's own rate waits for the next refresh and
+           would hold the game's step with it. */
         const uint64_t sixty = 16666667ull;
-        const uint64_t r = refreshNs < sixty ? refreshNs : sixty;
+        const uint64_t r = mailbox && refreshNs > sixty ? sixty : refreshNs;
         return r - r / 16;
     }
     return cap > 0 ? 1000000000ull / (uint64_t)cap : 0;

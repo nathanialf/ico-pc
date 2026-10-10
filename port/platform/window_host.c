@@ -2060,9 +2060,9 @@ static void pace(int hz)
            showed for every one it did, which kept a handheld's GPU near its
            limit; a phone also lost the time for the game.  Without vsync
            "uncapped" is back to back (pace_policy.h pace_present_gap) */
-        gap =
-            pace_present_gap(s_pres.framerate,
-                             s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox, refresh);
+        gap = pace_present_gap(s_pres.framerate,
+                               s_pres.framerate == ICO_FRAMERATE_UNCAPPED && s_pres.mailbox,
+                               rhi_present_mailbox(), refresh);
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);

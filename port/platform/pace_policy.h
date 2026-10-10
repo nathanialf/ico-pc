@@ -47,8 +47,10 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
  * waits, and in mailbox mode every refresh gets a new picture with few drawn
  * that the display never shows (a gap of exactly one refresh averaged a
  * little more than a refresh, and the display showed some pictures twice).
+ * In mailbox mode never fewer than sixty a second whatever refresh the
+ * display reports (a 4K screen reported 30 Hz while running at 60).
  * 0 (no gap: back to back) otherwise, i.e. "uncapped" without vsync. */
-uint64_t pace_present_gap(int cap, bool uncappedVsync, uint64_t refreshNs);
+uint64_t pace_present_gap(int cap, bool uncappedVsync, bool mailbox, uint64_t refreshNs);
 
 /* Resolution "auto" (video_options.h ICO_RES_AUTO).  The window
  * feeds each present's cost (the GPU time of a replay when the backend has
