@@ -63,7 +63,7 @@ typedef enum RdCmdType {
     RDC_PABE,        /* b[0] */
     RDC_COLCLAMP,    /* b[0] */
     RDC_TEXA,        /* b[0] RdTexA */
-    RDC_FILTER,      /* b[0] mag, b[1] min (TEX1) */
+    RDC_FILTER,      /* b[0] mag, b[1] min (TEX1); u[0] TEX1's mipmap fields (rd_tex1_lod) */
     RDC_WRAP,        /* b[0] s, b[1] t (CLAMP) */
     RDC_TEXTURE,     /* u[0] RdTex id, b[0] RdTexFn, b[1] RdTcc; TME on */
     RDC_TEXTURE_OFF, /* TME off */
@@ -221,12 +221,18 @@ typedef struct RdStateBlock {
     int32_t scissor[4]; /* x0, y0, x1, y1 inclusive */
     uint32_t gouraud;   /* PRIM.IIP (rd_gouraud), 1 = Gouraud */
     uint32_t aa1;       /* PRIM.AA1 (rd_aa1); a version 3 dump loads it as 0 */
+    /* TEX1's mipmap fields, packed by rd_tex1_lod (rd_state.h): the level
+     * the GS samples a texture with GS levels at (RdTexRec.gsLevels).  0 in
+     * the dumps before version 9: level 0, as they were drawn */
+    uint32_t tex1Lod;
 } RdStateBlock;
 
 _Static_assert(sizeof(RdDrawState) == 28, "RdDrawState layout");
-_Static_assert(sizeof(RdStateBlock) == 84, "RdStateBlock is dumped as raw bytes");
+_Static_assert(sizeof(RdStateBlock) == 88, "RdStateBlock is dumped as raw bytes");
 /* The state block of a version 3 dump: the same fields without aa1. */
 #define RD_STATE_BLOCK_V3_SIZE 80u
+/* The state block of a version 4 to 8 dump: without tex1Lod. */
+#define RD_STATE_BLOCK_V8_SIZE 84u
 
 /* Applies a state command to s.  Returns false (s untouched) for actions. */
 bool rd__apply_state(RdStateBlock *s, const RdCmd *c);
@@ -531,6 +537,17 @@ typedef struct RdTexRec {
     /* Its RdSheetStyle.scale, 1..ICO_SHEET_SCALE_MAX
      * (0 in a texture that is no sheet) */
     uint8_t sheetScale;
+    /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
+     * (rdtex_store_levels): gsLevels counts them with the base (0 or 1:
+     * none), gsChain holds levels 1.. as RGBA8 one after the other, level l
+     * max(w >> l, 1) x max(h >> l, 1) texels.  These are the TIM2's own
+     * pictures, not filtered copies of the base: some textures keep a dark
+     * base and brighter small levels on purpose, so the GS's choice of level
+     * by distance fades them (the fog puffs, the light shafts).  Uploaded
+     * as the texture's mips whatever the filter option (uploadMips) and
+     * sampled at the GS's level (DF_GS_LOD) */
+    uint8_t gsLevels;
+    uint8_t *gsChain;
 } RdTexRec;
 
 /* RdTexRec.mipUse bits */
@@ -540,6 +557,14 @@ enum {
 };
 
 RdTexRec *rd__tex_rec(uint32_t id);
+/* Gives an image texture its GS levels (RdTexRec.gsLevels, gsChain): levels
+ * counts the base, chain holds levels 1.. as RGBA8, level l
+ * max(w >> l, 1) x max(h >> l, 1) texels (copied).  levels 0 or 1 (or a
+ * null chain) takes them away.  The texture is uploaded again when they
+ * change. */
+void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels);
+/* The bytes of levels 1..levels-1 of a w x h image's GS chain. */
+size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels);
 /* An image texture of format (RD_TEXEL_*), texels copied from px
  * (w * h * rd__texel_bytes bytes) or zero; rd_create_texture_src and
  * rd_create_texture_r8 are this, and the dump loader. */
@@ -1171,8 +1196,12 @@ enum {
 /* ------------------------------------------------------------- context */
 #define RD_SAMPLER_COUNT 16 /* mag x min x wrapS x wrapT */
 /* The Enhanced filter's samplers, the same 16 with linear mips
- * (trilinear) and again with the device's anisotropy */
-#define RD_SAMPLER_SETS 3
+ * (trilinear) and again with the device's anisotropy; a fourth set with
+ * nearest mips for the GS's nearest-level mipmapping (DF_GS_LOD; the GS's
+ * linear-between-levels mipmapping takes the trilinear set) */
+#define RD_SAMPLER_SETS 4
+#define RD_SAMPLER_SET_MIP_LINEAR 1
+#define RD_SAMPLER_SET_MIP_NEAREST 3
 #define RD_SCRATCH_COUNT 6
 
 typedef struct RdScratch {
@@ -1737,9 +1766,10 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * 5 RDC_OVERLAY_TEXT and RDC_SCREEN's RD_SCREEN_TEXT_QUADS; 6
  * RD_TARGET_FEED_HELD, a 17th fixed target; 7 RD_TEXEL_SHEET images, the
  * style in the view word; 8 RD_TARGET_DISPLAY_HELD, an 18th fixed target
- * (issue 28).  rd__dump_frame writes this version; rd__load_frame reads 3 to
- * it. */
-#define RD_DUMP_VERSION 8u
+ * (issue 28); 9 RdStateBlock.tex1Lod, RDC_FILTER's u[0] and an image's GS
+ * levels (RdTexRec.gsLevels) after its texels.  rd__dump_frame writes this
+ * version; rd__load_frame reads 3 to it. */
+#define RD_DUMP_VERSION 9u
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);
 

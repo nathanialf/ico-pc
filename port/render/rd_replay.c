@@ -202,14 +202,15 @@ bool rd__gpu_init(void *sdlWindow)
     }
     /* set 0: the Original samplers (one level); sets 1 and 2: the Enhanced
      * filter's trilinear and anisotropic ones over the generated mips
-     * (uploadTextures) */
+     * (uploadTextures); set 1 is also the GS's linear-between-levels
+     * mipmapping (gsLodSampler), set 3 its nearest-level one */
     for (int i = 0; i < RD_SAMPLER_COUNT * RD_SAMPLER_SETS; i++) {
         const int set = i / RD_SAMPLER_COUNT, k = i % RD_SAMPLER_COUNT;
         RhiSamplerDesc sd;
         memset(&sd, 0, sizeof(sd));
         sd.mag = (k & 1) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
         sd.min = (k & 2) ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
-        sd.mip = set ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
+        sd.mip = set == 1 || set == 2 ? RHI_FILTER_LINEAR : RHI_FILTER_NEAREST;
         sd.s = (k & 4) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
         sd.t = (k & 8) ? RHI_WRAP_CLAMP : RHI_WRAP_REPEAT;
         sd.maxAnisotropy = 1.0f;
@@ -1321,8 +1322,8 @@ static int mipBoost(const RdTexRec *t, uint8_t *ref)
  * rises). */
 static void noteMipUse(RdTexRec *t, const RdDrawState *d)
 {
-    if (t->mipLevels < 2 || t->replacement || d->tcc != RD_TCC_RGBA) {
-        return;
+    if (t->mipLevels < 2 || t->replacement || t->gsLevels > 1 || d->tcc != RD_TCC_RGBA) {
+        return; /* GS levels are uploaded as they are: no coverage to keep */
     }
     uint8_t use = t->mipUse, ref = t->mipRef;
     if (blendsByAs(d)) {
@@ -1820,6 +1821,8 @@ typedef struct DrawSetup {
     int mipmapped;   /* the image texture has generated mips */
     int wideBlock;   /* the texture is a widened render-to-texture block (RdTargetRec.wideBlock) */
     int replacement; /* texture packs: the image texture is a pack replacement */
+    int gsLevels;    /* the image texture's GS levels as uploaded (RdTexRec.gsLevels), 0 none:
+                        sampled at the GS's level (DF_GS_LOD) */
     int screenCopy;  /* a screen-space pass, not geometry (screenCopy): no added half pixel */
 } DrawSetup;
 
@@ -1914,6 +1917,20 @@ static void replacementUv(uint32_t tex, DrawSetup *ds)
     }
 }
 
+/* The GS levels the draw's texture has on the device (RdTexRec.gsLevels,
+ * uploaded: mipLevels), 0 for every other texture.  A pack replacement
+ * keeps the pack's own levels and its sampling (texSampler), whatever the
+ * TIM2 it replaces had. */
+static int drawGsLevels(const Replay *r, const DrawSetup *ds)
+{
+    const RdTexRec *t = ds->textured && r->st.ds.texEnabled ? rd__tex_rec(r->st.tex) : NULL;
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->gsLevels < 2 ||
+        ds->tex.id != t->rhi.id || t->mipLevels < 2) {
+        return 0;
+    }
+    return t->mipLevels < t->gsLevels ? t->mipLevels : t->gsLevels;
+}
+
 /* The target, the DATE snapshot and the texture (each may end the open
  * pass: they run before the draw's pass begins).  dateArea: the texels the
  * draw can touch, for the DATE snapshot (NULL: the whole target) */
@@ -1942,8 +1959,15 @@ static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
                              &ds->mipmapped);
     replacementUv(r->st.tex, ds);
     ds->wideBlock = samplesWideBlock(r, ds);
+    ds->gsLevels = drawGsLevels(r, ds);
     return true;
 }
+
+/* A texture with GS levels: the level is the shader's (DF_GS_LOD, given to
+ * SampleLevel), the sampler the TEX1 filters within a level, linear between
+ * levels for MMIN 3 and 5 (RD_SAMPLER_SET_MIP_LINEAR), nearest for the
+ * others (RD_SAMPLER_SET_MIP_NEAREST), never the Enhanced filter's. */
+static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
 
 /* Full pixel: a draw that samples a render target (a screen-space lookup,
  * such as the mirror floors' copy of the scene and the reflections) clamps
@@ -1973,9 +1997,11 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
         return (RhiBindGroup){0};
     }
     RhiSampler smp =
-        texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                   drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
-                   drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
+        ds->gsLevels
+            ? gsLodSampler(r, ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
     RhiBindGroup g2 = rd__tex_group_date(ds->tex, smp, ds->dateTex);
 
     if (!r->passOpen || r->passColor != r->st.color || r->passDepth != ds->tdId) {
@@ -2009,6 +2035,32 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
 static RhiBindGroup bindDraw(Replay *r, const DrawSetup *ds)
 {
     return bindDrawEx(r, ds, NULL, NULL);
+}
+
+static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds)
+{
+    const uint32_t mmin = RD_TEX1_MMIN(r->st.tex1Lod);
+    const int set =
+        mmin == 3u || mmin == 5u ? RD_SAMPLER_SET_MIP_LINEAR : RD_SAMPLER_SET_MIP_NEAREST;
+    const int i = (r->st.ds.magFilter ? 1 : 0) | (r->st.ds.minFilter ? 2 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? 4 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? 8 : 0);
+    return g_rd.samplers[set * RD_SAMPLER_COUNT + i];
+}
+
+/* DrawCB.blend[3] for a draw with GS levels: the state's TEX1 mipmap
+ * fields (rd_tex1_lod) with MXL no further than the levels the texture
+ * has, and none at all (level 0) when TEX1 asks for no mipmapping. */
+static uint32_t gsLodWord(const Replay *r, const DrawSetup *ds)
+{
+    uint32_t p = r->st.tex1Lod;
+    uint32_t mxl = RD_TEX1_MXL(p);
+    if (!rd_tex1_mipmapped(p)) {
+        mxl = 0;
+    } else if (mxl > (uint32_t)ds->gsLevels - 1u) {
+        mxl = (uint32_t)ds->gsLevels - 1u;
+    }
+    return (p & ~(7u << 3)) | (mxl << 3);
 }
 
 /* font_sheet_ps's style in DrawCB.param (the rim's weight, rimLevel,
@@ -2052,9 +2104,14 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
                        (d->minFilter == RD_FILTER_LINEAR ? ICO_DF_TEXA_MIN_LINEAR : 0u) |
                        (d->wrap.s != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S : 0u) |
                        (d->wrap.t != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
-        if (texSamplerUpgraded((RdFilter)d->minFilter, ds->mipmapped, ds->replacement)) {
+        if (!ds->gsLevels &&
+            texSamplerUpgraded((RdFilter)d->minFilter, ds->mipmapped, ds->replacement)) {
             cb->mode[0] |= ICO_DF_TEXA_MIN_SAMPLED;
         }
+    }
+    if (ds->textured && ds->gsLevels) {
+        cb->mode[0] |= ICO_DF_GS_LOD;
+        cb->blend[3] = gsLodWord(r, ds);
     }
     cb->mode[2] = dp->modeZ;
     cb->mode[3] = dp->aref;
@@ -3053,9 +3110,11 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
     RhiSampler smp =
-        texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                   drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
-                   drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
+        ds.gsLevels
+            ? gsLodSampler(r, &ds)
+            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
+                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
     rhi_cmd_set_pipeline(s_cl, pa);
     rd__bind_uniform(s_cl, 0,
                      rd__frame_group_ex(tc->w, tc->h, ox, oy, rd__target_z_scale(ds.tdId),
@@ -4427,6 +4486,9 @@ static uint8_t texLevels(const RdTexRec *t)
     if (t->replacement) {
         return t->mipLevels; /* texture packs: the image's own levels, whatever the filter */
     }
+    if (t->gsLevels > 1 && t->gsChain) {
+        return t->gsLevels; /* the TIM2's own levels, whatever the filter */
+    }
     if (!g_rd.filterUpgrade || rd__texel_is_coverage(t->format) || t->w < 2 || t->h < 2 ||
         (t->w & (t->w - 1)) || (t->h & (t->h - 1))) {
         return 1;
@@ -4575,28 +4637,40 @@ bool rd__begin_own_frame(uint64_t ringBytes)
     return ensureRing(ringBytes);
 }
 
-/* Levels 1.. of a game texture: 2x2 box filtered from the base
- * (rdtex_build_mip_chain; colour weighted by alpha when the alpha byte is
- * the draws' alpha), alpha coverage kept (rdtex_keep_alpha_coverage)
+/* Levels 1.. of a game texture: its GS levels when it has them
+ * (RdTexRec.gsChain, the TIM2's own pictures), else 2x2 box filtered from
+ * the base (rdtex_build_mip_chain; colour weighted by alpha when the alpha
+ * byte is the draws' alpha), alpha coverage kept (rdtex_keep_alpha_coverage)
  * for the textures mipBoost names, at their draws' reference, each level
  * copied into the ring and onto its subresource. */
 static void uploadMips(RdTexRec *t, uint8_t levels)
 {
     const uint32_t pitchA = rhi_limits()->copyRowPitchAlign;
     const uint32_t offA = rhi_limits()->copyOffsetAlign;
-    uint8_t *chain = malloc(rdtex_mip_chain_bytes(t->w, t->h) + 4);
-    if (!chain) {
-        return;
+    uint8_t *chain = NULL;
+    const uint8_t *src;
+    uint32_t n;
+    if (t->gsLevels > 1 && t->gsChain) {
+        /* the TIM2's own levels (rdtex_store_levels), as the GS has them:
+           no box filter, no alpha coverage kept */
+        src = t->gsChain;
+        n = t->gsLevels - 1u;
+        t->mipBuiltBoost = 0;
+        t->mipBuiltRef = 0;
+    } else {
+        chain = malloc(rdtex_mip_chain_bytes(t->w, t->h) + 4);
+        if (!chain) {
+            return;
+        }
+        n = rdtex_build_mip_chain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
+        uint8_t ref;
+        t->mipBuiltBoost = (uint8_t)mipBoost(t, &ref);
+        t->mipBuiltRef = ref;
+        if (t->mipBuiltBoost) {
+            rdtex_keep_alpha_coverage(t->pixels, t->w, t->h, chain, n, ref);
+        }
+        src = chain;
     }
-    const uint32_t n =
-        rdtex_build_mip_chain(t->pixels, t->w, t->h, chain, t->src == RD_TEXSRC_RGBA32);
-    uint8_t ref;
-    t->mipBuiltBoost = (uint8_t)mipBoost(t, &ref);
-    t->mipBuiltRef = ref;
-    if (t->mipBuiltBoost) {
-        rdtex_keep_alpha_coverage(t->pixels, t->w, t->h, chain, n, ref);
-    }
-    const uint8_t *src = chain;
     uint32_t w = t->w, h = t->h;
     for (uint32_t l = 1; l < levels && l <= n; l++) {
         w = w > 1 ? w / 2 : 1;

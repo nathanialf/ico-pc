@@ -510,7 +510,53 @@ RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
         e->smp = *smp;
     }
     free(px);
+    /* stored as one level: GS levels an earlier store gave the same
+       texture go (rdtex_store_levels adds them back after this) */
+    rd__tex_set_levels(e->tex, NULL, 0);
     return e->tex;
+}
+
+RdTex rdtex_store_levels(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
+                         const RdTexSampler *smp, const char *debugName)
+{
+    if (!ims || n == 0) {
+        return (RdTex){0};
+    }
+    RdTex t = rdtex_store(id, gen, texa, &ims[0], smp, debugName);
+    const RdTexRec *r = rd__tex_rec(t.id);
+    if (!r || n < 2 || r->format != RD_TEXEL_RGBA8) {
+        rd__tex_set_levels(t, NULL, 0);
+        return t;
+    }
+    /* each level padded as the base is: the GS addresses level l at
+       2^(TW - l) x 2^(TH - l), the base's padded size halved */
+    const size_t bytes = rd__gs_chain_bytes(r->w, r->h, n);
+    uint8_t *chain = malloc(bytes ? bytes : 1);
+    if (!chain) {
+        rd__tex_set_levels(t, NULL, 0);
+        return t;
+    }
+    uint32_t w = r->w, h = r->h, levels = 1;
+    uint8_t *at = chain;
+    for (uint32_t l = 1; l < n; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        RdTexImage im = ims[l];
+        RdTexSrc src;
+        im.padW = w;
+        im.padH = h;
+        if (im.w > w || im.h > h || im.w == 0 || im.h == 0 || rdtex_decode(&im, at, &src) != 0) {
+            break;
+        }
+        if (texa != RDTEX_TEXA_REPLAY) {
+            rdtex_apply_texa(at, (size_t)w * h, src, (RdTexA)texa);
+        }
+        at += (size_t)w * h * 4;
+        levels++;
+    }
+    rd__tex_set_levels(t, chain, levels);
+    free(chain);
+    return t;
 }
 
 const RdTexSampler *rdtex_sampler(uint32_t id, int texa)

@@ -188,6 +188,38 @@ static inline RdSamplerWrap rd_wrap_from_gs(uint64_t clamp)
  * (smpMag/smpMin) in Texture.c and uses the same two filters. */
 typedef enum RdFilter { RD_FILTER_NEAREST = 0, RD_FILTER_LINEAR = 1 } RdFilter;
 
+/* TEX1's mipmap fields packed into one word (RdStateBlock.tex1Lod,
+ * RDC_FILTER's u[0], DrawCB.blend[3]: common.hlsli gs_lod):
+ *   bits 0..2   MMIN (0 NEAREST, 1 LINEAR, 2 NEAREST_MIPMAP_NEAREST,
+ *               3 NEAREST_MIPMAP_LINEAR, 4 LINEAR_MIPMAP_NEAREST,
+ *               5 LINEAR_MIPMAP_LINEAR)
+ *   bits 3..5   MXL, the last level
+ *   bit 6       LCM (1: the level is K alone)
+ *   bits 7..8   L
+ *   bits 16..27 K, 12-bit signed, in sixteenths of a level
+ * The GS's level: LOD = (log2(1 / |Q|) << L) + K with LCM 0, LOD = K with
+ * LCM 1; LOD <= 0 magnifies (MMAG at level 0), otherwise MMIN picks the
+ * level: the nearest one for 2 and 4, a blend of the two around it for 3
+ * and 5, level 0 for 0 and 1; never past MXL. */
+#define RD_TEX1_MMIN(p) ((p) & 7u)
+#define RD_TEX1_MXL(p) (((p) >> 3) & 7u)
+#define RD_TEX1_LCM(p) (((p) >> 6) & 1u)
+#define RD_TEX1_L(p) (((p) >> 7) & 3u)
+#define RD_TEX1_K(p) ((int32_t)((p) << 4) >> 20)
+
+static inline uint32_t rd_tex1_lod(uint64_t tex1)
+{
+    return (uint32_t)((tex1 >> 6) & 7u) | (uint32_t)(((tex1 >> 2) & 7u) << 3) |
+           (uint32_t)((tex1 & 1u) << 6) | (uint32_t)(((tex1 >> 19) & 3u) << 7) |
+           (uint32_t)(((tex1 >> 32) & 0xFFFu) << 16);
+}
+
+/* MMIN modes that take a mipmap level */
+static inline int rd_tex1_mipmapped(uint32_t p)
+{
+    return RD_TEX1_MMIN(p) >= 2u && RD_TEX1_MMIN(p) <= 5u && RD_TEX1_MXL(p) > 0u;
+}
+
 /* ------------------------------------------------------------ TEX0 / TCC
  * Texture function (TFX, TEX0 bits 35-36) and TCC (bit 34).  Only MODULATE
  * and DECAL appear (0x664...800 family = DECAL/RGBA from Texture.c; material

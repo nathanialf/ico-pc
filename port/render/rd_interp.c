@@ -3604,10 +3604,11 @@ static bool stateDiff(const RdStateBlock *a, const RdStateBlock *b, RdCmd *out, 
             out[k++] = c;
         }
     }
-    if (x->magFilter != y->magFilter || x->minFilter != y->minFilter) {
+    if (x->magFilter != y->magFilter || x->minFilter != y->minFilter || a->tex1Lod != b->tex1Lod) {
         RdCmd c = stateCmd(RDC_FILTER);
         c.b[0] = y->magFilter;
         c.b[1] = y->minFilter;
+        c.u[0] = b->tex1Lod; /* TEX1's mipmap fields */
         out[k++] = c;
     }
     if (x->wrap.s != y->wrap.s || x->wrap.t != y->wrap.t) {

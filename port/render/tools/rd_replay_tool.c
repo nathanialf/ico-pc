@@ -209,6 +209,9 @@ static void texSummary(uint32_t id)
     printf(" alpha %02x..%02x below80 %.1f%% black %.1f%%", lo, hi,
            n ? 100.0 * (double)below / (double)n : 0.0,
            n ? 100.0 * (double)black / (double)n : 0.0);
+    if (t->gsLevels > 1) {
+        printf(" gs levels %u", t->gsLevels);
+    }
 }
 
 /* --list, RDC_SKINNED: the drawn vertices' place as cluster.vsm computes it
@@ -292,6 +295,11 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         texSummary(c->u[0]);
     } else if (c->type == RDC_FILTER || c->type == RDC_WRAP) {
         printf(" %u %u", c->b[0], c->b[1]);
+        if (c->type == RDC_FILTER && c->u[0]) {
+            /* TEX1's mipmap fields (rd_tex1_lod) */
+            printf(" mmin %u mxl %u lcm %u l %u k %d", RD_TEX1_MMIN(c->u[0]), RD_TEX1_MXL(c->u[0]),
+                   RD_TEX1_LCM(c->u[0]), RD_TEX1_L(c->u[0]), (int)RD_TEX1_K(c->u[0]));
+        }
     } else if (c->type == RDC_TARGET) {
         printf(" colour %s depth %s gs %ux%u offset %u", targetName(c->u[0], nb[0]),
                targetName(c->u[1], nb[1]), c->u[2] & 0xFFFF, c->u[2] >> 16, c->b[0]);

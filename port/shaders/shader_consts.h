@@ -34,7 +34,8 @@ typedef struct IcoFrameCB {
 typedef struct IcoDrawCB {
     uint32_t col[4];   /* RGBA 0..255 */
     uint32_t mode[4];  /* flags, texa | texfmt << 8, atst | ate << 8 | split << 16, aref */
-    uint32_t blend[4]; /* ALPHA register, FIX, COLCLAMP, 0 */
+    uint32_t blend[4]; /* ALPHA register, FIX, COLCLAMP, TEX1's mipmap fields with
+                        * ICO_DF_GS_LOD (rd_state.h rd_tex1_lod), else 0 */
     float uvRect[4];   /* u0, v0, u1, v1 in texels */
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
     float param[4];    /* kind specific */
@@ -88,7 +89,10 @@ enum {
      * *_nodual entries; rd_pipeline.c rd__expand_no_dual): the colour pass
      * writes the blend factor into c0.a, the alpha pass the stored alpha */
     ICO_DF_NODUAL_FACTOR = 65536,
-    ICO_DF_NODUAL_ALPHA_PASS = 131072
+    ICO_DF_NODUAL_ALPHA_PASS = 131072,
+    /* the texture has its GS mipmap levels: sample at the GS's level from
+     * Q and TEX1's fields in DrawCB.blend[3] (common.hlsli gs_lod) */
+    ICO_DF_GS_LOD = 262144
 };
 
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */

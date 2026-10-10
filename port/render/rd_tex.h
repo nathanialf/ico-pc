@@ -82,9 +82,12 @@ typedef struct RdTexImage {
 } RdTexImage;
 
 /* Per-texture sampler state the caller derives from its TEX1/CLAMP words
- * (RdFilter, RdWrap). */
+ * (RdFilter, RdWrap), and TEX1's mipmap fields packed by rd_tex1_lod
+ * (rd_state.h; 0: none).  Kept with the entry for reference: the draws take
+ * TEX1 from the GS state (rd_sampler_tex1). */
 typedef struct RdTexSampler {
     uint8_t mag, min, wrapS, wrapT;
+    uint32_t tex1Lod;
 } RdTexSampler;
 
 typedef struct RdTexCacheStats {
@@ -171,6 +174,19 @@ RdTex rdtex_find(uint32_t id, uint32_t gen, int texa);
  * is unknown. */
 RdTex rdtex_store(uint32_t id, uint32_t gen, int texa, const RdTexImage *im,
                   const RdTexSampler *smp, const char *debugName);
+/* rdtex_store for a texture the GS samples mipmapped (TEX1's MMIN 2..5
+ * with MXL above 0): ims[0] is the base, ims[1..n-1] the TIM2's further
+ * levels as they sit in host memory, each half the size of the one before
+ * (padW, padH halved too).  The levels are decoded as the base is and kept
+ * as the texture's GS levels (RdTexRec.gsLevels), which the replay uploads
+ * as its mips and samples at the GS's level instead of building box mips.
+ * A level that fails to decode ends the chain there.  n 1 is rdtex_store.
+ * texa must be RDTEX_TEXA_REPLAY or a mode; the levels get the same.
+ * Texture packs: a replacement for such a texture keeps the pack's own
+ * levels and is sampled as every replacement is (trilinear, PCSX2's way),
+ * not at the GS's level: the pack's pictures are not the TIM2's. */
+RdTex rdtex_store_levels(uint32_t id, uint32_t gen, int texa, const RdTexImage *ims, uint32_t n,
+                         const RdTexSampler *smp, const char *debugName);
 /* The sampler state stored with the entry for (id, texa), or null. */
 const RdTexSampler *rdtex_sampler(uint32_t id, int texa);
 /* The texture id is gone (tex_FreeTexture): retire its entries. */

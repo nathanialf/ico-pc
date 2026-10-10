@@ -203,6 +203,7 @@ bool rd__apply_state(RdStateBlock *s, const RdCmd *c)
     case RDC_FILTER:
         d->magFilter = c->b[0];
         d->minFilter = c->b[1];
+        s->tex1Lod = c->u[0];
         return true;
     case RDC_WRAP:
         d->wrap.s = c->b[0];
@@ -1067,6 +1068,55 @@ void rd_update_texture(RdTex tex, const void *rgba8)
     g_rd.texFullUpdates++;
 }
 
+size_t rd__gs_chain_bytes(uint32_t w, uint32_t h, uint32_t levels)
+{
+    size_t n = 0;
+    for (uint32_t l = 1; l < levels; l++) {
+        w = w > 1 ? w / 2 : 1;
+        h = h > 1 ? h / 2 : 1;
+        n += (size_t)w * h * 4;
+    }
+    return n;
+}
+
+void rd__tex_set_levels(RdTex tex, const uint8_t *chain, uint32_t levels)
+{
+    RdTexRec *t = rd__tex_rec(tex.id);
+    if (!t || t->kind != RD_TEXKIND_IMAGE || t->replacement || t->format != RD_TEXEL_RGBA8) {
+        return;
+    }
+    if (!chain || levels < 2) {
+        if (t->gsLevels > 1 || t->gsChain) {
+            free(t->gsChain);
+            t->gsChain = NULL;
+            t->gsLevels = 0;
+            texDirtyAll(t);
+        }
+        return;
+    }
+    /* never past the full chain of the base */
+    uint32_t full = 1;
+    for (uint32_t m = t->w > t->h ? t->w : t->h; m > 1; m >>= 1) {
+        full++;
+    }
+    if (levels > full) {
+        levels = full;
+    }
+    const size_t bytes = rd__gs_chain_bytes(t->w, t->h, levels);
+    if (t->gsChain && t->gsLevels == levels && memcmp(t->gsChain, chain, bytes) == 0) {
+        return; /* the same levels again: nothing to upload */
+    }
+    uint8_t *copy = malloc(bytes);
+    if (!copy) {
+        return;
+    }
+    memcpy(copy, chain, bytes);
+    free(t->gsChain);
+    t->gsChain = copy;
+    t->gsLevels = (uint8_t)levels;
+    texDirtyAll(t);
+}
+
 void rd_update_texture_rect(RdTex tex, uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                             const void *px)
 {
@@ -1126,6 +1176,7 @@ void rd_destroy_texture(RdTex tex)
         g_rd.texDirtyCount--;
     }
     free(t->pixels);
+    free(t->gsChain);
     rd__free_pending(t); /* a replacement destroyed before its upload */
     uint32_t gen = t->gen;
     memset(t, 0, sizeof(*t));
@@ -1280,6 +1331,7 @@ void rd_shutdown(void)
                 rhi_destroy_texture(t->rhi);
             }
             free(t->pixels);
+            free(t->gsChain);
             rd__free_pending(t);
         }
     }
@@ -1841,6 +1893,18 @@ void rd_scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1)
 void rd_sampler_filter(RdFilter mag, RdFilter min)
 {
     rd__rec_filter(mag, min);
+}
+
+void rd_sampler_tex1(uint64_t tex1)
+{
+    const uint32_t mmin = (uint32_t)((tex1 >> 6) & 7u);
+    RdCmd *c = rd__push(RDC_FILTER);
+    if (c) {
+        c->b[0] = (uint8_t)((tex1 >> 5) & 1u ? RD_FILTER_LINEAR : RD_FILTER_NEAREST);
+        c->b[1] = (uint8_t)(mmin == 1u || mmin == 4u || mmin == 5u ? RD_FILTER_LINEAR
+                                                                   : RD_FILTER_NEAREST);
+        c->u[0] = rd_tex1_lod(tex1);
+    }
 }
 
 void rd_sampler_wrap(RdWrap s, RdWrap t)

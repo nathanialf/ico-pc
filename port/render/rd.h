@@ -819,7 +819,12 @@ void rd_color_mask(uint32_t fbmsk);
  *   rd_blend_func     the ALPHA register alone: equation and FIX, ABE untouched
  *   rd_scissor       SCISSOR_1, GS pixels of the bound target, inclusive
  *                    (rd_set_target resets it to the target's size)
- *   rd_sampler_filter TEX1 alone (MMAG, MMIN base filter); wrap untouched
+ *   rd_sampler_filter TEX1 alone (MMAG, MMIN base filter); wrap untouched;
+ *                    no mipmapping (a texture with GS levels draws level 0)
+ *   rd_sampler_tex1   the whole TEX1 word: the filters as rd_sampler_filter
+ *                    takes them from it, and its mipmap fields (MXL, MMIN,
+ *                    LCM, L, K: rd_tex1_lod), which pick the level a texture
+ *                    with GS levels is drawn at (rdtex_store_levels)
  *   rd_sampler_wrap   CLAMP alone; filters untouched
  *   rd_gouraud       PRIM.IIP: 1 = Gouraud (the default), 0 = flat, where the
  *                    GS takes the colour of a primitive's last vertex
@@ -829,6 +834,7 @@ void rd_abe(int abe);
 void rd_blend_func(RdBlend eq, uint8_t fix);
 void rd_scissor(int32_t x0, int32_t y0, int32_t x1, int32_t y1);
 void rd_sampler_filter(RdFilter mag, RdFilter min);
+void rd_sampler_tex1(uint64_t tex1);
 void rd_sampler_wrap(RdWrap s, RdWrap t);
 void rd_gouraud(int iip);
 /* PRIM.AA1, the GS's edge antialiasing (0 = off, the default).  It acts on

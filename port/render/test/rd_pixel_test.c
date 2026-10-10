@@ -52,6 +52,14 @@
  *            reference, outside the letters it is the 1x strip of its sheet
  *            texels magnified S times within 1 (the rim is the sheets'
  *            look magnified), and its dump keeps the scale
+ *   gs lod   a texture with three GS levels (flat red, green, blue)
+ *            drawn in strips of one Q each through the STQ shaders under
+ *            TEX1 words of every mipmap kind (MMIN 2 to 5, LCM 0 and 1,
+ *            L 0 and 1, K positive and negative): each strip has the
+ *            colour of the level the GS formula picks, rounded or blended,
+ *            never past MXL, level 0 when magnified or not mipmapped; a
+ *            single-level texture draws the same bytes under a mipmapping
+ *            TEX1 as under none
  *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
@@ -1051,6 +1059,167 @@ static void testStq(void)
             }
         }
     }
+    rd_destroy_texture(t);
+}
+
+/* ---------------------------------------------------------------- gs lod */
+
+/* The GS's level of detail (rd_state.h rd_tex1_lod) for a pixel with Q q */
+static double gsLodRef(double q, int lcm, int l, int k)
+{
+    return lcm ? k / 16.0 : -log2(q) * (double)(1 << l) + k / 16.0;
+}
+
+/* The colour the GS samples from flat levels lv[0..mxl] at that LOD */
+static void gsLodWant(double lod, int mmin, int mxl, const int lv[3][3], int want[4])
+{
+    double c[3];
+    int a = 0, b = 0;
+    double f = 0.0;
+    if (lod > 0.0 && (mmin == 2 || mmin == 4)) {
+        a = b = (int)fmin(floor(lod + 0.5), (double)mxl);
+    } else if (lod > 0.0 && (mmin == 3 || mmin == 5)) {
+        const double s = fmin(lod, (double)mxl);
+        a = (int)floor(s);
+        b = a < mxl ? a + 1 : a;
+        f = s - a;
+    }
+    for (int i = 0; i < 3; i++) {
+        c[i] = lv[a][i] * (1.0 - f) + lv[b][i] * f;
+        want[i] = (int)floor(c[i] + 0.5);
+    }
+    want[3] = 0x80;
+}
+
+/* Strips of one Q each, through the STQ shaders, from a texture whose
+ * three GS levels are flat colours (the base red, then green, then blue),
+ * under TEX1 words of every mipmap kind: the colour of each strip is the
+ * level the GS formula picks (rounded for MMIN 2 and 4, the two levels
+ * around the LOD blended for 3 and 5, K alone with LCM, never past MXL,
+ * level 0 at a LOD of 0 or below).  The same strips from a texture without
+ * GS levels draw its base everywhere, byte for byte as with a TEX1 that
+ * does not mipmap. */
+static void gsLodStrips(RdTex t, uint64_t tex1, int useTex1)
+{
+    static const double qs[10] = {2.0, 0.9, 0.72, 0.69, 0.6, 0.5, 0.4, 0.33, 0.25, 0.125};
+    static const uint8_t black[4] = {0, 0, 0, 0}, white[4] = {0x80, 0x80, 0x80, 0x80};
+    rd_begin_frame();
+    rd_select_list(11);
+    rd_clear_target(rd_target(RD_TARGET_WORK1), black, 0, 0);
+    rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 256, 0);
+    rd_test_gs(RD_TEST_Z_ALWAYS);
+    rd_z_write(0);
+    rd_abe(0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    if (useTex1) {
+        rd_sampler_tex1(tex1);
+    }
+    rd_texture(t, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    const int32_t ox = (2048 - 128) * 16, oy = (2048 - 128) * 16;
+    for (int i = 0; i < 10; i++) {
+        const float q = (float)qs[i];
+        const int32_t y0 = (4 + 8 * i) * 16, y1 = (10 + 8 * i) * 16;
+        /* S = T = 0.5 Q: the texture's centre at every pixel */
+        RdScreenVtx v[4] = {vtx(ox + 16 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 16 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 48 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
+                            vtx(ox + 48 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q)};
+        for (int k = 0; k < 4; k++) {
+            v[k].q = q;
+        }
+        rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
+    }
+    rd_end_frame(0);
+}
+
+static uint64_t gsTex1(int mmin, int lcm, int l, int k)
+{
+    return (uint64_t)lcm | (2ull << 2) | (1ull << 5) | ((uint64_t)mmin << 6) | ((uint64_t)l << 19) |
+           ((uint64_t)(k & 0xFFF) << 32);
+}
+
+static void testGsLod(void)
+{
+    static const int lv[3][3] = {{240, 0, 0}, {0, 240, 0}, {0, 0, 240}};
+    static const double qs[10] = {2.0, 0.9, 0.72, 0.69, 0.6, 0.5, 0.4, 0.33, 0.25, 0.125};
+    static uint8_t base[8 * 8 * 4], chain[4 * 4 * 4 + 2 * 2 * 4];
+    for (int i = 0; i < 64; i++) {
+        memcpy(base + i * 4, (const uint8_t[4]){240, 0, 0, 0x80}, 4);
+    }
+    for (int i = 0; i < 16; i++) {
+        memcpy(chain + i * 4, (const uint8_t[4]){0, 240, 0, 0x80}, 4);
+    }
+    for (int i = 0; i < 4; i++) {
+        memcpy(chain + 64 + i * 4, (const uint8_t[4]){0, 0, 240, 0x80}, 4);
+    }
+    RdTex t = rd_create_texture(8, 8, base, RD_TEXA_80_80, "gs lod");
+    rd__tex_set_levels(t, chain, 3);
+    CHECK(rd__tex_rec(t.id) && rd__tex_rec(t.id)->gsLevels == 3, "gs lod: three GS levels");
+
+    static const struct {
+        int mmin, lcm, l, k;
+        const char *what;
+    } cases[] = {
+        {4, 0, 0, 0, "LINEAR_MIPMAP_NEAREST"},
+        {5, 0, 0, 0, "LINEAR_MIPMAP_LINEAR"},
+        {2, 0, 1, -26, "NEAREST_MIPMAP_NEAREST, L 1, K -1.625"},
+        {3, 0, 1, -26, "NEAREST_MIPMAP_LINEAR, L 1, K -1.625"},
+        {5, 1, 0, 20, "LCM, K 1.25, linear"},
+        {4, 1, 0, 24, "LCM, K 1.5, nearest"},
+        {4, 1, 0, -8, "LCM, K -0.5 (magnified)"},
+        {1, 0, 0, 0, "LINEAR (no mipmapping)"},
+    };
+
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        gsLodStrips(t, gsTex1(cases[c].mmin, cases[c].lcm, cases[c].l, cases[c].k), 1);
+        uint32_t w, h;
+        const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+        if (!img) {
+            continue;
+        }
+        const int linear = cases[c].mmin == 3 || cases[c].mmin == 5;
+        for (int i = 0; i < 10; i++) {
+            const double lod = gsLodRef(qs[i], cases[c].lcm, cases[c].l, cases[c].k);
+            int want[4];
+            gsLodWant(lod, cases[c].mmin, 2, lv, want);
+            const int x = 32, y = 7 + 8 * i;
+            const uint8_t *p = img + ((size_t)y * w + (size_t)x) * 4;
+            /* the device's blend between levels has as few as 4 bits
+               (Vulkan's mipmapPrecisionBits): 240 / 32 */
+            const int tol = linear ? 8 : 1;
+            if (abs((int)p[0] - want[0]) > tol || abs((int)p[1] - want[1]) > tol ||
+                abs((int)p[2] - want[2]) > tol) {
+                char what[96];
+                snprintf(what, sizeof(what), "gs lod %s, Q %.3f (LOD %.3f)", cases[c].what, qs[i],
+                         lod);
+                pixFail(what, x, y, p, want);
+            }
+        }
+    }
+    /* a single-level texture: its base, and the bytes of the same strips
+       under a TEX1 that does not mipmap */
+    RdTex one = rd_create_texture(8, 8, base, RD_TEXA_80_80, "gs lod one");
+    static uint8_t ref[512 * 512 * 4];
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    gsLodStrips(one, 0, 0);
+    const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+    if (img) {
+        memcpy(ref, img, (size_t)w * h * 4);
+    }
+    gsLodStrips(one, gsTex1(5, 0, 0, 0), 1);
+    img = readTarget(RD_TARGET_WORK1, &w2, &h2);
+    CHECK(img && w == w2 && h == h2 && memcmp(ref, img, (size_t)w * h * 4) == 0,
+          "gs lod: a single-level texture draws the same bytes whatever TEX1 says");
+    if (img) {
+        const uint8_t *p = img + ((size_t)(7 + 8 * 9) * w + 32) * 4;
+        CHECK(p[0] == 240 && p[1] == 0 && p[2] == 0,
+              "gs lod: a single-level texture's base at "
+              "Q 0.125 (got %u %u %u)",
+              p[0], p[1], p[2]);
+    }
+    rd_destroy_texture(one);
     rd_destroy_texture(t);
 }
 
@@ -3664,6 +3833,7 @@ int main(int argc, char **argv)
     testFont(dir);
     testSheetText("Original 1x", 1, dir);
     testStq();
+    testGsLod();
     testAa1();
     testReduction(dir);
     testPresent();

@@ -19,7 +19,9 @@
  *              on) draw them; the DATE snapshot and the shadow count write
  *              no Z; PABE flags (DF_C1_DST for Cd*FIX + Cs only)
  *   dump       a frame with textures and a temp target survives dump/load;
- *              RDC_AA1 and RdStateBlock.aa1 round-trip, and a
+ *              an image's GS levels and TEX1's mipmap fields (tex1Lod)
+ *              round-trip; version 8 and older dumps (no tex1Lod, no level
+ *              words) still load; RDC_AA1 and RdStateBlock.aa1 round-trip, and a
  *              version 3 dump (no aa1) still loads, with AA1 off; a version
  *              5 and a version 7 dump's temps at the handles FEED_HELD and
  *              DISPLAY_HELD (appended after them) are recreated
@@ -416,6 +418,50 @@ static void testPlans(void)
    The dump at path with its temp's handle moved to that slot and its
    version set loads with the temp recreated and remapped, not read as the
    fixed target. */
+static uint32_t rd32(const uint8_t *p)
+{
+    uint32_t v;
+    memcpy(&v, p, 4);
+    return v;
+}
+
+/* n bytes at o taken out of buf (*size bytes long) */
+static void cutBytes(uint8_t *buf, long *size, size_t o, size_t n)
+{
+    memmove(buf + o, buf + o + n, (size_t)*size - o - n);
+    *size -= (long)n;
+}
+
+/* A dump of this version in buf rewritten in place as a version 8 one:
+ * the state blocks without tex1Lod and every image without its level word
+ * (and GS levels).  The version word is left to the caller. */
+static void dumpTo8(uint8_t *buf, long *size)
+{
+    const size_t st0 = 8 + 4 * 4 + 5 * 4 + sizeof(RdCamera);
+    const size_t sb = sizeof(RdStateBlock), sb8 = RD_STATE_BLOCK_V8_SIZE;
+    const uint32_t sz8 = RD_STATE_BLOCK_V8_SIZE;
+    memcpy(buf + 16, &sz8, 4);
+    cutBytes(buf, size, st0 + 2 * sb - (sb - sb8), sb - sb8); /* the end state's */
+    cutBytes(buf, size, st0 + sb - (sb - sb8), sb - sb8);     /* the start state's */
+    size_t o = st0 + 2 * sb8;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        o += 4 + (size_t)rd32(buf + o) * sizeof(RdCmd);
+    }
+    o += 4 + rd32(buf + o); /* the payload */
+    const uint32_t nt = rd32(buf + o);
+    o += 4;
+    for (uint32_t i = 0; i < nt; i++) {
+        const uint32_t kind = rd32(buf + o + 4), w = rd32(buf + o + 16), h = rd32(buf + o + 20),
+                       view = rd32(buf + o + 28);
+        o += 32;
+        if (kind == RD_TEXKIND_IMAGE) {
+            o += (size_t)w * h * rd__texel_bytes((uint8_t)(view & 0xFFu));
+            const uint32_t nl = rd32(buf + o);
+            cutBytes(buf, size, o, 4 + (nl > 1 ? rd__gs_chain_bytes(w, h, nl) : 0));
+        }
+    }
+}
+
 static void testDumpOldTemps(const RdFrame *f, const char *path, const char *dir, uint32_t ver,
                              RdTargetId fixed)
 {
@@ -447,6 +493,7 @@ static void testDumpOldTemps(const RdFrame *f, const char *path, const char *dir
         free(buf);
         return;
     }
+    dumpTo8(buf, &size);
     /* every field holding the temp's handle (the commands, the state
        blocks, its view's texture header, the temp section) */
     const uint32_t old = (tid & 0xFFFF0000u) | slot;
@@ -508,10 +555,20 @@ static void testDump(const char *dir)
     }
     RdTex a = rd_create_texture(4, 4, px, RD_TEXA_7F_81_AEM, "a");
     RdTex b = rd_create_texture_src(2, 8, px, RD_TEXSRC_RGB24, "b");
+    /* GS levels on a: 2x2 and 1x1 (rdtex_store_levels), and a TEX1 that
+       mipmaps (MXL 2, LINEAR_MIPMAP_LINEAR, L 1, K -100) */
+    uint8_t chain[2 * 2 * 4 + 4];
+    for (int i = 0; i < (int)sizeof(chain); i++) {
+        chain[i] = (uint8_t)(200 - i);
+    }
+    rd__tex_set_levels(a, chain, 3);
+    const uint64_t tex1 =
+        (2ull << 2) | (1ull << 5) | (5ull << 6) | (1ull << 19) | ((uint64_t)(-100 & 0xFFF) << 32);
     rd_begin_frame();
     RdTarget tt = rd_temp_target(64, 32, 1, 0);
     rd_select_list(7);
     rd_set_target(tt, tt, 64, 32, 0);
+    rd_sampler_tex1(tex1);
     rd_texture(a, RD_TEXFN_DECAL, RD_TCC_RGB);
     draw(1);
     rd_texture(b, RD_TEXFN_MODULATE, RD_TCC_RGBA);
@@ -548,6 +605,12 @@ static void testDump(const char *dir)
                     CHECK(memcmp(tx->pixels, ty->pixels, (size_t)tx->w * tx->h * 4) == 0 &&
                               tx->bakedTexa == ty->bakedTexa,
                           "texture pixels round trip");
+                    CHECK(tx->gsLevels == ty->gsLevels &&
+                              (tx->gsLevels < 2 ||
+                               (ty->gsChain &&
+                                memcmp(tx->gsChain, ty->gsChain,
+                                       rd__gs_chain_bytes(tx->w, tx->h, tx->gsLevels)) == 0)),
+                          "GS levels round trip (%u, %u)", tx->gsLevels, ty->gsLevels);
                 }
                 texSeen++;
             } else if (x->type == RDC_TARGET) {
@@ -561,6 +624,19 @@ static void testDump(const char *dir)
         }
     }
     CHECK(texSeen == 3, "three texture binds compared, got %d", texSeen);
+    CHECK(rd__tex_rec(a.id) && rd__tex_rec(a.id)->gsLevels == 3, "a has its 3 GS levels");
+    {
+        /* TEX1's mipmap fields: in the FILTER command and the state of every draw after it */
+        const uint32_t want = rd_tex1_lod(tex1);
+        CHECK(RD_TEX1_MMIN(want) == 5 && RD_TEX1_MXL(want) == 2 && RD_TEX1_LCM(want) == 0 &&
+                  RD_TEX1_L(want) == 1 && RD_TEX1_K(want) == -100,
+              "rd_tex1_lod packs MMIN 5 MXL 2 L 1 K -100 (%#x)", want);
+        Seen sl;
+        walk(&g, &sl);
+        const RdStateBlock *s1 = stateFor(&sl, 1);
+        CHECK(s1 && s1->tex1Lod == want && g.endState.tex1Lod == want,
+              "tex1Lod at draw 1 and at the end after the round trip");
+    }
     /* PRIM.AA1: the bit at each draw after the round trip */
     Seen seen;
     walk(&g, &seen);
@@ -592,18 +668,18 @@ static void testDump(const char *dir)
     CHECK(buf != NULL, "dump read back");
     if (buf) {
         const size_t st0 = 8 + 4 * 4 + 5 * 4 + sizeof(RdCamera);
+        const size_t sb8 = RD_STATE_BLOCK_V8_SIZE;
+        dumpTo8(buf, &size);
         uint32_t v3 = 3, sz3 = RD_STATE_BLOCK_V3_SIZE;
         memcpy(buf + 8, &v3, 4);
         memcpy(buf + 16, &sz3, 4);
         /* the end state's aa1, then the start state's */
-        memmove(buf + st0 + 2 * sizeof(RdStateBlock) - 4, buf + st0 + 2 * sizeof(RdStateBlock),
-                (size_t)size - (st0 + 2 * sizeof(RdStateBlock)));
-        memmove(buf + st0 + sizeof(RdStateBlock) - 4, buf + st0 + sizeof(RdStateBlock),
-                (size_t)size - 4 - (st0 + sizeof(RdStateBlock)));
+        cutBytes(buf, &size, st0 + 2 * sb8 - 4, 4);
+        cutBytes(buf, &size, st0 + sb8 - 4, 4);
         char path3[1100];
         snprintf(path3, sizeof(path3), "%s/rd_state_test_v3.rddump", dir);
         fp = fopen(path3, "wb");
-        CHECK(fp && fwrite(buf, 1, (size_t)size - 8, fp) == (size_t)size - 8, "v3 dump written");
+        CHECK(fp && fwrite(buf, 1, (size_t)size, fp) == (size_t)size, "v3 dump written");
         if (fp) {
             fclose(fp);
         }
