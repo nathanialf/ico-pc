@@ -557,6 +557,12 @@ player guides, TODOs, and the package's list of player guides; `tools/check_docs
 the allowed exceptions (top-level `CMakeLists.txt`, `docs_check`; `tools/check_docs.py`,
 docstring). `python3 -I tools/check_docs.py` runs it without a build.
 
+`spirv_check` runs `tools/check_spirv.py` over the SPIR-V modules the build compiled
+(`<build>/shaders/*.spv`): no module carries an array as a value (a whole-array load, store,
+construct, insert, phi, select or copy) and no vertex shader keeps a local array
+([SHADERS.md](SHADERS.md#scalars-not-arrays)). `python3 -I tools/check_spirv.py <build>/shaders`
+runs it by hand.
+
 ## Which tests a change needs
 
 - A new Options row: `ctest -L ui`. `settings` builds every page and compares its rows with fixed
@@ -581,7 +587,8 @@ docstring). `python3 -I tools/check_docs.py` runs it without a build.
 - A new shader: `shaders_table`, whose `expected[]` lists every embedded entry
   (`port/shaders/test/shaders_table_test.c`), then `ctest -L rhi` and `-L render`
   (`shaders_pixel` and its variants, `vu1` for a VU shader, `gs_math`, `rhi_d3d12_plan`); on
-  Windows `rhi_d3d12` and `compare_backends.cmd` for the DXIL side.
+  Windows `rhi_d3d12` and `compare_backends.cmd` for the DXIL side. Any shader change:
+  `spirv_check` (no array-typed values, no local array in a vertex shader).
 - A new achievement: `achievements`, which fails unless one of its runs unlocks every achievement
   and each has a title and a description in every language; its count check
   (`ico_ach_count() >= 20 && ico_ach_count() <= 30`) bounds the table, which holds 30

@@ -431,27 +431,72 @@ bool vu_rect_reaches_picture(float2 lo, float2 hi)
 // Corners p[0..n) of a convex polygon in clip space cut to
 // dot(plane, v) >= 0 (Sutherland-Hodgman). A triangle cut by four planes
 // has at most seven corners.
+//
+// No corner array is indexed by a run-time value and none is copied,
+// built or carried whole: every loop over the corners is written out as
+// VU_CUT_CORNERS constant steps guarded by the count, a write at a run-time
+// position (vu_corner_set) or a read at one (vu_corner) is a select over
+// the corners, so the compiled shader holds the corners in registers (no
+// array-typed value, no OpVariable in the Function storage class). The
+// vertex shaders carrying the arrays as values (an NVIDIA GeForce 10-series
+// driver, an Adreno 740 driver) were the first pipeline those drivers'
+// compilers crashed on, while every shader without them built;
+// tools/check_spirv.py (the spirv_check test) keeps every shader free of
+// them (docs/port/SHADERS.md, Scalars, not arrays).
 #define VU_CUT_CORNERS 7u
+
+// p[i] for a run-time i (i < VU_CUT_CORNERS)
+float4 vu_corner(float4 p[VU_CUT_CORNERS], uint i)
+{
+    float4 r = p[0];
+    [unroll] for (uint j = 1u; j < VU_CUT_CORNERS; j++)
+    {
+        r = j == i ? p[j] : r;
+    }
+    return r;
+}
+
+// q[m] = v for a run-time m (m < VU_CUT_CORNERS)
+void vu_corner_set(inout float4 q[VU_CUT_CORNERS], uint m, float4 v)
+{
+    [unroll] for (uint j = 0u; j < VU_CUT_CORNERS; j++)
+    {
+        q[j] = j == m ? v : q[j];
+    }
+}
+
+// One corner of the cut, corner I against the plane (I a literal: the
+// loop below is written out, since the compiler left an [unroll] loop with
+// this body as a loop, indexing the corners at run time)
+#define VU_CLIP_STEP(I)                                                              \
+    if ((I) < nc) {                                                                  \
+        float4 a = p[I];                                                             \
+        float4 b = vu_corner(p, (I) + 1u < nc ? (I) + 1u : 0u);                      \
+        float da = dot(plane, a);                                                    \
+        float db = dot(plane, b);                                                    \
+        if (da >= 0.0 && m < VU_CUT_CORNERS) {                                       \
+            vu_corner_set(q, m, a);                                                  \
+            m++;                                                                     \
+        }                                                                            \
+        if ((da >= 0.0) != (db >= 0.0) && m < VU_CUT_CORNERS) {                      \
+            vu_corner_set(q, m, lerp(a, b, da / (da - db)));                         \
+            m++;                                                                     \
+        }                                                                            \
+    }
 
 void vu_clip_corners(inout float4 p[VU_CUT_CORNERS], inout uint n, float4 plane)
 {
     float4 q[VU_CUT_CORNERS] = p;
     uint m = 0u;
     const uint nc = min(n, VU_CUT_CORNERS);
-    for (uint i = 0u; i < nc; i++) {
-        float4 a = p[i];
-        float4 b = p[i + 1u < nc ? i + 1u : 0u];
-        float da = dot(plane, a);
-        float db = dot(plane, b);
-        if (da >= 0.0 && m < VU_CUT_CORNERS) {
-            q[m] = a;
-            m++;
-        }
-        if ((da >= 0.0) != (db >= 0.0) && m < VU_CUT_CORNERS) {
-            q[m] = lerp(a, b, da / (da - db));
-            m++;
-        }
-    }
+    VU_CLIP_STEP(0u)
+    VU_CLIP_STEP(1u)
+    VU_CLIP_STEP(2u)
+    VU_CLIP_STEP(3u)
+    VU_CLIP_STEP(4u)
+    VU_CLIP_STEP(5u)
+    VU_CLIP_STEP(6u)
+#undef VU_CLIP_STEP
     p = q;
     n = m;
 }
@@ -476,12 +521,22 @@ bool vu_cut_reaches(float4 a, float4 b, float4 c, float4 e)
     vu_clip_corners(p, n, float4(0.0, 1.0, 0.0, -e.w)); // y >= bottom * w
     float lo = 1e30;
     float hi = -1e30;
-    for (uint i = 0u; i < min(n, VU_CUT_CORNERS); i++) {
-        // a corner left at w = 0 (z = 0 there too) lies at infinity on its x's side
-        float x = p[i].w > 0.0 ? p[i].x / p[i].w : (p[i].x >= 0.0 ? 1e30 : -1e30);
-        lo = min(lo, x);
-        hi = max(hi, x);
+    const uint nc = min(n, VU_CUT_CORNERS);
+    // a corner left at w = 0 (z = 0 there too) lies at infinity on its x's side
+#define VU_CUT_EXTENT(I)                                                              \
+    if ((I) < nc) {                                                                   \
+        float x = p[I].w > 0.0 ? p[I].x / p[I].w : (p[I].x >= 0.0 ? 1e30 : -1e30);    \
+        lo = min(lo, x);                                                              \
+        hi = max(hi, x);                                                              \
     }
+    VU_CUT_EXTENT(0u)
+    VU_CUT_EXTENT(1u)
+    VU_CUT_EXTENT(2u)
+    VU_CUT_EXTENT(3u)
+    VU_CUT_EXTENT(4u)
+    VU_CUT_EXTENT(5u)
+    VU_CUT_EXTENT(6u)
+#undef VU_CUT_EXTENT
     return n >= 3u && vu_reaches_columns(lo, hi, e);
 }
 

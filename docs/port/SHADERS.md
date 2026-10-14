@@ -264,6 +264,20 @@ arithmetic are clamped to a constant that valid inputs never reach, so every pic
 No shader waits on memory, spins on an atomic or uses recursion; the one ordered section is
 `gs_dst_out`'s (above).
 
+## Scalars, not arrays
+
+No shader builds, copies or carries a whole array as a value, and no vertex shader keeps a local
+array (one in SPIR-V's Function storage class). An array in a constant buffer, a storage buffer or
+a stream is read one element at a time. The polygon cut (`port/shaders/vu_common.hlsli`,
+vu_clip_corners, vu_cut_reaches) is written out over its seven corners with macros: a write at a
+run-time position is a select over the corners (vu_corner_set), a read at one likewise (vu_corner),
+so the compiled vertex shaders hold the corners in registers. The compilers of two drivers (an
+NVIDIA GeForce 10-series card on Windows, a Qualcomm Adreno 740 on Android) crash on the first
+pipeline whose vertex shader carries array-typed values, while every shader without them builds,
+and the game cannot start without the VU vertex shaders. `spirv_check` (`tools/check_spirv.py`)
+reads every compiled module and fails on either construct; the pixel shaders with a local array
+indexed at run time (`font.hlsl`, font_sheet_ps; `yuv.hlsl`) build on those drivers and are allowed.
+
 ## Tests
 
 | test | checks |
@@ -271,6 +285,7 @@ No shader waits on memory, spins on an atomic or uses recursion; the one ordered
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
+| `spirv_check` (`tools/check_spirv.py`) | every compiled SPIR-V module under the build's `shaders/`: no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader (Scalars, not arrays, above); the module's binary form decoded in Python, no SPIR-V tool needed |
 | `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
 
