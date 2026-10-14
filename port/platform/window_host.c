@@ -1005,18 +1005,19 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     const bool backendExplicit = chosen != NULL && chosen[0] != '\0';
     const char *backend = backendExplicit ? chosen : "vulkan";
     /* the blending the player chose: [dev] blend / blend=, or ICO_RD_BLEND
-       from the environment the game was started with (a loss step's run
-       has its own ICO_RD_BLEND=fixed, host_config.c ico_ini_export, which
-       is not the player's) */
+       from the environment the game was started with (a loss step's or
+       the fixedblend step's run has its own ICO_RD_BLEND=fixed,
+       host_config.c ico_ini_export, which is not the player's) */
     const char *blendKey = ico_config_get_string("dev.blend", NULL);
     const char *blendEnv = getenv("ICO_RD_BLEND");
-    const bool retryLoss = startup_retry_value_is_loss(getenv(STARTUP_RETRY_ENV));
+    const bool retryFixed = startup_retry_value_draws_fixed(getenv(STARTUP_RETRY_ENV));
     const bool blendExplicit = (blendKey != NULL && blendKey[0] != '\0') ||
-                               (!retryLoss && blendEnv != NULL && blendEnv[0] != '\0');
+                               (!retryFixed && blendEnv != NULL && blendEnv[0] != '\0');
     /* this run was started again after a graphics driver crash while
        preparing the shaders or after the graphics card stopped responding
        (startup_retry.h): its step, and its backend unless the player chose
-       one; a loss step's fixed-function blend is set by ico_ini_export */
+       one; the fixed-function blend of a loss step or fixedblend is set
+       by ico_ini_export */
     static char retryBackend[16];
     StartupRetry retry = STARTUP_RETRY_NONE;
     if (startup_retry_parse(getenv(STARTUP_RETRY_ENV), &retry, retryBackend,

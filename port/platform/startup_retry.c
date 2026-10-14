@@ -38,6 +38,14 @@ static StartupRetry crash_next(const StartupRetryRun *run, const char *name, boo
                  name);
         return STARTUP_RETRY_CACHE;
     }
+    if (step < STARTUP_RETRY_CRASH_BLEND && run->dstPipeline && !run->blendExplicit &&
+        !run->blendWasFixed) {
+        snprintf(reason, reasonLen,
+                 "the pipeline being built read the screen for the exact blend; the next try "
+                 "on %s draws with the simpler blending",
+                 name);
+        return STARTUP_RETRY_CRASH_BLEND;
+    }
     if (step < STARTUP_RETRY_D3D12 && run->haveD3d12 && !run->backendExplicit && !onD3d12) {
         snprintf(reason, reasonLen, "%s crashed; the next try uses Direct3D 12", name);
         return STARTUP_RETRY_D3D12;
@@ -84,6 +92,30 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
     return STARTUP_RETRY_NONE;
 }
 
+bool startup_retry_note_has_dst(const char *note)
+{
+    static const char head[] = "creating pipeline ";
+    static const char field[] = " dst ";
+    const char *p;
+    size_t i;
+    bool digits = false, nonzero = false;
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+        return false;
+    }
+    /* the first " dst " field, from the head's closing space on */
+    p = strstr(note + (sizeof head - 2), field);
+    if (p == NULL) {
+        return false;
+    }
+    p += sizeof field - 1;
+    for (i = 0; p[i] >= '0' && p[i] <= '9'; i++) {
+        digits = true;
+        nonzero = nonzero || p[i] != '0';
+    }
+    /* the number ends the note or a word */
+    return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
+}
+
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen)
 {
     const char *name =
@@ -107,6 +139,8 @@ const char *startup_retry_name(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "cache";
+    case STARTUP_RETRY_CRASH_BLEND:
+        return "fixedblend";
     case STARTUP_RETRY_D3D12:
         return "d3d12";
     case STARTUP_RETRY_LAZY:
@@ -139,9 +173,9 @@ int startup_retry_value(StartupRetry next, const char *backendName, char *out, s
 
 int startup_retry_parse(const char *value, StartupRetry *step, char *backend, size_t size)
 {
-    static const StartupRetry steps[] = {STARTUP_RETRY_CACHE, STARTUP_RETRY_D3D12,
-                                         STARTUP_RETRY_LAZY, STARTUP_RETRY_LOSS_BLEND,
-                                         STARTUP_RETRY_LOSS_BACKEND};
+    static const StartupRetry steps[] = {STARTUP_RETRY_CACHE,      STARTUP_RETRY_CRASH_BLEND,
+                                         STARTUP_RETRY_D3D12,      STARTUP_RETRY_LAZY,
+                                         STARTUP_RETRY_LOSS_BLEND, STARTUP_RETRY_LOSS_BACKEND};
     const char *colon;
     size_t i, n;
     *step = STARTUP_RETRY_NONE;
@@ -178,6 +212,8 @@ const char *startup_retry_what(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "the pipeline cache file was deleted; the shaders are prepared again from scratch";
+    case STARTUP_RETRY_CRASH_BLEND:
+        return "this run draws with the simpler blending on the same graphics backend";
     case STARTUP_RETRY_D3D12:
         return "this run uses Direct3D 12";
     case STARTUP_RETRY_LAZY:

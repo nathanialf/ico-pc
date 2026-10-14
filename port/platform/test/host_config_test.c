@@ -513,10 +513,11 @@ static void set_env(const char *name, const char *value)
 }
 
 /* ICO_RD_BLEND in a run started again after a device loss
-   (ICO_STARTUP_RETRY=blend:... or backend:..., startup_retry.h): the
-   restart's fixed blend wins over the ini's blend= and over an ICO_RD_BLEND
-   already in the environment, for that run; any other run (none, or a
-   crash step) keeps the order ini > environment > default */
+   (ICO_STARTUP_RETRY=blend:... or backend:..., startup_retry.h) or at the
+   crash order's fixedblend step: the restart's fixed blend wins over the
+   ini's blend= and over an ICO_RD_BLEND already in the environment, for
+   that run; any other run (none, or another crash step) keeps the order
+   ini > environment > default */
 static void test_retry_blend(void)
 {
     IcoIni ini;
@@ -525,7 +526,10 @@ static void test_retry_blend(void)
     CHECK(strcmp(ico_dev_env_export_value("blend", NULL, "blend:vulkan"), "fixed") == 0);
     CHECK(strcmp(ico_dev_env_export_value("blend", "exact", "backend:d3d12"), "fixed") == 0);
     CHECK(strcmp(ico_dev_env_export_value("blend", "fixed", "blend:d3d12"), "fixed") == 0);
+    CHECK(strcmp(ico_dev_env_export_value("blend", NULL, "fixedblend:vulkan"), "fixed") == 0);
     CHECK(ico_dev_env_export_value("blend", NULL, "lazy:vulkan") == NULL);
+    CHECK(ico_dev_env_export_value("blend", NULL, "d3d12:d3d12") == NULL);
+    CHECK(ico_dev_env_export_value("blend", NULL, "cache:vulkan") == NULL);
     CHECK(ico_dev_env_export_value("blend", "exact", NULL) == NULL);
     CHECK(strcmp(ico_dev_env_export_value("blend", "fixed", NULL), "fixed") == 0);
     /* the other switches are not touched by the restart */

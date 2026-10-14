@@ -12,14 +12,25 @@
  *
  * After a driver crash (STARTUP_RETRY_CRASH) the steps, in order; each is
  * taken only when the run before crashed:
- *   cache  the crashing run had loaded the pipeline cache file: it is
- *          deleted and the same backend tries again;
- *   d3d12  a build with the D3D12 backend, whose player did not choose a
- *          backend (backend= / [video] backend): Direct3D 12; when it
- *          cannot start (no device), that run goes on to lazy on Vulkan
- *          itself (window_host.c), as nothing crashed;
- *   lazy   the up-front creation of the pipeline set is skipped: each one
- *          is built when a frame first needs it, on the same backend.
+ *   cache       the crashing run had loaded the pipeline cache file: it is
+ *               deleted and the same backend tries again;
+ *   fixedblend  the crash's activity note names a pipeline with a
+ *               destination read (its "dst N" field nonzero,
+ *               startup_retry_note_has_dst: an exact-blend pass, so a
+ *               fragment shader interlock or rasterizer-ordered view
+ *               fragment entry, port/render/rd_dst_read.c): the same
+ *               backend with the fixed-function blend (ICO_RD_BLEND=fixed,
+ *               host_config.c ico_ini_export, as the loss steps), which
+ *               creates no such pipeline; skipped when the player chose
+ *               the blending (blend= / [dev] blend, or ICO_RD_BLEND);
+ *   d3d12       a build with the D3D12 backend, whose player did not
+ *               choose a backend (backend= / [video] backend): Direct3D
+ *               12 (its own blending, not the fixed one); when it cannot
+ *               start (no device), that run goes on to lazy on Vulkan
+ *               itself (window_host.c), as nothing crashed;
+ *   lazy        the up-front creation of the pipeline set is skipped: each
+ *               one is built when a frame first needs it, on the same
+ *               backend.
  * After lazy, or in a run started after a device loss, there is nothing
  * left: the crash box is shown.
  *
@@ -37,8 +48,9 @@
  *            blending other than fixed; when Direct3D 12 cannot start, that
  *            run goes on with Vulkan itself (window_host.c).
  * After backend there is nothing left: the device-loss box is shown.  A
- * loss restart follows a crash step too (lazy, then blend): the step only
- * grows, so a chain always ends.  The restarted run starts at the title as
+ * loss restart follows a crash step too (lazy, then blend; fixedblend,
+ * whose run already draws with the fixed-function blend, then backend):
+ * the step only grows, so a chain always ends.  The restarted run starts at the title as
  * a fresh launch: what was not saved was lost with the card, as at a quit.
  *
  * Android and iOS cannot start the game again (canRelaunch false): the box.
@@ -57,6 +69,7 @@
 typedef enum {
     STARTUP_RETRY_NONE = 0, /* the first run; as a result: no step left */
     STARTUP_RETRY_CACHE,
+    STARTUP_RETRY_CRASH_BLEND, /* "fixedblend": the crash order's fixed-function blend */
     STARTUP_RETRY_D3D12,
     STARTUP_RETRY_LAZY,
     STARTUP_RETRY_LOSS_BLEND,
@@ -79,6 +92,8 @@ typedef struct {
     bool backendExplicit;    /* the player named the backend */
     bool blendExplicit;      /* the player named the blending (blend=, ICO_RD_BLEND) */
     bool blendWasFixed;      /* the run drew with the fixed-function blend */
+    bool dstPipeline;        /* a crash: its note names a destination-read pipeline
+                                (startup_retry_note_has_dst) */
     const char *backendName; /* the run's backend; NULL or "": vulkan */
 } StartupRetryRun;
 
@@ -106,13 +121,45 @@ static inline bool startup_retry_value_is_loss(const char *value)
     return b[i] == '\0';
 }
 
+/* The steps whose runs draw with the fixed-function blend
+ * (ICO_RD_BLEND=fixed set by host_config.c ico_ini_export, not the
+ * player's): the crash order's fixedblend and both loss steps */
+static inline bool startup_retry_draws_fixed(StartupRetry step)
+{
+    return step == STARTUP_RETRY_CRASH_BLEND || startup_retry_is_loss(step);
+}
+
+/* Whether a value of ICO_STARTUP_RETRY names a step that draws with the
+ * fixed-function blend: a loss value or "fixedblend:...".  Inline, as
+ * startup_retry_value_is_loss. */
+static inline bool startup_retry_value_draws_fixed(const char *value)
+{
+    static const char c[] = "fixedblend:";
+    size_t i;
+    if (startup_retry_value_is_loss(value)) {
+        return true;
+    }
+    if (value == NULL) {
+        return false;
+    }
+    for (i = 0; c[i] != '\0' && value[i] == c[i]; i++) {}
+    return c[i] == '\0';
+}
+
+/* Whether a crash's activity note (diag_host.h ico_diag_set_activity) names
+ * a pipeline with a destination read: it starts with "creating pipeline "
+ * and has a " dst N" field with N nonzero (port/render/rd_pipeline.c
+ * activityCreating).  Tolerant: NULL, another note, a missing or
+ * malformed field read as false.  No I/O, no allocation. */
+bool startup_retry_note_has_dst(const char *note);
+
 /* The step after the run described by run ended (run->why): the crash or
  * loss order above, NONE when nothing is left or the platform cannot start
  * the game again.  reason gets one line in plain words (also for NONE: why
  * nothing is left). */
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen);
 
-/* "cache", "d3d12", "lazy", "blend", "backend"; "" for NONE */
+/* "cache", "fixedblend", "d3d12", "lazy", "blend", "backend"; "" for NONE */
 const char *startup_retry_name(StartupRetry step);
 
 /* The variable's value for the run after a crash or loss on backendName

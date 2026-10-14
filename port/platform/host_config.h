@@ -136,8 +136,8 @@ const char *ico_dev_env_name(const char *key);
 const char *ico_dev_env_value(const char *key, const char *value);
 /* The value ico_ini_export sets for key: ico_dev_env_value's, except that
    blend gets "fixed" when retry (the ICO_STARTUP_RETRY value this run was
-   started with, NULL when none) names a device-loss step
-   (startup_retry.h): the restart's fixed-function blend wins over blend=
+   started with, NULL when none) names a device-loss step or the crash
+   order's fixedblend (startup_retry.h): the restart's fixed-function blend wins over blend=
    and over an ICO_RD_BLEND in the environment for that run. The restart
    is never chosen against a player's blending other than fixed, so this
    only ever replaces nothing or "fixed". */
