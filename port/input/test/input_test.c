@@ -805,6 +805,28 @@ static void test_step(void)
     CHECK(v.buttons == 0 && v.lx == 0.0f);
 }
 
+static void test_separate_gamepad_bindings(void)
+{
+    IcoBindings bindings1, bindings2;
+    IcoInputRaw raw1, raw2;
+    IcoVirtualPad v1, v2;
+
+    ico_bindings_defaults(&bindings1);
+    ico_bindings_defaults(&bindings2);
+    blank(&raw1);
+    blank(&raw2);
+    raw1.gamepads = raw2.gamepads = 1;
+    raw1.gp[ICO_GP_SOUTH] = 1.0f;
+    raw1.axis[0] = -1.0f;
+    raw2.gp[ICO_GP_EAST] = 1.0f;
+    raw2.axis[0] = 1.0f;
+    ico_bindings_step(&bindings1, &raw1, &v1);
+    ico_bindings_step(&bindings2, &raw2, &v2);
+
+    CHECK(v1.buttons == ICO_PAD_CROSS && v1.menu_buttons == ICO_PAD_CROSS && v1.lx < -0.99f);
+    CHECK(v2.buttons == ICO_PAD_CIRCLE && v2.menu_buttons == ICO_PAD_CIRCLE && v2.lx > 0.99f);
+}
+
 /* one gamepad source held on its own: the (play, menu) words it gives */
 static void gp_press(IcoBindings *b, int src, unsigned int *play, unsigned int *menu)
 {
@@ -1065,7 +1087,7 @@ static void expect_frame(const unsigned char *got, const unsigned char *want, in
 static void test_libpad(void)
 {
     unsigned char dma[256], d[32];
-    IcoVirtualPad v;
+    IcoVirtualPad v, v2;
     unsigned short hi, lo;
     unsigned char align[6] = {0, 1, 0xFF, 0xFF, 0xFF, 0xFF};
     unsigned char act[6];
@@ -1087,6 +1109,8 @@ static void test_libpad(void)
     ico_input_set_live(1);
     CHECK(scePadGetState(0, 0) == 6 && scePadGetState(1, 0) == 0);
     CHECK(scePadRead(1, 0, d) == 0);
+    ico_input_set_gamepad_present(1, 1);
+    CHECK(scePadGetState(1, 0) == 6);
     /* the DualShock 2 power-up and pad.c's walk to analog */
     CHECK(scePadInfoMode(0, 0, 1, 0) == 4);
     CHECK(scePadInfoMode(0, 0, 2, 0) == 0);
@@ -1124,6 +1148,26 @@ static void test_libpad(void)
     CHECK((unsigned)(((d[2] << 8) | d[3]) ^ 0xFFFF) ==
           (ICO_PAD_CROSS | ICO_PAD_START | ICO_PAD_LEFT));
     CHECK(ico_pad_menu_word(d) == (ICO_PAD_TRIANGLE | ICO_PAD_START | ICO_PAD_LEFT));
+
+    memset(&v2, 0, sizeof(v2));
+    v2.buttons = ICO_PAD_CIRCLE;
+    v2.menu_buttons = ICO_PAD_SQUARE;
+    v2.lx = -1.0f;
+    v2.ly = 0.25f;
+    v2.rx = 0.5f;
+    ico_input_set_vpad_for_port(1, &v2);
+    CHECK(scePadSetMainMode(1, 0, 1, 3) == 1);
+    CHECK(scePadRead(1, 0, d) == 32 && d[1] == 0x73);
+    CHECK(((((unsigned int)d[2] << 8) | d[3]) ^ 0xFFFFu) == ICO_PAD_CIRCLE);
+    CHECK(ico_pad_menu_word(d) == ICO_PAD_SQUARE);
+    CHECK(d[4] == 191 && d[5] == 128 && d[6] == 0 && d[7] == 159);
+    CHECK(scePadRead(0, 0, d) == 32 && d[1] == 0x73);
+    CHECK(((((unsigned int)d[2] << 8) | d[3]) ^ 0xFFFFu) ==
+          (ICO_PAD_CROSS | ICO_PAD_START | ICO_PAD_LEFT));
+    CHECK(d[4] == 128 && d[5] == 255 && d[6] == 255 && d[7] == 0);
+    ico_input_set_gamepad_present(1, 0);
+    CHECK(scePadGetState(1, 0) == 0 && scePadRead(1, 0, d) == 0);
+    ico_input_set_gamepad_present(1, 1);
 
     /* digital mode: id 0x41, sticks centred */
     CHECK(scePadSetMainMode(0, 0, 0, 2) == 1);
@@ -1191,7 +1235,17 @@ static void test_libpad(void)
     scePadSetActDirect(0, 0, act);
     ico_input_rumble_get(&hi, &lo);
     CHECK(hi == 0 && lo == 0);
-    CHECK(scePadSetActDirect(1, 0, act) == 0);
+    CHECK(scePadSetActDirect(1, 0, act) == 1);
+    CHECK(scePadSetActAlign(1, 0, (char *)align) == 1);
+    act[0] = 1;
+    act[1] = 128;
+    CHECK(scePadSetActDirect(1, 0, act) == 1);
+    ico_input_rumble_get_for_port(1, &hi, &lo);
+    CHECK(hi == 0xFFFF && lo == 128 * 257);
+    ico_input_rumble_get(&hi, &lo);
+    CHECK(hi == 0 && lo == 0);
+    act[0] = act[1] = 0;
+    scePadSetActDirect(1, 0, act);
     {
         unsigned char swapped[6] = {1, 0, 0xFF, 0xFF, 0xFF, 0xFF};
         unsigned char both[6] = {200, 1, 0, 0, 0, 0};
@@ -1231,6 +1285,7 @@ int main(void)
     test_mouse_capture();
     test_escape();
     test_pointer();
+    test_separate_gamepad_bindings();
     test_frame();
     test_libpad();
     if (failures != 0) {

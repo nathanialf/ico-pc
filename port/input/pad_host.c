@@ -1,8 +1,8 @@
 /*
  * port/input/pad_host.c
  *
- * libpad for the host build: one DualShock 2 in port 0
- * slot 0 when something feeds it, nothing otherwise.
+ * libpad for the host build: independent DualShock 2s in ports 0 and 1,
+ * slot 0. Port 0 also accepts keyboard and mouse input.
  *
  * Feeds, in priority order: the pad script (port/input/pad_script.h, the
  * headless and test source), then the live virtual pad the binding layer
@@ -62,25 +62,47 @@
 #define PAD_READ_SIZE 32 /* bytes scePadRead fills */
 
 static int s_live;
-static IcoVirtualPad s_vpad;
+static IcoVirtualPad s_vpad[ICO_INPUT_PLAYERS];
+static unsigned int s_gamepad_mask;
 /* the pad's mode: digital until scePadSetMainMode(1) */
-static int s_analog;
-static int s_press;
-static unsigned char s_align[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static unsigned short s_rumble_high, s_rumble_low;
+static int s_analog[ICO_INPUT_PLAYERS];
+static int s_press[ICO_INPUT_PLAYERS];
+static unsigned char s_align[ICO_INPUT_PLAYERS][6] = {{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF},
+                                                      {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
+static unsigned short s_rumble_high[ICO_INPUT_PLAYERS], s_rumble_low[ICO_INPUT_PLAYERS];
 
 void ico_input_set_live(int on)
 {
     s_live = on != 0;
     if (!s_live) {
-        memset(&s_vpad, 0, sizeof(s_vpad));
-        s_rumble_high = s_rumble_low = 0;
+        memset(s_vpad, 0, sizeof(s_vpad));
+        s_gamepad_mask = 0;
+        memset(s_rumble_high, 0, sizeof(s_rumble_high));
+        memset(s_rumble_low, 0, sizeof(s_rumble_low));
     }
 }
 
 void ico_input_set_vpad(const IcoVirtualPad *v)
 {
-    s_vpad = *v;
+    ico_input_set_vpad_for_port(0, v);
+}
+
+void ico_input_set_vpad_for_port(int port, const IcoVirtualPad *v)
+{
+    if ((unsigned int)port < ICO_INPUT_PLAYERS && v != NULL) {
+        s_vpad[port] = *v;
+    }
+}
+
+void ico_input_set_gamepad_present(int port, int present)
+{
+    if ((unsigned int)port < ICO_INPUT_PLAYERS) {
+        if (present) {
+            s_gamepad_mask |= 1u << port;
+        } else {
+            s_gamepad_mask &= ~(1u << port);
+        }
+    }
 }
 
 static unsigned int s_start_sources;
@@ -132,10 +154,15 @@ int ico_input_mirror(void)
 
 void ico_input_frame(IcoPadFrame *out)
 {
-    if (ico_pad_script_active()) {
+    ico_input_frame_for_port(0, out);
+}
+
+void ico_input_frame_for_port(int port, IcoPadFrame *out)
+{
+    if (port == 0 && ico_pad_script_active()) {
         ico_pad_script_frame(out);
-    } else if (s_live) {
-        ico_input_vpad_to_frame(&s_vpad, ico_opt_stick_fix(), ico_opt_mirror(), out);
+    } else if (s_live && (unsigned int)port < ICO_INPUT_PLAYERS) {
+        ico_input_vpad_to_frame(&s_vpad[port], ico_opt_stick_fix(), ico_opt_mirror(), out);
     } else {
         memset(out, 0, sizeof(*out));
         out->lx = out->ly = out->rx = out->ry = ICO_PAD_STICK_CENTRE;
@@ -160,22 +187,36 @@ void ico_pad_rumble_map(const unsigned char align[6], const unsigned char act[6]
 
 void ico_input_rumble_get(unsigned short *high_freq, unsigned short *low_freq)
 {
-    *high_freq = s_rumble_high;
-    *low_freq = s_rumble_low;
+    ico_input_rumble_get_for_port(0, high_freq, low_freq);
+}
+
+void ico_input_rumble_get_for_port(int port, unsigned short *high_freq, unsigned short *low_freq)
+{
+    if ((unsigned int)port < ICO_INPUT_PLAYERS) {
+        *high_freq = s_rumble_high[port];
+        *low_freq = s_rumble_low[port];
+    } else {
+        *high_freq = *low_freq = 0;
+    }
 }
 
 static int connected(int port, int slot)
 {
-    return port == 0 && slot == 0 && (ico_pad_script_active() || s_live);
+    if (slot != 0 || (unsigned int)port >= ICO_INPUT_PLAYERS) {
+        return 0;
+    }
+    return (port == 0 && ico_pad_script_active()) ||
+           (s_live && (port == 0 || (s_gamepad_mask & (1u << port)) != 0));
 }
 
 int scePadInit(int a0)
 {
     (void)a0;
-    s_analog = 0;
-    s_press = 0;
+    memset(s_analog, 0, sizeof(s_analog));
+    memset(s_press, 0, sizeof(s_press));
     memset(s_align, 0xFF, sizeof(s_align));
-    s_rumble_high = s_rumble_low = 0;
+    memset(s_rumble_high, 0, sizeof(s_rumble_high));
+    memset(s_rumble_low, 0, sizeof(s_rumble_low));
     return 1;
 }
 
@@ -245,26 +286,29 @@ int scePadRead(int port, int slot, void *data)
         }
         return 0;
     }
-    ico_input_frame(&f);
+    ico_input_frame_for_port(port, &f);
     /* what this tick read, for the pad recording (input_record.h) */
-    ico_input_record_sample(ico_pad_script_tick(), &f);
+    if (port == 0) {
+        ico_input_record_sample(ico_pad_script_tick(), &f);
+    }
     if (d != NULL) {
         unsigned int raw = ~f.buttons & 0xFFFFu;
 
         memset(d, 0, PAD_READ_SIZE);
         d[0] = 0x00;
-        d[1] = s_analog ? (s_press ? 0x79 : 0x73) : 0x41;
+        d[1] = s_analog[port] ? (s_press[port] ? 0x79 : 0x73) : 0x41;
         d[2] = (unsigned char)(raw >> 8);
         d[3] = (unsigned char)raw;
         {
-            const unsigned int menu = ico_pad_script_active() ? f.buttons : s_vpad.menu_buttons;
+            const unsigned int menu =
+                port == 0 && ico_pad_script_active() ? f.buttons : s_vpad[port].menu_buttons;
             const unsigned int mraw = ~menu & 0xFFFFu;
 
             d[20] = (unsigned char)(mraw >> 8);
             d[21] = (unsigned char)mraw;
         }
         d[4] = d[5] = d[6] = d[7] = ICO_PAD_STICK_CENTRE;
-        if (s_analog) {
+        if (s_analog[port]) {
             static const unsigned int order[12] = {ICO_PAD_RIGHT, ICO_PAD_LEFT,     ICO_PAD_UP,
                                                    ICO_PAD_DOWN,  ICO_PAD_TRIANGLE, ICO_PAD_CIRCLE,
                                                    ICO_PAD_CROSS, ICO_PAD_SQUARE,   ICO_PAD_L1,
@@ -275,7 +319,7 @@ int scePadRead(int port, int slot, void *data)
             d[5] = f.ry;
             d[6] = f.lx;
             d[7] = f.ly;
-            if (s_press) {
+            if (s_press[port]) {
                 for (i = 0; i < 12; i++) {
                     d[8 + i] = (f.buttons & order[i]) != 0 ? 0xFF : 0;
                 }
@@ -299,7 +343,7 @@ int scePadInfoMode(int port, int slot, int term, int index)
     }
     switch (term) {
     case PAD_INFO_CURID:
-        return s_analog ? PAD_ID_ANALOG : PAD_ID_DIGITAL;
+        return s_analog[port] ? PAD_ID_ANALOG : PAD_ID_DIGITAL;
     case PAD_INFO_CUREXID:
     case PAD_INFO_CUREXOFFS:
         return 0; /* no extended mode */
@@ -336,7 +380,7 @@ int scePadEnterPressMode(int port, int slot)
     if (!connected(port, slot)) {
         return 0;
     }
-    s_press = 1;
+    s_press[port] = 1;
     return 1;
 }
 
@@ -355,7 +399,7 @@ int scePadSetMainMode(int port, int slot, int mode, int option)
     if (!connected(port, slot)) {
         return 0;
     }
-    s_analog = mode == 1;
+    s_analog[port] = mode == 1;
     return 1;
 }
 
@@ -365,7 +409,7 @@ int scePadSetActAlign(int port, int slot, char *act)
         return 0;
     }
     if (act != NULL) {
-        memcpy(s_align, act, sizeof(s_align));
+        memcpy(s_align[port], act, sizeof(s_align[port]));
     }
     return 1;
 }
@@ -376,7 +420,7 @@ int scePadSetActDirect(int port, int slot, unsigned char *act)
         return 0;
     }
     if (act != NULL && !ico_pad_script_active()) {
-        ico_pad_rumble_map(s_align, act, &s_rumble_high, &s_rumble_low);
+        ico_pad_rumble_map(s_align[port], act, &s_rumble_high[port], &s_rumble_low[port]);
     }
     return 1;
 }

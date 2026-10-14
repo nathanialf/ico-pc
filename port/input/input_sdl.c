@@ -27,6 +27,7 @@ static void ico_host_vibrate(int amplitude, int ms)
 #endif
 
 #define MAX_PADS 8
+#define PAD_ID_TEXT 256
 #define RUMBLE_MS 250
 #define RUMBLE_REFRESH 8 /* vsyncs between re-issues of a running rumble */
 
@@ -34,18 +35,31 @@ static void ico_host_vibrate(int amplitude, int ms)
    edits in place */
 #define s_bind (*ico_input_live_bindings())
 static IcoInputRaw s_raw;
+/* SDL's open-pad slots are assigned once per connection and stay attached to
+    their joystick IDs until removal; slot 0 is Ico, slot 1 is Yorda. */
+static IcoInputRaw s_pad_raw[MAX_PADS];
 /* the last snapshot's gamepad sources, for the press edges the remap
    screen's capture reads (ico_input_note_press) */
 static unsigned char s_gp_down[ICO_GP_COUNT];
 static SDL_JoystickID s_pad_id[MAX_PADS];
 static SDL_Gamepad *s_pad[MAX_PADS];
+
+typedef struct PadIdentity {
+    SDL_GUID guid;
+    char serial[PAD_ID_TEXT];
+    char path[PAD_ID_TEXT];
+    int valid;
+} PadIdentity;
+
+static PadIdentity s_pad_identity[MAX_PADS];
 static unsigned char s_sdl_to_key[SDL_SCANCODE_COUNT];
 static int s_capture; /* ICO_CAPTURE_* (mouse_look.h) */
 /* Escape or Android's Back, and the button it holds (ico_input_escape) */
 static IcoEscapeLatch s_escape;
 static float s_acc_dx, s_acc_dy;
-static unsigned short s_last_high, s_last_low;
-static int s_rumble_age;
+static unsigned short s_last_high[MAX_PADS], s_last_low[MAX_PADS];
+static int s_rumble_age[MAX_PADS];
+static unsigned char s_rumble_took[MAX_PADS];
 static int s_phone_vibrating; /* the phone, not a controller, was last sent a rumble */
 static void phone_vibrate_stop(void);
 static int s_ready;
@@ -72,25 +86,112 @@ static int s_safeX, s_safeY, s_safeW, s_safeH; /* s_safeW 0: the whole output */
 static IcoTouchEnv s_touchEnv;                 /* zero: unknown density, no fold */
 static IcoTouchOverlay s_touchSnap;
 
+static void pad_identity_read(PadIdentity *identity, SDL_JoystickID id, SDL_Gamepad *pad)
+{
+    const char *serial = SDL_GetGamepadSerial(pad);
+    const char *path = SDL_GetGamepadPath(pad);
+
+    memset(identity, 0, sizeof(*identity));
+    identity->guid = SDL_GetGamepadGUIDForID(id);
+    if (serial != NULL) {
+        SDL_strlcpy(identity->serial, serial, sizeof(identity->serial));
+    }
+    if (path != NULL) {
+        SDL_strlcpy(identity->path, path, sizeof(identity->path));
+    }
+    identity->valid = 1;
+}
+
+static int identity_slot(const PadIdentity *identity, int first, int end)
+{
+    int guid_slot = -1;
+    int guid_matches = 0;
+    int i;
+
+    for (i = first; i < end; i++) {
+        const PadIdentity *known = &s_pad_identity[i];
+
+        if (s_pad[i] != NULL || !known->valid) {
+            continue;
+        }
+        if (identity->serial[0] != '\0' && known->serial[0] != '\0') {
+            if (strcmp(identity->serial, known->serial) == 0) {
+                return i;
+            }
+            continue;
+        }
+        if (identity->path[0] != '\0' && known->path[0] != '\0') {
+            if (strcmp(identity->path, known->path) == 0) {
+                return i;
+            }
+            continue;
+        }
+        if (memcmp(&identity->guid, &known->guid, sizeof(identity->guid)) == 0) {
+            guid_slot = i;
+            guid_matches++;
+        }
+    }
+    return guid_matches == 1 ? guid_slot : -1;
+}
+
+static int pad_slot(const PadIdentity *identity)
+{
+    int slot, i;
+
+    slot = identity_slot(identity, 0, ICO_INPUT_PLAYERS);
+    if (slot >= 0) {
+        return slot;
+    }
+    for (i = 0; i < ICO_INPUT_PLAYERS; i++) {
+        if (s_pad[i] == NULL && !s_pad_identity[i].valid) {
+            return i;
+        }
+    }
+    slot = identity_slot(identity, ICO_INPUT_PLAYERS, MAX_PADS);
+    if (slot >= 0) {
+        return slot;
+    }
+    for (i = ICO_INPUT_PLAYERS; i < MAX_PADS; i++) {
+        if (s_pad[i] == NULL && !s_pad_identity[i].valid) {
+            return i;
+        }
+    }
+    for (i = ICO_INPUT_PLAYERS; i < MAX_PADS; i++) {
+        if (s_pad[i] == NULL) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 static void open_pad(SDL_JoystickID id)
 {
-    int i;
+    SDL_Gamepad *pad;
+    PadIdentity identity;
+    int slot, i;
 
     for (i = 0; i < MAX_PADS; i++) {
         if (s_pad[i] != NULL && s_pad_id[i] == id) {
             return;
         }
     }
-    for (i = 0; i < MAX_PADS; i++) {
-        if (s_pad[i] == NULL) {
-            s_pad[i] = SDL_OpenGamepad(id);
-            if (s_pad[i] != NULL) {
-                s_pad_id[i] = id;
-                fprintf(stderr, "input: gamepad \"%s\"\n", SDL_GetGamepadName(s_pad[i]));
-            }
-            return;
-        }
+    pad = SDL_OpenGamepad(id);
+    if (pad == NULL) {
+        return;
     }
+    pad_identity_read(&identity, id, pad);
+    slot = pad_slot(&identity);
+    if (slot < 0) {
+        SDL_CloseGamepad(pad);
+        return;
+    }
+    s_pad[slot] = pad;
+    s_pad_id[slot] = id;
+    s_pad_identity[slot] = identity;
+    s_last_high[slot] = s_last_low[slot] = 0;
+    s_rumble_age[slot] = 0;
+    s_rumble_took[slot] = 0;
+    fprintf(stderr, "input: gamepad slot %d \"%s\"\n", slot, SDL_GetGamepadName(s_pad[slot]));
 }
 
 static int open_pads(void)
@@ -146,9 +247,13 @@ static void close_pad(SDL_JoystickID id)
 
     for (i = 0; i < MAX_PADS; i++) {
         if (s_pad[i] != NULL && s_pad_id[i] == id) {
+            fprintf(stderr, "input: gamepad slot %d \"%s\" removed\n", i,
+                    SDL_GetGamepadName(s_pad[i]));
             SDL_CloseGamepad(s_pad[i]);
             s_pad[i] = NULL;
-            fprintf(stderr, "input: gamepad removed\n");
+            s_last_high[i] = s_last_low[i] = 0;
+            s_rumble_age[i] = 0;
+            s_rumble_took[i] = 0;
         }
     }
 }
@@ -450,30 +555,37 @@ static void sample_pads(void)
 
     memset(s_raw.gp, 0, sizeof(s_raw.gp));
     memset(s_raw.axis, 0, sizeof(s_raw.axis));
+    memset(s_pad_raw, 0, sizeof(s_pad_raw));
     s_raw.gamepads = 0;
     for (i = 0; i < MAX_PADS; i++) {
         SDL_Gamepad *g = s_pad[i];
+        IcoInputRaw *raw = &s_pad_raw[i];
         float v;
 
         if (g == NULL) {
             continue;
         }
         s_raw.gamepads++;
+        raw->gamepads = 1;
         for (j = 1; j < ICO_GP_BUTTONS; j++) {
             if (btn[j] != SDL_GAMEPAD_BUTTON_INVALID && SDL_GetGamepadButton(g, btn[j])) {
+                raw->gp[j] = 1.0f;
                 s_raw.gp[j] = 1.0f;
             }
         }
         v = axis_f(g, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
+        raw->gp[ICO_GP_LTRIGGER] = v;
         if (v > s_raw.gp[ICO_GP_LTRIGGER]) {
             s_raw.gp[ICO_GP_LTRIGGER] = v;
         }
         v = axis_f(g, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+        raw->gp[ICO_GP_RTRIGGER] = v;
         if (v > s_raw.gp[ICO_GP_RTRIGGER]) {
             s_raw.gp[ICO_GP_RTRIGGER] = v;
         }
         for (j = 0; j < 4; j++) {
             v = axis_f(g, ax[j]);
+            raw->axis[j] = v;
             if (v * v > s_raw.axis[j] * s_raw.axis[j]) {
                 s_raw.axis[j] = v;
             }
@@ -492,39 +604,51 @@ static void phone_vibrate_stop(void)
 
 static void send_rumble(void)
 {
-    unsigned short high, low;
-    int i, taken = 0;
+    unsigned short phone_high = 0, phone_low = 0;
+    int i, phone_taken = 0;
 
-    if (s_bind.rumble) {
-        ico_input_rumble_get(&high, &low);
-    } else {
-        high = low = 0;
-    }
-    s_rumble_age++;
-    if (high == s_last_high && low == s_last_low &&
-        !((high != 0 || low != 0) && s_rumble_age >= RUMBLE_REFRESH)) {
-        return;
-    }
-    s_rumble_age = 0;
-    s_last_high = high;
-    s_last_low = low;
     for (i = 0; i < MAX_PADS; i++) {
-        if (s_pad[i] != NULL &&
-            SDL_RumbleGamepad(s_pad[i], low, high, high != 0 || low != 0 ? RUMBLE_MS : 0)) {
-            taken = 1;
+        const int port = i < ICO_INPUT_PLAYERS ? i : 0;
+        unsigned short high, low;
+        int changed;
+
+        if (s_bind.rumble) {
+            ico_input_rumble_get_for_port(port, &high, &low);
+        } else {
+            high = low = 0;
+        }
+        s_rumble_age[i]++;
+        changed = high != s_last_high[i] || low != s_last_low[i] ||
+                  ((high != 0 || low != 0) && s_rumble_age[i] >= RUMBLE_REFRESH);
+        if (changed) {
+            s_rumble_age[i] = 0;
+            s_last_high[i] = high;
+            s_last_low[i] = low;
+            s_rumble_took[i] =
+                s_pad[i] != NULL &&
+                SDL_RumbleGamepad(s_pad[i], low, high, high != 0 || low != 0 ? RUMBLE_MS : 0);
+        } else if (s_pad[i] == NULL) {
+            s_rumble_took[i] = 0;
+        }
+        if (port == 0 && s_rumble_took[i]) {
+            phone_taken = 1;
+        }
+        if (i == 0) {
+            phone_high = high;
+            phone_low = low;
         }
     }
     /* no controller took it: the phone's own vibrator does (the same values
        the game's vibration setting and [input] rumble already produced, so
        Off in either gives zero here). Called on SDL's main thread, which
        is where the host loop runs this. */
-    if ((high != 0 || low != 0) && !taken) {
+    if ((phone_high != 0 || phone_low != 0) && !phone_taken) {
         /* one vibrator for two motors: the stronger of the two, the small
            motor (on or off, pad_host.c) counting as full strength and the
            large one by its level; at least 1 so a weak large motor alone
            still vibrates */
-        const int small_amp = high != 0 ? 255 : 0;
-        const int large_amp = low / 257;
+        const int small_amp = phone_high != 0 ? 255 : 0;
+        const int large_amp = phone_low / 257;
         int amp = small_amp > large_amp ? small_amp : large_amp;
 
         if (amp < 1) {
@@ -597,13 +721,16 @@ void ico_input_escape(int down, const IcoCaptureState *s)
 
 void ico_input_sdl_update(void)
 {
-    IcoVirtualPad v;
+    IcoVirtualPad v, v2;
+    IcoInputRaw player_raw, player2_raw;
+    IcoBindings player2_bindings;
     unsigned int start_src = 0;
 
     if (!s_ready) {
         return;
     }
     sample_pads();
+    ico_input_set_gamepad_present(1, s_pad[1] != NULL);
     note_pad_presses();
     s_raw.mouse_dx = s_acc_dx;
     s_raw.mouse_dy = s_acc_dy;
@@ -626,10 +753,22 @@ void ico_input_sdl_update(void)
         if (s_left_menu || (pointer_free() && ico_pointer_menu())) {
             s_raw.mouse[1] = 0;
         }
-        ico_bindings_step(&s_bind, &s_raw, &v);
+        player_raw = s_raw;
+        memcpy(player_raw.gp, s_pad_raw[0].gp, sizeof(player_raw.gp));
+        memcpy(player_raw.axis, s_pad_raw[0].axis, sizeof(player_raw.axis));
+        ico_bindings_step(&s_bind, &player_raw, &v);
         start_src = ico_bindings_start_sources(&s_bind, &s_raw);
         s_raw.mouse[1] = left;
     }
+    memset(&player2_raw, 0, sizeof(player2_raw));
+    memcpy(player2_raw.gp, s_pad_raw[1].gp, sizeof(player2_raw.gp));
+    memcpy(player2_raw.axis, s_pad_raw[1].axis, sizeof(player2_raw.axis));
+    player2_raw.gamepads = s_pad_raw[1].gamepads;
+    player2_raw.dt = s_raw.dt;
+    player2_bindings = s_bind;
+    player2_bindings.keyboard = 0;
+    player2_bindings.mouse_on = 0;
+    ico_bindings_step(&player2_bindings, &player2_raw, &v2);
     /* Escape (Back on Android): Start or Triangle, outside the bindings */
     {
         const unsigned int esc = ico_escape_take(&s_escape);
@@ -646,6 +785,7 @@ void ico_input_sdl_update(void)
     }
     ico_input_set_start_sources(start_src);
     ico_input_set_vpad(&v);
+    ico_input_set_vpad_for_port(1, &v2);
     send_rumble();
 }
 
