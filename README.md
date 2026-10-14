@@ -228,6 +228,7 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
   ([GBAtemp thread](https://gbatemp.net/threads/ps2-ico-pal-sces-50760-in-progress.671638/)).
 - katsifolis, for the iOS support (through LiveContainer).
 - braito4, for the Apple-silicon macOS app.
+- neetgon, for the second player's gamepad.
 
 ## Legal and licence
 
