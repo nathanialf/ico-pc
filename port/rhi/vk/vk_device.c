@@ -696,10 +696,12 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
 }
 
-/* "; driver NVIDIA 581.57, version 581.57" for the adapter line: the
- * driver's name and its own version text (VK_KHR_driver_properties, core in
- * Vulkan 1.2, which every device the renderer takes has), and driverVersion
- * decoded the vendor's way (rhi_driver_version.h) */
+/* "; device 10de:1b80; driver NVIDIA 581.57, version 581.57" for the
+ * adapter line: the PCI vendor and device ids (the form d3d12_device.c's
+ * unnamed adapter takes), the driver's name and its own version text
+ * (VK_KHR_driver_properties, core in Vulkan 1.2, which every device the
+ * renderer takes has), and driverVersion decoded the vendor's way
+ * (rhi_driver_version.h) */
 static char s_driverText[600];
 
 static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDeviceProperties *p)
@@ -716,7 +718,8 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     dp.driverName[VK_MAX_DRIVER_NAME_SIZE - 1] = '\0';
     dp.driverInfo[VK_MAX_DRIVER_INFO_SIZE - 1] = '\0';
     rhi_driver_version_text(p->vendorID, (uint32_t)dp.driverID, p->driverVersion, ver, sizeof ver);
-    snprintf(s_driverText, sizeof s_driverText, "; driver %s%s%s, version %s",
+    snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s",
+             (unsigned)p->vendorID, (unsigned)p->deviceID,
              dp.driverName[0] ? dp.driverName : "(unnamed)", dp.driverInfo[0] ? " " : "",
              dp.driverInfo, ver);
 }

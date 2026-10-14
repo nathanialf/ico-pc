@@ -33,10 +33,11 @@ not take you back. It is off unless you turn it on.
 **The window disappeared, then came back. Why?**
 
 Some graphics drivers crash while the game gets its graphics ready. On
-Windows, Linux and Mac the game notices and starts itself again, up to three
+Windows, Linux and Mac the game notices and starts itself again, up to four
 times, each time trying a gentler way: first without the graphics it saved
-last time, then (on Windows) with Direct3D 12, then getting the graphics
-ready as you play instead of all at once. You need do nothing, and your
+last time, then with simpler blending (when the crash was in the way the
+game draws see-through effects), then (on Windows) with Direct3D 12, then
+getting the graphics ready as you play instead of all at once. You need do nothing, and your
 settings are left as they are. If it still cannot start, Windows shows a
 message that the graphics driver crashed; on Linux and Mac the game closes
 and the log says why. On an Android phone a message says the graphics

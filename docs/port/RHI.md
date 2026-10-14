@@ -199,7 +199,8 @@ and loads `d3d12.dll` and `dxgi.dll` at run time (`port/rhi/CMakeLists.txt`, hea
 the extension), timeline semaphores, the swapchain extension on a window, a graphics queue that can
 present, and RGBA8, RGBA8 UINT, R8, D32F and D32F_S8 or D24S8 formats. Devices score discrete 1000,
 integrated 500, virtual 200, CPU 100, plus 10 for core 1.3 and 5 for dual-source blending
-(`vkr_rate_device`). The adapter line gives the driver's name and version, decoded by
+(`vkr_rate_device`). The adapter line gives the PCI vendor and device ids (`device 10de:1b80`) and
+the driver's name and version, decoded by
 `rhi_driver_version_text`: NVIDIA's own driver as major 10 bits, minor 8, a third part 8 and a
 fourth 6, Intel's Windows driver as major 18 bits and minor 14, every other driver in the Vulkan
 version packing; `VkDriverId` decides, and the vendor id alone when it is 0

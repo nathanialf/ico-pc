@@ -372,7 +372,12 @@ Windows, Linux and macOS the handler then starts the program again at once, with
 `ICO_STARTUP_RETRY=<step>:<backend>` in the new run's environment; nothing is written to the user
 folder or the settings. The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
-tries again), `d3d12` (a build with the Direct3D 12 backend whose player named no backend), `lazy`
+tries again), `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
+pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
+fixed-function blend, `ICO_RD_BLEND=fixed` from `ico_ini_export` as for the loss steps, which builds
+no such pipeline; skipped when the player chose the blending with `blend=` or `ICO_RD_BLEND`;
+`startup_retry_note_has_dst` reads the note), `d3d12` (a build with the Direct3D 12 backend whose
+player named no backend; its own blending, not the fixed one), `lazy`
 (each pipeline is built when a frame first needs it), then none: the crash ends as any other, with
 the driver-crash text in the crash box where the platform shows one (`port/platform/startup_retry.h`
 (`startup_retry_next`); `port/platform/diag_host.c` (`driver_crash_plan`, `driver_box_text`)).

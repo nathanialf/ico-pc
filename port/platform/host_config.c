@@ -543,11 +543,12 @@ const char *ico_dev_env_value(const char *key, const char *value)
 
 const char *ico_dev_env_export_value(const char *key, const char *value, const char *retry)
 {
-    /* a run started again after the graphics card stopped responding draws
-       with the fixed-function blend (startup_retry.h, the loss steps); the
-       step is not taken against a player's blend= other than fixed, so this
-       never overrides a choice */
-    if (key != NULL && strcmp(key, "blend") == 0 && startup_retry_value_is_loss(retry)) {
+    /* a run started again after the graphics card stopped responding, or
+       after a driver crash in a pipeline that read the screen for the exact
+       blend, draws with the fixed-function blend (startup_retry.h, the loss
+       steps and fixedblend); the step is not taken against a player's
+       blend= other than fixed, so this never overrides a choice */
+    if (key != NULL && strcmp(key, "blend") == 0 && startup_retry_value_draws_fixed(retry)) {
         return "fixed";
     }
     return ico_dev_env_value(key, value);
@@ -699,8 +700,9 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
             }
         }
     }
-    /* a run started again after the graphics card stopped responding
-       (ICO_STARTUP_RETRY, startup_retry.h) draws with the fixed-function
+    /* a run started again after the graphics card stopped responding or
+       at the fixedblend crash step (ICO_STARTUP_RETRY, startup_retry.h)
+       draws with the fixed-function
        blend: ICO_RD_BLEND=fixed over the ini's blend= and the environment,
        with or without an ini (ico_dev_env_export_value) */
     {

@@ -1297,7 +1297,9 @@ static const char driver_box_text[] =
 /* A crash while the note says a pipeline was being built: the step the
    next run takes (startup_retry.h), logged; relaunch_value set when there
    is one and this platform can start the game again. The cache step
-   deletes the pipeline cache file here. */
+   deletes the pipeline cache file here. The note says whether the
+   pipeline read the screen for the exact blend (its dst field), which
+   gives the fixedblend step. */
 static void driver_crash_plan(void)
 {
     char reason[200];
@@ -1309,6 +1311,7 @@ static void driver_crash_plan(void)
         .haveD3d12 = retry_have_d3d12 != 0,
         .backendExplicit = retry_explicit != 0,
         .blendExplicit = retry_blend_explicit != 0,
+        .dstPipeline = startup_retry_note_has_dst(activity),
         .backendName = retry_backend,
     };
     const StartupRetry next = startup_retry_next(&run, reason, sizeof reason);
