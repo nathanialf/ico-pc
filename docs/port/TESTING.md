@@ -213,7 +213,7 @@ program under an environment switch ([Environment switches](#environment-switche
   120 Hz and on a display that drifts from its report (`pace_loop`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
-  synthetic display (`pace_policy`).
+  synthetic display, and the audio skip (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
