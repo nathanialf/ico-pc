@@ -464,7 +464,8 @@ driver's init (0x1E) and reset forget the cache (`ico_audio_gain_forget`).
 steps and applied by `ico_audio_scale` with integer rounding and clamping to the SDL device's
 blocks only; a WAV dump stays unscaled (`port/audio/volume.c`; `port/audio/audio_host.h`
 (`ico_audio_set_volume`)). The
-value is read on every push, so a change from the Settings menu is heard within two vsyncs.
+value is read on every push, so a change from the Settings menu is heard once the queued audio
+(the cushion below and a vsync) has played.
 
 ### Mirror mode
 
@@ -507,17 +508,30 @@ Hz; at 59.94 Hz 800.8 on average, spread exactly over every five vsyncs as 800 8
   device needs it, with a device buffer of 480 frames (10 ms,
   `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`). The simulation thread pushes one vsync of frames per
   vsync; nothing else is shared with SDL's audio thread.
-- The stream keeps about two vsyncs queued. When the queue is below a quarter of a vsync (a
-  stall), one vsync of silence goes in ahead of the block to rebuild the cushion; with more than
-  four vsyncs queued (the simulation ran ahead) the block is dropped. Both are counted and logged
-  at the close: `audio: SDL output closed (<n> refills after a dry queue, <n> blocks dropped)`
+- The stream keeps a cushion of queued audio. It starts at two vsyncs (two pushed blocks: 33 ms
+  at 59.94 Hz, 40 ms at 50 Hz), and the open and every resume prime the stream with the current
+  cushion of silence (`cushion_frames`, `open_stream`, `ico_audio_sdl_pause`). When the queue is
+  below a quarter of a vsync before a push (a stall: the simulation fell behind real time by more
+  than the cushion) the cushion doubles, up to 120 ms (`CUSHION_MAX_FRAMES`), and silence fills
+  the queue to it ahead of the block; the first eight such refills each log `audio: low queue <n>
+  frames, <ms> ms between pushes; refilled to a <ms> ms cushion`. After 20 s of pushed audio
+  without a dry queue (`CUSHION_QUIET_FRAMES`) the cushion halves, down to two vsyncs again, and
+  the trim below plays the surplus out. With more than the cushion plus four vsyncs queued (the
+  simulation ran ahead; never more than 250 ms, `QUEUE_CEILING_FRAMES`) the block is dropped
+  (`queue_limit_frames`). The close logs the cushion and the counters: `audio: SDL output closed
+  (cushion <ms> ms, largest <ms> ms; <n> refills after a dry queue, <n> blocks dropped)`
   (`ico_audio_sdl_push`, `ico_audio_sdl_close`).
+- The window reads the queue once per vsync it paces (`ico_audio_sdl_active`,
+  `ico_audio_sdl_queued_ms`, `ico_audio_sdl_cushion_ms`): with less than half the cushion queued
+  the audio is about to run dry, one of the two conditions under which the timer path leaves a
+  late new frame unpresented ([DISPLAY.md](DISPLAY.md#pacing); `port/platform/window_host.c`
+  (`pace`)).
 - Under the window's [vsync lock](ARCHITECTURE.md#terms) the display is the simulation's clock, so
   the simulation runs a little off 59.94 Hz. The window measures that rate every 10 s and hands the
   ratio to `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`pace_log`); the nominal
 ratio at lock start in `pace_locked`), and the stream plays at it
-  (`SDL_SetAudioStreamFrequencyRatio`); ratios outside 0.5..2 are taken as 1. While more than two
-  vsyncs wait before a push, the stream plays `ICO_AUDIO_TRIM` (0.25 %) faster on top, which drains
+  (`SDL_SetAudioStreamFrequencyRatio`); ratios outside 0.5..2 are taken as 1. While more than the
+  cushion waits before a push, the stream plays `ICO_AUDIO_TRIM` (0.25 %) faster on top, which drains
   latency the 10 s measurement left behind without an audible pitch change (`port/audio/volume.c`
   (`ico_audio_play_ratio`); `port/audio/audio_host.h` (`ICO_AUDIO_TRIM`)).
 - The device is the one `[audio] device` names, or SDL's default (which follows the system's)
@@ -528,10 +542,10 @@ ratio at lock start in `pace_locked`), and the stream plays at it
   `port/platform/window_host.c`) the stream moves to the default and the setting stays
   (`ico_audio_sdl_device_removed`).
 - `ico_audio_sdl_pause` stops the device while the app is in the background (Android) and clears
-  the queue on resume, so no stale audio plays.
+  the queue on resume, so no stale audio plays; the resume then primes the current cushion.
 
-Without SDL output (the headless build) the device functions are stubs: no devices, reopen fails
-(`port/audio/audio_host.c`).
+Without SDL output (the headless build) the device functions are stubs: no devices, reopen fails,
+no stream (`ico_audio_sdl_active` 0, `ico_audio_sdl_queued_ms` -1) (`port/audio/audio_host.c`).
 
 ## The WAV dump
 
@@ -567,7 +581,8 @@ port"):
 | `adpcm` (`adpcm_test.c`) | ADPCM block decoding against vectors worked by hand from the format's formula |
 | `spu2` (`spu2_test.c`) | the SPU2 and the libsd front end: the Gaussian table, ADSR lengths against psx-spx's closed forms, a sine at several pitches, loop flags and ENDX, mixing, sweeps, core 0 into core 1, the AutoDMA input, noise, timed writes, transfers and IRQ, the reverb impulse, a determinism checksum |
 | `spu2_render_crc` (`spu2_bench --check`) | five 10 s scenes against golden CRCs of everything observable from the frame-by-frame renderer, and 24 random 2 s scenes rendered both chunked and frame by frame |
-| `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling |
+| `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling; the trim's play ratio against a target |
+| `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c` on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
 | `mix_gain` (`mix_gain_test.c`) | the gains: identity at 100 %, scaling, sweep words, the stream categories, the cache and its re-issue |
 | `adpcm_slots` (`adpcm_slots_test.c`) | the game's `adpcm_init.c` with the driver stubbed: a stream already fading out gives its slot up at once when both stream slots are taken |
 | `sndn2` (`sndn2_test.c`) | the driver and the sequencer against the IRX's code: transport and reply pages, packets as register effects, transfers, the pitch arithmetic and table (the disc's when `ICO_DISC_IMAGE` is there), an ADPCM stream through the half-fill scheme, the PCM mixer, a sound effect through the sequencer's pointer seams |

@@ -28,9 +28,9 @@ int ico_audio_volume_q8(void)
     return volume_q8;
 }
 
-double ico_audio_play_ratio(double rateRatio, int queuedBytes, int vsyncBytes)
+double ico_audio_play_ratio(double rateRatio, int queuedBytes, int targetBytes)
 {
-    if (vsyncBytes > 0 && queuedBytes > 2 * vsyncBytes) {
+    if (targetBytes > 0 && queuedBytes > targetBytes) {
         return rateRatio * ICO_AUDIO_TRIM;
     }
     return rateRatio;

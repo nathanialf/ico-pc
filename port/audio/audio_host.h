@@ -55,14 +55,14 @@ int ico_audio_volume_q8(void);
 void ico_audio_scale(int16_t *dst, const int16_t *src, int count, int q8);
 /* The ratio the output plays at (volume.c, pure): the window's rate ratio
    (ico_audio_set_rate_ratio), and ICO_AUDIO_TRIM faster while more than
-   two vsyncs of audio wait before a vsync's block is queued.  The rate
+   targetBytes of audio wait before a vsync's block is queued. The rate
    ratio is measured over 10 s, so what the simulation produced ahead of it
    (a 60.00 Hz screen: 0.1 % for the first 10 s, a vsync's worth over a
    long session of measuring errors) would stay queued as latency until
-   the four-vsync drop cut a block; the trim plays it out (a quarter of a
+   the queue limit cut a block; the trim plays it out (a quarter of a
    percent: a vsync in about 7 s, a pitch change no one hears). */
 #define ICO_AUDIO_TRIM 1.0025
-double ico_audio_play_ratio(double rateRatio, int queuedBytes, int vsyncBytes);
+double ico_audio_play_ratio(double rateRatio, int queuedBytes, int targetBytes);
 
 /* Close the WAV and the device (also an atexit handler). */
 void ico_audio_host_shutdown(void);
@@ -83,8 +83,18 @@ uint64_t ico_wav_close(IcoWav *w);
    device ICO_AUDIO_DEVICE names ([audio] device), or the default one when
    that is empty or names no device (logged once). */
 int ico_audio_sdl_open(void);
-/* Queue one vsync of frames, keeping about two vsyncs buffered. */
+/* Queue one vsync of frames, keeping a cushion queued: two vsyncs, doubled
+   after each dry queue up to 120 ms, halved again after 20 s without one
+   (out_sdl.c). */
 void ico_audio_sdl_push(const int16_t *frames, int count);
+/* Whether an output stream is open (0 without the SDL output). */
+int ico_audio_sdl_active(void);
+/* The audio queued on the stream in milliseconds, -1 when no stream is
+   open; and the cushion the queue is kept at, 0 when none is.  The window
+   (pace) reads them: below half the cushion the audio is about to run
+   dry. */
+int ico_audio_sdl_queued_ms(void);
+int ico_audio_sdl_cushion_ms(void);
 void ico_audio_sdl_close(void);
 
 /* The output device ([audio] device).
