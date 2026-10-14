@@ -106,6 +106,11 @@ void ico_diag_present_leave(void);
    without any Main tick; later_s: seconds without a new Main tick or new
    progress after the first tick. 0 turns a limit off. */
 void ico_diag_start(unsigned int first_s, unsigned int later_s);
+/* Starts the same thread earlier with both limits off (the heartbeat
+   only), so a crash before ico_diag_start still has it (Android: the crash
+   handler's log flush and box go through it). ico_diag_start then sets the
+   limits and counts them from its own call. */
+void ico_diag_start_reporter(void);
 /* 1 while the game is meant to stand still (Android: the app in the
    background), 0 when it runs again: while paused neither watchdog limit
    counts and the heartbeat is quiet. Any thread. */
@@ -138,6 +143,43 @@ void ico_diag_set_activity(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
 void ico_diag_clear_activity(void);
 /* The note ("" when none; tests). */
 const char *ico_diag_activity(void);
+/* The start-up activity file (logs/startup-activity.txt; issue 93): while
+   it records, each note (ico_diag_set_activity) replaces the file's text
+   with one open, write and close, so a start that is ended without a crash
+   report (the system ends the process, the driver exits it) still says on
+   the next start what it was doing.
+   ico_diag_startup_activity_begin, once before the renderer starts: keeps
+   path for the writes, reads what the previous run left there and deletes
+   the file. A non-empty text is logged as "ico_pc: the previous run ended
+   while: <note>" and the result is 1: this run creates its pipelines as
+   the frames need them. relaunched != 0 (a restart after a driver crash,
+   ICO_STARTUP_RETRY) logs and deletes it the same way but returns 0: the
+   restart's own step decides. 0 when there is no file or it is empty.
+   The file's first line is the version that wrote it
+   (ico_diag_set_version), the note follows: a note from another version
+   is logged as "ico_pc: the previous run ended while: <note> (version
+   <old>); trying the start-up set again on <new>" and the result is 0, so
+   a new version tries the start-up set again. */
+int ico_diag_startup_activity_begin(const char *path, int relaunched);
+/* The running version's text (the "ico_pc: version" log line's: "<label>
+   (commit <c>)" or "development build (commit <c>)"); copied, at most 127
+   bytes. */
+void ico_diag_set_version(const char *version);
+/* ICO_DIAG_ACTIVITY_STARTUP: around the start-up set's creation: each
+   pipeline's note (the set's own "(i of m)" notes between two are not
+   written; "creating the start-up pipelines" until the first), and a
+   cleared note keeps the file's last one. ICO_DIAG_ACTIVITY_LAZY: a run that
+   creates the pipelines as the frames need them, for the whole run; a
+   cleared note writes a line saying none is being created (so the next
+   start stays lazy). 0: stops recording and deletes the file (the start-up
+   set's end). */
+#define ICO_DIAG_ACTIVITY_STARTUP 1
+#define ICO_DIAG_ACTIVITY_LAZY 2
+void ico_diag_startup_activity_record(int mode);
+/* A clean exit: stops recording; a lazy run keeps the file (its line
+   saying no pipeline is being created), so the lazy decision sticks until
+   the version changes; any other run deletes it. */
+void ico_diag_startup_activity_exit(void);
 /* The relaunch's inputs: the step this run is at (StartupRetry, 0 for the
    first run), whether the build has the D3D12 backend, whether the player
    named the backend, whether the player named the blending (blend= /

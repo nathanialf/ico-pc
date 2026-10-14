@@ -1609,16 +1609,30 @@ static int host_main(int argc, char **argv)
     /* A crash or the watchdog ends the run with a box and the C
        library's last words in the log, not by the game just going */
     ico_diag_set_fatal_ui(ico_android_fatal_box, ico_android_log_mirror_try_flush);
+    /* ... from the start: the box and the flush go through the
+       diagnostics thread, which the window's start-up (the pipelines it
+       prepares, issue 93) would otherwise run without; the watchdog's
+       limits start with the game (start_watchdog) */
+    ico_diag_start_reporter();
 #elif defined(__linux__) && !defined(ICO_HEADLESS)
     /* the watchdog's end shows a box too (a crash does not: diag_host.c finish) */
     ico_diag_set_fatal_ui(linux_fatal_box, NULL);
 #endif
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
-    if (ICO_VERSION_LABEL[0] != '\0') {
-        fprintf(stderr, "ico_pc: version %s (commit %s)\n", ICO_VERSION_LABEL, ICO_BUILD_COMMIT);
-    } else {
-        fprintf(stderr, "ico_pc: development build (commit %s)\n", ICO_BUILD_COMMIT);
+    {
+        /* the start-up activity file records it (diag_host.h): a new
+           version tries the start-up set again */
+        char ver[128];
+
+        if (ICO_VERSION_LABEL[0] != '\0') {
+            snprintf(ver, sizeof(ver), "%s (commit %s)", ICO_VERSION_LABEL, ICO_BUILD_COMMIT);
+            fprintf(stderr, "ico_pc: version %s\n", ver);
+        } else {
+            snprintf(ver, sizeof(ver), "development build (commit %s)", ICO_BUILD_COMMIT);
+            fprintf(stderr, "ico_pc: %s\n", ver);
+        }
+        ico_diag_set_version(ver);
     }
 #ifndef ICO_HEADLESS
     /* the corner of the Options menu's main page (nothing when "") */

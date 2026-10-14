@@ -1035,6 +1035,20 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* read (main_host.c read it before, for the log): nothing started
        from here inherits it */
     ico_diag_forget_startup_retry_env();
+    /* the start-up activity file (diag_host.h, issue 93): a previous start
+       that ended while preparing the pipelines (a crash with no report, the
+       system ending the app) is named, and this run creates them as the
+       frames need them. A restart after a driver crash (retry above) takes
+       its own step: the file is only logged and deleted. */
+    bool lazyStart = false;
+    {
+        char logs[ICO_PATH_MAX], act[ICO_PATH_MAX + 32];
+
+        if (ico_host_logs_dir(logs, sizeof(logs)) == 0 &&
+            ico_path_join(act, sizeof(act), logs, "startup-activity.txt") == 0) {
+            lazyStart = ico_diag_startup_activity_begin(act, retry != STARTUP_RETRY_NONE) != 0;
+        }
+    }
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
@@ -1195,10 +1209,19 @@ open_window:
        pipeline compile (tens of ms each on a GPU driver); the time is
        logged. Not after a driver crash in it: the lazy step builds each
        pipeline when a frame first needs it */
-    if (retry == STARTUP_RETRY_LAZY) {
-        fprintf(stderr, "window: the pipelines are created as the frames need them, not at "
-                        "start-up (a restart after a graphics driver crash)\n");
+    if (retry == STARTUP_RETRY_LAZY || lazyStart) {
+        fprintf(stderr,
+                "window: the pipelines are created as the frames need them, not at "
+                "start-up (%s)\n",
+                retry == STARTUP_RETRY_LAZY ? "a restart after a graphics driver crash"
+                                            : "the previous start ended while preparing them");
+        /* each first-use pipeline's note in the file, for the whole run, so
+           a further end names the pipeline; no further step follows */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
     } else {
+        /* the note of each pipeline in the file while the set is created,
+           the file deleted when it is done */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
 #if defined(__ANDROID__) || defined(ICO_IOS)
         static PipeScreen screen;
 
@@ -1211,6 +1234,7 @@ open_window:
 #else
         rd_precreate_pipelines();
 #endif
+        ico_diag_startup_activity_record(0);
     }
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
@@ -3554,6 +3578,10 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
+    /* a clean exit: a lazy run keeps the start-up activity file, so the
+       next start of this version is lazy too; any other deletes it
+       (diag_host.h) */
+    ico_diag_startup_activity_exit();
 #if defined(__ANDROID__) || defined(ICO_IOS)
     SDL_RemoveEventWatch(lifecycle_watch, NULL);
 #endif

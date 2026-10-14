@@ -1027,22 +1027,185 @@ static void stack_bounds_here(uintptr_t sp, uintptr_t *lo, uintptr_t *hi)
    faulting thread waits, so the text stands still) */
 static char activity[160];
 
+/* ico_diag_startup_activity_record's mode (0 off) and the file's path */
+static int act_mode;
+static char act_path[1024];
+#ifdef _WIN32
+static wchar_t act_wpath[1024];
+#endif
+
+/* The note in the start-up activity file, replacing what it held: one
+   open, write and close, no stdio buffer, so the file holds it even when
+   the process is ended the next moment without a word (a phone's system
+   ends it, or a driver exits it) */
+static char act_version[128];
+
+void ico_diag_set_version(const char *version)
+{
+    snprintf(act_version, sizeof act_version, "%s", version != NULL ? version : "");
+}
+
+static void act_write(const char *note)
+{
+    /* the version's line, then the note */
+    static char text[sizeof act_version + 1 + 160];
+    const int len = snprintf(text, sizeof text, "%s\n%s", act_version, note);
+    const size_t n = len < 0 ? 0 : (size_t)len < sizeof text ? (size_t)len : sizeof text - 1;
+#ifdef _WIN32
+    DWORD done;
+    HANDLE h;
+    if (act_wpath[0] == L'\0') {
+        return;
+    }
+    h = CreateFileW(act_wpath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h != INVALID_HANDLE_VALUE) {
+        WriteFile(h, text, (DWORD)n, &done, NULL);
+        CloseHandle(h);
+    }
+#else
+    int fd;
+    if (act_path[0] == '\0') {
+        return;
+    }
+    fd = open(act_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    if (fd >= 0) {
+        ssize_t w = write(fd, text, n);
+        (void)w;
+        close(fd);
+    }
+#endif
+}
+
+/* a lazy run's file between two creations: the next start stays lazy
+   when this run is ended outside one */
+static const char act_between[] =
+    "running with the pipelines created as the frames need them (none was being created)";
+
 void ico_diag_set_activity(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(activity, sizeof activity, fmt, ap);
     va_end(ap);
+    /* the start-up set's own "(i of m)" notes between two pipelines are
+       left out: the pipeline's note names its place in the set, and this
+       halves the writes */
+    if (act_mode == ICO_DIAG_ACTIVITY_LAZY ||
+        (act_mode == ICO_DIAG_ACTIVITY_STARTUP &&
+         strncmp(activity, "creating the start-up pipelines", 31) != 0)) {
+        act_write(activity);
+    }
 }
 
 void ico_diag_clear_activity(void)
 {
     activity[0] = '\0';
+    /* the start-up set's mode keeps the last note: a frame the progress
+       screen presents between two of its pipelines clears it, and the
+       next one follows at once */
+    if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
+        act_write(act_between);
+    }
 }
 
 const char *ico_diag_activity(void)
 {
     return activity;
+}
+
+static void act_remove(void)
+{
+#ifdef _WIN32
+    if (act_wpath[0] != L'\0') {
+        DeleteFileW(act_wpath);
+    }
+#else
+    if (act_path[0] != '\0') {
+        unlink(act_path);
+    }
+#endif
+}
+
+int ico_diag_startup_activity_begin(const char *path, int relaunched)
+{
+    char buf[sizeof act_version + 1 + sizeof activity];
+    const char *ver = "";
+    char *prev = buf;
+    char *nl;
+    size_t n = 0;
+    FILE *f;
+    act_mode = 0;
+    act_path[0] = '\0';
+    if (path == NULL || strlen(path) >= sizeof act_path) {
+        return 0;
+    }
+    memcpy(act_path, path, strlen(path) + 1);
+#ifdef _WIN32
+    act_wpath[0] = L'\0';
+    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, act_path, -1, act_wpath,
+                            (int)(sizeof act_wpath / sizeof act_wpath[0])) == 0) {
+        act_wpath[0] = L'\0';
+    }
+#endif
+    f = ico_fopen(act_path, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    /* the version's line, then the note's (a file without the version's
+       line counts as another version's) */
+    nl = strchr(buf, '\n');
+    if (nl != NULL) {
+        *nl = '\0';
+        ver = buf;
+        prev = nl + 1;
+        if (nl > buf && nl[-1] == '\r') {
+            nl[-1] = '\0';
+        }
+    }
+    /* one line: a cut write leaves no newline to strip, a hand-edited file
+       may have one */
+    prev[strcspn(prev, "\r\n")] = '\0';
+    act_remove();
+    if (prev[0] == '\0') {
+        return 0;
+    }
+    if (strcmp(ver, act_version) != 0) {
+        /* another version: its fixes may have removed the cause */
+        ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
+                     "start-up set again on %s",
+                     prev, ver[0] != '\0' ? ver : "unknown", act_version);
+        return 0;
+    }
+    ico_diag_log("ico_pc: the previous run ended while: %s", prev);
+    /* a restart after a driver crash (startup_retry.h) takes its own step */
+    return relaunched ? 0 : 1;
+}
+
+void ico_diag_startup_activity_exit(void)
+{
+    if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
+        /* the file keeps the line saying none was being created */
+        act_write(act_between);
+        act_mode = 0;
+        return;
+    }
+    ico_diag_startup_activity_record(0);
+}
+
+void ico_diag_startup_activity_record(int mode)
+{
+    act_mode = mode;
+    if (mode == 0) {
+        act_remove();
+    } else if (mode == ICO_DIAG_ACTIVITY_LAZY) {
+        act_write(activity[0] != '\0' ? activity : act_between);
+    } else {
+        act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
+    }
 }
 
 /* the note says the graphics driver was building a pipeline */
@@ -1293,6 +1456,14 @@ static int relaunch_now(const char *value)
 static const char driver_box_text[] =
     "The graphics driver crashed while the game was getting its graphics ready, and the game "
     "could not work around it. Updating the graphics driver usually fixes this.";
+
+#ifdef __ANDROID__
+/* ... and after one while preparing the start-up set: the next start
+   prepares them as the game draws (ico_diag_startup_activity_begin) */
+static const char driver_next_start_text[] =
+    "The graphics driver crashed while the game was getting its graphics ready. Start the game "
+    "again: it will then get its graphics ready as you play instead.";
+#endif
 
 /* A crash while the note says a pipeline was being built: the step the
    next run takes (startup_retry.h), logged; relaunch_value set when there
@@ -1815,6 +1986,10 @@ void ico_diag_main_thread_end(void)
 #endif
 }
 
+/* ico_diag_start after ico_diag_start_reporter: bumped (release) once the
+   limits are set, so the watchdog takes them and counts them from then */
+static unsigned int wd_epoch;
+
 static void watchdog_loop(void)
 {
     double start = ico_diag_uptime();
@@ -1823,16 +1998,31 @@ static void watchdog_loop(void)
     double last_poll = start;
     /* seconds inside presents when the clock last restarted: those since
        are not the game's idle time */
-    const double pres_start = present_seconds(NULL);
+    double pres_start = present_seconds(NULL);
     double pres_alive = pres_start;
     unsigned int last_ticks = 0;
     unsigned int last_progress = progress;
+    unsigned int epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
+    /* this thread's copies, read again when the epoch moves (set before
+       it, so they are seen with it) */
+    unsigned int first_s = wd_first_s;
+    unsigned int later_s = wd_later_s;
     char reason[160];
     for (;;) {
         double now;
         unsigned int ticks;
         unsigned int prog;
         double pres;
+        if (epoch != __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE)) {
+            /* the limits were just set (ico_diag_start): both count from now */
+            epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
+            first_s = wd_first_s;
+            later_s = wd_later_s;
+            start = last_alive = last_poll = ico_diag_uptime();
+            pres_start = pres_alive = present_seconds(NULL);
+            last_ticks = ticks_fn != NULL ? ticks_fn() : 0;
+            last_progress = progress;
+        }
 #ifdef _WIN32
         if (WaitForSingleObject(crash_event, 250) == WAIT_OBJECT_0) {
             report_crash();
@@ -1879,21 +2069,20 @@ static void watchdog_loop(void)
             last_alive = now;
             pres_alive = pres;
         }
-        if (wd_first_s != 0 && ticks == 0 && now - start - (pres - pres_start) >= wd_first_s) {
+        if (first_s != 0 && ticks == 0 && now - start - (pres - pres_start) >= first_s) {
             snprintf(reason, sizeof reason, "no Main tick %u s after boot started (watchdog=%u)",
-                     wd_first_s, wd_first_s);
+                     first_s, first_s);
             watchdog_fire(reason);
-        } else if (wd_later_s != 0 && ticks > 0 &&
-                   now - last_alive - (pres - pres_alive) >= wd_later_s) {
+        } else if (later_s != 0 && ticks > 0 && now - last_alive - (pres - pres_alive) >= later_s) {
             if (movie_playing) {
                 snprintf(reason, sizeof reason,
                          "a movie was playing and showed no new picture for %u s (the last "
                          "was tick %u, progress %u)",
-                         wd_later_s, ticks, prog);
+                         later_s, ticks, prog);
             } else {
                 snprintf(reason, sizeof reason,
-                         "no new Main tick for %u s (the last was tick %u, progress %u)",
-                         wd_later_s, ticks, prog);
+                         "no new Main tick for %u s (the last was tick %u, progress %u)", later_s,
+                         ticks, prog);
             }
             watchdog_fire(reason);
         }
@@ -1920,13 +2109,43 @@ ICO_ENTRY static void *watchdog_main(void *arg)
 
 #endif
 
+/* the thread itself (ico_diag_start, ico_diag_start_reporter); 0 when it
+   could not start */
+static int reporter_create(void);
+
 void ico_diag_start(unsigned int first_s, unsigned int later_s)
 {
     wd_first_s = first_s;
     wd_later_s = later_s;
+    if (!inited) {
+        return;
+    }
+    if (reporter_running) {
+        /* started early (ico_diag_start_reporter): the limits count from
+           here, as they would from the thread's start */
+        __atomic_add_fetch(&wd_epoch, 1, __ATOMIC_RELEASE);
+    } else if (!reporter_create()) {
+        return;
+    }
+    ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; watchdog: first Main tick within "
+                 "%u s, then a new one or a movie picture within %u s (0 = off)",
+                 HEARTBEAT_S, first_s, later_s);
+}
+
+void ico_diag_start_reporter(void)
+{
     if (!inited || reporter_running) {
         return;
     }
+    if (reporter_create()) {
+        ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; the watchdog starts with the "
+                     "game",
+                     HEARTBEAT_S);
+    }
+}
+
+static int reporter_create(void)
+{
 #ifdef _WIN32
     {
         HANDLE h = w32_create_thread != NULL
@@ -1934,7 +2153,7 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
                        : NULL;
         if (h == NULL) {
             ico_diag_log("ico_pc: diagnostics: cannot start the watchdog thread");
-            return;
+            return 0;
         }
         CloseHandle(h);
     }
@@ -1943,7 +2162,7 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
         pthread_t t;
         if (pthread_create(&t, NULL, watchdog_main, NULL) != 0) {
             ico_diag_log("ico_pc: diagnostics: cannot start the watchdog thread");
-            return;
+            return 0;
         }
 #ifdef __ANDROID__
         reporter_thread = t;
@@ -1952,9 +2171,7 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
     }
 #endif
     reporter_running = 1;
-    ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; watchdog: first Main tick within "
-                 "%u s, then a new one or a movie picture within %u s (0 = off)",
-                 HEARTBEAT_S, first_s, later_s);
+    return 1;
 }
 
 /* --- Crash handlers ------------------------------------------------------------------- */
@@ -2217,7 +2434,13 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
         /* a box instead of the game just going (the system shows
            nothing), from the watchdog thread; this thread waits for it */
         static char box[1536];
-        if (driver_note()) {
+        if (driver_note() && act_mode == ICO_DIAG_ACTIVITY_STARTUP) {
+            /* the start-up activity file keeps the note: the next start
+               creates the pipelines as the frames need them */
+            flog("ico_pc: the graphics driver crashed while preparing the shaders; the next "
+                 "start creates the pipelines as the frames need them");
+            fatal_text(box, sizeof box, driver_next_start_text);
+        } else if (driver_note()) {
             driver_crash_plan(); /* logged; no relaunch on Android */
             fatal_text(box, sizeof box, driver_box_text);
         } else {
