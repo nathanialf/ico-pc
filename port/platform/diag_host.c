@@ -1034,53 +1034,127 @@ static char act_path[1024];
 static wchar_t act_wpath[1024];
 #endif
 
-/* The note in the start-up activity file, replacing what it held: one
-   open, write and close, no stdio buffer, so the file holds it even when
-   the process is ended the next moment without a word (a phone's system
-   ends it, or a driver exits it) */
+/* The note in the start-up activity file, replacing what it held. The
+   file stays open while the run records (about 700 notes in a start-up
+   set): each note is one write at the file's start, no stdio buffer, then
+   the file is cut to it. A write shorter than the text before it is
+   padded with NULs to that text's end, so the file reads as the new note
+   (the reader stops at a NUL) even when the process is ended between the
+   write and the cut, or the next moment without a word (a phone's system
+   ends it, or a driver exits it). act_len: the file's length now. */
 static char act_version[128];
+#ifdef _WIN32
+static HANDLE act_h = INVALID_HANDLE_VALUE;
+#else
+static int act_fd = -1;
+#endif
+static size_t act_len;
 
 void ico_diag_set_version(const char *version)
 {
     snprintf(act_version, sizeof act_version, "%s", version != NULL ? version : "");
 }
 
-static void act_write(const char *note)
+/* 0 when the file is open for the writes */
+static int act_open(void)
 {
-    /* the version's line, then the note */
-    static char text[sizeof act_version + 1 + 160];
-    const int len = snprintf(text, sizeof text, "%s\n%s", act_version, note);
-    const size_t n = len < 0 ? 0 : (size_t)len < sizeof text ? (size_t)len : sizeof text - 1;
 #ifdef _WIN32
-    DWORD done;
-    HANDLE h;
-    if (act_wpath[0] == L'\0') {
-        return;
+    LARGE_INTEGER size;
+    if (act_h != INVALID_HANDLE_VALUE) {
+        return 0;
     }
-    h = CreateFileW(act_wpath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
-                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h != INVALID_HANDLE_VALUE) {
-        WriteFile(h, text, (DWORD)n, &done, NULL);
-        CloseHandle(h);
+    if (act_wpath[0] == L'\0') {
+        return -1;
+    }
+    act_h = CreateFileW(act_wpath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
+                        OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (act_h == INVALID_HANDLE_VALUE) {
+        return -1;
+    }
+    act_len = GetFileSizeEx(act_h, &size) && size.QuadPart > 0 ? (size_t)size.QuadPart : 0;
+#else
+    off_t end;
+    if (act_fd >= 0) {
+        return 0;
+    }
+    if (act_path[0] == '\0') {
+        return -1;
+    }
+    act_fd = open(act_path, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+    if (act_fd < 0) {
+        return -1;
+    }
+    end = lseek(act_fd, 0, SEEK_END);
+    act_len = end > 0 ? (size_t)end : 0;
+#endif
+    return 0;
+}
+
+/* the writes are done (the file keeps what it holds) */
+static void act_close(void)
+{
+#ifdef _WIN32
+    if (act_h != INVALID_HANDLE_VALUE) {
+        CloseHandle(act_h);
+        act_h = INVALID_HANDLE_VALUE;
     }
 #else
-    int fd;
-    if (act_path[0] == '\0') {
-        return;
-    }
-    fd = open(act_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-    if (fd >= 0) {
-        ssize_t w = write(fd, text, n);
-        (void)w;
-        close(fd);
+    if (act_fd >= 0) {
+        close(act_fd);
+        act_fd = -1;
     }
 #endif
+}
+
+static void act_write(const char *note)
+{
+    /* the version's line, then the note; room for the NULs over a longer
+       text before it (one past the longest text) */
+    static char text[sizeof act_version + 1 + 160 + 1];
+    const size_t cap = sizeof text - 1;
+    const int len = snprintf(text, cap, "%s\n%s", act_version, note);
+    const size_t n = len < 0 ? 0 : (size_t)len < cap ? (size_t)len : cap - 1;
+    size_t w = n;
+    if (act_open() != 0) {
+        return;
+    }
+    if (act_len > n) {
+        w = act_len < sizeof text ? act_len : sizeof text;
+        memset(text + n, 0, w - n);
+    }
+#ifdef _WIN32
+    {
+        DWORD done = 0;
+        LARGE_INTEGER zero;
+        zero.QuadPart = 0;
+        LARGE_INTEGER at;
+        at.QuadPart = (LONGLONG)n;
+        if (SetFilePointerEx(act_h, zero, NULL, FILE_BEGIN) &&
+            WriteFile(act_h, text, (DWORD)w, &done, NULL) && done == (DWORD)w &&
+            SetFilePointerEx(act_h, at, NULL, FILE_BEGIN) && SetEndOfFile(act_h)) {
+            act_len = n;
+            return;
+        }
+    }
+#else
+    if (pwrite(act_fd, text, w, 0) == (ssize_t)w && ftruncate(act_fd, (off_t)n) == 0) {
+        act_len = n;
+        return;
+    }
+#endif
+    /* a failed step: the file may reach as far as this write */
+    if (act_len < w) {
+        act_len = w;
+    }
 }
 
 /* a lazy run's file between two creations: the next start stays lazy
    when this run is ended outside one */
 static const char act_between[] =
     "running with the pipelines created as the frames need them (none was being created)";
+/* ... and after its clean exit: the next start is lazy too, and says it
+   is no ended run */
+static const char act_lazy_exit[] = "exited with the pipelines created as the frames needed them";
 
 void ico_diag_set_activity(const char *fmt, ...)
 {
@@ -1116,6 +1190,9 @@ const char *ico_diag_activity(void)
 
 static void act_remove(void)
 {
+    /* closed first: Windows keeps an open file's name until its handle
+       goes */
+    act_close();
 #ifdef _WIN32
     if (act_wpath[0] != L'\0') {
         DeleteFileW(act_wpath);
@@ -1135,6 +1212,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     char *nl;
     size_t n = 0;
     FILE *f;
+    act_close();
     act_mode = 0;
     act_path[0] = '\0';
     if (path == NULL || strlen(path) >= sizeof act_path) {
@@ -1156,7 +1234,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     fclose(f);
     buf[n] = '\0';
     /* the version's line, then the note's (a file without the version's
-       line counts as another version's) */
+       line counts as another version's); a NUL ends the text (act_write's
+       padding) */
     nl = strchr(buf, '\n');
     if (nl != NULL) {
         *nl = '\0';
@@ -1175,12 +1254,24 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     }
     if (strcmp(ver, act_version) != 0) {
         /* another version: its fixes may have removed the cause */
-        ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
-                     "start-up set again on %s",
-                     prev, ver[0] != '\0' ? ver : "unknown", act_version);
+        if (strcmp(prev, act_lazy_exit) == 0) {
+            ico_diag_log("ico_pc: the previous run (version %s) created the pipelines as the "
+                         "frames needed them; trying the start-up set again on %s",
+                         ver[0] != '\0' ? ver : "unknown", act_version);
+        } else {
+            ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
+                         "start-up set again on %s",
+                         prev, ver[0] != '\0' ? ver : "unknown", act_version);
+        }
         return 0;
     }
-    ico_diag_log("ico_pc: the previous run ended while: %s", prev);
+    if (strcmp(prev, act_lazy_exit) == 0) {
+        /* a clean exit of a lazy run: no ended run to report */
+        ico_diag_log("ico_pc: the previous run created the pipelines as the frames needed them; "
+                     "this one does too");
+    } else {
+        ico_diag_log("ico_pc: the previous run ended while: %s", prev);
+    }
     /* a restart after a driver crash (startup_retry.h) takes its own step */
     return relaunched ? 0 : 1;
 }
@@ -1188,8 +1279,9 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
 void ico_diag_startup_activity_exit(void)
 {
     if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
-        /* the file keeps the line saying none was being created */
-        act_write(act_between);
+        /* the file keeps a line saying the run exited lazy */
+        act_write(act_lazy_exit);
+        act_close();
         act_mode = 0;
         return;
     }
@@ -1277,6 +1369,14 @@ void ico_diag_set_pipeline_cache(int loaded, const char *path)
    when the run is to start again (finish). */
 static int relaunch_ready;
 static char relaunch_value[48];
+/* ico_diag_set_relaunch_stub (tests): called instead of starting the
+   program again */
+static int (*relaunch_stub)(const char *value);
+
+void ico_diag_set_relaunch_stub(int (*fn)(const char *value))
+{
+    relaunch_stub = fn;
+}
 
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
 static void loss_relaunch_at_exit(void);
@@ -1337,6 +1437,9 @@ static int relaunch_now(const char *value)
 {
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
+    if (relaunch_ready && relaunch_stub != NULL) {
+        return relaunch_stub(value);
+    }
     if (!relaunch_ready ||
         startup_retry_block_finish(relaunch_env, relaunch_env_used,
                                    sizeof relaunch_env / sizeof relaunch_env[0], value) != 0) {
@@ -1409,6 +1512,9 @@ static int relaunch_now(const char *value)
     int fd;
     if (!relaunch_ready) {
         return -1;
+    }
+    if (relaunch_stub != NULL) {
+        return relaunch_stub(value);
     }
     for (j = 0; name[j] != '\0'; j++) {
         relaunch_var[i++] = name[j];
@@ -1587,7 +1693,11 @@ static void loss_relaunch_at_exit(void)
         MessageBoxA(NULL, box, "ICO PC", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
     }
 #else
-    relaunch_now(loss_value); /* returns only when it failed */
+    /* returns only when it failed (or a test's stub stood in) */
+    if (relaunch_now(loss_value) == 0) {
+        ico_diag_log("ico_pc: started the game again");
+        return;
+    }
     ico_diag_log("ico_pc: could not start the game again");
     if (fatal_box != NULL) {
         char box[2048]; /* the text (up to 1023) and a path (up to 1023) */
@@ -1618,6 +1728,9 @@ static void finish(const char *reason, const char *box_text, int code)
         if (log_h != INVALID_HANDLE_VALUE) {
             FlushFileBuffers(log_h);
         }
+        /* the activity file's name is free for the new run (it keeps the
+           note) */
+        act_close();
         if (relaunch_now(relaunch_value) == 0) {
             flog("ico_pc: started the game again");
             if (log_h != INVALID_HANDLE_VALUE) {

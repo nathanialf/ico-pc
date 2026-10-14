@@ -37,7 +37,21 @@
  *               notes and a line between them, and keeps the file at a
  *               clean exit (the next start is lazy); a normal end of the
  *               set deletes it; a restart after a driver crash logs it but
- *               is not lazy; a file another version wrote is not lazy;
+ *               is not lazy; a file another version wrote is not lazy; a
+ *               lazy run's clean exit is logged as such at the next start,
+ *               not as an ended run; a file cut short after a write (the
+ *               NUL padding) reads as the new note;
+ *   - loss:     the restart after a device loss (ico_diag_device_lost_restart)
+ *               with the relaunch prepared and stubbed (no new process):
+ *               lossstep, the first loss: the blend step, the restarted
+ *               run's ICO_STARTUP_RETRY=blend:<backend> (which draws with
+ *               the fixed-function blend, the value host_config.c exports
+ *               ICO_RD_BLEND=fixed for), handed over at exit after the
+ *               normal quit path's steps; lossbackend, the next loss on a
+ *               build with D3D12: backend:d3d12; lossnone, no step left:
+ *               0 (the window's box), nothing at exit; lossunprepared, no
+ *               relaunch prepared: 0; lossfail, the relaunch fails: the box
+ *               saying the game could not start itself again;
  *   - early:    the reporter started before the limits (Android's start):
  *               the first limit counts from ico_diag_start, not from the
  *               thread's start.
@@ -49,6 +63,7 @@
 #include <eekernel.h>
 #include "diag_host.h"
 #include "sched.h"
+#include "startup_retry.h"
 
 #if !defined(_WIN32)
 
@@ -242,6 +257,65 @@ static void activity_child(const char *mode, const char *log)
     child_quit(0); /* actrelaunch, actnext */
 }
 
+/* main's program path, for the loss children's relaunch */
+static const char *self_path = "diag_test";
+
+/* the normal quit path's steps (main_host.c and the window register them
+   with atexit after ico_diag_prepare_relaunch) */
+static void loss_quit_steps(void)
+{
+    ico_diag_log("test: the end-of-run steps");
+}
+
+/* the relaunch, stubbed: the value, its step and backend as the restarted
+   run reads them, and whether that run draws with the fixed-function
+   blend (host_config.c ico_ini_export: ICO_RD_BLEND=fixed) */
+static int loss_relaunch_stub(const char *value)
+{
+    StartupRetry step = STARTUP_RETRY_NONE;
+    char backend[16] = "";
+    const int ok = startup_retry_parse(value, &step, backend, sizeof backend);
+    ico_diag_log("test: relaunch %s=%s (parse %d, step %d, backend %s, blend %s)",
+                 STARTUP_RETRY_ENV, value, ok, (int)step, backend,
+                 startup_retry_value_draws_fixed(value) ? "fixed" : "not fixed");
+    return getenv("ICO_TEST_LOSS_FAIL") != NULL ? -1 : 0;
+}
+
+static void loss_box(const char *text)
+{
+    ico_diag_log("test: box: %s", text);
+}
+
+/* A device loss on a run at step `step`: the decision, then a normal exit
+   (atexit: the quit steps, then the relaunch) */
+static void loss_child(const char *mode, const char *log)
+{
+    static char *argv[4];
+    int r;
+    argv[0] = (char *)self_path;
+    argv[1] = (char *)mode;
+    argv[2] = (char *)log;
+    argv[3] = NULL;
+    if (strcmp(mode, "lossunprepared") != 0) {
+        ico_diag_prepare_relaunch(3, argv);
+    }
+    ico_diag_set_relaunch_stub(loss_relaunch_stub);
+    ico_diag_set_fatal_ui(loss_box, NULL);
+    atexit(loss_quit_steps);
+    if (strcmp(mode, "lossbackend") == 0) {
+        ico_diag_set_startup_retry(STARTUP_RETRY_LOSS_BLEND, 1, 0, 0, "vulkan");
+    } else if (strcmp(mode, "lossnone") == 0) {
+        ico_diag_set_startup_retry(STARTUP_RETRY_LOSS_BLEND, 0, 0, 0, "vulkan");
+    } else {
+        ico_diag_set_startup_retry(STARTUP_RETRY_NONE, 0, 0, 0, "vulkan");
+    }
+    /* a run at a loss step drew with the fixed-function blend */
+    r = ico_diag_device_lost_restart(strcmp(mode, "lossbackend") == 0 ||
+                                     strcmp(mode, "lossnone") == 0);
+    ico_diag_log("test: restart %d", r);
+    exit(0);
+}
+
 /* ico_diag_start_reporter first, the limits 1.5 s later: the first limit
    (1 s) has not fired 0.6 s after them, and fires after that */
 static void early_child(void)
@@ -270,6 +344,8 @@ static void run_child(const char *mode, const char *log)
     sema = ico_sched_create_sema(1, 1, 0, 0);
     if (strncmp(mode, "act", 3) == 0) {
         activity_child(mode, log);
+    } else if (strncmp(mode, "loss", 4) == 0) {
+        loss_child(mode, log);
     } else if (strcmp(mode, "early") == 0) {
         early_child();
     } else if (strcmp(mode, "segv") == 0) {
@@ -360,6 +436,7 @@ int main(int argc, char **argv)
     char *s;
     int r;
 
+    self_path = argv[0];
     if (argc == 3) {
         run_child(argv[1], argv[2]);
         return 0;
@@ -551,11 +628,13 @@ int main(int argc, char **argv)
         CHECK(r == 0);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         s = read_file(act);
-        CHECK(strstr(s, "test 1\nrunning with the pipelines created") == s);
+        CHECK(strcmp(s, "test 1\nexited with the pipelines created as the frames needed them") ==
+              0);
         r = run(argv[0], "actnext", log);
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: running with the pipelines") !=
-              NULL);
+        CHECK(strstr(s, "ico_pc: the previous run created the pipelines as the frames needed "
+                        "them; this one does too\n") != NULL);
+        CHECK(strstr(s, "the previous run ended while") == NULL);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         /* another version tries the start-up set again (and deletes the
            file) */
@@ -592,10 +671,101 @@ int main(int argc, char **argv)
                 fclose(f);
             }
         }
+        /* a run ended between a shorter note's write and the cut: the
+           padding's NUL ends the note (diag_host.c act_write) */
+        {
+            static const char cut[] = "test 1\ncreating pipeline a\0\0\0\0 (start-up set)";
+            FILE *f = fopen(act, "wb");
+            CHECK(f != NULL);
+            if (f != NULL) {
+                fwrite(cut, 1, sizeof cut - 1, f);
+                fclose(f);
+            }
+        }
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline a\n") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
         remove(act);
         if (fails) {
             printf("--- activity log ---\n%s\n", read_file(log));
         }
+    }
+
+    /* the restart after a device loss, the relaunch stubbed */
+    r = run(argv[0], "lossstep", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "the game starts again at the title when this run has closed, with "
+                    "ICO_STARTUP_RETRY=blend:vulkan: ") != NULL);
+    CHECK(strstr(s, "test: restart 1\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 5, backend "
+                    "vulkan, blend fixed)\n") != NULL);
+    /* the normal quit path first, then the relaunch */
+    CHECK(strstr(s, "test: restart 1") != NULL && strstr(s, "test: the end-of-run steps") != NULL &&
+          strstr(s, "ico_pc: starting the game again") != NULL &&
+          strstr(s, "test: relaunch ") != NULL &&
+          strstr(s, "ico_pc: started the game again") != NULL &&
+          strstr(s, "test: restart 1") < strstr(s, "test: the end-of-run steps") &&
+          strstr(s, "test: the end-of-run steps") < strstr(s, "ico_pc: starting the game again") &&
+          strstr(s, "ico_pc: starting the game again") < strstr(s, "test: relaunch ") &&
+          strstr(s, "test: relaunch ") < strstr(s, "ico_pc: started the game again"));
+    CHECK(strstr(s, "test: box:") == NULL);
+    if (fails) {
+        printf("--- lossstep log ---\n%s\n", s);
+    }
+    /* the next loss, on a build with D3D12: the other backend */
+    r = run(argv[0], "lossbackend", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: restart 1\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 6, backend "
+                    "d3d12, blend fixed)\n") != NULL);
+    CHECK(strstr(s, "ico_pc: started the game again") != NULL);
+    if (fails) {
+        printf("--- lossbackend log ---\n%s\n", s);
+    }
+    /* no step left: 0 (the window shows its box), nothing at exit */
+    r = run(argv[0], "lossnone", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "ico_pc: the graphics card stopped responding; the game does not start "
+                    "again: ") != NULL);
+    CHECK(strstr(s, "test: restart 0\n") != NULL);
+    CHECK(strstr(s, "test: the end-of-run steps") != NULL);
+    CHECK(strstr(s, "starting the game again") == NULL);
+    CHECK(strstr(s, "test: relaunch ") == NULL);
+    CHECK(strstr(s, "test: box:") == NULL);
+    if (fails) {
+        printf("--- lossnone log ---\n%s\n", s);
+    }
+    /* no relaunch prepared: 0 as well */
+    r = run(argv[0], "lossunprepared", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "the game does not start again: the game cannot start itself again on this "
+                    "system") != NULL);
+    CHECK(strstr(s, "test: restart 0\n") != NULL);
+    CHECK(strstr(s, "test: relaunch ") == NULL);
+    if (fails) {
+        printf("--- lossunprepared log ---\n%s\n", s);
+    }
+    /* the relaunch fails: the box, after the attempt */
+    setenv("ICO_TEST_LOSS_FAIL", "1", 1);
+    r = run(argv[0], "lossstep", log);
+    unsetenv("ICO_TEST_LOSS_FAIL");
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan") != NULL);
+    CHECK(strstr(s, "ico_pc: could not start the game again") != NULL);
+    CHECK(strstr(s, "ico_pc: started the game again") == NULL);
+    CHECK(strstr(s, "test: box: The graphics card stopped responding, and the game could not "
+                    "start itself again.") != NULL);
+    CHECK(strstr(s, "test: relaunch ") != NULL && strstr(s, "test: box:") != NULL &&
+          strstr(s, "test: relaunch ") < strstr(s, "test: box:"));
+    if (fails) {
+        printf("--- lossfail log ---\n%s\n", s);
     }
 
     /* the reporter before the limits: they count from ico_diag_start */

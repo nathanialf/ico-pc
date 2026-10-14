@@ -426,7 +426,31 @@ the environment for that run (the step is never taken against a player's blendin
 `lazy`), so a crash in a loss step's run ends with the crash box and every chain ends. Nothing is
 written to the user folder. ctest `startup_retry` checks both orders over every input
 and the loss values in the relaunch's environment; ctest `host_config` checks the `ICO_RD_BLEND`
-precedence (`port/platform/test/host_config_test.c` (`test_retry_blend`)).
+precedence (`port/platform/test/host_config_test.c` (`test_retry_blend`)). ctest `diag` runs the
+loss restart end to end with the relaunch prepared and stubbed (`ico_diag_set_relaunch_stub`, so no
+process is started): the step and its value (`blend:vulkan`, then `backend:d3d12`), the quit path's
+`atexit` steps before the relaunch, nothing at exit when no step is left, and the box when the
+relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
+
+An end without a crash report (the system or the driver ends the process) is caught by the start-up
+activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
+start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each pipeline's note replaces the
+text, and the file is deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
+every first-use pipeline and a line between them for the whole run. The file is opened once when
+the recording starts and closed when it ends; each note is one write at the file's start, padded
+with NULs over a longer text before it, then the file is cut to the note, so it reads as one whole
+note even when the process is ended between the two (`port/platform/diag_host.c` (`act_write`,
+`act_open`, `act_close`)). The next start of the same version logs
+`ico_pc: the previous run ended while: <note>` and creates the pipelines as the frames need them;
+another version's file is logged and the set tried again; a lazy run's clean exit leaves its own
+line, logged as `ico_pc: the previous run created the pipelines as the frames needed them; this one
+does too`, so the lazy start sticks until the version changes (`port/platform/diag_host.h`
+(`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)). Deleting the file makes the
+next start try the set again. While the set is created the window shows the "Preparing graphics"
+screen on every platform, drawn only once the set has taken 250 ms and then at most ten times a
+second, and takes the window's events meanwhile, so Windows does not mark the window "Not
+Responding" on a cold driver cache and a close asked then ends the run after the set
+(`port/platform/window_host.c` (`pipeline_progress`, `progress_present`)).
 
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a
 kernel call cannot stop them. Every 2 s the heartbeat logs one line of progress

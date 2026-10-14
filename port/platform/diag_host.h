@@ -145,9 +145,10 @@ void ico_diag_clear_activity(void);
 const char *ico_diag_activity(void);
 /* The start-up activity file (logs/startup-activity.txt; issue 93): while
    it records, each note (ico_diag_set_activity) replaces the file's text
-   with one open, write and close, so a start that is ended without a crash
-   report (the system ends the process, the driver exits it) still says on
-   the next start what it was doing.
+   with one write into the file, kept open from the first note to the end
+   of the recording, so a start that is ended without a crash report (the
+   system ends the process, the driver exits it) still says on the next
+   start what it was doing.
    ico_diag_startup_activity_begin, once before the renderer starts: keeps
    path for the writes, reads what the previous run left there and deletes
    the file. A non-empty text is logged as "ico_pc: the previous run ended
@@ -177,8 +178,10 @@ void ico_diag_set_version(const char *version);
 #define ICO_DIAG_ACTIVITY_LAZY 2
 void ico_diag_startup_activity_record(int mode);
 /* A clean exit: stops recording; a lazy run keeps the file (its line
-   saying no pipeline is being created), so the lazy decision sticks until
-   the version changes; any other run deletes it. */
+   saying the run exited lazy, which the next start logs as "ico_pc: the
+   previous run created the pipelines as the frames needed them; this one
+   does too"), so the lazy decision sticks until the version changes; any
+   other run deletes it. */
 void ico_diag_startup_activity_exit(void);
 /* The relaunch's inputs: the step this run is at (StartupRetry, 0 for the
    first run), whether the build has the D3D12 backend, whether the player
@@ -212,6 +215,10 @@ void ico_diag_set_pipeline_cache(int loaded, const char *path);
    relaunch after a device loss with atexit (ico_diag_device_lost_restart).
    Android and iOS: nothing (no relaunch). */
 void ico_diag_prepare_relaunch(int argc, char **argv);
+/* Tests: once the relaunch is prepared, fn(value) stands in for starting
+   the program again (value: ICO_STARTUP_RETRY's), returning 0 as a started
+   run would; NULL: the real relaunch. */
+void ico_diag_set_relaunch_stub(int (*fn)(const char *value));
 
 /* Names a thread function for the thread lines; game threads are named by
    the function iosThreadCreate runs (ico_host_thread_func). */
