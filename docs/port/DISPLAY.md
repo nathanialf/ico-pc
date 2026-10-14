@@ -77,7 +77,12 @@ clipped to it (`port/render/rd_present.c` (`rd__border_mask`, `blit`, `depthBlit
 DISPLAY, the F12 frame `.png` and a dump have no border; the F12 `-present.png` shows it. A zeroed
 `RdSettings` (the tests' PS2 models, the [replay tool](ARCHITECTURE.md#terms) without
 `--border-mask`) keeps the reduction's recorded scissor instead, the GS's own DISPLAY, in the same
-box. The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
+box. The mask and the open border apply only on a cropped frame (`rd__frame_cropped`: `gsW` over
+512 and `wExact` under it, as at 16:9, 688 over 682.67, where the crop cuts the game's own border
+away); at 4:3 and at aspects where the frame is exactly the picture's width (48:9 at 2048), Full
+pixel off is the game's own border as before, the reduction's recorded scissor and no mask, so the
+Original preset at 4:3 is the PS2's picture byte for byte (`port/render/rd_present.c`
+(`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
 the same with the option on and off (`port/render/rd_present.c` (`outputBox`, `rd_ui_box`,
 `rd__ui_box`, `rd__apply_display`, `sourceCrop`), `port/render/rd_crt.c` (`rd__crt_crop`); the
 targets: [RENDER.md](RENDER.md#frames-and-targets)).
@@ -454,8 +459,8 @@ line (`port/platform/window_host.c` (`disp_lock_start`, `disp_take`, `disp_vsync
 shape of the columns it shows (`wExact / 384`, the exact width, with Full pixel on and off; 4:3 in
 integer arithmetic at 512) in two blits: DISPLAY to a lines target, nearest, doubling each field
 line (skipped with full height); then the lines target to the box, bilinear, black outside, the
-columns past the exact width left out of the source rectangle; with Full pixel off its scissor is
-inset by the game's border ([the native frame](#the-native-frame), `rd__border_mask`). The
+columns past the exact width left out of the source rectangle; with Full pixel off on a cropped
+frame its scissor is inset by the game's border ([the native frame](#the-native-frame), `rd__border_mask`). The
 mirror mode flips the second blit. The output is the swapchain's backbuffer, or a headless RGBA8
 texture for the tests and the [replay tool](ARCHITECTURE.md#terms) (`port/render/rd_present.c`,
 header comment, `rd__present_box`). After the picture come the overlay (the port's popups and hints,

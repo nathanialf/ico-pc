@@ -2462,13 +2462,17 @@ bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held,
     return true;
 }
 
-/* The reduction's border open: Full pixel on, or off in the game, where the
- * presenter masks the border over the same picture (RdSettings.borderMask,
- * rd_present.c rd__border_mask), so the picture inside the mask is Full
- * pixel on's.  Neither in a zeroed RdSettings: the GS's own DISPLAY */
+/* The reduction's border open: Full pixel on, or off in the game on a
+ * cropped frame (rd_present.c rd__frame_cropped: 16:9 and the other aspects
+ * whose exact width is under gsW, where step 2's crop cuts the game's own
+ * border away), where the presenter masks the border over the same picture
+ * (RdSettings.borderMask, rd__border_mask), so the picture inside the mask
+ * is Full pixel on's.  Off at 4:3 and wherever the frame is its exact width
+ * (48:9), and in a zeroed RdSettings: the reduction's own scissor, the GS's
+ * own DISPLAY with its border (the PS2's picture) */
 static bool borderOpen(void)
 {
-    return g_rd.settings.fullPixel || g_rd.settings.borderMask;
+    return g_rd.settings.fullPixel || (g_rd.settings.borderMask && rd__frame_cropped());
 }
 
 /* Full pixel: a sprite the game tags RD_SPACE_FULLFRAME (a bar or fade that
