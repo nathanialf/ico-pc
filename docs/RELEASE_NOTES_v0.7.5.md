@@ -5,3 +5,4 @@
 - The menu text has its previous look back.
 - If the game closes while preparing its graphics, the next start records where it stopped and prepares the graphics as you play instead.
 - Sound no longer breaks up when the picture falls behind on a slow graphics card (thanks to braito4).
+- With Full pixel off, the black border again covers the edge of the picture as on the PS2, without shrinking the picture.

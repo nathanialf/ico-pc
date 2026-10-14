@@ -39,7 +39,7 @@ window's extent grows (`port/include/ico_frame.h`, header comment).
 | `w` | the native GS width, `16 * ceil(32 k)` with `k = aspect / (4/3)` clamped to 1..5: 512 at 4:3, 688 at 16:9, 2560 at most |
 | `h` | `ScreenHeight`: 448 NTSC, 512 PAL |
 | `fbw` | `(w + 63) / 64`, the FRAME and TEX0 FBW of a frame-sized buffer |
-| `wExact` | `512 k`, the visible width with Full pixel on; the presenter then crops `(w - wExact) / 2` columns a side |
+| `wExact` | `512 k`, the visible width with Full pixel on and off; the presenter crops `(w - wExact) / 2` columns a side |
 | `aspect` | the aspect the frame is built for, 4/3 exactly when `w` is 512 |
 
 (`port/include/ico_frame.h` (`IcoFrame`, `ico_frame_width_for`, `ico_frame_make`)). The width is a
@@ -62,16 +62,25 @@ resolution and a frame wider than its exact width the scene's scale is the box's
 exact width (2.8125 at 1080p 16:9), held to a 1/4096 step when that keeps the box's width, and the
 scene-class targets hold the exact width alone, so one texel is one output pixel and nothing is
 cropped; the reduction draws over its border (`port/render/rd_replay.c` (`doBlurSprite`)).
-Without it the picture is the PS2's: the whole native frame, `w` columns, with the reduction's black
-border on all four sides (2 columns at each side, 2 or 8 rows at the top and bottom), in a box of
-the frame's own shape `w / 384`, so where `w` overshoots `512 k` (688 for 682.67 at 16:9) the box
-is a few rows shorter than the aspect's (1920 x 1072 at 1080p 16:9) and nothing is cropped or
-squeezed; with the "window" resolution the scene is that box's size, one texel an output pixel
-(`port/render/rd_present.c` (`rd__frame_wshown`, `outputBox`, `optionsBox`, `rd__apply_display`,
-`sourceCrop`); the targets: [RENDER.md](RENDER.md#frames-and-targets)). The UI box, the pointer,
-the movie's box, the deferred text and the CRT filter's grid follow the same box
-(`port/render/rd_present.c` (`rd_ui_box`, `rd__ui_box`, `textRegion`), `port/render/rd_crt.c`
-(`rd__crt_crop`)). At 4:3 and 48:9 the frame is its exact width, so the box is the same either way.
+Without it the picture is the same: the same box, scale, crop and replay (the host sets
+`RdSettings.borderMask`, and the reduction draws over its border as with the option on,
+`port/render/rd_replay.c` (`borderOpen`)), and the presenter masks the game's border over its edge at
+the picture's own scale, where the PS2's reduction scissor held it black (`port/render/rd_post.c`
+(`postReduction`)): 2 GS columns at each side, `round(2 k)` output pixels with `k` the box's width
+over the exact width (6 at 1080p 16:9, 5.625 exactly; 11 at 4K), and `crop / (h / 2)` of the box's
+height at the top and bottom, `crop` 2 rows, or 8 at 512 lines (`rd__reduction_crop`; 10 rows at
+1080p, 19 at 4K, 34 at 1080p and 50 Hz). The mask is the box blit's scissor inset by the bands, the
+viewport the box's, so the cleared black stays in them; the effects depth blit and the CRT filter's
+last pass take the same scissor (the tube's box at its grid's scale), and the deferred text is
+clipped to it (`port/render/rd_present.c` (`rd__border_mask`, `blit`, `depthBlit`, `textRegion`),
+`port/render/rd_crt.c` (`compose`)). Nothing is squeezed or moved. The mask is the presenter's alone:
+DISPLAY, the F12 frame `.png` and a dump have no border; the F12 `-present.png` shows it. A zeroed
+`RdSettings` (the tests' PS2 models, the [replay tool](ARCHITECTURE.md#terms) without
+`--border-mask`) keeps the reduction's recorded scissor instead, the GS's own DISPLAY, in the same
+box. The box (`wExact / 384`), the UI box, the pointer, the movie's box and the CRT filter's grid are
+the same with the option on and off (`port/render/rd_present.c` (`outputBox`, `rd_ui_box`,
+`rd__ui_box`, `rd__apply_display`, `sourceCrop`), `port/render/rd_crt.c` (`rd__crt_crop`); the
+targets: [RENDER.md](RENDER.md#frames-and-targets)).
 
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
@@ -442,10 +451,11 @@ line (`port/platform/window_host.c` (`disp_lock_start`, `disp_take`, `disp_vsync
 ## Presentation
 
 `rd_present.c` shows the reduced DISPLAY frame (W x H/2) in a centred box of the output with the
-shape of the columns it shows (`rd__frame_wshown / 384`: the whole frame with Full pixel off, the
-exact width `wExact` with it on; 4:3 in integer arithmetic at 512) in two blits: DISPLAY to a lines
-target, nearest, doubling each field line (skipped with full height); then the lines target to the
-box, bilinear, black outside, the columns past the shown width left out of the source rectangle. The
+shape of the columns it shows (`wExact / 384`, the exact width, with Full pixel on and off; 4:3 in
+integer arithmetic at 512) in two blits: DISPLAY to a lines target, nearest, doubling each field
+line (skipped with full height); then the lines target to the box, bilinear, black outside, the
+columns past the exact width left out of the source rectangle; with Full pixel off its scissor is
+inset by the game's border ([the native frame](#the-native-frame), `rd__border_mask`). The
 mirror mode flips the second blit. The output is the swapchain's backbuffer, or a headless RGBA8
 texture for the tests and the [replay tool](ARCHITECTURE.md#terms) (`port/render/rd_present.c`,
 header comment, `rd__present_box`). After the picture come the overlay (the port's popups and hints,
@@ -497,7 +507,8 @@ alpha is the grid's exact `k / (n * perFrame)` (`pace_lock_alpha`).
 of the present but for the top layer. It reads SCENE and DISPLAY and never writes them, so dumps are
 the same with it on (`port/render/rd_crt.c`, header comment). It works on the source grid: the PS2
 picture's pixels, 512 across at 4:3 and DISPLAY's field lines; on a wider frame the columns the
-present shows (the whole frame with Full pixel off, the exact width in whole GS pixels with it on),
+present shows (the exact width in whole GS pixels, with Full pixel on and off; off, the last pass's
+scissor masks the game's border at the grid's scale),
 so a phosphor triad covers one of the picture's pixels at every aspect, in a box of the grid's shape
 (`rd__crt_crop`, `rd__crt_box`). With the filter on the scene renders at 1x and no
 text is deferred. The passes: the overlay drawn into a line-doubled layer and reduced back to the

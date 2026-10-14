@@ -50,7 +50,7 @@
  *             4:3 run's at the same 3 output pixels a source pixel
  * Without a device, also:
  *   wide grid the grid at 512, 688 (16:9), 1376 (32:9), 2560 (60:9): the
- *             columns cropped with Full pixel on (0, 3, 5, 0; none off)
+ *             columns cropped with Full pixel on and off (0, 3, 5, 0)
  *             and the grid's width, the films'
  *             512, and the filter's box of the grid's shape: output pixels
  *             a source pixel the 4:3 run's at 768 and 1152 lines (the 4:3
@@ -766,25 +766,32 @@ static void checkLuma(void)
 
 /* Full pixel under the filter: a flat frame through the tube at 1920 x 1080
  * (pillars).  Off, the reduction's border is dark at the box edge; on, the
- * edge pixels are as lit as the centre and the pillars stay black. */
+ * edge pixels are as lit as the centre and the pillars stay black.  Off in
+ * the game (the border mask, mode 2): the tube's box at the centre row and
+ * column is the on run's byte for byte inside the mask and black in its
+ * bands, 2 of the grid's 512 columns a side (5.625 pixels) and 8 of its
+ * 256 lines top and bottom (33.75 pixels: 512 lines), within a pixel. */
 static void checkFullPixel(void)
 {
     const uint32_t w = 1920, h = 1080;
-    uint8_t edge[2][4][3], mid[2][3];
+    uint8_t edge[3][4][3], mid[3][3];
+    static uint8_t row[3][1920][3], col[3][1080][3];
     RhiRect b;
     rd__present_box(w, h, 4.0f / 3.0f, &b);
-    for (int on = 0; on < 2; on++) {
+    static const char *const kMode[3] = {"off", "on", "off (border mask)"};
+    for (int on = 0; on < 3; on++) {
         makeFlatScene(0xC0, 0xC0, 0xC0);
         RdSettings s = outputSettings(w, h);
         rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
         s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
         s.crtScanlines = 0.0f;
-        s.fullPixel = (uint8_t)on;
+        s.fullPixel = (uint8_t)(on == 1);
+        s.borderMask = (uint8_t)(on == 2);
         if (!present(&s, 0)) {
             return;
         }
         CHECK(rhi_vk_validation_error_count() == 0, "full pixel %s: %u validation errors",
-              on ? "on" : "off", rhi_vk_validation_error_count());
+              kMode[on], rhi_vk_validation_error_count());
         const uint32_t cx = (uint32_t)b.x + b.w / 2, cy = (uint32_t)b.y + b.h / 2;
         const uint32_t xs[4] = {(uint32_t)b.x, (uint32_t)b.x + b.w - 1, cx, cx};
         const uint32_t ys[4] = {cy, cy, (uint32_t)b.y, (uint32_t)b.y + b.h - 1};
@@ -792,9 +799,47 @@ static void checkFullPixel(void)
             memcpy(edge[on][k], &s_out[((size_t)ys[k] * w + xs[k]) * 4], 3);
         }
         memcpy(mid[on], &s_out[((size_t)cy * w + cx) * 4], 3);
+        for (uint32_t x = 0; x < w; x++) {
+            memcpy(row[on][x], &s_out[((size_t)cy * w + x) * 4], 3);
+        }
+        for (uint32_t y = 0; y < h; y++) {
+            memcpy(col[on][y], &s_out[((size_t)y * w + cx) * 4], 3);
+        }
         /* the pillars beside the box */
         CHECK(!(s_out[((size_t)cy * w + b.x - 1) * 4] | s_out[((size_t)cy * w + b.x + b.w) * 4]),
-              "full pixel %s: the pillars stay black", on ? "on" : "off");
+              "full pixel %s: the pillars stay black", kMode[on]);
+    }
+    {
+        /* the mask's bands: the black runs from the box's edges */
+        static const uint8_t zero[3] = {0, 0, 0};
+        uint32_t l = 0, r = 0, t = 0, bo = 0;
+        while (l < b.w / 2 && !memcmp(row[2][b.x + l], zero, 3)) {
+            l++;
+        }
+        while (r < b.w / 2 && !memcmp(row[2][b.x + b.w - 1 - r], zero, 3)) {
+            r++;
+        }
+        while (t < b.h / 2 && !memcmp(col[2][b.y + t], zero, 3)) {
+            t++;
+        }
+        while (bo < b.h / 2 && !memcmp(col[2][b.y + b.h - 1 - bo], zero, 3)) {
+            bo++;
+        }
+        const float side = 2.0f * (float)b.w / 512.0f, rows = (float)b.h * 16.0f / 512.0f;
+        printf("  full pixel border mask: %u left, %u right, %u top, %u bottom (%.3f, %.3f)\n", l,
+               r, t, bo, (double)side, (double)rows);
+        CHECK(l == r && fabsf((float)l - side) <= 1.0f && t == bo && fabsf((float)t - rows) <= 1.0f,
+              "full pixel border mask: the bands are 2 columns and 8 of 256 lines at the "
+              "grid's scale (%u %u %u %u; %.3f, %.3f)",
+              l, r, t, bo, (double)side, (double)rows);
+        uint32_t bad = 0;
+        for (uint32_t x = (uint32_t)b.x + l; x < (uint32_t)b.x + b.w - r; x++) {
+            bad += memcmp(row[2][x], row[1][x], 3) != 0;
+        }
+        for (uint32_t y = (uint32_t)b.y + t; y < (uint32_t)b.y + b.h - bo; y++) {
+            bad += memcmp(col[2][y], col[1][y], 3) != 0;
+        }
+        CHECK(bad == 0, "full pixel border mask: inside the mask the on picture (%u differ)", bad);
     }
     static const char *const kSide[4] = {"left", "right", "top", "bottom"};
     for (int k = 0; k < 4; k++) {
@@ -1253,11 +1298,12 @@ static void checkTopLayer(void)
 
 /* ------------------------------------------------------ the native frame
  *
- * The grid of a frame wider than 512: with Full pixel on the native
- * frame's columns its exact width shows, the (gsW - wExact) / 2 past it at
- * each side rounded to whole GS pixels and left out; off, the whole frame;
- * in a box of the grid's shape, so a source pixel spans as many output
- * pixels as in the 4:3 run; none of this at 512. */
+ * The grid of a frame wider than 512: with Full pixel on and off the
+ * native frame's columns its exact width shows, the (gsW - wExact) / 2
+ * past it at each side rounded to whole GS pixels and left out (off masks
+ * the game's border over the tube's box), in a box of the grid's shape,
+ * so a source pixel spans as many output pixels as in the 4:3 run; none
+ * of this at 512. */
 static void checkWideGrid(void)
 {
     static const struct {
@@ -1272,8 +1318,8 @@ static void checkWideGrid(void)
     };
 
     for (size_t j = 0; j < 2 * sizeof(kW) / sizeof(kW[0]); j++) {
-        /* Full pixel on: the exact width; off: the whole frame, its border
-           included (rd__frame_wshown), nothing cropped */
+        /* Full pixel on and off (the game's: the border mask): the exact
+           width either way */
         const size_t i = j / 2;
         const int on = (j % 2) == 0;
         if (!rd__init_record_only(kW[i].w, 512)) {
@@ -1281,8 +1327,9 @@ static void checkWideGrid(void)
             return;
         }
         g_rd.settings.fullPixel = (uint8_t)on;
+        g_rd.settings.borderMask = (uint8_t)!on;
         g_rd.frameWExact = kW[i].we;
-        const uint32_t wantCrop = on ? kW[i].crop : 0u, wantW = on ? kW[i].vw : kW[i].w;
+        const uint32_t wantCrop = kW[i].crop, wantW = kW[i].vw;
         uint32_t vw = 0, vh = 0, fw = 0, fh = 0;
         rd__crt_grid(&vw, &vh);
         CHECK(rd__crt_crop() == wantCrop && vw == wantW && vh == 256,

@@ -165,11 +165,11 @@ The last row is not one of the game's effects:
   With Original, a fixed Resolution (1x to 16x), the CRT filter or
   supersampling, this row only opens up the thin black border. Picking the
   Enhanced Preset turns it on, and you can turn it on or off here at any
-  time. Off shows the picture as the PS2 did: the whole picture with its
-  thin black border on all four sides, fitted to your screen without
-  stretching. On a wide screen this can leave a few more black rows above
-  and below the picture. With Video mode at 50 Hz the strip at the top and
-  bottom is a little taller.
+  time. Off shows the same picture, the same size and just as sharp, with
+  the PS2's thin black border laid over its edges as the PS2 did: a few
+  dots at the sides and a little more at the top and bottom. Nothing is
+  shrunk or moved; the border only covers the edge. With Video mode at
+  50 Hz the border at the top and bottom is a little taller.
 
 The Preset on the Display page sets Texture filtering, Full-height picture and Full pixel on this
 page too (Enhanced turns Full pixel on, Original turns it off), but it does not change the rest.

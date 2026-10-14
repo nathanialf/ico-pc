@@ -309,6 +309,8 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->filterUpgrade = (uint8_t)o.filter;
     rs->fullHeightScene = (uint8_t)(o.fullHeight != 0);
     rs->fullPixel = (uint8_t)(o.fullPixel != 0);
+    /* off: the same picture, the game's border masked over it */
+    rs->borderMask = (uint8_t)(o.fullPixel == 0);
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();

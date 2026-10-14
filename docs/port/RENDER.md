@@ -492,9 +492,11 @@ sun's eye blur (WORK0 to WORK3) (`port/render/rd.h` (`RdPostKind`)). `rd_blur.c`
 - `((A - B) C >> 7) + D` on integers with PABE, COLCLAMP, FBA, written to UNORM8 as k / 255.
 
 The destination is read from a snapshot taken just before the sprite, so the result is the GS
-integer arithmetic of every pass, feedback or not (`port/render/rd_blur.c`). With Full pixel the
-reduction's textured sprite is drawn with the whole target as scissor and both axes clamped, so
-the border shows the picture SCENE holds (`port/render/rd_replay.c` (`doBlurSprite`)).
+integer arithmetic of every pass, feedback or not (`port/render/rd_blur.c`). With Full pixel (on,
+or off in the game, where the presenter masks the border over the same picture:
+`RdSettings.borderMask`, [DISPLAY.md](DISPLAY.md#the-native-frame)) the reduction's textured
+sprite is drawn with the whole target as scissor and both axes clamped, so the border shows the
+picture SCENE holds (`port/render/rd_replay.c` (`borderOpen`, `doBlurSprite`)).
 
 ## Above 1x
 
@@ -817,7 +819,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--pass-dump DIR` | writes every named target to `DIR/<NAME>.png`, and with `--present` the presented picture |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
-| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
+| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
 | `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |

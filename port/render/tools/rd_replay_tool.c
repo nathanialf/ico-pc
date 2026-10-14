@@ -45,6 +45,8 @@
  *                         --present box with --enhanced, else the GS size)
  *   --full-height         the full-height scene
  *   --full-pixel          the reduction draws the whole frame: no black border
+ *   --border-mask         the game's Full pixel off: the same picture, the
+ *                         border masked over it at present (rd__border_mask)
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -925,7 +927,8 @@ int main(int argc, char **argv)
     if (argc < 3) {
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
-                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] [--filter F] "
+                "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
+                "[--border-mask] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
@@ -977,6 +980,8 @@ int main(int argc, char **argv)
             s.fullHeightScene = 1;
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
+        } else if (strcmp(argv[i], "--border-mask") == 0) {
+            s.borderMask = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {
@@ -1162,11 +1167,7 @@ int main(int argc, char **argv)
     if (pw && crop) {
         rd__present_box(pw, ph, reqAspect, &want);
         oh = (uint32_t)want.h;
-        /* the recorded picture's box fills that output: its exact width
-         * with Full pixel on, the whole frame at its own shape off
-         * (rd_present.c rd__frame_wshown) */
-        const float shape = s.fullPixel || gw == ICO_FRAME_BASE_W ? recAspect : (float)gw / 384.0f;
-        ow = (uint32_t)((float)oh * shape + 0.5f);
+        ow = (uint32_t)((float)oh * recAspect + 0.5f);
     }
     /* --pass-dump renders the targets with no output, as --target did, and
      * the present in a second context */
