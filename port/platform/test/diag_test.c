@@ -29,7 +29,16 @@
  *               2 s after the present ended; a long present before the first
  *               tick does not trip a 2 s first limit either; without the
  *               effects program a 2.5 s present fires inside it;
- *   - lines:    milestones and logs reach the file at once.
+ *   - lines:    milestones and logs reach the file at once;
+ *   - activity: the start-up activity file (issue 93): written with each
+ *               note while the start-up set is created and kept when the
+ *               run just ends; the next start names it ("the previous run
+ *               ended while"), deletes it and is lazy; a lazy run keeps its
+ *               notes and a line between them; a normal end deletes it; a
+ *               restart after a driver crash logs it but is not lazy;
+ *   - early:    the reporter started before the limits (Android's start):
+ *               the first limit counts from ico_diag_start, not from the
+ *               thread's start.
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
 #include <stdio.h>
@@ -177,6 +186,64 @@ static void present_child(int first, int effects)
     exit(0);
 }
 
+/* a child's end without the clean-up, as a killed process ends */
+#if defined(_WIN32)
+#define child_quit(c) exit(c)
+#else
+#define child_quit(c) _exit(c)
+#endif
+
+/* the activity file beside the log */
+static void act_path(char *out, size_t size, const char *log)
+{
+    snprintf(out, size, "%s.act", log);
+}
+
+/* The start-up activity file's steps, each ending as a killed process
+   would (_exit: no clean-up) unless the step ends cleanly */
+static void activity_child(const char *mode, const char *log)
+{
+    char path[300];
+    int lazy;
+    act_path(path, sizeof path, log);
+    lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0);
+    ico_diag_log("test: lazy %d", lazy);
+    if (strcmp(mode, "actrecord") == 0) {
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_activity("creating pipeline program 5 blend 1 (start-up set, 2 of 9)");
+        /* a frame between two of the set's pipelines clears the note: the
+           file keeps the last one */
+        ico_diag_clear_activity();
+        child_quit(0);
+    } else if (strcmp(mode, "actlazy") == 0) {
+        ico_diag_startup_activity_record(lazy ? ICO_DIAG_ACTIVITY_LAZY : 0);
+        ico_diag_set_activity("creating pipeline fog test");
+        if (getenv("ICO_TEST_ACT_BETWEEN") != NULL) {
+            ico_diag_clear_activity();
+        }
+        child_quit(0);
+    } else if (strcmp(mode, "actclean") == 0) {
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_activity("creating the start-up pipelines (1 of 9)");
+        ico_diag_startup_activity_record(0);
+        child_quit(0);
+    }
+    child_quit(0); /* actrelaunch, actnext */
+}
+
+/* ico_diag_start_reporter first, the limits 1.5 s later: the first limit
+   (1 s) has not fired 0.6 s after them, and fires after that */
+static void early_child(void)
+{
+    ico_diag_start_reporter();
+    pause_ms(1500);
+    ico_diag_start(1, 0);
+    pause_ms(600);
+    ico_diag_log("test: not fired yet");
+    pause_ms(5000);
+    exit(0);
+}
+
 static void run_child(const char *mode, const char *log)
 {
     int id;
@@ -190,7 +257,11 @@ static void run_child(const char *mode, const char *log)
     ico_diag_log("test: child %s", mode);
     ico_sched_reset();
     sema = ico_sched_create_sema(1, 1, 0, 0);
-    if (strcmp(mode, "segv") == 0) {
+    if (strncmp(mode, "act", 3) == 0) {
+        activity_child(mode, log);
+    } else if (strcmp(mode, "early") == 0) {
+        early_child();
+    } else if (strcmp(mode, "segv") == 0) {
         fn = segv_thread;
     } else if (strcmp(mode, "segvnote") == 0) {
         /* a crash inside the graphics driver's pipeline build; this child
@@ -405,6 +476,97 @@ int main(int argc, char **argv)
     if (fails) {
         printf("--- presentplain log ---\n%s\n", s);
     }
+    /* the start-up activity file */
+    {
+        char act[300];
+        act_path(act, sizeof act, log);
+        remove(act);
+        /* no file: not lazy; the start-up set's note stays after a
+           cleared note and when the run just ends */
+        r = run(argv[0], "actrecord", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        CHECK(strstr(s, "the previous run ended while") == NULL);
+        s = read_file(act);
+        CHECK(strcmp(s, "creating pipeline program 5 blend 1 (start-up set, 2 of 9)") == 0);
+        /* the next start names it, deletes it and is lazy; its own note
+           replaces the file's */
+        r = run(argv[0], "actlazy", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5 "
+                        "blend 1 (start-up set, 2 of 9)\n") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        s = read_file(act);
+        CHECK(strcmp(s, "creating pipeline fog test") == 0);
+        /* a lazy run ended between two creations: the line between them,
+           and the next start is lazy again (no further step) */
+        setenv("ICO_TEST_ACT_BETWEEN", "1", 1);
+        r = run(argv[0], "actlazy", log);
+        unsetenv("ICO_TEST_ACT_BETWEEN");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline fog test\n") !=
+              NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        s = read_file(act);
+        CHECK(strstr(s, "none was being created") != NULL);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ended while: running with the pipelines created as the frames need "
+                        "them") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        /* ... which deleted it: the start after is not lazy */
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        CHECK(strstr(s, "the previous run ended while") == NULL);
+        /* a normal end of the set deletes the file */
+        r = run(argv[0], "actclean", log);
+        CHECK(r == 0);
+        {
+            FILE *f = fopen(act, "rb");
+            CHECK(f == NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+        }
+        /* a restart after a driver crash: logged and deleted, its own step
+           decides (not lazy) */
+        run(argv[0], "actrecord", log);
+        r = run(argv[0], "actrelaunch", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5") !=
+              NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        {
+            FILE *f = fopen(act, "rb");
+            CHECK(f == NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+        }
+        remove(act);
+        if (fails) {
+            printf("--- activity log ---\n%s\n", read_file(log));
+        }
+    }
+
+    /* the reporter before the limits: they count from ico_diag_start */
+    r = run(argv[0], "early", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "the watchdog starts with the game") != NULL);
+    CHECK(strstr(s, "test: not fired yet") != NULL);
+    CHECK(strstr(s, "WATCHDOG: no Main tick 1 s after boot started") != NULL);
+    CHECK(strstr(s, "test: not fired yet") != NULL && strstr(s, "WATCHDOG:") != NULL &&
+          strstr(s, "test: not fired yet") < strstr(s, "WATCHDOG:"));
+    if (fails) {
+        printf("--- early log ---\n%s\n", s);
+    }
+
     remove(log);
     if (fails) {
         printf("diag_test: %d failures\n", fails);

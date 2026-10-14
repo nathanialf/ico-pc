@@ -177,19 +177,22 @@ closes. Either way the log says why: near the end of the log there is a
 line of `=` signs, and the line after it has `CRASH:` in it. Send the log.
 The developers can find where it happened from the numbers in that block.
 
-**The game closes or restarts itself right after it starts.** Some graphics
-drivers crash while the game gets its graphics ready. On Windows, Linux and
-Mac the game notices and starts itself again, up to three times, each time
-trying a gentler way: first without the graphics it saved last time, then
-(on Windows) with Direct3D 12, then getting the graphics ready as you play
-instead of all at once. You need do nothing, and your settings are left as
-they are. If it still cannot start, Windows shows a message that the
-graphics driver crashed; on Linux and Mac the game closes and the log says
-why. On an Android phone a message says the graphics driver crashed and
-the game closes; on an iPhone the game closes. Updating the graphics driver
-usually fixes this. On Windows you can also open `ico-pc.ini` in the `x64`
-folder with Notepad and add the line `backend=d3d12` at the end to always
-use Direct3D 12
+**The game closes or restarts itself right after it starts.** Some
+graphics drivers crash while the game gets its graphics ready. On Windows,
+Linux and Mac the game notices and starts itself again, up to three times,
+each time trying a gentler way: first without the graphics it saved last
+time, then (on Windows) with Direct3D 12, then getting the graphics ready
+as you play instead of all at once. You need do nothing, and your settings
+are left as they are. If it still cannot start, Windows shows a message
+that the graphics driver crashed; on Linux and Mac the game closes and the
+log says why. On an Android phone a message says the graphics driver
+crashed and the game closes; on an iPhone the game closes. On every
+system, when the game closed while it was getting its graphics ready (with
+a message or without one), the next start gets the graphics ready as you
+play instead of all at once, and the log of that start says where the one
+before stopped. Updating the graphics driver usually fixes this. On
+Windows you can also open `ico-pc.ini` in the `x64` folder with Notepad
+and add the line `backend=d3d12` at the end to always use Direct3D 12
 ([how](OPTIONS.md#choosing-the-renderer-on-windows)). If you report it,
 attach the log: it shows every attempt.
 
