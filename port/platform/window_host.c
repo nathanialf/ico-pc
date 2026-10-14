@@ -142,6 +142,7 @@ static struct {
     Uint64 cost;       /* how long the last rd_present took */
     PaceHist paceHist; /* the last presents' costs (pace_policy.h) */
     bool paceSlow;     /* pace_slow_present after the last present */
+    bool skippedLast;  /* pace left the last new frame unpresented (the audio's skip) */
     /* the rate log */
     Uint64 statAt;
     unsigned statPresents, statFrames;
@@ -815,6 +816,7 @@ static void lc_pace_reset(void *u)
     s_pres.paceEnd = 0;
     memset(&s_pres.paceHist, 0, sizeof(s_pres.paceHist));
     s_pres.paceSlow = false;
+    s_pres.skippedLast = false;
     s_pres.cost = 0;
     s_pres.lockN = 0; /* the lock starts again from now */
     s_pres.lastReturn = 0;
@@ -3462,15 +3464,28 @@ static void pace(int hz)
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
+    /* the audio about to run dry: less than half its cushion queued
+       (audio_host.h ico_audio_sdl_queued_ms; -1 without a stream) */
+    const int audioMs = ico_audio_sdl_queued_ms();
+    const bool audioLow = audioMs >= 0 && 2 * audioMs < ico_audio_sdl_cushion_ms();
     for (;;) {
         now = SDL_GetTicksNS();
-        /* Each simulation step supplies one vsync of PCM. A mandatory
-           replay of every new frame while already late can keep the
-           simulation below real time, repeatedly emptying any audio
-           cushion. Catch up first when a sound device is active; the next
-           on-time present uses the latest frame. No game ticks or PCM are
-           discarded, only intermediate presentations. */
-        if (now >= s_deadline && ico_audio_sdl_active()) {
+        /* each simulation step queues one vsync of audio, so a step held
+           back by presents is audio the device plays out without
+           replacement.  A new frame behind the deadline is left
+           unpresented (the next step at once; the next present shows the
+           newer frame) only when the audio plays (ico_audio_sdl_active)
+           and either the renderer is measured slower than real time
+           (s_pres.paceSlow) or the audio is about to run dry (audioLow),
+           and never for two new frames in a row (s_pres.skippedLast): the
+           picture keeps at least every other frame, and a single late
+           present (a FIFO return just past the deadline) on a renderer
+           that keeps up, with the audio full, never repeats a picture
+           (paceSlow needs three slow presents in a row).  Without audio,
+           as below.  No step or audio is dropped, only that present */
+        if (now >= s_deadline && s_pres.presentedFrame != s_pres.frame && !s_pres.skippedLast &&
+            (s_pres.paceSlow || audioLow) && ico_audio_sdl_active()) {
+            s_pres.skippedLast = true;
             break;
         }
         /* behind the deadline, or on a renderer slower than a vsync period
@@ -3539,6 +3554,9 @@ static void pace(int hz)
         }
         const int ok = present_once(a, refresh, period);
         now = SDL_GetTicksNS();
+        if (ok) {
+            s_pres.skippedLast = false;
+        }
         if (!ok) {
             /* a movie on the output, or nothing closed yet */
             if (now < s_deadline) {

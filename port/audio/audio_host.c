@@ -161,6 +161,16 @@ int ico_audio_sdl_active(void)
     return 0;
 }
 
+int ico_audio_sdl_queued_ms(void)
+{
+    return -1;
+}
+
+int ico_audio_sdl_cushion_ms(void)
+{
+    return 0;
+}
+
 /* No SDL output (the headless build): no devices to choose from
    (audio_host.h). */
 int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)

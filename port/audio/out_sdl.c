@@ -7,13 +7,20 @@
  * pushes one vsync of frames per vsync (SDL_PutAudioStreamData is
  * thread-safe; nothing else is shared with SDL's audio thread).
  *
- * Latency: prebuffer 120 ms, plus the device buffer
- * (SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES = 480, 10 ms). The window paces the
- * simulation to real time, so
- * production and consumption match on average; when the queue runs dry
- * (a stall) silence restores the full cushion before the next block.
- * When more than 250 ms are queued (the simulation ran
- * ahead) the block is dropped.  Both are counted and logged at the close.
+ * Latency: the stream keeps a cushion of queued audio, plus the device
+ * buffer (SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES = 480, 10 ms).  The cushion
+ * starts at two vsyncs (two of the pushed blocks: 33 ms at 59.94 Hz, 40 ms
+ * at 50) and is what the open and every resume prime with silence.  The
+ * window paces the simulation to real time, so production and consumption
+ * match on average.  When the queue runs dry (a stall: the simulation fell
+ * behind real time by more than the cushion) the cushion doubles, up to
+ * 120 ms (CUSHION_MAX_FRAMES), and silence fills the queue to it before the
+ * block; after 20 s of pushed audio without a dry queue
+ * (CUSHION_QUIET_FRAMES) it halves again, down to two vsyncs, and the trim
+ * below plays the surplus out.  When more than the cushion plus four
+ * vsyncs is queued (the simulation ran ahead; never more than 250 ms,
+ * QUEUE_CEILING_FRAMES) the block is dropped.  Refills and drops are
+ * counted and logged at the close with the cushion.
  * Under the window's vsync lock the display is the simulation's clock, so
  * the simulation runs a little off 59.94 Hz (60.00 on a 60.00 Hz screen);
  * the window measures the rate every 10 s and the stream plays at that
@@ -21,7 +28,8 @@
  *
  * Volume: each block is scaled by audio_host.h's ico_audio_volume_q8()
  * (0..256 in 1/256 steps) just before it is queued, so a change from the
- * Settings menu is heard within the buffered audio's duration.
+ * Settings menu is heard within the queued audio (the cushion and a
+ * vsync).
  *
  * Device ([audio] device): the stream
  * is opened on the playback device with that name, or on SDL's default
@@ -39,8 +47,15 @@
 
 #define CHANNELS 2
 #define BYTES_PER_FRAME (CHANNELS * 2)
-#define QUEUE_TARGET_FRAMES (48000 * 120 / 1000)
-#define QUEUE_LIMIT_FRAMES (48000 * 250 / 1000)
+#define RATE 48000
+/* the cushion's largest size: the stalls of a slow renderer's cinematics */
+#define CUSHION_MAX_FRAMES (RATE * 120 / 1000)
+/* pushed audio without a dry queue before the cushion halves: 20 s */
+#define CUSHION_QUIET_FRAMES (RATE * 20)
+/* the queue's limit above which a block is dropped, at most */
+#define QUEUE_CEILING_FRAMES (RATE * 250 / 1000)
+/* the block size until the first push: a 59.94 Hz vsync */
+#define BLOCK_DEFAULT_FRAMES 800
 
 static SDL_AudioStream *stream;
 static int subsystem;            /* SDL_INIT_AUDIO is up */
@@ -51,12 +66,33 @@ static unsigned long drops;
 static float rate_ratio = 1.0f;    /* ico_audio_set_rate_ratio */
 static float applied_ratio = 1.0f; /* the stream's (ico_audio_play_ratio of rate_ratio) */
 static Uint64 last_push_ns;
+static int block_frames = BLOCK_DEFAULT_FRAMES; /* the last pushed block's size */
+static int cushion_level; /* the cushion is two blocks doubled this often (capped) */
+static int cushion_peak;  /* the largest cushion since the open, frames */
+static long quiet_frames; /* pushed since the last dry queue or halving */
 static int16_t silence[1024 * CHANNELS];
 static int16_t scaled[1024 * CHANNELS];
 
-/* Queue a cushion while the device is paused, or restore a low queue.
-   A single vsync of padding is shorter than the shader/scene
-   loading stalls that occur during cinematic playback. */
+/* the current cushion, frames: two blocks doubled cushion_level times,
+   at most CUSHION_MAX_FRAMES */
+static int cushion_frames(void)
+{
+    const long f = (2L * block_frames) << cushion_level;
+
+    return f > CUSHION_MAX_FRAMES ? CUSHION_MAX_FRAMES : (int)f;
+}
+
+/* the queue above which a block is dropped: the cushion plus four
+   blocks, at most QUEUE_CEILING_FRAMES */
+static int queue_limit_frames(void)
+{
+    const long f = cushion_frames() + 4L * block_frames;
+
+    return f > QUEUE_CEILING_FRAMES ? QUEUE_CEILING_FRAMES : (int)f;
+}
+
+/* Queue silence: the cushion at the open and a resume, or the rest of it
+   after a dry queue; in pieces of the silence buffer's size. */
 static void buffer_silence(int frames)
 {
     while (frames > 0) {
@@ -136,7 +172,7 @@ static int open_stream(const char *name)
     if (rate_ratio != 1.0f) {
         SDL_SetAudioStreamFrequencyRatio(stream, rate_ratio);
     }
-    buffer_silence(QUEUE_TARGET_FRAMES);
+    buffer_silence(cushion_frames());
     SDL_ResumeAudioStreamDevice(stream);
     if (chosen != 0) {
         fprintf(stderr, "audio: output on \"%s\"\n", name);
@@ -151,6 +187,7 @@ int ico_audio_sdl_open(void)
         fprintf(stderr, "audio: SDL audio unavailable (%s); no sound\n", SDL_GetError());
         return -1;
     }
+    cushion_level = 0; /* before the open primes it */
     if (open_stream(getenv("ICO_AUDIO_DEVICE")) != 0) {
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         return -1;
@@ -158,8 +195,13 @@ int ico_audio_sdl_open(void)
     subsystem = 1;
     underruns = drops = 0;
     last_push_ns = 0;
-    fprintf(stderr, "audio: SDL driver %s, 48 kHz stereo, 120 ms prebuffered\n",
-            SDL_GetCurrentAudioDriver() != NULL ? SDL_GetCurrentAudioDriver() : "?");
+    quiet_frames = 0;
+    cushion_peak = cushion_frames();
+    fprintf(stderr,
+            "audio: SDL driver %s, 48 kHz stereo, %d ms buffered (up to %d ms after a dry "
+            "queue)\n",
+            SDL_GetCurrentAudioDriver() != NULL ? SDL_GetCurrentAudioDriver() : "?",
+            cushion_frames() * 1000 / RATE, CUSHION_MAX_FRAMES * 1000 / RATE);
     return 0;
 }
 
@@ -219,7 +261,7 @@ void ico_audio_sdl_pause(int paused)
     }
     /* what was queued before the pause would play late: from silence */
     SDL_ClearAudioStream(stream);
-    buffer_silence(QUEUE_TARGET_FRAMES);
+    buffer_silence(cushion_frames());
     if (!SDL_ResumeAudioStreamDevice(stream)) {
         fprintf(stderr, "audio: resume: %s\n", SDL_GetError());
     }
@@ -252,29 +294,48 @@ void ico_audio_sdl_push(const int16_t *frames, int count)
     const Uint64 now = SDL_GetTicksNS();
     const double gap_ms = last_push_ns ? (double)(now - last_push_ns) / 1e6 : 0.0;
     last_push_ns = now;
+    block_frames = count;
+    /* a quiet stretch: the cushion one step back toward two vsyncs */
+    quiet_frames += count;
+    if (quiet_frames >= CUSHION_QUIET_FRAMES) {
+        quiet_frames = 0;
+        if (cushion_level > 0) {
+            cushion_level--;
+        }
+    }
     queued = SDL_GetAudioStreamQueued(stream);
     {
-        /* Trim surplus above the cushion, without draining the cushion itself. */
+        /* more than the cushion waiting: played out a little faster,
+           never into the cushion itself */
         const float want =
-            (float)ico_audio_play_ratio(rate_ratio, queued, QUEUE_TARGET_FRAMES * BYTES_PER_FRAME);
+            (float)ico_audio_play_ratio(rate_ratio, queued, cushion_frames() * BYTES_PER_FRAME);
 
         if (want != applied_ratio && SDL_SetAudioStreamFrequencyRatio(stream, want)) {
             applied_ratio = want;
         }
     }
-    if (queued > QUEUE_LIMIT_FRAMES * BYTES_PER_FRAME) {
+    if (queued > queue_limit_frames() * BYTES_PER_FRAME) {
         drops++;
         return;
     }
     if (queued >= 0 && queued < vsync_bytes / 4) {
+        /* dry: the cushion was too short for this stall; doubled (up to
+           CUSHION_MAX_FRAMES) and filled with silence before the block */
         underruns++;
-        if (underruns <= 8) {
-            fprintf(
-                stderr,
-                "audio: low queue %d frames, %.1f ms between pushes; restoring 120 ms cushion\n",
-                queued / BYTES_PER_FRAME, gap_ms);
+        quiet_frames = 0;
+        if (cushion_frames() < CUSHION_MAX_FRAMES) {
+            cushion_level++;
         }
-        buffer_silence(QUEUE_TARGET_FRAMES - queued / BYTES_PER_FRAME);
+        if (cushion_frames() > cushion_peak) {
+            cushion_peak = cushion_frames();
+        }
+        if (underruns <= 8) {
+            fprintf(stderr,
+                    "audio: low queue %d frames, %.1f ms between pushes; refilled to a %d ms "
+                    "cushion\n",
+                    queued / BYTES_PER_FRAME, gap_ms, cushion_frames() * 1000 / RATE);
+        }
+        buffer_silence(cushion_frames() - queued / BYTES_PER_FRAME);
     }
     if (count <= 1024 && q8 != 256) {
         /* the volume (audio_host.h): scaled into a copy, the caller's block
@@ -290,6 +351,18 @@ int ico_audio_sdl_active(void)
     return stream != NULL;
 }
 
+int ico_audio_sdl_queued_ms(void)
+{
+    const int queued = stream != NULL ? SDL_GetAudioStreamQueued(stream) : -1;
+
+    return queued < 0 ? -1 : (int)((long long)queued / BYTES_PER_FRAME * 1000 / RATE);
+}
+
+int ico_audio_sdl_cushion_ms(void)
+{
+    return stream != NULL ? cushion_frames() * 1000 / RATE : 0;
+}
+
 void ico_audio_sdl_close(void)
 {
     if (stream == NULL && !subsystem) {
@@ -303,6 +376,7 @@ void ico_audio_sdl_close(void)
     subsystem = 0;
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
     fprintf(stderr,
-            "audio: SDL output closed (%lu refills after a dry queue, %lu blocks dropped)\n",
-            underruns, drops);
+            "audio: SDL output closed (cushion %d ms, largest %d ms; %lu refills after a dry "
+            "queue, %lu blocks dropped)\n",
+            cushion_frames() * 1000 / RATE, cushion_peak * 1000 / RATE, underruns, drops);
 }

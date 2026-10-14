@@ -67,7 +67,8 @@ int main(void)
     check_eq(in[3], 8192, "in place: quarter of full scale");
 
     /* the play ratio: the rate ratio, a quarter of a percent faster above
-       two vsyncs queued (800 frames of 4 bytes a vsync) */
+       the target (out_sdl.c passes its cushion: two vsyncs of 800 frames of
+       4 bytes, 6400 bytes, at first; 23040 bytes at its 120 ms largest) */
     check_eq((long)(ico_audio_play_ratio(1.001, 3200, 6400) * 1e6 + 0.5), 1001000,
              "one vsync: as is");
     check_eq((long)(ico_audio_play_ratio(1.001, 6400, 6400) * 1e6 + 0.5), 1001000, "two: as is");

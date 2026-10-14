@@ -83,11 +83,18 @@ uint64_t ico_wav_close(IcoWav *w);
    device ICO_AUDIO_DEVICE names ([audio] device), or the default one when
    that is empty or names no device (logged once). */
 int ico_audio_sdl_open(void);
-/* Queue one vsync of frames, with a 120 ms startup/recovery cushion. */
+/* Queue one vsync of frames, keeping a cushion queued: two vsyncs, doubled
+   after each dry queue up to 120 ms, halved again after 20 s without one
+   (out_sdl.c). */
 void ico_audio_sdl_push(const int16_t *frames, int count);
-/* Whether an output stream is open; the presenter prioritizes simulation
-   catch-up when real-time audio consumption is active. */
+/* Whether an output stream is open (0 without the SDL output). */
 int ico_audio_sdl_active(void);
+/* The audio queued on the stream in milliseconds, -1 when no stream is
+   open; and the cushion the queue is kept at, 0 when none is.  The window
+   (pace) reads them: below half the cushion the audio is about to run
+   dry. */
+int ico_audio_sdl_queued_ms(void);
+int ico_audio_sdl_cushion_ms(void);
 void ico_audio_sdl_close(void);
 
 /* The output device ([audio] device).
