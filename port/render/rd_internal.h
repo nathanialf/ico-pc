@@ -1770,7 +1770,15 @@ void rd__ui_box(uint32_t outW, uint32_t outH, RhiRect *box);
  * unless full pixel is on (the reduction then draws the whole frame), and
  * with the border mask (rd__border_mask). */
 uint32_t rd__reduction_crop(uint32_t gsH);
-/* The border mask (RdSettings.borderMask with Full pixel off): the part of
+/* The frame is cropped: gsW is over 512 and its exact width
+ * (rd__frame_wexact) under gsW, so step 2 leaves (gsW - wExact) / 2
+ * columns out at each side (16:9: 688 over 682.67) and the game's own
+ * border with them.  False at 512 (4:3) and where the frame is its exact
+ * width (48:9 at 2048).  The border mask and the replay's open border
+ * (rd_replay.c borderOpen) apply only then. */
+bool rd__frame_cropped(void);
+/* The border mask (RdSettings.borderMask with Full pixel off, on a cropped
+ * frame alone: rd__frame_cropped; elsewhere the GS's own border): the part of
  * box, a picture cols GS columns across of a frame gsH lines high, that
  * the game's border leaves visible.  The border is the reduction's
  * (rd_post.c postReduction scissor) at the picture's own scale: 2 GS

@@ -15,6 +15,9 @@
  *      (RdSettings.borderMask, rd__border_mask: 2 GS columns at the sides,
  *      the reduction's rows at the top and bottom), where the PS2's
  *      reduction scissor (rd_post.c postReduction) held them black.
+ *      The mask is drawn on a cropped frame alone (rd__frame_cropped); at
+ *      4:3 and wherever the frame is its exact width (48:9) Full pixel off
+ *      is the GS's own DISPLAY, its border the reduction's, as on the PS2.
  * The output is the swapchain backbuffer with a window, or a headless RGBA8
  * texture of RdSettings.outputWidth x outputHeight (tests, the replay tool;
  * none when either is 0).
@@ -169,6 +172,12 @@ float rd__frame_wexact(void)
     return wexactFor(g_rd.frameAspect > 0.0f ? g_rd.frameAspect : g_rd.outAspect);
 }
 
+bool rd__frame_cropped(void)
+{
+    const uint32_t gw = g_rd.gsW ? g_rd.gsW : ICO_FRAME_BASE_W;
+    return gw != ICO_FRAME_BASE_W && rd__frame_wexact() < (float)gw;
+}
+
 /* step 2's box in an outW x outH output: the frame's exact width over its
  * height, wExact / 384 (4:3 exactly at 512), with Full pixel on and off */
 static void outputBox(uint32_t outW, uint32_t outH, RhiRect *box)
@@ -194,7 +203,13 @@ static double boxScale(uint32_t boxW, float we)
 bool rd__border_mask(const RhiRect *box, float cols, uint32_t gsH, RhiRect *inner)
 {
     *inner = *box;
-    if (!g_rd.settings.borderMask || g_rd.settings.fullPixel || !(cols > 0.0f)) {
+    /* only where step 2 crops the frame (rd__frame_cropped: 16:9 and the
+     * other aspects whose exact width is under gsW), which cuts the game's
+     * own border away; at 4:3 and wherever the frame is its exact width
+     * (48:9) the replay keeps the reduction's scissor (rd_replay.c
+     * borderOpen) and the picture is the GS's own border, the PS2's */
+    if (!g_rd.settings.borderMask || g_rd.settings.fullPixel || !(cols > 0.0f) ||
+        !rd__frame_cropped()) {
         return false;
     }
     /* the reduction's scissor (rd_post.c postReduction): columns 2 ..
@@ -1225,11 +1240,12 @@ static bool textRegion(const TextPending *t, const TextSeg *g, RhiRect *out)
     /* the reduction's crop (rd_post.c postReduction): 2 pixels left and
      * right of the native frame, 8 lines of DISPLAY's H / 2 top and bottom
      * (2 below 512), which the picture holds black.  With the border mask
-     * (Full pixel off in the game) that black is the mask's bands at the
-     * box's edges, the text clipped to the blit's scissor
-     * (rd__border_mask).  With full pixel on the reduction draws the whole
-     * frame (rd_replay.c), so there is no black strip to keep the text out
-     * of.  Neither (a zeroed RdSettings): the reduction's own border in
+     * (Full pixel off in the game on a cropped frame, rd__frame_cropped)
+     * that black is the mask's bands at the box's edges, the text clipped
+     * to the blit's scissor (rd__border_mask).  With full pixel on the
+     * reduction draws the whole frame (rd_replay.c), so there is no black
+     * strip to keep the text out of.  Neither (a zeroed RdSettings, or Full pixel off at 4:3 and
+     * wherever the frame is its exact width): the reduction's own border in
      * DISPLAY; the box shows the frame's exact width we, (W - we) / 2
      * columns left out at each side (sourceCrop), so what is left of the 2
      * columns is 2 less that, none once the crop passes them */

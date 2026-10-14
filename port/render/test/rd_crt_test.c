@@ -43,6 +43,10 @@
  *             its ctx the output, its solid quad drawn after the filter
  *             (every pixel its flat colour), the main overlay's quad still
  *             in the filtered picture (its rows vary)
+ *   wide mask Full pixel off in the game (the border mask) on a 688 frame
+ *             at 16:9: the bands 2 of the grid's 682 columns and 8 of 256
+ *             lines, black, the on picture inside them (at 4:3, the full
+ *             pixel check: no mask, plain off's present byte for byte)
  *   wide crop a 688 frame at 16:9: the grid 682 columns, the 3 a
  *             side past the exact width never in the box (white there, all
  *             black), columns 3 and 684 at its edges; under Trinitron's
@@ -767,15 +771,15 @@ static void checkLuma(void)
 /* Full pixel under the filter: a flat frame through the tube at 1920 x 1080
  * (pillars).  Off, the reduction's border is dark at the box edge; on, the
  * edge pixels are as lit as the centre and the pillars stay black.  Off in
- * the game (the border mask, mode 2): the tube's box at the centre row and
- * column is the on run's byte for byte inside the mask and black in its
- * bands, 2 of the grid's 512 columns a side (5.625 pixels) and 8 of its
- * 256 lines top and bottom (33.75 pixels: 512 lines), within a pixel. */
+ * the game (the border mask, mode 2) at 4:3, where the frame is its exact
+ * width: no mask (rd_present.c rd__frame_cropped), the present the plain
+ * off one's byte for byte, the GS's own border as in v0.7.4 (the mask on
+ * a cropped frame: checkWideMask). */
 static void checkFullPixel(void)
 {
     const uint32_t w = 1920, h = 1080;
     uint8_t edge[3][4][3], mid[3][3];
-    static uint8_t row[3][1920][3], col[3][1080][3];
+    static uint8_t gsOut[1920 * 1080 * 4];
     RhiRect b;
     rd__present_box(w, h, 4.0f / 3.0f, &b);
     static const char *const kMode[3] = {"off", "on", "off (border mask)"};
@@ -799,47 +803,16 @@ static void checkFullPixel(void)
             memcpy(edge[on][k], &s_out[((size_t)ys[k] * w + xs[k]) * 4], 3);
         }
         memcpy(mid[on], &s_out[((size_t)cy * w + cx) * 4], 3);
-        for (uint32_t x = 0; x < w; x++) {
-            memcpy(row[on][x], &s_out[((size_t)cy * w + x) * 4], 3);
-        }
-        for (uint32_t y = 0; y < h; y++) {
-            memcpy(col[on][y], &s_out[((size_t)y * w + cx) * 4], 3);
+        if (on == 0) {
+            memcpy(gsOut, s_out, sizeof(gsOut));
+        } else if (on == 2) {
+            CHECK(memcmp(gsOut, s_out, sizeof(gsOut)) == 0,
+                  "full pixel off (border mask) at 4:3: the present is plain off's byte for byte, "
+                  "the GS's own border, no mask");
         }
         /* the pillars beside the box */
         CHECK(!(s_out[((size_t)cy * w + b.x - 1) * 4] | s_out[((size_t)cy * w + b.x + b.w) * 4]),
               "full pixel %s: the pillars stay black", kMode[on]);
-    }
-    {
-        /* the mask's bands: the black runs from the box's edges */
-        static const uint8_t zero[3] = {0, 0, 0};
-        uint32_t l = 0, r = 0, t = 0, bo = 0;
-        while (l < b.w / 2 && !memcmp(row[2][b.x + l], zero, 3)) {
-            l++;
-        }
-        while (r < b.w / 2 && !memcmp(row[2][b.x + b.w - 1 - r], zero, 3)) {
-            r++;
-        }
-        while (t < b.h / 2 && !memcmp(col[2][b.y + t], zero, 3)) {
-            t++;
-        }
-        while (bo < b.h / 2 && !memcmp(col[2][b.y + b.h - 1 - bo], zero, 3)) {
-            bo++;
-        }
-        const float side = 2.0f * (float)b.w / 512.0f, rows = (float)b.h * 16.0f / 512.0f;
-        printf("  full pixel border mask: %u left, %u right, %u top, %u bottom (%.3f, %.3f)\n", l,
-               r, t, bo, (double)side, (double)rows);
-        CHECK(l == r && fabsf((float)l - side) <= 1.0f && t == bo && fabsf((float)t - rows) <= 1.0f,
-              "full pixel border mask: the bands are 2 columns and 8 of 256 lines at the "
-              "grid's scale (%u %u %u %u; %.3f, %.3f)",
-              l, r, t, bo, (double)side, (double)rows);
-        uint32_t bad = 0;
-        for (uint32_t x = (uint32_t)b.x + l; x < (uint32_t)b.x + b.w - r; x++) {
-            bad += memcmp(row[2][x], row[1][x], 3) != 0;
-        }
-        for (uint32_t y = (uint32_t)b.y + t; y < (uint32_t)b.y + b.h - bo; y++) {
-            bad += memcmp(col[2][y], col[1][y], 3) != 0;
-        }
-        CHECK(bad == 0, "full pixel border mask: inside the mask the on picture (%u differ)", bad);
     }
     static const char *const kSide[4] = {"left", "right", "top", "bottom"};
     for (int k = 0; k < 4; k++) {
@@ -1430,6 +1403,70 @@ static void rowChannels(const RhiRect *b, uint32_t outW, uint32_t y, int *ch)
     }
 }
 
+/* Full pixel off in the game (the border mask) on a cropped frame under the
+ * filter: a flat 688 frame at 16:9 (the grid 682 columns) through the tube
+ * at 1920 x 1080 with Full pixel on and with the mask.  The tube's box at
+ * the centre row and column is the on run's byte for byte inside the mask
+ * and black in its bands, 2 of the grid's 682 columns a side and 8 of its
+ * 256 lines top and bottom (512 lines), within a pixel. */
+static void checkWideMask(void)
+{
+    const uint32_t W = 688, w = 1920, h = 1080;
+    const float aspect = 16.0f / 9.0f;
+    static uint8_t row[2][1920][3], col[2][1080][3];
+    RhiRect b;
+    rd__present_box(w, h, 682.0f / 384.0f, &b);
+    const uint32_t cx = (uint32_t)b.x + b.w / 2, cy = (uint32_t)b.y + b.h / 2;
+    for (int k = 0; k < 2; k++) {
+        RdSettings s = outputSettings(w, h);
+        s.aspect = aspect;
+        rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+        s.crtHalation = s.crtBloom = s.crtCurvature = 0.0f;
+        s.crtScanlines = 0.0f;
+        s.fullPixel = (uint8_t)(k == 0);
+        s.borderMask = (uint8_t)(k == 1);
+        if (!presentWide(&s, W, aspect, 0xC0, NULL, 0)) {
+            return;
+        }
+        for (uint32_t x = 0; x < w; x++) {
+            memcpy(row[k][x], &s_out[((size_t)cy * w + x) * 4], 3);
+        }
+        for (uint32_t y = 0; y < h; y++) {
+            memcpy(col[k][y], &s_out[((size_t)y * w + cx) * 4], 3);
+        }
+    }
+    static const uint8_t zero[3] = {0, 0, 0};
+    uint32_t l = 0, r = 0, t = 0, bo = 0;
+    while (l < b.w / 2 && !memcmp(row[1][b.x + l], zero, 3)) {
+        l++;
+    }
+    while (r < b.w / 2 && !memcmp(row[1][b.x + b.w - 1 - r], zero, 3)) {
+        r++;
+    }
+    while (t < b.h / 2 && !memcmp(col[1][b.y + t], zero, 3)) {
+        t++;
+    }
+    while (bo < b.h / 2 && !memcmp(col[1][b.y + b.h - 1 - bo], zero, 3)) {
+        bo++;
+    }
+    const float side = 2.0f * (float)b.w / 682.0f, rows = (float)b.h * 16.0f / 512.0f;
+    printf("  wide border mask: %u left, %u right, %u top, %u bottom (%.3f, %.3f)\n", l, r, t, bo,
+           (double)side, (double)rows);
+    CHECK(fabsf((float)l - side) <= 1.0f && fabsf((float)r - side) <= 1.0f &&
+              fabsf((float)t - rows) <= 1.0f && fabsf((float)bo - rows) <= 1.0f,
+          "wide border mask: the bands are 2 of 682 columns and 8 of 256 lines at the grid's "
+          "scale (%u %u %u %u; %.3f, %.3f)",
+          l, r, t, bo, (double)side, (double)rows);
+    uint32_t bad = 0;
+    for (uint32_t x = (uint32_t)b.x + l; x < (uint32_t)b.x + b.w - r; x++) {
+        bad += memcmp(row[1][x], row[0][x], 3) != 0;
+    }
+    for (uint32_t y = (uint32_t)b.y + t; y < (uint32_t)b.y + b.h - bo; y++) {
+        bad += memcmp(col[1][y], col[0][y], 3) != 0;
+    }
+    CHECK(bad == 0, "wide border mask: inside the mask the on picture (%u differ)", bad);
+}
+
 /* A 688 frame at 16:9 through the filter: the grid is 682 columns (3 a
  * side cropped); white columns 0..2 and 686..687 never reach the box, 3
  * and 684 do, at its edges.  Column 685 is cropped too, but the reduction
@@ -1561,6 +1598,7 @@ int main(int argc, char **argv)
     checkLight();
     checkTopLayer();
     checkWideCrop();
+    checkWideMask();
     if (failures) {
         printf("rd_crt_test: %d failures\n", failures);
         return 1;

@@ -374,7 +374,11 @@ typedef struct RdSettings {
      * it as a black mask at the picture's own scale (rd_present.c
      * rd__border_mask: 2 GS columns at the sides, the reduction's rows at
      * the top and bottom), as the PS2's reduction scissor hid the picture's
-     * edge.  0 in a zeroed RdSettings: the reduction keeps its recorded
+     * edge.  Only on a cropped frame (rd__frame_cropped: 16:9 and the
+     * other aspects whose exact width is under gsW, where the crop cuts the
+     * game's own border away); at 4:3 and wherever the frame is its exact
+     * width (48:9) it changes nothing, the GS's own border shown as on the
+     * PS2.  0 in a zeroed RdSettings: the reduction keeps its recorded
      * scissor, DISPLAY's border is the GS's own (the tests' PS2 models,
      * the replay tool without --border-mask); ignored with fullPixel. */
     uint8_t borderMask;

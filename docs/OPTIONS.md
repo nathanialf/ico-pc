@@ -169,7 +169,9 @@ The last row is not one of the game's effects:
   the PS2's thin black border laid over its edges as the PS2 did: a few
   dots at the sides and a little more at the top and bottom. Nothing is
   shrunk or moved; the border only covers the edge. With Video mode at
-  50 Hz the border at the top and bottom is a little taller.
+  50 Hz the border at the top and bottom is a little taller. With Aspect
+  ratio at 4:3, or at a shape the game's picture fills exactly (such as
+  48:9), Off is the PS2's own picture and border, exactly as before.
 
 The Preset on the Display page sets Texture filtering, Full-height picture and Full pixel on this
 page too (Enhanced turns Full pixel on, Original turns it off), but it does not change the rest.

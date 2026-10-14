@@ -493,10 +493,11 @@ sun's eye blur (WORK0 to WORK3) (`port/render/rd.h` (`RdPostKind`)). `rd_blur.c`
 
 The destination is read from a snapshot taken just before the sprite, so the result is the GS
 integer arithmetic of every pass, feedback or not (`port/render/rd_blur.c`). With Full pixel (on,
-or off in the game, where the presenter masks the border over the same picture:
-`RdSettings.borderMask`, [DISPLAY.md](DISPLAY.md#the-native-frame)) the reduction's textured
-sprite is drawn with the whole target as scissor and both axes clamped, so the border shows the
-picture SCENE holds (`port/render/rd_replay.c` (`borderOpen`, `doBlurSprite`)).
+or off in the game on a cropped frame such as 16:9, where the presenter masks the border over the
+same picture: `RdSettings.borderMask`, `rd__frame_cropped`,
+[DISPLAY.md](DISPLAY.md#the-native-frame); at 4:3 and 48:9 off keeps the recorded scissor) the
+reduction's textured sprite is drawn with the whole target as scissor and both axes clamped, so the
+border shows the picture SCENE holds (`port/render/rd_replay.c` (`borderOpen`, `doBlurSprite`)).
 
 ## Above 1x
 
