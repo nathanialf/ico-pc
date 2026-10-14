@@ -407,6 +407,24 @@ double pace_lock_rate_ratio(PaceLock *L);
 bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, uint64_t deadlineNs,
                     bool frameShown, bool frameHeld);
 
+/* The timer path's audio skip: whether the window leaves a new frame
+ * unpresented and runs the next step at once (the next present shows the
+ * newer frame).  Each simulation step queues one vsync of audio, so a step
+ * held back by presents is audio the device plays out without replacement.
+ * True only when all hold: the deadline has passed (pastDeadline), the frame
+ * is not presented yet (newFrame), the last new frame was not skipped
+ * (skippedLast: never two in a row, so the picture keeps at least every other
+ * frame), the audio plays (audioActive), and either presents are slow
+ * (paceSlow, pace_slow_present) or the audio is about to run dry.  The audio
+ * is low when queuedMs >= 0 (-1: no stream) and 2 * queuedMs < cushionMs, on
+ * the whole milliseconds the audio reports (audio_host.h
+ * ico_audio_sdl_queued_ms, ico_audio_sdl_cushion_ms; each truncated, not
+ * rounded).  A single late present on a renderer that keeps up, with the
+ * audio full, never skips (paceSlow needs three slow presents in a row).
+ * No step or audio is dropped, only that present. */
+bool pace_audio_skip(bool pastDeadline, bool newFrame, bool skippedLast, bool paceSlow,
+                     bool audioActive, int queuedMs, int cushionMs);
+
 /* The limiter's grid: when the present after one that started at startNs is
  * due.  nextPresent is when that one was due (0: none yet).  The result is
  * nextPresent + gap, so a late wake-up or a present held behind a game step

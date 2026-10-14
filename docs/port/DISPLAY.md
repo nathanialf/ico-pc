@@ -291,8 +291,10 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
    audio playing, a new frame found past its deadline is left unpresented (the next step runs at
    once and the next present shows the newer frame) when presents are slow or less than half the
    audio cushion is queued, and never two new frames in a row, so the picture keeps at least every
-   other frame and a single late present never repeats a picture (`pace`, `s_pres.skippedLast`;
-   [AUDIO.md](AUDIO.md#the-output)). Without audio every new frame is presented.
+   other frame and a single late present never repeats a picture (`port/platform/pace_policy.c`
+   (`pace_audio_skip`), called from `pace` with `s_pres.skippedLast`; "less than half" compares the
+   whole milliseconds the audio reports; [AUDIO.md](AUDIO.md#the-output)). Without audio every new
+   frame is presented.
 3. **The vsync lock** (below).
 
 **The present gap** on the timer path: "uncapped" with vsync on is a sixteenth of a refresh less
@@ -565,7 +567,7 @@ is flushed after each drain, every vsync (`perf_drain`).
 | test | checks |
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`) |
-| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals |
+| `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the audio skip |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |

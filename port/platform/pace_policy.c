@@ -72,6 +72,15 @@ bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, u
     return lastReturnNs + k * refreshNs > deadlineNs;
 }
 
+bool pace_audio_skip(bool pastDeadline, bool newFrame, bool skippedLast, bool paceSlow,
+                     bool audioActive, int queuedMs, int cushionMs)
+{
+    /* less than half the cushion queued, in whole ms */
+    const bool audioLow = queuedMs >= 0 && 2 * queuedMs < cushionMs;
+
+    return pastDeadline && newFrame && !skippedLast && (paceSlow || audioLow) && audioActive;
+}
+
 uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)
 {
     const uint64_t n = nextPresent + gap;

@@ -12,6 +12,9 @@
  * bound on the measured refresh, and the phase law's sign (the steps
  * follow a display that moves later or earlier, a sixteenth of a refresh
  * after its vblanks).
+ * The timer path's audio skip (testAudioSkip*: never two in a row, only
+ * when slow or the audio low, never without audio, never a frame already
+ * presented, never before the deadline).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -695,9 +698,85 @@ static void testIntervals(void)
     }
 }
 
+/* the audio skip: arguments in pace_audio_skip's order (pastDeadline,
+   newFrame, skippedLast, paceSlow, audioActive, queuedMs, cushionMs); a
+   cushion of 100 ms: low below 50 queued */
+static void testAudioSkipNeverTwice(void)
+{
+    /* the frame after a skipped one is presented, slow or low */
+    CHECK(pace_audio_skip(true, true, false, true, true, 100, 100));
+    CHECK(!pace_audio_skip(true, true, true, true, true, 100, 100));
+    CHECK(!pace_audio_skip(true, true, true, false, true, 10, 100));
+    CHECK(!pace_audio_skip(true, true, true, true, true, 10, 100));
+    /* the window's loop: alternate frames past the deadline, slow, keep
+       every other one */
+    bool skippedLast = false;
+    int skips = 0;
+    for (int i = 0; i < 10; i++) {
+        if (pace_audio_skip(true, true, skippedLast, true, true, 10, 100)) {
+            skippedLast = true;
+            skips++;
+        } else {
+            skippedLast = false; /* presented */
+        }
+    }
+    CHECK(skips == 5);
+}
+
+static void testAudioSkipSlowOrLow(void)
+{
+    /* neither slow nor low: no skip */
+    CHECK(!pace_audio_skip(true, true, false, false, true, 100, 100));
+    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 100));
+    /* slow, the audio full */
+    CHECK(pace_audio_skip(true, true, false, true, true, 100, 100));
+    /* low: under half the cushion, in whole ms (2 * 49 < 100; 2 * 50 not) */
+    CHECK(pace_audio_skip(true, true, false, false, true, 49, 100));
+    CHECK(pace_audio_skip(true, true, false, false, true, 0, 100));
+    CHECK(pace_audio_skip(true, true, false, false, true, 49, 99));
+    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 99));
+    CHECK(!pace_audio_skip(true, true, false, false, true, 50, 100));
+    /* odd cushion: 2 * 25 < 51 is low, 2 * 26 not */
+    CHECK(pace_audio_skip(true, true, false, false, true, 25, 51));
+    CHECK(!pace_audio_skip(true, true, false, false, true, 26, 51));
+    /* no stream (-1) is never low; no cushion (0) is never low */
+    CHECK(!pace_audio_skip(true, true, false, false, true, -1, 100));
+    CHECK(!pace_audio_skip(true, true, false, false, true, 0, 0));
+}
+
+static void testAudioSkipNoAudio(void)
+{
+    /* without the audio playing, slow or low, every new frame is presented */
+    CHECK(!pace_audio_skip(true, true, false, true, false, 100, 100));
+    CHECK(!pace_audio_skip(true, true, false, false, false, 10, 100));
+    CHECK(!pace_audio_skip(true, true, false, true, false, -1, 0));
+}
+
+static void testAudioSkipPresentedFrame(void)
+{
+    /* a frame already presented is never skipped here (the paths below
+       leave it) */
+    CHECK(!pace_audio_skip(true, false, false, true, true, 100, 100));
+    CHECK(!pace_audio_skip(true, false, false, false, true, 10, 100));
+    CHECK(!pace_audio_skip(true, false, false, true, true, 10, 100));
+}
+
+static void testAudioSkipBeforeDeadline(void)
+{
+    /* before the deadline a new frame is presented, slow or low */
+    CHECK(!pace_audio_skip(false, true, false, true, true, 100, 100));
+    CHECK(!pace_audio_skip(false, true, false, false, true, 10, 100));
+    CHECK(!pace_audio_skip(false, true, false, true, true, 10, 100));
+}
+
 int main(void)
 {
     PaceHist h = {0};
+    testAudioSkipNeverTwice();
+    testAudioSkipSlowOrLow();
+    testAudioSkipNoAudio();
+    testAudioSkipPresentedFrame();
+    testAudioSkipBeforeDeadline();
     testLockPause();
     testIntervals();
     testFirstPresentPause();
