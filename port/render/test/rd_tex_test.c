@@ -35,20 +35,8 @@
  *            changed inside their union only (texels changed in the CPU
  *            copy outside it without an update stay as uploaded before).
  *            rd_create_texture_sheet keeps w * h bytes, the
- *            SHEET format (R8 on the device) and its style (the gain 64
- *            when 0); rectangles as R8; rd_set_texture_sheet_style changes
- *            a sheet's style alone;
- *   halo     (testSheetRim) rd_sheet_rim equals sheet_ref.c's direct 2D
- *            sum (sheetref_rim) texel for texel at scales 1 to 4, on the
- *            whole coverage and on rectangles clipped by its edges, and
- *            writes nothing outside the rectangle; a plane of coverage has
- *            the same halo at every scale; the taps reach (RX + 1) s - 1
- *            strip texels and no further (the oracle's sum is 0 from
- *            (RX + 1) s on, rd_sheet_rim's halo too); the blue-noise tile
- *            holds each value 0..255 four times and its 8 x 8 blocks
- *            average 100 .. 155 (no clumps); rd_sheet_rim's time on a
- *            full-width line, a popup body and a word at 4x and the line at
- *            3x is printed (timeSheetRim; not checked);
+ *            SHEET format (R8 on the device) and its style; rectangles as
+ *            R8; rd_set_texture_sheet_style changes a sheet's style alone.
  *   packs    (texture packs) rdtex_create_replacement moves the image into
  *            the texture's pending upload with the box chain for an RGBA8
  *            image without mips, rdtex_replacement_mips on a size that is
@@ -73,11 +61,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include "rd_internal.h"
 #include "rd_tex.h"
-#include "sheet_ref.h"
-#include "shader_consts.h"
 #include "texpack.h"
 #include "vk/rhi_vk.h"
 /* the game's side */
@@ -1253,8 +1238,8 @@ static void r8Checks(void)
               rd__texel_bytes(sr->format) == 1 && strcmp(sr->name, "sheet") == 0,
           "sheet record");
     CHECK(sr && sr->sheet[0] == 64 && sr->sheet[1] == 62 && sr->sheet[2] == 0xF0 &&
-              sr->sheet[3] == 1 && sr->sheetGain == 64,
-          "sheet style kept (no gain: 64)");
+              sr->sheet[3] == 1,
+          "sheet style kept");
     CHECK(rd__texel_rhi_format(RD_TEXEL_SHEET) == RHI_FMT_R8_UNORM &&
               rd__texel_is_coverage(RD_TEXEL_SHEET) && !rd__texel_is_block(RD_TEXEL_SHEET),
           "sheet texels: R8, coverage");
@@ -1279,10 +1264,9 @@ static void r8Checks(void)
         rd_set_texture_sheet_style(sh, &en);
         CHECK(sr->sheet[0] == 64 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 0,
               "rd_set_texture_sheet_style");
-        const RdSheetStyle faint = {1, 0, 0xFF, 0, 21, 1, 84};
+        const RdSheetStyle faint = {1, 0, 0xFF, 0, 21, 1};
         rd_set_texture_sheet_style(sh, &faint);
-        CHECK(sr->sheet[0] == 21 && sr->sheetGain == 84,
-              "a faint rim's weight and gain kept (%u %u)", sr->sheet[0], sr->sheetGain);
+        CHECK(sr->sheet[0] == 21, "a faint rim's weight kept (%u)", sr->sheet[0]);
         rd_set_texture_sheet_style(sh, NULL);
         CHECK(sr->sheet[0] == 64 && sr->sheet[1] == 0 && sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
               "the default sheet style");
@@ -1295,175 +1279,6 @@ static void r8Checks(void)
     CHECK(r8r && r8r->format == RD_TEXEL_R8 && r8r->sheet[1] == 0,
           "rd_set_texture_sheet_style ignores an R8 texture");
     rd_destroy_texture(r8);
-}
-
-/* ------------------------------------------------------------ the halo */
-
-/* a strip at scale s: shapes on the sheet's grid (a block, a thin stroke,
-   a soft ramp) s times finer, and noise at the strip's own texels */
-static uint8_t haloCov(int x, int y, int s)
-{
-    const int sx = x / s, sy = y / s;
-    if (sx >= 14 && sx < 19 && sy >= 9 && sy < 17) {
-        return 0xFF;
-    }
-    if (sx == 22 && sy >= 8 && sy < 18) {
-        return 150;
-    }
-    if (sx >= 26 && sx < 34 && sy >= 10 && sy < 15) {
-        return (uint8_t)(hash((uint32_t)(y * 1024 + x) + 7u) & 0xFFu);
-    }
-    if (sx >= 36 && sx < 44 && sy == 12) {
-        return (uint8_t)((sx - 36) * 32);
-    }
-    return 0;
-}
-
-static int haloCompare(const uint8_t *cov, uint32_t w, uint32_t h, int s, int x, int y, int rw,
-                       int rh, uint8_t *rim)
-{
-    memset(rim, 0xEE, (size_t)w * h);
-    rd_sheet_rim(cov, w, h, (uint32_t)s, x, y, rw, rh, rim);
-    int bad = 0;
-    for (int yy = 0; yy < (int)h; yy++) {
-        for (int xx = 0; xx < (int)w; xx++) {
-            const int in = xx >= x && xx < x + rw && yy >= y && yy < y + rh;
-            const uint8_t want = in ? sheetref_rim(cov, w, h, xx, yy, (uint32_t)s) : 0xEE;
-            if (rim[(size_t)yy * w + (size_t)xx] != want) {
-                if (bad < 4) {
-                    printf("  halo s%d rect %d,%d %dx%d: texel %d,%d is %u, %u expected\n", s, x, y,
-                           rw, rh, xx, yy, rim[(size_t)yy * w + (size_t)xx], want);
-                }
-                bad++;
-            }
-        }
-    }
-    return bad;
-}
-
-/* rd_sheet_rim's time on a strip's whole coverage (sheet texels w x h at
-   scale s, so (w s) x (h s) strip texels): the best of three runs, printed,
-   not checked (a machine's speed is no test) */
-static void timeSheetRim(void)
-{
-    static const int kCase[][3] = {{1001, 30, 4}, {700, 80, 4}, {300, 20, 4}, {1001, 30, 3}};
-    for (size_t c = 0; c < sizeof(kCase) / sizeof(kCase[0]); c++) {
-        const int s = kCase[c][2];
-        const uint32_t w = (uint32_t)(kCase[c][0] * s), h = (uint32_t)(kCase[c][1] * s);
-        uint8_t *cov = malloc((size_t)w * h), *rim = malloc((size_t)w * h);
-        if (!cov || !rim) {
-            free(cov);
-            free(rim);
-            return;
-        }
-        for (uint32_t i = 0; i < w * h; i++) {
-            cov[i] = (uint8_t)(hash(i) & 0x1Fu ? 0 : hash(i + 1u));
-        }
-        double best = 1e9;
-        for (int run = 0; run < 3; run++) {
-            /* clock(): processor time, which every toolchain has (the
-               mingw cross build lacks timespec_get's TIME_UTC) */
-            const clock_t t0 = clock();
-            rd_sheet_rim(cov, w, h, (uint32_t)s, 0, 0, (int32_t)w, (int32_t)h, rim);
-            const clock_t t1 = clock();
-            const double ms = (double)(t1 - t0) * 1e3 / (double)CLOCKS_PER_SEC;
-            best = ms < best ? ms : best;
-        }
-        printf("  halo time: %dx%d sheet texels at %dx (%ux%u): %.2f ms\n", kCase[c][0],
-               kCase[c][1], s, w, h, best);
-        free(cov);
-        free(rim);
-    }
-}
-
-static void testSheetRim(void)
-{
-    enum { SW = 52, SH = 26 };
-
-    static uint8_t cov[SW * SH * 16], rim[SW * SH * 16];
-    int planeLevel[ICO_SHEET_SCALE_MAX + 1];
-    for (int s = 1; s <= ICO_SHEET_SCALE_MAX; s++) {
-        const uint32_t w = SW * (uint32_t)s, h = SH * (uint32_t)s;
-        for (uint32_t y = 0; y < h; y++) {
-            for (uint32_t x = 0; x < w; x++) {
-                cov[y * w + x] = haloCov((int)x, (int)y, s);
-            }
-        }
-        /* the whole coverage, then rectangles: inside, over each edge, on
-           no sheet texel's corner */
-        int bad = haloCompare(cov, w, h, s, 0, 0, (int)w, (int)h, rim);
-        static const int kRect[4][4] = {
-            {13, 7, 9, 11}, {-5, -3, 20, 12}, {40, 17, 30, 30}, {21, 0, 3, 26}};
-        for (int k = 0; k < 4; k++) {
-            bad += haloCompare(cov, w, h, s, kRect[k][0] * s + (k & 1), kRect[k][1] * s,
-                               kRect[k][2] * s - (k & 1), kRect[k][3] * s, rim);
-        }
-        CHECK(bad == 0,
-              "rd_sheet_rim at scale %d: %d texels off sheetref_rim (or written outside "
-              "the rectangle)",
-              s, bad);
-        /* the reach: the block alone, across from its right edge (sheet
-           column 18) on its middle row and down from its bottom (sheet row
-           16) on its middle column */
-        for (uint32_t y = 0; y < h; y++) {
-            for (uint32_t x = 0; x < w; x++) {
-                const int sx = (int)x / s, sy = (int)y / s;
-                cov[y * w + x] = sx >= 14 && sx < 19 && sy >= 9 && sy < 17 ? 0xFF : 0;
-            }
-        }
-        const int ex = 19 * s - 1, ey = 17 * s - 1, my = 12 * s, mx = 16 * s;
-        const int rx = (ICO_SHEET_RX + 1) * s, ry = (ICO_SHEET_RY + 1) * s;
-        CHECK(sheetref_halo_sum(cov, w, h, ex + rx - 1, my, (uint32_t)s, NULL) > 0 &&
-                  sheetref_halo_sum(cov, w, h, ex + rx, my, (uint32_t)s, NULL) == 0,
-              "scale %d: the taps reach %d texels across from the ink and no further", s, rx - 1);
-        CHECK(sheetref_halo_sum(cov, w, h, mx, ey + ry - 1, (uint32_t)s, NULL) > 0 &&
-                  sheetref_halo_sum(cov, w, h, mx, ey + ry, (uint32_t)s, NULL) == 0,
-              "scale %d: the taps reach %d texels down from the ink and no further", s, ry - 1);
-        bad = haloCompare(cov, w, h, s, 0, 0, (int)w, (int)h, rim);
-        CHECK(bad == 0 && rim[(size_t)my * w + (size_t)(ex + rx)] == 0 &&
-                  rim[(size_t)(ey + ry) * w + (size_t)mx] == 0 &&
-                  rim[(size_t)my * w + (size_t)(ex + s)] > 0,
-              "scale %d: the halo beside the block (%d off), and none past the reach", s, bad);
-        /* a plane of coverage 100: the halo deep inside it */
-        memset(cov, 100, (size_t)w * h);
-        rd_sheet_rim(cov, w, h, (uint32_t)s, (int)w / 2, (int)h / 2, 1, 1, rim);
-        planeLevel[s] = rim[(size_t)(h / 2) * w + w / 2];
-    }
-    const int want = (100 * ICO_SHEET_GAIN + 32) / 64;
-    printf("  halo: a plane of 100 gives %d %d %d %d at scales 1..4 (%d)\n", planeLevel[1],
-           planeLevel[2], planeLevel[3], planeLevel[4], want > 255 ? 255 : want);
-    for (int s = 1; s <= ICO_SHEET_SCALE_MAX; s++) {
-        CHECK(planeLevel[s] == (want > 255 ? 255 : want),
-              "a plane's halo at scale %d is %d, at 1x %d", s, planeLevel[s], want);
-    }
-    /* the grain's tile */
-    int count[256];
-    memset(count, 0, sizeof(count));
-    for (int y = 0; y < 32; y++) {
-        for (int x = 0; x < 32; x++) {
-            count[sheetref_noise(x, y)]++;
-        }
-    }
-    int uneven = 0;
-    for (int v = 0; v < 256; v++) {
-        uneven += count[v] != 4;
-    }
-    int lo = 255, hi = 0;
-    for (int by = 0; by < 4; by++) {
-        for (int bx = 0; bx < 4; bx++) {
-            int sum = 0;
-            for (int y = 0; y < 8; y++) {
-                for (int x = 0; x < 8; x++) {
-                    sum += (int)sheetref_noise(bx * 8 + x, by * 8 + y);
-                }
-            }
-            lo = sum / 64 < lo ? sum / 64 : lo;
-            hi = sum / 64 > hi ? sum / 64 : hi;
-        }
-    }
-    CHECK(uneven == 0 && sheetref_noise(-1, -1) == sheetref_noise(31, 31),
-          "the noise tile holds each value 4 times (%d values not) and wraps", uneven);
-    CHECK(lo >= 100 && hi <= 155, "the noise tile's 8 x 8 blocks average %d .. %d", lo, hi);
 }
 
 static void r8Pixels(void)
@@ -1557,8 +1372,6 @@ int main(void)
     scrollChecks();
     cacheChecks();
     r8Checks();
-    testSheetRim();
-    timeSheetRim();
     textUploadLogChecks();
     replacementChecks();
     photoGrainChecks();

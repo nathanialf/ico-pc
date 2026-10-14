@@ -28,12 +28,10 @@ that fails, in this order:
    binaries, integer tables through `tools/check_int_arrays.py`; [LEGAL.md](../LEGAL.md)). With
    something staged it reads the staged blobs (`git show :path`), not the worktree.
 2. `tools/format.sh --check --staged`: the staged C is formatted.
-3. The four generated-file checks: `tools/gen_data_desc.py --check` (`port/data/gen/`),
+3. The three generated-file checks: `tools/gen_data_desc.py --check` (`port/data/gen/`),
    `tools/gen_layout_asserts.py --check` (`port/test/layout_asserts.c`), `tools/gen_sources.py
-   --check` (`cmake/IcoSources.cmake`), `tools/gen_sheet_noise.py --check`
-   (`port/shaders/sheet_noise.hlsli`, the menu text's grain tile; [SHADERS.md](SHADERS.md)). They
-   run under `.venv/bin/python` when it exists (`gen_data_desc.py` needs pyelftools); rerun the
-   script without `--check` and stage its output.
+   --check` (`cmake/IcoSources.cmake`). They run under `.venv/bin/python` when it exists
+   (`gen_data_desc.py` needs pyelftools); rerun the script without `--check` and stage its output.
 4. `tools/strip_host_gates.py --check`: no `ICO_HOST` conditional in `ico2/` or `sce/`.
 5. `tools/stack_overread_audit.py`: no reliance on the PS2's stack layout in `ico2/`.
 6. `tools/check_call_types.py`: calls and declarations agree with the definitions.

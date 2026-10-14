@@ -7,8 +7,6 @@
 //   group 0  b0            FrameCB, once per frame
 //   group 1  b1            DrawCB, per draw (or per post pass)
 //            b2, b3        the VU programs' VuCB and VuBoneCB (vu_common.hlsli)
-//            b4            the menu text's grain tile, a static uniform
-//                          buffer (sheet_text.hlsli SheetNoiseCB)
 //            t0            the VU vertex stream (vu_common.hlsli)
 //   group 2  t1..t4, s1..s4 textures and samplers
 // Clip space is D3D: x, y in -1..1 with +y up, depth 0..1, reversed-Z

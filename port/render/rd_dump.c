@@ -36,11 +36,12 @@
  *            dumps have none), bits 16..23 rimLevel, 24..31 fillLevel
  *            (sheetView); a sheet's bakedTexa word holds its scale less
  *            one in bits 8..15 (0, a 1x sheet, in older dumps: sheetTexa).
- *            Version 11: a sheet image is w x h with its coverage in the
- *            top half and its halo in the bottom half at every scale, its
- *            rimGain in the bakedTexa word's bits 16..23; an older one
- *            loads with its halo made again from its coverage
- *            (sheetRebuild) and a gain of 64
+ *            Version 11: a sheet's bakedTexa bits 16..23 are 0 and its
+ *            image is as above.  Those bits set mark a dump whose sheet
+ *            image is w x h at every scale, its coverage in the top half
+ *            over a halo made on the CPU, bits 16..23 that halo's gain;
+ *            such a sheet loads as its coverage, made into the image this
+ *            renderer draws (sheetFromHalo), the halo and the gain dropped
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
  *   (version 5: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
@@ -135,37 +136,34 @@ static uint32_t sheetView(const RdTexRec *t)
            (uint32_t)t->sheet[1] << 16 | (uint32_t)t->sheet[2] << 24;
 }
 
-/* an image's bakedTexa word: a sheet's scale less one above the byte and
-   its rimGain above that (version 11) */
+/* an image's bakedTexa word: a sheet's scale less one above the byte */
 static uint32_t sheetTexa(const RdTexRec *t)
 {
-    if (t->format != RD_TEXEL_SHEET) {
-        return t->bakedTexa;
-    }
-    const uint32_t up = t->sheetScale > 1 ? t->sheetScale - 1u : 0u;
-    return (uint32_t)t->bakedTexa | up << 8 | (uint32_t)(t->sheetGain ? t->sheetGain : 64u) << 16;
+    const uint32_t up = t->format == RD_TEXEL_SHEET && t->sheetScale > 1 ? t->sheetScale - 1u : 0u;
+    return (uint32_t)t->bakedTexa | up << 8;
 }
 
-/* A sheet image of a dump before version 11: its coverage (the whole image
-   at 1x, the top half above it) over a halo made now (rd_sheet_rim), as
-   the version 11 texture is; NULL without the memory.  *hOut the new
-   height.  Such a page keeps the strip gaps it was laid out with (7 sheet
-   texels across, 5 down), inside the halo's reach (shader_consts.h
-   ICO_SHEET_RX, ICO_SHEET_RY: 10 and 7; port/ui/menu_font.c MF_GAP_X,
-   MF_GAP_Y lay strips 11 and 8 apart), so a neighbouring strip's ink can
-   show in the tails of a halo made here: replays only, the game makes its
-   pages anew. */
-static uint8_t *sheetRebuild(const uint8_t *px, uint32_t w, uint32_t h, uint32_t scale,
-                             uint32_t *hOut)
+/* A sheet image of a version 11 dump with a gain in bakedTexa bits 16..23
+   (w x h, its coverage in the top half over a halo, at every scale): the
+   image rd_create_texture_sheet's callers make from that coverage (the
+   coverage alone at 1x, where font_sheet_ps makes the rim; above 1x the
+   coverage over rd_sheet_rim's rim of it), so the replay draws the text as
+   the game does now; NULL without the memory or a coverage.  *hOut the
+   new height. */
+static uint8_t *sheetFromHalo(const uint8_t *px, uint32_t w, uint32_t h, uint32_t scale,
+                              uint32_t *hOut)
 {
-    const uint32_t ch = scale > 1 ? h / 2u : h;
-    uint8_t *out = ch ? calloc((size_t)w * ch * 2u, 1) : NULL;
+    const uint32_t ch = h / 2u;
+    const size_t n = (size_t)w * ch;
+    uint8_t *out = n ? calloc(scale > 1 ? 2u * n : n, 1) : NULL;
     if (!out) {
         return NULL;
     }
-    memcpy(out, px, (size_t)w * ch);
-    rd_sheet_rim(out, w, ch, scale, 0, 0, (int32_t)w, (int32_t)ch, out + (size_t)w * ch);
-    *hOut = 2u * ch;
+    memcpy(out, px, n);
+    if (scale > 1) {
+        rd_sheet_rim(out, w, ch, scale, 0, 0, (int32_t)w, (int32_t)ch, out + n);
+    }
+    *hOut = scale > 1 ? 2u * ch : ch;
     return out;
 }
 
@@ -657,17 +655,20 @@ bool rd__load_frame(const char *path, RdFrame *out)
                 }
             }
             if (ok) {
+                /* the scale as the record below keeps it */
+                const uint32_t up = (h.bakedTexa >> 8) & 0xFFu;
+                const uint32_t scale =
+                    up + 1u > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : up + 1u;
                 uint32_t th = h.h;
-                uint8_t *rebuilt = NULL;
-                if (sheet && ver < 11u) {
-                    const uint32_t up = (h.bakedTexa >> 8) & 0xFFu;
-                    rebuilt = sheetRebuild(px, h.w, h.h, up + 1u, &th);
-                    ok = rebuilt != NULL;
+                uint8_t *made = NULL;
+                if (sheet && ver >= 11u && (h.bakedTexa >> 16) & 0xFFu) {
+                    made = sheetFromHalo(px, h.w, h.h, scale, &th);
+                    ok = made != NULL;
                 }
-                RdTex t = ok ? rd__create_texture_fmt(h.w, th, rebuilt ? rebuilt : px, fmt,
+                RdTex t = ok ? rd__create_texture_fmt(h.w, th, made ? made : px, fmt,
                                                       (RdTexSrc)h.src, "dump")
                              : (RdTex){0};
-                free(rebuilt);
+                free(made);
                 if (nl > 1) {
                     rd__tex_set_levels(t, chain, nl);
                 }
@@ -680,12 +681,7 @@ bool rd__load_frame(const char *path, RdFrame *out)
                         tr->sheet[1] = (uint8_t)(h.view >> 16);
                         tr->sheet[2] = (uint8_t)(h.view >> 24);
                         tr->sheet[3] = (uint8_t)((h.view >> 9) & 1u);
-                        const uint32_t up = (h.bakedTexa >> 8) & 0xFFu;
-                        tr->sheetScale =
-                            (uint8_t)(up + 1u > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
-                                                                    : up + 1u);
-                        const uint32_t gain = ver >= 11u ? (h.bakedTexa >> 16) & 0xFFu : 0u;
-                        tr->sheetGain = (uint8_t)(gain ? gain : 64u);
+                        tr->sheetScale = (uint8_t)scale;
                     }
                 }
                 texMap.from[texMap.n] = h.id;

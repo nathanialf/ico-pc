@@ -2,12 +2,10 @@
  * rd_create_texture_sheet).  rd_tex.h describes the decoding and the cache. */
 #include "rd_tex.h"
 #include <math.h>
-#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "shader_consts.h"
-#include "sheet_noise.hlsli"
 #include "texpack.h"
 
 /* ------------------------------------------------------------ decoding */
@@ -837,20 +835,18 @@ const RdTexCacheStats *rdtex_stats(void)
 }
 
 /* --------------------------------------------------------------- sheet text
- * rd.h rd_create_texture_sheet: an R8 image of coverage over its halo with
- * the style the replay hands font_sheet_ps (rd_replay.c fillDrawCB,
- * rd__overlay_draw). */
+ * rd.h rd_create_texture_sheet: an R8 image of coverage with the style the
+ * replay hands font_sheet_ps (rd_replay.c fillDrawCB, rd__overlay_draw). */
 
 static void sheetStyleSet(RdTexRec *t, const RdSheetStyle *style)
 {
-    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1, 0};
+    static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1};
     const RdSheetStyle *s = style ? style : &kDefault;
     t->sheet[0] = s->rimOn ? (s->rimWeight && s->rimWeight < 64 ? s->rimWeight : 64) : 0;
     t->sheet[1] = s->rimLevel;
     t->sheet[2] = s->fillLevel;
     t->sheet[3] = s->dither ? 1 : 0;
     t->sheetScale = s->scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX : s->scale ? s->scale : 1;
-    t->sheetGain = s->rimGain ? s->rimGain : 64;
 }
 
 RdTex rd_create_texture_sheet(uint32_t w, uint32_t h, const uint8_t *coverage,
@@ -868,193 +864,92 @@ RdTex rd_create_texture_sheet(uint32_t w, uint32_t h, const uint8_t *coverage,
     return t;
 }
 
-/* The halo at the strip's own texels: the blur of rd.h rd_sheet_rim, across
-   then down (integer sums, exact in either order).  The interpolated taps
-   are the 1x ramp's taps s texels apart (KX[|q|] at i = q s) convolved with
-   the tent of width s (s - |m| for |m| < s, a box of s convolved with a box
-   of s): KXs[q s + m] = KX[q] (s - m) + KX[q + 1] m.  So each pass is two
-   box sums of s, then RX + 1 (RY + 1) taps s apart: the same integers as
-   the direct sum, in about a quarter of the work at 4x */
-
-/* the box sums of s along a line of n values (stride apart) that the tent
-   leaves valid at [s - 1, n - s + 1): in place, the box ending at each value
-   (backwards, from n - 1 down to s - 1), then the box starting at each
-   (forwards) */
-/* the sums' bounds: a row's sum across times the tent down under 2^32
-   (255 * 11264 * 4^4), the numerator of the quotient under 2^53
-   (255 * 1023 * 11264 * 8192 * 4^4) */
-_Static_assert(ICO_SHEET_SCALE_MAX <= 4 && ICO_SHEET_GAIN < 1024, "the halo's sums fit");
-
-static void sheetTent(uint32_t *v, size_t n, size_t stride, int32_t s)
-{
-    if (s <= 1 || n < (size_t)(2 * s - 1)) {
-        return;
-    }
-    for (size_t i = n - 1; i >= (size_t)(s - 1); i--) {
-        uint32_t *p = v + i * stride;
-        for (size_t c = 0; c < stride; c++) {
-            uint32_t sum = p[c];
-            for (int32_t b = 1; b < s; b++) {
-                sum += p[c - (size_t)b * stride];
-            }
-            p[c] = sum;
-        }
-        if (i == (size_t)(s - 1)) {
-            break;
-        }
-    }
-    for (size_t i = (size_t)(s - 1); i + (size_t)s <= n; i++) {
-        uint32_t *p = v + i * stride;
-        for (size_t c = 0; c < stride; c++) {
-            uint32_t sum = p[c];
-            for (int32_t a = 1; a < s; a++) {
-                sum += p[c + (size_t)a * stride];
-            }
-            p[c] = sum;
-        }
-    }
-}
-
+/* The rim at sheet resolution, as the 1x shader makes it, over the sheet
+   texels that the rectangle touches */
 void rd_sheet_rim(const uint8_t *cov, uint32_t w, uint32_t h, uint32_t scale, int32_t x, int32_t y,
                   int32_t rw, int32_t rh, uint8_t *rim)
 {
-    /* the 1x ramps, 0 one sheet texel past the reach */
-    static const uint32_t kKx[ICO_SHEET_RX + 2] = {ICO_SHEET_KX_0, ICO_SHEET_KX_1,  ICO_SHEET_KX_2,
-                                                   ICO_SHEET_KX_3, ICO_SHEET_KX_4,  ICO_SHEET_KX_5,
-                                                   ICO_SHEET_KX_6, ICO_SHEET_KX_7,  ICO_SHEET_KX_8,
-                                                   ICO_SHEET_KX_9, ICO_SHEET_KX_10, 0};
-    static const uint32_t kKy[ICO_SHEET_RY + 2] = {ICO_SHEET_KY_0, ICO_SHEET_KY_1, ICO_SHEET_KY_2,
-                                                   ICO_SHEET_KY_3, ICO_SHEET_KY_4, ICO_SHEET_KY_5,
-                                                   ICO_SHEET_KY_6, ICO_SHEET_KY_7, 0};
+    static const uint32_t kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
+                                                   ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
+                                                   ICO_SHEET_WX_6};
+    static const uint32_t kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
+                                                   ICO_SHEET_WY_3, ICO_SHEET_WY_4};
     const int32_t s = scale < 1                     ? 1
                       : scale > ICO_SHEET_SCALE_MAX ? ICO_SHEET_SCALE_MAX
-                                                    : (int32_t)scale;
+                                                    : (int)scale;
     const int32_t x0 = x < 0 ? 0 : x, y0 = y < 0 ? 0 : y;
     const int32_t x1 = x + rw > (int32_t)w ? (int32_t)w : x + rw;
     const int32_t y1 = y + rh > (int32_t)h ? (int32_t)h : y + rh;
     if (!cov || !rim || x0 >= x1 || y0 >= y1) {
         return;
     }
-    /* the taps reach |i| < (RX + 1) s across, |j| < (RY + 1) s down, in
-       1 / (1024 s); their totals are s^2 times the 1x taps' */
-    const int32_t rx = (ICO_SHEET_RX + 1) * s - 1, ry = (ICO_SHEET_RY + 1) * s - 1;
-    uint64_t sx = 0, sy = 0;
-    for (int32_t i = -rx; i <= rx; i++) {
-        const int32_t d = i < 0 ? -i : i;
-        sx += kKx[d / s] * (uint32_t)(s - d % s) + kKx[d / s + 1] * (uint32_t)(d % s);
-    }
-    for (int32_t j = -ry; j <= ry; j++) {
-        const int32_t d = j < 0 ? -j : j;
-        sy += kKy[d / s] * (uint32_t)(s - d % s) + kKy[d / s + 1] * (uint32_t)(d % s);
-    }
-    const uint64_t den = sx * sy, d64 = den * 64u;
-    const double dd = (double)d64;
-    /* the rows the sums down read: ry above and below the rectangle, 0
-       outside the coverage [cy0, cy1) */
-    const int32_t cy0 = y0 - ry < 0 ? 0 : y0 - ry;
-    const int32_t cy1 = y1 + ry > (int32_t)h ? (int32_t)h : y1 + ry;
-    const size_t ow = (size_t)(x1 - x0), ny = (size_t)(y1 - y0 + 2 * ry);
-    const size_t nx = ow + 2u * (size_t)rx;
-    /* hs: each row's sum across at the rectangle's columns (at most
-       255 * 11264 s^2, then s^2 times that after the tent down: under
-       2^30 at 4x, a uint32); line: a row of coverage rx either side;
-       acc: a row of the sums down (a uint64) */
-    uint32_t *hs = calloc(ny * ow, sizeof(uint32_t));
-    uint32_t *line = malloc(sizeof(uint32_t) * nx);
-    uint64_t *acc = malloc(sizeof(uint64_t) * ow);
-    if (!hs || !line || !acc) {
-        free(hs);
-        free(line);
-        free(acc);
+    /* the sheet texels: those the rectangle touches (qx0..qx1 - 1 across,
+       qy0..qy1 - 1 down), and their coverage's reach round them, clipped to
+       the sheet (sw x sh) */
+    const int32_t sw = ((int32_t)w + s - 1) / s, sh = ((int32_t)h + s - 1) / s;
+    const int32_t qx0 = x0 / s, qx1 = (x1 + s - 1) / s, qy0 = y0 / s, qy1 = (y1 + s - 1) / s;
+    const int32_t cx0 = qx0 - ICO_SHEET_RX < 0 ? 0 : qx0 - ICO_SHEET_RX;
+    const int32_t cx1 = qx1 + ICO_SHEET_RX > sw ? sw : qx1 + ICO_SHEET_RX;
+    const int32_t cy0 = qy0 - ICO_SHEET_RY < 0 ? 0 : qy0 - ICO_SHEET_RY;
+    const int32_t cy1 = qy1 + ICO_SHEET_RY > sh ? sh : qy1 + ICO_SHEET_RY;
+    const int32_t cw = cx1 - cx0, ch = cy1 - cy0, ow = qx1 - qx0;
+    uint32_t *c = malloc(sizeof(uint32_t) * (size_t)cw * (size_t)ch);
+    uint32_t *hm = malloc(sizeof(uint32_t) * (size_t)ow * (size_t)ch);
+    if (!c || !hm) {
+        free(c);
+        free(hm);
         return;
     }
-    for (int32_t cy = cy0; cy < cy1; cy++) {
-        const uint8_t *row = cov + (size_t)cy * w;
-        for (size_t i = 0; i < nx; i++) {
-            const int32_t k = x0 - rx + (int32_t)i;
-            line[i] = k >= 0 && k < (int32_t)w ? row[k] : 0u;
+    /* each sheet texel's coverage: the mean of its s x s texels (0 outside
+       the coverage), rounded */
+    const uint32_t n = (uint32_t)(s * s);
+    for (int32_t qy = cy0; qy < cy1; qy++) {
+        for (int32_t qx = cx0; qx < cx1; qx++) {
+            uint32_t sum = 0;
+            for (int32_t yy = qy * s; yy < qy * s + s && yy < (int32_t)h; yy++) {
+                for (int32_t xx = qx * s; xx < qx * s + s && xx < (int32_t)w; xx++) {
+                    sum += cov[(size_t)yy * w + (size_t)xx];
+                }
+            }
+            c[(size_t)(qy - cy0) * (size_t)cw + (size_t)(qx - cx0)] = (sum + n / 2u) / n;
         }
-        sheetTent(line, nx, 1, s);
-        /* the column xx is line[xx - x0 + rx]; the taps s apart */
-        uint32_t *out = hs + (size_t)(cy - (y0 - ry)) * ow;
-        const uint32_t *t = line + rx;
-        for (size_t c = 0; c < ow; c++) {
-            out[c] = kKx[0] * t[c];
+    }
+    /* the 1x dilation, separable (a max commutes with a non-negative
+       factor): each row's largest c * wx across, then down with wy */
+    for (int32_t qy = cy0; qy < cy1; qy++) {
+        for (int32_t qx = qx0; qx < qx1; qx++) {
+            uint32_t m = 0;
+            for (int32_t k = qx - ICO_SHEET_RX; k <= qx + ICO_SHEET_RX; k++) {
+                if (k >= cx0 && k < cx1) {
+                    const uint32_t v = c[(size_t)(qy - cy0) * (size_t)cw + (size_t)(k - cx0)] *
+                                       kWx[k < qx ? qx - k : k - qx];
+                    m = v > m ? v : m;
+                }
+            }
+            hm[(size_t)(qy - cy0) * (size_t)ow + (size_t)(qx - qx0)] = m;
         }
-        for (int32_t q = 1; q <= ICO_SHEET_RX; q++) {
-            const uint32_t *lt = t - q * s, *rt = t + q * s, k = kKx[q];
-            for (size_t c = 0; c < ow; c++) {
-                out[c] += k * (lt[c] + rt[c]);
+    }
+    for (int32_t qy = qy0; qy < qy1; qy++) {
+        for (int32_t qx = qx0; qx < qx1; qx++) {
+            uint32_t m = 0;
+            for (int32_t k = qy - ICO_SHEET_RY; k <= qy + ICO_SHEET_RY; k++) {
+                if (k >= cy0 && k < cy1) {
+                    const uint32_t v = hm[(size_t)(k - cy0) * (size_t)ow + (size_t)(qx - qx0)] *
+                                       kWy[k < qy ? qy - k : k - qy];
+                    m = v > m ? v : m;
+                }
+            }
+            /* the value over the sheet texel's texels */
+            const uint8_t r = (uint8_t)((m + 500000u) / 1000000u);
+            for (int32_t yy = qy * s; yy < qy * s + s && yy < (int32_t)h; yy++) {
+                for (int32_t xx = qx * s; xx < qx * s + s && xx < (int32_t)w; xx++) {
+                    rim[(size_t)yy * w + (size_t)xx] = r;
+                }
             }
         }
     }
-    /* down: the tent over the rows, then the taps s rows apart; normalised
-       by the taps' total with the gain, rounded, clamped */
-    sheetTent(hs, ny, ow, s);
-    for (int32_t yy = y0; yy < y1; yy++) {
-        const uint32_t *t = hs + (size_t)(yy - y0 + ry) * ow;
-        for (size_t c = 0; c < ow; c++) {
-            acc[c] = (uint64_t)kKy[0] * t[c];
-        }
-        for (int32_t q = 1; q <= ICO_SHEET_RY; q++) {
-            const uint32_t *up = t - (size_t)(q * s) * ow, *dn = t + (size_t)(q * s) * ow;
-            for (size_t c = 0; c < ow; c++) {
-                acc[c] += (uint64_t)kKy[q] * ((uint64_t)up[c] + dn[c]);
-            }
-        }
-        uint8_t *dst = rim + (size_t)yy * w + (size_t)x0;
-        for (size_t c = 0; c < ow; c++) {
-            /* (acc G + 32 D) / (64 D) in integers (acc G / 64 D rounded to
-               nearest): the quotient in double (both sides under 2^53, so
-               exact as doubles; within one of the integer quotient), then
-               at most one step to it */
-            const uint64_t num = acc[c] * ICO_SHEET_GAIN + den * 32u;
-            uint64_t r = (uint64_t)((double)num / dd);
-            r -= r * d64 > num;
-            r += (r + 1u) * d64 <= num;
-            dst[c] = (uint8_t)(r > 255u ? 255u : r);
-        }
-    }
-    free(hs);
-    free(line);
-    free(acc);
-}
-
-/* the grain tile's uniform buffer (rd_internal.h rd__sheet_noise_binding):
-   written once, read by every font_sheet_ps draw */
-static RhiBuffer s_sheetNoise;
-
-bool rd__sheet_noise_binding(RhiBinding *b)
-{
-    static const uint32_t kWords[SHEET_NOISE_SIZE * SHEET_NOISE_SIZE / 4] = {SHEET_NOISE_WORDS};
-    if (!s_sheetNoise.id) {
-        const RhiBuffer buf = rhi_create_buffer(
-            &(RhiBufferDesc){sizeof(kWords), RHI_BUF_UNIFORM, RHI_MEM_UPLOAD, "rd sheet noise"});
-        void *map = buf.id ? rhi_map_buffer(buf) : NULL;
-        if (!map) {
-            if (buf.id) {
-                rhi_destroy_buffer(buf);
-            }
-            return false;
-        }
-        memcpy(map, kWords, sizeof(kWords));
-        s_sheetNoise = buf;
-    }
-    memset(b, 0, sizeof(*b));
-    b->slot = ICO_SHEET_NOISE_SLOT;
-    b->type = RHI_BIND_UNIFORM_BUFFER;
-    b->buffer = s_sheetNoise;
-    b->offset = 0;
-    b->size = sizeof(kWords);
-    return true;
-}
-
-void rd__sheet_noise_free(void)
-{
-    if (s_sheetNoise.id) {
-        rhi_destroy_buffer(s_sheetNoise);
-        s_sheetNoise.id = 0;
-    }
+    free(c);
+    free(hm);
 }
 
 void rd_set_texture_sheet_style(RdTex t, const RdSheetStyle *style)

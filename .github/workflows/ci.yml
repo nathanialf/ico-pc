@@ -122,7 +122,6 @@ jobs:
           .venv/bin/python tools/gen_data_desc.py --check
           .venv/bin/python tools/gen_layout_asserts.py --check
           .venv/bin/python tools/gen_sources.py --check
-          .venv/bin/python tools/gen_sheet_noise.py --check
 
       # ---- builds and tests ----
       - name: linux-x64, headless

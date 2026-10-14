@@ -4,7 +4,7 @@
  * so there is no packing ambiguity). Change this file and common.hlsli
  * together. The constants mirrored from an .hlsli (ICO_DF_*:
  * common.hlsli; ICO_TEXFMT_*: gs_math.hlsli; ICO_VU_*: vu_common.hlsli;
- * the ICO_SHEET_* the shader reads: sheet_text.hlsli) hold the same values as their HLSL twins;
+ * ICO_SHEET_*: sheet_text.hlsli) hold the same values as their HLSL twins;
  * ICO_SHEET_* and ICO_TEXFMT_* are static-asserted (port/render/test/
  * sheet_ref.c, port/shaders/test/gs_math_test.c). */
 #ifndef PORT_SHADERS_SHADER_CONSTS_H
@@ -149,72 +149,52 @@ enum { ICO_DF_ABOVE1X = 33554432 };
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
 enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 
-/* The menu text's constants (rd.h rd_create_texture_sheet says what they
- * do).  The halo is made on the CPU (port/render/rd_tex.c rd_sheet_rim, with
- * ICO_SHEET_RX .. ICO_SHEET_GAIN); font_sheet_ps reads it and quantises
- * (ICO_SHEET_LEVELS, ICO_SHEET_GRAIN, ICO_SHEET_T_OFF: SHEET_* in
- * sheet_text.hlsli, the same values; port/render/test/sheet_ref.c
- * static-asserts each pair and the tables' shapes).  The style reaches the
- * shader in DrawCB.param: the halo's weight times its language gain, in
- * 64ths (0 off, 64 the plain halo; up to 255: the French and German
- * sheets' gains take it past 64), rimLevel, fillLevel, dither (rd_replay.c
- * sheetParam).
- *
- * The halo is a blur of the coverage: a separable weighted sum over
- * ICO_SHEET_RX sheet texels across and ICO_SHEET_RY down (a sheet texel is
- * one x unit by one field line), the taps a linear ramp to zero one texel
- * past the reach (KX[d] = 1024 (1 - d / 11), KY[d] = 1024 (1 - d / 8),
- * rounded), times ICO_SHEET_GAIN / 64 so a stroke's edge reaches a full halo,
- * clamped to 255.  The sheets' halo is a soft dark turbulence round the
- * letters (port/ui/menu_font.c, above kSheetInk); a blur reads like it where
- * a dilation draws a hard-edged box.  The taps sum to 11 x 1024 across and
- * 8 x 1024 down. */
-#define ICO_SHEET_RX 10 /* halo: sheet texels across */
-#define ICO_SHEET_RY 7  /* halo: sheet texels (field lines) down */
-#define ICO_SHEET_KX_0 1024
-#define ICO_SHEET_KX_1 931
-#define ICO_SHEET_KX_2 838
-#define ICO_SHEET_KX_3 745
-#define ICO_SHEET_KX_4 652
-#define ICO_SHEET_KX_5 559
-#define ICO_SHEET_KX_6 465
-#define ICO_SHEET_KX_7 372
-#define ICO_SHEET_KX_8 279
-#define ICO_SHEET_KX_9 186
-#define ICO_SHEET_KX_10 93
-#define ICO_SHEET_KY_0 1024
-#define ICO_SHEET_KY_1 896
-#define ICO_SHEET_KY_2 768
-#define ICO_SHEET_KY_3 640
-#define ICO_SHEET_KY_4 512
-#define ICO_SHEET_KY_5 384
-#define ICO_SHEET_KY_6 256
-#define ICO_SHEET_KY_7 128
-/* the blur's gain, 64ths (2.89): the survey's English profile and halo
-   mass (ctest menu_look) */
-#define ICO_SHEET_GAIN 185
-/* the levels the opacity and the halo-to-fill mix are quantised to (the
-   sheets' 16 colours hold a few antialiasing steps between none and full) */
-#define ICO_SHEET_LEVELS 6
-/* the grain: the quantiser's threshold, in 512ths of a step, is
-   256 + (2 rank + 1 - 256) * ICO_SHEET_GRAIN / 64 (rounded to nearest:
-   + 32, then down) with rank the texel's entry of the 32 x 32 blue-noise
-   tile (sheet_noise.hlsli, 0..255), so the threshold spreads
-   ICO_SHEET_GRAIN / 64 of a step round the half (0.60); ICO_SHEET_T_OFF, a
-   half, with dither off */
-#define ICO_SHEET_GRAIN 38
-#define ICO_SHEET_T_OFF 256
-/* the tile's slot: a uniform buffer of its 256 words (rd_tex.c
-   rd__sheet_noise_binding) at group 1, slot 4 (register b4, space1:
-   sheet_text.hlsli SheetNoiseCB), in every draw group (rd_replay.c
-   dynamicGroup) */
-#define ICO_SHEET_NOISE_SLOT 4
+/* font_sheet_ps's constants, SHEET_* in
+ * sheet_text.hlsli (the same values; port/render/test/sheet_ref.c
+ * static-asserts each pair).  rd.h rd_create_texture_sheet says what they do.
+ * The style reaches the shader in DrawCB.param: the rim's weight (0 off,
+ * 64 full), rimLevel, fillLevel, dither (rd_replay.c, from RdTexRec.sheet). */
+/* The values are the sheets' survey (the comment above kSheetInk in
+ * port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
+ * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across
+ * and ICO_SHEET_RY down, each scaled by WX[|dx|] * WY[|dy|] (per mille), so
+ * the dark halo fades out as the sheets' does instead of filling the gaps
+ * between letters.  The falloff is the English sheets' mean rim alpha at
+ * each distance outside the letters (across 1..6, down 1..4). */
+#define ICO_SHEET_RX 6 /* rim: texels across */
+#define ICO_SHEET_RY 4 /* rim: texels (field lines) down */
+#define ICO_SHEET_WX_0 1000
+#define ICO_SHEET_WX_1 760
+#define ICO_SHEET_WX_2 610
+#define ICO_SHEET_WX_3 540
+#define ICO_SHEET_WX_4 500
+#define ICO_SHEET_WX_5 390
+#define ICO_SHEET_WX_6 330
+#define ICO_SHEET_WY_0 1000
+#define ICO_SHEET_WY_1 770
+#define ICO_SHEET_WY_2 440
+#define ICO_SHEET_WY_3 360
+#define ICO_SHEET_WY_4 270
+/* opacity and rim-to-fill levels: the sheets' white takes three steps
+   between none and full (five levels), but once the strips' letters sat on
+   the sheets' (ctest menu_look) eight gave the smaller difference on every
+   language (the blurred difference's median 8.7 .. 9.4 where five give
+   9.0 .. 9.5), a finer grain still dithered */
+#define ICO_SHEET_LEVELS 8
+/* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
+#define ICO_SHEET_BAYER_ROW0 0xA280
+#define ICO_SHEET_BAYER_ROW1 0x6E4C
+#define ICO_SHEET_BAYER_ROW2 0x91B3
+#define ICO_SHEET_BAYER_ROW3 0x5D7F
+#define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
 /* A strip rasterised at s strip texels a sheet texel across and down (the
  * scene's or the output's scale, port/ui/menu_font.c), 1..ICO_SHEET_SCALE_MAX:
- * the letters are the strip's texels and the halo is the blur at the strip's
- * texels (rd_sheet_rim: the taps interpolated at 1 / s of a sheet texel, so
- * the halo reaches as far in sheet texels and a plane has the same level at
- * every scale), quantised per strip texel: the grain is one strip texel. */
+ * the letters are the strip's texels, the rim is the 1x rim of the sheet
+ * texels' mean coverage magnified s times (rd.h rd_sheet_rim computes it
+ * into the texture's bottom half), the Bayer cell is s x s strip texels
+ * (one sheet texel), the levels are the same.  The scale reaches the
+ * shader in DrawCB.param.w above the dither bit: dither | (s - 1) << 1
+ * (rd_replay.c sheetParam), so s = 1 leaves the dither word as it is. */
 #define ICO_SHEET_SCALE_MAX 4
 
 /* Vertex of sprite.hlsl and font.hlsl: 20 bytes.

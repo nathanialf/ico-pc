@@ -139,20 +139,17 @@ static bool ensureUpload(int slot, uint64_t need)
 static RhiBindGroup uniformGroup(RhiBindGroupLayout layout, uint32_t bindSlot, RhiBuffer buf,
                                  uint64_t off, uint32_t size)
 {
-    RhiBinding b[2];
-    memset(b, 0, sizeof(b));
-    b[0].slot = bindSlot;
+    RhiBinding b;
+    memset(&b, 0, sizeof(b));
+    b.slot = bindSlot;
     /* rd's frame and draw layouts take a dynamic uniform; the
      * movie's two blocks are the group's base, bound with offset 0 (one
      * draw a frame: no group to share) */
-    b[0].type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
-    b[0].buffer = buf;
-    b[0].offset = off;
-    b[0].size = size;
-    /* rd's draw layout also holds the menu text's grain tile (rd_replay.c
-     * dynamicGroup) */
-    const uint32_t n = layout.id == g_rd.layoutDraw.id && rd__sheet_noise_binding(&b[1]) ? 2u : 1u;
-    return rhi_create_bind_group(&(RhiBindGroupDesc){layout, b, n});
+    b.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+    b.buffer = buf;
+    b.offset = off;
+    b.size = size;
+    return rhi_create_bind_group(&(RhiBindGroupDesc){layout, &b, 1});
 }
 
 /* The movie's box: the 2D layer's 4:3 box inside the presenter's box

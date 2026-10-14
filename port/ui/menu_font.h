@@ -5,10 +5,9 @@
  * menu shows, the game's own (the rows of the menu text table, menu_text.h)
  * and the port's (its layout rows, popups and the photo panel), is Arimo
  * rasterised on the sheets' own texel grid and drawn with rd's sheet
- * shader (rd.h rd_create_texture_sheet: a soft dark halo round the letters,
- * a blur of their coverage, the antialiasing quantised to a few levels
- * against a blue-noise threshold), so it reads like the sheets in every
- * preset and scale.
+ * shader (rd.h rd_create_texture_sheet: a rim around the letters,
+ * the antialiasing quantised to a few levels against a fixed Bayer
+ * threshold), so it reads like the sheets in every preset and scale.
  *
  * The recipe.  A sheet texel is one x unit wide and one field line (two y
  * units) tall (font.h's grid); the menu rows' em is 13.5 texels, 27 y units
@@ -19,18 +18,16 @@
  * typeface, ui_internal.h), made a little heavier (UI_MENU_BOLD_X / Y).
  * The strip is rasterised at s strip texels a sheet texel, s the scene's
  * scale (or the output's on the presentation overlay), 1 to
- * ICO_SHEET_SCALE_MAX, so the letters are as crisp as the picture, and
- * the halo and its grain are made at the strip's texels too (one output
- * texel wide); the layout is in sheet texels at every scale (menu_font.c
- * mfScale).
+ * ICO_SHEET_SCALE_MAX, so the letters are as crisp as the picture; the
+ * layout is in sheet texels at every scale (menu_font.c mfScale).
  *
  * Strips.  A drawn text is one coverage strip in a cache of pages of one
- * scale each (1024 x 1024 of coverage at 1x, larger above it, the halo
- * below it: menu_font.c MF_PAGE; four per style, three styles), shelf
- * packed with each strip's corner on a multiple of 4 texels and 11 texels
- * across, 8 down, between strips (the halo's reach and the bilinear texel,
- * so no strip's halo reaches its neighbour), 12 from the page's top left:
- * a page holds 36 rows of 20-texel menu items, a
+ * scale each (1024 x 1024 at 1x, larger above it: menu_font.c MF_PAGE;
+ * four per style, three styles), shelf
+ * packed with each strip's corner on a multiple of 4 texels (the dither
+ * cell) and 7 texels across, 5 down, between strips (the rim's reach and
+ * the bilinear texel, so no strip's rim reaches its neighbour), 8 from the
+ * page's top left: a page holds 36 rows of 20-texel menu items, a
  * page set per style (the light ink's rim, a faint rim, the plain inks); a
  * set whose pages are full drops its page drawn least recently once no
  * frame of the last EVICT_FRAMES can still name it.  A game row's strip is
@@ -40,12 +37,12 @@
  * drawn with the sprite's own box and texel rectangle relative to the item's, it lands
  * where the sheet's texels would have, insets and half-texel offsets
  * included.  A port text's strip is its measured lines plus a margin for
- * the halo, its anchor snapped to whole texels.
+ * the rim, its anchor snapped to whole texels.
  *
- * Inks (menu_text.h UiMenuTextInk).  UI_INK_LIGHT: the halo on, its level,
- * its strength and the fill's level per language (ui_menu_sheet_ink, the
- * table kSheetInk in menu_font.c); a language change restyles the pages,
- * nothing is rasterised again.  UI_INK_DARK, PLAIN and GREY: no rim, a white fill,
+ * Inks (menu_text.h UiMenuTextInk).  UI_INK_LIGHT: the rim on, its level
+ * and the fill's per language (ui_menu_sheet_ink, the table kSheetInk in
+ * menu_font.c); a language change restyles the pages, nothing is
+ * rasterised again.  UI_INK_DARK, PLAIN and GREY: no rim, a white fill,
  * the colour from the vertex colour (DARK black and never in the glow,
  * GREY 151 / 255 of the row colour).
  */
@@ -61,10 +58,10 @@
 extern "C" {
 #endif
 
-/* The margin round a port text's ink, texels: the halo's reach (rd's
+/* The margin round a port text's ink, texels: the rim's reach (rd's
    ICO_SHEET_RX and ICO_SHEET_RY) plus the bilinear read's texel. */
-#define UI_MENU_RIM_X 11
-#define UI_MENU_RIM_Y 8
+#define UI_MENU_RIM_X 7
+#define UI_MENU_RIM_Y 5
 /* A faint halo's weight, 64ths of the full one (rd.h RdSheetStyle
    rimWeight): the 31 faint words' halo is 0.44 of their fill on the sheets
    (mostly English, menu_PAL_03), the strips' at 16 / 64 too (ctest
@@ -74,7 +71,7 @@ extern "C" {
 /* A sheet style, rd.h RdSheetStyle's fields (rd.h is not included here:
    the headless build has no rd). */
 typedef struct UiSheetInk {
-    uint8_t rimOn, rimLevel, fillLevel, dither, rimWeight, rimGain;
+    uint8_t rimOn, rimLevel, fillLevel, dither, rimWeight;
 } UiSheetInk;
 
 /* The light ink's style in language lang (UiLang; out of range: English):

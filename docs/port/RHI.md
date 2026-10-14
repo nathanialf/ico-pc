@@ -80,9 +80,7 @@ copy is made visible to every later read and waits for every earlier read of its
 (`port/rhi/rhi.h`, commands).
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
-1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the menu
-text's grain tile (b4, a static uniform buffer: `port/render/rd_tex.c`
-(`rd__sheet_noise_binding`)), group 2 the
+1 the per-draw uniforms (b1; the VU programs' b2, b3) and the VU vertex stream (t0), group 2 the
 textures t1..t4 and samplers s1..s4. Backends map these onto descriptor sets or root parameters; rd
 never sees the mapping. Binding types: uniform buffer, storage buffer, sampled texture, sampler, a
 dynamic uniform buffer whose offset is given at bind time (`rhi_cmd_set_bind_group_offsets`, at most

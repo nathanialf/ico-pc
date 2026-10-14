@@ -321,44 +321,24 @@ pre-rendered menu sheets (`port/ui/menu_font.h`, header comment). A sheet texel 
 and one field line tall; the menu rows' em is 13.5 texels, 27 y units. A text is rasterised on
 that grid, its lettering 0.8 as wide as the typeface (`UI_SHEET_WIDTH`, the sheets having been
 lettered for the GS's 512-wide frame) and a little heavier (`UI_MENU_BOLD_X`, `UI_MENU_BOLD_Y`),
-then drawn with rd's sheet [shader](SHADERS.md): a soft dark halo round the letters and the
-antialiasing quantised to a few levels against a blue-noise threshold, as the sheets read
-(`port/ui/menu_font.h`; `port/ui/ui_internal.h` (`UI_SHEET_WIDTH`, `UI_MENU_BOLD_X`)).
-
-The halo is a blur of the letters' coverage, not a dilation: a separable weighted sum whose taps
-fall linearly to zero one texel past its reach, 10 texels across and 7 field lines down, times a
-gain, clamped (`port/shaders/shader_consts.h` (`ICO_SHEET_RX`, `ICO_SHEET_RY`, `ICO_SHEET_KX_0`,
-`ICO_SHEET_KY_0`, `ICO_SHEET_GAIN`)). The CPU makes it when a strip is placed, into the bottom half
-of the strip's page, one value a strip texel (`port/render/rd.h` (`rd_sheet_rim`);
-`port/ui/menu_font.c` (`placeCoverage`)); the shader reads a texel's coverage and halo with two
-gathers and quantises the opacity and the halo-to-fill mix to `ICO_SHEET_LEVELS` levels against
-one threshold, the texel's entry of a 32 x 32 blue-noise tile spread `ICO_SHEET_GRAIN` / 64 of a
-step round the half (`port/shaders/sheet_text.hlsli` (`sheet_threshold`, `sheet_texel`);
-`port/shaders/sheet_noise.hlsli`, made by `tools/gen_sheet_noise.py`). The letter's own coverage
-always wins over the halo. The halo's strength per language is `kSheetInk`'s `rimGain` (64ths),
-times the faint style's weight where a sheet's halo is faint (`port/ui/menu_font.c` (`kSheetInk`);
-`port/ui/menu_font.h` (`UI_MENU_FAINT_WEIGHT`)).
+then drawn with rd's sheet [shader](SHADERS.md): a rim around the letters and the antialiasing
+quantised against a fixed dither, as the sheets read (`port/ui/menu_font.h`;
+`port/ui/ui_internal.h` (`UI_SHEET_WIDTH`, `UI_MENU_BOLD_X`)).
 
 The strips are rasterised at the [scene scale](ARCHITECTURE.md#terms), the scene's texels per GS
 line rounded to whole strip texels per sheet texel, from 1 up to `ICO_SHEET_SCALE_MAX` (on the
 overlay, the output's pixels per y unit), so the letters are sharp at every resolution while the
-quad stays the 1x strip's (`port/ui/menu_font.c` (`mfScale`); `port/ui/menu_font.h`
-(`ui_draw_menu_text`)). Above 1x the halo is made at the strip's own texels too, the 1x taps
-interpolated at 1 / s of a sheet texel, so it reaches as far and is as dark as at 1x while its
-grain is one output pixel wide (`port/render/rd.h` (`rd_sheet_rim`)). Each drawn text is one strip
-in a page cache of four pages per style for three styles; a page holds 1024 x 1024 texels of
-coverage at 1x (a 1024 x 2048 texture with the halo below) and up to 4096 x 2048 at 4x; strips sit
-11 texels apart across and 8 down, the halo's reach and the bilinear texel
-(`port/ui/menu_font.c` (`MF_GAP_X`, `MF_GAP_Y`, `MF_ORIGIN`)), and a port text's strip carries the
-same margin round its ink (`port/ui/menu_font.h` (`UI_MENU_RIM_X`, `UI_MENU_RIM_Y`)); a full set
-drops its page drawn least recently once no recent frame can name it (`port/ui/menu_font.c`
-(`MF_PAGE`, `MF_PAGES`, `MF_EVICT_FRAMES`)).
+quad and the look stay the 1x strip's (`port/ui/menu_font.c` (`mfScale`); `port/ui/menu_font.h`
+(`ui_draw_menu_text`)). Each drawn text is one strip in a page cache of four pages per style for
+three styles, a page 1024 x 1024 at 1x and up to 4096 x 2048 at 4x; a full set drops its page drawn
+least recently once no recent frame can name it (`port/ui/menu_font.c` (`MF_PAGE`, `MF_PAGES`,
+`MF_EVICT_FRAMES`)).
 
-The inks (`UiMenuTextInk`): light letters with the dark halo (the menu rows; the port's text
-always has the full halo), and dark, plain and grey letters without one (the white panel's prompts,
-the save screens' play time and slot numbers). The light ink's halo level, halo strength and fill
-are per language (`kSheetInk`, `ui_menu_sheet_ink`), and a language change restyles the pages
-without rasterising again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
+The inks (`UiMenuTextInk`): light letters with the dark rim (the menu rows; the port's text always
+has the full rim), and dark, plain and grey letters without one (the white panel's prompts, the
+save screens' play time and slot numbers). The light ink's rim level and fill are per language
+(`kSheetInk`, `ui_menu_sheet_ink`), and a language change restyles the pages without rasterising
+again (`port/ui/menu_font.h` (`ui_menu_sheet_ink`, `ui_menu_item_ink`)).
 
 ### The game's own menu words
 
@@ -539,10 +519,7 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `menu_text` (`test/menu_text_test.c`): the menu text table against the boot ELF's rows, every
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
-  player's sheets through the sheet shader's CPU reference; pins the sheet constants (the halo's
-  profile and strength per language, the levels, the grain). `ICO_MENU_LOOK_HALOFIT=1` fits the
-  halo's gain, the levels and the per-language gains; `ICO_MENU_LOOK_DUMP=1` writes each row's
-  sheet rectangle and its strip at scales 1, 2 and 4 (`test/menu_look_test.c`, header comment).
+  player's sheets through the sheet shader's CPU reference; pins the sheet constants.
 - `font_coverage` (`test/font_coverage_test.c`, `test/font_corpus/`): every character the port
   draws has a glyph.
 - `font_edge` (`test/font_edge_test.c`): plain text on the output at Enhanced 1080p and 4K, and

@@ -1028,43 +1028,41 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
                             const void *px);
 
 /* Sheet text.  The menus' words drawn in the look of
- * the game's 4-bit menu sheets (text/menu_PAL_*.tm2: light letters in a
- * soft, grainy dark halo, the antialiasing mixed into a few colours) from a
+ * the game's 4-bit menu sheets (text/menu_PAL_*.tm2: light letters, a
+ * darker rim around them, the antialiasing mixed into a few colours) from a
  * plain coverage strip, so a font rasterised on the sheets' own texel grid
  * reads like the sheets did in every preset and scale.
  *
- * rd_create_texture_sheet  a one-channel texture, w x h bytes (null: zero),
- *                        h even: rows 0 .. h/2 - 1 the coverage, 0 none to
- *                        255 full (a rasteriser's 8-bit bitmap, not GS
- *                        units), rows h/2 .. h - 1 the halo of each
- *                        coverage texel (rd_sheet_rim; the caller fills it).
- *                        At scale 1 a texel is a sheet texel (1 x unit wide,
- *                        one field line tall); style null is {1, 0, 255, 1}
- *                        (rim on, black rim, white fill, dithered).  It is
- *                        drawn, by screen prims and overlay prims alike,
- *                        with font_sheet_ps (RD_FS_FONT_SHEET), and a draw
- *                        addresses the top half (its UVs are the texture's,
- *                        normalised to w x h).  Texel (x, y) of the top
- *                        half is made from (both 0 outside the half):
+ * rd_create_texture_sheet  a one-channel texture, w * h bytes of coverage
+ *                        (null: zero): 0 none to 255 full (a rasteriser's
+ *                        8-bit bitmap, not GS units), one byte a sheet
+ *                        texel (1 x unit wide, one field line tall); style
+ *                        null is {1, 0, 255, 1} (rim on, black rim, white
+ *                        fill, dithered).  It is drawn, by screen prims
+ *                        and overlay prims alike, with font_sheet_ps
+ *                        (RD_FS_FONT_SHEET), which makes
+ *                        each texel (x, y) of the sheet from the coverage
+ *                        around it (texels outside the texture have
+ *                        coverage 0):
  *                          c  the coverage at (x, y);
- *                          r  the halo at (x, h/2 + y);
- *                          a  max(c, min(255, r * W / 64 rounded)), the
- *                             texel's opacity, W the halo's weight: 0
- *                             without the rim, else the rimWeight (1..63;
- *                             0 or 64 and more: 64) times the rimGain (0:
- *                             64) / 64, rounded (rd_replay.c sheetParam), so
- *                             the letter's own coverage always wins;
- *                          t  c / a (0 where a is 0): halo (0) to fill (1);
- *                          a and t quantised to ICO_SHEET_LEVELS levels
- *                          against one threshold, the texel's entry of a
- *                          32 x 32 blue-noise tile (sheet_noise.hlsli)
- *                          spread ICO_SHEET_GRAIN / 64 of a step round the
- *                          half (the sheets' irregular grain; fixed to the
- *                          texture's texel, so the grain moves with the
- *                          text) or, with dither 0, rounded;
+ *                          r  the largest coverage within ICO_SHEET_RX
+ *                             texels across and ICO_SHEET_RY down, each
+ *                             scaled by the falloff ICO_SHEET_WX[|dx|] *
+ *                             ICO_SHEET_WY[|dy|] (per mille,
+ *                             shader_consts.h), rounded: the rim, a dark
+ *                             halo that fades out;
+ *                          a  rimOn ? max(c, r * w) : c, the texel's
+ *                             opacity, w the rim's weight (rimWeight / 64,
+ *                             rounded; 1 when rimWeight is 0 or 64 or more);
+ *                          t  c / a (0 where a is 0): rim (0) to fill (1);
+ *                          a and t quantised to ICO_SHEET_LEVELS levels,
+ *                          against a 4x4 Bayer threshold picked by (x, y)
+ *                          (the sheets' mottled antialiasing; fixed to the
+ *                          texel, so the grain moves with the text) or, with
+ *                          dither 0, rounded;
  *                          grey  the rim level lerped to the fill level by t;
  *                          alpha a in GS units (full = 0x80).
- *                        A sampled pixel blends the four texels around
+ *                        A sampled pixel blends the four sheet texels around
  *                        its position bilinearly, as the GS's bilinear read
  *                        of a 4-bit sheet did, whatever the draw's filter
  *                        and wrap (clamped, never mipmapped).  The texel
@@ -1076,47 +1074,68 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                        port/render/test/sheet_ref.c computes the same
  *                        texels and samples on the CPU (the tests' oracle)
  * rd_set_texture_sheet_style  the style the next replays draw t with (the
- *                        language's rim level and gain, without rasterising
+ *                        language's rim level, without rasterising
  *                        again); ignored for any other texture.  The style
  *                        is read when a frame is replayed, not when its
  *                        draws are recorded
  * rd_update_texture_rect   takes a sheet texture's rectangles as R8's: w * h
- *                        bytes, the coverage's rows in the top half, the
- *                        halo's in the bottom half
- * rd_sheet_rim            the halo of the rw x rh texels at (x, y) of a
- *                        w x h coverage (rows packed, 0 outside it) at scale
- *                        s (style.scale: coverage texels a sheet texel
- *                        across and down, 1 .. ICO_SHEET_SCALE_MAX), into
- *                        rim at the same texels (w bytes a row): a blur of
- *                        the coverage, the separable weighted sum
- *                          R = sum c(x + i, y + j) KXs[|i|] KYs[|j|]
- *                        over |i| < (ICO_SHEET_RX + 1) s and
- *                        |j| < (ICO_SHEET_RY + 1) s, with the 1x taps
- *                        ICO_SHEET_KX / KY (a linear ramp, 0 one sheet
- *                        texel past the reach) interpolated at 1 / s of a
- *                        sheet texel: KXs[i] = KX[i / s] (s - i % s) +
- *                        KX[i / s + 1] (i % s); the taps sum to s^2 times
- *                        the 1x sum, so with D = s^4 * 11264 * 8192 the halo
- *                        is min(255, (R * ICO_SHEET_GAIN + D * 32) /
- *                        (D * 64)): a plane's level and the halo's reach in
- *                        sheet texels are the same at every scale, and the
- *                        halo (and so the grain) is one value a strip
- *                        texel.  The rectangle is clipped to the coverage
- * A dump keeps a sheet texture's texels and style (rd_dump.c). */
+ *                        bytes of coverage
+ * Scaled strips: with
+ *                        style.scale s > 1 the coverage holds s x s texels
+ *                        for each sheet texel (a strip rasterised s times
+ *                        finer for a scene or an output s times the GS's).
+ *                        The letters are those texels' own and the rim is
+ *                        the sheet's, magnified as the GS magnified a
+ *                        sheet: each sheet texel (X, Y) (texels sX ..
+ *                        sX + s - 1 across, sY .. down) has the coverage
+ *                        C, the mean of its s x s texels rounded, and the
+ *                        rim R, the 1x dilation of C (ICO_SHEET_RX and
+ *                        ICO_SHEET_RY sheet texels, the per-mille tables as
+ *                        they are); its rim level is
+ *                        L = quantise(rimOn ? R * weight : 0) against its
+ *                        own Bayer threshold (X & 3, Y & 3).  A texel
+ *                        (x, y) blends the L of the four sheet texels
+ *                        around its centre, ((x + 0.5) / s - 0.5,
+ *                        (y + 0.5) / s - 0.5), bilinearly: Lm on the
+ *                        0..255 scale and Am of the GS units
+ *                        (L * 128 + 127) / 255.  With c the texel's own
+ *                        coverage and th the threshold of the sheet texel
+ *                        it lies in (floor(x / s), floor(y / s)):
+ *                          alpha  the larger of Am and the fill's
+ *                                 quantise(c) in GS units, rounded;
+ *                          grey   the rim level lerped to the fill level
+ *                                 by t = c / max(c, Lm rounded),
+ *                                 quantised;
+ *                        so outside the letters a texel is the 1x strip's
+ *                        rim magnified s times (its steps, its grain the
+ *                        sheet texel's), and the letters' edge is the fine
+ *                        texel's.  The bilinear blend of a sample is of
+ *                        the texture's own texels.  Such a texture is
+ *                        w x h with the coverage in rows 0 .. h/2 - 1 and
+ *                        R in rows h/2 .. h - 1, each sheet texel's over
+ *                        its s x s texels (the caller fills them with
+ *                        rd_sheet_rim); the coverage and the rim are 0
+ *                        outside their halves, and a draw addresses the
+ *                        top half.  s = 1 draws the unscaled path above
+ *                        (the rim made by the shader).
+ * rd_sheet_rim            R of the sheet texels (s x s texels each) that
+ *                        the rw x rh texels at (x, y) of a w x h coverage
+ *                        at scale s touch (rows packed, 0 outside it),
+ *                        into rim at those sheet texels' texels (w bytes a
+ *                        row), whole sheet texels: a rectangle on the
+ *                        sheet texels' corners writes only itself.  The
+ *                        rectangle is clipped to the coverage
+ * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
 typedef struct RdSheetStyle {
-    uint8_t rimOn;     /* nonzero: the halo is drawn (light ink: the menus' words) */
-    uint8_t rimLevel;  /* grey of the halo, 0..255 (English sheets 24, French ~61) */
+    uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
+    uint8_t rimLevel;  /* grey of the rim, 0..255 (English sheets 0, French ~62) */
     uint8_t fillLevel; /* grey of the letters' fill, 0..255 */
-    uint8_t dither;    /* nonzero: the blue-noise threshold; 0: rounded to the levels */
-    uint8_t rimWeight; /* the halo's strength in 64ths (a faint halo); 0 or 64 and more:
+    uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
+    uint8_t rimWeight; /* the rim's strength in 64ths (a faint halo); 0 or 64 and more:
                           full */
     uint8_t scale;     /* coverage texels a sheet texel, across and down
                           (a strip rasterised at the scene's scale); 0 or 1: one,
-                          above ICO_SHEET_SCALE_MAX: that.  rd_sheet_rim's
-                          scale; the shader does not read it */
-    uint8_t rimGain;   /* the language's halo strength in 64ths, times rimWeight
-                          (the French and German sheets' halo is heavier than
-                          the English); 0: 64 */
+                          above ICO_SHEET_SCALE_MAX: that */
 } RdSheetStyle;
 
 RdTex rd_create_texture_sheet(uint32_t w, uint32_t h, const uint8_t *coverage,

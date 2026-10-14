@@ -8,13 +8,10 @@
  * (port/render/test/sheet_ref.c), and the two pictures are compared.
  *
  *   testSurvey        measures the sheets (the light-ink items of the menu
- *                     text table on the five languages' sheets) and the
- *                     strips drawn the same way, and pins the constants that
- *                     came from it: kSheetInk (menu_font.c: the levels, the
- *                     halo's strength per language), the halo's reach
- *                     ICO_SHEET_RX / RY and its falloff (the strips' halo
- *                     profile against the sheets'), the floor of
- *                     ICO_SHEET_LEVELS and the grain (shader_consts.h).
+ *                     text table on the five languages' sheets) and pins
+ *                     the constants that came from it: kSheetInk (menu_font.c),
+ *                     ICO_SHEET_RX / RY, the rim's falloff ICO_SHEET_WX / WY
+ *                     and the floor of ICO_SHEET_LEVELS (shader_consts.h).
  *   testCompareItems  every item of ui_menu_text_items in the five languages:
  *                     the reference strip against the sheet's rectangle,
  *                     both composited on black and on mid-grey with MODULATE
@@ -29,23 +26,10 @@
  * OUT_DIR/menu_look/<lang>/contact.png, every item of the language at x1.
  *
  * ICO_MENU_LOOK_FIT=1 (development only): searches the levels and each
- * language's rim and fill grey (the halo's shape and gains as they are)
- * for the smallest blurred difference over the light-ink items and prints
- * the best, instead of the checks.  The constants it finds are then written
- * into shader_consts.h, sheet_text.hlsli and kSheetInk by hand.
- *
- * ICO_MENU_LOOK_HALOFIT=1 (development only): with the halo's shape fixed
- * (the reach and the linear taps), coordinate descent over the blur's gain
- * (ICO_SHEET_GAIN, on the English items), each other language's rimGain
- * and the levels, for the smallest blurred difference; prints the lines to
- * paste into shader_consts.h, sheet_text.hlsli and kSheetInk, instead of
- * the checks.
- *
- * ICO_MENU_LOOK_DUMP=1 (development only): per item and language, the raw
- * sheet rectangle and the strip at scales 1, 2 and 4, each magnified 4x
- * nearest on grey, stacked, into OUT_DIR/menu_look/dump/<lang>/<row>.png,
- * instead of the checks (for the eye: the grain and the halo at each
- * scale).
+ * language's rim and fill grey (the rim's reach and falloff are the
+ * survey's) for the smallest blurred difference over the light-ink items and
+ * prints the best, instead of the checks.  The constants it finds are then
+ * written into shader_consts.h, sheet_text.hlsli and kSheetInk by hand.
  *
  * ICO_MENU_LOOK_GEOFIT=1 (development only): fits each item's em, width,
  * anchor and capital middle per language to its sheet (geoFit) and prints
@@ -141,21 +125,9 @@ static const float kExpMassX[UI_LANG_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3.64f
 static const float kExpMassY[UI_LANG_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
 #define TOL_LEVEL 0.6f /* grey levels */
 #define TOL_MASS 0.08f
-/* the strips' halo against the sheets', measured alike (testSurvey): the
-   mean alpha at each distance across (1..PROF_X) and down (1..PROF_Y), per
-   entry, on the English items (one shape for every language) */
+/* the rim's falloff (ICO_SHEET_WX / WY, per mille) against the English
+   sheets' mean rim alpha at each distance, per entry */
 #define TOL_FALLOFF 0.08f
-#define PROF_X 12
-#define PROF_Y 8
-/* the strips' halo mass (the first six texels, as kExpMassX / Y) against
-   the sheets' per language: what kSheetInk's rimGain is set from (the run
-   on main with the blurred halo: within 0.26 on every language). */
-#define TOL_MODEL_MASS 0.30f
-/* the grain: the mean |alpha - its 3 x 3 mean| over the halo texels, strip /
-   sheet, per language (the run on main with the blurred halo: 0.96 ..
-   1.14). */
-#define GRAIN_RATIO_LO 0.75f
-#define GRAIN_RATIO_HI 1.33f
 #define EXP_STEPS 3 /* the median number of antialiasing steps of a sheet's white */
 
 static int failures;
@@ -244,66 +216,46 @@ static void collect(void)
 
 typedef struct Survey {
     double fill, rim, massX, massY;
-    double profX[PROF_X + 1],
-        profY[PROF_X + 1]; /* the mean alpha (0..1) at distance d, [0] unused */
-    double grain;          /* the mean |alpha - its 3 x 3 mean| (0..1) over the halo texels */
+    double profX[7], profY[7]; /* the mean alpha (0..1) at distance 1..6, [0] unused */
     int sheets;
     int steps[16]; /* the antialiasing steps of each sheet's white */
 } Survey;
-
-/* the strips' pictures of the rectangles (refRect), for the survey of the
-   model: [lang][k] as s_rect */
-typedef struct Pic {
-    uint8_t *grey, *alpha;
-} Pic;
-
-static Pic *s_model[UI_LANG_COUNT];
-
-static int refRect(const Rect *r, uint8_t *grey, uint8_t *alpha);
 
 static int cmpInt(const void *a, const void *b)
 {
     return *(const int *)a - *(const int *)b;
 }
 
-/* The measures of the survey, over the light-ink rectangles of a language,
-   of the sheets (model 0) or of the strips drawn in their place (model 1)
+/* The measures of the survey, over the light-ink rectangles of a language
    (the definitions are the scratch survey's):
    fill   alpha-weighted mean grey of the texels with grey >= 240 and alpha >= 0.9
    rim    the same over the texels with alpha >= 0.5 and grey <= 100 that have no
           fill texel (grey >= 200, alpha >= 0.7) within a texel
    mass   outside the letters of a short word (w <= 60, h <= 25), the mean alpha
           at distance 1..6 from the first / last fill texel of each row (X) and the
-          topmost / lowest of each column (Y), summed over the six distances;
-          the profile is the same mean at each distance, 1..PROF_X across and
-          1..PROF_Y down
-   grain  over the halo texels (alpha >= 13, grey <= 100, no fill texel within
-          a texel), the mean |alpha - the mean alpha of its 3 x 3|: the grain's
-          strength
+          topmost / lowest of each column (Y), summed over the six distances
    steps  per sheet, the distinct alphas of its white texels (grey >= 240, alpha
           between 13 and 254) taken by at least 1 % of them, merged when within 16:
           the clusters that are not full (< 0.93) */
-static void survey(int lang, int model, Survey *out)
+static void survey(int lang, Survey *out)
 {
     memset(out, 0, sizeof(*out));
-    double fN = 0, fD = 0, rN = 0, rD = 0, gN = 0, gD = 0;
-    double pm[4][PROF_X + 1][2];
+    double fN = 0, fD = 0, rN = 0, rD = 0;
+    double pm[4][7][2];
     memset(pm, 0, sizeof(pm));
     const char *names[16];
     static long hist[16][256];
     memset(hist, 0, sizeof(hist));
     for (int k = 0; k < s_nrect[lang]; k++) {
         const Rect *r = &s_rect[lang][k];
-        if (r->ink != UI_INK_LIGHT || (model && !s_model[lang][k].grey)) {
+        if (r->ink != UI_INK_LIGHT) {
             continue;
         }
-        const uint8_t *G = model ? s_model[lang][k].grey : r->grey;
-        const uint8_t *A = model ? s_model[lang][k].alpha : r->alpha;
         const int w = r->w, h = r->h;
         uint8_t *fill = calloc((size_t)w * (size_t)h, 1);
         int nfill = 0;
         for (int i = 0; i < w * h; i++) {
-            const int g = G[i], a = A[i];
+            const int g = r->grey[i], a = r->alpha[i];
             if (g >= 240 && a * 10 >= 9 * 255) {
                 fN += (double)g * a;
                 fD += a;
@@ -326,30 +278,22 @@ static void survey(int lang, int model, Survey *out)
         }
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                const int i = y * w + x, g = G[i], a = A[i];
-                int near = 0;
-                for (int dy = -1; dy <= 1 && !near; dy++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        const int xx = x + dx, yy = y + dy;
-                        if (xx >= 0 && yy >= 0 && xx < w && yy < h && fill[yy * w + xx]) {
-                            near = 1;
-                            break;
-                        }
-                    }
-                }
-                if (a * 2 >= 255 && g <= 100 && !near) {
-                    rN += (double)g * a;
-                    rD += a;
-                }
-                if (a >= 13 && g <= 100 && !near && x > 0 && y > 0 && x < w - 1 && y < h - 1) {
-                    int m = 0;
-                    for (int dy = -1; dy <= 1; dy++) {
+                const int i = y * w + x, g = r->grey[i], a = r->alpha[i];
+                if (a * 2 >= 255 && g <= 100) {
+                    int near = 0;
+                    for (int dy = -1; dy <= 1 && !near; dy++) {
                         for (int dx = -1; dx <= 1; dx++) {
-                            m += A[(y + dy) * w + x + dx];
+                            const int xx = x + dx, yy = y + dy;
+                            if (xx >= 0 && yy >= 0 && xx < w && yy < h && fill[yy * w + xx]) {
+                                near = 1;
+                                break;
+                            }
                         }
                     }
-                    gN += fabs((double)a - m / 9.0) / 255.0;
-                    gD += 1;
+                    if (!near) {
+                        rN += (double)g * a;
+                        rD += a;
+                    }
                 }
                 if (si < 16 && g >= 240 && a >= 13 && a < 255) {
                     hist[si][a]++;
@@ -368,13 +312,13 @@ static void survey(int lang, int model, Survey *out)
                 if (x0 < 0) {
                     continue;
                 }
-                for (int d = 1; d <= PROF_X; d++) {
+                for (int d = 1; d <= 6; d++) {
                     if (x0 - d >= 0) {
-                        pm[0][d][0] += A[y * w + x0 - d];
+                        pm[0][d][0] += r->alpha[y * w + x0 - d];
                         pm[0][d][1] += 1;
                     }
                     if (x1 + d < w) {
-                        pm[1][d][0] += A[y * w + x1 + d];
+                        pm[1][d][0] += r->alpha[y * w + x1 + d];
                         pm[1][d][1] += 1;
                     }
                 }
@@ -390,13 +334,13 @@ static void survey(int lang, int model, Survey *out)
                 if (y0 < 0) {
                     continue;
                 }
-                for (int d = 1; d <= PROF_Y; d++) {
+                for (int d = 1; d <= 6; d++) {
                     if (y0 - d >= 0) {
-                        pm[2][d][0] += A[(y0 - d) * w + x];
+                        pm[2][d][0] += r->alpha[(y0 - d) * w + x];
                         pm[2][d][1] += 1;
                     }
                     if (y1 + d < h) {
-                        pm[3][d][0] += A[(y1 + d) * w + x];
+                        pm[3][d][0] += r->alpha[(y1 + d) * w + x];
                         pm[3][d][1] += 1;
                     }
                 }
@@ -406,19 +350,22 @@ static void survey(int lang, int model, Survey *out)
     }
     out->fill = fD > 0 ? fN / fD : 0;
     out->rim = rD > 0 ? rN / rD : 0;
-    out->grain = gD > 0 ? gN / gD : 0;
-    for (int d = 1; d <= PROF_X; d++) {
+    double m[4] = {0, 0, 0, 0};
+    for (int s = 0; s < 4; s++) {
+        for (int d = 1; d <= 6; d++) {
+            m[s] += pm[s][d][1] > 0 ? pm[s][d][0] / pm[s][d][1] / 255.0 : 0;
+        }
+    }
+    out->massX = (m[0] + m[1]) * 0.5;
+    out->massY = (m[2] + m[3]) * 0.5;
+    for (int d = 1; d <= 6; d++) {
         double px[2], py[2];
         for (int k = 0; k < 2; k++) {
             px[k] = pm[k][d][1] > 0 ? pm[k][d][0] / pm[k][d][1] / 255.0 : 0;
             py[k] = pm[2 + k][d][1] > 0 ? pm[2 + k][d][0] / pm[2 + k][d][1] / 255.0 : 0;
         }
         out->profX[d] = (px[0] + px[1]) * 0.5;
-        out->profY[d] = d <= PROF_Y ? (py[0] + py[1]) * 0.5 : 0.0;
-        if (d <= 6) {
-            out->massX += out->profX[d];
-            out->massY += out->profY[d];
-        }
+        out->profY[d] = (py[0] + py[1]) * 0.5;
     }
     for (int si = 0; si < out->sheets; si++) {
         long tot = 0;
@@ -447,55 +394,30 @@ static void survey(int lang, int model, Survey *out)
     }
 }
 
-static void surveyPrint(const char *what, int l, const Survey *sv)
-{
-    printf("menu_look: survey %s %s: fill %.1f rim %.1f massX %.2f massY %.2f grain %.4f, %d "
-           "sheets, steps",
-           what, kLang[l], sv->fill, sv->rim, sv->massX, sv->massY, sv->grain, sv->sheets);
-    for (int s = 0; s < sv->sheets; s++) {
-        printf(" %d", sv->steps[s]);
-    }
-    printf("\n");
-    printf("menu_look: survey %s %s: falloff across", what, kLang[l]);
-    for (int d = 1; d <= PROF_X; d++) {
-        printf(" %.2f", sv->profX[d]);
-    }
-    printf(", down");
-    for (int d = 1; d <= PROF_Y; d++) {
-        printf(" %.2f", sv->profY[d]);
-    }
-    printf("\n");
-}
-
 static void testSurvey(void)
 {
-    Survey sv[UI_LANG_COUNT], md[UI_LANG_COUNT];
+    Survey sv[UI_LANG_COUNT];
+    double meanX = 0, meanY = 0;
     int steps[UI_LANG_COUNT * 16], nsteps = 0;
     for (int l = 0; l < UI_LANG_COUNT; l++) {
-        /* the strips in the sheets' places */
-        s_model[l] = calloc((size_t)(s_nrect[l] > 0 ? s_nrect[l] : 1), sizeof(Pic));
-        for (int k = 0; k < s_nrect[l]; k++) {
-            const Rect *r = &s_rect[l][k];
-            if (r->ink != UI_INK_LIGHT) {
-                continue;
-            }
-            Pic *p = &s_model[l][k];
-            p->grey = malloc((size_t)r->w * (size_t)r->h);
-            p->alpha = malloc((size_t)r->w * (size_t)r->h);
-            if (!p->grey || !p->alpha || refRect(r, p->grey, p->alpha) != 0) {
-                free(p->grey);
-                free(p->alpha);
-                p->grey = p->alpha = NULL;
-            }
-        }
-        survey(l, 0, &sv[l]);
-        survey(l, 1, &md[l]);
+        survey(l, &sv[l]);
         const UiSheetInk *ink = ui_menu_sheet_ink(l);
-        surveyPrint("sheets", l, &sv[l]);
-        surveyPrint("strips", l, &md[l]);
+        printf("menu_look: survey %s: fill %.1f rim %.1f massX %.2f massY %.2f, %d sheets, steps",
+               kLang[l], sv[l].fill, sv[l].rim, sv[l].massX, sv[l].massY, sv[l].sheets);
         for (int s = 0; s < sv[l].sheets; s++) {
+            printf(" %d", sv[l].steps[s]);
             steps[nsteps++] = sv[l].steps[s];
         }
+        printf("\n");
+        printf("menu_look: survey %s: falloff across", kLang[l]);
+        for (int d = 1; d <= 6; d++) {
+            printf(" %.2f", sv[l].profX[d]);
+        }
+        printf(", down");
+        for (int d = 1; d <= 6; d++) {
+            printf(" %.2f", sv[l].profY[d]);
+        }
+        printf("\n");
         CHECK(sv[l].sheets >= 4, "%s: only %d sheets measured", kLang[l], sv[l].sheets);
         CHECK(fabs(sv[l].fill - kExpFill[l]) <= TOL_LEVEL, "%s: fill %.1f, expected %.1f", kLang[l],
               sv[l].fill, kExpFill[l]);
@@ -511,18 +433,8 @@ static void testSurvey(void)
               kLang[l], ink->rimLevel, sv[l].rim);
         CHECK(fabs(sv[l].fill - (double)ink->fillLevel) <= 3.0,
               "%s: kSheetInk fill %d, measured %.1f", kLang[l], ink->fillLevel, sv[l].fill);
-        /* the halo's strength per language (kSheetInk rimGain): the strips'
-           mass against the sheets' */
-        CHECK(fabs(md[l].massX - sv[l].massX) <= TOL_MODEL_MASS &&
-                  fabs(md[l].massY - sv[l].massY) <= TOL_MODEL_MASS,
-              "%s: the strips' halo mass %.2f x %.2f, the sheets' %.2f x %.2f (rimGain %d)",
-              kLang[l], md[l].massX, md[l].massY, sv[l].massX, sv[l].massY, ink->rimGain);
-        /* the grain's strength against the sheets' */
-        const double gr = sv[l].grain > 0 ? md[l].grain / sv[l].grain : 0;
-        printf("menu_look: survey %s: grain strip / sheet %.2f\n", kLang[l], gr);
-        CHECK(gr >= GRAIN_RATIO_LO && gr <= GRAIN_RATIO_HI,
-              "%s: the strips' grain %.4f, the sheets' %.4f (ratio %.2f)", kLang[l], md[l].grain,
-              sv[l].grain, gr);
+        meanX += sv[l].massX / UI_LANG_COUNT;
+        meanY += sv[l].massY / UI_LANG_COUNT;
     }
     /* German's rim is grey like the Romance languages', not the English black */
     CHECK(sv[UI_LANG_DE].rim > 40.0 && sv[UI_LANG_EN].rim < 40.0,
@@ -530,47 +442,36 @@ static void testSurvey(void)
           sv[UI_LANG_EN].rim);
     qsort(steps, (size_t)nsteps, sizeof(int), cmpInt);
     const int median = nsteps ? steps[nsteps / 2] : 0;
-    printf("menu_look: survey: median %d steps (halo %d x %d, %d levels, gain %d)\n", median,
-           ICO_SHEET_RX, ICO_SHEET_RY, ICO_SHEET_LEVELS, ICO_SHEET_GAIN);
-    /* the halo's reach and falloff: the strips' halo alpha at each distance
-       against the English sheets', twelve across, eight down */
-    CHECK(ICO_SHEET_RX == 10 && ICO_SHEET_RY == 7, "the halo's reach %d x %d, the chosen 10 x 7",
+    printf("menu_look: survey: rim mass %.2f x %.2f, median %d steps (rim %d x %d, %d levels)\n",
+           meanX, meanY, median, ICO_SHEET_RX, ICO_SHEET_RY, ICO_SHEET_LEVELS);
+    /* the rim's reach and falloff: the English sheets' rim alpha at each
+       distance (six across, four down; the survey measures six, the
+       falloff past four field lines is in the noise of the rows below) */
+    static const int kWx[7] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2, ICO_SHEET_WX_3,
+                               ICO_SHEET_WX_4, ICO_SHEET_WX_5, ICO_SHEET_WX_6};
+    static const int kWy[5] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2, ICO_SHEET_WY_3,
+                               ICO_SHEET_WY_4};
+    CHECK(ICO_SHEET_RX == 6 && ICO_SHEET_RY == 4, "the rim's reach %d x %d, the survey's 6 x 4",
           ICO_SHEET_RX, ICO_SHEET_RY);
-    for (int d = 1; d <= PROF_X; d++) {
-        CHECK(fabs(md[UI_LANG_EN].profX[d] - sv[UI_LANG_EN].profX[d]) <= TOL_FALLOFF,
-              "the strips' halo at %d across %.2f, the English sheets' %.2f", d,
-              md[UI_LANG_EN].profX[d], sv[UI_LANG_EN].profX[d]);
+    CHECK(kWx[0] == 1000 && kWy[0] == 1000, "the falloff is 1 at the texel itself");
+    for (int d = 1; d <= 6; d++) {
+        CHECK(fabs(sv[UI_LANG_EN].profX[d] - kWx[d] / 1000.0) <= TOL_FALLOFF,
+              "ICO_SHEET_WX_%d %d, the English sheets' %.2f", d, kWx[d], sv[UI_LANG_EN].profX[d]);
     }
-    /* the first field line below a letter: the sheets step from the edge
-       to about 0.78 there and to 0.44 on the second, a sharper start than
-       the strips' linear ramp (ICO_SHEET_KY_*), which gives about 0.6 on the
-       first line and the sheets' values from the second on; the ramp is the
-       chosen shape, so the first line is pinned to a band of its own */
-    CHECK(md[UI_LANG_EN].profY[1] >= 0.50 && md[UI_LANG_EN].profY[1] <= sv[UI_LANG_EN].profY[1],
-          "the strips' halo on the first line down %.2f, the English sheets' %.2f",
-          md[UI_LANG_EN].profY[1], sv[UI_LANG_EN].profY[1]);
-    for (int d = 2; d <= PROF_Y; d++) {
-        CHECK(fabs(md[UI_LANG_EN].profY[d] - sv[UI_LANG_EN].profY[d]) <= TOL_FALLOFF,
-              "the strips' halo at %d down %.2f, the English sheets' %.2f", d,
-              md[UI_LANG_EN].profY[d], sv[UI_LANG_EN].profY[d]);
+    for (int d = 1; d <= 4; d++) {
+        CHECK(fabs(sv[UI_LANG_EN].profY[d] - kWy[d] / 1000.0) <= TOL_FALLOFF,
+              "ICO_SHEET_WY_%d %d, the English sheets' %.2f", d, kWy[d], sv[UI_LANG_EN].profY[d]);
     }
     CHECK(median == EXP_STEPS, "the sheets' white has %d antialiasing steps, expected %d", median,
           EXP_STEPS);
-    /* the levels are not the survey's five but never fewer */
+    /* the levels are not the survey's five (shader_consts.h: eight matched the
+       sheets better in testCompareItems) but never fewer */
     CHECK(ICO_SHEET_LEVELS >= median + 2, "ICO_SHEET_LEVELS %d, fewer than the survey's %d",
           ICO_SHEET_LEVELS, median + 2);
-    /* the strips' margin covers the halo's reach and the bilinear texel */
+    /* the strips' margin covers the rim's reach and the bilinear texel */
     CHECK(UI_MENU_RIM_X == ICO_SHEET_RX + 1 && UI_MENU_RIM_Y == ICO_SHEET_RY + 1,
-          "menu_font.h's halo margin %d x %d for a halo of %d x %d", UI_MENU_RIM_X, UI_MENU_RIM_Y,
+          "menu_font.h's rim margin %d x %d for a rim of %d x %d", UI_MENU_RIM_X, UI_MENU_RIM_Y,
           ICO_SHEET_RX, ICO_SHEET_RY);
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        for (int k = 0; k < s_nrect[l]; k++) {
-            free(s_model[l][k].grey);
-            free(s_model[l][k].alpha);
-        }
-        free(s_model[l]);
-        s_model[l] = NULL;
-    }
 }
 
 /* ------------------------------------------------------------ the strip */
@@ -585,48 +486,36 @@ static void inkOf(int ink, int rim, int lang, RdSheetStyle *st, int *col)
     st->dither = k->dither;
     st->rimWeight = k->rimWeight;
     st->scale = 1;
-    st->rimGain = k->rimGain;
     *col = ink == UI_INK_DARK ? 0 : ink == UI_INK_GREY ? (128 * 151 + 127) / 255 : 128;
 }
 
-/* the reference picture of an item at scale strip texels a sheet texel
-   ((r->w * scale) x (r->h * scale) texels): grey and alpha 0..255 after the
-   texture function (MODULATE with the sprite colour); the halo made by
-   rd_sheet_rim (rd_tex_test holds it to sheet_ref.c's) and the texel by
-   sheetref_texel_from */
-static int refRectAt(const Rect *r, const UiMenuTextItem *it, int scale, uint8_t *grey,
-                     uint8_t *alpha)
+/* the reference rectangle: grey and alpha 0..255 after the texture function
+   (MODULATE with the sprite colour) */
+static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uint8_t *alpha)
 {
-    const int w = r->w * scale, h = r->h * scale;
-    uint8_t *cov = malloc((size_t)w * (size_t)h), *rim = malloc((size_t)w * (size_t)h);
-    if (!cov || !rim || ui__menu_strip_raster(it, r->lang, cov, r->w, r->h, scale) != 0) {
+    uint8_t *cov = malloc((size_t)r->w * (size_t)r->h);
+    if (!cov) {
+        return -1;
+    }
+    if (ui__menu_strip_raster(it, r->lang, cov, r->w, r->h) != 0) {
         free(cov);
-        free(rim);
         return -1;
     }
     RdSheetStyle st;
     int col;
     inkOf(r->ink, it->rim[r->lang], r->lang, &st, &col);
-    st.scale = (uint8_t)scale;
-    rd_sheet_rim(cov, (uint32_t)w, (uint32_t)h, (uint32_t)scale, 0, 0, w, h, rim);
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
+    for (int y = 0; y < r->h; y++) {
+        for (int x = 0; x < r->w; x++) {
             uint8_t g, a;
-            sheetref_texel_from(cov[y * w + x], rim[y * w + x], x, y, &st, &g, &a);
+            sheetref_texel(cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
             const int gm = (g * col + 64) / 128;
-            grey[y * w + x] = (uint8_t)(gm > 255 ? 255 : gm);
+            grey[y * r->w + x] = (uint8_t)(gm > 255 ? 255 : gm);
             const int a255 = a * 255 / 128;
-            alpha[y * w + x] = (uint8_t)(a255 > 255 ? 255 : a255);
+            alpha[y * r->w + x] = (uint8_t)(a255 > 255 ? 255 : a255);
         }
     }
     free(cov);
-    free(rim);
     return 0;
-}
-
-static int refRectOf(const Rect *r, const UiMenuTextItem *it, uint8_t *grey, uint8_t *alpha)
-{
-    return refRectAt(r, it, 1, grey, alpha);
 }
 
 static int refRect(const Rect *r, uint8_t *grey, uint8_t *alpha)
@@ -1465,94 +1354,73 @@ static void geoFit(int fixedWidth)
 
 /* ------------------------------------------------------------------ fit */
 
-/* font_sheet_ps's arithmetic (sheet_ref.c) with the constants as arguments:
-   v quantised to levels against th (512ths of a step) */
-static unsigned quantiseN(unsigned v, unsigned th512, unsigned levels)
+/* font_sheet_ps's arithmetic (sheet_ref.c) with the constants as arguments */
+static unsigned quantiseN(unsigned v, unsigned th32, unsigned levels)
 {
     const unsigned n = levels - 1;
-    unsigned q = (v * n * 512u + th512 * 255u) / (255u * 512u);
+    unsigned q = (v * n * 32u + th32 * 255u) / (255u * 32u);
     q = q > n ? n : q;
     return (q * 255u + n / 2u) / n;
 }
 
-/* the dithered threshold of texel (x, y): the noise tile's entry spread
-   ICO_SHEET_GRAIN / 64 of a step round the half */
-static unsigned thresholdN(int x, int y)
-{
-    const unsigned r = sheetref_noise(x, y);
-    return ((2u * r + 1u) * ICO_SHEET_GRAIN + 256u * (64u - ICO_SHEET_GRAIN) + 32u) / 64u;
-}
+static const uint8_t kBayerT[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
 
 typedef struct FitItem {
     const Rect *r;
-    uint8_t *cov;  /* the strip */
-    uint64_t *sum; /* its halo's weighted sums (the shape fixed: sheetref_halo_sum) */
-    uint64_t den;  /* the taps' total */
+    uint8_t *cov, *rim; /* the strip and its rim (the weighted dilation) */
 } FitItem;
 
-static int fitItemMake(FitItem *f, const Rect *r, int lang)
+/* the rim: the coverage dilated with the falloff (shader_consts.h's), a copy
+   of sheet_ref.c's arithmetic (testFitCopy holds the two together) */
+static void maxFilter(const FitItem *f)
 {
-    const int n = r->w * r->h;
-    f->r = r;
-    f->cov = malloc((size_t)n);
-    f->sum = malloc(sizeof(uint64_t) * (size_t)n);
-    if (!f->cov || !f->sum ||
-        ui__menu_strip_raster(&ui_menu_text_items[r->item], lang, f->cov, r->w, r->h, 1) != 0) {
-        free(f->cov);
-        free(f->sum);
-        return 0;
-    }
-    for (int y = 0; y < r->h; y++) {
-        for (int x = 0; x < r->w; x++) {
-            f->sum[y * r->w + x] =
-                sheetref_halo_sum(f->cov, (uint32_t)r->w, (uint32_t)r->h, x, y, 1, &f->den);
-        }
-    }
-    return 1;
-}
-
-static void fitItemFree(FitItem *f)
-{
-    free(f->cov);
-    free(f->sum);
-}
-
-/* the item's texels (grey, alpha 0..255) for a style: the halo's gain and
-   the weight (the rim weight times the language gain, 64ths), the levels,
-   the rim and fill greys */
-static void fitTexels(const FitItem *f, unsigned levels, unsigned rim, unsigned fill, unsigned gain,
-                      unsigned weight, uint8_t *g, uint8_t *a)
-{
+    static const unsigned kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
+                                                   ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
+                                                   ICO_SHEET_WX_6};
+    static const unsigned kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
+                                                   ICO_SHEET_WY_3, ICO_SHEET_WY_4};
     const int w = f->r->w, h = f->r->h;
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
-            const unsigned c = f->cov[y * w + x];
-            const uint64_t rr = (f->sum[y * w + x] * gain + f->den * 32u) / (f->den * 64u);
-            const unsigned r = rr > 255u ? 255u : (unsigned)rr;
-            const unsigned hw = (r * weight + 32u) / 64u;
-            const unsigned rw = hw > 255u ? 255u : hw;
-            const unsigned av = c > rw ? c : rw;
+            unsigned m = 0;
+            for (int dy = -ICO_SHEET_RY; dy <= ICO_SHEET_RY; dy++) {
+                for (int dx = -ICO_SHEET_RX; dx <= ICO_SHEET_RX; dx++) {
+                    const int xx = x + dx, yy = y + dy;
+                    if (xx >= 0 && yy >= 0 && xx < w && yy < h) {
+                        const unsigned c =
+                            f->cov[yy * w + xx] * kWx[dx < 0 ? -dx : dx] * kWy[dy < 0 ? -dy : dy];
+                        m = c > m ? c : m;
+                    }
+                }
+            }
+            f->rim[y * w + x] = (uint8_t)((m + 500000u) / 1000000u);
+        }
+    }
+}
+
+/* the blurred difference of one item for a style and level count, over both
+   backgrounds */
+static double fitScore(const FitItem *f, unsigned levels, unsigned rim, unsigned fill)
+{
+    const int w = f->r->w, h = f->r->h, n = w * h;
+    uint8_t *g = malloc((size_t)n), *a = malloc((size_t)n);
+    float *p = malloc((size_t)n * sizeof(float)), *q = malloc((size_t)n * sizeof(float)),
+          *pb = malloc((size_t)n * sizeof(float));
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            const unsigned c = f->cov[y * w + x], r = f->rim[y * w + x];
+            const unsigned av = c > r ? c : r;
             const unsigned t = av ? (c * 255u + av / 2u) / av : 0u;
-            const unsigned th = thresholdN(x, y);
+            const unsigned th = 2u * kBayerT[y & 3][x & 3] + 1u;
             const unsigned aq = quantiseN(av, th, levels), tq = quantiseN(t, th, levels);
             g[y * w + x] = (uint8_t)((rim * (255u - tq) + fill * tq + 127u) / 255u);
             const unsigned a128 = (aq * 128u + 127u) / 255u;
             a[y * w + x] = (uint8_t)(a128 * 255u / 128u > 255u ? 255u : a128 * 255u / 128u);
         }
     }
-}
-
-/* the blurred difference of one item for a style, over both backgrounds */
-static double fitScore(const FitItem *f, unsigned levels, unsigned rim, unsigned fill,
-                       unsigned gain, unsigned weight)
-{
-    const int w = f->r->w, h = f->r->h, n = w * h;
-    uint8_t *g = malloc((size_t)n), *a = malloc((size_t)n);
-    float *p = malloc((size_t)n * sizeof(float)), *q = malloc((size_t)n * sizeof(float)),
-          *pb = malloc((size_t)n * sizeof(float)), *ref = malloc((size_t)n * sizeof(float));
-    fitTexels(f, levels, rim, fill, gain, weight, g, a);
     double sum = 0.0;
     for (int k = 0; k < 2; k++) {
+        float *ref = malloc((size_t)n * sizeof(float));
         composite(f->r->grey, f->r->alpha, n, kBg[k], ref);
         composite(g, a, n, kBg[k], p);
         blur3(ref, w, h, q);
@@ -1560,64 +1428,58 @@ static double fitScore(const FitItem *f, unsigned levels, unsigned rim, unsigned
         for (int i = 0; i < n; i++) {
             sum += fabsf(q[i] - pb[i]);
         }
+        free(ref);
     }
     free(g);
     free(a);
     free(p);
     free(q);
     free(pb);
-    free(ref);
     return sum / (2.0 * n);
-}
-
-enum { MAXI = 160 };
-
-/* the light-ink items of a language with their sums; returns the count */
-static int fitItems(int lang, FitItem *fi)
-{
-    int n = 0;
-    for (int k = 0; k < s_nrect[lang] && n < MAXI; k++) {
-        const Rect *r = &s_rect[lang][k];
-        if (r->ink == UI_INK_LIGHT && fitItemMake(&fi[n], r, lang)) {
-            n++;
-        }
-    }
-    return n;
-}
-
-/* the mean score over a language's items */
-static double fitMean(const FitItem *fi, int n, unsigned levels, unsigned rim, unsigned fill,
-                      unsigned gain, unsigned weight)
-{
-    double s = 0.0;
-    for (int i = 0; i < n; i++) {
-        s += fitScore(&fi[i], levels, rim, fill, gain, weight);
-    }
-    return s / (n ? n : 1);
-}
-
-static unsigned inkWeight(const UiSheetInk *k)
-{
-    return ((unsigned)(k->rimGain ? k->rimGain : 64u) * 64u + 32u) / 64u;
 }
 
 static void fit(void)
 {
     /* the grid holds every language's current rim (24 56 61 62) and room
-       past it */
+       past the best the first run found (rim 90, fill 235, both its edges) */
     static const unsigned kRims[] = {0, 16, 24, 32, 48, 56, 61, 62, 72, 90, 110, 130, 160};
     static const unsigned kFills[] = {205, 215, 225, 235, 245, 255};
-    static FitItem fi[MAXI];
+
+    enum { MAXI = 160 };
+
     for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
-        const int n = fitItems(lang, fi);
+        FitItem fi[MAXI];
+        int n = 0;
+        for (int k = 0; k < s_nrect[lang] && n < MAXI; k++) {
+            const Rect *r = &s_rect[lang][k];
+            if (r->ink != UI_INK_LIGHT) {
+                continue;
+            }
+            uint8_t *cov = malloc((size_t)r->w * (size_t)r->h);
+            if (!cov ||
+                ui__menu_strip_raster(&ui_menu_text_items[r->item], lang, cov, r->w, r->h)) {
+                free(cov);
+                continue;
+            }
+            fi[n].r = r;
+            fi[n].cov = cov;
+            fi[n].rim = malloc((size_t)r->w * (size_t)r->h);
+            n++;
+        }
         double best = 1e9, atCurrent = 1e9;
         unsigned bl = 0, br = 0, bf = 0;
         const UiSheetInk *cur = ui_menu_sheet_ink(lang);
-        const unsigned wt = inkWeight(cur);
+        for (int i = 0; i < n; i++) {
+            maxFilter(&fi[i]);
+        }
         for (unsigned lv = 3; lv <= 9; lv++) {
             for (size_t ri = 0; ri < sizeof(kRims) / sizeof(kRims[0]); ri++) {
                 for (size_t fl = 0; fl < sizeof(kFills) / sizeof(kFills[0]); fl++) {
-                    const double s = fitMean(fi, n, lv, kRims[ri], kFills[fl], ICO_SHEET_GAIN, wt);
+                    double s = 0.0;
+                    for (int i = 0; i < n; i++) {
+                        s += fitScore(&fi[i], lv, kRims[ri], kFills[fl]);
+                    }
+                    s /= n ? n : 1;
                     if (s < best) {
                         best = s;
                         bl = lv;
@@ -1636,117 +1498,14 @@ static void fit(void)
                kLang[lang], n, best, bl, br, bf, ICO_SHEET_LEVELS, cur->rimLevel, cur->fillLevel,
                atCurrent);
         for (int i = 0; i < n; i++) {
-            fitItemFree(&fi[i]);
-        }
-    }
-}
-
-/* one parameter by coordinate descent: steps from 16 halving to 1 within
-   lo..hi, the score's smallest; *v holds the start and the result */
-typedef double (*HaloScore)(unsigned v, void *ctx);
-
-static double descend(unsigned *v, unsigned lo, unsigned hi, HaloScore fn, void *ctx)
-{
-    double e = fn(*v, ctx);
-    for (unsigned step = 16; step >= 1; step /= 2) {
-        for (int better = 1; better;) {
-            better = 0;
-            for (int sgn = -1; sgn <= 1; sgn += 2) {
-                const int t = (int)*v + sgn * (int)step;
-                if (t < (int)lo || t > (int)hi) {
-                    continue;
-                }
-                const double et = fn((unsigned)t, ctx);
-                if (et < e - 1e-9) {
-                    e = et;
-                    *v = (unsigned)t;
-                    better = 1;
-                }
-            }
-        }
-    }
-    return e;
-}
-
-typedef struct HaloCtx {
-    const FitItem *fi;
-    int n;
-    unsigned levels, rim, fill, gain, weight;
-} HaloCtx;
-
-static double haloByGain(unsigned v, void *p)
-{
-    const HaloCtx *c = p;
-    return fitMean(c->fi, c->n, c->levels, c->rim, c->fill, v, c->weight);
-}
-
-static double haloByWeight(unsigned v, void *p)
-{
-    const HaloCtx *c = p;
-    return fitMean(c->fi, c->n, c->levels, c->rim, c->fill, c->gain, v);
-}
-
-/* ICO_MENU_LOOK_HALOFIT=1: for each level count, the blur's gain on the
-   English items (rimGain 64), then each other language's rimGain; the
-   level count with the smallest mean over the languages wins */
-static void haloFit(void)
-{
-    static FitItem fi[UI_LANG_COUNT][MAXI];
-    int n[UI_LANG_COUNT];
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        n[l] = fitItems(l, fi[l]);
-    }
-    double bestTotal = 1e30;
-    unsigned bestLv = 0, bestGain = 0, bestW[UI_LANG_COUNT] = {0};
-    for (unsigned lv = 4; lv <= 8; lv++) {
-        unsigned gain = ICO_SHEET_GAIN, w[UI_LANG_COUNT];
-        double total = 0.0;
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
-            const UiSheetInk *k = ui_menu_sheet_ink(l);
-            HaloCtx c = {fi[l], n[l], lv, k->rimLevel, k->fillLevel, gain, 64};
-            w[l] = 64;
-            if (l == UI_LANG_EN) {
-                total += descend(&gain, 16, 1023, haloByGain, &c);
-            } else {
-                w[l] = inkWeight(k);
-                total += descend(&w[l], 16, 255, haloByWeight, &c);
-            }
-        }
-        printf("menu_look: halofit LEVELS %u: gain %u, rimGain EN %u FR %u DE %u IT %u ES %u, "
-               "mean blur %.3f\n",
-               lv, gain, w[0], w[1], w[2], w[3], w[4], total / UI_LANG_COUNT);
-        if (total < bestTotal) {
-            bestTotal = total;
-            bestLv = lv;
-            bestGain = gain;
-            memcpy(bestW, w, sizeof(w));
-        }
-    }
-    {
-        double cur = 0.0;
-        for (int l = 0; l < UI_LANG_COUNT; l++) {
-            const UiSheetInk *k = ui_menu_sheet_ink(l);
-            cur += fitMean(fi[l], n[l], ICO_SHEET_LEVELS, k->rimLevel, k->fillLevel, ICO_SHEET_GAIN,
-                           inkWeight(k));
-        }
-        printf("menu_look: halofit the constants in force (LEVELS %d, gain %d): mean blur %.3f\n",
-               ICO_SHEET_LEVELS, ICO_SHEET_GAIN, cur / UI_LANG_COUNT);
-    }
-    printf("menu_look: halofit best: mean blur %.3f; paste:\n", bestTotal / UI_LANG_COUNT);
-    printf("  shader_consts.h:   #define ICO_SHEET_GAIN %u\n", bestGain);
-    printf("  shader_consts.h:   #define ICO_SHEET_LEVELS %u\n", bestLv);
-    printf("  sheet_text.hlsli:  #define SHEET_LEVELS %u\n", bestLv);
-    printf("  menu_font.c kSheetInk rimGain: EN %u FR %u DE %u IT %u ES %u\n", bestW[0], bestW[1],
-           bestW[2], bestW[3], bestW[4]);
-    for (int l = 0; l < UI_LANG_COUNT; l++) {
-        for (int i = 0; i < n[l]; i++) {
-            fitItemFree(&fi[l][i]);
+            free(fi[i].cov);
+            free(fi[i].rim);
         }
     }
 }
 
 /* The reference of this file's own arithmetic against sheet_ref.c's, for the
-   constants in force (the fit modes' copy is only worth its numbers when it
+   constants in force (fit mode's copy is only worth its numbers when it
    agrees). */
 static void testFitCopy(void)
 {
@@ -1760,79 +1519,34 @@ static void testFitCopy(void)
         return;
     }
     FitItem f;
-    CHECK(fitItemMake(&f, r, UI_LANG_EN), "the strip of the first item");
+    f.r = r;
+    f.cov = malloc((size_t)r->w * (size_t)r->h);
+    f.rim = malloc((size_t)r->w * (size_t)r->h);
+    CHECK(ui__menu_strip_raster(&ui_menu_text_items[r->item], UI_LANG_EN, f.cov, r->w, r->h) == 0,
+          "the strip of the first item");
+    maxFilter(&f);
     const UiSheetInk *k = ui_menu_sheet_ink(UI_LANG_EN);
-    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight, 1, k->rimGain};
-    const int n = r->w * r->h;
-    uint8_t *g = malloc((size_t)n), *a = malloc((size_t)n);
-    fitTexels(&f, ICO_SHEET_LEVELS, k->rimLevel, k->fillLevel, ICO_SHEET_GAIN, sheetref_weight(&st),
-              g, a);
+    RdSheetStyle st = {k->rimOn, k->rimLevel, k->fillLevel, k->dither, k->rimWeight, 1};
     int diff = 0;
     for (int y = 0; y < r->h; y++) {
         for (int x = 0; x < r->w; x++) {
-            uint8_t rg, ra;
-            sheetref_texel(f.cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &rg, &ra);
-            const unsigned a255 = ra * 255u / 128u > 255u ? 255u : ra * 255u / 128u;
-            diff += g[y * r->w + x] != rg || a[y * r->w + x] != a255;
+            uint8_t g, a;
+            sheetref_texel(f.cov, (uint32_t)r->w, (uint32_t)r->h, x, y, &st, &g, &a);
+            const unsigned c = f.cov[y * r->w + x], rm = f.rim[y * r->w + x];
+            const unsigned av = c > rm ? c : rm;
+            const unsigned t = av ? (c * 255u + av / 2u) / av : 0u;
+            const unsigned th = 2u * kBayerT[y & 3][x & 3] + 1u;
+            const unsigned aq = quantiseN(av, th, ICO_SHEET_LEVELS),
+                           tq = quantiseN(t, th, ICO_SHEET_LEVELS);
+            const unsigned gg =
+                ((unsigned)k->rimLevel * (255u - tq) + (unsigned)k->fillLevel * tq + 127u) / 255u;
+            diff += gg != g || (aq * 128u + 127u) / 255u != a;
         }
     }
     CHECK(diff == 0,
-          "the fit modes' copy of the sheet arithmetic differs from sheet_ref.c at %d texels",
-          diff);
-    free(g);
-    free(a);
-    fitItemFree(&f);
-}
-
-/* ---------------------------------------------------------------- dump */
-
-/* ICO_MENU_LOOK_DUMP=1: per item and language, the sheet's rectangle and
-   the strip at scales 1, 2 and 4, each 4x nearest on grey, stacked */
-static void dumpRows(const char *outDir)
-{
-    static const int kScales[3] = {1, 2, 4};
-    char path[1100];
-    snprintf(path, sizeof(path), "%s/menu_look", outDir);
-    ico_mkdir(path);
-    snprintf(path, sizeof(path), "%s/menu_look/dump", outDir);
-    ico_mkdir(path);
-    int written = 0;
-    for (int lang = 0; lang < UI_LANG_COUNT; lang++) {
-        snprintf(path, sizeof(path), "%s/menu_look/dump/%s", outDir, kLang[lang]);
-        ico_mkdir(path);
-        for (int k = 0; k < s_nrect[lang]; k++) {
-            const Rect *r = &s_rect[lang][k];
-            const int m = 4, gap = 8;
-            const int W = r->w * 4 * m, H = r->h * m * (1 + 1 + 2 + 4) + 4 * gap;
-            uint8_t *img = malloc((size_t)W * (size_t)H * 4);
-            if (!img) {
-                continue;
-            }
-            for (size_t i = 0; i < (size_t)W * (size_t)H; i++) {
-                img[i * 4] = img[i * 4 + 1] = img[i * 4 + 2] = 40;
-                img[i * 4 + 3] = 255;
-            }
-            blit(img, W, 0, 0, r->grey, r->alpha, r->w, r->h, m, 0);
-            int y = r->h * m + gap;
-            for (int si = 0; si < 3; si++) {
-                const int s = kScales[si];
-                uint8_t *g = malloc((size_t)(r->w * s) * (size_t)(r->h * s));
-                uint8_t *a = malloc((size_t)(r->w * s) * (size_t)(r->h * s));
-                if (g && a && refRectAt(r, &ui_menu_text_items[r->item], s, g, a) == 0) {
-                    blit(img, W, 0, y, g, a, r->w * s, r->h * s, m, 0);
-                }
-                free(g);
-                free(a);
-                y += r->h * s * m + gap;
-            }
-            snprintf(path, sizeof(path), "%s/menu_look/dump/%s/%d.png", outDir, kLang[lang],
-                     r->row);
-            rd_write_png(path, img, (uint32_t)W, (uint32_t)H, (uint32_t)W * 4, 1);
-            free(img);
-            written++;
-        }
-    }
-    printf("menu_look: dump: %d pictures in %s/menu_look/dump\n", written, outDir);
+          "fit mode's copy of the sheet arithmetic differs from sheet_ref.c at %d texels", diff);
+    free(f.cov);
+    free(f.rim);
 }
 
 /* ----------------------------------------------------------------- main */
@@ -1904,16 +1618,10 @@ int main(int argc, char **argv)
     if (widthEnv) {
         ui__sheet_set_width((float)atof(widthEnv));
     }
-    const char *haloEnv = getenv("ICO_MENU_LOOK_HALOFIT");
-    const char *dumpEnv = getenv("ICO_MENU_LOOK_DUMP");
     if (geoEnv && (*geoEnv == '1' || *geoEnv == '2')) {
         geoFit(*geoEnv == '2');
     } else if (fitEnv && *fitEnv == '1') {
         fit();
-    } else if (haloEnv && *haloEnv == '1') {
-        haloFit();
-    } else if (dumpEnv && *dumpEnv == '1') {
-        dumpRows(argv[3]);
     } else {
         testSurvey();
         testFitCopy();
