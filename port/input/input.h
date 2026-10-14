@@ -56,12 +56,18 @@ void ico_input_vpad_to_frame(const IcoVirtualPad *v, int stick_fix, int mirror, 
 
 /* --- the pad as the game sees it (pad_host.c) ----------------------------- */
 
+#define ICO_INPUT_PLAYERS 2
+
 /* Live sources (keyboard, mouse, gamepads) plug a DualShock 2 into port 0.
    Off by default so the headless build keeps the scripted / empty pad; the
    window build turns it on. A script, when loaded, wins over live sources. */
 void ico_input_set_live(int on);
 /* The binding layer's output for this vsync. */
 void ico_input_set_vpad(const IcoVirtualPad *v);
+/* The independent virtual pad and physical connection for a player's port.
+   The game opens ports 0 and 1, slot 0; keyboard/mouse remain on port 0. */
+void ico_input_set_vpad_for_port(int port, const IcoVirtualPad *v);
+void ico_input_set_gamepad_present(int port, int present);
 /* [gameplay] stick_fix (off by default on every platform, options.h
    ico_opt_stick_fix_default) and the mirror mode: negate stick X, both
    sticks, of the live sources (a script is bytes and is left as
@@ -73,6 +79,7 @@ int ico_input_mirror(void);
 /* The frame scePadRead hands out now: the script's if one is loaded, else
    the live pad, else a centred, released frame. */
 void ico_input_frame(IcoPadFrame *out);
+void ico_input_frame_for_port(int port, IcoPadFrame *out);
 /* The menus' button word (active high) out of a 32-byte libpad read buffer:
    bytes 20 and 21, active low. fumi/ios/pad.c reads the default table's
    buttons through it. */
@@ -86,6 +93,7 @@ void ico_pad_rumble_map(const unsigned char align[6], const unsigned char act[6]
                         unsigned short *high_freq, unsigned short *low_freq);
 /* The motors the game asked for last (0 when no live pad is plugged). */
 void ico_input_rumble_get(unsigned short *high_freq, unsigned short *low_freq);
+void ico_input_rumble_get_for_port(int port, unsigned short *high_freq, unsigned short *low_freq);
 
 /* --- bindings (bindings.c) ------------------------------------------------ */
 

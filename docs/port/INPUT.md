@@ -50,10 +50,19 @@ window (`port/platform/window_host.c`) drives it (`port/input/input_sdl.h`, head
   and right swapped to the port's 2 right, 3 middle), motion, wheel, fingers, gamepad hotplug
   (`input: gamepad "<name>"`). Focus loss and going to the background release what is held.
 - `ico_input_sdl_update()` runs once per vsync: sample up to 8 gamepads (buttons as 0 or 1, the
-  triggers as 0..1, every pad merged by maximum and the sticks by the largest magnitude), record
-  the gamepad's new presses for the remap screen, take the mouse motion and the time since the
-  last snapshot, run the binding step, add Escape's button, merge the touch overlay's pad, and
-  hand the result to libpad (`ico_input_set_vpad`); then send the rumble.
+  triggers as 0..1; one snapshot per pad, `s_pad_raw`, and one with every pad merged by maximum
+  and the sticks by the largest magnitude for the remap screen and the start sources), record
+  the gamepads' new presses for the remap screen, take the mouse motion and the time since the
+  last snapshot, run the binding step for the first player (slot 0's pad with the keyboard and
+  the mouse) and again for the second (slot 1's pad alone, keyboard and mouse off in a copy of
+  the bindings), add Escape's button, merge the touch overlay's pad into the first, and hand the
+  two pads to libpad (`ico_input_set_vpad`, `ico_input_set_vpad_for_port`); then send the
+  rumble, each slot its port's motors (slots 2 and up follow port 0).
+- Gamepad slots (`open_pad`, `pad_slot`): slot 0 is the first player's pad, slot 1 the second's
+  (libpad port 1, which `ico2/fumi/src/girl_act.c` connects to Yorda while `girlControlMode` is
+  set), slots 2..7 drive no port. A pad keeps its slot across a reconnection by serial, then
+  path, then a GUID no other known pad shares; a different pad plugged in while a player's slot
+  stands empty takes that slot. The log names the slot (`input: gamepad slot N "<name>"`).
 
 Rumble: libpad maps the game's actuator bytes through `scePadSetActAlign`'s table (the small
 motor on or off to 0xFFFF, the large motor's level times 257; `port/input/pad_host.c`
@@ -154,8 +163,11 @@ small arctangent, accurate to 0.25 degrees (`port/input/vpad.c` (`ico_input_stic
 
 ### libpad
 
-`port/input/pad_host.c` is libpad: one DualShock 2 in port 0, slot 0, when something feeds it,
-nothing otherwise (`port/input/pad_host.c`, header comment):
+`port/input/pad_host.c` is libpad: a DualShock 2 in port 0, slot 0, when something feeds it, and
+one in port 1, slot 0, while a gamepad sits in the device layer's slot 1
+(`ico_input_set_gamepad_present`); each port has its own virtual pad, mode, actuator table and
+motors; the script, the recording, the keyboard and the mouse belong to port 0 (`port/input/pad_host.c`,
+header comment):
 
 - Feeds, in order: a loaded pad script, then the live virtual pad (when the device layer has
   plugged it in), else a released, centred frame (`ico_input_frame`). With neither feed,
