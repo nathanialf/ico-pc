@@ -6,6 +6,14 @@
  * mapper, its pad merged with the bindings' once per vsync, the layout
  * from the window's size and safe area, and a copy of what the overlay
  * drawing reads.
+ *
+ * Gamepads sit in slots (open_pad, pad_slot): slot 0 is the first player's
+ * pad and feeds libpad port 0 with the keyboard, the mouse and the touch
+ * overlay; slot 1 is the second player's and feeds port 1 alone (Yorda,
+ * when the game's two-player control is on); slots 2..7 drive no port,
+ * only the remap screen's capture. A pad keeps its slot across a
+ * reconnection by serial, path or (when unique) GUID; a different pad
+ * plugged in while a player's slot stands empty takes that slot.
  */
 #include <stdio.h>
 #include <string.h>
@@ -144,6 +152,14 @@ static int pad_slot(const PadIdentity *identity)
     }
     for (i = 0; i < ICO_INPUT_PLAYERS; i++) {
         if (s_pad[i] == NULL && !s_pad_identity[i].valid) {
+            return i;
+        }
+    }
+    /* a new pad while a player's slot stands empty (its pad unplugged, a
+       different one plugged in): that slot, so the swap keeps a player
+       in control; the slot's old identity goes */
+    for (i = 0; i < ICO_INPUT_PLAYERS; i++) {
+        if (s_pad[i] == NULL) {
             return i;
         }
     }

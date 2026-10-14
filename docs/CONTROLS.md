@@ -5,6 +5,9 @@
 ## Play with a gamepad, a keyboard or a mouse
 
 A gamepad, the keyboard and the mouse all work, even at the same time.
+They all control Ico. A second gamepad controls Yorda when the game's
+two-player mode is on; the first gamepad to be plugged in is Ico's, and if
+you unplug it, the next one you plug in takes its place.
 
 Gamepad buttons go by where they sit, not by what is printed on them. The
 bottom face button is always Cross, whether your pad is an Xbox,
