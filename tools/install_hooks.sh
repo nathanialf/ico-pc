@@ -49,7 +49,7 @@ ROOT="$(git rev-parse --show-toplevel)"
 # gen_data_desc.py needs pyelftools (tools/requirements.txt): the venv's python.
 PY="$ROOT/.venv/bin/python"
 [[ -x "$PY" ]] || PY=python3
-for gen in gen_data_desc gen_layout_asserts gen_sources gen_sheet_noise; do
+for gen in gen_data_desc gen_layout_asserts gen_sources; do
     "$PY" "$ROOT/tools/$gen.py" --check || {
         echo "pre-commit: tools/$gen.py --check failed: run tools/$gen.py and stage its output" >&2
         exit 1

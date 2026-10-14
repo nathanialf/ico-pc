@@ -198,9 +198,7 @@ bool rd__gpu_init(void *sdlWindow)
         return false;
     }
     static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
-    /* b4: the menu text's grain tile (rd_tex.c rd__sheet_noise_binding) */
-    static const RhiBindSlot s1[2] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS},
-                                      {ICO_SHEET_NOISE_SLOT, RHI_BIND_UNIFORM_BUFFER, FS}};
+    static const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     /* t2: sprite_ps's DATE snapshot */
     static const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                       {1, RHI_BIND_SAMPLER, FS},
@@ -208,7 +206,7 @@ bool rd__gpu_init(void *sdlWindow)
     static const RhiBindSlot s3[2] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                       {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
     g_rd.layoutFrame = makeLayout(s0, 1, "rd frame");
-    g_rd.layoutDraw = makeLayout(s1, 2, "rd draw");
+    g_rd.layoutDraw = makeLayout(s1, 1, "rd draw");
     g_rd.layoutTex = makeLayout(s2, 3, "rd tex");
     g_rd.layoutInt = makeLayout(s3, 2, "rd int");
     /* the VU programs' group 1 (vu_common.hlsli) */
@@ -323,7 +321,6 @@ void rd__gpu_shutdown(void)
     rd__shadow_shutdown();   /* the box-reduced shadow count */
     rd__wrap_shutdown();     /* the COLCLAMP 0 wrap's pipelines and accumulator */
     rd__msaa_free();         /* the MSAA scene pair */
-    rd__sheet_noise_free();  /* the menu text's grain tile */
     if (g_rd.dummy.id) {
         rhi_destroy_texture(g_rd.dummy);
     }
@@ -581,16 +578,14 @@ static RhiBindGroup dynamicGroup(RhiBindGroupLayout layout, uint32_t slot, uint3
             free = e;
         }
     }
-    RhiBinding b[2];
-    memset(b, 0, sizeof(b));
-    b[0].slot = slot;
-    b[0].type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
-    b[0].buffer = ring;
-    b[0].offset = 0;
-    b[0].size = size;
-    /* a draw group also holds the grain tile font_sheet_ps reads */
-    const uint32_t n = layout.id == g_rd.layoutDraw.id && rd__sheet_noise_binding(&b[1]) ? 2u : 1u;
-    const RhiBindGroup g = bindGroup(layout, b, n);
+    RhiBinding b;
+    memset(&b, 0, sizeof(b));
+    b.slot = slot;
+    b.type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC;
+    b.buffer = ring;
+    b.offset = 0;
+    b.size = size;
+    const RhiBindGroup g = bindGroup(layout, &b, 1);
     if (g.id && free) {
         free->epoch = s_bindEpoch;
         free->layout = layout.id;
@@ -2879,19 +2874,20 @@ static uint32_t gsLodWord(const Replay *r, const DrawSetup *ds)
     return (p & ~(7u << 3)) | (mxl << 3);
 }
 
-/* font_sheet_ps's style in DrawCB.param, the sheet texture's at replay
- * time: the halo's weight (rd.h rd_create_texture_sheet W: the rim weight
- * 1..64 times the gain in 64ths, rounded; 0 without the rim), rimLevel,
- * fillLevel, dither. */
+/* font_sheet_ps's style in DrawCB.param (the rim's weight, rimLevel,
+ * fillLevel, dither), the sheet texture's at replay time, and the strip's
+ * scale above the dither bit (dither | (scale - 1) << 1, shader_consts.h
+ * ICO_SHEET_SCALE_MAX), so a 1x sheet's param[3] is the dither alone. */
 static void sheetParam(const RdTexRec *t, float param[4])
 {
     if (!t || t->kind != RD_TEXKIND_IMAGE || t->format != RD_TEXEL_SHEET) {
         return;
     }
-    const uint32_t gain = t->sheetGain ? t->sheetGain : 64u;
-    param[0] = t->sheet[0] ? (float)(((uint32_t)t->sheet[0] * gain + 32u) / 64u) : 0.0f;
-    for (int k = 1; k < 4; k++) {
+    for (int k = 0; k < 4; k++) {
         param[k] = (float)t->sheet[k];
+    }
+    if (t->sheetScale > 1) {
+        param[3] += (float)((t->sheetScale - 1) << 1);
     }
 }
 

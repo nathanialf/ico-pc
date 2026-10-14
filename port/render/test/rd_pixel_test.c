@@ -33,28 +33,25 @@
  *            the same atlas as RGBA8 (white, alpha c) through sprite_ps;
  *            the frame dumped and loaded has the texture as R8 with its
  *            texels and replays to the same bytes
- *   sheet    a coverage strip over its halo (rd_create_texture_sheet,
- *            rd_sheet_rim; every sheet texture is twice the strip's
- *            height) through font_sheet_ps against sprite_ps drawing the
- *            CPU reference's texels (sheet_ref.c sheetref_texel) as RGBA8,
+ *   sheet    a coverage strip (rd_create_texture_sheet)
+ *            through font_sheet_ps against sprite_ps drawing the CPU
+ *            reference's texels (sheet_ref.c sheetref_texel) as RGBA8,
  *            magnified, the grey (TCC RGB) and the alpha (TCC RGBA) within 1,
  *            at scene scale 1 (Original) and 2, 3 (Enhanced); 1:1 at the
- *            texel centres every pixel is sheetref_texel's and the halo
+ *            texel centres every pixel is sheetref_texel's and the rim
  *            texels hold the style's rim level (English black, then French
- *            grey with its gain, a faint halo and no halo through
- *            rd_set_texture_sheet_style); the strip moved by whole pixels
- *            gives the same pixels (the grain is the texel's); on the
- *            presentation overlay magnified 4x within 2; the frame dumped
- *            and loaded keeps the format, the texels and the style (the
- *            gain too) and replays to the same bytes; a strip rasterised at
- *            2 and 4 texels a sheet texel (style.scale) drawn 1:1 is
- *            sheetref_texel's at that scale within 1, its halo is inked
- *            (RX - 3) S pixels from the ink and not RX S, its grain varies
- *            inside an S x S cell with the cells' means within a level of
- *            the rounded value, outside the letters its S x S cells' means
- *            are within 30 (S 2) or 24 (S 4) of the 1x strip's texels,
- *            magnified 1.25x it is within 1 of the reference, and its dump
- *            keeps the scale
+ *            grey and no rim through rd_set_texture_sheet_style); the strip
+ *            moved by whole pixels gives the same pixels (the grain is the
+ *            texel's); on the presentation overlay magnified 4x within 2;
+ *            the frame dumped and loaded keeps the format and the style and
+ *            replays to the same bytes; a strip rasterised at 2 and 4
+ *            texels a sheet texel (style.scale) drawn 1:1 is
+ *            sheetref_texel's at that scale within 1, its rim reaches 6.5 S
+ *            pixels across and 4.5 S down, its fill's grain is constant
+ *            over each S x S cell, magnified it is within 1 of the
+ *            reference, outside the letters it is the 1x strip of its sheet
+ *            texels magnified S times within 1 (the rim is the sheets'
+ *            look magnified), and its dump keeps the scale
  *   gs lod   a TIM2 picture with three authored levels (a dark base,
  *            then flat green and blue: rdtex_store_levels keeps them)
  *            drawn in strips of one Q each through the STQ shaders under
@@ -1446,69 +1443,48 @@ static void testFont(const char *dir)
  * blends the RGBA8 ones.  The draws are port/ui/font.c's state (LERP with
  * ABE, the font keys of the reachable set); TCC RGB writes the sampled grey
  * itself (As is the vertex's 0x80), TCC RGBA the sampled alpha into A. */
-/* the shapes' margin, sheet texels: the halo's reach plus one, so no edge
- * texel has a halo (below) */
-#define SHEET_MX (ICO_SHEET_RX + 1)
-#define SHEET_MY (ICO_SHEET_RY + 1)
-#define SHEET_W (26 + 2 * SHEET_MX)
-#define SHEET_H (10 + 2 * SHEET_MY)
+#define SHEET_W 40
+#define SHEET_H 20
 
 static uint8_t *readScaled(RdTargetId id, uint32_t *w, uint32_t *h, float *sx, float *sy);
 static void testSheetScaled(int S, const char *dir);
 
-static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1, 0, 1, 64}; /* the English sheets: black rim */
-static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1,
-                                      0, 1,  78}; /* French, Italian, Spanish: grey */
-static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1, 0, 1, 64};   /* the dark inks: no rim */
-static const RdSheetStyle kSheetFaint = {1, 62, 0xFF, 1, 21, 1, 78}; /* a faint halo (a third) */
+static const RdSheetStyle kSheetEn = {1, 0, 0xFF, 1, 0, 1};    /* the English sheets: black rim */
+static const RdSheetStyle kSheetFr = {1, 62, 0xFF, 1, 0, 1};   /* French, Italian, Spanish: grey */
+static const RdSheetStyle kSheetPlain = {0, 0, 0xFF, 1, 0, 1}; /* the dark inks: no rim */
+static const RdSheetStyle kSheetFaint = {1, 62, 0xFF, 1, 21, 1}; /* a faint halo (a third) */
 
-/* the shapes SHEET_MX texels inside the edges across and SHEET_MY down
- * (the halo's reach plus one), so no edge texel has a halo: the RGBA8
- * reference clamps to its edge texels where the shader reads 0 beyond
- * the edge, and the two agree only where both are clear: a solid block, a
- * soft diagonal edge, a thin stroke of partial coverage, a noisy patch.
- * (With the shapes 3 texels in, written for a smaller reach, the magnified
- * alpha was 64 to 78 off along the left and right edges.) */
+/* a few shapes more than the rim's reach inside the edges (x 7..32 with
+ * SHEET_RX 6, y 5..14 with SHEET_RY 4), so no edge texel has a rim: the
+ * RGBA8 reference clamps to its edge texels where the shader rebuilds
+ * texels beyond the edge, and the two agree only where both are clear: a
+ * solid block, a soft diagonal edge, a thin stroke of partial coverage, a
+ * noisy patch.  (With the shapes 3 texels in, written for a smaller reach,
+ * the magnified alpha was 64 to 78 off along the left and right edges.) */
+_Static_assert(ICO_SHEET_RX <= 6 && ICO_SHEET_RY <= 4, "sheetCov's margins hold the rim's reach");
+
 static uint8_t sheetCov(int x, int y)
 {
-    x -= SHEET_MX;
-    y -= SHEET_MY;
-    if (x < 0 || y < 0 || x >= SHEET_W - 2 * SHEET_MX || y >= SHEET_H - 2 * SHEET_MY) {
+    if (x < 7 || y < 5 || x >= SHEET_W - 7 || y >= SHEET_H - 5) {
         return 0;
     }
-    if (x < 5) {
+    if (x < 12) {
         return 0xFF;
     }
-    if (x >= 7 && x < 15) {
-        const int v = ((x - 7) * 2 - y) * 40 + 128;
+    if (x >= 14 && x < 22) {
+        const int v = ((x - 14) * 2 - (y - 5)) * 40 + 128;
         return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
     }
-    if (x == 16 || x == 17) {
-        return x == 16 ? 160 : 60;
+    if (x == 23 || x == 24) {
+        return x == 23 ? 160 : 60;
     }
-    if (x >= 19 && y >= 1 && y < 9) {
+    if (x >= 26 && y >= 6 && y < 14) {
         return (uint8_t)hash((uint32_t)(y * 64 + x) + 77u);
     }
     return 0;
 }
 
 static uint8_t s_sheetCov[SHEET_W * SHEET_H];
-
-/* a sheet texture of the w x h coverage cov at scale st->scale: the
- * coverage over its halo (rd_sheet_rim), w x 2h */
-static RdTex sheetTexture(const uint8_t *cov, int w, int h, const RdSheetStyle *st,
-                          const char *name)
-{
-    uint8_t *px = calloc((size_t)w * (size_t)h * 2u, 1);
-    if (!px) {
-        return (RdTex){0};
-    }
-    memcpy(px, cov, (size_t)w * (size_t)h);
-    rd_sheet_rim(px, (uint32_t)w, (uint32_t)h, st->scale, 0, 0, w, h, px + (size_t)w * (size_t)h);
-    RdTex t = rd_create_texture_sheet((uint32_t)w, (uint32_t)(2 * h), px, st, name);
-    free(px);
-    return t;
-}
 
 /* the reference texels of style st as an RGBA8 texture (white is not
  * assumed: the grey is the texel's colour) */
@@ -1654,7 +1630,7 @@ static void testSheetOverlay(RdTex sheet, RdTex ref)
            SHEET_OV_M, worst, inked);
     CHECK(worst <= 2, "sheet overlay magnified: worst %d off the RGBA8 reference (2 allowed)",
           worst);
-    CHECK(inked > sw * sh / 6, "sheet overlay: %d pixels inked", inked);
+    CHECK(inked > sw * sh / 4, "sheet overlay: %d pixels inked", inked);
 }
 
 /* Texture packs and the overlay: the overlay's UVs address the
@@ -1779,35 +1755,27 @@ static void testSheetText(const char *mode, int scale, const char *dir)
             s_sheetCov[y * SHEET_W + x] = sheetCov(x, y);
         }
     }
-    RdTex sheet = sheetTexture(s_sheetCov, SHEET_W, SHEET_H, &kSheetEn, "sheet");
+    RdTex sheet = rd_create_texture_sheet(SHEET_W, SHEET_H, s_sheetCov, &kSheetEn, "sheet");
     RdTex ref = sheetRefTexture(&kSheetEn);
     const RdTexRec *sr = rd__tex_rec(sheet.id);
     CHECK(sr && sr->format == RD_TEXEL_SHEET && sr->sheet[0] == 64 && sr->sheet[1] == 0 &&
-              sr->sheet[2] == 0xFF && sr->sheet[3] == 1 && sr->h == 2 * SHEET_H &&
-              sr->sheetGain == 64,
-          "%s: the sheet texture's record (the coverage over its halo)", mode);
+              sr->sheet[2] == 0xFF && sr->sheet[3] == 1,
+          "%s: the sheet texture's record", mode);
 
     /* magnified 3 x 4: sheet and reference side by side, TCC RGB (grey)
      * on top, TCC RGBA (alpha) below; 1:1 at the texel centres; the strip
-     * magnified 2x twice, the second moved by whole pixels (100, 45) */
-    enum {
-        MX = 3,
-        MY = 4,
-        REF_X = 8 + SHEET_W * MX + 8,
-        Y_A = 8 + SHEET_H * MY + 8,
-        X1 = REF_X + SHEET_W * MX + 8,
-        Y2 = 80
-    };
+     * magnified 2x twice, the second moved by whole pixels (96, 45) */
+    enum { MX = 3, MY = 4 };
 
     sheetFrameBegin();
     sheetDraw(sheet, RD_TCC_RGB, 8, 8, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(ref, RD_TCC_RGB, REF_X, 8, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(sheet, RD_TCC_RGBA, 8, Y_A, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(ref, RD_TCC_RGBA, REF_X, Y_A, SHEET_W * MX, SHEET_H * MY, 0);
-    sheetDraw(sheet, RD_TCC_RGB, X1, 8, SHEET_W, SHEET_H, 1);
-    sheetDraw(sheet, RD_TCC_RGBA, X1, 40, SHEET_W, SHEET_H, 1);
-    sheetDraw(sheet, RD_TCC_RGBA, X1, Y2, SHEET_W * 2, SHEET_H * 2, 0);
-    sheetDraw(sheet, RD_TCC_RGBA, X1 + 100, Y2 + 45, SHEET_W * 2, SHEET_H * 2, 0);
+    sheetDraw(ref, RD_TCC_RGB, 136, 8, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 8, 96, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(ref, RD_TCC_RGBA, 136, 96, SHEET_W * MX, SHEET_H * MY, 0);
+    sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
+    sheetDraw(sheet, RD_TCC_RGBA, 264, 184, SHEET_W * 2, SHEET_H * 2, 0);
+    sheetDraw(sheet, RD_TCC_RGBA, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0);
     rd_end_frame(0);
     uint32_t w = 0, h = 0;
     float fsx = 1.0f, fsy = 1.0f;
@@ -1817,14 +1785,14 @@ static void testSheetText(const char *mode, int scale, const char *dir)
           (double)fsx, (double)fsy, scale);
     if (img && s == scale) {
         const int sw = SHEET_W * MX, sh = SHEET_H * MY;
-        const int wRgb = sheetWorst(img, w, s, 8, 8, REF_X, 8, sw, sh, 0, 2);
-        const int wA = sheetWorst(img, w, s, 8, Y_A, REF_X, Y_A, sw, sh, 3, 3);
+        const int wRgb = sheetWorst(img, w, s, 8, 8, 136, 8, sw, sh, 0, 2);
+        const int wA = sheetWorst(img, w, s, 8, 96, 136, 96, sw, sh, 3, 3);
         const int moved =
-            sheetWorst(img, w, s, X1, Y2, X1 + 100, Y2 + 45, SHEET_W * 2, SHEET_H * 2, 0, 3);
+            sheetWorst(img, w, s, 264, 184, 264 + 96, 184 + 45, SHEET_W * 2, SHEET_H * 2, 0, 3);
         int inked = 0;
         for (int y = 0; y < sh * s; y++) {
             for (int x = 0; x < sw * s; x++) {
-                inked += img[((size_t)(Y_A * s + y) * w + (size_t)(8 * s + x)) * 4 + 3] != 0;
+                inked += img[((size_t)(96 * s + y) * w + (size_t)(8 * s + x)) * 4 + 3] != 0;
             }
         }
         printf("  sheet text (%s): magnified worst %d (grey) %d (alpha) off the RGBA8 "
@@ -1834,7 +1802,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
               "%s: the sheet magnified is %d (grey) %d (alpha) off sprite_ps on the reference "
               "texels (1 allowed)",
               mode, wRgb, wA);
-        CHECK(inked > sw * sh * s * s / 5, "%s: %d pixels inked", mode, inked);
+        CHECK(inked > sw * sh * s * s / 4, "%s: %d pixels inked", mode, inked);
         /* 3 allowed: the shader blends the four texels with float weights
          * from the interpolated UV, which lands a hair either side of a
          * half at a different screen position (measured 1 at 1x and 3x, 2
@@ -1848,7 +1816,7 @@ static void testSheetText(const char *mode, int scale, const char *dir)
               mode, moved);
         if (scale == 1) {
             int rim = 0;
-            const int bad = sheetExact(img, w, X1, 8, 40, &kSheetEn, &rim);
+            const int bad = sheetExact(img, w, 264, 8, 40, &kSheetEn, &rim);
             CHECK(bad == 0 && rim > 0, "%s: 1:1 %d texels off sheetref_texel, %d rim texels", mode,
                   bad, rim);
         }
@@ -1865,13 +1833,13 @@ static void testSheetText(const char *mode, int scale, const char *dir)
         for (int k = 0; k < 3; k++) {
             rd_set_texture_sheet_style(sheet, styles[k]);
             sheetFrameBegin();
-            sheetDraw(sheet, RD_TCC_RGB, X1, 8, SHEET_W, SHEET_H, 1);
-            sheetDraw(sheet, RD_TCC_RGBA, X1, 40, SHEET_W, SHEET_H, 1);
+            sheetDraw(sheet, RD_TCC_RGB, 264, 8, SHEET_W, SHEET_H, 1);
+            sheetDraw(sheet, RD_TCC_RGBA, 264, 40, SHEET_W, SHEET_H, 1);
             rd_end_frame(0);
             img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
             if (img) {
                 int rim = 0;
-                const int bad = sheetExact(img, w, X1, 8, 40, styles[k], &rim);
+                const int bad = sheetExact(img, w, 264, 8, 40, styles[k], &rim);
                 CHECK(bad == 0 && (k == 2   ? rim == 0
                                    : k == 1 ? rim > 0 && rim < rimFull
                                             : rim > 0),
@@ -1892,11 +1860,9 @@ static void testSheetText(const char *mode, int scale, const char *dir)
         testSheetScaled(2, dir);
         testSheetScaled(4, dir);
 
-        /* the dump keeps the format, the texels (the coverage over its
-         * halo) and the style: load, replay, the same bytes; the faint
-         * style's rim weight rides in the view word's bits 10..15, which
-         * the loader once rejected, the gain in the bakedTexa word's bits
-         * 16..23 */
+        /* the dump keeps the format and the style: load, replay, the same
+         * bytes; the faint style's rim weight rides in the view word's bits
+         * 10..15, which the loader once rejected */
         static const RdSheetStyle *const dumped[2] = {&kSheetFr, &kSheetFaint};
         static const uint8_t dumpedWeight[2] = {64, 21};
         for (int k = 0; k < 2; k++) {
@@ -1914,11 +1880,10 @@ static void testSheetText(const char *mode, int scale, const char *dir)
                 for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                     const RdTexRec *t = &g_rd.textures[i];
                     sheets += t->live && t->kind == RD_TEXKIND_IMAGE &&
-                              t->format == RD_TEXEL_SHEET && t->w == SHEET_W &&
-                              t->h == 2 * SHEET_H &&
+                              t->format == RD_TEXEL_SHEET && t->w == SHEET_W && t->h == SHEET_H &&
                               memcmp(t->pixels, s_sheetCov, sizeof(s_sheetCov)) == 0 &&
                               t->sheet[0] == dumpedWeight[k] && t->sheet[1] == 62 &&
-                              t->sheet[2] == 0xFF && t->sheet[3] == 1 && t->sheetGain == 78 &&
+                              t->sheet[2] == 0xFF && t->sheet[3] == 1 &&
                               strcmp(t->name, "dump") == 0;
                 }
                 CHECK(sheets == 1, "the loaded dump has the sheet texture with style %d (%d)", k,
@@ -1948,33 +1913,33 @@ static void testSheetText(const char *mode, int scale, const char *dir)
 
 /* A strip rasterised at S texels a sheet texel
  * (style.scale S): sheetCov's shapes S times finer, plus a band of noise at
- * the strip's own texels (detail finer than a sheet texel), its halo made by
- * rd_sheet_rim at the strip's texels, drawn 1:1 at the texel centres in a
- * 1x scene: every pixel is sheetref_texel's at scale S within 1; the halo
- * beside the solid block on its middle row is inked at (RX - 3) S pixels
- * and not at RX S, above it on its middle column at (RY - 3) S and not at
- * RY S (the 1x reach in sheet texels at every scale; measured 8 S and
- * 7.5 S across, 4.5 S and 4.75 S down at S 2 and 4); the grain is the
- * strip texel's: on a flat partial patch in the plain style the alpha
- * varies inside each S x S cell and each cell's mean is within a level of
- * the patch's value rounded; outside the letters each S x S cell's mean
- * alpha is within SCALED_CELL_TOL of the 1x strip's texel (the strip of
- * the sheet texels' mean coverage: the same halo and level, finer grain);
- * magnified 1.25x the strip is within 1 of sprite_ps on the reference's
- * texels; the frame dumped and loaded keeps the scale and replays to the
- * same bytes.  With a directory the scaled strip and the 1x strip
- * magnified are written side by side over a grey as rd_pixel_rim_s<S>.png
- * (each pixel 4 x 4). */
+ * the strip's own texels (detail finer than a sheet texel), drawn 1:1 at
+ * the texel centres in a 1x scene: every pixel is sheetref_texel's at
+ * scale S within 1; the rim beside the solid block reaches 6.5 S pixels
+ * across (ICO_SHEET_RX sheet texels, the sheets' width, and the half
+ * sheet texel of the magnified ramp) and 4.5 S down; the fill's grain is
+ * the sheet texel's (with the plain style a flat partial patch is constant
+ * over each S x S cell and changes between cells); magnified 1.5x the
+ * strip is within 1 of sprite_ps on the reference's texels; outside the
+ * letters the strip is the 1x strip of its
+ * sheet texels' mean coverage magnified S times, grey and alpha within 1
+ * (the rim at any scale is the sheets' look magnified, never a finer
+ * rendition of it); the frame dumped and loaded keeps the scale and
+ * replays to the same bytes.  With a directory the scaled strip and the
+ * 1x strip magnified are written side by side over a grey as
+ * rd_pixel_rim_s<S>.png (each pixel 4 x 4). */
 #define SCALED_MAX 4
-/* the worst S x S cell mean (alpha, GS units) off the 1x strip's texel
-   outside the letters, at S = 2 and S = 4 */
-#define SCALED_CELL_TOL_2 30
-#define SCALED_CELL_TOL_4 24
 
-/* the coverage */
-static uint8_t s_scaledCov[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX];
+/* the coverage, and below it the rim (rd_sheet_rim) */
+static uint8_t s_scaledCov[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX * 2];
 /* its sheet texels' coverage, the means of the S x S cells */
 static uint8_t s_scaledCov1[SHEET_W * SHEET_H];
+
+/* floor(v / d) */
+static int floorDivI(int v, int d)
+{
+    return v >= 0 ? v / d : -((-v + d - 1) / d);
+}
 
 /* the sheet texel (x, y)'s coverage of s_scaledCov1, 0 outside it */
 static int cov1At(int x, int y)
@@ -2005,27 +1970,17 @@ static void rimPngPut(const uint8_t *img, uint32_t w, int ax, int ay, int aa, in
 
 static uint8_t scaledCov(int x, int y, int S)
 {
-    const int sx = x / S - SHEET_MX, sy = y / S - SHEET_MY;
-    /* a flat partial patch over the noisy patch's top three rows of sheet
-       texels: the grain test (128: half way between two of the 5 steps, so
-       the threshold rounds about half its texels up) */
-    if (sx >= 19 && sx < 26 && sy >= 1 && sy < 4) {
-        return 128;
+    const int sx = x / S, sy = y / S;
+    /* a flat partial patch over sheet texels 26..32 x 6..8: the grain test
+       (164: 4.5 of the 7 steps, so the Bayer threshold picks 4 or 5) */
+    if (sx >= 26 && sx < 33 && sy >= 6 && sy < 9) {
+        return 164;
     }
     /* the noisy patch at the strip's own texels */
-    if (sx >= 19 && sx < 26 && sy >= 4 && sy < 9) {
+    if (sx >= 26 && sx < 33 && sy >= 9 && sy < 14) {
         return (uint8_t)hash((uint32_t)(y * 512 + x) + 91u);
     }
-    return sheetCov(x / S, y / S);
-}
-
-/* the alpha (GS units) v quantised with dither off (rounded) */
-static int sheetRounded(int v)
-{
-    const int n = ICO_SHEET_LEVELS - 1;
-    int q = (v * n * 512 + ICO_SHEET_T_OFF * 255) / (255 * 512);
-    q = q > n ? n : q;
-    return (((q * 255 + n / 2) / n) * 128 + 127) / 255;
+    return sheetCov(sx, sy);
 }
 
 static void testSheetScaled(int S, const char *dir)
@@ -2036,9 +1991,12 @@ static void testSheetScaled(int S, const char *dir)
             s_scaledCov[y * W + x] = scaledCov(x, y, S);
         }
     }
+    rd_sheet_rim(s_scaledCov, (uint32_t)W, (uint32_t)H, (uint32_t)S, 0, 0, W, H,
+                 s_scaledCov + (size_t)W * (size_t)H);
     RdSheetStyle st = kSheetEn;
     st.scale = (uint8_t)S;
-    RdTex sheet = sheetTexture(s_scaledCov, W, H, &st, "sheet S");
+    RdTex sheet =
+        rd_create_texture_sheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &st, "sheet S");
     static uint8_t rgba[SHEET_W * SHEET_H * SCALED_MAX * SCALED_MAX * 4];
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -2054,7 +2012,8 @@ static void testSheetScaled(int S, const char *dir)
        and the 1x strip of its sheet texels' mean coverage */
     RdSheetStyle plain = kSheetPlain;
     plain.scale = (uint8_t)S;
-    RdTex sheetPlain = sheetTexture(s_scaledCov, W, H, &plain, "sheet S plain");
+    RdTex sheetPlain = rd_create_texture_sheet((uint32_t)W, (uint32_t)(2 * H), s_scaledCov, &plain,
+                                               "sheet S plain");
     for (int y = 0; y < SHEET_H; y++) {
         for (int x = 0; x < SHEET_W; x++) {
             int sum = 0;
@@ -2066,29 +2025,40 @@ static void testSheetScaled(int S, const char *dir)
             s_scaledCov1[y * SHEET_W + x] = (uint8_t)((sum + S * S / 2) / (S * S));
         }
     }
-    RdTex sheet1 = sheetTexture(s_scaledCov1, SHEET_W, SHEET_H, &kSheetEn, "sheet S 1x");
+    RdTex sheet1 = rd_create_texture_sheet(SHEET_W, SHEET_H, s_scaledCov1, &kSheetEn, "sheet S 1x");
     const RdTexRec *sr = rd__tex_rec(sheet.id);
-    CHECK(sr && sr->sheetScale == S && sr->h == (uint32_t)(2 * H),
-          "scaled sheet %d: the record's scale (%d) and the halo below the coverage", S,
+    CHECK(sr && sr->sheetScale == S, "scaled sheet %d: the record's scale (%d)", S,
           sr ? sr->sheetScale : -1);
 
     static const uint8_t grey[4] = {0x80, 0x80, 0x80, 0x80};
-    /* 1:1 (nudged to the texel centres) RGB at (8, 8), RGBA below, the
-       plain strip's RGBA under that; right of them the 1x strip magnified
-       S times, RGB then RGBA, nudged by half a pixel (8 / S sixteenths of a
-       sheet texel: a pixel samples at its corner) */
-    const int yA = 8 + H + 4, yP = yA + H + 8, x1x = 8 + W + 8, n1 = 8 / S;
+    /* 1:1 (nudged to the texel centres) RGB at (8, 8), RGBA below; 1.5x
+       sheet and reference side by side, RGB then RGBA */
+    const int yA = 8 + H + 4, yM = yA + H + 8, mw = W * 3 / 2, mh = H * 3 / 2;
+    const int yMA = yM + mh + 8;
     sheetFrameBegin();
     for (int k = 0; k < 2; k++) {
         rd_texture(sheet, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, 8 * 16, (k ? yA : 8) * 16, (8 + W) * 16, ((k ? yA : 8) + H) * 16, grey, 8,
                8, W * 16 + 8, H * 16 + 8);
+    }
+    for (int k = 0; k < 4; k++) {
+        const int x = k & 1 ? 8 + mw + 8 : 8, y = k & 2 ? yMA : yM;
+        rd_texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
+        sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16, H * 16);
+    }
+    /* right of the 1:1 strip the 1x strip magnified S times, RGB
+       then RGBA, nudged by half a pixel (8 / S sixteenths of a sheet
+       texel: a pixel samples at its corner) so pixel x samples sheet
+       texel position (x + 0.5) / S, where the scaled strip's texel x
+       reads its rim; and the plain strip 1:1 (RGBA) */
+    const int x1x = 8 + W + 8, xPl = x1x + W + 8, n1 = 8 / S;
+    for (int k = 0; k < 2; k++) {
         rd_texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
         sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + W) * 16, ((k ? yA : 8) + H) * 16, grey,
                n1, n1, SHEET_W * 16 + n1, SHEET_H * 16 + n1);
     }
     rd_texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
-    sprite(512, 512, 8 * 16, yP * 16, (8 + W) * 16, (yP + H) * 16, grey, 8, 8, W * 16 + 8,
+    sprite(512, 512, xPl * 16, yA * 16, (xPl + W) * 16, (yA + H) * 16, grey, 8, 8, W * 16 + 8,
            H * 16 + 8);
     rd_end_frame(0);
     uint32_t w = 0, h = 0;
@@ -2115,88 +2085,97 @@ static void testSheetScaled(int S, const char *dir)
                 }
             }
         }
-        /* the halo's reach: the farthest inked pixel left of the solid
-           block (sheet texels MX .. MX + 4 across, MY .. MY + 9 down) on
-           its middle row, and above it on its middle column */
-        const int bx = SHEET_MX * S, by = SHEET_MY * S;
-        const int my = (SHEET_MY + 5) * S, mx = (SHEET_MX + 2) * S;
+        /* the rim's reach: the inked run left of the solid block (sheet
+           texels 7..11 across, 5..14 down) on its middle row, and above
+           it on its middle column */
+        const int my = 10 * S, mx = 9 * S;
         int left = 0, up = 0;
-        for (int x = 0; x < bx; x++) {
-            if (img[((size_t)(yA + my) * w + (size_t)(8 + x)) * 4 + 3] && bx - x > left) {
-                left = bx - x;
-            }
+        for (int x = 7 * S - 1; x >= 0 && img[((size_t)(yA + my) * w + (size_t)(8 + x)) * 4 + 3];
+             x--) {
+            left++;
         }
-        for (int y = 0; y < by; y++) {
-            if (img[((size_t)(yA + y) * w + (size_t)(8 + mx)) * 4 + 3] && by - y > up) {
-                up = by - y;
-            }
+        for (int y = 5 * S - 1; y >= 0 && img[((size_t)(yA + y) * w + (size_t)(8 + mx)) * 4 + 3];
+             y--) {
+            up++;
         }
-        /* the fill's grain (the plain strip: no halo): the flat patch's
-           S x S cells (its middle row of sheet texels) */
-        const int plainA = sheetRounded(128);
-        int mixed = 0, cells = 0, worstCell = 0;
-        for (int cx = SHEET_MX + 19; cx < SHEET_MX + 26; cx++) {
-            const int cy = SHEET_MY + 2;
-            const uint8_t a0 = img[((size_t)(yP + cy * S) * w + (size_t)(8 + cx * S)) * 4 + 3];
-            int sum = 0, cellMixed = 0;
+        /* the fill's grain (the plain strip: no rim): the flat patch's
+           S x S cells (its top row of sheet texels) have one alpha each,
+           and the cells differ (the Bayer entries of neighbouring sheet
+           texels) */
+        int mixed = 0, cells = 0, levels = 0, firstA = -1;
+        for (int cx = 27; cx < 32; cx++) {
+            const int cy = 6;
+            const uint8_t a = img[((size_t)(yA + cy * S) * w + (size_t)(xPl + cx * S)) * 4 + 3];
             for (int y = 0; y < S; y++) {
                 for (int x = 0; x < S; x++) {
-                    const uint8_t a =
-                        img[((size_t)(yP + cy * S + y) * w + (size_t)(8 + cx * S + x)) * 4 + 3];
-                    cellMixed |= a != a0;
-                    sum += a;
+                    mixed +=
+                        img[((size_t)(yA + cy * S + y) * w + (size_t)(xPl + cx * S + x)) * 4 + 3] !=
+                        a;
                 }
             }
-            const int d = abs((sum + S * S / 2) / (S * S) - plainA);
-            worstCell = d > worstCell ? d : worstCell;
-            mixed += cellMixed;
+            firstA = firstA < 0 ? a : firstA;
+            levels += a != firstA;
             cells++;
         }
-        /* outside the letters (no coverage in the cell, none in its sheet
-           texel) each cell's mean alpha against the 1x strip's texel */
-        int halo1x = 0, worst1x = 0;
-        for (int Y = 0; Y < SHEET_H; Y++) {
-            for (int X = 0; X < SHEET_W; X++) {
-                if (cov1At(X, Y)) {
+        const int wRgb = sheetWorst(img, w, 1, 8, yM, 8 + mw + 8, yM, mw, mh, 0, 2);
+        const int wA = sheetWorst(img, w, 1, 8, yMA, 8 + mw + 8, yMA, mw, mh, 3, 3);
+        /* outside the letters (the four sheet texels a pixel's rim
+           blends have no coverage) the scaled strip is the 1x strip
+           magnified, grey and alpha */
+        int out1x = 0, rim1x = 0, worst1x = 0;
+        for (int y = 0; y < H; y++) {
+            const int qy = floorDivI(2 * y + 1 - S, 2 * S);
+            for (int x = 0; x < W; x++) {
+                const int qx = floorDivI(2 * x + 1 - S, 2 * S);
+                if (cov1At(qx, qy) || cov1At(qx + 1, qy) || cov1At(qx, qy + 1) ||
+                    cov1At(qx + 1, qy + 1)) {
                     continue;
                 }
-                int sum = 0, ink = 0;
-                for (int y = 0; y < S; y++) {
-                    for (int x = 0; x < S; x++) {
-                        ink |= s_scaledCov[(Y * S + y) * W + X * S + x];
-                        sum +=
-                            img[((size_t)(yA + Y * S + y) * w + (size_t)(8 + X * S + x)) * 4 + 3];
-                    }
+                const uint8_t *sc = &img[((size_t)(8 + y) * w + (size_t)(8 + x)) * 4];
+                const uint8_t *sa = &img[((size_t)(yA + y) * w + (size_t)(8 + x)) * 4];
+                const uint8_t *oc = &img[((size_t)(8 + y) * w + (size_t)(x1x + x)) * 4];
+                const uint8_t *oa = &img[((size_t)(yA + y) * w + (size_t)(x1x + x)) * 4];
+                const int d[4] = {abs(sc[0] - oc[0]), abs(sc[1] - oc[1]), abs(sc[2] - oc[2]),
+                                  abs(sa[3] - oa[3])};
+                for (int c = 0; c < 4; c++) {
+                    worst1x = d[c] > worst1x ? d[c] : worst1x;
                 }
-                uint8_t g1, a1;
-                sheetref_texel(s_scaledCov1, SHEET_W, SHEET_H, X, Y, &kSheetEn, &g1, &a1);
-                if (ink || (sum == 0 && a1 == 0)) {
-                    continue;
+                if (d[0] > 1 || d[1] > 1 || d[2] > 1 || d[3] > 1) {
+                    const int want[4] = {oc[0], oc[1], oc[2], oa[3]};
+                    const uint8_t got[4] = {sc[0], sc[1], sc[2], sa[3]};
+                    bad +=
+                        pixFail("scaled sheet rim against the 1x strip magnified", x, y, got, want);
                 }
-                const int d = abs((sum + S * S / 2) / (S * S) - (int)a1);
-                worst1x = d > worst1x ? d : worst1x;
-                halo1x++;
+                out1x++;
+                rim1x += oa[3] != 0;
             }
         }
-        const int cellTol = S >= 4 ? SCALED_CELL_TOL_4 : SCALED_CELL_TOL_2;
-        printf("  scaled sheet %dx: 1:1 worst %d off sheetref_texel (%d over 1); halo inked %d "
-               "px across (%d .. %d), %d down (%d .. %d); grain: %d of %d cells vary inside, "
-               "the cells' means at most %d off the rounded %d; outside the letters %d cells, "
-               "means at most %d off the 1x strip (%d)\n",
-               S, worst, bad, left, (ICO_SHEET_RX - 3) * S, ICO_SHEET_RX * S - 1, up,
-               (ICO_SHEET_RY - 3) * S, ICO_SHEET_RY * S - 1, mixed, cells, worstCell, plainA,
-               halo1x, worst1x, cellTol);
-        CHECK(bad == 0, "scaled sheet %d: 1:1 %d texels more than 1 off sheetref_texel", S, bad);
-        CHECK(left >= (ICO_SHEET_RX - 3) * S && left < ICO_SHEET_RX * S &&
-                  up >= (ICO_SHEET_RY - 3) * S && up < ICO_SHEET_RY * S,
-              "scaled sheet %d: the halo is inked %d across and %d down", S, left, up);
-        CHECK(mixed == cells && worstCell <= 26,
-              "scaled sheet %d: the grain is the strip texel's (%d cells vary inside) and the "
-              "cells' means are within a level of the patch's (%d off)",
-              S, mixed, worstCell);
-        CHECK(halo1x > 40 && worst1x <= cellTol,
-              "scaled sheet %d: outside the letters %d cells, means %d off the 1x strip (%d)", S,
-              halo1x, worst1x, cellTol);
+        const int reachX = (2 * ICO_SHEET_RX + 1) * S / 2, reachY = (2 * ICO_SHEET_RY + 1) * S / 2;
+        printf("  scaled sheet %dx: 1:1 worst %d off sheetref_texel and the 1x strip magnified "
+               "(%d over 1); rim %d px across (%d), %d down (%d); grain: %d texels unlike their "
+               "cell's first, %d of %d cells another alpha; 1.5x worst %d (grey) %d (alpha) off "
+               "the reference; outside the letters %d px (%d rim) worst %d off the 1x strip "
+               "magnified\n",
+               S, worst, bad, left, reachX, up, reachY, mixed, levels, cells, wRgb, wA, out1x,
+               rim1x, worst1x);
+        CHECK(bad == 0,
+              "scaled sheet %d: 1:1 %d texels more than 1 off sheetref_texel or the 1x "
+              "strip magnified",
+              S, bad);
+        CHECK(rim1x > 40 * S * S && worst1x <= 1,
+              "scaled sheet %d: outside the letters %d rim pixels, %d off the 1x strip magnified",
+              S, rim1x, worst1x);
+        CHECK(left == reachX && up == reachY,
+              "scaled sheet %d: the rim reaches %d across (%d) and %d down (%d)", S, left, reachX,
+              up, reachY);
+        CHECK(mixed == 0 && levels > 0,
+              "scaled sheet %d: the grain is the sheet texel's (%d texels differ inside a cell, "
+              "%d cells differ)",
+              S, mixed, levels);
+        CHECK(wRgb <= 1 && wA <= 1,
+              "scaled sheet %d: magnified %d (grey) %d (alpha) off sprite_ps on the reference "
+              "(1 allowed)",
+              S, wRgb, wA);
     }
     if (img && dir) {
         char path[1024];
@@ -2219,8 +2198,7 @@ static void testSheetScaled(int S, const char *dir)
             for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                 const RdTexRec *t = &g_rd.textures[i];
                 sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
-                          t->w == (uint32_t)W && t->h == (uint32_t)(2 * H) && t->sheetScale == S &&
-                          strcmp(t->name, "dump") == 0;
+                          t->w == (uint32_t)W && t->sheetScale == S && strcmp(t->name, "dump") == 0;
             }
             CHECK(sheets == 2,
                   "the loaded dump has the scaled sheet and its plain twin with scale %d (%d)", S,
@@ -2240,30 +2218,6 @@ static void testSheetScaled(int S, const char *dir)
         } else {
             CHECK(0, "rd__load_frame (scaled sheet %d)", S);
         }
-    }
-    free(img);
-
-    /* magnified 1.25x: sheet and reference side by side, RGB then RGBA */
-    const int mw = W * 5 / 4, mh = H * 5 / 4, yM = 8, yMA = yM + mh + 8;
-    sheetFrameBegin();
-    for (int k = 0; k < 4; k++) {
-        const int x = k & 1 ? 8 + mw + 8 : 8, y = k & 2 ? yMA : yM;
-        rd_texture(k & 1 ? ref : sheet, RD_TEXFN_MODULATE, k & 2 ? RD_TCC_RGBA : RD_TCC_RGB);
-        sprite(512, 512, x * 16, y * 16, (x + mw) * 16, (y + mh) * 16, grey, 0, 0, W * 16, H * 16);
-    }
-    rd_end_frame(0);
-    img = readScaled(RD_TARGET_SCENE, &w, &h, &fsx, &fsy);
-    if (!img) {
-        CHECK(0, "scaled sheet %d: SCENE (magnified)", S);
-    } else {
-        const int wRgb = sheetWorst(img, w, 1, 8, yM, 8 + mw + 8, yM, mw, mh, 0, 2);
-        const int wA = sheetWorst(img, w, 1, 8, yMA, 8 + mw + 8, yMA, mw, mh, 3, 3);
-        printf("  scaled sheet %dx: 1.25x worst %d (grey) %d (alpha) off the reference\n", S, wRgb,
-               wA);
-        CHECK(wRgb <= 1 && wA <= 1,
-              "scaled sheet %d: magnified %d (grey) %d (alpha) off sprite_ps on the reference "
-              "(1 allowed)",
-              S, wRgb, wA);
     }
     free(img);
     rd_destroy_texture(sheet);

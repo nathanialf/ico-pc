@@ -24,7 +24,7 @@
  *     the scene list at 1x.
  * Then on a Vulkan device (exit 77 without one; lavapipe here): a port row
  * "New Game" in the title's place through exec_layout_texture into SCENE:
- * the text covers pixels only inside the row's rectangle (with the halo's
+ * the text covers pixels only inside the row's rectangle (with the rim's
  * margin), none elsewhere.  Writes menu_text_scene.png beside itself.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU checks).
@@ -908,15 +908,13 @@ static void testPixels(void)
     }
     rd_write_png("menu_text_scene.png", px, 512, 512, 512 * 4, 0);
     /* the row's box (display_texture: centred, New Game's 172 texels
-       wide, 20 field lines from dispY 165), plus the strip's margin for
-       the halo and its bilinear read (UI_MENU_RIM_X texels across, an x
-       unit each, UI_MENU_RIM_Y down, 2 y units each: the halo of the ink
-       nearest the box's edge may pass it by that much), and a unit for
-       the anchor's snap */
+       wide, 20 field lines from dispY 165), plus the reach of the sheet
+       strip's rim and its bilinear read: a texel each, 2 x units and 4 y
+       units, and a unit for the anchor's snap */
     const LtProperty *e = &texProperty[50];
     const float gx0 = UI_GRID_CX - (float)e->texW * 0.5f, gx1 = UI_GRID_CX + (float)e->texW * 0.5f;
     const float gy0 = (float)e->dispY * 2.0f, gy1 = gy0 + (float)e->dispH;
-    const float mx = (float)UI_MENU_RIM_X + 1.0f, my = 2.0f * (float)UI_MENU_RIM_Y + 1.0f;
+    const float mx = 3.0f, my = 5.0f;
     const int x0 = toPixX(gx0 - mx), x1 = toPixX(gx1 + mx);
     const int y0 = toPixY(gy0 - my), y1 = toPixY(gy1 + my);
     int inside = 0, outside = 0, bright = 0;

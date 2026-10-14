@@ -295,13 +295,11 @@ program under an environment switch ([Environment switches](#environment-switche
   once, the softening's AA0 (work scale 2) the area box of SCENE and its composite back the
   B-spline (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
-  and an older dump's menu text sheets loading with their halo made again (`testDumpSheetV10`)
-  (`rd_state`).
-- `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and the menu text's
-  halo against its CPU reference at scales 1 to 4 (`testSheetRim`; its time on three strip sizes
-  printed, not checked: `timeSheetRim`), and a text texture that could
-  not be uploaded named once in the log, the game's own textures never (`textUploadLogChecks`)
-  (`rd_tex`).
+  and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  the CPU included (`testDumpSheetV11`) (`rd_state`).
+- `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
+  that could not be uploaded named once in the log, the game's own textures never
+  (`textUploadLogChecks`) (`rd_tex`).
 - `rd_water_test.c`: the surfaces that render to and sample from textures (`rd_water`).
 - `texpack_disc_test.c`: the PCSX2 names of every texture on the disc, and how many of a pack's
   files they reach (`texpack_disc`).
@@ -311,8 +309,8 @@ program under an environment switch ([Environment switches](#environment-switche
 - `texpack_name_test.c`: XXH3, the swizzle and the names against PCSX2's rules (`texpack_name`).
 - `texpack_test.c`: the pack's index and loader on fake files (`texpack`).
 - Helpers: `mesh_env.h` (the mesh tests' game stubs), `vu_models.h` (synthetic models),
-  `sheet_ref.c`/`.h` (the sheet-text shader and the halo on the CPU), `above1x_ref.c`/`.h` (the
-  above-1x kernels and the fog's formula on the CPU, written from their definitions).
+  `sheet_ref.c`/`.h` (the sheet-text shader on the CPU), `above1x_ref.c`/`.h` (the above-1x
+  kernels and the fog's formula on the CPU, written from their definitions).
 
 ### port/rhi/test
 
@@ -364,12 +362,7 @@ program under an environment switch ([Environment switches](#environment-switche
   (`gallery_sweep`).
 - `gallery_test.c`: the music gallery's list from the base ELF's tables (`gallery`).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
-  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets. Development modes: `ICO_MENU_LOOK_FIT`,
-  `ICO_MENU_LOOK_GEOFIT`, `ICO_MENU_LOOK_HALOFIT` (the halo's gain, levels and per-language gains)
-  and `ICO_MENU_LOOK_DUMP` (each row's sheet rectangle and strip at scales 1, 2 and 4 as PNGs).
-  The survey (`testSurvey`) pins `kSheetInk`, the halo's reach and falloff, the levels and the
-  grain against the sheets, each language's halo mass, and the first field line below a letter in
-  a band of its own.
+  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look
   (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over

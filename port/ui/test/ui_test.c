@@ -506,11 +506,12 @@ static void testLayoutExtension(void)
               v[1].rgba[0], v[1].rgba[3]);
         /* the label starts at the row's dispX: x = (dispX - 320) * 16 + 4 in 1/16 px, through
            gif_SpriteSensitiveOffset's 512 / 640; the strip starts its margin
-           (the glyphs' overhang, a few texels at this size, and the halo's
-           UI_MENU_RIM_X texels, each 0.8 of 16 sixteenths) before */
+           (the glyphs' overhang and the rim, UI_MENU_RIM_X 7 since the
+           rim fades out over the sheets' 6 texels: 11 texels at this size,
+           145 measured; 119 with the hard 4-texel rim) before */
         int x0 = 0x8000 + ((200 - 320) * 16 + 4) * 512 / 640;
-        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * (UI_MENU_RIM_X + 5),
-              "row %d starts at x %d (box %d)", labels, v[0].x, x0);
+        CHECK(v[0].x < x0 && x0 - v[0].x < 16 * 10, "row %d starts at x %d (box %d)", labels,
+              v[0].x, x0);
         labels++;
     }
     CHECK(labels == 2, "%d labels", labels);
@@ -947,9 +948,12 @@ static int toPixY(float gy)
 }
 
 /* the drawn word's bounds: x from the measure, y from the line metrics
-   (the menus' text, menu_font.h), plus the strip's halo and its bilinear
+   (the menus' text, menu_font.h), plus the strip's rim and its bilinear
    read (UI_MENU_RIM_X and UI_MENU_RIM_Y texels: a texel is an x unit and
-   2 y units) and the anchor's snap to whole texels (an x unit, a y unit). */
+   2 y units) and the anchor's snap to whole texels (an x unit, a y unit).
+   Written for a rim of 1 x 1 texels (3 and 5 units); the sheets' survey
+   set 4 x 3, and 44 pixels of rim fell outside the old bounds; the faded
+   rim reaches 6 x 4. */
 typedef struct Box {
     int x0, y0, x1, y1;
 } Box;
@@ -1208,12 +1212,12 @@ static int reference4(const uint8_t bg[4], float *ref, uint8_t *in, Q4 *q, int m
             CHECK(0, "4x: quad %d's sheet page", i);
             continue;
         }
-        const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1],   t->sheet[2], t->sheet[3],
-                                 t->sheet[0],      t->sheetScale, t->sheetGain};
-        /* a page's coverage is its top half; its texels under the quad made
-           once (sheetref_texel blurs the coverage round each texel) and
-           blended as sheetref_sample blends them */
-        const uint32_t th = t->h / 2;
+        const RdSheetStyle st = {t->sheet[0] != 0, t->sheet[1], t->sheet[2],
+                                 t->sheet[3],      t->sheet[0], t->sheetScale};
+        /* a scaled page's coverage is its top half; its texels under
+           the quad made once (sheetref_texel dilates four sheet texels a texel)
+           and blended as sheetref_sample blends them */
+        const uint32_t th = t->sheetScale > 1 ? t->h / 2 : t->h;
         const int tx0 = (int)floorf(g->u0) - 2, ty0 = (int)floorf(g->v0) - 2;
         const int tcw = (int)ceilf(g->u1) + 2 - tx0, tch = (int)ceilf(g->v1) + 2 - ty0;
         uint8_t *tg = malloc((size_t)tcw * (size_t)tch * 2);

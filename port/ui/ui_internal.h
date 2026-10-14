@@ -96,13 +96,11 @@ void ui__sheet_raster_line(uint8_t *cov, int w, int h, int stride, float emRows,
 float ui__sheet_set_width(float k);
 uint64_t ui__text_key(const char *utf8, unsigned flags, int page);
 /* Tests (menu_look): the coverage strip of a menu text item in language lang
-   (UiLang) at scale strip texels a sheet texel (1 .. ICO_SHEET_SCALE_MAX),
-   the one ui_menu_word_draw caches, into out (w * scale x h * scale bytes,
-   w and h the item's; no ICO_RD needed).  0, or -1 for a size that is not
-   the item's or a scale out of range. */
+   (UiLang), the one ui_menu_word_draw caches, into out (w x h bytes, the
+   item's w and h; no ICO_RD needed).  0, or -1 for a size that is not the
+   item's. */
 struct UiMenuTextItem;
-int ui__menu_strip_raster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h,
-                          int scale);
+int ui__menu_strip_raster(const struct UiMenuTextItem *it, int lang, uint8_t *out, int w, int h);
 /* Tests: the menus' strips rasterised at scale strip texels a sheet
    texel (1 .. ICO_SHEET_SCALE_MAX) whatever the scene's or the output's
    scale; 0 goes back to those (menu_font.c mfScale) */

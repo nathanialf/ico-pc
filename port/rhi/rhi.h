@@ -250,7 +250,7 @@ typedef struct RhiShaderDesc {
  * Fixed slot model shared by all programs (see port/shaders/common.hlsli):
  *  group 0: per-frame uniforms   (b0)
  *  group 1: per-draw uniforms    (b1; the VU programs' b2, b3), the VU
- *           vertex stream (t0), the menu text's grain tile (b4, static)
+ *           vertex stream (t0)
  *  group 2: textures t1..t4 and samplers s1..s4
  * Backends map these onto descriptor sets / root parameters / argument
  * buffers; rd_core never sees the mapping. */

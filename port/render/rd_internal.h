@@ -595,14 +595,12 @@ typedef struct RdTexRec {
     uint8_t mipUse, mipRef;
     uint8_t mipBuiltBoost, mipBuiltRef;
     /* A SHEET texture's style (rd.h RdSheetStyle):
-     * the halo's weight (0 off, 1..64 the 64ths of a full halo: rimOn with
+     * the rim's weight (0 off, 1..64 the 64ths of a full rim: rimOn with
      * rimWeight), rimLevel, fillLevel, dither (kept as 0 or 1) */
     uint8_t sheet[4];
     /* Its RdSheetStyle.scale, 1..ICO_SHEET_SCALE_MAX
      * (0 in a texture that is no sheet) */
     uint8_t sheetScale;
-    /* Its RdSheetStyle.rimGain, 1..255 64ths (0 is kept as 64) */
-    uint8_t sheetGain;
     /* The GS mipmap levels of a game texture whose TEX1 asks for mipmapping
      * and whose levels are authored (rdtex_store_levels): gsLevels counts
      * them with the base (0 or 1: none), gsChain holds levels 1.. as RGBA8
@@ -647,15 +645,6 @@ RdTex rd__create_texture_replacement(struct TexpackImage *img, uint32_t uvW, uin
 /* Frees a replacement's pending levels (texpack_free_image) and the
  * TexpackImage holding them; t->pending is null afterwards. */
 void rd__free_pending(RdTexRec *t);
-/* The menu text's grain tile for font_sheet_ps (rd_tex.c): b, the binding
- * of a uniform buffer holding sheet_noise.hlsli's 256 words at
- * ICO_SHEET_NOISE_SLOT (group 1, register b4: sheet_text.hlsli
- * SheetNoiseCB), made on the first call; false when the buffer cannot be
- * made.  Every group of g_rd.layoutDraw carries it (rd_replay.c
- * dynamicGroup, rd_video.c).  rd__sheet_noise_free destroys it (the GPU
- * idle: rd__gpu_shutdown). */
-bool rd__sheet_noise_binding(RhiBinding *b);
-void rd__sheet_noise_free(void);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c.  A VU mesh keeps its vertex stream (the
@@ -2176,9 +2165,10 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * (the motion blur); 9 RdStateBlock.tex1Lod, RDC_FILTER's u[0] and an image's GS
  * levels (RdTexRec.gsLevels) after its texels; 10 the native frame after
  * gsH: f32 aspect, f32 wExact, u32 cullW (RdFrame.aspect, .wExact, .cullW);
- * 11 a sheet image always w x h with its halo in the bottom half and its
- * rimGain in the bakedTexa word's bits 16..23 (an older sheet loads with
- * its halo made again from its coverage and a gain of 64).
+ * 11 a sheet image's bakedTexa word with bits 16..23 clear, its image as in
+ * 10 (those bits set: a sheet w x h at every scale with a halo made on the
+ * CPU in its bottom half, which loads as the image made again from the
+ * coverage of its top half, rd_dump.c sheetFromHalo).
  * rd__dump_frame writes this version; rd__load_frame reads 3 to it, and a
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a

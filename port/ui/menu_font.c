@@ -21,17 +21,18 @@
 #include "ui_internal.h"
 
 #define MF_PAGE 1024 /* a 1x page's side, texels */
-/* Sheet texels between strips: a strip's halo (rd_sheet_rim, the page's
-   bottom half) is the blur of the page's coverage within ICO_SHEET_RX
-   across and ICO_SHEET_RY down and cannot see where a strip ends, and the
-   bilinear read takes the texel past a strip's edge, so a neighbour's ink
-   must sit at least the halo's reach plus one texel away (the taps reach 0
-   there) or its halo smears onto this strip's edge.  Strip origins sit on
-   multiples of MF_ALIGN sheet texels. */
-#define MF_GAP_X 11
-#define MF_GAP_Y 8
+/* Texels between strips: font_sheet_ps builds a texel's rim from the page's
+   coverage up to ICO_SHEET_RX across and ICO_SHEET_RY down and cannot see
+   where a strip ends, and the bilinear read takes one texel past a strip's
+   edge, so a neighbour's ink must sit at least the rim's reach plus one
+   texel away or its rim smears onto this strip's edge.  Strip origins sit
+   on multiples of MF_ALIGN (the dither's Bayer cell, font.hlsl
+   sheet_threshold indexes it by page texel), so a word's grain is the same
+   wherever it lands and the gaps come out at 8 either way. */
+#define MF_GAP_X 7
+#define MF_GAP_Y 5
 #define MF_ALIGN 4
-#define MF_ORIGIN 12 /* the first strip's corner: the gaps rounded up to MF_ALIGN */
+#define MF_ORIGIN 8 /* the first strip's corner: the gaps rounded up to MF_ALIGN */
 _Static_assert(MF_GAP_X >= ICO_SHEET_RX + 1, "strips must be a rim's reach apart across");
 _Static_assert(MF_GAP_Y >= ICO_SHEET_RY + 1, "strips must be a rim's reach apart down");
 _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_ALIGN == 0,
@@ -44,15 +45,15 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
    scene's scale, or the output's in overlay mode, 1 .. ICO_SHEET_SCALE_MAX),
    so the letters are as crisp as the picture; the gaps, the alignment and the
    first corner above are in sheet texels (s times as many strip texels).  A
-   page holds strips of one scale: 1024 x 1024 of coverage at 1x, 1024 s x
-   256 s above it, at most 4096 wide, and below it as many texels of halo
-   (rd.h rd_sheet_rim: the blur at the strip's own texels, made when a strip
-   is placed), so the texture is 1024 x 2048 at 1x, 2048 x 1024 at 2x,
-   3072 x 1536 at 3x, 4096 x 2048 at 4x (2, 2, 4.5 and 8 MB, kept on the CPU
-   and in the texture; at most MF_PAGES of a style, three styles: 96 MB of
+   page holds strips of one scale: 1024 x 1024 at 1x; above it 1024 s x 256 s
+   of coverage, at most 4096 wide, and below it as many texels of rim (rd.h
+   rd_sheet_rim: the 1x rim of the sheet texels, one value over each sheet
+   texel's texels, which the shader magnifies), so the texture is 2048 x 1024
+   at 2x, 3072 x 1536 at 3x, 4096 x 2048 at 4x (2, 4.5 and 8 MB, kept on the
+   CPU and in the texture; at most MF_PAGES of a style, three styles: 96 MB of
    textures at 4x if every page of every style were in use, two pages, 16 MB,
-   for a menu).  A page is 1001 sheet texels wide at every scale (the longest
-   notes fit) and 236 tall (the 1x page 1004: a menu's rows are 15 to 30
+   for a menu).  A page is 1009 sheet texels wide at every scale (the longest
+   notes fit) and 243 tall (the 1x page 1011: a menu's rows are 15 to 30
    texels). Pages of another scale than a draw's are emptied once no frame can
    name them (MF_EVICT_FRAMES), so a resolution change re-rasterises the words
    it shows within a few frames and a popup on the output (a scale of its own)
@@ -62,8 +63,8 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
 #define MF_STRIPS 1024    /* strips cached at once */
 #define MF_EVICT_FRAMES 4 /* rd frames a page must have gone undrawn before it is reset */
 #define MF_LINES 16       /* lines of one text */
-/* texels of margin round a port text's ink: the halo (rd's ICO_SHEET_RX and
-   ICO_SHEET_RY, 10 and 7; ctest menu_look checks the pair) and the bilinear
+/* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
+   ICO_SHEET_RY, 6 and 4; ctest menu_look checks the pair) and the bilinear
    read one texel past it */
 #define MF_RIM_X UI_MENU_RIM_X
 #define MF_RIM_Y UI_MENU_RIM_Y
@@ -73,12 +74,12 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
 enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
 
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
-   rimLevel, fillLevel, dither, rimWeight, rimGain.  The one table to retune.
+   rimLevel, fillLevel, dither.  The one table to retune.
 
    Measured on the game's sheets (the PAL sheets menu_PAL_01..04, scei and
    title, the 79 light-ink items of the menu text table, texels as (grey,
    alpha) with the GS alpha 0x80 = 1; ctest menu_look testSurvey re-measures
-   them and pins this table, the halo's reach, LEVELS and the grain):
+   them and pins this table, RX, RY and LEVELS):
      fill   the letters are white: palette entries ffffff at alpha 0x80 on
             every sheet; the fill texels (grey >= 200, alpha >= 0.7) average
             251 (EN) and 249 (FR DE IT ES), so the fill level is 255.
@@ -87,43 +88,42 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             letters: EN 24 (black on sheet 01, graded 0..100 on 03 and 04),
             FR 61, DE 56, IT 61, ES 62.  German's rim is grey like the
             Romance languages', not black.
-     halo   not a hard edge: a soft dark turbulence round the letters whose
-            alpha falls off over several texels (outside the letters, left
-            and right, texel 1..6: EN .76 .61 .54 .50 .39 .33, FR .88 .78 .72
-            .59 .44 .37, DE .93 .84 .74 .65 .50 .41, above and below 1..4: EN
-            .77 .44 .36 .27, FR .89 .67 .49 .30, DE .91 .70 .51 .36), drawn
-            through the sheets' few alpha levels with an irregular grain.
-            The mass of the first six texels is 3.1 (EN) to 4.1 (DE) across
-            and 2.0 (EN) to 3.1 (DE) down.  The halo is a blur of the
-            coverage (shader_consts.h: a linear ramp 10 texels across and 7
-            down, ICO_SHEET_GAIN), one shape for every language, its
-            strength per language rimGain (64ths: the French and German
-            sheets' halo is heavier than the English), quantised against a
-            blue-noise threshold.  A weighted dilation of the same reach draws
-            each word in a hard-edged box.
+     width  not a hard edge: the alpha falls off over several texels (outside
+            the letters, left and right, texel 1..6: EN .76 .61 .54 .50 .39 .33,
+            FR .88 .78 .72 .59 .44 .37, DE .93 .84 .74 .65 .50 .41, above and
+            below 1..4: EN .77 .44 .36 .27, FR .89 .67 .49 .30, DE .91 .70 .51
+            .36).  The mass of the first six texels is 3.1 (EN) to 4.1 (DE) across
+            and 2.0 (EN) to 3.1 (DE) down, 3.7 and 2.7 averaged over the five.
+            The rim is the coverage dilated with the English falloff
+            (shader_consts.h: ICO_SHEET_RX 6, ICO_SHEET_RY 4, ICO_SHEET_WX
+            1 .76 .61 .54 .50 .39 .33, ICO_SHEET_WY 1 .77 .44 .36 .27), one
+            shape for every language; the stronger French and German halo is
+            not modelled (the style has a rim grey, not a rim strength).  A
+            hard rim of the same mass (4 x 3) filled the gaps between the
+            letters and drew each word in a dark box.
      steps  the white texels' alpha takes three steps between none and full
             (sheet 01 EN: 0x20 0x43 0x61 then 0x80; sheet 04 EN: 0x1D 0x3D
-            0x5E then 0x7E): five levels; ICO_SHEET_LEVELS is 6
+            0x5E then 0x7E): five levels; ICO_SHEET_LEVELS is 8, which
+            matches the sheets better with the fitted geometry
             (shader_consts.h).
-   ctest menu_look's survey re-measures these numbers within 0.1 and pins
-   each language's halo mass against its sheets' (rimGain). */
+   ctest menu_look's survey re-measures these numbers within 0.1. */
 static const UiSheetInk kSheetInk[UI_LANG_COUNT] = {
-    {1, 24, 255, 1, 0, 64}, /* English */
-    {1, 61, 255, 1, 0, 70}, /* French */
-    {1, 56, 255, 1, 0, 74}, /* German */
-    {1, 61, 255, 1, 0, 72}, /* Italian */
-    {1, 62, 255, 1, 0, 69}, /* Spanish */
+    {1, 24, 255, 1, 0}, /* English */
+    {1, 61, 255, 1, 0}, /* French */
+    {1, 56, 255, 1, 0}, /* German */
+    {1, 61, 255, 1, 0}, /* Italian */
+    {1, 62, 255, 1, 0}, /* Spanish */
 };
 /* the dark, plain and grey inks and the light words without a halo: no
    rim, a white fill (the vertex colour makes them black, white or grey) */
-static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0, 64};
+static const UiSheetInk kPlainInk = {0, 0, 255, 1, 0};
 
 typedef struct MfPage {
-    uint8_t *cov; /* w x h coverage, NULL while unused; the halo below it
-                     (w x h more) */
+    uint8_t *cov; /* w x h coverage, NULL while unused; above 1x the rim
+                     below it (w x h more) */
     int scale;    /* strip texels a sheet texel */
     int w, h;     /* the coverage's texels (pageW, pageH); the texture is
-                     twice as tall */
+                     twice as tall above 1x */
     uint32_t tex; /* the rd sheet texture, 0 until first drawn */
     int shelfX, shelfY, shelfH;
     uint32_t lastFrame; /* rd_frame_number at its last draw */
@@ -294,9 +294,9 @@ static void embolden(uint8_t *cov, int w, int h, int scale)
 
 /* ---------------------------------------------------------------- items */
 
-/* An item's words rasterised at scale into cov (it->w * scale x it->h *
-   scale bytes, zeroed by the caller): the strip itemStrip caches, also the
-   comparison test's reference (ui__menu_strip_raster). */
+/* An item's words rasterised into cov (it->w x it->h bytes, zeroed by the
+   caller): the strip itemStrip caches, also the comparison test's
+   reference (ui__menu_strip_raster). */
 static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int scale)
 {
     const int w = it->w * scale, hgt = it->h * scale;
@@ -343,14 +343,13 @@ static void rasterItem(const UiMenuTextItem *it, int lang, uint8_t *cov, int sca
     embolden(cov, w, hgt, scale);
 }
 
-int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h, int scale)
+int ui__menu_strip_raster(const UiMenuTextItem *it, int lang, uint8_t *out, int w, int h)
 {
-    if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_COUNT || scale < 1 ||
-        scale > ICO_SHEET_SCALE_MAX) {
+    if (!it || !out || w != it->w || h != it->h || lang < 0 || lang >= UI_LANG_COUNT) {
         return -1;
     }
-    memset(out, 0, (size_t)(w * scale) * (size_t)(h * scale));
-    rasterItem(it, lang, out, scale);
+    memset(out, 0, (size_t)w * (size_t)h);
+    rasterItem(it, lang, out, 1);
     return 0;
 }
 
@@ -450,10 +449,11 @@ static int pageH(int sc)
     return sc <= 1 ? MF_PAGE : MF_PAGE * sc / 4;
 }
 
-/* the page's bytes, and its texture's rows: the halo's below the coverage */
+/* the page's bytes, and its texture's rows: the rim's below the coverage
+   above 1x */
 static size_t pageBytes(const MfPage *p)
 {
-    return (size_t)p->w * (size_t)p->h * 2u;
+    return (size_t)p->w * (size_t)p->h * (p->scale > 1 ? 2u : 1u);
 }
 
 /* the scale the strips drawn now are rasterised at: the output's pixels a
@@ -567,7 +567,7 @@ static void dropPage(int cls, int page)
 /* an empty page of scale sc in a free slot; 0 without the memory */
 static int newPage(MfPage *p, int sc)
 {
-    p->cov = calloc((size_t)pageW(sc) * (size_t)pageH(sc) * 2u, 1);
+    p->cov = calloc((size_t)pageW(sc) * (size_t)pageH(sc) * (sc > 1 ? 2u : 1u), 1);
     if (!p->cov) {
         return 0;
     }
@@ -714,24 +714,26 @@ static void placeCoverage(const MfStrip *s, const uint8_t *cov)
         rd_update_texture_rect((RdTex){p->tex}, (uint32_t)s->x, (uint32_t)s->y, (uint32_t)w,
                                (uint32_t)h, cov);
     }
-    if (s->cls == MF_PLAIN) {
-        return; /* no halo drawn (its weight is 0): the bottom half stays 0 */
-    }
-    /* the halo below, over the strip and the texel round it that the
-       bilinear read takes (the gaps keep other strips' ink out of its reach) */
-    uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
-    const int rx = s->x - 1, ry = s->y - 1, rw = w + 2, rh = h + 2;
-    rd_sheet_rim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh, rim);
-    if (p->tex) {
-        uint8_t *px = malloc((size_t)rw * (size_t)rh);
-        if (px) {
-            for (int r = 0; r < rh; r++) {
-                memcpy(px + (size_t)r * (size_t)rw,
-                       rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx, (size_t)rw);
+    if (p->scale > 1) {
+        /* the rim below, over the strip and the sheet texel round it that
+           the magnified rim's bilinear read takes (one value a
+           sheet texel; the gaps keep other strips' rims out) */
+        uint8_t *rim = p->cov + (size_t)p->w * (size_t)p->h;
+        const int sc = p->scale;
+        const int rx = s->x - sc, ry = s->y - sc, rw = w + 2 * sc, rh = h + 2 * sc;
+        rd_sheet_rim(p->cov, (uint32_t)p->w, (uint32_t)p->h, (uint32_t)p->scale, rx, ry, rw, rh,
+                     rim);
+        if (p->tex) {
+            uint8_t *px = malloc((size_t)rw * (size_t)rh);
+            if (px) {
+                for (int r = 0; r < rh; r++) {
+                    memcpy(px + (size_t)r * (size_t)rw,
+                           rim + (size_t)(ry + r) * (size_t)p->w + (size_t)rx, (size_t)rw);
+                }
+                rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
+                                       (uint32_t)rw, (uint32_t)rh, px);
+                free(px);
             }
-            rd_update_texture_rect((RdTex){p->tex}, (uint32_t)rx, (uint32_t)(p->h + ry),
-                                   (uint32_t)rw, (uint32_t)rh, px);
-            free(px);
         }
     }
 }
@@ -743,8 +745,8 @@ static uint32_t pageTex(int cls, int page, int lang)
     MfPage *p = &s_mf.pages[cls][page];
     if (!p->tex && p->cov) {
         const UiSheetInk *k = classInk(cls, lang);
-        const RdSheetStyle st = {k->rimOn,     k->rimLevel,       k->fillLevel, k->dither,
-                                 k->rimWeight, (uint8_t)p->scale, k->rimGain};
+        const RdSheetStyle st = {k->rimOn,  k->rimLevel,  k->fillLevel,
+                                 k->dither, k->rimWeight, (uint8_t)p->scale};
         static const char *const kName[MF_CLASSES] = {"light", "faint", "plain"};
         char name[32];
         if (p->scale > 1) {
@@ -752,8 +754,9 @@ static uint32_t pageTex(int cls, int page, int lang)
         } else {
             snprintf(name, sizeof(name), "ui menu text %s p%d", kName[cls], page);
         }
-        p->tex =
-            rd_create_texture_sheet((uint32_t)p->w, (uint32_t)(2 * p->h), p->cov, &st, name).id;
+        p->tex = rd_create_texture_sheet((uint32_t)p->w, (uint32_t)(p->scale > 1 ? 2 * p->h : p->h),
+                                         p->cov, &st, name)
+                     .id;
         ui__set_menu_font_hooks(mfShutdown, mfForget);
     }
     p->lastFrame = rd_frame_number();
@@ -772,8 +775,7 @@ static void styleLight(int lang)
         for (int p = 0; p < MF_PAGES; p++) {
             if (s_mf.pages[c][p].tex) {
                 const RdSheetStyle st = {k->rimOn,  k->rimLevel,  k->fillLevel,
-                                         k->dither, k->rimWeight, (uint8_t)s_mf.pages[c][p].scale,
-                                         k->rimGain};
+                                         k->dither, k->rimWeight, (uint8_t)s_mf.pages[c][p].scale};
                 rd_set_texture_sheet_style((RdTex){s_mf.pages[c][p].tex}, &st);
             }
         }

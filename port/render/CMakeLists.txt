@@ -18,9 +18,8 @@ target_include_directories(ico_vu1_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vu1_r
 target_compile_options(ico_vu1_ref PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_vu1_ref PUBLIC ico_math)
 
-# ico_sheet_ref: font_sheet_ps and rd_sheet_rim on the CPU (test/sheet_ref.h),
-# the oracle of rd_tex_test's halo, rd_pixel_test's sheet text and the menu
-# text comparisons.
+# ico_sheet_ref: font_sheet_ps on the CPU (test/sheet_ref.h),
+# the oracle of rd_pixel_test's sheet text and the menu text comparisons.
 # Plain C; built in every configuration.
 add_library(ico_sheet_ref STATIC test/sheet_ref.c)
 target_include_directories(ico_sheet_ref PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/test"
@@ -221,7 +220,7 @@ target_include_directories(rd_tex_test PRIVATE ${_ico_seki_incs}
 target_compile_definitions(rd_tex_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(rd_tex_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
-target_link_libraries(rd_tex_test PRIVATE ico_render ico_math ico_options ico_sheet_ref)
+target_link_libraries(rd_tex_test PRIVATE ico_render ico_math ico_options)
 
 # rd_gsbase_test: GsBase.c's host path with the 2D layer
 # (GifPacket.c, DisplayList.c, DmaPacket.c) as the window build has them,
