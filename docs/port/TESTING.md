@@ -187,7 +187,7 @@ program under an environment switch ([Environment switches](#environment-switche
 - `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
-- `diag_test.c`: the crash report, assert, watchdog and progress cases, each in a child process
+- `diag_test.c`: the crash report, assert, watchdog, progress, start-up activity file and device-loss restart cases, each in a child process
   whose log is read back (`diag`).
 - `dump_zip_test.c`: F12's zip and the aspect sweep's zip, written and read back with miniz
   (`dump_zip`).
