@@ -222,7 +222,8 @@ phone closes it without a message (for example when the phone runs short
 of memory); the log then just stops. If that happened while the game was
 getting its graphics ready, the next start's log says where it stopped,
 and from then on the game gets its graphics ready as you play until you
-install a new version. Send `logs/ico-pc.log` from the start where it
+install a new version, or until you delete the file `startup-activity.txt`
+in the `logs` folder. Send `logs/ico-pc.log` from the start where it
 happened. If you have started the game again since, the log of the start
 before is `logs/ico-pc-previous.log`. If you cannot send the whole file,
 copy everything from the line of `=====` signs near the end (the next line

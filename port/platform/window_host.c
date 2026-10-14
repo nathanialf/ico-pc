@@ -919,7 +919,6 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
     return true;
 }
 
-#if defined(__ANDROID__) || defined(ICO_IOS)
 /* the start-up screen's state and callback (the callback is below, with the
    progress view) */
 typedef struct PipeScreen {
@@ -928,7 +927,6 @@ typedef struct PipeScreen {
 } PipeScreen;
 
 static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
-#endif
 
 #ifdef __ANDROID__
 static const char k_driver_box[] =
@@ -1226,18 +1224,17 @@ open_window:
         /* the note of each pipeline in the file while the set is created,
            the file deleted when it is done */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
-#if defined(__ANDROID__) || defined(ICO_IOS)
         static PipeScreen screen;
 
-        /* a start with a cold driver cache can take many seconds on a
-           phone: say what is going on (nothing is drawn when it is quick).
-           The PC keeps its silent start. */
+        /* a start with a cold driver cache can take many seconds (a phone,
+           or a PC after a version that changed the shaders): say what is
+           going on (nothing is drawn when it is quick), and take the
+           window's events meanwhile, so the system does not call the
+           window "Not Responding" (Windows does after 5 s) and a close
+           asked meanwhile ends the run once the set is done */
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
-#else
-        rd_precreate_pipelines();
-#endif
         ico_diag_startup_activity_record(0);
     }
     /* which way of reading the depth gives the fog its distances on this
@@ -2194,7 +2191,6 @@ int ico_window_progress(const char *title, const char *phase, int pct)
     return stop || s_quitLatched;
 }
 
-#if defined(__ANDROID__) || defined(ICO_IOS)
 /* The start-up screen while the graphics are prepared (rd_set_pipeline_progress).
    With the graphics already prepared (the driver's saved cache, a start that
    follows another) this takes a few tens of milliseconds and nothing is
@@ -2226,7 +2222,6 @@ static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
     /* the present itself took time: the next draw is measured from its end */
     p->lastNs = SDL_GetTicksNS();
 }
-#endif
 
 /* ico-pc-perf.csv in the logs folder, beside ico-pc.log
    (ico_host_logs_dir), opened on the first record when [dev] perf_log is
