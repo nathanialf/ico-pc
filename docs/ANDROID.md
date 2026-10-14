@@ -224,7 +224,8 @@ getting its graphics ready, the next start's log says where it stopped,
 and from then on the game gets its graphics ready as you play until you
 install a new version, or until you delete the file `startup-activity.txt`
 in the `logs` folder. Send `logs/ico-pc.log` from the start where it
-happened. If you have started the game again since, the log of the start
+happened. The same goes for a message that the graphics driver stopped
+responding while the game was drawing: the log says what was being drawn. If you have started the game again since, the log of the start
 before is `logs/ico-pc-previous.log`. If you cannot send the whole file,
 copy everything from the line of `=====` signs near the end (the next line
 says `CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines if

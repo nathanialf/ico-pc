@@ -142,6 +142,12 @@ anything you had not saved is lost, as when you quit. Nothing is changed
 in your settings: the next start is normal again. If it keeps happening,
 set an overclocked card back to its stock clocks (see below).
 
+**"The graphics driver stopped responding while the game was drawing ..."**
+(on a phone) The phone's graphics driver failed while drawing a picture,
+and the game has to close; your last save is kept. Start the game again. If
+it happens every time at the same place, send the log (the message names
+the file) with a report: the log says what was being drawn.
+
 **"The graphics card stopped responding ..."** The graphics driver was
 reset, updated or crashed while you played, and the game has to close.
 When the message also says the game restarted itself with simpler blending

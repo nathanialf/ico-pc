@@ -1492,6 +1492,23 @@ static int device_lost_quit(void)
         ico_diag_watchdog_pause(1);
         const Uint64 t0 = SDL_GetTicksNS();
 
+#if defined(__ANDROID__) || defined(ICO_IOS)
+        /* a phone: no card, no overclock, no restart step; the player's
+           next move is to start again and, if it repeats, send the log,
+           which names what was being drawn (the pass ring above) */
+        char text[640];
+        char logs[ICO_PATH_MAX];
+        if (ico_host_logs_dir(logs, sizeof(logs)) != 0) {
+            logs[0] = '\0';
+        }
+        snprintf(text, sizeof(text),
+                 "The graphics driver stopped responding while the game was drawing, so the game "
+                 "has to close. Your last save is kept.\n\nStart the game again. If this "
+                 "happens every time at the same place, please send the log file%s%s%s with a "
+                 "report at github.com/nathanialf/ico-pc/issues: it says what was being drawn.",
+                 logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
+#else
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR, "ICO PC",
             startup_retry_is_loss(s_retry)
@@ -1505,6 +1522,7 @@ static int device_lost_quit(void)
                   "the log says why.\n\nIf the graphics card is overclocked, try its stock "
                   "clocks first.",
             s_window);
+#endif
         fprintf(stderr, "window: the message was closed after %.1f s\n",
                 (double)(SDL_GetTicksNS() - t0) / 1e9);
         ico_diag_watchdog_pause(0);
