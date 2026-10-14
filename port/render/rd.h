@@ -332,7 +332,9 @@ typedef struct RdSettings {
     uint8_t filterUpgrade;   /* RdFilterUpgrade: trilinear/anisotropic with generated mips */
     uint8_t fullHeightScene; /* skip the vertical halving of the reduction pass */
     /* the reduction pass draws the whole frame, with no black border and no
-     * wrap at the edge (rd_replay.c doBlurSprite) */
+     * wrap at the edge (rd_replay.c doBlurSprite); the picture's box, scale
+     * and crop are the same with it off (rd_present.c outputBox,
+     * rd__apply_display), which borderMask below masks */
     uint8_t fullPixel;
     uint8_t vsync;
     /* Texture packs ([video] texture_pack, dump_textures): replacements
@@ -366,7 +368,16 @@ typedef struct RdSettings {
      * Original preset, and an MSAA value outside rd_aa_supported_mask()
      * draws as OFF. */
     uint8_t antiAlias;
-    uint8_t _pad[1];
+    /* Full pixel off in the game (the host sets it with fullPixel 0): the
+     * picture is Full pixel on's, the reduction drawing the whole frame as
+     * above (rd_replay.c), and the presenter draws the game's border over
+     * it as a black mask at the picture's own scale (rd_present.c
+     * rd__border_mask: 2 GS columns at the sides, the reduction's rows at
+     * the top and bottom), as the PS2's reduction scissor hid the picture's
+     * edge.  0 in a zeroed RdSettings: the reduction keeps its recorded
+     * scissor, DISPLAY's border is the GS's own (the tests' PS2 models,
+     * the replay tool without --border-mask); ignored with fullPixel. */
+    uint8_t borderMask;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

@@ -2467,6 +2467,15 @@ bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held,
     return true;
 }
 
+/* The reduction's border open: Full pixel on, or off in the game, where the
+ * presenter masks the border over the same picture (RdSettings.borderMask,
+ * rd_present.c rd__border_mask), so the picture inside the mask is Full
+ * pixel on's.  Neither in a zeroed RdSettings: the GS's own DISPLAY */
+static bool borderOpen(void)
+{
+    return g_rd.settings.fullPixel || g_rd.settings.borderMask;
+}
+
 /* Full pixel: a sprite the game tags RD_SPACE_FULLFRAME (a bar or fade that
  * spans the frame: layout_texture.c's spanning items and primary sprite,
  * the posts' rects) that ends one pixel short of the target's edge is moved
@@ -2487,7 +2496,7 @@ static const RdScreenVtx *extendFullFrame(const Replay *r, const RdTargetRec *tc
 {
     static RdScreenVtx *s_wv;
     static uint32_t s_wvCap;
-    if (!g_rd.settings.fullPixel || !tc || !frameSized(tc) || space != RD_SPACE_FULLFRAME ||
+    if (!borderOpen() || !tc || !frameSized(tc) || space != RD_SPACE_FULLFRAME ||
         prim != RD_PRIM_SPRITES || n < 2) {
         return v;
     }
@@ -2676,7 +2685,7 @@ static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
  * strip of the far edge's colour.  Image textures keep their wrap. */
 static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w)
 {
-    if (w == RD_WRAP_CLAMP || !g_rd.settings.fullPixel || !ds->textured || !r->st.ds.texEnabled) {
+    if (w == RD_WRAP_CLAMP || !borderOpen() || !ds->textured || !r->st.ds.texEnabled) {
         return w;
     }
     const RdTexRec *t = rd__tex_rec(r->st.tex);
@@ -5566,7 +5575,8 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
 }
 
-/* The reduction's textured sprite with Full pixel on.  The game draws it
+/* The reduction's textured sprite with Full pixel on (or the border mask:
+ * borderOpen).  The game draws it
  * inside a scissor two columns and a few rows in from the frame's edge (the
  * black border), and with the wrap it never sets to CLAMP, so the last
  * column also blends in a quarter of the first.  Here the scissor is the
@@ -5577,7 +5587,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
  * clear sprite before it is not textured and covers everything already. */
 static void doBlurSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
-    if (!g_rd.settings.fullPixel || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
+    if (!borderOpen() || c->b[0] != RD_POST_REDUCTION || !r->st.ds.texEnabled) {
         doBlurSpriteDraw(r, f, c);
         return;
     }

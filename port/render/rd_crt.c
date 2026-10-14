@@ -9,10 +9,11 @@
  * The filter works on the source grid: the PS2 picture's pixels, 512
  * across at 4:3, and DISPLAY's lines (the PS2's field lines; 512 with
  * full_height).  On a wider frame the grid is the native frame's columns
- * that the picture shows (rd__frame_wshown): with Full pixel off the whole
- * frame, its border included; on, its exact width in whole GS pixels, the
- * (gsW - wExact) / 2 columns past it at each side, rounded, left out
- * (rd__crt_crop; the box blit crops the same columns unrounded),
+ * that the picture shows: its exact width (rd__frame_wexact) in whole GS
+ * pixels, the (gsW - wExact) / 2 columns past it at each side, rounded,
+ * left out (rd__crt_crop; the box blit crops the same columns unrounded),
+ * with Full pixel on and off (off, the game's border is a mask over the
+ * tube's box, step 3),
  * so a phosphor triad covers one of the picture's pixels at every aspect,
  * in a box of the grid's shape (rd__crt_box: a source pixel as many output
  * pixels across as at 4:3), and the mirror flips it about the native
@@ -349,13 +350,12 @@ float rd__crt_beam(float c, float d, float beamMin, float beamMax)
 
 uint32_t rd__crt_crop(void)
 {
-    /* (gsW - wShown) / 2 rounded to whole GS pixels; none at 512 (4:3)
-       and with Full pixel off (the whole frame: rd__frame_wshown) */
+    /* (gsW - wExact) / 2 rounded to whole GS pixels; none at 512 (4:3) */
     const uint32_t gw = g_rd.gsW ? g_rd.gsW : ICO_FRAME_BASE_W;
     if (gw == ICO_FRAME_BASE_W) {
         return 0;
     }
-    const float we = rd__frame_wshown();
+    const float we = rd__frame_wexact();
     if (!(we < (float)gw)) {
         return 0;
     }
@@ -496,10 +496,13 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
 }
 
 /* steps 1 to 3: src (vw x vh, the grid, SHADER_READ) through the glow
- * targets ga and gb into box of out, black around it */
+ * targets ga and gb into box of out, black around it; border: the game's
+ * picture, which Full pixel off masks (rd__border_mask: the composite's
+ * scissor inset by the border at the grid's scale, the cleared black in
+ * the bands; not the films') */
 static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, uint32_t vw,
                     uint32_t vh, CrtTex *ga, CrtTex *gb, RhiTexture out, RhiFormat outFmt,
-                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror)
+                    uint32_t outW, uint32_t outH, const RhiRect *box, int mirror, bool border)
 {
     const RdCrtParams p = *pp;
     const RdPipeKeyInt kBloom = rd__post_key(RD_VS_CRT, RD_FS_CRT_BLOOM, RHI_FMT_RGBA16F);
@@ -565,6 +568,10 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     beginPass(cl, out, outW, outH, RHI_LOAD_CLEAR, box);
     rhi_cmd_set_viewport(
         cl, &(RhiViewport){(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f});
+    RhiRect mask;
+    if (border && rd__border_mask(box, (float)vw, g_rd.gsH, &mask)) {
+        rhi_cmd_set_scissor(cl, &mask);
+    }
     crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
     rhi_cmd_end_render_pass(cl);
     s_passes++;
@@ -634,7 +641,8 @@ bool rd__crt_record(RhiCommandList cl, const RdTargetRec *disp, RhiTexture out, 
         }
         mirror = 0;
     }
-    return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, mirror);
+    return compose(cl, &p, src, vw, vh, &s_glowA, &s_glowB, out, outFmt, outW, outH, box, mirror,
+                   true);
 }
 
 void rd__crt_film_grid(uint32_t dispH, uint32_t *vw, uint32_t *vh)
@@ -662,8 +670,8 @@ bool rd__crt_record_film(RhiCommandList cl, RhiTexture pic, uint32_t pw, uint32_
         }
         src = s_filmSrc.t;
     }
-    return compose(cl, &p, src, vw, vh, &s_filmGlowA, &s_filmGlowB, out, outFmt, outW, outH, box,
-                   0);
+    return compose(cl, &p, src, vw, vh, &s_filmGlowA, &s_filmGlowB, out, outFmt, outW, outH, box, 0,
+                   false);
 }
 
 uint32_t rd__crt_last_pass(uint32_t *vw, uint32_t *vh)

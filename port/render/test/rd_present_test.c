@@ -48,10 +48,15 @@
  *             an odd 2341 x 1080): SCENE and DISPLAY the box's exact size,
  *             the present DISPLAY byte for byte, the frame's 4:3 columns
  *             the 4:3 picture at the box's height byte for byte (SCENE;
- *             DISPLAY but the reduction's edge columns); the Full pixel off
- *             frame's columns against them logged, and where the 688-rounded
- *             frame is even (a whole-texel crop: 2580 and 3870 wide) byte for
- *             byte the same (SCENE; DISPLAY but its edge columns)
+ *             DISPLAY but the reduction's edge columns); Full pixel off (the
+ *             game's border mask) SCENE and DISPLAY the on run's byte for
+ *             byte and the present the on present under the mask; the
+ *             present pinned with it on (hashes), and off at every pinned
+ *             case the pinned picture under the mask
+ *   border    Full pixel off at 448 and 512 lines (16:9 1080p, 1440p and
+ *             4K, 4:3, 48:9, odd sizes): the mask's bands 2 GS columns at
+ *             the picture's scale and the reduction's rows, within a pixel,
+ *             black; the on picture inside them; DISPLAY the on one's
  *   present info  with interpolation off, rd_last_present_info names the
  *             frame rd_end_frame presented
  *   full pixel  the reduction draws the whole frame: the box's edges show
@@ -1272,18 +1277,20 @@ static void checkScales(void)
     applyWith(&s);
     CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && g_rd.workScale == 2.0f,
           "scales: 1920x1440");
-    /* the window's box at 16:9 with Full pixel off: the whole frame (688
-     * columns) at its own shape, 1920 x 1072 of 1920 x 1080, one texel an
-     * output pixel, the PS2's pixel shape kept */
+    /* the window's box at 16:9: the box's exact width (682.67 of the 688
+     * columns) over 1920, one texel an output pixel, the PS2's pixel shape
+     * kept, with Full pixel off (the game's: the border mask over the same
+     * picture) and on */
     s.sceneWidth = s.sceneHeight = 0;
     s.outputWidth = 1920;
     s.outputHeight = 1080;
     s.aspect = 16.0f / 9.0f;
     frameFor(s.aspect);
+    s.borderMask = 1;
     applyWith(&s);
-    CHECK(near(g_rd.sceneSx, 1920.0f / 688.0f) && near(g_rd.sceneSy, 1072.0f / 512.0f),
-          "scales: the window's 16:9 box, the whole frame (%g, %g)", g_rd.sceneSx, g_rd.sceneSy);
-    /* on: the box's exact width (682.67 of the 688 columns) over 1920 */
+    CHECK(g_rd.sceneSx == 2.8125f && near(g_rd.sceneSy, 1080.0f / 512.0f),
+          "scales: the window's 16:9 box with Full pixel off (%g, %g)", g_rd.sceneSx, g_rd.sceneSy);
+    s.borderMask = 0;
     s.fullPixel = 1;
     applyWith(&s);
     CHECK(g_rd.sceneSx == 2.8125f && near(g_rd.sceneSy, 1080.0f / 512.0f),
@@ -2093,13 +2100,10 @@ static void checkWide169(void)
     uint8_t *p = readTarget(RD_TARGET_SCENE, &w, &h);
     CHECK(p && w == FW && h == 512, "wide169: SCENE is 688x512, square texels (%ux%u)", w, h);
     {
-        /* rd_ui_box: the 4:3 pillar of the present's box, which with Full
-           pixel off is the whole 688-column frame at its shape, 960 x 536
-           at y 2 of the 960 x 540 output: the frame's 4:3 columns are
-           512 / 688 of 960 (714.4) */
+        /* rd_ui_box: the 4:3 pillar of the 960 x 540 output's 16:9 box */
         const RdRect u = rd_ui_box();
-        CHECK(u.x == 123 && u.y == 2 && u.w == 715 && u.h == 536,
-              "wide169: rd_ui_box is the 715 x 536 pillar (%d,%d %ux%u)", u.x, u.y, u.w, u.h);
+        CHECK(u.x == 120 && u.y == 0 && u.w == 720 && u.h == 540,
+              "wide169: rd_ui_box is the 720 x 540 pillar (%d,%d %ux%u)", u.x, u.y, u.w, u.h);
     }
     if (p && w == FW && h == 512) {
 #define PX(x, y) (&p[((y) * (int)FW + (x)) * 4])
@@ -2139,18 +2143,19 @@ static void checkWide169(void)
               "wide169: below the top bar the scene shows");
 #undef PX
     }
-    /* the present with Full pixel off: the whole frame (688 columns) in the
-     * 960 x 536 box at y 2, so the reduction's 2-column black border is at
-     * the box's sides (2.8 output pixels) and the fill is red inside it */
+    /* the present: the frame's exact width (682.67 of 688 columns) fills the
+     * 960 x 540 output; the (688 - 682.67) / 2 columns cropped at each side
+     * take the reduction's 2-column black border with them, so the fill
+     * reaches the output's first and last columns (the GS's DISPLAY: no
+     * border mask) */
     static uint8_t out[960 * 540 * 4];
     uint32_t ow = 0, oh = 0;
     if (rd__read_present(out, sizeof(out), &ow, &oh) && ow == 960 && oh == 540) {
-        const size_t row = (size_t)(2 + 305 * 536 / 512) * 960;
-        const uint8_t *q0 = &out[(row + 0) * 4], *q1 = &out[(row + 959) * 4];
-        const uint8_t *r0 = &out[(row + 4) * 4], *r1 = &out[(row + 955) * 4];
-        CHECK(q0[0] < 8 && q1[0] < 8 && r0[0] > 200 && r1[0] > 200,
-              "wide169: the border at the box's sides, the fill inside it (%u %u, %u %u)", q0[0],
-              q1[0], r0[0], r1[0]);
+        const uint8_t *q0 = &out[(305 * 540 / 512 * 960 + 0) * 4];
+        const uint8_t *q1 = &out[(305 * 540 / 512 * 960 + 959) * 4];
+        CHECK(q0[0] > 200 && q1[0] > 200,
+              "wide169: the fill reaches the output's edges, the border cropped (%u, %u)", q0[0],
+              q1[0]);
     } else {
         CHECK(0, "wide169: present readback");
     }
@@ -2165,8 +2170,10 @@ static void checkWide169(void)
  * own, in rows 160..352 (the centre row's neighbourhood).  The presented
  * picture's centre row must equal the DISPLAY row's texels srcX .. srcX + outW
  * byte for byte (no half-texel blend: u0 = floor(crop + 1/2), snapWindow);
- * wantScene is the scene's width (with Full pixel off the box's own width:
- * the box shows the whole frame) and srcX the first texel shown. */
+ * wantScene is the scene's width (the box's exact width at the box's scale
+ * and RD_FULL_PIXEL_GUARD texels a side where the frame is cropped: 1922 at
+ * 1920 across 16:9, Full pixel off as on) and srcX the first texel shown
+ * (the guard). */
 static void checkOneToOne(const char *name, float aspect, uint32_t outW, uint32_t outH,
                           uint32_t wantScene, uint32_t srcX)
 {
@@ -2252,11 +2259,13 @@ static void checkOneToOne(const char *name, float aspect, uint32_t outW, uint32_
 
 static void checkPresent1to1(void)
 {
-    /* Full pixel off shows the whole native frame (688 columns) at its own
-     * shape: a scene of 1920 across the 1920 x 1072 box, nothing cropped */
-    checkOneToOne("1to1 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080, 1920, 0);
-    /* the same at 4K (3840 x 2143) */
-    checkOneToOne("1to1 3840x2160 16:9", 16.0f / 9.0f, 3840, 2160, 3840, 0);
+    /* the box's exact width (682.67 of 688 columns): a scene of 1920 and
+     * its guard texels across the 1920 box, shown from the guard */
+    checkOneToOne("1to1 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080, 1920 + 2 * RD_FULL_PIXEL_GUARD,
+                  RD_FULL_PIXEL_GUARD);
+    /* the same at 4K */
+    checkOneToOne("1to1 3840x2160 16:9", 16.0f / 9.0f, 3840, 2160, 3840 + 2 * RD_FULL_PIXEL_GUARD,
+                  RD_FULL_PIXEL_GUARD);
     /* 48:9: the native 2048 is the exact width, no crop */
     checkOneToOne("1to1 3840x2160 48:9", 48.0f / 9.0f, 3840, 2160, 3840, 0);
 }
@@ -2268,12 +2277,94 @@ static void checkPresent1to1(void)
  * (its snapshot through the UV crop, nearest), then the reduction into
  * DISPLAY; full height, so DISPLAY has every row.  The Enhanced window
  * resolution at aspect `aspect` in outW x outH.  Returns SCENE, DISPLAY and
- * the present (malloc'd; NULL on a failed readback) and the box. */
+ * the present (malloc'd; NULL on a failed readback) and the box.  full: 0
+ * Full pixel off with the GS's own DISPLAY (a zeroed RdSettings), 1 on, 2
+ * off as the game has it (RdSettings.borderMask). */
 typedef struct {
     uint8_t *scene, *disp, *out;
     uint32_t sw, sh, dw, dh;
     RhiRect box;
 } ExactRun;
+
+/* The last run's border mask (exactRun, fullPixelRun, checkBorderOff),
+ * noted before rd_shutdown: the present's box, the mask's rect in it
+ * (rd__border_mask; on 0 without the mask), the frame's exact width and
+ * lines */
+typedef struct {
+    RhiRect box, inner;
+    int on;
+    float we;
+    uint32_t gsH;
+} MaskInfo;
+
+static MaskInfo s_mask;
+
+static void noteMask(void)
+{
+    memset(&s_mask, 0, sizeof(s_mask));
+    uint32_t w = 0, h = 0;
+    if (!rd__last_present_box(&w, &h, &s_mask.box)) {
+        return;
+    }
+    s_mask.we = rd__frame_wexact();
+    s_mask.gsH = g_rd.gsH;
+    s_mask.on = rd__border_mask(&s_mask.box, s_mask.we, s_mask.gsH, &s_mask.inner);
+}
+
+/* Full pixel off in the game against on, both outW x outH presents of the
+ * same frame: the mask's rect m->inner is the on picture byte for byte,
+ * the rest of the box (the bands) black, outside the box the on present;
+ * and the bands are the game's border at the picture's own scale within a
+ * pixel: 2 GS columns of box.w / we output pixels at each side, and the
+ * reduction's crop rows of DISPLAY's gsH / 2 (2 of 224 at 448 lines, 8 of
+ * 256 at 512) of the box's height at the top and bottom.  Nothing of the
+ * picture moves: the mask only hides its edge. */
+static void checkMaskAgainst(const char *name, const uint8_t *off, const uint8_t *on, uint32_t outW,
+                             uint32_t outH, const MaskInfo *m)
+{
+    CHECK(m->on, "%s: the border mask is drawn", name);
+    if (!m->on) {
+        return;
+    }
+    const RhiRect *b = &m->box, *in = &m->inner;
+    const int32_t l = in->x - b->x, t = in->y - b->y;
+    const int32_t r = (b->x + (int32_t)b->w) - (in->x + (int32_t)in->w);
+    const int32_t bo = (b->y + (int32_t)b->h) - (in->y + (int32_t)in->h);
+    const float crop = m->gsH >= 512u ? 8.0f : 2.0f;
+    const float side = 2.0f * (float)b->w / m->we;
+    const float rows = (float)b->h * crop / ((float)m->gsH * 0.5f);
+    printf("%s: border mask: box %d,%d %ux%u, bands %d left, %d right, %d top, %d bottom (the "
+           "border %.3f a side, %.3f top and bottom)\n",
+           name, b->x, b->y, b->w, b->h, l, r, t, bo, (double)side, (double)rows);
+    CHECK(fabsf((float)l - side) <= 1.0f && fabsf((float)r - side) <= 1.0f,
+          "%s: the side bands are 2 GS columns at the picture's scale (%d, %d; %.3f)", name, l, r,
+          (double)side);
+    CHECK(fabsf((float)t - rows) <= 1.0f && fabsf((float)bo - rows) <= 1.0f,
+          "%s: the top and bottom bands are %g of %u lines (%d, %d; %.3f)", name, (double)crop,
+          m->gsH / 2u, t, bo, (double)rows);
+    uint32_t inside = 0, band = 0, outside = 0;
+    for (uint32_t y = 0; y < outH; y++) {
+        for (uint32_t x = 0; x < outW; x++) {
+            const size_t o = ((size_t)y * outW + x) * 4;
+            const int32_t X = (int32_t)x, Y = (int32_t)y;
+            const int inBox =
+                X >= b->x && X < b->x + (int32_t)b->w && Y >= b->y && Y < b->y + (int32_t)b->h;
+            const int inMask = X >= in->x && X < in->x + (int32_t)in->w && Y >= in->y &&
+                               Y < in->y + (int32_t)in->h;
+            if (inMask) {
+                inside += memcmp(&off[o], &on[o], 4) != 0;
+            } else if (inBox) {
+                band += (off[o] | off[o + 1] | off[o + 2]) != 0;
+            } else {
+                outside += memcmp(&off[o], &on[o], 4) != 0;
+            }
+        }
+    }
+    CHECK(inside == 0 && band == 0 && outside == 0,
+          "%s: inside the mask the on picture byte for byte, the bands black (%u pixels differ "
+          "inside, %u lit in the bands, %u differ outside the box)",
+          name, inside, band, outside);
+}
 
 /* exactRun without its Gouraud triangle: every remaining pixel is a flat
  * colour or a whole-texel copy, the same on every conformant device (the
@@ -2297,7 +2388,8 @@ static bool exactRun(float aspect, uint32_t outW, uint32_t outH, int full, Exact
     s.sceneScale = 0.0f;
     s.outputWidth = outW;
     s.outputHeight = outH;
-    s.fullPixel = (uint8_t)full;
+    s.fullPixel = (uint8_t)(full == 1);
+    s.borderMask = (uint8_t)(full == 2);
     s.fullHeightScene = 1;
     const uint32_t FW = (uint32_t)ico_frame_width_for(aspect);
     if (!rd_init(FW, 512, &s, NULL)) {
@@ -2365,6 +2457,7 @@ static bool exactRun(float aspect, uint32_t outW, uint32_t outH, int full, Exact
                     oh == outH;
     CHECK(rhi_vk_validation_error_count() == 0, "exact window: %u validation errors",
           rhi_vk_validation_error_count());
+    noteMask();
     rd_shutdown();
     if (!ok) {
         exactFree(e);
@@ -2450,9 +2543,10 @@ static void checkExactEdges(const char *name, const ExactRun *a, uint32_t outW, 
  * and the frame's 4:3 columns are byte for byte the 4:3 picture at the
  * same height (the Enhanced window at 4:3 in a box as high: "4:3 is a
  * camera"): SCENE whole, DISPLAY but the reduction's few columns at the
- * 4:3 picture's own edges (it reads past them there).  With it off the
- * scene is the box of the whole frame at its shape (1920 x 1072 at 1080p
- * 16:9). */
+ * 4:3 picture's own edges (it reads past them there).  With it off (the
+ * game's: the border mask) SCENE and DISPLAY are the on run's byte for
+ * byte and the present is the on present under the mask
+ * (checkMaskAgainst). */
 static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint32_t outH)
 {
     ExactRun a, b, c;
@@ -2507,24 +2601,37 @@ static void checkExactWindow(const char *name, float aspect, uint32_t outW, uint
         CHECK(0, "%s: the 4:3 picture is %ux%u (%ux%u wanted)", name, b.sw, b.sh, w43, a.sh);
     }
     exactFree(&b);
-    if (exactRun(aspect, outW, outH, 0, &c)) {
-        /* off: the whole frame at its own shape (rd__frame_wshown), SCENE
-           as wide as that box (checkBorderOff checks its picture) */
-        RhiRect bo;
-        rd__present_box(outW, outH, fr.w == 512 ? 4.0f / 3.0f : (float)fr.w / 384.0f, &bo);
-        CHECK(c.sw == bo.w && c.sh == bo.h,
-              "%s: full pixel off: SCENE is the whole frame's box, %ux%u (%ux%u)", name, bo.w, bo.h,
-              c.sw, c.sh);
+    if (exactRun(aspect, outW, outH, 2, &c)) {
+        /* off: the same frame, the same picture, the border masked over
+           it at present (rd__border_mask) */
+        const MaskInfo m = s_mask;
+        CHECK(c.sw == a.sw && c.sh == a.sh && c.dw == a.dw && c.dh == a.dh,
+              "%s: full pixel off: SCENE and DISPLAY are the on run's size (%ux%u, %ux%u)", name,
+              c.sw, c.sh, c.dw, c.dh);
+        if (c.sw == a.sw && c.sh == a.sh && c.dw == a.dw && c.dh == a.dh) {
+            CHECK(memcmp(c.scene, a.scene, (size_t)a.sw * a.sh * 4) == 0 &&
+                      memcmp(c.disp, a.disp, (size_t)a.dw * a.dh * 4) == 0,
+                  "%s: full pixel off: SCENE and DISPLAY are the on run's byte for byte (the "
+                  "mask is not in them)",
+                  name);
+            char nm[160];
+            snprintf(nm, sizeof(nm), "%s off", name);
+            checkMaskAgainst(nm, c.out, a.out, outW, outH, &m);
+        }
         exactFree(&c);
+    } else {
+        CHECK(0, "%s: full pixel off readback", name);
     }
     exactFree(&a);
 }
 
 /* Full pixel on, pinned: the present of the Enhanced window (exactRun
  * without its triangle) and of a fixed resolution (fullPixelRun's red
- * frame) hash to what they were measured at before the Full pixel off
- * box changed, so that change cannot have touched the on picture.  0
- * prints the hash (to measure a new case). */
+ * frame) hash to what they were measured at before v0.7.4's Full pixel
+ * off box changed (the same values since: the border mask changes off
+ * alone), so no Full pixel off change can have touched the on
+ * picture.  0 prints the hash (to measure a new case).  Off at each pinned
+ * case is the on present under the border mask (checkMaskPin). */
 static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int fullHeight,
                          float scale, uint8_t *dst, uint32_t *ow, uint32_t *oh);
 
@@ -2561,6 +2668,41 @@ static void checkFullPixelOnPinFixed(const char *name, float aspect, float scale
           (unsigned long long)got, (unsigned long long)want);
 }
 
+/* Full pixel off at a pinned case: the on present (the pinned picture,
+ * without the triangle) under the border mask, byte for byte inside it */
+static void checkMaskPin(const char *name, float aspect, uint32_t outW, uint32_t outH)
+{
+    ExactRun a, c;
+    s_exactNoTri = 1;
+    const bool okA = exactRun(aspect, outW, outH, 1, &a);
+    const bool okC = okA && exactRun(aspect, outW, outH, 2, &c);
+    const MaskInfo m = s_mask;
+    s_exactNoTri = 0;
+    if (!okC) {
+        CHECK(0, "%s: readback", name);
+        if (okA) {
+            exactFree(&a);
+        }
+        return;
+    }
+    checkMaskAgainst(name, c.out, a.out, outW, outH, &m);
+    exactFree(&a);
+    exactFree(&c);
+}
+
+static void checkMaskPinFixed(const char *name, float aspect, float scale)
+{
+    static uint8_t on[960 * 540 * 4], off[960 * 540 * 4];
+    uint32_t ow = 0, oh = 0;
+    if (!fullPixelRun(aspect, 960, 540, 1, 0, scale, on, &ow, &oh) ||
+        !fullPixelRun(aspect, 960, 540, 2, 0, scale, off, &ow, &oh)) {
+        CHECK(0, "%s: readback", name);
+        return;
+    }
+    const MaskInfo m = s_mask;
+    checkMaskAgainst(name, off, on, 960, 540, &m);
+}
+
 static void checkFullPixelOnPins(void)
 {
     checkFullPixelOnPin("on pin 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080, 1,
@@ -2576,10 +2718,17 @@ static void checkFullPixelOnPins(void)
     checkFullPixelOnPinFixed("on pin 16:9 1x", 16.0f / 9.0f, 1.0f, 1, 0xf3a2cee658fa9b25ull);
     checkFullPixelOnPinFixed("on pin 16:9 2x", 16.0f / 9.0f, 2.0f, 1, 0xf3a2cee658fa9b25ull);
     checkFullPixelOnPinFixed("on pin 4:3 1x", 4.0f / 3.0f, 1.0f, 1, 0x61c70a2a8bc63125ull);
-    /* off at 4:3, where the frame is its exact width: no box changed */
-    checkFullPixelOnPin("off pin 1440x1080 4:3", 4.0f / 3.0f, 1440, 1080, 0, 0xdb7d8b80a8a90725ull);
-    checkFullPixelOnPinFixed("off pin 4:3 1x", 4.0f / 3.0f, 1.0f, 0, 0xd3d0e6a8c395dc0dull);
-    checkFullPixelOnPin("off pin 3840x720 48:9", 48.0f / 9.0f, 3840, 720, 0, 0x7cfce9bed9c31c45ull);
+    /* off (the game's, the border mask) at each pinned case: the on
+     * picture under the mask */
+    checkMaskPin("mask pin 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080);
+    checkMaskPin("mask pin 2560x1440 16:9", 16.0f / 9.0f, 2560, 1440);
+    checkMaskPin("mask pin 3840x2160 16:9", 16.0f / 9.0f, 3840, 2160);
+    checkMaskPin("mask pin 3840x720 48:9", 48.0f / 9.0f, 3840, 720);
+    checkMaskPin("mask pin 2341x1080 odd", 2341.0f / 1080.0f, 2341, 1080);
+    checkMaskPin("mask pin 1440x1080 4:3", 4.0f / 3.0f, 1440, 1080);
+    checkMaskPinFixed("mask pin 16:9 1x", 16.0f / 9.0f, 1.0f);
+    checkMaskPinFixed("mask pin 16:9 2x", 16.0f / 9.0f, 2.0f);
+    checkMaskPinFixed("mask pin 4:3 1x", 4.0f / 3.0f, 1.0f);
 }
 
 static void checkExactWindows(void)
@@ -2595,7 +2744,8 @@ static void checkExactWindows(void)
  * black), presented into w x h.  The box's edge columns and rows are red
  * with the option on, the reduction drawing the whole frame, and, with it
  * off, the border shows.  scale above 1 runs the reduction on a scaled
- * target. */
+ * target.  full: as exactRun's (2: off as the game has it, the border
+ * mask) */
 static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int fullHeight,
                          float scale, uint8_t *dst, uint32_t *ow, uint32_t *oh)
 {
@@ -2603,7 +2753,8 @@ static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int ful
     s.aspect = aspect;
     s.outputWidth = w;
     s.outputHeight = h;
-    s.fullPixel = (uint8_t)full;
+    s.fullPixel = (uint8_t)(full == 1);
+    s.borderMask = (uint8_t)(full == 2);
     s.fullHeightScene = (uint8_t)fullHeight;
     if (aspect > 4.0f / 3.0f + 0.01f || scale > 1.0f) {
         s.preset = RD_PRESET_ENHANCED;
@@ -2628,6 +2779,7 @@ static bool fullPixelRun(float aspect, uint32_t w, uint32_t h, int full, int ful
     const bool ok = rd__read_present(dst, (size_t)w * h * 4, ow, oh) && *ow == w && *oh == h;
     CHECK(rhi_vk_validation_error_count() == 0, "full pixel: %u validation errors",
           rhi_vk_validation_error_count());
+    noteMask();
     rd_shutdown();
     return ok;
 }
@@ -2637,11 +2789,17 @@ static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint3
 {
     static uint8_t off[960 * 540 * 4], on[960 * 540 * 4];
     uint32_t ow = 0, oh = 0;
-    if (!fullPixelRun(aspect, w, h, 0, fullHeight, scale, off, &ow, &oh) ||
-        !fullPixelRun(aspect, w, h, 1, fullHeight, scale, on, &ow, &oh)) {
+    /* off as the game has it: the border mask over the on picture */
+    if (!fullPixelRun(aspect, w, h, 2, fullHeight, scale, off, &ow, &oh)) {
         CHECK(0, "%s: present readback", name);
         return;
     }
+    const MaskInfo m = s_mask;
+    if (!fullPixelRun(aspect, w, h, 1, fullHeight, scale, on, &ow, &oh)) {
+        CHECK(0, "%s: present readback", name);
+        return;
+    }
+    checkMaskAgainst(name, off, on, w, h, &m);
     RhiRect box;
     rd__present_box(w, h, aspect, &box);
     const uint32_t bw = box.w, bh = box.h;
@@ -2650,10 +2808,9 @@ static void checkFullPixelCase(const char *name, float aspect, uint32_t w, uint3
 #define RED(q) ((q)[0] > 200 && (q)[1] < 60 && (q)[2] < 60)
 #define BLACK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
     const uint32_t cx = w / 2, cy = h / 2;
-    /* off: the reduction's border at the box edge (2 of the frame's
-     * columns, 8 of DISPLAY's 256 rows), red inside, at every aspect: the
-     * box shows the whole frame (wider than 4:3 a box of the frame's own
-     * shape, a row or two of letterbox at 16:9, inside the aspect's box) */
+    /* off: the game's border masked at the box edge (2 of the frame's
+     * columns at the picture's scale, 8 of DISPLAY's 256 rows), red inside,
+     * at every aspect: the box is on's, the mask hides its edge */
     CHECK(BLACK(PXO(off, x0, cy)) && BLACK(PXO(off, x0 + 1, cy)) && BLACK(PXO(off, x1, cy)) &&
               BLACK(PXO(off, x1 - 1, cy)),
           "%s: off: the side columns are black", name);
@@ -2815,14 +2972,16 @@ static void checkFullPixelSharp(uint32_t w, uint32_t h)
  * bandTest 0: a blue column 0 and a blue row 0 in the scene.  1: a black
  * band, GS 1..511 across and the middle half of the rows, as the pause
  * menu's bars are drawn (full-frame tagged: the game draws them in
- * gif_FullFrameBegin's scope).  2: the same band UI-tagged. */
+ * gif_FullFrameBegin's scope).  2: the same band UI-tagged.  full: as
+ * exactRun's (2: off as the game has it, the border mask) */
 static uint8_t *clampRun(int full, float scale, int fullHeight, int mirror, int bandTest,
                          uint32_t *w, uint32_t *h)
 {
     static const uint8_t red[4] = {255, 0, 0, 0x80}, blue[4] = {0, 0, 255, 0x80},
                          black[4] = {0, 0, 0, 0x80};
     RdSettings s = originalSettings();
-    s.fullPixel = (uint8_t)full;
+    s.fullPixel = (uint8_t)(full == 1);
+    s.borderMask = (uint8_t)(full == 2);
     s.fullHeightScene = (uint8_t)fullHeight;
     s.mirror = (uint8_t)mirror;
     if (scale > 1.0f) {
@@ -3024,7 +3183,15 @@ static void checkFullPixelTargetWrap(void)
  * 0 into them; on the scaled target and with full height the last row's
  * bilinear taps reach past the scene's rows, where only the clamp matters),
  * and with the mirror on the left column, which then samples past the other
- * edge, is red.  The plain 1x case also keeps the exact value of column 0. */
+ * edge, is red.  The plain 1x case also keeps the exact value of column 0.
+ * Off as the game has it (the border mask), DISPLAY is the on one byte for
+ * byte: the mask is the presenter's. */
+static bool sameAsOn(const uint8_t *p, uint32_t w, uint32_t h, const uint8_t *on, uint32_t ow,
+                     uint32_t oh)
+{
+    return on && w == ow && h == oh && memcmp(p, on, (size_t)w * h * 4) == 0;
+}
+
 static void checkFullPixelClamp(void)
 {
     static const struct {
@@ -3038,7 +3205,9 @@ static void checkFullPixelClamp(void)
     };
 
     for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
-        for (int full = 0; full < 2; full++) {
+        uint8_t *on = NULL;
+        uint32_t ow = 0, oh = 0;
+        for (int full = 0; full < 3; full++) {
             const char *nm = cases[k].name;
             uint32_t w = 0, h = 0;
             uint8_t *p =
@@ -3047,10 +3216,22 @@ static void checkFullPixelClamp(void)
                 CHECK(0, "full pixel clamp %s: DISPLAY readback (%ux%u)", nm, w, h);
                 continue;
             }
+            if (full == 2) {
+                CHECK(sameAsOn(p, w, h, on, ow, oh),
+                      "full pixel clamp %s: off (border mask): DISPLAY is on's byte for byte", nm);
+                continue;
+            }
 #define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
 #define NOBLUE(q) ((q)[0] >= 250 && (q)[1] <= 2 && (q)[2] <= 2)
             const uint8_t *r = PX(w - 1, h / 2), *l = PX(0, h / 2);
             if (full) {
+                free(on);
+                on = (uint8_t *)malloc((size_t)w * h * 4);
+                if (on) {
+                    memcpy(on, p, (size_t)w * h * 4);
+                    ow = w;
+                    oh = h;
+                }
                 const uint8_t *bot = PX(w / 2, h - 1), *corner = PX(w - 1, h - 1);
                 CHECK(NOBLUE(bot) && NOBLUE(corner),
                       "full pixel clamp %s: the last row is red (%u %u %u, corner %u %u %u)", nm,
@@ -3083,6 +3264,7 @@ static void checkFullPixelClamp(void)
 #undef NOBLUE
 #undef PX
         }
+        free(on);
     }
 }
 
@@ -3092,7 +3274,8 @@ static void checkFullPixelClamp(void)
  * scene under it.  Rows outside the band keep the scene's red at the edge,
  * and with the option off the border stays black as it was.  The same band
  * UI-tagged is not extended: the tag is the rule, nothing is detected from
- * the pixels. */
+ * the pixels.  Off as the game has it (the border mask), DISPLAY is the on
+ * one byte for byte. */
 static void checkFullPixelBands(void)
 {
     static const struct {
@@ -3102,7 +3285,9 @@ static void checkFullPixelBands(void)
     } cases[] = {{1.0f, 0, "1x"}, {2.0f, 0, "2x"}, {1.0f, 1, "1x mirror"}, {2.0f, 1, "2x mirror"}};
 
     for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
-        for (int full = 0; full < 2; full++) {
+        uint8_t *on = NULL;
+        uint32_t ow = 0, oh = 0;
+        for (int full = 0; full < 3; full++) {
             const char *nm = cases[k].name;
             uint32_t w = 0, h = 0;
             uint8_t *p = clampRun(full, cases[k].scale, 0, cases[k].mirror, 1, &w, &h);
@@ -3110,10 +3295,22 @@ static void checkFullPixelBands(void)
                 CHECK(0, "full pixel bands %s: DISPLAY readback (%ux%u)", nm, w, h);
                 continue;
             }
+            if (full == 2) {
+                CHECK(sameAsOn(p, w, h, on, ow, oh),
+                      "full pixel bands %s: off (border mask): DISPLAY is on's byte for byte", nm);
+                continue;
+            }
 #define PX(x, y) (&p[((size_t)(y) * w + (x)) * 4])
 #define DARK(q) ((q)[0] < 8 && (q)[1] < 8 && (q)[2] < 8)
             const uint8_t *l = PX(0, h / 2), *r = PX(w - 1, h / 2), *m = PX(w / 2, h / 2);
             if (full) {
+                free(on);
+                on = (uint8_t *)malloc((size_t)w * h * 4);
+                if (on) {
+                    memcpy(on, p, (size_t)w * h * 4);
+                    ow = w;
+                    oh = h;
+                }
                 const uint8_t *lo = PX(0, h / 8), *ro = PX(w - 1, h / 8);
                 CHECK(DARK(l) && DARK(r) && DARK(m),
                       "full pixel bands %s: the band is black to both edges (%u %u %u, %u %u %u)",
@@ -3128,6 +3325,7 @@ static void checkFullPixelBands(void)
 #undef DARK
 #undef PX
         }
+        free(on);
     }
     uint32_t w = 0, h = 0;
     uint8_t *p = clampRun(1, 1.0f, 0, 0, 2, &w, &h);
@@ -3165,17 +3363,22 @@ static void checkPresentInfo(void)
     rd_shutdown();
 }
 
-/* Full pixel off: the PS2's picture with the reduction's black border on
- * all four sides, the whole frame fitted to the output at its own shape.
- * A red frame through the reduction at 448 lines (60 Hz: 2 of DISPLAY's
- * 224 rows a side), the Enhanced window resolution, presented into
- * outW x outH.  The black run from each side of the output at the centre
- * row and column must be the box's margin plus the border, the reduction's
- * 2 columns of the frame's W and 2 rows of 224 (in DISPLAY's whole rows,
- * doubled), within a pixel; and the
- * box is DISPLAY one texel an output pixel, line-doubled: the frame the
- * F12 dump saves and the presented picture are the same picture. */
-static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32_t outH)
+/* Full pixel off (the game's: RdSettings.borderMask): Full pixel on's
+ * picture, the same box, scale and crop, with the game's border masked
+ * over its edge at the picture's own scale, where the PS2's reduction
+ * scissor held it black (v0.7.4 shrank the whole frame into a box of its
+ * own shape instead).  A red frame through the reduction at
+ * gsH lines (448: 60 Hz, 2 of DISPLAY's 224 rows a side; 512: 50 Hz, 8 of
+ * 256), the Enhanced window resolution, presented into outW x outH off
+ * and on.  The black run from each side of the output at the centre row
+ * and column must be the box's margin plus the border, 2 columns of the
+ * frame's exact width at the box's scale and the crop's rows of the box's
+ * height, within a pixel (measured on the picture: on is red to the box's
+ * edges); inside the mask the present is on's byte for byte, the bands
+ * black (checkMaskAgainst); and DISPLAY, the picture the F12 dump saves,
+ * is on's byte for byte: the mask is the presenter's alone. */
+static bool borderRun(float aspect, uint32_t outW, uint32_t outH, uint32_t gsH, int full,
+                      uint8_t *out, uint8_t *disp, size_t cap, uint32_t *dw, uint32_t *dh)
 {
     RdSettings s = originalSettings();
     s.preset = RD_PRESET_ENHANCED;
@@ -3183,11 +3386,11 @@ static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32
     s.sceneScale = 0.0f;
     s.outputWidth = outW;
     s.outputHeight = outH;
-    s.fullPixel = 0;
+    s.fullPixel = (uint8_t)(full == 1);
+    s.borderMask = (uint8_t)(full == 2);
     const uint32_t FW = (uint32_t)ico_frame_width_for(aspect);
-    if (!rd_init(FW, 448, &s, NULL)) {
-        CHECK(0, "%s: init", name);
-        return;
+    if (!rd_init(FW, gsH, &s, NULL)) {
+        return false;
     }
     static const uint8_t red[4] = {255, 0, 0, 0x80};
     rd_begin_frame();
@@ -3199,25 +3402,39 @@ static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32
     pp.rgba[0] = pp.rgba[1] = pp.rgba[2] = 128;
     rd_post(RD_POST_REDUCTION, &pp);
     rd_end_frame(0);
+    uint32_t ow = 0, oh = 0;
+    const bool ok = rd__read_present(out, (size_t)outW * outH * 4, &ow, &oh) && ow == outW &&
+                    oh == outH && rd__read_target(rd_target(RD_TARGET_DISPLAY), disp, cap, dw, dh);
+    CHECK(rhi_vk_validation_error_count() == 0, "border: %u validation errors",
+          rhi_vk_validation_error_count());
+    noteMask();
+    rd_shutdown();
+    return ok;
+}
+
+static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32_t outH,
+                           uint32_t gsH)
+{
     const size_t cap = (size_t)4096 * 2304 * 4;
     uint8_t *out = (uint8_t *)malloc((size_t)outW * outH * 4);
+    uint8_t *on = (uint8_t *)malloc((size_t)outW * outH * 4);
     uint8_t *disp = (uint8_t *)malloc(cap);
-    uint32_t ow = 0, oh = 0, dw = 0, dh = 0;
-    const bool ok = out && disp && rd__read_present(out, (size_t)outW * outH * 4, &ow, &oh) &&
-                    ow == outW && oh == outH &&
-                    rd__read_target(rd_target(RD_TARGET_DISPLAY), disp, cap, &dw, &dh);
-    CHECK(rhi_vk_validation_error_count() == 0, "%s: %u validation errors", name,
-          rhi_vk_validation_error_count());
-    rd_shutdown();
+    uint8_t *dispOn = (uint8_t *)malloc(cap);
+    uint32_t dw = 0, dh = 0, dwOn = 0, dhOn = 0;
+    bool ok = out && on && disp && dispOn &&
+              borderRun(aspect, outW, outH, gsH, 2, out, disp, cap, &dw, &dh);
+    const MaskInfo m = s_mask;
+    ok = ok && borderRun(aspect, outW, outH, gsH, 1, on, dispOn, cap, &dwOn, &dhOn);
     if (!ok) {
         CHECK(0, "%s: readback", name);
         free(out);
+        free(on);
         free(disp);
+        free(dispOn);
         return;
     }
-    /* the box: the whole frame, FW / 384 (the 4:3 integer box at 512) */
-    RhiRect b;
-    rd__present_box(outW, outH, FW == 512u ? 4.0f / 3.0f : (float)FW / 384.0f, &b);
+    /* the box: on's, the frame's exact width (the 4:3 integer box at 512) */
+    const RhiRect b = m.box;
 #define PXB(x, y) (&out[((size_t)(y) * outW + (x)) * 4])
 #define DARK(q) ((q)[0] < 128)
     const uint32_t cx = outW / 2, cy = outH / 2;
@@ -3234,53 +3451,46 @@ static void checkBorderOff(const char *name, float aspect, uint32_t outW, uint32
     while (bo < outH && DARK(PXB(cx, outH - 1 - bo))) {
         bo++;
     }
-    const float side = (float)b.x + 2.0f * (float)b.w / (float)FW;
-    /* the scissor's 2 rows of 224 in DISPLAY's whole rows (b.h / 2 of
-       them), each presented twice */
-    const float top = (float)b.y + 2.0f * floorf(2.0f * (float)(b.h / 2u) / 224.0f);
-    printf("%s: off: box %d,%d %ux%u; black %u left, %u right, %u top, %u bottom (the picture "
-           "%u..%u x %u..%u; the border %.2f a side, %.2f top and bottom)\n",
-           name, b.x, b.y, b.w, b.h, l, r, t, bo, l, outW - 1 - r, t, outH - 1 - bo, (double)side,
-           (double)top);
-    CHECK(l > (uint32_t)b.x && r > (uint32_t)b.x && t > (uint32_t)b.y && bo > (uint32_t)b.y,
-          "%s: off: a black border inside the box on all four sides (%u %u %u %u)", name, l, r, t,
-          bo);
+    const float crop = gsH >= 512u ? 8.0f : 2.0f;
+    const float side = (float)b.x + 2.0f * (float)b.w / m.we;
+    const float top = (float)b.y + (float)b.h * crop / ((float)gsH * 0.5f);
+    printf("%s: off: box %d,%d %ux%u; black %u left, %u right, %u top, %u bottom (the border "
+           "%.2f a side, %.2f top and bottom)\n",
+           name, b.x, b.y, b.w, b.h, l, r, t, bo, (double)side, (double)top);
     CHECK(fabsf((float)l - side) <= 1.0f && fabsf((float)r - side) <= 1.0f,
-          "%s: off: the side borders are the box's margin and 2 of %u columns (%u, %u; %.2f)", name,
-          FW, l, r, (double)side);
+          "%s: off: the side borders are the box's margin and 2 of %.2f columns (%u, %u; %.2f)",
+          name, (double)m.we, l, r, (double)side);
     CHECK(fabsf((float)t - top) <= 1.0f && fabsf((float)bo - top) <= 1.0f,
-          "%s: off: the top and bottom borders are the box's margin and 2 of 224 rows (%u, %u; "
+          "%s: off: the top and bottom borders are the box's margin and %g of %u rows (%u, %u; "
           "%.2f)",
-          name, t, bo, (double)top);
-    /* the box is DISPLAY: one texel an output pixel, each row twice */
-    uint32_t bad = 0;
-    if (dw == b.w && dh * 2u == b.h) {
-        for (uint32_t y = 0; y < b.h; y++) {
-            bad += memcmp(PXB((uint32_t)b.x, (uint32_t)b.y + y), &disp[(size_t)(y / 2u) * dw * 4],
-                          (size_t)b.w * 4) != 0;
-        }
-    }
-    CHECK(dw == b.w && dh * 2u == b.h && bad == 0,
-          "%s: off: the box is DISPLAY (%ux%u, the box %ux%u) byte for byte, nothing cropped (%u "
-          "rows differ)",
-          name, dw, dh, b.w, b.h, bad);
+          name, (double)crop, gsH / 2u, t, bo, (double)top);
 #undef PXB
 #undef DARK
+    checkMaskAgainst(name, out, on, outW, outH, &m);
+    CHECK(dw == dwOn && dh == dhOn && memcmp(disp, dispOn, (size_t)dw * dh * 4) == 0,
+          "%s: off: DISPLAY is on's byte for byte, no border in it (%ux%u, %ux%u)", name, dw, dh,
+          dwOn, dhOn);
     free(out);
+    free(on);
     free(disp);
+    free(dispOn);
 }
 
 static void checkBordersOff(void)
 {
-    /* the reporter's 1920 x 1080 at 16:9: the frame's 688 columns at their
-     * shape, 1920 x 1072 at y 4; 2 columns of 688 are 5.6 pixels, 2 rows
-     * of 224 are 9.6 */
-    checkBorderOff("border 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080);
-    checkBorderOff("border 1440x1080 4:3", 4.0f / 3.0f, 1440, 1080);
-    checkBorderOff("border 1920x1080 4:3 (pillars)", 4.0f / 3.0f, 1920, 1080);
-    checkBorderOff("border 3840x720 48:9", 48.0f / 9.0f, 3840, 720);
-    checkBorderOff("border 2341x1080 odd", 2341.0f / 1080.0f, 2341, 1080);
-    checkBorderOff("border 1366x768 odd", 1366.0f / 768.0f, 1366, 768);
+    /* the reporter's 1920 x 1080 at 16:9: on's 1920 x 1080 box, 2 columns
+     * of 682.67 at 2.8125 a column are 5.6 pixels, 2 rows of 224 are 9.6 */
+    checkBorderOff("border 1920x1080 16:9", 16.0f / 9.0f, 1920, 1080, 448);
+    checkBorderOff("border 2560x1440 16:9", 16.0f / 9.0f, 2560, 1440, 448);
+    checkBorderOff("border 3840x2160 16:9", 16.0f / 9.0f, 3840, 2160, 448);
+    checkBorderOff("border 1440x1080 4:3", 4.0f / 3.0f, 1440, 1080, 448);
+    checkBorderOff("border 1920x1080 4:3 (pillars)", 4.0f / 3.0f, 1920, 1080, 448);
+    checkBorderOff("border 3840x720 48:9", 48.0f / 9.0f, 3840, 720, 448);
+    checkBorderOff("border 2341x1080 odd", 2341.0f / 1080.0f, 2341, 1080, 448);
+    checkBorderOff("border 1366x768 odd", 1366.0f / 768.0f, 1366, 768, 448);
+    /* 50 Hz: 8 of 256 rows, 33.75 pixels at 1080 */
+    checkBorderOff("border 1920x1080 16:9 50 Hz", 16.0f / 9.0f, 1920, 1080, 512);
+    checkBorderOff("border 3840x2160 16:9 50 Hz", 16.0f / 9.0f, 3840, 2160, 512);
 }
 
 static void checkFullPixel(void)
