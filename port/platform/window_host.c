@@ -3491,27 +3491,21 @@ static void pace(int hz)
     }
     Uint64 tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
     tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
-    /* the audio about to run dry: less than half its cushion queued
-       (audio_host.h ico_audio_sdl_queued_ms; -1 without a stream) */
+    /* the audio queued and its cushion, read once a call (audio_host.h
+       ico_audio_sdl_queued_ms: -1 without a stream) */
     const int audioMs = ico_audio_sdl_queued_ms();
-    const bool audioLow = audioMs >= 0 && 2 * audioMs < ico_audio_sdl_cushion_ms();
+    const int cushionMs = ico_audio_sdl_cushion_ms();
     for (;;) {
         now = SDL_GetTicksNS();
-        /* each simulation step queues one vsync of audio, so a step held
-           back by presents is audio the device plays out without
-           replacement.  A new frame behind the deadline is left
-           unpresented (the next step at once; the next present shows the
-           newer frame) only when the audio plays (ico_audio_sdl_active)
-           and either the renderer is measured slower than real time
-           (s_pres.paceSlow) or the audio is about to run dry (audioLow),
-           and never for two new frames in a row (s_pres.skippedLast): the
-           picture keeps at least every other frame, and a single late
-           present (a FIFO return just past the deadline) on a renderer
-           that keeps up, with the audio full, never repeats a picture
-           (paceSlow needs three slow presents in a row).  Without audio,
+        /* the audio skip (pace_policy.h pace_audio_skip): a new frame
+           behind the deadline is left unpresented (the next step at once;
+           the next present shows the newer frame) only with the audio
+           playing and presents slow or the audio about to run dry, never
+           two new frames in a row (s_pres.skippedLast).  Without audio,
            as below.  No step or audio is dropped, only that present */
-        if (now >= s_deadline && s_pres.presentedFrame != s_pres.frame && !s_pres.skippedLast &&
-            (s_pres.paceSlow || audioLow) && ico_audio_sdl_active()) {
+        if (pace_audio_skip(now >= s_deadline, s_pres.presentedFrame != s_pres.frame,
+                            s_pres.skippedLast, s_pres.paceSlow, ico_audio_sdl_active() != 0,
+                            audioMs, cushionMs)) {
             s_pres.skippedLast = true;
             break;
         }
