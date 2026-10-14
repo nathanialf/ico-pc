@@ -1038,9 +1038,19 @@ static wchar_t act_wpath[1024];
    open, write and close, no stdio buffer, so the file holds it even when
    the process is ended the next moment without a word (a phone's system
    ends it, or a driver exits it) */
+static char act_version[128];
+
+void ico_diag_set_version(const char *version)
+{
+    snprintf(act_version, sizeof act_version, "%s", version != NULL ? version : "");
+}
+
 static void act_write(const char *note)
 {
-    const size_t n = strlen(note);
+    /* the version's line, then the note */
+    static char text[sizeof act_version + 1 + 160];
+    const int len = snprintf(text, sizeof text, "%s\n%s", act_version, note);
+    const size_t n = len < 0 ? 0 : (size_t)len < sizeof text ? (size_t)len : sizeof text - 1;
 #ifdef _WIN32
     DWORD done;
     HANDLE h;
@@ -1050,7 +1060,7 @@ static void act_write(const char *note)
     h = CreateFileW(act_wpath, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
                     CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (h != INVALID_HANDLE_VALUE) {
-        WriteFile(h, note, (DWORD)n, &done, NULL);
+        WriteFile(h, text, (DWORD)n, &done, NULL);
         CloseHandle(h);
     }
 #else
@@ -1060,7 +1070,7 @@ static void act_write(const char *note)
     }
     fd = open(act_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd >= 0) {
-        ssize_t w = write(fd, note, n);
+        ssize_t w = write(fd, text, n);
         (void)w;
         close(fd);
     }
@@ -1119,7 +1129,10 @@ static void act_remove(void)
 
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
-    char prev[sizeof activity];
+    char buf[sizeof act_version + 1 + sizeof activity];
+    const char *ver = "";
+    char *prev = buf;
+    char *nl;
     size_t n = 0;
     FILE *f;
     act_mode = 0;
@@ -1139,9 +1152,20 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     if (f == NULL) {
         return 0;
     }
-    n = fread(prev, 1, sizeof prev - 1, f);
+    n = fread(buf, 1, sizeof buf - 1, f);
     fclose(f);
-    prev[n] = '\0';
+    buf[n] = '\0';
+    /* the version's line, then the note's (a file without the version's
+       line counts as another version's) */
+    nl = strchr(buf, '\n');
+    if (nl != NULL) {
+        *nl = '\0';
+        ver = buf;
+        prev = nl + 1;
+        if (nl > buf && nl[-1] == '\r') {
+            nl[-1] = '\0';
+        }
+    }
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
     prev[strcspn(prev, "\r\n")] = '\0';
@@ -1149,9 +1173,27 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     if (prev[0] == '\0') {
         return 0;
     }
+    if (strcmp(ver, act_version) != 0) {
+        /* another version: its fixes may have removed the cause */
+        ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
+                     "start-up set again on %s",
+                     prev, ver[0] != '\0' ? ver : "unknown", act_version);
+        return 0;
+    }
     ico_diag_log("ico_pc: the previous run ended while: %s", prev);
     /* a restart after a driver crash (startup_retry.h) takes its own step */
     return relaunched ? 0 : 1;
+}
+
+void ico_diag_startup_activity_exit(void)
+{
+    if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
+        /* the file keeps the line saying none was being created */
+        act_write(act_between);
+        act_mode = 0;
+        return;
+    }
+    ico_diag_startup_activity_record(0);
 }
 
 void ico_diag_startup_activity_record(int mode)

@@ -220,12 +220,13 @@ Copy them as they are.
 first shows a message that says so and where its log is. Sometimes the
 phone closes it without a message (for example when the phone runs short
 of memory); the log then just stops. If that happened while the game was
-getting its graphics ready, the next start's log says where it stopped.
-Send `logs/ico-pc.log` from the start where it happened. If you have
-started the game again since, the log of the start before is
-`logs/ico-pc-previous.log`. If you cannot send the whole file, copy
-everything from the line of `=====` signs near the end (the next line says
-`CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines if
+getting its graphics ready, the next start's log says where it stopped,
+and from then on the game gets its graphics ready as you play until you
+install a new version. Send `logs/ico-pc.log` from the start where it
+happened. If you have started the game again since, the log of the start
+before is `logs/ico-pc-previous.log`. If you cannot send the whole file,
+copy everything from the line of `=====` signs near the end (the next line
+says `CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines if
 there is no such line. They say where the game stopped. If it closed while
 the screen said "Preparing graphics", also say which numbers the screen
 showed last. Also tell us what you pressed just before, and whether your

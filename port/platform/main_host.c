@@ -1620,10 +1620,19 @@ static int host_main(int argc, char **argv)
 #endif
     timestamp(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S");
     fprintf(stderr, "ico_pc: started %s in %s\n", stamp, exe_dir);
-    if (ICO_VERSION_LABEL[0] != '\0') {
-        fprintf(stderr, "ico_pc: version %s (commit %s)\n", ICO_VERSION_LABEL, ICO_BUILD_COMMIT);
-    } else {
-        fprintf(stderr, "ico_pc: development build (commit %s)\n", ICO_BUILD_COMMIT);
+    {
+        /* the start-up activity file records it (diag_host.h): a new
+           version tries the start-up set again */
+        char ver[128];
+
+        if (ICO_VERSION_LABEL[0] != '\0') {
+            snprintf(ver, sizeof(ver), "%s (commit %s)", ICO_VERSION_LABEL, ICO_BUILD_COMMIT);
+            fprintf(stderr, "ico_pc: version %s\n", ver);
+        } else {
+            snprintf(ver, sizeof(ver), "development build (commit %s)", ICO_BUILD_COMMIT);
+            fprintf(stderr, "ico_pc: %s\n", ver);
+        }
+        ico_diag_set_version(ver);
     }
 #ifndef ICO_HEADLESS
     /* the corner of the Options menu's main page (nothing when "") */

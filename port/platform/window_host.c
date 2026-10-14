@@ -3577,9 +3577,10 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
-    /* a clean exit: the next start prepares the pipelines at start-up
-       again (diag_host.h) */
-    ico_diag_startup_activity_record(0);
+    /* a clean exit: a lazy run keeps the start-up activity file, so the
+       next start of this version is lazy too; any other deletes it
+       (diag_host.h) */
+    ico_diag_startup_activity_exit();
 #if defined(__ANDROID__) || defined(ICO_IOS)
     SDL_RemoveEventWatch(lifecycle_watch, NULL);
 #endif

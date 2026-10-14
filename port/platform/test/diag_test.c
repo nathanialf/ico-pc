@@ -34,8 +34,10 @@
  *               note while the start-up set is created and kept when the
  *               run just ends; the next start names it ("the previous run
  *               ended while"), deletes it and is lazy; a lazy run keeps its
- *               notes and a line between them; a normal end deletes it; a
- *               restart after a driver crash logs it but is not lazy;
+ *               notes and a line between them, and keeps the file at a
+ *               clean exit (the next start is lazy); a normal end of the
+ *               set deletes it; a restart after a driver crash logs it but
+ *               is not lazy; a file another version wrote is not lazy;
  *   - early:    the reporter started before the limits (Android's start):
  *               the first limit counts from ico_diag_start, not from the
  *               thread's start.
@@ -206,6 +208,8 @@ static void activity_child(const char *mode, const char *log)
     char path[300];
     int lazy;
     act_path(path, sizeof path, log);
+    ico_diag_set_version(getenv("ICO_TEST_ACT_VERSION") != NULL ? getenv("ICO_TEST_ACT_VERSION")
+                                                                : "test 1");
     lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0);
     ico_diag_log("test: lazy %d", lazy);
     if (strcmp(mode, "actrecord") == 0) {
@@ -221,6 +225,13 @@ static void activity_child(const char *mode, const char *log)
         if (getenv("ICO_TEST_ACT_BETWEEN") != NULL) {
             ico_diag_clear_activity();
         }
+        child_quit(0);
+    } else if (strcmp(mode, "actlazyexit") == 0) {
+        /* a lazy run's clean exit keeps the file */
+        ico_diag_startup_activity_record(lazy ? ICO_DIAG_ACTIVITY_LAZY : 0);
+        ico_diag_set_activity("creating pipeline fog test");
+        ico_diag_clear_activity();
+        ico_diag_startup_activity_exit();
         child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -489,7 +500,7 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: lazy 0") != NULL);
         CHECK(strstr(s, "the previous run ended while") == NULL);
         s = read_file(act);
-        CHECK(strcmp(s, "creating pipeline program 5 blend 1 (start-up set, 2 of 9)") == 0);
+        CHECK(strcmp(s, "test 1\ncreating pipeline program 5 blend 1 (start-up set, 2 of 9)") == 0);
         /* the next start names it, deletes it and is lazy; its own note
            replaces the file's */
         r = run(argv[0], "actlazy", log);
@@ -499,7 +510,7 @@ int main(int argc, char **argv)
                         "blend 1 (start-up set, 2 of 9)\n") != NULL);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         s = read_file(act);
-        CHECK(strcmp(s, "creating pipeline fog test") == 0);
+        CHECK(strcmp(s, "test 1\ncreating pipeline fog test") == 0);
         /* a lazy run ended between two creations: the line between them,
            and the next start is lazy again (no further step) */
         setenv("ICO_TEST_ACT_BETWEEN", "1", 1);
@@ -525,6 +536,39 @@ int main(int argc, char **argv)
         /* a normal end of the set deletes the file */
         r = run(argv[0], "actclean", log);
         CHECK(r == 0);
+        {
+            FILE *f = fopen(act, "rb");
+            CHECK(f == NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+        }
+        /* a lazy run's clean exit keeps the file: the next start of the
+           same version is lazy too */
+        run(argv[0], "actrecord", log);
+        r = run(argv[0], "actlazyexit", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        s = read_file(act);
+        CHECK(strstr(s, "test 1\nrunning with the pipelines created") == s);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: running with the pipelines") !=
+              NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        /* another version tries the start-up set again (and deletes the
+           file) */
+        run(argv[0], "actrecord", log);
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actnext", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5 blend 1 "
+                        "(start-up set, 2 of 9) (version test 1); trying the start-up set again "
+                        "on test 2\n") != NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
             CHECK(f == NULL);

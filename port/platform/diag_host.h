@@ -154,8 +154,17 @@ const char *ico_diag_activity(void);
    while: <note>" and the result is 1: this run creates its pipelines as
    the frames need them. relaunched != 0 (a restart after a driver crash,
    ICO_STARTUP_RETRY) logs and deletes it the same way but returns 0: the
-   restart's own step decides. 0 when there is no file or it is empty. */
+   restart's own step decides. 0 when there is no file or it is empty.
+   The file's first line is the version that wrote it
+   (ico_diag_set_version), the note follows: a note from another version
+   is logged as "ico_pc: the previous run ended while: <note> (version
+   <old>); trying the start-up set again on <new>" and the result is 0, so
+   a new version tries the start-up set again. */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
+/* The running version's text (the "ico_pc: version" log line's: "<label>
+   (commit <c>)" or "development build (commit <c>)"); copied, at most 127
+   bytes. */
+void ico_diag_set_version(const char *version);
 /* ICO_DIAG_ACTIVITY_STARTUP: around the start-up set's creation: each
    pipeline's note (the set's own "(i of m)" notes between two are not
    written; "creating the start-up pipelines" until the first), and a
@@ -163,10 +172,14 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched);
    creates the pipelines as the frames need them, for the whole run; a
    cleared note writes a line saying none is being created (so the next
    start stays lazy). 0: stops recording and deletes the file (the start-up
-   set's end, a clean exit). */
+   set's end). */
 #define ICO_DIAG_ACTIVITY_STARTUP 1
 #define ICO_DIAG_ACTIVITY_LAZY 2
 void ico_diag_startup_activity_record(int mode);
+/* A clean exit: stops recording; a lazy run keeps the file (its line
+   saying no pipeline is being created), so the lazy decision sticks until
+   the version changes; any other run deletes it. */
+void ico_diag_startup_activity_exit(void);
 /* The relaunch's inputs: the step this run is at (StartupRetry, 0 for the
    first run), whether the build has the D3D12 backend, whether the player
    named the backend, whether the player named the blending (blend= /

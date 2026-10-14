@@ -190,9 +190,11 @@ crashed and the game closes; on an iPhone the game closes. On every
 system, when the game closed while it was getting its graphics ready (with
 a message or without one), the next start gets the graphics ready as you
 play instead of all at once, and the log of that start says where the one
-before stopped. Updating the graphics driver usually fixes this. On
-Windows you can also open `ico-pc.ini` in the `x64` folder with Notepad
-and add the line `backend=d3d12` at the end to always use Direct3D 12
+before stopped. It keeps doing that until you install a new version of the
+game, which tries getting the graphics ready at the start again. Updating
+the graphics driver usually fixes this. On Windows you can also open
+`ico-pc.ini` in the `x64` folder with Notepad and add the line
+`backend=d3d12` at the end to always use Direct3D 12
 ([how](OPTIONS.md#choosing-the-renderer-on-windows)). If you report it,
 attach the log: it shows every attempt.
 
