@@ -15,12 +15,15 @@ VuVtx vu_prelit_vertex(uint v, uint mode)
     float4 st = vu_stream[at + 1u];
     float4 col = vu_stream[at + 2u];
     // :152-155 M * pos with vf00.w; the scissor loop uses pos.w (:337)
-    o.h = vu_matm(16u, pos, select(mode == VU_CLIP_SCISSOR, pos.w, 1.0));
+    float w = mode == VU_CLIP_SCISSOR ? pos.w : 1.0;
+    o.h = vu_matm(16u, pos, w);
     if (mode == VU_CLIP_SCISSOR) {
         o.clip = vu_matm(20u, pos, pos.w);
     }
     float q = vu_divide(o);
-    o.inside = select(mode == VU_CLIP_REGION, vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094), true);
+    if (mode == VU_CLIP_REGION) {
+        o.inside = vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094);
+    }
     // :157 add.xyz vf21 = ST + (UV offset xy, 0); :172 mulq.xyz
     precise float3 s = (st.xyz + float3(vu_mem[2].xy, 0.0)) * q;
     o.stq = s;
@@ -35,7 +38,7 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     // the triangle's first corner, or the tests' probe vertex
-    VuVtx a = vu_prelit_vertex(select(probe, vu_probe_vertex(vid), kick - 2u), mode);
+    VuVtx a = vu_prelit_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, mode);
     if (probe) {
         return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }

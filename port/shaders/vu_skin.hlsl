@@ -83,7 +83,7 @@ VuVSOut vu_skin_main(uint vid, uint variant)
     // the index marks: VU_INDEX_JOINED (rd_mesh.c markJoinedStrips)
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     // the triangle's first corner, or the tests' probe vertex
-    VuVtx a = vu_skin_vertex(select(probe, vu_probe_vertex(vid), kick - 2u), variant);
+    VuVtx a = vu_skin_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, variant);
     if (probe) {
         return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }

@@ -38,8 +38,7 @@ float3 vu_reflect_st(float4 pos, float4 n)
     precise float d2 = v.x * v.x;
     d2 = d2 + v.y * v.y;
     d2 = d2 + v.z * v.z;
-    precise float rs = 1.0 / sqrt(abs(d2));
-    precise float rq = select(d2 == 0.0, 3.40282347e38, rs);
+    precise float rq = d2 == 0.0 ? 3.40282347e38 : 1.0 / sqrt(abs(d2));
     // :393-396 the normal in view space: MV rotation * n (+ vf00 * n.w)
     float4 nv = vu_mat(vu_mem[24], vu_mem[25], vu_mem[26], float4(0.0, 0.0, 0.0, 1.0), n, n.w);
     precise float3 d = v.xyz * rq;
@@ -71,12 +70,14 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
     float4 st = vu_stream[at + 2u];
     float4 col = vu_stream[at + 3u];
     bool scissor = mode == VU_CLIP_SCISSOR;
-    o.h = vu_matm(16u, pos, select(scissor, pos.w, 1.0));
+    o.h = vu_matm(16u, pos, scissor ? pos.w : 1.0);
     if (scissor) {
         o.clip = vu_matm(20u, pos, pos.w);
     }
     float q = vu_divide(o);
-    o.inside = select(scissor, true, vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094));
+    if (!scissor) {
+        o.inside = vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094);
+    }
     if (variant == VU_REFLECT) {
         // :456 mulx.xyz vf21 = (S, T, 1) * (0 + q); colour as sent
         precise float3 s = vu_reflect_st(pos, n) * q;
@@ -94,12 +95,13 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
 VuVSOut vu_lit_main(uint vid, uint variant)
 {
     // codes 34 and 38 have no scissor variant: always the region test
-    bool scissor = vu_and(variant == VU_LIT, (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR);
-    uint mode = select(scissor, VU_CLIP_SCISSOR, VU_CLIP_REGION);
+    uint mode = variant == VU_LIT && (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR
+                    ? VU_CLIP_SCISSOR
+                    : VU_CLIP_REGION;
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     // the triangle's first corner, or the tests' probe vertex
-    VuVtx a = vu_lit_vertex(select(probe, vu_probe_vertex(vid), kick - 2u), mode, variant);
+    VuVtx a = vu_lit_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, mode, variant);
     if (probe) {
         return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }
