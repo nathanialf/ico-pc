@@ -3,9 +3,14 @@
  *
  * The VU vertex shaders (port/shaders/vu_*.hlsl) read the vertex stream at
  * t0 (vu_stream) through indices they compute: a triangle's three vertices
- * from its kick (vu_vertex_qw), a batch's header qword (a grid's colour),
- * the strip test's scans and walks (vu_strip_of, vu_*_strip_passes), a
- * particle's header and its two qwords.  A GPU that reads storage buffers
+ * from its kick (vu_vertex_qw; the clip plane's distance reads one of them),
+ * a batch's header qword (a grid's colour), a particle's header and its two
+ * qwords.  The shipped shaders scan no strip: the card test's verdicts come
+ * from the CPU as bits in VuBoneCB (vu_strip_card, its index clamped to
+ * 239), not from the stream.  The audit still runs v0.7.6's strip scans and
+ * walks (vu_strip_of, vu_*_strip_passes) over every kick, a superset of
+ * today's reads, so it stays conservative: a stream it passes is safe for
+ * the shaders of either version.  A GPU that reads storage buffers
  * through plain pointers (Mali) faults on an index past the end where
  * others read zero, so every VU draw of the dumps is walked here on the
  * CPU, every stream index those shaders can read for it computed as the
@@ -24,14 +29,13 @@
  * (vu_mem[0..35]) are fixed-size constant blocks, checked by the static
  * asserts below.
  *
- * The strip test is assumed to run for every kick (under VU_F_EXTENDED
- * it runs for a triangle the region rule sends to the card test, which
- * depends on the camera): the audit is the worst case over cameras.
+ * The (v0.7.6) strip test is taken to run for every kick (it ran for a
+ * triangle the region rule sent to the card test, which depends on the
+ * camera): the audit is the worst case over cameras.
  *
- * The strip bounds come from one function, stripBounds: today it runs
- * vu_strip_of's scans; a stream that carries its strips' bounds (a table
- * per kick) replaces that function with the table's reader and adds the
- * table's own qwords to the reads.
+ * The strip bounds come from one function, stripBounds, which runs
+ * v0.7.6's vu_strip_of scans; the shaders no longer read them, so they only
+ * add reads the shaders do not make.
  *
  * Self-test (always runs): a synthetic prelit draw passes; the same draw
  * with its stream one vertex short fails, as do a kick below 2 and an
@@ -205,12 +209,14 @@ static int stripStart(const AuditDraw *d, Audit *a, uint32_t v)
     return qw >= d->streamQw || d->stream[qw][3] < 1.0f;
 }
 
-#define VU_STRIP_SCAN 256u      /* vu_common.hlsli */
-#define VU_STRIP_SPAN_MAX 1024u /* vu_common.hlsli */
+#define VU_STRIP_SCAN 256u      /* v0.7.6's vu_common.hlsli */
+#define VU_STRIP_SPAN_MAX 1024u /* v0.7.6's vu_common.hlsli */
 
 /* The strip of kick k: vu_strip_of (x its first vertex, y one past its
  * last, *longStrip its z), the scans' reads checked.  The one function a
- * stream carrying its strips' bounds replaces. */
+ * stream carrying its strips' bounds would replace.  v0.7.6's scans: the
+ * shipped shaders make none of these reads (the audit's conservative
+ * superset). */
 static void stripBounds(const AuditDraw *d, Audit *a, uint32_t k, uint32_t *x, uint32_t *y,
                         int *longStrip)
 {

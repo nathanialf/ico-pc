@@ -452,13 +452,15 @@ bisect on a dump, `--passes A[-B]` replays a window (`port/render/rd_replay.c` (
 `rd_stream_audit_test` walks every VU draw of the dumps in `tools/native_frame_dumps.txt` and the
 boot corpus's title frame and computes on the CPU every vertex stream index the VU vertex shaders
 can read for it, the way the shaders compute it (`vu_vertex_qw`, `vu_batch_qw`): the triangle's
-three vertices, a grid's batch colour, the strip test's scans on the stream's own strip flags and
-its walk over the strip (taken to run for every kick, the worst camera), a particle's header and
-two qwords. Each index is checked against the draw's own stream, the qwords the replay uploads for
-it (`doVuDraw`); a kick below 2 and a draw's index range past its mesh's list fail too. The strip
-bounds come from one function (`stripBounds`), so a stream that carries its strips' bounds replaces
-only that reader. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the indices
-cannot leave (static asserts; `vu_bone_mat` clamps). A stream one vertex short fails it, in a
+three vertices (the clip plane's distance reads one of them), a grid's batch colour, a particle's
+header and two qwords. The shipped shaders scan no strip: the card test's verdicts are bits the CPU
+puts in VuBoneCB (`vu_strip_card`, its index clamped to qword 239). The audit still adds v0.7.6's
+strip scans on the stream's own strip flags and their walk over the strip, taken to run for every
+kick (`stripBounds`), reads the shaders no longer make, so it stays conservative: a stream it
+passes is safe for either version's shaders. Each index is checked against the draw's own stream,
+the qwords the replay uploads for it (`doVuDraw`); a kick below 2 and a draw's index range past its
+mesh's list fail too. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the
+indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). A stream one vertex short fails it, in a
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
 (2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
