@@ -211,23 +211,6 @@ plus `RD_FULL_PIXEL_GUARD` texels each side, centred, so the window's pixels are
 (`port/render/rd_core.c` (`rd__target_scale_of`)). [Scene scale](ARCHITECTURE.md#terms) and the
 display options are [DISPLAY.md](DISPLAY.md).
 
-### The glow size
-
-Glow size (`[video] effect_glow_size`, `RdSettings.glowOriginal`, Options > Effects, issue 103) is
-the player's choice of the work buffers' scale. `"scaled"`, the default, is the work scale above:
-the 256-wide post buffers are a kernel width in screen terms, so they are sized with the frame
-(at 2x WORK0..3, AA0/AA1, FEED128 and AURA_TAP hold four times the PS2's texels, and every glow
-sprite above 1x resamples through `fx_sprite_ps`'s kernels). `"original"` keeps them at the PS2's
-sizes at every resolution (work scale 1): the glow, the depth of field's blur and the softening
-are the 1x passes, magnified onto the scaled SCENE by the composite sprites, coarser than Scaled's
-above 1x and about a quarter of the glow chain's pixels at 2x. At 1x (and in Original, whose
-scene is 1x) the two are the same picture. The option is outside the preset: the default keeps
-every preset's picture byte for byte. A change remakes the targets at the next frame, as a
-resolution change does, and logs `rd: glow size: original (the work buffers at the PS2's sizes)`
-(or `scaled (the work scale)`); the display line's `work` field shows the scale in force
-(`port/render/rd_present.c` (`rd__apply_display`); `port/render/rd_core.c`; the replay tool's
-`--glow-original`).
-
 **Temporary targets** (`rd_temp_target`) live until the next `rd_begin_frame` unless kept, and
 come from a pool of parked textures of the same size (`port/render/rd_core.c`
 (`rd__temp_target_alloc`)). A target with a new texture starts cleared to zero colour and
@@ -244,6 +227,23 @@ the Vulkan D24S8 fallback; PSMZ24 2^-24; PSMZ16 2^-16 (`port/render/rd_frame.c`
 **The VU block and the camera.** `rd_set_vu_common` keeps the last block of the open frame and
 updates the VU image of all 13 lists; `rd__fill_camera_cb` puts the frame camera into FrameCB
 (view, projection, their product, the eye, near, far, zoom, aspect) (`port/render/rd_frame.c`).
+
+### The glow size
+
+Glow size (`[video] effect_glow_size`, `RdSettings.glowOriginal`, Options > Effects, issue 103) is
+the player's choice of the work buffers' scale. `"scaled"`, the default, is the work scale above:
+the 256-wide post buffers are a kernel width in screen terms, so they are sized with the frame
+(at 2x WORK0..3, AA0/AA1, FEED128 and AURA_TAP hold four times the PS2's texels, and every glow
+sprite above 1x resamples through `fx_sprite_ps`'s kernels). `"original"` keeps them at the PS2's
+sizes at every resolution (work scale 1): the glow, the depth of field's blur and the softening
+are the 1x passes, magnified onto the scaled SCENE by the composite sprites, coarser than Scaled's
+above 1x and about a quarter of the glow chain's pixels at 2x. At 1x (and in Original, whose
+scene is 1x) the two are the same picture. The option is outside the preset: the default keeps
+every preset's picture byte for byte. A change remakes the targets at the next frame, as a
+resolution change does, and logs `rd: glow size: original (the work buffers at the PS2's sizes)`
+(or `scaled (the work scale)`); the display line's `work` field shows the scale in force
+(`port/render/rd_present.c` (`rd__apply_display`); `port/render/rd_core.c`; the replay tool's
+`--glow-original`).
 
 ## Textures
 
@@ -623,37 +623,6 @@ and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/r
 path the device lacks logs `rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or
 `... is not on this device` and keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
 
-### The storage pass merge
-
-Under the storage read a destination-read draw needs a pass without the colour attachment, and any
-other draw a pass with it, so a frame that interleaves them ends and begins a pass (with its
-barrier) at every change: on an RTX 3090 the title ran 887 passes a replay against 53 to 75 on the
-attachment and fixed paths, and the GPU time of the logs held follows the pass count (issue 103).
-The merge (`g_rd.passMerge`, on by default) keeps an open storage pass open: a draw that
-`rd__expand_dst` would leave on the fixed-function blend is drawn in it through the
-destination-read shader instead when the shader stores the same bytes (`rd__dst_merge_ok`):
-
-- no GS blending: the shader's ALPHA register is then `0x00`, `((Cs - Cs) As >> 7) + Cs`, which is
-  Cs (`RdDrawPass.csOnly`, `fillDrawCB`);
-- the premultiplied add, modes 0 and 5 (exact on the blender, above);
-- an RGBA8 target, an entry with the destination-read twins, a mask writing RGB, no stencil,
-  single-sampled;
-- not a draw that writes Z and can discard: the storage pass tests Z before the shader, so such a
-  draw keeps the colour/depth-only split or the fixed-function blend as before.
-
-The premultiplied subtracts stay on the fixed-function blend, which rounds them differently
-(above): through the shader they would be the GS's bytes, not the current picture's. A draw that
-does not qualify still begins a pass with the colour attached, and the next destination-read draw
-a storage pass again. The merge changes only the storage mode's passes, so the attachment read and
-the fixed-function blend draw as before. `ICO_RD_PASS_MERGE=0` (`[dev] storage_pass_merge = false`)
-turns it off and logs `rd: storage pass merge: off (ICO_RD_PASS_MERGE=0)`; the start-up pipeline
-set has the merged keys while it is on (`rd__enumerate_dst`). lavapipe has no fragment shader
-interlock, so the tests that compare the merge's picture with the unmerged one byte for byte
-(`rd_replay_tool_pass_merge`, `rd_perf`) skip that part there and run on a device with the
-storage read; the release check is the shot list on an interlock card with and without the key
-(`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`
-(`expandPasses`, `dstPassMode`)).
-
 **The Qualcomm rule.** The attachment read is not offered on Qualcomm's own Adreno driver
 (vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown; Mesa's Turnip on
 the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver 512.800.72,
@@ -700,6 +669,37 @@ destination-read pipeline sets) and a device without an exact mode run nothing
 `attachment,storage,fixed` makes those modes' samples read white, for the fallback's tests
 (`port/render/rd_blend_selftest.c`; `port/render/rd.h` (`rd_blend_selftest`);
 `port/platform/window_host.c`).
+
+### The storage pass merge
+
+Under the storage read a destination-read draw needs a pass without the colour attachment, and any
+other draw a pass with it, so a frame that interleaves them ends and begins a pass (with its
+barrier) at every change: on an RTX 3090 the title ran 887 passes a replay against 53 to 75 on the
+attachment and fixed paths, and the GPU time of the logs held follows the pass count (issue 103).
+The merge (`g_rd.passMerge`, on by default) keeps an open storage pass open: a draw that
+`rd__expand_dst` would leave on the fixed-function blend is drawn in it through the
+destination-read shader instead when the shader stores the same bytes (`rd__dst_merge_ok`):
+
+- no GS blending: the shader's ALPHA register is then `0x00`, `((Cs - Cs) As >> 7) + Cs`, which is
+  Cs (`RdDrawPass.csOnly`, `fillDrawCB`);
+- the premultiplied add, modes 0 and 5 (exact on the blender, above);
+- an RGBA8 target, an entry with the destination-read twins, a mask writing RGB, no stencil,
+  single-sampled;
+- not a draw that writes Z and can discard: the storage pass tests Z before the shader, so such a
+  draw keeps the colour/depth-only split or the fixed-function blend as before.
+
+The premultiplied subtracts stay on the fixed-function blend, which rounds them differently
+(above): through the shader they would be the GS's bytes, not the current picture's. A draw that
+does not qualify still begins a pass with the colour attached, and the next destination-read draw
+a storage pass again. The merge changes only the storage mode's passes, so the attachment read and
+the fixed-function blend draw as before. `ICO_RD_PASS_MERGE=0` (`[dev] storage_pass_merge = false`)
+turns it off and logs `rd: storage pass merge: off (ICO_RD_PASS_MERGE=0)`; the start-up pipeline
+set has the merged keys while it is on (`rd__enumerate_dst`). lavapipe has no fragment shader
+interlock, so the tests that compare the merge's picture with the unmerged one byte for byte
+(`rd_replay_tool_pass_merge`, `rd_perf`) skip that part there and run on a device with the
+storage read; the release check is the shot list on an interlock card with and without the key
+(`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`
+(`expandPasses`, `dstPassMode`)).
 
 ## Post passes
 
