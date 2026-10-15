@@ -458,7 +458,10 @@ to close the app on a cold driver cache; a quit or close request, or a lost devi
 after the batch in flight and the run ends (`port/platform/window_host.c` (`pipeline_progress`,
 `pipe_estimate`, `progress_present_notes`)). While the set runs the heartbeat line ends with
 `pipelines N of M, longest 1.3 s`, the count and the longest single compile so far
-(`port/platform/diag_host.h` (`ico_diag_set_pipelines`)). A crash on a worker thread inside the
+(`port/platform/diag_host.h` (`ico_diag_set_pipelines`)). A set that was not stopped is then
+written to the Vulkan pipeline cache file at once (`rhi_pipeline_cache_save`,
+[RHI.md](RHI.md#vulkan)), not only at a clean exit, so the "once after an update" holds
+when the system ends the app or the device is lost later. A crash on a worker thread inside the
 driver is reported as any crash, with the batch's note as the `while:` line, so the restart steps
 treat it as a driver crash while preparing the shaders; the fixed-blend step reads the batch's
 `dst` field, which every key of the batch shares (`port/platform/startup_retry.h`

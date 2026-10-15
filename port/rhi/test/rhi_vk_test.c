@@ -1,7 +1,8 @@
 /* rhi_vk_test.c: the exact-texel RHI checks (rhi_test_common.c) on the
  * Vulkan backend, headless, then a hazard-tracking cell, the render-area
  * check (a pass larger than an attachment is clamped) and the pipeline
- * cache file (rhi_set_pipeline_cache_path: written at shutdown with a version
+ * cache file (rhi_set_pipeline_cache_path: written by rhi_pipeline_cache_save
+ * while the device is up and at shutdown, each with a version
  * one header, read back at the next init, a file of another device or of
  * garbage ignored and replaced).
  *
@@ -186,6 +187,21 @@ static int cacheCell(void)
             rhi_test_log("FAIL cache cell: init %d\n", pass);
             failures++;
             break;
+        }
+        if (pass == 0) {
+            /* written while the device is up (the window's save after the
+               start-up set), before any shutdown */
+            remove(path);
+            uint32_t s[2] = {0, 0};
+            const bool saved = rhi_pipeline_cache_save();
+            cacheHeader(path, s);
+            rhi_test_log("cache cell: saved while up: %d, header size %u version %u\n", (int)saved,
+                         s[0], s[1]);
+            if (!saved || s[0] < 32 || s[1] != 1) {
+                rhi_test_log("FAIL cache cell: rhi_pipeline_cache_save wrote no version one "
+                             "header\n");
+                failures++;
+            }
         }
         rhi_shutdown();
         uint32_t h[2];

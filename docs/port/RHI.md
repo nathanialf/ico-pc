@@ -276,8 +276,13 @@ end is left to end on its own (`port/rhi/vk/vk_swapchain.c`, the display's timin
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
 `pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
 starts empty, as does data the driver refuses. Every pipeline is created through it, and
-`rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file
-(`port/rhi/vk/vk_pipeline.c` (`vkr_cache_load`, `vkr_pipeline_cache_init`,
+`rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file. `rhi_pipeline_cache_save`
+writes it the same way while the device is up, keeping the cache, and logs
+`pipeline cache: N bytes written to <path> in T ms` (data of the size the file already holds is not
+written again); the window calls it after the start-up set, so the file holds the set when a run
+never reaches `rhi_shutdown` (a phone's system ends the app, or the device is lost). Nothing is
+written after a device loss. D3D12 writes nothing (`port/rhi/vk/vk_pipeline.c` (`vkr_cache_load`,
+`vkr_pipeline_cache_init`, `vkr_cache_write`, `rhi_pipeline_cache_save`,
 `vkr_pipeline_cache_shutdown`)). `rhi_pipeline_cache_loaded` says whether a file was loaded; the
 window passes it to the crash diagnostics, whose start-up retry deletes the file first
 (`port/platform/window_host.c` (`ico_window_open`)).
@@ -470,7 +475,7 @@ SHA-256, the licences of the libraries compiled into it, and builds a static SDL
 | test | checks |
 | --- | --- |
 | `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back) |
-| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
+| `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |

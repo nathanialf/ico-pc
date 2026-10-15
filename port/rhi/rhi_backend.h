@@ -95,6 +95,7 @@
     X(present_statistics)                                                                          \
     X(set_pipeline_cache_path)                                                                     \
     X(pipeline_cache_loaded)                                                                       \
+    X(pipeline_cache_save)                                                                         \
     X(set_vulkan_loader)                                                                           \
     X(injector_name)                                                                               \
     X(overlay_name)

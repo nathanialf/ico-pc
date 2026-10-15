@@ -963,6 +963,15 @@ void rhi_set_pipeline_cache_path(const char *path);
 /* true when the last rhi_init created its pipeline cache from that file's
  * blob (Vulkan); false when it started empty, and always on D3D12 */
 bool rhi_pipeline_cache_loaded(void);
+/* Writes the pipeline cache to the file now, as rhi_shutdown does (path.tmp,
+ * then renamed over path), keeping the cache; logs its size and the time
+ * taken; data of the size the file already holds (as this run read or
+ * wrote it) is not written again.  The window calls it after the start-up
+ * set, so the file holds the set even when the run never reaches
+ * rhi_shutdown (a phone's system ends it, or the device is lost).  Returns
+ * whether the file holds the cache now (false with no path, after a device
+ * loss, and always on D3D12). */
+bool rhi_pipeline_cache_save(void);
 
 /* The Vulkan loader rhi_init uses, as its
  * vkGetInstanceProcAddr: a graphics driver the Android build loaded itself

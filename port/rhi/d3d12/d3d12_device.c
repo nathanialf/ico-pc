@@ -894,6 +894,11 @@ bool rhi_pipeline_cache_loaded(void)
     return false;
 }
 
+bool rhi_pipeline_cache_save(void)
+{
+    return false; /* the driver keeps its own shader cache */
+}
+
 void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
     (void)getInstanceProcAddr; /* Vulkan only */

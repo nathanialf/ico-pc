@@ -64,6 +64,9 @@ static void *vkr_cache_load(size_t *size)
 
 /* rhi_pipeline_cache_loaded: the cache was created from the file's blob */
 static bool s_cacheLoaded;
+/* the size of the data the file holds as this run read or wrote it, 0
+ * none (rhi_pipeline_cache_save skips a write of the same size) */
+static size_t s_cacheFileSize;
 
 bool rhi_pipeline_cache_loaded(void)
 {
@@ -74,6 +77,7 @@ void vkr_pipeline_cache_init(void)
 {
     size_t size = 0;
     s_cacheLoaded = false;
+    s_cacheFileSize = 0;
     void *blob = vkr_cache_load(&size);
     VkPipelineCacheCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
@@ -92,21 +96,34 @@ void vkr_pipeline_cache_init(void)
         }
     } else if (blob) {
         s_cacheLoaded = true;
+        s_cacheFileSize = size;
         VKR_LOG("pipeline cache: %zu bytes from %s", size, s_cachePath);
     }
     free(blob);
 }
 
-void vkr_pipeline_cache_shutdown(void)
+/* the cache's data to <path>.tmp, renamed over the file; its size in
+ * bytes, 0 when nothing was written.  skipSame: not when the data's size
+ * is the file's as this run read or wrote it (*same set when that skipped
+ * the write) */
+static size_t vkr_cache_write(bool skipSame, bool *same)
 {
-    if (!g_vkr.pipelineCache) {
-        return;
-    }
     size_t size = 0;
     void *blob = NULL;
-    if (s_cachePath[0] && !g_vkr.deviceLost &&
-        vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) == VK_SUCCESS &&
-        size >= 32) {
+    if (same) {
+        *same = false;
+    }
+    if (!g_vkr.pipelineCache || !s_cachePath[0] || g_vkr.deviceLost) {
+        return 0;
+    }
+    if (vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) == VK_SUCCESS &&
+        skipSame && size == s_cacheFileSize) {
+        if (same) {
+            *same = true;
+        }
+        return 0;
+    }
+    if (size >= 32) {
         blob = malloc(size);
         if (blob &&
             vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, blob) != VK_SUCCESS) {
@@ -114,22 +131,49 @@ void vkr_pipeline_cache_shutdown(void)
             blob = NULL;
         }
     }
-    if (blob) {
-        char tmp[sizeof(s_cachePath) + 8];
-        snprintf(tmp, sizeof(tmp), "%s.tmp", s_cachePath);
-        FILE *fp = fopen(tmp, "wb");
-        bool ok = fp && fwrite(blob, 1, size, fp) == size;
-        if (fp) {
-            ok = fclose(fp) == 0 && ok;
-        }
-        /* rename does not replace an existing file on Windows */
-        remove(s_cachePath);
-        if (!ok || rename(tmp, s_cachePath) != 0) {
-            remove(tmp);
-            VKR_LOG("pipeline cache: could not write %s", s_cachePath);
-        }
-        free(blob);
+    if (!blob) {
+        return 0;
     }
+    char tmp[sizeof(s_cachePath) + 8];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", s_cachePath);
+    FILE *fp = fopen(tmp, "wb");
+    bool ok = fp && fwrite(blob, 1, size, fp) == size;
+    if (fp) {
+        ok = fclose(fp) == 0 && ok;
+    }
+    free(blob);
+    /* rename does not replace an existing file on Windows */
+    remove(s_cachePath);
+    if (!ok || rename(tmp, s_cachePath) != 0) {
+        remove(tmp);
+        VKR_LOG("pipeline cache: could not write %s", s_cachePath);
+        return 0;
+    }
+    s_cacheFileSize = size;
+    return size;
+}
+
+bool rhi_pipeline_cache_save(void)
+{
+    const uint64_t t0 = vkr_now_ns();
+    bool same = false;
+    const size_t size = vkr_cache_write(true, &same);
+    if (size) {
+        VKR_LOG("pipeline cache: %zu bytes written to %s in %.1f ms", size, s_cachePath,
+                (double)(vkr_now_ns() - t0) / 1e6);
+    } else if (same) {
+        VKR_LOG("pipeline cache: the file already holds its %zu bytes; not written",
+                s_cacheFileSize);
+    }
+    return size != 0 || same;
+}
+
+void vkr_pipeline_cache_shutdown(void)
+{
+    if (!g_vkr.pipelineCache) {
+        return;
+    }
+    (void)vkr_cache_write(false, NULL);
     vkDestroyPipelineCache(g_vkr.device, g_vkr.pipelineCache, NULL);
     g_vkr.pipelineCache = VK_NULL_HANDLE;
 }

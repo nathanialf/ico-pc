@@ -92,6 +92,7 @@
 #define rhi_present_statistics   RHI__NAME(present_statistics)
 #define rhi_set_pipeline_cache_path RHI__NAME(set_pipeline_cache_path)
 #define rhi_pipeline_cache_loaded RHI__NAME(pipeline_cache_loaded)
+#define rhi_pipeline_cache_save RHI__NAME(pipeline_cache_save)
 #define rhi_set_vulkan_loader     RHI__NAME(set_vulkan_loader)
 #define rhi_injector_name        RHI__NAME(injector_name)
 #define rhi_overlay_name         RHI__NAME(overlay_name)

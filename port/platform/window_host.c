@@ -1363,6 +1363,15 @@ open_window:
         rd_set_pipeline_progress(NULL, NULL);
         ico_diag_set_pipelines(0, 0, 0);
         ico_diag_startup_activity_record(0);
+        /* the set in the pipeline cache file now, not only at a clean exit:
+           a phone's system ends the app without one, and a lost device
+           skips it, so the next start would compile the set cold again
+           ("This happens once after an update"); one read of the cache's
+           data and one file write, its size and time logged, nothing when
+           the file already holds it. Not when the set was stopped */
+        if (!s_quitLatched && !rhi_device_lost()) {
+            (void)rhi_pipeline_cache_save();
+        }
     }
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
