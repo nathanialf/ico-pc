@@ -2867,8 +2867,12 @@ static int dstModeFor(const Replay *r)
 
 /* The planned passes as drawn into the open pass: the exact blend's images
  * (rd__expand_dst), then the two-pass fallback's (rd__expand_no_dual); at
- * most 4 for a plan of 2 (each pass becomes at most two). */
-static int expandPassesMode(const RdDrawPass *in, int n, int mode, RdDrawPass out[8])
+ * most 4 for a plan of 2 (each pass becomes at most two).  merge: the open
+ * pass is a storage pass and the storage pass merge is on (expandPasses):
+ * a pass rd__dst_merge_ok takes is drawn through the destination-read
+ * shader in it (rd__dst_merge) instead of in a pass with the colour
+ * attached. */
+static int expandPassesMode(const RdDrawPass *in, int n, int mode, bool merge, RdDrawPass out[8])
 {
     if (mode == RD_BLEND_EXACT_OFF && g_rd.dstMode != RD_BLEND_EXACT_OFF) {
         for (int i = 0; i < n; i++) {
@@ -2882,6 +2886,10 @@ static int expandPassesMode(const RdDrawPass *in, int n, int mode, RdDrawPass ou
     RdDrawPass dx[4];
     int m = 0;
     for (int i = 0; i < n && i < 2; i++) {
+        if (merge && mode == RD_BLEND_EXACT_STORAGE && rd__dst_merge_ok(&in[i])) {
+            out[m++] = rd__dst_merge(&in[i]); /* no second pass: blending off */
+            continue;
+        }
         const int nd = rd__expand_dst(&in[i], 1, mode, dx);
         m += rd__expand_no_dual(dx, nd, out + m);
     }
@@ -2890,7 +2898,9 @@ static int expandPassesMode(const RdDrawPass *in, int n, int mode, RdDrawPass ou
 
 static int expandPasses(const Replay *r, const RdDrawPass *in, int n, RdDrawPass out[8])
 {
-    return expandPassesMode(in, n, dstModeFor(r), out);
+    const int mode = dstModeFor(r);
+    return expandPassesMode(
+        in, n, mode, g_rd.passMerge && r->passStorage && mode == RD_BLEND_EXACT_STORAGE, out);
 }
 
 /* The open pass as the kind a pass's key draws in: a storage pass for a
@@ -3080,7 +3090,9 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     }
     cb->mode[2] = dp->modeZ;
     cb->mode[3] = dp->aref;
-    cb->blend[0] = rd__alpha_register(r->st.ds.blend);
+    /* a pass the storage pass merge draws through the destination read
+     * without GS blending: Cs (rd__dst_merge) */
+    cb->blend[0] = dp->csOnly ? 0x00u : rd__alpha_register(r->st.ds.blend);
     cb->blend[1] = dp->fix;
     cb->blend[2] = r->st.ds.colclamp;
     cb->tex[0] = (float)ds->tw;
@@ -5262,8 +5274,8 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     /* the planned passes as drawn in this pass: the exact blend's (the fog
      * is a LERP, ALPHA 0x44), the two-pass fallback's */
-    const int np =
-        fogEpoch ? expandPassesMode(pl, npl, RD_BLEND_EXACT_OFF, dp) : expandPasses(r, pl, npl, dp);
+    const int np = fogEpoch ? expandPassesMode(pl, npl, RD_BLEND_EXACT_OFF, false, dp)
+                            : expandPasses(r, pl, npl, dp);
     /* per sample in the epoch the sprite covers whole pixels, as doScreen's
      * integer-aligned sprites (msaaSpriteExpand): drawn as is, its top and
      * left edges would lie on the pixel centres of the frame's first row

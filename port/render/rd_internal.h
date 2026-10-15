@@ -1030,6 +1030,10 @@ typedef struct RdDrawPass {
      * on a premultiplied form, COLCLAMP 0) */
     uint32_t fixGs;
     uint8_t dstWant;
+    /* a pass without GS blending drawn through a destination-read shader
+     * by the storage pass merge (rd__dst_merge): the shader's ALPHA
+     * register is Cs (0x00: (Cs - Cs) * As >> 7 + Cs), not the state's */
+    uint8_t csOnly;
 } RdDrawPass;
 
 RdBlendPath rd__blend_path(uint8_t keyBlend);
@@ -1090,6 +1094,22 @@ void rd__blend_selftest_shutdown(void);
 uint32_t rd__dst_target_usage(RhiFormat fmt, uint8_t *dstUsage);
 bool rd__fs_has_dst(uint8_t fs);
 int rd__expand_dst(const RdDrawPass *in, int n, int mode, RdDrawPass out[4]);
+/* The storage pass merge (issue 103; g_rd.passMerge): inside a storage pass
+ * (the storage mode's pass without the colour attached), a pass that
+ * rd__expand_dst leaves on the fixed-function blend is drawn through the
+ * destination-read shader instead when the shader stores the same bytes,
+ * so the pass need not end and begin again with the colour attached: no
+ * GS blending (written as Cs, RdDrawPass.csOnly) or the premultiplied add
+ * (Cs*FIX + Cd, Cs*As + Cd: the blender adds two whole levels, exact), on
+ * an RGBA8 target whose entry has the twins, the mask writing RGB, no
+ * stencil, single-sampled, and not a pass that writes Z and can discard
+ * (the storage pass tests Z before the shader: rd__expand_dst's split).
+ * The premultiplied subtract stays fixed-function: the shader's term rounds
+ * Cs*F toward minus infinity (the GS's), the blender path subtracts the
+ * truncated Cs*F, one level apart wherever Cs*F is not a multiple of 128.
+ * rd__dst_merge_ok says whether p qualifies; rd__dst_merge its image. */
+bool rd__dst_merge_ok(const RdDrawPass *p);
+RdDrawPass rd__dst_merge(const RdDrawPass *p);
 /* The keys the exact blend adds to a reachable set: for each of in[0..n)
  * its rd__expand_dst images under every mode the device has (a pass whose
  * flags and alpha test the key does not keep is taken both ways), added
@@ -1668,6 +1688,10 @@ typedef struct RdContext {
      * pass of VU draws is ended and begun again, its targets loaded, after
      * every N of them (rd_replay.c passSplit); 0 off (the default) */
     uint32_t passSplit;
+    /* the storage pass merge (rd__dst_merge_ok; [dev] storage_pass_merge,
+     * ICO_RD_PASS_MERGE=0 turns it off; rd_core.c rd_init): on by default,
+     * used only under the storage mode */
+    bool passMerge;
     /* the supersampling factor in force (rd__apply_display): 1, 2 or 4,
      * already in sceneReqSx/Sy; rd_scene_scale_lowered divides it out */
     float ssaa;

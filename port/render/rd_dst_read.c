@@ -49,9 +49,15 @@
  * LERPs (modes 2, 4, 7), Cd*FIX + Cs (3), the Ad forms (8 to 10), Cd*As +
  * Cd (11), PABE on the premultiplied forms, and COLCLAMP 0, on RGBA8
  * targets, in every preset.  Left on the fixed-function blend: the
- * premultiplied adds and subtracts (0, 1, 5, 6: exact in hardware), the
+ * premultiplied adds and subtracts (0, 1, 5, 6; the adds exact in
+ * hardware, the subtracts one level above the GS where Cs*F is not a
+ * multiple of 128: the shader truncates Cs*F >> 7 and the blender
+ * subtracts it, where the GS shifts the negative (0 - Cs)*F down), the
  * MSAA epoch's passes and the fog drawn while it is open, targets other
- * than RGBA8, the port's presentation overlay.  The staticBlur sprites and
+ * than RGBA8, the port's presentation overlay.  Under the storage mode the
+ * storage pass merge (rd__dst_merge_ok, issue 103) draws the unblended
+ * passes and the premultiplied adds of an open storage pass through the
+ * read too, the same bytes, so the pass need not end for them.  The staticBlur sprites and
  * blend_int keep their own exact paths; DATE reads its snapshot.  See
  * docs/port/RENDER.md "Destination reads and blend paths".
  */
@@ -273,6 +279,26 @@ int rd__expand_dst(const RdDrawPass *in, int n, int mode, RdDrawPass out[4])
     return m;
 }
 
+bool rd__dst_merge_ok(const RdDrawPass *p)
+{
+    if (p->dstWant || !eligible(&p->key)) {
+        return false;
+    }
+    const RdBlendPath bp = rd__blend_path(p->key.gs.blend);
+    if (bp != RD_BP_NONE && bp != RD_BP_PREMUL_ADD) {
+        return false;
+    }
+    return !(p->key.gs.zwrite == RD_ZWRITE_ON && p->key.depthFmt != RHI_FMT_UNKNOWN &&
+             passDiscards(p));
+}
+
+RdDrawPass rd__dst_merge(const RdDrawPass *p)
+{
+    RdDrawPass c = dstPass(p, RD_BLEND_EXACT_STORAGE);
+    c.csOnly = (uint8_t)(rd__blend_path(p->key.gs.blend) == RD_BP_NONE);
+    return c;
+}
+
 uint32_t rd__enumerate_dst(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out, uint32_t max,
                            uint32_t count)
 {
@@ -281,12 +307,25 @@ uint32_t rd__enumerate_dst(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out
         return count;
     }
     for (uint32_t i = 0; i < n; i++) {
-        if (!eligible(&in[i]) || rd__blend_path(in[i].gs.blend) == RD_BP_NONE) {
+        if (!eligible(&in[i])) {
             continue;
         }
         RdDrawPass p;
         memset(&p, 0, sizeof(p));
         p.key = in[i];
+        const RdBlendPath bp = rd__blend_path(in[i].gs.blend);
+        if (bp == RD_BP_NONE || bp == RD_BP_PREMUL_ADD) {
+            /* the storage pass merge's image (rd__dst_merge), the same key
+             * as a blended pass's: the start-up set has it when the device
+             * has the storage mode and the merge is on */
+            if (mode == RD_BLEND_EXACT_STORAGE && g_rd.passMerge) {
+                const RdDrawPass m = rd__dst_merge(&p);
+                count = rd__add_pipe_key(out, max, count, &m.key);
+            }
+            if (bp == RD_BP_NONE) {
+                continue;
+            }
+        }
         p.dstWant = 1;
         /* a key keeps neither the alpha test nor DATE: the pass as it is,
          * and under the storage mode with Z write also split */

@@ -488,6 +488,7 @@ static const struct {
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
     {"dev.attachment_read", "attachment_read"},
+    {"dev.storage_pass_merge", "storage_pass_merge"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -502,6 +503,8 @@ static const struct {
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay.c passSplit */
     {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
+    /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
+    {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
 };
 
 static int value_is(const char *v, const char *const *words)

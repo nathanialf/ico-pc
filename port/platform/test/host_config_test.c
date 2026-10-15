@@ -490,6 +490,12 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("pass_split", "8x") == NULL);
     CHECK(ico_dev_env_value("pass_split", "-1") == NULL);
     CHECK(ico_dev_env_value("pass_split", "99999") == NULL);
+    /* storage_pass_merge: the storage pass merge's switch (issue 103) */
+    CHECK(strcmp(ico_dev_env_name("storage_pass_merge"), "ICO_RD_PASS_MERGE") == 0);
+    CHECK(strcmp(ico_dev_env_value("storage_pass_merge", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("storage_pass_merge", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("storage_pass_merge", "sometimes") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.storage_pass_merge"), "storage_pass_merge") == 0);
     /* config.toml's [dev] keys reach the same ini keys */
     CHECK(strcmp(ico_config_ini_key("dev.blend"), "blend") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.fog_path"), "fog_path") == 0);

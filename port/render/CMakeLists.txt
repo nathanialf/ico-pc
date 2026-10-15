@@ -769,6 +769,17 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_split.cmake")
     set_tests_properties(rd_replay_tool_pass_split PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                               FIXTURES_REQUIRED rd_dump TIMEOUT 300)
+    # the storage pass merge (issue 103): under ICO_RD_BLEND=storage the
+    # replay draws ICO_RD_PASS_MERGE=0's DISPLAY picture byte for byte, at 1x
+    # and 2x, with no more pass switches; skips without the storage read
+    # (lavapipe has no interlock)
+    add_test(NAME rd_replay_tool_pass_merge
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_pass_merge"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_merge.cmake")
+    set_tests_properties(rd_replay_tool_pass_merge PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                              FIXTURES_REQUIRED rd_dump TIMEOUT 300)
     # the native frame gates (tools/native_frame_check.py, docs/port/TESTING.md): gate-a
     # re-renders the dump list ICO_DUMPS names and compares with
     # docs/native_frame_baseline.json; gate-b checks the aspect sweeps ICO_SWEEPS names.

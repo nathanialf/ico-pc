@@ -378,6 +378,73 @@ static void samePixels(const char *what, const uint8_t *a, const uint8_t *b)
     }
 }
 
+/* The exact blend's counters (rd.h RdPerfRecord, issue 103) on the frame
+ * replayed under each blend path the device has: none under the
+ * fixed-function blend; destination-read draws (the frame's LERP meshes)
+ * and neither storage passes nor switches under the attachment read; under
+ * the storage read storage passes and switches, and with the storage pass
+ * merge (g_rd.passMerge) the same DISPLAY bytes as without it, no more
+ * passes and no more switches (a device with the interlock or ROV; not
+ * lavapipe, which has none: that part is skipped there).  The frame has no
+ * glow: no glow passes. */
+static RdPerfRecord replayOnce(const RdFrame *f)
+{
+    rd__replay_frame(f, 0, true);
+    const RdPerfRecord r = g_rdPerf; /* the record the replay just closed */
+    while (rd_perf_pop(NULL)) {}
+    return r;
+}
+
+static void checkExactCounters(const RdFrame *f)
+{
+    const RdBlendExact was = rd_blend_exact();
+    const bool merge = g_rd.passMerge;
+    if (rd_set_blend_exact(RD_BLEND_EXACT_OFF)) {
+        const RdPerfRecord r = replayOnce(f);
+        CHECK(r.dstDraws == 0 && r.storagePasses == 0 && r.dstSwitches == 0,
+              "fixed-function: %u destination-read draws, %u storage passes, %u switches",
+              r.dstDraws, r.storagePasses, r.dstSwitches);
+        CHECK(r.glowPasses == 0, "fixed-function: %u glow passes in a frame without the glow",
+              r.glowPasses);
+        printf("fixed-function: %u snapshots copied, %u swapped\n", r.snapshots, r.snapSwaps);
+    }
+    if (rd_set_blend_exact(RD_BLEND_EXACT_ATTACHMENT)) {
+        const RdPerfRecord r = replayOnce(f);
+        printf("attachment read: %u destination-read draws\n", r.dstDraws);
+        CHECK(r.dstDraws > 0 && r.storagePasses == 0 && r.dstSwitches == 0,
+              "attachment read: %u destination-read draws, %u storage passes, %u switches",
+              r.dstDraws, r.storagePasses, r.dstSwitches);
+    }
+    if (rd_set_blend_exact(RD_BLEND_EXACT_STORAGE)) {
+        g_rd.passMerge = false;
+        const RdPerfRecord off = replayOnce(f);
+        uint8_t *a = readDisplay();
+        g_rd.passMerge = true;
+        const RdPerfRecord on = replayOnce(f);
+        uint8_t *b = readDisplay();
+        printf("storage read: %u passes, %u storage passes, %u switches, %u destination-read draws "
+               "without the merge; %u, %u, %u, %u with it\n",
+               off.renderPasses, off.storagePasses, off.dstSwitches, off.dstDraws, on.renderPasses,
+               on.storagePasses, on.dstSwitches, on.dstDraws);
+        CHECK(off.dstDraws > 0 && off.storagePasses > 0 && off.dstSwitches > 0,
+              "storage read: %u destination-read draws, %u storage passes, %u switches",
+              off.dstDraws, off.storagePasses, off.dstSwitches);
+        CHECK(on.dstSwitches <= off.dstSwitches && on.renderPasses <= off.renderPasses &&
+                  on.dstDraws >= off.dstDraws,
+              "storage pass merge: %u switches, %u passes, %u destination-read draws against "
+              "%u, %u, %u without",
+              on.dstSwitches, on.renderPasses, on.dstDraws, off.dstSwitches, off.renderPasses,
+              off.dstDraws);
+        samePixels("storage pass merge", a, b);
+        free(a);
+        free(b);
+    }
+    g_rd.passMerge = merge;
+    rd_set_blend_exact(was);
+    rd__replay_frame(f, 0, true); /* the frame as it was, for what follows */
+    while (rd_perf_pop(NULL)) {}
+}
+
 /* The uniform blocks take dynamic offsets, so every replay
  * creates one group per uniform layout it uses, whatever its draw count:
  * the frame (FrameCB), draw (DrawCB) and VU (DrawCB, VuCB, VuBoneCB over
@@ -577,6 +644,7 @@ static int synthetic(void)
         RdPerfRecord r;
         while (rd_perf_pop(&r)) {}
     }
+    checkExactCounters(rd__last_frame());
     print("replay (first 2)", &first);
     print("replay (steady)", &rest);
     CHECK(rest.created == 0 && rest.destroyed == 0 && rest.allocs == 0,

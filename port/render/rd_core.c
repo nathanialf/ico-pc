@@ -1391,6 +1391,16 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
                     (unsigned)g_rd.passSplit);
         }
     }
+    /* the storage pass merge (rd_dst_read.c rd__dst_merge_ok, issue 103),
+     * on unless ICO_RD_PASS_MERGE=0 ([dev] storage_pass_merge = false);
+     * it changes only the storage mode's passes */
+    {
+        const char *merge = getenv("ICO_RD_PASS_MERGE");
+        g_rd.passMerge = !(merge && strcmp(merge, "0") == 0);
+        if (!g_rd.passMerge) {
+            rd__log("storage pass merge: off (ICO_RD_PASS_MERGE=0)");
+        }
+    }
     /* the exact GS blend (rd_dst_read.c): the destination read the device
      * has, before the targets are made with its usage */
     rd__dst_init();
