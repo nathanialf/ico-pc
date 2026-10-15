@@ -397,6 +397,13 @@ typedef struct RdTargetRec {
     /* the destination reads the colour texture was made for
      * (rd__dst_target_usage: 1 storage, 2 input attachment), 0 none */
     uint8_t dstUsage;
+    /* a render-to-texture block rd_block_target made (rd_water.c: the
+     * reflections of puddle.c and pool.c, the queen barrier's copy of the
+     * frame, the dark volume's scene-sized block): one that is not
+     * scene-sized takes the scene's scale under Water reflections: Sharp
+     * (RdSettings.waterSharp, rd__target_scale_of); 1 also in a dump's
+     * keep word (rd_dump.c) */
+    uint8_t block;
 } RdTargetRec;
 
 /* The texels a screen-prim command can touch on the bound target tc: the
@@ -444,6 +451,12 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name);
 void rd__target_destroy_gpu(RdTargetRec *t);
 /* Allocates a temp target record (dump loading uses it too). */
 uint32_t rd__temp_target_alloc(uint32_t w, uint32_t h, int withDepth, int keepAcross);
+/* the same, block != 0 marking a render-to-texture block
+ * (RdTargetRec.block: rd_block_target, a dump's block) */
+uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int keepAcross, int block);
+/* rd_temp_target of a block (rd_water.c rd_block_target): freed with the
+ * open frame, RdTargetRec.block set */
+RdTarget rd__block_temp_target(uint32_t gsW, uint32_t gsH, int withDepth);
 void rd__temp_target_free(uint32_t id);
 /* Destroys the parked temporary targets' textures (a scale
  * change, shutdown). */

@@ -1267,7 +1267,8 @@ void rd_shadow_resolve(void);
  *                  own GS size at every aspect (one the game sizes as the
  *                  native frame, gsFrame.w x ScreenHeight, takes the scene's
  *                  resolution scale like SCENE; rd_core.c
- *                  rd__target_scale_of)
+ *                  rd__target_scale_of), or at the scene's scale under
+ *                  Water reflections: Sharp (RdSettings.waterSharp)
  * rd_alias_target   from here on, in the current list and the open frame,
  *                  rd_set_target and rd_clear_target of `from` and rd_texture
  *                  of a view of `from` (rd_target_texture) record `to`

@@ -507,7 +507,16 @@ static uint32_t scaled(uint32_t n, float k)
  * (rd__apply_display).  A block of any other size (a reflection block, the
  * queen barrier's copy) is drawn at its own GS size, whatever the aspect:
  * the game sizes it, and its picture is the one its own screen matrix
- * gives. */
+ * gives.  Under Water reflections: Sharp (RdSettings.waterSharp) such a
+ * block that rd_block_target made (t->block: puddle.c's and pool.c's
+ * reflections, the queen barrier's copy) takes the scene's scale instead,
+ * both ways as SCENE has it, so its picture has the scene's texels per GS
+ * pixel; its depth buffer is made at the same texture size, and the
+ * grids and sprites that sample it address it in GS texels (the scale is
+ * the texture's alone).  The work scale is not used: it stops at 2x
+ * (rd_work_target_scale), which at 4K would leave the reflection at less
+ * than half the scene's resolution.  With the option off nothing here
+ * changes. */
 void rd__target_scale_of(RdTargetRec *t, int named)
 {
     float sx = 1.0f, sy = 1.0f;
@@ -518,6 +527,9 @@ void rd__target_scale_of(RdTargetRec *t, int named)
         if (displayClass(named) && g_rd.fullHeight) {
             sy *= 2.0f; /* the full-height scene: no vertical halving */
         }
+    } else if (named < 0 && t->block && g_rd.settings.waterSharp) {
+        sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
+        sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
     } else if (named >= 0 && g_rd.workScale > 1.0f && !shadowLevel(named)) {
         sx = sy = g_rd.workScale;
     }
@@ -754,7 +766,10 @@ void rd__note_target_pressure(const RdTargetRec *t)
     const int idx = (int)(t - g_rd.targets);
     const int scene = idx >= 0 && idx < RD_TARGET_COUNT ? sceneClass(idx)
                                                         : (t->w == g_rd.gsW && t->h == g_rd.gsH);
-    if (scene) {
+    /* a block at the scene's scale (Water reflections: Sharp) comes down
+     * with the scene */
+    const int sharpBlock = t->block && (t->sx > 1.0f || t->sy > 1.0f);
+    if (scene || sharpBlock) {
         rd__note_scene_pressure();
     }
 }
@@ -777,12 +792,18 @@ static bool parkedFits(const RdTargetRec *t, const RdTargetRec *want)
 
 uint32_t rd__temp_target_alloc(uint32_t w, uint32_t h, int withDepth, int keepAcross)
 {
+    return rd__temp_target_alloc_ex(w, h, withDepth, keepAcross, 0);
+}
+
+uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int keepAcross, int block)
+{
     RdTargetRec want;
     memset(&want, 0, sizeof(want));
     want.w = w ? w : 1;
     want.h = h ? h : 1;
     want.format = RHI_FMT_RGBA8_UNORM;
     want.withDepth = withDepth ? 1 : 0;
+    want.block = block ? 1 : 0;
     rd__target_scale_of(&want, -1);
     int pick = -1, empty = -1, other = -1;
     for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
@@ -902,9 +923,10 @@ RdTarget rd_target(RdTargetId id)
     return (RdTarget){(uint32_t)id + 1};
 }
 
-RdTarget rd_temp_target(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcrossFrames)
+static RdTarget tempTarget(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcrossFrames,
+                           int block)
 {
-    uint32_t id = rd__temp_target_alloc(gsW, gsH, withDepth, keepAcrossFrames);
+    uint32_t id = rd__temp_target_alloc_ex(gsW, gsH, withDepth, keepAcrossFrames, block);
     RdFrame *f = rd__rec_frame();
     if (id && !keepAcrossFrames) {
         if (f && f->tempCount < RD_MAX_TEMP_PER_FRAME) {
@@ -915,6 +937,16 @@ RdTarget rd_temp_target(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcros
         }
     }
     return (RdTarget){id};
+}
+
+RdTarget rd_temp_target(uint32_t gsW, uint32_t gsH, int withDepth, int keepAcrossFrames)
+{
+    return tempTarget(gsW, gsH, withDepth, keepAcrossFrames, 0);
+}
+
+RdTarget rd__block_temp_target(uint32_t gsW, uint32_t gsH, int withDepth)
+{
+    return tempTarget(gsW, gsH, withDepth, 0, 1);
 }
 
 void rd_set_target(RdTarget color, RdTarget depth, uint32_t gsW, uint32_t gsH, int useOffset)
@@ -1350,6 +1382,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     /* the fog's depth path (RdContext.fogPath, depthCopy) */
     rd__fog_path_init();
     rd__apply_display(); /* the scales the named targets take */
+    if (g_rd.settings.waterSharp) {
+        rd__log("water reflections: sharp (the scene's scale)");
+    }
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -1667,6 +1702,7 @@ void rd_begin_frame(void)
         /* the model pack's switch and its dump, on a change */
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
+        const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
@@ -1677,6 +1713,11 @@ void rd_begin_frame(void)
         }
         if (dumpChanged) {
             modelpack_set_dump_enabled(g_rd.settings.dumpModels != 0);
+        }
+        if (waterChanged) {
+            /* the blocks made from this frame on (rd__target_scale_of) */
+            rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
+                                                                      : "original (their GS size)");
         }
         /* the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next

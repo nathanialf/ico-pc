@@ -129,7 +129,9 @@ RdTarget rd_block_target(uint32_t tbp, uint32_t gsW, uint32_t gsH, int withDepth
         rd__log("rd_block_target: more than %d blocks in one frame", RD_WATER_BLOCKS);
         return (RdTarget){0};
     }
-    RdTarget t = rd_temp_target(gsW, gsH, withDepth, 0);
+    /* marked as a block: under Water reflections: Sharp one that is not
+     * scene-sized takes the scene's scale (rd_core.c rd__target_scale_of) */
+    RdTarget t = rd__block_temp_target(gsW, gsH, withDepth);
     if (t.id != 0) {
         WaterBlock *b = &w->blocks[w->blockCount++];
         b->tbp = tbp;
