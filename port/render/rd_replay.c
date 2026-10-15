@@ -68,6 +68,9 @@
 #include "shaders_gen.h"
 #include "texpack.h"
 
+/* the snapshots taken, copies and swaps alike (rd__blur_snapshot_count) */
+static uint64_t s_blurSnapCount;
+
 static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs" /* indexed by RD_VS_* */,
                                                    "sprite_world_vs",
                                                    "blit_vs",
@@ -2206,6 +2209,7 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
         return false;
     }
     g_rdPerf.snapshots++;
+    s_blurSnapCount++;
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_SNAP, (uint32_t)(tc - g_rd.targets) + 1u, tc->tw,
@@ -5550,6 +5554,7 @@ static bool blurSwapTarget(Replay *r, RdTargetRec *tc)
         s_ms.sceneColor = tc->color.id; /* SCENE's colour for the epoch's checks */
     }
     g_rdPerf.snapSwaps++;
+    s_blurSnapCount++;
     return true;
 }
 
@@ -5640,6 +5645,13 @@ static bool blurSpriteClears(const Replay *r, const RdTargetRec *tc, const RdPos
  * it draws into, the target is first copied into its snapshot, which the
  * shader reads as the destination (t2) and, sampling itself, as the
  * texture: the GS reads both before it writes. */
+/* rd__blur_snapshot_count (rd_internal.h): the snapshots taken, copies and
+   swaps alike (tests) */
+uint64_t rd__blur_snapshot_count(void)
+{
+    return s_blurSnapCount;
+}
+
 /* rd__set_blur_fix128_skip (rd_internal.h) */
 static bool s_blurFix128Skip = true;
 

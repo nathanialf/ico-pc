@@ -1932,6 +1932,9 @@ void rd__replay_window_stats(RdReplayWindowStats *out);
  * still take theirs). On by default; off draws it with the blend (tests:
  * the same frame replayed both ways). */
 void rd__set_blur_fix128_skip(bool on);
+/* The snapshots taken so far, copies and swaps alike (rd_replay.c takeSnap,
+   blurSwapTarget): the fix128_skip test counts what a sprite skipped */
+uint64_t rd__blur_snapshot_count(void);
 /* The reduction's fallback sprite (rd_replay.c doBlurSpriteDraw) whose steps
  * keep the GS's filter on both axes (blurAbove1xSteps 0: full height at
  * scale 1, one SCENE row a DISPLAY row) is drawn without DF_ABOVE1X, as

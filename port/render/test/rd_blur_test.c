@@ -2078,13 +2078,19 @@ static uint64_t fixReplay(const char *what, const RdFrame *f, int skip, uint8_t 
     rd__set_blur_fix128_skip(skip != 0);
     rhi_wait_idle();
     rhi_get_stats(&a);
+    const uint64_t snaps = rd__blur_snapshot_count();
     CHECK(rd__replay_frame(f, 0, false), "%s: replay with the skip %s", what, skip ? "on" : "off");
     rhi_wait_idle();
     rhi_get_stats(&b);
     CHECK(rd__read_target(rd_target(RD_TARGET_SCENE), out, (size_t)W * H * 4, &w, &h) && w == W &&
               h == H,
           "%s: read SCENE", what);
-    return b.copies - a.copies;
+    (void)a;
+    (void)b;
+    /* the snapshots the replay took, a copy or a swap alike (a sprite that
+       covers its target swaps instead of copying, so rhi copies no longer
+       count them) */
+    return rd__blur_snapshot_count() - snaps;
 }
 
 static void checkFix128Skip(void)
@@ -2131,12 +2137,12 @@ static void checkFix128Skip(void)
             dOff += off[i] != model[i];
             dBoth += on[i] != off[i];
         }
-        printf("  %s: %llu copies with the skip, %llu without; SCENE bytes differing: %d on, %d "
+        printf("  %s: %llu snapshots with the skip, %llu without; SCENE bytes differing: %d on, %d "
                "off from the model, %d between\n",
                what, (unsigned long long)cOn, (unsigned long long)cOff, dOn, dOff, dBoth);
         CHECK(dOn == 0 && dOff == 0 && dBoth == 0, "%s: SCENE the model's both ways", what);
-        CHECK(kC[k].skip ? cOff == cOn + 1 : cOff == cOn, "%s: %s (copies %llu on, %llu off)", what,
-              kC[k].skip ? "the skip takes no snapshot" : "the snapshot is kept",
+        CHECK(kC[k].skip ? cOff == cOn + 1 : cOff == cOn, "%s: %s (snapshots %llu on, %llu off)",
+              what, kC[k].skip ? "the skip takes no snapshot" : "the snapshot is kept",
               (unsigned long long)cOn, (unsigned long long)cOff);
     }
     rd__set_blur_fix128_skip(true);
