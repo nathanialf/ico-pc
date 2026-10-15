@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="description" content="Download ICO PC, the PAL PlayStation 2 game ICO as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac.">
+<title>ICO PC download</title>
+<style>
+:root {
+  --bg: #121110;
+  --panel: #1c1a18;
+  --line: #34302b;
+  --text: #ece6dc;
+  --muted: #a9a196;
+  --accent: #d8b26a;
+  --accent-hi: #e8c787;
+  --on-accent: #1b1610;
+  --warn: #e3a35d;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+}
+a { color: var(--accent); }
+a:hover { color: var(--accent-hi); }
+main, footer { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
+header.top { max-width: 44rem; margin: 0 auto; padding: 40px 16px 8px; display: flex; gap: 14px; align-items: center; }
+header.top svg { flex: none; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0; letter-spacing: 0.02em; }
+h2 { font-size: 1.2rem; margin: 0 0 12px; }
+.lede { color: var(--muted); margin: 8px 0 24px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 0 0 20px; }
+.for { color: var(--muted); margin: 0 0 12px; }
+.for strong { color: var(--text); }
+.btn {
+  display: block; width: 100%; text-align: center; text-decoration: none;
+  border-radius: 8px; padding: 14px 16px; font-weight: 600; overflow-wrap: anywhere;
+}
+.btn.big { background: var(--accent); color: var(--on-accent); font-size: 1.15rem; }
+.btn.big:hover, .btn.big:focus-visible { background: var(--accent-hi); color: var(--on-accent); }
+.btn.small { border: 1px solid var(--accent); color: var(--accent); margin-top: 12px; padding: 10px 16px; }
+.btn.small:hover, .btn.small:focus-visible { background: #2a2419; color: var(--accent-hi); }
+.btn .file { display: block; font-weight: 400; font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
+.note { color: var(--muted); font-size: 0.92rem; margin: 8px 0 0; }
+.note.warn { color: var(--warn); }
+.howto { margin: 14px 0 0; font-size: 0.95rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
+.chips button {
+  font: inherit; font-size: 0.9rem; color: var(--text); background: transparent;
+  border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer;
+}
+.chips button:hover { border-color: var(--muted); }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.lbl { display: block; color: var(--muted); font-size: 0.92rem; margin: 0 0 6px; }
+select {
+  font: inherit; width: 100%; max-width: 100%; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+}
+.files { margin: 12px 0 0; padding: 0; list-style: none; }
+.files li { padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.files .size { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+details summary { cursor: pointer; color: var(--accent); margin-top: 14px; }
+.notes h3 { font-size: 1.05rem; margin: 18px 0 6px; }
+.notes h4 { font-size: 1rem; margin: 14px 0 6px; }
+.notes ul, .notes ol { padding-left: 1.3em; margin: 6px 0; }
+.notes li { margin: 4px 0; }
+.notes p { margin: 8px 0; }
+.notes code, code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; background: #26231f; padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.notes > :first-child { margin-top: 0; }
+.status { color: var(--muted); }
+.thanks { color: var(--muted); }
+footer { color: var(--muted); font-size: 0.9rem; padding-top: 4px; padding-bottom: 40px; }
+footer a { margin-right: 16px; }
+:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
+    <rect x="1" y="1" width="42" height="42" rx="9" fill="#1c1a18" stroke="#34302b"/>
+    <path d="M14 34V17l3-3 3 3v4h4v-4l3-3 3 3v17z" fill="#d8b26a"/>
+    <path d="M20 34v-6a2 2 0 0 1 4 0v6z" fill="#121110"/>
+  </svg>
+  <h1>ICO PC</h1>
+</header>
+<main>
+  <p class="lede">ICO, the PAL PlayStation 2 game, as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac. It runs the game's own code, so it plays like the PS2 game, with a sharper picture, widescreen and smoother motion when you want them.</p>
+
+  <section class="panel" id="get" aria-live="polite">
+    <p class="status" id="status">Looking up the latest version&hellip;</p>
+    <div id="pick" hidden>
+      <p class="for" id="for"></p>
+      <div id="main-dl"></div>
+      <div id="portable-dl"></div>
+      <p class="howto" id="howto"></p>
+    </div>
+  </section>
+
+  <section class="panel" id="choose" hidden>
+    <h2>Another device or version</h2>
+    <p class="lbl" id="plat-lbl">Device</p>
+    <ul class="chips" id="plats" role="group" aria-labelledby="plat-lbl"></ul>
+    <label class="lbl" for="ver" style="margin-top:16px">Version</label>
+    <select id="ver"></select>
+    <p class="note" id="ver-note"></p>
+    <details id="all">
+      <summary>Every file in this version</summary>
+      <ul class="files" id="files"></ul>
+    </details>
+  </section>
+
+  <section class="panel" id="notes-panel" hidden>
+    <h2 id="notes-title">What changed</h2>
+    <div class="notes" id="notes"></div>
+  </section>
+
+  <section class="panel">
+    <p style="margin:0">Needs your own copy of the game disc (ICO, PAL version, SCES-50760) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
+    <p class="thanks" style="margin:12px 0 0">Special thanks: Sad Origami, for the <a href="https://ko-fi.com/s/7c0e3e044f">ICO HD texture pack</a> and for suggesting this page.</p>
+  </section>
+</main>
+<footer>
+  <a href="https://github.com/nathanialf/ico-pc">The project on GitHub</a>
+  <a href="https://github.com/nathanialf/ico-pc/issues">Report a problem</a>
+  <a href="https://github.com/nathanialf/ico-pc/releases">All releases</a>
+  <p>Not connected to Sony Interactive Entertainment or Team Ico. ICO is a trademark of its owners. The game itself is not included in the downloads.</p>
+</footer>
+<script>
+(function () {
+  "use strict";
+  var REPO = "https://github.com/nathanialf/ico-pc";
+  var API = "https://api.github.com/repos/nathanialf/ico-pc/releases?per_page=100";
+  var CACHE_KEY = "icopc-releases-v1";
+  var CACHE_MS = 10 * 60 * 1000;
+  var README = REPO + "#";
+
+  /* each device: the main file's name ending, the portable one's, where the
+     README explains the install, and a note shown under the button */
+  var PLATS = [
+    { id: "win", label: "Windows", main: "-win.zip", portable: "-win-portable.zip", howto: "windows" },
+    { id: "linux", label: "Linux and Steam Deck", main: "-linux.tar.gz", portable: "-linux-portable.tar.gz", howto: "linux-and-steam-deck" },
+    { id: "linux-arm64", label: "Linux on ARM", main: "-linux-arm64.tar.gz", portable: "-linux-arm64-portable.tar.gz", howto: "linux-and-steam-deck",
+      note: "For 64-bit ARM Linux handhelds and boards." },
+    { id: "macos", label: "Mac", main: "-macos-arm64.dmg", alt: "-macos-arm64.zip", howto: "mac",
+      note: "For Macs with Apple silicon. The first time, right-click ICO and choose Open." },
+    { id: "android", label: "Android", main: "-android.apk", howto: "android",
+      note: "Open the file on your phone or tablet to install it." },
+    { id: "ios", label: "iPhone and iPad", main: "-ios-unsigned.ipa", howto: "iphone",
+      note: "Not in the App Store: it runs inside LiveContainer, or install it with a signing tool." }
+  ];
+
+  var state = { releases: [], plat: null, detected: null, rel: null };
+
+  function $(id) { return document.getElementById(id); }
+  function str(v) { return typeof v === "string" ? v : ""; }
+  function esc(s) {
+    return str(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function platById(id) {
+    for (var i = 0; i < PLATS.length; i++) if (PLATS[i].id === id) return PLATS[i];
+    return null;
+  }
+  function size(n) {
+    if (typeof n !== "number" || !(n > 0)) return "";
+    if (n >= 1048576) return (n / 1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB";
+    return Math.max(1, Math.round(n / 1024)) + " KB";
+  }
+  function day(iso) {
+    var d = new Date(str(iso));
+    if (isNaN(d.getTime())) return "";
+    try {
+      return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    } catch (e) { return d.toISOString().slice(0, 10); }
+  }
+
+  /* ---- which device is this ---- */
+  function detect() {
+    var ua = "", pf = "", touch = 0;
+    try { ua = str(navigator.userAgent); pf = str(navigator.platform); touch = navigator.maxTouchPoints || 0; } catch (e) {}
+    if (/iPhone|iPad|iPod/i.test(ua) || /iPhone|iPad|iPod/i.test(pf) || (pf === "MacIntel" && touch > 1)) return "ios";
+    if (/Android/i.test(ua)) return "android";
+    if (/Windows/i.test(ua) || /^Win/i.test(pf)) return "win";
+    if (/Macintosh|Mac OS X/i.test(ua) || /^Mac/i.test(pf)) return "macos";
+    if (/CrOS/i.test(ua)) return null;
+    if (/Linux|X11/i.test(ua) || /Linux/i.test(pf)) {
+      return /aarch64|arm64|armv8/i.test(ua + " " + pf) ? "linux-arm64" : "linux";
+    }
+    return null;
+  }
+
+  /* ---- the releases, cached for ten minutes in this tab ---- */
+  function readCache(anyAge) {
+    try {
+      var raw = window.sessionStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      var c = JSON.parse(raw);
+      if (!c || !Array.isArray(c.data)) return null;
+      if (!anyAge && !(Date.now() - c.t < CACHE_MS)) return null;
+      return c.data;
+    } catch (e) { return null; }
+  }
+  function writeCache(data) {
+    try { window.sessionStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data: data })); } catch (e) {}
+  }
+  function load(done) {
+    var cached = readCache(false);
+    if (cached) { done(cached); return; }
+    function fail() {
+      var stale = readCache(true);
+      if (stale) done(stale); else done(null);
+    }
+    if (!window.fetch) { fail(); return; }
+    fetch(API, { headers: { Accept: "application/vnd.github+json" } })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (data) {
+        if (!Array.isArray(data)) throw new Error("bad data");
+        /* keep only what the page uses, so the cache stays small */
+        var slim = data.map(function (r) {
+          var assets = Array.isArray(r && r.assets) ? r.assets : [];
+          return {
+            tag_name: str(r && r.tag_name), name: str(r && r.name), html_url: str(r && r.html_url),
+            prerelease: !!(r && r.prerelease), draft: !!(r && r.draft),
+            published_at: str(r && r.published_at), body: str(r && r.body),
+            assets: assets.map(function (a) {
+              return { name: str(a && a.name), size: (a && a.size) || 0, url: str(a && a.browser_download_url) };
+            })
+          };
+        });
+        writeCache(slim);
+        done(slim);
+      })
+      .catch(fail);
+  }
+
+  /* ---- a small Markdown reader for the release notes ---- */
+  function linkTarget(u) {
+    u = str(u).replace(/&amp;/g, "&");
+    if (/^https?:\/\//i.test(u)) return u;
+    if (/^#/.test(u)) return REPO + u;
+    if (/^[\w.\/#-]+$/.test(u) && !/\.\./.test(u)) return REPO + "/blob/main/" + u.replace(/^\.?\//, "");
+    return "";
+  }
+  function inline(text) {
+    var s = esc(text);
+    return s.replace(/\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`|(https?:\/\/[^\s<]+)/g,
+      function (m, ltext, lurl, b1, b2, code, bare) {
+        if (ltext !== undefined) {
+          var t = linkTarget(lurl);
+          return t ? '<a href="' + esc(t) + '">' + ltext + "</a>" : ltext;
+        }
+        if (b1 !== undefined) return "<strong>" + b1 + "</strong>";
+        if (b2 !== undefined) return "<strong>" + b2 + "</strong>";
+        if (code !== undefined) return "<code>" + code + "</code>";
+        var tail = "";
+        var mm = /[.,;:!?)]+$/.exec(bare);
+        if (mm) { tail = mm[0]; bare = bare.slice(0, -tail.length); }
+        var href = bare.replace(/&amp;/g, "&");
+        return '<a href="' + esc(href) + '">' + bare + "</a>" + tail;
+      });
+  }
+  function markdown(src) {
+    var lines = str(src).replace(/\r\n?/g, "\n").split("\n");
+    var out = [], para = [], list = null, item = null;
+    function flushPara() { if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } }
+    function flushItem() { if (item !== null) { list.items.push(item); item = null; } }
+    function flushList() {
+      flushItem();
+      if (list) {
+        out.push("<" + list.tag + ">" + list.items.map(function (t) { return "<li>" + inline(t) + "</li>"; }).join("") + "</" + list.tag + ">");
+        list = null;
+      }
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i], m;
+      if (/^\s*$/.test(line)) { flushPara(); flushItem(); continue; }
+      if ((m = /^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line))) {
+        flushPara(); flushList();
+        var tag = m[1].length <= 2 ? "h3" : "h4";
+        out.push("<" + tag + ">" + inline(m[2]) + "</" + tag + ">");
+        continue;
+      }
+      if ((m = /^\s{0,3}([-*+]|\d+[.)])\s+(.*)$/.exec(line))) {
+        flushPara();
+        var want = /\d/.test(m[1]) ? "ol" : "ul";
+        if (list && list.tag !== want) flushList();
+        flushItem();
+        if (!list) list = { tag: want, items: [] };
+        item = m[2];
+        continue;
+      }
+      if (item !== null && /^\s+\S/.test(line)) { item += " " + line.trim(); continue; }
+      if (list && item === null && /^\s+\S/.test(line) && list.items.length) {
+        list.items[list.items.length - 1] += " " + line.trim();
+        continue;
+      }
+      flushList();
+      para.push(line.trim());
+    }
+    flushPara(); flushList();
+    return out.join("\n");
+  }
+
+  /* ---- drawing ---- */
+  function findAsset(rel, ending) {
+    if (!rel || !ending) return null;
+    var a = rel.assets || [];
+    for (var i = 0; i < a.length; i++) {
+      var n = str(a[i] && a[i].name);
+      if (n && n.slice(-ending.length) === ending && a[i].url) return a[i];
+    }
+    return null;
+  }
+  function buttonHtml(cls, label, asset) {
+    return '<a class="btn ' + cls + '" href="' + esc(asset.url) + '">' + esc(label) +
+      '<span class="file">' + esc(asset.name) + (size(asset.size) ? " &middot; " + size(asset.size) : "") + "</span></a>";
+  }
+  function latestStable() {
+    var r = state.releases;
+    for (var i = 0; i < r.length; i++) if (!r[i].prerelease) return r[i];
+    return r[0] || null;
+  }
+
+  function drawPlats() {
+    var html = "";
+    for (var i = 0; i < PLATS.length; i++) {
+      var p = PLATS[i];
+      html += '<li><button type="button" data-plat="' + p.id + '" aria-pressed="' + (state.plat === p.id) + '">' +
+        esc(p.label) + (state.detected === p.id ? " (this device)" : "") + "</button></li>";
+    }
+    $("plats").innerHTML = html;
+  }
+
+  function drawVersions() {
+    var latest = latestStable();
+    var html = "";
+    for (var i = 0; i < state.releases.length; i++) {
+      var r = state.releases[i];
+      var tag = r.tag_name || r.name || "(no name)";
+      var extra = r === latest ? " (latest)" : (r.prerelease ? " (test version)" : "");
+      html += '<option value="' + i + '"' + (r === state.rel ? " selected" : "") + ">" + esc(tag + extra) + "</option>";
+    }
+    $("ver").innerHTML = html;
+  }
+
+  function drawFiles() {
+    var rel = state.rel, a = (rel && rel.assets) || [], html = "";
+    for (var i = 0; i < a.length; i++) {
+      if (!a[i] || !a[i].url) continue;
+      html += '<li><a href="' + esc(a[i].url) + '">' + esc(a[i].name) + "</a> " +
+        '<span class="size">' + size(a[i].size) + "</span></li>";
+    }
+    $("files").innerHTML = html || "<li>This version has no files to download.</li>";
+  }
+
+  function drawMain() {
+    var rel = state.rel, p = platById(state.plat);
+    var tag = rel ? (rel.tag_name || rel.name) : "";
+    var main = $("main-dl"), port = $("portable-dl"), forEl = $("for"), howto = $("howto");
+    port.innerHTML = "";
+    howto.innerHTML = "";
+    if (!p) {
+      forEl.innerHTML = "We could not tell which device this is. Pick yours below, or choose a file from version <strong>" + esc(tag) + "</strong>:";
+      drawFiles();
+      main.innerHTML = '<ul class="files">' + $("files").innerHTML + "</ul>";
+      return;
+    }
+    forEl.innerHTML = "Version <strong>" + esc(tag) + "</strong> for <strong>" + esc(p.label) + "</strong>" +
+      (state.detected === p.id ? " (this device)" : "");
+    var asset = findAsset(rel, p.main);
+    if (!asset) {
+      main.innerHTML = '<p class="note warn">This version has no download for ' + esc(p.label) +
+        ". Pick another version or device below.</p>";
+    } else {
+      var html2 = buttonHtml("big", "Download for " + p.label, asset);
+      if (p.note) html2 += '<p class="note">' + esc(p.note) + "</p>";
+      var alt = findAsset(rel, p.alt);
+      if (alt) html2 += '<p class="note">Also as a <a href="' + esc(alt.url) + '">.zip</a> (' + esc(size(alt.size)) + "), the same app.</p>";
+      main.innerHTML = html2;
+    }
+    var pa = findAsset(rel, p.portable);
+    if (pa) {
+      port.innerHTML = buttonHtml("small", "Portable", pa) +
+        '<p class="note">The portable version keeps its saves and settings in its own folder, handy on a USB stick. <a href="' +
+        REPO + '/blob/main/docs/PORTABLE_MODE.md#keep-everything-in-one-folder">More</a></p>';
+    }
+    howto.innerHTML = '<a href="' + README + esc(p.howto) + '">How to install it</a>';
+  }
+
+  function drawNotes() {
+    var rel = state.rel;
+    var latest = latestStable();
+    var tag = rel ? (rel.tag_name || rel.name) : "";
+    var bits = [];
+    if (rel && day(rel.published_at)) bits.push("Released " + day(rel.published_at) + ".");
+    if (rel && rel === latest) bits.push("This is the latest version.");
+    else if (rel && rel.prerelease) bits.push("A test version, before a release.");
+    else if (rel) bits.push("An older version; the latest is " + esc(latest ? latest.tag_name : "") + ".");
+    $("ver-note").innerHTML = bits.join(" ");
+    $("notes-title").textContent = "What changed in " + tag;
+    var body = rel ? str(rel.body).trim() : "";
+    $("notes").innerHTML = body ? markdown(body) : "<p>This version has no release notes.</p>";
+    if (rel && rel.html_url) {
+      $("notes").innerHTML += '<p><a href="' + esc(rel.html_url) + '">This version on GitHub</a></p>';
+    }
+    $("notes-panel").hidden = false;
+  }
+
+  function drawAll() {
+    try {
+      drawPlats(); drawVersions(); drawFiles(); drawMain(); drawNotes();
+    } catch (e) {
+      showError();
+    }
+  }
+
+  function showError() {
+    $("status").innerHTML = 'The list of versions could not be loaded just now. Get the game from the <a href="' +
+      REPO + '/releases">releases page</a> instead.';
+    $("status").hidden = false;
+    $("pick").hidden = true;
+    $("choose").hidden = true;
+    $("notes-panel").hidden = true;
+  }
+
+  /* Chrome on ARM Linux reports x86_64 in its user agent; ask it directly */
+  function refineArch() {
+    try {
+      var uad = navigator.userAgentData;
+      if (state.detected !== "linux" || !uad || typeof uad.getHighEntropyValues !== "function") return;
+      uad.getHighEntropyValues(["architecture"]).then(function (v) {
+        if (!v || str(v.architecture).toLowerCase() !== "arm" || state.detected !== "linux") return;
+        var follow = state.plat === state.detected;
+        state.detected = "linux-arm64";
+        if (follow) state.plat = "linux-arm64";
+        if (state.releases.length) drawAll();
+      }, function () {});
+    } catch (e) {}
+  }
+
+  function start() {
+    state.detected = detect();
+    state.plat = state.detected;
+    refineArch();
+    load(function (data) {
+      var list = [];
+      if (Array.isArray(data)) {
+        for (var i = 0; i < data.length; i++) {
+          var r = data[i];
+          if (r && !r.draft && (r.tag_name || r.name)) {
+            if (!Array.isArray(r.assets)) r.assets = [];
+            list.push(r);
+          }
+        }
+      }
+      if (!list.length) { showError(); return; }
+      list.sort(function (a, b) { return str(b.published_at).localeCompare(str(a.published_at)); });
+      state.releases = list;
+      state.rel = latestStable();
+      $("status").hidden = true;
+      $("pick").hidden = false;
+      $("choose").hidden = false;
+      drawAll();
+    });
+    $("plats").addEventListener("click", function (ev) {
+      var t = ev.target;
+      while (t && t !== this && !(t.getAttribute && t.getAttribute("data-plat"))) t = t.parentNode;
+      if (!t || t === this) return;
+      state.plat = t.getAttribute("data-plat");
+      drawAll();
+      try { $("get").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+    });
+    $("ver").addEventListener("change", function () {
+      var r = state.releases[parseInt(this.value, 10)];
+      if (r) { state.rel = r; drawAll(); }
+    });
+  }
+
+  try { start(); } catch (e) { showError(); }
+})();
+</script>
+</body>
+</html>
