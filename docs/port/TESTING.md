@@ -263,7 +263,10 @@ program under an environment switch ([Environment switches](#environment-switche
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
-  (`rd_interp`).
+  (`rd_interp`); rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
+  170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
+  85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
+  keeps the tick's pose; a 20 degree turn after another blends bit for bit as without one.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
 - `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded); the
   content table's four sandstorm sheets and the tiles appended to them (`sheetTableChecks`), one

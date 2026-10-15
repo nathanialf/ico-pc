@@ -782,6 +782,23 @@ blends and how is [DISPLAY.md](DISPLAY.md#interpolation-between-ticks)'s
 output, `rd_crt.c` replaces that blit under the CRT filter, and `rd_video.c` shows the FMV picture.
 All of it is [DISPLAY.md](DISPLAY.md).
 
+**Rotation continuity.** A model matrix or a bone blends as a slerped rotation, and the slerp's
+short way (at most 180 degrees) is the motion only while the object turns less than half a turn a
+tick: a trolley wheel at full speed turns about 190 degrees a tick, and the short way would show it
+turned back 170 between the ticks and forward again at the tick (issue 98). So each rigid draw's
+model matrix and each bone of a skinned draw remember the turn they made between the two ticks
+before (a rotation vector in the object's own frame, kept per draw by its key and its place in the
+list, in one table allocated once), and the next blend takes the way, short or long, nearer that
+turn, when it lies within `RD_INTERP_TURN_KEEP` (60 degrees) of it and turns at most
+`RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`). A remembered turn applies only to
+the next pair of consecutive ticks; without one (the first pair, after a whole-frame snap, a draw
+not blended the tick before, or a turn far from the one before) the blend takes the short way and a
+turn over `RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. A turn is remembered also when
+it kept the tick's pose, so a wheel that sped past the snap blends again from its next tick. The
+camera keeps the short way. The tick's own present is never blended, so the tick's pose is exact
+either way (`port/render/rd_interp.c` (rotation continuity: `turnRecall`, `turnKeep`,
+`blendTurn`), `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
+
 ## Performance records
 
 A record (`RdPerfRecord`) is filled while a replay runs (its CPU phases and counts), closed with the
