@@ -111,6 +111,7 @@ if(NOT TARGET ico_shaders OR NOT TARGET ico_rhi_vk)
 endif()
 
 add_library(ico_render STATIC
+    rd_blend_selftest.c # the exact blend's start-up check on the device (issue 89)
     rd_blur.c # staticBlur.c's sprites
     rd_core.c
     rd_crt.c # the CRT filter at present time

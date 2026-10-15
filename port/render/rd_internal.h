@@ -1080,6 +1080,13 @@ bool rd__fs_has_no_dual(uint8_t fs);
  * NEVER, else left on the fixed-function blend (logged once).  Returns the
  * number of passes written. */
 void rd__dst_init(void);
+/* The mode ICO_RD_BLEND asked for when the device has it (kept by
+ * rd_blend_selftest whatever its result), -1 when none was asked. */
+int rd__dst_asked(void);
+/* rd__fog_scene_remade: a new SCENE size runs the blend's self-test again
+ * once rd_blend_selftest has run; rd__gpu_shutdown frees its objects. */
+void rd__blend_scene_remade(void);
+void rd__blend_selftest_shutdown(void);
 uint32_t rd__dst_target_usage(RhiFormat fmt, uint8_t *dstUsage);
 bool rd__fs_has_dst(uint8_t fs);
 int rd__expand_dst(const RdDrawPass *in, int n, int mode, RdDrawPass out[4]);
@@ -2162,6 +2169,15 @@ void rd__fog_probe_finish(void);
  * doFog reads the table at the exact entry of the depth's index (Z >> 16),
  * not between entries above 1x, so both measure the depth read alone. */
 bool rd__fog_exact(void);
+/* The self-tests' frames (rd_fog_path.c, rd_blend_selftest.c), built here,
+ * never recorded: rd__st_push appends a zeroed command of type to list
+ * (NULL when out of memory), rd__st_push1 one with b[0] = v, rd__st_test
+ * the TEST state of a GS TEST word, rd__st_target the list's colour and
+ * depth target scene at w x h GS pixels with the XYOFFSET. */
+RdCmd *rd__st_push(RdFrame *f, int list, uint8_t type);
+bool rd__st_push1(RdFrame *f, int list, uint8_t type, uint8_t v);
+bool rd__st_test(RdFrame *f, int list, uint64_t word);
+bool rd__st_target(RdFrame *f, int list, uint32_t scene, uint32_t w, uint32_t h);
 /* Copies recorded and not read back yet (rd_begin_frame then calls
  * rd__fog_probe_finish on the host). */
 bool rd__fog_probe_pending(void);

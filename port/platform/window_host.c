@@ -1475,10 +1475,16 @@ open_window:
         /* each first-use pipeline's note in the file, for the whole run, so
            a further end names the pipeline; no further step follows */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
+        /* the blend checked on this GPU (rd.h rd_blend_selftest) */
+        rd_blend_selftest();
     } else {
         /* the note of each pipeline in the file while the set is created,
            the file deleted when it is done */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        /* which way of blending draws right on this GPU, tried before the
+           set is made so the set is the chosen way's; logged ("blend: ...
+           (self-test: ...)"). A crash in it is noted as the set's would be */
+        rd_blend_selftest();
         static PipeScreen screen;
 
         /* a start with a cold driver cache can take many seconds (a phone,

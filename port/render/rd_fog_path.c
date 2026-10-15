@@ -470,7 +470,7 @@ static void stCellColor(int c, uint8_t out[4])
     out[3] = 0x40;
 }
 
-static RdCmd *stPush(RdFrame *f, int list, uint8_t type)
+RdCmd *rd__st_push(RdFrame *f, int list, uint8_t type)
 {
     RdCmdList *cl = &f->lists[list];
     if (cl->count == cl->cap) {
@@ -488,19 +488,19 @@ static RdCmd *stPush(RdFrame *f, int list, uint8_t type)
     return c;
 }
 
-static bool stPush1(RdFrame *f, int list, uint8_t type, uint8_t v)
+bool rd__st_push1(RdFrame *f, int list, uint8_t type, uint8_t v)
 {
-    RdCmd *c = stPush(f, list, type);
+    RdCmd *c = rd__st_push(f, list, type);
     if (c) {
         c->b[0] = v;
     }
     return c != NULL;
 }
 
-static bool stTest(RdFrame *f, int list, uint64_t word)
+bool rd__st_test(RdFrame *f, int list, uint64_t word)
 {
     const RdTestState t = rd_test_from_gs(word);
-    RdCmd *c = stPush(f, list, RDC_TEST);
+    RdCmd *c = rd__st_push(f, list, RDC_TEST);
     if (c) {
         c->b[0] = t.ate;
         c->b[1] = t.atst;
@@ -513,9 +513,9 @@ static bool stTest(RdFrame *f, int list, uint64_t word)
     return c != NULL;
 }
 
-static bool stTarget(RdFrame *f, int list, uint32_t scene, uint32_t w, uint32_t h)
+bool rd__st_target(RdFrame *f, int list, uint32_t scene, uint32_t w, uint32_t h)
 {
-    RdCmd *c = stPush(f, list, RDC_TARGET);
+    RdCmd *c = rd__st_push(f, list, RDC_TARGET);
     if (c) {
         c->u[0] = scene;
         c->u[1] = scene;
@@ -548,17 +548,17 @@ static bool stBuildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
     rd__reset_state_block(&f->startState);
     f->gsW = w;
     f->gsH = h;
-    bool ok = stTarget(f, 0, scene, w, h);
-    RdCmd *c = stPush(f, 0, RDC_CLEAR);
+    bool ok = rd__st_target(f, 0, scene, w, h);
+    RdCmd *c = rd__st_push(f, 0, RDC_CLEAR);
     if (c) {
         c->u[0] = scene;
         memcpy(c->b, kStClear, 4);
         c->b[4] = 1;
         c->u[1] = 0;
     }
-    ok = ok && c && stPush(f, 0, RDC_TEXTURE_OFF) && stPush1(f, 0, RDC_ABE, 0) &&
-         stTest(f, 0, RD_TEST_Z_ALWAYS) && stPush1(f, 0, RDC_ZWRITE, RD_ZWRITE_ON) &&
-         stPush1(f, 0, RDC_FBA, 0) && stPush1(f, 0, RDC_SHADE, 0);
+    ok = ok && c && rd__st_push(f, 0, RDC_TEXTURE_OFF) && rd__st_push1(f, 0, RDC_ABE, 0) &&
+         rd__st_test(f, 0, RD_TEST_Z_ALWAYS) && rd__st_push1(f, 0, RDC_ZWRITE, RD_ZWRITE_ON) &&
+         rd__st_push1(f, 0, RDC_FBA, 0) && rd__st_push1(f, 0, RDC_SHADE, 0);
     RdScreenVtx v[ST_CELLS * ST_CELLS * 2];
     memset(v, 0, sizeof(v));
     const int32_t ox = 2048 - (int32_t)(w / 2), oy = 2048 - (int32_t)(h / 2);
@@ -581,7 +581,7 @@ static bool stBuildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
             memcpy(p->rgba, rgba, 4);
         }
     }
-    c = stPush(f, 0, RDC_SCREEN);
+    c = rd__st_push(f, 0, RDC_SCREEN);
     if (c) {
         c->b[0] = RD_PRIM_SPRITES;
         c->b[1] = RD_SPACE_FULLFRAME;
@@ -591,26 +591,27 @@ static bool stBuildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
     ok = ok && c;
     /* ZFog.c fogHostDraw */
     const RdTex depthView = rd_target_texture((RdTarget){scene}, RD_VIEW_DEPTH);
-    ok = ok && depthView.id && stTarget(f, 4, scene, w, h) && stPush1(f, 4, RDC_PABE, 0);
-    c = stPush(f, 4, RDC_ALPHA);
+    ok = ok && depthView.id && rd__st_target(f, 4, scene, w, h) && rd__st_push1(f, 4, RDC_PABE, 0);
+    c = rd__st_push(f, 4, RDC_ALPHA);
     if (c) {
         c->b[0] = RD_BLEND_LERP_AS;
         c->b[1] = 128;
     }
     ok = ok && c;
-    c = stPush(f, 4, RDC_TEXTURE);
+    c = rd__st_push(f, 4, RDC_TEXTURE);
     if (c) {
         c->u[0] = depthView.id;
         c->b[0] = RD_TEXFN_MODULATE;
         c->b[1] = RD_TCC_RGBA;
     }
-    ok = ok && c && stPush1(f, 4, RDC_ZWRITE, RD_ZWRITE_OFF) && stTest(f, 4, RD_TEST_Z_GEQUAL);
-    c = stPush(f, 4, RDC_FILTER);
+    ok = ok && c && rd__st_push1(f, 4, RDC_ZWRITE, RD_ZWRITE_OFF) &&
+         rd__st_test(f, 4, RD_TEST_Z_GEQUAL);
+    c = rd__st_push(f, 4, RDC_FILTER);
     if (c) {
         c->b[0] = RD_FILTER_NEAREST;
         c->b[1] = RD_FILTER_NEAREST;
     }
-    ok = ok && c && stPush1(f, 4, RDC_ABE, 1) && stPush1(f, 4, RDC_SHADE, 0);
+    ok = ok && c && rd__st_push1(f, 4, RDC_ABE, 1) && rd__st_push1(f, 4, RDC_SHADE, 0);
     uint8_t lut[256 * 4];
     for (int i = 0; i < 256; i++) {
         stLut(i, &lut[i * 4]);
@@ -629,7 +630,7 @@ static bool stBuildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h)
     p.uv[2] = (float)(8 + w * 16);
     p.uv[3] = (float)(8 + h * 16);
     p.lutOffset = rd__frame_payload(f, lut, sizeof(lut));
-    c = stPush(f, 4, RDC_POST_STUB);
+    c = rd__st_push(f, 4, RDC_POST_STUB);
     if (c) {
         c->b[0] = RD_POST_FOG;
         c->u[1] = rd__frame_payload(f, &p, (uint32_t)sizeof(p));
@@ -956,6 +957,7 @@ void rd__fog_scene_remade(void)
     if (!g_rd.hasDevice) {
         return;
     }
+    rd__blend_scene_remade(); /* the blend's self-test first, as at start */
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t || (t->w == s_st.w && t->h == s_st.h && t->tw == s_st.tw && t->th == s_st.th)) {
         return;
@@ -972,6 +974,7 @@ void rd__fog_scene_remade(void)
 
 void rd__fog_path_shutdown(void)
 {
+    rd__blend_selftest_shutdown();
     rd__fog_buffer_free();
     probeFree();
     if (s_stRead.tex.id) {

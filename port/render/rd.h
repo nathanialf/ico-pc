@@ -555,6 +555,29 @@ void rd_set_activity_fn(RdActivityFn fn);
  * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
  * whether the path in force passed. */
 bool rd_fog_selftest(void);
+/* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
+ * (never recorded, never presented) draws on SCENE at its real size and
+ * scale, without MSAA, what the destination read must get right: the
+ * forest's tint sprite over eight cells of known colours (PCSX2's
+ * pixels), a textured LERP quad whose clear texels must leave the colour
+ * behind them, two overlapping LERP draws (the second must read the
+ * first's result) and a glyph through the text sheet's shader.  It is
+ * drawn with the fixed-function blend first (the reference; within 2
+ * levels of the GS arithmetic, the two-pass fallback tried when the
+ * dual-source blend is not), then with each exact mode the device has in
+ * rd_init's order (attachment read, then interlock or ROV), stopping at
+ * the first whose pixels are within 1 level of the GS arithmetic and of
+ * the reference's glyph; that mode is the one in force from then on, none
+ * passing leaves the fixed-function blend.  An ICO_RD_BLEND attachment or
+ * storage is kept whatever its result (logged); ICO_RD_BLEND=fixed and a
+ * device without an exact mode run nothing.  One log line, "blend: <mode>
+ * (self-test: ...)", names the choice with every result, and a failing
+ * mode's worst sample gets a line of its own.  ICO_RD_BLEND_SABOTAGE=
+ * attachment,storage,fixed (tests) makes those modes' read-back white.
+ * The window calls it before rd_precreate_pipelines (the set made is the
+ * chosen mode's); after that it runs again whenever SCENE is made at a new
+ * size.  Waits for the GPU.  Returns whether the mode in force passed. */
+bool rd_blend_selftest(void);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s
@@ -716,6 +739,8 @@ bool rd_no_dual(void);
  * "blend: exact (attachment read)", "exact (interlock)", "exact (rov)" or
  * "fixed-function (rounds up)"; ICO_RD_BLEND=fixed|storage|attachment
  * overrides the choice (one the device lacks is refused and logged).
+ * rd_blend_selftest then checks the choice on the device and may fall back
+ * to the next mode.
  * rd_set_blend_exact switches it for the next draws (tests: the same frame
  * both ways) and returns false for a mode the device or its targets lack. */
 typedef enum RdBlendExact {

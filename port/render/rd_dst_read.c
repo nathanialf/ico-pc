@@ -40,7 +40,9 @@
  * blend (logged "fixed-function (rounds up)").  The attachment read is not
  * offered on Qualcomm's own Adreno driver (vk_device.c: its reads return
  * wrong colours, issue 89; RhiLimits.rasterOrderOff says so and the blend
- * line carries it).
+ * line carries it).  rd_blend_selftest (rd_blend_selftest.c) then draws a
+ * known frame through each mode at start and keeps the first that is
+ * right on the device.
  *
  * What goes through it: the screen prims, the VU meshes and the fog sprite
  * whose fixed-function blend is not the GS's (dstWant, rd_pipeline.c): the
@@ -109,9 +111,18 @@ static uint8_t madeModes(void)
     return m;
 }
 
+/* the mode ICO_RD_BLEND asked for and the device has, -1 when none */
+static int s_asked = -1;
+
+int rd__dst_asked(void)
+{
+    return s_asked;
+}
+
 void rd__dst_init(void)
 {
     g_rd.dstModes = g_rd.hasDevice ? madeModes() : (uint8_t)(1u << RD_BLEND_EXACT_OFF);
+    s_asked = -1;
     int want = RD_BLEND_EXACT_OFF;
     if (g_rd.dstModes & (1u << RD_BLEND_EXACT_ATTACHMENT)) {
         want = RD_BLEND_EXACT_ATTACHMENT;
@@ -135,6 +146,7 @@ void rd__dst_init(void)
                     rd__blend_exact_name(want));
         } else {
             want = asked;
+            s_asked = asked;
         }
     }
     g_rd.dstMode = (uint8_t)want;
