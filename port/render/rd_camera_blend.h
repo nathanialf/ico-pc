@@ -192,7 +192,11 @@ static inline void rdcb_rot_from_quat(const double q[4], double m[3][3])
     m[2][2] = 1.0 - 2.0 * (x * x + y * y);
 }
 
-static inline void rdcb_slerp(const double a[4], const double b0[4], double t, double o[4])
+/* The slerp from a to b0 at t: the short way (the turn of at most 180
+ * degrees between the two rotations), or with longWay the long way (b0's
+ * other sign: the turn of 360 degrees less that, the other way round) */
+static inline void rdcb_slerp_way(const double a[4], const double b0[4], double t, int longWay,
+                                  double o[4])
 {
     double b[4];
     double d;
@@ -205,7 +209,7 @@ static inline void rdcb_slerp(const double a[4], const double b0[4], double t, d
     b[2] = b0[2];
     b[3] = b0[3];
     d = a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
-    if (d < 0.0) { /* the short way */
+    if (longWay ? d > 0.0 : d < 0.0) { /* the short way, or the long way */
         d = -d;
         for (i = 0; i < 4; i++) {
             b[i] = -b[i];
@@ -226,6 +230,11 @@ static inline void rdcb_slerp(const double a[4], const double b0[4], double t, d
     }
 }
 
+static inline void rdcb_slerp(const double a[4], const double b0[4], double t, double o[4])
+{
+    rdcb_slerp_way(a, b0, t, 0, o);
+}
+
 static inline int rdcb_is_affine(const double *m)
 {
     const double s = fabs(m[0]) + fabs(m[5]) + fabs(m[10]) + 1.0;
@@ -234,15 +243,72 @@ static inline int rdcb_is_affine(const double *m)
            fabs(m[15] - 1.0) < 1e-5;
 }
 
+/* The ways rdcb_blend_affine_turn blended a turn */
+enum {
+    RDCB_WAY_SHORT = 0, /* the short way, no turn continued (none given, or none near) */
+    RDCB_WAY_KEPT,      /* the short way, continuing the turn given */
+    RDCB_WAY_LONG       /* the long way, continuing the turn given */
+};
+
+/* The turn from rotation qp to rotation qc in qp's own frame (qp^-1 qc,
+ * the sign of the shorter of its two ways) as a rotation vector: the axis
+ * times the angle in radians.  A turn's axis is the same in the object's
+ * frame from tick to tick when it spins about an axis of its own (a wheel
+ * about its axle), whatever its carrier does. */
+static inline void rdcb_turn_vector(const double qp[4], const double qc[4], double v[3])
+{
+    /* conj(qp) qc: w = pw cw + pv . cv, v = pw cv - cw pv - pv x cv */
+    double w = qp[3] * qc[3] + qp[0] * qc[0] + qp[1] * qc[1] + qp[2] * qc[2];
+    double x = qp[3] * qc[0] - qc[3] * qp[0] - (qp[1] * qc[2] - qp[2] * qc[1]);
+    double y = qp[3] * qc[1] - qc[3] * qp[1] - (qp[2] * qc[0] - qp[0] * qc[2]);
+    double z = qp[3] * qc[2] - qc[3] * qp[2] - (qp[0] * qc[1] - qp[1] * qc[0]);
+    double s, a;
+
+    if (w < 0.0) { /* the short way */
+        w = -w;
+        x = -x;
+        y = -y;
+        z = -z;
+    }
+    s = sqrt(x * x + y * y + z * z);
+    if (!(s > 1e-12) || !isfinite(s)) {
+        v[0] = v[1] = v[2] = 0.0;
+        return;
+    }
+    a = 2.0 * atan2(s, w); /* 0 .. pi */
+    v[0] = x / s * a;
+    v[1] = y / s * a;
+    v[2] = z / s * a;
+}
+
 /* Rotation-aware blending of an affine 4 x 4 (column-major, w row 0 0 0 1)
  * at t (0 = p, 1 = c): the 3 x 3 polar-decomposed into a rotation (slerped)
  * and a stretch (lerped); the image of pivot (x, y, z; NULL: the origin)
  * lerped, so the blended matrix turns about it.  0 (o untouched) when
  * either matrix is not affine, is singular, or the two have opposite
- * handedness.  turnDeg (may be NULL) receives the turn between the two
- * rotations in degrees, 0 when the matrices are not affine. */
-static inline int rdcb_blend_affine(const double *p, const double *c, double t, const double *pivot,
-                                    double *o, double *turnDeg)
+ * handedness.
+ *
+ * The rotation turns the short way (at most 180 degrees) unless prefer is
+ * given: prefer is a turn to continue (a rotation vector in the frame of
+ * the tick before, rdcb_turn_vector's form, radians), the turn the same
+ * object made between the two ticks before.  Of the short way and the long
+ * way (the other sign of qc: 360 degrees less the short turn, about the
+ * opposite axis) the one nearer prefer is taken when it lies within keepDeg
+ * degrees of it (the distance between the two rotation vectors) and turns
+ * at most mostDeg degrees (under 350): a wheel turning 170 then 190 degrees
+ * a tick keeps turning forward instead of blending back 170.  Otherwise, or
+ * without prefer, the short way.
+ *
+ * turnDeg (may be NULL) receives the turn blended in degrees (the short
+ * turn, or 360 less it the long way), 0 when the matrices are not affine;
+ * turnVec (may be NULL) the turn blended as a rotation vector (radians, the
+ * frame of p), zeros when the matrices are not affine; way (may be NULL)
+ * RDCB_WAY_*.  With prefer NULL the blend is the plain short-way one bit
+ * for bit (rdcb_blend_affine). */
+static inline int rdcb_blend_affine_turn(const double *p, const double *c, double t,
+                                         const double *pivot, const double *prefer, double keepDeg,
+                                         double mostDeg, double *o, double *turnDeg,
+                                         double *turnVec, int *way)
 {
     double ap[3][3], ac[3][3], rp[3][3], rc[3][3];
     double sp[3][3], sc[3][3], qp[4], qc[4], qt[4], rt[3][3];
@@ -251,8 +317,16 @@ static inline int rdcb_blend_affine(const double *p, const double *c, double t, 
     double dp, dc, sign;
     int i, j, k;
 
+    int longWay = 0;
+
     if (turnDeg) {
         *turnDeg = 0.0;
+    }
+    if (turnVec) {
+        turnVec[0] = turnVec[1] = turnVec[2] = 0.0;
+    }
+    if (way) {
+        *way = RDCB_WAY_SHORT;
     }
     if (!rdcb_is_affine(p) || !rdcb_is_affine(c)) {
         return 0;
@@ -298,7 +372,49 @@ static inline int rdcb_blend_affine(const double *p, const double *c, double t, 
 
         *turnDeg = 2.0 * acos(d > 1.0 ? 1.0 : d) * 180.0 / 3.14159265358979323846;
     }
-    rdcb_slerp(qp, qc, t, qt);
+    if (prefer || turnVec) {
+        const double pi = 3.14159265358979323846;
+        double vs[3], vl[3], ds = 0.0, dl = 0.0, as, al;
+        int chosen = RDCB_WAY_SHORT;
+
+        rdcb_turn_vector(qp, qc, vs);
+        as = sqrt(vs[0] * vs[0] + vs[1] * vs[1] + vs[2] * vs[2]);
+        al = 2.0 * pi - as; /* the long way's angle, about the opposite axis */
+        for (i = 0; i < 3; i++) {
+            vl[i] = as > 1e-9 ? -vs[i] / as * al : 0.0;
+        }
+        if (prefer) {
+            const double keep = keepDeg * pi / 180.0;
+            const double most = (mostDeg < 350.0 ? mostDeg : 350.0) * pi / 180.0;
+
+            for (i = 0; i < 3; i++) {
+                ds += (vs[i] - prefer[i]) * (vs[i] - prefer[i]);
+                dl += (vl[i] - prefer[i]) * (vl[i] - prefer[i]);
+            }
+            ds = sqrt(ds);
+            dl = sqrt(dl);
+            if (as > 1e-9 && dl < ds) {
+                if (dl <= keep && al <= most) {
+                    chosen = RDCB_WAY_LONG;
+                }
+            } else if (ds <= keep && as <= most) {
+                chosen = RDCB_WAY_KEPT;
+            }
+        }
+        longWay = chosen == RDCB_WAY_LONG;
+        if (turnVec) {
+            for (i = 0; i < 3; i++) {
+                turnVec[i] = longWay ? vl[i] : vs[i];
+            }
+        }
+        if (turnDeg && longWay) {
+            *turnDeg = 360.0 - *turnDeg;
+        }
+        if (way) {
+            *way = chosen;
+        }
+    }
+    rdcb_slerp_way(qp, qc, t, longWay, qt);
     rdcb_rot_from_quat(qt, rt);
     x0[0] = pivot ? pivot[0] : 0.0;
     x0[1] = pivot ? pivot[1] : 0.0;
@@ -334,6 +450,15 @@ static inline int rdcb_blend_affine(const double *p, const double *c, double t, 
     }
     memcpy(o, out, sizeof(out));
     return 1;
+}
+
+/* rdcb_blend_affine_turn the short way: turnDeg (may be NULL) receives the
+ * turn between the two rotations in degrees, 0 when the matrices are not
+ * affine.  The camera's blend (rdcb_blend_view, rd_interp.c camSetup). */
+static inline int rdcb_blend_affine(const double *p, const double *c, double t, const double *pivot,
+                                    double *o, double *turnDeg)
+{
+    return rdcb_blend_affine_turn(p, c, t, pivot, NULL, 0.0, 0.0, o, turnDeg, NULL, NULL);
 }
 
 /* The blended camera's view at t, as rd_interp.c camSetup builds it: the

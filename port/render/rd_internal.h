@@ -1427,8 +1427,16 @@ void rd__capture_finish(void);
  * turn per tick past which the pictures snap: rd_camera_blend.h, which the
  * game's cull shares */
 /* A model matrix or bone turning further than this in a tick (3600
- * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's */
+ * degrees a second at 30 Hz) is a flip, not a motion: it keeps the tick's,
+ * unless it continues the turn the same draw (or bone) made in the tick
+ * before (rd_interp.c rotation continuity): a turn within
+ * RD_INTERP_TURN_KEEP of that one (the distance between the two turns'
+ * rotation vectors) blends the way that continues it, the short way or the
+ * long way (a wheel turning 190 degrees a tick turns on forward instead of
+ * back 170), up to RD_INTERP_TURN_LONG degrees */
 #define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
+#define RD_INTERP_TURN_KEEP 60.0  /* degrees */
+#define RD_INTERP_TURN_LONG 300.0 /* degrees, per tick */
 /* In the alignment of two ticks' shadow prisms, a prism left unmatched
  * costs as much as a pair whose top caps lie this far apart (rms, GS pixels)
  * once the volume's shift is taken out; a pair further apart than sqrt(2)
