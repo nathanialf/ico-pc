@@ -902,8 +902,11 @@ turn, when it lies within `RD_INTERP_TURN_KEEP` (60 degrees) of it and turns at 
 `RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`). A remembered turn applies only to
 the next pair of consecutive ticks; without one (the first pair, after a whole-frame snap, a draw
 not blended the tick before, or a turn far from the one before) the blend takes the short way and a
-turn over `RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. A turn is remembered also when
-it kept the tick's pose, so a wheel that sped past the snap blends again from its next tick. The
+turn over `RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. A turn is remembered only when
+it blended: a turn that kept the tick's pose has no known direction (forward 190 degrees is back 170
+the short way), so remembering it could make the next pair blend backwards. A wheel first seen
+between 120 and 180 degrees a tick therefore keeps the tick's pose until it slows below the snap,
+and one that speeds up in steps under 60 degrees a tick carries its turn through 180. The
 camera keeps the short way. The tick's own present is never blended, so the tick's pose is exact
 either way (`port/render/rd_interp.c` (rotation continuity: `turnRecall`, `turnKeep`,
 `blendTurn`), `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).

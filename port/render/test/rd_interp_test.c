@@ -124,12 +124,14 @@
  *             apart (the replay before) umi was in front
  *   wheels    rotation continuity (issue 98, the trolley's wheels): a rigid
  *             draw and a skinned draw's bone turning 170 degrees in a tick
- *             (no turn before it: the tick's pose), then 190: at alpha 0.5
- *             they stand at 265 degrees (on forward the long way, not back
- *             170 to 85), at 0.25 at 217.5, and alpha 1 is the tick's
- *             block byte for byte; 190 degrees with no turn before it keeps
- *             the tick's; a 20 degree turn after a 20 degree turn blends
- *             bit for bit as without one
+ *             (no turn before it: the tick's pose), then 190: the tick's
+ *             again (a snapped turn is not remembered); 190 then 190 with
+ *             no turn before: the tick's both times; +170 then -170: the
+ *             tick's both times; 110, 160, 190: the first two blend
+ *             forward, the third at alpha 0.5 stands at 365 degrees (on
+ *             forward the long way, not back to 185), at 0.25 at 317.5, and
+ *             alpha 1 is the tick's block byte for byte; a 20 degree turn
+ *             after a 20 degree turn blends bit for bit as without one
  *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
  *             degrees in the tick (a shadow climbing out of its pool, its
  *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
@@ -1800,33 +1802,74 @@ static void testRotationContinuity(void)
           "170 degrees with no turn before: snapped (rotated %u, snapped %u, long %u)", st->rotated,
           st->turnSnap, st->longWay);
     CHECK(turnIsTick(built(0.5f)), "170 degrees with no turn before keeps the tick's pose");
-    /* 170 -> 360: 190 degrees on, 170 back the short way; the turn before
-     * (170 on) says on */
+    /* 170 -> 360: 190 degrees on, 170 back the short way; the snapped turn
+     * before was not remembered (its direction is unknown), so this one
+     * snaps too */
     recordTurn(mesh, skin, 360.0);
     st = build(0.5f, 1);
-    CHECK(st->rotated == 2 && st->longWay == 2 && st->turnSnap == 0 &&
-              fabsf(st->maxTurn - 190.0f) < 1e-3f,
-          "190 degrees after 170: the long way (rotated %u, long %u, snapped %u, largest %.4f)",
-          st->rotated, st->longWay, st->turnSnap, st->maxTurn);
-    turnAngles(built(0.5f), &am, &ab);
-    /* 170 + 95 = 265 = -95; the short way would give 85 */
-    CHECK(fabsf(am + 95.0f) < 1e-3f && fabsf(ab + 95.0f) < 1e-3f,
-          "alpha 0.5 between 170 and 360 forward: mesh %.5f, bone %.5f degrees (want -95 = 265)",
-          am, ab);
-    printf("rd_interp_test: wheel 170 then 190 degrees, alpha 0.5: mesh %.6f, bone %.6f degrees\n",
-           am, ab);
-    turnAngles(built(0.25f), &am, &ab);
-    CHECK(fabsf(am + 142.5f) < 1e-3f && fabsf(ab + 142.5f) < 1e-3f,
-          "alpha 0.25 forward: mesh %.5f, bone %.5f degrees (want -142.5 = 217.5)", am, ab);
-    CHECK(turnIsTick(built(1.0f)), "alpha 1 is the tick's pose byte for byte after a long way");
-    /* 0 -> 190 with nothing before it: the short way is back 170, over the
-     * snap: the tick's */
+    CHECK(st->rotated == 2 && st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
+          "0, 170, 360: the second pair keeps the tick's pose too (snapped %u, long %u)",
+          st->turnSnap, st->longWay);
+    /* 0 -> 190 -> 380 with nothing before it: the short way is back 170
+     * both times, over the snap: the tick's both times, never blended
+     * backwards on the third tick */
     recordTurn(mesh, skin, 0.0);
     recordTurn(mesh, skin, 190.0);
     st = build(0.5f, 1);
     CHECK(st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
           "190 degrees with no turn before keeps the tick's pose (snapped %u, long %u)",
           st->turnSnap, st->longWay);
+    recordTurn(mesh, skin, 380.0);
+    st = build(0.5f, 1);
+    CHECK(st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
+          "0, 190, 380: the second pair keeps the tick's pose too (snapped %u, long %u)",
+          st->turnSnap, st->longWay);
+    /* a flip of +170 then -170: both keep the tick's pose (the second is
+     * not taken the long way after the first) */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 170.0);
+    st = build(0.5f, 1);
+    CHECK(st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
+          "+170 keeps the tick's pose (snapped %u, long %u)", st->turnSnap, st->longWay);
+    recordTurn(mesh, skin, 0.0);
+    st = build(0.5f, 1);
+    CHECK(st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
+          "+170 then -170 keeps the tick's pose (snapped %u, long %u)", st->turnSnap, st->longWay);
+    /* a wheel speeding up: 110 (blends), 160 (within RD_INTERP_TURN_KEEP of
+     * 110: kept, blended on forward), 190 (the long way, continuing 160) */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 110.0);
+    st = build(0.5f, 1);
+    CHECK(st->rotated == 2 && st->turnSnap == 0 && st->longWay == 0,
+          "110 degrees blends (rotated %u, snapped %u, long %u)", st->rotated, st->turnSnap,
+          st->longWay);
+    recordTurn(mesh, skin, 270.0);
+    st = build(0.5f, 1);
+    CHECK(st->rotated == 2 && st->turnSnap == 0 && st->longWay == 0,
+          "160 degrees after 110 blends (rotated %u, snapped %u, long %u)", st->rotated,
+          st->turnSnap, st->longWay);
+    turnAngles(built(0.5f), &am, &ab);
+    /* 110 + 80 = 190 = -170 */
+    CHECK(fabsf(am + 170.0f) < 1e-3f && fabsf(ab + 170.0f) < 1e-3f,
+          "alpha 0.5 between 110 and 270: mesh %.5f, bone %.5f degrees (want -170 = 190)", am, ab);
+    recordTurn(mesh, skin, 460.0);
+    st = build(0.5f, 1);
+    CHECK(st->rotated == 2 && st->longWay == 2 && st->turnSnap == 0 &&
+              fabsf(st->maxTurn - 190.0f) < 1e-3f,
+          "190 degrees after 160: the long way (rotated %u, long %u, snapped %u, largest %.4f)",
+          st->rotated, st->longWay, st->turnSnap, st->maxTurn);
+    turnAngles(built(0.5f), &am, &ab);
+    /* 270 + 95 = 365 = 5; the short way would give 185 = -175 */
+    CHECK(fabsf(am - 5.0f) < 1e-3f && fabsf(ab - 5.0f) < 1e-3f,
+          "alpha 0.5 between 270 and 460 forward: mesh %.5f, bone %.5f degrees (want 5 = 365)", am,
+          ab);
+    printf("rd_interp_test: wheel 110, 160 then 190 degrees, alpha 0.5: mesh %.6f, bone %.6f "
+           "degrees\n",
+           am, ab);
+    turnAngles(built(0.25f), &am, &ab);
+    CHECK(fabsf(am + 42.5f) < 1e-3f && fabsf(ab + 42.5f) < 1e-3f,
+          "alpha 0.25 forward: mesh %.5f, bone %.5f degrees (want -42.5 = 317.5)", am, ab);
+    CHECK(turnIsTick(built(1.0f)), "alpha 1 is the tick's pose byte for byte after a long way");
     /* a 20 degree turn after a 20 degree turn: the same blend as without the
      * turn before, bit for bit */
     recordTurn(mesh, skin, 0.0);

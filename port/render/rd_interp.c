@@ -362,9 +362,13 @@ bool rd__blend_affine(const double *p, const double *c, double t, const double *
  * RD_INTERP_TURN_LONG).  Without a turn to continue (the first pair, after
  * a whole-frame snap, a draw not blended the tick before, or a turn not
  * near the one before) the short way, and a turn over RD_INTERP_TURN_SNAP
- * keeps the tick's pose, as before.  A turn is remembered when it blended
- * and when it kept the tick's pose for its size (its short way then), so a
- * wheel that sped past the snap is caught on its next tick.  A remembered
+ * keeps the tick's pose, as before.  A turn is remembered only when it
+ * blended: one that kept the tick's pose for its size has no known
+ * direction (forward 190 is back 170 the short way), so it is never
+ * remembered, and a wheel first seen between RD_INTERP_TURN_SNAP and 180
+ * degrees a tick keeps the tick's pose until it slows below the snap.  A
+ * wheel that speeds up in steps under RD_INTERP_TURN_KEEP carries its
+ * remembered turn through 180 and takes the long way.  A remembered
  * turn applies only to the next pair of ticks (its end tick the pair's
  * first, the ticks consecutive), and only to the draw the pairing matched
  * (its key, and its list and place in that tick).  The tick's own present
@@ -518,15 +522,18 @@ static bool blendTurn(const double *p, const double *c, double t, const double *
 }
 
 /* a turn over RD_INTERP_TURN_SNAP that continued none: a flip, not a
- * motion (the caller keeps the tick's); counts the draw's long ways */
+ * motion (the caller keeps the tick's); counts the draw's long ways.  Only
+ * a turn that blends is remembered: a snapped turn's direction is unknown
+ * (forward 190 and back 170 look the same), and remembering its short way
+ * would let the next pair blend it backwards */
 static bool turnSnaps(uint32_t bone)
 {
-    turnKeep(bone);
     s_drawLong |= s_turnWay == RDCB_WAY_LONG;
     if (s_turnWay == RDCB_WAY_SHORT && s_turnDeg > RD_INTERP_TURN_SNAP) {
         s_drawSnap = 1;
         return true;
     }
+    turnKeep(bone);
     return false;
 }
 
