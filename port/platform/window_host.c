@@ -324,6 +324,8 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->borderMask = (uint8_t)(o.fullPixel == 0);
     /* Water reflections: Sharp, in either preset (at 1x it changes nothing) */
     rs->waterSharp = (uint8_t)(o.effectWaterSharp != 0);
+    /* Glow size: Original, in either preset (at 1x it changes nothing) */
+    rs->glowOriginal = (uint8_t)(o.effectGlowOriginal != 0);
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();

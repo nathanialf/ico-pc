@@ -476,6 +476,10 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Nitido",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Nitido disegna i riflessi nell’acqua alla risoluzione scelta; Originale mantiene i riflessi più morbidi della PS2.",
+    [UI_STR_OPT_EFFECT_GLOW_SIZE] = "Dimensione bagliore",
+    [UI_STR_VAL_SCALED] = "Scalata",
+    [UI_STR_EFFECT_GLOW_SIZE_NOTE] =
+        "Originale disegna il bagliore alle dimensioni della PlayStation 2: più grezzo sopra 1x, molto più leggero per la scheda video.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Bande cinema",
     [UI_STR_OPT_FULL_PIXEL] = "Pixel esatti dello schermo",
     /* Settings > Graphics driver (Android), Quit game */

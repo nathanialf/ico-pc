@@ -1410,6 +1410,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.settings.waterSharp) {
         rd__log("water reflections: sharp (the scene's scale)");
     }
+    if (g_rd.settings.glowOriginal) {
+        rd__log("glow size: original (the work buffers at the PS2's sizes)");
+    }
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -1728,6 +1731,7 @@ void rd_begin_frame(void)
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
+        const bool glowChanged = g_rd.settings.glowOriginal != g_rd.pendingSettings.glowOriginal;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
@@ -1743,6 +1747,12 @@ void rd_begin_frame(void)
             /* the blocks made from this frame on (rd__target_scale_of) */
             rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
                                                                       : "original (their GS size)");
+        }
+        if (glowChanged) {
+            /* the work scale (rd__apply_display) remakes the targets below */
+            rd__log("glow size: %s", g_rd.settings.glowOriginal
+                                         ? "original (the work buffers at the PS2's sizes)"
+                                         : "scaled (the work scale)");
         }
         /* the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next

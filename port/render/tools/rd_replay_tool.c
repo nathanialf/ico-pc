@@ -53,6 +53,11 @@
  *                         (rd_core.c rd__target_scale_of); without it they are
  *                         drawn at their GS size, the PS2's.  A dump from before
  *                         the option marks no block and replays as without it
+ *   --glow-original       Glow size: Original: the work buffers (the glow's,
+ *                         the depth of field's, the softening's) at the PS2's
+ *                         sizes, work scale 1, at every resolution
+ *                         (RdSettings.glowOriginal); without it they take the
+ *                         work scale (rd_work_target_scale: 2 at 2x and above)
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -960,7 +965,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--filter F] "
+                "[--border-mask] [--water-sharp] [--glow-original] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
@@ -1020,6 +1025,8 @@ int main(int argc, char **argv)
             s.borderMask = 1;
         } else if (strcmp(argv[i], "--water-sharp") == 0) {
             s.waterSharp = 1;
+        } else if (strcmp(argv[i], "--glow-original") == 0) {
+            s.glowOriginal = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {

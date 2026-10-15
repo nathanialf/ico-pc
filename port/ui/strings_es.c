@@ -476,6 +476,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Nítido",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Nítido dibuja los reflejos del agua a la resolución elegida; Original mantiene los reflejos más suaves de PS2.",
+    [UI_STR_OPT_EFFECT_GLOW_SIZE] = "Tamaño del resplandor",
+    [UI_STR_VAL_SCALED] = "Escalado",
+    [UI_STR_EFFECT_GLOW_SIZE_NOTE] =
+        "Original dibuja el resplandor al tamaño de PlayStation 2: más tosco por encima de 1x, mucho más ligero para la tarjeta gráfica.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
     [UI_STR_OPT_FULL_PIXEL] = "Píxeles exactos de pantalla",
     /* Settings > Graphics driver (Android), Quit game */

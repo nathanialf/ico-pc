@@ -478,6 +478,10 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Scharf",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Scharf zeichnet die Spiegelungen im Wasser in der gewählten Auflösung; Original behält die weicheren Spiegelungen der PS2.",
+    [UI_STR_OPT_EFFECT_GLOW_SIZE] = "Leuchtgröße",
+    [UI_STR_VAL_SCALED] = "Skaliert",
+    [UI_STR_EFFECT_GLOW_SIZE_NOTE] =
+        "Original zeichnet das Leuchten in der Größe der PlayStation 2: gröber über 1x, viel leichter für die Grafikkarte.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Kinobalken",
     [UI_STR_OPT_FULL_PIXEL] = "Exakte Bildschirmpixel",
     /* Settings > Graphics driver (Android), Quit game */

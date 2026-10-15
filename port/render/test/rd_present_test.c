@@ -1281,6 +1281,16 @@ static void checkScales(void)
     applyWith(&s);
     CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && g_rd.workScale == 2.0f,
           "scales: 1920x1440");
+    /* Glow size: Original (RdSettings.glowOriginal): the scene as it was,
+     * the work buffers at the PS2's sizes (work scale 1) */
+    s.glowOriginal = 1;
+    applyWith(&s);
+    CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && g_rd.workScale == 1.0f,
+          "scales: 1920x1440 with Glow size Original (work %g)", (double)g_rd.workScale);
+    s.glowOriginal = 0;
+    applyWith(&s);
+    CHECK(g_rd.workScale == 2.0f, "scales: Glow size Scaled again (work %g)",
+          (double)g_rd.workScale);
     /* the window's box at 16:9: the box's exact width (682.67 of the 688
      * columns) over 1920, one texel an output pixel, the PS2's pixel shape
      * kept, with Full pixel off (the game's: the border mask over the same

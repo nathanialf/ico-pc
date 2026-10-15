@@ -1163,6 +1163,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.effectFog);
     case UI_OPT_EFFECT_WATER:
         return ui_str(o.effectWaterSharp ? UI_STR_VAL_SHARP : UI_STR_VAL_ORIGINAL);
+    case UI_OPT_EFFECT_GLOW_SIZE:
+        return ui_str(o.effectGlowOriginal ? UI_STR_VAL_ORIGINAL : UI_STR_VAL_SCALED);
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
     case UI_OPT_FULL_PIXEL:
@@ -1416,6 +1418,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectFog;
     case UI_OPT_EFFECT_WATER:
         return &o->effectWaterSharp;
+    case UI_OPT_EFFECT_GLOW_SIZE:
+        return &o->effectGlowOriginal;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
     case UI_OPT_FULL_PIXEL:
@@ -1544,10 +1548,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_MOTION_BLUR:
     case UI_OPT_EFFECT_FOG:
     case UI_OPT_EFFECT_WATER:
+    case UI_OPT_EFFECT_GLOW_SIZE:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
     case UI_OPT_FULL_PIXEL: {
         /* the plain On/Off display rows (and Water reflections' Original
-           and Sharp) */
+           and Sharp, Glow size's Scaled and Original) */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
         video = 1;
@@ -2084,7 +2089,9 @@ static void buildGalleryBar(void)
      Effects      from 40, 18 apart, ten rows 16 (Back at 184, its box to 220);
                   eleven or twelve rows 13 (twelve: Back at 183); thirteen
                   (the pause menu's, with Brightness) from 34, 13 apart
-                  (Back at 190, its box to 226)
+                  (Back at 190, its box to 226); fourteen from 30, 12
+                  apart (Back at 186); fifteen (the pause menu's, with
+                  Glow size) from 30, 11 apart (Back at 184, its box to 220)
      the others   from 40, 18 apart */
 static int pagePitch(int page, int n, int *y0)
 {
@@ -2094,6 +2101,10 @@ static int pagePitch(int page, int n, int *y0)
         return 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_EFFECTS && n > 14) {
+        *y0 = 30;
+        return 11; /* fifteen rows: Back at 184, its box to 220 */
+    }
     if (page == UI_PAGE_EFFECTS && n > 13) {
         *y0 = 30;
         return 12; /* fourteen rows: Back at 186, its box to 222 */
@@ -2279,6 +2290,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_EFFECTS:
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
         addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
+        addNote(pg, UI_OPT_EFFECT_GLOW_SIZE, UI_STR_EFFECT_GLOW_SIZE_NOTE);
         break;
     case UI_PAGE_GPU_DRIVER:
         /* one note under the page, on every row but Back */
@@ -2709,6 +2721,7 @@ static void build(void)
                                  UI_OPT_CRT,
                                  UI_OPT_CRT_STRENGTH,
                                  UI_OPT_EFFECT_GLOW,
+                                 UI_OPT_EFFECT_GLOW_SIZE,
                                  UI_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
@@ -2723,6 +2736,7 @@ static void build(void)
                                  UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
                                  UI_STR_OPT_EFFECT_GLOW,
+                                 UI_STR_OPT_EFFECT_GLOW_SIZE,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,

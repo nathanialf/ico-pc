@@ -391,6 +391,16 @@ typedef struct RdSettings {
      * drawn at their own GS size, as on the PS2 (and as before this
      * option; the replay tool's --water-sharp sets it) */
     uint8_t waterSharp;
+    /* Glow size: Original ([video] effect_glow_size = "original", issue
+     * 103).  The work buffers (WORK0..3, AA0/AA1, FEED128, AURA_TAP: the
+     * glow, the depth of field, the softening, the aura) keep the PS2's
+     * sizes, work scale 1, at every resolution, instead of
+     * rd_work_target_scale's (2 at 2x and above): a coarser glow above 1x,
+     * about a quarter of its GPU work at 2x.  0 in a zeroed RdSettings: the
+     * work scale (Scaled, the default; the replay tool's --glow-original
+     * sets it).  A change remakes the targets at the next frame
+     * (rd__apply_display), as a resolution change does. */
+    uint8_t glowOriginal;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

@@ -412,7 +412,9 @@ bool rd__apply_display(void)
     }
     const float sx = w / gw < 1.0f ? 1.0f : w / gw;
     const float sy = h / gh < 1.0f ? 1.0f : h / gh;
-    const float work = rd_work_target_scale((uint32_t)(sy * 448.0f + 0.5f));
+    /* Glow size: Original (RdSettings.glowOriginal): the PS2's sizes */
+    const float work =
+        st->glowOriginal ? 1.0f : rd_work_target_scale((uint32_t)(sy * 448.0f + 0.5f));
     uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
     if (g_rd.hasDevice && !rhi_limits()->textureMips) {
         filter = 0;
