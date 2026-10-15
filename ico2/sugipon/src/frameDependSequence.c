@@ -199,7 +199,7 @@ static void playEff(int no)
        over its host stage with every other object parked and only the
        model's own draws kept, so a motion's stage animation or particle
        effect is not seen there, and the stage may not hold it (the boy's
-       SWIM in stage 8, DIVERGENCES.md GL-11): no effect is entered while it
+       SWIM in stage 8, DIVERGENCES.md GL-10): no effect is entered while it
        is up.  The sounds and the vibration (execSE, execVib) play on. */
     if (ico_mv_active != 0) {
         return;

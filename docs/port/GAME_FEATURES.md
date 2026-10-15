@@ -393,7 +393,13 @@ Picking a model loads its host stage with `ico_mv_active` set: the stage's scrip
 (`ico2/common/src/sceneManager.c` (`initSceneGObj`)) and achievements are suspended. Once the object
 is up every other object is parked, pause and fog are off, and the renderer keeps only the object's
 own draws (`rd_set_draw_filter`) over a grey backdrop recorded in [list](ARCHITECTURE.md#terms) 0;
-the camera orbits it (`port/game/model_viewer.c`, header comment, `MV_VIEW`). Triangle goes back to
+the camera orbits it (`port/game/model_viewer.c`, header comment, `MV_VIEW`). An animation plays
+through the motion manager as in the game, its frame-dependent sequence included: its sounds and pad
+vibration play, but its effects (the stage animations and particles a motion enters, such as the
+water ring of the boy's swim) are not entered while `ico_mv_active` is set; the draw filter would
+not show them and the host stage may not hold them
+(`ico2/sugipon/src/frameDependSequence.c` (`playEff`); [DIVERGENCES.md](DIVERGENCES.md) GL-10,
+issue 104). Triangle goes back to
 the list, and from the list to the title the way the pause menu's End Game does. The game side runs
 from `ico_mv_tick`, called by `Main` after the pad is read (`ico2/common/src/main.c`). The camera
 step is a pure function of the held buttons and sticks so a CPU test drives it
@@ -540,8 +546,8 @@ are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
 Each is a ctest: `options` (`port/game/test/options_test.c`: the defaults, the setters,
 `eBrainGetTarget` with Yorda safe), `door_grace`, `achievements`, `photo`, `appearance` and
 `appearance_disc`, `credits`, `title_logo` and `model_viewer_headless` (`port/game/CMakeLists.txt`);
-`gallery`, `gallery_sweep`, `credits_headless`, `model_viewer` and `model_viewer_cam`
-(`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
+`gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
+`model_viewer_effects` and `model_viewer_effects_elf` (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
 [TESTING.md](TESTING.md) has how to run them.
 
 ## Video options

@@ -21,7 +21,7 @@ static int stageBgaCount = 0; /* derived name */
    objects that enter a stage animation run only in the stages that load it.
    The model viewer (port/game/model_viewer.c) and an unforeseen path can, so
    the effect is skipped, leaving the slots as they were
-   (docs/port/DIVERGENCES.md GL-11). */
+   (docs/port/DIVERGENCES.md GL-10). */
 static void stageBgaNoNode(int kind)
 {
     static int reported;
