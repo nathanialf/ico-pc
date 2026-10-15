@@ -55,8 +55,9 @@ other than the PAL release (SCES-50760).
 
 ## Install
 
-Download the file for your device from the
-[releases page](https://github.com/nathanialf/ico-pc/releases).
+The easy way: the [download page](https://nathanialf.github.io/ico-pc/)
+picks the right file for your device. Or download the file for your device
+from the [releases page](https://github.com/nathanialf/ico-pc/releases).
 
 ### Windows
 

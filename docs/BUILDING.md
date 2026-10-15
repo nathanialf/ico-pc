@@ -520,6 +520,19 @@ structure; the game is not run:
 
 Run the same steps locally before pushing.
 
+`.github/workflows/pages.yml` publishes the download page,
+<https://nathanialf.github.io/ico-pc/>, on every push to main that touches
+`site/` and by hand (`workflow_dispatch`). The page is one static file,
+`site/index.html`, with no build step: in the visitor's browser it reads the
+releases list from GitHub's API (unauthenticated, kept ten minutes in the
+tab), picks the file for the visitor's device and shows the chosen version's
+release notes, so a new release needs no change to the page. The job uploads
+`site/` with `actions/upload-pages-artifact` and deploys it with
+`actions/deploy-pages` (permissions `pages: write` and `id-token: write`, the
+`github-pages` environment, one deployment at a time). It only works once
+the repository's Pages source is set to GitHub Actions (Settings > Pages >
+Build and deployment > Source: **GitHub Actions**), a one-time setting.
+
 ## Packages
 
 `tools/package_win.sh <label>` and `tools/package_linux.sh <label>` build the packages for HEAD in a
