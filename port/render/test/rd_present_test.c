@@ -1408,6 +1408,54 @@ static void checkScales(void)
     rd__target_scale_of(&t, -1);
     CHECK(t.tw == 256 && t.th == 256 && t.sx == 1.0f && t.sy == 1.0f,
           "scales: a 256 x 256 block at 16:9 stays 256 texels across (%u)", t.tw);
+    /* Water reflections (RdSettings.waterSharp): a block rd_block_target
+     * made (RdTargetRec.block) that is not scene-sized.  Original: its GS
+     * size, as any other temporary target; Sharp: the scene's scale, both
+     * ways, its depth with it (one texture size); another temporary target
+     * of that size stays; a frame-sized block is scene-class either way */
+    t.block = 1;
+    rd__target_scale_of(&t, -1);
+    CHECK(t.tw == 256 && t.th == 256 && t.sx == 1.0f && t.sy == 1.0f,
+          "scales: water Original: the reflection block at 2x is its GS size (%ux%u)", t.tw, t.th);
+    s.waterSharp = 1;
+    applyWith(&s);
+    rd__target_scale_of(&t, -1);
+    CHECK(t.tw == 512 && t.th == 512 && t.sx == 2.0f && t.sy == 2.0f && t.ox == 0.0f,
+          "scales: water Sharp: the reflection block at 2x is 512 x 512 (%ux%u, %g)", t.tw, t.th,
+          (double)t.sx);
+    t.w = 688; /* puddle.c's block on a 16:9 frame: as wide as the frame, 256 lines */
+    rd__target_scale_of(&t, -1);
+    CHECK(t.tw == 1376 && t.th == 512 && t.sx == g_rd.sceneSx && t.sy == g_rd.sceneSy,
+          "scales: water Sharp: a frame-wide reflection block at 16:9 2x is %ux%u", t.tw, t.th);
+    t.block = 0;
+    t.w = 256;
+    rd__target_scale_of(&t, -1);
+    CHECK(t.tw == 256 && t.sx == 1.0f, "scales: water Sharp: other temporary targets stay");
+    t.block = 1;
+    t.w = 688;
+    t.h = 512;
+    rd__target_scale_of(&t, -1);
+    CHECK(t.tw == 1376 && t.th == 1024, "scales: water Sharp: a frame-sized block is as SCENE");
+    /* the scene's scale, not the work scale (which stops at 2x) */
+    s.sceneScale = 4.0f;
+    applyWith(&s);
+    t.w = t.h = 256;
+    rd__target_scale_of(&t, -1);
+    CHECK(g_rd.workScale == 2.0f && t.tw == 1024 && t.th == 1024 && t.sx == 4.0f,
+          "scales: water Sharp at 4x: the block is 1024 x 1024, past the work scale %g (%ux%u)",
+          (double)g_rd.workScale, t.tw, t.th);
+    /* at 1x both are the GS size */
+    s.sceneScale = 1.0f;
+    for (int sharp = 0; sharp <= 1; sharp++) {
+        s.waterSharp = (uint8_t)sharp;
+        applyWith(&s);
+        rd__target_scale_of(&t, -1);
+        CHECK(t.tw == 256 && t.th == 256 && t.sx == 1.0f && t.sy == 1.0f,
+              "scales: water %s at 1x: the block is 256 x 256 (%ux%u)",
+              sharp ? "Sharp" : "Original", t.tw, t.th);
+    }
+    s.waterSharp = 0;
+    t.block = 0;
     g_rd.gsW = savedW;
     g_rd.settings = saved;
     rd__apply_display();
