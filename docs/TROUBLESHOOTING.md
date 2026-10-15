@@ -168,6 +168,12 @@ stay dark a little longer while it does. Then the game starts as usual,
 whatever it found. If you report the problem, attach the newest `loss-`
 file together with the log of the start after it.
 
+**"The game checked why the graphics stopped last time, and the graphics
+driver needs a fresh start now."** The check above stopped the graphics
+driver again, as it was meant to find out, and the driver could not carry
+on in the same start. Start the game again: the check runs only once, so
+this start is a normal one.
+
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,
 and the game has to close; your last save is kept. Start the game again. If

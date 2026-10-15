@@ -1307,7 +1307,8 @@ static int mount_game_data(const Args *a, const IcoIni *ini, const char *exe_dir
    port/ui's own font).  1 when the graphics did not start and the
    graphics driver box ended the run (Android: the player chose Quit, or a
    driver package for the next start; the box said why, so no second
-   one). */
+   one), or when it did not start again after the loss bisect lost the
+   device (window_host.c; a box asked to start again). */
 static int open_window(void)
 {
     const int r = ico_window_open(512, 512);
@@ -1316,6 +1317,12 @@ static int open_window(void)
         /* the summary is not registered yet: the reason is logged here */
         exit_reason = "the graphics did not start; the player quit at the graphics driver "
                       "choice or chose a driver package for the next start";
+        fprintf(stderr, "ico_pc: %s\n", exit_reason);
+        return 1;
+    }
+    if (r == -3) {
+        exit_reason = "the graphics did not start again after the loss bisect lost the device; "
+                      "the next start runs normally";
         fprintf(stderr, "ico_pc: %s\n", exit_reason);
         return 1;
     }

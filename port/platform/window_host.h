@@ -11,7 +11,10 @@
  *   ico_window_open(gsW, gsH)   SDL video, the window, rd_init; 0, or -1
  *                               with the reason logged (Android: -2 when
  *                               no driver started and the player chose
- *                               Quit in the box that offered one)
+ *                               Quit in the box that offered one; -3
+ *                               when the renderer did not start again
+ *                               after the loss bisect lost the device,
+ *                               a box having asked to start again)
  *   ico_window_pump()           drains SDL events once per vsync: window
  *                               resize reaches rd_resize_output; the close
  *                               button returns 0 (quit), else 1 (Escape is

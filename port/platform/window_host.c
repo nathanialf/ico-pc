@@ -1228,8 +1228,9 @@ open_window:
 #endif
     /* the previous run lost the device and left its loss dump: the pass
        that loses it, found before the game starts (once) */
+    bool bisectLost = false;
     if (ico_diag_loss_dump() != NULL) {
-        ico_diag_loss_bisect(window_loss_bisect, &rs);
+        bisectLost = ico_diag_loss_bisect(window_loss_bisect, &rs) == ICO_DIAG_BISECT_LOST;
     }
     rd_set_activity_fn(window_activity);
     bool up = rd_init(gsW, gsH, &rs, s_window);
@@ -1239,6 +1240,22 @@ open_window:
         up = rd_init(gsW, gsH, &rs, s_window);
     }
 #endif
+    if (!up && bisectLost) {
+        /* a driver that cannot make a device again in the process that lost
+           one: the bisect is done (its file deleted), so the next start is
+           a normal one; this one ends with a word, not the driver box */
+        fprintf(stderr, "window: the renderer did not start again after the loss bisect lost the "
+                        "device; the next start runs normally\n");
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "ICO PC",
+                                 "The game checked why the graphics stopped last time, and the "
+                                 "graphics driver needs a fresh start now.\n\nPlease start the "
+                                 "game again.",
+                                 s_window);
+        SDL_DestroyWindow(s_window);
+        s_window = NULL;
+        SDL_Quit();
+        return -3;
+    }
     if (!up) {
         fprintf(stderr,
                 "window: no usable %s device (rd_init failed; the rhi lines above say "
