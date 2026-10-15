@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500&family=Playfair+Display:wght@700;900&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=Playfair+Display:wght@700;900&family=JetBrains+Mono:wght@400;500&display=swap">
 <meta name="description" content="Download ICO PC, the PAL PlayStation 2 game ICO as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac.">
 <title>ICO PC download</title>
 <style>
@@ -14,30 +14,35 @@
   --bg: #0a0a0a; --panel: #0d0d0d; --panel-hi: #111; --field: #171717;
   --line: #1a1a1a; --line-hi: #262626; --line-hover: #404040;
   --text: #e5e5e5; --text-hi: #f9fafb; --muted: #737373; --dim: #525252; --faint: #404040;
-  --warn: #c9a24b;
-  --font-body: 'Outfit', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --warn: #c9a24b; --accent: #9fc2c2; --accent-dim: #6e9595; --accent-bg: #11201f;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-serif: 'Playfair Display', 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.6 var(--font-body); }
-a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line-hover); transition: color 0.15s ease, border-color 0.15s ease; }
-a:hover { color: var(--text-hi); border-color: var(--muted); }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); transition: color 0.15s ease, border-color 0.15s ease; }
+a:hover { color: #c6e0e0; border-color: var(--accent); }
 main, footer, header.top { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
 header.top { padding-top: 48px; padding-bottom: 4px; }
 h1 { font-family: var(--font-serif); font-weight: 700; font-size: 1.6rem; line-height: 1.2; margin: 0; color: var(--text-hi); }
+h1::after { content: ''; display: block; width: 2.5rem; height: 2px; background: var(--accent); margin-top: 0.6rem; }
 .lede { color: var(--muted); margin: 10px 0 28px; font-size: 0.95rem; }
 .panel { border: 1px solid var(--line); background: var(--panel); margin: 0 0 14px; }
 .panel > .head { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.9rem; background: var(--panel-hi); border-bottom: 1px solid var(--line); }
+.panel > .head { border-left: 2px solid var(--accent); }
 .panel > .head h2 { font-family: var(--font-serif); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #d4d4d4; margin: 0; }
 .panel > .body { padding: 1rem 0.9rem 1.1rem; }
 .for { color: var(--muted); margin: 0 0 12px; font-size: 0.95rem; }
 .for strong { color: var(--text); font-weight: 500; }
 .btn { display: block; width: 100%; text-decoration: none; border: 1px solid var(--line-hi); background: var(--field); color: var(--text); padding: 0.85rem 1rem; font-weight: 500; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; overflow-wrap: anywhere; }
 .btn:hover, .btn:focus-visible { background: var(--line-hi); border-color: var(--line-hover); color: var(--text-hi); }
-.btn.big { font-size: 1.05rem; }
-.btn.small { margin-top: 10px; font-size: 0.95rem; padding: 0.65rem 1rem; }
+.btn.big { font-size: 1.05rem; background: var(--accent); border-color: var(--accent); color: #0a0a0a; }
+.btn.big:hover, .btn.big:focus-visible { background: #b9d6d6; border-color: #b9d6d6; color: #0a0a0a; }
+.btn.big .file { color: #1f3b3b; }
+.btn.small { margin-top: 10px; font-size: 0.95rem; padding: 0.65rem 1rem; border-color: var(--accent-dim); color: var(--accent); background: transparent; }
+.btn.small:hover, .btn.small:focus-visible { background: var(--accent-bg); border-color: var(--accent); color: #c6e0e0; }
 .btn .file { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 0.65rem; color: var(--muted); margin-top: 3px; letter-spacing: 0.02em; }
 .note { color: var(--muted); font-size: 0.85rem; margin: 10px 0 0; }
 .note.warn { color: var(--warn); }
@@ -47,16 +52,16 @@ h1 { font-family: var(--font-serif); font-weight: 700; font-size: 1.6rem; line-h
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
 .chips button { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); background: transparent; border: 1px solid #333; border-radius: 0; padding: 0.55rem 0.8rem; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease; }
 .chips button:hover { border-color: var(--dim); color: #a3a3a3; }
-.chips button[aria-pressed="true"] { border-color: var(--muted); color: var(--text); }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
 .lbl { display: block; font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px; }
 select { font-family: var(--font-mono); font-size: 0.8rem; width: 100%; max-width: 100%; color: var(--text); background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23525252' d='M2 4l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 0.6rem center; border: 1px solid var(--line-hi); border-radius: 0; padding: 0.6rem 2rem 0.6rem 0.6rem; -webkit-appearance: none; appearance: none; cursor: pointer; }
-select:focus { outline: none; border-color: var(--line-hover); }
+select:focus { outline: none; border-color: var(--accent-dim); }
 .files { margin: 10px 0 0; padding: 0; list-style: none; }
 .files li { padding: 7px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 0.9rem; }
 .files .size { font-family: var(--font-mono); color: var(--dim); font-size: 0.65rem; white-space: nowrap; margin-left: 0.4rem; }
 details summary { cursor: pointer; margin-top: 14px; font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
 details summary:hover { color: #a3a3a3; }
-.notes h3 { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin: 18px 0 6px; padding-bottom: 0.25rem; border-bottom: 1px solid var(--line-hi); }
+.notes h3 { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-dim); margin: 18px 0 6px; padding-bottom: 0.25rem; border-bottom: 1px solid var(--line-hi); }
 .notes h4 { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin: 14px 0 6px; }
 .notes ul, .notes ol { padding-left: 1.2em; margin: 6px 0; }
 .notes li { margin: 4px 0; font-size: 0.93rem; }
@@ -71,7 +76,7 @@ footer nav { display: flex; flex-wrap: wrap; gap: 0 1.5rem; }
 footer nav a { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); border: 0; line-height: 2; }
 footer nav a:hover { color: #a3a3a3; }
 footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint); line-height: 1.6; margin: 12px 0 0; }
-:focus-visible { outline: 1px solid var(--muted); outline-offset: 2px; }
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
 </style>
 </head>
 <body>
