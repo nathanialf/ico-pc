@@ -123,6 +123,11 @@ void ico_diag_present_leave(void);
 void ico_diag_os_wait_enter(const char *what);
 void ico_diag_os_wait_leave(void);
 void ico_diag_set_os_wait_limit(unsigned int seconds);
+/* What the wait is doing, for the watchdog's "waiting" line and its report
+   (the window: the part of the pump, the window message being handled,
+   the last messages and events; pump_watch.h). Runs on the watchdog's
+   thread while the main thread is held, so it may only read. */
+void ico_diag_set_os_wait_describe(void (*fn)(char *out, size_t size));
 
 /* Starts the heartbeat and watchdog thread. first_s: seconds from now
    without any Main tick; later_s: seconds without a new Main tick or new

@@ -413,7 +413,10 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     # The display's vblanks for the vsync lock's log (display_clock.h): a
     # DXGI output's on Windows, none elsewhere
     if(WIN32)
-        target_sources(ico_pc PRIVATE port/platform/display_clock_win.c)
+        # and the window's messages for the event pump's long-call lines,
+        # the display and the computer kept awake (window_pump_win.h)
+        target_sources(ico_pc PRIVATE port/platform/display_clock_win.c
+                                      port/platform/window_pump_win.c)
     else()
         target_sources(ico_pc PRIVATE port/platform/display_clock_none.c)
     endif()

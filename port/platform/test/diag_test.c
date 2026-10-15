@@ -276,6 +276,12 @@ static void present_child(int first, int effects)
    then a tick. mode "pump": exit 0 after it; "pumphang": the game's code
    then stands still until the watchdog ends the run; "pumpbound": the
    bound for one wait is 3 s and the wait never returns (6 s). */
+/* the window's description of the wait (pump_watch_describe there) */
+static void pump_describe(char *out, size_t size)
+{
+    snprintf(out, size, "in the test's pump, handling WM_TEST(0x0400)");
+}
+
 static void pump_child(const char *mode)
 {
     const int bound = strcmp(mode, "pumpbound") == 0;
@@ -283,6 +289,7 @@ static void pump_child(const char *mode)
     if (bound) {
         ico_diag_set_os_wait_limit(3);
     }
+    ico_diag_set_os_wait_describe(pump_describe);
     ico_diag_start(0, 1);
     ico_diag_os_wait_enter("the window's event pump");
     pause_ms(bound ? 6000 : 3500);
@@ -778,6 +785,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "WATCHDOG:") == NULL);
     CHECK(strstr(s, "ico_pc: watchdog: the window's event pump has not returned for 1 s (the "
                     "system is holding it: the game is not hung); waiting\n") != NULL);
+    CHECK(strstr(s, "ico_pc: watchdog: in the test's pump, handling WM_TEST(0x0400)\n") != NULL);
     {
         /* named once per stall */
         const char *w = strstr(s, "has not returned for");
@@ -812,6 +820,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "WATCHDOG: the window's event pump has not returned for 3 s (the system "
                     "holds it; the limit is [dev] watchdog_pump)") != NULL);
     CHECK(strstr(s, "the main thread has been inside the window's event pump for 3 s") != NULL);
+    CHECK(strstr(s, "ico_pc: in the test's pump, handling WM_TEST(0x0400)\n") != NULL);
     CHECK(strstr(s, "the main thread was at") != NULL);
     CHECK(strstr(s, "test: pump returned") == NULL);
     if (fails) {

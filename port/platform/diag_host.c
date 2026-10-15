@@ -130,6 +130,7 @@ static volatile unsigned long long os_wait_done_ns;
 static volatile unsigned long long os_wait_last_ns;
 static const char *volatile os_wait_what;
 static volatile unsigned int os_wait_limit_s = OS_WAIT_LIMIT_S;
+static void (*volatile os_wait_describe)(char *out, size_t size);
 static double os_wait_seconds(double *current, unsigned long long *since_out);
 static const char *os_wait_name(void);
 /* ico_diag_set_effects_program: written by the host before the first present */
@@ -2618,6 +2619,21 @@ void ico_diag_set_os_wait_limit(unsigned int seconds)
     os_wait_limit_s = seconds;
 }
 
+void ico_diag_set_os_wait_describe(void (*fn)(char *out, size_t size))
+{
+    os_wait_describe = fn;
+}
+
+/* the describe function's text, "" without one */
+static void os_wait_detail(char *out, size_t size)
+{
+    void (*fn)(char *, size_t) = os_wait_describe;
+    out[0] = '\0';
+    if (fn != NULL) {
+        fn(out, size);
+    }
+}
+
 /* Seconds spent in the system's waits so far (finished ones plus the one
    in progress). *current: the one in progress, 0 if none; *since: its
    start (0 if none). */
@@ -2668,9 +2684,14 @@ static void watchdog_fire(const char *reason)
         }
         (void)os_wait_seconds(&cur, NULL);
         if (cur > 0.0) {
+            static char detail[LINE_MAX_BYTES - 64];
             flog("ico_pc: the main thread has been inside %s for %.0f s (a call into the "
                  "system that has not returned)",
                  os_wait_name(), cur);
+            os_wait_detail(detail, sizeof detail);
+            if (detail[0] != '\0') {
+                flog("ico_pc: %s", detail);
+            }
         }
     }
     if (sample_main() == 0) {
@@ -2858,10 +2879,15 @@ static void watchdog_loop(void)
             os_logged = 0;
         }
         if (os_since != 0 && os_since != os_logged && lim != 0 && os_cur - os_gap >= lim) {
+            static char detail[LINE_MAX_BYTES - 64];
             os_logged = os_since;
             ico_diag_log("ico_pc: watchdog: %s has not returned for %.0f s (the system is holding "
                          "it: the game is not hung); waiting",
                          os_wait_name(), os_cur - os_gap);
+            os_wait_detail(detail, sizeof detail);
+            if (detail[0] != '\0') {
+                ico_diag_log("ico_pc: watchdog: %s", detail);
+            }
         }
         if (os_since != 0 && os_wait_limit_s != 0 && os_cur - os_gap >= os_wait_limit_s) {
             snprintf(reason, sizeof reason,

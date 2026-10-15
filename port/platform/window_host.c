@@ -31,6 +31,7 @@
 #include "photo_mode.h"
 #include "photo_ui.h"
 #include "pointer.h"
+#include "pump_watch.h"
 #include "rd.h"
 #include "rd_bisect_plan.h"
 #include "rd_passring.h"
@@ -48,6 +49,7 @@
 #include "video_options.h"
 #include "window_host.h"
 #include "window_lifecycle.h"
+#include "window_pump_win.h"
 #include "window_video.h"
 #ifdef __ANDROID__
 #include "android/gpu_driver_android.h"
@@ -219,6 +221,8 @@ static struct {
        ico_input_sdl_update */
     double pumpEventsMs, pumpSettingsMs, pumpInputMs;
     unsigned pumpEvents;
+    /* the block's longest pump, for the 10 s line (issue 105) */
+    double pumpMaxMs;
     unsigned slowSteps, slowLogged;
     uint32_t decodes, pipeCreates;
     /* the present clock alpha is taken from (rd.h RdPresentClock) */
@@ -289,6 +293,7 @@ static struct {
 
 static void disp_clock_stop(void);
 static void disp_clock_start(void);
+static void pump_describe(char *out, size_t size);
 
 /* The renderer's settings from the display options and the window's pixel
    size. */
@@ -1261,6 +1266,15 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        iOS set SDL_HINT_APP_NAME, which SDL prefers */
     SDL_SetAppMetadata("ICO PC", ICO_VERSION_LABEL[0] != '\0' ? ICO_VERSION_LABEL : NULL,
                        "com.defnf.icopc");
+#ifdef _WIN32
+    /* The controllers' scan out of SDL_PollEvent: ico_window_pump calls
+       SDL_UpdateJoysticks itself, timed apart from the system's messages
+       (issue 105: the pump was held for 50 s right after a controller went
+       away; SDL's Windows joystick code enumerates DirectInput devices on
+       this thread after a device change). The same work at the same
+       point of the pump, only named in the slow-pump line. */
+    SDL_SetHint(SDL_HINT_AUTO_UPDATE_JOYSTICKS, "0");
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         fprintf(stderr, "window: SDL_Init: %s\n", SDL_GetError());
         return -1;
@@ -1293,6 +1307,11 @@ open_window:
        not whether the desktop accepted the request: the video driver in the
        line tells which way was taken. */
     SDL_DisableScreenSaver();
+    /* Windows: the window's messages for the slow-pump lines, and the
+       watchdog's description of a pump the system holds (issue 105) */
+    ico_pump_win_install(SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
+                                                SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL));
+    ico_diag_set_os_wait_describe(pump_describe);
     fprintf(stderr, "window: video driver %s; screensaver and idle sleep %s\n",
             SDL_GetCurrentVideoDriver() != NULL ? SDL_GetCurrentVideoDriver() : "(none)",
             SDL_ScreenSaverEnabled() ? "allowed (not inhibited)" : "inhibited");
@@ -2211,6 +2230,208 @@ static void window_fullscreen_event(int entered)
     }
 }
 
+/* --- the event pump's long calls (issue 105) ------------------------------ */
+
+/* the parts of the pump the slow-pump line and the watchdog name */
+#define PART_POLL "the system's messages and SDL's own work (SDL_PollEvent)"
+#define PART_JOYSTICKS "the controllers' scan and update (SDL_UpdateJoysticks)"
+
+/* the watchdog's description of a pump the system holds (diag_host.h
+   ico_diag_set_os_wait_describe; the watchdog's thread: reads only) */
+static void pump_describe(char *out, size_t size)
+{
+    pump_watch_describe(out, size, SDL_GetTicksNS());
+}
+
+/* A part of the pump that began at t0 (SDL_GetTicksNS): over 1 s, a line
+   naming it with the window messages and SDL events before it */
+static void pump_slow(const char *part, Uint64 t0)
+{
+    const Uint64 now = SDL_GetTicksNS();
+    char recent[1024];
+
+    if (now - t0 <= PUMP_WATCH_SLOW_NS) {
+        return;
+    }
+    pump_watch_recent(recent, sizeof(recent), now);
+    fprintf(stderr, "window: the event pump's %s took %.1f ms at vsync %u (Main tick %u); %s\n",
+            part, (double)(now - t0) / 1e6, ico_host_vsync_count(), ico_host_main_ticks(), recent);
+}
+
+/* SDL_PollEvent, marked as a wait the system holds (the watchdog does not
+   count it, diag_host.h ico_diag_os_wait_enter) and timed */
+static bool pump_poll(SDL_Event *e)
+{
+    const Uint64 t0 = SDL_GetTicksNS();
+
+    pump_watch_part(PART_POLL);
+    ico_diag_os_wait_enter("the window's event pump");
+    const bool got = SDL_PollEvent(e);
+    ico_diag_os_wait_leave();
+    pump_watch_part(NULL);
+    pump_slow(PART_POLL, t0);
+    return got;
+}
+
+#ifdef _WIN32
+/* SDL_UpdateJoysticks, out of SDL_PollEvent on Windows
+   (SDL_HINT_AUTO_UPDATE_JOYSTICKS, ico_window_open): the same */
+static void pump_joysticks(void)
+{
+    const Uint64 t0 = SDL_GetTicksNS();
+
+    pump_watch_part(PART_JOYSTICKS);
+    ico_diag_os_wait_enter("the window's event pump");
+    SDL_UpdateJoysticks();
+    ico_diag_os_wait_leave();
+    pump_watch_part(NULL);
+    pump_slow(PART_JOYSTICKS, t0);
+}
+#endif
+
+/* The SDL events the slow-pump line lists (NULL: not listed: the ones that
+   come by the hundred) */
+static const char *pump_event_name(Uint32 type)
+{
+    switch (type) {
+    case SDL_EVENT_QUIT:
+        return "quit";
+    case SDL_EVENT_TERMINATING:
+        return "terminating";
+    case SDL_EVENT_LOW_MEMORY:
+        return "low memory";
+    case SDL_EVENT_WILL_ENTER_BACKGROUND:
+    case SDL_EVENT_DID_ENTER_BACKGROUND:
+        return "app to the background";
+    case SDL_EVENT_WILL_ENTER_FOREGROUND:
+    case SDL_EVENT_DID_ENTER_FOREGROUND:
+        return "app to the foreground";
+    case SDL_EVENT_SYSTEM_THEME_CHANGED:
+        return "system theme changed";
+    case SDL_EVENT_DISPLAY_ORIENTATION:
+        return "display orientation";
+    case SDL_EVENT_DISPLAY_ADDED:
+        return "display added";
+    case SDL_EVENT_DISPLAY_REMOVED:
+        return "display removed";
+    case SDL_EVENT_DISPLAY_MOVED:
+        return "display moved";
+    case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+        return "display desktop mode changed";
+    case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+        return "display mode changed";
+    case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+        return "display scale changed";
+    case SDL_EVENT_WINDOW_SHOWN:
+        return "window shown";
+    case SDL_EVENT_WINDOW_HIDDEN:
+        return "window hidden";
+    case SDL_EVENT_WINDOW_EXPOSED:
+        return "window exposed";
+    case SDL_EVENT_WINDOW_MOVED:
+        return "window moved";
+    case SDL_EVENT_WINDOW_RESIZED:
+        return "window resized";
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+        return "window pixel size changed";
+    case SDL_EVENT_WINDOW_MINIMIZED:
+        return "window minimized";
+    case SDL_EVENT_WINDOW_MAXIMIZED:
+        return "window maximized";
+    case SDL_EVENT_WINDOW_RESTORED:
+        return "window restored";
+    case SDL_EVENT_WINDOW_MOUSE_ENTER:
+        return "mouse entered";
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        return "mouse left";
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+        return "focus gained";
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        return "focus lost";
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        return "close requested";
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+        return "window display changed";
+    case SDL_EVENT_WINDOW_OCCLUDED:
+        return "window occluded";
+    case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+        return "entered fullscreen";
+    case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+        return "left fullscreen";
+    case SDL_EVENT_KEY_DOWN:
+        return "key down";
+    case SDL_EVENT_KEY_UP:
+        return "key up";
+    case SDL_EVENT_KEYBOARD_ADDED:
+        return "keyboard added";
+    case SDL_EVENT_KEYBOARD_REMOVED:
+        return "keyboard removed";
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        return "mouse button";
+    case SDL_EVENT_MOUSE_ADDED:
+        return "mouse added";
+    case SDL_EVENT_MOUSE_REMOVED:
+        return "mouse removed";
+    case SDL_EVENT_JOYSTICK_ADDED:
+        return "joystick added";
+    case SDL_EVENT_JOYSTICK_REMOVED:
+        return "joystick removed";
+    case SDL_EVENT_JOYSTICK_BATTERY_UPDATED:
+        return "joystick battery";
+    case SDL_EVENT_GAMEPAD_ADDED:
+        return "gamepad added";
+    case SDL_EVENT_GAMEPAD_REMOVED:
+        return "gamepad removed";
+    case SDL_EVENT_GAMEPAD_REMAPPED:
+        return "gamepad remapped";
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+    case SDL_EVENT_GAMEPAD_BUTTON_UP:
+        return "gamepad button";
+    case SDL_EVENT_AUDIO_DEVICE_ADDED:
+        return "audio device added";
+    case SDL_EVENT_AUDIO_DEVICE_REMOVED:
+        return "audio device removed";
+    case SDL_EVENT_AUDIO_DEVICE_FORMAT_CHANGED:
+        return "audio device format changed";
+    case SDL_EVENT_RENDER_DEVICE_RESET:
+    case SDL_EVENT_RENDER_DEVICE_LOST:
+        return "render device reset";
+    default:
+        return NULL;
+    }
+}
+
+/* The system's events worth a line of their own as they come: the
+   window's focus and visibility, the displays, the joysticks (the
+   gamepads have input_sdl.c's line) */
+static void pump_event_line(const SDL_Event *e, const char *name)
+{
+    switch (e->type) {
+    case SDL_EVENT_WINDOW_FOCUS_GAINED:
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+    case SDL_EVENT_WINDOW_MINIMIZED:
+    case SDL_EVENT_WINDOW_RESTORED:
+    case SDL_EVENT_WINDOW_HIDDEN:
+    case SDL_EVENT_WINDOW_SHOWN:
+    case SDL_EVENT_WINDOW_OCCLUDED:
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+    case SDL_EVENT_DISPLAY_ORIENTATION:
+    case SDL_EVENT_DISPLAY_ADDED:
+    case SDL_EVENT_DISPLAY_REMOVED:
+    case SDL_EVENT_DISPLAY_MOVED:
+    case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+    case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+    case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+    case SDL_EVENT_JOYSTICK_ADDED:
+    case SDL_EVENT_JOYSTICK_REMOVED:
+        fprintf(stderr, "window: system event: %s at vsync %u\n", name, ico_host_vsync_count());
+        break;
+    default:
+        break;
+    }
+}
+
 int ico_window_pump(void)
 {
     SDL_Event e;
@@ -2227,8 +2448,21 @@ int ico_window_pump(void)
         quit = 1;
     }
 
-    while (SDL_PollEvent(&e)) {
+#ifdef _WIN32
+    /* the display and the computer kept awake (window_pump_win.h), and the
+       controllers' scan SDL_PollEvent no longer runs (pump_joysticks) */
+    ico_pump_win_keep_awake(t0);
+    pump_joysticks();
+#endif
+    while (pump_poll(&e)) {
+        const Uint64 h0 = SDL_GetTicksNS();
+        const char *name = pump_event_name(e.type);
+
         events++;
+        if (name != NULL) {
+            pump_watch_event(name, h0);
+            pump_event_line(&e, name);
+        }
         switch (e.type) {
         case SDL_EVENT_QUIT:
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
@@ -2329,6 +2563,15 @@ int ico_window_pump(void)
             ico_input_sdl_event(&e);
             break;
         }
+        /* the port's own handling of it (a size change remakes the
+           swapchain, a key may write a dump) */
+        if (SDL_GetTicksNS() - h0 > PUMP_WATCH_SLOW_NS) {
+            char what[96];
+
+            snprintf(what, sizeof(what), "handling of the event %s",
+                     name != NULL ? name : "(another kind)");
+            pump_slow(what, h0);
+        }
     }
     /* the pump's parts, for the slow-step line: which part of a long pump
        took the time */
@@ -2365,6 +2608,7 @@ int ico_window_pump(void)
 
         video_apply(rd_output_followed(NULL, NULL) ? 1 : 0);
         s_pres.pumpSettingsMs = (double)(SDL_GetTicksNS() - t1) / 1e6;
+        pump_slow("settings (video_apply)", t1);
     }
     /* a hard camera cut or stage change the game signalled during the
        step that just ran: the frame it recorded is not blended from the
@@ -2374,20 +2618,29 @@ int ico_window_pump(void)
         s_pres.cutSerial = ico_video_cut_serial();
         rd_camera_cut();
     }
-    photo_pump();                /* photo mode's captures */
-    sweep_pump();                /* Shift+F12's aspect sweep */
-    set_capture(capture_mode()); /* play and photo mode */
-    pointer_visibility();        /* the pointer in the menus */
+    {
+        const Uint64 t1 = SDL_GetTicksNS();
+
+        photo_pump();                /* photo mode's captures */
+        sweep_pump();                /* Shift+F12's aspect sweep */
+        set_capture(capture_mode()); /* play and photo mode */
+        pointer_visibility();        /* the pointer in the menus */
+        pump_slow("captures and the pointer", t1);
+    }
     {
         const Uint64 t1 = SDL_GetTicksNS();
 
         ico_input_sdl_update(); /* the pads sampled, the rumble sent */
         s_pres.pumpInputMs = (double)(SDL_GetTicksNS() - t1) / 1e6;
+        pump_slow("pads' reading and rumble (ico_input_sdl_update)", t1);
     }
     /* the popups' clock; the presenter draws them on its overlay at each
        present (port/ui/ui_host.c) */
     ui_host_vsync(ico_host_main_ticks());
     s_pres.pumpMs = (double)(SDL_GetTicksNS() - t0) / 1e6;
+    if (s_pres.pumpMs > s_pres.pumpMaxMs) {
+        s_pres.pumpMaxMs = s_pres.pumpMs;
+    }
     return !quit;
 }
 
@@ -2512,8 +2765,11 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
     RdOverlayFn prev, prevTop;
     ProgressView v;
 
+#ifdef _WIN32
+    pump_joysticks(); /* SDL_PollEvent no longer does it (ico_window_open) */
+#endif
     if (s_open) {
-        while (SDL_PollEvent(&e)) {
+        while (pump_poll(&e)) {
             progress_event(&e, &cancel, &closing);
         }
     } else {
@@ -2521,7 +2777,16 @@ static int progress_present_notes(const char *title, const char *phase, int pct,
                                          SDL_EVENT_KEY_DOWN};
         size_t i;
 
-        SDL_PumpEvents();
+        {
+            const Uint64 t0 = SDL_GetTicksNS();
+
+            pump_watch_part(PART_POLL);
+            ico_diag_os_wait_enter("the window's event pump");
+            SDL_PumpEvents();
+            ico_diag_os_wait_leave();
+            pump_watch_part(NULL);
+            pump_slow(PART_POLL, t0);
+        }
         for (i = 0; i < sizeof(k_taken) / sizeof(k_taken[0]); i++) {
             while (SDL_PeepEvents(&e, 1, SDL_GETEVENT, k_taken[i], k_taken[i]) == 1) {
                 progress_event(&e, &cancel, &closing);
@@ -3285,7 +3550,7 @@ static void pace_log(Uint64 now)
             "%.0f ms; longest replay %.1f ms of %u, %u over a refresh; %u steps over %.0f ms; "
             "framerate %s, present "
             "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
-            "ms; %s\n",
+            "ms; pump max %.1f ms; %s\n",
             s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
             fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
             s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
@@ -3294,7 +3559,8 @@ static void pace_log(Uint64 now)
             rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
             dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate
                                                   : 0.0,
-            pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6, lock);
+            pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
+            s_pres.pumpMaxMs, lock);
     if (s_pres.lockN > 0) {
         disp_log(sec, s_pres.lock.refreshNs);
     }
@@ -3308,6 +3574,7 @@ static void pace_log(Uint64 now)
     s_pres.statMovieFail = movieFail;
     s_pres.slowSteps = s_pres.slowLogged = 0;
     s_pres.lateMaxNs = 0;
+    s_pres.pumpMaxMs = 0.0;
 }
 
 /* The start-up's presents, one log line each: the boot shows black (keep
