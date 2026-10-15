@@ -1079,17 +1079,29 @@ model matrix and each bone of a skinned draw remember the turn they made between
 before (a rotation vector in the object's own frame, kept per draw by its key and its place in the
 list, in one table allocated once), and the next blend takes the way, short or long, nearer that
 turn, when it lies within `RD_INTERP_TURN_KEEP` (60 degrees) of it and turns at most
-`RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`). A remembered turn applies only to
-the next pair of consecutive ticks; without one (the first pair, after a whole-frame snap, a draw
-not blended the tick before, or a turn far from the one before) the blend takes the short way and a
-turn over `RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. A turn is remembered only when
+`RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`). A remembered turn applies to the
+next pair of consecutive ticks; without one (the first pair, a draw not blended in the last few
+ticks, or a turn far from the one before) the blend takes the short way and a turn over
+`RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. The memory also survives a gap: a pair
+not blended between (no present between two ticks, a camera cut, a fade or another whole-frame
+snap, a discarded frame) or a draw missing for a few ticks. The turn is a rotation per tick in the
+object's own frame (the model to world or the bone, no camera in it), so each draw's key and bone
+also keep their last remembered turn with the pose it ended at, by key and bone rather than by
+place in the list. A pair whose turn would snap (over 120 degrees with no memory of the tick
+before) takes that turn when it ended 1 to `RD_INTERP_TURN_GAP` (8) ticks before the pair's first
+tick and carrying it on that many ticks puts the draw within 60 degrees of its pose there
+(`turnRecallGap`); when several draws of one key kept a turn in the same tick, only the one at the
+remembered place takes it. A turn under the snap, or one with a memory of the tick before, blends
+as without this rule, bit for bit, and the whole-frame snaps clear no memory. Without it a wheel
+over 120 degrees a tick stepped at the tick rate after any such gap until the trolley slowed; at
+50 Hz (PAL) a tick's turn is 1.2 times the 60 Hz one, so that came sooner. A turn is remembered only when
 it blended: a turn that kept the tick's pose has no known direction (forward 190 degrees is back 170
 the short way), so remembering it could make the next pair blend backwards. A wheel first seen
 between 120 and 180 degrees a tick therefore keeps the tick's pose until it slows below the snap,
 and one that speeds up in steps under 60 degrees a tick carries its turn through 180. The
 camera keeps the short way. The tick's own present is never blended, so the tick's pose is exact
 either way (`port/render/rd_interp.c` (rotation continuity: `turnRecall`, `turnKeep`,
-`blendTurn`), `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
+`turnRecallGap`, `turnKeepLast`, `blendTurn`), `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
 
 ## Performance records
 
