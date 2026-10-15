@@ -1731,9 +1731,10 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present);
  * docs/port/RENDER.md, "The loss bisect"): every replay numbers its passes
  * 1, 2, ... in the order they begin (render passes, copies, snapshots and
  * exact blends: the pass ring's entries other than the uploads and the
- * present).  With a window [first, last] the draws and copies of the
- * passes outside it are not recorded (those passes still begin, so their
- * clears and layout changes run), and the walk stops after the command
+ * present).  With a window [first, last] the draws and the target and
+ * snapshot copies of the passes outside it are not recorded (those passes
+ * still begin, so their clears and layout changes run; the uploads and the
+ * fog's depth copy, rd_fog_path.c, are not windowed), and the walk stops after the command
  * that began pass last + 1, which therefore draws nothing.  So [1, k] is
  * the frame up to pass k, [k, k] pass k alone (on the targets as the
  * passes before it left them in an earlier replay), [UINT32_MAX, 0] no
