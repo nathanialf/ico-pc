@@ -37,6 +37,7 @@
 #include <string.h>
 #include "fiber.h"
 #include "host_fs.h"
+#include "rd_bisect_plan.h"
 #include "sched.h"
 #include "startup_retry.h"
 
@@ -1073,6 +1074,9 @@ static const char act_loss_none[] = "graphics device lost, no loss dump";
 static char loss_pending[1024];
 /* the bisect's note: a run ended during it is not bisected again */
 static const char act_bisect[] = "replaying the lost frame pass by pass (the loss bisect)";
+/* the second level's note (ico_diag_loss_bisect2): the same; its state file
+   says where it was */
+static const char act_bisect2[] = "replaying the lost frame draw by draw (the loss bisect)";
 #ifdef _WIN32
 static HANDLE act_h = INVALID_HANDLE_VALUE;
 #else
@@ -1307,6 +1311,12 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
                          zip);
         }
     }
+    if (strcmp(prev, act_bisect2) == 0) {
+        /* a second-level step that never finished: its state file says
+           where (ico_diag_loss_bisect2 continues it); not a lazy start */
+        ico_diag_log("ico_pc: the previous run ended while: %s; it continues", prev);
+        return 0;
+    }
     if (strcmp(prev, act_bisect) == 0) {
         /* a bisect that never finished: named, not run again, and nothing
            to do with the pipelines */
@@ -1424,6 +1434,421 @@ int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t 
     act_remove();
     ico_diag_log("ico_pc: loss bisect: done; the game starts");
     return r;
+}
+
+/* --- The loss bisect's second level ------------------------------------------ */
+
+/* The state file (diag_host.h ico_diag_loss_bisect2), one record a line:
+     ico-pc loss bisect 1
+     version <the program's version>
+     zip <the loss dump>
+     pass <P> draws <N> passes <T>
+     starts <k>
+     step <i> <kind> <first> <last> <filter> <arg> <verdict> <ms> key <valid> <vu> <skinned>
+          <vs> <clip> <tex> note <text>
+   (one line a step; verdict lost, clean, killed or "-" while it runs).
+   Read as untrusted: lines past B2_LINE bytes, numbers out of range, a step
+   out of order, a kind or filter it does not know: the file is deleted;
+   other unknown lines are ignored. */
+#define B2_MAGIC "ico-pc loss bisect 1"
+#define B2_LINE 1100
+#define B2_NOTE 320
+
+static char b2_path[1024];
+
+typedef struct B2State {
+    char version[128];
+    char zip[1024];
+    uint32_t pass, draws, passes, starts;
+    RdBisectPlan plan;
+    double ms[RD_BISECT_PLAN_STEPS];
+    char note[RD_BISECT_PLAN_STEPS][B2_NOTE];
+} B2State;
+
+static B2State b2;
+
+void ico_diag_loss_bisect2_path(const char *path)
+{
+    snprintf(b2_path, sizeof b2_path, "%s", path != NULL ? path : "");
+}
+
+static const char *b2_verdict_name(uint8_t v)
+{
+    return v == RD_BISECT_V_LOST     ? "lost"
+           : v == RD_BISECT_V_CLEAN  ? "clean"
+           : v == RD_BISECT_V_KILLED ? "killed"
+                                     : "-";
+}
+
+/* the file written whole (a temporary file renamed over it) */
+static int b2_save(void)
+{
+    char tmp[sizeof b2_path + 8];
+    FILE *f;
+    uint32_t i;
+    int ok;
+    if (b2_path[0] == '\0') {
+        return -1;
+    }
+    snprintf(tmp, sizeof tmp, "%s.new", b2_path);
+    f = ico_fopen(tmp, "wb");
+    if (f == NULL) {
+        return -1;
+    }
+    ok = fprintf(f, "%s\nversion %s\nzip %s\npass %u draws %u passes %u\nstarts %u\n", B2_MAGIC,
+                 b2.version, b2.zip, (unsigned)b2.pass, (unsigned)b2.draws, (unsigned)b2.passes,
+                 (unsigned)b2.starts) > 0;
+    for (i = 0; ok && i < b2.plan.count; i++) {
+        const RdBisectStep *s = &b2.plan.step[i];
+        const RdBisectKey *k = &b2.plan.key[i];
+        ok = fprintf(f, "step %u %s %u %u %s %u %s %.0f key %u %u %u %u %u %u note %s\n",
+                     (unsigned)(i + 1), rd_bisect_kind_name(s->kind), (unsigned)s->drawFirst,
+                     (unsigned)s->drawLast, rd_bisect_filter_name(s->filter), (unsigned)s->arg,
+                     b2_verdict_name(b2.plan.verdict[i]), b2.ms[i], (unsigned)k->valid,
+                     (unsigned)k->vu, (unsigned)k->skinned, (unsigned)k->vs, (unsigned)k->clip,
+                     (unsigned)k->tex, b2.note[i]) > 0;
+    }
+    ok = fclose(f) == 0 && ok;
+    if (!ok || ico_rename_replace(tmp, b2_path) != 0) {
+        ico_remove(tmp);
+        return -1;
+    }
+    return 0;
+}
+
+static void b2_delete(void)
+{
+    if (b2_path[0] != '\0') {
+        ico_remove(b2_path);
+    }
+}
+
+/* the next space-separated word of *s (at most size - 1 bytes), 0 when
+   none or too long */
+static int b2_word(const char **s, char *out, size_t size)
+{
+    size_t n = 0;
+    while (**s == ' ') {
+        (*s)++;
+    }
+    while ((*s)[n] != '\0' && (*s)[n] != ' ') {
+        n++;
+    }
+    if (n == 0 || n >= size) {
+        return 0;
+    }
+    memcpy(out, *s, n);
+    out[n] = '\0';
+    *s += n;
+    return 1;
+}
+
+/* the next word as a number at most max */
+static int b2_num(const char **s, uint32_t max, uint32_t *out)
+{
+    char w[16];
+    char *end;
+    unsigned long v;
+    if (!b2_word(s, w, sizeof w) || w[0] < '0' || w[0] > '9') {
+        return 0;
+    }
+    v = strtoul(w, &end, 10);
+    if (*end != '\0' || v > max) {
+        return 0;
+    }
+    *out = (uint32_t)v;
+    return 1;
+}
+
+static int b2_expect(const char **s, const char *word)
+{
+    char w[16];
+    return b2_word(s, w, sizeof w) && strcmp(w, word) == 0;
+}
+
+/* one step line after "step " */
+static int b2_parse_step(const char *s)
+{
+    char w[24];
+    uint32_t i, first, last, arg, ms, valid, vu, sk, vs, clip, tex;
+    int kind, filter;
+    uint8_t v;
+    RdBisectStep *st;
+    RdBisectKey *k;
+    if (!b2_num(&s, RD_BISECT_PLAN_STEPS, &i) || i != b2.plan.count + 1 ||
+        !b2_word(&s, w, sizeof w) || (kind = rd_bisect_kind_parse(w)) < 0 ||
+        !b2_num(&s, b2.draws, &first) || !b2_num(&s, b2.draws, &last) || first < 1 ||
+        last < first || !b2_word(&s, w, sizeof w) || (filter = rd_bisect_filter_parse(w)) < 0 ||
+        !b2_num(&s, 0xFFFFFFFFu, &arg) || !b2_word(&s, w, sizeof w)) {
+        return 0;
+    }
+    if (strcmp(w, "lost") == 0) {
+        v = RD_BISECT_V_LOST;
+    } else if (strcmp(w, "clean") == 0) {
+        v = RD_BISECT_V_CLEAN;
+    } else if (strcmp(w, "killed") == 0 || strcmp(w, "-") == 0) {
+        /* a step that never got its verdict: the run ended inside it */
+        v = RD_BISECT_V_KILLED;
+    } else {
+        return 0;
+    }
+    if (!b2_num(&s, 3600000u, &ms) || !b2_expect(&s, "key") || !b2_num(&s, 1, &valid) ||
+        !b2_num(&s, 1, &vu) || !b2_num(&s, 1, &sk) || !b2_num(&s, 255, &vs) ||
+        !b2_num(&s, 3, &clip) || !b2_num(&s, 0xFFFFFFFFu, &tex) || !b2_expect(&s, "note")) {
+        return 0;
+    }
+    st = &b2.plan.step[b2.plan.count];
+    k = &b2.plan.key[b2.plan.count];
+    st->kind = (uint8_t)kind;
+    st->filter = (uint8_t)filter;
+    st->drawFirst = first;
+    st->drawLast = last;
+    st->arg = arg;
+    k->valid = (uint8_t)valid;
+    k->vu = (uint8_t)vu;
+    k->skinned = (uint8_t)sk;
+    k->vs = (uint8_t)vs;
+    k->clip = (uint8_t)clip;
+    k->tex = tex;
+    b2.plan.verdict[b2.plan.count] = v;
+    b2.ms[b2.plan.count] = ms;
+    while (*s == ' ') {
+        s++;
+    }
+    snprintf(b2.note[b2.plan.count], B2_NOTE, "%s", s);
+    b2.plan.count++;
+    return 1;
+}
+
+/* the state file into b2: 1 read, 0 none, -1 a file that does not parse
+   or another version's (deleted) */
+static int b2_load(void)
+{
+    char line[B2_LINE + 2];
+    FILE *f;
+    int n = 0, ok = 1, have[4] = {0, 0, 0, 0};
+    const char *s;
+    memset(&b2, 0, sizeof b2);
+    if (b2_path[0] == '\0' || (f = ico_fopen(b2_path, "rb")) == NULL) {
+        return 0;
+    }
+    while (ok && fgets(line, sizeof line, f) != NULL) {
+        size_t len = strlen(line);
+        if (len > B2_LINE || (len > 0 && line[len - 1] != '\n' && !feof(f))) {
+            ok = 0; /* past the line's bound */
+            break;
+        }
+        line[strcspn(line, "\r\n")] = '\0';
+        if (n++ == 0) {
+            ok = strcmp(line, B2_MAGIC) == 0;
+            continue;
+        }
+        s = line;
+        if (strncmp(line, "version ", 8) == 0) {
+            const size_t n = strlen(line + 8);
+            ok = n < sizeof b2.version;
+            if (ok) {
+                memcpy(b2.version, line + 8, n + 1);
+            }
+            have[0] = 1;
+        } else if (strncmp(line, "zip ", 4) == 0) {
+            const size_t n = strlen(line + 4);
+            ok = n > 0 && n < sizeof b2.zip;
+            if (ok) {
+                memcpy(b2.zip, line + 4, n + 1);
+            }
+            have[1] = 1;
+        } else if (strncmp(line, "pass ", 5) == 0) {
+            s += 5;
+            ok = b2_num(&s, 4096, &b2.pass) && b2.pass >= 1 && b2_expect(&s, "draws") &&
+                 b2_num(&s, 1u << 20, &b2.draws) && b2.draws >= 1 && b2_expect(&s, "passes") &&
+                 b2_num(&s, 4096, &b2.passes) && b2.pass <= b2.passes;
+            have[2] = 1;
+        } else if (strncmp(line, "starts ", 7) == 0) {
+            s += 7;
+            ok = b2_num(&s, ICO_DIAG_BISECT2_STARTS, &b2.starts);
+            have[3] = 1;
+        } else if (strncmp(line, "step ", 5) == 0) {
+            ok = have[2] && b2.plan.count < RD_BISECT_PLAN_STEPS && b2_parse_step(line + 5);
+        }
+        /* any other line: ignored */
+    }
+    fclose(f);
+    b2.plan.draws = b2.draws;
+    if (!ok || n == 0 || !have[0] || !have[1] || !have[2] || !have[3]) {
+        ico_diag_log("ico_pc: loss bisect: the state file %s does not read as one; deleted",
+                     b2_path);
+        b2_delete();
+        memset(&b2, 0, sizeof b2);
+        return -1;
+    }
+    if (strcmp(b2.version, act_version) != 0) {
+        ico_diag_log("ico_pc: loss bisect: the state file is from version %s; deleted (this is "
+                     "%s)",
+                     b2.version, act_version);
+        b2_delete();
+        memset(&b2, 0, sizeof b2);
+        return -1;
+    }
+    return 1;
+}
+
+int ico_diag_loss_bisect2_pending(void)
+{
+    return b2_load() == 1;
+}
+
+/* the final line: the draw, its note and the verdict */
+static void b2_final(const RdBisectResult2 *r, const char *why)
+{
+    const char *note = "";
+    const char *mask = rd_bisect_mask_text(r);
+    uint32_t i;
+    for (i = 0; r->draw != 0 && i < b2.plan.count; i++) {
+        if (b2.plan.step[i].drawLast == r->draw && b2.note[i][0] != '\0') {
+            note = b2.note[i];
+            break;
+        }
+    }
+    if (r->draw != 0) {
+        ico_diag_log("ico_pc: loss bisect: pass %u, draw %u of %u%s%s%s: %s%s%s%s",
+                     (unsigned)b2.pass, (unsigned)r->draw, (unsigned)b2.draws, note[0] ? " (" : "",
+                     note, note[0] ? ")" : "", rd_bisect_alone_text(r), mask[0] ? "; " : "", mask,
+                     why);
+    } else {
+        ico_diag_log("ico_pc: loss bisect: pass %u of %u draws: not finished%s%s%s",
+                     (unsigned)b2.pass, (unsigned)b2.draws, mask[0] ? "; " : "", mask, why);
+    }
+}
+
+int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, uint32_t passes,
+                          IcoBisect2StepFn stepfn, void *user, double budget_ms)
+{
+    RdBisectResult2 res;
+    RdBisectStep step;
+    double spent = 0.0;
+    int last = ICO_DIAG_BISECT2_NOT_RUN, anyLost = 0;
+    if (stepfn == NULL || b2_path[0] == '\0') {
+        return ICO_DIAG_BISECT2_NOT_RUN;
+    }
+    if (dump_zip != NULL) {
+        if (draws == 0 || pass == 0 || strlen(dump_zip) >= sizeof b2.zip) {
+            return ICO_DIAG_BISECT2_NOT_RUN;
+        }
+        memset(&b2, 0, sizeof b2);
+        snprintf(b2.version, sizeof b2.version, "%s", act_version);
+        snprintf(b2.zip, sizeof b2.zip, "%s", dump_zip);
+        b2.pass = pass;
+        b2.draws = draws > (1u << 20) ? (1u << 20) : draws;
+        b2.passes = passes < pass ? pass : passes;
+        b2.starts = 1;
+        rd_bisect_plan_init(&b2.plan, b2.draws);
+        ico_diag_log("ico_pc: loss bisect: narrowing pass %u (%u draws) draw by draw, a renderer "
+                     "of its own a step",
+                     (unsigned)b2.pass, (unsigned)b2.draws);
+    } else {
+        uint32_t killed = 0, i;
+        if (b2_load() != 1) {
+            return ICO_DIAG_BISECT2_NOT_RUN;
+        }
+        for (i = 0; i < b2.plan.count; i++) {
+            killed = b2.plan.verdict[i] == RD_BISECT_V_KILLED ? i + 1 : killed;
+        }
+        if (b2.starts >= ICO_DIAG_BISECT2_STARTS) {
+            rd_bisect_plan_result(&b2.plan, &res);
+            b2_final(&res, " (4 starts)");
+            b2_delete();
+            return ICO_DIAG_BISECT2_NOT_RUN;
+        }
+        b2.starts++;
+        if (killed != 0 && killed == b2.plan.count) {
+            ico_diag_log("ico_pc: loss bisect: continuing at step %u (start %u of %u; step %u "
+                         "ended the run)",
+                         (unsigned)(b2.plan.count + 1), (unsigned)b2.starts,
+                         (unsigned)ICO_DIAG_BISECT2_STARTS, (unsigned)killed);
+        } else {
+            ico_diag_log("ico_pc: loss bisect: continuing at step %u (start %u of %u)",
+                         (unsigned)(b2.plan.count + 1), (unsigned)b2.starts,
+                         (unsigned)ICO_DIAG_BISECT2_STARTS);
+        }
+    }
+    if (b2_save() != 0) {
+        ico_diag_log("ico_pc: loss bisect: the state file %s cannot be written; not run", b2_path);
+        return ICO_DIAG_BISECT2_NOT_RUN;
+    }
+    act_write(act_bisect2);
+    for (;;) {
+        const RdBisectEnd end = rd_bisect_plan_next(&b2.plan, &step, &res);
+        const uint32_t i = b2.plan.count - 1;
+        char what[96], note[B2_NOTE];
+        RdBisectKey key;
+        double ms = 0.0;
+        int r;
+        if (end != RD_BISECT_END_NO) {
+            b2_final(&res, end == RD_BISECT_END_NOT_MONOTONE ? " (the verdicts contradict each "
+                                                               "other: something other than the "
+                                                               "draws loses the device)"
+                           : end == RD_BISECT_END_BOUND      ? " (16 steps)"
+                                                             : "");
+            b2_delete();
+            break;
+        }
+        if (spent >= budget_ms) {
+            ico_diag_log("ico_pc: loss bisect: %.0f s spent; step %u waits for the next start",
+                         spent / 1000.0, (unsigned)(i + 1));
+            /* the planned step is planned again then */
+            b2.plan.count--;
+            b2_save();
+            break;
+        }
+        b2.plan.verdict[i] = RD_BISECT_V_NONE;
+        b2.note[i][0] = '\0';
+        b2.ms[i] = 0.0;
+        b2_save(); /* the step without its verdict: killed if the run ends in it */
+        memset(&key, 0, sizeof key);
+        note[0] = '\0';
+        r = stepfn(b2.zip, b2.pass, i + 1, &step, &key, note, sizeof note, &ms, user);
+        rd_bisect_step_text(&step, b2.draws, what, sizeof what);
+        if (r == ICO_DIAG_BISECT2_NOINIT) {
+            ico_diag_log("ico_pc: loss bisect: step %u of %u: pass %u, %s: the renderer did not "
+                         "start; the step runs again at the next start",
+                         (unsigned)(i + 1), (unsigned)RD_BISECT_PLAN_STEPS, (unsigned)b2.pass,
+                         what);
+            b2.plan.count--;
+            b2_save();
+            last = r;
+            break;
+        }
+        if (r != ICO_DIAG_BISECT2_LOST && r != ICO_DIAG_BISECT2_CLEAN) {
+            ico_diag_log("ico_pc: loss bisect: step %u of %u: pass %u, %s: not run (%s); the "
+                         "bisect ends",
+                         (unsigned)(i + 1), (unsigned)RD_BISECT_PLAN_STEPS, (unsigned)b2.pass, what,
+                         note[0] ? note : "the dump cannot be replayed");
+            b2_delete();
+            last = ICO_DIAG_BISECT2_NOT_RUN;
+            break;
+        }
+        for (char *c = note; *c != '\0'; c++) {
+            if (*c == '\n' || *c == '\r') {
+                *c = ' '; /* one line in the file */
+            }
+        }
+        snprintf(b2.note[i], B2_NOTE, "%s", note);
+        b2.ms[i] = ms < 0.0 ? 0.0 : ms > 3600000.0 ? 3600000.0 : ms;
+        rd_bisect_plan_set(&b2.plan, i,
+                           r == ICO_DIAG_BISECT2_LOST ? RD_BISECT_V_LOST : RD_BISECT_V_CLEAN, &key);
+        spent += b2.ms[i];
+        last = r;
+        anyLost |= r == ICO_DIAG_BISECT2_LOST;
+        ico_diag_log("ico_pc: loss bisect: step %u of %u: pass %u, %s: %s in %.1f s",
+                     (unsigned)(i + 1), (unsigned)RD_BISECT_PLAN_STEPS, (unsigned)b2.pass, what,
+                     r == ICO_DIAG_BISECT2_LOST ? "lost" : "clean", b2.ms[i] / 1000.0);
+        b2_save();
+    }
+    act_remove();
+    /* a step of this start lost the device: the caller's renderer starts
+       after a loss */
+    return last == ICO_DIAG_BISECT2_NOINIT ? last : anyLost ? ICO_DIAG_BISECT2_LOST : last;
 }
 
 /* the note says the graphics driver was building a pipeline */

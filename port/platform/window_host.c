@@ -32,6 +32,7 @@
 #include "photo_ui.h"
 #include "pointer.h"
 #include "rd.h"
+#include "rd_bisect_plan.h"
 #include "rd_passring.h"
 #include "rd_tex.h"
 #include "../fmv/rd_video.h"
@@ -936,6 +937,8 @@ typedef struct PipeScreen {
 } PipeScreen;
 
 static int pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
+                                  const char *note0, const char *note1);
 
 #ifdef __ANDROID__
 static const char k_driver_box[] =
@@ -1011,21 +1014,19 @@ static int bisect_progress(void *ctx, uint32_t done, uint32_t total)
     return pipeline_progress(ctx, done, total);
 }
 
-static int window_loss_bisect(const char *zip, char *line, size_t size, void *user)
+/* the loss dump's lost frame taken out of the zip to dump (the zip's path
+   and .rddump) with its size and aspect; false with line saying why */
+static bool bisect_dump_file(const char *zip, char *dump, size_t dumpSize, uint32_t *gw,
+                             uint32_t *gh, float *aspect, char *line, size_t size)
 {
-    const RdSettings *game = (const RdSettings *)user;
-    char dump[ICO_PATH_MAX + 32];
     size_t bytes = 0;
     void *data = ico_dump_zip_extract(zip, &bytes, NULL, 0);
-    uint32_t gw = 0, gh = 0;
-    float aspect = 0.0f;
-    RdLossBisect b;
 
     if (data == NULL) {
         snprintf(line, size, "%s cannot be read or holds no frame", zip);
-        return ICO_DIAG_BISECT_NOT_RUN;
+        return false;
     }
-    snprintf(dump, sizeof(dump), "%s.rddump", zip);
+    snprintf(dump, dumpSize, "%s.rddump", zip);
     FILE *f = ico_fopen(dump, "wb");
     const int wrote = f != NULL && fwrite(data, 1, bytes, f) == bytes;
 
@@ -1037,11 +1038,31 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     if (!wrote || f == NULL) {
         snprintf(line, size, "the frame could not be written to %s", dump);
         ico_remove(dump);
-        return ICO_DIAG_BISECT_NOT_RUN;
+        return false;
     }
-    if (!rd_dump_frame_size(dump, &gw, &gh, &aspect)) {
+    if (!rd_dump_frame_size(dump, gw, gh, aspect)) {
         snprintf(line, size, "%s holds no frame this version reads", zip);
         ico_remove(dump);
+        return false;
+    }
+    return true;
+}
+
+/* what the first level found, for the second (window_bisect_step) */
+static struct {
+    uint32_t pass, draws, passes;
+} s_bisect1;
+
+static int window_loss_bisect(const char *zip, char *line, size_t size, void *user)
+{
+    const RdSettings *game = (const RdSettings *)user;
+    char dump[ICO_PATH_MAX + 32];
+    uint32_t gw = 0, gh = 0;
+    float aspect = 0.0f;
+    RdLossBisect b;
+
+    memset(&s_bisect1, 0, sizeof(s_bisect1));
+    if (!bisect_dump_file(zip, dump, sizeof(dump), &gw, &gh, &aspect, line, size)) {
         return ICO_DIAG_BISECT_NOT_RUN;
     }
     /* the frame's own size and aspect, the game's other settings */
@@ -1068,6 +1089,9 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
             (unsigned)b.frame, (unsigned)b.passes, (unsigned)b.replays, b.ms / 1000.0);
     switch (b.result) {
     case RD_BISECT_LOST:
+        s_bisect1.pass = b.pass;
+        s_bisect1.draws = b.draws;
+        s_bisect1.passes = b.passes;
         if (b.next[0] != '\0') {
             fprintf(stderr,
                     "window: loss bisect: the replay stopped as %s began (drawing nothing "
@@ -1087,6 +1111,67 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
         return ICO_DIAG_BISECT_NOT_RUN;
     }
 }
+
+/* One step of the loss bisect's second level (diag_host.h
+   IcoBisect2StepFn): the lost frame taken out of the zip again, a renderer
+   of its own (rd_init; NOINIT when it does not start: the step runs again
+   at the next start), the progress screen on it before the replay (never
+   on a lost device), the replay with the step's draw window
+   (rd_loss_bisect_step), then that renderer shut down, the device lost or
+   not. */
+static int window_bisect_step(const char *zip, uint32_t pass, uint32_t number,
+                              const RdBisectStep *step, RdBisectKey *key, char *note,
+                              size_t noteSize, double *ms, void *user)
+{
+    const RdSettings *game = (const RdSettings *)user;
+    const Uint64 t0 = SDL_GetTicksNS();
+    char dump[ICO_PATH_MAX + 32], phase[64];
+    uint32_t gw = 0, gh = 0;
+    float aspect = 0.0f;
+    RdLossStep o;
+
+    if (!bisect_dump_file(zip, dump, sizeof(dump), &gw, &gh, &aspect, note, noteSize)) {
+        return ICO_DIAG_BISECT2_NOT_RUN;
+    }
+    RdSettings rs = *game;
+    rs.aspect = aspect;
+    rd_set_activity_fn(window_activity);
+    if (!rd_init(gw, gh, &rs, s_window)) {
+        ico_remove(dump);
+        *ms = (double)(SDL_GetTicksNS() - t0) / 1e6;
+        return ICO_DIAG_BISECT2_NOINIT;
+    }
+    snprintf(phase, sizeof(phase), "Checking the graphics problem (step %u of %u)",
+             (unsigned)number, (unsigned)RD_BISECT_PLAN_STEPS);
+    if (!rhi_device_lost()) {
+        progress_present_notes("Starting ICO", phase, (int)(number * 100u / RD_BISECT_PLAN_STEPS),
+                               0, NULL, NULL);
+    }
+    static PipeScreen screen;
+    rd_set_pipeline_progress(bisect_progress, &screen);
+    rd_loss_bisect_step(dump, pass, step->drawFirst, step->drawLast, step->filter, step->arg, &o);
+    rd_set_pipeline_progress(NULL, NULL);
+    ico_diag_set_pipelines(0, 0, 0);
+    rd_shutdown();
+    ico_remove(dump);
+    *ms = (double)(SDL_GetTicksNS() - t0) / 1e6;
+    if (o.result == RD_BISECT_NOT_RUN) {
+        snprintf(note, noteSize, "%s", o.line);
+        return ICO_DIAG_BISECT2_NOT_RUN;
+    }
+    memset(key, 0, sizeof(*key));
+    key->valid = o.note.valid;
+    key->vu = o.note.vu;
+    key->skinned = o.note.skinned;
+    key->vs = o.note.vs;
+    key->clip = o.note.clip;
+    key->tex = o.note.tex;
+    rd_draw_note_text(&o.note, note, noteSize);
+    return o.result == RD_BISECT_LOST ? ICO_DIAG_BISECT2_LOST : ICO_DIAG_BISECT2_CLEAN;
+}
+
+/* the second level's wall bound a start (diag_host.h ico_diag_loss_bisect2) */
+#define WINDOW_BISECT2_BUDGET_MS 90000.0
 
 /* the restart step this run is at (startup_retry.h; ico_window_open):
    device_lost_quit's box says when a loss step's run lost the card too */
@@ -1259,9 +1344,37 @@ open_window:
        the frame on another path than the one that lost it, and a loss it
        reproduced would add a GPU reset to the restart chain */
     bool bisectLost = false;
-    if (ico_diag_loss_dump() != NULL) {
+    {
+        char logs[ICO_PATH_MAX], st[ICO_PATH_MAX + 32];
+
+        if (ico_host_logs_dir(logs, sizeof(logs)) == 0 &&
+            ico_path_join(st, sizeof(st), logs, "loss-bisect.txt") == 0) {
+            ico_diag_loss_bisect2_path(st);
+        }
+    }
+    if (retry == STARTUP_RETRY_NONE && ico_diag_loss_bisect2_pending()) {
+        /* the second level a start before left unfinished goes first; a
+           newer loss dump stays in logs */
+        if (ico_diag_loss_dump() != NULL) {
+            ico_diag_log("ico_pc: loss bisect: the unfinished one goes first; the loss dump %s "
+                         "stays in logs",
+                         ico_diag_loss_dump());
+        }
+        const int r2 =
+            ico_diag_loss_bisect2(NULL, 0, 0, 0, window_bisect_step, &rs, WINDOW_BISECT2_BUDGET_MS);
+        bisectLost = r2 == ICO_DIAG_BISECT2_LOST || r2 == ICO_DIAG_BISECT2_NOINIT;
+    } else if (ico_diag_loss_dump() != NULL) {
         if (retry == STARTUP_RETRY_NONE) {
+            char zip[ICO_PATH_MAX + 32];
+
+            snprintf(zip, sizeof(zip), "%s", ico_diag_loss_dump());
             bisectLost = ico_diag_loss_bisect(window_loss_bisect, &rs) == ICO_DIAG_BISECT_LOST;
+            if (bisectLost && s_bisect1.pass > 0 && s_bisect1.draws > 0) {
+                /* the pass drew: the second level narrows it to the draw,
+                   in this start (a renderer of its own a step) */
+                (void)ico_diag_loss_bisect2(zip, s_bisect1.pass, s_bisect1.draws, s_bisect1.passes,
+                                            window_bisect_step, &rs, WINDOW_BISECT2_BUDGET_MS);
+            }
         } else {
             ico_diag_log("ico_pc: loss bisect: not run (this start changed the blending or "
                          "backend after the loss); the loss dump stays in logs: %s",

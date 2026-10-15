@@ -41,6 +41,7 @@
 #define ICO_PLATFORM_DIAG_HOST_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __GNUC__
 #define ICO_DIAG_PRINTF(a, b) __attribute__((format(printf, a, b)))
@@ -212,6 +213,55 @@ const char *ico_diag_loss_dump(void);
 int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t line_size,
                                        void *user),
                          void *user);
+/* The loss bisect's second level (docs/port/RENDER.md, "The loss bisect"):
+   when the first level ends on a pass with draws, the draw within it, a
+   step at a time (port/render/rd_bisect_plan.h: the marks masked, the
+   prefix search, the draw alone, its classes), each step one replay of the
+   lost frame on a renderer of its own, its verdict written to the state
+   file logs/loss-bisect.txt before the next.  A start that ends inside a
+   step (the device or the system ended it) continues at the next start:
+   the step without a verdict counts as killed (lost).  Bounds: 16 steps,
+   4 starts, budget_ms of steps a start (the rest at the next start); the
+   file is deleted at the end or when a bound trips.  Logged: one line a
+   step ("ico_pc: loss bisect: step 4 of 16: pass 1, draws 1..656 of 1312:
+   lost in 0.6 s"), "continuing at step 7 (start 2 of 4; step 6 ended the
+   run)", and one final line naming the draw and the verdict.
+
+   The step function (number: the step's, 1 .. 16, for the progress
+   screen) replays the frame of dump_zip with passes 1 .. pass - 1 and pass
+   `pass`'s draws step->drawFirst .. drawLast through
+   step->filter, and returns ICO_DIAG_BISECT2_LOST or _CLEAN with the note
+   of the step's last draw (key and text, note_size bytes) and the wall time
+   in *ms; ICO_DIAG_BISECT2_NOINIT when its renderer did not start (this
+   start stops; the step is planned again at the next); _NOT_RUN when the
+   dump cannot be replayed (the bisect ends). */
+#define ICO_DIAG_BISECT2_NOT_RUN 0
+#define ICO_DIAG_BISECT2_LOST 1
+#define ICO_DIAG_BISECT2_CLEAN 2
+#define ICO_DIAG_BISECT2_NOINIT 3
+#define ICO_DIAG_BISECT2_STARTS 4
+
+struct RdBisectStep;
+struct RdBisectKey;
+typedef int (*IcoBisect2StepFn)(const char *dump_zip, uint32_t pass, uint32_t number,
+                                const struct RdBisectStep *step, struct RdBisectKey *key,
+                                char *note, size_t note_size, double *ms, void *user);
+
+/* The state file's path (logs/loss-bisect.txt); before either call below. */
+void ico_diag_loss_bisect2_path(const char *path);
+/* 1 when the state file holds a bisect of this version to continue (read
+   as untrusted: a file that does not parse, or of another version, is
+   deleted and logged). */
+int ico_diag_loss_bisect2_pending(void);
+/* Starts the second level on pass `pass` (draws of passes) of dump_zip's
+   lost frame, as the first level found it, or (dump_zip NULL) continues
+   the pending one; runs steps until the end, a bound, the budget or a
+   step's NOINIT. Returns ICO_DIAG_BISECT2_NOINIT when a step's renderer
+   did not start, ICO_DIAG_BISECT2_NOT_RUN when no step ran, else
+   ICO_DIAG_BISECT2_LOST when a step of this start lost the device (the
+   caller's renderer starts after a loss), else ICO_DIAG_BISECT2_CLEAN. */
+int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, uint32_t passes,
+                          IcoBisect2StepFn step, void *user, double budget_ms);
 /* The relaunch's inputs: the step this run is at (StartupRetry, 0 for the
    first run), whether the build has the D3D12 backend, whether the player
    named the backend, whether the player named the blending (blend= /
