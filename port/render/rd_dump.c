@@ -43,6 +43,11 @@
  *            such a sheet loads as its coverage, made into the image this
  *            renderer draws (sheetFromHalo), the halo and the gain dropped
  *   u32      temp target count; per target: u32 id, w, h, withDepth, keep
+ *            (keep's bit 1: a render-to-texture block, RdTargetRec.block,
+ *            which the loading context draws at the scene's scale under
+ *            Water reflections: Sharp, RdSettings.waterSharp; 0 in the dumps
+ *            from before it, whose blocks replay at their GS size as they
+ *            were drawn; the version is unchanged)
  *   (version 5: RDC_OVERLAY_TEXT commands, their RdTextItem and
  *   RdTextOp payloads, and RDC_SCREEN's b[3]; no new section.  A version 4
  *   dump has none, so it replays unchanged in every preset)
@@ -311,8 +316,9 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
     for (uint32_t i = 0; ok && i < temps.n; i++) {
         RdTargetRec *t = rd__target_rec(temps.ids[i]);
         if (t) {
+            /* keep: bit 0 keepAcross, bit 1 a block (RdTargetRec.block) */
             ok = w32(fp, temps.ids[i]) && w32(fp, t->w) && w32(fp, t->h) && w32(fp, t->withDepth) &&
-                 w32(fp, t->keepAcross);
+                 w32(fp, (uint32_t)t->keepAcross | ((uint32_t)t->block << 1));
         }
     }
     uint32_t nm = 0;
@@ -700,7 +706,10 @@ bool rd__load_frame(const char *path, RdFrame *out)
         ok = r32(fp, &id) && r32(fp, &w) && r32(fp, &h) && r32(fp, &d) && r32(fp, &k) && w && h &&
              w <= 8192 && h <= 8192;
         if (ok) {
-            uint32_t nid = rd__temp_target_alloc(w, h, (int)d, (int)k);
+            /* keep's bit 1: a block, which takes the scene's scale when
+             * the replay has Water reflections: Sharp (--water-sharp) */
+            uint32_t nid =
+                rd__temp_target_alloc_ex(w, h, (int)d, (int)(k & 1u), (int)((k >> 1) & 1u));
             tgtMap.from[tgtMap.n] = id;
             tgtMap.to[tgtMap.n++] = nid;
             if (nid && out->tempCount < RD_MAX_TEMP_PER_FRAME) {

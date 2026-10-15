@@ -746,6 +746,52 @@ static int spit(const char *path, const uint8_t *buf, long size)
     return ok;
 }
 
+/* Water reflections: a block rd_block_target made is marked
+ * (RdTargetRec.block), a plain temporary target is not, and the mark goes
+ * through a dump in the keep word's bit 1 with keepAcross unchanged, so a
+ * replay with --water-sharp scales the same targets the game did */
+static void testDumpBlock(const char *dir)
+{
+    rd_begin_frame();
+    const RdTarget blk = rd_block_target(0x2800u, 256u, 256u, 1);
+    const RdTarget tmp = rd_temp_target(256, 256, 1, 0);
+    const RdTargetRec *rb = rd__target_rec(blk.id), *rt = rd__target_rec(tmp.id);
+    CHECK(rb && rt && rb->block == 1 && rt->block == 0 && rb->withDepth == 1,
+          "block: rd_block_target marks its target, rd_temp_target does not");
+    CHECK(rd_block_target(0x2800u, 256u, 256u, 1).id == blk.id,
+          "block: the same block for the rest of the frame");
+    rd_select_list(4);
+    rd_set_target(blk, blk, 256, 256, 0);
+    draw(1);
+    rd_set_target(tmp, tmp, 256, 256, 0);
+    draw(2);
+    rd_end_frame(0);
+    char path[1100];
+    snprintf(path, sizeof(path), "%s/rd_state_test_block.rddump", dir);
+    CHECK(rd__dump_frame(rd__last_frame(), path), "block: dump written");
+    RdFrame g;
+    if (!rd__load_frame(path, &g)) {
+        CHECK(0, "block: dump loaded");
+        return;
+    }
+    int seen = 0;
+    for (uint32_t i = 0; i < g.lists[4].count; i++) {
+        const RdCmd *c = &g.lists[4].cmds[i];
+        if (c->type != RDC_TARGET) {
+            continue;
+        }
+        const RdTargetRec *t = rd__target_rec(c->u[0]);
+        CHECK(t && t->block == (seen == 0) && t->keepAcross == 0 && t->withDepth == 1 &&
+                  t->w == 256u && t->h == 256u,
+              "block: target %d of the loaded dump %s", seen,
+              seen == 0 ? "is a block" : "is not a block");
+        seen++;
+    }
+    CHECK(seen == 2, "block: two targets bound in the loaded list (%d)", seen);
+    rd__frame_free(&g);
+    remove(path);
+}
+
 /* Dump version 10: the native frame after gsH (aspect, wExact, cullW) round
  * trips; rd__dump_peek reads it without a load; a version 9 dump (the same
  * file less the three fields and with the version word 9) loads and peeks as
@@ -1684,6 +1730,7 @@ int main(int argc, char **argv)
     testPlans();
     testDump(dir);
     testDumpV10(dir);
+    testDumpBlock(dir);
     testDumpSheetV11(dir);
     testAa1Plans();
     testEnumeration();
