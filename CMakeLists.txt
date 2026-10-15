@@ -370,10 +370,13 @@ endfunction()
 set(ICO_DEPS_DIR "${CMAKE_SOURCE_DIR}/tools/toolchain/deps" CACHE PATH
     "Prefix of the dependencies tools/fetch_deps.sh installs")
 
-# the SPIR-V gate: no array-typed values and no local arrays in a vertex
-# shader, over the shaders the build compiled (port/shaders, tools/check_spirv.py)
+# the SPIR-V gate over the shaders the build compiled (port/shaders,
+# tools/check_spirv.py): vertex shaders inside v0.5.2's opcode envelope (no
+# loop, no dot, no logical-not-equal, no undef), every module within its size
+# budget (the sizes printed), no array-typed values, no local arrays in a
+# vertex shader
 if(Python3_FOUND AND EXISTS "${ICO_DEPS_DIR}/dxc/bin/dxc")
-    add_test(NAME spirv_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_spirv.py" "${CMAKE_BINARY_DIR}/shaders")
+    add_test(NAME spirv_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_spirv.py" --sizes "${CMAKE_BINARY_DIR}/shaders")
 endif()
 
 # --- port/math: the VU0 maths in C and the newlib copies ---------------------
