@@ -244,6 +244,11 @@ program under an environment switch ([Environment switches](#environment-switche
   (`checkAbove1x`, `compareAll`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
+- `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
+  and the attachment read's Qualcomm rule; the mode left in force, the forest's tint under it, the
+  targets without the attachment read where it is off, the self-test again at a new scene size;
+  its log lines matched plain, sabotaged, under the fake Adreno, with each `ICO_RD_BLEND` and
+  without a destination read (`rd_blend_selftest*`).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`).
 - `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`).
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
@@ -442,7 +447,8 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
 `rd_replay_tool_loss_bisect.cmake` and `rd_replay_tool_pass_split.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
-`rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test
+`rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
+`rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's
 (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).
 
@@ -487,11 +493,14 @@ switches the tests and their registrations use:
 | --- | --- | --- |
 | `ICO_VK_FAKE_NO_DST`, `ICO_DX_FAKE_NO_DST` | `vk_device.c`, `d3d12_device.c` | a device that cannot read the pixel it draws over |
 | `ICO_VK_FAKE_NO_MSAA` | `vk_device.c` | single sampling only |
+| `ICO_VK_FAKE_ADRENO` | `vk_device.c` | Qualcomm's Adreno driver: the attachment read not offered (`rd_blend_selftest_adreno`) |
+| `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |
 | `ICO_VK_GLOBAL_BARRIERS` | `vk_cmd.c` | a global barrier before every pass instead of hazard tracking, for A/B runs |
 | `ICO_RD_FOG_PATH` | `rd_fog_path.c` | `inplace`, `copy` or `buffer` forces the fog's depth path; `test` makes the self-test try every path |
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`) |
+| `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |

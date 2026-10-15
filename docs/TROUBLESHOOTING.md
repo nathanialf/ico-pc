@@ -313,3 +313,9 @@ Performance).
 If the fog looks wrong on your phone, for example if it covers the whole
 picture, attach the log to your report: the log says which way the game
 drew the fog and what it found.
+
+If see-through things look wrong, for example white boxes around leaves,
+a washed-out title screen or menus you cannot read, attach the log to your
+report. The game checks at start that it draws see-through things right
+on your phone and uses a simpler way when it does not; the log says what
+it found.

@@ -131,7 +131,9 @@ and 4), mips and anisotropy, dynamic uniforms and the storage range, BC textures
 tile-based phone GPU: Qualcomm, ARM, Imagination, Samsung, Apple, Broadcom or any Android device;
 false on D3D12), the MSAA counts every renderer target supports and sample-rate shading, and the
 destination read's three bits: `fragmentInterlock` (Vulkan), `rov` (D3D12) and
-`rasterOrderAttachment` (Vulkan) (`port/rhi/rhi.h` (`RhiLimits`)).
+`rasterOrderAttachment` (Vulkan), and `rasterOrderOff`, why the attachment read is off on a device
+that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise) (`port/rhi/rhi.h`
+(`RhiLimits`)).
 
 **Device and swapchain.** `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
 [vsync](ARCHITECTURE.md#terms), debug layers and the app name. `rhi_device_lost` turns true once the
@@ -222,7 +224,13 @@ fourth 6, Intel's Windows driver as major 18 bits and minor 14, every other driv
 version packing; `VkDriverId` decides, and the vendor id alone when it is 0
 (`port/rhi/rhi_driver_version.h`; `port/rhi/vk/vk_device.c` (`vkr_driver_text`)). Only the features
 used are enabled; the destination read takes `VK_EXT_fragment_shader_interlock` or
-rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. The scene's
+rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. The attachment
+read is not offered on Qualcomm's own Adreno driver (vendor 0x5143, `VkDriverId`
+`QUALCOMM_PROPRIETARY` or unknown; not Mesa's Turnip): its reads return wrong colours (issue 89,
+Adreno 830 on driver 512.800.72), and the device line says `rasterization-order attachment read off
+on this driver (Qualcomm driver <version>: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries
+it)` (`port/rhi/rhi_driver_version.h` (`rhi_driver_is_qualcomm_proprietary`);
+[RENDER.md](RENDER.md#destination-reads-and-blend-paths)). The scene's
 depth-stencil is D32_SFLOAT_S8_UINT, or D24_UNORM_S8_UINT when only that has the sampled and
 transfer features (`vkr_choose_depth_stencil`).
 
@@ -235,6 +243,8 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_VK_FAKE_NO_DST` | 1 reports no destination read |
+| `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
+| `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |

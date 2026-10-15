@@ -596,10 +596,55 @@ epoch's passes, targets other than RGBA8, the port's presentation overlay. The s
 and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c`
 (`dstPassMode`, `rd__pass_wants_readable`)).
 
-`ICO_RD_BLEND` names the path instead: `fixed` (also `off`, `0`), `storage` (also `interlock`,
-`rov`) or `attachment`; a value that is none of these or a path the device lacks logs
-`rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or `... is not on this device` and
-keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
+`ICO_RD_BLEND` (`[dev] blend`, [CONFIG.md](CONFIG.md)) names the path instead: `fixed` (also
+`off`, `0`), `storage` (also `interlock`, `rov`) or `attachment`; a value that is none of these or a
+path the device lacks logs `rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or
+`... is not on this device` and keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
+
+**The Qualcomm rule.** The attachment read is not offered on Qualcomm's own Adreno driver
+(vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown; Mesa's Turnip on
+the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver 512.800.72,
+issue 89) it returned wrong destination colours: white boxes around the leaves' clear texels, the
+title washed out, the menu panels white on white; the same title frame replays through the same
+path on lavapipe with no validation error and within one level of `ICO_RD_BLEND=fixed`, so the
+driver is wrong, not the port's use. The device line says so,
+`rhi_vk: destination read: interlock no, rasterization-order attachment read off on this driver
+(Qualcomm driver 512.800.72: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries it)`, and the
+blend line carries the reason, `rd: blend: fixed-function (rounds up) (attachment read off:
+Qualcomm driver 512.800.72)`. No target is then made with the input attachment usage and no pass
+is begun readable: the picture is the fixed-function blend's. `ICO_VK_ATTACHMENT_READ=1`
+(`[dev] attachment_read = true`) offers the read anyway; `ICO_VK_FAKE_ADRENO=1` takes the branch on
+any device, for tests (`port/rhi/vk/vk_device.c`; `port/rhi/rhi_driver_version.h`
+(`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h` (`RhiLimits.rasterOrderOff`)).
+
+**The blend self-test.** A driver whose read returns the wrong colour draws a wrong picture with no
+error anywhere, so `rd_blend_selftest` checks the modes on the device at start, as the fog's
+self-test checks its depth reads ([The fog path and its self-test](#the-fog-path-and-its-self-test)). A frame of its
+own (never recorded or presented) is drawn on SCENE at its real size and scale, MSAA held off, in a
+256 x 64 GS pixel block in its middle: eight cells of PCSX2's forest pixels under the forest's tint
+sprite (`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour
+behind it (the leaf case), two overlapping LERP draws (the second must blend over the first's
+result) and a glyph through the text sheet's shader. Nineteen samples are copied out and read back.
+The fixed-function blend runs first as the reference (within 2 levels of the GS arithmetic; if it
+fails, the two-pass fallback is tried and kept when it passes), then the exact modes the device has
+in the order above, each within 1 level of the GS arithmetic and of the reference's glyph. The
+first exact mode that passes is the one in force; none passing leaves the fixed-function blend. The
+window runs it before the start-up pipeline set (so the set is the chosen mode's), and again
+whenever SCENE is made at a new size. One line names the choice and every result:
+
+```
+rd: blend: exact (attachment read) (self-test: attachment ok 0, storage not on this device, fixed-function ok 1) on SCENE 640x448 at 1920x1344 texels in 9.8 ms
+```
+
+and a failing mode's worst sample gets a line of its own,
+`rd: blend: self-test: attachment fail 245 at leaf, clear texel (texel 1031,671): 255,255,255,0
+want 40,120,60,0`. An `ICO_RD_BLEND` of `attachment` or `storage` is kept whatever its result (the
+line adds `; kept by ICO_RD_BLEND`); `ICO_RD_BLEND=fixed` (also what the restart after a crash in a
+destination-read pipeline sets) and a device without an exact mode run nothing
+(`rd: blend: fixed-function (rounds up) (self-test not run: ...)`). `ICO_RD_BLEND_SABOTAGE=`
+`attachment,storage,fixed` makes those modes' samples read white, for the fallback's tests
+(`port/render/rd_blend_selftest.c`; `port/render/rd.h` (`rd_blend_selftest`);
+`port/platform/window_host.c`).
 
 ## Post passes
 

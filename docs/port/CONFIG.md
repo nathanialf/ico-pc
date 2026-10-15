@@ -282,6 +282,7 @@ under the same name (below). Read through the store:
 | `gpu_checkpoints` | bool | `false` | |
 | `gpu_robust` | bool | `false` (`true` on Android) | |
 | `pass_split` | int | `0` | |
+| `attachment_read` | bool | `false` | |
 
 ## ico-pc.ini
 
@@ -313,11 +314,12 @@ store (`backend`, `unlock_credits`):
 | `dump_every`, `dump_dir`, `dump_interp`, `dump_from` | [rd](ARCHITECTURE.md#terms) frame dumps every N frames into a folder beside the ini (`export_dump_keys`) |
 | `start_stage`, `switch_to`, `switch_at` | the stage Main starts in; one forced stage change (exported) |
 | `popup_test` | test popups from Main tick 100 (exported as `ICO_UI_POPUP_TEST`) |
-| `blend` | `fixed`: the GS blend on the fixed-function path instead of the exact destination read (exported as `ICO_RD_BLEND=fixed`; `exact`, the default, exports nothing) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
+| `blend` | `fixed`: the GS blend on the fixed-function path instead of the exact destination read; `attachment` or `storage`: that destination read, kept whatever the start-up blend self-test finds (exported as `ICO_RD_BLEND`; `exact`, the default, exports nothing: the first path that passes the self-test) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
 | `fog_path` | `inplace`, `copy` or `buffer`: the fog's depth path, tried first (exported as `ICO_RD_FOG_PATH`) ([RENDER.md](RENDER.md#the-fog-path-and-its-self-test)) |
 | `gpu_checkpoints` | `true`: GPU checkpoints, resource addresses (Vulkan) and DRED (D3D12) for the device-loss report (exported as `ICO_GPU_CHECKPOINTS=1`) ([RHI.md](RHI.md#device-loss)) |
 | `gpu_robust` | `true`: robust buffer and image access (Vulkan; exported as `ICO_GPU_ROBUST=1`), with null descriptors; robust buffer and image access (`VK_EXT_robustness2` where offered) is on by default on Android, where `false` turns it off (exported as `ICO_GPU_ROBUST=0`) ([RHI.md](RHI.md#device-loss)) |
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
+| `attachment_read` | `true`: the attachment read offered on Qualcomm's Adreno driver too, where it is off because it draws wrong colours (exported as `ICO_VK_ATTACHMENT_READ=1`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,
