@@ -122,6 +122,14 @@
  *             the grey layer umi by the blended camera's gap at alpha 0.25,
  *             0.5 and 0.75, matched and drawn as the tick's; half a pixel
  *             apart (the replay before) umi was in front
+ *   wheels    rotation continuity (issue 98, the trolley's wheels): a rigid
+ *             draw and a skinned draw's bone turning 170 degrees in a tick
+ *             (no turn before it: the tick's pose), then 190: at alpha 0.5
+ *             they stand at 265 degrees (on forward the long way, not back
+ *             170 to 85), at 0.25 at 217.5, and alpha 1 is the tick's
+ *             block byte for byte; 190 degrees with no turn before it keeps
+ *             the tick's; a 20 degree turn after a 20 degree turn blends
+ *             bit for bit as without one
  *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
  *             degrees in the tick (a shadow climbing out of its pool, its
  *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
@@ -1745,6 +1753,108 @@ static void testRotationDraws(void)
               memcmp(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock),
                      cur->payload + skc->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0,
           "a 150 degree turn in a tick keeps the tick's bone");
+}
+
+/* the turn about z of the turning draws' model to view (qw 24) and bone 0
+ * in frame f, degrees in (-180, 180] */
+static void turnAngles(const RdFrame *f, float *mesh, float *bone)
+{
+    const float (*m)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    *mesh = m ? atan2f(m[24][1], m[24][0]) * 57.2957795f : 1000.0f;
+    *bone = 1000.0f;
+    if (sk) {
+        const float (*b)[4] = (const float (*)[4])(
+            const void *)(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+        *bone = atan2f(b[0][1], b[0][0]) * 57.2957795f;
+    }
+}
+
+/* the turning draws' VU blocks and bone (qw 16..27, 64 bytes) of f and the
+ * last frame equal */
+static bool turnIsTick(const RdFrame *f)
+{
+    const RdFrame *cur = rd__last_frame();
+    const float (*mf)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    const float (*mc)[4] = vuBlock(cur, findKey(cur, 0, RD_KEY(&kObjD, 0, 32), 0));
+    const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    const RdCmd *skc = findKey(cur, 0, RD_KEY(&kObjD, 1, 20), 0);
+    return mf && mc && sk && skc && memcmp(mf[16], mc[16], 12 * 16) == 0 &&
+           memcmp(f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock),
+                  cur->payload + skc->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0;
+}
+
+/* Rotation continuity (issue 98): a trolley wheel at full speed turns
+ * more than 180 degrees a tick, and the short way would blend it back.  The
+ * draw (and the bone) remembers its turn of the tick before; a turn near it
+ * blends the way that continues it. */
+static void testRotationContinuity(void)
+{
+    RdMesh mesh = makeMesh(), skin = makeSkinMesh();
+    float am, ab;
+    /* 0 -> 170: nothing before it, over RD_INTERP_TURN_SNAP: the tick's */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 170.0);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->rotated == 2 && st->turnSnap == 2 && st->longWay == 0,
+          "170 degrees with no turn before: snapped (rotated %u, snapped %u, long %u)", st->rotated,
+          st->turnSnap, st->longWay);
+    CHECK(turnIsTick(built(0.5f)), "170 degrees with no turn before keeps the tick's pose");
+    /* 170 -> 360: 190 degrees on, 170 back the short way; the turn before
+     * (170 on) says on */
+    recordTurn(mesh, skin, 360.0);
+    st = build(0.5f, 1);
+    CHECK(st->rotated == 2 && st->longWay == 2 && st->turnSnap == 0 &&
+              fabsf(st->maxTurn - 190.0f) < 1e-3f,
+          "190 degrees after 170: the long way (rotated %u, long %u, snapped %u, largest %.4f)",
+          st->rotated, st->longWay, st->turnSnap, st->maxTurn);
+    turnAngles(built(0.5f), &am, &ab);
+    /* 170 + 95 = 265 = -95; the short way would give 85 */
+    CHECK(fabsf(am + 95.0f) < 1e-3f && fabsf(ab + 95.0f) < 1e-3f,
+          "alpha 0.5 between 170 and 360 forward: mesh %.5f, bone %.5f degrees (want -95 = 265)",
+          am, ab);
+    printf("rd_interp_test: wheel 170 then 190 degrees, alpha 0.5: mesh %.6f, bone %.6f degrees\n",
+           am, ab);
+    turnAngles(built(0.25f), &am, &ab);
+    CHECK(fabsf(am + 142.5f) < 1e-3f && fabsf(ab + 142.5f) < 1e-3f,
+          "alpha 0.25 forward: mesh %.5f, bone %.5f degrees (want -142.5 = 217.5)", am, ab);
+    CHECK(turnIsTick(built(1.0f)), "alpha 1 is the tick's pose byte for byte after a long way");
+    /* 0 -> 190 with nothing before it: the short way is back 170, over the
+     * snap: the tick's */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 190.0);
+    st = build(0.5f, 1);
+    CHECK(st->turnSnap == 2 && st->longWay == 0 && turnIsTick(built(0.5f)),
+          "190 degrees with no turn before keeps the tick's pose (snapped %u, long %u)",
+          st->turnSnap, st->longWay);
+    /* a 20 degree turn after a 20 degree turn: the same blend as without the
+     * turn before, bit for bit */
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 20.0);
+    build(0.5f, 1);
+    recordTurn(mesh, skin, 40.0);
+    st = build(0.5f, 1);
+    const RdFrame *f = built(0.5f);
+    static uint8_t kept[16 * 12 + 64];
+    const float (*mk)[4] = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    const RdCmd *sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    CHECK(mk && sk && st->longWay == 0 && st->turnSnap == 0, "20 degrees after 20 blends");
+    if (mk && sk) {
+        memcpy(kept, mk[16], 16 * 12);
+        memcpy(kept + 16 * 12, f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64);
+    }
+    turnAngles(f, &am, &ab);
+    CHECK(fabsf(am - 30.0f) < 1e-3f && fabsf(ab - 30.0f) < 1e-3f,
+          "20 degrees after 20 at alpha 0.5: mesh %.5f, bone %.5f degrees (want 30)", am, ab);
+    recordTurn(mesh, skin, 20.0);
+    recordTurn(mesh, skin, 40.0);
+    f = built(0.5f);
+    mk = vuBlock(f, findKey(f, 0, RD_KEY(&kObjD, 0, 32), 0));
+    sk = findKey(f, 0, RD_KEY(&kObjD, 1, 20), 0);
+    CHECK(mk && sk && memcmp(kept, mk[16], 16 * 12) == 0 &&
+              memcmp(kept + 16 * 12,
+                     f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0,
+          "20 degrees blends bit for bit with and without the turn before");
 }
 
 /* A shadow coming out of its pool: the root climbs up to 13
@@ -5693,6 +5803,7 @@ static void runCpu(void)
 {
     testRotationBlend();
     testRotationDraws();
+    testRotationContinuity();
     testRisingBone();
     testCameraBlend();
     testCameraLocked();
