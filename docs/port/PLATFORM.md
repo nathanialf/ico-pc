@@ -463,6 +463,21 @@ driver is reported as any crash, with the batch's note as the `while:` line, so 
 treat it as a driver crash while preparing the shaders; the fixed-blend step reads the batch's
 `dst` field, which every key of the batch shares (`port/platform/startup_retry.h`
 (`startup_retry_note_has_dst`)).
+A device loss adds a third line, `loss dump: <zip>` (or
+`graphics device lost, no loss dump`), written at the loss and kept through the run's end whatever
+the note and the mode, so the next start finds it even when the process is ended after the loss
+(`ico_diag_note_device_loss`). That start logs `ico_pc: the previous run lost the graphics device;
+its loss dump is <zip>` and, for a dump of the same version, runs the loss bisect once before the
+game ([RENDER.md](RENDER.md#the-loss-bisect); `ico_diag_loss_bisect`, the bisect itself a
+callback, `port/platform/window_host.c` (`window_loss_bisect`)): the file's note says the bisect is
+running while it runs (`replaying the lost frame pass by pass (the loss bisect)`), the result is
+logged as `ico_pc: loss bisect: <line>`, then `ico_pc: loss bisect: done; the game starts`, and the
+file is deleted. A start ended inside the bisect leaves that note; the start after logs it, is not
+lazy for it and does not bisect again. A loss of another version is logged, not replayed. ctest
+`diag` runs these steps with the bisect stubbed (a lost pass, a clean frame, a bisect that could not
+run, a start ended inside it), the loss noted on a run at the loss restart with the relaunch stubbed,
+a lazy run's loss and a killed run's (`port/platform/test/diag_test.c` (`activity_child`,
+`bisect_stub`)).
 
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a
 kernel call cannot stop them. Every 2 s the heartbeat logs one line of progress
@@ -486,8 +501,13 @@ pump and the start-up screens' pump end the session through the normal quit path
 `window: the graphics device was lost; quitting`, then the renderer's
 [pass ring](RENDER.md#the-pass-ring) (the last replays and the passes of the last three, with the
 sequence numbers the checkpoint markers carry and each effect's name from `rd_perf_post_name`), a
-flush of the log, and one message box: the card stopped responding, the game has to close, the save
-is kept, and "If the graphics card is overclocked, try its stock clocks first." The box is modal:
+flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<time>.zip`, logged as
+`window: loss dump: frames N and M (the one before) written to <zip>`, and noted in the activity
+file), and one message box: the card stopped responding, the game has to close, the save is kept,
+"If the graphics card is overclocked, try its stock clocks first.", and, when the loss dump was
+written, its file name in the logs folder and a request to attach it with the log; on a phone the
+box asks to send the log and that file. The loss restart above comes after the loss dump, so a
+restarted run bisects the lost frame first. The box is modal:
 the watchdog is paused before it (`ico_diag_watchdog_pause`, so the time the player takes to read
 it is not reported as a hang), the heartbeat stops, and after it one line
 `window: the message was closed after N s` and the watchdog running again, so a hang in the shutdown
@@ -516,6 +536,13 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
 
 Neither key can be bound, and a held key's repeats do nothing. `dump_every=N` in `ico-pc.ini`
 writes every Nth frame as an `.rddump` (`port/platform/host_config.h`).
+
+A device loss writes its own zip with no key: `logs/loss-<time>.zip`, the lost frame's dump first,
+the frame before it, then the log, the newest three kept
+([RENDER.md](RENDER.md#the-loss-dump); `port/platform/dump_zip.h` (`ico_loss_dump_zip`,
+`ico_loss_dump_path`, `ico_loss_dump_prune`)). ctest `dump_zip` checks its entries and their order,
+that the bisect's extraction takes the lost frame, and the pruning
+(`port/platform/test/dump_zip_test.c` (`test_loss`)).
 
 ## Window lifecycle
 

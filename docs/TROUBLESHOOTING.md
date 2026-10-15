@@ -157,11 +157,23 @@ anything you had not saved is lost, as when you quit. Nothing is changed
 in your settings: the next start is normal again. If it keeps happening,
 set an overclocked card back to its stock clocks (see below).
 
+**What the game keeps when the graphics stop.** Whenever the graphics card
+or the phone's graphics driver stops responding, the game saves a copy of
+the picture it was drawing in the `logs` folder, next to the log: a file
+whose name starts with `loss-` and goes on with the date and time, ending
+in `.zip`. The three newest are kept. At the next start, before the title,
+the game draws that picture again one step at a time to find the step that
+makes the graphics stop, and writes the answer in the log; the screen may
+stay dark a little longer while it does. Then the game starts as usual,
+whatever it found. If you report the problem, attach the newest `loss-`
+file together with the log of the start after it.
+
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,
 and the game has to close; your last save is kept. Start the game again. If
 it happens every time at the same place, send the log (the message names
-the file) with a report: the log says what was being drawn.
+the file) and the `loss-` file the message names beside it with a report:
+together they show what was being drawn.
 
 **"The graphics card stopped responding ..."** The graphics driver was
 reset, updated or crashed while you played, and the game has to close.
@@ -169,7 +181,8 @@ When the message also says the game restarted itself with simpler blending
 and the card still stopped, the game already tried that. Your last save is
 kept, and the log says why. The message stays until you close it. Start
 the game again. This is usually a driver reset: if it keeps happening,
-update the graphics driver and send the log. If the graphics card is
+update the graphics driver and send the log, together with the `loss-` file
+the message names (it is in the same `logs` folder). If the graphics card is
 overclocked (its speed or memory raised above the maker's settings, in a
 tool such as MSI Afterburner), set it back to its stock clocks first and
 try again: a card pushed past what it can do steadily makes the driver
@@ -188,7 +201,8 @@ afterwards:
 - `gpu_checkpoints=true` makes the log say more exactly what the graphics
   card was doing when it stopped. The game may run a little slower with it.
 - `gpu_robust=true` makes the graphics card check every read and write the
-  game asks for. The game may run a little slower with it.
+  game asks for. The game may run a little slower with it. On a phone or
+  tablet it is on already; `gpu_robust=false` turns it off there.
 
 ## The game closes by itself
 

@@ -398,7 +398,10 @@ and whether the device runs on WARP.
 When the driver gives up on the device (Vulkan `VK_ERROR_DEVICE_LOST`; D3D12 a removed, reset or hung
 device) the backend prints one report, at the first failing call, and the window prints the
 renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
-([PLATFORM.md](PLATFORM.md#diagnostics)). The report's parts:
+([PLATFORM.md](PLATFORM.md#diagnostics)). `rhi_wait_idle` is such a call too: Vulkan checks
+`vkDeviceWaitIdle`'s result and D3D12 the device's removed reason after the wait, so the
+[loss bisect](RENDER.md#the-loss-bisect), which waits there after each replay, sees the loss
+(`port/rhi/vk/vk_cmd.c`, `port/rhi/d3d12/d3d12_cmd.c` (`rhi_wait_idle`)). The report's parts:
 
 - **The last submissions.** Each backend keeps its last 8 submissions with the timeline (fence) value
   each signals, the replay and frame numbers `rhi_set_submit_tag` set before it, and on Vulkan its

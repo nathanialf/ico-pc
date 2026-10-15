@@ -112,7 +112,9 @@ In that folder:
 
 - `memcard` holds your saves.
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
-  reports.
+  reports. When the graphics driver stops responding, the game also saves
+  a copy of the picture it was drawing there, a file whose name starts
+  with `loss-` and ends in `.zip` (the three newest are kept).
 - `textures/SCES-50760/replacements` is where a
   [texture pack](TEXTURE_PACKS.md) goes. The game makes these folders when
   it starts.
@@ -230,8 +232,12 @@ and from then on the game gets its graphics ready as you play until you
 install a new version, or until you delete the file `startup-activity.txt`
 in the `logs` folder. Send `logs/ico-pc.log` from the start where it
 happened. The same goes for a message that the graphics driver stopped
-responding while the game was drawing: the log says what was being drawn. If you have started the game again since, the log of the start
-before is `logs/ico-pc-previous.log`. If you cannot send the whole file,
+responding while the game was drawing: the log says what was being drawn.
+Also send the newest `loss-` file from `logs` (the message names it). At the
+next start, before the title, the game draws that picture again one step at
+a time to find the step that makes the driver stop, and writes the answer in
+the log, so send the log of that start too. If you have started the game
+again since, the log of the start before is `logs/ico-pc-previous.log`. If you cannot send the whole file,
 copy everything from the line of `=====` signs near the end (the next line
 says `CRASH` or `WATCHDOG`) down to the last line, or the last 60 lines if
 there is no such line. They say where the game stopped. If it closed while

@@ -188,9 +188,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
-- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes) and device-loss restart cases, each in a child process
+- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process
   whose log is read back (`diag`).
-- `dump_zip_test.c`: F12's zip and the aspect sweep's zip, written and read back with miniz
+- `dump_zip_test.c`: F12's zip, the aspect sweep's zip and the device-loss zip (the lost frame first, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
@@ -280,7 +280,8 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
-  replays printed (the last three, whole at 430 passes a replay), the line format; pure (`rd_passring`).
+  replays printed (the last three, whole at 430 passes a replay), the line format and the loss
+  bisect's line; pure (`rd_passring`).
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`).
 - `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths
   (`rd_native`).
@@ -297,6 +298,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
   (`rd_replay_tool_pass_dump`).
+- `rd_replay_tool_loss_bisect.cmake`: `--loss-bisect` on that dump runs clean on the device with one
+  replay per pass and one to count them, `--passes 1-P` (the whole frame) draws the plain replay's
+  picture and `--passes 1` stops the walk at pass 2 (`rd_replay_tool_loss_bisect`).
 - `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
   and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
@@ -305,8 +309,7 @@ program under an environment switch ([Environment switches](#environment-switche
   B-spline (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
-  the CPU included (`testDumpSheetV11`), and `rd_block_target`'s block mark set on its target only
-  and kept through a dump (`testDumpBlock`) (`rd_state`).
+- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
   (`textUploadLogChecks`) (`rd_tex`).
@@ -427,8 +430,8 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 `build-host/tmp/replay.lock` or `ICO_REPLAY_LOCK`, so two runs never compete.
 
 The script tests under `port/render/test/` run the tool or a test program and check its output:
-`rd_replay_tool_list.cmake` and `rd_replay_tool_pass_dump.cmake` on the dump `rd_pixel` leaves
-behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake` and
+`rd_replay_tool_loss_bisect.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test
 (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).

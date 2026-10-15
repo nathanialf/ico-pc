@@ -387,6 +387,67 @@ after a device loss, before the box ([PLATFORM.md](PLATFORM.md#diagnostics))
 (`rd_passring_print_start`, `rd_passring_print`); `port/render/rd_replay.c` (`replayFrame`,
 `beginPass`, `doCopy`, `takeSnap`, `doExact`); `port/render/rd_pipeline.c` (`rd__get_pipeline`)).
 
+### The loss dump
+
+On a device loss the window writes, after the pass ring and before the message, the frames the
+renderer still holds as one zip in the logs folder, `logs/loss-<date>-<time>.zip`: the last
+closed frame (the one the lost replay drew, or the tick it was blended towards) as
+`loss-<time>-lost.rddump`, then the frame before it as `loss-<time>-before.rddump` when the frame
+ring still holds it, then a copy of the log. They are ordinary dumps written from the CPU side
+(the commands, the payload, the image texels and VU streams the renderer keeps), with the textures
+as F12 writes them, so the writing needs no device; the lost frame is the zip's first `.rddump`,
+the one `rd_replay_tool` and the loss bisect take. The newest three loss zips are kept, the older
+ones deleted, so a device lost at every start cannot fill a phone. The activity file then records
+the loss with the zip's path (or that none was written) for the next start
+([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log
+(`port/render/rd_dump.c` (`rd_dump_retained`); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
+`ico_loss_dump_prune`); `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)).
+
+### The loss bisect
+
+The start after a loss that left a loss dump (of the same version) finds the pass that loses the
+device on that device, before the game. A renderer of its own, sized to the dump's frame, loads the
+lost frame and replays it with nothing presented: first with no draw recorded, which counts the
+frame's passes (their clears and layout changes still run, and every pipeline the frame binds is
+created), then as passes 1..k for k = 1, 2, ..., waiting for the GPU after each replay
+(`rhi_wait_idle`, which reports a loss like any other call). The first replay that loses the device
+names the pass, logged in the pass ring's words:
+`ico_pc: loss bisect: pass 12 of 61, list 3, pipeline 409 (vs 7 fs 5 dst 0), pass colour 4
+(640x448), depth 5 (640x448), 14 draws`, with a second line naming the pass whose first command
+the walk stopped at (that command's work before its pass began, a fog depth copy for example, ran
+too). A frame that runs to its end says so (`the whole frame (61 passes) ran one more pass at a
+time without losing the device`). The bisect's renderer is then shut down, lost or not, and the game's
+own starts as at any start: the bisect is diagnostics only. The activity file says the bisect is
+running while it runs, so a start ended inside it does not bisect again, and the file is deleted
+when it is done ([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_dump.c`
+(`rd_loss_bisect`); `port/platform/window_host.c` (`window_loss_bisect`, `ico_window_open`);
+`port/platform/diag_host.c` (`ico_diag_loss_bisect`)).
+
+The replay behind it is the pass window (`rd__replay_set_window`): every replay numbers its passes
+in the order they begin (render passes, copies, snapshots and exact blends: the pass ring's entries
+other than the uploads and the present). With a window [first, last] the draws and copies of the
+passes outside it are not recorded, the passes themselves still begin, and the walk stops after the
+command that began pass last + 1, which draws nothing. [1, k] is the frame up to pass k, [k, k]
+pass k alone on the targets as an earlier replay left them. `rd_replay_tool --loss-bisect` runs the
+bisect on a dump, `--passes A[-B]` replays a window (`port/render/rd_replay.c` (`passPush`,
+`drawCmd`, `copyCmd`, `replayFrame`); `port/render/rd_internal.h` (`rd__replay_set_window`)).
+
+### The stream bounds audit
+
+`rd_stream_audit_test` walks every VU draw of the dumps in `tools/native_frame_dumps.txt` and the
+boot corpus's title frame and computes on the CPU every vertex stream index the VU vertex shaders
+can read for it, the way the shaders compute it (`vu_vertex_qw`, `vu_batch_qw`): the triangle's
+three vertices, a grid's batch colour, the strip test's scans on the stream's own strip flags and
+its walk over the strip (taken to run for every kick, the worst camera), a particle's header and
+two qwords. Each index is checked against the draw's own stream, the qwords the replay uploads for
+it (`doVuDraw`); a kick below 2 and a draw's index range past its mesh's list fail too. The strip
+bounds come from one function (`stripBounds`), so a stream that carries its strips' bounds replaces
+only that reader. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the indices
+cannot leave (static asserts; `vu_bone_mat` clamps). A stream one vertex short fails it, in a
+synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
+header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
+(2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
+
 ## Pipelines
 
 The shaders take the alpha test, the AFAIL split, the texture function, TCC, TEXA, FBA, PABE,
@@ -887,6 +948,8 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--crt-strength K` | after `--crt`, the strength 0..1 |
 | `--overlay-test` | (with `--present`) a test pattern and a popup drawn as a presentation overlay |
 | `--vu-ref L:I` | the CPU mirror's vertices of prelit draw I of list L |
+| `--loss-bisect` | the [loss bisect](#the-loss-bisect) on the dump: the frame one pass longer each time, waiting for the GPU after each |
+| `--passes A[-B]` | replays passes A..B only (the [pass window](#the-loss-bisect)); A alone is pass A alone |
 
 ## Shader families
 
