@@ -211,6 +211,23 @@ plus `RD_FULL_PIXEL_GUARD` texels each side, centred, so the window's pixels are
 (`port/render/rd_core.c` (`rd__target_scale_of`)). [Scene scale](ARCHITECTURE.md#terms) and the
 display options are [DISPLAY.md](DISPLAY.md).
 
+### The glow size
+
+Glow size (`[video] effect_glow_size`, `RdSettings.glowOriginal`, Options > Effects, issue 103) is
+the player's choice of the work buffers' scale. `"scaled"`, the default, is the work scale above:
+the 256-wide post buffers are a kernel width in screen terms, so they are sized with the frame
+(at 2x WORK0..3, AA0/AA1, FEED128 and AURA_TAP hold four times the PS2's texels, and every glow
+sprite above 1x resamples through `fx_sprite_ps`'s kernels). `"original"` keeps them at the PS2's
+sizes at every resolution (work scale 1): the glow, the depth of field's blur and the softening
+are the 1x passes, magnified onto the scaled SCENE by the composite sprites, coarser than Scaled's
+above 1x and about a quarter of the glow chain's pixels at 2x. At 1x (and in Original, whose
+scene is 1x) the two are the same picture. The option is outside the preset: the default keeps
+every preset's picture byte for byte. A change remakes the targets at the next frame, as a
+resolution change does, and logs `rd: glow size: original (the work buffers at the PS2's sizes)`
+(or `scaled (the work scale)`); the display line's `work` field shows the scale in force
+(`port/render/rd_present.c` (`rd__apply_display`); `port/render/rd_core.c`; the replay tool's
+`--glow-original`).
+
 **Temporary targets** (`rd_temp_target`) live until the next `rd_begin_frame` unless kept, and
 come from a pool of parked textures of the same size (`port/render/rd_core.c`
 (`rd__temp_target_alloc`)). A target with a new texture starts cleared to zero colour and
@@ -591,8 +608,13 @@ pixel's own destination, read in rasterization order, with blending off
 The preference is attachment, then storage, then the fixed-function blend. What goes through it:
 the screen prims, the VU meshes and the fog sprite whose fixed-function blend is not the GS's (the
 LERPs, mode 3, the Ad forms, mode 11, PABE on the premultiplied forms, COLCLAMP 0) on RGBA8
-targets. What stays on the fixed-function blend: the premultiplied forms (already exact), the MSAA
-epoch's passes, targets other than RGBA8, the port's presentation overlay. The staticBlur sprites
+targets. What stays on the fixed-function blend: the premultiplied forms, the MSAA epoch's passes,
+targets other than RGBA8, the port's presentation overlay. Of the premultiplied forms the adds
+(modes 0 and 5) are exact on the blender (the shader writes the GS term `(Cs F) >> 7` and the
+blender adds two whole levels); the subtracts (modes 1 and 6) are one level above the GS wherever
+`Cs F` is not a multiple of 128, because the GS's term is `(0 - Cs) F >> 7`, an arithmetic shift
+that rounds the negative product down, while the blender subtracts the truncated `(Cs F) >> 7`
+(`port/shaders/common.hlsli` (`gs_dual_out`); `port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites
 and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c`
 (`dstPassMode`, `rd__pass_wants_readable`)).
 
@@ -600,6 +622,37 @@ and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/r
 `off`, `0`), `storage` (also `interlock`, `rov`) or `attachment`; a value that is none of these or a
 path the device lacks logs `rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or
 `... is not on this device` and keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
+
+### The storage pass merge
+
+Under the storage read a destination-read draw needs a pass without the colour attachment, and any
+other draw a pass with it, so a frame that interleaves them ends and begins a pass (with its
+barrier) at every change: on an RTX 3090 the title ran 887 passes a replay against 53 to 75 on the
+attachment and fixed paths, and the GPU time of the logs held follows the pass count (issue 103).
+The merge (`g_rd.passMerge`, on by default) keeps an open storage pass open: a draw that
+`rd__expand_dst` would leave on the fixed-function blend is drawn in it through the
+destination-read shader instead when the shader stores the same bytes (`rd__dst_merge_ok`):
+
+- no GS blending: the shader's ALPHA register is then `0x00`, `((Cs - Cs) As >> 7) + Cs`, which is
+  Cs (`RdDrawPass.csOnly`, `fillDrawCB`);
+- the premultiplied add, modes 0 and 5 (exact on the blender, above);
+- an RGBA8 target, an entry with the destination-read twins, a mask writing RGB, no stencil,
+  single-sampled;
+- not a draw that writes Z and can discard: the storage pass tests Z before the shader, so such a
+  draw keeps the colour/depth-only split or the fixed-function blend as before.
+
+The premultiplied subtracts stay on the fixed-function blend, which rounds them differently
+(above): through the shader they would be the GS's bytes, not the current picture's. A draw that
+does not qualify still begins a pass with the colour attached, and the next destination-read draw
+a storage pass again. The merge changes only the storage mode's passes, so the attachment read and
+the fixed-function blend draw as before. `ICO_RD_PASS_MERGE=0` (`[dev] storage_pass_merge = false`)
+turns it off and logs `rd: storage pass merge: off (ICO_RD_PASS_MERGE=0)`; the start-up pipeline
+set has the merged keys while it is on (`rd__enumerate_dst`). lavapipe has no fragment shader
+interlock, so the tests that compare the merge's picture with the unmerged one byte for byte
+(`rd_replay_tool_pass_merge`, `rd_perf`) skip that part there and run on a device with the
+storage read; the release check is the shot list on an interlock card with and without the key
+(`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`
+(`expandPasses`, `dstPassMode`)).
 
 **The Qualcomm rule.** The attachment read is not offered on Qualcomm's own Adreno driver
 (vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown; Mesa's Turnip on
@@ -692,7 +745,16 @@ sun's eye blur (WORK0 to WORK3) (`port/render/rd.h` (`RdPostKind`)). `rd_blur.c`
 - `((A - B) C >> 7) + D` on integers with PABE, COLCLAMP, FBA, written to UNORM8 as k / 255.
 
 The destination is read from a snapshot taken just before the sprite, so the result is the GS
-integer arithmetic of every pass, feedback or not (`port/render/rd_blur.c`). With Full pixel (on,
+integer arithmetic of every pass, feedback or not (`port/render/rd_blur.c`). A sprite that stores
+every texel of its target (its coverage holds every GS pixel the target's texels stand for, the
+scissor is the whole target, no alpha test but FB_ONLY or RGB_ONLY, no DATE, no Z test but ALWAYS,
+every channel written) needs no copy: it draws into the snapshot texture, which becomes the
+target's colour, and reads the old colour, which becomes the snapshot, the picture before the
+sprite as a whole copy would hold it (issue 103). The snapshot texture is made with the target's
+own usage for that. The swap is no pass of the [pass ring](#the-pass-ring) (a copy is);
+`ICO_RD_SNAP_SWAP=0` keeps the copy, for the A/B (`rd_replay_tool_snap_swap`: the same bytes on
+every blend path at 1x and 2x) (`port/render/rd_replay.c` (`blurCoversTarget`, `blurSwapTarget`,
+`snapEnsure`)). With Full pixel (on,
 or off in the game on a cropped frame such as 16:9, where the presenter masks the border over the
 same picture: `RdSettings.borderMask`, `rd__frame_cropped`,
 [DISPLAY.md](DISPLAY.md#the-native-frame); at 4:3 and 48:9 off keeps the recorded scissor) the
@@ -1041,6 +1103,25 @@ into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.
 
+The record also counts the exact blend's cost and the glow's passes (issue 103): `dstDraws`, the
+draws recorded through a destination-read shader (`dstBind`); `storagePasses`, the passes begun
+without the colour attached; `dstSwitches`, the passes ended and begun again on the same targets
+to change between a storage pass and one with the colour (`dstPassMode`; 0 on the attachment read
+and the fixed-function blend); `glowPasses`, the render passes begun while the glow (flare, bloom,
+the sun's eye blur) draws; `snapshots` and `snapSwaps`, target snapshots copied and the staticBlur
+sprites' swaps ([above](#post-passes)). The window's per-replay line carries them after the exact
+blends:
+
+```
+window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact blends, 412 destination-read draws, 28 storage passes, 27 pass switches for the exact blend, glow 40 passes, 6.0 snapshots copied and 4.0 swapped; in the block ...
+```
+
+(the numbers there show the fields, not a measurement). The GPU line before it carries the glow,
+fog and the other effects' milliseconds; the two together say what a slow card spends its replay
+on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-read draws, S
+storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped`
+(`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
+
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
@@ -1069,7 +1150,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--pass-dump DIR` | writes every named target to `DIR/<NAME>.png`, and with `--present` the presented picture |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
-| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
+| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--glow-original` (Glow size: Original), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
 | `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |

@@ -57,6 +57,23 @@ it is `ico-pc-previous.log`) with a [problem report](#send-a-problem-report),
 and say roughly where in the game it happened and for how long the music
 was missing.
 
+## The game is slow on an older graphics card
+
+If the game stutters, or your graphics card is always at full load, these
+settings lower the load the most (Options):
+
+- **Frame rate** Original draws one picture per game step, as on the PS2,
+  instead of also drawing the pictures in between: about half the work.
+- **Glow size** Original (on the Effects page) draws the glow at the
+  PlayStation 2's size: a little coarser above 1x, much lighter on the
+  graphics card. The rest of the picture keeps your resolution.
+- **Resolution** 1x is the PS2's own sharpness and the lightest of all.
+
+If it is still slow, play for a minute with your usual settings and send
+`ico-pc.log` with a [problem report](#send-a-problem-report): every 10
+seconds the log says how long the graphics card spent on the scene, the
+glow, the fog and the other effects.
+
 ## Send a problem report
 
 1. Open a report on the

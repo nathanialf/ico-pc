@@ -158,6 +158,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `texture_pack_cache_mb` | int | `0` | file only; memory for that read, 0 (half the computer's) or 128..65536 |
 | `effect_glow`, `effect_depth_of_field`, `effect_softening`, `effect_motion_blur`, `effect_fog`, `effect_cinematic_bars` | bool | `true` | the game's own picture effects |
 | `effect_water_sharp` | bool | `false` | Water reflections: `true` (Sharp) draws the reflections in water and the queen barrier's picture at the scene's scale, `false` (Original) at their GS size ([RENDER.md](RENDER.md#water-and-render-to-texture-blocks)) |
+| `effect_glow_size` | string | `"scaled"` | Glow size: `"original"` keeps the work buffers (the glow's, the depth of field's, the softening's, the aura's) at the PS2's sizes at every resolution (work scale 1), `"scaled"` gives them the work scale above 1x; anything else reads as `"scaled"` ([RENDER.md](RENDER.md#the-glow-size)) |
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
 | `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`) |
 | `backend` | string | `"vulkan"` | `vulkan` or `d3d12`, the window build's renderer; when the key is empty, a run restarted after a graphics driver crash takes the backend its retry step names (`port/platform/window_host.c` (`ico_window_open`); `port/platform/startup_retry.h`) |
@@ -283,6 +284,7 @@ under the same name (below). Read through the store:
 | `gpu_robust` | bool | `false` (`true` on Android) | |
 | `pass_split` | int | `0` | |
 | `attachment_read` | bool | `false` | |
+| `storage_pass_merge` | bool | `true` | |
 
 ## ico-pc.ini
 
@@ -320,6 +322,7 @@ store (`backend`, `unlock_credits`):
 | `gpu_robust` | `true`: robust buffer and image access (Vulkan; exported as `ICO_GPU_ROBUST=1`), with null descriptors; robust buffer and image access (`VK_EXT_robustness2` where offered) is on by default on Android, where `false` turns it off (exported as `ICO_GPU_ROBUST=0`) ([RHI.md](RHI.md#device-loss)) |
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
 | `attachment_read` | `true`: the attachment read offered on Qualcomm's Adreno driver too, where it is off because it draws wrong colours (exported as `ICO_VK_ATTACHMENT_READ=1`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
+| `storage_pass_merge` | `false`: the storage destination read (the interlock or ROV path) ends its storage pass for every draw it does not need the read for instead of drawing those draws in it through the read (exported as `ICO_RD_PASS_MERGE=0`; `true`, the default, exports `1`: the merge on) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

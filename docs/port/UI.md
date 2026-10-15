@@ -166,7 +166,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | --- | --- |
 | Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
-| Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
+| Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects with Glow size (Scaled or Original, `UI_OPT_EFFECT_GLOW_SIZE`) after Glow and Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, the touch overlay's three rows, Back |

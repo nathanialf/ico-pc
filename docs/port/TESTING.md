@@ -159,7 +159,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
-  reflections' `effect_water_sharp` off by default, saved, outside the preset), and
+  reflections' `effect_water_sharp` off by default, saved, outside the preset; Glow size's
+  `effect_glow_size` `"scaled"` by default, `"original"` read in any case, an unknown word read as
+  Scaled, saved as the word, outside the preset), and
   `eBrainGetTarget` with Yorda safe off and on (`options`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
@@ -299,8 +301,11 @@ program under an environment switch ([Environment switches](#environment-switche
   (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
-  end), a stop after the first batch and the rest made by the next call (`rd_perf`,
-  `rd_perf_mali`).
+  end), a stop after the first batch and the rest made by the next call; the exact blend's
+  counters (`RdPerfRecord.dstDraws`, `storagePasses`, `dstSwitches`) under each blend path the
+  device has (none under the fixed-function blend, no storage pass or switch under the attachment
+  read) and, under the storage read, the storage pass merge's DISPLAY bytes equal to the unmerged
+  ones with no more passes or switches (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
@@ -317,6 +322,13 @@ program under an environment switch ([Environment switches](#environment-switche
   1-2` and one with `--mask-marks` run clean and name their last draw (`rd_replay_tool_loss_bisect`).
 - `rd_replay_tool_pass_split.cmake`: that dump with `ICO_RD_PASS_SPLIT=8` draws the plain replay's
   DISPLAY picture byte for byte (`rd_replay_tool_pass_split`).
+- `rd_replay_tool_pass_merge.cmake`: that dump under `ICO_RD_BLEND=storage` with the storage pass
+  merge draws `ICO_RD_PASS_MERGE=0`'s DISPLAY picture byte for byte at 1x and 2x, with no more
+  passes or pass switches; skips without the storage read, as on lavapipe, which has no
+  interlock (`rd_replay_tool_pass_merge`).
+- `rd_replay_tool_snap_swap.cmake`: that dump on each blend path the device has, at 1x and 2x:
+  the staticBlur sprites' snapshot swap draws `ICO_RD_SNAP_SWAP=0`'s (the copy's) DISPLAY picture
+  byte for byte, and its copies plus swaps are the copy's snapshots (`rd_replay_tool_snap_swap`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
   faults with every draw before it (1, 731 and 1,312 of 1,312) found within 12 steps, the masked
   step's verdict, a killed step counted as lost, a step without a verdict planned again,
@@ -406,7 +418,9 @@ program under an environment switch ([Environment switches](#environment-switche
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
   `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
-  note, its key and the page's fourteen rows (`testWaterReflections`).
+  note, its key and the page's rows (`testWaterReflections`), and Effects > Glow size between
+  Scaled and Original: the row after Glow, its note, its key and the page's fifteen rows
+  (`testGlowSize`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
@@ -453,7 +467,8 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
-`rd_replay_tool_loss_bisect.cmake` and `rd_replay_tool_pass_split.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
+`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's
 (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
