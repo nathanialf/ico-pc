@@ -53,9 +53,7 @@ VuVtx vu_grid_vertex(uint v, uint variant)
 VuVSOut vu_grid_main(uint vid, uint variant)
 {
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
-    // the index marks: VU_INDEX_JOINED (rd_replay.c, a grid of two strips
-    // or more)
-    uint kick = (vid & VU_INDEX_MASK) >> 2;
+    uint kick = vid >> 2;
     // the triangle's first corner, or the tests' probe vertex
     VuVtx a = vu_grid_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, variant);
     if (probe) {
@@ -63,7 +61,10 @@ VuVSOut vu_grid_main(uint vid, uint variant)
     }
     VuVtx b = vu_grid_vertex(kick - 1u, variant);
     VuVtx c = vu_grid_vertex(kick, variant);
-    return vu_mesh_out(a, b, c, vid, VU_CLIP_REGION, VU_LO0, VU_HI4094, false);
+    // the marks: the draw's VU_MARK_JOINED (rd_replay.c, a grid of two
+    // strips or more; no mark bytes)
+    return vu_mesh_out(a, b, c, kick, vid & 3u, vu_mark.y, VU_CLIP_REGION, VU_LO0, VU_HI4094,
+                       false);
 }
 
 VuVSOut vu_grid_vs(uint vid : SV_VertexID)

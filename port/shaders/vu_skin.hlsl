@@ -80,8 +80,7 @@ VuVtx vu_skin_vertex(uint v, uint variant)
 VuVSOut vu_skin_main(uint vid, uint variant)
 {
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
-    // the index marks: VU_INDEX_JOINED (rd_mesh.c markJoinedStrips)
-    uint kick = (vid & VU_INDEX_MASK) >> 2;
+    uint kick = vid >> 2;
     // the triangle's first corner, or the tests' probe vertex
     VuVtx a = vu_skin_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, variant);
     if (probe) {
@@ -89,7 +88,9 @@ VuVSOut vu_skin_main(uint vid, uint variant)
     }
     VuVtx b = vu_skin_vertex(kick - 1u, variant);
     VuVtx c = vu_skin_vertex(kick, variant);
-    return vu_mesh_out(a, b, c, vid, VU_CLIP_REGION, vu_mem[0], vu_mem[1], false);
+    // the marks: VU_MARK_JOINED (rd_mesh.c markJoinedStrips)
+    return vu_mesh_out(a, b, c, kick, vid & 3u, vu_kick_marks(kick), VU_CLIP_REGION, vu_mem[0],
+                       vu_mem[1], false);
 }
 
 VuVSOut vu_skin_vs(uint vid : SV_VertexID)

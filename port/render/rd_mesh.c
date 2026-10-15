@@ -241,14 +241,15 @@ static void meshFree(RdMeshRec *m)
     }
     free(m->stream);
     free(m->index);
-    free(m->drawIndex);
+    free(m->kickMark);
     free(m->batches);
     free(m->cardStrips);
     m->cardStrips = NULL;
     m->cardStripCount = 0;
     m->stream = NULL;
     m->index = NULL;
-    m->drawIndex = NULL;
+    m->kickMark = NULL;
+    m->markCount = 0;
     m->batches = NULL;
     m->live = 0;
     m->vu = 0;
@@ -313,9 +314,10 @@ static RdMeshRec *meshAlloc(uint32_t *id)
  * user's dumps: from one frame to the next the earlier face won 0 then 42%
  * of the panel): the wires and the dark FB_ONLY fringes of the two copies
  * took turns, the shimmer.  A triangle that overlaps an earlier one of its
- * mesh in the same plane carries ICO_VU_INDEX_LATER in the index list the
- * device draws, and vu_later_out raises its depth by more than that bound:
- * the later face wins every frame, the picture of an exact GS.
+ * mesh in the same plane carries ICO_VU_MARK_LATER (RdMeshRec.kickMark,
+ * the mark bytes the draw binds after its stream), and vu_later_out raises
+ * its depth by more than that bound: the later face wins every frame, the
+ * picture of an exact GS.
  *
  * Candidates are the earlier triangles that share a corner position with
  * the triangle (double-sided faces share all their corners), tested in
@@ -325,7 +327,7 @@ static RdMeshRec *meshAlloc(uint32_t *id)
  * edge or a corner do not).  Only the prelit and lit layouts, whose first
  * quadword is the position the static programs transform; the
  * interpolation's scratch meshes take their source's list
- * (rd__vu_mesh_copy_draw_index), and a morph (rd_update_vu_mesh) keeps the marks
+ * (rd__vu_mesh_copy_marks), and a morph (rd_update_vu_mesh) keeps the marks
  * of the creation stream. */
 
 typedef struct OvlTri {
@@ -423,12 +425,45 @@ static uint32_t ovlHash(const float *p)
     return h ^ (h >> 16);
 }
 
-/* m->drawIndex for m's stream and index list (none when no triangle
- * overlaps an earlier one, or on no memory) */
+/* mark into the byte of kick k (RdMeshRec.kickMark, made at the
+ * mesh's vertex count when the first mark comes); false on no memory */
+static bool markKick(RdMeshRec *m, uint32_t k, uint8_t mark)
+{
+    if (k >= m->vertexCount) {
+        return true;
+    }
+    if (!m->kickMark) {
+        m->kickMark = calloc(m->vertexCount ? m->vertexCount : 1u, 1);
+        if (!m->kickMark) {
+            return false;
+        }
+        m->markCount = m->vertexCount;
+    }
+    if (k < m->markCount) {
+        m->kickMark[k] |= mark;
+    }
+    return true;
+}
+
+void rd__mesh_write_marks(const RdMeshRec *m, uint8_t *dst)
+{
+    const size_t bytes = (size_t)rd__mesh_mark_qw(m) * 16u;
+    if (!bytes) {
+        return;
+    }
+    const size_t n = m->markCount < bytes ? m->markCount : bytes;
+    memcpy(dst, m->kickMark, n);
+    memset(dst + n, 0, bytes - n);
+}
+
+/* ICO_VU_MARK_LATER for m's stream and index list (no marks when no
+ * triangle overlaps an earlier one, or on no memory); the first of the
+ * marks, so it starts them afresh */
 static void markLaterOverlaps(RdMeshRec *m)
 {
-    free(m->drawIndex);
-    m->drawIndex = NULL;
+    free(m->kickMark);
+    m->kickMark = NULL;
+    m->markCount = 0;
     const uint32_t nt = m->indexCount / 3, qpv = m->qwPerVertex;
     if (nt < 2 || (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT) ||
         m->vertexCount >= ICO_VU_INDEX_KICK_LIMIT) {
@@ -453,7 +488,6 @@ static void markLaterOverlaps(RdMeshRec *m)
     Slot *slot = malloc((size_t)cap * sizeof(Slot));
     Link *link = malloc((size_t)nt * 3 * sizeof(Link));
     uint32_t *seen = malloc((size_t)nt * sizeof(uint32_t));
-    uint32_t *out = NULL;
     if (!slot || !link || !seen) {
         goto done;
     }
@@ -465,7 +499,7 @@ static void markLaterOverlaps(RdMeshRec *m)
     }
     uint32_t links = 0;
     for (uint32_t t = 0; t < nt; t++) {
-        const uint32_t kick = (m->index[t * 3] & ICO_VU_INDEX_MASK) / 4u;
+        const uint32_t kick = m->index[t * 3] / 4u;
         if (kick < 2 || kick >= m->vertexCount) {
             continue;
         }
@@ -491,7 +525,7 @@ static void markLaterOverlaps(RdMeshRec *m)
                     continue;
                 }
                 seen[s] = t;
-                const uint32_t sk = (m->index[s * 3] & ICO_VU_INDEX_MASK) / 4u;
+                const uint32_t sk = m->index[s * 3] / 4u;
                 OvlTri ss;
                 for (int j = 0; j < 3; j++) {
                     const float *q = m->stream[(size_t)(sk - 2u + (uint32_t)j) * qpv];
@@ -502,17 +536,11 @@ static void markLaterOverlaps(RdMeshRec *m)
                 later = ovlCoplanarOverlap(&ss, &tt);
             }
         }
-        if (later) {
-            if (!out) {
-                out = malloc((size_t)m->indexCount * 4);
-                if (!out) {
-                    goto done;
-                }
-                memcpy(out, m->index, (size_t)m->indexCount * 4);
-            }
-            for (int c = 0; c < 3; c++) {
-                out[t * 3 + (uint32_t)c] |= ICO_VU_INDEX_LATER;
-            }
+        if (later && !markKick(m, kick, ICO_VU_MARK_LATER)) {
+            free(m->kickMark);
+            m->kickMark = NULL;
+            m->markCount = 0;
+            goto done;
         }
         for (int k = 0; k < 3; k++) {
             if (slot[at[k]].head < 0) {
@@ -523,10 +551,7 @@ static void markLaterOverlaps(RdMeshRec *m)
             slot[at[k]].head = (int32_t)links++;
         }
     }
-    m->drawIndex = out;
-    out = NULL;
 done:
-    free(out);
     free(slot);
     free(link);
     free(seen);
@@ -536,8 +561,8 @@ done:
  *
  * rd_content_hide.c lists the stage geometry made for the PS2's 4:3 picture
  * by the stream bits of its black corners; a triangle whose three vertices
- * are black corners of one entry carries the entry's verb as an index bit
- * in the draw's list (ICO_VU_INDEX_HIDE), the mesh's own list untouched. */
+ * are black corners of one entry carries the entry's verb as a mark
+ * (ICO_VU_MARK_HIDE in RdMeshRec.kickMark), the index list untouched. */
 
 /* the verbs applied: the table's, or an override (rd__content_hide_set);
  * s_verbSet once the environment has been read or a spec given */
@@ -633,9 +658,8 @@ static int contentEntryOf(const RdMeshRec *m, uint32_t v)
     return -1;
 }
 
-/* The entry's index bit into m->drawIndex (a copy of m->index made when
- * markLaterOverlaps left none) on every triangle of a listed entry whose
- * verb is not off.  The colour is the layout's last quadword (prelit 2,
+/* ICO_VU_MARK_HIDE on every triangle of a listed entry whose verb is not
+ * off.  The colour is the layout's last quadword (prelit 2,
  * lit 3). */
 static void markContentHidden(RdMeshRec *m)
 {
@@ -647,7 +671,7 @@ static void markContentHidden(RdMeshRec *m)
         return;
     }
     for (uint32_t t = 0; t < nt; t++) {
-        const uint32_t kick = (m->index[t * 3] & ICO_VU_INDEX_MASK) / 4u;
+        const uint32_t kick = m->index[t * 3] / 4u;
         if (kick < 2 || kick >= m->vertexCount) {
             continue;
         }
@@ -659,15 +683,8 @@ static void markContentHidden(RdMeshRec *m)
         if (verb == RD_HIDE_OFF) {
             continue;
         }
-        if (!m->drawIndex) {
-            m->drawIndex = malloc((size_t)m->indexCount * 4);
-            if (!m->drawIndex) {
-                return;
-            }
-            memcpy(m->drawIndex, m->index, (size_t)m->indexCount * 4);
-        }
-        for (int c = 0; c < 3; c++) {
-            m->drawIndex[t * 3 + (uint32_t)c] |= ICO_VU_INDEX_HIDE;
+        if (!markKick(m, kick, ICO_VU_MARK_HIDE)) {
+            return;
         }
     }
 }
@@ -1015,7 +1032,7 @@ static void retileSheet(RdMeshRec *m)
  * free-standing quads of its draw; a wall's or a plank's strip shares its
  * edges with the rest of the surface (the old bridge's plank faces at
  * 48:9, st08a_p4), and is drawn.  Every triangle of a joined
- * strip carries ICO_VU_INDEX_JOINED in the list the device draws.  A strip
+ * strip carries ICO_VU_MARK_JOINED (RdMeshRec.kickMark).  A strip
  * starts at a vertex whose ST.w is below 1 (the strip flag; ST is the
  * second-last quadword) or at its batch's first vertex, as the static kicks
  * see it (batchIndices).  The prelit, lit and skinned layouts, whose first
@@ -1189,23 +1206,16 @@ static bool joinStrips(RdMeshRec *const *ms, uint32_t n)
         }
         const uint32_t mv = m->vertexCount, nt = m->indexCount / 3;
         for (uint32_t t = 0; t < nt; t++) {
-            const uint32_t kick = (m->index[t * 3] & ICO_VU_INDEX_MASK) / 4u;
+            const uint32_t kick = m->index[t * 3] / 4u;
             if (kick < 2 || kick >= mv || !posOf[base[k] + kick] ||
                 !joined[stripOf[base[k] + kick]]) {
                 continue;
             }
-            if (m->drawIndex && (m->drawIndex[t * 3] & ICO_VU_INDEX_JOINED) != 0) {
+            if ((rd__mesh_kick_mark(m, kick) & ICO_VU_MARK_JOINED) != 0) {
                 continue;
             }
-            if (!m->drawIndex) {
-                m->drawIndex = malloc((size_t)m->indexCount * 4);
-                if (!m->drawIndex) {
-                    break;
-                }
-                memcpy(m->drawIndex, m->index, (size_t)m->indexCount * 4);
-            }
-            for (int c = 0; c < 3; c++) {
-                m->drawIndex[t * 3 + (uint32_t)c] |= ICO_VU_INDEX_JOINED;
+            if (!markKick(m, kick, ICO_VU_MARK_JOINED)) {
+                break;
             }
             m->gpuDirty = m->gpuChunk != 0 ? 1 : m->gpuDirty;
             changed = true;
@@ -1271,7 +1281,7 @@ void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms)
 /* m's free-standing strips (RdMeshRec.cardStrips: the runs between two
  * strip flags of a batch, ST.w < 1 on a strip's first vertex as
  * batchIndices reads it, three vertices or more, no triangle marked
- * ICO_VU_INDEX_JOINED at creation; the part joining at replay, rd_join.c,
+ * ICO_VU_MARK_JOINED at creation; the part joining at replay, rd_join.c,
  * may mark more, which the shader's JOINED test then catches) and a
  * skinned mesh's bone qwords (boneQwUsed: vu_skin.hlsl vu_bone_mat's
  * clamped address of every weight, plus its four qwords).  The game writes
@@ -1312,10 +1322,10 @@ static void cardStrips(RdMeshRec *m)
         free(out);
         return;
     }
-    const uint32_t *ix = rd__mesh_draw_index(m);
+    const uint32_t *ix = m->index;
     for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
-        const uint32_t k = (ix[i] & ICO_VU_INDEX_MASK) >> 2;
-        if ((ix[i] & ICO_VU_INDEX_JOINED) != 0u && k < nv) {
+        const uint32_t k = ix[i] >> 2;
+        if ((rd__mesh_kick_mark(m, k) & ICO_VU_MARK_JOINED) != 0u && k < nv) {
             joined[k] = 1;
         }
     }
@@ -1562,18 +1572,20 @@ void rd__vu_cards_fill_frame(RdFrame *f)
     }
 }
 
-bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src)
+bool rd__vu_mesh_copy_marks(RdMeshRec *dst, const RdMeshRec *src)
 {
-    free(dst->drawIndex);
-    dst->drawIndex = NULL;
-    if (!src->drawIndex || dst->indexCount != src->indexCount) {
-        return !src->drawIndex;
+    free(dst->kickMark);
+    dst->kickMark = NULL;
+    dst->markCount = 0;
+    if (!src->kickMark || dst->indexCount != src->indexCount) {
+        return !src->kickMark;
     }
-    dst->drawIndex = malloc((size_t)src->indexCount * 4);
-    if (dst->drawIndex) {
-        memcpy(dst->drawIndex, src->drawIndex, (size_t)src->indexCount * 4);
+    dst->kickMark = malloc(src->markCount ? src->markCount : 1u);
+    if (dst->kickMark) {
+        memcpy(dst->kickMark, src->kickMark, src->markCount);
+        dst->markCount = src->markCount;
     }
-    return dst->drawIndex != NULL;
+    return dst->kickMark != NULL;
 }
 
 uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,

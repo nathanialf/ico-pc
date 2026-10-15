@@ -23,7 +23,7 @@
  * pedestals, st17a; the pool, st09a), which every picture shows.  A model
  * pack's replacement or any other geometry never matches by accident.
  *
- * The verb (shader_consts.h ICO_VU_INDEX_HIDE):
+ * The verb (shader_consts.h ICO_VU_MARK_HIDE):
  *   RD_HIDE    drawn nowhere.  Listed only when a replay shows the
  *              triangles never reach the 4:3 picture
  *              (tools/content_table_check.py decide: the dumps at 4:3, in

@@ -740,8 +740,23 @@ bool rd__load_frame(const char *path, RdFrame *out)
         uint32_t *ix = malloc((size_t)ni * 4 + 4);
         RdVuBatchRec *br = malloc((size_t)nb * sizeof(RdVuBatchRec) + 4);
         ok = st && ix && br && rraw(fp, st, (size_t)nv * qpv * 16) &&
-             rraw(fp, ix, (size_t)ni * 4) && rraw(fp, br, (size_t)nb * sizeof(RdVuBatchRec)) &&
-             meshValid(nv, qpv, ix, ni, br, nb);
+             rraw(fp, ix, (size_t)ni * 4) && rraw(fp, br, (size_t)nb * sizeof(RdVuBatchRec));
+        if (ok) {
+            /* the lists are written unmarked (RdMeshRec.index); a value with
+               the old mark bits (bits 28..30, before v0.8.0) is not expected,
+               masked and logged so it loads as the dense value it stands for
+               (shader_consts.h ICO_VU_INDEX_MASK) */
+            uint32_t marked = 0;
+            for (uint32_t k = 0; k < ni; k++) {
+                marked += (ix[k] & ~ICO_VU_INDEX_MASK) != 0;
+                ix[k] &= ICO_VU_INDEX_MASK;
+            }
+            if (marked) {
+                rd__log("load: mesh %u \"%.24s\": %u index values carried mark bits; masked", id,
+                        name, marked);
+            }
+        }
+        ok = ok && meshValid(nv, qpv, ix, ni, br, nb);
         if (ok) {
             meshMap.from[meshMap.n] = id;
             meshMap.to[meshMap.n++] =

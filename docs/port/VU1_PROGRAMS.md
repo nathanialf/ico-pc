@@ -140,23 +140,34 @@ again from semantic transforms, so no rounding differs from the PS2's before the
 (`rd_create_vu_mesh`): the batches' vertices without their GIF tags, numbered across the mesh, and
 an index list with, for each vertex k of a batch with k >= 2 and neither k nor k-1 carrying the
 strip flag (`ST.w < 1`), the three indices `ICO_VU_INDEX(K, corner) = K * 4 + corner`
-(`port/shaders/shader_consts.h` (`ICO_VU_INDEX`)). Each shader invocation evaluates all three
+(`port/shaders/shader_consts.h` (`ICO_VU_INDEX`)). The values are dense: nothing but the kick and the
+corner, so a draw's values span about four times its mesh's vertices, far below 2^24 - 1, the
+largest index value every Vulkan device takes (`maxDrawIndexedIndexValue` without
+`fullDrawIndexUint32`). Each shader invocation evaluates all three
 vertices of its triangle, so the per-triangle decisions (region test, scissor) are the same in all
 three (`port/render/rd_mesh.h` (`rd_create_vu_mesh`); `port/shaders/vu_common.hlsli`, header
 comment). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
 (`rd_update_vu_mesh`), and a mesh no frame drew for a while may be evicted, which tells the seki
 side to build it again (`rd_vu_mesh_valid`) (`port/render/rd_mesh.h`).
 
-**Marks on the index list.** At creation `rd_mesh.c` adds bits to the indices the device draws
-(`port/shaders/shader_consts.h`; the shaders spell them `VU_INDEX_*` in
-`port/shaders/vu_common.hlsli`):
-- `ICO_VU_INDEX_LATER` (0x40000000): a triangle that overlaps an earlier triangle of its mesh in the
+**The triangles' marks.** At creation `rd_mesh.c` marks triangles in a byte per kick
+(`RdMeshRec.kickMark`; `port/shaders/shader_consts.h` `ICO_VU_MARK_*`, which the shaders spell
+`VU_MARK_*` in `port/shaders/vu_common.hlsli`). A draw binds the bytes right after the mesh's
+vertices in its stream, sixteen kicks a qword (`rd__mesh_write_marks`; the device arena and the ring
+alike), and `vu_mark` says where: `x` their first qword after `vu_draw.x`, `z` their qwords (0: the
+mesh has no marked triangle, and no read is made), `y` the marks every triangle of the draw carries
+(a grid's). `vu_kick_marks` reads the triangle's qword (its index clamped into the bytes), picks the
+word and the byte, as `vu_strip_card` picks the card bits, so the read stays in the
+[envelope](SHADERS.md#the-envelope). The index values carry no mark: a bit above the kick would
+make a draw's values span up to 2^30, and a Mali GPU sizes a draw's vertex storage by that span
+(issue 95). The marks:
+- `ICO_VU_MARK_LATER` (4): a triangle that overlaps an earlier triangle of its mesh in the
   same plane (double-sided faces split along other diagonals). `vu_later_out` raises its depth past
   ftoi4's rounding bound so the later face wins every frame, as on an exact GS
   (`port/render/rd_mesh.c` (`markLaterOverlaps`));
-- `ICO_VU_INDEX_HIDE` (0x20000000): a triangle of the content table, drawn nowhere
+- `ICO_VU_MARK_HIDE` (2): a triangle of the content table, drawn nowhere
   ([RENDER.md](RENDER.md#content-tables); `markContentHidden`);
-- `ICO_VU_INDEX_JOINED` (0x10000000): a triangle of a strip that shares a vertex position with a
+- `ICO_VU_MARK_JOINED` (1): a triangle of a strip that shares a vertex position with a
   strip of another shape in its mesh, so it is not a card (`port/render/rd_mesh.c`
   (`markJoinedStrips`)), joined across a part's packets at replay
   ([RENDER.md](RENDER.md#strip-joining); `port/render/rd_join.c`).
@@ -228,15 +239,15 @@ since the projection does not change with the width. What the port then draws of
 5. It reaches into the picture in any other state (the Enhanced [preset](ARCHITECTURE.md#terms), a
    wider [native frame](ARCHITECTURE.md#terms) or a [scene scale](ARCHITECTURE.md#terms) above 1),
    every vertex in front of the eye: drawn, clipped, unless it belongs to a card, a free-standing
-   strip (no `VU_INDEX_JOINED`) none of whose triangles passes the test ([The card
+   strip (no `VU_MARK_JOINED`) none of whose triangles passes the test ([The card
    test](#the-card-test), `vu_strip_card`). A wall whose strip passes or is joined is drawn; an
    artist's card parked at the picture's edge stays out.
 6. A vertex behind the eye and reaching into the picture: not drawn in any state.
 
-A `VU_INDEX_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
+A `VU_MARK_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
 vertex outside takes code 36's corner rule (`vu_cut_position`). A grid's strips share rows with
-their neighbours, so the replay marks every triangle of a grid of two strips or more joined
-(`port/render/rd_replay.c` (`doVuDraw`)).
+their neighbours, so the replay marks every triangle of a grid of two strips or more joined, as the
+draw's own mark (`vu_mark.y`; `port/render/rd_replay.c` (`doVuDraw`)).
 
 Under `VU_F_TICKS` (a picture between two ticks, through a blended camera) a triangle the rule
 drops at the blended camera is drawn, clipped, when either tick's camera showed it on the frame;
@@ -278,7 +289,7 @@ envelope ([SHADERS.md](SHADERS.md#the-envelope)).
 **The strips.** When a mesh is made, `rd_mesh.c` lists its free-standing strips
 (`RdMeshRec.cardStrips`): the runs of vertices between two strip flags of a batch (`ST.w < 1` on a
 strip's first vertex, as the index list reads it), three vertices or more, none of whose triangles
-carries `ICO_VU_INDEX_JOINED` then. The part joining at replay ([RENDER.md](RENDER.md#strip-joining))
+carries `ICO_VU_MARK_JOINED` then. The part joining at replay ([RENDER.md](RENDER.md#strip-joining))
 can mark more strips joined; those still get a verdict, and the shader's joined test overrules it. A
 grid's batch is one strip, and only a grid of one strip can be a card (`port/render/rd_mesh.c`
 (`cardStrips`)).

@@ -1376,6 +1376,10 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.noDual) {
         rd__log("blend: two-pass fallback (no dualSrcBlend)");
     }
+    /* the VU draws' index values carry nothing but the kick and corner, the
+     * triangles' marks are bytes in the stream (shader_consts.h
+     * ICO_VU_MARK_*; issue 95) */
+    rd__log("VU index values: dense (marks in the stream)");
     /* the exact GS blend (rd_dst_read.c): the destination read the device
      * has, before the targets are made with its usage */
     rd__dst_init();

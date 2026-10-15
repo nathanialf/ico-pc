@@ -40,6 +40,13 @@
  * v0.7.6's vu_strip_of scans; the shaders no longer read them, so they only
  * add reads the shaders do not make.
  *
+ * The marks (issue 95): a triangle's marks are a byte a kick after the
+ * mesh's vertices in the bound stream (rd_mesh.c kickMark, vu_common.hlsli
+ * vu_kick_marks: one qword read a triangle, clamped into the mark bytes),
+ * checked like the vertex reads; the index values are dense, and a span
+ * (max - min of a draw's values) past 2^24 - 1, Vulkan's least
+ * maxDrawIndexedIndexValue, fails (the index span report below).
+ *
  * Self-test (always runs): a synthetic prelit draw passes; the same draw
  * with its stream one vertex short fails, as do a kick below 2 and an
  * index range past the list; on the first real mesh draw of the dumps, the
@@ -103,6 +110,10 @@ typedef struct AuditDraw {
     const uint8_t *kickMark;
     uint32_t markCount;
     uint32_t drawMark;
+    /* the mark bytes' qwords after the vertices (vu_mark.x, vu_mark.z;
+     * vu_common.hlsli vu_kick_marks reads one per kick, its index clamped
+     * to markQw - 1) */
+    uint32_t markBase, markQw;
 } AuditDraw;
 
 typedef struct Audit {
@@ -307,7 +318,7 @@ static void auditDraw(const AuditDraw *d, Audit *a)
     /* the strip walk is the same for every kick of a strip: once each */
     uint32_t prev = UINT32_MAX;
     for (uint32_t i = 0; i < d->indexCount; i++) {
-        const uint32_t kick = (d->index[i] & ICO_VU_INDEX_MASK) >> 2;
+        const uint32_t kick = d->index[i] >> 2;
         if (kick < 2u) {
             a->badKicks++;
             fail(a, "index %u: kick %u below 2 (k - 2 reads before vertex 0)", i, kick);
@@ -316,6 +327,11 @@ static void auditDraw(const AuditDraw *d, Audit *a)
             continue; /* the triangle's other corners read the same */
         }
         prev = kick;
+        /* the triangle's marks (vu_kick_marks) */
+        if (d->markQw) {
+            const uint32_t q = kick >> 4;
+            readQw(d, a, d->markBase + (q < d->markQw - 1u ? q : d->markQw - 1u), kick);
+        }
         /* the three vertices (and vu_plane_distance's qword 0 of each) */
         readVertex(d, a, kick - 2u);
         readVertex(d, a, kick - 1u);
@@ -341,7 +357,7 @@ static void auditDraw(const AuditDraw *d, Audit *a)
 #define AUDIT_SPAN_LIMIT ((1u << 24) - 1u)
 /* 1: a span past AUDIT_SPAN_LIMIT fails (the marks live in the stream) */
 #ifndef AUDIT_SPAN_GATE
-#define AUDIT_SPAN_GATE 0
+#define AUDIT_SPAN_GATE 1
 #endif
 #define AUDIT_OLD_LATER 0x40000000u
 #define AUDIT_OLD_HIDE 0x20000000u
@@ -600,7 +616,12 @@ static bool drawOf(const RdFrame *f, const RdCmd *c, AuditDraw *d, uint32_t **gr
         }
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
         d->stream = (const float (*)[4])m->stream;
-        d->streamQw = m->vertexCount * m->qwPerVertex;
+        /* the vertices, then the mark bytes (rd_replay.c doVuDraw binds both) */
+        d->markBase = m->vertexCount * m->qwPerVertex;
+        d->markQw = rd__mesh_mark_qw(m);
+        d->streamQw = d->markBase + d->markQw;
+        d->kickMark = m->kickMark;
+        d->markCount = m->markCount;
         d->qpv = m->qwPerVertex;
         /* the strip bounds as the replay sets them, the widest (the
            content table's tiles drawn: rd__vu_sheet_end extended) */
@@ -611,7 +632,7 @@ static bool drawOf(const RdFrame *f, const RdCmd *c, AuditDraw *d, uint32_t **gr
             *why = "the draw's index range is past the mesh's index list";
             return true;
         }
-        d->index = rd__mesh_draw_index(m) + first;
+        d->index = m->index + first;
         d->indexCount = end - first;
         return true;
     }
@@ -643,9 +664,9 @@ static bool drawOf(const RdFrame *f, const RdCmd *c, AuditDraw *d, uint32_t **gr
         }
     }
     *gridIndex = idx;
-    /* a grid of two strips or more: every value carries the joined mark
-       (rd_replay.c doVuDraw) */
-    d->valueMark = p.batchCount >= 2 ? AUDIT_OLD_JOINED : 0u;
+    /* a grid of two strips or more: the draw's joined mark (rd_replay.c
+       doVuDraw, vu_mark.y) */
+    d->drawMark = p.batchCount >= 2 ? ICO_VU_MARK_JOINED : 0u;
     d->index = idx;
     d->indexCount = ni;
     return true;
@@ -761,7 +782,7 @@ static void auditFrame(const char *path, const RdFrame *f, Totals *t)
                 b.where = where;
                 uint32_t maxKick = 0;
                 for (uint32_t k = 0; k < d.indexCount; k++) {
-                    const uint32_t kk = (d.index[k] & ICO_VU_INDEX_MASK) >> 2;
+                    const uint32_t kk = d.index[k] >> 2;
                     maxKick = kk > maxKick ? kk : maxKick;
                 }
                 s.streamQw = maxKick * d.qpv; /* the drawn last vertex cut off */

@@ -201,13 +201,13 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
 | `IcoSpriteAa1Vertex`, `IcoSpriteStqVertex` | vertex | 24 | plus the AA1 coverage, or Q |
 | `IcoSpritePlaneVertex` | vertex | 120 | the STQ vertex plus the triangle's colour and STQ planes |
-| `IcoVuCB` | b2 space1 | 752 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices |
+| `IcoVuCB` | b2 space1 | 768 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`) |
 | `IcoVuBoneCB` | b3 space1 | 3840 | VU memory 16..255, the cluster bones; the card bits after them |
 
 Constants mirrored from the HLSL keep the same values: `ICO_DF_*` (`common.hlsli`),
 `ICO_DF_WMASK_SHIFT` (19), `ICO_TEXFMT_*` (`gs_math.hlsli`, asserted in `gs_math_test.c`),
 `ICO_SHEET_*` (`sheet_text.hlsli`, asserted in `port/render/test/sheet_ref.c`), `ICO_VU_*` and the
-index marks `ICO_VU_INDEX_LATER`, `_HIDE`, `_JOINED` (`vu_common.hlsli`), and `ICO_SH_FRAME_*`, the
+triangle marks `ICO_VU_MARK_LATER`, `_HIDE`, `_JOINED` (`VU_MARK_*` in `vu_common.hlsli`), and `ICO_SH_FRAME_*`, the
 [native frame](ARCHITECTURE.md#terms)'s constants, which `rd_present_test` asserts equal
 `port/include/ico_frame.h`'s (`port/shaders/shader_consts.h`).
 

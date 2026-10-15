@@ -1013,10 +1013,10 @@ static void stretchWidePixels(void)
  * listed closing box (st08a_p4, four black corners of entry 0, HIDE), a
  * mesh of its own as the stage has it.
  *   recording: the table's entry 0 is the box, HIDE; its two triangles
- *     carry ICO_VU_INDEX_HIDE in the draw's index list (the mesh's own
- *     list untouched); the same quad grey, or black but moved half a unit,
- *     is not marked; the interpolation's copy of the list takes the mark
- *     with it.  Overridden (rd__content_hide_set) to "off" the triangles
+ *     carry ICO_VU_MARK_HIDE in the mesh's mark bytes (the index list
+ *     untouched); the same quad grey, or black but moved half a unit, is
+ *     not marked; the interpolation's copy of the marks takes the mark with
+ *     it.  Overridden (rd__content_hide_set) to "off" the triangles
  *     are unmarked; a bad spec (the retired "hide43" among them) changes
  *     nothing
  *   16:9 on the native frame (688 wide) and 4:3: the HIDE box is drawn
@@ -1065,20 +1065,22 @@ static RdMesh closingMesh(const uint8_t rgb[3], float shift, int unmark)
     RdMeshRec *r = rd__mesh_rec(m.id);
     CHECK(r != NULL, "content table: rd_create_vu_mesh");
     if (r && unmark) {
-        free(r->drawIndex);
-        r->drawIndex = NULL;
+        free(r->kickMark);
+        r->kickMark = NULL;
+        r->markCount = 0;
     }
     return m;
 }
 
 static const uint8_t kClosingBlack[3] = {0, 0, 0}, kClosingGrey[3] = {90, 90, 90};
 
-/* every index of a's draw list is its own with bit set */
-static int closingMarked(const RdMeshRec *a, uint32_t bit)
+/* every triangle of a carries mark, and its index values are dense */
+static int closingMarked(const RdMeshRec *a, uint32_t mark)
 {
-    int ok = a->indexCount == 6 && a->drawIndex != NULL;
+    int ok = a->indexCount == 6 && a->kickMark != NULL;
     for (uint32_t i = 0; ok && i < a->indexCount; i++) {
-        ok = a->drawIndex[i] == (a->index[i] | bit) && (a->index[i] & ICO_VU_INDEX_HIDE) == 0;
+        ok = (rd__mesh_kick_mark(a, a->index[i] / 4u) & mark) == mark &&
+             a->index[i] < 4u * a->vertexCount;
     }
     return ok;
 }
@@ -1097,15 +1099,15 @@ static void closingPlaneChecks(void)
     RdMeshRec *a = rd__mesh_rec(black.id), *g = rd__mesh_rec(grey.id);
     RdMeshRec *mv = rd__mesh_rec(moved.id);
     if (a && g && mv) {
-        CHECK(closingMarked(a, ICO_VU_INDEX_HIDE),
+        CHECK(closingMarked(a, ICO_VU_MARK_HIDE),
               "content table: the black box top carries HIDE (%u indices)", a->indexCount);
-        CHECK(!g->drawIndex, "content table: the grey quad is not marked");
-        CHECK(!mv->drawIndex, "content table: the moved black quad is not marked");
-        CHECK(rd__vu_mesh_copy_draw_index(g, a) && g->drawIndex &&
-                  memcmp(g->drawIndex, a->drawIndex, 6 * 4) == 0,
-              "content table: a copy of the list takes the mark");
-        CHECK(rd__vu_mesh_copy_draw_index(g, mv) && !g->drawIndex,
-              "content table: a copy of an unmarked list drops it");
+        CHECK(!g->kickMark, "content table: the grey quad is not marked");
+        CHECK(!mv->kickMark, "content table: the moved black quad is not marked");
+        CHECK(rd__vu_mesh_copy_marks(g, a) && g->kickMark && g->markCount == a->markCount &&
+                  memcmp(g->kickMark, a->kickMark, a->markCount) == 0,
+              "content table: a copy of the marks takes the mark");
+        CHECK(rd__vu_mesh_copy_marks(g, mv) && !g->kickMark,
+              "content table: a copy of an unmarked mesh drops it");
     }
     rd_destroy_vu_mesh(black);
     rd_destroy_vu_mesh(grey);
@@ -1116,7 +1118,7 @@ static void closingPlaneChecks(void)
           "content table: \"off\" overrides every entry");
     const RdMesh off = closingMesh(kClosingBlack, 0.0f, 0);
     const RdMeshRec *o = rd__mesh_rec(off.id);
-    CHECK(o && !o->drawIndex, "content table: off leaves the box unmarked");
+    CHECK(o && !o->kickMark, "content table: off leaves the box unmarked");
     rd_destroy_vu_mesh(off);
     CHECK(!rd__content_hide_set("hide43") && !rd__content_hide_set("0=hide43") &&
               !rd__content_hide_set("999=hide") && !rd__content_hide_set("0=") &&
@@ -3297,7 +3299,7 @@ static void buildModels(void)
 /* ------------------------------------------------- joined strips */
 /* rd_mesh.c markJoinedStrips: a strip that shares a corner
  * position with another strip of its mesh, not its double-sided copy,
- * carries ICO_VU_INDEX_JOINED on every triangle of the draw's list (the
+ * carries ICO_VU_MARK_JOINED on every triangle (RdMeshRec.kickMark; the
  * region rule draws it as a wall outside the out-of-the-box state, never as
  * a card); a free-standing strip, or one whose only neighbour is its
  * double-sided copy, does not. */
@@ -3334,18 +3336,15 @@ static RdMesh joinMesh(const float (*xy)[2], const uint8_t *start, int n)
     return m;
 }
 
-/* the joined mark of the triangle that kick ends in m's draw list: 1
-   marked, 0 not, -1 no such triangle */
+/* the joined mark of the triangle that kick ends in m's list: 1 marked,
+   0 not, -1 no such triangle (or index values that are not dense) */
 static int joinedAt(const RdMeshRec *m, uint32_t kick)
 {
     for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
-        if ((m->index[i] & ICO_VU_INDEX_MASK) / 4u == kick) {
-            const uint32_t *d = rd__mesh_draw_index(m);
-            const int j = (d[i] & ICO_VU_INDEX_JOINED) != 0;
-            return j == ((d[i + 1] & ICO_VU_INDEX_JOINED) != 0) &&
-                           j == ((d[i + 2] & ICO_VU_INDEX_JOINED) != 0)
-                       ? j
-                       : -1;
+        if (m->index[i] / 4u == kick) {
+            const int dense = m->index[i] < 4u * m->vertexCount && m->index[i + 1] / 4u == kick &&
+                              m->index[i + 2] / 4u == kick;
+            return dense ? (rd__mesh_kick_mark(m, kick) & ICO_VU_MARK_JOINED) != 0 : -1;
         }
     }
     return -1;
@@ -3370,7 +3369,7 @@ static void joinedStripChecks(void)
 
     /* a double-sided card: the same four corners twice, the second strip
      * turned (its back face): not joined (its back triangles carry
-     * ICO_VU_INDEX_LATER) */
+     * ICO_VU_MARK_LATER) */
     static const float kCard[8][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 1},
                                       {1, 0}, {0, 0}, {1, 1}, {0, 1}};
     static const uint8_t kCardStart[8] = {1, 0, 0, 0, 1, 0, 0, 0};

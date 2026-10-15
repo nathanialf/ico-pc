@@ -36,18 +36,19 @@ VuVSOut vu_prelit_vs(uint vid : SV_VertexID)
 {
     uint mode = vu_draw.z & VU_CLIP_MASK;
     bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
-    uint kick = (vid & VU_INDEX_MASK) >> 2;
+    uint kick = vid >> 2;
     // the triangle's first corner, or the tests' probe vertex
     VuVtx a = vu_prelit_vertex(probe ? vu_probe_vertex(vid) : kick - 2u, mode);
     if (probe) {
         return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }
-    if (vu_content_hidden(vid)) {
+    uint marks = vu_kick_marks(kick);
+    if (vu_content_hidden(marks)) {
         return vu_out_init();
     }
     VuVtx b = vu_prelit_vertex(kick - 1u, mode);
     VuVtx c = vu_prelit_vertex(kick, mode);
-    return vu_mesh_out(a, b, c, vid, mode, VU_LO0, VU_HI4094, true);
+    return vu_mesh_out(a, b, c, kick, vid & 3u, marks, mode, VU_LO0, VU_HI4094, true);
 }
 
 GS_PS_ATTR GS_PS_OUT vu_ps(VuVSOut i)

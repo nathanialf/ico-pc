@@ -175,9 +175,9 @@ static inline int vu1ref_extended(int preset, int frameW, float scale)
  * in any other state (extended 1, vu1ref_extended) is clipped when every
  * vertex is in front of the eye (front: each VuGsVertex.clipW > 0) and it
  * is not a card: its strip is joined to another (joined: the triangle
- * carries ICO_VU_INDEX_JOINED, rd_mesh.c markJoinedStrips) or a triangle
+ * carries ICO_VU_MARK_JOINED, rd_mesh.c markJoinedStrips) or a triangle
  * of its strip passes the region test (stripPasses, vu1ref_strip_passes);
- * else not drawn.  hide: the triangle carries ICO_VU_INDEX_HIDE (never
+ * else not drawn.  hide: the triangle carries ICO_VU_MARK_HIDE (never
  * drawn). */
 int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, int insideC,
                        int hide, int reaches, int front, int joined, int stripPasses);

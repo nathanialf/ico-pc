@@ -170,7 +170,7 @@
  *            diagonals, a corner's UV 2 texels off), under the railing's
  *            state (ATE GREATER 0x60, FB_ONLY, Z GEQUAL with Z write, ABE),
  *            seen obliquely at Z 30M..41M, the camera moving a little in 12
- *            steps: the back triangles are marked (ICO_VU_INDEX_LATER), and
+ *            steps: the back triangles are marked (ICO_VU_MARK_LATER), and
  *            every step the one draw equals the front strip drawn and then
  *            the back strips with Z ALWAYS (the later face over the earlier
  *            at every pixel, an exact GS's picture); the faces drawn apart
@@ -4162,14 +4162,14 @@ static int ovDiff(const uint8_t *x, const uint8_t *y, uint32_t w, uint32_t h)
     return n;
 }
 
-/* the indices of m's draw list that carry ICO_VU_INDEX_LATER (the list
- * also carries ICO_VU_INDEX_JOINED where strips share corners: rd_mesh.c
+/* the indices of m's list whose triangle carries ICO_VU_MARK_LATER (the
+ * marks also carry ICO_VU_MARK_JOINED where strips share corners: rd_mesh.c
  * markJoinedStrips) */
 static int laterMarks(const RdMeshRec *m)
 {
     int n = 0;
     for (uint32_t i = 0; i < m->indexCount; i++) {
-        n += (rd__mesh_draw_index(m)[i] & ICO_VU_INDEX_LATER) != 0;
+        n += (rd__mesh_kick_mark(m, m->index[i] / 4) & ICO_VU_MARK_LATER) != 0;
     }
     return n;
 }
@@ -4191,8 +4191,8 @@ static void testVuOverlap(const char *mode)
     if (ma && mf && mb) {
         int marks = 0, right = 0;
         for (uint32_t i = 0; i < ma->indexCount; i++) {
-            const uint32_t ix = rd__mesh_draw_index(ma)[i], kick = (ix & ICO_VU_INDEX_MASK) / 4;
-            const int later = (ix & ICO_VU_INDEX_LATER) != 0;
+            const uint32_t kick = ma->index[i] / 4;
+            const int later = (rd__mesh_kick_mark(ma, kick) & ICO_VU_MARK_LATER) != 0;
             marks += later;
             right += later == (kick == 7 || kick == 8 || kick == 11);
         }

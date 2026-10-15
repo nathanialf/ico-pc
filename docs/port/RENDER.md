@@ -340,8 +340,11 @@ resolves `(Cd + acc) mod 256` against a copy of the target (`port/render/rd_repl
 bones for a skinned draw, and sets the draw's flags: a chain clip plane, the free camera's
 `ICO_VU_BEHIND_EYE`, `ICO_VU_EXTENDED` outside [out of the box](ARCHITECTURE.md#terms)
 (`vuExtended`), and `ICO_VU_TICKS` for a draw seen through a camera blended between two
-[ticks](ARCHITECTURE.md#terms). A grid draw builds its index list here and marks every triangle of a
-grid of two strips or more joined (`port/render/rd_replay.c` (`doVu`, `doVuDraw`, `vuExtended`)).
+[ticks](ARCHITECTURE.md#terms). A mesh with marked triangles binds its mark bytes after its stream
+(`vu_mark`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-mesh-path)). A grid draw builds its index list
+here and marks every triangle of a grid of two strips or more joined, as the draw's own mark
+(`port/render/rd_replay.c` (`doVu`, `doVuDraw`, `vuExtended`)). At start the renderer logs `rd: VU
+index values: dense (marks in the stream)`.
 What the flags do is [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule). `ICO_RD_VU_OFFGRID=1`, a
 developer switch, lets the [VU1](ARCHITECTURE.md#terms) programs output X and Y off the GS's 1/16
 grid on a scaled target under the Enhanced preset; otherwise every preset keeps the GS's
@@ -812,7 +815,7 @@ probe's frame is one game frame drawn that way (`port/render/rd_fog_path.c` (`rd
 **Hidden stage faces.** A few stage faces relied on the PS2's 4:3 picture: closing planes that seal
 a model where the 4:3 camera never looks. They are listed in `rd__content_hide` by the stream bits
 of their corners; `markContentHidden` marks a triangle whose three vertices are black and corners of
-one entry with `ICO_VU_INDEX_HIDE`, drawn nowhere. Black alone does not identify such a face, and a
+one entry with `ICO_VU_MARK_HIDE`, drawn nowhere. Black alone does not identify such a face, and a
 model pack's replacement never matches. An entry is listed only when 4:3 dumps with it hidden equal
 those without, byte for byte, in Original 1x and Enhanced 2x (`tools/content_table_check.py decide`)
 (`port/render/rd_content_hide.c`; `port/render/rd_mesh.c` (`markContentHidden`)). To add an entry:

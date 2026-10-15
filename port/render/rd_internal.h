@@ -684,14 +684,18 @@ typedef struct RdMeshRec {
     /* VU meshes */
     uint32_t qwPerVertex, batchCount, srcQw;
     float (*stream)[4]; /* vertexCount * qwPerVertex quadwords */
-    uint32_t *index;
-    /* the index list the device draws, index with
-     * ICO_VU_INDEX_LATER on each triangle that overlaps an earlier
-     * triangle of the mesh in its plane (rd_mesh.c markLaterOverlaps);
-     * NULL when none does (rd__mesh_draw_index); also ICO_VU_INDEX_HIDE
-     * on each triangle of a content table entry (rd_content_hide.c,
-     * rd_mesh.c markContentHidden) */
-    uint32_t *drawIndex;
+    uint32_t *index;    /* the list the device draws, dense (ICO_VU_INDEX) */
+    /* The triangles' marks, a byte a kick (shader_consts.h ICO_VU_MARK_*;
+     * markCount bytes, NULL when no triangle has one): ICO_VU_MARK_LATER
+     * on each triangle that overlaps an earlier triangle of the mesh in
+     * its plane (rd_mesh.c markLaterOverlaps), ICO_VU_MARK_HIDE on each
+     * triangle of a content table entry (rd_content_hide.c, rd_mesh.c
+     * markContentHidden), ICO_VU_MARK_JOINED on each triangle of a joined
+     * strip (markJoinedStrips, rd__mesh_join_part).  A draw binds them
+     * after the stream (rd__mesh_mark_qw, rd__mesh_write_marks;
+     * vu_common.hlsli vu_kick_marks) */
+    uint8_t *kickMark;
+    uint32_t markCount;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -733,7 +737,7 @@ typedef struct RdMeshRec {
     uint8_t tileCols, tileRows;
     /* The free-standing strips (rd_mesh.c cardStrips, at creation): the
      * runs of vertices between two strip flags in a batch, three or more,
-     * none of whose triangles carried ICO_VU_INDEX_JOINED then; cardStrips
+     * none of whose triangles carried ICO_VU_MARK_JOINED then; cardStrips
      * holds each one's first vertex and one past its last, in vertex order
      * (the card test's strips, rd_draw_vu_mesh).  boneQwUsed: a skinned
      * mesh's VuBoneCB qwords its weights read (the card bits go after them,
@@ -766,7 +770,7 @@ uint64_t rd__mesh_gpu_buffer_size(uint32_t chunk);
 void rd__mesh_gpu_shutdown(void);
 /* Creates a VU mesh record from a stream and index list already in the
  * tagless layout (dump loading); returns the id, 0 on failure.  Every VU
- * mesh is made here, so its drawIndex is worked out here too. */
+ * mesh is made here, so its marks are worked out here too. */
 uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
                                 uint32_t qwPerVertex, const uint32_t *index, uint32_t indexCount,
                                 const RdVuBatchRec *batches, uint32_t batchCount, const char *name);
@@ -775,7 +779,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
  * one part of a model (rd_replay.c joinParts: the VU draws of a frame with
  * one object and part in their keys), a strip of one mesh joined by a strip
  * of another shape in any of them (rd_mesh.c joinStrips); the marks are
- * added to the meshes' drawIndex (gpuDirty when a device copy holds the
+ * added to the meshes' kickMark (gpuDirty when a device copy holds the
  * old list).  sig names the set of meshes: nothing is done when every one
  * was last joined under it.  1 when a mark was added. */
 uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
@@ -784,16 +788,27 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig);
  * without the packet's ordinal) and joined with rd__mesh_join_part */
 void rd__join_parts(const RdFrame *f, int keep);
 
-/* The index list a draw of m uploads (RdMeshRec.drawIndex) */
-static inline const uint32_t *rd__mesh_draw_index(const RdMeshRec *m)
+/* The marks of the triangle of kick k (ICO_VU_MARK_*; 0 past the bytes) */
+static inline uint32_t rd__mesh_kick_mark(const RdMeshRec *m, uint32_t k)
 {
-    return m->drawIndex ? m->drawIndex : m->index;
+    return m->kickMark && k < m->markCount ? m->kickMark[k] : 0u;
 }
 
-/* dst's drawIndex becomes a copy of src's (none when src
- * has none): the interpolation's scratch meshes draw their source's (rd_interp.c);
- * false on no memory (dst then has none) */
-bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src);
+/* The qwords of mark bytes a draw of m binds after its stream (one byte a
+ * vertex, rounded up to a qword; 0 when m has no marks) */
+static inline uint32_t rd__mesh_mark_qw(const RdMeshRec *m)
+{
+    return m->kickMark ? (m->vertexCount + 15u) / 16u : 0u; /* ICO_VU_MARKS_PER_QW */
+}
+
+/* m's mark bytes as a draw binds them: rd__mesh_mark_qw(m) * 16 bytes at
+ * dst, a byte a kick, zero past the marked ones */
+void rd__mesh_write_marks(const RdMeshRec *m, uint8_t *dst);
+
+/* dst's marks become a copy of src's (none when src has none): the
+ * interpolation's scratch meshes draw their source's (rd_interp.c); false
+ * on no memory (dst then has none) */
+bool rd__vu_mesh_copy_marks(RdMeshRec *dst, const RdMeshRec *src);
 
 /* The content table (rd_content_hide.c): stage geometry made for the PS2's
  * 4:3 picture, by the stream bits of its black corners, and what the

@@ -15,7 +15,8 @@
 //
 // Drawing: the mesh programs are drawn as an indexed triangle list whose
 // index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
-// kick * 4 + corner: kick = the vertex index k whose XYZ2 draws the
+// kick * 4 + corner, nothing else (the marks are bytes in the stream,
+// vu_kick_marks): kick = the vertex index k whose XYZ2 draws the
 // triangle k-2, k-1, k on the GS, corner 0..2 the vertex k-2+corner. Each
 // invocation evaluates all three vertices so the per-triangle
 // decisions (region test, scissor) come out the same in all three. The
@@ -70,6 +71,10 @@
 //          R = S_tick St^-1 (columns; 0..3 the tick before's, 4..7 this
 //          tick's), a vertex's h through the blended camera St to the h the
 //          tick's camera gave (vu_tick_vertex)
+// vu_mark  the triangles' marks (vu_kick_marks): x the first qword of the
+//          mark bytes after vu_draw.x, y the marks of every triangle of the
+//          draw (a grid of two strips or more: VU_MARK_JOINED), z the mark
+//          bytes' qwords (0: none)
 cbuffer VuCB : register(b2, space1)
 {
     float4 vu_mem[36];
@@ -77,6 +82,7 @@ cbuffer VuCB : register(b2, space1)
     uint4 vu_batch;
     uint4 vu_strip;
     float4 vu_ticks[8];
+    uint4 vu_mark;
 };
 
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
@@ -118,25 +124,45 @@ StructuredBuffer<float4> vu_stream : register(t0, space1);
 // camera is drawn, clipped, when either tick showed it on the frame
 // (vu_region_rule)
 #define VU_F_TICKS 512u
-// The index bit of a triangle that overlaps an earlier triangle of
-// its mesh in the same plane (shader_consts.h ICO_VU_INDEX_LATER; static
-// prelit and lit meshes, rd_mesh.c markLaterOverlaps); vu_later_out
-#define VU_INDEX_LATER 0x40000000u
-// The content table (port/render/rd_content_hide.c, rd_mesh.c
-// markContentHidden): the index bit of a triangle of an artist trick made
-// for the 4:3 picture, drawn nowhere (HIDE). Static prelit and lit meshes
-// only; shader_consts.h ICO_VU_INDEX_HIDE
-#define VU_INDEX_HIDE 0x20000000u
-// The index bit of a triangle of a joined strip (rd_mesh.c
-// markJoinedStrips; shader_consts.h ICO_VU_INDEX_JOINED): not a card
-// (vu_region_rule)
-#define VU_INDEX_JOINED 0x10000000u
-#define VU_INDEX_MASK 0x0FFFFFFFu
+// The marks of a triangle k-2, k-1, k (shader_consts.h ICO_VU_MARK_*,
+// rd_mesh.c RdMeshRec.kickMark): a byte a kick after the mesh's vertices
+// in the stream, where vu_mark says.
+//   VU_MARK_JOINED  a triangle of a joined strip (rd_mesh.c
+//                   markJoinedStrips; the draw's own on a grid of two
+//                   strips or more): not a card (vu_rule_card)
+//   VU_MARK_HIDE    the content table (port/render/rd_content_hide.c,
+//                   rd_mesh.c markContentHidden): a triangle of an artist
+//                   trick made for the 4:3 picture, drawn nowhere (static
+//                   prelit and lit meshes)
+//   VU_MARK_LATER   a triangle that overlaps an earlier triangle of its
+//                   mesh in the same plane (static prelit and lit meshes,
+//                   rd_mesh.c markLaterOverlaps; vu_later_out)
+#define VU_MARK_JOINED 1u
+#define VU_MARK_HIDE 2u
+#define VU_MARK_LATER 4u
 
-// Whether the triangle of index value vid is left out of every draw (HIDE).
-bool vu_content_hidden(uint vid)
+// The marks of the triangle of kick k: the draw's own, and its byte when
+// the draw has mark bytes (sixteen kicks a qword, four a word; the qword
+// clamped into the bytes the draw bound)
+uint vu_kick_marks(uint kick)
 {
-    return (vid & VU_INDEX_HIDE) != 0u;
+    uint m = vu_mark.y;
+    if (vu_mark.z != 0u) {
+        uint4 q = asuint(vu_stream[vu_draw.x + vu_mark.x + min(kick >> 4, vu_mark.z - 1u)]);
+        uint s = (kick >> 2) & 3u;
+        uint word = q.x;
+        word = s == 1u ? q.y : word;
+        word = s == 2u ? q.z : word;
+        word = s == 3u ? q.w : word;
+        m = m | ((word >> ((kick & 3u) * 8u)) & 0xFFu);
+    }
+    return m;
+}
+
+// Whether a triangle of these marks is left out of every draw (HIDE).
+bool vu_content_hidden(uint marks)
+{
+    return (marks & VU_MARK_HIDE) != 0u;
 }
 
 #define VU_PROBE_FIELDS 16u
@@ -1025,7 +1051,7 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 #define VU_RULE_CLIP 1u  // GPU-clipped at the native frustum (vu_cut_position)
 #define VU_RULE_DROP 2u  // not drawn
 // The card test decides (vu_rule_card): VU_RULE_DROP for a triangle of a
-// card, a free-standing strip (no VU_INDEX_JOINED) none of whose
+// card, a free-standing strip (no VU_MARK_JOINED) none of whose
 // triangles passes the region test (vu_strip_card), else VU_RULE_CLIP
 #define VU_RULE_STRIP 3u
 
@@ -1061,7 +1087,7 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 //   free-standing strip (the run of triangles the strip flag ties together:
 //   one strip of the model, pac_makeNormalStrip; sharing no vertex
 //   position with another strip of its mesh but a double-sided copy, no
-//   VU_INDEX_JOINED, rd_mesh.c markJoinedStrips) none of whose triangles
+//   VU_MARK_JOINED, rd_mesh.c markJoinedStrips) none of whose triangles
 //   pass the test (vu_strip_card: the CPU decides it per strip and tick,
 //   rd_mesh.c). The opening's tree card (st26a_near, a free-standing
 //   2-triangle strip of a 12-card draw, every vertex 160 to 540 units in
@@ -1084,7 +1110,7 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 // a strip, each the rows i and i + 1 of one vertex grid
 // (Primitive.c prim_UpdateMesh3D), so neighbouring strips share a row of
 // positions: rd_replay.c marks every triangle of a grid of two strips or
-// more VU_INDEX_JOINED; a grid of one strip is a card when none of its
+// more VU_MARK_JOINED; a grid of one strip is a card when none of its
 // triangles pass.
 // Two differences from a code-36 draw of the same triangle remain: code
 // 36's clipped triangles go through their own earlier pass with ABE forced
@@ -1235,12 +1261,12 @@ bool vu_strip_card(uint kick)
 
 // VU_RULE_STRIP resolved: a joined strip is not a card; a free-standing
 // one is when the CPU said so
-uint vu_rule_card(uint rule, uint vid, uint kick)
+uint vu_rule_card(uint rule, uint marks, uint kick)
 {
     if (rule != VU_RULE_STRIP) {
         return rule;
     }
-    if ((vid & VU_INDEX_JOINED) != 0u || !vu_strip_card(kick)) {
+    if ((marks & VU_MARK_JOINED) != 0u || !vu_strip_card(kick)) {
         return VU_RULE_CLIP;
     }
     return VU_RULE_DROP;
@@ -1326,7 +1352,7 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
     return o;
 }
 
-// A triangle marked VU_INDEX_LATER and the earlier one it
+// A triangle marked VU_MARK_LATER and the earlier one it
 // overlaps are one plane in the model (the two faces of the railing's
 // lattice, split along other diagonals), where an exact GS's GEQUAL would
 // let the later pass over the earlier at every pixel.  ftoi4 rounds each
@@ -1427,19 +1453,17 @@ uint vu_probe_field(VuVtx v, uint field)
 }
 
 // What a mesh program draws of the triangle kick-2, kick-1, kick (a, b, c)
-// at the corner of index value vid: mode VU_CLIP_*, the programs without
+// at its corner (0..2) under its marks (vu_kick_marks): mode VU_CLIP_*, the programs without
 // a scissor or no-test variant passing VU_CLIP_REGION whatever vu_draw.z
 // says; lo, hi the region test's bounds; chain (a literal): the program
 // has the chain clip plane and the later mark (normal_c, normal_l).
-VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint vid, uint mode, float4 lo, float4 hi,
-                    bool chain)
+VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint marks, uint mode,
+                    float4 lo, float4 hi, bool chain)
 {
-    uint kick = (vid & VU_INDEX_MASK) >> 2;
-    uint corner = vid & 3u;
     VuVtx me = vu_pick(a, b, c, corner);
     uint rule = VU_RULE_EXACT;
     if (mode == VU_CLIP_REGION) {
-        rule = vu_rule_card(vu_region_rule(a, b, c, lo, hi), vid, kick);
+        rule = vu_rule_card(vu_region_rule(a, b, c, lo, hi), marks, kick);
     }
     uint exact;
     VuVSOut o = vu_triangle_out_pos(a, b, c, me, mode, rule, exact);
@@ -1447,7 +1471,7 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint vid, uint mode, float4 lo, f
     o = vu_attr_planes(o, t, a, b, c, exact);
     if (chain) {
         o = vu_plane_out(o, t, kick, corner);
-        if ((vid & VU_INDEX_LATER) != 0u) {
+        if ((marks & VU_MARK_LATER) != 0u) {
             o = vu_later_out(o, a, b, c);
         }
     }

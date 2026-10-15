@@ -31,7 +31,7 @@
  *           Original preset at 4:3, the PS2's picture) and, in any other
  *           state (ICO_VU_EXTENDED: Enhanced or a wide frame), is drawn
  *           clipped when every vertex is in front of the eye and its
- *           strip is joined to another (ICO_VU_INDEX_JOINED) or a triangle
+ *           strip is joined to another (ICO_VU_MARK_JOINED) or a triangle
  *           of its strip passes (vu1ref_strip_passes), else not drawn (a
  *           card: a free-standing strip none of whose triangles pass; the
  *           verdicts go to the shader in VuBoneCB as rd_replay.c hands
@@ -972,7 +972,7 @@ typedef struct Case {
  * 2-triangle strip): not drawn in any state. DEPART_GRID_ROW (the grid):
  * the last batch's odd vertices past the window far left (X -3904), the
  * others at GS X 2088..2128: none of that batch's triangles passes; with
- * two batches or more its strips share rows (ICO_VU_INDEX_JOINED, as
+ * two batches or more its strips share rows (ICO_VU_MARK_JOINED, as
  * rd_replay.c marks a grid), drawn clipped outside the out-of-the-box
  * state; a grid of one batch is a card. DEPART_BESIDE: the target placed right of the
  * picture (GS X 2320..2384), the strip at GS X 2330..2378 and vertex 7 at
@@ -1022,9 +1022,11 @@ enum {
 };
 
 /* The content table's mark (rd_content_hide.c; vu_content_hidden):
- * MARK_HIDE every triangle carries ICO_VU_INDEX_HIDE (drawn nowhere).
- * MARK_JOINED every triangle carries ICO_VU_INDEX_JOINED (rd_mesh.c
- * markJoinedStrips: its strip is joined to another, not a card). */
+ * MARK_HIDE every triangle carries ICO_VU_MARK_HIDE (drawn nowhere).
+ * MARK_JOINED every triangle carries ICO_VU_MARK_JOINED (rd_mesh.c
+ * markJoinedStrips: its strip is joined to another, not a card).  The
+ * marks go to the shader as the replay hands them over: a byte a kick
+ * after the stream (vu_mark.x, z), a grid's on the draw (vu_mark.y). */
 enum { MARK_NONE, MARK_HIDE, MARK_JOINED };
 
 /* DEPART_EYE's input seen through a camera blended between two
@@ -1115,7 +1117,7 @@ static int extendedState(const Case *c)
 }
 
 /* the strips are joined: the case's mark, or a grid of two batches or
-   more (rd_replay.c marks its indices ICO_VU_INDEX_JOINED) */
+   more (rd_replay.c marks the draw ICO_VU_MARK_JOINED) */
 static int joinedCase(const Case *c)
 {
     return c->mark == MARK_JOINED || (c->prog == P_MESH && c->nbatch >= 2);
@@ -1124,10 +1126,10 @@ static int joinedCase(const Case *c)
 static uint32_t markBit(const Case *c)
 {
     if (c->prog == P_MESH && c->mark == MARK_NONE) {
-        return joinedCase(c) ? ICO_VU_INDEX_JOINED : 0u;
+        return joinedCase(c) ? ICO_VU_MARK_JOINED : 0u;
     }
-    return c->mark == MARK_HIDE     ? ICO_VU_INDEX_HIDE
-           : c->mark == MARK_JOINED ? ICO_VU_INDEX_JOINED
+    return c->mark == MARK_HIDE     ? ICO_VU_MARK_HIDE
+           : c->mark == MARK_JOINED ? ICO_VU_MARK_JOINED
                                     : 0u;
 }
 
@@ -2073,7 +2075,7 @@ static int checkPortTriangles(const Case *c, const CaseRef *cr, const uint32_t *
         if (!clipped[i / 3]) {
             continue;
         }
-        const int k = (int)((idx[first + i] & ICO_VU_INDEX_MASK) >> 2);
+        const int k = (int)(idx[first + i] >> 2);
         pn[np] = portPolygon(c, cr, k, polys[np]);
         if (pn[np] < 0) {
             *bad = -1;
@@ -2221,7 +2223,7 @@ static const Case kCases[] = {
      0, 1.0f, DEPART_CARD_STRIP, VU1REF_ENHANCED, MARK_NONE, 0, 0},
     {"prelit cardstrip wide", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0,
      0, 0.375f, DEPART_CARD_STRIP, VU1REF_ORIGINAL, MARK_NONE, 0, 0},
-    /* the same strip joined to another of its mesh (ICO_VU_INDEX_JOINED, a
+    /* the same strip joined to another of its mesh (ICO_VU_MARK_JOINED, a
      * plank's face): not a card, drawn clipped outside the out-of-the-box
      * state; out of the box not drawn */
     {"prelit joined enh", "vu_prelit_vs", P_NORMALC, 32, ICO_VU_CLIP_REGION, 3, 1, 2, 12, 0, 0, 0,
@@ -2484,8 +2486,8 @@ static int gpuTests(void)
         } else {
             memcpy(map + OFF_STREAM, in, (size_t)nq * 16);
         }
-        /* indices: the static kicks, kick * 4 + corner, with the case's
-         * marks; first those the port draws exactly (nkept: the VU's,
+        /* indices: the static kicks, kick * 4 + corner (the case's marks
+         * go in the stream, below); first those the port draws exactly (nkept: the VU's,
          * less what the marks hide), then the others (drawn on their own,
          * into imgPort): clippedOf says which of them the rule draws
          * clipped, nclip and nnone count the two kinds */
@@ -2508,7 +2510,7 @@ static int gpuTests(void)
                         nnone += d == VU1REF_DRAW_NONE;
                     }
                     for (int j = 0; j < 3; j++) {
-                        idx[nidx++] = ICO_VU_INDEX(kicks[i], j) | markBit(c);
+                        idx[nidx++] = ICO_VU_INDEX(kicks[i], j);
                     }
                 }
                 nkept = pass == 0 ? nidx : nkept;
@@ -2521,6 +2523,18 @@ static int gpuTests(void)
         static IcoVuBoneCB bones;
         memset(&bones, 0, sizeof(bones));
         makeVuCB(c, &st, &vcb, &bones, 0);
+        if (c->prog == P_MESH) {
+            /* a grid's mark is the draw's (rd_replay.c doVuDraw) */
+            vcb.mark[1] = markBit(c);
+        } else if (markBit(c) && c->prog != P_PARTICLE) {
+            /* a byte a kick after the stream (rd_mesh.c kickMark,
+               rd__mesh_write_marks): every triangle carries the case's */
+            const uint32_t sq = c->tagless ? (uint32_t)(c->nbatch * c->vpb * c->vq) : (uint32_t)nq;
+            const uint32_t mq = ((uint32_t)cr.nv + ICO_VU_MARKS_PER_QW - 1u) / ICO_VU_MARKS_PER_QW;
+            memset(map + OFF_STREAM + (size_t)sq * 16u, (int)markBit(c), (size_t)mq * 16u);
+            vcb.mark[0] = sq - vcb.draw[0];
+            vcb.mark[2] = mq;
+        }
         checkCards(c, &cr, (const float (*)[4])in, &vcb, &bones);
         cardBits(c, &cr, &vcb, &bones);
         vcbProbe = vcb;
@@ -2757,7 +2771,7 @@ static int gpuTests(void)
             if (eyeCase) {
                 int eye = 0;
                 for (int i = nkept; i < nidx; i += 3) {
-                    eye += behindEye(&cr, (int)((idx[i] & ICO_VU_INDEX_MASK) >> 2));
+                    eye += behindEye(&cr, (int)(idx[i] >> 2));
                 }
                 if (eye == 0) {
                     FAILF("%s: no dropped triangle has a vertex behind the eye\n", c->name);

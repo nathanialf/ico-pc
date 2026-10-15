@@ -4506,20 +4506,26 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         streamBuf = indexBuf = rd__mesh_gpu_buffer(m->gpuChunk);
         streamBufSize = rd__mesh_gpu_buffer_size(m->gpuChunk);
         streamOff = m->gpuOff;
-        streamSize = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+        streamSize = ((uint64_t)m->vertexCount * m->qwPerVertex + rd__mesh_mark_qw(m)) * 16;
         indexOff = m->gpuIndexOff;
         vcb.draw[1] = m->qwPerVertex;
     } else if (m) {
+        /* the stream and its mark bytes after it, as in the arena */
+        const uint64_t vb = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+        const uint64_t mb = (uint64_t)rd__mesh_mark_qw(m) * 16;
         if (m->replaySeen != g_rd.replayCounter) {
-            m->ringStream = ringCopy(m->stream, (uint64_t)m->vertexCount * m->qwPerVertex * 16, ua);
-            m->ringIndex = ringCopy(rd__mesh_draw_index(m), (uint64_t)m->indexCount * 4, 16);
+            m->ringStream = rd__ring_alloc((vb + mb) ? (vb + mb) : 16, ua);
+            if (m->ringStream != ~0ull) {
+                memcpy(g_rd.ringMap[s_slot] + m->ringStream, m->stream, vb);
+                rd__mesh_write_marks(m, g_rd.ringMap[s_slot] + m->ringStream + vb);
+            }
+            m->ringIndex = ringCopy(m->index, (uint64_t)m->indexCount * 4, 16);
             m->replaySeen = g_rd.replayCounter;
             g_rdPerf.meshUploads++;
-            g_rdPerf.meshUploadBytes +=
-                (uint64_t)m->vertexCount * m->qwPerVertex * 16 + (uint64_t)m->indexCount * 4;
+            g_rdPerf.meshUploadBytes += vb + mb + (uint64_t)m->indexCount * 4;
         }
         streamOff = m->ringStream;
-        streamSize = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+        streamSize = vb + mb;
         indexOff = m->ringIndex;
         vcb.draw[1] = m->qwPerVertex;
     } else {
@@ -4548,6 +4554,12 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         /* a triangle the region test drops is clipped unless it belongs
          * to a card (vu_region_rule) */
         vcb.draw[2] |= ICO_VU_EXTENDED;
+    }
+    if (m && m->kickMark) {
+        /* the triangles' marks, a byte a kick after the stream
+           (vu_common.hlsli vu_kick_marks) */
+        vcb.mark[0] = m->vertexCount * m->qwPerVertex;
+        vcb.mark[2] = rd__mesh_mark_qw(m);
     }
     if (c->type != RDC_PARTICLES) {
         /* the card test (vu_region_rule): its verdicts in VuBoneCB above */
@@ -4581,12 +4593,12 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         /* strip i is the grid's rows i and i + 1
          * (Primitive.c prim_UpdateMesh3D), so with two strips or more
          * every strip shares a row of positions with a neighbour: joined,
-         * never a card (vu_region_rule) */
-        const uint32_t mark = p.batchCount >= 2 ? ICO_VU_INDEX_JOINED : 0u;
+         * never a card (vu_region_rule), the draw's mark */
+        vcb.mark[1] = p.batchCount >= 2 ? ICO_VU_MARK_JOINED : 0u;
         for (uint32_t b = 0, k = 0; b < p.batchCount; b++) {
             for (uint32_t v = 2; v < vpb; v++) {
                 for (uint32_t cc = 0; cc < 3; cc++) {
-                    idx[k++] = ICO_VU_INDEX(b * vpb + v, cc) | mark;
+                    idx[k++] = ICO_VU_INDEX(b * vpb + v, cc);
                 }
             }
         }

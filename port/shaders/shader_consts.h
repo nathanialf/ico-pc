@@ -306,7 +306,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  * stream (float4 quadwords as the VIF unpacked them), b2 = IcoVuCB,
  * b3 = IcoVuBoneCB (the cluster's bones; every mesh program's card bits). */
 
-/* VuCB: group 1, slot 2 (register b2, space1). 752 bytes.
+/* VuCB: group 1, slot 2 (register b2, space1). 768 bytes.
  *   mem    VU1 data memory 0..35 as the program reads it: 0..15 the common
  *          block (RdVuCommon), 16..27 the per-object matrices, 28..35 the
  *          light matrices (vu_common.hlsli lists what each program keeps
@@ -329,13 +329,20 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  *          the tick before's, 4..7 this tick's) that take a vertex's
  *          position h = St M pos through the blended camera St to the one
  *          each tick's camera gave (rd_interp.c, RdFrame.tickCams;
- *          vu_common.hlsli vu_region_rule); unused without the flag */
+ *          vu_common.hlsli vu_region_rule); unused without the flag
+ *   mark   the triangles' marks (ICO_VU_MARK_*, vu_common.hlsli
+ *          vu_kick_marks): the first qword of the draw's mark bytes after
+ *          vu_draw.x (the stream's vertex count times its qwords a vertex),
+ *          the marks every triangle of the draw carries (a grid of two
+ *          strips or more: ICO_VU_MARK_JOINED), the mark bytes' qwords (0:
+ *          none, the draw's mesh has no marked triangle), 0 */
 typedef struct IcoVuCB {
     float mem[36][4];
     uint32_t draw[4];
     uint32_t batch[4];
     uint32_t strip[4];
     float ticks[8][4];
+    uint32_t mark[4];
 } IcoVuCB;
 
 /* VuBoneCB: group 1, slot 3 (register b3, space1): VU memory 16..255, the
@@ -382,26 +389,42 @@ enum {
 #define ICO_SH_FRAME_W_MAX 2560
 
 /* The index value of an indexed VU draw: kick * 4 + corner (corner 0..2 =
- * vertex kick - 2 + corner); vertexOffset must be 0. */
+ * vertex kick - 2 + corner); vertexOffset must be 0.  The values are dense:
+ * a draw's span is about four times its mesh's vertices, far below the
+ * 2^24 - 1 every Vulkan device takes (maxDrawIndexedIndexValue without
+ * fullDrawIndexUint32).  Three mark bits used to ride in bits 28..30 of
+ * the values the device drew, spans near 2^30, which a Mali GPU sizes a
+ * draw's vertex storage by (issue 95); the marks are bytes in the stream
+ * (ICO_VU_MARK_*). */
 #define ICO_VU_INDEX(kick, corner) ((uint32_t)(kick) * 4u + (uint32_t)(corner))
-/* Set on the three indices of a triangle that overlaps an earlier
- * triangle of its mesh in the same plane (RdMeshRec.drawIndex; static
- * prelit and lit meshes only), which vu_later_out draws in front of it;
- * vu_common.hlsli's VU_INDEX_LATER and VU_INDEX_MASK.  The kick stays
- * below ICO_VU_INDEX_KICK_LIMIT for any mark (rd_mesh.c marks no larger
- * mesh) */
-#define ICO_VU_INDEX_LATER 0x40000000u
-/* The content table (port/render/rd_content_hide.c, rd_mesh.c
- * markContentHidden), set on the three indices of a triangle of a listed
- * artist trick: HIDE, drawn nowhere.  vu_common.hlsli's VU_INDEX_HIDE */
-#define ICO_VU_INDEX_HIDE 0x20000000u
-/* Set on the three indices of a triangle of a joined strip (one
- * that shares a vertex position with another strip of its mesh, not its
- * double-sided copy; rd_mesh.c markJoinedStrips; prelit, lit and skinned
- * meshes): not a card, so the region rule draws its failing triangles
- * clipped outside the out-of-the-box state.  vu_common.hlsli's
- * VU_INDEX_JOINED */
-#define ICO_VU_INDEX_JOINED 0x10000000u
+/* The marks of a triangle k-2, k-1, k: one byte a kick k after the mesh's
+ * vertices in the stream the draw binds (rd_mesh.c RdMeshRec.kickMark,
+ * four a 32-bit word, sixteen a qword; IcoVuCB.mark says where), read by
+ * vu_common.hlsli vu_kick_marks; a grid's JOINED is the draw's
+ * (IcoVuCB.mark[1]).
+ *   ICO_VU_MARK_JOINED  a triangle of a joined strip (one that shares a
+ *                       vertex position with another strip of its mesh,
+ *                       not its double-sided copy; rd_mesh.c
+ *                       markJoinedStrips; prelit, lit and skinned meshes,
+ *                       and every triangle of a grid of two strips or
+ *                       more): not a card, so the region rule draws its
+ *                       failing triangles clipped outside the out-of-the-box
+ *                       state
+ *   ICO_VU_MARK_HIDE    the content table (port/render/rd_content_hide.c,
+ *                       rd_mesh.c markContentHidden): a triangle of a
+ *                       listed artist trick, drawn nowhere
+ *   ICO_VU_MARK_LATER   a triangle that overlaps an earlier triangle of its
+ *                       mesh in the same plane (static prelit and lit
+ *                       meshes; rd_mesh.c markLaterOverlaps), which
+ *                       vu_later_out draws in front of it */
+#define ICO_VU_MARK_JOINED 1u
+#define ICO_VU_MARK_HIDE 2u
+#define ICO_VU_MARK_LATER 4u
+#define ICO_VU_MARKS_PER_QW 16u
+/* The kick and corner bits of an index value: what an older dump could
+ * carry besides them were the three old mark bits (28..30), which its
+ * lists never held (rd_dump.c writes RdMeshRec.index, the
+ * unmarked list); the load masks and logs any it meets */
 #define ICO_VU_INDEX_MASK 0x0FFFFFFFu
 /* kick * 4 + corner below 2^28: the meshes rd_mesh.c marks have fewer
  * vertices */
@@ -416,7 +439,8 @@ _Static_assert(offsetof(IcoVuCB, batch) == 592, "vu batch");
 _Static_assert(offsetof(IcoVuCB, strip) == 608, "vu strip");
 
 _Static_assert(offsetof(IcoVuCB, ticks) == 624, "vu ticks");
-_Static_assert(sizeof(IcoVuCB) == 752, "VuCB size");
+_Static_assert(offsetof(IcoVuCB, mark) == 752, "vu mark");
+_Static_assert(sizeof(IcoVuCB) == 768, "VuCB size");
 
 _Static_assert(sizeof(IcoVuBoneCB) == 3840, "VuBoneCB size");
 

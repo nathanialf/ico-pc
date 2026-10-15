@@ -124,7 +124,8 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {
                     total += (uint64_t)m->vertexCount * m->qwPerVertex * 16 +
-                             (uint64_t)m->indexCount * 4 + 2 * align;
+                             (uint64_t)rd__mesh_mark_qw(m) * 16 + (uint64_t)m->indexCount * 4 +
+                             2 * align;
                 }
             }
         }
@@ -496,7 +497,10 @@ void rd__upload_meshes(const RdFrame *f, int keep)
                 continue;
             }
             m->replaySeen = g_rd.replayCounter;
-            const uint64_t sb = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+            /* the stream, then its mark bytes (vu_common.hlsli
+             * vu_kick_marks), then the indices */
+            const uint64_t vb = (uint64_t)m->vertexCount * m->qwPerVertex * 16;
+            const uint64_t sb = vb + (uint64_t)rd__mesh_mark_qw(m) * 16;
             const uint64_t ib = (uint64_t)m->indexCount * 4;
             if (!rd__mesh_gpu_reserve(m, sb, ib, ua)) {
                 m->replaySeen = 0; /* doVu's ring path */
@@ -512,12 +516,13 @@ void rd__upload_meshes(const RdFrame *f, int keep)
                 m->gpuDirty = 1;
                 continue;
             }
-            if (sb) {
-                memcpy(g_rd.ringMap[rd__ring_slot()] + off, m->stream, sb);
+            if (vb) {
+                memcpy(g_rd.ringMap[rd__ring_slot()] + off, m->stream, vb);
             }
+            rd__mesh_write_marks(m, g_rd.ringMap[rd__ring_slot()] + off + vb);
             if (ib) {
-                memcpy(g_rd.ringMap[rd__ring_slot()] + off + (m->gpuIndexOff - m->gpuOff),
-                       rd__mesh_draw_index(m), ib);
+                memcpy(g_rd.ringMap[rd__ring_slot()] + off + (m->gpuIndexOff - m->gpuOff), m->index,
+                       ib);
             }
             rhi_cmd_copy_buffer(rd__replay_cl(), g_rd.ring[rd__ring_slot()], off,
                                 rd__mesh_gpu_buffer(m->gpuChunk), m->gpuOff, span);

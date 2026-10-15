@@ -96,7 +96,7 @@
  *                         that triangle overlaps an earlier one in its plane
  *                         and is drawn in front of it; then 'j'
  *                         where its strip is joined to another strip of
- *                         the mesh, ICO_VU_INDEX_JOINED: not a card)
+ *                         the mesh, ICO_VU_MARK_JOINED: not a card)
  *   --dump-textures DIR   writes every image texture of the dump to
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
@@ -171,7 +171,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
-#include "../../shaders/shader_consts.h" /* ICO_VU_INDEX_*: the marks --mesh shows */
+#include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
 #include "font.h"                        /* port/ui: the overlay test's text */
 
 static const char *const kNames[] = {
@@ -504,10 +504,10 @@ static void listMesh(const char *name)
                 bool drawn = false, later = false, joined = false;
                 for (uint32_t k = 0; k < br->indexCount; k++) {
                     const uint32_t ix = m->index[br->firstIndex + k];
-                    const uint32_t dx = rd__mesh_draw_index(m)[br->firstIndex + k];
+                    const uint32_t mk = rd__mesh_kick_mark(m, ix / 4);
                     drawn |= ix / 4 == v;
-                    later |= ix / 4 == v && (dx & ICO_VU_INDEX_LATER) != 0;
-                    joined |= ix / 4 == v && (dx & ICO_VU_INDEX_JOINED) != 0;
+                    later |= ix / 4 == v && (mk & ICO_VU_MARK_LATER) != 0;
+                    joined |= ix / 4 == v && (mk & ICO_VU_MARK_JOINED) != 0;
                 }
                 printf("  %4u %c%c", v, later ? '^' : drawn ? '*' : ' ', joined ? 'j' : ' ');
                 for (uint32_t q = 0; q < m->qwPerVertex; q++) {
