@@ -64,6 +64,23 @@ static bool vkr_env_on(const char *name)
                  strcmp(v, "yes") == 0);
 }
 
+/* the environment's word on a switch: 1 on, 0 off (0, false, off, no), -1
+ * when it is unset or says neither */
+static int vkr_env_switch(const char *name)
+{
+    const char *v = getenv(name);
+    if (!v) {
+        return -1;
+    }
+    if (vkr_env_on(name)) {
+        return 1;
+    }
+    return strcmp(v, "0") == 0 || strcmp(v, "false") == 0 || strcmp(v, "off") == 0 ||
+                   strcmp(v, "no") == 0
+               ? 0
+               : -1;
+}
+
 /* ------------------------------------------------------------ device loss
  * The report vkr_check prints once, at the first VK_ERROR_DEVICE_LOST
  * (docs/port/RHI.md, "Device loss"): the last submissions with the frames
@@ -1208,9 +1225,10 @@ static bool vkr_create_device(void)
     }
 
     /* GPU loss diagnostics (VkrState): the fault report whenever offered;
-     * robust access under gpu_robust; checkpoints and the address binding
-     * report under gpu_checkpoints.  Queried, then the queries' structures
-     * become the enables with only what is used on. */
+     * robust access under gpu_robust (on by default on Android);
+     * checkpoints and the address binding report under gpu_checkpoints.
+     * Queried, then the queries' structures become the enables with only
+     * what is used on. */
     VkPhysicalDeviceFaultFeaturesEXT qFault = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT};
     VkPhysicalDeviceRobustness2FeaturesEXT qRobust2 = {
@@ -1218,7 +1236,18 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceAddressBindingReportFeaturesEXT qBind = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
     {
-        const bool wantRobust = vkr_env_on("ICO_GPU_ROBUST");
+        /* robust access: on by default on Android, where a Mali GPU reads
+         * storage buffers through plain pointers and an out-of-range read
+         * loses the device (issue 95); off by default on the desktop, whose
+         * GPUs bound their descriptors in hardware.  gpu_robust overrides
+         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST). */
+        const int robustSaid = vkr_env_switch("ICO_GPU_ROBUST");
+#ifdef __ANDROID__
+        const bool robustDefault = true;
+#else
+        const bool robustDefault = false;
+#endif
+        const bool wantRobust = robustSaid >= 0 ? robustSaid == 1 : robustDefault;
         const bool wantCheck = vkr_env_on("ICO_GPU_CHECKPOINTS");
         const bool extFault = vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
         const bool extRobust2 =
@@ -1276,6 +1305,12 @@ static bool vkr_create_device(void)
         if (g_vkr.checkpoints) {
             exts[extCount++] = VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME;
         }
+        /* gpu_robust named, or the platform's default */
+        const char *robustSay = !g_vkr.robust     ? (wantRobust ? "asked for, not offered" : "off")
+                                : robustSaid == 1 ? (image2 ? "on with images (gpu_robust)"
+                                                            : "on, buffers (gpu_robust)")
+                                                  : (image2 ? "on with images (the Android default)"
+                                                            : "on, buffers (the Android default)");
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
                 "access %s",
                 g_vkr.deviceFault ? "on" : "not offered",
@@ -1285,9 +1320,7 @@ static bool vkr_create_device(void)
                 g_vkr.addressReport ? "on (gpu_checkpoints)"
                 : wantCheck         ? "asked for, not offered"
                                     : "off",
-                g_vkr.robust ? (image2 ? "on with images (gpu_robust)" : "on, buffers (gpu_robust)")
-                : wantRobust ? "asked for, not offered"
-                             : "off");
+                robustSay);
     }
 
     VkPhysicalDeviceDynamicRenderingFeatures dyn = {
@@ -1344,8 +1377,9 @@ static bool vkr_create_device(void)
                 /* a fragment shader storing to an image (the interlock's
                  * destination read) */
                 .fragmentStoresAndAtomics = g_vkr.interlock ? VK_TRUE : VK_FALSE,
-                /* gpu_robust: out-of-range buffer reads give zero and
-                 * writes are dropped instead of reaching other memory */
+                /* gpu_robust (on by default on Android): out-of-range
+                 * buffer reads give zero and writes are dropped instead of
+                 * reaching other memory */
                 .robustBufferAccess = g_vkr.robust ? VK_TRUE : VK_FALSE,
             },
     };
