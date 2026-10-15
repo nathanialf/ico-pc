@@ -172,18 +172,21 @@ set an overclocked card back to its stock clocks (see below).
 or the phone's graphics driver stops responding, the game saves a copy of
 the picture it was drawing in the `logs` folder, next to the log: a file
 whose name starts with `loss-` and goes on with the date and time, ending
-in `.zip`. The three newest are kept. At the next start, before the title,
-the game draws that picture again one step at a time to find the step that
-makes the graphics stop, and writes the answer in the log; the screen may
-stay dark a little longer while it does. Then the game starts as usual,
-whatever it found. If you report the problem, attach the newest `loss-`
-file together with the log of the start after it.
+in `.zip`. The three newest are kept. Before the title, the game checks
+the picture step by step at the next start and writes what it finds into
+the log: first which part of the picture makes the graphics stop, then
+which single drawing in it, a few tries at a time. While it does, the
+screen says "Checking the graphics problem" and may stay dark a little
+longer. If the graphics stop during the check, the next start
+carries on where it left off (it gives up after a few starts). Then the
+game starts as usual, whatever it found. If you report the problem, attach
+the newest `loss-` file together with the log of the start after it.
 
 **"The game checked why the graphics stopped last time, and the graphics
 driver needs a fresh start now."** The check above stopped the graphics
 driver again, as it was meant to find out, and the driver could not carry
-on in the same start. Start the game again: the check runs only once, so
-this start is a normal one.
+on in the same start. Start the game again: the check carries on where it
+left off if it was not finished, and the game then starts as usual.
 
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,

@@ -482,6 +482,34 @@ run, a start ended inside it), the loss noted on a run at the loss restart with 
 a lazy run's loss and a killed run's (`port/platform/test/diag_test.c` (`activity_child`,
 `bisect_stub`)).
 
+When the first level ends on a pass that drew, the second level narrows it to the draw in the same
+start ([RENDER.md](RENDER.md#the-loss-bisect); `ico_diag_loss_bisect2`, the step a callback,
+`port/platform/window_host.c` (`window_bisect_step`)). Its state is a file of its own,
+`logs/loss-bisect.txt`, not the activity file:
+```
+ico-pc loss bisect 1
+version <the program's version>
+zip <the loss dump>
+pass <P> draws <N> passes <T>
+starts <k>
+step <i> <kind> <first> <last> <filter> <arg> <lost|clean|killed|-> <ms> key <valid> <vu> <skinned> <vs> <clip> <tex> note <text>
+```
+one `step` line a step, written before the step runs with `-` for its verdict and again with the
+verdict after it; the file is replaced whole each time (a temporary file renamed over it). The next
+start reads it as untrusted: lines past 1100 bytes, numbers out of range, a step out of order, a
+kind or filter it does not know, or another version's file delete it (logged); other lines are
+ignored. A step without a verdict becomes `killed` (logged as `ico_pc: loss bisect: continuing at
+step 7 (start 2 of 4; step 6 ended the run)`); a step whose renderer did not start is planned again
+at the next start. The file is deleted when the plan ends (16 steps at most), after 4 starts, or
+when the dump cannot be replayed; a start spends at most 90 s on steps and leaves the rest to the
+next. While a step runs the activity file's note says so (`replaying the lost frame draw by draw
+(the loss bisect)`); a start after one ended inside a step logs it, is not lazy for it, and the
+second level continues. An unfinished second level goes before a newer loss dump, which stays in
+logs. ctest `diag` runs it with the step stubbed (`actbisect2`, `ICO_TEST_BISECT2`): all in one
+start, a start killed at step 3 continued at step 4, a renderer that did not start, the 16-step and
+4-start bounds, the time budget, and state files that do not parse or are another version's
+(`port/platform/test/diag_test.c` (`bisect2_stub`)).
+
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a
 kernel call cannot stop them. Every 2 s the heartbeat logs one line of progress
 (`port/platform/trace_host.c` (`ico_host_status`: vsyncs, ticks, stage, the disc and

@@ -188,7 +188,7 @@ program under an environment switch ([Environment switches](#environment-switche
 - `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
-- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process
+- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, the loss bisect's second level (its state file, the step stubbed: all in one start, killed at step 3 and continued at 4, a renderer that did not start, the step and start bounds, the time budget, files that do not parse) cases, each in a child process
   whose log is read back (`diag`).
 - `dump_zip_test.c`: F12's zip, the aspect sweep's zip and the device-loss zip (the lost frame first, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
@@ -300,7 +300,16 @@ program under an environment switch ([Environment switches](#environment-switche
   (`rd_replay_tool_pass_dump`).
 - `rd_replay_tool_loss_bisect.cmake`: `--loss-bisect` on that dump runs clean on the device with one
   replay per pass and one to count them, `--passes 1-P` (the whole frame) draws the plain replay's
-  picture and `--passes 1` stops the walk at pass 2 (`rd_replay_tool_loss_bisect`).
+  picture and `--passes 1` stops the walk at pass 2; the second level's draw window: `--passes 1-P
+  --draws 1-N` (every draw of the last pass) draws the plain picture, and one step with `--draws
+  1-2` and one with `--mask-marks` run clean and name their last draw (`rd_replay_tool_loss_bisect`).
+- `rd_replay_tool_pass_split.cmake`: that dump with `ICO_RD_PASS_SPLIT=8` draws the plain replay's
+  DISPLAY picture byte for byte (`rd_replay_tool_pass_split`).
+- `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that
+  faults with every draw before it (1, 731 and 1,312 of 1,312) found within 12 steps, the masked
+  step's verdict, a killed step counted as lost, a step without a verdict planned again,
+  contradicting prefixes ending the plan, 1,000 random oracles ending within 16 steps
+  (`rd_bisect_plan`).
 - `rd_depth_copy_dump.cmake`: a player dump with the fog replayed with the depth in place, copied
   and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
@@ -431,8 +440,8 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 `build-host/tmp/replay.lock` or `ICO_REPLAY_LOCK`, so two runs never compete.
 
 The script tests under `port/render/test/` run the tool or a test program and check its output:
-`rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake` and
-`rd_replay_tool_loss_bisect.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
+`rd_replay_tool_loss_bisect.cmake` and `rd_replay_tool_pass_split.cmake` on the dump `rd_pixel` leaves behind, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test
 (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`).

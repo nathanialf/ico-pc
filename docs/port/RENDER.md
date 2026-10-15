@@ -448,7 +448,50 @@ not windowed), the passes themselves still begin, and the walk stops after the
 command that began pass last + 1, which draws nothing. [1, k] is the frame up to pass k, [k, k]
 pass k alone on the targets as an earlier replay left them. `rd_replay_tool --loss-bisect` runs the
 bisect on a dump, `--passes A[-B]` replays a window (`port/render/rd_replay.c` (`passPush`,
-`drawCmd`, `copyCmd`, `replayFrame`); `port/render/rd_internal.h` (`rd__replay_set_window`)).
+`drawCmd`, `copyCmd`, `replayFrame`); `port/render/rd_window.c`; `port/render/rd_internal.h`
+(`rd__replay_set_window`, `g_rdWin`)).
+
+**The second level: the draw.** When the first level ends on a pass that drew, the same start
+narrows it to the draw, one step at a time, each step one replay of the lost frame on a renderer of
+its own (`rd_init`, the step, `rd_shutdown`, lost or not: the reporter's log of issue 95 shows a
+fresh device works after a loss on that driver). A step replays passes 1..P - 1 as the first level
+ran them and, of pass P, the draws `drawFirst..drawLast` that pass the step's filter, numbered as
+the pass asks for them (every draw call, the exact blend's second pass too: the first level's
+count); then it waits for the GPU. The draw window (`rd__replay_set_window_draws`; the filters
+`MASK_MARKS`, every VU draw with its triangles' marks left out, `vu_mark` zero; `VS_ONLY(vs)`;
+`CLIP_ONLY(clip)`; `SKINNED_ONLY`; `TEX_ONLY(id)`) costs a normal replay nothing: the draw
+counters test `s_win.first` as before. While it is set, `vuDraw` notes each VU draw of pass P (list,
+command, mesh name, program, vertex and pixel shader, clip mode, batch, index range, the values'
+span and marked triangles, the texture's id, size, format and mip levels, the pipeline key's words),
+and the window keeps the note of the last draw it recorded (`RdDrawNote`, `rd_draw_note_text`).
+The planner (`port/render/rd_bisect_plan.c`, pure) says which step comes next from the steps so far:
+first the whole pass with the marks masked (the hypothesis test: clean means the marks did it),
+then the prefix search, halving between the longest clean prefix (0) and the shortest lost one (N,
+the first level's), 11 steps for 1,312 draws, then draw D alone, then D's classes over draws 1..D
+(its vertex shader, its clip mode, the skinned draws, its texture), and, when no step lost the
+whole pass again, that pass once more; at most 16 steps. Prefix verdicts that contradict each other
+(a clean prefix as long as a lost one: something other than the draws loses the device) end it and
+say so. Each step is logged (`ico_pc: loss bisect: step 4 of 16: pass 1, draws 1..656 of 1312:
+lost in 0.6 s`), and one final line names the draw, its note and the verdict (`faults alone`, `does
+not fault alone`, `not finished`), and how the masked step went (`clean with the marks masked`).
+The steps' verdicts are written to `logs/loss-bisect.txt` before the next step, so a start ended
+inside a step continues at the next start (that step counted as lost, `killed`); 4 starts and 90 s
+of steps a start at most ([PLATFORM.md](PLATFORM.md#diagnostics)). Between the steps the start-up
+screen says "Checking the graphics problem (step 4 of 16)", drawn on the step's fresh renderer
+before its replay, never on a lost device (`port/render/rd_dump.c` (`rd_loss_bisect_step`);
+`port/render/rd_window.c` (`rd__win_take`, `winFilter`, `rd__win_vu_note`); `port/platform/window_host.c`
+(`window_bisect_step`); `port/platform/diag_host.c` (`ico_diag_loss_bisect2`)).
+`rd_replay_tool --loss-bisect --passes P --draws A-B [--mask-marks]` runs one step on a dump;
+without `--loss-bisect`, `--draws` and `--mask-marks` shape a replay's picture.
+
+**The pass split.** `ICO_RD_PASS_SPLIT=N` (`[dev] pass_split = N`; off by default) ends a render
+pass and begins it again, both targets loaded, after every N VU draws, as the exact blend begins a
+pass again (the scissor taken back), so a GPU that runs a pass's draws as one job gets jobs of N:
+the fallback if a device still faults on a pass of many VU draws. It is refused, logged once, in a
+multisampled pass, a storage pass or a readable one (the exact blend's), and its passes are not
+passes of the loss bisect's window. The picture is the same byte for byte
+(`rd_replay_tool_pass_split`) (`port/render/rd_replay.c` (`passSplit`); `port/render/rd_core.c`
+(`rd_init`)).
 
 ### The stream bounds audit
 
@@ -465,7 +508,17 @@ the qwords the replay uploads for it (`doVuDraw`); a kick below 2 and a draw's i
 mesh's list fail too. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the
 indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). Reported, not
 failed: the skinned draws' weight addresses (lowest and highest bone) and the draws whose bones fill
-VuBoneCB, which leaves no room for the card bits ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)). A stream one vertex short fails it, in a
+VuBoneCB, which leaves no room for the card bits ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)). Each triangle's
+mark read (`vu_kick_marks`, one qword of the mark bytes after the vertices) is checked the same way.
+The audit also reports, per frame, the index span (the lowest and highest value of every indexed VU
+draw, the widest, the draws past 2^24 - 1 by list, the values carrying the old mark bits), and fails
+a span past 2^24 - 1 (Vulkan's least `maxDrawIndexedIndexValue`) and a kick listed twice in a draw
+with different marks; the CPU mirror (the programs' references in `port/render/vu1_ref` run on each
+prelit, lit and skinned batch at the draw's own VU memory and bones: clip w not finite or within
+1e-6 of 0, GS X/Y past 16 bits, the scissor fans, a NaN clip w or bone failed, a NaN in VU memory
+counted); and the textures list 0 binds (id, size, format, mip levels, whether the texels are
+there). On the reporter's lost frame of issue 95 the widest span is 14,314 (the title scenery,
+`st26a_p2`). `ICO_AUDIT_SPANS=1` lists each draw past the bound. A stream one vertex short fails it, in a
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
 (2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
