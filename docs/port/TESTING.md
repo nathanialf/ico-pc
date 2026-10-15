@@ -149,6 +149,13 @@ program under an environment switch ([Environment switches](#environment-switche
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
   sizes, its names in five languages (`model_viewer`).
+- `model_viewer_effects_test.c`: a motion's effects with no stage animation loaded
+  (`frameDependSequence.c` and `stageMultiBgaManager.c` compiled in over stubs): the stage
+  animation entries' guard (no write, the slot kept, its log line once), and every motion of every
+  viewer model stepped through `ExecFrameDependSequence` in the game (each stage animation skipped)
+  and in the viewer (no stage animation or particle, the game's sounds and vibration); synthetic
+  tables (`model_viewer_effects`) and the PAL base ELF's, where BOY SWIM reaches the guard
+  (`model_viewer_effects_elf`, 77 without the ELF).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water

@@ -259,6 +259,53 @@ if(ICO_RUN_TESTS)
     add_test(NAME model_viewer_cam COMMAND model_viewer_cam_test)
 endif()
 
+# model_viewer_effects (port/game/test, issue 104): a motion's effects with
+# no stage animation loaded. frameDependSequence.c and stageMultiBgaManager.c
+# compiled in, every call they make a stub, stage_MakePlayBgAnimation
+# returning no node: the guard of the stage animation entries (no write, the
+# slot kept, its log line once), and every motion of every Extras > Models
+# model stepped through ExecFrameDependSequence in the game (each stage
+# animation skipped) and in the viewer (no stage animation or particle, the
+# sounds and vibration the game's). model_viewer_effects runs on synthetic
+# motion tables; model_viewer_effects_elf on the PAL base ELF's (the table
+# loader, port/data/tables.c), where BOY SWIM must reach the guard, and exits
+# 77 without the ELF. CPU only.
+set(_mve_data "${CMAKE_SOURCE_DIR}/port/data")
+add_executable(model_viewer_effects_test
+    "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_effects_test.c"
+    "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/frameDependSequence.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/stageMultiBgaManager.c"
+    "${_mve_data}/tables.c" "${_mve_data}/gen/table_defs.c"
+    "${_mve_data}/gen/table_desc.c" "${_mve_data}/gen/ee_symbols.c")
+ico_include_dirs(sugipon _ico_mve_incs)
+target_include_directories(model_viewer_effects_test PRIVATE ${_ico_mve_incs}
+                           "${CMAKE_SOURCE_DIR}/port/game" "${_mve_data}" "${CMAKE_SOURCE_DIR}")
+# CPU only, as gallery_test: no ICO_RD
+set(_mve_defs ${ICO_GAME_DEFINITIONS})
+list(REMOVE_ITEM _mve_defs ICO_RD=1)
+target_compile_definitions(model_viewer_effects_test PRIVATE ${_mve_defs} ICO_HOST=1)
+set_source_files_properties("${_mve_data}/gen/ee_symbols.c" TARGET_DIRECTORY
+                            model_viewer_effects_test PROPERTIES COMPILE_DEFINITIONS
+                            ICO_EE_SYMBOLS_STUBS=1)
+# port/ui's "strings.h" (model_viewer_table.c) by -iquote, so <strings.h>
+# stays the C library's
+target_compile_options(model_viewer_effects_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}
+                       -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
+# ico_math: newlib's rand (crt_random_unit)
+target_link_libraries(model_viewer_effects_test PRIVATE ico_math ico_port_data)
+if(NOT WIN32)
+    target_link_libraries(model_viewer_effects_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    add_test(NAME model_viewer_effects
+             COMMAND model_viewer_effects_test "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME model_viewer_effects_elf
+             COMMAND model_viewer_effects_test "${CMAKE_CURRENT_BINARY_DIR}" "${ICO_BASE_ELF}")
+    set_tests_properties(model_viewer_effects_elf PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # ui_mouse_test: the mouse pointer's arithmetic in the menus
 # (ui_mouse_geom.c): the pointer into the layouts' grid (4:3 and a
 # pillarboxed 1920 x 1080), the rows' boxes and the hit test. CPU only.
