@@ -51,6 +51,22 @@ add_executable(texpack_disc_test test/texpack_disc_test.c)
 target_compile_options(texpack_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_disc_test PRIVATE ico_texpack_name ico_port_data)
 
+# ico_bisect_plan: the loss bisect's second-level planner (rd_bisect_plan.h:
+# which draws of the lost pass the next step replays).  Pure C, built in
+# every configuration; the platform's state file (diag_host.c) and the
+# window's driver use it.
+add_library(ico_bisect_plan STATIC rd_bisect_plan.c)
+target_include_directories(ico_bisect_plan PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_bisect_plan PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# the platform's state file of the second level (diag_host.c)
+target_link_libraries(ico_platform PUBLIC ico_bisect_plan)
+
+# rd_bisect_plan_test: the planner against oracles (a draw that faults with
+# every draw before it found within 12 steps, random verdicts end within 16)
+add_executable(rd_bisect_plan_test test/rd_bisect_plan_test.c)
+target_compile_options(rd_bisect_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_bisect_plan_test PRIVATE ico_bisect_plan)
+
 # ico_gltf: glTF 2.0 for model packs (gltf.h), the dump's
 # .gltf + .bin writer and the .gltf/.glb reader.  CPU only, built in every
 # configuration: JSON through ico_json, files through host_fs (UTF-8 paths).
@@ -81,6 +97,7 @@ if(ICO_RUN_TESTS)
     set(ICO_TEXPACK_DIR "${_ico_texpack_default}"
         CACHE PATH "A PCSX2 texture pack's replacements folder for the texture pack tests")
     add_test(NAME texpack_name COMMAND texpack_name_test)
+    add_test(NAME rd_bisect_plan COMMAND rd_bisect_plan_test)
     add_test(NAME gltf COMMAND gltf_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_disc COMMAND texpack_disc_test "${ICO_DISC_IMAGE}" "${ICO_TEXPACK_DIR}"
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
