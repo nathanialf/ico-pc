@@ -998,6 +998,19 @@ static void window_activity(const char *note)
    renderer is shut down after, the device lost or not, and the game's
    own starts as at any start. Diagnostics only: whatever happens, the
    game starts. user: the game's RdSettings. */
+/* the start-up screen's progress function while the bisect creates the
+   lost frame's pipelines (rd.h rd_loss_bisect): the same screen and event
+   pump as the start-up set's, but never a present on a lost device (the
+   bisect reports a loss itself; device_lost_quit's box and dump are the
+   game's) */
+static int bisect_progress(void *ctx, uint32_t done, uint32_t total)
+{
+    if (rhi_device_lost()) {
+        return 1;
+    }
+    return pipeline_progress(ctx, done, total);
+}
+
 static int window_loss_bisect(const char *zip, char *line, size_t size, void *user)
 {
     const RdSettings *game = (const RdSettings *)user;
@@ -1040,7 +1053,13 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
         remove(dump);
         return ICO_DIAG_BISECT_NOT_RUN;
     }
+    /* the frame's pipelines compile on worker threads behind the
+       "Preparing graphics" screen, which takes the window's events */
+    static PipeScreen screen;
+    rd_set_pipeline_progress(bisect_progress, &screen);
     rd_loss_bisect(dump, &b);
+    rd_set_pipeline_progress(NULL, NULL);
+    ico_diag_set_pipelines(0, 0, 0);
     rd_shutdown();
     remove(dump);
     fprintf(stderr,

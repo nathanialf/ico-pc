@@ -892,6 +892,28 @@ static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at)
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
 }
 
+/* rd__pipeline_gather: the keys a replay asked for and found no pipeline
+ * for, as drawKey made them, each once */
+static bool s_gatherOn;
+static RdPipeKeyInt s_gather[RD_PIPELINE_CACHE_MAX];
+static uint32_t s_gatherN;
+
+/* in rd__get_pipeline while gathering: k (drawKey's) noted, no pipeline */
+static void gatherKey(const RdPipeKeyInt *k)
+{
+    if (keyFailed(k) || cacheFull(k)) {
+        return;
+    }
+    for (uint32_t i = 0; i < s_gatherN; i++) {
+        if (rd__pipe_key_equal(&s_gather[i], k)) {
+            return;
+        }
+    }
+    if (s_gatherN < RD_PIPELINE_CACHE_MAX) {
+        s_gather[s_gatherN++] = *k;
+    }
+}
+
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 {
     RdPipeKeyInt tmp;
@@ -901,6 +923,10 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     if (found) {
         rd__passring_pipeline(s_cache[s_hash[at] - 1].pipe.id, k->vs, k->fs, k->dst);
         return s_cache[s_hash[at] - 1].pipe;
+    }
+    if (s_gatherOn) {
+        gatherKey(k); /* created afterwards in batches (rd__pipeline_gather) */
+        return (RhiPipeline){0};
     }
     if (!g_rd.hasDevice || keyFailed(k) || cacheFull(k)) {
         return (RhiPipeline){0};
@@ -1061,35 +1087,29 @@ static void preTimesLog(const PreTimes *t)
     rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
 }
 
-uint32_t rd_precreate_pipelines(void)
+/* the counts of one createKeys */
+typedef struct PreCounts {
+    uint32_t failed, compiled, threads;
+    uint32_t stoppedAt; /* the keys gone over when the progress function stopped it */
+    int stop;
+} PreCounts;
+
+/* Creates keys[0..m) not made yet through rhi_create_pipelines, in batches
+ * of up to RD_PIPE_BATCH (all with a destination read or all without), the
+ * progress function running while a batch compiles and between two.
+ * resolved: the keys are as rd__get_pipeline's drawKey made them (a
+ * replay's, rd__pipeline_gather), not adjusted again. */
+static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreTimes *times,
+                       PreCounts *c)
 {
-    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
     static RdPipeKeyInt bk[RD_PIPE_BATCH];
     static RhiPipelineDesc bd[RD_PIPE_BATCH];
     static RhiBindGroupLayout bl[RD_PIPE_BATCH][4];
     static RhiPipeline bp[RD_PIPE_BATCH];
     static float bms[RD_PIPE_BATCH];
-    if (!g_rd.hasDevice) {
-        /* logged, so a call before rd_init does not pass unnoticed */
-        rd__log("rd_precreate_pipelines without a device (before rd_init?): nothing created");
-        return 0;
-    }
-    const double t0 = rd__now_ms();
-    const uint32_t before = s_count;
-    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
-    /* n counts the whole set, keys[] holds the first RD_PIPELINE_CACHE_MAX:
-     * only those are created, and the progress counts to them */
-    const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
-    if (n > m) {
-        rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
-                "the first %u are created",
-                n, (unsigned)RD_PIPELINE_CACHE_MAX, m);
-    }
-    uint32_t failed = 0, compiled = 0, threads = 1;
     PreBatch pb = {0, m, 0, 0};
-    static PreTimes times;
-    memset(&times, 0, sizeof(times));
-    s_preLongestMs = 0.0f;
+    memset(c, 0, sizeof(*c));
+    c->threads = 1;
     if (s_progressFn != NULL) {
         s_progressFn(s_progressCtx, 0, m);
     }
@@ -1104,7 +1124,7 @@ uint32_t rd_precreate_pipelines(void)
         for (; i < m && nb < RD_PIPE_BATCH; i++) {
             RdPipeKeyInt tmp;
             bool found, dup = false;
-            const RdPipeKeyInt *k = drawKey(&keys[i], &tmp);
+            const RdPipeKeyInt *k = resolved ? &keys[i] : drawKey(&keys[i], &tmp);
             const int kind = k->dst != RHI_DST_READ_NONE;
             if (dstKind >= 0 && kind != dstKind) {
                 break;
@@ -1114,7 +1134,7 @@ uint32_t rd_precreate_pipelines(void)
                 continue;
             }
             if (keyFailed(k)) {
-                failed++;
+                c->failed++;
                 continue;
             }
             for (uint32_t j = 0; j < nb && !dup; j++) {
@@ -1124,12 +1144,12 @@ uint32_t rd_precreate_pipelines(void)
                 continue;
             }
             if (cacheFull(k) || s_count + nb >= RD_PIPELINE_CACHE_MAX) {
-                failed++;
+                c->failed++;
                 continue;
             }
             if (!pipelineDesc(k, &bd[nb], bl[nb])) {
                 keepPipeline(k, (RhiPipeline){0}, 0);
-                failed++;
+                c->failed++;
                 continue;
             }
             bk[nb] = *k;
@@ -1155,8 +1175,8 @@ uint32_t rd_precreate_pipelines(void)
             pb.base = first;
             rhi_create_pipelines(bd, nb, bp, &batch);
             s_batchNote[0] = '\0';
-            if (batch.threads > threads) {
-                threads = batch.threads;
+            if (batch.threads > c->threads) {
+                c->threads = batch.threads;
             }
             for (uint32_t j = 0; j < nb; j++) {
                 bool found;
@@ -1164,13 +1184,15 @@ uint32_t rd_precreate_pipelines(void)
                 if (bms[j] > s_preLongestMs) {
                     s_preLongestMs = bms[j];
                 }
-                preTime(&times, &bk[j], bms[j]);
+                if (times) {
+                    preTime(times, &bk[j], bms[j]);
+                }
                 if (!bp[j].id) {
                     keepPipeline(&bk[j], bp[j], at);
-                    failed++;
+                    c->failed++;
                     continue;
                 }
-                compiled++;
+                c->compiled++;
                 /* the progress screen's frame may have made the same key
                    meanwhile, or filled the cache */
                 if (found || s_count >= RD_PIPELINE_CACHE_MAX) {
@@ -1188,23 +1210,82 @@ uint32_t rd_precreate_pipelines(void)
         }
     }
     s_batchNote[0] = '\0';
-    if (pb.stop) {
-        rd__log("pipelines: the start-up set stopped at %u of %u (the game is closing)", i, m);
-    } else if (s_progressFn != NULL) {
+    c->stop = pb.stop;
+    c->stoppedAt = i;
+    if (!pb.stop && s_progressFn != NULL) {
         s_progressFn(s_progressCtx, m, m);
     }
     if (s_activityFn != NULL) {
         s_activityFn(NULL);
     }
+}
+
+uint32_t rd_precreate_pipelines(void)
+{
+    static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    if (!g_rd.hasDevice) {
+        /* logged, so a call before rd_init does not pass unnoticed */
+        rd__log("rd_precreate_pipelines without a device (before rd_init?): nothing created");
+        return 0;
+    }
+    const double t0 = rd__now_ms();
+    const uint32_t before = s_count;
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
+    /* n counts the whole set, keys[] holds the first RD_PIPELINE_CACHE_MAX:
+     * only those are created, and the progress counts to them */
+    const uint32_t m = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+    if (n > m) {
+        rd__log("pipelines: the reachable set has %u keys, more than the %u the cache holds: "
+                "the first %u are created",
+                n, (unsigned)RD_PIPELINE_CACHE_MAX, m);
+    }
+    static PreTimes times;
+    memset(&times, 0, sizeof(times));
+    s_preLongestMs = 0.0f;
+    PreCounts c;
+    createKeys(keys, m, false, &times, &c);
+    if (c.stop) {
+        rd__log("pipelines: the start-up set stopped at %u of %u (the game is closing)",
+                c.stoppedAt, m);
+    }
     const double ms = rd__now_ms() - t0;
     rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed); "
             "%u compiled on %u thread%s, the longest %.2f s",
-            s_count - before, n, ms, failed, compiled, threads, threads == 1 ? "" : "s",
+            s_count - before, n, ms, c.failed, c.compiled, c.threads, c.threads == 1 ? "" : "s",
             (double)s_preLongestMs / 1000.0);
-    if (compiled) {
+    if (c.compiled) {
         preTimesLog(&times);
     }
     return s_count - before;
+}
+
+void rd__pipeline_gather(bool on)
+{
+    s_gatherOn = on;
+    if (on) {
+        s_gatherN = 0;
+    }
+}
+
+uint32_t rd__pipeline_create_gathered(bool *stopped)
+{
+    const double t0 = rd__now_ms();
+    const uint32_t before = s_count, m = s_gatherN;
+    PreCounts c;
+    s_gatherOn = false;
+    *stopped = false;
+    if (m == 0 || !g_rd.hasDevice) {
+        s_gatherN = 0;
+        return 0;
+    }
+    createKeys(s_gather, m, true, NULL, &c);
+    s_gatherN = 0;
+    *stopped = c.stop != 0;
+    rd__log("pipelines: %u of the %u keys a replay asked for created in %.1f ms (%u failed); "
+            "%u compiled on %u thread%s%s",
+            s_count - before, m, rd__now_ms() - t0, c.failed, c.compiled, c.threads,
+            c.threads == 1 ? "" : "s", c.stop ? "; stopped (the game is closing)" : "");
+    return m;
 }
 
 uint32_t rd__pipeline_count(void)

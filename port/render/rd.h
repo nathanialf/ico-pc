@@ -1489,10 +1489,14 @@ bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lo
  * the dump at path replayed in this renderer one pass longer each time
  * (the pass window, rd_internal.h rd__replay_set_window: passes 1..k),
  * waiting for the GPU after each (rhi_wait_idle), until the device is lost
- * or the whole frame has run.  Nothing is presented.  The renderer must
+ * or the whole frame has run.  Nothing is presented.  The frame's pipelines
+ * are made first through rhi_create_pipelines in batches, with the progress
+ * function (rd_set_pipeline_progress) as rd_precreate_pipelines runs it; a
+ * nonzero return stops the bisect (RD_BISECT_NOT_RUN).  The renderer must
  * have a device; a loss leaves it lost (the caller shuts it down). */
 typedef enum RdBisectResult {
-    RD_BISECT_NOT_RUN = 0, /* no device, or the dump could not be read: line says why */
+    RD_BISECT_NOT_RUN = 0, /* no device, the dump could not be read, or the progress function
+                              stopped it: line says why */
     RD_BISECT_LOST,        /* pass `pass` lost the device: line names it */
     RD_BISECT_CLEAN        /* every pass ran without a loss */
 } RdBisectResult;
@@ -1502,7 +1506,8 @@ typedef struct RdLossBisect {
     uint32_t frame;   /* the dump's frame number */
     uint32_t pass;    /* RD_BISECT_LOST: the pass (1, 2, ...); 0: before any pass drew */
     uint32_t passes;  /* the frame's passes, counted by a replay that draws nothing */
-    uint32_t replays; /* the replays it took */
+    uint32_t replays; /* the replays it took (the count and passes 1..k; not the
+                         replays that only name the frame's pipelines) */
     double ms;        /* the wall time */
     /* RD_BISECT_LOST: the pass that lost the device, in the pass ring's
      * words (rd_passring.h rd_passring_format_bisect); RD_BISECT_NOT_RUN:

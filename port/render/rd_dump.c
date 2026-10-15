@@ -975,6 +975,9 @@ static const RdPassRec *ringEntry(uint64_t seq)
     return NULL;
 }
 
+/* the bisect's replays that only name the frame's pipelines, at most */
+#define RD_BISECT_GATHER_ROUNDS 4
+
 void rd_loss_bisect(const char *path, RdLossBisect *out)
 {
     memset(out, 0, sizeof(*out));
@@ -991,12 +994,42 @@ void rd_loss_bisect(const char *path, RdLossBisect *out)
     }
     out->frame = f.number;
     RdReplayWindowStats st;
-    /* the passes counted, nothing drawn: their clears and layout changes
-     * run, and every pipeline the frame binds is created */
+    /* the frame's pipelines first, as the start-up set makes its own: a
+     * replay with nothing drawn that only names the keys it finds no
+     * pipeline for (rd__pipeline_gather), then those keys compiled on
+     * worker threads with the progress function (the window's start-up
+     * screen and event pump), not one by one on this thread.  Again while
+     * a replay names new keys (one a draw asks for only once another was
+     * made: the second pass of a fallback pair), at most
+     * RD_BISECT_GATHER_ROUNDS times; what is left is made as the replays
+     * below need it */
     rd__replay_set_window(UINT32_MAX, 0);
-    (void)rd__replay_frame(&f, (int)f.keep, false);
-    rhi_wait_idle();
-    out->replays = 1;
+    for (int round = 0; round < RD_BISECT_GATHER_ROUNDS && !rhi_device_lost(); round++) {
+        bool stopped = false;
+        rd__pipeline_gather(true);
+        (void)rd__replay_frame(&f, (int)f.keep, false);
+        rd__pipeline_gather(false);
+        rhi_wait_idle();
+        if (rhi_device_lost() || rd__pipeline_create_gathered(&stopped) == 0) {
+            break;
+        }
+        if (stopped) {
+            snprintf(out->line, sizeof(out->line),
+                     "stopped while creating the frame's pipelines (the game is closing)");
+            rd__replay_set_window(0, 0);
+            rd__frame_free(&f);
+            out->ms = rd__now_ms() - t0;
+            return;
+        }
+    }
+    /* the passes counted, nothing drawn: their clears and layout changes
+     * run, and every pipeline the frame binds is made (any the rounds
+     * above left) */
+    if (!rhi_device_lost()) {
+        (void)rd__replay_frame(&f, (int)f.keep, false);
+        rhi_wait_idle();
+    }
+    out->replays = 1; /* the count (the rounds above are not the bisect's) */
     rd__replay_window_stats(&st);
     out->passes = st.passes;
     if (rhi_device_lost()) {

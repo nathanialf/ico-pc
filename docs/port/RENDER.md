@@ -410,9 +410,15 @@ device on that device, before the game. Only a start with the player's own blend
 bisects: a run the loss restart started (its step's fixed-function blend or Direct3D 12) logs that
 the bisect was not run and leaves the zip in the logs folder
 ([PLATFORM.md](PLATFORM.md#diagnostics)). A renderer of its own, sized to the dump's frame, loads the
-lost frame and replays it with nothing presented: first with no draw recorded, which counts the
-frame's passes (their clears and layout changes still run, and every pipeline the frame binds is
-created), then as passes 1..k for k = 1, 2, ..., waiting for the GPU after each replay
+lost frame and replays it with nothing presented. Its pipelines are made first as the start-up
+set's are: a replay with no draw recorded names the keys it finds no pipeline for without compiling
+any (`rd__pipeline_gather`), and those keys compile on worker threads in batches
+(`rd__pipeline_create_gathered`, `rhi_create_pipelines`) while the window's "Preparing graphics"
+screen shows and takes the window's events (`port/platform/window_host.c` (`bisect_progress`)),
+again while a replay names new keys, at most four times. A close asked meanwhile stops the bisect,
+and a loss in these replays is reported as a loss with no draw recorded. Then the bisect replays the
+frame with no draw recorded, which counts the frame's passes (their clears and layout changes still
+run, and any pipeline still missing is created), then as passes 1..k for k = 1, 2, ..., waiting for the GPU after each replay
 (`rhi_wait_idle`, which reports a loss like any other call). The first replay that loses the device
 names the pass, logged in the pass ring's words:
 `ico_pc: loss bisect: pass 12 of 61, list 3, pipeline 409 (vs 7 fs 5 dst 0), pass colour 4

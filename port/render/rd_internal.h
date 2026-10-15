@@ -1113,6 +1113,17 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
 void rd__pipeline_note_begin(const char *what);
 void rd__pipeline_note_end(void);
 void rd__pipeline_cache_clear(void);
+/* Gathering (the loss bisect, rd_dump.c rd_loss_bisect): on, rd__get_pipeline
+ * creates nothing for a key it does not hold, notes the key (as the pass's
+ * sample count made it, each once) and returns 0, so a replay made
+ * meanwhile names the pipelines it needs without compiling them on the
+ * calling thread.  rd__pipeline_create_gathered turns gathering off and
+ * creates the noted keys through rhi_create_pipelines in batches, with the
+ * progress function (rd_set_pipeline_progress) as the start-up set does;
+ * returns the count noted, *stopped when the progress function stopped it.
+ * on clears the notes. */
+void rd__pipeline_gather(bool on);
+uint32_t rd__pipeline_create_gathered(bool *stopped);
 uint32_t rd__pipeline_count(void);
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i);
 /* The pipelines the implemented programs can reach from the game's state
