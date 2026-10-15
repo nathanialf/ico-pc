@@ -976,6 +976,17 @@ static int preProgress(PreBatch *b, uint32_t done)
     return s_progressFn(s_progressCtx, done, b->total);
 }
 
+/* the note between two batches: "creating the start-up pipelines (i + 1
+ * of m)" (diag_host.c leaves it out of the start-up activity file) */
+static void noteBetween(uint32_t i, uint32_t m)
+{
+    char note[64];
+    if (s_activityFn != NULL) {
+        snprintf(note, sizeof(note), "creating the start-up pipelines (%u of %u)", i + 1, m);
+        s_activityFn(note);
+    }
+}
+
 /* rhi_create_pipelines' wait function */
 static void preWait(void *ctx, uint32_t finished)
 {
@@ -1022,11 +1033,7 @@ uint32_t rd_precreate_pipelines(void)
         const uint32_t first = i;
         uint32_t nb = 0;
         int dstKind = -1;
-        if (s_activityFn != NULL) {
-            char note[64];
-            snprintf(note, sizeof(note), "creating the start-up pipelines (%u of %u)", i + 1, m);
-            s_activityFn(note);
-        }
+        noteBetween(i, m);
         for (; i < m && nb < RD_PIPE_BATCH; i++) {
             RdPipeKeyInt tmp;
             bool found, dup = false;
@@ -1106,6 +1113,9 @@ uint32_t rd_precreate_pipelines(void)
             }
         }
         if (!pb.stop && i < m) {
+            /* the frame the progress function may present is not the
+               batch's */
+            noteBetween(i, m);
             pb.stop = preProgress(&pb, i);
         }
     }
