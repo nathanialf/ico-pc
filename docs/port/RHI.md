@@ -240,7 +240,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |
 | `ICO_VK_FIFO_LATEST_READY` | 1 uses `VK_PRESENT_MODE_FIFO_LATEST_READY_EXT` where FIFO would be taken, when offered |
 | `ICO_VK_POLL_SURFACE` | 1 polls the surface size after presents, as Android always does (`vk_swapchain.c`) |
-| `ICO_GPU_ROBUST` | 1 enables (0 disables; unset: on on Android, off elsewhere) `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them ([Device loss](#device-loss)); ico-pc.ini `gpu_robust` |
+| `ICO_GPU_ROBUST` | 1 enables `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them; 0 disables; unset: `robustBufferAccess` alone on Android, off elsewhere ([Device loss](#device-loss)); ico-pc.ini `gpu_robust` |
 | `ICO_GPU_CHECKPOINTS` | 1 enables `VK_NV_device_diagnostic_checkpoints` and `VK_EXT_device_address_binding_report` where offered ([Device loss](#device-loss)); ico-pc.ini `gpu_checkpoints` |
 
 (`port/rhi/vk/vk_device.c` (`vkr_fake_limits`, `vkr_choose_depth_stencil`, `vkr_pick_device`);
@@ -448,9 +448,10 @@ per resource, so they stay off unless asked for; the fault report costs nothing 
 **Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustImageAccess2` and
 `nullDescriptor` where `VK_EXT_robustness2` offers them, so an access out of a buffer's or image's
 range reads zero and writes nothing instead of reaching other memory; an A/B switch for a loss that
-an out-of-range access could explain. It is on by default on Android (a Mali GPU reads storage
-buffers through plain pointers, so an out-of-range read there loses the device instead of reading
-zero; issue 95) and off by default on the desktop; `gpu_robust` overrides either way
+an out-of-range access could explain. `robustBufferAccess` alone is on by default on Android (a Mali
+GPU reads storage buffers through plain pointers, so an out-of-range read there loses the device
+instead of reading zero; issue 95); the image and null-descriptor parts come only with
+`gpu_robust=true`. It is off by default on the desktop; `gpu_robust` overrides either way
 (`gpu_robust=false` turns it off on Android). One start-up line says what is on:
 `rhi_vk: loss diagnostics: fault report on|not offered; checkpoints ...; resource addresses ...;
 robust access ...` (`on, buffers (the Android default)` when the default turned it on) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the

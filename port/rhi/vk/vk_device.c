@@ -1240,7 +1240,9 @@ static bool vkr_create_device(void)
          * storage buffers through plain pointers and an out-of-range read
          * loses the device (issue 95); off by default on the desktop, whose
          * GPUs bound their descriptors in hardware.  gpu_robust overrides
-         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST). */
+         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST).  The
+         * default is robustBufferAccess alone; VK_EXT_robustness2's
+         * robustImageAccess2 and nullDescriptor only when gpu_robust asks */
         const int robustSaid = vkr_env_switch("ICO_GPU_ROBUST");
 #ifdef __ANDROID__
         const bool robustDefault = true;
@@ -1251,7 +1253,7 @@ static bool vkr_create_device(void)
         const bool wantCheck = vkr_env_on("ICO_GPU_CHECKPOINTS");
         const bool extFault = vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
         const bool extRobust2 =
-            wantRobust && vkr_device_has_ext(g_vkr.phys, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+            robustSaid == 1 && vkr_device_has_ext(g_vkr.phys, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
         const bool extBind =
             wantCheck && s_debugUtilsExt &&
             vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
@@ -1309,8 +1311,7 @@ static bool vkr_create_device(void)
         const char *robustSay = !g_vkr.robust     ? (wantRobust ? "asked for, not offered" : "off")
                                 : robustSaid == 1 ? (image2 ? "on with images (gpu_robust)"
                                                             : "on, buffers (gpu_robust)")
-                                                  : (image2 ? "on with images (the Android default)"
-                                                            : "on, buffers (the Android default)");
+                                                  : "on, buffers (the Android default)";
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
                 "access %s",
                 g_vkr.deviceFault ? "on" : "not offered",

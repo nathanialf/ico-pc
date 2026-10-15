@@ -208,7 +208,8 @@ afterwards:
   card was doing when it stopped. The game may run a little slower with it.
 - `gpu_robust=true` makes the graphics card check every read and write the
   game asks for. The game may run a little slower with it. On a phone or
-  tablet it is on already; `gpu_robust=false` turns it off there.
+  tablet part of it is on already: `gpu_robust=true` turns all of it on,
+  `gpu_robust=false` turns it off.
 
 ## The game closes by itself
 
