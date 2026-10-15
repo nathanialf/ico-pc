@@ -132,6 +132,15 @@
  *             forward the long way, not back to 185), at 0.25 at 317.5, and
  *             alpha 1 is the tick's block byte for byte; a 20 degree turn
  *             after a 20 degree turn blends bit for bit as without one
+ *   wheel gap rotation continuity across a gap (issue 98's residual): after
+ *             110, 160, 170, 190 a pair not blended (+195) then 200 takes
+ *             the long way (alpha 0.5 the forward half turn), and the pair
+ *             after it too; the same across a camera cut (RD_SNAP_CUT) and
+ *             a discarded frame (RD_SNAP_GAP); a turn RD_INTERP_TURN_GAP
+ *             ticks old serves, 9 and 10 do not (the tick's pose); a
+ *             memory that does not carry the draw to its pose (back at 0
+ *             between) is not taken; 100 degrees after a gap blends the
+ *             short way
  *   rising    a skinned draw whose bone 0 rises 40 units and turns 30
  *             degrees in the tick (a shadow climbing out of its pool, its
  *             pivot 97 units from the bone's origin): at alpha 0.25, 0.5 and
@@ -1623,6 +1632,9 @@ static void testRotationBlend(void)
           "opposite handedness is left to the element-wise blend");
 }
 
+/* recordTurn's next frame is a camera cut (rd_camera_cut) */
+static int s_turnCut;
+
 /* a prelit mesh whose model to world turns deg about z, seen through a
  * world to screen S (a scale and a translation, w = 1); and a skinned draw
  * with one bone turning the same way */
@@ -1675,6 +1687,10 @@ static void recordTurn(RdMesh mesh, RdMesh skin, double deg)
     d.bones = (const float (*)[4])bone;
     d.boneQw = 4;
     rd_draw_vu_mesh(skin, &d, RD_KEY(&kObjD, 1, 20));
+    if (s_turnCut) {
+        rd_camera_cut();
+        s_turnCut = 0;
+    }
     rd_end_frame(0);
 }
 
@@ -1898,6 +1914,144 @@ static void testRotationContinuity(void)
               memcmp(kept + 16 * 12,
                      f->payload + sk->u[1] + sizeof(RdVuPayload) + sizeof(RdVuBlock), 64) == 0,
           "20 degrees blends bit for bit with and without the turn before");
+}
+
+/* the turning draws at alpha 0.5 of the last pair stand at want degrees
+ * (mod 360) */
+static bool turnHalfAt(double want, float *am, float *ab)
+{
+    turnAngles(built(0.5f), am, ab);
+    const double dm = remainder((double)*am - want, 360.0);
+    const double db = remainder((double)*ab - want, 360.0);
+    return fabs(dm) < 1e-3 && fabs(db) < 1e-3;
+}
+
+/* a wheel speeding up to 190 degrees a tick, every pair blended forward:
+ * 110, 160, 170 (kept, continuing 160), 190 (the long way); the angle it
+ * ends at */
+static double turnRamp(RdMesh mesh, RdMesh skin, const char *what)
+{
+    static const double steps[4] = {110.0, 160.0, 170.0, 190.0};
+    double a = 0.0;
+    float am, ab;
+    recordTurn(mesh, skin, a);
+    for (int k = 0; k < 4; k++) {
+        recordTurn(mesh, skin, a + steps[k]);
+        const RdInterpStats *st = build(0.5f, 1);
+        CHECK(st->rotated == 2 && st->turnSnap == 0 && turnHalfAt(a + steps[k] * 0.5, &am, &ab),
+              "%s: ramp %.0f degrees blends forward (snapped %u, mesh %.4f, bone %.4f, want "
+              "%.1f)",
+              what, steps[k], st->turnSnap, am, ab, fmod(a + steps[k] * 0.5, 360.0));
+        a += steps[k];
+    }
+    return a;
+}
+
+/* Rotation continuity across a gap (issue 98's residual): a pair not
+ * blended between (no present between two ticks, a camera cut, a frame
+ * discarded) keeps the turn remembered before it for RD_INTERP_TURN_GAP
+ * ticks, when the draw's pose is where that turn carries it */
+static void testRotationGap(void)
+{
+    RdMesh mesh = makeMesh(), skin = makeSkinMesh();
+    float am, ab;
+    /* (a) 170, 190, then a pair not blended (+195), then 200: on forward
+     * the long way, the turn of two ticks before */
+    double a = turnRamp(mesh, skin, "skipped pair");
+    recordTurn(mesh, skin, a + 195.0); /* no present between these two ticks */
+    a += 195.0;
+    recordTurn(mesh, skin, a + 200.0);
+    const RdInterpStats *st = build(0.5f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->rotated == 2 && st->longWay == 2 && st->turnSnap == 0,
+          "200 degrees after a pair not blended: the long way (long %u, snapped %u)", st->longWay,
+          st->turnSnap);
+    CHECK(turnHalfAt(a + 100.0, &am, &ab),
+          "200 degrees after a skipped pair, alpha 0.5: mesh %.4f, bone %.4f (want %.1f)", am, ab,
+          fmod(a + 100.0, 360.0));
+    CHECK(turnIsTick(built(1.0f)), "alpha 1 after a skipped pair is the tick's pose");
+    a += 200.0;
+    /* and the turn it made is remembered for the next pair as ever */
+    recordTurn(mesh, skin, a + 200.0);
+    st = build(0.5f, 1);
+    CHECK(st->longWay == 2 && st->turnSnap == 0 && turnHalfAt(a + 100.0, &am, &ab),
+          "the pair after: the long way again (long %u, snapped %u)", st->longWay, st->turnSnap);
+    printf("rd_interp_test: wheel 170, 190, a skipped pair, 200 degrees, alpha 0.5: mesh %.6f, "
+           "bone %.6f degrees\n",
+           am, ab);
+
+    /* (b) the same with a camera cut between the pairs: the whole-frame
+     * snap keeps the memory */
+    a = turnRamp(mesh, skin, "cut");
+    s_turnCut = 1;
+    recordTurn(mesh, skin, a + 195.0);
+    a += 195.0;
+    st = build(0.5f, 1);
+    CHECK(st->snap == RD_SNAP_CUT, "the cut's pair snaps (snap %u)", st->snap);
+    recordTurn(mesh, skin, a + 200.0);
+    st = build(0.5f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->longWay == 2 && st->turnSnap == 0 &&
+              turnHalfAt(a + 100.0, &am, &ab),
+          "200 degrees after a cut: the long way (long %u, snapped %u, mesh %.4f, bone %.4f)",
+          st->longWay, st->turnSnap, am, ab);
+
+    /* (c) the bound: a turn remembered RD_INTERP_TURN_GAP ticks before the
+     * pair's first still serves, one more tick and it does not */
+    for (uint32_t ago = RD_INTERP_TURN_GAP; ago <= RD_INTERP_TURN_GAP + 2u; ago++) {
+        a = turnRamp(mesh, skin, "bound");
+        for (uint32_t k = 0; k < ago; k++) {
+            a += 190.0;
+            recordTurn(mesh, skin, a); /* not blended */
+        }
+        recordTurn(mesh, skin, a + 190.0);
+        st = build(0.5f, 1);
+        if (ago <= RD_INTERP_TURN_GAP) {
+            CHECK(st->longWay == 2 && st->turnSnap == 0 && turnHalfAt(a + 95.0, &am, &ab),
+                  "a turn %u ticks old serves (long %u, snapped %u, mesh %.4f, bone %.4f)", ago,
+                  st->longWay, st->turnSnap, am, ab);
+        } else {
+            CHECK(st->longWay == 0 && st->turnSnap == 2 && turnIsTick(built(0.5f)),
+                  "a turn %u ticks old does not: the tick's pose (long %u, snapped %u)", ago,
+                  st->longWay, st->turnSnap);
+        }
+    }
+
+    /* (d) a frame discarded between: the pair across it never blends
+     * (RD_SNAP_GAP), the pair after continues the turn two ticks old */
+    a = turnRamp(mesh, skin, "discarded");
+    rd_begin_frame();
+    rd_discard_frame();
+    a += 200.0;
+    recordTurn(mesh, skin, a + 200.0);
+    a += 200.0;
+    st = build(0.5f, 1);
+    CHECK(st->snap == RD_SNAP_GAP, "the pair across the discarded frame snaps (snap %u)", st->snap);
+    recordTurn(mesh, skin, a + 200.0);
+    st = build(0.5f, 1);
+    CHECK(st->snap == RD_SNAP_NONE && st->longWay == 2 && st->turnSnap == 0 &&
+              turnHalfAt(a + 100.0, &am, &ab),
+          "200 degrees after a discarded frame: the long way (long %u, snapped %u, mesh %.4f, "
+          "bone %.4f)",
+          st->longWay, st->turnSnap, am, ab);
+
+    /* (e) a pose the remembered turn does not carry to (the wheel back at
+     * 0 between): no memory, the turn over the snap keeps the tick's */
+    a = turnRamp(mesh, skin, "pose");
+    recordTurn(mesh, skin, 0.0);
+    recordTurn(mesh, skin, 190.0);
+    st = build(0.5f, 1);
+    CHECK(st->longWay == 0 && st->turnSnap == 2 && turnIsTick(built(0.5f)),
+          "a turn whose pose the memory does not carry to: the tick's (long %u, snapped %u)",
+          st->longWay, st->turnSnap);
+    /* and a turn under the snap after a gap blends the short way as
+     * without a memory */
+    a = turnRamp(mesh, skin, "short");
+    recordTurn(mesh, skin, a + 190.0);
+    a += 190.0;
+    recordTurn(mesh, skin, a + 100.0);
+    st = build(0.5f, 1);
+    CHECK(st->longWay == 0 && st->turnSnap == 0 && turnHalfAt(a + 50.0, &am, &ab),
+          "100 degrees after a gap: the short way (long %u, mesh %.4f, bone %.4f)", st->longWay, am,
+          ab);
 }
 
 /* A shadow coming out of its pool: the root climbs up to 13
@@ -5847,6 +6001,7 @@ static void runCpu(void)
     testRotationBlend();
     testRotationDraws();
     testRotationContinuity();
+    testRotationGap();
     testRisingBone();
     testCameraBlend();
     testCameraLocked();
