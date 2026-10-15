@@ -650,6 +650,7 @@ static void dx_fill_limits(void)
     o->rov = dx_rov_supported();
     o->fragmentInterlock = false;
     o->rasterOrderAttachment = false;
+    o->rasterOrderOff = NULL;
 }
 
 /* ------------------------------------------------------------- lifecycle */

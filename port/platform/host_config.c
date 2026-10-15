@@ -487,6 +487,7 @@ static const struct {
     {"dev.gpu_checkpoints", "gpu_checkpoints"},
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
+    {"dev.attachment_read", "attachment_read"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -495,11 +496,12 @@ static const struct {
     const char *key;
     const char *env;
 } dev_env[] = {
-    {"blend", "ICO_RD_BLEND"},                  /* port/render/rd_dst_read.c rd__dst_init */
-    {"fog_path", "ICO_RD_FOG_PATH"},            /* port/render/rd_fog_path.c rd__fog_path_init */
-    {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"}, /* port/rhi vk_device.c, d3d12_device.c */
-    {"gpu_robust", "ICO_GPU_ROBUST"},           /* port/rhi/vk/vk_device.c */
-    {"pass_split", "ICO_RD_PASS_SPLIT"},        /* port/render/rd_replay.c passSplit */
+    {"blend", "ICO_RD_BLEND"},                     /* port/render/rd_dst_read.c rd__dst_init */
+    {"fog_path", "ICO_RD_FOG_PATH"},               /* port/render/rd_fog_path.c rd__fog_path_init */
+    {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
+    {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
+    {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay.c passSplit */
+    {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
 };
 
 static int value_is(const char *v, const char *const *words)
@@ -529,13 +531,16 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const on[] = {"1", "true", "on", "yes", NULL};
     static const char *const off[] = {"0", "false", "off", "no", NULL};
     static const char *const paths[] = {"inplace", "copy", "buffer", NULL};
+    static const char *const blends[] = {"fixed", "attachment", "storage", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
     }
     if (strcmp(key, "blend") == 0) {
-        /* exact is the default (the best exact path the device has) */
-        return strcmp(value, "fixed") == 0 ? "fixed" : NULL;
+        /* exact is the default (the best exact path the device has that
+           passes its self-test); fixed, attachment or storage force one
+           (rd_dst_read.c rd__dst_init) */
+        return value_is(value, blends) ? value : NULL;
     }
     if (strcmp(key, "fog_path") == 0) {
         return value_is(value, paths) ? value : NULL;
@@ -558,7 +563,8 @@ const char *ico_dev_env_export_value(const char *key, const char *value, const c
        after a driver crash in a pipeline that read the screen for the exact
        blend, draws with the fixed-function blend (startup_retry.h, the loss
        steps and fixedblend); the step is not taken against a player's
-       blend= other than fixed, so this never overrides a choice */
+       blend= other than fixed (attachment, storage), so this never
+       overrides a choice */
     if (key != NULL && strcmp(key, "blend") == 0 && startup_retry_value_draws_fixed(retry)) {
         return "fixed";
     }

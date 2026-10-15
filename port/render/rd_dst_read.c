@@ -37,7 +37,10 @@
  *               test is ALWAYS; under GEQUAL/GREATER it stays on the
  *               fixed-function blend (logged once).
  * The preference is attachment, then storage, then the fixed-function
- * blend (logged "fixed-function (rounds up)").
+ * blend (logged "fixed-function (rounds up)").  The attachment read is not
+ * offered on Qualcomm's own Adreno driver (vk_device.c: its reads return
+ * wrong colours, issue 89; RhiLimits.rasterOrderOff says so and the blend
+ * line carries it).
  *
  * What goes through it: the screen prims, the VU meshes and the fog sprite
  * whose fixed-function blend is not the GS's (dstWant, rd_pipeline.c): the
@@ -135,7 +138,9 @@ void rd__dst_init(void)
         }
     }
     g_rd.dstMode = (uint8_t)want;
-    rd__log("blend: %s", rd__blend_exact_name(want));
+    const char *off = g_rd.hasDevice ? rhi_limits()->rasterOrderOff : NULL;
+    rd__log("blend: %s%s%s%s", rd__blend_exact_name(want), off ? " (" : "", off ? off : "",
+            off ? ")" : "");
 }
 
 bool rd_set_blend_exact(RdBlendExact mode)

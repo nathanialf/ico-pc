@@ -229,6 +229,15 @@ typedef struct VkrState {
      * rasterOrderAttachment): the features enabled */
     bool interlock;
     bool rasterOrder;
+    /* the attachment read the device has but is not offered on (Qualcomm's
+     * own driver, rhi_driver_is_qualcomm_proprietary; ICO_VK_FAKE_ADRENO=1
+     * takes that branch, ICO_VK_ATTACHMENT_READ=1 offers it anyway): why,
+     * for RhiLimits.rasterOrderOff; "" when it is not denied */
+    char rasterOrderOff[96];
+    /* VkPhysicalDeviceDriverProperties.driverID and the driver's version as
+     * its vendor writes it (vkr_driver_text) */
+    uint32_t driverID;
+    char driverVersion[32];
     /* VK_KHR_dynamic_rendering_local_read enabled (the attachment read, and
      * barriers inside a render pass); validationOn: the Khronos validation
      * layer is loaded; storageBarriers: a by-region barrier before a

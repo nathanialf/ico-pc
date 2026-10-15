@@ -32,3 +32,9 @@ char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t dri
     }
     return buf;
 }
+
+int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId)
+{
+    return vendorId == RHI_VENDOR_QUALCOMM &&
+           (driverId == RHI_DRIVER_ID_QUALCOMM_PROPRIETARY || driverId == 0);
+}

@@ -595,10 +595,15 @@ typedef struct RhiLimits {
      *                          dynamicRenderingLocalRead
      *                          (VK_KHR_dynamic_rendering_local_read or
      *                          Vulkan 1.4): RHI_DST_READ_ATTACHMENT
-     * ICO_VK_FAKE_NO_DST=1 (Vulkan) reports all of them false. */
+     * ICO_VK_FAKE_NO_DST=1 (Vulkan) reports all of them false.
+     * rasterOrderOff: why rasterOrderAttachment is false on a device that
+     * has it ("attachment read off: Qualcomm driver 512.800.72": the
+     * Adreno driver's read returns wrong colours, issue 89; Vulkan,
+     * overridden by ICO_VK_ATTACHMENT_READ=1), NULL otherwise. */
     bool fragmentInterlock;
     bool rov;
     bool rasterOrderAttachment;
+    const char *rasterOrderOff;
     /* Indexed draws: the largest index value a draw may use (Vulkan
      * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
      * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the

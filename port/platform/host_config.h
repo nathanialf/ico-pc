@@ -125,13 +125,15 @@ int ico_ini_load_file(IcoIni *ini, const char *path);
    ICO_AUDIO_VOLUME, ICO_FIXED_CLOCK, ICO_RD_DUMP_*). */
 const char *ico_config_ini_key(const char *toml_path);
 /* The [dev] A/B switches (blend=, fog_path=, gpu_checkpoints=,
-   gpu_robust=): ico_dev_env_name gives the environment variable a key is
-   exported as (ICO_RD_BLEND, ICO_RD_FOG_PATH, ICO_GPU_CHECKPOINTS,
-   ICO_GPU_ROBUST), NULL for any other key; ico_dev_env_value the value
-   exported for an ini value, NULL when nothing is set: blend "fixed" ->
-   "fixed" (exact is the default: nothing set); fog_path inplace, copy or
-   buffer as they are; gpu_* 1/true/on/yes -> "1", 0/false/off/no -> "0".
-   ico_ini_export sets them. */
+   gpu_robust=, pass_split=, attachment_read=): ico_dev_env_name gives the
+   environment variable a key is exported as (ICO_RD_BLEND,
+   ICO_RD_FOG_PATH, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST, ICO_RD_PASS_SPLIT,
+   ICO_VK_ATTACHMENT_READ), NULL for any other key; ico_dev_env_value the
+   value exported for an ini value, NULL when nothing is set: blend
+   "fixed", "attachment" or "storage" as they are (exact is the default:
+   nothing set); fog_path inplace, copy or buffer as they are; pass_split a
+   count; gpu_* and attachment_read 1/true/on/yes -> "1", 0/false/off/no
+   -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);
 const char *ico_dev_env_value(const char *key, const char *value);
 /* The value ico_ini_export sets for key: ico_dev_env_value's, except that

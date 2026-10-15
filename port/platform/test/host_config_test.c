@@ -443,7 +443,7 @@ static int env_is(const char *name, const char *want)
 static void test_dev_env(void)
 {
     static const char *const vars[] = {"ICO_RD_BLEND", "ICO_RD_FOG_PATH", "ICO_GPU_CHECKPOINTS",
-                                       "ICO_GPU_ROBUST"};
+                                       "ICO_GPU_ROBUST", "ICO_VK_ATTACHMENT_READ"};
     IcoIni ini;
     size_t i;
 
@@ -457,6 +457,16 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("blend", "fixed"), "fixed") == 0);
     CHECK(ico_dev_env_value("blend", "exact") == NULL);
     CHECK(ico_dev_env_value("blend", "rov") == NULL);
+    /* the exact paths forced by name (issue 89: the self-test's verdict
+       overridden for a test) */
+    CHECK(strcmp(ico_dev_env_value("blend", "attachment"), "attachment") == 0);
+    CHECK(strcmp(ico_dev_env_value("blend", "storage"), "storage") == 0);
+    CHECK(ico_dev_env_value("blend", "auto") == NULL); /* the default: nothing set */
+    /* the attachment read on Qualcomm's driver (vk_device.c) */
+    CHECK(strcmp(ico_dev_env_name("attachment_read"), "ICO_VK_ATTACHMENT_READ") == 0);
+    CHECK(strcmp(ico_dev_env_value("attachment_read", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("attachment_read", "0"), "0") == 0);
+    CHECK(ico_dev_env_value("attachment_read", "maybe") == NULL);
     /* fog_path: the three paths as they are */
     CHECK(strcmp(ico_dev_env_value("fog_path", "inplace"), "inplace") == 0);
     CHECK(strcmp(ico_dev_env_value("fog_path", "copy"), "copy") == 0);
@@ -486,6 +496,7 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_config_ini_key("dev.gpu_checkpoints"), "gpu_checkpoints") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.gpu_robust"), "gpu_robust") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.pass_split"), "pass_split") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.attachment_read"), "attachment_read") == 0);
 
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
@@ -507,6 +518,14 @@ static void test_dev_env(void)
     CHECK(env_is("ICO_RD_FOG_PATH", NULL));
     CHECK(env_is("ICO_GPU_CHECKPOINTS", NULL));
     CHECK(env_is("ICO_GPU_ROBUST", "0"));
+    for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+        unset_env(vars[i]);
+    }
+    /* blend=attachment and attachment_read=true (config.toml's [dev]) */
+    ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_BLEND", "attachment"));
+    CHECK(env_is("ICO_VK_ATTACHMENT_READ", "1"));
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }

@@ -20,12 +20,22 @@
 
 #define RHI_VENDOR_NVIDIA 0x10DEu
 #define RHI_VENDOR_INTEL 0x8086u
+#define RHI_VENDOR_QUALCOMM 0x5143u
 /* VkDriverId values */
 #define RHI_DRIVER_ID_NVIDIA_PROPRIETARY 4u
 #define RHI_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS 5u
+#define RHI_DRIVER_ID_QUALCOMM_PROPRIETARY 8u
 
 /* The text into buf (always terminated when n > 0); returns buf. */
 char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t driverVersion,
                               char *buf, size_t n);
+
+/* 1 for Qualcomm's own Adreno driver: vendor 0x5143 with
+ * VK_DRIVER_ID_QUALCOMM_PROPRIETARY, or with the id unknown (0).  Mesa's
+ * Turnip on the same GPUs reports its own id (MESA_TURNIP) and is not
+ * covered.  Its rasterization-order attachment read returns wrong
+ * destination colours (issue 89: Adreno 830, driver 512.800.72), so
+ * vk_device.c does not offer that read on it. */
+int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId);
 
 #endif /* PORT_RHI_RHI_DRIVER_VERSION_H */

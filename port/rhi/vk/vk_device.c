@@ -741,6 +741,8 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     dp.driverName[VK_MAX_DRIVER_NAME_SIZE - 1] = '\0';
     dp.driverInfo[VK_MAX_DRIVER_INFO_SIZE - 1] = '\0';
     rhi_driver_version_text(p->vendorID, (uint32_t)dp.driverID, p->driverVersion, ver, sizeof ver);
+    g_vkr.driverID = (uint32_t)dp.driverID;
+    snprintf(g_vkr.driverVersion, sizeof g_vkr.driverVersion, "%s", ver);
     snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s",
              (unsigned)p->vendorID, (unsigned)p->deviceID,
              dp.driverName[0] ? dp.driverName : "(unnamed)", dp.driverInfo[0] ? " " : "",
@@ -1058,7 +1060,9 @@ static bool vkr_create_device(void)
      *                (VK_EXT_ or VK_ARM_rasterization_order_attachment_access,
      *                the same structure) and VK_KHR_dynamic_rendering_local_read
      *                (input attachments under dynamic rendering).
-     * ICO_VK_FAKE_NO_DST=1 leaves both off, as on a device without them. */
+     * ICO_VK_FAKE_NO_DST=1 leaves both off, as on a device without them.
+     * The attachment read is not offered on Qualcomm's own driver (below;
+     * RhiLimits.rasterOrderOff). */
     VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT qInterlock = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT};
     VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT qOrder = {
@@ -1101,9 +1105,30 @@ static bool vkr_create_device(void)
                           avail.fragmentStoresAndAtomics == VK_TRUE &&
                           vkr_format_ok(g_vkr.phys, VK_FORMAT_R8G8B8A8_UNORM,
                                         VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
-        g_vkr.rasterOrder = !fake && (extOrder || extOrderArm) &&
-                            qOrder.rasterizationOrderColorAttachmentAccess && extLocal &&
-                            qLocal.dynamicRenderingLocalRead;
+        const bool hasOrder = !fake && (extOrder || extOrderArm) &&
+                              qOrder.rasterizationOrderColorAttachmentAccess && extLocal &&
+                              qLocal.dynamicRenderingLocalRead;
+        /* Qualcomm's own Adreno driver has the read but returns wrong
+         * destination colours through it (issue 89, Adreno 830 on driver
+         * 512.800.72: white around the leaves' clear texels, the title
+         * washed out, the menus white on white; the same frames are right
+         * on lavapipe through the same path, 0 validation errors): not
+         * offered there, so the renderer's blend self-test starts from the
+         * next path.  ICO_VK_FAKE_ADRENO=1 takes this branch on any device;
+         * ICO_VK_ATTACHMENT_READ=1 ([dev] attachment_read) offers it anyway */
+        const char *fakeQc = getenv("ICO_VK_FAKE_ADRENO");
+        const bool fakeAdreno = fakeQc && fakeQc[0] && fakeQc[0] != '0';
+        const char *askRead = getenv("ICO_VK_ATTACHMENT_READ");
+        const bool forceRead = askRead && askRead[0] && askRead[0] != '0';
+        const bool qualcomm =
+            fakeAdreno || rhi_driver_is_qualcomm_proprietary(g_vkr.props.vendorID, g_vkr.driverID);
+        g_vkr.rasterOrderOff[0] = '\0';
+        if (hasOrder && qualcomm && !forceRead) {
+            snprintf(g_vkr.rasterOrderOff, sizeof g_vkr.rasterOrderOff,
+                     "attachment read off: Qualcomm driver %s",
+                     fakeAdreno ? "(ICO_VK_FAKE_ADRENO)" : g_vkr.driverVersion);
+        }
+        g_vkr.rasterOrder = hasOrder && g_vkr.rasterOrderOff[0] == '\0';
         /* local read for the attachment read, and with the interlock for
          * the barriers a pass may record between draws (vk_cmd.c
          * vkr_dst_order) */
@@ -1120,9 +1145,18 @@ static bool vkr_create_device(void)
             g_vkr.storageBarriers =
                 g_vkr.localRead && (g_vkr.validationOn || (sb && sb[0] && sb[0] != '0'));
         }
-        VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s",
-                g_vkr.interlock ? "yes" : "no", g_vkr.rasterOrder ? "yes" : "no",
-                fake ? " (ICO_VK_FAKE_NO_DST)" : "");
+        if (g_vkr.rasterOrderOff[0]) {
+            VKR_LOG("destination read: interlock %s, rasterization-order attachment read off on "
+                    "this driver (Qualcomm driver %s%s: wrong results on Adreno; "
+                    "ICO_VK_ATTACHMENT_READ=1 tries it)",
+                    g_vkr.interlock ? "yes" : "no", g_vkr.driverVersion,
+                    fakeAdreno ? ", ICO_VK_FAKE_ADRENO" : "");
+        } else {
+            VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s",
+                    g_vkr.interlock ? "yes" : "no", g_vkr.rasterOrder ? "yes" : "no",
+                    fake ? " (ICO_VK_FAKE_NO_DST)" : "",
+                    hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "");
+        }
         /* only what is used is enabled; the queries' structures become the
          * enables, everything else in them off */
         memset(&qInterlock, 0, sizeof(qInterlock));
@@ -1599,6 +1633,7 @@ static void vkr_fill_limits(void)
     o->fragmentInterlock = g_vkr.interlock;
     o->rov = false;
     o->rasterOrderAttachment = g_vkr.rasterOrder;
+    o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required
      * Limits table), where phone GPUs sit while desktop ones and lavapipe are

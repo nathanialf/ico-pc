@@ -34,6 +34,19 @@ int main(void)
     CHECK_STR(text(RHI_VENDOR_INTEL, 6, mesa), "25.1.4");
     /* AMD's driver (id 1): 2.0.302 */
     CHECK_STR(text(0x1002u, 1, (2u << 22) | 302u), "2.0.302");
+    /* Qualcomm's Adreno driver (id 8): the Vulkan packing, 512.800.72 (issue 89) */
+    CHECK_STR(text(RHI_VENDOR_QUALCOMM, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY,
+                   (512u << 22) | (800u << 12) | 72u),
+              "512.800.72");
+    /* the attachment read's rule (vk_device.c): Qualcomm's own driver, by
+       id or with the id unknown; not Turnip (Mesa, id 18) on the same GPU,
+       not another vendor */
+    CHECK(rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_QUALCOMM,
+                                             RHI_DRIVER_ID_QUALCOMM_PROPRIETARY));
+    CHECK(rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_QUALCOMM, 0));
+    CHECK(!rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_QUALCOMM, 18));
+    CHECK(!rhi_driver_is_qualcomm_proprietary(0x13B5u, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY));
+    CHECK(!rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_NVIDIA, 0));
     /* a short buffer is cut and terminated */
     {
         char small[4];
