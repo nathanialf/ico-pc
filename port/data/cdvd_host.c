@@ -266,6 +266,25 @@ void ico_cdvd_host_stats(IcoCdvdStats *out)
     out->stream_lsn = cd.stLsn;
 }
 
+void ico_cdvd_host_bg_retry(const char *name, unsigned int lsn, int error)
+{
+    static unsigned int retries;
+
+    retries++;
+    if (retries > 8 && retries % 100 != 0) {
+        return;
+    }
+    if (error == 0) {
+        fprintf(stderr,
+                "cdvd: background read of %s at lsn %u retried (the drive was not ready; retry "
+                "%u)\n",
+                name != NULL ? name : "?", lsn, retries);
+    } else {
+        fprintf(stderr, "cdvd: background read of %s at lsn %u retried (read error %d; retry %u)\n",
+                name != NULL ? name : "?", lsn, error, retries);
+    }
+}
+
 int ico_cdvd_host_busy(void)
 {
     return cd.busy;

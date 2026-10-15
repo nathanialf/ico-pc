@@ -973,6 +973,10 @@ static int bgReadCnt = 0; /* derived name */
 
 static int bgReadRetryCnt = 0; /* derived name */
 
+/* PC port: port/data/cdvd_host.h: a background read about to be retried
+   is logged (0: the drive was not ready; else the read's error code) */
+extern void ico_cdvd_host_bg_retry(const char *name, unsigned int lsn, int error);
+
 int iosCdvdStDelayCnt = 0; /* derived name */
 
 float inflateSec = 0;
@@ -1060,11 +1064,14 @@ int iosCdvdBackGroundRead(CdvdBgReq *self, void *buf, int size)
         }
         if (flag != 0) {
             bgReadRetryCnt++;
+            ico_cdvd_host_bg_retry(self->name, self->lsn + self->pos / 2048, 0); /* PC port */
             while (sceCdBreak() == 0) {
                 cdWait(&flag);
             }
         } else {
             if (sceCdGetError() != 0 && self->flags.noPause == 0) {
+                /* PC port: the log */
+                ico_cdvd_host_bg_retry(self->name, self->lsn + self->pos / 2048, sceCdGetError());
                 while (sceCdBreak() == 0) {
                     cdWait(&flag);
                 }
@@ -1101,11 +1108,14 @@ int iosCdvdBackGroundReadIOPm(CdvdBgReq *self, void *buf, int size)
         }
         if (flag != 0) {
             bgReadRetryCnt++;
+            ico_cdvd_host_bg_retry(self->name, self->lsn + self->pos / 2048, 0); /* PC port */
             while (sceCdBreak() == 0) {
                 cdWait(&flag);
             }
         } else {
             if (sceCdGetError() != 0 && self->flags.noPause == 0) {
+                /* PC port: the log */
+                ico_cdvd_host_bg_retry(self->name, self->lsn + self->pos / 2048, sceCdGetError());
                 while (sceCdBreak() == 0) {
                     cdWait(&flag);
                 }

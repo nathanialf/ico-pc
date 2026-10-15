@@ -12,6 +12,9 @@
 /* port/audio/mix_gain.h: the voices of stream `no` are music, or effects for
    Yorda's hint voice (101 to 104), for the port's gains */
 extern void ico_audio_tag_stream(int slot, int no);
+/* port/audio/stream_watch.h: the driver logs the levels stream `no` plays
+   at on `n` voices after its key-on, half way and at its close */
+extern void ico_audio_stream_watch(int slot, int no, const int *voices, int n, int data_bytes);
 static inline void adpcmDiskNotReady(void);
 static inline void adpcmDiskReturnReady(void);
 static inline int adpcmOpenProc(CdvdBgReq *bg, AdpcmOpenReq *open);
@@ -160,7 +163,6 @@ found:
     obj->stream = p;
     adpcmObj[i] = obj; /* PC port */
     adpcmNo[i] = no;
-    ico_diag_log("adpcm: open %d slot %d", no, i);
     p->n = adpcmFile[no].channels;
     switch (p->n) {
     case 1:
@@ -200,6 +202,21 @@ found:
         SgStAdpcmChannelVolume(1LL << p->ch[j], p->volL[j], p->volR[j]);
         SgStAdpcmChannelPitch(1LL << p->ch[j], adpcmFile[no].pitch);
         p->mask |= 1LL << p->ch[j];
+    }
+    /* PC port: the open's line names the voices, and the driver's log
+       watches them (the voices are read as adpcmTickProc2 reads them) */
+    {
+        int voices[4];
+        char list[32];
+        int m = 0;
+
+        list[0] = 0;
+        for (j = 0; j < p->n; j++) {
+            voices[j] = *(int *)((char *)p->ch + j * 4);
+            m += snprintf(list + m, sizeof list - m, j != 0 ? ",%d" : "%d", voices[j]);
+        }
+        ico_diag_log("adpcm: open %d slot %d voices %s", no, i, list);
+        ico_audio_stream_watch(i, no, voices, p->n, adpcmFile[no].sectors << 11);
     }
     if (size < 0x5C000) {
         p->seekSize = size;

@@ -32,6 +32,7 @@
 #include "sndn2_internal.h"
 #include "spu2.h"
 #include "spu2_sd.h"
+#include "stream_watch.h"
 
 static uint8_t staging[SNDN2_STAGING_SIZE]; /* the IRX's 0x5140 */
 
@@ -162,6 +163,7 @@ void st_adpcm_open(uint32_t w1, uint32_t w2, uint32_t w3) /* 0x1958 */
     spu2_sd_set_addr((uint16_t)(vsel(slot, SPU2_SD_VADDR_SSA) | 0x40), v->spu_start);
     spu2_sd_set_param(vsel(slot, SPU2_SD_VPARAM_ADSR1), 0x8080);
     spu2_sd_set_param(vsel(slot, SPU2_SD_VPARAM_ADSR2), 0x808A);
+    sw_open(slot);
 }
 
 void st_adpcm_close(uint32_t slot) /* 0x1CD0 */
@@ -232,6 +234,7 @@ void st_adpcm_stop(uint32_t m0, uint32_t m1) /* 0x2250 */
 
     FOR_MASKED(slot, m0, m1)
     {
+        sw_stop(slot); /* the stream's levels before its key-off (the log) */
         cancel(slot);
         st[slot].active = 0;
         st[slot].read_off = 0;
@@ -320,6 +323,7 @@ static void run_queue(void)
         if (v->iop_size != 0) {
             v->read_off = (v->read_off + (v->spu_size / 2) * v->n) % v->iop_size;
         }
+        sw_played(slot % SNDN2_SLOTS, (v->spu_size / 2) * v->n);
         pending = 0;
     }
     while (q_read != q_write) {
@@ -341,6 +345,7 @@ static void run_queue(void)
                 st[slot].active |= 1;
                 st[slot].half = 0;
                 st[slot].sched = 0;
+                sw_keyon(slot);
             }
         }
     }
@@ -348,6 +353,7 @@ static void run_queue(void)
 
 void st_adpcm_tick(void)
 {
+    sw_tick(); /* the log's stream lines, two ticks after a key-on */
     schedule();
     run_queue();
 }

@@ -71,4 +71,23 @@ unsigned ico_sndn2_pitch_clamps(void);
    ring share it, as in the IRX), for tests. */
 const uint8_t *ico_sndn2_staging(void);
 
+/* --- The EE's side (sce/libsndn2/sound.c host lines) ------------------------
+
+   The EE's packet page holds 255 packets; _SgSetPkAdd drops every later
+   one until the tick sends the page (on the PS2 as written).  The port
+   keeps them instead (docs/port/DIVERGENCES.md, AU-7): _SgSetPkAdd hands
+   each packet past the 255th to ico_sndn2_pk_full, which keeps up to
+   ICO_SNDN2_CARRY_MAX of them and runs them right after the page's own
+   packets in the next tick.  `page` is the full page (`count` packets of
+   four words), read for the log's command mix: `sndn2: packet page full`
+   is printed for the first 8 full pages and then every 100th; every one
+   is counted (stream_watch.h). */
+#define ICO_SNDN2_CARRY_MAX 4096
+void ico_sndn2_pk_full(const int *page, int count, int cmd, int id, int w2, int w3);
+
+/* A sequencer key-off (`path`, the function that set the key-off bit)
+   landed on `voice`, one of the stream voices (slot state 3): logged for
+   the first 8 and counted (stream_watch.c). */
+void ico_sndn2_stream_keyoff(int voice, const char *path);
+
 #endif

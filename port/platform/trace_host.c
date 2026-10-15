@@ -7,12 +7,14 @@
 #include "trace_host.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include "cdvd_host.h"
 #include "diag_host.h"
 #include "host_fs.h"
 #include "host_loop.h"
 #include "pad_script.h"
 #include "sif_host.h"
+#include "stream_watch.h"
 
 /* The game's state the trace reads (each defined in the file named). */
 extern int stage_no;               /* common/src/main.c:428 */
@@ -91,6 +93,15 @@ void ico_host_status(char *out, size_t size)
              cd.sectors, cd.last_lsn, cd.busy, cd.waiters, cd.stream_active, cd.stream_lsn,
              IosCdvdMgrSleep ? "asleep" : "awake",
              iosCdvdBackGroundMgrRunning ? " (background reads)" : "", rpcs, sid, rpc);
+    {
+        /* the two stream slots as the driver plays them (stream_watch.h) */
+        size_t n = strlen(out);
+
+        if (n + 4 < size) {
+            snprintf(out + n, size - n, " | ");
+            ico_audio_stream_status(out + n + 3, size - n - 3);
+        }
+    }
 }
 
 unsigned int ico_host_main_ticks(void)

@@ -12,6 +12,13 @@
  * The boat scene's case: the sea stream (7) is fading from the skip, the
  * boat's stream (8) is open, and the music (10) is requested.
  *
+ * The ending's shape (issue 101): six streams, each opened while the one
+ * before still plays and that one then closed at once, so the game's two
+ * stream slots and the two voice pairs alternate (43 slot 0 voices 0,1;
+ * 44 slot 1 voices 2,3; 45 slot 0 voices 0,1; ...), every open handing the
+ * driver's log watch the stream's voices and length.  The same shape runs
+ * through the real driver in adpcm_stream_test.c.
+ *
  * Exit status 0 when every check passes.
  */
 #include <stdarg.h>
@@ -41,11 +48,35 @@ void ico_audio_tag_stream(int slot, int no)
     (void)no;
 }
 
+/* the driver's log watch (port/audio/stream_watch.h): the last call */
+static struct {
+    int calls, slot, no, n, v0, v1, bytes;
+} watch;
+
+void ico_audio_stream_watch(int slot, int no, const int *voices, int n, int data_bytes)
+{
+    watch.calls++;
+    watch.slot = slot;
+    watch.no = no;
+    watch.n = n;
+    watch.v0 = n > 0 ? voices[0] : -1;
+    watch.v1 = n > 1 ? voices[1] : -1;
+    watch.bytes = data_bytes;
+}
+
 /* the stubs adpcm_init.c links against */
-const AdpcmDataRec adpcmFile[16] = {
+const AdpcmDataRec adpcmFile[64] = {
     [7] = {.sectors = 100, .pitch = 0x1000, .channels = 2},
     [8] = {.sectors = 100, .pitch = 0x1000, .channels = 2},
     [10] = {.sectors = 100, .pitch = 0x1000, .channels = 2},
+    /* the ending's streams, their lengths in sectors as on the disc
+       (ed1..ed4, the sea song, the next one) */
+    [43] = {.sectors = 1423, .pitch = 44100, .channels = 2},
+    [44] = {.sectors = 1324, .pitch = 44100, .channels = 2},
+    [45] = {.sectors = 379, .pitch = 44100, .channels = 2},
+    [46] = {.sectors = 1056, .pitch = 44100, .channels = 2},
+    [47] = {.sectors = 6536, .pitch = 44100, .channels = 2},
+    [48] = {.sectors = 500, .pitch = 44100, .channels = 2},
 };
 
 static SqEntry sqTbl[16];
@@ -74,18 +105,30 @@ void soundDataClose(SqEntry *self)
     *(int *)self = 0;
 }
 
-static int chNext;
+/* s_init.c's rule: the lowest free of the four stream channels, given
+   back at the close */
+static long long chMask;
 
 int soundBufAdpcmChAlloc(SqEntry *self, int *chp)
 {
-    (void)self;
-    *chp = chNext++ & 3;
-    return 0;
+    int ch;
+
+    for (ch = 0; ch < 4 && (chMask >> ch & 1) != 0; ch++) {}
+    if (ch == 4) {
+        printf("FAIL: no free stream channel\n");
+        failures++;
+        ch = 3;
+    }
+    self->spu.chMask |= 1LL << ch;
+    chMask |= 1LL << ch;
+    *chp = ch;
+    return 0x1E0000 + (ch << 14);
 }
 
 void soundBufAdpcmFree(SqEntry *self)
 {
-    (void)self;
+    chMask &= ~self->spu.chMask;
+    self->spu.chMask = 0;
 }
 
 int Ee2Iop(ICO_WORD ee, int iop, int size)
@@ -269,7 +312,14 @@ static void reset(void)
     memset(adpcmObj, 0, sizeof adpcmObj);
     adpcmIopBase = 0x100000;
     nlog = 0;
-    chNext = 0;
+    chMask = 0;
+    memset(&watch, 0, sizeof watch);
+    /* AdpcmStreamInit's four slots, as SgGetSpuSlotMalloc(1) hands them out
+       on a fresh sequencer */
+    adpcmSpuSlot[0] = 0;
+    adpcmSpuSlot[1] = 1;
+    adpcmSpuSlot[2] = 2;
+    adpcmSpuSlot[3] = 3;
 }
 
 int main(void)
@@ -285,8 +335,8 @@ int main(void)
     sea = open_stream(7);
     boat = open_stream(8);
     check_eq(AdpcmFreeAreaGet(), 0, "A both rings taken");
-    check_log(0, "adpcm: open 7 slot 0");
-    check_log(1, "adpcm: open 8 slot 1");
+    check_log(0, "adpcm: open 7 slot 0 voices 0,1");
+    check_log(1, "adpcm: open 8 slot 1 voices 2,3");
     AdpcmFadeCloseAll(0x3FFF);
     /* the skip fades only the sea: put the boat back to steady */
     boat->stream->fadeStep = 0;
@@ -300,7 +350,7 @@ int main(void)
     check_eq(nlog, 3, "A one close line");
     music = open_stream(10);
     check_eq(music->stream->used, 1, "A music opened");
-    check_log(3, "adpcm: open 10 slot 0");
+    check_log(3, "adpcm: open 10 slot 0 voices 0,1");
     check_eq(adpcmNo[0], 10, "A music took the sea's slot");
     check_eq(adpcmNo[1], 8, "A boat still in its slot");
 
@@ -326,6 +376,53 @@ int main(void)
     AdpcmFadeCloseAll(0x3FFF);
     check_eq(adpcmStream[0].fadeStep, 0x3FFF, "B stream 7 fades");
     check_eq(adpcmStream[1].fadeStep, 0x3FFF, "B stream 8 fades");
+
+    /* C: the ending's shape.  Each stream opens while the one before plays,
+       then the one before closes at once (the scenes cut). */
+    {
+        static const int order[] = {43, 44, 45, 46, 47, 48};
+        SqEntry *prev = NULL;
+        char want[64];
+        int closed0;
+        int k;
+
+        reset();
+        closed0 = closedCh;
+        for (k = 0; k < 6; k++) {
+            int no = order[k];
+            int slot = k & 1;
+            SqEntry *e;
+
+            nlog = 0;
+            e = open_stream(no);
+            check_eq(e != NULL && e->stream != NULL, 1, "C opened");
+            check_eq(adpcmNo[slot], no, "C the slots alternate");
+            check_eq(watch.calls, k + 1, "C one watch a stream");
+            check_eq(watch.slot, slot, "C watch slot");
+            check_eq(watch.no, no, "C watch stream");
+            check_eq(watch.n, adpcmFile[no].channels, "C watch voices");
+            check_eq(watch.v0, slot * 2, "C the voice pairs alternate");
+            check_eq(watch.bytes, adpcmFile[no].sectors << 11, "C watch length");
+            check_eq(watch.v1, slot * 2 + 1, "C second voice");
+            snprintf(want, sizeof want, "adpcm: open %d slot %d voices %d,%d", no, slot, slot * 2,
+                     slot * 2 + 1);
+            check_log(0, want);
+            check_eq(e->stream->volL[0], 0x3FFF, "C the open's volume");
+            check_eq(e->stream->fadeStep, 0, "C no fade at the open");
+            if (prev != NULL) {
+                int pno = prev->num;
+
+                soundDataClose(prev); /* AdpcmClose: "now" */
+                snprintf(want, sizeof want, "adpcm: close %d (now)", pno);
+                check_log(1, want);
+                check_eq(adpcmStream[slot ^ 1].used, 0, "C the slot before is free");
+            }
+            check_eq(AdpcmFreeAreaGet(), 1, "C one ring free after each step");
+            prev = e;
+        }
+        /* five stereo closes: one close packet a voice */
+        check_eq(closedCh - closed0, 10, "C the closes' channel packets");
+    }
 
     printf("%d checks, %d failures\n", checks, failures);
     return failures != 0;

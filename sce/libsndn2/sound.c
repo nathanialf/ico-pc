@@ -30,7 +30,10 @@
  * the sound thread's next tick), and SgSndn2RemoteInit registers the host
  * IOP server (sndn2_host.c) before binding to it.  _SgSeqSeVolume tags the
  * voice music or effects for the port's gains (port/audio/mix_gain.h);
- * the packets are the EE's. */
+ * the packets are the EE's.  _SgSetPkAdd hands a packet that finds the
+ * page full to the host driver, which carries it to the next tick instead
+ * of losing it (AU-7), and the key-off sites report a key-off that lands
+ * on a stream voice (sgHostKeyOffCheck); both are logged (sndn2_host.h). */
 #include <stdint.h>
 #include "sched.h"
 #include "mix_gain.h"
@@ -335,6 +338,16 @@ void _SgCalledTickProc(void)
     *(int *)(com + 0x3C) = (*(volatile int *)(com + 0x3C) + 1) & 1;
 }
 
+/* PC port: a sequencer key-off that lands on a stream voice (slot state 3,
+   SgGetSpuSlotMalloc) is logged and counted (sndn2_host.h); the key-off
+   itself is the EE's */
+static void sgHostKeyOffCheck(int voice, const char *path)
+{
+    if (voice >= 0 && voice < 48 && sgSlotContext[voice][0x51] == 3) {
+        ico_sndn2_stream_keyoff(voice, path);
+    }
+}
+
 /* The EE to IOP packet ring in the common context: c[0xF] is the page the ring
  * lives in and c[0x10] the write index _SgGetPacketCntext resolves to a slot.
  * The index is read and bumped through a volatile view because the IOP side
@@ -346,6 +359,9 @@ int _SgSetPkAdd(int cmd, int id, int word2, int word3)
     int *p = _SgGetPacketCntext(c[0xF], c[0x10]);
 
     if ((unsigned int)*n >= 0xFF) {
+        /* PC port: the PS2 drops the packet here; the host driver carries
+           it to the next tick after the page's own (AU-7, sndn2_host.h) */
+        ico_sndn2_pk_full(_SgGetPacketCntext(c[0xF], 0), (int)*n, cmd, id, word2, word3);
         return -1;
     }
     p[0] = cmd;
@@ -1144,6 +1160,7 @@ int _SgSeKeyOff(char *seq)
     for (i = 0; i < 0x30; i++) {
         if ((mask16 >> i) & 1) {
             *(long long *)(com + 0x28) |= (1LL << i);
+            sgHostKeyOffCheck(i, "_SgSeKeyOff"); /* PC port: the log */
         }
     }
     *(int *)(seq + 4) += 4;
@@ -1177,6 +1194,7 @@ int _SgSeqKeyOff(int *seq)
                             }
                             *(long long *)(com + 0x28) =
                                 *(long long *)(com + 0x28) | ((long long)1 << i);
+                            sgHostKeyOffCheck(i, "_SgSeqKeyOff"); /* PC port: the log */
                         }
                     }
                 }
@@ -1598,6 +1616,7 @@ void _SgContDump(int *seq)
                 if (*(unsigned char *)(head[2] + (*(unsigned short *)((char *)seq + 0x4E) << 4) +
                                        0x1B) == 0) {
                     *(long long *)(com + 0x28) = *(long long *)(com + 0x28) | ((long long)1 << i);
+                    sgHostKeyOffCheck(i, "_SgContDump"); /* PC port: the log */
                 } else {
                     *(int *)s = *(volatile int *)s | 8;
                 }
@@ -2175,6 +2194,7 @@ int SgVabClose(int vab)
                     int *obj = (int *)_SgGetSeqContext(*(unsigned char *)(p + 0x50));
                     int *q = (int *)_SgGetComContext();
                     *(long long *)((char *)q + 0x28) |= (long long)1 << i;
+                    sgHostKeyOffCheck(i, "SgVabClose"); /* PC port: the log */
                     *obj |= 0x2000;
                     memset((char *)obj + 4, 0, 0x50);
                     *obj = 0;
@@ -2450,6 +2470,7 @@ void SgBgmStop(unsigned int id, int mode)
                 *(volatile int *)sl &= 0xFFFFFFEF;
                 *(volatile int *)sl &= 0xFFFFFEFF;
                 *(long long *)(com + 0x28) |= (long long)1 << i;
+                sgHostKeyOffCheck(i, "SgBgmStop"); /* PC port: the log */
                 if (want == st) {
                     _SgSetPkAdd(2, i, 0, 0);
                 }
@@ -2636,6 +2657,7 @@ void SgSeStop(int id)
                     _SgSetPkAdd(2, i, 0, 0);
                 }
                 *(long long *)(com + 0x28) |= 1LL << i;
+                sgHostKeyOffCheck(i, "SgSeStop"); /* PC port: the log */
             }
         }
         *seq &= 0xFFFFDFFF;

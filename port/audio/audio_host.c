@@ -13,6 +13,7 @@
 #include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
+#include "stream_watch.h"
 #if defined(__ANDROID__) || defined(ICO_IOS)
 #include "host_loop.h"
 #endif
@@ -45,7 +46,17 @@ int ico_audio_host_frames(int hz, unsigned int i)
 void ico_audio_host_shutdown(void)
 {
     spu2_stats st;
+    IcoAudioStreamStats ss;
+    static int streams_said; /* the shutdown can run twice (atexit) */
 
+    ico_audio_stream_stats(&ss);
+    if (!streams_said && ss.opened + ss.keyoffs + ss.pages_full > 0) {
+        streams_said = 1;
+        fprintf(stderr,
+                "audio: streams: %u opened; %u key-offs from the sequencer on stream voices; %u "
+                "packet pages full (%u packets carried, %u dropped)\n",
+                ss.opened, ss.keyoffs, ss.pages_full, ss.carried, ss.dropped);
+    }
     spu2_get_stats(&st);
     if (st.chunked_frames + st.exact_frames > 0) {
         fprintf(stderr,

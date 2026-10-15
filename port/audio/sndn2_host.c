@@ -23,6 +23,7 @@
 #include "sndn2_internal.h"
 #include "spu2.h"
 #include "spu2_sd.h"
+#include "stream_watch.h"
 #include "vfs.h"
 
 /* SNDN2DRV.IRX on the PAL disc, its size, and the pitch table's file
@@ -45,7 +46,15 @@ static struct {
     unsigned pitch_clamps;
 } H;
 
-static int logged_cmd, logged_iop, logged_clamp, logged_sub;
+static int logged_cmd, logged_iop, logged_clamp, logged_sub, logged_carry_drop;
+
+/* The packets past a full EE page (ico_sndn2_pk_full), run after the page
+   in the next tick; `page_full`: the current page has overflowed. */
+static struct {
+    uint32_t pk[ICO_SNDN2_CARRY_MAX][4];
+    int n;
+    int page_full;
+} C;
 
 void sndn2_log_once(int *flag, const char *fmt, ...)
 {
@@ -405,6 +414,66 @@ static void dispatch(const uint8_t *pk)
     }
 }
 
+/* --- A full EE packet page (AU-7) -------------------------------------------- */
+
+void ico_sndn2_pk_full(const int *page, int count, int cmd, int id, int w2, int w3)
+{
+    if (!C.page_full) {
+        IcoAudioStreamStats st;
+
+        C.page_full = 1;
+        sw_page_full();
+        ico_audio_stream_stats(&st);
+        if (st.pages_full <= 8 || st.pages_full % 100 == 0) {
+            /* the page's command mix, the commonest first, six at most */
+            unsigned int cnt[256];
+            char mix[128];
+            size_t n = 0;
+            int shown;
+            int i;
+
+            memset(cnt, 0, sizeof cnt);
+            for (i = 0; page != NULL && i < count; i++) {
+                cnt[(uint32_t)page[i * 4] & 0xFF]++;
+            }
+            mix[0] = '\0';
+            for (shown = 0; shown < 6; shown++) {
+                int best = -1;
+
+                for (i = 0; i < 256; i++) {
+                    if (cnt[i] != 0 && (best < 0 || cnt[i] > cnt[best])) {
+                        best = i;
+                    }
+                }
+                if (best < 0 || n >= sizeof mix) {
+                    break;
+                }
+                n += (size_t)snprintf(mix + n, sizeof mix - n, "%s0x%02X x%u", shown ? ", " : "",
+                                      (unsigned)best, cnt[best]);
+                cnt[best] = 0;
+            }
+            sw_log("sndn2: packet page full (%d packets: %s); the later packets of this tick are "
+                   "carried to the driver (page %u)",
+                   count, mix, st.pages_full);
+        }
+    }
+    if (C.n >= ICO_SNDN2_CARRY_MAX) {
+        sw_dropped();
+        if (!logged_carry_drop) {
+            logged_carry_drop = 1;
+            sw_log("sndn2: more than %d packets past a full page: packet 0x%X dropped",
+                   ICO_SNDN2_CARRY_MAX, (unsigned)cmd);
+        }
+        return;
+    }
+    C.pk[C.n][0] = (uint32_t)cmd;
+    C.pk[C.n][1] = (uint32_t)id;
+    C.pk[C.n][2] = (uint32_t)w2;
+    C.pk[C.n][3] = (uint32_t)w3;
+    C.n++;
+    sw_carried();
+}
+
 /* --- The reply page ---------------------------------------------------------- */
 
 static uint8_t *fill_page(void)
@@ -438,6 +507,18 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
         for (i = 0; pk != NULL && i + 16 <= ssize; i += 16) {
             dispatch(pk + i);
         }
+        /* AU-7: what the full page could not hold, in the order sent */
+        for (i = 0; i < C.n; i++) {
+            uint8_t b[16];
+
+            wr32(b, C.pk[i][0]);
+            wr32(b + 4, C.pk[i][1]);
+            wr32(b + 8, C.pk[i][2]);
+            wr32(b + 12, C.pk[i][3]);
+            dispatch(b);
+        }
+        C.n = 0;
+        C.page_full = 0;
         st_adpcm_tick();
         H.last_reply = fill_page();
         /* the host SIF copies `rsize` bytes from the reply: never past the
@@ -470,7 +551,10 @@ void ico_sndn2_host_reset(void)
     memset(&H, 0, sizeof(H));
     st_adpcm_reset();
     ico_audio_gain_forget();
-    logged_cmd = logged_iop = logged_clamp = logged_sub = 0;
+    ico_audio_stream_watch_reset();
+    C.n = 0;
+    C.page_full = 0;
+    logged_cmd = logged_iop = logged_clamp = logged_sub = logged_carry_drop = 0;
 }
 
 void ico_sndn2_host_register(void)

@@ -66,6 +66,7 @@ add_library(ico_sndn2 STATIC
     sndn2_host.c
     libsd_irx.c
     stream.c
+    stream_watch.c
     audio_host.c
     wav.c)
 target_include_directories(ico_sndn2

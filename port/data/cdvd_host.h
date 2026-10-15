@@ -67,6 +67,12 @@ typedef struct IcoCdvdStats {
 
 void ico_cdvd_host_stats(IcoCdvdStats *out);
 
+/* The game's background reader (ico2/fumi/ios/cdvd.c) is about to retry a
+   read of `name` at `lsn`: `error` 0 when the drive was not ready during
+   it, else sceCdGetError's code.  Logged (`cdvd: background read of ...
+   retried`) for the first 8 retries and then every 100th. */
+void ico_cdvd_host_bg_retry(const char *name, unsigned int lsn, int error);
+
 /* Whether sceCdInit registered ico_cdvd_host_vsync with the host loop. */
 int ico_cdvd_host_vsync_hooked(void);
 
