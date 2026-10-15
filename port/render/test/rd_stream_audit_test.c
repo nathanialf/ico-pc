@@ -60,6 +60,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "shader_consts.h"
+#include "vu1_ref.h"
 
 _Static_assert(sizeof(((IcoVuCB *)0)->ticks) == 8 * 16,
                "vu_ticks[4k + 3] for k < 2 must stay inside the block");
@@ -94,6 +95,14 @@ typedef struct AuditDraw {
     uint32_t indexCount;
     uint32_t particles; /* RD_PROG_PARTICLE: the count */
     uint32_t boneQw;    /* skinned: the bone qwords uploaded */
+    /* the marks as the replay hands them over: OR-ed into every index
+     * value (valueMark: a grid before v0.8.0), a mark byte a kick
+     * (kickMark, markCount bytes: rd_mesh.c's), or the draw's own
+     * (drawMark: a grid's vu_mark.y) */
+    uint32_t valueMark;
+    const uint8_t *kickMark;
+    uint32_t markCount;
+    uint32_t drawMark;
 } AuditDraw;
 
 typedef struct Audit {
@@ -317,6 +326,238 @@ static void auditDraw(const AuditDraw *d, Audit *a)
     }
 }
 
+/* ------------------------------------------------------ the index span
+ * Issue 95: the index values the device draws (rd_replay.c doVuDraw: the
+ * mesh's list, or the grid's made at replay) are vertex numbers to the
+ * driver, whatever the shaders make of them.  Vulkan holds them to
+ * VkPhysicalDeviceLimits::maxDrawIndexedIndexValue, which is 2^24 - 1 on
+ * a device without fullDrawIndexUint32, and a GPU that shades by index
+ * range (Mali) sizes a draw's vertex storage by max - min.  Reported per
+ * frame: the widest draw, the draws past 2^24 - 1, the values carrying
+ * one of the old mark bits (bits 28..30, the marks before v0.8.0); and,
+ * failed, a kick listed twice in one draw with different marks (a mark a
+ * kick, rd_mesh.c kickMark, is exact only when each kick is one
+ * triangle). */
+#define AUDIT_SPAN_LIMIT ((1u << 24) - 1u)
+/* 1: a span past AUDIT_SPAN_LIMIT fails (the marks live in the stream) */
+#ifndef AUDIT_SPAN_GATE
+#define AUDIT_SPAN_GATE 0
+#endif
+#define AUDIT_OLD_LATER 0x40000000u
+#define AUDIT_OLD_HIDE 0x20000000u
+#define AUDIT_OLD_JOINED 0x10000000u
+
+typedef struct Span {
+    uint32_t lo, hi, n;
+    uint32_t later, hide, joined; /* values carrying each old mark bit */
+    uint32_t marked;              /* triangles with a mark of any kind (marks or bits) */
+    uint32_t dupKicks;            /* kicks listed twice with different marks */
+} Span;
+
+/* the span of n values (each OR-ed with orMark, as the grid's are) */
+static void spanOf(const AuditDraw *d, Span *s)
+{
+    memset(s, 0, sizeof(*s));
+    s->lo = UINT32_MAX;
+    uint32_t maxKick = 0;
+    for (uint32_t i = 0; i < d->indexCount; i++) {
+        const uint32_t v = d->index[i] | d->valueMark;
+        s->lo = v < s->lo ? v : s->lo;
+        s->hi = v > s->hi ? v : s->hi;
+        s->later += (v & AUDIT_OLD_LATER) != 0;
+        s->hide += (v & AUDIT_OLD_HIDE) != 0;
+        s->joined += (v & AUDIT_OLD_JOINED) != 0;
+        const uint32_t k = (v & ICO_VU_INDEX_MASK) >> 2;
+        maxKick = k > maxKick ? k : maxKick;
+    }
+    s->n = d->indexCount;
+    /* the mark of each triangle: the old bits, or the draw's mark bytes */
+    uint8_t *seen = d->indexCount ? malloc((size_t)maxKick + 1u) : NULL;
+    if (seen) {
+        memset(seen, 0xFF, (size_t)maxKick + 1u);
+    }
+    for (uint32_t i = 0; seen && i + 2 < d->indexCount; i += 3) {
+        const uint32_t v = d->index[i] | d->valueMark;
+        const uint32_t k = (v & ICO_VU_INDEX_MASK) >> 2;
+        uint32_t mark = (v >> 28) & 7u;
+        if (d->kickMark && k < d->markCount) {
+            mark |= d->kickMark[k];
+        }
+        mark |= d->drawMark;
+        s->marked += mark != 0;
+        if (seen[k] != 0xFF && seen[k] != mark) {
+            s->dupKicks++;
+        }
+        seen[k] = (uint8_t)mark;
+    }
+    free(seen);
+    if (s->lo == UINT32_MAX) {
+        s->lo = 0;
+    }
+}
+
+/* ---------------------------------------------------- the CPU mirror
+ * The programs' CPU references (port/render/vu1_ref) run on each batch of
+ * every prelit, lit and skinned mesh draw at the draw's own VU memory
+ * (RdVuBlock) and bones: what the PS2's VU would have sent.  Counted per
+ * frame, not checked against the GPU: clip W not finite or within 1e-6 of
+ * 0, GS X or Y past 16 bits (the GS wraps them), the scissor programs'
+ * fans (and the largest), NaN in the bones the draw uploaded or in its VU
+ * memory.  Failed: a NaN clip W or a NaN bone (values the program reads);
+ * a NaN in VU memory is only counted (a slot the program does not read
+ * may hold one). */
+typedef struct Mirror {
+    uint32_t draws, batches, skipped; /* skipped: a batch past VU_BATCH_MAX */
+    uint64_t vertices, wNonFinite, wNan, wTiny, xyWrap;
+    uint32_t fans, fanMax;
+    uint32_t nanBones, nanMem;
+} Mirror;
+
+static bool qwNan(const float *q)
+{
+    return q[0] != q[0] || q[1] != q[1] || q[2] != q[2] || q[3] != q[3];
+}
+
+static void mirrorDraw(const RdFrame *f, const RdCmd *c, Mirror *mt, const char *where)
+{
+    RdVuPayload p;
+    memcpy(&p, f->payload + c->u[1], sizeof(p));
+    if (c->type != RDC_MESH && c->type != RDC_SKINNED) {
+        return;
+    }
+    const int skin = p.prog == RD_PROG_SKIN || p.prog == RD_PROG_SKIN_SPEC;
+    const int lit =
+        p.prog == RD_PROG_LIT || p.prog == RD_PROG_LIT_SPEC || p.prog == RD_PROG_REFLECT;
+    if (!skin && !lit && p.prog != RD_PROG_PRELIT) {
+        return;
+    }
+    const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+    if (!m || !m->vu || p.firstBatch >= m->batchCount) {
+        return;
+    }
+    RdVuBlock blk;
+    memcpy(&blk, f->payload + c->u[1] + sizeof(p), sizeof(blk));
+    const float (*bones)[4] =
+        (const float (*)[4])(f->payload + c->u[1] + sizeof(p) + sizeof(RdVuBlock));
+    const uint32_t boneQw = p.boneQw > 240u ? 240u : p.boneQw;
+    for (int q = 0; q < 36; q++) {
+        /* counted, not failed: a slot the program does not read may hold
+           anything (the title logo's prelit draws leave NaN in 24..27, the
+           model-to-view matrix normal_c does not use) */
+        if (qwNan(blk.mem[q])) {
+            mt->nanMem++;
+            break;
+        }
+    }
+    static Vu1Ref r;
+    vu1ref_init(&r);
+    vu1ref_load_common(&r, (const float (*)[4])blk.mem);
+    if (skin) {
+        /* SET_CLUSTER_MATRIX: n + 1 qwords from qw[1] to mem[16..] */
+        static float pk[242][4];
+        memset(pk, 0, sizeof(pk));
+        const uint32_t n1 = boneQw ? boneQw : 1u;
+        memcpy(&pk[0][0], &n1, 4);
+        pk[0][3] = blk.mem[2][3];
+        for (uint32_t b = 0; b < boneQw; b++) {
+            memcpy(pk[1 + b], bones[b], 16);
+            if (qwNan(bones[b])) {
+                mt->nanBones++;
+            }
+        }
+        CHECK(mt->nanBones == 0, "%s: a bone qword is NaN", where);
+        vu1ref_cluster_set_matrix(&r, (const float (*)[4])pk);
+        vu1ref_cluster_set_light(&r, (const float (*)[4])(blk.mem + 28));
+    } else {
+        vu1ref_normal_set_matrix(&r, (const float (*)[4])(blk.mem + 16));
+        vu1ref_normal_set_light(&r, (const float (*)[4])(blk.mem + 28));
+    }
+    uint32_t last = p.firstBatch + p.batchCount;
+    if (last > m->batchCount || p.batchCount == 0) {
+        last = m->batchCount;
+    }
+    mt->draws++;
+    static float in[1 + VU_BATCH_MAX * 5][4];
+    static VuBatchOut out;
+    const uint32_t qpv = m->qwPerVertex;
+    for (uint32_t b = p.firstBatch; b < last; b++) {
+        const RdVuBatchRec *br = &m->batches[b];
+        const uint32_t nv = br->vertexCount;
+        if (nv == 0 || (uint64_t)br->firstVertex + nv > m->vertexCount || nv > VU_BATCH_MAX ||
+            qpv > 5u) {
+            mt->skipped++;
+            continue;
+        }
+        /* the batch at TOP: the common tag with NLOOP = the vertices */
+        memcpy(in[0], blk.mem[3], 16);
+        uint32_t t0;
+        memcpy(&t0, &in[0][0], 4);
+        t0 = (t0 & ~0x7FFFu) | (nv & 0x7FFFu);
+        memcpy(&in[0][0], &t0, 4);
+        memcpy(in[1], m->stream[(size_t)br->firstVertex * qpv], (size_t)nv * qpv * 16);
+        memset(&out, 0, sizeof(out));
+        if (skin) {
+            vu1ref_cluster(&r, p.code, (const float (*)[4])in, &out);
+        } else if (lit) {
+            vu1ref_normal_l(&r, p.code, (const float (*)[4])in, &out);
+        } else {
+            vu1ref_normal_c(&r, p.code, (const float (*)[4])in, &out);
+        }
+        mt->batches++;
+        for (int i = 0; i < out.count; i++) {
+            const VuGsVertex *v = &out.v[i];
+            const float w = v->clipW;
+            mt->vertices++;
+            if (w != w) {
+                mt->wNan++;
+                CHECK(0, "%s: batch %u vertex %d: the reference's clip w is NaN", where,
+                      (unsigned)b, i);
+            }
+            if (w != w || w - w != 0.0f) {
+                mt->wNonFinite++;
+            } else if (w > -1e-6f && w < 1e-6f) {
+                mt->wTiny++;
+            }
+            mt->xyWrap +=
+                v->xyz[0] < 0 || v->xyz[0] > 0xFFFF || v->xyz[1] < 0 || v->xyz[1] > 0xFFFF;
+        }
+        mt->fans += (uint32_t)out.fanCount;
+        for (int i = 0; i < out.fanCount; i++) {
+            mt->fanMax =
+                (uint32_t)out.fans[i].n > mt->fanMax ? (uint32_t)out.fans[i].n : mt->fanMax;
+        }
+    }
+}
+
+/* ---------------------------------------------------- list 0's textures
+ * Every texture a list-0 command binds (RDC_TEXTURE), once: its id, size,
+ * texel format, mip levels and whether the CPU copy is there. */
+static void listTextures(const RdFrame *f)
+{
+    uint32_t seen[256];
+    uint32_t n = 0;
+    const RdCmdList *cl = &f->lists[0];
+    for (uint32_t i = 0; i < cl->count; i++) {
+        const RdCmd *c = &cl->cmds[i];
+        if (c->type != RDC_TEXTURE) {
+            continue;
+        }
+        bool dup = false;
+        for (uint32_t k = 0; k < n && !dup; k++) {
+            dup = seen[k] == c->u[0];
+        }
+        if (dup || n == 256) {
+            continue;
+        }
+        seen[n++] = c->u[0];
+        const RdTexRec *t = rd__tex_rec(c->u[0]);
+        printf("rd_stream_audit:   list 0 texture %u \"%.24s\" %ux%u format %u mips %u pixels %s\n",
+               c->u[0], t ? t->name : "", t ? t->w : 0u, t ? t->h : 0u, t ? t->format : 0u,
+               t ? t->mipLevels : 0u, t && t->pixels ? "present" : "absent");
+    }
+    printf("rd_stream_audit:   list 0 binds %u textures\n", n);
+}
+
 /* ------------------------------------------------------------ the dumps */
 
 typedef struct Totals {
@@ -326,6 +567,10 @@ typedef struct Totals {
     uint32_t skinDraws, skinFull, addrLo, addrHi;
     uint64_t reads;
     int shortenedDone;
+    /* the index span (spanOf), over every frame */
+    uint32_t spanMax, spanOver, spanMarkedValues, dupKicks;
+    char spanWhere[240];
+    Mirror mirror;
 } Totals;
 
 /* doVuDraw's words for command c of frame f; false for a draw the replay
@@ -398,6 +643,9 @@ static bool drawOf(const RdFrame *f, const RdCmd *c, AuditDraw *d, uint32_t **gr
         }
     }
     *gridIndex = idx;
+    /* a grid of two strips or more: every value carries the joined mark
+       (rd_replay.c doVuDraw) */
+    d->valueMark = p.batchCount >= 2 ? AUDIT_OLD_JOINED : 0u;
     d->index = idx;
     d->indexCount = ni;
     return true;
@@ -414,6 +662,11 @@ static const char *kindName(uint8_t t)
 static void auditFrame(const char *path, const RdFrame *f, Totals *t)
 {
     uint32_t draws = 0, bad = 0;
+    /* the frame's index spans */
+    uint32_t fMax = 0, fOver = 0, fMarkedDraws = 0, fLater = 0, fHide = 0, fJoined = 0;
+    uint32_t fOverList[RD_LIST_COUNT] = {0}, fDrawsList[RD_LIST_COUNT] = {0};
+    char fWhere[240] = "";
+    const Mirror m0 = t->mirror;
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
             const RdCmd *c = &f->lists[l].cmds[i];
@@ -438,6 +691,46 @@ static void auditFrame(const char *path, const RdFrame *f, Totals *t)
                 failText(&a, why);
             } else {
                 auditDraw(&d, &a);
+            }
+            if (!why && d.index && d.indexCount) {
+                Span sp;
+                spanOf(&d, &sp);
+                const uint32_t span = sp.hi - sp.lo;
+                if (span >= fMax) {
+                    fMax = span;
+                    snprintf(fWhere, sizeof(fWhere), "list %d command %u (%s %s, prog %u)", l, i,
+                             kindName(c->type), name, (unsigned)d.prog);
+                }
+                fOver += span > AUDIT_SPAN_LIMIT;
+                fOverList[l] += span > AUDIT_SPAN_LIMIT;
+                fDrawsList[l]++;
+                if (span > AUDIT_SPAN_LIMIT && getenv("ICO_AUDIT_SPANS")) {
+                    /* ICO_AUDIT_SPANS=1: each such draw */
+                    printf("rd_stream_audit:     %s: values %u..%u, old mark bits later %u hide %u "
+                           "joined %u\n",
+                           where, sp.lo, sp.hi, sp.later, sp.hide, sp.joined);
+                }
+                fMarkedDraws += sp.marked != 0;
+                fLater += sp.later;
+                fHide += sp.hide;
+                fJoined += sp.joined;
+                t->spanMarkedValues += sp.later + sp.hide + sp.joined;
+                t->dupKicks += sp.dupKicks;
+                CHECK(sp.dupKicks == 0, "%s: %u kicks listed twice with different marks", where,
+                      sp.dupKicks);
+#if AUDIT_SPAN_GATE
+                CHECK(span <= AUDIT_SPAN_LIMIT,
+                      "%s: index values %u..%u, a span past 2^24 - 1 (Vulkan's least "
+                      "maxDrawIndexedIndexValue)",
+                      where, sp.lo, sp.hi);
+#endif
+                if (span > t->spanMax) {
+                    t->spanMax = span;
+                    snprintf(t->spanWhere, sizeof(t->spanWhere), "%s", where);
+                }
+            }
+            if (!why) {
+                mirrorDraw(f, c, &t->mirror, where);
             }
             draws++;
             t->draws++;
@@ -488,6 +781,27 @@ static void auditFrame(const char *path, const RdFrame *f, Totals *t)
     }
     printf("rd_stream_audit: %s: frame %u, %u VU draws, %u with reads past the end\n", path,
            f->number, draws, bad);
+    t->spanOver += fOver;
+    printf("rd_stream_audit:   index span: widest %u (%s), %u draws past 2^24 - 1; %u draws "
+           "with marked triangles; values with the old mark bits: later %u, hide %u, joined "
+           "%u\n",
+           fMax, fWhere[0] ? fWhere : "none", fOver, fMarkedDraws, fLater, fHide, fJoined);
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        if (fDrawsList[l]) {
+            printf("rd_stream_audit:   list %d: %u indexed VU draws, %u past 2^24 - 1\n", l,
+                   fDrawsList[l], fOverList[l]);
+        }
+    }
+    const Mirror *m1 = &t->mirror;
+    printf("rd_stream_audit:   CPU mirror: %u draws, %u batches (%u past VU_BATCH_MAX), %llu "
+           "vertices: clip w not finite %llu, |w| < 1e-6 %llu, GS X/Y past 16 bits %llu; %u "
+           "fans (largest %u); NaN bone qwords %u, NaN VU memory %u\n",
+           m1->draws - m0.draws, m1->batches - m0.batches, m1->skipped - m0.skipped,
+           (unsigned long long)(m1->vertices - m0.vertices),
+           (unsigned long long)(m1->wNonFinite - m0.wNonFinite),
+           (unsigned long long)(m1->wTiny - m0.wTiny), (unsigned long long)(m1->xyWrap - m0.xyWrap),
+           m1->fans - m0.fans, m1->fanMax, m1->nanBones - m0.nanBones, m1->nanMem - m0.nanMem);
+    listTextures(f);
 }
 
 static bool endsWith(const char *s, const char *suffix)
@@ -705,6 +1019,15 @@ int main(int argc, char **argv)
                t.skinDraws, t.addrLo, t.addrHi, ((int)t.addrLo - 16) / 4, ((int)t.addrHi - 16) / 4,
                t.skinFull);
     }
+    printf("rd_stream_audit: index span: widest %u (%s), %u draws past 2^24 - 1 (%s), %u values "
+           "with the old mark bits, %u kicks listed twice with different marks\n",
+           t.spanMax, t.spanWhere[0] ? t.spanWhere : "none", t.spanOver,
+           AUDIT_SPAN_GATE ? "failed" : "reported", t.spanMarkedValues, t.dupKicks);
+    printf("rd_stream_audit: CPU mirror: %u draws, %llu vertices, clip w not finite %llu, "
+           "|w| < 1e-6 %llu, GS X/Y past 16 bits %llu, %u fans (largest %u), NaN bones %u\n",
+           t.mirror.draws, (unsigned long long)t.mirror.vertices,
+           (unsigned long long)t.mirror.wNonFinite, (unsigned long long)t.mirror.wTiny,
+           (unsigned long long)t.mirror.xyWrap, t.mirror.fans, t.mirror.fanMax, t.mirror.nanBones);
     if (failures) {
         printf("rd_stream_audit_test: FAILED\n");
         return 1;
