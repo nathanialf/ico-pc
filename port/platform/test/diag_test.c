@@ -158,7 +158,7 @@ static void *segv_worker(void *arg)
 {
     volatile int *p = (volatile int *)arg;
     ico_diag_milestone("segv worker runs");
-    *p = 1; /* NULL */
+    *p = 1; /* an unmapped address */
     return NULL;
 }
 #endif
@@ -465,7 +465,9 @@ static void run_child(const char *mode, const char *log)
 #if !defined(_WIN32)
         pthread_t t;
         ico_diag_set_activity(BATCH_NOTE);
-        if (pthread_create(&t, NULL, segv_worker, NULL) == 0) {
+        /* a low unmapped address, not NULL: the undefined-behaviour
+           sanitizer would report a store through NULL before the fault */
+        if (pthread_create(&t, NULL, segv_worker, (void *)16) == 0) {
             pthread_join(t, NULL);
         }
         ico_diag_log("test: the worker did not fault");
