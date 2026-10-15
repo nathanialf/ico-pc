@@ -21,7 +21,9 @@
  * model loads its host stage with ico_mv_active set (options.h): the stage's
  * scripts do not start, every other object is parked, the renderer keeps
  * only the model's draws (rd.h rd_set_draw_filter) over a grey backdrop, and
- * a free camera orbits it.  Triangle goes back to the list, and from the
+ * a free camera orbits it.  A motion's sounds and vibration play; its stage
+ * animations and particle effects are not entered (frameDependSequence.c
+ * playEff).  Triangle goes back to the list, and from the
  * list to the title the way the pause menu's End Game does.
  */
 #ifndef PORT_GAME_MODEL_VIEWER_H

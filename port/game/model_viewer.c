@@ -18,7 +18,11 @@
  *                     MOTION IN THIS STAGE": area != 0, blendKind 320,
  *                     motionTable[id] == 0); the frame is
  *                     ForMotionViewer_GetCurrentAnimationFrame of
- *                     GetNbMotionFrames - 1
+ *                     GetNbMotionFrames - 1; the motion's frame-dependent
+ *                     sequence runs (the motion manager's update calls
+ *                     ExecFrameDependSequence): its sounds and vibration
+ *                     play, its effects are not entered while ico_mv_active
+ *                     is set (frameDependSequence.c playEff)
  *   modeMessage       the root update mode 19 ("RotOnly"): the root turns
  *                     but does not travel, so a walk stays in view
  *

@@ -53,6 +53,8 @@ extern int soundSeDefPlayWithVolumeRate(int se, unsigned int owner, ICO_WORD_PTR
                                         int playMode, float rate);
 /* seMail has no header; declared as ico2/fumi/src/seMail.c defines it */
 extern void seMail(GObj *self, int id);
+/* port/game/options.h: the model viewer is up */
+extern int ico_mv_active;
 
 static int playSE(int no)
 {
@@ -193,6 +195,15 @@ static void playEff(int no)
     int node;
     unsigned int flags;
 
+    /* PC port: the model viewer (port/game/model_viewer.c) plays a motion
+       over its host stage with every other object parked and only the
+       model's own draws kept, so a motion's stage animation or particle
+       effect is not seen there, and the stage may not hold it (the boy's
+       SWIM in stage 8, DIVERGENCES.md GL-11): no effect is entered while it
+       is up.  The sounds and the vibration (execSE, execVib) play on. */
+    if (ico_mv_active != 0) {
+        return;
+    }
     if (motionEffKind[no].node == -1) {
         GetRootQuaternion(q, (GObj *)fdsGObj);
         GetRootMatrix(MatrixDrive_GetMatrix(), (GObj *)fdsGObj);

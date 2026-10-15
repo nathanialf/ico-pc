@@ -13,6 +13,26 @@ static BgaPlayNode *stageBgaAnim[30]; /* derived name */
 static int stageBgaCount = 0; /* derived name */
 
 #include "stageMultiBgaManager.h"
+#include <stdio.h>
+
+/* PC port: a stage animation the stage has not loaded makes no play node
+   (stage_MakePlayBgAnimation returns 0) and the PS2 code below writes the
+   effect's position into it.  The PS2 never gets there: the motions and
+   objects that enter a stage animation run only in the stages that load it.
+   The model viewer (port/game/model_viewer.c) and an unforeseen path can, so
+   the effect is skipped, leaving the slots as they were
+   (docs/port/DIVERGENCES.md GL-11). */
+static void stageBgaNoNode(int kind)
+{
+    static int reported;
+
+    if (!reported) {
+        reported = 1;
+        fprintf(stderr,
+                "stage: no animation node for effect kind %d (stage %d): the effect is skipped\n",
+                kind, stage_no);
+    }
+}
 
 inline void InitStageMultiBgaManager(void)
 {
@@ -27,7 +47,13 @@ inline void InitStageMultiBgaManager(void)
 
 inline void EntryStageMultiBgaManagerWithStay(int kind, void *pos, void *rot, int stay)
 {
-    stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
+    BgaPlayNode *node = stage_MakePlayBgAnimation(kind);
+
+    if (node == 0) { /* PC port: stageBgaNoNode */
+        stageBgaNoNode(kind);
+        return;
+    }
+    stageBgaAnim[stageBgaCount] = node;
     _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
     CopyQuaternion(stageBgaAnim[stageBgaCount]->rot, rot);
     EntryMultiBgaManager(stageBga, stageBgaCount++, kind, pos, rot);
@@ -45,7 +71,13 @@ inline void EntryStageMultiBgaManager(int kind, void *pos, void *rot)
 inline void EntryStageMultiBgaManagerSensitiveWithStay(int kind, void *pos, void *rot, void *vel,
                                                        int stay)
 {
-    stageBgaAnim[stageBgaCount] = stage_MakePlayBgAnimation(kind);
+    BgaPlayNode *node = stage_MakePlayBgAnimation(kind);
+
+    if (node == 0) { /* PC port: stageBgaNoNode */
+        stageBgaNoNode(kind);
+        return;
+    }
+    stageBgaAnim[stageBgaCount] = node;
     _CopyVector(stageBgaAnim[stageBgaCount]->pos, pos);
     CopyQuaternion(stageBgaAnim[stageBgaCount]->rot, rot);
     EntryMultiBgaManagerSensitive(stageBga, stageBgaCount++, kind, pos, rot, vel);

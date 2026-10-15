@@ -40,7 +40,8 @@
 
 /* The model viewer is up (port/game/model_viewer.h), from the
    model's choice until the title is back.  While it is set, a loading
-   stage other than the title starts no script (common/src/sceneManager.c)
+   stage other than the title starts no script (common/src/sceneManager.c),
+   a motion enters no effect (sugipon/src/frameDependSequence.c playEff)
    and the achievements are suspended (gamestate.c); nothing else reads it. */
 extern int ico_mv_active;
 
