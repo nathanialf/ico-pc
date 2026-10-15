@@ -1536,6 +1536,13 @@ void rd__capture_finish(void);
 #define RD_INTERP_TURN_SNAP 120.0 /* degrees, per tick */
 #define RD_INTERP_TURN_KEEP 60.0  /* degrees */
 #define RD_INTERP_TURN_LONG 300.0 /* degrees, per tick */
+/* A remembered turn also serves a turn that would snap when it ended up to
+ * this many ticks before the pair's first (about a quarter second at 30
+ * Hz): a pair not blended between (a dropped present, a cut, a fade, a
+ * discarded frame) or a draw not drawn for a few ticks keeps its wheel
+ * turning on, when the draw's pose is where the turn carried on that many
+ * ticks puts it (within RD_INTERP_TURN_KEEP) */
+#define RD_INTERP_TURN_GAP 8u /* ticks */
 /* In the alignment of two ticks' shadow prisms, a prism left unmatched
  * costs as much as a pair whose top caps lie this far apart (rms, GS pixels)
  * once the volume's shift is taken out; a pair further apart than sqrt(2)

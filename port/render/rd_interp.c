@@ -359,23 +359,49 @@ bool rd__blend_affine(const double *p, const double *c, double t, const double *
  * own frame, rdcb_turn_vector: a wheel's axle is the same axis there from
  * tick to tick), and the next blend takes the way, short or long, that
  * continues it (rdcb_blend_affine_turn; RD_INTERP_TURN_KEEP,
- * RD_INTERP_TURN_LONG).  Without a turn to continue (the first pair, after
- * a whole-frame snap, a draw not blended the tick before, or a turn not
- * near the one before) the short way, and a turn over RD_INTERP_TURN_SNAP
- * keeps the tick's pose, as before.  A turn is remembered only when it
- * blended: one that kept the tick's pose for its size has no known
- * direction (forward 190 is back 170 the short way), so it is never
- * remembered, and a wheel first seen between RD_INTERP_TURN_SNAP and 180
- * degrees a tick keeps the tick's pose until it slows below the snap.  A
- * wheel that speeds up in steps under RD_INTERP_TURN_KEEP carries its
- * remembered turn through 180 and takes the long way.  A remembered
- * turn applies only to the next pair of ticks (its end tick the pair's
- * first, the ticks consecutive), and only to the draw the pairing matched
- * (its key, and its list and place in that tick).  The tick's own present
- * (alpha 1) never blends, so the tick's pose is exact whatever the way.
+ * RD_INTERP_TURN_LONG).  Without a turn to continue (the first pair, a
+ * draw not blended in the last RD_INTERP_TURN_GAP ticks, or a turn not
+ * near the one remembered) the short way, and a turn over
+ * RD_INTERP_TURN_SNAP keeps the tick's pose, as before.  A turn is
+ * remembered only when it blended: one that kept the tick's pose for its
+ * size has no known direction (forward 190 is back 170 the short way), so
+ * it is never remembered, and a wheel first seen between
+ * RD_INTERP_TURN_SNAP and 180 degrees a tick keeps the tick's pose until
+ * it slows below the snap.  A wheel that speeds up in steps under
+ * RD_INTERP_TURN_KEEP carries its remembered turn through 180 and takes
+ * the long way.  A remembered turn applies to the next pair of ticks (its
+ * end tick the pair's first, the ticks consecutive) for the draw the
+ * pairing matched (its key, and its list and place in that tick).  The
+ * tick's own present (alpha 1) never blends, so the tick's pose is exact
+ * whatever the way.
  *
- * The memory is one table of RD_TURN_CAP records, allocated once: a record
- * whose tick is neither of the present pair's is free. */
+ * Across a gap (issue 98's residual): a pair not blended between (a
+ * dropped or late present, a whole-frame snap: a cut, a fade, a discarded
+ * frame) or a draw not drawn for a few ticks would otherwise lose the
+ * memory, and a wheel over RD_INTERP_TURN_SNAP a tick would keep the
+ * tick's pose until it slowed below the snap.  The turn is a per-tick
+ * rotation in the object's own frame (the model to world or the bone, no
+ * camera in it), so it still holds a few ticks on.  Each draw's key and
+ * bone also keep their last remembered turn with the pose it ended at
+ * (TurnLast: by key and bone, not by place, which may change between the
+ * ticks), and a pair whose turn would snap (over RD_INTERP_TURN_SNAP with
+ * no memory of the tick before) takes that turn when it ended 1 to
+ * RD_INTERP_TURN_GAP ticks before the pair's first tick and the draw's
+ * pose at that tick is where the turn carried on that many ticks puts it,
+ * within RD_INTERP_TURN_KEEP (turnRecallGap).  When several draws kept
+ * the key and bone in the same tick, only the one in the remembered
+ * draw's list and place takes it.  Only a turn that would snap with no
+ * memory of the tick before asks: a turn under the snap, and any turn
+ * with a memory of the tick before, blends as without the gap rule, bit
+ * for bit.  The whole-frame snaps clear neither table (nothing blends in
+ * them, so nothing is recalled or kept).  A pair of ticks that are not
+ * consecutive never blends (RD_SNAP_GAP), so every turn remembered is
+ * one tick's.
+ *
+ * The memory is two tables of RD_TURN_CAP records, each allocated once:
+ * by place, a record whose tick is neither of the present pair's is free;
+ * by key and bone (TurnLast), a record whose newer turn ended more than
+ * RD_INTERP_TURN_GAP + 1 ticks before the present pair's last is free. */
 typedef struct TurnEnt {
     uint32_t frame;  /* the tick the turn ended at (its blend's cur); 0: free */
     uint32_t from;   /* the tick it started at (its blend's prev) */
@@ -393,6 +419,27 @@ typedef struct TurnEnt {
 
 static TurnEnt *s_turnMem;
 
+/* a draw's key and bone's last two remembered turns (rec[0] the newer):
+ * the newer may be the present pair's own, kept by an earlier present */
+typedef struct TurnRec {
+    uint32_t frame; /* the tick the turn ended at; 0: none */
+    uint32_t index; /* the draw's place in its list in frame */
+    uint8_t list;
+    uint8_t shared; /* another place kept the key and bone in frame too */
+    uint8_t _pad[2];
+    float turn[3]; /* rotation vector, radians, in the object's frame */
+    float pose[4]; /* the rotation the turn ended at (quaternion, w last) */
+} TurnRec;
+
+typedef struct TurnLast {
+    uint32_t lo, hi; /* the draw's key (RdKey) */
+    uint8_t bone;    /* the bone, or RD_TURN_RIGID */
+    uint8_t _pad[3];
+    TurnRec rec[2];
+} TurnLast;
+
+static TurnLast *s_turnLast;
+
 /* the draw blendVu blends (set around its call): its key, the two ticks,
  * its list and place in cur and (looked up when first needed) in prev */
 static struct {
@@ -406,9 +453,11 @@ static struct {
     uint32_t pIndex;
 } s_tk;
 
-/* the last blendTurn's turn (rotation vector) and RDCB_WAY_* */
+/* the last blendTurn's turn (rotation vector) and RDCB_WAY_*, and the
+ * matrix it ended at (its c, for turnKeep) */
 static double s_turnVec[3];
 static int s_turnWay;
+static const double *s_turnEnd;
 
 /* the draw blendVu blends: a model or bone turned the long way, one kept at
  * the tick's pose for its turn */
@@ -418,6 +467,8 @@ static void turnFree(void)
 {
     free(s_turnMem);
     s_turnMem = NULL;
+    free(s_turnLast);
+    s_turnLast = NULL;
 }
 
 static uint32_t turnHash(uint32_t frame, uint32_t list, uint32_t index, uint32_t bone)
@@ -431,13 +482,10 @@ static uint32_t turnHash(uint32_t frame, uint32_t list, uint32_t index, uint32_t
     return h & (RD_TURN_CAP - 1u);
 }
 
-/* the turn the draw's bone (or model matrix) made between the two ticks
- * before, false without one */
-static bool turnRecall(uint32_t bone, double out[3])
+/* the draw's list and place in prev (s_tk.pList, s_tk.pIndex), looked up
+ * once; false when not found */
+static bool turnPrevPlace(void)
 {
-    if (!s_tk.on || !s_turnMem || s_tk.prevNum == 0u || s_tk.prevNum + 1u != s_tk.curNum) {
-        return false;
-    }
     if (s_tk.pList == -1) {
         s_tk.pList = -2;
         for (int l = 0; l < RD_LIST_COUNT; l++) {
@@ -450,7 +498,17 @@ static bool turnRecall(uint32_t bone, double out[3])
             }
         }
     }
-    if (s_tk.pList < 0) {
+    return s_tk.pList >= 0;
+}
+
+/* the turn the draw's bone (or model matrix) made between the two ticks
+ * before, false without one */
+static bool turnRecall(uint32_t bone, double out[3])
+{
+    if (!s_tk.on || !s_turnMem || s_tk.prevNum == 0u || s_tk.prevNum + 1u != s_tk.curNum) {
+        return false;
+    }
+    if (!turnPrevPlace()) {
         return false;
     }
     uint32_t i = turnHash(s_tk.prevNum, (uint32_t)s_tk.pList, s_tk.pIndex, bone);
@@ -508,17 +566,196 @@ static void turnKeep(uint32_t bone)
     }
 }
 
+static uint32_t turnLastHash(uint32_t lo, uint32_t hi, uint32_t bone)
+{
+    uint32_t h = lo * 0x9E3779B1u;
+    h ^= hi * 0x85EBCA77u + 0x165667B1u;
+    h ^= bone * 0xC2B2AE3Du;
+    h ^= h >> 15;
+    h *= 0x27D4EB2Fu;
+    h ^= h >> 13;
+    return h & (RD_TURN_CAP - 1u);
+}
+
+/* the rotation of an affine 4 x 4 as rdcb_blend_affine_turn takes it (the
+ * polar decomposition's rotation, a mirror's sign folded in), a quaternion
+ * with w last; false when not affine or singular */
+static bool turnPose(const double *m, double q[4])
+{
+    double a[3][3], r[3][3];
+    if (!rdcb_is_affine(m)) {
+        return false;
+    }
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            a[i][j] = m[j * 4 + i];
+        }
+    }
+    if (!rdcb_polar_rotation((const double (*)[3])a, r)) {
+        return false;
+    }
+    if (rdcb_det3((const double (*)[3])r) < 0.0) {
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                r[i][j] = -r[i][j];
+            }
+        }
+    }
+    rdcb_quat_from_rot((const double (*)[3])r, q);
+    return isfinite(q[0]) && isfinite(q[1]) && isfinite(q[2]) && isfinite(q[3]);
+}
+
+/* the pose `now` is where the turn r, carried on `ticks` ticks from the
+ * pose it ended at, puts it, within RD_INTERP_TURN_KEEP */
+static bool turnCarries(const TurnRec *r, uint32_t ticks, const double now[4])
+{
+    double v[3], q[4], e[4];
+    for (int k = 0; k < 3; k++) {
+        v[k] = (double)r->turn[k] * (double)ticks;
+    }
+    const double a = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+    const double s = a > 1e-12 ? sin(0.5 * a) / a : 0.0;
+    q[0] = v[0] * s;
+    q[1] = v[1] * s;
+    q[2] = v[2] * s;
+    q[3] = cos(0.5 * a);
+    /* e = pose q (the turn in the pose's own frame, as rdcb_turn_vector) */
+    const double pw = r->pose[3], px = r->pose[0], py = r->pose[1], pz = r->pose[2];
+    e[3] = pw * q[3] - px * q[0] - py * q[1] - pz * q[2];
+    e[0] = pw * q[0] + q[3] * px + (py * q[2] - pz * q[1]);
+    e[1] = pw * q[1] + q[3] * py + (pz * q[0] - px * q[2]);
+    e[2] = pw * q[2] + q[3] * pz + (px * q[1] - py * q[0]);
+    const double n = sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2] + e[3] * e[3]);
+    if (!(n > 1e-12) || !isfinite(n)) {
+        return false;
+    }
+    double d = fabs(e[0] * now[0] + e[1] * now[1] + e[2] * now[2] + e[3] * now[3]) / n;
+    d = d > 1.0 ? 1.0 : d;
+    return 2.0 * acos(d) * 180.0 / 3.14159265358979323846 <= RD_INTERP_TURN_KEEP;
+}
+
+/* the turn the draw's bone (or model matrix) last remembered, when it ended
+ * 1 to RD_INTERP_TURN_GAP ticks before the present pair's first and still
+ * carries it to its pose there (p, the tick before's matrix); false
+ * without one */
+static bool turnRecallGap(uint32_t bone, const double *p, double out[3])
+{
+    if (!s_tk.on || !s_turnLast || s_tk.prevNum == 0u) {
+        return false;
+    }
+    uint32_t i = turnLastHash(s_tk.lo, s_tk.hi, bone);
+    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
+        const TurnLast *e = &s_turnLast[i];
+        if (e->rec[0].frame == 0u || e->lo != s_tk.lo || e->hi != s_tk.hi || e->bone != bone) {
+            continue;
+        }
+        for (int k = 0; k < 2; k++) {
+            const TurnRec *r = &e->rec[k];
+            const uint32_t ago = s_tk.prevNum - r->frame;
+            if (r->frame == 0u || ago < 1u || ago > RD_INTERP_TURN_GAP) {
+                continue;
+            }
+            if (r->shared &&
+                (!turnPrevPlace() || r->list != (uint8_t)s_tk.pList || r->index != s_tk.pIndex)) {
+                return false;
+            }
+            double now[4];
+            if (!turnPose(p, now) || !turnCarries(r, ago, now)) {
+                return false;
+            }
+            for (int c = 0; c < 3; c++) {
+                out[c] = r->turn[c];
+            }
+            return isfinite(out[0]) && isfinite(out[1]) && isfinite(out[2]);
+        }
+        return false;
+    }
+    return false;
+}
+
+/* the turn the last blendTurn made, by the draw's key and bone, with the
+ * pose it ended at (s_turnEnd) */
+static void turnKeepLast(uint32_t bone)
+{
+    if (!s_tk.on || s_tk.curNum == 0u || !s_turnEnd) {
+        return;
+    }
+    if (!s_turnLast) {
+        s_turnLast = calloc(RD_TURN_CAP, sizeof(TurnLast));
+        if (!s_turnLast) {
+            return;
+        }
+    }
+    uint32_t i = turnLastHash(s_tk.lo, s_tk.hi, bone);
+    TurnLast *own = NULL, *free_ = NULL;
+    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
+        TurnLast *e = &s_turnLast[i];
+        if (e->rec[0].frame != 0u && e->lo == s_tk.lo && e->hi == s_tk.hi && e->bone == bone) {
+            own = e;
+            break;
+        }
+        if (!free_ &&
+            (e->rec[0].frame == 0u || s_tk.curNum - e->rec[0].frame > RD_INTERP_TURN_GAP + 1u)) {
+            free_ = e; /* free, or too old for any pair to take */
+        }
+    }
+    if (own && own->rec[0].frame == s_tk.curNum) {
+        /* this pair's, again (another present), or another draw's of the
+         * same key and bone: then neither place's is certain */
+        if (own->rec[0].list != (uint8_t)s_tk.list || own->rec[0].index != s_tk.index) {
+            own->rec[0].shared = 1;
+        }
+        return;
+    }
+    double q[4];
+    if (!turnPose(s_turnEnd, q)) {
+        return;
+    }
+    TurnLast *e = own ? own : free_;
+    if (!e) {
+        return; /* full here: the draw goes without a memory across a gap */
+    }
+    if (own) {
+        e->rec[1] = e->rec[0];
+    } else {
+        memset(e, 0, sizeof(*e));
+        e->lo = s_tk.lo;
+        e->hi = s_tk.hi;
+        e->bone = (uint8_t)bone;
+    }
+    TurnRec *r = &e->rec[0];
+    r->frame = s_tk.curNum;
+    r->index = s_tk.index;
+    r->list = (uint8_t)s_tk.list;
+    r->shared = 0;
+    for (int k = 0; k < 3; k++) {
+        r->turn[k] = (float)s_turnVec[k];
+    }
+    for (int k = 0; k < 4; k++) {
+        r->pose[k] = (float)q[k];
+    }
+}
+
 /* rd__blend_affine for a draw's model matrix or bone: the way that
- * continues the turn it made between the two ticks before (turnRecall),
- * the turn kept for the next pair (turnKeep, by the caller once the blend
- * is used); s_turnDeg, s_turnVec, s_turnWay */
+ * continues the turn it made between the two ticks before (turnRecall), or,
+ * when the turn would snap, the one it remembered a few ticks before
+ * (turnRecallGap); the turn kept for the next pair (turnKeep, by the
+ * caller once the blend is used); s_turnDeg, s_turnVec, s_turnWay */
 static bool blendTurn(const double *p, const double *c, double t, const double *pivot,
                       uint32_t bone, double *o)
 {
     double prefer[3];
     const bool mem = turnRecall(bone, prefer);
-    return rdcb_blend_affine_turn(p, c, t, pivot, mem ? prefer : NULL, RD_INTERP_TURN_KEEP,
-                                  RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec, &s_turnWay) != 0;
+    s_turnEnd = c;
+    const bool ok =
+        rdcb_blend_affine_turn(p, c, t, pivot, mem ? prefer : NULL, RD_INTERP_TURN_KEEP,
+                               RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec, &s_turnWay) != 0;
+    if (ok && !mem && s_turnDeg > RD_INTERP_TURN_SNAP && turnRecallGap(bone, p, prefer)) {
+        return rdcb_blend_affine_turn(p, c, t, pivot, prefer, RD_INTERP_TURN_KEEP,
+                                      RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec,
+                                      &s_turnWay) != 0;
+    }
+    return ok;
 }
 
 /* a turn over RD_INTERP_TURN_SNAP that continued none: a flip, not a
@@ -534,6 +771,7 @@ static bool turnSnaps(uint32_t bone)
         return true;
     }
     turnKeep(bone);
+    turnKeepLast(bone);
     return false;
 }
 
