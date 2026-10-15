@@ -626,13 +626,25 @@ add_executable(texpack_e2e_test test/texpack_e2e_test.c)
 target_compile_options(texpack_e2e_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(texpack_e2e_test PRIVATE ico_render)
 
+# rd_stream_audit_test: the VU stream bounds audit (docs/port/RENDER.md, "The
+# stream bounds audit"): every stream index the VU vertex shaders can read for
+# every VU draw of the dumps, computed on the CPU and checked against the
+# draw's stream; a self-test (a stream one vertex short fails) always runs.
+# The dumps are machine-local (tools/native_frame_dumps.txt, the boot
+# corpus's title frame): 77 when none is there.
+add_executable(rd_stream_audit_test test/rd_stream_audit_test.c ../platform/dump_zip.c)
+target_compile_options(rd_stream_audit_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_stream_audit_test PRIVATE ../platform
+                           "${CMAKE_SOURCE_DIR}/port/shaders")
+target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
+
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
-                  rd_native_test rd_passring_test)
+                  rd_native_test rd_passring_test rd_stream_audit_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -643,6 +655,11 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_layout PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_mip COMMAND rd_mip_test)
     add_test(NAME rd_passring COMMAND rd_passring_test)
+    add_test(NAME rd_stream_audit
+             COMMAND rd_stream_audit_test --list "${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
+                     "${CMAKE_SOURCE_DIR}/build-host/tmp/corpus/dumps/boot/rd-00200.rddump"
+             WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_stream_audit PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
     add_test(NAME rd_tex COMMAND rd_tex_test)
     add_test(NAME texpack COMMAND texpack_test "${CMAKE_CURRENT_BINARY_DIR}")
     get_filename_component(_ico_texpack_textures "${ICO_TEXPACK_DIR}/../.." ABSOLUTE)
