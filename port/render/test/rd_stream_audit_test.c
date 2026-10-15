@@ -25,7 +25,10 @@
  * index buffer is read too).  Reported, not failed: a skinned vertex's
  * bone address outside the bones its draw uploaded (VuBoneCB is a fixed
  * 240 qwords and vu_bone_mat clamps into it, so it reads zeros, not past
- * it); the tick cameras (vu_ticks[4k .. 4k + 3], k < 2) and VU memory
+ * it), and the skinned draws' weight addresses and those whose bones fill
+ * VuBoneCB (bone 59 or an address below 16: no room for the card bits,
+ * docs/port/VU1_PROGRAMS.md "The card test"); the tick cameras
+ * (vu_ticks[4k .. 4k + 3], k < 2) and VU memory
  * (vu_mem[0..35]) are fixed-size constant blocks, checked by the static
  * asserts below.
  *
@@ -99,6 +102,10 @@ typedef struct Audit {
     uint32_t bad;
     uint32_t badKicks;
     uint32_t boneOutside;
+    /* skinned: the weights' addresses (lowest, highest) and the bone
+     * qwords they reach (rd_mesh.c cardStrips' boneQwUsed: 240 leaves no
+     * room for the card bits) */
+    uint32_t addrLo, addrHi, boneUsed;
     char first[320];
 } Audit;
 
@@ -193,6 +200,9 @@ static void readVertex(const AuditDraw *d, Audit *a, uint32_t v)
             if (i + 4u > d->boneQw) {
                 a->boneOutside++;
             }
+            a->addrLo = addr[k] < a->addrLo ? addr[k] : a->addrLo;
+            a->addrHi = addr[k] > a->addrHi ? addr[k] : a->addrHi;
+            a->boneUsed = i + 4u > a->boneUsed ? i + 4u : a->boneUsed;
         }
     }
 }
@@ -311,6 +321,9 @@ static void auditDraw(const AuditDraw *d, Audit *a)
 
 typedef struct Totals {
     uint32_t dumps, draws, meshDraws, gridDraws, particleDraws, bad, boneOutside;
+    /* skinned draws, those whose bones fill VuBoneCB (no card bits), and
+     * the weights' addresses seen (lowest, highest) */
+    uint32_t skinDraws, skinFull, addrLo, addrHi;
     uint64_t reads;
     int shortenedDone;
 } Totals;
@@ -420,6 +433,7 @@ static void auditFrame(const char *path, const RdFrame *f, Totals *t)
             Audit a;
             memset(&a, 0, sizeof(a));
             a.where = where;
+            a.addrLo = UINT32_MAX;
             if (why) {
                 failText(&a, why);
             } else {
@@ -429,6 +443,12 @@ static void auditFrame(const char *path, const RdFrame *f, Totals *t)
             t->draws++;
             t->reads += a.reads;
             t->boneOutside += a.boneOutside;
+            if (a.boneUsed) {
+                t->skinDraws++;
+                t->skinFull += a.boneUsed >= 240u;
+                t->addrLo = a.addrLo < t->addrLo ? a.addrLo : t->addrLo;
+                t->addrHi = a.addrHi > t->addrHi ? a.addrHi : t->addrHi;
+            }
             t->meshDraws += c->type == RDC_MESH || c->type == RDC_SKINNED;
             t->gridDraws += c->type == RDC_GRID;
             t->particleDraws += c->type == RDC_PARTICLES;
@@ -662,6 +682,7 @@ int main(int argc, char **argv)
     }
     Totals t;
     memset(&t, 0, sizeof(t));
+    t.addrLo = UINT32_MAX;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--list") == 0 && i + 1 < argc) {
             auditList(argv[++i], &t);
@@ -675,6 +696,15 @@ int main(int argc, char **argv)
            "uploaded bones (read as zero, not past the block)\n",
            t.dumps, t.draws, t.meshDraws, t.gridDraws, t.particleDraws, (unsigned long long)t.reads,
            t.bad, t.boneOutside);
+    /* reported: a skinned draw whose weights reach bone 59 (address 252) or
+       wrap below address 16 has no room in VuBoneCB for the card bits
+       (rd_replay.c doVuDraw draws it with no card) */
+    if (t.skinDraws) {
+        printf("rd_stream_audit: %u skinned draws, weight addresses %u..%u (bone %d..%d); %u "
+               "with their bones filling VuBoneCB (no card bits)\n",
+               t.skinDraws, t.addrLo, t.addrHi, ((int)t.addrLo - 16) / 4, ((int)t.addrHi - 16) / 4,
+               t.skinFull);
+    }
     if (failures) {
         printf("rd_stream_audit_test: FAILED\n");
         return 1;

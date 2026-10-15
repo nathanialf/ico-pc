@@ -460,7 +460,9 @@ kick (`stripBounds`), reads the shaders no longer make, so it stays conservative
 passes is safe for either version's shaders. Each index is checked against the draw's own stream,
 the qwords the replay uploads for it (`doVuDraw`); a kick below 2 and a draw's index range past its
 mesh's list fail too. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the
-indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). A stream one vertex short fails it, in a
+indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). Reported, not
+failed: the skinned draws' weight addresses (lowest and highest bone) and the draws whose bones fill
+VuBoneCB, which leaves no room for the card bits ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)). A stream one vertex short fails it, in a
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
 (2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.

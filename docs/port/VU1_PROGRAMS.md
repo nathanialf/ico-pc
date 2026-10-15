@@ -309,7 +309,13 @@ load from each draw's own payload and mesh, whatever settings it replays at
 at either tick: after the bones a skinned mesh's weights read (`RdMeshRec.boneQwUsed`), from qword 0
 for the other programs; `vu_strip` holds the first vertex covered, 1 (the card test applies), the
 vertices covered and the first qword. A draw with more vertices than the block holds covers the
-first ones and logs once. `vu_strip_card` reads a vertex's two bits; a strip is a card when it was
+first ones and logs once. A skinned draw whose weights reach bone 59 (address 252) or an address
+below 16 fills the block with bones (`boneQwUsed` 240), so it has no room for the bits: its strips
+are drawn as no card, logged once (`card verdicts: a skinned draw's bones fill VuBoneCB`). The game
+allows bones 0..59 (`ico2/seki/src/Packet.c` (`pac_makeClusterStrip`) writes `bone * 4 + 16` and
+asserts the bone is below 60), so bone 59 is possible; an address below 16 would need a negative
+bone. Neither is in the 145 dumps on the maintainer's machine (4,875 skinned draws, bones 0..58;
+2026-10-15); `rd_stream_audit` reports the range and any draw that fills the block. `vu_strip_card` reads a vertex's two bits; a strip is a card when it was
 one at either tick, so a card never enters the picture between the ticks
 (`port/render/rd_replay.c` (`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_strip_card`,
 `vu_rule_card`)).

@@ -1274,7 +1274,14 @@ void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms)
  * ICO_VU_INDEX_JOINED at creation; the part joining at replay, rd_join.c,
  * may mark more, which the shader's JOINED test then catches) and a
  * skinned mesh's bone qwords (boneQwUsed: vu_skin.hlsl vu_bone_mat's
- * clamped address of every weight, plus its four qwords) */
+ * clamped address of every weight, plus its four qwords).  The game writes
+ * a weight's address as bone * 4 + 16 with bones 0..59 (Packet.c
+ * pac_makeClusterStrip asserts below 60), so 16..252: bone 59, or an
+ * address below 16 (a negative bone, which no model has), makes 240 and
+ * leaves no room for the card bits (rd_replay.c doVuDraw logs it once).
+ * The 145 dumps on the maintainer's machine (4,875 skinned draws,
+ * 2026-10-15) reach bones 0..58, never below 16 (rd_stream_audit reports
+ * the range) */
 static void cardStrips(RdMeshRec *m)
 {
     const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount;

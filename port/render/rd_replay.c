@@ -4448,6 +4448,20 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
     const bool withCards = cardWords && cards.any && rd__vu_extended() &&
                            (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
+    if (cardWords && cards.any && rd__vu_extended() && !withCards && c->type == RDC_SKINNED) {
+        /* bones reaching bone 59 (address 252; the game allows 0..59,
+           Packet.c pac_makeClusterStrip) or a weight address below 16
+           fill VuBoneCB: the card bits have no room and the draw's strips
+           are no card.  Not seen in the dumps (bones 0..58,
+           rd_stream_audit reports it) */
+        static bool logged; /* once a run (rd__log_once's flags are full) */
+        if (!logged) {
+            logged = true;
+            rd__log("card verdicts: a skinned draw's bones fill VuBoneCB (%u qwords): its "
+                    "strips are drawn as no card",
+                    m ? m->boneQwUsed : 0u);
+        }
+    }
     uint32_t cardQw = 0, cardKicks = 0;
     if (withCards) {
         cardQw = c->type == RDC_SKINNED ? m->boneQwUsed : 0u;
