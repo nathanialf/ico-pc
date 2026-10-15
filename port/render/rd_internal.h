@@ -1339,8 +1339,14 @@ typedef struct RdInterpStats {
      * draws whose model matrices or bones blended as rotations */
     uint32_t why[RD_MISMATCH_COUNT];
     uint32_t rotated;
-    uint32_t turned;  /* of them, turning more than 10 degrees in the tick */
-    float maxTurn;    /* the largest turn of a model or bone in the tick, degrees */
+    uint32_t turned; /* of them, turning more than 10 degrees in the tick */
+    float maxTurn;   /* the largest turn of a model or bone in the tick, degrees */
+    /* of them, those with a model or bone turned the long way to continue
+     * its turn of the tick before (rotation continuity), and those with one
+     * kept at the tick's pose for a turn over RD_INTERP_TURN_SNAP that
+     * continued none */
+    uint32_t longWay;
+    uint32_t turnSnap;
     uint32_t shifted; /* shadow volumes blended with cur's triangles moved by the volume's
                          shift: a topology change, or a prism in one tick only */
     /* VU draws drawn through the rigidly blended camera (matched and

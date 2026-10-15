@@ -406,6 +406,10 @@ static struct {
 static double s_turnVec[3];
 static int s_turnWay;
 
+/* the draw blendVu blends: a model or bone turned the long way, one kept at
+ * the tick's pose for its turn */
+static int s_drawLong, s_drawSnap;
+
 static void turnFree(void)
 {
     free(s_turnMem);
@@ -514,11 +518,13 @@ static bool blendTurn(const double *p, const double *c, double t, const double *
 }
 
 /* a turn over RD_INTERP_TURN_SNAP that continued none: a flip, not a
- * motion (the caller keeps the tick's) */
+ * motion (the caller keeps the tick's); counts the draw's long ways */
 static bool turnSnaps(uint32_t bone)
 {
     turnKeep(bone);
+    s_drawLong |= s_turnWay == RDCB_WAY_LONG;
     if (s_turnWay == RDCB_WAY_SHORT && s_turnDeg > RD_INTERP_TURN_SNAP) {
+        s_drawSnap = 1;
         return true;
     }
     return false;
@@ -2423,6 +2429,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     s_vuTicks = 0;
     s_rotated = 0;
     s_drawTurn = 0.0;
+    s_drawLong = s_drawSnap = 0;
     if (pc->u[2] != cc->u[2]) {
         return mismatch(RD_MISMATCH_SIZE);
     }
@@ -5081,6 +5088,8 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     st.rotated++;
                     st.turned += s_drawTurn > 10.0;
                     st.maxTurn = fmaxf(st.maxTurn, (float)s_drawTurn);
+                    st.longWay += (uint32_t)s_drawLong;
+                    st.turnSnap += (uint32_t)s_drawSnap;
                 }
                 st.shifted += r == R_LERP && s_shifted;
                 if (s_track) {
@@ -5146,6 +5155,7 @@ static struct {
     /* mismatch reasons, rotation blends, frames whose snap differs
      * from the frame before's (whole-frame flaps) */
     uint64_t why[RD_MISMATCH_COUNT], rotated, turned, shifted;
+    uint64_t longWay, turnSnap; /* rotation continuity's long ways, snapped turns */
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
@@ -5183,6 +5193,8 @@ static void presentLog(void)
     }
     s_pres.rotated += st->rotated;
     s_pres.turned += st->turned;
+    s_pres.longWay += st->longWay;
+    s_pres.turnSnap += st->turnSnap;
     s_pres.shifted += st->shifted;
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
@@ -5227,15 +5239,18 @@ static void presentLog(void)
     rd__log(
         "interp: mismatched by size %llu, mesh %llu, state %llu, header %llu, topology %llu; "
         "%llu mesh draws blended as rotations (%llu turning over 10 degrees a tick, the largest "
-        "%.1f degrees); %llu shadow volumes moved across a topology change; %u draws flapping "
+        "%.1f degrees; %llu continued the long way, %llu snapped over %.0f degrees); %llu shadow "
+        "volumes moved across a topology change; %u draws flapping "
         "(%u or more outcome changes); %u frames changed between blended and snapped; %llu VU "
         "draws through the blended camera (%llu of them the tick's: unmatched, snapped or unkeyed)",
         (unsigned long long)s_pres.why[0], (unsigned long long)s_pres.why[1],
         (unsigned long long)s_pres.why[2], (unsigned long long)s_pres.why[3],
         (unsigned long long)s_pres.why[4], (unsigned long long)s_pres.rotated,
         (unsigned long long)s_pres.turned, (double)s_pres.maxTurn,
-        (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN, s_pres.snapFlips,
-        (unsigned long long)s_pres.rebased, (unsigned long long)s_pres.rebasedCur);
+        (unsigned long long)s_pres.longWay, (unsigned long long)s_pres.turnSnap,
+        RD_INTERP_TURN_SNAP, (unsigned long long)s_pres.shifted, flapping, RD_FLAP_MIN,
+        s_pres.snapFlips, (unsigned long long)s_pres.rebased,
+        (unsigned long long)s_pres.rebasedCur);
     /* a third line: the unmatched draws and the scratch meshes */
     rd__log("interp: unmatched screen prims and shadow volumes: %llu faded in, %llu faded out, "
             "%llu of the tick drawn from half way, %llu of the tick before drawn until half way, "
