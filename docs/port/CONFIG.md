@@ -281,6 +281,7 @@ under the same name (below). Read through the store:
 | `fog_path` | string | (none) | |
 | `gpu_checkpoints` | bool | `false` | |
 | `gpu_robust` | bool | `false` (`true` on Android) | |
+| `pass_split` | int | `0` | |
 
 ## ico-pc.ini
 
@@ -316,6 +317,7 @@ store (`backend`, `unlock_credits`):
 | `fog_path` | `inplace`, `copy` or `buffer`: the fog's depth path, tried first (exported as `ICO_RD_FOG_PATH`) ([RENDER.md](RENDER.md#the-fog-path-and-its-self-test)) |
 | `gpu_checkpoints` | `true`: GPU checkpoints, resource addresses (Vulkan) and DRED (D3D12) for the device-loss report (exported as `ICO_GPU_CHECKPOINTS=1`) ([RHI.md](RHI.md#device-loss)) |
 | `gpu_robust` | `true`: robust buffer and image access (Vulkan; exported as `ICO_GPU_ROBUST=1`), with null descriptors; robust buffer and image access (`VK_EXT_robustness2` where offered) is on by default on Android, where `false` turns it off (exported as `ICO_GPU_ROBUST=0`) ([RHI.md](RHI.md#device-loss)) |
+| `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

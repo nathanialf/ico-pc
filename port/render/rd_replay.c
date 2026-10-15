@@ -415,6 +415,7 @@ static struct {
     uint64_t lastSeq;     /* pass `last`'s pass ring entry, 0: not begun */
     uint64_t nextSeq;     /* pass last + 1's, 0: not begun */
     bool stop;
+    bool noCount; /* the pass split's own pass (passSplit): not a pass of the window */
 } s_win;
 
 void rd__replay_set_window(uint32_t first, uint32_t last)
@@ -445,7 +446,7 @@ static const void *passPush(RdPassKind kind, uint32_t color, uint32_t cw, uint32
                             uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
 {
     const void *m = rd__passring_push(kind, color, cw, ch, depth, dw, dh, storage, post);
-    if (s_win.first) {
+    if (s_win.first && !s_win.noCount) {
         s_win.passes++;
         if (s_win.passes == s_win.last) {
             s_win.lastSeq = (uint64_t)(uintptr_t)m;
@@ -4314,6 +4315,54 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
     }
 }
 
+/* The pass split (g_rd.passSplit, ICO_RD_PASS_SPLIT / [dev] pass_split;
+ * off by default): after every N VU draws of a render pass the pass is
+ * ended and begun again on the same targets, both loaded, as dstPassMode
+ * begins a pass again (the scissor taken back), so a GPU that holds a
+ * pass's draws in one job gets them in jobs of N.  Not a pass of the loss
+ * bisect's window (s_win.noCount).  Refused, logged once, in a pass the
+ * split would change the picture or the exact blend of: a multisampled
+ * one (the MSAA epoch), a storage pass or a readable one (the exact
+ * blend's). */
+static uint32_t s_splitSerial, s_splitCount;
+
+static void passSplit(Replay *r)
+{
+    if (!r->passOpen) {
+        return;
+    }
+    if (s_splitSerial != r->passSerial) {
+        s_splitSerial = r->passSerial;
+        s_splitCount = 0;
+    }
+    if (++s_splitCount < g_rd.passSplit) {
+        return;
+    }
+    s_splitCount = 0;
+    if (r->passStorage || r->passReadable || g_rd.passSamples > 1 || s_ms.want > 1u) {
+        static bool logged; /* once a run */
+        if (!logged) {
+            logged = true;
+            rd__log("pass split: not in a multisampled, storage or readable pass (those are "
+                    "drawn whole)");
+        }
+        return;
+    }
+    const uint32_t cid = r->passColor, did = r->passDepth;
+    RdTargetRec *c = rd__target_rec(cid);
+    if (!c) {
+        return;
+    }
+    const RhiRect sc = r->sc;
+    s_win.noCount = true;
+    beginPass(r, c, did ? rd__target_rec(did) : NULL, cid, did, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD,
+              0.0f, false);
+    s_win.noCount = false;
+    r->sc = sc;
+    rhi_cmd_set_scissor(s_cl, &sc);
+    s_splitSerial = r->passSerial;
+}
+
 /* One VU draw call under the planned passes of state s. */
 static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBindGroup g2,
                    uint8_t prog, uint8_t vs, RhiBuffer streamBuf, uint64_t streamBufSize,
@@ -4384,6 +4433,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         }
     }
     r->st = saved;
+    if (g_rd.passSplit) {
+        passSplit(r);
+    }
 }
 
 static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c);

@@ -1655,6 +1655,10 @@ typedef struct RdContext {
      * beginPass): 1, or the MSAA epoch's count; rd__get_pipeline makes the
      * pipelines of that pass with it (RdPipelineKey.msaa) */
     uint8_t passSamples;
+    /* ICO_RD_PASS_SPLIT=N ([dev] pass_split; rd_core.c rd_init): a render
+     * pass of VU draws is ended and begun again, its targets loaded, after
+     * every N of them (rd_replay.c passSplit); 0 off (the default) */
+    uint32_t passSplit;
     /* the supersampling factor in force (rd__apply_display): 1, 2 or 4,
      * already in sceneReqSx/Sy; rd_scene_scale_lowered divides it out */
     float ssaa;

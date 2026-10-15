@@ -1380,6 +1380,17 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
      * triangles' marks are bytes in the stream (shader_consts.h
      * ICO_VU_MARK_*; issue 95) */
     rd__log("VU index values: dense (marks in the stream)");
+    /* the pass split (rd_replay.c passSplit), off by default: a fallback
+     * for a GPU that faults on a pass of many VU draws (issue 95) */
+    {
+        const char *split = getenv("ICO_RD_PASS_SPLIT");
+        const long n = split ? strtol(split, NULL, 10) : 0;
+        g_rd.passSplit = n > 0 && n <= 65536 ? (uint32_t)n : 0u;
+        if (g_rd.passSplit) {
+            rd__log("pass split: every %u VU draws a render pass ends and begins again",
+                    (unsigned)g_rd.passSplit);
+        }
+    }
     /* the exact GS blend (rd_dst_read.c): the destination read the device
      * has, before the targets are made with its usage */
     rd__dst_init();

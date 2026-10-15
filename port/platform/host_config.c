@@ -486,6 +486,7 @@ static const struct {
     {"dev.fog_path", "fog_path"},
     {"dev.gpu_checkpoints", "gpu_checkpoints"},
     {"dev.gpu_robust", "gpu_robust"},
+    {"dev.pass_split", "pass_split"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -498,6 +499,7 @@ static const struct {
     {"fog_path", "ICO_RD_FOG_PATH"},            /* port/render/rd_fog_path.c rd__fog_path_init */
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"}, /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},           /* port/rhi/vk/vk_device.c */
+    {"pass_split", "ICO_RD_PASS_SPLIT"},        /* port/render/rd_replay.c passSplit */
 };
 
 static int value_is(const char *v, const char *const *words)
@@ -537,6 +539,15 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "fog_path") == 0) {
         return value_is(value, paths) ? value : NULL;
+    }
+    if (strcmp(key, "pass_split") == 0) {
+        /* a count of VU draws, 1..65536; 0 or off: none */
+        char *end = NULL;
+        const long n = strtol(value, &end, 10);
+        if (end != value && *end == '\0' && n >= 0 && n <= 65536) {
+            return value;
+        }
+        return value_is(value, off) ? "0" : NULL;
     }
     return value_is(value, on) ? "1" : value_is(value, off) ? "0" : NULL;
 }

@@ -472,11 +472,20 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("gpu_robust", "maybe") == NULL);
     CHECK(ico_dev_env_value("gpu_robust", NULL) == NULL);
     CHECK(ico_dev_env_value("ticks", "1") == NULL);
+    /* pass_split: a count of VU draws as it is, 0 or off for none */
+    CHECK(strcmp(ico_dev_env_name("pass_split"), "ICO_RD_PASS_SPLIT") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_split", "8"), "8") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_split", "0"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("pass_split", "off"), "0") == 0);
+    CHECK(ico_dev_env_value("pass_split", "8x") == NULL);
+    CHECK(ico_dev_env_value("pass_split", "-1") == NULL);
+    CHECK(ico_dev_env_value("pass_split", "99999") == NULL);
     /* config.toml's [dev] keys reach the same ini keys */
     CHECK(strcmp(ico_config_ini_key("dev.blend"), "blend") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.fog_path"), "fog_path") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.gpu_checkpoints"), "gpu_checkpoints") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.gpu_robust"), "gpu_robust") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.pass_split"), "pass_split") == 0);
 
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
