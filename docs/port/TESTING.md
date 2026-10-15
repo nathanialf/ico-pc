@@ -197,7 +197,7 @@ program under an environment switch ([Environment switches](#environment-switche
 - `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
-- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, the loss bisect's second level (its state file, the step stubbed: all in one start, killed at step 3 and continued at 4, a renderer that did not start, the step and start bounds, the time budget, files that do not parse) cases, each in a child process
+- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, the loss bisect's second level (its state file, the step stubbed: all in one start, killed at step 3 and continued at 4, a renderer that did not start, the step and start bounds, the time budget, files that do not parse) cases, the watchdog and a wait the system holds (the event pump held past the limit without an end, a stall in the game's code after it ended, the bound for one wait), each in a child process
   whose log is read back (`diag`).
 - `dump_zip_test.c`: F12's zip, the aspect sweep's zip and the device-loss zip (the lost frame first, the pruning to the newest three), written and read back with miniz
   (`dump_zip`).
@@ -218,6 +218,10 @@ program under an environment switch ([Environment switches](#environment-switche
   EE's offsets (`memory`).
 - `movie_pad_test.c`: the pad as a movie's skip check sees it from inside the player's loop
   (`movie_pad`).
+- `pump_watch_test.c`: the event pump's history for its slow-pump lines: the window messages' names
+  (the display's power, the power and device-change kinds, an unknown id), the noisy ones left out,
+  repeats counted, the newest 16 messages and 8 SDL events kept newest first with their age, the
+  message being handled named while it runs and timed, the watchdog's description (`pump_watch`).
 - `pace_loop_test.c`: the [vsync lock](ARCHITECTURE.md#terms)'s loop on a grid of the wall clock
   under a fake clock and a fake swapchain, with and without the display clock, at 60, 59.94 and
   120 Hz and on a display that drifts from its report (`pace_loop`).

@@ -280,6 +280,16 @@ line after it has `WATCHDOG:` in it and says what the game was doing.
 With [ReShade](RESHADE.md) loaded, the game gives itself 60 seconds to
 start as well, as ReShade takes a while to get ready.
 
+**The game stopped after being left alone.** Sometimes Windows holds the
+game's window for a while, for example when a controller turns itself off
+or the computer would go idle. The game counts that time as Windows' and
+waits; it only gives up when Windows has held the window for 10 minutes.
+The game also keeps the screen and the computer awake while it runs, as a
+console does: quit the game to let them sleep. If the game still stops
+after being left alone, the log says which message from Windows held the
+window: look for lines with `has not returned` or `the event pump's` in
+them, and send the log.
+
 ## Texture packs and model packs
 
 If a texture or model from a pack does not show up, look in the log for

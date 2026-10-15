@@ -45,7 +45,7 @@ the ini has it non-empty, else `config.toml`'s, else the caller's default (`port
 | `[paths] iso`, `saves`, `saves2`, `keep_image` | `iso`, `saves`, `saves2`, `keep_image` |
 | `[audio] enabled` | `audio` |
 | `[video] backend` | `backend` |
-| `[dev] ticks`, `watchdog`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test` | the same names |
+| `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test` | the same names |
 
 The start-up code reads the ini the other way round: `ico_ini_load` loads the ini and fills its
 missing keys from those `config.toml` entries (a `true` or `false` there reads as `1` or `0`), then
@@ -306,6 +306,7 @@ store (`backend`, `unlock_credits`):
 | `backend` | `vulkan` or `d3d12` |
 | `ticks` | exit after N [Main ticks](ARCHITECTURE.md#terms) |
 | `watchdog` | seconds, default 30; 0 is off |
+| `watchdog_pump` | seconds, default 600; 0 is no limit: the longest one wait the system holds (the window's event pump) may last before the watchdog ends the run; the time inside such a wait does not count towards `watchdog` ([PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `trace` | `0` off, `1` or a path on; on by default only in the headless build |
 | `pad_script` | the [pad script](ARCHITECTURE.md#terms) to run |
 | `input_record` | the pad recording: `0`/`false`/`none` off, `1`/`true` on, or a path; on by default in the window build |

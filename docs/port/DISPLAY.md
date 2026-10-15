@@ -206,8 +206,9 @@ unshown, so a gap between the two is not a slowdown), the block's seconds, prese
 a second, the vsyncs and the simulated rate, the resyncs and the lag they dropped, the longest
 [replay](ARCHITECTURE.md#terms) and the replay count with how many were over a refresh, the slow
 steps, the frame rate option, the present mode, the display's refresh with presents a refresh, the
-window's pixel size, "step late max" (the latest a simulation step started against when it was due)
-and the lock's state (`pace_log`), one of:
+window's pixel size, "step late max" (the latest a simulation step started against when it was due),
+"pump max" (the longest window event pump, [PLATFORM.md](PLATFORM.md#diagnostics)) and the lock's
+state (`pace_log`), one of:
 
 ```
 lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,

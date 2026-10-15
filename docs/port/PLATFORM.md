@@ -28,6 +28,8 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
+| `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, and the names of the messages (pure C, tested everywhere) |
+| `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
 | `port/platform/pace_policy.c`, `pace_policy.h` | the pacing decisions, free of SDL: the vsync lock, slow presents, the gap between presents |
 | `port/platform/display_clock.h`, `display_clock_win.c`, `display_clock_none.c`, `perf_block.c`, `perf_block.h` | the vsync lock's vblank clock and the replay blocks ([DISPLAY.md](DISPLAY.md#files)) |
 | `port/platform/startup_retry.c`, `startup_retry.h` | the steps the relaunch takes after a graphics driver crash or a lost graphics device |
@@ -518,7 +520,29 @@ exit code 4, when no Main tick comes `watchdog=` seconds after boot (default 30)
 other progress for twice that; a movie notes each picture as progress, time inside a present is
 excused for an effects program, and the first limit is doubled when one is loaded
 (`port/platform/diag_host.h` (`ico_diag_start`, `ico_diag_note_progress`);
-`port/platform/main_host.c` (`start_watchdog`)). Milestone lines carry the wall time, vsyncs, Main
+`port/platform/main_host.c` (`start_watchdog`)).
+
+**A wait the system holds.** The hang verdict applies to the game's own code only. The window build
+marks the main thread's calls into the system that run none of the game's code (`SDL_PollEvent`, and
+on Windows `SDL_UpdateJoysticks`) with `ico_diag_os_wait_enter`/`ico_diag_os_wait_leave`, and the time
+inside them counts towards neither limit. A wait that outlasts the limit in force is named once:
+
+```
+ico_pc: watchdog: the window's event pump has not returned for 60 s (the system is holding it: the game is not hung); waiting
+ico_pc: watchdog: in the system's messages and SDL's own work (SDL_PollEvent), handling WM_xxx(0x....) for 59.8 s; last messages before it: ...; SDL events before it: ...
+```
+
+then `ico_pc: watchdog: the window's event pump returned after N s; the game goes on` when it comes
+back, and the heartbeat carries `| in the window's event pump N s` while it lasts (outside its
+"no progress" comparison). The run still ends with the watchdog's report when one wait passes
+`[dev] watchdog_pump` seconds (default 600, 0 no limit), so a deadlock in the system is reported; a
+system sleep inside a wait counts towards neither (`port/platform/diag_host.h`
+(`ico_diag_os_wait_enter`, `ico_diag_set_os_wait_limit`, `ico_diag_set_os_wait_describe`)). The case
+behind it: a Windows player's game, paused and left alone, had its pump held for 50 s three times in
+a row right after a controller turned itself off, and the 60 s limit ended a run that was waiting on
+Windows, not hung. ctest `diag` checks a 3.5 s held pump against a 1 s limit (no end, the line
+once), a stall in the game's code right after it (the end), and the bound (`pump`, `pumphang`,
+`pumpbound` in `port/platform/test/diag_test.c`). Milestone lines carry the wall time, vsyncs, Main
 ticks and the current thread (`ico_diag_milestone`), and game threads are named by the function
 `iosThreadCreate` runs (`ico_host_thread_func`). `ico_diag_float_fault` logs a NaN that reaches game
 code the PS2 never fed one (`port/platform/diag_host.h` (`ico_diag_float_fault`)).
@@ -526,6 +550,45 @@ code the PS2 never fed one (`port/platform/diag_host.h` (`ico_diag_float_fault`)
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
 `port/platform/window_host.c` (`slow_step`); `port/platform/host_loop.h` (`IcoStepProfile`)).
+
+**The event pump's long calls.** Each part of `ico_window_pump` over 1 s logs a line of its own:
+
+```
+window: the event pump's PART took N ms at vsync V (Main tick T); last messages before it: WM_TIMER(0x0113) x3 0.4 s ago, WM_DEVICECHANGE DBT_DEVICEREMOVECOMPLETE(0x0219) 50.3 s ago, ...; SDL events before it: gamepad removed 50.3 s ago, ...
+```
+
+PART is the system's messages and SDL's own work (`SDL_PollEvent`), on Windows the controllers'
+scan and update (`SDL_UpdateJoysticks`), the handling of one event, the settings (`video_apply`),
+the captures and the pointer, or the pads' reading and rumble. On Windows SDL's own joystick update
+is taken out of `SDL_PollEvent` (`SDL_HINT_AUTO_UPDATE_JOYSTICKS` = 0 before `SDL_Init`) and called
+at the pump's start (and on the start-up screens), so the two are timed apart: after a device
+change SDL 3.4 enumerates the DirectInput devices on the thread that pumps
+(`SDL_windowsjoystick.c` `WINDOWS_JoystickDetect`, `SDL_dinputjoystick.c` `SDL_DINPUT_JoystickDetect`,
+whose own comment says `EnumDevices` can take a minute). The messages come from SDL's message hook
+(`SDL_SetWindowsMessageHook`: the posted ones, for every window of the main thread, SDL's hidden
+device-notification windows included) and a window procedure in front of SDL's on the game window
+(the sent ones, which never pass the hook: `WM_SYSCOMMAND`, `WM_POWERBROADCAST`,
+`WM_DISPLAYCHANGE`, `WM_ACTIVATE`...); both let every message through unchanged, and a message whose
+handling takes over 1 s logs `window: the window message NAME took N ms in SDL's window procedure`.
+The last 16 messages and 8 SDL events are kept, a repeat of the newest counted (`x3`), mouse moves,
+raw input and hit tests left out; the names cover `WM_SYSCOMMAND` `SC_SCREENSAVE` and
+`SC_MONITORPOWER` (on, low, off), `WM_POWERBROADCAST`, `WM_DEVICECHANGE`, `WM_DISPLAYCHANGE`,
+`WM_ACTIVATE`, `WM_NCACTIVATE`, `WM_SETFOCUS`/`WM_KILLFOCUS`, `WM_SIZE`,
+`WM_DWMCOMPOSITIONCHANGED`, `WM_INPUT_DEVICE_CHANGE` and `WM_TIMER` among others, and an unknown id
+as `message 0x....`. The window's focus, visibility and display events and the joysticks coming and
+going log `window: system event: NAME at vsync V`, and the 10 s line carries `pump max N ms`
+(`port/platform/window_host.c` (`pump_poll`, `pump_joysticks`, `pump_slow`); `port/platform/pump_watch.h`;
+`port/platform/window_pump_win.h`).
+
+**The display and the computer awake.** SDL's `SDL_DisableScreenSaver` sets
+`ES_CONTINUOUS | ES_DISPLAY_REQUIRED` on Windows (`SDL_windowsvideo.c` `WIN_SuspendScreenSaver`) and
+returns 0 for `SC_SCREENSAVE` and `SC_MONITORPOWER` while it is in force (`SDL_windowsevents.c`,
+`WM_SYSCOMMAND`); the display flag alone does not keep the computer out of its idle sleep. The
+Windows window build sets `ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED` from the main
+thread at the first pump and every 30 s after, logged once (`window: the display and the computer
+are kept awake while the game runs`): the game never lets the display or the computer sleep while it
+runs, as a console does; the player quits to let them (`port/platform/window_pump_win.c`
+(`ico_pump_win_keep_awake`)).
 
 **A lost graphics device.** When the backend reports the device gone (`rhi_device_lost`), the window
 pump and the start-up screens' pump end the session through the normal quit path: one line
