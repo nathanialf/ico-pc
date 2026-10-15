@@ -506,8 +506,12 @@ flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<time>.zi
 file), and one message box: the card stopped responding, the game has to close, the save is kept,
 "If the graphics card is overclocked, try its stock clocks first.", and, when the loss dump was
 written, its file name in the logs folder and a request to attach it with the log; on a phone the
-box asks to send the log and that file. The loss restart above comes after the loss dump, so a
-restarted run bisects the lost frame first. The box is modal:
+box asks to send the log and that file. The loss restart above comes after the loss dump, but a
+restarted run does not bisect it: its step changed the blending or the backend, so its replay would
+not be the path that lost the device, and a loss it reproduced would add a GPU reset to the
+restart chain. It logs `ico_pc: loss bisect: not run (this start changed the blending or backend
+after the loss); the loss dump stays in logs: <zip>`, and the zip stays for `rd_replay_tool
+--loss-bisect`. Only a start at no restart step bisects. The box is modal:
 the watchdog is paused before it (`ico_diag_watchdog_pause`, so the time the player takes to read
 it is not reported as a hang), the heartbeat stops, and after it one line
 `window: the message was closed after N s` and the watchdog running again, so a hang in the shutdown

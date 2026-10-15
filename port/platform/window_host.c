@@ -1234,10 +1234,20 @@ open_window:
     const int customDriver = ico_gpu_driver_android_start();
 #endif
     /* the previous run lost the device and left its loss dump: the pass
-       that loses it, found before the game starts (once) */
+       that loses it, found before the game starts (once). Only on a start
+       with the player's own blending and backend: a restart step's run
+       (the fixed-function blend, or Direct3D 12 after Vulkan) would replay
+       the frame on another path than the one that lost it, and a loss it
+       reproduced would add a GPU reset to the restart chain */
     bool bisectLost = false;
     if (ico_diag_loss_dump() != NULL) {
-        bisectLost = ico_diag_loss_bisect(window_loss_bisect, &rs) == ICO_DIAG_BISECT_LOST;
+        if (retry == STARTUP_RETRY_NONE) {
+            bisectLost = ico_diag_loss_bisect(window_loss_bisect, &rs) == ICO_DIAG_BISECT_LOST;
+        } else {
+            ico_diag_log("ico_pc: loss bisect: not run (this start changed the blending or "
+                         "backend after the loss); the loss dump stays in logs: %s",
+                         ico_diag_loss_dump());
+        }
     }
     rd_set_activity_fn(window_activity);
     bool up = rd_init(gsW, gsH, &rs, s_window);

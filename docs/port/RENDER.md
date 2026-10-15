@@ -406,7 +406,10 @@ the loss with the zip's path (or that none was written) for the next start
 ### The loss bisect
 
 The start after a loss that left a loss dump (of the same version) finds the pass that loses the
-device on that device, before the game. A renderer of its own, sized to the dump's frame, loads the
+device on that device, before the game. Only a start with the player's own blending and backend
+bisects: a run the loss restart started (its step's fixed-function blend or Direct3D 12) logs that
+the bisect was not run and leaves the zip in the logs folder
+([PLATFORM.md](PLATFORM.md#diagnostics)). A renderer of its own, sized to the dump's frame, loads the
 lost frame and replays it with nothing presented: first with no draw recorded, which counts the
 frame's passes (their clears and layout changes still run, and every pipeline the frame binds is
 created), then as passes 1..k for k = 1, 2, ..., waiting for the GPU after each replay
