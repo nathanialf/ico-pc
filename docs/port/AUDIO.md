@@ -21,6 +21,7 @@ SDL3 device, a WAV file, or nothing.
 | `port/audio/sndn2_host.h`, `sndn2_host.c` | SNDN2DRV.IRX as a host SIF server: the packet dispatcher, the reply page, the pitch table |
 | `port/audio/sndn2_internal.h` | what the dispatcher and the stream engines share |
 | `port/audio/stream.c` | the driver's ADPCM stream engine and PCM mixer |
+| `port/audio/stream_watch.h`, `stream_watch.c` | the stream log lines, the heartbeat's stream part and the end-of-run stream counts |
 | `port/audio/mix_gain.h`, `mix_gain.c` | the music, effects and film gains on the voice volumes |
 | `port/audio/volume.c` | the output volume and the output's play ratio |
 | `port/audio/audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; mirror mode's pan swap |
@@ -374,8 +375,33 @@ mask), and two arguments (`port/audio/sndn2_host.c` (`dispatch`)):
 | 0x46-0x4F | the PCM channels: init, quit, open, close, volume, play, stop, seek, effect, buffer mode |
 
 Any other command is logged once (`sndn2: command 0x.. ignored (not one the IRX handles)`) and does
-nothing, as the IRX's jump table does. All `sndn2:` diagnostics go through `sndn2_log_once`: one
-line per kind of anomaly, then silence (`port/audio/sndn2_internal.h`).
+nothing, as the IRX's jump table does. The driver's `sndn2:` diagnostics go through
+`sndn2_log_once`: one line per kind of anomaly, then silence (`port/audio/sndn2_internal.h`); the
+two below are counted instead.
+
+### The EE's packet page
+
+The sequencer queues every command in a page of at most 255 packets, which the sound thread's tick
+sends (`_SgCalledTickProc`). On the PS2 a packet that finds the page full is dropped:
+`_SgSetPkAdd` returns -1 and no caller checks (`sce/libsndn2/sound.c` (`_SgSetPkAdd`)). A stream
+open that lands on a full page would lose its volume (0x40) or its key-on (0x42), which the game
+sends once, and the piece would play silently or not at all for its whole length. The port hands
+such a packet to the driver instead (`ico_sndn2_pk_full`, `port/audio/sndn2_host.h`): up to 4096
+are kept and run right after the page's own packets in the same tick, in the order sent; the EE
+still sees -1 and an unchanged page. This is [DIVERGENCES.md](DIVERGENCES.md) AU-7. The first full
+page and every 100th after the first 8 are logged with the page's commonest commands, and every
+full page is counted:
+
+```
+sndn2: packet page full (255 packets: 0x01 x255); the later packets of this tick are carried to the driver (page 1)
+```
+
+A key-off from the sequencer that lands on one of the four stream voices (slot state 3, taken by
+`SgGetSpuSlotMalloc(1)` in `AdpcmStreamInit`) is logged for the first 8 and counted, naming the
+function that set the key-off bit: `sndn2: key-off from the sequencer (_SgContDump) on stream voice 2
+(stream 43)`. Of the six sites (`_SgSeKeyOff`, `_SgSeqKeyOff`, `_SgContDump`, `SgVabClose`,
+`SgBgmStop`, `SgSeStop`), only `_SgContDump` (the damper pedal's release) tests no slot state
+(`sce/libsndn2/sound.c` (`sgHostKeyOffCheck`)).
 
 ### The reply page
 
@@ -420,6 +446,49 @@ full: the new event is dropped`), as the IRX does. Closing a stream forgets its 
 zeroes its queued FILLs and removes its bit from a queued KEYON; for a core 0 voice the IRX clears
 the same bit in both cores' masks, and so does the port (`port/audio/stream.c` (`cancel`)). A fill
 that reads outside IOP RAM writes zeros and is logged once.
+
+### What the log says about streams
+
+A stream that is keyed on at zero volume, or keyed off while it plays, still consumes its ring at
+the real rate (the SPU2 runs every voice whatever its envelope, `port/audio/spu2.c`), closes on
+time and leaves the open and close lines as a stream that was heard. So the log also writes down
+the levels the voices play at (`port/audio/stream_watch.h`, header comment):
+
+| line | written by | when |
+| --- | --- | --- |
+| `adpcm: open 43 slot 0 voices 0,1` | the game (`adpcmDataSet`) | the open: stream number, the game's stream slot (0 or 1), the SPU2 voices |
+| `adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff` | the driver (`stream_watch.c`) | two driver ticks after the stream's key-on |
+| `adpcm: 43 at half: voices 0,1 vol ... env ...` | the driver | once the driver has fed half the file's bytes to the voices |
+| `adpcm: 43 at close: voices 0,1 vol ... env ...` | the driver | the stop (0x43) reaching the driver, before its key-off |
+| `adpcm: close 43 (now)` or `(fade)` | the game (`AdpcmClose`) | the close; "fade" when a fade ran out |
+
+`vol` is, per voice, the louder side of its VOLL/VOLR registers as the SPU2 holds them, so it
+includes the Music volume setting (`mix_gain.h`); a stereo stream's voices are left-only and
+right-only, so both read the level. `env` is each voice's ENVX. A healthy stream reads `vol
+3fff/3fff` at 100 % music and a nonzero `env`; a fade's close reads a small `vol`. At most three
+driver lines per stream. Examples from `adpcm_stream_test`:
+
+```
+adpcm: open 43 slot 0 voices 0,1
+adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff
+adpcm: 43 at half: voices 0,1 vol 3fff/3fff env 7fff/7fff
+adpcm: 43 at close: voices 0,1 vol 3fff/3fff env 7fff/7fff
+adpcm: close 43 (now)
+```
+
+The heartbeat (`ico_host_status`, `port/platform/trace_host.c`) ends with the two stream slots as
+the driver plays them, `stream@first voice` or `-` for an empty slot (`43@0 opening` between the
+open and the key-on):
+
+```
+... | adpcm: -, 44@2 vol 3fff/3fff env 7fff/7fff
+```
+
+The end of the run adds `audio: streams: N opened; M key-offs from the sequencer on stream voices;
+P packet pages full (Q packets carried, R dropped)`. The game's background disc reader logs a read
+it is about to retry, the first 8 and then every 100th (`port/data/cdvd_host.c`
+(`ico_cdvd_host_bg_retry`)): `cdvd: background read of <file> at lsn N retried (the drive was not
+ready; retry 1)`, or `(read error E; retry 1)`.
 
 ### PCM channels
 
@@ -584,8 +653,9 @@ port"):
 | `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling; the trim's play ratio against a target |
 | `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c` on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
 | `mix_gain` (`mix_gain_test.c`) | the gains: identity at 100 %, scaling, sweep words, the stream categories, the cache and its re-issue |
-| `adpcm_slots` (`adpcm_slots_test.c`) | the game's `adpcm_init.c` with the driver stubbed: a stream already fading out gives its slot up at once when both stream slots are taken |
-| `sndn2` (`sndn2_test.c`) | the driver and the sequencer against the IRX's code: transport and reply pages, packets as register effects, transfers, the pitch arithmetic and table (the disc's when `ICO_DISC_IMAGE` is there), an ADPCM stream through the half-fill scheme, the PCM mixer, a sound effect through the sequencer's pointer seams |
+| `adpcm_slots` (`adpcm_slots_test.c`) | the game's `adpcm_init.c` with the driver stubbed: a stream already fading out gives its slot up at once when both stream slots are taken; the ending's six streams opened one over the other alternate the two slots and the two voice pairs, each open's line names its voices and hands the log watch its length |
+| `adpcm_stream` (`adpcm_stream_test.c`) | the game's `adpcm_init.c` on the real sequencer, driver and SPU2 with synthesized streams: a stream reopened on the voices a fade closed lands VOL 0x3FFF and is heard at its level; the ending's six-stream shape, each stream's level alone against its amplitude; stream 43's length (57.8 s) at 1x with 7 IOP ring wraps, no 10 ms of silence and the close at the file's length (about 2,900 vsyncs, about 2 s); the stream log lines |
+| `sndn2` (`sndn2_test.c`) | the driver and the sequencer against the IRX's code: transport and reply pages, packets as register effects, transfers, the pitch arithmetic and table (the disc's when `ICO_DISC_IMAGE` is there), an ADPCM stream through the half-fill scheme, the PCM mixer, a sound effect through the sequencer's pointer seams, a stream opened on a full packet page (AU-7) |
 | `libsd_irx` (`libsd_irx_test.c`) | the LIBSD.IRX reader on a synthetic module, the structural checks, the fallback without a disc |
 | `audio_pan` (`pan_test.c`) | mirror mode's swap and the per-vsync frame counts at 50 and 59.94 Hz |
 
@@ -600,5 +670,5 @@ the named scenes' frame-by-frame CRCs, which replace the golden table `scene_gol
 `port/audio/test/spu2_bench.c` (`port/audio/test/spu2_bench.c`, header comment).
 
 Run the set with
-`ctest --preset linux-x64 -R '^(adpcm|spu2|spu2_render_crc|volume|mix_gain|adpcm_slots|sndn2|libsd_irx|audio_pan)$'`
+`ctest --preset linux-x64 -R '^(adpcm|spu2|spu2_render_crc|volume|mix_gain|adpcm_slots|adpcm_stream|sndn2|libsd_irx|audio_pan)$'`
 ([TESTING.md](TESTING.md) has the presets and labels).

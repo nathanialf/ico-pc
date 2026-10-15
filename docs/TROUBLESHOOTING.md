@@ -46,6 +46,17 @@ and only the picture is missing. See
 [The screen stays black but I hear the game](FAQ.md#the-screen-stays-black-but-i-hear-the-game):
 updating the graphics driver usually fixes it.
 
+## The music stops
+
+If a piece of music goes quiet while the sounds around it still play, or
+never starts in a scene where it should, the log of that run has what is
+needed to find out why: it writes down when each piece of music starts and
+ends, and how loud it is playing at its start, half way and at its end.
+Send `ico-pc.log` from that run (if you have started the game again since,
+it is `ico-pc-previous.log`) with a [problem report](#send-a-problem-report),
+and say roughly where in the game it happened and for how long the music
+was missing.
+
 ## Send a problem report
 
 1. Open a report on the
