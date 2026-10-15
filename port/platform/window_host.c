@@ -1030,18 +1030,18 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     const int wrote = f != NULL && fwrite(data, 1, bytes, f) == bytes;
 
     if (f != NULL && fclose(f) != 0) {
-        remove(dump);
+        ico_remove(dump);
         f = NULL;
     }
     free(data);
     if (!wrote || f == NULL) {
         snprintf(line, size, "the frame could not be written to %s", dump);
-        remove(dump);
+        ico_remove(dump);
         return ICO_DIAG_BISECT_NOT_RUN;
     }
     if (!rd_dump_frame_size(dump, &gw, &gh, &aspect)) {
         snprintf(line, size, "%s holds no frame this version reads", zip);
-        remove(dump);
+        ico_remove(dump);
         return ICO_DIAG_BISECT_NOT_RUN;
     }
     /* the frame's own size and aspect, the game's other settings */
@@ -1050,7 +1050,7 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     rd_set_activity_fn(window_activity);
     if (!rd_init(gw, gh, &rs, s_window)) {
         snprintf(line, size, "the renderer did not start (the lines above say why)");
-        remove(dump);
+        ico_remove(dump);
         return ICO_DIAG_BISECT_NOT_RUN;
     }
     /* the frame's pipelines compile on worker threads behind the
@@ -1061,7 +1061,7 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     rd_set_pipeline_progress(NULL, NULL);
     ico_diag_set_pipelines(0, 0, 0);
     rd_shutdown();
-    remove(dump);
+    ico_remove(dump);
     fprintf(stderr,
             "window: loss bisect: frame %u, %u passes, %u replays in %.1f s; the bisect's "
             "renderer is shut down\n",
@@ -1643,19 +1643,19 @@ static void loss_dump(char *name, size_t name_size)
     snprintf(before, sizeof(before), "%s/loss-%s-before.rddump", logs, stamp);
     if (!rd_dump_retained(lost, before, &lostFrame, &beforeFrame)) {
         fprintf(stderr, "window: loss dump: the renderer holds no frame to write\n");
-        remove(lost);
+        ico_remove(lost);
         ico_diag_note_device_loss(NULL);
         return;
     }
     if (beforeFrame == 0) {
-        remove(before);
+        ico_remove(before);
     }
     ico_host_log_flush();
     if (ico_loss_dump_zip(zip, lost, beforeFrame ? before : NULL, ico_diag_log_path(), why,
                           sizeof(why)) < 0) {
         fprintf(stderr, "window: loss dump: zip not written: %s\n", why);
-        remove(lost);
-        remove(before);
+        ico_remove(lost);
+        ico_remove(before);
         ico_diag_note_device_loss(NULL);
         return;
     }

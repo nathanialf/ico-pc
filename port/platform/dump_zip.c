@@ -136,10 +136,10 @@ static int files_zip(const char *zip_path, const char *const *paths, int n, cons
             }
             if (r < 0) {
                 say(why, why_size, "cannot write", zip_path);
-                remove(zip_path);
+                ico_remove(zip_path);
             } else {
                 for (int i = 0; i < n; i++) {
-                    remove(paths[i]);
+                    ico_remove(paths[i]);
                 }
             }
             mz_free(out);
@@ -351,12 +351,12 @@ int ico_sweep_zip(const char *zip_path, const char *prefix, char *why, size_t wh
     }
     if (r < 0) {
         say(why, why_size, "cannot write", zip_path);
-        remove(zip_path);
+        ico_remove(zip_path);
     } else {
         for (int i = 0; i < ICO_SWEEP_COUNT; i++) {
             for (int k = 0; have[i] && k < 2; k++) {
                 snprintf(path[k], sizeof(path[k]), "%s%s.%s", prefix, kSweepName[i], kExt[k]);
-                remove(path[k]);
+                ico_remove(path[k]);
             }
         }
     }
