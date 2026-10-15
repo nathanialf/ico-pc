@@ -216,7 +216,7 @@ The particle program skips a sprite whose corners or w fall outside its windows.
 **In the port.** The test is the program's own on the position as computed, at every aspect,
 since the projection does not change with the width. What the port then draws of a triangle
 ([the region rule](ARCHITECTURE.md#terms)), in this order (`port/shaders/vu_common.hlsli`
-(`vu_region_rule_at`, `vu_region_rule`); CPU mirror `port/render/vu1_ref/vu1_ref.h`
+(`vu_region_rule`, `vu_region_rule_cut`); CPU mirror `port/render/vu1_ref/vu1_ref.h`
 (`vu1ref_region_draw`)):
 
 1. All three vertices inside: drawn exactly, on the ftoi4 grid.
@@ -240,10 +240,10 @@ their neighbours, so the replay marks every triangle of a grid of two strips or 
 
 Under `VU_F_TICKS` (a picture between two ticks, through a blended camera) a triangle the rule
 drops at the blended camera is drawn, clipped, when either tick's camera showed it on the frame;
-a card stays a card. At each tick's own picture the rule is unchanged. One cut tests the triangle
-at the three cameras at once, in the lanes of `float4` values: the picture at the blended camera
-and at both ticks, and the frame at both ticks when the blended camera drops it
-(`port/shaders/vu_common.hlsli` (`vu_region_rule`, `vu_lanes`, `vu_cut_z`, `vu_cut_rows`;
+a card stays a card. At each tick's own picture the rule is unchanged. The ticks are tested only
+for a triangle the blended camera drops, tick 0 then tick 1 (the second not when the first showed
+it), each with its own camera's vertices, one z cut, and the picture's and the frame's rows
+(`port/shaders/vu_common.hlsli` (`vu_region_rule`, `vu_tick_shown`, `vu_cut_z`, `vu_cut_rows`;
 [SHADERS.md](SHADERS.md#the-envelope)); `port/render/vu1_ref/vu1_ref.h` (`vu1ref_region_between`)).
 
 `rd_replay.c` sets `VU_F_EXTENDED` from `vuExtended` (not the Original preset, a frame wider

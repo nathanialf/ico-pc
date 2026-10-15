@@ -1173,7 +1173,7 @@ static int stripPasses(const Case *c, const CaseRef *cr, int k);
 
 /* Whether what the GPU draws of strip triangle k (portPolygon, cut at the
  * near plane, then to the picture's rows) reaches the camera's picture
- * (vu_cut_reaches_picture, vu1ref_polygon_reaches_picture); -1
+ * (vu_cut_z and vu_cut_rows, vu1ref_polygon_reaches_picture); -1
  * when it cannot be predicted. */
 static int triReaches(const Case *c, const CaseRef *cr, int k)
 {

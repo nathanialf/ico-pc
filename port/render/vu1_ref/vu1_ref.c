@@ -137,7 +137,7 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
     if (insideA && insideB && insideC) {
         return VU1REF_DRAW_EXACT;
     }
-    /* vu_region_rule: the free camera, then vu_cut_reaches_picture */
+    /* vu_region_rule: the free camera, then the cut (vu_cut_rows) */
     if (freeCamera || !reaches) {
         return VU1REF_DRAW_CLIPPED;
     }
@@ -230,7 +230,7 @@ int vu1ref_polygon_reaches_picture(const float (*poly)[2], int n, const float pi
         return n >= 3; /* not a polygon this cuts: counted as reaching */
     }
     memcpy(p, poly, (size_t)n * sizeof(p[0]));
-    /* vu_cut_reaches_picture: the picture's rows first, then the columns */
+    /* the cut (vu_cut_rows): the picture's rows first, then the columns */
     n = cutPolygon(p, n, 1, pic[2], 1.0f);
     n = cutPolygon(p, n, 1, pic[3], -1.0f);
     if (n < 3) {

@@ -169,7 +169,8 @@ static inline int vu1ref_extended(int preset, int frameW, float scale)
  * (freeCamera, ICO_VU_BEHIND_EYE); else clipped when it lies wholly beside
  * the camera's picture (reaches 0: what the GPU draws of it, cut to
  * 0 <= z <= w and to the picture's rows, does not meet the picture's
- * columns: vu_cut_reaches_picture, vu1ref_polygon_reaches_picture); one
+ * columns: vu_common.hlsli's cut, vu_cut_z and vu_cut_rows,
+ * vu1ref_polygon_reaches_picture); one
  * that reaches the picture is not drawn out of the box (extended 0), and
  * in any other state (extended 1, vu1ref_extended) is clipped when every
  * vertex is in front of the eye (front: each VuGsVertex.clipW > 0) and it
@@ -196,7 +197,7 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
  * drawn; the rest as drawT. */
 int vu1ref_region_between(int drawT, int cardT, int shownPrev, int shownCur);
 /* Whether a triangle of the strip of static kick k passes the region test
- * (vu_common.hlsli vu_strip_of and the programs' vu_*_strip_passes): the
+ * (the card test, rd_mesh.h RdVuCards, vu_common.hlsli vu_strip_card): the
  * strip is the run of static kicks (vu1ref_static_kicks; stw and
  * batchFirst as there, stw NULL for the mesh program, whose batch is one
  * strip) that k belongs to, over v[0..count). */
@@ -214,8 +215,8 @@ int vu1ref_strip_passes(const VuGsVertex *v, const float *stw, const int *batchF
  * vu_particle_tick_shown). */
 int vu1ref_particle_draw(int extended, int freeCamera, int drawn, int shown, int reaches);
 
-/* The reach those two take (vu_common.hlsli vu_cut_reaches_picture,
- * vu_rect_reaches_picture). pic = the camera's picture: x0, x1, y0, y1
+/* The reach those two take (vu_common.hlsli's cut, vu_cut_z and
+ * vu_cut_rows, and vu_rect_reaches_picture). pic = the camera's picture: x0, x1, y0, y1
  * (left, right, top, bottom; GS (2048, 2048) -+ the picture's half-size
  * from FrameCB frame[1] and frame[2]: 256 by half the native height for the
  * frame's camera, a reflection camera's own), in the same pixels as the

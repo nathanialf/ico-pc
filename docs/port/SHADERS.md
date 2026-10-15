@@ -263,65 +263,82 @@ No shader waits on memory, spins on an atomic or uses recursion; the one ordered
 
 ## The envelope
 
-The vertex shaders use only the SPIR-V instructions of a set proven on every device the port has
-failed on: the union of the opcodes of a set of VU vertex shaders that built on an NVIDIA GeForce
-10-series card and a Qualcomm Adreno 740 (the tree is named in `tools/check_spirv.py`) and of every
-2D vertex shader, compiled with the pinned DXC and the build's flags, less `OpUndef`. Four
-constructs lie outside it that those drivers' compilers crash or hang on in a vertex shader: loops
-with run-time trip counts (`OpLoopMerge`), `dot()` (`OpDot`), a comparison of two booleans
-(`OpLogicalNotEqual`) and undefined values (`OpUndef`); the game cannot start without the VU vertex
-shaders. `spirv_check` (`tools/check_spirv.py`, `VS_OPCODES`, `DENIED`) reads every compiled module
-and fails a vertex shader with any opcode outside the set, naming the four. The rules that came before it stay: no shader builds, copies or carries a whole
-array as a value, and no vertex shader keeps a local array (one in SPIR-V's Function storage
-class); an array in a constant buffer, a storage buffer or a stream is read one element at a time,
-and the pixel shaders with a local array indexed at run time (`font.hlsl`, font_sheet_ps;
-`yuv.hlsl`) build on those drivers and are allowed.
+The vertex shaders are written in the forms of a set proven on every device the port has failed on
+(the VU vertex shaders that built on an NVIDIA GeForce 10-series card, a Qualcomm Adreno 740 and a
+PowerVR DXT-48-1536; the tree is named in `tools/check_spirv.py`), and `spirv_check` holds every
+compiled vertex shader to them:
 
-**The size.** Each module has a budget in 32-bit words, `VS_BUDGET` (22,000) for a vertex shader and
-`PS_BUDGET` (78,560, the largest pixel shader's 71,418 and a tenth) for a pixel shader, and
-`spirv_check` fails a module over it; `--sizes` prints each module's words, instructions, basic
-blocks, phis, loops and dot products. A phone's driver compiles the start-up set in a time about
+- **The shape.** No vector of booleans (`OpTypeVector` of `OpTypeBool`), no `any()` or `all()`
+  (`OpAny`, `OpAll`) and no select whose result is a boolean or a vector of booleans. The PowerVR
+  driver compiled every VU vertex shader written as scalar comparisons, branches and selects
+  between numbers, and crashed (SIGSEGV inside its compiler, on the first pipeline with a VU vertex
+  shader, and on `vu_particle_vs` alone) on a set with the same opcodes but 1,476 comparisons of
+  float vectors, 1,660 selects of boolean vectors and 116 `any()`.
+- **The opcodes.** Only the opcodes of that set's vertex shaders and of every 2D vertex shader,
+  compiled with the pinned DXC and the build's flags, less `OpUndef` (`VS_OPCODES`). Four
+  constructs lie outside it that the GeForce and Adreno drivers' compilers crash or hang on in a
+  vertex shader: loops with run-time trip counts (`OpLoopMerge`), `dot()` (`OpDot`), a comparison of
+  two booleans (`OpLogicalNotEqual`) and undefined values (`OpUndef`), named in the finding
+  (`DENIED`).
+- **Arrays.** No shader builds, copies or carries a whole array as a value, and no vertex shader
+  keeps a local array (one in SPIR-V's Function storage class); an array in a constant buffer, a
+  storage buffer or a stream is read one element at a time, and the pixel shaders with a local
+  array indexed at run time (`font.hlsl`, font_sheet_ps; `yuv.hlsl`) build on those drivers and are
+  allowed.
+
+**How the code is written** (`port/shaders/vu_common.hlsli`, header comment). Boolean logic is
+scalar comparisons joined with `&&`, `||` and `!`, which DXC makes branches; a choice is an `if` or
+a `?:` between numbers; flags combined after they are computed are uints, 1 or 0 (`vu_clipw`'s
+bits, `VuVtx.inside`, `vu_has_gs_position`), joined with `&`. No vector is chosen after it is
+computed: DXC's optimiser makes a phi of two vectors that exist before the branch into a select on
+a vector of booleans, so a vector is chosen value by value (`vu_pick`, the triangle's position in
+`vu_triangle_out_pos`, the culled position in `vu_plane_out`) or computed inside its branch, and
+the GS integers are three scalars in `VuVtx`. A struct is initialised whole (`(VuVtx)0`) and no
+vector is built with a lane nothing reads (the optimiser leaves an `OpUndef` there); an unsigned
+comparison is written with `<`, `>=`, `==` or `!=`. A mesh program evaluates its three vertices in
+full, and the tests' probe vertex is the first of them (`vu_mesh_out`, the programs' `*_vs`).
+
+**The GPU's work.** One cut a vertex, at the blended camera, for a triangle not all inside the
+region (and not under the free camera); the two ticks' tests only under `VU_F_TICKS` and only for a
+triangle the blended camera dropped, tick 0 then tick 1, the second skipped when the first showed
+it ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule); `vu_region_rule`, `vu_tick_shown`).
+
+**The cut** (`vu_cut_z`, `vu_cut_rows`). The region rule asks whether what the GPU draws of a
+triangle reaches a rectangle: the triangle cut to `0 <= z <= w` and to the rectangle's rows
+(Sutherland-Hodgman, plane by plane), its `x / w` extent met with the columns. A corner is four
+scalars (three after the z planes); a plane's corners are registers, the polygon the last `n` of
+them; a corner is appended by moving the registers down one and writing the last, each a `?:`
+between numbers on the step's flag, and a plane's steps are written out for the most corners it
+can be given (3, 4, 5, 6: a convex polygon cut by a plane gains at most one corner; one that
+rounding has made gain more keeps its first ones, as the cut always kept its first seven). The
+distance to a plane is its dot product in the VU's order with the plane's zero and unit products
+folded, exact for a finite corner: `z`, `w - z`, `top w - y`, `y - bottom w`, each `precise`; the
+crossing is `lerp(a, b, da / (da - db))`; the sign change a comparison of the two signs' flags. The
+z planes and the rows are apart, so a tick's picture test and frame test share its z cut. The cut
+is 1,073 instructions without a branch; the corner-array form with a loop over the corners was
+3,098 instructions in 260 blocks, executed in part.
+
+**The size.** Each module has a budget in 32-bit words, `VS_BUDGET` (56,000, a tripwire about a
+tenth above the largest) for a vertex shader and `PS_BUDGET` (78,560, the largest pixel shader's
+71,418 and a tenth) for a pixel shader, and `spirv_check` fails a module over it; `--sizes` prints
+each module's words, instructions, basic blocks, phis, loops, dot products, vector comparisons,
+boolean selects and `any()`. A phone's driver compiles the start-up set in a time about
 proportional to the modules' size (the renderer logs the largest at start and the compile time per
 vertex shader after the set, [RENDER.md](RENDER.md#pipelines)).
 
 | module | words | instructions | blocks | phis |
 | --- | --- | --- | --- | --- |
-| `vu_prelit_vs` | 20,414 | 4,036 | 34 | 25 |
-| `vu_lit_vs` | 20,979 | 4,151 | 31 | 23 |
-| `vu_skin_vs` | 20,496 | 4,066 | 15 | 12 |
-| `vu_grid_vs` | 18,135 | 3,556 | 15 | 12 |
-| `vu_particle_vs` | 7,098 | 1,535 | 17 | 13 |
+| `vu_prelit_vs` | 50,092 | 10,692 | 861 | 327 |
+| `vu_lit_vs` | 51,005 | 10,887 | 861 | 327 |
+| `vu_skin_vs` | 48,846 | 10,307 | 707 | 261 |
+| `vu_grid_vs` | 46,470 | 9,801 | 716 | 264 |
+| `vu_particle_vs` | 10,000 | 2,344 | 232 | 103 |
 
-(the other entries of each file within 900 words of their family's; DXC v1.9.2609). The same rule
-written as Sutherland-Hodgman loops over corner arrays, with the strip walk and the two ticks as
-loops in the vertex shader, compiles to 91,686 words, 19,920 instructions and 2,431 blocks in
+(the other entries of each file within 2,200 words of their family's; DXC v1.9.2609). More than
+half of a mesh program is the two ticks' tests written out (each tick's three vertices, its z cut
+and its picture and frame rows), a seventh the blended camera's cut. The same rule written with corner
+arrays, loops and `dot()` compiles to 91,686 words, 19,920 instructions and 2,431 blocks in
 `vu_prelit_vs`.
-
-**How the code is written** (`port/shaders/vu_common.hlsli`, header comment). In HLSL 2021 a scalar
-`?:`, `&&` and `||` short-circuit into branches, so a choice between two computed values is
-`select()` and a conjunction `select(a, b, false)` (`vu_and`; `OpLogicalAnd` and `OpLogicalOr` are
-outside the set); an unsigned comparison is written with `<`, `>=`, `==` or `!=`; a struct is
-initialised whole (`(VuVtx)0`) and no vector is built with a component nothing reads, nor chosen by
-a `select()` on a literal (the optimiser leaves an `OpUndef` in either); a choice on a literal is an
-`if`. A mesh program evaluates its three vertices in full, and the tests' probe vertex is the first
-of them (`vu_mesh_out`, the programs' `*_vs`).
-
-**The cut** (`vu_cut_z`, `vu_cut_rows`). The region rule asks whether what the GPU draws of a
-triangle reaches a rectangle: the triangle cut to `0 <= z <= w` and to the rectangle's rows
-(Sutherland-Hodgman, plane by plane), its `x / w` extent met with the columns. One copy of the cut
-tests three triangles at once (the blended camera's and the two ticks', [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)):
-every value is a `float4` whose lanes are the triangles, each lane doing what one triangle's cut
-does with the same operands in the same order, and a corner is four such values. A plane's
-corners are registers, the polygon the last `n` of them; a corner is appended by moving the
-registers down one and writing the last, a select on one condition, and a plane's steps are
-written out for the most corners it can be given (3, 4, 5, 6: a convex polygon cut by a plane gains
-at most one corner; one that rounding has made gain more keeps its first ones, as the cut always
-kept its first seven). The distance to a plane is its dot product in the VU's order with the
-plane's zero and unit products folded, exact for a finite corner: `z`, `w - z`, `top w - y`,
-`y - bottom w`, each `precise`; the crossing is `lerp(a, b, da / (da - db))`; the sign change a
-select on the two signs. Each corner's three triangles come from `vu_lanes` (the ticks' cameras,
-the divide, the region test and `vu_cut_position`, lane by lane). The picture's rows run in one
-call, the frame's (the ticks only, under `VU_F_TICKS`) in a second.
 
 **The card test** is decided on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): the
 vertex shader reads two bits a vertex from `VuBoneCB` (`vu_strip_card`) instead of walking the
@@ -334,7 +351,7 @@ strip.
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
-| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader's opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes printed; the module's binary form decoded in Python, no SPIR-V tool needed |
+| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
 | `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; the CPU's card test against the reference on every vertex and strip; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
 

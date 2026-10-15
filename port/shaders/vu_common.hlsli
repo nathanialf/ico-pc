@@ -69,7 +69,7 @@
 // vu_ticks under VU_F_TICKS: the two ticks' cameras of a blended picture,
 //          R = S_tick St^-1 (columns; 0..3 the tick before's, 4..7 this
 //          tick's), a vertex's h through the blended camera St to the h the
-//          tick's camera gave (vu_lanes)
+//          tick's camera gave (vu_tick_vertex)
 cbuffer VuCB : register(b2, space1)
 {
     float4 vu_mem[36];
