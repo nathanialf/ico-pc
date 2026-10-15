@@ -382,6 +382,14 @@ typedef struct RdSettings {
      * scissor, DISPLAY's border is the GS's own (the tests' PS2 models,
      * the replay tool without --border-mask); ignored with fullPixel. */
     uint8_t borderMask;
+    /* Water reflections: Sharp ([video] effect_water_sharp).  The blocks
+     * rd_block_target makes that are not scene-sized (the reflections of
+     * puddle.c and pool.c, the queen barrier's copy of the frame) take the
+     * scene's scale, so their pictures have the scene's texels per GS pixel
+     * (rd_core.c rd__target_scale_of).  0 in a zeroed RdSettings: they are
+     * drawn at their own GS size, as on the PS2 (and as before this
+     * option; the replay tool's --water-sharp sets it) */
+    uint8_t waterSharp;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the

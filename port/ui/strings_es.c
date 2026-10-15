@@ -472,6 +472,10 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_VAL_WINDOWED] = "Ventana",
     [UI_STR_VAL_BORDERLESS] = "Sin bordes",
     /* Effects > Cinematic bars */
+    [UI_STR_OPT_EFFECT_WATER] = "Reflejos del agua",
+    [UI_STR_VAL_SHARP] = "Nítido",
+    [UI_STR_EFFECT_WATER_NOTE] =
+        "Nítido dibuja los reflejos del agua a la resolución elegida; Original mantiene los reflejos más suaves de PS2.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Franjas de cine",
     [UI_STR_OPT_FULL_PIXEL] = "Píxeles exactos de pantalla",
     /* Settings > Graphics driver (Android), Quit game */

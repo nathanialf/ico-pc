@@ -1161,6 +1161,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.effectMotionBlur);
     case UI_OPT_EFFECT_FOG:
         return onOff(o.effectFog);
+    case UI_OPT_EFFECT_WATER:
+        return ui_str(o.effectWaterSharp ? UI_STR_VAL_SHARP : UI_STR_VAL_ORIGINAL);
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return onOff(o.effectCinematicBars);
     case UI_OPT_FULL_PIXEL:
@@ -1412,6 +1414,8 @@ static int *videoSwitch(IcoVideoOptions *o, UiSettingsOpt opt)
         return &o->effectMotionBlur;
     case UI_OPT_EFFECT_FOG:
         return &o->effectFog;
+    case UI_OPT_EFFECT_WATER:
+        return &o->effectWaterSharp;
     case UI_OPT_EFFECT_CINEMATIC_BARS:
         return &o->effectCinematicBars;
     case UI_OPT_FULL_PIXEL:
@@ -1539,9 +1543,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_EFFECT_SOFTENING:
     case UI_OPT_EFFECT_MOTION_BLUR:
     case UI_OPT_EFFECT_FOG:
+    case UI_OPT_EFFECT_WATER:
     case UI_OPT_EFFECT_CINEMATIC_BARS:
     case UI_OPT_FULL_PIXEL: {
-        /* the plain On/Off display rows */
+        /* the plain On/Off display rows (and Water reflections' Original
+           and Sharp) */
         int *const on = videoSwitch(&o, opt);
         *on = !*on;
         video = 1;
@@ -2088,6 +2094,10 @@ static int pagePitch(int page, int n, int *y0)
         return 14;
     }
     *y0 = 40;
+    if (page == UI_PAGE_EFFECTS && n > 13) {
+        *y0 = 30;
+        return 12; /* fourteen rows: Back at 186, its box to 222 */
+    }
     if (page == UI_PAGE_EFFECTS && n > 12) {
         *y0 = 34;
         return 13; /* thirteen rows: Back at 190, its box to 226 */
@@ -2268,6 +2278,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_EFFECTS:
         addNote(pg, UI_OPT_EFFECT_GLOW, UI_STR_EFFECTS_NOTE);
+        addNote(pg, UI_OPT_EFFECT_WATER, UI_STR_EFFECT_WATER_NOTE);
         break;
     case UI_PAGE_GPU_DRIVER:
         /* one note under the page, on every row but Back */
@@ -2702,6 +2713,7 @@ static void build(void)
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_WATER,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
@@ -2715,6 +2727,7 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};

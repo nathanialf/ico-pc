@@ -118,9 +118,12 @@ static void testCinematicBars(void)
     useConfig("version = 1\n");
     enterMain(0);
     const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    CHECK(n >= 4 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_FULL_PIXEL &&
-              opts[n - 3] == UI_OPT_EFFECT_CINEMATIC_BARS && opts[n - 4] == UI_OPT_EFFECT_FOG,
-          "bars: the row sits after Fog, before Full pixel and Back (%d rows)", n);
+    CHECK(n >= 5 && opts[n - 1] == UI_OPT_BACK && opts[n - 2] == UI_OPT_FULL_PIXEL &&
+              opts[n - 3] == UI_OPT_EFFECT_CINEMATIC_BARS && opts[n - 4] == UI_OPT_EFFECT_WATER &&
+              opts[n - 5] == UI_OPT_EFFECT_FOG,
+          "bars: the row sits after Fog and Water reflections, before Full pixel and Back (%d "
+          "rows)",
+          n);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FULL_PIXEL), "Off") == 0,
           "full pixel: Off by default");
     ui_settings_step(UI_OPT_FULL_PIXEL, 1);
@@ -152,6 +155,40 @@ static void testCinematicBars(void)
     ui_settings_step(UI_OPT_EFFECT_CINEMATIC_BARS, -1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_CINEMATIC_BARS), "On") == 0,
           "bars: On again");
+    useConfig("version = 1\n");
+}
+
+/* Effects > Water reflections: Original by default, a step makes it Sharp
+   (the getter at once, [video] effect_water_sharp true when saved), its note
+   on the page, and the page's fourteen rows fit from the pause menu */
+static void testWaterReflections(void)
+{
+    char p[1100];
+
+    useConfig("version = 1\n");
+    const int mainL = enterMain(0);
+    openPage(mainL, 1, UI_PAGE_EFFECTS);
+    CHECK(ui_settings_row_of(UI_PAGE_EFFECTS, UI_OPT_EFFECT_WATER) >= 0, "water: the row");
+    CHECK(noteStarting(UI_PAGE_EFFECTS, "Sharp draws") >= 0, "water: the note");
+    checkPageFits(UI_PAGE_EFFECTS, "Effects with Water reflections (pause)");
+    press(0x10);
+    CHECK(settle(mainL, 60), "water: back from Effects");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_WATER), "Original") == 0,
+          "water: Original by default");
+    CHECK(ico_video_effect_water_sharp() == 0, "water: the getter reads Original");
+    ui_settings_step(UI_OPT_EFFECT_WATER, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_WATER), "Sharp") == 0, "water: Sharp");
+    CHECK(ico_video_effect_water_sharp() == 1, "water: the getter reads Sharp at once");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_FOG), "On") == 0, "water: Fog untouched");
+    CHECK(ui_settings_save() == 0, "water: save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "video.effect_water_sharp", 0) == 1,
+          "water: [video] effect_water_sharp true");
+    ico_toml_free(t);
+    ui_settings_step(UI_OPT_EFFECT_WATER, -1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_WATER), "Original") == 0,
+          "water: Original again");
     useConfig("version = 1\n");
 }
 
@@ -2160,6 +2197,8 @@ int main(int argc, char **argv)
     testWindowMode();
     /* Effects > Cinematic bars */
     testCinematicBars();
+    /* Effects > Water reflections */
+    testWaterReflections();
     /* the select callback's argument */
     testItemSelectArg();
     /* Settings > Graphics driver, the Quit game label */

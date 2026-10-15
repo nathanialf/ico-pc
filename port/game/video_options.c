@@ -86,6 +86,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->effectMotionBlur = 1;
     o->effectFog = 1;
     o->effectCinematicBars = 1;
+    o->effectWaterSharp = 0;
     o->effectsDepth = 1;
 }
 
@@ -413,6 +414,7 @@ static void sanitize(IcoVideoOptions *o)
     o->effectMotionBlur = !!o->effectMotionBlur;
     o->effectFog = !!o->effectFog;
     o->effectCinematicBars = !!o->effectCinematicBars;
+    o->effectWaterSharp = !!o->effectWaterSharp;
     o->effectsDepth = !!o->effectsDepth;
 }
 
@@ -516,6 +518,7 @@ static void read_config(void)
     o.effectMotionBlur = ico_config_get_bool("video.effect_motion_blur", 1);
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     o.effectCinematicBars = ico_config_get_bool("video.effect_cinematic_bars", 1);
+    o.effectWaterSharp = ico_config_get_bool("video.effect_water_sharp", 0);
     /* the depth handed to an effects program (ReShade) */
     o.effectsDepth = ico_config_get_bool("video.effects_depth", 1);
     /* the preset is a shortcut over the four rows: only "enhanced" and
@@ -638,6 +641,7 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_motion_blur", o.effectMotionBlur);
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
     r |= ico_config_set_bool("video.effect_cinematic_bars", o.effectCinematicBars);
+    r |= ico_config_set_bool("video.effect_water_sharp", o.effectWaterSharp);
     /* file-only, so only when not at its default, or to keep a key the
        file already has in step (2: no key) */
     if (!o.effectsDepth || ico_config_get_bool("video.effects_depth", 2) != 2) {
@@ -749,6 +753,14 @@ int ico_video_effect_cinematic_bars(void)
         read_config();
     }
     return s_opt.effectCinematicBars;
+}
+
+int ico_video_effect_water_sharp(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.effectWaterSharp;
 }
 
 int ico_video_effects_depth(void)

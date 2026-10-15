@@ -598,6 +598,10 @@ typedef enum UiStrId {
     UI_STR_STEAM_NO_USER_BODY,
     UI_STR_STEAM_FAILED,
     UI_STR_STEAM_FAILED_BODY,
+    /* Effects > Water reflections: Original (UI_STR_VAL_ORIGINAL) or Sharp */
+    UI_STR_OPT_EFFECT_WATER,
+    UI_STR_VAL_SHARP,
+    UI_STR_EFFECT_WATER_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

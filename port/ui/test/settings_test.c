@@ -45,6 +45,7 @@ static void testBuild(void)
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
                                  UI_OPT_EFFECT_FOG,
+                                 UI_OPT_EFFECT_WATER,
                                  UI_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_OPT_FULL_PIXEL,
                                  UI_OPT_BACK};
@@ -58,6 +59,7 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
                                  UI_STR_OPT_EFFECT_FOG,
+                                 UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_OPT_FULL_PIXEL,
                                  UI_STR_BACK};

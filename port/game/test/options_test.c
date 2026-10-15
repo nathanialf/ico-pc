@@ -423,6 +423,34 @@ static void test_video_effects(const char *dir)
         ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
         CHECK(*fx[i] == 0 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
     }
+    /* Water reflections: Original (0) by default and with no key, Sharp
+       read, sanitized, saved and read back; outside the preset as the six */
+    ico_video_defaults(&d);
+    CHECK(d.effectWaterSharp == 0);
+    f = fopen(path, "wb");
+    if (f != NULL) {
+        fputs("[video]\neffect_fog = false\n", f);
+        fclose(f);
+    }
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.effectWaterSharp == 0 && ico_video_effect_water_sharp() == 0);
+    o.effectWaterSharp = 3;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.effectWaterSharp == 1 && ico_video_effect_water_sharp() == 1);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "effect_water_sharp = true") != NULL);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+    CHECK(o.effectWaterSharp == 1);
     remove(path);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_video_reload();
