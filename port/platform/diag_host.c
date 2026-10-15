@@ -110,6 +110,8 @@ static unsigned int (*vsyncs_fn)(void);
 static volatile unsigned int progress;
 
 static volatile int movie_playing;
+/* ico_diag_set_pipelines: the start-up set's count and its longest compile */
+static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
 /* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
    the present it is in (0 = not inside one), and the capped time of the
    presents that finished, both in ico_diag_now_ns */
@@ -442,6 +444,13 @@ unsigned int ico_diag_progress(void)
 void ico_diag_set_movie(int playing)
 {
     movie_playing = playing;
+}
+
+void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int longest_ms)
+{
+    pipes_done = done;
+    pipes_longest_ms = longest_ms;
+    pipes_total = total;
 }
 
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
@@ -843,6 +852,16 @@ static void heartbeat_body(char *out, size_t size)
         size_t n = strlen(out);
         snprintf(out + n, size - n, " | progress %u%s", progress,
                  movie_playing ? " (a movie is playing)" : "");
+    }
+    {
+        /* the start-up set while it is created (it runs before the first
+           Main tick, and a phone takes minutes over it) */
+        const unsigned int total = pipes_total;
+        if (total > 0) {
+            size_t n = strlen(out);
+            snprintf(out + n, size - n, " | pipelines %u of %u, longest %.1f s", pipes_done, total,
+                     (double)pipes_longest_ms / 1000.0);
+        }
     }
 }
 

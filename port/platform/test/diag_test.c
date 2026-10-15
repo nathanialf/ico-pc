@@ -22,7 +22,8 @@
  *   - progress: the Main tick stands still (a movie plays inside one) but
  *               the progress count moves for longer than the later limit:
  *               no fire; then both stop and the watchdog fires naming the
- *               movie, and the heartbeat printed the count;
+ *               movie, and the heartbeat printed the count and the
+ *               start-up set's pipelines;
  *   - stall:    the tick stands still and nothing else moves: the later
  *               limit fires;
  *   - present:  with an effects program set, a fake present of 4 s inside a
@@ -188,6 +189,8 @@ static void progress_child(int progress)
     ico_diag_start(0, 1);
     if (progress) {
         ico_diag_set_movie(1);
+        /* the start-up set's count in the heartbeat */
+        ico_diag_set_pipelines(12, 527, 1310);
     }
     for (i = 0; progress && i < 50; i++) {
         pause_ms(50);
@@ -567,6 +570,7 @@ int main(int argc, char **argv)
           strstr(s, "test: progress kept it alive") < strstr(s, "WATCHDOG:"));
     CHECK(strstr(s, "| progress ") != NULL);
     CHECK(strstr(s, "(a movie is playing)") != NULL);
+    CHECK(strstr(s, " | pipelines 12 of 527, longest 1.3 s") != NULL);
     if (fails) {
         printf("--- progress log ---\n%s\n", s);
     }

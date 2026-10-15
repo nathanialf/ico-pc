@@ -72,6 +72,11 @@ unsigned int ico_diag_progress(void);
 /* 1 while a movie plays, 0 after: the heartbeat and the watchdog's reason
    say so. */
 void ico_diag_set_movie(int playing);
+/* The renderer's start-up set while it is created (the window's progress
+   function): the heartbeat adds "pipelines <done> of <total>, longest
+   <longest_ms / 1000> s"; total 0 (when the set is done) takes it off. Any
+   thread. */
+void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int longest_ms);
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));

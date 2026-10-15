@@ -1227,14 +1227,18 @@ open_window:
         static PipeScreen screen;
 
         /* a start with a cold driver cache can take many seconds (a phone,
-           or a PC after a version that changed the shaders): say what is
-           going on (nothing is drawn when it is quick), and take the
-           window's events meanwhile, so the system does not call the
-           window "Not Responding" (Windows does after 5 s) and a close
-           asked meanwhile ends the run once the set is done */
+           or a PC after a version that changed the shaders): the driver
+           compiles on worker threads (rhi_create_pipelines) while this
+           thread says what is going on (nothing is drawn when it is
+           quick), with the count and an estimate, and takes the window's
+           events about every 100 ms, so the system does not call the
+           window "Not Responding" (Windows does after 5 s, Android asks
+           whether to close the app) and a close asked meanwhile stops the
+           set after the batch in flight and ends the run */
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
+        ico_diag_set_pipelines(0, 0, 0);
         ico_diag_startup_activity_record(0);
     }
     /* which way of reading the depth gives the fog its distances on this
@@ -2037,11 +2041,12 @@ typedef struct ProgressView {
     const char *title;
     const char *phase;
     int pct;
-    int allowCancel; /* the bar's "how to stop" line is shown */
+    int allowCancel;      /* the bar's "how to stop" line is shown */
+    const char *notes[2]; /* lines under the bar, NULL for none */
 } ProgressView;
 
 /* the layout grid's 4:3 picture (port/ui/font.h): the title, the phase
-   line, the bar and (Android) how to stop */
+   line, the bar, (Android) how to stop and the notes */
 static void progress_overlay(const RdOverlayCtx *ctx, void *user)
 {
     const ProgressView *v = user;
@@ -2074,13 +2079,24 @@ static void progress_overlay(const RdOverlayCtx *ctx, void *user)
         ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x1 - 2.0f, y1 - 2.0f, track);
         ui_draw_rect(x0 + 2.0f, y0 + 2.0f, x0 + 2.0f + (x1 - x0 - 4.0f) * (float)pct / 100.0f,
                      y1 - 2.0f, fill);
+        float y = 300.0f;
+        int i;
+
 #ifdef __ANDROID__
         if (v->allowCancel) {
-            ui_draw_text(UI_GRID_CX, 300.0f, 16.0f, body,
+            ui_draw_text(UI_GRID_CX, y, 16.0f, body,
                          "Press Back to stop (you can start again later)",
                          UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+            y += 24.0f;
         }
 #endif
+        for (i = 0; i < 2; i++) {
+            if (v->notes[i] != NULL) {
+                ui_draw_text(UI_GRID_CX, y, 16.0f, body, v->notes[i],
+                             UI_ALIGN_CENTER | UI_VALIGN_BASELINE);
+                y += 24.0f;
+            }
+        }
     }
     ui_end_overlay();
 }
@@ -2128,8 +2144,10 @@ static void progress_event(const SDL_Event *e, int *cancel, int *closing)
    1 when the player asked to stop and allowCancel is set (or the device was
    lost).  A quit or close request is also kept (s_quitLatched) whatever
    allowCancel is, so a screen whose caller carries on still ends the run at
-   the next ico_window_pump. */
-static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
+   the next ico_window_pump.  note0 and note1: lines under the bar (NULL:
+   none). */
+static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
+                                  const char *note0, const char *note1)
 {
     static int s_cancelLogged;
     SDL_Event e;
@@ -2185,6 +2203,8 @@ static int progress_present(const char *title, const char *phase, int pct, int a
     v.phase = phase;
     v.pct = pct;
     v.allowCancel = allowCancel;
+    v.notes[0] = note0;
+    v.notes[1] = note1;
     prev = rd_get_present_overlay(&prevUser);
     /* the touch controls' layer off too */
     prevTop = rd_get_present_overlay_top(&prevTopUser);
@@ -2194,6 +2214,11 @@ static int progress_present(const char *title, const char *phase, int pct, int a
     rd_set_present_overlay(prev, prevUser);
     rd_set_present_overlay_top(prevTop, prevTopUser);
     return cancel;
+}
+
+static int progress_present(const char *title, const char *phase, int pct, int allowCancel)
+{
+    return progress_present_notes(title, phase, pct, allowCancel, NULL, NULL);
 }
 
 int ico_window_progress(const char *title, const char *phase, int pct)
@@ -2213,33 +2238,78 @@ int ico_window_progress(const char *title, const char *phase, int pct)
    With the graphics already prepared (the driver's saved cache, a start that
    follows another) this takes a few tens of milliseconds and nothing is
    drawn: the screen appears only when the wait is already noticeable, and
-   then at most ten times a second. */
+   then at most ten times a second.  The count moves while a batch compiles
+   (the renderer calls this about every 50 ms from inside it), so the
+   window's events are taken meanwhile; an estimate of the time left from
+   the rate so far joins once there is a rate to go by.  Returns 1 when the
+   game is closing (a quit or close request came in): the renderer stops the
+   set after the batch in flight. */
 #define PIPE_SCREEN_AFTER_MS 250.0
 #define PIPE_SCREEN_EVERY_MS 100.0
+/* the estimate from this much time and this many pipelines on */
+#define PIPE_ESTIMATE_AFTER_S 3.0
+#define PIPE_ESTIMATE_AFTER_DONE 8u
+
+/* "About 2 minutes left" from the rate so far; NULL while too early */
+static const char *pipe_estimate(char *out, size_t size, double elapsedS, uint32_t done,
+                                 uint32_t total)
+{
+    double left;
+
+    if (done < PIPE_ESTIMATE_AFTER_DONE || done >= total || elapsedS < PIPE_ESTIMATE_AFTER_S) {
+        return NULL;
+    }
+    left = elapsedS * (double)(total - done) / (double)done;
+    if (left < 10.0) {
+        snprintf(out, size, "A few seconds left");
+    } else if (left < 55.0) {
+        /* rounded up to ten seconds */
+        snprintf(out, size, "About %d seconds left", ((int)left + 9) / 10 * 10);
+    } else if (left < 90.0) {
+        snprintf(out, size, "About a minute left");
+    } else {
+        snprintf(out, size, "About %d minutes left", (int)(left / 60.0 + 0.5));
+    }
+    return out;
+}
 
 static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
 {
     PipeScreen *p = ctx;
     const uint64_t now = SDL_GetTicksNS();
-    char phase[64];
+    const double elapsedMs = (double)(now - p->startNs) / 1e6;
+    char phase[64], left[48];
+    const char *estimate;
+    const char *once = NULL;
+    int stop;
 
+    /* the heartbeat line says how far the set is (diag_host.h) */
+    ico_diag_set_pipelines(done, done < total ? total : 0,
+                           (unsigned)(rd_precreate_longest_ms() + 0.5f));
     if (done == 0) {
         p->startNs = now;
         p->drawn = 0;
-        return 0;
+        return s_quitLatched;
     }
-    if ((double)(now - p->startNs) / 1e6 < PIPE_SCREEN_AFTER_MS ||
+    if (elapsedMs < PIPE_SCREEN_AFTER_MS ||
         (p->drawn && (double)(now - p->lastNs) / 1e6 < PIPE_SCREEN_EVERY_MS)) {
-        return 0;
+        return s_quitLatched;
     }
     snprintf(phase, sizeof(phase), "Preparing graphics (%u of %u)", (unsigned)done,
              (unsigned)total);
+    estimate = pipe_estimate(left, sizeof(left), elapsedMs / 1000.0, done, total);
+#ifdef __ANDROID__
+    /* the driver keeps what it prepared: the next starts take seconds */
+    once = "This happens once after an update";
+#endif
     p->drawn = 1;
-    progress_present("Starting ICO", phase, total > 0 ? (int)((uint64_t)done * 100u / total) : -1,
-                     0);
+    /* 1 from a screen that cannot stop: the device was lost */
+    stop = progress_present_notes("Starting ICO", phase,
+                                  total > 0 ? (int)((uint64_t)done * 100u / total) : -1, 0,
+                                  estimate, once);
     /* the present itself took time: the next draw is measured from its end */
     p->lastNs = SDL_GetTicksNS();
-    return 0;
+    return stop || s_quitLatched;
 }
 
 /* ico-pc-perf.csv in the logs folder, beside ico-pc.log
