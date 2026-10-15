@@ -108,7 +108,11 @@
  *                         groups created (rd's uniform and texture groups
  *                         apart), bind group and pipeline binds, ring bytes,
  *                         pipeline barriers and copies, the screen-prim
- *                         draws one per command and merged; on a device
+ *                         draws one per command and merged; a second line:
+ *                         the exact blend's destination-read draws, storage
+ *                         passes and pass switches, the glow's passes, the
+ *                         target snapshots copied and swapped (rd.h
+ *                         RdPerfRecord); on a device
  *                         with GPU timestamps, after the picture is written,
  *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
  *                         more times and the last replay's GPU times are
@@ -1355,6 +1359,10 @@ int main(int argc, char **argv)
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
                pr->screenDraws);
+        printf("%s: stats: %u destination-read draws, %u storage passes, %u pass switches for the "
+               "exact blend; glow %u passes; snapshots %u copied, %u swapped\n",
+               dump, pr->dstDraws, pr->storagePasses, pr->dstSwitches, pr->glowPasses,
+               pr->snapshots, pr->snapSwaps);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

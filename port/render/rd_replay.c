@@ -1361,6 +1361,12 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
                                       d ? d->th : 0, storage, r->perfPost));
     setViewport(c->tw, c->th);
+    if (storage) {
+        g_rdPerf.storagePasses++;
+    }
+    if (r->perfPost == RD_PERF_POST_GLOW) {
+        g_rdPerf.glowPasses++;
+    }
     r->passOpen = 1;
     r->passColor = cid;
     r->passDepth = did;
@@ -2908,6 +2914,7 @@ static void dstPassMode(Replay *r, const RdPipeKeyInt *k)
               0.0f, storage);
     r->sc = sc;
     rhi_cmd_set_scissor(s_cl, &sc);
+    g_rdPerf.dstSwitches++;
 }
 
 /* group 3 of a destination-read key: the open pass's target, as a storage
@@ -2917,6 +2924,7 @@ static void dstBind(Replay *r, const RdPipeKeyInt *k)
     if (k->dst == RHI_DST_READ_NONE || !r->passOpen) {
         return;
     }
+    g_rdPerf.dstDraws++; /* every caller draws right after */
     if (!r->dstGroup.id || r->dstGroupSerial != r->passSerial) {
         RdTargetRec *c = rd__target_rec(r->passColor);
         RhiBinding b;

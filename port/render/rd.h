@@ -1701,6 +1701,22 @@ typedef struct RdPerfRecord {
     /* the slots of the replay's bind groups left without a binding (each
      * slot of rd's layouts gets one; 0 in every replay) */
     uint32_t unboundSlots;
+    /* The exact blend's cost (rd_dst_read.c, issue 103): dstDraws the
+     * draws recorded through a destination-read shader (either
+     * realisation), storagePasses the passes begun without the colour
+     * attached for the storage read, dstSwitches the passes ended and begun
+     * again on the same targets to change between a storage pass and one
+     * with the colour attached (rd_replay.c dstPassMode).  0 under the
+     * fixed-function blend; the attachment read never switches. */
+    uint32_t dstDraws, storagePasses, dstSwitches;
+    /* glowPasses: the render passes begun while the replay drew the glow
+     * (RD_PERF_POST_GLOW: flare, bloom, the sun's eye blur).  snapshots:
+     * copies of a target into its snapshot texture (a draw reading the
+     * target it draws into, a staticBlur sprite reading its destination);
+     * snapSwaps: staticBlur sprites that cover their whole target and drew
+     * into the snapshot texture, swapped with the target's, instead of a
+     * copy (rd_replay.c doBlurSpriteDraw, blurSwapTarget) */
+    uint32_t glowPasses, snapshots, snapSwaps;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

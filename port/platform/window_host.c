@@ -260,6 +260,9 @@ static struct {
     unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
+    /* the exact blend's draws and passes, the glow's passes, the target
+       snapshots copied and swapped (rd.h RdPerfRecord, issue 103) */
+    uint64_t dstDraws, storagePasses, dstSwitches, glowPasses, snapshots, snapSwaps;
     uint64_t msaaResolves;
     uint32_t msaaSamples; /* the block's largest count (0: no MSAA) */
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
@@ -2853,6 +2856,12 @@ static void perf_drain(void)
         s_perf.meshUploads += r.meshUploads;
         s_perf.dateSnaps += r.dateSnapshots;
         s_perf.exact += r.exactBlends;
+        s_perf.dstDraws += r.dstDraws;
+        s_perf.storagePasses += r.storagePasses;
+        s_perf.dstSwitches += r.dstSwitches;
+        s_perf.glowPasses += r.glowPasses;
+        s_perf.snapshots += r.snapshots;
+        s_perf.snapSwaps += r.snapSwaps;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -2956,14 +2965,18 @@ static void perf_log(void)
     fprintf(stderr,
             "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds, "
             "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
-            "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends; in "
+            "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
+            "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
+            "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped; in "
             "the block %llu buffers and %llu textures created, %llu and %llu destroyed, %llu "
             "memory allocations, %llu pipelines created, %llu fence waits, %llu wait-idles, %llu "
             "readbacks\n",
             s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
             s_perf.groups / n, s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
             s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
-            s_perf.dateSnaps / n, s_perf.exact / n, (unsigned long long)s_perf.bufCreated,
+            s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
+            s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n,
+            s_perf.snapSwaps / n, (unsigned long long)s_perf.bufCreated,
             (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
             (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
             (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,
