@@ -467,15 +467,17 @@ static void checkScreen(const char *what, const Sum *s)
           s->screenDrawMax, SCREEN_DRAWS);
 }
 
-/* rd_set_pipeline_progress: one call before the first pipeline and one after
-   each, done never going down and ending at the total, which is the size of
-   the reachable set; cleared, no more calls */
+/* rd_set_pipeline_progress: one call with 0 before the first pipeline, the
+   calls while the batches compile and between them, done never going down
+   and below the total until the one last call at the total, which is the
+   size of the reachable set; cleared, no more calls.  A nonzero return
+   stops the set after the batch in flight, without the last call. */
 typedef struct PipeProgress {
-    uint32_t calls, firstDone, lastDone, lastTotal;
+    uint32_t calls, firstDone, lastDone, lastTotal, atTotal, stopAfter;
     int backwards, totalChanged;
 } PipeProgress;
 
-static void pipeProgress(void *ctx, uint32_t done, uint32_t total)
+static int pipeProgress(void *ctx, uint32_t done, uint32_t total)
 {
     PipeProgress *p = ctx;
 
@@ -486,8 +488,10 @@ static void pipeProgress(void *ctx, uint32_t done, uint32_t total)
         p->backwards += done < p->lastDone;
         p->totalChanged += total != p->lastTotal;
     }
+    p->atTotal += done == total;
     p->lastDone = done;
     p->calls++;
+    return p->stopAfter != 0 && p->calls >= p->stopAfter;
 }
 
 static void checkPipelineProgress(void)
@@ -496,20 +500,37 @@ static void checkPipelineProgress(void)
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_CACHE_MAX);
     PipeProgress p;
 
+    /* stopped at the first call after the first one: one batch made, the
+       set's end not reported, and the next call makes the rest */
+    rd__pipeline_cache_clear();
     memset(&p, 0, sizeof(p));
+    p.stopAfter = 2;
     rd_set_pipeline_progress(pipeProgress, &p);
+    const uint32_t made = rd_precreate_pipelines();
+    CHECK(made > 0 && made <= 32 && made < n,
+          "pipeline progress: a stopped set made %u of %u (want one batch, at most 32)", made, n);
+    CHECK(p.atTotal == 0 && p.lastDone < n, "pipeline progress: a stopped set reported %u of %u",
+          p.lastDone, n);
+
+    memset(&p, 0, sizeof(p));
     rd_precreate_pipelines();
-    CHECK(p.calls == n + 1, "pipeline progress: %u calls for %u pipelines", p.calls, n);
+    CHECK(p.calls >= 2, "pipeline progress: %u calls for %u pipelines", p.calls, n);
     CHECK(p.firstDone == 0, "pipeline progress: the first call had %u done", p.firstDone);
-    CHECK(p.lastDone == n && p.lastTotal == n, "pipeline progress: ended at %u of %u (want %u)",
-          p.lastDone, p.lastTotal, n);
+    CHECK(p.lastDone == n && p.lastTotal == n && p.atTotal == 1,
+          "pipeline progress: ended at %u of %u (want %u), %u calls at the total", p.lastDone,
+          p.lastTotal, n, p.atTotal);
     CHECK(p.backwards == 0 && p.totalChanged == 0,
           "pipeline progress: went back %d times, total "
           "changed %d times",
           p.backwards, p.totalChanged);
+    CHECK(rd__pipeline_count() >= n, "pipeline progress: %u pipelines cached for a set of %u",
+          rd__pipeline_count(), n);
+    CHECK(rd_precreate_longest_ms() >= 0.0f, "pipeline progress: the longest compile %.3f ms",
+          (double)rd_precreate_longest_ms());
+    const uint32_t calls = p.calls;
     rd_set_pipeline_progress(NULL, NULL);
     rd_precreate_pipelines();
-    CHECK(p.calls == n + 1, "pipeline progress: called %u times after it was cleared", p.calls);
+    CHECK(p.calls == calls, "pipeline progress: called %u times after it was cleared", p.calls);
 }
 
 static int synthetic(void)

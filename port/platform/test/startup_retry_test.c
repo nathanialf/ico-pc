@@ -322,13 +322,24 @@ static void test_note(void)
         /* the issue's quote, without the field */
         {"creating pipeline program 3 blend 12 vs 4 fs 19", false},
         {"creating the start-up pipelines (12 of 400)", false},
+        /* a batch of the start-up set: its first key's field */
+        {"creating pipelines 321-352 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 1 "
+         "to program 3 blend 12 vs 7 fs 19 fmt 1/8 msaa 0 dst 1",
+         true},
+        {"creating pipelines 321-352 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "to program 3 blend 12 vs 7 fs 19 fmt 1/8 msaa 0 dst 0",
+         false},
+        {"creating pipelines 9 of 9: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 2", true},
+        {"creating pipelinesX dst 1", false},
+        {"creating pipelinex dst 1", false},
         {"creating pipeline fog depth copy", false},
         {"creating pipeline program 3 dst ", false},
         {"creating pipeline program 3 dst x", false},
         {"creating pipeline program 3 dst 1x", false},
         {"creating pipeline program 3 dst -1", false},
         {"loading the title dst 1", false},
-        {"creating pipelines dst 1", false},
+        /* the batch's head is a pipeline note's too */
+        {"creating pipelines dst 1", true},
         {"", false},
     };
 

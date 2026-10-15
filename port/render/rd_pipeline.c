@@ -608,7 +608,10 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
     ds->back = f;
 }
 
-static RhiPipeline createPipeline(const RdPipeKeyInt *k)
+/* k's description into *d; layouts (4 entries) holds the bind group
+ * layouts d points at.  false: the key's destination read has no shader or
+ * layout here (it is not created) */
+static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLayout *layouts)
 {
     static const RhiVertexBinding vb = {0, sizeof(IcoSpriteVertex), false};
     static const RhiVertexAttr va[4] = {
@@ -657,61 +660,71 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
      * target, the fragment entry is the _dstrov or _dstatt twin */
     const bool dstStorage = k->dst == RHI_DST_READ_STORAGE;
     const bool dstAttach = k->dst == RHI_DST_READ_ATTACHMENT;
-    RhiBindGroupLayout layouts[4] = {g_rd.layoutFrame, vu ? g_rd.layoutVu : g_rd.layoutDraw,
-                                     k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex,
-                                     dstStorage ? g_rd.layoutDstStorage : g_rd.layoutDstAttach};
-    RhiPipelineDesc d;
-    memset(&d, 0, sizeof(d));
-    d.vertex = g_rd.vs[k->vs];
+    layouts[0] = g_rd.layoutFrame;
+    layouts[1] = vu ? g_rd.layoutVu : g_rd.layoutDraw;
+    layouts[2] = k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex;
+    layouts[3] = dstStorage ? g_rd.layoutDstStorage : g_rd.layoutDstAttach;
+    memset(d, 0, sizeof(*d));
+    d->vertex = g_rd.vs[k->vs];
     /* no dual-source blending: the *_nodual twin (c0 alone) */
-    d.fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
+    d->fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
     if (dstStorage || dstAttach) {
-        d.fragment = dstStorage ? g_rd.fsDstRov[k->fs] : g_rd.fsDstAtt[k->fs];
-        if (!d.fragment.id || !layouts[3].id) {
-            return (RhiPipeline){0};
+        d->fragment = dstStorage ? g_rd.fsDstRov[k->fs] : g_rd.fsDstAtt[k->fs];
+        if (!d->fragment.id || !layouts[3].id) {
+            return false;
         }
-        d.dstRead = dstStorage ? RHI_DST_READ_STORAGE : RHI_DST_READ_ATTACHMENT;
+        d->dstRead = dstStorage ? RHI_DST_READ_STORAGE : RHI_DST_READ_ATTACHMENT;
     }
-    d.layouts = layouts;
-    d.layoutCount = dstStorage || dstAttach ? 4u : 3u;
+    d->layouts = layouts;
+    d->layoutCount = dstStorage || dstAttach ? 4u : 3u;
     if (k->vs == RD_VS_SPRITE_UI || k->vs == RD_VS_SPRITE_WORLD) {
-        d.vertexBindings = &vb;
-        d.vertexBindingCount = 1;
-        d.vertexAttrs = va;
-        d.vertexAttrCount = 4;
+        d->vertexBindings = &vb;
+        d->vertexBindingCount = 1;
+        d->vertexAttrs = va;
+        d->vertexAttrCount = 4;
     } else if (k->vs == RD_VS_SPRITE_AA1_UI || k->vs == RD_VS_SPRITE_AA1_WORLD) {
-        d.vertexBindings = &vbAa1;
-        d.vertexBindingCount = 1;
-        d.vertexAttrs = vaAa1;
-        d.vertexAttrCount = 5;
+        d->vertexBindings = &vbAa1;
+        d->vertexBindingCount = 1;
+        d->vertexAttrs = vaAa1;
+        d->vertexAttrCount = 5;
     } else if (k->vs == RD_VS_SPRITE_STQ_UI || k->vs == RD_VS_SPRITE_STQ_WORLD) {
-        d.vertexBindings = &vbStq;
-        d.vertexBindingCount = 1;
-        d.vertexAttrs = vaStq;
-        d.vertexAttrCount = 5;
+        d->vertexBindings = &vbStq;
+        d->vertexBindingCount = 1;
+        d->vertexAttrs = vaStq;
+        d->vertexAttrCount = 5;
     } else if (k->vs >= RD_VS_SPRITE_PLANE_UI && k->vs <= RD_VS_SPRITE_STQ_PLANE_WORLD) {
-        d.vertexBindings = &vbPlane;
-        d.vertexBindingCount = 1;
-        d.vertexAttrs = vaPlane;
-        d.vertexAttrCount = 11;
+        d->vertexBindings = &vbPlane;
+        d->vertexBindingCount = 1;
+        d->vertexAttrs = vaPlane;
+        d->vertexAttrCount = 11;
     }
-    d.topology = k->gs.prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
-    d.cullNone = true;
-    d.blend[0] = blendState(keyBlendPath(k), k->gs.colorMask, k->gs.nodual);
+    d->topology = k->gs.prim == RD_PRIM_LINES ? RHI_TOPO_LINE_LIST : RHI_TOPO_TRIANGLE_LIST;
+    d->cullNone = true;
+    d->blend[0] = blendState(keyBlendPath(k), k->gs.colorMask, k->gs.nodual);
     if (k->depthFmt != RHI_FMT_UNKNOWN) {
-        d.depthStencil.depthTest = true;
-        d.depthStencil.depthWrite = k->gs.zwrite == RD_ZWRITE_ON;
-        d.depthStencil.depthCompare = depthCompare(k->gs.ztst);
-        shadowStencil(k->gs.stencil, &d.depthStencil); /* the shadow count */
+        d->depthStencil.depthTest = true;
+        d->depthStencil.depthWrite = k->gs.zwrite == RD_ZWRITE_ON;
+        d->depthStencil.depthCompare = depthCompare(k->gs.ztst);
+        shadowStencil(k->gs.stencil, &d->depthStencil); /* the shadow count */
     }
-    d.colorFormats[0] = (RhiFormat)k->colorFmt;
+    d->colorFormats[0] = (RhiFormat)k->colorFmt;
     /* no colour format: a depth-only pass (the MSAA depth resolve); the
      * storage destination read writes the target itself, in a pass without
      * a colour attachment */
-    d.colorCount = k->colorFmt != RHI_FMT_UNKNOWN && !dstStorage ? 1u : 0u;
-    d.depthFormat = (RhiFormat)k->depthFmt;
-    d.debugName = "rd";
-    d.samples = k->gs.msaa; /* 0: single-sampled */
+    d->colorCount = k->colorFmt != RHI_FMT_UNKNOWN && !dstStorage ? 1u : 0u;
+    d->depthFormat = (RhiFormat)k->depthFmt;
+    d->debugName = "rd";
+    d->samples = k->gs.msaa; /* 0: single-sampled */
+    return true;
+}
+
+static RhiPipeline createPipeline(const RdPipeKeyInt *k)
+{
+    RhiPipelineDesc d;
+    RhiBindGroupLayout layouts[4];
+    if (!pipelineDesc(k, &d, layouts)) {
+        return (RhiPipeline){0};
+    }
     return rhi_create_pipeline(&d);
 }
 
@@ -732,47 +745,43 @@ static uint32_t keyHash(const RdPipeKeyInt *k)
 }
 
 static RdActivityFn s_activityFn;
-/* inside rd_precreate_pipelines: the pipeline being created (1-based) and
- * the set's size; 0 outside */
-static uint32_t s_preIndex, s_preTotal;
+/* the batch's note while its pipelines are compiled ("" outside): a
+ * creation of the progress screen's own in the middle of it puts it back
+ * after its own note, so a crash on a worker thread names the batch */
+static char s_batchNote[160];
 
 void rd_set_activity_fn(RdActivityFn fn)
 {
     s_activityFn = fn;
 }
 
+/* a key's words, for the notes and the log */
+static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
+{
+    snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u", k->gs.program,
+             k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst);
+}
+
 /* the note before a creation: the key's words */
 static void activityCreating(const RdPipeKeyInt *k)
 {
     char note[160];
-    char set[48] = "";
+    char words[96];
     if (s_activityFn == NULL) {
         return;
     }
-    if (s_preTotal > 0) {
-        snprintf(set, sizeof(set), " (start-up set, %u of %u)", s_preIndex, s_preTotal);
-    }
-    snprintf(note, sizeof(note),
-             "creating pipeline program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u%s",
-             k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa,
-             (unsigned)k->dst, set);
+    keyWords(k, words, sizeof(words));
+    snprintf(note, sizeof(note), "creating pipeline %s", words);
     s_activityFn(note);
 }
 
-/* the note after a creation: back to the set's, or none */
+/* the note after a creation: back to the batch's, or none */
 static void activityDone(void)
 {
-    char note[64];
     if (s_activityFn == NULL) {
         return;
     }
-    if (s_preTotal > 0) {
-        snprintf(note, sizeof(note), "creating the start-up pipelines (%u of %u)", s_preIndex,
-                 s_preTotal);
-        s_activityFn(note);
-    } else {
-        s_activityFn(NULL);
-    }
+    s_activityFn(s_batchNote[0] != '\0' ? s_batchNote : NULL);
 }
 
 void rd__pipeline_note_begin(const char *what)
@@ -790,24 +799,20 @@ void rd__pipeline_note_end(void)
     activityDone();
 }
 
-RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
+/* The key a draw is created with: the MSAA epoch (a pipeline fetched for a
+ * multisampled pass draws with its sample count; single-sampled passes keep
+ * msaa 0: the same keys as without anti-aliasing) and, without dual-source
+ * blending, a gs_dual_out entry as its *_nodual twin (the planned passes
+ * come through rd__expand_no_dual, the single keys, the shadow count's
+ * volumes, are turned here).  k itself, or tmp holding the turned key. */
+static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
 {
-    /* the MSAA epoch: a pipeline fetched for a multisampled pass draws with
-     * its sample count (single-sampled passes keep msaa 0: the same keys as
-     * without anti-aliasing) */
-    RdPipeKeyInt mk;
     if (g_rd.passSamples > 1 && k->gs.msaa != g_rd.passSamples) {
-        mk = *k;
-        mk.gs.msaa = g_rd.passSamples;
-        k = &mk;
+        *tmp = *k;
+        tmp->gs.msaa = g_rd.passSamples;
+        k = tmp;
     }
-    /* without dual-source blending a gs_dual_out entry draws
-     * as its *_nodual twin; the planned passes come through rd__expand_no_dual,
-     * the single keys (the shadow count's volumes) are turned here */
-    RdPipeKeyInt nk;
     if (g_rd.noDual && !k->gs.nodual && rd__fs_has_no_dual(k->fs) && k->dst == RHI_DST_READ_NONE) {
-        nk = *k;
-        nk.gs.nodual = 1;
         const RdBlendPath bp = keyBlendPath(k);
         if (bp == RD_BP_LERP || bp == RD_BP_DST_FIX) {
             rd__log_once(RD_ONCE_NODUAL_KEY,
@@ -815,38 +820,61 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
                          "the two-pass fallback; its alpha is the factor",
                          k->gs.program, k->gs.blend, k->fs);
         }
-        k = &nk;
+        if (k != tmp) {
+            *tmp = *k;
+        }
+        tmp->gs.nodual = 1;
+        k = tmp;
     }
+    return k;
+}
+
+/* k's slot in s_hash: its entry's (*found) or the empty slot the probe
+ * ended on */
+static uint32_t probeKey(const RdPipeKeyInt *k, bool *found)
+{
     uint32_t at = keyHash(k) % RD_PIPE_HASH;
     for (; s_hash[at] != 0; at = (at + 1) % RD_PIPE_HASH) {
         if (rd__pipe_key_equal(&s_cache[s_hash[at] - 1].key, k)) {
-            rd__passring_pipeline(s_cache[s_hash[at] - 1].pipe.id, k->vs, k->fs, k->dst);
-            return s_cache[s_hash[at] - 1].pipe;
+            *found = true;
+            return at;
         }
     }
-    if (!g_rd.hasDevice) {
-        return (RhiPipeline){0};
-    }
+    *found = false;
+    return at;
+}
+
+static bool keyFailed(const RdPipeKeyInt *k)
+{
     for (uint32_t i = 0; i < s_failedCount; i++) {
         if (rd__pipe_key_equal(&s_failed[i], k)) {
-            return (RhiPipeline){0};
+            return true;
         }
     }
-    /* no assert: NDEBUG is never defined (CMakeLists.txt), so an assert here
-     * would abort a release build; the tests hold the reachable set under
-     * RD_PIPELINE_REACHABLE_MAX instead */
-    if (s_count >= RD_PIPELINE_CACHE_MAX) {
-        if (!s_fullLogged) {
-            s_fullLogged = true;
-            rd__log("pipeline cache full (%d keys): new keys are not drawn (program %u blend %u "
-                    "vs %u fs %u)",
-                    RD_PIPELINE_CACHE_MAX, k->gs.program, k->gs.blend, k->vs, k->fs);
-        }
-        return (RhiPipeline){0};
+    return false;
+}
+
+/* no assert: NDEBUG is never defined (CMakeLists.txt), so an assert here
+ * would abort a release build; the tests hold the reachable set under
+ * RD_PIPELINE_REACHABLE_MAX instead */
+static bool cacheFull(const RdPipeKeyInt *k)
+{
+    if (s_count < RD_PIPELINE_CACHE_MAX) {
+        return false;
     }
-    activityCreating(k);
-    RhiPipeline p = createPipeline(k);
-    activityDone();
+    if (!s_fullLogged) {
+        s_fullLogged = true;
+        rd__log("pipeline cache full (%d keys): new keys are not drawn (program %u blend %u "
+                "vs %u fs %u)",
+                RD_PIPELINE_CACHE_MAX, k->gs.program, k->gs.blend, k->vs, k->fs);
+    }
+    return true;
+}
+
+/* a creation's result into the cache (at: the empty slot probeKey gave),
+ * or into the failed keys */
+static void keepPipeline(const RdPipeKeyInt *k, RhiPipeline p, uint32_t at)
+{
     if (!p.id) {
         if (s_failedCount < RD_PIPELINE_FAIL_MAX) {
             s_failed[s_failedCount++] = *k;
@@ -854,14 +882,33 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
                     "draws with this key are skipped",
                     k->gs.program, k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt);
         }
-        return p;
+        return;
     }
     s_cache[s_count].key = *k;
     s_cache[s_count].pipe = p;
     s_count++;
-    s_hash[at] = (uint16_t)s_count; /* at: the empty slot the probe ended on */
+    s_hash[at] = (uint16_t)s_count;
     g_rd.stats.pipelineCreates++;
     rd__passring_pipeline(p.id, k->vs, k->fs, k->dst);
+}
+
+RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
+{
+    RdPipeKeyInt tmp;
+    bool found;
+    k = drawKey(k, &tmp);
+    const uint32_t at = probeKey(k, &found);
+    if (found) {
+        rd__passring_pipeline(s_cache[s_hash[at] - 1].pipe.id, k->vs, k->fs, k->dst);
+        return s_cache[s_hash[at] - 1].pipe;
+    }
+    if (!g_rd.hasDevice || keyFailed(k) || cacheFull(k)) {
+        return (RhiPipeline){0};
+    }
+    activityCreating(k);
+    RhiPipeline p = createPipeline(k);
+    activityDone();
+    keepPipeline(k, p, at);
     return p;
 }
 
@@ -887,9 +934,65 @@ void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx)
     s_progressCtx = fn != NULL ? ctx : NULL;
 }
 
+/* the longest compile of the start-up set so far (rd_precreate_longest_ms) */
+static float s_preLongestMs;
+
+float rd_precreate_longest_ms(void)
+{
+    return s_preLongestMs;
+}
+
+/* The start-up set goes to rhi_create_pipelines RD_PIPE_BATCH keys at a
+ * time: the progress function runs while a batch compiles (the RHI's wait
+ * function) and between two, and a crash note names the batch's first and
+ * last key.  A batch holds keys with a destination read or keys without,
+ * never both, so the note's dst field is the whole batch's
+ * (startup_retry.h startup_retry_note_has_dst: the fixed-blend step) */
+#define RD_PIPE_BATCH 32u
+
+typedef struct PreBatch {
+    uint32_t base;  /* the set's keys done before this batch */
+    uint32_t total; /* the set's size */
+    uint32_t last;  /* the last count the progress function was given */
+    int stop;       /* the progress function asked to stop */
+} PreBatch;
+
+static int preProgress(PreBatch *b, uint32_t done)
+{
+    if (s_progressFn == NULL) {
+        return 0;
+    }
+    /* never back, and the set's end only at the end */
+    if (done < b->last) {
+        done = b->last;
+    }
+    if (done >= b->total && b->total > 0) {
+        done = b->total - 1;
+    }
+    b->last = done;
+    /* the frame it may present asks for its own few pipelines: created at
+     * once (each with its own note, the batch's put back after it) and
+     * found again when the batch's results are kept */
+    return s_progressFn(s_progressCtx, done, b->total);
+}
+
+/* rhi_create_pipelines' wait function */
+static void preWait(void *ctx, uint32_t finished)
+{
+    PreBatch *b = ctx;
+    if (!b->stop) {
+        b->stop = preProgress(b, b->base + finished);
+    }
+}
+
 uint32_t rd_precreate_pipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
+    static RdPipeKeyInt bk[RD_PIPE_BATCH];
+    static RhiPipelineDesc bd[RD_PIPE_BATCH];
+    static RhiBindGroupLayout bl[RD_PIPE_BATCH][4];
+    static RhiPipeline bp[RD_PIPE_BATCH];
+    static float bms[RD_PIPE_BATCH];
     if (!g_rd.hasDevice) {
         /* logged, so a call before rd_init does not pass unnoticed */
         rd__log("rd_precreate_pipelines without a device (before rd_init?): nothing created");
@@ -906,32 +1009,120 @@ uint32_t rd_precreate_pipelines(void)
                 "the first %u are created",
                 n, (unsigned)RD_PIPELINE_CACHE_MAX, m);
     }
-    uint32_t failed = 0;
+    uint32_t failed = 0, compiled = 0, threads = 1;
+    PreBatch pb = {0, m, 0, 0};
+    s_preLongestMs = 0.0f;
     if (s_progressFn != NULL) {
         s_progressFn(s_progressCtx, 0, m);
     }
-    for (uint32_t i = 0; i < m; i++) {
-        s_preIndex = i + 1;
-        s_preTotal = m;
-        activityDone(); /* "creating the start-up pipelines (i + 1 of m)" */
-        if (!rd__get_pipeline(&keys[i]).id) {
-            failed++;
+    uint32_t i = 0;
+    while (i < m && !pb.stop) {
+        /* the batch: the next keys not made yet, up to RD_PIPE_BATCH, all
+         * with a destination read or all without */
+        const uint32_t first = i;
+        uint32_t nb = 0;
+        int dstKind = -1;
+        if (s_activityFn != NULL) {
+            char note[64];
+            snprintf(note, sizeof(note), "creating the start-up pipelines (%u of %u)", i + 1, m);
+            s_activityFn(note);
         }
-        /* the progress may present a frame, whose own pipelines are not
-         * the set's */
-        s_preTotal = 0;
-        if (s_progressFn != NULL) {
-            s_progressFn(s_progressCtx, i + 1, m);
+        for (; i < m && nb < RD_PIPE_BATCH; i++) {
+            RdPipeKeyInt tmp;
+            bool found, dup = false;
+            const RdPipeKeyInt *k = drawKey(&keys[i], &tmp);
+            const int kind = k->dst != RHI_DST_READ_NONE;
+            if (dstKind >= 0 && kind != dstKind) {
+                break;
+            }
+            probeKey(k, &found);
+            if (found) {
+                continue;
+            }
+            if (keyFailed(k)) {
+                failed++;
+                continue;
+            }
+            for (uint32_t j = 0; j < nb && !dup; j++) {
+                dup = rd__pipe_key_equal(&bk[j], k);
+            }
+            if (dup) {
+                continue;
+            }
+            if (cacheFull(k) || s_count + nb >= RD_PIPELINE_CACHE_MAX) {
+                failed++;
+                continue;
+            }
+            if (!pipelineDesc(k, &bd[nb], bl[nb])) {
+                keepPipeline(k, (RhiPipeline){0}, 0);
+                failed++;
+                continue;
+            }
+            bk[nb] = *k;
+            dstKind = kind;
+            nb++;
+        }
+        if (nb > 0) {
+            char note[160];
+            char a[96], z[96];
+            keyWords(&bk[0], a, sizeof(a));
+            keyWords(&bk[nb - 1], z, sizeof(z));
+            if (nb == 1) {
+                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s", first + 1, m, a);
+            } else {
+                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s", first + 1,
+                         i, m, a, z);
+            }
+            memcpy(s_batchNote, note, sizeof(s_batchNote));
+            if (s_activityFn != NULL) {
+                s_activityFn(s_batchNote);
+            }
+            RhiPipelineBatch batch = {preWait, &pb, bms, 1};
+            pb.base = first;
+            rhi_create_pipelines(bd, nb, bp, &batch);
+            s_batchNote[0] = '\0';
+            if (batch.threads > threads) {
+                threads = batch.threads;
+            }
+            for (uint32_t j = 0; j < nb; j++) {
+                bool found;
+                const uint32_t at = probeKey(&bk[j], &found);
+                if (bms[j] > s_preLongestMs) {
+                    s_preLongestMs = bms[j];
+                }
+                if (!bp[j].id) {
+                    keepPipeline(&bk[j], bp[j], at);
+                    failed++;
+                    continue;
+                }
+                compiled++;
+                /* the progress screen's frame may have made the same key
+                   meanwhile, or filled the cache */
+                if (found || s_count >= RD_PIPELINE_CACHE_MAX) {
+                    rhi_destroy_pipeline(bp[j]);
+                    continue;
+                }
+                keepPipeline(&bk[j], bp[j], at);
+            }
+        }
+        if (!pb.stop && i < m) {
+            pb.stop = preProgress(&pb, i);
         }
     }
-    s_preIndex = 0;
-    s_preTotal = 0;
+    s_batchNote[0] = '\0';
+    if (pb.stop) {
+        rd__log("pipelines: the start-up set stopped at %u of %u (the game is closing)", i, m);
+    } else if (s_progressFn != NULL) {
+        s_progressFn(s_progressCtx, m, m);
+    }
     if (s_activityFn != NULL) {
         s_activityFn(NULL);
     }
     const double ms = rd__now_ms() - t0;
-    rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed)",
-            s_count - before, n, ms, failed);
+    rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed); "
+            "%u compiled on %u thread%s, the longest %.2f s",
+            s_count - before, n, ms, failed, compiled, threads, threads == 1 ? "" : "s",
+            (double)s_preLongestMs / 1000.0);
     return s_count - before;
 }
 

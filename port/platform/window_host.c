@@ -926,7 +926,7 @@ typedef struct PipeScreen {
     int drawn;
 } PipeScreen;
 
-static void pipeline_progress(void *ctx, uint32_t done, uint32_t total);
+static int pipeline_progress(void *ctx, uint32_t done, uint32_t total);
 
 #ifdef __ANDROID__
 static const char k_driver_box[] =
@@ -2217,7 +2217,7 @@ int ico_window_progress(const char *title, const char *phase, int pct)
 #define PIPE_SCREEN_AFTER_MS 250.0
 #define PIPE_SCREEN_EVERY_MS 100.0
 
-static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
+static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
 {
     PipeScreen *p = ctx;
     const uint64_t now = SDL_GetTicksNS();
@@ -2226,11 +2226,11 @@ static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
     if (done == 0) {
         p->startNs = now;
         p->drawn = 0;
-        return;
+        return 0;
     }
     if ((double)(now - p->startNs) / 1e6 < PIPE_SCREEN_AFTER_MS ||
         (p->drawn && (double)(now - p->lastNs) / 1e6 < PIPE_SCREEN_EVERY_MS)) {
-        return;
+        return 0;
     }
     snprintf(phase, sizeof(phase), "Preparing graphics (%u of %u)", (unsigned)done,
              (unsigned)total);
@@ -2239,6 +2239,7 @@ static void pipeline_progress(void *ctx, uint32_t done, uint32_t total)
                      0);
     /* the present itself took time: the next draw is measured from its end */
     p->lastNs = SDL_GetTicksNS();
+    return 0;
 }
 
 /* ico-pc-perf.csv in the logs folder, beside ico-pc.log

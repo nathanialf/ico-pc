@@ -499,24 +499,36 @@ void rd_end_frame(int keep);
 typedef void (*RdHostCall)(void (*fn)(void *arg), void *arg);
 /* Creates every pipeline of the reachable set (rd__enumerate_reachable) now,
  * so the first frames that use them do not stall on the driver's pipeline
- * compile; logs the count and the time.  The window calls it after
- * rd_init; the tests do not.  Returns the number created. */
+ * compile; logs the count, the time, the compiles and the threads.  The keys
+ * go to rhi_create_pipelines in batches of up to 32 (the driver compiles a
+ * batch on worker threads; a batch holds keys with a destination read or
+ * keys without, never both).  The window calls it after rd_init; the tests
+ * do not.  Returns the number created. */
 uint32_t rd_precreate_pipelines(void);
 /* Progress of rd_precreate_pipelines: fn(ctx, done, total) is called with
- * (0, total) before the first pipeline and (i + 1, total) after each one,
- * on the calling thread, with done never going down.  fn may present a
- * frame (the window draws its start-up screen from it); that present asks
- * the pipeline cache for its own few pipelines, which are created once and
- * found again afterwards, so the call is safe from inside the loop.  NULL
- * clears it.  Kept across calls until cleared. */
-typedef void (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
+ * (0, total) before the first pipeline, while a batch compiles (about every
+ * 50 ms, with the pipelines finished so far) and between two batches, with
+ * done never going down and below total, and (total, total) once at the
+ * end; on the calling thread.  fn may present a frame (the window draws its
+ * start-up screen from it); that present asks the pipeline cache for its
+ * own few pipelines, which are created at once and found again afterwards,
+ * so the call is safe from inside the loop.  A nonzero return stops the set
+ * after the batch in flight (the game is closing): the rest is created as
+ * the frames need it, and the last call is not made.  NULL clears it.
+ * Kept across calls until cleared. */
+typedef int (*RdPipelineProgressFn)(void *ctx, uint32_t done, uint32_t total);
 void rd_set_pipeline_progress(RdPipelineProgressFn fn, void *ctx);
+/* The longest single compile of the start-up set so far, in ms, as the
+ * worker measured it (updated after each batch; 0 before the first). */
+float rd_precreate_longest_ms(void);
 /* What the renderer is asking the graphics driver for, as one line, for
  * a crash report (the window passes diag_host.h's activity note): fn(note)
- * before each pipeline creation ("creating pipeline program 3 blend 0 ...",
- * with "(start-up set, 12 of 431)" inside rd_precreate_pipelines) and
- * between two pipelines of that set ("creating the start-up pipelines (12
- * of 431)"), fn(NULL) when the step is over.  NULL (the default): nothing. */
+ * before each pipeline creation ("creating pipeline program 3 blend 0 vs 4
+ * fs 5 fmt 1/8 msaa 0 dst 0"), for each batch of rd_precreate_pipelines
+ * while it compiles ("creating pipelines 321-352 of 702: <first key> to
+ * <last key>", the range counting the set's keys the batch went over),
+ * between two batches ("creating the start-up pipelines (353 of 702)"),
+ * fn(NULL) when the step is over.  NULL (the default): nothing. */
 typedef void (*RdActivityFn)(const char *note);
 void rd_set_activity_fn(RdActivityFn fn);
 /* The depth fog's self-test (rd_fog_path.c): a frame of its own (never

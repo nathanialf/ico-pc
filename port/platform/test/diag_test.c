@@ -10,7 +10,9 @@
  *               "while: <note>" right after the CRASH line, and the
  *               graphics driver crash named, with no relaunch (the child
  *               never prepared one); segvcleared: a cleared note is not
- *               printed;
+ *               printed; segvworker: a batch of the start-up set's note
+ *               and the fault on another OS thread (a worker compiling a
+ *               pipeline, rhi_create_pipelines): the same report;
  *   - abort:    an assertion through ico_assert: exit 3 and the failure
  *               message in the report;
  *   - watchdog: a game thread spins without a kernel call, so the host loop
@@ -31,8 +33,9 @@
  *               effects program a 2.5 s present fires inside it;
  *   - lines:    milestones and logs reach the file at once;
  *   - activity: the start-up activity file (issue 93): written with each
- *               note while the start-up set is created and kept when the
- *               run just ends; the next start names it ("the previous run
+ *               note while the start-up set is created (a batch's note,
+ *               put back after the progress screen's own pipeline in the
+ *               middle of it) and kept when the run just ends; the next start names it ("the previous run
  *               ended while"), deletes it and is lazy; a lazy run keeps its
  *               notes and a line between them, and keeps the file at a
  *               clean exit (the next start is lazy); a normal end of the
@@ -67,6 +70,7 @@
 
 #if !defined(_WIN32)
 
+#include <pthread.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -125,6 +129,24 @@ static void segv_thread(void *arg)
     PollSema(sema);
     *p = 1; /* NULL */
 }
+
+/* the start-up set's batch note (port/render/rd_pipeline.c
+   rd_precreate_pipelines) */
+#define BATCH_NOTE                                                                                 \
+    "creating pipelines 1-4 of 9: program 5 blend 1 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 to program 6 "  \
+    "blend 1 vs 7 fs 19 fmt 1/8 msaa 0 dst 0"
+
+#if !defined(_WIN32)
+/* an OS thread that is not a game thread faults, as a worker inside the
+   graphics driver's pipeline compile would */
+static void *segv_worker(void *arg)
+{
+    volatile int *p = (volatile int *)arg;
+    ico_diag_milestone("segv worker runs");
+    *p = 1; /* NULL */
+    return NULL;
+}
+#endif
 
 static void abort_thread(void *arg)
 {
@@ -229,9 +251,15 @@ static void activity_child(const char *mode, const char *log)
     ico_diag_log("test: lazy %d", lazy);
     if (strcmp(mode, "actrecord") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
-        ico_diag_set_activity("creating pipeline program 5 blend 1 (start-up set, 2 of 9)");
-        /* a frame between two of the set's pipelines clears the note: the
-           file keeps the last one */
+        /* the set's own note before a batch is not written */
+        ico_diag_set_activity("creating the start-up pipelines (1 of 9)");
+        ico_diag_set_activity(BATCH_NOTE);
+        /* the progress screen's own pipeline while the batch compiles,
+           then the batch's note back */
+        ico_diag_set_activity("creating pipeline program 7 blend 0 vs 1 fs 2 fmt 1/0 msaa 0 dst 0");
+        ico_diag_set_activity(BATCH_NOTE);
+        /* a frame between two batches clears the note: the file keeps the
+           last one */
         ico_diag_clear_activity();
         child_quit(0);
     } else if (strcmp(mode, "actlazy") == 0) {
@@ -355,6 +383,16 @@ static void run_child(const char *mode, const char *log)
            never called ico_diag_prepare_relaunch, so it cannot start again */
         ico_diag_set_activity("creating pipeline program %d blend 0", 3);
         fn = segv_thread;
+    } else if (strcmp(mode, "segvworker") == 0) {
+#if !defined(_WIN32)
+        pthread_t t;
+        ico_diag_set_activity(BATCH_NOTE);
+        if (pthread_create(&t, NULL, segv_worker, NULL) == 0) {
+            pthread_join(t, NULL);
+        }
+        ico_diag_log("test: the worker did not fault");
+        exit(0);
+#endif
     } else if (strcmp(mode, "segvcleared") == 0) {
         ico_diag_set_activity("creating pipeline program 3");
         ico_diag_clear_activity();
@@ -480,6 +518,18 @@ int main(int argc, char **argv)
     if (fails) {
         printf("--- segvnote log ---\n%s\n", s);
     }
+    /* the same from a worker thread under a batch's note */
+    r = run(argv[0], "segvworker", log);
+    s = read_file(log);
+    CHECK(r == 3);
+    CHECK(strstr(s, "CRASH: SIGSEGV") != NULL);
+    CHECK(strstr(s, "ico_pc: while: " BATCH_NOTE "\n") != NULL);
+    CHECK(strstr(s, "the graphics driver crashed while preparing the shaders: the game cannot "
+                    "start itself again on this system") != NULL);
+    CHECK(strstr(s, "test: the worker did not fault") == NULL);
+    if (fails) {
+        printf("--- segvworker log ---\n%s\n", s);
+    }
     r = run(argv[0], "segvcleared", log);
     s = read_file(log);
     CHECK(r == 3);
@@ -577,14 +627,13 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: lazy 0") != NULL);
         CHECK(strstr(s, "the previous run ended while") == NULL);
         s = read_file(act);
-        CHECK(strcmp(s, "test 1\ncreating pipeline program 5 blend 1 (start-up set, 2 of 9)") == 0);
+        CHECK(strcmp(s, "test 1\n" BATCH_NOTE) == 0);
         /* the next start names it, deletes it and is lazy; its own note
            replaces the file's */
         r = run(argv[0], "actlazy", log);
         s = read_file(log);
         CHECK(r == 0);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5 "
-                        "blend 1 (start-up set, 2 of 9)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE "\n") != NULL);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         s = read_file(act);
         CHECK(strcmp(s, "test 1\ncreating pipeline fog test") == 0);
@@ -644,9 +693,8 @@ int main(int argc, char **argv)
         unsetenv("ICO_TEST_ACT_VERSION");
         s = read_file(log);
         CHECK(r == 0);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5 blend 1 "
-                        "(start-up set, 2 of 9) (version test 1); trying the start-up set again "
-                        "on test 2\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE
+                        " (version test 1); trying the start-up set again on test 2\n") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
@@ -661,7 +709,7 @@ int main(int argc, char **argv)
         r = run(argv[0], "actrelaunch", log);
         s = read_file(log);
         CHECK(r == 0);
-        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipeline program 5") !=
+        CHECK(strstr(s, "ico_pc: the previous run ended while: creating pipelines 1-4 of 9") !=
               NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {

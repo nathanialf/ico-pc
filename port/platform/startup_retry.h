@@ -148,9 +148,12 @@ static inline bool startup_retry_value_draws_fixed(const char *value)
 
 /* Whether a crash's activity note (diag_host.h ico_diag_set_activity) names
  * a pipeline with a destination read: it starts with "creating pipeline "
- * and has a " dst N" field with N nonzero (port/render/rd_pipeline.c
- * activityCreating).  Tolerant: NULL, another note, a missing or
- * malformed field read as false.  No I/O, no allocation. */
+ * (one pipeline) or "creating pipelines " (a batch of the start-up set,
+ * whose keys all have a destination read or none has) and its first
+ * " dst N" field has N nonzero (port/render/rd_pipeline.c
+ * activityCreating, rd_precreate_pipelines).  Tolerant: NULL, another
+ * note, a missing or malformed field read as false.  No I/O, no
+ * allocation. */
 bool startup_retry_note_has_dst(const char *note);
 
 /* The step after the run described by run ended (run->why): the crash or

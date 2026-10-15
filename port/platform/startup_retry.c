@@ -94,7 +94,7 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
 
 bool startup_retry_note_has_dst(const char *note)
 {
-    static const char head[] = "creating pipeline ";
+    static const char head[] = "creating pipeline";
     static const char field[] = " dst ";
     const char *p;
     size_t i;
@@ -102,8 +102,18 @@ bool startup_retry_note_has_dst(const char *note)
     if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
         return false;
     }
+    /* one pipeline's note, or a batch's ("creating pipelines ...": its keys
+       all have a destination read or none has, so its first key's field is
+       the batch's) */
+    p = note + (sizeof head - 1);
+    if (*p == 's') {
+        p++;
+    }
+    if (*p != ' ') {
+        return false;
+    }
     /* the first " dst " field, from the head's closing space on */
-    p = strstr(note + (sizeof head - 2), field);
+    p = strstr(p, field);
     if (p == NULL) {
         return false;
     }
