@@ -780,6 +780,15 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_merge.cmake")
     set_tests_properties(rd_replay_tool_pass_merge PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                               FIXTURES_REQUIRED rd_dump TIMEOUT 300)
+    # the staticBlur sprites' snapshot swap (issue 103): the copy's DISPLAY
+    # picture byte for byte (ICO_RD_SNAP_SWAP=0), each blend path, 1x and 2x
+    add_test(NAME rd_replay_tool_snap_swap
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_snap_swap"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_snap_swap.cmake")
+    set_tests_properties(rd_replay_tool_snap_swap PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                             FIXTURES_REQUIRED rd_dump TIMEOUT 600)
     # the native frame gates (tools/native_frame_check.py, docs/port/TESTING.md): gate-a
     # re-renders the dump list ICO_DUMPS names and compares with
     # docs/native_frame_baseline.json; gate-b checks the aspect sweeps ICO_SWEEPS names.

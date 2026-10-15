@@ -2173,6 +2173,26 @@ static void noteMipUse(RdTexRec *t, const RdDrawState *d)
     t->dirtyY1 = t->h;
 }
 
+/* The target's snapshot texture, made on first use; false when it cannot be */
+static bool snapEnsure(RdTargetRec *tc)
+{
+    if (!tc->snap.id) {
+        /* made as the target's colour is (rd__target_create_gpu): a
+         * staticBlur sprite that covers the whole target draws into it and
+         * the two change places (blurSwapTarget) */
+        const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC |
+                               RHI_TEX_COPY_DST | rd__dst_target_usage(tc->format, NULL);
+        tc->snap = rhi_create_texture(
+            &(RhiTextureDesc){tc->tw, tc->th, 1, tc->format, usage, "rd snap", 0});
+        tc->snapState = RHI_STATE_UNDEFINED;
+    }
+    if (!tc->snap.id) {
+        rd__note_target_pressure(tc);
+        return false;
+    }
+    return true;
+}
+
 /* The target's colour copied into its snapshot texture (created on first
  * use) at the same texels, area only: the copy ends the open pass and
  * leaves the snapshot readable.  The rest of the snapshot is older content:
@@ -2182,15 +2202,10 @@ static void noteMipUse(RdTexRec *t, const RdDrawState *d)
 static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
 {
     endPass(r);
-    if (!tc->snap.id) {
-        tc->snap = rhi_create_texture(&(RhiTextureDesc){
-            tc->tw, tc->th, 1, tc->format, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "rd snap", 0});
-        tc->snapState = RHI_STATE_UNDEFINED;
-    }
-    if (!tc->snap.id) {
-        rd__note_target_pressure(tc);
+    if (!snapEnsure(tc)) {
         return false;
     }
+    g_rdPerf.snapshots++;
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_SNAP, (uint32_t)(tc - g_rd.targets) + 1u, tc->tw,
@@ -5472,6 +5487,72 @@ static void blurSnapArea(const Replay *r, const RdTargetRec *tc, const RdPostRec
     *need = dstRead && selfSample ? rectJoin(dst, tex) : (dstRead ? dst : tex);
 }
 
+/* Whether a staticBlur sprite stores every texel of its target (issue 103):
+ * fx_sprite_ps's coverage holds every GS pixel the target's texels stand
+ * for (texel blocks 0 .. w - 1 across and 0 .. h - 1 down at the origin
+ * FrameCB gets, the half line included), the scissor is the whole target,
+ * nothing can discard a fragment (the alpha test but for FB_ONLY and
+ * RGB_ONLY, DATE, a Z test other than ALWAYS) and every channel is
+ * written.  Such a sprite needs no copy of what it reads: it draws into the
+ * snapshot texture, which becomes the target's colour, reading the old
+ * colour, which becomes the snapshot (blurSwapTarget).  ICO_RD_SNAP_SWAP=0
+ * keeps the copy (the A/B for the picture: the same bytes either way). */
+static bool blurCoversTarget(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
+                             const RdDrawState *d, const RdPipeKeyInt *key, int useDepth)
+{
+    static int s_swap = -1;
+    if (s_swap < 0) {
+        const char *e = getenv("ICO_RD_SNAP_SWAP");
+        s_swap = !(e && strcmp(e, "0") == 0);
+    }
+    if (!s_swap || key->gs.colorMask != 15u || d->test.date != RD_DATE_OFF ||
+        (useDepth && key->gs.ztst != RD_ZTST_ALWAYS)) {
+        return false;
+    }
+    if (d->test.ate && d->test.atst != RD_ATST_ALWAYS && d->test.afail != RD_AFAIL_FB_ONLY &&
+        d->test.afail != RD_AFAIL_RGB_ONLY) {
+        return false;
+    }
+    RhiRect sc;
+    if (!scissorRect(r, tc, &sc) || sc.x != 0 || sc.y != 0 || sc.w != tc->tw || sc.h != tc->th) {
+        return false;
+    }
+    /* the origin frameRefresh gives a post sprite (drawOffset, screenCopy) */
+    const uint32_t use =
+        r->halfAdded ? r->st.useOffset & ~(uint32_t)RD_TARGET_HALF_Y : r->st.useOffset;
+    const int64_t ox = 16 * (2048 - (int64_t)(r->st.gsW >> 1));
+    const int64_t oy = 16 * (2048 - (int64_t)(r->st.gsH >> 1)) + ((use & RD_TARGET_HALF_Y) ? 8 : 0);
+    const int64_t x0 = (int64_t)p->rect[0], y0 = (int64_t)p->rect[1];
+    const int64_t x1 = (int64_t)p->rect[2], y1 = (int64_t)p->rect[3];
+    return tc->w > 0 && tc->h > 0 && x0 <= ox && x1 > ox + 16 * ((int64_t)tc->w - 1) && y0 <= oy &&
+           y1 > oy + 16 * ((int64_t)tc->h - 1);
+}
+
+/* The target's colour and its snapshot change places: the snapshot holds
+ * the picture before the sprite (all of it, as a whole copy would), the
+ * colour is the texture the sprite draws into.  The pass ends first and
+ * the old colour leaves its attachment state (closing the MSAA epoch on
+ * SCENE, recording a pending clear) before it is the snapshot. */
+static bool blurSwapTarget(Replay *r, RdTargetRec *tc)
+{
+    endPass(r);
+    if (!snapEnsure(tc)) {
+        return false;
+    }
+    rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
+    const RhiTexture old = tc->color;
+    const RhiState oldState = tc->colorState;
+    tc->color = tc->snap;
+    tc->colorState = tc->snapState;
+    tc->snap = old;
+    tc->snapState = oldState;
+    if (s_ms.sceneColor == old.id) {
+        s_ms.sceneColor = tc->color.id; /* SCENE's colour for the epoch's checks */
+    }
+    g_rdPerf.snapSwaps++;
+    return true;
+}
+
 /* fx_sprite_ps's flags (DrawCB.mode.x) for a staticBlur sprite: the texture
  * function and sampling, ABE, PABE, FBA, DATE and the destination read */
 static uint32_t blurFlags(const RdDrawState *d, uint32_t lines, int textured, int dstRead)
@@ -5722,7 +5803,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
          * at its own fragments, the texture at its UVs and its kernel's
          * reach (blurSnapArea) */
         blurSnapArea(r, tc, &p, uv, dstRead, selfSample, steps, &need);
-        if (!takeSnap(r, tc, need)) {
+        if (blurCoversTarget(r, tc, &p, d, &key, useDepth)) {
+            if (!blurSwapTarget(r, tc)) {
+                return;
+            }
+        } else if (!takeSnap(r, tc, need)) {
             return;
         }
     }
