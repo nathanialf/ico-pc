@@ -1615,7 +1615,7 @@ static void toggle_fullscreen(void)
 
 /* The loss dump (docs/port/RENDER.md, "The loss dump"): the frames the
    renderer still holds, the lost one and the one before it, as one zip in
-   the logs folder, logs/loss-<time>.zip, with a copy of the log
+   the logs folder, logs/loss-<date>-<time>.zip, with a copy of the log
    (rd_dump_retained, dump_zip.h ico_loss_dump_zip), so a report carries the
    frame the next start's loss bisect replays and the developers can replay
    it too. The oldest loss zips go beyond ICO_LOSS_DUMP_KEEP. Its name

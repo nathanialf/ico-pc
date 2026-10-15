@@ -504,7 +504,7 @@ pump and the start-up screens' pump end the session through the normal quit path
 `window: the graphics device was lost; quitting`, then the renderer's
 [pass ring](RENDER.md#the-pass-ring) (the last replays and the passes of the last three, with the
 sequence numbers the checkpoint markers carry and each effect's name from `rd_perf_post_name`), a
-flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<time>.zip`, logged as
+flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<date>-<time>.zip`, logged as
 `window: loss dump: frames N and M (the one before) written to <zip>`, and noted in the activity
 file), and one message box: the card stopped responding, the game has to close, the save is kept,
 "If the graphics card is overclocked, try its stock clocks first.", and, when the loss dump was
@@ -544,8 +544,8 @@ The window build's diagnostic keys are free of SDL so a unit test checks them
 Neither key can be bound, and a held key's repeats do nothing. `dump_every=N` in `ico-pc.ini`
 writes every Nth frame as an `.rddump` (`port/platform/host_config.h`).
 
-A device loss writes its own zip with no key: `logs/loss-<time>.zip`, the lost frame's dump first,
-the frame before it, then the log, the newest three kept
+A device loss writes its own zip with no key: `logs/loss-<date>-<time>.zip`, the lost frame's dump
+first, the frame before it, then the log, the newest three kept
 ([RENDER.md](RENDER.md#the-loss-dump); `port/platform/dump_zip.h` (`ico_loss_dump_zip`,
 `ico_loss_dump_path`, `ico_loss_dump_prune`)). ctest `dump_zip` checks its entries and their order,
 that the bisect's extraction takes the lost frame, and the pruning

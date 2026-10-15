@@ -392,8 +392,8 @@ after a device loss, before the box ([PLATFORM.md](PLATFORM.md#diagnostics))
 On a device loss the window writes, after the pass ring and before the message, the frames the
 renderer still holds as one zip in the logs folder, `logs/loss-<date>-<time>.zip`: the last
 closed frame (the one the lost replay drew, or the tick it was blended towards) as
-`loss-<time>-lost.rddump`, then the frame before it as `loss-<time>-before.rddump` when the frame
-ring still holds it, then a copy of the log. They are ordinary dumps written from the CPU side
+`loss-<date>-<time>-lost.rddump`, then the frame before it as `loss-<date>-<time>-before.rddump`
+when the frame ring still holds it, then a copy of the log. They are ordinary dumps written from the CPU side
 (the commands, the payload, the image texels and VU streams the renderer keeps), with the textures
 as F12 writes them, so the writing needs no device; the lost frame is the zip's first `.rddump`,
 the one `rd_replay_tool` and the loss bisect take. The newest three loss zips are kept, the older
