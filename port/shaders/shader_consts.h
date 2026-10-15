@@ -304,7 +304,7 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
 /* ---------------------------------------------------------------- VU1
  * The VU1 program shaders (vu_common.hlsli). Group 1: t0 = the vertex
  * stream (float4 quadwords as the VIF unpacked them), b2 = IcoVuCB,
- * b3 = IcoVuBoneCB (cluster only). */
+ * b3 = IcoVuBoneCB (the cluster's bones; every mesh program's card bits). */
 
 /* VuCB: group 1, slot 2 (register b2, space1). 752 bytes.
  *   mem    VU1 data memory 0..35 as the program reads it: 0..15 the common
@@ -318,9 +318,12 @@ _Static_assert(sizeof(IcoSpriteStqVertex) == 24, "STQ vertex size");
  *          them (a Mesh3D buffer's MSCNT: 1), the clip plane's code and its
  *          offset's float bits (0, 0: none; rd_chain.h, static prelit and lit
  *          meshes)
- *   strip  the draw's first vertex and one past its last (the region
- *          rule's strip test, vu_common.hlsli vu_strip_of; both 0: no strip
- *          test), 0, 0
+ *   strip  the region rule's card test (vu_common.hlsli vu_strip_card):
+ *          the first kick the card bits cover, 1 when the rule has the card
+ *          test (0: none, the PS2's rule), the kicks the bits cover (0:
+ *          none, no strip of the draw is a card), the bits' first qword in
+ *          IcoVuBoneCB (rd_replay.c doVuDraw from the payload's RdVuCards,
+ *          rd_mesh.h)
  *   ticks  under ICO_VU_TICKS: the two ticks' cameras of a picture blended
  *          between them, as the matrices R = S_tick St^-1 (columns; 0..3
  *          the tick before's, 4..7 this tick's) that take a vertex's
@@ -336,7 +339,9 @@ typedef struct IcoVuCB {
 } IcoVuCB;
 
 /* VuBoneCB: group 1, slot 3 (register b3, space1): VU memory 16..255, the
- * cluster bone matrices at VU address bone * 4 + 16. 3840 bytes. */
+ * cluster bone matrices at VU address bone * 4 + 16; from qword
+ * IcoVuCB.strip[3] the card bits (two a kick, rd_mesh.h RdVuCards).
+ * 3840 bytes. */
 typedef struct IcoVuBoneCB {
     float bone[240][4];
 } IcoVuBoneCB;

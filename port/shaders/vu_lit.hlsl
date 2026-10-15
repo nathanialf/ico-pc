@@ -38,7 +38,8 @@ float3 vu_reflect_st(float4 pos, float4 n)
     precise float d2 = v.x * v.x;
     d2 = d2 + v.y * v.y;
     d2 = d2 + v.z * v.z;
-    precise float rq = d2 == 0.0 ? 3.40282347e38 : 1.0 / sqrt(abs(d2));
+    precise float rs = 1.0 / sqrt(abs(d2));
+    precise float rq = select(d2 == 0.0, 3.40282347e38, rs);
     // :393-396 the normal in view space: MV rotation * n (+ vf00 * n.w)
     float4 nv = vu_mat(vu_mem[24], vu_mem[25], vu_mem[26], float4(0.0, 0.0, 0.0, 1.0), n, n.w);
     precise float3 d = v.xyz * rq;
@@ -61,7 +62,7 @@ float3 vu_reflect_st(float4 pos, float4 n)
     return float3(st, 1.0);
 }
 
-VuVtx vu_lit_vertex(uint v, uint mode, uint variant, bool full)
+VuVtx vu_lit_vertex(uint v, uint mode, uint variant)
 {
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
@@ -70,95 +71,44 @@ VuVtx vu_lit_vertex(uint v, uint mode, uint variant, bool full)
     float4 st = vu_stream[at + 2u];
     float4 col = vu_stream[at + 3u];
     bool scissor = mode == VU_CLIP_SCISSOR;
-    o.h = vu_matm(16u, pos, scissor ? pos.w : 1.0);
+    o.h = vu_matm(16u, pos, select(scissor, pos.w, 1.0));
     if (scissor) {
         o.clip = vu_matm(20u, pos, pos.w);
     }
     float q = vu_divide(o);
-    if (!scissor) {
-        o.inside = vu_inside(o.p, VU_LO0, VU_HI4094);
-    }
-    if (full) {
-        if (variant == VU_REFLECT) {
-            // :456 mulx.xyz vf21 = (S, T, 1) * (0 + q); colour as sent
-            precise float3 s = vu_reflect_st(pos, n) * q;
-            o.stq = s;
-            o.rgba = vu_rgba(col);
-        } else {
-            // :164 add.xy ST + UV offset; :176 mulq.xyz
-            precise float3 s = float3(st.xy + vu_mem[2].xy, st.z) * q;
-            o.stq = s;
-            o.rgba = vu_lit_colour(n, col, variant == VU_LIT_SPEC);
-        }
+    o.inside = select(scissor, true, vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094));
+    if (variant == VU_REFLECT) {
+        // :456 mulx.xyz vf21 = (S, T, 1) * (0 + q); colour as sent
+        precise float3 s = vu_reflect_st(pos, n) * q;
+        o.stq = s;
+        o.rgba = vu_rgba(col);
+    } else {
+        // :164 add.xy ST + UV offset; :176 mulq.xyz
+        precise float3 s = float3(st.xy + vu_mem[2].xy, st.z) * q;
+        o.stq = s;
+        o.rgba = vu_lit_colour(n, col, variant == VU_LIT_SPEC);
     }
     return o;
-}
-
-// VU_RULE_STRIP: whether a triangle of kick's strip passes the region
-// test (vu_prelit_strip_passes)
-bool vu_lit_strip_passes(uint kick, uint variant)
-{
-    uint3 r = vu_strip_of(kick, true);
-    if (r.z != 0u) {
-        return true;
-    }
-    bool i0 = vu_lit_vertex(r.x, VU_CLIP_REGION, variant, false).inside;
-    bool i1 = vu_lit_vertex(r.x + 1u, VU_CLIP_REGION, variant, false).inside;
-    [loop] for (uint v = r.x + 2u; v < vu_strip_end(r); v++) {
-        bool i2 = vu_lit_vertex(v, VU_CLIP_REGION, variant, false).inside;
-        if (i0 && i1 && i2) {
-            return true;
-        }
-        i0 = i1;
-        i1 = i2;
-    }
-    return false;
 }
 
 VuVSOut vu_lit_main(uint vid, uint variant)
 {
     // codes 34 and 38 have no scissor variant: always the region test
-    uint mode = variant == VU_LIT && (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR
-                    ? VU_CLIP_SCISSOR
-                    : VU_CLIP_REGION;
-    if ((vu_draw.z & VU_F_PROBE) != 0u) {
-        VuVtx v = vu_lit_vertex(vu_probe_vertex(vid), mode, variant, true);
-        return vu_probe_out(vid, vu_probe_field(v, (vid / 3u) % VU_PROBE_FIELDS));
+    bool scissor = vu_and(variant == VU_LIT, (vu_draw.z & VU_CLIP_MASK) == VU_CLIP_SCISSOR);
+    uint mode = select(scissor, VU_CLIP_SCISSOR, VU_CLIP_REGION);
+    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
+    uint kick = (vid & VU_INDEX_MASK) >> 2;
+    // the triangle's first corner, or the tests' probe vertex
+    VuVtx a = vu_lit_vertex(select(probe, vu_probe_vertex(vid), kick - 2u), mode, variant);
+    if (probe) {
+        return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }
     if (vu_content_hidden(vid)) {
         return vu_out_init();
     }
-    uint kick = (vid & VU_INDEX_MASK) >> 2;
-    uint corner = vid & 3u;
-    // every corner's attributes under the exact viewport (the attribute
-    // planes, vu_common.hlsli vu_attr_planes), else only this corner's
-    bool full = g_vp.x != 0.0;
-    VuVtx a = vu_lit_vertex(kick - 2u, mode, variant, full);
-    VuVtx b = vu_lit_vertex(kick - 1u, mode, variant, full);
-    VuVtx c = vu_lit_vertex(kick, mode, variant, full);
-    VuVtx me = a;
-    if (!full) {
-        me = vu_lit_vertex(kick - 2u + corner, mode, variant, true);
-    } else if (corner == 1u) {
-        me = b;
-    } else if (corner == 2u) {
-        me = c;
-    }
-    uint rule = mode == VU_CLIP_REGION ? vu_region_rule(a, b, c, VU_LO0, VU_HI4094) : VU_RULE_EXACT;
-    if (rule == VU_RULE_STRIP) {
-        // a joined strip is not a card; a free-standing one is unless a
-        // triangle of it passes
-        if ((vid & VU_INDEX_JOINED) != 0u) {
-            rule = VU_RULE_CLIP;
-        } else {
-            rule = vu_lit_strip_passes(kick, variant) ? VU_RULE_CLIP : VU_RULE_DROP;
-        }
-    }
-    VuVSOut o = vu_plane_out(vu_triangle_out(a, b, c, me, mode, rule), a, b, c, kick, corner);
-    if ((vid & VU_INDEX_LATER) != 0u) {
-        o = vu_later_out(o, a, b, c);
-    }
-    return o;
+    VuVtx b = vu_lit_vertex(kick - 1u, mode, variant);
+    VuVtx c = vu_lit_vertex(kick, mode, variant);
+    return vu_mesh_out(a, b, c, vid, mode, VU_LO0, VU_HI4094, true);
 }
 
 VuVSOut vu_lit_vs(uint vid : SV_VertexID)

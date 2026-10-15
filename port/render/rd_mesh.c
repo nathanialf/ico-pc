@@ -28,6 +28,7 @@
  * rd_draw_vu_particles runs the CPU reference on a copy of the list image to
  * see whether a batch would have clobbered the common block, and a skinned
  * draw later in that list then logs once. */
+#include <fenv.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -242,6 +243,9 @@ static void meshFree(RdMeshRec *m)
     free(m->index);
     free(m->drawIndex);
     free(m->batches);
+    free(m->cardStrips);
+    m->cardStrips = NULL;
+    m->cardStripCount = 0;
     m->stream = NULL;
     m->index = NULL;
     m->drawIndex = NULL;
@@ -1239,6 +1243,318 @@ uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig)
     return changed ? 1u : 0u;
 }
 
+/* -------------------------------------------------------- the card test
+ * The region rule's card test (vu_common.hlsli vu_strip_card, rd_mesh.h
+ * RdVuCards): a triangle the rule would draw clipped in a state other than
+ * out of the box is left out when it belongs to a card, a free-standing
+ * strip none of whose triangles passes the region test.  The vertex
+ * shaders used to walk the strip for every vertex (up to 1,024 transforms
+ * and two scans of the stream, in loops); the CPU decides it here instead,
+ * once per tick for each free-standing strip of a draw, with the shaders'
+ * own test (vu1_ref.h vu1ref_strip_card: round to nearest, the shaders'
+ * order of operations), and hands the verdicts over in the payload.  Most
+ * strips pass at their first triangle, so the cost is about three vertex
+ * transforms a strip (counted for the summary line, rd_vu_card_counts). */
+
+static uint64_t s_cardStripsTested, s_cardTrisTested;
+static double s_cardMs;
+static uint8_t *s_cardBuf;
+static size_t s_cardCap;
+
+void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms)
+{
+    *strips = s_cardStripsTested;
+    *triangles = s_cardTrisTested;
+    *ms = s_cardMs;
+}
+
+/* m's free-standing strips (RdMeshRec.cardStrips: the runs between two
+ * strip flags of a batch, ST.w < 1 on a strip's first vertex as
+ * batchIndices reads it, three vertices or more, no triangle marked
+ * ICO_VU_INDEX_JOINED at creation; the part joining at replay, rd_join.c,
+ * may mark more, which the shader's JOINED test then catches) and a
+ * skinned mesh's bone qwords (boneQwUsed: vu_skin.hlsl vu_bone_mat's
+ * clamped address of every weight, plus its four qwords) */
+static void cardStrips(RdMeshRec *m)
+{
+    const uint32_t qpv = m->qwPerVertex, nv = m->vertexCount;
+    free(m->cardStrips);
+    m->cardStrips = NULL;
+    m->cardStripCount = 0;
+    m->boneQwUsed = 0;
+    if (!m->vu || nv < 3 ||
+        (qpv != RD_VU_QW_PRELIT && qpv != RD_VU_QW_LIT && qpv != RD_VU_QW_SKIN)) {
+        return;
+    }
+    if (qpv == RD_VU_QW_SKIN) {
+        for (uint32_t v = 0; v < nv; v++) {
+            const float *wt = m->stream[(size_t)v * qpv + 2];
+            for (int j = 0; j < 4; j += 2) {
+                uint32_t a;
+                memcpy(&a, &wt[j], 4);
+                a -= 16u;
+                const uint32_t used = (a < 236u ? a : 236u) + 4u;
+                m->boneQwUsed = used > m->boneQwUsed ? used : m->boneQwUsed;
+            }
+        }
+    }
+    uint8_t *joined = calloc(nv, 1);
+    uint32_t *out = malloc(((size_t)nv / 3 + 1) * 2 * sizeof(uint32_t));
+    if (!joined || !out) {
+        free(joined);
+        free(out);
+        return;
+    }
+    const uint32_t *ix = rd__mesh_draw_index(m);
+    for (uint32_t i = 0; i + 2 < m->indexCount; i += 3) {
+        const uint32_t k = (ix[i] & ICO_VU_INDEX_MASK) >> 2;
+        if ((ix[i] & ICO_VU_INDEX_JOINED) != 0u && k < nv) {
+            joined[k] = 1;
+        }
+    }
+    const uint32_t stAt = qpv - 2;
+    uint32_t n = 0;
+    for (uint32_t b = 0; b < m->batchCount; b++) {
+        const uint32_t fv = m->batches[b].firstVertex;
+        if (fv >= nv) {
+            continue;
+        }
+        const uint32_t ev =
+            m->batches[b].vertexCount < nv - fv ? fv + m->batches[b].vertexCount : nv;
+        uint32_t s = fv;
+        for (uint32_t v = fv + 1; v <= ev; v++) {
+            if (v < ev && !(m->stream[(size_t)v * qpv + stAt][3] < 1.0f)) {
+                continue;
+            }
+            /* the strip s .. v - 1: its kicks are s + 2 .. v - 1 */
+            bool free_ = v - s >= 3;
+            for (uint32_t k = s + 2; free_ && k < v; k++) {
+                free_ = !joined[k];
+            }
+            if (free_) {
+                out[2 * n] = s;
+                out[2 * n + 1] = v;
+                n++;
+            }
+            s = v;
+        }
+    }
+    free(joined);
+    if (n == 0) {
+        free(out);
+        return;
+    }
+    m->cardStrips = out;
+    m->cardStripCount = n;
+}
+
+/* The card section (rd_mesh.h RdVuCards) of the count strips at strips
+ * (first vertex, one past the last, in order), whose vertices are qpv
+ * qwords each from stream, at the camera of the VU memory mem (and the
+ * bones of a cluster draw): in a buffer of this file's, *bytes long */
+static const uint8_t *cardsMake(int kind, const float (*mem)[4], const float (*bones)[4],
+                                const float (*stream)[4], uint32_t qpv, const uint32_t *strips,
+                                uint32_t count, uint32_t *bytes)
+{
+    RdVuCards h;
+    h.firstKick = strips[0];
+    h.kickCount = strips[2 * count - 1] - strips[0];
+    h.any = 0;
+    h.words = ((h.kickCount + 15u) / 16u + 3u) & ~3u;
+    const size_t need = sizeof(h) + (size_t)h.words * 4u;
+    if (need > s_cardCap) {
+        uint8_t *nb = realloc(s_cardBuf, need);
+        if (!nb) {
+            return NULL;
+        }
+        s_cardBuf = nb;
+        s_cardCap = need;
+    }
+    memset(s_cardBuf, 0, need);
+    uint32_t *w = (uint32_t *)(void *)(s_cardBuf + sizeof(h));
+    /* the shaders' rounding (the simulation runs toward zero) */
+    const int mode = fegetround();
+    if (mode != FE_TONEAREST) {
+        fesetround(FE_TONEAREST);
+    }
+    const double t0 = rd__now_ms();
+    uint32_t tested = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        const uint32_t s = strips[2 * i], e = strips[2 * i + 1];
+        if (vu1ref_strip_card(kind, mem, bones, stream + (size_t)s * qpv, qpv, e - s, &tested)) {
+            for (uint32_t v = s; v < e; v++) {
+                const uint32_t k = v - h.firstKick;
+                w[k >> 4] |= 3u << ((k & 15u) * 2u);
+            }
+            h.any = 3;
+        }
+    }
+    s_cardMs += rd__now_ms() - t0;
+    if (mode != FE_TONEAREST) {
+        fesetround(mode);
+    }
+    s_cardStripsTested += count;
+    s_cardTrisTested += tested;
+    memcpy(s_cardBuf, &h, sizeof(h));
+    *bytes = (uint32_t)need;
+    return s_cardBuf;
+}
+
+/* The program's card test kind (vu1_ref.h VU1REF_CARD_*), -1 for a draw
+ * without the region rule */
+static int cardKind(uint8_t prog, uint8_t clip)
+{
+    if (clip != RD_VU_CLIP_REGION) {
+        return -1;
+    }
+    switch (prog) {
+    case RD_PROG_PRELIT:
+    case RD_PROG_LIT:
+    case RD_PROG_LIT_SPEC:
+    case RD_PROG_REFLECT:
+        return VU1REF_CARD_NORMAL;
+    case RD_PROG_SKIN:
+    case RD_PROG_SKIN_SPEC:
+        return VU1REF_CARD_CLUSTER;
+    case RD_PROG_GRID:
+    case RD_PROG_GRID_LIT:
+        return VU1REF_CARD_MESH;
+    default:
+        return -1;
+    }
+}
+
+/* The card section of a mesh draw of batches first .. first + n - 1 of m
+ * (none: NULL, when no free-standing strip lies in them) */
+static const uint8_t *meshCards(const RdMeshRec *m, uint32_t first, uint32_t n, int kind,
+                                const float (*mem)[4], const float (*bones)[4], uint32_t *bytes)
+{
+    if (kind < 0 || !m->cardStripCount || n == 0) {
+        return NULL;
+    }
+    const uint32_t v0 = m->batches[first].firstVertex;
+    const uint32_t v1 =
+        m->batches[first + n - 1].firstVertex + m->batches[first + n - 1].vertexCount;
+    /* the first strip from v0 (in order: a binary search) */
+    uint32_t lo = 0, hi = m->cardStripCount;
+    while (lo < hi) {
+        const uint32_t mid = (lo + hi) / 2;
+        if (m->cardStrips[2 * mid] < v0) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    uint32_t end = lo;
+    while (end < m->cardStripCount && m->cardStrips[2 * end + 1] <= v1) {
+        end++;
+    }
+    if (end == lo) {
+        return NULL;
+    }
+    return cardsMake(kind, mem, bones, (const float (*)[4])m->stream, m->qwPerVertex,
+                     m->cardStrips + 2 * lo, end - lo, bytes);
+}
+
+/* A grid of one strip (a grid of two or more is joined, rd_replay.c):
+ * its stripLen vertices after the VIF qword, the tag and the colour */
+static const uint8_t *gridCards(const float (*mem)[4], const float (*qw)[4], uint32_t qpv,
+                                uint32_t stripLen, uint32_t *bytes)
+{
+    const uint32_t strip[2] = {0, stripLen};
+    return cardsMake(VU1REF_CARD_MESH, mem, NULL, qw + 3, qpv, strip, 1, bytes);
+}
+
+uint32_t rd__vu_cards_at(const uint8_t *payload, uint32_t size, RdVuCards *cards)
+{
+    const uint64_t head = sizeof(RdVuPayload) + sizeof(RdVuBlock);
+    if (!payload || size < head) {
+        return 0;
+    }
+    RdVuPayload p;
+    memcpy(&p, payload, sizeof(p));
+    const uint64_t at = head + ((uint64_t)p.boneQw + p.streamQw) * 16u +
+                        (uint64_t)p.materialCount * sizeof(RdMaterial);
+    if (at + sizeof(RdVuCards) > size) {
+        return 0;
+    }
+    memcpy(cards, payload + at, sizeof(*cards));
+    if (cards->words > (size - at - sizeof(RdVuCards)) / 4u ||
+        cards->kickCount > (uint64_t)cards->words * 16u) {
+        return 0;
+    }
+    return (uint32_t)(at + sizeof(RdVuCards));
+}
+
+void rd__vu_cards_merge(uint8_t *out, uint32_t outSize, const uint8_t *prev, uint32_t prevSize)
+{
+    RdVuCards co, cp;
+    const uint32_t wo = rd__vu_cards_at(out, outSize, &co);
+    const uint32_t wp = rd__vu_cards_at(prev, prevSize, &cp);
+    if (!wo || !wp || co.firstKick != cp.firstKick || co.kickCount != cp.kickCount ||
+        co.words != cp.words) {
+        return;
+    }
+    for (uint32_t i = 0; i < co.words; i++) {
+        uint32_t o, q;
+        memcpy(&o, out + wo + 4u * i, 4);
+        memcpy(&q, prev + wp + 4u * i, 4);
+        /* the tick before's own verdicts (its second bits) into the first */
+        o = (o & 0xAAAAAAAAu) | ((q & 0xAAAAAAAAu) >> 1);
+        memcpy(out + wo + 4u * i, &o, 4);
+    }
+    co.any = (co.any & 2u) | ((cp.any & 2u) >> 1);
+    memcpy(out + wo - sizeof(co), &co, sizeof(co));
+}
+
+void rd__vu_cards_fill_frame(RdFrame *f)
+{
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            RdCmd *c = &f->lists[l].cmds[i];
+            if (c->type != RDC_MESH && c->type != RDC_SKINNED && c->type != RDC_GRID) {
+                continue;
+            }
+            RdVuCards h;
+            const uint8_t *pl = f->payload + c->u[1];
+            if (c->u[2] < sizeof(RdVuPayload) + sizeof(RdVuBlock) ||
+                rd__vu_cards_at(pl, c->u[2], &h)) {
+                continue;
+            }
+            RdVuPayload p;
+            memcpy(&p, pl, sizeof(p));
+            const float (*mem)[4] = (const float (*)[4])(const void *)(pl + sizeof(RdVuPayload));
+            const float (*after)[4] =
+                (const float (*)[4])(const void *)(pl + sizeof(RdVuPayload) + sizeof(RdVuBlock));
+            uint32_t bytes = 0;
+            const uint8_t *cards = NULL;
+            const int kind = cardKind(p.prog, p.clip);
+            if (c->type == RDC_GRID) {
+                if (p.batchCount == 1 && kind >= 0) {
+                    cards = gridCards(mem, after, p.qwPerVertex, p.vertsPerBatch, &bytes);
+                }
+            } else {
+                const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+                if (m && m->vu && p.firstBatch < m->batchCount && p.batchCount &&
+                    p.firstBatch + p.batchCount <= m->batchCount &&
+                    (kind != VU1REF_CARD_CLUSTER || p.boneQw >= 240u)) {
+                    cards = meshCards(m, p.firstBatch, p.batchCount, kind, mem,
+                                      kind == VU1REF_CARD_CLUSTER ? after : NULL, &bytes);
+                }
+            }
+            if (!cards) {
+                continue;
+            }
+            const uint32_t old = c->u[2];
+            const uint32_t off = rd__frame_payload(f, NULL, old + bytes);
+            memcpy(f->payload + off, f->payload + c->u[1], old);
+            memcpy(f->payload + off + old, cards, bytes);
+            c->u[1] = off;
+            c->u[2] = old + bytes;
+        }
+    }
+}
+
 bool rd__vu_mesh_copy_draw_index(RdMeshRec *dst, const RdMeshRec *src)
 {
     free(dst->drawIndex);
@@ -1290,6 +1606,7 @@ uint32_t rd__vu_mesh_create_raw(const float (*stream)[4], uint32_t vertexCount,
     markLaterOverlaps(m);
     markContentHidden(m);
     markJoinedStrips(m);
+    cardStrips(m);
     return id;
 }
 
@@ -1914,23 +2231,28 @@ bool rd_vu_draw_from_state(RdVuDraw *d)
 /* --------------------------------------------------------------- draws */
 
 static RdCmd *pushVu(uint8_t type, RdKey key, const RdVuPayload *p, const RdVuBlock *vu,
-                     const void *bones, const void *stream, const RdMaterial *mats)
+                     const void *bones, const void *stream, const RdMaterial *mats,
+                     const uint8_t *cards, uint32_t cardBytes)
 {
     RdFrame *f = rd__rec_frame();
     if (!f) {
         rd__push(type); /* reports once */
         return NULL;
     }
-    const uint32_t sizes[5] = {(uint32_t)sizeof(*p), (uint32_t)sizeof(*vu), p->boneQw * 16u,
-                               p->streamQw * 16u, p->materialCount * (uint32_t)sizeof(RdMaterial)};
-    const void *parts[5] = {p, vu, bones, stream, mats};
+    const uint32_t sizes[6] = {(uint32_t)sizeof(*p),
+                               (uint32_t)sizeof(*vu),
+                               p->boneQw * 16u,
+                               p->streamQw * 16u,
+                               p->materialCount * (uint32_t)sizeof(RdMaterial),
+                               cards ? cardBytes : 0u};
+    const void *parts[6] = {p, vu, bones, stream, mats, cards};
     uint32_t total = 0;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         total += sizes[i];
     }
     const uint32_t off = rd__frame_payload(f, NULL, total);
     uint32_t at = off;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         if (parts[i] && sizes[i]) {
             memcpy(f->payload + at, parts[i], sizes[i]);
         }
@@ -1988,8 +2310,18 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
                      "RdVuDraw.materials is recorded, not applied: draws take the GS state");
         p.materialCount = m->materialCount;
     }
-    RdCmd *c =
-        pushVu(d->bones ? RDC_SKINNED : RDC_MESH, key, &p, &d->vu, d->bones, NULL, d->materials);
+    /* the card verdicts of the draw's free-standing strips, in a state
+     * other than out of the box (rd_mesh.h RdVuCards) */
+    const uint8_t *cards = NULL;
+    uint32_t cardBytes = 0;
+    const int kind = cardKind(p.prog, p.clip);
+    if (kind >= 0 && m->cardStripCount && rd__vu_extended() &&
+        (kind != VU1REF_CARD_CLUSTER || (d->bones && p.boneQw >= 240u))) {
+        cards = meshCards(m, first, n, kind, (const float (*)[4])d->vu.mem,
+                          kind == VU1REF_CARD_CLUSTER ? d->bones : NULL, &cardBytes);
+    }
+    RdCmd *c = pushVu(d->bones ? RDC_SKINNED : RDC_MESH, key, &p, &d->vu, d->bones, NULL,
+                      d->materials, cards, cardBytes);
     if (c) {
         c->u[0] = mesh.id;
         /* b[4]: RD_VU_VIEW_*, how the model matrices follow the camera
@@ -2022,7 +2354,15 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
     uint8_t kind = 0;
     float sx = 0.0f, sy = 0.0f;
     rd__grid_screen_st_take(&kind, &sx, &sy);
-    RdCmd *c = pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL);
+    /* a grid of one strip: its card verdict (rd_mesh.h RdVuCards; a grid
+     * of two strips or more is joined) */
+    const uint8_t *cards = NULL;
+    uint32_t cardBytes = 0;
+    if (d->strips == 1 && rd__vu_extended()) {
+        cards =
+            gridCards((const float (*)[4])d->vu.mem, d->qw, p.qwPerVertex, d->stripLen, &cardBytes);
+    }
+    RdCmd *c = pushVu(RDC_GRID, key, &p, &d->vu, NULL, d->qw, NULL, cards, cardBytes);
     if (c && kind) {
         /* b[5]: the RdGridSt formula of the STs (rd.h rd_grid_screen_st),
          * f[0], f[1] its sx and sy; 0 in other grids and in older dumps */
@@ -2067,7 +2407,7 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
     p.vertsPerBatch = count;
     p.qwPerVertex = RD_VU_QW_PARTICLE;
     p.streamQw = 6 + 2 * count;
-    pushVu(RDC_PARTICLES, key, &p, &d->vu, NULL, d->qw, NULL);
+    pushVu(RDC_PARTICLES, key, &p, &d->vu, NULL, d->qw, NULL, NULL, 0);
 }
 
 /* ------------------------------------------------------------ pipelines

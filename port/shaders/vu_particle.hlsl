@@ -21,7 +21,7 @@ struct VuSprite {
 
 VuSprite vu_particle(uint i)
 {
-    VuSprite o;
+    VuSprite o = (VuSprite)0;
     uint base = vu_draw.x;
     float4 clipMin = vu_stream[base + 3u];
     float4 clipMax = vu_stream[base + 4u];
@@ -40,8 +40,8 @@ VuSprite vu_particle(uint i)
     // :125-133 both corners strictly inside the window on x, y and w;
     // :100-105 a zero alpha skips the particle
     bool alphaZero = (asuint(b.w) & 0x7F800000u) == 0u;
-    o.drawn = !alphaZero && vu_inside(float4(p0, h.w), clipMin, clipMax) &&
-              vu_inside(float4(p1, h.w), clipMin, clipMax);
+    o.drawn = vu_and(vu_and(!alphaZero, vu_inside(p0.xy, h.w, clipMin, clipMax)),
+                     vu_inside(p1.xy, h.w, clipMin, clipMax));
     // Out of the box the PS2's test; beside the picture and outside the
     // out-of-the-box state drawn (vu_particle_vs; docs/port/VU1_PROGRAMS.md,
     // "The region rule").
@@ -53,7 +53,7 @@ VuSprite vu_particle(uint i)
     // GS pixels, so on a wide frame it ends at the frame's edge at 48:9 and
     // inside it at 60:9, where a sprite with a corner past it would vanish
     // whole.
-    o.shown = !alphaZero && clipMin.w < h.w && h.w < clipMax.w;
+    o.shown = vu_and(vu_and(!alphaZero, clipMin.w < h.w), h.w < clipMax.w);
     o.c0 = int3(vu_ftoi4(p0.x), vu_ftoi4(p0.y), vu_ftoi4(p0.z));
     o.c1 = int3(vu_ftoi4(p1.x), vu_ftoi4(p1.y), vu_ftoi4(p1.z));
     // :118-124 RGBA = ftoi0(grey, grey, grey, alpha)
@@ -67,34 +67,42 @@ VuSprite vu_particle(uint i)
 uint vu_particle_probe(VuSprite s, uint field)
 {
     uint r = 0u;
-    if (field == 0u) {
-        r = asuint(s.c0.x);
-    } else if (field == 1u) {
-        r = asuint(s.c0.y);
-    } else if (field == 2u) {
-        r = asuint(s.c1.x);
-    } else if (field == 3u) {
-        r = asuint(s.c1.y);
-    } else if (field == 4u) {
-        r = asuint(s.c0.z);
-    } else if (field == 5u) {
-        r = s.rgba.x | (s.rgba.y << 8) | (s.rgba.z << 16) | (s.rgba.w << 24);
-    } else if (field == 6u) {
-        r = asuint(s.st.x);
-    } else if (field == 7u) {
-        r = asuint(s.st.y);
-    } else if (field == 8u) {
-        r = asuint(s.st.z);
-    } else if (field == 9u) {
-        r = asuint(s.st.w);
-    } else if (field == 10u) {
-        r = s.drawn ? 1u : 0u;
-    } else if (field == 11u) {
-        r = asuint(s.c1.z);
-    } else if (field == 12u) {
-        r = s.shown ? 1u : 0u;
-    }
+    r = select(field == 0u, asuint(s.c0.x), r);
+    r = select(field == 1u, asuint(s.c0.y), r);
+    r = select(field == 2u, asuint(s.c1.x), r);
+    r = select(field == 3u, asuint(s.c1.y), r);
+    r = select(field == 4u, asuint(s.c0.z), r);
+    r = select(field == 5u, s.rgba.x | (s.rgba.y << 8) | (s.rgba.z << 16) | (s.rgba.w << 24), r);
+    r = select(field == 6u, asuint(s.st.x), r);
+    r = select(field == 7u, asuint(s.st.y), r);
+    r = select(field == 8u, asuint(s.st.z), r);
+    r = select(field == 9u, asuint(s.st.w), r);
+    r = select(field == 10u, select(s.drawn, 1u, 0u), r);
+    r = select(field == 11u, asuint(s.c1.z), r);
+    r = select(field == 12u, select(s.shown, 1u, 0u), r);
     return r;
+}
+
+// Whether tick t (0 the tick before, 1 this tick) showed the sprite of
+// position h (the blended camera's) and half extent e (the screen
+// matrix's, the same at every camera): at the tick's camera (h_t = R_t h,
+// vu_ticks) the VU draws it (both corners inside the x/y window, w inside
+// its window) and its quad reaches the frame (vu_frame_ndc)
+bool vu_particle_tick(float4 h, float4 e, uint t, float4 clipMin, float4 clipMax, float4 frame)
+{
+    uint b = 4u * t;
+    precise float4 hk = vu_ticks[b] * h.x + vu_ticks[b + 1u] * h.y + vu_ticks[b + 2u] * h.z +
+                        vu_ticks[b + 3u] * h.w;
+    float q = vu_rcp(hk.w);
+    precise float2 p0 = (hk.xy - e.xy) * q;
+    precise float2 p1 = (hk.xy + e.xy) * q;
+    bool drawn = vu_and(vu_inside(p0, hk.w, clipMin, clipMax), vu_inside(p1, hk.w, clipMin, clipMax));
+    float2 n0 = vu_ndc(float2(vu_ftoi4(p0.x), vu_ftoi4(p0.y)) * (1.0 / 16.0));
+    float2 n1 = vu_ndc(float2(vu_ftoi4(p1.x), vu_ftoi4(p1.y)) * (1.0 / 16.0));
+    float2 lo = min(n0, n1);
+    float2 hi = max(n0, n1);
+    bool reaches = vu_and(vu_and(lo.x < frame.y, frame.x < hi.x), vu_and(lo.y < frame.z, frame.w < hi.y));
+    return vu_and(drawn, reaches);
 }
 
 // The between-ticks rule for the x/y window (vu_common.hlsli vu_region_rule):
@@ -102,7 +110,8 @@ uint vu_particle_probe(VuSprite s, uint field)
 // two ticks' (VU_F_TICKS): at tick k's camera (h_k = R_k h, vu_ticks; the
 // half extent e is the screen matrix's, the same at every camera) the VU
 // draws it (alpha, both corners inside the x/y window, w inside its
-// window) and its quad reaches the frame (vu_frame_ndc).
+// window) and its quad reaches the frame (vu_frame_ndc).  The two ticks are
+// written out (the envelope: no loop).
 bool vu_particle_tick_shown(uint i)
 {
     uint base = vu_draw.x;
@@ -114,36 +123,18 @@ bool vu_particle_tick_shown(uint i)
     precise float sz = (0.0 + a.w) * k.x;
     float4 e = vu_matm(20u, float4(sz, sz, 0.0, 1.0), 1.0);
     float4 frame = vu_frame_ndc();
-    [loop] for (uint t = 0u; t < 2u; t++)
-    {
-        uint b = 4u * t;
-        precise float4 hk = vu_ticks[b] * h.x + vu_ticks[b + 1u] * h.y + vu_ticks[b + 2u] * h.z +
-                            vu_ticks[b + 3u] * h.w;
-        float q = vu_rcp(hk.w);
-        precise float3 p0 = float3(hk.xy - e.xy, hk.z) * q;
-        precise float3 p1 = float3(hk.xy + e.xy, hk.z) * q;
-        if (!vu_inside(float4(p0, hk.w), clipMin, clipMax) ||
-            !vu_inside(float4(p1, hk.w), clipMin, clipMax)) {
-            continue;
-        }
-        float2 n0 = vu_ndc(float2(vu_ftoi4(p0.x), vu_ftoi4(p0.y)) * (1.0 / 16.0));
-        float2 n1 = vu_ndc(float2(vu_ftoi4(p1.x), vu_ftoi4(p1.y)) * (1.0 / 16.0));
-        float2 lo = min(n0, n1);
-        float2 hi = max(n0, n1);
-        if (lo.x < frame.y && hi.x > frame.x && lo.y < frame.z && hi.y > frame.w) {
-            return true;
-        }
-    }
-    return false;
+    return select(vu_particle_tick(h, e, 0u, clipMin, clipMax, frame), true,
+                  vu_particle_tick(h, e, 1u, clipMin, clipMax, frame));
 }
 
 VuVSOut vu_particle_vs(uint vid : SV_VertexID)
 {
-    if ((vu_draw.z & VU_F_PROBE) != 0u) {
-        VuSprite s = vu_particle(vu_probe_vertex(vid));
+    // the particle, or the tests' probe particle
+    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
+    VuSprite s = vu_particle(select(probe, vu_probe_vertex(vid), vid / 6u));
+    if (probe) {
         return vu_probe_out(vid, vu_particle_probe(s, (vid / 3u) % VU_PROBE_FIELDS));
     }
-    VuSprite s = vu_particle(vid / 6u);
     VuVSOut o = vu_out_init();
     if (!s.shown) {
         return o;
@@ -168,12 +159,12 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     }
     // corners of the two triangles: (0,0) (1,0) (0,1), (0,1) (1,0) (1,1)
     uint c = vid % 6u;
-    bool right = c == 1u || c == 4u || c == 5u;
-    bool down = c == 2u || c == 3u || c == 5u;
-    int3 g = int3(right ? s.c1.x : s.c0.x, down ? s.c1.y : s.c0.y, s.c1.z);
+    bool right = select(c == 1u, true, select(c == 4u, true, c == 5u));
+    bool down = select(c == 2u, true, select(c == 3u, true, c == 5u));
+    int3 g = int3(select(right, s.c1.x, s.c0.x), select(down, s.c1.y, s.c0.y), s.c1.z);
     o.pos = vu_gs_position(g, false);
     o.col = float4(s.rgba);
-    o.stq = float3(right ? s.st.z : s.st.x, down ? s.st.w : s.st.y, 1.0);
+    o.stq = float3(select(right, s.st.z, s.st.x), select(down, s.st.w, s.st.y), 1.0);
     // the sprite's planes (vu_common.hlsli vu_attr_planes): S runs across,
     // T down, the same on both triangles
     float2 p0 = vu_texel_offset_px(float2(s.c0.xy) * (1.0 / 16.0));

@@ -2609,6 +2609,10 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
             lerpFloats(b, a, tmp, 4, t);
         }
     }
+    /* the card verdicts (rd_mesh.h RdVuCards): the tick before's own as
+     * the first bits, so a strip that was a card at either tick stays one
+     * between them (vu_common.hlsli vu_strip_card) */
+    rd__vu_cards_merge(op, cc->u[2], pp, pc->u[2]);
     return R_LERP;
 }
 

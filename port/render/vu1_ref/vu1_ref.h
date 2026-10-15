@@ -229,6 +229,41 @@ int vu1ref_particle_draw(int extended, int freeCamera, int drawn, int shown, int
 int vu1ref_polygon_reaches_picture(const float (*poly)[2], int n, const float pic[4]);
 int vu1ref_rect_reaches_picture(float x0, float y0, float x1, float y1, const float pic[4]);
 
+/* ------------------------------------------------------- the card test
+ * The region rule's card test (vu_common.hlsli vu_strip_card), decided on
+ * the CPU once per tick (rd_mesh.c): whether none of a free-standing
+ * strip's triangles passes the region test at the draw's camera.  The test
+ * is the vertex shaders' own (vu_prelit_vertex, vu_lit_vertex,
+ * vu_skin_vertex, vu_grid_vertex in the region mode), not the programs'
+ * above: IEEE single precision in the caller's rounding mode, which must
+ * be round to nearest as on the GPU (rd_mesh.c sets it), every product and
+ * sum on its own in the VU's order (vu_mat), 1 / w with the VU's zero rule
+ * (vu_rcp), x and y divided, then lo < (x, y, w) < hi.  The programs'
+ * references (vu1ref_normal_c and the others: the PS2's division and the
+ * caller's rounding) give the same verdict but at the bounds. */
+enum {
+    VU1REF_CARD_NORMAL = 0,  /* normal_c / normal_l: mem[16..19] * (pos, 1); bounds 0 and
+                                (4094, 4094, -, 16777214) */
+    VU1REF_CARD_CLUSTER = 1, /* cluster: pos through the two bones of its weight qword
+                                (VuBoneCB, VU memory 16..255), blended, through mem[4..7];
+                                bounds mem[0] and mem[1] */
+    VU1REF_CARD_MESH = 2     /* mesh: mem[16..19] (vf01..vf04) * (pos, 1); normal_c's bounds */
+};
+
+/* One vertex's region test (VuVtx.inside).  mem: VU memory 0..35 as the
+ * draw's VuCB holds it (RdVuBlock); bones: VuBoneCB (240 qwords, the
+ * cluster program's; NULL for the others); v: the vertex's qwords (pos
+ * first; the cluster's weights in v[2], the bone addresses as raw ints). */
+int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
+                         const float (*v)[4]);
+/* Whether a strip of count vertices (qwords from v, qpv a vertex) is a
+ * card: none of its triangles k-2, k-1, k (k = 2 .. count - 1) has all
+ * three vertices inside (vu1ref_strip_passes's walk; the first passing
+ * triangle ends it).  *tested (when not NULL) grows by the triangles
+ * tested. */
+int vu1ref_strip_card(int kind, const float (*mem)[4], const float (*bones)[4], const float (*v)[4],
+                      uint32_t qpv, uint32_t count, uint32_t *tested);
+
 /* ------------------------------------------------------------- draws
  * in = the batch at TOP: in[0] is the GIF tag (NLOOP in the low 15 bits of
  * the first word is the vertex count), then the vertices. Each run is the

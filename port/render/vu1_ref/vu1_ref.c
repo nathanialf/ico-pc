@@ -251,3 +251,77 @@ int vu1ref_rect_reaches_picture(float x0, float y0, float x1, float y1, const fl
     const float yl = y0 < y1 ? y0 : y1, yh = y0 < y1 ? y1 : y0;
     return xl < pic[1] && xh > pic[0] && yl < pic[3] && yh > pic[2];
 }
+
+/* vu_common.hlsli vu_rcp: 1 / x, a zero (or denormal) divisor gives +-Fmax */
+static float cardRcp(float x)
+{
+    uint32_t u;
+    memcpy(&u, &x, 4);
+    if ((u & 0x7F800000u) == 0u) {
+        const uint32_t f = (u & 0x80000000u) | 0x7F7FFFFFu;
+        float r;
+        memcpy(&r, &f, 4);
+        return r;
+    }
+    return 1.0f / x;
+}
+
+int vu1ref_region_inside(int kind, const float (*mem)[4], const float (*bones)[4],
+                         const float (*v)[4])
+{
+    static const float lo0[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    static const float hi4094[4] = {4094.0f, 4094.0f, 0.0f, 16777214.0f};
+    Vec4 h;
+    const float *lo = lo0, *hi = hi4094;
+    if (kind == VU1REF_CARD_CLUSTER) {
+        /* vu_skin_vertex: P = B0 (pos, 1) w0 + B1 (pos, 1) w1, then mem[4..7] */
+        uint32_t b0, b1;
+        memcpy(&b0, &v[2][0], 4);
+        memcpy(&b1, &v[2][2], 4);
+        b0 -= 16u;
+        b1 -= 16u;
+        const uint32_t i0 = b0 < 236u ? b0 : 236u, i1 = b1 < 236u ? b1 : 236u;
+        Vec4 p0, p1;
+        vu_mat(p0, bones[i0], bones[i0 + 1], bones[i0 + 2], bones[i0 + 3], v[0], 1.0f);
+        vu_mat(p1, bones[i1], bones[i1 + 1], bones[i1 + 2], bones[i1 + 3], v[0], 1.0f);
+        Vec4 pb;
+        for (int i = 0; i < 3; i++) {
+            const float t = p0[i] * v[2][1];
+            pb[i] = t + p1[i] * v[2][3];
+        }
+        pb[3] = 1.0f;
+        vu_mat(h, mem[4], mem[5], mem[6], mem[7], pb, 1.0f);
+        lo = mem[0];
+        hi = mem[1];
+    } else {
+        /* vu_prelit_vertex, vu_lit_vertex (the region mode: vf00.w),
+         * vu_grid_vertex */
+        vu_mat(h, mem[16], mem[17], mem[18], mem[19], v[0], 1.0f);
+    }
+    const float q = cardRcp(h[3]);
+    const float px = h[0] * q, py = h[1] * q;
+    /* vu_inside */
+    return lo[0] < px && lo[1] < py && lo[3] < h[3] && px < hi[0] && py < hi[1] && h[3] < hi[3];
+}
+
+int vu1ref_strip_card(int kind, const float (*mem)[4], const float (*bones)[4], const float (*v)[4],
+                      uint32_t qpv, uint32_t count, uint32_t *tested)
+{
+    if (count < 3) {
+        return 1;
+    }
+    int i0 = vu1ref_region_inside(kind, mem, bones, v);
+    int i1 = vu1ref_region_inside(kind, mem, bones, v + qpv);
+    for (uint32_t k = 2; k < count; k++) {
+        const int i2 = vu1ref_region_inside(kind, mem, bones, v + (size_t)k * qpv);
+        if (tested) {
+            (*tested)++;
+        }
+        if (i0 && i1 && i2) {
+            return 0;
+        }
+        i0 = i1;
+        i1 = i2;
+    }
+    return 1;
+}

@@ -160,6 +160,13 @@ static struct {
     Uint64 paceEnd;
     double stepSumMs, stepMaxMs;
     unsigned stepCount;
+    /* rd_vu_card_counts at the block's start: the card verdicts the
+       steps decided (rd_mesh.c), for the 10 s line */
+    uint64_t cardStrips, cardTris;
+    double cardMs;
+    /* the same at the last step's end, for the slow step's line */
+    uint64_t stepCardStrips, stepCardTris;
+    double stepCardMs;
     int mailbox; /* rhi_prefer_mailbox as last applied: vsync on and presenting between ticks */
     int vsync;   /* vsync on and presenting between ticks */
     /* vsync on and the cap equals the display's refresh but no vsync lock
@@ -2716,6 +2723,7 @@ static void perf_reset(void)
     s_perf.csvTried = tried;
     s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
     s_pres.stepCount = 0;
+    rd_vu_card_counts(&s_pres.cardStrips, &s_pres.cardTris, &s_pres.cardMs);
 }
 
 /* The block's second line: where a replay's time went, on average */
@@ -2744,15 +2752,24 @@ static void perf_log(void)
                  s_perf.gpu / g, s_perf.maxGpu, s_perf.gpuUpload / g, scene / g,
                  (s_perf.gpuList[11] + s_perf.gpuList[12]) / g, s_perf.gpuPresent / g);
     }
+    /* the region rule's card verdicts the steps decided on the CPU
+       (rd_mesh.c), a step's average */
+    uint64_t cardStrips, cardTris;
+    double cardMs;
+    rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
+    const double steps = s_pres.stepCount ? (double)s_pres.stepCount : 1.0;
     fprintf(stderr,
             "window: %u replays: CPU %.2f ms (max %.2f): interp %.2f, wait %.2f, acquire %.2f, "
             "upload %.2f, walk %.2f, bind %.2f, submit %.2f, present %.2f, readback %.2f "
-            "(fence waits %.2f); longest: %s; %s; simulation step %.2f ms (max %.2f)\n",
+            "(fence waits %.2f); longest: %s; %s; simulation step %.2f ms (max %.2f); strip "
+            "verdicts %.1f strips, %.1f triangles, %.3f ms a step\n",
             b->n, b->total / n, b->totalMax, b->sum[PERF_PH_INTERP] / n, b->sum[PERF_PH_WAIT] / n,
             b->sum[PERF_PH_ACQUIRE] / n, b->sum[PERF_PH_UPLOAD] / n, b->sum[PERF_PH_WALK] / n,
             b->sum[PERF_PH_BIND] / n, b->sum[PERF_PH_SUBMIT] / n, b->sum[PERF_PH_PRESENT] / n,
             b->sum[PERF_PH_READBACK] / n, b->sum[PERF_PH_FENCE] / n, longest, gpu,
-            s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs);
+            s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs,
+            (double)(cardStrips - s_pres.cardStrips) / steps,
+            (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
            effect's time is inside its list's, the CRT filter's inside the
@@ -3187,13 +3204,21 @@ static void slow_step(double ms)
     s_pres.slowLogged++;
     ico_host_step_profile(&p);
     const double other = ms - p.totalMs - s_pres.pumpMs;
+    /* the card verdicts the step decided (rd_mesh.c), inside the game
+       threads' time */
+    uint64_t cardStrips, cardTris;
+    double cardMs;
+    rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
     fprintf(stderr,
             "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
-            "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, achievements "
+            "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, strip verdicts "
+            "%llu strips, %llu triangles, %.2f ms, achievements "
             "%.1f), pump %.1f (events %.1f in %u, settings %.1f, input %.1f), other %.1f; %u "
             "disc reads (%u sectors), %u texture decodes, %u pipelines created, memory card %s\n",
             ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage,
             p.loading ? ", loading" : "", p.totalMs, p.hooksMs, p.audioMs, p.threadsMs, p.switches,
+            (unsigned long long)(cardStrips - s_pres.stepCardStrips),
+            (unsigned long long)(cardTris - s_pres.stepCardTris), cardMs - s_pres.stepCardMs,
             p.achMs, s_pres.pumpMs, s_pres.pumpEventsMs, s_pres.pumpEvents, s_pres.pumpSettingsMs,
             s_pres.pumpInputMs, other > 0.0 ? other : 0.0, p.cdReads, p.cdSectors,
             tc != NULL ? tc->decodes - s_pres.decodes : 0u,
@@ -3239,6 +3264,7 @@ void ico_window_pace(int hz)
             slow_step(ms);
         }
     }
+    rd_vu_card_counts(&s_pres.stepCardStrips, &s_pres.stepCardTris, &s_pres.stepCardMs);
     if (s_pres.pausePendingNs) {
         /* a swapchain rebuilt in the pump (video_apply): paused out */
         pace_paused(s_pres.pausePendingNs);

@@ -74,6 +74,12 @@
  *   camera, rd_mesh.c pushVu: 0 in the dumps from before them, which
  *   replay with the full screen's picture as they did; the version is
  *   unchanged)
+ *   (the VU draws' card verdicts, rd_mesh.h RdVuCards, after the
+ *   materials in the payload of RDC_MESH, RDC_SKINNED and RDC_GRID: a draw
+ *   recorded out of the box and every draw of the dumps from before them
+ *   has none and gets them at load from its own payload and mesh
+ *   (rd__vu_cards_fill_frame), so the frame replays alike at every
+ *   setting; the version is unchanged)
  *   u32      VU mesh count (from version 3); per mesh: u32 id, vertexCount,
  *            qwPerVertex, indexCount, batchCount, char[24] name, then the
  *            stream (vertexCount * qwPerVertex * 16 bytes), the index list
@@ -792,6 +798,9 @@ bool rd__load_frame(const char *path, RdFrame *out)
             }
         }
     }
+    /* the card verdicts of the draws recorded without them (rd_mesh.h
+     * RdVuCards), whatever settings the frame replays at */
+    rd__vu_cards_fill_frame(out);
     out->closed = 1;
     return true;
 }

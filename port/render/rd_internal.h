@@ -731,6 +731,15 @@ typedef struct RdMeshRec {
      * the entry's cols and rows, for rd_update_vu_mesh to lay them again */
     uint32_t tiledFrom, tiledIndexFrom;
     uint8_t tileCols, tileRows;
+    /* The free-standing strips (rd_mesh.c cardStrips, at creation): the
+     * runs of vertices between two strip flags in a batch, three or more,
+     * none of whose triangles carried ICO_VU_INDEX_JOINED then; cardStrips
+     * holds each one's first vertex and one past its last, in vertex order
+     * (the card test's strips, rd_draw_vu_mesh).  boneQwUsed: a skinned
+     * mesh's VuBoneCB qwords its weights read (the card bits go after them,
+     * rd_replay.c doVuDraw) */
+    uint32_t *cardStrips;
+    uint32_t cardStripCount, boneQwUsed;
 } RdMeshRec;
 
 /* The stream mesh m had when frame `frame` was recorded, NULL when no
@@ -857,6 +866,20 @@ uint32_t rd__sheet_tiles(const float (*stream)[4], uint32_t vertexCount, uint32_
  * never holds an appended tile whatever the sheet's placement; in any
  * other state, and for any other mesh, `end` */
 uint32_t rd__vu_sheet_end(const RdMeshRec *m, uint32_t end, bool extended);
+/* Whether the picture is not the PS2's out of the box (ICO_VU_EXTENDED; the
+ * region rule, vu_common.hlsli vu_region_rule): the Enhanced preset, a frame
+ * wider than 4:3 or a scene scale above 1 (rd_replay.c) */
+bool rd__vu_extended(void);
+/* The card section of a VU draw's payload (rd_mesh.h RdVuCards) of size
+ * bytes at payload: its header in *cards and the offset of its words from
+ * payload, 0 when the payload has none */
+struct RdVuCards;
+uint32_t rd__vu_cards_at(const uint8_t *payload, uint32_t size, struct RdVuCards *cards);
+/* rd_interp.c's blend of a VU draw: the tick before's verdicts (prev, its
+ * payload of prevSize bytes) into the blended copy's first bits (out) */
+void rd__vu_cards_merge(uint8_t *out, uint32_t outSize, const uint8_t *prev, uint32_t prevSize);
+/* A loaded dump's VU draws without a card section get one (rd_dump.c) */
+void rd__vu_cards_fill_frame(RdFrame *f);
 /* rd_mesh.c: the per-list VU images (rd_set_vu_common updates all 13). */
 void rd__vu_init(void);
 void rd__vu_shutdown(void);

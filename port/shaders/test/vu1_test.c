@@ -33,7 +33,12 @@
  *           clipped when every vertex is in front of the eye and its
  *           strip is joined to another (ICO_VU_INDEX_JOINED) or a triangle
  *           of its strip passes (vu1ref_strip_passes), else not drawn (a
- *           card: a free-standing strip none of whose triangles pass); the
+ *           card: a free-standing strip none of whose triangles pass; the
+ *           verdicts go to the shader in VuBoneCB as rd_replay.c hands
+ *           them over, cardBits, and the CPU's own card test, what
+ *           rd_mesh.c decides with, vu1ref_region_inside and
+ *           vu1ref_strip_card, must agree with the reference on every
+ *           vertex and strip, checkCards); the
  *           content table's HIDE mark hides triangles; under
  *           ICO_VU_TICKS (a picture between two ticks) one the rule drops
  *           is drawn clipped when the rule draws it at either tick's camera
@@ -1589,10 +1594,98 @@ static void makeVuCB(const Case *c, const Vu1Ref *r, IcoVuCB *cb, IcoVuBoneCB *b
     cb->draw[3] = c->prog == P_PARTICLE || c->tagless ? 0u : (uint32_t)c->vpb;
     cb->batch[0] = c->tagless ? 0u : (uint32_t)c->hdr;
     cb->batch[1] = (uint32_t)c->trail;
-    /* the strip test's bounds: every vertex of the stream (rd_replay.c sets
-     * the draw's) */
+    /* the card test on, no card bits yet (cardBits) */
+    cb->strip[1] = c->prog == P_PARTICLE ? 0u : 1u;
+}
+
+/* the card test's kind of a case's program (vu1_ref.h VU1REF_CARD_*) */
+static int cardKind(const Case *c)
+{
+    return c->prog == P_CLUSTER ? VU1REF_CARD_CLUSTER
+           : c->prog == P_MESH  ? VU1REF_CARD_MESH
+                                : VU1REF_CARD_NORMAL;
+}
+
+/* vertex v's first qword in the case's input (makeInput's batches) */
+static const float (*caseVertex(const Case *c, const float (*in)[4], int v))[4]
+{
+    const int b = v / c->vpb, k = v % c->vpb;
+    return in + b * (c->hdr + c->vpb * c->vq + c->trail) + c->hdr + k * c->vq;
+}
+
+/* The card verdicts as the renderer hands them to the shader (rd_mesh.h
+ * RdVuCards, rd_replay.c doVuDraw): both bits of every static kick whose
+ * strip has no passing triangle (the oracle's stripPasses, the blended
+ * camera's in a tick case, as portDraws decides), in VuBoneCB from qword 8
+ * for the cluster (its bones, addresses 16 and 20, are qwords 0..7) and
+ * from 0 for the others; vu_strip = (0, 1, the kicks, that qword) */
+static void cardBits(const Case *c, const CaseRef *cr, IcoVuCB *cb, IcoVuBoneCB *bones)
+{
+    if (c->prog == P_PARTICLE) {
+        return;
+    }
+    const uint32_t q0 = c->prog == P_CLUSTER ? 8u : 0u;
+    const uint32_t n = (uint32_t)cr->nv;
+    uint32_t w[(MAXV + 15) / 16 + 4];
+    memset(w, 0, sizeof(w));
+    for (uint32_t k = 2; k < n; k++) {
+        const int kick = (int)k - cr->first[k] >= 2 &&
+                         (c->prog == P_MESH || (cr->stw[k] >= 1.0f && cr->stw[k - 1] >= 1.0f));
+        if (kick && !stripPasses(c, cr, (int)k)) {
+            w[k >> 4] |= 3u << ((k & 15u) * 2u);
+        }
+    }
+    memcpy(bones->bone[q0], w, ((n + 15u) / 16u) * 4u);
     cb->strip[0] = 0u;
-    cb->strip[1] = c->prog == P_PARTICLE ? 0u : (uint32_t)(c->nbatch * c->vpb);
+    cb->strip[2] = n;
+    cb->strip[3] = q0;
+}
+
+/* The CPU's card test (vu1_ref.h vu1ref_region_inside, vu1ref_strip_card,
+ * what rd_mesh.c decides from) against the reference: every vertex's
+ * region test as the program's (VuGsVertex.inside), and every static
+ * kick's strip a card exactly when vu1ref_strip_passes finds no passing
+ * triangle in it, at the case's camera (cb, bones) */
+static void checkCards(const Case *c, const CaseRef *cr, const float (*in)[4], const IcoVuCB *cb,
+                       const IcoVuBoneCB *bones)
+{
+    if (c->prog == P_PARTICLE || c->clip != ICO_VU_CLIP_REGION) {
+        return;
+    }
+    const int mode = fegetround();
+    fesetround(FE_TONEAREST);
+    const int kind = cardKind(c);
+    for (int v = 0; v < cr->nv; v++) {
+        const int in1 = vu1ref_region_inside(kind, (const float (*)[4])cb->mem,
+                                             (const float (*)[4])bones->bone, caseVertex(c, in, v));
+        if (in1 != (cr->v[v].inside != 0)) {
+            FAILF("%s: vertex %d: the CPU card test's region test %d, the reference's %d\n",
+                  c->name, v, in1, cr->v[v].inside);
+        }
+    }
+    for (int k = 2; k < cr->nv; k++) {
+        if (k - cr->first[k] < 2 ||
+            (c->prog != P_MESH && (cr->stw[k] < 1.0f || cr->stw[k - 1] < 1.0f))) {
+            continue;
+        }
+        /* the strip: the run of static kicks around k, s .. e - 1 its vertices */
+        int s = k - 2, e = k + 1;
+        while (s > cr->first[k] && (c->prog == P_MESH || cr->stw[s] >= 1.0f)) {
+            s--;
+        }
+        while (e < cr->nv && cr->first[e] == cr->first[k] &&
+               (c->prog == P_MESH || cr->stw[e] >= 1.0f)) {
+            e++;
+        }
+        const int card =
+            vu1ref_strip_card(kind, (const float (*)[4])cb->mem, (const float (*)[4])bones->bone,
+                              caseVertex(c, in, s), (uint32_t)c->vq, (uint32_t)(e - s), NULL);
+        if (card != !stripPasses(c, cr, k)) {
+            FAILF("%s: kick %d: the CPU card test says %s, the reference %s\n", c->name, k,
+                  card ? "card" : "no card", stripPasses(c, cr, k) ? "passes" : "card");
+        }
+    }
+    fesetround(mode);
 }
 
 static IcoSpriteVertex spriteV(const VuGsVertex *v)
@@ -2428,6 +2521,8 @@ static int gpuTests(void)
         static IcoVuBoneCB bones;
         memset(&bones, 0, sizeof(bones));
         makeVuCB(c, &st, &vcb, &bones, 0);
+        checkCards(c, &cr, (const float (*)[4])in, &vcb, &bones);
+        cardBits(c, &cr, &vcb, &bones);
         vcbProbe = vcb;
         vcbProbe.draw[2] |= ICO_VU_PROBE;
         IcoFrameCB fProbe, fDraw;

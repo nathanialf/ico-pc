@@ -14,7 +14,7 @@
 #define VU_GRID_LIT 1u
 #define VU_GRID_SPEC 2u
 
-VuVtx vu_grid_vertex(uint v, uint variant, bool full)
+VuVtx vu_grid_vertex(uint v, uint variant)
 {
     VuVtx o = vu_vtx_init();
     uint at = vu_vertex_qw(v);
@@ -24,8 +24,8 @@ VuVtx vu_grid_vertex(uint v, uint variant, bool full)
     // mesh.vsm:172-175 M * pos (vf00.w), :179 div, :188 mulq
     o.h = vu_matm(16u, pos, 1.0);
     float q = vu_divide(o);
-    o.inside = vu_inside(o.p, VU_LO0, VU_HI4094);
-    if (full) {
+    o.inside = vu_inside(o.p, o.h.w, VU_LO0, VU_HI4094);
+    {
         float4 col = vu_stream[vu_batch_qw(v) + vu_batch.x - 1u]; // the last header qword
         if (lit) {
             // :168-176 l = max(L1 * n, 0); :184-187 c = L2 * l with the
@@ -50,59 +50,20 @@ VuVtx vu_grid_vertex(uint v, uint variant, bool full)
     return o;
 }
 
-// VU_RULE_STRIP: whether a triangle of kick's strip, its batch (mesh.vsm
-// has no strip flag), passes the region test (vu_prelit_strip_passes)
-bool vu_grid_strip_passes(uint kick, uint variant)
-{
-    uint3 r = vu_strip_of(kick, false);
-    bool i0 = vu_grid_vertex(r.x, variant, false).inside;
-    bool i1 = vu_grid_vertex(r.x + 1u, variant, false).inside;
-    [loop] for (uint v = r.x + 2u; v < vu_strip_end(r); v++) {
-        bool i2 = vu_grid_vertex(v, variant, false).inside;
-        if (i0 && i1 && i2) {
-            return true;
-        }
-        i0 = i1;
-        i1 = i2;
-    }
-    return false;
-}
-
 VuVSOut vu_grid_main(uint vid, uint variant)
 {
-    if ((vu_draw.z & VU_F_PROBE) != 0u) {
-        VuVtx v = vu_grid_vertex(vu_probe_vertex(vid), variant, true);
-        return vu_probe_out(vid, vu_probe_field(v, (vid / 3u) % VU_PROBE_FIELDS));
-    }
+    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
     // the index marks: VU_INDEX_JOINED (rd_replay.c, a grid of two strips
     // or more)
     uint kick = (vid & VU_INDEX_MASK) >> 2;
-    uint corner = vid & 3u;
-    // every corner's attributes under the exact viewport (the attribute
-    // planes, vu_common.hlsli vu_attr_planes), else only this corner's
-    bool full = g_vp.x != 0.0;
-    VuVtx a = vu_grid_vertex(kick - 2u, variant, full);
-    VuVtx b = vu_grid_vertex(kick - 1u, variant, full);
-    VuVtx c = vu_grid_vertex(kick, variant, full);
-    VuVtx me = a;
-    if (!full) {
-        me = vu_grid_vertex(kick - 2u + corner, variant, true);
-    } else if (corner == 1u) {
-        me = b;
-    } else if (corner == 2u) {
-        me = c;
+    // the triangle's first corner, or the tests' probe vertex
+    VuVtx a = vu_grid_vertex(select(probe, vu_probe_vertex(vid), kick - 2u), variant);
+    if (probe) {
+        return vu_probe_out(vid, vu_probe_field(a, (vid / 3u) % VU_PROBE_FIELDS));
     }
-    uint rule = vu_region_rule(a, b, c, VU_LO0, VU_HI4094);
-    if (rule == VU_RULE_STRIP) {
-        // a grid's strips share their rows: joined; a grid of one strip is
-        // a card unless a triangle of it passes
-        if ((vid & VU_INDEX_JOINED) != 0u) {
-            rule = VU_RULE_CLIP;
-        } else {
-            rule = vu_grid_strip_passes(kick, variant) ? VU_RULE_CLIP : VU_RULE_DROP;
-        }
-    }
-    return vu_triangle_out(a, b, c, me, VU_CLIP_REGION, rule);
+    VuVtx b = vu_grid_vertex(kick - 1u, variant);
+    VuVtx c = vu_grid_vertex(kick, variant);
+    return vu_mesh_out(a, b, c, vid, VU_CLIP_REGION, VU_LO0, VU_HI4094, false);
 }
 
 VuVSOut vu_grid_vs(uint vid : SV_VertexID)

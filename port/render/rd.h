@@ -1532,6 +1532,13 @@ typedef struct RdStats {
 
 const RdStats *rd_get_stats(void);
 
+/* The region rule's card verdicts decided on the CPU since the start
+ * (rd_mesh.c, rd_mesh.h RdVuCards): free-standing strips tested, triangles
+ * tested (the first passing one ends a strip), and the time it took in ms,
+ * all on the simulation's thread as the draws are recorded (the window's
+ * summary line gives them per step) */
+void rd_vu_card_counts(uint64_t *strips, uint64_t *triangles, double *ms);
+
 /* One record per replay (rd_end_frame's, rd_present's, the replay tool's).
  * CPU phases in ms: interp (rd__interp_frame building the blended copy), wait
  * (rhi_wait_frame:

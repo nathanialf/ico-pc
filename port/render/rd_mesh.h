@@ -367,6 +367,10 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key);
  *   bones[boneQw][4]             RDC_SKINNED only
  *   stream[streamQw][4]          RDC_GRID / RDC_PARTICLES only (the frame's copy)
  *   RdMaterial[materialCount]
+ *   RdVuCards, words[cards.words]  the card verdicts (below), RDC_MESH /
+ *                                RDC_SKINNED / RDC_GRID under the region
+ *                                rule's card test; absent otherwise and in
+ *                                the dumps from before it
  *
  * Replay per batch in order (the PS2 draws batch after batch, material
  * packets between them): bind the batch's material state, then
@@ -385,6 +389,30 @@ typedef struct RdVuPayload {
     uint32_t qwPerVertex;
     uint32_t materialCount;
 } RdVuPayload;
+
+/* The card verdicts of a draw (the region rule's card test,
+ * vu_common.hlsli vu_strip_card; docs/port/VU1_PROGRAMS.md "The card
+ * test"): rd_draw_vu_mesh and rd_draw_vu_grid decide, once per tick and
+ * only in a state other than out of the box (rd__vu_extended), whether
+ * each free-standing strip of the draw is a card (no triangle of it passes
+ * the region test at the tick's camera, vu1_ref.h vu1ref_strip_card) and
+ * write two bits per vertex of the vertices firstKick .. firstKick +
+ * kickCount - 1 (the span of the draw's free-standing strips; every
+ * vertex of a card's strip, so every one of its kicks, carries them):
+ * vertex i's are bits 2 (i % 16) and 2 (i % 16) + 1 of words[i / 16], the
+ * first the verdict at the tick before, the second at this tick.  The
+ * draw records both as this tick's; rd_interp.c, blending the draw from
+ * the tick before's, sets the first from that tick's (rd__vu_cards_merge).
+ * any: bit 0 some vertex's first bit is set, bit 1 some second; words a
+ * multiple of 4 (whole quadwords, as the replay hands them to VuBoneCB).
+ * The size depends only on the mesh and the batch range, so the two ticks'
+ * payloads of a draw keep one size (the interpolation pairs them).  A dump
+ * whose draws have none (one from before them, or recorded out of the box)
+ * gets them at load (rd__vu_cards_fill_frame), whatever its replay's
+ * settings. */
+typedef struct RdVuCards {
+    uint32_t firstKick, kickCount, any, words;
+} RdVuCards;
 
 #ifdef __cplusplus
 }

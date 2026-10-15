@@ -4370,8 +4370,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c);
  * vu_region_rule): the Enhanced preset, a frame wider than 4:3 or a scene
  * scale above 1.  Out of the box the PS2's behaviour stays; any other
  * state draws what a game made for that picture would draw (RENDER.md
- * "Strip joining"). */
-static bool vuExtended(void)
+ * "Strip joining").  rd_mesh.c asks it too, when it records a draw (the
+ * card verdicts, RdVuCards). */
+bool rd__vu_extended(void)
 {
     return g_rd.settings.preset != RD_PRESET_ORIGINAL || g_rd.gsW > ICO_SH_FRAME_BASE_W ||
            g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f;
@@ -4412,12 +4413,45 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
+    /* the card verdicts (rd_mesh.h RdVuCards, vu_common.hlsli
+     * vu_strip_card), in a state other than out of the box when a strip of
+     * the draw is a card at either tick: in VuBoneCB after the bones a
+     * skinned mesh reads (RdMeshRec.boneQwUsed), from qword 0 for the
+     * others; vu_strip = (first kick, the card test, kicks covered, first
+     * qword).  A draw with more kicks than VuBoneCB holds covers the first
+     * ones (the others are no card) */
+    RdVuCards cards;
+    const uint8_t *pay = f->payload + c->u[1];
+    const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
+    const bool withCards = cardWords && cards.any && rd__vu_extended() &&
+                           (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
+    uint32_t cardQw = 0, cardKicks = 0;
+    if (withCards) {
+        cardQw = c->type == RDC_SKINNED ? m->boneQwUsed : 0u;
+        cardKicks = cards.kickCount;
+        if (cardKicks > (240u - cardQw) * 64u) {
+            static bool logged; /* once a run (rd__log_once's flags are full) */
+            if (!logged) {
+                logged = true;
+                rd__log("card verdicts: a draw of %u kicks past VuBoneCB's room; the rest are "
+                        "drawn as no card",
+                        cardKicks);
+            }
+            cardKicks = (240u - cardQw) * 64u;
+        }
+    }
     /* bones: VuBoneCB (VU memory 16..255); a zero block for the others */
     uint64_t bonesOff;
-    if (bones) {
+    if (bones || withCards) {
         IcoVuBoneCB bc;
         memset(&bc, 0, sizeof(bc));
-        memcpy(bc.bone, bones, (size_t)(p.boneQw > 240 ? 240 : p.boneQw) * 16);
+        if (bones) {
+            memcpy(bc.bone, bones, (size_t)(p.boneQw > 240 ? 240 : p.boneQw) * 16);
+        }
+        if (withCards) {
+            const uint32_t words = (cardKicks + 15u) / 16u;
+            memcpy(bc.bone[cardQw], pay + cardWords, (size_t)words * 4u);
+        }
         bonesOff = ringCopy(&bc, sizeof(bc), ua);
     } else {
         if (s_zeroBonesFor != g_rd.replayCounter) {
@@ -4473,10 +4507,17 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         /* photo mode: behind-eye triangles clipped, not dropped */
         vcb.draw[2] |= ICO_VU_BEHIND_EYE;
     }
-    if (vuExtended()) {
+    if (rd__vu_extended()) {
         /* a triangle the region test drops is clipped unless it belongs
          * to a card (vu_region_rule) */
         vcb.draw[2] |= ICO_VU_EXTENDED;
+    }
+    if (c->type != RDC_PARTICLES) {
+        /* the card test (vu_region_rule): its verdicts in VuBoneCB above */
+        vcb.strip[0] = withCards ? cards.firstKick : 0u;
+        vcb.strip[1] = 1;
+        vcb.strip[2] = cardKicks;
+        vcb.strip[3] = cardQw;
     }
     if (f->hasTickCams && c->u[3] == RD_VU_TICK_CAMERAS) {
         /* drawn through a camera blended between two ticks'; a
@@ -4494,10 +4535,6 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         vcb.draw[3] = vpb;
         vcb.batch[0] = 3;
         vcb.batch[1] = 1;
-        /* the strip test's bounds: every vertex of the buffer (a batch is
-         * one strip) */
-        vcb.strip[0] = 0;
-        vcb.strip[1] = p.batchCount * vpb;
         const uint32_t ni = p.batchCount * (vpb - 2) * 3;
         const uint64_t iOff = rd__ring_alloc((uint64_t)ni * 4, 16);
         if (iOff == ~0ull) {
@@ -4544,15 +4581,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
     }
-    /* the strip test's bounds: the draw's vertices (its batches'); a sheet
-     * of the content table out of the box: its own triangles only, never
-     * the appended tiles (rd__vu_sheet_end) */
-    const bool extended = vuExtended();
-    vcb.strip[0] = m->batches[p.firstBatch].firstVertex;
-    vcb.strip[1] = m->batches[last - 1].firstVertex + m->batches[last - 1].vertexCount;
-    if (m->tiledFrom && !extended && vcb.strip[1] > m->tiledFrom) {
-        vcb.strip[1] = m->tiledFrom;
-    }
+    /* a sheet of the content table out of the box: its own triangles
+     * only, never the appended tiles (rd__vu_sheet_end) */
+    const bool extended = rd__vu_extended();
     if (p.clip != RD_VU_CLIP_SCISSOR) {
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
         const uint32_t end = rd__vu_sheet_end(m, b1->firstIndex + b1->indexCount, extended);
