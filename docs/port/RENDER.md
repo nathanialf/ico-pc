@@ -203,7 +203,9 @@ covers on the PS2 at every aspect (`port/render/rd_core.c` (`namedTargetDesc`, `
 
 **Scale.** A scene-class target's texture is its GS size times the scene scale; the work buffers
 take `rd_work_target_scale` (1 at the GS height, else the scene height over 448, at most 2), the
-shadow levels none (`port/render/rd_core.c` (`rd__target_scale_of`, `rd_work_target_scale`)). Under
+shadow levels none (`port/render/rd_core.c` (`rd__target_scale_of`, `rd_work_target_scale`)). A
+temporary target of any other size is drawn at its GS size, except a render-to-texture block under
+Water reflections: Sharp ([below](#water-and-render-to-texture-blocks)). Under
 [Full pixel](ARCHITECTURE.md#terms) a frame-wide scene target holds the frame's exact visible width
 plus `RD_FULL_PIXEL_GUARD` texels each side, centred, so the window's pixels are its texels
 (`port/render/rd_core.c` (`rd__target_scale_of`)). [Scene scale](ARCHITECTURE.md#terms) and the
@@ -653,7 +655,8 @@ out after `tex_ResetVramPri`, TBP 0x2800 in their lists, which the register deco
 `rd_water.c` supplies what the decoder cannot know (`port/render/rd_water.c`, header comment):
 
 - `rd_gs_named_block` and `rd_block_target`: a per-frame target of the block's own GS size, with
-  its own depth when asked, the same target for the same (TBP, size) for the rest of the frame;
+  its own depth when asked, the same target for the same (TBP, size) for the rest of the frame,
+  marked as a block (`RdTargetRec.block`, `rd__block_temp_target`);
 - `rd_alias_target`: from here on in the current list, `rd_set_target`, `rd_clear_target` and
   `rd_texture` of `from` record `to` (at most 4 aliases a list), so replay and dumps see an
   ordinary target;
@@ -666,6 +669,29 @@ out after `tex_ResetVramPri`, TBP 0x2800 in their lists, which the register deco
 
 The records live per frame slot and are cleared when the slot is reused
 (`port/render/rd_water.c` (`rd__water_frame_reset`)).
+
+**Water reflections** (`[video] effect_water_sharp`, `RdSettings.waterSharp`, issue 97). A block
+the game sizes as the native frame (the dark volume's, `gsFrame.w x ScreenHeight`) is scene-class
+and takes the scene's scale whatever the option. Every other block, the puddle's and the pool's
+reflection (`bw x 256`, `ico2/sugipon/src/puddle.c` (`puddleHostBlockBegin`), `pool.c`
+(`poolHostBlockBegin`)) and the queen barrier's copy of the frame (`gsFrame.w x 256`,
+`ico2/ito/src/queen_barrier_disp.c` (`barrierHostBlock`)), is drawn at its own GS size under
+Original, the PS2's texels and the default, so above 1x the reflection is softer than the scene
+around it. Under Sharp such a block takes the scene's scale, both ways as SCENE has it
+(`sceneSx`, `sceneSy`), not the work scale, which stops at 2x and would leave a 4K reflection at
+under half the scene's texels (`port/render/rd_core.c` (`rd__target_scale_of`)). Its depth buffer
+is made at the same texture size, the clears and scissors are in GS pixels through the target's
+`sx`/`sy` as on any scaled target, and what samples it (the reflecting grid's GS-texel STs, pool.c's
+screen STs normalised by the screen size, the barrier mesh's UVs, the copy sprites) addresses it
+in GS texels, so only the texel count changes. The queen barrier's copy follows the same rule: it
+is the frame seen through the barrier, as soft as the reflections under Original for the same
+reason. A block at the scene's scale that does not fit comes down with the scene
+(`rd__note_target_pressure`). Off, `rd__target_scale_of` takes the branch it always did, so the
+picture is byte for byte the one before the option. A change applies to the blocks made from the
+next frame (they are per-frame temporaries) and logs `water reflections: sharp|original`; a
+Sharp start logs the line once at `rd_init`. Dumps carry the mark in the temporary target's keep
+word (bit 1); the replay tool's `--water-sharp` draws them at the scene's scale, and without it they
+replay at their GS size (`port/render/rd_dump.c`, header comment).
 
 ## The fog path and its self-test
 
@@ -846,7 +872,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--pass-dump DIR` | writes every named target to `DIR/<NAME>.png`, and with `--present` the presented picture |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
-| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
+| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
 | `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |

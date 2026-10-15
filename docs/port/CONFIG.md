@@ -157,6 +157,7 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `texture_pack_precache` | bool | `true` | file only; read the whole pack into memory at start |
 | `texture_pack_cache_mb` | int | `0` | file only; memory for that read, 0 (half the computer's) or 128..65536 |
 | `effect_glow`, `effect_depth_of_field`, `effect_softening`, `effect_motion_blur`, `effect_fog`, `effect_cinematic_bars` | bool | `true` | the game's own picture effects |
+| `effect_water_sharp` | bool | `false` | Water reflections: `true` (Sharp) draws the reflections in water and the queen barrier's picture at the scene's scale, `false` (Original) at their GS size ([RENDER.md](RENDER.md#water-and-render-to-texture-blocks)) |
 | `effects_depth` | bool | `true` | file only; the scene's depth for an effects program such as ReShade |
 | `video_mode` | string | absent: 60 Hz | `pal50` or `60hz`, the boot screen's choice (`port/config/sysconf.c`) |
 | `backend` | string | `"vulkan"` | `vulkan` or `d3d12`, the window build's renderer; when the key is empty, a run restarted after a graphics driver crash takes the backend its retry step names (`port/platform/window_host.c` (`ico_window_open`); `port/platform/startup_retry.h`) |

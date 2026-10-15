@@ -141,8 +141,9 @@ The picture's finish, the CRT filter and the game's own picture effects.
   still show through it. To adjust a style's details, see
   [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
 
-The game's own effects are each On or Off. All On is the picture the PS2
-gives you, and that is how the game starts.
+The game's own effects are each On or Off (Water reflections is Original
+or Sharp). All On, with Water reflections at Original, is the picture the
+PS2 gives you, and that is how the game starts.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
 - **Depth of field:** the blur on things far away.
@@ -150,6 +151,12 @@ gives you, and that is how the game starts.
   jagged edges.
 - **Motion blur:** the trail that moving things leave behind.
 - **Fog:** the haze that hides the distance.
+- **Water reflections:** Original or Sharp. Original is the PS2's
+  reflection in puddles, pools and the water at the mill, which looks soft
+  when the rest of the picture is sharper than the PS2's. Sharp draws the
+  reflections as sharp as the rest of the picture, and also the picture you
+  see through the Queen's barrier. At the PS2's resolution (1x) the two look
+  the same. Original is how the game starts.
 - **Cinematic bars:** the black bars at the top and bottom of the picture
   during cutscenes. With them Off you see the whole picture, and the
   subtitles are not dimmed.
@@ -451,6 +458,7 @@ Under `[video]`:
 | --- | --- |
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. If the file has no `window_mode` line, the game reads its `fullscreen =` line instead: `true` is Fullscreen, `false` is Windowed. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
+| `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |

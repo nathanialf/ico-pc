@@ -151,8 +151,9 @@ program under an environment switch ([Environment switches](#environment-switche
   sizes, its names in five languages (`model_viewer`).
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
-- `options_test.c`: the gameplay options' defaults and setters, and `eBrainGetTarget` with Yorda
-  safe off and on (`options`).
+- `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
+  reflections' `effect_water_sharp` off by default, saved, outside the preset), and
+  `eBrainGetTarget` with Yorda safe off and on (`options`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
   as off (`photo`).
@@ -289,7 +290,9 @@ program under an environment switch ([Environment switches](#environment-switche
   `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
-- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`).
+- `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
+  the targets' scales include Water reflections' block: its GS size under Original, the scene's
+  scale under Sharp (past the work scale at 4x), both the GS size at 1x (`checkScales`).
 - `rd_raw_test.c`: the raw packet builders outside `seki` (`rd_raw`).
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
@@ -302,7 +305,8 @@ program under an environment switch ([Environment switches](#environment-switche
   B-spline (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
-  the CPU included (`testDumpSheetV11`) (`rd_state`).
+  the CPU included (`testDumpSheetV11`), and `rd_block_target`'s block mark set on its target only
+  and kept through a dump (`testDumpBlock`) (`rd_state`).
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
   (`textUploadLogChecks`) (`rd_tex`).
@@ -375,7 +379,9 @@ program under an environment switch ([Environment switches](#environment-switche
   (`menu_text`).
 - `settings_test.c`, `settings_extra_test.c`, `settings_extras_test.c`: the Settings menu over
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
-  presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`).
+  presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
+  `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
+  note, its key and the page's fourteen rows (`testWaterReflections`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).

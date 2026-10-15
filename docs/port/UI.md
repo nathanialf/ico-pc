@@ -166,7 +166,7 @@ tables in step and within the `MAX_ROWS` (16) budget of a page (`port/ui/setting
 | --- | --- |
 | Main (`UI_PAGE_MAIN`) | Display, Effects, Graphics driver, Audio, Controls, Gameplay, Language, Achievements, Extras, Developer mode, Dump textures, Dump models, Back |
 | Display | Preset, Resolution, Aspect, Anti-aliasing, Window mode, Vsync, Texture pack, Model pack, Frame rate, Video mode, Back |
-| Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects, Full pixel, Back |
+| Effects | Full height, Filtering, Brightness, CRT filter, CRT strength, the six game effects with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Full pixel, Back |
 | Graphics driver | Driver, Add a driver, Remove this driver, Back (Android) |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, the touch overlay's three rows, Back |
@@ -193,7 +193,8 @@ its handler); the dump rows only in developer mode; the touch rows only with a t
 window and mouse camera rows not on Android; the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows and spaces the shown ones by the page's pitch table, which keeps Back's box inside the
-226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`)).
+226 lines and above the notes (`port/ui/settings.c` (`layoutPage`, `pagePitch`)); Effects' fourteen
+rows from the pause menu (Brightness shown) are 12 apart from line 30, Back's box ending at 222.
 
 ### Values and saving
 
