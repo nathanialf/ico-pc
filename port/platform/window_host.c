@@ -1252,7 +1252,10 @@ open_window:
     rd_set_activity_fn(window_activity);
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
-    if (!up && customDriver) {
+    /* not after a bisect that lost the device: the player's driver did not
+       fail, it cannot make a second device in the process that lost one
+       (the -3 path below; the next start loads it again) */
+    if (!up && customDriver && !bisectLost) {
         ico_gpu_driver_android_init_failed();
         up = rd_init(gsW, gsH, &rs, s_window);
     }

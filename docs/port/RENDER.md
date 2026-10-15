@@ -423,7 +423,9 @@ time without losing the device`). The bisect's renderer is then shut down, lost 
 own starts as at any start: the bisect is diagnostics only. A driver that cannot make a device
 again in the process that lost one ends that start with a box asking to start the game again
 (`ico_window_open` returns -3, `port/platform/main_host.c` (`open_window`)); the bisect is done by
-then, so the next start is a normal one. The activity file says the bisect is
+then, so the next start is a normal one. On Android this holds for a graphics driver the player
+chose too: after a bisect that lost the device it is not recorded as failed nor turned off, and the
+next start loads it again. The activity file says the bisect is
 running while it runs, so a start ended inside it does not bisect again, and the file is deleted
 when it is done ([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_dump.c`
 (`rd_loss_bisect`); `port/platform/window_host.c` (`window_loss_bisect`, `ico_window_open`);
