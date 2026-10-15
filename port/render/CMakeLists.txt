@@ -479,6 +479,16 @@ target_compile_options(rd_fog_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${IC
 target_include_directories(rd_fog_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_fog_selftest_test PRIVATE ico_render)
 
+# rd_blend_selftest_test: the exact blend's self-test (rd_blend_selftest.c)
+# and the attachment read's Qualcomm rule (vk_device.c) on a wide, scaled
+# scene: the mode left in force, the forest's tint under it, the targets
+# without the attachment read where it is off, and the self-test again at a
+# new scene size (the log lines are matched by test/rd_blend_selftest.cmake).
+add_executable(rd_blend_selftest_test test/rd_blend_selftest_test.c)
+target_compile_options(rd_blend_selftest_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_blend_selftest_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_blend_selftest_test PRIVATE ico_render)
+
 # fog_lut_test: the depth fog's game side alone, ZFog.c with the renderer
 # calls stubbed: the fog tables and sprites of three player dumps byte for
 # byte, and a sweep of the stage parameters against the integer formula.
@@ -660,7 +670,7 @@ target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_mi
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test rd_replay_tool rd_state_test rd_pixel_test
                   rd_layout_test rd_tex_test rd_gsbase_test rd_mesh_test modelpack_test
-                  rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
+                  rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test rd_blur_test rd_water_test rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_boot_present_test rd_crt_test texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test)
@@ -943,6 +953,71 @@ if(ICO_RUN_TESTS)
                      -DFOG_PATH=buffer
                      "-DRESULTS=inplace fail [0-9]+, copy fail [0-9]+, buffer ok [0-2]"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    # the exact blend's self-test (rd_blend_selftest.c) and the attachment
+    # read's Qualcomm rule (vk_device.c) on lavapipe, which has the
+    # attachment read and no interlock: the attachment read passes and is
+    # kept; read white (ICO_RD_BLEND_SABOTAGE) it fails, its worst sample is
+    # logged and the fixed-function blend is taken; under the fake Adreno
+    # (ICO_VK_FAKE_ADRENO) the read is not offered, the device and blend
+    # lines say why and, nothing exact left on lavapipe, the fixed-function
+    # blend runs without a self-test; ICO_VK_ATTACHMENT_READ=1 offers it
+    # again; without a destination read nothing runs; ICO_RD_BLEND
+    # attachment (kept though sabotaged), storage (not on this device: the
+    # default kept) and fixed (nothing run) honoured
+    set(_bst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_blend_selftest.cmake")
+    set(_bst_att "exact \\(attachment read\\)")
+    set(_bst_fix "fixed-function \\(rounds up\\)")
+    set(_bst_ok "attachment ok [01], storage not on this device, fixed-function ok [0-2]")
+    add_test(NAME rd_blend_selftest
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}"
+                     "-DRESULTS=attachment fail [0-9]+, storage not on this device, fixed-function ok [0-2]"
+                     "-DFAIL=attachment fail [0-9]+" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_adreno
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DNOTRUN=no exact blend on this device; attachment read off: Qualcomm driver"
+                     -DDENY=1 -P "${_bst}")
+    add_test(NAME rd_blend_selftest_adreno_forced
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}"
+                     "-DEXTRA=attachment read yes \\(Qualcomm driver: ICO_VK_ATTACHMENT_READ=1\\)"
+                     -P "${_bst}")
+    add_test(NAME rd_blend_selftest_no_dst
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DNOTRUN=no exact blend on this device" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_blend_attachment
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}"
+                     "-DRESULTS=attachment fail [0-9]+, storage not on this device, fixed-function ok [0-2]"
+                     "-DFAIL=attachment fail [0-9]+" "-DEXTRA=; kept by ICO_RD_BLEND" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_blend_storage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
+                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}"
+                     "-DEXTRA=ICO_RD_BLEND=storage is not on this device" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_blend_fixed
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DNOTRUN=ICO_RD_BLEND=fixed" -P "${_bst}")
+    set(_bst_tests rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
+                   rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
+                   rd_blend_selftest_blend_attachment rd_blend_selftest_blend_storage
+                   rd_blend_selftest_blend_fixed)
+    set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_env}")
+    set_tests_properties(rd_blend_selftest_sabotage
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND_SABOTAGE=attachment")
+    set_tests_properties(rd_blend_selftest_adreno PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_ADRENO=1")
+    set_tests_properties(rd_blend_selftest_adreno_forced
+                         PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_ADRENO=1;ICO_VK_ATTACHMENT_READ=1")
+    set_tests_properties(rd_blend_selftest_no_dst PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_DST=1")
+    set_tests_properties(rd_blend_selftest_blend_attachment
+                         PROPERTIES ENVIRONMENT
+                                    "${_env};ICO_RD_BLEND=attachment;ICO_RD_BLEND_SABOTAGE=attachment")
+    set_tests_properties(rd_blend_selftest_blend_storage
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND=storage")
+    set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND=fixed")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
     # 2341x1080 at scale 1) and the big scenes: in place passes as at an even
     # width.  Sample counts the device lacks are skipped.  With the buffer path
