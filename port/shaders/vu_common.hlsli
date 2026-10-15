@@ -66,7 +66,7 @@
 // vu_ticks under VU_F_TICKS: the two ticks' cameras of a blended picture,
 //          R = S_tick St^-1 (columns; 0..3 the tick before's, 4..7 this
 //          tick's), a vertex's h through the blended camera St to the h the
-//          tick's camera gave (vu_tick_vertex)
+//          tick's camera gave (vu_lanes)
 cbuffer VuCB : register(b2, space1)
 {
     float4 vu_mem[36];
@@ -995,49 +995,92 @@ uint vu_rule_at(bool allIn, bool reaches, bool front)
                   select(reaches, select(card, VU_RULE_STRIP, VU_RULE_DROP), VU_RULE_CLIP));
 }
 
-// The vertex as tick k's camera gave it (0 the tick before, 1 this tick):
-// h_k = R_k h, R_k = S_k St^-1 (vu_ticks), then the program's divide and
-// its region test with its bounds lo, hi (vu_inside).  h is the vertex
-// through the blended camera at the object's blended pose (rd_interp.c
-// blends a matched draw's model matrix with the camera), so this is the
-// tick's camera looking at the blended pose: only the camera is moved
-// back to the tick, never the object (an object moving between the ticks
-// is tested where it is drawn).
-VuVtx vu_tick_vertex(VuVtx v, uint k, float4 lo, float4 hi)
+// One corner of the triangle at the three cameras of vu_region_rule, lane
+// by lane (lane 0 the blended camera, 1 the tick before, 2 this tick, 3 the
+// blended camera again): the vertex as each camera gives it, then
+// vu_divide, vu_inside, vu_cut_position and the clip w, every lane what the
+// one-vertex functions compute, in the same order.  Tick k's vertex is h_k
+// = R_k h, R_k = S_k St^-1 (vu_ticks); h is the vertex through the blended
+// camera at the object's blended pose (rd_interp.c blends a matched draw's
+// model matrix with the camera), so this is the tick's camera looking at
+// the blended pose: only the camera is moved back to the tick, never the
+// object (an object moving between the ticks is tested where it is drawn).
+// Without VU_F_TICKS the tick lanes are unused.
+struct VuLanes {
+    float4 x, y, z, w; // vu_cut_position
+    float4 cw;         // the clip w (h.w)
+    bool4 inside;      // the region test with the program's bounds lo, hi
+};
+
+VuLanes vu_lanes(VuVtx v, float4 lo, float4 hi)
 {
-    VuVtx o = vu_vtx_init();
-    uint b = 4u * k;
-    precise float4 h = vu_ticks[b] * v.h.x + vu_ticks[b + 1u] * v.h.y + vu_ticks[b + 2u] * v.h.z +
-                       vu_ticks[b + 3u] * v.h.w;
-    o.h = h;
-    vu_divide(o);
-    o.inside = vu_inside(o.p, o.h.w, lo, hi);
+    precise float4 h0 = vu_ticks[0] * v.h.x + vu_ticks[1] * v.h.y + vu_ticks[2] * v.h.z +
+                        vu_ticks[3] * v.h.w;
+    precise float4 h1 = vu_ticks[4] * v.h.x + vu_ticks[5] * v.h.y + vu_ticks[6] * v.h.z +
+                        vu_ticks[7] * v.h.w;
+    float4 x = float4(v.h.x, h0.x, h1.x, v.h.x);
+    float4 y = float4(v.h.y, h0.y, h1.y, v.h.y);
+    float4 z = float4(v.h.z, h0.z, h1.z, v.h.z);
+    float4 w = float4(v.h.w, h0.w, h1.w, v.h.w);
+    // vu_divide (vu_rcp, the divide, ftoi4)
+    precise float4 r = 1.0 / w;
+    float4 fmax = asfloat((asuint(w) & 0x80000000u) | 0x7F7FFFFFu);
+    float4 q = select((asuint(w) & 0x7F800000u) == 0u, fmax, r);
+    precise float4 px = x * q, py = y * q, pz = z * q;
+    int4 gx = vu_ftoi_4(px * 16.0), gy = vu_ftoi_4(py * 16.0), gz = vu_ftoi_4(pz * 16.0);
+    VuLanes o;
+    o.cw = w;
+    // vu_inside
+    bool4 inLo = select(lo.x < px, select(lo.y < py, lo.w < w, VU_CUT_NO), VU_CUT_NO);
+    o.inside = select(inLo, select(px < hi.x, select(py < hi.y, w < hi.w, VU_CUT_NO), VU_CUT_NO),
+                      VU_CUT_NO);
+    // vu_has_gs_position
+    bool4 satX = select(gx == 0x7FFFFFFF, VU_CUT_ALL, gx == (int)0x80000000u);
+    bool4 satY = select(gy == 0x7FFFFFFF, VU_CUT_ALL, gy == (int)0x80000000u);
+    bool4 gzOk = select(gz >= 0, gz != 0x7FFFFFFF, VU_CUT_NO);
+    bool4 has = select(select(0.0 < w, gzOk, VU_CUT_NO), !select(satX, VU_CUT_ALL, satY), VU_CUT_NO);
+    // vu_vtx_position: vu_ndc and vu_depth of each lane
+    bool off = g_z.w != 0.0, exact = g_vp.x != 0.0;
+    float4 vx = select(off, px, float4(gx) * (1.0 / 16.0));
+    float4 vy = select(off, py, float4(gy) * (1.0 / 16.0));
+    precise float2 c = g_origin.xy + g_target.xy * 0.5;
+    precise float4 qx = (vx - c.x) * g_vp.z + g_frame.w + g_vpo.x;
+    precise float4 qy = (vy - c.y) * g_vp.w + g_frame.w + g_vpo.y;
+    precise float4 ex = qx * g_vp.x;
+    precise float4 ey = -(qy * g_vp.y);
+    precise float4 sx = vx - g_origin.x + g_origin.z;
+    precise float4 sy = vy - g_origin.y + g_origin.w;
+    precise float4 fx = sx * g_target.z * 2.0 - 1.0;
+    precise float4 fy = 1.0 - sy * g_target.w * 2.0;
+    float4 nx = select(exact, ex, fx), ny = select(exact, ey, fy);
+    uint4 zu = asuint(gz);
+    float scale = g_z.x;
+    precise float4 top = (1.0 - 1.0 / 256.0) + float4(zu - 0xFFFF0000u) * (1.0 / 16777216.0);
+    precise float4 zf = float4(zu) * scale;
+    float4 f32 = select(zu >= 0xFFFF0000u, top, zf);
+    uint zmax = select(scale < 1.0e-9, 0xFFFFFFFFu, (uint)(1.0 / scale) - 1u);
+    precise float4 d24 = float4(min(zu, zmax)) * scale;
+    float4 depth = select(scale < 1.5e-10, f32, d24);
+    // vu_homogeneous_position
+    precise float4 hz = 16.0 * z * g_z.x;
+    precise float4 hex = ((x - c.x * w) * g_vp.z + (g_frame.w + g_vpo.x) * w) * g_vp.x;
+    precise float4 hey = ((y - c.y * w) * g_vp.w + (g_frame.w + g_vpo.y) * w) * g_vp.y;
+    float2 og = g_origin.xy - g_origin.zw;
+    precise float4 hvx = (x - og.x * w) * g_target.z * 2.0;
+    precise float4 hvy = (y - og.y * w) * g_target.w * 2.0;
+    precise float4 hpx = hvx - w;
+    precise float4 hpy = w - hvy;
+    float4 hx = select(exact, hex, hpx), hy = select(exact, -hey, hpy);
+    // vu_cut_position
+    o.x = select(has, nx, hx);
+    o.y = select(has, ny, hy);
+    o.z = select(has, depth, hz);
+    o.w = select(has, float4(1.0, 1.0, 1.0, 1.0), w);
     return o;
 }
 
-// The triangle a, b, c at tick k's camera (vu_tick_vertex): its corners'
-// vu_cut_position, whether all three are inside and all in front of the eye
-struct VuTickTri {
-    float4 a, b, c;
-    bool allIn, front;
-};
-
-VuTickTri vu_tick_tri(VuVtx a, VuVtx b, VuVtx c, uint k, float4 lo, float4 hi)
-{
-    VuVtx ak = vu_tick_vertex(a, k, lo, hi);
-    VuVtx bk = vu_tick_vertex(b, k, lo, hi);
-    VuVtx ck = vu_tick_vertex(c, k, lo, hi);
-    VuTickTri t;
-    t.a = vu_cut_position(ak);
-    t.b = vu_cut_position(bk);
-    t.c = vu_cut_position(ck);
-    t.allIn = vu_and(vu_and(ak.inside, bk.inside), ck.inside);
-    t.front = 0.0 < min(ak.h.w, min(bk.h.w, ck.h.w));
-    return t;
-}
-
-// The region rule of the triangle a, b, c (corners' vu_cut_position pa,
-// pb, pc), whose program's region test has the bounds lo, hi.  The PS2
+// The region rule of the triangle a, b, c, whose program's region test
+// has the bounds lo, hi.  The PS2
 // drew only the ticks' pictures, each with the rule at its own camera; the
 // port also draws pictures between two ticks, through a camera blended
 // between theirs (rd_interp.c camSetup: the eye on the straight line
@@ -1068,8 +1111,7 @@ VuTickTri vu_tick_tri(VuVtx a, VuVtx b, VuVtx c, uint k, float4 lo, float4 hi)
 // tick before's, 2 this tick's, 3 the blended camera's again), against the
 // picture, and the ticks' against the frame when they are asked.
 // vu1_ref.h vu1ref_region_between is the CPU mirror.
-uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 pa, float4 pb, float4 pc, float4 lo,
-                    float4 hi)
+uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 lo, float4 hi)
 {
     if (vu_and(vu_and(a.inside, b.inside), c.inside)) {
         return VU_RULE_EXACT;
@@ -1077,38 +1119,26 @@ uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 pa, float4 pb, float4 pc, 
     if ((vu_draw.z & VU_F_BEHIND_EYE) != 0u) {
         return VU_RULE_CLIP;
     }
-    bool ticks = (vu_draw.z & VU_F_TICKS) != 0u;
-    bool front = 0.0 < min(a.h.w, min(b.h.w, c.h.w));
-    VuTickTri t0, t1;
-    t0.a = pa;
-    t0.b = pb;
-    t0.c = pc;
-    t0.allIn = false;
-    t0.front = front;
-    t1 = t0;
-    if (ticks) {
-        t0 = vu_tick_tri(a, b, c, 0u, lo, hi);
-        t1 = vu_tick_tri(a, b, c, 1u, lo, hi);
-    }
-    VuCutPoly z = vu_cut_z(float4(pa.x, t0.a.x, t1.a.x, pa.x), float4(pa.y, t0.a.y, t1.a.y, pa.y),
-                           float4(pa.z, t0.a.z, t1.a.z, pa.z), float4(pa.w, t0.a.w, t1.a.w, pa.w),
-                           float4(pb.x, t0.b.x, t1.b.x, pb.x), float4(pb.y, t0.b.y, t1.b.y, pb.y),
-                           float4(pb.z, t0.b.z, t1.b.z, pb.z), float4(pb.w, t0.b.w, t1.b.w, pb.w),
-                           float4(pc.x, t0.c.x, t1.c.x, pc.x), float4(pc.y, t0.c.y, t1.c.y, pc.y),
-                           float4(pc.z, t0.c.z, t1.c.z, pc.z), float4(pc.w, t0.c.w, t1.c.w, pc.w));
+    VuLanes la = vu_lanes(a, lo, hi), lb = vu_lanes(b, lo, hi), lc = vu_lanes(c, lo, hi);
+    VuCutPoly z = vu_cut_z(la.x, la.y, la.z, la.w, lb.x, lb.y, lb.z, lb.w, lc.x, lc.y, lc.z, lc.w);
     float4 pic = vu_picture_ndc();
     bool4 reachPic = vu_cut_rows(z, pic.zzzz, pic.wwww, pic.xxxx, pic.yyyy);
-    uint r = vu_rule_at(false, reachPic.x, front);
-    if (r != VU_RULE_DROP || !ticks) {
+    // every vertex in front of the eye
+    bool4 front = 0.0 < min(la.cw, min(lb.cw, lc.cw));
+    uint r = vu_rule_at(false, reachPic.x, front.x);
+    if (r != VU_RULE_DROP || (vu_draw.z & VU_F_TICKS) == 0u) {
         return r;
     }
     float4 frame = vu_frame_ndc();
     bool4 reachFrame = vu_cut_rows(z, frame.zzzz, frame.wwww, frame.xxxx, frame.yyyy);
+    bool4 allIn = select(la.inside, select(lb.inside, lc.inside, VU_CUT_NO), VU_CUT_NO);
     // whether each tick showed it: 0 not, 1 through the card test, 2 drawn there
-    uint r0 = vu_rule_at(t0.allIn, reachPic.y, t0.front);
-    uint r1 = vu_rule_at(t1.allIn, reachPic.z, t1.front);
-    uint s0 = select(vu_and(r0 != VU_RULE_DROP, reachFrame.y), select(r0 == VU_RULE_STRIP, 1u, 2u), 0u);
-    uint s1 = select(vu_and(r1 != VU_RULE_DROP, reachFrame.z), select(r1 == VU_RULE_STRIP, 1u, 2u), 0u);
+    uint r0 = vu_rule_at(allIn.y, reachPic.y, front.y);
+    uint r1 = vu_rule_at(allIn.z, reachPic.z, front.z);
+    uint s0 = select(vu_and(r0 != VU_RULE_DROP, reachFrame.y), select(r0 == VU_RULE_STRIP, 1u, 2u),
+                     0u);
+    uint s1 = select(vu_and(r1 != VU_RULE_DROP, reachFrame.z), select(r1 == VU_RULE_STRIP, 1u, 2u),
+                     0u);
     uint s = max(s0, s1);
     return select(s == 2u, VU_RULE_CLIP, select(s == 1u, VU_RULE_STRIP, VU_RULE_DROP));
 }
@@ -1294,17 +1324,15 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint vid, uint mode, float4 lo, f
 {
     uint kick = (vid & VU_INDEX_MASK) >> 2;
     uint corner = vid & 3u;
-    float4 pa = vu_vtx_position(a), pb = vu_vtx_position(b), pc = vu_vtx_position(c);
-    float4 ca = select(vu_has_gs_position(a), pa, vu_homogeneous_position(a.h));
-    float4 cb = select(vu_has_gs_position(b), pb, vu_homogeneous_position(b.h));
-    float4 cc = select(vu_has_gs_position(c), pc, vu_homogeneous_position(c.h));
     uint rule = VU_RULE_EXACT;
     if (mode == VU_CLIP_REGION) {
-        rule = vu_rule_card(vu_region_rule(a, b, c, ca, cb, cc, lo, hi), vid, kick);
+        rule = vu_rule_card(vu_region_rule(a, b, c, lo, hi), vid, kick);
     }
+    VuVtx me = vu_pick(a, b, c, corner);
+    float4 pme = vu_vtx_position(me);
+    float4 cme = select(vu_has_gs_position(me), pme, vu_homogeneous_position(me.h));
     bool exact;
-    VuVSOut o = vu_triangle_out_pos(a, b, c, vu_pick(a, b, c, corner), vu_pick4(pa, pb, pc, corner),
-                                    vu_pick4(ca, cb, cc, corner), mode, rule, exact);
+    VuVSOut o = vu_triangle_out_pos(a, b, c, me, pme, cme, mode, rule, exact);
     VuPlaneTri t = vu_plane_tri(a, b, c);
     o = vu_attr_planes(o, t, a, b, c, exact);
     if (chain) {
