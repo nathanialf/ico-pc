@@ -774,8 +774,16 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
             want = n;
         }
         w.wake = CreateEventW(NULL, FALSE, FALSE, NULL);
-        for (; w.wake && started < want; started++) {
-            th[started] = CreateThread(NULL, DX_PIPE_STACK_BYTES, dx_pipe_worker, &w,
+        /* kernel32's CreateThread by address: the game's PS2 kernel defines a
+         * CreateThread of its own (port/platform/kernel_host.c), so the name
+         * cannot be linked against kernel32 (diag_host.c does the same) */
+        typedef HANDLE(WINAPI * CreateThreadFn)(LPSECURITY_ATTRIBUTES, SIZE_T,
+                                                LPTHREAD_START_ROUTINE, LPVOID, DWORD, LPDWORD);
+        HMODULE k32 = GetModuleHandleA("kernel32.dll");
+        CreateThreadFn createThread =
+            k32 ? (CreateThreadFn)(void (*)(void))GetProcAddress(k32, "CreateThread") : NULL;
+        for (; w.wake && createThread && started < want; started++) {
+            th[started] = createThread(NULL, DX_PIPE_STACK_BYTES, dx_pipe_worker, &w,
                                        STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
             if (!th[started]) {
                 break;
