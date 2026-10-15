@@ -89,6 +89,9 @@
    PRESENT_FREE_NS is excused from the watchdog, for at most PRESENT_EXCUSE_NS */
 #define PRESENT_FREE_NS (1000000000ull)
 #define PRESENT_EXCUSE_NS (300ull * 1000000000ull)
+/* one wait in the system (ico_diag_os_wait_enter) ends the run only after
+   this many seconds (ico_diag_set_os_wait_limit) */
+#define OS_WAIT_LIMIT_S 600u
 #define STACK_SCAN_BYTES (64 * 1024)
 #define STACK_HITS 24
 #define FUNC_NAMES 64
@@ -119,6 +122,16 @@ static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
 static volatile unsigned long long present_since_ns;
 
 static volatile unsigned long long present_done_ns;
+/* ico_diag_os_wait_enter/leave (diag_host.h): when the main thread entered
+   the system's wait it is in (0 = not inside one), what it is, the time of
+   the waits that finished and the last one's, all in ico_diag_now_ns */
+static volatile unsigned long long os_wait_since_ns;
+static volatile unsigned long long os_wait_done_ns;
+static volatile unsigned long long os_wait_last_ns;
+static const char *volatile os_wait_what;
+static volatile unsigned int os_wait_limit_s = OS_WAIT_LIMIT_S;
+static double os_wait_seconds(double *current, unsigned long long *since_out);
+static const char *os_wait_name(void);
 /* ico_diag_set_effects_program: written by the host before the first present */
 static volatile int effects_program;
 static void (*exit_hook)(const char *reason);
@@ -873,7 +886,7 @@ static unsigned int same_beats;
 static void heartbeat(int fatal_path)
 {
     static char body[1024];
-    static char mem[64];
+    static char mem[160];
     heartbeat_body(body, sizeof body);
     if (strcmp(body, last_body) == 0) {
         same_beats++;
@@ -885,6 +898,16 @@ static void heartbeat(int fatal_path)
        much without a word), outside the comparison: it moves while the game
        stands still */
     memory_note(mem, sizeof mem);
+    {
+        /* a wait the system holds (ico_diag_os_wait_enter), also outside
+           the comparison: the game stands still while it lasts */
+        double cur;
+        (void)os_wait_seconds(&cur, NULL);
+        if (cur >= 1.0) {
+            const size_t n = strlen(mem);
+            snprintf(mem + n, sizeof mem - n, " | in %s %.0f s", os_wait_name(), cur);
+        }
+    }
     if (fatal_path) {
         flog("ico_pc: heartbeat %.1f s | %s%s", ico_diag_uptime(), body, mem);
     } else if (same_beats + 1 >= NO_PROGRESS_BEATS) {
@@ -2571,6 +2594,59 @@ static double present_seconds(double *current)
     return (double)(done + present_excused(cur)) / 1e9;
 }
 
+void ico_diag_os_wait_enter(const char *what)
+{
+    os_wait_what = what;
+    /* 0 means "not inside one": a start at 0 ns is moved by one */
+    __atomic_store_n(&os_wait_since_ns, ico_diag_now_ns() | 1ull, __ATOMIC_RELEASE);
+}
+
+void ico_diag_os_wait_leave(void)
+{
+    const unsigned long long since = os_wait_since_ns;
+    if (since != 0) {
+        const unsigned long long now = ico_diag_now_ns();
+        const unsigned long long d = now > since ? now - since : 0;
+        os_wait_last_ns = d;
+        __atomic_add_fetch(&os_wait_done_ns, d, __ATOMIC_RELEASE);
+    }
+    __atomic_store_n(&os_wait_since_ns, 0ull, __ATOMIC_RELEASE);
+}
+
+void ico_diag_set_os_wait_limit(unsigned int seconds)
+{
+    os_wait_limit_s = seconds;
+}
+
+/* Seconds spent in the system's waits so far (finished ones plus the one
+   in progress). *current: the one in progress, 0 if none; *since: its
+   start (0 if none). */
+static double os_wait_seconds(double *current, unsigned long long *since_out)
+{
+    unsigned long long done, since, now, cur = 0;
+    do {
+        done = __atomic_load_n(&os_wait_done_ns, __ATOMIC_ACQUIRE);
+        since = __atomic_load_n(&os_wait_since_ns, __ATOMIC_ACQUIRE);
+        now = ico_diag_now_ns();
+    } while (done != __atomic_load_n(&os_wait_done_ns, __ATOMIC_ACQUIRE));
+    if (since != 0 && now > since) {
+        cur = now - since;
+    }
+    if (current != NULL) {
+        *current = (double)cur / 1e9;
+    }
+    if (since_out != NULL) {
+        *since_out = since;
+    }
+    return (double)(done + cur) / 1e9;
+}
+
+static const char *os_wait_name(void)
+{
+    const char *w = os_wait_what;
+    return w != NULL ? w : "a call into the system";
+}
+
 static void watchdog_fire(const char *reason)
 {
     char where[96];
@@ -2589,6 +2665,12 @@ static void watchdog_fire(const char *reason)
             flog("ico_pc: the game has waited %.0f s for a picture to be shown (an effects "
                  "program may be preparing its effects)",
                  cur);
+        }
+        (void)os_wait_seconds(&cur, NULL);
+        if (cur > 0.0) {
+            flog("ico_pc: the main thread has been inside %s for %.0f s (a call into the "
+                 "system that has not returned)",
+                 os_wait_name(), cur);
         }
     }
     if (sample_main() == 0) {
@@ -2664,6 +2746,16 @@ static void watchdog_loop(void)
        are not the game's idle time */
     double pres_start = present_seconds(NULL);
     double pres_alive = pres_start;
+    /* the same for the system's waits (ico_diag_os_wait_enter): the time
+       the main thread spent where the system held it */
+    double os_start = os_wait_seconds(NULL, NULL);
+    double os_alive = os_start;
+    /* the wait the "waiting" line was written for (its start; 0: none),
+       and the suspended time inside the wait in progress (not the
+       system's holding: the machine slept) */
+    unsigned long long os_logged = 0;
+    unsigned long long os_gap_since = 0;
+    double os_gap = 0.0;
     unsigned int last_ticks = 0;
     unsigned int last_progress = progress;
     unsigned int epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
@@ -2671,12 +2763,16 @@ static void watchdog_loop(void)
        it, so they are seen with it) */
     unsigned int first_s = wd_first_s;
     unsigned int later_s = wd_later_s;
-    char reason[160];
+    char reason[200];
     for (;;) {
         double now;
         unsigned int ticks;
         unsigned int prog;
         double pres;
+        double os;
+        double os_cur;
+        unsigned long long os_since;
+        unsigned int lim;
         if (epoch != __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE)) {
             /* the limits were just set (ico_diag_start): both count from now */
             epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
@@ -2684,6 +2780,7 @@ static void watchdog_loop(void)
             later_s = wd_later_s;
             start = last_alive = last_poll = ico_diag_uptime();
             pres_start = pres_alive = present_seconds(NULL);
+            os_start = os_alive = os_wait_seconds(NULL, NULL);
             last_ticks = ticks_fn != NULL ? ticks_fn() : 0;
             last_progress = progress;
         }
@@ -2703,6 +2800,11 @@ static void watchdog_loop(void)
             continue;
         }
         now = ico_diag_uptime();
+        os = os_wait_seconds(&os_cur, &os_since);
+        if (os_since != os_gap_since) {
+            os_gap_since = os_since;
+            os_gap = 0.0;
+        }
         if (now - last_poll > SUSPEND_GAP_S || wd_paused) {
             /* the clock jumped between two polls: the system slept (Windows'
                GetTickCount64 counts sleep and hibernation) or the process was
@@ -2711,6 +2813,13 @@ static void watchdog_loop(void)
                neither limit counts it. */
             start += now - last_poll;
             last_alive += now - last_poll;
+            if (os_since != 0) {
+                /* nor is it the system's holding of a wait: the bound
+                   below does not count a night's sleep inside the pump */
+                os_gap += now - last_poll;
+                os_start += now - last_poll;
+                os_alive += now - last_poll;
+            }
         }
         last_poll = now;
         if (wd_paused) {
@@ -2732,12 +2841,41 @@ static void watchdog_loop(void)
             last_progress = prog;
             last_alive = now;
             pres_alive = pres;
+            os_alive = os;
         }
-        if (first_s != 0 && ticks == 0 && now - start - (pres - pres_start) >= first_s) {
+        /* The main thread inside a wait the system holds (the window's
+           event pump): its time counts towards neither limit below, since
+           the game's code is not running and cannot be hung. Once a wait
+           outlasts the limit in force it is named, once; only past the
+           bound for one wait does the run end, so a deadlock in the system
+           is still reported. */
+        lim = ticks == 0 ? first_s : later_s;
+        if (os_logged != 0 && os_since != os_logged) {
+            /* the wait named below came back (os_wait_last_ns: it, unless
+               a later one already finished, which is short) */
+            ico_diag_log("ico_pc: watchdog: %s returned after %.1f s; the game goes on",
+                         os_wait_name(), (double)os_wait_last_ns / 1e9);
+            os_logged = 0;
+        }
+        if (os_since != 0 && os_since != os_logged && lim != 0 && os_cur - os_gap >= lim) {
+            os_logged = os_since;
+            ico_diag_log("ico_pc: watchdog: %s has not returned for %.0f s (the system is holding "
+                         "it: the game is not hung); waiting",
+                         os_wait_name(), os_cur - os_gap);
+        }
+        if (os_since != 0 && os_wait_limit_s != 0 && os_cur - os_gap >= os_wait_limit_s) {
+            snprintf(reason, sizeof reason,
+                     "%s has not returned for %u s (the system holds it; the limit is [dev] "
+                     "watchdog_pump)",
+                     os_wait_name(), os_wait_limit_s);
+            watchdog_fire(reason);
+        } else if (first_s != 0 && ticks == 0 &&
+                   now - start - (pres - pres_start) - (os - os_start) >= first_s) {
             snprintf(reason, sizeof reason, "no Main tick %u s after boot started (watchdog=%u)",
                      first_s, first_s);
             watchdog_fire(reason);
-        } else if (later_s != 0 && ticks > 0 && now - last_alive - (pres - pres_alive) >= later_s) {
+        } else if (later_s != 0 && ticks > 0 &&
+                   now - last_alive - (pres - pres_alive) - (os - os_alive) >= later_s) {
             if (movie_playing) {
                 snprintf(reason, sizeof reason,
                          "a movie was playing and showed no new picture for %u s (the last "
@@ -2792,8 +2930,10 @@ void ico_diag_start(unsigned int first_s, unsigned int later_s)
         return;
     }
     ico_diag_log("ico_pc: diagnostics: heartbeat every %.0f s; watchdog: first Main tick within "
-                 "%u s, then a new one or a movie picture within %u s (0 = off)",
-                 HEARTBEAT_S, first_s, later_s);
+                 "%u s, then a new one or a movie picture within %u s (0 = off); time the system "
+                 "holds the window's event pump is not counted, up to %u s for one wait (0 = no "
+                 "limit)",
+                 HEARTBEAT_S, first_s, later_s, os_wait_limit_s);
 }
 
 void ico_diag_start_reporter(void)

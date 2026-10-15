@@ -443,6 +443,9 @@ static const struct {
     {"audio.enabled", "audio"},
     {"dev.ticks", "ticks"},
     {"dev.watchdog", "watchdog"},
+    /* the bound for one wait the system holds (the window's event pump):
+       seconds, default 600, 0 no limit (diag_host.h, issue 105) */
+    {"dev.watchdog_pump", "watchdog_pump"},
     {"dev.trace", "trace"},
     {"dev.dump_every", "dump_every"},
     {"dev.dump_dir", "dump_dir"},

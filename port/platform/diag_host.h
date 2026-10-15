@@ -108,6 +108,22 @@ void ico_diag_set_effects_program(int loaded);
 void ico_diag_present_enter(void);
 void ico_diag_present_leave(void);
 
+/* The main thread is inside a call that waits on the operating system and
+   runs none of the game's code (the window's event pump, SDL_PollEvent):
+   ico_diag_os_wait_enter before it, ico_diag_os_wait_leave after it, on the
+   main thread. what names it for the log ("the window's event pump"; a
+   static string). The time spent inside counts towards neither watchdog
+   limit (issue 105: Windows held the pump for 50 s at a time while the game
+   idled). When one wait outlasts the limit that would have ended the run,
+   the watchdog logs once "<what> has not returned for N s (the system is
+   holding it: the game is not hung); waiting", and the heartbeat says how
+   long it has been held; the run ends with the watchdog's report only when
+   one wait passes the bound of ico_diag_set_os_wait_limit (default 600 s,
+   0: never), so a true deadlock in the system is still reported. */
+void ico_diag_os_wait_enter(const char *what);
+void ico_diag_os_wait_leave(void);
+void ico_diag_set_os_wait_limit(unsigned int seconds);
+
 /* Starts the heartbeat and watchdog thread. first_s: seconds from now
    without any Main tick; later_s: seconds without a new Main tick or new
    progress after the first tick. 0 turns a limit off. */

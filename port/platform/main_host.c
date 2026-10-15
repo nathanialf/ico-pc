@@ -59,6 +59,11 @@
  *                            and reported when no Main tick came S seconds
  *                            after boot started, or no new one for 2*S
  *                            seconds; 0 turns it off (diag_host.h)
+ *   watchdog_pump            ini watchdog_pump=S (default 600): the time the
+ *                            system holds the window's event pump is not
+ *                            counted by the watchdog, up to S seconds for one
+ *                            wait; 0 is no limit (diag_host.h
+ *                            ico_diag_set_os_wait_limit, issue 105)
  *
  * Developer overrides, which win over all of the above:
  *
@@ -1762,6 +1767,16 @@ static int host_main(int argc, char **argv)
     watchdog = WATCHDOG_DEFAULT_S;
     if (v != NULL && v[0] != '\0' && parse_count(v, &watchdog) != 0) {
         ico_host_fatal(log_file(), "watchdog=%s in %s is not a number of seconds.", v, ini_path);
+    }
+    v = ico_ini_get(&ini, "watchdog_pump");
+    if (v != NULL && v[0] != '\0') {
+        unsigned long pump_s;
+
+        if (parse_count(v, &pump_s) != 0) {
+            ico_host_fatal(log_file(), "watchdog_pump=%s in %s is not a number of seconds.", v,
+                           ini_path);
+        }
+        ico_diag_set_os_wait_limit(pump_s > 86400ul ? 86400u : (unsigned int)pump_s);
     }
     at_shutdown(summary);
 

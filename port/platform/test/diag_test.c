@@ -32,6 +32,20 @@
  *               2 s after the present ended; a long present before the first
  *               tick does not trip a 2 s first limit either; without the
  *               effects program a 2.5 s present fires inside it;
+ *   - pump:     the main thread inside a wait the system holds (the
+ *               window's event pump, ico_diag_os_wait_enter; issue 105) for
+ *               3.5 s against a 1 s later limit (the player's 70 s against
+ *               60 s, scaled): no fire; "has not returned for 1 s (the
+ *               system is holding it: the game is not hung); waiting" once,
+ *               then "returned after 3.5 s"; 0.4 s after it with the tick
+ *               still standing (the next step has not run yet) no fire
+ *               either; then the tick moves and the run ends with exit 0;
+ *               pumphang: the same, then the game's own code stands still:
+ *               the later limit fires 1 s after it, so the excuse does not
+ *               leak into a game-side stall; pumpbound: a wait that never
+ *               returns ends the run at the bound for one wait (3 s here,
+ *               ico_diag_set_os_wait_limit; 600 s by default, which the
+ *               watchdog's start line names) with the crash-style report;
  *   - lines:    milestones and logs reach the file at once;
  *   - activity: the start-up activity file (issue 93): written with each
  *               note while the start-up set is created (a batch's note,
@@ -253,6 +267,35 @@ static void present_child(int first, int effects)
         exit(0);
     }
     pause_ms(5000);
+    exit(0);
+}
+
+/* The window's event pump held by the system (issue 105), scaled: 3.5 s
+   inside ico_diag_os_wait_enter against a 1 s later limit, then 0.4 s
+   with the tick still standing (the step after the pump has not run yet),
+   then a tick. mode "pump": exit 0 after it; "pumphang": the game's code
+   then stands still until the watchdog ends the run; "pumpbound": the
+   bound for one wait is 3 s and the wait never returns (6 s). */
+static void pump_child(const char *mode)
+{
+    const int bound = strcmp(mode, "pumpbound") == 0;
+    fake_ticks = 1;
+    if (bound) {
+        ico_diag_set_os_wait_limit(3);
+    }
+    ico_diag_start(0, 1);
+    ico_diag_os_wait_enter("the window's event pump");
+    pause_ms(bound ? 6000 : 3500);
+    ico_diag_os_wait_leave();
+    ico_diag_log("test: pump returned");
+    pause_ms(400);
+    fake_ticks++;
+    pause_ms(500);
+    fake_ticks++;
+    ico_diag_log("test: game resumed");
+    if (strcmp(mode, "pumphang") == 0) {
+        pause_ms(5000);
+    }
     exit(0);
 }
 
@@ -542,6 +585,8 @@ static void run_child(const char *mode, const char *log)
         loss_child(mode, log);
     } else if (strcmp(mode, "early") == 0) {
         early_child();
+    } else if (strncmp(mode, "pump", 4) == 0) {
+        pump_child(mode);
     } else if (strcmp(mode, "segv") == 0) {
         fn = segv_thread;
     } else if (strcmp(mode, "segvnote") == 0) {
@@ -718,8 +763,59 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "the main thread was at") != NULL);
     CHECK(strstr(s, "#1 spin_thread") != NULL);
     CHECK(strstr(s, "test: exit hook (watchdog)") != NULL);
+    /* the bound for one wait in the system, by default 10 minutes */
+    CHECK(strstr(s, "time the system holds the window's event pump is not counted, up to 600 s "
+                    "for one wait") != NULL);
     if (fails) {
         printf("--- watchdog log ---\n%s\n", s);
+    }
+
+    /* issue 105: the system holds the window's event pump for 3.5 s against
+       a 1 s limit (70 s against 60 s, scaled): not a hang */
+    r = run(argv[0], "pump", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "WATCHDOG:") == NULL);
+    CHECK(strstr(s, "ico_pc: watchdog: the window's event pump has not returned for 1 s (the "
+                    "system is holding it: the game is not hung); waiting\n") != NULL);
+    {
+        /* named once per stall */
+        const char *w = strstr(s, "has not returned for");
+        CHECK(w != NULL && strstr(w + 1, "has not returned for") == NULL);
+    }
+    CHECK(strstr(s, "ico_pc: watchdog: the window's event pump returned after 3.") != NULL);
+    CHECK(strstr(s, "| in the window's event pump ") != NULL);
+    CHECK(strstr(s, "test: game resumed") != NULL);
+    if (fails) {
+        printf("--- pump log ---\n%s\n", s);
+    }
+    /* ... and a stall in the game's own code after it still ends the run */
+    r = run(argv[0], "pumphang", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "test: game resumed") != NULL);
+    CHECK(strstr(s, "WATCHDOG: no new Main tick for 1 s (the last was tick 3, progress 0)") !=
+          NULL);
+    CHECK(strstr(s, "test: game resumed") != NULL && strstr(s, "WATCHDOG:") != NULL &&
+          strstr(s, "test: game resumed") < strstr(s, "WATCHDOG:"));
+    CHECK(strstr(s, "the main thread has been inside") == NULL);
+    if (fails) {
+        printf("--- pumphang log ---\n%s\n", s);
+    }
+    /* ... and a wait that never returns ends it at the bound for one wait */
+    r = run(argv[0], "pumpbound", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "up to 3 s for one wait") != NULL);
+    CHECK(strstr(s, "the window's event pump has not returned for 1 s (the system is holding "
+                    "it: the game is not hung); waiting") != NULL);
+    CHECK(strstr(s, "WATCHDOG: the window's event pump has not returned for 3 s (the system "
+                    "holds it; the limit is [dev] watchdog_pump)") != NULL);
+    CHECK(strstr(s, "the main thread has been inside the window's event pump for 3 s") != NULL);
+    CHECK(strstr(s, "the main thread was at") != NULL);
+    CHECK(strstr(s, "test: pump returned") == NULL);
+    if (fails) {
+        printf("--- pumpbound log ---\n%s\n", s);
     }
 
     /* the second sign of life: 2.5 s of progress without a tick against a
