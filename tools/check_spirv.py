@@ -4,9 +4,27 @@
 The SPIR-V gate: every *.spv under the directories given is read and every
 finding is printed as `file: gate: text`; the exit status is 1 when there is
 one.  --sizes also prints one line per module: its stage, words,
-instructions, basic blocks (OpLabel), OpPhi, OpLoopMerge and OpDot counts.
+instructions, basic blocks (OpLabel), OpPhi, OpLoopMerge and OpDot counts,
+and the shape census: comparisons with a vector-of-booleans result, OpSelect
+with a boolean or vector-of-booleans result, OpAny and OpAll.
 
 Gates:
+  shape      a vertex shader has no vector of booleans (no OpTypeVector of
+             OpTypeBool), no OpAny or OpAll and no OpSelect whose result is
+             a boolean or a vector of booleans: the forms of v0.5.2's
+             vertex shaders, which built on every device the port has
+             failed on (scalar comparisons joined with &&, || and !, which
+             DXC makes branches, ifs, and ?: between numbers).  v0.7.6's VU
+             vertex shaders built on a PowerVR DXT-48-1536's driver
+             (driver 26.1); the next set, the same opcodes but 1,476
+             comparisons of float vectors, 1,660 selects of boolean
+             vectors and 116 any(), crashed its compiler (SIGSEGV in the
+             driver on the first pipeline with a VU vertex shader and
+             on vu_particle_vs alone).  The HLSL avoids every construct
+             the optimiser turns into one (docs/port/SHADERS.md, The
+             envelope): a vector chosen after it is computed becomes a
+             select on a vector of booleans, so a vector is chosen value
+             by value.
   envelope   a vertex shader uses only the opcodes of the vertex shaders
              proven on every device the port has failed on (VS_OPCODES):
              the union over v0.5.2's eleven VU vertex shaders and the 2D
@@ -28,11 +46,12 @@ Gates:
              start-up set in a time about proportional to the size: v0.7.6's
              VU vertex shaders were 81k to 93k words (the cut copied three
              times as branch chains), minutes on a phone.  The vertex budget
-             is the largest VU vertex shader inside the envelope (vu_lit_vs,
-             20,979: the exact cut for three triangles at once, the tick
-             cameras in its lanes, the attribute planes) and about 5
-             percent; v0.5.2's, without the cut, the ticks and the planes,
-             were up to 16,268.
+             is a tripwire about a tenth above the largest VU vertex shader
+             in the forms above (vu_lit_vs, 51,005: the cut once for the
+             blended camera, the two ticks written out with a z cut each
+             and their picture and frame rows, the attribute planes);
+             v0.5.2's, without the cut, the ticks and the planes, were up
+             to 16,268.
   aggregate  no instruction produces or stores a whole array: no OpLoad,
              OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi,
              OpSelect, OpCopyObject or OpCopyLogical whose type is an array
@@ -58,6 +77,10 @@ import sys
 
 OP_UNDEF = 1
 OP_ENTRY_POINT = 15
+OP_TYPE_BOOL = 20
+OP_TYPE_VECTOR = 23
+OP_ANY = 154
+OP_ALL = 155
 OP_TYPE_ARRAY = 28
 OP_TYPE_RUNTIME_ARRAY = 29
 OP_TYPE_STRUCT = 30
@@ -121,7 +144,7 @@ OTHER_NAMES = {77: "OpVectorExtractDynamic", 78: "OpVectorInsertDynamic", 126: "
                173: "OpSGreaterThan", 177: "OpSLessThan", 178: "OpULessThanEqual",
                179: "OpSLessThanEqual", 195: "OpShiftRightArithmetic", 198: "OpBitwiseXor",
                200: "OpNot", 252: "OpKill"}
-VS_BUDGET = 22000
+VS_BUDGET = 56000
 PS_BUDGET = 78560
 
 
@@ -164,6 +187,11 @@ def check(path, sizes=None):
         elif op in TYPED_VALUE_OPS or op == OP_ACCESS_CHAIN or op == OP_VARIABLE:
             value_type[ops[1]] = ops[0]
     vertex = MODEL_VERTEX in models
+    bools = {ops[0] for op, ops in insts if op == OP_TYPE_BOOL}
+    bvecs = {ops[0] for op, ops in insts if op == OP_TYPE_VECTOR and ops[1] in bools}
+    vcmp = sum(1 for op, ops in insts if 164 <= op <= 191 and ops and ops[0] in bvecs)
+    bsel = sum(1 for op, ops in insts if op == OP_SELECT and ops[0] in bools | bvecs)
+    anyall = census.get(OP_ANY, 0) + census.get(OP_ALL, 0)
     out = []
     counts = {}
     local = 0
@@ -180,6 +208,9 @@ def check(path, sizes=None):
         out.append("aggregate: array-typed values: " + agg)
     if local:
         out.append("localarray: %d local arrays in a vertex shader" % local)
+    if vertex and (bvecs or bsel or anyall):
+        out.append("shape: %d vector-of-boolean types, %d vector comparisons, %d boolean "
+                   "selects, %d OpAny/OpAll" % (len(bvecs), vcmp, bsel, anyall))
     if vertex:
         denied = ", ".join("%d %s" % (census[op], DENIED[op]) for op in sorted(DENIED)
                            if op in census)
@@ -194,10 +225,11 @@ def check(path, sizes=None):
         out.append("size: %d words, over the %s budget of %d" %
                    (nwords, "vertex" if vertex else "pixel", budget))
     if sizes is not None:
-        sizes.append("%-32s %-2s %7d words %6d insts %5d blocks %5d phis %3d loops %3d dot" %
+        sizes.append("%-32s %-2s %7d words %6d insts %5d blocks %5d phis %3d loops %3d dot "
+                     "%4d vcmp %4d bsel %3d any" %
                      (os.path.basename(path), "vs" if vertex else "ps", nwords, len(insts),
                       census.get(OP_LABEL, 0), census.get(OP_PHI, 0),
-                      census.get(OP_LOOP_MERGE, 0), census.get(OP_DOT, 0)))
+                      census.get(OP_LOOP_MERGE, 0), census.get(OP_DOT, 0), vcmp, bsel, anyall))
     return out
 
 
