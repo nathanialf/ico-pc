@@ -748,7 +748,7 @@ static RdActivityFn s_activityFn;
 /* the batch's note while its pipelines are compiled ("" outside): a
  * creation of the progress screen's own in the middle of it puts it back
  * after its own note, so a crash on a worker thread names the batch */
-static char s_batchNote[160];
+static char s_batchNote[256];
 
 void rd_set_activity_fn(RdActivityFn fn)
 {
@@ -1137,7 +1137,7 @@ uint32_t rd_precreate_pipelines(void)
             nb++;
         }
         if (nb > 0) {
-            char note[160];
+            char note[256];
             char a[96], z[96];
             keyWords(&bk[0], a, sizeof(a));
             keyWords(&bk[nb - 1], z, sizeof(z));
