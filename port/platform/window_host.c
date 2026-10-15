@@ -1582,7 +1582,7 @@ static void toggle_fullscreen(void)
    file notes the loss either way (diag_host.h ico_diag_note_device_loss). */
 static void loss_dump(char *name, size_t name_size)
 {
-    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], lost[ICO_PATH_MAX + 32], before[ICO_PATH_MAX + 32],
+    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], lost[ICO_PATH_MAX + 64], before[ICO_PATH_MAX + 64],
         stamp[32], why[160];
     const time_t now = time(NULL);
     const struct tm *tm = localtime(&now);
