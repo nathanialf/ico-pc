@@ -454,10 +454,10 @@ boot corpus's title frame and computes on the CPU every vertex stream index the 
 can read for it, the way the shaders compute it (`vu_vertex_qw`, `vu_batch_qw`): the triangle's
 three vertices (the clip plane's distance reads one of them), a grid's batch colour, a particle's
 header and two qwords. The shipped shaders scan no strip: the card test's verdicts are bits the CPU
-puts in VuBoneCB (`vu_strip_card`, its index clamped to qword 239). The audit still adds v0.7.6's
-strip scans on the stream's own strip flags and their walk over the strip, taken to run for every
-kick (`stripBounds`), reads the shaders no longer make, so it stays conservative: a stream it
-passes is safe for either version's shaders. Each index is checked against the draw's own stream,
+puts in VuBoneCB (`vu_strip_card`, its index clamped to qword 239). The audit also checks a strip
+test's scans on the stream's own strip flags and its walk over the strip, taken to run for every
+kick (`stripBounds`): reads the shipped shaders do not make, a superset that keeps the audit
+conservative. Each index is checked against the draw's own stream,
 the qwords the replay uploads for it (`doVuDraw`); a kick below 2 and a draw's index range past its
 mesh's list fail too. VuCB's tick cameras and VU memory and VuBoneCB are fixed-size blocks the
 indices cannot leave (static asserts; `vu_bone_mat` and `vu_strip_card` clamp). Reported, not
