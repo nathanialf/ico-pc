@@ -6,6 +6,10 @@
 #   - --passes 1-P (the whole frame) draws the same DISPLAY picture as a
 #     replay without a window, and does not stop the walk
 #   - --passes 1 stops the walk where pass 2 begins (when there is one)
+#   - the second level's draw window: --passes 1-P --draws 1-N (every draw of
+#     pass P) draws the plain picture; --loss-bisect --passes P --draws 1-2
+#     and --loss-bisect --passes P --mask-marks run one step each, clean on
+#     this device, and name the last draw they recorded
 #   Exit 77 (no device) skips.
 # -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${DUMP}")
@@ -60,4 +64,37 @@ if(passes GREATER 1)
     message(FATAL_ERROR "--passes 1: exit ${rc}, want the walk stopped at pass 2:\n${out}\n${err}")
   endif()
 endif()
-message(STATUS "rd_replay_tool_loss_bisect: ${passes} passes, ${replays} replays, clean")
+
+# the second level: the draw window and one step each way
+execute_process(COMMAND "${TOOL}" "${DUMP}" - --passes ${passes}
+                RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT rc EQUAL 0 OR NOT out MATCHES "; ([0-9]+) draws in pass ${passes}")
+  message(FATAL_ERROR "--passes ${passes}: exit ${rc}, no draw count:\n${out}\n${err}")
+endif()
+set(draws ${CMAKE_MATCH_1})
+if(draws GREATER 0)
+  execute_process(COMMAND "${TOOL}" "${DUMP}" "${OUT}/draws.png" --target DISPLAY
+                          --passes 1-${passes} --draws 1-${draws}
+                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0 OR NOT out MATCHES "draws 1-${draws} of pass ${passes}: ${draws} drawn; the last: ")
+    message(FATAL_ERROR "--draws 1-${draws}: exit ${rc}:\n${out}\n${err}")
+  endif()
+  file(SHA256 "${OUT}/draws.png" c)
+  if(NOT a STREQUAL c)
+    message(FATAL_ERROR "--passes 1-${passes} --draws 1-${draws} drew another picture than the "
+                        "plain replay")
+  endif()
+  execute_process(COMMAND "${TOOL}" "${DUMP}" - --loss-bisect --passes ${passes} --draws 1-2
+                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0 OR NOT out MATCHES "loss bisect step: clean; pass ${passes} of ${passes}, draws 1..2 of ${draws}"
+     OR NOT out MATCHES "loss bisect step: the last draw: list ")
+    message(FATAL_ERROR "--loss-bisect --draws 1-2: exit ${rc}:\n${out}\n${err}")
+  endif()
+  execute_process(COMMAND "${TOOL}" "${DUMP}" - --loss-bisect --passes ${passes} --mask-marks
+                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0 OR NOT out MATCHES "loss bisect step: clean; pass ${passes} of ${passes}, draws 1..${draws} of ${draws}, marks masked, ${draws} drawn")
+    message(FATAL_ERROR "--loss-bisect --mask-marks: exit ${rc}:\n${out}\n${err}")
+  endif()
+endif()
+message(STATUS "rd_replay_tool_loss_bisect: ${passes} passes, ${replays} replays, clean; "
+               "${draws} draws in the last pass")

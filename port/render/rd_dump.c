@@ -993,6 +993,73 @@ static const RdPassRec *ringEntry(uint64_t seq)
 /* the bisect's replays that only name the frame's pipelines, at most */
 #define RD_BISECT_GATHER_ROUNDS 4
 
+/* The frame's pipelines first, as the start-up set makes its own: a
+ * replay with nothing drawn that only names the keys it finds no pipeline
+ * for, then those compiled on worker threads (rd_loss_bisect,
+ * rd_loss_bisect_step).  false when the progress function stopped it
+ * (line says so). */
+static bool bisectPipelines(RdFrame *f, char *line, size_t size)
+{
+    rd__replay_set_window(UINT32_MAX, 0);
+    for (int round = 0; round < RD_BISECT_GATHER_ROUNDS && !rhi_device_lost(); round++) {
+        bool stopped = false;
+        rd__pipeline_gather(true);
+        (void)rd__replay_frame(f, (int)f->keep, false);
+        rd__pipeline_gather(false);
+        rhi_wait_idle();
+        if (rhi_device_lost() || rd__pipeline_create_gathered(&stopped) == 0) {
+            break;
+        }
+        if (stopped) {
+            snprintf(line, size,
+                     "stopped while creating the frame's pipelines (the game is "
+                     "closing)");
+            rd__replay_set_window(0, 0);
+            return false;
+        }
+    }
+    return true;
+}
+
+void rd_loss_bisect_step(const char *path, uint32_t pass, uint32_t drawFirst, uint32_t drawLast,
+                         int filter, uint32_t arg, RdLossStep *out)
+{
+    memset(out, 0, sizeof(*out));
+    const double t0 = rd__now_ms();
+    if (!g_rd.inited || !g_rd.hasDevice || rhi_device_lost()) {
+        snprintf(out->line, sizeof(out->line), "the renderer has no device");
+        return;
+    }
+    RdFrame f;
+    if (!path || !rd__load_frame(path, &f)) {
+        snprintf(out->line, sizeof(out->line), "the dump %s could not be read",
+                 path ? path : "(none)");
+        return;
+    }
+    RdReplayWindowStats st;
+    if (!bisectPipelines(&f, out->line, sizeof(out->line))) {
+        rd__frame_free(&f);
+        out->ms = rd__now_ms() - t0;
+        return;
+    }
+    /* the window: passes 1 .. pass - 1 whole, pass `pass`'s draws
+     * drawFirst .. drawLast through the filter */
+    rd__replay_set_window_draws(1, pass ? pass : 1u, drawFirst, drawLast, filter, arg);
+    if (!rhi_device_lost()) {
+        (void)rd__replay_frame(&f, (int)f.keep, false);
+        rhi_wait_idle();
+    }
+    rd__replay_window_stats(&st);
+    rd__replay_window_note(&out->note);
+    out->passes = st.passes;
+    out->draws = st.lastDraws;
+    out->drawn = st.drawn;
+    out->result = rhi_device_lost() ? RD_BISECT_LOST : RD_BISECT_CLEAN;
+    rd__replay_set_window(0, 0);
+    rd__frame_free(&f);
+    out->ms = rd__now_ms() - t0;
+}
+
 void rd_loss_bisect(const char *path, RdLossBisect *out)
 {
     memset(out, 0, sizeof(*out));
@@ -1017,25 +1084,11 @@ void rd_loss_bisect(const char *path, RdLossBisect *out)
      * a replay names new keys (one a draw asks for only once another was
      * made: the second pass of a fallback pair), at most
      * RD_BISECT_GATHER_ROUNDS times; what is left is made as the replays
-     * below need it */
-    rd__replay_set_window(UINT32_MAX, 0);
-    for (int round = 0; round < RD_BISECT_GATHER_ROUNDS && !rhi_device_lost(); round++) {
-        bool stopped = false;
-        rd__pipeline_gather(true);
-        (void)rd__replay_frame(&f, (int)f.keep, false);
-        rd__pipeline_gather(false);
-        rhi_wait_idle();
-        if (rhi_device_lost() || rd__pipeline_create_gathered(&stopped) == 0) {
-            break;
-        }
-        if (stopped) {
-            snprintf(out->line, sizeof(out->line),
-                     "stopped while creating the frame's pipelines (the game is closing)");
-            rd__replay_set_window(0, 0);
-            rd__frame_free(&f);
-            out->ms = rd__now_ms() - t0;
-            return;
-        }
+     * below need it (bisectPipelines) */
+    if (!bisectPipelines(&f, out->line, sizeof(out->line))) {
+        rd__frame_free(&f);
+        out->ms = rd__now_ms() - t0;
+        return;
     }
     /* the passes counted, nothing drawn: their clears and layout changes
      * run, and every pipeline the frame binds is made (any the rounds
@@ -1066,6 +1119,7 @@ void rd_loss_bisect(const char *path, RdLossBisect *out)
         }
         out->result = RD_BISECT_LOST;
         out->pass = k;
+        out->draws = st.lastDraws;
         const RdPassRec *e = ringEntry(st.lastSeq);
         if (e) {
             rd_passring_format_bisect(e, k, out->passes, st.lastDraws, rd_perf_post_name, out->line,

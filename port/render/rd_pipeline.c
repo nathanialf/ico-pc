@@ -756,6 +756,13 @@ void rd_set_activity_fn(RdActivityFn fn)
 }
 
 /* a key's words, for the notes and the log */
+static void keyWords(const RdPipeKeyInt *k, char *out, size_t size);
+
+void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size)
+{
+    keyWords(k, out, size);
+}
+
 static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
 {
     snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u", k->gs.program,

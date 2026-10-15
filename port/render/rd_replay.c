@@ -403,56 +403,22 @@ RhiCommandList rd__replay_cl(void)
 }
 
 /* ------------------------------------------------------ the pass window
- * rd__replay_set_window (rd_internal.h; the loss bisect, rd_dump.c
- * rd_loss_bisect): the replay numbers its passes 1, 2, ... as they begin
- * (passPush: render passes, copies, snapshots, exact blends), records the
- * draws and copies of the passes inside [first, last] only, and stops the
- * walk after the command that began pass last + 1. */
-static struct {
-    uint32_t first, last; /* first 0: no window */
-    uint32_t passes;      /* begun in this replay */
-    uint32_t lastDraws;   /* recorded in pass `last` */
-    uint64_t lastSeq;     /* pass `last`'s pass ring entry, 0: not begun */
-    uint64_t nextSeq;     /* pass last + 1's, 0: not begun */
-    bool stop;
-    bool noCount; /* the pass split's own pass (passSplit): not a pass of the window */
-} s_win;
-
-void rd__replay_set_window(uint32_t first, uint32_t last)
-{
-    memset(&s_win, 0, sizeof(s_win));
-    s_win.first = first;
-    s_win.last = first ? last : 0;
-}
-
-void rd__replay_window_stats(RdReplayWindowStats *out)
-{
-    memset(out, 0, sizeof(*out));
-    out->passes = s_win.passes;
-    out->lastDraws = s_win.lastDraws;
-    out->lastSeq = s_win.lastSeq;
-    out->nextSeq = s_win.nextSeq;
-    out->stopped = s_win.stop;
-}
-
-/* the window leaves this pass's draws and copies out */
-static bool winMuted(void)
-{
-    return s_win.first && (s_win.passes < s_win.first || (s_win.last && s_win.passes > s_win.last));
-}
+ * rd_window.c (rd_internal.h g_rdWin): the replay numbers its passes 1, 2,
+ * ... as they begin (passPush) and records the draws and copies of the
+ * window's passes only (rd__win_muted, rd__win_take). */
 
 /* a pass begins: its pass ring entry and its number in the window */
 static const void *passPush(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                             uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
 {
     const void *m = rd__passring_push(kind, color, cw, ch, depth, dw, dh, storage, post);
-    if (s_win.first && !s_win.noCount) {
-        s_win.passes++;
-        if (s_win.passes == s_win.last) {
-            s_win.lastSeq = (uint64_t)(uintptr_t)m;
-        } else if (s_win.last && s_win.passes == s_win.last + 1u) {
-            s_win.nextSeq = (uint64_t)(uintptr_t)m;
-            s_win.stop = true;
+    if (g_rdWin.first && !g_rdWin.noCount) {
+        g_rdWin.passes++;
+        if (g_rdWin.passes == g_rdWin.last) {
+            g_rdWin.lastSeq = (uint64_t)(uintptr_t)m;
+        } else if (g_rdWin.last && g_rdWin.passes == g_rdWin.last + 1u) {
+            g_rdWin.nextSeq = (uint64_t)(uintptr_t)m;
+            g_rdWin.stop = true;
         }
     }
     return m;
@@ -461,11 +427,8 @@ static const void *passPush(RdPassKind kind, uint32_t color, uint32_t cw, uint32
 static void drawCmd(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
                     uint32_t instanceCount)
 {
-    if (winMuted()) {
+    if (g_rdWin.first && !rd__win_take()) {
         return;
-    }
-    if (s_win.first && s_win.passes == s_win.last) {
-        s_win.lastDraws++;
     }
     rhi_cmd_draw(cl, vertexCount, firstVertex, instanceCount);
 }
@@ -473,11 +436,8 @@ static void drawCmd(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVerte
 static void drawIndexedCmd(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
                            int32_t vertexOffset, uint32_t instanceCount)
 {
-    if (winMuted()) {
+    if (g_rdWin.first && !rd__win_take()) {
         return;
-    }
-    if (s_win.first && s_win.passes == s_win.last) {
-        s_win.lastDraws++;
     }
     rhi_cmd_draw_indexed(cl, indexCount, firstIndex, vertexOffset, instanceCount);
 }
@@ -485,7 +445,7 @@ static void drawIndexedCmd(RhiCommandList cl, uint32_t indexCount, uint32_t firs
 static void copyCmd(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
                     int32_t dstX, int32_t dstY)
 {
-    if (!winMuted()) {
+    if (!rd__win_muted()) {
         rhi_cmd_copy_texture(cl, src, srcRegion, dst, dstX, dstY);
     }
 }
@@ -4320,7 +4280,7 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
  * ended and begun again on the same targets, both loaded, as dstPassMode
  * begins a pass again (the scissor taken back), so a GPU that holds a
  * pass's draws in one job gets them in jobs of N.  Not a pass of the loss
- * bisect's window (s_win.noCount).  Refused, logged once, in a pass the
+ * bisect's window (g_rdWin.noCount).  Refused, logged once, in a pass the
  * split would change the picture or the exact blend of: a multisampled
  * one (the MSAA epoch), a storage pass or a readable one (the exact
  * blend's). */
@@ -4354,10 +4314,10 @@ static void passSplit(Replay *r)
         return;
     }
     const RhiRect sc = r->sc;
-    s_win.noCount = true;
+    g_rdWin.noCount = true;
     beginPass(r, c, did ? rd__target_rec(did) : NULL, cid, did, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD,
               0.0f, false);
-    s_win.noCount = false;
+    g_rdWin.noCount = false;
     r->sc = sc;
     rhi_cmd_set_scissor(s_cl, &sc);
     s_splitSerial = r->passSerial;
@@ -4376,6 +4336,10 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
      * goes into vu_draw.x */
     IcoVuCB vcbAt = *vcb0;
     const IcoVuCB *vcb = &vcbAt;
+    if (g_rdWin.first && g_rdWin.filter == 1) {
+        /* the loss bisect's MASK_MARKS: every triangle drawn unmarked */
+        memset(vcbAt.mark, 0, sizeof(vcbAt.mark));
+    }
     const RhiBindGroup g1 =
         vuGroup(streamBuf, streamBufSize, streamOff, streamSize, &vcbAt.draw[0]);
     if (!g1.id) {
@@ -4420,6 +4384,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         rhi_cmd_set_bind_group_offsets(s_cl, 1, g1, offs, 3);
         rhi_cmd_set_bind_group(s_cl, 2, g2);
         dstBind(r, &dp[i].key);
+        if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
+            rd__win_vu_note(r->st.tex, &dp[i].key, vcb, indexed, first, count);
+        }
         if (indexed) {
             drawIndexedCmd(s_cl, count, first, 0, 1);
         } else {
@@ -4628,6 +4595,17 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         memcpy(vcb.ticks, f->tickCams, sizeof(vcb.ticks));
     }
 
+    if (g_rdWin.first && g_rdWin.drawLast) {
+        /* the draw note's command (rd__win_vu_note) */
+        g_rdVuCur.type = c->type;
+        g_rdVuCur.prog = p.prog;
+        g_rdVuCur.clip = p.clip;
+        g_rdVuCur.batch = p.firstBatch;
+        g_rdVuCur.index = m ? m->index : NULL;
+        g_rdVuCur.marks = m ? m->kickMark : NULL;
+        g_rdVuCur.markCount = m ? m->markCount : 0u;
+        g_rdVuCur.mesh = m ? m->name : NULL;
+    }
     if (c->type == RDC_GRID) {
         /* the Mesh3D buffer as it is: per strip the VIF qword, tag and colour
          * before the vertices, MSCNT after them; indices k = 2 .. stripLen-1
@@ -4642,6 +4620,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         uint32_t *idx = (uint32_t *)(g_rd.ringMap[s_slot] + iOff);
+        if (g_rdWin.first && g_rdWin.drawLast) {
+            g_rdVuCur.index = idx;
+        }
         /* strip i is the grid's rows i and i + 1
          * (Primitive.c prim_UpdateMesh3D), so with two strips or more
          * every strip shares a row of positions with a neighbour: joined,
@@ -4704,6 +4685,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         const uint32_t end = rd__vu_sheet_end(m, br->firstIndex + br->indexCount, extended);
         if (end <= br->firstIndex) {
             continue;
+        }
+        if (g_rdWin.first && g_rdWin.drawLast) {
+            g_rdVuCur.batch = b;
         }
         vuDraw(r, &fan, &ds, g2, p.prog, vs, streamBuf, streamBufSize, streamOff, streamSize, &cut,
                bonesOff, 1, br->firstIndex, end - br->firstIndex);
@@ -5915,9 +5899,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     /* the pass window's count starts again (rd__replay_set_window) */
-    s_win.passes = s_win.lastDraws = 0;
-    s_win.lastSeq = s_win.nextSeq = 0;
-    s_win.stop = false;
+    g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
+    memset(&g_rdWin.note, 0, sizeof(g_rdWin.note));
+    g_rdWin.lastSeq = g_rdWin.nextSeq = 0;
+    g_rdWin.stop = false;
     rhi_set_submit_tag(g_rdPerf.replay, f->number);
     s_ringOff = 0;
     g_rd.deferText = false;
@@ -5970,6 +5955,12 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rd__passring_list(l);
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
+            if (g_rdWin.first) {
+                /* the draw note's place (rd__replay_set_window_draws) */
+                g_rdWin.list = (int8_t)l;
+                g_rdWin.cmd = i;
+                g_rdWin.tex = r.st.tex;
+            }
             if (c->type == RDC_TARGET) {
                 r.perfPost = perfTargetPost(&r, c); /* before the state takes the new target */
             }
@@ -6036,13 +6027,13 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 rd__not_implemented(stubName(c->type));
                 break;
             }
-            if (s_win.stop) {
+            if (g_rdWin.stop) {
                 break; /* the pass window's end: this command began the next pass */
             }
         }
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
-        if (s_win.stop) {
+        if (g_rdWin.stop) {
             break;
         }
     }

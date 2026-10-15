@@ -1121,6 +1121,8 @@ RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
+/* the key's words ("program 0 blend 4 vs 5 fs 5 fmt 1/8 msaa 0 dst 0") */
+void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size);
 /* The crash report's note (rd_set_activity_fn) around a pipeline made
  * outside rd__get_pipeline: begin sets "creating pipeline <what>" (a
  * graphics driver crash then counts as one while preparing the shaders,
@@ -1797,9 +1799,88 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present);
  * Set until changed: the caller clears it. */
 void rd__replay_set_window(uint32_t first, uint32_t last);
 
+/* The second level's draw window (the loss bisect, rd_dump.c
+ * rd_loss_bisect_step): the pass window first .. last, and in pass `last`
+ * only the draws drawFirst .. drawLast (numbered 1, 2, ... as the pass asks
+ * for them, before the filter) that pass filter (rd_bisect_plan.h
+ * RdBisectFilter, arg its value); filter MASK_MARKS draws every VU draw of
+ * the window with its marks left out (vu_mark zero).  drawLast 0: the pass
+ * window alone.  The note of the last draw recorded:
+ * rd__replay_window_note (RdDrawNote: only filled while a draw window is
+ * set). */
+void rd__replay_set_window_draws(uint32_t first, uint32_t last, uint32_t drawFirst,
+                                 uint32_t drawLast, int filter, uint32_t arg);
+void rd__replay_window_note(RdDrawNote *out);
+
+/* The window's state (rd_window.c), read by the replay (rd_replay.c
+ * passPush, drawCmd, copyCmd, vuDraw, replayFrame) */
+typedef struct RdReplayWindow {
+    uint32_t first, last; /* first 0: no window */
+    uint32_t passes;      /* begun in this replay */
+    uint32_t lastDraws;   /* asked for in pass `last` */
+    uint32_t drawn;       /* recorded in pass `last` */
+    uint64_t lastSeq;     /* pass `last`'s pass ring entry, 0: not begun */
+    uint64_t nextSeq;     /* pass last + 1's, 0: not begun */
+    bool stop;
+    bool noCount; /* the pass split's own pass (passSplit): not a pass of the window */
+    /* the second level's draw window (rd__replay_set_window_draws): in pass
+     * `last` the draws drawFirst .. drawLast (0: all) that pass filter */
+    uint32_t drawFirst, drawLast;
+    int filter;
+    uint32_t arg;
+    /* the command being replayed and its texture (the note of a draw that
+     * is not a VU draw) */
+    int8_t list;
+    uint32_t cmd, tex;
+    RdDrawNote note; /* the last draw recorded */
+} RdReplayWindow;
+
+extern RdReplayWindow g_rdWin;
+
+/* the VU draw about to be recorded (rd__win_vu_note, while a draw window is
+ * set): the window's filter and note read it; a draw without it is no VU
+ * draw */
+typedef struct RdDrawCtx {
+    bool set;
+    RdDrawNote note;
+} RdDrawCtx;
+
+extern RdDrawCtx g_rdDrawCtx;
+
+/* the VU command being replayed, for the draw note (rd_replay.c doVuDraw,
+ * while a draw window is set) */
+typedef struct RdVuCur {
+    uint8_t type, prog, clip;
+    uint32_t batch;
+    const uint32_t *index; /* the index list the draws' first and count are in */
+    const uint8_t *marks;  /* the mesh's mark bytes (RdMeshRec.kickMark), markCount of them */
+    uint32_t markCount;
+    const char *mesh;
+} RdVuCur;
+
+extern RdVuCur g_rdVuCur;
+
+/* the window leaves this pass's draws and copies out */
+static inline bool rd__win_muted(void)
+{
+    return g_rdWin.first &&
+           (g_rdWin.passes < g_rdWin.first || (g_rdWin.last && g_rdWin.passes > g_rdWin.last));
+}
+
+/* (with a window set) whether the draw about to be recorded is (false: left
+ * out); counts pass `last`'s draws and notes the last one recorded */
+bool rd__win_take(void);
+
+/* the note of a VU draw about to be recorded (draws first .. count of
+ * g_rdVuCur's list with key k, texture tex) */
+struct IcoVuCB;
+void rd__win_vu_note(uint32_t tex, const RdPipeKeyInt *k, const struct IcoVuCB *vcb, int indexed,
+                     uint32_t first, uint32_t count);
+
 typedef struct RdReplayWindowStats {
     uint32_t passes;    /* the last replay's passes begun */
-    uint32_t lastDraws; /* the draws recorded in pass `last` */
+    uint32_t lastDraws; /* the draws pass `last` asked for (all recorded without a draw window) */
+    uint32_t drawn;     /* the draws recorded in pass `last` */
     uint64_t lastSeq;   /* pass `last`'s pass ring sequence number, 0: never begun */
     uint64_t nextSeq;   /* pass last + 1's (the walk stopped there), 0: none */
     bool stopped;       /* the walk stopped at the window's end */

@@ -74,6 +74,7 @@
 #define PORT_RENDER_RD_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "rd_state.h"
 
@@ -1505,6 +1506,7 @@ typedef struct RdLossBisect {
     RdBisectResult result;
     uint32_t frame;   /* the dump's frame number */
     uint32_t pass;    /* RD_BISECT_LOST: the pass (1, 2, ...); 0: before any pass drew */
+    uint32_t draws;   /* RD_BISECT_LOST: the draws that pass asked for (the second level's N) */
     uint32_t passes;  /* the frame's passes, counted by a replay that draws nothing */
     uint32_t replays; /* the replays it took (the count and passes 1..k; not the
                          replays that only name the frame's pipelines) */
@@ -1519,6 +1521,50 @@ typedef struct RdLossBisect {
 } RdLossBisect;
 
 void rd_loss_bisect(const char *path, RdLossBisect *out);
+
+/* The loss bisect's second level (port/render/rd_bisect_plan.h): what one
+ * draw of the window was, noted while a draw window is set (no work
+ * otherwise).  The draw's place (list, command, its number in the pass),
+ * kind (RDC_* type; vu: a VU draw), the mesh, the program and its shaders,
+ * the index range drawn (count from first) and the values' span and
+ * marked triangles, the batch, the clip mode, the texture bound (id, size,
+ * texel format, mip levels) and the pipeline key's words. */
+typedef struct RdDrawNote {
+    uint8_t valid, vu, type, prog, vs, fs, clip, skinned;
+    int8_t list;
+    uint8_t texFormat, texMips;
+    uint32_t cmd, ordinal, count, first, batch;
+    uint32_t tex, texW, texH;
+    uint32_t spanLo, spanHi, marked;
+    char mesh[25];
+    char key[96];
+} RdDrawNote;
+
+/* the note in a line ("list 0 command 27, mesh st26a_p1, prog 0 vs 5 fs 5
+ * clip 0, ...") */
+void rd_draw_note_text(const RdDrawNote *n, char *out, size_t size);
+
+/* One step of the second level: the frame of the dump at path (its
+ * pipelines made first, as rd_loss_bisect does) replayed once with passes
+ * 1 .. pass - 1 and draws drawFirst .. drawLast of pass `pass` (numbered
+ * as the first level counted them) that pass filter (RdBisectFilter, arg
+ * its value: 0 every draw, 1 every draw with the VU draws' marks left out,
+ * 2 the draws of vertex shader arg, 3 the VU draws of clip mode arg, 4 the
+ * skinned draws, 5 the draws binding texture arg), then a wait for the
+ * GPU.  result: RD_BISECT_LOST or RD_BISECT_CLEAN, RD_BISECT_NOT_RUN with
+ * line saying why; note: the last draw the step recorded. */
+typedef struct RdLossStep {
+    RdBisectResult result;
+    uint32_t passes; /* the frame's passes */
+    uint32_t draws;  /* the draws pass `pass` asked for (before the window) */
+    uint32_t drawn;  /* the draws the step recorded in it */
+    double ms;
+    RdDrawNote note;
+    char line[320];
+} RdLossStep;
+
+void rd_loss_bisect_step(const char *path, uint32_t pass, uint32_t drawFirst, uint32_t drawLast,
+                         int filter, uint32_t arg, RdLossStep *out);
 /* A dump's frame size and aspect without loading it (the loss bisect sizes
  * its renderer with them); false when path is no dump this version reads
  * or its size is outside 1..4096. */

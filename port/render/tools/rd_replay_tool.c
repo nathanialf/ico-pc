@@ -140,6 +140,16 @@
  *                         rd__replay_set_window: the draws and copies of the
  *                         other passes left out, the walk stopped where pass
  *                         B + 1 begins); A alone is pass A alone
+ *   --draws A[-B]         with --passes: in the window's last pass only its
+ *                         draws A..B (numbered as the pass asks for them;
+ *                         rd__replay_set_window_draws, the second level of
+ *                         the loss bisect); A alone is draw A alone
+ *   --mask-marks          every VU draw with its triangles' marks left out
+ *                         (the second level's MASK_MARKS)
+ *   With --loss-bisect, --passes P and --draws or --mask-marks make one step
+ *   of the second level instead (rd.h rd_loss_bisect_step: passes 1..P - 1
+ *   and pass P's draws through the window, then a wait for the GPU) and
+ *   print its verdict and the note of the last draw it recorded
  *
  * Interpolation:
  *   --interp T PREV       replays the frame the presenter builds between the
@@ -950,7 +960,7 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
-                "       [--loss-bisect] [--passes A[-B]]\n"
+                "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n",
@@ -968,7 +978,8 @@ int main(int argc, char **argv)
     uint32_t vuRefI[8];
     const char *passDir = NULL;
     const char *texDir = NULL, *meshName = NULL;
-    bool lossBisect = false;
+    bool lossBisect = false, maskMarks = false;
+    uint32_t drawA = 0, drawB = 0;
     unsigned passA = 0, passB = 0;
     memset(&s, 0, sizeof(s));
     s.preset = RD_PRESET_ORIGINAL;
@@ -1109,6 +1120,17 @@ int main(int argc, char **argv)
             noDevice = true;
         } else if (strcmp(argv[i], "--loss-bisect") == 0) {
             lossBisect = true;
+        } else if (strcmp(argv[i], "--draws") == 0 && i + 1 < argc) {
+            const int n = sscanf(argv[++i], "%u-%u", &drawA, &drawB);
+            if (n < 1 || drawA == 0 || (n == 2 && drawB < drawA)) {
+                fprintf(stderr, "bad --draws\n");
+                return 1;
+            }
+            if (n == 1) {
+                drawB = drawA;
+            }
+        } else if (strcmp(argv[i], "--mask-marks") == 0) {
+            maskMarks = true;
         } else if (strcmp(argv[i], "--passes") == 0 && i + 1 < argc) {
             const int n = sscanf(argv[++i], "%u-%u", &passA, &passB);
             if (n < 1 || passA == 0 || (n == 2 && passB < passA)) {
@@ -1238,6 +1260,23 @@ int main(int argc, char **argv)
             fprintf(stderr, "--loss-bisect needs a device\n");
             return 77;
         }
+        if (passA && (drawA || maskMarks)) {
+            /* one step of the second level on pass B's draws */
+            RdLossStep o;
+            char note[400];
+            rd_loss_bisect_step(dump, passB, drawA ? drawA : 1u, drawA ? drawB : UINT32_MAX,
+                                maskMarks ? 1 : 0, 0, &o);
+            static const char *const kStep[] = {"not run", "lost", "clean"};
+            rd_draw_note_text(&o.note, note, sizeof(note));
+            printf("%s: loss bisect step: %s; pass %u of %u, draws %u..%u of %u%s, %u drawn, in "
+                   "%.1f s%s%s\n",
+                   dump, kStep[o.result], passB, o.passes, drawA ? drawA : 1u,
+                   drawA ? drawB : o.draws, o.draws, maskMarks ? ", marks masked" : "", o.drawn,
+                   o.ms / 1000.0, o.line[0] ? ": " : "", o.line);
+            printf("%s: loss bisect step: the last draw: %s\n", dump, note);
+            rd_shutdown();
+            return o.result == RD_BISECT_NOT_RUN ? 1 : 0;
+        }
         RdLossBisect b;
         rd_loss_bisect(dump, &b);
         static const char *const kResult[] = {"not run", "lost", "clean"};
@@ -1282,7 +1321,9 @@ int main(int argc, char **argv)
         return 0;
     }
     if (passA) {
-        rd__replay_set_window(passA, passB);
+        rd__replay_set_window_draws(passA, passB, drawA, drawA ? drawB : 0u, maskMarks ? 1 : 0, 0);
+    } else if (maskMarks) {
+        rd__replay_set_window_draws(1, UINT32_MAX, 0, 0, 1, 0);
     }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
     if (passA) {
@@ -1291,6 +1332,16 @@ int main(int argc, char **argv)
         printf("%s: passes %u-%u of the %u begun%s; %u draws in pass %u\n", dump, passA, passB,
                ws.passes, ws.stopped ? " (the walk stopped after the window)" : "", ws.lastDraws,
                passB);
+        if (drawA) {
+            char note[400];
+            RdDrawNote n;
+            rd__replay_window_note(&n);
+            rd_draw_note_text(&n, note, sizeof(note));
+            printf("%s: draws %u-%u of pass %u: %u drawn; the last: %s\n", dump, drawA, drawB,
+                   passB, ws.drawn, note);
+        }
+        rd__replay_set_window(0, 0);
+    } else if (maskMarks) {
         rd__replay_set_window(0, 0);
     }
     if (replayed && stats) {
