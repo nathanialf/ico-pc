@@ -635,6 +635,10 @@ static void dx_fill_limits(void)
     /* a structured-buffer SRV of 16-byte elements:
      * D3D12_REQ_BUFFER_RESOURCE_TEXEL_COUNT_2_TO_EXP (27) elements */
     o->maxStorageRange = (uint64_t)16u << 27;
+    /* indexed draws: every 32-bit index value but the strip cut (D3D12 has no
+     * smaller limit) */
+    o->maxDrawIndexedIndexValue = 0xFFFFFFFFu;
+    o->fullDrawIndexUint32 = true;
     /* texture packs: BC1/2/3/7 are required of every D3D12 device
      * (feature level 11_0) */
     o->bcTextures = true;
@@ -747,8 +751,10 @@ bool rhi_init(const RhiDeviceDesc *desc)
         return false;
 #endif
     }
-    DX_LOG("%s (D3D12, feature level 11_0%s%s)%s", g_dx.adapterName, g_dx.warp ? ", WARP" : "",
-           s_driverText, g_dx.swapchain ? "" : ", headless");
+    DX_LOG("%s (D3D12, feature level 11_0%s%s)%s; index values up to %u (full 32-bit range "
+           "offered)",
+           g_dx.adapterName, g_dx.warp ? ", WARP" : "", s_driverText,
+           g_dx.swapchain ? "" : ", headless", g_dx.limits.maxDrawIndexedIndexValue);
     dx_drain_messages();
     return true;
 }

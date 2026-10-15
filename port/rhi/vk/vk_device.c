@@ -678,6 +678,12 @@ static void vkr_fake_limits(void)
     VKR_FAKE_MIN(nonCoherentAtomSize, 64u);
     VKR_FAKE_MAX(maxMemoryAllocationCount, 4096u);
     VKR_FAKE_MAX(maxSamplerAllocationCount, 4000u);
+    /* the VS->PS interface and the index values (issue 95): a Mali-G52's
+     * 128 components, and the least maxDrawIndexedIndexValue (no
+     * fullDrawIndexUint32, which the profile also reports absent) */
+    VKR_FAKE_MAX(maxVertexOutputComponents, 128u);
+    VKR_FAKE_MAX(maxFragmentInputComponents, 128u);
+    VKR_FAKE_MAX(maxDrawIndexedIndexValue, (1u << 24) - 1u);
 #undef VKR_FAKE_MAX
 #undef VKR_FAKE_MIN
     g_vkr.fakeLimits = "mali";
@@ -1033,6 +1039,7 @@ static bool vkr_create_device(void)
      * desktop GPU, the Deck, lavapipe); the formats' sampled and copy
      * features are checked too, so bcTextures promises what it says */
     g_vkr.bc = avail.textureCompressionBC == VK_TRUE;
+    g_vkr.fullDrawIndex = avail.fullDrawIndexUint32 == VK_TRUE && g_vkr.fakeLimits == NULL;
     for (int f = RHI_FMT_BC1_UNORM; g_vkr.bc && f <= RHI_FMT_BC7_UNORM; f++) {
         VkFormatProperties fp;
         vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkr_vk_format((RhiFormat)f), &fp);
@@ -1563,6 +1570,11 @@ static void vkr_fill_limits(void)
     /* dynamic uniform buffers (rhi_cmd_set_bind_group_offsets) */
     o->maxDynamicUniforms = l->maxDescriptorSetUniformBuffersDynamic;
     o->maxStorageRange = l->maxStorageBufferRange;
+    /* indexed draws (VkPhysicalDeviceFeatures::fullDrawIndexUint32: the
+     * limit is 2^32 - 1 when the device has the feature, at least 2^24 - 1
+     * without it); logged on the device line */
+    o->maxDrawIndexedIndexValue = l->maxDrawIndexedIndexValue;
+    o->fullDrawIndexUint32 = g_vkr.fullDrawIndex;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;
     /* multisampling (vkr_msaa_counts, at device creation) */
@@ -1703,9 +1715,11 @@ bool rhi_init(const RhiDeviceDesc *desc)
             return false;
         }
     }
-    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s", g_vkr.adapterName, VK_API_VERSION_MAJOR(g_vkr.apiVersion),
+    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s; index values up to %u (full 32-bit range %s)",
+            g_vkr.adapterName, VK_API_VERSION_MAJOR(g_vkr.apiVersion),
             VK_API_VERSION_MINOR(g_vkr.apiVersion), VK_API_VERSION_PATCH(g_vkr.apiVersion),
-            s_driverText, g_vkr.surface ? "" : ", headless");
+            s_driverText, g_vkr.surface ? "" : ", headless", g_vkr.limits.maxDrawIndexedIndexValue,
+            g_vkr.limits.fullDrawIndexUint32 ? "offered" : "not offered");
     return true;
 }
 

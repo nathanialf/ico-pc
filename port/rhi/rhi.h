@@ -599,6 +599,14 @@ typedef struct RhiLimits {
     bool fragmentInterlock;
     bool rov;
     bool rasterOrderAttachment;
+    /* Indexed draws: the largest index value a draw may use (Vulkan
+     * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
+     * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the
+     * device has the full 32-bit range.  The renderer's index values stay
+     * below 2^28 (shader_consts.h ICO_VU_INDEX: kick * 4 + corner, the
+     * marks in the stream since v0.8.0, issue 95) */
+    uint32_t maxDrawIndexedIndexValue;
+    bool fullDrawIndexUint32;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {

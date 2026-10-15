@@ -218,6 +218,9 @@ typedef struct VkrState {
     /* texture packs: textureCompressionBC enabled and the four BC formats
      * sampleable and copyable (RhiLimits.bcTextures) */
     bool bc;
+    /* fullDrawIndexUint32 offered (not enabled: the index values stay below
+     * 2^28; ICO_VK_FAKE_LIMITS=mali reports it absent) */
+    bool fullDrawIndex;
     /* multisampling (RhiLimits.msaaCounts, sampleRateShading): the counts
      * every multisampled format takes, and the feature enabled */
     uint32_t msaaCounts;
