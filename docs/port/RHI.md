@@ -99,6 +99,24 @@ render pass names its colour and depth attachments with load ops (LOAD, CLEAR, D
 ops (STORE, or DONT_CARE so a tile-based GPU can skip the write-back) (`port/rhi/rhi.h`, pipelines,
 passes).
 
+**Several pipelines at once.** `rhi_create_pipelines(descs, n, out, batch)` creates a set of
+pipelines with the driver's compiles on worker threads: the logical cores less one, at least one, at
+most `RHI_PIPELINE_THREADS_MAX` (8), each with an 8 MB stack. What the backend keeps in its own
+tables (the pool slots, Vulkan's pipeline layouts, D3D12's root signatures) is made on the calling
+thread before the workers start and filled in after they finish, so the workers call nothing but
+`vkCreateGraphicsPipelines`, through the one `VkPipelineCache` (which the Vulkan specification makes
+internally synchronised), or `ID3D12Device::CreateGraphicsPipelineState` (the device is free
+threaded). Vulkan's workers are SDL threads (a backend built without SDL compiles on the calling
+thread); D3D12's are Win32 threads. `out[i]` is `descs[i]`'s pipeline or 0, each failure logged
+as `rhi_create_pipeline` logs it, and the call returns the count made. The optional
+`RhiPipelineBatch` takes a wait function, which the calling thread calls about every
+`RHI_PIPELINE_WAIT_MS` (50) with the number finished; it may use the RHI meanwhile (the renderer's
+start-up screen presents frames from it), since the workers touch nothing but the driver. It hands
+back each pipeline's compile time as the worker measured it around the driver call, and the threads
+used. `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
+(`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
+`port/rhi/d3d12/d3d12_pipeline.c`).
+
 **Commands.** Begin, end and submit a list; barriers; begin and end a render pass; viewport,
 scissor, pipeline, bind groups, vertex and index buffers, stencil reference, blend constant; draw
 and draw indexed; buffer, buffer-to-texture, texture and texture-to-buffer copies (outside passes,
@@ -445,7 +463,7 @@ SHA-256, the licences of the libraries compiled into it, and builds a static SDL
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back) |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |

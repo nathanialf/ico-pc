@@ -695,6 +695,37 @@ void rhi_destroy_bind_group_layout(RhiBindGroupLayout l);
 RhiBindGroup rhi_create_bind_group(
     const RhiBindGroupDesc *desc); /* transient: valid for the current frame only */
 RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc);
+/* Several pipelines at once (the renderer's start-up set): what
+ * the backend keeps in its own tables (pool slots, pipeline layouts, root
+ * signatures) is made on the calling thread before and after, and the
+ * driver's compiles run on worker threads, each calling
+ * vkCreateGraphicsPipelines through the one VkPipelineCache (internally
+ * synchronised) or ID3D12Device::CreateGraphicsPipelineState (free
+ * threaded).  Workers: the logical cores less one, at least 1, at most 8
+ * (RHI_PIPELINE_THREADS_MAX); a single pipeline with no wait function,
+ * a build without threads or a failed thread start compiles on the
+ * calling thread.  out[i] is descs[i]'s pipeline, {0} where it
+ * failed (logged as rhi_create_pipeline logs it).  Returns how many were
+ * created.  batch may be NULL; see RhiPipelineBatch. */
+#define RHI_PIPELINE_THREADS_MAX 8u
+
+typedef struct RhiPipelineBatch {
+    /* in, optional: called on the calling thread about every
+     * RHI_PIPELINE_WAIT_MS while the workers compile, with how many of the
+     * n are finished; it may use the RHI (present a frame, create a
+     * pipeline of its own): the workers touch nothing but the driver */
+    void (*wait)(void *ctx, uint32_t finished);
+    void *ctx;
+    /* out, optional (n entries): each pipeline's compile time in ms, as the
+     * worker measured it around the driver call (0 where it failed before) */
+    float *ms;
+    /* out: the threads that compiled (1: the calling thread) */
+    uint32_t threads;
+} RhiPipelineBatch;
+
+#define RHI_PIPELINE_WAIT_MS 50u
+uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
+                              RhiPipelineBatch *batch);
 void rhi_destroy_pipeline(RhiPipeline p);
 
 /* ------------------------------------------------------------ commands

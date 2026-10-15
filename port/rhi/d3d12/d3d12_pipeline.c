@@ -522,13 +522,29 @@ static bool dx_valid_pipeline_desc(const RhiPipelineDesc *d)
     return ds->depthCompare < RHI_CMP_COUNT;
 }
 
-RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
+/* One pipeline's creation, in three steps (rhi.h rhi_create_pipelines):
+ * dx_pipe_prepare on the calling thread (the checks, the root signature
+ * from the shared table, the state description), dx_pipe_compile on any
+ * thread (ID3D12Device is free threaded), dx_pipe_finish on the calling
+ * thread (the pool slot, the name, the debug layer's messages).  The
+ * description points into the job, so a job does not move once prepared. */
+typedef struct DxPipeJob {
+    bool ok; /* prepared: there is something to compile */
+    DxRootSig *root;
+    ID3D12PipelineState *pso;
+    HRESULT hr;
+    float ms;
+    D3D12_INPUT_ELEMENT_DESC ie[RHI_MAX_VERTEX_ATTRS];
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC pd;
+} DxPipeJob;
+
+static bool dx_pipe_prepare(const RhiPipelineDesc *d, DxPipeJob *j)
 {
-    RhiPipeline out = {0};
+    memset(j, 0, sizeof(*j));
     const char *name = d && d->debugName ? d->debugName : "?";
     if (!d || !dx_valid_pipeline_desc(d)) {
         DX_LOG("pipeline %s: invalid description", name);
-        return out;
+        return false;
     }
     /* the destination read: ROVs only, with no render target (the pixel
      * shader writes the target through its UAV) */
@@ -536,27 +552,27 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
         (d->dstRead == RHI_DST_READ_STORAGE && (!g_dx.limits.rov || d->colorCount != 0)) ||
         d->dstRead >= RHI_DST_READ_COUNT) {
         DX_LOG("pipeline %s: destination read %d not available", name, (int)d->dstRead);
-        return out;
+        return false;
     }
     DxShader *vs = d3dp_pool_get(&g_dx.shaders, d->vertex.id);
     DxShader *fs = d3dp_pool_get(&g_dx.shaders, d->fragment.id);
     if (!vs) {
         DX_LOG("pipeline %s: no vertex shader", name);
-        return out;
+        return false;
     }
     DxRootSig *root = dx_root_signature(d->layouts, d->layoutCount);
     if (!root) {
-        return out;
+        return false;
     }
 
     /* input layout: RHI locations to the vertex shader's semantics */
-    D3D12_INPUT_ELEMENT_DESC ie[RHI_MAX_VERTEX_ATTRS];
+    D3D12_INPUT_ELEMENT_DESC *ie = j->ie;
     for (uint32_t i = 0; i < d->vertexAttrCount; i++) {
         const RhiVertexAttr *a = &d->vertexAttrs[i];
         int e = vs->sigCount > 0 ? d3dp_location_element(vs->sig, vs->sigCount, a->location) : -1;
         if (e < 0) {
             DX_LOG("pipeline %s: the vertex shader has no input at location %u", name, a->location);
-            return out;
+            return false;
         }
         bool inst = false;
         for (uint32_t k = 0; k < d->vertexBindingCount; k++) {
@@ -574,73 +590,97 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
         ie[i].InstanceDataStepRate = inst ? 1u : 0u;
     }
 
-    D3D12_GRAPHICS_PIPELINE_STATE_DESC pd;
-    memset(&pd, 0, sizeof(pd));
-    pd.pRootSignature = root->rs;
-    pd.VS.pShaderBytecode = vs->code;
-    pd.VS.BytecodeLength = vs->size;
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC *pd = &j->pd;
+    pd->pRootSignature = root->rs;
+    pd->VS.pShaderBytecode = vs->code;
+    pd->VS.BytecodeLength = vs->size;
     if (fs) {
-        pd.PS.pShaderBytecode = fs->code;
-        pd.PS.BytecodeLength = fs->size;
+        pd->PS.pShaderBytecode = fs->code;
+        pd->PS.BytecodeLength = fs->size;
     }
-    pd.BlendState.IndependentBlendEnable = d->colorCount > 1 ? TRUE : FALSE;
+    pd->BlendState.IndependentBlendEnable = d->colorCount > 1 ? TRUE : FALSE;
     for (uint32_t i = 0; i < D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT; i++) {
-        pd.BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
-        pd.BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
-        pd.BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
-        pd.BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
-        pd.BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
-        pd.BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
-        pd.BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-        pd.BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
+        pd->BlendState.RenderTarget[i].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        pd->BlendState.RenderTarget[i].SrcBlend = D3D12_BLEND_ONE;
+        pd->BlendState.RenderTarget[i].DestBlend = D3D12_BLEND_ZERO;
+        pd->BlendState.RenderTarget[i].BlendOp = D3D12_BLEND_OP_ADD;
+        pd->BlendState.RenderTarget[i].SrcBlendAlpha = D3D12_BLEND_ONE;
+        pd->BlendState.RenderTarget[i].DestBlendAlpha = D3D12_BLEND_ZERO;
+        pd->BlendState.RenderTarget[i].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        pd->BlendState.RenderTarget[i].LogicOp = D3D12_LOGIC_OP_NOOP;
     }
     for (uint32_t i = 0; i < d->colorCount; i++) {
-        pd.BlendState.RenderTarget[i] = dx_blend(&d->blend[i], d->colorFormats[i]);
-        pd.RTVFormats[i] = dx_formatMap[d->colorFormats[i]].view;
+        pd->BlendState.RenderTarget[i] = dx_blend(&d->blend[i], d->colorFormats[i]);
+        pd->RTVFormats[i] = dx_formatMap[d->colorFormats[i]].view;
     }
-    pd.SampleMask = UINT_MAX;
+    pd->SampleMask = UINT_MAX;
     /* The game never culls (rhi.h: cullNone is always true). */
-    pd.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
-    pd.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
-    pd.RasterizerState.FrontCounterClockwise = FALSE;
-    pd.RasterizerState.DepthClipEnable = TRUE;
+    pd->RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
+    pd->RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+    pd->RasterizerState.FrontCounterClockwise = FALSE;
+    pd->RasterizerState.DepthClipEnable = TRUE;
     const RhiDepthStencilState *dss = &d->depthStencil;
     if (d->depthFormat != RHI_FMT_UNKNOWN) {
-        pd.DepthStencilState.DepthEnable = dss->depthTest ? TRUE : FALSE;
-        pd.DepthStencilState.DepthWriteMask = (dss->depthTest && dss->depthWrite)
-                                                  ? D3D12_DEPTH_WRITE_MASK_ALL
-                                                  : D3D12_DEPTH_WRITE_MASK_ZERO;
-        pd.DepthStencilState.DepthFunc = dx_compareMap[dss->depthCompare].d3d;
-        pd.DepthStencilState.StencilEnable =
+        pd->DepthStencilState.DepthEnable = dss->depthTest ? TRUE : FALSE;
+        pd->DepthStencilState.DepthWriteMask = (dss->depthTest && dss->depthWrite)
+                                                   ? D3D12_DEPTH_WRITE_MASK_ALL
+                                                   : D3D12_DEPTH_WRITE_MASK_ZERO;
+        pd->DepthStencilState.DepthFunc = dx_compareMap[dss->depthCompare].d3d;
+        pd->DepthStencilState.StencilEnable =
             (dss->stencilTest && dx_formatMap[d->depthFormat].stencil) ? TRUE : FALSE;
-        pd.DepthStencilState.StencilReadMask = dss->stencilReadMask;
-        pd.DepthStencilState.StencilWriteMask = dss->stencilWriteMask;
-        pd.DepthStencilState.FrontFace = dx_stencil(&dss->front);
-        pd.DepthStencilState.BackFace = dx_stencil(&dss->back);
-        pd.DSVFormat = dx_formatMap[d->depthFormat].dsv;
+        pd->DepthStencilState.StencilReadMask = dss->stencilReadMask;
+        pd->DepthStencilState.StencilWriteMask = dss->stencilWriteMask;
+        pd->DepthStencilState.FrontFace = dx_stencil(&dss->front);
+        pd->DepthStencilState.BackFace = dx_stencil(&dss->back);
+        pd->DSVFormat = dx_formatMap[d->depthFormat].dsv;
     } else {
-        pd.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-        pd.DepthStencilState.FrontFace = dx_stencil(&dss->front);
-        pd.DepthStencilState.BackFace = dx_stencil(&dss->back);
+        pd->DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        pd->DepthStencilState.FrontFace = dx_stencil(&dss->front);
+        pd->DepthStencilState.BackFace = dx_stencil(&dss->back);
     }
-    pd.InputLayout.pInputElementDescs = d->vertexAttrCount ? ie : NULL;
-    pd.InputLayout.NumElements = d->vertexAttrCount;
-    pd.PrimitiveTopologyType = dx_topologyMap[d->topology].type;
-    pd.NumRenderTargets = d->colorCount;
-    pd.SampleDesc.Count = d->samples > 1u ? d->samples : 1u;
+    pd->InputLayout.pInputElementDescs = d->vertexAttrCount ? ie : NULL;
+    pd->InputLayout.NumElements = d->vertexAttrCount;
+    pd->PrimitiveTopologyType = dx_topologyMap[d->topology].type;
+    pd->NumRenderTargets = d->colorCount;
+    pd->SampleDesc.Count = d->samples > 1u ? d->samples : 1u;
 
+    j->root = root;
+    j->ok = true;
+    return true;
+}
+
+/* Any thread: the driver call alone */
+static void dx_pipe_compile(DxPipeJob *j)
+{
+    if (!j->ok) {
+        return;
+    }
+    const uint64_t t0 = dx_now_ns();
+    j->hr = ID3D12Device_CreateGraphicsPipelineState(g_dx.device, &j->pd, &IID_ID3D12PipelineState,
+                                                     (void **)&j->pso);
+    j->ms = (float)((double)(dx_now_ns() - t0) / 1e6);
+}
+
+static RhiPipeline dx_pipe_finish(const RhiPipelineDesc *d, DxPipeJob *j)
+{
+    RhiPipeline out = {0};
+    const char *name = d && d->debugName ? d->debugName : "?";
+    if (!j->ok) {
+        return out;
+    }
+    if (!dx_check(j->hr, "ID3D12Device_CreateGraphicsPipelineState", __FILE__, __LINE__)) {
+        DX_LOG("pipeline %s not created", name);
+        DX_RELEASE(j->pso);
+        return out;
+    }
     DxPipeline *p = NULL;
     uint32_t id = d3dp_pool_alloc(&g_dx.pipelines, (void **)&p);
     if (!id) {
+        DX_RELEASE(j->pso);
         return out;
     }
-    if (!DX_CHECK(ID3D12Device_CreateGraphicsPipelineState(
-            g_dx.device, &pd, &IID_ID3D12PipelineState, (void **)&p->pso))) {
-        DX_LOG("pipeline %s not created", name);
-        d3dp_pool_release(&g_dx.pipelines, id);
-        return out;
-    }
-    p->root = root;
+    p->pso = j->pso;
+    p->root = j->root;
     p->topo = dx_topologyMap[d->topology].topo;
     for (uint32_t i = 0; i < d->vertexBindingCount; i++) {
         p->strides[d->vertexBindings[i].binding] = d->vertexBindings[i].stride;
@@ -650,6 +690,143 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
     dx_drain_messages();
     out.id = id;
     return out;
+}
+
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
+{
+    DxPipeJob j;
+    if (!dx_pipe_prepare(d, &j)) {
+        return (RhiPipeline){0};
+    }
+    dx_pipe_compile(&j);
+    return dx_pipe_finish(d, &j);
+}
+
+/* ------------------------------------------------- several at once (rhi.h)
+ * Win32 threads (the backend does not need SDL): the workers take the next
+ * job index from one counter until none is left; each finished job counts
+ * and sets an event the calling thread waits on, calling the caller's wait
+ * function at most every RHI_PIPELINE_WAIT_MS. */
+typedef struct DxPipeWork {
+    DxPipeJob *jobs;
+    uint32_t n;
+    volatile LONG next, finished;
+    HANDLE wake;
+} DxPipeWork;
+
+/* the workers' stack, reserved (not committed): a driver's compiler may
+ * recurse deeply, and a new thread's default is 1 MB */
+#define DX_PIPE_STACK_BYTES (8u * 1024u * 1024u)
+
+static DWORD WINAPI dx_pipe_worker(LPVOID arg)
+{
+    DxPipeWork *w = arg;
+    for (;;) {
+        const LONG i = InterlockedIncrement(&w->next) - 1;
+        if (i < 0 || (uint32_t)i >= w->n) {
+            break;
+        }
+        dx_pipe_compile(&w->jobs[i]);
+        InterlockedIncrement(&w->finished);
+        SetEvent(w->wake);
+    }
+    return 0;
+}
+
+uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
+                              RhiPipelineBatch *batch)
+{
+    uint32_t made = 0, threads = 1;
+    if (batch) {
+        batch->threads = 1;
+    }
+    if (!descs || !out || n == 0) {
+        return 0;
+    }
+    DxPipeWork w;
+    memset(&w, 0, sizeof(w));
+    w.jobs = calloc(n, sizeof(DxPipeJob));
+    w.n = n;
+    if (!w.jobs) {
+        for (uint32_t i = 0; i < n; i++) {
+            out[i] = rhi_create_pipeline(&descs[i]);
+            made += out[i].id != 0;
+            if (batch && batch->ms) {
+                batch->ms[i] = 0.0f;
+            }
+        }
+        return made;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        dx_pipe_prepare(&descs[i], &w.jobs[i]);
+    }
+    bool done = false;
+    if (n > 1 || (batch && batch->wait)) {
+        HANDLE th[RHI_PIPELINE_THREADS_MAX];
+        uint32_t started = 0;
+        SYSTEM_INFO si;
+        GetSystemInfo(&si);
+        uint32_t want = si.dwNumberOfProcessors > 1 ? (uint32_t)si.dwNumberOfProcessors - 1u : 1u;
+        if (want > RHI_PIPELINE_THREADS_MAX) {
+            want = RHI_PIPELINE_THREADS_MAX;
+        }
+        if (want > n) {
+            want = n;
+        }
+        w.wake = CreateEventW(NULL, FALSE, FALSE, NULL);
+        for (; w.wake && started < want; started++) {
+            th[started] = CreateThread(NULL, DX_PIPE_STACK_BYTES, dx_pipe_worker, &w,
+                                       STACK_SIZE_PARAM_IS_A_RESERVATION, NULL);
+            if (!th[started]) {
+                break;
+            }
+        }
+        if (started > 0) {
+            uint64_t last = dx_now_ns();
+            while ((uint32_t)InterlockedCompareExchange(&w.finished, 0, 0) < n) {
+                WaitForSingleObject(w.wake, RHI_PIPELINE_WAIT_MS);
+                const uint64_t now = dx_now_ns();
+                if (batch && batch->wait &&
+                    now - last >= (uint64_t)RHI_PIPELINE_WAIT_MS * 1000000ull) {
+                    batch->wait(batch->ctx,
+                                (uint32_t)InterlockedCompareExchange(&w.finished, 0, 0));
+                    last = dx_now_ns();
+                }
+            }
+            WaitForMultipleObjects(started, th, TRUE, INFINITE);
+            for (uint32_t i = 0; i < started; i++) {
+                CloseHandle(th[i]);
+            }
+            threads = started;
+            done = true;
+        } else if (w.wake) {
+            DX_LOG("pipelines: no worker thread (error %lu); creating them on this thread",
+                   (unsigned long)GetLastError());
+        }
+        if (w.wake) {
+            CloseHandle(w.wake);
+        }
+    }
+    if (!done) {
+        for (uint32_t i = 0; i < n; i++) {
+            dx_pipe_compile(&w.jobs[i]);
+            if (batch && batch->wait && i + 1 < n) {
+                batch->wait(batch->ctx, i + 1);
+            }
+        }
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        out[i] = dx_pipe_finish(&descs[i], &w.jobs[i]);
+        made += out[i].id != 0;
+        if (batch && batch->ms) {
+            batch->ms[i] = w.jobs[i].ms;
+        }
+    }
+    if (batch) {
+        batch->threads = threads;
+    }
+    free(w.jobs);
+    return made;
 }
 
 void rhi_destroy_pipeline(RhiPipeline h)

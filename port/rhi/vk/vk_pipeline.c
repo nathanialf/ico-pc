@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef ICO_RHI_HAVE_SDL
+#include <SDL3/SDL.h>
+#endif
 
 #define VKR_H(x) ((uint64_t)(x))
 
@@ -628,26 +631,60 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
     return true;
 }
 
-RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
+/* One pipeline's creation, in three steps: vkr_pipe_prepare on the calling
+ * thread (the checks, the pool slot, the pipeline layout and the create
+ * info), vkr_pipe_compile on any thread (the driver's compile, through the
+ * shared VkPipelineCache, which is internally synchronised), vkr_pipe_finish
+ * on the calling thread (the result into the slot, or the slot back).
+ * The create info points into the job itself, so a job does not move once
+ * prepared. */
+typedef struct VkrPipeJob {
+    uint32_t id; /* the pool slot; 0: nothing to compile */
+    VkPipelineLayout layout;
+    VkPipeline pipeline;
+    VkResult result;
+    float ms;
+    VkPipelineShaderStageCreateInfo stages[2];
+    VkVertexInputBindingDescription vb[RHI_MAX_VERTEX_ATTRS];
+    VkVertexInputAttributeDescription va[RHI_MAX_VERTEX_ATTRS];
+    VkPipelineVertexInputStateCreateInfo vi;
+    VkPipelineInputAssemblyStateCreateInfo ia;
+    VkPipelineViewportStateCreateInfo vp;
+    VkPipelineRasterizationStateCreateInfo rs;
+    VkPipelineMultisampleStateCreateInfo ms_;
+    VkPipelineDepthStencilStateCreateInfo ds;
+    VkPipelineColorBlendAttachmentState cba[RHI_MAX_COLOR_TARGETS];
+    VkFormat colorFormats[RHI_MAX_COLOR_TARGETS];
+    VkPipelineColorBlendStateCreateInfo cb;
+    VkPipelineDynamicStateCreateInfo dy;
+    VkPipelineRenderingCreateInfo ri;
+    VkGraphicsPipelineCreateInfo ci;
+} VkrPipeJob;
+
+static const VkDynamicState vkr_pipe_dynamic[] = {
+    VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_STENCIL_REFERENCE,
+    VK_DYNAMIC_STATE_BLEND_CONSTANTS};
+
+static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
 {
-    RhiPipeline out = {0};
+    memset(j, 0, sizeof(*j));
     if (!d || !vkr_valid_pipeline_desc(d)) {
         VKR_LOG("pipeline %s: invalid description", d && d->debugName ? d->debugName : "?");
-        return out;
+        return false;
     }
     if (!vkr_pipeline_fits(d)) {
-        return out;
+        return false;
     }
     VkrShader *vs = vkr_pool_get(&g_vkr.shaders, d->vertex.id);
     VkrShader *fs = vkr_pool_get(&g_vkr.shaders, d->fragment.id);
     if (!vs) {
         VKR_LOG("pipeline %s: no vertex shader", d->debugName ? d->debugName : "?");
-        return out;
+        return false;
     }
     VkrPipeline *p = NULL;
     uint32_t id = vkr_pool_alloc(&g_vkr.pipelines, (void **)&p);
     if (!id) {
-        return out;
+        return false;
     }
 
     /* pipeline layout: group i is descriptor set i */
@@ -658,7 +695,7 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
             VKR_LOG("pipeline %s: invalid bind group layout %u", d->debugName ? d->debugName : "?",
                     i);
             vkr_pool_release(&g_vkr.pipelines, id);
-            return out;
+            return false;
         }
         sets[i] = l->layout;
     }
@@ -669,73 +706,71 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
     };
     if (!VKR_CHECK(vkCreatePipelineLayout(g_vkr.device, &lci, NULL, &p->layout))) {
         vkr_pool_release(&g_vkr.pipelines, id);
-        return out;
+        return false;
     }
     p->layoutCount = d->layoutCount;
     p->dstRead = (uint8_t)d->dstRead;
+    j->id = id;
+    j->layout = p->layout;
 
-    VkPipelineShaderStageCreateInfo stages[2] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = vs->module,
-            .pName = vs->entry,
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = fs ? fs->module : VK_NULL_HANDLE,
-            .pName = fs ? fs->entry : "main",
-        },
+    j->stages[0] = (VkPipelineShaderStageCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_VERTEX_BIT,
+        .module = vs->module,
+        .pName = vs->entry,
+    };
+    j->stages[1] = (VkPipelineShaderStageCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = fs ? fs->module : VK_NULL_HANDLE,
+        .pName = fs ? fs->entry : "main",
     };
 
-    VkVertexInputBindingDescription vb[RHI_MAX_VERTEX_ATTRS];
-    VkVertexInputAttributeDescription va[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbCount =
         d->vertexBindingCount < RHI_MAX_VERTEX_ATTRS ? d->vertexBindingCount : RHI_MAX_VERTEX_ATTRS;
     for (uint32_t i = 0; i < vbCount; i++) {
-        vb[i] = (VkVertexInputBindingDescription){
+        j->vb[i] = (VkVertexInputBindingDescription){
             d->vertexBindings[i].binding, d->vertexBindings[i].stride,
             d->vertexBindings[i].perInstance ? VK_VERTEX_INPUT_RATE_INSTANCE
                                              : VK_VERTEX_INPUT_RATE_VERTEX};
     }
     for (uint32_t i = 0; i < d->vertexAttrCount; i++) {
-        va[i] = (VkVertexInputAttributeDescription){
+        j->va[i] = (VkVertexInputAttributeDescription){
             d->vertexAttrs[i].location, d->vertexAttrs[i].binding,
             vkr_vertexFormatMap[d->vertexAttrs[i].format].vk, d->vertexAttrs[i].offset};
     }
-    VkPipelineVertexInputStateCreateInfo vi = {
+    j->vi = (VkPipelineVertexInputStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = vbCount,
-        .pVertexBindingDescriptions = vb,
+        .pVertexBindingDescriptions = j->vb,
         .vertexAttributeDescriptionCount = d->vertexAttrCount,
-        .pVertexAttributeDescriptions = va,
+        .pVertexAttributeDescriptions = j->va,
     };
-    VkPipelineInputAssemblyStateCreateInfo ia = {
+    j->ia = (VkPipelineInputAssemblyStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = vkr_topologyMap[d->topology].vk,
     };
-    VkPipelineViewportStateCreateInfo vp = {
+    j->vp = (VkPipelineViewportStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1,
         .scissorCount = 1,
     };
     /* The game never culls (rhi.h: cullNone is always true); front face is
      * irrelevant without culling. */
-    VkPipelineRasterizationStateCreateInfo rs = {
+    j->rs = (VkPipelineRasterizationStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL,
         .cullMode = VK_CULL_MODE_NONE,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
         .lineWidth = 1.0f,
     };
-    VkPipelineMultisampleStateCreateInfo ms = {
+    j->ms_ = (VkPipelineMultisampleStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .rasterizationSamples =
             d->samples > 1u ? (VkSampleCountFlagBits)d->samples : VK_SAMPLE_COUNT_1_BIT,
     };
     const RhiDepthStencilState *dss = &d->depthStencil;
-    VkPipelineDepthStencilStateCreateInfo ds = {
+    j->ds = (VkPipelineDepthStencilStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
         .depthTestEnable = dss->depthTest ? VK_TRUE : VK_FALSE,
         .depthWriteEnable = (dss->depthTest && dss->depthWrite) ? VK_TRUE : VK_FALSE,
@@ -746,13 +781,11 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
         .minDepthBounds = 0.0f,
         .maxDepthBounds = 1.0f,
     };
-    VkPipelineColorBlendAttachmentState cba[RHI_MAX_COLOR_TARGETS];
-    VkFormat colorFormats[RHI_MAX_COLOR_TARGETS];
     for (uint32_t i = 0; i < d->colorCount; i++) {
-        cba[i] = vkr_blend(&d->blend[i], d->colorFormats[i]);
-        colorFormats[i] = vkr_vk_format(d->colorFormats[i]);
+        j->cba[i] = vkr_blend(&d->blend[i], d->colorFormats[i]);
+        j->colorFormats[i] = vkr_vk_format(d->colorFormats[i]);
     }
-    VkPipelineColorBlendStateCreateInfo cb = {
+    j->cb = (VkPipelineColorBlendStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         /* the attachment read as an input attachment in rasterization
          * order: no barrier between overlapping fragments (rhi.h RhiDstRead) */
@@ -761,46 +794,68 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
                 ? VK_PIPELINE_COLOR_BLEND_STATE_CREATE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_BIT_EXT
                 : 0u,
         .attachmentCount = d->colorCount,
-        .pAttachments = cba,
+        .pAttachments = j->cba,
     };
-    const VkDynamicState dyn[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR,
-                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE,
-                                  VK_DYNAMIC_STATE_BLEND_CONSTANTS};
-    VkPipelineDynamicStateCreateInfo dy = {
+    j->dy = (VkPipelineDynamicStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-        .dynamicStateCount = (uint32_t)(sizeof(dyn) / sizeof(dyn[0])),
-        .pDynamicStates = dyn,
+        .dynamicStateCount = (uint32_t)(sizeof(vkr_pipe_dynamic) / sizeof(vkr_pipe_dynamic[0])),
+        .pDynamicStates = vkr_pipe_dynamic,
     };
     VkFormat depthFmt = vkr_vk_format(d->depthFormat);
-    VkPipelineRenderingCreateInfo ri = {
+    j->ri = (VkPipelineRenderingCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .colorAttachmentCount = d->colorCount,
-        .pColorAttachmentFormats = colorFormats,
+        .pColorAttachmentFormats = j->colorFormats,
         .depthAttachmentFormat = depthFmt,
         .stencilAttachmentFormat =
             d->depthFormat == RHI_FMT_D32F_S8 ? depthFmt : VK_FORMAT_UNDEFINED,
     };
-    VkGraphicsPipelineCreateInfo ci = {
+    j->ci = (VkGraphicsPipelineCreateInfo){
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .pNext = &ri,
+        .pNext = &j->ri,
         .stageCount = fs ? 2u : 1u,
-        .pStages = stages,
-        .pVertexInputState = &vi,
-        .pInputAssemblyState = &ia,
-        .pViewportState = &vp,
-        .pRasterizationState = &rs,
-        .pMultisampleState = &ms,
-        .pDepthStencilState = &ds,
-        .pColorBlendState = &cb,
-        .pDynamicState = &dy,
-        .layout = p->layout,
+        .pStages = j->stages,
+        .pVertexInputState = &j->vi,
+        .pInputAssemblyState = &j->ia,
+        .pViewportState = &j->vp,
+        .pRasterizationState = &j->rs,
+        .pMultisampleState = &j->ms_,
+        .pDepthStencilState = &j->ds,
+        .pColorBlendState = &j->cb,
+        .pDynamicState = &j->dy,
+        .layout = j->layout,
     };
-    if (!VKR_CHECK(vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &ci, NULL,
-                                             &p->pipeline))) {
-        vkDestroyPipelineLayout(g_vkr.device, p->layout, NULL);
-        vkr_pool_release(&g_vkr.pipelines, id);
+    return true;
+}
+
+/* Any thread: the driver call alone (no pool, no log) */
+static void vkr_pipe_compile(VkrPipeJob *j)
+{
+    if (!j->id) {
+        return;
+    }
+    const uint64_t t0 = vkr_now_ns();
+    j->result =
+        vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &j->ci, NULL, &j->pipeline);
+    j->ms = (float)((double)(vkr_now_ns() - t0) / 1e6);
+}
+
+static RhiPipeline vkr_pipe_finish(const RhiPipelineDesc *d, VkrPipeJob *j)
+{
+    RhiPipeline out = {0};
+    if (!j->id) {
         return out;
     }
+    VkrPipeline *p = vkr_pool_get(&g_vkr.pipelines, j->id);
+    if (!vkr_check(j->result, "vkCreateGraphicsPipelines", __FILE__, __LINE__) || !p) {
+        if (j->result == VK_SUCCESS) {
+            vkDestroyPipeline(g_vkr.device, j->pipeline, NULL);
+        }
+        vkDestroyPipelineLayout(g_vkr.device, j->layout, NULL);
+        vkr_pool_release(&g_vkr.pipelines, j->id);
+        return out;
+    }
+    p->pipeline = j->pipeline;
     if (g_vkr.debugUtils && d->debugName && VKR_FUNCTION_AVAILABLE(vkSetDebugUtilsObjectNameEXT)) {
         VkDebugUtilsObjectNameInfoEXT ni = {
             .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
@@ -810,8 +865,165 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
         };
         vkSetDebugUtilsObjectNameEXT(g_vkr.device, &ni);
     }
-    out.id = id;
+    out.id = j->id;
     return out;
+}
+
+RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
+{
+    VkrPipeJob j;
+    if (!vkr_pipe_prepare(d, &j)) {
+        return (RhiPipeline){0};
+    }
+    vkr_pipe_compile(&j);
+    return vkr_pipe_finish(d, &j);
+}
+
+/* ------------------------------------------------- several at once (rhi.h)
+ * The workers take the next job index from one counter until none is left;
+ * each finished job counts and wakes the calling thread, which calls the
+ * caller's wait function at most every RHI_PIPELINE_WAIT_MS. */
+typedef struct VkrPipeWork {
+    VkrPipeJob *jobs;
+    uint32_t n;
+#ifdef ICO_RHI_HAVE_SDL
+    SDL_AtomicInt next, finished;
+    SDL_Semaphore *wake;
+#endif
+} VkrPipeWork;
+
+/* the workers' stack: a desktop main thread's (a driver's compiler may
+ * recurse deeply; the platform's default for a new thread is 1 MB on
+ * Windows and Android) */
+#define VKR_PIPE_STACK_BYTES (8u * 1024u * 1024u)
+
+#ifdef ICO_RHI_HAVE_SDL
+static int SDLCALL vkr_pipe_worker(void *arg)
+{
+    VkrPipeWork *w = arg;
+    for (;;) {
+        const int i = SDL_AddAtomicInt(&w->next, 1);
+        if (i < 0 || (uint32_t)i >= w->n) {
+            break;
+        }
+        vkr_pipe_compile(&w->jobs[i]);
+        SDL_AddAtomicInt(&w->finished, 1);
+        SDL_SignalSemaphore(w->wake);
+    }
+    return 0;
+}
+
+static uint32_t vkr_pipe_threads_for(uint32_t jobs)
+{
+    int cores = SDL_GetNumLogicalCPUCores();
+    uint32_t t = cores > 1 ? (uint32_t)cores - 1u : 1u;
+    if (t > RHI_PIPELINE_THREADS_MAX) {
+        t = RHI_PIPELINE_THREADS_MAX;
+    }
+    return t < jobs ? t : (jobs > 0 ? jobs : 1u);
+}
+#endif
+
+uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
+                              RhiPipelineBatch *batch)
+{
+    uint32_t made = 0, threads = 1;
+    if (batch) {
+        batch->threads = 1;
+    }
+    if (!descs || !out || n == 0) {
+        return 0;
+    }
+    VkrPipeWork w;
+    memset(&w, 0, sizeof(w));
+    w.jobs = calloc(n, sizeof(VkrPipeJob));
+    w.n = n;
+    if (!w.jobs) {
+        /* no room for the jobs: one at a time */
+        for (uint32_t i = 0; i < n; i++) {
+            out[i] = rhi_create_pipeline(&descs[i]);
+            made += out[i].id != 0;
+            if (batch && batch->ms) {
+                batch->ms[i] = 0.0f;
+            }
+        }
+        return made;
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        vkr_pipe_prepare(&descs[i], &w.jobs[i]);
+    }
+    bool done = false;
+#ifdef ICO_RHI_HAVE_SDL
+    /* a single pipeline with nobody waiting needs no thread */
+    if (n > 1 || (batch && batch->wait)) {
+        SDL_Thread *th[RHI_PIPELINE_THREADS_MAX];
+        uint32_t started = 0;
+        const uint32_t want = vkr_pipe_threads_for(n);
+        SDL_SetAtomicInt(&w.next, 0);
+        SDL_SetAtomicInt(&w.finished, 0);
+        w.wake = SDL_CreateSemaphore(0);
+        SDL_PropertiesID props = w.wake ? SDL_CreateProperties() : 0;
+        if (props) {
+            SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_ENTRY_FUNCTION_POINTER,
+                                   (void *)vkr_pipe_worker);
+            SDL_SetStringProperty(props, SDL_PROP_THREAD_CREATE_NAME_STRING, "rhi-pipelines");
+            SDL_SetNumberProperty(props, SDL_PROP_THREAD_CREATE_STACKSIZE_NUMBER,
+                                  VKR_PIPE_STACK_BYTES);
+            SDL_SetPointerProperty(props, SDL_PROP_THREAD_CREATE_USERDATA_POINTER, &w);
+            for (; started < want; started++) {
+                th[started] = SDL_CreateThreadWithProperties(props);
+                if (!th[started]) {
+                    break;
+                }
+            }
+            SDL_DestroyProperties(props);
+        }
+        if (started > 0) {
+            uint64_t last = vkr_now_ns();
+            while ((uint32_t)SDL_GetAtomicInt(&w.finished) < n) {
+                SDL_WaitSemaphoreTimeout(w.wake, (Sint32)RHI_PIPELINE_WAIT_MS);
+                const uint64_t now = vkr_now_ns();
+                if (batch && batch->wait &&
+                    now - last >= (uint64_t)RHI_PIPELINE_WAIT_MS * 1000000ull) {
+                    batch->wait(batch->ctx, (uint32_t)SDL_GetAtomicInt(&w.finished));
+                    last = vkr_now_ns();
+                }
+            }
+            for (uint32_t i = 0; i < started; i++) {
+                SDL_WaitThread(th[i], NULL);
+            }
+            threads = started;
+            done = true;
+        } else if (w.wake) {
+            VKR_LOG("pipelines: no worker thread (%s); creating them on this thread",
+                    SDL_GetError());
+        }
+        if (w.wake) {
+            SDL_DestroySemaphore(w.wake);
+        }
+    }
+#endif
+    if (!done) {
+        /* the calling thread compiles them, the wait function between two */
+        for (uint32_t i = 0; i < n; i++) {
+            vkr_pipe_compile(&w.jobs[i]);
+            if (batch && batch->wait && i + 1 < n) {
+                batch->wait(batch->ctx, i + 1);
+            }
+        }
+    }
+    for (uint32_t i = 0; i < n; i++) {
+        out[i] = vkr_pipe_finish(&descs[i], &w.jobs[i]);
+        made += out[i].id != 0;
+        if (batch && batch->ms) {
+            batch->ms[i] = w.jobs[i].ms;
+        }
+    }
+    if (batch) {
+        batch->threads = threads;
+    }
+    free(w.jobs);
+    return made;
 }
 
 void rhi_destroy_pipeline(RhiPipeline h)

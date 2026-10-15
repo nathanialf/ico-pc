@@ -247,6 +247,12 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc)
     return be()->create_pipeline(desc);
 }
 
+uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
+                              RhiPipelineBatch *batch)
+{
+    return be()->create_pipelines(descs, n, out, batch);
+}
+
 void rhi_destroy_pipeline(RhiPipeline p)
 {
     be()->destroy_pipeline(p);

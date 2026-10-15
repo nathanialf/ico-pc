@@ -48,6 +48,7 @@
     X(destroy_bind_group_layout)                                                                   \
     X(create_bind_group)                                                                           \
     X(create_pipeline)                                                                             \
+    X(create_pipelines)                                                                            \
     X(destroy_pipeline)                                                                            \
     X(begin_commands)                                                                              \
     X(end_commands)                                                                                \

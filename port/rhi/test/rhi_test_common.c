@@ -98,6 +98,7 @@ static void cellQuad(Vtx *v, int cell, float z, uint8_t r, uint8_t g, uint8_t b,
 
 typedef struct Ctx {
     RhiBindGroupLayout l0, l1, l2;
+    RhiBindGroupLayout layouts[3]; /* l0, l1, l2, for the descriptions */
     RhiShader vs, psDual, psColor, psTex, psUint;
     RhiShader psDepthResolve;   /* multisampling: the depth's largest sample */
     RhiShader psRov, psSubpass; /* the destination read (dstReadCell) */
@@ -105,9 +106,9 @@ typedef struct Ctx {
 
 /* color RHI_FMT_UNKNOWN: no colour target (a depth-only pass); samples the
  * targets' count (0: single-sampled) */
-static RhiPipeline makePipelineN(const Ctx *c, RhiShader ps, RhiFormat color, RhiFormat depth,
-                                 const RhiBlendState *blend, const RhiDepthStencilState *ds,
-                                 const char *name, uint32_t samples)
+static void pipelineDesc(const Ctx *c, RhiShader ps, RhiFormat color, RhiFormat depth,
+                         const RhiBlendState *blend, const RhiDepthStencilState *ds,
+                         const char *name, uint32_t samples, RhiPipelineDesc *out)
 {
     static const RhiVertexBinding vb = {0, sizeof(Vtx), false};
     static const RhiVertexAttr va[3] = {
@@ -115,11 +116,10 @@ static RhiPipeline makePipelineN(const Ctx *c, RhiShader ps, RhiFormat color, Rh
         {1, 0, RHI_VTX_U8x4_UNORM, offsetof(Vtx, rgba)},
         {2, 0, RHI_VTX_F32x2, offsetof(Vtx, u)},
     };
-    RhiBindGroupLayout layouts[3] = {c->l0, c->l1, c->l2};
     RhiPipelineDesc d = {0};
     d.vertex = c->vs;
     d.fragment = ps;
-    d.layouts = layouts;
+    d.layouts = c->layouts;
     d.layoutCount = 3;
     d.vertexBindings = &vb;
     d.vertexBindingCount = 1;
@@ -136,6 +136,15 @@ static RhiPipeline makePipelineN(const Ctx *c, RhiShader ps, RhiFormat color, Rh
     d.depthFormat = depth;
     d.debugName = name;
     d.samples = samples;
+    *out = d;
+}
+
+static RhiPipeline makePipelineN(const Ctx *c, RhiShader ps, RhiFormat color, RhiFormat depth,
+                                 const RhiBlendState *blend, const RhiDepthStencilState *ds,
+                                 const char *name, uint32_t samples)
+{
+    RhiPipelineDesc d;
+    pipelineDesc(c, ps, color, depth, blend, ds, name, samples, &d);
     RhiPipeline p = rhi_create_pipeline(&d);
     if (!p.id) {
         rhi_test_log("FAIL pipeline %s not created\n", name);
@@ -716,6 +725,20 @@ static void dstReadCell(const Ctx *c, RhiDstRead kind)
     rhi_destroy_buffer(ring);
 }
 
+/* rhi_create_pipelines' wait function: the finished count never goes
+ * back */
+typedef struct BatchWait {
+    uint32_t calls, last, backwards;
+} BatchWait;
+
+static void batchWait(void *ctx, uint32_t finished)
+{
+    BatchWait *w = ctx;
+    w->backwards += finished < w->last;
+    w->last = finished;
+    w->calls++;
+}
+
 int rhi_test_run_cells(const RhiTestConfig *cfg)
 {
     failures = 0;
@@ -781,6 +804,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     c.l0 = rhi_create_bind_group_layout(&ld0);
     c.l1 = rhi_create_bind_group_layout(&ld1);
     c.l2 = rhi_create_bind_group_layout(&ld2);
+    c.layouts[0] = c.l0;
+    c.layouts[1] = c.l1;
+    c.layouts[2] = c.l2;
     /* the blob the backend understands: DXIL for D3D12, SPIR-V otherwise */
     const bool dxil = rhi_backend() == RHI_BACKEND_D3D12;
 #define BLOB(n)                                                                                    \
@@ -850,13 +876,54 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         pDualColor = makePipeline(&c, c.psDual, CF, DF, &dualColor, &dsNone, "dualColor");
         pDualAlpha = makePipeline(&c, c.psDual, CF, DF, &dualAlpha, &dsNone, "dualAlpha");
     }
-    RhiPipeline pDecr = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr");
-    RhiPipeline pReplace = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep");
-    RhiPipeline pIncr = makePipeline(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr");
-    RhiPipeline pEqual = makePipeline(&c, c.psColor, CF, DF, &opaque, &dsEqual, "stencilEqual");
-    RhiPipeline pDepth = makePipeline(&c, c.psColor, CF, DF, &opaque, &dsGequal, "depthGequal");
-    RhiPipeline pMask = makePipeline(&c, c.psColor, CF, DF, &maskRA, &dsNone, "maskRA");
-    RhiPipeline pTex = makePipeline(&c, c.psTex, CF, DF, &opaque, &dsNone, "tex");
+    /* these seven through rhi_create_pipelines (the renderer's start-up
+     * set), with one description that cannot be created among them: the
+     * cells below draw with them, and the failed one fails alone */
+    RhiPipelineDesc batchDesc[8];
+    RhiPipeline batchPipe[8];
+    float batchMs[8];
+    BatchWait bw = {0, 0, 0};
+    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0};
+    pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr", 0u, &batchDesc[0]);
+    pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep", 0u, &batchDesc[1]);
+    pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr", 0u, &batchDesc[2]);
+    pipelineDesc(&c, c.psColor, CF, DF, &opaque, &dsGequal, "depthGequal", 0u, &batchDesc[3]);
+    pipelineDesc(&c, c.psColor, CF, DF, &opaque, &dsNone, "noVertexShader", 0u, &batchDesc[4]);
+    batchDesc[4].vertex = (RhiShader){0};
+    pipelineDesc(&c, c.psColor, CF, DF, &opaque, &dsEqual, "stencilEqual", 0u, &batchDesc[5]);
+    pipelineDesc(&c, c.psColor, CF, DF, &maskRA, &dsNone, "maskRA", 0u, &batchDesc[6]);
+    pipelineDesc(&c, c.psTex, CF, DF, &opaque, &dsNone, "tex", 0u, &batchDesc[7]);
+    const uint32_t batchMade = rhi_create_pipelines(batchDesc, 8, batchPipe, &batch);
+    rhi_test_log("%s: rhi_create_pipelines: %u of 8 on %u threads, %u waits\n", s_label, batchMade,
+                 batch.threads, bw.calls);
+    if (batchMade != 7 || batchPipe[4].id != 0 || batch.threads < 1 ||
+        batch.threads > RHI_PIPELINE_THREADS_MAX || bw.backwards || bw.last > 8) {
+        rhi_test_log("FAIL rhi_create_pipelines: %u made, the failed one %u, %u threads, "
+                     "finished went back %u times, last %u\n",
+                     batchMade, batchPipe[4].id, batch.threads, bw.backwards, bw.last);
+        failures++;
+    }
+    for (uint32_t i = 0; i < 8; i++) {
+        for (uint32_t k = 0; k < i; k++) {
+            if (batchPipe[i].id && batchPipe[i].id == batchPipe[k].id) {
+                rhi_test_log("FAIL rhi_create_pipelines: pipelines %u and %u share id %u\n", k, i,
+                             batchPipe[i].id);
+                failures++;
+            }
+        }
+        if (batchMs[i] < 0.0f || (i == 4 && batchMs[i] != 0.0f)) {
+            rhi_test_log("FAIL rhi_create_pipelines: pipeline %u took %.3f ms\n", i,
+                         (double)batchMs[i]);
+            failures++;
+        }
+    }
+    RhiPipeline pDecr = batchPipe[0];
+    RhiPipeline pReplace = batchPipe[1];
+    RhiPipeline pIncr = batchPipe[2];
+    RhiPipeline pDepth = batchPipe[3];
+    RhiPipeline pEqual = batchPipe[5];
+    RhiPipeline pMask = batchPipe[6];
+    RhiPipeline pTex = batchPipe[7];
     RhiPipeline pUint =
         makePipeline(&c, c.psUint, RHI_FMT_RGBA8_UINT, RHI_FMT_UNKNOWN, &opaque, NULL, "uint");
 

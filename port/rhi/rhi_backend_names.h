@@ -44,6 +44,7 @@
 #define rhi_destroy_bind_group_layout RHI__NAME(destroy_bind_group_layout)
 #define rhi_create_bind_group     RHI__NAME(create_bind_group)
 #define rhi_create_pipeline      RHI__NAME(create_pipeline)
+#define rhi_create_pipelines     RHI__NAME(create_pipelines)
 #define rhi_destroy_pipeline     RHI__NAME(destroy_pipeline)
 #define rhi_begin_commands       RHI__NAME(begin_commands)
 #define rhi_end_commands         RHI__NAME(end_commands)
