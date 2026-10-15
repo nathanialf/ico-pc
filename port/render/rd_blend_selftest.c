@@ -43,11 +43,16 @@
  * while it runs (the MSAA epoch draws with the fixed-function blend), and
  * SCENE is left to start from its clear.
  *
- *   blend: exact (attachment read) (self-test: fixed-function ok 1,
- *     attachment ok 0, storage not on this device) on SCENE 640x448 at
- *     1920x1344 texels in 12.3 ms
- *   blend: self-test: attachment fail 246 at leaf, clear texel (texel
- *     890,697): 255,255,255,0 want 40,120,60,0
+ *   blend: exact (attachment read) (self-test: attachment ok 1, storage
+ *     not on this device, fixed-function ok 1) on SCENE 640x448 at
+ *     1920x1344 texels in 318.3 ms
+ *   blend: self-test: attachment ok 1 at glyph 0 (texel 1105,709):
+ *     73,57,41,23 want 74,57,41,23
+ * (lavapipe: the glyph one level off the fixed-function reference, the
+ * blender's rounding; the GS samples exact), and read white
+ * (ICO_RD_BLEND_SABOTAGE=attachment):
+ *   blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625):
+ *     255,255,255,4 want 21,28,14,4
  *
  * ICO_RD_BLEND_SABOTAGE=attachment,storage,fixed (tests): those modes'
  * read-back samples are made white, as a driver whose read returns white

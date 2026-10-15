@@ -633,12 +633,14 @@ window runs it before the start-up pipeline set (so the set is the chosen mode's
 whenever SCENE is made at a new size. One line names the choice and every result:
 
 ```
-rd: blend: exact (attachment read) (self-test: attachment ok 0, storage not on this device, fixed-function ok 1) on SCENE 640x448 at 1920x1344 texels in 9.8 ms
+rd: blend: exact (attachment read) (self-test: attachment ok 1, storage not on this device, fixed-function ok 1) on SCENE 640x448 at 1920x1344 texels in 318.3 ms
 ```
 
-and a failing mode's worst sample gets a line of its own,
-`rd: blend: self-test: attachment fail 245 at leaf, clear texel (texel 1031,671): 255,255,255,0
-want 40,120,60,0`. An `ICO_RD_BLEND` of `attachment` or `storage` is kept whatever its result (the
+(lavapipe at 3x: the glyph one level off the fixed-function reference, the blender's rounding;
+the time is mostly the first compile of its pipelines, a run at a new scene size takes 50 to 90 ms
+there). A failing mode's worst sample, and a passing one's when it is not exact, gets a line of its
+own, `rd: blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625): 255,255,255,4
+want 21,28,14,4` (read white by `ICO_RD_BLEND_SABOTAGE=attachment`). An `ICO_RD_BLEND` of `attachment` or `storage` is kept whatever its result (the
 line adds `; kept by ICO_RD_BLEND`); `ICO_RD_BLEND=fixed` (also what the restart after a crash in a
 destination-read pipeline sets) and a device without an exact mode run nothing
 (`rd: blend: fixed-function (rounds up) (self-test not run: ...)`). `ICO_RD_BLEND_SABOTAGE=`
