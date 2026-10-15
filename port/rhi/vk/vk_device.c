@@ -1247,9 +1247,12 @@ static bool vkr_create_device(void)
          * storage buffers through plain pointers and an out-of-range read
          * loses the device (issue 95); off by default on the desktop, whose
          * GPUs bound their descriptors in hardware.  gpu_robust overrides
-         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST).  The
-         * default is robustBufferAccess alone; VK_EXT_robustness2's
-         * robustImageAccess2 and nullDescriptor only when gpu_robust asks */
+         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST;
+         * gpu_robust=false turns it all off).  Wherever robust access is on,
+         * VK_EXT_robustness2's robustBufferAccess2 and robustImageAccess2 go
+         * with it when the device offers them (reads past a range give zero,
+         * on every descriptor kind); nullDescriptor only when gpu_robust
+         * asks */
         const int robustSaid = vkr_env_switch("ICO_GPU_ROBUST");
 #ifdef __ANDROID__
         const bool robustDefault = true;
@@ -1260,7 +1263,7 @@ static bool vkr_create_device(void)
         const bool wantCheck = vkr_env_on("ICO_GPU_CHECKPOINTS");
         const bool extFault = vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
         const bool extRobust2 =
-            robustSaid == 1 && vkr_device_has_ext(g_vkr.phys, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+            wantRobust && vkr_device_has_ext(g_vkr.phys, VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
         const bool extBind =
             wantCheck && s_debugUtilsExt &&
             vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME);
@@ -1287,9 +1290,11 @@ static bool vkr_create_device(void)
         }
         g_vkr.deviceFault = extFault && qFault.deviceFault;
         g_vkr.robust = wantRobust && avail.robustBufferAccess == VK_TRUE;
+        const bool buffer2 = g_vkr.robust && extRobust2 && qRobust2.robustBufferAccess2;
         const bool image2 = g_vkr.robust && extRobust2 && qRobust2.robustImageAccess2;
-        const bool nullDesc = g_vkr.robust && extRobust2 && qRobust2.nullDescriptor;
-        g_vkr.robust2 = image2 || nullDesc;
+        const bool nullDesc =
+            g_vkr.robust && extRobust2 && robustSaid == 1 && qRobust2.nullDescriptor;
+        g_vkr.robust2 = buffer2 || image2 || nullDesc;
         g_vkr.addressReport = extBind && qBind.reportAddressBinding;
         g_vkr.checkpoints = extCheck;
         memset(&qFault, 0, sizeof(qFault));
@@ -1297,6 +1302,7 @@ static bool vkr_create_device(void)
         qFault.deviceFault = VK_TRUE;
         memset(&qRobust2, 0, sizeof(qRobust2));
         qRobust2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT;
+        qRobust2.robustBufferAccess2 = buffer2 ? VK_TRUE : VK_FALSE;
         qRobust2.robustImageAccess2 = image2 ? VK_TRUE : VK_FALSE;
         qRobust2.nullDescriptor = nullDesc ? VK_TRUE : VK_FALSE;
         memset(&qBind, 0, sizeof(qBind));
@@ -1314,11 +1320,20 @@ static bool vkr_create_device(void)
         if (g_vkr.checkpoints) {
             exts[extCount++] = VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME;
         }
-        /* gpu_robust named, or the platform's default */
-        const char *robustSay = !g_vkr.robust     ? (wantRobust ? "asked for, not offered" : "off")
-                                : robustSaid == 1 ? (image2 ? "on with images (gpu_robust)"
-                                                            : "on, buffers (gpu_robust)")
-                                                  : "on, buffers (the Android default)";
+        /* what is on, and whether gpu_robust named it or it is the
+           platform's default */
+        char robustSay[160];
+        if (!g_vkr.robust) {
+            snprintf(robustSay, sizeof robustSay, "%s",
+                     wantRobust        ? "asked for, not offered"
+                     : robustSaid == 0 ? "off (gpu_robust)"
+                                       : "off");
+        } else {
+            snprintf(robustSay, sizeof robustSay, "on, buffers%s%s%s (%s)",
+                     buffer2 ? " (robustness2)" : "", image2 ? " and images (robustness2)" : "",
+                     nullDesc ? ", null descriptors" : "",
+                     robustSaid == 1 ? "gpu_robust" : "the Android default");
+        }
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
                 "access %s",
                 g_vkr.deviceFault ? "on" : "not offered",

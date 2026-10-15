@@ -445,16 +445,17 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
 
 The checkpoints cost one GPU write per pass (about 430 a replay) and the binding report a callback
 per resource, so they stay off unless asked for; the fault report costs nothing until a loss.
-**Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustImageAccess2` and
-`nullDescriptor` where `VK_EXT_robustness2` offers them, so an access out of a buffer's or image's
-range reads zero and writes nothing instead of reaching other memory; an A/B switch for a loss that
-an out-of-range access could explain. `robustBufferAccess` alone is on by default on Android (a Mali
-GPU reads storage buffers through plain pointers, so an out-of-range read there loses the device
-instead of reading zero; issue 95); the image and null-descriptor parts come only with
-`gpu_robust=true`. It is off by default on the desktop; `gpu_robust` overrides either way
-(`gpu_robust=false` turns it off on Android). One start-up line says what is on:
+**Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustBufferAccess2` and
+`robustImageAccess2` where `VK_EXT_robustness2` offers them, so an access out of a buffer's or
+image's range reads zero and writes nothing instead of reaching other memory; an A/B switch for a
+loss that an out-of-range access could explain. It is on by default on Android, the robustness2
+parts with it when offered (a Mali GPU reads storage buffers through plain pointers, so an
+out-of-range read there loses the device instead of reading zero; issue 95); `nullDescriptor` comes
+only with `gpu_robust=true`. It is off by default on the desktop; `gpu_robust` overrides either way
+(`gpu_robust=false` turns all of it off on Android). One start-up line says what is on:
 `rhi_vk: loss diagnostics: fault report on|not offered; checkpoints ...; resource addresses ...;
-robust access ...` (`on, buffers (the Android default)` when the default turned it on) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
+robust access ...` (`on, buffers (robustness2) and images (robustness2) (the Android default)`
+when the default turned it on and the device offers the extension) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
 environment (`ICO_GPU_CHECKPOINTS`, `ICO_GPU_ROBUST`) or ico-pc.ini's `[dev]` keys
 ([CONFIG.md](CONFIG.md#dev)).
 
