@@ -1,7 +1,6 @@
 ## New
 
 - A Water reflections row on the Effects page (Options > Effects): Original keeps the game's soft reflections, Sharp draws them at your resolution.
-- A [download page](https://nathanialf.github.io/ico-pc/) that picks the right file for your device, with every version and its notes (thanks to Sad Origami for the idea).
 
 ## Fixed
 
