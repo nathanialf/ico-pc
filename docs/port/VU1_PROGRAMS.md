@@ -124,8 +124,9 @@ Each draw carries VU1 data memory 0..35 as the program reads it, `VuCB.vu_mem`
 The cluster, mesh and particle programs keep their `SET_*` uploads in VF registers; `vuImage`
 copies those registers into the slots the normal programs use, so every shader reads the same map
 (`port/render/rd_mesh.c` (`vuImage`)). The bones of a skinned draw go in `VuBoneCB` (VU memory
-16..255). `vu_draw`, `vu_batch` and `vu_strip` describe the stream layout, the clip mode and
-flags, a chain clip plane and the strip test's bounds (`port/shaders/vu_common.hlsli` (`VuCB`)).
+16..255), and the card test's verdicts after them ([The card test](#the-card-test)). `vu_draw`,
+`vu_batch` and `vu_strip` describe the stream layout, the clip mode and flags, a chain clip plane
+and where the card test's bits are (`port/shaders/vu_common.hlsli` (`VuCB`)).
 
 ## The mesh path
 
@@ -199,8 +200,10 @@ accumulator chain each, named after it (`port/render/vu1_ref/vu1_ref_internal.h`
 `vu1ref_normal_l`, `vu1ref_cluster`, `vu1ref_mesh`, `vu1ref_particle`
 (`port/render/vu1_ref/vu1_ref.c`, `vu1_normal.c`, `vu1_cluster.c`, `vu1_mesh.c`, `vu1_particle.c`,
 `vu1_scissor.c`). `vu1ref_static_kicks` (`port/render/vu1_ref/vu1_ref.h`) is the strip rule the
-index list encodes. Besides the tests, `rd_mesh.c` keeps its per-list images in a `Vu1Ref` and runs
-`vu1ref_particle` for the end-tag check.
+index list encodes. Besides the tests, `rd_mesh.c` keeps its per-list images in a `Vu1Ref`, runs
+`vu1ref_particle` for the end-tag check, and decides the card test with `vu1ref_region_inside` and
+`vu1ref_strip_card`: the vertex shaders' own region test, not the programs' ([The card
+test](#the-card-test)).
 
 ## The region rule
 
@@ -225,9 +228,9 @@ since the projection does not change with the width. What the port then draws of
 5. It reaches into the picture in any other state (the Enhanced [preset](ARCHITECTURE.md#terms), a
    wider [native frame](ARCHITECTURE.md#terms) or a [scene scale](ARCHITECTURE.md#terms) above 1),
    every vertex in front of the eye: drawn, clipped, unless it belongs to a card, a free-standing
-   strip (no `VU_INDEX_JOINED`) none of whose triangles passes the test (`vu_strip_of`, the
-   programs' `vu_*_strip_passes`). A wall whose strip passes or is joined is drawn; an artist's card
-   parked at the picture's edge stays out.
+   strip (no `VU_INDEX_JOINED`) none of whose triangles passes the test ([The card
+   test](#the-card-test), `vu_strip_card`). A wall whose strip passes or is joined is drawn; an
+   artist's card parked at the picture's edge stays out.
 6. A vertex behind the eye and reaching into the picture: not drawn in any state.
 
 A `VU_INDEX_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
@@ -237,9 +240,11 @@ their neighbours, so the replay marks every triangle of a grid of two strips or 
 
 Under `VU_F_TICKS` (a picture between two ticks, through a blended camera) a triangle the rule
 drops at the blended camera is drawn, clipped, when either tick's camera showed it on the frame;
-a card stays a card. At each tick's own picture the rule is unchanged
-(`port/shaders/vu_common.hlsli` (`vu_region_rule`); `port/render/vu1_ref/vu1_ref.h`
-(`vu1ref_region_between`)).
+a card stays a card. At each tick's own picture the rule is unchanged. One cut tests the triangle
+at the three cameras at once, in the lanes of `float4` values: the picture at the blended camera
+and at both ticks, and the frame at both ticks when the blended camera drops it
+(`port/shaders/vu_common.hlsli` (`vu_region_rule`, `vu_lanes`, `vu_cut_z`, `vu_cut_rows`;
+[SHADERS.md](SHADERS.md#the-envelope)); `port/render/vu1_ref/vu1_ref.h` (`vu1ref_region_between`)).
 
 `rd_replay.c` sets `VU_F_EXTENDED` from `vuExtended` (not the Original preset, a frame wider
 than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera's `freeCamera`
@@ -263,6 +268,56 @@ the box (`ico2/seki/src/GifPacket.c` (`gifHostBeside`); `ico2/seki/include/GifPa
 picture) are hidden by the content table ([RENDER.md](RENDER.md#content-tables))
 (`port/render/rd_content_hide.c`).
 
+## The card test
+
+Rule 5's card test is decided on the CPU, once per [tick](ARCHITECTURE.md#terms), and the vertex
+shaders read the verdicts: a walk over the strip in every vertex (two scans of the stream for its
+ends, then up to 1,024 vertex transforms, in loops) has no place in a vertex shader inside the
+envelope ([SHADERS.md](SHADERS.md#the-envelope)).
+
+**The strips.** When a mesh is made, `rd_mesh.c` lists its free-standing strips
+(`RdMeshRec.cardStrips`): the runs of vertices between two strip flags of a batch (`ST.w < 1` on a
+strip's first vertex, as the index list reads it), three vertices or more, none of whose triangles
+carries `ICO_VU_INDEX_JOINED` then. The part joining at replay ([RENDER.md](RENDER.md#strip-joining))
+can mark more strips joined; those still get a verdict, and the shader's joined test overrules it. A
+grid's batch is one strip, and only a grid of one strip can be a card (`port/render/rd_mesh.c`
+(`cardStrips`)).
+
+**The verdicts.** `rd_draw_vu_mesh` and `rd_draw_vu_grid`, in any state but out of the box
+(`rd__vu_extended`, the state `VU_F_EXTENDED` stands for), test each free-standing strip of the
+draw's batches at the draw's camera (its `RdVuBlock`, and a skinned draw's bones) with the vertex
+shaders' region test (`vu1ref_region_inside`: single precision rounded to nearest as on the GPU, the
+products and sums in the VU's order, `1 / w` with the VU's zero rule; the simulation's own rounding,
+toward zero, is set aside for it). The first triangle with all three vertices inside ends a strip
+(`vu1ref_strip_card`), so most strips cost three vertex transforms. A strip with no passing
+triangle is a card (`port/render/rd_mesh.c` (`cardsMake`, `meshCards`, `gridCards`);
+`port/render/vu1_ref/vu1_ref.c`).
+
+**The payload.** The verdicts follow the materials in the draw's payload (`port/render/rd_mesh.h`
+(`RdVuCards`)): the span of vertices from the draw's first free-standing strip to its last, and two
+bits for each vertex of a card's strip, the verdict at the tick before and at this tick, sixteen
+vertices a word. The draw records both as this tick's; when the interpolation blends the draw from
+the tick before's, it puts that tick's own verdicts in the first bits (`rd__vu_cards_merge`;
+`port/render/rd_interp.c` (`blendVu`)). The section's size depends only on the mesh and the batch
+range, so the two ticks' payloads of a draw keep one size and pair. The vertex stream is not
+touched (the bits are numbered by the index list's vertices), so a dump keeps its format: a dump
+whose draws have no verdicts (one recorded out of the box, or one written before them) gets them at
+load from each draw's own payload and mesh, whatever settings it replays at
+(`rd__vu_cards_fill_frame`; `port/render/rd_dump.c`).
+
+**The shader's side.** `doVuDraw` copies the bits into `VuBoneCB` when a strip of the draw is a card
+at either tick: after the bones a skinned mesh's weights read (`RdMeshRec.boneQwUsed`), from qword 0
+for the other programs; `vu_strip` holds the first vertex covered, 1 (the card test applies), the
+vertices covered and the first qword. A draw with more vertices than the block holds covers the
+first ones and logs once. `vu_strip_card` reads a vertex's two bits; a strip is a card when it was
+one at either tick, so a card never enters the picture between the ticks
+(`port/render/rd_replay.c` (`doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_strip_card`,
+`vu_rule_card`)).
+
+**The cost.** The window's 10 s statistics line gives a step's average (`strip verdicts N strips, M
+triangles, T ms a step`), and a slow step's line the step's own, inside the game threads' time
+([DISPLAY.md](DISPLAY.md#the-stats-lines); `rd_vu_card_counts`, `port/render/rd.h`).
+
 ## Tests
 
 `vu1` (`port/shaders/test/vu1_test.c`) has three parts. Part a: hand traces, a few vertices per
@@ -272,7 +327,9 @@ each vertex's GS X, Y, Z, RGBA, STQ and region test, compared with the reference
 pixel, Z and STQ within 2^-20 relative, colours within 1, the region test exact); a strip drawn
 through the shipped entry and `vu_ps` against the reference's triangles drawn through the sprite
 shaders, every pixel within 1 LSB; and the port's rule over the VU (`vu1ref_region_draw`,
-`vu1ref_region_between`, `vu1ref_particle_draw`), checked by coverage. Part c: `RdVuCommon` against
+`vu1ref_region_between`, `vu1ref_particle_draw`), checked by coverage, with the card verdicts
+handed to the shader as `doVuDraw` hands them; the CPU's card test (`vu1ref_region_inside`,
+`vu1ref_strip_card`) must agree with the reference on every vertex and strip. Part c: `RdVuCommon` against
 the VU parameter block and the `VuCB` mirror. Exit 77 when parts a and c pass and there is no Vulkan
 device (`port/shaders/test/vu1_test.c`, header comment).
 

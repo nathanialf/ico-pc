@@ -243,14 +243,18 @@ went back or a gap over `PACE_SHOWN_GAP` (240) refreshes (`port/platform/pace_po
 
 ```
 window: N replays: CPU A ms (max M): interp, wait, acquire, upload, walk, bind, submit, present,
-        readback (fence waits); longest: ...; GPU ...; simulation step ...
+        readback (fence waits); longest: ...; GPU ...; simulation step ...; strip verdicts S
+        strips, T triangles, C ms a step
 ```
 
 It gives the replays' mean CPU time by phase, then `longest:` with each phase's maximum in the block
 (wait, acquire, upload, walk, bind, submit, present), so a log says which phase made the slowest
 replay slow; the GPU times when the backend has timestamps (uploads, [lists](ARCHITECTURE.md#terms)
-0-10, lists 11-12, present), else `no GPU timestamps`; and the simulation step's mean and maximum
-(`perf_log`; `port/platform/perf_block.h` (`perf_block_max_text`)). The phases are the replay's own:
+0-10, lists 11-12, present), else `no GPU timestamps`; the simulation step's mean and maximum;
+and a step's mean of the region rule's card verdicts the CPU decided while the draws were recorded
+(the strips and triangles tested, the time;
+[VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) (`perf_log`; `port/platform/perf_block.h`
+(`perf_block_max_text`); `port/render/rd.h` (`rd_vu_card_counts`)). The phases are the replay's own:
 `wait` the [frame slot](ARCHITECTURE.md#terms)'s fence (`rhi_wait_frame`), `upload` the ring and the
 uploads, `acquire` the backbuffer, `walk` recording the lists less `bind`, `submit`, `present`;
 `fence waits` is the backend's blocked time inside wait and readback (`port/render/rd_replay.c`
@@ -266,7 +270,8 @@ inside `wait`, its uploads, pipeline creations, allocations, buffers and texture
 snapshots, and its GPU time. The records arrive two replays late, so the vsync is the one the record
 was drained at (`port/platform/window_host.c` (`slow_replay`, `perf_drain`)). `[dev] slow_step_ms`
 (default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
-the step's parts and the pump's (`slow_step`).
+the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
+(`slow_step`).
 
 ## Pacing
 

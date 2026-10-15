@@ -489,8 +489,14 @@ created as the frames need it. The activity note names the batch: `creating pipe
 702: <first key> to <last key>`, put back after any pipeline the progress screen's frame creates in
 the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
 `pipelines: <made> of the reachable set's <n> created at start-up in <t> ms (<f> failed); <c>
-compiled on <k> threads, the longest <s> s` (`port/render/rd.h` (`rd_precreate_pipelines`,
-`RdPipelineProgressFn`, `rd_precreate_longest_ms`); `port/render/rd_pipeline.c`).
+compiled on <k> threads, the longest <s> s`, and two lines say where the time went, from the
+workers' own times (`RhiPipelineBatch.ms`): `pipelines: the slowest: <s> s <key>; ...` (the ten
+slowest compiles) and `pipelines: compile time by vertex shader: <entry> <s> s, ...` (summed over
+the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
+`RdPipelineProgressFn`, `rd_precreate_longest_ms`); `port/render/rd_pipeline.c` (`preTimesLog`)).
+At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
+largest <entry> <words> words`: a driver's compile time grows with a module's size, which
+`spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
 
 ## Destination reads and blend paths
 
@@ -849,7 +855,10 @@ with the rest of the wall only through the part's other packets. Once per replay
 meshes are uploaded, `rd__join_parts` groups the VU draws whose keys name one object and part (the
 key without its ordinal byte) and `rd__mesh_join_part` marks across their meshes. Every packet of a
 part the game registers is drawn, so the group is the part's whole, live and in a dump's replay. Out
-of the box the rule never reads the mark (`port/render/rd_join.c`).
+of the box the rule never reads the mark (`port/render/rd_join.c`). Whether a free-standing strip is
+a card is decided on the CPU when the draw is recorded and travels in its payload
+([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)); a strip the part joining marks is drawn whatever
+its verdict.
 
 ## Screen planes
 
@@ -917,8 +926,10 @@ A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versio
 `RD_DUMP_VERSION` (10): the frame's native size and aspect, its camera, start and end states, the
 13 lists, the payload, the textures and temporary targets it references, and its VU meshes. Target
 contents are not written: a frame that reads a retained target replays from what the loading
-context holds. Loading creates the textures and targets anew and rewrites every id. Dumps hold game
-assets and are never committed (`port/render/rd_dump.c`, header comment).
+context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
+draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so
+a dump replays alike at every setting. Dumps hold game assets and are never committed
+(`port/render/rd_dump.c`, header comment).
 
 Dumps are written by F12 and Shift+F12 ([PLATFORM.md](PLATFORM.md#hotkeys-and-dump-zips)) and by
 `[dev] dump_every = N` (with `dump_dir`, `dump_interp`, `dump_from`), which the host hands to rd as

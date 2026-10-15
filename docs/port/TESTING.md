@@ -358,7 +358,8 @@ program under an environment switch ([Environment switches](#environment-switche
   compiled as C against `above1x_ref.c`: the Bayer matrix, the B-spline's weights, the box, the
   axes and the separable combine, and the fog's `gs_fog_channel` (`checkAbove1xKernels`).
 - `vu1_test.c`: the [VU1](ARCHITECTURE.md#terms) program shaders against their CPU references and
-  hand traces (`vu1`, `vu1_mali`).
+  hand traces, the card verdicts handed over as the renderer does, and the CPU's card test against
+  the reference (`vu1`, `vu1_mali`).
 
 ### port/test
 
@@ -574,11 +575,14 @@ player guides, TODOs, and the package's list of player guides; `tools/check_docs
 the allowed exceptions (top-level `CMakeLists.txt`, `docs_check`; `tools/check_docs.py`,
 docstring). `python3 -I tools/check_docs.py` runs it without a build.
 
-`spirv_check` runs `tools/check_spirv.py` over the SPIR-V modules the build compiled
-(`<build>/shaders/*.spv`): no module carries an array as a value (a whole-array load, store,
-construct, insert, phi, select or copy) and no vertex shader keeps a local array
-([SHADERS.md](SHADERS.md#scalars-not-arrays)). `python3 -I tools/check_spirv.py <build>/shaders`
-runs it by hand.
+`spirv_check` runs `tools/check_spirv.py --sizes` over the SPIR-V modules the build compiled
+(`<build>/shaders/*.spv`): a vertex shader uses only the opcodes of the envelope's set (a loop,
+`dot()`, a logical-not-equal or an undefined value named), every module stays within its stage's
+size budget in words, no module carries an array as a value (a whole-array load, store, construct,
+insert, phi, select or copy) and no vertex shader keeps a local array
+([SHADERS.md](SHADERS.md#the-envelope)); the log lists each module's words, instructions, blocks,
+phis, loops and dot products. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
+hand.
 
 ## Which tests a change needs
 
@@ -605,7 +609,10 @@ runs it by hand.
   (`port/shaders/test/shaders_table_test.c`), then `ctest -L rhi` and `-L render`
   (`shaders_pixel` and its variants, `vu1` for a VU shader, `gs_math`, `rhi_d3d12_plan`); on
   Windows `rhi_d3d12` and `compare_backends.cmd` for the DXIL side. Any shader change:
-  `spirv_check` (no array-typed values, no local array in a vertex shader).
+  `spirv_check` (the vertex shaders' envelope, the size budget, no array-typed values, no local
+  array in a vertex shader). A change to a VU vertex shader or to the card test
+  ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): `vu1`, `vu1_mali`, `rd_native` and the frame
+  gates ([Render gates](#render-gates)), whose pictures must not change.
 - A new achievement: `achievements`, which fails unless one of its runs unlocks every achievement
   and each has a title and a description in every language; its count check
   (`ico_ach_count() >= 20 && ico_ach_count() <= 30`) bounds the table, which holds 30

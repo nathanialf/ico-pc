@@ -22,11 +22,17 @@ Gates:
              decision, not an accident.  (v0.5.2's three grid entries
              carried one OpUndef each; the gate allows none.)
   size       no module is longer than its stage's budget in 32-bit words:
-             VS_BUDGET for a vertex shader (v0.5.2's largest was 16,268,
-             v0.7.6's 93,407: a phone compiles the start-up set in minutes
-             at that size), PS_BUDGET for a pixel shader (the largest at
-             the gate's introduction, font_sheet_ps_dstrov's 71,418, plus 10
-             percent)
+             VS_BUDGET for a vertex shader, PS_BUDGET for a pixel shader
+             (the largest at the gate's introduction, font_sheet_ps_dstrov's
+             71,418, plus 10 percent).  A phone's driver compiles the
+             start-up set in a time about proportional to the size: v0.7.6's
+             VU vertex shaders were 81k to 93k words (the cut copied three
+             times as branch chains), minutes on a phone.  The vertex budget
+             is the largest VU vertex shader inside the envelope (vu_lit_vs,
+             20,979: the exact cut for three triangles at once, the tick
+             cameras in its lanes, the attribute planes) and about 5
+             percent; v0.5.2's, without the cut, the ticks and the planes,
+             were up to 16,268.
   aggregate  no instruction produces or stores a whole array: no OpLoad,
              OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi,
              OpSelect, OpCopyObject or OpCopyLogical whose type is an array
@@ -115,7 +121,7 @@ OTHER_NAMES = {77: "OpVectorExtractDynamic", 78: "OpVectorInsertDynamic", 126: "
                173: "OpSGreaterThan", 177: "OpSLessThan", 178: "OpULessThanEqual",
                179: "OpSLessThanEqual", 195: "OpShiftRightArithmetic", 198: "OpBitwiseXor",
                200: "OpNot", 252: "OpKill"}
-VS_BUDGET = 16000
+VS_BUDGET = 22000
 PS_BUDGET = 78560
 
 
