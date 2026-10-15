@@ -19,7 +19,10 @@
  *     sample-step shift, read offsets in the reply;
  *   - a sound effect played through SgVabOpenFakeBody / SgSePlay /
  *     SgCalledTickProc on a synthetic .hd, so the sequencer's pointer seams
- *     (head context, header records, sequence bodies) run on this host.
+ *     (head context, header records, sequence bodies) run on this host;
+ *   - the EE's full packet page (AU-7): a stream opened when the page
+ *     already holds 255 packets still lands its open, volume, pitch and
+ *     play, in the order sent, and the page is logged and counted.
  *
  * Usage: sndn2_test [disc image]
  */
@@ -37,6 +40,7 @@
 #include "sndn2_host.h"
 #include "spu2.h"
 #include "spu2_sd.h"
+#include "stream_watch.h"
 #include "vfs.h"
 
 static int failures;
@@ -795,6 +799,122 @@ static void test_sequencer(void)
     CHECK(SgGetDmaTransferStatus(0) == 1);
 }
 
+/* --- the full packet page (AU-7) --------------------------------------- */
+
+static char caught[8][200];
+static int ncaught;
+
+static void catch_line(const char *line)
+{
+    if (ncaught < 8) {
+        snprintf(caught[ncaught], sizeof caught[0], "%s", line);
+    }
+    ncaught++;
+}
+
+/* adpcmDataSet's packets for a stereo stream on voices 0 and 1
+   (ico2/fumi/sound/adpcm_init.c): the two opens (AdpcmChReq: ch, attr,
+   iopAddr, iopSize, spuAddr, the SPU ring's size), their volumes and
+   pitches, then AdpcmPlay */
+static void ee_stream_open(uint32_t iop, int vol)
+{
+    int ch;
+
+    for (ch = 0; ch < 2; ch++) {
+        int req[6] = {ch, 0x20002, (int)iop + 0x400 * ch, 0x5C000, 0x1E0000 + 0x4000 * ch, 0x4000};
+
+        SgStAdpcmOpen(req);
+        SgStAdpcmChannelVolume(1ull << ch, ch == 0 ? (unsigned)vol : 0, ch == 0 ? 0 : vol);
+        SgStAdpcmChannelPitch(1ull << ch, 44100);
+    }
+    SgStAdpcmPlay(3);
+}
+
+static void test_full_page(void)
+{
+    uint32_t ring = ico_iop_heap_alloc(RING);
+    IcoAudioStreamStats st;
+    int i;
+
+    ico_sif_host_reset();
+    ico_sndn2_host_reset();
+    ico_audio_stream_log_sink(catch_line);
+    ncaught = 0;
+    CHECK(SgSndn2RemoteInit() == 0);
+    SgInit();
+    /* AdpcmStreamInit: the four stream voices */
+    for (i = 0; i < 4; i++) {
+        CHECK(SgGetSpuSlotMalloc(1) == i);
+    }
+    SgStAdpcmInit();
+    SgCalledTickProc();
+
+    /* A: the page holds 255 packets (the per-tick volume updates of a busy
+       scene, here on voice 10) before the stream opens.  On the PS2 the
+       open's seven packets are dropped (_SgSetPkAdd returns -1 and the
+       voices keep the volume the last stream left: a stream that plays in
+       silence); the port carries them to the driver after the page. */
+    for (i = 0; i < 255; i++) {
+        CHECK(_SgSetPkAdd(1, 10, 0x0100, 0x0100) == i + 1);
+    }
+    CHECK(_SgSetPkAdd(1, 10, 0x0200, 0x0200) == -1); /* the EE still sees the drop */
+    ee_stream_open(ring, 0x3FFF);
+    SgCalledTickProc();
+    spu2_apply_pending();
+    CHECK(spu2_sd_get_param(vsel(10, SPU2_SD_VPARAM_VOLL)) == 0x0200); /* the carried one, last */
+    CHECK(spu2_sd_get_addr(vsel(0, SPU2_SD_VADDR_SSA)) == 0x1E0000);
+    CHECK(spu2_sd_get_addr(vsel(1, SPU2_SD_VADDR_SSA)) == 0x1E4000);
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_VOLL)) == 0x3FFF);
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_VOLR)) == 0);
+    CHECK(spu2_sd_get_param(vsel(1, SPU2_SD_VPARAM_VOLR)) == 0x3FFF);
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_PITCH)) == (44100 << 12) / 48000);
+    CHECK(spu2_sd_get_param(vsel(1, SPU2_SD_VPARAM_PITCH)) == (44100 << 12) / 48000);
+    ico_audio_stream_stats(&st);
+    CHECK(st.pages_full == 1 && st.carried == 8 && st.dropped == 0);
+    CHECK(ncaught == 1);
+    CHECK(strcmp(caught[0],
+                 "sndn2: packet page full (255 packets: 0x01 x255); the later packets of "
+                 "this tick are carried to the driver (page 1)") == 0);
+    /* the KEYON follows the two FILLs: the voices sound */
+    for (i = 0; i < 6; i++) {
+        render(960);
+        SgCalledTickProc();
+    }
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_ENVX)) > 0x4000);
+
+    /* B: two volumes past the full page: the later one wins, as sent */
+    for (i = 0; i < 255; i++) {
+        _SgSetPkAdd(1, 10, 0x0100, 0x0100);
+    }
+    SgStAdpcmChannelVolume(1, 0x1000, 0);
+    SgStAdpcmChannelVolume(1, 0x2000, 0);
+    SgCalledTickProc();
+    spu2_apply_pending();
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_VOLL)) == 0x2000);
+
+    /* C: a page at 250: five of the open's packets fit, the rest are
+       carried; nothing is lost and the next page starts empty */
+    SgStAdpcmStop(3);
+    SgStAdpcmClose(0);
+    SgStAdpcmClose(1);
+    SgCalledTickProc();
+    for (i = 0; i < 250; i++) {
+        _SgSetPkAdd(1, 10, 0x0100, 0x0100);
+    }
+    ee_stream_open(ring, 0x3000);
+    SgCalledTickProc();
+    spu2_apply_pending();
+    CHECK(spu2_sd_get_param(vsel(0, SPU2_SD_VPARAM_VOLL)) == 0x3000);
+    CHECK(spu2_sd_get_param(vsel(1, SPU2_SD_VPARAM_VOLR)) == 0x3000);
+    ico_audio_stream_stats(&st);
+    CHECK(st.pages_full == 3 && st.carried == 8 + 2 + 2 && st.dropped == 0);
+    SgCalledTickProc();
+    ico_audio_stream_stats(&st);
+    CHECK(st.pages_full == 3);
+    ico_audio_stream_log_sink(NULL);
+    ico_iop_heap_free(ring);
+}
+
 int main(int argc, char **argv)
 {
     const char *iso = argc > 1 ? argv[1] : NULL;
@@ -813,6 +933,7 @@ int main(int argc, char **argv)
     test_adpcm_cancel();
     test_pcm();
     test_sequencer();
+    test_full_page();
     printf("sndn2_test: %d checks, %s\n", checks, failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

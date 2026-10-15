@@ -105,6 +105,21 @@ if(ICO_RUN_TESTS)
     add_test(NAME sndn2 COMMAND sndn2_test "${ICO_DISC_IMAGE}")
 endif()
 
+# adpcm_stream_test: the game's adpcm_init.c on the real sequencer, driver
+# and SPU2 (the sound-data table, the SPU channels and the disc reader stood
+# in for): a stream reopened on faded voices, the ending's six-stream shape,
+# a stream of minutes with ring wraps; the stream log lines
+add_executable(adpcm_stream_test test/adpcm_stream_test.c)
+target_include_directories(adpcm_stream_test PRIVATE ${_ico_adpcm_slots_incs}
+                           "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(adpcm_stream_test PRIVATE ICO_HOST=1)
+target_compile_options(adpcm_stream_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(adpcm_stream_test PRIVATE ico_sndn2)
+if(ICO_RUN_TESTS)
+    add_test(NAME adpcm_stream COMMAND adpcm_stream_test)
+endif()
+
 # libsd_irx_test: the LIBSD.IRX reader on a synthetic module and its
 # fallback; the real module is sndn2_test's
 add_executable(libsd_irx_test test/libsd_irx_test.c)
