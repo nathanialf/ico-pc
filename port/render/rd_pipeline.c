@@ -996,6 +996,71 @@ static void preWait(void *ctx, uint32_t finished)
     }
 }
 
+/* The start-up set's slowest compiles and its compile time by vertex
+ * shader, from the workers' own times (RhiPipelineBatch.ms), for the log
+ * line that says where a phone's first start goes */
+#define PRE_SLOWEST 10
+
+typedef struct PreTimes {
+    float ms[PRE_SLOWEST];
+    RdPipeKeyInt key[PRE_SLOWEST];
+    uint32_t n;
+    double byVs[RD_VS_COUNT];
+} PreTimes;
+
+static void preTime(PreTimes *t, const RdPipeKeyInt *k, float ms)
+{
+    if (k->vs < RD_VS_COUNT) {
+        t->byVs[k->vs] += ms;
+    }
+    uint32_t at = t->n < PRE_SLOWEST ? t->n : PRE_SLOWEST - 1;
+    if (t->n == PRE_SLOWEST && ms <= t->ms[at]) {
+        return;
+    }
+    /* in order, the slowest first */
+    while (at > 0 && t->ms[at - 1] < ms) {
+        t->ms[at] = t->ms[at - 1];
+        t->key[at] = t->key[at - 1];
+        at--;
+    }
+    t->ms[at] = ms;
+    t->key[at] = *k;
+    t->n += t->n < PRE_SLOWEST;
+}
+
+static void preTimesLog(const PreTimes *t)
+{
+    char line[1200];
+    size_t at = 0;
+    for (uint32_t i = 0; i < t->n && at < sizeof(line); i++) {
+        char w[96];
+        keyWords(&t->key[i], w, sizeof(w));
+        const int k = snprintf(line + at, sizeof(line) - at, "%s%.2f s %s", i ? "; " : "",
+                               (double)t->ms[i] / 1000.0, w);
+        at = k > 0 ? at + (size_t)k : at;
+    }
+    rd__log("pipelines: the slowest: %s", t->n ? line : "none");
+    bool done[RD_VS_COUNT] = {false};
+    at = 0;
+    line[0] = '\0';
+    for (;;) {
+        int best = -1;
+        for (int v = 0; v < RD_VS_COUNT; v++) {
+            if (!done[v] && t->byVs[v] > 0.0 && (best < 0 || t->byVs[v] > t->byVs[best])) {
+                best = v;
+            }
+        }
+        if (best < 0 || at >= sizeof(line)) {
+            break;
+        }
+        done[best] = true;
+        const int k = snprintf(line + at, sizeof(line) - at, "%s%s %.2f s", at ? ", " : "",
+                               rd__vs_name((uint8_t)best), t->byVs[best] / 1000.0);
+        at = k > 0 ? at + (size_t)k : at;
+    }
+    rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
+}
+
 uint32_t rd_precreate_pipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_CACHE_MAX];
@@ -1022,6 +1087,8 @@ uint32_t rd_precreate_pipelines(void)
     }
     uint32_t failed = 0, compiled = 0, threads = 1;
     PreBatch pb = {0, m, 0, 0};
+    static PreTimes times;
+    memset(&times, 0, sizeof(times));
     s_preLongestMs = 0.0f;
     if (s_progressFn != NULL) {
         s_progressFn(s_progressCtx, 0, m);
@@ -1097,6 +1164,7 @@ uint32_t rd_precreate_pipelines(void)
                 if (bms[j] > s_preLongestMs) {
                     s_preLongestMs = bms[j];
                 }
+                preTime(&times, &bk[j], bms[j]);
                 if (!bp[j].id) {
                     keepPipeline(&bk[j], bp[j], at);
                     failed++;
@@ -1133,6 +1201,9 @@ uint32_t rd_precreate_pipelines(void)
             "%u compiled on %u thread%s, the longest %.2f s",
             s_count - before, n, ms, failed, compiled, threads, threads == 1 ? "" : "s",
             (double)s_preLongestMs / 1000.0);
+    if (compiled) {
+        preTimesLog(&times);
+    }
     return s_count - before;
 }
 

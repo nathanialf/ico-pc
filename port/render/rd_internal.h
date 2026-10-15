@@ -870,6 +870,8 @@ uint32_t rd__vu_sheet_end(const RdMeshRec *m, uint32_t end, bool extended);
  * region rule, vu_common.hlsli vu_region_rule): the Enhanced preset, a frame
  * wider than 4:3 or a scene scale above 1 (rd_replay.c) */
 bool rd__vu_extended(void);
+/* A vertex shader's embedded name (RD_VS_*; rd_replay.c s_vsNames) */
+const char *rd__vs_name(uint8_t vs);
 /* The card section of a VU draw's payload (rd_mesh.h RdVuCards) of size
  * bytes at payload: its header in *cards and the offset of its words from
  * payload, 0 when the payload has none */

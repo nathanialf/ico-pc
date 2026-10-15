@@ -94,6 +94,11 @@ static const char *const s_vsNames[RD_VS_COUNT] = {"sprite_ui_vs" /* indexed by 
                                                    "sprite_stq_plane_ui_vs",
                                                    "sprite_stq_plane_world_vs"};
 
+const char *rd__vs_name(uint8_t vs)
+{
+    return vs < RD_VS_COUNT ? s_vsNames[vs] : "?";
+}
+
 static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_FS_* */,
                                                    "blit_ps",
                                                    "blend_int_ps",
@@ -230,6 +235,24 @@ bool rd__gpu_init(void *sdlWindow)
     if (dstAttach) {
         static const RhiBindSlot sa[1] = {{0, RHI_BIND_INPUT_ATTACHMENT, FS}};
         g_rd.layoutDstAttach = makeLayout(sa, 1, "rd dst attachment");
+    }
+    {
+        /* the embedded modules' size, once a run (a phone's driver
+           compiles the start-up set in time about proportional to it;
+           tools/check_spirv.py holds each to a budget) */
+        static bool logged;
+        uint32_t largest = 0;
+        const char *name = "";
+        for (unsigned i = 0; i < g_icoShaderCount && !logged; i++) {
+            if (g_icoShaders[i].spirv_len / 4u > largest) {
+                largest = (uint32_t)(g_icoShaders[i].spirv_len / 4u);
+                name = g_icoShaders[i].name;
+            }
+        }
+        if (!logged) {
+            rd__log("shaders: %u modules, largest %s %u words", g_icoShaderCount, name, largest);
+            logged = true;
+        }
     }
     for (int i = 0; i < RD_VS_COUNT; i++) {
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
