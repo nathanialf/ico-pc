@@ -7,7 +7,8 @@ usually sharper ones made by fans. The game works fine without one.
 
 Packs made for PCSX2 work as they are. PCSX2 is a program that plays
 PS2 games on a PC, and most ICO packs are made for it. You do not need to
-rename or convert anything. Sad Origami's ICO PAL HD pack works with it.
+rename or convert anything.
+[Sad Origami's ICO PAL HD pack](https://ko-fi.com/s/7c0e3e044f) works with it.
 
 ## Put a texture pack in
 

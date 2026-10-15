@@ -223,9 +223,9 @@ contributors: [`docs/port/ARCHITECTURE.md`](https://github.com/nathanialf/ico-pc
 
 ## Special thanks
 
-- Sad Origami, for the ICO PAL HD texture pack, and for the support and
-  blessing to test the port with it
-  ([GBAtemp thread](https://gbatemp.net/threads/ps2-ico-pal-sces-50760-in-progress.671638/)).
+- Sad Origami, for the [ICO PAL HD texture pack](https://ko-fi.com/s/7c0e3e044f),
+  for the support and blessing to test the port with it, and for
+  suggesting the download page.
 - katsifolis, for the iOS support (through LiveContainer).
 - braito4, for the Apple-silicon macOS app.
 - neetgon, for the second player's gamepad.
