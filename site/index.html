@@ -26,12 +26,10 @@ a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--li
 a:hover { color: var(--text-hi); border-color: var(--muted); }
 main, footer, header.top { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
 header.top { padding-top: 48px; padding-bottom: 4px; }
-.kicker { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin: 0 0 0.6rem; }
 h1 { font-family: var(--font-serif); font-weight: 700; font-size: 1.6rem; line-height: 1.2; margin: 0; color: var(--text-hi); }
 .lede { color: var(--muted); margin: 10px 0 28px; font-size: 0.95rem; }
 .panel { border: 1px solid var(--line); background: var(--panel); margin: 0 0 14px; }
 .panel > .head { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.9rem; background: var(--panel-hi); border-bottom: 1px solid var(--line); }
-.panel > .head .num { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint); flex-shrink: 0; }
 .panel > .head h2 { font-family: var(--font-serif); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #d4d4d4; margin: 0; }
 .panel > .body { padding: 1rem 0.9rem 1.1rem; }
 .for { color: var(--muted); margin: 0 0 12px; font-size: 0.95rem; }
@@ -78,14 +76,13 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
 </head>
 <body>
 <header class="top">
-  <p class="kicker">Download</p>
   <h1>ICO PC</h1>
 </header>
 <main>
   <p class="lede">ICO, the PAL PlayStation 2 game, as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac. It runs the game's own code, so it plays like the PS2 game, with a sharper picture, widescreen and smoother motion when you want them.</p>
 
   <section class="panel" id="get" aria-live="polite">
-    <div class="head"><span class="num">01</span><h2>Get the game</h2></div>
+    <div class="head"><h2>Get the game</h2></div>
     <div class="body">
     <p class="status" id="status">Looking up the latest version&hellip;</p>
     <div id="pick" hidden>
@@ -98,7 +95,7 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
   </section>
 
   <section class="panel" id="choose" hidden>
-    <div class="head"><span class="num">02</span><h2>Another device or version</h2></div>
+    <div class="head"><h2>Another device or version</h2></div>
     <div class="body">
     <p class="lbl" id="plat-lbl">Device</p>
     <ul class="chips" id="plats" role="group" aria-labelledby="plat-lbl"></ul>
@@ -113,12 +110,12 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
   </section>
 
   <section class="panel" id="notes-panel" hidden>
-    <div class="head"><span class="num">03</span><h2 id="notes-title">What changed</h2></div>
+    <div class="head"><h2 id="notes-title">What changed</h2></div>
     <div class="body"><div class="notes" id="notes"></div></div>
   </section>
 
   <section class="panel">
-    <div class="head"><span class="num">04</span><h2>Before you start</h2></div>
+    <div class="head"><h2>Before you start</h2></div>
     <div class="body">
     <p class="disc">Needs your own copy of the game disc (ICO, PAL version, SCES-50760) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
     <p class="thanks" style="margin:12px 0 0">Special thanks: Sad Origami, for the <a href="https://ko-fi.com/s/7c0e3e044f">ICO HD texture pack</a> and for suggesting this page.</p>
