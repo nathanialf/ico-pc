@@ -413,8 +413,17 @@ The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_
 ceiling the tests hold the reachable set under, `rd__enumerate_reachable`); a key past it or one
 whose creation failed is logged once and drawn as nothing, never an abort (`port/render/rd_state.h`;
 `port/render/rd_pipeline.c` (`rd__get_pipeline`)). `rd_precreate_pipelines` creates the whole
-reachable set at start so the first frames do not stall on the driver (`port/render/rd.h`
-(`rd_precreate_pipelines`)).
+reachable set at start so the first frames do not stall on the driver. It hands the keys to
+`rhi_create_pipelines` up to 32 at a time, so the driver compiles each batch on worker threads
+([RHI.md](RHI.md#the-interface)); a batch holds keys with a destination read or keys without, never
+both. The progress function runs while a batch compiles (about every 50 ms, with the count so far)
+and between batches, and a nonzero return stops the set after the batch in flight; the rest is
+created as the frames need it. The activity note names the batch: `creating pipelines 321-352 of
+702: <first key> to <last key>`, put back after any pipeline the progress screen's frame creates in
+the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
+`pipelines: <made> of the reachable set's <n> created at start-up in <t> ms (<f> failed); <c>
+compiled on <k> threads, the longest <s> s` (`port/render/rd.h` (`rd_precreate_pipelines`,
+`RdPipelineProgressFn`, `rd_precreate_longest_ms`); `port/render/rd_pipeline.c`).
 
 ## Destination reads and blend paths
 

@@ -434,8 +434,9 @@ relaunch fails (`port/platform/test/diag_test.c` (`loss_child`)).
 
 An end without a crash report (the system or the driver ends the process) is caught by the start-up
 activity file, `logs/startup-activity.txt`: the version's line, then the activity note. While the
-start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each pipeline's note replaces the
-text, and the file is deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
+start-up pipeline set is created (`ICO_DIAG_ACTIVITY_STARTUP`) each batch's note (its range of the
+set and its first and last key, [RENDER.md](RENDER.md#pipelines)) replaces the text, and the file is
+deleted when the set is done; a lazy run (`ICO_DIAG_ACTIVITY_LAZY`) records
 every first-use pipeline and a line between them for the whole run. The file is opened once when
 the recording starts and closed when it ends; each note is one write at the file's start, padded
 with NULs over a longer text before it, then the file is cut to the note, so it reads as one whole
@@ -446,11 +447,22 @@ another version's file is logged and the set tried again; a lazy run's clean exi
 line, logged as `ico_pc: the previous run created the pipelines as the frames needed them; this one
 does too`, so the lazy start sticks until the version changes (`port/platform/diag_host.h`
 (`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)). Deleting the file makes the
-next start try the set again. While the set is created the window shows the "Preparing graphics"
-screen on every platform, drawn only once the set has taken 250 ms and then at most ten times a
-second, and takes the window's events meanwhile, so Windows does not mark the window "Not
-Responding" on a cold driver cache and a close asked then ends the run after the set
-(`port/platform/window_host.c` (`pipeline_progress`, `progress_present`)).
+next start try the set again. The driver compiles the set on worker threads
+(`rhi_create_pipelines`, [RHI.md](RHI.md#the-interface)); the main thread waits in the renderer's
+progress function, about every 50 ms, and from it shows the "Preparing graphics (N of M)" screen on
+every platform, drawn only once the set has taken 250 ms and then at most ten times a second, with
+the time left from the rate so far under the bar once 3 s and 8 pipelines have passed ("About 2
+minutes left") and, on Android, "This happens once after an update". It takes the window's events
+each time it draws, so Windows does not mark the window "Not Responding" and Android does not offer
+to close the app on a cold driver cache; a quit or close request, or a lost device, stops the set
+after the batch in flight and the run ends (`port/platform/window_host.c` (`pipeline_progress`,
+`pipe_estimate`, `progress_present_notes`)). While the set runs the heartbeat line ends with
+`pipelines N of M, longest 1.3 s`, the count and the longest single compile so far
+(`port/platform/diag_host.h` (`ico_diag_set_pipelines`)). A crash on a worker thread inside the
+driver is reported as any crash, with the batch's note as the `while:` line, so the restart steps
+treat it as a driver crash while preparing the shaders; the fixed-blend step reads the batch's
+`dst` field, which every key of the batch shares (`port/platform/startup_retry.h`
+(`startup_retry_note_has_dst`)).
 
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a
 kernel call cannot stop them. Every 2 s the heartbeat logs one line of progress

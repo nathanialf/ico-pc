@@ -41,9 +41,14 @@ first ([where it is](#where-your-files-are)).
 
 ## The first start
 
-1. The first time the game opens, the screen can say **Starting ICO** and
-   **Preparing graphics**, with a count and a bar, for a few seconds. Later
-   starts skip it or show it only for a moment.
+1. The first time the game opens, and the first time after you install a
+   new version, the screen says **Starting ICO** and **Preparing
+   graphics**, with a count and a bar. On some phones this takes a few
+   minutes. After a few seconds the screen also says about how much time
+   is left (a rough guess from how fast the count has gone so far) and
+   that this happens once after an update. Leave the game open until the
+   count is done. Later starts skip it or show it only for a moment. If you
+   close the game during it, the next start shows it again.
 2. The game opens your phone's file picker. Find your disc image and tap
    it. The picker shows every file, so make sure you pick the `.iso`,
    `.chd` or `.bin`. If you have a `.bin` and a `.cue`, pick the `.bin`; the

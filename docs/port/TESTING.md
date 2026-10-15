@@ -187,7 +187,7 @@ program under an environment switch ([Environment switches](#environment-switche
 - `android_paths_test.c`: the Android file layout on any platform (`android_paths`).
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
-- `diag_test.c`: the crash report, assert, watchdog, progress, start-up activity file and device-loss restart cases, each in a child process
+- `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes) and device-loss restart cases, each in a child process
   whose log is read back (`diag`).
 - `dump_zip_test.c`: F12's zip and the aspect sweep's zip, written and read back with miniz
   (`dump_zip`).
@@ -219,7 +219,8 @@ program under an environment switch ([Environment switches](#environment-switche
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
-  crash chain to the box, the variable and the relaunch environment (`startup_retry`).
+  crash chain to the box, the variable and the relaunch environment, and the `dst` field of a
+  pipeline's or a start-up batch's note (`startup_retry`).
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
   the duplicate check, `loginusers.vdf` (`steam_shortcut`).
 - `window_video_test.c`: fullscreen and mode requests on SDL's offscreen driver (`window_video`).
@@ -282,7 +283,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`).
 - `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths
   (`rd_native`).
-- `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state (`rd_perf`,
+- `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
+  through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
+  end), a stop after the first batch and the rest made by the next call (`rd_perf`,
   `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
@@ -331,9 +334,11 @@ program under an environment switch ([Environment switches](#environment-switche
   (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
   (`rhi_vk_swapchain`).
-- Helpers: `rhi_test_common.c`/`.h` (the shared cells), `shaders/` (`rhi_test.hlsl`, its compiled
-  headers and `gen_shaders.sh`), and `compare_backends.cmd` with `compare_png.ps1`, which render
-  every dump on Vulkan and D3D12 on Windows and compare the PNGs within 1 LSB.
+- Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
+  `rhi_create_pipelines` call with a failing description among them), `shaders/`
+  (`rhi_test.hlsl`, its compiled headers and `gen_shaders.sh`), and `compare_backends.cmd` with
+  `compare_png.ps1`, which render every dump on Vulkan and D3D12 on Windows and compare the PNGs
+  within 1 LSB.
 
 ### port/shaders/test
 

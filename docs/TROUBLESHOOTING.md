@@ -24,6 +24,21 @@ log also records your display settings, every change you make to them, and
 every 10 seconds how fast the game is running (every second for 30 seconds
 after you press F11). When something goes wrong, it says what.
 
+## The first start takes a long time
+
+The first start after you install the game or a new version of it says
+**Starting ICO** and **Preparing graphics**, with a count and a bar: the
+game is getting its graphics ready for your graphics card or phone. On a
+computer this usually takes a few seconds. On a phone or a handheld it can
+take a few minutes. After a few seconds the screen also says about how
+much time is left, worked out from how fast the count has gone so far, so
+it is only a rough guess. The game keeps working meanwhile: leave it open
+until the count is done. On a phone the screen also says that this happens
+once after an update: the game keeps what was prepared, and later starts
+skip this screen or show it only for a moment. If you close the game while
+it says this, the next start shows it again. If the game closes by itself
+on this screen, see [The game closes by itself](#the-game-closes-by-itself).
+
 ## The screen stays black
 
 If the screen stays black but you can hear the game, the game is running
