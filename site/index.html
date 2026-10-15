@@ -14,7 +14,7 @@
   --bg: #0a0a0a; --panel: #0d0d0d; --panel-hi: #111; --field: #171717;
   --line: #1a1a1a; --line-hi: #262626; --line-hover: #404040;
   --text: #e5e5e5; --text-hi: #f9fafb; --muted: #737373; --dim: #525252; --faint: #404040;
-  --warn: #c9a24b; --accent: #9fc2c2; --accent-dim: #6e9595; --accent-bg: #11201f;
+  --warn: #c9a24b; --accent: #cdb389; --accent-dim: #8f7a55; --accent-bg: #1f1a12;
   --font-body: 'IBM Plex Sans', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-serif: 'Playfair Display', 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
@@ -23,7 +23,7 @@
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.6 var(--font-body); }
 a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-dim); transition: color 0.15s ease, border-color 0.15s ease; }
-a:hover { color: #c6e0e0; border-color: var(--accent); }
+a:hover { color: #e6d6b8; border-color: var(--accent); }
 main, footer, header.top { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
 header.top { padding-top: 48px; padding-bottom: 4px; }
 h1 { font-family: var(--font-serif); font-weight: 700; font-size: 1.6rem; line-height: 1.2; margin: 0; color: var(--text-hi); }
@@ -39,10 +39,10 @@ h1::after { content: ''; display: block; width: 2.5rem; height: 2px; background:
 .btn { display: block; width: 100%; text-decoration: none; border: 1px solid var(--line-hi); background: var(--field); color: var(--text); padding: 0.85rem 1rem; font-weight: 500; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; overflow-wrap: anywhere; }
 .btn:hover, .btn:focus-visible { background: var(--line-hi); border-color: var(--line-hover); color: var(--text-hi); }
 .btn.big { font-size: 1.05rem; background: var(--accent); border-color: var(--accent); color: #0a0a0a; }
-.btn.big:hover, .btn.big:focus-visible { background: #b9d6d6; border-color: #b9d6d6; color: #0a0a0a; }
-.btn.big .file { color: #1f3b3b; }
+.btn.big:hover, .btn.big:focus-visible { background: #ddc7a3; border-color: #ddc7a3; color: #0a0a0a; }
+.btn.big .file { color: #4a3d26; }
 .btn.small { margin-top: 10px; font-size: 0.95rem; padding: 0.65rem 1rem; border-color: var(--accent-dim); color: var(--accent); background: transparent; }
-.btn.small:hover, .btn.small:focus-visible { background: var(--accent-bg); border-color: var(--accent); color: #c6e0e0; }
+.btn.small:hover, .btn.small:focus-visible { background: var(--accent-bg); border-color: var(--accent); color: #e6d6b8; }
 .btn .file { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 0.65rem; color: var(--muted); margin-top: 3px; letter-spacing: 0.02em; }
 .note { color: var(--muted); font-size: 0.85rem; margin: 10px 0 0; }
 .note.warn { color: var(--warn); }
@@ -56,6 +56,11 @@ h1::after { content: ''; display: block; width: 2.5rem; height: 2px; background:
 .lbl { display: block; font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px; }
 select { font-family: var(--font-mono); font-size: 0.8rem; width: 100%; max-width: 100%; color: var(--text); background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23525252' d='M2 4l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 0.6rem center; border: 1px solid var(--line-hi); border-radius: 0; padding: 0.6rem 2rem 0.6rem 0.6rem; -webkit-appearance: none; appearance: none; cursor: pointer; }
 select:focus { outline: none; border-color: var(--accent-dim); }
+.steps { margin: 0; padding-left: 1.3em; font-size: 0.95rem; }
+.steps li { margin: 6px 0; }
+.steps.plain { margin-top: 4px; }
+.sub { font-family: var(--font-mono); font-size: 0.65rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-dim); margin: 18px 0 6px; padding-bottom: 0.25rem; border-bottom: 1px solid var(--line-hi); }
+.plain { margin: 0; font-size: 0.95rem; }
 .files { margin: 10px 0 0; padding: 0; list-style: none; }
 .files li { padding: 7px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 0.9rem; }
 .files .size { font-family: var(--font-mono); color: var(--dim); font-size: 0.65rem; white-space: nowrap; margin-left: 0.4rem; }
@@ -96,6 +101,21 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
       <div id="portable-dl"></div>
       <p class="howto" id="howto"></p>
     </div>
+    </div>
+  </section>
+
+  <section class="panel" id="install" hidden>
+    <div class="head"><h2 id="install-title">How to install</h2></div>
+    <div class="body">
+      <ol class="steps" id="steps"></ol>
+      <p class="note" id="install-note"></p>
+      <h3 class="sub">What you need</h3>
+      <ul class="steps plain">
+        <li><strong>Your own disc image of ICO, PAL version</strong> (SCES-50760, the number printed on the disc and the case): one file ending in <code>.iso</code>, <code>.chd</code> or <code>.bin</code> (a <code>.bin</code> may come with a <code>.cue</code>). Other regions and editions do not work.</li>
+        <li>About 1 GB of free space for the game's files, which the first start copies out of the disc image.</li>
+      </ul>
+      <h3 class="sub">The first start</h3>
+      <p class="plain">The game asks for your disc image, then copies the game's files out of it. That takes a minute or two and happens once; after it the game runs without the disc image. On Windows and Linux you can skip the question by putting the disc image beside the program (inside the <code>x64</code> folder on Windows) named <code>Ico_PAL.iso</code>, <code>.chd</code>, <code>.bin</code> or <code>.cue</code>.</p>
     </div>
   </section>
 
@@ -148,16 +168,16 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
   /* each device: the main file's name ending, the portable one's, where the
      README explains the install, and a note shown under the button */
   var PLATS = [
-    { id: "win", label: "Windows", main: "-win.zip", portable: "-win-portable.zip", howto: "windows" },
-    { id: "linux", label: "Linux and Steam Deck", main: "-linux.tar.gz", portable: "-linux-portable.tar.gz", howto: "linux-and-steam-deck" },
+    { id: "win", label: "Windows", main: "-win.zip", portable: "-win-portable.zip", howto: "windows", steps: ["Download the file whose name ends in <code>-win.zip</code>.", "Right-click it and choose <strong>Extract All</strong>, into a folder you can write to, such as Documents or a Games folder. Keep all the files together.", "Open the <code>x64</code> folder and double-click <code>ico_pc_x64.exe</code>."], install: "" },
+    { id: "linux", label: "Linux and Steam Deck", main: "-linux.tar.gz", portable: "-linux-portable.tar.gz", howto: "linux-and-steam-deck", steps: ["Download the file whose name ends in <code>-linux.tar.gz</code>.", "Right-click it and choose <strong>Extract</strong> (or <strong>Extract Here</strong>), into a folder in your home folder.", "Double-click <code>ico_pc</code>, or run it from a terminal. If your file manager asks, choose <strong>Run</strong> or <strong>Execute</strong>."], install: "Needs a fairly new system: Debian 13, Ubuntu 24.04 or newer. On a Steam Deck, unpack and start it once in Desktop Mode, then close Steam and choose Options &gt; Extras &gt; Add to Steam on the title screen to play in Game Mode." },
     { id: "linux-arm64", label: "Linux on ARM", main: "-linux-arm64.tar.gz", portable: "-linux-arm64-portable.tar.gz", howto: "linux-and-steam-deck",
-      note: "For 64-bit ARM Linux handhelds and boards." },
+      note: "For 64-bit ARM Linux handhelds and boards.", steps: ["Download the file whose name ends in <code>-linux-arm64.tar.gz</code>.", "Right-click it and choose <strong>Extract</strong> (or <strong>Extract Here</strong>), into a folder in your home folder.", "Double-click <code>ico_pc</code>, or run it from a terminal. If your file manager asks, choose <strong>Run</strong> or <strong>Execute</strong>."], install: "Needs a fairly new system: Debian 13, Ubuntu 24.04 or newer." },
     { id: "macos", label: "Mac", main: "-macos-arm64.dmg", alt: "-macos-arm64.zip", howto: "mac",
-      note: "For Macs with Apple silicon. The first time, right-click ICO and choose Open." },
+      note: "For Macs with Apple silicon. The first time, right-click ICO and choose Open.", steps: ["Download the file whose name ends in <code>-macos-arm64.dmg</code> (the <code>.zip</code> holds the same app).", "Open it, open a second Finder window on Applications (<strong>Go &gt; Applications</strong>) and drag <strong>ICO</strong> into it.", "The first time, right-click <strong>ICO</strong> and choose <strong>Open</strong>, then <strong>Open</strong> again. If your Mac still will not open it, go to <strong>System Settings &gt; Privacy &amp; Security</strong>, scroll down and choose <strong>Open Anyway</strong> next to ICO."], install: "Your saves, settings and logs are in <code>~/Library/Application Support/ico-pc/ico-pc/</code> (Finder: Go &gt; Go to Folder)." },
     { id: "android", label: "Android", main: "-android.apk", howto: "android",
-      note: "Open the file on your phone or tablet to install it." },
+      note: "Open the file on your phone or tablet to install it.", steps: ["Download the file whose name ends in <code>-android.apk</code> on your phone or tablet.", "Open it. Your phone may ask you to allow installing apps from your browser or file manager first; say yes.", "Open <strong>ICO</strong> from your apps."], install: "The Android guide in the README explains the first start, the touch controls and where your saves are." },
     { id: "ios", label: "iPhone and iPad", main: "-ios-unsigned.ipa", howto: "iphone",
-      note: "Not in the App Store: it runs inside LiveContainer, or install it with a signing tool." }
+      note: "Not in the App Store: it runs inside LiveContainer, or install it with a signing tool.", steps: ["Set up <a href=\"https://github.com/LiveContainer/LiveContainer\">LiveContainer</a> first, with its own instructions. The iPhone version is not in the App Store.", "Download the file whose name ends in <code>-ios-unsigned.ipa</code> on your iPhone, add it to LiveContainer and start <strong>ICO</strong> once. It says the game data is missing and closes; that is expected.", "Copy your disc image into ICO's <strong>Documents</strong> folder through LiveContainer's data-folder access, named <code>Ico_PAL.iso</code> (or <code>.chd</code>, <code>.bin</code>, <code>.cue</code>), then start <strong>ICO</strong> again."], install: "Your saves, settings and logs are in that same Documents folder." }
   ];
 
   var state = { releases: [], plat: null, detected: null, rel: null };
@@ -370,6 +390,7 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
     var main = $("main-dl"), port = $("portable-dl"), forEl = $("for"), howto = $("howto");
     port.innerHTML = "";
     howto.innerHTML = "";
+    $("install").hidden = true;
     if (!p) {
       forEl.innerHTML = "We could not tell which device this is. Pick yours below, or choose a file from version <strong>" + esc(tag) + "</strong>:";
       drawFiles();
@@ -395,7 +416,20 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
         '<p class="note">The portable version keeps its saves and settings in its own folder, handy on a USB stick. <a href="' +
         REPO + '/blob/main/docs/PORTABLE_MODE.md#keep-everything-in-one-folder">More</a></p>';
     }
-    howto.innerHTML = '<a href="' + README + esc(p.howto) + '">How to install it</a>';
+    howto.innerHTML = '<a href="' + README + esc(p.howto) + '">The full install guide in the README</a>';
+    drawInstall(p);
+  }
+
+  function drawInstall(p) {
+    var panel = $("install");
+    if (!p || !p.steps || !p.steps.length) { panel.hidden = true; return; }
+    $("install-title").textContent = "How to install on " + p.label;
+    var html = "";
+    for (var i = 0; i < p.steps.length; i++) html += "<li>" + p.steps[i] + "</li>";
+    $("steps").innerHTML = html;
+    $("install-note").innerHTML = p.install || "";
+    $("install-note").hidden = !p.install;
+    panel.hidden = false;
   }
 
   function drawNotes() {
