@@ -31,6 +31,12 @@ h1::after { content: ''; display: block; width: 2.5rem; height: 2px; background:
 .lede { color: var(--muted); margin: 10px 0 28px; font-size: 0.95rem; }
 .panel { border: 1px solid var(--line); background: var(--panel); margin: 0 0 14px; }
 .panel > .head { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.9rem; background: var(--panel-hi); border-bottom: 1px solid var(--line); }
+.fold > summary.head { cursor: pointer; list-style: none; justify-content: space-between; align-items: center; }
+.fold > summary.head::-webkit-details-marker { display: none; }
+.fold > summary.head::after { content: '+'; font-family: var(--font-mono); font-size: 0.9rem; color: var(--accent-dim); }
+.fold[open] > summary.head::after { content: '\2013'; }
+.fold:not([open]) > summary.head { border-bottom: 0; }
+.fold > summary.head:hover h2 { color: var(--text-hi); }
 .panel > .head { border-left: 2px solid var(--accent); }
 .panel > .head h2 { font-family: var(--font-serif); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #d4d4d4; margin: 0; }
 .panel > .body { padding: 1rem 0.9rem 1.1rem; }
@@ -119,8 +125,8 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
     </div>
   </section>
 
-  <section class="panel" id="choose" hidden>
-    <div class="head"><h2>Another device or version</h2></div>
+  <details class="panel fold" id="choose" hidden>
+    <summary class="head"><h2>Another device or version</h2></summary>
     <div class="body">
     <p class="lbl" id="plat-lbl">Device</p>
     <ul class="chips" id="plats" role="group" aria-labelledby="plat-lbl"></ul>
@@ -132,12 +138,12 @@ footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint)
       <ul class="files" id="files"></ul>
     </details>
     </div>
-  </section>
+  </details>
 
-  <section class="panel" id="notes-panel" hidden>
-    <div class="head"><h2 id="notes-title">What changed</h2></div>
+  <details class="panel fold" id="notes-panel" hidden>
+    <summary class="head"><h2 id="notes-title">What changed</h2></summary>
     <div class="body"><div class="notes" id="notes"></div></div>
-  </section>
+  </details>
 
   <section class="panel">
     <div class="head"><h2>Before you start</h2></div>
