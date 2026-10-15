@@ -1473,6 +1473,51 @@ const RdVuCommon *rd_get_vu_common(void);
  * can replay it headless on another backend.  Dumps contain game assets and
  * are never committed. */
 bool rd_dump_frame(const char *path);
+/* The device-loss dump (port/platform/window_host.c device_lost_quit;
+ * docs/port/RENDER.md, "The loss dump"): the frames the renderer still holds
+ * as two ordinary dumps, the last closed frame (the one the lost replay
+ * drew, or the tick it was blended towards) to lostPath and the one before
+ * it, when the ring still holds it, to beforePath (NULL: not written).  CPU
+ * data only (the commands, the payload, the image texels and VU streams the
+ * renderer keeps), so it works after the device is gone.  The frames'
+ * numbers into *lostFrame and *beforeFrame (0: not written; either may be
+ * NULL).  True when the lost frame was written. */
+bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lostFrame,
+                      uint32_t *beforeFrame);
+
+/* The loss bisect (docs/port/RENDER.md, "The loss bisect"): the frame of
+ * the dump at path replayed in this renderer one pass longer each time
+ * (the pass window, rd_internal.h rd__replay_set_window: passes 1..k),
+ * waiting for the GPU after each (rhi_wait_idle), until the device is lost
+ * or the whole frame has run.  Nothing is presented.  The renderer must
+ * have a device; a loss leaves it lost (the caller shuts it down). */
+typedef enum RdBisectResult {
+    RD_BISECT_NOT_RUN = 0, /* no device, or the dump could not be read: line says why */
+    RD_BISECT_LOST,        /* pass `pass` lost the device: line names it */
+    RD_BISECT_CLEAN        /* every pass ran without a loss */
+} RdBisectResult;
+
+typedef struct RdLossBisect {
+    RdBisectResult result;
+    uint32_t frame;   /* the dump's frame number */
+    uint32_t pass;    /* RD_BISECT_LOST: the pass (1, 2, ...); 0: before any pass drew */
+    uint32_t passes;  /* the frame's passes, counted by a replay that draws nothing */
+    uint32_t replays; /* the replays it took */
+    double ms;        /* the wall time */
+    /* RD_BISECT_LOST: the pass that lost the device, in the pass ring's
+     * words (rd_passring.h rd_passring_format_bisect); RD_BISECT_NOT_RUN:
+     * why; RD_BISECT_CLEAN: empty */
+    char line[320];
+    /* RD_BISECT_LOST: the pass that began after it (its first command ran
+     * up to that pass's start and drew nothing), "" when none */
+    char next[320];
+} RdLossBisect;
+
+void rd_loss_bisect(const char *path, RdLossBisect *out);
+/* A dump's frame size and aspect without loading it (the loss bisect sizes
+ * its renderer with them); false when path is no dump this version reads
+ * or its size is outside 1..4096. */
+bool rd_dump_frame_size(const char *path, uint32_t *gsW, uint32_t *gsH, float *aspect);
 /* Readback of the DISPLAY target (the reduced frame the presenter scales;
  * the output itself is rd_read_presented), tightly packed RGBA8, for
  * screenshots and image comparison. */

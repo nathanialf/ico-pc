@@ -704,6 +704,16 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_dump.cmake")
     set_tests_properties(rd_replay_tool_pass_dump PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                              FIXTURES_REQUIRED rd_dump TIMEOUT 300)
+    # --loss-bisect (the frame one pass longer each time, clean on this
+    # device) and --passes (the pass window: the whole frame's window draws
+    # the plain picture; one pass stops the walk at the next)
+    add_test(NAME rd_replay_tool_loss_bisect
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_loss_bisect"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_loss_bisect.cmake")
+    set_tests_properties(rd_replay_tool_loss_bisect PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                               FIXTURES_REQUIRED rd_dump TIMEOUT 300)
     # the native frame gates (tools/native_frame_check.py, docs/port/TESTING.md): gate-a
     # re-renders the dump list ICO_DUMPS names and compares with
     # docs/native_frame_baseline.json; gate-b checks the aspect sweeps ICO_SWEEPS names.

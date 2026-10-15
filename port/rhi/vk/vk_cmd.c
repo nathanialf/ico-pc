@@ -213,7 +213,12 @@ uint32_t rhi_frame_slot(void)
 void rhi_wait_idle(void)
 {
     const uint64_t t0 = vkr_now_ns();
-    vkDeviceWaitIdle(g_vkr.device);
+    /* a loss found here is noted and reported like any other (the loss
+     * bisect waits here after each replay, rd_dump.c rd_loss_bisect); a
+     * device already lost is not asked again */
+    if (!g_vkr.deviceLost) {
+        VKR_CHECK(vkDeviceWaitIdle(g_vkr.device));
+    }
     g_vkr.stats.waitIdles++;
     g_vkr.stats.fenceWaitNs += vkr_now_ns() - t0;
     /* The other slots' garbage is now safe to destroy.  The current frame's

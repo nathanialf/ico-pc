@@ -129,6 +129,18 @@
  *                         the GS's edge antialiasing (an on/off pair from
  *                         one dump)
  *
+ * The loss bisect (docs/port/RENDER.md, "The loss bisect"):
+ *   --loss-bisect         replays the frame as the game's next start after a
+ *                         device loss does (rd.h rd_loss_bisect: one pass
+ *                         longer each time, waiting for the GPU after each)
+ *                         and prints what it found; <out.png> is unused (give
+ *                         -).  Exit 0 when it ran (lost or not), 1 when it
+ *                         could not
+ *   --passes A[-B]        replays passes A..B only (rd_internal.h
+ *                         rd__replay_set_window: the draws and copies of the
+ *                         other passes left out, the walk stopped where pass
+ *                         B + 1 begins); A alone is pass A alone
+ *
  * Interpolation:
  *   --interp T PREV       replays the frame the presenter builds between the
  *                         dump PREV (the tick before, e.g. the game's
@@ -938,6 +950,7 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
+                "       [--loss-bisect] [--passes A[-B]]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n",
@@ -955,6 +968,8 @@ int main(int argc, char **argv)
     uint32_t vuRefI[8];
     const char *passDir = NULL;
     const char *texDir = NULL, *meshName = NULL;
+    bool lossBisect = false;
+    unsigned passA = 0, passB = 0;
     memset(&s, 0, sizeof(s));
     s.preset = RD_PRESET_ORIGINAL;
     s.aspect = 4.0f / 3.0f;
@@ -1092,6 +1107,17 @@ int main(int argc, char **argv)
             list = true;
         } else if (strcmp(argv[i], "--no-device") == 0) {
             noDevice = true;
+        } else if (strcmp(argv[i], "--loss-bisect") == 0) {
+            lossBisect = true;
+        } else if (strcmp(argv[i], "--passes") == 0 && i + 1 < argc) {
+            const int n = sscanf(argv[++i], "%u-%u", &passA, &passB);
+            if (n < 1 || passA == 0 || (n == 2 && passB < passA)) {
+                fprintf(stderr, "bad --passes\n");
+                return 1;
+            }
+            if (n == 1) {
+                passB = passA;
+            }
         } else if (strcmp(argv[i], "--mesh") == 0 && i + 1 < argc) {
             meshName = argv[++i];
         } else if (strcmp(argv[i], "--dump-textures") == 0 && i + 1 < argc) {
@@ -1207,6 +1233,23 @@ int main(int argc, char **argv)
         rd_shutdown();
         return 1;
     }
+    if (lossBisect) {
+        if (noDevice) {
+            fprintf(stderr, "--loss-bisect needs a device\n");
+            return 77;
+        }
+        RdLossBisect b;
+        rd_loss_bisect(dump, &b);
+        static const char *const kResult[] = {"not run", "lost", "clean"};
+        printf("%s: loss bisect: %s; frame %u, %u passes, %u replays in %.1f s%s%s\n", dump,
+               kResult[b.result], b.frame, b.passes, b.replays, b.ms / 1000.0,
+               b.line[0] ? ": " : "", b.line);
+        if (b.next[0]) {
+            printf("%s: loss bisect: the replay stopped as %s began\n", dump, b.next);
+        }
+        rd_shutdown();
+        return b.result == RD_BISECT_NOT_RUN ? 1 : 0;
+    }
     RdFrame pf, f;
     const RdFrame *rf = prepareFrame(dump, &pf, &f);
     if (!rf) {
@@ -1238,7 +1281,18 @@ int main(int argc, char **argv)
         rd_shutdown();
         return 0;
     }
+    if (passA) {
+        rd__replay_set_window(passA, passB);
+    }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    if (passA) {
+        RdReplayWindowStats ws;
+        rd__replay_window_stats(&ws);
+        printf("%s: passes %u-%u of the %u begun%s; %u draws in pass %u\n", dump, passA, passB,
+               ws.passes, ws.stopped ? " (the walk stopped after the window)" : "", ws.lastDraws,
+               passB);
+        rd__replay_set_window(0, 0);
+    }
     if (replayed && stats) {
         /* the record rd__perf_end just closed (rd_perf_pop hands it out only
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */

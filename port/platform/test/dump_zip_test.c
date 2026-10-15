@@ -7,7 +7,12 @@
  * dump alone in the zip, and a missing dump writes nothing.  The aspect
  * sweep's zip (ico_sweep_zip): <aspect>.rddump and <aspect>.png for each of
  * 4x3, 16x9, 32x9, 48x9 and 60x9, 4:3 first, the loose files gone after; an
- * aspect missing a file is left out; none to zip writes nothing.
+ * aspect missing a file is left out; none to zip writes nothing.  The
+ * device-loss zip (ico_loss_dump_zip): the lost frame's dump first, the one
+ * before it, the log, the loose dumps gone after; without the one before,
+ * the lost one and the log; its path (ico_loss_dump_path); the pruning
+ * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
+ * every other file alone.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -57,6 +62,80 @@ static int entry_is(mz_zip_archive *z, const char *name, const void *data, size_
     }
     return mz_zip_reader_extract_to_mem(z, (mz_uint)i, back, sizeof(back), 0) &&
            memcmp(back, data, n) == 0;
+}
+
+static void test_loss(const char *base)
+{
+    char dir[1200], lost[1300], before[1300], log[1300], zip[1300], name[64], why[160];
+    const char a[] = "the lost frame", b[] = "the frame before", text[] = "rhi_vk: device lost\n";
+    mz_zip_archive z;
+    size_t size = 0;
+
+    snprintf(dir, sizeof(dir), "%s/loss-test", base);
+    ico_mkdir(dir);
+    snprintf(lost, sizeof(lost), "%s/frame-121-lost.rddump", dir);
+    snprintf(before, sizeof(before), "%s/frame-120-before.rddump", dir);
+    snprintf(log, sizeof(log), "%s/ico-pc.log", dir);
+    CHECK(ico_loss_dump_path(zip, sizeof(zip), dir, "20261015-101500") == 0);
+    CHECK(strstr(zip, "/loss-20261015-101500.zip") != NULL);
+    CHECK(ico_loss_dump_path(zip, 8, dir, "20261015-101500") == -1);
+    CHECK(ico_loss_dump_path(zip, sizeof(zip), dir, "20261015-101500") == 0);
+    CHECK(put(lost, a, sizeof(a)) == 0);
+    CHECK(put(before, b, sizeof(b)) == 0);
+    CHECK(put(log, text, sizeof(text) - 1) == 0);
+    CHECK(ico_loss_dump_zip(zip, lost, before, log, why, sizeof(why)) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 3);
+    CHECK(find(&z, "frame-121-lost.rddump") == 0);
+    CHECK(entry_is(&z, "frame-121-lost.rddump", a, sizeof(a)));
+    CHECK(entry_is(&z, "frame-120-before.rddump", b, sizeof(b)));
+    CHECK(entry_is(&z, "ico-pc.log", text, sizeof(text) - 1));
+    mz_zip_reader_end(&z);
+    CHECK(ico_path_kind(lost, NULL, NULL) == -1);
+    CHECK(ico_path_kind(before, NULL, NULL) == -1);
+    CHECK(ico_path_kind(log, NULL, NULL) == 0);
+    /* the loss bisect's dump: the first .rddump, the lost frame */
+    void *got = ico_dump_zip_extract(zip, &size, name, sizeof(name));
+    CHECK(got != NULL && size == sizeof(a) && memcmp(got, a, size) == 0);
+    CHECK(strcmp(name, "frame-121-lost.rddump") == 0);
+    free(got);
+    /* no frame before it: the lost one and the log */
+    CHECK(put(lost, a, sizeof(a)) == 0);
+    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 2);
+    mz_zip_reader_end(&z);
+    /* a missing lost dump writes nothing */
+    remove(zip);
+    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == -1);
+    CHECK(ico_path_kind(zip, NULL, NULL) == -1);
+    /* the pruning: five loss zips, the newest three kept, the log and a
+       zip of another name untouched */
+    static const char *const stamps[5] = {"20261015-090000", "20261013-235959", "20261015-101500",
+                                          "20261014-120000", "20261015-101501"};
+    for (int i = 0; i < 5; i++) {
+        CHECK(ico_loss_dump_path(zip, sizeof(zip), dir, stamps[i]) == 0);
+        CHECK(put(zip, "z", 1) == 0);
+    }
+    snprintf(zip, sizeof(zip), "%s/frame-x-v1.zip", dir);
+    CHECK(put(zip, "z", 1) == 0);
+    CHECK(ico_loss_dump_prune(dir, 3) == 2);
+    for (int i = 0; i < 5; i++) {
+        CHECK(ico_loss_dump_path(zip, sizeof(zip), dir, stamps[i]) == 0);
+        /* 20261013 and 20261014 were the oldest */
+        CHECK(ico_path_kind(zip, NULL, NULL) == (i == 1 || i == 3 ? -1 : 0));
+        remove(zip);
+    }
+    snprintf(zip, sizeof(zip), "%s/frame-x-v1.zip", dir);
+    CHECK(ico_path_kind(zip, NULL, NULL) == 0);
+    remove(zip);
+    CHECK(ico_path_kind(log, NULL, NULL) == 0);
+    remove(log);
+    snprintf(zip, sizeof(zip), "%s/no-such-folder", dir);
+    CHECK(ico_loss_dump_prune(zip, 3) == -1);
+    ico_rmdir(dir);
 }
 
 int main(int argc, char **argv)
@@ -223,6 +302,8 @@ int main(int argc, char **argv)
         CHECK(why[0] != '\0');
         CHECK(ico_path_kind(zip, NULL, NULL) == -1);
     }
+
+    test_loss(argv[1]);
 
     printf("dump_zip_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;

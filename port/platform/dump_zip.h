@@ -20,6 +20,23 @@
 int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *log_path, char *why,
                        size_t why_size);
 
+/* The device-loss dump (window_host.c device_lost_quit): zip_path holding
+   lost_path, then before_path (NULL or "": none), then log_path, each under
+   its own name, as ico_frame_dump_zip writes its one dump (the same
+   result, and the loose dumps deleted after a 0 or 1).  The lost frame is
+   the first .rddump, so rd_replay_tool and the loss bisect
+   (ico_dump_zip_extract) take it. */
+#define ICO_LOSS_DUMP_FILES 2
+int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
+                      const char *log_path, char *why, size_t why_size);
+/* dir/loss-<stamp>.zip into out; 0, or -1 when it does not fit */
+int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stamp);
+/* Deletes the oldest loss-*.zip files in dir until keep remain (a device
+   lost at every start must not fill a phone); the number deleted, or -1
+   when dir cannot be read. */
+#define ICO_LOSS_DUMP_KEEP 3
+int ico_loss_dump_prune(const char *dir, int keep);
+
 /* The first entry of zip_path whose name ends in ".rddump", in a malloc
    block (free it) with its size in *size and, when name is not NULL, its
    name in name (name_size bytes). NULL when the zip cannot be read or holds

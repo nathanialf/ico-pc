@@ -379,6 +379,93 @@ RhiCommandList rd__replay_cl(void)
     return s_cl;
 }
 
+/* ------------------------------------------------------ the pass window
+ * rd__replay_set_window (rd_internal.h; the loss bisect, rd_dump.c
+ * rd_loss_bisect): the replay numbers its passes 1, 2, ... as they begin
+ * (passPush: render passes, copies, snapshots, exact blends), records the
+ * draws and copies of the passes inside [first, last] only, and stops the
+ * walk after the command that began pass last + 1. */
+static struct {
+    uint32_t first, last; /* first 0: no window */
+    uint32_t passes;      /* begun in this replay */
+    uint32_t lastDraws;   /* recorded in pass `last` */
+    uint64_t lastSeq;     /* pass `last`'s pass ring entry, 0: not begun */
+    uint64_t nextSeq;     /* pass last + 1's, 0: not begun */
+    bool stop;
+} s_win;
+
+void rd__replay_set_window(uint32_t first, uint32_t last)
+{
+    memset(&s_win, 0, sizeof(s_win));
+    s_win.first = first;
+    s_win.last = first ? last : 0;
+}
+
+void rd__replay_window_stats(RdReplayWindowStats *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->passes = s_win.passes;
+    out->lastDraws = s_win.lastDraws;
+    out->lastSeq = s_win.lastSeq;
+    out->nextSeq = s_win.nextSeq;
+    out->stopped = s_win.stop;
+}
+
+/* the window leaves this pass's draws and copies out */
+static bool winMuted(void)
+{
+    return s_win.first && (s_win.passes < s_win.first || (s_win.last && s_win.passes > s_win.last));
+}
+
+/* a pass begins: its pass ring entry and its number in the window */
+static const void *passPush(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
+                            uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
+{
+    const void *m = rd__passring_push(kind, color, cw, ch, depth, dw, dh, storage, post);
+    if (s_win.first) {
+        s_win.passes++;
+        if (s_win.passes == s_win.last) {
+            s_win.lastSeq = (uint64_t)(uintptr_t)m;
+        } else if (s_win.last && s_win.passes == s_win.last + 1u) {
+            s_win.nextSeq = (uint64_t)(uintptr_t)m;
+            s_win.stop = true;
+        }
+    }
+    return m;
+}
+
+static void drawCmd(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
+                    uint32_t instanceCount)
+{
+    if (winMuted()) {
+        return;
+    }
+    if (s_win.first && s_win.passes == s_win.last) {
+        s_win.lastDraws++;
+    }
+    rhi_cmd_draw(cl, vertexCount, firstVertex, instanceCount);
+}
+
+static void drawIndexedCmd(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
+                           int32_t vertexOffset, uint32_t instanceCount)
+{
+    if (winMuted()) {
+        return;
+    }
+    if (s_win.first && s_win.passes == s_win.last) {
+        s_win.lastDraws++;
+    }
+    rhi_cmd_draw_indexed(cl, indexCount, firstIndex, vertexOffset, instanceCount);
+}
+
+static void copyCmd(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
+                    int32_t dstX, int32_t dstY)
+{
+    if (!winMuted()) {
+        rhi_cmd_copy_texture(cl, src, srcRegion, dst, dstX, dstY);
+    }
+}
+
 uint32_t rd__ring_slot(void)
 {
     return s_slot;
@@ -1287,8 +1374,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     p.width = c->tw;
     p.height = c->th;
     rhi_cmd_begin_render_pass(s_cl, &p);
-    rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0,
-                                               d ? d->tw : 0, d ? d->th : 0, storage, r->perfPost));
+    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
+                                      d ? d->th : 0, storage, r->perfPost));
     setViewport(c->tw, c->th);
     r->passOpen = 1;
     r->passColor = cid;
@@ -1463,7 +1550,7 @@ static void msaaFullscreen(RdFsId fs, RhiFormat colorFmt, RhiTexture src, RhiVie
     rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, g2);
-    rhi_cmd_draw(s_cl, 3, 0, 1);
+    drawCmd(s_cl, 3, 0, 1);
 }
 
 /* SCENE's colour (depth 0) or depth (1) spread over SCENE_MS's samples, in
@@ -2116,9 +2203,9 @@ static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
     }
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_COPY_DST);
-    rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_SNAP, (uint32_t)(tc - g_rd.targets) + 1u,
-                                               tc->tw, tc->th, 0, area.w, area.h, 0, r->perfPost));
-    rhi_cmd_copy_texture(s_cl, tc->color, area, tc->snap, area.x, area.y);
+    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_SNAP, (uint32_t)(tc - g_rd.targets) + 1u, tc->tw,
+                                      tc->th, 0, area.w, area.h, 0, r->perfPost));
+    copyCmd(s_cl, tc->color, area, tc->snap, area.x, area.y);
     rd__transition(s_cl, tc->snap, &tc->snapState, RHI_STATE_SHADER_READ);
     return true;
 }
@@ -2273,7 +2360,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const 
             s_cl, 2,
             rd__tex_group(tc->color, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                  RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-        rhi_cmd_draw(s_cl, 3, 0, 1);
+        drawCmd(s_cl, 3, 0, 1);
     }
     rhi_cmd_end_render_pass(s_cl);
     rd__transition(s_cl, sn->color, &sn->colorState, RHI_STATE_SHADER_READ);
@@ -3248,7 +3335,7 @@ static void flushScreenRun(Replay *r)
         rd__bind_uniform(s_cl, 1, rd__draw_group(&q->cb));
         rhi_cmd_set_bind_group(s_cl, 2, q->g2);
         dstBind(r, &q->key);
-        rhi_cmd_draw(s_cl, q->count, 0, 1);
+        drawCmd(s_cl, q->count, 0, 1);
         if (q->passes == 2 && q->pipe2.id) {
             /* the two-pass fallback's alpha pass over the same vertices */
             rhi_cmd_set_pipeline(s_cl, q->pipe2);
@@ -3256,7 +3343,7 @@ static void flushScreenRun(Replay *r)
             rd__bind_uniform(s_cl, 1, rd__draw_group(&q->cb2));
             rhi_cmd_set_bind_group(s_cl, 2, q->g2);
             dstBind(r, &q->key2);
-            rhi_cmd_draw(s_cl, q->count, 0, 1);
+            drawCmd(s_cl, q->count, 0, 1);
         }
         g_rdPerf.screenDraws++; /* one draw of the run, however many passes */
     }
@@ -3401,7 +3488,7 @@ static bool drawExpanded(Replay *r, const RdDrawPass *pass, const DrawSetup *ds,
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
         dstBind(r, &ex[j].key);
-        rhi_cmd_draw(s_cl, count, first, 1);
+        drawCmd(s_cl, count, first, 1);
     }
     return any;
 }
@@ -3766,7 +3853,7 @@ void rd__overlay_draw(RhiCommandList cl, RhiFormat fmt, RdUniform frame, uint8_t
         rd__bind_uniform(cl, 0, frame);
         rd__bind_uniform(cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(cl, 2, g2);
-        rhi_cmd_draw(cl, nv, 0, 1);
+        drawCmd(cl, nv, 0, 1);
     }
 }
 
@@ -4059,7 +4146,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, rd__tex_group(ds.tex, smp));
     rhi_cmd_set_vertex_buffer(s_cl, 0, g_rd.ring[s_slot], vOff);
-    rhi_cmd_draw(s_cl, nv, 0, 1);
+    drawCmd(s_cl, nv, 0, 1);
     rhi_cmd_end_render_pass(s_cl);
     rd__transition(s_cl, s_wrapAcc, &s_wrapAccState, RHI_STATE_SHADER_READ);
 
@@ -4076,7 +4163,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
                                               rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                           RD_WRAP_CLAMP, RD_WRAP_CLAMP),
                                               tc->snap));
-    rhi_cmd_draw(s_cl, 3, 0, 1);
+    drawCmd(s_cl, 3, 0, 1);
     endPass(r);
     r->writeSerial++;
 }
@@ -4262,9 +4349,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         rhi_cmd_set_bind_group(s_cl, 2, g2);
         dstBind(r, &dp[i].key);
         if (indexed) {
-            rhi_cmd_draw_indexed(s_cl, count, first, 0, 1);
+            drawIndexedCmd(s_cl, count, first, 0, 1);
         } else {
-            rhi_cmd_draw(s_cl, count, first, 1);
+            drawCmd(s_cl, count, first, 1);
         }
         if (dp[i].key.gs.colorMask & 8) {
             r->writeSerial++;
@@ -4501,8 +4588,8 @@ static void doExact(Replay *r, const RdCmd *c)
         return;
     }
     endPass(r);
-    rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_EXACT, c->u[0], src->tw, src->th, c->u[1],
-                                               dst->tw, dst->th, 0, r->perfPost));
+    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_EXACT, c->u[0], src->tw, src->th, c->u[1], dst->tw,
+                                      dst->th, 0, r->perfPost));
     r->writeSerial++;
     uint32_t w = dst->tw, h = dst->th;
     if (src->tw != w || src->th != h) {
@@ -4516,7 +4603,7 @@ static void doExact(Replay *r, const RdCmd *c)
         /* no blending: the GS writes Cs */
         rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
         rd__transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
-        rhi_cmd_copy_texture(s_cl, src->color, all, dst->color, 0, 0);
+        copyCmd(s_cl, src->color, all, dst->color, 0, 0);
         return;
     }
     RdScratch *cs = scratchGet(w, h, 0), *cd = scratchGet(w, h, 1), *co = scratchGet(w, h, 2);
@@ -4526,10 +4613,10 @@ static void doExact(Replay *r, const RdCmd *c)
     g_rdPerf.exactBlends++;
     rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, cs->tex, &cs->state, RHI_STATE_COPY_DST);
-    rhi_cmd_copy_texture(s_cl, src->color, all, cs->tex, 0, 0);
+    copyCmd(s_cl, src->color, all, cs->tex, 0, 0);
     rd__transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, cd->tex, &cd->state, RHI_STATE_COPY_DST);
-    rhi_cmd_copy_texture(s_cl, dst->color, all, cd->tex, 0, 0);
+    copyCmd(s_cl, dst->color, all, cd->tex, 0, 0);
     rd__transition(s_cl, cs->tex, &cs->state, RHI_STATE_SHADER_READ);
     rd__transition(s_cl, cd->tex, &cd->state, RHI_STATE_SHADER_READ);
     rd__transition(s_cl, co->tex, &co->state, RHI_STATE_RENDER_TARGET);
@@ -4564,12 +4651,12 @@ static void doExact(Replay *r, const RdCmd *c)
         rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, bindGroup(g_rd.layoutInt, b, 2));
-        rhi_cmd_draw(s_cl, 3, 0, 1);
+        drawCmd(s_cl, 3, 0, 1);
     }
     rhi_cmd_end_render_pass(s_cl);
     rd__transition(s_cl, co->tex, &co->state, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
-    rhi_cmd_copy_texture(s_cl, co->tex, all, dst->color, 0, 0);
+    copyCmd(s_cl, co->tex, all, dst->color, 0, 0);
 }
 
 static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
@@ -4633,10 +4720,10 @@ static void doCopy(Replay *r, const RdFrame *f, const RdCmd *c)
     r->writeSerial++;
     rd__transition(s_cl, src->color, &src->colorState, RHI_STATE_COPY_SRC);
     rd__transition(s_cl, dst->color, &dst->colorState, RHI_STATE_COPY_DST);
-    rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_COPY, c->u[0], src->tw, src->th, c->u[1],
-                                               dst->tw, dst->th, 0, r->perfPost));
-    rhi_cmd_copy_texture(s_cl, src->color, (RhiRect){(int32_t)sx0, (int32_t)sy0, w, h}, dst->color,
-                         (int32_t)dx0, (int32_t)dy0);
+    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_COPY, c->u[0], src->tw, src->th, c->u[1], dst->tw,
+                                      dst->th, 0, r->perfPost));
+    copyCmd(s_cl, src->color, (RhiRect){(int32_t)sx0, (int32_t)sy0, w, h}, dst->color, (int32_t)dx0,
+            (int32_t)dy0);
 }
 
 /* --------------------------------------------------------------- shadows
@@ -4758,7 +4845,7 @@ static void doShadowStrip(Replay *r, const RdFrame *f, const RdCmd *c)
             rd__bind_uniform(s_cl, 1, g1);
             rhi_cmd_set_bind_group(s_cl, 2, g2);
             rhi_cmd_set_stencil_ref(s_cl, 0);
-            rhi_cmd_draw(s_cl, count[decr], first, 1);
+            drawCmd(s_cl, count[decr], first, 1);
             g_rd.stats.draws++;
         }
         first += count[decr];
@@ -4838,7 +4925,7 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
         s_cl, 2,
         rd__tex_group(tc->color, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP,
                                              RD_WRAP_CLAMP)));
-    rhi_cmd_draw(s_cl, 3, 0, 1);
+    drawCmd(s_cl, 3, 0, 1);
     rhi_cmd_end_render_pass(s_cl);
     rd__transition(s_cl, s_shadowRed, &s_shadowRedState, RHI_STATE_SHADER_READ);
     s_shadowRedFor = r->st.color;
@@ -4880,7 +4967,7 @@ static void doShadowResolve(Replay *r)
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
         rhi_cmd_set_stencil_ref(s_cl, pass < 6 ? (uint8_t)(1u << pass) : 0);
-        rhi_cmd_draw(s_cl, 3, 0, 1);
+        drawCmd(s_cl, 3, 0, 1);
     }
     endPass(r);
     /* the count has been read: the window closes, and later passes on the
@@ -5114,7 +5201,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
         dstBind(r, &dp[i].key);
-        rhi_cmd_draw(s_cl, nv, 0, 1);
+        drawCmd(s_cl, nv, 0, 1);
         if (!rd__no_dual_second(dp, i)) {
             g_rd.stats.draws++;
         }
@@ -5568,7 +5655,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     rd__bind_uniform(s_cl, 0, r->frameBG);
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, g2);
-    rhi_cmd_draw(s_cl, 3, 0, 1);
+    drawCmd(s_cl, 3, 0, 1);
     g_rd.stats.draws++;
     if (key.gs.colorMask & 8) {
         r->writeSerial++;
@@ -5695,6 +5782,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
+    /* the pass window's count starts again (rd__replay_set_window) */
+    s_win.passes = s_win.lastDraws = 0;
+    s_win.lastSeq = s_win.nextSeq = 0;
+    s_win.stop = false;
     rhi_set_submit_tag(g_rdPerf.replay, f->number);
     s_ringOff = 0;
     g_rd.deferText = false;
@@ -5813,9 +5904,15 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 rd__not_implemented(stubName(c->type));
                 break;
             }
+            if (s_win.stop) {
+                break; /* the pass window's end: this command began the next pass */
+            }
         }
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
+        if (s_win.stop) {
+            break;
+        }
     }
     msaaEnd(&r); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
@@ -6024,7 +6121,7 @@ bool rd__camera_probe(const RdCamera *cam, const float p[4], float out[3][4])
                 s_cl, 2,
                 rd__tex_group(g_rd.dummy, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
                                                       RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-            rhi_cmd_draw(s_cl, 3, 0, 1);
+            drawCmd(s_cl, 3, 0, 1);
         }
         rhi_cmd_end_render_pass(s_cl);
         rhi_end_commands(s_cl);

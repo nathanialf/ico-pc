@@ -131,6 +131,12 @@ uint32_t rhi_frame_slot(void)
 void rhi_wait_idle(void)
 {
     dx_wait_fence(dx_signal());
+    /* a removed device completes every fence at once: its reason, noted
+     * and reported like any other loss (the loss bisect waits here after
+     * each replay, rd_dump.c rd_loss_bisect) */
+    if (!g_dx.deviceLost && g_dx.device) {
+        DX_CHECK(ID3D12Device_GetDeviceRemovedReason(g_dx.device));
+    }
     /* The other slots' garbage is now safe to destroy; the current frame's
      * is not (a list recorded but not submitted may still use it). */
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {

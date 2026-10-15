@@ -1062,6 +1062,17 @@ static wchar_t act_wpath[1024];
    write and the cut, or the next moment without a word (a phone's system
    ends it, or a driver exits it). act_len: the file's length now. */
 static char act_version[128];
+/* a device loss in this run (ico_diag_note_device_loss): the file's third
+   line, "loss dump: <zip>" or act_loss_none, kept through the run's end so
+   the next start finds it; "" none */
+static char act_loss[1100];
+static const char act_loss_prefix[] = "loss dump: ";
+static const char act_loss_none[] = "graphics device lost, no loss dump";
+/* the loss dump the previous run left for this one's bisect
+   (ico_diag_startup_activity_begin), "" none */
+static char loss_pending[1024];
+/* the bisect's note: a run ended during it is not bisected again */
+static const char act_bisect[] = "replaying the lost frame pass by pass (the loss bisect)";
 #ifdef _WIN32
 static HANDLE act_h = INVALID_HANDLE_VALUE;
 #else
@@ -1127,11 +1138,13 @@ static void act_close(void)
 
 static void act_write(const char *note)
 {
-    /* the version's line, then the note; room for the NULs over a longer
-       text before it (one past the longest text) */
-    static char text[sizeof act_version + 1 + 160 + 1];
+    /* the version's line, then the note, then this run's loss when there
+       was one; room for the NULs over a longer text before it (one past the
+       longest text) */
+    static char text[sizeof act_version + 1 + 160 + 1 + sizeof act_loss + 1];
     const size_t cap = sizeof text - 1;
-    const int len = snprintf(text, cap, "%s\n%s", act_version, note);
+    const int len = snprintf(text, cap, "%s\n%s%s%s", act_version, note,
+                             act_loss[0] != '\0' ? "\n" : "", act_loss);
     const size_t n = len < 0 ? 0 : (size_t)len < cap ? (size_t)len : cap - 1;
     size_t w = n;
     if (act_open() != 0) {
@@ -1225,15 +1238,18 @@ static void act_remove(void)
 
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
-    char buf[sizeof act_version + 1 + sizeof activity];
+    char buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss];
     const char *ver = "";
     char *prev = buf;
+    char *loss = NULL;
     char *nl;
     size_t n = 0;
     FILE *f;
     act_close();
     act_mode = 0;
     act_path[0] = '\0';
+    act_loss[0] = '\0';
+    loss_pending[0] = '\0';
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
     }
@@ -1264,10 +1280,39 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
             nl[-1] = '\0';
         }
     }
+    /* the note's line, then a device loss's (ico_diag_note_device_loss) */
+    nl = strchr(prev, '\n');
+    if (nl != NULL) {
+        loss = nl + 1;
+        loss[strcspn(loss, "\r\n")] = '\0';
+    }
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
     prev[strcspn(prev, "\r\n")] = '\0';
     act_remove();
+    if (loss != NULL && strcmp(loss, act_loss_none) == 0) {
+        ico_diag_log("ico_pc: the previous run lost the graphics device (no loss dump was "
+                     "written)");
+    } else if (loss != NULL && strncmp(loss, act_loss_prefix, sizeof act_loss_prefix - 1) == 0 &&
+               loss[sizeof act_loss_prefix - 1] != '\0') {
+        const char *zip = loss + sizeof act_loss_prefix - 1;
+        if (strcmp(ver, act_version) != 0) {
+            /* the bisect replays the dump on the renderer that lost it */
+            ico_diag_log("ico_pc: the previous run (version %s) lost the graphics device; its "
+                         "loss dump %s is not replayed on %s",
+                         ver[0] != '\0' ? ver : "unknown", zip, act_version);
+        } else if (strlen(zip) < sizeof loss_pending) {
+            memcpy(loss_pending, zip, strlen(zip) + 1);
+            ico_diag_log("ico_pc: the previous run lost the graphics device; its loss dump is %s",
+                         zip);
+        }
+    }
+    if (strcmp(prev, act_bisect) == 0) {
+        /* a bisect that never finished: named, not run again, and nothing
+           to do with the pipelines */
+        ico_diag_log("ico_pc: the previous run ended while: %s; it is not run again", prev);
+        return 0;
+    }
     if (prev[0] == '\0') {
         return 0;
     }
@@ -1310,13 +1355,75 @@ void ico_diag_startup_activity_exit(void)
 void ico_diag_startup_activity_record(int mode)
 {
     act_mode = mode;
-    if (mode == 0) {
+    if (mode == 0 && act_loss[0] != '\0') {
+        /* the run's device loss stays for the next start, with no note */
+        act_write("");
+        act_close();
+    } else if (mode == 0) {
         act_remove();
     } else if (mode == ICO_DIAG_ACTIVITY_LAZY) {
         act_write(activity[0] != '\0' ? activity : act_between);
     } else {
         act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
     }
+}
+
+void ico_diag_note_device_loss(const char *dump_zip)
+{
+    if (dump_zip != NULL && dump_zip[0] != '\0') {
+        snprintf(act_loss, sizeof act_loss, "%s%s", act_loss_prefix, dump_zip);
+    } else {
+        snprintf(act_loss, sizeof act_loss, "%s", act_loss_none);
+    }
+    /* written now, the run's note kept (the process may be ended before
+       its exit) */
+    if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {
+        act_write(activity[0] != '\0' ? activity : act_between);
+    } else if (act_mode == ICO_DIAG_ACTIVITY_STARTUP) {
+        act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
+    } else {
+        act_write("");
+    }
+}
+
+const char *ico_diag_loss_dump(void)
+{
+    return loss_pending[0] != '\0' ? loss_pending : NULL;
+}
+
+int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t line_size,
+                                       void *user),
+                         void *user)
+{
+    char zip[sizeof loss_pending];
+    char line[640];
+    int r;
+    if (loss_pending[0] == '\0' || bisect == NULL) {
+        return -1;
+    }
+    memcpy(zip, loss_pending, sizeof zip);
+    loss_pending[0] = '\0';
+    /* the file says the bisect is running (and holds no loss): a run ended
+       inside it does not bisect again */
+    act_write(act_bisect);
+    ico_diag_log("ico_pc: loss bisect: replaying the lost frame of %s pass by pass before the "
+                 "game starts",
+                 zip);
+    line[0] = '\0';
+    r = bisect(zip, line, sizeof line, user);
+    if (r == ICO_DIAG_BISECT_LOST) {
+        ico_diag_log("ico_pc: loss bisect: %s", line[0] != '\0' ? line : "the device was lost");
+    } else if (r == ICO_DIAG_BISECT_CLEAN) {
+        ico_diag_log("ico_pc: loss bisect: %s",
+                     line[0] != '\0' ? line : "the frame ran without losing the device");
+    } else {
+        r = ICO_DIAG_BISECT_NOT_RUN;
+        ico_diag_log("ico_pc: loss bisect: not run: %s", line[0] != '\0' ? line : "no reason");
+    }
+    /* done: the file goes (the start that follows writes its own) */
+    act_remove();
+    ico_diag_log("ico_pc: loss bisect: done; the game starts");
+    return r;
 }
 
 /* the note says the graphics driver was building a pipeline */

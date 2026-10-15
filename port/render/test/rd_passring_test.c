@@ -12,7 +12,9 @@
  *   pipeline  only a render pass or exact blend takes the pipeline asked
  *             for; an upload batch takes its bytes
  *   format    a pass, a copy and the present as the loss report prints
- *             them */
+ *             them
+ *   bisect    the loss bisect's line for a pass, a copy and a pass of
+ *             unknown count, in the same words */
 #include "rd_passring.h"
 #include <stdio.h>
 #include <string.h>
@@ -166,12 +168,37 @@ static void testFormat(void)
     CHECK(strlen(small) == 7);
 }
 
+static void testBisect(void)
+{
+    rd__passring_reset();
+    rd__passring_frame(5, 121, 0);
+    rd__passring_list(3);
+    rd__passring_push(RD_PASSK_PASS, 4, 640, 448, 5, 640, 448, 0, -1);
+    rd__passring_pipeline(409, 7, 5, 0);
+    rd__passring_push(RD_PASSK_COPY, 7, 688, 448, 8, 688, 448, 0, 3);
+    char line[320];
+    rd_passring_format_bisect(rd_passring_get(0), 12, 61, 14, postName, line, sizeof(line));
+    CHECK(strcmp(line, "pass 12 of 61, list 3, pipeline 409 (vs 7 fs 5 dst 0), pass colour 4 "
+                       "(640x448), depth 5 (640x448), 14 draws") == 0);
+    if (strstr(line, "pass 12 of 61") == NULL) {
+        fprintf(stderr, "got: %s\n", line);
+    }
+    rd_passring_format_bisect(rd_passring_get(1), 13, 0, 1, postName, line, sizeof(line));
+    CHECK(strcmp(line, "pass 13, list 3, no pipeline, copy target 7 (688x448) -> target 8 "
+                       "(688x448), effect fog, 1 draw") == 0);
+    /* the loss report's own line is unchanged by the shared parts */
+    rd_passring_format(rd_passring_get(0), NULL, line, sizeof(line));
+    CHECK(strcmp(line, "#1 replay 5 frame 121 list 3: pass, colour 4 (640x448), depth 5 "
+                       "(640x448), pipeline 409 (vs 7 fs 5 dst 0)") == 0);
+}
+
 int main(void)
 {
     testOrder();
     testWrap();
     testPrintStart();
     testFormat();
+    testBisect();
     printf("rd_passring_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

@@ -93,6 +93,13 @@ const RdPassReplay *rd_passring_replay_of(uint64_t seq);
 /* one entry as a line (no newline), postName naming an effect (NULL:
  * numbers); the length written, as snprintf */
 int rd_passring_format(const RdPassRec *e, const char *(*postName)(int), char *out, size_t n);
+/* the loss bisect's line for the pass that lost the device (rd_dump.c
+ * rd_loss_bisect): "pass <pass> of <of>, list <l>, pipeline <id> (vs <v>
+ * fs <f> dst <d>), <kind> <targets>[, effect <e>], <draws> draws", the
+ * parts in rd_passring_format's words (of 0: " of <of>" left out; no
+ * pipeline: "no pipeline"); the length written, as snprintf */
+int rd_passring_format_bisect(const RdPassRec *e, uint32_t pass, uint32_t of, uint32_t draws,
+                              const char *(*postName)(int), char *out, size_t n);
 /* the first entry the report prints (an index for rd_passring_get): the
  * first of the last RD_PASSRING_PRINT_REPLAYS replays, or the oldest entry
  * held when the ring has moved past it; rd_passring_count() when empty */

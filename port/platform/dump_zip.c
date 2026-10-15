@@ -73,26 +73,45 @@ static const char *base_name(const char *path)
     return b;
 }
 
-int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *log_path, char *why,
-                       size_t why_size)
+/* the files paths[0..n) and, when it can be read, log_path, each under its
+   own name, into zip_path; the loose files deleted after; as
+   ico_frame_dump_zip's result (0, 1 or -1) */
+static int files_zip(const char *zip_path, const char *const *paths, int n, const char *log_path,
+                     char *why, size_t why_size)
 {
     mz_zip_archive z;
     void *out = NULL;
-    size_t out_size = 0, dump_size = 0, log_size = 0;
-    void *dump = read_all(dump_path, &dump_size);
+    size_t out_size = 0, log_size = 0;
+    void *data[ICO_LOSS_DUMP_FILES] = {NULL, NULL};
+    size_t size[ICO_LOSS_DUMP_FILES] = {0, 0};
     void *log = log_path != NULL && log_path[0] != '\0' ? read_all(log_path, &log_size) : NULL;
-    int r = -1;
+    int r = -1, have = 1;
 
+    if (n < 1 || n > ICO_LOSS_DUMP_FILES) {
+        say(why, why_size, "no dump to add", NULL);
+        free(log);
+        return -1;
+    }
+    for (int i = 0; i < n && have; i++) {
+        data[i] = read_all(paths[i], &size[i]);
+        if (data[i] == NULL) {
+            say(why, why_size, "cannot read the dump", paths[i]);
+            have = 0;
+        }
+    }
     memset(&z, 0, sizeof(z));
-    if (dump == NULL) {
-        say(why, why_size, "cannot read the dump", dump_path);
+    if (!have) {
+        /* said above */
     } else if (!mz_zip_writer_init_heap(&z, 0, 0)) {
         say(why, why_size, "cannot start the archive",
             mz_zip_get_error_string(mz_zip_get_last_error(&z)));
     } else {
-        int ok =
-            mz_zip_writer_add_mem(&z, base_name(dump_path), dump, dump_size, MZ_DEFAULT_LEVEL) != 0;
+        int ok = 1;
 
+        for (int i = 0; i < n && ok; i++) {
+            ok = mz_zip_writer_add_mem(&z, base_name(paths[i]), data[i], size[i],
+                                       MZ_DEFAULT_LEVEL) != 0;
+        }
         if (ok && log != NULL) {
             ok = mz_zip_writer_add_mem(&z, base_name(log_path), log, log_size, MZ_DEFAULT_LEVEL) !=
                  0;
@@ -119,14 +138,96 @@ int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *
                 say(why, why_size, "cannot write", zip_path);
                 remove(zip_path);
             } else {
-                remove(dump_path);
+                for (int i = 0; i < n; i++) {
+                    remove(paths[i]);
+                }
             }
             mz_free(out);
         }
     }
-    free(dump);
+    for (int i = 0; i < n; i++) {
+        free(data[i]);
+    }
     free(log);
     return r;
+}
+
+int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *log_path, char *why,
+                       size_t why_size)
+{
+    const char *paths[1] = {dump_path};
+
+    return files_zip(zip_path, paths, 1, log_path, why, why_size);
+}
+
+int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
+                      const char *log_path, char *why, size_t why_size)
+{
+    const char *paths[ICO_LOSS_DUMP_FILES] = {lost_path, before_path};
+    const int n = before_path != NULL && before_path[0] != '\0' ? 2 : 1;
+
+    return files_zip(zip_path, paths, n, log_path, why, why_size);
+}
+
+int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stamp)
+{
+    const size_t n = strlen(dir);
+    const char *sep = n > 0 && (dir[n - 1] == '/' || dir[n - 1] == '\\') ? "" : "/";
+    const int c = snprintf(out, size, "%s%sloss-%s.zip", dir, sep, stamp);
+
+    return c < 0 || (size_t)c >= size ? -1 : 0;
+}
+
+/* ico_loss_dump_prune's walk: the loss zips' paths, in name order */
+typedef struct PruneList {
+    char (*paths)[1024];
+    int count, cap;
+} PruneList;
+
+static int is_loss_zip(const char *name)
+{
+    const size_t n = strlen(name);
+
+    return n > 9 && strncmp(name, "loss-", 5) == 0 && strcmp(name + n - 4, ".zip") == 0;
+}
+
+static int prune_visit(const char *path, const char *name, void *user)
+{
+    PruneList *l = (PruneList *)user;
+
+    if (!is_loss_zip(name) || strlen(path) >= sizeof(l->paths[0])) {
+        return 0;
+    }
+    if (l->count == l->cap) {
+        const int ncap = l->cap ? l->cap * 2 : 16;
+        char (*np)[1024] = realloc(l->paths, (size_t)ncap * sizeof(l->paths[0]));
+
+        if (np == NULL) {
+            return 1;
+        }
+        l->paths = np;
+        l->cap = ncap;
+    }
+    memcpy(l->paths[l->count++], path, strlen(path) + 1);
+    return 0;
+}
+
+int ico_loss_dump_prune(const char *dir, int keep)
+{
+    PruneList l = {NULL, 0, 0};
+    int removed = 0;
+
+    if (ico_dir_walk(dir, 0, prune_visit, &l) < 0) {
+        free(l.paths);
+        return -1;
+    }
+    /* the names hold the time (loss-YYYYMMDD-HHMMSS.zip): byte order is
+       oldest first */
+    for (int i = 0; i + (keep > 0 ? keep : 0) < l.count; i++) {
+        removed += ico_remove(l.paths[i]) == 0;
+    }
+    free(l.paths);
+    return removed;
 }
 
 void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_t name_size)

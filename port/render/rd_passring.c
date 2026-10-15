@@ -164,56 +164,86 @@ static const char *kindName(uint8_t k)
     return k < RD_PASSK_COUNT ? names[k] : "?";
 }
 
-int rd_passring_format(const RdPassRec *e, const char *(*postName)(int), char *out, size_t n)
-{
+/* an entry's parts, as rd_passring_format and rd_passring_format_bisect
+ * write them */
+typedef struct EntryText {
     char list[16], post[48], target[96], pipe[64];
+} EntryText;
+
+static void entryText(const RdPassRec *e, const char *(*postName)(int), EntryText *t)
+{
     if (e->list == 255) {
-        snprintf(list, sizeof(list), "-");
+        snprintf(t->list, sizeof(t->list), "-");
     } else {
-        snprintf(list, sizeof(list), "%u", (unsigned)e->list);
+        snprintf(t->list, sizeof(t->list), "%u", (unsigned)e->list);
     }
     if (e->post < 0) {
-        post[0] = '\0';
+        t->post[0] = '\0';
     } else if (postName) {
-        snprintf(post, sizeof(post), ", effect %s", postName(e->post));
+        snprintf(t->post, sizeof(t->post), ", effect %s", postName(e->post));
     } else {
-        snprintf(post, sizeof(post), ", effect %d", (int)e->post);
+        snprintf(t->post, sizeof(t->post), ", effect %d", (int)e->post);
     }
     switch (e->kind) {
     case RD_PASSK_COPY:
     case RD_PASSK_EXACT:
-        snprintf(target, sizeof(target), "target %u (%ux%u) -> target %u (%ux%u)",
+        snprintf(t->target, sizeof(t->target), "target %u (%ux%u) -> target %u (%ux%u)",
                  (unsigned)e->color, (unsigned)e->cw, (unsigned)e->ch, (unsigned)e->depth,
                  (unsigned)e->dw, (unsigned)e->dh);
         break;
     case RD_PASSK_UPLOAD:
-        snprintf(target, sizeof(target), "%llu bytes", (unsigned long long)e->bytes);
+        snprintf(t->target, sizeof(t->target), "%llu bytes", (unsigned long long)e->bytes);
         break;
     case RD_PASSK_PRESENT:
-        snprintf(target, sizeof(target), "from target %u (%ux%u) to %ux%u", (unsigned)e->color,
-                 (unsigned)e->cw, (unsigned)e->ch, (unsigned)e->dw, (unsigned)e->dh);
+        snprintf(t->target, sizeof(t->target), "from target %u (%ux%u) to %ux%u",
+                 (unsigned)e->color, (unsigned)e->cw, (unsigned)e->ch, (unsigned)e->dw,
+                 (unsigned)e->dh);
         break;
     default:
         if (e->depth) {
-            snprintf(target, sizeof(target), "colour %u (%ux%u), depth %u (%ux%u)",
+            snprintf(t->target, sizeof(t->target), "colour %u (%ux%u), depth %u (%ux%u)",
                      (unsigned)e->color, (unsigned)e->cw, (unsigned)e->ch, (unsigned)e->depth,
                      (unsigned)e->dw, (unsigned)e->dh);
         } else {
-            snprintf(target, sizeof(target), "colour %u (%ux%u)", (unsigned)e->color,
+            snprintf(t->target, sizeof(t->target), "colour %u (%ux%u)", (unsigned)e->color,
                      (unsigned)e->cw, (unsigned)e->ch);
         }
         break;
     }
     if (e->pipeline) {
-        snprintf(pipe, sizeof(pipe), ", pipeline %u (vs %u fs %u dst %u)", (unsigned)e->pipeline,
-                 (unsigned)e->vs, (unsigned)e->fs, (unsigned)e->dst);
+        snprintf(t->pipe, sizeof(t->pipe), "pipeline %u (vs %u fs %u dst %u)",
+                 (unsigned)e->pipeline, (unsigned)e->vs, (unsigned)e->fs, (unsigned)e->dst);
     } else {
-        pipe[0] = '\0';
+        t->pipe[0] = '\0';
     }
-    return snprintf(out, n, "#%llu replay %u frame %u%s list %s: %s%s, %s%s%s",
+}
+
+int rd_passring_format(const RdPassRec *e, const char *(*postName)(int), char *out, size_t n)
+{
+    EntryText t;
+    entryText(e, postName, &t);
+    return snprintf(out, n, "#%llu replay %u frame %u%s list %s: %s%s, %s%s%s%s",
                     (unsigned long long)e->seq, (unsigned)e->replay, (unsigned)e->frame,
-                    e->keep ? " (keep)" : "", list, kindName(e->kind),
-                    e->storage ? " (storage)" : "", target, post, pipe);
+                    e->keep ? " (keep)" : "", t.list, kindName(e->kind),
+                    e->storage ? " (storage)" : "", t.target, t.post, t.pipe[0] ? ", " : "",
+                    t.pipe);
+}
+
+int rd_passring_format_bisect(const RdPassRec *e, uint32_t pass, uint32_t of, uint32_t draws,
+                              const char *(*postName)(int), char *out, size_t n)
+{
+    EntryText t;
+    char ofText[24];
+    entryText(e, postName, &t);
+    if (of) {
+        snprintf(ofText, sizeof(ofText), " of %u", (unsigned)of);
+    } else {
+        ofText[0] = '\0';
+    }
+    return snprintf(out, n, "pass %u%s, list %s, %s, %s%s %s%s, %u draw%s", (unsigned)pass, ofText,
+                    t.list, t.pipe[0] ? t.pipe : "no pipeline", kindName(e->kind),
+                    e->storage ? " (storage)" : "", t.target, t.post, (unsigned)draws,
+                    draws == 1 ? "" : "s");
 }
 
 void rd_passring_print(FILE *f, const char *(*postName)(int))

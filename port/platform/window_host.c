@@ -983,6 +983,85 @@ static void window_activity(const char *note)
     }
 }
 
+/* The loss bisect (docs/port/RENDER.md, "The loss bisect";
+   diag_host.h ico_diag_loss_bisect): the lost frame of the previous run's
+   loss dump (the zip's first .rddump, taken out to a file beside it)
+   replayed by a renderer of its own on this window, one pass longer each
+   time with a wait for the GPU after each (rd.h rd_loss_bisect); that
+   renderer is shut down after, the device lost or not, and the game's
+   own starts as at any start. Diagnostics only: whatever happens, the
+   game starts. user: the game's RdSettings. */
+static int window_loss_bisect(const char *zip, char *line, size_t size, void *user)
+{
+    const RdSettings *game = (const RdSettings *)user;
+    char dump[ICO_PATH_MAX + 32];
+    size_t bytes = 0;
+    void *data = ico_dump_zip_extract(zip, &bytes, NULL, 0);
+    uint32_t gw = 0, gh = 0;
+    float aspect = 0.0f;
+    RdLossBisect b;
+
+    if (data == NULL) {
+        snprintf(line, size, "%s cannot be read or holds no frame", zip);
+        return ICO_DIAG_BISECT_NOT_RUN;
+    }
+    snprintf(dump, sizeof(dump), "%s.rddump", zip);
+    FILE *f = ico_fopen(dump, "wb");
+    const int wrote = f != NULL && fwrite(data, 1, bytes, f) == bytes;
+
+    if (f != NULL && fclose(f) != 0) {
+        remove(dump);
+        f = NULL;
+    }
+    free(data);
+    if (!wrote || f == NULL) {
+        snprintf(line, size, "the frame could not be written to %s", dump);
+        remove(dump);
+        return ICO_DIAG_BISECT_NOT_RUN;
+    }
+    if (!rd_dump_frame_size(dump, &gw, &gh, &aspect)) {
+        snprintf(line, size, "%s holds no frame this version reads", zip);
+        remove(dump);
+        return ICO_DIAG_BISECT_NOT_RUN;
+    }
+    /* the frame's own size and aspect, the game's other settings */
+    RdSettings rs = *game;
+    rs.aspect = aspect;
+    rd_set_activity_fn(window_activity);
+    if (!rd_init(gw, gh, &rs, s_window)) {
+        snprintf(line, size, "the renderer did not start (the lines above say why)");
+        remove(dump);
+        return ICO_DIAG_BISECT_NOT_RUN;
+    }
+    rd_loss_bisect(dump, &b);
+    rd_shutdown();
+    remove(dump);
+    fprintf(stderr,
+            "window: loss bisect: frame %u, %u passes, %u replays in %.1f s; the bisect's "
+            "renderer is shut down\n",
+            (unsigned)b.frame, (unsigned)b.passes, (unsigned)b.replays, b.ms / 1000.0);
+    switch (b.result) {
+    case RD_BISECT_LOST:
+        if (b.next[0] != '\0') {
+            fprintf(stderr,
+                    "window: loss bisect: the replay stopped as %s began (drawing nothing "
+                    "in it)\n",
+                    b.next);
+        }
+        snprintf(line, size, "%s", b.line);
+        return ICO_DIAG_BISECT_LOST;
+    case RD_BISECT_CLEAN:
+        snprintf(line, size,
+                 "the whole frame (%u passes) ran one more pass at a time without losing the "
+                 "device",
+                 (unsigned)b.passes);
+        return ICO_DIAG_BISECT_CLEAN;
+    default:
+        snprintf(line, size, "%s", b.line);
+        return ICO_DIAG_BISECT_NOT_RUN;
+    }
+}
+
 /* the restart step this run is at (startup_retry.h; ico_window_open):
    device_lost_quit's box says when a loss step's run lost the card too */
 static StartupRetry s_retry = STARTUP_RETRY_NONE;
@@ -1147,6 +1226,11 @@ open_window:
        the phone's with a message */
     const int customDriver = ico_gpu_driver_android_start();
 #endif
+    /* the previous run lost the device and left its loss dump: the pass
+       that loses it, found before the game starts (once) */
+    if (ico_diag_loss_dump() != NULL) {
+        ico_diag_loss_bisect(window_loss_bisect, &rs);
+    }
     rd_set_activity_fn(window_activity);
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
@@ -1464,12 +1548,73 @@ static void toggle_fullscreen(void)
 #endif
 }
 
+/* The loss dump (docs/port/RENDER.md, "The loss dump"): the frames the
+   renderer still holds, the lost one and the one before it, as one zip in
+   the logs folder, logs/loss-<time>.zip, with a copy of the log
+   (rd_dump_retained, dump_zip.h ico_loss_dump_zip), so a report carries the
+   frame the next start's loss bisect replays and the developers can replay
+   it too. The oldest loss zips go beyond ICO_LOSS_DUMP_KEEP. Its name
+   (the file name alone) into name, "" when none was written; the activity
+   file notes the loss either way (diag_host.h ico_diag_note_device_loss). */
+static void loss_dump(char *name, size_t name_size)
+{
+    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], lost[ICO_PATH_MAX + 32], before[ICO_PATH_MAX + 32],
+        stamp[32], why[160];
+    const time_t now = time(NULL);
+    const struct tm *tm = localtime(&now);
+    uint32_t lostFrame = 0, beforeFrame = 0;
+
+    name[0] = '\0';
+    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
+        snprintf(stamp, sizeof(stamp), "unknown");
+    }
+    if (ico_host_logs_dir(logs, sizeof(logs)) != 0 ||
+        ico_loss_dump_path(zip, sizeof(zip), logs, stamp) != 0) {
+        fprintf(stderr, "window: loss dump: no usable logs folder\n");
+        ico_diag_note_device_loss(NULL);
+        return;
+    }
+    snprintf(lost, sizeof(lost), "%s/loss-%s-lost.rddump", logs, stamp);
+    snprintf(before, sizeof(before), "%s/loss-%s-before.rddump", logs, stamp);
+    if (!rd_dump_retained(lost, before, &lostFrame, &beforeFrame)) {
+        fprintf(stderr, "window: loss dump: the renderer holds no frame to write\n");
+        remove(lost);
+        ico_diag_note_device_loss(NULL);
+        return;
+    }
+    if (beforeFrame == 0) {
+        remove(before);
+    }
+    ico_host_log_flush();
+    if (ico_loss_dump_zip(zip, lost, beforeFrame ? before : NULL, ico_diag_log_path(), why,
+                          sizeof(why)) < 0) {
+        fprintf(stderr, "window: loss dump: zip not written: %s\n", why);
+        remove(lost);
+        remove(before);
+        ico_diag_note_device_loss(NULL);
+        return;
+    }
+    const int pruned = ico_loss_dump_prune(logs, ICO_LOSS_DUMP_KEEP);
+    if (beforeFrame) {
+        fprintf(stderr, "window: loss dump: frames %u and %u (the one before) written to %s%s\n",
+                (unsigned)lostFrame, (unsigned)beforeFrame, zip,
+                pruned > 0 ? "; older loss dumps deleted" : "");
+    } else {
+        fprintf(stderr, "window: loss dump: frame %u written to %s%s\n", (unsigned)lostFrame, zip,
+                pruned > 0 ? "; older loss dumps deleted" : "");
+    }
+    snprintf(name, name_size, "loss-%s.zip", stamp);
+    ico_diag_note_device_loss(zip);
+}
+
 /* The renderer's device was removed, reset or hung (the driver
    crashed or was updated, the GPU was unplugged, an overclocked card
    stopped): nothing more can be drawn. The backend logged the reason and
    its loss report (docs/port/RHI.md, "Device loss"); the renderer's pass
    ring follows it here, so the log names what was being drawn
-   (port/render/rd_passring.h). Then, when startup_retry.h has a loss step
+   (port/render/rd_passring.h). The loss dump follows (loss_dump: the
+   frames as a zip in the logs folder, noted in the activity file for the
+   next start's loss bisect). Then, when startup_retry.h has a loss step
    left (diag_host.c ico_diag_device_lost_restart), the session ends
    through the normal quit path without a box and the program starts again
    at exit with that step; otherwise the player gets one message and the
@@ -1487,6 +1632,9 @@ static int device_lost_quit(void)
         fprintf(stderr, "window: the graphics device was lost; quitting\n");
         rd_passring_print(stderr, rd_perf_post_name);
         ico_host_log_flush();
+        char dumpName[64];
+        loss_dump(dumpName, sizeof(dumpName));
+        ico_host_log_flush();
         if (ico_diag_device_lost_restart(rd_blend_exact() == RD_BLEND_EXACT_OFF)) {
             return 1;
         }
@@ -1502,32 +1650,49 @@ static int device_lost_quit(void)
         /* a phone: no card, no overclock, no restart step; the player's
            next move is to start again and, if it repeats, send the log,
            which names what was being drawn (the pass ring above) */
-        char text[640];
+        char text[1024];
         char logs[ICO_PATH_MAX];
+        char also[160];
         if (ico_host_logs_dir(logs, sizeof(logs)) != 0) {
             logs[0] = '\0';
+        }
+        if (dumpName[0] != '\0') {
+            snprintf(also, sizeof(also), " and the file %s beside it", dumpName);
+        } else {
+            also[0] = '\0';
         }
         snprintf(text, sizeof(text),
                  "The graphics driver stopped responding while the game was drawing, so the game "
                  "has to close. Your last save is kept.\n\nStart the game again. If this "
-                 "happens every time at the same place, please send the log file%s%s%s with a "
-                 "report at github.com/nathanialf/ico-pc/issues: it says what was being drawn.",
-                 logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "");
+                 "happens every time at the same place, please send the log file%s%s%s%s with a "
+                 "report at github.com/nathanialf/ico-pc/issues: %s what was being drawn.",
+                 logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "", also,
+                 dumpName[0] != '\0' ? "together they show" : "it says");
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
 #else
-        SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, "ICO PC",
-            startup_retry_is_loss(s_retry)
-                ? "The graphics card stopped responding (its driver was reset or updated, or "
-                  "the card was removed).\n\nThe game restarted itself with simpler blending "
-                  "and the card still stopped responding.\n\nThe game has to close. Your last "
-                  "save is kept; the log says why.\n\nIf the graphics card is overclocked, try "
-                  "its stock clocks first."
-                : "The graphics card stopped responding (its driver was reset or updated, or "
-                  "the card was removed).\n\nThe game has to close. Your last save is kept; "
-                  "the log says why.\n\nIf the graphics card is overclocked, try its stock "
-                  "clocks first.",
-            s_window);
+        char text[1024];
+        char also[256];
+        if (dumpName[0] != '\0') {
+            snprintf(also, sizeof(also),
+                     "\n\nThe game saved what it was drawing as %s in the logs folder, next to "
+                     "the log. If you report this, please attach both files.",
+                     dumpName);
+        } else {
+            also[0] = '\0';
+        }
+        snprintf(text, sizeof(text), "%s%s",
+                 startup_retry_is_loss(s_retry)
+                     ? "The graphics card stopped responding (its driver was reset or updated, or "
+                       "the card was removed).\n\nThe game restarted itself with simpler "
+                       "blending and the card still stopped responding.\n\nThe game has to "
+                       "close. Your last save is kept; the log says why.\n\nIf the graphics "
+                       "card is overclocked, try its stock clocks first."
+                     : "The graphics card stopped responding (its driver was reset or updated, or "
+                       "the card was removed).\n\nThe game has to close. Your last save is "
+                       "kept; the log says why.\n\nIf the graphics card is overclocked, try its "
+                       "stock clocks first.",
+                 also);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
 #endif
         fprintf(stderr, "window: the message was closed after %.1f s\n",
                 (double)(SDL_GetTicksNS() - t0) / 1e9);

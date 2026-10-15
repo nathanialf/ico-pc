@@ -188,6 +188,30 @@ void ico_diag_startup_activity_record(int mode);
    does too"), so the lazy decision sticks until the version changes; any
    other run deletes it. */
 void ico_diag_startup_activity_exit(void);
+/* A device loss in this run (window_host.c device_lost_quit), after its
+   loss dump was written (dump_zip: its path; NULL or "": none was): the
+   activity file gets a third line, "loss dump: <zip>" (or one saying none
+   was written), at once and kept through the run's end, whatever the
+   file's note and mode; the next start's ico_diag_startup_activity_begin
+   logs it and, when it names a dump and the version is the same, keeps
+   the path for the loss bisect (ico_diag_loss_dump). */
+void ico_diag_note_device_loss(const char *dump_zip);
+/* The loss dump the previous run left for this one (NULL: none). */
+const char *ico_diag_loss_dump(void);
+/* The loss bisect (docs/port/RENDER.md, "The loss bisect"), once, before
+   the game: with a loss dump pending, the activity file's note says the
+   bisect is running (so a run ended inside it does not bisect again at the
+   next start), bisect(zip, line, size, user) replays the dump and returns
+   one of the ICO_DIAG_BISECT_* with line saying what it found, which is
+   logged as "ico_pc: loss bisect: <line>", and the file is deleted (the
+   bisect is done; the start that follows writes its own).  -1 when there
+   was nothing to bisect, else what bisect returned. */
+#define ICO_DIAG_BISECT_NOT_RUN 0
+#define ICO_DIAG_BISECT_LOST 1
+#define ICO_DIAG_BISECT_CLEAN 2
+int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t line_size,
+                                       void *user),
+                         void *user);
 /* The relaunch's inputs: the step this run is at (StartupRetry, 0 for the
    first run), whether the build has the D3D12 backend, whether the player
    named the backend, whether the player named the blending (blend= /

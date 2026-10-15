@@ -56,6 +56,20 @@
  *               0 (the window's box), nothing at exit; lossunprepared, no
  *               relaunch prepared: 0; lossfail, the relaunch fails: the box
  *               saying the game could not start itself again;
+ *   - lossdump: the loss bisect's file steps (ico_diag_note_device_loss,
+ *               ico_diag_loss_bisect) with the bisect stubbed: a loss
+ *               noted on a run at the restart after a device loss (the
+ *               relaunch stubbed) leaves "loss dump: <zip>" in the activity
+ *               file through the run's end; the next start names it, runs
+ *               the bisect once before the game and logs its line (a lost
+ *               pass, a clean frame, a bisect that could not run) and
+ *               deletes the file; a start ended inside the bisect leaves the
+ *               bisect's note, and the start after names it, is not lazy and
+ *               does not bisect again; a lazy run's loss keeps the lazy note
+ *               beside the loss (the next start is lazy and bisects); a
+ *               run killed after the loss still leaves it; a loss with no
+ *               dump is named and not bisected; a loss from another version
+ *               is named and not bisected;
  *   - early:    the reporter started before the limits (Android's start):
  *               the first limit counts from ico_diag_start, not from the
  *               thread's start.
@@ -241,6 +255,30 @@ static void act_path(char *out, size_t size, const char *log)
     snprintf(out, size, "%s.act", log);
 }
 
+/* the loss bisect, stubbed (ICO_TEST_BISECT: lost, clean, die, or a
+   bisect that could not run) */
+static int bisect_stub(const char *zip, char *line, size_t size, void *user)
+{
+    const char *how = getenv("ICO_TEST_BISECT");
+    (void)user;
+    ico_diag_log("test: bisect stub given %s", zip);
+    if (how != NULL && strcmp(how, "die") == 0) {
+        _exit(0); /* the device or the system ends the run inside it */
+    }
+    if (how != NULL && strcmp(how, "lost") == 0) {
+        snprintf(line, size,
+                 "pass 12 of 61, list 3, pipeline 409 (vs 7 fs 5 dst 0), pass colour "
+                 "4 (640x448), 14 draws");
+        return ICO_DIAG_BISECT_LOST;
+    }
+    if (how != NULL && strcmp(how, "clean") == 0) {
+        snprintf(line, size, "the whole frame (61 passes) ran without losing the device");
+        return ICO_DIAG_BISECT_CLEAN;
+    }
+    snprintf(line, size, "the renderer did not start");
+    return ICO_DIAG_BISECT_NOT_RUN;
+}
+
 /* The start-up activity file's steps, each ending as a killed process
    would (_exit: no clean-up) unless the step ends cleanly */
 static void activity_child(const char *mode, const char *log)
@@ -278,6 +316,34 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_set_activity("creating pipeline fog test");
         ico_diag_clear_activity();
         ico_diag_startup_activity_exit();
+        child_quit(0);
+    } else if (strcmp(mode, "actloss") == 0) {
+        /* a device loss on a run (lazy when the start is), its dump named
+           by ICO_TEST_LOSS_ZIP (unset: none written); a clean exit, or a
+           kill with ICO_TEST_LOSS_KILL */
+        ico_diag_startup_activity_record(lazy ? ICO_DIAG_ACTIVITY_LAZY : 0);
+        if (lazy) {
+            ico_diag_set_activity("creating pipeline fog test");
+            ico_diag_clear_activity();
+        }
+        ico_diag_note_device_loss(getenv("ICO_TEST_LOSS_ZIP"));
+        if (getenv("ICO_TEST_LOSS_KILL") == NULL) {
+            ico_diag_startup_activity_exit();
+        }
+        child_quit(0);
+    } else if (strcmp(mode, "actbisect") == 0) {
+        /* the next start: the bisect before the game, then the game's own
+           record (the start-up set ended normally) */
+        ico_diag_log("test: loss dump %s",
+                     ico_diag_loss_dump() != NULL ? ico_diag_loss_dump() : "(none)");
+        ico_diag_log("test: bisect %d", ico_diag_loss_bisect(bisect_stub, NULL));
+        if (getenv("ICO_TEST_NO_RECORD") == NULL) {
+            ico_diag_startup_activity_record(lazy ? ICO_DIAG_ACTIVITY_LAZY
+                                                  : ICO_DIAG_ACTIVITY_STARTUP);
+            if (!lazy) {
+                ico_diag_startup_activity_record(0);
+            }
+        }
         child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -339,6 +405,15 @@ static void loss_child(const char *mode, const char *log)
         ico_diag_set_startup_retry(STARTUP_RETRY_LOSS_BLEND, 0, 0, 0, "vulkan");
     } else {
         ico_diag_set_startup_retry(STARTUP_RETRY_NONE, 0, 0, 0, "vulkan");
+    }
+    if (getenv("ICO_TEST_LOSS_ACT") != NULL) {
+        /* the window's order: the activity file at the start, the loss dump
+           noted before the restart decision */
+        char path[300];
+        act_path(path, sizeof path, log);
+        ico_diag_set_version("test 1");
+        ico_diag_startup_activity_begin(path, 0);
+        ico_diag_note_device_loss(getenv("ICO_TEST_LOSS_ACT"));
     }
     /* a run at a loss step drew with the fixed-function blend */
     r = ico_diag_device_lost_restart(strcmp(mode, "lossbackend") == 0 ||
@@ -818,6 +893,125 @@ int main(int argc, char **argv)
           strstr(s, "test: relaunch ") < strstr(s, "test: box:"));
     if (fails) {
         printf("--- lossfail log ---\n%s\n", s);
+    }
+
+    /* the loss dump and the loss bisect's file steps, the bisect stubbed */
+    {
+        char act[300];
+        act_path(act, sizeof act, log);
+        remove(act);
+        /* a loss on a run at the restart after a loss (the relaunch
+           stubbed): the file keeps it through the run's end */
+        setenv("ICO_TEST_LOSS_ACT", "/logs/loss-20261015-101500.zip", 1);
+        r = run(argv[0], "lossstep", log);
+        unsetenv("ICO_TEST_LOSS_ACT");
+        CHECK(r == 0);
+        CHECK(strstr(read_file(log), "test: relaunch ICO_STARTUP_RETRY=blend:vulkan") != NULL);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n\nloss dump: /logs/loss-20261015-101500.zip") == 0);
+        /* the next start names it, bisects once before the game, logs the
+           pass and deletes the file; the start-up set then ends normally */
+        setenv("ICO_TEST_BISECT", "lost", 1);
+        r = run(argv[0], "actbisect", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run lost the graphics device; its loss dump is "
+                        "/logs/loss-20261015-101500.zip\n") != NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        CHECK(strstr(s, "test: loss dump /logs/loss-20261015-101500.zip\n") != NULL);
+        CHECK(strstr(s, "test: bisect stub given /logs/loss-20261015-101500.zip\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: pass 12 of 61, list 3, pipeline 409 (vs 7 fs 5 dst "
+                        "0), pass colour 4 (640x448), 14 draws\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: done; the game starts\n") != NULL);
+        CHECK(strstr(s, "test: bisect 1\n") != NULL);
+        CHECK(read_file(act)[0] == '\0');
+        /* ... once: the start after has nothing to bisect */
+        r = run(argv[0], "actbisect", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: loss dump (none)") != NULL);
+        CHECK(strstr(s, "test: bisect -1\n") != NULL);
+        CHECK(strstr(s, "loss bisect:") == NULL);
+        CHECK(strstr(s, "test: bisect stub") == NULL);
+        /* a clean frame, and a bisect that could not run, are logged too;
+           the run killed after its loss still leaves the loss */
+        setenv("ICO_TEST_LOSS_ZIP", "/logs/loss-a.zip", 1);
+        setenv("ICO_TEST_LOSS_KILL", "1", 1);
+        run(argv[0], "actloss", log);
+        unsetenv("ICO_TEST_LOSS_KILL");
+        CHECK(strcmp(read_file(act), "test 1\n\nloss dump: /logs/loss-a.zip") == 0);
+        setenv("ICO_TEST_BISECT", "clean", 1);
+        r = run(argv[0], "actbisect", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: loss bisect: the whole frame (61 passes) ran without losing the "
+                        "device\n") != NULL);
+        CHECK(strstr(s, "test: bisect 2\n") != NULL);
+        run(argv[0], "actloss", log);
+        setenv("ICO_TEST_BISECT", "none", 1);
+        r = run(argv[0], "actbisect", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: loss bisect: not run: the renderer did not start\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: done; the game starts\n") != NULL);
+        CHECK(strstr(s, "test: bisect 0\n") != NULL);
+        /* a start ended inside the bisect: the bisect's note; the start
+           after names it, is not lazy and does not bisect again */
+        run(argv[0], "actloss", log);
+        setenv("ICO_TEST_BISECT", "die", 1);
+        r = run(argv[0], "actbisect", log);
+        CHECK(r == 0);
+        CHECK(strstr(read_file(log), "test: bisect stub given /logs/loss-a.zip") != NULL);
+        CHECK(strstr(read_file(log), "test: bisect ") != NULL &&
+              strstr(read_file(log), "loss bisect: done") == NULL);
+        CHECK(strcmp(read_file(act), "test 1\nreplaying the lost frame pass by pass (the loss "
+                                     "bisect)") == 0);
+        setenv("ICO_TEST_NO_RECORD", "1", 1);
+        r = run(argv[0], "actbisect", log);
+        unsetenv("ICO_TEST_NO_RECORD");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: replaying the lost frame pass by "
+                        "pass (the loss bisect); it is not run again\n") != NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        CHECK(strstr(s, "test: bisect -1\n") != NULL);
+        CHECK(read_file(act)[0] == '\0');
+        /* a lazy run's loss: the lazy note beside the loss; the next start
+           is lazy and bisects */
+        run(argv[0], "actrecord", log);
+        setenv("ICO_TEST_BISECT", "lost", 1);
+        r = run(argv[0], "actloss", log);
+        CHECK(strstr(read_file(log), "test: lazy 1") != NULL);
+        CHECK(strcmp(read_file(act), "test 1\nexited with the pipelines created as the frames "
+                                     "needed them\nloss dump: /logs/loss-a.zip") == 0);
+        setenv("ICO_TEST_NO_RECORD", "1", 1);
+        r = run(argv[0], "actbisect", log);
+        unsetenv("ICO_TEST_NO_RECORD");
+        s = read_file(log);
+        CHECK(strstr(s, "this one does too") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        CHECK(strstr(s, "test: bisect 1\n") != NULL);
+        unsetenv("ICO_TEST_LOSS_ZIP");
+        /* a loss with no dump: named, not bisected */
+        run(argv[0], "actloss", log);
+        CHECK(strcmp(read_file(act), "test 1\n\ngraphics device lost, no loss dump") == 0);
+        r = run(argv[0], "actbisect", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run lost the graphics device (no loss dump was "
+                        "written)\n") != NULL);
+        CHECK(strstr(s, "test: bisect -1\n") != NULL);
+        /* a loss from another version: named, not bisected */
+        setenv("ICO_TEST_LOSS_ZIP", "/logs/loss-b.zip", 1);
+        run(argv[0], "actloss", log);
+        unsetenv("ICO_TEST_LOSS_ZIP");
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actbisect", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) lost the graphics device; its "
+                        "loss dump /logs/loss-b.zip is not replayed on test 2\n") != NULL);
+        CHECK(strstr(s, "test: bisect -1\n") != NULL);
+        unsetenv("ICO_TEST_BISECT");
+        remove(act);
+        if (fails) {
+            printf("--- loss bisect log ---\n%s\n", read_file(log));
+        }
     }
 
     /* the reporter before the limits: they count from ico_diag_start */

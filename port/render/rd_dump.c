@@ -93,6 +93,7 @@
 #include "host_fs.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_passring.h"
 #include "shader_consts.h"
 
 #define MAX_REFS 4096
@@ -906,4 +907,128 @@ bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
         ok = ok && shot;
     }
     return ok;
+}
+
+/* ------------------------------------------------------- loss dump */
+
+bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lostFrame,
+                      uint32_t *beforeFrame)
+{
+    const RdFrame *last = rd__last_frame();
+    const RdFrame *prev = rd__prev_frame();
+    if (lostFrame) {
+        *lostFrame = 0;
+    }
+    if (beforeFrame) {
+        *beforeFrame = 0;
+    }
+    if (!last || !last->closed || !lostPath || !rd__dump_frame(last, lostPath)) {
+        return false;
+    }
+    if (lostFrame) {
+        *lostFrame = last->number;
+    }
+    if (beforePath && prev && rd__dump_frame(prev, beforePath) && beforeFrame) {
+        *beforeFrame = prev->number;
+    }
+    return true;
+}
+
+/* ------------------------------------------------------- loss bisect */
+
+bool rd_dump_frame_size(const char *path, uint32_t *gsW, uint32_t *gsH, float *aspect)
+{
+    RdDumpInfo info;
+    if (!path || !rd__dump_peek(path, &info) || !info.gsW || !info.gsH || info.gsW > 4096 ||
+        info.gsH > 4096) {
+        return false;
+    }
+    *gsW = info.gsW;
+    *gsH = info.gsH;
+    *aspect = info.aspect;
+    return true;
+}
+
+/* the pass ring's entry with sequence number seq (the replay just made),
+ * NULL when the ring has moved past it */
+static const RdPassRec *ringEntry(uint64_t seq)
+{
+    const uint32_t n = rd_passring_count();
+    for (uint32_t i = n; seq && i-- > 0;) {
+        const RdPassRec *e = rd_passring_get(i);
+        if (e->seq == seq) {
+            return e;
+        }
+        if (e->seq < seq) {
+            break;
+        }
+    }
+    return NULL;
+}
+
+void rd_loss_bisect(const char *path, RdLossBisect *out)
+{
+    memset(out, 0, sizeof(*out));
+    const double t0 = rd__now_ms();
+    if (!g_rd.inited || !g_rd.hasDevice || rhi_device_lost()) {
+        snprintf(out->line, sizeof(out->line), "the renderer has no device");
+        return;
+    }
+    RdFrame f;
+    if (!path || !rd__load_frame(path, &f)) {
+        snprintf(out->line, sizeof(out->line), "the dump %s could not be read",
+                 path ? path : "(none)");
+        return;
+    }
+    out->frame = f.number;
+    RdReplayWindowStats st;
+    /* the passes counted, nothing drawn: their clears and layout changes
+     * run, and every pipeline the frame binds is created */
+    rd__replay_set_window(UINT32_MAX, 0);
+    (void)rd__replay_frame(&f, (int)f.keep, false);
+    rhi_wait_idle();
+    out->replays = 1;
+    rd__replay_window_stats(&st);
+    out->passes = st.passes;
+    if (rhi_device_lost()) {
+        out->result = RD_BISECT_LOST;
+        snprintf(out->line, sizeof(out->line),
+                 "the frame's %u passes with no draw recorded (their clears and layout changes "
+                 "only)",
+                 (unsigned)st.passes);
+    }
+    for (uint32_t k = 1; out->result == RD_BISECT_NOT_RUN && k <= out->passes; k++) {
+        /* passes 1..k, the walk stopped where pass k + 1 begins */
+        rd__replay_set_window(1, k);
+        (void)rd__replay_frame(&f, (int)f.keep, false);
+        rhi_wait_idle();
+        out->replays++;
+        rd__replay_window_stats(&st);
+        if (!rhi_device_lost()) {
+            continue;
+        }
+        out->result = RD_BISECT_LOST;
+        out->pass = k;
+        const RdPassRec *e = ringEntry(st.lastSeq);
+        if (e) {
+            rd_passring_format_bisect(e, k, out->passes, st.lastDraws, rd_perf_post_name, out->line,
+                                      sizeof(out->line));
+        } else {
+            snprintf(out->line, sizeof(out->line), "pass %u of %u (not in the pass ring)",
+                     (unsigned)k, (unsigned)out->passes);
+        }
+        const RdPassRec *nx = ringEntry(st.nextSeq);
+        if (nx) {
+            rd_passring_format_bisect(nx, k + 1, out->passes, 0, rd_perf_post_name, out->next,
+                                      sizeof(out->next));
+        }
+    }
+    if (out->result == RD_BISECT_NOT_RUN) {
+        out->result = RD_BISECT_CLEAN;
+    }
+    rd__replay_set_window(0, 0);
+    /* the frame's lists, payload and temporary targets; its textures and
+     * meshes stay in this renderer until its shutdown */
+    rd__frame_free(&f);
+    out->ms = rd__now_ms() - t0;
 }
