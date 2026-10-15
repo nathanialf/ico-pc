@@ -4,94 +4,89 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500&family=Playfair+Display:wght@700;900&family=JetBrains+Mono:wght@400;500&display=swap">
 <meta name="description" content="Download ICO PC, the PAL PlayStation 2 game ICO as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac.">
 <title>ICO PC download</title>
 <style>
 :root {
-  --bg: #121110;
-  --panel: #1c1a18;
-  --line: #34302b;
-  --text: #ece6dc;
-  --muted: #a9a196;
-  --accent: #d8b26a;
-  --accent-hi: #e8c787;
-  --on-accent: #1b1610;
-  --warn: #e3a35d;
+  --bg: #0a0a0a; --panel: #0d0d0d; --panel-hi: #111; --field: #171717;
+  --line: #1a1a1a; --line-hi: #262626; --line-hover: #404040;
+  --text: #e5e5e5; --text-hi: #f9fafb; --muted: #737373; --dim: #525252; --faint: #404040;
+  --warn: #c9a24b;
+  --font-body: 'Outfit', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: 'Playfair Display', 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', ui-monospace, monospace;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
-}
-a { color: var(--accent); }
-a:hover { color: var(--accent-hi); }
-main, footer { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
-header.top { max-width: 44rem; margin: 0 auto; padding: 40px 16px 8px; display: flex; gap: 14px; align-items: center; }
-header.top svg { flex: none; }
-h1 { font-size: 1.9rem; line-height: 1.2; margin: 0; letter-spacing: 0.02em; }
-h2 { font-size: 1.2rem; margin: 0 0 12px; }
-.lede { color: var(--muted); margin: 8px 0 24px; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px; margin: 0 0 20px; }
-.for { color: var(--muted); margin: 0 0 12px; }
-.for strong { color: var(--text); }
-.btn {
-  display: block; width: 100%; text-align: center; text-decoration: none;
-  border-radius: 8px; padding: 14px 16px; font-weight: 600; overflow-wrap: anywhere;
-}
-.btn.big { background: var(--accent); color: var(--on-accent); font-size: 1.15rem; }
-.btn.big:hover, .btn.big:focus-visible { background: var(--accent-hi); color: var(--on-accent); }
-.btn.small { border: 1px solid var(--accent); color: var(--accent); margin-top: 12px; padding: 10px 16px; }
-.btn.small:hover, .btn.small:focus-visible { background: #2a2419; color: var(--accent-hi); }
-.btn .file { display: block; font-weight: 400; font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
-.note { color: var(--muted); font-size: 0.92rem; margin: 8px 0 0; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.6 var(--font-body); }
+a { color: var(--text); text-decoration: none; border-bottom: 1px solid var(--line-hover); transition: color 0.15s ease, border-color 0.15s ease; }
+a:hover { color: var(--text-hi); border-color: var(--muted); }
+main, footer, header.top { max-width: 44rem; margin: 0 auto; padding: 0 16px; }
+header.top { padding-top: 48px; padding-bottom: 4px; }
+.kicker { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); margin: 0 0 0.6rem; }
+h1 { font-family: var(--font-serif); font-weight: 700; font-size: 1.6rem; line-height: 1.2; margin: 0; color: var(--text-hi); }
+.lede { color: var(--muted); margin: 10px 0 28px; font-size: 0.95rem; }
+.panel { border: 1px solid var(--line); background: var(--panel); margin: 0 0 14px; }
+.panel > .head { display: flex; align-items: baseline; gap: 0.75rem; padding: 0.45rem 0.9rem; background: var(--panel-hi); border-bottom: 1px solid var(--line); }
+.panel > .head .num { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint); flex-shrink: 0; }
+.panel > .head h2 { font-family: var(--font-serif); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #d4d4d4; margin: 0; }
+.panel > .body { padding: 1rem 0.9rem 1.1rem; }
+.for { color: var(--muted); margin: 0 0 12px; font-size: 0.95rem; }
+.for strong { color: var(--text); font-weight: 500; }
+.btn { display: block; width: 100%; text-decoration: none; border: 1px solid var(--line-hi); background: var(--field); color: var(--text); padding: 0.85rem 1rem; font-weight: 500; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; overflow-wrap: anywhere; }
+.btn:hover, .btn:focus-visible { background: var(--line-hi); border-color: var(--line-hover); color: var(--text-hi); }
+.btn.big { font-size: 1.05rem; }
+.btn.small { margin-top: 10px; font-size: 0.95rem; padding: 0.65rem 1rem; }
+.btn .file { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 0.65rem; color: var(--muted); margin-top: 3px; letter-spacing: 0.02em; }
+.note { color: var(--muted); font-size: 0.85rem; margin: 10px 0 0; }
 .note.warn { color: var(--warn); }
-.howto { margin: 14px 0 0; font-size: 0.95rem; }
+.howto { margin: 14px 0 0; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.howto a { color: var(--dim); border-bottom-color: var(--line-hi); }
+.howto a:hover { color: #a3a3a3; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; padding: 0; list-style: none; }
-.chips button {
-  font: inherit; font-size: 0.9rem; color: var(--text); background: transparent;
-  border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer;
-}
-.chips button:hover { border-color: var(--muted); }
-.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-.lbl { display: block; color: var(--muted); font-size: 0.92rem; margin: 0 0 6px; }
-select {
-  font: inherit; width: 100%; max-width: 100%; color: var(--text); background: var(--bg);
-  border: 1px solid var(--line); border-radius: 8px; padding: 10px;
-}
-.files { margin: 12px 0 0; padding: 0; list-style: none; }
-.files li { padding: 8px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
-.files .size { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
-details summary { cursor: pointer; color: var(--accent); margin-top: 14px; }
-.notes h3 { font-size: 1.05rem; margin: 18px 0 6px; }
-.notes h4 { font-size: 1rem; margin: 14px 0 6px; }
-.notes ul, .notes ol { padding-left: 1.3em; margin: 6px 0; }
-.notes li { margin: 4px 0; }
-.notes p { margin: 8px 0; }
-.notes code, code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; background: #26231f; padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+.chips button { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); background: transparent; border: 1px solid #333; border-radius: 0; padding: 0.55rem 0.8rem; cursor: pointer; transition: border-color 0.15s ease, color 0.15s ease; }
+.chips button:hover { border-color: var(--dim); color: #a3a3a3; }
+.chips button[aria-pressed="true"] { border-color: var(--muted); color: var(--text); }
+.lbl { display: block; font-family: var(--font-mono); font-size: 0.65rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 8px; }
+select { font-family: var(--font-mono); font-size: 0.8rem; width: 100%; max-width: 100%; color: var(--text); background: var(--field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23525252' d='M2 4l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 0.6rem center; border: 1px solid var(--line-hi); border-radius: 0; padding: 0.6rem 2rem 0.6rem 0.6rem; -webkit-appearance: none; appearance: none; cursor: pointer; }
+select:focus { outline: none; border-color: var(--line-hover); }
+.files { margin: 10px 0 0; padding: 0; list-style: none; }
+.files li { padding: 7px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; font-size: 0.9rem; }
+.files .size { font-family: var(--font-mono); color: var(--dim); font-size: 0.65rem; white-space: nowrap; margin-left: 0.4rem; }
+details summary { cursor: pointer; margin-top: 14px; font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+details summary:hover { color: #a3a3a3; }
+.notes h3 { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin: 18px 0 6px; padding-bottom: 0.25rem; border-bottom: 1px solid var(--line-hi); }
+.notes h4 { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin: 14px 0 6px; }
+.notes ul, .notes ol { padding-left: 1.2em; margin: 6px 0; }
+.notes li { margin: 4px 0; font-size: 0.93rem; }
+.notes p { margin: 8px 0; font-size: 0.93rem; }
+.notes code, code { font-family: var(--font-mono); font-size: 0.85em; background: var(--field); border: 1px solid var(--line-hi); padding: 0 4px; overflow-wrap: anywhere; }
 .notes > :first-child { margin-top: 0; }
-.status { color: var(--muted); }
-.thanks { color: var(--muted); }
-footer { color: var(--muted); font-size: 0.9rem; padding-top: 4px; padding-bottom: 40px; }
-footer a { margin-right: 16px; }
-:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.status { color: var(--muted); margin: 0; font-size: 0.95rem; }
+.thanks { color: var(--muted); font-size: 0.9rem; }
+.disc { margin: 0; font-size: 0.93rem; }
+footer { padding-top: 10px; padding-bottom: 48px; }
+footer nav { display: flex; flex-wrap: wrap; gap: 0 1.5rem; }
+footer nav a { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); border: 0; line-height: 2; }
+footer nav a:hover { color: #a3a3a3; }
+footer p { font-family: var(--font-mono); font-size: 0.6rem; color: var(--faint); line-height: 1.6; margin: 12px 0 0; }
+:focus-visible { outline: 1px solid var(--muted); outline-offset: 2px; }
 </style>
 </head>
 <body>
 <header class="top">
-  <svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true">
-    <rect x="1" y="1" width="42" height="42" rx="9" fill="#1c1a18" stroke="#34302b"/>
-    <path d="M14 34V17l3-3 3 3v4h4v-4l3-3 3 3v17z" fill="#d8b26a"/>
-    <path d="M20 34v-6a2 2 0 0 1 4 0v6z" fill="#121110"/>
-  </svg>
+  <p class="kicker">Download</p>
   <h1>ICO PC</h1>
 </header>
 <main>
   <p class="lede">ICO, the PAL PlayStation 2 game, as a normal program for Windows, Linux, the Steam Deck, Android, iPhone and Mac. It runs the game's own code, so it plays like the PS2 game, with a sharper picture, widescreen and smoother motion when you want them.</p>
 
   <section class="panel" id="get" aria-live="polite">
+    <div class="head"><span class="num">01</span><h2>Get the game</h2></div>
+    <div class="body">
     <p class="status" id="status">Looking up the latest version&hellip;</p>
     <div id="pick" hidden>
       <p class="for" id="for"></p>
@@ -99,10 +94,12 @@ footer a { margin-right: 16px; }
       <div id="portable-dl"></div>
       <p class="howto" id="howto"></p>
     </div>
+    </div>
   </section>
 
   <section class="panel" id="choose" hidden>
-    <h2>Another device or version</h2>
+    <div class="head"><span class="num">02</span><h2>Another device or version</h2></div>
+    <div class="body">
     <p class="lbl" id="plat-lbl">Device</p>
     <ul class="chips" id="plats" role="group" aria-labelledby="plat-lbl"></ul>
     <label class="lbl" for="ver" style="margin-top:16px">Version</label>
@@ -112,22 +109,29 @@ footer a { margin-right: 16px; }
       <summary>Every file in this version</summary>
       <ul class="files" id="files"></ul>
     </details>
+    </div>
   </section>
 
   <section class="panel" id="notes-panel" hidden>
-    <h2 id="notes-title">What changed</h2>
-    <div class="notes" id="notes"></div>
+    <div class="head"><span class="num">03</span><h2 id="notes-title">What changed</h2></div>
+    <div class="body"><div class="notes" id="notes"></div></div>
   </section>
 
   <section class="panel">
-    <p style="margin:0">Needs your own copy of the game disc (ICO, PAL version, SCES-50760) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
+    <div class="head"><span class="num">04</span><h2>Before you start</h2></div>
+    <div class="body">
+    <p class="disc">Needs your own copy of the game disc (ICO, PAL version, SCES-50760) saved as a disc image; see the <a href="https://github.com/nathanialf/ico-pc#readme">README</a>.</p>
     <p class="thanks" style="margin:12px 0 0">Special thanks: Sad Origami, for the <a href="https://ko-fi.com/s/7c0e3e044f">ICO HD texture pack</a> and for suggesting this page.</p>
+    </div>
   </section>
 </main>
 <footer>
-  <a href="https://github.com/nathanialf/ico-pc">The project on GitHub</a>
-  <a href="https://github.com/nathanialf/ico-pc/issues">Report a problem</a>
-  <a href="https://github.com/nathanialf/ico-pc/releases">All releases</a>
+  <nav>
+    <a href="https://github.com/nathanialf/ico-pc">The project on GitHub</a>
+    <a href="https://github.com/nathanialf/ico-pc/issues">Report a problem</a>
+    <a href="https://github.com/nathanialf/ico-pc/releases">All releases</a>
+    <a href="https://defnf.com">defnf.com</a>
+  </nav>
   <p>Not connected to Sony Interactive Entertainment or Team Ico. ICO is a trademark of its owners. The game itself is not included in the downloads.</p>
 </footer>
 <script>
