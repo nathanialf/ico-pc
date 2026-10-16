@@ -3521,7 +3521,11 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
-    ds.repeatKept = rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th);
+    /* read only by drawWrap's clamp under the open border: not computed
+     * with the border closed (the vertices' texel range is a loop over
+     * every vertex of every screen command) */
+    ds.repeatKept =
+        borderOpen() ? rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th) : 0u;
 
     /* geometry */
     setUvShift(ds.tc->sx, ds.tc->sy);
@@ -4017,7 +4021,8 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
-    ds.repeatKept = rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th);
+    ds.repeatKept = /* drawWrap's only, as doScreen's */
+        borderOpen() ? rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th) : 0u;
     const uint64_t vOff = rd__ring_alloc((uint64_t)n * 6 * sizeof(IcoSpriteVertex), 16);
     if (vOff == ~0ull) {
         return;
