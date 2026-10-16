@@ -1600,7 +1600,7 @@ static bool vkr_is_tiler(uint32_t vendor)
  * (rhi_driver_is_qualcomm_proprietary: Mesa's Turnip on the same GPU is
  * another compiler).  The reason is logged and goes to
  * RhiLimits.vuPlainOnly.
- *   Adreno 740 (device 0x4305xxxx; AYN Thor, issue 107, and AYN Odin 2
+ *   Adreno 740 (device 0x43050A01; AYN Thor, issue 107, and AYN Odin 2
  *   Portal, issue 93; driver 512.676.53, compiler E031.41.03.47): the
  *   whole device froze, needing a reboot, while the driver compiled the
  *   first pipelines with a VU vertex shader of v0.7.5 to v0.7.7 (46,470
@@ -1629,7 +1629,12 @@ static const struct {
     const char *reason;
     const char *lazy; /* NULL: the start-up set as usual */
 } kVuPlainOnly[] = {
-    {RHI_VENDOR_QUALCOMM, 0xFFFF0000u, 0x43050000u, true, "Adreno 740, issue 107",
+    /* the Adreno 740 by the whole chip id both devices report (0x43050A01,
+     * the issue 93 and 107 logs), nothing near it: Mesa's freedreno
+     * device list (src/freedreno/common/freedreno_devices.py) gives
+     * 0x43050A00 to the Adreno A32, 0x43050B00 to the 740v3 and
+     * 0x43051401 to the Adreno 750, none of them seen failing */
+    {RHI_VENDOR_QUALCOMM, 0xFFFFFFFFu, 0x43050A01u, true, "Adreno 740, issue 107",
      "Adreno 740, issues 93 and 107"},
 };
 
