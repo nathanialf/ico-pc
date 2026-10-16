@@ -1038,8 +1038,9 @@ static unsigned char *gzip_of(const char *text, size_t n, size_t *out_n)
     if (d == NULL) {
         return NULL;
     }
-    /* with an FNAME, as gzip without -n writes */
-    g = malloc(10 + 12 + dn + 8);
+    /* with an FNAME, as gzip without -n writes: the 10-byte header, the
+       name with its NUL (13), the deflate stream, CRC-32 and the size */
+    g = malloc(10 + 13 + dn + 8);
     memcpy(g, head, 10);
     memcpy(g + 10, "libmain.syms", 13);
     memcpy(g + 23, d, dn);
