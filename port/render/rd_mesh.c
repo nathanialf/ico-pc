@@ -2481,11 +2481,18 @@ static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, 
     return n;
 }
 
-/* the plain variants always, the extended ones (vuExt 1) when the settings
- * can draw with them on a device that takes them (rd__vu_ext_reachable;
- * rd_pipeline.c puts them after every other key) */
+/* the plain variants unless no draw can take them, the extended ones (vuExt
+ * 1) when the settings can draw with them on a device that takes them
+ * (rd__vu_ext_reachable; rd_pipeline.c puts them after every other key).
+ * In a state other than out of the box (rd__vu_extended: the Enhanced
+ * preset, a frame wider than 4:3, a scene scale above 1) every VU draw has
+ * ICO_VU_EXTENDED (rd_replay.c) and so the extended variant
+ * (rd__vu_draw_ext), unless the device or the settings keep it to the
+ * plain ones (g_rd.vuPlainOnly) */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
-    n = enumerateVuVariant(out, max, n, 0);
+    if (!rd__vu_extended() || g_rd.vuPlainOnly) {
+        n = enumerateVuVariant(out, max, n, 0);
+    }
     return rd__vu_ext_reachable() ? enumerateVuVariant(out, max, n, 1) : n;
 }

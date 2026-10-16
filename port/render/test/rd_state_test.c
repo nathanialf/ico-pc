@@ -1070,6 +1070,57 @@ static void testAa1Plans(void)
           "aa1 0 plans as before AA1");
 }
 
+/* the VU keys of the set by variant (vuExt 0 plain, 1 extended) */
+static void countVu(const RdPipeKeyInt *keys, uint32_t n, uint32_t *plain, uint32_t *ext)
+{
+    *plain = *ext = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        if (keys[i].vs >= RD_VS_VU_FIRST && keys[i].vs <= RD_VS_VU_LAST) {
+            *plain += keys[i].vuExt == 0;
+            *ext += keys[i].vuExt != 0;
+        }
+    }
+}
+
+/* The VU keys of the start-up set (rd__enumerate_reachable_vu): out of the
+ * box (the Original preset, 4:3, 1x, the original framerate) the plain
+ * variants only; in a state other than out of the box (rd__vu_extended:
+ * here the Enhanced preset) every VU draw takes the extended variant
+ * (rd__vu_draw_ext), so the plain ones are not enumerated; with the device
+ * or the settings keeping the plain ones (vuPlainOnly) the plain ones only,
+ * whatever the state. */
+static void testEnumerationVu(RdPipeKeyInt *keys)
+{
+    const RdPreset keepPreset = g_rd.settings.preset;
+    const uint8_t keepInterp = g_rd.settings.interpolate;
+    const bool keepPlain = g_rd.vuPlainOnly;
+    uint32_t n, p0, e0, p1, e1, p2, e2;
+    g_rd.vuPlainOnly = false;
+    g_rd.settings.interpolate = 0;
+    g_rd.settings.preset = RD_PRESET_ORIGINAL;
+    const bool box = !rd__vu_extended();
+    n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    countVu(keys, n, &p0, &e0);
+    g_rd.settings.preset = RD_PRESET_ENHANCED;
+    n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    countVu(keys, n, &p1, &e1);
+    g_rd.vuPlainOnly = true;
+    n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    countVu(keys, n, &p2, &e2);
+    printf("  VU keys plain/extended: out of the box %u/%u, Enhanced %u/%u, Enhanced plain "
+           "only %u/%u\n",
+           p0, e0, p1, e1, p2, e2);
+    if (box) {
+        CHECK(p0 > 0 && e0 == 0, "out of the box: the plain VU keys only (%u/%u)", p0, e0);
+    }
+    CHECK(p1 == 0 && e1 > 0, "Enhanced: the extended VU keys only (%u/%u)", p1, e1);
+    CHECK(p2 > 0 && e2 == 0, "Enhanced, plain only: the plain VU keys only (%u/%u)", p2, e2);
+    CHECK(!box || (p0 == p2 && p0 == e1), "the variants' key counts (%u, %u, %u)", p0, p2, e1);
+    g_rd.settings.preset = keepPreset;
+    g_rd.settings.interpolate = keepInterp;
+    g_rd.vuPlainOnly = keepPlain;
+}
+
 static void testEnumeration(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -1101,6 +1152,7 @@ static void testEnumeration(void)
     printf("  font_ps keys %u, font_sheet_ps keys %u\n", font, sheet);
     CHECK(font == 10 && sheet == 10, "font_ps keys %u, font_sheet_ps keys %u (10 each)", font,
           sheet);
+    testEnumerationVu(keys);
 }
 
 /* The native frame's region scale (rd__region_scale, FrameCB g_frame.x):

@@ -670,19 +670,26 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   every key without a VU vertex shader. `vuDraw` takes the plain one unless the draw has
   `VU_F_EXTENDED` or `VU_F_TICKS` (`rd__vu_draw_ext`); the camera blend still reaches a plain
   draw through its blended matrices.
-- **The start-up set.** The plain VU keys always; the extended ones when the settings can make a
-  draw that wants them (`rd__vu_ext_reachable`): the Enhanced preset, an aspect or a frame wider
-  than 4:3, a scene scale above 1, or the interpolation on (a framerate other than `original`,
-  which draws through the tick cameras whenever the camera moves). The Original preset at 4:3 and
-  1x with the original framerate compiles only plain VU shaders. A setting changed later to one
+- **The start-up set.** The extended VU keys when the settings can make a draw that wants them
+  (`rd__vu_ext_reachable`): the Enhanced preset, an aspect or a frame wider than 4:3, a scene scale
+  above 1, or the interpolation on (a framerate other than `original`, which draws through the
+  tick cameras whenever the camera moves). The plain ones unless no draw can take them: in a state
+  other than out of the box (`rd__vu_extended`: the Enhanced preset, a frame wider than 4:3, a
+  scene scale above 1) every VU draw has `VU_F_EXTENDED` and so the extended variant, so the plain
+  keys are enumerated only out of the box or where the device or the settings keep the plain ones
+  (`g_rd.vuPlainOnly`; `rd__enumerate_reachable_vu`). The Original preset at 4:3 and 1x with the
+  original framerate compiles only plain VU shaders; the Enhanced preset or a wide frame only
+  extended ones; the Original preset at 4:3 and 1x with the interpolation on both. A setting changed later to one
   that wants them creates them as the frames first need them. The set is ordered: every 2D key
   first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
   extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
   With the fixed-function blend (the phones' usual path) the set is 351 2D keys and 176 plain VU
-  keys, 527 in all (as before: the VU keys were the extended shaders), and 703 with the
-  extended ones; with the exact blend 438 and 220, 658 in all, and 878 with the extended ones
-  (`RD_PIPELINE_REACHABLE_MAX`, 1024). A cold start that draws with the extended ones compiles
-  the plain ones too (a draw without either flag, a still camera, takes them).
+  keys, 527 in all (as before: the VU keys were the extended shaders), and 703 with both
+  variants (the interpolation at the Original preset, 4:3 and 1x); with the exact blend 438 and
+  220, 658 in all, and 878 with both (`RD_PIPELINE_REACHABLE_MAX`, 1024). Each variant has as
+  many keys (176, 220 with the exact blend), so a set with the extended ones alone has as many VU
+  keys as the Original 4:3 set. With the interpolation on at 4:3 and 1x a still
+  camera's draw has neither flag and takes the plain ones, so that state compiles both.
 - **The device table** (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, `RhiLimits.vuPlainOnly`): a
   device whose driver cannot build the extended ones draws every VU draw with the plain ones,
   logged once as `rd: VU shaders: plain only on this device (Adreno 740, issue 107): the
