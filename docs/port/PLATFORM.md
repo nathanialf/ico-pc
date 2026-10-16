@@ -22,7 +22,9 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/clock.c`, `clock.h` | the wall clock behind `sceCdReadClock`; the EE timers T0 to T3 |
 | `port/platform/host_config.c`, `host_config.h` | the executable's folder, the user folder, portable mode, `ico-pc.ini`, the TOML reader and writer, SHA-1, message boxes, the log redirect |
 | `port/platform/host_fs.c`, `host_fs.h` | file calls on UTF-8 paths (wide calls on Windows) |
-| `port/platform/diag_host.c`, `diag_host.h` | crash handlers, heartbeat, watchdog, milestones, float faults |
+| `port/platform/diag_host.c`, `diag_host.h` | crash handlers, heartbeat, watchdog, milestones, float faults, the summary line, `ico_log_limited` |
+| `port/platform/symmap.c`, `symmap.h` | the crash and watchdog reports' symbolizer: a GNU ld link map or an nm table (plain or gzip), no allocation |
+| `port/platform/report.c`, `report.h` | the report file of an abnormal end, `logs/report-<date>-<time>.zip`, no allocation |
 | `port/platform/trace_host.c`, `trace_host.h` | the Main tick count, the heartbeat's state line, the trace file |
 | `port/platform/assert_host.c` | newlib's `__assert` as the game calls it |
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
@@ -359,10 +361,11 @@ comment); `port/platform/window_host.c` (the perf record comment)).
 `ico_diag_init`, called as soon as the log is open, installs the crash handlers: a vectored handler
 and the unhandled-exception filter on Windows, SIGSEGV, SIGBUS, SIGILL, SIGFPE and SIGTRAP on an
 alternate stack on POSIX, and `abort` (asserts, `ico_assert`, the scheduler's fatal errors). A crash
-writes the cause, the faulting address as module+offset (to be looked up in `ico_pc.map`, the link
-map written beside the program), the current game thread and its last kernel call, return-address
-candidates, the heartbeat line and every thread, then on Windows shows a message box and exits with
-code 3 (`port/platform/diag_host.h`; `port/platform/CMakeLists.txt` (the link map)). Every
+writes the cause, the faulting address as module+offset, the current game thread and its last
+kernel call, return-address candidates, the heartbeat line and every thread, then the
+[symbol lines](#the-symbol-lines) naming each offset and the [report file](#the-report-file), then
+on Windows shows a message box naming the report and exits with code 3 (`port/platform/diag_host.h`;
+`port/platform/CMakeLists.txt` (the link map)). Every
 diagnostic line is written with one unbuffered OS call to its own handle on the log, so a crash
 leaves everything before it (`port/platform/diag_host.c` (header comment)). On Android the handler
 then puts the system's handlers back so the system still writes its tombstone
@@ -597,10 +600,11 @@ pump and the start-up screens' pump end the session through the normal quit path
 sequence numbers the checkpoint markers carry and each effect's name from `rd_perf_post_name`), a
 flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<date>-<time>.zip`, logged as
 `window: loss dump: frames N and M (the one before) written to <zip>`, and noted in the activity
-file), and one message box: the card stopped responding, the game has to close, the save is kept,
-"If the graphics card is overclocked, try its stock clocks first.", and, when the loss dump was
-written, its file name in the logs folder and a request to attach it with the log; on a phone the
-box asks to send the log and that file. The loss restart above comes after the loss dump, but a
+file), the [report file](#the-report-file) (which holds the loss dump and the log), and one message
+box: the card stopped responding, the game has to close, the save is kept, "If the graphics card is
+overclocked, try its stock clocks first.", and a request to attach the newest file in logs that
+starts with report-, naming it (without a report, the loss dump's file name and a request to attach
+it with the log); on a phone the box asks the same. The loss restart above comes after the loss dump, but a
 restarted run does not bisect it: its step changed the blending or the backend, so its replay would
 not be the path that lost the device, and a loss it reproduced would add a GPU reset to the
 restart chain. It logs `ico_pc: loss bisect: not run (this start changed the blending or backend
@@ -615,6 +619,100 @@ it, at the first failing call ([RHI.md](RHI.md#device-loss)).
 
 `port/platform/assert_host.c` is newlib's `__assert` as the game calls it: the same message on
 stderr, then `abort`, which the crash handler reports.
+
+### The symbol lines
+
+A crash or watchdog report names, after its raw lines, every offset in the program it printed (the
+faulting address, the stack's return-address candidates, the thread table's `fn <module>+0x...`
+and each last kernel call's caller), in the order printed, from the symbol file shipped with the
+program:
+
+```
+ico_pc: symbols from ico_pc_x64.map (each offset above in ico_pc_x64.exe, in order):
+ico_pc:   +0x1b35e4 _CopyVector+0x4 (vu0.c.obj)
+ico_pc:   +0x9add a static function in diag_test.c.o, +0x11d into its code
+```
+
+The file is the GNU ld link map beside the program, its name the program's with `.exe` replaced
+by `.map` (`x64/ico_pc_x64.map` on Windows, `ico_pc.map` on Linux; both packages ship it), opened
+at `ico_diag_init` and read only when a report is written; on Android it is the APK's
+`assets/libmain.syms.gz`, `llvm-nm -n` of the unstripped `libmain.so` gzip-compressed and stored
+by `tools/package_android.sh`, whose range of the APK file the window opens at start with
+`AAsset_openFileDescriptor64` (`port/platform/android/host_android.c`
+(`ico_android_open_symbols`); `ico_diag_set_symbols_fd`). macOS and iOS ship no map in the bundle:
+their reports say so and keep the raw offsets (`port/platform/diag_host.c` (`sym_open_default`,
+`report_symbols`)).
+
+The parser (`port/platform/symmap.c`) streams the file twice through static buffers, a line at a
+time (lines cut at 4096 bytes): the first pass finds the anchor `ico_diag_init`, whose map address
+minus its offset in the running module places the map against the program (a PE map's image base,
+a PIE's zero and a shared library's table read alike); the second compares every offset (64 at
+most) with every symbol line and input section line of the code's output sections (`.text`,
+`.init`, `.fini`, `.plt`). A map names global functions only: a symbol counts only inside its own
+object's input section, and an offset in an object with no global function before it is printed as
+the object and the offset into its code (`a static function in rd_blur.c.o, +0x1c0 into its
+code`); a `.text.<name>` section (`-ffunction-sections`) names its function; an nm table's `t`
+lines name static functions too. The map is checked against this build: `ico_diag_log` must come
+out at `+0x0`, else one line says the map is not this build's and the offsets stay as they are.
+Nothing is allocated, so it runs inside the signal handler of a crash; the symbol lines come after
+the raw ones, so a parser that fails loses nothing; a 3 MB map is a few milliseconds
+(`port/platform/symmap.h`).
+
+### The report file
+
+On a crash, a watchdog stop, a lost graphics device and graphics that could not start, the port
+writes one zip, `logs/report-<date>-<time>.zip` (a second in the same second
+`report-<date>-<time>-2.zip`), the one file a player attaches; the boxes of those ends say "attach
+the newest file in logs that starts with report-" and name it (`port/platform/diag_host.c`
+(`report_file`, `report_box`, `fatal_text`); `port/platform/window_host.c` (`device_lost_quit`);
+`port/platform/main_host.c` (`open_window`)). It holds:
+
+| entry | what |
+| --- | --- |
+| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, and the report block itself (the crash or watchdog report with its symbol lines) |
+| `ico-pc.log` | the log so far |
+| `ico-pc-previous.log` | the run before's |
+| `startup-activity.txt` | when there is one |
+| `config.toml`, `ico-pc.ini` | the settings |
+| `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, stored as it is |
+
+`port/platform/report.c` writes it without allocation: raw file calls (`open`/`read`/`write`/`lseek`,
+the wide Win32 calls through a static buffer), a zip writer of its own (UTF-8 names, the sizes
+patched into each local header) and miniz's `tdefl` deflating into a static compressor; the local
+time from an offset noted at start, so no time zone lookup runs in a signal handler. The loss
+dump's writer (`dump_zip.c`) is not used: miniz's zip writer allocates, which a crash inside
+`malloc` would deadlock. `ico_report_prune` keeps the newest five; it lists the folder and so runs
+only on the normal paths (at start, after a lost device's or a failed start's report)
+(`port/platform/report.h`). The line `ico_pc: report: report-<stamp>.zip in the logs folder (...)`
+names it in the log.
+
+### The summary line
+
+Once a start, after the device line, the self-tests and the window line, the window logs one line
+with what a report usually asks:
+
+```
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set for every GPU; index values up to 4294967295; robust access off; controller Xbox Series X Controller; disc SCES_507.60; user profile
+```
+
+(`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
+the self-tests' results); `port/rhi/rhi.h` (`RhiLimits.driverText`, `robustText`)). The controller
+is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
+line follows); on Android the disc is mounted after the window ("not mounted yet").
+`ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
+device and window lines in the file, and keeps the text for the report file. The 10 s block's
+`window: memory:` line has the graphics memory in use and its peak where the backend counts it
+(Vulkan), and the process's (`port/platform/window_host.c` (`perf_log`)).
+
+### Rate-limited lines
+
+Every line that may repeat (a per-frame or per-event condition) goes through one helper,
+`ico_log_limited(key, fmt, ...)` (`port/platform/diag_host.h`): the first 8 of a key are written,
+then every 100th, the 8th saying `(8 of these so far; from here every 100th is written)` and a later
+one `(number N of these)`; the hot path is one atomic increment and a compare, the arguments
+evaluated and the line formatted only when it is written. At the end of a run, normal or fatal, one
+line counts every key: `ico_pc: limited lines (key, count, written): rd: interp snap 412 (11
+written); ...` (`port/platform/main_host.c` (`summary`, `fatal_summary`)).
 
 ## Hotkeys and dump zips
 

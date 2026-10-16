@@ -9,12 +9,13 @@
  *     executable and the unhandled-exception filter; POSIX: SIGSEGV, SIGBUS,
  *     SIGILL, SIGFPE, SIGTRAP on an alternate stack) or abort() (assert,
  *     ico_assert, the scheduler's fatal errors) writes the cause, the
- *     faulting address as module+offset (look it up in ico_pc.map or with
- *     addr2line on the exact executable), the fault address, the current
+ *     faulting address as module+offset, the fault address, the current
  *     game thread and its last kernel call, return-address candidates from
  *     the stack, the last failure message, the heartbeat line and every
- *     thread to the log, then (Windows) shows a message box naming the log
- *     and exits with code 3;
+ *     thread to the log, then each offset's name from the map shipped
+ *     beside the program (symmap.h) and the report file (report.h), then
+ *     (Windows) shows a message box naming the report and exits with code
+ *     3;
  *   - a heartbeat: every 2 s of wall time, from its own OS thread (so a
  *     game thread that spins without a kernel call cannot stop it), one
  *     line of progress, with "no progress" once it repeats unchanged;

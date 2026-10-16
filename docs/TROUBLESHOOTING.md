@@ -19,6 +19,15 @@ Each run starts the file again and keeps the one from the run before as
 `ico-pc-previous.log` in the same folder, so the log of a run that went
 wrong is still there after you start the game once more.
 
+When the game closes with an error, stops responding and closes itself,
+loses the graphics card, or cannot start its graphics, it also writes a
+report file in the same `logs` folder: its name starts with `report-` and
+goes on with the date and time, ending in `.zip` (for example
+`report-20261016-142301.zip`). It holds the log, the log of the run
+before, your settings and a short summary, so it is the one file a
+problem report needs. The message the game shows names it. The five
+newest are kept.
+
 The first lines of the log say which version of the game you have. The
 log also records your display settings, every change you make to them, and
 every 10 seconds how fast the game is running (every second for 30 seconds
@@ -82,7 +91,9 @@ glow, the fog and the other effects.
 3. Say which version of the game you have. A downloaded release shows it
    in the top-right corner of the Options menu's first page, and the log
    says it at the top.
-4. Attach `ico-pc.log`.
+4. Attach the newest file in `logs` that starts with `report-`, when the
+   game wrote one for the problem (it already holds the log and your
+   settings). Otherwise attach `ico-pc.log`.
 5. If you are asked for it, also attach `config.toml` from the folder with
    your saves ([where that is](PORTABLE_MODE.md#where-your-saves-are)).
 
@@ -197,7 +208,8 @@ screen says "Checking the graphics problem" and may stay dark a little
 longer. If the graphics stop during the check, the next start
 carries on where it left off (it gives up after a few starts). Then the
 game starts as usual, whatever it found. If you report the problem, attach
-the newest `loss-` file together with the log of the start after it.
+the newest file in `logs` that starts with `report-` (it holds the `loss-`
+file) together with the log of the start after it.
 
 **"The game checked why the graphics stopped last time, and the graphics
 driver needs a fresh start now."** The check above stopped the graphics
@@ -208,9 +220,9 @@ left off if it was not finished, and the game then starts as usual.
 **"The graphics driver stopped responding while the game was drawing ..."**
 (on a phone) The phone's graphics driver failed while drawing a picture,
 and the game has to close; your last save is kept. Start the game again. If
-it happens every time at the same place, send the log (the message names
-the file) and the `loss-` file the message names beside it with a report:
-together they show what was being drawn.
+it happens every time at the same place, report it and attach the newest
+file in `logs` that starts with `report-` (the message names it): it shows
+what was being drawn.
 
 **"The graphics card stopped responding ..."** The graphics driver was
 reset, updated or crashed while you played, and the game has to close.
@@ -218,8 +230,8 @@ When the message also says the game restarted itself with simpler blending
 and the card still stopped, the game already tried that. Your last save is
 kept, and the log says why. The message stays until you close it. Start
 the game again. This is usually a driver reset: if it keeps happening,
-update the graphics driver and send the log, together with the `loss-` file
-the message names (it is in the same `logs` folder). If the graphics card is
+update the graphics driver and send the newest file in `logs` that starts
+with `report-` (the message names it). If the graphics card is
 overclocked (its speed or memory raised above the maker's settings, in a
 tool such as MSI Afterburner), set it back to its stock clocks first and
 try again: a card pushed past what it can do steadily makes the driver
@@ -247,8 +259,11 @@ afterwards:
 If the game closes with an error, Windows and Android show a message that
 says so; on Linux, the Steam Deck, a Mac and an iPhone the game just
 closes. Either way the log says why: near the end of the log there is a
-line of `=` signs, and the line after it has `CRASH:` in it. Send the log.
-The developers can find where it happened from the numbers in that block.
+line of `=` signs, and the line after it has `CRASH:` in it; a few lines
+further on, the place in the game where it happened is named (on
+Windows, Linux, the Steam Deck and Android). Send the
+newest file in `logs` that starts with `report-`: it holds the log and
+everything else a report needs.
 
 **The game closes or restarts itself right after it starts.** Some graphics
 drivers crash while the game gets its graphics ready. On Windows, Linux and
@@ -277,6 +292,7 @@ If the game stops responding, it closes itself after a while: 30 seconds
 while it is starting, 60 seconds once it is running. Windows and Android
 show a message that says so. The log then has a line of `=` signs, and the
 line after it has `WATCHDOG:` in it and says what the game was doing.
+Send the newest file in `logs` that starts with `report-`.
 With [ReShade](RESHADE.md) loaded, the game gives itself 60 seconds to
 start as well, as ReShade takes a while to get ready.
 

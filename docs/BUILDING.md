@@ -546,10 +546,12 @@ differs in three ways: its `ico-pc.ini` has `portable=1` on (the game makes `use
 program at the first start), the README has a paragraph saying so, and it has no make-portable
 script. Both scripts check each archive's entries afterwards, and
 `tools/test/package_textures_test.sh` (ctest `package_textures`) covers the helpers. The archives
-hold no developer files: no link map, `rhi_d3d12_test`, `rd_replay_tool` or `compare_backends`
+hold no developer programs: no `rhi_d3d12_test`, `rd_replay_tool` or `compare_backends`
 (developer programs in a download make browsers and Windows flag it; the scripts assert their
-absence). The link map stays in `dist/stage` (`ico_pc_x64.map`, `ico_pc.map`) to symbolize a crash
-address from a player's log, and `tools/package_win.sh` builds only `ico_pc` and `mc_import`. The
+absence). The link map ships beside the program in both archives (`x64/ico_pc_x64.map`,
+`ico_pc.map`; the scripts assert it is there): a crash or watchdog report names its functions from
+it on the player's machine ([PLATFORM.md](port/PLATFORM.md#the-symbol-lines)). It stays in
+`dist/stage` too, and `tools/package_win.sh` builds only `ico_pc` and `mc_import`. The
 Windows program carries version information (company, product, file version `x.y.z.N`: N is the
 release candidate's number for a label `vX.Y.Z-rcN`, 0 for `vX.Y.Z`; `ico_version_from_label` in
 `cmake/IcoVersion.cmake`), from `-DICO_VERSION_LABEL=<label>` which `package_win.sh` passes
@@ -609,8 +611,13 @@ notes are drafted in `docs/RELEASE_NOTES_<tag>.md`.
 `tools/fetch_android.sh`, `assembleRelease -PicoLabel=<label>`,
 `zipalign -P 16 -f 4`, then `apksigner sign` (v2 and v3) and
 `apksigner verify --print-certs` (the certificate digests go in the log and on
-screen) and `zipalign -c -P 16 -v 4`. The unstripped `libmain.so`, `ico_pc.map`
-and `VERSION.txt` are left in `dist/stage/android/`.
+screen) and `zipalign -c -P 16 -v 4`. Before the alignment it adds
+`assets/libmain.syms.gz` to the APK, stored: `llvm-nm -n --defined-only` of the unstripped
+`libmain.so`, its code symbols (`T`, `t`, `W`, `w`), gzip-compressed, from which a crash or
+watchdog report names its functions on the phone
+([PLATFORM.md](port/PLATFORM.md#the-symbol-lines)); the signed APK is checked to hold it stored. The
+unstripped `libmain.so`, `ico_pc.map`, `libmain.syms.gz` and `VERSION.txt` are left in
+`dist/stage/android/`.
 
 The signing key is never in the repository. The script reads it from
 `android-keystores/` next to the repository folder (`../android-keystores/`
