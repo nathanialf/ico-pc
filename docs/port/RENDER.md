@@ -687,7 +687,12 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   (`g_rd.vuPlainOnly`; `rd__enumerate_reachable_vu`). The Original preset at 4:3 and 1x with the
   original framerate compiles only plain VU shaders; the Enhanced preset or a wide frame only
   extended ones; the Original preset at 4:3 and 1x with the interpolation on both. A setting changed later to one
-  that wants them creates them as the frames first need them. The set is ordered: every 2D key
+  that wants them creates them as the frames first need them. That holds the other way too, and
+  is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
+  plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
+  as the frames first need them, up to 176 pipelines (220 with the exact blend), a short pause
+  here and there in the first minutes after the switch; the pipeline cache keeps them for the
+  next start. The set is ordered: every 2D key
   first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
   extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
   With the fixed-function blend (the phones' usual path) the set is 351 2D keys and 176 plain VU
