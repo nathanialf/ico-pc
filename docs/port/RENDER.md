@@ -1073,35 +1073,46 @@ All of it is [DISPLAY.md](DISPLAY.md).
 
 **Rotation continuity.** A model matrix or a bone blends as a slerped rotation, and the slerp's
 short way (at most 180 degrees) is the motion only while the object turns less than half a turn a
-tick: a trolley wheel at full speed turns about 190 degrees a tick, and the short way would show it
-turned back 170 between the ticks and forward again at the tick (issue 98). So each rigid draw's
-model matrix and each bone of a skinned draw remember the turn they made between the two ticks
-before (a rotation vector in the object's own frame, kept per draw by its key and its place in the
-list, in one table allocated once), and the next blend takes the way, short or long, nearer that
-turn, when it lies within `RD_INTERP_TURN_KEEP` (60 degrees) of it and turns at most
-`RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`). A remembered turn applies to the
-next pair of consecutive ticks; without one (the first pair, a draw not blended in the last few
-ticks, or a turn far from the one before) the blend takes the short way and a turn over
-`RD_INTERP_TURN_SNAP` (120 degrees) keeps the tick's pose. The memory also survives a gap: a pair
-not blended between (no present between two ticks, a camera cut, a fade or another whole-frame
-snap, a discarded frame) or a draw missing for a few ticks. The turn is a rotation per tick in the
-object's own frame (the model to world or the bone, no camera in it), so each draw's key and bone
-also keep their last remembered turn with the pose it ended at, by key and bone rather than by
-place in the list. A pair whose turn would snap (over 120 degrees with no memory of the tick
-before) takes that turn when it ended 1 to `RD_INTERP_TURN_GAP` (8) ticks before the pair's first
-tick and carrying it on that many ticks puts the draw within 60 degrees of its pose there
-(`turnRecallGap`); when several draws of one key kept a turn in the same tick, only the one at the
-remembered place takes it. A turn under the snap, or one with a memory of the tick before, blends
-as without this rule, bit for bit, and the whole-frame snaps clear no memory. Without it a wheel
-over 120 degrees a tick stepped at the tick rate after any such gap until the trolley slowed; at
-50 Hz (PAL) a tick's turn is 1.2 times the 60 Hz one, so that came sooner. A turn is remembered only when
-it blended: a turn that kept the tick's pose has no known direction (forward 190 degrees is back 170
-the short way), so remembering it could make the next pair blend backwards. A wheel first seen
-between 120 and 180 degrees a tick therefore keeps the tick's pose until it slows below the snap,
-and one that speeds up in steps under 60 degrees a tick carries its turn through 180. The
-camera keeps the short way. The tick's own present is never blended, so the tick's pose is exact
-either way (`port/render/rd_interp.c` (rotation continuity: `turnRecall`, `turnKeep`,
-`turnRecallGap`, `turnKeepLast`, `blendTurn`), `port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
+tick, and a turn over `RD_INTERP_TURN_SNAP` (120 degrees) with nothing to tell its direction keeps
+the tick's pose. A wheel can turn more than that: the trolley's wheels reach 140 degrees a tick at
+full speed (`box.c`: a push of 0.5 a tick against a friction of 0.98 is 24.5 units a tick, on wheels
+of radius 10), and a faster wheel at 190 degrees a tick would blend back 170 the short way (issue
+98). So each rigid draw's model matrix and each bone of a skinned draw remember the turn they made
+between two ticks (a rotation vector in the object's own frame), and the next blend takes the way,
+short or long, nearer that turn, when it lies within `RD_INTERP_TURN_KEEP` (60 degrees) of it and
+turns at most `RD_INTERP_TURN_LONG` (300 degrees) (`rdcb_blend_affine_turn`): a turn over the snap
+that continues the one remembered blends.
+
+The memory is kept by the draw's identity, not its place in the list: its key, type and list, its
+ordinal among the draws of that key, type and list in its tick (the order the pairing pairs them
+in, so two draws of one key keep their own memories), and the bone. Each identity keeps its last
+two turns with the tick each ended at and the pose it ended at, in one table allocated once
+(`RD_TURN_CAP` identities; one whose newer turn ended more than `RD_INTERP_TURN_GAP` + 1 ticks
+before is free). A pair takes the turn that ended at its first tick (the pair before, blended);
+without one, when its turn would snap, it takes the last turn that ended 1 to `RD_INTERP_TURN_GAP`
+(8) ticks before its first tick, when carrying that turn on that many ticks puts the draw within 60
+degrees of its pose there. The second rule is what issue 98 needed: a pair that is not blended (a
+camera cut, a fade, a present that never came, a draw missing or mismatched for a tick) remembers
+nothing, and a turn kept at the tick's pose is never remembered (forward 190 degrees is back 170
+the short way, so its direction is unknown and remembering it could make the next pair blend
+backwards). Without the second rule one camera cut on the ride at full speed left both wheels at
+the tick's pose for every pair until the trolley slowed below 120 degrees a tick: the reporter's
+log shows 2 cuts and 246 turns kept at the tick's pose in the block, none continued the long way
+(140 degrees a tick never needs it). A turn under the snap, or one with the memory of the pair
+before, blends as without the second rule, bit for bit. A wheel first seen between 120 and 180
+degrees a tick with no memory keeps the tick's pose until it slows below the snap, and one that
+speeds up in steps under 60 degrees a tick carries its turn through 180. The camera keeps the
+short way. The tick's own present is never blended, so the tick's pose is exact either way.
+
+The 10 s summary counts the turns that kept the tick's pose (`snapped over 120 degrees`) and, only
+when there were any, adds a line saying why (no memory of the draw, its memory older than 8 ticks,
+the pose not where its memory carries it, further than 60 degrees from its memory, the long way
+over 300 degrees), how many turns found no room in the table, and the three draws that did it most
+by mesh name and key with their largest turn and the last reason (`RD_TURN_WHY_*`,
+`RdInterpStats.turnWhy`, `snapNote`; counters only, nothing per frame). `rd_replay_tool --interp`
+prints the pair's long ways and turns kept at the tick's pose (`port/render/rd_interp.c` (rotation
+continuity: `turnFind`, `turnRecall`, `turnRecallGap`, `turnKeep`, `blendTurn`, `turnSnaps`),
+`port/render/rd_camera_blend.h`, `port/render/rd_internal.h`).
 
 ## Performance records
 

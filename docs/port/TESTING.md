@@ -283,10 +283,18 @@ program under an environment switch ([Environment switches](#environment-switche
   stage 40 or with photo mode closed, the veil alone without the row (`checkDejaReel`; the
   evaluator there stands in for the game's).
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
-  (`rd_interp`); rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
+  (`rd_interp`); its rotation cases live in `rd_interp_turn_test.inc`, included where they stood;
+  rotation continuity (`testRotationContinuity`): a rigid draw and a bone turning
   170 then 190 degrees a tick stand at 265 degrees half way (on forward the long way, not back to
   85), at 217.5 at alpha 0.25 and at the tick's pose at alpha 1; 190 degrees with no turn before
-  keeps the tick's pose; a 20 degree turn after another blends bit for bit as without one.
+  keeps the tick's pose; a 20 degree turn after another blends bit for bit as without one. Across
+  a gap (`testRotationGap`): after a pair with no present, a camera cut or a discarded frame the
+  wheel turning 200 degrees a tick continues the long way from the turn two ticks before, a turn
+  8 ticks old serves and 9 does not, a pose the memory does not carry to keeps the tick's, a turn
+  under the snap blends the short way. The trolley's wheels (`testRotationWheels`): two draws, of
+  one key and of two, at 185 degrees a tick with their places in the list changing every tick,
+  both forward the long way; the ride of `box.c` (0.5 a tick of push, 0.98 friction, radius 10)
+  up to 125 degrees a tick blended every pair, then a camera cut, and each pair after it forward.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
 - `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded); the
   content table's four sandstorm sheets and the tiles appended to them (`sheetTableChecks`), one
