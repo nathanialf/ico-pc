@@ -1386,7 +1386,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
     prev[strcspn(prev, "\r\n")] = '\0';
-    snprintf(act_prev, sizeof act_prev, "%s", prev);
+    snprintf(act_prev, sizeof act_prev, "%.*s", (int)(sizeof act_prev - 1), prev);
     act_remove();
     if (loss != NULL && strcmp(loss, act_loss_none) == 0) {
         ico_diag_log("ico_pc: the previous run lost the graphics device (no loss dump was "
