@@ -171,10 +171,11 @@ int main(void)
             failures++;
         }
     }
-    if (g_icoShaderCount !=
-        sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst + nPlanes) {
+    if (g_icoShaderCount != sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants +
+                                nDst + nPlanes + nPlain) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount,
-               sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst + nPlanes);
+               sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst + nPlanes +
+                   nPlain);
         failures++;
     }
     printf("shaders_table_test: %s\n", failures ? "FAILED" : "ok");
