@@ -223,6 +223,25 @@ static void segv_thread(void *arg)
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
     "22392 words; largest fragment vu_texa_ps 21000 words"
 
+/* issues 93 and 107: a batch of the set's 2D half (v0.7.7 ended inside one
+   on both Adreno 740 devices) and a finished one's line with the memory and
+   the pipeline cache's size (rd_pipeline.c batchTimes), and a lazy batch's
+   line (rd_pipelines_lazy) */
+#define NOTE_2D                                                                                    \
+    "creating pipelines 193-224 of 527: program 3 blend 0 vs 1 fs 7 fmt 1/8 msaa 0 dst 0 to "      \
+    "program 9 blend 2 vs 1 fs 7 fmt 1/0 msaa 0 dst 0; vertex sprite_vs 900 words (210 "           \
+    "instructions); largest fragment font_sheet_ps 70444 words"
+#define TIMES_2D                                                                                   \
+    "2D batch 161-192 of 527 (compiler E031.41.03.47): 32 pipelines 0.02-0.21 s, mean 0.08 s, "    \
+    "0.9 s on 8 threads; memory 185 MB (most 194 MB), pipeline cache 3104 KB; slowest 0.21 s "     \
+    "program 3 blend 0 vs 1 fs 7 fmt 1/8 msaa 0 dst 0 (sprite_vs 900 words + font_sheet_ps "       \
+    "70444 words)"
+#define TIMES_LAZY                                                                                 \
+    "lazy batch 3, pipelines 41-57 of this run (compiler E031.41.03.47): 17 pipelines "            \
+    "0.02-0.61 s, mean 0.14 s, over 1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 "      \
+    "KB; slowest 0.61 s program 3 blend 0 vs 1 fs 7 fmt 1/8 msaa 0 dst 0 (sprite_vs 900 words + "  \
+    "font_sheet_ps 70444 words)"
+
 #if !defined(_WIN32)
 /* an OS thread that is not a game thread faults, as a worker inside the
    graphics driver's pipeline compile would */
@@ -442,6 +461,14 @@ static int bisect2_stub(const char *zip, uint32_t pass, uint32_t number, const R
     return ICO_DIAG_BISECT2_LOST;
 }
 
+/* window_host.c pipeline_set_persist_lazy, stubbed: the config write
+   logged; ICO_TEST_PERSIST_FAIL makes it fail */
+static int persist_lazy_stub(void)
+{
+    ico_diag_log("test: config write dev.pipeline_set = lazy");
+    return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
+}
+
 /* The start-up activity file's steps, each ending as a killed process
    would (_exit: no clean-up) unless the step ends cleanly */
 static void activity_child(const char *mode, const char *log)
@@ -451,7 +478,8 @@ static void activity_child(const char *mode, const char *log)
     act_path(path, sizeof path, log);
     ico_diag_set_version(getenv("ICO_TEST_ACT_VERSION") != NULL ? getenv("ICO_TEST_ACT_VERSION")
                                                                 : "test 1");
-    lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0);
+    lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0 ||
+                                                     strcmp(mode, "actpipesetrelaunch") == 0);
     ico_diag_log("test: lazy %d", lazy);
     /* what window_host.c asks of the previous note (issue 107) */
     ico_diag_log("test: previous vu ext %d",
@@ -554,6 +582,37 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_set_activity(VU_PLAIN_NOTE);
         ico_diag_startup_activity_batch(VU_TIMES_1);
         ico_diag_startup_activity_record(0);
+        child_quit(0);
+    } else if (strcmp(mode, "act2dbatch") == 0) {
+        /* issues 93 and 107: a 2D batch finished (its line with the
+           memory), then the system ended the start in the next one; with
+           ICO_TEST_LOW_MEMORY a low-memory signal came first (Android's
+           onTrimMemory, level 15) */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_pipelines(192, 527, 210);
+        ico_diag_startup_activity_batch(TIMES_2D);
+        ico_diag_set_activity(NOTE_2D);
+        ico_diag_set_pipelines(201, 527, 210);
+        if (getenv("ICO_TEST_LOW_MEMORY") != NULL) {
+            ico_diag_note_low_memory(15);
+            ico_diag_startup_activity_poll();
+        }
+        _exit(0);
+    } else if (strcmp(mode, "actlowlazy") == 0) {
+        /* a run without the set: a lazy batch closed, then the system's
+           signal between two creations, then the end */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
+        ico_diag_set_pipelines_made(57);
+        ico_diag_startup_activity_batch(TIMES_LAZY);
+        ico_diag_note_low_memory(80);
+        ico_diag_startup_activity_poll();
+        _exit(0);
+    } else if (strcmp(mode, "actpipeset") == 0 || strcmp(mode, "actpipesetrelaunch") == 0) {
+        /* the next start's policy (window_host.c ico_window_open) */
+        const int set = ico_diag_startup_pipeline_set(strcmp(mode, "actpipesetrelaunch") == 0, lazy,
+                                                      getenv("ICO_TEST_PIPESET"), persist_lazy_stub,
+                                                      "config.toml");
+        ico_diag_log("test: pipeline set %d", set);
         child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -1518,6 +1577,118 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "compiled: ") == NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
+        /* issues 93 and 107: a start that ended inside a 2D batch of the
+           set: the file keeps the note and the finished batch's line (its
+           memory and pipeline cache); the next start logs both, the last
+           batch again, writes [dev] pipeline_set = "lazy" for good and
+           says so */
+        r = run(argv[0], "act2dbatch", log);
+        CHECK(r == 0);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n" NOTE_2D "\ncompiled: " TIMES_2D) == 0);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " TIMES_2D "\n") !=
+              NULL);
+        CHECK(strstr(s, "ico_pc: the previous run's last finished batch: " TIMES_2D "\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D "\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while preparing the graphics (" NOTE_2D
+                        "); this start and every start after it make the pipelines as the game "
+                        "needs them, with no start-up set ([dev] pipeline_set = \"lazy\" in "
+                        "config.toml); delete that line to try the start-up set again\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        /* any version's end counts (the setting outlives the version) */
+        run(argv[0], "act2dbatch", log);
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        s = read_file(log);
+        CHECK(strstr(s, "test: lazy 0\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        /* the setting could not be written: this start only */
+        run(argv[0], "act2dbatch", log);
+        setenv("ICO_TEST_PERSIST_FAIL", "1", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_PERSIST_FAIL");
+        s = read_file(log);
+        CHECK(strstr(s, "("
+                        "[dev] pipeline_set = \"lazy\" in config.toml, which could not be "
+                        "written: this start only)") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        /* a restart after a crash report takes its own step: nothing
+           written */
+        run(argv[0], "act2dbatch", log);
+        r = run(argv[0], "actpipesetrelaunch", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        /* an extended VU batch's end makes the plain variants the rule
+           instead (window_host.c): nothing written, the set as usual */
+        run(argv[0], "actvuext", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        /* no file: the set; the setting "lazy": none, nothing written */
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        setenv("ICO_TEST_PIPESET", "lazy", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_PIPESET");
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: pipeline set 2\n") != NULL);
+        /* issue 93: a low-memory signal before the end: logged at once with
+           the set's count and the memory, kept in the file after the
+           batch's line, logged by the next start */
+        setenv("ICO_TEST_LOW_MEMORY", "1", 1);
+        r = run(argv[0], "act2dbatch", log);
+        unsetenv("ICO_TEST_LOW_MEMORY");
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the system asked the app to free memory: low memory "
+                        "(onTrimMemory level 15, running critical; signal 1 of this run) at "
+                        "pipelines 201 of 527 of the start-up set; memory ") != NULL);
+        s = read_file(act);
+        CHECK(strncmp(s,
+                      "test 1\n" NOTE_2D "\ncompiled: " TIMES_2D
+                      "\nsystem: low memory (onTrimMemory level 15, running critical; signal 1 "
+                      "of this run) at pipelines 201 of 527 of the start-up set; memory ",
+                      strlen("test 1\n" NOTE_2D "\ncompiled: " TIMES_2D
+                             "\nsystem: low memory (onTrimMemory level 15, running critical; "
+                             "signal 1 of this run) at pipelines 201 of 527 of the start-up set; "
+                             "memory ")) == 0);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) was told by the system: low "
+                        "memory (onTrimMemory level 15, running critical; signal 1 of this run) "
+                        "at pipelines 201 of 527 of the start-up set; memory ") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run's last finished batch: " TIMES_2D "\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        /* a run without the set ended between two creations, after its
+           lazy batch and a signal: the batch and the signal are logged,
+           the next start of the version is lazy from the file, and nothing
+           is written (no pipeline was being made) */
+        r = run(argv[0], "actlowlazy", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the system asked the app to free memory: low memory "
+                        "(onTrimMemory level 80, complete; signal 1 of this run) with 57 "
+                        "pipelines made; memory ") != NULL);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " TIMES_LAZY "\n") !=
+              NULL);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) was told by the system: low "
+                        "memory (onTrimMemory level 80, complete; signal 1 of this run) with 57 "
+                        "pipelines made") != NULL);
+        CHECK(strstr(s, "test: lazy 1\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: pipeline set 1\n") != NULL);
+        remove(act);
         /* a run ended between a shorter note's write and the cut: the
            padding's NUL ends the note (diag_host.c act_write) */
         {

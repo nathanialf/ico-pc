@@ -1338,6 +1338,15 @@ static void joystick_scan_hints(void)
 #endif
 }
 
+/* [dev] pipeline_set = "lazy" in config.toml, for good (issues 93 and
+   107: a start that ended while preparing the pipelines; diag_host.h
+   ico_diag_startup_pipeline_set): 0 when written */
+static int pipeline_set_persist_lazy(void)
+{
+    return ico_config_set_string("dev.pipeline_set", "lazy") == 0 && ico_config_save() == 0 ? 0
+                                                                                            : -1;
+}
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -1417,6 +1426,17 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                              "driver compiled the extended ones, issue 107");
         lazyStart = false;
     }
+    /* issues 93 and 107: the start-up set or none. [dev] pipeline_set =
+       "lazy" (ICO_PIPELINE_SET), or a previous start of any version that
+       ended without a word while a pipeline was being made (not inside an
+       extended VU batch, above): this start and every one after it make
+       the pipelines as the game needs them, the setting written now. The
+       device table's rule (RhiLimits.lazyPipelines) is read after
+       rd_init. */
+    const char *pipeSetting = getenv("ICO_PIPELINE_SET");
+    const int pipePolicy = ico_diag_startup_pipeline_set(
+        retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, pipeline_set_persist_lazy,
+        ico_config_toml_path() ? ico_config_toml_path() : "config.toml");
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
@@ -1665,18 +1685,30 @@ open_window:
        pipeline compile (tens of ms each on a GPU driver); the time is
        logged. Not after a driver crash in it (the lazy step), not on a
        device of the table (RhiLimits.lazyPipelines: the Adreno 740 dies
-       inside it, issues 93 and 107), not after a start that ended inside
-       it (lazyStart): each pipeline is then built when
+       inside it, issues 93 and 107), not by the settings or after a start
+       that ended inside it (pipePolicy): each pipeline is then built when
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
     const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
-    if (retry == STARTUP_RETRY_LAZY || lazyStart || devLazy != NULL) {
+    if (retry == STARTUP_RETRY_LAZY || pipePolicy != ICO_DIAG_PIPESET_FULL || devLazy != NULL) {
         char why[160];
 
         if (devLazy != NULL) {
             snprintf(why, sizeof(why), "on this device (%s)", devLazy);
+            if (pipeSetting != NULL && strcmp(pipeSetting, "full") == 0) {
+                fprintf(stderr,
+                        "window: [dev] pipeline_set = \"full\" does not override the "
+                        "device table (%s)\n",
+                        devLazy);
+            }
         } else if (retry == STARTUP_RETRY_LAZY) {
             snprintf(why, sizeof(why), "(a restart after a graphics driver crash)");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_SETTING) {
+            snprintf(why, sizeof(why), "by the settings ([dev] pipeline_set = \"lazy\")");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+            snprintf(why, sizeof(why),
+                     "(the previous start ended while preparing them; [dev] pipeline_set = "
+                     "\"lazy\" from now on)");
         } else {
             snprintf(why, sizeof(why), "(the last run made them that way)");
         }

@@ -126,16 +126,16 @@ int ico_ini_load_file(IcoIni *ini, const char *path);
 const char *ico_config_ini_key(const char *toml_path);
 /* The [dev] A/B switches (blend=, fog_path=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
-   vu_plain_only=, vu_extended=, joystick_directinput=):
+   vu_plain_only=, vu_extended=, joystick_directinput=, pipeline_set=):
    ico_dev_env_name gives the environment variable a key is exported as
    (ICO_RD_BLEND, ICO_RD_FOG_PATH, ICO_GPU_CHECKPOINTS, ICO_GPU_ROBUST,
    ICO_RD_PASS_SPLIT, ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE,
-   ICO_RD_VU_PLAIN, ICO_RD_VU_EXTENDED, ICO_JOYSTICK_DIRECTINPUT), NULL for
-   any other key; ico_dev_env_value the
+   ICO_RD_VU_PLAIN, ICO_RD_VU_EXTENDED, ICO_JOYSTICK_DIRECTINPUT,
+   ICO_PIPELINE_SET), NULL for any other key; ico_dev_env_value the
    value exported for an ini value, NULL when nothing is set: blend
    "fixed", "attachment" or "storage" as they are (exact is the default:
-   nothing set); fog_path inplace, copy or buffer as they are; pass_split a
-   count; gpu_*, attachment_read, storage_pass_merge, vu_* and
+   nothing set); fog_path inplace, copy or buffer as they are; pipeline_set
+   full or lazy as they are; pass_split a count; gpu_*, attachment_read, storage_pass_merge, vu_* and
    joystick_directinput 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);

@@ -1623,6 +1623,42 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     return relaunched ? 0 : 1;
 }
 
+/* Whether a note names a pipeline being made: one ("creating pipeline
+   ..."), a batch of the start-up set ("creating pipelines ...") or the set
+   between two ("creating the start-up pipelines") */
+static int note_is_pipelines(const char *note)
+{
+    return note != NULL && (strncmp(note, "creating pipeline", 17) == 0 ||
+                            strncmp(note, "creating the start-up pipelines", 31) == 0);
+}
+
+int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
+                                  int (*persist_lazy)(void), const char *config_name)
+{
+    if (setting != NULL && strcmp(setting, "lazy") == 0) {
+        return ICO_DIAG_PIPESET_LAZY_SETTING;
+    }
+    /* an extended VU batch's end makes the plain variants the rule instead
+       (window_host.c, [dev] vu_plain_only), and that start builds the set */
+    if (startup_retry_note_has_vu_ext(act_prev)) {
+        return ICO_DIAG_PIPESET_FULL;
+    }
+    /* a restart after a crash report takes its own step (startup_retry.h) */
+    if (relaunched || !note_is_pipelines(act_prev)) {
+        return file_lazy ? ICO_DIAG_PIPESET_LAZY_FILE : ICO_DIAG_PIPESET_FULL;
+    }
+    {
+        const int saved = persist_lazy != NULL && persist_lazy() == 0;
+        ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this "
+                     "start and every start after it make the pipelines as the game needs them, "
+                     "with no start-up set ([dev] pipeline_set = \"lazy\" in %s%s); delete that "
+                     "line to try the start-up set again",
+                     act_prev, config_name != NULL ? config_name : "config.toml",
+                     saved ? "" : ", which could not be written: this start only");
+    }
+    return ICO_DIAG_PIPESET_LAZY_NOW;
+}
+
 void ico_diag_startup_activity_exit(void)
 {
     if (act_mode == ICO_DIAG_ACTIVITY_LAZY) {

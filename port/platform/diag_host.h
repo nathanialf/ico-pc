@@ -223,6 +223,43 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched);
    previous run's last finished batch: <line>"). Cleared with the file. */
 #define ICO_DIAG_ACTIVITY_BATCHES 24
 void ico_diag_startup_activity_batch(const char *line);
+/* The start-up set's policy for this start (issues 93 and 107), after
+   ico_diag_startup_activity_begin (file_lazy: its result) and before the
+   renderer starts; setting: [dev] pipeline_set ("full", "lazy", NULL when
+   not set).
+     ICO_DIAG_PIPESET_LAZY_SETTING  setting is "lazy";
+     ICO_DIAG_PIPESET_LAZY_NOW      the previous start, of any version,
+                                    ended without a word while a pipeline
+                                    was being made (its note names one:
+                                    "creating pipeline ...", "creating
+                                    pipelines ...", "creating the start-up
+                                    pipelines"), not as a restart after a
+                                    crash report (relaunched) and not
+                                    inside an extended VU batch (window_host.c
+                                    makes the plain variants the rule for
+                                    that one): persist_lazy() writes
+                                    [dev] pipeline_set = "lazy" (0 when it
+                                    did), and one line says so ("ico_pc: the
+                                    previous start ended while preparing the
+                                    graphics (<note>); this start and every
+                                    start after it make the pipelines as
+                                    the game needs them, with no start-up
+                                    set ([dev] pipeline_set = "lazy" in
+                                    <config_name>) ..."; ", which could not be
+                                    written: this start only" when it
+                                    failed);
+     ICO_DIAG_PIPESET_LAZY_FILE     file_lazy (the previous run of this
+                                    version ended in a lazy run, or exited
+                                    lazy);
+     ICO_DIAG_PIPESET_FULL          the start-up set.
+   The device table's lazy rule (port/rhi/rhi.h RhiLimits.lazyPipelines)
+   is the window's, after the device is made. */
+#define ICO_DIAG_PIPESET_FULL 0
+#define ICO_DIAG_PIPESET_LAZY_FILE 1
+#define ICO_DIAG_PIPESET_LAZY_SETTING 2
+#define ICO_DIAG_PIPESET_LAZY_NOW 3
+int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
+                                  int (*persist_lazy)(void), const char *config_name);
 /* The system asked the app to free memory (issue 93: Android's
    onTrimMemory, level its TRIM_MEMORY_* value, -1 when none is known):
    logged at once from any thread ("ico_pc: the system asked the app to

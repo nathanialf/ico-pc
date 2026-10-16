@@ -502,6 +502,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("joystick_directinput", "true"), "1") == 0);
     CHECK(ico_dev_env_value("joystick_directinput", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.joystick_directinput"), "joystick_directinput") == 0);
+    /* pipeline_set: the start-up set or none (issues 93 and 107) */
+    CHECK(strcmp(ico_dev_env_name("pipeline_set"), "ICO_PIPELINE_SET") == 0);
+    CHECK(strcmp(ico_dev_env_value("pipeline_set", "lazy"), "lazy") == 0);
+    CHECK(strcmp(ico_dev_env_value("pipeline_set", "full"), "full") == 0);
+    CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
+    CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);
     /* config.toml's [dev] keys reach the same ini keys */
     CHECK(strcmp(ico_config_ini_key("dev.blend"), "blend") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.fog_path"), "fog_path") == 0);

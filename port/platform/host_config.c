@@ -501,6 +501,10 @@ static const struct {
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
     {"dev.joystick_directinput", "joystick_directinput"},
+    /* "lazy": no start-up set, the pipelines made as the game needs them
+       (issues 93 and 107; written by window_host.c after a start that
+       ended while preparing them), "full" the set (the default) */
+    {"dev.pipeline_set", "pipeline_set"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -523,6 +527,8 @@ static const struct {
     /* port/platform/window_host.c joystick_scan_hints: 0 sets
        SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
+    /* port/platform/window_host.c: "lazy" skips the start-up set */
+    {"pipeline_set", "ICO_PIPELINE_SET"},
 };
 
 static int value_is(const char *v, const char *const *words)
@@ -553,6 +559,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const off[] = {"0", "false", "off", "no", NULL};
     static const char *const paths[] = {"inplace", "copy", "buffer", NULL};
     static const char *const blends[] = {"fixed", "attachment", "storage", NULL};
+    static const char *const sets[] = {"full", "lazy", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -565,6 +572,9 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "fog_path") == 0) {
         return value_is(value, paths) ? value : NULL;
+    }
+    if (strcmp(key, "pipeline_set") == 0) {
+        return value_is(value, sets) ? value : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {
         /* a count of VU draws, 1..65536; 0 or off: none */
