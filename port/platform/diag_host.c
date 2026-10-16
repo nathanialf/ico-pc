@@ -1237,7 +1237,13 @@ static unsigned int act_nbatches;
 static char act_system_pending[ACT_BATCH_BYTES];
 static volatile int act_system_waiting;
 
-static void act_write(const char *note)
+/* a write of the batches' lines left in the system's cache
+   (ico_diag_startup_activity_batch): the next write syncs it */
+static int act_unsynced;
+
+/* sync: the note goes to the disc (act_sync_note), or the write is a
+   batch's line (0: it goes with the next note's sync, one sync a batch) */
+static void act_write_sync(const char *note, int sync)
 {
     /* the version's line, then the note, then this run's loss when there
        was one, then the batches' lines; room for the NULs over a longer
@@ -1278,8 +1284,11 @@ static void act_write(const char *note)
             WriteFile(act_h, text, (DWORD)w, &done, NULL) && done == (DWORD)w &&
             SetFilePointerEx(act_h, at, NULL, FILE_BEGIN) && SetEndOfFile(act_h)) {
             act_len = n;
-            if (act_sync_note(note)) {
+            if (sync && (act_unsynced || act_sync_note(note))) {
                 (void)FlushFileBuffers(act_h);
+                act_unsynced = 0;
+            } else if (!sync) {
+                act_unsynced = 1;
             }
             return;
         }
@@ -1287,8 +1296,11 @@ static void act_write(const char *note)
 #else
     if (pwrite(act_fd, text, w, 0) == (ssize_t)w && ftruncate(act_fd, (off_t)n) == 0) {
         act_len = n;
-        if (act_sync_note(note)) {
+        if (sync && (act_unsynced || act_sync_note(note))) {
             (void)fsync(act_fd);
+            act_unsynced = 0;
+        } else if (!sync) {
+            act_unsynced = 1;
         }
         return;
     }
@@ -1297,6 +1309,11 @@ static void act_write(const char *note)
     if (act_len < w) {
         act_len = w;
     }
+}
+
+static void act_write(const char *note)
+{
+    act_write_sync(note, 1);
 }
 
 /* a lazy run's file between two creations: the next start stays lazy
@@ -1379,11 +1396,13 @@ void ico_diag_startup_activity_batch(const char *line)
     snprintf(act_batches[act_nbatches % ICO_DIAG_ACTIVITY_BATCHES], ACT_BATCH_BYTES, "%s%s",
              act_batch_prefix, line);
     act_nbatches++;
-    /* written at once with the batch's note still in the file (a note of
-       a batch goes to the disc, act_sync_note), so a device that freezes
-       before the next batch's note still leaves it */
+    /* written at once with the batch's note still in the file, not synced:
+       the next note's write syncs it with that note (a batch's note goes
+       to the disc before its batch, act_sync_note), so each batch costs
+       one sync and a device that freezes in the next batch still leaves
+       this line */
     if (act_mode != 0) {
-        act_write(act_current());
+        act_write_sync(act_current(), 0);
     }
 }
 
@@ -1796,6 +1815,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     loss_pending[0] = '\0';
     act_once = 0;
     act_saw_vu_ext = 0;
+    act_unsynced = 0;
     act_end_n[0] = act_end_n[1] = 0;
     act_prev_background = 0;
     act_prev_bg_line[0] = '\0';

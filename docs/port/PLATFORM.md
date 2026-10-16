@@ -516,7 +516,9 @@ true`).
 
 A batch's note, and any note naming an extended VU pipeline, is written through to the disc
 (fsync, `act_sync_note`) before the driver starts on it, and in a lazy run every first-use
-pipeline's note, so it is still there after a device that froze was rebooted (issue 107). An end inside a batch of the VU
+pipeline's note, so it is still there after a device that froze was rebooted (issue 107). Each
+batch costs one sync: its `compiled: ` line (below) is written without one and goes to the disc
+with the next note's sync (`act_write_sync`, `act_unsynced`). An end inside a batch of the VU
 vertex shaders' extended variants follows the same rule with its own count and setting: the first
 makes the next start, unless it is a restart after a crash report, draw with the plain variants
 for that start only (`ico_pc: the previous start ended while the graphics driver compiled the
