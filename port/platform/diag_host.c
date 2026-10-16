@@ -1757,7 +1757,7 @@ static const char *trim_kind(int level)
 
 void ico_diag_note_low_memory(int level)
 {
-    char line[ACT_BATCH_BYTES - sizeof act_system_prefix], pipes[96], mem[64], lv[64];
+    char line[ACT_BATCH_BYTES - sizeof act_system_prefix], pipes[96], mem[64], lv[128];
     long rss = -1, peak = -1;
     const unsigned int nth = ++low_memory_count;
     act_where(pipes, sizeof pipes);
