@@ -492,8 +492,9 @@ say so. Each step is logged (`ico_pc: loss bisect: step 4 of 16: pass 1, draws 1
 lost in 0.6 s`), and one final line names the draw, its note and the verdict (`faults alone`, `does
 not fault alone`, `not finished`), and how the masked step went (`clean with the marks masked`).
 The steps' verdicts are written to `logs/loss-bisect.txt` before the next step, so a start ended
-inside a step continues at the next start (that step counted as lost, `killed`); 4 starts and 90 s
-of steps a start at most ([PLATFORM.md](PLATFORM.md#diagnostics)). Between the steps the start-up
+inside a step continues at the next start (that step counted as lost, `killed`); 4 starts, 90 s
+of steps a start and 3 steps that lose the device a start at most (Windows restarts the system
+after 5 graphics resets in 60 s; [PLATFORM.md](PLATFORM.md#diagnostics)). Between the steps the start-up
 screen says "Checking the graphics problem (step 4 of 16)", drawn on the step's fresh renderer
 before its replay, never on a lost device (`port/render/rd_dump.c` (`rd_loss_bisect_step`);
 `port/render/rd_window.c` (`rd__win_take`, `winFilter`, `rd__win_vu_note`); `port/platform/window_host.c`

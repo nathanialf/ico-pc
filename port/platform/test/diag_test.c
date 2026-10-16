@@ -89,9 +89,10 @@
  *               step, lost, clean, die (the run ends inside the step),
  *               noinit (its renderer did not start), notrun; past the list
  *               an oracle, draw ICO_TEST_BISECT2_D of 1,312 faults with
- *               every draw before it): all in one start, the draw found
- *               and named with its verdict, the state file deleted; a start
- *               killed at step 3 continues at step 4 at the next (the step
+ *               every draw before it): the draw found and named with its
+ *               verdict in 4 starts (at most 3 lost steps a start, then
+ *               "step 5 waits for the next start"), the state file
+ *               deleted; a start killed at step 3 continues at step 4 at the next (the step
  *               counted as killed); noinit stops the start and the step
  *               runs again at the next; the 16-step and 4-start bounds; the
  *               time budget; a state file that does not parse (garbage, a
@@ -1940,7 +1941,8 @@ int main(int argc, char **argv)
         snprintf(st, sizeof st, "%s.bisect", log);
         remove(act);
         remove(st);
-        /* all in one start: draw 731 of 1312 found, alone, its classes */
+        /* draw 731 of 1312 found, alone, its classes, in 4 starts: at
+           most 3 lost steps a start (Windows' 5 resets in 60 s) */
         setenv("ICO_TEST_BISECT2_BEGIN", "/logs/loss-c.zip", 1);
         r = run(argv[0], "actbisect2", log);
         unsetenv("ICO_TEST_BISECT2_BEGIN");
@@ -1951,10 +1953,23 @@ int main(int argc, char **argv)
                         "masked: lost in 0.6 s\n") != NULL);
         CHECK(strstr(s, "ico_pc: loss bisect: step 2 of 16: pass 1, draws 1..656 of 1312: clean "
                         "in 0.6 s\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: 3 lost steps in this start; step 5 waits for the "
+                        "next start\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: step 5 of 16") == NULL);
+        CHECK(strstr(s, "test: bisect2 1\n") != NULL);
+        r = run(argv[0], "actbisect2", log);
+        s = read_file(log);
+        CHECK(strstr(s, "continuing at step 5 (start 2 of 4)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss bisect: 3 lost steps in this start; step 13 waits for the "
+                        "next start\n") != NULL);
+        r = run(argv[0], "actbisect2", log);
+        CHECK(strstr(read_file(log), "; step 16 waits for the next start\n") != NULL);
+        r = run(argv[0], "actbisect2", log);
+        s = read_file(log);
+        CHECK(strstr(s, "continuing at step 16 (start 4 of 4)\n") != NULL);
         CHECK(strstr(s,
                      "ico_pc: loss bisect: pass 1, draw 731 of 1312 (list 0 command 731, mesh "
                      "st26a_p1, vs 5 fs 5): faults alone; lost with the marks masked\n") != NULL);
-        CHECK(strstr(s, "test: bisect2 1\n") != NULL);
         CHECK(read_file(st)[0] == '\0');
         CHECK(read_file(act)[0] == '\0');
         if (fails) {
@@ -1986,7 +2001,10 @@ int main(int argc, char **argv)
         /* step 3 (1..984) killed counts as lost: step 4 asks 1..820 */
         CHECK(strstr(s, "ico_pc: loss bisect: step 4 of 16: pass 1, draws 1..820 of 1312:") !=
               NULL);
-        CHECK(strstr(s, "ico_pc: loss bisect: pass 1, draw ") != NULL);
+        CHECK(strstr(s, "; step 10 waits for the next start\n") != NULL);
+        run(argv[0], "actbisect2", log);
+        r = run(argv[0], "actbisect2", log);
+        CHECK(strstr(read_file(log), "ico_pc: loss bisect: pass 1, draw 731 of 1312") != NULL);
         CHECK(read_file(st)[0] == '\0');
         if (fails) {
             printf("--- bisect2 killed log ---\n%s\n", s);
@@ -2023,6 +2041,8 @@ int main(int argc, char **argv)
         setenv("ICO_TEST_BISECT2_BEGIN", "/logs/loss-c.zip", 1);
         r = run(argv[0], "actbisect2", log);
         unsetenv("ICO_TEST_BISECT2_BEGIN");
+        CHECK(strstr(read_file(log), "; step 15 waits for the next start\n") != NULL);
+        r = run(argv[0], "actbisect2", log);
         unsetenv("ICO_TEST_BISECT2_D");
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: loss bisect: step 16 of 16:") != NULL);
@@ -2041,6 +2061,9 @@ int main(int argc, char **argv)
               NULL);
         r = run(argv[0], "actbisect2", log);
         CHECK(strstr(read_file(log), "continuing at step 3 (start 2 of 4)\n") != NULL);
+        run(argv[0], "actbisect2", log);
+        r = run(argv[0], "actbisect2", log);
+        CHECK(strstr(read_file(log), "ico_pc: loss bisect: pass 1, draw 731 of 1312") != NULL);
         CHECK(read_file(st)[0] == '\0');
         /* state files that do not parse, or another version's: deleted */
         {
@@ -2104,10 +2127,10 @@ int main(int argc, char **argv)
             }
             setenv("ICO_TEST_BISECT2_D", "2", 1);
             r = run(argv[0], "actbisect2", log);
+            CHECK(strstr(read_file(log), "continuing at step 1 (start 2 of 4)\n") != NULL);
+            r = run(argv[0], "actbisect2", log);
             unsetenv("ICO_TEST_BISECT2_D");
-            s = read_file(log);
-            CHECK(strstr(s, "continuing at step 1 (start 2 of 4)\n") != NULL);
-            CHECK(strstr(s, "ico_pc: loss bisect: pass 1, draw ") != NULL);
+            CHECK(strstr(read_file(log), "ico_pc: loss bisect: pass 1, draw 2 of 4") != NULL);
         }
         remove(act);
         remove(st);

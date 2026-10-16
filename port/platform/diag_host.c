@@ -2041,6 +2041,10 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
     RdBisectStep step;
     double spent = 0.0;
     int last = ICO_DIAG_BISECT2_NOT_RUN, anyLost = 0;
+    /* the lost steps of this start: with the first level's loss at most
+       ICO_DIAG_BISECT2_LOSSES + 1 device losses (Windows restarts the
+       whole system after 5 graphics resets in 60 s) */
+    unsigned int losses = 0;
     if (stepfn == NULL || b2_path[0] == '\0') {
         return ICO_DIAG_BISECT2_NOT_RUN;
     }
@@ -2106,9 +2110,15 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
             b2_delete();
             break;
         }
-        if (spent >= budget_ms) {
-            ico_diag_log("ico_pc: loss bisect: %.0f s spent; step %u waits for the next start",
-                         spent / 1000.0, (unsigned)(i + 1));
+        if (spent >= budget_ms || losses >= ICO_DIAG_BISECT2_LOSSES) {
+            if (spent >= budget_ms) {
+                ico_diag_log("ico_pc: loss bisect: %.0f s spent; step %u waits for the next start",
+                             spent / 1000.0, (unsigned)(i + 1));
+            } else {
+                ico_diag_log("ico_pc: loss bisect: %u lost steps in this start; step %u waits "
+                             "for the next start",
+                             losses, (unsigned)(i + 1));
+            }
             /* the planned step is planned again then */
             b2.plan.count--;
             b2_save();
@@ -2153,6 +2163,7 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
         spent += b2.ms[i];
         last = r;
         anyLost |= r == ICO_DIAG_BISECT2_LOST;
+        losses += r == ICO_DIAG_BISECT2_LOST;
         ico_diag_log("ico_pc: loss bisect: step %u of %u: pass %u, %s: %s in %.1f s",
                      (unsigned)(i + 1), (unsigned)RD_BISECT_PLAN_STEPS, (unsigned)b2.pass, what,
                      r == ICO_DIAG_BISECT2_LOST ? "lost" : "clean", b2.ms[i] / 1000.0);
