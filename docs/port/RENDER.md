@@ -1140,6 +1140,33 @@ interlock path); with the read kept on REPEAT they are the faint reflection ring
 without the option ([DISPLAY.md](DISPLAY.md), `rd__repeat_kept`). `rd_water_test` draws a ripple
 and requires SCENE byte for byte the same with Full pixel on and off.
 
+**What the GS draws from the game's own data (issue 106, the shapes).** The ring and the puddle
+outline were checked against the disc and the byte-matched game code, not the port's decode. The
+ring is nine spokes 45 degrees apart (`ico2/sugipon/src/puddle.c` (`InitPuddleGeo`): `i * 8192` of
+a 65536 turn) drawn as two nine-point rings at `t` and `t + 5` interleaved into one strip of 18
+vertices (`drawRipple`, `gif_DrawStripFST(..., 0x12, 1)`; `ico2/seki/src/GifPacket.c`
+(`gif_DrawStripFST`): PRIM 0x94 | 1 << 6, a triangle strip with TME, ABE and AA1, FST 0 so ST with
+Q 1 from RGBAQ): eight flat quads, an octagon on any GS, whose outer ring is turned by
+`age * 10.24` so the sampled reflection twists. The mask is `object/sdf/st02a/model/../texture/
+puddle.tm2` (also st13a's): TIM2 PSMT4 128 x 128, one level, a 16-entry RGBA32 CLUT whose entry 0
+is `00000000` and entries 1 to 15 `00000080`, the image using indices 0 and 1 only, so every texel
+is alpha 0 or 0x80 on the disc. The game's `tex_setTexReg` writes TEX0 with TCC 1 and TFX 0 for every
+texture (`ico2/seki/src/Texture.c` (`tex_setTexReg`), bit 34 always set; the TIM2 header's own TEX0
+field, TCC 0, is not what it writes), so the alpha test GREATER 1 (`TEST 0x3F000` family, AREF 1
+from the record's TEST) runs on the bilinear blend of a 0 / 0x80 mask times the vertex alpha 127: a
+pixel passes wherever the four texels under it hold any 0x80, which is the texel grid dilated by
+one texel, stepped at the texel size (about 3 GS pixels at 1x on the drained room's floor, the mask
+repeating about six times across the puddle mesh's STs of -3.4 to 2.9). PCSX2's software renderer
+follows the same arithmetic (`GSDrawScanline.cpp` `TestAlpha`: `(ga >> 16) < aref` fails GREATER;
+the bilinear `lerp16` of the four texels; AA1 only as coverage on the edges, `GSRendererSW.cpp`
+`IsCoverageAlpha`), so at its native resolution it draws the same octagon and the same stepped
+outline, 3 pixels a step; its display scaling softens them. Sad Origami's PCSX2 pack carries a
+smooth 1024 x 1024 BC7 replacement of this very mask
+(`02 - World/04 - Particles/c2d383ac71c5d893-cd153d44d14cf0c9-00001dd4.dds`), and
+`texpack_disc_test` names puddle.tm2 exactly so, so with the pack installed and the option on the
+port's puddle outlines follow the replacement (the pack does not touch the ring). No run with the
+pack on has been dumped; the reporting run's log said `textures: no texture pack`.
+
 ## The fog path and its self-test
 
 The depth fog reads SCENE's depth: the GS copies the Z buffer, a PSMT4 view copies the third byte

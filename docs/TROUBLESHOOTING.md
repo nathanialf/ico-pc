@@ -182,8 +182,14 @@ optional, and can be very large when the Resolution is high.
 The files contain pictures from your disc, so use them only for a bug
 report, and do not share them anywhere else.
 
-**Puddles, ripples or water look broken.** Press **F12** while it shows and
-attach the `.zip`. Then try these one at a time, each with the others as
+**Puddles, ripples or water look broken.** First, two things are the
+game's own and look the same on a PlayStation 2: the rings in the drained
+Waterfall room have eight sides, and the puddles' edges follow the small
+stencil picture the game paints them with, so at a high resolution they
+show small steps. Sad Origami's texture pack carries a smoother version of
+that stencil, so with **Texture pack** on the puddles' edges are smooth
+([Texture packs](TEXTURE_PACKS.md)). For anything else, press **F12** while
+it shows and attach the `.zip`. Then try these one at a time, each with the others as
 they were, and say in the report which one changed the water: set
 **Anti-aliasing** to **Off**, then (with your anti-aliasing back) set
 **Texture pack** to **Off** ([Options](OPTIONS.md)). The log line the game
