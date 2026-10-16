@@ -655,6 +655,7 @@ static void dx_fill_limits(void)
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->vuPlainOnly = NULL;
+    o->lazyPipelines = NULL;
     o->compilerVersion = NULL;
 }
 
@@ -909,6 +910,11 @@ bool rhi_pipeline_cache_loaded(void)
 bool rhi_pipeline_cache_save(void)
 {
     return false; /* the driver keeps its own shader cache */
+}
+
+uint64_t rhi_pipeline_cache_size(void)
+{
+    return 0; /* the driver keeps its own shader cache */
 }
 
 void rhi_set_vulkan_loader(void *getInstanceProcAddr)

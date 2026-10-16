@@ -246,6 +246,10 @@ typedef struct VkrState {
      * device (vkr_vu_plain_only's table: "Adreno 740, issue 107"), "" when
      * they are not, for RhiLimits.vuPlainOnly */
     char vuPlainOnly[96];
+    /* why this device gets no start-up set (the same table's lazy column:
+     * "Adreno 740, issues 93 and 107"), "" otherwise, for
+     * RhiLimits.lazyPipelines */
+    char lazyPipelines[96];
     /* VK_KHR_dynamic_rendering_local_read enabled (the attachment read, and
      * barriers inside a render pass); validationOn: the Khronos validation
      * layer is loaded; storageBarriers: a by-region barrier before a

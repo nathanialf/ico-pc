@@ -98,6 +98,10 @@ void vkr_pipeline_cache_init(void)
         s_cacheLoaded = true;
         s_cacheFileSize = size;
         VKR_LOG("pipeline cache: %zu bytes from %s", size, s_cachePath);
+    } else if (s_cachePath[0]) {
+        /* the size at the start either way (issues 93 and 107: a start the
+           system ended keeps what the last write saved) */
+        VKR_LOG("pipeline cache: starting empty (%s holds none for this device)", s_cachePath);
     }
     free(blob);
 }
@@ -166,6 +170,16 @@ bool rhi_pipeline_cache_save(void)
                 s_cacheFileSize);
     }
     return size != 0 || same;
+}
+
+uint64_t rhi_pipeline_cache_size(void)
+{
+    size_t size = 0;
+    if (!g_vkr.pipelineCache || g_vkr.deviceLost ||
+        vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) != VK_SUCCESS) {
+        return 0;
+    }
+    return (uint64_t)size;
 }
 
 void vkr_pipeline_cache_shutdown(void)

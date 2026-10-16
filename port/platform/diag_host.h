@@ -207,17 +207,40 @@ const char *ico_diag_activity(void);
    a new version tries the start-up set again. */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
 /* A start-up batch's compile times (rd.h rd_set_batch_fn: one line per
-   batch with a VU vertex shader, "VU batch 329-360 of 702 extended: 32
-   pipelines 0.41-2.10 s, mean 1.29 s; vu_prelit_vs 50325 words 9801
-   instructions 8 x 1.10-2.10 s mean 1.62 s; ..."): kept as the activity
-   file's "compiled: " lines after the note (the last
-   ICO_DIAG_ACTIVITY_BATCHES), written with the next note (a batch's note
+   batch, "VU batch 329-360 of 702 (extended, ...): 32 pipelines 0.41-2.10
+   s, mean 1.29 s, ...; memory 185 MB (most 194 MB), pipeline cache 3104
+   KB; vu_prelit_vs 50325 words 9801 instructions: 8 x 1.10-2.10 s mean
+   1.62 s; ...", "2D batch 193-224 of 527 ...", and a run without the set
+   its lazy batches' "lazy batch 3, pipelines 41-57 of this run ..."): kept
+   as the activity file's "compiled: " lines after the note, among the
+   "system: " lines of ico_diag_note_low_memory (the last
+   ICO_DIAG_ACTIVITY_BATCHES of both), written at once (a batch's note
    goes to the disc before the batch starts), so a device that froze in a
-   batch shows the sizes and times of every batch it finished. The next
-   start's ico_diag_startup_activity_begin logs each ("ico_pc: the previous
-   run compiled: <line>"). Cleared with the file. */
+   batch or a start the system ended shows the sizes, times and memory of
+   every batch it finished. The next start's
+   ico_diag_startup_activity_begin logs each ("ico_pc: the previous run
+   (version V) compiled: <line>"), then the last one again ("ico_pc: the
+   previous run's last finished batch: <line>"). Cleared with the file. */
 #define ICO_DIAG_ACTIVITY_BATCHES 24
 void ico_diag_startup_activity_batch(const char *line);
+/* The system asked the app to free memory (issue 93: Android's
+   onTrimMemory, level its TRIM_MEMORY_* value, -1 when none is known):
+   logged at once from any thread ("ico_pc: the system asked the app to
+   free memory: low memory (onTrimMemory level 15, running critical;
+   signal 1 of this run) at pipelines 201 of 527 of the start-up set;
+   memory 102 MB (most 194 MB)", or "with N pipelines made" outside the
+   set, ico_diag_set_pipelines_made), and kept for the activity file as a
+   "system: " line among the batches' lines, written by the main thread's
+   next ico_diag_startup_activity_poll; the next start logs it ("ico_pc:
+   the previous run (version V) was told by the system: ..."). */
+void ico_diag_note_low_memory(int level);
+/* On the main thread (the start-up screen's progress, the window's pump):
+   a low-memory line waiting from ico_diag_note_low_memory goes into the
+   activity file while it records. Cheap when none waits. */
+void ico_diag_startup_activity_poll(void);
+/* The pipelines made so far, for the low-memory line outside the start-up
+   set. Any thread. */
+void ico_diag_set_pipelines_made(unsigned int n);
 /* The note the file held when ico_diag_startup_activity_begin read it,
    whatever its version ("" none): window_host.c asks
    startup_retry_note_has_vu_ext of it (issue 107).  A batch's note and

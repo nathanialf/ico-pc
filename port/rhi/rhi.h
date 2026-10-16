@@ -614,6 +614,11 @@ typedef struct RhiLimits {
      * (logged at rd_init). */
     const char *vuPlainOnly;
     const char *compilerVersion;
+    /* Why this device gets no start-up set ("Adreno 740, issues 93 and
+     * 107": the driver dies inside it; Vulkan, vk_device.c kVuPlainOnly's
+     * lazy column), NULL otherwise: the window then makes each pipeline when
+     * a frame first needs it (port/render/rd.h rd_pipelines_lazy). */
+    const char *lazyPipelines;
     /* Indexed draws: the largest index value a draw may use (Vulkan
      * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
      * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the
@@ -1003,6 +1008,12 @@ bool rhi_pipeline_cache_loaded(void);
  * whether the file holds the cache now (false with no path, after a device
  * loss, and always on D3D12). */
 bool rhi_pipeline_cache_save(void);
+/* The pipeline cache's data size in bytes now (Vulkan
+ * vkGetPipelineCacheData's size: what a save would write), for the start-up
+ * set's and the lazy batches' lines (issues 93 and 107: whether the driver's
+ * memory grows with it); 0 with no cache, after a device loss, and always on
+ * D3D12. */
+uint64_t rhi_pipeline_cache_size(void);
 
 /* The Vulkan loader rhi_init uses, as its
  * vkGetInstanceProcAddr: a graphics driver the Android build loaded itself

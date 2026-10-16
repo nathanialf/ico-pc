@@ -1608,24 +1608,45 @@ static bool vkr_is_tiler(uint32_t vendor)
  *   (docs/port/SHADERS.md, The size history).  The plain variants are 10,011
  *   to 23,305 words.
  * ICO_RD_VU_EXTENDED=1 ([dev] vu_extended) gives the extended variants
- * anyway (the renderer reads it). */
+ * anyway (the renderer reads it).
+ *
+ * The lazy column: the devices that get no start-up set at all (lazy, its
+ * reason for RhiLimits.lazyPipelines; docs/port/RENDER.md, "The start-up
+ * set"): the window skips rd_precreate_pipelines and each pipeline is made
+ * when a frame first needs it, the pipeline cache written after each batch
+ * of them (rd_pipelines_lazy).
+ *   Adreno 740 again: with v0.7.7 both devices died inside the 2D half of
+ *   the set (its first 327 keys at Original 4:3 with the fixed-function
+ *   blend, before any VU key): the Odin 2 Portal at 201 of 527 finished,
+ *   the process shrinking from 194 MB to 47 MB until the system ended it
+ *   (issue 93), the Thor at 307 or later with the whole device frozen
+ *   (issue 107); the same since v0.5.3, while v0.5.2 and v0.6.1 started.
+ *   No one module explains it (font_sheet_ps and yuv_ps were as large in
+ *   v0.6.1), so the set itself is skipped there. */
 static const struct {
     uint32_t vendor, deviceMask, device;
     bool qualcomm;
     const char *reason;
+    const char *lazy; /* NULL: the start-up set as usual */
 } kVuPlainOnly[] = {
-    {RHI_VENDOR_QUALCOMM, 0xFFFF0000u, 0x43050000u, true, "Adreno 740, issue 107"},
+    {RHI_VENDOR_QUALCOMM, 0xFFFF0000u, 0x43050000u, true, "Adreno 740, issue 107",
+     "Adreno 740, issues 93 and 107"},
 };
 
 static void vkr_vu_plain_only(void)
 {
     const uint32_t v = g_vkr.props.vendorID, d = g_vkr.props.deviceID;
     g_vkr.vuPlainOnly[0] = '\0';
+    g_vkr.lazyPipelines[0] = '\0';
     for (size_t i = 0; i < sizeof(kVuPlainOnly) / sizeof(kVuPlainOnly[0]); i++) {
         if (kVuPlainOnly[i].vendor == v &&
             (d & kVuPlainOnly[i].deviceMask) == kVuPlainOnly[i].device &&
             (!kVuPlainOnly[i].qualcomm || rhi_driver_is_qualcomm_proprietary(v, g_vkr.driverID))) {
             snprintf(g_vkr.vuPlainOnly, sizeof g_vkr.vuPlainOnly, "%s", kVuPlainOnly[i].reason);
+            if (kVuPlainOnly[i].lazy != NULL) {
+                snprintf(g_vkr.lazyPipelines, sizeof g_vkr.lazyPipelines, "%s",
+                         kVuPlainOnly[i].lazy);
+            }
             return;
         }
     }
@@ -1694,6 +1715,7 @@ static void vkr_fill_limits(void)
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
     o->vuPlainOnly = g_vkr.vuPlainOnly[0] ? g_vkr.vuPlainOnly : NULL;
+    o->lazyPipelines = g_vkr.lazyPipelines[0] ? g_vkr.lazyPipelines : NULL;
     o->compilerVersion = g_vkr.compilerVersion[0] ? g_vkr.compilerVersion : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required

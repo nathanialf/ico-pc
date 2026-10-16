@@ -96,10 +96,12 @@ void rd_summary_text(char *out, size_t size)
         snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
     }
     snprintf(out, size,
-             "blend %s; index values dense (marks in the stream); fog %s; VU shaders %s%s",
+             "blend %s; index values dense (marks in the stream); fog %s; VU shaders %s%s; "
+             "pipelines %s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
-             g_rd.vuPlainOnly ? "plain only (issue 107)" : "plain and extended", split);
+             g_rd.vuPlainOnly ? "plain only (issue 107)" : "plain and extended", split,
+             rd__pipelines_lazy_on() ? "on first use (no start-up set)" : "the start-up set");
 }
 
 /* ------------------------------------------------ the VU index spans

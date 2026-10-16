@@ -560,15 +560,43 @@ float rd_precreate_longest_ms(void);
  * fn(NULL) when the step is over.  NULL (the default): nothing. */
 typedef void (*RdActivityFn)(const char *note);
 void rd_set_activity_fn(RdActivityFn fn);
-/* A start-up batch with a VU vertex shader done (issue 107): fn(line) with
- * its compile times ("VU batch 329-360 of 702 (extended, compiler
- * E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4
- * threads; vu_prelit_vs 50325 words 9801 instructions: 8 x 1.10-2.10 s
- * mean 1.62 s; ..."), the window passing it to the activity file
- * (diag_host.h ico_diag_startup_activity_batch); the log also gets the
- * line with each pipeline's time ("rd: pipelines: compiled ...; each (s):
- * 1.10 1.22 ...").  NULL (the default): the log line only. */
+/* A start-up batch done (issue 107 for the VU batches, issues 93 and 107
+ * for the 2D ones): fn(line) with its compile times, the process's memory
+ * and the pipeline cache's size after it ("VU batch 329-360 of 702
+ * (extended, compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29
+ * s, 12.3 s on 4 threads; memory 185 MB (most 194 MB), pipeline cache 3104
+ * KB; vu_prelit_vs 50325 words 9801 instructions: 8 x 1.10-2.10 s mean
+ * 1.62 s; ...", a 2D batch "2D batch 193-224 of 527 (compiler ...): ...;
+ * slowest 0.21 s program ... (font_sheet_ps ...)"), and a lazy batch's
+ * line the same way (rd_pipelines_lazy: "lazy batch 3, pipelines 41-57 of
+ * this run ..."), the window passing it to the activity file (diag_host.h
+ * ico_diag_startup_activity_batch); the log also gets the line, a set's
+ * with each pipeline's time ("rd: pipelines: compiled ...; each (s): 1.10
+ * 1.22 ...").  NULL (the default): the log line only. */
 void rd_set_batch_fn(RdActivityFn fn);
+/* The process's resident memory and its peak in KB for the batches' lines
+ * (diag_host.h ico_diag_process_memory: 0 when known).  NULL (the
+ * default): "memory unknown". */
+typedef int (*RdMemoryFn)(long *rssKb, long *peakKb);
+void rd_set_memory_fn(RdMemoryFn fn);
+/* No start-up set (issues 93 and 107; docs/port/RENDER.md, "The start-up
+ * set"): the window calls it instead of rd_precreate_pipelines, why saying
+ * why ("on this device (Adreno 740, issues 93 and 107)", "by the settings
+ * ([dev] pipeline_set = \"lazy\")", ...), logged as "rd: pipelines: no
+ * start-up set <why>: pipelines are made as the game needs them" with the
+ * pipeline cache's size.  Each pipeline is then made when a frame first
+ * needs it, and those creations are counted into batches that
+ * rd_pipelines_lazy_tick closes: the pipeline cache written to its file
+ * (rhi_pipeline_cache_save, its size logged), the batch's line to the log
+ * and to rd_set_batch_fn. */
+void rd_pipelines_lazy(const char *why);
+/* Once a frame (the window's pump), on the thread that draws: closes the
+ * open lazy batch once no pipeline was made for 0.5 s or 2 s after its
+ * first.  Nothing outside rd_pipelines_lazy's runs. */
+void rd_pipelines_lazy_tick(void);
+/* The pipelines made so far this run (the start-up set's and the frames'),
+ * for the window's low-memory line. */
+uint32_t rd_pipeline_count(void);
 /* The VU draws' index spans (issue 95; rd_replay.c measures one replay in
  * 64): "VU index span: the widest 14314 (frame 812) over 40 measured
  * frames (one replay in 64), 0 indexed VU draws past 2^24 - 1 of 52000 in
@@ -595,7 +623,8 @@ bool rd_fog_selftest(void);
  * index values dense (marks in the stream); fog <path> (self-test: ...);
  * VU shaders plain only (issue 107)" or "VU shaders plain and extended" (the
  * policy rd_init chose, rd__vu_policy_init), and ", pass split every N" when
- * on. */
+ * on, then "; pipelines the start-up set" or "; pipelines on first use (no
+ * start-up set)" (rd_pipelines_lazy). */
 void rd_summary_text(char *out, size_t size);
 /* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
  * (never recorded, never presented) draws on SCENE at its real size and

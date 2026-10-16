@@ -1580,6 +1580,7 @@ open_window:
     }
     rd_set_activity_fn(window_activity);
     rd_set_batch_fn(ico_diag_startup_activity_batch);
+    rd_set_memory_fn(ico_diag_process_memory);
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     /* not after a bisect that lost the device: the player's driver did not
@@ -1662,17 +1663,27 @@ open_window:
     /* the whole reachable pipeline set before the first frame and after
        rd_init (which makes the device), so the game never waits on a
        pipeline compile (tens of ms each on a GPU driver); the time is
-       logged. Not after a driver crash in it: the lazy step builds each
-       pipeline when a frame first needs it */
-    if (retry == STARTUP_RETRY_LAZY || lazyStart) {
-        fprintf(stderr,
-                "window: the pipelines are created as the frames need them, not at "
-                "start-up (%s)\n",
-                retry == STARTUP_RETRY_LAZY ? "a restart after a graphics driver crash"
-                                            : "the previous start ended while preparing them");
+       logged. Not after a driver crash in it (the lazy step), not on a
+       device of the table (RhiLimits.lazyPipelines: the Adreno 740 dies
+       inside it, issues 93 and 107), not after a start that ended inside
+       it (lazyStart): each pipeline is then built when
+       a frame first needs it, the title comes at once, and the pipeline
+       cache is written after each batch of them (rd_pipelines_lazy) */
+    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
+    if (retry == STARTUP_RETRY_LAZY || lazyStart || devLazy != NULL) {
+        char why[160];
+
+        if (devLazy != NULL) {
+            snprintf(why, sizeof(why), "on this device (%s)", devLazy);
+        } else if (retry == STARTUP_RETRY_LAZY) {
+            snprintf(why, sizeof(why), "(a restart after a graphics driver crash)");
+        } else {
+            snprintf(why, sizeof(why), "(the last run made them that way)");
+        }
         /* each first-use pipeline's note in the file, for the whole run, so
            a further end names the pipeline; no further step follows */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
+        rd_pipelines_lazy(why);
         /* the blend checked on this GPU (rd.h rd_blend_selftest) */
         rd_blend_selftest();
     } else {
@@ -2740,6 +2751,13 @@ int ico_window_pump(void)
         s_quitLatched = 0;
         quit = 1;
     }
+    /* a run without the start-up set (issues 93 and 107): the pipelines
+       the last frames made closed as a batch once they pause (the pipeline
+       cache written, the batch's line logged), the count for the
+       low-memory line, and such a line waiting for the activity file */
+    rd_pipelines_lazy_tick();
+    ico_diag_set_pipelines_made(rd_pipeline_count());
+    ico_diag_startup_activity_poll();
 
 #ifdef _WIN32
     /* the display and the computer kept awake (window_pump_win.h), and the
@@ -3200,6 +3218,8 @@ static int pipeline_progress(void *ctx, uint32_t done, uint32_t total)
     /* the heartbeat line says how far the set is (diag_host.h) */
     ico_diag_set_pipelines(done, done < total ? total : 0,
                            (unsigned)(rd_precreate_longest_ms() + 0.5f));
+    /* a low-memory signal meanwhile into the activity file (issue 93) */
+    ico_diag_startup_activity_poll();
     if (done == 0) {
         p->startNs = now;
         p->drawn = 0;

@@ -770,6 +770,31 @@ void rd_set_batch_fn(RdActivityFn fn)
     s_batchFn = fn;
 }
 
+/* rd_set_memory_fn: the process's memory for the batches' lines (issues
+ * 93 and 107) */
+static RdMemoryFn s_memoryFn;
+
+void rd_set_memory_fn(RdMemoryFn fn)
+{
+    s_memoryFn = fn;
+}
+
+/* "memory 185 MB (most 194 MB), pipeline cache 3104 KB": the process's
+ * resident memory and its peak (rd_set_memory_fn) and the pipeline cache's
+ * data (rhi_pipeline_cache_size), for a batch's line: a set that the system
+ * ends shows whether the memory grew with it, batch by batch */
+static void memoryText(char *out, size_t size)
+{
+    long rss = -1, peak = -1;
+    char mem[64] = "memory unknown";
+    if (s_memoryFn != NULL && s_memoryFn(&rss, &peak) == 0 && rss >= 0) {
+        snprintf(mem, sizeof(mem), "memory %ld MB (most %ld MB)", rss / 1024,
+                 (peak >= 0 ? peak : rss) / 1024);
+    }
+    snprintf(out, size, "%s, pipeline cache %llu KB", mem,
+             (unsigned long long)((rhi_pipeline_cache_size() + 1023u) / 1024u));
+}
+
 /* the device's compiler as its driver names it ("E031.41.03.47"; "" none),
  * for the VU batches' notes and lines (rd__vu_policy_init) */
 static char s_compiler[64];
@@ -1040,6 +1065,54 @@ static void gatherKey(const RdPipeKeyInt *k)
     }
 }
 
+/* rd_pipelines_lazy (issues 93 and 107): no start-up set; the pipelines
+ * a frame first needs are made at once, one at a time, and counted into a
+ * batch that rd_pipelines_lazy_tick closes once the creations pause
+ * (RD_LAZY_QUIET_MS without one) or after RD_LAZY_BATCH_MS: the pipeline
+ * cache is written then (so a start the system ends, or a device that
+ * freezes, keeps what was compiled before it) and the batch's line goes to
+ * the log and the activity file as a start-up batch's does */
+#define RD_LAZY_QUIET_MS 500.0
+#define RD_LAZY_BATCH_MS 2000.0
+
+static struct {
+    bool on;
+    uint32_t n;       /* the open batch's pipelines (0: none open) */
+    uint32_t made;    /* made on first use this run, the open batch's too */
+    uint32_t batches; /* closed */
+    float lo, hi;
+    double sum;
+    float slowMs;
+    RdPipeKeyInt slow;
+    double t0, tLast; /* the open batch's first and last creation */
+} s_lazy;
+
+bool rd__pipelines_lazy_on(void)
+{
+    return s_lazy.on;
+}
+
+static void lazyCount(const RdPipeKeyInt *k, float ms)
+{
+    const double now = rd__now_ms();
+    if (s_lazy.n == 0) {
+        s_lazy.t0 = now - ms;
+        s_lazy.lo = s_lazy.hi = ms;
+        s_lazy.sum = 0.0;
+        s_lazy.slowMs = -1.0f;
+    }
+    s_lazy.lo = ms < s_lazy.lo ? ms : s_lazy.lo;
+    s_lazy.hi = ms > s_lazy.hi ? ms : s_lazy.hi;
+    s_lazy.sum += ms;
+    if (ms > s_lazy.slowMs) {
+        s_lazy.slowMs = ms;
+        s_lazy.slow = *k;
+    }
+    s_lazy.n++;
+    s_lazy.made++;
+    s_lazy.tLast = now;
+}
+
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 {
     RdPipeKeyInt tmp;
@@ -1058,7 +1131,11 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
         return (RhiPipeline){0};
     }
     activityCreating(k);
+    const double t0 = rd__now_ms();
     RhiPipeline p = createPipeline(k);
+    if (s_lazy.on) {
+        lazyCount(k, (float)(rd__now_ms() - t0));
+    }
     activityDone();
     keepPipeline(k, p, at);
     return p;
@@ -1224,42 +1301,60 @@ static void preTimesLog(const PreTimes *t)
     rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
 }
 
-/* A batch with a VU vertex shader done (issue 107): its compile times,
- * each pipeline's as the worker measured it (RhiPipelineBatch.ms), as one
- * line for the log (with every time, in the batch's order) and one for the
- * activity file (rd_set_batch_fn: min, max and mean, overall and by
- * vertex shader with the shader's words and instructions), so a device
- * that froze shows the sizes and times of every batch it finished */
+/* A batch done: its compile times, each pipeline's as the worker measured
+ * it (RhiPipelineBatch.ms), as one line for the log (with every time, in
+ * the batch's order) and one for the activity file (rd_set_batch_fn: min,
+ * max and mean, the process's memory and the pipeline cache's size after
+ * it, then a VU batch's times by vertex shader with the shader's words and
+ * instructions, a 2D batch's slowest pipeline with its modules), so a
+ * device that froze or a start the system ended shows the sizes, times and
+ * memory of every batch it finished (issue 107 for the VU batches; issue
+ * 93 and 107's v0.7.7 logs for the 2D ones, both ending inside the 2D
+ * half of the set) */
 static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, uint32_t first,
                        uint32_t last, uint32_t total, double wallMs, uint32_t threads)
 {
-    char line[600];
+    char line[600], mem[96];
     size_t at = 0;
     float lo = 0.0f, hi = 0.0f;
     double sum = 0.0;
     bool vu = false;
+    uint32_t slow = 0;
     for (uint32_t j = 0; j < n; j++) {
         vu = vu || keyIsVu(&keys[j]);
         lo = j == 0 || ms[j] < lo ? ms[j] : lo;
         hi = j == 0 || ms[j] > hi ? ms[j] : hi;
+        slow = ms[j] > ms[slow] ? j : slow;
         sum += ms[j];
     }
-    if (!vu || n == 0) {
+    if (n == 0) {
         return;
     }
+    memoryText(mem, sizeof(mem));
 #define BT_PUT(...)                                                                                \
     do {                                                                                           \
         const int k_ =                                                                             \
             at < sizeof(line) ? snprintf(line + at, sizeof(line) - at, __VA_ARGS__) : 0;           \
         at = k_ > 0 ? (at + (size_t)k_ < sizeof(line) ? at + (size_t)k_ : sizeof(line) - 1) : at;  \
     } while (0)
-    BT_PUT("VU batch %u-%u of %u (%s, compiler %s): %u pipelines %.2f-%.2f s, mean %.2f s, "
-           "%.1f s on %u threads",
-           first, last, total, keys[0].vuExt ? "extended" : "plain",
-           s_compiler[0] ? s_compiler : "unnamed by the driver", n, lo / 1000.0, hi / 1000.0,
-           sum / n / 1000.0, wallMs / 1000.0, threads);
+    if (vu) {
+        BT_PUT("VU batch %u-%u of %u (%s, compiler %s)", first, last, total,
+               keys[0].vuExt ? "extended" : "plain",
+               s_compiler[0] ? s_compiler : "unnamed by the driver");
+    } else {
+        BT_PUT("2D batch %u-%u of %u (compiler %s)", first, last, total,
+               s_compiler[0] ? s_compiler : "unnamed by the driver");
+    }
+    BT_PUT(": %u pipelines %.2f-%.2f s, mean %.2f s, %.1f s on %u threads; %s", n, lo / 1000.0,
+           hi / 1000.0, sum / n / 1000.0, wallMs / 1000.0, threads, mem);
+    if (!vu) {
+        char w[96], mods[160];
+        keyWords(&keys[slow], w, sizeof(w));
+        keyModules(&keys[slow], mods, sizeof(mods));
+        BT_PUT("; slowest %.2f s %s (%s)", ms[slow] / 1000.0, w, mods);
+    }
     /* by vertex shader, in the batch's order (the keys come grouped) */
-    for (uint32_t j = 0; j < n;) {
+    for (uint32_t j = 0; vu && j < n;) {
         uint32_t e = j + 1;
         while (e < n && keys[e].vs == keys[j].vs && keys[e].vuExt == keys[j].vuExt) {
             e++;
@@ -1289,6 +1384,15 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
 #undef BT_PUT
     rd__log("pipelines: compiled %s", line);
 }
+
+/* The start-up set's pipeline cache writes between its batches (issues 93
+ * and 107): after a batch that ends RD_SET_SAVE_MS or more after the last
+ * write (or the set's start), so a set the system ends or a device that
+ * freezes keeps what it compiled and the next start compiles only the
+ * rest; a desktop's set, done in a few seconds, writes once or not at
+ * all before the window's write at its end */
+#define RD_SET_SAVE_MS 5000.0
+static double s_setSavedMs;
 
 /* the counts of one createKeys */
 typedef struct PreCounts {
@@ -1402,6 +1506,11 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);
             batchTimes(bk, bms, nb, first + 1, i, m, rd__now_ms() - bt0, batch.threads);
+            if (times != NULL && i < m && rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) {
+                /* the start-up set (times: not a replay's gathered keys) */
+                (void)rhi_pipeline_cache_save();
+                s_setSavedMs = rd__now_ms();
+            }
             s_batchNote[0] = '\0';
             if (batch.threads > c->threads) {
                 c->threads = batch.threads;
@@ -1470,6 +1579,7 @@ uint32_t rd_precreate_pipelines(void)
     static PreTimes times;
     memset(&times, 0, sizeof(times));
     s_preLongestMs = 0.0f;
+    s_setSavedMs = t0;
     PreCounts c;
     createKeys(keys, m, false, &times, &c);
     if (c.stop) {
@@ -1519,6 +1629,62 @@ uint32_t rd__pipeline_create_gathered(bool *stopped)
 uint32_t rd__pipeline_count(void)
 {
     return s_count;
+}
+
+uint32_t rd_pipeline_count(void)
+{
+    return s_count;
+}
+
+void rd_pipelines_lazy(const char *why)
+{
+    memset(&s_lazy, 0, sizeof(s_lazy));
+    s_lazy.on = true;
+    rd__log("pipelines: no start-up set %s: pipelines are made as the game needs them",
+            why != NULL && why[0] != '\0' ? why : "(no reason given)");
+    rd__log("pipelines: the pipeline cache holds %llu KB at the start; it is written after each "
+            "batch of new pipelines (%.1f s without one, or %.1f s after the batch's first)",
+            (unsigned long long)((rhi_pipeline_cache_size() + 1023u) / 1024u),
+            RD_LAZY_QUIET_MS / 1000.0, RD_LAZY_BATCH_MS / 1000.0);
+}
+
+/* the open lazy batch closed: the cache written, then its line ("lazy
+ * batch 3, pipelines 41-57 of this run (compiler E031.41.03.47): 17
+ * pipelines 0.02-0.61 s, mean 0.14 s, over 1.8 s; memory 210 MB (most 214
+ * MB), pipeline cache 3104 KB; slowest 0.61 s program ... (font_sheet_ps
+ * ...)") to the log and the activity file (rd_set_batch_fn) */
+static void lazyBatchEnd(double now)
+{
+    char line[600], mem[96], w[96], mods[160];
+    (void)rhi_pipeline_cache_save();
+    memoryText(mem, sizeof(mem));
+    keyWords(&s_lazy.slow, w, sizeof(w));
+    keyModules(&s_lazy.slow, mods, sizeof(mods));
+    s_lazy.batches++;
+    snprintf(line, sizeof(line),
+             "lazy batch %u, pipelines %u-%u of this run (compiler %s): %u pipelines %.2f-%.2f "
+             "s, mean %.2f s, over %.1f s; %s; slowest %.2f s %s (%s)",
+             s_lazy.batches, s_lazy.made - s_lazy.n + 1, s_lazy.made,
+             s_compiler[0] ? s_compiler : "unnamed by the driver", s_lazy.n, s_lazy.lo / 1000.0,
+             s_lazy.hi / 1000.0, s_lazy.sum / s_lazy.n / 1000.0, (now - s_lazy.t0) / 1000.0, mem,
+             s_lazy.slowMs / 1000.0, w, mods);
+    s_lazy.n = 0;
+    if (s_batchFn != NULL) {
+        s_batchFn(line);
+    }
+    rd__log("pipelines: compiled %s", line);
+}
+
+void rd_pipelines_lazy_tick(void)
+{
+    if (!s_lazy.on || s_lazy.n == 0 || !g_rd.hasDevice) {
+        return;
+    }
+    const double now = rd__now_ms();
+    if (now - s_lazy.tLast < RD_LAZY_QUIET_MS && now - s_lazy.t0 < RD_LAZY_BATCH_MS) {
+        return;
+    }
+    lazyBatchEnd(now);
 }
 
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)

@@ -548,4 +548,19 @@ JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeScreen(JNIEnv *env
     SDL_UnlockSpinlock(&s_screenLock);
 }
 
+/* IcoActivity.nativeTrimMemory (a static native method, issue 93): the
+   system's onTrimMemory with its level, before SDL's own handler turns it
+   into SDL_EVENT_LOW_MEMORY (which carries no level). On the activity's
+   thread: diag_host.c logs it at once with the pipelines made and the
+   process's memory, and the main thread's next poll puts it in the
+   activity file, so a start the system ends shows whether a low-memory
+   signal came first. */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeTrimMemory(JNIEnv *env, jclass cls,
+                                                                         jint level)
+{
+    (void)env;
+    (void)cls;
+    ico_diag_note_low_memory((int)level);
+}
+
 #endif /* __ANDROID__ */

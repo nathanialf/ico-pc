@@ -96,6 +96,25 @@ public class IcoActivity extends SDLActivity {
         super.onStop();
     }
 
+    // The system's request to free memory (issue 93), with its level, to the
+    // native side's log and start-up activity file (host_android.c
+    // nativeTrimMemory), then SDL's own handler (SDL_EVENT_LOW_MEMORY, which
+    // carries no level). Skipped when SDL could not load the libraries; a
+    // missing native method is ignored.
+    private static native void nativeTrimMemory(int level);
+
+    @Override
+    public void onTrimMemory(int level) {
+        if (!SDLActivity.mBrokenLibraries) {
+            try {
+                nativeTrimMemory(level);
+            } catch (UnsatisfiedLinkError e) {
+                // libmain.so without the method: SDL's event only
+            }
+        }
+        super.onTrimMemory(level);
+    }
+
     // density is in the manifest's configChanges, so a new display size
     // setting (or moving to the other screen of a foldable) comes here
     // instead of restarting the activity

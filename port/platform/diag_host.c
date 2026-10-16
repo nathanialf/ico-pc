@@ -1211,20 +1211,31 @@ static void act_close(void)
    batch, and after the reboot a note still in the system's cache would be
    gone): a start-up batch's note ("creating pipelines ...", about 20 a
    cold start, a few ms each) and any note naming an extended VU pipeline
-   (startup_retry_note_has_vu_ext: a lazy run's). Not the single
-   pipelines of the progress screen's frames, nor a lazy run's others. */
+   (startup_retry_note_has_vu_ext: a lazy run's), and in a lazy run each
+   pipeline's note (issues 93 and 107: the Adreno 740 makes every pipeline
+   that way, and a freeze in one must still name it; each such creation
+   takes far longer than the write). Not the single pipelines of the
+   progress screen's frames. */
 static int act_sync_note(const char *note)
 {
-    return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_ext(note);
+    return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_ext(note) ||
+           (act_mode == ICO_DIAG_ACTIVITY_LAZY && strncmp(note, "creating pipeline ", 18) == 0);
 }
 
-/* the start-up batches' compile times (ico_diag_startup_activity_batch):
-   the file's "compiled: " lines, the last ICO_DIAG_ACTIVITY_BATCHES */
-#define ACT_BATCH_BYTES 400
+/* the start-up batches' compile times (ico_diag_startup_activity_batch,
+   the file's "compiled: " lines) and the system's low-memory signals
+   (ico_diag_note_low_memory, its "system: " lines), in order, the last
+   ICO_DIAG_ACTIVITY_BATCHES, each kept with its prefix */
+#define ACT_BATCH_BYTES 480
 static const char act_batch_prefix[] = "compiled: ";
+static const char act_system_prefix[] = "system: ";
 static char act_batches[ICO_DIAG_ACTIVITY_BATCHES][ACT_BATCH_BYTES];
 static unsigned int act_nbatches;
-#define ACT_BATCHES_TEXT (ICO_DIAG_ACTIVITY_BATCHES * (ACT_BATCH_BYTES + sizeof act_batch_prefix))
+#define ACT_BATCHES_TEXT (ICO_DIAG_ACTIVITY_BATCHES * (ACT_BATCH_BYTES + 1))
+/* a low-memory signal from another thread waiting for the main thread's
+   next write (ico_diag_startup_activity_poll), under the log's lock */
+static char act_system_pending[ACT_BATCH_BYTES];
+static volatile int act_system_waiting;
 
 static void act_write(const char *note)
 {
@@ -1242,7 +1253,7 @@ static void act_write(const char *note)
             nb > ICO_DIAG_ACTIVITY_BATCHES ? nb - ICO_DIAG_ACTIVITY_BATCHES : 0;
 
         for (unsigned int i = first; i < nb && len >= 0 && (size_t)len < cap; i++) {
-            const int k = snprintf(text + len, cap - (size_t)len, "\n%s%s", act_batch_prefix,
+            const int k = snprintf(text + len, cap - (size_t)len, "\n%s",
                                    act_batches[i % ICO_DIAG_ACTIVITY_BATCHES]);
             len = k < 0 ? len : len + k;
         }
@@ -1296,6 +1307,16 @@ static const char act_between[] =
    is no ended run */
 static const char act_lazy_exit[] = "exited with the pipelines created as the frames needed them";
 
+/* the note a write of the batches' lines keeps: the run's own, else what
+   the mode's file says between two creations */
+static const char *act_current(void)
+{
+    if (activity[0] != '\0') {
+        return activity;
+    }
+    return act_mode == ICO_DIAG_ACTIVITY_LAZY ? act_between : "creating the start-up pipelines";
+}
+
 void ico_diag_set_activity(const char *fmt, ...)
 {
     va_list ap;
@@ -1333,14 +1354,108 @@ void ico_diag_startup_activity_batch(const char *line)
     if (line == NULL || line[0] == '\0') {
         return;
     }
-    snprintf(act_batches[act_nbatches % ICO_DIAG_ACTIVITY_BATCHES], ACT_BATCH_BYTES, "%s", line);
+    snprintf(act_batches[act_nbatches % ICO_DIAG_ACTIVITY_BATCHES], ACT_BATCH_BYTES, "%s%s",
+             act_batch_prefix, line);
     act_nbatches++;
     /* written at once with the batch's note still in the file (a note of
        a batch goes to the disc, act_sync_note), so a device that freezes
        before the next batch's note still leaves it */
     if (act_mode != 0) {
-        act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
+        act_write(act_current());
     }
+}
+
+/* --- The system's low-memory signals (issue 93) ------------------------------ */
+
+/* ico_diag_set_pipelines_made: the pipelines made so far (a run without
+   the start-up set) */
+static volatile unsigned int pipes_made;
+static volatile unsigned int low_memory_count;
+
+void ico_diag_set_pipelines_made(unsigned int n)
+{
+    pipes_made = n;
+}
+
+/* Android's ComponentCallbacks2 TRIM_MEMORY_* levels */
+static const char *trim_name(int level)
+{
+    switch (level) {
+    case 5:
+        return "running moderate";
+    case 10:
+        return "running low";
+    case 15:
+        return "running critical";
+    case 20:
+        return "the app's screen hidden";
+    case 40:
+        return "background";
+    case 60:
+        return "moderate";
+    case 80:
+        return "complete";
+    default:
+        return "a level not named";
+    }
+}
+
+void ico_diag_note_low_memory(int level)
+{
+    char line[ACT_BATCH_BYTES - sizeof act_system_prefix], pipes[96], mem[64], lv[64];
+    long rss = -1, peak = -1;
+    const unsigned int nth = ++low_memory_count;
+    const unsigned int total = pipes_total;
+    if (total > 0) {
+        snprintf(pipes, sizeof pipes, "at pipelines %u of %u of the start-up set", pipes_done,
+                 total);
+    } else {
+        snprintf(pipes, sizeof pipes, "with %u pipelines made", pipes_made);
+    }
+    if (ico_diag_process_memory(&rss, &peak) == 0 && rss >= 0) {
+        snprintf(mem, sizeof mem, "memory %ld MB (most %ld MB)", rss / 1024,
+                 (peak >= 0 ? peak : rss) / 1024);
+    } else {
+        snprintf(mem, sizeof mem, "memory unknown");
+    }
+    if (level >= 0) {
+        snprintf(lv, sizeof lv, "onTrimMemory level %d, %s", level, trim_name(level));
+    } else {
+        snprintf(lv, sizeof lv, "no level given");
+    }
+    snprintf(line, sizeof line, "low memory (%s; signal %u of this run) %s; %s", lv, nth, pipes,
+             mem);
+    ico_diag_log("ico_pc: the system asked the app to free memory: %s", line);
+    if (inited) {
+        lock_take();
+    }
+    snprintf(act_system_pending, sizeof act_system_pending, "%s%s", act_system_prefix, line);
+    act_system_waiting = 1;
+    if (inited) {
+        lock_give();
+    }
+}
+
+void ico_diag_startup_activity_poll(void)
+{
+    char line[sizeof act_system_pending];
+    if (!act_system_waiting) {
+        return;
+    }
+    if (inited) {
+        lock_take();
+    }
+    memcpy(line, act_system_pending, sizeof line);
+    act_system_waiting = 0;
+    if (inited) {
+        lock_give();
+    }
+    if (act_mode == 0) {
+        return; /* not recording: the log's line only */
+    }
+    snprintf(act_batches[act_nbatches % ICO_DIAG_ACTIVITY_BATCHES], ACT_BATCH_BYTES, "%s", line);
+    act_nbatches++;
+    act_write(act_current());
 }
 
 static void act_remove(void)
@@ -1374,6 +1489,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     const char *ver = "";
     char *prev = buf;
     char *loss = NULL;
+    const char *lastBatch = NULL;
     char *nl;
     size_t n = 0;
     FILE *f;
@@ -1428,8 +1544,14 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         if (strncmp(line, act_batch_prefix, sizeof act_batch_prefix - 1) == 0) {
             /* issue 107: the sizes and times of the batches a start that
                froze did finish */
+            lastBatch = line + sizeof act_batch_prefix - 1;
             ico_diag_log("ico_pc: the previous run (version %s) compiled: %s",
-                         ver[0] != '\0' ? ver : "unknown", line + sizeof act_batch_prefix - 1);
+                         ver[0] != '\0' ? ver : "unknown", lastBatch);
+        } else if (strncmp(line, act_system_prefix, sizeof act_system_prefix - 1) == 0) {
+            /* issue 93: the system's low-memory signals, in their place
+               among the batches */
+            ico_diag_log("ico_pc: the previous run (version %s) was told by the system: %s",
+                         ver[0] != '\0' ? ver : "unknown", line + sizeof act_system_prefix - 1);
         } else if (loss == NULL && line[0] != '\0') {
             loss = line;
         }
@@ -1437,6 +1559,12 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
     prev[strcspn(prev, "\r\n")] = '\0';
+    if (lastBatch != NULL) {
+        /* issues 93 and 107: the last batch it finished, with the memory
+           and the pipeline cache's size after it (the system ending a
+           start shows as memory that grew batch by batch, or not) */
+        ico_diag_log("ico_pc: the previous run's last finished batch: %s", lastBatch);
+    }
     snprintf(act_prev, sizeof act_prev, "%.*s", (int)(sizeof act_prev - 1), prev);
     act_remove();
     if (loss != NULL && strcmp(loss, act_loss_none) == 0) {

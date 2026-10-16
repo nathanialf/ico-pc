@@ -507,6 +507,11 @@ bool rhi_pipeline_cache_save(void)
     return s_up && be()->pipeline_cache_save();
 }
 
+uint64_t rhi_pipeline_cache_size(void)
+{
+    return s_up ? be()->pipeline_cache_size() : 0;
+}
+
 void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 {
     be()->set_vulkan_loader(getInstanceProcAddr);

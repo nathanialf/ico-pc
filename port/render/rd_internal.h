@@ -1179,6 +1179,8 @@ void rd__pipeline_cache_clear(void);
 void rd__pipeline_gather(bool on);
 uint32_t rd__pipeline_create_gathered(bool *stopped);
 uint32_t rd__pipeline_count(void);
+/* rd_pipelines_lazy was called (the summary's pipelines part) */
+bool rd__pipelines_lazy_on(void);
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i);
 /* The pipelines the implemented programs can reach from the game's state
  * set (rd_pipeline.c lists the families and their sources).  Writes up to
