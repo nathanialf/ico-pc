@@ -637,14 +637,17 @@ such a run each first-use pipeline's note goes to the disc before its compile (f
 twice: by the backend (`rhi_vk: pipeline cache: <n> bytes from <path>`, or `rhi_vk: pipeline
 cache: starting empty (<path> holds none for this device)`) and by `rd_pipelines_lazy` (`rd:
 pipelines: the pipeline cache holds <n> KB at the start; it is written after each batch of new
-pipelines ...`). The start-up set writes the cache once, at its end (the window's write), and
-its batches' lines say `pipeline cache not measured`: the measure (`vkGetPipelineCacheData` over
-the whole cache) and the writes between batches are kept to the lazy path and to a device of the
-table (`cacheKeptPerBatch`; there the set is skipped, so only `RD_SET_SAVE_MS`'s write after a
-batch that ends 5 s or more after the last one would apply to a set). On an RTX 3090 with a 21 MB
-cache, a measure after every batch and a write or compare every 5 s took a warm start from 1.9 s
-to 16.7 s and 31.2 s, every pipeline a cache hit. The cache file is written to
-`<path>.tmp`, flushed to the disk, then moved over the old file in one step (`vkr_cache_write`),
+pipelines ...`). On a phone or a tablet (Android, iOS) the start-up set also writes the cache after
+a batch that ends 5 s or more after the last write (`RD_SET_SAVE_MS`), and once more at the set's
+end by the window, so a phone's set that the system ends keeps most of its work and the next start
+compiles only the rest; its batches' lines carry the cache's size (`pipeline cache 3104 KB`), so a
+set the system ends shows how the cache grew batch by batch. On a desktop the start-up set writes
+the cache once, at its end (the window's write), and its batches' lines say `pipeline cache not
+measured`: the measure (`vkGetPipelineCacheData` over the whole cache) and the writes between
+batches are kept there to the lazy path and to a device of the table (`cacheKeptPerBatch`). On an
+RTX 3090 with a 21 MB cache, a measure after every batch and a write or compare every 5 s took a
+warm start from 1.9 s to 16.7 s and 31.2 s, every pipeline a cache hit. The cache file is written
+to `<path>.tmp`, flushed to the disk, then moved over the old file in one step (`vkr_cache_write`),
 so a freeze mid-write leaves the old cache or the new one, never an empty or missing file.
 
 **The batches' lines.** Every batch of the set is logged as it completes, the 2D ones too: `rd:
@@ -653,8 +656,8 @@ pipelines: compiled 2D batch 193-224 of 527 (compiler ...): 32 pipelines 0.02-0.
 <key> (<modules>); each (s): ...`; the VU ones as in the next section. The memory is the process's
 resident memory and its peak (`rd_set_memory_fn`, `ico_diag_process_memory`; `memory unknown`
 where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulkan's data size, 0
-on Direct3D 12) on the lazy path and a device of the table only (`pipeline cache 3104 KB`), `not
-measured` elsewhere (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
+on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the table (`pipeline
+cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
 
 ### The VU shader variants
@@ -730,7 +733,7 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   compiling 329-360 of 702 (extended VU): ...`) and as it completes, with every pipeline's compile
   time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 702 (extended,
   compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185
-  MB (most 194 MB), pipeline cache not measured; vu_prelit_vs 50325 words 9801 instructions: 8 x
+  MB (most 194 MB), pipeline cache 3104 KB; vu_prelit_vs 50325 words 9801 instructions: 8 x
   1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines:
   [The start-up set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
   `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after

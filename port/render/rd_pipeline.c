@@ -780,16 +780,22 @@ void rd_set_memory_fn(RdMemoryFn fn)
 }
 
 /* Whether the pipeline cache is measured for the batches' lines and written
- * between the start-up set's batches (issues 93 and 107): on the lazy path
- * and on a device of the table (RhiLimits.lazyPipelines), never in a
- * desktop's start-up set.  Each measure is vkGetPipelineCacheData over the
+ * between the start-up set's batches (issues 93 and 107): on a phone or a
+ * tablet (Android, iOS) always, so a set the system ends keeps what it
+ * compiled and its lines show the cache's growth; on a desktop only on the
+ * lazy path and on a device of the table (RhiLimits.lazyPipelines), never
+ * in its start-up set.  Each measure is vkGetPipelineCacheData over the
  * whole cache (21 MB on an RTX 3090) and each write compares or writes it
  * all: with them after every batch a warm start on that card took 16.7 s
  * and 31.2 s against 1.9 s without, every pipeline a cache hit. */
 static bool cacheKeptPerBatch(void)
 {
+#if defined(__ANDROID__) || defined(ICO_IOS)
+    return true;
+#else
     const RhiLimits *lim = rhi_limits();
     return rd__pipelines_lazy_on() || (lim != NULL && lim->lazyPipelines != NULL);
+#endif
 }
 
 /* "memory 185 MB (most 194 MB), pipeline cache 3104 KB": the process's
@@ -1404,7 +1410,7 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
 }
 
 /* The start-up set's pipeline cache writes between its batches (issues 93
- * and 107), on a device of the table only (cacheKeptPerBatch): after a
+ * and 107), on a phone or a tablet only (cacheKeptPerBatch): after a
  * batch that ends RD_SET_SAVE_MS or more after the last write (or the
  * set's start), so a set the system ends or a device that freezes keeps
  * what it compiled and the next start compiles only the rest; a desktop's
@@ -1527,7 +1533,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             if (times != NULL && i < m && rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS &&
                 cacheKeptPerBatch()) {
                 /* the start-up set (times: not a replay's gathered keys) on
-                 * a device of the table only: a desktop's set writes once,
+                 * a phone or a tablet only: a desktop's set writes once,
                  * at its end (the window's write) */
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
