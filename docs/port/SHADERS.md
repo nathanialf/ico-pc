@@ -223,8 +223,8 @@ Functions: `gs_tfx_mod`, `gs_texa_alpha` (the alpha of a 24- or 16-bit texel und
 `TEXA_80_80`, `TEXA_7F_81_AEM`, `TEXA_80_80_AEM`), `gs_alpha_pass` (the `ATST_*` tests),
 `gs_blend_term`, `gs_blend_factor`, `gs_blend_ch` (with COLCLAMP clamping or wrapping),
 `gs_blend_reg_ch` (from the ALPHA register), `gs_dst_channel` (one channel of the destination read),
-`gs_z_to_depth` (a GS Z to a depth that grows with it) and `gs_wrap_repeat` (REPEAT's residue,
-[Integer forms](#integer-forms)) (`port/shaders/gs_math.hlsli`).
+`gs_z_to_depth` (a GS Z to a depth that grows with it), `gs_wrap_repeat` (REPEAT's residue) and
+`gs_div_trunc` (an integer division) ([Integer forms](#integer-forms)) (`port/shaders/gs_math.hlsli`).
 
 ## sheet_text.hlsli
 
@@ -276,6 +276,19 @@ the code and a CPU sweep against the plain operator in `gs_math_test`:
   `int`; the test is per draw (a texture's size), kept a branch (`GS_BRANCH`, SPIR-V
   `DontFlatten`) so the modulo runs only for a size that is not a power of two. Users:
   `gs_texa_load` and `gs_load_lv` (`common.hlsli`), `fx_texel` (`fx_sprite.hlsl`).
+- **Integer division** is `gs_div_trunc(n, d)` (`gs_math.hlsli`): `n / d` truncated toward zero
+  as `OpSDiv` gives it, from the float quotient of `|n|` and `d` and one integer correction each
+  way, exact for `1 <= d <= 2^24` and `|n| < d * 2^21`. There the float quotient is within 0.57
+  of the exact one (the conversion within one ulp, the divide within 2.5 ulp: Vulkan's `OpFDiv`
+  bound, which D3D's reciprocal and multiply and Metal's fast-math divide meet), so its integer
+  part is the floor or one off, and the remainder `|n| - q * d` (exact modulo 2^32) says which.
+  The function's comment carries the bounds of its one user, `fx_sprite_ps`'s UV step
+  (`(X - x0) * (u1 - u0) / (x1 - x0)`: `|n| <= (d + 30) * 65543`); a new user proves its own.
+  `gs_math_test` sweeps it against `/` with the float quotient moved to the corners of those
+  bounds.
+- **A divide by a per-draw float that is often 1** is skipped in a branch when it is 1
+  (`fx_sprite_ps`'s coverage, `fp / ts` at scale 1): the reciprocal of 1.0 is 1.0 and `x * 1.0`
+  is `x`.
 
 ## The envelope
 

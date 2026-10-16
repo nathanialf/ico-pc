@@ -128,8 +128,16 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
     // the texel in the frame's texels: a Full pixel target's left-out
     // texels added (g_vpo.z, 0 on every other target)
     const float2 fp = pos.xy + float2(g_vpo.z, 0.0);
-    const int2 gb = int2(floor((fp - 0.5) / ts)) * 16;
-    const int2 gp = int2(floor((fp / ts - 0.5) * 16.0 + 0.5));
+    // fp / ts: four divides by a per-draw value, skipped at scale 1, where
+    // a divide by exactly 1.0 returns its dividend (the reciprocal of 1.0
+    // is 1.0 and x * 1.0 is x)
+    float2 fb = fp - 0.5, fc = fp;
+    [branch] if (ts.x != 1.0 || ts.y != 1.0) {
+        fb = fb / ts;
+        fc = fc / ts;
+    }
+    const int2 gb = int2(floor(fb)) * 16;
+    const int2 gp = int2(floor((fc - 0.5) * 16.0 + 0.5));
     const int ox = int(round(g_origin.x * 16.0)), oy = int(round(g_origin.y * 16.0));
     const int X = ox + gp.x;
     const int Y = oy + gp.y;
@@ -142,8 +150,10 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
     if ((flags & FXF_TEXTURED) != 0u) {
         const int u0 = int(g_uvRect.x), v0 = int(g_uvRect.y);
         const int u1 = int(g_uvRect.z), v1 = int(g_uvRect.w);
-        const int u = u0 + ((X - x0) * (u1 - u0)) / (x1 - x0);
-        const int v = v0 + ((Y - y0) * (v1 - v0)) / (y1 - y0);
+        // the GS's U(X) = u0 + (X - x0) (u1 - u0) / (x1 - x0), truncated,
+        // without the integer divide (gs_div_trunc: the operands' bounds)
+        const int u = u0 + gs_div_trunc((X - x0) * (u1 - u0), x1 - x0);
+        const int v = v0 + gs_div_trunc((Y - y0) * (v1 - v0), y1 - y0);
         uint4 t;
         // the UV in t1's own texels, 12.4 (u, v at scale 1)
         const float2 ss = fx_src_scale();

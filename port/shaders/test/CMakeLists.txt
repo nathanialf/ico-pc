@@ -1,6 +1,7 @@
 # port/shaders/test: the shader toolchain's tests.
 #   shaders_table  every embedded entry compiled for SPIR-V and signed DXIL
-#   gs_math        gs_math.hlsli as C against port/test/gs_blend_test.c's formulas
+#   gs_math        gs_math.hlsli as C against port/test/gs_blend_test.c's formulas,
+#                  its integer forms against the operators they replace
 #   shaders_pixel  sprite, blit and blend_int drawn through the Vulkan RHI
 #                  (skips, exit 77, without a Vulkan device), after
 #                  common.hlsli's above-1x kernels as C against
@@ -15,6 +16,9 @@ target_link_libraries(shaders_table_test PRIVATE ico_shaders)
 add_executable(gs_math_test gs_math_test.c)
 target_include_directories(gs_math_test PRIVATE "${ICO_SHADER_DIR}")
 target_compile_options(gs_math_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(NOT WIN32)
+    target_link_libraries(gs_math_test PRIVATE m) # nextafterf: gs_div_trunc's moved quotients
+endif()
 
 if(TARGET ico_rhi_vk)
     add_executable(shaders_pixel_test shaders_pixel_test.c

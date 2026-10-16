@@ -2,9 +2,35 @@
  * port/test/gs_blend_test.c (gs_blend_int, gs_tfx_int) and the GS rules
  * re-expressed here (TEXA, alpha test, Z mapping), and the shaders' integer
  * forms against the plain operators they replace (gs_wrap_repeat against
- * the double modulo). Tables are exhaustive where the domain is small and
+ * the double modulo, gs_div_trunc against the integer division with its
+ * float quotient moved as far as the APIs allow). Tables are exhaustive where the domain is small and
  * dense elsewhere. */
+#include <math.h>
 #include "hlsl_shim.h"
+
+/* gs_div_trunc's float quotient, moved: float(a) by s_convUlps ulps and the
+ * divide's result by s_quotUlps (nextafterf steps), so the sweep covers
+ * every quotient a conversion within one ulp and a divide within 2.5 ulp
+ * (three steps from the correctly rounded one) can give */
+static int s_convUlps, s_quotUlps;
+
+static float step_ulps(float x, int k)
+{
+    for (; k > 0; k--) {
+        x = nextafterf(x, INFINITY);
+    }
+    for (; k < 0; k++) {
+        x = nextafterf(x, -INFINITY);
+    }
+    return x;
+}
+
+static float moved_quot(uint a, int d)
+{
+    return step_ulps(step_ulps((float)a, s_convUlps) / (float)d, s_quotUlps);
+}
+
+#define GS_DIV_QUOT(a, d) moved_quot((a), (d))
 #include "gs_math.hlsli"
 #include "shader_consts.h"
 #include "../../render/rd_state.h"
@@ -79,6 +105,73 @@ static void check_wrap(int n, int span)
     const int edge[] = {INT_MIN, INT_MIN + 1, INT_MAX - 1, INT_MAX, -n, n, -n - 1, n + 1};
     for (int i = 0; i < (int)(sizeof(edge) / sizeof(edge[0])); i++) {
         CHECK(gs_wrap_repeat(edge[i], n) == ref_wrap(edge[i], n), "wrap %d mod %d", edge[i], n);
+    }
+}
+
+/* the corners of the quotient's error box and the exact one */
+static const int s_moves[5][2] = {{0, 0}, {-1, -3}, {-1, 3}, {1, -3}, {1, 3}};
+
+static long s_divChecks;
+
+/* gs_div_trunc(n, d) against C's n / d (truncation, as OpSDiv) with the
+ * quotient at each corner */
+static void check_div(int n, int d)
+{
+    for (int m = 0; m < 5; m++) {
+        s_convUlps = s_moves[m][0];
+        s_quotUlps = s_moves[m][1];
+        CHECK(gs_div_trunc(n, d) == n / d, "div %d / %d (moved %d, %d): %d", n, d, s_convUlps,
+              s_quotUlps, gs_div_trunc(n, d));
+        s_divChecks++;
+    }
+    s_convUlps = s_quotUlps = 0;
+}
+
+/* the largest |n| fx_sprite_ps gives gs_div_trunc for a span d
+ * (gs_math.hlsli, gs_div_trunc): (d + 30) * 65543, every int above 1024 */
+static long long div_n_max(int d)
+{
+    const long long m = d <= 1024 ? (long long)(d + 30) * 65543 : 2147483648LL;
+    return m < (long long)d * (1 << 21) ? m : (long long)d * (1 << 21) - 1;
+}
+
+/* every quotient magnitude for span d: k = 0..40, the last 41 below the
+ * largest, 2^j - 2 .. 2^j + 2, and 64 spread between, each at the
+ * remainders 0, 1, d / 2 and d - 1, both signs */
+static void check_div_span(int d, uint32_t *seed)
+{
+    const long long nmax = div_n_max(d);
+    const long long kmax = nmax / d;
+    long long ks[41 + 41 + 22 * 5 + 64];
+    int nk = 0;
+    for (long long k = 0; k <= 40; k++) {
+        ks[nk++] = k;
+        ks[nk++] = kmax - k;
+    }
+    for (int j = 1; j <= 21; j++) {
+        for (int o = -2; o <= 2; o++) {
+            ks[nk++] = (1LL << j) + o;
+        }
+    }
+    for (int i = 0; i < 64; i++) {
+        *seed = *seed * 1664525u + 1013904223u;
+        ks[nk++] = (long long)(((uint64_t)*seed * (uint64_t)(kmax + 1)) >> 32);
+    }
+    const long long rs[4] = {0, 1, d / 2, d - 1};
+    for (int i = 0; i < nk; i++) {
+        if (ks[i] < 0 || ks[i] > kmax) {
+            continue;
+        }
+        for (int j = 0; j < 4; j++) {
+            const long long n = ks[i] * d + rs[j];
+            if (n > nmax || (j > 0 && rs[j] == rs[j - 1])) {
+                continue;
+            }
+            if (n <= 2147483647LL) {
+                check_div((int)n, d);
+            }
+            check_div((int)-n, d);
+        }
     }
 }
 
@@ -296,6 +389,38 @@ int main(void)
     }
     for (int k = 13; k <= 30; k++) {
         check_wrap(1 << k, 4101);
+    }
+
+    /* integer division: gs_div_trunc against n / d over the operands
+     * fx_sprite_ps gives it (|n| up to div_n_max(d)), the float quotient
+     * moved to the corners of what the APIs allow: every d up to 4096, then
+     * every 61st and the powers of two and their neighbours to 2^17; every
+     * n for d = 1 and 2 (the largest quotients); INT_MIN and INT_MAX above
+     * d = 1024 (the product's wrap) */
+    uint32_t seed = 12345u;
+    for (int d = 1; d <= 4096; d++) {
+        check_div_span(d, &seed);
+    }
+    for (int d = 4097; d <= 1 << 17; d += 61) {
+        check_div_span(d, &seed);
+    }
+    for (int j = 12; j <= 17; j++) {
+        for (int o = -1; o <= 1; o++) {
+            check_div_span((1 << j) + o, &seed);
+        }
+    }
+    check_div_span(65535, &seed);
+    check_div_span(40960, &seed);
+    for (int d = 1; d <= 2; d++) {
+        const int nmax = (int)div_n_max(d);
+        for (int n = -nmax; n <= nmax; n++) {
+            check_div(n, d);
+        }
+    }
+    for (int d = 1025; d <= 1 << 17; d += 997) {
+        check_div(INT_MIN, d);
+        check_div(INT_MIN + 1, d);
+        check_div(INT_MAX, d);
     }
 
     if (failures) {

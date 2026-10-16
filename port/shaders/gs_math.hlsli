@@ -69,6 +69,57 @@ GS_FN int gs_wrap_repeat(int c, int n)
     return r;
 }
 
+// The float quotient gs_div_trunc starts from: a / d correctly rounded to
+// float, then the divide. gs_math_test defines it first to move both by
+// more than any API allows.
+#ifndef GS_DIV_QUOT
+#define GS_DIV_QUOT(a, d) ((float)(a) / (float)(d))
+#endif
+
+// n / d truncated toward zero, what OpSDiv (and C99's /) gives, without
+// the integer division the GPU emulates, for d in 1..2^24 and
+// |n| < d * 2^21 (the operands fx_sprite_ps gives it, there).
+//
+// a = |n| (two's complement, in uint: 2^31 for INT_MIN), Q = a / d, f the
+// float quotient; the sign is applied the same way, without a branch.
+// float(d) is exact (d <= 2^24). float(a) is within one ulp of a (Vulkan,
+// D3D and Metal convert correctly rounded, half an ulp), so within
+// 2^-23 * a, which divided by d is 2^-23 * Q < 0.25 for Q < 2^21. The
+// divide is within 2.5 ulp of float(a) / float(d) (Vulkan's OpFDiv and
+// Metal's fast-math divide; D3D's x * (1 / y) at 1 ulp and 0.5 ulp is
+// tighter), and below 2^21 an ulp is at most 2^-3, so 0.3125 at most.
+// |f - Q| < 0.5625 < 1, so q0 = trunc(f) (f >= 0, so the floor) is
+// floor(Q) - 1, floor(Q) or floor(Q) + 1, and r = a - q0 * d lies in
+// [-d, 2d): one step back when r < 0, one on when r >= d, gives floor(Q)
+// exactly. The product and the difference are taken modulo 2^32 (uint);
+// the true r is below 2^25 in magnitude, so int(r) is it. The sign
+// last: OpSDiv truncates toward zero, sign(n) * floor(|n| / d).
+//
+// fx_sprite_ps's UV (fx_sprite.hlsl): n = (X - x0) * (u1 - u0), d =
+// x1 - x0. d >= 1 wherever the division runs (a pixel past the coverage
+// test has x0 <= ox + gb.x < x1); d <= 65535 + 8 and |u1 - u0| <= 65543
+// (staticBlur.c's sprites take 16-bit corners and UVs, rd_post.c's
+// reduction at most 2560 * 16 + 8, the mirror moves U by -8). X - x0 is
+// the coverage's ox + gb.x - x0, in 0..d-1, plus gp.x - gb.x, the pixel's
+// centre against its block's start, in -8..16 at every scale >= 1 (the
+// target's scale is never below 1, rd_present.c rd__apply_display): at
+// most 31 apart from the block either way however the floats round. So
+// |n| <= (d + 30) * 65543, which is below d * 2^21 for every d >= 1;
+// above d = 1024 every int n is (2^31 / 1025 < 2^21), the product's
+// int32 wrap included, where OpSDiv divided the wrapped value too. V the
+// same with y. gs_math_test sweeps d over 1..2^17 and the quotient over
+// its whole range near every multiple, with the quotient and float(a)
+// moved by three ulps and one either way.
+GS_FN int gs_div_trunc(int n, int d)
+{
+    const int sg = n >> 31; // arithmetic: -1 for n < 0, else 0
+    const uint a = ((uint)n ^ (uint)sg) - (uint)sg;
+    const int q0 = (int)(GS_DIV_QUOT(a, d));
+    const int r = (int)(a - (uint)q0 * (uint)d);
+    const int q = q0 - (r < 0 ? 1 : 0) + (r >= d ? 1 : 0);
+    return (q ^ sg) - sg;
+}
+
 // Texture function MODULATE, one channel: min((tex * col) >> 7, 255).
 GS_FN uint gs_tfx_mod(uint tex, uint col)
 {

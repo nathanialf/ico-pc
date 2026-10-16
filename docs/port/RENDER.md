@@ -930,8 +930,10 @@ sun's eye blur (WORK0 to WORK3) (`port/render/rd.h` (`RdPostKind`)). `rd_blur.c`
 `fx_sprite_ps` in the GS integer arithmetic (`port/render/rd_blur.c`, header comment):
 
 - coverage: pixels with `x0 <= X < x1` in 12.4, inside the scissor;
-- UV stepped in integers, 12.4; nearest, or the GS bilinear on 4-bit fractions, each texel wrapped
-  by CLAMP on the TEX0 size, clamped to the backing target and expanded by TEXA before filtering;
+- UV stepped in integers, 12.4 (the division without the GPU's integer divide,
+  [SHADERS.md](SHADERS.md#integer-forms)); nearest, or the GS bilinear on 4-bit fractions, each
+  texel wrapped by CLAMP on the TEX0 size, clamped to the backing target and expanded by TEXA
+  before filtering;
 - TFX MODULATE, DECAL, HIGHLIGHT, HIGHLIGHT2, clamped at 255;
 - the alpha test, DATE against the destination before the sprite, the Z test in hardware;
 - `((A - B) C >> 7) + D` on integers with PABE, COLCLAMP, FBA, written to UNORM8 as k / 255.
