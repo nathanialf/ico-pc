@@ -987,6 +987,7 @@ int main(int argc, char **argv)
     int vuRefL[8], vuRefCount = 0;
     uint32_t vuRefI[8];
     const char *passDir = NULL;
+    const char *tempsDir = NULL; /* --dump-temps: every per-frame temp target after the replay */
     const char *texDir = NULL, *meshName = NULL;
     bool lossBisect = false, maskMarks = false;
     uint32_t drawA = 0, drawB = 0;
@@ -998,6 +999,11 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "--target") == 0 && i + 1 < argc) {
             const char *n = argv[++i];
             target = -1;
+            if (strncmp(n, "0x", 2) == 0) {
+                /* a target by its id as --list prints it (a per-frame block,
+                   "target 0x10014"): read back after the replay */
+                target = (int)strtoul(n, NULL, 16);
+            }
             for (int k = 0; k < (int)(sizeof(kNames) / sizeof(kNames[0])); k++) {
                 if (kNames[k][0] != '\0' && strcmp(n, kNames[k]) == 0) {
                     target = k;
@@ -1032,6 +1038,8 @@ int main(int argc, char **argv)
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {
             passDir = argv[++i];
+        } else if (strcmp(argv[i], "--dump-temps") == 0 && i + 1 < argc) {
+            tempsDir = argv[++i];
         } else if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
             unsigned a = 0, b = 0;
             aspectGiven = true;
@@ -1343,6 +1351,29 @@ int main(int argc, char **argv)
         rd__replay_set_window_draws(1, UINT32_MAX, 0, 0, 1, 0);
     }
     const bool replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
+    if (replayed && tempsDir) {
+        /* the frame's temp targets (the water blocks among them), read back
+           before anything frees them, as DIR/temp-<n>-<w>x<h>.png */
+        for (uint32_t k = 0; k < rf->tempCount; k++) {
+            const RdTargetRec *tr = rd__target_rec(rf->tempTargets[k]);
+            if (!tr || tr->format == RHI_FMT_R8_UNORM) {
+                continue;
+            }
+            size_t cap = (size_t)tr->tw * tr->th * 4;
+            uint8_t *tp = malloc(cap);
+            uint32_t tw = 0, th = 0;
+            char tn[1024];
+            snprintf(tn, sizeof(tn), "%s/temp-%u-%ux%u.png", tempsDir, k, tr->w, tr->h);
+            if (tp && rd__read_target((RdTarget){rf->tempTargets[k]}, tp, cap, &tw, &th) &&
+                rd_write_png(tn, tp, tw, th, tw * 4, 1)) {
+                printf("temp target %u: %ux%u GS, %ux%u texels%s -> %s\n", k, tr->w, tr->h, tw, th,
+                       tr->withDepth ? " with depth" : "", tn);
+            } else {
+                fprintf(stderr, "temp target %u: readback or PNG write failed\n", k);
+            }
+            free(tp);
+        }
+    }
     if (passA) {
         RdReplayWindowStats ws;
         rd__replay_window_stats(&ws);

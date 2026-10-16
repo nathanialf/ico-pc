@@ -1411,6 +1411,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | --- | --- |
 | `--target NAME` | writes a named target instead of DISPLAY |
 | `--pass-dump DIR` | writes every named target to `DIR/<NAME>.png`, and with `--present` the presented picture |
+| `--dump-temps DIR` | writes every per-frame temp target (the water blocks among them: puddle.c's 344x256 reflection block with its depth) to `DIR/temp-<n>-<w>x<h>.png` right after the replay, before the frame's end frees them |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
 | `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--glow-original` (Glow size: Original), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
