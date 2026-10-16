@@ -120,7 +120,13 @@ void ico_diag_present_leave(void);
    holding it: the game is not hung); waiting", and the heartbeat says how
    long it has been held; the run ends with the watchdog's report only when
    one wait passes the bound of ico_diag_set_os_wait_limit (default 600 s,
-   0: never), so a true deadlock in the system is still reported. */
+   0: never), so a true deadlock in the system is still reported. The
+   bound holds only while a limit does (ico_diag_start with a limit not 0):
+   with the watchdog off, and before ico_diag_start (Android's reporter
+   runs from the start, ico_diag_start_reporter, while the start-up set's
+   progress screen pumps), no wait ends the run; nor does time while the
+   watchdog is paused (ico_diag_watchdog_pause, the app in the
+   background). */
 void ico_diag_os_wait_enter(const char *what);
 void ico_diag_os_wait_leave(void);
 void ico_diag_set_os_wait_limit(unsigned int seconds);

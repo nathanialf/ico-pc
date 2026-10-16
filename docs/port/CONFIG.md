@@ -310,7 +310,7 @@ store (`backend`, `unlock_credits`):
 | `backend` | `vulkan` or `d3d12` |
 | `ticks` | exit after N [Main ticks](ARCHITECTURE.md#terms) |
 | `watchdog` | seconds, default 30; 0 is off |
-| `watchdog_pump` | seconds, default 600; 0 is no limit: the longest one wait the system holds (the window's event pump) may last before the watchdog ends the run; the time inside such a wait does not count towards `watchdog` ([PLATFORM.md](PLATFORM.md#diagnostics)) |
+| `watchdog_pump` | seconds, default 600; 0 is no limit: the longest one wait the system holds (the window's event pump) may last before the watchdog ends the run; the time inside such a wait does not count towards `watchdog`; with `watchdog = 0`, before the game starts and in the background it ends nothing ([PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `trace` | `0` off, `1` or a path on; on by default only in the headless build |
 | `pad_script` | the [pad script](ARCHITECTURE.md#terms) to run |
 | `input_record` | the pad recording: `0`/`false`/`none` off, `1`/`true` on, or a path; on by default in the window build |

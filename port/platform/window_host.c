@@ -939,6 +939,13 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
         }
 #endif
         ico_lifecycle_on(e, &k_lifecycle_ops);
+    } else if (e == ICO_LIFECYCLE_WILL_ENTER_BACKGROUND) {
+        /* before the window loop is open (Android: the start-up set's
+           progress screen, the loss bisect): the time in the background
+           is not the game's, so the watchdog does not count it */
+        ico_diag_watchdog_pause(1);
+    } else if (e == ICO_LIFECYCLE_DID_ENTER_FOREGROUND) {
+        ico_diag_watchdog_pause(0);
     }
     return true;
 }
@@ -1685,9 +1692,17 @@ open_window:
     ico_diag_set_pipeline_cache(rhi_pipeline_cache_loaded(), NULL);
 #ifdef ICO_IOS
     s_background = 0;
+#endif
+#if defined(ICO_IOS) || defined(__ANDROID__)
+    /* SDL delivers the app's lifecycle only to a watch, as it happens (SDL
+       sends these on mobile systems only); from here, so the start-up
+       set's time in the background pauses the watchdog (Android: before
+       the window loop is open, lifecycle_watch) */
     if (!SDL_AddEventWatch(lifecycle_watch, NULL)) {
         fprintf(stderr, "window: SDL_AddEventWatch: %s\n", SDL_GetError());
     }
+#else
+    (void)lifecycle_watch;
 #endif
     /* the whole reachable pipeline set before the first frame and after
        rd_init (which makes the device), so the game never waits on a
@@ -1841,15 +1856,6 @@ open_window:
     touch_layout_update();
     ui_settings_set_touch_query(ico_input_sdl_touch_present);
     ui_touch_set_source(ico_input_sdl_touch_overlay);
-    /* SDL delivers the app's lifecycle only to a watch, as
-       it happens (SDL sends these on mobile systems only) */
-#ifdef __ANDROID__
-    if (!SDL_AddEventWatch(lifecycle_watch, NULL)) {
-        fprintf(stderr, "window: SDL_AddEventWatch: %s\n", SDL_GetError());
-    }
-#else
-    (void)lifecycle_watch;
-#endif
     return 0;
 }
 

@@ -592,13 +592,19 @@ then `ico_pc: watchdog: the window's event pump returned after N s; the game goe
 back, and the heartbeat carries `| in the window's event pump N s` while it lasts (outside its
 "no progress" comparison). The run still ends with the watchdog's report when one wait passes
 `[dev] watchdog_pump` seconds (default 600, 0 no limit), so a deadlock in the system is reported; a
-system sleep inside a wait counts towards neither (`port/platform/diag_host.h`
+system sleep inside a wait counts towards neither. The bound holds only while a watchdog limit does:
+with `[dev] watchdog = 0`, and on Android before the game starts (the diagnostics thread runs from
+the start, `ico_diag_start_reporter`, while the start-up set's progress screen pumps the window's
+events), a wait never ends the run, and time in the background pauses the watchdog there too
+(`lifecycle_watch` before the window loop is open), so Home pressed on "Preparing graphics" for an
+hour does not end the app (`port/platform/diag_host.h`
 (`ico_diag_os_wait_enter`, `ico_diag_set_os_wait_limit`, `ico_diag_set_os_wait_describe`)). The case
 behind it: a Windows player's game, paused and left alone, had its pump held for 50 s three times in
 a row right after a controller turned itself off, and the 60 s limit ended a run that was waiting on
 Windows, not hung. ctest `diag` checks a 3.5 s held pump against a 1 s limit (no end, the line
-once), a stall in the game's code right after it (the end), and the bound (`pump`, `pumphang`,
-`pumpbound` in `port/platform/test/diag_test.c`). Milestone lines carry the wall time, vsyncs, Main
+once), a stall in the game's code right after it (the end), the bound, and the bound with no limit
+in force (`pump`, `pumphang`, `pumpbound`, `pumpearly`, `pumpoff` in
+`port/platform/test/diag_test.c`). Milestone lines carry the wall time, vsyncs, Main
 ticks and the current thread (`ico_diag_milestone`), and game threads are named by the function
 `iosThreadCreate` runs (`ico_host_thread_func`). `ico_diag_float_fault` logs a NaN that reaches game
 code the PS2 never fed one (`port/platform/diag_host.h` (`ico_diag_float_fault`)).
@@ -864,7 +870,9 @@ operations it supplies, so `port/platform/test/lifecycle_test.c` checks the orde
 - low memory: the texture pack's read-ahead held, a line, the log flushed.
 
 SDL3 delivers these only to an event watch, which `window_host.c` installs on Android and iOS
-(`port/platform/window_host.c` (`lifecycle_watch`)).
+after the renderer starts, before the start-up set (`port/platform/window_host.c`
+(`lifecycle_watch`)). Before the window loop is open (Android's start-up set) the table does not
+run: the watch only pauses the watchdog in the background and runs it again in the foreground.
 
 ## Android graphics driver packages
 

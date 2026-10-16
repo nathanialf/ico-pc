@@ -46,6 +46,9 @@
  *               returns ends the run at the bound for one wait (3 s here,
  *               ico_diag_set_os_wait_limit; 600 s by default, which the
  *               watchdog's start line names) with the crash-style report;
+ *               pumpearly, pumpoff: that bound (1 s) with no limit in
+ *               force (the reporter before the limits, Android's start-up
+ *               set; the watchdog off) does not end a 2.5 s wait;
  *   - lines:    milestones and logs reach the file at once;
  *   - activity: the start-up activity file (issue 93): written with each
  *               note while the start-up set is created (a batch's note,
@@ -351,6 +354,22 @@ static void pump_describe(char *out, size_t size)
 static void pump_child(const char *mode)
 {
     const int bound = strcmp(mode, "pumpbound") == 0;
+    if (strcmp(mode, "pumpearly") == 0 || strcmp(mode, "pumpoff") == 0) {
+        /* the bound (1 s here) with no limit in force: Android's reporter
+           before the game (the start-up set's progress pump), or the
+           watchdog off; a 2.5 s wait does not end the run */
+        ico_diag_set_os_wait_limit(1);
+        if (strcmp(mode, "pumpearly") == 0) {
+            ico_diag_start_reporter();
+        } else {
+            ico_diag_start(0, 0);
+        }
+        ico_diag_os_wait_enter("the window's event pump");
+        pause_ms(2500);
+        ico_diag_os_wait_leave();
+        ico_diag_log("test: pump returned");
+        exit(0);
+    }
     fake_ticks = 1;
     if (bound) {
         ico_diag_set_os_wait_limit(3);
@@ -1382,6 +1401,24 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "test: pump returned") == NULL);
     if (fails) {
         printf("--- pumpbound log ---\n%s\n", s);
+    }
+    /* ... but only while a limit is in force: not before the limits
+       (Android's start-up set), not with the watchdog off */
+    r = run(argv[0], "pumpearly", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "WATCHDOG:") == NULL);
+    CHECK(strstr(s, "test: pump returned") != NULL);
+    if (fails) {
+        printf("--- pumpearly log ---\n%s\n", s);
+    }
+    r = run(argv[0], "pumpoff", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "WATCHDOG:") == NULL);
+    CHECK(strstr(s, "test: pump returned") != NULL);
+    if (fails) {
+        printf("--- pumpoff log ---\n%s\n", s);
     }
 
     /* the second sign of life: 2.5 s of progress without a tick against a

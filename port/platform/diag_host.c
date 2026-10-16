@@ -3746,7 +3746,12 @@ static void watchdog_loop(void)
                 ico_diag_log("ico_pc: watchdog: %s", detail);
             }
         }
-        if (os_since != 0 && os_wait_limit_s != 0 && os_cur - os_gap >= os_wait_limit_s) {
+        /* the bound only while a limit is in force: with the watchdog off
+           ([dev] watchdog = 0), and on Android before the game starts
+           (ico_diag_start_reporter, the start-up set's progress pump), a
+           wait the system holds never ends the run */
+        if (os_since != 0 && os_wait_limit_s != 0 && (first_s != 0 || later_s != 0) &&
+            os_cur - os_gap >= os_wait_limit_s) {
             snprintf(reason, sizeof reason,
                      "%s has not returned for %u s (the system holds it; the limit is [dev] "
                      "watchdog_pump)",
