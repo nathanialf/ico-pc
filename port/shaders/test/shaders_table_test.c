@@ -28,6 +28,14 @@ static const char *const expected[] = {
 static const char *const expectedPlanes[] = {"sprite_plane_ui_vs", "sprite_plane_world_vs",
                                              "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs"};
 
+/* the VU vertex shaders' plain variants (ICO_VU_PLAIN, vu_common.hlsli) */
+static const char *const expectedPlain[] = {
+    "vu_prelit_plain_vs",     "vu_lit_plain_vs",      "vu_lit_spec_plain_vs",
+    "vu_reflect_plain_vs",    "vu_skin_plain_vs",     "vu_skin_spec_plain_vs",
+    "vu_skin_debug_plain_vs", "vu_grid_plain_vs",     "vu_grid_lit_plain_vs",
+    "vu_grid_spec_plain_vs",  "vu_particle_plain_vs",
+};
+
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
 static const char *const expectedAa[] = {"aa_reduce_ps", "depth_resolve_ps", "depth_upsample_ps"};
 
@@ -146,6 +154,13 @@ int main(void)
     for (size_t i = 0; i < nPlanes; i++) {
         if (!ico_find_shader(expectedPlanes[i])) {
             printf("FAIL %s: not in the table\n", expectedPlanes[i]);
+            failures++;
+        }
+    }
+    const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
+    for (size_t i = 0; i < nPlain; i++) {
+        if (!ico_find_shader(expectedPlain[i])) {
+            printf("FAIL %s: not in the table\n", expectedPlain[i]);
             failures++;
         }
     }

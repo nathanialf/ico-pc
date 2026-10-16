@@ -604,6 +604,16 @@ typedef struct RhiLimits {
     bool rov;
     bool rasterOrderAttachment;
     const char *rasterOrderOff;
+    /* Why the VU vertex shaders' extended variants are refused on this
+     * device ("Adreno 740, issue 107": the driver hangs the whole device
+     * compiling them; Vulkan, vk_device.c kVuPlainOnly), NULL otherwise;
+     * the renderer then draws every VU draw with the plain ones
+     * (port/render/rd_pipeline.c rd__vu_policy_init).  compilerVersion: the
+     * driver's own compiler line as it writes it ("Compiler Version:
+     * E031.41.03.47" on Qualcomm's Adreno driver), NULL when it names none
+     * (logged at rd_init). */
+    const char *vuPlainOnly;
+    const char *compilerVersion;
     /* Indexed draws: the largest index value a draw may use (Vulkan
      * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
      * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the

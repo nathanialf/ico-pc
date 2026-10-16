@@ -2439,7 +2439,7 @@ void rd_draw_vu_particles(const RdVuParticleDraw *d, RdKey key)
  * specular, reflection and particle equations 0x44, 0x48, 0x42, 0x68, 0x62
  * (four hardware paths); SCENE's D32F_S8 (render-to-texture targets have
  * depth too).  The scissor batches' cut pass forces ABE on: the same set. */
-uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+static uint32_t enumerateVuVariant(RdPipeKeyInt *out, uint32_t max, uint32_t n, uint8_t ext)
 {
     static const uint64_t kTests[] = {RD_TEST_Z_GEQUAL, RD_TEST_AT_GT64_FBONLY,
                                       RD_TEST_DATE1_Z_GEQUAL};
@@ -2471,6 +2471,7 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
                         k.gs.program = prog;
                         k.vs = vs;
                         k.fs = (i & 1) ? RD_FS_VU_TEXA : RD_FS_VU;
+                        k.vuExt = ext;
                         n = rd__add_pipe_key(out, max, n, &k);
                     }
                 }
@@ -2478,4 +2479,13 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
         }
     }
     return n;
+}
+
+/* the plain variants always, the extended ones (vuExt 1) when the settings
+ * can draw with them on a device that takes them (rd__vu_ext_reachable;
+ * rd_pipeline.c puts them after every other key) */
+uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
+{
+    n = enumerateVuVariant(out, max, n, 0);
+    return rd__vu_ext_reachable() ? enumerateVuVariant(out, max, n, 1) : n;
 }

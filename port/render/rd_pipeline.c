@@ -63,10 +63,12 @@
  * times the target's scale), so GS GEQUAL is RHI_CMP_GEQUAL and GREATER is
  * GREATER.
  */
+#include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "shader_consts.h"
+#include "shaders_gen.h"
 
 typedef struct RdPipeEntry {
     RdPipeKeyInt key;
@@ -665,7 +667,12 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     layouts[2] = k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex;
     layouts[3] = dstStorage ? g_rd.layoutDstStorage : g_rd.layoutDstAttach;
     memset(d, 0, sizeof(*d));
-    d->vertex = g_rd.vs[k->vs];
+    /* a VU key's variant: the plain module unless the key asks for the
+     * extended one (vuExt, rd__vu_draw_ext) */
+    d->vertex = vu && !k->vuExt ? g_rd.vsPlain[k->vs] : g_rd.vs[k->vs];
+    if (!d->vertex.id) {
+        return false;
+    }
     /* no dual-source blending: the *_nodual twin (c0 alone) */
     d->fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
     if (dstStorage || dstAttach) {
@@ -748,7 +755,7 @@ static RdActivityFn s_activityFn;
 /* the batch's note while its pipelines are compiled ("" outside): a
  * creation of the progress screen's own in the middle of it puts it back
  * after its own note, so a crash on a worker thread names the batch */
-static char s_batchNote[256];
+static char s_batchNote[480];
 
 void rd_set_activity_fn(RdActivityFn fn)
 {
@@ -763,22 +770,121 @@ void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size)
     keyWords(k, out, size);
 }
 
+static bool keyIsVu(const RdPipeKeyInt *k)
+{
+    return k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
+}
+
+/* the key's fields; a VU key also its variant, " ext 1" for the extended
+ * one (startup_retry.h startup_retry_note_has_vu_ext reads it) */
 static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
 {
-    snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u", k->gs.program,
-             k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst);
+    snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u%s", k->gs.program,
+             k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst,
+             keyIsVu(k) ? (k->vuExt ? " ext 1" : " ext 0") : "");
+}
+
+/* the modules a key's pipeline is made of, as pipelineDesc picks them: the
+ * vertex shader (a VU key's plain or extended variant) and the fragment
+ * shader (its _dstrov, _dstatt or _nodual twin) */
+static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
+{
+    const char *v = rd__vs_name(k->vs);
+    const size_t n = strlen(v);
+    if (keyIsVu(k) && !k->vuExt && n > 3) {
+        snprintf(out, size, "%.*s_plain_vs", (int)(n - 3), v);
+    } else {
+        snprintf(out, size, "%s", v);
+    }
+}
+
+static void keyFsName(const RdPipeKeyInt *k, char *out, size_t size)
+{
+    const char *f = rd__fs_name(k->fs);
+    if (k->dst == RHI_DST_READ_STORAGE) {
+        snprintf(out, size, "%s_dstrov", f);
+    } else if (k->dst == RHI_DST_READ_ATTACHMENT) {
+        snprintf(out, size, "%s_dstatt", f);
+    } else if (k->gs.nodual && k->fs < RD_FS_COUNT && g_rd.fsNoDual[k->fs].id) {
+        snprintf(out, size, "%s_nodual", f);
+    } else {
+        snprintf(out, size, "%s", f);
+    }
+}
+
+/* "vu_lit_plain_vs 23305 words + vu_ps 9876 words": the key's modules and
+ * their sizes (rd__shader_words) */
+static void keyModules(const RdPipeKeyInt *k, char *out, size_t size)
+{
+    char v[64], f[64];
+    keyVsName(k, v, sizeof(v));
+    keyFsName(k, f, sizeof(f));
+    snprintf(out, size, "%s %u words + %s %u words", v, rd__shader_words(v), f,
+             rd__shader_words(f));
+}
+
+/* the batch's vertex shaders, each once in the batch's order with its size,
+ * and its largest fragment shader: "vertex vu_prelit_plain_vs 22392 words,
+ * vu_lit_plain_vs 23305 words; largest fragment vu_ps 9876 words" (at most
+ * four vertex shaders named, then "and N more") */
+static void batchModules(const RdPipeKeyInt *keys, uint32_t n, char *out, size_t size)
+{
+    char names[4][64];
+    uint32_t named = 0, more = 0, fsWords = 0;
+    char fsBig[64] = "";
+    size_t at = 0;
+    out[0] = '\0';
+    for (uint32_t i = 0; i < n; i++) {
+        char v[64], f[64];
+        keyVsName(&keys[i], v, sizeof(v));
+        keyFsName(&keys[i], f, sizeof(f));
+        const uint32_t fw = rd__shader_words(f);
+        if (fw > fsWords) {
+            fsWords = fw;
+            memcpy(fsBig, f, sizeof(fsBig));
+        }
+        bool seen = false;
+        for (uint32_t j = 0; j < named && !seen; j++) {
+            seen = strcmp(names[j], v) == 0;
+        }
+        if (seen) {
+            continue;
+        }
+        if (named < 4) {
+            memcpy(names[named++], v, sizeof(v));
+        } else {
+            /* counted once each: the keys come grouped by vertex shader */
+            if (i == 0 || keys[i].vs != keys[i - 1].vs || keys[i].vuExt != keys[i - 1].vuExt) {
+                more++;
+            }
+        }
+    }
+    for (uint32_t j = 0; j < named && at < size; j++) {
+        const int w = snprintf(out + at, size - at, "%s%s %u words", j ? ", " : "vertex ", names[j],
+                               rd__shader_words(names[j]));
+        at = w > 0 ? at + (size_t)w : at;
+    }
+    if (more && at < size) {
+        const int w = snprintf(out + at, size - at, " and %u more", more);
+        at = w > 0 ? at + (size_t)w : at;
+    }
+    if (at < size) {
+        snprintf(out + at, size - at, "; largest fragment %s %u words", fsBig[0] ? fsBig : "none",
+                 fsWords);
+    }
 }
 
 /* the note before a creation: the key's words */
 static void activityCreating(const RdPipeKeyInt *k)
 {
-    char note[160];
-    char words[96];
+    char note[320];
+    char words[96], mods[160];
     if (s_activityFn == NULL) {
         return;
     }
     keyWords(k, words, sizeof(words));
-    snprintf(note, sizeof(note), "creating pipeline %s", words);
+    keyModules(k, mods, sizeof(mods));
+    snprintf(note, sizeof(note), "creating pipeline %s (%s)", words, mods);
     s_activityFn(note);
 }
 
@@ -1038,13 +1144,13 @@ typedef struct PreTimes {
     float ms[PRE_SLOWEST];
     RdPipeKeyInt key[PRE_SLOWEST];
     uint32_t n;
-    double byVs[RD_VS_COUNT];
+    double byVs[RD_VS_COUNT * 2]; /* by vertex shader and VU variant (vs * 2 + vuExt) */
 } PreTimes;
 
 static void preTime(PreTimes *t, const RdPipeKeyInt *k, float ms)
 {
     if (k->vs < RD_VS_COUNT) {
-        t->byVs[k->vs] += ms;
+        t->byVs[k->vs * 2 + (k->vuExt ? 1 : 0)] += ms;
     }
     uint32_t at = t->n < PRE_SLOWEST ? t->n : PRE_SLOWEST - 1;
     if (t->n == PRE_SLOWEST && ms <= t->ms[at]) {
@@ -1063,22 +1169,26 @@ static void preTime(PreTimes *t, const RdPipeKeyInt *k, float ms)
 
 static void preTimesLog(const PreTimes *t)
 {
-    char line[1200];
+    /* each with its modules and their sizes (issue 107: a phone's driver
+     * takes a time about proportional to the vertex shader's size) */
+    static char line[2600];
     size_t at = 0;
+    line[0] = '\0';
     for (uint32_t i = 0; i < t->n && at < sizeof(line); i++) {
-        char w[96];
+        char w[96], mods[160];
         keyWords(&t->key[i], w, sizeof(w));
-        const int k = snprintf(line + at, sizeof(line) - at, "%s%.2f s %s", i ? "; " : "",
-                               (double)t->ms[i] / 1000.0, w);
+        keyModules(&t->key[i], mods, sizeof(mods));
+        const int k = snprintf(line + at, sizeof(line) - at, "%s%.2f s %s (%s)", i ? "; " : "",
+                               (double)t->ms[i] / 1000.0, w, mods);
         at = k > 0 ? at + (size_t)k : at;
     }
     rd__log("pipelines: the slowest: %s", t->n ? line : "none");
-    bool done[RD_VS_COUNT] = {false};
+    bool done[RD_VS_COUNT * 2] = {false};
     at = 0;
     line[0] = '\0';
     for (;;) {
         int best = -1;
-        for (int v = 0; v < RD_VS_COUNT; v++) {
+        for (int v = 0; v < RD_VS_COUNT * 2; v++) {
             if (!done[v] && t->byVs[v] > 0.0 && (best < 0 || t->byVs[v] > t->byVs[best])) {
                 best = v;
             }
@@ -1087,9 +1197,16 @@ static void preTimesLog(const PreTimes *t)
             break;
         }
         done[best] = true;
-        const int k = snprintf(line + at, sizeof(line) - at, "%s%s %.2f s", at ? ", " : "",
-                               rd__vs_name((uint8_t)best), t->byVs[best] / 1000.0);
-        at = k > 0 ? at + (size_t)k : at;
+        RdPipeKeyInt k;
+        memset(&k, 0, sizeof(k));
+        k.vs = (uint8_t)(best / 2);
+        k.vuExt = (uint8_t)(best & 1);
+        char name[64];
+        keyVsName(&k, name, sizeof(name));
+        const int n =
+            snprintf(line + at, sizeof(line) - at, "%s%s %.2f s (%u words)", at ? ", " : "", name,
+                     t->byVs[best] / 1000.0, rd__shader_words(name));
+        at = n > 0 ? at + (size_t)n : at;
     }
     rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
 }
@@ -1132,7 +1249,10 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             RdPipeKeyInt tmp;
             bool found, dup = false;
             const RdPipeKeyInt *k = resolved ? &keys[i] : drawKey(&keys[i], &tmp);
-            const int kind = k->dst != RHI_DST_READ_NONE;
+            /* a batch is all with a destination read or all without, and
+             * all extended VU keys or none (the note's first key says which
+             * for the whole batch: startup_retry.h) */
+            const int kind = (k->dst != RHI_DST_READ_NONE) | (keyIsVu(k) && k->vuExt ? 2 : 0);
             if (dstKind >= 0 && kind != dstKind) {
                 break;
             }
@@ -1164,15 +1284,30 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             nb++;
         }
         if (nb > 0) {
-            char note[256];
-            char a[96], z[96];
+            char note[sizeof(s_batchNote)];
+            char a[96], z[96], mods[256];
             keyWords(&bk[0], a, sizeof(a));
             keyWords(&bk[nb - 1], z, sizeof(z));
+            batchModules(bk, nb, mods, sizeof(mods));
             if (nb == 1) {
-                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s", first + 1, m, a);
+                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s; %s", first + 1, m, a,
+                         mods);
             } else {
-                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s", first + 1,
-                         i, m, a, z);
+                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s; %s",
+                         first + 1, i, m, a, z, mods);
+            }
+            /* a batch with a VU vertex shader, the modules a phone's driver
+             * is slowest on (issue 107), named in the log as it starts: a
+             * log that stops here says what the driver was compiling (the
+             * heartbeat repeats the note every 2 s, the activity file
+             * keeps it for the next start) */
+            bool vuBatch = false;
+            for (uint32_t j = 0; j < nb && !vuBatch; j++) {
+                vuBatch = keyIsVu(&bk[j]);
+            }
+            if (vuBatch) {
+                rd__log("pipelines: compiling %u-%u of %u (%s VU): %s", first + 1, i, m,
+                        keyIsVu(&bk[0]) && bk[0].vuExt ? "extended" : "plain", mods);
             }
             memcpy(s_batchNote, note, sizeof(s_batchNote));
             if (s_activityFn != NULL) {
@@ -1305,6 +1440,186 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
     return i < s_count ? &s_cache[i].key : NULL;
 }
 
+/* ------------------------------------------------ the VU shader variants
+ * Issue 107 (docs/port/RENDER.md, "The VU shader variants"): every VU
+ * vertex shader is built twice, the extended variant (vu_X_vs: the card
+ * test and the two tick cameras of the region rule) and the plain one
+ * (vu_X_plain_vs, about half its size: neither).  A draw with neither
+ * VU_F_EXTENDED nor VU_F_TICKS gives the same picture through both, and
+ * takes the plain one; a device whose driver cannot be given the extended
+ * ones (RhiLimits.vuPlainOnly, vk_device.c kVuPlainOnly), a setting
+ * ([dev] vu_plain_only, ICO_RD_VU_PLAIN=1) or the host
+ * (rd_set_vu_plain_only, after a start that ended inside their compile)
+ * makes every VU draw take the plain one: the wide-screen rule (the card
+ * test) and the tick cameras' rule are then off.  ICO_RD_VU_EXTENDED=1
+ * ([dev] vu_extended) gives the extended ones whatever the others say. */
+/* Whether the picture is not the PS2's out of the box, the Original preset
+ * on a 4:3 frame at 1x (ICO_VU_EXTENDED; the region rule, vu_common.hlsli
+ * vu_region_rule): the Enhanced preset, a frame wider than 4:3 or a scene
+ * scale above 1.  Out of the box the PS2's behaviour stays; any other
+ * state draws what a game made for that picture would draw (RENDER.md
+ * "Strip joining").  rd_mesh.c asks it too, when it records a draw (the
+ * card verdicts, RdVuCards). */
+bool rd__vu_extended(void)
+{
+    return g_rd.settings.preset != RD_PRESET_ORIGINAL || g_rd.gsW > ICO_SH_FRAME_BASE_W ||
+           g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f;
+}
+
+static char s_vuHostWhy[128];
+
+void rd_set_vu_plain_only(const char *reason)
+{
+    snprintf(s_vuHostWhy, sizeof(s_vuHostWhy), "%s", reason != NULL ? reason : "");
+}
+
+const char *rd_vu_plain_only(void)
+{
+    return g_rd.vuPlainOnly ? g_rd.vuPlainWhy : NULL;
+}
+
+static bool envOn(const char *name)
+{
+    const char *v = getenv(name);
+    return v != NULL && v[0] != '\0' && v[0] != '0';
+}
+
+/* the largest VU vertex shader of a variant: its name and size */
+static uint32_t vuLargest(uint8_t ext, char *name, size_t size)
+{
+    uint32_t best = 0;
+    name[0] = '\0';
+    for (uint8_t v = RD_VS_VU_FIRST; v <= RD_VS_VU_LAST; v++) {
+        RdPipeKeyInt k;
+        char n[64];
+        memset(&k, 0, sizeof(k));
+        k.vs = v;
+        k.vuExt = ext;
+        keyVsName(&k, n, sizeof(n));
+        const uint32_t w = rd__shader_words(n);
+        if (w > best) {
+            best = w;
+            snprintf(name, size, "%s", n);
+        }
+    }
+    return best;
+}
+
+uint32_t rd__shader_words(const char *name)
+{
+    const IcoShaderBlob *b = name ? ico_find_shader(name) : NULL;
+    return b ? (uint32_t)(b->spirv_len / 4u) : 0u;
+}
+
+bool rd__vu_policy_init(const RhiLimits *lim)
+{
+    /* the plain variants' modules (vu_X_vs's is vu_X_plain_vs; rd_replay.c
+     * rd__gpu_shutdown destroys them) */
+    bool ok = true;
+    for (uint8_t v = RD_VS_VU_FIRST; v <= RD_VS_VU_LAST; v++) {
+        RdPipeKeyInt k;
+        char name[64];
+        memset(&k, 0, sizeof(k));
+        k.vs = v;
+        keyVsName(&k, name, sizeof(name));
+        g_rd.vsPlain[v] = rd__make_shader(name);
+        ok = ok && g_rd.vsPlain[v].id;
+    }
+    /* the device's compiler, as its driver names it (Qualcomm's Adreno
+     * driver: "Compiler Version: E031.41.03.47"), once per rd_init */
+    rd__log("device compiler: %s",
+            lim && lim->compilerVersion ? lim->compilerVersion : "the driver names none");
+    g_rd.vuPlainOnly = false;
+    g_rd.vuPlainWhy[0] = '\0';
+    if (lim && lim->vuPlainOnly) {
+        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)", lim->vuPlainOnly);
+    } else if (envOn("ICO_RD_VU_PLAIN")) {
+        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy),
+                 "by the settings ([dev] vu_plain_only, which the game writes after a start "
+                 "that ended while the graphics driver compiled the extended ones, issue 107)");
+    } else if (s_vuHostWhy[0]) {
+        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "(%s)", s_vuHostWhy);
+    }
+    g_rd.vuPlainOnly = g_rd.vuPlainWhy[0] != '\0';
+    char pn[64], en[64];
+    const uint32_t pw = vuLargest(0, pn, sizeof(pn)), ew = vuLargest(1, en, sizeof(en));
+    if (g_rd.vuPlainOnly && envOn("ICO_RD_VU_EXTENDED")) {
+        rd__log("VU shaders: plain only %s, but ICO_RD_VU_EXTENDED=1 ([dev] vu_extended): the "
+                "extended ones are used (largest %s %u words)",
+                g_rd.vuPlainWhy, en, ew);
+        g_rd.vuPlainOnly = false;
+        g_rd.vuPlainWhy[0] = '\0';
+        return ok;
+    }
+    if (g_rd.vuPlainOnly) {
+        rd__log("VU shaders: plain only %s (largest %s %u words; the extended ones, largest %s "
+                "%u words, are never compiled): the wide-screen rule and the tick cameras' rule "
+                "are off",
+                g_rd.vuPlainWhy, pn, pw, en, ew);
+        return ok;
+    }
+    rd__log("VU shaders: plain for the draws of the Original preset at 4:3 and 1x without "
+            "interpolation (largest %s %u words), extended for the others (largest %s %u words)",
+            pn, pw, en, ew);
+    return ok;
+}
+
+bool rd__vu_ext_reachable(void)
+{
+    if (g_rd.vuPlainOnly) {
+        return false;
+    }
+    /* rd_replay.c rd__vu_extended's state (VU_F_EXTENDED) or the
+     * interpolation's tick cameras (VU_F_TICKS) */
+    const float aspect = g_rd.settings.aspect > 0.0f ? g_rd.settings.aspect : 4.0f / 3.0f;
+    return g_rd.settings.preset != RD_PRESET_ORIGINAL || aspect > 4.0f / 3.0f + 1e-3f ||
+           g_rd.gsW > ICO_SH_FRAME_BASE_W || g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f ||
+           g_rd.settings.interpolate != 0;
+}
+
+uint8_t rd__vu_draw_ext(uint32_t drawFlags)
+{
+    if ((drawFlags & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u) {
+        return 0;
+    }
+    if (g_rd.vuPlainOnly) {
+        static bool logged; /* once a run */
+        if (!logged) {
+            logged = true;
+            rd__log("VU shaders: plain only %s: the wide-screen rule is off", g_rd.vuPlainWhy);
+        }
+        return 0;
+    }
+    return 1;
+}
+
+/* The start-up set's order (issue 107): the 2D keys, then the VU keys with
+ * the plain variant, then those with the extended one, each in its
+ * enumeration order, so a driver that cannot build the extended ones has
+ * built every other key before it meets one, and the activity note names
+ * the class of the batch it died in */
+static uint32_t keyClass(const RdPipeKeyInt *k)
+{
+    return keyIsVu(k) ? (k->vuExt ? 2u : 1u) : 0u;
+}
+
+static void orderSet(RdPipeKeyInt *out, uint32_t n)
+{
+    static RdPipeKeyInt tmp[RD_PIPELINE_CACHE_MAX];
+    if (n > RD_PIPELINE_CACHE_MAX) {
+        n = RD_PIPELINE_CACHE_MAX;
+    }
+    uint32_t at = 0;
+    for (uint32_t c = 0; c < 3; c++) {
+        for (uint32_t i = 0; i < n; i++) {
+            if (keyClass(&out[i]) == c) {
+                tmp[at++] = out[i];
+            }
+        }
+    }
+    memcpy(out, tmp, (size_t)n * sizeof(out[0]));
+}
+
 /* -------------------------------------------------------------- reachable
  * The families the implemented programs (screen prims and the post/present
  * blits) can reach, each from the state the game uses with it:
@@ -1369,7 +1684,9 @@ static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
 uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
 {
     if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF) {
-        return enumerateAll(out, max);
+        const uint32_t n = enumerateAll(out, max);
+        orderSet(out, n < max ? n : max);
+        return n;
     }
     static RdPipeKeyInt raw[RD_PIPELINE_CACHE_MAX];
     const uint32_t nr = enumerateAll(raw, RD_PIPELINE_CACHE_MAX);
@@ -1384,7 +1701,9 @@ uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
             n = rd__add_pipe_key(out, max, n, &ex[j].key);
         }
     }
-    return rd__enumerate_dst(raw, nk, out, max, n);
+    n = rd__enumerate_dst(raw, nk, out, max, n);
+    orderSet(out, n < max ? n : max);
+    return n;
 }
 
 /* the CRT filter (rd_crt.c): the glow passes into RGBA16F, the composite on

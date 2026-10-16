@@ -35,6 +35,18 @@
 // no local array, no array-typed value.  tools/check_spirv.py (the ctest
 // spirv_check) holds every module to it: no vector of booleans, no
 // any()/all(), no select with a boolean result.
+//
+// The two variants (issue 107; docs/port/SHADERS.md, The variants): every
+// VU vertex shader is built twice.  The extended variant (vu_*_vs) is this
+// file as it reads.  The plain variant (vu_*_plain_vs, ICO_VU_PLAIN=1) is
+// what the Original preset at 4:3 and 1x without interpolation draws: no
+// card test (VU_F_EXTENDED's step of the region rule, vu_region_rule_cut)
+// and no tick cameras (VU_F_TICKS: vu_tick_shown, vu_particle_tick_shown);
+// everything else is the same code, so a draw with neither flag gives the
+// same picture through either.  rd_replay.c vuDraw takes the plain one for
+// such a draw, and for every draw on a device that refuses the extended
+// one (rd_pipeline.c rd__vu_plain_only); the plain modules are about half
+// the extended ones' size (tools/check_spirv.py VS_PLAIN_BUDGET).
 #ifndef ICO_VU_COMMON_HLSLI
 #define ICO_VU_COMMON_HLSLI
 
@@ -1127,10 +1139,12 @@ uint vu_region_rule_cut(VuVtx a, VuVtx b, VuVtx c, VuCutZ z, float4 pic)
     if (!vu_cut_rows(z, pic)) {
         return VU_RULE_CLIP;
     }
+#ifndef ICO_VU_PLAIN
     if ((vu_draw.z & VU_F_EXTENDED) != 0u && vu_strip.y != 0u &&
         min(a.h.w, min(b.h.w, c.h.w)) > 0.0) {
         return VU_RULE_STRIP;
     }
+#endif
     return VU_RULE_DROP;
 }
 
@@ -1222,6 +1236,10 @@ uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 lo, float4 hi)
     if (r != VU_RULE_DROP || (vu_draw.z & VU_F_TICKS) == 0u) {
         return r;
     }
+#ifdef ICO_VU_PLAIN
+    // the plain variant: no tick cameras (ICO_VU_PLAIN, above)
+    return r;
+#else
     float4 frame = vu_frame_ndc();
     uint s0 = vu_tick_shown(a, b, c, 0u, lo, hi, pic, frame);
     if (s0 == 2u) {
@@ -1232,6 +1250,7 @@ uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 lo, float4 hi)
         return VU_RULE_CLIP;
     }
     return (s0 | s1) != 0u ? VU_RULE_STRIP : VU_RULE_DROP;
+#endif
 }
 
 // The card test (VU_RULE_STRIP) of the triangle kick: whether its strip

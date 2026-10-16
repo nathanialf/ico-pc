@@ -167,10 +167,17 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     if (!s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED)) == 0u) {
         float2 p0 = vu_ndc(float2(s.c0.xy) * (1.0 / 16.0));
         float2 p1 = vu_ndc(float2(s.c1.xy) * (1.0 / 16.0));
+#ifdef ICO_VU_PLAIN
+        // the plain variant: no tick cameras (vu_common.hlsli)
+        if (vu_rect_reaches_picture(min(p0, p1), max(p0, p1))) {
+            return o;
+        }
+#else
         if (vu_rect_reaches_picture(min(p0, p1), max(p0, p1)) &&
             ((vu_draw.z & VU_F_TICKS) == 0u || !vu_particle_tick_shown(vid / 6u))) {
             return o;
         }
+#endif
     }
     // the sprite's planes (vu_common.hlsli vu_attr_planes), under the
     // exact viewport: S runs across, T down, the same on both triangles

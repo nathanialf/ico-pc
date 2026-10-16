@@ -890,6 +890,8 @@ uint32_t rd__vu_sheet_end(const RdMeshRec *m, uint32_t end, bool extended);
 bool rd__vu_extended(void);
 /* A vertex shader's embedded name (RD_VS_*; rd_replay.c s_vsNames) */
 const char *rd__vs_name(uint8_t vs);
+/* A fragment shader's embedded name (RD_FS_*; rd_replay.c s_fsNames) */
+const char *rd__fs_name(uint8_t fs);
 /* The card section of a VU draw's payload (rd_mesh.h RdVuCards) of size
  * bytes at payload: its header in *cards and the offset of its words from
  * payload, 0 when the payload has none */
@@ -1018,6 +1020,11 @@ typedef struct RdPipeKeyInt {
     /* RhiDstRead: the exact blend's destination read (rd_dst_read.c); the
      * fragment entry is its _dstrov or _dstatt twin, blending off */
     uint8_t dst;
+    /* a VU key's vertex shader variant (issue 107; vu_common.hlsli
+     * ICO_VU_PLAIN): 1 the extended one (vu_*_vs: the card test and the
+     * tick cameras), 0 the plain one (vu_*_plain_vs); 0 for every other
+     * key.  rd_replay.c vuDraw sets it (rd__vu_draw_ext) */
+    uint8_t vuExt;
 } RdPipeKeyInt;
 
 /* One hardware draw of a screen-prim command (the AFAIL split makes two). */
@@ -1188,6 +1195,32 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max);
 /* The VU program families (rd_mesh.c): each VU vertex shader
  * under the states the mesh lists draw with.  Appends to out[0..n). */
 uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n);
+/* The VU shader variants (issue 107; docs/port/RENDER.md, "The VU shader
+ * variants"), rd_pipeline.c.
+ * rd__vu_policy_init  at rd_init, after the shaders: creates the plain
+ *                     variants' modules (false when one is missing), and
+ *                     whether this run
+ *                     draws every VU draw with the plain variants
+ *                     (g_rd.vuPlainOnly: the device table,
+ *                     RhiLimits.vuPlainOnly; ICO_RD_VU_PLAIN=1, [dev]
+ *                     vu_plain_only; rd_set_vu_plain_only), ICO_RD_VU_EXTENDED=1
+ *                     overriding them; logs the device's compiler line and
+ *                     the policy, once per rd_init
+ * rd__vu_ext_reachable  whether the settings can produce a draw that
+ *                     wants the extended variant (the Enhanced preset, a
+ *                     frame wider than 4:3 or a wider aspect, a scene
+ *                     scale above 1, the interpolation on), and the device
+ *                     takes it: the start-up set has the extended keys
+ * rd__vu_draw_ext     the variant of a VU draw with the VU_F_* flags
+ *                     drawFlags (vu_draw.z): 1 when it has VU_F_EXTENDED or
+ *                     VU_F_TICKS and the device takes it (else 0, logged
+ *                     once per run when a draw wanted it)
+ * rd__shader_words    a module's size in 32-bit words (its SPIR-V), 0 when
+ *                     the table has no such module */
+bool rd__vu_policy_init(const RhiLimits *lim);
+bool rd__vu_ext_reachable(void);
+uint8_t rd__vu_draw_ext(uint32_t drawFlags);
+uint32_t rd__shader_words(const char *name);
 /* The (program, code) row of rd_mesh.h's table: the RdProg, the vertex
  * shader and the clip mode; false without a row. */
 bool rd__vu_row(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);
@@ -1642,6 +1675,13 @@ typedef struct RdContext {
     RhiBindGroupLayout layoutFrame, layoutDraw, layoutTex, layoutInt;
     RhiBindGroupLayout layoutVu; /* t0 stream, b1 DrawCB, b2 VuCB, b3 VuBoneCB */
     RhiShader vs[RD_VS_COUNT], fs[RD_FS_COUNT];
+    /* the VU vertex shaders' plain variants (vu_*_plain_vs, indexed by
+     * RD_VS_*; 0 for the others), and whether every VU draw takes them
+     * (rd__vu_policy_init) and why ("on this device (Adreno 740, issue
+     * 107)") */
+    RhiShader vsPlain[RD_VS_COUNT];
+    bool vuPlainOnly;
+    char vuPlainWhy[160];
     /* the *_nodual twins of the gs_dual_out entries (0 for the
      * others), and whether the two-pass blend is in force (no dualSrcBlend,
      * ICO_RD_NO_DUAL or rd_set_no_dual) */

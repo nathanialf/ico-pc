@@ -483,6 +483,16 @@ void rd_shutdown(void);
 void rd_reset_scene(uint32_t gsWidth, uint32_t gsHeight);
 /* Settings menu: applies at the next rd_begin_frame. */
 void rd_set_settings(const RdSettings *settings);
+/* Before rd_init: every VU draw of the run takes the VU vertex shaders'
+ * plain variants (issue 107; docs/port/RENDER.md, "The VU shader
+ * variants"), reason saying why for the log ("[dev] vu_plain_only: the
+ * last start ended while the driver compiled them"); NULL clears it.  The
+ * host calls it after a start that ended inside the extended variants'
+ * compile (window_host.c); ICO_RD_VU_EXTENDED=1 overrides it. */
+void rd_set_vu_plain_only(const char *reason);
+/* Whether the run draws every VU draw with the plain variants (after
+ * rd_init), and why (NULL when it does not) */
+const char *rd_vu_plain_only(void);
 const RdSettings *rd_get_settings(void);
 /* The scene's scale in force (rd_present.c
  * rd__apply_display, from the settings applied at the last rd_begin_frame):

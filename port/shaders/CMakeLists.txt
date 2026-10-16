@@ -54,6 +54,16 @@ ico_add_shader(vu_grid_vs vu_grid.hlsl vu_grid_vs vertex)
 ico_add_shader(vu_grid_lit_vs vu_grid.hlsl vu_grid_lit_vs vertex)
 ico_add_shader(vu_grid_spec_vs vu_grid.hlsl vu_grid_spec_vs vertex)
 ico_add_shader(vu_particle_vs vu_particle.hlsl vu_particle_vs vertex)
+# the plain variants (ICO_VU_PLAIN, vu_common.hlsli): no card test and no
+# tick cameras, for the draws with neither (rd_replay.c vuDraw); about half
+# the size (issue 107: the Adreno 740's compiler hangs the device on the
+# extended ones)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
+        grid:grid grid_lit:grid grid_spec:grid particle:particle)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_PLAIN=1)
+endforeach()
 # the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)

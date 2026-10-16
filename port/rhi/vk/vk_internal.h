@@ -238,6 +238,14 @@ typedef struct VkrState {
      * its vendor writes it (vkr_driver_text) */
     uint32_t driverID;
     char driverVersion[32];
+    /* the driver's own "Compiler Version: ..." line from its driverInfo
+     * (Qualcomm's Adreno driver writes one), "" when it has none, for
+     * RhiLimits.compilerVersion (vkr_driver_text) */
+    char compilerVersion[96];
+    /* why the VU vertex shaders' extended variants are refused on this
+     * device (vkr_vu_plain_only's table: "Adreno 740, issue 107"), "" when
+     * they are not, for RhiLimits.vuPlainOnly */
+    char vuPlainOnly[96];
     /* VK_KHR_dynamic_rendering_local_read enabled (the attachment read, and
      * barriers inside a render pass); validationOn: the Khronos validation
      * layer is loaded; storageBarriers: a by-region barrier before a

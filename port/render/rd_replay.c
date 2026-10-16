@@ -129,6 +129,11 @@ static const char *const s_fsNames[RD_FS_COUNT] = {"sprite_ps" /* indexed by RD_
                                                    "depth_resolve_ps",
                                                    "depth_upsample_ps"};
 
+const char *rd__fs_name(uint8_t fs)
+{
+    return fs < RD_FS_COUNT ? s_fsNames[fs] : "?";
+}
+
 /* ------------------------------------------------------------------ init */
 
 RhiShader rd__make_shader(const char *name)
@@ -261,6 +266,7 @@ bool rd__gpu_init(void *sdlWindow)
         g_rd.vs[i] = rd__make_shader(s_vsNames[i]);
         ok = ok && g_rd.vs[i].id;
     }
+    ok = rd__vu_policy_init(lim) && ok; /* the plain variants, rd_pipeline.c */
     for (int i = 0; i < RD_FS_COUNT; i++) {
         /* the per-sample fog reads SV_SampleIndex: only a device with
          * sample-rate shading takes it (else it is never asked for) */
@@ -358,6 +364,9 @@ void rd__gpu_shutdown(void)
     for (int i = 0; i < RD_VS_COUNT; i++) {
         if (g_rd.vs[i].id) {
             rhi_destroy_shader(g_rd.vs[i]);
+        }
+        if (g_rd.vsPlain[i].id) {
+            rhi_destroy_shader(g_rd.vsPlain[i]);
         }
     }
     for (int i = 0; i < RD_FS_COUNT; i++) {
@@ -4389,9 +4398,11 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     RdDrawPass pl[2], dp[8];
     const int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
                                          ds->depthFmt, pl);
+    const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]); /* the VS variant */
     for (int i = 0; i < npl; i++) {
         pl[i].key.gs.program = prog;
         pl[i].key.vs = vs;
+        pl[i].key.vuExt = vuExt;
         /* the planner's sprite_texa_ps becomes vu_texa_ps */
         pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         if (vcb->batch[2] != 0u) {
@@ -4446,19 +4457,6 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
 }
 
 static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c);
-
-/* Whether the picture is not the PS2's out of the box, the Original preset
- * on a 4:3 frame at 1x (ICO_VU_EXTENDED; the region rule, vu_common.hlsli
- * vu_region_rule): the Enhanced preset, a frame wider than 4:3 or a scene
- * scale above 1.  Out of the box the PS2's behaviour stays; any other
- * state draws what a game made for that picture would draw (RENDER.md
- * "Strip joining").  rd_mesh.c asks it too, when it records a draw (the
- * card verdicts, RdVuCards). */
-bool rd__vu_extended(void)
-{
-    return g_rd.settings.preset != RD_PRESET_ORIGINAL || g_rd.gsW > ICO_SH_FRAME_BASE_W ||
-           g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f;
-}
 
 /* A VU draw under its camera's picture (Replay.picture: the frame group's
  * g_frame.yz) */

@@ -654,6 +654,8 @@ static void dx_fill_limits(void)
     o->fragmentInterlock = false;
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
+    o->vuPlainOnly = NULL;
+    o->compilerVersion = NULL;
 }
 
 /* ------------------------------------------------------------- lifecycle */

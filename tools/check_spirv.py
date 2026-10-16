@@ -52,6 +52,28 @@ Gates:
              and their picture and frame rows, the attribute planes);
              v0.5.2's, without the cut, the ticks and the planes, were up
              to 16,268.
+  size per variant (issue 107)  the VU vertex shaders' plain variants
+             (vu_*_plain_vs, ICO_VU_PLAIN: no card test, no tick cameras;
+             port/shaders/vu_common.hlsli) have their own budget,
+             VS_PLAIN_BUDGET, a tenth above the largest of them at its
+             introduction (vu_lit_plain_vs, 23,305).  The extended
+             variants keep VS_BUDGET.  An Adreno 740 (driver 512.676.53)
+             built every VU vertex shader of v0.6.1 (at most 32,709 words)
+             and hung the whole device compiling those of v0.7.5 to v0.7.7
+             (46,470 words and up): the plain variant is what such a
+             device compiles, so it stays well inside the size that
+             built (docs/port/SHADERS.md, The size history).
+             The VU vertex shaders by release (git archive <tag>
+             port/shaders, this DXC and flags; words, and vu_prelit_vs's
+             instructions / blocks), and the Adreno 740 with them:
+               v0.5.2  5,448 to 16,268 words (3,870 / 604)     built (issue 93)
+               v0.6.1  8,200 to 32,709 (7,699 / 1,180)         built (issue 107)
+               v0.7.5  10,840 to 49,256 (11,826 / 1,837)       hung (issue 93)
+               v0.7.6  10,840 to 93,407 (19,920 / 2,431)       hung (issue 107)
+               v0.7.7  10,000 to 51,005 (10,692 / 861)         hung (issue 107)
+  variants   every VU vertex shader vu_X_vs in the directories given has
+             its plain variant vu_X_plain_vs beside it (only when a
+             directory, not single files, is given).
   aggregate  no instruction produces or stores a whole array: no OpLoad,
              OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi,
              OpSelect, OpCopyObject or OpCopyLogical whose type is an array
@@ -145,6 +167,7 @@ OTHER_NAMES = {77: "OpVectorExtractDynamic", 78: "OpVectorInsertDynamic", 126: "
                179: "OpSLessThanEqual", 195: "OpShiftRightArithmetic", 198: "OpBitwiseXor",
                200: "OpNot", 252: "OpKill"}
 VS_BUDGET = 56000
+VS_PLAIN_BUDGET = 25700
 PS_BUDGET = 78560
 
 
@@ -220,10 +243,12 @@ def check(path, sizes=None):
                           for op in sorted(census) if op not in VS_OPCODES and op not in DENIED)
         if other:
             out.append("envelope: opcodes outside the vertex-shader set: " + other)
-    budget = VS_BUDGET if vertex else PS_BUDGET
+    plain = os.path.basename(path).endswith("_plain_vs.spv")
+    budget = (VS_PLAIN_BUDGET if plain else VS_BUDGET) if vertex else PS_BUDGET
     if nwords > budget:
         out.append("size: %d words, over the %s budget of %d" %
-                   (nwords, "vertex" if vertex else "pixel", budget))
+                   (nwords, "plain vertex" if plain and vertex else
+                    "vertex" if vertex else "pixel", budget))
     if sizes is not None:
         sizes.append("%-32s %-2s %7d words %6d insts %5d blocks %5d phis %3d loops %3d dot "
                      "%4d vcmp %4d bsel %3d any" %
@@ -255,6 +280,16 @@ def main(argv):
         for text in check(f, sizes):
             print("%s: %s" % (f, text))
             findings += 1
+    # every VU vertex shader has its plain variant (only over directories)
+    if all(not os.path.isfile(d) for d in args):
+        names = {os.path.basename(f) for f in files}
+        for n in sorted(names):
+            if (n.startswith("vu_") and n.endswith("_vs.spv") and
+                    not n.endswith("_plain_vs.spv") and
+                    n[:-len("_vs.spv")] + "_plain_vs.spv" not in names):
+                print("%s: variants: no plain variant %s" %
+                      (n, n[:-len("_vs.spv")] + "_plain_vs.spv"))
+                findings += 1
     if show:
         print("\n".join(sizes))
     print("check_spirv: %d modules, %d findings" % (len(files), findings))

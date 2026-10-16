@@ -745,6 +745,16 @@ static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDevicePropertie
     rhi_driver_version_text(p->vendorID, (uint32_t)dp.driverID, p->driverVersion, ver, sizeof ver);
     g_vkr.driverID = (uint32_t)dp.driverID;
     snprintf(g_vkr.driverVersion, sizeof g_vkr.driverVersion, "%s", ver);
+    /* the compiler's own line (Qualcomm: "Compiler Version: E031.41.03.47"),
+     * the driver's text up to the line's end */
+    g_vkr.compilerVersion[0] = '\0';
+    {
+        const char *c = strstr(dp.driverInfo, "Compiler Version:");
+        if (c != NULL) {
+            const size_t n = strcspn(c, "\r\n");
+            snprintf(g_vkr.compilerVersion, sizeof g_vkr.compilerVersion, "%.*s", (int)n, c);
+        }
+    }
     snprintf(s_driverText, sizeof s_driverText, "; device %04x:%04x; driver %s%s%s, version %s",
              (unsigned)p->vendorID, (unsigned)p->deviceID,
              dp.driverName[0] ? dp.driverName : "(unnamed)", dp.driverInfo[0] ? " " : "",
@@ -1581,6 +1591,46 @@ static bool vkr_is_tiler(uint32_t vendor)
     }
 }
 
+/* The devices whose driver cannot be given the VU vertex shaders' extended
+ * variants (port/shaders/vu_common.hlsli, ICO_VU_PLAIN; docs/port/RENDER.md,
+ * "The VU shader variants"): the renderer creates only the plain ones there
+ * and draws every VU draw with them (port/render/rd_pipeline.c
+ * rd__vu_policy_init).  A row matches the vendor id, the device id under its
+ * mask and, with qualcomm set, Qualcomm's own driver only
+ * (rhi_driver_is_qualcomm_proprietary: Mesa's Turnip on the same GPU is
+ * another compiler).  The reason is logged and goes to
+ * RhiLimits.vuPlainOnly.
+ *   Adreno 740 (device 0x4305xxxx; AYN Thor, issue 107, and AYN Odin 2
+ *   Portal, issue 93; driver 512.676.53, compiler E031.41.03.47): the
+ *   whole device froze, needing a reboot, while the driver compiled the
+ *   first pipelines with a VU vertex shader of v0.7.5 to v0.7.7 (46,470
+ *   to 93,407 words); v0.6.1's (20,975 to 32,709 words) built
+ *   (docs/port/SHADERS.md, The size history).  The plain variants are 10,011
+ *   to 23,305 words.
+ * ICO_RD_VU_EXTENDED=1 ([dev] vu_extended) gives the extended variants
+ * anyway (the renderer reads it). */
+static const struct {
+    uint32_t vendor, deviceMask, device;
+    bool qualcomm;
+    const char *reason;
+} kVuPlainOnly[] = {
+    {RHI_VENDOR_QUALCOMM, 0xFFFF0000u, 0x43050000u, true, "Adreno 740, issue 107"},
+};
+
+static void vkr_vu_plain_only(void)
+{
+    const uint32_t v = g_vkr.props.vendorID, d = g_vkr.props.deviceID;
+    g_vkr.vuPlainOnly[0] = '\0';
+    for (size_t i = 0; i < sizeof(kVuPlainOnly) / sizeof(kVuPlainOnly[0]); i++) {
+        if (kVuPlainOnly[i].vendor == v &&
+            (d & kVuPlainOnly[i].deviceMask) == kVuPlainOnly[i].device &&
+            (!kVuPlainOnly[i].qualcomm || rhi_driver_is_qualcomm_proprietary(v, g_vkr.driverID))) {
+            snprintf(g_vkr.vuPlainOnly, sizeof g_vkr.vuPlainOnly, "%s", kVuPlainOnly[i].reason);
+            return;
+        }
+    }
+}
+
 static void vkr_fill_limits(void)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
@@ -1640,6 +1690,11 @@ static void vkr_fill_limits(void)
     o->rov = false;
     o->rasterOrderAttachment = g_vkr.rasterOrder;
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
+    /* the VU shader variants' device table (kVuPlainOnly) and the
+     * compiler's line, for the renderer's log (rd__vu_policy_init) */
+    vkr_vu_plain_only();
+    o->vuPlainOnly = g_vkr.vuPlainOnly[0] ? g_vkr.vuPlainOnly : NULL;
+    o->compilerVersion = g_vkr.compilerVersion[0] ? g_vkr.compilerVersion : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required
      * Limits table), where phone GPUs sit while desktop ones and lavapipe are

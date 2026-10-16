@@ -2368,6 +2368,33 @@ static void frameCB(IcoFrameCB *f, float w, float h, float ox, float oy)
 #define UBO_SLOT 4096u
 #define RING_SIZE (OFF_UBO + 8u * UBO_SLOT)
 
+/* A case's VU draw into the bound pass: the particles, a scissor case's
+ * cut and kick draws, or the indices [first, first + count) */
+static void drawCase(RhiCommandList cl, RhiPipeline p, const Case *c, RhiBuffer ring,
+                     RhiBindGroup g1Cut, RhiBindGroup g1Kick, int first, int count, int scissor)
+{
+    rhi_cmd_set_pipeline(cl, p);
+    if (c->prog == P_PARTICLE) {
+        rhi_cmd_draw(cl, (uint32_t)c->vpb * 6, 0, 1);
+    } else if (count && scissor) {
+        rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
+        rhi_cmd_set_bind_group(cl, 1, g1Cut);
+        rhi_cmd_draw_indexed(cl, (uint32_t)count, (uint32_t)first, 0, 1);
+        rhi_cmd_set_bind_group(cl, 1, g1Kick);
+        rhi_cmd_draw_indexed(cl, (uint32_t)count, (uint32_t)first, 0, 1);
+    } else if (count) {
+        rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
+        rhi_cmd_draw_indexed(cl, (uint32_t)count, (uint32_t)first, 0, 1);
+    }
+}
+
+/* the plain variant's name of a VU vertex shader: vu_X_vs -> vu_X_plain_vs */
+static void plainName(const char *vs, char *out, size_t size)
+{
+    const size_t n = strlen(vs);
+    snprintf(out, size, "%.*s_plain_vs", (int)(n - 3), vs);
+}
+
 static int gpuTests(void)
 {
     RhiDeviceDesc dd = {NULL, false, true, "vu1_test"};
@@ -2399,11 +2426,20 @@ static int gpuTests(void)
     RhiPipeline pSprite =
         makePipeline(spriteVs, spritePs, lay, 1, RHI_FMT_RGBA8_UNORM, "ref sprite");
     RhiPipeline pProbe[NCASES], pDraw[NCASES];
+    /* and with each shader's plain variant (vu_common.hlsli ICO_VU_PLAIN,
+     * issue 107) */
+    RhiPipeline pProbePlain[NCASES], pDrawPlain[NCASES];
     for (int i = 0; i < NCASES; i++) {
         RhiShader vs = makeShader(kCases[i].vs);
         pProbe[i] = makePipeline(vs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
         pDraw[i] = makePipeline(vs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        char pn[64];
+        plainName(kCases[i].vs, pn, sizeof(pn));
+        RhiShader vsp = makeShader(pn);
+        pProbePlain[i] = makePipeline(vsp, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
+        pDrawPlain[i] = makePipeline(vsp, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
     }
+    int plainCases = 0; /* the cases the plain variant drew, byte for byte the extended's */
     RhiBuffer ring = rhi_create_buffer(&(RhiBufferDesc){
         RING_SIZE,
         RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_SRC,
@@ -2651,25 +2687,12 @@ static int gpuTests(void)
             rhi_cmd_set_bind_group(cl, 0, g0Draw);
             rhi_cmd_set_bind_group(cl, 1, g1Draw);
             rhi_cmd_set_bind_group(cl, 2, g2);
+            const int scissor = c->clip == ICO_VU_CLIP_SCISSOR;
             if (pass == 0) {
-                rhi_cmd_set_pipeline(cl, pDraw[ci]);
-                if (c->prog == P_PARTICLE) {
-                    rhi_cmd_draw(cl, (uint32_t)c->vpb * 6, 0, 1);
-                } else if (nidx && c->clip == ICO_VU_CLIP_SCISSOR) {
-                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
-                    rhi_cmd_set_bind_group(cl, 1, g1Cut);
-                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
-                    rhi_cmd_set_bind_group(cl, 1, g1Kick);
-                    rhi_cmd_draw_indexed(cl, (uint32_t)nidx, 0, 0, 1);
-                } else if (nkept) {
-                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
-                    rhi_cmd_draw_indexed(cl, (uint32_t)nkept, 0, 0, 1);
-                }
+                drawCase(cl, pDraw[ci], c, ring, g1Cut, g1Kick, 0, scissor ? nidx : nkept, scissor);
             } else if (pass == 2) {
                 if (nidx > nkept) {
-                    rhi_cmd_set_pipeline(cl, pDraw[ci]);
-                    rhi_cmd_set_index_buffer(cl, ring, OFF_INDEX, true);
-                    rhi_cmd_draw_indexed(cl, (uint32_t)(nidx - nkept), (uint32_t)nkept, 0, 1);
+                    drawCase(cl, pDraw[ci], c, ring, g1Cut, g1Kick, nkept, nidx - nkept, 0);
                 }
             } else if (cr.ntri) {
                 rhi_cmd_set_pipeline(cl, pSprite);
@@ -2696,6 +2719,70 @@ static int gpuTests(void)
             !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, pa, sizeof(pa), &pitch)) {
             FAILF("%s readback\n", c->name);
             break;
+        }
+        /* the plain variant of a case whose draw has neither
+         * VU_F_EXTENDED nor VU_F_TICKS (the Original preset at 4:3 and 1x
+         * without interpolation: what rd_replay.c vuDraw gives the plain
+         * one): its probe, its exact triangles and the others, byte for
+         * byte the extended variant's */
+        if ((vcb.draw[2] & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u) {
+            static uint8_t qimg[ICO_VU_PROBE_FIELDS * MAXV * 4], qa[RT * RT * 4], qpa[RT * RT * 4];
+            RhiCommandList ql = rhi_begin_commands();
+            RhiTextureBarrier qpre[3] = {{probe, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                                         {imgVu, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                                         {imgPort, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET}};
+            rhi_cmd_barrier(ql, qpre, 3);
+            rhi_cmd_begin_render_pass(ql, &rp);
+            rhi_cmd_set_pipeline(ql, pProbePlain[ci]);
+            rhi_cmd_set_bind_group(ql, 0, g0Probe);
+            rhi_cmd_set_bind_group(ql, 1, g1Probe);
+            rhi_cmd_set_bind_group(ql, 2, g2);
+            rhi_cmd_draw(ql, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
+            rhi_cmd_end_render_pass(ql);
+            for (int pass = 0; pass < 2; pass++) {
+                RhiRenderPassDesc dp = {0};
+                dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
+                                                   RHI_LOAD_CLEAR,
+                                                   {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                                                   RHI_STORE_STORE,
+                                                   false};
+                dp.colorCount = 1;
+                dp.width = dp.height = RT;
+                rhi_cmd_begin_render_pass(ql, &dp);
+                rhi_cmd_set_bind_group(ql, 0, g0Draw);
+                rhi_cmd_set_bind_group(ql, 1, g1Draw);
+                rhi_cmd_set_bind_group(ql, 2, g2);
+                const int scissor = c->clip == ICO_VU_CLIP_SCISSOR;
+                if (pass == 0) {
+                    drawCase(ql, pDrawPlain[ci], c, ring, g1Cut, g1Kick, 0, scissor ? nidx : nkept,
+                             scissor);
+                } else if (nidx > nkept) {
+                    drawCase(ql, pDrawPlain[ci], c, ring, g1Cut, g1Kick, nkept, nidx - nkept, 0);
+                }
+                rhi_cmd_end_render_pass(ql);
+            }
+            RhiTextureBarrier qpost[3] = {{probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                          {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                          {imgPort, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
+            rhi_cmd_barrier(ql, qpost, 3);
+            rhi_end_commands(ql);
+            rhi_submit(ql);
+            uint32_t qp = 0, qq = 0;
+            if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, qimg, sizeof(qimg), &qp) ||
+                !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, qa, sizeof(qa), &qq) ||
+                !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, qpa, sizeof(qpa), &qq)) {
+                FAILF("%s plain readback\n", c->name);
+                break;
+            }
+            if (memcmp(qimg, pimg, sizeof(qimg)) != 0 || memcmp(qa, a, sizeof(qa)) != 0 ||
+                memcmp(qpa, pa, sizeof(qpa)) != 0) {
+                FAILF("%s: the plain variant differs from the extended one (probe %s, exact %s, "
+                      "the others %s)\n",
+                      c->name, memcmp(qimg, pimg, sizeof(qimg)) ? "differs" : "same",
+                      memcmp(qa, a, sizeof(qa)) ? "differs" : "same",
+                      memcmp(qpa, pa, sizeof(qpa)) ? "differs" : "same");
+            }
+            plainCases++;
         }
         int before = failures;
         compareProbe(c, &cr, pimg, ppitch);
@@ -2840,6 +2927,10 @@ static int gpuTests(void)
                "covered, max diff %d %s\n",
                c->name, nvert, c->prog == P_PARTICLE ? cr.po.count * 2 : nidx / 3, cr.ntri, covered,
                maxd, failures == before ? "ok" : "FAILED");
+    }
+    printf("  the plain variants: %d cases drawn byte for byte as the extended ones\n", plainCases);
+    if (plainCases == 0) {
+        FAILF("the plain variants: no case without VU_F_EXTENDED and VU_F_TICKS\n");
     }
     if (portIn == 0 || portDropped == 0) {
         FAILF("triangles past the region window: %d pixels drawn clipped, %d triangles dropped "

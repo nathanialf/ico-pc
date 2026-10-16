@@ -300,10 +300,13 @@ _Static_assert(sizeof(RdPipelineKey) == 16, "RdPipelineKey: 16 bytes, msaa took 
 /* Every sprite_ps and vu_ps key has a twin with sprite_texa_ps / vu_texa_ps
  * (TEXA, the texture's format and its filter are runtime state that leaks
  * between lists, so any of those states can meet a 24- or 16-bit texture
- * under AEM), which roughly doubles the set, and the exact blend adds the
- * destination-read images of the blended keys (rd_dst_read.c); the tests
- * keep it under this. */
-#define RD_PIPELINE_REACHABLE_MAX 768
+ * under AEM), which roughly doubles the set, the exact blend adds the
+ * destination-read images of the blended keys (rd_dst_read.c), and a
+ * setting that draws with the VU vertex shaders' extended variants adds
+ * them beside the plain ones (issue 107: 878 keys with the exact blend,
+ * 703 with the fixed-function one, against 658 and 527 without); the
+ * tests keep it under this. */
+#define RD_PIPELINE_REACHABLE_MAX 1024
 #define RD_PIPELINE_CACHE_MAX (4 * RD_PIPELINE_REACHABLE_MAX)
 /* keys whose rhi_create_pipeline failed, remembered so they are not retried
  * (and logged) on every draw */
