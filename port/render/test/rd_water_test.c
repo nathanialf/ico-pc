@@ -63,6 +63,12 @@
  *   waterdot  one pixel per dot, Cd + life (ALPHA 0x48, As = life)
  *   cloth     the replay against the VU reference's triangles drawn as
  *             screen prims in the same state (rd_mesh's method), 1 LSB
+ *   ripples   a ripple (drawRipples, its STs 1.05 .. 1.95 of the block on
+ *             REPEAT) drawn, and SCENE byte for byte the same with Full
+ *             pixel on and off: the open border's clamp of a target read
+ *             keeps a read wholly past the first period on REPEAT
+ *             (rd__repeat_kept, issue 106; the rule's cases without a
+ *             device); the dump line counts the read
  *   16:9      Enhanced at 16:9, scene 1x (native blocks): the aspect alone
  *             widens nothing; the puddle's block 256 x 256 texels (its GS
  *             size) holding the 4:3 run's picture byte for byte; SCENE
@@ -1436,6 +1442,11 @@ static const uint8_t kSurfCol[4] = {90, 100, 110, 0x80};
  * see the copy */
 static int s_surfFba;
 
+/* the reflection's material on REPEAT both ways (ripplePixels): its CLAMP_1
+ * is the state the ripples draw under, as the stage's mirror leaves REPEAT
+ * in list 4 */
+static int s_reflRepeat;
+
 static const uint8_t kReflCol[4] = {200, 60, 40, 0x80};
 
 /* the reflected quad, at view depth about 450 */
@@ -1456,6 +1467,9 @@ static void setupPuddle(void)
     makeQuad(&s_puddleSurf, &s_puddleObj, kSurfQuad, kSurfCol, "puddle_surface");
     s_puddleSurf.mat.fbaOff = !s_surfFba;
     makeQuad(&s_puddleRefl, &s_puddleReflObj, kReflQuad, kReflCol, "puddle_reflect");
+    if (s_reflRepeat) {
+        s_puddleRefl.mat.wrap = 3;
+    }
     p2o_MakePacket(&s_puddleObj);
     p2o_MakePacket(&s_puddleReflObj);
     memset(&s_puddleG, 0, sizeof(s_puddleG));
@@ -2366,6 +2380,64 @@ static void puddlePixels(void)
 
 static uint8_t s_lim43[W * H * 4], s_lim43Cover[W * H];
 
+/* puddle.c's ripple entry and tick (prototyped there, not in puddle.h) */
+void PuddleGeo(GObj *self);
+void EntryRippleToPuddle(GObj *self, void *vec);
+
+static uint8_t s_ripBase[W * H * 4], s_ripOff[W * H * 4];
+
+/* Issue 106: the ripples (drawRipples, ADD FIX 0x60 under DATE) sample the
+ * block at STs 1.05 .. 1.95 on REPEAT, the block's middle on the GS.  Full
+ * pixel clamps a draw reading a render target at its edges, which pinned
+ * every ripple fragment to the block's corner texel: flat bright segments.
+ * SCENE with a ripple is the same byte for byte with Full pixel on and off
+ * (at 4:3 the option changes nothing else the puddle draws), and differs
+ * from SCENE without the ripple */
+static void ripplePixels(void)
+{
+    s_surfFba = 1; /* the surface sets the MSB the ripples' DATE tests */
+    s_reflRepeat = 1;
+    setupPuddle();
+    g_rd.settings.fullPixel = 0;
+    recordPuddle();
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_ripBase, W, H)) {
+        return;
+    }
+    float pos[4] = {0.0f, 0.0f, 10.0f, 1.0f};
+    EntryRippleToPuddle(&s_puddleG, pos);
+    for (int i = 0; i < 3; i++) {
+        PuddleGeo(&s_puddleG); /* t 14.4: the ring samples the reflected quad */
+    }
+    recordPuddle();
+    if (!readTarget(rd_target(RD_TARGET_SCENE).id, s_ripOff, W, H)) {
+        return;
+    }
+    char line[1536];
+    rd__water_dump_line(rd__last_frame(), line, sizeof(line));
+    printf("  ripples dump line: %s\n", line);
+    CHECK(strstr(line, "2 read it") != NULL &&
+              strstr(line, "REPEAT 2, 1 of them wholly past the first period") != NULL,
+          "ripples: the dump line counts the ripples' read as wholly past the first period");
+    g_rd.settings.fullPixel = 1;
+    recordPuddle();
+    const int read = readTarget(rd_target(RD_TARGET_SCENE).id, s_img, W, H);
+    g_rd.settings.fullPixel = 0;
+    if (!read) {
+        return;
+    }
+    int drawn = 0, differ = 0;
+    for (int i = 0; i < W * H; i++) {
+        drawn += memcmp(&s_ripOff[i * 4], &s_ripBase[i * 4], 3) != 0;
+        differ += memcmp(&s_img[i * 4], &s_ripOff[i * 4], 4) != 0;
+    }
+    printf("  ripples: %d pixels drawn, %d differ with Full pixel on\n", drawn, differ);
+    CHECK(drawn > 200, "ripples: the ring drawn (%d pixels)", drawn);
+    CHECK(differ == 0, "ripples: Full pixel on draws them as off (%d pixels differ)", differ);
+    s_surfFba = 0;
+    s_reflRepeat = 0;
+    setupPuddle();
+}
+
 static void poolPixels(void)
 {
     s_range = 1;
@@ -2821,8 +2893,34 @@ static void checkPuddleDumpLine(const char *what, const char *scale)
           what);
 }
 
+/* rd__repeat_kept (issue 106): a range wholly in a later period keeps
+ * REPEAT, one from about 0 to the size (the screen-space lookups) or across
+ * a period's end does not */
+static void repeatKeptChecks(void)
+{
+    CHECK(rd__repeat_kept(1.05f * 344.0f, 1.95f * 344.0f, 344.0f), "repeat kept: 1.05 .. 1.95");
+    CHECK(rd__repeat_kept(-0.9f * 256.0f, -0.1f * 256.0f, 256.0f), "repeat kept: -0.9 .. -0.1");
+    CHECK(rd__repeat_kept(256.0f, 512.0f, 256.0f), "repeat kept: the whole second period");
+    CHECK(!rd__repeat_kept(-0.5f, 256.5f, 256.0f), "repeat not kept: -0.5 .. 256.5");
+    CHECK(!rd__repeat_kept(13.25f, 243.625f, 256.0f), "repeat not kept: the copy's UVs");
+    CHECK(!rd__repeat_kept(200.0f, 300.0f, 256.0f), "repeat not kept: across the end");
+    CHECK(!rd__repeat_kept(300.0f, 600.0f, 256.0f), "repeat not kept: two periods");
+    CHECK(!rd__repeat_kept(1.0f, 2.0f, 0.0f), "repeat not kept: no size");
+    RdScreenVtx v[2];
+    memset(v, 0, sizeof(v));
+    v[0].s = 1.2f, v[0].t = 0.5f, v[0].q = 1.0f;
+    v[1].s = 1.8f, v[1].t = 1.5f, v[1].q = 1.0f;
+    CHECK(rd__screen_repeat_kept(v, 2, 0, 256.0f, 256.0f) == 1u,
+          "repeat kept: S on 1.2 .. 1.8, not T on 0.5 .. 1.5");
+    v[0].s = 16.0f * 300.0f, v[0].t = 16.0f * 300.0f;
+    v[1].s = 16.0f * 500.0f, v[1].t = 16.0f * 600.0f;
+    CHECK(rd__screen_repeat_kept(v, 2, 1, 256.0f, 256.0f) == 1u,
+          "repeat kept: 12.4 texels, S 300 .. 500, not T 300 .. 600");
+}
+
 static void recordingChecks(void)
 {
+    repeatKeptChecks();
     decoderOnlyChecks();
     recordPuddle();
     checkPuddleRecording();
@@ -2880,6 +2978,7 @@ int main(void)
     s_range = 0;
     dotPixels();
     clothPixels();
+    ripplePixels();
 
     static RdPipeKeyInt keys[1024];
     const uint32_t n = rd__enumerate_reachable(keys, 1024);

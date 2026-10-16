@@ -1150,76 +1150,6 @@ bool rd__take_pending_clear(const RdPendingClear *p, uint32_t cid, uint32_t did,
     return true;
 }
 
-bool rd__stencil_live(const RdStencilWindow *w, uint32_t depth)
-{
-    if (depth == 0) {
-        return false;
-    }
-    if (w->spill) {
-        return true;
-    }
-    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
-        if (w->live[i] == depth) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void rd__stencil_open(RdStencilWindow *w, uint32_t depth)
-{
-    if (depth == 0 || rd__stencil_live(w, depth)) {
-        return;
-    }
-    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
-        if (w->live[i] == 0) {
-            w->live[i] = depth;
-            return;
-        }
-    }
-    w->spill = 1;
-}
-
-void rd__stencil_close(RdStencilWindow *w, uint32_t depth)
-{
-    for (int i = 0; i < RD_STENCIL_LIVE_MAX && depth != 0; i++) {
-        if (w->live[i] == depth) {
-            w->live[i] = 0;
-        }
-    }
-}
-
-bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
-                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
-{
-    const bool live = rd__stencil_live(w, depth);
-    *stencilStore = live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
-    if (depth != 0 && depth == w->clearFor && whole) {
-        w->clearFor = 0;
-        *stencilLoad = RHI_LOAD_CLEAR;
-        return true;
-    }
-    *stencilLoad = live || depthLoad == RHI_LOAD_CLEAR ? depthLoad : RHI_LOAD_DONT_CARE;
-    return false;
-}
-
-/* rd__stencil_ops, and with g_rd.depthCopy the stencil loaded with the
- * depth and stored outside the window too: no pass on a
- * packed depth-stencil then asks for its depth and its stencil
- * differently */
-bool rd__stencil_ops_packed(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
-                            RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
-{
-    const bool took = rd__stencil_ops(w, depth, whole, depthLoad, stencilLoad, stencilStore);
-    if (g_rd.depthCopy) {
-        *stencilStore = RHI_STORE_STORE;
-        if (*stencilLoad == RHI_LOAD_DONT_CARE) {
-            *stencilLoad = depthLoad;
-        }
-    }
-    return took;
-}
-
 /* A shadow reset no pass took, recorded as a pass of its own: the colour
  * and depth loaded and kept, the stencil cleared to 0 and stored (the
  * depth is live: only the end of a resolve's pass leaves the window, and
@@ -2670,6 +2600,10 @@ typedef struct DrawSetup {
      * less its left-out ones (fillDrawCB, common.hlsli gs_uv_norm); NULL
      * for every other texture */
     const RdTargetRec *texCrop;
+    /* the axes (bit 0 S, bit 1 T) a screen prim samples wholly past the
+     * first period of a REPEAT (rd__screen_repeat_kept): Full pixel keeps
+     * the game's wrap there (drawWrap) */
+    uint32_t repeatKept;
 } DrawSetup;
 
 /* Whether a screen prim is a screen-space pass rather than geometry: a
@@ -2788,10 +2722,14 @@ static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
  * at the target's edges.  The game leaves those draws on REPEAT, and at the
  * frame's outer columns the lookup wraps to the far side of the picture,
  * which the PS2's black border hid; with the border open it showed as a
- * strip of the far edge's colour.  Image textures keep their wrap. */
-static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w)
+ * strip of the far edge's colour.  Image textures keep their wrap, and so
+ * does an axis on which a screen prim's coordinates lie wholly in a later
+ * period of the REPEAT (ds->repeatKept, rd__repeat_kept: the puddle's
+ * ripples, issue 106).  axis 0 is S, 1 T. */
+static RdWrap drawWrap(const Replay *r, const DrawSetup *ds, RdWrap w, int axis)
 {
-    if (w == RD_WRAP_CLAMP || !borderOpen() || !ds->textured || !r->st.ds.texEnabled) {
+    if (w == RD_WRAP_CLAMP || !borderOpen() || !ds->textured || !r->st.ds.texEnabled ||
+        (ds->repeatKept & (1u << axis))) {
         return w;
     }
     const RdTexRec *t = rd__tex_rec(r->st.tex);
@@ -2836,12 +2774,12 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
     if (!scissorRect(r, tc, &sc)) {
         return (RhiBindGroup){0};
     }
-    RhiSampler smp =
-        ds->gsLevels
-            ? gsLodSampler(r, ds)
-            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s),
-                         drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t), ds->mipmapped, ds->replacement);
+    RhiSampler smp = ds->gsLevels
+                         ? gsLodSampler(r, ds)
+                         : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                      drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0),
+                                      drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1), ds->mipmapped,
+                                      ds->replacement);
     RhiBindGroup g2 = rd__tex_group_date(ds->tex, smp, ds->dateTex);
 
     /* a storage pass (the exact blend) stays open for the callers that
@@ -2986,8 +2924,8 @@ static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds)
     const int set =
         mmin == 3u || mmin == 5u ? RD_SAMPLER_SET_MIP_LINEAR : RD_SAMPLER_SET_MIP_NEAREST;
     const int i = (r->st.ds.magFilter ? 1 : 0) | (r->st.ds.minFilter ? 2 : 0) |
-                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? 4 : 0) |
-                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? 8 : 0);
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) ? 4 : 0) |
+                  (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) ? 8 : 0);
     return g_rd.samplers[set * RD_SAMPLER_COUNT + i];
 }
 
@@ -3104,8 +3042,9 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
          * (gsLodSampler) wraps */
         cb->mode[0] |= ICO_DF_NEAREST;
         if (ds->gsLevels) {
-            cb->mode[0] |= (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) ? ICO_DF_TEXA_CLAMP_S : 0u) |
-                           (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) ? ICO_DF_TEXA_CLAMP_T : 0u);
+            cb->mode[0] |=
+                (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) ? ICO_DF_TEXA_CLAMP_S : 0u) |
+                (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) ? ICO_DF_TEXA_CLAMP_T : 0u);
         }
     }
     if (spriteAbove1x(r, dp, ds)) {
@@ -3113,9 +3052,10 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
          * wrap its loads reproduce */
         cb->mode[0] |=
             ICO_DF_ABOVE1X |
-            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S
-                                                                        : 0u) |
-            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T : 0u);
+            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_S
+                                                                           : 0u) |
+            (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) != RD_WRAP_REPEAT ? ICO_DF_TEXA_CLAMP_T
+                                                                           : 0u);
         g_rd.above1xDraws++;
     }
     cb->mode[2] = dp->modeZ;
@@ -3581,6 +3521,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
+    ds.repeatKept = rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th);
 
     /* geometry */
     setUvShift(ds.tc->sx, ds.tc->sy);
@@ -4076,6 +4017,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    ds.repeatKept = rd__screen_repeat_kept(v, n, c->b[2], (float)ds.tw, (float)ds.th);
     const uint64_t vOff = rd__ring_alloc((uint64_t)n * 6 * sizeof(IcoSpriteVertex), 16);
     if (vOff == ~0ull) {
         return;
@@ -4169,12 +4111,12 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     fillDrawCB(r, &dp[0], &ds, &cb);
     cb.mode[0] &= ~(uint32_t)ICO_DF_PREMUL;
     cb.param[0] = (float)wrapEquation(&r->st);
-    RhiSampler smp =
-        ds.gsLevels
-            ? gsLodSampler(r, &ds)
-            : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
-                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s),
-                         drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t), ds.mipmapped, ds.replacement);
+    RhiSampler smp = ds.gsLevels
+                         ? gsLodSampler(r, &ds)
+                         : texSampler((RdFilter)r->st.ds.magFilter, (RdFilter)r->st.ds.minFilter,
+                                      drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.s, 0),
+                                      drawWrap(r, &ds, (RdWrap)r->st.ds.wrap.t, 1), ds.mipmapped,
+                                      ds.replacement);
     rhi_cmd_set_pipeline(s_cl, pa);
     rd__bind_uniform(s_cl, 0, frameGroupOf(tc, ox, oy, rd__target_z_scale(ds.tdId)));
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));

@@ -87,6 +87,20 @@ the same with the option on and off (`port/render/rd_present.c` (`outputBox`, `r
 `rd__ui_box`, `rd__apply_display`, `sourceCrop`), `port/render/rd_crt.c` (`rd__crt_crop`); the
 targets: [RENDER.md](RENDER.md#frames-and-targets)).
 
+**A draw that samples a render target** clamps at the target's edges while the border is open
+(Full pixel on, or the mask on a cropped frame: `borderOpen`): the game leaves its screen-space
+lookups (the mirror floors' copy of the scene, the reflections) on REPEAT, and at the frame's outer
+columns they wrapped to the far side of the picture, which the PS2's border hid
+(`port/render/rd_replay.c` (`drawWrap`); ctest `rd_present` (`checkFullPixelTargetWrap`)). A screen
+prim whose texel coordinates lie wholly in one period of the REPEAT past the first keeps the wrap on
+that axis (`port/render/rd_water.c` (`rd__repeat_kept`, `rd__screen_repeat_kept`);
+`DrawSetup.repeatKept`): the puddle's ripples (`ico2/sugipon/src/puddle.c` (`drawRipple`)) sample
+the reflection block at STs 1.05 to 1.95, its middle on the GS, and clamped every fragment took the
+block's corner texel, so the ring's segments came out flat and bright (issue 106, on every wide
+frame since the clamp). A lookup that runs from about 0 to the size, or across a period's end, stays
+clamped. Only screen prims carry the range on the CPU; the VU draws keep the clamp (ctest
+`rd_water`, the ripples).
+
 **The [scene scale](ARCHITECTURE.md#terms)** comes from the Resolution row in `rd__apply_display`:
 "Nx" is the GS size times N; "WxH" that size; "window" the presentation box (only with the Enhanced
 flag, so a zeroed `RdSettings` stays the GS size); otherwise the GS size. The CRT filter forces 1x.

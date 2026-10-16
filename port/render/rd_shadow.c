@@ -118,3 +118,77 @@ void rd_shadow_tris(const RdScreenVtx *v, const int8_t *sign, uint32_t triCount,
     c->keyHi = (uint32_t)(key >> 32);
     g_rd.stats.draws++;
 }
+
+/* ------------------------------------------- the stencil window's ops
+ * The load and store of a pass's stencil against the shadow window
+ * (rd_internal.h RdStencilWindow), which the replay's passes ask
+ * (rd_replay.c beginPass, rd_upload.c) */
+bool rd__stencil_live(const RdStencilWindow *w, uint32_t depth)
+{
+    if (depth == 0) {
+        return false;
+    }
+    if (w->spill) {
+        return true;
+    }
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
+        if (w->live[i] == depth) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void rd__stencil_open(RdStencilWindow *w, uint32_t depth)
+{
+    if (depth == 0 || rd__stencil_live(w, depth)) {
+        return;
+    }
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX; i++) {
+        if (w->live[i] == 0) {
+            w->live[i] = depth;
+            return;
+        }
+    }
+    w->spill = 1;
+}
+
+void rd__stencil_close(RdStencilWindow *w, uint32_t depth)
+{
+    for (int i = 0; i < RD_STENCIL_LIVE_MAX && depth != 0; i++) {
+        if (w->live[i] == depth) {
+            w->live[i] = 0;
+        }
+    }
+}
+
+bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
+                     RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
+{
+    const bool live = rd__stencil_live(w, depth);
+    *stencilStore = live ? RHI_STORE_STORE : RHI_STORE_DONT_CARE;
+    if (depth != 0 && depth == w->clearFor && whole) {
+        w->clearFor = 0;
+        *stencilLoad = RHI_LOAD_CLEAR;
+        return true;
+    }
+    *stencilLoad = live || depthLoad == RHI_LOAD_CLEAR ? depthLoad : RHI_LOAD_DONT_CARE;
+    return false;
+}
+
+/* rd__stencil_ops, and with g_rd.depthCopy the stencil loaded with the
+ * depth and stored outside the window too: no pass on a
+ * packed depth-stencil then asks for its depth and its stencil
+ * differently */
+bool rd__stencil_ops_packed(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
+                            RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
+{
+    const bool took = rd__stencil_ops(w, depth, whole, depthLoad, stencilLoad, stencilStore);
+    if (g_rd.depthCopy) {
+        *stencilStore = RHI_STORE_STORE;
+        if (*stencilLoad == RHI_LOAD_DONT_CARE) {
+            *stencilLoad = depthLoad;
+        }
+    }
+    return took;
+}

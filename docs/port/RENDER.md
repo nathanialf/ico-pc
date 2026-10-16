@@ -1090,12 +1090,15 @@ DATE with DATM 1, so they draw only where the surface set the bit; leveldown and
 test NEVER and AFAIL RGB_ONLY. An F12 adds one line to the log after the box cull's,
 
 ```
-rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; K draws sampled a texture-pack replacement (blank in the dump), P of them DATE draws; MSAA 8x (resolve: colour the mean of the samples, depth the smallest sample): the last replay's DATE snapshots of SCENE S, A of them read the resolved picture (C closed the epoch), of other targets O
+rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0, REPEAT r, k of them wholly past the first period); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; Full pixel on|off, border mask on|off; blend exact (interlock|rov|attachment read)|fixed-function (rounds up), storage pass merge on|off; K draws sampled a texture-pack replacement (blank in the dump), P of them DATE draws; MSAA 8x (resolve: colour the mean of the samples, depth the smallest sample): the last replay's DATE snapshots of SCENE S, A of them read the resolved picture (C closed the epoch), of other targets O
 ```
 
 (one line; a part with nothing to say is left out): each render-to-texture block a draw of the frame
-wrote or read, at which scale it was drawn, the draws into it and the DATE, AFAIL and blends of the
-draws that read it, the DATE draws by target, and how many draws sampled a texture pack's picture,
+wrote or read, at which scale it was drawn, the draws into it and the DATE, AFAIL, blends and wrap
+of the draws that read it (`REPEAT r`: the reads on REPEAT on an axis; `k of them`: screen prims
+whose coordinates lie wholly past its first period there, which keep the wrap under an open border:
+the ripples, [DISPLAY.md](DISPLAY.md)), the DATE draws by target, the border and the blend path in
+force (Full pixel, the border mask, the destination read and the storage pass merge), and how many draws sampled a texture pack's picture,
 which a dump carries blank, so a replay of that dump cannot show what they drew
 (`port/render/rd_water.c` (`rd__water_dump_line`); `port/render/rd_dump.c` (`rd_dump_on_demand`)).
 It walks the dumped frame once, on the key press, never per frame. The replay tool's `--list` ends
@@ -1113,6 +1116,14 @@ through the snapshot of SCENE as the epoch resolved it, the colour the mean of t
 edge pixel's bit can differ from what each sample drew (`rd_replay.c` `dateSnapshot`, `rd_core.c`
 `rd__date_msaa_last`). `P of them DATE draws` tests the second: a texture pack's picture sampled
 by the puddle's mask readers themselves.
+
+What it was (a dump from an RTX 3090 on the interlock path, Enhanced at 3840x2160, Full pixel on):
+neither of the two, nor the blend path. The bright, flat ring segments were the ripples sampling
+the block's corner texel: an open border clamped their read, whose STs run 1.05 to 1.95 on REPEAT. A
+lavapipe replay of the same dump with `--full-pixel` drew them so (the attachment read, so not the
+interlock path); with the read kept on REPEAT they are the faint reflection rings of the replay
+without the option ([DISPLAY.md](DISPLAY.md), `rd__repeat_kept`). `rd_water_test` draws a ripple
+and requires SCENE byte for byte the same with Full pixel on and off.
 
 ## The fog path and its self-test
 

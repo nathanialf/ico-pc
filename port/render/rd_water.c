@@ -19,6 +19,7 @@
  * Also the screen-space STs of pool.c's grids (rd_grid_screen_st): the
  * formula and scales wait here for the next rd_draw_vu_grid, which writes
  * them into its command (so dumps carry them). */
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -375,6 +376,45 @@ void rd__block_read(const RdTargetRec *src)
     }
 }
 
+/* ------------------------------------ a block read wholly past its period
+ * rd_internal.h rd__repeat_kept: the open border's clamp of a target read
+ * (rd_replay.c drawWrap) leaves the ripples' read on REPEAT (issue 106) */
+bool rd__repeat_kept(float lo, float hi, float size)
+{
+    if (!(size > 0.0f) || !(hi >= lo)) {
+        return false;
+    }
+    const float k = floorf(lo / size);
+    return k != 0.0f && hi <= (k + 1.0f) * size;
+}
+
+/* the texel range of the vertices on each axis, as convVtx converts them
+ * (without the scroll offset: a texel's fraction at most) */
+uint32_t rd__screen_repeat_kept(const RdScreenVtx *v, uint32_t n, int uvFixed, float tw, float th)
+{
+    if (n == 0) {
+        return 0;
+    }
+    float lo[2] = {INFINITY, INFINITY}, hi[2] = {-INFINITY, -INFINITY};
+    for (uint32_t i = 0; i < n; i++) {
+        float c[2];
+        if (uvFixed) {
+            c[0] = v[i].s * (1.0f / 16.0f);
+            c[1] = v[i].t * (1.0f / 16.0f);
+        } else {
+            const float q = v[i].q != 0.0f ? v[i].q : 1.0f;
+            c[0] = v[i].s / q * tw;
+            c[1] = v[i].t / q * th;
+        }
+        for (int a = 0; a < 2; a++) {
+            lo[a] = c[a] < lo[a] ? c[a] : lo[a];
+            hi[a] = c[a] > hi[a] ? c[a] : hi[a];
+        }
+    }
+    return (rd__repeat_kept(lo[0], hi[0], tw) ? 1u : 0u) |
+           (rd__repeat_kept(lo[1], hi[1], th) ? 2u : 0u);
+}
+
 /* ------------------------------------------- the F12 line (issue 106)
  * What a reporter's dump line alone has to tell about the water: which
  * scale each block was drawn at (Water reflections Original: its GS size;
@@ -392,9 +432,13 @@ typedef struct WaterUse {
     uint32_t date[3]; /* reads by RdDate */
     uint32_t afail;   /* reads' RdAFail bits (when the alpha test is on) */
     uint32_t blend;   /* reads' RdBlend bits; bit RD_BLEND_COUNT: blending off */
+    uint32_t repeat;  /* reads on REPEAT on an axis */
+    uint32_t kept;    /* of them, screen prims wholly past the first period on
+                         it (rd__screen_repeat_kept: REPEAT kept under Full pixel) */
 } WaterUse;
 
 typedef struct WaterLineAcc {
+    const RdFrame *f;
     WaterUse blocks[WATER_LINE_BLOCKS];
     uint32_t nBlocks, moreBlocks;
     WaterUse date[WATER_LINE_DATE]; /* DATE draws by colour target */
@@ -477,6 +521,16 @@ static void waterLineWalk(void *user, int list, uint32_t index, const RdCmd *c,
         if (u) {
             u->reads++;
             waterNoteState(u, s);
+            const uint32_t rep = (s->ds.wrap.s == RD_WRAP_REPEAT ? 1u : 0u) |
+                                 (s->ds.wrap.t == RD_WRAP_REPEAT ? 2u : 0u);
+            u->repeat += rep != 0;
+            const RdTargetRec *src = rd__target_rec(readId);
+            if (rep && c->type == RDC_SCREEN && src) {
+                const RdScreenVtx *v = (const RdScreenVtx *)(a->f->payload + c->u[0]);
+                u->kept +=
+                    (rd__screen_repeat_kept(v, c->u[1], c->b[2], (float)src->w, (float)src->h) &
+                     rep) != 0;
+            }
         }
     }
     if (s->ds.test.date != RD_DATE_OFF) {
@@ -532,6 +586,7 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
         return waterPut(line, cap, at, "no frame");
     }
     memset(&a, 0, sizeof(a));
+    a.f = f;
     RdStateBlock s = f->startState;
     rd__walk(f, f->keep, &s, waterLineWalk, &a);
     const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1);
@@ -558,6 +613,8 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
             at = waterPut(line, cap, at, " (DATE off %u, alpha 0 %u, alpha 1 %u", u->date[0],
                           u->date[1], u->date[2]);
             at = waterPutStates(line, cap, at, u);
+            at = waterPut(line, cap, at, ", REPEAT %u, %u of them wholly past the first period",
+                          u->repeat, u->kept);
             at = waterPut(line, cap, at, ")");
         }
     }
@@ -570,6 +627,13 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
                       rd__target_name(u->id), u->date[1], u->date[2]);
         at = waterPutStates(line, cap, at, u);
     }
+    /* Full pixel clamps a draw reading a render target at its edges,
+     * except on the axes the REPEAT reads above keep (issue 106: clamped,
+     * the ripples took the block's corner texel); the blend path the DATE
+     * draws took */
+    at = waterPut(line, cap, at, "; Full pixel %s, border mask %s; blend %s, storage pass merge %s",
+                  g_rd.settings.fullPixel ? "on" : "off", g_rd.settings.borderMask ? "on" : "off",
+                  rd__blend_exact_name(g_rd.dstMode), g_rd.passMerge ? "on" : "off");
     if (a.packDraws) {
         at = waterPut(line, cap, at,
                       "; %u draws sampled a texture-pack replacement (blank in the dump), %u of "

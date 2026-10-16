@@ -424,6 +424,20 @@ bool rd__screen_area(const RdTargetRec *tc, const RdStateBlock *st, const RdScre
  * snapshot would need). */
 bool rd__date_retake(uint32_t heldFor, uint32_t heldSerial, const RhiRect *held, uint32_t tcId,
                      uint32_t serial, const RhiRect *want, uint32_t tw, uint32_t th, RhiRect *take);
+/* Full pixel's clamp of a draw sampling a render target (rd_replay.c
+ * drawWrap) against a draw the game wraps on purpose: whether texel
+ * coordinates lo .. hi on an axis of size texels lie wholly in one period
+ * of a REPEAT other than the first, [k size, (k + 1) size] with k != 0.
+ * The GS then samples the texture's inside (puddle.c drawRipples: STs 1.05
+ * to 1.95 of the block, the reflection's middle), where a clamp pins every
+ * fragment to the edge texel (issue 106: bright flat ring segments).  The
+ * screen-space lookups the clamp is for run from about 0 to size and stay
+ * clamped. */
+bool rd__repeat_kept(float lo, float hi, float size);
+/* The axes (bit 0 S, bit 1 T) on which a screen-prim command's texel
+ * coordinates on a tw x th texture keep REPEAT by that rule; uvFixed as the
+ * command's (12.4 texels, else STQ normalised, divided per vertex) */
+uint32_t rd__screen_repeat_kept(const RdScreenVtx *v, uint32_t n, int uvFixed, float tw, float th);
 
 /* GS Z to depth scale of a target id's depth buffer: PSMZ32, the default
  * (also for an unknown id), is 2^-33 on a float depth buffer (gs_math.hlsli
