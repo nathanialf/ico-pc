@@ -80,8 +80,19 @@
  *   runs     consecutive screen-prim commands under one state
  *            are one draw: six overlapping, differently coloured blended
  *            sprites drawn merged give the bytes of six sequential draws;
- *            two DATE sprites (the second retakes the snapshot), an AFAIL
- *            split and a scissor change each end a run (draws counted)
+ *            two DATE sprites (the second retakes the snapshot) and a
+ *            scissor change each end a run; two AFAIL FB_ONLY sprites
+ *            without Z write are one draw each without the test and join
+ *            one (draws counted)
+ *   alpha order an alpha-tested draw with Z write off whose failing
+ *            pixels write what its passing ones write (FB_ONLY; RGB_ONLY
+ *            with the alpha channel masked): two overlapping sprites in one
+ *            command, the first failing, the second passing, on SCENE with
+ *            depth: the overlap holds the second sprite (the GS's
+ *            primitive order), the stored alpha the second's (FB_ONLY) or
+ *            the clear's (RGB_ONLY, alpha masked), the depth the clear's;
+ *            with the merge off (rd__set_alpha_merge) the split
+ *            draws the failing sprite last and the overlap holds it
  *   aa1      PRIM.AA1 against a CPU coverage reference, in
  *            GS pixels at the integer sample points, As on the 0x80 scale
  *            (grey 0x80 LERPed over black writes As itself): a line with
@@ -488,6 +499,98 @@ static void testRailing(int fba)
     rd_destroy_texture(t);
 }
 
+/* ------------------------------------------------------ alpha test order */
+
+/* Two overlapping untextured sprites in one command under ATE GREATER 0x40
+ * with Z write off: A (green, alpha 0x20) fails, then B (red, alpha 0x80)
+ * passes.  With Z write off a failing pixel under FB_ONLY writes what a
+ * passing one writes, so the GS draws A, then B over it: the overlap is
+ * red.  The split draws the passing fragments (B) first and the
+ * failing ones (A) after, and the overlap is green.  RGB_ONLY with FBMSK
+ * masking alpha is the same case, the alpha left at the clear's. */
+static void testAlphaOrder(int rgbOnly, int merge)
+{
+    static const uint8_t clr[4] = {0, 0, 0, 0x11};
+    static const uint8_t green[4] = {0, 200, 0, 0x20}, red[4] = {200, 0, 0, 0x80};
+    const int32_t ox = (2048 - 256) * 16, oy = (2048 - 256) * 16;
+    const uint32_t clearZ = 0x10000000u, drawZ = 0x20000000u; /* the draws write none */
+    rd__set_alpha_merge(merge != 0);
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), clr, 1, clearZ);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    rd_select_list(1);
+    rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
+    /* ATE GREATER 0x40, AFAIL FB_ONLY (1) or RGB_ONLY (3), ZTE, Z ALWAYS */
+    rd_test_gs(rgbOnly ? 0x3340Du : 0x3140Du);
+    rd_z_write(0);
+    rd_blend(RD_BLEND_LERP_AS, 0x80, 0);
+    rd_pabe(0);
+    rd_fba(0);
+    rd_color_mask(rgbOnly ? 0xFF000000u : 0u);
+    rd_texture_off();
+    {
+        /* A over x 32..96, B over x 64..128, both y 32..64 */
+        RdScreenVtx v[4] = {vtx(ox + 32 * 16, oy + 32 * 16, drawZ, green, 0.0f, 0.0f),
+                            vtx(ox + 96 * 16, oy + 64 * 16, drawZ, green, 0.0f, 0.0f),
+                            vtx(ox + 64 * 16, oy + 32 * 16, drawZ, red, 0.0f, 0.0f),
+                            vtx(ox + 128 * 16, oy + 64 * 16, drawZ, red, 0.0f, 0.0f)};
+        rd_screen_prims(RD_PRIM_SPRITES, v, 4, RD_SPACE_WORLD, 1, 0);
+    }
+    rd_color_mask(0u);
+    rd_end_frame(0);
+    rd__set_alpha_merge(true);
+
+    uint32_t w, h;
+    uint8_t *img = readTarget(RD_TARGET_SCENE, &w, &h);
+    static float depth[512 * 512];
+    uint32_t dw = 0, dh = 0;
+    const bool zOk =
+        rd__read_target_depth(rd_target(RD_TARGET_SCENE), depth, sizeof(depth), &dw, &dh);
+    CHECK(zOk && dw == w && dh == h, "alpha order: depth readback");
+    if (!img || !zOk) {
+        return;
+    }
+    /* the cleared depth, read where nothing was drawn */
+    const float clearD = depth[200 * w + 200];
+    int bad = 0, zBad = 0, overlapA = 0;
+    for (uint32_t y = 32; y < 64; y++) {
+        for (uint32_t x = 32; x < 128; x++) {
+            const uint8_t *p = &img[(y * w + x) * 4];
+            /* the GS: B where B covers, else A */
+            const uint8_t *c = x >= 64 ? red : green;
+            const int a = rgbOnly ? clr[3] : c[3];
+            const int want[4] = {c[0], c[1], c[2], a};
+            if (x >= 64 && x < 96 && p[1] == green[1] && p[0] == green[0]) {
+                overlapA++;
+            }
+            if (p[0] != want[0] || p[1] != want[1] || p[2] != want[2] || p[3] != want[3]) {
+                if (merge) {
+                    pixFail(rgbOnly ? "alpha order RGB_ONLY" : "alpha order FB_ONLY", (int)x,
+                            (int)y, p, want);
+                }
+                bad++;
+            }
+            zBad += depth[y * w + x] != clearD;
+        }
+    }
+    printf("  alpha order (%s, merge %s): %d of %d pixels off the GS order, %d overlap pixels "
+           "hold the failing sprite, %d off the clear's Z\n",
+           rgbOnly ? "RGB_ONLY, alpha masked" : "FB_ONLY", merge ? "on" : "off", bad, 96 * 32,
+           overlapA, zBad);
+    CHECK(zBad == 0, "alpha order: %d pixels wrote Z with Z write off", zBad);
+    if (merge) {
+        CHECK(bad == 0 && overlapA == 0, "alpha order (%s): %d pixels off the GS order",
+              rgbOnly ? "RGB_ONLY" : "FB_ONLY", bad);
+    } else {
+        /* the split: the failing sprite drawn last over the overlap */
+        CHECK(overlapA == 32 * 32,
+              "alpha order (%s), split: %d of %d overlap pixels hold the "
+              "failing sprite",
+              rgbOnly ? "RGB_ONLY" : "FB_ONLY", overlapA, 32 * 32);
+    }
+}
+
 /* ------------------------------------------------------------ DATE, flat */
 
 /* TEST.DATE against the R8 snapshot, and PRIM.IIP 0.  WORK0 gets
@@ -614,8 +717,9 @@ static void testScreenRuns(void)
 
     /* the boundaries: a run of two; two DATE sprites under the same state
      * (the first writes alpha, so the second retakes the snapshot); two
-     * AFAIL FB_ONLY sprites (two passes each, never merged); two sprites,
-     * a scissor change, two more */
+     * AFAIL FB_ONLY sprites (WORK0 has no depth, so no Z write: one draw
+     * each without the test, rd__plan_screen_draw_ex, and a run of two);
+     * two sprites, a scissor change, two more */
     rd_begin_frame();
     rd_select_list(5);
     rd_clear_target(rd_target(RD_TARGET_WORK0), black, 0, 0);
@@ -638,7 +742,7 @@ static void testScreenRuns(void)
     runSprite(0, 0, 256, 128, 2, 0x30);
     runSprite(50, 30, 220, 110, 3, 0x58);
     rd_end_frame(0);
-    checkRun("run boundaries", 2 + 2 + 4 + 4, 1 + 2 + 4 + 2);
+    checkRun("run boundaries", 2 + 2 + 2 + 4, 1 + 2 + 1 + 2);
 }
 
 /* -------------------------------------------------------------------- AA1 */
@@ -4292,6 +4396,10 @@ int main(int argc, char **argv)
     testHalfOffset();
     testRailing(0);
     testRailing(1); /* as the game's materials draw it */
+    testAlphaOrder(0, 1);
+    testAlphaOrder(0, 0);
+    testAlphaOrder(1, 1);
+    testAlphaOrder(1, 0);
     testDateFlat();
     testScreenRuns();
     testSprites();

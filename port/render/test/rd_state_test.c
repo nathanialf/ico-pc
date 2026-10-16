@@ -18,6 +18,10 @@
  *              DATE), as the VU path and its edge-clipped fans (ABE forced
  *              on) draw them; the DATE snapshot and the shadow count write
  *              no Z; PABE flags (DF_C1_DST for Cd*FIX + Cs only)
+ *   alpha merge the condition table (Z write x AFAIL x ATE x the alpha
+ *              mask): one draw without the test where Z write is off and a
+ *              failing fragment writes what a passing one writes, the pass
+ *              and fail pair otherwise; the toggle restores the split
  *   dump       a frame with textures and a temp target survives dump/load;
  *              an image's GS levels and TEX1's mipmap fields (tex1Lod)
  *              round-trip; version 8 and older dumps (no tex1Lod, no level
@@ -417,6 +421,100 @@ static void testPlans(void)
                          dp);
     CHECK(dp[0].key.gs.ztst == RD_ZTST_ALWAYS && dp[0].key.gs.zwrite == RD_ZWRITE_OFF,
           "no depth attachment: Z test and write normalised off");
+}
+
+/* The alpha test merged where it decides nothing (rd_pipeline.c
+ * rd__plan_screen_draw_ex): Z write on/off x AFAIL 0..3 x ATE x the alpha
+ * channel's mask, ATST GREATER with a depth attachment.  One draw without
+ * the test where Z write is off and a failing fragment writes what a
+ * passing one writes (FB_ONLY; RGB_ONLY with alpha masked), the pass and
+ * fail pair otherwise; the merged draw is the plan of the same state
+ * without the test (key, flags, FIX, AREF), DATE and FBA kept. */
+static void testAlphaMerge(void)
+{
+    for (int zw = 0; zw < 2; zw++) {
+        for (int afail = 0; afail < 4; afail++) {
+            for (int ate = 0; ate < 2; ate++) {
+                for (int am = 0; am < 2; am++) {
+                    RdStateBlock s;
+                    RdDrawPass dp[2], ref[2];
+                    rd__reset_state_block(&s);
+                    /* ATST GREATER, AREF 0x40, ZTE, Z GEQUAL, DATE (DATM 1) */
+                    s.ds.test = rd_test_from_gs(0x5C40Cu | (uint64_t)ate | (uint64_t)afail << 12);
+                    s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
+                    s.ds.colorMask = am ? 0x7 : 0xF;
+                    s.ds.fba = 1;
+                    s.ds.abe = 1;
+                    s.ds.blend = RD_BLEND_LERP_AS;
+                    const int n = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                                       RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, dp);
+                    RdStateBlock off = s;
+                    off.ds.test.ate = 0;
+                    CHECK(rd__plan_screen_draw(&off, RD_PRIM_TRIANGLES, RD_SPACE_WORLD,
+                                               RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, ref) == 1,
+                          "alpha merge: the plan without the test is one draw");
+                    int want;
+                    const int merged =
+                        ate && !zw &&
+                        (afail == RD_AFAIL_FB_ONLY || (afail == RD_AFAIL_RGB_ONLY && am));
+                    if (!ate || afail == RD_AFAIL_KEEP || merged) {
+                        want = 1;
+                    } else if (afail == RD_AFAIL_ZB_ONLY && !zw) {
+                        want = 1; /* a failing fragment writes nothing: the passing draw alone */
+                    } else {
+                        want = 2;
+                    }
+                    CHECK(n == want,
+                          "alpha merge: zwrite %d afail %d ate %d alpha %s: %d draws, "
+                          "expected %d",
+                          zw, afail, ate, am ? "masked" : "written", n, want);
+                    if (n != want) {
+                        continue;
+                    }
+                    if (merged || !ate) {
+                        CHECK(dp[0].modeZ == 0 && rd__pipe_key_equal(&dp[0].key, &ref[0].key) &&
+                                  dp[0].flags == ref[0].flags && dp[0].fix == ref[0].fix &&
+                                  dp[0].dstWant == ref[0].dstWant &&
+                                  (dp[0].flags & (ICO_DF_DATE | ICO_DF_DATM | ICO_DF_FBA)) ==
+                                      (ICO_DF_DATE | ICO_DF_DATM | ICO_DF_FBA),
+                              "alpha merge: zwrite %d afail %d ate %d alpha %s: the draw "
+                              "without the test, DATE and FBA kept",
+                              zw, afail, ate, am ? "masked" : "written");
+                    } else if (want == 2) {
+                        CHECK(dp[0].modeZ == (RD_ATST_GREATER | 1u << 8 | 1u << 16) &&
+                                  dp[1].modeZ == (RD_ATST_GREATER | 1u << 8 | 2u << 16),
+                              "alpha merge: zwrite %d afail %d alpha %s: the pass, then the fail",
+                              zw, afail, am ? "masked" : "written");
+                    }
+                }
+            }
+        }
+    }
+    /* the toggle: off, the split (two draws for FB_ONLY without Z
+     * write); ATST NEVER is one draw either way */
+    RdStateBlock s;
+    RdDrawPass dp[2];
+    rd__reset_state_block(&s);
+    s.ds.test = rd_test_from_gs(0x5140Du); /* ATE GREATER 0x40, FB_ONLY, Z GEQUAL */
+    s.ds.zwrite = RD_ZWRITE_OFF;
+    rd__set_alpha_merge(false);
+    int n = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                                 RHI_FMT_D32F_S8, dp);
+    CHECK(n == 2, "alpha merge off: FB_ONLY without Z write splits (%d draws)", n);
+    rd__set_alpha_merge(true);
+    n = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_D32F_S8, dp);
+    CHECK(n == 1 && dp[0].modeZ == 0, "alpha merge on: FB_ONLY without Z write, one draw");
+    s.ds.test.atst = RD_ATST_NEVER;
+    n = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_D32F_S8, dp);
+    CHECK(n == 1 && dp[0].modeZ == 0, "alpha merge: ATST NEVER, FB_ONLY without Z write: one draw");
+    /* no depth attachment: Z write is off whatever the state says */
+    s.ds.test.atst = RD_ATST_GREATER;
+    s.ds.zwrite = RD_ZWRITE_ON;
+    n = rd__plan_screen_draw(&s, RD_PRIM_TRIANGLES, RD_SPACE_UI, RHI_FMT_RGBA8_UNORM,
+                             RHI_FMT_UNKNOWN, dp);
+    CHECK(n == 1 && dp[0].modeZ == 0, "alpha merge: no depth attachment, FB_ONLY: one draw");
 }
 
 /* A dump written before a fixed target was appended: version 5 (before
@@ -1780,6 +1878,7 @@ int main(int argc, char **argv)
     testKeep();
     testStubs();
     testPlans();
+    testAlphaMerge();
     testDump(dir);
     testDumpV10(dir);
     testDumpBlock(dir);

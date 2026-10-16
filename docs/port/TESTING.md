@@ -356,7 +356,8 @@ program under an environment switch ([Environment switches](#environment-switche
   once, the softening's AA0 (work scale 2) the area box of SCENE and its composite back the
   B-spline (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
-  and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
+  nothing, `testAlphaMerge`), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never

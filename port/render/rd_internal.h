@@ -1072,6 +1072,13 @@ int rd__plan_screen_draw(const RdStateBlock *s, uint8_t prim, uint8_t space, Rhi
  * rd__plan_screen_draw is aa1 0. */
 int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_t space,
                             RhiFormat colorFmt, RhiFormat depthFmt, RdDrawPass out[2]);
+/* An alpha-tested draw with Z write off whose failing fragments write what
+ * its passing ones write (AFAIL FB_ONLY, or RGB_ONLY with the alpha channel
+ * masked) is one draw without the test, every fragment in the GS's
+ * primitive order (rd_pipeline.c rd__plan_screen_draw_ex).  On by default;
+ * off plans two draws, the passing fragments' and then the failing ones'
+ * (tests: the same frame both ways). */
+void rd__set_alpha_merge(bool on);
 /* The two-pass blend for a device without dual-source
  * blending (g_rd.noDual): the planned passes in[0..n) as the device draws
  * them, in order, into out (at most 2 per pass: give out[4] for a plan of

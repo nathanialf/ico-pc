@@ -163,6 +163,16 @@ static uint8_t tfmtOf(RhiFormat f)
     }
 }
 
+static bool s_alphaMergeLogged; /* rd__plan_screen_draw_ex's merge line, once a run */
+
+/* rd__set_alpha_merge (rd_internal.h) */
+static bool s_alphaMerge = true;
+
+void rd__set_alpha_merge(bool on)
+{
+    s_alphaMerge = on;
+}
+
 int rd__plan_screen_draw(const RdStateBlock *s, uint8_t prim, uint8_t space, RhiFormat colorFmt,
                          RhiFormat depthFmt, RdDrawPass out[2])
 {
@@ -315,6 +325,31 @@ int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_
         fail.key.gs.colorMask &= 0x7;
     }
     const int failWrites = fail.key.gs.colorMask != 0 || fail.key.gs.zwrite == RD_ZWRITE_ON;
+    /* Z write off and a failing fragment writing what a passing one writes
+     * (FB_ONLY, or RGB_ONLY without the alpha channel in the mask): the test
+     * decides nothing, so one draw without it, every fragment in the GS's
+     * primitive order.  GS User's Manual, TEST.AFAIL: FB_ONLY updates the
+     * frame buffer and not the Z buffer, RGB_ONLY the frame buffer's RGB
+     * only; with ZBUF.ZMSK 1 a passing fragment updates the frame buffer
+     * only too.  PCSX2's software renderer skips the test there
+     * (GSDrawScanline.cpp TestAlpha: FB_ONLY without zwrite, RGB_ONLY
+     * without zwrite on a 24-bit frame) and its hardware renderer sets ATST
+     * ALWAYS (GSRendererHW.cpp, "Failing alpha test is a NOP").  The split
+     * wrote every failing fragment after every passing one, so where the two
+     * overlapped on a pixel the order was not the GS's (issues 95 and
+     * 103).  DATE, FBA, PABE and the blend ride on the one draw as on the
+     * two. */
+    if (s_alphaMerge && failWrites && base.key.gs.zwrite == RD_ZWRITE_OFF &&
+        fail.key.gs.zwrite == RD_ZWRITE_OFF && fail.key.gs.colorMask == base.key.gs.colorMask) {
+        out[0] = base;
+        if (!s_alphaMergeLogged) {
+            s_alphaMergeLogged = true;
+            rd__log("alpha test: a draw with Z write off whose failing pixels write what its "
+                    "passing pixels write (AFAIL FB_ONLY, RGB_ONLY without alpha) is one draw "
+                    "without the test, in the GS's order (reported once)");
+        }
+        return 1;
+    }
     if (d->test.atst == RD_ATST_NEVER) {
         if (!failWrites) {
             return 0;

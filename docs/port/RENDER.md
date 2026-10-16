@@ -572,6 +572,35 @@ colour pass's fragments (`port/render/rd_pipeline.c` (`rd__expand_no_dual`)). `I
 forces the two-pass form on any device (`port/render/rd_core.c` (`rd_init`)). Where the destination
 read is available these paths give way to it (next section).
 
+**The AFAIL split.** An alpha-tested draw whose failing fragments write something other than its
+passing ones is two draws: the passing fragments with the draw's Z write and mask, then the failing
+ones under AFAIL (FB_ONLY: no Z; ZB_ONLY: no colour; RGB_ONLY: no Z, no alpha), the shader keeping
+one side each (`gs_alpha_discard`, `g_mode.z` bits 16..17). Where the failing fragments write
+exactly what the passing ones write the test decides nothing and the draw is one draw without it,
+every fragment in the GS's primitive order: Z write off (ZBUF.ZMSK 1, or no depth attachment) with
+AFAIL FB_ONLY, or with RGB_ONLY when the mask already leaves alpha out (`port/render/rd_pipeline.c`
+(`rd__plan_screen_draw_ex`)). The GS User's Manual's TEST register: FB_ONLY updates the frame buffer
+and not the Z buffer for a failing pixel, RGB_ONLY the frame buffer's RGB only, and with ZMSK 1 a
+passing pixel updates the frame buffer only too. PCSX2 does the same: its software renderer skips
+the test for FB_ONLY without Z write and for RGB_ONLY without Z write on a 24-bit frame
+(`GSDrawScanline.cpp` `TestAlpha`), its hardware renderer sets ATST ALWAYS for FB_ONLY without Z
+write and turns RGB_ONLY without alpha into FB_ONLY ("Failing alpha test is a NOP",
+`GSRendererHW.cpp`). The split had drawn every failing fragment after every passing one, so where a
+failing and a passing fragment of one draw met on a pixel the later one in the GS's order did not
+always win (issues 95 and 103). DATE, FBA, PABE and the blend ride on the one draw as
+on both. The scissor batches' two draws (code 36: the clipped fans with ABE forced on, then the
+strip's kicks) are another state and another set of triangles, not this condition, and stay two
+(`port/render/rd_replay.c` (`doVuDraw`)). The split still orders the passing fragments first where
+it remains: Z write on (each draw writes other buffers), RGB_ONLY with alpha written, ZB_ONLY with
+colour written. In the dumps measured (2026-10-16) the merged draws are the Z-write-off alpha-tested
+ones: meshes `si_hair`, `bmd-tuno`, `cloud`, `cloud2`, `wf_ab03`, `fogs`, the particles, and two
+sprites of list 11 on the title frame; there 6 VU commands and 2 screen prims, of 172 VU commands
+whose other 166 alpha-tested ones write Z. The log says once that the rule is in effect: `rd: alpha test: a draw with Z write off
+whose failing pixels write what its passing pixels write (AFAIL FB_ONLY, RGB_ONLY without alpha) is
+one draw without the test, in the GS's order (reported once)`; `rd__set_alpha_merge(false)` plans the
+two draws (tests: ctest `rd_state` `testAlphaMerge`, the condition table; ctest `rd_pixel`
+`testAlphaOrder`, an overlap the split drew in the other order).
+
 The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (1024, the
 ceiling the tests hold the reachable set under, `rd__enumerate_reachable`); a key past it or one
 whose creation failed is logged once and drawn as nothing, never an abort (`port/render/rd_state.h`;
@@ -1484,6 +1513,23 @@ Measured or worked out, not done:
   title frame's at under three times the pixels; the fog pass count (`rd__fog_plan`) and its
   depth source (`rd__fog_source`) are where to look before its shader, which is about 60
   instructions a pixel.
+
+**On a tile-based GPU** the times per list and per effect are where the work ended, not where it
+was drawn: a tiler renders a pass's geometry when the pass ends, so the time lands on the timestamp
+after the pass break. The fog shows it (issue 95, the Galaxy A12's log, Mali-G52, `fog: depth
+path copy at start (tile-based GPU)`): it is one RD_POST_FOG a fogged frame (list 4; the title
+frame's `4:42`), one draw, and on the copy path one whole copy of SCENE's depth (512 x 448 D32S8,
+about 1.8 MB), after `endPass` closes the scene's pass (`port/render/rd_replay.c` (`doFog`);
+`port/render/rd_core.c` (`rd__sampled_depth`)). The log's fog time equals list 4's time in every
+line, and it swings with the scene, not the fog: 8.8-9.3 ms, then 70-172 ms, then 0.00 when the
+scene has no fog, while lists 3 and 11 and the glow climb to 150-330 ms in the same lines: the
+pass break moved, and the scene's tiles are paid at the next one. The fog's own work is a
+full-screen sprite and the copy, a few MB of traffic. Every path breaks the pass there (inplace
+must end the pass to sample the depth too; the copy adds only the transfer), so no cheaper path
+draws the same picture with the passes as they are; one that keeps the depth on the tile would read
+it in the scene's pass (a subpass input attachment, or dynamic rendering local read) and store
+neither the depth nor a copy, a change to the RHI's passes, not done. On a tiler, compare the
+sum of the lists, not one list or effect.
 
 ## Dumps and the replay tool
 
