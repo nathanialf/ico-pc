@@ -63,8 +63,9 @@ b="$wt/build-host/$p"; d="$stage/$a"
 mkdir -p "$d"
 rm -f "$d"/ico_pc*.exe "$d"/ico_pc*.map
 cp "$b/ico_pc.exe" "$d/ico_pc_$a.exe"
-# the link map stays in the stage folder (it symbolizes a crash address from a
-# player's log) and is not zipped
+# the link map ships beside the program in both zips: a crash or watchdog
+# report names its functions from it on the player's machine
+# (port/platform/symmap.h; the name is the program's with .map)
 cp "$b/ico_pc.map" "$d/ico_pc_$a.map"
 cp "$b/SDL3.dll" "$d/SDL3.dll"
 # the save importer, in its own folder with the SDL3.dll it needs beside it
@@ -118,7 +119,7 @@ for variant in normal portable; do
     cp -a "$stage/README.md" "$top/README.md"
     cp -a "$stage/docs" "$top/docs"
     cp -a "$stage/VERSION.txt" "$top/VERSION.txt"
-    files=("ico_pc_$a.exe" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt
+    files=("ico_pc_$a.exe" "ico_pc_$a.map" SDL3.dll ico-pc.ini LICENSE.txt NOTICES.txt
         tools/mc_import.exe tools/SDL3.dll tools/README.txt "$pkg_textures_rel/README.txt" "$pkg_models_rel/README.txt" "$pkg_reshade_rel/README.txt")
     [[ "$variant" == portable ]] || files+=(make_portable.cmd)
     for f in "${files[@]}"; do
@@ -137,7 +138,8 @@ for variant in normal portable; do
         pkg_assert_zip_has "$out" "ico-pc-$label/$a/$r/README.txt" || fail "the $variant zip lacks $a/$r/README.txt"
     done
     # developer files stay out of the player zips
-    for n in "$a/ico_pc_$a.map" "$a/tools/rhi_d3d12_test.exe" "$a/tools/rd_replay_tool.exe" \
+    pkg_assert_zip_has "$out" "ico-pc-$label/$a/ico_pc_$a.map" || fail "the $variant zip lacks $a/ico_pc_$a.map"
+    for n in "$a/tools/rhi_d3d12_test.exe" "$a/tools/rd_replay_tool.exe" \
         "$a/tools/compare_backends.cmd" "$a/tools/compare_png.ps1"; do
         pkg_assert_zip_lacks "$out" "ico-pc-$label/$n" || fail "the $variant zip has $n"
     done
