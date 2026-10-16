@@ -1510,12 +1510,17 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 snprintf(comp, sizeof(comp), "; compiler %s",
                          s_compiler[0] ? s_compiler : "unnamed by the driver");
             }
-            if (nb == 1) {
-                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s; %s%s", first + 1, m,
-                         a, mods, comp);
-            } else {
-                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s; %s%s",
-                         first + 1, i, m, a, z, mods, comp);
+            {
+                /* a note past its 640 bytes is cut (the compiler line last);
+                   the result is read so gcc 14's -Wformat-truncation at -O2
+                   sees the cut is meant */
+                int n = nb == 1
+                            ? snprintf(note, sizeof(note), "creating pipelines %u of %u: %s; %s%s",
+                                       first + 1, m, a, mods, comp)
+                            : snprintf(note, sizeof(note),
+                                       "creating pipelines %u-%u of %u: %s to %s; %s%s", first + 1,
+                                       i, m, a, z, mods, comp);
+                (void)n;
             }
             if (vuBatch) {
                 rd__log("pipelines: compiling %u-%u of %u (%s VU): %s", first + 1, i, m,

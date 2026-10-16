@@ -985,6 +985,10 @@ if(ICO_RUN_TESTS)
     # attachment (kept though sabotaged), storage (not on this device: the
     # default kept) and fixed (nothing run) honoured
     set(_bst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_blend_selftest.cmake")
+    # the expectations below are a device with the attachment read and without
+    # the interlock (lavapipe before Mesa 25.2; from 25.2 lavapipe has the
+    # interlock, so the storage mode would be tried): the interlock is faked off
+    set(_bst_env "${_bst_env};ICO_VK_FAKE_NO_INTERLOCK=1")
     set(_bst_att "exact \\(attachment read\\)")
     set(_bst_fix "fixed-function \\(rounds up\\)")
     set(_bst_ok "attachment ok [01], storage not on this device, fixed-function ok [0-2]")
@@ -1003,7 +1007,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_blend_selftest_adreno_forced
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
                      "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}"
-                     "-DEXTRA=attachment read yes \\(Qualcomm driver: ICO_VK_ATTACHMENT_READ=1\\)"
+                     "-DEXTRA=attachment read yes( \\(ICO_VK_FAKE_NO_INTERLOCK\\))? \\(Qualcomm driver: ICO_VK_ATTACHMENT_READ=1\\)"
                      -P "${_bst}")
     add_test(NAME rd_blend_selftest_no_dst
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
@@ -1025,19 +1029,19 @@ if(ICO_RUN_TESTS)
                    rd_blend_selftest_blend_attachment rd_blend_selftest_blend_storage
                    rd_blend_selftest_blend_fixed)
     set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
-    set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_env}")
+    set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_bst_env}")
     set_tests_properties(rd_blend_selftest_sabotage
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND_SABOTAGE=attachment")
-    set_tests_properties(rd_blend_selftest_adreno PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_ADRENO=1")
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND_SABOTAGE=attachment")
+    set_tests_properties(rd_blend_selftest_adreno PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_ADRENO=1")
     set_tests_properties(rd_blend_selftest_adreno_forced
-                         PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_ADRENO=1;ICO_VK_ATTACHMENT_READ=1")
-    set_tests_properties(rd_blend_selftest_no_dst PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_DST=1")
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_ADRENO=1;ICO_VK_ATTACHMENT_READ=1")
+    set_tests_properties(rd_blend_selftest_no_dst PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_NO_DST=1")
     set_tests_properties(rd_blend_selftest_blend_attachment
                          PROPERTIES ENVIRONMENT
-                                    "${_env};ICO_RD_BLEND=attachment;ICO_RD_BLEND_SABOTAGE=attachment")
+                                    "${_bst_env};ICO_RD_BLEND=attachment;ICO_RD_BLEND_SABOTAGE=attachment")
     set_tests_properties(rd_blend_selftest_blend_storage
-                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND=storage")
-    set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_env};ICO_RD_BLEND=fixed")
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=storage")
+    set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=fixed")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
     # 2341x1080 at scale 1) and the big scenes: in place passes as at an even
     # width.  Sample counts the device lacks are skipped.  With the buffer path

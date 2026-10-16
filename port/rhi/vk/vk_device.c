@@ -1085,6 +1085,11 @@ static bool vkr_create_device(void)
     {
         const char *noDst = getenv("ICO_VK_FAKE_NO_DST");
         const bool fake = noDst && noDst[0] && noDst[0] != '0';
+        /* ICO_VK_FAKE_NO_INTERLOCK=1 leaves the interlock alone off (the
+         * attachment read kept): the blend self-test's ctests were written
+         * for a lavapipe without it, and Mesa 25.2 gained it */
+        const char *noIl = getenv("ICO_VK_FAKE_NO_INTERLOCK");
+        const bool fakeNoInterlock = noIl && noIl[0] && noIl[0] != '0';
         const bool extInterlock =
             vkr_device_has_ext(g_vkr.phys, VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME);
         const bool extOrder = vkr_device_has_ext(
@@ -1113,7 +1118,8 @@ static bool vkr_create_device(void)
                                            .pNext = chain};
             vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
         }
-        g_vkr.interlock = !fake && extInterlock && qInterlock.fragmentShaderPixelInterlock &&
+        g_vkr.interlock = !fake && !fakeNoInterlock && extInterlock &&
+                          qInterlock.fragmentShaderPixelInterlock &&
                           avail.fragmentStoresAndAtomics == VK_TRUE &&
                           vkr_format_ok(g_vkr.phys, VK_FORMAT_R8G8B8A8_UNORM,
                                         VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
@@ -1166,7 +1172,9 @@ static bool vkr_create_device(void)
         } else {
             VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s",
                     g_vkr.interlock ? "yes" : "no", g_vkr.rasterOrder ? "yes" : "no",
-                    fake ? " (ICO_VK_FAKE_NO_DST)" : "",
+                    fake              ? " (ICO_VK_FAKE_NO_DST)"
+                    : fakeNoInterlock ? " (ICO_VK_FAKE_NO_INTERLOCK)"
+                                      : "",
                     hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "");
         }
         /* only what is used is enabled; the queries' structures become the
