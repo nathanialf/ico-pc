@@ -254,7 +254,7 @@ int scePadRead(int port, int slot, void *data)
         return 0;
     }
     s0 = scePadGetDmaStr(port, slot);
-    memcpy(data, s0, *(int *)(s0 + 0x60));
+    memcpy(data, (void *)s0, *(int *)(s0 + 0x60));
     return *(int *)(s0 + 0x60);
 }
 

@@ -823,7 +823,7 @@ inline ICO_WORD_PTR(GObj *) actEnemy_GetClingTarget(GObj *self)
     Act *b = GOBJ_ACT(self);
     EnemyBattleWork *e = b->enemy;
     if (e->sizeClass == 0 && b->actMode == 0x10) {
-        return e->clingTarget;
+        return (GObj *)e->clingTarget;
     }
     return 0;
 }
@@ -2838,7 +2838,7 @@ void subEnemyBrain_Cling(GObj *volatile self)
     float v[4];
 
     GOBJ_ACT(self)->enemy->clingReq = tgt;
-    _OrientXZGV(v, test_CURRENTROOT(tgt), test_CURRENTROOT(self));
+    _OrientXZGV(v, test_CURRENTROOT((GObj *)tgt), test_CURRENTROOT(self));
     sub->dir[0] = v[0];
     sub->dir[1] = v[1];
     sub->dir[2] = v[2];
@@ -2848,7 +2848,7 @@ void subEnemyBrain_Cling(GObj *volatile self)
     _ACTWait(1);
     while (1) {
         if (sub->actMode == 4 || sub->actMode == 0x10) {
-            if (_DistSqGV(test_CURRENTROOT(tgt), test_CURRENTROOT(self)) < 3600.0f) {
+            if (_DistSqGV(test_CURRENTROOT((GObj *)tgt), test_CURRENTROOT(self)) < 3600.0f) {
                 ACTSendMailCorrect((void *)self, 0xD0);
             }
         } else {

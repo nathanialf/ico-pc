@@ -2795,17 +2795,15 @@ static int formatState = 0; /* derived name */
 
 static int formatBlink = 0; /* derived name */
 
-/* PC port: debug_MemoryCard calls its entries with &mc (layout_action.h),
-   which an int parameter cannot hold on a 64-bit host: the format, unformat
-   and save-number entries use the global directly */
+/* PC port: the save-number entry's second argument comes through
+   debug_SelectCsvWindowVal's int (int (*)(int, int)), which cannot hold a
+   64-bit pointer: debug_saveNumFunc uses the global directly */
 static McMgr *debugHostMc(void)
 {
     return &mc;
 }
 
-#define DEBUG_MC_PORT debugHostMc()
-
-inline int debug_mcFormat(int port)
+inline int debug_mcFormat(McMgr *mc)
 {
     int r;
     switch (formatState) {
@@ -2814,14 +2812,14 @@ inline int debug_mcFormat(int port)
         if (r != 1) {
             return r;
         }
-        iosMcFormat(DEBUG_MC_PORT);
+        iosMcFormat(mc);
         formatState++;
         break;
     case 1:
         if (formatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now formatting");
         }
-        if (iosMcSync(DEBUG_MC_PORT) != 0) {
+        if (iosMcSync(mc) != 0) {
             formatState++;
         }
         break;
@@ -2836,7 +2834,7 @@ static int unformatState = 0; /* derived name */
 
 static int unformatBlink = 0; /* derived name */
 
-inline int debug_mcUnformat(int port)
+inline int debug_mcUnformat(McMgr *mc)
 {
     int r;
     switch (unformatState) {
@@ -2845,14 +2843,14 @@ inline int debug_mcUnformat(int port)
         if (r != 1) {
             return r;
         }
-        iosMcUnformat(DEBUG_MC_PORT);
+        iosMcUnformat(mc);
         unformatState++;
         break;
     case 1:
         if (unformatBlink++ & 0x10) {
             debug_PrintfDummy(120, 70, 0xFFFFFF00u, "now unformatting");
         }
-        if (iosMcSync(DEBUG_MC_PORT) != 0) {
+        if (iosMcSync(mc) != 0) {
             unformatState++;
         }
         break;
@@ -2862,8 +2860,6 @@ inline int debug_mcUnformat(int port)
     }
     return 0;
 }
-
-#undef DEBUG_MC_PORT
 
 static int debug_mcRetErrCheck(McMgr *mc)
 {

@@ -151,8 +151,10 @@ int debug_SelectCsvWindowWithLineColor(char *title, int x, int y, int rows, cons
                                        int stride, int off, int deref, int n, int *psel,
                                        int (*colfunc)(int));
 
-int debug_mcFormat(int port);
-int debug_mcUnformat(int port);
+struct McMgr;
+
+int debug_mcFormat(struct McMgr *mc);
+int debug_mcUnformat(struct McMgr *mc);
 void *debug_saveNumFunc(int no, void *mc);
 int debug_mcTest(void);
 int debug_STAFFROLLTest(void);

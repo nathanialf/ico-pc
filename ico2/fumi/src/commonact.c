@@ -88,7 +88,7 @@ void SetCorrectOrientOfChain(void *self);
 void actAfterForceRope(GObj *volatile self);
 inline void actAfterForceRopeSwing(GObj *volatile self);
 static inline void actAfterRopeJump(GObj *volatile self);
-static inline void afterCommonRopeCliff(char *self);
+static inline void afterCommonRopeCliff(GObj *self);
 static inline void afterCommonRopeTurnSpecial(GObj *volatile self);
 inline void actAfterDown(GObj *volatile self);
 void afterCommonCling(ICO_WORD_PTR(GObj *) volatile self);
@@ -4637,9 +4637,9 @@ static inline void actAfterRopeJump(GObj *volatile self)
     GOBJ_ACT(g)->flags20.ll |= (1ULL << 31);
 }
 
-static inline void afterCommonRopeCliff(char *self)
+static inline void afterCommonRopeCliff(GObj *self)
 {
-    char *volatile local = self;
+    char *volatile local = (char *)self;
     char *g = ICO_RAW(char *, boyGObj, 0x15C, ((struct GObj *)boyGObj)->dobj);
     ((struct Sub15C *)g)->root.ropeState = 0;
 }

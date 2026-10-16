@@ -1656,7 +1656,7 @@ void actSt04aTorch1(GObj *volatile self)
 void actSt04aTorch1Chk(GObj *volatile self)
 {
     GObj *x = self;
-    ActSt04A *act = actInitialize(self);
+    ActSt04A *act = (ActSt04A *)actInitialize(self);
     _ACTWait(1);
 
     switch (self->labelId) {

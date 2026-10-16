@@ -186,7 +186,7 @@ void ExecSpiderGroupManager(void)
         groups = 0;
         total = 0;
         for (i = 0; i < spiderGroupIdCount; i++) {
-            int n = GetAliveSpiders(spiderGroupIds[i]);
+            int n = GetAliveSpiders((GObj *)spiderGroupIds[i]);
             if (n >= 0) {
                 total += n;
                 groups++;
@@ -203,8 +203,8 @@ void ExecSpiderGroupManager(void)
 
         if ((60 - systemStatus[0] * 10) / systemStatus[1] * 45 < reviveCounter) {
             for (i = 0; i < spiderGroupIdCount; i++) {
-                if (GetAliveSpiders(spiderGroupIds[i]) >= 0) {
-                    DeadAllSpiders(spiderGroupIds[i]);
+                if (GetAliveSpiders((GObj *)spiderGroupIds[i]) >= 0) {
+                    DeadAllSpiders((GObj *)spiderGroupIds[i]);
                 }
             }
             reviveDone = 1;
@@ -235,7 +235,7 @@ inline void DispAllSpiderGroups(void)
     {
         int i;
         for (i = 0; i < spiderGroupIdCount; i++) {
-            DispAllMemberOfSpider(spiderGroupIds[i], spiderGroupColors[i]);
+            DispAllMemberOfSpider((GObj *)spiderGroupIds[i], spiderGroupColors[i]);
         }
     }
 }

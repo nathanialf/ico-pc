@@ -1288,14 +1288,14 @@ void _ACTCharStatus_Clear(void *self)
         sel = 0;
         g = isysGObjSearchFromObjKindID_begin(4);
         while (g != 0) {
-            d = _DistGV(test_CURRENTROOT(self), test_CURRENTROOT(g));
-            if (actEnemyFlagCheckActive(g)) {
+            d = _DistGV(test_CURRENTROOT(self), test_CURRENTROOT((GObj *)g));
+            if (actEnemyFlagCheckActive((GObj *)g)) {
                 if (d < nearest) {
                     sel = g;
                     nearest = d;
                 }
             }
-            g = isysGObjSearchFromObjKindID_next(g);
+            g = isysGObjSearchFromObjKindID_next((GObj *)g);
         }
         s->statusOther = (ICO_WORD_PTR(GObj *))sel;
         if (self == (char *)boyGObj) {

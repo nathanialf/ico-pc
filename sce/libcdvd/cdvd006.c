@@ -43,8 +43,8 @@ int sceCdReadIOPm(int lsn, int sectors, void *buf, CdRMode *mode)
     sceSifWriteBackDCache(sd, 24);
     sceCdCbfunc_num = 1;
     _sceCd_c_cb_sem = 1;
-    if (sceSifCallRpc(&_sceCd_cd_ncmd, 13, 1, sd, 24, 0, 0, _sceCd_cd_callback, &sceCdCbfunc_num) <
-        0) {
+    if (sceSifCallRpc(&_sceCd_cd_ncmd, 13, 1, sd, 24, 0, 0, _sceCd_cd_callback,
+                      (void *)&sceCdCbfunc_num) < 0) {
         sceCdCbfunc_num = 0;
         _sceCd_c_cb_sem = 0;
         SignalSema(*(volatile int *)&_sceCd_ncmd_semid);

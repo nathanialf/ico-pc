@@ -52,9 +52,9 @@ static float nestPos[4]; /* derived name */
 /* the carrier walks the waypoint route instead of a generator */
 static int wayKidnap; /* derived name */
 
-/* as in generator.h, which this TU does not include */
-extern void SetInfoSpKidnapGenerator(short *info);
-/* this TU passes an int *; generator.h declares a short * */
+/* generator.h, which this TU does not include, declares both with a
+   short *; this TU passes the int * work words of a GamesysObjInfo */
+extern void SetInfoSpKidnapGenerator(int *info);
 extern void SetInfoSpKidnapEnemy(int *work);
 /* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);

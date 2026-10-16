@@ -68,56 +68,56 @@ inline int iosMcGetInfo(McMgr *mp)
 {
     mp->flags.w.command = 0;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcFormat(McMgr *mp)
 {
     mp->flags.w.command = 3;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcUnformat(McMgr *mp)
 {
     mp->flags.w.command = 4;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcGetDir(McMgr *mp)
 {
     mp->flags.w.command = 6;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcDelete(McMgr *mp)
 {
     mp->flags.w.command = 2;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcSaveIconBlock(McMgr *mp)
 {
     mp->flags.w.command = 7;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcSaveProductBlock(McMgr *mp)
 {
     mp->flags.w.command = 8;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcLoadProductBlock(McMgr *mp)
 {
     mp->flags.w.command = 9;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcSaveGameBlock(McMgr *mp, void *arg)
@@ -125,7 +125,7 @@ inline int iosMcSaveGameBlock(McMgr *mp, void *arg)
     mp->flags.w.command = 10;
     mp->segArg = arg;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcLoadGameBlock(McMgr *mp, void *arg)
@@ -133,21 +133,21 @@ inline int iosMcLoadGameBlock(McMgr *mp, void *arg)
     mp->flags.w.command = 11;
     mp->segArg = arg;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcChdirProduct(McMgr *mp)
 {
     mp->flags.w.command = 12;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 inline int iosMcGetBlockSaveInfo(McMgr *mp)
 {
     mp->flags.w.command = 13;
     mp->flags.ll = mp->flags.ll & -2;
-    return iosMsgSend(&McMsgQ, mp, 0);
+    return iosMsgSend(&McMsgQ, (IosMsgWord)mp, 0);
 }
 
 typedef struct { /* field names derived */

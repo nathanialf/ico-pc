@@ -10,8 +10,8 @@
 #include <string.h>
 #include "thread.h"
 
-static int _closeHander(void);
-static int _handler(struct CdvdBgReq *self);
+static inline int _closeHander(void);
+static inline int _handler(struct CdvdBgReq *self);
 static void _deleteStreamMotionManager(void);
 
 /* the stream entry count and state, the background reader's state and id,

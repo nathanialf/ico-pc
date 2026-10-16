@@ -186,6 +186,9 @@ void dl_Clear(void)
 #endif
 }
 
+inline void dl_SetDLPriority(int pri);
+inline void dl_OpenDma(int id, const void *addr, int qwc);
+
 void dl_Swap(void)
 {
     int i;

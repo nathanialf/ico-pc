@@ -12,12 +12,12 @@
 #include "motionManager2.h"
 #include "frameDependSequence.h"
 
-static int execSE(int no, void *entry);
-static int checkWaterDepth(struct GObj *gobj, int depth);
-static int checkModelDataID(struct GObj *gobj, int id);
-static int checkWeaponType(struct GObj *gobj, int kind);
-static int execVib(int no, void *entry);
-static int execWeaponLightOff(int no, void *entry);
+static inline int execSE(int no, void *entry);
+static inline int checkWaterDepth(struct GObj *gobj, int depth);
+static inline int checkModelDataID(struct GObj *gobj, int id);
+static inline int checkWeaponType(struct GObj *gobj, int kind);
+static inline int execVib(int no, void *entry);
+static inline int execWeaponLightOff(int no, void *entry);
 extern GsysObjInfo seDef[];
 /* int (int, unsigned int, int, int) here, int (int, int, int, int) in s_init.h */
 extern int soundSeDefPlay(int se, unsigned int owner, ICO_WORD_PTR(float *) pos, int playMode);

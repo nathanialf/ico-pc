@@ -413,7 +413,7 @@ int SetChainExtendedWeight(ChainNode *node, int idx, float w0, float w1)
 }
 
 /* push a point back to the inner side of a wall plane */
-static __inline__ void pushInsidePlane(void *p, const void *plane) /* derived name */
+static __inline__ void pushInsidePlane(void *p, void *plane) /* derived name */
 {
     VECTOR tv;
     float d = plane_distance(p, plane);
@@ -1136,7 +1136,7 @@ static sceVu0FMATRIX procMatrix = {
 }; /* derived name */
 
 /* the two point writers: add, or set, a scaled transformed vector */
-static __inline__ void clothAddPoint(void *dst, const void *src, float f) /* derived name */
+static __inline__ void clothAddPoint(void *dst, void *src, float f) /* derived name */
 {
     VECTOR tv;
 
@@ -1145,7 +1145,7 @@ static __inline__ void clothAddPoint(void *dst, const void *src, float f) /* der
     _AddVectorXYZ(dst, dst, &tv);
 }
 
-static __inline__ void clothSetPoint(void *dst, const void *src, float f) /* derived name */
+static __inline__ void clothSetPoint(void *dst, void *src, float f) /* derived name */
 {
     VECTOR tv;
 

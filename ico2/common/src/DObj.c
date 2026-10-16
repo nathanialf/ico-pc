@@ -186,7 +186,7 @@ static void initGeometryState(Sub15C *self, SObjSimpleSetting *lay)
         {
             DObjVec dir = {{0.0f, 0.0f, 1.0f, 1.0f}};
             _ApplyRyGV(dir.f, -lay->rot[1]);
-            SetMotionDirection(p, dir.f);
+            SetMotionDirection((GObj *)p, dir.f);
         }
     } else {
         DOBJ_D(p)->blendBuf = 0;

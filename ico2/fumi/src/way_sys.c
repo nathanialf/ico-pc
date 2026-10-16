@@ -377,7 +377,7 @@ static void create_box_bridge(char *g)
     int j;
     int id;
 
-    GetRootPosition(pos, g);
+    GetRootPosition(pos, (GObj *)g);
     for (i = 0; i < 4; i++) {
         sceVu0CopyVector(start, pos);
         off[0] = GetTableCos((short)(i * 0x4000)) * 75.0f;

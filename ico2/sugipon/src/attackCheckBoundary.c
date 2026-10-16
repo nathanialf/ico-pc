@@ -19,6 +19,8 @@ static unsigned int acbSphereColor[4] = {0, 128, 255, 128}; /* derived name */
 #include "main.h"
 #include "GifPacket.h"
 
+inline float GetAttackCheckBoundaryRadius(GObj *self);
+
 static inline GObj *createAttackCheckBoundaryGObj(SObjSimpleSetting *lay) /* derived name */
 {
     return CreateLayoutedGObj(63, 75, -1, 0, lay, -1, 7, 1);

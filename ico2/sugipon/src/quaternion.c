@@ -4,6 +4,11 @@
 #include "matrixDrive.h"
 #include "Matrix.h"
 
+inline void MultiQuaternion(void *out, void *qa, void *qb);
+inline void RotQuaternionX(void *self, short ang);
+inline void RotQuaternionY(void *self, short ang);
+inline void RotQuaternionZ(void *self, short ang);
+
 /* the current depth of the quaternion stack below */
 static int quatStackIndex = -1; /* derived name */
 

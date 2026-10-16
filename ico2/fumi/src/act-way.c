@@ -219,7 +219,7 @@ int ACTWayMove_BeginDetail(GObj *self, float *goal, float *from, void *tgt, void
     act->wayState.flags = (act->wayState.flags & ~0x200000) |
                           ((long long)(checkPositionIllegal(self, goal) & 1) << 21);
     act->wayGoalY = goal[1];
-    w = RequestWayBegin(self, goal, from, wp, sub);
+    w = RequestWayBegin((char *)self, goal, from, wp, sub);
     if (w != 0) {
         act->wayState.st[1] = 0;
         if (wp->flag3C == 0) {

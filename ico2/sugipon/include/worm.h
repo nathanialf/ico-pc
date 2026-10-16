@@ -13,8 +13,8 @@ struct GObj;
 /* The declarations below lead this header because their order is load-bearing:
  * gcc 2.9 emits the deferred out-of-line copy of a plain-inline function in
  * first-declaration order, so this is the order worm.c's inline tail has. */
-void SetDirectWormTargetPos(struct GObj *act, void *pos);
-void SetWormReduceRatio(struct GObj *act, float ratio);
+inline void SetDirectWormTargetPos(struct GObj *act, void *pos);
+inline void SetWormReduceRatio(struct GObj *act, float ratio);
 void TraceWormRoute(struct GObj *act, float t);
 
 struct WormInit;

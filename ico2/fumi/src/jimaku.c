@@ -328,7 +328,7 @@ static void jimakuMgrEnd(JimakuArg *p)
 {
     CdvdBgReq *val = p->sub.bg;
     if (val != 0) {
-        iosCdvdBackGroundMgrDelete(val);
+        iosCdvdBackGroundMgrDelete((CdvdBgReq *)val);
     }
     iosSemaDelete(&jimakuFrameSema);
     iosSemaDelete(&jimakuShownSema);

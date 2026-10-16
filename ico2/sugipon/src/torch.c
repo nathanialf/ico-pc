@@ -34,6 +34,8 @@ static TorchGeoWork emptyTorchWork = {
 #include "main.h"
 #include "sceneManager.h"
 
+inline int IsTorchLightOn(GObj *torch);
+
 inline void SetTorchChainReactionFlag(GObj *torch, int flag)
 {
     TorchGeoWork *w = GOBJ_SUB(torch)->work;

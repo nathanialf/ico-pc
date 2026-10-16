@@ -47,8 +47,8 @@ static AP1Vec ap1BoxedInJump = {0.0f, -20.0f, 2.0f, 0.0f}; /* derived name */
 
 static int standAI(GObj *self);
 static int walkAI(GObj *self);
-static int jumpAI(GObj *);
-static int attackAI(GObj *);
+static inline int jumpAI(GObj *);
+static inline int attackAI(GObj *);
 
 /* one entry per mode; dead and sleep run no AI of their own. */
 static int (*ap1ModeAI[])(GObj *) = {standAI, walkAI, jumpAI, attackAI, 0, 0};
@@ -531,7 +531,7 @@ void AP1BeforeFunc(GObj *self)
     q->num = 0;
 }
 
-void subAP1Control(int x);
+inline void subAP1Control(int x);
 
 void actAP1Start(GObj *g)
 {

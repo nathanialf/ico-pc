@@ -8,7 +8,7 @@ float GetTableSin(short angle);
 float GetTableCos(short angle);
 void InitTableSin(void);
 short GetTableArcSin(float x);
-short GetTableArcCos(float x);
+inline short GetTableArcCos(float x);
 int GetTableArcTan2(float y, float x);
 /* PC port: port/platform/diag_host.c, the log of a NaN's first
    arrival from each caller */

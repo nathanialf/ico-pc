@@ -2280,7 +2280,7 @@ void subBoyCollision(GObj *volatile self)
                     /* a local debug switch, off (see dbg in the declarations): mark
                        the helper position just set */
                     if (dbg) {
-                        debug_NMarker(work, 0xFF, 0, 0, 100.0f);
+                        debug_NMarker((float *)work, 0xFF, 0, 0, 100.0f);
                     }
                     if ((int)(sub->flags20.ll >> 23) & 1) {
                         if (((int)(sub->flags20.ll >> 24) & 3) != 0) {
@@ -2392,8 +2392,8 @@ void actBoySwim(GObj *volatile self)
                 BOY_EXT_F(self, grip, holdPoint));
             debug_NMarker(pos, 0xFF, 0, 0, 100.0f);
             MoveFloatingBox(box, self,
-                            *(char **)&GOBJ_SUB(self)->nodeMtx +
-                                GetSkeltonFocusNode(self, 0x13) * 0x40 + 0x30,
+                            (float *)(*(char **)&GOBJ_SUB(self)->nodeMtx +
+                                      GetSkeltonFocusNode(self, 0x13) * 0x40 + 0x30),
                             BOY_EXT_F(self, grip, holdPoint), 30.0f);
             if (!(_DistSqGV(test_CURRENTROOT((void *)self), pos) < 4e+04f)) {
                 BOY_EXT_F(self, holdBox, word2C0) = 0;
