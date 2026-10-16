@@ -2,7 +2,6 @@
 
 - A Glow size row on the Effects page (Options > Effects): Scaled draws the glow, the blur on far things and the screen softening as finely as the rest of the picture; Original draws them at the PlayStation 2's size, which is much lighter on the graphics card. Try Original if the game is slow on an older graphics card.
 - The log now writes down when each piece of music starts and ends and how loud it plays, and which way the game draws see-through things on your graphics card. If the music goes quiet or see-through things look wrong, send the log with your report.
-
 - When the game ends on an error, it now writes one file next to the log, named report- with the date, that holds everything a report needs: the log, the previous log, the settings and what the graphics were drawing. Attach that one file to your report. Crash reports also name the place in the game's code now, so they can be acted on at once.
 
 ## Fixed
