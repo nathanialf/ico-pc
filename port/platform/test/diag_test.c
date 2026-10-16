@@ -1216,6 +1216,33 @@ int main(int argc, char **argv)
         snprintf(p, sizeof p, "%s/loss-20261001-000000.zip", rdir);
         CHECK(access(p, F_OK) == 0);
     }
+    /* the prune sorts by stamp then k, whatever order the folder lists */
+    clear_dir(rdir);
+    {
+        static const char *names[] = {
+            "report-20261002-000000-1.zip", "report-20261003-000000.zip",
+            "report-20261002-000000.zip",   "report-20261003-000000-2.zip",
+            "report-20261001-235959.zip",   "report-20261003-000000-10.zip",
+            "report-20261003-000000-1.zip", "report-20261002-000000-2.zip"};
+        static const int gone[] = {1, 0, 1, 0, 1, 0, 0, 0}; /* keep 5: the oldest 3 go */
+        char p[256];
+
+        for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+            FILE *f;
+
+            snprintf(p, sizeof p, "%s/%s", rdir, names[i]);
+            f = fopen(p, "wb");
+            if (f != NULL) {
+                fclose(f);
+            }
+        }
+        ico_report_set_paths(rdir, NULL, NULL, NULL);
+        CHECK(ico_report_prune(5) == 3);
+        for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+            snprintf(p, sizeof p, "%s/%s", rdir, names[i]);
+            CHECK((access(p, F_OK) != 0) == (gone[i] != 0));
+        }
+    }
     clear_dir(rdir);
     rmdir(rdir);
 

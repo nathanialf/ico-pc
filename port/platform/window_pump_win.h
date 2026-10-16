@@ -30,17 +30,20 @@
 /* hwnd: the game window's HWND (SDL_PROP_WINDOW_WIN32_HWND_POINTER); again
    for a window made again (a new HWND is subclassed, the same one is not) */
 void ico_pump_win_install(void *hwnd);
-/* each pump, with the pump's monotonic time */
-void ico_pump_win_keep_awake(uint64_t now_ns);
+/* each pump, with the pump's monotonic time and whether the window is
+   focused and not minimized: awake is refreshed every 30 s only then; on
+   losing that it is released once (ES_CONTINUOUS alone) */
+void ico_pump_win_keep_awake(uint64_t now_ns, int active);
 #else
 static inline void ico_pump_win_install(void *hwnd)
 {
     (void)hwnd;
 }
 
-static inline void ico_pump_win_keep_awake(uint64_t now_ns)
+static inline void ico_pump_win_keep_awake(uint64_t now_ns, int active)
 {
     (void)now_ns;
+    (void)active;
 }
 #endif
 

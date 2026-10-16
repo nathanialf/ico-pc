@@ -649,9 +649,12 @@ enumeration after a controller change. The next log decides it four ways:
   (`pump_watch_sdl_log`); every slow-pump line is followed by the ring's lines from 120 s before the
   part began (`window: SDL's own log from 120 s before it to its end (N lines, oldest first):`, then
   `window:   12.3 s ago INPUT debug: ...`), and the report file's `report.txt` ends with the whole
-  ring (`ico_diag_set_report_extra`). SDL's info, warning and error lines also go to the log as
-  `window: SDL <category> <priority>: ...` through the rate limiter, as SDL's own output wrote them
-  before.
+  ring (`ico_diag_set_report_extra`). SDL's info, warning, error and critical lines also go to the log as
+  `window: SDL <category> <priority>: ...`, as SDL's own output wrote them before. Info and warning
+  lines each go through the rate limiter under a key of their own (`window: SDL's log, info`,
+  `window: SDL's log, warnings`: the first 8, then every 100th), so a flood of one cannot silence
+  the other; error and critical lines are never limited and always logged (`sdl_log_output` in
+  `port/platform/window_host.c`).
 - On Windows the watchdog samples the held main thread at 2, 10 and 30 s into a held wait:
   `ico_pc: watchdog: the window's event pump has held the main thread for 2 s: at win32u.dll+0x...;
   code on its stack (innermost first): DINPUT8.dll+0x..., SDL3.dll+0x..., ico_pc_x64.exe+0x...`.
@@ -681,8 +684,14 @@ returns 0 for `SC_SCREENSAVE` and `SC_MONITORPOWER` while it is in force (`SDL_w
 `WM_SYSCOMMAND`); the display flag alone does not keep the computer out of its idle sleep. The
 Windows window build sets `ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED` from the main
 thread at the first pump and every 30 s after, logged once (`window: the display and the computer
-are kept awake while the game runs`): the game never lets the display or the computer sleep while it
-runs, as a console does; the player quits to let them (`port/platform/window_pump_win.c`
+are kept awake while the game runs`), but only while the window has the input focus and is not
+minimized (the caller passes it from `SDL_GetWindowFlags`: `SDL_WINDOW_INPUT_FOCUS` set,
+`SDL_WINDOW_MINIMIZED` clear). When it loses focus or is minimized, `SetThreadExecutionState(ES_CONTINUOUS)`
+is called once to release and `window: the display may sleep while the game is minimized or in the
+background` is logged; when it is focused again the next pump sets the flags at once and logs
+`window: the display and the computer are kept awake again`. Both lines go through the rate limiter
+(first 8, then every 100th). A game left running in front never lets the display or the computer
+sleep, as a console does; one left behind does not hold them (`port/platform/window_pump_win.c`
 (`ico_pump_win_keep_awake`)).
 
 **A lost graphics device.** When the backend reports the device gone (`rhi_device_lost`), the window
@@ -773,7 +782,9 @@ the wide Win32 calls through a static buffer), a zip writer of its own (UTF-8 na
 patched into each local header) and miniz's `tdefl` deflating into a static compressor; the local
 time from an offset noted at start, so no time zone lookup runs in a signal handler. The loss
 dump's writer (`dump_zip.c`) is not used: miniz's zip writer allocates, which a crash inside
-`malloc` would deadlock. `ico_report_prune` keeps the newest five; it lists the folder and so runs
+`malloc` would deadlock. `ico_report_prune` keeps the newest five: it sorts the `report-YYYYMMDD-HHMMSS[-k].zip` names
+explicitly by stamp, then by `k` (the plain name is `k = 0`, so a same-second `-1` is newer; the
+folder's order and byte order are not age), and removes the oldest. It lists the folder and so runs
 only on the normal paths (at start, after a lost device's or a failed start's report)
 (`port/platform/report.h`). The line `ico_pc: report: report-<stamp>.zip in the logs folder (...)`
 names it in the log.
