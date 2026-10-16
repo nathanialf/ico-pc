@@ -1029,13 +1029,14 @@ if(ICO_RUN_TESTS)
     # device as MoltenVK without the attachment read; the interlock is the
     # device's own (Mesa 25.2's lavapipe has it, so no ICO_VK_FAKE_NO_INTERLOCK
     # here; on a lavapipe without it the tests skip).  The default is the
-    # fixed-function blend with its reason in the blend lines; ICO_RD_BLEND=
-    # storage keeps the interlock and the line says it was forced
+    # fixed-function blend with its reason in the blend lines and no exact
+    # mode tried (only the reference runs); ICO_RD_BLEND=storage keeps the
+    # interlock, tries it as everywhere and the line says it was forced
     add_test(NAME rd_blend_selftest_moltenvk
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
                      "-DNAME=${_bst_fix}"
-                     "-DRESULTS=attachment not on this device, storage (ok|fail) [0-9]+, fixed-function ok [0-2]"
-                     "-DEXTRA=; MoltenVK default: fixed-function"
+                     "-DRESULTS=exact modes not tried: MoltenVK default is fixed-function, fixed-function ok [0-2]"
+                     "-DEXTRA=blend: fixed-function \\(rounds up\\) \\(self-test: exact modes not tried"
                      "-DEXTRA2=rd: blend: fixed-function \\(rounds up\\) \\(MoltenVK: the exact blend's pass switching costs 3 to 4 times the frame; \\[dev\\] blend = storage keeps it\\)"
                      -P "${_bst}")
     add_test(NAME rd_blend_selftest_moltenvk_storage

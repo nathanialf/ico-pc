@@ -510,8 +510,16 @@ static bool runSelftest(void)
     static const int kOrder[2][2] = {{RD_BLEND_EXACT_ATTACHMENT, E_ATTACH},
                                      {RD_BLEND_EXACT_STORAGE, E_STORAGE}};
     int chosen = -1;
+    /* MoltenVK's default (rd__dst_init, issue 102): the exact modes are not
+       tried (their pipelines cost start-up time for nothing, and A14's
+       interlock regressed the picture); only the reference runs.  An
+       ICO_RD_BLEND mode is tried as everywhere */
+    const bool skipExact = rd__dst_platform_fixed();
     for (int i = 0; i < 2; i++) {
         const int mode = kOrder[i][0], e = kOrder[i][1];
+        if (skipExact) {
+            continue; /* MoltenVK's default: the exact modes are not exercised */
+        }
         if (!(g_rd.dstModes & (1u << mode))) {
             v[e].result = R_UNSUPPORTED;
             continue;
@@ -534,7 +542,7 @@ static bool runSelftest(void)
     /* the next replay starts SCENE from its clear, not from the block */
     t->clearPending = 1;
 
-    const bool passed = chosen >= 0;
+    const bool passed = chosen >= 0 || skipExact;
     if (chosen < 0) {
         chosen = RD_BLEND_EXACT_OFF;
     }
@@ -554,13 +562,23 @@ static bool runSelftest(void)
     char res[200];
     size_t n = 0;
     res[0] = '\0';
+    bool afterNote = false;
+    if (skipExact) {
+        afterNote = true;
+        n = (size_t)snprintf(res, sizeof res,
+                             "exact modes not tried: MoltenVK default is fixed-function");
+    }
     for (int i = 0; i < E_COUNT; i++) {
         const int e = kLine[i];
+        if (skipExact && (e == E_ATTACH || e == E_STORAGE)) {
+            continue;
+        }
         if ((e == E_NODUAL && v[e].result == R_NOT_TRIED) ||
             (e == E_FIXED && v[e].result == R_NOT_TRIED && v[E_NODUAL].result != R_NOT_TRIED)) {
             continue; /* the fixed-function entry that was not this device's */
         }
-        const char *sep = n ? ", " : "";
+        const char *sep = afterNote ? "; " : n ? ", " : "";
+        afterNote = false;
         switch (v[e].result) {
         case R_OK:
             n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s ok %d", sep, kEntryName[e],
@@ -586,9 +604,7 @@ static bool runSelftest(void)
         }
     }
     const char *off = rhi_limits()->rasterOrderOff;
-    const char *why = asked > 0                  ? "; kept by ICO_RD_BLEND"
-                      : rd__dst_platform_fixed() ? "; MoltenVK default: fixed-function"
-                                                 : "";
+    const char *why = asked > 0 ? "; kept by ICO_RD_BLEND" : "";
     snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s)%s",
              rd__blend_exact_name(chosen), res, why);
     rd__log("blend: %s (self-test: %s)%s%s%s on SCENE %ux%u at %ux%u texels in %.1f ms",
@@ -618,7 +634,7 @@ static bool runSelftest(void)
                 kEntryName[e], v[e].result == R_FAIL ? "fail" : "ok", v[e].err, what, x, y, p[0],
                 p[1], p[2], p[3], want[0], want[1], want[2], want[3]);
     }
-    if (!passed && asked < 0) {
+    if (!passed && asked < 0 && !skipExact) {
         rd__log("blend: no exact blend passed the self-test on this device: the fixed-function "
                 "blend (rounds up) is used");
     }

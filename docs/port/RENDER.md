@@ -817,10 +817,16 @@ for the exact blend's last level of rounding. iOS already had the rule (a `seten
 `port/platform/ios/main_ios.c`, A14: the interlock also regressed the picture); it is now this one,
 in `rd__dst_init`, for both. The line is `rd: blend: fixed-function (rounds up) (MoltenVK: the exact
 blend's pass switching costs 3 to 4 times the frame; [dev] blend = storage keeps it)`, and the
-`ico_pc: summary:` line's blend text ends `; MoltenVK default: fixed-function`. The self-test still
-runs (the exact modes are tried and logged, the fixed-function blend stays in force).
+`ico_pc: summary:` line's blend text is the self-test's, `fixed-function (rounds up) (self-test:
+exact modes not tried: MoltenVK default is fixed-function; fixed-function ok N)`: only the
+fixed-function reference runs (A14's interlock regressed the picture, and the exact modes'
+pipelines would be compiled for nothing). The start-up pipeline set holds no destination-read keys
+on it: `rd__enumerate_reachable` adds them only when the mode in force is not OFF, and
+`rd__dst_init` and the self-test settle the mode before the set is made. The destination-read
+shader modules (`_dstrov`) are still created with the device, as before.
 `[dev] blend` / `ICO_RD_BLEND` forces any mode as everywhere (the init line then ends `(forced:
-MoltenVK's default is fixed-function)`). `ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no
+MoltenVK's default is fixed-function)`, and the self-test tries the forced mode as everywhere).
+`ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no
 attachment read, on any device (`rd_blend_selftest_moltenvk`, `rd_blend_selftest_moltenvk_storage`).
 
 **The blend self-test.** A driver whose read returns the wrong colour draws a wrong picture with no
