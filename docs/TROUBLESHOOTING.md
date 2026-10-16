@@ -56,11 +56,12 @@ the first time the game needs it. The title comes at once; the first
 minutes of play can pause for a moment here and there while graphics are
 prepared, and the game keeps what it prepared, so later starts pause less.
 The start after that tries this screen again, because the stop may not
-have been the graphics' fault (closing the game from the recent apps or
-Task Manager looks the same to it). If the game stops while preparing
+have been the graphics' fault (closing the game with Task Manager on a
+computer looks the same to it). If the game stops while preparing
 graphics two starts in a row, it keeps to the different path from then on
-and writes that into `config.toml`. A stop while the game was in the
-background (you switched to another app) does not count. On the AYN Thor
+and writes that into `config.toml`. On a phone, a stop while the game was
+in the background (you switched to another app, or closed the game from
+the recent apps) does not count. On the AYN Thor
 and the AYN Odin 2 Portal the game takes the different path on every
 start, and writes nothing. You can also tell the game yourself: close it,
 open `config.toml` from the folder with your saves
