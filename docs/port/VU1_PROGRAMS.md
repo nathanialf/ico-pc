@@ -305,7 +305,9 @@ grid's batch is one strip, and only a grid of one strip can be a card (`port/ren
 (`cardStrips`)).
 
 **The verdicts.** `rd_draw_vu_mesh` and `rd_draw_vu_grid`, in any state but out of the box
-(`rd__vu_extended`, the state `VU_F_EXTENDED` stands for), test each free-standing strip of the
+(`rd__vu_extended`, the state `VU_F_EXTENDED` stands for) and not where every VU draw takes the plain
+shaders, which have no card test (`g_rd.vuPlainOnly`, [RENDER.md](RENDER.md#the-vu-shader-variants)),
+test each free-standing strip of the
 draw's batches at the draw's camera (its `RdVuBlock`, and a skinned draw's bones) with the vertex
 shaders' region test (`vu1ref_region_inside`: single precision rounded to nearest as on the GPU, the
 products and sums in the VU's order, `1 / w` with the VU's zero rule; the simulation's own rounding,
@@ -322,12 +324,13 @@ the tick before's, it puts that tick's own verdicts in the first bits (`rd__vu_c
 `port/render/rd_interp.c` (`blendVu`)). The section's size depends only on the mesh and the batch
 range, so the two ticks' payloads of a draw keep one size and pair. The vertex stream is not
 touched (the bits are numbered by the index list's vertices), so a dump keeps its format: a dump
-whose draws have no verdicts (one recorded out of the box, or one written before them) gets them at
+whose draws have no verdicts (one recorded out of the box or with the plain shaders only, or one
+written before them) gets them at
 load from each draw's own payload and mesh, whatever settings it replays at
 (`rd__vu_cards_fill_frame`; `port/render/rd_dump.c`).
 
 **The shader's side.** `doVuDraw` copies the bits into `VuBoneCB` when a strip of the draw is a card
-at either tick: after the bones a skinned mesh's weights read (`RdMeshRec.boneQwUsed`), from qword 0
+at either tick and the extended shaders are in use (not `g_rd.vuPlainOnly`): after the bones a skinned mesh's weights read (`RdMeshRec.boneQwUsed`), from qword 0
 for the other programs; `vu_strip` holds the first vertex covered, 1 (the card test applies), the
 vertices covered and the first qword. A draw with more vertices than the block holds covers the
 first ones and logs once. A skinned draw whose weights reach bone 59 (address 252) or an address

@@ -2330,11 +2330,13 @@ void rd_draw_vu_mesh(RdMesh mesh, const RdVuDraw *d, RdKey key)
         p.materialCount = m->materialCount;
     }
     /* the card verdicts of the draw's free-standing strips, in a state
-     * other than out of the box (rd_mesh.h RdVuCards) */
+     * other than out of the box (rd_mesh.h RdVuCards); none where every VU
+     * draw takes the plain shaders, which have no card test
+     * (g_rd.vuPlainOnly; a dump fills them, rd__vu_cards_fill_frame) */
     const uint8_t *cards = NULL;
     uint32_t cardBytes = 0;
     const int kind = cardKind(p.prog, p.clip);
-    if (kind >= 0 && m->cardStripCount && rd__vu_extended() &&
+    if (kind >= 0 && m->cardStripCount && rd__vu_extended() && !g_rd.vuPlainOnly &&
         (kind != VU1REF_CARD_CLUSTER || (d->bones && p.boneQw >= 240u))) {
         cards = meshCards(m, first, n, kind, (const float (*)[4])d->vu.mem,
                           kind == VU1REF_CARD_CLUSTER ? d->bones : NULL, &cardBytes);
@@ -2374,10 +2376,11 @@ void rd_draw_vu_grid(const RdVuGridDraw *d, RdKey key)
     float sx = 0.0f, sy = 0.0f;
     rd__grid_screen_st_take(&kind, &sx, &sy);
     /* a grid of one strip: its card verdict (rd_mesh.h RdVuCards; a grid
-     * of two strips or more is joined) */
+     * of two strips or more is joined); none with the plain shaders only,
+     * as rd_draw_vu's */
     const uint8_t *cards = NULL;
     uint32_t cardBytes = 0;
-    if (d->strips == 1 && rd__vu_extended()) {
+    if (d->strips == 1 && rd__vu_extended() && !g_rd.vuPlainOnly) {
         cards =
             gridCards((const float (*)[4])d->vu.mem, d->qw, p.qwPerVertex, d->stripLen, &cardBytes);
     }

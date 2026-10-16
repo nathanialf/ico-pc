@@ -4444,18 +4444,18 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint64_t ua = rhi_limits()->uniformAlign;
     /* the card verdicts (rd_mesh.h RdVuCards, vu_common.hlsli
-     * vu_strip_card), in a state other than out of the box when a strip of
-     * the draw is a card at either tick: in VuBoneCB after the bones a
-     * skinned mesh reads (RdMeshRec.boneQwUsed), from qword 0 for the
-     * others; vu_strip = (first kick, the card test, kicks covered, first
+     * vu_strip_card), in a state other than out of the box (not with the
+     * plain shaders only) when a strip of the draw is a card at either
+     * tick: in VuBoneCB after the bones a skinned mesh reads
+     * (RdMeshRec.boneQwUsed), from qword 0 for the others; vu_strip = (first kick, the card test, kicks covered, first
      * qword).  A draw with more kicks than VuBoneCB holds covers the first
      * ones (the others are no card) */
     RdVuCards cards;
     const uint8_t *pay = f->payload + c->u[1];
     const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
-    const bool withCards = cardWords && cards.any && rd__vu_extended() &&
-                           (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
-    if (cardWords && cards.any && rd__vu_extended() && !withCards && c->type == RDC_SKINNED) {
+    const bool cardsRead = cardWords && cards.any && rd__vu_extended() && !g_rd.vuPlainOnly;
+    const bool withCards = cardsRead && (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
+    if (cardsRead && !withCards && c->type == RDC_SKINNED) {
         /* bones reaching bone 59 (address 252; the game allows 0..59,
            Packet.c pac_makeClusterStrip) or a weight address below 16
            fill VuBoneCB: the card bits have no room and the draw's strips
