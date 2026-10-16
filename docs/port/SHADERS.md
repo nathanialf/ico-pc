@@ -340,6 +340,28 @@ and its picture and frame rows), a seventh the blended camera's cut. The same ru
 arrays, loops and `dot()` compiles to 91,686 words, 19,920 instructions and 2,431 blocks in
 `vu_prelit_vs`.
 
+**The size history** (issue 107). Every release's VU vertex shaders compiled again from its tag
+(`git archive <tag> port/shaders`) with the pinned DXC and the build's flags, measured with
+`tools/check_spirv.py --sizes`: words per module, and in brackets `vu_prelit_vs`'s instructions and
+blocks (the first VU vertex shader of the start-up set). The last column is what the Adreno 740
+(driver 512.676.53, compiler E031.41.03.47: the AYN Thor of issue 107, the AYN Odin 2 Portal of
+issue 93) did with the set.
+
+| version | `vu_prelit_vs` | `vu_lit_vs` | `vu_lit_spec_vs` | `vu_reflect_vs` | `vu_skin_vs` | `vu_grid_vs` | `vu_particle_vs` | Adreno 740 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| v0.5.2 | 15,537 (3,870 / 604) | 16,268 | 10,844 | 11,213 | 10,884 | 8,427 | 5,448 | built (issue 93) |
+| v0.6.1 | 30,988 (7,699 / 1,180) | 32,709 | 25,494 | 26,406 | 26,530 | 20,975 | 8,200 | built (issue 107) |
+| v0.7.5 | 47,535 (11,826 / 1,837) | 49,256 | 42,056 | 42,968 | 42,298 | 36,668 | 10,840 | hung (issue 93) |
+| v0.7.6 | 91,686 (19,920 / 2,431) | 93,407 | 86,207 | 87,119 | 86,449 | 80,819 | 10,840 | hung (issue 107) |
+| v0.7.7 | 50,092 (10,692 / 861) | 51,005 | 48,857 | 49,353 | 48,846 | 46,470 | 10,000 | hung (issue 107) |
+
+The modules that built are at most 32,709 words and 8,062 instructions (v0.6.1's `vu_lit_vs`); the
+sets that hung the device start at 46,470 words and 9,801 instructions (v0.7.7's `vu_grid_vs`).
+Size tracks the outcome; the opcodes do not (v0.6.1 had the loops, `dot()` and local arrays the
+envelope now refuses and built; v0.7.7 has none of them and hung), nor do the blocks (v0.7.7's
+`vu_prelit_vs` has 861 against v0.6.1's 1,180). An earlier note put v0.6.1 at about 17,500 words;
+the measurement above replaces it.
+
 **The card test** is decided on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): the
 vertex shader reads two bits a vertex from `VuBoneCB` (`vu_strip_card`) instead of walking the
 strip.
