@@ -284,7 +284,7 @@ under the same name (below). Read through the store:
 | `gpu_robust` | bool | `false` (`true` on Android) | |
 | `pass_split` | int | `0` | |
 | `attachment_read` | bool | `false` | |
-| `storage_pass_merge` | bool | `true` | |
+| `storage_pass_merge` | bool | `false` | |
 | `vu_plain_only` | bool | `false` | |
 | `vu_extended` | bool | `false` | |
 | `joystick_directinput` | bool | `true` | |
@@ -327,7 +327,7 @@ store (`backend`, `unlock_credits`):
 | `gpu_robust` | `true`: robust buffer and image access (Vulkan; exported as `ICO_GPU_ROBUST=1`), with null descriptors; robust buffer and image access (`VK_EXT_robustness2` where offered) is on by default on Android, where `false` turns it off (exported as `ICO_GPU_ROBUST=0`) ([RHI.md](RHI.md#device-loss)) |
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
 | `attachment_read` | `true`: the attachment read offered on Qualcomm's Adreno driver too, where it is off because it draws wrong colours (exported as `ICO_VK_ATTACHMENT_READ=1`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
-| `storage_pass_merge` | `false`: the storage destination read (the interlock or ROV path) ends its storage pass for every draw it does not need the read for instead of drawing those draws in it through the read (exported as `ICO_RD_PASS_MERGE=0`; `true`, the default, exports `1`: the merge on) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |
+| `storage_pass_merge` | `true`: the storage destination read (the interlock or ROV path) keeps an open storage pass open and draws in it, through the read, the draws it does not need the read for when the shader stores the same bytes, instead of ending the pass for each of them (exported as `ICO_RD_PASS_MERGE=1`; `false`, the default, exports `0`: every such draw ends the storage pass) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |
 | `vu_plain_only` | `true`: every 3D (VU) draw takes the VU vertex shaders' plain variants, the extended ones never compiled; the wide-screen rule and the tick cameras' rule are off (exported as `ICO_RD_VU_PLAIN=1`). The game writes it to `config.toml` itself after a start that ended without a word while the graphics driver compiled the extended ones (issue 107) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `vu_extended` | `true`: the extended variants on a device the renderer's table or `vu_plain_only` keeps to the plain ones (exported as `ICO_RD_VU_EXTENDED=1`) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `joystick_directinput` | `false`: SDL's DirectInput controller scan off on Windows (`SDL_HINT_JOYSTICK_DIRECTINPUT` = 0 before `SDL_Init`; exported as `ICO_JOYSTICK_DIRECTINPUT=0`): the test for a pump held by that scan after a controller change (issue 105); XInput, HIDAPI and Raw Input controllers are still found, a device only DirectInput knows is not. No effect elsewhere (a line says so) ([PLATFORM.md](PLATFORM.md#diagnostics)) |

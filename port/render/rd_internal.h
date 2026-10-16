@@ -1798,7 +1798,7 @@ typedef struct RdContext {
      * every N of them (rd_replay.c passSplit); 0 off (the default) */
     uint32_t passSplit;
     /* the storage pass merge (rd__dst_merge_ok; [dev] storage_pass_merge,
-     * ICO_RD_PASS_MERGE=0 turns it off; rd_core.c rd_init): on by default,
+     * ICO_RD_PASS_MERGE=1 turns it on; rd_core.c rd_init): off by default,
      * used only under the storage mode */
     bool passMerge;
     /* the supersampling factor in force (rd__apply_display): 1, 2 or 4,

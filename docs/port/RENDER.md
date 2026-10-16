@@ -818,7 +818,7 @@ Under the storage read a destination-read draw needs a pass without the colour a
 other draw a pass with it, so a frame that interleaves them ends and begins a pass (with its
 barrier) at every change: on an RTX 3090 the title ran 887 passes a replay against 53 to 75 on the
 attachment and fixed paths, and the GPU time of the logs held follows the pass count (issue 103).
-The merge (`g_rd.passMerge`, on by default) keeps an open storage pass open: a draw that
+The merge (`g_rd.passMerge`, off by default) keeps an open storage pass open: a draw that
 `rd__expand_dst` would leave on the fixed-function blend is drawn in it through the
 destination-read shader instead when the shader stores the same bytes (`rd__dst_merge_ok`):
 
@@ -834,10 +834,12 @@ The premultiplied subtracts stay on the fixed-function blend, which rounds them 
 (above): through the shader they would be the GS's bytes, not the current picture's. A draw that
 does not qualify still begins a pass with the colour attached, and the next destination-read draw
 a storage pass again. The merge changes only the storage mode's passes, so the attachment read and
-the fixed-function blend draw as before. `ICO_RD_PASS_MERGE=0` (`[dev] storage_pass_merge = false`)
-turns it off and logs `rd: storage pass merge: off (ICO_RD_PASS_MERGE=0)`; the start-up pipeline
-set has the merged keys while it is on (`rd__enumerate_dst`). lavapipe has no fragment shader
-interlock, so the tests that compare the merge's picture with the unmerged one byte for byte
+the fixed-function blend draw as before. `ICO_RD_PASS_MERGE=1` (`[dev] storage_pass_merge = true`)
+turns it on and logs `rd: storage pass merge: on (ICO_RD_PASS_MERGE=1)`; the start-up pipeline
+set has the merged keys while it is on (`rd__enumerate_dst`). It is off by default until the A/B
+on an RTX 3090 and the shot list have been run with it: the only logs with it on (an RTX 3090,
+interlock) count 645 to 1189 pass switches a replay (`window: per replay` lines).
+lavapipe has no fragment shader interlock, so the tests that compare the merge's picture with the unmerged one byte for byte
 (`rd_replay_tool_pass_merge`, `rd_perf`) skip that part there and run on a device with the
 storage read; the release check is the shot list on an interlock card with and without the key
 (`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`

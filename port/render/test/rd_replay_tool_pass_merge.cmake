@@ -1,6 +1,6 @@
 # rd_replay_tool_pass_merge: the storage pass merge (issue 103,
 # docs/port/RENDER.md "Destination reads and blend paths";
-# ICO_RD_PASS_MERGE, on by default) on the dump rd_pixel leaves behind,
+# ICO_RD_PASS_MERGE=1, off by default) on the dump rd_pixel leaves behind,
 # under the storage destination read (ICO_RD_BLEND=storage, a device with
 # the fragment shader interlock or ROV): the frame replayed with the merge draws the
 # same DISPLAY picture, byte for byte, as with ICO_RD_PASS_MERGE=0, and
