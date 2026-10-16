@@ -988,6 +988,7 @@ if(ICO_RUN_TESTS)
     # the expectations below are a device with the attachment read and without
     # the interlock (lavapipe before Mesa 25.2; from 25.2 lavapipe has the
     # interlock, so the storage mode would be tried): the interlock is faked off
+    set(_bst_env_mvk "${_bst_env};ICO_VK_FAKE_LIMITS=moltenvk")
     set(_bst_env "${_bst_env};ICO_VK_FAKE_NO_INTERLOCK=1")
     set(_bst_att "exact \\(attachment read\\)")
     set(_bst_fix "fixed-function \\(rounds up\\)")
@@ -1024,10 +1025,31 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_blend_selftest_blend_fixed
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
                      "-DNAME=${_bst_fix}" "-DNOTRUN=ICO_RD_BLEND=fixed" -P "${_bst}")
+    # MoltenVK's default (issue 102): ICO_VK_FAKE_LIMITS=moltenvk reports the
+    # device as MoltenVK without the attachment read; the interlock is the
+    # device's own (Mesa 25.2's lavapipe has it, so no ICO_VK_FAKE_NO_INTERLOCK
+    # here; on a lavapipe without it the tests skip).  The default is the
+    # fixed-function blend with its reason in the blend lines; ICO_RD_BLEND=
+    # storage keeps the interlock and the line says it was forced
+    add_test(NAME rd_blend_selftest_moltenvk
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}"
+                     "-DRESULTS=attachment not on this device, storage (ok|fail) [0-9]+, fixed-function ok [0-2]"
+                     "-DEXTRA=; MoltenVK default: fixed-function"
+                     "-DEXTRA2=rd: blend: fixed-function \\(rounds up\\) \\(MoltenVK: the exact blend's pass switching costs 3 to 4 times the frame; \\[dev\\] blend = storage keeps it\\)"
+                     -P "${_bst}")
+    add_test(NAME rd_blend_selftest_moltenvk_storage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=storage
+                     "-DNAME=exact \\(interlock\\)"
+                     "-DRESULTS=attachment not on this device, storage (ok|fail) [0-9]+, fixed-function ok [0-2]"
+                     "-DEXTRA=; kept by ICO_RD_BLEND"
+                     "-DEXTRA2=rd: blend: exact \\(interlock\\) \\(forced: MoltenVK's default is fixed-function\\)"
+                     -P "${_bst}")
     set(_bst_tests rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
                    rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
                    rd_blend_selftest_blend_attachment rd_blend_selftest_blend_storage
-                   rd_blend_selftest_blend_fixed)
+                   rd_blend_selftest_blend_fixed rd_blend_selftest_moltenvk
+                   rd_blend_selftest_moltenvk_storage)
     set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_bst_env}")
     set_tests_properties(rd_blend_selftest_sabotage
@@ -1042,6 +1064,9 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_blend_selftest_blend_storage
                          PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=storage")
     set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=fixed")
+    set_tests_properties(rd_blend_selftest_moltenvk PROPERTIES ENVIRONMENT "${_bst_env_mvk}")
+    set_tests_properties(rd_blend_selftest_moltenvk_storage
+                         PROPERTIES ENVIRONMENT "${_bst_env_mvk};ICO_RD_BLEND=storage")
     # odd texel counts under MSAA (1935x1080 is 645x360 at scale 3;
     # 2341x1080 at scale 1) and the big scenes: in place passes as at an even
     # width.  Sample counts the device lacks are skipped.  With the buffer path

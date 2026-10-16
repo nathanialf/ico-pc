@@ -173,6 +173,21 @@ int main(int argc, char **argv)
     const bool adreno = fakeQc && fakeQc[0] == '1' && !(force && force[0] == '1');
     const bool none = noDst && noDst[0] == '1';
     const RhiLimits *lim = rhi_limits();
+    /* ICO_VK_FAKE_LIMITS=moltenvk: the device reports MoltenVK, no
+     * attachment read; the interlock is the device's own, so a device
+     * without it cannot show the default (it has nothing exact to take
+     * away) */
+    const char *fakeLim = getenv("ICO_VK_FAKE_LIMITS");
+    const bool mvk = fakeLim && strcmp(fakeLim, "moltenvk") == 0;
+    if (mvk) {
+        CHECK(lim->moltenvk, "RhiLimits.moltenvk under the fake MoltenVK");
+        CHECK(!lim->rasterOrderAttachment, "the attachment read offered under the fake MoltenVK");
+        if (!lim->fragmentInterlock) {
+            printf("rd_blend_selftest_test: SKIP: no fragment shader interlock on this device\n");
+            rd_shutdown();
+            return 77;
+        }
+    }
 
     /* 1. the self-test */
     const bool passed = rd_blend_selftest();
@@ -184,7 +199,7 @@ int main(int argc, char **argv)
     const bool sabotaged =
         sab && ((got == RD_BLEND_EXACT_ATTACHMENT && strstr(sab, "attachment")) ||
                 (got == RD_BLEND_EXACT_STORAGE && strstr(sab, "storage")));
-    CHECK(passed == !sabotaged, "the self-test %s", passed ? "passed" : "failed");
+    CHECK(mvk || passed == !sabotaged, "the self-test %s", passed ? "passed" : "failed");
 
     /* 2. the attachment read not offered */
     if (adreno) {

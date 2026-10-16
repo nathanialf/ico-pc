@@ -38,3 +38,9 @@ int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId)
     return vendorId == RHI_VENDOR_QUALCOMM &&
            (driverId == RHI_DRIVER_ID_QUALCOMM_PROPRIETARY || driverId == 0);
 }
+
+int rhi_driver_is_moltenvk(uint32_t vendorId, uint32_t driverId, int moltenvkBuild)
+{
+    return driverId == RHI_DRIVER_ID_MOLTENVK ||
+           (moltenvkBuild && vendorId == RHI_VENDOR_APPLE && driverId == 0);
+}

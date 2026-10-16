@@ -647,10 +647,19 @@ static void vkr_fake_limits(void)
         g_vkr.fakeMinLimits = true; /* applied in vkr_fill_limits */
         return;
     }
+    if (strcmp(e, "moltenvk") == 0) {
+        /* no limits clamped: the device reports MoltenVK (RhiLimits.moltenvk)
+         * and no rasterization-order attachment read; the interlock stays
+         * what the device has (the blend ctests) */
+        g_vkr.fakeMoltenvk = true;
+        VKR_LOG("ICO_VK_FAKE_LIMITS=moltenvk: the device is reported as MoltenVK, without the "
+                "attachment read");
+        return;
+    }
     if (strcmp(e, "mali") != 0) {
-        VKR_LOG(
-            "ICO_VK_FAKE_LIMITS=%s: not a known profile (mali, min); the limits are the device's",
-            e);
+        VKR_LOG("ICO_VK_FAKE_LIMITS=%s: not a known profile (mali, min, moltenvk); the limits are "
+                "the device's",
+                e);
         return;
     }
     VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
@@ -912,6 +921,13 @@ static bool vkr_pick_device(void)
     vkGetPhysicalDeviceProperties(g_vkr.phys, &g_vkr.props);
     vkr_driver_text(g_vkr.phys, &g_vkr.props);
     vkr_fake_limits();
+#ifdef ICO_RHI_MOLTENVK
+    g_vkr.moltenvk =
+        g_vkr.fakeMoltenvk || rhi_driver_is_moltenvk(g_vkr.props.vendorID, g_vkr.driverID, 1);
+#else
+    g_vkr.moltenvk =
+        g_vkr.fakeMoltenvk || rhi_driver_is_moltenvk(g_vkr.props.vendorID, g_vkr.driverID, 0);
+#endif
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     /* the heaps, and the one uploads (the renderer's ring, texture
        pack uploads) come from: a device-local, host-visible type first
@@ -1123,7 +1139,7 @@ static bool vkr_create_device(void)
                           avail.fragmentStoresAndAtomics == VK_TRUE &&
                           vkr_format_ok(g_vkr.phys, VK_FORMAT_R8G8B8A8_UNORM,
                                         VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
-        const bool hasOrder = !fake && (extOrder || extOrderArm) &&
+        const bool hasOrder = !fake && !g_vkr.fakeMoltenvk && (extOrder || extOrderArm) &&
                               qOrder.rasterizationOrderColorAttachmentAccess && extLocal &&
                               qLocal.dynamicRenderingLocalRead;
         /* Qualcomm's own Adreno driver has the read but returns wrong
@@ -1724,6 +1740,7 @@ static void vkr_fill_limits(void)
     o->rov = false;
     o->rasterOrderAttachment = g_vkr.rasterOrder;
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
+    o->moltenvk = g_vkr.moltenvk;
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
@@ -1861,10 +1878,11 @@ bool rhi_init(const RhiDeviceDesc *desc)
             return false;
         }
     }
-    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s; index values up to %u (full 32-bit range %s)",
+    VKR_LOG("%s (Vulkan %u.%u.%u%s)%s%s; index values up to %u (full 32-bit range %s)",
             g_vkr.adapterName, VK_API_VERSION_MAJOR(g_vkr.apiVersion),
             VK_API_VERSION_MINOR(g_vkr.apiVersion), VK_API_VERSION_PATCH(g_vkr.apiVersion),
-            s_driverText, g_vkr.surface ? "" : ", headless", g_vkr.limits.maxDrawIndexedIndexValue,
+            s_driverText, g_vkr.moltenvk ? "; MoltenVK" : "", g_vkr.surface ? "" : ", headless",
+            g_vkr.limits.maxDrawIndexedIndexValue,
             g_vkr.limits.fullDrawIndexUint32 ? "offered" : "not offered");
     return true;
 }

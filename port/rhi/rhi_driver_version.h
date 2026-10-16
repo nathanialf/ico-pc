@@ -21,10 +21,12 @@
 #define RHI_VENDOR_NVIDIA 0x10DEu
 #define RHI_VENDOR_INTEL 0x8086u
 #define RHI_VENDOR_QUALCOMM 0x5143u
+#define RHI_VENDOR_APPLE 0x106Bu
 /* VkDriverId values */
 #define RHI_DRIVER_ID_NVIDIA_PROPRIETARY 4u
 #define RHI_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS 5u
 #define RHI_DRIVER_ID_QUALCOMM_PROPRIETARY 8u
+#define RHI_DRIVER_ID_MOLTENVK 14u
 
 /* The text into buf (always terminated when n > 0); returns buf. */
 char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t driverVersion,
@@ -37,5 +39,11 @@ char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t dri
  * destination colours (issue 89: Adreno 830, driver 512.800.72), so
  * vk_device.c does not offer that read on it. */
 int rhi_driver_is_qualcomm_proprietary(uint32_t vendorId, uint32_t driverId);
+
+/* 1 for MoltenVK (Vulkan over Metal): VK_DRIVER_ID_MOLTENVK, or, on a build
+ * that links MoltenVK (moltenvkBuild nonzero), Apple's vendor id 0x106B with
+ * the id unknown (0).  The renderer's default blend path on it is the
+ * fixed-function one (port/render/rd_dst_read.c rd__dst_init; issue 102). */
+int rhi_driver_is_moltenvk(uint32_t vendorId, uint32_t driverId, int moltenvkBuild);
 
 #endif /* PORT_RHI_RHI_DRIVER_VERSION_H */

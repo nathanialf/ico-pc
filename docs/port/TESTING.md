@@ -523,7 +523,7 @@ the ctest exclusion used for such runs, `-E
 
 The variants that force GPU paths a desktop driver does not take are in
 [../BUILDING.md](../BUILDING.md#tests)'s table (`ICO_RD_NO_DUAL`, `ICO_VK_FAKE_NO_DUAL`,
-`ICO_VK_FAKE_D24S8`, `ICO_VK_FAKE_LIMITS=mali|min`, `ICO_RD_BLEND=storage|fixed`). The other
+`ICO_VK_FAKE_D24S8`, `ICO_VK_FAKE_LIMITS=mali|min|moltenvk`, `ICO_RD_BLEND=storage|fixed`). The other
 switches the tests and their registrations use:
 
 | variable | read in | effect |
@@ -532,6 +532,7 @@ switches the tests and their registrations use:
 | `ICO_DX_FAKE_NO_TIMESTAMPS` | `d3d12_cmd.c` | D3D12 without GPU timestamps (the `no GPU timestamps` log text) |
 | `ICO_VK_FAKE_NO_MSAA` | `vk_device.c` | single sampling only |
 | `ICO_VK_FAKE_NO_INTERLOCK` | `vk_device.c` | the fragment shader interlock off, the attachment read kept (the `rd_blend_selftest*` ctests: lavapipe has the interlock from Mesa 25.2, their expectations are a device without it) |
+| `ICO_VK_FAKE_LIMITS=moltenvk` | `vk_device.c` | MoltenVK: `RhiLimits.moltenvk` set, no attachment read, the interlock the device's own (`rd_blend_selftest_moltenvk`: the default is the fixed-function blend with the MoltenVK reason; `rd_blend_selftest_moltenvk_storage`: `ICO_RD_BLEND=storage` keeps the interlock. Run without `ICO_VK_FAKE_NO_INTERLOCK`; they skip on a device without the interlock, as Mesa before 25.2's lavapipe) |
 | `ICO_VK_FAKE_ADRENO` | `vk_device.c` | Qualcomm's Adreno driver: the attachment read not offered (`rd_blend_selftest_adreno`) |
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |

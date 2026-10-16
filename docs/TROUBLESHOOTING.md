@@ -139,6 +139,10 @@ settings lower the load the most (Options):
   graphics card. The rest of the picture keeps your resolution.
 - **Resolution** 1x is the PS2's own sharpness and the lightest of all.
 
+On a Mac, anti-aliasing no longer needs to be on for the game to run fast:
+the game now draws with the faster method by default, whatever the
+anti-aliasing setting.
+
 If it is still slow, play for a minute with your usual settings and send
 `ico-pc.log` with a [problem report](#send-a-problem-report): every 10
 seconds the log says how long the graphics card spent on the scene, the

@@ -125,10 +125,20 @@ int rd__dst_asked(void)
     return s_asked;
 }
 
+/* the platform default took the fixed-function blend from a device that has
+ * an exact mode (MoltenVK, issue 102), not ICO_RD_BLEND */
+static bool s_platformFixed;
+
+bool rd__dst_platform_fixed(void)
+{
+    return s_platformFixed;
+}
+
 void rd__dst_init(void)
 {
     g_rd.dstModes = g_rd.hasDevice ? madeModes() : (uint8_t)(1u << RD_BLEND_EXACT_OFF);
     s_asked = -1;
+    s_platformFixed = false;
     int want = RD_BLEND_EXACT_OFF;
     if (g_rd.dstModes & (1u << RD_BLEND_EXACT_ATTACHMENT)) {
         want = RD_BLEND_EXACT_ATTACHMENT;
@@ -155,10 +165,27 @@ void rd__dst_init(void)
             s_asked = asked;
         }
     }
+    /* MoltenVK: the exact blend's pass switching (rd_replay.c dstPassMode)
+     * measured 54 ms a replay and 750 passes against 14 ms and 49 with the
+     * fixed-function blend (an M1, issue 102; 16.7 ms with MSAA, which
+     * draws fixed too).  One rule for macOS and iOS, here; ICO_RD_BLEND
+     * ([dev] blend) above has forced any mode */
+    const bool mvk = g_rd.hasDevice && rhi_limits()->moltenvk;
+    if (mvk && s_asked < 0 && want != RD_BLEND_EXACT_OFF) {
+        want = RD_BLEND_EXACT_OFF;
+        s_platformFixed = true;
+    }
     g_rd.dstMode = (uint8_t)want;
     const char *off = g_rd.hasDevice ? rhi_limits()->rasterOrderOff : NULL;
-    rd__log("blend: %s%s%s%s", rd__blend_exact_name(want), off ? " (" : "", off ? off : "",
-            off ? ")" : "");
+    if (s_platformFixed) {
+        rd__log("blend: %s (MoltenVK: the exact blend's pass switching costs 3 to 4 times the "
+                "frame; [dev] blend = storage keeps it)",
+                rd__blend_exact_name(want));
+    } else {
+        rd__log("blend: %s%s%s%s%s", rd__blend_exact_name(want), off ? " (" : "", off ? off : "",
+                off ? ")" : "",
+                mvk && s_asked >= 0 ? " (forced: MoltenVK's default is fixed-function)" : "");
+    }
 }
 
 bool rd_set_blend_exact(RdBlendExact mode)

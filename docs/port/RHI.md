@@ -255,6 +255,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_VALIDATION` | 1 adds `VK_LAYER_KHRONOS_validation` and debug utils; 0 keeps them off |
 | `ICO_VK_DEVICE` | an index or a substring of the device name forces the pick |
 | `ICO_VK_FAKE_LIMITS` | `mali` clamps the limits to a Mali-G68's (4 descriptor sets, 128 bytes of push constants, 16 sampled images a stage, 4096 allocations, ...); `min` holds the alignment, texture, render target, dynamic uniform, storage range and anisotropy limits to 256, 4096, 4096, 8, 2^27 and 16 |
+| `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk*`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
@@ -502,6 +503,12 @@ SHA-256, the licences of the libraries compiled into it, and builds a static SDL
 (iOS 15.0, macOS 12.0 minimum), then runs `tools/fetch_deps.sh --game-only`
 (`tools/fetch_moltenvk.sh`). `rhi_init` rejects a different Vulkan loader on these builds
 (`port/rhi/rhi.h` (`rhi_set_vulkan_loader`)).
+
+`RhiLimits.moltenvk` is true on MoltenVK (`rhi_driver_is_moltenvk`: `VK_DRIVER_ID_MOLTENVK`, or
+vendor 0x106B with the id unknown under `ICO_RHI_MOLTENVK`) and is logged as `; MoltenVK` on the
+`rhi_vk:` device line. The renderer reads it for its default blend: fixed-function, because the
+exact blend's pass switching costs 3 to 4 times the frame there
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths), issue 102).
 
 ## Tests
 

@@ -14,6 +14,9 @@
 # -DTOOL=<rd_blend_selftest_test> -DMODE=<attachment|storage|fixed>
 # -DNAME=<the blend's log name, a regex> -DRESULTS=<regex of the results>
 # [-DFAIL=<regex>] [-DDENY=1] [-DNOTRUN=<regex of why>] [-DEXTRA=<regex>]
+# [-DEXTRA2=<regex>]
+# (rd_blend_selftest_moltenvk*: ICO_VK_FAKE_LIMITS=moltenvk, skipped on a
+# device without the interlock)
 execute_process(COMMAND "${TOOL}" "${MODE}" RESULT_VARIABLE rc OUTPUT_VARIABLE out
                 ERROR_VARIABLE err)
 message(STATUS "${out}")
@@ -60,6 +63,11 @@ endif()
 if(EXTRA)
   if(NOT err MATCHES "${EXTRA}")
     message(FATAL_ERROR "no line matching \"${EXTRA}\":\n${err}")
+  endif()
+endif()
+if(EXTRA2)
+  if(NOT err MATCHES "${EXTRA2}")
+    message(FATAL_ERROR "no line matching \"${EXTRA2}\":\n${err}")
   endif()
 endif()
 message(STATUS "rd_blend_selftest ${MODE}: the blend and the self-test's results logged")

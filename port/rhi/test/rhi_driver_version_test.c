@@ -47,6 +47,12 @@ int main(void)
     CHECK(!rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_QUALCOMM, 18));
     CHECK(!rhi_driver_is_qualcomm_proprietary(0x13B5u, RHI_DRIVER_ID_QUALCOMM_PROPRIETARY));
     CHECK(!rhi_driver_is_qualcomm_proprietary(RHI_VENDOR_NVIDIA, 0));
+    CHECK(rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, RHI_DRIVER_ID_MOLTENVK, 0));
+    CHECK(rhi_driver_is_moltenvk(0x1002u, RHI_DRIVER_ID_MOLTENVK, 0));
+    CHECK(rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, 0, 1));
+    CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, 0, 0));
+    CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_APPLE, 3, 1));
+    CHECK(!rhi_driver_is_moltenvk(RHI_VENDOR_NVIDIA, 4, 1));
     /* a short buffer is cut and terminated */
     {
         char small[4];

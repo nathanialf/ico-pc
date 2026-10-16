@@ -540,6 +540,8 @@ static bool runSelftest(void)
     }
     if (asked > 0) {
         chosen = asked;
+    } else if (rd__dst_platform_fixed()) {
+        chosen = RD_BLEND_EXACT_OFF; /* MoltenVK's default (rd__dst_init) */
     }
     g_rd.dstMode = (uint8_t)chosen;
     if (g_rd.noDual != noDualBefore) {
@@ -584,11 +586,14 @@ static bool runSelftest(void)
         }
     }
     const char *off = rhi_limits()->rasterOrderOff;
-    snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s)", rd__blend_exact_name(chosen),
-             res);
+    const char *why = asked > 0                  ? "; kept by ICO_RD_BLEND"
+                      : rd__dst_platform_fixed() ? "; MoltenVK default: fixed-function"
+                                                 : "";
+    snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s)%s",
+             rd__blend_exact_name(chosen), res, why);
     rd__log("blend: %s (self-test: %s)%s%s%s on SCENE %ux%u at %ux%u texels in %.1f ms",
-            rd__blend_exact_name(chosen), res, asked > 0 ? "; kept by ICO_RD_BLEND" : "",
-            off ? "; " : "", off ? off : "", t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
+            rd__blend_exact_name(chosen), res, why, off ? "; " : "", off ? off : "", t->w, t->h,
+            t->tw, t->th, rd__now_ms() - t0);
     for (int e = 0; e < E_COUNT; e++) {
         /* a failing mode's worst sample, and a passing one's when it is not
            exact (the blender's rounding, or a driver near the limit) */

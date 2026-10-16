@@ -243,9 +243,10 @@ The label (`vX.Y.Z`) gives the bundle its version, as for macOS, and the files t
 `dist/ico-pc-<label>-ios-unsigned.ipa`, with the licences inside the bundle, and the link map
 `dist/ico-pc-<label>-ios.map`. No provisioning profile or signing identity is needed.
 
-The iOS entry point (`port/platform/ios/main_ios.c`) sets `ICO_RD_BLEND=fixed` unless the
-environment already sets it, so iOS blends through the fixed-function path; every other platform
-picks its blend path from the device. It runs the game on a guarded 32 MB [fiber](port/ARCHITECTURE.md#terms) stack on SDL's
+iOS and macOS blend through the fixed-function path by default, because the renderer takes that
+path on MoltenVK (`rd__dst_init` in `port/render/rd_dst_read.c`; `[dev] blend` or `ICO_RD_BLEND`
+still forces any mode); every other platform picks its blend path from the device. The iOS entry
+point (`port/platform/ios/main_ios.c`) sets nothing for it. It runs the game on a guarded 32 MB [fiber](port/ARCHITECTURE.md#terms) stack on SDL's
 UIKit main thread.
 
 Import the IPA into LiveContainer. Copy your own extracted `ico.o2r` into the guest app's

@@ -1111,6 +1111,10 @@ void rd__dst_init(void);
 /* The mode ICO_RD_BLEND asked for when the device has it (kept by
  * rd_blend_selftest whatever its result), -1 when none was asked. */
 int rd__dst_asked(void);
+/* true when the platform default (MoltenVK) took the fixed-function blend
+ * from a device that has an exact mode: the self-test still runs, the
+ * default stays (rd_dst_read.c) */
+bool rd__dst_platform_fixed(void);
 /* rd__fog_scene_remade: a new SCENE size runs the blend's self-test again
  * once rd_blend_selftest has run; rd__gpu_shutdown frees its objects. */
 void rd__blend_scene_remade(void);
@@ -1900,7 +1904,7 @@ void rd__log_once(int bit, const char *fmt, ...);
 /* The self-tests' results for the start's summary line (rd_summary_text):
  * "<blend> (self-test: ...)" and "<fog path> (self-test: ...)", written
  * where their log lines are, "" until then. */
-extern char g_rdSumBlend[256];
+extern char g_rdSumBlend[288];
 extern char g_rdSumFog[224];
 /* A recorded command the replay does not model (RDC_WORLD_PRIMS, or a post
  * kind recorded as a stub): counted, and skipped with one log line for the

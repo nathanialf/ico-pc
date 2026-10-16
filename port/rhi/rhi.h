@@ -604,6 +604,12 @@ typedef struct RhiLimits {
     bool rov;
     bool rasterOrderAttachment;
     const char *rasterOrderOff;
+    /* The device is MoltenVK (Vulkan over Metal: macOS, iOS): the exact
+     * blend's pass switching costs 3 to 4 times the frame there (issue
+     * 102), so the renderer's default blend is the fixed-function one
+     * (port/render/rd_dst_read.c; [dev] blend still forces any mode).
+     * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
+    bool moltenvk;
     /* Why the VU vertex shaders' extended variants are refused on this
      * device ("Adreno 740, issue 107": the driver hangs the whole device
      * compiling them; Vulkan, vk_device.c kVuPlainOnly), NULL otherwise;

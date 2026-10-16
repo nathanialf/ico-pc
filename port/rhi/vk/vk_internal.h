@@ -237,6 +237,10 @@ typedef struct VkrState {
     /* VkPhysicalDeviceDriverProperties.driverID and the driver's version as
      * its vendor writes it (vkr_driver_text) */
     uint32_t driverID;
+    /* the device is MoltenVK (rhi_driver_is_moltenvk), or ICO_VK_FAKE_LIMITS=
+     * moltenvk says so: RhiLimits.moltenvk; fakeMoltenvk is that profile */
+    bool moltenvk;
+    bool fakeMoltenvk;
     char driverVersion[32];
     /* the driver's own "Compiler Version: ..." line from its driverInfo
      * (Qualcomm's Adreno driver writes one), "" when it has none, for

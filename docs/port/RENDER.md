@@ -805,6 +805,24 @@ is begun readable: the picture is the fixed-function blend's. `ICO_VK_ATTACHMENT
 any device, for tests (`port/rhi/vk/vk_device.c`; `port/rhi/rhi_driver_version.h`
 (`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h` (`RhiLimits.rasterOrderOff`)).
 
+**The MoltenVK rule.** On MoltenVK (macOS and iOS; `VK_DRIVER_ID_MOLTENVK`, or Apple's vendor
+0x106B with the id unknown on the builds that link MoltenVK; `RhiLimits.moltenvk`, shown as
+`; MoltenVK` on the `rhi_vk:` device line) the default blend is the fixed-function one even though
+the interlock is offered (the reporter's M2 Pro, MoltenVK 1.4.2: `interlock yes,
+rasterization-order attachment read no`, issue 102). The exact path's cost is its pass switching
+(`dstPassMode`, `port/render/rd_replay.c`): a contributor's M1 replay of the reporter's dump took
+54 ms and 750 passes with MSAA off and the interlock, 16.7 ms and 59 with MSAA 2x (which draws
+fixed-function), and 14 ms and 49 with MSAA off and `ICO_RD_BLEND=fixed`: 3 to 4 times the frame
+for the exact blend's last level of rounding. iOS already had the rule (a `setenv` in
+`port/platform/ios/main_ios.c`, A14: the interlock also regressed the picture); it is now this one,
+in `rd__dst_init`, for both. The line is `rd: blend: fixed-function (rounds up) (MoltenVK: the exact
+blend's pass switching costs 3 to 4 times the frame; [dev] blend = storage keeps it)`, and the
+`ico_pc: summary:` line's blend text ends `; MoltenVK default: fixed-function`. The self-test still
+runs (the exact modes are tried and logged, the fixed-function blend stays in force).
+`[dev] blend` / `ICO_RD_BLEND` forces any mode as everywhere (the init line then ends `(forced:
+MoltenVK's default is fixed-function)`). `ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no
+attachment read, on any device (`rd_blend_selftest_moltenvk`, `rd_blend_selftest_moltenvk_storage`).
+
 **The blend self-test.** A driver whose read returns the wrong colour draws a wrong picture with no
 error anywhere, so `rd_blend_selftest` checks the modes on the device at start, as the fog's
 self-test checks its depth reads ([The fog path and its self-test](#the-fog-path-and-its-self-test)). A frame of its
