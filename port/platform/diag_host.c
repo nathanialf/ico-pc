@@ -3709,34 +3709,67 @@ static int sample_main(void)
 
 #ifdef _WIN32
 
+/* size bytes at the image's base + off into out, through
+   ReadProcessMemory on this process: the main thread runs again after the
+   sample, and a module may unload before its header is read; an unmapped
+   page fails the read instead of faulting this thread. 0 when read whole. */
+static int image_read(uintptr_t base, uint32_t off, void *out, size_t size)
+{
+    SIZE_T got = 0;
+    return ReadProcessMemory(GetCurrentProcess(), (LPCVOID)(base + off), out, size, &got) &&
+                   got == size
+               ? 0
+               : -1;
+}
+
 /* A code module's name from its own export table (the DLL's name as it
    was linked: "DINPUT8.dll", "SDL3.dll"), never through the loader: the
    held main thread may own the loader lock (a device scan loads drivers).
-   NULL when the image has none. */
-static const char *image_export_name(const unsigned char *base)
+   The DOS header, the NT headers, the export directory and the name are
+   copied (bounded) into locals by image_read, never dereferenced in place.
+   0 with out set, -1 when the image has none or a read failed. */
+static int image_export_name(uintptr_t base, char *out, size_t size)
 {
-    const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)base;
-    const IMAGE_NT_HEADERS *nt;
+    IMAGE_DOS_HEADER dos;
+    IMAGE_NT_HEADERS nt;
+    IMAGE_EXPORT_DIRECTORY ed;
     const IMAGE_DATA_DIRECTORY *d;
-    const IMAGE_EXPORT_DIRECTORY *ed;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 4096) {
-        return NULL;
+    char name[49];
+    size_t k;
+    if (size == 0 || image_read(base, 0, &dos, sizeof dos) != 0 ||
+        dos.e_magic != IMAGE_DOS_SIGNATURE || dos.e_lfanew <= 0 || dos.e_lfanew > 4096 ||
+        image_read(base, (uint32_t)dos.e_lfanew, &nt, sizeof nt) != 0 ||
+        nt.Signature != IMAGE_NT_SIGNATURE ||
+        nt.OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT) {
+        return -1;
     }
-    nt = (const IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE ||
-        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT) {
-        return NULL;
-    }
-    d = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    d = &nt.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
     if (d->VirtualAddress == 0 || d->Size == 0 ||
-        d->VirtualAddress >= nt->OptionalHeader.SizeOfImage) {
-        return NULL;
+        d->VirtualAddress >= nt.OptionalHeader.SizeOfImage ||
+        image_read(base, d->VirtualAddress, &ed, sizeof ed) != 0 || ed.Name == 0 ||
+        ed.Name >= nt.OptionalHeader.SizeOfImage) {
+        return -1;
     }
-    ed = (const IMAGE_EXPORT_DIRECTORY *)(base + d->VirtualAddress);
-    if (ed->Name == 0 || ed->Name >= nt->OptionalHeader.SizeOfImage) {
-        return NULL;
+    /* the name, at most 48 bytes (the line's width) and not past the
+       image; when those cross into a page that is gone, up to the page's
+       end */
+    k = sizeof name - 1;
+    if (k > nt.OptionalHeader.SizeOfImage - ed.Name) {
+        k = nt.OptionalHeader.SizeOfImage - ed.Name;
     }
-    return (const char *)(base + ed->Name);
+    if (image_read(base, ed.Name, name, k) != 0) {
+        const size_t page = 4096 - (size_t)((base + ed.Name) & 4095u);
+        if (page >= k || image_read(base, ed.Name, name, page) != 0) {
+            return -1;
+        }
+        k = page;
+    }
+    name[k] = '\0';
+    if (name[0] == '\0') {
+        return -1;
+    }
+    snprintf(out, size, "%s", name);
+    return 0;
 }
 
 /* "DINPUT8.dll+0x1234" when a is in executable image memory (a return
@@ -3746,7 +3779,7 @@ static int code_address(uintptr_t a, char *out, size_t size)
     MEMORY_BASIC_INFORMATION mbi;
     const DWORD exec =
         PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    const char *name;
+    char name[49];
     if (a < 0x10000) {
         return 0;
     }
@@ -3758,8 +3791,7 @@ static int code_address(uintptr_t a, char *out, size_t size)
         mbi.Type != MEM_IMAGE || (mbi.Protect & exec) == 0 || mbi.AllocationBase == NULL) {
         return 0;
     }
-    name = image_export_name((const unsigned char *)mbi.AllocationBase);
-    if (name != NULL) {
+    if (image_export_name((uintptr_t)mbi.AllocationBase, name, sizeof name) == 0) {
         snprintf(out, size, "%.48s+0x%lx", name,
                  (unsigned long)(a - (uintptr_t)mbi.AllocationBase));
     } else {
