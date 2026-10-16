@@ -94,12 +94,14 @@ ok "make_portable.sh refuses and creates"
 zl="$(sed -n '/^    files=(/,/^    \[\[ "\$variant" == portable \]\] || files/p' "$here/tools/package_win.sh")"
 [[ -n "$zl" ]] || bad "package_win.sh: the zip file list was not found"
 for n in tools/mc_import.exe tools/SDL3.dll tools/README.txt ico_pc_; do grep -q "$n" <<<"$zl" || bad "package_win.sh: the zip list lacks $n"; done
-for n in rhi_d3d12_test rd_replay_tool compare_backends compare_png .map; do
+for n in rhi_d3d12_test rd_replay_tool compare_backends compare_png; do
     if grep -q "$n" <<<"$zl"; then bad "package_win.sh: the zip list names $n"; fi
     grep -q "pkg_assert_zip_lacks.*\$n\|\"[^\"]*$n" "$here/tools/package_win.sh" || bad "package_win.sh does not assert $n absent"
 done
-if grep -q 'ico_pc.map' <<<"$(grep -n 'top/ico_pc.map' "$here/tools/package_linux.sh")"; then bad "package_linux.sh copies the map into the archive"; fi
-grep -q 'pkg_assert_tar_lacks "$out" "ico-pc-$label/ico_pc.map"' "$here/tools/package_linux.sh" || bad "package_linux.sh does not assert the map absent"
+# the map ships beside the program (crash reports symbolize their stacks from it)
+grep -q '\.map' <<<"$zl" || bad "package_win.sh: the zip list lacks the map"
+grep -q 'ico_pc.map' "$here/tools/package_linux.sh" || bad "package_linux.sh does not ship the map"
+if grep -q 'pkg_assert_tar_lacks "$out" "ico-pc-$label/ico_pc.map"' "$here/tools/package_linux.sh"; then bad "package_linux.sh still asserts the map absent"; fi
 # the version information: the label's numbers reach the resource
 grep -q 'ICO_VERSION_LABEL' "$here/tools/package_win.sh" || bad "package_win.sh does not pass the label to the build"
 grep -q 'VERSIONINFO' "$here/port/platform/win/ico_pc.rc" || bad "ico_pc.rc has no version information"
