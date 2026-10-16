@@ -8,9 +8,11 @@
  * and event queue, then the 0x200-byte reply page).  Every packet becomes
  * the libsd calls the IRX makes, on the software SPU2 (spu2_sd.h).
  *
- * Threading: none.  The server runs on the game's sound fiber, the SPU2
- * renders on the host context at each vsync (audio_host.h); both are the
- * one simulation thread, so the calls never overlap.
+ * Threading: the server runs on the game's sound fiber.  On the game's
+ * clock the SPU2 renders on the host context at each vsync, the same
+ * simulation thread; on the audio device's clock SDL's audio thread
+ * renders it (audio_host.h), and the serve, the reset and the register
+ * take the audio lock (audio_lock.h) around everything they do.
  */
 #ifndef ICO_PORT_AUDIO_SNDN2_HOST_H
 #define ICO_PORT_AUDIO_SNDN2_HOST_H

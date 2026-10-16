@@ -23,8 +23,10 @@
  *   - A gain change re-issues the cached volumes of the slots it covers,
  *     so it is heard at once.
  *
- * Everything runs on the simulation thread (the game's fibers, the driver
- * and the render share it, audio_host.h), so nothing is locked.
+ * The driver calls ico_audio_gain_voice under the audio lock its serve
+ * holds (audio_lock.h); ico_audio_set_gain and ico_audio_gain_reapply,
+ * the Settings menu's calls, take the lock themselves, since on the audio
+ * device's clock the render runs on SDL's audio thread (audio_host.h).
  */
 #ifndef ICO_PORT_AUDIO_MIX_GAIN_H
 #define ICO_PORT_AUDIO_MIX_GAIN_H

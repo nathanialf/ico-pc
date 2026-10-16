@@ -26,8 +26,8 @@
 #define MAX_FRAMES_PER_VSYNC 1024 /* 960 at 50 Hz, 800 or 801 at 59.94 Hz */
 /* the pull path's watchdog: the device silent this long while the game
    stepped as long falls back to the game's clock; before the device's
-   first request after an open or a resume (a Bluetooth headset can take a
-   second to start) the longer bound */
+   first request after an open or a resume the longer bound, for a device
+   slow to start */
 #define PULL_STALL_MS 300
 #define PULL_START_MS 2000
 

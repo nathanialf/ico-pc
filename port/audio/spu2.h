@@ -26,9 +26,13 @@
  * arithmetic on every supported compiler); the same writes at the same
  * times render the same bits on every host.
  *
- * Threading: none.  The caller serialises every call; callbacks run inside
- * spu2_render() and may call spu2_write_reg() and the transfer functions
- * (their effects then start at the next sample).
+ * Threading: no lock of its own.  The caller serialises every call: on the
+ * audio device's clock SDL's audio thread renders (port/audio/out_sdl.c
+ * pull_cb) under port/audio/audio_lock.h's lock, which every caller on the
+ * game's side takes too; on the game's clock everything runs on the one
+ * simulation thread.  Callbacks run inside spu2_render() and may call
+ * spu2_write_reg() and the transfer functions (their effects then start at
+ * the next sample).
  */
 #ifndef ICO_PORT_AUDIO_SPU2_H
 #define ICO_PORT_AUDIO_SPU2_H

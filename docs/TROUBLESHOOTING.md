@@ -127,6 +127,17 @@ played well: its last lines count how often a piece of music started while
 the game had a lot of sound to send at once, which is when music can go
 missing.
 
+## Sound that crackles or cuts out
+
+The game keeps its sound playing on its own while a scene loads or the
+picture takes a moment, so the sound carries on through short pauses. If
+you still hear crackling or gaps, send `ico-pc.log` from that run (if you
+have started the game again since, it is `ico-pc-previous.log`) with a
+[problem report](#send-a-problem-report): every ten seconds the log counts
+the moments the sound could not keep up. A short click when you go from one
+area to the next is the game stopping its sounds all at once, as it does on
+the PlayStation 2; the log writes down how loud each one was.
+
 ## The game is slow on an older graphics card
 
 If the game stutters, or your graphics card is always at full load, these

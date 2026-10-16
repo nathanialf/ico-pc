@@ -78,6 +78,16 @@ program under an environment switch ([Environment switches](#environment-switche
 - `adpcm_slots_test.c`: the ADPCM request daemon with both stream slots taken; a stream already
   fading out gives its slot up (`adpcm_slots`).
 - `adpcm_test.c`: SPU ADPCM block decoding against hand-worked vectors (`adpcm`).
+- `audio_pull_test.c` (window build): the output on the device's clock (`out_sdl.c`'s pull path)
+  on a device-less SDL stream over the real SPU2: a writer thread under the audio lock and a
+  pulling thread render the frames one thread renders; 10 s free-running with the frames and the
+  silence accounted; the ramp out of and into silence while the lock is held elsewhere; the 10 s
+  line and the mode choice (`audio_pull`). It is the program to run under ThreadSanitizer: the
+  `asan` preset with `-DICO_HEADLESS=OFF -DICO_SANITIZE=thread` into a build folder of its own,
+  `--target audio_pull_test`, run with `TSAN_OPTIONS=halt_on_error=1`; a report is a failure.
+- `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
+  device-less SDL stream: the cushion, the refill after a dry queue and its ramp, the trim and the
+  drop limit (`audio_queue`).
 - `libsd_irx_test.c`: the LIBSD.IRX reader on a synthetic module, its structural checks and its
   fallback (`libsd_irx`).
 - `mix_gain_test.c`: the music, effects and film gains, every fixed volume word unchanged at 100 %
@@ -85,11 +95,11 @@ program under an environment switch ([Environment switches](#environment-switche
 - `pan_test.c`: mirror mode's pan swap and the per-[vsync](ARCHITECTURE.md#terms) block size
   (`audio_pan`).
 - `sndn2_test.c`: the SNDN2DRV host and the Sg sequencer against what the IRX's code does; reads
-  the disc when present; also `sw_log`'s bound (the longest page-full line arrives whole, a longer one ends in `...`) (`sndn2`).
+  the disc when present; also `sw_log`'s bound (the longest page-full line arrives whole, a longer one ends in `...`), and the audio lock's sites with a counting fake lock (`sndn2`).
 - `spu2_bench.c`: the [SPU2](ARCHITECTURE.md#terms) render's cost, and with `--check` a CRC-32 of
   five 10 s scenes (`spu2_render_crc`).
 - `spu2_test.c`: the software SPU2 and its [libsd](ARCHITECTURE.md#terms) front end: interpolation,
-  ADSR, voices, reverb (`spu2`).
+  ADSR, voices, the voices cut short, reverb (`spu2`).
 - `volume_test.c`: the output volume's mapping, clamp and integer scaling (`volume`).
 
 ### port/config/test, port/null/test, port/save/test
@@ -230,7 +240,8 @@ program under an environment switch ([Environment switches](#environment-switche
   120 Hz and on a display that drifts from its report (`pace_loop`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
-  synthetic display, and the audio skip (`pace_policy`).
+  synthetic display, and the audio skip, never for a cushion of 0 (the audio on the device's
+  clock) unless presents are slow (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls

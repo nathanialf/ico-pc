@@ -187,8 +187,9 @@ the memory card, disc and stage manager threads when they wait for it (`ico2/fum
 2. `ico_sched_vsync_advance`, then `ico_vsync(field)` in the game (`ico2/common/src/main.c`), which
    sets `GS_CSR.FIELD` and raises the vblank-start cause, the field alternating from 0;
 3. the on-vsync callbacks, as interrupt code (`ico_host_run_vsync_hooks`);
-4. the vsync's audio from the [SPU2](ARCHITECTURE.md#terms) state the last sound tick left
-   (`port/audio/audio_host.h` (`ico_audio_host_vsync`));
+4. on the game's clock, the vsync's audio from the [SPU2](ARCHITECTURE.md#terms) state the last
+   sound tick left; on the device's clock nothing is rendered here, only the watchdog and the
+   voices-cut line run (`port/audio/audio_host.h` (`ico_audio_host_vsync`));
 5. `ico_sched_run`: every thread that became ready runs until all wait again;
 6. the achievements' poll (once per new [Main tick](ARCHITECTURE.md#terms), reading game state only)
    and the Extras credits' poll (nothing unless a credits playback runs);

@@ -3,8 +3,9 @@
 How the game's sound reaches the speakers: the game's sequencer runs as compiled, its RPC to the
 [IOP](ARCHITECTURE.md#terms) sound driver lands in a host server that does what SNDN2DRV.IRX did,
 the driver's [libsd](ARCHITECTURE.md#terms) calls drive a software [SPU2](ARCHITECTURE.md#terms),
-and once per [vsync](ARCHITECTURE.md#terms) the host loop renders that vsync's samples into an
-SDL3 device, a WAV file, or nothing.
+and the SPU2 is rendered on one of two clocks: the audio device's, by SDL's audio thread whenever
+the device asks for sound (the window build's default), or the game's, once per
+[vsync](ARCHITECTURE.md#terms) by the host loop into an SDL3 device, a WAV file, or nothing.
 [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among the others.
 
 ## Files
@@ -23,15 +24,16 @@ SDL3 device, a WAV file, or nothing.
 | `port/audio/stream.c` | the driver's ADPCM stream engine and PCM mixer |
 | `port/audio/stream_watch.h`, `stream_watch.c` | the stream log lines, the heartbeat's stream part and the end-of-run stream counts |
 | `port/audio/mix_gain.h`, `mix_gain.c` | the music, effects and film gains on the voice volumes |
-| `port/audio/volume.c` | the output volume and the output's play ratio |
-| `port/audio/audio_host.h`, `audio_host.c` | the per-vsync render and its sinks; mirror mode's pan swap |
-| `port/audio/out_sdl.c` | the SDL3 output (window build) |
+| `port/audio/volume.c` | the output volume, the output's play ratio and the choice of its clock |
+| `port/audio/audio_lock.h`, `audio_lock.c` | the one lock over the SPU2 and the driver; the driver's tick clock |
+| `port/audio/audio_host.h`, `audio_host.c` | the output's clock: the per-vsync render and its sinks, the device's render and its watchdog; mirror mode's pan swap; the voices-cut line |
+| `port/audio/out_sdl.c` | the SDL3 output (window build): the pull path and the push |
 | `port/audio/wav.c` | the WAV writer behind the audio dump |
 | `port/audio/CMakeLists.txt` | the `ico_audio` and `ico_sndn2` libraries and the audio tests |
 | `port/audio/test/` | the audio unit tests and the render benchmark |
 
-`ico_audio` (the SPU2, ADPCM, libsd front end, tables, volume, gains) is integer code with no
-platform dependency; `ico_sndn2` adds the sequencer, the driver, the LIBSD.IRX reader, the
+`ico_audio` (the SPU2, ADPCM, libsd front end, tables, volume, gains, the audio lock) is integer
+code with no platform dependency; `ico_sndn2` adds the sequencer, the driver, the LIBSD.IRX reader, the
 streams, the audio host and the WAV writer, and `out_sdl.c` when the build has a window and SDL3
 (`port/audio/CMakeLists.txt`).
 
@@ -46,15 +48,44 @@ streams, the audio host and the WAV writer, and `out_sdl.c` when the build has a
 3. Each packet becomes the libsd calls SNDN2DRV.IRX made, through the
    front end in `port/audio/spu2_sd.c`, which turns them into timed SPU2 register writes and
    transfers.
-4. Once per vsync the host loop calls `ico_audio_host_vsync` (`port/platform/host_loop.c`), which
-   renders the vsync's 48 kHz frames with `spu2_render` and hands them to the sinks
-   (`port/audio/audio_host.c`).
+4. The 48 kHz frames are rendered with `spu2_render` on one of two clocks
+   ([The output's clock](#the-outputs-clock)): on the device's, SDL's audio thread renders what the
+   device asks for, and the driver's writes land at its next callback; on the game's, once per
+   vsync the host loop calls `ico_audio_host_vsync` (`port/platform/host_loop.c`), which renders the
+   vsync's frames and hands them to the sinks (`port/audio/audio_host.c`).
 
-Everything runs on the one simulation thread: the server on the game's sound
-[fiber](ARCHITECTURE.md#terms), the render in [host context](ARCHITECTURE.md#terms) at the vsync,
-so the calls never overlap and nothing is locked (`port/audio/sndn2_host.h`, header comment;
-`port/audio/audio_host.h`, header comment). The driver runs in every build, headless included,
-because the game reads the envelopes and stream offsets the driver reports.
+The server runs on the game's sound [fiber](ARCHITECTURE.md#terms), on the one simulation thread.
+On the game's clock the render runs there too, in [host context](ARCHITECTURE.md#terms) at the
+vsync, so the calls never overlap. On the device's clock the render runs on SDL's audio thread,
+and one lock serializes it with everything on the simulation thread that reaches the SPU2 or the
+driver's state ([The audio lock](#the-audio-lock)). The driver runs in every build, headless
+included, because the game reads the envelopes and stream offsets the driver reports
+(`port/audio/audio_host.h`, header comment).
+
+### The audio lock
+
+`port/audio/audio_lock.h` is one lock over the SPU2 and the driver's state
+(`port/audio/audio_lock.h`, header comment). The SDL output installs it as an SDL mutex, which is
+recursive, when it opens on the device's clock (`port/audio/out_sdl.c` (`lock_create`)); with
+nothing installed (the headless build, the game's clock, every unit test that installs none)
+`ico_audio_lock` and `ico_audio_unlock` do nothing. It is taken by:
+
+| site | why |
+| --- | --- |
+| `ico_sndn2_host_serve` (`port/audio/sndn2_host.c`), the whole body | every packet's register writes and transfers, the stream engines, the reply page; the tick's reply is copied out under the lock, since the host SIF copies it after the serve returns (`reply_out`) |
+| `ico_sndn2_host_reset`, `ico_sndn2_host_register` | `spu2_reset` and the disc's tables |
+| `ico_audio_set_gain`, `ico_audio_gain_reapply` (`port/audio/mix_gain.c`) | the Settings menu's gains re-issue the voice volumes |
+| `audioFrame`, `voiceSounding`, `sampleBlocks`, `findEffectVoices`, `streamTick` (`port/ui/gallery_play.c`) | the music gallery's reads of the SPU2 |
+| `iop_write` (`port/fmv/movie.c`) | the PCM buffer the driver's mixer reads inside the render (`pcm_mix`) |
+| `cut_line` (`port/audio/audio_host.c`) | the once-a-second look at the cut voices |
+
+Nothing under the lock switches fibers (the host SIF runs the server synchronously,
+`port/data/sif_host.c`) or calls SDL's stream functions; the audio thread takes it inside SDL's
+stream lock, never the other way round, and tries it for at most a quarter of a device period
+(`port/audio/out_sdl.c` (`pull_lock`)). The serve's log lines (`sw_log`, `sndn2_log_once`) are
+written while the lock is held, so a slow write of the log (Android also mirrors each line to
+logcat) lengthens that hold; they are rate-limited or once a run. The shutdown closes the SDL
+output before it reads the SPU2's statistics (`ico_audio_host_shutdown`).
 
 ## The software SPU2
 
@@ -204,6 +235,31 @@ chunks, the chunked and exact frames and the hazards; `ico_audio_host_shutdown` 
 (`audio: SPU2 rendered ...`). `spu2_set_exact(1)` forces the reference renderer, for the tests
 that compare the two (`port/audio/spu2_internal.h` (`spu2_set_exact`)).
 
+### Voices cut short
+
+A key-off of a sounding voice (envelope above 0) whose ADSR2 release rate (bits 0-4) is 0 is the
+fastest release: a linear one steps -0x4000 a frame, from full level to 0 in two frames, a step
+the size of the voice's amplitude, which is heard as a click. `key_off` counts these in
+`spu2_stats` (`cuts`), with the loudest one's `|out * volume >> 15|` (the last rendered frame's
+enveloped sample times the louder volume level), its envelope level and ADSR2; `spu2_take_cuts`
+returns the same for the cuts since its last call (`port/audio/spu2.c` (`cut_note`, `key_off`);
+`port/audio/spu2.h` (`spu2_stats`)). None of it changes the output. The game cuts its sounds this
+way at a stage change: the stage manager's `sndBgmReadyNextStage` stops every sound of play mode 1
+(`soundSePlayModeStop`) through `_soundSeDefStop(id, 1)`, whose `SgSeStop(h | 0x8000)` writes
+ADSR1 = ADSR2 = 0 through command 0x02 and sets the key-off bit that the same tick's page carries
+(`ico2/common/src/StageManager.c`; `ico2/fumi/sound/soundManager.c` (`sndBgmReadyNextStage`);
+`ico2/fumi/sound/s_init.c` (`soundSePlayModeStop`, `_soundSeDefStop`); `sce/libsndn2/sound.c`
+(`SgSeStop`)), so the PS2 clicks there too. At most
+once a second `ico_audio_host_vsync` logs the cuts since the last look through the shared limiter,
+with the vsync, the stage the host loop names (`ico_audio_host_set_stage`), the loudest one's
+release length and level, and its peak as a fraction of full scale (`port/audio/audio_host.c`
+(`cut_line`)):
+
+    audio: 6 voices cut short at vsync 12345 (stage 3): a 2-sample release from level 7fff; loudest 0.18 of full scale (-15 dB)
+
+and the shutdown the run's count: `audio: N voices cut short over the run (a release at rate 0);
+loudest ...`.
+
 ### Determinism
 
 The SPU2 uses integer arithmetic only (right shifts of negative values are arithmetic on every
@@ -257,8 +313,9 @@ header comments).
 
 Every write is stamped with the time set by `spu2_sd_set_time` (never behind `spu2_time`). The
 driver stamps each RPC with the current SPU2 time, so its writes take effect at the start of the
-next rendered block: timing is block-accurate, one vsync per block (`port/audio/sndn2_host.c`
-(`ico_sndn2_host_serve`)).
+next rendered block: on the device's clock the next callback, at most one device period (10 ms)
+later; on the game's clock the next vsync's block (`port/audio/sndn2_host.c`
+(`serve_locked`)).
 
 The calls:
 
@@ -540,16 +597,17 @@ driver's init (0x1E) and reset forget the cache (`ico_audio_gain_forget`).
 `[audio] volume` (0.0 to 1.0) is stored by `ico_audio_set_volume` as a 0..256 gain in 1/256
 steps and applied by `ico_audio_scale` with integer rounding and clamping to the SDL device's
 blocks only; a WAV dump stays unscaled (`port/audio/volume.c`; `port/audio/audio_host.h`
-(`ico_audio_set_volume`)). The
-value is read on every push, so a change from the Settings menu is heard once the queued audio
-(the cushion below and a vsync) has played.
+(`ico_audio_set_volume`)). The value is read where each block is queued: on the device's clock in
+each callback, so a change from the Settings menu is heard after the lead (about 10 ms); on the
+game's clock at every push, after the cushion and a vsync (`port/audio/out_sdl.c` (`pull_cb`,
+`ico_audio_sdl_push`)).
 
 ### Mirror mode
 
-While the mirror option is on (`ico_opt_mirror`, `port/game/options.h`),
-`ico_audio_host_vsync` swaps left and right in each rendered block, so the device and the WAV dump
-hear the mirrored pan; the SPU2 and the driver are untouched (`port/audio/audio_host.c`
-(`ico_audio_pan_mirror`)).
+While the mirror option is on (`ico_opt_mirror`, `port/game/options.h`), left and right are
+swapped in each rendered block, by `ico_audio_host_vsync` on the game's clock and by the device's
+render on the device's clock, so the device and the WAV dump hear the mirrored pan; the SPU2 and
+the driver are untouched (`port/audio/audio_host.c` (`ico_audio_pan_mirror`, `device_render`)).
 
 ## The audio host
 
@@ -563,54 +621,65 @@ config, powers the driver on and opens the sinks (`port/audio/audio_host.h`
 | `ICO_AUDIO` | ini `audio=` | `0`: no audio device in the window build |
 | `ICO_AUDIO_VOLUME`, `ICO_AUDIO_MUSIC`, `ICO_AUDIO_EFFECTS` | `[audio] volume`, `music`, `effects` | the output volume and the two gains |
 | `ICO_AUDIO_DEVICE` | `[audio] device` | the SDL output device by name |
+| `ICO_AUDIO_SYNC` | `[dev] audio_sync` | `1`: the audio on the game's clock |
 
-Its log lines: `audio: writing the mixed output to <path> (48 kHz stereo)`,
-`audio: audio=0: no audio device (the driver still runs)` in the [window
-build](ARCHITECTURE.md#terms), and in the [headless build](ARCHITECTURE.md#terms)
+Its log lines: `audio: writing the mixed output to <path> (48 kHz stereo)` and `audio: the dump
+renders on the game's clock`, `audio: audio=0: no audio device (the driver still runs)` in the
+[window build](ARCHITECTURE.md#terms), and in the [headless build](ARCHITECTURE.md#terms)
 `audio: headless build: the driver runs, the output is only dumped` (or `discarded`). Shutdown runs
-at exit on the desktop and through `ico_host_at_shutdown` on Android and iOS, and logs the chunk
-statistics and the dump's length, peak and first sound (`ico_audio_host_shutdown`).
+at exit on the desktop and through `ico_host_at_shutdown` on Android and iOS; it closes the SDL
+output first, then logs the chunk statistics, the voices cut short and the dump's length, peak and
+first sound (`ico_audio_host_shutdown`).
 
-`ico_audio_host_vsync(hz)` renders `ico_audio_host_frames(hz, n)` frames: 960 every vsync at 50
-Hz; at 59.94 Hz 800.8 on average, spread exactly over every five vsyncs as 800 801 801 801 801
-(48000 x 1001 / 60000 per vsync, rounded by the running total) (`port/audio/audio_host.c`
-(`ico_audio_host_frames`)). The count depends on the rate and the vsync count alone.
+On the game's clock `ico_audio_host_vsync(hz)` renders `ico_audio_host_frames(hz, n)` frames: 960
+every vsync at 50 Hz; at 59.94 Hz 800.8 on average, spread exactly over every five vsyncs as 800
+801 801 801 801 (48000 x 1001 / 60000 per vsync, rounded by the running total)
+(`port/audio/audio_host.c` (`ico_audio_host_frames`)). The count depends on the rate and the vsync
+count alone.
+
+### The output's clock
+
+`ico_audio_host_init` chooses once (`port/audio/audio_host.h`, the mode; `port/audio/volume.c`
+(`ico_audio_pick_mode`)):
+
+| mode | when | who renders |
+| --- | --- | --- |
+| the device's clock (`ICO_AUDIO_MODE_PULL`) | the window build with an audio device, by default | SDL's audio thread, when the device asks (`port/audio/out_sdl.c` (`pull_cb`)); `ico_audio_host_vsync` renders nothing |
+| the game's clock (`ICO_AUDIO_MODE_SYNC`) | the headless build; `audio=0`; a WAV dump (the WAV is a function of the driver's writes and their times only on the game's step); `[dev] audio_sync`; no device opens | `ico_audio_host_vsync`, once per vsync |
+
+On the device's clock `ico_audio_host_vsync` watches the device instead: when the device has not
+asked for sound for 300 ms (2 s before its first request after an open or a resume, for a device
+slow to start) while the game stepped as long, or the stream is
+gone, it reopens the stream without the callback and the game's clock renders for the rest of the
+run (`port/audio/audio_host.c` (`pull_watch`, `pull_fall_back`)). Without it the SPU2's time would
+stand still while the game serves on: its streams would never reach their ends and the event queue
+would fill (`port/audio/spu2.c` (`ev_push`)). The line:
+
+    audio: the output device stopped asking for sound for 412 ms; rendering on the game's clock from here
+
+A paused device (the Android lifecycle) and a process stopped as a whole (no steps) never trigger
+it. The start's summary line names the clock (`port/platform/window_host.c` (`log_summary`);
+`port/audio/audio_host.h` (`ico_audio_mode_text`)): `audio on the device's clock`, `audio on the
+game's clock (audio_dump)`, `audio on the game's clock ([dev] audio_sync)` or `audio off
+(audio=0)`; it is written before the audio starts, so it says the clock the configuration asks
+for.
 
 ## The output
 
-`port/audio/out_sdl.c` plays the blocks on an SDL3 device in the window build
-(`port/audio/out_sdl.c`, header comment):
+`port/audio/out_sdl.c` plays the SPU2's frames on an SDL3 device in the window build, fed one of
+two ways, the pull path on the device's clock and the push on the game's
+([The output's clock](#the-outputs-clock); `port/audio/out_sdl.c`, header comment). Shared by both:
 
 - One `SDL_AudioStream` at the SPU2's own format, 48 kHz stereo S16, so SDL converts only if the
-  device needs it, with a device buffer of 480 frames (10 ms,
-  `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`). The simulation thread pushes one vsync of frames per
-  vsync; nothing else is shared with SDL's audio thread.
-- The stream keeps a cushion of queued audio. It starts at two vsyncs (two pushed blocks: 33 ms
-  at 59.94 Hz, 40 ms at 50 Hz), and the open and every resume prime the stream with the current
-  cushion of silence (`cushion_frames`, `open_stream`, `ico_audio_sdl_pause`). When the queue is
-  below a quarter of a vsync before a push (a stall: the simulation fell behind real time by more
-  than the cushion) the cushion doubles, up to 120 ms (`CUSHION_MAX_FRAMES`), and silence fills
-  the queue to it ahead of the block; the first eight such refills each log `audio: low queue <n>
-  frames, <ms> ms between pushes; refilled to a <ms> ms cushion`. After 20 s of pushed audio
-  without a dry queue (`CUSHION_QUIET_FRAMES`) the cushion halves, down to two vsyncs again, and
-  the trim below plays the surplus out. With more than the cushion plus four vsyncs queued (the
-  simulation ran ahead; never more than 250 ms, `QUEUE_CEILING_FRAMES`) the block is dropped
-  (`queue_limit_frames`). The close logs the cushion and the counters: `audio: SDL output closed
-  (cushion <ms> ms, largest <ms> ms; <n> refills after a dry queue, <n> blocks dropped)`
-  (`ico_audio_sdl_push`, `ico_audio_sdl_close`).
-- The window reads the queue once per vsync it paces (`ico_audio_sdl_active`,
-  `ico_audio_sdl_queued_ms`, `ico_audio_sdl_cushion_ms`): with less than half the cushion queued
-  the audio is about to run dry, one of the two conditions under which the timer path leaves a
-  late new frame unpresented ([DISPLAY.md](DISPLAY.md#pacing); `port/platform/window_host.c`
-  (`pace`)).
+  device needs it, with a device period of 480 frames asked for (10 ms,
+  `SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES`; the backends take it as a request).
 - Under the window's [vsync lock](ARCHITECTURE.md#terms) the display is the simulation's clock, so
   the simulation runs a little off 59.94 Hz. The window measures that rate every 10 s and hands the
   ratio to `ico_audio_set_rate_ratio` (`port/platform/window_host.c` (`pace_log`); the nominal
-ratio at lock start in `pace_locked`), and the stream plays at it
-  (`SDL_SetAudioStreamFrequencyRatio`); ratios outside 0.5..2 are taken as 1. While more than the
-  cushion waits before a push, the stream plays `ICO_AUDIO_TRIM` (0.25 %) faster on top, which drains
-  latency the 10 s measurement left behind without an audible pitch change (`port/audio/volume.c`
-  (`ico_audio_play_ratio`); `port/audio/audio_host.h` (`ICO_AUDIO_TRIM`)).
+  ratio at lock start in `pace_locked`), and the stream plays at it
+  (`SDL_SetAudioStreamFrequencyRatio`); ratios outside 0.5..2 are taken as 1. On the pull path the
+  SPU2's time then advances with the game's, so sequenced music keeps its tempo against the game
+  and a film's sound its picture (`port/audio/audio_host.h` (`ico_audio_set_rate_ratio`)).
 - The device is the one `[audio] device` names, or SDL's default (which follows the system's)
   when the name is empty or no device has it (`audio: no output device called "..."; using the
   default`). A name cut to the Settings list's buffer matches a device whose name starts with it
@@ -619,7 +688,80 @@ ratio at lock start in `pace_locked`), and the stream plays at it
   `port/platform/window_host.c`) the stream moves to the default and the setting stays
   (`ico_audio_sdl_device_removed`).
 - `ico_audio_sdl_pause` stops the device while the app is in the background (Android) and clears
-  the queue on resume, so no stale audio plays; the resume then primes the current cushion.
+  the queue on resume, so no stale audio plays (`port/platform/window_lifecycle.c`; the loop is
+  paused by the same lifecycle steps, so the driver stops too).
+- The window reads the queue once per vsync it paces (`ico_audio_sdl_active`,
+  `ico_audio_sdl_queued_ms`, `ico_audio_sdl_cushion_ms`): with less than half the cushion queued
+  the audio is about to run dry, one of the two conditions under which the timer path leaves a
+  late new frame unpresented ([DISPLAY.md](DISPLAY.md#pacing); `port/platform/window_host.c`
+  (`pace`)). The pull path reports its lead as the queue and a cushion of 0, which is never low,
+  so there only slow presents skip (`port/platform/pace_policy.h` (`pace_audio_skip`)).
+
+### The pull path
+
+The stream is opened with a get-callback, `pull_cb`, which SDL's audio thread runs inside SDL's
+stream lock when the device wants sound; on every backend that is a time-critical thread of
+SDL's, not the backend's real-time callback (`port/audio/out_sdl.c`, header comment). It renders
+what SDL is about to take plus a lead of one device period (at least 480 frames), so the lead
+stays queued after each take, through `spu2_render` and the mirror swap
+(`port/audio/audio_host.c` (`device_render`)), under the audio lock:
+
+- The lock is tried every 50 us for at most a quarter of the device period (2.5 ms at 480 frames),
+  and once more after a pause that overran it (`pull_lock`). When the game's side holds it longer,
+  nothing is rendered and the SPU2's time stands still, so nothing is lost: the queued lead plays,
+  and when the lead does not cover the request the shortfall (at least 96 frames) is silence ramped
+  down from the last frame over 96 frames (2 ms, `buffer_ramp_down`); the next sound ramps in over
+  96 frames (`ramp_up`).
+- The open, a move to another device and a resume prime nothing; the first sound ramps in. The
+  start reads the device's period back (`SDL_GetAudioDeviceFormat`, `pull_start`):
+
+      audio: SDL driver wasapi, 48 kHz stereo, played on the device's clock: 480 frames a callback (10.0 ms at the device's 48000 Hz), 10.0 ms kept ahead
+
+- A driver write lands at the next callback (at most a period) and plays after the lead and the
+  device's own buffer: at 10 ms periods about 25 to 30 ms from the game's write to the speaker, the
+  same in every scene. A stall of
+  the game is not a stall of the sound: the SPU2 plays on from its state. A stream voice plays its
+  16 KB SPU ring, whose other half the driver refills as its read position crosses the middle
+  (`port/audio/stream.c` (`schedule`)), so about 300 ms pass before stale data plays; past that the
+  ring's loop replays the stale half until the driver ticks again.
+- The callback counts and never logs: callbacks, frames rendered, the longest lock wait, the misses,
+  the callbacks that came more than two periods after the one before (SDL's own thread ran late, so
+  the device may have run dry) and the silence. After the window's 10 s line
+  (`ico_audio_sdl_log_summary`, called by `pace_log`), with the driver's ticks and the longest gap
+  between two of them (`port/audio/audio_lock.h` (`ico_audio_tick_note`), noted by the serve):
+
+      audio: 1000 callbacks, 480000 frames; waited 0.21 ms at most for the driver (0 gave up), 0 callbacks late, 0 ms of silence; the driver ticked 599 times, longest gap 17 ms (0 over 200 ms)
+
+  and at the close: `audio: SDL output closed (on the device's clock: N callbacks, N frames, N
+  callbacks late; the lock waited N ms at most and gave up N times, N ms of silence)`.
+
+### The push
+
+On the game's clock the simulation thread pushes one vsync of frames per vsync; nothing else is
+shared with SDL's audio thread (`ico_audio_sdl_push`). The start line says why this clock:
+`audio: SDL driver <name>, 48 kHz stereo, 33 ms buffered (up to 120 ms after a dry queue); on the
+game's clock (<reason>)`.
+
+- The stream keeps a cushion of queued audio. It starts at two vsyncs (two pushed blocks: 33 ms
+  at 59.94 Hz, 40 ms at 50 Hz), and the open and every resume prime the stream with the current
+  cushion of silence (`cushion_frames`, `open_stream`, `ico_audio_sdl_pause`). When the queue is
+  below a quarter of a vsync before a push (a stall: the simulation fell behind real time by more
+  than the cushion) the cushion doubles, up to 120 ms (`CUSHION_MAX_FRAMES`), and silence fills
+  the queue to it ahead of the block, ramped down from the last pushed frame over 96 frames; the
+  first eight such refills each log `audio: low queue <n> frames, <ms> ms between pushes; refilled
+  to a <ms> ms cushion`. After 20 s of pushed audio without a dry queue (`CUSHION_QUIET_FRAMES`)
+  the cushion halves, down to two vsyncs again, and the trim below plays the surplus out. With more
+  than the cushion plus four vsyncs queued (the simulation ran ahead; never more than 250 ms,
+  `QUEUE_CEILING_FRAMES`) the block is dropped (`queue_limit_frames`). The close logs the cushion
+  and the counters: `audio: SDL output closed (cushion <ms> ms, largest <ms> ms; <n> refills after
+  a dry queue, <n> blocks dropped)` (`ico_audio_sdl_push`, `ico_audio_sdl_close`).
+- While more than the cushion waits before a push, the stream plays `ICO_AUDIO_TRIM` (0.25 %)
+  faster on top of the rate ratio, which drains latency the 10 s measurement left behind without
+  an audible pitch change (`port/audio/volume.c` (`ico_audio_play_ratio`);
+  `port/audio/audio_host.h` (`ICO_AUDIO_TRIM`)).
+- Event to ear: the cushion (33 ms, 40 at 50 Hz, up to 120 after stalls), up to a vsync of block
+  granularity and of waiting for the block, and the device's buffer: about 50 to 70 ms, up to about
+  160 ms after a stall.
 
 Without SDL output (the headless build) the device functions are stubs: no devices, reopen fails,
 no stream (`ico_audio_sdl_active` 0, `ico_audio_sdl_queued_ms` -1) (`port/audio/audio_host.c`).
@@ -656,14 +798,15 @@ port"):
 | test | checks |
 | --- | --- |
 | `adpcm` (`adpcm_test.c`) | ADPCM block decoding against vectors worked by hand from the format's formula |
-| `spu2` (`spu2_test.c`) | the SPU2 and the libsd front end: the Gaussian table, ADSR lengths against psx-spx's closed forms, a sine at several pitches, loop flags and ENDX, mixing, sweeps, core 0 into core 1, the AutoDMA input, noise, timed writes, transfers and IRQ, the reverb impulse, a determinism checksum |
+| `spu2` (`spu2_test.c`) | the SPU2 and the libsd front end: the Gaussian table, ADSR lengths against psx-spx's closed forms, a sine at several pitches, loop flags and ENDX, the voices cut short (a key-off at release rate 0 counted with the peak of the frame before, chunked and frame by frame; the envelope at 0 two frames on; another rate not counted), mixing, sweeps, core 0 into core 1, the AutoDMA input, noise, timed writes, transfers and IRQ, the reverb impulse, a determinism checksum |
 | `spu2_render_crc` (`spu2_bench --check`) | five 10 s scenes against golden CRCs of everything observable from the frame-by-frame renderer, and 24 random 2 s scenes rendered both chunked and frame by frame |
 | `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling; the trim's play ratio against a target |
-| `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c` on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
+| `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c`'s push on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms with its ramp down from the last pushed frame, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
+| `audio_pull` (`audio_pull_test.c`, window build) | `out_sdl.c`'s pull path on a real SDL stream without a device over the real SPU2: a writer thread under the audio lock and a pulling thread, fenced so no write lands late, render the frames one thread renders; 10 s free-running with the writes stamped as the serve stamps them: every pull full, the frames rendered and the silence equal to the frames taken plus the lead left, misses only behind a preempted writer; with the lock held elsewhere the lead, then a 96-frame ramp to 0, then silence, two misses, and the ramp in after; the lead as the queue and a cushion of 0; the 10 s line's numbers and the mode choice. The program to run under ThreadSanitizer ([TESTING.md](TESTING.md#portaudiotest)) |
 | `mix_gain` (`mix_gain_test.c`) | the gains: identity at 100 %, scaling, sweep words, the stream categories, the cache and its re-issue |
 | `adpcm_slots` (`adpcm_slots_test.c`) | the game's `adpcm_init.c` with the driver stubbed: a stream already fading out gives its slot up at once when both stream slots are taken; the ending's six streams opened one over the other alternate the two slots and the two voice pairs, each open's line names its voices and hands the log watch its length |
 | `adpcm_stream` (`adpcm_stream_test.c`) | the game's `adpcm_init.c` on the real sequencer, driver and SPU2 with synthesized streams: a stream reopened on the voices a fade closed lands VOL 0x3FFF and is heard at its level; the ending's six-stream shape, each stream's level alone against its amplitude; stream 43's length (57.8 s) at 1x with 7 IOP ring wraps, no 10 ms of silence and the close at the file's length (about 2,900 vsyncs, about 2 s); the stream log lines |
-| `sndn2` (`sndn2_test.c`) | the driver and the sequencer against the IRX's code: transport and reply pages, packets as register effects, transfers, the pitch arithmetic and table (the disc's when `ICO_DISC_IMAGE` is there), an ADPCM stream through the half-fill scheme, the PCM mixer, a sound effect through the sequencer's pointer seams, a stream opened on a full packet page (AU-7) |
+| `sndn2` (`sndn2_test.c`) | the driver and the sequencer against the IRX's code: transport and reply pages, packets as register effects, transfers, the pitch arithmetic and table (the disc's when `ICO_DISC_IMAGE` is there), an ADPCM stream through the half-fill scheme, the PCM mixer, a sound effect through the sequencer's pointer seams, a stream opened on a full packet page (AU-7); the audio lock with a counting fake: the serve takes it once (also when it logs), a gain change once, the reset and the register around a nested reset |
 | `libsd_irx` (`libsd_irx_test.c`) | the LIBSD.IRX reader on a synthetic module, the structural checks, the fallback without a disc |
 | `audio_pan` (`pan_test.c`) | mirror mode's swap and the per-vsync frame counts at 50 and 59.94 Hz |
 
@@ -678,5 +821,6 @@ the named scenes' frame-by-frame CRCs, which replace the golden table `scene_gol
 `port/audio/test/spu2_bench.c` (`port/audio/test/spu2_bench.c`, header comment).
 
 Run the set with
-`ctest --preset linux-x64 -R '^(adpcm|spu2|spu2_render_crc|volume|mix_gain|adpcm_slots|adpcm_stream|sndn2|libsd_irx|audio_pan)$'`
-([TESTING.md](TESTING.md) has the presets and labels).
+`ctest --preset linux-x64 -R '^(adpcm|spu2|spu2_render_crc|volume|mix_gain|adpcm_slots|adpcm_stream|sndn2|libsd_irx|audio_pan)$'`;
+the window build adds `audio_queue` and `audio_pull` ([TESTING.md](TESTING.md) has the presets and
+labels).

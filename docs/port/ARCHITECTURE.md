@@ -115,7 +115,8 @@ reproduced and a run is a function of its input and the vsync count. The SDK nam
 
 There is no real interrupt. Once per vsync the host loop advances the vsync count, raises the
 vblank-start [INTC](#terms) cause through the game's handler table, runs the registered on-vsync
-callbacks as [interrupt code](#terms), renders the vsync's audio, and then runs every thread that
+callbacks as [interrupt code](#terms), renders the vsync's audio when the audio runs on the game's
+clock, and then runs every thread that
 became ready until all of them wait again (`port/platform/host_loop.c` (`ico_host_step`);
 `port/platform/kernel_host.c` (`ico_kernel_raise_intc`)). The game's vblank handler wakes an event
 thread, whose message wakes the game's `scheduler` thread, which wakes `Main` once every
@@ -256,9 +257,12 @@ hardware notes, integer arithmetic only, rendering 48 kHz stereo (`port/audio/sp
 `port/audio/spu2_sd.h`). The streams read the rings the game fills in the IOP RAM stand-in
 (`port/audio/stream.c` (header comment)).
 
-Once per simulated vsync the host loop renders that vsync's frames (960 at 50 Hz) and hands them
-to the SDL3 device, a WAV file, or nothing; the driver runs in every mode because the game reads
-its envelopes and stream offsets (`port/audio/audio_host.h` (`ico_audio_host_vsync`)). Values the
+The SPU2 renders on the audio device's clock in the window build: SDL's audio thread renders what
+the device asks for, under one lock with the driver. On the game's clock (the headless build, the
+WAV dump, `[dev] audio_sync`, no device) the host loop renders each simulated vsync's frames (960 at
+50 Hz) and hands them to the SDL3 device, a WAV file, or nothing. The driver runs in every mode
+because the game reads its envelopes and stream offsets (`port/audio/audio_host.h`, header
+comment). Values the
 SPU2 needs from Sony's modules (SNDN2DRV's pitch table, LIBSD's reverb presets) are read from the
 player's disc (`port/audio/sndn2_host.h`; `port/audio/libsd_irx.h`). [AUDIO.md](AUDIO.md) has
 the rest.

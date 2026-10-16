@@ -45,11 +45,12 @@ the ini has it non-empty, else `config.toml`'s, else the caller's default (`port
 | `[paths] iso`, `saves`, `saves2`, `keep_image` | `iso`, `saves`, `saves2`, `keep_image` |
 | `[audio] enabled` | `audio` |
 | `[video] backend` | `backend` |
-| `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test` | the same names |
+| `[dev] ticks`, `watchdog`, `watchdog_pump`, `trace`, `dump_every`, `dump_dir`, `dump_interp`, `dump_from`, `audio_dump`, `audio_sync`, `pad_script`, `input_record`, `verify`, `headless`, `fixed_clock`, `use_iso`, `write_config`, `start_stage`, `switch_to`, `switch_at`, `unlock_credits`, `popup_test` | the same names |
 
 The start-up code reads the ini the other way round: `ico_ini_load` loads the ini and fills its
 missing keys from those `config.toml` entries (a `true` or `false` there reads as `1` or `0`), then
 exports the values other libraries take from the environment (`ICO_AUDIO`, `ICO_AUDIO_DUMP`,
+`ICO_AUDIO_SYNC`,
 `ICO_AUDIO_VOLUME`, `ICO_AUDIO_MUSIC`, `ICO_AUDIO_EFFECTS`, `ICO_AUDIO_DEVICE`,
 `ICO_FIXED_CLOCK`, `ICO_RD_DUMP_*`, `ICO_START_STAGE`, `ICO_SWITCH_TO`, `ICO_SWITCH_AT`,
 `ICO_UI_POPUP_TEST`) (`port/platform/host_config.c` (`ico_ini_load_layered`, `ico_ini_export`)).
@@ -289,6 +290,7 @@ under the same name (below). Read through the store:
 | `vu_extended` | bool | `false` | |
 | `joystick_directinput` | bool | `true` | |
 | `pipeline_set` | string | `full` | |
+| `audio_sync` | bool | `false` | |
 
 ## ico-pc.ini
 
@@ -306,7 +308,7 @@ store (`backend`, `unlock_credits`):
 | `keep_image` | Android: `1` keeps the first start's copy of the disc image |
 | `portable` | `1` on, `0` off; read before the user folder is first used, ini only (`host_config.c` (`ico_host_portable_value`)) |
 | `audio` | `0`: no audio device (exported as `ICO_AUDIO`) |
-| `audio_dump` | a WAV of the mixed output; `1` is `logs/audio.wav` (`export_audio_keys`) |
+| `audio_dump` | a WAV of the mixed output; `1` is `logs/audio.wav` (`export_audio_keys`); the audio then renders on the game's clock ([AUDIO.md](AUDIO.md#the-outputs-clock)) |
 | `backend` | `vulkan` or `d3d12` |
 | `ticks` | exit after N [Main ticks](ARCHITECTURE.md#terms) |
 | `watchdog` | seconds, default 30; 0 is off |
@@ -332,6 +334,7 @@ store (`backend`, `unlock_credits`):
 | `vu_extended` | `true`: the extended variants on a device the renderer's table or `vu_plain_only` keeps to the plain ones (exported as `ICO_RD_VU_EXTENDED=1`) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `joystick_directinput` | `false`: SDL's DirectInput controller scan off on Windows (`SDL_HINT_JOYSTICK_DIRECTINPUT` = 0 before `SDL_Init`; exported as `ICO_JOYSTICK_DIRECTINPUT=0`): the test for a pump held by that scan after a controller change (issue 105); XInput, HIDAPI and Raw Input controllers are still found, a device only DirectInput knows is not. No effect elsewhere (a line says so) ([PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `pipeline_set` | `lazy`: no start-up set; each pipeline is made when a frame first needs it, the pipeline cache written after each batch of them (exported as `ICO_PIPELINE_SET=lazy`); `full`, the default, builds the set behind the start-up screen. The game writes `lazy` to `config.toml` itself after the second start in a row that ended without a word, in the foreground, while it made the pipelines (issues 93 and 107); the first such end makes only the next start lazy, writing nothing ([PLATFORM.md](PLATFORM.md#diagnostics)); it writes nothing on a device the renderer's table makes lazy; on a device of the renderer's table (the Adreno 740 on Qualcomm's driver) the set is skipped whatever the key says ([RENDER.md](RENDER.md#the-start-up-set)) |
+| `audio_sync` | `true`: the audio renders on the game's clock, once per vsync with the queue and cushion of the push, instead of on the audio device's (exported as `ICO_AUDIO_SYNC=1`; `false`, the default, exports `0`); for comparing the two when a report is about sound ([AUDIO.md](AUDIO.md#the-outputs-clock)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

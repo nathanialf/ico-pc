@@ -310,11 +310,12 @@ with a fake clock and swapchain; `window_host.c` only supplies its I/O (`pace`, 
    present's cost would end past the deadline (`pace`). Presents are slow when the median of the
    last 8 present costs is above `max(refresh, period) + period / 2` (a refresh more with an effects
    program loaded), entering after 3 such presents in a row and leaving below 80 % of it
-   (`port/platform/pace_policy.h` (`pace_slow_present`, `pace_slow_threshold`)). Every step queues
-   one vsync of audio, so presents that hold the simulation back drain the audio queue: with the
-   audio playing, a new frame found past its deadline is left unpresented (the next step runs at
-   once and the next present shows the newer frame) when presents are slow or less than half the
-   audio cushion is queued, and never two new frames in a row, so the picture keeps at least every
+   (`port/platform/pace_policy.h` (`pace_slow_present`, `pace_slow_threshold`)). On the game's
+   clock every step queues one vsync of audio, so presents that hold the simulation back drain the
+   audio queue: with the audio playing, a new frame found past its deadline is left unpresented (the
+   next step runs at once and the next present shows the newer frame) when presents are slow or
+   less than half the audio cushion is queued (on the device's clock the audio reports no cushion,
+   which is never low), and never two new frames in a row, so the picture keeps at least every
    other frame and a single late present never repeats a picture (`port/platform/pace_policy.c`
    (`pace_audio_skip`), called from `pace` with `s_pres.skippedLast`; "less than half" compares the
    whole milliseconds the audio reports; [AUDIO.md](AUDIO.md#the-output)). Without audio every new
