@@ -2621,8 +2621,10 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
             killed = b2.plan.verdict[i] == RD_BISECT_V_KILLED ? i + 1 : killed;
         }
         if (b2.starts >= ICO_DIAG_BISECT2_STARTS) {
+            char why[32];
+            snprintf(why, sizeof why, " (%u starts)", (unsigned)ICO_DIAG_BISECT2_STARTS);
             rd_bisect_plan_result(&b2.plan, &res);
-            b2_final(&res, " (4 starts)");
+            b2_final(&res, why);
             b2_delete();
             return ICO_DIAG_BISECT2_NOT_RUN;
         }

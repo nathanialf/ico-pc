@@ -645,19 +645,22 @@ verdict after it; the file is replaced whole each time (a temporary file renamed
 start reads it as untrusted: lines past 1100 bytes, numbers out of range, a step out of order, a
 kind or filter it does not know, or another version's file delete it (logged); other lines are
 ignored. A step without a verdict becomes `killed` (logged as `ico_pc: loss bisect: continuing at
-step 7 (start 2 of 4; step 6 ended the run)`); a step whose renderer did not start is planned again
-at the next start. The file is deleted when the plan ends (16 steps at most), after 4 starts, or
+step 7 (start 2 of 6; step 6 ended the run)`); a step whose renderer did not start is planned again
+at the next start. The file is deleted when the plan ends (16 steps at most), after 6 starts (`ICO_DIAG_BISECT2_STARTS`;
+a draw early in its pass loses the device on nearly every prefix step, about 12 lost steps with
+the masked one, so the alone and class steps need a fifth start), or
 when the dump cannot be replayed; a start spends at most 90 s on steps and leaves the rest to the
 next, and it runs at most 3 steps that lose the device: after the third, `ico_pc: loss bisect: 3
 lost steps in this start; step 5 waits for the next start`. With the first level's loss a start
 then loses the device at most 4 times, under the 5 graphics resets in 60 s after which Windows
 restarts the whole system (its `TdrLimitCount` and `TdrLimitTime` defaults); the bound holds on
-every platform, and the state file carries the rest to the next start, within the 4. While a step runs the activity file's note says so (`replaying the lost frame draw by draw
+every platform, and the state file carries the rest to the next start, within the 6. While a step runs the activity file's note says so (`replaying the lost frame draw by draw
 (the loss bisect)`); a start after one ended inside a step logs it, is not lazy for it, and the
 second level continues. An unfinished second level goes before a newer loss dump, which stays in
 logs. ctest `diag` runs it with the step stubbed (`actbisect2`, `ICO_TEST_BISECT2`): the draw
-found in 4 starts of at most 3 lost steps each, a start killed at step 3 continued at step 4, a renderer that did not start, the 16-step and
-4-start bounds, the time budget, and state files that do not parse or are another version's
+found in 4 starts of at most 3 lost steps each, draw 1 (every prefix step lost) found with its
+classes in 5 starts, a start killed at step 3 continued at step 4, a renderer that did not start,
+the 16-step and 6-start bounds, the time budget, and state files that do not parse or are another version's
 (`port/platform/test/diag_test.c` (`bisect2_stub`)).
 
 A heartbeat and a watchdog share one OS thread of their own, so a game thread that spins without a

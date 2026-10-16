@@ -459,7 +459,8 @@ int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t 
    file logs/loss-bisect.txt before the next.  A start that ends inside a
    step (the device or the system ended it) continues at the next start:
    the step without a verdict counts as killed (lost).  Bounds: 16 steps,
-   4 starts, budget_ms of steps a start (the rest at the next start), and
+   6 starts (a draw early in its pass takes about 12 lost steps of the
+   prefix search, so the alone and class steps need a fifth), budget_ms of steps a start (the rest at the next start), and
    ICO_DIAG_BISECT2_LOSSES lost steps a start, so a start loses the device
    at most 4 times with the first level's loss (Windows restarts the
    whole system after 5 graphics resets in 60 s, its TdrLimitCount and
@@ -468,7 +469,7 @@ int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t 
    next start"); the file is deleted at the end or when a bound trips.
    Logged: one line a
    step ("ico_pc: loss bisect: step 4 of 16: pass 1, draws 1..656 of 1312:
-   lost in 0.6 s"), "continuing at step 7 (start 2 of 4; step 6 ended the
+   lost in 0.6 s"), "continuing at step 7 (start 2 of 6; step 6 ended the
    run)", and one final line naming the draw and the verdict.
 
    The step function (number: the step's, 1 .. 16, for the progress
@@ -483,7 +484,7 @@ int ico_diag_loss_bisect(int (*bisect)(const char *dump_zip, char *line, size_t 
 #define ICO_DIAG_BISECT2_LOST 1
 #define ICO_DIAG_BISECT2_CLEAN 2
 #define ICO_DIAG_BISECT2_NOINIT 3
-#define ICO_DIAG_BISECT2_STARTS 4
+#define ICO_DIAG_BISECT2_STARTS 6
 #define ICO_DIAG_BISECT2_LOSSES 3
 
 struct RdBisectStep;
