@@ -1420,6 +1420,18 @@ enum {
     RD_UNMATCHED_COUNT
 };
 
+/* Why a turn over RD_INTERP_TURN_SNAP kept the tick's pose (rd_interp.c
+ * rotation continuity; RdInterpStats.turnWhy, the 10 s summary) */
+enum {
+    RD_TURN_WHY_NONE = 0, /* no memory of the draw: never blended under the snap, or the
+                             table full when it was */
+    RD_TURN_WHY_OLD,      /* its last memory ended more than RD_INTERP_TURN_GAP ticks before */
+    RD_TURN_WHY_POSE,     /* a memory within the gap whose turn does not carry to the pose */
+    RD_TURN_WHY_FAR,      /* a memory, the turn further than RD_INTERP_TURN_KEEP from it */
+    RD_TURN_WHY_LONG,     /* a memory the long way continues, over RD_INTERP_TURN_LONG */
+    RD_TURN_WHY_COUNT
+};
+
 typedef struct RdInterpStats {
     uint32_t snap;     /* RD_SNAP_* of the frame */
     uint32_t keyed;    /* keyed draws in cur */
@@ -1440,6 +1452,10 @@ typedef struct RdInterpStats {
      * continued none */
     uint32_t longWay;
     uint32_t turnSnap;
+    /* the snapped ones by why (RD_TURN_WHY_*, the draw's first snapped
+     * model or bone), and the turns not remembered for want of room */
+    uint32_t turnWhy[RD_TURN_WHY_COUNT];
+    uint32_t turnFull;
     uint32_t shifted; /* shadow volumes blended with cur's triangles moved by the volume's
                          shift: a topology change, or a prism in one tick only */
     /* VU draws drawn through the rigidly blended camera (matched and

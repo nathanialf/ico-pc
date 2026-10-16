@@ -137,6 +137,7 @@
  */
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "rd_camera_blend.h"
@@ -350,231 +351,164 @@ bool rd__blend_affine(const double *p, const double *c, double t, const double *
 /* ---------------------------------------------------- rotation continuity
  *
  * The short way between two ticks' rotations is the motion only while an
- * object turns less than 180 degrees a tick.  A wheel of the trolley at
- * full speed (issue 98) turns up to about 190 degrees a tick: the short way
- * blends it back 170, and the presents between two ticks show it turned
- * back, the tick's own present forward again.  So each rigid draw's model
- * matrix and each bone of a skinned draw remember the turn they made
- * between the two ticks before (the turn's rotation vector in the object's
- * own frame, rdcb_turn_vector: a wheel's axle is the same axis there from
- * tick to tick), and the next blend takes the way, short or long, that
- * continues it (rdcb_blend_affine_turn; RD_INTERP_TURN_KEEP,
- * RD_INTERP_TURN_LONG).  Without a turn to continue (the first pair, a
- * draw not blended in the last RD_INTERP_TURN_GAP ticks, or a turn not
- * near the one remembered) the short way, and a turn over
- * RD_INTERP_TURN_SNAP keeps the tick's pose, as before.  A turn is
- * remembered only when it blended: one that kept the tick's pose for its
- * size has no known direction (forward 190 is back 170 the short way), so
- * it is never remembered, and a wheel first seen between
- * RD_INTERP_TURN_SNAP and 180 degrees a tick keeps the tick's pose until
- * it slows below the snap.  A wheel that speeds up in steps under
- * RD_INTERP_TURN_KEEP carries its remembered turn through 180 and takes
- * the long way.  A remembered turn applies to the next pair of ticks (its
- * end tick the pair's first, the ticks consecutive) for the draw the
- * pairing matched (its key, and its list and place in that tick).  The
- * tick's own present (alpha 1) never blends, so the tick's pose is exact
- * whatever the way.
+ * object turns less than 180 degrees a tick, and a turn over
+ * RD_INTERP_TURN_SNAP (120) with nothing to tell its direction keeps the
+ * tick's pose (a flip, not a motion).  A wheel can turn more than that a
+ * tick: the trolley's wheels reach 140 degrees a tick at full speed
+ * (box.c: 0.5 a tick of push against 0.98 of friction, 24.5 units a tick,
+ * on wheels of radius 10), and a faster one 190 or more, which the short
+ * way would blend back 170.  So each rigid draw's model matrix and each
+ * bone of a skinned draw remember the turn they made between two ticks
+ * (the turn's rotation vector in the object's own frame, rdcb_turn_vector:
+ * a wheel's axle is the same axis there from tick to tick), and the next
+ * blend takes the way, short or long, that continues it
+ * (rdcb_blend_affine_turn; RD_INTERP_TURN_KEEP, RD_INTERP_TURN_LONG): a
+ * turn over the snap that continues the one remembered blends.
  *
- * Across a gap (issue 98's residual): a pair not blended between (a
- * dropped or late present, a whole-frame snap: a cut, a fade, a discarded
- * frame) or a draw not drawn for a few ticks would otherwise lose the
- * memory, and a wheel over RD_INTERP_TURN_SNAP a tick would keep the
- * tick's pose until it slowed below the snap.  The turn is a per-tick
- * rotation in the object's own frame (the model to world or the bone, no
- * camera in it), so it still holds a few ticks on.  Each draw's key and
- * bone also keep their last remembered turn with the pose it ended at
- * (TurnLast: by key and bone, not by place, which may change between the
- * ticks), and a pair whose turn would snap (over RD_INTERP_TURN_SNAP with
- * no memory of the tick before) takes that turn when it ended 1 to
- * RD_INTERP_TURN_GAP ticks before the pair's first tick and the draw's
- * pose at that tick is where the turn carried on that many ticks puts it,
- * within RD_INTERP_TURN_KEEP (turnRecallGap).  When several draws kept
- * the key and bone in the same tick, only the one in the remembered
- * draw's list and place takes it.  Only a turn that would snap with no
- * memory of the tick before asks: a turn under the snap, and any turn
- * with a memory of the tick before, blends as without the gap rule, bit
- * for bit.  The whole-frame snaps clear neither table (nothing blends in
- * them, so nothing is recalled or kept).  A pair of ticks that are not
- * consecutive never blends (RD_SNAP_GAP), so every turn remembered is
- * one tick's.
+ * The memory is by the draw's identity, not its place in the list: its
+ * key, type and list, the ordinal among the draws of that key, type and
+ * list in its tick (the order the pairing pairs them in; RD_KEY's part
+ * already tells the trolley's two wheels apart), and the bone (or
+ * RD_TURN_RIGID for the model matrix).  Each identity keeps its last two
+ * turns (the newer may be the present pair's own, kept by an earlier
+ * present of the pair) with the tick each ended at and the pose (the
+ * rotation) it ended at.
  *
- * The memory is two tables of RD_TURN_CAP records, each allocated once:
- * by place, a record whose tick is neither of the present pair's is free;
- * by key and bone (TurnLast), a record whose newer turn ended more than
- * RD_INTERP_TURN_GAP + 1 ticks before the present pair's last is free. */
-typedef struct TurnEnt {
-    uint32_t frame;  /* the tick the turn ended at (its blend's cur); 0: free */
-    uint32_t from;   /* the tick it started at (its blend's prev) */
-    uint32_t lo, hi; /* the draw's key (RdKey) */
-    uint32_t index;  /* the draw's place in its list in frame */
-    uint8_t list;
-    uint8_t bone; /* the bone, or RD_TURN_RIGID for the model matrix */
-    uint8_t _pad[2];
-    float turn[3]; /* rotation vector, radians, in the object's frame */
-} TurnEnt;
-
-#define RD_TURN_CAP 8192u
-#define RD_TURN_PROBE 16u
-#define RD_TURN_RIGID 0xFFu
-
-static TurnEnt *s_turnMem;
-
-/* a draw's key and bone's last two remembered turns (rec[0] the newer):
- * the newer may be the present pair's own, kept by an earlier present */
+ * Which memory a pair takes: the turn that ended at the pair's first tick
+ * (the pair before, blended); without one, when the turn would snap, the
+ * last turn that ended 1 to RD_INTERP_TURN_GAP ticks before the pair's
+ * first tick when the draw's pose there is where that turn, carried on
+ * that many ticks, puts it (within RD_INTERP_TURN_KEEP).  A pair that is
+ * not blended (a camera cut, a fade, a present that never came, a draw not
+ * drawn or mismatched for a tick) remembers nothing; without the second
+ * rule a wheel turning over the snap would then keep the tick's pose for
+ * as long as it stayed over the snap, since a turn kept at the tick's pose
+ * is never remembered (its direction is unknown: forward 190 is back 170
+ * the short way, and remembering its short way would blend it backwards
+ * on the next pair).  Issue 98: one camera cut on the trolley ride at full
+ * speed, and the wheels kept the tick's pose for the rest of the ride.
+ * The turn is a per-tick rotation in the object's own frame (no camera in
+ * it), so it still holds a few ticks on; the pose test keeps a memory from
+ * serving a draw that stopped, turned back or was put elsewhere.  A turn
+ * under the snap and any turn with the memory of the pair before blend as
+ * without the gap rule, bit for bit, and the tick's own present (alpha 1)
+ * never blends, so the tick's pose is exact whatever the way.  A pair of
+ * ticks that are not consecutive never blends (RD_SNAP_GAP), so every turn
+ * remembered is one tick's.
+ *
+ * The table holds RD_TURN_CAP identities, allocated once; an identity
+ * whose newer turn ended more than RD_INTERP_TURN_GAP + 1 ticks before the
+ * present pair's last is free.  A turn over the snap that keeps the tick's
+ * pose is counted by why (RD_TURN_WHY_*) for the log, with the draws that
+ * did it most (the 10 s summary). */
 typedef struct TurnRec {
-    uint32_t frame; /* the tick the turn ended at; 0: none */
-    uint32_t index; /* the draw's place in its list in frame */
-    uint8_t list;
-    uint8_t shared; /* another place kept the key and bone in frame too */
-    uint8_t _pad[2];
-    float turn[3]; /* rotation vector, radians, in the object's frame */
-    float pose[4]; /* the rotation the turn ended at (quaternion, w last) */
+    uint32_t frame; /* the tick the turn ended at (its blend's cur); 0: none */
+    uint32_t from;  /* the tick it started at (its blend's prev) */
+    float turn[3];  /* rotation vector, radians, in the object's frame */
+    float pose[4];  /* the rotation the turn ended at (quaternion, w last) */
 } TurnRec;
 
-typedef struct TurnLast {
+typedef struct TurnMem {
     uint32_t lo, hi; /* the draw's key (RdKey) */
-    uint8_t bone;    /* the bone, or RD_TURN_RIGID */
-    uint8_t _pad[3];
-    TurnRec rec[2];
-} TurnLast;
+    uint16_t ord;    /* its ordinal among the draws of its key, type and list */
+    uint8_t list, type;
+    uint8_t bone; /* the bone, or RD_TURN_RIGID for the model matrix */
+    uint8_t used;
+    uint8_t _pad[2];
+    TurnRec rec[2]; /* rec[0] the newer */
+} TurnMem;
 
-static TurnLast *s_turnLast;
+#define RD_TURN_CAP 16384u
+#define RD_TURN_PROBE 32u
+#define RD_TURN_RIGID 0xFFu
 
-/* the draw blendVu blends (set around its call): its key, the two ticks,
- * its list and place in cur and (looked up when first needed) in prev */
+static TurnMem *s_turnMem;
+
+/* the draw blendVu blends (set around its call): its identity in cur
+ * (ord) and in prev (pOrd), the two ticks */
 static struct {
     bool on;
     uint32_t lo, hi;
     uint32_t prevNum, curNum;
-    const RdFrame *prev;
-    const RdCmd *pc;
-    uint32_t list, index;
-    int pList; /* -1: not looked up yet, -2: not found */
-    uint32_t pIndex;
+    uint32_t list, type;
+    uint32_t ord, pOrd;
 } s_tk;
 
-/* the last blendTurn's turn (rotation vector) and RDCB_WAY_*, and the
- * matrix it ended at (its c, for turnKeep) */
+/* the last blendTurn's turn (rotation vector) and RDCB_WAY_*, the matrix
+ * it ended at (its c, for turnKeep), and why a turn over the snap would
+ * keep the tick's pose (RD_TURN_WHY_*) */
 static double s_turnVec[3];
 static int s_turnWay;
 static const double *s_turnEnd;
+static int s_turnWhy;
 
 /* the draw blendVu blends: a model or bone turned the long way, one kept at
- * the tick's pose for its turn */
-static int s_drawLong, s_drawSnap;
+ * the tick's pose for its turn (and why: the first one's RD_TURN_WHY_*) */
+static int s_drawLong, s_drawSnap, s_drawSnapWhy;
+
+/* turns not remembered for want of room in the table, this present */
+static uint32_t s_turnFull;
 
 static void turnFree(void)
 {
     free(s_turnMem);
     s_turnMem = NULL;
-    free(s_turnLast);
-    s_turnLast = NULL;
 }
 
-static uint32_t turnHash(uint32_t frame, uint32_t list, uint32_t index, uint32_t bone)
-{
-    uint32_t h = frame * 0x9E3779B1u;
-    h ^= index * 0x85EBCA77u + 0x165667B1u;
-    h ^= (list << 8 | bone) * 0xC2B2AE3Du;
-    h ^= h >> 15;
-    h *= 0x27D4EB2Fu;
-    h ^= h >> 13;
-    return h & (RD_TURN_CAP - 1u);
-}
-
-/* the draw's list and place in prev (s_tk.pList, s_tk.pIndex), looked up
- * once; false when not found */
-static bool turnPrevPlace(void)
-{
-    if (s_tk.pList == -1) {
-        s_tk.pList = -2;
-        for (int l = 0; l < RD_LIST_COUNT; l++) {
-            const RdCmdList *cl = &s_tk.prev->lists[l];
-            const uintptr_t at = (uintptr_t)s_tk.pc, base = (uintptr_t)cl->cmds;
-            if (cl->count && at >= base && at < base + (uintptr_t)cl->count * sizeof(RdCmd)) {
-                s_tk.pList = l;
-                s_tk.pIndex = (uint32_t)((at - base) / sizeof(RdCmd));
-                break;
-            }
-        }
-    }
-    return s_tk.pList >= 0;
-}
-
-/* the turn the draw's bone (or model matrix) made between the two ticks
- * before, false without one */
-static bool turnRecall(uint32_t bone, double out[3])
-{
-    if (!s_tk.on || !s_turnMem || s_tk.prevNum == 0u || s_tk.prevNum + 1u != s_tk.curNum) {
-        return false;
-    }
-    if (!turnPrevPlace()) {
-        return false;
-    }
-    uint32_t i = turnHash(s_tk.prevNum, (uint32_t)s_tk.pList, s_tk.pIndex, bone);
-    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
-        const TurnEnt *e = &s_turnMem[i];
-        if (e->frame == s_tk.prevNum && e->from + 1u == s_tk.prevNum &&
-            e->list == (uint8_t)s_tk.pList && e->index == s_tk.pIndex && e->bone == bone &&
-            e->lo == s_tk.lo && e->hi == s_tk.hi) {
-            for (int k = 0; k < 3; k++) {
-                out[k] = e->turn[k];
-            }
-            return isfinite(out[0]) && isfinite(out[1]) && isfinite(out[2]);
-        }
-    }
-    return false;
-}
-
-/* the turn the last blendTurn made (s_turnVec), for the next pair */
-static void turnKeep(uint32_t bone)
-{
-    if (!s_tk.on || s_tk.curNum == 0u) {
-        return;
-    }
-    if (!s_turnMem) {
-        s_turnMem = calloc(RD_TURN_CAP, sizeof(TurnEnt));
-        if (!s_turnMem) {
-            return;
-        }
-    }
-    uint32_t i = turnHash(s_tk.curNum, s_tk.list, s_tk.index, bone);
-    TurnEnt *free_ = NULL;
-    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
-        TurnEnt *e = &s_turnMem[i];
-        if (e->frame == s_tk.curNum && e->list == (uint8_t)s_tk.list && e->index == s_tk.index &&
-            e->bone == bone) {
-            free_ = e; /* this pair's, again (another present) */
-            break;
-        }
-        if (!free_ && e->frame != s_tk.curNum && e->frame != s_tk.prevNum) {
-            free_ = e; /* free, or of an older pair */
-        }
-    }
-    if (!free_) {
-        return; /* full here: the draw goes without a memory */
-    }
-    free_->frame = s_tk.curNum;
-    free_->from = s_tk.prevNum;
-    free_->lo = s_tk.lo;
-    free_->hi = s_tk.hi;
-    free_->index = s_tk.index;
-    free_->list = (uint8_t)s_tk.list;
-    free_->bone = (uint8_t)bone;
-    for (int k = 0; k < 3; k++) {
-        free_->turn[k] = (float)s_turnVec[k];
-    }
-}
-
-static uint32_t turnLastHash(uint32_t lo, uint32_t hi, uint32_t bone)
+static uint32_t turnHash(uint32_t lo, uint32_t hi, uint32_t list, uint32_t type, uint32_t ord,
+                         uint32_t bone)
 {
     uint32_t h = lo * 0x9E3779B1u;
     h ^= hi * 0x85EBCA77u + 0x165667B1u;
-    h ^= bone * 0xC2B2AE3Du;
+    h ^= (list << 24 | type << 16 | (bone & 0xFFu) << 8) * 0xC2B2AE3Du;
+    h ^= ord * 0x27D4EB2Fu + 0x61C88647u;
     h ^= h >> 15;
     h *= 0x27D4EB2Fu;
     h ^= h >> 13;
     return h & (RD_TURN_CAP - 1u);
+}
+
+static bool turnIs(const TurnMem *e, uint32_t ord, uint32_t bone)
+{
+    return e->used && e->lo == s_tk.lo && e->hi == s_tk.hi && e->ord == (uint16_t)ord &&
+           e->list == (uint8_t)s_tk.list && e->type == (uint8_t)s_tk.type &&
+           e->bone == (uint8_t)bone;
+}
+
+/* the draw's memory in prev (its identity there: pOrd), NULL without one */
+static const TurnMem *turnFind(uint32_t bone)
+{
+    if (!s_tk.on || !s_turnMem || s_tk.prevNum == 0u || s_tk.pOrd > 0xFFFFu) {
+        return NULL;
+    }
+    uint32_t i = turnHash(s_tk.lo, s_tk.hi, s_tk.list, s_tk.type, s_tk.pOrd, bone);
+    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
+        const TurnMem *e = &s_turnMem[i];
+        if (turnIs(e, s_tk.pOrd, bone)) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+static bool turnFinite(const float v[3])
+{
+    return isfinite(v[0]) && isfinite(v[1]) && isfinite(v[2]);
+}
+
+/* the turn that ended at the pair's first tick (the pair before, blended) */
+static const TurnRec *turnRecall(const TurnMem *e)
+{
+    if (!e || s_tk.prevNum + 1u != s_tk.curNum) {
+        return NULL;
+    }
+    for (int k = 0; k < 2; k++) {
+        const TurnRec *r = &e->rec[k];
+        if (r->frame == s_tk.prevNum && r->from + 1u == s_tk.prevNum && turnFinite(r->turn)) {
+            return r;
+        }
+    }
+    return NULL;
 }
 
 /* the rotation of an affine 4 x 4 as rdcb_blend_affine_turn takes it (the
@@ -614,7 +548,7 @@ static bool turnCarries(const TurnRec *r, uint32_t ticks, const double now[4])
         v[k] = (double)r->turn[k] * (double)ticks;
     }
     const double a = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    const double s = a > 1e-12 ? sin(0.5 * a) / a : 0.0;
+    const double s = a > 1e-12 ? sin(0.5 * a) / a : 0.5;
     q[0] = v[0] * s;
     q[1] = v[1] * s;
     q[2] = v[2] * s;
@@ -634,100 +568,85 @@ static bool turnCarries(const TurnRec *r, uint32_t ticks, const double now[4])
     return 2.0 * acos(d) * 180.0 / 3.14159265358979323846 <= RD_INTERP_TURN_KEEP;
 }
 
-/* the turn the draw's bone (or model matrix) last remembered, when it ended
- * 1 to RD_INTERP_TURN_GAP ticks before the present pair's first and still
- * carries it to its pose there (p, the tick before's matrix); false
- * without one */
-static bool turnRecallGap(uint32_t bone, const double *p, double out[3])
+/* the last turn that ended 1 to RD_INTERP_TURN_GAP ticks before the pair's
+ * first tick and carries on to the draw's pose there (p, the tick before's
+ * matrix); NULL without one, s_turnWhy saying why */
+static const TurnRec *turnRecallGap(const TurnMem *e, const double *p)
 {
-    if (!s_tk.on || !s_turnLast || s_tk.prevNum == 0u) {
-        return false;
+    s_turnWhy = RD_TURN_WHY_NONE;
+    if (!e) {
+        return NULL;
     }
-    uint32_t i = turnLastHash(s_tk.lo, s_tk.hi, bone);
-    for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
-        const TurnLast *e = &s_turnLast[i];
-        if (e->rec[0].frame == 0u || e->lo != s_tk.lo || e->hi != s_tk.hi || e->bone != bone) {
-            continue;
+    for (int k = 0; k < 2; k++) {
+        const TurnRec *r = &e->rec[k];
+        if (r->frame == 0u || r->frame >= s_tk.prevNum) {
+            continue; /* none, or this pair's own (an earlier present's) */
         }
-        for (int k = 0; k < 2; k++) {
-            const TurnRec *r = &e->rec[k];
-            const uint32_t ago = s_tk.prevNum - r->frame;
-            if (r->frame == 0u || ago < 1u || ago > RD_INTERP_TURN_GAP) {
-                continue;
-            }
-            if (r->shared &&
-                (!turnPrevPlace() || r->list != (uint8_t)s_tk.pList || r->index != s_tk.pIndex)) {
-                return false;
-            }
-            double now[4];
-            if (!turnPose(p, now) || !turnCarries(r, ago, now)) {
-                return false;
-            }
-            for (int c = 0; c < 3; c++) {
-                out[c] = r->turn[c];
-            }
-            return isfinite(out[0]) && isfinite(out[1]) && isfinite(out[2]);
+        const uint32_t ago = s_tk.prevNum - r->frame;
+        if (ago > RD_INTERP_TURN_GAP || !turnFinite(r->turn)) {
+            s_turnWhy = RD_TURN_WHY_OLD;
+            return NULL;
         }
-        return false;
+        double now[4];
+        if (!turnPose(p, now) || !turnCarries(r, ago, now)) {
+            s_turnWhy = RD_TURN_WHY_POSE;
+            return NULL;
+        }
+        return r;
     }
-    return false;
+    return NULL;
 }
 
-/* the turn the last blendTurn made, by the draw's key and bone, with the
- * pose it ended at (s_turnEnd) */
-static void turnKeepLast(uint32_t bone)
+/* the turn the last blendTurn made (s_turnVec, ending at s_turnEnd), kept
+ * under the draw's identity in cur for the pairs after */
+static void turnKeep(uint32_t bone)
 {
-    if (!s_tk.on || s_tk.curNum == 0u || !s_turnEnd) {
+    if (!s_tk.on || s_tk.curNum == 0u || !s_turnEnd || s_tk.ord > 0xFFFFu) {
         return;
     }
-    if (!s_turnLast) {
-        s_turnLast = calloc(RD_TURN_CAP, sizeof(TurnLast));
-        if (!s_turnLast) {
+    if (!s_turnMem) {
+        s_turnMem = calloc(RD_TURN_CAP, sizeof(TurnMem));
+        if (!s_turnMem) {
             return;
         }
     }
-    uint32_t i = turnLastHash(s_tk.lo, s_tk.hi, bone);
-    TurnLast *own = NULL, *free_ = NULL;
+    uint32_t i = turnHash(s_tk.lo, s_tk.hi, s_tk.list, s_tk.type, s_tk.ord, bone);
+    TurnMem *own = NULL, *free_ = NULL;
     for (uint32_t probe = 0; probe < RD_TURN_PROBE; probe++, i = (i + 1u) & (RD_TURN_CAP - 1u)) {
-        TurnLast *e = &s_turnLast[i];
-        if (e->rec[0].frame != 0u && e->lo == s_tk.lo && e->hi == s_tk.hi && e->bone == bone) {
+        TurnMem *e = &s_turnMem[i];
+        if (turnIs(e, s_tk.ord, bone)) {
             own = e;
             break;
         }
-        if (!free_ &&
-            (e->rec[0].frame == 0u || s_tk.curNum - e->rec[0].frame > RD_INTERP_TURN_GAP + 1u)) {
+        if (!free_ && (!e->used || e->rec[0].frame > s_tk.curNum ||
+                       s_tk.curNum - e->rec[0].frame > RD_INTERP_TURN_GAP + 1u)) {
             free_ = e; /* free, or too old for any pair to take */
         }
-    }
-    if (own && own->rec[0].frame == s_tk.curNum) {
-        /* this pair's, again (another present), or another draw's of the
-         * same key and bone: then neither place's is certain */
-        if (own->rec[0].list != (uint8_t)s_tk.list || own->rec[0].index != s_tk.index) {
-            own->rec[0].shared = 1;
-        }
-        return;
     }
     double q[4];
     if (!turnPose(s_turnEnd, q)) {
         return;
     }
-    TurnLast *e = own ? own : free_;
+    TurnMem *e = own ? own : free_;
     if (!e) {
-        return; /* full here: the draw goes without a memory across a gap */
+        s_turnFull++;
+        return; /* full here: the draw goes without a memory */
     }
-    if (own) {
-        e->rec[1] = e->rec[0];
-    } else {
+    if (!own) {
         memset(e, 0, sizeof(*e));
+        e->used = 1;
         e->lo = s_tk.lo;
         e->hi = s_tk.hi;
+        e->ord = (uint16_t)s_tk.ord;
+        e->list = (uint8_t)s_tk.list;
+        e->type = (uint8_t)s_tk.type;
         e->bone = (uint8_t)bone;
+    } else if (e->rec[0].frame != s_tk.curNum) {
+        e->rec[1] = e->rec[0]; /* else this pair's again (another present) */
     }
     TurnRec *r = &e->rec[0];
     r->frame = s_tk.curNum;
-    r->index = s_tk.index;
-    r->list = (uint8_t)s_tk.list;
-    r->shared = 0;
+    r->from = s_tk.prevNum;
     for (int k = 0; k < 3; k++) {
         r->turn[k] = (float)s_turnVec[k];
     }
@@ -736,24 +655,64 @@ static void turnKeepLast(uint32_t bone)
     }
 }
 
+/* why a turn over the snap with a memory (prefer, radians) kept the
+ * tick's pose: neither way within RD_INTERP_TURN_KEEP of it, or the long
+ * way within it but over RD_INTERP_TURN_LONG */
+static int turnWhyFar(const double prefer[3])
+{
+    const double a = sqrt(s_turnVec[0] * s_turnVec[0] + s_turnVec[1] * s_turnVec[1] +
+                          s_turnVec[2] * s_turnVec[2]);
+    if (!(a > 1e-9)) {
+        return RD_TURN_WHY_FAR;
+    }
+    const double twoPi = 2.0 * 3.14159265358979323846, k = 1.0 - twoPi / a;
+    double ds = 0.0, dl = 0.0;
+    for (int i = 0; i < 3; i++) {
+        const double s = s_turnVec[i] - prefer[i], l = s_turnVec[i] * k - prefer[i];
+        ds += s * s;
+        dl += l * l;
+    }
+    const double keep = RD_INTERP_TURN_KEEP * 3.14159265358979323846 / 180.0;
+    const double longDeg = (twoPi - a) * 180.0 / 3.14159265358979323846;
+    return dl < ds && sqrt(dl) <= keep && longDeg > RD_INTERP_TURN_LONG ? RD_TURN_WHY_LONG
+                                                                        : RD_TURN_WHY_FAR;
+}
+
 /* rd__blend_affine for a draw's model matrix or bone: the way that
  * continues the turn it made between the two ticks before (turnRecall), or,
  * when the turn would snap, the one it remembered a few ticks before
  * (turnRecallGap); the turn kept for the next pair (turnKeep, by the
- * caller once the blend is used); s_turnDeg, s_turnVec, s_turnWay */
+ * caller once the blend is used); s_turnDeg, s_turnVec, s_turnWay,
+ * s_turnWhy */
 static bool blendTurn(const double *p, const double *c, double t, const double *pivot,
                       uint32_t bone, double *o)
 {
     double prefer[3];
-    const bool mem = turnRecall(bone, prefer);
+    const TurnMem *e = turnFind(bone);
+    const TurnRec *r = turnRecall(e);
+    if (r) {
+        for (int k = 0; k < 3; k++) {
+            prefer[k] = r->turn[k];
+        }
+    }
     s_turnEnd = c;
-    const bool ok =
-        rdcb_blend_affine_turn(p, c, t, pivot, mem ? prefer : NULL, RD_INTERP_TURN_KEEP,
+    s_turnWhy = RD_TURN_WHY_NONE;
+    bool ok =
+        rdcb_blend_affine_turn(p, c, t, pivot, r ? prefer : NULL, RD_INTERP_TURN_KEEP,
                                RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec, &s_turnWay) != 0;
-    if (ok && !mem && s_turnDeg > RD_INTERP_TURN_SNAP && turnRecallGap(bone, p, prefer)) {
-        return rdcb_blend_affine_turn(p, c, t, pivot, prefer, RD_INTERP_TURN_KEEP,
-                                      RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec,
-                                      &s_turnWay) != 0;
+    if (ok && !r && s_turnDeg > RD_INTERP_TURN_SNAP) {
+        r = turnRecallGap(e, p);
+        if (r) {
+            for (int k = 0; k < 3; k++) {
+                prefer[k] = r->turn[k];
+            }
+            ok = rdcb_blend_affine_turn(p, c, t, pivot, prefer, RD_INTERP_TURN_KEEP,
+                                        RD_INTERP_TURN_LONG, o, &s_turnDeg, s_turnVec,
+                                        &s_turnWay) != 0;
+        }
+    }
+    if (ok && r && s_turnWay == RDCB_WAY_SHORT && s_turnDeg > RD_INTERP_TURN_SNAP) {
+        s_turnWhy = turnWhyFar(prefer);
     }
     return ok;
 }
@@ -767,12 +726,68 @@ static bool turnSnaps(uint32_t bone)
 {
     s_drawLong |= s_turnWay == RDCB_WAY_LONG;
     if (s_turnWay == RDCB_WAY_SHORT && s_turnDeg > RD_INTERP_TURN_SNAP) {
+        if (!s_drawSnap) {
+            s_drawSnapWhy = s_turnWhy;
+        }
         s_drawSnap = 1;
         return true;
     }
     turnKeep(bone);
-    turnKeepLast(bone);
     return false;
+}
+
+/* The draws whose turns kept the tick's pose most in the log's block (the
+ * 10 s summary names the top three): by key, type and list, a small table
+ * a draw that is not in it takes the least counted entry of when full */
+#define RD_SNAP_TOP 16
+
+typedef struct SnapTop {
+    uint32_t lo, hi, count;
+    uint8_t type, list, why, _pad;
+    float maxTurn;
+    char name[24];
+} SnapTop;
+
+static SnapTop s_snapTop[RD_SNAP_TOP];
+static uint32_t s_snapTopN;
+
+static void snapNote(const RdCmd *c, int list, int why, double turn)
+{
+    SnapTop *e = NULL;
+    for (uint32_t k = 0; k < s_snapTopN; k++) {
+        SnapTop *t = &s_snapTop[k];
+        if (t->lo == c->keyLo && t->hi == c->keyHi && t->type == c->type && t->list == list) {
+            e = t;
+            break;
+        }
+    }
+    if (!e) {
+        uint32_t least = 0;
+        if (s_snapTopN < RD_SNAP_TOP) {
+            least = s_snapTopN++;
+            s_snapTop[least].count = 0;
+        } else {
+            for (uint32_t k = 1; k < RD_SNAP_TOP; k++) {
+                least = s_snapTop[k].count < s_snapTop[least].count ? k : least;
+            }
+        }
+        e = &s_snapTop[least];
+        e->lo = c->keyLo;
+        e->hi = c->keyHi;
+        e->type = c->type;
+        e->list = (uint8_t)list;
+        e->maxTurn = 0.0f;
+        const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+        if (m && m->name[0]) {
+            memcpy(e->name, m->name, sizeof(e->name));
+            e->name[sizeof(e->name) - 1] = 0;
+        } else {
+            snprintf(e->name, sizeof(e->name), "mesh %u", c->u[0]);
+        }
+    }
+    e->count++;
+    e->why = (uint8_t)why;
+    e->maxTurn = fmaxf(e->maxTurn, (float)turn);
 }
 
 bool rd__s2_legacy(void)
@@ -2104,14 +2119,16 @@ typedef struct Slot {
     uint32_t count;                      /* of them */
     int32_t curHead, curTail, curCursor; /* cur's, when prev has two or more (CurNode) */
     uint32_t spare;                      /* placeSlot: prev's occurrences no draw of cur picked */
+    uint32_t curSeen;                    /* cur's occurrences matchOf has been asked for */
 } Slot;
 
 typedef struct Node {
     uint32_t list, index;
     int32_t next;
-    int32_t out; /* the index of its match in s_out's list, -1: unmatched */
-    int32_t org; /* placeSlot: 1 the draw's origin is in at, -1 it has none, 0 not known */
-    float at[3]; /* its model origin in the world (vuWorldOrigin) */
+    int32_t out;  /* the index of its match in s_out's list, -1: unmatched */
+    int32_t org;  /* placeSlot: 1 the draw's origin is in at, -1 it has none, 0 not known */
+    float at[3];  /* its model origin in the world (vuWorldOrigin) */
+    uint32_t ord; /* its ordinal among prev's draws of its slot */
 } Node;
 
 /* cur's occurrence of a key prev drew two or more times (placeSlot) */
@@ -2237,6 +2254,7 @@ static bool buildIndex(const RdFrame *prev)
             s_nodes[k].next = -1;
             s_nodes[k].out = -1;
             s_nodes[k].org = 0;
+            s_nodes[k].ord = s->count;
             s->count++;
             if (s->tail >= 0) {
                 s_nodes[s->tail].next = k;
@@ -2575,6 +2593,11 @@ static int s_unWhy;
 
 static bool s_matchApart;
 
+/* matchOf's last draw of cur: its ordinal among cur's draws of its key,
+ * type and list, and its match's among prev's (the identity rotation
+ * continuity remembers a draw by) */
+static uint32_t s_matchCurOrd, s_matchOrd;
+
 /* the next unmatched occurrence in prev of cur's draw c, index i in list l */
 static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t i)
 {
@@ -2584,6 +2607,7 @@ static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t
     if (!s) {
         return NULL;
     }
+    s_matchCurOrd = s->curSeen++;
     if (s->curCursor >= 0 && s_curNodes[s->curCursor].index == i) {
         if (!s->placed) {
             placeSlot(prev, s);
@@ -2598,6 +2622,7 @@ static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t
             return NULL;
         }
         s_nodes[k].out = (int32_t)i;
+        s_matchOrd = s_nodes[k].ord;
         return &prev->lists[s_nodes[k].list].cmds[s_nodes[k].index];
     }
     if (s->cursor < 0) {
@@ -2607,6 +2632,7 @@ static const RdCmd *matchOf(const RdFrame *prev, const RdCmd *c, int l, uint32_t
     Node *nd = &s_nodes[s->cursor];
     s->cursor = nd->next;
     nd->out = (int32_t)i;
+    s_matchOrd = nd->ord;
     return &prev->lists[nd->list].cmds[nd->index];
 }
 
@@ -2674,7 +2700,7 @@ static int blendVu(uint8_t *op, const RdFrame *prev, const RdCmd *pc, const RdCm
     s_vuTicks = 0;
     s_rotated = 0;
     s_drawTurn = 0.0;
-    s_drawLong = s_drawSnap = 0;
+    s_drawLong = s_drawSnap = s_drawSnapWhy = 0;
     if (pc->u[2] != cc->u[2]) {
         return mismatch(RD_MISMATCH_SIZE);
     }
@@ -5215,6 +5241,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     s_umFadeIn = s_umFadeOut = s_umHalfIn = s_umHalfOut = s_umHeld = 0;
     s_umPrevKept = s_umPrevHeld = 0;
     s_lightRot = 0;
+    s_turnFull = 0;
     s_lightPair = s_placed = s_gridSt = s_gridStCam = 0;
     s_pivotMesh = 0; /* the pivots are recomputed per present */
     if (s_track) {
@@ -5310,11 +5337,10 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     s_tk.hi = c->keyHi;
                     s_tk.prevNum = prev->number;
                     s_tk.curNum = cur->number;
-                    s_tk.prev = prev;
-                    s_tk.pc = pc;
                     s_tk.list = (uint32_t)l;
-                    s_tk.index = i;
-                    s_tk.pList = -1;
+                    s_tk.type = c->type;
+                    s_tk.ord = s_matchCurOrd;
+                    s_tk.pOrd = s_matchOrd;
                     r = s_matchApart ? R_JUMP : blendVu(op, prev, pc, c, t);
                     s_tk.on = false;
                     s_gridScreenSt = false;
@@ -5339,6 +5365,12 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
                     st.maxTurn = fmaxf(st.maxTurn, (float)s_drawTurn);
                     st.longWay += (uint32_t)s_drawLong;
                     st.turnSnap += (uint32_t)s_drawSnap;
+                    if (s_drawSnap) {
+                        st.turnWhy[s_drawSnapWhy < RD_TURN_WHY_COUNT ? s_drawSnapWhy : 0]++;
+                        if (s_track) {
+                            snapNote(c, l, s_drawSnapWhy, s_drawTurn);
+                        }
+                    }
                 }
                 st.shifted += r == R_LERP && s_shifted;
                 if (s_track) {
@@ -5377,6 +5409,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     if (blend) {
         unmatchedPass(prev, t); /* inserts commands, so after the passes above */
     }
+    st.turnFull = s_turnFull;
     st.prevKept = s_umPrevKept;
     st.prevHeld = s_umPrevHeld;
     st.rebased = (uint32_t)s_rebased;
@@ -5405,6 +5438,7 @@ static struct {
      * from the frame before's (whole-frame flaps) */
     uint64_t why[RD_MISMATCH_COUNT], rotated, turned, shifted;
     uint64_t longWay, turnSnap; /* rotation continuity's long ways, snapped turns */
+    uint64_t turnWhy[RD_TURN_WHY_COUNT], turnFull; /* why they snapped, the table full */
     float maxTurn;
     uint32_t snapFlips, lastSnap;
     uint64_t rebased, rebasedCur; /* VU draws re-based on the blended camera */
@@ -5444,6 +5478,10 @@ static void presentLog(void)
     s_pres.turned += st->turned;
     s_pres.longWay += st->longWay;
     s_pres.turnSnap += st->turnSnap;
+    for (int k = 0; k < RD_TURN_WHY_COUNT; k++) {
+        s_pres.turnWhy[k] += st->turnWhy[k];
+    }
+    s_pres.turnFull += st->turnFull;
     s_pres.shifted += st->shifted;
     s_pres.rebased += st->rebased;
     s_pres.rebasedCur += st->rebasedCur;
@@ -5529,6 +5567,52 @@ static void presentLog(void)
             (unsigned long long)u[RD_UNMATCHED_UNPLACED],
             (unsigned long long)u[RD_UNMATCHED_PAYLOAD], (unsigned long long)s_pres.apart,
             (unsigned long long)s_pres.prevKept, (unsigned long long)s_pres.prevHeld);
+    /* a sixth line, only when a turn kept the tick's pose: why, and the
+     * draws that did it most */
+    if (s_pres.turnSnap || s_pres.turnFull) {
+        char most[400];
+        size_t at = 0;
+        most[0] = 0;
+        static const char *const kWhy[RD_TURN_WHY_COUNT] = {
+            "no memory", "memory older than the gap", "pose not carried",
+            "further than the keep from the memory", "the long way over its bound"};
+        for (int n = 0; n < 3; n++) {
+            int best = -1;
+            for (uint32_t k = 0; k < s_snapTopN; k++) {
+                if (s_snapTop[k].count &&
+                    (best < 0 || s_snapTop[k].count > s_snapTop[best].count)) {
+                    best = (int)k;
+                }
+            }
+            if (best < 0) {
+                break;
+            }
+            SnapTop *e = &s_snapTop[best];
+            const int w =
+                snprintf(most + at, sizeof(most) - at,
+                         "%s%s (key %08x%08x list %u) %u times, largest %.1f degrees, "
+                         "last: %s",
+                         n ? "; " : "", e->name, e->hi, e->lo, e->list, e->count,
+                         (double)e->maxTurn, kWhy[e->why < RD_TURN_WHY_COUNT ? e->why : 0]);
+            if (w > 0) {
+                at = at + (size_t)w < sizeof(most) ? at + (size_t)w : sizeof(most) - 1;
+            }
+            e->count = 0;
+        }
+        const uint64_t *w = s_pres.turnWhy;
+        rd__log(
+            "interp: turns over %.0f degrees kept at the tick's pose: %llu draws (no memory of "
+            "the draw %llu, its memory older than %u ticks %llu, the pose not where its memory "
+            "carries it %llu, further than %.0f degrees from its memory %llu, the long way over "
+            "%.0f degrees %llu); %llu turns not remembered for want of room; most: %s",
+            RD_INTERP_TURN_SNAP, (unsigned long long)s_pres.turnSnap,
+            (unsigned long long)w[RD_TURN_WHY_NONE], RD_INTERP_TURN_GAP,
+            (unsigned long long)w[RD_TURN_WHY_OLD], (unsigned long long)w[RD_TURN_WHY_POSE],
+            RD_INTERP_TURN_KEEP, (unsigned long long)w[RD_TURN_WHY_FAR], RD_INTERP_TURN_LONG,
+            (unsigned long long)w[RD_TURN_WHY_LONG], (unsigned long long)s_pres.turnFull,
+            most[0] ? most : "none");
+    }
+    s_snapTopN = 0;
     const uint32_t number = s_pres.number;
     memset(&s_pres, 0, sizeof(s_pres));
     s_pres.number = number;
@@ -5543,6 +5627,7 @@ static void presentReset(void)
     memset(&s_pres, 0, sizeof(s_pres));
     memset(&s_info, 0, sizeof(s_info));
     s_infoValid = false;
+    s_snapTopN = 0;
 }
 
 /* with interpolation off rd_end_frame presents each frame once, whole */
