@@ -1255,13 +1255,16 @@ void rd__date_msaa_last(RdDateMsaa *out);
 /* The replay's diagnostic counts (rd_core.c, issues 95 and 106):
  * rd__diag_frame(NULL, 0) as a replay begins, (f, the MSAA epoch's sample
  * count, 1 without) as it ends; rd__span_idx the CPU index list of the VU
- * draw doVuDraw is on (NULL: none); rd__span_draw one indexed VU draw of
+ * draw doVuDraw is on (NULL: none); rd__span_range instead the span of a
+ * draw whose indices are not read back (a grid's, in the upload ring:
+ * values lo..hi); rd__span_draw one indexed VU draw of
  * it (count 0: a second pass of the same draw, not counted), measured on
  * one replay in 64; rd__date_snap a DATE snapshot of target tc as the
  * replay takes it, closing when its transition closes the open MSAA epoch,
  * ended when the epoch was resolved before. */
 void rd__diag_frame(const RdFrame *f, uint32_t samples);
 void rd__span_idx(const uint32_t *idx);
+void rd__span_range(uint32_t lo, uint32_t hi);
 void rd__span_draw(uint32_t first, uint32_t count);
 void rd__date_snap(const RdTargetRec *tc, bool closing, bool ended);
 /* The (program, code) row of rd_mesh.h's table: the RdProg, the vertex

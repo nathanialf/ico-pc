@@ -4606,7 +4606,12 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (g_rdWin.first && g_rdWin.drawLast) {
             g_rdVuCur.index = idx;
         }
-        rd__span_idx(idx);
+        /* the span from the grid's shape, not from idx (the mapped ring is
+         * uncached memory): ICO_VU_INDEX(2, 0) to ICO_VU_INDEX(the last
+         * batch's last vertex, 2) */
+        if (vpb >= 3u && p.batchCount > 0u) {
+            rd__span_range(ICO_VU_INDEX(2u, 0u), ICO_VU_INDEX(p.batchCount * vpb - 1u, 2u));
+        }
         /* strip i is the grid's rows i and i + 1
          * (Primitive.c prim_UpdateMesh3D), so with two strips or more
          * every strip shares a row of positions with a neighbour: joined,

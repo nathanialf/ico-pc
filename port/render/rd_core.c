@@ -110,7 +110,9 @@ void rd_summary_text(char *out, size_t size)
  * storage by the span; since the marks moved into the stream the widest
  * span of a frame is 14,314 and no draw passes 2^24 - 1 (rd_stream_audit).
  * One replay in SPAN_EVERY measures every indexed VU draw's span from its
- * CPU index list (rd_replay.c doVuDraw, rd__span_idx), so a regression
+ * CPU index list (rd_replay.c doVuDraw, rd__span_idx), a grid's from its
+ * batch count and vertices per batch (rd__span_range: its indices are
+ * written to the mapped upload ring, uncached memory, never read back), so a regression
  * shows in the log of a run: the first measured frame's line, a line for
  * any frame with a draw past 2^24 - 1 (the first 4), and the loss
  * report's (rd_index_span_text). */
@@ -118,8 +120,10 @@ void rd_summary_text(char *out, size_t size)
 #define SPAN_LIMIT ((1u << 24) - 1u)
 
 static struct {
-    bool on;                                          /* this replay is measured */
-    const uint32_t *idx;                              /* the draw's CPU index list (NULL: none) */
+    bool on;             /* this replay is measured */
+    const uint32_t *idx; /* the draw's CPU index list (NULL: none) */
+    bool range;          /* no list: the draw's values span lo..hi */
+    uint32_t lo, hi;
     uint32_t fWidest, fOver, fDraws;                  /* this replay's */
     uint32_t widest, over, draws, frames, overFrames; /* the run's measured replays */
     uint32_t widestFrame;
@@ -136,18 +140,32 @@ static RdDateMsaa s_dateMs, s_dateMsLast;
 void rd__span_idx(const uint32_t *idx)
 {
     s_span.idx = idx;
+    s_span.range = false;
+}
+
+void rd__span_range(uint32_t lo, uint32_t hi)
+{
+    s_span.idx = NULL;
+    s_span.range = true;
+    s_span.lo = lo;
+    s_span.hi = hi;
 }
 
 void rd__span_draw(uint32_t first, uint32_t count)
 {
-    if (!s_span.on || !s_span.idx || count == 0) {
+    if (!s_span.on || (!s_span.idx && !s_span.range) || count == 0) {
         return;
     }
     uint32_t lo = UINT32_MAX, hi = 0;
-    const uint32_t *v = s_span.idx + first;
-    for (uint32_t i = 0; i < count; i++) {
-        lo = v[i] < lo ? v[i] : lo;
-        hi = v[i] > hi ? v[i] : hi;
+    if (s_span.range) {
+        lo = s_span.lo;
+        hi = s_span.hi;
+    } else {
+        const uint32_t *v = s_span.idx + first;
+        for (uint32_t i = 0; i < count; i++) {
+            lo = v[i] < lo ? v[i] : lo;
+            hi = v[i] > hi ? v[i] : hi;
+        }
     }
     const uint32_t span = hi - lo;
     s_span.fWidest = span > s_span.fWidest ? span : s_span.fWidest;
@@ -207,6 +225,7 @@ void rd__diag_frame(const RdFrame *f, uint32_t samples)
         /* a replay begins (g_rd.replayCounter already counts it) */
         s_span.on = g_rd.replayCounter % SPAN_EVERY == 1u;
         s_span.idx = NULL;
+        s_span.range = false;
         s_span.fWidest = s_span.fOver = s_span.fDraws = 0;
         memset(&s_dateMs, 0, sizeof(s_dateMs));
         return;
