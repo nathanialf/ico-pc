@@ -99,7 +99,26 @@
  *               or from another version is deleted;
  *   - early:    the reporter started before the limits (Android's start):
  *               the first limit counts from ico_diag_start, not from the
- *               thread's start.
+ *               thread's start;
+ *   - symbols:  the symbolizer (symmap.h) on a small GNU ld map of an ELF
+ *               program (a wrapped function section, a static function in
+ *               an object, an anchor that is not at the module's start), a
+ *               Windows map excerpt (image base 0x140000000, a
+ *               libX.a(obj.c.obj) object), an nm table, the same table
+ *               gzip-compressed (larger than inflate's 32 KB window), and a
+ *               map without the anchor; then the segv and watchdog cases'
+ *               symbol lines from diag_test's own link map (diag_test.map,
+ *               linked beside it): sched.c's functions named, the test's
+ *               static functions as its object's;
+ *   - report:   the segv and watchdog cases write logs/report-<stamp>.zip
+ *               (report.h), read back with miniz: report.txt names the end,
+ *               the summary line, the report block with its symbol lines,
+ *               and ico-pc.log is the log; the crash's report.txt is
+ *               written to diag_test_report.txt (an example); the prune
+ *               keeps the newest 5;
+ *   - limited:  ico_log_limited: 250 calls write the first 8 and the 100th
+ *               and 200th, the 8th saying so, and the end summary counts
+ *               250 (10 written).
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
 #include <stdio.h>
@@ -107,13 +126,18 @@
 #include <string.h>
 #include <eekernel.h>
 #include "diag_host.h"
+#include "miniz.h"
 #include "rd_bisect_plan.h"
+#include "report.h"
 #include "sched.h"
 #include "startup_retry.h"
+#include "symmap.h"
 
 #if !defined(_WIN32)
 
+#include <dirent.h>
 #include <pthread.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -584,6 +608,21 @@ static void run_child(const char *mode, const char *log)
     ico_diag_name_func((void *)segv_thread, "segv_thread");
     ico_diag_name_func((void *)spin_thread, "spin_thread");
     ico_diag_log("test: child %s", mode);
+    if (getenv("ICO_TEST_REPORT_DIR") != NULL) {
+        /* the report file (report.h) into the test's own folder */
+        const char *dir = getenv("ICO_TEST_REPORT_DIR");
+
+        ico_report_set_paths(dir, NULL, dir, NULL);
+        ico_diag_set_version("test (commit 0)");
+        ico_diag_set_summary("version test; platform the test; GPU none");
+    }
+    if (strcmp(mode, "limited") == 0) {
+        for (unsigned int i = 1; i <= 250; i++) {
+            ico_log_limited("test: limited", "test: limited line %u", i);
+        }
+        ico_log_limit_log_summary();
+        exit(0);
+    }
     ico_sched_reset();
     sema = ico_sched_create_sema(1, 1, 0, 0);
     if (strncmp(mode, "act", 3) == 0) {
@@ -679,6 +718,273 @@ static int run(const char *self, const char *mode, const char *log)
 
 #endif
 
+#if !defined(_WIN32)
+
+/* --- The symbolizer on synthetic files --------------------------------------------- */
+
+/* a GNU ld map of an ELF program: the anchor (ico_diag_init) at 0x2000 */
+static const char elf_map[] =
+    "Archive member included to satisfy reference by file (symbol)\n"
+    "\n"
+    "libico_game.a(main.c.o)       port/game/gamestate.c.o (pad)\n"
+    "\n"
+    "Discarded input sections\n"
+    "\n"
+    " .text          0x0000000000000000       0x10 dropped.c.o\n"
+    "\n"
+    "Linker script and memory map\n"
+    "\n"
+    "                0x0000000000000000                PROVIDE (__executable_start = "
+    "SEGMENT_START (\"text-segment\", 0x0))\n"
+    ".init           0x0000000000001000       0x17\n"
+    " .init          0x0000000000001000        0x4 /usr/lib/crti.o\n"
+    "                0x0000000000001000                _init\n"
+    ".text           0x0000000000002000     0x1000\n"
+    " *(.text .stub .text.* .gnu.linkonce.t.*)\n"
+    " .text          0x0000000000002000      0x200 port/platform/CMakeFiles/p.dir/diag_host.c.o\n"
+    "                0x0000000000002000                ico_diag_init\n"
+    "                0x0000000000002100                ico_diag_log\n"
+    " .text.a_static_function_whose_section_name_is_long_enough_to_wrap\n"
+    "                0x0000000000002200       0x80 port/render/CMakeFiles/r.dir/rd_blur.c.o\n"
+    " *fill*         0x0000000000002280        0x0 \n"
+    " .text          0x0000000000002280      0x300 libico_game.a(vu0.c.o)\n"
+    "                0x0000000000002300                _CopyVector\n"
+    " .text          0x0000000000002580      0x100 statics.c.o\n"
+    ".data           0x0000000000004000      0x100\n"
+    " .data          0x0000000000004000      0x100 data.c.o\n"
+    "                0x0000000000004010                some_data\n";
+
+/* tools/package_win.sh's ico_pc_x64.map, cut down (the real lines' form) */
+static const char win_map[] =
+    "                0x0000000140000000                __image_base__ = 0x140000000\n"
+    ".text           0x0000000140001000   0x2aa400\n"
+    " *(SORT_NONE(.init))\n"
+    " *(.text)\n"
+    " .text          0x0000000140001000      0x430 /mingw/lib/crt2.o\n"
+    "                0x00000001400013d0                WinMainCRTStartup\n"
+    " .text          0x0000000140196000     0x21e0 libico_platform.a(diag_host.c.obj)\n"
+    "                0x0000000140197930                ico_diag_set_movie\n"
+    "                0x0000000140197940                ico_diag_set_exit_hook\n"
+    "                0x0000000140197fc0                ico_diag_init\n"
+    "                0x00000001401981b0                ico_diag_arm_vectored\n"
+    " .text          0x00000001401981e0      0x190 libico_platform.a(hotkeys.c.obj)\n"
+    "                0x0000000140198200                ico_hotkey_for\n"
+    "                0x0000000140198220                ico_stats_period_ns\r\n";
+
+static const char nm_table[] = "0000000000001000 T _init\n"
+                               "0000000000002000 T ico_diag_init\n"
+                               "0000000000002100 t static_fn\n"
+                               "0000000000002180 D some_data\n"
+                               "0000000000002200 W weak_fn\n";
+
+static int resolve_mem(const char *text, size_t n, const char *anchor, uint64_t anchor_off,
+                       IcoSymHit *h, int count)
+{
+    IcoSymSource src;
+    IcoSymMem m;
+
+    ico_sym_mem_source(&src, &m, text, n);
+    return ico_sym_resolve(&src, anchor, anchor_off, h, count);
+}
+
+static const char *hit_text(const IcoSymHit *h)
+{
+    static char d[256];
+
+    ico_sym_describe(h, d, sizeof d);
+    return d;
+}
+
+/* text as a gzip member (RFC 1952), in a malloc block */
+static unsigned char *gzip_of(const char *text, size_t n, size_t *out_n)
+{
+    size_t dn = 0;
+    void *d = tdefl_compress_mem_to_heap(text, n, &dn, 128);
+    unsigned char *g;
+    uint32_t crc = (uint32_t)mz_crc32(0, (const unsigned char *)text, n);
+    static const unsigned char head[10] = {0x1f, 0x8b, 8, 8, 0, 0, 0, 0, 0, 3};
+
+    if (d == NULL) {
+        return NULL;
+    }
+    /* with an FNAME, as gzip without -n writes */
+    g = malloc(10 + 12 + dn + 8);
+    memcpy(g, head, 10);
+    memcpy(g + 10, "libmain.syms", 13);
+    memcpy(g + 23, d, dn);
+    for (int i = 0; i < 4; i++) {
+        g[23 + dn + i] = (unsigned char)(crc >> (8 * i));
+        g[23 + dn + 4 + i] = (unsigned char)((uint32_t)n >> (8 * i));
+    }
+    free(d);
+    *out_n = 23 + dn + 8;
+    return g;
+}
+
+static void symbol_cases(void)
+{
+    IcoSymHit h[8];
+    int r;
+
+    memset(h, 0, sizeof h);
+    h[0].off = 0x2104;
+    h[1].off = 0x2210;
+    h[2].off = 0x2304;
+    h[3].off = 0x2290;
+    h[4].off = 0x2590;
+    h[5].off = 0x1002;
+    r = resolve_mem(elf_map, sizeof elf_map - 1, "ico_diag_init", 0x2000, h, 6);
+    CHECK(r == 6);
+    CHECK(strcmp(hit_text(&h[0]), "ico_diag_log+0x4 (diag_host.c.o)") == 0);
+    CHECK(strcmp(hit_text(&h[1]),
+                 "a_static_function_whose_section_name_is_long_enough_to_wrap+0x10 "
+                 "(rd_blur.c.o)") == 0);
+    CHECK(h[1].named_by_section == 1);
+    CHECK(strcmp(hit_text(&h[2]), "_CopyVector+0x4 (vu0.c.o)") == 0);
+    CHECK(strcmp(hit_text(&h[3]), "a static function in vu0.c.o, +0x10 into its code") == 0);
+    CHECK(strcmp(hit_text(&h[4]), "a static function in statics.c.o, +0x10 into its code") == 0);
+    CHECK(strcmp(hit_text(&h[5]), "_init+0x2 (crti.o)") == 0);
+    for (int i = 0; i < 6; i++) {
+        printf("symbols: elf +0x%llx %s\n", (unsigned long long)h[i].off, hit_text(&h[i]));
+    }
+    /* the anchor 0x1000 into the module: every offset 0x1000 less */
+    memset(h, 0, sizeof h);
+    h[0].off = 0x1304;
+    r = resolve_mem(elf_map, sizeof elf_map - 1, "_ico_diag_init", 0x1000, h, 1);
+    CHECK(r == 1 && strcmp(hit_text(&h[0]), "_CopyVector+0x4 (vu0.c.o)") == 0);
+    /* no anchor: nothing */
+    r = resolve_mem(elf_map, sizeof elf_map - 1, "not_there", 0, h, 1);
+    CHECK(r == -1);
+
+    /* Windows: offsets from the image base */
+    memset(h, 0, sizeof h);
+    h[0].off = 0x198210;
+    h[1].off = 0x197945;
+    h[2].off = 0x1003d8;
+    r = resolve_mem(win_map, sizeof win_map - 1, "ico_diag_init", 0x197fc0, h, 3);
+    CHECK(r == 2);
+    CHECK(strcmp(hit_text(&h[0]), "ico_hotkey_for+0x10 (hotkeys.c.obj)") == 0);
+    CHECK(strcmp(hit_text(&h[1]), "ico_diag_set_exit_hook+0x5 (diag_host.c.obj)") == 0);
+    CHECK(hit_text(&h[2])[0] == '\0'); /* past the excerpt's sections: crt2's, unnamed */
+    for (int i = 0; i < 2; i++) {
+        printf("symbols: windows +0x%llx %s\n", (unsigned long long)h[i].off, hit_text(&h[i]));
+    }
+
+    /* nm: static functions named, data left out */
+    memset(h, 0, sizeof h);
+    h[0].off = 0x2150;
+    h[1].off = 0x21a0;
+    h[2].off = 0x2204;
+    r = resolve_mem(nm_table, sizeof nm_table - 1, "ico_diag_init", 0x2000, h, 3);
+    CHECK(r == 3);
+    CHECK(strcmp(hit_text(&h[0]), "static_fn+0x50") == 0);
+    CHECK(strcmp(hit_text(&h[1]), "static_fn+0xa0") == 0);
+    CHECK(strcmp(hit_text(&h[2]), "weak_fn+0x4") == 0);
+
+    /* the same kind of table gzip-compressed, past inflate's window */
+    {
+        static char big[200000];
+        size_t n = 0, gn = 0;
+        unsigned char *gz;
+        IcoSymSource raw, src;
+        IcoSymMem m;
+
+        n += (size_t)snprintf(big + n, sizeof big - n, "0000000000001000 T ico_diag_init\n");
+        for (unsigned int i = 0; i < 4000; i++) {
+            n += (size_t)snprintf(big + n, sizeof big - n, "%016x t function_number_%u\n",
+                                  0x10000u + i * 0x40u, i);
+        }
+        gz = gzip_of(big, n, &gn);
+        CHECK(gz != NULL && n > 100000);
+        if (gz != NULL) {
+            memset(h, 0, sizeof h);
+            h[0].off = 0x10000u + 3999u * 0x40u + 0x8u;
+            h[1].off = 0x10000u + 17u * 0x40u;
+            ico_sym_mem_source(&raw, &m, gz, gn);
+            ico_sym_gz_source(&src, &raw);
+            r = ico_sym_resolve(&src, "ico_diag_init", 0x1000, h, 2);
+            CHECK(r == 2);
+            CHECK(strcmp(hit_text(&h[0]), "function_number_3999+0x8") == 0);
+            CHECK(strcmp(hit_text(&h[1]), "function_number_17+0x0") == 0);
+            /* a member cut short: the stream ends in an error, the lookup
+               names nothing (and returns) */
+            ico_sym_mem_source(&raw, &m, gz, gn / 2);
+            ico_sym_gz_source(&src, &raw);
+            r = ico_sym_resolve(&src, "ico_diag_init", 0x1000, h, 2);
+            CHECK(r == -1);
+            free(gz);
+        }
+    }
+}
+
+/* --- The report file ------------------------------------------------------------------ */
+
+/* the newest report-*.zip in dir into out (1), or 0 */
+static int newest_report(const char *dir, char *out, size_t size)
+{
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    char best[256] = "";
+
+    if (d == NULL) {
+        return 0;
+    }
+    while ((e = readdir(d)) != NULL) {
+        if (strncmp(e->d_name, "report-", 7) == 0 && strcmp(best, e->d_name) < 0) {
+            snprintf(best, sizeof best, "%s", e->d_name);
+        }
+    }
+    closedir(d);
+    if (best[0] == '\0') {
+        return 0;
+    }
+    snprintf(out, size, "%s/%s", dir, best);
+    return 1;
+}
+
+/* one entry of zip as a NUL-terminated malloc block (NULL: none) */
+static char *zip_entry(const char *zip, const char *name)
+{
+    mz_zip_archive z;
+    size_t n = 0;
+    char *data, *out;
+
+    memset(&z, 0, sizeof z);
+    if (!mz_zip_reader_init_file(&z, zip, 0)) {
+        return NULL;
+    }
+    data = mz_zip_reader_extract_file_to_heap(&z, name, &n, 0);
+    mz_zip_reader_end(&z);
+    if (data == NULL) {
+        return NULL;
+    }
+    out = malloc(n + 1);
+    memcpy(out, data, n);
+    out[n] = '\0';
+    mz_free(data);
+    return out;
+}
+
+static void clear_dir(const char *dir)
+{
+    DIR *d = opendir(dir);
+    struct dirent *e;
+    char p[512];
+
+    if (d == NULL) {
+        return;
+    }
+    while ((e = readdir(d)) != NULL) {
+        if (e->d_name[0] != '.') {
+            snprintf(p, sizeof p, "%s/%s", dir, e->d_name);
+            remove(p);
+        }
+    }
+    closedir(d);
+}
+
+#endif
+
 int main(int argc, char **argv)
 {
 #if defined(_WIN32)
@@ -706,6 +1012,122 @@ int main(int argc, char **argv)
     CHECK(r == 0);
     CHECK(strstr(s, "test: child lines") != NULL);
     CHECK(strstr(s, "] a milestone") != NULL);
+
+    symbol_cases();
+
+    /* the crash's report file, in a folder of its own */
+    char rdir[64];
+    snprintf(rdir, sizeof rdir, "diag_test_reports_%d", (int)getpid());
+    mkdir(rdir, 0755);
+    clear_dir(rdir);
+    setenv("ICO_TEST_REPORT_DIR", rdir, 1);
+    r = run(argv[0], "segv", log);
+    unsetenv("ICO_TEST_REPORT_DIR");
+    s = read_file(log);
+    CHECK(r == 3);
+    /* the symbol lines from diag_test.map, after the raw ones */
+    CHECK(strstr(s, "ico_pc: symbols from diag_test.map (each offset above in diag_test, in "
+                    "order):\n") != NULL);
+    CHECK(strstr(s, " ico_sched_run+0x") != NULL || strstr(s, " ico_sched_") != NULL);
+    CHECK(strstr(s, "a static function in diag_test.c.o") != NULL);
+    CHECK(strstr(s, "ico_pc: symbols from") > strstr(s, "ico_pc: threads"));
+    CHECK(strstr(s, "ico_pc: report: report-") != NULL);
+    {
+        char zip[512];
+        char *txt = NULL, *zlog = NULL;
+
+        CHECK(newest_report(rdir, zip, sizeof zip));
+        if (newest_report(rdir, zip, sizeof zip)) {
+            txt = zip_entry(zip, "report.txt");
+            zlog = zip_entry(zip, "ico-pc.log");
+        }
+        CHECK(txt != NULL && zlog != NULL);
+        if (txt != NULL) {
+            FILE *ex = fopen("diag_test_report.txt", "wb");
+
+            CHECK(strstr(txt, "what ended the run: SIGSEGV") != NULL);
+            CHECK(strstr(txt, "summary: version test; platform the test; GPU none\n") != NULL);
+            CHECK(strstr(txt, "the last ico_pc:/window:/rd: lines before the report:\n") != NULL);
+            CHECK(strstr(txt, "ico_pc: summary: version test") != NULL);
+            CHECK(strstr(txt, "ico_pc: CRASH: SIGSEGV") != NULL);
+            CHECK(strstr(txt, "ico_pc: symbols from diag_test.map") != NULL);
+            CHECK(strstr(txt, "achievements.toml: (no stages line)") != NULL);
+            if (ex != NULL) {
+                fputs(txt, ex);
+                fclose(ex);
+            }
+        }
+        if (zlog != NULL) {
+            CHECK(strstr(zlog, "test: child segv") != NULL);
+            CHECK(strstr(zlog, "ico_pc: CRASH: SIGSEGV") != NULL);
+        }
+        free(txt);
+        free(zlog);
+    }
+    clear_dir(rdir);
+    setenv("ICO_TEST_REPORT_DIR", rdir, 1);
+    r = run(argv[0], "watchdog", log);
+    unsetenv("ICO_TEST_REPORT_DIR");
+    CHECK(r == 4);
+    s = read_file(log);
+    CHECK(strstr(s, "ico_pc: symbols from diag_test.map") != NULL);
+    {
+        char zip[512];
+        char *txt = NULL;
+
+        if (newest_report(rdir, zip, sizeof zip)) {
+            txt = zip_entry(zip, "report.txt");
+        }
+        CHECK(txt != NULL && strstr(txt, "what ended the run: the watchdog: no Main tick 1 s "
+                                         "after boot started") != NULL);
+        free(txt);
+    }
+    /* the prune keeps the newest ICO_REPORT_KEEP */
+    clear_dir(rdir);
+    {
+        static const char *names[] = {"report-20261001-000000.zip", "report-20261002-000000.zip",
+                                      "report-20261003-000000.zip", "report-20261004-000000.zip",
+                                      "report-20261005-000000.zip", "report-20261006-000000.zip",
+                                      "report-20261007-000000.zip", "loss-20261001-000000.zip"};
+        char p[256];
+
+        for (size_t i = 0; i < sizeof names / sizeof names[0]; i++) {
+            FILE *f;
+
+            snprintf(p, sizeof p, "%s/%s", rdir, names[i]);
+            f = fopen(p, "wb");
+            if (f != NULL) {
+                fclose(f);
+            }
+        }
+        ico_report_set_paths(rdir, NULL, NULL, NULL);
+        CHECK(ico_report_prune(ICO_REPORT_KEEP) == 2);
+        snprintf(p, sizeof p, "%s/report-20261002-000000.zip", rdir);
+        CHECK(access(p, F_OK) != 0);
+        snprintf(p, sizeof p, "%s/report-20261003-000000.zip", rdir);
+        CHECK(access(p, F_OK) == 0);
+        snprintf(p, sizeof p, "%s/loss-20261001-000000.zip", rdir);
+        CHECK(access(p, F_OK) == 0);
+    }
+    clear_dir(rdir);
+    rmdir(rdir);
+
+    /* one helper for the lines that repeat */
+    r = run(argv[0], "limited", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: limited line 1\n") != NULL);
+    CHECK(strstr(s, "test: limited line 8 (8 of these so far; from here every 100th is "
+                    "written)\n") != NULL);
+    CHECK(strstr(s, "test: limited line 9") == NULL);
+    CHECK(strstr(s, "test: limited line 99") == NULL);
+    CHECK(strstr(s, "test: limited line 100 (number 100 of these)\n") != NULL);
+    CHECK(strstr(s, "test: limited line 200 (number 200 of these)\n") != NULL);
+    CHECK(strstr(s, "ico_pc: limited lines (key, count, written): test: limited 250 (10 "
+                    "written)\n") != NULL);
+    if (fails) {
+        printf("--- limited log ---\n%s\n", s);
+    }
 
     r = run(argv[0], "segv", log);
     s = read_file(log);

@@ -340,6 +340,87 @@ int ico_diag_float_fault(const char *site, const void *caller);
 /* The faults counted so far (tests). */
 unsigned int ico_diag_float_faults(void);
 
+/* --- The symbols, the summary line and the report file ---------------------- */
+
+/* The crash and watchdog reports name every offset they print
+   (ico_pc_x64.exe+0x1b35e4) after their raw lines, from the program's
+   symbol file (symmap.h), read only then:
+     ico_pc: symbols from ico_pc_x64.map (each offset above in ico_pc_x64.exe, in order):
+     ico_pc:   +0x1b35e4 _CopyVector+0x4 (vu0.c.obj)
+   The file is the link map beside the program by default (its name with
+   ".exe" replaced by ".map": ico_pc_x64.map, ico_pc.map), opened at
+   ico_diag_init; a map of another build is detected (ico_diag_log must
+   come out at +0x0) and not used. set_symbols_path replaces it (a ".gz"
+   path is read as gzip; tests); set_symbols_fd (Android: the APK's stored
+   assets/libmain.syms.gz, AAsset_openFileDescriptor64) reads length bytes
+   from offset of fd (length -1: to the end), name for the lines. */
+void ico_diag_set_symbols_path(const char *path);
+#ifndef _WIN32
+void ico_diag_set_symbols_fd(int fd, long long offset, long long length, int gzip,
+                             const char *name);
+#endif
+
+/* The first screenful's one line of what a report needs (the window,
+   after the renderer's start and its self-tests): "ico_pc: summary:
+   <text>", kept for the report file's report.txt. */
+void ico_diag_set_summary(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* The version text ico_diag_set_version took ("unknown" before). */
+const char *ico_diag_version(void);
+
+/* The report file (report.h, logs/report-<date>-<time>.zip): written by
+   the crash and watchdog reports themselves, and by this on the normal
+   paths that end a run abnormally (a lost graphics device, graphics that
+   could not start); what says which. Logged ("ico_pc: report: <name> in
+   the logs folder ..."), the oldest beyond ICO_REPORT_KEEP deleted. The
+   zip's file name, or NULL when none was written. */
+const char *ico_diag_write_report(const char *what);
+/* The last report's file name (NULL: none yet), for a box. */
+const char *ico_diag_report_name(void);
+
+/* --- Rate-limited lines ----------------------------------------------------- */
+
+/* One helper for every line that may repeat (a per-frame or per-event
+   condition): the first ICO_LOG_LIMIT_FIRST of a key are written, then
+   every ICO_LOG_LIMIT_EVERY-th, each counted; the 8th says so ("8 of these
+   so far; from here every 100th is written"), a later one its number; the
+   end of the run (normal or fatal) writes one line with every key's count
+   ("ico_pc: limited lines (key, count, written): rd: snap 412 (11
+   written); ..."). The hot path is an atomic increment and a compare: the
+   arguments are evaluated and the line formatted only when it is written.
+     ico_log_limited("rd: interp snap", "rd: interp: snapped %s at tick %u", why, tick);
+   key: a string literal naming the line (the summary's). Any thread. */
+#define ICO_LOG_LIMIT_FIRST 8u
+#define ICO_LOG_LIMIT_EVERY 100u
+
+typedef struct IcoLogLimit {
+    const char *key;
+    unsigned int count;   /* every time the line's condition came */
+    unsigned int written; /* the lines written */
+    struct IcoLogLimit *next;
+} IcoLogLimit;
+
+static inline int ico_log_limit_take(IcoLogLimit *l)
+{
+    const unsigned int c = __atomic_add_fetch(&l->count, 1u, __ATOMIC_RELAXED);
+    return c <= ICO_LOG_LIMIT_FIRST || c % ICO_LOG_LIMIT_EVERY == 0;
+}
+
+void ico_log_limit_write(IcoLogLimit *l, const char *fmt, ...) ICO_DIAG_PRINTF(2, 3);
+
+#define ico_log_limited(key, ...)                                                                  \
+    do {                                                                                           \
+        static IcoLogLimit ico_ll_ = {key, 0u, 0u, 0};                                             \
+        if (ico_log_limit_take(&ico_ll_)) {                                                        \
+            ico_log_limit_write(&ico_ll_, __VA_ARGS__);                                            \
+        }                                                                                          \
+    } while (0)
+
+/* Every key written so far as "key count (written written)", "; "
+   between, into out; the number of keys. */
+int ico_log_limit_summary(char *out, size_t size);
+/* That as one log line, when there is any key (the run's end). */
+void ico_log_limit_log_summary(void);
+
 #ifdef _WIN32
 /* Windows: puts the vectored exception handler in, once the file dialog is
    behind us (shell extensions in it may raise and handle their own

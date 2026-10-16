@@ -10,13 +10,18 @@ target_sources(ico_platform PRIVATE
     pace_policy.c
     perf_block.c
     pump_watch.c
+    report.c
     sched.c
     startup_retry.c
+    symmap.c
     vsync_hooks.c
     window_lifecycle.c)
 # diag_host.c's heartbeat and watchdog thread (pthreads on POSIX).
 find_package(Threads REQUIRED)
 target_link_libraries(ico_platform PUBLIC Threads::Threads)
+# report.c deflates the report file's entries (tdefl) and symmap.c reads a
+# gzip symbol table (tinfl), both into static buffers
+target_link_libraries(ico_platform PUBLIC ico_miniz)
 if(TARGET ico_pc)
     # A link map beside the program, shipped with test builds, to turn the
     # crash report's executable offsets into symbols.
@@ -76,6 +81,11 @@ foreach(t sched fiber arena diag hotkeys pace_policy pace_loop perf_block lifecy
         add_test(NAME ${t} COMMAND ${t}_test)
     endif()
 endforeach()
+# diag_test's own link map beside it: its crash cases check the symbol
+# lines against it, as a player's ico_pc.map is read beside ico_pc
+if(NOT APPLE AND NOT WIN32)
+    target_link_options(diag_test PRIVATE "LINKER:-Map=$<TARGET_FILE_DIR:diag_test>/diag_test.map")
+endif()
 if(ICO_RUN_TESTS)
     set_tests_properties(diag PROPERTIES SKIP_RETURN_CODE 77)
 endif()

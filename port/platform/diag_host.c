@@ -38,8 +38,10 @@
 #include "fiber.h"
 #include "host_fs.h"
 #include "rd_bisect_plan.h"
+#include "report.h"
 #include "sched.h"
 #include "startup_retry.h"
+#include "symmap.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -50,6 +52,7 @@
 
 #else
 
+#include <errno.h>
 #include <fcntl.h>
 
 #define ICO_WANT_LIBC_SCHED 1 /* sched.h says why */
@@ -172,6 +175,17 @@ static uintptr_t exe_lo;
 static uintptr_t exe_hi;
 
 static char exe_name[64] = "ico_pc";
+
+/* the offsets a fatal report printed, in order, for its symbol lines
+   (report_symbols); sym_collect while the report is written */
+static uint64_t sym_offs[ICO_SYM_MAX];
+static int sym_n;
+static int sym_collect;
+
+static void sym_note(uintptr_t a);
+
+/* the report file's name (report.h), for the box ("" none) */
+static char report_name[160];
 
 /* one crash (or watchdog report) at a time */
 static volatile int fatal_once;
@@ -488,6 +502,7 @@ static void describe(uintptr_t a, char *out, size_t size)
         return;
     }
     if (in_exe(a)) {
+        sym_note(a);
         snprintf(out, size, "%s+0x%lx", exe_name, (unsigned long)(a - exe_lo));
         return;
     }
@@ -816,10 +831,18 @@ static void fatal_ui_serve(void)
 /* the box's words: what happened, the saves, and the log to send */
 static void fatal_text(char *out, size_t size, const char *what)
 {
-    snprintf(out, size,
-             "%s\n\nYour saves are kept. To report it, send the file %s with a few words about "
-             "what you did just before.",
-             what, log_path_copy[0] != '\0' ? log_path_copy : "logs/ico-pc.log");
+    if (report_name[0] != '\0') {
+        snprintf(out, size,
+                 "%s\n\nYour saves are kept. To report it, send the newest file in logs that "
+                 "starts with report- (this time: %s) with a few words about what you did just "
+                 "before.",
+                 what, report_name);
+    } else {
+        snprintf(out, size,
+                 "%s\n\nYour saves are kept. To report it, send the file %s with a few words "
+                 "about what you did just before.",
+                 what, log_path_copy[0] != '\0' ? log_path_copy : "logs/ico-pc.log");
+    }
 }
 
 #endif
@@ -1012,6 +1035,7 @@ static void scan_stack(const unsigned char *lo, const unsigned char *hi)
         uintptr_t w;
         memcpy(&w, p, sizeof w);
         if (in_exe(w)) {
+            sym_note(w);
             n +=
                 (size_t)snprintf(line + n, sizeof line - n, " +0x%lx", (unsigned long)(w - exe_lo));
             hits++;
@@ -2284,6 +2308,396 @@ static void loss_relaunch_at_exit(void)
 
 #endif
 
+/* --- Symbols, the summary line and the report file --------------------------- */
+
+static void sym_note(uintptr_t a)
+{
+    uint64_t off;
+    int i;
+
+    if (!sym_collect || !in_exe(a)) {
+        return;
+    }
+    off = (uint64_t)(a - exe_lo);
+    for (i = 0; i < sym_n; i++) {
+        if (sym_offs[i] == off) {
+            return;
+        }
+    }
+    /* the last slot is the check's (report_symbols) */
+    if (sym_n < ICO_SYM_MAX - 1) {
+        sym_offs[sym_n++] = off;
+    }
+}
+
+/* The symbol file (symmap.h): the link map beside the program, opened at
+   ico_diag_init (no reading until a report), or the one handed in
+   (ico_diag_set_symbols_path, ico_diag_set_symbols_fd). */
+static char sym_name[160];
+static int sym_gz;
+static long long sym_base, sym_len = -1, sym_pos;
+static IcoSymHit sym_hits[ICO_SYM_MAX];
+#ifdef _WIN32
+static HANDLE sym_h = INVALID_HANDLE_VALUE;
+#define SYM_OPEN (sym_h != INVALID_HANDLE_VALUE)
+#else
+static int sym_fd = -1;
+#define SYM_OPEN (sym_fd >= 0)
+#endif
+
+static void sym_close(void)
+{
+#ifdef _WIN32
+    if (sym_h != INVALID_HANDLE_VALUE) {
+        CloseHandle(sym_h);
+        sym_h = INVALID_HANDLE_VALUE;
+    }
+#else
+    if (sym_fd >= 0) {
+        close(sym_fd);
+        sym_fd = -1;
+    }
+#endif
+    sym_base = 0;
+    sym_len = -1;
+    sym_gz = 0;
+}
+
+static long sym_raw_read(void *user, char *buf, size_t size)
+{
+    (void)user;
+    if (sym_len >= 0 && (long long)size > sym_len - sym_pos) {
+        size = (size_t)(sym_len - sym_pos);
+    }
+    if (size == 0) {
+        return 0;
+    }
+#ifdef _WIN32
+    {
+        DWORD got = 0;
+
+        if (!ReadFile(sym_h, buf, (DWORD)size, &got, NULL)) {
+            return -1;
+        }
+        sym_pos += got;
+        return (long)got;
+    }
+#else
+    {
+        ssize_t r;
+
+        do {
+            r = read(sym_fd, buf, size);
+        } while (r < 0 && errno == EINTR);
+        if (r > 0) {
+            sym_pos += r;
+        }
+        return (long)r;
+    }
+#endif
+}
+
+static int sym_raw_rewind(void *user)
+{
+    (void)user;
+    sym_pos = 0;
+#ifdef _WIN32
+    {
+        LARGE_INTEGER li;
+
+        li.QuadPart = sym_base;
+        return SetFilePointerEx(sym_h, li, NULL, FILE_BEGIN) ? 0 : -1;
+    }
+#else
+    return lseek(sym_fd, (off_t)sym_base, SEEK_SET) == (off_t)sym_base ? 0 : -1;
+#endif
+}
+
+static void sym_set_name(const char *path)
+{
+    const char *b = path + strlen(path);
+
+    while (b > path && b[-1] != '/' && b[-1] != '\\') {
+        b--;
+    }
+    snprintf(sym_name, sizeof sym_name, "%s", b);
+}
+
+void ico_diag_set_symbols_path(const char *path)
+{
+    size_t n;
+
+    sym_close();
+    sym_name[0] = '\0';
+    if (path == NULL || path[0] == '\0') {
+        return;
+    }
+#ifdef _WIN32
+    {
+        wchar_t *w = ico_widen(path);
+
+        if (w != NULL) {
+            sym_h = CreateFileW(w, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL,
+                                OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            free(w);
+        }
+    }
+#else
+    sym_fd = open(path, O_RDONLY | O_CLOEXEC);
+#endif
+    sym_set_name(path);
+    n = strlen(path);
+    sym_gz = n > 3 && strcmp(path + n - 3, ".gz") == 0;
+}
+
+#ifndef _WIN32
+void ico_diag_set_symbols_fd(int fd, long long offset, long long length, int gzip, const char *name)
+{
+    sym_close();
+    sym_fd = fd;
+    sym_base = offset;
+    sym_len = length;
+    sym_gz = gzip != 0;
+    snprintf(sym_name, sizeof sym_name, "%s", name != NULL ? name : "the symbol table");
+}
+#endif
+
+/* The map beside the program: its name with ".exe" (when there is one)
+   replaced by ".map" (ico_pc_x64.exe: ico_pc_x64.map; ico_pc: ico_pc.map).
+   Opened, not read. Android hands its table in (ico_diag_set_symbols_fd);
+   macOS and iOS ship none. */
+static void sym_open_default(void)
+{
+#if defined(_WIN32)
+    wchar_t w[1024];
+    const DWORD n = GetModuleFileNameW(NULL, w, (DWORD)(sizeof w / sizeof w[0]) - 8);
+    char path[2048];
+
+    if (n == 0 || n >= sizeof w / sizeof w[0] - 8) {
+        return;
+    }
+    if (n > 4 && (w[n - 4] == L'.')) {
+        w[n - 4] = L'\0';
+    }
+    wcscat(w, L".map");
+    if (ico_narrow(w, path, sizeof path) == 0) {
+        ico_diag_set_symbols_path(path);
+    }
+#elif defined(__linux__) && !defined(__ANDROID__)
+    char path[1024];
+    const ssize_t n = readlink("/proc/self/exe", path, sizeof path - 8);
+
+    if (n <= 0) {
+        return;
+    }
+    path[n] = '\0';
+    strcat(path, ".map");
+    ico_diag_set_symbols_path(path);
+#endif
+}
+
+/* The symbol lines after a report's raw ones (a failure here loses
+   nothing above): each offset the report printed, in order, as
+   "+0x1b35e4 _CopyVector+0x4 (vu0.c.obj)". The file is checked against
+   this build by a second function (ico_diag_log must come out at +0x0). */
+static void report_symbols(void)
+{
+    IcoSymSource raw, src;
+    char d[256];
+    int i, r;
+    const int n = sym_n;
+
+    sym_collect = 0;
+    if (n == 0) {
+        return;
+    }
+    if (!SYM_OPEN) {
+        flog("ico_pc: symbols: no %s beside the program (a build without one); the offsets above "
+             "are looked up in the release's map",
+             sym_name[0] != '\0' ? sym_name : "link map");
+        return;
+    }
+    raw.read = sym_raw_read;
+    raw.rewind = sym_raw_rewind;
+    raw.user = NULL;
+    if (sym_gz) {
+        ico_sym_gz_source(&src, &raw);
+    } else {
+        src = raw;
+    }
+    for (i = 0; i < n; i++) {
+        sym_hits[i].off = sym_offs[i];
+    }
+    sym_hits[n].off = (uint64_t)((uintptr_t)ico_diag_log - exe_lo);
+    r = ico_sym_resolve(&src, "ico_diag_init", (uint64_t)((uintptr_t)ico_diag_init - exe_lo),
+                        sym_hits, n + 1);
+    if (r < 0) {
+        flog("ico_pc: symbols: %s could not be read or does not name ico_diag_init", sym_name);
+        return;
+    }
+    if (strcmp(sym_hits[n].name, "ico_diag_log") != 0 || sym_hits[n].delta != 0) {
+        flog("ico_pc: symbols: %s is not this build's (ico_diag_log is not where it says); the "
+             "offsets above stay as they are",
+             sym_name);
+        return;
+    }
+    flog("ico_pc: symbols from %s (each offset above in %s, in order):", sym_name, exe_name);
+    for (i = 0; i < n; i++) {
+        ico_sym_describe(&sym_hits[i], d, sizeof d);
+        flog("ico_pc:   +0x%llx %s", (unsigned long long)sym_offs[i],
+             d[0] != '\0' ? d : "(before the first function the map names)");
+    }
+}
+
+/* The first screenful's summary line (ico_diag_set_summary) */
+static char summary_text[LINE_MAX_BYTES - 32];
+
+void ico_diag_set_summary(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(summary_text, sizeof summary_text, fmt, ap);
+    va_end(ap);
+    ico_diag_log("ico_pc: summary: %s", summary_text);
+}
+
+const char *ico_diag_version(void)
+{
+    return act_version[0] != '\0' ? act_version : "unknown";
+}
+
+static void report_file(const char *what, int fatal)
+{
+    IcoReportInputs in;
+    char name[160];
+    const size_t np = sizeof act_loss_prefix - 1;
+
+    memset(&in, 0, sizeof in);
+    in.what = what;
+    in.log_path = log_path_copy[0] != '\0' ? log_path_copy : NULL;
+    in.summary = summary_text;
+    in.uptime_s = ico_diag_uptime();
+    /* this run's loss dump, else the one the previous run left */
+    if (strncmp(act_loss, act_loss_prefix, np) == 0) {
+        in.loss_zip = act_loss + np;
+    } else if (loss_pending[0] != '\0') {
+        in.loss_zip = loss_pending;
+    }
+#ifdef _WIN32
+    if (log_h != INVALID_HANDLE_VALUE) {
+        FlushFileBuffers(log_h);
+    }
+#endif
+    if (ico_report_write(&in, name, sizeof name) == 0) {
+        snprintf(report_name, sizeof report_name, "%s", name);
+        if (fatal) {
+            flog("ico_pc: report: %s in the logs folder (this log, the previous one, the "
+                 "settings and a summary): the file to attach to an issue",
+                 name);
+        } else {
+            ico_diag_log("ico_pc: report: %s in the logs folder (this log, the previous one, the "
+                         "settings and a summary): the file to attach to an issue",
+                         name);
+        }
+    } else if (fatal) {
+        flog("ico_pc: report: not written (%s)", name);
+    } else {
+        ico_diag_log("ico_pc: report: not written (%s)", name);
+    }
+}
+
+const char *ico_diag_write_report(const char *what)
+{
+    if (!inited) {
+        return NULL;
+    }
+    report_file(what, 0);
+    if (report_name[0] != '\0') {
+        const int pruned = ico_report_prune(ICO_REPORT_KEEP);
+
+        if (pruned > 0) {
+            ico_diag_log("ico_pc: report: %d older report%s deleted (the newest %d kept)", pruned,
+                         pruned == 1 ? "" : "s", ICO_REPORT_KEEP);
+        }
+        return report_name;
+    }
+    return NULL;
+}
+
+const char *ico_diag_report_name(void)
+{
+    return report_name[0] != '\0' ? report_name : NULL;
+}
+
+/* --- Rate-limited lines (ico_log_limited) ----------------------------------------- */
+
+static IcoLogLimit *limit_list;
+
+void ico_log_limit_write(IcoLogLimit *l, const char *fmt, ...)
+{
+    char buf[LINE_MAX_BYTES - 96];
+    const unsigned int c = __atomic_load_n(&l->count, __ATOMIC_RELAXED);
+    va_list ap;
+
+    if (__atomic_add_fetch(&l->written, 1, __ATOMIC_RELAXED) == 1) {
+        /* the first line of this key: onto the end summary's list */
+        IcoLogLimit *head = __atomic_load_n(&limit_list, __ATOMIC_ACQUIRE);
+
+        do {
+            l->next = head;
+        } while (!__atomic_compare_exchange_n(&limit_list, &head, l, 1, __ATOMIC_RELEASE,
+                                              __ATOMIC_ACQUIRE));
+    }
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+    if (c == ICO_LOG_LIMIT_FIRST) {
+        ico_diag_log("%s (%u of these so far; from here every %uth is written)", buf, c,
+                     ICO_LOG_LIMIT_EVERY);
+    } else if (c > ICO_LOG_LIMIT_FIRST) {
+        ico_diag_log("%s (number %u of these)", buf, c);
+    } else {
+        ico_diag_log("%s", buf);
+    }
+}
+
+int ico_log_limit_summary(char *out, size_t size)
+{
+    const IcoLogLimit *l;
+    size_t n = 0;
+    int keys = 0;
+
+    if (size > 0) {
+        out[0] = '\0';
+    }
+    for (l = __atomic_load_n(&limit_list, __ATOMIC_ACQUIRE); l != NULL; l = l->next) {
+        const unsigned int c = __atomic_load_n(&l->count, __ATOMIC_RELAXED);
+        const unsigned int w = __atomic_load_n(&l->written, __ATOMIC_RELAXED);
+        int k;
+
+        if (n >= size) {
+            break;
+        }
+        k = snprintf(out + n, size - n, "%s%s %u (%u written)", keys ? "; " : "", l->key, c, w);
+        if (k < 0) {
+            break;
+        }
+        n += (size_t)k;
+        keys++;
+    }
+    return keys;
+}
+
+void ico_log_limit_log_summary(void)
+{
+    static char buf[LINE_MAX_BYTES - 64];
+
+    if (ico_log_limit_summary(buf, sizeof buf) > 0) {
+        ico_diag_log("ico_pc: limited lines (key, count, written): %s", buf);
+    }
+}
+
 /* --- The fatal end ------------------------------------------------------------------- */
 
 #if defined(__linux__) && !defined(__ANDROID__)
@@ -2291,6 +2705,23 @@ static void loss_relaunch_at_exit(void)
    may show a box on Linux; a crash's finish runs in a signal handler */
 static int watchdog_ending;
 #endif
+
+/* The box's words: what happened, and the file to attach */
+static void report_box(char *box, size_t size, const char *box_text)
+{
+    if (report_name[0] != '\0') {
+        snprintf(box, size,
+                 "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach the "
+                 "newest file in logs that starts with report- (this time: %s). The logs folder "
+                 "is beside the program; the log is:\n%s",
+                 box_text, report_name, ico_diag_log_path());
+    } else {
+        snprintf(box, size,
+                 "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach "
+                 "the logs folder from beside the program. The log is:\n%s",
+                 box_text, ico_diag_log_path());
+    }
+}
 
 static void finish(const char *reason, const char *box_text, int code)
 {
@@ -2317,10 +2748,7 @@ static void finish(const char *reason, const char *box_text, int code)
     }
     {
         char box[1536];
-        snprintf(box, sizeof box,
-                 "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach "
-                 "the logs folder from beside the program. The log is:\n%s",
-                 box_text, ico_diag_log_path());
+        report_box(box, sizeof box, box_text);
         MessageBoxA(NULL, box, "ICO PC", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
     }
     if (log_h != INVALID_HANDLE_VALUE) {
@@ -2349,10 +2777,7 @@ static void finish(const char *reason, const char *box_text, int code)
        where showing a box is not safe: no box, the log only. */
     if (watchdog_ending && fatal_box != NULL) {
         static char box[1536];
-        snprintf(box, sizeof box,
-                 "%s\n\nPlease report it at github.com/nathanialf/ico-pc/issues and attach "
-                 "the logs folder. The log is:\n%s",
-                 box_text, ico_diag_log_path());
+        report_box(box, sizeof box, box_text);
         /* the box runs SDL's dialog from this thread while the main thread
            hangs; if that call blocks on the stuck window, SIGALRM's default
            action still ends the process (the log is already written) */
@@ -2376,6 +2801,8 @@ static void report_crash_block(void)
     char tmp[80];
     char line[LINE_MAX_BYTES];
     flush_stdio_bounded();
+    sym_n = 0;
+    sym_collect = 1;
     describe(crash.pc, where, sizeof where);
     flog("ico_pc: ======================================================================");
     flog("ico_pc: CRASH: %s (0x%lx) at %s", crash.what, crash.code, where);
@@ -2389,14 +2816,9 @@ static void report_crash_block(void)
                                      : "reading",
              (unsigned long long)crash.fault_addr);
     }
-#ifdef __ANDROID__
-    flog("ico_pc: %s's offsets are relative to its load address; ico_pc.map (or "
-         "llvm-symbolizer on the unstripped %s) gives the symbol (map address = offset)",
-         exe_name, exe_name);
-#else
-    flog("ico_pc: the executable's offsets are relative to its load address; ico_pc.map gives "
-         "the symbol (map address = __image_base__ + offset)");
-#endif
+    flog("ico_pc: the offsets are from %s's load address; the symbol lines after the threads "
+         "name them",
+         exe_name);
     flog("ico_pc: game thread then: #%d %s", crash.thread,
          thread_name(crash.thread, tmp, sizeof tmp));
     if (crash.thread != 0 && thread_line(crash.thread, line, sizeof line)) {
@@ -2410,6 +2832,8 @@ static void report_crash_block(void)
     }
     heartbeat(1);
     dump_threads();
+    /* the names after the raw lines: a failure in the lookup loses none */
+    report_symbols();
 }
 
 #ifndef __ANDROID__
@@ -2429,6 +2853,7 @@ static void report_crash(void)
     } else {
         snprintf(box, sizeof box, "ICO PC hit an error and had to close.");
     }
+    report_file(crash.what, 1);
     finish(crash.what, box, EXIT_CRASH);
 }
 
@@ -2672,6 +3097,8 @@ static void watchdog_fire(const char *reason)
         return;
     }
     flush_stdio_bounded();
+    sym_n = 0;
+    sym_collect = 1;
     flog("ico_pc: ======================================================================");
     flog("ico_pc: WATCHDOG: %s", reason);
     {
@@ -2714,6 +3141,13 @@ static void watchdog_fire(const char *reason)
     }
     heartbeat(1);
     dump_threads();
+    report_symbols();
+    {
+        char what[LINE_MAX_BYTES - 64];
+
+        snprintf(what, sizeof what, "the watchdog: %s", reason);
+        report_file(what, 1);
+    }
     /* the reason is in the log; the box says what happened in plain words */
 #ifdef __ANDROID__
     snprintf(box, sizeof box, "ICO stopped responding, so it has to close.");
@@ -3256,6 +3690,7 @@ ICO_ENTRY static void crash_handler(int sig, siginfo_t *si, void *ucv)
        stack protector write them to stderr, the log mirror's pipe) */
     fatal_ui_flush();
     report_crash_block();
+    report_file(crash.what, 1);
     flog("ico_pc: the run ended: %s", crash.what);
     if (exit_hook != NULL) {
         exit_hook(crash.what);
@@ -3499,6 +3934,7 @@ void ico_diag_init(const char *log_path)
         snprintf(log_path_copy, sizeof log_path_copy, "%s", log_path);
     }
     exe_range();
+    sym_open_default();
     install_handlers();
     main_alive = 1;
     inited = 1;
