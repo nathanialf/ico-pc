@@ -1416,6 +1416,75 @@ on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-
 storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped`
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
 
+### The pixel cuts' records
+
+The [integer forms](SHADERS.md#integer-forms) (REPEAT's mask, `fx_sprite_ps`'s division and its
+coverage at scale 1) give the same bytes and shorten the executed path of `fx_sprite_ps`,
+`sprite_texa_ps`, `vu_texa_ps` and the GS-mipmapped sprite entries. Their timings, from
+`rd_replay_tool DUMP out.png --stats` on lavapipe (Mesa 25.0.7, `ICO_RD_BLEND=fixed`, three serial
+runs, the fastest): the issue 95 title frame (`loss-20261015-100428-lost.rddump`, Original 1x
+4:3) and the issue 102 Mac frame (`frame-20261015-161933-v4251.rddump`, 688x448 16:9). GPU
+milliseconds a replay; lists 0, 3, 4, 7 and 11; the effects glow, fog and motion blur (the
+sprite alone: its list's end ends it, [above](#performance-records)). The first column was taken
+on a host at a load average of 4.5 to 6 on four cores and runs high and uneven (the same title
+frame measured 139 to 142 ms on a quiet host); the second is taken at the same load as the first
+it is compared with.
+
+| frame, setting | without the cuts: total; lists 0, 3, 4, 7, 11; glow, fog, motion blur | with the cuts |
+| --- | --- | --- |
+| title, Original 1x | 148.4; 50.0, 15.3, 11.3, 62.6, 2.5; 54.1, 11.2, 8.4 | (to measure) |
+| title, Original 1x, `ICO_RD_NO_DUAL=1` | 231.3; 69.8, 31.0, 20.2, 90.5, 7.1; 77.3, 20.1, 13.1 | (to measure) |
+| title, `--enhanced --resolution 2x --present 1376x896` | 478.6; 45.4, 59.3, 32.3, 311.5, 7.8; 283.9, 32.2, 27.3 | (to measure) |
+| Mac, Original 1x | 775.4; 191.7, 37.4, 202.3, 189.1, 106.8; 159.2, 202.3, 29.8 | (to measure) |
+| Mac, `--enhanced --resolution 2x --present 1376x896` | 820.8; 80.3, 75.1, 127.9, 342.3, 142.1; 305.4, 127.9, 36.6 | (to measure) |
+| Mac, the same with `--glow-original` | 783.5; 78.0, 72.0, 128.4, 321.1, 135.5; 283.0, 128.4, 37.8 | (to measure) |
+
+The module sizes (`tools/check_spirv.py --sizes`, words / instructions / blocks):
+`fx_sprite_ps` 8,536 / 2,058 / 350 without the cuts, 9,323 / 2,260 / 390 with them;
+`sprite_texa_ps` 10,181 / 2,401 / 378 and 11,501 / 2,761 / 468; `vu_texa_ps` 10,346 / 2,443 /
+384 and 11,666 / 2,803 / 474; `sprite_ps` 7,548 / 1,792 / 269 and 7,812 / 1,864 / 287. The
+modules grow (each REPEAT coordinate keeps both forms behind its branch) while a pixel runs
+fewer instructions: no `OpSDiv` in `fx_sprite_ps` (a division is 19 straight-line instructions,
+one of them a float divide), no `OpSRem` on a power-of-two size, no float divide at scale 1.
+
+### Performance notes
+
+Measured or worked out, not done:
+
+- **A UINT view of the UNORM targets.** `fx_sprite_ps` and the TEXA paths read each texel as a
+  float and turn it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`,
+  `gs_texa_load`). An `RGBA8_UINT` view of the same `RGBA8_UNORM` image would hand the integer
+  over directly, exactly, but needs images made with a mutable format (Vulkan's
+  `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a view format list; a typeless resource on D3D12),
+  which the RHI does not make ([RHI.md](RHI.md)).
+- **A vertex pre-pass for the VU programs.** A mesh program's vertex shader evaluates its
+  triangle's three corners in full at each of the triangle's three invocations (`vu_mesh_out`:
+  the lit vertex, the pick, the triangle's position and attribute planes), and the index is
+  `kick * 4 + corner`, so nothing is reused: about three times the per-vertex work. A pass that
+  evaluates each vertex once into a buffer, read by a light triangle shader, would cut that, at
+  the cost of a storage buffer, a compute or vertex-only pass and a new pair of entries per
+  program.
+- **One pass for a constant-alpha lerp without dual-source blending.** On such a device a LERP
+  is two passes (`rd__expand_no_dual`). Where As is the same over the draw (untextured;
+  textured with TCC RGB; a mesh whose vertex alphas are all equal) the blend factors could be
+  `RHI_BF_CONSTANT` and `RHI_BF_ONE_MINUS_CONSTANT` with the constant As / 128 (FIX / 128,
+  or 1.0 and 0 for a PABE-unblended draw): one pass, the same bytes where the blender holds the
+  constant at the fragment alpha's precision, which a phone's driver need not, so it would ship
+  behind a switch, off, until a Mali device shows the same bytes both ways. It needs a blend in
+  `RdPipelineKey`, `pipelineDesc`, a per-pass constant, the mesh's alpha scan at upload, and
+  about a hundred more keys in the set without dual-source blending.
+- **The CRT's triad gain at a large output.** Under x curvature `crt_ps` scans `2 k0 + 1` box
+  pixels a pixel (`triadGain`, `k0 = ceil(box / grid) + 1`): at the 6016-pixel box of a 5K
+  display over the 682-column grid of a 16:9 frame, 21 warps for the 9 that fall in the pixel's
+  source column. `warpOf`'s x is affine in the box x along a row (its factor depends on y
+  alone), so the columns of one source pixel are one run whose ends can be solved for; a scan
+  from one before the run to one after it would visit the same hits in about half the steps.
+  Not done: the ends' float rounding needs its own proof that no hit falls outside them.
+- **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the
+  title frame's at under three times the pixels; the fog pass count (`rd__fog_plan`) and its
+  depth source (`rd__fog_source`) are where to look before its shader, which is about 60
+  instructions a pixel.
+
 ## Dumps and the replay tool
 
 A [.rddump](ARCHITECTURE.md#terms) is the in-memory frame, little-endian, versioned by
