@@ -755,7 +755,8 @@ static RdActivityFn s_activityFn;
 /* the batch's note while its pipelines are compiled ("" outside): a
  * creation of the progress screen's own in the middle of it puts it back
  * after its own note, so a crash on a worker thread names the batch */
-static char s_batchNote[640];
+static char s_batchNote
+    [768]; /* a 96-byte range, 320 of modules and the compiler's 96 fit (gcc 14's -Wformat-truncation at -O2 counts them); ico_diag_set_activity keeps its own bound */
 
 void rd_set_activity_fn(RdActivityFn fn)
 {

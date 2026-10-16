@@ -983,6 +983,25 @@ static const char win_map[] =
     "                0x0000000140198200                ico_hotkey_for\n"
     "                0x0000000140198220                ico_stats_period_ns\r\n";
 
+/* lld's ELF map (the linux-x64-clang preset): the name's column tells an
+   output section, an input section and a symbol apart; local functions are
+   listed too */
+static const char lld_map[] =
+    "             VMA              LMA     Size Align Out     In      Symbol\n"
+    "            1000             1000       1c     1 .init\n"
+    "            1000             1000       1c     1         /usr/lib/crti.o:(.init)\n"
+    "            1000             1000        0     1                 _init\n"
+    "            2000             2000     1000    16 .text\n"
+    "            2000             2000      200    16         libico_platform.a(diag_host.c.o):(.text)\n"
+    "            2000             2000       40     1                 ico_diag_init\n"
+    "            2100             2100       80     1                 ico_diag_log\n"
+    "            2180             2180       40     1                 a_static_in_diag_host\n"
+    "            2200             2200      200    16         libico_render.a(vu0.c.o):(.text)\n"
+    "            2300             2300       20     1                 _CopyVector\n"
+    "            3000             3000      100    16 .rodata\n"
+    "            3000             3000      100    16         libico_platform.a(diag_host.c.o):(.rodata)\n"
+    "            3000             3000       10     1                 some_data\n";
+
 static const char nm_table[] = "0000000000001000 T _init\n"
                                "0000000000002000 T ico_diag_init\n"
                                "0000000000002100 t static_fn\n"
@@ -1080,6 +1099,27 @@ static void symbol_cases(void)
     CHECK(hit_text(&h[2])[0] == '\0'); /* past the excerpt's sections: crt2's, unnamed */
     for (int i = 0; i < 2; i++) {
         printf("symbols: windows +0x%llx %s\n", (unsigned long long)h[i].off, hit_text(&h[i]));
+    }
+
+    /* lld's ELF map: the local function named, a symbol's size bounding
+       it, an input section with no symbol at the offset as the object */
+    memset(h, 0, sizeof h);
+    h[0].off = 0x2104;
+    h[1].off = 0x2190;
+    h[2].off = 0x2210;
+    h[3].off = 0x2304;
+    h[4].off = 0x1002;
+    h[5].off = 0x3004;
+    r = resolve_mem(lld_map, sizeof lld_map - 1, "ico_diag_init", 0x2000, h, 6);
+    CHECK(r == 5);
+    CHECK(strcmp(hit_text(&h[0]), "ico_diag_log+0x4 (diag_host.c.o)") == 0);
+    CHECK(strcmp(hit_text(&h[1]), "a_static_in_diag_host+0x10 (diag_host.c.o)") == 0);
+    CHECK(strcmp(hit_text(&h[2]), "a static function in vu0.c.o, +0x10 into its code") == 0);
+    CHECK(strcmp(hit_text(&h[3]), "_CopyVector+0x4 (vu0.c.o)") == 0);
+    CHECK(strcmp(hit_text(&h[4]), "_init+0x2 (crti.o)") == 0);
+    CHECK(hit_text(&h[5])[0] == '\0'); /* data: not code */
+    for (int i = 0; i < 6; i++) {
+        printf("symbols: lld +0x%llx %s\n", (unsigned long long)h[i].off, hit_text(&h[i]));
     }
 
     /* nm: static functions named, data left out */
@@ -1240,8 +1280,14 @@ int main(int argc, char **argv)
     /* the symbol lines from diag_test.map, after the raw ones */
     CHECK(strstr(s, "ico_pc: symbols from diag_test.map (each offset above in diag_test, in "
                     "order):\n") != NULL);
-    CHECK(strstr(s, " ico_sched_run+0x") != NULL || strstr(s, " ico_sched_") != NULL);
-    CHECK(strstr(s, "a static function in diag_test.c.o") != NULL);
+    /* the scheduler's frame: ico_sched_run (GNU ld's map), or, where clang
+       inlined it, sched.c's static thread_main, which lld's map names */
+    CHECK(strstr(s, " ico_sched_run+0x") != NULL || strstr(s, " ico_sched_") != NULL ||
+          strstr(s, " (sched.c.o)") != NULL);
+    /* GNU ld's map names global functions only (a static one shows as its
+       object); lld's names the static function itself */
+    CHECK(strstr(s, "a static function in diag_test.c.o") != NULL ||
+          strstr(s, " (diag_test.c.o)") != NULL);
     CHECK(strstr(s, "ico_pc: symbols from") > strstr(s, "ico_pc: threads"));
     CHECK(strstr(s, "ico_pc: report: report-") != NULL);
     {

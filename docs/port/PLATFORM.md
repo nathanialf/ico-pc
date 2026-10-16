@@ -841,7 +841,9 @@ ico_pc:   +0x1b35e4 _CopyVector+0x4 (vu0.c.obj)
 ico_pc:   +0x9add a static function in diag_test.c.o, +0x11d into its code
 ```
 
-The file is the GNU ld link map beside the program, its name the program's with `.exe` replaced
+The file is the link map beside the program (GNU ld's form, which llvm-mingw's lld also writes for
+the Windows program; lld's own ELF form, with its VMA, LMA, Size and Align columns and local
+functions named too, for the `linux-x64-clang` preset), its name the program's with `.exe` replaced
 by `.map` (`x64/ico_pc_x64.map` on Windows, `ico_pc.map` on Linux; both packages ship it), opened
 at `ico_diag_init` and read only when a report is written; on Android it is the APK's
 `assets/libmain.syms.gz`, `llvm-nm -n` of the unstripped `libmain.so` gzip-compressed and stored

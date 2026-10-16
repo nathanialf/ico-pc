@@ -13,7 +13,12 @@
  *     input section lines (" .text  0x...  0x190 libico_platform.a(hotkeys.c.obj)"),
  *     which name the object file an address is in (the map lists global
  *     functions only: a static function shows as the object and the offset
- *     into its code);
+ *     into its code); llvm-mingw's lld writes this format for the Windows
+ *     program;
+ *   - lld's ELF link map (the linux-x64-clang preset, -fuse-ld=lld): a
+ *     header "VMA LMA Size Align Out In Symbol" and one line per output
+ *     section, input section ("file:(.text)") and symbol, told apart by the
+ *     column of the name; it names local functions too, and gives sizes;
  *   - an nm table ("0000000000123456 T name", nm -n of the unstripped
  *     libmain.so: tools/package_android.sh writes it as libmain.syms.gz
  *     into the APK's assets), whose t symbols name static functions too;

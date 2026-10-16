@@ -180,6 +180,101 @@ static uint64_t s_sec_end;
 static char s_pending_sec[256];
 /* the section line's name, kept past the line (Parsed.name points here) */
 static char s_sec_name[256];
+/* lld's ELF map (-Map with -fuse-ld=lld): a header line "VMA LMA Size Align
+   Out In Symbol", then one line per output section, input section and
+   symbol, each VMA LMA Size Align and a name whose column tells which:
+   the header's Out, In and Symbol columns.  0 while the map is GNU ld's */
+static int s_lld;
+static size_t s_lld_in_col, s_lld_sym_col;
+/* the object file of the lld input section the next symbol lines are in */
+static char s_lld_obj[256];
+static size_t s_lld_obj_n;
+
+static void lld_reset(void)
+{
+    s_lld = 0;
+    s_lld_in_col = s_lld_sym_col = 0;
+    s_lld_obj[0] = '\0';
+    s_lld_obj_n = 0;
+}
+
+/* a decimal number: 1 and *v, else 0 */
+static int dec(const char *s, size_t n, uint64_t *v)
+{
+    uint64_t x = 0;
+    if (n == 0 || n > 18) {
+        return 0;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (s[i] < '0' || s[i] > '9') {
+            return 0;
+        }
+        x = x * 10 + (uint64_t)(s[i] - '0');
+    }
+    *v = x;
+    return 1;
+}
+
+/* lld's lines (above); 1 when the line was one of its kinds */
+static int parse_lld_line(const char *line, const Tok *t, Parsed *out)
+{
+    uint64_t addr, lma, size, align;
+    size_t col;
+
+    if (t->count < 5 || !hex(t->s[0], t->n[0], 0, &addr) || !hex(t->s[1], t->n[1], 0, &lma) ||
+        !hex(t->s[2], t->n[2], 0, &size) || !dec(t->s[3], t->n[3], &align)) {
+        return 0;
+    }
+    col = (size_t)(t->s[4] - line);
+    if (col >= s_lld_sym_col) {
+        /* a symbol: named only inside a code input section; its size
+           bounds it, the section's end when it has none */
+        if (!s_in_code || t->count != 5) {
+            return 1;
+        }
+        out->kind = L_SYMBOL;
+        out->addr = addr;
+        out->name = t->s[4];
+        out->name_n = t->n[4];
+        out->end = size > 0 ? addr + size : s_sec_end;
+        return 1;
+    }
+    if (col >= s_lld_in_col) {
+        /* an input section "file:(.section)" */
+        const char *q = memchr(t->s[4], ':', t->n[4]);
+        const char *sec;
+        size_t sec_n;
+
+        s_sec_end = 0;
+        s_lld_obj_n = 0;
+        if (q == NULL || q + 2 >= t->s[4] + t->n[4] || q[1] != '(' || t->s[4][t->n[4] - 1] != ')') {
+            s_in_code = 0;
+            return 1;
+        }
+        sec = q + 2;
+        sec_n = (size_t)(t->s[4] + t->n[4] - 1 - sec);
+        s_in_code = code_section(sec, sec_n);
+        if (!s_in_code) {
+            return 1;
+        }
+        snprintf(s_sec_name, sizeof s_sec_name, "%.*s", (int)sec_n, sec);
+        snprintf(s_lld_obj, sizeof s_lld_obj, "%.*s", (int)(q - t->s[4]), t->s[4]);
+        s_lld_obj_n = strlen(s_lld_obj);
+        s_sec_end = addr + size;
+        out->kind = L_SECTION;
+        out->addr = addr;
+        out->size = size;
+        out->name = NULL;
+        out->name_n = 0;
+        out->obj = s_lld_obj;
+        out->obj_n = s_lld_obj_n;
+        return 1;
+    }
+    /* an output section: whether what follows is code */
+    s_in_code = code_section(t->s[4], t->n[4]);
+    s_sec_end = 0;
+    return 1;
+}
 
 static void parse_line(const char *line, Parsed *out)
 {
@@ -191,6 +286,25 @@ static void parse_line(const char *line, Parsed *out)
     tokenize(line, &t);
     if (t.count == 0) {
         s_pending_sec[0] = '\0';
+        return;
+    }
+    if (s_lld) {
+        (void)parse_lld_line(line, &t, out);
+        return;
+    }
+    if (t.count == 7 && tok_is(t.s[0], t.n[0], "VMA") && tok_is(t.s[1], t.n[1], "LMA") &&
+        tok_is(t.s[2], t.n[2], "Size") && tok_is(t.s[3], t.n[3], "Align") &&
+        tok_is(t.s[4], t.n[4], "Out")) {
+        /* lld's header: the columns of the In and Symbol names (past the
+           tokenizer's five, so found in the line) */
+        const char *in = strstr(t.s[4] + 3, " In ");
+        const char *sym = in != NULL ? strstr(in + 4, "Symbol") : NULL;
+
+        if (in != NULL && sym != NULL) {
+            s_lld = 1;
+            s_lld_in_col = (size_t)(in + 1 - line);
+            s_lld_sym_col = (size_t)(sym - line);
+        }
         return;
     }
     /* an output section (column 0): whether its symbols are code */
@@ -349,6 +463,7 @@ int ico_sym_resolve(const IcoSymSource *src, const char *anchor, uint64_t anchor
     s_in_code = 0;
     s_sec_end = 0;
     s_pending_sec[0] = '\0';
+    lld_reset();
     while (!found && (r = next_line(src)) > 0) {
         parse_line(s_line, &p);
         if (p.kind == L_SYMBOL && same_name(p.name, p.name_n, anchor)) {
@@ -366,6 +481,7 @@ int ico_sym_resolve(const IcoSymSource *src, const char *anchor, uint64_t anchor
     s_in_code = 0;
     s_sec_end = 0;
     s_pending_sec[0] = '\0';
+    lld_reset();
     while ((r = next_line(src)) > 0) {
         parse_line(s_line, &p);
         if (p.kind == L_NONE) {
