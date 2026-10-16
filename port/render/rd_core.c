@@ -96,10 +96,139 @@ void rd_summary_text(char *out, size_t size)
         snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
     }
     snprintf(out, size,
-             "blend %s; index values dense (marks in the stream); fog %s; VU shaders one set for "
-             "every GPU%s",
+             "blend %s; index values dense (marks in the stream); fog %s; VU shaders %s%s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
-             g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)", split);
+             g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
+             g_rd.vuPlainOnly ? "plain only (issue 107)" : "plain and extended", split);
+}
+
+/* ------------------------------------------------ the VU index spans
+ * Issue 95: Vulkan holds a draw's index values to maxDrawIndexedIndexValue
+ * (2^24 - 1 without fullDrawIndexUint32) and Mali sizes a draw's vertex
+ * storage by the span; since the marks moved into the stream the widest
+ * span of a frame is 14,314 and no draw passes 2^24 - 1 (rd_stream_audit).
+ * One replay in SPAN_EVERY measures every indexed VU draw's span from its
+ * CPU index list (rd_replay.c doVuDraw, rd__span_idx), so a regression
+ * shows in the log of a run: the first measured frame's line, a line for
+ * any frame with a draw past 2^24 - 1 (the first 4), and the loss
+ * report's (rd_index_span_text). */
+#define SPAN_EVERY 64u
+#define SPAN_LIMIT ((1u << 24) - 1u)
+
+static struct {
+    bool on;                                          /* this replay is measured */
+    const uint32_t *idx;                              /* the draw's CPU index list (NULL: none) */
+    uint32_t fWidest, fOver, fDraws;                  /* this replay's */
+    uint32_t widest, over, draws, frames, overFrames; /* the run's measured replays */
+    uint32_t widestFrame;
+    bool logged;
+} s_span;
+
+/* Issue 106: a DATE draw on SCENE reads the alpha bit through the
+ * snapshot, and with MSAA the snapshot is taken from SCENE as the epoch
+ * resolved it (the colour the mean of the samples: an edge pixel's alpha
+ * bit can be lost or gained there); counted by replay for the F12 water
+ * line (rd__date_msaa_last) */
+static RdDateMsaa s_dateMs, s_dateMsLast;
+
+void rd__span_idx(const uint32_t *idx)
+{
+    s_span.idx = idx;
+}
+
+void rd__span_draw(uint32_t first, uint32_t count)
+{
+    if (!s_span.on || !s_span.idx || count == 0) {
+        return;
+    }
+    uint32_t lo = UINT32_MAX, hi = 0;
+    const uint32_t *v = s_span.idx + first;
+    for (uint32_t i = 0; i < count; i++) {
+        lo = v[i] < lo ? v[i] : lo;
+        hi = v[i] > hi ? v[i] : hi;
+    }
+    const uint32_t span = hi - lo;
+    s_span.fWidest = span > s_span.fWidest ? span : s_span.fWidest;
+    s_span.fOver += span > SPAN_LIMIT;
+    s_span.fDraws++;
+}
+
+void rd__date_snap(const RdTargetRec *tc, bool closing, bool ended)
+{
+    if (tc == rd__target_rec(RD_TARGET_SCENE + 1)) {
+        s_dateMs.sceneSnaps++;
+        s_dateMs.closing += closing;
+        s_dateMs.afterResolve += closing || ended;
+    } else {
+        s_dateMs.otherSnaps++;
+    }
+}
+
+void rd__date_msaa_last(RdDateMsaa *out)
+{
+    *out = s_dateMsLast;
+}
+
+/* the measured replay's end: its line, the run's totals */
+static void spanFrameEnd(const RdFrame *f)
+{
+    s_span.on = false;
+    if (!s_span.fDraws) {
+        return;
+    }
+    s_span.frames++;
+    s_span.draws += s_span.fDraws;
+    s_span.over += s_span.fOver;
+    s_span.overFrames += s_span.fOver != 0;
+    if (s_span.fWidest >= s_span.widest) {
+        s_span.widest = s_span.fWidest;
+        s_span.widestFrame = f->number;
+    }
+    const uint32_t devMax = rhi_limits()->maxDrawIndexedIndexValue;
+    if (!s_span.logged) {
+        s_span.logged = true;
+        rd__log("VU index span: frame %u (the first measured, one replay in %u from here): the "
+                "widest %u over %u indexed VU draws, %u past 2^24 - 1; the device takes values up "
+                "to %u",
+                f->number, SPAN_EVERY, s_span.fWidest, s_span.fDraws, s_span.fOver, devMax);
+    } else if (s_span.fOver && s_span.overFrames <= 4) {
+        rd__log("VU index span: frame %u has %u indexed VU draws past 2^24 - 1 (the widest %u; "
+                "the device takes values up to %u)%s",
+                f->number, s_span.fOver, s_span.fWidest, devMax,
+                s_span.overFrames == 4 ? "; further frames only counted" : "");
+    }
+}
+
+void rd__diag_frame(const RdFrame *f, uint32_t samples)
+{
+    if (f == NULL) {
+        /* a replay begins (g_rd.replayCounter already counts it) */
+        s_span.on = g_rd.replayCounter % SPAN_EVERY == 1u;
+        s_span.idx = NULL;
+        s_span.fWidest = s_span.fOver = s_span.fDraws = 0;
+        memset(&s_dateMs, 0, sizeof(s_dateMs));
+        return;
+    }
+    if (s_span.on) {
+        spanFrameEnd(f);
+    }
+    s_dateMs.samples = samples > 1u ? samples : 0u;
+    s_dateMsLast = s_dateMs;
+}
+
+void rd_index_span_text(char *out, size_t size)
+{
+    if (!s_span.frames) {
+        snprintf(out, size, "VU index span: no frame measured yet");
+        return;
+    }
+    snprintf(out, size,
+             "VU index span: the widest %u (frame %u) over %u measured frames (one replay in %u), "
+             "%u indexed VU draws past 2^24 - 1 of %u in %u frames; the device takes values up "
+             "to %u",
+             s_span.widest, s_span.widestFrame, s_span.frames, SPAN_EVERY, s_span.over,
+             s_span.draws, s_span.overFrames,
+             g_rd.hasDevice ? rhi_limits()->maxDrawIndexedIndexValue : 0u);
 }
 
 void rd__log_once(int bit, const char *fmt, ...)

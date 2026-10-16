@@ -2348,6 +2348,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const 
     }
     endPass(r);
     g_rdPerf.dateSnapshots++;
+    rd__date_snap(tc, s_ms.active && !s_ms.internal, s_ms.ended);
     rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
     rd__transition(s_cl, sn->color, &sn->colorState, RHI_STATE_RENDER_TARGET);
     RhiRenderPassDesc p;
@@ -4439,6 +4440,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             rd__win_vu_note(r->st.tex, &dp[i].key, vcb, indexed, first, count);
         }
         if (indexed) {
+            rd__span_draw(first, i ? 0 : count);
             drawIndexedCmd(s_cl, count, first, 0, 1);
         } else {
             drawCmd(s_cl, count, first, 1);
@@ -4469,6 +4471,7 @@ static void doVu(Replay *r, const RdFrame *f, const RdCmd *c)
 
 static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
+    rd__span_idx(NULL);
     RdVuPayload p;
     const uint8_t *at = f->payload + c->u[1];
     memcpy(&p, at, sizeof(p));
@@ -4661,6 +4664,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         if (g_rdWin.first && g_rdWin.drawLast) {
             g_rdVuCur.index = idx;
         }
+        rd__span_idx(idx);
         /* strip i is the grid's rows i and i + 1
          * (Primitive.c prim_UpdateMesh3D), so with two strips or more
          * every strip shares a row of positions with a neighbour: joined,
@@ -4697,6 +4701,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         return;
     }
     rhi_cmd_set_index_buffer(s_cl, indexBuf, indexOff, true);
+    rd__span_idx(m->index);
     uint32_t last = p.firstBatch + p.batchCount;
     if (last > m->batchCount || p.batchCount == 0) {
         last = m->batchCount;
@@ -6014,6 +6019,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     s_slot = g_rd.replayCounter % RHI_FRAMES_IN_FLIGHT;
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
+    rd__diag_frame(NULL, 0);
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
     memset(&g_rdWin.note, 0, sizeof(g_rdWin.note));
@@ -6156,6 +6162,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     msaaEnd(&r); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
     s_ms.r = NULL;
+    rd__diag_frame(f, s_ms.want);
     s_vpExact = false; /* the present sets its own viewports */
     if (doPresent) {
         uint32_t sw = 0, sh = 0; /* the pass ring's present entry: DISPLAY onto the window */

@@ -124,7 +124,7 @@ static volatile int movie_playing;
    gives at worst a mixed line, never a read past the buffer). A batch's
    note names its keys, its modules and their sizes (rd_pipeline.c
    createKeys): up to about 450 characters */
-static char activity[480];
+static char activity[640];
 /* ico_diag_set_pipelines: the start-up set's count and its longest compile */
 static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
 /* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
@@ -1218,15 +1218,35 @@ static int act_sync_note(const char *note)
     return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_ext(note);
 }
 
+/* the start-up batches' compile times (ico_diag_startup_activity_batch):
+   the file's "compiled: " lines, the last ICO_DIAG_ACTIVITY_BATCHES */
+#define ACT_BATCH_BYTES 400
+static const char act_batch_prefix[] = "compiled: ";
+static char act_batches[ICO_DIAG_ACTIVITY_BATCHES][ACT_BATCH_BYTES];
+static unsigned int act_nbatches;
+#define ACT_BATCHES_TEXT (ICO_DIAG_ACTIVITY_BATCHES * (ACT_BATCH_BYTES + sizeof act_batch_prefix))
+
 static void act_write(const char *note)
 {
     /* the version's line, then the note, then this run's loss when there
-       was one; room for the NULs over a longer text before it (one past the
-       longest text) */
-    static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1];
+       was one, then the batches' lines; room for the NULs over a longer
+       text before it (one past the longest text) */
+    static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1 +
+                     ACT_BATCHES_TEXT + 1];
     const size_t cap = sizeof text - 1;
-    const int len = snprintf(text, cap, "%s\n%s%s%s", act_version, note,
-                             act_loss[0] != '\0' ? "\n" : "", act_loss);
+    int len = snprintf(text, cap, "%s\n%s%s%s", act_version, note, act_loss[0] != '\0' ? "\n" : "",
+                       act_loss);
+    {
+        const unsigned int nb = act_nbatches;
+        const unsigned int first =
+            nb > ICO_DIAG_ACTIVITY_BATCHES ? nb - ICO_DIAG_ACTIVITY_BATCHES : 0;
+
+        for (unsigned int i = first; i < nb && len >= 0 && (size_t)len < cap; i++) {
+            const int k = snprintf(text + len, cap - (size_t)len, "\n%s%s", act_batch_prefix,
+                                   act_batches[i % ICO_DIAG_ACTIVITY_BATCHES]);
+            len = k < 0 ? len : len + k;
+        }
+    }
     const size_t n = len < 0 ? 0 : (size_t)len < cap ? (size_t)len : cap - 1;
     size_t w = n;
     if (act_open() != 0) {
@@ -1308,6 +1328,21 @@ const char *ico_diag_activity(void)
     return activity;
 }
 
+void ico_diag_startup_activity_batch(const char *line)
+{
+    if (line == NULL || line[0] == '\0') {
+        return;
+    }
+    snprintf(act_batches[act_nbatches % ICO_DIAG_ACTIVITY_BATCHES], ACT_BATCH_BYTES, "%s", line);
+    act_nbatches++;
+    /* written at once with the batch's note still in the file (a note of
+       a batch goes to the disc, act_sync_note), so a device that freezes
+       before the next batch's note still leaves it */
+    if (act_mode != 0) {
+        act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
+    }
+}
+
 static void act_remove(void)
 {
     /* closed first: Windows keeps an open file's name until its handle
@@ -1334,7 +1369,8 @@ const char *ico_diag_startup_activity_prev(void)
 
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
-    char buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss];
+    static char
+        buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1 + ACT_BATCHES_TEXT];
     const char *ver = "";
     char *prev = buf;
     char *loss = NULL;
@@ -1343,6 +1379,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     FILE *f;
     act_close();
     act_mode = 0;
+    act_nbatches = 0;
     act_path[0] = '\0';
     act_loss[0] = '\0';
     act_prev[0] = '\0';
@@ -1377,11 +1414,25 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
             nl[-1] = '\0';
         }
     }
-    /* the note's line, then a device loss's (ico_diag_note_device_loss) */
+    /* the note's line, then a device loss's (ico_diag_note_device_loss)
+       and the batches' compile times ("compiled: ", in order) */
     nl = strchr(prev, '\n');
-    if (nl != NULL) {
-        loss = nl + 1;
-        loss[strcspn(loss, "\r\n")] = '\0';
+    while (nl != NULL) {
+        char *line = nl + 1;
+
+        nl = strchr(line, '\n');
+        if (nl != NULL) {
+            *nl = '\0';
+        }
+        line[strcspn(line, "\r")] = '\0';
+        if (strncmp(line, act_batch_prefix, sizeof act_batch_prefix - 1) == 0) {
+            /* issue 107: the sizes and times of the batches a start that
+               froze did finish */
+            ico_diag_log("ico_pc: the previous run (version %s) compiled: %s",
+                         ver[0] != '\0' ? ver : "unknown", line + sizeof act_batch_prefix - 1);
+        } else if (loss == NULL && line[0] != '\0') {
+            loss = line;
+        }
     }
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
@@ -1459,6 +1510,10 @@ void ico_diag_startup_activity_exit(void)
 void ico_diag_startup_activity_record(int mode)
 {
     act_mode = mode;
+    if (mode == 0) {
+        /* the set is done: its batches' times are no news */
+        act_nbatches = 0;
+    }
     if (mode == 0 && act_loss[0] != '\0') {
         /* the run's device loss stays for the next start, with no note */
         act_write("");
@@ -2616,13 +2671,30 @@ const char *ico_diag_version(void)
     return act_version[0] != '\0' ? act_version : "unknown";
 }
 
+/* ico_diag_set_report_extra: the host's own part of report.txt */
+static void (*volatile report_extra_fn)(char *out, size_t size);
+
+void ico_diag_set_report_extra(void (*fn)(char *out, size_t size))
+{
+    report_extra_fn = fn;
+}
+
 static void report_file(const char *what, int fatal)
 {
     IcoReportInputs in;
     char name[160];
     const size_t np = sizeof act_loss_prefix - 1;
+    /* one report at a time (report.h): static, a crash handler's stack is
+       small */
+    static char extra[24 * 1024];
+    void (*extra_fn)(char *, size_t) = report_extra_fn;
 
     memset(&in, 0, sizeof in);
+    extra[0] = '\0';
+    if (extra_fn != NULL) {
+        extra_fn(extra, sizeof extra);
+        in.extra = extra;
+    }
     in.what = what;
     in.log_path = log_path_copy[0] != '\0' ? log_path_copy : NULL;
     in.summary = summary_text;
@@ -3022,6 +3094,111 @@ static int sample_main(void)
 
 #endif
 
+#ifdef _WIN32
+
+/* A code module's name from its own export table (the DLL's name as it
+   was linked: "DINPUT8.dll", "SDL3.dll"), never through the loader: the
+   held main thread may own the loader lock (a device scan loads drivers).
+   NULL when the image has none. */
+static const char *image_export_name(const unsigned char *base)
+{
+    const IMAGE_DOS_HEADER *dos = (const IMAGE_DOS_HEADER *)base;
+    const IMAGE_NT_HEADERS *nt;
+    const IMAGE_DATA_DIRECTORY *d;
+    const IMAGE_EXPORT_DIRECTORY *ed;
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 || dos->e_lfanew > 4096) {
+        return NULL;
+    }
+    nt = (const IMAGE_NT_HEADERS *)(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT) {
+        return NULL;
+    }
+    d = &nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    if (d->VirtualAddress == 0 || d->Size == 0 ||
+        d->VirtualAddress >= nt->OptionalHeader.SizeOfImage) {
+        return NULL;
+    }
+    ed = (const IMAGE_EXPORT_DIRECTORY *)(base + d->VirtualAddress);
+    if (ed->Name == 0 || ed->Name >= nt->OptionalHeader.SizeOfImage) {
+        return NULL;
+    }
+    return (const char *)(base + ed->Name);
+}
+
+/* "DINPUT8.dll+0x1234" when a is in executable image memory (a return
+   address candidate), else 0 */
+static int code_address(uintptr_t a, char *out, size_t size)
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    const DWORD exec =
+        PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    const char *name;
+    if (a < 0x10000) {
+        return 0;
+    }
+    if (in_exe(a)) {
+        snprintf(out, size, "%s+0x%lx", exe_name, (unsigned long)(a - exe_lo));
+        return 1;
+    }
+    if (VirtualQuery((LPCVOID)a, &mbi, sizeof mbi) == 0 || mbi.State != MEM_COMMIT ||
+        mbi.Type != MEM_IMAGE || (mbi.Protect & exec) == 0 || mbi.AllocationBase == NULL) {
+        return 0;
+    }
+    name = image_export_name((const unsigned char *)mbi.AllocationBase);
+    if (name != NULL) {
+        snprintf(out, size, "%.48s+0x%lx", name,
+                 (unsigned long)(a - (uintptr_t)mbi.AllocationBase));
+    } else {
+        snprintf(out, size, "module@0x%llx+0x%lx",
+                 (unsigned long long)(uintptr_t)mbi.AllocationBase,
+                 (unsigned long)(a - (uintptr_t)mbi.AllocationBase));
+    }
+    return 1;
+}
+
+/* A wait the system holds, sampled (issue 105, diag_host.h): where the
+   main thread is and the code modules on its stack, innermost first (each
+   word of the copied stack that points into executable image memory: the
+   return addresses and a few stale ones) */
+static void os_wait_sample(double held)
+{
+    static char line[LINE_MAX_BYTES - 200];
+    char where[96], a[80];
+    size_t n = 0;
+    int hits = 0;
+    if (sample_main() != 0) {
+        ico_log_limited("ico_pc: pump sample",
+                        "ico_pc: watchdog: %s has held the main thread for "
+                        "%.0f s; it could not be sampled",
+                        os_wait_name(), held);
+        return;
+    }
+    if (!code_address(sample_pc, where, sizeof where)) {
+        snprintf(where, sizeof where, "0x%llx", (unsigned long long)sample_pc);
+    }
+    line[0] = '\0';
+    for (size_t at = 0; at + sizeof(uintptr_t) <= sample_len && hits < 24;
+         at += sizeof(uintptr_t)) {
+        uintptr_t w;
+        memcpy(&w, sample_stack + at, sizeof w);
+        if (code_address(w, a, sizeof a)) {
+            const int k = snprintf(line + n, sizeof line - n, "%s%s", hits ? ", " : "", a);
+            if (k < 0 || (size_t)k >= sizeof line - n) {
+                break;
+            }
+            n += (size_t)k;
+            hits++;
+        }
+    }
+    ico_log_limited("ico_pc: pump sample",
+                    "ico_pc: watchdog: %s has held the main thread for %.0f s: at %s; code on its "
+                    "stack (innermost first): %s",
+                    os_wait_name(), held, where, hits ? line : "none found");
+}
+
+#endif
+
 void ico_diag_set_effects_program(int loaded)
 {
     effects_program = loaded != 0;
@@ -3357,6 +3534,25 @@ static void watchdog_loop(void)
            bound for one wait does the run end, so a deadlock in the system
            is still reported. */
         lim = ticks == 0 ? first_s : later_s;
+#ifdef _WIN32
+        {
+            /* a held wait sampled at 2, 10 and 30 s into it (issue 105:
+               which code the system holds the pump in) */
+            static const double steps[3] = {2.0, 10.0, 30.0};
+            static unsigned long long sampled_since;
+            static int sampled;
+            if (os_since != sampled_since) {
+                sampled_since = os_since;
+                sampled = 0;
+            }
+            if (os_since != 0 && sampled < 3 && os_cur - os_gap >= steps[sampled]) {
+                os_wait_sample(os_cur - os_gap);
+                while (sampled < 3 && os_cur - os_gap >= steps[sampled]) {
+                    sampled++;
+                }
+            }
+        }
+#endif
         if (os_logged != 0 && os_since != os_logged) {
             /* the wait named below came back (os_wait_last_ns: it, unless
                a later one already finished, which is short) */

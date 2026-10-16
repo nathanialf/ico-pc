@@ -400,6 +400,7 @@ typedef struct WaterLineAcc {
     WaterUse date[WATER_LINE_DATE]; /* DATE draws by colour target */
     uint32_t nDate;
     uint32_t packDraws;
+    uint32_t datePackDraws; /* of them, DATE draws (the puddle's mask readers) */
 } WaterLineAcc;
 
 static WaterUse *waterUse(WaterUse *u, uint32_t *n, uint32_t max, uint32_t id, uint32_t *more)
@@ -468,6 +469,7 @@ static void waterLineWalk(void *user, int list, uint32_t index, const RdCmd *c,
             readId = src && src->block ? t->target : 0;
         } else if (t && t->replacement) {
             a->packDraws++;
+            a->datePackDraws += s->ds.test.date != RD_DATE_OFF;
         }
     }
     if (readId) {
@@ -570,8 +572,26 @@ size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
     }
     if (a.packDraws) {
         at = waterPut(line, cap, at,
-                      "; %u draws sampled a texture-pack replacement (blank in the dump)",
-                      a.packDraws);
+                      "; %u draws sampled a texture-pack replacement (blank in the dump), %u of "
+                      "them DATE draws",
+                      a.packDraws, a.datePackDraws);
+    }
+    /* the DATE snapshot against the MSAA epoch, as the last replay took it
+     * (issue 106: with MSAA a DATE draw on SCENE reads the alpha bit of the
+     * resolved picture, the colour the mean of the samples) */
+    RdDateMsaa dm;
+    rd__date_msaa_last(&dm);
+    if (dm.samples) {
+        at = waterPut(line, cap, at,
+                      "; MSAA %ux (resolve: colour the mean of the samples, depth the smallest "
+                      "sample): the last replay's DATE snapshots of SCENE %u, %u of them read the "
+                      "resolved picture (%u closed the epoch), of other targets %u",
+                      dm.samples, dm.sceneSnaps, dm.afterResolve, dm.closing, dm.otherSnaps);
+    } else {
+        at = waterPut(line, cap, at,
+                      "; no MSAA: the last replay's DATE snapshots of SCENE %u, of other "
+                      "targets %u",
+                      dm.sceneSnaps, dm.otherSnaps);
     }
     return at;
 }

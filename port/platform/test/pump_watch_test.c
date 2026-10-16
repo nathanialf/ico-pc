@@ -8,7 +8,11 @@
  * the newest 16 messages and 8 events newest first with their age, the
  * message part absent until a message was recorded, the handling stack
  * (how long a message took, the innermost one named while it runs) and
- * the watchdog's description of a pump that has not returned.
+ * the watchdog's description of a pump that has not returned; the
+ * controllers' arrivals and removals (a removal named from its arrival,
+ * the driver from the GUID's signature byte) and SDL's own log ring (the
+ * newest 64 lines oldest first, a time bound, newlines folded, a cut
+ * buffer).
  */
 #include <stdio.h>
 #include <string.h>
@@ -174,11 +178,96 @@ static void handling(void)
     CHECK(strncmp(b, "in the pump's own code, no window message being handled; ", 57) == 0);
 }
 
+static void pads(void)
+{
+    char b[1024];
+    unsigned char g[16];
+
+    memset(g, 0, sizeof(g));
+    g[14] = 'x';
+    CHECK(strcmp(pump_watch_guid_driver(g, 1), "XInput") == 0);
+    g[14] = 'h';
+    CHECK(strcmp(pump_watch_guid_driver(g, 1), "HIDAPI") == 0);
+    g[14] = 0;
+    CHECK(strcmp(pump_watch_guid_driver(g, 1), "DirectInput") == 0);
+    CHECK(strcmp(pump_watch_guid_driver(g, 0), "the system's") == 0);
+    g[14] = 'q';
+    CHECK(strcmp(pump_watch_guid_driver(g, 1), "driver 'q'") == 0);
+
+    pump_watch_reset();
+    CHECK(pump_watch_pad_last_ns() == 0);
+    pump_watch_pads_recent(b, sizeof(b), S(10));
+    CHECK(b[0] == '\0');
+    pump_watch_pad(1, 7, "Xbox Controller", "030000005e0400000b0b000000007800", "XInput", S(1));
+    /* the removal names the arrival's device */
+    pump_watch_pad(0, 7, NULL, NULL, NULL, S(4));
+    CHECK(pump_watch_pad_last_ns() == S(4));
+    pump_watch_pads_recent(b, sizeof(b), S(54));
+    CHECK(strcmp(b,
+                 "controllers before it: removed \"Xbox Controller\" (GUID "
+                 "030000005e0400000b0b000000007800, XInput) 50.0 s ago, added \"Xbox "
+                 "Controller\" (GUID 030000005e0400000b0b000000007800, XInput) 53.0 s ago") == 0);
+    if (fails) {
+        printf("got: %s\n", b);
+    }
+    /* in the slow-pump line after the SDL events */
+    pump_watch_event("joystick removed", S(4));
+    pump_watch_recent(b, sizeof(b), S(54));
+    CHECK(strncmp(b,
+                  "SDL events before it: joystick removed 50.0 s ago; controllers before it: "
+                  "removed \"Xbox Controller\"",
+                  strlen("SDL events before it: joystick removed 50.0 s ago; controllers before "
+                         "it: removed \"Xbox Controller\"")) == 0);
+    /* an unknown id's removal */
+    pump_watch_pad(0, 99, NULL, NULL, NULL, S(5));
+    pump_watch_pads_recent(b, sizeof(b), S(6));
+    CHECK(strncmp(b, "controllers before it: removed \"(unnamed)\" (GUID ?, ?) 1.0 s ago", 63) ==
+          0);
+}
+
+static void sdl_ring(void)
+{
+    static char b[64 * (PUMP_WATCH_SDL_TEXT + 96)];
+    char line[48];
+    int i;
+
+    pump_watch_reset();
+    CHECK(pump_watch_sdl_text(b, sizeof(b), "", 0, S(1)) == 0);
+    CHECK(b[0] == '\0');
+    pump_watch_sdl_log(7, 3, "Added HIDAPI device 'Xbox'\nsecond", S(1));
+    pump_watch_sdl_log(3, 5, "warning", S(2));
+    CHECK(pump_watch_sdl_count() == 2);
+    CHECK(pump_watch_sdl_text(b, sizeof(b), "  ", 0, S(11)) == 2);
+    CHECK(strcmp(b, "  10.0 s ago INPUT debug: Added HIDAPI device 'Xbox' second\n"
+                    "  9.0 s ago SYSTEM warn: warning\n") == 0);
+    if (fails) {
+        printf("got: %s\n", b);
+    }
+    /* the time bound */
+    CHECK(pump_watch_sdl_text(b, sizeof(b), "", S(2), S(11)) == 1);
+    CHECK(strstr(b, "SYSTEM warn") != NULL);
+    /* the ring keeps the newest 64, oldest first */
+    for (i = 0; i < 70; i++) {
+        snprintf(line, sizeof(line), "line %d", i);
+        pump_watch_sdl_log(99, 2, line, S(3));
+    }
+    CHECK(pump_watch_sdl_count() == 72);
+    CHECK(pump_watch_sdl_text(b, sizeof(b), "", 0, S(4)) == 64);
+    CHECK(strncmp(b, "1.0 s ago custom verbose: line 6\n", 33) == 0);
+    CHECK(strstr(b, "line 69\n") != NULL);
+    CHECK(strstr(b, "line 5\n") == NULL);
+    /* a small buffer: whole lines only */
+    CHECK(pump_watch_sdl_text(b, 60, "", 0, S(4)) == 1);
+    CHECK(strcmp(b, "1.0 s ago custom verbose: line 6\n") == 0);
+}
+
 int main(void)
 {
     names();
     history();
     handling();
+    pads();
+    sdl_ring();
     if (fails) {
         printf("pump_watch_test: %d failures\n", fails);
         return 1;

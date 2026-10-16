@@ -755,12 +755,24 @@ static RdActivityFn s_activityFn;
 /* the batch's note while its pipelines are compiled ("" outside): a
  * creation of the progress screen's own in the middle of it puts it back
  * after its own note, so a crash on a worker thread names the batch */
-static char s_batchNote[480];
+static char s_batchNote[640];
 
 void rd_set_activity_fn(RdActivityFn fn)
 {
     s_activityFn = fn;
 }
+
+/* rd_set_batch_fn: a VU batch's compile times as it completes (issue 107) */
+static RdActivityFn s_batchFn;
+
+void rd_set_batch_fn(RdActivityFn fn)
+{
+    s_batchFn = fn;
+}
+
+/* the device's compiler as its driver names it ("E031.41.03.47"; "" none),
+ * for the VU batches' notes and lines (rd__vu_policy_init) */
+static char s_compiler[64];
 
 /* a key's words, for the notes and the log */
 static void keyWords(const RdPipeKeyInt *k, char *out, size_t size);
@@ -860,8 +872,9 @@ static void batchModules(const RdPipeKeyInt *keys, uint32_t n, char *out, size_t
         }
     }
     for (uint32_t j = 0; j < named && at < size; j++) {
-        const int w = snprintf(out + at, size - at, "%s%s %u words", j ? ", " : "vertex ", names[j],
-                               rd__shader_words(names[j]));
+        const int w =
+            snprintf(out + at, size - at, "%s%s %u words (%u instructions)", j ? ", " : "vertex ",
+                     names[j], rd__shader_words(names[j]), rd__shader_instructions(names[j]));
         at = w > 0 ? at + (size_t)w : at;
     }
     if (more && at < size) {
@@ -1211,6 +1224,72 @@ static void preTimesLog(const PreTimes *t)
     rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
 }
 
+/* A batch with a VU vertex shader done (issue 107): its compile times,
+ * each pipeline's as the worker measured it (RhiPipelineBatch.ms), as one
+ * line for the log (with every time, in the batch's order) and one for the
+ * activity file (rd_set_batch_fn: min, max and mean, overall and by
+ * vertex shader with the shader's words and instructions), so a device
+ * that froze shows the sizes and times of every batch it finished */
+static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, uint32_t first,
+                       uint32_t last, uint32_t total, double wallMs, uint32_t threads)
+{
+    char line[600];
+    size_t at = 0;
+    float lo = 0.0f, hi = 0.0f;
+    double sum = 0.0;
+    bool vu = false;
+    for (uint32_t j = 0; j < n; j++) {
+        vu = vu || keyIsVu(&keys[j]);
+        lo = j == 0 || ms[j] < lo ? ms[j] : lo;
+        hi = j == 0 || ms[j] > hi ? ms[j] : hi;
+        sum += ms[j];
+    }
+    if (!vu || n == 0) {
+        return;
+    }
+#define BT_PUT(...)                                                                                \
+    do {                                                                                           \
+        const int k_ =                                                                             \
+            at < sizeof(line) ? snprintf(line + at, sizeof(line) - at, __VA_ARGS__) : 0;           \
+        at = k_ > 0 ? (at + (size_t)k_ < sizeof(line) ? at + (size_t)k_ : sizeof(line) - 1) : at;  \
+    } while (0)
+    BT_PUT("VU batch %u-%u of %u (%s, compiler %s): %u pipelines %.2f-%.2f s, mean %.2f s, "
+           "%.1f s on %u threads",
+           first, last, total, keys[0].vuExt ? "extended" : "plain",
+           s_compiler[0] ? s_compiler : "unnamed by the driver", n, lo / 1000.0, hi / 1000.0,
+           sum / n / 1000.0, wallMs / 1000.0, threads);
+    /* by vertex shader, in the batch's order (the keys come grouped) */
+    for (uint32_t j = 0; j < n;) {
+        uint32_t e = j + 1;
+        while (e < n && keys[e].vs == keys[j].vs && keys[e].vuExt == keys[j].vuExt) {
+            e++;
+        }
+        float glo = ms[j], ghi = ms[j];
+        double gsum = 0.0;
+        for (uint32_t k = j; k < e; k++) {
+            glo = ms[k] < glo ? ms[k] : glo;
+            ghi = ms[k] > ghi ? ms[k] : ghi;
+            gsum += ms[k];
+        }
+        char v[64];
+        keyVsName(&keys[j], v, sizeof(v));
+        BT_PUT("; %s %u words %u instructions: %u x %.2f-%.2f s mean %.2f s", v,
+               rd__shader_words(v), rd__shader_instructions(v), e - j, glo / 1000.0, ghi / 1000.0,
+               gsum / (e - j) / 1000.0);
+        j = e;
+    }
+    if (s_batchFn != NULL) {
+        s_batchFn(line);
+    }
+    /* the log: the same and each pipeline's time */
+    BT_PUT("; each (s):");
+    for (uint32_t j = 0; j < n; j++) {
+        BT_PUT(" %.2f", ms[j] / 1000.0);
+    }
+#undef BT_PUT
+    rd__log("pipelines: compiled %s", line);
+}
+
 /* the counts of one createKeys */
 typedef struct PreCounts {
     uint32_t failed, compiled, threads;
@@ -1285,25 +1364,30 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
         }
         if (nb > 0) {
             char note[sizeof(s_batchNote)];
-            char a[96], z[96], mods[256];
+            char a[96], z[96], mods[320];
             keyWords(&bk[0], a, sizeof(a));
             keyWords(&bk[nb - 1], z, sizeof(z));
             batchModules(bk, nb, mods, sizeof(mods));
-            if (nb == 1) {
-                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s; %s", first + 1, m, a,
-                         mods);
-            } else {
-                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s; %s",
-                         first + 1, i, m, a, z, mods);
-            }
             /* a batch with a VU vertex shader, the modules a phone's driver
              * is slowest on (issue 107), named in the log as it starts: a
              * log that stops here says what the driver was compiling (the
              * heartbeat repeats the note every 2 s, the activity file
-             * keeps it for the next start) */
+             * keeps it for the next start), with the device's compiler */
             bool vuBatch = false;
             for (uint32_t j = 0; j < nb && !vuBatch; j++) {
                 vuBatch = keyIsVu(&bk[j]);
+            }
+            char comp[96] = "";
+            if (vuBatch) {
+                snprintf(comp, sizeof(comp), "; compiler %s",
+                         s_compiler[0] ? s_compiler : "unnamed by the driver");
+            }
+            if (nb == 1) {
+                snprintf(note, sizeof(note), "creating pipelines %u of %u: %s; %s%s", first + 1, m,
+                         a, mods, comp);
+            } else {
+                snprintf(note, sizeof(note), "creating pipelines %u-%u of %u: %s to %s; %s%s",
+                         first + 1, i, m, a, z, mods, comp);
             }
             if (vuBatch) {
                 rd__log("pipelines: compiling %u-%u of %u (%s VU): %s", first + 1, i, m,
@@ -1315,7 +1399,9 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             }
             RhiPipelineBatch batch = {preWait, &pb, bms, 1};
             pb.base = first;
+            const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);
+            batchTimes(bk, bms, nb, first + 1, i, m, rd__now_ms() - bt0, batch.threads);
             s_batchNote[0] = '\0';
             if (batch.threads > c->threads) {
                 c->threads = batch.threads;
@@ -1511,6 +1597,28 @@ uint32_t rd__shader_words(const char *name)
     return b ? (uint32_t)(b->spirv_len / 4u) : 0u;
 }
 
+uint32_t rd__shader_instructions(const char *name)
+{
+    /* SPIR-V: a five-word header, then each instruction's first word
+     * holds its word count in the high half */
+    const IcoShaderBlob *b = name ? ico_find_shader(name) : NULL;
+    if (!b || b->spirv_len < 20u) {
+        return 0u;
+    }
+    const uint32_t words = (uint32_t)(b->spirv_len / 4u);
+    uint32_t n = 0;
+    for (uint32_t at = 5; at < words; n++) {
+        uint32_t w;
+        memcpy(&w, (const uint8_t *)b->spirv + (size_t)at * 4u, 4);
+        const uint32_t len = w >> 16;
+        if (len == 0) {
+            break; /* not SPIR-V as expected: the count so far */
+        }
+        at += len;
+    }
+    return n;
+}
+
 bool rd__vu_policy_init(const RhiLimits *lim)
 {
     /* the plain variants' modules (vu_X_vs's is vu_X_plain_vs; rd_replay.c
@@ -1529,6 +1637,16 @@ bool rd__vu_policy_init(const RhiLimits *lim)
      * driver: "Compiler Version: E031.41.03.47"), once per rd_init */
     rd__log("device compiler: %s",
             lim && lim->compilerVersion ? lim->compilerVersion : "the driver names none");
+    {
+        /* "Compiler Version: E031.41.03.47" -> "E031.41.03.47" */
+        const char *c = lim && lim->compilerVersion ? lim->compilerVersion : "";
+        const char *v = strstr(c, "Version:");
+        v = v ? v + 8 : c;
+        while (*v == ' ') {
+            v++;
+        }
+        snprintf(s_compiler, sizeof(s_compiler), "%s", v);
+    }
     g_rd.vuPlainOnly = false;
     g_rd.vuPlainWhy[0] = '\0';
     if (lim && lim->vuPlainOnly) {

@@ -24,6 +24,31 @@ typedef struct PumpEvent {
 } PumpEvent;
 
 #define MSG_STACK 4
+/* the controllers' arrivals kept for a removal's name */
+#define PAD_KNOWN 8
+
+typedef struct PumpPad {
+    int added;
+    uint32_t id;
+    char name[64];
+    char guid[40];
+    char driver[24];
+    uint64_t ns;
+} PumpPad;
+
+/* SDL's log ring: a writer takes a slot with an atomic count and marks it
+   complete with seq = its number + 1, so a reader skips a line being
+   written (any thread logs through SDL) */
+typedef struct SdlLine {
+    volatile uint32_t seq;
+    int16_t category;
+    int8_t priority;
+    uint64_t ns;
+    char text[PUMP_WATCH_SDL_TEXT];
+} SdlLine;
+
+static SdlLine s_sdl[PUMP_WATCH_SDL_LINES];
+static volatile uint32_t s_sdlN;
 
 static struct {
     const char *volatile part;
@@ -34,11 +59,18 @@ static struct {
     /* the messages being handled, outermost first */
     PumpMsg in[MSG_STACK];
     volatile uint32_t depth;
+    /* the controllers that came and went, and the ones that arrived */
+    PumpPad pads[PUMP_WATCH_PADS];
+    volatile uint32_t nPads;
+    PumpPad known[PAD_KNOWN];
+    uint32_t nKnown;
 } s_w;
 
 void pump_watch_reset(void)
 {
     memset(&s_w, 0, sizeof(s_w));
+    memset(s_sdl, 0, sizeof(s_sdl));
+    s_sdlN = 0;
 }
 
 void pump_watch_part(const char *part)
@@ -388,10 +420,8 @@ void pump_watch_recent(char *out, size_t size, uint64_t now_ns)
     total = s_w.nEvents;
     n = put_str(out, size, n, "SDL events before it: ");
     if (total == 0) {
-        (void)put_str(out, size, n, "none");
-        return;
-    }
-    {
+        n = put_str(out, size, n, "none");
+    } else {
         const uint32_t shown = total < PUMP_WATCH_EVENTS ? total : PUMP_WATCH_EVENTS;
 
         for (i = 0; i < shown; i++) {
@@ -405,6 +435,10 @@ void pump_watch_recent(char *out, size_t size, uint64_t now_ns)
             }
             n = put_f(out, size, n, " %.1f s ago", ago_s(now_ns, e->ns));
         }
+    }
+    if (s_w.nPads > 0 && n + 3 < size) {
+        n = put_str(out, size, n, "; ");
+        pump_watch_pads_recent(out + n, size - n, now_ns);
     }
 }
 
@@ -434,4 +468,220 @@ void pump_watch_describe(char *out, size_t size, uint64_t now_ns)
     }
     n = put_str(out, size, n, "; ");
     pump_watch_recent(out + n, size - n, now_ns);
+}
+
+/* --- the controllers ------------------------------------------------------ */
+
+static void copy_text(char *out, size_t size, const char *s)
+{
+    snprintf(out, size, "%s", s != NULL ? s : "");
+}
+
+void pump_watch_pad(int added, uint32_t id, const char *name, const char *guid, const char *driver,
+                    uint64_t now_ns)
+{
+    const uint32_t n = s_w.nPads;
+    PumpPad *p = &s_w.pads[n % PUMP_WATCH_PADS];
+    const PumpPad *k = NULL;
+    uint32_t i;
+
+    for (i = 0; i < s_w.nKnown && i < PAD_KNOWN; i++) {
+        if (s_w.known[i].id == id) {
+            k = &s_w.known[i];
+        }
+    }
+    p->added = added != 0;
+    p->id = id;
+    p->ns = now_ns;
+    copy_text(p->name, sizeof(p->name), name != NULL ? name : k != NULL ? k->name : "(unnamed)");
+    copy_text(p->guid, sizeof(p->guid), guid != NULL ? guid : k != NULL ? k->guid : "?");
+    copy_text(p->driver, sizeof(p->driver), driver != NULL ? driver : k != NULL ? k->driver : "?");
+    s_w.nPads = n + 1;
+    if (added) {
+        /* the id's slot, else the next one round (the oldest) */
+        PumpPad *slot = NULL;
+
+        for (i = 0; i < s_w.nKnown && i < PAD_KNOWN; i++) {
+            if (s_w.known[i].id == id) {
+                slot = &s_w.known[i];
+            }
+        }
+        if (slot == NULL) {
+            slot = &s_w.known[s_w.nKnown % PAD_KNOWN];
+            s_w.nKnown++;
+        }
+        *slot = *p;
+    }
+}
+
+/* "\"name\" (GUID g, driver)" */
+static size_t put_pad(char *out, size_t size, size_t n, const PumpPad *p)
+{
+    n = put_str(out, size, n, "\"");
+    n = put_str(out, size, n, p->name);
+    n = put_str(out, size, n, "\" (GUID ");
+    n = put_str(out, size, n, p->guid);
+    n = put_str(out, size, n, ", ");
+    n = put_str(out, size, n, p->driver);
+    return put_str(out, size, n, ")");
+}
+
+void pump_watch_pad_newest(char *out, size_t size)
+{
+    const uint32_t n = s_w.nPads;
+
+    if (size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (n > 0) {
+        (void)put_pad(out, size, 0, &s_w.pads[(n - 1) % PUMP_WATCH_PADS]);
+    }
+}
+
+uint64_t pump_watch_pad_last_ns(void)
+{
+    const uint32_t n = s_w.nPads;
+
+    return n > 0 ? s_w.pads[(n - 1) % PUMP_WATCH_PADS].ns : 0;
+}
+
+void pump_watch_pads_recent(char *out, size_t size, uint64_t now_ns)
+{
+    const uint32_t total = s_w.nPads;
+    const uint32_t shown = total < PUMP_WATCH_PADS ? total : PUMP_WATCH_PADS;
+    size_t n = 0;
+    uint32_t i;
+
+    if (size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (total == 0) {
+        return;
+    }
+    n = put_str(out, size, n, "controllers before it: ");
+    for (i = 0; i < shown; i++) {
+        const PumpPad *p = &s_w.pads[(total - 1 - i) % PUMP_WATCH_PADS];
+
+        n = put_str(out, size, n, i > 0 ? ", " : "");
+        n = put_str(out, size, n, p->added ? "added " : "removed ");
+        n = put_pad(out, size, n, p);
+        n = put_f(out, size, n, " %.1f s ago", ago_s(now_ns, p->ns));
+    }
+}
+
+const char *pump_watch_guid_driver(const unsigned char guid[16], int windows)
+{
+    static char other[24];
+
+    switch (guid[14]) {
+    case 'x':
+        return "XInput";
+    case 'h':
+        return "HIDAPI";
+    case 'r':
+        return "RawInput";
+    case 'w':
+        return "Windows.Gaming.Input";
+    case 'g':
+        return "GameInput";
+    case 'v':
+        return "virtual";
+    case 'm':
+        return "MFi";
+    case 0:
+        return windows ? "DirectInput" : "the system's";
+    default:
+        snprintf(other, sizeof(other), "driver '%c'",
+                 guid[14] >= 0x20 && guid[14] < 0x7F ? (char)guid[14] : '?');
+        return other;
+    }
+}
+
+/* --- SDL's own log ---------------------------------------------------------- */
+
+void pump_watch_sdl_log(int category, int priority, const char *text, uint64_t now_ns)
+{
+    const uint32_t n = __atomic_fetch_add(&s_sdlN, 1u, __ATOMIC_RELAXED);
+    SdlLine *l = &s_sdl[n % PUMP_WATCH_SDL_LINES];
+    size_t k = 0;
+
+    __atomic_store_n(&l->seq, 0u, __ATOMIC_RELEASE);
+    l->category = (int16_t)(category < 0 ? -1 : category > 32767 ? 32767 : category);
+    l->priority = (int8_t)(priority < 0 ? 0 : priority > 100 ? 100 : priority);
+    l->ns = now_ns;
+    /* one line: SDL's hex dumps carry newlines */
+    for (; text != NULL && text[k] != '\0' && k + 1 < sizeof(l->text); k++) {
+        l->text[k] = text[k] == '\n' || text[k] == '\r' ? ' ' : text[k];
+    }
+    l->text[k] = '\0';
+    __atomic_store_n(&l->seq, n + 1u, __ATOMIC_RELEASE);
+}
+
+uint32_t pump_watch_sdl_count(void)
+{
+    return __atomic_load_n(&s_sdlN, __ATOMIC_ACQUIRE);
+}
+
+const char *pump_watch_sdl_category(int category)
+{
+    static const char *const names[] = {"APPLICATION", "ERROR",  "ASSERT", "SYSTEM", "AUDIO",
+                                        "VIDEO",       "RENDER", "INPUT",  "TEST",   "GPU"};
+
+    return category >= 0 && category < (int)(sizeof(names) / sizeof(names[0])) ? names[category]
+                                                                               : "custom";
+}
+
+const char *pump_watch_sdl_priority(int priority)
+{
+    static const char *const names[] = {"?",    "trace", "verbose", "debug",
+                                        "info", "warn",  "error",   "critical"};
+
+    return priority >= 0 && priority < (int)(sizeof(names) / sizeof(names[0])) ? names[priority]
+                                                                               : "?";
+}
+
+int pump_watch_sdl_text(char *out, size_t size, const char *prefix, uint64_t since_ns,
+                        uint64_t now_ns)
+{
+    const uint32_t total = pump_watch_sdl_count();
+    const uint32_t first = total > PUMP_WATCH_SDL_LINES ? total - PUMP_WATCH_SDL_LINES : 0;
+    size_t n = 0;
+    int lines = 0;
+    uint32_t i;
+
+    if (size == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    for (i = first; i < total; i++) {
+        const SdlLine *l = &s_sdl[i % PUMP_WATCH_SDL_LINES];
+        char line[PUMP_WATCH_SDL_TEXT + 96];
+        uint64_t ns;
+        int cat, pri, k;
+
+        if (__atomic_load_n(&l->seq, __ATOMIC_ACQUIRE) != i + 1u) {
+            continue; /* being written, or written over */
+        }
+        ns = l->ns;
+        cat = l->category;
+        pri = l->priority;
+        k = snprintf(line, sizeof(line), "%s%.1f s ago %s %s: %s\n", prefix != NULL ? prefix : "",
+                     ago_s(now_ns, ns), pump_watch_sdl_category(cat), pump_watch_sdl_priority(pri),
+                     l->text);
+        if (__atomic_load_n(&l->seq, __ATOMIC_ACQUIRE) != i + 1u || k < 0) {
+            continue;
+        }
+        if (since_ns != 0 && ns < since_ns) {
+            continue;
+        }
+        if (n + (size_t)k + 1 > size) {
+            break;
+        }
+        memcpy(out + n, line, (size_t)k + 1);
+        n += (size_t)k;
+        lines++;
+    }
+    return lines;
 }

@@ -14,7 +14,8 @@
  *                            of the log, the last 20 ico_pc:/window:/rd:
  *                            lines before the report and the report block
  *                            itself (the crash or watchdog report with its
- *                            symbolized stack);
+ *                            symbolized stack), then the host's own part
+ *                            (IcoReportInputs.extra: SDL's own log);
  *   ico-pc.log               the log so far;
  *   ico-pc-previous.log      the run before's;
  *   startup-activity.txt     when there is one (diag_host.h);
@@ -55,6 +56,9 @@ typedef struct IcoReportInputs {
     const char *summary;  /* the summary line's text ("" none) */
     const char *loss_zip; /* the newest loss dump's path (NULL: none) */
     double uptime_s;      /* seconds into the run */
+    /* text of the host's own for report.txt's end (the window: SDL's log
+       ring, diag_host.h ico_diag_set_report_extra; NULL or "": none) */
+    const char *extra;
 } IcoReportInputs;
 
 /* Writes the report. 0 with the zip's file name (no folder) in name, or -1

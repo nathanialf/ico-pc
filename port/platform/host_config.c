@@ -498,6 +498,9 @@ static const struct {
        rd__vu_policy_init) */
     {"dev.vu_plain_only", "vu_plain_only"},
     {"dev.vu_extended", "vu_extended"},
+    /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
+       joystick_scan_hints) */
+    {"dev.joystick_directinput", "joystick_directinput"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -517,6 +520,9 @@ static const struct {
     /* port/render/rd_pipeline.c rd__vu_policy_init */
     {"vu_plain_only", "ICO_RD_VU_PLAIN"},
     {"vu_extended", "ICO_RD_VU_EXTENDED"},
+    /* port/platform/window_host.c joystick_scan_hints: 0 sets
+       SDL_HINT_JOYSTICK_DIRECTINPUT to 0 before SDL_Init */
+    {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
 };
 
 static int value_is(const char *v, const char *const *words)

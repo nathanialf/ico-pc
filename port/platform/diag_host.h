@@ -129,6 +129,20 @@ void ico_diag_set_os_wait_limit(unsigned int seconds);
    the last messages and events; pump_watch.h). Runs on the watchdog's
    thread while the main thread is held, so it may only read. */
 void ico_diag_set_os_wait_describe(void (*fn)(char *out, size_t size));
+/* Windows: while one such wait lasts, the watchdog samples the main
+   thread at 2, 10 and 30 s into it and logs where it is, with the code
+   modules on its stack innermost first (issue 105: dinput8.dll there says
+   the DirectInput scan, hid.dll or setupapi.dll the HID enumeration):
+     ico_pc: watchdog: the window's event pump has held the main thread
+     for 2 s: at win32u.dll+0x1234; on its stack: DINPUT8.dll+0x5678, ...
+   A module's name is read from its own export table (no loader lock, which
+   the held thread may own). */
+
+/* The report file's extra part (report.h IcoReportInputs.extra): fn fills
+   out with text of its own (the window: SDL's log ring) when a report is
+   written, on any thread and from a crash handler (no allocation, no
+   locks). NULL: none. */
+void ico_diag_set_report_extra(void (*fn)(char *out, size_t size));
 
 /* Starts the heartbeat and watchdog thread. first_s: seconds from now
    without any Main tick; later_s: seconds without a new Main tick or new
@@ -161,7 +175,7 @@ void ico_diag_set_failure(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
    else's (the graphics driver building a pipeline, rd_pipeline.c): one
    line, printed by the crash and watchdog reports as "ico_pc: while:
    <note>" after the CRASH or WATCHDOG line. Set before the step, cleared
-   after it; a static buffer of 480 bytes, no allocation (a start-up
+   after it; a static buffer of 640 bytes, no allocation (a start-up
    batch's note names its keys, its modules and their sizes, and the
    heartbeat line repeats it while the start-up set is created). One writer
    thread. A crash while the note starts with "creating pipeline" or
@@ -192,6 +206,18 @@ const char *ico_diag_activity(void);
    <old>); trying the start-up set again on <new>" and the result is 0, so
    a new version tries the start-up set again. */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
+/* A start-up batch's compile times (rd.h rd_set_batch_fn: one line per
+   batch with a VU vertex shader, "VU batch 329-360 of 702 extended: 32
+   pipelines 0.41-2.10 s, mean 1.29 s; vu_prelit_vs 50325 words 9801
+   instructions 8 x 1.10-2.10 s mean 1.62 s; ..."): kept as the activity
+   file's "compiled: " lines after the note (the last
+   ICO_DIAG_ACTIVITY_BATCHES), written with the next note (a batch's note
+   goes to the disc before the batch starts), so a device that froze in a
+   batch shows the sizes and times of every batch it finished. The next
+   start's ico_diag_startup_activity_begin logs each ("ico_pc: the previous
+   run compiled: <line>"). Cleared with the file. */
+#define ICO_DIAG_ACTIVITY_BATCHES 24
+void ico_diag_startup_activity_batch(const char *line);
 /* The note the file held when ico_diag_startup_activity_begin read it,
    whatever its version ("" none): window_host.c asks
    startup_retry_note_has_vu_ext of it (issue 107).  A batch's note and

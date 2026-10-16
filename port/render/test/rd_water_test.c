@@ -2798,7 +2798,8 @@ static void buildAll(void)
 /* The F12 line's water summary (rd_water.c rd__water_dump_line, issue 106)
  * of the puddle's frame: the block at its GS size with its depth, the draws
  * into it and reading it, the DATE draws on SCENE with AFAIL RGB_ONLY and
- * leveldown's LERP FIX (2) and copy's ADD FIX (0) */
+ * leveldown's LERP FIX (2) and copy's ADD FIX (0), and the MSAA part (the
+ * last replay's DATE snapshots of SCENE against its epoch) */
 static void checkPuddleDumpLine(const char *what, const char *scale)
 {
     char line[1536];
@@ -2811,6 +2812,9 @@ static void checkPuddleDumpLine(const char *what, const char *scale)
     CHECK(strstr(line, "DATE draws on SCENE: alpha 0 0, alpha 1 2, AFAIL rgb-only, blends 0 2") !=
               NULL,
           "%s: the dump line's DATE draws on SCENE", what);
+    /* the DATE snapshot against the MSAA epoch (the last replay's) */
+    CHECK(strstr(line, "MSAA") != NULL && strstr(line, "DATE snapshots of SCENE") != NULL,
+          "%s: the dump line's MSAA part", what);
     char small[40];
     const size_t k = rd__water_dump_line(rd__last_frame(), small, sizeof(small));
     CHECK(k == sizeof(small) - 1 && strlen(small) == k, "%s: the dump line cut at its capacity",

@@ -786,6 +786,10 @@ static void build_text(const IcoReportInputs *in)
             text_line("(cut here: the rest is in ico-pc.log)");
         }
     }
+    if (in->extra != NULL && in->extra[0] != '\0') {
+        text_line("");
+        text_add(in->extra, strlen(in->extra));
+    }
 }
 
 /* --- The report --------------------------------------------------------------------------- */

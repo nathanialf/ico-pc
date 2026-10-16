@@ -1216,11 +1216,38 @@ uint32_t rd__enumerate_reachable_vu(RdPipeKeyInt *out, uint32_t max, uint32_t n)
  *                     VU_F_TICKS and the device takes it (else 0, logged
  *                     once per run when a draw wanted it)
  * rd__shader_words    a module's size in 32-bit words (its SPIR-V), 0 when
- *                     the table has no such module */
+ *                     the table has no such module
+ * rd__shader_instructions  its SPIR-V instruction count (the header's five
+ *                     words left out), 0 when there is none */
 bool rd__vu_policy_init(const RhiLimits *lim);
 bool rd__vu_ext_reachable(void);
 uint8_t rd__vu_draw_ext(uint32_t drawFlags);
 uint32_t rd__shader_words(const char *name);
+uint32_t rd__shader_instructions(const char *name);
+
+/* The last replay's DATE snapshots against its MSAA epoch (rd_core.c from
+ * rd_replay.c's rd__date_snap, issue 106; the F12 water line): samples the epoch's count (0: no
+ * MSAA), sceneSnaps SCENE's snapshots, closing the ones that closed the
+ * epoch (their transition resolved it), afterResolve the ones that read
+ * the resolved picture (those and the later ones), otherSnaps the
+ * snapshots of other targets. */
+typedef struct RdDateMsaa {
+    uint32_t samples, sceneSnaps, closing, afterResolve, otherSnaps;
+} RdDateMsaa;
+
+void rd__date_msaa_last(RdDateMsaa *out);
+/* The replay's diagnostic counts (rd_core.c, issues 95 and 106):
+ * rd__diag_frame(NULL, 0) as a replay begins, (f, the MSAA epoch's sample
+ * count, 1 without) as it ends; rd__span_idx the CPU index list of the VU
+ * draw doVuDraw is on (NULL: none); rd__span_draw one indexed VU draw of
+ * it (count 0: a second pass of the same draw, not counted), measured on
+ * one replay in 64; rd__date_snap a DATE snapshot of target tc as the
+ * replay takes it, closing when its transition closes the open MSAA epoch,
+ * ended when the epoch was resolved before. */
+void rd__diag_frame(const RdFrame *f, uint32_t samples);
+void rd__span_idx(const uint32_t *idx);
+void rd__span_draw(uint32_t first, uint32_t count);
+void rd__date_snap(const RdTargetRec *tc, bool closing, bool ended);
 /* The (program, code) row of rd_mesh.h's table: the RdProg, the vertex
  * shader and the clip mode; false without a row. */
 bool rd__vu_row(int program, int code, uint8_t *prog, uint8_t *vs, uint8_t *clip);

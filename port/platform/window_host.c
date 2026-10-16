@@ -1225,6 +1225,23 @@ static const char *summary_platform(void)
 /* The first screenful's one line of what a report needs (diag_host.h
    ico_diag_set_summary), after the device line, the self-tests and the
    window line: once a start (the report file's report.txt keeps it). */
+/* [dev] joystick_directinput (ICO_JOYSTICK_DIRECTINPUT, host_config.c):
+   0 when the config turned SDL's DirectInput controller scan off (issue
+   105); read once before SDL_Init (ico_window_open) */
+static int s_joyDirectInput = 1;
+
+/* the summary's controller-scan part (Windows only: the scan is
+   DirectInput's) */
+static const char *summary_joystick_scan(void)
+{
+#ifdef _WIN32
+    return s_joyDirectInput ? " (DirectInput scan on)"
+                            : " (DirectInput scan off: [dev] joystick_directinput = false)";
+#else
+    return "";
+#endif
+}
+
 static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
 {
     char rd[640], pads[160];
@@ -1249,15 +1266,76 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     rd_summary_text(rd, sizeof(rd));
     ico_diag_set_summary(
         "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; %s; "
-        "index values up to %u; robust access %s; controller %s; disc %s; %s",
+        "index values up to %u; robust access %s; controller %s%s; disc %s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
         ico_video_aspect_name(o->aspect), fr, rd, (unsigned)l->maxDrawIndexedIndexValue,
         l->robustText != NULL ? l->robustText
                               : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
-        pads[0] != '\0' ? pads : "none yet", disc != NULL ? disc : "not mounted yet",
+        pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
+        disc != NULL ? disc : "not mounted yet",
         ico_host_pref_is_portable() ? "portable" : "user profile");
+}
+
+/* SDL's log output (SDL_SetLogOutputFunction, any thread): every line
+   into the pump's ring (printed with a slow pump's line and in the report
+   file); info and above, which SDL's own output wrote to this log
+   before, also here, through the rate limiter */
+static void SDLCALL sdl_log_output(void *user, int category, SDL_LogPriority priority,
+                                   const char *message)
+{
+    (void)user;
+    pump_watch_sdl_log(category, (int)priority, message, SDL_GetTicksNS());
+    if (priority >= SDL_LOG_PRIORITY_INFO) {
+        ico_log_limited("window: SDL's log", "window: SDL %s %s: %s",
+                        pump_watch_sdl_category(category), pump_watch_sdl_priority((int)priority),
+                        message != NULL ? message : "");
+    }
+}
+
+/* The report file's SDL part (diag_host.h ico_diag_set_report_extra):
+   the ring as it is, oldest first. Any thread, a crash handler's too:
+   no allocation. */
+static void sdl_log_report(char *out, size_t size)
+{
+    const uint32_t n = pump_watch_sdl_count();
+    int k = snprintf(out, size, "SDL's own log, the last %u of %u lines (oldest first):\n",
+                     n < PUMP_WATCH_SDL_LINES ? n : PUMP_WATCH_SDL_LINES, n);
+
+    if (k > 0 && (size_t)k < size) {
+        pump_watch_sdl_text(out + k, size - (size_t)k, "  ", 0, SDL_GetTicksNS());
+    }
+}
+
+/* [dev] joystick_directinput = false (ICO_JOYSTICK_DIRECTINPUT=0): SDL's
+   DirectInput controller scan off (SDL_HINT_JOYSTICK_DIRECTINPUT, read by
+   SDL_Init). SDL 3.4 runs that scan on this thread inside
+   SDL_UpdateJoysticks after every HID arrival or removal and on the two
+   timers after it (SDL_windowsjoystick.c), and its own comment says the
+   enumeration "can take a minute even with no controllers" (issue 105).
+   Off, XInput, HIDAPI and Raw Input still find the usual pads; a device
+   only DirectInput knows (older wheels, flight sticks, some generic
+   pads) is not found. SDL_HINT_JOYSTICK_THREAD (on by default) is not an
+   alternative: its thread only waits for the device notifications, the
+   scan itself stays in SDL_UpdateJoysticks. */
+static void joystick_scan_hints(void)
+{
+    const char *v = getenv("ICO_JOYSTICK_DIRECTINPUT");
+
+    s_joyDirectInput = !(v != NULL && v[0] == '0');
+    if (s_joyDirectInput) {
+        return;
+    }
+#ifdef _WIN32
+    SDL_SetHint(SDL_HINT_JOYSTICK_DIRECTINPUT, "0");
+    fprintf(stderr, "window: controllers: the DirectInput scan is off ([dev] joystick_directinput "
+                    "= false): XInput, HIDAPI and Raw Input controllers are found as usual, a "
+                    "device only DirectInput knows is not\n");
+#else
+    fprintf(stderr, "window: controllers: [dev] joystick_directinput = false has no effect "
+                    "outside Windows\n");
+#endif
 }
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
@@ -1352,6 +1430,14 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        iOS set SDL_HINT_APP_NAME, which SDL prefers */
     SDL_SetAppMetadata("ICO PC", ICO_VERSION_LABEL[0] != '\0' ? ICO_VERSION_LABEL : NULL,
                        "com.defnf.icopc");
+    /* SDL's own log into the pump's ring (pump_watch.h), the controllers'
+       and the system's lines down to VERBOSE (issue 105: a stall after a
+       controller change is shown beside the joystick drivers' own steps);
+       its warnings and errors also into this log (sdl_log_output) */
+    SDL_SetLogOutputFunction(sdl_log_output, NULL);
+    SDL_SetLogPriority(SDL_LOG_CATEGORY_INPUT, SDL_LOG_PRIORITY_VERBOSE);
+    SDL_SetLogPriority(SDL_LOG_CATEGORY_SYSTEM, SDL_LOG_PRIORITY_VERBOSE);
+    joystick_scan_hints();
 #ifdef _WIN32
     /* The controllers' scan out of SDL_PollEvent: ico_window_pump calls
        SDL_UpdateJoysticks itself, timed apart from the system's messages
@@ -1398,6 +1484,7 @@ open_window:
     ico_pump_win_install(SDL_GetPointerProperty(SDL_GetWindowProperties(s_window),
                                                 SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL));
     ico_diag_set_os_wait_describe(pump_describe);
+    ico_diag_set_report_extra(sdl_log_report);
     fprintf(stderr, "window: video driver %s; screensaver and idle sleep %s\n",
             SDL_GetCurrentVideoDriver() != NULL ? SDL_GetCurrentVideoDriver() : "(none)",
             SDL_ScreenSaverEnabled() ? "allowed (not inhibited)" : "inhibited");
@@ -1492,6 +1579,7 @@ open_window:
         }
     }
     rd_set_activity_fn(window_activity);
+    rd_set_batch_fn(ico_diag_startup_activity_batch);
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     /* not after a bisect that lost the device: the player's driver did not
@@ -1926,6 +2014,13 @@ static int device_lost_quit(void)
     if (!s_shown) {
         s_shown = 1;
         fprintf(stderr, "window: the graphics device was lost; quitting\n");
+        {
+            /* issue 95: Mali's loss came from index spans past 2^24 - 1 */
+            char span[256];
+
+            rd_index_span_text(span, sizeof(span));
+            fprintf(stderr, "window: at the loss: %s\n", span);
+        }
         rd_passring_print(stderr, rd_perf_post_name);
         ico_host_log_flush();
         char dumpName[64];
@@ -2366,6 +2461,29 @@ static void pump_slow(const char *part, Uint64 t0)
             part, (double)(now - t0) / 1e6, ico_host_vsync_count(), ico_host_main_ticks(), recent);
 }
 
+/* After a slow pump's line: SDL's own log lines from 120 s before the
+   part began to now (pump_watch.h; the joystick drivers' add, remove and
+   warning lines), or that there were none */
+static void pump_slow_sdl_log(Uint64 t0)
+{
+    static char text[PUMP_WATCH_SDL_LINES * (PUMP_WATCH_SDL_TEXT + 96)];
+    const Uint64 now = SDL_GetTicksNS();
+    const Uint64 since = t0 > 120000000000ull ? t0 - 120000000000ull : 1;
+    const int n = pump_watch_sdl_text(text, sizeof(text), "window:   ", since, now);
+
+    if (n == 0) {
+        fprintf(stderr,
+                "window: SDL's own log: no line from 120 s before it to its end (%u "
+                "lines this run)\n",
+                (unsigned)pump_watch_sdl_count());
+        return;
+    }
+    fprintf(stderr,
+            "window: SDL's own log from 120 s before it to its end (%d lines, oldest "
+            "first):\n%s",
+            n, text);
+}
+
 /* SDL_PollEvent, marked as a wait the system holds (the watchdog does not
    count it, diag_host.h ico_diag_os_wait_enter) and timed */
 static bool pump_poll(SDL_Event *e)
@@ -2377,7 +2495,10 @@ static bool pump_poll(SDL_Event *e)
     const bool got = SDL_PollEvent(e);
     ico_diag_os_wait_leave();
     pump_watch_part(NULL);
-    pump_slow(PART_POLL, t0);
+    if (SDL_GetTicksNS() - t0 > PUMP_WATCH_SLOW_NS) {
+        pump_slow(PART_POLL, t0);
+        pump_slow_sdl_log(t0);
+    }
     return got;
 }
 
@@ -2386,6 +2507,9 @@ static bool pump_poll(SDL_Event *e)
    (SDL_HINT_AUTO_UPDATE_JOYSTICKS, ico_window_open): the same */
 static void pump_joysticks(void)
 {
+    /* the HID device list's change count before and after (SDL_hidapi.h:
+       on this thread a read of SDL's counter) */
+    const Uint32 hid0 = SDL_hid_device_change_count();
     const Uint64 t0 = SDL_GetTicksNS();
 
     pump_watch_part(PART_JOYSTICKS);
@@ -2393,7 +2517,36 @@ static void pump_joysticks(void)
     SDL_UpdateJoysticks();
     ico_diag_os_wait_leave();
     pump_watch_part(NULL);
+    const Uint64 now = SDL_GetTicksNS();
+    if (now - t0 <= PUMP_WATCH_SLOW_NS) {
+        return;
+    }
     pump_slow(PART_JOYSTICKS, t0);
+    {
+        /* what the scan found and what changed around it (issue 105): a
+           stall the DirectInput scan makes follows a HID change, and
+           [dev] joystick_directinput = false is the test */
+        int n = 0;
+        SDL_JoystickID *ids = SDL_GetJoysticks(&n);
+        const Uint32 hid1 = SDL_hid_device_change_count();
+        const Uint64 last = pump_watch_pad_last_ns();
+        char ago[48];
+
+        SDL_free(ids);
+        if (last != 0) {
+            snprintf(ago, sizeof(ago), "%.1f s before it ended", (double)(now - last) / 1e9);
+        } else {
+            snprintf(ago, sizeof(ago), "never this run");
+        }
+        fprintf(stderr,
+                "window: the controllers' scan: %d controllers after it; the HID device list "
+                "changed %u times during it (SDL_hid_device_change_count %u -> %u); the last "
+                "controller arrived or left %s; the DirectInput scan is %s\n",
+                n, (unsigned)(hid1 - hid0), (unsigned)hid0, (unsigned)hid1, ago,
+                s_joyDirectInput ? "on (to test it: [dev] joystick_directinput = false)"
+                                 : "off ([dev] joystick_directinput = false)");
+    }
+    pump_slow_sdl_log(t0);
 }
 #endif
 
@@ -2510,6 +2663,36 @@ static const char *pump_event_name(Uint32 type)
     }
 }
 
+/* A controller arrived or left: recorded with its name, GUID and SDL
+   driver for the slow-pump lines (pump_watch_pad; a removal is named
+   from its arrival), and a line */
+static void pump_pad_event(const SDL_Event *e, const char *name)
+{
+    const SDL_JoystickID id = e->jdevice.which;
+    const Uint64 now = SDL_GetTicksNS();
+    char line[256];
+
+    if (e->type == SDL_EVENT_JOYSTICK_ADDED) {
+        const SDL_GUID g = SDL_GetJoystickGUIDForID(id);
+        const char *pad = SDL_GetJoystickNameForID(id);
+        char gs[40];
+#ifdef _WIN32
+        const int windows = 1;
+#else
+        const int windows = 0;
+#endif
+
+        SDL_GUIDToString(g, gs, sizeof(gs));
+        pump_watch_pad(1, (uint32_t)id, pad != NULL ? pad : "(unnamed)", gs,
+                       pump_watch_guid_driver(g.data, windows), now);
+    } else {
+        pump_watch_pad(0, (uint32_t)id, NULL, NULL, NULL, now);
+    }
+    pump_watch_pad_newest(line, sizeof(line));
+    fprintf(stderr, "window: system event: %s at vsync %u: %s\n", name, ico_host_vsync_count(),
+            line);
+}
+
 /* The system's events worth a line of their own as they come: the
    window's focus and visibility, the displays, the joysticks (the
    gamepads have input_sdl.c's line) */
@@ -2531,9 +2714,11 @@ static void pump_event_line(const SDL_Event *e, const char *name)
     case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
     case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
     case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+        fprintf(stderr, "window: system event: %s at vsync %u\n", name, ico_host_vsync_count());
+        break;
     case SDL_EVENT_JOYSTICK_ADDED:
     case SDL_EVENT_JOYSTICK_REMOVED:
-        fprintf(stderr, "window: system event: %s at vsync %u\n", name, ico_host_vsync_count());
+        pump_pad_event(e, name);
         break;
     default:
         break;

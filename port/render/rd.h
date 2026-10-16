@@ -560,6 +560,21 @@ float rd_precreate_longest_ms(void);
  * fn(NULL) when the step is over.  NULL (the default): nothing. */
 typedef void (*RdActivityFn)(const char *note);
 void rd_set_activity_fn(RdActivityFn fn);
+/* A start-up batch with a VU vertex shader done (issue 107): fn(line) with
+ * its compile times ("VU batch 329-360 of 702 (extended, compiler
+ * E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4
+ * threads; vu_prelit_vs 50325 words 9801 instructions: 8 x 1.10-2.10 s
+ * mean 1.62 s; ..."), the window passing it to the activity file
+ * (diag_host.h ico_diag_startup_activity_batch); the log also gets the
+ * line with each pipeline's time ("rd: pipelines: compiled ...; each (s):
+ * 1.10 1.22 ...").  NULL (the default): the log line only. */
+void rd_set_batch_fn(RdActivityFn fn);
+/* The VU draws' index spans (issue 95; rd_replay.c measures one replay in
+ * 64): "VU index span: the widest 14314 (frame 812) over 40 measured
+ * frames (one replay in 64), 0 indexed VU draws past 2^24 - 1 of 52000 in
+ * 0 frames; the device takes values up to 16777215", for the line the
+ * window writes at a device loss. */
+void rd_index_span_text(char *out, size_t size);
 /* The depth fog's self-test (rd_fog_path.c): a frame of its own (never
  * recorded, never presented, no frame number) draws a grid of cells at
  * known GS Z on SCENE at its real size and scale and fogs it with a known
@@ -578,7 +593,9 @@ bool rd_fog_selftest(void);
 /* What the renderer decided at its start, for the window's summary line
  * (diag_host.h ico_diag_set_summary): "blend <mode> (self-test: ...);
  * index values dense (marks in the stream); fog <path> (self-test: ...);
- * VU shaders one set for every GPU" and ", pass split every N" when on. */
+ * VU shaders plain only (issue 107)" or "VU shaders plain and extended" (the
+ * policy rd_init chose, rd__vu_policy_init), and ", pass split every N" when
+ * on. */
 void rd_summary_text(char *out, size_t size);
 /* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
  * (never recorded, never presented) draws on SCENE at its real size and

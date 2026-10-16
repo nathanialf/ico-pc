@@ -496,6 +496,12 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("storage_pass_merge", "true"), "1") == 0);
     CHECK(ico_dev_env_value("storage_pass_merge", "sometimes") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.storage_pass_merge"), "storage_pass_merge") == 0);
+    /* joystick_directinput: SDL's DirectInput controller scan (issue 105) */
+    CHECK(strcmp(ico_dev_env_name("joystick_directinput"), "ICO_JOYSTICK_DIRECTINPUT") == 0);
+    CHECK(strcmp(ico_dev_env_value("joystick_directinput", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("joystick_directinput", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("joystick_directinput", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.joystick_directinput"), "joystick_directinput") == 0);
     /* config.toml's [dev] keys reach the same ini keys */
     CHECK(strcmp(ico_config_ini_key("dev.blend"), "blend") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.fog_path"), "fog_path") == 0);

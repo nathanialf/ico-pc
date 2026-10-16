@@ -209,6 +209,15 @@ static void segv_thread(void *arg)
     "creating pipelines 329-360 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs 50325 "       \
     "words; largest fragment vu_texa_ps 21000 words"
+/* a VU batch's compile-time lines (rd.h rd_set_batch_fn) */
+#define VU_TIMES_1                                                                                 \
+    "VU batch 300-331 of 702 (plain, compiler E031.41.03.47): 32 pipelines 0.20-0.90 s, mean "     \
+    "0.41 s, 3.2 s on 4 threads; vu_prelit_plain_vs 22392 words 4100 instructions: 32 x "          \
+    "0.20-0.90 s mean 0.41 s"
+#define VU_TIMES_2                                                                                 \
+    "VU batch 332-340 of 702 (plain, compiler E031.41.03.47): 9 pipelines 0.30-1.10 s, mean "      \
+    "0.52 s, 1.4 s on 4 threads; vu_lit_plain_vs 23305 words 4300 instructions: 9 x 0.30-1.10 "    \
+    "s mean 0.52 s"
 #define VU_PLAIN_NOTE                                                                              \
     "creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
@@ -530,6 +539,22 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_set_activity(BATCH_NOTE);
         ico_diag_set_activity(strcmp(mode, "actvuext") == 0 ? VU_EXT_NOTE : VU_PLAIN_NOTE);
         _exit(0);
+    } else if (strcmp(mode, "actvutimes") == 0) {
+        /* the plain batches compiled (their times kept as the file's
+           "compiled: " lines), then the device froze in an extended one */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_activity(VU_PLAIN_NOTE);
+        ico_diag_startup_activity_batch(VU_TIMES_1);
+        ico_diag_startup_activity_batch(VU_TIMES_2);
+        ico_diag_set_activity(VU_EXT_NOTE);
+        _exit(0);
+    } else if (strcmp(mode, "actvutimesdone") == 0) {
+        /* the same set completed: no times are left for the next start */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_activity(VU_PLAIN_NOTE);
+        ico_diag_startup_activity_batch(VU_TIMES_1);
+        ico_diag_startup_activity_record(0);
+        child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity("creating the start-up pipelines (1 of 9)");
@@ -1470,6 +1495,29 @@ int main(int argc, char **argv)
         r = run(argv[0], "actnext", log);
         s = read_file(log);
         CHECK(strstr(s, "test: previous vu ext 0") != NULL);
+        /* the plain batches' compile times survive the freeze in an
+           extended one: the file holds them after the note, and the next
+           start logs each with the version, then the note */
+        r = run(argv[0], "actvutimes", log);
+        CHECK(r == 0);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n" VU_EXT_NOTE "\ncompiled: " VU_TIMES_1
+                        "\ncompiled: " VU_TIMES_2) == 0);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " VU_TIMES_1 "\n") !=
+              NULL);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " VU_TIMES_2 "\n") !=
+              NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_EXT_NOTE "\n") != NULL);
+        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
+        /* a set that completed leaves no file and no times */
+        run(argv[0], "actvutimesdone", log);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "compiled: ") == NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
         /* a run ended between a shorter note's write and the cut: the
            padding's NUL ends the note (diag_host.c act_write) */
         {
