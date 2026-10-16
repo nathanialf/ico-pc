@@ -288,6 +288,10 @@ void rd__frame_reset(RdFrame *f)
     f->tempCount = 0;
     rd__water_frame_reset(f); /* block targets, aliases, camera scopes */
     f->hasCamera = 0;
+    /* the slot's last cut goes with it: rd_end_frame sets camera.cut and
+     * only rd_set_camera clears it, so a frame that sets no camera would
+     * otherwise snap as a cut every RD_FRAME_RING frames after one */
+    f->camera.cut = 0;
     f->hasVu = 0;
     f->headValid = 0;
     f->cut = 0;
