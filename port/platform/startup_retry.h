@@ -35,11 +35,15 @@
  * left: the crash box is shown.
  *
  * An end without a crash report (the system ends the app, the device
- * freezes) never reaches these steps: the start-up activity file names it
- * at the next start, which makes lazy last (no start-up set from then on,
- * [dev] pipeline_set = "lazy" written to config.toml, diag_host.h
- * ico_diag_startup_pipeline_set), or after an extended VU batch draws with
- * the plain variants instead ([dev] vu_plain_only, window_host.c).
+ * freezes, the user swipes it away) never reaches these steps: the
+ * start-up activity file names it at the next start, which takes lazy for
+ * that start only (diag_host.h ico_diag_startup_pipeline_set), or after an
+ * extended VU batch draws with the plain variants for that start only
+ * (ico_diag_startup_vu_plain). The second such end in a row, in the
+ * foreground, makes it last ([dev] pipeline_set = "lazy" or [dev]
+ * vu_plain_only = true written to config.toml, ico_diag_startup_end_persist,
+ * not on a device the table already makes lazy); an end in the background
+ * is not counted (ico_diag_startup_activity_background).
  *
  * After a device loss (STARTUP_RETRY_LOSS) the steps, in order; each is
  * taken only when the run before lost the device:
@@ -168,8 +172,9 @@ bool startup_retry_note_has_dst(const char *note);
  * key's " ext N" field, N nonzero; a batch's keys are all such keys or
  * none is).  window_host.c: a start that ended without a word inside such
  * a batch (the device froze, the system ended the app) makes the next
- * start, and every start after it, draw with the plain variants only
- * ([dev] vu_plain_only = true in config.toml).  Tolerant as
+ * start draw with the plain variants only, and the second such end in a
+ * row every start after it ([dev] vu_plain_only = true in config.toml,
+ * diag_host.h ico_diag_startup_vu_plain).  Tolerant as
  * startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_ext(const char *note);
 

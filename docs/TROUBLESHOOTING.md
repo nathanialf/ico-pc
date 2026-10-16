@@ -50,13 +50,19 @@ on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 
 If the game stops while it says **Preparing graphics** (it closes, or the
 phone takes you back to its home screen), start it again. The game sees
-that the last start stopped there and takes a different path on its own:
-from then on it skips this screen and prepares each piece of graphics the
-first time the game needs it. The title comes at once; the first minutes
-of play can pause for a moment here and there while graphics are prepared,
-and the game keeps what it prepared, so later starts pause less. On the
-AYN Thor and the AYN Odin 2 Portal the game does this from the first
-start. If it stops on this screen twice, tell the game yourself: close it,
+that the last start stopped there and, for that one start, takes a
+different path: it skips this screen and prepares each piece of graphics
+the first time the game needs it. The title comes at once; the first
+minutes of play can pause for a moment here and there while graphics are
+prepared, and the game keeps what it prepared, so later starts pause less.
+The start after that tries this screen again, because the stop may not
+have been the graphics' fault (closing the game from the recent apps or
+Task Manager looks the same to it). If the game stops while preparing
+graphics two starts in a row, it keeps to the different path from then on
+and writes that into `config.toml`. A stop while the game was in the
+background (you switched to another app) does not count. On the AYN Thor
+and the AYN Odin 2 Portal the game takes the different path on every
+start, and writes nothing. You can also tell the game yourself: close it,
 open `config.toml` from the folder with your saves
 ([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
 and add these two lines at the end (if the file already has a `[dev]`
@@ -75,13 +81,15 @@ memory the game was using.
 If the whole phone or handheld freezes on **Preparing graphics** and you
 have to restart it, its graphics driver stopped while it got the game's
 largest 3D graphics ready. Restart the device and start the game again:
-the game sees that the last start stopped there and from then on uses
-smaller 3D graphics that such a device can prepare. Wide screens then
-show a little less at the old 4:3 edges. On the AYN Thor and the AYN Odin
-2 Portal the game uses the smaller graphics from the first start, and
-prepares them as it goes rather than on this screen. If it
-freezes again, send the log from the start after the freeze: it lists how
-long each group of graphics took to prepare before the freeze.
+the game sees that the last start stopped there and, for that start,
+uses smaller 3D graphics that such a device can prepare. Wide screens then
+show a little less at the old 4:3 edges. If a later start freezes there
+again, the game uses the smaller graphics from then on and writes that
+into `config.toml`. On the AYN Thor and the AYN Odin 2 Portal the game
+uses the smaller graphics from the first start, and prepares them as it
+goes rather than on this screen. If it keeps freezing, send the log from
+the start after the freeze: it lists how long each group of graphics took
+to prepare before the freeze.
 
 You can also tell the game to use the smaller 3D graphics yourself, for
 example when the log of the start that froze ends with a line that has

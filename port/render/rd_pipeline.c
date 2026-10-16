@@ -1840,8 +1840,8 @@ bool rd__vu_policy_init(const RhiLimits *lim)
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)", lim->vuPlainOnly);
     } else if (envOn("ICO_RD_VU_PLAIN")) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy),
-                 "by the settings ([dev] vu_plain_only, which the game writes after a start "
-                 "that ended while the graphics driver compiled the extended ones, issue 107)");
+                 "by the settings ([dev] vu_plain_only, which the game writes after two starts "
+                 "in a row ended while the driver compiled the extended ones, issue 107)");
     } else if (s_vuHostWhy[0]) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "(%s)", s_vuHostWhy);
     }

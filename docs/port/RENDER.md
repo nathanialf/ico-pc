@@ -611,7 +611,8 @@ renderer part ends with `pipelines the start-up set` or `pipelines on first use 
 | --- | --- |
 | on a device of the table (`RhiLimits.lazyPipelines`, the lazy column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
 | `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
-| the previous start, of any version, ended without a word while a pipeline was being made: the setting is written now ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
+| the previous start, of any version, ended without a word in the foreground while a pipeline was being made, the first such end in a row: this start only, nothing written ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; for this start only)` |
+| the same, the second end in a row: the setting is written once the device is made, not on a device of the table ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
@@ -702,13 +703,18 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
 
 - **After a freeze.** A batch's note goes to the disc before the batch starts (fsync,
-  `port/platform/diag_host.c` `act_sync_note`). A start that ended without a word inside a batch of
-  extended VU keys (`startup_retry_note_has_vu_ext` on the activity file's note) makes the next
-  start write `[dev] vu_plain_only = true` to `config.toml` and draw with the plain ones, now and
-  at every later start (`port/platform/window_host.c`): `ico_pc: the previous start ended while
-  the graphics driver compiled the largest 3D shaders ...`. That start builds its set as usual
-  (the cause is out of it), not lazily. A restart after a crash report takes its own step
-  ([PLATFORM.md](PLATFORM.md#diagnostics)).
+  `port/platform/diag_host.c` `act_sync_note`). A start that ended without a word, in the
+  foreground, inside a batch of extended VU keys (`startup_retry_note_has_vu_ext` on the activity
+  file's note) makes the next start draw with the plain ones for that start only, nothing written
+  (`ico_pc: the previous start ended while the graphics driver compiled the largest 3D shaders (the
+  VU extended variants); this start only uses the smaller ones ...`); the next start that compiles
+  them and ends there again writes `[dev] vu_plain_only = true` to `config.toml` and draws with the
+  plain ones at every later start (`port/platform/window_host.c`, `diag_host.h`
+  `ico_diag_startup_end_persist`): `ico_pc: the previous start ended while the graphics driver
+  compiled the largest 3D shaders (the VU extended variants); this start and every start after it
+  use the smaller ones only ...`. Nothing is written on a device of the table. Those starts build
+  their set as usual (the cause is out of it), not lazily. A restart after a crash report takes its
+  own step, and an end in the background is not counted ([PLATFORM.md](PLATFORM.md#diagnostics)).
 - **Overrides.** `ICO_RD_VU_PLAIN=1` (`[dev] vu_plain_only`) keeps any device to the plain
   ones; `ICO_RD_VU_EXTENDED=1` (`[dev] vu_extended`) gives the extended ones whatever the table or
   the setting says (`rd__vu_policy_init`).

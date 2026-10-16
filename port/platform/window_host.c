@@ -925,6 +925,14 @@ static bool SDLCALL lifecycle_watch(void *userdata, SDL_Event *event)
 #else
     const int ready = s_open;
 #endif
+    /* the background mark of the start-up activity file (diag_host.h
+       ico_diag_startup_activity_background): an end there is the
+       system's or the user's, not one while preparing the graphics */
+    if (e == ICO_LIFECYCLE_WILL_ENTER_BACKGROUND) {
+        ico_diag_startup_activity_background(1);
+    } else if (e == ICO_LIFECYCLE_DID_ENTER_FOREGROUND) {
+        ico_diag_startup_activity_background(0);
+    }
     if (e != ICO_LIFECYCLE_NONE && ready) {
 #ifdef ICO_IOS
         if (e == ICO_LIFECYCLE_WILL_ENTER_BACKGROUND) {
@@ -1355,12 +1363,20 @@ static void joystick_scan_hints(void)
 }
 
 /* [dev] pipeline_set = "lazy" in config.toml, for good (issues 93 and
-   107: a start that ended while preparing the pipelines; diag_host.h
-   ico_diag_startup_pipeline_set): 0 when written */
+   107: the second start in a row that ended while preparing the
+   pipelines; diag_host.h ico_diag_startup_end_persist): 0 when written */
 static int pipeline_set_persist_lazy(void)
 {
     return ico_config_set_string("dev.pipeline_set", "lazy") == 0 && ico_config_save() == 0 ? 0
                                                                                             : -1;
+}
+
+/* [dev] vu_plain_only = true in config.toml, for good (issue 107: the
+   second start in a row that ended inside an extended VU batch): 0 when
+   written */
+static int vu_plain_persist(void)
+{
+    return ico_config_set_bool("dev.vu_plain_only", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
 }
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
@@ -1421,38 +1437,39 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* issue 107: a start that ended without a word while the graphics
        driver compiled the VU vertex shaders' extended variants (the
        Adreno 740 froze the whole device on them; the activity file names
-       the batch, startup_retry_note_has_vu_ext) makes this start and every
-       one after it draw with the plain variants: [dev] vu_plain_only =
-       true in config.toml (read back as ICO_RD_VU_PLAIN at the next
-       start), rd_set_vu_plain_only for this one. The cause is then out of
-       the set, so this start builds the set as usual (not lazily). A
-       restart after a crash report takes its own step instead. */
-    if (retry == STARTUP_RETRY_NONE &&
-        startup_retry_note_has_vu_ext(ico_diag_startup_activity_prev())) {
-        const int setOk = ico_config_set_bool("dev.vu_plain_only", 1) == 0;
-        const int saved = setOk && ico_config_save() == 0;
-        fprintf(stderr,
-                "ico_pc: the previous start ended while the graphics driver compiled the "
-                "largest 3D shaders (the VU extended variants); this start and every start "
-                "after it use the smaller ones only ([dev] vu_plain_only = true in %s%s): the "
-                "wide-screen rule is off; delete that line to try the larger ones again\n",
-                ico_config_toml_path() ? ico_config_toml_path() : "config.toml",
-                saved ? "" : ", which could not be written: this start only");
-        rd_set_vu_plain_only("[dev] vu_plain_only: the last start ended while the graphics "
-                             "driver compiled the extended ones, issue 107");
+       the batch, startup_retry_note_has_vu_ext) makes this start draw with
+       the plain variants (rd_set_vu_plain_only); the first such end in a
+       row for this start only, the second also every start after it ([dev]
+       vu_plain_only = true in config.toml, read back as ICO_RD_VU_PLAIN at
+       the next start, written after rd_init unless the device table already
+       rules the device, ico_diag_startup_end_persist). An end in the
+       background is not counted (diag_host.h
+       ico_diag_startup_activity_background). The cause is then out of the
+       set, so this start builds the set as usual (not lazily). A restart
+       after a crash report takes its own step instead (its count is 0). */
+    const char *cfgName = ico_config_toml_path() ? ico_config_toml_path() : "config.toml";
+    const int vuEnds = retry == STARTUP_RETRY_NONE ? ico_diag_startup_vu_plain(cfgName) : 0;
+    if (vuEnds > 0) {
+        rd_set_vu_plain_only(vuEnds == 1 ? "[dev] vu_plain_only for this start: the last start "
+                                           "ended while the graphics driver compiled the "
+                                           "extended ones, issue 107"
+                                         : "[dev] vu_plain_only: the last two starts ended "
+                                           "while the graphics driver compiled the extended "
+                                           "ones, issue 107");
         lazyStart = false;
     }
     /* issues 93 and 107: the start-up set or none. [dev] pipeline_set =
        "lazy" (ICO_PIPELINE_SET), or a previous start of any version that
-       ended without a word while a pipeline was being made (not inside an
-       extended VU batch, above): this start and every one after it make
-       the pipelines as the game needs them, the setting written now. The
-       device table's rule (RhiLimits.lazyPipelines) is read after
-       rd_init. */
+       ended in the foreground without a word while a pipeline was being
+       made (not inside an extended VU batch, above): this start makes the
+       pipelines as the game needs them, the first such end in a row for
+       this start only, the second also every start after it (the setting
+       written after rd_init unless the device table already makes this
+       device lazy). The device table's rule (RhiLimits.lazyPipelines) is
+       read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
-    const int pipePolicy = ico_diag_startup_pipeline_set(
-        retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, pipeline_set_persist_lazy,
-        ico_config_toml_path() ? ico_config_toml_path() : "config.toml");
+    const int pipePolicy =
+        ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);
@@ -1714,6 +1731,16 @@ open_window:
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
     const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
+    /* the second end in a row of a kind: its setting for good, not on a
+       device the table already makes lazy (diag_host.h
+       ico_diag_startup_end_persist says which) */
+    if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+        (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, devLazy,
+                                           pipeline_set_persist_lazy, cfgName);
+    }
+    if (vuEnds >= 2) {
+        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, devLazy, vu_plain_persist, cfgName);
+    }
     if (retry == STARTUP_RETRY_LAZY || pipePolicy != ICO_DIAG_PIPESET_FULL || devLazy != NULL) {
         char why[160];
 
@@ -1729,6 +1756,9 @@ open_window:
             snprintf(why, sizeof(why), "(a restart after a graphics driver crash)");
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_SETTING) {
             snprintf(why, sizeof(why), "by the settings ([dev] pipeline_set = \"lazy\")");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE) {
+            snprintf(why, sizeof(why),
+                     "(the previous start ended while preparing them; for this start only)");
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
             snprintf(why, sizeof(why),
                      "(the previous start ended while preparing them; [dev] pipeline_set = "

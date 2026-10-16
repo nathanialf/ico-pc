@@ -375,8 +375,8 @@ A crash while the renderer builds a pipeline is a graphics driver crash: the act
 (`ico_diag_set_activity`) starts with "creating pipeline" or "creating the start-up pipelines". On
 Windows, Linux and macOS the handler then starts the program again at once, with
 `ICO_STARTUP_RETRY=<step>:<backend>` in the new run's environment; nothing is written to the user
-folder or the settings (an end without a crash report has a step of its own, which writes one:
-below). The steps come in order, each taken only when the run before crashed:
+folder or the settings (an end without a crash report has a step of its own, which writes one
+on the second such end in a row: below). The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
 tries again), `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
@@ -448,33 +448,87 @@ the recording starts and closed when it ends; each note is one write at the file
 with NULs over a longer text before it, then the file is cut to the note, so it reads as one whole
 note even when the process is ended between the two (`port/platform/diag_host.c` (`act_write`,
 `act_open`, `act_close`)). The next start of the same version logs
-`ico_pc: the previous run ended while: <note>` and creates the pipelines as the frames need them;
+`ico_pc: the previous run ended while: <note>` and creates the pipelines as the frames need them
+(for how long: the chain's step below);
 another version's file is logged; a lazy run's clean exit leaves its own
 line, logged as `ico_pc: the previous run created the pipelines as the frames needed them; this one
 does too`, so the lazy start sticks until the version changes (`port/platform/diag_host.h`
 (`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)).
 
-The chain's step for an end without a crash report (issues 93 and 107): a note that names a
-pipeline being made (`creating pipeline ...`, `creating pipelines ...` or `creating the start-up
-pipelines`), from a start of any version that was not a restart after a crash report, and not
-inside an extended VU batch (below), makes the next start skip the start-up set for good: it writes
-`[dev] pipeline_set = "lazy"` to `config.toml` and logs `ico_pc: the previous start ended while
-preparing the graphics (<note>); this start and every start after it make the pipelines as the
-game needs them, with no start-up set ([dev] pipeline_set = "lazy" in <path>); delete that line to
-try the start-up set again` (`, which could not be written: this start only` when the write
-failed) (`port/platform/diag_host.h` (`ico_diag_startup_pipeline_set`);
-`port/platform/window_host.c` (`pipeline_set_persist_lazy`)). It is the crash order's `lazy` step
-made to last, for the ends a crash handler never sees (the system ending the app, a device that
-freezes); a crash with a report keeps its own order above. The setting outlives the version, as
-`[dev] vu_plain_only` does; deleting the line makes the next start try the set again
-([RENDER.md](RENDER.md#the-start-up-set)). A batch's note, and any note naming an extended VU
-pipeline, is written through to the disc (fsync, `act_sync_note`) before the driver starts on it,
-and in a lazy run every first-use pipeline's note, so it is still there after a device that froze
-was rebooted (issue 107). A note naming a batch of the VU
-vertex shaders' extended variants (` ext 1`, `startup_retry_note_has_vu_ext`, whatever the version)
-makes the next start, unless it is a restart after a crash report, write `[dev] vu_plain_only =
-true` to `config.toml` and draw with the plain variants from then on; that start builds the set as
-usual, not lazily ([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
+The chain's step for an end without a crash report (issues 93 and 107). Such an end is ambiguous:
+the driver may have killed the process, or the player swiped the app away, the system ended it in
+the background, or Task Manager did. So the first one changes one start only, and the second in a
+row makes it last. A note that names a pipeline being made (`creating pipeline ...`, `creating
+pipelines ...` or `creating the start-up pipelines`), from a start of any version that was not a
+restart after a crash report and was in the foreground, counts one end in a row of its kind: an
+extended VU batch's (` ext 1`, `startup_retry_note_has_vu_ext`) or else the pipelines'. The counts
+live beside the activity file in `logs/startup-activity-ends.txt` (`pipelines <n>`, `vu_ext <n>`),
+and each counted end logs `ico_pc: starts in a row that ended while preparing the graphics (the
+pipelines): 1 (the second makes the setting permanent)` (`(the extended VU shaders)` for the
+other kind) (`port/platform/diag_host.h` (`ico_diag_startup_end_count`); `port/platform/diag_host.c`
+(`ends_count_prev`)). The first pipelines' end makes the next start, and only that one, skip the
+start-up set: `ico_pc: the previous start ended while preparing the graphics (<note>); this start
+only makes the pipelines as the game needs them, with no start-up set (nothing is written to
+<path>); if this start also ends while preparing them, [dev] pipeline_set = "lazy" is written for
+good`; its notes between two creations and its clean exit say `for this start only`, so the start
+after it logs `ico_pc: the previous run made the pipelines as the frames needed them for that start
+only; this one tries the start-up set again` (`ico_diag_startup_pipeline_set`,
+`ICO_DIAG_PIPESET_LAZY_ONCE`). A second end in a row (that lazy start also ended inside a pipeline)
+writes `[dev] pipeline_set = "lazy"` to `config.toml` once the device is made and logs `ico_pc: the
+previous start ended while preparing the graphics (<note>); this start and every start after it
+make the pipelines as the game needs them, with no start-up set ([dev] pipeline_set = "lazy" in
+<path>); delete that line to try the start-up set again` (`, which could not be written: this
+start only` when the write failed) (`ico_diag_startup_end_persist`; `port/platform/window_host.c`
+(`pipeline_set_persist_lazy`)). It is the crash order's `lazy` step made to last, for the ends a
+crash handler never sees (the system ending the app, a device that freezes); a crash with a report
+keeps its own order above. The setting outlives the version, as `[dev] vu_plain_only` does; deleting
+the line makes the next start try the set again ([RENDER.md](RENDER.md#the-start-up-set)).
+
+What breaks a row: an end in the background (below) breaks the row of its kind; any other note in
+the file (the run ended between two creations, or in the loss bisect) breaks the pipelines' row; a
+start-up set that finished, or a lazy run's normal exit, clears the pipelines' row, and the extended
+VU row too when that run built extended VU pipelines (`ends_clean`). The plain run an extended VU
+end gives builds none, so it leaves that row as it was, and the next start that compiles them and
+ends there again is the second. A restart after a crash report counts nothing.
+
+The background mark: while the activity file records, the app going to the background (the
+lifecycle's `SDL_EVENT_WILL_ENTER_BACKGROUND` on Android and iOS, `lifecycle_watch`, or Android's
+`onTrimMemory` at level 20 or more, which arrives on the activity's thread even when the main
+thread is held) writes `logs/startup-activity-background.txt` (the version, `background: the app
+went to the background at pipelines 201 of 527 of the start-up set` or `with <n> pipelines made`,
+then every `system: ` line that comes while there) and logs `ico_pc: the app went to the background
+at pipelines 201 of 527 of the start-up set; an end there is not counted as one while preparing the
+graphics`; coming back deletes it (`ico_pc: back in the foreground; the background mark is
+deleted`), and so does the end of the recording. The next start reads and deletes the mark: an end
+while preparing the graphics with it is logged as `ico_pc: the previous run ended while: <note>, in
+the background (the app went to the background at ...); the system ends apps there, so it is not
+counted as an end while preparing the graphics: the start-up set as usual`, and the mark's system
+lines the activity file did not get as `ico_pc: the previous run was told by the system in the
+background: <line>` (`ico_diag_startup_activity_background`).
+
+On a device the device table already makes lazy (`RhiLimits.lazyPipelines`, the Adreno 740 row of
+`port/rhi/vk/vk_device.c`, which is also kept to the plain VU variants) nothing is ever written:
+the setting would be redundant and would outlive a change of the table. The second end in a row
+logs `ico_pc: the second start in a row ended while preparing the graphics (<note>); [dev]
+pipeline_set = "lazy" is not written to <path>: the device table already makes the pipelines as
+the game needs them on this device (Adreno 740, issue 107)` (the same with `[dev] vu_plain_only =
+true`).
+
+A batch's note, and any note naming an extended VU pipeline, is written through to the disc
+(fsync, `act_sync_note`) before the driver starts on it, and in a lazy run every first-use
+pipeline's note, so it is still there after a device that froze was rebooted (issue 107). An end inside a batch of the VU
+vertex shaders' extended variants follows the same rule with its own count and setting: the first
+makes the next start, unless it is a restart after a crash report, draw with the plain variants
+for that start only (`ico_pc: the previous start ended while the graphics driver compiled the
+largest 3D shaders (the VU extended variants); this start only uses the smaller ones (nothing is
+written to <path>): the wide-screen rule is off for this start; if a start that compiles them ends
+there again, [dev] vu_plain_only = true is written for good`, `ico_diag_startup_vu_plain`); the
+second in a row writes `[dev] vu_plain_only = true` to `config.toml` and logs `ico_pc: the previous
+start ended while the graphics driver compiled the largest 3D shaders (the VU extended variants);
+this start and every start after it use the smaller ones only ([dev] vu_plain_only = true in
+<path>): the wide-screen rule is off; delete that line to try the larger ones again`
+(`vu_plain_persist`). Either start builds the set as usual, not lazily
+([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
 `ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
 compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and

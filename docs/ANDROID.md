@@ -228,9 +228,10 @@ first shows a message that says so and where its log is. Sometimes the
 phone closes it without a message (for example when the phone runs short
 of memory); the log then just stops. If that happened while the game was
 getting its graphics ready, the next start's log says where it stopped,
-and from then on the game gets its graphics ready as you play until you
-install a new version, or until you delete the file `startup-activity.txt`
-in the `logs` folder. Send `logs/ico-pc.log` from the start where it
+and that start gets its graphics ready as you play. If it stops there
+two starts in a row, the game does that from then on and writes it into
+`config.toml` ([how to undo that](TROUBLESHOOTING.md#the-first-start-takes-a-long-time)).
+A stop while the game was in the background does not count. Send `logs/ico-pc.log` from the start where it
 happened. The same goes for a message that the graphics driver stopped
 responding while the game was drawing: the log says what was being drawn.
 Also send the newest `loss-` file from `logs` (the message names it). At the
