@@ -30,7 +30,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/window_host.c`, `window_host.h` | the SDL3 window, the renderer device, the real-time pacing, the stats lines (window build) |
 | `port/platform/window_video.c`, `window_video.h` | window mode requests and their readback |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
-| `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, and the names of the messages (pure C, tested everywhere) |
+| `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
 | `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
 | `port/platform/pace_policy.c`, `pace_policy.h` | the pacing decisions, free of SDL: the vsync lock, slow presents, the gap between presents |
 | `port/platform/display_clock.h`, `display_clock_win.c`, `display_clock_none.c`, `perf_block.c`, `perf_block.h` | the vsync lock's vblank clock and the replay blocks ([DISPLAY.md](DISPLAY.md#files)) |
@@ -461,7 +461,17 @@ true` to `config.toml` and draw with the plain variants from then on; that start
 usual, not lazily ([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
 `ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
-compiling. The driver compiles the set on worker threads
+compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and
+ends with the device's compiler (`; compiler E031.41.03.47`). Each finished batch with a VU vertex
+shader adds a `compiled: ` line after the note (the last 24, written at once, so on the disc with
+the next batch's note): its range, variant, compiler, pipeline count, the compile times' minimum,
+maximum and mean, the batch's wall time and threads, and the same by vertex shader with its words
+and instructions (`rd.h` `rd_set_batch_fn`, `diag_host.h` `ico_diag_startup_activity_batch`). The
+next start logs each as `ico_pc: the previous run (version V) compiled: VU batch 297-328 of 702
+(plain, compiler ...): 32 pipelines 0.20-0.90 s, mean 0.41 s, ...` before the note it ended in, so
+a device that froze shows where its compile times stood against the shaders' sizes (issue 107); the
+log itself has the line as each batch completes, with every pipeline's time (`rd: pipelines:
+compiled ...; each (s): ...`). The activity note holds 640 bytes. The driver compiles the set on worker threads
 (`rhi_create_pipelines`, [RHI.md](RHI.md#the-interface)); the main thread waits in the renderer's
 progress function, about every 50 ms, and from it shows the "Preparing graphics (N of M)" screen on
 every platform, drawn only once the set has taken 250 ms and then at most ten times a second, with
@@ -587,10 +597,53 @@ raw input and hit tests left out; the names cover `WM_SYSCOMMAND` `SC_SCREENSAVE
 `SC_MONITORPOWER` (on, low, off), `WM_POWERBROADCAST`, `WM_DEVICECHANGE`, `WM_DISPLAYCHANGE`,
 `WM_ACTIVATE`, `WM_NCACTIVATE`, `WM_SETFOCUS`/`WM_KILLFOCUS`, `WM_SIZE`,
 `WM_DWMCOMPOSITIONCHANGED`, `WM_INPUT_DEVICE_CHANGE` and `WM_TIMER` among others, and an unknown id
-as `message 0x....`. The window's focus, visibility and display events and the joysticks coming and
-going log `window: system event: NAME at vsync V`, and the 10 s line carries `pump max N ms`
+as `message 0x....`. The window's focus, visibility and display events log `window: system event:
+NAME at vsync V`; a joystick that arrives or leaves logs `window: system event: joystick added at
+vsync V: "Xbox Controller" (GUID 03000000..., XInput)`, recorded with its name, GUID and the SDL
+driver its GUID names (byte 14: `x` XInput, `h` HIDAPI, `r` Raw Input, `w` Windows.Gaming.Input,
+`g` GameInput, 0 DirectInput on Windows; a removal named from its arrival), and every slow-pump line
+and the watchdog's description end with `controllers before it: removed "..." (GUID ..., XInput)
+50.3 s ago, ...` (the last 4). The 10 s line carries `pump max N ms`
 (`port/platform/window_host.c` (`pump_poll`, `pump_joysticks`, `pump_slow`); `port/platform/pump_watch.h`;
 `port/platform/window_pump_win.h`).
+
+**What settles issue 105.** The standing hypothesis is that the 50 s holds are SDL's DirectInput
+enumeration after a controller change. The next log decides it four ways:
+
+- A slow controllers' scan adds `window: the controllers' scan: N controllers after it; the HID
+  device list changed K times during it (SDL_hid_device_change_count a -> b); the last controller
+  arrived or left T s before it ended; the DirectInput scan is on|off`.
+- SDL's own log: the window installs `SDL_SetLogOutputFunction` before `SDL_Init` with the INPUT
+  and SYSTEM categories at VERBOSE, so the joystick drivers' own lines (a HIDAPI device added or
+  removed with its path and driver, DirectInput's warnings) are kept in a ring of the last 64
+  (`pump_watch_sdl_log`); every slow-pump line is followed by the ring's lines from 120 s before the
+  part began (`window: SDL's own log from 120 s before it to its end (N lines, oldest first):`, then
+  `window:   12.3 s ago INPUT debug: ...`), and the report file's `report.txt` ends with the whole
+  ring (`ico_diag_set_report_extra`). SDL's info, warning and error lines also go to the log as
+  `window: SDL <category> <priority>: ...` through the rate limiter, as SDL's own output wrote them
+  before.
+- On Windows the watchdog samples the held main thread at 2, 10 and 30 s into a held wait:
+  `ico_pc: watchdog: the window's event pump has held the main thread for 2 s: at win32u.dll+0x...;
+  code on its stack (innermost first): DINPUT8.dll+0x..., SDL3.dll+0x..., ico_pc_x64.exe+0x...`.
+  Each stack word that points into executable image memory is named from the module's own export
+  table (no loader lock, which the held thread may own: a device scan loads drivers), so
+  `DINPUT8.dll` on the stack names the DirectInput scan and `hid.dll`, `setupapi.dll` or
+  `cfgmgr32.dll` the HID enumeration (`port/platform/diag_host.c` (`os_wait_sample`,
+  `code_address`)).
+- The test: `[dev] joystick_directinput = false` (exported as `ICO_JOYSTICK_DIRECTINPUT=0`) sets
+  `SDL_HINT_JOYSTICK_DIRECTINPUT` to 0 before `SDL_Init`; SDL then never creates its DirectInput
+  object and `SDL_DINPUT_JoystickDetect` returns at once. XInput, HIDAPI and Raw Input still find
+  the usual pads; a device only DirectInput knows is not found. The summary line says `controller
+  ... (DirectInput scan on|off)` and a line names the switch when it is off. SDL 3.4 offers no
+  switch that moves the scan off the main thread: `SDL_HINT_JOYSTICK_THREAD` (on by default) only
+  runs the device-notification window and its 300 ms and 2 s timers on a thread of its own
+  (`SDL_windowsjoystick.c` `SDL_JoystickThread`); the scan itself stays in `WINDOWS_JoystickDetect`,
+  which `SDL_UpdateJoysticks` calls on the pumping thread. So there is no `joystick_update` key.
+
+If the hypothesis holds, the line names the controllers' scan, the stack sample shows `DINPUT8.dll`
+and the holds stop with `joystick_directinput = false`; if the stack shows another module, or the
+held part is `SDL_PollEvent` with no controller change before it, the cause is elsewhere and the
+same lines name it.
 
 **The display and the computer awake.** SDL's `SDL_DisableScreenSaver` sets
 `ES_CONTINUOUS | ES_DISPLAY_REQUIRED` on Windows (`SDL_windowsvideo.c` `WIN_SuspendScreenSaver`) and
@@ -678,7 +731,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 
 | entry | what |
 | --- | --- |
-| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, and the report block itself (the crash or watchdog report with its symbol lines) |
+| `report.txt` | what ended the run and when, the `VERSION.txt` lines (beside the program or one folder up; Android's from the app's assets), `achievements.toml`'s `stages` line (not the file), the [summary line](#the-summary-line), the log's latest device, robust access, blend, VU index, fog, shader and window lines, the last 20 `ico_pc:`, `window:` and `rd:` lines before the report, the report block itself (the crash or watchdog report with its symbol lines), and the window's own part (`IcoReportInputs.extra`, `ico_diag_set_report_extra`: SDL's own log, the last 64 lines) |
 | `ico-pc.log` | the log so far |
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
@@ -701,13 +754,15 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders one set for every GPU; index values up to 4294967295; robust access off; controller Xbox Series X Controller; disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
 the self-tests' results); `port/rhi/rhi.h` (`RhiLimits.driverText`, `robustText`)). The controller
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
-line follows); on Android the disc is mounted after the window ("not mounted yet").
+line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
+the VU shaders are `plain only (issue 107)` on a device or setting that keeps them to the plain
+variants; on Android the disc is mounted after the window ("not mounted yet").
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it

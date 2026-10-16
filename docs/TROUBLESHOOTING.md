@@ -55,7 +55,22 @@ the game sees that the last start stopped there and from then on uses
 smaller 3D graphics that such a device can prepare. Wide screens then
 show a little less at the old 4:3 edges. On the AYN Thor and the AYN Odin
 2 Portal the game uses the smaller graphics from the first start. If it
-freezes again, send the log from the start after the freeze.
+freezes again, send the log from the start after the freeze: it lists how
+long each group of graphics took to prepare before the freeze.
+
+You can also tell the game to use the smaller 3D graphics yourself, for
+example when the log of the start that froze ends with a line that has
+`creating pipelines` in it. Close the game, open `config.toml` from the
+folder with your saves ([where that is](PORTABLE_MODE.md#where-your-saves-are))
+in a text editor and add these two lines at the end (if the file already
+has a `[dev]` line, add only the second line under it):
+
+```toml
+[dev]
+vu_plain_only = true
+```
+
+To try the larger graphics again, delete that line.
 
 ## The screen stays black
 
@@ -73,7 +88,10 @@ ends, and how loud it is playing at its start, half way and at its end.
 Send `ico-pc.log` from that run (if you have started the game again since,
 it is `ico-pc-previous.log`) with a [problem report](#send-a-problem-report),
 and say roughly where in the game it happened and for how long the music
-was missing.
+was missing. The log is worth sending even from a run where the music
+played well: its last lines count how often a piece of music started while
+the game had a lot of sound to send at once, which is when music can go
+missing.
 
 ## The game is slow on an older graphics card
 
@@ -138,6 +156,14 @@ optional, and can be very large when the Resolution is high.
 
 The files contain pictures from your disc, so use them only for a bug
 report, and do not share them anywhere else.
+
+**Puddles, ripples or water look broken.** Press **F12** while it shows and
+attach the `.zip`. Then try these one at a time, each with the others as
+they were, and say in the report which one changed the water: set
+**Anti-aliasing** to **Off**, then (with your anti-aliasing back) set
+**Texture pack** to **Off** ([Options](OPTIONS.md)). The log line the game
+writes when you press F12 says what the water was drawn with, so press F12
+once for each try.
 
 ## Error messages
 
@@ -314,6 +340,25 @@ console does: quit the game to let them sleep. If the game still stops
 after being left alone, the log says which message from Windows held the
 window: look for lines with `has not returned` or `the event pump's` in
 them, and send the log.
+
+If such a line says `the controllers' scan`, Windows held the game while
+it looked for controllers, which can happen right after a controller is
+plugged in, unplugged or turns itself off. To check whether that is the
+cause, close the game, open `config.toml` from the folder with your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
+and add these two lines at the end (if the file already has a `[dev]`
+line, add only the second line under it):
+
+```toml
+[dev]
+joystick_directinput = false
+```
+
+The game then skips Windows' older way of finding controllers. Xbox and
+PlayStation controllers and most others still work; some older wheels,
+flight sticks and plain USB pads are found only that way and stop working.
+Play as before and send the log either way: it says whether the long waits
+stopped. If a controller of yours stops working, delete the line.
 
 ## Texture packs and model packs
 

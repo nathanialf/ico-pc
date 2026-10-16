@@ -287,6 +287,7 @@ under the same name (below). Read through the store:
 | `storage_pass_merge` | bool | `true` | |
 | `vu_plain_only` | bool | `false` | |
 | `vu_extended` | bool | `false` | |
+| `joystick_directinput` | bool | `true` | |
 
 ## ico-pc.ini
 
@@ -328,6 +329,7 @@ store (`backend`, `unlock_credits`):
 | `storage_pass_merge` | `false`: the storage destination read (the interlock or ROV path) ends its storage pass for every draw it does not need the read for instead of drawing those draws in it through the read (exported as `ICO_RD_PASS_MERGE=0`; `true`, the default, exports `1`: the merge on) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |
 | `vu_plain_only` | `true`: every 3D (VU) draw takes the VU vertex shaders' plain variants, the extended ones never compiled; the wide-screen rule and the tick cameras' rule are off (exported as `ICO_RD_VU_PLAIN=1`). The game writes it to `config.toml` itself after a start that ended without a word while the graphics driver compiled the extended ones (issue 107) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `vu_extended` | `true`: the extended variants on a device the renderer's table or `vu_plain_only` keeps to the plain ones (exported as `ICO_RD_VU_EXTENDED=1`) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
+| `joystick_directinput` | `false`: SDL's DirectInput controller scan off on Windows (`SDL_HINT_JOYSTICK_DIRECTINPUT` = 0 before `SDL_Init`; exported as `ICO_JOYSTICK_DIRECTINPUT=0`): the test for a pump held by that scan after a controller change (issue 105); XInput, HIDAPI and Raw Input controllers are still found, a device only DirectInput knows is not. No effect elsewhere (a line says so) ([PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

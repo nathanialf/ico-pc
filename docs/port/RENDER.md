@@ -535,7 +535,14 @@ prelit, lit and skinned batch at the draw's own VU memory and bones: clip w not 
 1e-6 of 0, GS X/Y past 16 bits, the scissor fans, a NaN clip w or bone failed, a NaN in VU memory
 counted); and the textures list 0 binds (id, size, format, mip levels, whether the texels are
 there). On the reporter's lost frame of issue 95 the widest span is 14,314 (the title scenery,
-`st26a_p2`). `ICO_AUDIT_SPANS=1` lists each draw past the bound. A stream one vertex short fails it, in a
+`st26a_p2`). The game measures the same at run time on one replay in 64 (`rd_core.c` `rd__span_draw`,
+from each indexed VU draw's CPU index list): the first measured frame logs `rd: VU index span: frame
+N (the first measured, one replay in 64 from here): the widest W over D indexed VU draws, K past
+2^24 - 1; the device takes values up to M` (expected about 14,314 and 0), a later frame with a draw
+past 2^24 - 1 logs its own line (the first 4), and a device loss logs `window: at the loss: VU
+index span: the widest W (frame N) over F measured frames ..., K indexed VU draws past 2^24 - 1 of
+D in G frames; ...` (`rd_index_span_text`), so a regression of the dense indices shows in a
+player's log. `ICO_AUDIT_SPANS=1` lists each draw past the bound. A stream one vertex short fails it, in a
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
 (2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
@@ -642,12 +649,23 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   of the Original preset at 4:3 and 1x without interpolation (largest vu_lit_plain_vs 23305
   words), extended for the others (largest vu_lit_vs 51238 words)`, or the plain-only line with its
   reason. While the set is created the heartbeat line ends with the batch in flight (`| creating
-  pipelines 329-360 of 702: <first key> to <last key>; vertex vu_prelit_vs 50325 words; largest
-  fragment vu_texa_ps <n> words`), and each batch with a VU vertex shader is logged as it starts
-  (`rd: pipelines: compiling 329-360 of 702 (extended VU): ...`). After the set the ten slowest
-  compiles carry their modules (`(vu_lit_vs 51238 words + vu_ps <n> words)`) and the time by
-  vertex shader each module's size. A log that stops inside the set names the module the driver
-  was compiling.
+  pipelines 329-360 of 702: <first key> to <last key>; vertex vu_prelit_vs 50325 words (9801
+  instructions); largest fragment vu_texa_ps <n> words; compiler E031.41.03.47`: each vertex
+  shader's SPIR-V words and instructions, `rd__shader_instructions`, and on a VU batch the driver's
+  compiler), and each batch with a VU vertex shader is logged as it starts (`rd: pipelines:
+  compiling 329-360 of 702 (extended VU): ...`) and as it completes, with every pipeline's compile
+  time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 702 (extended,
+  compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; vu_prelit_vs
+  50325 words 9801 instructions: 8 x 1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...`
+  (`batchTimes`). The same line without the times goes to the start-up activity file as a
+  `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after
+  a freeze logs every batch the frozen one finished: a device that compiles the plain batches and
+  dies on the first extended one shows its size boundary, and one that dies on plain shows it there.
+  After the set the ten slowest compiles carry their modules (`(vu_lit_vs 51238 words + vu_ps <n>
+  words)`) and the time by vertex shader each module's size. A log that stops inside the set names
+  the module the driver was compiling. To test the size boundary on a device by hand, `[dev]
+  vu_plain_only = true` keeps it to the plain variants and `[dev] vu_extended = true` gives it the
+  extended ones whatever the device table says ([CONFIG.md](CONFIG.md#ico-pcini)).
 
 ## Destination reads and blend paths
 
@@ -1017,7 +1035,7 @@ DATE with DATM 1, so they draw only where the surface set the bit; leveldown and
 test NEVER and AFAIL RGB_ONLY. An F12 adds one line to the log after the box cull's,
 
 ```
-rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; K draws sampled a texture-pack replacement (blank in the dump)
+rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; K draws sampled a texture-pack replacement (blank in the dump), P of them DATE draws; MSAA 8x (resolve: colour the mean of the samples, depth the smallest sample): the last replay's DATE snapshots of SCENE S, A of them read the resolved picture (C closed the epoch), of other targets O
 ```
 
 (one line; a part with nothing to say is left out): each render-to-texture block a draw of the frame
@@ -1033,6 +1051,13 @@ above 1x), counted where the replay resolves a draw's texture (`port/render/rd_r
 (`resolveTexture`); `port/render/rd_water.c` (`rd__block_read`); `RdPerfRecord.blockOtherScaleReads`; `port/platform/window_host.c`). `rd_water_test`
 checks the line on the puddle's frame and the count at 2x under Original (the copy's read) and Sharp
 (none).
+
+The MSAA part (or `no MSAA: the last replay's DATE snapshots of SCENE S, of other targets O`)
+tests the first of issue 106's two candidates: with MSAA a DATE draw on SCENE reads the alpha bit
+through the snapshot of SCENE as the epoch resolved it, the colour the mean of the samples, so an
+edge pixel's bit can differ from what each sample drew (`rd_replay.c` `dateSnapshot`, `rd_core.c`
+`rd__date_msaa_last`). `P of them DATE draws` tests the second: a texture pack's picture sampled
+by the puddle's mask readers themselves.
 
 ## The fog path and its self-test
 

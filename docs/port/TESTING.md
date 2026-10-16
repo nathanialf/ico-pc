@@ -221,7 +221,10 @@ program under an environment switch ([Environment switches](#environment-switche
 - `pump_watch_test.c`: the event pump's history for its slow-pump lines: the window messages' names
   (the display's power, the power and device-change kinds, an unknown id), the noisy ones left out,
   repeats counted, the newest 16 messages and 8 SDL events kept newest first with their age, the
-  message being handled named while it runs and timed, the watchdog's description (`pump_watch`).
+  message being handled named while it runs and timed, the watchdog's description, the controllers
+  that came and went (a removal named from its arrival, the SDL driver from the GUID's byte 14) and
+  SDL's own log ring (the newest 64 oldest first, a time bound, newlines folded, whole lines only in
+  a short buffer) (`pump_watch`).
 - `pace_loop_test.c`: the [vsync lock](ARCHITECTURE.md#terms)'s loop on a grid of the wall clock
   under a fake clock and a fake swapchain, with and without the display clock, at 60, 59.94 and
   120 Hz and on a display that drifts from its report (`pace_loop`).

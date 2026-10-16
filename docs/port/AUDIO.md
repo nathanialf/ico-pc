@@ -394,7 +394,13 @@ full page is counted:
 
 ```
 sndn2: packet page full (255 packets: 0x01 x255); the later packets of this tick are carried to the driver (page 1)
+sndn2: the first packet carried past the page's 255 (packet 0x01): the PS2 would have lost it; the driver runs it after the page's own
+sndn2: the first stream packet carried past the page's 255 (0x3E, a stream's open): without the carry the stream's volume would have been lost
 ```
+
+The two carry lines come once a run each, the second for the first stream packet (0x3E open, 0x40
+volume, 0x41 pitch, 0x42 play, 0x43 stop) the carry saved: the line that proves issue 101's
+mechanism happened in a player's run (`port/audio/stream_watch.c` (`sw_carried`)).
 
 A key-off from the sequencer that lands on one of the four stream voices (slot state 3, taken by
 `SgGetSpuSlotMalloc(1)` in `AdpcmStreamInit`) is logged for the first 8 and counted, naming the
@@ -457,7 +463,7 @@ the levels the voices play at (`port/audio/stream_watch.h`, header comment):
 | line | written by | when |
 | --- | --- | --- |
 | `adpcm: open 43 slot 0 voices 0,1` | the game (`adpcmDataSet`) | the open: stream number, the game's stream slot (0 or 1), the SPU2 voices |
-| `adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff` | the driver (`stream_watch.c`) | two driver ticks after the stream's key-on |
+| `adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff (opened on a page of 37 packets)` | the driver (`stream_watch.c`) | two driver ticks after the stream's key-on; the end says how full the packet page its open ran on was, or `(opened on a full page: carried past its 255)` |
 | `adpcm: 43 at half: voices 0,1 vol ... env ...` | the driver | once the driver has fed half the file's bytes to the voices |
 | `adpcm: 43 at close: voices 0,1 vol ... env ...` | the driver | the stop (0x43) reaching the driver, before its key-off |
 | `adpcm: close 43 (now)` or `(fade)` | the game (`AdpcmClose`) | the close; "fade" when a fade ran out |
@@ -470,7 +476,7 @@ driver lines per stream. Examples from `adpcm_stream_test`:
 
 ```
 adpcm: open 43 slot 0 voices 0,1
-adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff
+adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff (opened on a page of N packets)
 adpcm: 43 at half: voices 0,1 vol 3fff/3fff env 7fff/7fff
 adpcm: 43 at close: voices 0,1 vol 3fff/3fff env 7fff/7fff
 adpcm: close 43 (now)
@@ -484,8 +490,10 @@ open and the key-on):
 ... | adpcm: -, 44@2 vol 3fff/3fff env 7fff/7fff
 ```
 
-The end of the run adds `audio: streams: N opened; M key-offs from the sequencer on stream voices;
-P packet pages full (Q packets carried, R dropped)`. The game's background disc reader logs a read
+The end of the run adds `audio: streams: N opened, F of them on a full packet page; M key-offs from
+the sequencer on stream voices; P packet pages full (Q packets carried, S of them a stream's, R
+dropped)`: F counts the game's streams whose open packet ran on a page of 255 or was carried past
+it, so a run whose music played well still says whether issue 101's case came up. The game's background disc reader logs a read
 it is about to retry, the first 8 and then every 100th (`port/data/cdvd_host.c`
 (`ico_cdvd_host_bg_retry`)): `cdvd: background read of <file> at lsn N retried (the drive was not
 ready; retry 1)`, or `(read error E; retry 1)`.
