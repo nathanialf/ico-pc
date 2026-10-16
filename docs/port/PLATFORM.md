@@ -755,8 +755,10 @@ enumeration after a controller change. The next log decides it four ways:
   `window: SDL <category> <priority>: ...`, as SDL's own output wrote them before. Info and warning
   lines each go through the rate limiter under a key of their own (`window: SDL's log, info`,
   `window: SDL's log, warnings`: the first 8, then every 100th), so a flood of one cannot silence
-  the other; error and critical lines are never limited and always logged (`sdl_log_output` in
-  `port/platform/window_host.c`).
+  the other; error lines go through one of their own with a high ceiling (`window: SDL's log,
+  errors`: the first 64, then every 1000th, `ico_log_limited_n`), so a flood cannot grow the log
+  without end and the run's end line still counts them; critical lines are never limited
+  (`sdl_log_output` in `port/platform/window_host.c`).
 - On Windows the watchdog samples the held main thread at 2, 10 and 30 s into a held wait:
   `ico_pc: watchdog: the window's event pump has held the main thread for 2 s: at win32u.dll+0x...;
   code on its stack (innermost first): DINPUT8.dll+0x..., SDL3.dll+0x..., ico_pc_x64.exe+0x...`.
@@ -917,7 +919,8 @@ device and window lines in the file, and keeps the text for the report file. The
 Every line that may repeat (a per-frame or per-event condition) goes through one helper,
 `ico_log_limited(key, fmt, ...)` (`port/platform/diag_host.h`): the first 8 of a key are written,
 then every 100th, the 8th saying `(8 of these so far; from here every 100th is written)` and a later
-one `(number N of these)`; the hot path is one atomic increment and a compare, the arguments
+one `(number N of these)`; `ico_log_limited_n(key, first, every, fmt, ...)` gives a key its own
+bounds (SDL's error lines: 64 and 1000), its line saying them the same way; the hot path is one atomic increment and a compare, the arguments
 evaluated and the line formatted only when it is written. At the end of a run, normal or fatal, one
 line counts every key: `ico_pc: limited lines (key, count, written): rd: interp snap 412 (11
 written); ...` (`port/platform/main_host.c` (`summary`, `fatal_summary`)).

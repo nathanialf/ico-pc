@@ -3497,10 +3497,10 @@ void ico_log_limit_write(IcoLogLimit *l, const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
-    if (c == ICO_LOG_LIMIT_FIRST) {
+    if (c == ico_log_limit_first(l)) {
         ico_diag_log("%s (%u of these so far; from here every %uth is written)", buf, c,
-                     ICO_LOG_LIMIT_EVERY);
-    } else if (c > ICO_LOG_LIMIT_FIRST) {
+                     ico_log_limit_every(l));
+    } else if (c > ico_log_limit_first(l)) {
         ico_diag_log("%s (number %u of these)", buf, c);
     } else {
         ico_diag_log("%s", buf);

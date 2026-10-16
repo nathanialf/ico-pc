@@ -122,7 +122,8 @@
  *               keeps the newest 5;
  *   - limited:  ico_log_limited: 250 calls write the first 8 and the 100th
  *               and 200th, the 8th saying so, and the end summary counts
- *               250 (10 written).
+ *               250 (10 written); ico_log_limited_n with SDL's error
+ *               bounds (64, 1000) writes the first 64, the 64th saying so.
  * POSIX only (fork); elsewhere it reports skipped (77).
  */
 #include <stdio.h>
@@ -829,6 +830,7 @@ static void run_child(const char *mode, const char *log)
     if (strcmp(mode, "limited") == 0) {
         for (unsigned int i = 1; i <= 250; i++) {
             ico_log_limited("test: limited", "test: limited line %u", i);
+            ico_log_limited_n("test: limited high", 64u, 1000u, "test: high line %u", i);
         }
         ico_log_limit_log_summary();
         exit(0);
@@ -1360,8 +1362,16 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "test: limited line 99") == NULL);
     CHECK(strstr(s, "test: limited line 100 (number 100 of these)\n") != NULL);
     CHECK(strstr(s, "test: limited line 200 (number 200 of these)\n") != NULL);
-    CHECK(strstr(s, "ico_pc: limited lines (key, count, written): test: limited 250 (10 "
+    CHECK(strstr(s, "test: limited 250 (10 written)") != NULL);
+    CHECK(strstr(s, "ico_pc: limited lines (key, count, written): ") != NULL);
+    /* a key's own bounds (SDL's error lines: the first 64, then every
+       1000th) */
+    CHECK(strstr(s, "test: high line 63\n") != NULL);
+    CHECK(strstr(s, "test: high line 64 (64 of these so far; from here every 1000th is "
                     "written)\n") != NULL);
+    CHECK(strstr(s, "test: high line 65") == NULL);
+    CHECK(strstr(s, "test: high line 200") == NULL);
+    CHECK(strstr(s, "test: limited high 250 (64 written)") != NULL);
     if (fails) {
         printf("--- limited log ---\n%s\n", s);
     }

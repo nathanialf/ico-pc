@@ -612,7 +612,10 @@ const char *ico_diag_report_name(void);
    written); ..."). The hot path is an atomic increment and a compare: the
    arguments are evaluated and the line formatted only when it is written.
      ico_log_limited("rd: interp snap", "rd: interp: snapped %s at tick %u", why, tick);
-   key: a string literal naming the line (the summary's). Any thread. */
+   key: a string literal naming the line (the summary's). Any thread.
+   ico_log_limited_n(key, first, every, ...): the same with a key's own
+   bounds (the first `first`, then every `every`-th), for a line that
+   must stay in the log far longer (SDL's error lines: 64 and 1000). */
 #define ICO_LOG_LIMIT_FIRST 8u
 #define ICO_LOG_LIMIT_EVERY 100u
 
@@ -621,19 +624,38 @@ typedef struct IcoLogLimit {
     unsigned int count;   /* every time the line's condition came */
     unsigned int written; /* the lines written */
     struct IcoLogLimit *next;
+    unsigned int first, every; /* 0: ICO_LOG_LIMIT_FIRST, ICO_LOG_LIMIT_EVERY */
 } IcoLogLimit;
+
+static inline unsigned int ico_log_limit_first(const IcoLogLimit *l)
+{
+    return l->first != 0u ? l->first : ICO_LOG_LIMIT_FIRST;
+}
+
+static inline unsigned int ico_log_limit_every(const IcoLogLimit *l)
+{
+    return l->every != 0u ? l->every : ICO_LOG_LIMIT_EVERY;
+}
 
 static inline int ico_log_limit_take(IcoLogLimit *l)
 {
     const unsigned int c = __atomic_add_fetch(&l->count, 1u, __ATOMIC_RELAXED);
-    return c <= ICO_LOG_LIMIT_FIRST || c % ICO_LOG_LIMIT_EVERY == 0;
+    return c <= ico_log_limit_first(l) || c % ico_log_limit_every(l) == 0;
 }
 
 void ico_log_limit_write(IcoLogLimit *l, const char *fmt, ...) ICO_DIAG_PRINTF(2, 3);
 
 #define ico_log_limited(key, ...)                                                                  \
     do {                                                                                           \
-        static IcoLogLimit ico_ll_ = {key, 0u, 0u, 0};                                             \
+        static IcoLogLimit ico_ll_ = {key, 0u, 0u, 0, 0u, 0u};                                     \
+        if (ico_log_limit_take(&ico_ll_)) {                                                        \
+            ico_log_limit_write(&ico_ll_, __VA_ARGS__);                                            \
+        }                                                                                          \
+    } while (0)
+
+#define ico_log_limited_n(key, first, every, ...)                                                  \
+    do {                                                                                           \
+        static IcoLogLimit ico_ll_ = {key, 0u, 0u, 0, first, every};                               \
         if (ico_log_limit_take(&ico_ll_)) {                                                        \
             ico_log_limit_write(&ico_ll_, __VA_ARGS__);                                            \
         }                                                                                          \

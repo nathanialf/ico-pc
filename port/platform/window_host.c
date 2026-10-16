@@ -1298,15 +1298,21 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
    file); info and above, which SDL's own output wrote to this log
    before, also here: info and warning lines each through the rate limiter
    under a key of their own (a flood of one priority cannot silence the
-   other), error and critical lines never limited */
+   other), error lines through one of their own with a high ceiling (the
+   first 64, then every 1000th: a flood cannot fill the disc, and the log's
+   end summary counts them), critical lines never limited */
 static void SDLCALL sdl_log_output(void *user, int category, SDL_LogPriority priority,
                                    const char *message)
 {
     (void)user;
     pump_watch_sdl_log(category, (int)priority, message, SDL_GetTicksNS());
-    if (priority >= SDL_LOG_PRIORITY_ERROR) {
+    if (priority >= SDL_LOG_PRIORITY_CRITICAL) {
         ico_diag_log("window: SDL %s %s: %s", pump_watch_sdl_category(category),
                      pump_watch_sdl_priority((int)priority), message != NULL ? message : "");
+    } else if (priority == SDL_LOG_PRIORITY_ERROR) {
+        ico_log_limited_n("window: SDL's log, errors", 64u, 1000u, "window: SDL %s %s: %s",
+                          pump_watch_sdl_category(category), pump_watch_sdl_priority((int)priority),
+                          message != NULL ? message : "");
     } else if (priority == SDL_LOG_PRIORITY_WARN) {
         ico_log_limited("window: SDL's log, warnings", "window: SDL %s %s: %s",
                         pump_watch_sdl_category(category), pump_watch_sdl_priority((int)priority),
