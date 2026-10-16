@@ -175,8 +175,9 @@ above 70 % of the frame budget the scale steps down once: the window's size to t
 2x, 1x below the window's own scale (the box's height over 448), Nx to (N-1)x, anything above 3x to
 3x; never below 1x, never back up (`port/platform/pace_policy.h` (`pace_auto_resolution_step`)). The
 cost is a [replay](ARCHITECTURE.md#terms)'s GPU time without the uploads when the backend has
-timestamps, else in mailbox mode its CPU time without the acquire and the present; under FIFO
-without timestamps there is no sample. The budget is the cap's period, two fields at frame rate
+timestamps (Vulkan and, since v0.7.9, D3D12: the sample is taken whenever the replay's timestamps
+came back, so D3D12 under its FIFO present now samples), else in mailbox mode its CPU time without
+the acquire and the present; under FIFO without timestamps there is no sample. The budget is the cap's period, two fields at frame rate
 Original, else 1/60 s; the rule is off under the CRT filter (`port/platform/window_host.c`
 (`auto_res_sample`, `auto_res_update`, `video_settings`)).
 

@@ -925,8 +925,9 @@ void rhi_get_stats(RhiStats *out);
  * completed, so reading never waits: ns[i] in nanoseconds from an arbitrary
  * origin, 0 for an index that frame did not write; returns 1 + the highest
  * index written (0 = none, or timestamps unsupported).
- * Vulkan: query pools.  D3D12: unsupported (rhi_timestamps_supported is
- * false; the calls do nothing and read 0).
+ * Vulkan: query pools.  D3D12: a timestamp query heap and a readback
+ * buffer per slot (rhi_timestamps_supported is false when the queue has no
+ * tick frequency or the heap fails; the calls then do nothing and read 0).
  *
  * RHI_TIMESTAMP_KEEP_BARRIERS or-ed into the index: the image barriers the
  * backend holds back to send with the next command (vk_cmd.c

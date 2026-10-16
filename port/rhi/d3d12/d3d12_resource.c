@@ -151,6 +151,7 @@ RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
         }
     }
     dx_set_name((ID3D12Object *)b->res, desc->debugName);
+    g_dx.counts.buffersCreated++;
     out.id = id;
     return out;
 }
@@ -162,6 +163,7 @@ void rhi_destroy_buffer(RhiBuffer h)
         return;
     }
     dx_defer((IUnknown *)b->res); /* releasing the resource unmaps it */
+    g_dx.counts.buffersDestroyed++;
     d3dp_pool_release(&g_dx.buffers, h.id);
 }
 
@@ -336,6 +338,7 @@ RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
         return out;
     }
     dx_set_name((ID3D12Object *)t->res, desc->debugName);
+    g_dx.counts.texturesCreated++;
     out.id = id;
     return out;
 }
@@ -348,6 +351,7 @@ void rhi_destroy_texture(RhiTexture h)
     }
     dx_free_views(t);
     dx_defer((IUnknown *)t->res);
+    g_dx.counts.texturesDestroyed++;
     d3dp_pool_release(&g_dx.textures, h.id);
 }
 

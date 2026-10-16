@@ -827,16 +827,18 @@ bool rhi_device_lost(void)
     return g_dx.deviceLost;
 }
 
-/* The performance entry points (rhi.h) on D3D12: of the counters only
- * swapchains, presents and fence waits with their times and the frame
- * latency wait (acquireNs) are kept (the rest read zero), timestamps are
- * unsupported (nothing is written, nothing read back) and there is no
- * mailbox mode (DXGI's flip model with sync interval 1 is FIFO;
- * docs/port/RHI.md, "Direct3D 12"). */
+/* The performance entry points (rhi.h) on D3D12: the counts the Vulkan
+ * backend keeps (draws, passes, pipeline and bind group binds, barriers
+ * as ResourceBarrier calls, copies, submits, wait-idles, readbacks,
+ * buffers and textures made and destroyed, transient bind groups) are
+ * kept at the same points (DxState.counts); the blocked times, swapchains
+ * and presents as before; the memory gauges read zero.  Timestamps are
+ * d3d12_cmd.c's.  There is no mailbox mode (DXGI's flip model with sync
+ * interval 1 is FIFO; docs/port/RHI.md, "Direct3D 12"). */
 void rhi_get_stats(RhiStats *out)
 {
     if (out) {
-        memset(out, 0, sizeof(*out));
+        *out = g_dx.counts;
         out->swapchains = g_dx.swapchains;
         out->presents = g_dx.presents;
         out->presentNs = g_dx.presentNs;
@@ -844,24 +846,6 @@ void rhi_get_stats(RhiStats *out)
         out->fenceWaitNs = g_dx.fenceWaitNs;
         out->acquireNs = g_dx.acquireNs;
     }
-}
-
-bool rhi_timestamps_supported(void)
-{
-    return false;
-}
-
-void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
-{
-    (void)cl;
-    (void)index;
-}
-
-uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
-{
-    (void)ns;
-    (void)max;
-    return 0;
 }
 
 void rhi_prefer_mailbox(bool on)

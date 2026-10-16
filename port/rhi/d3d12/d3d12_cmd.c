@@ -40,6 +40,187 @@ void dx_transition(ID3D12GraphicsCommandList *cl, ID3D12Resource *res, uint32_t 
     b.Transition.StateBefore = (D3D12_RESOURCE_STATES)before;
     b.Transition.StateAfter = (D3D12_RESOURCE_STATES)after;
     ID3D12GraphicsCommandList_ResourceBarrier(cl, 1, &b);
+    g_dx.counts.barriers++;
+}
+
+/* -------------------------------------------------------------- timestamps
+ * One timestamp query heap and one readback buffer per frame slot, the
+ * Vulkan pools' size (RHI_MAX_TIMESTAMPS).  rhi_cmd_write_timestamp is an
+ * EndQuery; the list that wrote them resolves them into the slot's
+ * readback buffer as it closes (dx_resolve_timestamps); the slot's recycle
+ * reads them once its fence has passed (dx_collect_timestamps), one frame
+ * slot late like Vulkan's, so a slot is never read while the GPU can still
+ * write it.  Ticks are converted with the queue's GetTimestampFrequency. */
+static void dx_timestamps_release_all(void)
+{
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        dx_timestamps_release(&g_dx.frames[i]);
+    }
+    g_dx.timestamps = false;
+}
+
+void dx_timestamps_release(DxFrame *f)
+{
+    if (f->tsRead && f->tsMapped) {
+        ID3D12Resource_Unmap(f->tsRead, 0, NULL);
+    }
+    f->tsMapped = NULL;
+    DX_RELEASE(f->tsRead);
+    DX_RELEASE(f->tsHeap);
+    f->tsWritten = 0;
+}
+
+static void dx_timestamps_init(void)
+{
+    UINT64 freq = 0;
+    g_dx.timestamps = false;
+    g_dx.tsFreq = 0;
+    g_dx.tsCount = 0;
+    memset(g_dx.tsResult, 0, sizeof(g_dx.tsResult));
+    if (getenv("ICO_DX_FAKE_NO_TIMESTAMPS")) {
+        DX_LOG("GPU timestamps: off (ICO_DX_FAKE_NO_TIMESTAMPS)");
+        return;
+    }
+    HRESULT hr = ID3D12CommandQueue_GetTimestampFrequency(g_dx.queue, &freq);
+    if (FAILED(hr) || freq == 0) {
+        DX_LOG("GPU timestamps: off (the queue reports no timestamp frequency, hr 0x%08x)",
+               (unsigned)hr);
+        return;
+    }
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        DxFrame *f = &g_dx.frames[i];
+        D3D12_QUERY_HEAP_DESC qd;
+        memset(&qd, 0, sizeof(qd));
+        qd.Type = D3D12_QUERY_HEAP_TYPE_TIMESTAMP;
+        qd.Count = RHI_MAX_TIMESTAMPS;
+        hr = ID3D12Device_CreateQueryHeap(g_dx.device, &qd, &IID_ID3D12QueryHeap,
+                                          (void **)&f->tsHeap);
+        if (FAILED(hr)) {
+            f->tsHeap = NULL;
+            DX_LOG("GPU timestamps: off (CreateQueryHeap failed, hr 0x%08x)", (unsigned)hr);
+            dx_timestamps_release_all();
+            return;
+        }
+        D3D12_HEAP_PROPERTIES hp;
+        memset(&hp, 0, sizeof(hp));
+        hp.Type = D3D12_HEAP_TYPE_READBACK;
+        D3D12_RESOURCE_DESC rd;
+        memset(&rd, 0, sizeof(rd));
+        rd.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        rd.Width = RHI_MAX_TIMESTAMPS * sizeof(uint64_t);
+        rd.Height = 1;
+        rd.DepthOrArraySize = 1;
+        rd.MipLevels = 1;
+        rd.Format = DXGI_FORMAT_UNKNOWN;
+        rd.SampleDesc.Count = 1;
+        rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        hr = ID3D12Device_CreateCommittedResource(g_dx.device, &hp, D3D12_HEAP_FLAG_NONE, &rd,
+                                                  D3D12_RESOURCE_STATE_COPY_DEST, NULL,
+                                                  &IID_ID3D12Resource, (void **)&f->tsRead);
+        void *mapped = NULL;
+        if (FAILED(hr)) {
+            f->tsRead = NULL;
+            DX_LOG("GPU timestamps: off (the readback buffer failed, hr 0x%08x)", (unsigned)hr);
+            dx_timestamps_release_all();
+            return;
+        }
+        hr = ID3D12Resource_Map(f->tsRead, 0, NULL, &mapped);
+        if (FAILED(hr) || !mapped) {
+            DX_LOG("GPU timestamps: off (mapping the readback buffer failed, hr 0x%08x)",
+                   (unsigned)hr);
+            dx_timestamps_release_all();
+            return;
+        }
+        f->tsMapped = (const uint64_t *)mapped;
+    }
+    g_dx.tsFreq = freq;
+    g_dx.timestamps = true;
+    DX_LOG("GPU timestamps: on (%llu Hz, %u per frame slot)", (unsigned long long)freq,
+           (unsigned)RHI_MAX_TIMESTAMPS);
+}
+
+void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
+{
+    DxCmdList *c = dx_get_cmd(cl);
+    DxFrame *f = dx_cur_frame();
+    /* the barrier flag (Vulkan's held-back image barriers) has no meaning here */
+    index &= ~RHI_TIMESTAMP_KEEP_BARRIERS;
+    if (!c || !g_dx.timestamps || !f->tsHeap || !c->recording || index >= RHI_MAX_TIMESTAMPS ||
+        (f->tsWritten & (1u << index)) || (c->tsMask & (1u << index))) {
+        return;
+    }
+    /* a stamp is written once a frame, in one list: not in a second one */
+    for (uint32_t j = 0; j < f->listCount; j++) {
+        if (f->lists[j].tsMask & (1u << index)) {
+            return;
+        }
+    }
+    ID3D12GraphicsCommandList_EndQuery(c->cl, f->tsHeap, D3D12_QUERY_TYPE_TIMESTAMP, index);
+    c->tsMask |= 1u << index;
+}
+
+/* The list's stamps into the slot's readback buffer, in runs of
+ * consecutive indices, before the list closes. */
+static void dx_resolve_timestamps(DxCmdList *c)
+{
+    DxFrame *f = dx_cur_frame();
+    uint32_t m = c->tsMask;
+    if (!m || !f->tsHeap || !f->tsRead) {
+        return;
+    }
+    for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS;) {
+        if (!(m & (1u << i))) {
+            i++;
+            continue;
+        }
+        uint32_t n = 0;
+        while (i + n < RHI_MAX_TIMESTAMPS && (m & (1u << (i + n)))) {
+            n++;
+        }
+        ID3D12GraphicsCommandList_ResolveQueryData(c->cl, f->tsHeap, D3D12_QUERY_TYPE_TIMESTAMP, i,
+                                                   n, f->tsRead, (UINT64)i * sizeof(uint64_t));
+        i += n;
+    }
+}
+
+/* The slot just recycled (its fence waited for): its stamps into
+ * g_dx.tsResult, as ns; rhi_read_timestamps hands them back.  Nothing is
+ * read from a slot whose fence did not complete (a lost device). */
+static void dx_collect_timestamps(DxFrame *f)
+{
+    g_dx.tsCount = 0;
+    memset(g_dx.tsResult, 0, sizeof(g_dx.tsResult));
+    const uint32_t m = f->tsWritten;
+    f->tsWritten = 0;
+    if (!m || !g_dx.timestamps || !f->tsMapped || g_dx.deviceLost || !g_dx.fence ||
+        ID3D12Fence_GetCompletedValue(g_dx.fence) < f->fenceValue) {
+        return;
+    }
+    const uint64_t freq = g_dx.tsFreq;
+    for (uint32_t i = 0; i < RHI_MAX_TIMESTAMPS; i++) {
+        if (m & (1u << i)) {
+            const uint64_t t = f->tsMapped[i];
+            if (t) {
+                g_dx.tsResult[i] = t / freq * 1000000000ull + t % freq * 1000000000ull / freq;
+                g_dx.tsCount = i + 1;
+            }
+        }
+    }
+}
+
+bool rhi_timestamps_supported(void)
+{
+    return g_dx.timestamps;
+}
+
+uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)
+{
+    if (!ns || !g_dx.timestamps) {
+        return 0;
+    }
+    const uint32_t n = g_dx.tsCount < max ? g_dx.tsCount : max;
+    memcpy(ns, g_dx.tsResult, (size_t)n * sizeof(uint64_t));
+    return n;
 }
 
 /* ------------------------------------------------------------------ frames */
@@ -70,6 +251,7 @@ bool dx_frames_init(void)
         d3dp_ring_init(&f->smpRing, DX_SMP_HEAP_SIZE, DX_SMP_RESERVED, RHI_FRAMES_IN_FLIGHT, i);
     }
     g_dx.frameIndex = 0;
+    dx_timestamps_init();
     return dx_new_list(&g_dx.oneShotAlloc, &g_dx.oneShotList);
 }
 
@@ -80,6 +262,7 @@ void dx_frames_shutdown(void)
         dx_destroy_garbage(f);
         free(f->garbage);
         free(f->groups);
+        dx_timestamps_release(f);
         for (uint32_t j = 0; j < DX_MAX_CMD_LISTS; j++) {
             DX_RELEASE(f->lists[j].cl);
             DX_RELEASE(f->lists[j].alloc);
@@ -94,6 +277,7 @@ void dx_frames_shutdown(void)
 static void dx_recycle_frame(DxFrame *f)
 {
     dx_wait_fence(f->fenceValue);
+    dx_collect_timestamps(f);
     dx_destroy_garbage(f);
     for (uint32_t j = 0; j < f->listCount; j++) {
         DX_CHECK(ID3D12CommandAllocator_Reset(f->lists[j].alloc));
@@ -130,6 +314,7 @@ uint32_t rhi_frame_slot(void)
 
 void rhi_wait_idle(void)
 {
+    g_dx.counts.waitIdles++;
     dx_wait_fence(dx_signal());
     /* a removed device completes every fence at once: its reason, noted
      * and reported like any other loss (the loss bisect waits here after
@@ -206,6 +391,7 @@ void rhi_end_commands(RhiCommandList cl)
     }
     /* a list whose Close failed is invalid: executing it is an error of
      * its own (and removes the device on some drivers); rhi_submit skips it */
+    dx_resolve_timestamps(c);
     c->closeFailed = !DX_CHECK(ID3D12GraphicsCommandList_Close(c->cl));
     c->recording = false;
 }
@@ -227,6 +413,9 @@ void rhi_submit(RhiCommandList cl)
     } else {
         ID3D12CommandList *lists[1] = {(ID3D12CommandList *)c->cl};
         ID3D12CommandQueue_ExecuteCommandLists(g_dx.queue, 1, lists);
+        g_dx.counts.submits++;
+        dx_cur_frame()->tsWritten |=
+            c->tsMask; /* resolved by the list, read at the slot's recycle */
     }
     dx_cur_frame()->fenceValue = dx_signal();
     dx_note_submit(dx_cur_frame()->fenceValue);
@@ -278,6 +467,7 @@ void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint3
         }
         if (n == 16) {
             ID3D12GraphicsCommandList_ResourceBarrier(c->cl, n, rb);
+            g_dx.counts.barriers++;
             n = 0;
         }
         memset(&rb[n], 0, sizeof(rb[n]));
@@ -290,6 +480,7 @@ void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint3
     }
     if (n) {
         ID3D12GraphicsCommandList_ResourceBarrier(c->cl, n, rb);
+        g_dx.counts.barriers++;
     }
 }
 
@@ -392,6 +583,7 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         }
     }
     c->inPass = true;
+    g_dx.counts.renderPasses++;
     uint32_t areaW = pass->width, areaH = pass->height;
     dx_pass_area_check(&areaW, &areaH, pass, dt);
     RhiViewport vp = {0.0f, 0.0f, (float)areaW, (float)areaH, 0.0f, 1.0f};
@@ -449,6 +641,7 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
         }
         c->pipeline = pp;
         ID3D12GraphicsCommandList_SetPipelineState(c->cl, pp->pso);
+        g_dx.counts.pipelineBinds++;
     }
 }
 
@@ -511,6 +704,7 @@ static void dx_flush(DxCmdList *c)
         if (!bg) {
             continue;
         }
+        g_dx.counts.bindGroupBinds++;
         if (r->resParam[g] >= 0 && bg->hasRes) {
             ID3D12GraphicsCommandList_SetGraphicsRootDescriptorTable(c->cl, (UINT)r->resParam[g],
                                                                      bg->res);
@@ -590,6 +784,7 @@ void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
     dx_flush(c);
     ID3D12GraphicsCommandList_DrawInstanced(c->cl, vertexCount, instanceCount ? instanceCount : 1u,
                                             firstVertex, 0);
+    g_dx.counts.draws++;
 }
 
 void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
@@ -602,6 +797,7 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
     dx_flush(c);
     ID3D12GraphicsCommandList_DrawIndexedInstanced(
         c->cl, indexCount, instanceCount ? instanceCount : 1u, firstIndex, vertexOffset, 0);
+    g_dx.counts.draws++;
 }
 
 /* ------------------------------------------------------------------ copies */
@@ -640,6 +836,7 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
     }
     dx_buffer_copy_begin(c, d);
     ID3D12GraphicsCommandList_CopyBufferRegion(c->cl, d->res, dstOffset, s->res, srcOffset, size);
+    g_dx.counts.copies++;
     dx_buffer_copy_end(c, d);
 }
 
@@ -714,6 +911,7 @@ void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t s
     dx_texture_copy_begin(c, t);
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, (UINT)region.x, (UINT)region.y, 0, &sl,
                                                 NULL);
+    g_dx.counts.copies++;
 }
 
 void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
@@ -752,6 +950,7 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
             dl.SubresourceIndex = d3dp_subresource(0, p, d->mips);
             ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, 0, 0, 0, &sl, NULL);
         }
+        g_dx.counts.copies++;
         return;
     }
     D3D12_BOX box = {(UINT)srcRegion.x,
@@ -761,6 +960,7 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
                      (UINT)srcRegion.y + srcRegion.h,
                      1};
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, (UINT)dstX, (UINT)dstY, 0, &sl, &box);
+    g_dx.counts.copies++;
 }
 
 /* D3D12_RESOURCE_STATE_RESOLVE_DEST and _RESOLVE_SOURCE */
@@ -789,6 +989,7 @@ void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
     ID3D12GraphicsCommandList_ResolveSubresource(c->cl, d->res, 0, s->res, 0, fm->view);
     dx_transition(c->cl, s->res, DX_STATE_RESOLVE_SOURCE, D3DP_STATE_COPY_SOURCE);
     dx_transition(c->cl, d->res, DX_STATE_RESOLVE_DEST, D3DP_STATE_COPY_DEST);
+    g_dx.counts.copies++;
 }
 
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
@@ -823,6 +1024,7 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
     }
     dx_buffer_copy_begin(c, d);
     ID3D12GraphicsCommandList_CopyTextureRegion(c->cl, &dl, 0, 0, 0, &sl, depth ? NULL : &box);
+    g_dx.counts.copies++;
     dx_buffer_copy_end(c, d);
 }
 
@@ -890,6 +1092,7 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
     if (dstSize < size) {
         return false;
     }
+    g_dx.counts.readbacks++;
     D3D12_RESOURCE_DESC rd = ID3D12Resource_GetDesc(t->res);
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp;
     UINT rows = 0;

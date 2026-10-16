@@ -151,16 +151,32 @@ fields are CPU time blocked in the backend: `fenceWaitNs` on GPU completion (`rh
 `swapchains` counts swapchains made, so the window can tell the first present on a new one. On
 Vulkan `acquireNs` is `vkAcquireNextImageKHR` and `presentNs` `vkQueuePresentKHR`; on D3D12
 `acquireNs` is the wait on the frame latency object, `presentNs` is `Present` and `fenceWaitNs` is
-`dx_wait_fence`, and only those with `swapchains`, `presents` and `fenceWaits` are counted; every
-other field reads 0 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c`
-(`rhi_acquire_backbuffer`, `rhi_present`); `port/rhi/d3d12/d3d12_device.c` (`rhi_get_stats`);
-`port/rhi/d3d12/d3d12_cmd.c` (`dx_wait_fence`)). The memory gauges (live and peak allocations, their
-bytes, the device's limit) are Vulkan's.
+`dx_wait_fence`. The counts are kept at the Vulkan backend's counting points (`DxState.counts`):
+`draws` per draw call, `renderPasses` per pass begun, `pipelineBinds` per pipeline change,
+`bindGroupBinds` per bind group set on the command list at a draw, `barriers` per `ResourceBarrier`
+call, `copies` per copy, resolve or texture-to-buffer call of the RHI, `submits` per executed list,
+`waitIdles`, `readbacks`, the buffers and textures made and destroyed and the transient bind groups.
+The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
+the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
+(`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
+`rhi_present`); `port/rhi/d3d12/d3d12_device.c` (`rhi_get_stats`); `port/rhi/d3d12/d3d12_cmd.c`
+(`dx_wait_fence`, the draw, pass, bind and copy calls)). `window: per replay N draws, ...` therefore
+reads real numbers on both backends.
 
 **Timestamps.** `RHI_MAX_TIMESTAMPS` (32) a [frame slot](ARCHITECTURE.md#terms);
 `rhi_read_timestamps` hands back the slot `rhi_wait_frame` last recycled, so reading never waits.
-`RHI_TIMESTAMP_KEEP_BARRIERS` keeps the held-back image barriers held. Vulkan uses query pools;
-D3D12 reports none (`port/rhi/rhi.h`, GPU timestamps).
+`RHI_TIMESTAMP_KEEP_BARRIERS` keeps the held-back image barriers held (D3D12 holds none back and
+ignores it). Vulkan uses query pools. D3D12 has a timestamp query heap of `RHI_MAX_TIMESTAMPS`
+entries and a readback buffer per frame slot (`port/rhi/d3d12/d3d12_cmd.c`): `rhi_cmd_write_timestamp`
+is an `EndQuery`, the list that wrote the stamps resolves them (`ResolveQueryData`) into the slot's
+readback buffer as it closes, and `rhi_wait_frame` reads them once the slot's fence has passed (the
+slot is recycled, so the GPU is not writing it), converting ticks with
+`ID3D12CommandQueue::GetTimestampFrequency`. A list that is not executed (a failed `Close`, a lost
+device) leaves its stamps unread. `rhi_timestamps_supported` is true when the queue reports a
+frequency and every slot got its heap and buffer; otherwise the device log says why once
+(`rhi_d3d12: GPU timestamps: off (...)`) and the calls do nothing. `rhi_init` logs
+`rhi_d3d12: GPU timestamps: on (<Hz> Hz, 32 per frame slot)`. `ICO_DX_FAKE_NO_TIMESTAMPS=1` turns
+them off for a test of the fallback.
 
 **Present mode and timing.** `rhi_prefer_mailbox` asks for mailbox with vsync from the next
 swapchain (D3D12: not offered); `rhi_present_mailbox` and `rhi_present_mode_name` say what the
@@ -350,6 +366,7 @@ the user-mode driver's version in four 16-bit parts (`dx_driver_text`, `rhi_init
 | `ICO_D3D12_DEBUG` | 1 the debug layer and the DXGI debug factory; 0 off |
 | `ICO_D3D12_ADAPTER` | `warp`, an adapter index or a substring of its name |
 | `ICO_DX_FAKE_NO_DST` | 1 reports no destination read (no ROVs) |
+| `ICO_DX_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off (`rhi_timestamps_supported` false) |
 | `ICO_D3D12_FRAME_LATENCY` | the swapchain's frame latency (below) |
 
 The debug layer's info queue keeps corruption, errors and warnings and drops the clear-value
@@ -403,8 +420,8 @@ size (minimised), which the caller retries at the next resize. `rhi_present_mode
 `fifo` with vsync, `immediate` without vsync where tearing is allowed, else `mailbox`. The surface
 calls do nothing: a DXGI swapchain stays on its window (`port/rhi/d3d12/d3d12_swapchain.c`).
 
-**Not implemented on D3D12**: timestamps, mailbox with vsync, the display's timing of presents, the
-pipeline cache file, and the stats beyond those above (`port/rhi/d3d12/d3d12_device.c`). On Windows
+**Not implemented on D3D12**: mailbox with vsync, the display's timing of presents, the pipeline
+cache file, and the Vulkan-only stats (the memory gauges and counts above; `port/rhi/d3d12/d3d12_device.c`). On Windows
 the vsync lock takes the display's vblanks from the window's own clock thread on
 `IDXGIOutput::WaitForVBlank`, outside the RHI and for both backends
 (`port/platform/display_clock_win.c`; [DISPLAY.md](DISPLAY.md#the-vblank-clock)).

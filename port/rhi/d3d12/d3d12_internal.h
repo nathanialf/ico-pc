@@ -130,6 +130,7 @@ typedef struct DxCmdList {
     uint32_t vbSize[RHI_MAX_VERTEX_ATTRS];
     uint32_t vbDirty;
     bool inPass;
+    uint32_t tsMask; /* timestamp indices written in this list (rhi_cmd_write_timestamp) */
 } DxCmdList;
 
 typedef struct DxFrame {
@@ -144,6 +145,13 @@ typedef struct DxFrame {
     uint32_t deadSamplers[DX_SMP_PERSISTENT]; /* sampler ids destroyed in this frame */
     uint32_t deadSamplerCount;
     uint32_t nullGroups[DX_MAX_LAYOUTS]; /* per layout slot: a bind group of null views */
+    /* GPU timestamps (d3d12_cmd.c): the slot's query heap, the readback
+     * buffer its lists resolve into (persistently mapped) and the indices
+     * of the lists that were executed */
+    ID3D12QueryHeap *tsHeap;
+    ID3D12Resource *tsRead;
+    const uint64_t *tsMapped;
+    uint32_t tsWritten;
 } DxFrame;
 
 /* Deferred releases that found their frame's garbage list unable to grow
@@ -251,6 +259,17 @@ typedef struct DxState {
     bool frameStatsValid;
     uint64_t frameStatsPresent, frameStatsRefresh, frameStatsSyncRefresh, frameStatsSyncNs;
 
+    /* GPU timestamps: on when the queue has a tick frequency and every
+     * frame slot got its heap and readback buffer; the last recycled slot's
+     * times in ns (rhi_read_timestamps) */
+    bool timestamps;
+    uint64_t tsFreq;
+    uint64_t tsResult[RHI_MAX_TIMESTAMPS];
+    uint32_t tsCount;
+    /* RhiStats counters kept at the places d3d12_cmd.c, d3d12_resource.c
+     * and d3d12_pipeline.c record them (the Vulkan backend's counting points) */
+    RhiStats counts;
+
     DxGarbageOverflow overflow[DX_GARBAGE_OVERFLOW]; /* see DX_GARBAGE_OVERFLOW */
     uint32_t overflowCount;
 } DxState;
@@ -338,6 +357,7 @@ uint32_t dx_null_bind_group(uint32_t layoutId);
 void dx_release_root_signatures(void);
 /* d3d12_cmd.c */
 bool dx_frames_init(void);
+void dx_timestamps_release(DxFrame *f);
 void dx_frames_shutdown(void);
 DxCmdList *dx_get_cmd(RhiCommandList cl);
 void dx_wait_fence(uint64_t value);

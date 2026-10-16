@@ -441,6 +441,7 @@ static RhiBindGroup dx_create_bind_group(const RhiBindGroupDesc *desc, bool quie
         bg.hasSmp = true;
     }
     f->groups[f->groupCount++] = bg;
+    g_dx.counts.bindGroups++;
     out.id = (dx_frame_tag() << D3DP_GEN_SHIFT) | f->groupCount;
     return out;
 }
