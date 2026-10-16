@@ -272,7 +272,9 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
    free memory: low memory (onTrimMemory level 15, running critical;
    signal 1 of this run) at pipelines 201 of 527 of the start-up set;
    memory 102 MB (most 194 MB)", or "with N pipelines made" outside the
-   set, ico_diag_set_pipelines_made), and kept for the activity file as a
+   set, ico_diag_set_pipelines_made; "low memory" for levels 5, 10, 15
+   and -1 only, "the app's screen was hidden" for 20, "the app is in the
+   background" for 40, 60 and 80), and kept for the activity file as a
    "system: " line among the batches' lines, written by the main thread's
    next ico_diag_startup_activity_poll; the next start logs it ("ico_pc:
    the previous run (version V) was told by the system: ..."). */

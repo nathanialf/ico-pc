@@ -1377,7 +1377,11 @@ void ico_diag_set_pipelines_made(unsigned int n)
     pipes_made = n;
 }
 
-/* Android's ComponentCallbacks2 TRIM_MEMORY_* levels */
+/* Android's ComponentCallbacks2 TRIM_MEMORY_* levels: 5, 10 and 15 come
+   while the app runs and the device is low on memory; 20 when its screen
+   is hidden (the app left the foreground), 40, 60 and 80 while it is in
+   the background, its place in the system's list of cached processes (80:
+   among the next to be ended; Android 14 and later send 20 and 40 only) */
 static const char *trim_name(int level)
 {
     switch (level) {
@@ -1388,16 +1392,32 @@ static const char *trim_name(int level)
     case 15:
         return "running critical";
     case 20:
-        return "the app's screen hidden";
+        return "UI hidden";
     case 40:
         return "background";
     case 60:
-        return "moderate";
+        return "moderate, the middle of the cached list";
     case 80:
-        return "complete";
+        return "complete, among the next to be ended";
     default:
         return "a level not named";
     }
+}
+
+/* what the signal says of the app: low memory while it runs, or that it
+   left the foreground (not a shortage of its own) */
+static const char *trim_kind(int level)
+{
+    if (level == 20) {
+        return "the app's screen was hidden";
+    }
+    if (level == 40 || level == 60 || level == 80) {
+        return "the app is in the background";
+    }
+    if (level < 0 || level == 5 || level == 10 || level == 15) {
+        return "low memory";
+    }
+    return "a memory signal";
 }
 
 void ico_diag_note_low_memory(int level)
@@ -1423,8 +1443,8 @@ void ico_diag_note_low_memory(int level)
     } else {
         snprintf(lv, sizeof lv, "no level given");
     }
-    snprintf(line, sizeof line, "low memory (%s; signal %u of this run) %s; %s", lv, nth, pipes,
-             mem);
+    snprintf(line, sizeof line, "%s (%s; signal %u of this run) %s; %s", trim_kind(level), lv, nth,
+             pipes, mem);
     ico_diag_log("ico_pc: the system asked the app to free memory: %s", line);
     if (inited) {
         lock_take();

@@ -496,7 +496,11 @@ batch (issue 93); the log itself has the line as each batch completes, with ever
 into `SDL_EVENT_LOW_MEMORY`, which has none) is logged at once from the activity's thread: `ico_pc:
 the system asked the app to free memory: low memory (onTrimMemory level 15, running critical;
 signal 1 of this run) at pipelines 201 of 527 of the start-up set; memory 102 MB (most 194 MB)`
-(`with <n> pipelines made` outside the set). The main thread's next poll (the start-up screen's
+(`with <n> pipelines made` outside the set). Only levels 5, 10 and 15 (`TRIM_MEMORY_RUNNING_*`:
+the device is low on memory while the app runs) are called low memory; level 20 is `the app's
+screen was hidden` (`TRIM_MEMORY_UI_HIDDEN`) and 40, 60 and 80 `the app is in the background`
+(its place in the system's list of cached processes; Android 14 and later send 20 and 40 only),
+which say the app left the foreground, not that memory ran short. The main thread's next poll (the start-up screen's
 progress, the window's pump: `ico_diag_startup_activity_poll`) adds it to the activity file as a
 `system: ` line among the `compiled: ` ones, and the next start logs it as `ico_pc: the previous
 run (version V) was told by the system: low memory ...`, so an end the system chose shows whether a

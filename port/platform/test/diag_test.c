@@ -1740,16 +1740,16 @@ int main(int argc, char **argv)
            is written (no pipeline was being made) */
         r = run(argv[0], "actlowlazy", log);
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: the system asked the app to free memory: low memory "
-                        "(onTrimMemory level 80, complete; signal 1 of this run) with 57 "
-                        "pipelines made; memory ") != NULL);
+        CHECK(strstr(s, "ico_pc: the system asked the app to free memory: the app is in the "
+                        "background (onTrimMemory level 80, complete, among the next to be "
+                        "ended; signal 1 of this run) with 57 pipelines made; memory ") != NULL);
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: the previous run (version test 1) compiled: " TIMES_LAZY "\n") !=
               NULL);
-        CHECK(strstr(s, "ico_pc: the previous run (version test 1) was told by the system: low "
-                        "memory (onTrimMemory level 80, complete; signal 1 of this run) with 57 "
-                        "pipelines made") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) was told by the system: the "
+                        "app is in the background (onTrimMemory level 80, complete, among the "
+                        "next to be ended; signal 1 of this run) with 57 pipelines made") != NULL);
         CHECK(strstr(s, "test: lazy 1\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: pipeline set 1\n") != NULL);
