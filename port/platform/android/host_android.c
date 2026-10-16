@@ -8,6 +8,10 @@
 #define _GNU_SOURCE 1 /* pipe2 */
 
 #include "host_android.h"
+#include "diag_host.h"
+#include "report.h"
+#include <android/asset_manager.h>
+#include <android/asset_manager_jni.h>
 #include <android/log.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -374,6 +378,8 @@ void ico_android_log_version(void)
     n = SDL_ReadIO(io, buf, sizeof(buf) - 1);
     SDL_CloseIO(io);
     buf[n] = '\0';
+    /* the report file's report.txt takes the lines (report.h) */
+    ico_report_set_version_text(buf);
     /* "ico-pc <label>", "built <date>", "commit <hash>" */
     for (line = buf; line != NULL && *line != '\0'; line = next) {
         next = strchr(line, '\n');
@@ -385,6 +391,65 @@ void ico_android_log_version(void)
             fprintf(stderr, "ico_pc: VERSION.txt: %s\n", line);
         }
     }
+}
+
+/* The crash report's symbol table (diag_host.h ico_diag_set_symbols_fd):
+   assets/libmain.syms.gz, which tools/package_android.sh stores
+   uncompressed in the APK, so the asset is a range of the APK file the
+   report reads directly with a file descriptor (AAsset_openFileDescriptor64,
+   the asset manager from the activity through JNI). Opened here, read only
+   by a crash or watchdog report. A debug build has no table: one line. */
+void ico_android_open_symbols(void)
+{
+    JNIEnv *env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    jobject act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    jobject jam = NULL;
+    AAssetManager *am = NULL;
+    AAsset *a = NULL;
+    off64_t start = 0, len = 0;
+    int fd = -1;
+
+    if (env == NULL || act == NULL) {
+        return;
+    }
+    {
+        jclass cls = (*env)->GetObjectClass(env, act);
+        jmethodID mid = cls != NULL ? (*env)->GetMethodID(env, cls, "getAssets",
+                                                          "()Landroid/content/res/AssetManager;")
+                                    : NULL;
+
+        if (mid != NULL) {
+            jam = (*env)->CallObjectMethod(env, act, mid);
+        }
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            jam = NULL;
+        }
+        if (cls != NULL) {
+            (*env)->DeleteLocalRef(env, cls);
+        }
+    }
+    if (jam != NULL) {
+        am = AAssetManager_fromJava(env, jam);
+    }
+    if (am != NULL) {
+        a = AAssetManager_open(am, "libmain.syms.gz", AASSET_MODE_UNKNOWN);
+    }
+    if (a != NULL) {
+        fd = AAsset_openFileDescriptor64(a, &start, &len);
+        AAsset_close(a);
+    }
+    if (fd >= 0) {
+        ico_diag_set_symbols_fd(fd, (long long)start, (long long)len, 1, "libmain.syms.gz");
+    } else {
+        fprintf(stderr, "ico_pc: symbols: %s; a crash report's offsets stay as they are\n",
+                a == NULL ? "no libmain.syms.gz in the app (a build without one)"
+                          : "libmain.syms.gz is compressed in the app and cannot be read directly");
+    }
+    if (jam != NULL) {
+        (*env)->DeleteLocalRef(env, jam);
+    }
+    (*env)->DeleteLocalRef(env, act);
 }
 
 /* --- the phone's vibrator ------------------------------------------------- */

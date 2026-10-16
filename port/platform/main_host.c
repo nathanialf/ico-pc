@@ -108,6 +108,7 @@
 #include "host_fs.h"
 #include "startup_retry.h"
 #include "host_loop.h"
+#include "report.h"
 #include "ico_build_commit.h" /* ICO_BUILD_COMMIT, generated (port/platform/CMakeLists.txt) */
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated (CMakeLists.txt; "" in a development build) */
 #include "input_record.h"
@@ -287,6 +288,8 @@ static void summary(void)
     ico_diag_log("ico_pc: exit: %s", exit_reason);
     ico_diag_log("ico_pc: %u Main ticks, %u vsyncs, stage_no %d", ico_host_main_ticks(),
                  ico_host_vsync_count(), ico_host_stage_no());
+    /* the rate-limited lines' counts (diag_host.h ico_log_limited) */
+    ico_log_limit_log_summary();
 }
 
 /* The run before's log as logs/ico-pc-previous.log, so the log of
@@ -308,6 +311,7 @@ static void fatal_summary(const char *reason)
 {
     ico_diag_log("ico_pc: %u Main ticks, %u vsyncs, stage_no %d (%s)", ico_host_main_ticks(),
                  ico_host_vsync_count(), ico_host_stage_no(), reason);
+    ico_log_limit_log_summary();
 }
 
 /* "--name VALUE" or "--name=VALUE": 1 and *value when argv[*i] is the
@@ -1332,16 +1336,32 @@ static int open_window(void)
         return 1;
     }
     if (r != 0) {
+        /* the report file before the box (diag_host.h): the box points at it */
+        char more[256] = "";
+        const char *rep;
+
+        ico_host_log_flush();
+        rep = ico_diag_write_report("the graphics could not start");
+        if (rep != NULL) {
+            snprintf(more, sizeof(more),
+                     "\n\nTo report it, attach the newest file in logs that starts with report- "
+                     "(this time: %s).",
+                     rep);
+        }
 #ifdef ICO_ANDROID_UI
-        ico_host_fatal(log_file(), "Could not start the game's graphics.\n"
-                                   "ICO needs a device whose graphics support Vulkan 1.2 (most "
-                                   "phones and tablets from 2022 on). Install the latest system "
-                                   "update and try again; the log says why.");
+        ico_host_fatal(log_file(),
+                       "Could not start the game's graphics.\n"
+                       "ICO needs a device whose graphics support Vulkan 1.2 (most "
+                       "phones and tablets from 2022 on). Install the latest system "
+                       "update and try again; the log says why.%s",
+                       more);
 #else
-        ico_host_fatal(log_file(), "Could not open the game window.\n"
-                                   "The game needs a graphics driver with Vulkan 1.2 or later. "
-                                   "Update your graphics driver and try again; the log says "
-                                   "why.");
+        ico_host_fatal(log_file(),
+                       "Could not open the game window.\n"
+                       "The game needs a graphics driver with Vulkan 1.2 or later. "
+                       "Update your graphics driver and try again; the log says "
+                       "why.%s",
+                       more);
 #endif
     }
     at_shutdown(ico_window_close);
@@ -1652,6 +1672,7 @@ static int host_main(int argc, char **argv)
 #endif
 #ifdef __ANDROID__
     ico_android_log_version();
+    ico_android_open_symbols();
 #endif
     for (r = 1; r < argc; r++) {
         fprintf(stderr, "ico_pc: argument %s\n", argv[r]);
@@ -1675,6 +1696,18 @@ static int host_main(int argc, char **argv)
         ico_host_pref_dir(user, sizeof(user));
         fprintf(stderr, "ico_pc: user folder %s (%s)\n", user,
                 ico_host_pref_is_portable() ? "portable" : "user profile");
+        /* the report file of an abnormal end (report.h): its files' places
+           now, the oldest reports beyond the newest few deleted */
+        if (logs_ready) {
+            int pruned;
+
+            ico_report_set_paths(logs_dir, exe_dir, user, ini_path);
+            pruned = ico_report_prune(ICO_REPORT_KEEP);
+            if (pruned > 0) {
+                fprintf(stderr, "ico_pc: report: %d older report%s deleted (the newest %d kept)\n",
+                        pruned, pruned == 1 ? "" : "s", ICO_REPORT_KEEP);
+            }
+        }
     }
 
     /* config.toml on the first run, so there is a file to edit; the window

@@ -34,7 +34,9 @@ static char s_exe[PATH_BYTES];
 static char s_pref[PATH_BYTES];
 static char s_ini[PATH_BYTES];
 static char s_version_text[256];
+#ifndef _WIN32
 static long s_utc_offset_s;
+#endif
 
 void ico_report_set_paths(const char *logs_dir, const char *exe_dir, const char *pref_dir,
                           const char *ini_path)

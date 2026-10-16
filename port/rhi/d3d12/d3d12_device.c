@@ -639,6 +639,9 @@ static void dx_fill_limits(void)
      * smaller limit) */
     o->maxDrawIndexedIndexValue = 0xFFFFFFFFu;
     o->fullDrawIndexUint32 = true;
+    /* the summary line's (s_driverText starts "; " when known) */
+    o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
+    o->robustText = NULL;
     /* texture packs: BC1/2/3/7 are required of every D3D12 device
      * (feature level 11_0) */
     o->bcTextures = true;

@@ -612,6 +612,14 @@ typedef struct RhiLimits {
      * marks in the stream since v0.8.0, issue 95) */
     uint32_t maxDrawIndexedIndexValue;
     bool fullDrawIndexUint32;
+    /* For the start's summary line (diag_host.h ico_diag_set_summary),
+     * NULL where unknown: driverText, the device line's driver part
+     * ("device 10de:1b81; driver NVIDIA 566.36, version 566.36.0.0";
+     * D3D12 "driver version 32.0.15.8157"); robustText, the robust access
+     * in force (Vulkan: "on, buffers (robustness2) ... (gpu_robust)" or
+     * "off"; D3D12 NULL: its own bounds rules always apply). */
+    const char *driverText;
+    const char *robustText;
 } RhiLimits;
 
 typedef struct RhiDeviceDesc {

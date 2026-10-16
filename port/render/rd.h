@@ -565,6 +565,11 @@ void rd_set_activity_fn(RdActivityFn fn);
  * again whenever SCENE is made at a new size.  Waits for the GPU.  Returns
  * whether the path in force passed. */
 bool rd_fog_selftest(void);
+/* What the renderer decided at its start, for the window's summary line
+ * (diag_host.h ico_diag_set_summary): "blend <mode> (self-test: ...);
+ * index values dense (marks in the stream); fog <path> (self-test: ...);
+ * VU shaders one set for every GPU" and ", pass split every N" when on. */
+void rd_summary_text(char *out, size_t size);
 /* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
  * (never recorded, never presented) draws on SCENE at its real size and
  * scale, without MSAA, what the destination read must get right: the

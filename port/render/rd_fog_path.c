@@ -900,6 +900,7 @@ static bool runSelftest(void)
             break;
         }
     }
+    snprintf(g_rdSumFog, sizeof g_rdSumFog, "%s (self-test: %s)", rd__fog_path_name(chosen), res);
     rd__log("fog: depth path %s (self-test: %s)%s%s on SCENE %ux%u at %ux%u texels",
             rd__fog_path_name(chosen), res, s_override >= 0 ? "; kept by " : "",
             s_override >= 0 ? s_overrideWhy : "", t->w, t->h, t->tw, t->th);

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <time.h>
 #include "audio_host.h"
+#include "cdvd_host.h"
 #include "config.h"
 #include "diag_host.h"
 #include "display_clock.h"
@@ -1198,6 +1199,64 @@ static bool window_have_d3d12(void)
     return false;
 }
 
+/* The platform the build is for, for the summary line */
+static const char *summary_platform(void)
+{
+#if defined(__ANDROID__)
+    return "Android arm64";
+#elif defined(ICO_IOS)
+    return "iOS arm64";
+#elif defined(__APPLE__)
+    return "macOS arm64";
+#elif defined(_WIN32) && (defined(__aarch64__) || defined(_M_ARM64))
+    return "Windows arm64";
+#elif defined(_WIN32)
+    return "Windows x64";
+#elif defined(__aarch64__)
+    return "Linux arm64";
+#else
+    return "Linux x64";
+#endif
+}
+
+/* The first screenful's one line of what a report needs (diag_host.h
+   ico_diag_set_summary), after the device line, the self-tests and the
+   window line: once a start (the report file's report.txt keeps it). */
+static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
+{
+    char rd[640], pads[160];
+    int n = 0;
+    SDL_JoystickID *ids = SDL_GetGamepads(&n);
+    const RhiLimits *l = rhi_limits();
+    const char *disc = ico_cdvd_host_boot_name();
+    size_t used = 0;
+
+    pads[0] = '\0';
+    for (int i = 0; ids != NULL && i < n && used < sizeof(pads) - 1; i++) {
+        const char *name = SDL_GetGamepadNameForID(ids[i]);
+        const int k = snprintf(pads + used, sizeof(pads) - used, "%s%s", i ? ", " : "",
+                               name != NULL ? name : "(unnamed)");
+
+        if (k < 0) {
+            break;
+        }
+        used += (size_t)k;
+    }
+    SDL_free(ids);
+    rd_summary_text(rd, sizeof(rd));
+    ico_diag_set_summary(
+        "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; %s; "
+        "index values up to %u; robust access %s; controller %s; disc %s; %s",
+        ico_diag_version(), summary_platform(), rhi_adapter_name(),
+        l->driverText != NULL ? l->driverText : "driver unknown",
+        rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
+        ico_video_aspect_name(o->aspect), fr, rd, (unsigned)l->maxDrawIndexedIndexValue,
+        l->robustText != NULL ? l->robustText
+                              : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
+        pads[0] != '\0' ? pads : "none yet", disc != NULL ? disc : "not mounted yet",
+        ico_host_pref_is_portable() ? "portable" : "user profile");
+}
+
 int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
@@ -1562,6 +1621,8 @@ open_window:
                 : s_pres.fifoLock       ? " (the cap equals the refresh)"
                 : rhi_present_mailbox() ? " (vsync without waiting on the display)"
                                         : "");
+        /* everything a report needs on the first screenful, once */
+        log_summary(&o, res, fr);
         /* a program hooking the graphics API, once */
         ico_diag_set_effects_program(rhi_injector_name() != NULL);
         if (rhi_injector_name() != NULL) {
@@ -1843,6 +1904,9 @@ static int device_lost_quit(void)
         char dumpName[64];
         loss_dump(dumpName, sizeof(dumpName));
         ico_host_log_flush();
+        /* the report file (diag_host.h): the log, the loss dump and the
+           settings in one zip, the one file a report needs */
+        const char *report = ico_diag_write_report("the graphics device was lost");
         if (ico_diag_device_lost_restart(rd_blend_exact() == RD_BLEND_EXACT_OFF)) {
             return 1;
         }
@@ -1864,23 +1928,40 @@ static int device_lost_quit(void)
         if (ico_host_logs_dir(logs, sizeof(logs)) != 0) {
             logs[0] = '\0';
         }
-        if (dumpName[0] != '\0') {
+        if (report != NULL) {
+            snprintf(text, sizeof(text),
+                     "The graphics driver stopped responding while the game was drawing, so the "
+                     "game has to close. Your last save is kept.\n\nStart the game again. If "
+                     "this happens every time at the same place, please report it at "
+                     "github.com/nathanialf/ico-pc/issues and attach the newest file in logs "
+                     "that starts with report- (this time: %s): it shows what was being drawn.",
+                     report);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
+        } else if (dumpName[0] != '\0') {
             snprintf(also, sizeof(also), " and the file %s beside it", dumpName);
         } else {
             also[0] = '\0';
         }
-        snprintf(text, sizeof(text),
-                 "The graphics driver stopped responding while the game was drawing, so the game "
-                 "has to close. Your last save is kept.\n\nStart the game again. If this "
-                 "happens every time at the same place, please send the log file%s%s%s%s with a "
-                 "report at github.com/nathanialf/ico-pc/issues: %s what was being drawn.",
-                 logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "", also,
-                 dumpName[0] != '\0' ? "together they show" : "it says");
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
+        if (report == NULL) {
+            snprintf(text, sizeof(text),
+                     "The graphics driver stopped responding while the game was drawing, so the "
+                     "game has to close. Your last save is kept.\n\nStart the game again. If "
+                     "this happens every time at the same place, please send the log file%s%s%s%s "
+                     "with a report at github.com/nathanialf/ico-pc/issues: %s what was being "
+                     "drawn.",
+                     logs[0] != '\0' ? " (" : "", logs, logs[0] != '\0' ? "/ico-pc.log)" : "", also,
+                     dumpName[0] != '\0' ? "together they show" : "it says");
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO PC", text, s_window);
+        }
 #else
         char text[1024];
         char also[256];
-        if (dumpName[0] != '\0') {
+        if (report != NULL) {
+            snprintf(also, sizeof(also),
+                     "\n\nIf you report this at github.com/nathanialf/ico-pc/issues, please "
+                     "attach the newest file in logs that starts with report- (this time: %s).",
+                     report);
+        } else if (dumpName[0] != '\0') {
             snprintf(also, sizeof(also),
                      "\n\nThe game saved what it was drawing as %s in the logs folder, next to "
                      "the log. If you report this, please attach both files.",

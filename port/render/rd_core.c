@@ -85,6 +85,23 @@ void rd__log(const char *fmt, ...)
     va_end(ap);
 }
 
+char g_rdSumBlend[256];
+char g_rdSumFog[224];
+
+void rd_summary_text(char *out, size_t size)
+{
+    char split[48] = "";
+
+    if (g_rd.passSplit) {
+        snprintf(split, sizeof split, ", pass split every %u VU draws", g_rd.passSplit);
+    }
+    snprintf(out, size,
+             "blend %s; index values dense (marks in the stream); fog %s; VU shaders one set for "
+             "every GPU%s",
+             g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
+             g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)", split);
+}
+
 void rd__log_once(int bit, const char *fmt, ...)
 {
     if (g_rd.onceFlags & (1u << bit)) {

@@ -1792,6 +1792,11 @@ static inline int rd__join_path(char *out, size_t size, const char *a, const cha
 
 void rd__log(const char *fmt, ...);
 void rd__log_once(int bit, const char *fmt, ...);
+/* The self-tests' results for the start's summary line (rd_summary_text):
+ * "<blend> (self-test: ...)" and "<fog path> (self-test: ...)", written
+ * where their log lines are, "" until then. */
+extern char g_rdSumBlend[256];
+extern char g_rdSumFog[224];
 /* A recorded command the replay does not model (RDC_WORLD_PRIMS, or a post
  * kind recorded as a stub): counted, and skipped with one log line for the
  * run.  With rd__set_not_implemented_fatal(true), which the render tests set,

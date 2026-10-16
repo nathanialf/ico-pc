@@ -89,5 +89,8 @@ int ico_android_screen(IcoAndroidScreen *out);
 /* Logs the APK's assets/VERSION.txt (a relative SDL_IOFromFile path reads
    the assets) to stderr. */
 void ico_android_log_version(void);
+/* Opens the APK's assets/libmain.syms.gz for the crash report's symbol
+   lines (diag_host.h ico_diag_set_symbols_fd); not read until a report. */
+void ico_android_open_symbols(void);
 
 #endif

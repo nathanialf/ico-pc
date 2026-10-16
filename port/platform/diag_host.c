@@ -2559,6 +2559,9 @@ void ico_diag_set_summary(const char *fmt, ...)
     va_start(ap, fmt);
     vsnprintf(summary_text, sizeof summary_text, fmt, ap);
     va_end(ap);
+    /* after the lines the C library still holds (Windows buffers stderr):
+       the summary follows the device and window lines in the file */
+    flush_stdio_if_main();
     ico_diag_log("ico_pc: summary: %s", summary_text);
 }
 
@@ -2706,7 +2709,9 @@ void ico_log_limit_log_summary(void)
 static int watchdog_ending;
 #endif
 
-/* The box's words: what happened, and the file to attach */
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+/* The box's words: what happened, and the file to attach (the systems
+   whose finish shows a box; Android's is fatal_text) */
 static void report_box(char *box, size_t size, const char *box_text)
 {
     if (report_name[0] != '\0') {
@@ -2722,6 +2727,7 @@ static void report_box(char *box, size_t size, const char *box_text)
                  box_text, ico_diag_log_path());
     }
 }
+#endif
 
 static void finish(const char *reason, const char *box_text, int code)
 {

@@ -441,6 +441,9 @@ static bool runSelftest(void)
                                                          (1u << RD_BLEND_EXACT_STORAGE));
     if (!exactModes || asked == RD_BLEND_EXACT_OFF) {
         const char *off = g_rd.hasDevice ? rhi_limits()->rasterOrderOff : NULL;
+        snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test not run: %s)",
+                 rd__blend_exact_name(g_rd.dstMode),
+                 exactModes ? "ICO_RD_BLEND=fixed" : "no exact blend on this device");
         rd__log("blend: %s (self-test not run: %s%s%s)", rd__blend_exact_name(g_rd.dstMode),
                 exactModes ? "ICO_RD_BLEND=fixed" : "no exact blend on this device",
                 off ? "; " : "", off ? off : "");
@@ -581,6 +584,8 @@ static bool runSelftest(void)
         }
     }
     const char *off = rhi_limits()->rasterOrderOff;
+    snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s)", rd__blend_exact_name(chosen),
+             res);
     rd__log("blend: %s (self-test: %s)%s%s%s on SCENE %ux%u at %ux%u texels in %.1f ms",
             rd__blend_exact_name(chosen), res, asked > 0 ? "; kept by ICO_RD_BLEND" : "",
             off ? "; " : "", off ? off : "", t->w, t->h, t->tw, t->th, rd__now_ms() - t0);

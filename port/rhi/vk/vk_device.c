@@ -726,6 +726,8 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
  * renderer takes has), and driverVersion decoded the vendor's way
  * (rhi_driver_version.h) */
 static char s_driverText[600];
+/* the robust access in force, for RhiLimits.robustText */
+static char s_robustText[160];
 
 static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDeviceProperties *p)
 {
@@ -1368,6 +1370,7 @@ static bool vkr_create_device(void)
                      nullDesc ? ", null descriptors" : "",
                      robustSaid == 1 ? "gpu_robust" : "the Android default");
         }
+        snprintf(s_robustText, sizeof s_robustText, "%s", robustSay);
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
                 "access %s",
                 g_vkr.deviceFault ? "on" : "not offered",
@@ -1624,6 +1627,9 @@ static void vkr_fill_limits(void)
      * without it); logged on the device line */
     o->maxDrawIndexedIndexValue = l->maxDrawIndexedIndexValue;
     o->fullDrawIndexUint32 = g_vkr.fullDrawIndex;
+    /* the summary line's (s_driverText starts "; ") */
+    o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
+    o->robustText = s_robustText[0] ? s_robustText : NULL;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;
     /* multisampling (vkr_msaa_counts, at device creation) */
