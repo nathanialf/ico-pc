@@ -1094,8 +1094,10 @@ typedef struct Replay {
     ScreenRun run;        /* the screen-prim run not drawn yet */
     /* the GPU timing's picture effect (rd__perf_post): the one the target
        in force or the last post sprite belongs to, and a change waiting for
-       the open run's draw (the run's draws belong to the effect before) */
-    int perfPost, perfPending, perfPendingPost;
+       the open run's draw (the run's draws belong to the effect before);
+       perfTargetEffect the target's alone (perfTargetPost), which a list
+       starts with: a post sprite's effect ends with its list */
+    int perfPost, perfPending, perfPendingPost, perfTargetEffect;
     /* the reduction's fallback sprite being drawn keeps the GS's filter on
      * both axes (doBlurSpriteDraw: blurAbove1xSteps 0), so spriteAbove1x
      * leaves its flag off */
@@ -6020,7 +6022,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     Replay r;
     memset(&r, 0, sizeof(r));
     r.st = f->startState;
-    r.perfPost = -1;
+    r.perfPost = r.perfTargetEffect = -1;
     memset(&s_pend, 0, sizeof(s_pend)); /* no clear pending from another replay */
     msaaFrameBegin(&r);                 /* the MSAA epoch's count and scene pair */
     const uint32_t headHalf = sceneHeadHalf(f);
@@ -6036,7 +6038,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 g_rdWin.tex = r.st.tex;
             }
             if (c->type == RDC_TARGET) {
-                r.perfPost = perfTargetPost(&r, c); /* before the state takes the new target */
+                /* before the state takes the new target */
+                r.perfPost = r.perfTargetEffect = perfTargetPost(&r, c);
             }
             if (rd__apply_state(&r.st, c)) {
                 if (c->type == RDC_TARGET) {
@@ -6107,6 +6110,11 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         }
         flushScreenRun(&r); /* a run does not cross a list (its timestamp) */
         rd__perf_stamp(s_cl, RD_PERF_TS_LIST0 + (uint32_t)l);
+        /* the next list's work is the effect of the target in force, not
+         * of this list's last post sprite: the motion blur, the last sprite
+         * of list 7, would otherwise take every list up to the next TARGET
+         * (list 12's) with it */
+        r.perfPost = r.perfTargetEffect;
         if (g_rdWin.stop) {
             break;
         }

@@ -1385,7 +1385,12 @@ RHI's counters, and then waits in a slot per frame in flight until its GPU times
 without waiting. The timestamps carry the effect whose work they end, so the record has a GPU time
 per list, for the uploads, for the present, and per picture effect (`RD_PERF_POST_*`: reduction,
 fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve)
-(`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). The window sums them
+(`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). An effect is the
+one the colour target in force belongs to (the softening's and the aura's targets) or the one the
+last post sprite names, and a post sprite's ends with its list: the next list starts with its
+target's effect, so the motion blur, list 7's last sprite, is the sprite alone and lists 8 to 11
+are no effect's (`port/render/rd_replay.c` (`perfTargetPost`, `Replay.perfTargetEffect`, the list
+loop)). The window sums them
 into its 10 s statistics line, and `[dev] perf_log` writes one line per replay
 ([DISPLAY.md](DISPLAY.md#the-perf-csv)). The [replay tool](ARCHITECTURE.md#terms)'s `--stats` prints
 the same record.
