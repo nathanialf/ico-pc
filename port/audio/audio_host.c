@@ -5,10 +5,12 @@
  */
 #include "audio_host.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "diag_host.h"
 #include "mix_gain.h"
 #include "options.h"
 #include "sndn2_host.h"
@@ -32,6 +34,11 @@ static int16_t out[MAX_FRAMES_PER_VSYNC * 2];
 static int dump_peak;
 static long long first_sound_vsync = -1;
 
+/* the voices cut short (spu2.h spu2_take_cuts): the stage the host loop
+   last named (ico_audio_host_set_stage) and the vsync of the last look */
+static int stage_now;
+static unsigned int cuts_seen_at;
+
 int ico_audio_host_frames(int hz, unsigned int i)
 {
     if (hz == 50) {
@@ -41,6 +48,66 @@ int ico_audio_host_frames(int hz, unsigned int i)
        frames, spread exactly over every five vsyncs */
     return (int)((uint64_t)(i + 1) * 48000u * 1001u / 60000u -
                  (uint64_t)i * 48000u * 1001u / 60000u);
+}
+
+void ico_audio_host_set_stage(int stage)
+{
+    stage_now = stage;
+}
+
+/* The samples a release at rate 0 takes from `level` to 0 (spu2.c
+   env_tick): a linear one steps -0x4000 a frame, an exponential one
+   (ADSR2 bit 5) halves the level, rounded down, each frame. */
+static int cut_samples(uint32_t level, uint16_t adsr2)
+{
+    int n = 0;
+
+    if ((adsr2 & 0x20u) == 0) {
+        return (int)((level + 0x3FFFu) / 0x4000u);
+    }
+    while (level > 0) {
+        level >>= 1;
+        n++;
+    }
+    return n;
+}
+
+/* A peak in 0..32768 as a fraction of full scale and in dB, for the cut
+   lines. */
+static void cut_peak_text(char *out, size_t size, uint32_t peak)
+{
+    if (peak == 0) {
+        snprintf(out, size, "silent at the cut");
+        return;
+    }
+    snprintf(out, size, "loudest %.2f of full scale (%.0f dB)", peak / 32768.0,
+             20.0 * log10(peak / 32768.0));
+}
+
+/* At most once a second: the voices the SPU2 cut short since the last
+   look (a key-off at release rate 0, the game's stop of its sounds at a
+   stage change), one line through the shared limiter with how many, the
+   loudest one's release and its level of full scale: what the click a
+   player hears there measures. */
+static void cut_line(int hz)
+{
+    spu2_stats w;
+    char peak[64];
+
+    if (vsync_index - cuts_seen_at < (unsigned int)hz) {
+        return;
+    }
+    cuts_seen_at = vsync_index;
+    spu2_take_cuts(&w);
+    if (w.cuts == 0) {
+        return;
+    }
+    cut_peak_text(peak, sizeof(peak), w.cut_peak);
+    ico_log_limited("audio: voices cut short",
+                    "audio: %llu voice%s cut short at vsync %u (stage %d): a %d-sample release "
+                    "from level %04x; %s",
+                    (unsigned long long)w.cuts, w.cuts == 1 ? "" : "s", vsync_index, stage_now,
+                    cut_samples(w.cut_level, w.cut_adsr2), (unsigned)w.cut_level, peak);
 }
 
 void ico_audio_host_shutdown(void)
@@ -66,6 +133,13 @@ void ico_audio_host_shutdown(void)
                 "by frame (%llu hazards)\n",
                 (unsigned long long)st.chunked_frames, (unsigned long long)st.chunks,
                 (unsigned long long)st.exact_frames, (unsigned long long)st.hazards);
+    }
+    if (st.cuts > 0) {
+        char peak[64];
+
+        cut_peak_text(peak, sizeof(peak), st.cut_peak);
+        fprintf(stderr, "audio: %llu voices cut short over the run (a release at rate 0); %s\n",
+                (unsigned long long)st.cuts, peak);
     }
     if (wav != NULL) {
         uint64_t frames = ico_wav_close(wav);
@@ -165,6 +239,7 @@ void ico_audio_host_vsync(int hz)
         ico_audio_sdl_push(out, frames);
     }
 #endif
+    cut_line(hz);
     vsync_index++;
 }
 

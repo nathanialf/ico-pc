@@ -36,6 +36,15 @@ void ico_audio_host_vsync(int hz);
 /* Frames the vsync after `vsync_index` vsyncs at `hz` renders (pure). */
 int ico_audio_host_frames(int hz, unsigned int vsync_index);
 
+/* The stage running (the game's stage_no), named by the host loop before
+   each ico_audio_host_vsync: the voices-cut line says it.  At most once a
+   second ico_audio_host_vsync logs the voices the SPU2 cut short since the
+   last look (spu2.h spu2_take_cuts; through the shared limiter):
+     audio: 6 voices cut short at vsync 12345 (stage 3): a 2-sample release
+     from level 7fff; loudest 0.18 of full scale (-15 dB)
+   and the shutdown the run's count and loudest. */
+void ico_audio_host_set_stage(int stage);
+
 /* Mirror mode: the option is port/game/options.c's (ico_opt_mirror).  While
    it is on ico_audio_host_vsync swaps left and right in each rendered block:
    the device and the WAV dump hear the mirrored pan; the SPU2 and the

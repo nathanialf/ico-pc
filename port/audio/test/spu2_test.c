@@ -9,6 +9,10 @@
  *   - a sine encoded to ADPCM by a tiny test-only encoder, played at
  *     several pitches, frequency measured by zero crossings;
  *   - loop flags, ENDX, end+mute, key off, ENVX;
+ *   - the cut statistic: a key-off with a release rate of 0 counted, with
+ *     the voice's last |out * volume >> 15| and its level, chunked and frame
+ *     by frame; the envelope at 0 two frames later; a key-off with another
+ *     release rate not counted;
  *   - mixing, clamping, volume sweeps, core 0 -> core 1, AutoDMA input,
  *     noise, timed register writes, transfers and IRQ;
  *   - reverb impulse response (energy decays, stereo spread);
@@ -407,6 +411,69 @@ static void test_loop_end_mute(void)
     check(spu2_read_reg(1, SPU2_R_VP(2) + SPU2_VP_ENVX) > 0, "release not done at 2047");
     spu2_render(buf, 1);
     check_eq(spu2_read_reg(1, SPU2_R_VP(2) + SPU2_VP_ENVX), 0, "release done at 2048");
+}
+
+static void test_cut_stat(void)
+{
+    spu2_stats st0;
+    spu2_stats st;
+    spu2_stats win;
+    int exact;
+
+    /* a key-off with a release rate other than 0 is not a cut */
+    spu2_reset();
+    put_dc_block(0x10000);
+    basic_mix();
+    voice_setup(1, 2, 0x8000, 0x1000, 0x3FFF);
+    key_on(1, 2);
+    spu2_render(buf, 100);
+    spu2_take_cuts(&win);
+    spu2_get_stats(&st0);
+    W(1, SPU2_R_VP(2) + SPU2_VP_ADSR2, 0x1FC0 | 0x0A);
+    W(1, SPU2_R_KOFF, 1u << 2);
+    spu2_render(buf, 10);
+    spu2_get_stats(&st);
+    check_eq((long long)(st.cuts - st0.cuts), 0, "cut: a release rate of 10 is no cut");
+    spu2_take_cuts(&win);
+    check_eq((long long)win.cuts, 0, "cut: none in the window");
+
+    /* ADSR2 = 0 and KOFF at the same time (the game's stop at a stage
+       change): one cut, the peak the voice's dry level of the frame before
+       (the output is that through the master volume 0x7FFE), the envelope
+       0x3FFF after one frame and 0 after two; chunked and frame by frame */
+    for (exact = 0; exact < 2; exact++) {
+        int16_t out[2 * 2];
+
+        spu2_set_exact(exact);
+        spu2_reset();
+        put_dc_block(0x10000);
+        basic_mix();
+        voice_setup(1, 2, 0x8000, 0x1000, 0x3FFF);
+        key_on(1, 2);
+        spu2_render(buf, 100);
+        check_eq(spu2_read_reg(1, SPU2_R_VP(2) + SPU2_VP_ENVX), 0x7FFF, "cut: sustained at full");
+        spu2_take_cuts(&win);
+        spu2_get_stats(&st0);
+        W(1, SPU2_R_VP(2) + SPU2_VP_ADSR2, 0x0000);
+        W(1, SPU2_R_KOFF, 1u << 2);
+        spu2_render(out, 1);
+        check_eq(spu2_read_reg(1, SPU2_R_VP(2) + SPU2_VP_ENVX), 0x3FFF, "cut: one frame on");
+        spu2_render(out + 2, 1);
+        check_eq(spu2_read_reg(1, SPU2_R_VP(2) + SPU2_VP_ENVX), 0, "cut: 0 two frames on");
+        spu2_get_stats(&st);
+        check_eq((long long)(st.cuts - st0.cuts), 1, "cut: counted once");
+        spu2_take_cuts(&win);
+        check_eq((long long)win.cuts, 1, "cut: one in the window");
+        check(buf[2 * 99] > 28000, "cut: the voice sounded before");
+        check_eq(((long long)win.cut_peak * 0x7FFE) >> 15, buf[2 * 99],
+                 "cut: the peak is the dry level of the frame before");
+        check_eq(win.cut_level, 0x7FFF, "cut: from full level");
+        check_eq(win.cut_adsr2, 0, "cut: its ADSR2");
+        check(st.cut_peak >= win.cut_peak, "cut: the run's loudest");
+        spu2_take_cuts(&win);
+        check_eq((long long)win.cuts + win.cut_peak + win.cut_level, 0, "cut: the window cleared");
+    }
+    spu2_set_exact(0);
 }
 
 static void test_mix_clamp(void)
@@ -863,6 +930,7 @@ int main(int argc, char **argv)
     test_adsr();
     test_pitch();
     test_loop_end_mute();
+    test_cut_stat();
     test_mix_clamp();
     test_timed_writes();
     test_memin();

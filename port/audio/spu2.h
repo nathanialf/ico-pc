@@ -207,15 +207,32 @@ void spu2_render(int16_t *out, int frames);
    (around timed writes, transfers and callbacks, with an IRQ armed, or
    after a hazard), and hazards (a voice reading sound RAM that the chunk's
    frames write: a write-back or reverb work area).  The output is the same
-   either way. */
+   either way.
+   Also the voices cut short: a key-off of a sounding voice (envelope above
+   0) whose ADSR2 release rate (bits 0-4) is 0, the fastest release: a
+   linear one steps -0x4000 a frame, from full level to 0 in two frames, a
+   step the size of the voice's amplitude (a click).  cut_peak is the
+   loudest such voice's |out * volume >> 15| (its last rendered frame's
+   enveloped sample times the louder of its two volume levels, 0..32768),
+   cut_level its envelope level and cut_adsr2 its ADSR2 at the key-off.
+   Not part of the output: nothing here changes what is rendered. */
 typedef struct spu2_stats {
     uint64_t chunks;
     uint64_t chunked_frames;
     uint64_t exact_frames;
     uint64_t hazards;
+    uint64_t cuts;
+    uint32_t cut_peak;
+    uint32_t cut_level;
+    uint16_t cut_adsr2;
 } spu2_stats;
 
 void spu2_get_stats(spu2_stats *st);
+
+/* The cuts since the last call: their number, and the loudest one's peak,
+   level and ADSR2 as in spu2_stats (all 0 when there was none); then
+   cleared.  The host's once-a-second line (audio_host.c). */
+void spu2_take_cuts(spu2_stats *window);
 
 /* --- Sound RAM transfers ---------------------------------------------------- */
 

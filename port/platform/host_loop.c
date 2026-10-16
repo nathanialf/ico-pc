@@ -109,6 +109,7 @@ void ico_host_step(void)
     /* this vsync's audio from the SPU2 state the last sound tick left; the
        sound thread the vsync woke ticks in ico_sched_run below, and its
        writes take effect from the next block */
+    ico_audio_host_set_stage(stage_no);
     ico_audio_host_vsync(ico_host_vsync_hz());
     profile.audioMs = ms_since(&t);
     /* the audio push is an SDL call */

@@ -123,6 +123,11 @@ static struct {
     spu2_reverb_preset presets[SPU2_REVERB_MODES];
 } S;
 
+/* How the render went (spu2_get_stats; not reset by spu2_reset), and the
+   voices cut short since the last spu2_take_cuts (key_off) */
+static spu2_stats stats;
+static spu2_stats cut_window;
+
 /* --- Small helpers ------------------------------------------------------------ */
 
 static int32_t clamp16(int32_t x)
@@ -434,11 +439,36 @@ static void key_on(core *c, int vi)
     voice_load_block(v);
 }
 
+/* A sounding voice keyed off with a release rate of 0 (spu2.h, spu2_stats):
+   counted, with the loudest one's |out * volume >> 15| (v->out is the
+   last rendered frame's enveloped sample in both renderers, voice_frame
+   and voice_chunk), its envelope level and its ADSR2. */
+static void cut_note(spu2_stats *st, const voice *v, uint16_t adsr2)
+{
+    const int32_t l = v->vol[0].level < 0 ? -v->vol[0].level : v->vol[0].level;
+    const int32_t r = v->vol[1].level < 0 ? -v->vol[1].level : v->vol[1].level;
+    const int32_t o = v->out < 0 ? -v->out : v->out;
+    const uint32_t peak = (uint32_t)((o * (l > r ? l : r)) >> 15);
+
+    st->cuts++;
+    if (peak >= st->cut_peak) {
+        st->cut_peak = peak;
+        st->cut_level = (uint32_t)v->env;
+        st->cut_adsr2 = adsr2;
+    }
+}
+
 static void key_off(core *c, int vi)
 {
     voice *v = &c->v[vi];
 
     if (v->phase != ENV_OFF) {
+        const uint16_t adsr2 = c->regs[(SPU2_R_VP(vi) + SPU2_VP_ADSR2) / 2];
+
+        if ((adsr2 & 0x1F) == 0 && v->env > 0) {
+            cut_note(&stats, v, adsr2);
+            cut_note(&cut_window, v, adsr2);
+        }
         v->phase = ENV_RELEASE;
         v->env_counter = 0;
     }
@@ -1285,7 +1315,6 @@ static struct {
 } F;
 
 static int exact_only;
-static spu2_stats stats;
 
 void spu2_set_exact(int on)
 {
@@ -1746,6 +1775,12 @@ void spu2_render(int16_t *out, int frames)
 void spu2_get_stats(spu2_stats *st)
 {
     *st = stats;
+}
+
+void spu2_take_cuts(spu2_stats *window)
+{
+    *window = cut_window;
+    memset(&cut_window, 0, sizeof cut_window);
 }
 
 void spu2_dma_write(uint32_t addr, const void *src, uint32_t len)
