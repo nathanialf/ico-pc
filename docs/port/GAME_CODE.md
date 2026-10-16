@@ -287,9 +287,14 @@ header declaration.
 Such a fix is made in the decompilation first, under its rules (byte match against the ROM, the
 period toolchain, its hooks), and reaches this tree through the merge. Conflicts in `ico2/` resolve
 to the host form here while taking the upstream names, types and fixes; `strip_host_gates.py`
-removes any `ICO_HOST` conditional a merge brings in. The port's own changes (the host build,
-`port/`, host paths in `ico2/`) never go up, and nothing here changes a byte the decompilation
-builds. The decompilation's [docs/PORT.md](https://github.com/nathanialf/ico/blob/main/docs/PORT.md)
+removes any `ICO_HOST` conditional a merge brings in. A merge that applies cleanly is read too:
+the decompilation spells an address carried in an int as `(int)p`, which truncates a 64-bit
+pointer, so each added `(int)` cast of a pointer becomes the host form (`(IosMsgWord)` for
+`iosMsgSend`, `ICO_WORD`, or no cast where the port's prototype already takes the pointer).
+`gcc -fsyntax-only` over the game files with the flags from `compile_commands.json`, before and
+after, finds them: each shows as a new `-Wpointer-to-int-cast`. The port's own changes (the host
+build, `port/`, host paths in `ico2/`) never go up, and nothing here changes a byte the
+decompilation builds. The decompilation's [docs/PORT.md](https://github.com/nathanialf/ico/blob/main/docs/PORT.md)
 states the same contract from its side.
 
 ## EUC-JP sources
