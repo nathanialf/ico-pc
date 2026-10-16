@@ -1,7 +1,9 @@
 /*
  * port/audio/audio_host.c
  *
- * The per-vsync SPU2 render and its sinks (audio_host.h).
+ * The output's clock (audio_host.h, the mode): the per-vsync SPU2 render
+ * and its sinks on the sync path, the render the device's thread runs on
+ * the pull path and the pull path's watchdog.
  */
 #include "audio_host.h"
 
@@ -22,11 +24,20 @@
 #endif
 
 #define MAX_FRAMES_PER_VSYNC 1024 /* 960 at 50 Hz, 800 or 801 at 59.94 Hz */
+/* the pull path's watchdog: the device silent this long while the game
+   stepped as long falls back to the game's clock; before the device's
+   first request after an open or a resume (a Bluetooth headset can take a
+   second to start) the longer bound */
+#define PULL_STALL_MS 300
+#define PULL_START_MS 2000
 
 static int started;
 static IcoWav *wav;
+static int mode = ICO_AUDIO_MODE_SYNC;
+static const char *mode_why = ""; /* the sync path's reason (ico_audio_pick_mode) */
 #ifdef ICO_AUDIO_SDL
 static int sdl_open;
+static unsigned int pull_seen_vsync; /* the last vsync the device was not silent too long */
 #endif
 static unsigned int vsync_index;
 static int16_t out[MAX_FRAMES_PER_VSYNC * 2];
@@ -163,6 +174,109 @@ void ico_audio_host_shutdown(void)
     }
 }
 
+int ico_audio_mode(void)
+{
+    return mode;
+}
+
+const char *ico_audio_mode_text(void)
+{
+    const char *why = mode_why;
+    int m = mode;
+
+    if (!started) {
+        const char *dump = getenv("ICO_AUDIO_DUMP");
+#ifdef ICO_AUDIO_SDL
+        const int window_build = 1;
+#else
+        const int window_build = 0;
+#endif
+
+        m = ico_audio_pick_mode(window_build, getenv("ICO_AUDIO"), dump != NULL && dump[0] != '\0',
+                                getenv("ICO_AUDIO_SYNC"), &why);
+    }
+    if (m == ICO_AUDIO_MODE_PULL) {
+        return "audio on the device's clock";
+    }
+    if (strcmp(why, "audio=0") == 0) {
+        return "audio off (audio=0)";
+    }
+    if (strcmp(why, "audio_dump") == 0) {
+        return "audio on the game's clock (audio_dump)";
+    }
+    if (strcmp(why, "[dev] audio_sync") == 0) {
+        return "audio on the game's clock ([dev] audio_sync)";
+    }
+    if (strcmp(why, "the device stopped asking") == 0) {
+        return "audio on the game's clock (the device stopped asking)";
+    }
+    if (strcmp(why, "headless build") == 0) {
+        return "audio on the game's clock (headless build)";
+    }
+    if (strcmp(why, "no lock") == 0) {
+        return "audio on the game's clock (no lock)";
+    }
+    return "audio on the game's clock (no device)";
+}
+
+#ifdef ICO_AUDIO_SDL
+/* The pull path's render (out_sdl.c pull_cb, the device's thread, under
+   the audio lock): the SPU2's frames, and mirror mode's swap where the
+   stereo output is produced (ico_opt_mirror, a plain int the Options menu
+   writes). */
+static void device_render(int16_t *frames, int count)
+{
+    spu2_render(frames, count);
+    ico_audio_pan_mirror(frames, count, ico_opt_mirror());
+}
+
+/* The pull path's end (main thread): the stream again without the
+   callback, the sync path from here.  sdl_open stays: without a stream
+   the push does nothing and the close still runs. */
+static void pull_fall_back(const char *line_why, int ms)
+{
+    if (ms >= 0) {
+        fprintf(stderr,
+                "audio: the output device stopped asking for sound for %d ms; rendering on the "
+                "game's clock from here\n",
+                ms);
+    } else {
+        fprintf(stderr, "audio: %s; rendering on the game's clock from here\n", line_why);
+    }
+    if (ico_audio_sdl_fall_back() != 0) {
+        fprintf(stderr, "audio: no output device opens; no sound (the driver still runs)\n");
+    }
+    mode = ICO_AUDIO_MODE_SYNC;
+    mode_why = "the device stopped asking";
+}
+
+/* The pull path's watchdog, once a vsync: 1 when it fell back.  A device
+   that stops asking leaves the SPU2's time standing while the game serves
+   on (its streams would never reach their ends, its event queue would
+   fill); a process stopped as a whole (a debugger, a sleep) is not that,
+   so the game must also have stepped through the bound. */
+static int pull_watch(int hz)
+{
+    int asked = 0;
+    const int idle = ico_audio_sdl_pull_idle_ms(&asked);
+    const int bound = asked ? PULL_STALL_MS : PULL_START_MS;
+
+    if (!ico_audio_sdl_active()) {
+        pull_fall_back("the output stream is gone", -1);
+        return 1;
+    }
+    if (idle < bound) { /* also -1: paused */
+        pull_seen_vsync = vsync_index;
+        return 0;
+    }
+    if (vsync_index - pull_seen_vsync < (unsigned int)(bound * hz / 1000)) {
+        return 0;
+    }
+    pull_fall_back(NULL, idle);
+    return 1;
+}
+#endif
+
 void ico_audio_host_init(void)
 {
     const char *dump = getenv("ICO_AUDIO_DUMP");
@@ -195,16 +309,34 @@ void ico_audio_host_init(void)
         }
     }
 #ifdef ICO_AUDIO_SDL
+    mode = ico_audio_pick_mode(1, enable, wav != NULL, getenv("ICO_AUDIO_SYNC"), &mode_why);
     if (enable != NULL && strcmp(enable, "0") == 0) {
         fprintf(stderr, "audio: audio=0: no audio device (the driver still runs)\n");
     } else {
-        sdl_open = ico_audio_sdl_open() == 0;
+        /* the pull path: the device's thread renders (device_render) */
+        sdl_open =
+            ico_audio_sdl_open(mode == ICO_AUDIO_MODE_PULL ? device_render : NULL, mode_why) == 0;
+        if (!sdl_open) {
+            mode = ICO_AUDIO_MODE_SYNC;
+            mode_why = "no device";
+        } else if (mode == ICO_AUDIO_MODE_PULL && ico_audio_sdl_pull_idle_ms(NULL) < 0) {
+            /* the open took the push instead (no lock, logged) */
+            mode = ICO_AUDIO_MODE_SYNC;
+            mode_why = "no lock";
+        }
+        pull_seen_vsync = vsync_index;
     }
 #else
     (void)enable;
+    mode = ico_audio_pick_mode(0, enable, wav != NULL, NULL, &mode_why);
     fprintf(stderr, "audio: headless build: the driver runs, the output is %s\n",
             wav != NULL ? "only dumped" : "discarded");
 #endif
+    if (wav != NULL) {
+        /* the WAV is a function of the driver's writes and their times only
+           when the render runs on the game's step */
+        fprintf(stderr, "audio: the dump renders on the game's clock\n");
+    }
 #if defined(__ANDROID__) || defined(ICO_IOS)
     /* Mobile: Quit returns from ico_host_main, which runs this */
     ico_host_at_shutdown(ico_audio_host_shutdown);
@@ -215,11 +347,20 @@ void ico_audio_host_init(void)
 
 void ico_audio_host_vsync(int hz)
 {
-    int frames = ico_audio_host_frames(hz, vsync_index);
+    int frames;
 
     if (!started) {
         ico_audio_host_init();
     }
+#ifdef ICO_AUDIO_SDL
+    if (mode == ICO_AUDIO_MODE_PULL && sdl_open && !pull_watch(hz)) {
+        /* the device's thread renders (out_sdl.c pull_cb) */
+        cut_line(hz);
+        vsync_index++;
+        return;
+    }
+#endif
+    frames = ico_audio_host_frames(hz, vsync_index);
     spu2_render(out, frames);
     /* mirror mode: left and right swapped where the stereo output is
        produced, for the device and the dump alike; the SPU2 is untouched */
@@ -293,6 +434,28 @@ void ico_audio_set_rate_ratio(double ratio)
 {
     (void)ratio;
 }
+
+int ico_audio_sdl_pull_idle_ms(int *asked)
+{
+    if (asked != NULL) {
+        *asked = 0;
+    }
+    return -1;
+}
+
+int ico_audio_sdl_fall_back(void)
+{
+    return -1;
+}
+
+int ico_audio_sdl_summary_text(char *out, size_t size)
+{
+    (void)out;
+    (void)size;
+    return 0;
+}
+
+void ico_audio_sdl_log_summary(void) {}
 #endif
 
 /* Left and right swapped in place (mirror mode, audio_host.h). */

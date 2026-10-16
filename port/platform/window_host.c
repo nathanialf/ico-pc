@@ -1279,9 +1279,11 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
     }
     SDL_free(ids);
     rd_summary_text(rd, sizeof(rd));
+    /* the audio's clock (audio_host.h ico_audio_mode_text): this runs
+       before the audio starts, so the one the configuration asks for */
     ico_diag_set_summary(
         "version %s; %s; GPU %s (%s); %s; %s preset, resolution %s, aspect %s, framerate %s; %s; "
-        "index values up to %u; robust access %s; controller %s%s; disc %s; %s",
+        "index values up to %u; robust access %s; controller %s%s; disc %s; %s; %s",
         ico_diag_version(), summary_platform(), rhi_adapter_name(),
         l->driverText != NULL ? l->driverText : "driver unknown",
         rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12" : "Vulkan", video_preset_label(o), res,
@@ -1290,7 +1292,7 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
                               : (rhi_backend() == RHI_BACKEND_D3D12 ? "D3D12's own" : "off"),
         pads[0] != '\0' ? pads : "none yet", summary_joystick_scan(),
         disc != NULL ? disc : "not mounted yet",
-        ico_host_pref_is_portable() ? "portable" : "user profile");
+        ico_host_pref_is_portable() ? "portable" : "user profile", ico_audio_mode_text());
 }
 
 /* SDL's log output (SDL_SetLogOutputFunction, any thread): every line
@@ -3982,6 +3984,8 @@ static void pace_log(Uint64 now)
                                                   : 0.0,
             pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
             s_pres.pumpMaxMs, lock);
+    /* the audio's 10 s line (out_sdl.c; the pull path's only) */
+    ico_audio_sdl_log_summary();
     if (s_pres.lockN > 0) {
         disp_log(sec, s_pres.lock.refreshNs);
     }

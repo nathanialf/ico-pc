@@ -18,9 +18,16 @@
  * which is recursive, so a nested take is legal); until then, in the
  * headless build and in every unit test that installs none, both calls do
  * nothing, and everything runs on the one simulation thread as before.
+ *
+ * Also the driver's tick clock: the serve notes each tick under the lock,
+ * and the output's 10 s line (out_sdl.c ico_audio_sdl_summary_text) says
+ * how often the driver ticked and the longest gap between two ticks, the
+ * time the SPU2 played on from its own state (a stage load).
  */
 #ifndef ICO_PORT_AUDIO_AUDIO_LOCK_H
 #define ICO_PORT_AUDIO_AUDIO_LOCK_H
+
+#include <stdint.h>
 
 typedef void (*IcoAudioLockFn)(void *user);
 
@@ -30,5 +37,21 @@ void ico_audio_unlock(void);
 /* Install the lock's functions (both NULL: none).  On the main thread,
    with no audio thread running and the lock not held. */
 void ico_audio_lock_install(IcoAudioLockFn lock, IcoAudioLockFn unlock, void *user);
+
+/* A gap between two driver ticks longer than this counts as long. */
+#define ICO_AUDIO_TICK_LONG_NS 200000000ull
+
+typedef struct IcoAudioTicks {
+    uint64_t ticks;      /* since start-up */
+    uint64_t long_gaps;  /* gaps over ICO_AUDIO_TICK_LONG_NS, since start-up */
+    uint64_t gap_max_ns; /* the longest gap since the last take */
+} IcoAudioTicks;
+
+/* One driver tick at now_ns (a monotonic clock); under the lock
+   (sndn2_host.c ico_sndn2_host_serve). */
+void ico_audio_tick_note(uint64_t now_ns);
+/* The counts, and the longest gap since the last take, which is zeroed;
+   takes the lock. */
+void ico_audio_tick_take(IcoAudioTicks *out);
 
 #endif

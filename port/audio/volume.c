@@ -2,12 +2,17 @@
  * port/audio/volume.c
  *
  * The output volume (audio_host.h): a 0..256 gain in 1/256 steps and the
- * integer scaling of 16-bit sample blocks.  No platform dependencies, so the
- * Settings menu and the unit test link it without the driver.
+ * integer scaling of 16-bit sample blocks; the output's play ratio and the
+ * choice of its clock (ico_audio_pick_mode).  No platform dependencies, so
+ * the Settings menu and the unit tests link it without the driver.
  */
 #include "audio_host.h"
 
-static volatile int volume_q8 = 256;
+#include <string.h>
+
+/* set on the main thread (Settings), read where each block is queued: on
+   the device's thread on the pull path (out_sdl.c pull_cb) */
+static int volume_q8 = 256;
 
 void ico_audio_set_volume(double volume)
 {
@@ -20,12 +25,35 @@ void ico_audio_set_volume(double volume)
     } else {
         q = (int)(volume * 256.0 + 0.5);
     }
-    volume_q8 = q;
+    __atomic_store_n(&volume_q8, q, __ATOMIC_RELAXED);
 }
 
 int ico_audio_volume_q8(void)
 {
-    return volume_q8;
+    return __atomic_load_n(&volume_q8, __ATOMIC_RELAXED);
+}
+
+int ico_audio_pick_mode(int window_build, const char *enable, int dumping, const char *sync,
+                        const char **why)
+{
+    const char *w = "";
+    int mode = ICO_AUDIO_MODE_SYNC;
+
+    if (!window_build) {
+        w = "headless build";
+    } else if (enable != NULL && strcmp(enable, "0") == 0) {
+        w = "audio=0";
+    } else if (dumping) {
+        w = "audio_dump";
+    } else if (sync != NULL && strcmp(sync, "1") == 0) {
+        w = "[dev] audio_sync";
+    } else {
+        mode = ICO_AUDIO_MODE_PULL;
+    }
+    if (why != NULL) {
+        *why = w;
+    }
+    return mode;
 }
 
 double ico_audio_play_ratio(double rateRatio, int queuedBytes, int targetBytes)

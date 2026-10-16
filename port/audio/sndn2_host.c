@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include "audio_lock.h"
+#include "diag_host.h"
 #include "iop_ram.h"
 #include "libsd_irx.h"
 #include "mix_gain.h"
@@ -505,13 +506,18 @@ static uint8_t *fill_page(void)
 /* The serve under the lock (audio_lock.h): the whole body, from the time
    stamp to the reply, so the audio thread's render never sees half a
    page's writes; nothing in it switches fibers (the host SIF runs the
-   server synchronously). */
+   server synchronously).  The time stamp is the SPU2's time: on the pull
+   path the frames the device's thread has rendered, so the writes land at
+   its next callback; on the sync path the vsyncs' frames, so they land at
+   the next vsync's block. */
 static void *serve_locked(unsigned int rpc_number, const uint8_t *pk, int ssize, int rsize)
 {
     int i;
 
     spu2_sd_set_time(spu2_time());
     if (rpc_number == ICO_SNDN2_RPC_TICK) {
+        /* the tick's time, for the output's 10 s line (audio_lock.h) */
+        ico_audio_tick_note(ico_diag_now_ns());
         /* the page's fill, for a stream open's line (stream_watch.h) */
         sw_page(pk != NULL ? ssize / 16 : 0, 0);
         for (i = 0; pk != NULL && i + 16 <= ssize; i += 16) {

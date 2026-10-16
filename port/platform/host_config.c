@@ -454,6 +454,9 @@ static const struct {
     /* the first frame number dump_every dumps */
     {"dev.dump_from", "dump_from"},
     {"dev.audio_dump", "audio_dump"},
+    /* true: the audio rendered on the game's clock, as the dump does
+       (port/audio/audio_host.h, the mode) */
+    {"dev.audio_sync", "audio_sync"},
     {"dev.pad_script", "pad_script"},
     /* the pad recording, logs/input-<time>.txt (main_host.c:
        default on in the window build, off headless; a path writes there) */
@@ -529,6 +532,9 @@ static const struct {
     {"joystick_directinput", "ICO_JOYSTICK_DIRECTINPUT"},
     /* port/platform/window_host.c: "lazy" skips the start-up set */
     {"pipeline_set", "ICO_PIPELINE_SET"},
+    /* port/audio/audio_host.c ico_audio_host_init: 1 renders the audio on
+       the game's clock (the sync path) instead of the device's */
+    {"audio_sync", "ICO_AUDIO_SYNC"},
 };
 
 static int value_is(const char *v, const char *const *words)

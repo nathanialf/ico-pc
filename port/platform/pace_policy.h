@@ -419,9 +419,12 @@ bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, u
  * is low when queuedMs >= 0 (-1: no stream) and 2 * queuedMs < cushionMs, on
  * the whole milliseconds the audio reports (audio_host.h
  * ico_audio_sdl_queued_ms, ico_audio_sdl_cushion_ms; each truncated, not
- * rounded).  A single late present on a renderer that keeps up, with the
- * audio full, never skips (paceSlow needs three slow presents in a row).
- * No step or audio is dropped, only that present. */
+ * rounded).  A cushion of 0 is never low: the audio on the device's clock
+ * (out_sdl.c, the pull path) keeps no cushion and reports 0, since its
+ * device renders what it plays whatever the steps do, so there only slow
+ * presents skip.  A single late present on a renderer that keeps up, with
+ * the audio full, never skips (paceSlow needs three slow presents in a
+ * row).  No step or audio is dropped, only that present. */
 bool pace_audio_skip(bool pastDeadline, bool newFrame, bool skippedLast, bool paceSlow,
                      bool audioActive, int queuedMs, int cushionMs);
 
