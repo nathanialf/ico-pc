@@ -301,7 +301,8 @@ static void doTexture(const char *member, const uint8_t *d, size_t size, FILE *f
                 levels);
         return;
     }
-    fprintf(f, "%s %s 0x%02x %ux%u %u", member, kType[type], clutType, w, h, levels);
+    fprintf(f, "%s %s 0x%02x %ux%u %u clut %u/%uB scroll %d", member, kType[type], clutType, w, h,
+            levels, clutColors, clutSize, scroll);
     char line[TEXPACK_MAX_CANDIDATES * (TEXPACK_NAME_MAX + 16)];
     size_t ll = 0;
     line[0] = 0;
