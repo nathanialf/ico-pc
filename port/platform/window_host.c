@@ -1281,14 +1281,23 @@ static void log_summary(const IcoVideoOptions *o, const char *res, const char *f
 /* SDL's log output (SDL_SetLogOutputFunction, any thread): every line
    into the pump's ring (printed with a slow pump's line and in the report
    file); info and above, which SDL's own output wrote to this log
-   before, also here, through the rate limiter */
+   before, also here: info and warning lines each through the rate limiter
+   under a key of their own (a flood of one priority cannot silence the
+   other), error and critical lines never limited */
 static void SDLCALL sdl_log_output(void *user, int category, SDL_LogPriority priority,
                                    const char *message)
 {
     (void)user;
     pump_watch_sdl_log(category, (int)priority, message, SDL_GetTicksNS());
-    if (priority >= SDL_LOG_PRIORITY_INFO) {
-        ico_log_limited("window: SDL's log", "window: SDL %s %s: %s",
+    if (priority >= SDL_LOG_PRIORITY_ERROR) {
+        ico_diag_log("window: SDL %s %s: %s", pump_watch_sdl_category(category),
+                     pump_watch_sdl_priority((int)priority), message != NULL ? message : "");
+    } else if (priority == SDL_LOG_PRIORITY_WARN) {
+        ico_log_limited("window: SDL's log, warnings", "window: SDL %s %s: %s",
+                        pump_watch_sdl_category(category), pump_watch_sdl_priority((int)priority),
+                        message != NULL ? message : "");
+    } else if (priority >= SDL_LOG_PRIORITY_INFO) {
+        ico_log_limited("window: SDL's log, info", "window: SDL %s %s: %s",
                         pump_watch_sdl_category(category), pump_watch_sdl_priority((int)priority),
                         message != NULL ? message : "");
     }
@@ -2792,9 +2801,13 @@ int ico_window_pump(void)
     ico_diag_startup_activity_poll();
 
 #ifdef _WIN32
-    /* the display and the computer kept awake (window_pump_win.h), and the
+    /* the display and the computer kept awake while the window is focused and
+       not minimized (window_pump_win.h), and the
        controllers' scan SDL_PollEvent no longer runs (pump_joysticks) */
-    ico_pump_win_keep_awake(t0);
+    ico_pump_win_keep_awake(
+        t0, s_window != NULL &&
+                (SDL_GetWindowFlags(s_window) & (SDL_WINDOW_INPUT_FOCUS | SDL_WINDOW_MINIMIZED)) ==
+                    SDL_WINDOW_INPUT_FOCUS);
     pump_joysticks();
 #endif
     while (pump_poll(&e)) {

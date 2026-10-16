@@ -8,6 +8,7 @@
 #include <windows.h>
 #include <SDL3/SDL.h>
 #include <stdio.h>
+#include "diag_host.h"
 #include "pump_watch.h"
 #include "window_pump_win.h"
 
@@ -83,11 +84,31 @@ void ico_pump_win_install(void *hwnd)
     fprintf(stderr, "window: the window's messages are recorded for the event pump's lines\n");
 }
 
-void ico_pump_win_keep_awake(uint64_t now_ns)
+void ico_pump_win_keep_awake(uint64_t now_ns, int active)
 {
     static uint64_t s_last;
     static int s_logged;
+    static int s_released;
 
+    if (!active) {
+        /* minimized or without focus: let the display and the computer
+           sleep as they would for any other program, once */
+        if (!s_released) {
+            s_released = 1;
+            s_last = 0;
+            SetThreadExecutionState(ES_CONTINUOUS);
+            ico_log_limited("window: keep awake released",
+                            "window: the display may sleep while the game is minimized or in the "
+                            "background");
+        }
+        return;
+    }
+    if (s_released) {
+        s_released = 0;
+        s_last = 0;
+        ico_log_limited("window: keep awake again",
+                        "window: the display and the computer are kept awake again");
+    }
     if (s_last != 0 && now_ns - s_last < KEEP_AWAKE_EVERY_NS) {
         return;
     }

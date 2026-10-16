@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -875,6 +876,38 @@ static int prune_visit(const char *path, const char *name, void *user)
     return 0;
 }
 
+/* A name's order key: its report-YYYYMMDD-HHMMSS stamp, then the -k
+   suffix (the plain name of a second is k = 0, so it is older than its -1) */
+static void prune_key(const char *path, const char **stamp, long *k)
+{
+    const char *b = path + strlen(path);
+    char *end;
+
+    while (b > path && b[-1] != '/' && b[-1] != '\\') {
+        b--;
+    }
+    *stamp = b + 7; /* after "report-" */
+    *k = 0;
+    if (strlen(b) > 7 + 15 && b[7 + 15] == '-') {
+        *k = strtol(b + 7 + 15 + 1, &end, 10);
+    }
+}
+
+static int prune_cmp(const void *pa, const void *pb)
+{
+    const char *sa, *sb;
+    long ka, kb;
+    int c;
+
+    prune_key((const char *)pa, &sa, &ka);
+    prune_key((const char *)pb, &sb, &kb);
+    c = strncmp(sa, sb, 15);
+    if (c != 0) {
+        return c;
+    }
+    return ka < kb ? -1 : ka > kb;
+}
+
 int ico_report_prune(int keep)
 {
     int removed = 0, i;
@@ -883,8 +916,11 @@ int ico_report_prune(int keep)
     if (s_logs[0] == '\0' || ico_dir_walk(s_logs, 0, prune_visit, NULL) < 0) {
         return -1;
     }
-    /* report-YYYYMMDD-HHMMSS[-k].zip: byte order is oldest first (a -k
-       one sorts just before the first of its second: the same second) */
+    /* report-YYYYMMDD-HHMMSS[-k].zip: the folder's order is the file
+       system's, and byte order is not age (report-X-1.zip sorts before
+       report-X.zip but is newer): sorted by stamp, then k (the plain name
+       as 0), oldest first */
+    qsort(s_prune, (size_t)s_prune_n, sizeof s_prune[0], prune_cmp);
     for (i = 0; i + (keep > 0 ? keep : 0) < s_prune_n; i++) {
         removed += ico_remove(s_prune[i]) == 0;
     }

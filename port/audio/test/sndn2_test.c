@@ -801,7 +801,7 @@ static void test_sequencer(void)
 
 /* --- the full packet page (AU-7) --------------------------------------- */
 
-static char caught[8][200];
+static char caught[8][300];
 static int ncaught;
 
 static void catch_line(const char *line)
@@ -926,6 +926,37 @@ static void test_full_page(void)
     ico_iop_heap_free(ring);
 }
 
+/* sw_log's bound (stream_watch.c LINE): the longest line any caller can
+   build (229 characters, the page-full line with every field at its
+   maximum) arrives whole; one past the bound is cut and ends in "..." */
+static void test_longest_line(void)
+{
+    char mix[128] = "";
+    char longer[400];
+    size_t n = 0;
+    int i;
+
+    for (i = 0; i < 6; i++) {
+        n += (size_t)snprintf(mix + n, sizeof mix - n, "%s0x%02X x%u", i ? ", " : "", 0xFFu,
+                              4294967295u);
+    }
+    ncaught = 0;
+    ico_audio_stream_log_sink(catch_line);
+    sw_log("sndn2: packet page full (%d packets: %s); the later packets of this tick are "
+           "carried to the driver (page %u)",
+           -2147483647 - 1, mix, 4294967295u);
+    CHECK(ncaught == 1);
+    CHECK(strlen(caught[0]) == 229);
+    CHECK(strcmp(caught[0] + 229 - 17, "(page 4294967295)") == 0); /* whole */
+    memset(longer, 'x', sizeof longer - 1);
+    longer[sizeof longer - 1] = '\0';
+    ncaught = 0;
+    sw_log("%s", longer);
+    CHECK(ncaught == 1 && strlen(caught[0]) == 255);
+    CHECK(strcmp(caught[0] + 252, "...") == 0);
+    ico_audio_stream_log_sink(NULL);
+}
+
 int main(int argc, char **argv)
 {
     const char *iso = argc > 1 ? argv[1] : NULL;
@@ -945,6 +976,7 @@ int main(int argc, char **argv)
     test_pcm();
     test_sequencer();
     test_full_page();
+    test_longest_line();
     printf("sndn2_test: %d checks, %s\n", checks, failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

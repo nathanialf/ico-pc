@@ -15,8 +15,21 @@
 #include "sndn2_internal.h"
 #include "spu2_sd.h"
 
-/* a log line's bound; the longest stream line is about 90 characters */
-#define LINE 160
+/* A log line's bound. The longest line any sw_log caller can build, from
+   the format strings and the fields' maxima:
+   - sndn2_host.c's "packet page full" line, 229 characters: its text 85
+     + count (an int, 11) + mix (six "0xFF x4294967295" entries, 16 each,
+     ", " between: 106) + page number (an unsigned, 10) + the rest;
+   - the key-on levels line, 131: "adpcm: " + stream number (11) + " voices "
+     + four voices "47,47,47,47" (11) + "vol ffff/ffff/ffff/ffff env
+     7fff/7fff/7fff/7fff" (47) + " (opened on a full page: carried past
+     its 255)", or the page-of-N variant, 127;
+   - the carry lines 140 and 150 (a command printed as 8 hex digits),
+     the key-off lines about 100 (path is one of sound.c's literals, 12
+     characters at most).
+   256 holds the 229 with 27 to spare. A line that would still not fit is
+   cut with "..." at its end (sw_log), never silently. */
+#define LINE 256
 /* the key-off lines printed before only the count goes on */
 #define KEYOFF_LINES 8
 
@@ -65,8 +78,11 @@ void sw_log(const char *fmt, ...)
     va_list ap;
 
     va_start(ap, fmt);
-    vsnprintf(line, sizeof line, fmt, ap);
+    const int n = vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
+    if (n >= (int)sizeof line) {
+        memcpy(line + sizeof line - 4, "...", 4);
+    }
     if (sink != NULL) {
         sink(line);
     } else {
