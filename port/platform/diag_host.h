@@ -161,7 +161,9 @@ void ico_diag_set_failure(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
    else's (the graphics driver building a pipeline, rd_pipeline.c): one
    line, printed by the crash and watchdog reports as "ico_pc: while:
    <note>" after the CRASH or WATCHDOG line. Set before the step, cleared
-   after it; a static buffer of 160 bytes, no allocation. One writer
+   after it; a static buffer of 480 bytes, no allocation (a start-up
+   batch's note names its keys, its modules and their sizes, and the
+   heartbeat line repeats it while the start-up set is created). One writer
    thread. A crash while the note starts with "creating pipeline" or
    "creating the start-up pipelines" is a graphics driver crash while
    preparing the shaders: the handler starts the game again with the next
@@ -190,6 +192,13 @@ const char *ico_diag_activity(void);
    <old>); trying the start-up set again on <new>" and the result is 0, so
    a new version tries the start-up set again. */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
+/* The note the file held when ico_diag_startup_activity_begin read it,
+   whatever its version ("" none): window_host.c asks
+   startup_retry_note_has_vu_ext of it (issue 107).  A batch's note and
+   any note naming an extended VU pipeline is written through to the disc
+   before the batch starts (fsync), so it survives a device that froze and
+   was rebooted. */
+const char *ico_diag_startup_activity_prev(void);
 /* The running version's text (the "ico_pc: version" log line's: "<label>
    (commit <c>)" or "development build (commit <c>)"); copied, at most 127
    bytes. */

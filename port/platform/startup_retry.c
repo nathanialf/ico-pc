@@ -126,6 +126,38 @@ bool startup_retry_note_has_dst(const char *note)
     return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
 }
 
+bool startup_retry_note_has_vu_ext(const char *note)
+{
+    static const char head[] = "creating pipeline";
+    static const char field[] = " ext ";
+    const char *p;
+    size_t i;
+    bool digits = false, nonzero = false;
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+        return false;
+    }
+    p = note + (sizeof head - 1);
+    if (*p == 's') {
+        p++;
+    }
+    if (*p != ' ') {
+        return false;
+    }
+    /* the first " ext " field: a batch's keys are all extended VU keys or
+       none is (rd_pipeline.c createKeys), so its first such field is the
+       batch's */
+    p = strstr(p, field);
+    if (p == NULL) {
+        return false;
+    }
+    p += sizeof field - 1;
+    for (i = 0; p[i] >= '0' && p[i] <= '9'; i++) {
+        digits = true;
+        nonzero = nonzero || p[i] != '0';
+    }
+    return digits && nonzero && (p[i] == '\0' || p[i] == ' ');
+}
+
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen)
 {
     const char *name =

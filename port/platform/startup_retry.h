@@ -156,6 +156,16 @@ static inline bool startup_retry_value_draws_fixed(const char *value)
  * allocation. */
 bool startup_retry_note_has_dst(const char *note);
 
+/* Whether an activity note names a pipeline with a VU vertex shader's
+ * extended variant (issue 107; port/render/rd_pipeline.c keyWords: a VU
+ * key's " ext N" field, N nonzero; a batch's keys are all such keys or
+ * none is).  window_host.c: a start that ended without a word inside such
+ * a batch (the device froze, the system ended the app) makes the next
+ * start, and every start after it, draw with the plain variants only
+ * ([dev] vu_plain_only = true in config.toml).  Tolerant as
+ * startup_retry_note_has_dst. */
+bool startup_retry_note_has_vu_ext(const char *note);
+
 /* The step after the run described by run ended (run->why): the crash or
  * loss order above, NONE when nothing is left or the platform cannot start
  * the game again.  reason gets one line in plain words (also for NONE: why

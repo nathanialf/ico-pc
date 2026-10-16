@@ -349,6 +349,45 @@ static void test_note(void)
     CHECK(!startup_retry_note_has_dst(NULL));
 }
 
+/* the same notes read for a VU key's variant (issue 107: " ext 1", the
+   extended VU vertex shaders) */
+static void test_note_vu_ext(void)
+{
+    static const struct {
+        const char *note;
+        bool ext;
+    } notes[] = {
+        {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "
+         "(vu_prelit_vs 50325 words + vu_ps 9000 words)",
+         true},
+        {"creating pipeline program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "
+         "(vu_prelit_plain_vs 22392 words + vu_ps 9000 words)",
+         false},
+        {"creating pipelines 329-360 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "ext 1 to program 0 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs "
+         "50325 words",
+         true},
+        {"creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 "
+         "ext 0 to program 0 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 0",
+         false},
+        /* a 2D batch: no field */
+        {"creating pipelines 1-32 of 702: program 5 blend 1 vs 0 fs 0 fmt 1/8 msaa 0 dst 0 to "
+         "program 6 blend 1 vs 1 fs 0 fmt 1/8 msaa 0 dst 0; vertex sprite_ui_vs 900 words",
+         false},
+        {"creating pipeline program 0 ext 1x", false},
+        {"creating pipeline program 0 ext ", false},
+        {"loading the title ext 1", false},
+        {"creating the start-up pipelines (12 of 400)", false},
+        {"", false},
+    };
+
+    for (size_t i = 0; i < sizeof notes / sizeof notes[0]; i++) {
+        CHECK(startup_retry_note_has_vu_ext(notes[i].note) == notes[i].ext, "\"%s\"",
+              notes[i].note);
+    }
+    CHECK(!startup_retry_note_has_vu_ext(NULL));
+}
+
 /* one loss-chain step */
 static StartupRetry loss_step(StartupRetry step, bool d3d12, bool expl, bool blendExpl,
                               bool wasFixed, const char *backend, bool relaunch)
@@ -578,6 +617,7 @@ int main(void)
     test_loss_chain();
     test_dst_chain();
     test_note();
+    test_note_vu_ext();
     test_values();
     test_envp();
     test_block();

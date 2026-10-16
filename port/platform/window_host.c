@@ -1315,6 +1315,30 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
             lazyStart = ico_diag_startup_activity_begin(act, retry != STARTUP_RETRY_NONE) != 0;
         }
     }
+    /* issue 107: a start that ended without a word while the graphics
+       driver compiled the VU vertex shaders' extended variants (the
+       Adreno 740 froze the whole device on them; the activity file names
+       the batch, startup_retry_note_has_vu_ext) makes this start and every
+       one after it draw with the plain variants: [dev] vu_plain_only =
+       true in config.toml (read back as ICO_RD_VU_PLAIN at the next
+       start), rd_set_vu_plain_only for this one. The cause is then out of
+       the set, so this start builds the set as usual (not lazily). A
+       restart after a crash report takes its own step instead. */
+    if (retry == STARTUP_RETRY_NONE &&
+        startup_retry_note_has_vu_ext(ico_diag_startup_activity_prev())) {
+        const int setOk = ico_config_set_bool("dev.vu_plain_only", 1) == 0;
+        const int saved = setOk && ico_config_save() == 0;
+        fprintf(stderr,
+                "ico_pc: the previous start ended while the graphics driver compiled the "
+                "largest 3D shaders (the VU extended variants); this start and every start "
+                "after it use the smaller ones only ([dev] vu_plain_only = true in %s%s): the "
+                "wide-screen rule is off; delete that line to try the larger ones again\n",
+                ico_config_toml_path() ? ico_config_toml_path() : "config.toml",
+                saved ? "" : ", which could not be written: this start only");
+        rd_set_vu_plain_only("[dev] vu_plain_only: the last start ended while the graphics "
+                             "driver compiled the extended ones, issue 107");
+        lazyStart = false;
+    }
     if (!rhi_create_backend(backend)) {
         fprintf(stderr, "window: renderer backend \"%s\" is not in this build; using vulkan\n",
                 backend);

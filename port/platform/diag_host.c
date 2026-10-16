@@ -117,6 +117,14 @@ static unsigned int (*vsyncs_fn)(void);
 static volatile unsigned int progress;
 
 static volatile int movie_playing;
+/* ico_diag_set_activity: written by the one thread that builds pipelines,
+   read by the crash report (on Windows from the watchdog thread while the
+   faulting thread waits, so the text stands still) and by the heartbeat
+   while the start-up set is created (a copy, so a note changing meanwhile
+   gives at worst a mixed line, never a read past the buffer). A batch's
+   note names its keys, its modules and their sizes (rd_pipeline.c
+   createKeys): up to about 450 characters */
+static char activity[480];
 /* ico_diag_set_pipelines: the start-up set's count and its longest compile */
 static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
 /* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
@@ -899,6 +907,18 @@ static void heartbeat_body(char *out, size_t size)
             size_t n = strlen(out);
             snprintf(out + n, size - n, " | pipelines %u of %u, longest %.1f s", pipes_done, total,
                      (double)pipes_longest_ms / 1000.0);
+            /* and what the driver is compiling now (the batch's keys,
+               modules and sizes: issue 107, a log that stops mid-set
+               names the shader) */
+            {
+                char note[sizeof activity];
+                memcpy(note, activity, sizeof note);
+                note[sizeof note - 1] = '\0';
+                if (note[0] != '\0') {
+                    n = strlen(out);
+                    snprintf(out + n, size - n, " | %s", note);
+                }
+            }
         }
     }
 }
@@ -1090,10 +1110,8 @@ static void stack_bounds_here(uintptr_t sp, uintptr_t *lo, uintptr_t *hi)
 
 /* --- The activity note and the relaunch after a driver crash ------------------ */
 
-/* ico_diag_set_activity: written by the one thread that builds pipelines,
-   read by the crash report (on Windows from the watchdog thread while the
-   faulting thread waits, so the text stands still) */
-static char activity[160];
+/* activity (ico_diag_set_activity) is defined with the heartbeat's state
+   at the top of the file */
 
 /* ico_diag_startup_activity_record's mode (0 off) and the file's path */
 static int act_mode;
@@ -1188,12 +1206,24 @@ static void act_close(void)
 #endif
 }
 
+/* Whether a note goes to the disc before the work it names starts (issue
+   107: the Adreno 740 froze the whole device while its driver compiled a
+   batch, and after the reboot a note still in the system's cache would be
+   gone): a start-up batch's note ("creating pipelines ...", about 20 a
+   cold start, a few ms each) and any note naming an extended VU pipeline
+   (startup_retry_note_has_vu_ext: a lazy run's). Not the single
+   pipelines of the progress screen's frames, nor a lazy run's others. */
+static int act_sync_note(const char *note)
+{
+    return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_ext(note);
+}
+
 static void act_write(const char *note)
 {
     /* the version's line, then the note, then this run's loss when there
        was one; room for the NULs over a longer text before it (one past the
        longest text) */
-    static char text[sizeof act_version + 1 + 160 + 1 + sizeof act_loss + 1];
+    static char text[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss + 1];
     const size_t cap = sizeof text - 1;
     const int len = snprintf(text, cap, "%s\n%s%s%s", act_version, note,
                              act_loss[0] != '\0' ? "\n" : "", act_loss);
@@ -1217,12 +1247,18 @@ static void act_write(const char *note)
             WriteFile(act_h, text, (DWORD)w, &done, NULL) && done == (DWORD)w &&
             SetFilePointerEx(act_h, at, NULL, FILE_BEGIN) && SetEndOfFile(act_h)) {
             act_len = n;
+            if (act_sync_note(note)) {
+                (void)FlushFileBuffers(act_h);
+            }
             return;
         }
     }
 #else
     if (pwrite(act_fd, text, w, 0) == (ssize_t)w && ftruncate(act_fd, (off_t)n) == 0) {
         act_len = n;
+        if (act_sync_note(note)) {
+            (void)fsync(act_fd);
+        }
         return;
     }
 #endif
@@ -1288,6 +1324,14 @@ static void act_remove(void)
 #endif
 }
 
+/* the note the previous run's file held (ico_diag_startup_activity_prev) */
+static char act_prev[sizeof activity];
+
+const char *ico_diag_startup_activity_prev(void)
+{
+    return act_prev;
+}
+
 int ico_diag_startup_activity_begin(const char *path, int relaunched)
 {
     char buf[sizeof act_version + 1 + sizeof activity + 1 + sizeof act_loss];
@@ -1301,6 +1345,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_mode = 0;
     act_path[0] = '\0';
     act_loss[0] = '\0';
+    act_prev[0] = '\0';
     loss_pending[0] = '\0';
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
@@ -1341,6 +1386,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     /* one line: a cut write leaves no newline to strip, a hand-edited file
        may have one */
     prev[strcspn(prev, "\r\n")] = '\0';
+    snprintf(act_prev, sizeof act_prev, "%s", prev);
     act_remove();
     if (loss != NULL && strcmp(loss, act_loss_none) == 0) {
         ico_diag_log("ico_pc: the previous run lost the graphics device (no loss dump was "

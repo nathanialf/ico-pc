@@ -492,6 +492,12 @@ static const struct {
     {"dev.pass_split", "pass_split"},
     {"dev.attachment_read", "attachment_read"},
     {"dev.storage_pass_merge", "storage_pass_merge"},
+    /* the VU vertex shaders' plain variants only (issue 107; written by
+       window_host.c after a start that ended inside their compile), and the
+       developer's override of the device table (port/render/rd_pipeline.c
+       rd__vu_policy_init) */
+    {"dev.vu_plain_only", "vu_plain_only"},
+    {"dev.vu_extended", "vu_extended"},
 };
 
 /* the [dev] keys exported as the environment switches the renderer and the
@@ -508,6 +514,9 @@ static const struct {
     {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
+    /* port/render/rd_pipeline.c rd__vu_policy_init */
+    {"vu_plain_only", "ICO_RD_VU_PLAIN"},
+    {"vu_extended", "ICO_RD_VU_EXTENDED"},
 };
 
 static int value_is(const char *v, const char *const *words)

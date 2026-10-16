@@ -203,6 +203,17 @@ static void segv_thread(void *arg)
     "creating pipelines 1-4 of 9: program 5 blend 1 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 to program 6 "  \
     "blend 1 vs 7 fs 19 fmt 1/8 msaa 0 dst 0"
 
+/* a batch of the VU vertex shaders' extended variants (issue 107;
+   rd_pipeline.c keyWords " ext 1", batchModules) and one of the plain ones */
+#define VU_EXT_NOTE                                                                                \
+    "creating pipelines 329-360 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 1 "  \
+    "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 1; vertex vu_prelit_vs 50325 "       \
+    "words; largest fragment vu_texa_ps 21000 words"
+#define VU_PLAIN_NOTE                                                                              \
+    "creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "  \
+    "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
+    "22392 words; largest fragment vu_texa_ps 21000 words"
+
 #if !defined(_WIN32)
 /* an OS thread that is not a game thread faults, as a worker inside the
    graphics driver's pipeline compile would */
@@ -257,6 +268,8 @@ static void progress_child(int progress)
         ico_diag_set_movie(1);
         /* the start-up set's count in the heartbeat */
         ico_diag_set_pipelines(12, 527, 1310);
+        /* the batch in flight, repeated by the heartbeat (issue 107) */
+        ico_diag_set_activity(VU_EXT_NOTE);
     }
     for (i = 0; progress && i < 50; i++) {
         pause_ms(50);
@@ -431,6 +444,9 @@ static void activity_child(const char *mode, const char *log)
                                                                 : "test 1");
     lazy = ico_diag_startup_activity_begin(path, strcmp(mode, "actrelaunch") == 0);
     ico_diag_log("test: lazy %d", lazy);
+    /* what window_host.c asks of the previous note (issue 107) */
+    ico_diag_log("test: previous vu ext %d",
+                 startup_retry_note_has_vu_ext(ico_diag_startup_activity_prev()) ? 1 : 0);
     if (strcmp(mode, "actrecord") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         /* the set's own note before a batch is not written */
@@ -507,6 +523,13 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_startup_activity_record(0);
         child_quit(0);
+    } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0) {
+        /* the start-up set ended without a word inside a VU batch (the
+           device froze): the batch's note is in the file */
+        ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
+        ico_diag_set_activity(BATCH_NOTE);
+        ico_diag_set_activity(strcmp(mode, "actvuext") == 0 ? VU_EXT_NOTE : VU_PLAIN_NOTE);
+        _exit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity("creating the start-up pipelines (1 of 9)");
@@ -1262,7 +1285,9 @@ int main(int argc, char **argv)
           strstr(s, "test: progress kept it alive") < strstr(s, "WATCHDOG:"));
     CHECK(strstr(s, "| progress ") != NULL);
     CHECK(strstr(s, "(a movie is playing)") != NULL);
-    CHECK(strstr(s, " | pipelines 12 of 527, longest 1.3 s") != NULL);
+    CHECK(strstr(s, " | pipelines 12 of 527, longest 1.3 s | creating pipelines 329-360 of 702") !=
+          NULL);
+    CHECK(strstr(s, "vertex vu_prelit_vs 50325 words") != NULL);
     if (fails) {
         printf("--- progress log ---\n%s\n", s);
     }
@@ -1415,6 +1440,36 @@ int main(int argc, char **argv)
                 fclose(f);
             }
         }
+        /* issue 107: a start that ended inside a batch of the extended VU
+           variants: the next start reads the note (any version, relaunch
+           or not) and names it; window_host.c then writes [dev]
+           vu_plain_only. A plain batch's note does not count */
+        r = run(argv[0], "actvuext", log);
+        CHECK(r == 0);
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\n" VU_EXT_NOTE) == 0);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(r == 0);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_EXT_NOTE "\n") != NULL);
+        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
+        run(argv[0], "actvuext", log);
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actnext", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        s = read_file(log);
+        CHECK(strstr(s, "test: previous vu ext 1") != NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        run(argv[0], "actvuplain", log);
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " VU_PLAIN_NOTE "\n") != NULL);
+        CHECK(strstr(s, "test: previous vu ext 0") != NULL);
+        CHECK(strstr(s, "test: lazy 1") != NULL);
+        /* the next start found no file */
+        r = run(argv[0], "actnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: previous vu ext 0") != NULL);
         /* a run ended between a shorter note's write and the cut: the
            padding's NUL ends the note (diag_host.c act_write) */
         {
