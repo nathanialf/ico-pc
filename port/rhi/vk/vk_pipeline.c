@@ -4,6 +4,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+
+#include <io.h>
+#include <windows.h>
+
+#else
+
+#include <unistd.h>
+
+#endif
 #ifdef ICO_RHI_HAVE_SDL
 #include <SDL3/SDL.h>
 #endif
@@ -106,6 +118,33 @@ void vkr_pipeline_cache_init(void)
     free(blob);
 }
 
+/* fflush, then the file's bytes onto the disk (_commit on Windows, fsync
+ * elsewhere; port/platform/host_fs.c ico_fsync, which port/rhi does not
+ * link) */
+static bool vkr_file_sync(FILE *fp)
+{
+    if (fflush(fp) != 0) {
+        return false;
+    }
+#ifdef _WIN32
+    return _commit(_fileno(fp)) == 0;
+#else
+    return fsync(fileno(fp)) == 0;
+#endif
+}
+
+/* from renamed over to, replacing it in one step (MoveFileExA with
+ * MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH on Windows, where
+ * rename does not replace a file; rename(2) elsewhere) */
+static bool vkr_rename_over(const char *from, const char *to)
+{
+#ifdef _WIN32
+    return MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+#else
+    return rename(from, to) == 0;
+#endif
+}
+
 /* the cache's data to <path>.tmp, renamed over the file; its size in
  * bytes, 0 when nothing was written.  skipSame: not when the data's size
  * is the file's as this run read or wrote it (*same set when that skipped
@@ -143,12 +182,15 @@ static size_t vkr_cache_write(bool skipSame, bool *same)
     FILE *fp = fopen(tmp, "wb");
     bool ok = fp && fwrite(blob, 1, size, fp) == size;
     if (fp) {
+        /* the bytes on the disk before the move, and the move over the old
+         * file (never a remove first): a device that freezes or a start the
+         * system ends mid-write (issues 93 and 107) leaves the old cache or
+         * the new one, never an empty or missing file */
+        ok = ok && vkr_file_sync(fp);
         ok = fclose(fp) == 0 && ok;
     }
     free(blob);
-    /* rename does not replace an existing file on Windows */
-    remove(s_cachePath);
-    if (!ok || rename(tmp, s_cachePath) != 0) {
+    if (!ok || !vkr_rename_over(tmp, s_cachePath)) {
         remove(tmp);
         VKR_LOG("pipeline cache: could not write %s", s_cachePath);
         return 0;

@@ -779,9 +779,23 @@ void rd_set_memory_fn(RdMemoryFn fn)
     s_memoryFn = fn;
 }
 
+/* Whether the pipeline cache is measured for the batches' lines and written
+ * between the start-up set's batches (issues 93 and 107): on the lazy path
+ * and on a device of the table (RhiLimits.lazyPipelines), never in a
+ * desktop's start-up set.  Each measure is vkGetPipelineCacheData over the
+ * whole cache (21 MB on an RTX 3090) and each write compares or writes it
+ * all: with them after every batch a warm start on that card took 16.7 s
+ * and 31.2 s against 1.9 s without, every pipeline a cache hit. */
+static bool cacheKeptPerBatch(void)
+{
+    const RhiLimits *lim = rhi_limits();
+    return rd__pipelines_lazy_on() || (lim != NULL && lim->lazyPipelines != NULL);
+}
+
 /* "memory 185 MB (most 194 MB), pipeline cache 3104 KB": the process's
  * resident memory and its peak (rd_set_memory_fn) and the pipeline cache's
- * data (rhi_pipeline_cache_size), for a batch's line: a set that the system
+ * data (rhi_pipeline_cache_size; "pipeline cache not measured" where
+ * cacheKeptPerBatch says no), for a batch's line: a set that the system
  * ends shows whether the memory grew with it, batch by batch */
 static void memoryText(char *out, size_t size)
 {
@@ -790,6 +804,10 @@ static void memoryText(char *out, size_t size)
     if (s_memoryFn != NULL && s_memoryFn(&rss, &peak) == 0 && rss >= 0) {
         snprintf(mem, sizeof(mem), "memory %ld MB (most %ld MB)", rss / 1024,
                  (peak >= 0 ? peak : rss) / 1024);
+    }
+    if (!cacheKeptPerBatch()) {
+        snprintf(out, size, "%s, pipeline cache not measured", mem);
+        return;
     }
     snprintf(out, size, "%s, pipeline cache %llu KB", mem,
              (unsigned long long)((rhi_pipeline_cache_size() + 1023u) / 1024u));
@@ -1386,11 +1404,11 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
 }
 
 /* The start-up set's pipeline cache writes between its batches (issues 93
- * and 107): after a batch that ends RD_SET_SAVE_MS or more after the last
- * write (or the set's start), so a set the system ends or a device that
- * freezes keeps what it compiled and the next start compiles only the
- * rest; a desktop's set, done in a few seconds, writes once or not at
- * all before the window's write at its end */
+ * and 107), on a device of the table only (cacheKeptPerBatch): after a
+ * batch that ends RD_SET_SAVE_MS or more after the last write (or the
+ * set's start), so a set the system ends or a device that freezes keeps
+ * what it compiled and the next start compiles only the rest; a desktop's
+ * set writes only at its end (the window's write) */
 #define RD_SET_SAVE_MS 5000.0
 static double s_setSavedMs;
 
@@ -1506,8 +1524,11 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
             const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);
             batchTimes(bk, bms, nb, first + 1, i, m, rd__now_ms() - bt0, batch.threads);
-            if (times != NULL && i < m && rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) {
-                /* the start-up set (times: not a replay's gathered keys) */
+            if (times != NULL && i < m && rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS &&
+                cacheKeptPerBatch()) {
+                /* the start-up set (times: not a replay's gathered keys) on
+                 * a device of the table only: a desktop's set writes once,
+                 * at its end (the window's write) */
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
             }
