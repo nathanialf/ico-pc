@@ -288,6 +288,7 @@ under the same name (below). Read through the store:
 | `vu_plain_only` | bool | `false` | |
 | `vu_extended` | bool | `false` | |
 | `joystick_directinput` | bool | `true` | |
+| `pipeline_set` | string | `full` | |
 
 ## ico-pc.ini
 
@@ -330,6 +331,7 @@ store (`backend`, `unlock_credits`):
 | `vu_plain_only` | `true`: every 3D (VU) draw takes the VU vertex shaders' plain variants, the extended ones never compiled; the wide-screen rule and the tick cameras' rule are off (exported as `ICO_RD_VU_PLAIN=1`). The game writes it to `config.toml` itself after a start that ended without a word while the graphics driver compiled the extended ones (issue 107) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `vu_extended` | `true`: the extended variants on a device the renderer's table or `vu_plain_only` keeps to the plain ones (exported as `ICO_RD_VU_EXTENDED=1`) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `joystick_directinput` | `false`: SDL's DirectInput controller scan off on Windows (`SDL_HINT_JOYSTICK_DIRECTINPUT` = 0 before `SDL_Init`; exported as `ICO_JOYSTICK_DIRECTINPUT=0`): the test for a pump held by that scan after a controller change (issue 105); XInput, HIDAPI and Raw Input controllers are still found, a device only DirectInput knows is not. No effect elsewhere (a line says so) ([PLATFORM.md](PLATFORM.md#diagnostics)) |
+| `pipeline_set` | `lazy`: no start-up set; each pipeline is made when a frame first needs it, the pipeline cache written after each batch of them (exported as `ICO_PIPELINE_SET=lazy`); `full`, the default, builds the set behind the start-up screen. The game writes `lazy` to `config.toml` itself after a start that ended without a word while it made the pipelines (issues 93 and 107); on a device of the renderer's table (the Adreno 740 on Qualcomm's driver) the set is skipped whatever the key says ([RENDER.md](RENDER.md#the-start-up-set)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

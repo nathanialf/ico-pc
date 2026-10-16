@@ -595,6 +595,60 @@ At start the renderer logs the embedded modules' count and the largest, `shaders
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
 
+### The start-up set
+
+The window builds the reachable set with `rd_precreate_pipelines` before the first frame, behind the
+start-up screen, unless one of the rules below skips it (`port/platform/window_host.c`
+(`ico_window_open`)). Without the set the window calls `rd_pipelines_lazy(why)` instead, which logs
+`rd: pipelines: no start-up set <why>: pipelines are made as the game needs them`; there is no
+start-up screen (the title comes at once), and each pipeline is made when a frame first needs it,
+on the thread that draws, the frame waiting for its compile (`rd__get_pipeline`). The summary line's
+renderer part ends with `pipelines the start-up set` or `pipelines on first use (no start-up set)`
+(`rd_summary_text`).
+
+| the set is skipped | `<why>` in the line |
+| --- | --- |
+| on a device of the table (`RhiLimits.lazyPipelines`, the lazy column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
+| `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
+| the previous start, of any version, ended without a word while a pipeline was being made: the setting is written now ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
+| the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
+| the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
+
+The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the plain-only rule of the next section
+stays on the same device):
+
+| device | match | reason |
+| --- | --- | --- |
+| Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x4305xxxx | issue 93 (AYN Odin 2 Portal) and issue 107 (AYN Thor), driver 512.676.53: both logs ended inside the set's 2D keys. The set was then ordered as enumerated: the 327 screen keys, the 176 VU keys, then the 24 shadow, fog, water, CRT and blur keys (527 at Original 4:3 with the fixed-function blend). The Odin 2 Portal stopped at 201 finished (the batch of keys 193 to 224 in flight), its memory falling from 194 MB to 47 MB over 22 s without progress until the system ended the app, with no crash report; the Thor froze the whole device at 307 or later (the batch of keys 289 to 320). No one module explains it (the font sheet's fragment shader, 70,444 words, and the movie decoder's, 47,609 words, were as large in a release that started on the Thor), so on this device the set is not made at all |
+
+**The pipeline cache.** Without the set the creations are counted into batches: a batch closes at
+the window's next pump once no pipeline was made for 0.5 s, or 2 s after its first
+(`rd_pipelines_lazy_tick`). The pipeline cache is then written to its file
+(`rhi_pipeline_cache_save`, `rhi_vk: pipeline cache: <n> bytes written to <path> in <t> ms`), so a
+start the system ends or a device that freezes keeps every batch before it and the next start
+compiles only the rest, and the batch's line goes to the log and to the activity file as a
+`compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics)): `rd: pipelines: compiled lazy batch 3,
+pipelines 41-57 of this run (compiler E031.41.03.47): 17 pipelines 0.02-0.61 s, mean 0.14 s, over
+1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 KB; slowest 0.61 s <key> (<modules>)`. In
+such a run each first-use pipeline's note goes to the disc before its compile (fsync,
+`act_sync_note`), so a freeze inside one still names it. The cache's size at the start is logged
+twice: by the backend (`rhi_vk: pipeline cache: <n> bytes from <path>`, or `rhi_vk: pipeline
+cache: starting empty (<path> holds none for this device)`) and by `rd_pipelines_lazy` (`rd:
+pipelines: the pipeline cache holds <n> KB at the start; it is written after each batch of new
+pipelines ...`). With the set, the cache is written after a batch that ends 5 s or more after the
+last write (`RD_SET_SAVE_MS`), and once more at the set's end by the window, so a phone's set that
+the system ends keeps most of its work too; a desktop's set, done in a few seconds, writes once or
+not at all before its end.
+
+**The batches' lines.** Every batch of the set is logged as it completes, the 2D ones too: `rd:
+pipelines: compiled 2D batch 193-224 of 527 (compiler ...): 32 pipelines 0.02-0.21 s, mean 0.08 s,
+0.9 s on 8 threads; memory 185 MB (most 194 MB), pipeline cache 3104 KB; slowest 0.21 s <key>
+(<modules>); each (s): ...`; the VU ones as in the next section. The memory is the process's
+resident memory and its peak (`rd_set_memory_fn`, `ico_diag_process_memory`; `memory unknown`
+where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulkan's data size, 0
+on Direct3D 12). A start the system ended shows whether the memory grew with the batches, and the
+next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
+
 ### The VU shader variants
 
 Every VU vertex shader is built twice (issue 107; `port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`):
@@ -655,9 +709,10 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   compiler), and each batch with a VU vertex shader is logged as it starts (`rd: pipelines:
   compiling 329-360 of 702 (extended VU): ...`) and as it completes, with every pipeline's compile
   time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 702 (extended,
-  compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; vu_prelit_vs
-  50325 words 9801 instructions: 8 x 1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...`
-  (`batchTimes`). The same line without the times goes to the start-up activity file as a
+  compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185
+  MB (most 194 MB), pipeline cache 3104 KB; vu_prelit_vs 50325 words 9801 instructions: 8 x
+  1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines:
+  [The start-up set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
   `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after
   a freeze logs every batch the frozen one finished: a device that compiles the plain batches and
   dies on the first extended one shows its size boundary, and one that dies on plain shows it there.

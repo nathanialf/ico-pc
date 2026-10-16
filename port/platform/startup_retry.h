@@ -34,6 +34,13 @@
  * After lazy, or in a run started after a device loss, there is nothing
  * left: the crash box is shown.
  *
+ * An end without a crash report (the system ends the app, the device
+ * freezes) never reaches these steps: the start-up activity file names it
+ * at the next start, which makes lazy last (no start-up set from then on,
+ * [dev] pipeline_set = "lazy" written to config.toml, diag_host.h
+ * ico_diag_startup_pipeline_set), or after an extended VU batch draws with
+ * the plain variants instead ([dev] vu_plain_only, window_host.c).
+ *
  * After a device loss (STARTUP_RETRY_LOSS) the steps, in order; each is
  * taken only when the run before lost the device:
  *   blend    the same backend with the fixed-function blend

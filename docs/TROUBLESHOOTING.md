@@ -48,13 +48,38 @@ skip this screen or show it only for a moment. If you close the game while
 it says this, the next start shows it again. If the game closes by itself
 on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 
+If the game stops while it says **Preparing graphics** (it closes, or the
+phone takes you back to its home screen), start it again. The game sees
+that the last start stopped there and takes a different path on its own:
+from then on it skips this screen and prepares each piece of graphics the
+first time the game needs it. The title comes at once; the first minutes
+of play can pause for a moment here and there while graphics are prepared,
+and the game keeps what it prepared, so later starts pause less. On the
+AYN Thor and the AYN Odin 2 Portal the game does this from the first
+start. If it stops on this screen twice, tell the game yourself: close it,
+open `config.toml` from the folder with your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
+and add these two lines at the end (if the file already has a `[dev]`
+line, add only the second line under it):
+
+```toml
+[dev]
+pipeline_set = "lazy"
+```
+
+To have the game prepare everything at the start again, delete that line.
+If the game still stops, send the log of the start that stopped and the
+log of the start after it: they say what was being prepared and how much
+memory the game was using.
+
 If the whole phone or handheld freezes on **Preparing graphics** and you
 have to restart it, its graphics driver stopped while it got the game's
 largest 3D graphics ready. Restart the device and start the game again:
 the game sees that the last start stopped there and from then on uses
 smaller 3D graphics that such a device can prepare. Wide screens then
 show a little less at the old 4:3 edges. On the AYN Thor and the AYN Odin
-2 Portal the game uses the smaller graphics from the first start. If it
+2 Portal the game uses the smaller graphics from the first start, and
+prepares them as it goes rather than on this screen. If it
 freezes again, send the log from the start after the freeze: it lists how
 long each group of graphics took to prepare before the freeze.
 

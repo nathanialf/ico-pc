@@ -375,7 +375,8 @@ A crash while the renderer builds a pipeline is a graphics driver crash: the act
 (`ico_diag_set_activity`) starts with "creating pipeline" or "creating the start-up pipelines". On
 Windows, Linux and macOS the handler then starts the program again at once, with
 `ICO_STARTUP_RETRY=<step>:<backend>` in the new run's environment; nothing is written to the user
-folder or the settings. The steps come in order, each taken only when the run before crashed:
+folder or the settings (an end without a crash report has a step of its own, which writes one:
+below). The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
 tries again), `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
@@ -448,13 +449,28 @@ with NULs over a longer text before it, then the file is cut to the note, so it 
 note even when the process is ended between the two (`port/platform/diag_host.c` (`act_write`,
 `act_open`, `act_close`)). The next start of the same version logs
 `ico_pc: the previous run ended while: <note>` and creates the pipelines as the frames need them;
-another version's file is logged and the set tried again; a lazy run's clean exit leaves its own
+another version's file is logged; a lazy run's clean exit leaves its own
 line, logged as `ico_pc: the previous run created the pipelines as the frames needed them; this one
 does too`, so the lazy start sticks until the version changes (`port/platform/diag_host.h`
-(`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)). Deleting the file makes the
-next start try the set again. A batch's note, and any note naming an extended VU pipeline, is
-written through to the disc (fsync, `act_sync_note`) before the driver starts on it, so it is
-still there after a device that froze was rebooted (issue 107). A note naming a batch of the VU
+(`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)).
+
+The chain's step for an end without a crash report (issues 93 and 107): a note that names a
+pipeline being made (`creating pipeline ...`, `creating pipelines ...` or `creating the start-up
+pipelines`), from a start of any version that was not a restart after a crash report, and not
+inside an extended VU batch (below), makes the next start skip the start-up set for good: it writes
+`[dev] pipeline_set = "lazy"` to `config.toml` and logs `ico_pc: the previous start ended while
+preparing the graphics (<note>); this start and every start after it make the pipelines as the
+game needs them, with no start-up set ([dev] pipeline_set = "lazy" in <path>); delete that line to
+try the start-up set again` (`, which could not be written: this start only` when the write
+failed) (`port/platform/diag_host.h` (`ico_diag_startup_pipeline_set`);
+`port/platform/window_host.c` (`pipeline_set_persist_lazy`)). It is the crash order's `lazy` step
+made to last, for the ends a crash handler never sees (the system ending the app, a device that
+freezes); a crash with a report keeps its own order above. The setting outlives the version, as
+`[dev] vu_plain_only` does; deleting the line makes the next start try the set again
+([RENDER.md](RENDER.md#the-start-up-set)). A batch's note, and any note naming an extended VU
+pipeline, is written through to the disc (fsync, `act_sync_note`) before the driver starts on it,
+and in a lazy run every first-use pipeline's note, so it is still there after a device that froze
+was rebooted (issue 107). A note naming a batch of the VU
 vertex shaders' extended variants (` ext 1`, `startup_retry_note_has_vu_ext`, whatever the version)
 makes the next start, unless it is a restart after a crash report, write `[dev] vu_plain_only =
 true` to `config.toml` and draw with the plain variants from then on; that start builds the set as
@@ -462,16 +478,30 @@ usual, not lazily ([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform
 `ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
 compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and
-ends with the device's compiler (`; compiler E031.41.03.47`). Each finished batch with a VU vertex
-shader adds a `compiled: ` line after the note (the last 24, written at once, so on the disc with
-the next batch's note): its range, variant, compiler, pipeline count, the compile times' minimum,
-maximum and mean, the batch's wall time and threads, and the same by vertex shader with its words
-and instructions (`rd.h` `rd_set_batch_fn`, `diag_host.h` `ico_diag_startup_activity_batch`). The
-next start logs each as `ico_pc: the previous run (version V) compiled: VU batch 297-328 of 702
-(plain, compiler ...): 32 pipelines 0.20-0.90 s, mean 0.41 s, ...` before the note it ended in, so
-a device that froze shows where its compile times stood against the shaders' sizes (issue 107); the
-log itself has the line as each batch completes, with every pipeline's time (`rd: pipelines:
-compiled ...; each (s): ...`). The activity note holds 640 bytes. The driver compiles the set on worker threads
+ends with the device's compiler (`; compiler E031.41.03.47`). Each finished batch adds a
+`compiled: ` line after the note (the last 24 lines, written at once, so on the disc with the next
+batch's note): its range, kind (2D, or VU with its variant), compiler, pipeline count, the compile
+times' minimum, maximum and mean, the batch's wall time and threads, the process's memory and the
+pipeline cache's size after it, then a VU batch's times by vertex shader with its words and
+instructions or a 2D batch's slowest pipeline with its modules; a run without the set adds its lazy
+batches' lines the same way ([RENDER.md](RENDER.md#the-start-up-set); `rd.h` `rd_set_batch_fn`,
+`diag_host.h` `ico_diag_startup_activity_batch`). The next start logs each as `ico_pc: the previous
+run (version V) compiled: VU batch 297-328 of 702 (plain, compiler ...): 32 pipelines 0.20-0.90 s,
+mean 0.41 s, ...` before the note it ended in, then the last one again as `ico_pc: the previous
+run's last finished batch: <line>`, so a device that froze shows where its compile times stood
+against the shaders' sizes (issue 107) and a start the system ended shows its memory batch by
+batch (issue 93); the log itself has the line as each batch completes, with every pipeline's time
+(`rd: pipelines: compiled ...; each (s): ...`). On Android the system's request to free memory
+(`onTrimMemory`, which `IcoActivity` hands to `nativeTrimMemory` with its level before SDL turns it
+into `SDL_EVENT_LOW_MEMORY`, which has none) is logged at once from the activity's thread: `ico_pc:
+the system asked the app to free memory: low memory (onTrimMemory level 15, running critical;
+signal 1 of this run) at pipelines 201 of 527 of the start-up set; memory 102 MB (most 194 MB)`
+(`with <n> pipelines made` outside the set). The main thread's next poll (the start-up screen's
+progress, the window's pump: `ico_diag_startup_activity_poll`) adds it to the activity file as a
+`system: ` line among the `compiled: ` ones, and the next start logs it as `ico_pc: the previous
+run (version V) was told by the system: low memory ...`, so an end the system chose shows whether a
+low-memory signal came before it (`port/platform/diag_host.h` (`ico_diag_note_low_memory`);
+`port/platform/android/host_android.c`). The activity note holds 640 bytes. The driver compiles the set on worker threads
 (`rhi_create_pipelines`, [RHI.md](RHI.md#the-interface)); the main thread waits in the renderer's
 progress function, about every 50 ms, and from it shows the "Preparing graphics (N of M)" screen on
 every platform, drawn only once the set has taken 250 ms and then at most ten times a second, with
@@ -754,7 +784,7 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; pipelines the start-up set; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
@@ -762,7 +792,8 @@ the self-tests' results); `port/rhi/rhi.h` (`RhiLimits.driverText`, `robustText`
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
 the VU shaders are `plain only (issue 107)` on a device or setting that keeps them to the plain
-variants; on Android the disc is mounted after the window ("not mounted yet").
+variants, and the pipelines `on first use (no start-up set)` where the set is skipped
+([RENDER.md](RENDER.md#the-start-up-set)); on Android the disc is mounted after the window ("not mounted yet").
 `ico_diag_set_summary` flushes the C library's held lines first, so on Windows the line follows the
 device and window lines in the file, and keeps the text for the report file. The 10 s block's
 `window: memory:` line has the graphics memory in use and its peak where the backend counts it
