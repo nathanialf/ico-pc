@@ -463,7 +463,7 @@ the levels the voices play at (`port/audio/stream_watch.h`, header comment):
 | line | written by | when |
 | --- | --- | --- |
 | `adpcm: open 43 slot 0 voices 0,1` | the game (`adpcmDataSet`) | the open: stream number, the game's stream slot (0 or 1), the SPU2 voices |
-| `adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff (opened on a page of 37 packets)` | the driver (`stream_watch.c`) | two driver ticks after the stream's key-on; the end says how full the packet page its open ran on was, or `(opened on a full page: carried past its 255)` |
+| `adpcm: 43 voices 0,1 vol 3fff/3fff env 7fff/7fff (opened on a page of 37 packets)` | the driver (`stream_watch.c`) | two driver ticks after the stream's key-on; the end says how full the packet page its open ran on was, or `(opened on a full page: carried past its 255)`. Every stream line goes through `sw_log`, whose buffer is 256 characters (the longest line that can be built is the page-full line, 229 with every field at its maximum; the arithmetic is in `stream_watch.c`); a line that would not fit is cut and ends in `...` |
 | `adpcm: 43 at half: voices 0,1 vol ... env ...` | the driver | once the driver has fed half the file's bytes to the voices |
 | `adpcm: 43 at close: voices 0,1 vol ... env ...` | the driver | the stop (0x43) reaching the driver, before its key-off |
 | `adpcm: close 43 (now)` or `(fade)` | the game (`AdpcmClose`) | the close; "fade" when a fade ran out |

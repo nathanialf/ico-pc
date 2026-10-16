@@ -85,7 +85,7 @@ program under an environment switch ([Environment switches](#environment-switche
 - `pan_test.c`: mirror mode's pan swap and the per-[vsync](ARCHITECTURE.md#terms) block size
   (`audio_pan`).
 - `sndn2_test.c`: the SNDN2DRV host and the Sg sequencer against what the IRX's code does; reads
-  the disc when present (`sndn2`).
+  the disc when present; also `sw_log`'s bound (the longest page-full line arrives whole, a longer one ends in `...`) (`sndn2`).
 - `spu2_bench.c`: the [SPU2](ARCHITECTURE.md#terms) render's cost, and with `--check` a CRC-32 of
   five 10 s scenes (`spu2_render_crc`).
 - `spu2_test.c`: the software SPU2 and its [libsd](ARCHITECTURE.md#terms) front end: interpolation,
