@@ -1,7 +1,8 @@
 /* Exercise the actual SDL queue without a device or an audio thread: the
    cushion (two vsyncs at first, doubled after a dry queue up to 120 ms,
-   halved after 20 s without one), the refill, the trim target, the drop
-   limit and the queued-ms query (out_sdl.c). */
+   halved after 20 s without one), the refill and its 96-frame ramp down
+   from the last pushed frame, the trim target, the drop limit and the
+   queued-ms query (out_sdl.c's push, the sync path). */
 #include "../out_sdl.c"
 
 static int failures;
@@ -54,7 +55,8 @@ int main(void)
     CHECK(ico_audio_sdl_queued_ms() == 50);
 
     /* a dry queue: the cushion doubles and silence fills to it before the
-       block, which is kept whole */
+       block, which is kept whole; the silence starts as a ramp down from
+       the last pushed frame (pcm's last, 1599 and 1600) over 96 frames */
     SDL_ClearAudioStream(stream);
     CHECK(ico_audio_sdl_queued_ms() == 0);
     ico_audio_sdl_push(pcm, 800);
@@ -63,9 +65,13 @@ int main(void)
     CHECK(queued_frames() == 3200 + 800);
     CHECK(SDL_GetAudioStreamData(stream, received, (3200 + 800) * BYTES_PER_FRAME) ==
           (3200 + 800) * BYTES_PER_FRAME);
-    for (i = 0; i < 3200 * CHANNELS; i++) {
-        CHECK(received[i] == 0);
+    for (i = 0; i < 3200; i++) {
+        const int l = i < RAMP_FRAMES ? 1599 * (RAMP_FRAMES - 1 - i) / RAMP_FRAMES : 0;
+        const int r = i < RAMP_FRAMES ? 1600 * (RAMP_FRAMES - 1 - i) / RAMP_FRAMES : 0;
+
+        CHECK(received[2 * i] == l && received[2 * i + 1] == r);
     }
+    CHECK(received[2 * (RAMP_FRAMES - 1)] == 0 && received[0] == 1599 * 95 / 96);
     CHECK(memcmp(received + 3200 * CHANNELS, pcm, sizeof(pcm)) == 0);
 
     /* a resume primes the current cushion (the stream has no device, so

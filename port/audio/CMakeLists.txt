@@ -89,8 +89,18 @@ if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_compile_options(audio_queue_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(audio_queue_test PRIVATE ico_audio SDL3::SDL3)
     ico_copy_sdl3_dll(audio_queue_test)
+    # audio_pull_test: out_sdl.c's pull path on a device-less stream over the
+    # real SPU2: a writer thread under the audio lock and a pulling thread
+    # render the same frames as one thread; 10 s free-running with the
+    # accounting of frames and silence; the ramp out of and into silence
+    # when the lock is held; the 10 s line and the mode choice
+    add_executable(audio_pull_test test/audio_pull_test.c)
+    target_compile_options(audio_pull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(audio_pull_test PRIVATE ico_audio SDL3::SDL3)
+    ico_copy_sdl3_dll(audio_pull_test)
     if(ICO_RUN_TESTS)
         add_test(NAME audio_queue COMMAND audio_queue_test)
+        add_test(NAME audio_pull COMMAND audio_pull_test)
     endif()
 endif()
 if(TARGET ico_pc)

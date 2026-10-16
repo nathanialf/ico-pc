@@ -509,6 +509,12 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("pipeline_set", "true") == NULL);
     CHECK(ico_dev_env_value("pipeline_set", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.pipeline_set"), "pipeline_set") == 0);
+    /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
+    CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
+    CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("audio_sync", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("audio_sync", "always") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.audio_sync"), "audio_sync") == 0);
     /* config.toml's [dev] keys reach the same ini keys */
     CHECK(strcmp(ico_config_ini_key("dev.blend"), "blend") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.fog_path"), "fog_path") == 0);

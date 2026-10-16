@@ -14,7 +14,8 @@
  * after its vblanks).
  * The timer path's audio skip (testAudioSkip*: never two in a row, only
  * when slow or the audio low, never without audio, never a frame already
- * presented, never before the deadline).
+ * presented, never before the deadline; the audio on the device's clock,
+ * a cushion of 0, never low).
  */
 #include <stdio.h>
 #include "pace_policy.h"
@@ -744,6 +745,18 @@ static void testAudioSkipSlowOrLow(void)
     CHECK(!pace_audio_skip(true, true, false, false, true, 0, 0));
 }
 
+/* the audio on the device's clock (out_sdl.c, the pull path): a cushion of
+   0 with any lead queued is never low, so only slow presents skip */
+static void testAudioSkipPullOutput(void)
+{
+    for (int q = 0; q <= 50; q += 10) {
+        CHECK(!pace_audio_skip(true, true, false, false, true, q, 0));
+        CHECK(pace_audio_skip(true, true, false, true, true, q, 0));
+        CHECK(!pace_audio_skip(true, true, true, true, true, q, 0));
+    }
+    CHECK(!pace_audio_skip(false, true, false, true, true, 10, 0));
+}
+
 static void testAudioSkipNoAudio(void)
 {
     /* without the audio playing, slow or low, every new frame is presented */
@@ -774,6 +787,7 @@ int main(void)
     PaceHist h = {0};
     testAudioSkipNeverTwice();
     testAudioSkipSlowOrLow();
+    testAudioSkipPullOutput();
     testAudioSkipNoAudio();
     testAudioSkipPresentedFrame();
     testAudioSkipBeforeDeadline();
