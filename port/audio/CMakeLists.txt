@@ -3,6 +3,7 @@
 # on top of it (ico_sndn2, below).
 add_library(ico_audio STATIC
     adpcm.c
+    audio_lock.c
     spu2.c
     spu2_sd.c
     spu2_tables.c

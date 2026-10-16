@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 
+#include "audio_lock.h"
 #include "sndn2_internal.h"
 #include "spu2_sd.h"
 
@@ -133,7 +134,12 @@ static int reapply(int cat)
 
 int ico_audio_gain_reapply(void)
 {
-    return reapply(ICO_AUDIO_CAT_COUNT);
+    int n;
+
+    ico_audio_lock(); /* the SPU2's voice volumes (audio_lock.h) */
+    n = reapply(ICO_AUDIO_CAT_COUNT);
+    ico_audio_unlock();
+    return n;
 }
 
 void ico_audio_gain_forget(void)
@@ -159,12 +165,18 @@ void ico_audio_set_gain(int cat, double gain)
     } else {
         q = (int)(gain * ICO_AUDIO_GAIN_ONE + 0.5);
     }
+    /* the gain and the voice volumes it re-issues are the driver's and the
+       SPU2's (the PCM mixer reads the film gain in the render): under the
+       lock (audio_lock.h); the Settings menu calls this on the main
+       thread */
+    ico_audio_lock();
     if (q != gain_q12[cat]) {
         gain_q12[cat] = q;
         if (cat != ICO_AUDIO_CAT_FILM) { /* the PCM mixer reads it per half */
             reapply(cat);
         }
     }
+    ico_audio_unlock();
 }
 
 int ico_audio_gain_q12(int cat)

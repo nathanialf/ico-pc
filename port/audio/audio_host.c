@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "audio_lock.h"
 #include "diag_host.h"
 #include "mix_gain.h"
 #include "options.h"
@@ -98,7 +99,9 @@ static void cut_line(int hz)
         return;
     }
     cuts_seen_at = vsync_index;
+    ico_audio_lock(); /* the render writes them (audio_lock.h) */
     spu2_take_cuts(&w);
+    ico_audio_unlock();
     if (w.cuts == 0) {
         return;
     }
@@ -116,6 +119,14 @@ void ico_audio_host_shutdown(void)
     IcoAudioStreamStats ss;
     static int streams_said; /* the shutdown can run twice (atexit) */
 
+#ifdef ICO_AUDIO_SDL
+    /* the device first: after it no thread renders, so the SPU2's
+       statistics below are read alone */
+    if (sdl_open) {
+        ico_audio_sdl_close();
+        sdl_open = 0;
+    }
+#endif
     ico_audio_stream_stats(&ss);
     if (!streams_said && ss.opened + ss.keyoffs + ss.pages_full > 0) {
         streams_said = 1;
@@ -150,12 +161,6 @@ void ico_audio_host_shutdown(void)
                 (unsigned long long)frames, (double)frames / SPU2_RATE, dump_peak,
                 first_sound_vsync);
     }
-#ifdef ICO_AUDIO_SDL
-    if (sdl_open) {
-        ico_audio_sdl_close();
-        sdl_open = 0;
-    }
-#endif
 }
 
 void ico_audio_host_init(void)

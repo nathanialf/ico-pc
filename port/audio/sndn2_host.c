@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "audio_lock.h"
 #include "iop_ram.h"
 #include "libsd_irx.h"
 #include "mix_gain.h"
@@ -40,6 +41,10 @@ static struct {
     uint32_t xfer_counter;                  /* 0x3D2C */
     uint8_t ret_page[ICO_SNDN2_REPLY_SIZE]; /* 0x7140 and zeros (a non-tick reply) */
     const uint8_t *last_reply;
+    /* the tick's reply as the serve returns it: the host SIF copies it
+       after the serve, outside the lock, while the DMA-done callback may
+       write the page itself on the audio thread (dma0_done) */
+    uint8_t reply_out[ICO_SNDN2_REPLY_SIZE];
     spu2_sd_effect_attr attr; /* the dispatcher frame's attr */
     uint16_t pitch[ICO_SNDN2_PITCH_ENTRIES];
     int pitch_source;
@@ -497,9 +502,12 @@ static uint8_t *fill_page(void)
     return page;
 }
 
-void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int rsize)
+/* The serve under the lock (audio_lock.h): the whole body, from the time
+   stamp to the reply, so the audio thread's render never sees half a
+   page's writes; nothing in it switches fibers (the host SIF runs the
+   server synchronously). */
+static void *serve_locked(unsigned int rpc_number, const uint8_t *pk, int ssize, int rsize)
 {
-    const uint8_t *pk = send;
     int i;
 
     spu2_sd_set_time(spu2_time());
@@ -525,17 +533,29 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
         sw_page(0, 0);
         st_adpcm_tick();
         H.last_reply = fill_page();
+        memcpy(H.reply_out, H.last_reply, sizeof(H.reply_out));
         /* the host SIF copies `rsize` bytes from the reply: never past the
            page (the EE asks for exactly 0x200) */
-        return rsize <= ICO_SNDN2_REPLY_SIZE ? (void *)H.last_reply : NULL;
+        return rsize <= ICO_SNDN2_REPLY_SIZE ? (void *)H.reply_out : NULL;
     }
     /* any other number (the EE sends only 0x65): one packet, the return
-       word; the host SIF copies `rsize` bytes from the reply */
+       word; the host SIF copies `rsize` bytes from the reply (written only
+       here, on the game's thread) */
     memset(H.ret_page, 0, sizeof(H.ret_page));
     if (pk != NULL && ssize >= 16) {
         dispatch(pk);
     }
     return rsize <= ICO_SNDN2_REPLY_SIZE ? H.ret_page : NULL;
+}
+
+void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int rsize)
+{
+    void *reply;
+
+    ico_audio_lock();
+    reply = serve_locked(rpc_number, send, ssize, rsize);
+    ico_audio_unlock();
+    return reply;
 }
 
 const uint8_t *ico_sndn2_host_last_reply(void)
@@ -550,6 +570,7 @@ const uint8_t *ico_sndn2_staging(void)
 
 void ico_sndn2_host_reset(void)
 {
+    ico_audio_lock();
     spu2_reset();
     ico_libsd_apply(NULL); /* the idle block too, like the presets */
     memset(&H, 0, sizeof(H));
@@ -559,10 +580,14 @@ void ico_sndn2_host_reset(void)
     C.n = 0;
     C.page_full = 0;
     logged_cmd = logged_iop = logged_clamp = logged_sub = logged_carry_drop = 0;
+    ico_audio_unlock();
 }
 
 void ico_sndn2_host_register(void)
 {
+    /* the first call powers the SPU2 on and installs the disc's tables
+       (spu2_reverb_set_preset, spu2_sd_set_idle_block): under the lock */
+    ico_audio_lock();
     if (!H.registered) {
         ico_sndn2_host_reset();
         ico_sndn2_pitch_load();
@@ -570,4 +595,5 @@ void ico_sndn2_host_register(void)
         H.registered = 1;
     }
     ico_sif_register_server(ICO_SNDN2_SERVER_ID, ico_sndn2_host_serve);
+    ico_audio_unlock();
 }

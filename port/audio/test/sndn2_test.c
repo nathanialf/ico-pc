@@ -22,7 +22,11 @@
  *     (head context, header records, sequence bodies) run on this host;
  *   - the EE's full packet page (AU-7): a stream opened when the page
  *     already holds 255 packets still lands its open, volume, pitch and
- *     play, in the order sent, and the page is logged and counted.
+ *     play, in the order sent, and the page is logged and counted;
+ *   - the audio lock (audio_lock.h) with a counting fake installed: a tick
+ *     and the init RPC take it once each and release it, also when the
+ *     serve logs a line; a gain change takes it once; the reset takes it,
+ *     the register around a nested reset; uninstalled, nothing is called.
  *
  * Usage: sndn2_test [disc image]
  */
@@ -34,8 +38,10 @@
 #include <sound.h>
 
 #include "adpcm.h"
+#include "audio_lock.h"
 #include "iop_ram.h"
 #include "libsd_irx.h"
+#include "mix_gain.h"
 #include "sif_host.h"
 #include "sndn2_host.h"
 #include "spu2.h"
@@ -957,6 +963,74 @@ static void test_longest_line(void)
     ico_audio_stream_log_sink(NULL);
 }
 
+/* --- the audio lock ---------------------------------------------------------- */
+
+static int lock_depth, lock_depth_max, lock_takes, lock_unbalanced;
+
+static void fake_lock(void *user)
+{
+    CHECK(user == &lock_takes);
+    lock_takes++;
+    if (++lock_depth > lock_depth_max) {
+        lock_depth_max = lock_depth;
+    }
+}
+
+static void fake_unlock(void *user)
+{
+    CHECK(user == &lock_takes);
+    if (--lock_depth < 0) {
+        lock_unbalanced++;
+    }
+}
+
+static void test_lock(void)
+{
+    uint8_t init[0x40];
+    uint8_t ret[0x40];
+
+    start();
+    ico_audio_lock_install(fake_lock, fake_unlock, &lock_takes);
+
+    /* a tick, with a command the IRX does not handle (logged once from
+       inside the serve): one take around the whole serve, released */
+    lock_takes = lock_depth_max = 0;
+    pk(0x01, 3, 0x1000, 0x1000);
+    pk(0x99, 0, 0, 0);
+    tick();
+    CHECK(lock_takes == 1 && lock_depth == 0 && lock_depth_max == 1);
+    spu2_apply_pending();
+    CHECK(spu2_sd_get_param(vsel(3, SPU2_SD_VPARAM_VOLL)) == 0x1000);
+
+    /* the init RPC (0x65) */
+    memset(init, 0, sizeof(init));
+    put32(init, 0x1E);
+    CHECK(sceSifCallRpc(&client, ICO_SNDN2_RPC_INIT, 0, init, 0x40, ret, 0x40, NULL, NULL) == 0);
+    CHECK(lock_takes == 2 && lock_depth == 0);
+
+    /* the gains: one take a change, the re-issued volumes inside it */
+    ico_audio_set_gain(ICO_AUDIO_CAT_MUSIC, 0.5);
+    CHECK(lock_takes == 3 && lock_depth == 0 && lock_depth_max == 1);
+    ico_audio_set_gain(ICO_AUDIO_CAT_MUSIC, 1.0);
+    CHECK(lock_takes == 4 && lock_depth == 0);
+
+    /* the reset; the register around the reset it runs again (the reset
+       forgot the registration) */
+    lock_takes = lock_depth_max = 0;
+    ico_sndn2_host_reset();
+    CHECK(lock_takes == 1 && lock_depth == 0 && lock_depth_max == 1);
+    ico_sndn2_host_register();
+    CHECK(lock_takes == 3 && lock_depth == 0 && lock_depth_max == 2);
+
+    /* uninstalled: the calls do nothing */
+    ico_audio_lock_install(NULL, NULL, NULL);
+    ico_audio_lock();
+    ico_audio_unlock();
+    tick();
+    CHECK(lock_takes == 3 && lock_depth == 0);
+    CHECK(lock_unbalanced == 0);
+}
+
 int main(int argc, char **argv)
 {
     const char *iso = argc > 1 ? argv[1] : NULL;
@@ -977,6 +1051,7 @@ int main(int argc, char **argv)
     test_sequencer();
     test_full_page();
     test_longest_line();
+    test_lock();
     printf("sndn2_test: %d checks, %s\n", checks, failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

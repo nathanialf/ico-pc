@@ -48,6 +48,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../audio/audio_lock.h"
 #include "../include/ico_endian.h"
 #include "diag_host.h"
 #include "iop_ram.h"
@@ -565,10 +566,15 @@ static void fill_slots(void)
 
 /* --- audio (mv_audiodec.c) -------------------------------------------------- */
 
+/* Under the audio lock (port/audio/audio_lock.h): the driver's PCM mixer
+   reads this buffer inside the SPU2's render, on the device's thread when
+   the output runs on its clock (port/audio/stream.c pcm_mix). */
 static void iop_write(uint32_t dst, const uint8_t *src, uint32_t n)
 {
     if (n > 0 && ico_iop_range_ok(dst, n)) {
+        ico_audio_lock();
         memcpy(ico_iop_ptr(dst), src, n);
+        ico_audio_unlock();
     }
 }
 

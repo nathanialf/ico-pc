@@ -65,6 +65,7 @@
 #include <string.h>
 
 #include "adpcm_init.h"
+#include "audio_lock.h"
 #include "df_pack.h"
 #include "fightSound.h"
 #include "gallery.h"
@@ -130,9 +131,14 @@ static int s_seLoops;
 #define SPU_RATE 48000.0
 #define SE_FIND_FRAMES 96000u /* how long the effect's voices are looked for (2 s) */
 
+/* The SPU2's reads below take its lock (audio_lock.h): the device's
+   thread renders it while this runs on the main thread. */
 static unsigned long long audioFrame(void)
 {
-    return (unsigned long long)spu2_time();
+    ico_audio_lock();
+    const unsigned long long t = (unsigned long long)spu2_time();
+    ico_audio_unlock();
+    return t;
 }
 
 static double streamSeconds(int no, double bytes);
@@ -491,7 +497,10 @@ static uint16_t voiceEntry(int slot, uint16_t param)
 
 static int voiceSounding(int slot)
 {
-    return spu2_sd_get_param(voiceEntry(slot, SPU2_SD_VPARAM_ENVX)) != 0;
+    ico_audio_lock();
+    const int on = spu2_sd_get_param(voiceEntry(slot, SPU2_SD_VPARAM_ENVX)) != 0;
+    ico_audio_unlock();
+    return on;
 }
 
 static unsigned long long soundingVoices(void)
@@ -512,6 +521,7 @@ static int sampleBlocks(uint32_t addr, int *loops)
     const uint8_t *ram = spu2_ram();
     int n = 0;
     *loops = 0;
+    ico_audio_lock();
     for (uint32_t a = addr & ~15u; a + 16 <= 0x200000u; a += 16) {
         n++;
         if (ram[a + 1] & 1) {
@@ -519,6 +529,7 @@ static int sampleBlocks(uint32_t addr, int *loops)
             break;
         }
     }
+    ico_audio_unlock();
     return n;
 }
 
@@ -530,6 +541,8 @@ static void findEffectVoices(void)
         return;
     }
     uint32_t lo = (uint32_t)b->spu.buf.addr, hi = lo + (uint32_t)b->spu.buf.size;
+    /* one look at the voices (the reads below nest) */
+    ico_audio_lock();
     for (int v = 0; v < 48; v++) {
         if ((s_seBusy >> v) & 1 || !voiceSounding(v)) {
             continue;
@@ -547,6 +560,7 @@ static void findEffectVoices(void)
             s_seLoops = loops;
         }
     }
+    ico_audio_unlock();
 }
 
 static double streamSeconds(int no, double bytes)
@@ -698,8 +712,10 @@ static void streamTick(void)
     if (!s_clock.started && st->remain >= st->dataSize) {
         return; /* not keyed on yet */
     }
+    ico_audio_lock();
     uint32_t ssa = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_SSA));
     uint32_t nax = spu2_sd_get_addr(voiceEntry(st->ch[0], SPU2_SD_VADDR_NAX));
+    ico_audio_unlock();
     gallery_clock_step(&s_clock, nax, ssa, GALLERY_SPU_RING);
     if (gallery_clock_at_end(&s_clock, st->n, audibleBytes(s_streamNo))) {
         int ch = st->n > 0 ? st->n : 1;
