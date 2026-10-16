@@ -564,7 +564,7 @@ colour pass's fragments (`port/render/rd_pipeline.c` (`rd__expand_no_dual`)). `I
 forces the two-pass form on any device (`port/render/rd_core.c` (`rd_init`)). Where the destination
 read is available these paths give way to it (next section).
 
-The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (768, the
+The cache holds `RD_PIPELINE_CACHE_MAX` keys, four times `RD_PIPELINE_REACHABLE_MAX` (1024, the
 ceiling the tests hold the reachable set under, `rd__enumerate_reachable`); a key past it or one
 whose creation failed is logged once and drawn as nothing, never an abort (`port/render/rd_state.h`;
 `port/render/rd_pipeline.c` (`rd__get_pipeline`)). `rd_precreate_pipelines` creates the whole
@@ -574,7 +574,9 @@ reachable set at start so the first frames do not stall on the driver. It hands 
 both. The progress function runs while a batch compiles (about every 50 ms, with the count so far)
 and between batches, and a nonzero return stops the set after the batch in flight; the rest is
 created as the frames need it. The activity note names the batch: `creating pipelines 321-352 of
-702: <first key> to <last key>`, put back after any pipeline the progress screen's frame creates in
+702: <first key> to <last key>; vertex <module> <words> words, ...; largest fragment <module>
+<words> words` (a VU key's words end with ` ext 0` or ` ext 1`, its variant: [The VU shader
+variants](#the-vu-shader-variants)), put back after any pipeline the progress screen's frame creates in
 the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
 `pipelines: <made> of the reachable set's <n> created at start-up in <t> ms (<f> failed); <c>
 compiled on <k> threads, the longest <s> s`, and two lines say where the time went, from the
@@ -585,6 +587,67 @@ the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
 At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
+
+### The VU shader variants
+
+Every VU vertex shader is built twice (issue 107; `port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`):
+the extended variant (`vu_X_vs`) and the plain one (`vu_X_plain_vs`). The plain one leaves out the
+two steps of the region rule that only a picture other than the PS2's out of the box takes: the
+card test (`VU_F_EXTENDED`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)) and the two tick
+cameras (`VU_F_TICKS`, the interpolation's pictures between two ticks); every other line is the
+same code, so a draw with neither flag gives the same picture through either. The plain modules
+are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
+([SHADERS.md](SHADERS.md#the-variants)).
+
+- **The key.** `RdPipeKeyInt.vuExt` is 1 for the extended variant, 0 for the plain one and for
+  every key without a VU vertex shader. `vuDraw` takes the plain one unless the draw has
+  `VU_F_EXTENDED` or `VU_F_TICKS` (`rd__vu_draw_ext`); the camera blend still reaches a plain
+  draw through its blended matrices.
+- **The start-up set.** The plain VU keys always; the extended ones when the settings can make a
+  draw that wants them (`rd__vu_ext_reachable`): the Enhanced preset, an aspect or a frame wider
+  than 4:3, a scene scale above 1, or the interpolation on (a framerate other than `original`,
+  which draws through the tick cameras whenever the camera moves). The Original preset at 4:3 and
+  1x with the original framerate compiles only plain VU shaders. A setting changed later to one
+  that wants them creates them as the frames first need them. The set is ordered: every 2D key
+  first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
+  extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
+  With the fixed-function blend (the phones' usual path) the set is 351 2D keys and 176 plain VU
+  keys, 527 in all (as before: the VU keys were the extended shaders), and 703 with the
+  extended ones; with the exact blend 438 and 220, 658 in all, and 878 with the extended ones
+  (`RD_PIPELINE_REACHABLE_MAX`, 1024). A cold start that draws with the extended ones compiles
+  the plain ones too (a draw without either flag, a still camera, takes them).
+- **The device table** (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, `RhiLimits.vuPlainOnly`): a
+  device whose driver cannot build the extended ones draws every VU draw with the plain ones,
+  logged once as `rd: VU shaders: plain only on this device (Adreno 740, issue 107): the
+  wide-screen rule is off`; triangles that the extended picture would clip at the 4:3 picture's
+  edge are dropped as at 4:3, and the pictures between two ticks keep the blended camera's rule.
+
+  | device | match | reason |
+  | --- | --- | --- |
+  | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x4305xxxx | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
+
+- **After a freeze.** A batch's note goes to the disc before the batch starts (fsync,
+  `port/platform/diag_host.c` `act_sync_note`). A start that ended without a word inside a batch of
+  extended VU keys (`startup_retry_note_has_vu_ext` on the activity file's note) makes the next
+  start write `[dev] vu_plain_only = true` to `config.toml` and draw with the plain ones, now and
+  at every later start (`port/platform/window_host.c`): `ico_pc: the previous start ended while
+  the graphics driver compiled the largest 3D shaders ...`. That start builds its set as usual
+  (the cause is out of it), not lazily. A restart after a crash report takes its own step
+  ([PLATFORM.md](PLATFORM.md#diagnostics)).
+- **Overrides.** `ICO_RD_VU_PLAIN=1` (`[dev] vu_plain_only`) keeps any device to the plain
+  ones; `ICO_RD_VU_EXTENDED=1` (`[dev] vu_extended`) gives the extended ones whatever the table or
+  the setting says (`rd__vu_policy_init`).
+- **The log.** At `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's
+  own line, Vulkan; `the driver names none` without one) and `rd: VU shaders: plain for the draws
+  of the Original preset at 4:3 and 1x without interpolation (largest vu_lit_plain_vs 23305
+  words), extended for the others (largest vu_lit_vs 51238 words)`, or the plain-only line with its
+  reason. While the set is created the heartbeat line ends with the batch in flight (`| creating
+  pipelines 329-360 of 702: <first key> to <last key>; vertex vu_prelit_vs 50325 words; largest
+  fragment vu_texa_ps <n> words`), and each batch with a VU vertex shader is logged as it starts
+  (`rd: pipelines: compiling 329-360 of 702 (extended VU): ...`). After the set the ten slowest
+  compiles carry their modules (`(vu_lit_vs 51238 words + vu_ps <n> words)`) and the time by
+  vertex shader each module's size. A log that stops inside the set names the module the driver
+  was compiling.
 
 ## Destination reads and blend paths
 

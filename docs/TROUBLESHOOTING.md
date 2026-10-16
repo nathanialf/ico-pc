@@ -48,6 +48,15 @@ skip this screen or show it only for a moment. If you close the game while
 it says this, the next start shows it again. If the game closes by itself
 on this screen, see [The game closes by itself](#the-game-closes-by-itself).
 
+If the whole phone or handheld freezes on **Preparing graphics** and you
+have to restart it, its graphics driver stopped while it got the game's
+largest 3D graphics ready. Restart the device and start the game again:
+the game sees that the last start stopped there and from then on uses
+smaller 3D graphics that such a device can prepare. Wide screens then
+show a little less at the old 4:3 edges. On the AYN Thor and the AYN Odin
+2 Portal the game uses the smaller graphics from the first start. If it
+freezes again, send the log from the start after the freeze.
+
 ## The screen stays black
 
 If the screen stays black but you can hear the game, the game is running

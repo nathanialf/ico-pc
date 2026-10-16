@@ -535,6 +535,8 @@ switches the tests and their registrations use:
 | `ICO_RD_DEPTH_COPY` | `rd_fog_path.c` | 0 samples the depth in place, 1 copies it |
 | `ICO_RD_FOG_SABOTAGE` | `rd_fog_path.c` | makes named paths fail the self-test (`rd_fog_selftest_fallback`) |
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
+| `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
+| `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |

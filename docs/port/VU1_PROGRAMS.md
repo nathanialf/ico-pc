@@ -279,6 +279,16 @@ the box (`ico2/seki/src/GifPacket.c` (`gifHostBeside`); `ico2/seki/include/GifPa
 picture) are hidden by the content table ([RENDER.md](RENDER.md#content-tables))
 (`port/render/rd_content_hide.c`).
 
+**The two variants** (issue 107). Each VU vertex shader is built with the whole rule (`vu_X_vs`,
+the extended variant) and without the two steps out of the box never takes, the card test and the
+tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). A draw with neither `VU_F_EXTENDED` nor
+`VU_F_TICKS` takes the plain one and gets the same picture. A device the renderer keeps to the
+plain ones (the Adreno 740, whose driver froze the whole device compiling the extended ones, or
+`[dev] vu_plain_only`) draws every state with the plain variant: there a triangle that reaches into
+the picture and fails the region test is not drawn in any state (no card test: the wide picture's
+edge at the old 4:3 border may open), and the pictures between two ticks take the blended camera's
+rule alone ([RENDER.md](RENDER.md#the-vu-shader-variants)).
+
 ## The card test
 
 Rule 5's card test is decided on the CPU, once per [tick](ARCHITECTURE.md#terms), and the vertex

@@ -319,7 +319,8 @@ is 1,073 instructions without a branch; the corner-array form with a loop over t
 3,098 instructions in 260 blocks, executed in part.
 
 **The size.** Each module has a budget in 32-bit words, `VS_BUDGET` (56,000, a tripwire about a
-tenth above the largest) for a vertex shader and `PS_BUDGET` (78,560, the largest pixel shader's
+tenth above the largest) for a vertex shader, `VS_PLAIN_BUDGET` (25,700) for a VU vertex shader's
+plain variant ([The variants](#the-variants)) and `PS_BUDGET` (78,560, the largest pixel shader's
 71,418 and a tenth) for a pixel shader, and `spirv_check` fails a module over it; `--sizes` prints
 each module's words, instructions, basic blocks, phis, loops, dot products, vector comparisons,
 boolean selects and `any()`. A phone's driver compiles the start-up set in a time about
@@ -340,31 +341,64 @@ and its picture and frame rows), a seventh the blended camera's cut. The same ru
 arrays, loops and `dot()` compiles to 91,686 words, 19,920 instructions and 2,431 blocks in
 `vu_prelit_vs`.
 
-**The size history** (issue 107). Every release's VU vertex shaders compiled again from its tag
-(`git archive <tag> port/shaders`) with the pinned DXC and the build's flags, measured with
-`tools/check_spirv.py --sizes`: words per module, and in brackets `vu_prelit_vs`'s instructions and
-blocks (the first VU vertex shader of the start-up set). The last column is what the Adreno 740
-(driver 512.676.53, compiler E031.41.03.47: the AYN Thor of issue 107, the AYN Odin 2 Portal of
-issue 93) did with the set.
+**The size against the Adreno 740** (issue 107). Five shipped sets of VU vertex shaders, each
+compiled again from its release tag with the pinned DXC and the build's flags and measured with
+`tools/check_spirv.py --sizes` (the table by tag is in that script's header), against what the
+Adreno 740 (driver 512.676.53, compiler E031.41.03.47: the AYN Thor of issue 107, the AYN Odin 2
+Portal of issue 93) did with the start-up set: words per module, and in brackets `vu_prelit_vs`'s
+instructions and blocks (the first VU vertex shader of the set).
 
-| version | `vu_prelit_vs` | `vu_lit_vs` | `vu_lit_spec_vs` | `vu_reflect_vs` | `vu_skin_vs` | `vu_grid_vs` | `vu_particle_vs` | Adreno 740 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| v0.5.2 | 15,537 (3,870 / 604) | 16,268 | 10,844 | 11,213 | 10,884 | 8,427 | 5,448 | built (issue 93) |
-| v0.6.1 | 30,988 (7,699 / 1,180) | 32,709 | 25,494 | 26,406 | 26,530 | 20,975 | 8,200 | built (issue 107) |
-| v0.7.5 | 47,535 (11,826 / 1,837) | 49,256 | 42,056 | 42,968 | 42,298 | 36,668 | 10,840 | hung (issue 93) |
-| v0.7.6 | 91,686 (19,920 / 2,431) | 93,407 | 86,207 | 87,119 | 86,449 | 80,819 | 10,840 | hung (issue 107) |
-| v0.7.7 | 50,092 (10,692 / 861) | 51,005 | 48,857 | 49,353 | 48,846 | 46,470 | 10,000 | hung (issue 107) |
+| set | `vu_prelit_vs` | `vu_lit_vs` | `vu_skin_vs` | `vu_grid_vs` | `vu_particle_vs` | Adreno 740 |
+| --- | --- | --- | --- | --- | --- | --- |
+| the PS2's rule, no cut | 15,537 (3,870 / 604) | 16,268 | 10,884 | 8,427 | 5,448 | built (issue 93) |
+| the cut with loops, `dot()` and local arrays | 30,988 (7,699 / 1,180) | 32,709 | 26,530 | 20,975 | 8,200 | built (issue 107) |
+| the cut and the tick cameras with loops | 47,535 (11,826 / 1,837) | 49,256 | 42,298 | 36,668 | 10,840 | hung (issue 93) |
+| the same written out as select chains | 91,686 (19,920 / 2,431) | 93,407 | 86,449 | 80,819 | 10,840 | hung (issue 107) |
+| the envelope's forms, no loop | 50,092 (10,692 / 861) | 51,005 | 48,846 | 46,470 | 10,000 | hung (issue 107) |
 
-The modules that built are at most 32,709 words and 8,062 instructions (v0.6.1's `vu_lit_vs`); the
-sets that hung the device start at 46,470 words and 9,801 instructions (v0.7.7's `vu_grid_vs`).
-Size tracks the outcome; the opcodes do not (v0.6.1 had the loops, `dot()` and local arrays the
-envelope now refuses and built; v0.7.7 has none of them and hung), nor do the blocks (v0.7.7's
-`vu_prelit_vs` has 861 against v0.6.1's 1,180). An earlier note put v0.6.1 at about 17,500 words;
-the measurement above replaces it.
+The modules that built are at most 32,709 words and 8,062 instructions; the sets that hung the
+device start at 46,470 words and 9,801 instructions. Size tracks the outcome; the opcodes do not
+(the second set had the loops, `dot()` and local arrays the envelope refuses and built; the last
+has none of them and hung), nor do the blocks (861 in the last set's `vu_prelit_vs` against the
+second's 1,180).
 
 **The card test** is decided on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)): the
 vertex shader reads two bits a vertex from `VuBoneCB` (`vu_strip_card`) instead of walking the
 strip.
+
+### The variants
+
+Every VU vertex shader has two variants (issue 107): the extended one, `vu_X_vs`, the file as it
+reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
+(`port/shaders/CMakeLists.txt`), which leaves out the card test's step of the region rule
+(`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras (`vu_tick_shown`,
+`vu_particle_tick_shown`). A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` runs the same
+instructions on the same values through either, so the renderer gives it the plain one
+([RENDER.md](RENDER.md#the-vu-shader-variants)). The cut against the camera's picture stays in
+both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as before.
+
+| module | plain words | instructions | blocks | extended words | instructions | blocks | the set that built on the Adreno 740 (words) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `vu_prelit_vs` | 22,392 | 5,014 | 504 | 50,325 | 10,749 | 872 | 30,988 |
+| `vu_lit_vs` | 23,305 | 5,209 | 504 | 51,238 | 10,944 | 872 | 32,709 |
+| `vu_lit_spec_vs` | 21,157 | 4,679 | 419 | 49,090 | 10,414 | 787 | 25,494 |
+| `vu_reflect_vs` | 21,653 | 4,818 | 428 | 49,586 | 10,553 | 796 | 26,406 |
+| `vu_skin_vs` | 21,004 | 4,601 | 350 | 49,087 | 10,366 | 718 | 26,530 |
+| `vu_skin_spec_vs` | 21,067 | 4,614 | 350 | 49,150 | 10,379 | 718 | 26,601 |
+| `vu_skin_debug_vs` | 21,156 | 4,631 | 350 | 49,239 | 10,396 | 718 | 26,872 |
+| `vu_grid_vs` | 18,545 | 4,067 | 348 | 46,478 | 9,802 | 716 | 20,975 |
+| `vu_grid_lit_vs` | 19,358 | 4,241 | 348 | 47,291 | 9,976 | 716 | 22,576 |
+| `vu_grid_spec_vs` | 19,409 | 4,251 | 348 | 47,342 | 9,986 | 716 | 22,659 |
+| `vu_particle_vs` | 6,183 | 1,432 | 134 | 10,011 | 2,346 | 232 | 8,200 |
+
+Every plain module is smaller than the same module of the last set that built on the Adreno 740 in
+words, instructions and blocks.
+The plain variant's budget is its own, `VS_PLAIN_BUDGET` (25,700, a tenth above `vu_lit_plain_vs`);
+the extended ones keep `VS_BUDGET`, and `spirv_check` fails a build directory where a `vu_X_vs`
+has no `vu_X_plain_vs` (`tools/check_spirv.py`, gates `size per variant` and `variants`). The
+cut is about 9,500 of a plain mesh program's words (`vu_prelit_vs` without it: 12,866); it stays,
+because at 4:3 it decides whether a triangle wholly beside the picture is drawn, and the plain
+variant must give the extended one's picture.
 
 ## Tests
 
@@ -373,8 +407,8 @@ strip.
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
-| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
-| `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; the CPU's card test against the reference on every vertex and strip; `vu1_mali` under the Mali limits |
+| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant within its own), every `vu_X_vs` with its `vu_X_plain_vs`, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
+| `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; `vu1_mali` under the Mali limits |
 | `port/test/gs_blend_test.c` | not a ctest: a CPU program (`cc -O2`) printing how far a float blender with round-to-nearest drifts from the GS integer blender under feedback |
 
 The Vulkan tests exit 77 (skipped) without a device (`port/shaders/test/CMakeLists.txt`; each test's

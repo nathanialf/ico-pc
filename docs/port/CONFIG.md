@@ -285,6 +285,8 @@ under the same name (below). Read through the store:
 | `pass_split` | int | `0` | |
 | `attachment_read` | bool | `false` | |
 | `storage_pass_merge` | bool | `true` | |
+| `vu_plain_only` | bool | `false` | |
+| `vu_extended` | bool | `false` | |
 
 ## ico-pc.ini
 
@@ -324,6 +326,8 @@ store (`backend`, `unlock_credits`):
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none) ([RENDER.md](RENDER.md#the-loss-bisect)) |
 | `attachment_read` | `true`: the attachment read offered on Qualcomm's Adreno driver too, where it is off because it draws wrong colours (exported as `ICO_VK_ATTACHMENT_READ=1`) ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)) |
 | `storage_pass_merge` | `false`: the storage destination read (the interlock or ROV path) ends its storage pass for every draw it does not need the read for instead of drawing those draws in it through the read (exported as `ICO_RD_PASS_MERGE=0`; `true`, the default, exports `1`: the merge on) ([RENDER.md](RENDER.md#the-storage-pass-merge)) |
+| `vu_plain_only` | `true`: every 3D (VU) draw takes the VU vertex shaders' plain variants, the extended ones never compiled; the wide-screen rule and the tick cameras' rule are off (exported as `ICO_RD_VU_PLAIN=1`). The game writes it to `config.toml` itself after a start that ended without a word while the graphics driver compiled the extended ones (issue 107) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
+| `vu_extended` | `true`: the extended variants on a device the renderer's table or `vu_plain_only` keeps to the plain ones (exported as `ICO_RD_VU_EXTENDED=1`) ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `unlock_credits` | as `[dev] unlock_credits` |
 
 (`port/platform/host_config.c` (`ini_map`, `export_dump_keys`, `export_audio_keys`,

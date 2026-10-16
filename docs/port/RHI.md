@@ -38,7 +38,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 ## The interface
 
 `rhi.h` keeps the surface small: fourteen shader files, a reachable set of a few hundred pipelines
-(held under `RD_PIPELINE_REACHABLE_MAX`, 768, `port/render/rd_state.h`), about twenty render
+(held under `RD_PIPELINE_REACHABLE_MAX`, 1024, `port/render/rd_state.h`), about twenty render
 targets, ring buffers for per-frame data and no compute. Its rules for additions: nothing
 Vulkan-only (no input attachments, no framebuffer feedback loops, no push descriptors; anything
 added must be expressible in D3D12 and Metal); explicit state transitions (`rhi_cmd_barrier`: the

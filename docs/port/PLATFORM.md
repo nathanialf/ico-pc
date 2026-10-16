@@ -452,7 +452,16 @@ another version's file is logged and the set tried again; a lazy run's clean exi
 line, logged as `ico_pc: the previous run created the pipelines as the frames needed them; this one
 does too`, so the lazy start sticks until the version changes (`port/platform/diag_host.h`
 (`ico_diag_startup_activity_begin`, `ico_diag_startup_activity_exit`)). Deleting the file makes the
-next start try the set again. The driver compiles the set on worker threads
+next start try the set again. A batch's note, and any note naming an extended VU pipeline, is
+written through to the disc (fsync, `act_sync_note`) before the driver starts on it, so it is
+still there after a device that froze was rebooted (issue 107). A note naming a batch of the VU
+vertex shaders' extended variants (` ext 1`, `startup_retry_note_has_vu_ext`, whatever the version)
+makes the next start, unless it is a restart after a crash report, write `[dev] vu_plain_only =
+true` to `config.toml` and draw with the plain variants from then on; that start builds the set as
+usual, not lazily ([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
+`ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
+in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
+compiling. The driver compiles the set on worker threads
 (`rhi_create_pipelines`, [RHI.md](RHI.md#the-interface)); the main thread waits in the renderer's
 progress function, about every 50 ms, and from it shows the "Preparing graphics (N of M)" screen on
 every platform, drawn only once the set has taken 250 ms and then at most ten times a second, with
