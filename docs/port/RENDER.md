@@ -715,7 +715,7 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   plain ones at every later start (`port/platform/window_host.c`, `diag_host.h`
   `ico_diag_startup_end_persist`): `ico_pc: the previous start ended while the graphics driver
   compiled the largest 3D shaders (the VU extended variants); this start and every start after it
-  use the smaller ones only ...`. Nothing is written on a device of the table. Those starts build
+  use the smaller ones only ...`. Nothing is written on a device of the table (`RhiLimits.vuPlainOnly`). Those starts build
   their set as usual (the cause is out of it), not lazily. A restart after a crash report takes its
   own step, and an end in the background is not counted ([PLATFORM.md](PLATFORM.md#diagnostics)).
 - **Overrides.** `ICO_RD_VU_PLAIN=1` (`[dev] vu_plain_only`) keeps any device to the plain

@@ -210,12 +210,19 @@ const char *ico_diag_activity(void);
    (ico_diag_set_version), the note follows: a note from another version
    is logged as "ico_pc: the previous run ended while: <note> (version
    <old>); trying the start-up set again on <new>" and the result is 0, so
-   a new version tries the start-up set again. 0 as well: a note of a
-   lazy run for one start only ("ico_pc: the previous run made the
-   pipelines as the frames needed them for that start only; this one tries
-   the start-up set again"), and an end while preparing the graphics in
-   the background (ico_diag_startup_activity_background). It counts the
-   previous run's end (ico_diag_startup_end_count). */
+   a new version tries the start-up set again; a note that counts as an
+   end while making the pipelines (ico_diag_startup_end_count) drops the
+   last clause: the count decides, whatever the version. 0 as well: a
+   note of a lazy run for one start only, its clean exit ("ico_pc: the
+   previous run made the pipelines as the frames needed them for that
+   start only; this one tries the start-up set again") or its end between
+   two creations ("ico_pc: the previous run ended while: <note>; that lazy
+   run was for that start only, so this one tries the start-up set
+   again"), and an end while preparing the graphics in the background
+   (ico_diag_startup_activity_background). A background mark beside any
+   other note is logged as "ico_pc: the previous run was in the background
+   when it ended (<line>)". It counts the previous run's end
+   (ico_diag_startup_end_count). */
 int ico_diag_startup_activity_begin(const char *path, int relaunched);
 /* A start-up batch's compile times (rd.h rd_set_batch_fn: one line per
    batch, "VU batch 329-360 of 702 (extended, ...): 32 pipelines 0.41-2.10
@@ -242,10 +249,15 @@ void ico_diag_startup_activity_batch(const char *line);
    "creating pipeline ...", "creating pipelines ...", "creating the
    start-up pipelines", and no extended VU variant) and ICO_DIAG_END_VU_EXT
    (the note names one, startup_retry_note_has_vu_ext). The counts live in
-   "<activity file without .txt>-ends.txt". An end in the foreground counts
-   one more and logs "ico_pc: starts in a row that ended while preparing
-   the graphics (the pipelines): 1 (the second makes the setting
-   permanent)"; the second in a row is due and the count goes back to 0.
+   "<activity file without .txt>-ends.txt" (a write that fails is logged
+   once a run: "ico_pc: the count of starts that ended while preparing the
+   graphics could not be written to <path> (pipelines <n>, extended VU
+   shaders <n>)"). An end in the foreground counts one more and logs
+   "ico_pc: starts in a row that ended while preparing the graphics (the
+   pipelines): 1"; the second in a row is due, and the count stays until
+   ico_diag_startup_end_persist writes the setting or finds the device
+   table rules that kind (a start that fails before the device is made
+   leaves it for the next end).
    Not counted: a restart after a crash report (relaunched), an end while
    the app was in the background (its mark, ico_diag_startup_activity_
    background; it breaks the row of its kind). Any other ended note breaks
@@ -271,15 +283,9 @@ int ico_diag_startup_end_count(int kind);
                                     (ico_diag_startup_end_count): this
                                     start only, nothing written, and the
                                     lazy run's notes say so (the next start
-                                    tries the set again); "ico_pc: the
-                                    previous start ended while preparing
-                                    the graphics (<note>); this start only
-                                    makes the pipelines as the game needs
-                                    them, with no start-up set (nothing is
-                                    written to <config_name>); if this
-                                    start also ends while preparing them,
-                                    [dev] pipeline_set = "lazy" is written
-                                    for good";
+                                    tries the set again); its line comes
+                                    after the device is made
+                                    (ico_diag_startup_end_persist);
      ICO_DIAG_PIPESET_LAZY_NOW      the same end, the second in a row: the
                                     window writes the setting after the
                                     device is made
@@ -289,7 +295,8 @@ int ico_diag_startup_end_count(int kind);
                                     lazy, without a "this start only");
      ICO_DIAG_PIPESET_FULL          the start-up set.
    The device table's lazy rule (port/rhi/rhi.h RhiLimits.lazyPipelines)
-   is the window's, after the device is made. */
+   is the window's, after the device is made. With setting "lazy" the
+   pipelines' count is cleared (a deleted setting starts it again). */
 #define ICO_DIAG_PIPESET_FULL 0
 #define ICO_DIAG_PIPESET_LAZY_FILE 1
 #define ICO_DIAG_PIPESET_LAZY_SETTING 2
@@ -299,34 +306,56 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
                                   const char *config_name);
 /* The plain VU variants after an end inside an extended VU batch (issue
    107): this start's ICO_DIAG_END_VU_EXT count. 1: the first in a row,
-   this start draws with the plain ones only and nothing is written
-   ("ico_pc: the previous start ended while the graphics driver compiled
-   the largest 3D shaders (the VU extended variants); this start only uses
-   the smaller ones (nothing is written to <config_name>): ..."); 2: the
-   second, the window writes [dev] vu_plain_only after the device is made
-   (ico_diag_startup_end_persist); 0: neither. */
+   this start draws with the plain ones only and nothing is written; 2:
+   the second, the window writes [dev] vu_plain_only after the device is
+   made; both lines come from ico_diag_startup_end_persist; 0: neither.
+   config_name is unused (the lines are the persist call's). */
 int ico_diag_startup_vu_plain(const char *config_name);
-/* After the device is made, for a kind whose count is 2 (else nothing,
-   0): table_lazy (RhiLimits.lazyPipelines, NULL when the device table
-   leaves the device alone) non-NULL writes nothing ("ico_pc: the second
-   start in a row ended while preparing the graphics (<note>); [dev]
-   pipeline_set = "lazy" is not written to <config_name>: the device table
-   already makes the pipelines as the game needs them on this device
-   (<table_lazy>)", the same for [dev] vu_plain_only = true); else
-   persist() writes the setting (0 when it did) and one line says so
-   ("ico_pc: the previous start ended while preparing the graphics
-   (<note>); this start and every start after it make the pipelines as the
-   game needs them, with no start-up set ([dev] pipeline_set = "lazy" in
-   <config_name>); delete that line to try the start-up set again", or the
-   VU line "... use the smaller ones only ([dev] vu_plain_only = true in
-   <config_name>) ..."; ", which could not be written: this start only"
-   when it failed). 1 when written. */
-int ico_diag_startup_end_persist(int kind, const char *table_lazy, int (*persist)(void),
+/* After the device is made, for a kind this start counted (else nothing,
+   0): the window calls it for the pipelines on ICO_DIAG_PIPESET_LAZY_ONCE
+   and ICO_DIAG_PIPESET_LAZY_NOW, for the VU kind when
+   ico_diag_startup_vu_plain was 1 or 2. table: the device table's rule
+   for that kind (RhiLimits.lazyPipelines for the pipelines,
+   RhiLimits.vuPlainOnly for the VU kind; NULL when the table leaves the
+   device alone). With a table rule nothing is written and the count is
+   cleared (the setting would be redundant, and would outlive a change of
+   the table), the pipelines' lazy run no longer "for this start only":
+   the first end "ico_pc: the previous start ended while preparing the
+   graphics (<note>); nothing is counted or written to <config_name>: the
+   device table already makes the pipelines as the game needs them on this
+   device (<table>)", the second "ico_pc: the second start in a row ended
+   while preparing the graphics (<note>); [dev] pipeline_set = "lazy" is
+   not written to <config_name>: the device table already makes ..."
+   (for the VU kind "[dev] vu_plain_only = true ... the device table
+   already draws with the smaller 3D shaders (the VU plain variants) only
+   on this device (<table>)"). Without one, the first logs what this
+   start does ("ico_pc: the previous start ended while preparing the
+   graphics (<note>); this start only makes the pipelines as the game
+   needs them, with no start-up set (nothing is written to
+   <config_name>); if this start also ends while preparing them, [dev]
+   pipeline_set = "lazy" is written for good", the VU kind "ico_pc: the
+   previous start ended while the graphics driver compiled the largest 3D
+   shaders (the VU extended variants); this start only uses the smaller
+   ones (nothing is written to <config_name>): ..."); the second calls
+   persist() to write the setting (0 when it did; the count is then
+   cleared) and one line says so ("ico_pc: the previous start ended while
+   preparing the graphics (<note>); this start and every start after it
+   make the pipelines as the game needs them, with no start-up set ([dev]
+   pipeline_set = "lazy" in <config_name>); delete that line to try the
+   start-up set again", or the VU line "... use the smaller ones only
+   ([dev] vu_plain_only = true in <config_name>) ..."; ", which could not
+   be written: this start only" when it failed: the count stays, and the
+   pipelines' lazy run says "for this start only"). 1 when written. */
+int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(void),
                                  const char *config_name);
 /* The app went to the background (background != 0: Android's and iOS's
    will-enter-background, or ico_diag_note_low_memory at a level of 20 or
-   more) or came back (0), any thread. While the activity file records,
-   the first writes the mark "<activity file without .txt>-background.txt"
+   more) or came back (0), any thread. The state is kept whether the file
+   records or not: a recording that starts with the app in the background
+   writes the mark then ("background: the app was in the background
+   before preparing the graphics began (with N pipelines made)", logged
+   the same way). While the activity file records, the first (checked
+   again under the log's lock: one thread sets it) writes the mark "<activity file without .txt>-background.txt"
    (the version, "background: the app went to the background at pipelines
    N of M of the start-up set" or "with N pipelines made", then the
    system's lines that come while there) and logs "ico_pc: the app went to

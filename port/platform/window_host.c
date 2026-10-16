@@ -1441,8 +1441,10 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        the plain variants (rd_set_vu_plain_only); the first such end in a
        row for this start only, the second also every start after it ([dev]
        vu_plain_only = true in config.toml, read back as ICO_RD_VU_PLAIN at
-       the next start, written after rd_init unless the device table already
-       rules the device, ico_diag_startup_end_persist). An end in the
+       the next start; both lines and the write come after rd_init, and
+       neither is written when the device table already draws this device
+       with the plain ones, RhiLimits.vuPlainOnly,
+       ico_diag_startup_end_persist). An end in the
        background is not counted (diag_host.h
        ico_diag_startup_activity_background). The cause is then out of the
        set, so this start builds the set as usual (not lazily). A restart
@@ -1463,10 +1465,10 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        ended in the foreground without a word while a pipeline was being
        made (not inside an extended VU batch, above): this start makes the
        pipelines as the game needs them, the first such end in a row for
-       this start only, the second also every start after it (the setting
-       written after rd_init unless the device table already makes this
-       device lazy). The device table's rule (RhiLimits.lazyPipelines) is
-       read after rd_init. */
+       this start only, the second also every start after it (the line and
+       the setting after rd_init, neither when the device table already
+       makes this device lazy). The device table's rule
+       (RhiLimits.lazyPipelines) is read after rd_init. */
     const char *pipeSetting = getenv("ICO_PIPELINE_SET");
     const int pipePolicy =
         ico_diag_startup_pipeline_set(retry != STARTUP_RETRY_NONE, lazyStart, pipeSetting, cfgName);
@@ -1731,15 +1733,20 @@ open_window:
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
     const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
-    /* the second end in a row of a kind: its setting for good, not on a
-       device the table already makes lazy (diag_host.h
+    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuPlainOnly : NULL;
+    /* an end while preparing the graphics, by kind: the first's line, the
+       second's setting for good, neither on a device whose table entry
+       already rules that kind (the lazy column for the pipelines, the
+       plain variants for the VU kind; diag_host.h
        ico_diag_startup_end_persist says which) */
-    if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
-        (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, devLazy,
-                                           pipeline_set_persist_lazy, cfgName);
+    int pipeSaved = 0;
+    if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE || pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+        pipeSaved = ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, devLazy,
+                                                 pipeline_set_persist_lazy, cfgName);
     }
-    if (vuEnds >= 2) {
-        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, devLazy, vu_plain_persist, cfgName);
+    if (vuEnds >= 1) {
+        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, devVuPlain, vu_plain_persist,
+                                           cfgName);
     }
     if (retry == STARTUP_RETRY_LAZY || pipePolicy != ICO_DIAG_PIPESET_FULL || devLazy != NULL) {
         char why[160];
@@ -1759,10 +1766,14 @@ open_window:
         } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE) {
             snprintf(why, sizeof(why),
                      "(the previous start ended while preparing them; for this start only)");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW && pipeSaved) {
             snprintf(why, sizeof(why),
                      "(the previous start ended while preparing them; [dev] pipeline_set = "
                      "\"lazy\" from now on)");
+        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+            snprintf(why, sizeof(why),
+                     "(the previous start ended while preparing them; [dev] pipeline_set = "
+                     "\"lazy\" could not be written, so for this start only)");
         } else {
             snprintf(why, sizeof(why), "(the last run made them that way)");
         }

@@ -498,7 +498,7 @@ static int persist_vu_stub(void)
 
 /* The run after the policy (ICO_TEST_THEN): "die" ends it without a word
    inside a pipeline ("dievu": an extended VU batch), "between" between two
-   creations of a lazy run, "clean" ends it cleanly (a lazy run's exit, or
+   creations of a lazy run ("betweenbg": there in the background), "clean" ends it cleanly (a lazy run's exit, or
    the set finished), "cleanvu" the set finished after an extended VU
    batch; unset: no run (the file stays deleted) */
 static void pipeset_then(int set)
@@ -515,9 +515,12 @@ static void pipeset_then(int set)
     } else if (strcmp(then, "dievu") == 0) {
         ico_diag_set_activity(VU_EXT_NOTE);
         _exit(0);
-    } else if (strcmp(then, "between") == 0) {
+    } else if (strcmp(then, "between") == 0 || strcmp(then, "betweenbg") == 0) {
         ico_diag_set_activity("creating pipeline fog test");
         ico_diag_clear_activity();
+        if (strcmp(then, "betweenbg") == 0) {
+            ico_diag_startup_activity_background(1);
+        }
         _exit(0);
     } else if (strcmp(then, "cleanvu") == 0) {
         ico_diag_set_activity(VU_EXT_NOTE);
@@ -651,6 +654,12 @@ static void activity_child(const char *mode, const char *log)
            memory), then the system ended the start in the next one; with
            ICO_TEST_LOW_MEMORY a low-memory signal came first (Android's
            onTrimMemory, level 15) */
+        /* "early": the app went to the background before the recording
+           began (Home during the renderer's start) */
+        if (getenv("ICO_TEST_BACKGROUND") != NULL &&
+            strcmp(getenv("ICO_TEST_BACKGROUND"), "early") == 0) {
+            ico_diag_startup_activity_background(1);
+        }
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_pipelines(192, 527, 210);
         ico_diag_startup_activity_batch(TIMES_2D);
@@ -664,7 +673,8 @@ static void activity_child(const char *mode, const char *log)
            recent apps): "bg" the lifecycle's event, "trim20" Android's
            onTrimMemory(20) first (the line only in the mark: the held
            main thread did not poll), "back" to the background and back */
-        if (getenv("ICO_TEST_BACKGROUND") != NULL) {
+        if (getenv("ICO_TEST_BACKGROUND") != NULL &&
+            strcmp(getenv("ICO_TEST_BACKGROUND"), "early") != 0) {
             const char *bg = getenv("ICO_TEST_BACKGROUND");
             if (strcmp(bg, "trim20") == 0) {
                 ico_diag_note_low_memory(20);
@@ -687,20 +697,21 @@ static void activity_child(const char *mode, const char *log)
     } else if (strcmp(mode, "actpipeset") == 0 || strcmp(mode, "actpipesetrelaunch") == 0) {
         /* the next start's policy (window_host.c ico_window_open): the
            plain VU variants, the set, then after the device is made the
-           settings of a second end in a row (ICO_TEST_TABLE_LAZY: the
-           device table's lazy rule) */
+           lines and settings of an end in a row (ICO_TEST_TABLE_LAZY: the
+           device table's lazy rule, RhiLimits.lazyPipelines;
+           ICO_TEST_TABLE_VU: its plain VU rule, RhiLimits.vuPlainOnly) */
         const int relaunch = strcmp(mode, "actpipesetrelaunch") == 0;
-        const char *table = getenv("ICO_TEST_TABLE_LAZY");
         const int vu = relaunch ? 0 : ico_diag_startup_vu_plain("config.toml");
         const int set = ico_diag_startup_pipeline_set(relaunch, vu > 0 ? 0 : lazy,
                                                       getenv("ICO_TEST_PIPESET"), "config.toml");
-        if (set == ICO_DIAG_PIPESET_LAZY_NOW) {
-            (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES, table, persist_lazy_stub,
+        if (set == ICO_DIAG_PIPESET_LAZY_ONCE || set == ICO_DIAG_PIPESET_LAZY_NOW) {
+            (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES,
+                                               getenv("ICO_TEST_TABLE_LAZY"), persist_lazy_stub,
                                                "config.toml");
         }
-        if (vu >= 2) {
-            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, table, persist_vu_stub,
-                                               "config.toml");
+        if (vu >= 1) {
+            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_EXT, getenv("ICO_TEST_TABLE_VU"),
+                                               persist_vu_stub, "config.toml");
         }
         ico_diag_log("test: vu plain %d", vu);
         ico_diag_log("test: pipeline set %d", set);
@@ -1633,7 +1644,8 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "the previous run ended while") == NULL);
         CHECK(strstr(s, "test: lazy 1") != NULL);
         /* another version tries the start-up set again (and deletes the
-           file) */
+           file); an end while making the pipelines counts whatever the
+           version, so its line leaves the policy to the count's line */
         run(argv[0], "actrecord", log);
         setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
         r = run(argv[0], "actnext", log);
@@ -1641,7 +1653,17 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(r == 0);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " BATCH_NOTE
-                        " (version test 1); trying the start-up set again on test 2\n") != NULL);
+                        " (version test 1)\n") != NULL);
+        CHECK(strstr(s, "trying the start-up set again") == NULL);
+        CHECK(strstr(s, "test: lazy 0") != NULL);
+        run(argv[0], "actrecord", log);
+        run(argv[0], "actlazyexit", log);
+        setenv("ICO_TEST_ACT_VERSION", "test 2", 1);
+        r = run(argv[0], "actnext", log);
+        unsetenv("ICO_TEST_ACT_VERSION");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run (version test 1) created the pipelines as the "
+                        "frames needed them; trying the start-up set again on test 2\n") != NULL);
         CHECK(strstr(s, "test: lazy 0") != NULL);
         {
             FILE *f = fopen(act, "rb");
@@ -1739,7 +1761,7 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the previous run's last finished batch: " TIMES_2D "\n") != NULL);
         CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D "\n") != NULL);
         CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
-                        "pipelines): 1 (the second makes the setting permanent)\n") != NULL);
+                        "pipelines): 1\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "ico_pc: the previous start ended while preparing the graphics (" NOTE_2D
                         "); this start only makes the pipelines as the game needs them, with no "
@@ -1755,7 +1777,7 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(r == 0);
         CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
-                        "pipelines): 2 (the second makes the setting permanent)\n") != NULL);
+                        "pipelines): 2\n") != NULL);
         CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
         CHECK(strstr(s, "ico_pc: the previous start ended while preparing the graphics (creating "
                         "pipeline fog test); this start and every start after it make the "
@@ -1769,6 +1791,10 @@ int main(int argc, char **argv)
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "test: lazy 0\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " NOTE_2D " (version test 1)\n") !=
+              NULL);
+        CHECK(strstr(s, "trying the start-up set again") == NULL);
+        CHECK(strstr(s, "this start only makes the pipelines as the game needs them") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
         run(argv[0], "act2dbatch", log);
@@ -1777,18 +1803,59 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
-        /* the setting could not be written: this start only */
+        /* the setting could not be written: this start only, and the
+           count stays, so the next end in a row is due again */
+        remove(ends);
         run(argv[0], "act2dbatch", log);
         run(argv[0], "actpipeset", log);
         run(argv[0], "act2dbatch", log);
         setenv("ICO_TEST_PERSIST_FAIL", "1", 1);
+        setenv("ICO_TEST_THEN", "die", 1);
         r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
         unsetenv("ICO_TEST_PERSIST_FAIL");
         s = read_file(log);
         CHECK(strstr(s, "("
                         "[dev] pipeline_set = \"lazy\" in config.toml, which could not be "
                         "written: this start only)") != NULL);
         CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "pipelines): 3\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.pipeline_set = lazy\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... and that start's lazy run says "for this start only", so the
+           start after a clean exit tries the set again */
+        run(argv[0], "act2dbatch", log);
+        run(argv[0], "actpipeset", log);
+        run(argv[0], "act2dbatch", log);
+        setenv("ICO_TEST_PERSIST_FAIL", "1", 1);
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        unsetenv("ICO_TEST_PERSIST_FAIL");
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\nexited with the pipelines created as the frames needed them for "
+                        "that start only") == 0);
+        CHECK(read_file(ends)[0] == '\0');
+        /* a count that cannot be written is said once */
+        mkdir(ends, 0755);
+        run(argv[0], "act2dbatch", log);
+        r = run(argv[0], "actpipeset", log);
+        rmdir(ends);
+        s = read_file(log);
+        {
+            char want[512];
+            snprintf(want, sizeof want,
+                     "ico_pc: the count of starts that ended while preparing the graphics could "
+                     "not be written to %s (pipelines 1, extended VU shaders 0)\n",
+                     ends);
+            CHECK(strstr(s, want) != NULL);
+        }
+        CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
+        remove(ends);
         /* a lazy run for that start only that exited cleanly: its file says
            so, the next start tries the set again, and the row is cleared
            (the next end is the first again) */
@@ -1825,7 +1892,11 @@ int main(int argc, char **argv)
                         "this start only (none was being created)") == 0);
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
-        CHECK(strstr(s, "for that start only; this one tries the start-up set again\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: running with the pipelines created "
+                        "as the frames need them for this start only (none was being created); "
+                        "that lazy run was for that start only, so this one tries the start-up "
+                        "set again\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous run made the pipelines") == NULL);
         CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
         run(argv[0], "act2dbatch", log);
         r = run(argv[0], "actpipeset", log);
@@ -1879,6 +1950,17 @@ int main(int argc, char **argv)
         setenv("ICO_TEST_BACKGROUND", "trim20", 1);
         run(argv[0], "act2dbatch", log);
         unsetenv("ICO_TEST_BACKGROUND");
+        /* the mark is set once: the lifecycle's event after it logs
+           nothing, and the system's line stays in the mark */
+        s = read_file(log);
+        {
+            const char *first = strstr(s, "ico_pc: the app went to the background ");
+            CHECK(first != NULL);
+            CHECK(first == NULL ||
+                  strstr(first + 1, "ico_pc: the app went to the background ") == NULL);
+        }
+        CHECK(strstr(read_file(bgmark), "\nsystem: the app's screen was hidden (onTrimMemory "
+                                        "level 20, ") != NULL);
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: the previous run was told by the system in the background: the "
@@ -1899,9 +1981,10 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "in the background (") == NULL);
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
         /* a device the table already makes lazy (RhiLimits.lazyPipelines):
-           the second end in a row writes nothing and says why */
+           the second end in a row writes nothing and says why, and the
+           row is cleared */
         run(argv[0], "act2dbatch", log);
-        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issue 107", 1);
+        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issues 93 and 107", 1);
         r = run(argv[0], "actpipeset", log);
         unsetenv("ICO_TEST_TABLE_LAZY");
         s = read_file(log);
@@ -1909,8 +1992,57 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the second start in a row ended while preparing the graphics "
                         "(" NOTE_2D "); [dev] pipeline_set = \"lazy\" is not written to "
                         "config.toml: the device table already makes the pipelines as the game "
-                        "needs them on this device (Adreno 740, issue 107)\n") != NULL);
+                        "needs them on this device (Adreno 740, issues 93 and 107)\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 3\n") != NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        /* ... and the first: no line promises a setting, and its lazy run
+           follows the table, not "this start only" */
+        run(argv[0], "act2dbatch", log);
+        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issues 93 and 107", 1);
+        setenv("ICO_TEST_THEN", "between", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        unsetenv("ICO_TEST_TABLE_LAZY");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous start ended while preparing the graphics (" NOTE_2D
+                        "); nothing is counted or written to config.toml: the device table "
+                        "already makes the pipelines as the game needs them on this device "
+                        "(Adreno 740, issues 93 and 107)\n") != NULL);
+        CHECK(strstr(s, "written for good") == NULL);
+        CHECK(strstr(s, "makes the setting permanent") == NULL);
+        CHECK(read_file(ends)[0] == '\0');
+        s = read_file(act);
+        CHECK(strcmp(s, "test 1\nrunning with the pipelines created as the frames need them "
+                        "(none was being created)") == 0);
+        /* a lazy run ended in the background between two creations: the
+           next start says so */
+        remove(ends);
+        run(argv[0], "act2dbatch", log);
+        setenv("ICO_TEST_THEN", "betweenbg", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run was in the background when it ended (the app "
+                        "went to the background with 0 pipelines made)\n") != NULL);
+        CHECK(strstr(s, "that lazy run was for that start only") != NULL);
+        /* the app in the background before the recording began (Home while
+           the renderer starts): marked when it begins */
+        remove(ends);
+        setenv("ICO_TEST_BACKGROUND", "early", 1);
+        r = run(argv[0], "act2dbatch", log);
+        unsetenv("ICO_TEST_BACKGROUND");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the app was in the background before preparing the graphics "
+                        "began (with 0 pipelines made); an end there is not counted as one while "
+                        "preparing the graphics\n") != NULL);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, ", in the background (the app was in the background before preparing the "
+                        "graphics began (with 0 pipelines made)); the system ends apps there") !=
+              NULL);
+        CHECK(strstr(s, "starts in a row") == NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
         /* an extended VU batch's end makes the plain variants this start's
            instead (nothing written, the set as usual); a plain run in
            between leaves the row, and the next end inside an extended
@@ -1921,9 +2053,8 @@ int main(int argc, char **argv)
         r = run(argv[0], "actpipeset", log);
         unsetenv("ICO_TEST_THEN");
         s = read_file(log);
-        CHECK(strstr(s,
-                     "ico_pc: starts in a row that ended while preparing the graphics (the "
-                     "extended VU shaders): 1 (the second makes the setting permanent)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "extended VU shaders): 1\n") != NULL);
         CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
                         "largest 3D shaders (the VU extended variants); this start only uses the "
                         "smaller ones (nothing is written to config.toml): the wide-screen rule "
@@ -1954,16 +2085,27 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: vu plain 1\n") != NULL);
-        /* ... and on a device the table makes lazy nothing is written */
+        /* ... and on a device the table draws with the plain ones only
+           (RhiLimits.vuPlainOnly) nothing is written; its lazy rule alone
+           does not stop the write */
         run(argv[0], "actvuext", log);
-        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issue 107", 1);
+        setenv("ICO_TEST_TABLE_VU", "Adreno 740, issue 107", 1);
         r = run(argv[0], "actpipeset", log);
-        unsetenv("ICO_TEST_TABLE_LAZY");
+        unsetenv("ICO_TEST_TABLE_VU");
         s = read_file(log);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "[dev] vu_plain_only = true is not written to config.toml: the device "
-                        "table already makes the pipelines as the game needs them on this device "
-                        "(Adreno 740, issue 107)\n") != NULL);
+                        "table already draws with the smaller 3D shaders (the VU plain variants) "
+                        "only on this device (Adreno 740, issue 107)\n") != NULL);
+        CHECK(strstr(s, "test: vu plain 2\n") != NULL);
+        run(argv[0], "actvuext", log);
+        run(argv[0], "actpipeset", log);
+        run(argv[0], "actvuext", log);
+        setenv("ICO_TEST_TABLE_LAZY", "Adreno 740, issues 93 and 107", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_TABLE_LAZY");
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write dev.vu_plain_only = true\n") != NULL);
         CHECK(strstr(s, "test: vu plain 2\n") != NULL);
         /* no file: the set; the setting "lazy": none, nothing written */
         r = run(argv[0], "actpipeset", log);

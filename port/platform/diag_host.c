@@ -1459,9 +1459,13 @@ static void ends_read(unsigned int n[2])
     fclose(f);
 }
 
+/* the counts written (0 and 0: the file deleted); a write that fails is
+   logged once a run */
 static void ends_write(const unsigned int n[2])
 {
+    static int logged;
     FILE *f;
+    int ok;
     if (act_ends_path[0] == '\0') {
         return;
     }
@@ -1470,9 +1474,27 @@ static void ends_write(const unsigned int n[2])
         return;
     }
     f = ico_fopen(act_ends_path, "wb");
-    if (f != NULL) {
-        fprintf(f, "pipelines %u\nvu_ext %u\n", n[0], n[1]);
-        fclose(f);
+    ok = f != NULL && fprintf(f, "pipelines %u\nvu_ext %u\n", n[0], n[1]) > 0;
+    if (f != NULL && fclose(f) != 0) {
+        ok = 0;
+    }
+    if (!ok && !logged) {
+        logged = 1;
+        ico_diag_log("ico_pc: the count of starts that ended while preparing the graphics could "
+                     "not be written to %s (pipelines %u, extended VU shaders %u)",
+                     act_ends_path, n[0], n[1]);
+    }
+}
+
+/* one kind's count set to 0 in the file (its setting was written, or the
+   device table already rules it) */
+static void ends_clear_kind(int kind)
+{
+    unsigned int n[2];
+    ends_read(n);
+    if (n[kind] != 0) {
+        n[kind] = 0;
+        ends_write(n);
     }
 }
 
@@ -1496,10 +1518,11 @@ static const char *end_kind_name(int kind)
 
 /* ico_diag_startup_activity_begin: the previous run's end into the counts
    (its note prev, read whatever its version). An end of a kind in the
-   foreground counts one more; the second in a row is due (the count goes
-   back to 0: the setting is the rule from now, and a deleted setting
-   starts the count again). An end of a kind in the background breaks the
-   row of that kind. Any other note (the run ended outside a creation)
+   foreground counts one more; the second in a row is due, and the count
+   stays until ico_diag_startup_end_persist writes the setting (or finds
+   the device table rules it) and sets it to 0, so a start that fails
+   before the device is made leaves it for the next end. An end of a kind
+   in the background breaks the row of that kind. Any other note (the run ended outside a creation)
    breaks the row of ends while making the pipelines; the row of ends
    inside an extended VU batch stays across the runs that build none (the
    plain run its first end gives), and is cleared by a run that built
@@ -1528,12 +1551,8 @@ static void ends_count_prev(const char *prev, int relaunched)
     } else {
         n[kind]++;
         act_end_n[kind] = n[kind];
-        ico_diag_log("ico_pc: starts in a row that ended while preparing the graphics (%s): %u "
-                     "(the second makes the setting permanent)",
+        ico_diag_log("ico_pc: starts in a row that ended while preparing the graphics (%s): %u",
                      end_kind_name(kind), n[kind]);
-        if (n[kind] >= 2) {
-            n[kind] = 0;
-        }
     }
     if (n[0] != was[0] || n[1] != was[1]) {
         ends_write(n);
@@ -1578,11 +1597,14 @@ static void bg_write_locked(void)
     }
 }
 
-static void bg_remove(void)
+/* the mark deleted (under the lock); 1 when there was one */
+static int bg_remove(void)
 {
+    int had;
     if (inited) {
         lock_take();
     }
+    had = act_bg;
     act_bg = 0;
     act_bg_text[0] = '\0';
     if (act_bg_path[0] != '\0') {
@@ -1591,6 +1613,7 @@ static void bg_remove(void)
     if (inited) {
         lock_give();
     }
+    return had;
 }
 
 /* where the run is, for the mark and the low-memory line */
@@ -1604,33 +1627,60 @@ static void act_where(char *out, size_t size)
     }
 }
 
+/* the app is in the background (its last signal said so), whether the
+   activity file records or not: a start that goes there before the
+   recording begins (Home during the renderer's start) is marked when it
+   does (ico_diag_startup_activity_record) */
+static volatile int act_in_bg;
+
+/* The mark written while the file records, once: act_bg checked again
+   under the lock, so of two threads that both see it unset (the lifecycle
+   watch, onTrimMemory(20) on Android's Java thread) only the one that sets
+   it writes the text and logs. before: the app was there before the
+   recording began. */
+static void bg_mark(int before)
+{
+    char where[96], what[200];
+    int set = 0;
+    act_where(where, sizeof where);
+    if (before) {
+        snprintf(what, sizeof what,
+                 "the app was in the background before preparing the graphics began (%s)", where);
+    } else {
+        snprintf(what, sizeof what, "the app went to the background %s", where);
+    }
+    if (inited) {
+        lock_take();
+    }
+    if (act_mode != 0 && !act_bg) {
+        act_bg = 1;
+        set = 1;
+        snprintf(act_bg_text, sizeof act_bg_text, "%s\n%s%s\n", act_version, act_bg_prefix, what);
+        bg_write_locked();
+    }
+    if (inited) {
+        lock_give();
+    }
+    if (set) {
+        ico_diag_log("ico_pc: %s; an end there is not counted as one while preparing the graphics",
+                     what);
+    }
+}
+
 void ico_diag_startup_activity_background(int background)
 {
-    char where[96];
     if (!background) {
-        if (act_bg) {
-            bg_remove();
+        act_in_bg = 0;
+        if (act_bg && bg_remove()) {
             ico_diag_log("ico_pc: back in the foreground; the background mark is deleted");
         }
         return;
     }
+    act_in_bg = 1;
     if (act_mode == 0 || act_bg) {
-        return; /* not recording, or marked already */
+        return; /* not recording (the recording's start marks it), or marked already */
     }
-    act_where(where, sizeof where);
-    if (inited) {
-        lock_take();
-    }
-    act_bg = 1;
-    snprintf(act_bg_text, sizeof act_bg_text, "%s\n%sthe app went to the background %s\n",
-             act_version, act_bg_prefix, where);
-    bg_write_locked();
-    if (inited) {
-        lock_give();
-    }
-    ico_diag_log("ico_pc: the app went to the background %s; an end there is not counted as one "
-                 "while preparing the graphics",
-                 where);
+    bg_mark(0);
 }
 
 /* a system line into the mark while the app is in the background (any
@@ -1771,7 +1821,7 @@ void ico_diag_startup_activity_poll(void)
 static void act_remove(void)
 {
     if (act_bg) {
-        bg_remove();
+        (void)bg_remove();
     }
     /* closed first: Windows keeps an open file's name until its handle
        goes */
@@ -1930,6 +1980,13 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     snprintf(act_prev, sizeof act_prev, "%.*s", (int)(sizeof act_prev - 1), prev);
     act_remove();
     ends_count_prev(prev, relaunched);
+    if (act_prev_background && (relaunched || !note_is_pipelines(prev))) {
+        /* the mark of a run that ended in the background outside a
+           creation (a lazy run between two, a bisect): said, nothing
+           decided by it (an end inside one is logged below) */
+        ico_diag_log("ico_pc: the previous run was in the background when it ended (%s)",
+                     act_prev_bg_line);
+    }
     if (loss != NULL && strcmp(loss, act_loss_none) == 0) {
         ico_diag_log("ico_pc: the previous run lost the graphics device (no loss dump was "
                      "written)");
@@ -1962,11 +2019,18 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     if (prev[0] == '\0') {
         return 0;
     }
-    if (strcmp(prev, act_between_once) == 0 || strcmp(prev, act_lazy_exit_once) == 0) {
+    if (strcmp(prev, act_lazy_exit_once) == 0) {
         /* the lazy run after a first end while preparing the graphics was
            for that start only */
         ico_diag_log("ico_pc: the previous run made the pipelines as the frames needed them for "
                      "that start only; this one tries the start-up set again");
+        return 0;
+    }
+    if (strcmp(prev, act_between_once) == 0) {
+        /* ... and was ended between two creations, not by one */
+        ico_diag_log("ico_pc: the previous run ended while: %s; that lazy run was for that start "
+                     "only, so this one tries the start-up set again",
+                     prev);
         return 0;
     }
     if (act_prev_background && !relaunched && note_is_pipelines(prev)) {
@@ -1984,6 +2048,12 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
             ico_diag_log("ico_pc: the previous run (version %s) created the pipelines as the "
                          "frames needed them; trying the start-up set again on %s",
                          ver[0] != '\0' ? ver : "unknown", act_version);
+        } else if (act_end_n[ICO_DIAG_END_PIPELINES] != 0) {
+            /* an end while making the pipelines counts whatever the
+               version (the setting outlives it): the policy's line says
+               what this start does (ico_diag_startup_end_persist) */
+            ico_diag_log("ico_pc: the previous run ended while: %s (version %s)", prev,
+                         ver[0] != '\0' ? ver : "unknown");
         } else {
             ico_diag_log("ico_pc: the previous run ended while: %s (version %s); trying the "
                          "start-up set again on %s",
@@ -2005,8 +2075,13 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
 int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *setting,
                                   const char *config_name)
 {
-    const char *cfg = config_name != NULL ? config_name : "config.toml";
+    (void)config_name;
     if (setting != NULL && strcmp(setting, "lazy") == 0) {
+        /* the setting already rules: no count kept towards it (a deleted
+           setting starts the count again) */
+        if (act_end_n[ICO_DIAG_END_PIPELINES] != 0) {
+            ends_clear_kind(ICO_DIAG_END_PIPELINES);
+        }
         return ICO_DIAG_PIPESET_LAZY_SETTING;
     }
     /* an extended VU batch's end makes the plain variants the rule instead
@@ -2025,51 +2100,83 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
         return ICO_DIAG_PIPESET_LAZY_NOW;
     }
     /* the first: an end the user or the system may have caused (a swipe
-       from the recent apps, Task Manager), so this start only */
+       from the recent apps, Task Manager), so this start only; its line
+       comes after the device is made (ico_diag_startup_end_persist: the
+       device table may already rule it) */
     act_once = 1;
-    ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this start "
-                 "only makes the pipelines as the game needs them, with no start-up set (nothing "
-                 "is written to %s); if this start also ends while preparing them, [dev] "
-                 "pipeline_set = \"lazy\" is written for good",
-                 act_prev, cfg);
     return ICO_DIAG_PIPESET_LAZY_ONCE;
 }
 
 int ico_diag_startup_vu_plain(const char *config_name)
 {
     const unsigned int n = act_end_n[ICO_DIAG_END_VU_EXT];
-    if (n == 1) {
-        ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
-                     "largest 3D shaders (the VU extended variants); this start only uses the "
-                     "smaller ones (nothing is written to %s): the wide-screen rule is off for "
-                     "this start; if a start that compiles them ends there again, [dev] "
-                     "vu_plain_only = true is written for good",
-                     config_name != NULL ? config_name : "config.toml");
-    }
+    (void)config_name;
     return n > 2 ? 2 : (int)n;
 }
 
-int ico_diag_startup_end_persist(int kind, const char *table_lazy, int (*persist)(void),
+int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(void),
                                  const char *config_name)
 {
     const char *cfg = config_name != NULL ? config_name : "config.toml";
-    const char *setting = kind == ICO_DIAG_END_VU_EXT ? "[dev] vu_plain_only = true"
-                                                      : "[dev] pipeline_set = \"lazy\"";
+    const int vu = kind == ICO_DIAG_END_VU_EXT;
+    const char *setting = vu ? "[dev] vu_plain_only = true" : "[dev] pipeline_set = \"lazy\"";
+    const char *rule = vu ? "the device table already draws with the smaller 3D shaders (the VU "
+                            "plain variants) only on this device"
+                          : "the device table already makes the pipelines as the game needs them "
+                            "on this device";
     int saved;
-    if ((kind != ICO_DIAG_END_PIPELINES && kind != ICO_DIAG_END_VU_EXT) || act_end_n[kind] < 2) {
+    if ((kind != ICO_DIAG_END_PIPELINES && kind != ICO_DIAG_END_VU_EXT) || act_end_n[kind] == 0) {
         return 0;
     }
-    if (table_lazy != NULL) {
+    if (table != NULL) {
         /* the device table's rule already holds here: the setting would
-           be redundant, and it would outlive a change of the table */
-        ico_diag_log("ico_pc: the second start in a row ended while preparing the graphics (%s); "
-                     "%s is not written to %s: the device table already makes the pipelines as "
-                     "the game needs them on this device (%s)",
-                     act_prev, setting, cfg, table_lazy);
+           be redundant, and it would outlive a change of the table; the
+           row is cleared, and a lazy run follows the table, not "this
+           start only" */
+        ends_clear_kind(kind);
+        if (!vu) {
+            act_once = 0;
+        }
+        if (act_end_n[kind] >= 2) {
+            ico_diag_log("ico_pc: the second start in a row ended while preparing the graphics "
+                         "(%s); %s is not written to %s: %s (%s)",
+                         act_prev, setting, cfg, rule, table);
+        } else {
+            ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); "
+                         "nothing is counted or written to %s: %s (%s)",
+                         act_prev, cfg, rule, table);
+        }
+        return 0;
+    }
+    if (act_end_n[kind] == 1) {
+        if (vu) {
+            ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
+                         "largest 3D shaders (the VU extended variants); this start only uses "
+                         "the smaller ones (nothing is written to %s): the wide-screen rule is off "
+                         "for this start; if a start that compiles them ends there again, [dev] "
+                         "vu_plain_only = true is written for good",
+                         cfg);
+        } else {
+            ico_diag_log("ico_pc: the previous start ended while preparing the graphics (%s); this "
+                         "start only makes the pipelines as the game needs them, with no start-up "
+                         "set (nothing is written to %s); if this start also ends while preparing "
+                         "them, [dev] pipeline_set = \"lazy\" is written for good",
+                         act_prev, cfg);
+        }
         return 0;
     }
     saved = persist != NULL && persist() == 0;
-    if (kind == ICO_DIAG_END_VU_EXT) {
+    if (saved) {
+        /* the setting is the rule from now; a deleted setting starts the
+           count again */
+        ends_clear_kind(kind);
+    } else if (!vu) {
+        /* not written: this start only, so its lazy run's notes say so
+           and the next start tries the set again; the count stays, so a
+           further end is due again */
+        act_once = 1;
+    }
+    if (vu) {
         ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
                      "largest 3D shaders (the VU extended variants); this start and every start "
                      "after it use the smaller ones only ([dev] vu_plain_only = true in %s%s): the "
@@ -2094,7 +2201,7 @@ void ico_diag_startup_activity_exit(void)
         act_close();
         act_mode = 0;
         if (act_bg) {
-            bg_remove();
+            (void)bg_remove();
         }
         ends_clean();
         return;
@@ -2110,7 +2217,7 @@ void ico_diag_startup_activity_record(int mode)
         /* the set is done: its batches' times are no news */
         act_nbatches = 0;
         if (act_bg) {
-            bg_remove();
+            (void)bg_remove();
         }
         if (was == ICO_DIAG_ACTIVITY_STARTUP) {
             ends_clean();
@@ -2126,6 +2233,10 @@ void ico_diag_startup_activity_record(int mode)
         act_write(activity[0] != '\0' ? activity : act_between_note());
     } else {
         act_write(activity[0] != '\0' ? activity : "creating the start-up pipelines");
+    }
+    /* the app went to the background before the recording began */
+    if (mode != 0 && was == 0 && act_in_bg) {
+        bg_mark(1);
     }
 }
 
