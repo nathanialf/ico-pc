@@ -42,6 +42,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The tables this test fills are declared const in the game's headers
+   (frameDependSequence.h) and defined writable in port/data/gen/table_defs.c
+   (the loader fills them from the ELF). A store through a pointer cast from
+   the const declaration is undefined, and clang drops it (LLVM marks the
+   global constant): the condition table then has no -1 terminator and
+   playSEConditionID walks off the end of .bss (the clang CI builds' segfault).
+   So the headers' declarations are hidden, as table_desc.c hides them, and
+   the writable ones declared below. */
+#define motEffCondKind motEffCondKind_header_decl
+#define motSECondKind motSECondKind_header_decl
+#define motionEffKind motionEffKind_header_decl
+#define randomEffKind randomEffKind_header_decl
+#define randomSEKind randomSEKind_header_decl
 #include "typedef.h"
 #include "debug.h"
 #include "pad.h"
@@ -64,8 +77,19 @@
 #include "options.h"
 #include "tables.h"
 
-/* port/data/gen/table_defs.c; motionOrientManager.h declares none */
+#undef motEffCondKind
+#undef motSECondKind
+#undef motionEffKind
+#undef randomEffKind
+#undef randomSEKind
+/* port/data/gen/table_defs.c's writable definitions; motionOrientManager.h
+   declares motionKind not at all */
 extern MotionDef motionKind[];
+extern VibCondEntry motEffCondKind[];
+extern SECondEntry motSECondKind[];
+extern EffEntry motionEffKind[];
+extern int randomEffKind[];
+extern SERandEntry randomSEKind[];
 
 static int failures;
 
@@ -386,11 +410,11 @@ static void testGuard(void)
    vibration */
 static void fillSynthetic(void)
 {
-    EffEntry *eff = (EffEntry *)motionEffKind;
-    int *rnd = (int *)randomEffKind;
-    VibCondEntry *cond = (VibCondEntry *)motEffCondKind;
-    SECondEntry *seCond = (SECondEntry *)motSECondKind;
-    SERandEntry *seRnd = (SERandEntry *)randomSEKind;
+    EffEntry *eff = motionEffKind;
+    int *rnd = randomEffKind;
+    VibCondEntry *cond = motEffCondKind;
+    SECondEntry *seCond = motSECondKind;
+    SERandEntry *seRnd = randomSEKind;
 
     /* 1: a stage animation at the root; 2: a particle at a node; 3: a stage
        animation at a node at the water's height; 4: a particle at the root */
