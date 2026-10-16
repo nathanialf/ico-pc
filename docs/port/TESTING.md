@@ -399,7 +399,8 @@ program under an environment switch ([Environment switches](#environment-switche
 
 - `shaders_table_test.c`: every embedded entry compiled for SPIR-V and signed DXIL
   (`shaders_table`).
-- `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas
+- `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas,
+  and its integer forms against the operators they replace ([SHADERS.md](SHADERS.md#integer-forms))
   (`gs_math`); `hlsl_shim.h` makes it compile.
 - `shaders_pixel_test.c`: sprite, blit and blend shaders through the Vulkan RHI
   (`shaders_pixel`, `_nodual`, `_mali`); first, on the CPU, `common.hlsli`'s above-1x kernels

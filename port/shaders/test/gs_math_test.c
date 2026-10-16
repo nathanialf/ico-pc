@@ -1,11 +1,14 @@
 /* gs_math_test.c: gs_math.hlsli, compiled as C, against the formulas of
  * port/test/gs_blend_test.c (gs_blend_int, gs_tfx_int) and the GS rules
- * re-expressed here (TEXA, alpha test, Z mapping). Tables are exhaustive
- * where the domain is small and dense elsewhere. */
+ * re-expressed here (TEXA, alpha test, Z mapping), and the shaders' integer
+ * forms against the plain operators they replace (gs_wrap_repeat against
+ * the double modulo). Tables are exhaustive where the domain is small and
+ * dense elsewhere. */
 #include "hlsl_shim.h"
 #include "gs_math.hlsli"
 #include "shader_consts.h"
 #include "../../render/rd_state.h"
+#include <limits.h>
 #include <stdio.h>
 
 /* The constants gs_math.hlsli shares with C, pinned at compile time: the
@@ -58,6 +61,25 @@ static int ref_tfx_int(int tex, int col)
 {
     int v = (tex * col) >> 7;
     return v > 255 ? 255 : v;
+}
+
+/* REPEAT's residue as the shaders wrote it before gs_wrap_repeat */
+static int ref_wrap(int c, int n)
+{
+    return ((c % n) + n) % n;
+}
+
+/* gs_wrap_repeat(c, n) against ref_wrap for c in -span..span, the edges of
+ * a period and the int range's ends */
+static void check_wrap(int n, int span)
+{
+    for (int c = -span; c <= span; c++) {
+        CHECK(gs_wrap_repeat(c, n) == ref_wrap(c, n), "wrap %d mod %d", c, n);
+    }
+    const int edge[] = {INT_MIN, INT_MIN + 1, INT_MAX - 1, INT_MAX, -n, n, -n - 1, n + 1};
+    for (int i = 0; i < (int)(sizeof(edge) / sizeof(edge[0])); i++) {
+        CHECK(gs_wrap_repeat(edge[i], n) == ref_wrap(edge[i], n), "wrap %d mod %d", edge[i], n);
+    }
 }
 
 static int ref_atest(int atst, int aref, int a)
@@ -264,6 +286,17 @@ int main(void)
     CHECK(gs_z_to_depth(16999983u, s32f) < gs_z_to_depth(17000000u, s32f), "z32f 17 apart");
     CHECK(gs_z_to_depth(0xFFFFFF9Bu, s32f) < gs_z_to_depth(0xFFFFFFFFu, s32f), "z32f top apart");
     CHECK(gs_z_to_depth(0x7FFFFFFFu, s32f) < gs_z_to_depth(0xFFFF0000u, s32f), "z32f band");
+
+    /* REPEAT: gs_wrap_repeat (the mask for a power of two, the double
+     * modulo otherwise) against the double modulo, every n up to 4096 and
+     * the powers of two to 2^30, c over three periods each way (4101 values
+     * each way above 4096) and the int range's ends */
+    for (int n = 1; n <= 4096; n++) {
+        check_wrap(n, 3 * n + 5);
+    }
+    for (int k = 13; k <= 30; k++) {
+        check_wrap(1 << k, 4101);
+    }
 
     if (failures) {
         printf("gs_math_test: %d failures\n", failures);

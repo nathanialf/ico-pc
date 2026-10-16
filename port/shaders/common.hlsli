@@ -467,10 +467,8 @@ int2 gs_nearest_texel(float2 tc)
 
 uint4 gs_texa_load(Texture2D<float4> tex, int2 c, int2 size, uint flags)
 {
-    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1)
-                                          : ((c.x % size.x) + size.x) % size.x;
-    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1)
-                                          : ((c.y % size.y) + size.y) % size.y;
+    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1) : gs_wrap_repeat(c.x, size.x);
+    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1) : gs_wrap_repeat(c.y, size.y);
     uint4 t = uint4(floor(tex.Load(int3(c, 0)) * 255.0 + 0.5));
     return gs_texa_expand(t, g_mode.y & 0xFFu, g_mode.y >> 8);
 }
@@ -479,10 +477,8 @@ uint4 gs_texa_load(Texture2D<float4> tex, int2 c, int2 size, uint flags)
 // (REPEAT or CLAMP at the level's size), before TEXA.
 uint4 gs_load_lv(Texture2D<float4> tex, int2 c, int2 size, uint lv, uint flags)
 {
-    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1)
-                                          : ((c.x % size.x) + size.x) % size.x;
-    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1)
-                                          : ((c.y % size.y) + size.y) % size.y;
+    c.x = (flags & DF_TEXA_CLAMP_S) != 0u ? clamp(c.x, 0, size.x - 1) : gs_wrap_repeat(c.x, size.x);
+    c.y = (flags & DF_TEXA_CLAMP_T) != 0u ? clamp(c.y, 0, size.y - 1) : gs_wrap_repeat(c.y, size.y);
     return uint4(floor(tex.Load(int3(c, int(lv))) * 255.0 + 0.5));
 }
 

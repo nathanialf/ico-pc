@@ -222,8 +222,9 @@ compiles it through `hlsl_shim.h` (which defines `ICO_GS_MATH_C`, the `uint` typ
 Functions: `gs_tfx_mod`, `gs_texa_alpha` (the alpha of a 24- or 16-bit texel under TEXA,
 `TEXA_80_80`, `TEXA_7F_81_AEM`, `TEXA_80_80_AEM`), `gs_alpha_pass` (the `ATST_*` tests),
 `gs_blend_term`, `gs_blend_factor`, `gs_blend_ch` (with COLCLAMP clamping or wrapping),
-`gs_blend_reg_ch` (from the ALPHA register), `gs_dst_channel` (one channel of the destination read)
-and `gs_z_to_depth` (a GS Z to a depth that grows with it) (`port/shaders/gs_math.hlsli`).
+`gs_blend_reg_ch` (from the ALPHA register), `gs_dst_channel` (one channel of the destination read),
+`gs_z_to_depth` (a GS Z to a depth that grows with it) and `gs_wrap_repeat` (REPEAT's residue,
+[Integer forms](#integer-forms)) (`port/shaders/gs_math.hlsli`).
 
 ## sheet_text.hlsli
 
@@ -260,6 +261,21 @@ constant that valid inputs never reach, so every picture is unchanged:
 
 No shader waits on memory, spins on an atomic or uses recursion; the one ordered section is
 `gs_dst_out`'s (above).
+
+## Integer forms
+
+Integer division and remainder by a value that is not a compile-time constant (`OpSDiv`, `OpSRem`,
+`OpUDiv`, `OpUMod`) have no instruction on the GPUs the port runs on: the driver expands each into
+a reciprocal and correction steps, tens of instructions. A pixel shader on a hot path writes them
+in these forms instead, each the same value for every input it can be given, with the argument in
+the code and a CPU sweep against the plain operator in `gs_math_test`:
+
+- **REPEAT addressing** is `gs_wrap_repeat(c, n)` (`port/shaders/gs_math.hlsli`): `c & (n - 1)`
+  when `n` is a power of two, else `((c % n) + n) % n`. In two's complement the low bits of `c`
+  are its residue modulo a power of two, negative `c` included, so the two sides agree for every
+  `int`; the test is per draw (a texture's size), kept a branch (`GS_BRANCH`, SPIR-V
+  `DontFlatten`) so the modulo runs only for a size that is not a power of two. Users:
+  `gs_texa_load` and `gs_load_lv` (`common.hlsli`), `fx_texel` (`fx_sprite.hlsl`).
 
 ## The envelope
 
@@ -405,7 +421,7 @@ variant must give the extended one's picture.
 | test | checks |
 | --- | --- |
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present |
-| `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned |
+| `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
 | `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant within its own), every `vu_X_vs` with its `vu_X_plain_vs`, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
 | `vu1` (`vu1_test.c`) | the VU program shaders against `port/render/vu1_ref/`: hand traces through the `.vsm` code on the CPU, then on Vulkan every vertex shader's probe output, strips drawn through the shipped entries, and the region rule's clipping with the card verdicts handed over as the renderer does; every case whose draw has neither `VU_F_EXTENDED` nor `VU_F_TICKS` drawn again through the plain variants, its probe and pictures byte for byte the extended ones' ([The variants](#the-variants)); the CPU's card test against the reference on every vertex and strip; `vu1_mali` under the Mali limits |

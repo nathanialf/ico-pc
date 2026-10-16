@@ -15,8 +15,12 @@
 
 #ifdef ICO_GS_MATH_C
 #define GS_FN static inline
+#define GS_BRANCH
 #else
 #define GS_FN
+// an if kept a branch (SPIR-V DontFlatten): its condition is the same for
+// every pixel of a draw, and a select would run both sides
+#define GS_BRANCH [branch]
 #endif
 
 // RdAlphaTest (port/render/rd_state.h)
@@ -39,6 +43,31 @@
 #define TEXFMT_RGBA32 0 // alpha is the texel's own byte; TEXA ignored
 #define TEXFMT_RGB24 1  // no alpha in the source: alpha = TA0 (AEM: 0 when RGB is 0)
 #define TEXFMT_RGBA16 2 // alpha byte is the 1-bit A (0 or 1): TA1 when set, else TA0
+
+// REPEAT addressing: the residue of c modulo n in 0..n-1 (n >= 1), what
+// ((c % n) + n) % n gives (% keeps the dividend's sign, OpSRem and C99
+// alike; |c % n| < n, so the sum is in 1..2n-1 and the second % is exact).
+// For n a power of two 2^k, c & (n - 1) is the same value for every int c:
+// in two's complement the low k bits of c are c - 2^k * floor(c / 2^k),
+// the residue in 0..n-1, negative c included (n == 1 gives 0 both ways).
+// The test (n & (n - 1)) == 0 holds exactly for the powers of two among
+// n >= 1. A GS texture is 2^TW x 2^TH, so the double modulo, an emulated
+// integer division twice on most GPUs, runs only for a size that is not
+// a power of two (a scaled target at a fractional scale, a replacement
+// texture). gs_math_test checks the two forms equal over every n up to
+// 4096 and the powers of two to 2^30, c across several periods each way
+// and at the int range's ends.
+GS_FN int gs_wrap_repeat(int c, int n)
+{
+    const int m = n - 1;
+    int r;
+    GS_BRANCH if ((n & m) == 0) {
+        r = c & m;
+    } else {
+        r = ((c % n) + n) % n;
+    }
+    return r;
+}
 
 // Texture function MODULATE, one channel: min((tex * col) >> 7, 255).
 GS_FN uint gs_tfx_mod(uint tex, uint col)

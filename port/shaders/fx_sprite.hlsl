@@ -90,13 +90,6 @@ float2 fx_src_scale()
     return float2(g_scale.x > 0.0 ? g_scale.x : 1.0, g_scale.y > 0.0 ? g_scale.y : 1.0);
 }
 
-// REPEAT on a size that is a power of two at scale 1 (c & (n - 1) there);
-// the modulo keeps it for a scaled size that is not
-int fx_wrap(int c, int n)
-{
-    return ((c % n) + n) % n;
-}
-
 // t1's Full pixel crop in 1/16 texels: the texels of the GS frame left out
 // at its left (g_scale.z times its width), 0 on every other texture
 int fx_src_crop16()
@@ -114,8 +107,10 @@ uint4 fx_texel(int2 c, uint flags)
     int2 asz = int2(g_tex.zw);
     const int k = fx_src_crop16() >> 4;
     c.x += k;
-    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : fx_wrap(c.x, lsz.x);
-    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : fx_wrap(c.y, lsz.y);
+    // REPEAT: lsz is 2^TW x 2^TH at scale 1 and at an integer scale that
+    // is a power of two (gs_wrap_repeat's mask), any size otherwise
+    c.x = (flags & FXF_CLAMP_S) != 0u ? clamp(c.x, 0, lsz.x - 1) : gs_wrap_repeat(c.x, lsz.x);
+    c.y = (flags & FXF_CLAMP_T) != 0u ? clamp(c.y, 0, lsz.y - 1) : gs_wrap_repeat(c.y, lsz.y);
     c.x -= k;
     c = clamp(c, int2(0, 0), asz - 1);
     uint4 t = fx_load(g_texture, c);
