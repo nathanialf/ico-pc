@@ -437,6 +437,9 @@ float rd__depth_unorm_steps(void);
 float rd__gs_depth(uint32_t z, float scale);
 
 RdTargetRec *rd__target_rec(uint32_t id);
+/* a target's name: SCENE, DISPLAY, ... for a named one, "block" for a
+ * render-to-texture block, "temporary" for another temporary, "gone" */
+const char *rd__target_name(uint32_t id);
 
 /* The texel position of GS pixel x (from the target's left GS edge) on t:
  * x * sx less the Full pixel crop (RdTargetRec.ox, 0 but on a cropped
@@ -2482,6 +2485,17 @@ typedef struct RdCameraScope {
 } RdCameraScope;
 
 void rd__water_frame_reset(const RdFrame *f);
+/* The F12 log line's summary of f's render-to-texture blocks (issue 106):
+ * the Water reflections option, SCENE's scale, each block a draw of f wrote
+ * or read (GS size, texels and scale, depth, the draws into it, the draws
+ * reading it with their DATE, AFAIL and blend), the DATE draws by target,
+ * and the draws sampling a texture-pack replacement (blank in a dump).  At
+ * most cap - 1 characters; the length written.  Walks f once: for a dump,
+ * never per frame */
+size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap);
+/* a draw samples src (rd_replay.c resolveTexture): counts it in
+ * g_rdPerf.blockOtherScaleReads when src is a block not at SCENE's scale */
+void rd__block_read(const RdTargetRec *src);
 uint32_t rd__alias_of(uint32_t id);
 /* rd_grid_screen_st's formula and scales for the grid draw being recorded,
  * and none for the draws after it (rd_mesh.c rd_draw_vu_grid) */

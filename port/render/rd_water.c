@@ -19,6 +19,8 @@
  * Also the screen-space STs of pool.c's grids (rd_grid_screen_st): the
  * formula and scales wait here for the next rd_draw_vu_grid, which writes
  * them into its command (so dumps carry them). */
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include "rd_internal.h"
 
@@ -358,4 +360,218 @@ uint32_t rd__enumerate_reachable_water(RdPipeKeyInt *out, uint32_t max, uint32_t
         }
     }
     return n;
+}
+
+/* The other-size rule's count (rd_replay.c resolveTexture, every draw that
+ * samples a target): a render-to-texture block drawn at a scale other than
+ * SCENE's (rd_core.c rd__target_scale_of), for the 10 s line (issue 106) */
+void rd__block_read(const RdTargetRec *src)
+{
+    if (src->block) {
+        const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1);
+        if (sc && (src->sx != sc->sx || src->sy != sc->sy)) {
+            g_rdPerf.blockOtherScaleReads++;
+        }
+    }
+}
+
+/* ------------------------------------------- the F12 line (issue 106)
+ * What a reporter's dump line alone has to tell about the water: which
+ * scale each block was drawn at (Water reflections Original: its GS size;
+ * Sharp: the scene's), and the state of the draws that wrote and read it
+ * (puddle.c's leveldown, drawRipples and copy test DATE with AFAIL
+ * RGB_ONLY; the puddle surface sets the alpha bit they test).  A dump
+ * carries a texture-pack replacement as a blank image (rd_dump.c), so the
+ * draws that sampled one are counted: a replay cannot show what they drew. */
+#define WATER_LINE_BLOCKS 8
+#define WATER_LINE_DATE 6
+
+typedef struct WaterUse {
+    uint32_t id;
+    uint32_t into, reads;
+    uint32_t date[3]; /* reads by RdDate */
+    uint32_t afail;   /* reads' RdAFail bits (when the alpha test is on) */
+    uint32_t blend;   /* reads' RdBlend bits; bit RD_BLEND_COUNT: blending off */
+} WaterUse;
+
+typedef struct WaterLineAcc {
+    WaterUse blocks[WATER_LINE_BLOCKS];
+    uint32_t nBlocks, moreBlocks;
+    WaterUse date[WATER_LINE_DATE]; /* DATE draws by colour target */
+    uint32_t nDate;
+    uint32_t packDraws;
+} WaterLineAcc;
+
+static WaterUse *waterUse(WaterUse *u, uint32_t *n, uint32_t max, uint32_t id, uint32_t *more)
+{
+    for (uint32_t i = 0; i < *n; i++) {
+        if (u[i].id == id) {
+            return &u[i];
+        }
+    }
+    if (*n == max) {
+        if (more) {
+            (*more)++;
+        }
+        return NULL;
+    }
+    memset(&u[*n], 0, sizeof(u[*n]));
+    u[*n].id = id;
+    return &u[(*n)++];
+}
+
+static void waterNoteState(WaterUse *u, const RdStateBlock *s)
+{
+    u->date[s->ds.test.date < 3 ? s->ds.test.date : 0]++;
+    if (s->ds.test.ate) {
+        u->afail |= 1u << (s->ds.test.afail & 3u);
+    }
+    u->blend |= 1u << (s->ds.abe ? (s->ds.blend < RD_BLEND_COUNT ? s->ds.blend : RD_BLEND_COUNT)
+                                 : RD_BLEND_COUNT);
+}
+
+static void waterLineWalk(void *user, int list, uint32_t index, const RdCmd *c,
+                          const RdStateBlock *s)
+{
+    WaterLineAcc *a = (WaterLineAcc *)user;
+    uint32_t readId = 0;
+    (void)list, (void)index;
+    if (c->type == RDC_COPY) {
+        const RdTargetRec *src = rd__target_rec(c->u[0]);
+        const RdTargetRec *dst = rd__target_rec(c->u[1]);
+        WaterUse *u;
+        if (dst && dst->block &&
+            (u = waterUse(a->blocks, &a->nBlocks, WATER_LINE_BLOCKS, c->u[1], &a->moreBlocks))) {
+            u->into++;
+        }
+        if (src && src->block &&
+            (u = waterUse(a->blocks, &a->nBlocks, WATER_LINE_BLOCKS, c->u[0], &a->moreBlocks))) {
+            u->reads++;
+        }
+        return;
+    }
+    if (c->type != RDC_SCREEN && c->type != RDC_MESH && c->type != RDC_SKINNED &&
+        c->type != RDC_GRID && c->type != RDC_PARTICLES && c->type != RDC_WORLD_PRIMS) {
+        return;
+    }
+    const RdTargetRec *tc = rd__target_rec(s->color);
+    if (tc && tc->block) {
+        WaterUse *u = waterUse(a->blocks, &a->nBlocks, WATER_LINE_BLOCKS, s->color, &a->moreBlocks);
+        if (u) {
+            u->into++;
+        }
+    }
+    if (s->ds.texEnabled) {
+        const RdTexRec *t = rd__tex_rec(s->tex);
+        if (t && t->kind == RD_TEXKIND_TARGET) {
+            const RdTargetRec *src = rd__target_rec(t->target);
+            readId = src && src->block ? t->target : 0;
+        } else if (t && t->replacement) {
+            a->packDraws++;
+        }
+    }
+    if (readId) {
+        WaterUse *u = waterUse(a->blocks, &a->nBlocks, WATER_LINE_BLOCKS, readId, &a->moreBlocks);
+        if (u) {
+            u->reads++;
+            waterNoteState(u, s);
+        }
+    }
+    if (s->ds.test.date != RD_DATE_OFF) {
+        WaterUse *u = waterUse(a->date, &a->nDate, WATER_LINE_DATE, s->color, NULL);
+        if (u) {
+            u->reads++;
+            waterNoteState(u, s);
+        }
+    }
+}
+
+/* appends to line (at most cap - 1 characters in all); the new length */
+static size_t waterPut(char *line, size_t cap, size_t at, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    const int k = at < cap ? vsnprintf(line + at, cap - at, fmt, ap) : -1;
+    va_end(ap);
+    if (k > 0) {
+        at = at + (size_t)k < cap ? at + (size_t)k : cap - 1;
+    }
+    return at;
+}
+
+/* the AFAIL modes and the blends of u's draws */
+static size_t waterPutStates(char *line, size_t cap, size_t at, const WaterUse *u)
+{
+    static const char *const kAfail[4] = {"keep", "fb-only", "zb-only", "rgb-only"};
+    for (int k = 0; k < 4; k++) {
+        if (u->afail & (1u << k)) {
+            at = waterPut(line, cap, at, ", AFAIL %s", kAfail[k]);
+        }
+    }
+    at = waterPut(line, cap, at, ", blends");
+    for (int k = 0; k <= RD_BLEND_COUNT; k++) {
+        if (u->blend & (1u << k)) {
+            at = k == RD_BLEND_COUNT ? waterPut(line, cap, at, " off")
+                                     : waterPut(line, cap, at, " %d", k);
+        }
+    }
+    return at;
+}
+
+size_t rd__water_dump_line(const RdFrame *f, char *line, size_t cap)
+{
+    static WaterLineAcc a; /* the F12 path only: one caller at a time */
+    size_t at = 0;
+    if (cap == 0) {
+        return 0;
+    }
+    line[0] = 0;
+    if (!f) {
+        return waterPut(line, cap, at, "no frame");
+    }
+    memset(&a, 0, sizeof(a));
+    RdStateBlock s = f->startState;
+    rd__walk(f, f->keep, &s, waterLineWalk, &a);
+    const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1);
+    at = waterPut(line, cap, at, "frame %u: water reflections %s; scene %gx%g", f->number,
+                  g_rd.settings.waterSharp ? "sharp" : "original", sc ? (double)sc->sx : 0.0,
+                  sc ? (double)sc->sy : 0.0);
+    if (a.nBlocks == 0) {
+        at = waterPut(line, cap, at, "; no render-to-texture block");
+    }
+    for (uint32_t i = 0; i < a.nBlocks; i++) {
+        const WaterUse *u = &a.blocks[i];
+        const RdTargetRec *b = rd__target_rec(u->id);
+        if (b) {
+            at = waterPut(line, cap, at, "; block %ux%u GS%s at %ux%u texels (%gx%g, %s)", b->w,
+                          b->h, b->withDepth ? " with depth" : "", b->tw, b->th, (double)b->sx,
+                          (double)b->sy,
+                          sc && (b->sx != sc->sx || b->sy != sc->sy) ? "not the scene's scale"
+                                                                     : "the scene's scale");
+        } else {
+            at = waterPut(line, cap, at, "; block (gone)");
+        }
+        at = waterPut(line, cap, at, ": %u draws into it, %u read it", u->into, u->reads);
+        if (u->reads) {
+            at = waterPut(line, cap, at, " (DATE off %u, alpha 0 %u, alpha 1 %u", u->date[0],
+                          u->date[1], u->date[2]);
+            at = waterPutStates(line, cap, at, u);
+            at = waterPut(line, cap, at, ")");
+        }
+    }
+    if (a.moreBlocks) {
+        at = waterPut(line, cap, at, "; %u draws on more blocks not listed", a.moreBlocks);
+    }
+    for (uint32_t i = 0; i < a.nDate; i++) {
+        const WaterUse *u = &a.date[i];
+        at = waterPut(line, cap, at, "; DATE draws on %s: alpha 0 %u, alpha 1 %u",
+                      rd__target_name(u->id), u->date[1], u->date[2]);
+        at = waterPutStates(line, cap, at, u);
+    }
+    if (a.packDraws) {
+        at = waterPut(line, cap, at,
+                      "; %u draws sampled a texture-pack replacement (blank in the dump)",
+                      a.packDraws);
+    }
+    return at;
 }

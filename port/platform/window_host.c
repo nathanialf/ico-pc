@@ -269,6 +269,9 @@ static struct {
        snapshots copied and swapped (rd.h RdPerfRecord, issue 103) */
     uint64_t dstDraws, storagePasses, dstSwitches, glowPasses, snapshots, snapSwaps;
     uint64_t msaaResolves;
+    /* draws that read a water block at a scale other than the scene's
+       (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
+    uint64_t blockOtherScale;
     uint32_t msaaSamples; /* the block's largest count (0: no MSAA) */
     uint64_t bufCreated, bufDestroyed, texCreated, texDestroyed, allocs, fenceWaits, waitIdles,
         readbacks;
@@ -3203,6 +3206,7 @@ static void perf_drain(void)
         s_perf.texUploads += r.textureUploads;
         s_perf.meshUploads += r.meshUploads;
         s_perf.dateSnaps += r.dateSnapshots;
+        s_perf.blockOtherScale += r.blockOtherScaleReads;
         s_perf.exact += r.exactBlends;
         s_perf.dstDraws += r.dstDraws;
         s_perf.storagePasses += r.storagePasses;
@@ -3334,6 +3338,15 @@ static void perf_log(void)
            "MSAA resolve" above */
         fprintf(stderr, "window: msaa: %u samples, resolves %.1f per replay\n", s_perf.msaaSamples,
                 (double)s_perf.msaaResolves / n);
+    }
+    if (s_perf.blockOtherScale) {
+        /* the puddles', the pools' and the queen barrier's render-to-texture
+           blocks read at their own size, not the scene's (Water reflections:
+           Original, the other-size rule; rd_core.c rd__target_scale_of) */
+        fprintf(stderr,
+                "window: water: %.1f draws per replay read a reflection block drawn at a scale "
+                "other than the scene's (%llu in the block)\n",
+                (double)s_perf.blockOtherScale / n, (unsigned long long)s_perf.blockOtherScale);
     }
     {
         /* the graphics allocations against the device's limit (a

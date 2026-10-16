@@ -914,6 +914,10 @@ bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
     const RdFrame *last = rd__last_frame();
     if (last) {
         logCullDrops(last);
+        /* the water's blocks and the draws on them (issue 106) */
+        char line[1536];
+        rd__water_dump_line(last, line, sizeof(line));
+        rd__log("dump: %s", line);
     }
     if (dumpPath) {
         ok = rd_dump_frame(dumpPath);

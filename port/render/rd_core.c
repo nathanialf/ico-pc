@@ -600,6 +600,19 @@ static const char *const s_targetNames[RD_TARGET_COUNT] = {
     "WORK1",         "WORK2",     "WORK3",    "AA0",       "AA1",       "FEED128",
     "DATE_SNAPSHOT", "AURA_WORK", "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD"};
 
+const char *rd__target_name(uint32_t id)
+{
+    const RdTargetRec *t = rd__target_rec(id);
+    if (!t) {
+        return "gone";
+    }
+    if (t->block) {
+        return "block";
+    }
+    const uint32_t slot = (id & 0xFFFF) - 1;
+    return slot < RD_TARGET_COUNT ? s_targetNames[slot] : "temporary";
+}
+
 RdTargetRec *rd__target_rec(uint32_t id)
 {
     uint32_t slot = (id & 0xFFFF) - 1;

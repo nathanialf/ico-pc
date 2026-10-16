@@ -1315,6 +1315,11 @@ int main(int argc, char **argv)
                aspectName(info.aspect, (char[16]){0}), (double)info.wExact, info.cullW);
         printf("listed %u commands of frame %u (%ux%u, fba/pabe/texa/date per action)\n", s_listed,
                rf->number, rf->gsW, rf->gsH);
+        /* the game's F12 line about the water (rd_water.c rd__water_dump_line),
+           at this replay's options */
+        char water[1536];
+        rd__water_dump_line(rf, water, sizeof(water));
+        printf("water: %s\n", water);
     }
     for (int k = 0; k < vuRefCount; k++) {
         vuRefDraw(rf, vuRefL[k], vuRefI[k]);

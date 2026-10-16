@@ -2506,6 +2506,9 @@ static void wide169Pixels(void)
     /* (1) the puddle: the block at its own size, the 4:3 picture */
     recordPuddle();
     walkFrame(rd__last_frame());
+    CHECK(g_rdPerf.blockOtherScaleReads == 0,
+          "16:9: the block at the scene's scale, no read counted by the other-size rule (%u)",
+          g_rdPerf.blockOtherScaleReads);
     uint32_t block = checkBlock("puddle 16:9", 4, 256, 256, 1);
     const RdTargetRec *br = rd__target_rec(block);
     CHECK(br && br->tw == BT && br->th == 256 && br->sx == 1.0f && br->sy == 1.0f,
@@ -2792,11 +2795,34 @@ static void buildAll(void)
     setupCloth();
 }
 
+/* The F12 line's water summary (rd_water.c rd__water_dump_line, issue 106)
+ * of the puddle's frame: the block at its GS size with its depth, the draws
+ * into it and reading it, the DATE draws on SCENE with AFAIL RGB_ONLY and
+ * leveldown's LERP FIX (2) and copy's ADD FIX (0) */
+static void checkPuddleDumpLine(const char *what, const char *scale)
+{
+    char line[1536];
+    const size_t n = rd__water_dump_line(rd__last_frame(), line, sizeof(line));
+    printf("  %s dump line: %s\n", what, line);
+    CHECK(n == strlen(line) && n > 0, "%s: the dump line's length", what);
+    CHECK(strstr(line, "block 256x256 GS with depth") != NULL, "%s: the dump line names the block",
+          what);
+    CHECK(strstr(line, scale) != NULL, "%s: the dump line says \"%s\"", what, scale);
+    CHECK(strstr(line, "DATE draws on SCENE: alpha 0 0, alpha 1 2, AFAIL rgb-only, blends 0 2") !=
+              NULL,
+          "%s: the dump line's DATE draws on SCENE", what);
+    char small[40];
+    const size_t k = rd__water_dump_line(rd__last_frame(), small, sizeof(small));
+    CHECK(k == sizeof(small) - 1 && strlen(small) == k, "%s: the dump line cut at its capacity",
+          what);
+}
+
 static void recordingChecks(void)
 {
     decoderOnlyChecks();
     recordPuddle();
     checkPuddleRecording();
+    checkPuddleDumpLine("puddle", "(1x1, the scene's scale)");
     recordPool();
     checkPoolRecording();
     recordBarrier();
@@ -2884,6 +2910,36 @@ int main(void)
         setupPuddle();
         wide169Pixels();
         CHECK(rhi_vk_validation_error_count() == 0, "16:9: %u validation errors",
+              rhi_vk_validation_error_count());
+        rd_shutdown();
+    }
+    /* the other-size rule's counter and the dump line (issue 106): the
+       scene at 2x, the block at its GS size under Water reflections
+       Original, at the scene's under Sharp */
+    for (int sharp = 0; sharp < 2; sharp++) {
+        st.preset = RD_PRESET_ENHANCED;
+        st.aspect = 4.0f / 3.0f;
+        st.sceneScale = 2.0f;
+        st.waterSharp = (uint8_t)sharp;
+        if (!rd_init(W, H, &st, NULL)) {
+            CHECK(0, "rd_init at 2x");
+            continue;
+        }
+        gif_HostForgetTextures();
+        gif_HostFrameReset();
+        setup();
+        buildScene();
+        s_surfFba = 1;
+        setupPuddle();
+        recordPuddle(); /* replayed at rd_end_frame */
+        printf("  2x %s: %u draws read a block not at the scene's scale\n",
+               sharp ? "sharp" : "original", g_rdPerf.blockOtherScaleReads);
+        CHECK(g_rdPerf.blockOtherScaleReads == (sharp ? 0u : 1u),
+              "2x %s: the copy's read of the block counted by the other-size rule (%u)",
+              sharp ? "sharp" : "original", g_rdPerf.blockOtherScaleReads);
+        checkPuddleDumpLine(sharp ? "2x sharp" : "2x original",
+                            sharp ? "(2x2, the scene's scale)" : "(1x1, not the scene's scale)");
+        CHECK(rhi_vk_validation_error_count() == 0, "2x: %u validation errors",
               rhi_vk_validation_error_count());
         rd_shutdown();
     }

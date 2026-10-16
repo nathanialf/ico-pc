@@ -1684,6 +1684,10 @@ typedef struct RdPerfRecord {
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
     uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
     uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */
+    /* draws that sampled a render-to-texture block (RdTargetRec.block: the
+     * puddles', the pools', the queen barrier's) drawn at a scale other than
+     * SCENE's (rd_core.c rd__target_scale_of, the other-size rule) */
+    uint32_t blockOtherScaleReads;
     /* Of bindGroups, rd's own by kind.  uniformGroups: the
      * frame, draw and VU layouts' groups, whose uniforms take dynamic
      * offsets, so one group per layout and buffer serves the replay (the VU

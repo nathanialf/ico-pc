@@ -944,6 +944,33 @@ Sharp start logs the line once at `rd_init`. Dumps carry the mark in the tempora
 word (bit 1); the replay tool's `--water-sharp` draws them at the scene's scale, and without it they
 replay at their GS size (`port/render/rd_dump.c`, header comment).
 
+**What the log says about the water** (issue 106). The puddles are four steps in list 4
+(`ico2/sugipon/src/puddle.c` (`PuddleDL`)): `baseSetup` clears SCENE's alpha with a full-frame
+sprite (ALPHA mode 5, colour 0) and draws the puddle surface, whose pixels set the alpha bit;
+`drawAreaSetup` and the reflection draw into the block; `leveldown` (LERP FIX 0x10), `drawRipples`
+(ADD FIX 0x60, the ripple a ring of eight segments, `t` to `t + 5` from where a foot landed, its STs
+the block's at the ring's projected place) and `copy` (ADD FIX 0x60, the block over the frame) test
+DATE with DATM 1, so they draw only where the surface set the bit; leveldown and copy with the alpha
+test NEVER and AFAIL RGB_ONLY. An F12 adds one line to the log after the box cull's,
+
+```
+rd: dump: frame N: water reflections original|sharp; scene SXxSY; block WxH GS with depth at TWxTH texels (SXxSY, the scene's scale|not the scene's scale): D draws into it, R read it (DATE off a, alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0); DATE draws on SCENE: alpha 0 b, alpha 1 c, AFAIL rgb-only, blends 0 2; K draws sampled a texture-pack replacement (blank in the dump)
+```
+
+(one line; a part with nothing to say is left out): each render-to-texture block a draw of the frame
+wrote or read, at which scale it was drawn, the draws into it and the DATE, AFAIL and blends of the
+draws that read it, the DATE draws by target, and how many draws sampled a texture pack's picture,
+which a dump carries blank, so a replay of that dump cannot show what they drew
+(`port/render/rd_water.c` (`rd__water_dump_line`); `port/render/rd_dump.c` (`rd_dump_on_demand`)).
+It walks the dumped frame once, on the key press, never per frame. The replay tool's `--list` ends
+with the same summary as `water: ...`, at the replay's options. The 10 s block adds `window: water: N
+draws per replay read a reflection block drawn at a scale other than the scene's (M in the block)`
+when any draw did: the other-size rule above in force (Water reflections Original with the scene
+above 1x), counted where the replay resolves a draw's texture (`port/render/rd_replay.c`
+(`resolveTexture`); `port/render/rd_water.c` (`rd__block_read`); `RdPerfRecord.blockOtherScaleReads`; `port/platform/window_host.c`). `rd_water_test`
+checks the line on the puddle's frame and the count at 2x under Original (the copy's read) and Sharp
+(none).
+
 ## The fog path and its self-test
 
 The depth fog reads SCENE's depth: the GS copies the Z buffer, a PSMT4 view copies the third byte
@@ -1174,7 +1201,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
 | `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--glow-original` (Glow size: Original), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
-| `--list` | every command of the replayed lists, with textures, prims, boxes and state |
+| `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](#water-and-render-to-texture-blocks)) |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
 | `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |

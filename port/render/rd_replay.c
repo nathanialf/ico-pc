@@ -2263,6 +2263,7 @@ static RhiTexture resolveTexture(Replay *r, RdTargetRec *drawTarget, uint32_t dr
     *w = src->w;
     *h = src->h;
     *textured = 1;
+    rd__block_read(src);
     if (s_shadowRedFor && t->target == s_shadowRedFor && s_shadowRed.id &&
         t->target != drawTargetId) {
         return s_shadowRed; /* the shadow count at the GS size */
