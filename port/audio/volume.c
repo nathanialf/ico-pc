@@ -33,8 +33,8 @@ int ico_audio_volume_q8(void)
     return __atomic_load_n(&volume_q8, __ATOMIC_RELAXED);
 }
 
-int ico_audio_pick_mode(int window_build, const char *enable, int dumping, const char *sync,
-                        const char **why)
+int ico_audio_pick_mode(int window_build, const char *enable, int dumping, int repeatable,
+                        const char *sync, const char **why)
 {
     const char *w = "";
     int mode = ICO_AUDIO_MODE_SYNC;
@@ -45,6 +45,8 @@ int ico_audio_pick_mode(int window_build, const char *enable, int dumping, const
         w = "audio=0";
     } else if (dumping) {
         w = "audio_dump";
+    } else if (repeatable) {
+        w = "fixed clock";
     } else if (sync != NULL && strcmp(sync, "1") == 0) {
         w = "[dev] audio_sync";
     } else {

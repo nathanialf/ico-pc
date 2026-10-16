@@ -179,6 +179,16 @@ int ico_audio_mode(void)
     return mode;
 }
 
+/* A run meant to repeat: the fixed clock on (port/platform/host_config.c
+   ico_host_fixed_clock exports ICO_FIXED_CLOCK: a trace to a path,
+   headless=1, [dev] fixed_clock). */
+static int fixed_clock(void)
+{
+    const char *v = getenv("ICO_FIXED_CLOCK");
+
+    return v != NULL && strcmp(v, "1") == 0;
+}
+
 const char *ico_audio_mode_text(void)
 {
     const char *why = mode_why;
@@ -193,7 +203,7 @@ const char *ico_audio_mode_text(void)
 #endif
 
         m = ico_audio_pick_mode(window_build, getenv("ICO_AUDIO"), dump != NULL && dump[0] != '\0',
-                                getenv("ICO_AUDIO_SYNC"), &why);
+                                fixed_clock(), getenv("ICO_AUDIO_SYNC"), &why);
     }
     if (m == ICO_AUDIO_MODE_PULL) {
         return "audio on the device's clock";
@@ -206,6 +216,9 @@ const char *ico_audio_mode_text(void)
     }
     if (strcmp(why, "[dev] audio_sync") == 0) {
         return "audio on the game's clock ([dev] audio_sync)";
+    }
+    if (strcmp(why, "fixed clock") == 0) {
+        return "audio on the game's clock (fixed clock)";
     }
     if (strcmp(why, "the device stopped asking") == 0) {
         return "audio on the game's clock (the device stopped asking)";
@@ -309,7 +322,8 @@ void ico_audio_host_init(void)
         }
     }
 #ifdef ICO_AUDIO_SDL
-    mode = ico_audio_pick_mode(1, enable, wav != NULL, getenv("ICO_AUDIO_SYNC"), &mode_why);
+    mode = ico_audio_pick_mode(1, enable, wav != NULL, fixed_clock(), getenv("ICO_AUDIO_SYNC"),
+                               &mode_why);
     if (enable != NULL && strcmp(enable, "0") == 0) {
         fprintf(stderr, "audio: audio=0: no audio device (the driver still runs)\n");
     } else {
@@ -328,7 +342,7 @@ void ico_audio_host_init(void)
     }
 #else
     (void)enable;
-    mode = ico_audio_pick_mode(0, enable, wav != NULL, NULL, &mode_why);
+    mode = ico_audio_pick_mode(0, enable, wav != NULL, fixed_clock(), NULL, &mode_why);
     fprintf(stderr, "audio: headless build: the driver runs, the output is %s\n",
             wav != NULL ? "only dumped" : "discarded");
 #endif

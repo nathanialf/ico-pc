@@ -645,7 +645,7 @@ count alone.
 | mode | when | who renders |
 | --- | --- | --- |
 | the device's clock (`ICO_AUDIO_MODE_PULL`) | the window build with an audio device, by default | SDL's audio thread, when the device asks (`port/audio/out_sdl.c` (`pull_cb`)); `ico_audio_host_vsync` renders nothing |
-| the game's clock (`ICO_AUDIO_MODE_SYNC`) | the headless build; `audio=0`; a WAV dump (the WAV is a function of the driver's writes and their times only on the game's step); `[dev] audio_sync`; no device opens | `ico_audio_host_vsync`, once per vsync |
+| the game's clock (`ICO_AUDIO_MODE_SYNC`) | the headless build; `audio=0`; a WAV dump (the WAV is a function of the driver's writes and their times only on the game's step); a run meant to repeat, with the fixed clock on (`ICO_FIXED_CLOCK=1`: a trace to a path, `headless=1`, `[dev] fixed_clock`), since the envelopes and stream offsets the game reads follow the render's clock; `[dev] audio_sync`; no device opens | `ico_audio_host_vsync`, once per vsync |
 
 On the device's clock `ico_audio_host_vsync` watches the device instead: when the device has not
 asked for sound for 300 ms (2 s before its first request after an open or a resume, for a device
@@ -660,8 +660,8 @@ would fill (`port/audio/spu2.c` (`ev_push`)). The line:
 A paused device (the Android lifecycle) and a process stopped as a whole (no steps) never trigger
 it. The start's summary line names the clock (`port/platform/window_host.c` (`log_summary`);
 `port/audio/audio_host.h` (`ico_audio_mode_text`)): `audio on the device's clock`, `audio on the
-game's clock (audio_dump)`, `audio on the game's clock ([dev] audio_sync)` or `audio off
-(audio=0)`; it is written before the audio starts, so it says the clock the configuration asks
+game's clock (audio_dump)`, `audio on the game's clock (fixed clock)`, `audio on the game's clock
+([dev] audio_sync)` or `audio off (audio=0)`; it is written before the audio starts, so it says the clock the configuration asks
 for.
 
 ## The output

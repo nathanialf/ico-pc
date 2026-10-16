@@ -50,8 +50,10 @@ void ico_audio_host_vsync(int hz);
    ICO_AUDIO_MODE_SYNC: the game's clock (ico_audio_host_vsync renders).
    SYNC in the headless build, with audio=0 (no device), with the WAV dump
    (the WAV is a function of the writes and their times only on the game's
-   clock), with [dev] audio_sync (ICO_AUDIO_SYNC=1) and when no device
-   opens; PULL otherwise.  On the pull path ico_audio_host_vsync falls back
+   clock), in a run meant to repeat (the fixed clock, ICO_FIXED_CLOCK=1:
+   a trace or headless=1; the driver's state the game reads follows the
+   render's clock), with [dev] audio_sync (ICO_AUDIO_SYNC=1) and when no
+   device opens; PULL otherwise.  On the pull path ico_audio_host_vsync falls back
    to SYNC for the rest of the run, logged, once the device has not asked
    for sound for 300 ms (2 s before its first request after an open or a
    resume) while the game stepped that long: the SPU2's time would stand
@@ -59,11 +61,12 @@ void ico_audio_host_vsync(int hz);
 enum { ICO_AUDIO_MODE_SYNC, ICO_AUDIO_MODE_PULL };
 
 /* The choice (pure; volume.c): window_build: the SDL output is built;
-   enable: ICO_AUDIO; dumping: a WAV dump is written; sync: ICO_AUDIO_SYNC.
+   enable: ICO_AUDIO; dumping: a WAV dump is written; repeatable: the
+   fixed clock is on (ICO_FIXED_CLOCK is "1"); sync: ICO_AUDIO_SYNC.
    *why (when not NULL): the reason for SYNC ("headless build", "audio=0",
-   "audio_dump", "[dev] audio_sync"), "" for PULL. */
-int ico_audio_pick_mode(int window_build, const char *enable, int dumping, const char *sync,
-                        const char **why);
+   "audio_dump", "fixed clock", "[dev] audio_sync"), "" for PULL. */
+int ico_audio_pick_mode(int window_build, const char *enable, int dumping, int repeatable,
+                        const char *sync, const char **why);
 /* The mode in use (SYNC before ico_audio_host_init). */
 int ico_audio_mode(void);
 /* For the start's summary line (window_host.c log_summary, which runs

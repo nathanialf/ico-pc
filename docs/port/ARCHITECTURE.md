@@ -109,7 +109,9 @@ A scheduler picks which one runs with the EE kernel's rules: strict priority 0 t
 slice, one FIFO ready queue per priority, a readied thread preempting a lower-priority caller at
 once, wakeup counts, FIFO semaphore waiters (`port/platform/sched.h` (`ico_sched_run`)). Threads
 switch only inside kernel calls, as on the single-core EE, so the game's order of events is
-reproduced and a run is a function of its input and the vsync count. The SDK names
+reproduced and a run is a function of its input and the vsync count, save the sound driver's state
+when the audio renders on the device's clock ([DIVERGENCES.md](DIVERGENCES.md) AU-8; a run with
+the fixed clock, a trace's, renders it on the game's). The SDK names
 (`CreateThread`, `WaitSema`, `iSignalSema`, `AddIntcHandler`, ...) map onto the scheduler in
 `port/platform/kernel_host.c`; cache and interrupt-disable calls do nothing there.
 
@@ -259,13 +261,12 @@ hardware notes, integer arithmetic only, rendering 48 kHz stereo (`port/audio/sp
 
 The SPU2 renders on the audio device's clock in the window build: SDL's audio thread renders what
 the device asks for, under one lock with the driver. On the game's clock (the headless build, the
-WAV dump, `[dev] audio_sync`, no device) the host loop renders each simulated vsync's frames (960 at
-50 Hz) and hands them to the SDL3 device, a WAV file, or nothing. The driver runs in every mode
-because the game reads its envelopes and stream offsets (`port/audio/audio_host.h`, header
-comment). Values the
-SPU2 needs from Sony's modules (SNDN2DRV's pitch table, LIBSD's reverb presets) are read from the
-player's disc (`port/audio/sndn2_host.h`; `port/audio/libsd_irx.h`). [AUDIO.md](AUDIO.md) has
-the rest.
+WAV dump, the fixed clock, `[dev] audio_sync`, no device) the host loop renders each simulated
+vsync's frames (960 at 50 Hz) and hands them to the SDL3 device, a WAV file, or nothing. The
+driver runs in every mode because the game reads its envelopes and stream offsets
+(`port/audio/audio_host.h`, header comment). Values the SPU2 needs from Sony's modules
+(SNDN2DRV's pitch table, LIBSD's reverb presets) are read from the player's disc
+(`port/audio/sndn2_host.h`; `port/audio/libsd_irx.h`). [AUDIO.md](AUDIO.md) has the rest.
 
 ## IPU and movies
 

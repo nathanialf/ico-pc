@@ -24,7 +24,8 @@
  *     ico_audio_sdl_queued_ms and a cushion of 0;
  *   - the 10 s line's numbers (ico_audio_sdl_summary_text) with the
  *     driver's ticks and longest gap, and the choice of the mode
- *     (ico_audio_pick_mode).
+ *     (ico_audio_pick_mode: the dump, the fixed clock, [dev] audio_sync,
+ *     audio=0 and the headless build on the game's clock).
  */
 #include "../out_sdl.c"
 
@@ -546,19 +547,21 @@ static void test_summary_and_mode(void)
     CHECK(strstr(line, "longest gap 0 ms (0 over 200 ms)") != NULL, "%s", line);
 
     /* the mode */
-    CHECK(ico_audio_pick_mode(1, NULL, 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
     CHECK_STR(why, "");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, "0", &why) == ICO_AUDIO_MODE_PULL);
-    CHECK(ico_audio_pick_mode(1, NULL, 1, NULL, &why) == ICO_AUDIO_MODE_SYNC);
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, "0", &why) == ICO_AUDIO_MODE_PULL);
+    CHECK(ico_audio_pick_mode(1, NULL, 1, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
     CHECK_STR(why, "audio_dump");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, "1", &why) == ICO_AUDIO_MODE_SYNC);
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, "1", &why) == ICO_AUDIO_MODE_SYNC);
     CHECK_STR(why, "[dev] audio_sync");
-    CHECK(ico_audio_pick_mode(1, "0", 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
+    CHECK(ico_audio_pick_mode(1, "0", 0, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
     CHECK_STR(why, "audio=0");
-    CHECK(ico_audio_pick_mode(1, "1", 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
-    CHECK(ico_audio_pick_mode(0, NULL, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
+    CHECK(ico_audio_pick_mode(1, "1", 0, 0, NULL, &why) == ICO_AUDIO_MODE_PULL);
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 1, NULL, &why) == ICO_AUDIO_MODE_SYNC);
+    CHECK_STR(why, "fixed clock");
+    CHECK(ico_audio_pick_mode(0, NULL, 0, 0, NULL, &why) == ICO_AUDIO_MODE_SYNC);
     CHECK_STR(why, "headless build");
-    CHECK(ico_audio_pick_mode(1, NULL, 0, NULL, NULL) == ICO_AUDIO_MODE_PULL);
+    CHECK(ico_audio_pick_mode(1, NULL, 0, 0, NULL, NULL) == ICO_AUDIO_MODE_PULL);
 }
 
 int main(void)

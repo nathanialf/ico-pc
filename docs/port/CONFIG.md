@@ -319,7 +319,7 @@ store (`backend`, `unlock_credits`):
 | `verify` | `0` skips the disc image's SHA-1 check when it is mounted directly |
 | `use_iso` | `1` mounts the disc image instead of `ico.o2r`; default 1 headless, 0 in the window build |
 | `write_config` | `1` writes the first-run `config.toml`; default 1 in the window build, 0 headless |
-| `headless`, `fixed_clock` | the fixed clock: `fixed_clock` when present, else on for the headless build, `headless=1` or a trace to an explicit path (`ico_host_fixed_clock`) |
+| `headless`, `fixed_clock` | the fixed clock: `fixed_clock` when present, else on for the headless build, `headless=1` or a trace to an explicit path (`ico_host_fixed_clock`); with it the audio also renders on the game's clock ([AUDIO.md](AUDIO.md#the-outputs-clock)) |
 | `dump_every`, `dump_dir`, `dump_interp`, `dump_from` | [rd](ARCHITECTURE.md#terms) frame dumps every N frames into a folder beside the ini (`export_dump_keys`) |
 | `start_stage`, `switch_to`, `switch_at` | the stage Main starts in; one forced stage change (exported) |
 | `popup_test` | test popups from Main tick 100 (exported as `ICO_UI_POPUP_TEST`) |
