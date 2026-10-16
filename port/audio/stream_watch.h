@@ -19,11 +19,19 @@
  *   - sndn2: key-off from the sequencer (<function>) on stream voice V
  *       a sequencer key-off (sce/libsndn2/sound.c) hit one of the four
  *       voices the streams own (slot state 3);
- *   - sndn2: packet page full ... (sndn2_host.c, ico_sndn2_pk_full).
+ *   - sndn2: packet page full ... (sndn2_host.c, ico_sndn2_pk_full);
+ *   - sndn2: the first packet carried past the page's 255 ..., and the
+ *       first stream packet carried (open, volume, pitch, play, stop),
+ *       once a run each (issue 101: without the carry a stream opened on a
+ *       full page keeps the volume the last stream left).
+ *   The key-on line ends with the page's fill at the open:
+ *   `(opened on a page of 37 packets)`, or `(opened on a full page:
+ *   carried past its 255)`.
  *
  * The heartbeat carries `adpcm: 43@2 vol 3fff/3fff env 7fff/7fff, -` (the
  * game's two stream slots: stream @ first voice, or `-`), and the end of
- * the run one `audio: streams: ...` line with the counts.
+ * the run one `audio: streams: ...` line with the counts (the streams
+ * opened on a full page and the stream packets carried among them).
  *
  * Everything but ico_audio_stream_status runs on the simulation thread;
  * ico_audio_stream_status is the heartbeat thread's plain read of a text
@@ -51,6 +59,11 @@ typedef struct IcoAudioStreamStats {
     unsigned int pages_full; /* EE packet pages that reached 255 packets */
     unsigned int carried;    /* packets past the 255th, carried to the driver */
     unsigned int dropped;    /* packets past the carry list's room, lost */
+    /* issue 101: stream packets (0x3E open, 0x40 volume, 0x41 pitch, 0x42
+       play, 0x43 stop) among the carried ones, and the game's streams
+       whose open packet ran on a full page or was carried past it */
+    unsigned int stream_carried;
+    unsigned int opens_on_full;
 } IcoAudioStreamStats;
 
 void ico_audio_stream_stats(IcoAudioStreamStats *out);
@@ -69,7 +82,11 @@ void sw_played(uint32_t voice, uint32_t bytes);
 void sw_stop(uint32_t voice); /* 0x43 for `voice`, before its key-off */
 void sw_tick(void);           /* start of each driver tick */
 void sw_page_full(void);
-void sw_carried(void);
+/* a packet past the full page's 255th, carried (cmd: its command) */
+void sw_carried(int cmd);
+/* the page the driver runs now: its packet count, and 1 while it runs the
+   packets carried past it (sndn2_host.c), for the open's page fill */
+void sw_page(int fill, int carried);
 void sw_dropped(void);
 void sw_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 

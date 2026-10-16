@@ -53,9 +53,11 @@ void ico_audio_host_shutdown(void)
     if (!streams_said && ss.opened + ss.keyoffs + ss.pages_full > 0) {
         streams_said = 1;
         fprintf(stderr,
-                "audio: streams: %u opened; %u key-offs from the sequencer on stream voices; %u "
-                "packet pages full (%u packets carried, %u dropped)\n",
-                ss.opened, ss.keyoffs, ss.pages_full, ss.carried, ss.dropped);
+                "audio: streams: %u opened, %u of them on a full packet page; %u key-offs from "
+                "the sequencer on stream voices; %u packet pages full (%u packets carried, %u of "
+                "them a stream's, %u dropped)\n",
+                ss.opened, ss.opens_on_full, ss.keyoffs, ss.pages_full, ss.carried,
+                ss.stream_carried, ss.dropped);
     }
     spu2_get_stats(&st);
     if (st.chunked_frames + st.exact_frames > 0) {

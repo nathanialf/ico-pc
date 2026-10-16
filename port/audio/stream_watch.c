@@ -33,6 +33,8 @@ typedef struct Watch {
     int countdown; /* ticks until the key-on line; 0 when none is due */
     int half_logged;
     unsigned int seq; /* the order of the game's opens */
+    int page_fill;    /* the packets of the page its open ran on */
+    int carried;      /* its open was carried past a full page */
 } Watch;
 
 /* two per game slot: a new open's watch can wait for its 0x3E while the
@@ -43,6 +45,10 @@ static Watch W[WATCHES];
 static unsigned int seq_next;
 static IcoAudioStreamStats stats;
 static IcoAudioLogSink sink;
+/* the page the driver runs now (sw_page) */
+static int page_fill, page_carried;
+/* the once-a-run carry lines (sw_carried) */
+static int carry_said, stream_carry_said;
 
 /* the heartbeat's text, published whole: the reader takes buf[cur] */
 static char status_buf[2][128];
@@ -73,6 +79,8 @@ void ico_audio_stream_watch_reset(void)
     memset(W, 0, sizeof W);
     memset(&stats, 0, sizeof stats);
     seq_next = 0;
+    page_fill = page_carried = 0;
+    carry_said = stream_carry_said = 0;
     snprintf(status_buf[0], sizeof status_buf[0], "adpcm: -, -");
     snprintf(status_buf[1], sizeof status_buf[1], "adpcm: -, -");
     status_cur = 0;
@@ -177,7 +185,22 @@ static void log_levels(const Watch *w, const char *when)
     char lv[112];
 
     levels(w, voices, sizeof voices, lv, sizeof lv);
-    sw_log("adpcm: %d %svoices %s %s", w->no, when, voices, lv);
+    if (when[0] != '\0') {
+        sw_log("adpcm: %d %svoices %s %s", w->no, when, voices, lv);
+    } else if (w->carried) {
+        /* the key-on line: the page its open ran on (issue 101) */
+        sw_log("adpcm: %d voices %s %s (opened on a full page: carried past its 255)", w->no,
+               voices, lv);
+    } else {
+        sw_log("adpcm: %d voices %s %s (opened on a page of %d packets)", w->no, voices, lv,
+               w->page_fill);
+    }
+}
+
+void sw_page(int fill, int carried)
+{
+    page_fill = fill;
+    page_carried = carried != 0;
 }
 
 void sw_open(uint32_t voice)
@@ -186,6 +209,11 @@ void sw_open(uint32_t voice)
 
     if (w != NULL) {
         w->state = W_OPEN;
+        w->page_fill = page_fill;
+        w->carried = page_carried;
+        if (page_carried || page_fill >= 255) {
+            stats.opens_on_full++;
+        }
     }
 }
 
@@ -288,9 +316,45 @@ void sw_page_full(void)
     stats.pages_full++;
 }
 
-void sw_carried(void)
+static const char *stream_packet(int cmd)
 {
+    switch (cmd) {
+    case 0x3E:
+        return "open";
+    case 0x40:
+        return "volume";
+    case 0x41:
+        return "pitch";
+    case 0x42:
+        return "play";
+    case 0x43:
+        return "stop";
+    default:
+        return NULL;
+    }
+}
+
+void sw_carried(int cmd)
+{
+    const char *sp = stream_packet(cmd);
+
     stats.carried++;
+    if (!carry_said) {
+        carry_said = 1;
+        sw_log("sndn2: the first packet carried past the page's 255 (packet 0x%02X): the PS2 "
+               "would have lost it; the driver runs it after the page's own",
+               (unsigned)cmd);
+    }
+    if (sp == NULL) {
+        return;
+    }
+    stats.stream_carried++;
+    if (!stream_carry_said) {
+        stream_carry_said = 1;
+        sw_log("sndn2: the first stream packet carried past the page's 255 (0x%02X, a stream's "
+               "%s): without the carry the stream's volume would have been lost",
+               (unsigned)cmd, sp);
+    }
 }
 
 void sw_dropped(void)

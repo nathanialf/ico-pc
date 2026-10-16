@@ -871,10 +871,19 @@ static void test_full_page(void)
     CHECK(spu2_sd_get_param(vsel(1, SPU2_SD_VPARAM_PITCH)) == (44100 << 12) / 48000);
     ico_audio_stream_stats(&st);
     CHECK(st.pages_full == 1 && st.carried == 8 && st.dropped == 0);
-    CHECK(ncaught == 1);
+    /* the open's seven: two opens, volumes and pitches, the play */
+    CHECK(st.stream_carried == 7);
+    CHECK(ncaught == 3);
     CHECK(strcmp(caught[0],
                  "sndn2: packet page full (255 packets: 0x01 x255); the later packets of "
                  "this tick are carried to the driver (page 1)") == 0);
+    /* once a run each: the first carry, the first stream packet's (issue 101) */
+    CHECK(strcmp(caught[1], "sndn2: the first packet carried past the page's 255 (packet 0x01): "
+                            "the PS2 would have lost it; the driver runs it after the page's "
+                            "own") == 0);
+    CHECK(strcmp(caught[2], "sndn2: the first stream packet carried past the page's 255 (0x3E, "
+                            "a stream's open): without the carry the stream's volume would have "
+                            "been lost") == 0);
     /* the KEYON follows the two FILLs: the voices sound */
     for (i = 0; i < 6; i++) {
         render(960);
@@ -908,6 +917,8 @@ static void test_full_page(void)
     CHECK(spu2_sd_get_param(vsel(1, SPU2_SD_VPARAM_VOLR)) == 0x3000);
     ico_audio_stream_stats(&st);
     CHECK(st.pages_full == 3 && st.carried == 8 + 2 + 2 && st.dropped == 0);
+    CHECK(st.stream_carried == 7 + 2 + 2);
+    CHECK(ncaught == 5); /* the two later pages' full lines; no carry line again */
     SgCalledTickProc();
     ico_audio_stream_stats(&st);
     CHECK(st.pages_full == 3);

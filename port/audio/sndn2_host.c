@@ -471,7 +471,7 @@ void ico_sndn2_pk_full(const int *page, int count, int cmd, int id, int w2, int 
     C.pk[C.n][2] = (uint32_t)w2;
     C.pk[C.n][3] = (uint32_t)w3;
     C.n++;
-    sw_carried();
+    sw_carried(cmd);
 }
 
 /* --- The reply page ---------------------------------------------------------- */
@@ -504,10 +504,13 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
 
     spu2_sd_set_time(spu2_time());
     if (rpc_number == ICO_SNDN2_RPC_TICK) {
+        /* the page's fill, for a stream open's line (stream_watch.h) */
+        sw_page(pk != NULL ? ssize / 16 : 0, 0);
         for (i = 0; pk != NULL && i + 16 <= ssize; i += 16) {
             dispatch(pk + i);
         }
         /* AU-7: what the full page could not hold, in the order sent */
+        sw_page(pk != NULL ? ssize / 16 : 0, 1);
         for (i = 0; i < C.n; i++) {
             uint8_t b[16];
 
@@ -519,6 +522,7 @@ void *ico_sndn2_host_serve(unsigned int rpc_number, void *send, int ssize, int r
         }
         C.n = 0;
         C.page_full = 0;
+        sw_page(0, 0);
         st_adpcm_tick();
         H.last_reply = fill_page();
         /* the host SIF copies `rsize` bytes from the reply: never past the
