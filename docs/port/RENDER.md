@@ -647,8 +647,10 @@ measured`: the measure (`vkGetPipelineCacheData` over the whole cache) and the w
 batches are kept there to the lazy path and to a device of the table (`cacheKeptPerBatch`). On an
 RTX 3090 with a 21 MB cache, a measure after every batch and a write or compare every 5 s took a
 warm start from 1.9 s to 16.7 s and 31.2 s, every pipeline a cache hit. The cache file is written
-to `<path>.tmp`, flushed to the disk, then moved over the old file in one step (`vkr_cache_write`),
-so a freeze mid-write leaves the old cache or the new one, never an empty or missing file.
+to `<path>.tmp`, flushed to the disk during a run, then moved over the old file in one step
+(`vkr_cache_write`), so a freeze mid-write leaves the old cache or the new one, never an empty or
+missing file; the exit's write is not flushed, and is skipped when the cache's size is unchanged
+([RHI.md](RHI.md#vulkan)).
 
 **The batches' lines.** Every batch of the set is logged as it completes, the 2D ones too: `rd:
 pipelines: compiled 2D batch 193-224 of 527 (compiler ...): 32 pipelines 0.02-0.21 s, mean 0.08 s,

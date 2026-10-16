@@ -286,8 +286,12 @@ end is left to end on its own (`port/rhi/vk/vk_swapchain.c`, the display's timin
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
 `pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
 starts empty, as does data the driver refuses. Every pipeline is created through it, and
-`rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file. `rhi_pipeline_cache_save`
-writes it the same way while the device is up, keeping the cache, and logs
+`rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file, not synced to the disk
+(`pipeline cache: N bytes written to <path> at exit in T ms`), and not at all when its data's size
+is the one this run loaded or last wrote (`pipeline cache unchanged, not written (N bytes in
+<path>)`: a run that made no new pipeline; a 21 MB cache took seconds on a USB stick).
+`rhi_pipeline_cache_save` writes it the same way while the device is up, flushed to the disk
+before the rename, keeping the cache, and logs
 `pipeline cache: N bytes written to <path> in T ms` (data of the size the file already holds is not
 written again); the window calls it after the start-up set, so the file holds the set when a run
 never reaches `rhi_shutdown` (a phone's system ends the app, or the device is lost). Nothing is

@@ -148,8 +148,10 @@ static bool vkr_rename_over(const char *from, const char *to)
 /* the cache's data to <path>.tmp, renamed over the file; its size in
  * bytes, 0 when nothing was written.  skipSame: not when the data's size
  * is the file's as this run read or wrote it (*same set when that skipped
- * the write) */
-static size_t vkr_cache_write(bool skipSame, bool *same)
+ * the write).  sync: the bytes onto the disk before the move (the writes
+ * during a run, which a device that freezes or a start the system ends
+ * may follow); the exit's write leaves that to the system */
+static size_t vkr_cache_write(bool skipSame, bool *same, bool sync)
 {
     size_t size = 0;
     void *blob = NULL;
@@ -186,7 +188,7 @@ static size_t vkr_cache_write(bool skipSame, bool *same)
          * file (never a remove first): a device that freezes or a start the
          * system ends mid-write (issues 93 and 107) leaves the old cache or
          * the new one, never an empty or missing file */
-        ok = ok && vkr_file_sync(fp);
+        ok = ok && (!sync || vkr_file_sync(fp));
         ok = fclose(fp) == 0 && ok;
     }
     free(blob);
@@ -203,7 +205,7 @@ bool rhi_pipeline_cache_save(void)
 {
     const uint64_t t0 = vkr_now_ns();
     bool same = false;
-    const size_t size = vkr_cache_write(true, &same);
+    const size_t size = vkr_cache_write(true, &same, true);
     if (size) {
         VKR_LOG("pipeline cache: %zu bytes written to %s in %.1f ms", size, s_cachePath,
                 (double)(vkr_now_ns() - t0) / 1e6);
@@ -229,7 +231,19 @@ void vkr_pipeline_cache_shutdown(void)
     if (!g_vkr.pipelineCache) {
         return;
     }
-    (void)vkr_cache_write(false, NULL);
+    /* the exit's write: not when the data's size is the file's as this run
+     * read or wrote it (a run that made no new pipeline; 21 MB on an RTX
+     * 3090, seconds on a USB stick), and not synced */
+    const uint64_t t0 = vkr_now_ns();
+    bool same = false;
+    const size_t size = vkr_cache_write(true, &same, false);
+    if (same) {
+        VKR_LOG("pipeline cache unchanged, not written (%zu bytes in %s)", s_cacheFileSize,
+                s_cachePath);
+    } else if (size) {
+        VKR_LOG("pipeline cache: %zu bytes written to %s at exit in %.1f ms", size, s_cachePath,
+                (double)(vkr_now_ns() - t0) / 1e6);
+    }
     vkDestroyPipelineCache(g_vkr.device, g_vkr.pipelineCache, NULL);
     g_vkr.pipelineCache = VK_NULL_HANDLE;
 }
