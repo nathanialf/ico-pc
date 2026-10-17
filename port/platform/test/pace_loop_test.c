@@ -54,7 +54,10 @@
  *   presents finishing near a vblank (the ratchet), D3D12's full queue
  *   at +163 ppm, the skip guard (no skip after a present that waited for
  *   the display, while a 30 ms step and a slow GPU still skip), and clocks
- *   not believed (twice the rate, one that stops, missed wake-ups).
+ *   not believed (twice the rate, one that stops, missed wake-ups);
+ *   the late-present skip (testLateSkipLock): 39 ms presents of a 30
+ *   frames a second game keep real time, never two frames in a row
+ *   unpresented, no resync; 2 ms presents never skip.
  */
 #include <stdio.h>
 #include <string.h>
@@ -523,7 +526,7 @@ static Run run(Fake *f, const Opt *o)
         }
         if (newFrame) {
             /* the frame that just closed: its alphas were 1 / (2n) .. 1 */
-            const unsigned gaps = L->skipped + L->unshown;
+            const unsigned gaps = L->skipped + L->unshown + L->skippedLate;
 
             for (unsigned i = 0; i < f->nAlpha && vsync > 4 && gaps == gapsAtFrame; i++) {
                 r.alphaChecked++;
@@ -1134,6 +1137,66 @@ static void testSkipGuard(void)
     }
 }
 
+/* the late-present skip under the lock (pace_late_skip, the timer path's
+   rule): which frames were presented, the frame closing at each even
+   vsync (testLateSkipLock) */
+static unsigned s_trackFrame;
+static unsigned char s_trackShown[2048];
+
+static bool f_present_track(void *u, float a)
+{
+    s_trackShown[s_trackFrame] = 1;
+    return f_present(u, a);
+}
+
+/* A 30 frames a second game whose presents take 39 ms (a GPU-bound phone
+   at 2x on a 60 Hz panel, where Android's default framerate 60 takes the
+   lock; each step 2.4 ms) keeps real time under the lock: new frames left
+   unpresented while the next step is a whole period late (skippedLate),
+   never two in a row, more than half the frames presented, no lag dropped
+   (the rule before presented every new frame: 43.8 ms a frame against
+   33.4, a resync every few frames).  Presents of 2 ms never skip. */
+static void testLateSkipLock(void)
+{
+    for (int slow = 0; slow < 2; slow++) {
+        Fake f = fake(D60);
+        PaceLock L;
+        const PaceLockIo io = {&f, f_now, f_present_track, f_sleep, NULL, NULL, NULL, NULL, NULL};
+        unsigned frames = 0, run = 0, worst = 0, shown = 0;
+
+        f.cost = slow ? 39 * MS : 2 * MS;
+        f.gpu = 1 * MS;
+        memset(s_trackShown, 0, sizeof s_trackShown);
+        pace_lock_reset(&L, 1, R60, NTSC, f.now, true, PACE_CLOCK_KIND_NONE);
+        for (unsigned v = 0; v < 1200; v++) {
+            const bool close = v % 2 == 0;
+
+            f.now += 2400000ull; /* the step */
+            if (close) {
+                s_trackFrame = ++frames;
+            }
+            (void)pace_lock_vsync(&L, &io, close);
+        }
+        /* the last frame may still be due: not counted */
+        for (unsigned k = 1; k < frames; k++) {
+            shown += s_trackShown[k];
+            run = s_trackShown[k] ? 0 : run + 1;
+            worst = run > worst ? run : worst;
+        }
+        printf("presents of %s: %u of %u frames presented, %u late skips, at most %u in a row "
+               "unpresented, %u resyncs\n",
+               slow ? "39 ms" : "2 ms", shown, frames - 1, L.skippedLate, worst, L.resyncs);
+        if (slow) {
+            CHECK(L.skippedLate > 0);
+            CHECK(L.resyncs == 0);
+            CHECK(worst == 1);
+            CHECK(shown * 2 > frames - 1 && shown < frames - 1);
+        } else {
+            CHECK(L.skippedLate == 0 && L.resyncs == 0 && shown == frames - 1);
+        }
+    }
+}
+
 /* Vblank clocks not believed: an output at twice the rate (another
    display), one that stops; and one that misses every 7th wake-up (each
    such interval counts two refreshes): the slot on the display within 3
@@ -1715,6 +1778,7 @@ int main(void)
     testFifoRatchet();
     testQueueBlocking();
     testSkipGuard();
+    testLateSkipLock();
     testVblankClockLeft();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);

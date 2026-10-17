@@ -245,11 +245,13 @@ program under an environment switch ([Environment switches](#environment-switche
   a short buffer) (`pump_watch`).
 - `pace_loop_test.c`: the [vsync lock](ARCHITECTURE.md#terms)'s loop on a grid of the wall clock
   under a fake clock and a fake swapchain, with and without the display clock, at 60, 59.94 and
-  120 Hz and on a display that drifts from its report (`pace_loop`).
+  120 Hz and on a display that drifts from its report, and its late-present skip (39 ms presents
+  of a 30 frames a second game keep real time, never two frames in a row unpresented)
+  (`pace_loop`).
 - `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
-  synthetic display, and the late-present skip: a whole period behind skips with no audio queue
-  read, less does not, slow presents skip past the deadline, never two frames in a row while the
+  synthetic display, and the late-present skip: a whole period behind skips, with or without
+  sound, less does not, slow presents skip past the deadline, never two frames in a row while the
   same frame may stay skipped; the timer path's loop under a fake clock keeps a 30 frames a second
   game on 39 ms presents at real time with no resync, where a frame skipped for one step only fell
   behind, and a 60 frames a second game on 20 ms presents through the late arm alone

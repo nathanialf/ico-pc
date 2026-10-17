@@ -6,7 +6,7 @@
 ## Fixed
 
 - The sound keeps playing through short loading pauses, and it no longer clicks when the picture falls behind. When the game stops for longer, the sound pauses with it instead of running ahead. This is for Windows, Linux, Android and Mac. A short click when you leave a room can still be the game stopping its own sounds, as it does on the PlayStation 2.
-- On phones and other devices that cannot draw every picture in time at the chosen settings, the game keeps its normal speed by showing fewer pictures, instead of slowing down and catching up in jumps.
+- On phones and other devices that cannot draw every picture in time at the chosen settings, the game keeps its normal speed by showing fewer pictures, instead of slowing down and catching up in jumps (at every frame rate except Original).
 - On a Mac the game is now fast with anti-aliasing off. It used a slower way of mixing colours, which made the game only feel smooth with anti-aliasing on. The only cost is that a few blended colours can be one shade lighter than on the PlayStation 2.
 - Drawing is cheaper on slow graphics chips: the glow and the other full-screen effects do less work for the same picture, and a few see-through objects are drawn in one pass, as the PlayStation 2 orders them. The gain is on phones, handhelds and older cards; fast cards will not notice.
 - The glow is now drawn at the PlayStation 2's size at every resolution, as on the console, which makes it much cheaper at 2x and above; the Glow size setting is gone.

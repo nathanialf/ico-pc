@@ -154,8 +154,7 @@ void ico_audio_sdl_push(const int16_t *frames, int count);
    ahead the stream plays ICO_AUDIO_TRIM slower until it is under 32 ms
    (out_sdl.c, the file comment).  Never under the audio lock. */
 void ico_audio_sdl_game_step(int frames);
-/* Whether an output stream is open (0 without the SDL output); the window's
-   late-present skip runs only with one (pace_policy.h pace_late_skip). */
+/* Whether an output stream is open (0 without the SDL output). */
 int ico_audio_sdl_active(void);
 /* The audio queued on the stream in milliseconds, -1 when no stream is
    open; and the cushion the queue is kept at, 0 when none is (diagnostics

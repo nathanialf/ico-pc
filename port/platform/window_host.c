@@ -215,9 +215,10 @@ static struct {
     /* the lock's counts at the 10 s block's start */
     double lockNudgeAt;
     unsigned lockSeenAt, lockLateAt, lockEarlyAt, lockWaitedAt, lockSkippedAt;
-    double audioRatio; /* the audio's rate ratio last set (ico_audio_set_rate_ratio) */
-    Uint64 lastReturn; /* when the last present returned (0: none yet) */
-    Uint64 lateMaxNs;  /* the block's latest step against when it was due */
+    unsigned lockSkippedLateAt; /* the lock's late skips counted into statSkipLate */
+    double audioRatio;          /* the audio's rate ratio last set (ico_audio_set_rate_ratio) */
+    Uint64 lastReturn;          /* when the last present returned (0: none yet) */
+    Uint64 lateMaxNs;           /* the block's latest step against when it was due */
     /* the slow-step lines ([dev] slow_step_ms, 0 off): the threshold,
        the block's count and lines, ico_window_pump's time, the renderer's
        texture decodes and pipeline creations at the last pace's end */
@@ -4056,6 +4057,10 @@ static void pace_log(Uint64 now)
         s_pres.lockEarlyAt = L->early;
         s_pres.lockWaitedAt = L->waited;
         s_pres.lockSkippedAt = L->skipped;
+        /* its late skips are the 10 s line's "late" (the timer path's
+           rule, pace_late_skip) */
+        s_pres.statSkipLate += L->skippedLate - s_pres.lockSkippedLateAt;
+        s_pres.lockSkippedLateAt = L->skippedLate;
     } else if (s_pres.fifoLock) {
         /* fifo with a cap that is not a whole multiple of the game's rate
            (144 on 59.94): nothing is locked */
@@ -4373,6 +4378,9 @@ static bool lock_io_present(void *u, float a)
     if (!present_once(a, c->refresh, c->period)) {
         return false;
     }
+    /* the timer path's late skip closes with any present (pace_late_skip):
+       back on it after the lock, its next frame may be skipped again */
+    s_pres.skipOpen = false;
     rhi_get_stats(&after);
     /* how long it waited: the backend's own blocked time in it (Vulkan:
        the acquire, the present and the fence waits; D3D12: the frame
@@ -4535,6 +4543,7 @@ static void pace_locked(unsigned n, Uint64 period)
         s_pres.lockNudgeAt = 0.0;
         s_pres.lockSeenAt = s_pres.lockLateAt = s_pres.lockEarlyAt = 0;
         s_pres.lockWaitedAt = s_pres.lockSkippedAt = 0;
+        s_pres.lockSkippedLateAt = 0;
         s_pres.lockWaitNs = 0;
         s_pres.nextPresent = 0;
         {
@@ -4760,18 +4769,18 @@ static void pace(int hz)
         now = SDL_GetTicksNS();
         /* the late-present skip (pace_policy.h pace_late_skip): a new frame
            behind the deadline is left unpresented (the next step at once;
-           the next present shows the newer frame) with the audio playing
-           when the next step is already a whole period late (the step
-           debt: now against its due time, s_deadline, as "step late"
-           measures it) or presents are slow; never two frames in a row
-           (pace_skipped_last), the same frame again while it holds.
-           Without audio, as below.  No step or audio is dropped, only
-           presents */
+           the next present shows the newer frame) when the next step is
+           already a whole period late (the step debt: now against its due
+           time, s_deadline, as "step late" measures it) or presents are
+           slow; never two frames in a row (pace_skipped_last), the same
+           frame again while it holds; with or without sound.  The vsync
+           lock has the late arm too (pace_lock_vsync).  No step or audio is
+           dropped, only presents */
         {
-            const PaceSkip why = pace_late_skip(
-                s_pres.presentedFrame != s_pres.frame,
-                pace_skipped_last(s_pres.skipOpen, s_pres.skipFrame, s_pres.frame), s_pres.paceSlow,
-                ico_audio_sdl_active() != 0, now, s_deadline, period);
+            const PaceSkip why =
+                pace_late_skip(s_pres.presentedFrame != s_pres.frame,
+                               pace_skipped_last(s_pres.skipOpen, s_pres.skipFrame, s_pres.frame),
+                               s_pres.paceSlow, now, s_deadline, period);
 
             if (why != PACE_SKIP_NONE) {
                 s_pres.skipOpen = true;

@@ -143,13 +143,15 @@ the PlayStation 2; the log writes down how loud each one was.
 ## The game is slow on an older graphics card
 
 When the graphics card cannot draw every picture in time, the game keeps
-its normal speed (with the sound on) and leaves some pictures out, so it
-looks less smooth instead of slowing down. If the game stutters, or your
-graphics card is always at full load, these settings lower the load the
-most (Options):
+its normal speed and leaves some pictures out, so it looks less smooth
+instead of slowing down. This works at every frame rate except Original.
+If the game stutters, or your graphics card is always at full load, these
+settings lower the load the most (Options):
 
 - **Frame rate** Original draws one picture per game step, as on the PS2,
   instead of also drawing the pictures in between: about half the work.
+  It never leaves a picture out, so if the card still cannot keep up there,
+  the game slows down a little instead.
 - **Resolution** 1x is the PS2's own sharpness and the lightest of all.
 
 On a Mac the game runs fast with anti-aliasing on or off: it draws with

@@ -72,10 +72,10 @@ bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, u
     return lastReturnNs + k * refreshNs > deadlineNs;
 }
 
-PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, bool audioActive,
-                        uint64_t nowNs, uint64_t deadlineNs, uint64_t periodNs)
+PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, uint64_t nowNs,
+                        uint64_t deadlineNs, uint64_t periodNs)
 {
-    if (nowNs < deadlineNs || !newFrame || skippedLast || !audioActive) {
+    if (nowNs < deadlineNs || !newFrame || skippedLast) {
         return PACE_SKIP_NONE;
     }
     /* a whole step period or more behind the grid */
@@ -602,6 +602,7 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
     if (newFrame) {
         const unsigned v = L->vsyncsSinceClose;
 
+        L->frames++;
         /* the first close since the reset ends no whole frame: perFrame
            stays (two) until the next */
         if (L->closeSeen) {
@@ -660,6 +661,20 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
             L->pendCount = 0;
             continue;
         }
+        /* the late-present skip (pace_late_skip, the timer path's rule): a
+           frame not presented yet while the next step is already a whole
+           period late is left unpresented, never two frames in a row
+           (pace_skipped_last on the closes' count), the same frame again
+           while it holds; the steps catch up instead of falling behind
+           until the lag is dropped */
+        if (pace_late_skip(!L->framePresented,
+                           pace_skipped_last(L->skipOpen, L->skipFrame, L->frames), false, now,
+                           next, (uint64_t)period) != PACE_SKIP_NONE) {
+            L->skipOpen = true;
+            L->skipFrame = L->frames;
+            L->skippedLate++;
+            continue;
+        }
         if (now >= next && L->framePresented &&
             (!L->lastBlocked || (double)(now - next) >= L->slotNs)) {
             /* behind: no picture again until the step.  Not after a
@@ -690,6 +705,7 @@ uint64_t pace_lock_vsync(PaceLock *L, const PaceLockIo *io, bool newFrame)
 
         L->presents++;
         L->framePresented = true;
+        L->skipOpen = false;
         lock_trace(L, ret, id > L->lastId ? id : 0);
         L->lastReturn = ret;
         L->lastBlocked = (double)waitNs * 4.0 >= L->slotNs;

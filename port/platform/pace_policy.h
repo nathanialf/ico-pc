@@ -179,7 +179,13 @@ typedef struct PaceIntervals {
  * lock).  A present that waited a quarter of a slot or more (PaceLockIo.
  * waited: the backend's own acquire, present and fence-wait time where it
  * gives one, else the whole present) waited for a vblank (the queue was
- * full) and is counted (waited, waitedMaxNs).  The skip guard: a step
+ * full) and is counted (waited, waitedMaxNs).  The late-present skip
+ * (pace_late_skip, as on the timer path): a new frame not presented yet
+ * while the next step is a whole period or more late is left unpresented
+ * (skippedLate), never two frames in a row, the same frame again while it
+ * holds, so a renderer slower than the frames (a GPU-bound phone) drops
+ * pictures instead of the game falling behind until the lag is dropped.
+ * The skip guard: a step
  * that ends past the next step's due time skips the rest of its presents
  * (a frame already shown), unless the present before waited for the
  * display and the step is less than a slot behind: then the lateness is
@@ -248,6 +254,11 @@ typedef struct PaceLock {
     bool framePresented; /* the last frame that closed was presented */
     bool frameHeld;      /* cleared at each close; not read (no pace_fifo_hold under the lock) */
     bool lastBlocked;    /* the last present waited a quarter of a slot or more (.waited) */
+    /* the late-present skip (pace_late_skip): the closes since the reset, a
+       frame left unpresented and none presented since, its close's number */
+    uint32_t frames;
+    bool skipOpen;
+    uint32_t skipFrame;
     /* the display clock */
     int clockKind; /* PACE_CLOCK_KIND_* offered */
     int clock;     /* PACE_CLOCK_*: its state */
@@ -284,6 +295,7 @@ typedef struct PaceLock {
        a slot or more (PaceLockIo.waited; FIFO: the queue was full, they
        waited for a vblank), waitedMaxNs the longest wait */
     unsigned presents, steps, waited, unshown, skipped, resyncs;
+    unsigned skippedLate; /* new frames left unpresented by the late-present skip */
     uint64_t waitedMaxNs;
     uint64_t droppedNs; /* lag dropped (more than PACE_LOCK_DEBT_VSYNCS periods) */
     /* the rate block (pace_lock_rate_ratio) */
@@ -407,14 +419,16 @@ double pace_lock_rate_ratio(PaceLock *L);
 bool pace_fifo_hold(uint64_t nowNs, uint64_t lastReturnNs, uint64_t refreshNs, uint64_t deadlineNs,
                     bool frameShown, bool frameHeld);
 
-/* Why the timer path left a new frame unpresented (pace_late_skip). */
+/* Why a new frame was left unpresented (pace_late_skip). */
 typedef enum PaceSkip {
     PACE_SKIP_NONE = 0,
     PACE_SKIP_LATE, /* the simulation a whole step period or more behind its grid */
     PACE_SKIP_SLOW  /* presents slow (pace_slow_present) */
 } PaceSkip;
 
-/* The timer path's late-present skip: whether the window leaves a new frame
+/* The late-present skip, on the timer path and under the vsync lock
+ * (pace_lock_vsync, deadlineNs the next step's due time, the slow arm
+ * not used): whether the window leaves a new frame
  * unpresented and runs the next step at once (the next present shows the
  * newer frame), so the simulation catches up with real time instead of
  * falling behind until the pacer drops the lag (a resync).  A present that
@@ -424,14 +438,15 @@ typedef enum PaceSkip {
  * only when all hold: the next step's due time has passed (nowNs >=
  * deadlineNs), the frame is not presented yet (newFrame), the frame before
  * it was presented (skippedLast false, pace_skipped_last: never two frames
- * in a row, so the picture keeps at least every other frame), the audio
- * plays (audioActive: without a sound device every new frame is
- * presented), and either the simulation is a whole step period or more
+ * in a row, so the picture keeps at least every other frame), and either
+ * the simulation is a whole step period or more
  * behind (nowNs - deadlineNs >= periodNs: PACE_SKIP_LATE, the debt the
  * window's "step late" figure measures at the step's start) or presents are
  * slow (paceSlow, pace_slow_present: PACE_SKIP_SLOW).  The late arm comes
- * from the loop's own lateness, not the audio queue: on the device's clock
- * the audio keeps no queue that a late step drains.  The same frame may be
+ * from the loop's own lateness, not the audio queue (on the device's clock
+ * the audio keeps no queue that a late step drains), so it holds with or
+ * without a sound device: a game behind real time is slow with or without
+ * sound.  The same frame may be
  * left unpresented again at the next steps while the condition holds (a
  * game at 30 frames a second closes a frame every second step; skipping it
  * at one step and presenting it at the next saves nothing), until a newer
@@ -439,8 +454,8 @@ typedef enum PaceSkip {
  * renderer that keeps up (a FIFO return just past the deadline, less than a
  * period behind, presents not slow) never skips.  No step or audio is
  * dropped, only presents. */
-PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, bool audioActive,
-                        uint64_t nowNs, uint64_t deadlineNs, uint64_t periodNs);
+PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, uint64_t nowNs,
+                        uint64_t deadlineNs, uint64_t periodNs);
 
 /* pace_late_skip's skippedLast: a frame was left unpresented and none
  * presented since (skipOpen; a present closes it), and it was an older frame
