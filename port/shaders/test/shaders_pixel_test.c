@@ -23,6 +23,14 @@
  *           a noise texture, every step from 0 to past the box's widest;
  *           gs_fog_channel (the fog above 1x) against a1x_fog's formula
  *           over entries, fractions, factors and every dither threshold
+ *   grid    (CPU) common.hlsli gs_grid_level's claim: the coordinate it
+ *           hands the sampler, q / 16 / size in float, puts the sampler's
+ *           texel pair and weight at the GS's ((q - 8) >> 4, (q - 8) & 15)
+ *           for every power-of-two size to 2048 and q over four periods
+ *           each way; and the residual of an exact bilinear (one weighted
+ *           sum, rounded) against the GS's truncating steps (gs_bilerp)
+ *           over every pair of 4-bit weights and texel values in steps of
+ *           17: 0 to 2 levels above, never below, the histogram printed
  *
  * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual,
  * and the draws that read the second output (the lerps, Cd*FIX + Cs, the
@@ -349,10 +357,79 @@ static void checkAbove1xKernels(void)
            failures == f0 ? "ok" : "FAILED", kinds[0], kinds[1], kinds[2], fogN);
 }
 
+/* ------------------------------------------------------- the GS's grid */
+
+/* common.hlsli gs_bilerp, one channel: across then down, each step
+ * truncated (arithmetic shifts) */
+static int gridBilerp(int a, int b, int c, int d, int fu, int fv)
+{
+    const int top = a + (((b - a) * fu) >> 4);
+    const int bot = c + (((d - c) * fu) >> 4);
+    return top + (((bot - top) * fv) >> 4);
+}
+
+static void checkGridBilinear(void)
+{
+    /* the sampler's coordinate: gs_grid_level's uvg = q * (1/16) / size,
+       the sampler's texel coordinate uvg * size - 0.5 */
+    int badCoord = 0;
+    long coords = 0;
+    for (int lg = 0; lg <= 11; lg++) {
+        const int size = 1 << lg;
+        for (int q = -64 * size; q <= 64 * size + 64; q++) {
+            const float uvg = (float)q * (1.0f / 16.0f) / (float)size;
+            const float t = uvg * (float)size - 0.5f;
+            int i0 = (int)t; /* floor, without libm */
+            i0 -= (float)i0 > t ? 1 : 0;
+            badCoord += i0 != (q - 8) >> 4 || t - (float)i0 != (float)((q - 8) & 15) / 16.0f;
+            coords++;
+        }
+    }
+    if (badCoord) {
+        printf("FAIL grid: %d of %ld coordinates off the GS's texel pair and weight\n", badCoord,
+               coords);
+        failures++;
+    }
+    /* the residual: the exact four-texel sum with the same weights,
+       rounded, against the GS's three truncating steps */
+    long hist[5] = {0, 0, 0, 0, 0};
+    int out = 0;
+    for (int a = 0; a < 256; a += 17) {
+        for (int b = 0; b < 256; b += 17) {
+            for (int c = 0; c < 256; c += 17) {
+                for (int d = 0; d < 256; d += 17) {
+                    for (int fu = 0; fu < 16; fu++) {
+                        for (int fv = 0; fv < 16; fv++) {
+                            const int g = gridBilerp(a, b, c, d, fu, fv);
+                            const int v256 = a * (16 - fu) * (16 - fv) + b * fu * (16 - fv) +
+                                             c * (16 - fu) * fv + d * fu * fv;
+                            const int h = (v256 + 128) >> 8;
+                            const int e = h - g;
+                            if (e < 0 || e > 2) {
+                                out++;
+                            } else {
+                                hist[e]++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    printf("  grid: %ld coordinates on the GS's texels; the exact bilinear above the GS's: "
+           "+0 %ld, +1 %ld, +2 %ld, outside %d\n",
+           coords, hist[0], hist[1], hist[2], out);
+    if (out) {
+        printf("FAIL grid: %d samples outside 0..2 levels above the GS's filter\n", out);
+        failures++;
+    }
+}
+
 int main(int argc, char **argv)
 {
     const int nodual = argc > 1 && strcmp(argv[1], "--nodual") == 0;
     checkAbove1xKernels();
+    checkGridBilinear();
     if (failures) {
         return 1;
     }

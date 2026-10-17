@@ -314,6 +314,37 @@ time it is needed and keeps it until the content changes (`port/render/rd_tex.h`
   kept for alpha-tested textures (`port/render/rd_upload.c` (`uploadMips`);
   `port/render/rd_tex.h` (`rdtex_build_mip_chain`, `rdtex_keep_alpha_coverage`)).
 
+**Sampling at the GS's level in the Original preset.** A linear-filtered draw of an image with
+GS levels (`DF_GS_LOD`) is filtered as the GS filters, in one of two forms
+(`port/render/rd_pipeline.c` (`rd__gs_filter_int`, `rd__texa_per_texel`)):
+
+- **TEXA per texel**: a 24- or 16-bit source (or CLUT) under a TEXA whose alpha depends on the
+  texel (AEM, or TA0 and TA1 apart: every mode but 80/80) goes through the TEXA entries
+  (`sprite_texa_ps`, `vu_texa_ps`, and `sprite_stq_ps`'s four taps), whose integer filter loads
+  the four texels of each level, expands TEXA, blends them with the GS's 4-bit weights across
+  then down, each step truncated, and blends the two levels in 256ths (`port/shaders/common.hlsli`
+  (`gs_texa_texture_lod`)).
+- **The sampler on the GS's grid**: every other one (an RGBA32 texture; TEXA 80/80, which gives
+  every texel the same alpha) takes the sampler (`ICO_DF_GS_BILINEAR_GRID`, `common.hlsli`
+  (`gs_sample_gs_bilinear`, `gs_grid_level`)). Per level the coordinate is rounded to the GS's
+  12.4 grid, `q = floor(uv * size * 16 + 0.5)`, as the integer filter rounds it, and handed to
+  `SampleLevel` as `q / 16 / size`, exact in float for the power-of-two sizes of a TIM2 picture,
+  so the sampler's texel pair and weight are the GS's (`(q - 8) >> 4` and `(q - 8) & 15`, four
+  fraction bits, which every device's sub-texel precision holds); the sampler is nearest between
+  levels (`port/render/rd_replay.c` (`gsLodSampler`)), and for MMIN 3 and 5 the shader samples
+  the two levels and blends them by the LOD's fraction in 256ths, truncated, as the GS does. What
+  is left is the GS's truncation after each of its three steps against the sampler's one rounded
+  sum: the sampler's value is 0 to 2 levels above the GS's, never below, on a device whose filter
+  is exact to within a level (`shaders_pixel`'s grid check, over every pair of 4-bit weights and
+  texel values in steps of 17: 21 % of the samples +0, 74 % +1, 4 % +2; a flat area is +0, so the
+  difference is a systematic half to one level where texels differ), and the blend of two levels
+  keeps the bound. `rd_pixel`'s gs grid case checks it
+  through the replay against the GS's arithmetic.
+
+The replay counts both: `rd_replay_tool --stats` prints `texa draws N (TEXA per texel), M
+GS-level draws on the GS's grid` (`RdPerfRecord` `texaDraws`, `gridDraws`, per planned pass, as
+`a1xDraws`), and the first grid draw of a run logs `rd: GS levels (Original): ...` once.
+
 ## The replay
 
 `rd__replay_frame` records one RHI command list per replay. The lists are walked in order 0..12
@@ -680,9 +711,8 @@ both. The progress function runs while a batch compiles (about every 50 ms, with
 and between batches, and a nonzero return stops the set after the batch in flight; the rest is
 created as the frames need it. The activity note names the batch: `creating pipelines 321-352 of
 702: <first key> to <last key>; vertex <module> <words> words, ...; largest fragment <module>
-<words> words` (a VU key's words end with ` ext 0` or ` ext 1`, its variant: [The VU shader
-variants](#the-vu-shader-variants)), put back after any pipeline the progress screen's frame creates in
-the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
+<words> words` (a point key's words, the vertex pre-pass's and the record stages', end with
+` pre`), put back after any pipeline the progress screen's frame creates in the middle of it. The log line after the set adds the compiles, the threads and the longest compile:
 `pipelines: <made> of the reachable set's <n> created at start-up in <t> ms (<f> failed); <c>
 compiled on <k> threads, the longest <s> s`, and two lines say where the time went, from the
 workers' own times (`RhiPipelineBatch.ms`): `pipelines: the slowest: <s> s <key>; ...` (the ten
@@ -692,6 +722,33 @@ the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
 At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
+
+**Dynamic state.** Where the device has it the Z test, the Z write, the blend and the colour mask
+are set at each draw instead of being part of the pipeline ([RHI.md](RHI.md#dynamic-state);
+`RhiLimits.dynamicDepth`: Vulkan 1.3 or `VK_EXT_extended_dynamic_state`; `RhiLimits.dynamicBlend`:
+`VK_EXT_extended_dynamic_state3`; D3D12 neither). The cache then holds the keys with those fields
+normalised away (`port/render/rd_pipeline.c` (`rd__key_dynamic_normalise`)): a key with a depth
+attachment and no stencil mode takes `ztst` ALWAYS and `zwrite` OFF, a key with one colour target
+and no destination read takes `blend` `RD_BLEND_COUNT` and mask `0xF`; the shadow count's stencil
+keys keep their depth state, the point keys (the vertex pre-pass's and the record stages', three
+targets) every state, and `nodual` stays in the key (it picks the fragment module).
+`rd__get_pipeline` normalises the key it is given (`drawKey`), the start-up set is enumerated
+normalised (`rd__enumerate_reachable`, after the two-pass and destination-read expansions, so the
+set holds the keys the draws' pipelines are made from), and every draw binds through
+`rd__set_pipeline(cl, p, key)` with the key it planned, un-normalised: it binds and sets the depth
+state and the blend state from that key through `depthCompare` and `blendState`, the functions the
+static state is made with, so each draw gets the fixed-function tuple a pipeline of its own key
+would have had and the picture is the same byte for byte. `rd__pipe_key_equal` compares two keys
+modulo the normalisation (a key as a planner made it matches the set's). The draws that differed
+only in those fields (the AFAIL halves, the Z-write alternations, the blend paths of one shader)
+share one pipeline, so the set is smaller and fewer binds change the pipeline; `rd_replay_tool
+--stats` prints `<n> dynamic state sets (dynamic depth on|off, blend on|off)`, the commands
+recorded (`RhiStats.dynamicSets`). The log says which at `rd_init`, `rd: pipelines: dynamic state:
+depth and blend (the Z test, Z write, blend and colour mask set at each draw, out of the pipeline
+keys)` (or `depth (...)`, `blend (...)`, `none (every state in the pipeline keys)`), and the
+start-up set's line carries ` (dynamic depth, blend)` after `created at start-up`; the first-use
+line prints the normalised key. `ICO_VK_FAKE_NO_DYNAMIC=1` (`=blend`: the blend alone) turns it off
+on a device that has it, for an A/B of the same frames.
 
 ### The start-up set
 
@@ -749,14 +806,31 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 
 | the set is skipped | `<why>` in the line |
 | --- | --- |
-| on a device of the table (`RhiLimits.lazyPipelines`, the lazy column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
+| on a device of the table (`RhiLimits.carefulPipelines`, the careful column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |
+| the set under a policy with a memory budget (below) grew the process past it, or a batch took over 10 s: the rest of the set | `(memory budget: the process grew <g> MB, from <a> to <b> MB, past the policy's <m> MB, after <i> of <n> keys)` or `(memory budget: a batch of <k> took <t> s, past 10 s; ...)` |
 | `[dev] pipeline_set = "lazy"` (`ICO_PIPELINE_SET=lazy`, [CONFIG.md](CONFIG.md#ico-pcini)) | `by the settings ([dev] pipeline_set = "lazy")` |
 | the previous start, of any version, ended without a word in the foreground while a pipeline was being made, the first such end in a row: this start only, nothing written ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; for this start only)` |
 | the same, the second end in a row: the setting is written once the device is made, not on a device of the table ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
-The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the plain-only rule of the next section
+**The policy.** `rd_set_pipeline_policy(&p)` before `rd_precreate_pipelines` sets how the set is
+made (`port/render/rd.h` (`RdPipelineSetPolicy`); `port/render/rd_pipeline.c` (`createKeys`)); zero
+fields are the defaults. `batch`: keys a batch (`RD_PIPE_BATCH`, 32, and no more); `maxThreads`:
+`RhiPipelineBatch.maxThreads`, the workers a batch may use (0: the backend's count,
+[RHI.md](RHI.md#the-interface)); `cacheEachBatch`: the pipeline cache written after every batch, on
+any platform (`cacheKeptPerBatch`); `memoryBudgetMB`: the process's resident memory is read before
+and after every batch (`rd_set_memory_fn`), and once it has grown past the budget over its size
+when the set began, or a batch took over `RD_SET_SLOW_BATCH_MS` (10 s), the set stops after that
+batch and the rest goes the first-use way (`rd_pipelines_lazy` with the reason in the table
+above). `rd_pipeline_policy_careful()` is the careful set: batches of 8, one worker thread, a 128
+MB budget, the cache after each batch, the values for a device of `RhiLimits.carefulPipelines`.
+A policy other than the defaults is logged once before the set, `rd: pipelines: the start-up set's
+policy: batch 8, threads 1, budget 128 MB, cache each batch; with a budget the set stops past it or
+after a batch over 10 s, the rest made on first use`, and each batch's line ends with `; policy
+batch 8, threads 1, budget 128 MB, cache each batch`.
+
+The table's row (`port/rhi/vk/vk_device.c` `kVuPlainOnly`; the fallback rule of the next section
 stays on the same device):
 
 | device | match | reason |
@@ -802,105 +876,64 @@ on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the 
 cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
 
-### The VU shader variants
+### The fallback entries
 
-Every VU vertex shader is built twice (issue 107; `port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`):
-the extended variant (`vu_X_vs`) and the plain one (`vu_X_plain_vs`). The plain one leaves out the
-two steps of the region rule that only a picture other than the PS2's out of the box takes: the
-card test (`VU_F_EXTENDED`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)) and the two tick
-cameras (`VU_F_TICKS`, the interpolation's pictures between two ticks); every other line is the
-same code, so a draw with neither flag gives the same picture through either. The plain modules
-are 6,216 to 23,199 words, the extended ones 10,044 to 51,132 (the vertex pre-pass's triangle
-stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
+Every device draws the VU programs through one module set, the record path's: `vu_main_vs` and
+`vu_particle_main_vs` with `vu_ps` / `vu_texa_ps`, the vertex pre-pass's ten `vu_X_pre_vs` and the
+record stages' four point entries ([The vertex pre-pass](#the-vertex-and-triangle-pre-passes)), each with the
+region rule's every step (the card test, the tick cameras); there is no per-draw variant and no key
+field for one. A draw the record path cannot take (a command past the record, a stage pipeline that
+could not be made, a failed self-test, the pre-pass off) draws the old way, through its program's
+own entry with the legacy pixel shaders (`vu_legacy_ps`, `vu_legacy_texa_ps`). Which module a
+program entry's key is made from is decided once a run, at `rd_init` (`port/render/rd_pipeline.c`
+(`rd__vu_policy_init`), `g_rd.vsFallback`):
 
-- **The key.** `RdPipeKeyInt.vuExt` is 1 for the extended variant, 0 for the plain one and for
-  every key without a VU vertex shader. `vuDraw` takes the plain one unless the draw has
-  `VU_F_EXTENDED` or `VU_F_TICKS` (`rd__vu_draw_ext`); the camera blend still reaches a plain
-  draw through its blended matrices.
-- **The start-up set.** The extended VU keys when the settings can make a draw that wants them
-  (`rd__vu_ext_reachable`): the Enhanced preset, an aspect or a frame wider than 4:3, a scene scale
-  above 1, or the interpolation on (a framerate other than `original`, which draws through the
-  tick cameras whenever the camera moves). The plain ones unless no draw can take them: in a state
-  other than out of the box (`rd__vu_extended`: the Enhanced preset, a frame wider than 4:3, a
-  scene scale above 1) every VU draw has `VU_F_EXTENDED` and so the extended variant, so the plain
-  keys are enumerated only out of the box or where the device or the settings keep the plain ones
-  (`g_rd.vuPlainOnly`; `rd__enumerate_reachable_vu`). The Original preset at 4:3 and 1x with the
-  original framerate compiles only plain VU shaders; the Enhanced preset or a wide frame only
-  extended ones; the Original preset at 4:3 and 1x with the interpolation on both. A setting changed later to one
-  that wants them creates them as the frames first need them. That holds the other way too, and
-  is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
-  plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
-  as the frames first need them, up to 74 pipelines with the vertex pre-pass (90 with the exact
-  blend; 176 and 220 without it, [The vertex and triangle pre-passes](#the-vertex-and-triangle-pre-passes)), a short pause
-  here and there in the first minutes after the switch; the pipeline cache keeps them for the
-  next start. The set is ordered: every 2D key
-  first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
-  extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
-  The VU keys: eleven VU vertex shaders, 16 keys each (20 with the exact blend): TEST Z GEQUAL
-  (the three tests of `rd_mesh.c` `enumerateVuVariant` give one Z test), Z write on and off, four
-  blends, `vu_ps` and `vu_texa_ps`. With the pre-pass (the default) a variant has `vu_tri_vs`'s and
-  `vu_particle_vs`'s keys under TEST Z ALWAYS as well (a VU draw after the game turned the Z test
-  off: `queen_barrier_disp.c` `MakeRefractTexture` before the barrier mesh, `pool.c`
-  `copyToWork`), 32 each, 64 in all, and the ten pre-pass keys join the plain ones' class. With
-  the fixed-function blend (the phones' usual path) and one variant the set is 367 2D keys and 176
-  VU keys, 543 in all, without the pre-pass (`[dev] vu_prepass = false`), and 441 with it (367,
-  64 and 10), as `rd_state_test` prints them (`testEnumerationPrepass`); with both variants (the
-  interpolation at the Original preset, 4:3 and 1x) 719 and 505. The exact blend adds the
-  destination-read images of the blended keys, 2D and VU (`rd_state_test`'s `testEnumeration`
-  prints the totals). The program entries keep the Z GEQUAL states: doubled, both variants would
-  pass `RD_PIPELINE_REACHABLE_MAX` (1024). Each variant has as many keys, so a set
-  with the extended ones alone has as many VU keys as the Original 4:3 set. With the
-  interpolation on at 4:3 and 1x a still camera's draw has neither flag and takes the plain ones,
-  so that state compiles both.
-- **The device table** (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, `RhiLimits.vuPlainOnly`): a
-  device whose driver cannot build the extended ones draws every VU draw with the plain ones,
-  logged once as `rd: VU shaders: plain only on this device (Adreno 740, issue 107): the
-  wide-screen rule is off`; triangles that the extended picture would clip at the 4:3 picture's
-  edge are dropped as at 4:3, and the pictures between two ticks keep the blended camera's rule.
+- the extended build `vu_X_vs` on every device but those of the table;
+- the plain build `vu_X_plain_vs` (`port/shaders/vu_common.hlsli`, `ICO_VU_PLAIN`: no card test, no
+  tick cameras) on a device of the table (`RhiLimits.vuFallbackPlain`, `kVuPlainOnly` in
+  `port/rhi/vk/vk_device.c`), with `ICO_RD_VU_PLAIN=1`, or after `rd_set_vu_plain_only`; only the
+  ten mesh entries have it (the particles' `vu_particle_vs` is one build), and its modules are made
+  only then. `ICO_RD_VU_EXTENDED=1` gives the extended build whatever the others say.
 
-  | device | match | reason |
-  | --- | --- | --- |
-  | Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
+The program entries' keys are in the start-up set only with the pre-pass off (then every VU draw is
+the old way: the eleven entries with the legacy pixel shaders, 16 keys each, 176); with it they are
+made on first use, by the fallback alone. The set at Original 4:3 with the fixed-function blend and
+every state static is the 2D keys, `vu_main_vs`'s 32 and `vu_particle_main_vs`'s 32 (TEST Z
+GEQUAL and Z ALWAYS, Z write on and off, four blends, `vu_ps` and `vu_texa_ps`; the particles' keys
+carry `RD_PROG_PARTICLE`, the meshes' `RD_PROG_PRELIT`), the ten pre-pass keys and the five stage
+keys (`rd__vu_stage_key`: the rule, the tick test under colour mask R and under G, the colour planes,
+the particles' stage): the 2D part + 32 + 32 + 10 + 5, 446 with a 2D part of 367 (the VU part is
+79 whatever the 2D part; `rd_state_test` prints both); with dynamic depth ([Pipelines](#pipelines)) the two drawing shaders' keys fall to 8 each,
+with dynamic depth and blend to 2 each, the point keys staying 15 (`rd_state_test`
+`testEnumerationPrepass`, `testDynamicNormalise` print each set with its 2D part).
 
-- **After a freeze.** A batch's note goes to the disc before the batch starts (fsync,
-  `port/platform/diag_host.c` `act_sync_note`). A start that ended without a word, in the
-  foreground, inside a batch of extended VU keys (`startup_retry_note_has_vu_ext` on the activity
-  file's note) makes the next start draw with the plain ones for that start only, nothing written
-  (`ico_pc: the previous start ended while the graphics driver compiled the largest 3D shaders (the
-  VU extended variants); this start only uses the smaller ones ...`); the next start that compiles
-  them and ends there again writes `[dev] vu_plain_only = true` to `config.toml` and draws with the
-  plain ones at every later start (`port/platform/window_host.c`, `diag_host.h`
-  `ico_diag_startup_end_persist`): `ico_pc: the previous start ended while the graphics driver
-  compiled the largest 3D shaders (the VU extended variants); this start and every start after it
-  use the smaller ones only ...`. Nothing is written on a device of the table (`RhiLimits.vuPlainOnly`). Those starts build
-  their set as usual (the cause is out of it), not lazily. A restart after a crash report takes its
-  own step, and an end in the background is not counted ([PLATFORM.md](PLATFORM.md#diagnostics)).
-- **Overrides.** `ICO_RD_VU_PLAIN=1` (`[dev] vu_plain_only`) keeps any device to the plain
-  ones; `ICO_RD_VU_EXTENDED=1` (`[dev] vu_extended`) gives the extended ones whatever the table or
-  the setting says (`rd__vu_policy_init`).
-- **The log.** At `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's
-  own line, Vulkan; `the driver names none` without one) and `rd: VU shaders: plain for the draws
-  of the Original preset at 4:3 and 1x without interpolation (largest vu_lit_plain_vs 23305
-  words), extended for the others (largest vu_lit_vs 51238 words)`, or the plain-only line with its
-  reason. While the set is created the heartbeat line ends with the batch in flight (`| creating
-  pipelines 329-360 of 702: <first key> to <last key>; vertex vu_prelit_vs 50325 words (9801
-  instructions); largest fragment vu_texa_ps <n> words; compiler E031.41.03.47`: each vertex
-  shader's SPIR-V words and instructions, `rd__shader_instructions`, and on a VU batch the driver's
-  compiler), and each batch with a VU vertex shader is logged as it starts (`rd: pipelines:
-  compiling 329-360 of 702 (extended VU): ...`) and as it completes, with every pipeline's compile
-  time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 702 (extended,
-  compiler E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185
-  MB (most 194 MB), pipeline cache 3104 KB; vu_prelit_vs 50325 words 9801 instructions: 8 x
-  1.10-2.10 s mean 1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines:
-  [The start-up set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
-  `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after
-  a freeze logs every batch the frozen one finished: a device that compiles the plain batches and
-  dies on the first extended one shows its size boundary, and one that dies on plain shows it there.
-  After the set the ten slowest compiles carry their modules (`(vu_lit_vs 51238 words + vu_ps <n>
-  words)`) and the time by vertex shader each module's size. A log that stops inside the set names
-  the module the driver was compiling. To test the size boundary on a device by hand, `[dev]
-  vu_plain_only = true` keeps it to the plain variants and `[dev] vu_extended = true` gives it the
-  extended ones whatever the device table says ([CONFIG.md](CONFIG.md#ico-pcini)).
+The table:
+
+| device | match | reason |
+| --- | --- | --- |
+| Qualcomm Adreno 740 on Qualcomm's own driver (not Turnip) | vendor 0x5143, device 0x43050A01 (what both devices report; not Mesa's other 0x4305xxxx ids: 0x43050A00 the Adreno A32, 0x43050B00 the 740v3, 0x43051401 the Adreno 750) | issue 107 (AYN Thor) and issue 93 (AYN Odin 2 Portal), driver 512.676.53, compiler E031.41.03.47: the whole device froze, needing a reboot, while the driver compiled the first pipelines with a VU vertex shader of 46,470 words and up; a set of at most 32,709 words built ([SHADERS.md](SHADERS.md#the-envelope)) |
+
+The log at `rd_init`: `rd: device compiler: Compiler Version: E031.41.03.47` (the driver's own line,
+Vulkan; `the driver names none` without one), then `rd: VU shaders: the record path's modules on
+every device (largest <module> <words> words); the fallback's program entries extended (largest
+vu_lit_vs <words> words), in the start-up set only with the vertex pre-pass off`, or `... entries
+plain on this device (Adreno 740, issue 107): no wide-screen rule and no tick cameras on those
+draws (largest vu_lit_plain_vs 23305 words) ...`. While the set is created the heartbeat line ends
+with the batch in flight (`| creating pipelines 329-360 of 446: <first key> to <last key>; vertex
+vu_main_vs <words> words (<n> instructions); largest fragment vu_texa_ps <n> words; compiler
+E031.41.03.47`: each vertex shader's SPIR-V words and instructions, `rd__shader_instructions`, and
+on a VU batch the driver's compiler), and each batch with a VU vertex shader is logged as it starts
+(`rd: pipelines: compiling 329-360 of 446 (VU): ...`) and as it completes, with every pipeline's
+compile time as the worker measured it: `rd: pipelines: compiled VU batch 329-360 of 446 (compiler
+E031.41.03.47): 32 pipelines 0.41-2.10 s, mean 1.29 s, 12.3 s on 4 threads; memory 185 MB (most
+194 MB), pipeline cache 3104 KB; vu_main_vs <words> words <n> instructions: 16 x 1.10-2.10 s mean
+1.62 s; ...; each (s): 1.10 1.22 ...` (`batchTimes`; the 2D batches' lines: [The start-up
+set](#the-start-up-set)). The same line without the times goes to the start-up activity file as a
+`compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics), `rd_set_batch_fn`), so the start after a
+freeze logs every batch the frozen one finished. After the set the ten slowest compiles carry their
+modules and the time by vertex shader each module's size; a log that stops inside the set names
+the module the driver was compiling. The set is ordered: every 2D key first, then the VU keys
+(`orderSet`).
 
 ### The vertex and triangle pre-passes
 
@@ -1180,10 +1213,11 @@ records](#performance-records)).
 
 The GS blends in integers with an arithmetic shift, no clamp of C, then COLCLAMP, PABE and FBA;
 the GPU's fixed-function blender computes in float and rounds to nearest, one level above the GS
-on many LERP channels. The destination read computes the GS result in the fragment shader from the
-pixel's own destination, read in rasterization order, with blending off
-(`gs_dst_channel`, `port/shaders/gs_math.hlsli`) (`port/render/rd_dst_read.c`). Two realisations
-(`port/rhi/rhi.h` (`RhiDstRead`); `port/render/rd_dst_read.c`):
+on about half the channels of a LERP ([DIVERGENCES.md](DIVERGENCES.md) VD-7). The destination
+read computes the GS result in the fragment shader from the pixel's own destination, read in
+rasterization order, with blending off (`gs_dst_channel`, `port/shaders/gs_math.hlsli`)
+(`port/render/rd_dst_read.c`). Two realisations (`port/rhi/rhi.h` (`RhiDstRead`);
+`port/render/rd_dst_read.c`):
 
 - **attachment**: the colour attachment read as an input attachment in rasterization order
   (Vulkan rasterization-order attachment access over dynamic rendering local read). Depth,
@@ -1195,94 +1229,107 @@ pixel's own destination, read in rasterization order, with blending off
   into colour without Z write then a depth-only pass when its Z test is ALWAYS; under
   GEQUAL/GREATER it stays on the fixed-function blend (logged once).
 
-The preference is attachment, then storage, then the fixed-function blend. What goes through it:
-the screen prims, the VU meshes and the fog sprite whose fixed-function blend is not the GS's (the
-LERPs, mode 3, the Ad forms, mode 11, PABE on the premultiplied forms, COLCLAMP 0) on RGBA8
-targets. What stays on the fixed-function blend: the premultiplied forms, the MSAA epoch's passes,
-targets other than RGBA8, the port's presentation overlay. Of the premultiplied forms the adds
-(modes 0 and 5) are exact on the blender (the shader writes the GS term `(Cs F) >> 7` and the
-blender adds two whole levels); the subtracts (modes 1 and 6) are one level above the GS wherever
-`Cs F` is not a multiple of 128, because the GS's term is `(0 - Cs) F >> 7`, an arithmetic shift
-that rounds the negative product down, while the blender subtracts the truncated `(Cs F) >> 7`
-(`port/shaders/common.hlsli` (`gs_dual_out`); `port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites
-and `blend_int` keep their own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c`
-(`dstPassMode`, `rd__pass_wants_readable`)).
+**The exact blend is an opt-in.** The fixed-function blend is the default on every device and
+backend. Only `[dev] blend` / `ICO_RD_BLEND` ([CONFIG.md](CONFIG.md)) set to `attachment` or
+`storage` (also `interlock`, `rov`) opts into a destination read, and only where the device has
+it; `exact` takes the device's best (the attachment read, else the storage read) and logs
+`rd: blend: [dev] blend = exact: the exact blend is an opt-in; attachment tried`; `fixed` (also
+`off`, `0`) pins the default. The ask is read before the shader modules exist
+(`port/render/rd_dst_read.c` (`rd__dst_asked_env`)), so `rd__gpu_init` makes the group-3 layout
+and the `_dstrov` / `_dstatt` twins of the asked mode alone (`port/render/rd_replay.c`
+(`rd__gpu_init`)), `g_rd.dstModes` holds at most the fixed-function blend and that mode
+(`madeModes`), no RGBA8 target is made with `RHI_TEX_STORAGE` or `RHI_TEX_INPUT_ATTACHMENT` for the
+blend unless asked (`rd__dst_target_usage`, `RdTargetRec.dstUsage` bits `RD_DST_USAGE_STORAGE` and
+`RD_DST_USAGE_ATTACHMENT`; `RD_DST_USAGE_LOCAL_DATE` is DATE's local read, not the blend's), and
+the start-up pipeline set has no destination-read key: `rd__enumerate_reachable` takes its
+`enumerateAll` path when the mode is the fixed-function blend and the dual-source blend is in use
+(`port/render/rd_pipeline.c`), and `rd__enumerate_dst` returns at once for it. The start line is
+`rd: blend: fixed-function (the default; [dev] blend = attachment|storage opts into an exact
+mode)`, `rd: blend: fixed-function ([dev] blend = fixed)` or `rd: blend: exact (attachment read)
+([dev] blend)`; a word that is none of these or a mode the device lacks logs `rd: blend:
+ICO_RD_BLEND=<v> is not fixed, attachment or storage; fixed-function` or `... is not on this
+device; fixed-function` and keeps the default (`rd__dst_init`).
 
-`ICO_RD_BLEND` (`[dev] blend`, [CONFIG.md](CONFIG.md)) names the path instead: `fixed` (also
-`off`, `0`), `storage` (also `interlock`, `rov`) or `attachment`; a value that is none of these or a
-path the device lacks logs `rd: blend: ICO_RD_BLEND=<v> is not fixed, storage or attachment` or
-`... is not on this device` and keeps the default (`port/render/rd_dst_read.c` (`rd__dst_init`)).
+Every place that branches on the mode stays and is inert at the fixed-function blend: the pass's
+mode (`dstModeFor`) is the fixed-function blend, `expandPassesMode` and `rd__expand_dst` copy the
+passes, `dstPassMode` begins no storage pass (the `window: per replay` line's destination-read
+draws, storage passes and pass switches read 0), `rd__pass_wants_readable` is false, the MSAA
+epoch's exclusion and the fog drawn in it change nothing (`port/render/rd_replay.c`), and the
+restart steps that take the fixed-function blend after a crash or a loss are skipped because the
+run already drew with it (`port/platform/startup_retry.h`). A nonzero exact-blend field in
+`window: per replay` means the player opted in.
 
-**The Qualcomm rule.** The attachment read is not offered on Qualcomm's own Adreno driver
-(vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown; Mesa's Turnip on
-the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver 512.800.72,
-issue 89) it returned wrong destination colours: white boxes around the leaves' clear texels, the
-title washed out, the menu panels white on white; the same title frame replays through the same
-path on lavapipe with no validation error and within one level of `ICO_RD_BLEND=fixed`, so the
-driver is wrong, not the port's use. The device line says so,
+What the exact blend draws when opted into: the screen prims, the VU meshes and the fog sprite
+whose fixed-function blend is not the GS's (the LERPs, mode 3, the Ad forms, mode 11, PABE on the
+premultiplied forms, COLCLAMP 0) on RGBA8 targets. What stays on the fixed-function blend: the
+premultiplied forms, the MSAA epoch's passes, targets other than RGBA8, the port's presentation
+overlay. Of the premultiplied forms the adds (modes 0 and 5) are exact on the blender (the shader
+writes the GS term `(Cs F) >> 7` and the blender adds two whole levels); the subtracts (modes 1
+and 6) are one level above the GS wherever `Cs F` is not a multiple of 128, because the GS's term
+is `(0 - Cs) F >> 7`, an arithmetic shift that rounds the negative product down, while the blender
+subtracts the truncated `(Cs F) >> 7` (`port/shaders/common.hlsli` (`gs_dual_out`);
+`port/shaders/gs_math.hlsli` (`gs_blend_ch`)). The staticBlur sprites and `blend_int` keep their
+own exact paths (`port/render/rd_dst_read.c`; `port/render/rd_replay.c` (`dstPassMode`,
+`rd__pass_wants_readable`)).
+
+Why the opt-in: the storage read ends and begins a pass at every switch between a shader-blended
+and a hardware-blended draw (`dstPassMode`): 887 passes a replay on an RTX 3090 against 53 to 75
+with the fixed-function blend, 432 against 40 on a GTX 1650, and on a contributor's M1 (MoltenVK,
+interlock) 54 ms and 750 passes a replay against 14 ms and 49 with `ICO_RD_BLEND=fixed` (issue
+102), for the last level of rounding on the LERP channels. Between the attachment read and the
+fixed-function blend (`rd_replay_tool --pass-dump` of a corpus frame at Original 4:3 1x, each
+way), about 95 % of SCENE's pixels differ, by one level on most, two on about one in eight, at
+most 5 or 6 where several blend steps add up; WORK0 to WORK3 and the shadow levels are identical.
+
+**The attachment read on Qualcomm's driver.** The attachment read is not offered on Qualcomm's own
+Adreno driver (vendor 0x5143 with `VK_DRIVER_ID_QUALCOMM_PROPRIETARY`, or with the id unknown;
+Mesa's Turnip on the same GPUs reports its own id and keeps it). On the Odin 3 (Adreno 830, driver
+512.800.72, issue 89) it returned wrong destination colours: white boxes around the leaves' clear
+texels, the title washed out, the menu panels white on white; the same title frame replays
+through the same path on lavapipe with no validation error and within one level of
+`ICO_RD_BLEND=fixed`, so the driver is wrong, not the port's use. The device line says so,
 `rhi_vk: destination read: interlock no, rasterization-order attachment read off on this driver
-(Qualcomm driver 512.800.72: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries it)`, and the
-blend line carries the reason, `rd: blend: fixed-function (rounds up) (attachment read off:
-Qualcomm driver 512.800.72)`. No target is then made with the input attachment usage and no pass
-is begun readable: the picture is the fixed-function blend's. `ICO_VK_ATTACHMENT_READ=1`
-(`[dev] attachment_read = true`) offers the read anyway; `ICO_VK_FAKE_ADRENO=1` takes the branch on
-any device, for tests (`port/rhi/vk/vk_device.c`; `port/rhi/rhi_driver_version.h`
-(`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h` (`RhiLimits.rasterOrderOff`)).
+(Qualcomm driver 512.800.72: wrong results on Adreno; ICO_VK_ATTACHMENT_READ=1 tries it); local
+read yes`, so `[dev] blend = attachment` is refused there (`is not on this device`).
+`ICO_VK_ATTACHMENT_READ=1` (`[dev] attachment_read = true`) offers the read anyway;
+`ICO_VK_FAKE_ADRENO=1` takes the branch on any device, for tests (`port/rhi/vk/vk_device.c`;
+`port/rhi/rhi_driver_version.h` (`rhi_driver_is_qualcomm_proprietary`); `port/rhi/rhi.h`
+(`RhiLimits.rasterOrderOff`)). On MoltenVK (`RhiLimits.moltenvk`, `; MoltenVK` on the `rhi_vk:`
+device line) the default is the same fixed-function blend as everywhere; an opt-in there behaves
+as on any other device. `ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no attachment read, on
+any device (`rd_blend_selftest_moltenvk_storage`).
 
-**The MoltenVK rule.** On MoltenVK (macOS and iOS; `VK_DRIVER_ID_MOLTENVK`, or Apple's vendor
-0x106B with the id unknown on the builds that link MoltenVK; `RhiLimits.moltenvk`, shown as
-`; MoltenVK` on the `rhi_vk:` device line) the default blend is the fixed-function one even though
-the interlock is offered (the reporter's M2 Pro, MoltenVK 1.4.2: `interlock yes,
-rasterization-order attachment read no`, issue 102). The exact path's cost is its pass switching
-(`dstPassMode`, `port/render/rd_replay.c`): a contributor's M1 replay of the reporter's dump took
-54 ms and 750 passes with MSAA off and the interlock, 16.7 ms and 59 with MSAA 2x (which draws
-fixed-function), and 14 ms and 49 with MSAA off and `ICO_RD_BLEND=fixed`: 3 to 4 times the frame
-for the exact blend's last level of rounding. iOS already had the rule (a `setenv` in
-`port/platform/ios/main_ios.c`, A14: the interlock also regressed the picture); it is now this one,
-in `rd__dst_init`, for both. The line is `rd: blend: fixed-function (rounds up) (MoltenVK: the exact
-blend's pass switching costs 3 to 4 times the frame; [dev] blend = storage keeps it)`, and the
-`ico_pc: summary:` line's blend text is the self-test's, `fixed-function (rounds up) (self-test:
-exact modes not tried: MoltenVK default is fixed-function; fixed-function ok N)`: only the
-fixed-function reference runs (A14's interlock regressed the picture, and the exact modes'
-pipelines would be compiled for nothing). The start-up pipeline set holds no destination-read keys
-on it: `rd__enumerate_reachable` adds them only when the mode in force is not OFF, and
-`rd__dst_init` and the self-test settle the mode before the set is made. The destination-read
-shader modules (`_dstrov`) are still created with the device, as before.
-`[dev] blend` / `ICO_RD_BLEND` forces any mode as everywhere (the init line then ends `(forced:
-MoltenVK's default is fixed-function)`, and the self-test tries the forced mode as everywhere).
-`ICO_VK_FAKE_LIMITS=moltenvk` reports MoltenVK, with no
-attachment read, on any device (`rd_blend_selftest_moltenvk`, `rd_blend_selftest_moltenvk_storage`).
-
-**The blend self-test.** A driver whose read returns the wrong colour draws a wrong picture with no
-error anywhere, so `rd_blend_selftest` checks the modes on the device at start, as the fog's
-self-test checks its depth reads ([The fog path and its self-test](#the-fog-path-and-its-self-test)). A frame of its
-own (never recorded or presented) is drawn on SCENE at its real size and scale, MSAA held off, in a
-256 x 64 GS pixel block in its middle: eight cells of PCSX2's forest pixels under the forest's tint
-sprite (`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour
-behind it (the leaf case), two overlapping LERP draws (the second must blend over the first's
-result) and a glyph through the text sheet's shader. Nineteen samples are copied out and read back.
-The fixed-function blend runs first as the reference (within 2 levels of the GS arithmetic; if it
-fails, the two-pass fallback is tried and kept when it passes), then the exact modes the device has
-in the order above, each within 1 level of the GS arithmetic and of the reference's glyph. The
-first exact mode that passes is the one in force; none passing leaves the fixed-function blend. The
-window runs it before the start-up pipeline set (so the set is the chosen mode's), and again
-whenever SCENE is made at a new size. One line names the choice and every result:
+**The blend self-test.** A driver whose read or dual-source blend returns the wrong colour draws a
+wrong picture with no error anywhere, so `rd_blend_selftest` checks the blend in force on the
+device at start, on every device, as the fog's self-test checks its depth reads ([The fog path and
+its self-test](#the-fog-path-and-its-self-test)). A frame of its own (never recorded or
+presented) is drawn on SCENE at its real size and scale, MSAA held off, in a 256 x 64 GS pixel
+block in its middle: eight cells of PCSX2's forest pixels under the forest's tint sprite
+(`rd_pixel_test.c` `kTint`), a textured LERP quad whose clear texel must leave the colour behind it
+(the leaf case), two overlapping LERP draws (the second must blend over the first's result) and a
+glyph through the text sheet's shader. Nineteen samples are copied out and read back (one
+256 x 64 block, one readback; its pipelines are keys of the start-up set). The fixed-function
+blend runs first, the reference, within 2 levels of the GS arithmetic; if it fails, the two-pass
+fallback (`rd_set_no_dual`) is tried and kept when it passes. Then, only when `[dev] blend` opted
+into an exact mode the device has (`rd__dst_asked`), that mode runs, within 1 level of the GS
+arithmetic and of the reference's glyph, and is kept whatever its result. The window runs it
+before the start-up pipeline set and again whenever SCENE is made at a new size. One line names the
+blend in force and every result:
 
 ```
-rd: blend: exact (attachment read) (self-test: attachment ok 1, storage not on this device, fixed-function ok 1) on SCENE 640x448 at 1920x1344 texels in 318.3 ms
+rd: blend: fixed-function (self-test: fixed-function ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE 640x448 at 1920x1344 texels in T ms
+rd: blend: exact (attachment read) (self-test: attachment ok 1, fixed-function ok 1; kept by [dev] blend) on SCENE 640x448 at 1920x1344 texels in T ms
+rd: blend: fixed-function (self-test: fixed-function fail N -> two-pass ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE ...
 ```
 
-(lavapipe at 3x: the glyph one level off the fixed-function reference, the blender's rounding;
-the time is mostly the first compile of its pipelines, a run at a new scene size takes 50 to 90 ms
-there). A failing mode's worst sample, and a passing one's when it is not exact, gets a line of its
-own, `rd: blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625): 255,255,255,4
-want 21,28,14,4` (read white by `ICO_RD_BLEND_SABOTAGE=attachment`). An `ICO_RD_BLEND` of `attachment` or `storage` is kept whatever its result (the
-line adds `; kept by ICO_RD_BLEND`); `ICO_RD_BLEND=fixed` (also what the restart after a crash in a
-destination-read pipeline sets) and a device without an exact mode run nothing
-(`rd: blend: fixed-function (rounds up) (self-test not run: ...)`). `ICO_RD_BLEND_SABOTAGE=`
-`attachment,storage,fixed` makes those modes' samples read white, for the fallback's tests
-(`port/render/rd_blend_selftest.c`; `port/render/rd.h` (`rd_blend_selftest`);
-`port/platform/window_host.c`).
+and the `ico_pc: summary:` line carries `blend fixed-function (self-test: fixed-function ok 1)`.
+A failing entry's worst sample, and a passing one's when it is not exact, gets a line of its own,
+`rd: blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625): 255,255,255,4 want
+21,28,14,4` (read white by `ICO_RD_BLEND_SABOTAGE=attachment`). `ICO_RD_BLEND_SABOTAGE=`
+`attachment,storage,fixed,twopass` makes those entries' samples read white, for the fallback's
+tests; a run that took the two-pass fallback starts from the dual-source blend again at the next
+SCENE size, so each line is whole (`port/render/rd_blend_selftest.c`; `port/render/rd.h`
+(`rd_blend_selftest`); `port/platform/window_host.c`).
 
 ### The storage pass merge
 
@@ -1316,6 +1363,64 @@ lavapipe has no fragment shader interlock, so the tests that compare the merge's
 storage read; the release check is the shot list on an interlock card with and without the key
 (`port/render/rd_dst_read.c` (`rd__dst_merge_ok`, `rd__dst_merge`); `port/render/rd_replay.c`
 (`expandPasses`, `dstPassMode`)).
+
+## The device profile
+
+One renderer with device-class profiles: after `rd__gpu_init`, `rd__profile_init` decides
+`g_rd.profile` (`RdProfile`, `port/render/rd_internal.h`) once from `RhiLimits` (`tiler`,
+`localRead`, `vendorId`, `moltenvk`, `uintView`, `driverText`) and the backend, and every
+vendor-dependent choice of the renderer reads one of its flags; no other file of the renderer
+branches on a vendor (`port/render/rd_profile.c`). The classes: D3D12 (the backend), Apple /
+MoltenVK (`RhiLimits.moltenvk`), Adreno on Qualcomm's driver and Adreno on Turnip (vendor 0x5143;
+Turnip names itself in the driver text), Mali (0x13B5), PowerVR (0x1010), any other tile-based GPU
+(`RhiLimits.tiler`: Samsung, Broadcom, every Android GPU) on the PowerVR row, and the desktop
+immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan.
+
+| flag | desktop Vulkan | D3D12 | Adreno (Qualcomm's driver) | Adreno (Turnip) | Mali | PowerVR, other tile-based | Apple / MoltenVK |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| blend | fixed-function; `[dev] blend` opts into an exact mode | fixed-function; `[dev] blend = storage` opts into the ROV | fixed-function | fixed-function | fixed-function | fixed-function | fixed-function |
+| `fogLocal` | off | off | on where local read is offered | same | same | same | same |
+| `dateStencil` | off | off | on where local read is offered | same | same | same | same |
+| `storePlan` | off | off | on | on | on | on | on |
+| `blurFold` | off | off | on | on | off (the G52 is bound by its ALU) | on | on |
+| robust access | off | its own bounds rules | off | off | off | off | off |
+| `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
+| `uintViewWork`, `uintViewScene` | on where the backend has the view | on where the backend has the view | off | off | off | off | off |
+| `carefulSet` | off | off | off | off | off | off | off |
+
+The blend row is `rd_dst_read.c`'s ([Destination reads and blend
+paths](#destination-reads-and-blend-paths)), robust access the Vulkan backend's
+(`port/rhi/vk/vk_device.c`; [RHI.md](RHI.md#device-loss)); the profile reports both. The other
+flags are decisions only: the fog's local depth read, DATE through the stencil bit, the depth
+store plan, the folded staticBlur passes and the RGBA8_UINT views read them where those
+mechanisms are implemented, and a flag whose mechanism is not implemented changes nothing. Two
+are wired here: a target is made with `RHI_TEX_UINT_VIEW` by class when `uintViewWork` (the work
+buffers, `rd__work_class`) or `uintViewScene` (the scene-class targets) is on
+(`port/render/rd_core.c` (`rd__target_create_gpu`)), and with `RHI_TEX_INPUT_ATTACHMENT` and
+`RD_DST_USAGE_LOCAL_DATE` when `dateStencil` is on and the DATE stencil shader is in the table
+(`rd__dst_target_usage`). `uintView*` are off wherever `RhiLimits.uintView` is false, and
+`fogLocal` and `dateStencil` wherever `RhiLimits.localRead` is.
+
+Each flag has a `[dev]` key, exported by the host ([CONFIG.md](CONFIG.md)): `fog_path = "local"`
+(`ICO_RD_FOG_PATH=local`: `fogLocal` on; `inplace`, `copy` or `buffer`: off), `date_path =
+"stencil"|"snapshot"` (`ICO_RD_DATE_PATH`), `store_plan` (`ICO_RD_STORE_PLAN=1|0`), `blur_fold`
+(`ICO_RD_BLUR_FOLD=1|0`), `uint_view` (`ICO_RD_UINT_VIEW=1|work|0`: both views, the work buffers'
+only, none), `gpu_robust` (`ICO_GPU_ROBUST`). A flag a key set is marked `([dev])`; a key that
+asks for what the device lacks leaves the flag off and logs `rd: profile: [dev] fog_path = local
+(no local read): not on this device, the flag stays off`. A self-test that finds its mechanism
+wrong turns the flag off (`rd__profile_self_test_off`): the flag is marked `(self-test)` and the
+line `rd: profile: <flag> off (self-test)` is logged. The start line, once a run:
+
+```
+rd: profile: tile-based GPU (Imagination, Vulkan): blend fixed-function; fog local on; DATE stencil; depth stores planned; blur fold on; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+rd: profile: immediate-mode GPU (Mesa, Vulkan): blend fixed-function; fog local off; DATE snapshot; depth stores kept; blur fold off; robust access off (the default; gpu_robust = true turns it on); local read yes; uint views off; pipelines the start-up set
+```
+
+and the `ico_pc: summary:` line carries the flags as in force after the blend's text
+(`rd__profile_text`; `port/render/rd_core.c` (`rd_summary_text`)): `profile tile-based GPU
+(Imagination, Vulkan): fog local on, DATE stencil, depth stores planned, blur fold on, local read
+yes, uint views off`. The Vulkan version is not in the class name (`RhiLimits` does not carry
+it); the `rhi_vk:` device line has it.
 
 ## Post passes
 
@@ -1465,8 +1570,8 @@ standard deviation of 0.58 texel against the bilinear's 0.41, so the penumbra is
 without the bilinear's corners along a diagonal; `rd_shadow_test` checks each composite at 4x
 against the CPU B-spline and that a row across the shadow falls and rises once
 (`port/render/test/rd_shadow_test.c` (`checkComposite4x`)). The GS
-levels' integer filter of the Original preset (`rd__gs_filter_int`) is for images only, so it never
-meets the flag (`port/render/rd_pipeline.c` (`rd__gs_filter_int`)). The flag is never set when the
+levels' filter of the Original preset (`rd__gs_filter_int`: [Textures](#textures)) is for images
+only, so it never meets the flag (`port/render/rd_pipeline.c` (`rd__gs_filter_int`)). The flag is never set when the
 two scales are equal, nor on the reduction at the GS's filter, so never at scale 1;
 `rd_present_test`'s full height 1x case checks no draw is flagged there and that the frame is byte
 for byte the one with the reduction flagged (`rd__set_a1x_gs_keep` off), whose shader takes the GS's
@@ -1981,14 +2086,32 @@ one of them a float divide), no `OpSRem` on a power-of-two size, no float divide
 
 ### Performance notes
 
+**The UINT views of the RGBA8 targets.** `fx_sprite_ps` reads each texel as a float and turns
+it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`), which gives the stored byte
+for every byte. A target made with `RHI_TEX_UINT_VIEW` has an `RGBA8_UINT` view of the same image
+as well (Vulkan: `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` with the two formats listed and a second,
+sampled-only view, `port/rhi/vk/vk_resource.c` (`vkr_create_uint_view`); D3D12: the RGBA8 resources
+are typeless already and the view is a UINT SRV, `port/rhi/d3d12/d3d12_pipeline.c`;
+`RhiLimits.uintView` on both), bound with `RHI_ASPECT_UINT`. Which targets have it is the
+profile's (`port/render/rd_core.c` (`rd__target_create_gpu`)): the work class under
+`RdProfile.uintViewWork`, the scene class under `uintViewScene` (a tiler's driver may give up its
+compression on a mutable-format image, so a frame-sized target takes it only where the profile
+says), the snapshot as its target (`port/render/rd_replay.c` (`snapEnsure`)). A staticBlur sprite
+whose every texture has the view draws through `fx_sprite_u_ps` (`ICO_UINT_SRC=1`: `Texture2D<uint4>`
+loads), the same bytes (`port/render/rd_replay.c` (`doBlurSpriteDraw`, `blurUintGroup`);
+`port/render/rd_pipeline.c` (`rd__blur_key`, whose six enumerated keys get their twins while a
+target can have the view)). The start line `rd: UINT view: work targets on|off, scene targets
+on|off (the profile); the device's view and fx_sprite_u_ps present|absent` says what is in force,
+`--stats` counts the sprites (`... staticBlur sprites through the UINT views`), and `rd_blur`'s
+u case and `rd_pixel`'s uint case check the bytes against the CPU model with the views on.
+
+**The blur sprite's per-draw constants.** `fx_sprite_ps` takes its UV step's divides from the
+reciprocals the CPU rounds once a draw (`gs_div_trunc_rcp`, [SHADERS.md](SHADERS.md#integer-forms))
+and `fx_texel`'s wrap size as integers (`DrawCB.aux1`, `port/render/rd_replay.c` (`blurAux1`)), the
+same values the shader computed per pixel.
+
 Measured or worked out, not done:
 
-- **A UINT view of the UNORM targets.** `fx_sprite_ps` and the TEXA paths read each texel as a
-  float and turn it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`,
-  `gs_texa_load`). An `RGBA8_UINT` view of the same `RGBA8_UNORM` image would hand the integer
-  over directly, exactly, but needs images made with a mutable format (Vulkan's
-  `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a view format list; a typeless resource on D3D12),
-  which the RHI does not make ([RHI.md](RHI.md)).
 - **One pass for a constant-alpha lerp without dual-source blending.** On such a device a LERP
   is two passes (`rd__expand_no_dual`). Where As is the same over the draw (untextured;
   textured with TCC RGB; a mesh whose vertex alphas are all equal) the blend factors could be

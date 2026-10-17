@@ -832,8 +832,13 @@ static void checkPasses(const RdFrame *f, bool prepass)
     }
     RdPerfRecord r;
     const RdPerfPass *p;
+    /* the drain's last RHI_FRAMES_IN_FLIGHT replays are still in flight
+     * (their records pop RHI_FRAMES_IN_FLIGHT replays later, untimed): the
+     * loop below passes over those by their replay number */
+    uint32_t lastDrained = 0;
     while (rd_perf_pop(&r)) {
         rd_perf_passes_of(r.replay, &p);
+        lastDrained = r.replay > lastDrained ? r.replay : lastDrained;
     }
     rd__set_perf_passes(true);
     uint32_t timed = 0, records = 0;
@@ -841,6 +846,9 @@ static void checkPasses(const RdFrame *f, bool prepass)
         rd__replay_frame(f, 0, true);
         while (rd_perf_pop(&r)) {
             const uint32_t n = rd_perf_passes_of(r.replay, &p);
+            if (!r.passTimed && r.replay <= lastDrained + RHI_FRAMES_IN_FLIGHT + 1) {
+                continue; /* a drain replay's record, popped late */
+            }
             records++;
             timed += r.passTimed;
             checkPieces(&r, p, n, prepass);

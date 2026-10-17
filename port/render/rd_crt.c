@@ -450,13 +450,14 @@ static void beginPass(RhiCommandList cl, RhiTexture t, uint32_t w, uint32_t h, R
     rhi_cmd_set_scissor(cl, area);
 }
 
-/* one CRT pass of fs into area of dst, CrtCB cb, t1 src, t2 glow */
-static void crtPass(RhiCommandList cl, RhiPipeline pipe, uint32_t dw, uint32_t dh,
-                    const IcoCrtCB *cb, RhiTexture src, RhiTexture glow)
+/* one CRT pass of fs into area of dst (pipe made from key), CrtCB cb, t1
+ * src, t2 glow */
+static void crtPass(RhiCommandList cl, RhiPipeline pipe, const RdPipeKeyInt *key, uint32_t dw,
+                    uint32_t dh, const IcoCrtCB *cb, RhiTexture src, RhiTexture glow)
 {
     const RhiSampler lin =
         rd__sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-    rhi_cmd_set_pipeline(cl, pipe);
+    rd__set_pipeline(cl, pipe, key);
     rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__crt_group(cb));
     rhi_cmd_set_bind_group(cl, 2,
@@ -483,7 +484,7 @@ static bool boxReduce(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     cb.param[1] = (float)sh / (float)dst->h;
     cb.param[2] = (float)sw;
     cb.param[3] = (float)sh;
-    rhi_cmd_set_pipeline(cl, pRed);
+    rd__set_pipeline(cl, pRed, &kRed);
     rd__bind_uniform(cl, 0, rd__frame_group(dst->w, dst->h, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2,
@@ -552,14 +553,14 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     const RhiRect glowArea = {0, 0, gw, gh};
     rd__transition(cl, ga->t, &ga->state, RHI_STATE_RENDER_TARGET);
     beginPass(cl, ga->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
-    crtPass(cl, pBloom, gw, gh, &cb, src, (RhiTexture){0});
+    crtPass(cl, pBloom, &kBloom, gw, gh, &cb, src, (RhiTexture){0});
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, ga->t, &ga->state, RHI_STATE_SHADER_READ);
     cb.pass[2] = 1.0f / (float)gw;
     cb.pass[3] = 1.0f / (float)gh;
     rd__transition(cl, gb->t, &gb->state, RHI_STATE_RENDER_TARGET);
     beginPass(cl, gb->t, gw, gh, RHI_LOAD_DONT_CARE, &glowArea);
-    crtPass(cl, pBlur, gw, gh, &cb, ga->t, (RhiTexture){0});
+    crtPass(cl, pBlur, &kBlur, gw, gh, &cb, ga->t, (RhiTexture){0});
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, gb->t, &gb->state, RHI_STATE_SHADER_READ);
 
@@ -572,7 +573,7 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     if (border && rd__border_mask(box, (float)vw, g_rd.gsH, &mask)) {
         rhi_cmd_set_scissor(cl, &mask);
     }
-    crtPass(cl, pCrt, outW, outH, &cb, src, gb->t);
+    crtPass(cl, pCrt, &kCrt, outW, outH, &cb, src, gb->t);
     rhi_cmd_end_render_pass(cl);
     s_passes++;
     s_lastW = vw;

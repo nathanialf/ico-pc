@@ -3,7 +3,9 @@
  * re-expressed here (TEXA, alpha test, Z mapping), and the shaders' integer
  * forms against the plain operators they replace (gs_wrap_repeat against
  * the double modulo, gs_div_trunc against the integer division with its
- * float quotient moved as far as the APIs allow). Tables are exhaustive where the domain is small and
+ * float quotient moved as far as the APIs allow, gs_div_trunc_rcp likewise
+ * with float(a), the CPU's reciprocal and their product each moved past
+ * what the APIs allow). Tables are exhaustive where the domain is small and
  * dense elsewhere. */
 #include <math.h>
 #include "hlsl_shim.h"
@@ -31,11 +33,26 @@ static float moved_quot(uint a, int d)
 }
 
 #define GS_DIV_QUOT(a, d) moved_quot((a), (d))
+
+/* gs_div_trunc_rcp's quotient, moved: float(a) by s_rcpMove[0] ulps, the
+ * reciprocal rd (1.0f / d, correctly rounded) by s_rcpMove[1] and the
+ * product by s_rcpMove[2]; the APIs convert and multiply within half an ulp
+ * and the CPU's reciprocal is within half an ulp, so a whole ulp each way
+ * is past every bound (gs_math.hlsli: |f - Q| < 0.9375 there) */
+static int s_rcpMove[3];
+
+static float moved_rcp_quot(uint a, float rd)
+{
+    return step_ulps(step_ulps((float)a, s_rcpMove[0]) * step_ulps(rd, s_rcpMove[1]), s_rcpMove[2]);
+}
+
+#define GS_DIV_RCP_QUOT(a, rd) moved_rcp_quot((a), (rd))
 #include "gs_math.hlsli"
 #include "shader_consts.h"
 #include "../../render/rd_state.h"
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
 
 /* The constants gs_math.hlsli shares with C, pinned at compile time: the
  * texel formats (shader_consts.h), the alpha tests and the TEXA modes
@@ -113,8 +130,17 @@ static const int s_moves[5][2] = {{0, 0}, {-1, -3}, {-1, 3}, {1, -3}, {1, 3}};
 
 static long s_divChecks;
 
+/* the exact quotient and the eight corners of gs_div_trunc_rcp's error box
+ * (float(a), rd, the product: each a whole ulp down or up) */
+static const int s_rcpMoves[9][3] = {{0, 0, 0},   {-1, -1, -1}, {-1, -1, 1},
+                                     {-1, 1, -1}, {-1, 1, 1},   {1, -1, -1},
+                                     {1, -1, 1},  {1, 1, -1},   {1, 1, 1}};
+
+static long s_rcpChecks;
+
 /* gs_div_trunc(n, d) against C's n / d (truncation, as OpSDiv) with the
- * quotient at each corner */
+ * quotient at each corner, and gs_div_trunc_rcp(n, d, 1.0f / d) with its
+ * three roundings at each of theirs */
 static void check_div(int n, int d)
 {
     for (int m = 0; m < 5; m++) {
@@ -125,6 +151,14 @@ static void check_div(int n, int d)
         s_divChecks++;
     }
     s_convUlps = s_quotUlps = 0;
+    const float rd = 1.0f / (float)d; /* as rd_replay.c blurAux1 rounds it */
+    for (int m = 0; m < 9; m++) {
+        memcpy(s_rcpMove, s_rcpMoves[m], sizeof(s_rcpMove));
+        CHECK(gs_div_trunc_rcp(n, d, rd) == n / d, "rcp div %d / %d (moved %d, %d, %d): %d", n, d,
+              s_rcpMove[0], s_rcpMove[1], s_rcpMove[2], gs_div_trunc_rcp(n, d, rd));
+        s_rcpChecks++;
+    }
+    memset(s_rcpMove, 0, sizeof(s_rcpMove));
 }
 
 /* the largest |n| fx_sprite_ps gives gs_div_trunc for a span d
@@ -422,6 +456,8 @@ int main(void)
         check_div(INT_MIN + 1, d);
         check_div(INT_MAX, d);
     }
+    printf("  division: %ld checks of the divide form, %ld of the reciprocal form\n", s_divChecks,
+           s_rcpChecks);
 
     if (failures) {
         printf("gs_math_test: %d failures\n", failures);

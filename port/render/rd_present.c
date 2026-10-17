@@ -598,7 +598,7 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
         cb.tex[1] = (float)sh;
         cb.tex[2] = 1.0f / (float)sw;
         cb.tex[3] = 1.0f / (float)sh;
-        rhi_cmd_set_pipeline(cl, pipe);
+        rd__set_pipeline(cl, pipe, &k);
         rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
         rd__bind_uniform(cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(
@@ -708,7 +708,7 @@ static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint3
     rhi_cmd_set_viewport(cl, &vp);
     const RhiRect all = {0, 0, box->w, box->h};
     rhi_cmd_set_scissor(cl, &all);
-    rhi_cmd_set_pipeline(cl, pipe);
+    rd__set_pipeline(cl, pipe, &k);
     rd__bind_uniform(cl, 0, rd__frame_group(box->w, box->h, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2,
@@ -875,7 +875,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     b[2].aspect = RHI_ASPECT_DEPTH;
     const RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){g_rd.layoutTex, b, 3});
     if (g2.id) {
-        rhi_cmd_set_pipeline(cl, pipe);
+        rd__set_pipeline(cl, pipe, &k);
         rd__bind_uniform(cl, 0, rd__frame_group(dw, dh, 0.0f, 0.0f));
         rd__bind_uniform(cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(cl, 2, g2);

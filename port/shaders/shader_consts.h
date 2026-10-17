@@ -153,6 +153,13 @@ enum {
  * (sprite.hlsl sprite_above1x), the wrap in ICO_DF_TEXA_CLAMP_S/T. */
 enum { ICO_DF_ABOVE1X = 33554432 };
 
+/* DrawCB.mode[0] bit 26 (common.hlsli DF_GS_BILINEAR_GRID): a draw with
+ * ICO_DF_GS_LOD in the Original preset whose texture takes no TEXA per
+ * texel (rd_pipeline.c rd__gs_filter_int, rd__texa_per_texel): gs_sample
+ * filters with the sampler on the GS's 12.4 grid, one level or two
+ * blended in 256ths (gs_sample_gs_bilinear; rd_replay.c fillDrawCB). */
+enum { ICO_DF_GS_BILINEAR_GRID = 67108864 };
+
 /* DrawCB.mode[1] bits 8..: TEXFMT_* in gs_math.hlsli. */
 enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 

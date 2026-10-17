@@ -65,6 +65,16 @@
  *            shaft (TEX1 MMIN 5, MXL 2, K -110, Q 0.002873: LOD 1.568)
  *            draws levels 1 and 2 blended, as PCSX2's software renderer
  *            does, not the near-black base
+ *   gs grid  the same picture's sampler path in the Original preset
+ *            (ICO_DF_GS_BILINEAR_GRID: an RGBA32 texture, TEXA 80/80):
+ *            checker levels sampled off the texel centres at a LOD of
+ *            -0.5, 0.5, 1.25 and 1.5 against the GS's own arithmetic (the
+ *            12.4 coordinate per level, the 4-bit weights across then down
+ *            with each step truncated, the levels blended in 256ths): every
+ *            channel the GS's value or up to 2 above it, never below
+ *            (common.hlsli gs_sample_gs_bilinear), the draws counted as
+ *            grid draws and none per texel (RdPerfRecord.gridDraws,
+ *            texaDraws)
  *   stq      a textured triangle strip with Q 1 to 0.25
  *            maps the texture perspective-correctly (U = f q1 / (q0 + f (q1 -
  *            q0)) at the fraction f across it), a strip with Q = 1 stays affine
@@ -72,6 +82,11 @@
  *            against a CPU reference of gsb_Reduction (the GS bilinear at
  *            the GS sample points, tint, border crop) exactly (the
  *            reduction is drawn through the GS sprite model)
+ *   uint     the same with the scene-class and work targets made with
+ *            their RGBA8_UINT views (RdProfile.uintViewWork and
+ *            uintViewScene on, the targets made again): the reduction
+ *            through fx_sprite_u_ps, the same exact expectations, so the
+ *            same bytes as fx_sprite_ps (skipped without the device's view)
  *   keep     a keep frame (lists 11/12 only) draws DISPLAY back at 112/128
  *   exact    100 frames of RD_POST_COMPOSITE_FIX with exactInt into
  *            FEED128 equal the GS integer formula exactly every frame
@@ -1237,7 +1252,7 @@ static void gsLodWant(double lod, int mmin, int mxl, const int lv[3][3], int wan
  * level 0 at a LOD of 0 or below).  The same strips from a texture without
  * GS levels draw its base everywhere, byte for byte as with a TEX1 that
  * does not mipmap. */
-static void gsLodStrips(RdTex t, uint64_t tex1, int useTex1, const double *qs, int nq)
+static void gsLodStripsAt(RdTex t, uint64_t tex1, int useTex1, const double *qs, int nq, float uv)
 {
     static const uint8_t black[4] = {0, 0, 0, 0}, white[4] = {0x80, 0x80, 0x80, 0x80};
     rd_begin_frame();
@@ -1258,17 +1273,23 @@ static void gsLodStrips(RdTex t, uint64_t tex1, int useTex1, const double *qs, i
     for (int i = 0; i < nq; i++) {
         const float q = (float)qs[i];
         const int32_t y0 = (4 + 8 * i) * 16, y1 = (10 + 8 * i) * 16;
-        /* S = T = 0.5 Q: the texture's centre at every pixel */
-        RdScreenVtx v[4] = {vtx(ox + 16 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
-                            vtx(ox + 16 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q),
-                            vtx(ox + 48 * 16, oy + y0, 0, white, 0.5f * q, 0.5f * q),
-                            vtx(ox + 48 * 16, oy + y1, 0, white, 0.5f * q, 0.5f * q)};
+        /* S = T = uv Q: the same point of the texture at every pixel */
+        RdScreenVtx v[4] = {vtx(ox + 16 * 16, oy + y0, 0, white, uv * q, uv * q),
+                            vtx(ox + 16 * 16, oy + y1, 0, white, uv * q, uv * q),
+                            vtx(ox + 48 * 16, oy + y0, 0, white, uv * q, uv * q),
+                            vtx(ox + 48 * 16, oy + y1, 0, white, uv * q, uv * q)};
         for (int k = 0; k < 4; k++) {
             v[k].q = q;
         }
         rd_screen_prims(RD_PRIM_TRIANGLE_STRIP, v, 4, RD_SPACE_WORLD, 0, 0);
     }
     rd_end_frame(0);
+}
+
+/* S = T = 0.5 Q: the texture's centre at every pixel */
+static void gsLodStrips(RdTex t, uint64_t tex1, int useTex1, const double *qs, int nq)
+{
+    gsLodStripsAt(t, tex1, useTex1, qs, nq, 0.5f);
 }
 
 static uint64_t gsTex1(int mmin, int lcm, int l, int k)
@@ -1430,6 +1451,107 @@ static void testGsLod(void)
     rd_destroy_texture(one);
     rdtex_drop(9001);
     rdtex_drop(9002);
+}
+
+/* The GS's value of channel ch of gsLodStore's checker levels c (8x8, 4x4,
+ * 2x2, CLAMP) at the normalised point uv on both axes, at LOD lod under
+ * MMIN mmin (4 or 5, MMAG and MMIN linear) and MXL mxl: per level the 12.4
+ * coordinate (floor(uv size 16 + 0.5)), its four texels around q - 8 with
+ * the 4-bit weights, across then down, each step truncated (common.hlsli
+ * gs_bilerp); for MMIN 5 the two levels around the LOD blended by its
+ * fraction in 256ths, truncated */
+static int gsGridLevel(const uint8_t c[3][2][4], int lv, float uv, int ch)
+{
+    const int size = 8 >> lv;
+    const int q = (int)floor((double)(uv * (float)size) * 16.0 + 0.5) - 8;
+    const int i0 = q >> 4, f = q & 15;
+    int t[2][2];
+    for (int y = 0; y < 2; y++) {
+        for (int x = 0; x < 2; x++) {
+            int tx = i0 + x, ty = i0 + y;
+            tx = tx < 0 ? 0 : tx >= size ? size - 1 : tx;
+            ty = ty < 0 ? 0 : ty >= size ? size - 1 : ty;
+            t[y][x] = c[lv][(tx + ty) & 1][ch];
+        }
+    }
+    const int top = t[0][0] + (((t[0][1] - t[0][0]) * f) >> 4);
+    const int bot = t[1][0] + (((t[1][1] - t[1][0]) * f) >> 4);
+    return top + (((bot - top) * f) >> 4);
+}
+
+static int gsGridRef(const uint8_t c[3][2][4], double lod, int mmin, int mxl, float uv, int ch)
+{
+    if (!(lod > 0.0)) {
+        return gsGridLevel(c, 0, uv, ch);
+    }
+    if (mmin == 4) {
+        return gsGridLevel(c, (int)fmin(floor(lod + 0.5), (double)mxl), uv, ch);
+    }
+    const double s = fmin(lod, (double)mxl);
+    const int a = (int)floor(s), b = a < mxl ? a + 1 : a;
+    const int f8 = (int)floor((s - a) * 256.0);
+    return (gsGridLevel(c, a, uv, ch) * (256 - f8) + gsGridLevel(c, b, uv, ch) * f8) >> 8;
+}
+
+static void testGsGrid(void)
+{
+    /* checker levels of their own (the brightness ratio 1.97 from level 0
+       to 1, past RDTEX_AUTHORED_RATIO): kept as three GS levels */
+    static const uint8_t lv[3][2][4] = {{{200, 10, 40, 0x80}, {0, 0, 0, 0x80}},
+                                        {{0, 250, 250, 0x80}, {0, 0, 0, 0x80}},
+                                        {{250, 250, 0, 0x80}, {0, 0, 0, 0x80}}};
+    RdTex t = gsLodStore(9003, lv, "gs grid checker");
+    CHECK(rd__tex_rec(t.id) && rd__tex_rec(t.id)->gsLevels == 3,
+          "gs grid: the checker levels kept as three GS levels");
+    /* 0.5375: level 0 at 4.3 texels (q 69: texels 3 and 4, weight 13 of
+       16, where the sampler's own weight would be 12.8), level 1 at 2.15
+       (texels 1 and 2, weight 10), level 2 at 1.075 (texels 0 and 1,
+       weight 9) */
+    const float uv = 0.5375f;
+
+    static const struct {
+        int mmin, k;
+        const char *what;
+    } cases[] = {
+        {5, -8, "magnified (LOD -0.5): level 0"},
+        {5, 8, "LOD 0.5: levels 0 and 1 blended 128 / 256"},
+        {5, 20, "LOD 1.25: levels 1 and 2 blended 64 / 256"},
+        {4, 24, "LOD 1.5, MMIN 4: level 2"},
+    };
+
+    static const double q1[1] = {0.5};
+    int worst = 0, below = 0;
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        gsLodStripsAt(t, gsTex1(cases[c].mmin, 1, 0, cases[c].k), 1, q1, 1, uv);
+        /* the replay rd_end_frame ran (its record) */
+        const uint32_t grid = g_rdPerf.gridDraws, texa = g_rdPerf.texaDraws;
+        CHECK(grid > 0 && texa == 0, "gs grid %s: %u grid draws, %u per-texel draws", cases[c].what,
+              grid, texa);
+        uint32_t w, h;
+        const uint8_t *img = readTarget(RD_TARGET_WORK1, &w, &h);
+        if (!img) {
+            continue;
+        }
+        const double lod = cases[c].k / 16.0;
+        const uint8_t *p = img + ((size_t)7 * w + 32) * 4;
+        int want[4] = {0, 0, 0, 0x80};
+        int bad = 0;
+        for (int ch = 0; ch < 3; ch++) {
+            want[ch] = gsGridRef(lv, lod, cases[c].mmin, 2, uv, ch);
+            const int d = (int)p[ch] - want[ch];
+            worst = d > worst ? d : worst;
+            below += d < 0;
+            bad += d < 0 || d > 2;
+        }
+        if (bad) {
+            char what[96];
+            snprintf(what, sizeof(what), "gs grid %s (the GS's value to 2 above)", cases[c].what);
+            pixFail(what, 32, 7, p, want);
+        }
+    }
+    printf("  gs grid: at most %d above the GS's truncating filter, %d channels below\n", worst,
+           below);
+    rdtex_drop(9003);
 }
 
 /* ------------------------------------------------------------------ font */
@@ -2446,6 +2568,50 @@ static void testReduction(const char *dir)
     snprintf(path, sizeof(path), "%s/rd_pixel_reduction.png", dir);
     rd_write_png(path, d, 512, 256, 512 * 4, 1);
     rd_destroy_texture(t);
+}
+
+/* The reduction with the RGBA8_UINT views: the work and scene-class
+ * targets made again with them (RdProfile.uintViewWork, uintViewScene;
+ * rd_core.c rd__target_create_gpu), SCENE -> DISPLAY through
+ * fx_sprite_u_ps, the same exact expectations as testReduction, then the
+ * targets made again without */
+static void testReductionUint(const char *dir)
+{
+    if (!rhi_limits()->uintView || !g_rd.fs[RD_FS_FX_SPRITE_UINT].id) {
+        printf("  reduction through the UINT views: skipped (no RGBA8_UINT view)\n");
+        return;
+    }
+    g_rd.profile.uintViewWork = g_rd.profile.uintViewScene = true;
+    rd_reset_scene(g_rd.gsW, g_rd.gsH);
+    const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    const RdTargetRec *dsp = rd__target_rec(rd_target(RD_TARGET_DISPLAY).id);
+    CHECK(sc && sc->uintView && dsp && dsp->uintView, "SCENE and DISPLAY made with the UINT view");
+    const int before = failures;
+    testReduction(dir);
+    /* testReduction's replay: its sprite took fx_sprite_u_ps */
+    uint32_t uintPipes = 0;
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        uintPipes += rd__pipeline_key_at(i)->fs == RD_FS_FX_SPRITE_UINT;
+    }
+    CHECK(uintPipes > 0, "the reduction drew through fx_sprite_u_ps (%u pipelines)", uintPipes);
+    /* the UINT twins are in the reachable set while a target can have the
+       view (rd_pipeline.c rd__enumerate_reachable_blur) */
+    static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
+    const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
+        const RdPipeKeyInt *k = rd__pipeline_key_at(i);
+        int found = k->fs != RD_FS_FX_SPRITE_UINT;
+        for (uint32_t j = 0; j < n && j < RD_PIPELINE_REACHABLE_MAX && !found; j++) {
+            found = rd__pipe_key_equal(k, &keys[j]);
+        }
+        CHECK(found, "fx_sprite_u_ps pipeline %u is not enumerated", i);
+    }
+    printf("  reduction through the UINT views: %s, %u fx_sprite_u_ps pipelines\n",
+           failures == before ? "the bytes of fx_sprite_ps" : "DIFFERS", uintPipes);
+    g_rd.profile.uintViewWork = g_rd.profile.uintViewScene = false;
+    rd_reset_scene(g_rd.gsW, g_rd.gsH);
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the twins are outside the reachable set again */
 }
 
 /* ------------------------------------------------------------------ keep */
@@ -4413,8 +4579,10 @@ int main(int argc, char **argv)
     testOverlayReplacement();
     testStq();
     testGsLod();
+    testGsGrid();
     testAa1();
     testReduction(dir);
+    testReductionUint(dir);
     testPresent();
     testKeep();
     testExact();

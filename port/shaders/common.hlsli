@@ -595,15 +595,73 @@ float4 gs_sample_lod_nearest(Texture2D<float4> tex, float2 uvn, float q)
     return float4(t) * (1.0 / 255.0);
 }
 
+// With DF_GS_LOD in the Original preset, a filter linear (rd_replay.c
+// fillDrawCB, rd_pipeline.c rd__gs_filter_int) and no TEXA to apply per
+// texel (rd__texa_per_texel): gs_sample filters on the GS's grid with the
+// sampler (gs_sample_gs_bilinear), which rd_replay.c gsLodSampler binds
+// nearest between levels. shader_consts.h ICO_DF_GS_BILINEAR_GRID.
+#define DF_GS_BILINEAR_GRID 67108864u
+
+// Level lv of tex at uvn, 0..255, the sampler's filter at the GS's sample
+// point: the coordinate in the level's texels rounded to the GS's 12.4
+// grid as gs_texa_level rounds it (q = floor(uvn size 16 + 0.5)), so the
+// sampler's texel pair, (q - 8) >> 4 and the next, and its weight,
+// ((q - 8) & 15) / 16, are the GS's. q / 16 / size is exact in float for
+// the GS's power-of-two sizes (a texture is padded to 2^TW x 2^TH), so the
+// sampler's coordinate, q / 16 - 0.5 texels, has four fraction bits and
+// every device's sub-texel precision holds it (Vulkan's minimum is 4
+// bits), rounded or truncated alike. The sampler
+// wraps (REPEAT or CLAMP at the level's size) as gs_load_lv does. lod the
+// level for SampleLevel: lv, or for level 0 at most 1/256 above it (above
+// 0 the sampler takes the MMIN filter, as gs_lod_level has it).
+uint4 gs_grid_level(Texture2D<float4> tex, SamplerState smp, float2 uvn, uint lv, float lod)
+{
+    uint w, h, n;
+    tex.GetDimensions(lv, w, h, n);
+    const float2 size = float2(max(w, 1u), max(h, 1u));
+    const float2 tc = uvn * size;
+    const float2 q = floor(tc * 16.0 + 0.5);
+    const float2 uvg = q * (1.0 / 16.0) / size;
+    return uint4(floor(tex.SampleLevel(smp, uvg, lod) * 255.0 + 0.5));
+}
+
+// gs_sample with DF_GS_BILINEAR_GRID: gs_texa_texture_lod's levels and
+// blend with the sampler's bilinear inside a level (gs_grid_level): the
+// level gs_lod_level picks, and for MMIN 3 and 5 (minified) the level
+// after it, blended by the LOD's fraction in 256ths, truncated. Within a
+// level the sampler weighs the four texels in one sum, rounded, where the
+// GS truncates after each of its three steps (gs_bilerp): on a device
+// whose filter is exact to within a level the sampler's value is 0 to 2
+// levels above the GS's, never below (docs/port/RENDER.md, "Textures");
+// the blend of two levels keeps that bound.
+float4 gs_sample_gs_bilinear(Texture2D<float4> tex, SamplerState smp, float2 uvn, float q)
+{
+    const float lv = gs_lod_level(q);
+    const uint l0 = uint(floor(lv));
+    uint4 t = gs_grid_level(tex, smp, uvn, l0, max(float(l0), min(lv, 1.0 / 256.0)));
+    const uint mmin = g_blend.w & 7u;
+    if (gs_lod(q) > 0.0 && (mmin == 3u || mmin == 5u)) {
+        const uint f = uint(floor((lv - float(l0)) * 256.0));
+        if (f > 0u) {
+            const uint4 u = gs_grid_level(tex, smp, uvn, l0 + 1u, float(l0 + 1u));
+            t = (t * (256u - f) + u * f) >> 8;
+        }
+    }
+    return float4(t) * (1.0 / 255.0);
+}
+
 // The texel at uv: at the GS's level with DF_GS_LOD (the GS's nearest
-// texel there with DF_NEAREST), the GS's nearest texel with DF_NEAREST
-// alone (the sampler has the one level), else as the sampler takes it (q
-// unused).
+// texel there with DF_NEAREST, the GS's grid with DF_GS_BILINEAR_GRID),
+// the GS's nearest texel with DF_NEAREST alone (the sampler has the one
+// level), else as the sampler takes it (q unused).
 float4 gs_sample(Texture2D<float4> tex, SamplerState smp, float2 uv, float q)
 {
     if ((g_mode.x & DF_GS_LOD) != 0u) {
         if ((g_mode.x & DF_NEAREST) != 0u) {
             return gs_sample_lod_nearest(tex, uv, q);
+        }
+        if ((g_mode.x & DF_GS_BILINEAR_GRID) != 0u) {
+            return gs_sample_gs_bilinear(tex, smp, uv, q);
         }
         return tex.SampleLevel(smp, uv, gs_lod_level(q));
     }

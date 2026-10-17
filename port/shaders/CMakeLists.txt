@@ -66,12 +66,12 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
 endforeach()
 ico_add_shader(vu_pre_ps vu_tri.hlsl vu_pre_ps fragment)
 ico_add_shader(vu_tri_vs vu_tri.hlsl vu_tri_vs vertex)
-# the plain variants (ICO_VU_PLAIN, vu_common.hlsli): no card test and no
-# tick cameras, for the draws with neither (rd_replay_vu.c vuDraw); about half
-# the size (issue 107: the Adreno 740's compiler hangs the device on the
-# extended ones)
+# the ten mesh program entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli):
+# no card test and no tick cameras, the fallback's entries on a device of the
+# table (rd_pipeline.c rd__vu_policy_init, g_rd.vsFallback; issue 107: the
+# Adreno 740's compiler hung the device on the extended ones)
 foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
-        grid:grid grid_lit:grid grid_spec:grid particle:particle tri:tri)
+        grid:grid grid_lit:grid grid_spec:grid)
     string(REGEX REPLACE ":.*" "" _e "${_v}")
     string(REGEX REPLACE ".*:" "" _f "${_v}")
     ico_add_shader(vu_${_e}_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_PLAIN=1)
@@ -143,12 +143,6 @@ foreach(_v rov:1 att:2)
                    SUFFIX _dst${_s})
 endforeach()
 
-ico_shaders_library(ico_shaders)
-
-if(TARGET ico_shaders)
-    add_subdirectory(test)
-endif()
-
 # ---- v0.7.10 (docs/port/RENDER.md): each package adds its entries inside its
 # own fence and nowhere else, so the packages merge without conflicts.  The
 # ids and names are rd_internal.h's RD_VS_V0710_FIRST / RD_FS_V0710_FIRST on
@@ -180,4 +174,16 @@ endforeach()
 # ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
 # ---- X2 end ----
 # ---- X3 pixel cuts (fx_sprite_u_ps) ----
+# fx_sprite_ps reading its textures through their RGBA8_UINT views
+# (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
+ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
 # ---- X3 end ----
+
+# the table of every entry above, the fences included (ico_shaders_library reads
+# the manifest where it is called: it must come after every ico_add_shader)
+ico_shaders_library(ico_shaders)
+
+if(TARGET ico_shaders)
+    add_subdirectory(test)
+endif()
+

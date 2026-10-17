@@ -987,99 +987,96 @@ if(ICO_RUN_TESTS)
                      -DFOG_PATH=buffer
                      "-DRESULTS=inplace fail [0-9]+, copy fail [0-9]+, buffer ok [0-2]"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
-    # the exact blend's self-test (rd_blend_selftest.c) and the attachment
-    # read's Qualcomm rule (vk_device.c) on lavapipe, which has the
-    # attachment read and no interlock: the attachment read passes and is
-    # kept; read white (ICO_RD_BLEND_SABOTAGE) it fails, its worst sample is
-    # logged and the fixed-function blend is taken; under the fake Adreno
-    # (ICO_VK_FAKE_ADRENO) the read is not offered, the device and blend
-    # lines say why and, nothing exact left on lavapipe, the fixed-function
-    # blend runs without a self-test; ICO_VK_ATTACHMENT_READ=1 offers it
-    # again; without a destination read nothing runs; ICO_RD_BLEND
-    # attachment (kept though sabotaged), storage (not on this device: the
-    # default kept) and fixed (nothing run) honoured
+    # the blend's self-test (rd_blend_selftest.c) on lavapipe, which has the
+    # attachment read (the interlock faked off: Mesa 25.2's lavapipe has it).
+    # By default the fixed-function blend is in force and only its
+    # reference runs (the line says how to opt in); read white
+    # (ICO_RD_BLEND_SABOTAGE=fixed) the two-pass fallback is taken; under the
+    # fake Adreno (ICO_VK_FAKE_ADRENO) the device line says the attachment
+    # read is off, and ICO_VK_ATTACHMENT_READ=1 with ICO_RD_BLEND=attachment
+    # offers and opts into it; without a destination read the reference
+    # still runs; ICO_RD_BLEND attachment (kept though sabotaged), exact (the
+    # device's best: the attachment read), storage (not on this device: the
+    # default kept) and fixed honoured; the fake MoltenVK with
+    # ICO_RD_BLEND=storage tries the interlock where the device has one.
+    # The results' "; " is matched as ", " (rd_blend_selftest.cmake)
     set(_bst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_blend_selftest.cmake")
-    # the expectations below are a device with the attachment read and without
-    # the interlock (lavapipe before Mesa 25.2; from 25.2 lavapipe has the
-    # interlock, so the storage mode would be tried): the interlock is faked off
     set(_bst_env_mvk "${_bst_env};ICO_VK_FAKE_LIMITS=moltenvk")
     set(_bst_env "${_bst_env};ICO_VK_FAKE_NO_INTERLOCK=1")
     set(_bst_att "exact \\(attachment read\\)")
-    set(_bst_fix "fixed-function \\(rounds up\\)")
-    set(_bst_ok "attachment ok [01], storage not on this device, fixed-function ok [0-2]")
+    set(_bst_fix "fixed-function")
+    set(_bst_hint ", exact modes not asked for: \\[dev\\] blend = attachment\\|storage tries one")
+    set(_bst_ok "fixed-function ok [0-2]${_bst_hint}")
+    set(_bst_kept "fixed-function ok [0-2], kept by \\[dev\\] blend")
     add_test(NAME rd_blend_selftest
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
-                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}" -P "${_bst}")
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
+                     "-DEXTRA=rd: blend: fixed-function \\(the default. \\[dev\\] blend = attachment\\|storage opts into an exact mode\\)"
+                     "-DEXTRA2=rd: profile: immediate-mode GPU \\(Mesa, Vulkan\\): blend fixed-function. "
+                     -P "${_bst}")
     add_test(NAME rd_blend_selftest_sabotage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
                      "-DNAME=${_bst_fix}"
-                     "-DRESULTS=attachment fail [0-9]+, storage not on this device, fixed-function ok [0-2]"
-                     "-DFAIL=attachment fail [0-9]+" -P "${_bst}")
+                     "-DRESULTS=fixed-function fail [0-9]+ -> two-pass ok [0-2]${_bst_hint}"
+                     "-DFAIL=fixed-function fail [0-9]+"
+                     "-DEXTRA=blend: the fixed-function blend through the two-pass fallback"
+                     -P "${_bst}")
     add_test(NAME rd_blend_selftest_adreno
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
-                     "-DNAME=${_bst_fix}" "-DNOTRUN=no exact blend on this device; attachment read off: Qualcomm driver"
-                     -DDENY=1 -P "${_bst}")
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}" -DDENY=1 -P "${_bst}")
     add_test(NAME rd_blend_selftest_adreno_forced
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
-                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}"
+                     "-DNAME=${_bst_att}" "-DRESULTS=attachment ok [01], ${_bst_kept}"
                      "-DEXTRA=attachment read yes( \\(ICO_VK_FAKE_NO_INTERLOCK\\))? \\(Qualcomm driver: ICO_VK_ATTACHMENT_READ=1\\)"
                      -P "${_bst}")
     add_test(NAME rd_blend_selftest_no_dst
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
-                     "-DNAME=${_bst_fix}" "-DNOTRUN=no exact blend on this device" -P "${_bst}")
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}" -P "${_bst}")
     add_test(NAME rd_blend_selftest_blend_attachment
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
-                     "-DNAME=${_bst_att}"
-                     "-DRESULTS=attachment fail [0-9]+, storage not on this device, fixed-function ok [0-2]"
-                     "-DFAIL=attachment fail [0-9]+" "-DEXTRA=; kept by ICO_RD_BLEND" -P "${_bst}")
-    add_test(NAME rd_blend_selftest_blend_storage
+                     "-DNAME=${_bst_att}" "-DRESULTS=attachment fail [0-9]+, ${_bst_kept}"
+                     "-DFAIL=attachment fail [0-9]+" -P "${_bst}")
+    add_test(NAME rd_blend_selftest_blend_exact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
-                     "-DNAME=${_bst_att}" "-DRESULTS=${_bst_ok}"
+                     "-DNAME=${_bst_att}" "-DRESULTS=attachment ok [01], ${_bst_kept}"
+                     "-DEXTRA=blend: \\[dev\\] blend = exact: the exact blend is an opt-in. attachment tried"
+                     -P "${_bst}")
+    add_test(NAME rd_blend_selftest_blend_storage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
                      "-DEXTRA=ICO_RD_BLEND=storage is not on this device" -P "${_bst}")
     add_test(NAME rd_blend_selftest_blend_fixed
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
-                     "-DNAME=${_bst_fix}" "-DNOTRUN=ICO_RD_BLEND=fixed" -P "${_bst}")
-    # MoltenVK's default (issue 102): ICO_VK_FAKE_LIMITS=moltenvk reports the
-    # device as MoltenVK without the attachment read; the interlock is the
-    # device's own (Mesa 25.2's lavapipe has it, so no ICO_VK_FAKE_NO_INTERLOCK
-    # here; on a lavapipe without it the tests skip).  The default is the
-    # fixed-function blend with its reason in the blend lines and no exact
-    # mode tried (only the reference runs); ICO_RD_BLEND=storage keeps the
-    # interlock, tries it as everywhere and the line says it was forced
-    add_test(NAME rd_blend_selftest_moltenvk
-             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
-                     "-DNAME=${_bst_fix}"
-                     "-DRESULTS=exact modes not tried: MoltenVK default is fixed-function, fixed-function ok [0-2]"
-                     "-DEXTRA=blend: fixed-function \\(rounds up\\) \\(self-test: exact modes not tried"
-                     "-DEXTRA2=rd: blend: fixed-function \\(rounds up\\) \\(MoltenVK: the exact blend's pass switching costs 3 to 4 times the frame; \\[dev\\] blend = storage keeps it\\)"
-                     -P "${_bst}")
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
+                     "-DEXTRA=rd: blend: fixed-function \\(\\[dev\\] blend = fixed\\)" -P "${_bst}")
+    # the fake MoltenVK (no attachment read; the interlock the device's own,
+    # skipped without it) opting into the storage read: tried and kept as on
+    # any device (no MoltenVK rule)
     add_test(NAME rd_blend_selftest_moltenvk_storage
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=storage
                      "-DNAME=exact \\(interlock\\)"
-                     "-DRESULTS=attachment not on this device, storage (ok|fail) [0-9]+, fixed-function ok [0-2]"
-                     "-DEXTRA=; kept by ICO_RD_BLEND"
-                     "-DEXTRA2=rd: blend: exact \\(interlock\\) \\(forced: MoltenVK's default is fixed-function\\)"
-                     -P "${_bst}")
+                     "-DRESULTS=storage (ok|fail) [0-9]+, ${_bst_kept}" -P "${_bst}")
     set(_bst_tests rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
                    rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
-                   rd_blend_selftest_blend_attachment rd_blend_selftest_blend_storage
-                   rd_blend_selftest_blend_fixed rd_blend_selftest_moltenvk
+                   rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
+                   rd_blend_selftest_blend_storage rd_blend_selftest_blend_fixed
                    rd_blend_selftest_moltenvk_storage)
     set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_bst_env}")
     set_tests_properties(rd_blend_selftest_sabotage
-                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND_SABOTAGE=attachment")
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND_SABOTAGE=fixed")
     set_tests_properties(rd_blend_selftest_adreno PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_ADRENO=1")
     set_tests_properties(rd_blend_selftest_adreno_forced
-                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_ADRENO=1;ICO_VK_ATTACHMENT_READ=1")
+                         PROPERTIES ENVIRONMENT
+                                    "${_bst_env};ICO_VK_FAKE_ADRENO=1;ICO_VK_ATTACHMENT_READ=1;ICO_RD_BLEND=attachment")
     set_tests_properties(rd_blend_selftest_no_dst PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_NO_DST=1")
     set_tests_properties(rd_blend_selftest_blend_attachment
                          PROPERTIES ENVIRONMENT
                                     "${_bst_env};ICO_RD_BLEND=attachment;ICO_RD_BLEND_SABOTAGE=attachment")
+    set_tests_properties(rd_blend_selftest_blend_exact PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=exact")
     set_tests_properties(rd_blend_selftest_blend_storage
                          PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=storage")
     set_tests_properties(rd_blend_selftest_blend_fixed PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND=fixed")
-    set_tests_properties(rd_blend_selftest_moltenvk PROPERTIES ENVIRONMENT "${_bst_env_mvk}")
     set_tests_properties(rd_blend_selftest_moltenvk_storage
                          PROPERTIES ENVIRONMENT "${_bst_env_mvk};ICO_RD_BLEND=storage")
     # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
@@ -1281,3 +1278,35 @@ if(ICO_RUN_TESTS)
         set_tests_properties(rd_vustage_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
 endif()
+# ---- X1: the blend policy (rd_dst_read.c) ----
+# rd_dst_usage_test: the fixed-function blend by default makes no
+# destination-read layout, shader twin, target usage or start-up key; an
+# ICO_RD_BLEND=attachment opt-in makes the attachment read's alone.
+add_executable(rd_dst_usage_test test/rd_dst_usage_test.c)
+target_compile_options(rd_dst_usage_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_dst_usage_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_dst_usage_test PRIVATE ico_render)
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_dst_usage COMMAND rd_dst_usage_test)
+    set_tests_properties(rd_dst_usage PROPERTIES SKIP_RETURN_CODE 77)
+    if(_env)
+        set_tests_properties(rd_dst_usage PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # the exact blend's attachment read, now an opt-in, by the tests that
+    # drew it by default before (lavapipe has the read): the same
+    # expectations and recorded hashes (rd_present's and rd_crt's *_EXACT),
+    # rd_pixel's comparison of the modes, rd_perf's destination-read counts
+    set(_env_blend_attachment ${_env} "ICO_RD_BLEND=attachment")
+    set(_bat "${CMAKE_CURRENT_BINARY_DIR}/blend_attachment")
+    file(MAKE_DIRECTORY "${_bat}")
+    add_test(NAME rd_pixel_attachment COMMAND rd_pixel_test "${_bat}")
+    add_test(NAME rd_fog_attachment COMMAND rd_fog_test)
+    add_test(NAME rd_present_attachment COMMAND rd_present_test "${_bat}")
+    add_test(NAME rd_crt_attachment COMMAND rd_crt_test "${_bat}")
+    add_test(NAME rd_perf_attachment COMMAND rd_perf_test)
+    set_tests_properties(rd_pixel_attachment rd_fog_attachment rd_present_attachment
+                         rd_crt_attachment rd_perf_attachment
+                         PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_bat}"
+                                    ENVIRONMENT "${_env_blend_attachment}")
+endif()
+# ---- X1 end ----

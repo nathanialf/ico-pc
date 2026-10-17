@@ -11,8 +11,12 @@
  *     vertex pre-pass or not, the run drawing with the pre-pass or not, on
  *     Vulkan and on D3D12, against the crash order cache, noprepass,
  *     fixedblend, d3d12, lazy, none and the loss order lossnoprepass,
+ *     robust (the run's robust access off by the platform's default),
  *     blend, backend, none (the note never changes it); the reason is
  *     never empty and a step only grows (every chain ends);
+ *   - the robust step: its place before blend, its value, that it draws
+ *     with robust access and without the pre-pass, not with the fixed
+ *     blend, and that no run without robustOffDefault takes it;
  *   - the chains with the pre-pass: a crash in one of its pipelines
  *     (cache, noprepass, then the rest without it) and a loss in a run
  *     drawing with it (lossnoprepass, blend, backend), each value written
@@ -42,8 +46,8 @@ static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bo
                                    const char *backend)
 {
     const bool onD3d12 = strcmp(backend, "d3d12") == 0;
-    if (step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_BLEND ||
-        step == STARTUP_RETRY_LOSS_BACKEND) {
+    if (step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_ROBUST ||
+        step == STARTUP_RETRY_LOSS_BLEND || step == STARTUP_RETRY_LOSS_BACKEND) {
         return STARTUP_RETRY_NONE; /* a crash after a loss restart: the box */
     }
     if (step == STARTUP_RETRY_NONE && cache) {
@@ -69,16 +73,22 @@ static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bo
 }
 
 /* the loss order: lossnoprepass (same backend, no pre-pass) when the run
-   drew with the pre-pass; blend (same backend, fixed blend) unless the run
-   was already fixed or the player chose the blending; then backend (the
-   other one, fixed blend) in a two-backend build when the player chose
-   neither the backend nor a blending other than fixed; then the box */
+   drew with the pre-pass; robust (same backend, robust access on) when the
+   run drew with it off by the platform's default; blend (same backend,
+   fixed blend) unless the run was already fixed or the player chose the
+   blending; then backend (the other one, fixed blend) in a two-backend
+   build when the player chose neither the backend nor a blending other
+   than fixed; then the box */
 static StartupRetry expected_loss(StartupRetry step, bool d3d12, bool expl, bool blendExpl,
-                                  bool wasFixed, bool preOn)
+                                  bool wasFixed, bool preOn, bool robustOff)
 {
     const bool beforeBlend = step != STARTUP_RETRY_LOSS_BLEND && step != STARTUP_RETRY_LOSS_BACKEND;
-    if (beforeBlend && step != STARTUP_RETRY_LOSS_NO_PREPASS && preOn) {
+    const bool beforeRobust = beforeBlend && step != STARTUP_RETRY_LOSS_ROBUST;
+    if (beforeRobust && step != STARTUP_RETRY_LOSS_NO_PREPASS && preOn) {
         return STARTUP_RETRY_LOSS_NO_PREPASS;
+    }
+    if (beforeRobust && robustOff) {
+        return STARTUP_RETRY_LOSS_ROBUST;
     }
     if (beforeBlend && !wasFixed && !blendExpl) {
         return STARTUP_RETRY_LOSS_BLEND;
@@ -100,11 +110,12 @@ static void test_table(void)
     int combos = 0;
     for (int why = STARTUP_RETRY_CRASH; why <= STARTUP_RETRY_LOSS; why++) {
         for (int step = STARTUP_RETRY_NONE; step <= STARTUP_RETRY_LOSS_BACKEND; step++) {
-            for (int bits = 0; bits < 512; bits++) {
+            for (int bits = 0; bits < 1024; bits++) {
                 for (int b = 0; b < 2; b++) {
                     const bool cache = bits & 1, d3d12 = bits & 2, expl = bits & 4,
                                blendExpl = bits & 8, wasFixed = bits & 16, relaunch = bits & 32,
-                               dst = bits & 64, pre = bits & 128, preOn = bits & 256;
+                               dst = bits & 64, pre = bits & 128, preOn = bits & 256,
+                               robustOff = bits & 512;
                     const StartupRetryRun run = {
                         .why = (StartupRetryWhy)why,
                         .step = (StartupRetry)step,
@@ -117,6 +128,7 @@ static void test_table(void)
                         .dstPipeline = dst,
                         .prepassPipeline = pre,
                         .prepassWasOn = preOn,
+                        .robustOffDefault = robustOff,
                         .backendName = backends[b],
                     };
                     char reason[200];
@@ -128,13 +140,14 @@ static void test_table(void)
                                    ? expected_crash((StartupRetry)step, cache, d3d12, expl,
                                                     blendExpl, wasFixed, dst, pre, backends[b])
                                    : expected_loss((StartupRetry)step, d3d12, expl, blendExpl,
-                                                   wasFixed, preOn);
+                                                   wasFixed, preOn, robustOff);
                     }
                     CHECK(got == want,
                           "why %d step %d cache %d d3d12 %d explicit %d blend explicit %d "
-                          "fixed %d relaunch %d dst %d pre %d pre on %d %s: got %d, want %d",
+                          "fixed %d relaunch %d dst %d pre %d pre on %d robust off %d %s: got %d, "
+                          "want %d",
                           why, step, cache, d3d12, expl, blendExpl, wasFixed, relaunch, dst, pre,
-                          preOn, backends[b], (int)got, (int)want);
+                          preOn, robustOff, backends[b], (int)got, (int)want);
                     CHECK(reason[0] != '\0', "why %d step %d: empty reason", why, step);
                     /* a loss step only grows, and never comes from a crash */
                     if (got != STARTUP_RETRY_NONE) {
@@ -146,7 +159,7 @@ static void test_table(void)
             }
         }
     }
-    CHECK(combos == 2 * 9 * 512 * 2);
+    CHECK(combos == 2 * 10 * 1024 * 2);
     /* no name means the default backend; a NULL reason is allowed */
     {
         StartupRetryRun run = {.canRelaunch = true, .haveD3d12 = true};
@@ -761,6 +774,82 @@ static void test_values(void)
     CHECK(!startup_retry_draws_fixed(STARTUP_RETRY_NO_PREPASS));
 }
 
+/* the robust step (startup_retry.h): taken after lossnoprepass and before
+ * blend when the losing run drew with robust access off by the platform's
+ * default; its run draws with robust access on (host_config.c exports
+ * ICO_GPU_ROBUST=1 for "robust:...") and without the pre-pass, with the
+ * blend as before; the default run (robustOffDefault false, as every
+ * caller leaves it) never takes it */
+static void test_robust_step(void)
+{
+    char v[32], be[16];
+    StartupRetry s;
+    StartupRetryRun run = {
+        .why = STARTUP_RETRY_LOSS,
+        .canRelaunch = true,
+        .blendWasFixed = true, /* the default blend */
+        .prepassWasOn = true,
+        .robustOffDefault = true,
+        .backendName = "vulkan",
+    };
+    char reason[200];
+    static const StartupRetry chain[] = {STARTUP_RETRY_LOSS_NO_PREPASS, STARTUP_RETRY_LOSS_ROBUST,
+                                         STARTUP_RETRY_NONE};
+    s = STARTUP_RETRY_NONE;
+    for (int i = 0; i < 3; i++) {
+        run.step = s;
+        reason[0] = '\0';
+        s = startup_retry_next(&run, reason, sizeof reason);
+        CHECK(s == chain[i], "robust chain step %d: %d (%s)", i, (int)s, reason);
+        CHECK(reason[0] != '\0');
+        if (s == STARTUP_RETRY_LOSS_ROBUST) {
+            CHECK(strstr(reason, "robust access") != NULL, "reason: %s", reason);
+        }
+        run.prepassWasOn = false;
+    }
+    /* with the player's exact blend: robust, then blend */
+    run = (StartupRetryRun){.why = STARTUP_RETRY_LOSS,
+                            .step = STARTUP_RETRY_LOSS_ROBUST,
+                            .canRelaunch = true,
+                            .robustOffDefault = true,
+                            .backendName = "vulkan"};
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_LOSS_BLEND);
+    run.step = STARTUP_RETRY_NONE;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_LOSS_ROBUST);
+    /* no caller's default: never taken */
+    run.robustOffDefault = false;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_LOSS_BLEND);
+    run.blendWasFixed = true;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NONE);
+    /* Android cannot start again: the box, whatever the run */
+    run.canRelaunch = false;
+    run.robustOffDefault = true;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NONE);
+    /* a crash in a robust run: the box */
+    run = (StartupRetryRun){.why = STARTUP_RETRY_CRASH,
+                            .step = STARTUP_RETRY_LOSS_ROBUST,
+                            .canRelaunch = true,
+                            .backendName = "vulkan"};
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NONE);
+    /* the value and what it means */
+    CHECK(startup_retry_value(STARTUP_RETRY_LOSS_ROBUST, "vulkan", v, sizeof v) == 0);
+    CHECK_STR(v, "robust:vulkan");
+    CHECK(startup_retry_parse(v, &s, be, sizeof be) == 0 && s == STARTUP_RETRY_LOSS_ROBUST);
+    CHECK_STR(startup_retry_name(STARTUP_RETRY_LOSS_ROBUST), "robust");
+    CHECK(startup_retry_is_loss(STARTUP_RETRY_LOSS_ROBUST) && startup_retry_value_is_loss(v));
+    CHECK(startup_retry_value_robust(v));
+    CHECK(!startup_retry_value_robust("blend:vulkan") && !startup_retry_value_robust("robust"));
+    CHECK(!startup_retry_value_robust(NULL));
+    CHECK(startup_retry_value_no_prepass(v) && startup_retry_draws_no_prepass(s));
+    CHECK(!startup_retry_value_draws_fixed(v) && !startup_retry_draws_fixed(s));
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_LOSS_ROBUST), "robust access") != NULL);
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_LOSS_ROBUST), "fresh launch") != NULL);
+    CHECK(strstr(startup_retry_what(STARTUP_RETRY_LOSS_BLEND), "simpler blending") != NULL);
+    /* the step only grows: robust sits between lossnoprepass and blend */
+    CHECK(STARTUP_RETRY_LOSS_NO_PREPASS < STARTUP_RETRY_LOSS_ROBUST &&
+          STARTUP_RETRY_LOSS_ROBUST < STARTUP_RETRY_LOSS_BLEND);
+}
+
 static void test_envp(void)
 {
     char *env[] = {"HOME=/home/x",
@@ -824,6 +913,7 @@ int main(void)
     test_note_vu_pre();
     test_prepass_chain();
     test_values();
+    test_robust_step();
     test_envp();
     test_block();
     return ico_check_summary("startup_retry");

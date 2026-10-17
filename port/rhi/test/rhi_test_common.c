@@ -725,6 +725,264 @@ static void dstReadCell(const Ctx *c, RhiDstRead kind)
     rhi_destroy_buffer(ring);
 }
 
+/* The dynamic depth and blend state (rhi.h RhiPipelineDesc.dynamic,
+ * rhi_cmd_set_depth_state, rhi_cmd_set_blend_state; RhiLimits.dynamicDepth,
+ * dynamicBlend): a 64 x 16 RGBA8 target with a D32F+S8 depth cleared to 0,
+ * sixteen 8 x 8 cells, each a base quad (Z 0.5, written, GEQUAL), the
+ * cell's quad under its depth test, Z write, blend and mask (the renderer's
+ * Z tests, its blend equations and masks), then a probe quad on the cell's
+ * right half (Z 0.6, GEQUAL, no write: it shows whether the cell's quad
+ * wrote its Z).  Drawn twice: once with every state static (one pipeline a
+ * cell, made by one rhi_create_pipelines batch with maxThreads 1: one
+ * worker), once with the groups the device leaves dynamic out of the
+ * pipelines (their static values the normalised ones: ALWAYS, no write,
+ * blending off, mask F) and set after each bind; the two pictures are
+ * equal texel for texel.  The base and probe pipelines are static, so every
+ * cell's draw sets its group again (3 commands a group); after the cells
+ * a repeat of the values in force sets nothing, on the same pipeline and on
+ * another dynamic one (RhiStats.dynamicSets).  Without dynamic state only
+ * the static pass and its maxThreads batch run. */
+static void dynamicCell(const Ctx *c)
+{
+    enum { DW = 64, DH = 16, DC = 8, NCASE = 16, NV = NCASE * 18 + 3 };
+
+    const RhiLimits *lim = rhi_limits();
+    const uint32_t dyn = (lim->dynamicDepth ? (uint32_t)RHI_DYN_DEPTH : 0u) |
+                         (lim->dynamicBlend ? (uint32_t)RHI_DYN_BLEND : 0u);
+    rhi_test_log("%s: dynamic state: depth %d, blend %d\n", s_label, (int)lim->dynamicDepth,
+                 (int)lim->dynamicBlend);
+    rhi_wait_frame();
+    const RhiFormat CF = RHI_FMT_RGBA8_UNORM, DF = RHI_FMT_D32F_S8;
+    RhiTexture col = rhi_create_texture(&(RhiTextureDesc){
+        DW, DH, 1, CF, RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC, "dyn colour", 0});
+    RhiTexture dep =
+        rhi_create_texture(&(RhiTextureDesc){DW, DH, 1, DF, RHI_TEX_DEPTH_STENCIL, "dyn depth", 0});
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){NV * sizeof(Vtx) + 256u, RHI_BUF_VERTEX, RHI_MEM_UPLOAD, "dyn verts"});
+    uint8_t *map = ring.id ? rhi_map_buffer(ring) : NULL;
+
+    typedef struct DynCase {
+        RhiBlendState b;
+        RhiCompare cmp;
+        bool write;
+        float z;
+    } DynCase;
+
+    const RhiBlendState opaque = {.writeMask = 0xF};
+    const RhiBlendState lerp = {true,
+                                RHI_BF_SRC_ALPHA,
+                                RHI_BF_ONE_MINUS_SRC_ALPHA,
+                                RHI_BO_ADD,
+                                RHI_BF_ONE,
+                                RHI_BF_ZERO,
+                                RHI_BO_ADD,
+                                0xF};
+    RhiBlendState add = lerp, revsub = lerp, adAdd = lerp, adLerp = lerp, keep = lerp;
+    add.srcColor = add.dstColor = RHI_BF_ONE;
+    revsub.srcColor = revsub.dstColor = RHI_BF_ONE;
+    revsub.colorOp = RHI_BO_REVERSE_SUBTRACT;
+    adAdd.srcColor = RHI_BF_DST_ALPHA;
+    adAdd.dstColor = RHI_BF_ONE;
+    adLerp.srcColor = RHI_BF_DST_ALPHA;
+    adLerp.dstColor = RHI_BF_ONE_MINUS_DST_ALPHA;
+    keep.srcColor = RHI_BF_ZERO;
+    keep.dstColor = RHI_BF_ONE;
+    RhiBlendState mask7 = opaque, mask9 = lerp, mask0 = opaque;
+    mask7.writeMask = 0x7;
+    mask9.writeMask = 0x9;
+    mask0.writeMask = 0x0;
+    const DynCase cases[NCASE] = {
+        {opaque, RHI_CMP_GEQUAL, true, 0.75f},  {opaque, RHI_CMP_GEQUAL, true, 0.25f},
+        {opaque, RHI_CMP_GREATER, false, 0.5f}, {opaque, RHI_CMP_ALWAYS, false, 0.25f},
+        {opaque, RHI_CMP_NEVER, true, 0.75f},   {opaque, RHI_CMP_LESS, true, 0.25f},
+        {lerp, RHI_CMP_ALWAYS, false, 0.5f},    {add, RHI_CMP_ALWAYS, false, 0.5f},
+        {revsub, RHI_CMP_ALWAYS, false, 0.5f},  {adAdd, RHI_CMP_ALWAYS, false, 0.5f},
+        {adLerp, RHI_CMP_ALWAYS, false, 0.5f},  {keep, RHI_CMP_ALWAYS, false, 0.5f},
+        {mask7, RHI_CMP_GEQUAL, true, 0.75f},   {mask9, RHI_CMP_GEQUAL, false, 0.75f},
+        {mask0, RHI_CMP_GEQUAL, true, 0.75f},   {lerp, RHI_CMP_GEQUAL, true, 0.75f},
+    };
+    RhiDepthStencilState dsBase;
+    memset(&dsBase, 0, sizeof(dsBase));
+    dsBase.depthTest = true;
+    dsBase.depthWrite = true;
+    dsBase.depthCompare = RHI_CMP_GEQUAL;
+    RhiDepthStencilState dsProbe = dsBase;
+    dsProbe.depthWrite = false;
+    RhiPipeline pBase = makePipeline(c, c->psColor, CF, DF, &opaque, &dsBase, "dyn base");
+    RhiPipeline pProbe = makePipeline(c, c->psColor, CF, DF, &opaque, &dsProbe, "dyn probe");
+    /* the static cells' pipelines: one batch on one worker (maxThreads) */
+    RhiPipelineDesc sd[NCASE], dd[NCASE];
+    RhiPipeline ps[NCASE], pd[NCASE];
+    RhiDepthStencilState dss[NCASE];
+    for (int i = 0; i < NCASE; i++) {
+        memset(&dss[i], 0, sizeof(dss[i]));
+        dss[i].depthTest = true;
+        dss[i].depthWrite = cases[i].write;
+        dss[i].depthCompare = cases[i].cmp;
+        pipelineDesc(c, c->psColor, CF, DF, &cases[i].b, &dss[i], "dyn static", 0u, &sd[i]);
+    }
+    RhiPipelineBatch one = {NULL, NULL, NULL, 0, 1};
+    const uint32_t made = rhi_create_pipelines(sd, NCASE, ps, &one);
+    rhi_test_log("%s: dynamic state: the static cells' %u of %u pipelines on %u thread%s "
+                 "(maxThreads 1)\n",
+                 s_label, made, (unsigned)NCASE, one.threads, one.threads == 1 ? "" : "s");
+    if (made != NCASE || one.threads != 1) {
+        rhi_test_log("FAIL %s: rhi_create_pipelines with maxThreads 1: %u made on %u threads\n",
+                     s_label, made, one.threads);
+        failures++;
+    }
+    /* the dynamic cells' pipelines: the dynamic groups at their normalised
+       values */
+    const RhiBlendState normB = opaque;
+    RhiDepthStencilState normD = dsProbe;
+    normD.depthCompare = RHI_CMP_ALWAYS;
+    for (int i = 0; dyn && i < NCASE; i++) {
+        pipelineDesc(c, c->psColor, CF, DF, (dyn & RHI_DYN_BLEND) ? &normB : &cases[i].b,
+                     (dyn & RHI_DYN_DEPTH) ? &normD : &dss[i], "dyn dynamic", 0u, &dd[i]);
+        dd[i].dynamic = dyn;
+        pd[i] = rhi_create_pipeline(&dd[i]);
+        if (!pd[i].id) {
+            rhi_test_log("FAIL %s: dynamic state: pipeline %d not created\n", s_label, i);
+            failures++;
+        }
+    }
+    if (!col.id || !dep.id || !map || !pBase.id || !pProbe.id || failures) {
+        rhi_test_log("FAIL %s: dynamic state: resources\n", s_label);
+        failures++;
+        return;
+    }
+    Vtx v[NV];
+    for (int i = 0; i < NCASE; i++) {
+        const float x = (float)((i % 8) * DC), y = (float)((i / 8) * DC);
+        quad(&v[i * 18], x, y, x + DC, y + DC, DW, DH, 0.5f, 20, 220, 40, 0x80);
+        quad(&v[i * 18 + 6], x, y, x + DC, y + DC, DW, DH, cases[i].z, 200, 100, 50, 0x60);
+        quad(&v[i * 18 + 12], x + DC / 2, y, x + DC, y + DC, DW, DH, 0.6f, 0, 0, 255, 255);
+    }
+    for (int k = 0; k < 3; k++) {
+        v[NCASE * 18 + k] = (Vtx){0.0f, 0.0f, 0.5f, {0, 0, 0, 0}, 0, 0}; /* covers no pixel */
+    }
+    memcpy(map, v, sizeof(v));
+
+    static uint8_t img[2][DW * DH * 4];
+    uint32_t pitch[2] = {0, 0};
+    uint64_t sets[2] = {0, 0}, repeat = 0;
+    for (int run = 0; run < (dyn ? 2 : 1); run++) {
+        RhiStats s0, s1;
+        rhi_wait_frame();
+        RhiCommandList cl = rhi_begin_commands();
+        RhiTextureBarrier b0[2] = {{col, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
+                                   {dep, RHI_STATE_UNDEFINED, RHI_STATE_DEPTH_WRITE}};
+        rhi_cmd_barrier(cl, b0, 2);
+        RhiRenderPassDesc rp;
+        memset(&rp, 0, sizeof(rp));
+        rp.color[0].texture = col;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[0] = rp.color[0].clear[1] = rp.color[0].clear[2] = 10.0f / 255.0f;
+        rp.color[0].clear[3] = 1.0f;
+        rp.colorCount = 1;
+        rp.depth.texture = dep;
+        rp.depth.depthLoad = RHI_LOAD_CLEAR;
+        rp.depth.stencilLoad = RHI_LOAD_CLEAR;
+        rp.depth.clearDepth = 0.0f;
+        rp.width = DW;
+        rp.height = DH;
+        rhi_get_stats(&s0);
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_vertex_buffer(cl, 0, ring, 0);
+        for (int i = 0; i < NCASE; i++) {
+            rhi_cmd_set_pipeline(cl, pBase);
+            rhi_cmd_draw(cl, 6, (uint32_t)(i * 18), 1);
+            if (run == 0) {
+                rhi_cmd_set_pipeline(cl, ps[i]);
+            } else {
+                rhi_cmd_set_pipeline(cl, pd[i]);
+                rhi_cmd_set_depth_state(cl, true, cases[i].write, cases[i].cmp);
+                rhi_cmd_set_blend_state(cl, &cases[i].b);
+            }
+            rhi_cmd_draw(cl, 6, (uint32_t)(i * 18 + 6), 1);
+            rhi_cmd_set_pipeline(cl, pProbe);
+            rhi_cmd_draw(cl, 6, (uint32_t)(i * 18 + 12), 1);
+        }
+        rhi_get_stats(&s1);
+        sets[run] = s1.dynamicSets - s0.dynamicSets;
+        if (run == 1) {
+            /* the values in force again: on the same pipeline, then on
+               another dynamic one (no static bind between) */
+            rhi_cmd_set_pipeline(cl, pd[0]);
+            rhi_cmd_set_depth_state(cl, true, cases[0].write, cases[0].cmp);
+            rhi_cmd_set_blend_state(cl, &cases[0].b);
+            rhi_cmd_draw(cl, 3, NCASE * 18, 1);
+            rhi_get_stats(&s0);
+            rhi_cmd_set_depth_state(cl, true, cases[0].write, cases[0].cmp);
+            rhi_cmd_set_blend_state(cl, &cases[0].b);
+            rhi_cmd_draw(cl, 3, NCASE * 18, 1);
+            rhi_cmd_set_pipeline(cl, pd[1]);
+            rhi_cmd_set_depth_state(cl, true, cases[0].write, cases[0].cmp);
+            rhi_cmd_set_blend_state(cl, &cases[0].b);
+            rhi_cmd_draw(cl, 3, NCASE * 18, 1);
+            rhi_get_stats(&s1);
+            repeat = s1.dynamicSets - s0.dynamicSets;
+        }
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier b1 = {col, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &b1, 1);
+        rhi_end_commands(cl);
+        rhi_submit(cl);
+        if (!rhi_readback_texture(col, RHI_ASPECT_COLOR, img[run], sizeof(img[run]), &pitch[run])) {
+            rhi_test_log("FAIL %s: dynamic state: readback %d\n", s_label, run);
+            failures++;
+            return;
+        }
+    }
+    /* the opaque cells' texels are exact on any device */
+    const int before = failures;
+    expectRGBA(img[0], pitch[0], 1, 1, 200, 100, 50, 0x60, 300);  /* 0: passes, writes */
+    expectRGBA(img[0], pitch[0], 6, 1, 200, 100, 50, 0x60, 300);  /* its Z hides the probe */
+    expectRGBA(img[0], pitch[0], 9, 1, 20, 220, 40, 0x80, 300);   /* 1: fails */
+    expectRGBA(img[0], pitch[0], 14, 1, 0, 0, 255, 255, 300);     /* the probe */
+    expectRGBA(img[0], pitch[0], 17, 1, 20, 220, 40, 0x80, 300);  /* 2: GREATER, equal Z */
+    expectRGBA(img[0], pitch[0], 25, 1, 200, 100, 50, 0x60, 300); /* 3: ALWAYS */
+    expectRGBA(img[0], pitch[0], 30, 1, 0, 0, 255, 255, 300);     /* no Z written */
+    expectRGBA(img[0], pitch[0], 33, 1, 20, 220, 40, 0x80, 300);  /* 4: NEVER */
+    expectRGBA(img[0], pitch[0], 33, 9, 200, 100, 50, 0x80, 300); /* 12: mask RGB */
+    expectRGBA(img[0], pitch[0], 49, 9, 20, 220, 40, 0x80, 300);  /* 14: mask 0, Z written */
+    expectRGBA(img[0], pitch[0], 54, 9, 20, 220, 40, 0x80, 300);  /* the probe hidden */
+    if (failures != before) {
+        rhi_test_log("FAIL %s: dynamic state: the static cells\n", s_label);
+    }
+    if (!dyn) {
+        rhi_test_log("SKIP %s: dynamic state: none on this device (the static cells only)\n",
+                     s_label);
+        return;
+    }
+    uint32_t diff = 0;
+    for (int y = 0; y < DH; y++) {
+        diff += memcmp(img[0] + (size_t)y * pitch[0], img[1] + (size_t)y * pitch[1], DW * 4u) != 0;
+    }
+    const uint64_t perDraw = ((dyn & RHI_DYN_DEPTH) ? 3u : 0u) + ((dyn & RHI_DYN_BLEND) ? 3u : 0u);
+    rhi_test_log("%s: dynamic state: static and dynamic pictures %s (%u rows differ); %llu "
+                 "dynamic commands for %u cells (%llu each), %llu for the repeats\n",
+                 s_label, diff ? "differ" : "equal texel for texel", diff,
+                 (unsigned long long)sets[1], (unsigned)NCASE, (unsigned long long)perDraw,
+                 (unsigned long long)repeat);
+    if (diff || sets[0] != 0 || sets[1] != perDraw * NCASE || repeat != 0) {
+        rhi_test_log("FAIL %s: dynamic state: %u rows differ, %llu static and %llu dynamic "
+                     "commands (want 0 and %llu), %llu on the repeats (want 0)\n",
+                     s_label, diff, (unsigned long long)sets[0], (unsigned long long)sets[1],
+                     (unsigned long long)(perDraw * NCASE), (unsigned long long)repeat);
+        failures++;
+    }
+    rhi_destroy_pipeline(pBase);
+    rhi_destroy_pipeline(pProbe);
+    for (int i = 0; i < NCASE; i++) {
+        rhi_destroy_pipeline(ps[i]);
+        rhi_destroy_pipeline(pd[i]);
+    }
+    rhi_destroy_texture(col);
+    rhi_destroy_texture(dep);
+    rhi_destroy_buffer(ring);
+}
+
 /* rhi_create_pipelines' wait function: the finished count never goes
  * back */
 typedef struct BatchWait {
@@ -883,7 +1141,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     RhiPipeline batchPipe[8];
     float batchMs[8];
     BatchWait bw = {0, 0, 0};
-    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0};
+    RhiPipelineBatch batch = {batchWait, &bw, batchMs, 0, 0};
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsDecr, "stencilDecr", 0u, &batchDesc[0]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsReplace, "stencilRep", 0u, &batchDesc[1]);
     pipelineDesc(&c, c.psColor, CF, DF, &noColor, &dsIncr, "stencilIncr", 0u, &batchDesc[2]);
@@ -1112,8 +1370,8 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
                                  RHI_STORE_STORE,
                                  false};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR, RHI_LOAD_CLEAR,  0.0f,
-                                        0,     false,          RHI_STORE_STORE, RHI_STORE_STORE};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f, 0,
+                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false};
         rp.width = W;
         rp.height = H;
         rhi_cmd_begin_label(cl, "scene");
@@ -1296,6 +1554,9 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     if (!failures) {
         dstReadCell(&c, RHI_DST_READ_STORAGE);
         dstReadCell(&c, RHI_DST_READ_ATTACHMENT);
+    }
+    if (!failures) {
+        dynamicCell(&c);
     }
 
     /* destroys are deferred; the frames in flight retire them */

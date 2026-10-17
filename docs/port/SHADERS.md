@@ -298,10 +298,19 @@ the code and a CPU sweep against the plain operator in `gs_math_test`:
   of the exact one (the conversion within one ulp, the divide within 2.5 ulp: Vulkan's `OpFDiv`
   precision, which the proof assumes of the other APIs' divides too), so its integer
   part is the floor or one off, and the remainder `|n| - q * d` (exact modulo 2^32) says which.
-  The function's comment carries the bounds of its one user, `fx_sprite_ps`'s UV step
+  The function's comment carries the bounds of `fx_sprite_ps`'s UV step
   (`(X - x0) * (u1 - u0) / (x1 - x0)`: `|n| <= (d + 30) * 65543`); a new user proves its own.
   `gs_math_test` sweeps it against `/` with the float quotient moved to the corners of those
   bounds.
+- **Integer division by a per-draw divisor** is `gs_div_trunc_rcp(n, d, rd)` (`gs_math.hlsli`),
+  `gs_div_trunc` with the quotient taken as `float(|n|) * rd` (`precise`), `rd` the correctly
+  rounded `1.0f / d` the CPU computes once a draw, and the same correction: the conversion, `rd`
+  and the product each within half an ulp, so below `2^21` the quotient is within 0.375 of the
+  exact one. `fx_sprite_ps`'s UV step is its user, the reciprocals in `DrawCB.aux1.xy`
+  (`port/render/rd_replay.c` (`blurAux1`)), with `fx_texel`'s wrap size in `aux1.zw` (the
+  `max(1, round(size * scale))` it computed per pixel, `rintf` for the shader's `RoundEven`).
+  `gs_math_test` sweeps it over `gs_div_trunc`'s operands with the conversion, `rd` and the
+  product each moved a whole ulp either way (the bound there 0.9375).
 - **A divide by a per-draw float that is often 1** is skipped in a branch when it is 1
   (`fx_sprite_ps`'s coverage, `fp / ts` at scale 1): the reciprocal of 1.0 is 1.0 and `x * 1.0`
   is `x`.
@@ -413,14 +422,15 @@ strip.
 
 ### The variants
 
-Every VU vertex shader has two variants (issue 107): the extended one, `vu_X_vs`, the file as it
-reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
-(`port/shaders/CMakeLists.txt`), which leaves out the card test's step of the region rule
-(`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras (`vu_tick_shown`,
-`vu_particle_tick_shown`). A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` runs the same
-instructions on the same values through either, so the renderer gives it the plain one
-([RENDER.md](RENDER.md#the-vu-shader-variants)). The cut against the camera's picture stays in
-both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as before.
+The record path's modules have one build each, on every device. The ten mesh program entries,
+which only the fallback draws through, have two (issue 107): the extended one, `vu_X_vs`, the file
+as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
+(`port/shaders/CMakeLists.txt`, the ten mesh entries only), which leaves out the card test's step
+of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
+(`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
+the extended ones everywhere else, once a run ([RENDER.md](RENDER.md#the-fallback-entries));
+`vu_particle_vs` and `vu_tri_vs` have the one build. The cut against the camera's picture stays in
+both: at 4:3 a triangle wholly beside the picture is drawn, clipped, as in the extended one.
 
 | module | plain words | instructions | blocks | extended words | instructions | blocks | the set that built on the Adreno 740 (words) |
 | --- | --- | --- | --- | --- | --- | --- | --- |

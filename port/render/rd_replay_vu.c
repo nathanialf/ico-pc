@@ -353,18 +353,11 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     RdDrawPass pl[2], dp[8];
     const int npl = rd__plan_screen_draw(s, RD_PRIM_TRIANGLES, RD_SPACE_WORLD, ds->tc->format,
                                          ds->depthFmt, pl);
-#ifndef RD_HAVE_VU_STAGE_KEY
-    /* the program entries' variant while the key still has one */
-    const uint8_t vuExt = rd__vu_draw_ext(vcb->draw[2]);
-#endif
     for (int i = 0; i < npl; i++) {
         /* the meshes' main shader serves every program (RD_PROG_PRELIT);
          * the sprites' keeps the particles' program */
         pl[i].key.gs.program = vs == RD_VS_VU_MAIN ? RD_PROG_PRELIT : prog;
         pl[i].key.vs = vs;
-#ifndef RD_HAVE_VU_STAGE_KEY
-        pl[i].key.vuExt = recorded ? 0u : vuExt;
-#endif
         /* the planner's sprite_texa_ps becomes vu_texa_ps */
         pl[i].key.fs = pl[i].key.fs == RD_FS_SPRITE_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         if (vcb->batch[2] != 0u) {
@@ -402,9 +395,6 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             key.vs = progVs;
             key.gs.program = prog;
             key.fs = vuLegacyFs(key.fs);
-#ifndef RD_HAVE_VU_STAGE_KEY
-            key.vuExt = vuExt;
-#endif
             p = rd__get_pipeline(&key);
             g_rdPerf.vuPreFallbacks++;
         }
@@ -833,18 +823,6 @@ static uint32_t vuRows(uint64_t n)
 {
     return (uint32_t)((n + ICO_VU_REC_W - 1u) / ICO_VU_REC_W);
 }
-
-#ifndef RD_HAVE_VU_STAGE_KEY
-/* A record stage's pipeline key (rd_pipeline.c rd__vu_stage_key once it
- * has one: the pre-pass entries' key, points into the record's three
- * targets, no depth, no blend) with the tick stage's colour mask */
-static RdPipeKeyInt rd__vu_stage_key(uint8_t vs, uint8_t colorMask)
-{
-    RdPipeKeyInt k = rd__vu_pre_key(vs);
-    k.gs.colorMask = colorMask;
-    return k;
-}
-#endif
 
 /* the record stages' pipeline keys of entry e (*n of them): its pre-pass
  * entry's, the rule, tick (masks R and G) and planes stages' for a mesh or

@@ -1,12 +1,15 @@
-/* rd_blend_selftest.c: the exact blend's self-test (rd.h rd_blend_selftest).
+/* rd_blend_selftest.c: the blend's self-test (rd.h rd_blend_selftest).
  *
- * The exact blend (rd_dst_read.c) reads the pixel behind each blended
- * fragment.  A driver whose read returns the wrong colour draws a wrong
- * picture with no error anywhere: issue 89, Adreno 830 on Qualcomm's
- * driver 512.800.72, where the attachment read gave white around the
- * leaves' clear texels, washed the title out and drew the menus white on
- * white, while the same frames are right through the same path on
- * lavapipe.  So the modes are checked on the device itself at start.
+ * The blend in force is checked on the device at start: the
+ * fixed-function blend (the default everywhere, rd_dst_read.c) and, when
+ * [dev] blend opted into one, the exact blend, which reads the pixel behind
+ * each blended fragment.  A driver whose read returns the wrong colour
+ * draws a wrong picture with no error anywhere: issue 89, Adreno 830 on
+ * Qualcomm's driver 512.800.72, where the attachment read gave white
+ * around the leaves' clear texels, washed the title out and drew the menus
+ * white on white, while the same frames are right through the same path
+ * on lavapipe.  A driver whose dual-source blend is wrong is caught the
+ * same way, and takes the two-pass fallback.
  *
  * The frame, built here and never recorded (rd_fog_path.c's helpers), on
  * SCENE at its real size and scale, in a block of 256 x 64 GS pixels in its
@@ -32,20 +35,21 @@
  * The order: the fixed-function blend first (the reference; it passes
  * within 2 levels, the blender rounding to nearest where the GS floors,
  * twice where the two draws overlap; failing that the two-pass fallback,
- * rd_set_no_dual, is tried and kept if it passes), then the exact modes
- * the device has in rd__dst_init's order, attachment read then interlock
- * or ROV, each within 1 level.  The first exact mode that passes is the
- * one in force; none passing leaves the fixed-function blend.  A mode
- * ICO_RD_BLEND asked for is kept whatever its result (still run and
- * logged); ICO_RD_BLEND=fixed and a device without an exact mode run
- * nothing (a restart after a crash in a destination-read pipeline asks for
- * fixed: nothing of the exact blend is built again).  MSAA is held off
- * while it runs (the MSAA epoch draws with the fixed-function blend), and
- * SCENE is left to start from its clear.
+ * rd_set_no_dual, is tried and kept if it passes), then, only when
+ * ICO_RD_BLEND ([dev] blend) opted into an exact mode the device has
+ * (rd__dst_asked), that mode within 1 level, kept whatever its result
+ * (run and logged).  It runs on every device, whatever the blend: a
+ * device without dual-source blending starts from the two-pass blend.
+ * MSAA is held off while it runs (the MSAA epoch draws with the
+ * fixed-function blend), and SCENE is left to start from its clear.
  *
- *   blend: exact (attachment read) (self-test: attachment ok 1, storage
- *     not on this device, fixed-function ok 1) on SCENE 640x448 at
- *     1920x1344 texels in 318.3 ms
+ *   blend: fixed-function (self-test: fixed-function ok 1; exact modes not
+ *     asked for: [dev] blend = attachment|storage tries one) on SCENE
+ *     640x448 at 1920x1344 texels in T ms
+ *   blend: exact (attachment read) (self-test: attachment ok 1,
+ *     fixed-function ok 1; kept by [dev] blend) on SCENE ...
+ *   blend: fixed-function (self-test: fixed-function fail N -> two-pass
+ *     ok 1; ...) on SCENE ...
  *   blend: self-test: attachment ok 1 at glyph 0 (texel 1105,709):
  *     73,57,41,23 want 74,57,41,23
  * (lavapipe: the glyph one level off the fixed-function reference, the
@@ -54,9 +58,10 @@
  *   blend: self-test: attachment fail 241 at tint cell 0 (texel 625,625):
  *     255,255,255,4 want 21,28,14,4
  *
- * ICO_RD_BLEND_SABOTAGE=attachment,storage,fixed (tests): those modes'
- * read-back samples are made white, as a driver whose read returns white
- * would draw them, so the fallback can be run where every mode is right.
+ * ICO_RD_BLEND_SABOTAGE=attachment,storage,fixed,twopass (tests): those
+ * entries' read-back samples are made white, as a driver whose read (or
+ * blend) returns white would draw them, so the fallback can be run where
+ * every mode is right.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,7 +78,7 @@
 /* the entries of the log line; FIXED the reference, NODUAL its fallback */
 enum { E_ATTACH, E_STORAGE, E_FIXED, E_NODUAL, E_COUNT };
 
-enum { R_NOT_TRIED, R_UNSUPPORTED, R_ERROR, R_FAIL, R_OK };
+enum { R_NOT_TRIED, R_ERROR, R_FAIL, R_OK };
 
 static const char *const kEntryName[E_COUNT] = {"attachment", "storage", "fixed-function",
                                                 "two-pass"};
@@ -308,6 +313,8 @@ static struct {
     RhiTexture read;
     RhiState readState;
     uint8_t sabotage; /* ICO_RD_BLEND_SABOTAGE: a bit per entry */
+    bool fellBack;    /* the last run took the two-pass fallback: the next starts from
+                         the dual-source blend again, so each run's line is whole */
 } s_bt;
 
 /* the sample's texel in SCENE (rd_fog_path.c stSamples' mapping) */
@@ -414,15 +421,18 @@ static void readSabotage(void)
                    (n == 3 && strncmp(sb, "rov", n) == 0)) {
             s_bt.sabotage |= 1u << E_STORAGE;
         } else if (n == 5 && strncmp(sb, "fixed", n) == 0) {
-            s_bt.sabotage |= (1u << E_FIXED) | (1u << E_NODUAL);
+            s_bt.sabotage |= 1u << E_FIXED;
+        } else if (n == 7 && strncmp(sb, "twopass", n) == 0) {
+            s_bt.sabotage |= 1u << E_NODUAL;
         }
         sb = end ? end + 1 : NULL;
     }
     if (s_bt.sabotage) {
-        rd__log("blend: ICO_RD_BLEND_SABOTAGE: the self-test's pixels of%s%s%s read white",
+        rd__log("blend: ICO_RD_BLEND_SABOTAGE: the self-test's pixels of%s%s%s%s read white",
                 (s_bt.sabotage & (1u << E_ATTACH)) ? " attachment" : "",
                 (s_bt.sabotage & (1u << E_STORAGE)) ? " storage" : "",
-                (s_bt.sabotage & (1u << E_FIXED)) ? " fixed-function" : "");
+                (s_bt.sabotage & (1u << E_FIXED)) ? " fixed-function" : "",
+                (s_bt.sabotage & (1u << E_NODUAL)) ? " two-pass" : "");
     }
 }
 
@@ -434,23 +444,39 @@ static void freeObjects(void)
     s_bt.read = (RhiTexture){0};
 }
 
+/* "<entry> ok N", "fail N", "error" into out at *n */
+static void entryText(char *out, size_t size, size_t *n, int e, const Verdict *v)
+{
+    int k;
+    switch (v->result) {
+    case R_OK:
+        k = snprintf(out + *n, size - *n, "%s ok %d", kEntryName[e], v->err);
+        break;
+    case R_FAIL:
+        k = snprintf(out + *n, size - *n, "%s fail %d", kEntryName[e], v->err);
+        break;
+    case R_ERROR:
+        k = snprintf(out + *n, size - *n, "%s error", kEntryName[e]);
+        break;
+    default:
+        k = snprintf(out + *n, size - *n, "%s not tried", kEntryName[e]);
+        break;
+    }
+    if (k > 0) {
+        *n += (size_t)k;
+        if (*n >= size) {
+            *n = size - 1;
+        }
+    }
+}
+
 static bool runSelftest(void)
 {
-    const int asked = rd__dst_asked();
-    const uint8_t exactModes = g_rd.dstModes & (uint8_t)((1u << RD_BLEND_EXACT_ATTACHMENT) |
-                                                         (1u << RD_BLEND_EXACT_STORAGE));
-    if (!exactModes || asked == RD_BLEND_EXACT_OFF) {
-        const char *off = g_rd.hasDevice ? rhi_limits()->rasterOrderOff : NULL;
-        snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test not run: %s)",
-                 rd__blend_exact_name(g_rd.dstMode),
-                 exactModes ? "ICO_RD_BLEND=fixed" : "no exact blend on this device");
-        rd__log("blend: %s (self-test not run: %s%s%s)", rd__blend_exact_name(g_rd.dstMode),
-                exactModes ? "ICO_RD_BLEND=fixed" : "no exact blend on this device",
-                off ? "; " : "", off ? off : "");
-        return true;
-    }
+    const int asked = rd__dst_asked(); /* > 0: an exact mode opted into, on the device */
     RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t || !t->color.id || t->format != RHI_FMT_RGBA8_UNORM || t->w < BT_W || t->h < BT_H) {
+        snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: no SCENE target)",
+                 rd__blend_exact_name(g_rd.dstMode));
         rd__log("blend: self-test: no SCENE target to run it on");
         return false;
     }
@@ -477,8 +503,14 @@ static bool runSelftest(void)
         rd__frame_free(&f);
         rd_destroy_texture(leaf);
         rd_destroy_texture(sheet);
+        snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: could not build its frame)",
+                 rd__blend_exact_name(g_rd.dstMode));
         rd__log("blend: self-test: could not build its frame");
         return false;
+    }
+    if (s_bt.fellBack) {
+        rd_set_no_dual(false);
+        s_bt.fellBack = false;
     }
     const bool noDualBefore = g_rd.noDual;
     const bool wasBlocked = g_rd.msaaBlocked;
@@ -491,7 +523,8 @@ static bool runSelftest(void)
         v[e].err = v[e].worst = 0;
     }
     /* the reference: the fixed-function blend, the two-pass fallback when
-       the dual-source blend fails */
+       the dual-source blend fails (or from the start on a device without
+       it) */
     g_rd.dstMode = RD_BLEND_EXACT_OFF;
     const int fixedEntry = g_rd.noDual ? E_NODUAL : E_FIXED;
     runEntry(fixedEntry, &f, t, NULL, &v[fixedEntry]);
@@ -505,33 +538,13 @@ static bool runSelftest(void)
         }
     }
     const uint8_t *ref = refEntry >= 0 ? v[refEntry].px : NULL;
-    /* the exact modes in rd__dst_init's order, up to the first that passes
-       (an asked mode is run whatever came before it) */
-    static const int kOrder[2][2] = {{RD_BLEND_EXACT_ATTACHMENT, E_ATTACH},
-                                     {RD_BLEND_EXACT_STORAGE, E_STORAGE}};
-    int chosen = -1;
-    /* MoltenVK's default (rd__dst_init, issue 102): the exact modes are not
-       tried (their pipelines cost start-up time for nothing, and A14's
-       interlock regressed the picture); only the reference runs.  An
-       ICO_RD_BLEND mode is tried as everywhere */
-    const bool skipExact = rd__dst_platform_fixed();
-    for (int i = 0; i < 2; i++) {
-        const int mode = kOrder[i][0], e = kOrder[i][1];
-        if (skipExact) {
-            continue; /* MoltenVK's default: the exact modes are not exercised */
-        }
-        if (!(g_rd.dstModes & (1u << mode))) {
-            v[e].result = R_UNSUPPORTED;
-            continue;
-        }
-        if (chosen >= 0 && asked != mode) {
-            continue; /* not tried */
-        }
-        g_rd.dstMode = (uint8_t)mode;
-        runEntry(e, &f, t, ref, &v[e]);
-        if (v[e].result == R_OK && chosen < 0) {
-            chosen = mode;
-        }
+    /* the exact mode [dev] blend opted into, kept whatever it finds */
+    const int askedEntry = asked == RD_BLEND_EXACT_ATTACHMENT ? E_ATTACH
+                           : asked == RD_BLEND_EXACT_STORAGE  ? E_STORAGE
+                                                              : -1;
+    if (askedEntry >= 0) {
+        g_rd.dstMode = (uint8_t)asked;
+        runEntry(askedEntry, &f, t, ref, &v[askedEntry]);
     }
     s_bt.running = false;
     g_rd.msaaBlocked = wasBlocked;
@@ -542,76 +555,39 @@ static bool runSelftest(void)
     /* the next replay starts SCENE from its clear, not from the block */
     t->clearPending = 1;
 
-    const bool passed = chosen >= 0 || skipExact;
-    if (chosen < 0) {
-        chosen = RD_BLEND_EXACT_OFF;
-    }
-    if (asked > 0) {
-        chosen = asked;
-    } else if (rd__dst_platform_fixed()) {
-        chosen = RD_BLEND_EXACT_OFF; /* MoltenVK's default (rd__dst_init) */
-    }
+    const int chosen = askedEntry >= 0 ? asked : RD_BLEND_EXACT_OFF;
     g_rd.dstMode = (uint8_t)chosen;
-    if (g_rd.noDual != noDualBefore) {
+    s_bt.fellBack = g_rd.noDual && !noDualBefore;
+    if (s_bt.fellBack) {
         rd__log("blend: the fixed-function blend through the two-pass fallback (the dual-source "
                 "blend failed the self-test)");
     }
 
-    /* the line: the modes in rd__dst_init's order, then the reference */
-    static const int kLine[E_COUNT] = {E_ATTACH, E_STORAGE, E_FIXED, E_NODUAL};
+    /* the results: the asked exact mode, then the reference (and its
+       fallback after "->") */
     char res[200];
     size_t n = 0;
     res[0] = '\0';
-    bool afterNote = false;
-    if (skipExact) {
-        afterNote = true;
-        n = (size_t)snprintf(res, sizeof res,
-                             "exact modes not tried: MoltenVK default is fixed-function");
+    if (askedEntry >= 0) {
+        entryText(res, sizeof res, &n, askedEntry, &v[askedEntry]);
+        n += (size_t)snprintf(res + n, sizeof(res) - n, ", ");
+        n = n >= sizeof res ? sizeof res - 1 : n;
     }
-    for (int i = 0; i < E_COUNT; i++) {
-        const int e = kLine[i];
-        if (skipExact && (e == E_ATTACH || e == E_STORAGE)) {
-            continue;
-        }
-        if ((e == E_NODUAL && v[e].result == R_NOT_TRIED) ||
-            (e == E_FIXED && v[e].result == R_NOT_TRIED && v[E_NODUAL].result != R_NOT_TRIED)) {
-            continue; /* the fixed-function entry that was not this device's */
-        }
-        const char *sep = afterNote ? "; " : n ? ", " : "";
-        afterNote = false;
-        switch (v[e].result) {
-        case R_OK:
-            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s ok %d", sep, kEntryName[e],
-                                  v[e].err);
-            break;
-        case R_FAIL:
-            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s fail %d", sep, kEntryName[e],
-                                  v[e].err);
-            break;
-        case R_ERROR:
-            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s error", sep, kEntryName[e]);
-            break;
-        case R_UNSUPPORTED:
-            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s not on this device", sep,
-                                  kEntryName[e]);
-            break;
-        default:
-            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s not tried", sep, kEntryName[e]);
-            break;
-        }
-        if (n >= sizeof(res)) {
-            n = sizeof(res) - 1;
-        }
+    entryText(res, sizeof res, &n, fixedEntry, &v[fixedEntry]);
+    if (fixedEntry == E_FIXED && v[E_NODUAL].result != R_NOT_TRIED) {
+        n += (size_t)snprintf(res + n, sizeof(res) - n, " -> ");
+        n = n >= sizeof res ? sizeof res - 1 : n;
+        entryText(res, sizeof res, &n, E_NODUAL, &v[E_NODUAL]);
     }
-    const char *off = rhi_limits()->rasterOrderOff;
-    const char *why = asked > 0 ? "; kept by ICO_RD_BLEND" : "";
-    snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s)%s",
-             rd__blend_exact_name(chosen), res, why);
-    rd__log("blend: %s (self-test: %s)%s%s%s on SCENE %ux%u at %ux%u texels in %.1f ms",
-            rd__blend_exact_name(chosen), res, why, off ? "; " : "", off ? off : "", t->w, t->h,
-            t->tw, t->th, rd__now_ms() - t0);
+    const char *why = askedEntry >= 0 ? "; kept by [dev] blend"
+                                      : "; exact modes not asked for: [dev] blend = "
+                                        "attachment|storage tries one";
+    snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s%s)",
+             rd__blend_exact_name(chosen), res, askedEntry >= 0 ? why : "");
+    rd__log("blend: %s (self-test: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms",
+            rd__blend_exact_name(chosen), res, why, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
     for (int e = 0; e < E_COUNT; e++) {
-        /* a failing mode's worst sample, and a passing one's when it is not
+        /* a failing entry's worst sample, and a passing one's when it is not
            exact (the blender's rounding, or a driver near the limit) */
         if (v[e].result != R_FAIL && !(v[e].result == R_OK && v[e].err > 0)) {
             continue;
@@ -634,14 +610,10 @@ static bool runSelftest(void)
                 kEntryName[e], v[e].result == R_FAIL ? "fail" : "ok", v[e].err, what, x, y, p[0],
                 p[1], p[2], p[3], want[0], want[1], want[2], want[3]);
     }
-    if (!passed && asked < 0 && !skipExact) {
-        rd__log("blend: no exact blend passed the self-test on this device: the fixed-function "
-                "blend (rounds up) is used");
+    if (askedEntry >= 0) {
+        return v[askedEntry].result == R_OK;
     }
-    if (chosen == RD_BLEND_EXACT_OFF) {
-        return refEntry >= 0;
-    }
-    return v[chosen == RD_BLEND_EXACT_ATTACHMENT ? E_ATTACH : E_STORAGE].result == R_OK;
+    return refEntry >= 0;
 }
 
 bool rd_blend_selftest(void)
@@ -670,4 +642,5 @@ void rd__blend_selftest_shutdown(void)
 {
     freeObjects();
     s_bt.armed = false;
+    s_bt.fellBack = false;
 }

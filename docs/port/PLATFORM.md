@@ -386,7 +386,9 @@ from `ico_ini_export`, which makes none of them, [RENDER.md](RENDER.md#the-verte
 `fixedblend` (the note names a pipeline whose `dst` field is nonzero, an exact-blend
 pass with a fragment shader interlock or rasterizer-ordered view entry: the same backend with the
 fixed-function blend, `ICO_RD_BLEND=fixed` from `ico_ini_export` as for the loss steps, which builds
-no such pipeline; skipped when the player chose the blending with `blend=` or `ICO_RD_BLEND`;
+no such pipeline; skipped when the player chose the blending with `blend=` or `ICO_RD_BLEND`, so
+with the fixed-function blend the default, which makes no destination-read pipeline, it is reached
+only by a run whose exact blend the player did not choose;
 `startup_retry_note_has_dst` reads the note), `d3d12` (a build with the Direct3D 12 backend whose
 player named no backend; its own blending, not the fixed one), `lazy`
 (each pipeline is built when a frame first needs it), then none: the crash ends as any other, with
@@ -418,14 +420,17 @@ logs the loss and the renderer's pass ring, then asks for the loss step
 (`ico_diag_device_lost_restart`)); the steps come in order, each taken only when the run before
 lost the device: `lossnoprepass` (the same backend without the VU vertex pre-pass,
 `ICO_RD_VU_PREPASS=0`, when the losing run drew with it after its self-test:
-`ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
+`ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `robust` (the same backend with robust
+buffer and image access, `ICO_GPU_ROBUST=1`, when the losing run drew with it off by the platform's
+default, `StartupRetryRun.robustOffDefault`, which no caller sets: the default is off on every
+platform, and Android, where it was the reason, does not relaunch), `blend` (the same backend with the fixed-function blend, `ICO_RD_BLEND=fixed`, so
 no fragment shader interlock or rasterizer-ordered view passes; skipped when the losing run already
-drew with it or the player chose the blending with `blend=` or `ICO_RD_BLEND`), `backend` (the
+drew with it, the default, or the player chose the blending with `blend=` or `ICO_RD_BLEND`), `backend` (the
 other backend, Direct3D 12 from Vulkan or Vulkan from Direct3D 12, with the fixed-function blend; in
 a build with both, when the player named no backend and no blending other than `fixed`), then none
 (`port/platform/startup_retry.h` (`startup_retry_next`, `StartupRetryRun`); `port/platform/startup_retry.c`
-(`loss_next`)). Every loss step's run draws without the pre-pass, and `blend` and `backend` with the
-fixed-function blend. With a step, the session ends through the normal quit path without a box (the
+(`loss_next`)). Every loss step's run draws without the pre-pass, `robust` with robust access, and
+`blend` and `backend` with the fixed-function blend. With a step, the session ends through the normal quit path without a box (the
 settings are saved and the window, audio and files closed as at any quit) and the program starts
 again at exit, after the end-of-run steps, with `ICO_STARTUP_RETRY=blend:<backend>` or
 `backend:<backend>`; the relaunch is the same `relaunch_now` as the crash's, run from an `atexit`
@@ -436,7 +441,7 @@ itself with simpler blending when the run was a loss step's. Android and iOS kee
 run starts at the title as a fresh launch (what was not saved was lost with the card, as at a quit),
 appends to the log, logs
 `ico_pc: restarted after the graphics card stopped responding: <what this run does>`, and gets
-`ICO_RD_BLEND=fixed` (the `blend` and `backend` steps) and `ICO_RD_VU_PREPASS=0` from
+`ICO_RD_BLEND=fixed` (the `blend` and `backend` steps), `ICO_GPU_ROBUST=1` (the `robust` step) and `ICO_RD_VU_PREPASS=0` from
 `ico_ini_export`, which win over `blend=` and `vu_prepass=` and over the environment for that run
 (the step is never taken against a player's blending other than `fixed`)
 (`port/platform/host_config.c` (`ico_ini_export`, `ico_dev_env_export_value`)). When the
@@ -588,7 +593,7 @@ start ended while the graphics driver compiled the largest 3D shaders (the VU ex
 this start and every start after it use the smaller ones only ([dev] vu_plain_only = true in
 <path>): the wide-screen rule is off; delete that line to try the larger ones again`
 (`vu_plain_persist`). Either start builds the set as usual, not lazily
-([RENDER.md](RENDER.md#the-vu-shader-variants); `port/platform/window_host.c`,
+([RENDER.md](RENDER.md#the-fallback-entries); `port/platform/window_host.c`,
 `ico_diag_startup_activity_prev`). While the set is created the heartbeat line ends with the note
 in flight (`| creating pipelines ...`), so a log that stops mid-set says what the driver was
 compiling; a VU batch's note names each vertex shader with its words and SPIR-V instructions and
@@ -930,11 +935,16 @@ Once a start, after the device line, the self-tests and the window line, the win
 with what a report usually asks:
 
 ```
-ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend exact (interlock) (self-test: ...); index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off; controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
+ico_pc: summary: version vX.Y.Z (commit 1a2b3c4d); Windows x64; GPU NVIDIA GeForce GTX 1060 (device 10de:1c03; driver NVIDIA 566.36, version 566.36.0.0); Vulkan; Enhanced preset, resolution ..., aspect ..., framerate ...; blend fixed-function (self-test: fixed-function ok 1); profile immediate-mode GPU (NVIDIA, Vulkan): fog local off, DATE snapshot, depth stores kept, blur fold off, local read yes, uint views off; index values dense (marks in the stream); fog inplace (self-test: ...); VU shaders plain and extended; VU pre-pass on (self-test: ok); pipelines the start-up set; index values up to 4294967295; robust access off (the default; gpu_robust = true turns it on); controller Xbox Series X Controller (DirectInput scan on); disc SCES_507.60; user profile
 ```
 
 (`port/platform/window_host.c` (`log_summary`); `port/render/rd_core.c` (`rd_summary_text`, from
-the self-tests' results); `port/rhi/rhi.h` (`RhiLimits.driverText`, `robustText`)). The controller
+the self-tests' results); `port/render/rd_profile.c` (`rd__profile_text`); `port/rhi/rhi.h`
+(`RhiLimits.driverText`, `robustText`)). The blend is the self-test's
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths)): `fixed-function` by default, an exact
+mode with `; kept by [dev] blend` where the player opted in; the profile is the device class and
+its flags as in force, `([dev])` after one a `[dev]` key set and `(self-test)` after one a self-test
+turned off ([RENDER.md](RENDER.md#the-device-profile)). The controller
 is what SDL has connected then ("none yet" when the pad arrives later; its own `input: gamepad`
 line follows), on Windows with whether SDL's DirectInput scan is on (`[dev] joystick_directinput`);
 the VU shaders are `plain only (issue 107)` on a device or setting that keeps them to the plain

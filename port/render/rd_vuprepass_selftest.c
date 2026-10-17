@@ -343,11 +343,7 @@ static bool pushSprites(RdFrame *f)
  * ticks copy is left out) */
 static bool fallbackPlain(void)
 {
-#ifdef RD_HAVE_VU_STAGE_KEY
     return g_rd.vuFallbackPlain; /* rd_pipeline.c rd__vu_policy_init */
-#else
-    return g_rd.vuPlainOnly;
-#endif
 }
 
 static bool buildFrame(RdFrame *f, uint32_t scene, uint32_t w, uint32_t h, const RdMesh *m)

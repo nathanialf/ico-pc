@@ -639,9 +639,11 @@ typedef struct RhiLimits {
      * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
     bool moltenvk;
     /* v0.7.10 (docs/port/RENDER.md, the device profile).  localRead: Vulkan
-     * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read or
-     * Vulkan 1.4), whatever the destination read says: a pass's own
-     * attachments can be read as input attachments after
+     * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
+     * VkPhysicalDeviceVulkan14Features on a 1.4 device without the
+     * extension), enabled wherever offered, whatever the destination read
+     * says (vk_device.c; the device line's "local read yes|no"): a pass's
+     * own attachments can be read as input attachments after
      * rhi_cmd_local_read_barrier.  vendorId: the PCI vendor id (0 where
      * unknown).  dynamicDepth: pipelines may leave the depth test, write and
      * compare to rhi_cmd_set_depth_state (Vulkan 1.3 or
@@ -654,21 +656,24 @@ typedef struct RhiLimits {
     bool dynamicDepth;
     bool dynamicBlend;
     bool uintView;
-    /* Why the VU vertex shaders' extended variants are refused on this
-     * device ("Adreno 740, issue 107": the driver hangs the whole device
-     * compiling them; Vulkan, vk_device.c kVuPlainOnly), NULL otherwise;
-     * the renderer then draws every VU draw with the plain ones
-     * (port/render/rd_pipeline.c rd__vu_policy_init).  compilerVersion: the
-     * driver's own compiler line as it writes it ("Compiler Version:
-     * E031.41.03.47" on Qualcomm's Adreno driver), NULL when it names none
-     * (logged at rd_init). */
-    const char *vuPlainOnly;
+    /* Why the VU fallback's program entries are the plain ones on this
+     * device ("Adreno 740, issue 107": the driver hung the whole device
+     * compiling the extended ones; Vulkan, vk_device.c kVuPlainOnly), NULL
+     * otherwise: the draws the record path cannot take draw through
+     * vu_X_plain_vs there (port/render/rd_pipeline.c rd__vu_policy_init,
+     * g_rd.vsFallback); the record path is the same on every device.
+     * compilerVersion: the driver's own compiler line as it writes it
+     * ("Compiler Version: E031.41.03.47" on Qualcomm's Adreno driver), NULL
+     * when it names none (logged at rd_init). */
+    const char *vuFallbackPlain;
     const char *compilerVersion;
-    /* Why this device gets no start-up set ("Adreno 740, issues 93 and
-     * 107": the driver dies inside it; Vulkan, vk_device.c kVuPlainOnly's
-     * lazy column), NULL otherwise: the window then makes each pipeline when
-     * a frame first needs it (port/render/rd.h rd_pipelines_lazy). */
-    const char *lazyPipelines;
+    /* Why this device gets its start-up set under the careful policy
+     * ("Adreno 740, issues 93 and 107": the driver died inside the blind
+     * set; Vulkan, vk_device.c kVuPlainOnly's careful column), NULL
+     * otherwise: the window then passes rd_pipeline_policy_careful() to
+     * rd_set_pipeline_policy (small batches on one thread, the cache written
+     * after each, the set stopped past a memory budget; port/render/rd.h). */
+    const char *carefulPipelines;
     /* Indexed draws: the largest index value a draw may use (Vulkan
      * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
      * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the
@@ -690,8 +695,10 @@ typedef struct RhiLimits {
      * NULL where unknown: driverText, the device line's driver part
      * ("device 10de:1b81; driver NVIDIA 566.36, version 566.36.0.0";
      * D3D12 "driver version 32.0.15.8157"); robustText, the robust access
-     * in force (Vulkan: "on, buffers (robustness2) ... (gpu_robust)" or
-     * "off"; D3D12 NULL: its own bounds rules always apply). */
+     * in force (Vulkan: "off (the default; gpu_robust = true turns it on)",
+     * the default on every platform, "off (gpu_robust)", or "on, buffers
+     * (robustness2) ... (gpu_robust)"; D3D12 NULL: its own bounds rules
+     * always apply). */
     const char *driverText;
     const char *robustText;
 } RhiLimits;
@@ -979,7 +986,11 @@ typedef struct RhiStats {
     uint64_t texturesCreated, texturesDestroyed;
     uint64_t memoryAllocs, memoryFrees; /* device memory allocations (VkDeviceMemory, heaps) */
     uint64_t bindGroups;                /* transient bind groups created */
-    uint64_t pipelineBinds;  /* pipeline changes recorded (a repeat of the bound one is not) */
+    uint64_t pipelineBinds; /* pipeline changes recorded (a repeat of the bound one is not) */
+    /* dynamic depth and blend commands recorded (vkCmdSetDepthTestEnable
+     * and the five others, each one): a value equal to the one in force is
+     * not (Vulkan, vk_cmd.c vkr_flush_dynamic; 0 on D3D12) */
+    uint64_t dynamicSets;
     uint64_t bindGroupBinds; /* bind group changes recorded (likewise) */
     uint64_t draws, renderPasses, barriers, copies;
     uint64_t submits, presents;

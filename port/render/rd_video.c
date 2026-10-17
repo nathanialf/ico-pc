@@ -279,7 +279,7 @@ static void drawPicture(RhiCommandList cl, RhiTexture dst, RhiFormat fmt, uint32
             tb[2].slot = 2;
             tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
             tb[2].texture = g_rd.dummy;
-            rhi_cmd_set_pipeline(cl, pipe);
+            rd__set_pipeline(cl, pipe, NULL); /* its own pipeline: every state static */
             rhi_cmd_set_bind_group(
                 cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
             rhi_cmd_set_bind_group(
@@ -363,7 +363,7 @@ static void drawField(RhiCommandList cl, uint32_t w, uint32_t h, RhiBuffer buf, 
     tb[2].slot = 2;
     tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
     tb[2].texture = g_rd.dummy;
-    rhi_cmd_set_pipeline(cl, s_v.fieldPipe);
+    rd__set_pipeline(cl, s_v.fieldPipe, NULL); /* its own: every state static */
     rhi_cmd_set_bind_group(
         cl, 0, uniformGroup(g_rd.layoutFrame, 0, buf, cbOff, (uint32_t)sizeof(IcoFrameCB)));
     rhi_cmd_set_bind_group(

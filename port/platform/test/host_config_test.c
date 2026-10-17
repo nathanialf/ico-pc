@@ -442,8 +442,10 @@ static int env_is(const char *name, const char *want)
    other than the executable's own: the export block alone) */
 static void test_dev_env(void)
 {
-    static const char *const vars[] = {"ICO_RD_BLEND", "ICO_RD_FOG_PATH", "ICO_GPU_CHECKPOINTS",
-                                       "ICO_GPU_ROBUST", "ICO_VK_ATTACHMENT_READ"};
+    static const char *const vars[] = {
+        "ICO_RD_BLEND",      "ICO_RD_FOG_PATH",        "ICO_GPU_CHECKPOINTS",
+        "ICO_GPU_ROBUST",    "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
+        "ICO_RD_STORE_PLAN", "ICO_RD_BLUR_FOLD",       "ICO_RD_UINT_VIEW"};
     IcoIni ini;
     size_t i;
 
@@ -453,12 +455,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_name("gpu_robust"), "ICO_GPU_ROBUST") == 0);
     CHECK(ico_dev_env_name("ticks") == NULL);
     CHECK(ico_dev_env_name(NULL) == NULL);
-    /* blend: fixed is exported, exact is the default (nothing set) */
+    /* blend: the fixed-function blend is the default (nothing set); fixed
+       pins it, attachment and storage opt into that exact blend, exact
+       (the old default's word) into the device's best exact mode
+       (rd_dst_read.c rd__dst_asked_env) */
     CHECK(strcmp(ico_dev_env_value("blend", "fixed"), "fixed") == 0);
-    CHECK(ico_dev_env_value("blend", "exact") == NULL);
+    CHECK(strcmp(ico_dev_env_value("blend", "exact"), "exact") == 0);
     CHECK(ico_dev_env_value("blend", "rov") == NULL);
-    /* the exact paths forced by name (issue 89: the self-test's verdict
-       overridden for a test) */
     CHECK(strcmp(ico_dev_env_value("blend", "attachment"), "attachment") == 0);
     CHECK(strcmp(ico_dev_env_value("blend", "storage"), "storage") == 0);
     CHECK(ico_dev_env_value("blend", "auto") == NULL); /* the default: nothing set */
@@ -467,7 +470,9 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("attachment_read", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("attachment_read", "0"), "0") == 0);
     CHECK(ico_dev_env_value("attachment_read", "maybe") == NULL);
-    /* fog_path: the three paths as they are */
+    /* fog_path: the four paths as they are (local: the device profile's
+       fogLocal, port/render/rd_profile.c) */
+    CHECK(strcmp(ico_dev_env_value("fog_path", "local"), "local") == 0);
     CHECK(strcmp(ico_dev_env_value("fog_path", "inplace"), "inplace") == 0);
     CHECK(strcmp(ico_dev_env_value("fog_path", "copy"), "copy") == 0);
     CHECK(strcmp(ico_dev_env_value("fog_path", "buffer"), "buffer") == 0);
@@ -528,6 +533,31 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("perf_list_stamps", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.perf_list_stamps"), "perf_list_stamps") == 0);
+    /* the device profile's flags (port/render/rd_profile.c rd__profile_init):
+       date_path stencil or snapshot as they are, store_plan and blur_fold
+       on/off, uint_view on/off or work */
+    CHECK(strcmp(ico_dev_env_name("date_path"), "ICO_RD_DATE_PATH") == 0);
+    CHECK(strcmp(ico_dev_env_value("date_path", "stencil"), "stencil") == 0);
+    CHECK(strcmp(ico_dev_env_value("date_path", "snapshot"), "snapshot") == 0);
+    CHECK(ico_dev_env_value("date_path", "true") == NULL);
+    CHECK(ico_dev_env_value("date_path", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.date_path"), "date_path") == 0);
+    CHECK(strcmp(ico_dev_env_name("store_plan"), "ICO_RD_STORE_PLAN") == 0);
+    CHECK(strcmp(ico_dev_env_value("store_plan", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("store_plan", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("store_plan", "planned") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.store_plan"), "store_plan") == 0);
+    CHECK(strcmp(ico_dev_env_name("blur_fold"), "ICO_RD_BLUR_FOLD") == 0);
+    CHECK(strcmp(ico_dev_env_value("blur_fold", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("blur_fold", "on"), "1") == 0);
+    CHECK(ico_dev_env_value("blur_fold", "folded") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.blur_fold"), "blur_fold") == 0);
+    CHECK(strcmp(ico_dev_env_name("uint_view"), "ICO_RD_UINT_VIEW") == 0);
+    CHECK(strcmp(ico_dev_env_value("uint_view", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("uint_view", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("uint_view", "work"), "work") == 0);
+    CHECK(ico_dev_env_value("uint_view", "scene") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.uint_view"), "uint_view") == 0);
     /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
     CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
     CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);
@@ -555,10 +585,11 @@ static void test_dev_env(void)
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }
-    /* blend=exact and an unknown path leave the defaults; false is 0 */
+    /* blend=exact is exported (the opt-in to the device's best exact
+       mode); an unknown path leaves the default; false is 0 */
     ico_ini_parse(&ini, "blend=exact\nfog_path=sideways\ngpu_robust=false\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
-    CHECK(env_is("ICO_RD_BLEND", NULL));
+    CHECK(env_is("ICO_RD_BLEND", "exact"));
     CHECK(env_is("ICO_RD_FOG_PATH", NULL));
     CHECK(env_is("ICO_GPU_CHECKPOINTS", NULL));
     CHECK(env_is("ICO_GPU_ROBUST", "0"));
@@ -570,6 +601,27 @@ static void test_dev_env(void)
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_BLEND", "attachment"));
     CHECK(env_is("ICO_VK_ATTACHMENT_READ", "1"));
+    for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+        unset_env(vars[i]);
+    }
+    /* the profile's keys from config.toml's [dev] (rd_profile.c reads the
+       variables) */
+    ico_ini_parse(&ini, "[dev]\nfog_path = local\ndate_path = stencil\nstore_plan = false\n"
+                        "blur_fold = true\nuint_view = work\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_FOG_PATH", "local"));
+    CHECK(env_is("ICO_RD_DATE_PATH", "stencil"));
+    CHECK(env_is("ICO_RD_STORE_PLAN", "0"));
+    CHECK(env_is("ICO_RD_BLUR_FOLD", "1"));
+    CHECK(env_is("ICO_RD_UINT_VIEW", "work"));
+    for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
+        unset_env(vars[i]);
+    }
+    ico_ini_parse(&ini, "date_path=snapshot\nuint_view=false\nstore_plan=maybe\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_DATE_PATH", "snapshot"));
+    CHECK(env_is("ICO_RD_UINT_VIEW", "0"));
+    CHECK(env_is("ICO_RD_STORE_PLAN", NULL));
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }
@@ -607,6 +659,13 @@ static void test_retry_blend(void)
     /* the other switches are not touched by the restart */
     CHECK(ico_dev_env_export_value("fog_path", NULL, "blend:vulkan") == NULL);
     CHECK(strcmp(ico_dev_env_export_value("gpu_robust", "1", "blend:vulkan"), "1") == 0);
+    CHECK(ico_dev_env_export_value("gpu_robust", NULL, "blend:vulkan") == NULL);
+    /* the loss order's robust step: robust access on over gpu_robust, its
+       blend the run's own */
+    CHECK(strcmp(ico_dev_env_export_value("gpu_robust", NULL, "robust:vulkan"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_export_value("gpu_robust", "false", "robust:d3d12"), "1") == 0);
+    CHECK(ico_dev_env_export_value("blend", NULL, "robust:vulkan") == NULL);
+    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", NULL, "robust:vulkan"), "0") == 0);
 
     /* the export: a loss restart with no blend= */
     unset_env("ICO_RD_BLEND");
@@ -635,13 +694,22 @@ static void test_retry_blend(void)
     ico_ini_parse(&ini, "blend=fixed\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_BLEND", "fixed"));
-    /* no restart */
+    /* no restart: blend=exact is the player's opt-in, exported */
     unset_env("ICO_STARTUP_RETRY");
     unset_env("ICO_RD_BLEND");
     ico_ini_parse(&ini, "blend=exact\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
-    CHECK(env_is("ICO_RD_BLEND", NULL));
+    CHECK(env_is("ICO_RD_BLEND", "exact"));
     unset_env("ICO_RD_BLEND");
+    /* the robust step's run: ICO_GPU_ROBUST=1 over the ini's gpu_robust */
+    unset_env("ICO_GPU_ROBUST");
+    set_env("ICO_STARTUP_RETRY", "robust:vulkan");
+    ico_ini_parse(&ini, "gpu_robust=false\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_GPU_ROBUST", "1"));
+    CHECK(env_is("ICO_RD_BLEND", NULL));
+    unset_env("ICO_STARTUP_RETRY");
+    unset_env("ICO_GPU_ROBUST");
 }
 
 /* ICO_RD_VU_PREPASS in a restart: 0 at the crash order's noprepass step
@@ -654,15 +722,11 @@ static void test_retry_prepass(void)
         const char *retry;
         const char *prepass, *blend;
     } runs[] = {
-        {"noprepass:vulkan", "0", NULL},
-        {"fixedblend:vulkan", "0", "fixed"},
-        {"d3d12:d3d12", "0", NULL},
-        {"lazy:vulkan", "0", NULL},
-        {"lossnoprepass:d3d12", "0", NULL},
-        {"blend:vulkan", "0", "fixed"},
-        {"backend:d3d12", "0", "fixed"},
-        {"cache:vulkan", "1", NULL},
-        {NULL, "1", NULL},
+        {"noprepass:vulkan", "0", NULL},    {"fixedblend:vulkan", "0", "fixed"},
+        {"d3d12:d3d12", "0", NULL},         {"lazy:vulkan", "0", NULL},
+        {"lossnoprepass:d3d12", "0", NULL}, {"robust:vulkan", "0", NULL},
+        {"blend:vulkan", "0", "fixed"},     {"backend:d3d12", "0", "fixed"},
+        {"cache:vulkan", "1", NULL},        {NULL, "1", NULL},
     };
 
     IcoIni ini;
@@ -694,6 +758,7 @@ static void test_retry_prepass(void)
     unset_env("ICO_STARTUP_RETRY");
     unset_env("ICO_RD_VU_PREPASS");
     unset_env("ICO_RD_BLEND");
+    unset_env("ICO_GPU_ROBUST"); /* the robust step's */
 }
 
 int main(void)

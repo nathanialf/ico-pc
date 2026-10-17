@@ -555,6 +555,28 @@ static bool vkr_create_view(VkImage image, VkFormat fmt, VkImageAspectFlags aspe
     return VKR_CHECK(vkCreateImageView(g_vkr.device, &vi, NULL, out));
 }
 
+/* The RGBA8_UINT view of an RHI_TEX_UINT_VIEW image (made MUTABLE_FORMAT
+ * with the two formats listed), sampled only: the view's usage is
+ * restricted to SAMPLED (Vulkan 1.1 VkImageViewUsageCreateInfo), so the
+ * image's attachment and copy usages, which the UNORM format carries, are
+ * not asked of the UINT one */
+static bool vkr_create_uint_view(VkImage image, uint32_t mips, VkImageView *out)
+{
+    const VkImageViewUsageCreateInfo use = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+    };
+    VkImageViewCreateInfo vi = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = &use,
+        .image = image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UINT,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, 1},
+    };
+    return VKR_CHECK(vkCreateImageView(g_vkr.device, &vi, NULL, out));
+}
+
 /* vkr_test_fail_texels_above: 0 is off */
 static uint64_t s_failTexelsAbove;
 
@@ -639,8 +661,23 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
         vkr_pool_release(&g_vkr.textures, id);
         return out;
     }
+    /* RHI_TEX_UINT_VIEW: an RGBA8_UNORM image also viewed as RGBA8_UINT
+     * (the same texel class), the two formats listed so the driver can keep
+     * its compression for exactly those (Vulkan 1.2 VkImageFormatListCreateInfo;
+     * the device is 1.2 or later, vkr_create_device) */
+    static const VkFormat uintPair[2] = {VK_FORMAT_R8G8B8A8_UNORM, VK_FORMAT_R8G8B8A8_UINT};
+    const bool uintView =
+        (desc->usage & RHI_TEX_UINT_VIEW) && desc->format == RHI_FMT_RGBA8_UNORM &&
+        vkFmt == VK_FORMAT_R8G8B8A8_UNORM && samples == 1u && (desc->usage & RHI_TEX_SAMPLED);
+    const VkImageFormatListCreateInfo formatList = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO,
+        .viewFormatCount = 2,
+        .pViewFormats = uintPair,
+    };
     VkImageCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = uintView ? &formatList : NULL,
+        .flags = uintView ? VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT : 0u,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = vkFmt,
         .extent = {desc->width, desc->height, 1},
@@ -684,6 +721,10 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     } else {
         t->depthView = VK_NULL_HANDLE;
     }
+    t->uintView = VK_NULL_HANDLE;
+    if (uintView && !vkr_create_uint_view(t->image, mips, &t->uintView)) {
+        goto fail;
+    }
     vkr_set_name(VK_OBJECT_TYPE_IMAGE, VKR_H(t->image), desc->debugName);
     g_vkr.stats.texturesCreated++;
     g_vkr.stats.memoryAllocs++;
@@ -693,6 +734,9 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
 fail:
     if (t->view) {
         vkDestroyImageView(g_vkr.device, t->view, NULL);
+    }
+    if (t->depthView) {
+        vkDestroyImageView(g_vkr.device, t->depthView, NULL);
     }
     vkDestroyImage(g_vkr.device, t->image, NULL);
     vkr_free_memory(t->memory, req.size);
@@ -708,6 +752,7 @@ void rhi_destroy_texture(RhiTexture h)
     }
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->view));
     vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->depthView));
+    vkr_defer(VKR_GARBAGE_VIEW, VKR_H(t->uintView));
     vkr_defer(VKR_GARBAGE_IMAGE, VKR_H(t->image));
     vkr_defer_memory(t->memory, t->memSize);
     vkr_pool_release(&g_vkr.textures, h.id);

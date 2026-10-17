@@ -67,6 +67,7 @@ typedef struct VkrTexture {
     VkDeviceSize memSize;  /* the allocation's size (vkr_allocate) */
     VkImageView view;      /* all aspects: attachments, colour sampling */
     VkImageView depthView; /* depth aspect only, depth-stencil formats that are sampled */
+    VkImageView uintView;  /* RGBA8_UINT, an RHI_TEX_UINT_VIEW texture's (RHI_ASPECT_UINT) */
     VkFormat format;
     RhiFormat rhiFormat;
     VkImageAspectFlags aspects;
@@ -97,12 +98,40 @@ typedef struct VkrLayout {
     uint32_t dynamicCount; /* RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots */
 } VkrLayout;
 
+/* The dynamic depth and blend state (rhi.h RhiPipelineDesc.dynamic; vk_cmd.c
+ * vkr_flush_dynamic): the values a draw needs, as the Vulkan commands take
+ * them.  Compared with memcmp, so always made from a zeroed value. */
+typedef struct VkrDepthDyn {
+    VkBool32 test, write;
+    VkCompareOp compare;
+} VkrDepthDyn;
+
+typedef struct VkrBlendDyn {
+    VkBool32 enable;
+    VkColorBlendEquationEXT eq;
+    VkColorComponentFlags mask;
+} VkrBlendDyn;
+
 typedef struct VkrPipeline {
     VkPipeline pipeline;
     VkPipelineLayout layout;
     uint32_t layoutCount;
     uint8_t dstRead; /* RhiDstRead (vk_cmd.c vkr_dst_order) */
+    /* the RHI_DYN_* states the pipeline leaves dynamic (only where the
+     * device has them: g_vkr.dynDepth, dynBlend), their values in the
+     * description (a draw's until rhi_cmd_set_depth_state /
+     * rhi_cmd_set_blend_state after the bind), and whether colour target 0
+     * is an integer format (no blending there) */
+    uint8_t dynamic;
+    bool intTarget;
+    VkrDepthDyn depthDefault;
+    VkrBlendDyn blendDefault;
 } VkrPipeline;
+
+/* vk_pipeline.c: an RHI blend state as Vulkan's attachment state (blending
+ * off on an integer target), and that state as the dynamic blend values */
+VkPipelineColorBlendAttachmentState vkr_blend_state(const RhiBlendState *b, bool intTarget);
+void vkr_blend_dyn(const VkPipelineColorBlendAttachmentState *a, VkrBlendDyn *out);
 
 /* --------------------------------------------------------- per frame slot */
 typedef enum VkrGarbageKind {
@@ -173,6 +202,15 @@ typedef struct VkrCmdList {
      * barrier from the transfer writes, issued with the pending image
      * barriers */
     VkAccessFlags pendMemDst;
+    /* the dynamic depth and blend state (vk_cmd.c vkr_flush_dynamic):
+     * dynValid the RHI_DYN_* groups whose values in dynHave the command
+     * buffer holds (a bind of a pipeline with the group static clears its
+     * bit: that pipeline's own values replaced them), dynWant what the next
+     * draw needs (the bound pipeline's defaults, then the sets), dynSet the
+     * groups set since the bind */
+    uint8_t dynValid, dynSet;
+    VkrDepthDyn depthWant, depthHave;
+    VkrBlendDyn blendWant, blendHave;
     /* the swapchain image the list moves to RHI_STATE_PRESENT
      * (VK_NULL_HANDLE: none): its submit signals the present semaphore
      * (rhi_submit) */
@@ -254,14 +292,28 @@ typedef struct VkrState {
      * (Qualcomm's Adreno driver writes one), "" when it has none, for
      * RhiLimits.compilerVersion (vkr_driver_text) */
     char compilerVersion[96];
-    /* why the VU vertex shaders' extended variants are refused on this
+    /* why the VU fallback's program entries are the plain ones on this
      * device (vkr_vu_plain_only's table: "Adreno 740, issue 107"), "" when
-     * they are not, for RhiLimits.vuPlainOnly */
-    char vuPlainOnly[96];
-    /* why this device gets no start-up set (the same table's lazy column:
-     * "Adreno 740, issues 93 and 107"), "" otherwise, for
-     * RhiLimits.lazyPipelines */
-    char lazyPipelines[96];
+     * they are not, for RhiLimits.vuFallbackPlain */
+    char vuFallbackPlain[96];
+    /* why this device gets the careful start-up set (the same table's
+     * careful column: "Adreno 740, issues 93 and 107"), "" otherwise, for
+     * RhiLimits.carefulPipelines */
+    char carefulPipelines[96];
+    /* the dynamic state (vk_device.c vkr_create_device; RhiLimits.dynamicDepth,
+     * dynamicBlend): dynDepth the depth test, write and compare (Vulkan 1.3,
+     * or VK_EXT_extended_dynamic_state's extendedDynamicState), dynBlend the
+     * blend enable, equation and write mask (VK_EXT_extended_dynamic_state3's
+     * extendedDynamicState3ColorBlendEnable, ...ColorBlendEquation,
+     * ...ColorWriteMask), each with its commands found
+     * (vkGetDeviceProcAddr: the core names on 1.3, the EXT ones otherwise) */
+    bool dynDepth, dynBlend;
+    PFN_vkCmdSetDepthTestEnable cmdSetDepthTestEnable;
+    PFN_vkCmdSetDepthWriteEnable cmdSetDepthWriteEnable;
+    PFN_vkCmdSetDepthCompareOp cmdSetDepthCompareOp;
+    PFN_vkCmdSetColorBlendEnableEXT cmdSetColorBlendEnable;
+    PFN_vkCmdSetColorBlendEquationEXT cmdSetColorBlendEquation;
+    PFN_vkCmdSetColorWriteMaskEXT cmdSetColorWriteMask;
     /* VK_KHR_dynamic_rendering_local_read enabled (the attachment read, and
      * barriers inside a render pass); validationOn: the Khronos validation
      * layer is loaded; storageBarriers: a by-region barrier before a
@@ -277,8 +329,8 @@ typedef struct VkrState {
      * vkr_lost_report, printed once at the first VK_ERROR_DEVICE_LOST):
      *   robust       robustBufferAccess (+ VK_EXT_robustness2's
      *                robustImageAccess2 and nullDescriptor when offered),
-     *                ICO_GPU_ROBUST=1 (ico-pc.ini gpu_robust), on by
-     *                default on Android (ICO_GPU_ROBUST=0 turns it off);
+     *                ICO_GPU_ROBUST=1 (ico-pc.ini gpu_robust, or the loss
+     *                order's robust step), off by default everywhere;
      *   deviceFault  VK_EXT_device_fault enabled (whenever offered):
      *                vkGetDeviceFaultInfoEXT's addresses and description;
      *   checkpoints  VK_NV_device_diagnostic_checkpoints enabled,

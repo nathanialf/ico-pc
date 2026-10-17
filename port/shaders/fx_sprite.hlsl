@@ -7,10 +7,17 @@
 //   fx_sprite_ps the sprite: coverage, UV, texel (nearest or the GS bilinear
 //                with TEXA before filtering), TFX, alpha test, DATE, blend;
 //                no hardware blending, the result written as k / 255
+//   fx_sprite_u_ps (ICO_UINT_SRC=1) the same reading t1 and t2 through
+//                their RGBA8_UINT views (RHI_ASPECT_UINT): the texel k
+//                itself, where fx_sprite_ps converts k / 255 back with
+//                floor(x * 255 + 0.5), which gives k for every k; so the
+//                two write the same bytes (rd_replay.c doBlurSpriteDraw
+//                picks it when both textures have the view)
 //
-// Bindings: t1 the texture (UNORM8, read with Load), t2 the destination as
-// it was before the sprite (a copy of the bound target; with FXF_DST only),
-// s1 unused.
+// Bindings: t1 the texture (UNORM8, read with Load; its UINT view in
+// fx_sprite_u_ps), t2 the destination as it was before the sprite (a copy
+// of the bound target; with FXF_DST only; in fx_sprite_u_ps t1 again when
+// unused), s1 unused.
 // DrawCB:
 //   g_col    RGBAQ 0..255
 //   g_mode   x FXF_* flags, y TEXA mode | TEXFMT << 8,
@@ -25,6 +32,10 @@
 //            w with FXF_ABOVE1X the steps (t1 texels per bound texel, in
 //            1/32) step32x * 4096 + step32y (rd_replay.c doBlurSpriteDraw),
 //            else 0
+//   g_aux1   x, y the UV divides' 1 / (x1 - x0), 1 / (y1 - y0), floats
+//            correctly rounded on the CPU (asfloat; gs_div_trunc_rcp), z, w
+//            fx_texel's REPEAT and CLAMP size: max(1, round(g_tex.xy *
+//            g_scale.xy)) as integers (rd_replay.c blurAux1)
 // FrameCB: g_origin.xy the XYOFFSET of the bound target (GS pixels, + 0.5 y
 // with the half-line offset), g_z.x the GS Z scale of its depth, g_z.yz the
 // bound target's texels per GS pixel (1 in Original). The target is as wide
@@ -75,6 +86,17 @@ float4 fx_rect_vs(uint id : SV_VertexID) : SV_Position
     return pos;
 }
 
+#ifdef ICO_UINT_SRC
+// fx_sprite_u_ps: the integer texel through the RGBA8_UINT view
+Texture2D<uint4> g_texture : register(t1, space2);
+SamplerState g_sampler : register(s1, space2);
+Texture2D<uint4> g_dest : register(t2, space2);
+
+uint4 fx_load(Texture2D<uint4> t, int2 c)
+{
+    return t.Load(int3(c, 0));
+}
+#else
 Texture2D<float4> g_texture : register(t1, space2);
 SamplerState g_sampler : register(s1, space2);
 Texture2D<float4> g_dest : register(t2, space2);
@@ -83,6 +105,7 @@ uint4 fx_load(Texture2D<float4> t, int2 c)
 {
     return uint4(floor(t.Load(int3(c, 0)) * 255.0 + 0.5));
 }
+#endif
 
 // t1 texels per GS texel, 1 when unset.
 float2 fx_src_scale()
@@ -103,8 +126,9 @@ int fx_src_crop16()
 // (the crop's whole texels added back).
 uint4 fx_texel(int2 c, uint flags)
 {
-    int2 lsz = max(int2(round(g_tex.xy * fx_src_scale())), int2(1, 1));
-    int2 asz = int2(g_tex.zw);
+    // max(1, round(g_tex.xy * fx_src_scale())), per draw (g_aux1.zw)
+    const int2 lsz = int2(g_aux1.zw);
+    const int2 asz = int2(g_tex.zw);
     const int k = fx_src_crop16() >> 4;
     c.x += k;
     // REPEAT: lsz is 2^TW x 2^TH at scale 1 and at an integer scale that
@@ -151,9 +175,10 @@ float4 fx_sprite_ps(float4 pos : SV_Position) : SV_Target0
         const int u0 = int(g_uvRect.x), v0 = int(g_uvRect.y);
         const int u1 = int(g_uvRect.z), v1 = int(g_uvRect.w);
         // the GS's U(X) = u0 + (X - x0) (u1 - u0) / (x1 - x0), truncated,
-        // without the integer divide (gs_div_trunc: the operands' bounds)
-        const int u = u0 + gs_div_trunc((X - x0) * (u1 - u0), x1 - x0);
-        const int v = v0 + gs_div_trunc((Y - y0) * (v1 - v0), y1 - y0);
+        // without the integer divide or a float one (gs_div_trunc_rcp: the
+        // operands' bounds, the reciprocals the CPU rounded)
+        const int u = u0 + gs_div_trunc_rcp((X - x0) * (u1 - u0), x1 - x0, asfloat(g_aux1.x));
+        const int v = v0 + gs_div_trunc_rcp((Y - y0) * (v1 - v0), y1 - y0, asfloat(g_aux1.y));
         uint4 t;
         // the UV in t1's own texels, 12.4 (u, v at scale 1)
         const float2 ss = fx_src_scale();

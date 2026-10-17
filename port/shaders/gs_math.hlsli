@@ -81,6 +81,25 @@ GS_FN int gs_wrap_repeat(int c, int n)
 #define GS_DIV_QUOT(a, d) ((float)(a) / (float)(d))
 #endif
 
+// gs_div_trunc_rcp's float quotient: float(a) times rd, a correctly
+// rounded 1 / d the CPU computed once for the draw (IEEE single, round to
+// nearest), the product kept as written (precise: no contraction into
+// another operation). gs_math_test defines it first to move float(a), rd
+// and the product by more than any API allows.
+#ifdef ICO_GS_MATH_C
+#define GS_PRECISE
+#else
+#define GS_PRECISE precise
+#endif
+GS_FN float gs_rcp_quot(uint a, float rd)
+{
+    GS_PRECISE const float f = (float)a * rd;
+    return f;
+}
+#ifndef GS_DIV_RCP_QUOT
+#define GS_DIV_RCP_QUOT(a, rd) gs_rcp_quot((a), (rd))
+#endif
+
 // n / d truncated toward zero, what OpSDiv (and C99's /) gives, without
 // the integer division the GPU emulates, for d in 1..2^24 and
 // |n| < d * 2^21 (the operands fx_sprite_ps gives it, there).
@@ -121,6 +140,29 @@ GS_FN int gs_div_trunc(int n, int d)
     const int sg = n >> 31; // arithmetic: -1 for n < 0, else 0
     const uint a = ((uint)n ^ (uint)sg) - (uint)sg;
     const int q0 = (int)(GS_DIV_QUOT(a, d));
+    const int r = (int)(a - (uint)q0 * (uint)d);
+    const int q = q0 - (r < 0 ? 1 : 0) + (r >= d ? 1 : 0);
+    return (q ^ sg) - sg;
+}
+
+// gs_div_trunc without the divide: the quotient from rd, 1 / d correctly
+// rounded to float on the CPU (fx_sprite_ps: DrawCB.aux1.xy, rd_replay.c
+// doBlurSpriteDraw), for the same operands (d in 1..2^24, |n| < d * 2^21),
+// with the same one-step correction. float(a) is within half an ulp of a
+// (correctly rounded conversion), rd within half an ulp of 1 / d, and the
+// product (OpFMul, correctly rounded in Vulkan; D3D's and Metal's
+// multiplies likewise) within half an ulp of float(a) * rd: f is within
+// (1 + 2^-24)^3 - 1 < 3.0001 * 2^-24 of Q relatively, which below 2^21 is
+// under 0.375. So |f - Q| < 1, q0 = floor(Q) - 1, floor(Q) or floor(Q) + 1,
+// and the remainder steps it to floor(Q) exactly as above. gs_math_test
+// checks it against n / d over gs_div_trunc's operands with float(a), rd
+// and the product each moved a whole ulp either way (twice what the APIs
+// allow; the bound is then 0.9375).
+GS_FN int gs_div_trunc_rcp(int n, int d, float rd)
+{
+    const int sg = n >> 31; // arithmetic: -1 for n < 0, else 0
+    const uint a = ((uint)n ^ (uint)sg) - (uint)sg;
+    const int q0 = (int)(GS_DIV_RCP_QUOT(a, rd));
     const int r = (int)(a - (uint)q0 * (uint)d);
     const int q = q0 - (r < 0 ? 1 : 0) + (r >= d ? 1 : 0);
     return (q ^ sg) - sg;

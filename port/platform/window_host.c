@@ -1285,7 +1285,7 @@ static const char *summary_joystick_scan(void)
 
 static void log_summary(const IcoVideoOptions *o, const char *res, const char *fr)
 {
-    char rd[640], pads[160];
+    char rd[1024], pads[160]; /* rd: the blend, then the device profile's words, ... */
     int n = 0;
     SDL_JoystickID *ids = SDL_GetGamepads(&n);
     const RhiLimits *l = rhi_limits();
@@ -1433,7 +1433,10 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
     /* the blending the player chose: [dev] blend / blend=, or ICO_RD_BLEND
        from the environment the game was started with (a loss step's or
        the fixedblend step's run has its own ICO_RD_BLEND=fixed,
-       host_config.c ico_ini_export, which is not the player's) */
+       host_config.c ico_ini_export, which is not the player's).  The
+       fixed-function blend is the default, so this is a player who opted
+       into an exact mode (attachment, storage, exact) or pinned fixed; the
+       restart steps' fixed blend (startup_retry.h) never overrides it */
     const char *blendKey = ico_config_get_string("dev.blend", NULL);
     const char *blendEnv = getenv("ICO_RD_BLEND");
     const bool retryFixed = startup_retry_value_draws_fixed(getenv(STARTUP_RETRY_ENV));
@@ -1798,8 +1801,8 @@ open_window:
        that ended inside it (pipePolicy): each pipeline is then built when
        a frame first needs it, the title comes at once, and the pipeline
        cache is written after each batch of them (rd_pipelines_lazy) */
-    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->lazyPipelines : NULL;
-    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuPlainOnly : NULL;
+    const char *devLazy = rhi_limits() != NULL ? rhi_limits()->carefulPipelines : NULL;
+    const char *devVuPlain = rhi_limits() != NULL ? rhi_limits()->vuFallbackPlain : NULL;
     /* an end while preparing the graphics, by kind: the first's line, the
        second's setting for good, neither on a device whose table entry
        already rules that kind (the lazy column for the pipelines, the

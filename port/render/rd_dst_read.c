@@ -36,13 +36,20 @@
  *               colour without Z write then a depth-only pass when its Z
  *               test is ALWAYS; under GEQUAL/GREATER it stays on the
  *               fixed-function blend (logged once).
- * The preference is attachment, then storage, then the fixed-function
- * blend (logged "fixed-function (rounds up)").  The attachment read is not
- * offered on Qualcomm's own Adreno driver (vk_device.c: its reads return
- * wrong colours, issue 89; RhiLimits.rasterOrderOff says so and the blend
- * line carries it).  rd_blend_selftest (rd_blend_selftest.c) then draws a
- * known frame through each mode at start and keeps the first that is
- * right on the device.
+ * The fixed-function blend is the default on every device and backend; an
+ * exact mode is an opt-in, [dev] blend / ICO_RD_BLEND = attachment or
+ * storage (rd__dst_asked_env), and only the asked mode's layout and
+ * shader twins are made (rd_replay.c rd__gpu_init), so g_rd.dstModes holds
+ * at most OFF and that mode, the targets get its usage alone
+ * (rd__dst_target_usage) and the start-up set its keys alone
+ * (rd__enumerate_dst).  The attachment read is not offered on Qualcomm's
+ * own Adreno driver (vk_device.c: its reads return wrong colours, issue 89;
+ * the device line says so, RhiLimits.rasterOrderOff).  rd_blend_selftest
+ * (rd_blend_selftest.c) draws a known frame at start through the
+ * fixed-function blend (the two-pass fallback when it fails) and, when one
+ * was asked for, through the exact mode, which is kept whatever it finds.
+ * The fixed-function blend's rounding (above) is VD-7 in
+ * docs/port/DIVERGENCES.md.
  *
  * What goes through it: the screen prims, the VU meshes and the fog sprite
  * whose fixed-function blend is not the GS's (dstWant, rd_pipeline.c): the
@@ -74,7 +81,7 @@ const char *rd__blend_exact_name(int mode)
     case RD_BLEND_EXACT_ATTACHMENT:
         return "exact (attachment read)";
     default:
-        return "fixed-function (rounds up)";
+        return "fixed-function";
     }
 }
 
@@ -119,6 +126,41 @@ static uint8_t madeModes(void)
     return m;
 }
 
+/* the old default word: "the best exact mode the device has" */
+static bool askedBest(const char *e)
+{
+    return strcmp(e, "exact") == 0;
+}
+
+int rd__dst_asked_env(void)
+{
+    const char *e = getenv("ICO_RD_BLEND");
+    if (!e || !e[0]) {
+        return -1;
+    }
+    if (strcmp(e, "fixed") == 0 || strcmp(e, "off") == 0 || strcmp(e, "0") == 0) {
+        return RD_BLEND_EXACT_OFF;
+    }
+    if (strcmp(e, "storage") == 0 || strcmp(e, "interlock") == 0 || strcmp(e, "rov") == 0) {
+        return RD_BLEND_EXACT_STORAGE;
+    }
+    if (strcmp(e, "attachment") == 0) {
+        return RD_BLEND_EXACT_ATTACHMENT;
+    }
+    if (askedBest(e)) {
+        /* the attachment read where the device has it, else the storage
+         * read; neither: the attachment read, which rd__dst_init then finds
+         * missing (rhi_limits is the device's: rd__gpu_init calls this after
+         * rhi_init) */
+        const RhiLimits *lim = rhi_limits();
+        if (!lim->rasterOrderAttachment && (lim->fragmentInterlock || lim->rov)) {
+            return RD_BLEND_EXACT_STORAGE;
+        }
+        return RD_BLEND_EXACT_ATTACHMENT;
+    }
+    return -1;
+}
+
 /* the mode ICO_RD_BLEND asked for and the device has, -1 when none */
 static int s_asked = -1;
 
@@ -127,67 +169,33 @@ int rd__dst_asked(void)
     return s_asked;
 }
 
-/* the platform default took the fixed-function blend from a device that has
- * an exact mode (MoltenVK, issue 102), not ICO_RD_BLEND */
-static bool s_platformFixed;
-
-bool rd__dst_platform_fixed(void)
-{
-    return s_platformFixed;
-}
-
 void rd__dst_init(void)
 {
     g_rd.dstModes = g_rd.hasDevice ? madeModes() : (uint8_t)(1u << RD_BLEND_EXACT_OFF);
     s_asked = -1;
-    s_platformFixed = false;
-    int want = RD_BLEND_EXACT_OFF;
-    if (g_rd.dstModes & (1u << RD_BLEND_EXACT_ATTACHMENT)) {
-        want = RD_BLEND_EXACT_ATTACHMENT;
-    } else if (g_rd.dstModes & (1u << RD_BLEND_EXACT_STORAGE)) {
-        want = RD_BLEND_EXACT_STORAGE;
-    }
     const char *e = getenv("ICO_RD_BLEND");
+    const int asked = rd__dst_asked_env();
+    const char *why = " (the default; [dev] blend = attachment|storage opts into an exact mode)";
     if (e && e[0]) {
-        int asked = -1;
-        if (strcmp(e, "fixed") == 0 || strcmp(e, "off") == 0 || strcmp(e, "0") == 0) {
-            asked = RD_BLEND_EXACT_OFF;
-        } else if (strcmp(e, "storage") == 0 || strcmp(e, "interlock") == 0 ||
-                   strcmp(e, "rov") == 0) {
-            asked = RD_BLEND_EXACT_STORAGE;
-        } else if (strcmp(e, "attachment") == 0) {
-            asked = RD_BLEND_EXACT_ATTACHMENT;
+        if (askedBest(e)) {
+            rd__log("blend: [dev] blend = exact: the exact blend is an opt-in; %s tried",
+                    asked == RD_BLEND_EXACT_STORAGE ? "storage" : "attachment");
         }
-        if (asked < 0 || !(g_rd.dstModes & (1u << asked))) {
-            rd__log("blend: ICO_RD_BLEND=%s %s; %s", e,
-                    asked < 0 ? "is not fixed, storage or attachment" : "is not on this device",
-                    rd__blend_exact_name(want));
+        if (asked < 0) {
+            rd__log("blend: ICO_RD_BLEND=%s is not fixed, attachment or storage; %s", e,
+                    rd__blend_exact_name(RD_BLEND_EXACT_OFF));
+        } else if (asked == RD_BLEND_EXACT_OFF) {
+            why = " ([dev] blend = fixed)";
+        } else if (!(g_rd.dstModes & (1u << asked))) {
+            rd__log("blend: ICO_RD_BLEND=%s is not on this device; %s", e,
+                    rd__blend_exact_name(RD_BLEND_EXACT_OFF));
         } else {
-            want = asked;
             s_asked = asked;
+            why = " ([dev] blend)";
         }
     }
-    /* MoltenVK: the exact blend's pass switching (rd_replay.c dstPassMode)
-     * measured 54 ms a replay and 750 passes against 14 ms and 49 with the
-     * fixed-function blend (an M1, issue 102; 16.7 ms with MSAA, which
-     * draws fixed too).  One rule for macOS and iOS, here; ICO_RD_BLEND
-     * ([dev] blend) above has forced any mode */
-    const bool mvk = g_rd.hasDevice && rhi_limits()->moltenvk;
-    if (mvk && s_asked < 0 && want != RD_BLEND_EXACT_OFF) {
-        want = RD_BLEND_EXACT_OFF;
-        s_platformFixed = true;
-    }
-    g_rd.dstMode = (uint8_t)want;
-    const char *off = g_rd.hasDevice ? rhi_limits()->rasterOrderOff : NULL;
-    if (s_platformFixed) {
-        rd__log("blend: %s (MoltenVK: the exact blend's pass switching costs 3 to 4 times the "
-                "frame; [dev] blend = storage keeps it)",
-                rd__blend_exact_name(want));
-    } else {
-        rd__log("blend: %s%s%s%s%s", rd__blend_exact_name(want), off ? " (" : "", off ? off : "",
-                off ? ")" : "",
-                mvk && s_asked >= 0 ? " (forced: MoltenVK's default is fixed-function)" : "");
-    }
+    g_rd.dstMode = (uint8_t)(s_asked > 0 ? s_asked : RD_BLEND_EXACT_OFF);
+    rd__log("blend: %s%s", rd__blend_exact_name(g_rd.dstMode), why);
 }
 
 bool rd_set_blend_exact(RdBlendExact mode)
@@ -211,16 +219,26 @@ uint32_t rd__dst_target_usage(RhiFormat fmt, uint8_t *dstUsage)
 {
     uint32_t usage = 0;
     uint8_t u = 0;
-    /* every mode the device has, whichever is in force: rd_set_blend_exact
-     * switches without remaking the targets */
+    /* the destination read the player opted into (g_rd.dstModes holds at
+     * most OFF and the asked mode: rd__gpu_init made no other), so with
+     * the default fixed-function blend no RGBA8 target is made for a read;
+     * rd_set_blend_exact switches between OFF and that mode without
+     * remaking the targets */
     if (fmt == RHI_FMT_RGBA8_UNORM) {
         if (g_rd.dstModes & (1u << RD_BLEND_EXACT_STORAGE)) {
             usage |= RHI_TEX_STORAGE;
-            u |= 1u;
+            u |= RD_DST_USAGE_STORAGE;
         }
         if (g_rd.dstModes & (1u << RD_BLEND_EXACT_ATTACHMENT)) {
             usage |= RHI_TEX_INPUT_ATTACHMENT;
-            u |= 2u;
+            u |= RD_DST_USAGE_ATTACHMENT;
+        }
+        /* not the blend: DATE through the stencil bit reads the colour
+         * attachment by local read (RdProfile.dateStencil), once its
+         * shaders are in the table */
+        if (g_rd.profile.dateStencil && g_rd.fs[RD_FS_DATE_STENCIL].id) {
+            usage |= RHI_TEX_INPUT_ATTACHMENT;
+            u |= RD_DST_USAGE_LOCAL_DATE;
         }
     }
     if (dstUsage) {
@@ -333,7 +351,7 @@ uint32_t rd__enumerate_dst(const RdPipeKeyInt *in, uint32_t n, RdPipeKeyInt *out
 {
     const int mode = g_rd.dstMode;
     if (mode == RD_BLEND_EXACT_OFF) {
-        return count;
+        return count; /* the default: the start-up set has no destination-read key */
     }
     for (uint32_t i = 0; i < n; i++) {
         if (!eligible(&in[i])) {

@@ -1029,7 +1029,7 @@ static bool vkr_create_device(void)
         g_vkr.apiVersion = s_instanceApi;
     }
 #endif
-    const char *exts[16];
+    const char *exts[24];
     uint32_t extCount = 0;
     if (g_vkr.surface) {
         exts[extCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -1088,6 +1088,12 @@ static bool vkr_create_device(void)
      *                (VK_EXT_ or VK_ARM_rasterization_order_attachment_access,
      *                the same structure) and VK_KHR_dynamic_rendering_local_read
      *                (input attachments under dynamic rendering).
+     * Local read itself (RhiLimits.localRead: a pass's own attachments read
+     * as input attachments) is enabled wherever the device offers it,
+     * whatever the destination read: VK_KHR_dynamic_rendering_local_read, or
+     * on a Vulkan 1.4 device without the extension
+     * VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead (core; the
+     * effective version is capped by the instance's, s_instanceApi).
      * ICO_VK_FAKE_NO_DST=1 leaves both off, as on a device without them.
      * The attachment read is not offered on Qualcomm's own driver (below;
      * RhiLimits.rasterOrderOff). */
@@ -1116,6 +1122,9 @@ static bool vkr_create_device(void)
                                VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
         const bool extLocal =
             vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
+        const bool core14 = !extLocal && g_vkr.apiVersion >= VK_API_VERSION_1_4;
+        VkPhysicalDeviceVulkan14Features q14 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
         void *chain = NULL;
         if (extInterlock) {
             qInterlock.pNext = chain;
@@ -1128,6 +1137,10 @@ static bool vkr_create_device(void)
         if (extLocal) {
             qLocal.pNext = chain;
             chain = &qLocal;
+        }
+        if (core14) {
+            q14.pNext = chain;
+            chain = &q14;
         }
         if (chain) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -1163,11 +1176,12 @@ static bool vkr_create_device(void)
                      fakeAdreno ? "(ICO_VK_FAKE_ADRENO)" : g_vkr.driverVersion);
         }
         g_vkr.rasterOrder = hasOrder && g_vkr.rasterOrderOff[0] == '\0';
-        /* local read for the attachment read, and with the interlock for
-         * the barriers a pass may record between draws (vk_cmd.c
-         * vkr_dst_order) */
-        g_vkr.localRead =
-            extLocal && qLocal.dynamicRenderingLocalRead && (g_vkr.rasterOrder || g_vkr.interlock);
+        /* local read whenever offered (the attachment read needs it, the
+         * interlock's barriers between draws use it, vk_cmd.c
+         * vkr_dst_order, and the renderer's profile reads it,
+         * port/render/rd_profile.c); ICO_VK_FAKE_NO_DST leaves it off too */
+        g_vkr.localRead = !fake && ((extLocal && qLocal.dynamicRenderingLocalRead) ||
+                                    (core14 && q14.dynamicRenderingLocalRead));
         /* the interlock and the rasterization-order access order a
          * destination read after the pass's earlier draws, so no barrier
          * is needed between them; the validation layer's synchronisation
@@ -1176,22 +1190,25 @@ static bool vkr_create_device(void)
          * before such a draw */
         {
             const char *sb = getenv("ICO_VK_STORAGE_BARRIERS");
-            g_vkr.storageBarriers =
-                g_vkr.localRead && (g_vkr.validationOn || (sb && sb[0] && sb[0] != '0'));
+            g_vkr.storageBarriers = g_vkr.localRead && (g_vkr.rasterOrder || g_vkr.interlock) &&
+                                    (g_vkr.validationOn || (sb && sb[0] && sb[0] != '0'));
         }
+        const char *localSay = !g_vkr.localRead ? "no" : extLocal ? "yes" : "yes (Vulkan 1.4)";
         if (g_vkr.rasterOrderOff[0]) {
             VKR_LOG("destination read: interlock %s, rasterization-order attachment read off on "
                     "this driver (Qualcomm driver %s%s: wrong results on Adreno; "
-                    "ICO_VK_ATTACHMENT_READ=1 tries it)",
+                    "ICO_VK_ATTACHMENT_READ=1 tries it); local read %s",
                     g_vkr.interlock ? "yes" : "no", g_vkr.driverVersion,
-                    fakeAdreno ? ", ICO_VK_FAKE_ADRENO" : "");
+                    fakeAdreno ? ", ICO_VK_FAKE_ADRENO" : "", localSay);
         } else {
-            VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s",
+            VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s; "
+                    "local read %s",
                     g_vkr.interlock ? "yes" : "no", g_vkr.rasterOrder ? "yes" : "no",
                     fake              ? " (ICO_VK_FAKE_NO_DST)"
                     : fakeNoInterlock ? " (ICO_VK_FAKE_NO_INTERLOCK)"
                                       : "",
-                    hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "");
+                    hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "",
+                    localSay);
         }
         /* only what is used is enabled; the queries' structures become the
          * enables, everything else in them off */
@@ -1213,7 +1230,8 @@ static bool vkr_create_device(void)
                                    ? VK_EXT_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME
                                    : VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME;
         }
-        if (g_vkr.localRead) {
+        if (g_vkr.localRead && extLocal) {
+            /* core on a 1.4 device without it: the feature structure alone */
             exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME;
         }
     }
@@ -1302,7 +1320,7 @@ static bool vkr_create_device(void)
     }
 
     /* GPU loss diagnostics (VkrState): the fault report whenever offered;
-     * robust access under gpu_robust (on by default on Android);
+     * robust access under gpu_robust (off by default everywhere);
      * checkpoints and the address binding report under gpu_checkpoints.
      * Queried, then the queries' structures become the enables with only
      * what is used on. */
@@ -1313,22 +1331,20 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceAddressBindingReportFeaturesEXT qBind = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
     {
-        /* robust access: on by default on Android, where a Mali GPU reads
-         * storage buffers through plain pointers and an out-of-range read
-         * loses the device (issue 95); off by default on the desktop, whose
-         * GPUs bound their descriptors in hardware.  gpu_robust overrides
-         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST;
-         * gpu_robust=false turns it all off).  Wherever robust access is on,
+        /* robust access: off by default on every platform.  Android had it
+         * on, because a Mali GPU reads storage buffers through plain
+         * pointers and an out-of-range read lost the device (issue 95); that
+         * read is gone since the VU index values are dense (marks in the
+         * stream), and the bounds checks cost every StructuredBuffer read of
+         * the VU path.  gpu_robust = true turns it on (ico-pc.ini [dev],
+         * exported as ICO_GPU_ROBUST=1; the loss order's robust step,
+         * port/platform/startup_retry.h, exports it for its run).  Wherever robust access is on,
          * VK_EXT_robustness2's robustBufferAccess2 and robustImageAccess2 go
          * with it when the device offers them (reads past a range give zero,
          * on every descriptor kind); nullDescriptor only when gpu_robust
          * asks */
         const int robustSaid = vkr_env_switch("ICO_GPU_ROBUST");
-#ifdef __ANDROID__
-        const bool robustDefault = true;
-#else
         const bool robustDefault = false;
-#endif
         const bool wantRobust = robustSaid >= 0 ? robustSaid == 1 : robustDefault;
         const bool wantCheck = vkr_env_on("ICO_GPU_CHECKPOINTS");
         const bool extFault = vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
@@ -1393,16 +1409,20 @@ static bool vkr_create_device(void)
         /* what is on, and whether gpu_robust named it or it is the
            platform's default */
         char robustSay[160];
+        const char *retry = getenv("ICO_STARTUP_RETRY");
+        const bool robustRetry = retry != NULL && strncmp(retry, "robust:", 7) == 0;
         if (!g_vkr.robust) {
             snprintf(robustSay, sizeof robustSay, "%s",
                      wantRobust        ? "asked for, not offered"
                      : robustSaid == 0 ? "off (gpu_robust)"
-                                       : "off");
+                                       : "off (the default; gpu_robust = true turns it on)");
         } else {
             snprintf(robustSay, sizeof robustSay, "on, buffers%s%s%s (%s)",
                      buffer2 ? " (robustness2)" : "", image2 ? " and images (robustness2)" : "",
                      nullDesc ? ", null descriptors" : "",
-                     robustSaid == 1 ? "gpu_robust" : "the Android default");
+                     robustRetry       ? "the restart after the graphics card stopped responding"
+                     : robustSaid == 1 ? "gpu_robust"
+                                       : "the default");
         }
         snprintf(s_robustText, sizeof s_robustText, "%s", robustSay);
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
@@ -1415,6 +1435,80 @@ static bool vkr_create_device(void)
                 : wantCheck         ? "asked for, not offered"
                                     : "off",
                 robustSay);
+    }
+
+    /* The dynamic state (RhiLimits.dynamicDepth, dynamicBlend; rd's
+     * pipelines leave the depth test, write and compare and the blend to the
+     * draw, docs/port/RHI.md "Dynamic state"):
+     *   depth  Vulkan 1.3 (VK_EXT_extended_dynamic_state is core there, its
+     *          states with no feature bit), or the extension's
+     *          extendedDynamicState on a 1.2 device;
+     *   blend  VK_EXT_extended_dynamic_state3 with
+     *          extendedDynamicState3ColorBlendEnable,
+     *          extendedDynamicState3ColorBlendEquation and
+     *          extendedDynamicState3ColorWriteMask, only those enabled.
+     * ICO_VK_FAKE_NO_DYNAMIC=1 leaves both off, =blend the blend alone (the
+     * A/B of the same frames with every state static). */
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT qEds = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT qEds3 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+    bool edsExt = false;
+    {
+        const char *fakeDyn = getenv("ICO_VK_FAKE_NO_DYNAMIC");
+        const bool fakeBlendOnly = fakeDyn && strcmp(fakeDyn, "blend") == 0;
+        const bool fakeAll = fakeDyn && fakeDyn[0] && fakeDyn[0] != '0' && !fakeBlendOnly;
+        const bool fakeBlend = fakeAll || fakeBlendOnly;
+        const bool hasEds =
+            !core13 && vkr_device_has_ext(g_vkr.phys, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+        const bool hasEds3 =
+            vkr_device_has_ext(g_vkr.phys, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+        void *chain = NULL;
+        if (hasEds) {
+            qEds.pNext = chain;
+            chain = &qEds;
+        }
+        if (hasEds3) {
+            qEds3.pNext = chain;
+            chain = &qEds3;
+        }
+        if (chain) {
+            VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                           .pNext = chain};
+            vkGetPhysicalDeviceFeatures2(g_vkr.phys, &q);
+        }
+        edsExt = !fakeAll && hasEds && qEds.extendedDynamicState;
+        g_vkr.dynDepth = !fakeAll && (core13 || edsExt);
+        const bool eds3 = hasEds3 && qEds3.extendedDynamicState3ColorBlendEnable &&
+                          qEds3.extendedDynamicState3ColorBlendEquation &&
+                          qEds3.extendedDynamicState3ColorWriteMask;
+        g_vkr.dynBlend = !fakeBlend && eds3;
+        const char *depthSay =
+            g_vkr.dynDepth ? (core13 ? "yes (Vulkan 1.3)" : "yes (VK_EXT_extended_dynamic_state)")
+            : fakeAll      ? "no (ICO_VK_FAKE_NO_DYNAMIC)"
+                           : "no";
+        const char *blendSay = g_vkr.dynBlend      ? "yes (VK_EXT_extended_dynamic_state3)"
+                               : fakeBlend && eds3 ? "no (ICO_VK_FAKE_NO_DYNAMIC)"
+                               : hasEds3 ? "no (VK_EXT_extended_dynamic_state3 without the three "
+                                           "features)"
+                                         : "no";
+        VKR_LOG("dynamic state: depth test, write and compare %s; blend enable, equation and "
+                "write mask %s",
+                depthSay, blendSay);
+        memset(&qEds, 0, sizeof(qEds));
+        qEds.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+        qEds.extendedDynamicState = VK_TRUE;
+        memset(&qEds3, 0, sizeof(qEds3));
+        qEds3.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT;
+        qEds3.extendedDynamicState3ColorBlendEnable = VK_TRUE;
+        qEds3.extendedDynamicState3ColorBlendEquation = VK_TRUE;
+        qEds3.extendedDynamicState3ColorWriteMask = VK_TRUE;
+        if (g_vkr.dynDepth && edsExt) {
+            exts[extCount++] = VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME;
+        }
+        if (g_vkr.dynBlend) {
+            exts[extCount++] = VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME;
+        }
     }
 
     VkPhysicalDeviceDynamicRenderingFeatures dyn = {
@@ -1453,6 +1547,14 @@ static bool vkr_create_device(void)
     if (g_vkr.localRead) {
         qLocal.pNext = dyn.pNext;
         dyn.pNext = &qLocal;
+    }
+    if (g_vkr.dynDepth && edsExt) {
+        qEds.pNext = dyn.pNext;
+        dyn.pNext = &qEds;
+    }
+    if (g_vkr.dynBlend) {
+        qEds3.pNext = dyn.pNext;
+        dyn.pNext = &qEds3;
     }
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
@@ -1523,6 +1625,35 @@ static bool vkr_create_device(void)
     }
     if (g_vkr.presentWaitFake) {
         g_vkr.presentWait = true; /* the extensions stay off (vkr_present_wait_fake) */
+    }
+    /* the dynamic state's commands (through the device, as the loss
+     * diagnostics' below): the core names on a 1.3 device, the EXT ones
+     * otherwise; a group whose commands are not all found stays static */
+    if (g_vkr.dynDepth) {
+        g_vkr.cmdSetDepthTestEnable = (PFN_vkCmdSetDepthTestEnable)vkGetDeviceProcAddr(
+            g_vkr.device, core13 ? "vkCmdSetDepthTestEnable" : "vkCmdSetDepthTestEnableEXT");
+        g_vkr.cmdSetDepthWriteEnable = (PFN_vkCmdSetDepthWriteEnable)vkGetDeviceProcAddr(
+            g_vkr.device, core13 ? "vkCmdSetDepthWriteEnable" : "vkCmdSetDepthWriteEnableEXT");
+        g_vkr.cmdSetDepthCompareOp = (PFN_vkCmdSetDepthCompareOp)vkGetDeviceProcAddr(
+            g_vkr.device, core13 ? "vkCmdSetDepthCompareOp" : "vkCmdSetDepthCompareOpEXT");
+        if (!g_vkr.cmdSetDepthTestEnable || !g_vkr.cmdSetDepthWriteEnable ||
+            !g_vkr.cmdSetDepthCompareOp) {
+            VKR_LOG("dynamic state: the depth commands were not found: depth static");
+            g_vkr.dynDepth = false;
+        }
+    }
+    if (g_vkr.dynBlend) {
+        g_vkr.cmdSetColorBlendEnable = (PFN_vkCmdSetColorBlendEnableEXT)vkGetDeviceProcAddr(
+            g_vkr.device, "vkCmdSetColorBlendEnableEXT");
+        g_vkr.cmdSetColorBlendEquation = (PFN_vkCmdSetColorBlendEquationEXT)vkGetDeviceProcAddr(
+            g_vkr.device, "vkCmdSetColorBlendEquationEXT");
+        g_vkr.cmdSetColorWriteMask = (PFN_vkCmdSetColorWriteMaskEXT)vkGetDeviceProcAddr(
+            g_vkr.device, "vkCmdSetColorWriteMaskEXT");
+        if (!g_vkr.cmdSetColorBlendEnable || !g_vkr.cmdSetColorBlendEquation ||
+            !g_vkr.cmdSetColorWriteMask) {
+            VKR_LOG("dynamic state: the blend commands were not found: blend static");
+            g_vkr.dynBlend = false;
+        }
     }
     /* the loss diagnostics' entry points (through the device, so a build
      * linked straight to its driver needs none of them) */
@@ -1615,43 +1746,49 @@ static bool vkr_is_tiler(uint32_t vendor)
     }
 }
 
-/* The devices whose driver cannot be given the VU vertex shaders' extended
- * variants (port/shaders/vu_common.hlsli, ICO_VU_PLAIN; docs/port/RENDER.md,
- * "The VU shader variants"): the renderer creates only the plain ones there
- * and draws every VU draw with them (port/render/rd_pipeline.c
- * rd__vu_policy_init).  A row matches the vendor id, the device id under its
+/* The devices whose VU fallback takes the program entries' plain variants
+ * (port/shaders/vu_common.hlsli, ICO_VU_PLAIN; docs/port/RENDER.md, "The
+ * fallback entries"): the record path's modules are the same on every
+ * device; a draw it cannot take (past the record, a stage pipeline that
+ * could not be made, a failed self-test) draws through vu_X_plain_vs there
+ * instead of vu_X_vs (port/render/rd_pipeline.c rd__vu_policy_init,
+ * g_rd.vsFallback).  A row matches the vendor id, the device id under its
  * mask and, with qualcomm set, Qualcomm's own driver only
  * (rhi_driver_is_qualcomm_proprietary: Mesa's Turnip on the same GPU is
  * another compiler).  The reason is logged and goes to
- * RhiLimits.vuPlainOnly.
+ * RhiLimits.vuFallbackPlain.
  *   Adreno 740 (device 0x43050A01; AYN Thor, issue 107, and AYN Odin 2
  *   Portal, issue 93; driver 512.676.53, compiler E031.41.03.47): the
  *   whole device froze, needing a reboot, while the driver compiled the
  *   first pipelines with a VU vertex shader of v0.7.5 to v0.7.7 (46,470
  *   to 93,407 words); v0.6.1's (20,975 to 32,709 words) built
  *   (docs/port/SHADERS.md, The size history).  The plain variants are 10,011
- *   to 23,305 words.
- * ICO_RD_VU_EXTENDED=1 ([dev] vu_extended) gives the extended variants
- * anyway (the renderer reads it).
+ *   to 23,305 words, the record path's largest module about 20,000 (an
+ *   estimate until the build measures it).
+ * ICO_RD_VU_EXTENDED=1 gives the fallback the extended variants anyway (the
+ * renderer reads it).
  *
- * The lazy column: the devices that get no start-up set at all (lazy, its
- * reason for RhiLimits.lazyPipelines; docs/port/RENDER.md, "The start-up
- * set"): the window skips rd_precreate_pipelines and each pipeline is made
- * when a frame first needs it, the pipeline cache written after each batch
- * of them (rd_pipelines_lazy).
+ * The careful column: the devices whose start-up set is made under the
+ * careful policy (its reason for RhiLimits.carefulPipelines;
+ * docs/port/RENDER.md, "The start-up set"): the window passes
+ * rd_pipeline_policy_careful() to rd_set_pipeline_policy (batches of 8 on
+ * one thread, the pipeline cache written after each, the set stopped and
+ * the rest made on first use once the process grew past the budget or a
+ * batch took over 10 s).
  *   Adreno 740 again: with v0.7.7 both devices died inside the 2D half of
- *   the set (its first 327 keys at Original 4:3 with the fixed-function
- *   blend, before any VU key): the Odin 2 Portal at 201 of 527 finished,
- *   the process shrinking from 194 MB to 47 MB until the system ended it
- *   (issue 93), the Thor at 307 or later with the whole device frozen
- *   (issue 107); the same since v0.5.3, while v0.5.2 and v0.6.1 started.
- *   No one module explains it (font_sheet_ps and yuv_ps were as large in
- *   v0.6.1), so the set itself is skipped there. */
+ *   the blind set (its first 327 keys at Original 4:3 with the
+ *   fixed-function blend, before any VU key): the Odin 2 Portal at 201 of
+ *   527 finished, the process shrinking from 194 MB to 47 MB until the
+ *   system ended it (issue 93), the Thor at 307 or later with the whole
+ *   device frozen (issue 107); the same since v0.5.3, while v0.5.2 and
+ *   v0.6.1 started.  No one module explains it (font_sheet_ps and yuv_ps
+ *   were as large in v0.6.1); memory pressure from the parallel compiles
+ *   is the hypothesis the careful policy answers (inferred, not measured). */
 static const struct {
     uint32_t vendor, deviceMask, device;
     bool qualcomm;
     const char *reason;
-    const char *lazy; /* NULL: the start-up set as usual */
+    const char *careful; /* NULL: the start-up set as usual */
 } kVuPlainOnly[] = {
     /* the Adreno 740 by the whole chip id both devices report (0x43050A01,
      * the issue 93 and 107 logs), nothing near it: Mesa's freedreno
@@ -1665,16 +1802,17 @@ static const struct {
 static void vkr_vu_plain_only(void)
 {
     const uint32_t v = g_vkr.props.vendorID, d = g_vkr.props.deviceID;
-    g_vkr.vuPlainOnly[0] = '\0';
-    g_vkr.lazyPipelines[0] = '\0';
+    g_vkr.vuFallbackPlain[0] = '\0';
+    g_vkr.carefulPipelines[0] = '\0';
     for (size_t i = 0; i < sizeof(kVuPlainOnly) / sizeof(kVuPlainOnly[0]); i++) {
         if (kVuPlainOnly[i].vendor == v &&
             (d & kVuPlainOnly[i].deviceMask) == kVuPlainOnly[i].device &&
             (!kVuPlainOnly[i].qualcomm || rhi_driver_is_qualcomm_proprietary(v, g_vkr.driverID))) {
-            snprintf(g_vkr.vuPlainOnly, sizeof g_vkr.vuPlainOnly, "%s", kVuPlainOnly[i].reason);
-            if (kVuPlainOnly[i].lazy != NULL) {
-                snprintf(g_vkr.lazyPipelines, sizeof g_vkr.lazyPipelines, "%s",
-                         kVuPlainOnly[i].lazy);
+            snprintf(g_vkr.vuFallbackPlain, sizeof g_vkr.vuFallbackPlain, "%s",
+                     kVuPlainOnly[i].reason);
+            if (kVuPlainOnly[i].careful != NULL) {
+                snprintf(g_vkr.carefulPipelines, sizeof g_vkr.carefulPipelines, "%s",
+                         kVuPlainOnly[i].careful);
             }
             return;
         }
@@ -1750,14 +1888,14 @@ static void vkr_fill_limits(void)
      * the UINT view are false until the backend implements them */
     o->localRead = g_vkr.localRead;
     o->vendorId = g_vkr.props.vendorID;
-    o->dynamicDepth = false;
-    o->dynamicBlend = false;
-    o->uintView = false;
+    o->dynamicDepth = g_vkr.dynDepth;
+    o->dynamicBlend = g_vkr.dynBlend;
+    o->uintView = true; /* mutable-format images, core in 1.2 (vk_resource.c) */
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();
-    o->vuPlainOnly = g_vkr.vuPlainOnly[0] ? g_vkr.vuPlainOnly : NULL;
-    o->lazyPipelines = g_vkr.lazyPipelines[0] ? g_vkr.lazyPipelines : NULL;
+    o->vuFallbackPlain = g_vkr.vuFallbackPlain[0] ? g_vkr.vuFallbackPlain : NULL;
+    o->carefulPipelines = g_vkr.carefulPipelines[0] ? g_vkr.carefulPipelines : NULL;
     o->compilerVersion = g_vkr.compilerVersion[0] ? g_vkr.compilerVersion : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required

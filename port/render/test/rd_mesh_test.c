@@ -3571,12 +3571,19 @@ int main(int argc, char **argv)
         rd__enumerate_reachable(keys + RD_PIPELINE_REACHABLE_MAX, RD_PIPELINE_REACHABLE_MAX);
     rd__set_vu_prepass(prepassOn);
     printf("  pipelines: %u created, %u reachable (%u screen and post; %u with the vertex "
-           "pre-pass switched)\n",
-           rd__pipeline_count(), n, ns, n2);
+           "pre-pass switched; dynamic depth %d, blend %d)\n",
+           rd__pipeline_count(), n, ns, n2, (int)g_rd.dynDepth, (int)g_rd.dynBlend);
     CHECK(n < RD_PIPELINE_REACHABLE_MAX && n2 < RD_PIPELINE_REACHABLE_MAX && ns < 400,
           "reachable pipelines %u and %u (screen %u)", n, n2, ns);
     for (uint32_t i = 0; i < rd__pipeline_count(); i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
+        /* the cache holds the dynamic state's normalised keys
+         * (rd_pipeline.c drawKey, rd__key_dynamic_normalise) */
+        RdPipeKeyInt nk = *k;
+        rd__key_dynamic_normalise(&nk);
+        CHECK(memcmp(&nk, k, sizeof(nk)) == 0,
+              "created pipeline %u (vs %u z %u/%u blend %u) is not normalised", i, k->vs,
+              k->gs.ztst, k->gs.zwrite, k->gs.blend);
         int found = 0;
         for (uint32_t j = 0; j < n && j < RD_PIPELINE_REACHABLE_MAX; j++) {
             found |= rd__pipe_key_equal(&keys[j], k);

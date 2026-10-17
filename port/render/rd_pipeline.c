@@ -62,6 +62,16 @@
  * Z: the shaders map GS Z to a depth that grows with it (gs_z_to_depth, z
  * times the target's scale), so GS GEQUAL is RHI_CMP_GEQUAL and GREATER is
  * GREATER.
+ *
+ * Dynamic state (docs/port/RENDER.md "Pipelines"): where the device has it
+ * (RhiLimits.dynamicDepth / dynamicBlend, g_rd.dynDepth / dynBlend) the
+ * Z test, Z write, blend and colour mask leave the key
+ * (rd__key_dynamic_normalise: ztst ALWAYS, zwrite OFF, blend RD_BLEND_COUNT,
+ * mask 0xF in the cache) and every bind sets them from the draw's own key
+ * (rd__set_pipeline) through depthCompare and blendState, the functions the
+ * static state is made with: each draw gets the same fixed-function tuple
+ * either way.  The shadow count's stencil keys keep their depth static, the
+ * point keys every state; nodual stays in the key (it picks the module).
  */
 #include <stdlib.h>
 #include <string.h>
@@ -88,9 +98,27 @@ static uint32_t s_failedCount;
 
 static bool s_fullLogged;
 
-bool rd__pipe_key_equal(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
+/* the cache's own comparison: its keys are drawKey's, normalised */
+static bool keyEqual(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
 {
     return memcmp(a, b, sizeof(*a)) == 0;
+}
+
+/* whether a and b select the same pipeline: equal, or equal once the
+ * dynamic state's fields are normalised away (rd__key_dynamic_normalise),
+ * so a key as a planner made it matches the set's normalised one */
+bool rd__pipe_key_equal(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
+{
+    if (keyEqual(a, b)) {
+        return true;
+    }
+    if (!g_rd.dynDepth && !g_rd.dynBlend) {
+        return false;
+    }
+    RdPipeKeyInt na = *a, nb = *b;
+    rd__key_dynamic_normalise(&na);
+    rd__key_dynamic_normalise(&nb);
+    return keyEqual(&na, &nb);
 }
 
 RdBlendPath rd__blend_path(uint8_t b)
@@ -368,12 +396,19 @@ int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_
 }
 
 /* A linear-filtered texture with GS levels drawn at the GS's level
- * (DF_GS_LOD) in the Original preset: the four-tap integer filter of the
- * TEXA entries (gs_texa_texture_lod: the GS's 4-bit fractions, gs_bilerp,
- * the two levels blended by the LOD's fraction) instead of the sampler's
- * float filter, which rounds where the GS truncates.  PCSX2's per-draw
- * dumps of the opening's mist (fog1, list 5) had the sampler's version
- * about 5 % brighter (forest: +19.5 against +18.6 levels). */
+ * (DF_GS_LOD) in the Original preset: filtered as the GS filters, not by
+ * the sampler's own LOD and level blend.  PCSX2's per-draw dumps of the
+ * opening's mist (fog1, list 5) had the sampler's version about 5 %
+ * brighter (forest: +19.5 against +18.6 levels): its fraction between
+ * levels (4 to 8 bits on a device) and its texel weights off the GS's
+ * 12.4 grid.  Two forms: a texture whose TEXA changes texels before the
+ * filter (rd__texa_per_texel) takes the TEXA entries' four-tap integer
+ * filter (gs_texa_texture_lod); every other one the sampler at the GS's
+ * grid point of each level, nearest between levels, the two levels
+ * blended in 256ths as the GS does (common.hlsli gs_sample_gs_bilinear,
+ * rd_replay.c fillDrawCB's ICO_DF_GS_BILINEAR_GRID and gsLodSampler),
+ * within 2 levels of the GS's truncating steps (docs/port/RENDER.md,
+ * "Textures"). */
 int rd__gs_filter_int(const RdStateBlock *s)
 {
     const RdDrawState *d = &s->ds;
@@ -387,12 +422,14 @@ int rd__gs_filter_int(const RdStateBlock *s)
            ((tr->gsLevels > 1 && tr->gsChain) || tr->mipLevels > 1);
 }
 
+/* TEXA before the filter: a 24- or 16-bit source (or CLUT) under a TEXA
+ * whose alpha depends on the texel (AEM, or TA0 != TA1: the two modes
+ * other than 80/80) with a linear filter.  An RGBA32 texture and TEXA
+ * 80/80 give the same texels before and after the filter, and take the
+ * sampler (with GS levels on the GS's grid: rd__gs_filter_int). */
 int rd__texa_per_texel(const RdStateBlock *s)
 {
     const RdDrawState *d = &s->ds;
-    if (rd__gs_filter_int(s)) {
-        return 1;
-    }
     if (!d->texEnabled || d->texa == RD_TEXA_80_80) {
         return 0; /* TEXA 80/80 gives every texel alpha 0x80: no order to keep */
     }
@@ -692,13 +729,12 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         {9, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sx)},
         {10, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sy)},
     };
-    if (rd__vs_is_vu_pre(k->vs) ||
-        (k->vs >= RD_VS_VU_TRI_RULE_PRE && k->vs <= RD_VS_VU_PARTICLE_PRE)) {
-        /* the vertex and triangle pre-passes (rd_replay_vu.c rd__vu_prepass):
-         * the program's pre-pass entry or a record stage reads group 1 as the
-         * VU programs do; points into the record's three RGBA32_UINT targets
-         * through vu_pre_ps, no depth, no blend, the key's colour mask (the
-         * tick stage's R or G) */
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+        /* the vertex pre-pass and the record stages (rd_replay_vu.c
+         * rd__vu_prepass): the entry reads group 1 as the VU programs do;
+         * points into the record's three RGBA32_UINT targets through
+         * vu_pre_ps, no depth, no blend, the key's colour mask on each
+         * target (0xF but for the tick stage's R or G, rd__vu_stage_key) */
         layouts[0] = g_rd.layoutFrame;
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
@@ -713,7 +749,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         d->topology = RHI_TOPO_POINT_LIST;
         d->cullNone = true;
         for (uint32_t i = 0; i < ICO_VU_REC_PLANES; i++) {
-            d->blend[i].writeMask = k->gs.colorMask;
+            d->blend[i].writeMask = (uint8_t)(k->gs.colorMask & 0xFu);
             d->colorFormats[i] = RHI_FMT_RGBA32_UINT;
         }
         d->colorCount = ICO_VU_REC_PLANES;
@@ -721,9 +757,7 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         d->debugName = "rd vu pre-pass";
         return true;
     }
-    /* the main VU shaders: one module, group 1 as the programs' */
-    const bool vuMain = k->vs == RD_VS_VU_MAIN || k->vs == RD_VS_VU_PARTICLE_MAIN;
-    const int vu = (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || vuMain;
+    const int vu = (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(k->vs);
     /* the VU program shaders read the stream, VuCB and
      * VuBoneCB from group 1 next to DrawCB, and have no vertex input */
     /* the exact blend's destination read (rd_dst_read.c): group 3 holds the
@@ -735,14 +769,19 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     layouts[2] = k->fs == RD_FS_BLEND_INT ? g_rd.layoutInt : g_rd.layoutTex;
     layouts[3] = dstStorage ? g_rd.layoutDstStorage : g_rd.layoutDstAttach;
     memset(d, 0, sizeof(*d));
-    /* a VU key's variant: the plain module unless the key asks for the
-     * extended one (vuExt, rd__vu_draw_ext) */
-    d->vertex = vu && !vuMain && !k->vuExt ? g_rd.vsPlain[k->vs] : g_rd.vs[k->vs];
+    /* a program entry's key: the fallback's module (rd__vu_policy_init,
+     * the plain variant on a device of the table) */
+    d->vertex = k->vs >= RD_VS_VU_PRELIT && k->vs <= RD_VS_VU_PARTICLE && g_rd.vsFallback[k->vs].id
+                    ? g_rd.vsFallback[k->vs]
+                    : g_rd.vs[k->vs];
     if (!d->vertex.id) {
         return false;
     }
     /* no dual-source blending: the *_nodual twin (c0 alone) */
     d->fragment = k->gs.nodual && g_rd.fsNoDual[k->fs].id ? g_rd.fsNoDual[k->fs] : g_rd.fs[k->fs];
+    if (!d->fragment.id) {
+        return false; /* a module this build does not have (rd__gpu_init's fence) */
+    }
     if (dstStorage || dstAttach) {
         d->fragment = dstStorage ? g_rd.fsDstRov[k->fs] : g_rd.fsDstAtt[k->fs];
         if (!d->fragment.id || !layouts[3].id) {
@@ -790,6 +829,9 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
     d->depthFormat = (RhiFormat)k->depthFmt;
     d->debugName = "rd";
     d->samples = k->gs.msaa; /* 0: single-sampled */
+    /* the groups the key leaves to the draw (its static values above are
+     * the normalised ones; rd__set_pipeline sets the draw's) */
+    d->dynamic = rd__key_dynamic_bits(k);
     return true;
 }
 
@@ -848,12 +890,44 @@ void rd_set_memory_fn(RdMemoryFn fn)
     s_memoryFn = fn;
 }
 
+/* How the start-up set is made (rd.h RdPipelineSetPolicy; createKeys):
+ * zero fields are the defaults (RD_PIPE_BATCH keys a batch, the backend's
+ * threads, no memory bound, the cache written as cacheKeptPerBatch says).
+ * The careful values (rd_pipeline_policy_careful) are what the window
+ * passes on a device of the table's careful column
+ * (RhiLimits.carefulPipelines; docs/port/RENDER.md "The start-up set"):
+ * batches of 8 on one worker thread, the cache written after each, the
+ * set stopped once the process grew 128 MB past its size at the set's
+ * start or a batch took over RD_SET_SLOW_BATCH_MS. */
+static RdPipelineSetPolicy s_setPolicy;
+
+void rd_set_pipeline_policy(const RdPipelineSetPolicy *p)
+{
+    if (p) {
+        s_setPolicy = *p;
+    } else {
+        memset(&s_setPolicy, 0, sizeof(s_setPolicy));
+    }
+}
+
+const RdPipelineSetPolicy *rd_pipeline_policy(void)
+{
+    return &s_setPolicy;
+}
+
+const RdPipelineSetPolicy *rd_pipeline_policy_careful(void)
+{
+    static const RdPipelineSetPolicy careful = {8u, 1u, 128u, true};
+    return &careful;
+}
+
 /* Whether the pipeline cache is measured for the batches' lines and written
  * between the start-up set's batches (issues 93 and 107): on a phone or a
  * tablet (Android, iOS) always, so a set the system ends keeps what it
  * compiled and its lines show the cache's growth; on a desktop only on the
- * lazy path and on a device of the table (RhiLimits.lazyPipelines), never
- * in its start-up set.  Each measure is vkGetPipelineCacheData over the
+ * lazy path, on a device of the table (RhiLimits.carefulPipelines) and
+ * under a policy with cacheEachBatch, never in a desktop's usual start-up
+ * set.  Each measure is vkGetPipelineCacheData over the
  * whole cache (21 MB on an RTX 3090) and each write compares or writes it
  * all: with them after every batch a warm start on that card took 16.7 s
  * and 31.2 s against 1.9 s without, every pipeline a cache hit. */
@@ -863,7 +937,8 @@ static bool cacheKeptPerBatch(void)
     return true;
 #else
     const RhiLimits *lim = rhi_limits();
-    return rd__pipelines_lazy_on() || (lim != NULL && lim->lazyPipelines != NULL);
+    return rd__pipelines_lazy_on() || s_setPolicy.cacheEachBatch ||
+           (lim != NULL && lim->carefulPipelines != NULL);
 #endif
 }
 
@@ -900,30 +975,40 @@ void rd__pipe_key_text(const RdPipeKeyInt *k, char *out, size_t size)
     keyWords(k, out, size);
 }
 
+/* a key with a VU vertex shader: a program entry, the old triangle stage,
+ * the record path's two drawing shaders, the pre-pass's and the stages'
+ * point entries */
 static bool keyIsVu(const RdPipeKeyInt *k)
 {
-    return k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST;
+    return (k->vs >= RD_VS_VU_FIRST && k->vs <= RD_VS_VU_LAST) || rd__vs_is_vu_main(k->vs) ||
+           rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs);
 }
 
-/* the key's fields; a VU key also its variant, " ext 1" for the extended
- * one (startup_retry.h startup_retry_note_has_vu_ext reads it) */
+/* the key's fields; a point key (the pre-pass's, a record stage's) " pre"
+ * (startup_retry.h startup_retry_note_has_vu_pre reads it) */
 static void keyWords(const RdPipeKeyInt *k, char *out, size_t size)
 {
     snprintf(out, size, "program %u blend %u vs %u fs %u fmt %u/%u msaa %u dst %u%s", k->gs.program,
              k->gs.blend, k->vs, k->fs, k->colorFmt, k->depthFmt, k->gs.msaa, (unsigned)k->dst,
-             keyIsVu(k)                ? (k->vuExt ? " ext 1" : " ext 0")
-             : rd__vs_is_vu_pre(k->vs) ? " pre"
-                                       : "");
+             rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs) ? " pre" : "");
+}
+
+/* whether a program entry's key draws through the plain variant (the
+ * fallback on a device of the table, rd__vu_policy_init) */
+static bool keyPlain(const RdPipeKeyInt *k)
+{
+    return g_rd.vuFallbackPlain && k->vs >= RD_VS_VU_PRELIT && k->vs <= RD_VS_VU_GRID_SPEC &&
+           g_rd.vsPlain[k->vs].id;
 }
 
 /* the modules a key's pipeline is made of, as pipelineDesc picks them: the
- * vertex shader (a VU key's plain or extended variant) and the fragment
- * shader (its _dstrov, _dstatt or _nodual twin) */
+ * vertex shader (a program entry's plain variant where the fallback takes
+ * it) and the fragment shader (its _dstrov, _dstatt or _nodual twin) */
 static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
-    if (keyIsVu(k) && !k->vuExt && n > 3) {
+    if (keyPlain(k) && n > 3) {
         snprintf(out, size, "%.*s_plain_vs", (int)(n - 3), v);
     } else {
         snprintf(out, size, "%s", v);
@@ -986,7 +1071,7 @@ static void batchModules(const RdPipeKeyInt *keys, uint32_t n, char *out, size_t
             memcpy(names[named++], v, sizeof(v));
         } else {
             /* counted once each: the keys come grouped by vertex shader */
-            if (i == 0 || keys[i].vs != keys[i - 1].vs || keys[i].vuExt != keys[i - 1].vuExt) {
+            if (i == 0 || keys[i].vs != keys[i - 1].vs) {
                 more++;
             }
         }
@@ -1051,7 +1136,7 @@ void rd__pipeline_note_end(void)
  * blending, a gs_dual_out entry as its *_nodual twin (the planned passes
  * come through rd__expand_no_dual, the single keys, the shadow count's
  * volumes, are turned here).  k itself, or tmp holding the turned key. */
-static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
+static const RdPipeKeyInt *drawKeyTurned(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
 {
     if (g_rd.passSamples > 1 && k->gs.msaa != g_rd.passSamples) {
         *tmp = *k;
@@ -1075,13 +1160,60 @@ static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
     return k;
 }
 
+uint32_t rd__key_dynamic_bits(const RdPipeKeyInt *k)
+{
+    if (rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) {
+        return 0; /* three targets, no depth: every state static */
+    }
+    uint32_t bits = 0;
+    if (g_rd.dynDepth && k->depthFmt != RHI_FMT_UNKNOWN && k->gs.stencil == RD_STENCIL_OFF) {
+        bits |= RHI_DYN_DEPTH; /* the shadow count's stencil keys stay static */
+    }
+    if (g_rd.dynBlend && k->colorFmt != RHI_FMT_UNKNOWN && k->dst == RHI_DST_READ_NONE) {
+        /* one colour target and no destination read (a storage pass has no
+         * colour target; the attachment read blends in its shader, blending
+         * off in its key already, and keeps its rasterization-order
+         * pipeline static) */
+        bits |= RHI_DYN_BLEND;
+    }
+    return bits;
+}
+
+void rd__key_dynamic_normalise(RdPipeKeyInt *k)
+{
+    const uint32_t bits = rd__key_dynamic_bits(k);
+    if (bits & RHI_DYN_DEPTH) {
+        k->gs.ztst = RD_ZTST_ALWAYS;
+        k->gs.zwrite = RD_ZWRITE_OFF;
+    }
+    if (bits & RHI_DYN_BLEND) {
+        k->gs.blend = RD_BLEND_COUNT;
+        k->gs.colorMask = 0xF;
+    }
+}
+
+/* drawKeyTurned's key with the dynamic state's fields normalised away
+ * (rd__key_dynamic_normalise): the key the cache holds.  k itself, or tmp. */
+static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
+{
+    k = drawKeyTurned(k, tmp);
+    if (rd__key_dynamic_bits(k) != 0u) {
+        if (k != tmp) {
+            *tmp = *k;
+        }
+        rd__key_dynamic_normalise(tmp);
+        k = tmp;
+    }
+    return k;
+}
+
 /* k's slot in s_hash: its entry's (*found) or the empty slot the probe
  * ended on */
 static uint32_t probeKey(const RdPipeKeyInt *k, bool *found)
 {
     uint32_t at = keyHash(k) % RD_PIPE_HASH;
     for (; s_hash[at] != 0; at = (at + 1) % RD_PIPE_HASH) {
-        if (rd__pipe_key_equal(&s_cache[s_hash[at] - 1].key, k)) {
+        if (keyEqual(&s_cache[s_hash[at] - 1].key, k)) {
             *found = true;
             return at;
         }
@@ -1093,7 +1225,7 @@ static uint32_t probeKey(const RdPipeKeyInt *k, bool *found)
 static bool keyFailed(const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < s_failedCount; i++) {
-        if (rd__pipe_key_equal(&s_failed[i], k)) {
+        if (keyEqual(&s_failed[i], k)) {
             return true;
         }
     }
@@ -1151,7 +1283,7 @@ static void gatherKey(const RdPipeKeyInt *k)
         return;
     }
     for (uint32_t i = 0; i < s_gatherN; i++) {
-        if (rd__pipe_key_equal(&s_gather[i], k)) {
+        if (keyEqual(&s_gather[i], k)) {
             return;
         }
     }
@@ -1260,28 +1392,28 @@ static void firstUseLine(const RdPipeKeyInt *k, float ms)
             s_firstUse == 8u ? "; from here every 100th is written" : "");
 }
 
-/* v0.7.10 (rd_internal.h): the bind and its dynamic state.  Until the
- * dynamic-state package lands every state is static and this is the bind. */
+/* The bind and its dynamic state (rd_internal.h): the depth test, write
+ * and compare and the blend of k as drawKeyTurned makes it (the two-pass
+ * blend's factors), through the functions pipelineDesc makes the static
+ * state with, so each draw gets the fixed-function state a pipeline of
+ * its own un-normalised key would have had: the same tuple, set
+ * dynamically (the RHI skips the values already in force) */
 void rd__set_pipeline(RhiCommandList cl, RhiPipeline p, const RdPipeKeyInt *k)
 {
-    (void)k;
     rhi_cmd_set_pipeline(cl, p);
-}
-
-static RdPipelineSetPolicy s_setPolicy;
-
-void rd_set_pipeline_policy(const RdPipelineSetPolicy *p)
-{
-    if (p) {
-        s_setPolicy = *p;
-    } else {
-        memset(&s_setPolicy, 0, sizeof(s_setPolicy));
+    if (k == NULL || !p.id || (!g_rd.dynDepth && !g_rd.dynBlend)) {
+        return;
     }
-}
-
-const RdPipelineSetPolicy *rd_pipeline_policy(void)
-{
-    return &s_setPolicy;
+    RdPipeKeyInt tmp;
+    const RdPipeKeyInt *dk = drawKeyTurned(k, &tmp);
+    const uint32_t bits = rd__key_dynamic_bits(dk);
+    if (bits & RHI_DYN_DEPTH) {
+        rhi_cmd_set_depth_state(cl, true, dk->gs.zwrite == RD_ZWRITE_ON, depthCompare(dk->gs.ztst));
+    }
+    if (bits & RHI_DYN_BLEND) {
+        const RhiBlendState b = blendState(keyBlendPath(dk), dk->gs.colorMask, dk->gs.nodual);
+        rhi_cmd_set_blend_state(cl, &b);
+    }
 }
 
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
@@ -1409,13 +1541,13 @@ typedef struct PreTimes {
     float ms[PRE_SLOWEST];
     RdPipeKeyInt key[PRE_SLOWEST];
     uint32_t n;
-    double byVs[RD_VS_COUNT * 2]; /* by vertex shader and VU variant (vs * 2 + vuExt) */
+    double byVs[RD_VS_COUNT]; /* by vertex shader */
 } PreTimes;
 
 static void preTime(PreTimes *t, const RdPipeKeyInt *k, float ms)
 {
     if (k->vs < RD_VS_COUNT) {
-        t->byVs[k->vs * 2 + (k->vuExt ? 1 : 0)] += ms;
+        t->byVs[k->vs] += ms;
     }
     uint32_t at = t->n < PRE_SLOWEST ? t->n : PRE_SLOWEST - 1;
     if (t->n == PRE_SLOWEST && ms <= t->ms[at]) {
@@ -1448,12 +1580,12 @@ static void preTimesLog(const PreTimes *t)
         at = k > 0 ? at + (size_t)k : at;
     }
     rd__log("pipelines: the slowest: %s", t->n ? line : "none");
-    bool done[RD_VS_COUNT * 2] = {false};
+    bool done[RD_VS_COUNT] = {false};
     at = 0;
     line[0] = '\0';
     for (;;) {
         int best = -1;
-        for (int v = 0; v < RD_VS_COUNT * 2; v++) {
+        for (int v = 0; v < RD_VS_COUNT; v++) {
             if (!done[v] && t->byVs[v] > 0.0 && (best < 0 || t->byVs[v] > t->byVs[best])) {
                 best = v;
             }
@@ -1464,8 +1596,7 @@ static void preTimesLog(const PreTimes *t)
         done[best] = true;
         RdPipeKeyInt k;
         memset(&k, 0, sizeof(k));
-        k.vs = (uint8_t)(best / 2);
-        k.vuExt = (uint8_t)(best & 1);
+        k.vs = (uint8_t)best;
         char name[64];
         keyVsName(&k, name, sizeof(name));
         const int n =
@@ -1474,6 +1605,34 @@ static void preTimesLog(const PreTimes *t)
         at = n > 0 ? at + (size_t)n : at;
     }
     rd__log("pipelines: compile time by vertex shader: %s", at ? line : "none");
+}
+
+/* a policy other than the defaults is in force (rd_set_pipeline_policy) */
+static bool policySet(void)
+{
+    return s_setPolicy.batch || s_setPolicy.maxThreads || s_setPolicy.memoryBudgetMB ||
+           s_setPolicy.cacheEachBatch;
+}
+
+/* "batch 8, threads 1, budget 128 MB, cache each batch": the policy's
+ * values (0 threads: the backend's; 0 MB: no budget) */
+static void policyText(char *out, size_t size)
+{
+    char th[32], mb[32];
+    if (s_setPolicy.maxThreads) {
+        snprintf(th, sizeof(th), "threads %u", s_setPolicy.maxThreads);
+    } else {
+        snprintf(th, sizeof(th), "threads the backend's");
+    }
+    if (s_setPolicy.memoryBudgetMB) {
+        snprintf(mb, sizeof(mb), "budget %u MB", s_setPolicy.memoryBudgetMB);
+    } else {
+        snprintf(mb, sizeof(mb), "no budget");
+    }
+    snprintf(out, size, "batch %u, %s, %s, cache %s",
+             s_setPolicy.batch && s_setPolicy.batch < RD_PIPE_BATCH ? s_setPolicy.batch
+                                                                    : RD_PIPE_BATCH,
+             th, mb, s_setPolicy.cacheEachBatch ? "each batch" : "as usual");
 }
 
 /* A batch done: its compile times, each pipeline's as the worker measured
@@ -1513,8 +1672,7 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
         at = k_ > 0 ? (at + (size_t)k_ < sizeof(line) ? at + (size_t)k_ : sizeof(line) - 1) : at;  \
     } while (0)
     if (vu) {
-        BT_PUT("VU batch %u-%u of %u (%s, compiler %s)", first, last, total,
-               keys[0].vuExt ? "extended" : "plain",
+        BT_PUT("VU batch %u-%u of %u (compiler %s)", first, last, total,
                s_compiler[0] ? s_compiler : "unnamed by the driver");
     } else {
         BT_PUT("2D batch %u-%u of %u (compiler %s)", first, last, total,
@@ -1522,6 +1680,11 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
     }
     BT_PUT(": %u pipelines %.2f-%.2f s, mean %.2f s, %.1f s on %u threads; %s", n, lo / 1000.0,
            hi / 1000.0, sum / n / 1000.0, wallMs / 1000.0, threads, mem);
+    if (policySet()) {
+        char pol[160];
+        policyText(pol, sizeof(pol));
+        BT_PUT("; policy %s", pol);
+    }
     if (!vu) {
         char w[96], mods[160];
         keyWords(&keys[slow], w, sizeof(w));
@@ -1531,7 +1694,7 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
     /* by vertex shader, in the batch's order (the keys come grouped) */
     for (uint32_t j = 0; vu && j < n;) {
         uint32_t e = j + 1;
-        while (e < n && keys[e].vs == keys[j].vs && keys[e].vuExt == keys[j].vuExt) {
+        while (e < n && keys[e].vs == keys[j].vs) {
             e++;
         }
         float glo = ms[j], ghi = ms[j];
@@ -1568,13 +1731,29 @@ static void batchTimes(const RdPipeKeyInt *keys, const float *ms, uint32_t n, ui
  * set writes only at its end (the window's write) */
 #define RD_SET_SAVE_MS 5000.0
 static double s_setSavedMs;
+/* under a policy with a memory budget, a batch longer than this stops the
+ * set too (createKeys) */
+#define RD_SET_SLOW_BATCH_MS 10000.0
 
 /* the counts of one createKeys */
 typedef struct PreCounts {
     uint32_t failed, compiled, threads;
     uint32_t stoppedAt; /* the keys gone over when the progress function stopped it */
     int stop;
+    /* why the policy's budget stopped the set ("" if it did not): the rest
+     * is made on first use (rd_pipelines_lazy) */
+    char budget[192];
 } PreCounts;
+
+/* the process's resident memory in KB (rd_set_memory_fn), -1 unknown */
+static long residentKb(void)
+{
+    long rss = -1, peak = -1;
+    if (s_memoryFn == NULL || s_memoryFn(&rss, &peak) != 0) {
+        return -1;
+    }
+    return rss;
+}
 
 /* Creates keys[0..m) not made yet through rhi_create_pipelines, in batches
  * of up to RD_PIPE_BATCH (all with a destination read or all without), the
@@ -1584,6 +1763,13 @@ typedef struct PreCounts {
 static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreTimes *times,
                        PreCounts *c)
 {
+    /* the policy (rd_set_pipeline_policy): the batch's size, its threads,
+     * the memory bound of the start-up set (times: not a replay's keys) */
+    const uint32_t batchMax = s_setPolicy.batch > 0u && s_setPolicy.batch < RD_PIPE_BATCH
+                                  ? s_setPolicy.batch
+                                  : RD_PIPE_BATCH;
+    const bool budgeted = times != NULL && s_setPolicy.memoryBudgetMB > 0u;
+    const long startKb = budgeted ? residentKb() : -1;
     static RdPipeKeyInt bk[RD_PIPE_BATCH];
     static RhiPipelineDesc bd[RD_PIPE_BATCH];
     static RhiBindGroupLayout bl[RD_PIPE_BATCH][4];
@@ -1603,14 +1789,14 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
         uint32_t nb = 0;
         int dstKind = -1;
         noteBetween(i, m);
-        for (; i < m && nb < RD_PIPE_BATCH; i++) {
+        for (; i < m && nb < batchMax; i++) {
             RdPipeKeyInt tmp;
             bool found, dup = false;
             const RdPipeKeyInt *k = resolved ? &keys[i] : drawKey(&keys[i], &tmp);
-            /* a batch is all with a destination read or all without, and
-             * all extended VU keys or none (the note's first key says which
-             * for the whole batch: startup_retry.h) */
-            const int kind = (k->dst != RHI_DST_READ_NONE) | (keyIsVu(k) && k->vuExt ? 2 : 0);
+            /* a batch is all with a destination read or all without (the
+             * note's first key says which for the whole batch:
+             * startup_retry.h) */
+            const int kind = k->dst != RHI_DST_READ_NONE;
             if (dstKind >= 0 && kind != dstKind) {
                 break;
             }
@@ -1623,7 +1809,7 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 continue;
             }
             for (uint32_t j = 0; j < nb && !dup; j++) {
-                dup = rd__pipe_key_equal(&bk[j], k);
+                dup = keyEqual(&bk[j], k);
             }
             if (dup) {
                 continue;
@@ -1674,25 +1860,49 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 (void)n;
             }
             if (vuBatch) {
-                rd__log("pipelines: compiling %u-%u of %u (%s VU): %s", first + 1, i, m,
-                        keyIsVu(&bk[0]) && bk[0].vuExt ? "extended" : "plain", mods);
+                rd__log("pipelines: compiling %u-%u of %u (VU): %s", first + 1, i, m, mods);
             }
             memcpy(s_batchNote, note, sizeof(s_batchNote));
             if (s_activityFn != NULL) {
                 s_activityFn(s_batchNote);
             }
-            RhiPipelineBatch batch = {preWait, &pb, bms, 1, 0};
+            RhiPipelineBatch batch = {preWait, &pb, bms, 1, s_setPolicy.maxThreads};
             pb.base = first;
+            const long beforeKb = budgeted ? residentKb() : -1;
             const double bt0 = rd__now_ms();
             rhi_create_pipelines(bd, nb, bp, &batch);
-            batchTimes(bk, bms, nb, first + 1, i, m, rd__now_ms() - bt0, batch.threads);
-            if (times != NULL && i < m && rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS &&
+            const double batchMs = rd__now_ms() - bt0;
+            batchTimes(bk, bms, nb, first + 1, i, m, batchMs, batch.threads);
+            if (times != NULL && i < m &&
+                (s_setPolicy.cacheEachBatch || rd__now_ms() - s_setSavedMs >= RD_SET_SAVE_MS) &&
                 cacheKeptPerBatch()) {
                 /* the start-up set (times: not a replay's gathered keys) on
-                 * a phone or a tablet only: a desktop's set writes once,
-                 * at its end (the window's write) */
+                 * a phone or a tablet, or after every batch under a policy
+                 * that asks: a desktop's set writes once, at its end (the
+                 * window's write) */
                 (void)rhi_pipeline_cache_save();
                 s_setSavedMs = rd__now_ms();
+            }
+            if (budgeted && i < m) {
+                /* the policy's bound: the process's growth since the set
+                 * began (the memory read before and after the batch) or a
+                 * batch past RD_SET_SLOW_BATCH_MS stops the set here */
+                const long afterKb = residentKb();
+                const long grewMb = startKb >= 0 && afterKb >= 0 ? (afterKb - startKb) / 1024 : 0;
+                if (grewMb > (long)s_setPolicy.memoryBudgetMB) {
+                    snprintf(c->budget, sizeof(c->budget),
+                             "(memory budget: the process grew %ld MB, from %ld to %ld MB, past "
+                             "the policy's %u MB, after %u of %u keys)",
+                             grewMb, startKb / 1024, afterKb / 1024, s_setPolicy.memoryBudgetMB, i,
+                             m);
+                } else if (batchMs > RD_SET_SLOW_BATCH_MS) {
+                    snprintf(c->budget, sizeof(c->budget),
+                             "(memory budget: a batch of %u took %.1f s, past %.0f s; memory %ld "
+                             "to %ld MB; after %u of %u keys)",
+                             nb, batchMs / 1000.0, RD_SET_SLOW_BATCH_MS / 1000.0,
+                             beforeKb >= 0 ? beforeKb / 1024 : -1L,
+                             afterKb >= 0 ? afterKb / 1024 : -1L, i, m);
+                }
             }
             s_batchNote[0] = '\0';
             if (batch.threads > c->threads) {
@@ -1722,6 +1932,9 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
                 keepPipeline(&bk[j], bp[j], at);
             }
         }
+        if (c->budget[0]) {
+            break; /* the policy's bound (above): the rest on first use */
+        }
         if (!pb.stop && i < m) {
             /* the frame the progress function may present is not the
                batch's */
@@ -1738,6 +1951,16 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     if (s_activityFn != NULL) {
         s_activityFn(NULL);
     }
+}
+
+/* the pipelines line's words for the dynamic state in force
+ * (rd__key_dynamic_normalise) */
+static const char *dynamicWords(void)
+{
+    return g_rd.dynDepth && g_rd.dynBlend ? " (dynamic depth, blend)"
+           : g_rd.dynDepth                ? " (dynamic depth)"
+           : g_rd.dynBlend                ? " (dynamic blend)"
+                                          : "";
 }
 
 uint32_t rd_precreate_pipelines(void)
@@ -1764,6 +1987,13 @@ uint32_t rd_precreate_pipelines(void)
     s_preLongestMs = 0.0f;
     s_setSavedMs = t0;
     PreCounts c;
+    if (policySet()) {
+        char pol[160];
+        policyText(pol, sizeof(pol));
+        rd__log("pipelines: the start-up set's policy: %s; with a budget the set stops past it or "
+                "after a batch over %.0f s, the rest made on first use",
+                pol, RD_SET_SLOW_BATCH_MS / 1000.0);
+    }
     createKeys(keys, m, false, &times, &c);
     if (c.stop) {
         rd__log("pipelines: the start-up set stopped at %u of %u (the game is closing)",
@@ -1771,10 +2001,15 @@ uint32_t rd_precreate_pipelines(void)
     }
     const double ms = rd__now_ms() - t0;
     s_startupSet = true;
-    rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed); "
-            "%u compiled on %u thread%s, the longest %.2f s",
-            s_count - before, n, ms, c.failed, c.compiled, c.threads, c.threads == 1 ? "" : "s",
-            (double)s_preLongestMs / 1000.0);
+    rd__log("pipelines: %u of the reachable set's %u created at start-up%s in %.1f ms (%u "
+            "failed); %u compiled on %u thread%s, the longest %.2f s",
+            s_count - before, n, dynamicWords(), ms, c.failed, c.compiled, c.threads,
+            c.threads == 1 ? "" : "s", (double)s_preLongestMs / 1000.0);
+    if (c.budget[0]) {
+        /* the careful policy's bound: the rest as the frames first need
+           them, each batch of them written to the cache */
+        rd_pipelines_lazy(c.budget);
+    }
     if (c.compiled) {
         preTimesLog(&times);
     }
@@ -1829,8 +2064,8 @@ void rd_pipelines_lazy(const char *why)
 {
     memset(&s_lazy, 0, sizeof(s_lazy));
     s_lazy.on = true;
-    rd__log("pipelines: no start-up set %s: pipelines are made as the game needs them",
-            why != NULL && why[0] != '\0' ? why : "(no reason given)");
+    rd__log("pipelines: no start-up set %s: pipelines are made as the game needs them%s",
+            why != NULL && why[0] != '\0' ? why : "(no reason given)", dynamicWords());
     rd__log("pipelines: the pipeline cache holds %llu KB at the start; it is written after each "
             "batch of new pipelines (%.1f s without one, or %.1f s after the batch's first)",
             (unsigned long long)((rhi_pipeline_cache_size() + 1023u) / 1024u),
@@ -1881,19 +2116,20 @@ const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i)
     return i < s_count ? &s_cache[i].key : NULL;
 }
 
-/* ------------------------------------------------ the VU shader variants
- * Issue 107 (docs/port/RENDER.md, "The VU shader variants"): every VU
- * vertex shader is built twice, the extended variant (vu_X_vs: the card
- * test and the two tick cameras of the region rule) and the plain one
- * (vu_X_plain_vs, about half its size: neither).  A draw with neither
- * VU_F_EXTENDED nor VU_F_TICKS gives the same picture through both, and
- * takes the plain one; a device whose driver cannot be given the extended
- * ones (RhiLimits.vuPlainOnly, vk_device.c kVuPlainOnly), a setting
- * ([dev] vu_plain_only, ICO_RD_VU_PLAIN=1) or the host
- * (rd_set_vu_plain_only, after a start that ended inside their compile)
- * makes every VU draw take the plain one: the wide-screen rule (the card
- * test) and the tick cameras' rule are then off.  ICO_RD_VU_EXTENDED=1
- * ([dev] vu_extended) gives the extended ones whatever the others say. */
+/* ------------------------------------------------ the VU modules
+ * docs/port/RENDER.md, "The fallback entries": every device draws the VU
+ * programs through one module set, the record path's (vu_main_vs,
+ * vu_particle_main_vs, the pre-pass's and the stages' point entries), with
+ * the region rule's every step.  A draw the record path cannot take (past
+ * the record, a stage pipeline that could not be made, a failed self-test,
+ * the pre-pass off) draws the old way, through its program's own entry
+ * with the legacy pixel shaders: vu_X_vs (the extended build), or on a
+ * device of the table (RhiLimits.vuFallbackPlain, vk_device.c kVuPlainOnly)
+ * vu_X_plain_vs (ICO_VU_PLAIN: no card test, no tick cameras), as
+ * ICO_RD_VU_PLAIN=1 or the host (rd_set_vu_plain_only) ask anywhere;
+ * ICO_RD_VU_EXTENDED=1 gives the extended ones whatever the others say.
+ * One choice a run (g_rd.vsFallback), no key field: the program entries'
+ * keys are in the start-up set only when the pre-pass is off. */
 /* Whether the picture is not the PS2's out of the box, the Original preset
  * on a 4:3 frame at 1x (ICO_VU_EXTENDED; the region rule, vu_common.hlsli
  * vu_region_rule): the Enhanced preset, a frame wider than 4:3 or a scene
@@ -1916,7 +2152,7 @@ void rd_set_vu_plain_only(const char *reason)
 
 const char *rd_vu_plain_only(void)
 {
-    return g_rd.vuPlainOnly ? g_rd.vuPlainWhy : NULL;
+    return g_rd.vuFallbackPlain ? g_rd.vuPlainWhy : NULL;
 }
 
 static bool envOn(const char *name)
@@ -1925,23 +2161,26 @@ static bool envOn(const char *name)
     return v != NULL && v[0] != '\0' && v[0] != '0';
 }
 
-/* the largest VU vertex shader of a variant: its name and size */
-static uint32_t vuLargest(uint8_t ext, char *name, size_t size)
+/* the largest of the vertex modules ids[0..n) as pipelineDesc picks them
+ * (keyVsName): its name and size */
+static uint32_t vuLargest(const uint8_t *ids, uint32_t n, char *name, size_t size)
 {
     uint32_t best = 0;
     name[0] = '\0';
-    for (uint8_t v = RD_VS_VU_FIRST; v <= RD_VS_VU_LAST; v++) {
+    for (uint32_t i = 0; i < n; i++) {
         RdPipeKeyInt k;
-        char n[64];
+        char nm[64];
         memset(&k, 0, sizeof(k));
-        k.vs = v;
-        k.vuExt = ext;
-        keyVsName(&k, n, sizeof(n));
-        const uint32_t w = rd__shader_words(n);
+        k.vs = ids[i];
+        keyVsName(&k, nm, sizeof(nm));
+        const uint32_t w = rd__shader_words(nm);
         if (w > best) {
             best = w;
-            snprintf(name, size, "%s", n);
+            snprintf(name, size, "%s", nm);
         }
+    }
+    if (!name[0]) {
+        snprintf(name, size, "none in this build");
     }
     return best;
 }
@@ -1976,18 +2215,6 @@ uint32_t rd__shader_instructions(const char *name)
 
 bool rd__vu_policy_init(const RhiLimits *lim)
 {
-    /* the plain variants' modules (vu_X_vs's is vu_X_plain_vs; rd_replay.c
-     * rd__gpu_shutdown destroys them) */
-    bool ok = true;
-    for (uint8_t v = RD_VS_VU_FIRST; v <= RD_VS_VU_LAST; v++) {
-        RdPipeKeyInt k;
-        char name[64];
-        memset(&k, 0, sizeof(k));
-        k.vs = v;
-        keyVsName(&k, name, sizeof(name));
-        g_rd.vsPlain[v] = rd__make_shader(name);
-        ok = ok && g_rd.vsPlain[v].id;
-    }
     /* the device's compiler, as its driver names it (Qualcomm's Adreno
      * driver: "Compiler Version: E031.41.03.47"), once per rd_init */
     rd__log("device compiler: %s",
@@ -2002,75 +2229,85 @@ bool rd__vu_policy_init(const RhiLimits *lim)
         }
         snprintf(s_compiler, sizeof(s_compiler), "%s", v);
     }
-    g_rd.vuPlainOnly = false;
+    /* the dynamic state (rd__key_dynamic_normalise, rd__set_pipeline) */
+    g_rd.dynDepth = lim != NULL && lim->dynamicDepth;
+    g_rd.dynBlend = lim != NULL && lim->dynamicBlend;
+    rd__log("pipelines: dynamic state: %s",
+            g_rd.dynDepth && g_rd.dynBlend
+                ? "depth and blend (the Z test, Z write, blend and colour mask set at each draw, "
+                  "out of the pipeline keys)"
+            : g_rd.dynDepth ? "depth (the Z test and Z write set at each draw, out of the pipeline "
+                              "keys; the blend in the keys)"
+            : g_rd.dynBlend ? "blend (the blend and colour mask set at each draw, out of the "
+                              "pipeline keys; the Z test and Z write in the keys)"
+                            : "none (every state in the pipeline keys)");
+    /* the fallback's program entries */
+    g_rd.vuFallbackPlain = false;
     g_rd.vuPlainWhy[0] = '\0';
-    if (lim && lim->vuPlainOnly) {
-        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)", lim->vuPlainOnly);
+    if (lim && lim->vuFallbackPlain) {
+        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "on this device (%s)",
+                 lim->vuFallbackPlain);
     } else if (envOn("ICO_RD_VU_PLAIN")) {
-        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy),
-                 "by the settings ([dev] vu_plain_only, which the game writes after two starts "
-                 "in a row ended while the driver compiled the extended ones, issue 107)");
+        snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "by ICO_RD_VU_PLAIN=1");
     } else if (s_vuHostWhy[0]) {
         snprintf(g_rd.vuPlainWhy, sizeof(g_rd.vuPlainWhy), "(%s)", s_vuHostWhy);
     }
-    g_rd.vuPlainOnly = g_rd.vuPlainWhy[0] != '\0';
-    char pn[64], en[64];
-    const uint32_t pw = vuLargest(0, pn, sizeof(pn)), ew = vuLargest(1, en, sizeof(en));
-    if (g_rd.vuPlainOnly && envOn("ICO_RD_VU_EXTENDED")) {
-        rd__log("VU shaders: plain only %s, but ICO_RD_VU_EXTENDED=1 ([dev] vu_extended): the "
-                "extended ones are used (largest %s %u words)",
-                g_rd.vuPlainWhy, en, ew);
-        g_rd.vuPlainOnly = false;
+    bool plain = g_rd.vuPlainWhy[0] != '\0';
+    if (plain && envOn("ICO_RD_VU_EXTENDED")) {
+        rd__log("VU shaders: the fallback's plain program entries %s, but ICO_RD_VU_EXTENDED=1: "
+                "the extended ones are used",
+                g_rd.vuPlainWhy);
+        plain = false;
         g_rd.vuPlainWhy[0] = '\0';
-        return ok;
     }
-    if (g_rd.vuPlainOnly) {
-        rd__log("VU shaders: plain only %s (largest %s %u words; the extended ones, largest %s "
-                "%u words, are never compiled): the wide-screen rule and the tick cameras' rule "
-                "are off",
-                g_rd.vuPlainWhy, pn, pw, en, ew);
-        return ok;
-    }
-    rd__log("VU shaders: plain for the draws of the Original preset at 4:3 and 1x without "
-            "interpolation (largest %s %u words), extended for the others (largest %s %u words)",
-            pn, pw, en, ew);
-    return ok;
-}
-
-bool rd__vu_ext_reachable(void)
-{
-    if (g_rd.vuPlainOnly) {
-        return false;
-    }
-    /* rd_replay.c rd__vu_extended's state (VU_F_EXTENDED) or the
-     * interpolation's tick cameras (VU_F_TICKS) */
-    const float aspect = g_rd.settings.aspect > 0.0f ? g_rd.settings.aspect : 4.0f / 3.0f;
-    return g_rd.settings.preset != RD_PRESET_ORIGINAL || aspect > 4.0f / 3.0f + 1e-3f ||
-           g_rd.gsW > ICO_SH_FRAME_BASE_W || g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f ||
-           g_rd.settings.interpolate != 0;
-}
-
-uint8_t rd__vu_draw_ext(uint32_t drawFlags)
-{
-    if ((drawFlags & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u) {
-        return 0;
-    }
-    if (g_rd.vuPlainOnly) {
-        static bool logged; /* once a run */
-        if (!logged) {
-            logged = true;
-            rd__log("VU shaders: plain only %s: the wide-screen rule is off", g_rd.vuPlainWhy);
+    /* the ten mesh entries' plain modules (vu_X_vs's is vu_X_plain_vs;
+     * rd_replay.c rd__gpu_shutdown destroys them), made only when the
+     * fallback takes them; one missing keeps the extended ones */
+    for (uint8_t v = RD_VS_VU_PRELIT; plain && v <= RD_VS_VU_GRID_SPEC; v++) {
+        char name[64];
+        const char *e = rd__vs_name(v);
+        snprintf(name, sizeof(name), "%.*s_plain_vs", (int)(strlen(e) > 3 ? strlen(e) - 3 : 0), e);
+        g_rd.vsPlain[v] = rd__make_shader(name);
+        if (!g_rd.vsPlain[v].id) {
+            rd__log("VU shaders: %s is missing: the fallback takes the extended program entries",
+                    name);
+            for (uint8_t u = RD_VS_VU_PRELIT; u <= v; u++) {
+                if (g_rd.vsPlain[u].id) {
+                    rhi_destroy_shader(g_rd.vsPlain[u]);
+                }
+                g_rd.vsPlain[u] = (RhiShader){0};
+            }
+            plain = false;
+            g_rd.vuPlainWhy[0] = '\0';
         }
-        return 0;
     }
-    return 1;
+    g_rd.vuFallbackPlain = plain;
+    for (uint8_t v = RD_VS_VU_PRELIT; v <= RD_VS_VU_PARTICLE; v++) {
+        g_rd.vsFallback[v] = plain && g_rd.vsPlain[v].id ? g_rd.vsPlain[v] : g_rd.vs[v];
+    }
+    static const uint8_t kMain[] = {RD_VS_VU_MAIN,           RD_VS_VU_PARTICLE_MAIN,
+                                    RD_VS_VU_TRI_RULE_PRE,   RD_VS_VU_TRI_TICK_PRE,
+                                    RD_VS_VU_TRI_PLANES_PRE, RD_VS_VU_PARTICLE_PRE};
+    uint8_t entries[RD_VS_VU_PARTICLE - RD_VS_VU_PRELIT + 1];
+    for (uint8_t v = RD_VS_VU_PRELIT; v <= RD_VS_VU_PARTICLE; v++) {
+        entries[v - RD_VS_VU_PRELIT] = v;
+    }
+    char mn[64], fn[64];
+    const uint32_t mw = vuLargest(kMain, (uint32_t)sizeof(kMain), mn, sizeof(mn));
+    const uint32_t fw = vuLargest(entries, (uint32_t)sizeof(entries), fn, sizeof(fn));
+    rd__log("VU shaders: the record path's modules on every device (largest %s %u words); the "
+            "fallback's program entries %s%s%s (largest %s %u words), in the start-up set only "
+            "with the vertex pre-pass off",
+            mn, mw, plain ? "plain " : "extended", plain ? g_rd.vuPlainWhy : "",
+            plain ? ": no wide-screen rule and no tick cameras on those draws" : "", fn, fw);
+    return true;
 }
 
 RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
 {
     /* normalised as every key (rd_state_test testEnumeration): no alpha
-     * test, no blend; the program is the one the triangle stage's keys
-     * carry (rd_replay.c vuDraw) */
+     * test, no blend; the program is the one the drawing keys carry
+     * (rd_replay_vu.c vuDraw) */
     RdPipeKeyInt k;
     memset(&k, 0, sizeof(k));
     k.gs.program = RD_PROG_PRELIT;
@@ -2085,16 +2322,21 @@ RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
     return k;
 }
 
-/* The start-up set's order (issue 107): the 2D keys, then the VU keys with
- * the plain variant, then those with the extended one, each in its
- * enumeration order, so a driver that cannot build the extended ones has
- * built every other key before it meets one, and the activity note names
- * the class of the batch it died in */
+RdPipeKeyInt rd__vu_stage_key(uint8_t vs, uint8_t colorMask)
+{
+    RdPipeKeyInt k = rd__vu_pre_key(vs);
+    k.gs.colorMask = (uint8_t)(colorMask & 0xFu);
+    return k;
+}
+
+/* The start-up set's order: the 2D keys, then the VU keys (the drawing
+ * shaders', the pre-pass's and the stages'), each in its enumeration order,
+ * so a driver that dies on the largest modules has built every other key
+ * before it meets one, and the activity note names the class of the batch
+ * it died in */
 static uint32_t keyClass(const RdPipeKeyInt *k)
 {
-    /* the vertex pre-pass's keys (each a program's vertex function alone)
-     * with the plain VU keys */
-    return keyIsVu(k) ? (k->vuExt ? 2u : 1u) : rd__vs_is_vu_pre(k->vs) ? 1u : 0u;
+    return keyIsVu(k) ? 1u : 0u;
 }
 
 static void orderSet(RdPipeKeyInt *out, uint32_t n)
@@ -2104,7 +2346,7 @@ static void orderSet(RdPipeKeyInt *out, uint32_t n)
         n = RD_PIPELINE_CACHE_MAX;
     }
     uint32_t at = 0;
-    for (uint32_t c = 0; c < 3; c++) {
+    for (uint32_t c = 0; c < 2; c++) {
         for (uint32_t i = 0; i < n; i++) {
             if (keyClass(&out[i]) == c) {
                 tmp[at++] = out[i];
@@ -2148,7 +2390,7 @@ static void orderSet(RdPipeKeyInt *out, uint32_t n)
 uint32_t rd__add_pipe_key(RdPipeKeyInt *out, uint32_t max, uint32_t n, const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < n && i < max; i++) {
-        if (rd__pipe_key_equal(&out[i], k)) {
+        if (keyEqual(&out[i], k)) {
             return n;
         }
     }
@@ -2177,25 +2419,49 @@ static uint32_t enumerateAll(RdPipeKeyInt *out, uint32_t max)
  * discarding draws keep the fixed-function blend). */
 uint32_t rd__enumerate_reachable(RdPipeKeyInt *out, uint32_t max)
 {
-    if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF) {
+    const bool dyn = g_rd.dynDepth || g_rd.dynBlend;
+    if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF && !dyn) {
         const uint32_t n = enumerateAll(out, max);
         orderSet(out, n < max ? n : max);
         return n;
     }
     static RdPipeKeyInt raw[RD_PIPELINE_CACHE_MAX];
+    static RdPipeKeyInt planned[RD_PIPELINE_CACHE_MAX];
     const uint32_t nr = enumerateAll(raw, RD_PIPELINE_CACHE_MAX);
     const uint32_t nk = nr < RD_PIPELINE_CACHE_MAX ? nr : RD_PIPELINE_CACHE_MAX;
+    /* the keys as the draws plan them: the families' own, or what the
+     * two-pass fallback and the exact blend make of them */
+    RdPipeKeyInt *dst = dyn ? planned : out;
+    const uint32_t dmax = dyn ? RD_PIPELINE_CACHE_MAX : max;
     uint32_t n = 0;
-    for (uint32_t i = 0; i < nk; i++) {
-        RdDrawPass in, ex[4];
-        memset(&in, 0, sizeof(in));
-        in.key = raw[i];
-        const int m = rd__expand_no_dual(&in, 1, ex);
-        for (int j = 0; j < m; j++) {
-            n = rd__add_pipe_key(out, max, n, &ex[j].key);
+    if (!g_rd.noDual && g_rd.dstMode == RD_BLEND_EXACT_OFF) {
+        for (uint32_t i = 0; i < nk; i++) {
+            n = rd__add_pipe_key(dst, dmax, n, &raw[i]);
+        }
+    } else {
+        for (uint32_t i = 0; i < nk; i++) {
+            RdDrawPass in, ex[4];
+            memset(&in, 0, sizeof(in));
+            in.key = raw[i];
+            const int m = rd__expand_no_dual(&in, 1, ex);
+            for (int j = 0; j < m; j++) {
+                n = rd__add_pipe_key(dst, dmax, n, &ex[j].key);
+            }
+        }
+        n = rd__enumerate_dst(raw, nk, dst, dmax, n);
+    }
+    if (dyn) {
+        /* the dynamic state's fields normalised away
+         * (rd__key_dynamic_normalise, as drawKey does): the set collapses
+         * to the keys the draws' pipelines are made from */
+        const uint32_t np = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+        n = 0;
+        for (uint32_t i = 0; i < np; i++) {
+            RdPipeKeyInt k = planned[i];
+            rd__key_dynamic_normalise(&k);
+            n = rd__add_pipe_key(out, max, n, &k);
         }
     }
-    n = rd__enumerate_dst(raw, nk, out, max, n);
     orderSet(out, n < max ? n : max);
     return n;
 }
@@ -2520,11 +2786,13 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
  * itself on integers, so the key keeps only what the hardware does: the
  * colour mask (FRAME.FBMSK) and, with a depth target, the Z test and Z
  * write.  A Z test of ALWAYS without Z write needs no depth target and
- * binds none. */
+ * binds none.  uintSrc: fx_sprite_u_ps, the twin that reads its textures
+ * through their RGBA8_UINT views (rd_replay.c doBlurSpriteDraw). */
 RdPipeKeyInt rd__blur_key(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
-                          int *useDepth)
+                          int *useDepth, int uintSrc)
 {
-    RdPipeKeyInt k = rd__post_key(RD_VS_FX_RECT, RD_FS_FX_SPRITE, colorFmt);
+    RdPipeKeyInt k =
+        rd__post_key(RD_VS_FX_RECT, uintSrc ? RD_FS_FX_SPRITE_UINT : RD_FS_FX_SPRITE, colorFmt);
     k.gs.colorMask = s->ds.colorMask;
     const uint8_t ztst = s->ds.test.zte ? s->ds.test.ztst : RD_ZTST_ALWAYS;
     const int depth =
@@ -2549,13 +2817,20 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
     RdStateBlock s;
     rd__reset_state_block(&s);
     s.ds.colorMask = 0xF;
+    /* the UINT twins where a target can have the view (rd_core.c
+     * rd__target_create_gpu: the profile's flags, the device's view) */
+    const int twins = (g_rd.profile.uintViewWork || g_rd.profile.uintViewScene) && g_rd.hasDevice &&
+                      rhi_limits()->uintView && g_rd.fs[RD_FS_FX_SPRITE_UINT].id != 0;
     for (int zw = 0; zw < 2; zw++) {
         for (int z = 0; z < 3; z++) {
             s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
             s.ds.test.ztst = kZ[z];
             s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
-            const RdPipeKeyInt k = rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
-            n = rd__add_pipe_key(out, max, n, &k);
+            for (int u = 0; u <= twins; u++) {
+                const RdPipeKeyInt k =
+                    rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL, u);
+                n = rd__add_pipe_key(out, max, n, &k);
+            }
         }
     }
     return n;

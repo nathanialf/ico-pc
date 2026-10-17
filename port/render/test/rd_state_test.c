@@ -60,7 +60,13 @@
  *   pipelines  the reachable screen and post set is under 400 keys (the
  *              sprite_texa_ps twins and the triangle planes included), with the VU program families
  *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps has font_ps's
- *              10 keys
+ *              10 keys; the VU keys: 176 program-entry keys without the
+ *              pre-pass, 32 + 32 + 10 + 5 with it (printed with the 2D
+ *              part: 446 in all when the 2D part is 367)
+ *   dynamic    rd__key_dynamic_normalise: keys differing only in Z write or
+ *              Z test (dynamic depth), blend or mask (dynamic blend) map to
+ *              one; the collapsed sets' VU parts 8 + 8 + 10 + 5 and
+ *              2 + 2 + 10 + 5, every static key's normalised form in them
  *
  * argv[1]: a writable directory for the dump.  Exit 0 or 1. */
 #include <stdio.h>
@@ -1221,19 +1227,35 @@ static void testAa1Plans(void)
           "aa1 0 plans as before AA1");
 }
 
-/* the VU keys of the set by variant (vuExt 0 plain, 1 extended) */
-static void countVu(const RdPipeKeyInt *keys, uint32_t n, uint32_t *plain, uint32_t *ext)
+/* the VU keys of a set by kind: the program entries' (the fallback's,
+ * RD_VS_VU_PRELIT .. RD_VS_VU_PARTICLE), vu_main_vs's, vu_particle_main_vs's,
+ * the pre-pass's and the record stages' */
+typedef struct VuCounts {
+    uint32_t entries, main, particleMain, pre, stages, legacy;
+} VuCounts;
+
+static VuCounts countVu(const RdPipeKeyInt *keys, uint32_t n)
 {
-    *plain = *ext = 0;
+    VuCounts c;
+    memset(&c, 0, sizeof(c));
     for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-        if (keys[i].vs >= RD_VS_VU_FIRST && keys[i].vs <= RD_VS_VU_LAST) {
-            *plain += keys[i].vuExt == 0;
-            *ext += keys[i].vuExt != 0;
-        }
+        const uint8_t vs = keys[i].vs;
+        c.entries += vs >= RD_VS_VU_PRELIT && vs <= RD_VS_VU_PARTICLE;
+        c.legacy += keys[i].fs == RD_FS_VU_LEGACY || keys[i].fs == RD_FS_VU_LEGACY_TEXA;
+        c.main += vs == RD_VS_VU_MAIN;
+        c.particleMain += vs == RD_VS_VU_PARTICLE_MAIN;
+        c.pre += rd__vs_is_vu_pre(vs);
+        c.stages += rd__vs_is_vu_stage(vs);
     }
+    return c;
 }
 
-/* whether keys[0..n) holds k */
+static uint32_t vuTotal(const VuCounts *c)
+{
+    return c->entries + c->main + c->particleMain + c->pre + c->stages;
+}
+
+/* whether keys[0..n) holds k (the same pipeline: rd__pipe_key_equal) */
 static bool keyIn(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
 {
     for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
@@ -1244,10 +1266,20 @@ static bool keyIn(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
     return false;
 }
 
-/* the key a VU draw of vertex shader vs (variant ext) plans under TEST
- * test, Z write zw and blend (-1: ABE off) on SCENE's formats, as
- * rd_replay_vu.c vuDraw makes it */
-static RdPipeKeyInt vuKey(uint8_t vs, uint8_t ext, uint64_t test, int zw, int blend)
+/* how many of keys[0..n) are k, field for field */
+static uint32_t keyCount(const RdPipeKeyInt *keys, uint32_t n, const RdPipeKeyInt *k)
+{
+    uint32_t found = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        found += memcmp(&keys[i], k, sizeof(*k)) == 0;
+    }
+    return found;
+}
+
+/* the key a VU draw of vertex shader vs plans under TEST test, Z write zw
+ * and blend (-1: ABE off) on SCENE's formats, as rd_replay_vu.c vuDraw
+ * makes it (program RD_PROG_PRELIT, vu_ps) */
+static RdPipeKeyInt vuKey(uint8_t vs, uint64_t test, int zw, int blend)
 {
     RdStateBlock st;
     rd__reset_state_block(&st);
@@ -1262,110 +1294,139 @@ static RdPipeKeyInt vuKey(uint8_t vs, uint8_t ext, uint64_t test, int zw, int bl
     k.gs.program = RD_PROG_PRELIT;
     k.vs = vs;
     k.fs = RD_FS_VU;
-    k.vuExt = ext;
     return k;
 }
 
+/* The five record-stage keys (rd__vu_stage_key) in keys[0..n): each once,
+ * points into the three RGBA32_UINT targets through vu_pre_ps, no depth,
+ * the masks the draws ask for */
+static uint32_t checkStageKeys(const RdPipeKeyInt *keys, uint32_t n, const char *what)
+{
+    static const struct {
+        uint8_t vs, mask;
+    } kStages[] = {{RD_VS_VU_TRI_RULE_PRE, 0xF},
+                   {RD_VS_VU_TRI_TICK_PRE, 0x1},
+                   {RD_VS_VU_TRI_TICK_PRE, 0x2},
+                   {RD_VS_VU_TRI_PLANES_PRE, 0xF},
+                   {RD_VS_VU_PARTICLE_PRE, 0xF}};
+
+    uint32_t ok = 0;
+    for (size_t i = 0; i < sizeof(kStages) / sizeof(kStages[0]); i++) {
+        const RdPipeKeyInt k = rd__vu_stage_key(kStages[i].vs, kStages[i].mask);
+        const uint32_t found = keyCount(keys, n, &k);
+        CHECK(found == 1, "%s: the stage key of %s mask %x enumerated %u times", what,
+              rd__vs_name(kStages[i].vs), kStages[i].mask, found);
+        CHECK(k.gs.colorMask == kStages[i].mask && k.fs == RD_FS_VU_PRE &&
+                  k.gs.prim == RD_PRIM_POINTS && k.colorFmt == RHI_FMT_RGBA32_UINT &&
+                  k.depthFmt == RHI_FMT_UNKNOWN && k.gs.blend == RD_BLEND_COUNT &&
+                  rd__key_dynamic_bits(&k) == 0u,
+              "%s: the stage key of %s", what, rd__vs_name(kStages[i].vs));
+        ok += found == 1;
+    }
+    return ok;
+}
+
 /* The VU keys of the start-up set with the vertex pre-pass
- * (rd__set_vu_prepass; docs/port/RENDER.md, "The vertex pre-pass"), in the
- * Enhanced preset (the extended variant): the triangle stage's keys
- * (vu_tri_vs, RD_PROG_PRELIT) and the particles' under the VU states and
- * TEST Z ALWAYS too, so twice two of the eleven VU vertex shaders' keys
- * without it (perVariant, as enumerated without the pre-pass), and the ten
- * pre-pass keys (rd__vu_pre_key), each once; no program entry's key but the
- * particles'; every program entry's key enumerated without the pre-pass
- * has its vu_tri_vs twin (program RD_PROG_PRELIT) in the set, and every
- * particle key its own; the phone's first-use keys (rc2, PowerVR: program 0
- * blend 4 and 12 vs vu_tri_vs fs vu_ps fmt 1/8 ext 1, under Z ALWAYS) and
- * the 2D one (program 9 blend 4, sprite_ui_vs + sprite_ps, fmt 1/8, under
- * the list head's Z GEQUAL) are in it; the whole set under
+ * (rd__set_vu_prepass; docs/port/RENDER.md, "The vertex and triangle
+ * pre-passes"): vu_main_vs's (RD_PROG_PRELIT) and vu_particle_main_vs's
+ * (RD_PROG_PARTICLE) keys under the VU states and TEST Z ALWAYS, 32 each,
+ * the ten pre-pass keys (rd__vu_pre_key) and the five stage keys
+ * (rd__vu_stage_key), each once; no program entry's key (the fallback's
+ * are made on first use); every program entry's key enumerated without the
+ * pre-pass has its drawing twin in the set (vu_main_vs with RD_PROG_PRELIT,
+ * or vu_particle_main_vs; vu_ps for vu_legacy_ps); the phone's first-use
+ * keys (rc2, PowerVR: program 0 blend 4 and 12 through the triangle stage
+ * fs vu_ps fmt 1/8, under Z ALWAYS) and the 2D one (program 9 blend 4,
+ * sprite_ui_vs + sprite_ps, fmt 1/8, under the list head's Z GEQUAL) are
+ * in it; the whole set is the 2D keys and 79 VU keys, under
  * RD_PIPELINE_REACHABLE_MAX.  The pre-pass is off again after. */
-static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
+static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t entriesOff)
 {
     static RdPipeKeyInt off[RD_PIPELINE_REACHABLE_MAX];
     const bool keepPrepass = g_rd.vuPrepass;
-    /* the extended variant, as the phone's keys (testEnumerationVu leaves
-       the plain-only rule on) */
-    const bool keepPlain = g_rd.vuPlainOnly;
-    g_rd.vuPlainOnly = false;
     const uint32_t nOff = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     memcpy(off, keys, sizeof(off));
     rd__set_vu_prepass(true);
     const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    uint32_t tri = 0, particle = 0, entries = 0, plain, ext;
-    countVu(keys, n, &plain, &ext);
+    const VuCounts c = countVu(keys, n);
     for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-        tri += keys[i].vs == RD_VS_VU_TRI;
-        particle += keys[i].vs == RD_VS_VU_PARTICLE;
-        entries += keys[i].vs >= RD_VS_VU_PRELIT && keys[i].vs <= RD_VS_VU_GRID_SPEC;
-        if (keys[i].vs == RD_VS_VU_TRI) {
-            CHECK(keys[i].gs.program == RD_PROG_PRELIT,
-                  "pre-pass: key %u of vu_tri_vs carries "
-                  "program %u",
-                  i, keys[i].gs.program);
+        if (keys[i].vs == RD_VS_VU_MAIN || keys[i].vs == RD_VS_VU_PARTICLE_MAIN) {
+            const uint8_t want =
+                keys[i].vs == RD_VS_VU_MAIN ? (uint8_t)RD_PROG_PRELIT : (uint8_t)RD_PROG_PARTICLE;
+            CHECK(keys[i].gs.program == want &&
+                      (keys[i].fs == RD_FS_VU || keys[i].fs == RD_FS_VU_TEXA),
+                  "pre-pass: key %u of %s carries program %u fs %u", i, rd__vs_name(keys[i].vs),
+                  keys[i].gs.program, keys[i].fs);
         }
     }
     uint32_t pre = 0;
     for (uint8_t v = RD_VS_VU_PRE_FIRST; v <= RD_VS_VU_PRE_LAST; v++) {
         const RdPipeKeyInt k = rd__vu_pre_key(v);
-        uint32_t found = 0;
-        for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-            found += rd__pipe_key_equal(&keys[i], &k);
-        }
+        const uint32_t found = keyCount(keys, n, &k);
         CHECK(found == 1, "pre-pass: the key of %s enumerated %u times", rd__vs_name(v), found);
         pre += found == 1;
         CHECK(k.gs.atst == RD_ATST_ALWAYS && k.fs == RD_FS_VU_PRE &&
                   k.colorFmt == RHI_FMT_RGBA32_UINT && k.depthFmt == RHI_FMT_UNKNOWN,
               "pre-pass: the key of %s", rd__vs_name(v));
     }
-    printf("  with the vertex pre-pass: %u keys (%u without), vu_tri_vs %u, vu_particle_vs %u, "
-           "program entries %u, pre-pass %u\n",
-           n, nOff, tri, particle, entries, pre);
-    CHECK(entries == 0, "pre-pass: %u program entries' keys enumerated", entries);
-    CHECK(tri > 0 && tri == particle && (tri + particle) * 11u == perVariant * 4u,
-          "pre-pass: vu_tri_vs %u and vu_particle_vs %u keys, %u for the eleven shaders without",
-          tri, particle, perVariant);
+    const uint32_t stages = checkStageKeys(keys, n, "pre-pass");
+    const uint32_t n2d = n - vuTotal(&c);
+    printf("  with the vertex pre-pass: %u keys = 2D %u + vu_main_vs %u + vu_particle_main_vs %u "
+           "+ pre-pass %u + stages %u (%u without the pre-pass: 2D %u + program entries %u)\n",
+           n, n2d, c.main, c.particleMain, c.pre, c.stages, nOff, nOff - entriesOff, entriesOff);
+    CHECK(c.entries == 0 && c.legacy == 0, "pre-pass: %u program entries' keys, %u legacy PS",
+          c.entries, c.legacy);
+    CHECK(c.main == 32 && c.particleMain == 32,
+          "pre-pass: vu_main_vs %u, vu_particle_main_vs %u "
+          "keys (32 each)",
+          c.main, c.particleMain);
+    CHECK(c.main * 11u == entriesOff * 2u,
+          "pre-pass: vu_main_vs's %u keys against the eleven program entries' %u without", c.main,
+          entriesOff);
     /* every VU key without the pre-pass has its twin with it */
     uint32_t twins = 0, missing = 0;
     for (uint32_t i = 0; i < nOff && i < RD_PIPELINE_REACHABLE_MAX; i++) {
-        if (off[i].vs < RD_VS_VU_FIRST || off[i].vs > RD_VS_VU_LAST) {
+        if (off[i].vs < RD_VS_VU_PRELIT || off[i].vs > RD_VS_VU_PARTICLE) {
             continue;
         }
         RdPipeKeyInt t = off[i];
-        if (t.vs != RD_VS_VU_PARTICLE) {
-            t.vs = RD_VS_VU_TRI;
+        if (t.vs == RD_VS_VU_PARTICLE) {
+            t.vs = RD_VS_VU_PARTICLE_MAIN;
+        } else {
+            t.vs = RD_VS_VU_MAIN;
             t.gs.program = RD_PROG_PRELIT;
         }
+        t.fs = t.fs == RD_FS_VU_LEGACY_TEXA ? RD_FS_VU_TEXA : RD_FS_VU;
         twins++;
         if (!keyIn(keys, n, &t)) {
             if (missing++ < 4) {
                 char w[160];
                 rd__pipe_key_text(&off[i], w, sizeof(w));
-                CHECK(0, "pre-pass: no vu_tri_vs twin of %s", w);
+                CHECK(0, "pre-pass: no drawing twin of %s", w);
             }
         }
     }
     printf("  every program entry's key (%u) has its twin with the pre-pass: %u missing\n", twins,
            missing);
-    CHECK(twins == perVariant && missing == 0, "pre-pass: %u of %u VU keys without a twin", missing,
+    CHECK(twins == entriesOff && missing == 0, "pre-pass: %u of %u VU keys without a twin", missing,
           twins);
-    /* the phone's first-use keys: vu_tri_vs under Z ALWAYS, ABE off (blend
-       12) and LERP_AS (blend 4), Z write on and off; the 2D sprite under
-       the list head's Z GEQUAL */
+    /* the phone's first-use keys: the triangle stage's draws under Z
+       ALWAYS, ABE off (blend 12) and LERP_AS (blend 4), Z write on and off,
+       now vu_main_vs's; the particles' alike; the 2D sprite under the list
+       head's Z GEQUAL */
     for (int zw = 0; zw < 2; zw++) {
         for (int b = 0; b < 2; b++) {
             const RdPipeKeyInt k =
-                vuKey(RD_VS_VU_TRI, 1, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
-            CHECK(k.gs.blend == (b ? 4 : 12) && k.vs == RD_VS_VU_TRI && k.fs == RD_FS_VU &&
+                vuKey(RD_VS_VU_MAIN, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
+            CHECK(k.gs.blend == (b ? 4 : 12) && k.vs == RD_VS_VU_MAIN && k.fs == RD_FS_VU &&
                       k.colorFmt == RHI_FMT_RGBA8_UNORM && k.depthFmt == RHI_FMT_D32F_S8,
                   "pre-pass: the first-use key's fields");
-            CHECK(keyIn(keys, n, &k), "pre-pass: vu_tri_vs blend %u under Z ALWAYS, Z write %d",
+            CHECK(keyIn(keys, n, &k), "pre-pass: vu_main_vs blend %u under Z ALWAYS, Z write %d",
                   k.gs.blend, zw);
-            const RdPipeKeyInt p =
-                vuKey(RD_VS_VU_PARTICLE, 1, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
-            RdPipeKeyInt pk = p;
+            RdPipeKeyInt pk =
+                vuKey(RD_VS_VU_PARTICLE_MAIN, RD_TEST_Z_ALWAYS, zw, b ? RD_BLEND_LERP_AS : -1);
             pk.gs.program = RD_PROG_PARTICLE;
-            CHECK(keyIn(keys, n, &pk), "pre-pass: vu_particle_vs blend %u under Z ALWAYS",
+            CHECK(keyIn(keys, n, &pk), "pre-pass: vu_particle_main_vs blend %u under Z ALWAYS",
                   pk.gs.blend);
         }
     }
@@ -1383,53 +1444,149 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
               "the 2D first-use key's fields");
         CHECK(keyIn(keys, n, &dp[0].key), "the 2D sprite under Z GEQUAL with depth, blend 4");
     }
-    CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1, "pre-pass: %u pre-pass keys", pre);
-    CHECK(n == nOff - perVariant + tri + particle + pre && n < RD_PIPELINE_REACHABLE_MAX,
-          "pre-pass: %u keys, %u without the pre-pass", n, nOff);
-    CHECK(ext == tri + particle && plain == 0, "pre-pass: %u extended and %u plain VU keys", ext,
-          plain);
+    CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1 && stages == 5,
+          "pre-pass: %u pre-pass keys, %u stage keys", pre, stages);
+    CHECK(vuTotal(&c) == 79u && n == nOff - entriesOff + 79u && n < RD_PIPELINE_REACHABLE_MAX,
+          "pre-pass: %u keys (%u VU), %u without the pre-pass", n, vuTotal(&c), nOff);
     rd__set_vu_prepass(keepPrepass);
-    g_rd.vuPlainOnly = keepPlain;
 }
 
-/* The VU keys of the start-up set (rd__enumerate_reachable_vu): out of the
- * box (the Original preset, 4:3, 1x, the original framerate) the plain
- * variants only; in a state other than out of the box (rd__vu_extended:
- * here the Enhanced preset) every VU draw takes the extended variant
- * (rd__vu_draw_ext), so the plain ones are not enumerated; with the device
- * or the settings keeping the plain ones (vuPlainOnly) the plain ones only,
- * whatever the state. */
+/* The VU keys of the start-up set (rd__enumerate_reachable_vu) without the
+ * vertex pre-pass: the eleven program entries with the legacy pixel
+ * shaders, 16 keys each, whatever the preset (one module set: no variant);
+ * then with it (testEnumerationPrepass). */
 static void testEnumerationVu(RdPipeKeyInt *keys)
 {
     const RdPreset keepPreset = g_rd.settings.preset;
     const uint8_t keepInterp = g_rd.settings.interpolate;
-    const bool keepPlain = g_rd.vuPlainOnly;
-    uint32_t n, p0, e0, p1, e1, p2, e2;
-    g_rd.vuPlainOnly = false;
+    const bool keepPrepass = g_rd.vuPrepass;
+    rd__set_vu_prepass(false);
     g_rd.settings.interpolate = 0;
     g_rd.settings.preset = RD_PRESET_ORIGINAL;
-    const bool box = !rd__vu_extended();
-    n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    countVu(keys, n, &p0, &e0);
+    uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+    const VuCounts o = countVu(keys, n);
     g_rd.settings.preset = RD_PRESET_ENHANCED;
+    g_rd.settings.interpolate = 1;
     n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    countVu(keys, n, &p1, &e1);
-    g_rd.vuPlainOnly = true;
-    n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
-    countVu(keys, n, &p2, &e2);
-    printf("  VU keys plain/extended: out of the box %u/%u, Enhanced %u/%u, Enhanced plain "
-           "only %u/%u\n",
-           p0, e0, p1, e1, p2, e2);
-    if (box) {
-        CHECK(p0 > 0 && e0 == 0, "out of the box: the plain VU keys only (%u/%u)", p0, e0);
-    }
-    CHECK(p1 == 0 && e1 > 0, "Enhanced: the extended VU keys only (%u/%u)", p1, e1);
-    CHECK(p2 > 0 && e2 == 0, "Enhanced, plain only: the plain VU keys only (%u/%u)", p2, e2);
-    CHECK(!box || (p0 == p2 && p0 == e1), "the variants' key counts (%u, %u, %u)", p0, p2, e1);
-    testEnumerationPrepass(keys, p1 + e1);
+    const VuCounts e = countVu(keys, n);
+    printf("  VU keys without the pre-pass: Original %u (legacy PS %u), Enhanced with "
+           "interpolation %u\n",
+           o.entries, o.legacy, e.entries);
+    CHECK(o.entries == 11u * 16u && o.legacy == o.entries && vuTotal(&o) == o.entries,
+          "without the pre-pass: %u program entries' keys (%u legacy PS; 176 wanted)", o.entries,
+          o.legacy);
+    CHECK(e.entries == o.entries && vuTotal(&e) == vuTotal(&o),
+          "the VU keys do not depend on the state (%u, %u)", o.entries, e.entries);
+    g_rd.settings.preset = RD_PRESET_ORIGINAL;
+    g_rd.settings.interpolate = 0;
+    testEnumerationPrepass(keys, o.entries);
     g_rd.settings.preset = keepPreset;
     g_rd.settings.interpolate = keepInterp;
-    g_rd.vuPlainOnly = keepPlain;
+    rd__set_vu_prepass(keepPrepass);
+}
+
+/* The dynamic state's normalisation (rd__key_dynamic_normalise; RENDER.md
+ * "Pipelines"), without a device (g_rd.dynDepth / dynBlend set as a device
+ * with Vulkan 1.3 and VK_EXT_extended_dynamic_state3 sets them): two keys
+ * that differ only in the Z write or the Z test map to one key with
+ * dynamic depth, two that differ only in the blend or the colour mask map
+ * to one with dynamic blend (rd__pipe_key_equal), and not without; the
+ * shadow count's stencil keys keep their depth, a storage destination read
+ * its blend, the point keys everything.  The collapsed sets (with the
+ * pre-pass, the fixed-function blend): every key normalised and once, every
+ * key of the static set's normalised form in it and nothing else, the VU
+ * part 8 + 8 + 10 + 5 with dynamic depth and 2 + 2 + 10 + 5 with both (the
+ * point keys stay static), each printed with its 2D part. */
+static void testDynamicNormalise(RdPipeKeyInt *keys)
+{
+    static RdPipeKeyInt stat[RD_PIPELINE_REACHABLE_MAX];
+    const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
+    rd__set_vu_prepass(true);
+    g_rd.dynDepth = g_rd.dynBlend = false;
+    const uint32_t ns = rd__enumerate_reachable(stat, RD_PIPELINE_REACHABLE_MAX);
+    const VuCounts cs = countVu(stat, ns);
+
+    const RdPipeKeyInt zOn = vuKey(RD_VS_VU_MAIN, RD_TEST_Z_GEQUAL, 1, RD_BLEND_LERP_AS);
+    const RdPipeKeyInt zOff = vuKey(RD_VS_VU_MAIN, RD_TEST_Z_ALWAYS, 0, RD_BLEND_LERP_AS);
+    RdPipeKeyInt bOther = zOn;
+    bOther.gs.blend = RD_BLEND_COUNT;
+    bOther.gs.colorMask = 0x7;
+    CHECK(!rd__pipe_key_equal(&zOn, &zOff) && !rd__pipe_key_equal(&zOn, &bOther) &&
+              rd__key_dynamic_bits(&zOn) == 0u,
+          "static: keys differing in Z or blend are other pipelines");
+    RdPipeKeyInt shadow = zOn;
+    shadow.gs.stencil = RD_STENCIL_INCR;
+    RdPipeKeyInt storage = zOn;
+    storage.dst = RHI_DST_READ_STORAGE;
+    const RdPipeKeyInt pre = rd__vu_pre_key(RD_VS_VU_PRE_PRELIT);
+
+    g_rd.dynDepth = true;
+    RdPipeKeyInt a = zOn, b = zOff;
+    rd__key_dynamic_normalise(&a);
+    rd__key_dynamic_normalise(&b);
+    CHECK(rd__pipe_key_equal(&zOn, &zOff) && memcmp(&a, &b, sizeof(a)) == 0 &&
+              a.gs.ztst == RD_ZTST_ALWAYS && a.gs.zwrite == RD_ZWRITE_OFF &&
+              a.gs.blend == zOn.gs.blend && !rd__pipe_key_equal(&zOn, &bOther),
+          "dynamic depth: Z write on/GEQUAL and off/ALWAYS map to one key, the blend kept");
+    RdPipeKeyInt sh = shadow;
+    rd__key_dynamic_normalise(&sh);
+    CHECK(memcmp(&sh, &shadow, sizeof(sh)) == 0 && rd__key_dynamic_bits(&shadow) == 0u,
+          "dynamic depth: a shadow volume key keeps its depth state");
+
+    g_rd.dynBlend = true;
+    a = zOn;
+    b = bOther;
+    rd__key_dynamic_normalise(&a);
+    rd__key_dynamic_normalise(&b);
+    RdPipeKeyInt st = storage, p = pre;
+    rd__key_dynamic_normalise(&st);
+    rd__key_dynamic_normalise(&p);
+    CHECK(rd__pipe_key_equal(&zOn, &bOther) && memcmp(&a, &b, sizeof(a)) == 0 &&
+              a.gs.blend == RD_BLEND_COUNT && a.gs.colorMask == 0xF &&
+              st.gs.blend == storage.gs.blend && st.gs.colorMask == storage.gs.colorMask &&
+              memcmp(&p, &pre, sizeof(p)) == 0,
+          "dynamic blend: blend 4 mask F and no blend mask 7 map to one key; the storage read and "
+          "the point keys keep theirs");
+
+    /* the collapsed sets: depth alone, then depth and blend */
+    for (int pass = 0; pass < 2; pass++) {
+        g_rd.dynBlend = pass == 1;
+        const uint32_t n = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
+        const VuCounts c = countVu(keys, n);
+        uint32_t notNorm = 0, dup = 0, extra = 0, absent = 0;
+        for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            RdPipeKeyInt k = keys[i];
+            rd__key_dynamic_normalise(&k);
+            notNorm += memcmp(&k, &keys[i], sizeof(k)) != 0;
+            dup += keyCount(keys, n, &keys[i]) != 1;
+            extra += !keyIn(stat, ns, &keys[i]);
+        }
+        for (uint32_t i = 0; i < ns && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            RdPipeKeyInt k = stat[i];
+            rd__key_dynamic_normalise(&k);
+            absent += keyCount(keys, n, &k) != 1;
+        }
+        const uint32_t want = pass ? 2u : 8u;
+        printf("  dynamic %s: %u keys = 2D %u + vu_main_vs %u + vu_particle_main_vs %u + pre-pass "
+               "%u + stages %u (static %u = 2D %u + %u VU)\n",
+               pass ? "depth and blend" : "depth", n, n - vuTotal(&c), c.main, c.particleMain,
+               c.pre, c.stages, ns, ns - vuTotal(&cs), vuTotal(&cs));
+        CHECK(notNorm == 0 && dup == 0 && extra == 0 && absent == 0,
+              "dynamic %d: %u keys not normalised, %u twice, %u not from the static set, %u of "
+              "the static set's missing",
+              pass, notNorm, dup, extra, absent);
+        CHECK(c.main == want && c.particleMain == want && c.pre == 10 && c.stages == 5 &&
+                  c.entries == 0,
+              "dynamic %d: vu_main_vs %u, vu_particle_main_vs %u, pre-pass %u, stages %u (want "
+              "%u, %u, 10, 5)",
+              pass, c.main, c.particleMain, c.pre, c.stages, want, want);
+        CHECK(n < ns && n - vuTotal(&c) <= ns - vuTotal(&cs),
+              "dynamic %d: %u keys against %u static", pass, n, ns);
+        checkStageKeys(keys, n, pass ? "dynamic depth and blend" : "dynamic depth");
+    }
+    g_rd.dynDepth = keepD;
+    g_rd.dynBlend = keepB;
+    rd__set_vu_prepass(keepPrepass);
 }
 
 static void testEnumeration(void)
@@ -1464,6 +1621,7 @@ static void testEnumeration(void)
     CHECK(font == 10 && sheet == 10, "font_ps keys %u, font_sheet_ps keys %u (10 each)", font,
           sheet);
     testEnumerationVu(keys);
+    testDynamicNormalise(keys);
 }
 
 /* The native frame's region scale (rd__region_scale, FrameCB g_frame.x):

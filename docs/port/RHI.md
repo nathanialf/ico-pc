@@ -123,7 +123,8 @@ as `rhi_create_pipeline` logs it, and the call returns the count made. The optio
 `RHI_PIPELINE_WAIT_MS` (50) with the number finished; it may use the RHI meanwhile (the renderer's
 start-up screen presents frames from it), since the workers touch nothing but the driver. It hands
 back each pipeline's compile time as the worker measured it around the driver call, and the threads
-used. `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
+used; its `maxThreads` (0: the count above) caps the workers on both backends, the renderer's
+careful start-up set taking 1 ([RENDER.md](RENDER.md#the-start-up-set)). `rhi_create_pipeline` stays the single creation, the same three steps on the calling thread
 (`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
@@ -144,7 +145,12 @@ destination read's three bits: `fragmentInterlock` (Vulkan), `rov` (D3D12) and
 `rasterOrderAttachment` (Vulkan), and `rasterOrderOff`, why the attachment read is off on a device
 that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise), and
 `colorBytesPerPixel`, the bytes one pixel of a pass's colour targets may take together: 0 (no
-bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below)
+bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below),
+`dynamicDepth` and `dynamicBlend` ([Dynamic state](#dynamic-state)), and the device table's two
+reasons (Vulkan, `kVuPlainOnly` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
+`vuFallbackPlain`, why the renderer's VU fallback takes the plain program entries on this device,
+and `carefulPipelines`, why its start-up set is made under the careful policy
+([RENDER.md](RENDER.md#the-fallback-entries), [RENDER.md](RENDER.md#the-start-up-set))
 (`port/rhi/rhi.h` (`RhiLimits`)).
 
 **Device and swapchain.** `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
@@ -225,6 +231,40 @@ builds reject another loader), `rhi_injector_name` ("ReShade" or "vkBasalt") and
 `rhi_overlay_from_layer_name` and `rhi_layer_switched_on`, which reads a layer's enable and disable
 variables as the loader does (`port/rhi/rhi.h`; `port/rhi/rhi_backend.c`).
 
+### Dynamic state
+
+A pipeline whose `RhiPipelineDesc.dynamic` has `RHI_DYN_DEPTH` leaves the depth test, write and
+compare to the draw, one with `RHI_DYN_BLEND` the blend enable, the blend equation and the colour
+write mask of its one colour target, where the limits say the device takes them
+(`RhiLimits.dynamicDepth`, `dynamicBlend`; a bit the device lacks, or blend on a pipeline with other
+than one colour target, is dropped and the description's value is static). The description's values
+are the draw's until a set: `rhi_cmd_set_depth_state(cl, test, write, cmp)` and
+`rhi_cmd_set_blend_state(cl, &blend)` after the bind give the next draws their own (a set on a
+pipeline without that group does nothing). D3D12 has neither: its limits say false and the sets are
+no-ops (`port/rhi/d3d12/d3d12_cmd.c`).
+
+Vulkan (`port/rhi/vk/vk_device.c` (`vkr_create_device`), `vk_pipeline.c` (`vkr_pipe_prepare`),
+`vk_cmd.c` (`vkr_flush_dynamic`)): depth is Vulkan 1.3's core states, or on a 1.2 device
+`VK_EXT_extended_dynamic_state` with `extendedDynamicState`; blend is
+`VK_EXT_extended_dynamic_state3` with `extendedDynamicState3ColorBlendEnable`,
+`extendedDynamicState3ColorBlendEquation` and `extendedDynamicState3ColorWriteMask`, only those
+enabled. A pipeline's dynamic states are the four always dynamic (viewport, scissor, stencil
+reference, blend constants) and `VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE`, `DEPTH_WRITE_ENABLE`,
+`DEPTH_COMPARE_OP` and `COLOR_BLEND_ENABLE_EXT`, `COLOR_BLEND_EQUATION_EXT`,
+`COLOR_WRITE_MASK_EXT` for its groups; the commands are found through `vkGetDeviceProcAddr` (the
+core names on 1.3, the EXT ones otherwise). The sets keep the values the next draw needs; the draw
+records only what differs from the values the command buffer holds, and every command of a group
+after the bind of a pipeline with that group static (that bind replaced them). So binds of two
+dynamic pipelines with the same values record nothing more, and a draw gets exactly the values a
+static pipeline of its state would have given it. `RhiStats.dynamicSets` counts the commands
+recorded. A draw on a dynamic pipeline whose sets were not made since its bind takes the
+pipeline's own values and is logged once (`rhi_vk: dynamic state: a draw with its pipeline's depth
+left unset since the bind ...`). The device's line: `rhi_vk: dynamic state: depth test, write and
+compare yes (Vulkan 1.3); blend enable, equation and write mask yes
+(VK_EXT_extended_dynamic_state3)` (or `no`, with why). `ICO_VK_FAKE_NO_DYNAMIC=1` reports both
+false, `=blend` the blend alone, for an A/B of the same frames (`rhi_vk_test`'s dynamic cell draws
+the renderer's depth tests, blends and masks static and dynamic, texel-equal; [Tests](#tests)).
+
 ## Backends in one build
 
 Each backend library is compiled with `RHI_BACKEND_PREFIX` set to its short name (`vk`, `d3d12`).
@@ -269,7 +309,14 @@ fourth 6, Intel's Windows driver as major 18 bits and minor 14, every other driv
 version packing; `VkDriverId` decides, and the vendor id alone when it is 0
 (`port/rhi/rhi_driver_version.h`; `port/rhi/vk/vk_device.c` (`vkr_driver_text`)). Only the features
 used are enabled; the destination read takes `VK_EXT_fragment_shader_interlock` or
-rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. The attachment
+rasterization-order attachment access with `VK_KHR_dynamic_rendering_local_read`. Local read
+itself (`RhiLimits.localRead`: a pass's own attachments read as input attachments after
+`rhi_cmd_local_read_barrier`) is enabled wherever the device offers it, whatever the destination
+read: `VK_KHR_dynamic_rendering_local_read`, or on a Vulkan 1.4 device without the extension
+`VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead` (the effective version is the
+instance's at most, 1.3, so that branch waits for the instance to ask for 1.4), and the device line
+ends `; local read yes|no` (`yes (Vulkan 1.4)` for the core feature) (`port/rhi/vk/vk_device.c`
+(`vkr_create_device`)). `ICO_VK_FAKE_NO_DST` leaves it off too. D3D12 reports none. The attachment
 read is not offered on Qualcomm's own Adreno driver (vendor 0x5143, `VkDriverId`
 `QUALCOMM_PROPRIETARY` or unknown; not Mesa's Turnip): its reads return wrong colours (issue 89,
 Adreno 830 on driver 512.800.72), and the device line says `rasterization-order attachment read off
@@ -284,11 +331,12 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_VALIDATION` | 1 adds `VK_LAYER_KHRONOS_validation` and debug utils; 0 keeps them off |
 | `ICO_VK_DEVICE` | an index or a substring of the device name forces the pick |
 | `ICO_VK_FAKE_LIMITS` | `mali` clamps the limits to a Mali-G68's (4 descriptor sets, 128 bytes of push constants, 16 sampled images a stage, 4096 allocations, ...); `min` holds the alignment, texture, render target, dynamic uniform, storage range and anisotropy limits to 256, 4096, 4096, 8, 2^27 and 16 |
-| `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk*`) |
+| `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
+| `ICO_VK_FAKE_NO_DYNAMIC` | 1 leaves the dynamic depth and blend state off, `blend` the blend alone ([Dynamic state](#dynamic-state)) |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
-| `ICO_VK_FAKE_NO_DST` | 1 reports no destination read |
+| `ICO_VK_FAKE_NO_DST` | 1 reports no destination read and no local read |
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
@@ -296,7 +344,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |
 | `ICO_VK_FIFO_LATEST_READY` | 1 uses `VK_PRESENT_MODE_FIFO_LATEST_READY_EXT` where FIFO would be taken, when offered |
 | `ICO_VK_POLL_SURFACE` | 1 polls the surface size after presents, as Android always does (`vk_swapchain.c`) |
-| `ICO_GPU_ROBUST` | 1 enables `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them; 0 disables; unset: `robustBufferAccess` alone on Android, off elsewhere ([Device loss](#device-loss)); ico-pc.ini `gpu_robust` |
+| `ICO_GPU_ROBUST` | 1 enables `robustBufferAccess`, and `robustImageAccess2` and `nullDescriptor` where `VK_EXT_robustness2` offers them; 0 or unset: off, on every platform ([Device loss](#device-loss)); ico-pc.ini `gpu_robust`; the loss order's `robust` step sets 1 for its run |
 | `ICO_GPU_CHECKPOINTS` | 1 enables `VK_NV_device_diagnostic_checkpoints` and `VK_EXT_device_address_binding_report` where offered ([Device loss](#device-loss)); ico-pc.ini `gpu_checkpoints` |
 
 (`port/rhi/vk/vk_device.c` (`vkr_fake_limits`, `vkr_choose_depth_stencil`, `vkr_pick_device`);
@@ -509,14 +557,18 @@ per resource, so they stay off unless asked for; the fault report costs nothing 
 **Robust access** (`gpu_robust`, Vulkan): `robustBufferAccess`, plus `robustBufferAccess2` and
 `robustImageAccess2` where `VK_EXT_robustness2` offers them, so an access out of a buffer's or
 image's range reads zero and writes nothing instead of reaching other memory; an A/B switch for a
-loss that an out-of-range access could explain. It is on by default on Android, the robustness2
-parts with it when offered (a Mali GPU reads storage buffers through plain pointers, so an
-out-of-range read there loses the device instead of reading zero; issue 95); `nullDescriptor` comes
-only with `gpu_robust=true`. It is off by default on the desktop; `gpu_robust` overrides either way
-(`gpu_robust=false` turns all of it off on Android). One start-up line says what is on:
+loss that an out-of-range access could explain. It is off by default on every platform: a Mali GPU
+reads storage buffers through plain pointers, so an out-of-range read there loses the device
+instead of reading zero (issue 95), but the VU path's reads that went out of range are gone since
+its index values are dense (marks in the stream), and the bounds checks cost every
+StructuredBuffer read of that path. `gpu_robust = true` turns it on with `nullDescriptor`; the
+device-loss order's `robust` step (`port/platform/startup_retry.h`) exports `ICO_GPU_ROBUST=1` for
+its run, which only a platform that can start the game again reaches, and only a run whose caller
+sets `StartupRetryRun.robustOffDefault`. One start-up line says what is on:
 `rhi_vk: loss diagnostics: fault report on|not offered; checkpoints ...; resource addresses ...;
-robust access ...` (`on, buffers (robustness2) and images (robustness2) (the Android default)`
-when the default turned it on and the device offers the extension) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
+robust access ...` (`off (the default; gpu_robust = true turns it on)`, `off (gpu_robust)`, or `on,
+buffers (robustness2) and images (robustness2) (gpu_robust)`, `(the restart after the graphics card
+stopped responding)` at the robust step) (`port/rhi/vk/vk_device.c` (`vkr_create_device`)). Both switches come from the
 environment (`ICO_GPU_CHECKPOINTS`, `ICO_GPU_ROBUST`) or ico-pc.ini's `[dev]` keys
 ([CONFIG.md](CONFIG.md#dev)).
 
@@ -535,9 +587,9 @@ SHA-256, the licences of the libraries compiled into it, and builds a static SDL
 
 `RhiLimits.moltenvk` is true on MoltenVK (`rhi_driver_is_moltenvk`: `VK_DRIVER_ID_MOLTENVK`, or
 vendor 0x106B with the id unknown under `ICO_RHI_MOLTENVK`) and is logged as `; MoltenVK` on the
-`rhi_vk:` device line. The renderer reads it for its default blend: fixed-function, because the
-exact blend's pass switching costs 3 to 4 times the frame there
-([RENDER.md](RENDER.md#destination-reads-and-blend-paths), issue 102).
+`rhi_vk:` device line. The renderer's device profile reads it for the Apple / MoltenVK class
+([RENDER.md](RENDER.md#the-device-profile)); the blend is the fixed-function one there as
+everywhere ([RENDER.md](RENDER.md#destination-reads-and-blend-paths)).
 
 `RhiLimits.colorBytesPerPixel` under MoltenVK is the Metal family's "Maximum implicit image block
 size, per pixel, per sample, when using multiple color render targets" (Metal Feature Set Tables)
@@ -551,7 +603,7 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 
 | test | checks |
 | --- | --- |
-| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back) |
+| `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state) |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
