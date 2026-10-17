@@ -714,7 +714,11 @@ log that named only the fields before the comma) and a program entry's up to 3.4
 stall each; a 2D key the driver has cached, under 1 ms. That log's keys matched enumerated
 keys in every field it printed, so they differed in one it did not: two `vu_tri_vs` keys (blend 4
 and 12, ABE off) in list 0, and a UI-space sprite (`program 9 blend 4`, `sprite_ui_vs +
-sprite_ps`, with the depth target) in list 11. The set now also holds the pre-pass's keys under
+sprite_ps`, with the depth target) in list 11. For the two VU keys that field is the Z test or the
+colour mask, the only two unprinted fields a VU draw's state changes: the Z write is enumerated
+both ways, the target format follows `fmt 1`, the topology, stencil mode and PRIM.AA1 are fixed
+for a VU draw (`vuDraw` plans triangles without AA1), and the two-pass blend's flag cannot touch
+blend 12, which does not blend. The set now also holds the pre-pass's keys under
 TEST Z ALWAYS (the one Z test a VU draw is seen to get that the set lacked, below; not confirmed
 as those keys' state) and UI-space sprites under the TEST Z GEQUAL every list's head writes, with
 the depth target (`ico2/seki/src/GsBase.c` (`gsb_setNormalReg`): a 2D draw of list 11 before
@@ -825,19 +829,19 @@ stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
   next start. The set is ordered: every 2D key
   first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
   extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
-  Without the vertex pre-pass (`[dev] vu_prepass = false`) and with the fixed-function blend (the
-  phones' usual path) the set is 351 2D keys and 176 plain VU keys, 527 in all, and 703 with both
-  variants (the interpolation at the Original preset, 4:3 and 1x); with the exact blend 438 and
-  220, 658 in all, and 878 with both (`RD_PIPELINE_REACHABLE_MAX`, 1024): eleven VU vertex
-  shaders, 16 keys each (20 with the exact blend): TEST Z GEQUAL (the three tests of
-  `rd_mesh.c` `enumerateVuVariant` give one Z test), Z write on and off, four blends, `vu_ps` and
-  `vu_texa_ps`. With the pre-pass (the default) a variant has `vu_tri_vs`'s and `vu_particle_vs`'s
-  keys under TEST Z ALWAYS as well (a VU draw after the game turned the Z test off:
-  `queen_barrier_disp.c` `MakeRefractTexture` before the barrier mesh, `pool.c` `copyToWork`), 32
-  each (40), 64 (80), and the ten pre-pass keys join the plain ones' class, so the set is 102 keys
-  smaller with one variant (130 with the exact blend) and 214 (270) with both, derived from those
-  counts (`rd_state_test` prints them, `testEnumerationPrepass`). The program entries keep the Z
-  GEQUAL states: doubled, both variants would pass `RD_PIPELINE_REACHABLE_MAX`. Each variant has as many keys, so a set
+  The VU keys: eleven VU vertex shaders, 16 keys each (20 with the exact blend): TEST Z GEQUAL
+  (the three tests of `rd_mesh.c` `enumerateVuVariant` give one Z test), Z write on and off, four
+  blends, `vu_ps` and `vu_texa_ps`. With the pre-pass (the default) a variant has `vu_tri_vs`'s and
+  `vu_particle_vs`'s keys under TEST Z ALWAYS as well (a VU draw after the game turned the Z test
+  off: `queen_barrier_disp.c` `MakeRefractTexture` before the barrier mesh, `pool.c`
+  `copyToWork`), 32 each, 64 in all, and the ten pre-pass keys join the plain ones' class. With
+  the fixed-function blend (the phones' usual path) and one variant the set is 367 2D keys and 176
+  VU keys, 543 in all, without the pre-pass (`[dev] vu_prepass = false`), and 441 with it (367,
+  64 and 10), as `rd_state_test` prints them (`testEnumerationPrepass`); with both variants (the
+  interpolation at the Original preset, 4:3 and 1x) 719 and 505. The exact blend adds the
+  destination-read images of the blended keys, 2D and VU (`rd_state_test`'s `testEnumeration`
+  prints the totals). The program entries keep the Z GEQUAL states: doubled, both variants would
+  pass `RD_PIPELINE_REACHABLE_MAX` (1024). Each variant has as many keys, so a set
   with the extended ones alone has as many VU keys as the Original 4:3 set. With the
   interpolation on at 4:3 and 1x a still camera's draw has neither flag and takes the plain ones,
   so that state compiles both.

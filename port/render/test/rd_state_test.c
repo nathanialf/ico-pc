@@ -1284,6 +1284,10 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
 {
     static RdPipeKeyInt off[RD_PIPELINE_REACHABLE_MAX];
     const bool keepPrepass = g_rd.vuPrepass;
+    /* the extended variant, as the phone's keys (testEnumerationVu leaves
+       the plain-only rule on) */
+    const bool keepPlain = g_rd.vuPlainOnly;
+    g_rd.vuPlainOnly = false;
     const uint32_t nOff = rd__enumerate_reachable(keys, RD_PIPELINE_REACHABLE_MAX);
     memcpy(off, keys, sizeof(off));
     rd__set_vu_prepass(true);
@@ -1382,7 +1386,10 @@ static void testEnumerationPrepass(RdPipeKeyInt *keys, uint32_t perVariant)
     CHECK(pre == RD_VS_VU_PRE_LAST - RD_VS_VU_PRE_FIRST + 1, "pre-pass: %u pre-pass keys", pre);
     CHECK(n == nOff - perVariant + tri + particle + pre && n < RD_PIPELINE_REACHABLE_MAX,
           "pre-pass: %u keys, %u without the pre-pass", n, nOff);
+    CHECK(ext == tri + particle && plain == 0, "pre-pass: %u extended and %u plain VU keys", ext,
+          plain);
     rd__set_vu_prepass(keepPrepass);
+    g_rd.vuPlainOnly = keepPlain;
 }
 
 /* The VU keys of the start-up set (rd__enumerate_reachable_vu): out of the
