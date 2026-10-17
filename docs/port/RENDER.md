@@ -499,11 +499,15 @@ when it is done ([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_dump.c
 `port/platform/diag_host.c` (`ico_diag_loss_bisect`)).
 
 The replay behind it is the pass window (`rd__replay_set_window`): every replay numbers its passes
-in the order they begin (render passes, copies, snapshots and exact blends: the pass ring's entries
-other than the uploads and the present). With a window [first, last] the draws and the target and
-snapshot copies of the passes outside it are not recorded (the uploads and the fog's depth copy are
-not windowed), the passes themselves still begin, and the walk stops after the
-command that began pass last + 1, which draws nothing. [1, k] is the frame up to pass k, [k, k]
+in the order they begin (the [vertex pre-pass](#the-vertex-pre-pass) first when it runs, then
+render passes, copies, snapshots and exact blends: the pass ring's entries other than the uploads
+and the present). With a window [first, last] the draws and the target and snapshot copies of the
+passes outside it are not recorded (the pre-pass's record copies go with its draws, so the slot's
+record buffer keeps what an earlier replay of the frame wrote; the uploads and the fog's depth copy
+are not windowed), the passes themselves still begin, and the walk stops after the
+command that began pass last + 1, which draws nothing. So a loss in the pre-pass is pass 1, not a
+loss with no draw recorded (`port/render/rd_replay_vu.c` (`rd__vu_prepass`,
+`rd__replay_pass_push`)). [1, k] is the frame up to pass k, [k, k]
 pass k alone on the targets as an earlier replay left them. `rd_replay_tool --loss-bisect` runs the
 bisect on a dump, `--passes A[-B]` replays a window (`port/render/rd_replay.c` (`passPush`,
 `drawCmd`, `copyCmd`, `replayFrame`); `port/render/rd_window.c`; `port/render/rd_internal.h`
@@ -522,6 +526,9 @@ counters test `s_win.first` as before. While it is set, `vuDraw` notes each VU d
 command, mesh name, program, vertex and pixel shader, clip mode, batch, index range, the values'
 span and marked triangles, the texture's id, size, format and mip levels, the pipeline key's words),
 and the window keeps the note of the last draw it recorded (`RdDrawNote`, `rd_draw_note_text`).
+The note's vertex shader is the program's own entry, also for a draw through `vu_tri_vs` and for
+the pre-pass's draws (pass 1, noted by `rd__vu_prepass` with their vertex range), so `VS_ONLY`
+separates the programs as before the pre-pass; the key's words name the pipeline drawn with.
 The planner (`port/render/rd_bisect_plan.c`, pure) says which step comes next from the steps so far:
 first the whole pass with the marks masked (the hypothesis test: clean means the marks did it),
 then the prefix search, halving between the longest clean prefix (0) and the shortest lost one (N,

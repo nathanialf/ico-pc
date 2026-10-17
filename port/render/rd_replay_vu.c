@@ -377,7 +377,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         rhi_cmd_set_bind_group(rd__replay_cl(), 2, g2);
         rd__replay_dst_bind(r, &dp[i].key);
         if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
-            rd__win_vu_note(r->st.tex, &dp[i].key, vcb, indexed, first, count);
+            /* its class (the second level's VS_ONLY) the program's own
+               entry, whether it draws through it or vu_tri_vs */
+            rd__win_vu_note(r->st.tex, &dp[i].key, vcb, progVs, indexed, first, count);
         }
         if (indexed) {
             rd__span_draw(first, i ? 0 : count);
@@ -849,9 +851,13 @@ void rd__vu_prepass(const RdFrame *f, int keep)
         rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_RENDER_TARGET);
     }
     /* the pass ring's entry: the record's rows drawn and its vertices
-     * (rd_passring.h RD_PASSK_VU_PRE) */
-    rhi_cmd_checkpoint(rd__replay_cl(), rd__passring_push(RD_PASSK_VU_PRE, 0, ICO_VU_REC_W,
-                                                          usedRows, 0, used, 0, 0, -1));
+     * (rd_passring.h RD_PASSK_VU_PRE); the loss bisect's pass window
+     * numbers it pass 1 (rd_window.c): outside the window its draws and
+     * copies are left out, and the slot's record buffer keeps what an
+     * earlier replay of the frame wrote */
+    rhi_cmd_checkpoint(rd__replay_cl(), rd__replay_pass_push(RD_PASSK_VU_PRE, 0, ICO_VU_REC_W,
+                                                             usedRows, 0, used, 0, 0, -1));
+    const bool muted = rd__win_muted();
     RhiRenderPassDesc rp;
     memset(&rp, 0, sizeof(rp));
     for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
@@ -896,7 +902,20 @@ void rd__vu_prepass(const RdFrame *f, int keep)
         const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)e->src.bonesOff};
         rhi_cmd_set_pipeline(rd__replay_cl(), p);
         rhi_cmd_set_bind_group_offsets(rd__replay_cl(), 1, g1, offs, 3);
-        rhi_cmd_draw(rd__replay_cl(), e->count, 0, 1);
+        if (g_rdWin.first && g_rdWin.drawLast && g_rdWin.passes == g_rdWin.last) {
+            /* the draw note: the command's, its class the program's own
+               entry (rd__win_vu_note) */
+            g_rdVuCur.type = e->cmd->type;
+            g_rdVuCur.prog = e->src.p.prog;
+            g_rdVuCur.clip = e->src.p.clip;
+            g_rdVuCur.batch = e->src.p.firstBatch;
+            g_rdVuCur.index = NULL;
+            g_rdVuCur.marks = NULL;
+            g_rdVuCur.markCount = 0;
+            g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
+            rd__win_vu_note(0, &key, &vcb, e->src.vs, 0, e->first, e->count);
+        }
+        rd__replay_draw(rd__replay_cl(), e->count, 0, 1);
         verts += e->count;
         draws++;
     }
@@ -909,8 +928,11 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
         rd__transition(rd__replay_cl(), s_recTex[k], &s_recTexState[k], RHI_STATE_COPY_SRC);
         const RhiRect region = {0, 0, ICO_VU_REC_W, usedRows};
-        rhi_cmd_copy_texture_to_buffer(rd__replay_cl(), s_recTex[k], RHI_ASPECT_COLOR, region,
-                                       s_recBuf[rd__ring_slot()], plane * k, ICO_VU_REC_W * 16u);
+        if (!muted) {
+            rhi_cmd_copy_texture_to_buffer(rd__replay_cl(), s_recTex[k], RHI_ASPECT_COLOR, region,
+                                           s_recBuf[rd__ring_slot()], plane * k,
+                                           ICO_VU_REC_W * 16u);
+        }
     }
     g_rdPerf.vuPrePasses = 1;
     g_rdPerf.vuPreVertices = verts;

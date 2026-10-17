@@ -5786,6 +5786,12 @@ void rd__replay_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVert
     drawCmd(cl, vertexCount, firstVertex, instanceCount);
 }
 
+const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
+                                 uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
+{
+    return passPush(kind, color, cw, ch, depth, dw, dh, storage, post);
+}
+
 void rd__replay_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t firstIndex,
                              int32_t vertexOffset, uint32_t instanceCount)
 {

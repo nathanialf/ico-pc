@@ -144,8 +144,8 @@ RdVuCur g_rdVuCur;
 
 /* the draw note of a VU draw about to be recorded (draws first .. count
  * of g_rdVuCur's list with key k): the window's filter and note read it */
-void rd__win_vu_note(uint32_t tex, const RdPipeKeyInt *k, const struct IcoVuCB *vcb, int indexed,
-                     uint32_t first, uint32_t count)
+void rd__win_vu_note(uint32_t tex, const RdPipeKeyInt *k, const struct IcoVuCB *vcb,
+                     uint8_t classVs, int indexed, uint32_t first, uint32_t count)
 {
     RdDrawNote *n = &g_rdDrawCtx.note;
     memset(n, 0, sizeof(*n));
@@ -155,7 +155,7 @@ void rd__win_vu_note(uint32_t tex, const RdPipeKeyInt *k, const struct IcoVuCB *
     n->prog = g_rdVuCur.prog;
     n->skinned = g_rdVuCur.type == RDC_SKINNED;
     n->clip = (uint8_t)(vcb->draw[2] & 3u);
-    n->vs = k->vs;
+    n->vs = classVs;
     n->fs = k->fs;
     n->batch = g_rdVuCur.batch;
     n->first = first;

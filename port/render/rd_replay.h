@@ -7,6 +7,7 @@
 #define PORT_RENDER_RD_REPLAY_H
 
 #include "rd_internal.h"
+#include "rd_passring.h"
 #include "shader_consts.h"
 
 /* Consecutive screen-prim commands that bind the same things are one draw
@@ -100,7 +101,9 @@ typedef struct DrawSetup {
 
 /* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, drawCmd,
  * drawIndexedCmd, dstBind, dstPassMode, expandPasses, fillDrawCB,
- * prepareDraw, the MSAA epoch's sample count this replay (s_ms.want) */
+ * prepareDraw, the MSAA epoch's sample count this replay (s_ms.want),
+ * passPush (a pass begun outside beginPass: its pass ring entry and its
+ * number in the pass window) */
 void rd__replay_begin_pass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, uint32_t did,
                            RhiLoadOp colorLoad, const float clear[4], RhiLoadOp depthLoad,
                            float clearDepth, bool storage);
@@ -118,6 +121,8 @@ void rd__replay_fill_draw_cb(const Replay *r, const RdDrawPass *dp, const DrawSe
                              IcoDrawCB *cb);
 bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea);
 uint32_t rd__replay_msaa_want(void);
+const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
+                                 uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and
