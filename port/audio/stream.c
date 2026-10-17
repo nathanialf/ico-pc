@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "audio_host.h"
 #include "iop_ram.h"
 #include "mix_gain.h"
 #include "sndn2_internal.h"
@@ -454,6 +455,9 @@ void st_pcm_init(void) /* 0x1360 */
     spu2_memin_start(1, staging, pcm_half_done, NULL);
     spu2_sd_set_param(SPU2_SD_PARAM_BVOLL | 1, 0x7FFF);
     spu2_sd_set_param(SPU2_SD_PARAM_BVOLR | 1, 0x7FFF);
+    /* the output's tighter bound while a film plays (audio_host.h
+       ico_audio_sdl_film; under the audio lock, the serve's) */
+    ico_audio_sdl_film(1);
 }
 
 void st_pcm_quit(void) /* 0x13D0 */
@@ -461,6 +465,7 @@ void st_pcm_quit(void) /* 0x13D0 */
     spu2_memin_stop(1);
     spu2_sd_set_param(SPU2_SD_PARAM_BVOLL | 1, 0);
     spu2_sd_set_param(SPU2_SD_PARAM_BVOLR | 1, 0);
+    ico_audio_sdl_film(0); /* as st_pcm_init */
 }
 
 void st_pcm_open(uint32_t id, uint32_t w2, uint32_t w3) /* 0x1410 */

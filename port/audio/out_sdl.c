@@ -27,10 +27,18 @@
  * vsyncs the game stepped, ico_audio_sdl_game_step): the callback counts
  * how far its render is ahead of them (never below 0: a game ahead of the
  * device is level), renders at most up to the bound, and covers the rest
- * with silence ramped like a miss; once held back it renders nothing until
- * it is 40 ms (LEAD_HOLD_FRAMES) under the bound, so a stall of the game is
- * one gap of sound, as on the game's clock, and a film's or a stream's
- * read position can lead the game by the bound at most.  A device clock
+ * with silence ramped like a miss; once held back (latched only by a
+ * callback that rendered or had nothing left to render, never by one that
+ * missed the lock) it renders nothing until the lead is back to the steady
+ * lead it runs at, two device periods (pull_release), so a stall of the
+ * game is one gap of sound, as on the game's clock, after which the sound
+ * is as far ahead of the picture as before it, and a film's or a stream's
+ * read position can lead the game by the bound at most.  While a film's
+ * PCM channels are open (ico_audio_sdl_film, from stream.c st_pcm_init and
+ * st_pcm_quit under the audio lock) the bound is 60 ms
+ * (LEAD_FILM_FRAMES).  Either bound is at least the steady lead and 20 ms
+ * (pull_bound), so a device with long periods is not held back at every
+ * callback.  A device clock
  * faster than the system's would creep up to the bound; past 64 ms ahead
  * (TRIM_ON_FRAMES) the stream plays ICO_AUDIO_TRIM slower until it is under
  * 32 ms (TRIM_OFF_FRAMES), which also brings a film's sound back to its
@@ -108,9 +116,10 @@
    the pacer's 100 ms of lag before it drops time (window_host.c
    RESYNC_NS) and about a period and a lead */
 #define LEAD_MAX_FRAMES (RATE * 120 / 1000)
-/* once held back, how far under the bound the lead falls before the render
-   resumes (about a vsync of the game's frames and a callback's) */
-#define LEAD_HOLD_FRAMES (RATE * 40 / 1000)
+/* the bound while a film's PCM channels are open (ico_audio_sdl_film) */
+#define LEAD_FILM_FRAMES (RATE * 60 / 1000)
+/* a bound's least room over the steady lead (two device periods) */
+#define LEAD_SLACK_MIN_FRAMES (RATE * 20 / 1000)
 /* the lead over the game above which the stream plays ICO_AUDIO_TRIM
    slower, and below which it stops */
 #define TRIM_ON_FRAMES (RATE * 64 / 1000)
@@ -158,8 +167,11 @@ static int16_t pull_buf[PULL_MAX_FRAMES * CHANNELS];
 static int16_t pull_last[CHANNELS]; /* the last frame put */
 static Uint64 pull_prev_ns;         /* the last callback's start */
 static uint64_t pull_game_seen;     /* game_frames at the last callback */
-static int pull_ahead;              /* frames rendered past the game's (0..LEAD_MAX_FRAMES) */
-static int pull_holding;            /* held back at the bound (LEAD_HOLD_FRAMES) */
+static int pull_ahead;              /* frames rendered past the game's (0..the bound) */
+static int pull_holding;            /* held back at the bound (until pull_release) */
+/* a film's PCM channels are open (ico_audio_sdl_film: the game's side,
+   under the audio lock; the callback reads it before taking the lock) */
+static int pull_film;
 
 /* the game's frames: the frames of every vsync it stepped
    (ico_audio_sdl_game_step, main thread; the callback reads it) */
@@ -369,28 +381,48 @@ static void note_ahead(int ahead)
                                                        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
 }
 
+/* The bound on the lead over the game: LEAD_MAX_FRAMES, LEAD_FILM_FRAMES
+   while a film's PCM channels are open, and at least the steady lead (two
+   device periods) and LEAD_SLACK_MIN_FRAMES */
+static int pull_bound(void)
+{
+    const int base = P_LOAD(pull_film) ? LEAD_FILM_FRAMES : LEAD_MAX_FRAMES;
+    const int least = 2 * lead_frames + LEAD_SLACK_MIN_FRAMES;
+
+    return base > least ? base : least;
+}
+
+/* The lead a hold releases at: the steady lead the callbacks run at, one
+   period queued after a take and the period's render ahead of the game's
+   frames (two device periods), at most a period under the bound */
+static int pull_release(int bound)
+{
+    const int steady = 2 * lead_frames;
+
+    return steady < bound - lead_frames ? steady : bound - lead_frames;
+}
+
 /* How many of `want` frames the bound lets the callback render: the game's
    frames since the last callback taken off the lead (not below 0), then up
-   to LEAD_MAX_FRAMES ahead, nothing while held back; held back from the
-   first callback the bound cuts until the lead is LEAD_HOLD_FRAMES under
-   it. */
-static int pull_allow(int want)
+   to the bound (pull_bound) ahead, nothing while held back (released once
+   the lead is back to pull_release).  *cut: the bound cut the request; the
+   caller latches the hold once it rendered (or had nothing to render),
+   never on a lock miss. */
+static int pull_allow(int want, int *cut)
 {
     const uint64_t g = P_LOAD(game_frames);
     const uint64_t moved = g - pull_game_seen;
+    const int bound = pull_bound();
     int room;
 
     pull_game_seen = g;
     pull_ahead = moved >= (uint64_t)pull_ahead ? 0 : pull_ahead - (int)moved;
-    if (pull_holding && pull_ahead <= LEAD_MAX_FRAMES - LEAD_HOLD_FRAMES) {
+    if (pull_holding && pull_ahead <= pull_release(bound)) {
         pull_holding = 0;
     }
-    room = pull_holding ? 0 : LEAD_MAX_FRAMES - pull_ahead;
-    if (want > room) {
-        pull_holding = 1;
-        return room;
-    }
-    return want;
+    room = pull_holding || pull_ahead >= bound ? 0 : bound - pull_ahead;
+    *cut = want > room;
+    return *cut ? room : want;
 }
 
 /* `frames` of silence ramped down from the last frame put, after a miss or
@@ -446,7 +478,7 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
     const int need = additional / BYTES_PER_FRAME;
     const int take = total / BYTES_PER_FRAME;
     int want = take + lead_frames - queued;
-    int n;
+    int n, cut = 0;
     Uint64 waited = 0;
 
     (void)user;
@@ -468,10 +500,10 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
         P_STORE(P.queued, queued > take ? queued - take : 0);
         return;
     }
-    /* the bound: at most LEAD_MAX_FRAMES past the game's frames (the
-       callback's own counts: before the lock, which a held-back callback
-       does not take) */
-    n = pull_allow(want);
+    /* the bound: at most pull_bound past the game's frames (the callback's
+       own counts: before the lock, which a held-back callback does not
+       take) */
+    n = pull_allow(want, &cut);
     if (n > 0 && !pull_lock(&waited)) {
         /* the game's side holds the SPU2: its time stands still; the lead
            plays, and silence ramped down from the last frame covers what
@@ -506,6 +538,9 @@ static void SDLCALL pull_cb(void *user, SDL_AudioStream *s, int additional, int 
         SDL_PutAudioStreamData(s, pull_buf, n * BYTES_PER_FRAME);
         P_ADD(P.frames, (uint64_t)n);
         pull_ahead += n;
+    }
+    if (cut) {
+        pull_holding = 1; /* after a render (or none left to make): not on a lock miss */
     }
     note_ahead(pull_ahead);
     if (n < want && need > n) {
@@ -741,6 +776,11 @@ void ico_audio_set_rate_ratio(double ratio)
     if (stream != NULL && !SDL_SetAudioStreamFrequencyRatio(stream, r)) {
         fprintf(stderr, "audio: rate ratio: %s\n", SDL_GetError());
     }
+}
+
+void ico_audio_sdl_film(int on)
+{
+    P_STORE(pull_film, on != 0);
 }
 
 void ico_audio_sdl_game_step(int frames)

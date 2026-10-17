@@ -14,7 +14,9 @@
  *     fence under the lock): the same frames;
  *   - free-running: 10 s of audio pulled while the writer pushes the
  *     scene's writes stamped with spu2_time() under the lock, as the
- *     driver's serve does: every pull full, the stamps never going back,
+ *     driver's serve does, and a third thread steps the game
+ *     (ico_audio_sdl_game_step, the stream's ratio set again every 50th
+ *     step) ahead of the pulls, as the window's thread does: every pull full, the stamps never going back,
  *     the frames rendered and the silence equal to what was taken plus what
  *     is left queued, no lock miss and the lead left queued (the lock's
  *     wait bound raised to 500 ms here, so a writer the system preempts
@@ -32,11 +34,16 @@
  *     game's frames frozen render exactly 120 ms (LEAD_MAX_FRAMES), then a
  *     96-frame ramp from the last frame to 0 and silence, all of it counted
  *     as held back (the 10 s line says so); the game stepping 1000 frames
- *     leaves it held (99 ms ahead, over the 80 ms it resumes at) and turns
- *     the trim on (the stream at ICO_AUDIO_TRIM slower); 1000 more resume
- *     the sound, ramped in; the game a second on, level again, turns the
- *     trim off.  Elsewhere every pull steps the game by the frames it takes
- *     (pull), so the bound never holds there.
+ *     leaves it held (99 ms ahead) and turns the trim on (the stream at
+ *     ICO_AUDIO_TRIM slower); 1000 more leave it held (78 ms ahead, over
+ *     the 20 ms, two device periods, it resumes at: pull_release); 2800
+ *     more resume the sound, ramped in; the game a second on, level again,
+ *     turns the trim off.  With a film's PCM channels open
+ *     (ico_audio_sdl_film) the bound is 60 ms: frozen pulls render exactly
+ *     that, the steady lead releases it; a lock miss at the bound's edge
+ *     latches no hold, the next callback renders up to the bound.
+ *     Elsewhere the game is stepped ahead of every pull (pull, the
+ *     free-running part's stepper), so the bound never holds there.
  *
  * Every check is a count, a fence or a sample, never a wall-clock time, so
  * scheduler delays (a loaded machine, ctest -j) change how long the test
@@ -343,6 +350,8 @@ static void test_bit_for_bit(void)
 /* --- free-running ----------------------------------------------------------------- */
 
 static int free_done;      /* the puller finished (atomic) */
+static int free_pulls;     /* the pulls made (atomic) */
+static int free_steps;     /* the game's vsyncs stepped by the stepper (atomic) */
 static int free_backwards; /* a stamp before the last one */
 static int free_pushed;
 
@@ -375,6 +384,8 @@ static int writer_free(void *u)
     return 0;
 }
 
+/* the device: each take after the stepper stepped the game past it (so
+   the bound never holds, whatever the scheduler does) */
 static int puller_free(void *u)
 {
     int16_t out[PULL_FRAMES * CHANNELS];
@@ -382,12 +393,40 @@ static int puller_free(void *u)
     int i;
 
     for (i = 0; i < 1000; i++) {
-        if (pull(out) != PULL_FRAMES * BYTES_PER_FRAME) {
+        while (__atomic_load_n(&free_steps, __ATOMIC_ACQUIRE) < i + 1) {
+            SDL_DelayPrecise(50000);
+        }
+        if (pull_frozen(out) != PULL_FRAMES * BYTES_PER_FRAME) {
             (*short_pulls)++;
         }
+        __atomic_store_n(&free_pulls, i + 1, __ATOMIC_RELEASE);
         SDL_DelayPrecise(200000);
     }
     __atomic_store_n(&free_done, 1, __ATOMIC_RELEASE);
+    return 0;
+}
+
+/* the game's side, as the window steps it: ico_audio_sdl_game_step from a
+   thread of its own, up to four vsyncs ahead of the device, against the
+   running callback; every 50th step sets the stream's ratio again
+   (applied_ratio cleared, so game_step calls
+   SDL_SetAudioStreamFrequencyRatio, at 1: the counts unchanged) */
+static int stepper_free(void *u)
+{
+    int steps = 0;
+
+    (void)u;
+    while (!__atomic_load_n(&free_done, __ATOMIC_ACQUIRE)) {
+        if (steps < __atomic_load_n(&free_pulls, __ATOMIC_ACQUIRE) + 4) {
+            if (steps % 50 == 0) {
+                applied_ratio = 0.0f;
+            }
+            ico_audio_sdl_game_step(PULL_FRAMES);
+            __atomic_store_n(&free_steps, ++steps, __ATOMIC_RELEASE);
+        } else {
+            SDL_DelayPrecise(50000);
+        }
+    }
     return 0;
 }
 
@@ -395,6 +434,7 @@ static void test_free_running(void)
 {
     SDL_Thread *w;
     SDL_Thread *p;
+    SDL_Thread *g;
     int short_pulls = 0;
     uint64_t frames0, silence0, misses0, callbacks0;
     int queued;
@@ -412,10 +452,14 @@ static void test_free_running(void)
     silence0 = P_LOAD(P.silence);
     misses0 = P_LOAD(P.misses);
     callbacks0 = P_LOAD(P.callbacks);
+    __atomic_store_n(&free_pulls, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&free_steps, 0, __ATOMIC_RELEASE);
     w = SDL_CreateThread(writer_free, "writer", NULL);
+    g = SDL_CreateThread(stepper_free, "stepper", NULL);
     p = SDL_CreateThread(puller_free, "puller", &short_pulls);
-    CHECK(w != NULL && p != NULL, "threads: %s", SDL_GetError());
+    CHECK(w != NULL && p != NULL && g != NULL, "threads: %s", SDL_GetError());
     SDL_WaitThread(p, NULL);
+    SDL_WaitThread(g, NULL);
     SDL_WaitThread(w, NULL);
     queued = SDL_GetAudioStreamQueued(stream) / BYTES_PER_FRAME;
     CHECK(short_pulls == 0, "%d pulls short", short_pulls);
@@ -709,7 +753,8 @@ static void test_hold(void)
                        "by 120 ms at most, slowed for 0.0 s") != NULL,
           "the line: %s", line);
 
-    /* the game steps 1000 frames: 99 ms ahead, held until 80; the trim on */
+    /* the game steps 1000 frames: 99 ms ahead, held until 20 (the steady
+       lead, two device periods: pull_release); the trim on */
     ico_audio_sdl_game_step(1000);
     ratio = SDL_GetAudioStreamFrequencyRatio(stream);
     CHECK(trimming && ratio > 0.99749f && ratio < 0.99751f, "trim %d, the stream at %f", trimming,
@@ -719,9 +764,15 @@ static void test_hold(void)
     CHECK(P_LOAD(P.frames) == f0, "rendered %llu frames while held",
           (unsigned long long)(P_LOAD(P.frames) - f0));
 
-    /* 1000 more: 78 ms ahead, the sound back, ramped in (resampled by the
-       trim, so checked to a margin) */
+    /* 1000 more: 78 ms ahead, still held */
     ico_audio_sdl_game_step(1000);
+    pull_frozen(dev);
+    CHECK(P_LOAD(P.frames) == f0 && pull_holding, "rendered %llu frames at 78 ms ahead",
+          (unsigned long long)(P_LOAD(P.frames) - f0));
+
+    /* 2800 more: 20 ms ahead, the sound back, ramped in (resampled by the
+       trim, so checked to a margin) */
+    ico_audio_sdl_game_step(2800);
     held0 = P_LOAD(P.held);
     pull_frozen(dev);
     pull_frozen(dev + PULL_FRAMES * CHANNELS);
@@ -746,7 +797,71 @@ static void test_hold(void)
     ratio = SDL_GetAudioStreamFrequencyRatio(stream);
     CHECK(!trimming && ratio == 1.0f, "trim %d, the stream at %f", trimming, (double)ratio);
     CHECK(ico_audio_sdl_summary_text(line, sizeof(line)) == 1, "no 10 s line");
-    CHECK(strstr(line, "slowed for 1.0 s") != NULL, "the trim's time: %s", line);
+    CHECK(strstr(line, "slowed for 1.1 s") != NULL, "the trim's time: %s", line);
+}
+
+static int puller_one_frozen(void *u)
+{
+    (void)u;
+    pull_frozen(dev);
+    return 0;
+}
+
+/* While a film's PCM channels are open (ico_audio_sdl_film, stream.c
+   st_pcm_init) the bound is 60 ms: 2 s of frozen pulls render exactly
+   LEAD_FILM_FRAMES, the rest held back; the game stepping back to the
+   steady lead releases it; closed, the bound is 120 ms again.  A lock miss
+   never latches the hold: with the lock held at the bound's edge the
+   callback misses and the next one, the lock free, renders up to the
+   bound. */
+static void test_hold_film(void)
+{
+    uint64_t frames0, held0;
+    int i;
+
+    restart();
+    ico_audio_sdl_film(1);
+    frames0 = P_LOAD(P.frames);
+    held0 = P_LOAD(P.held);
+    for (i = 0; i < 200; i++) {
+        pull_frozen(dev);
+    }
+    CHECK(P_LOAD(P.frames) - frames0 == LEAD_FILM_FRAMES, "film: rendered %llu frames, want %d",
+          (unsigned long long)(P_LOAD(P.frames) - frames0), LEAD_FILM_FRAMES);
+    CHECK(P_LOAD(P.held) - held0 == 200 * PULL_FRAMES - LEAD_FILM_FRAMES && pull_holding,
+          "film: held back %llu frames, want %d", (unsigned long long)(P_LOAD(P.held) - held0),
+          200 * PULL_FRAMES - LEAD_FILM_FRAMES);
+    /* back to the steady lead (two periods, 960 frames): released */
+    ico_audio_sdl_game_step(LEAD_FILM_FRAMES - 2 * PULL_FRAMES);
+    frames0 = P_LOAD(P.frames);
+    pull_frozen(dev);
+    CHECK(P_LOAD(P.frames) > frames0 && !pull_holding, "film: %llu frames after the release",
+          (unsigned long long)(P_LOAD(P.frames) - frames0));
+    ico_audio_sdl_film(0);
+    CHECK(pull_bound() == LEAD_MAX_FRAMES, "the bound after the film: %d", pull_bound());
+
+    /* the lock held by another thread while the bound would cut: a miss,
+       no hold latched */
+    restart();
+    pull_frozen(dev); /* the lead queued */
+    pull_ahead = LEAD_MAX_FRAMES - 100;
+    {
+        SDL_Thread *p;
+
+        ico_audio_lock();
+        p = SDL_CreateThread(puller_one_frozen, "puller", NULL);
+        CHECK(p != NULL, "thread: %s", SDL_GetError());
+        SDL_WaitThread(p, NULL);
+        ico_audio_unlock();
+    }
+    CHECK(!pull_holding, "a lock miss latched the hold");
+    frames0 = P_LOAD(P.frames);
+    pull_frozen(dev);
+    CHECK(P_LOAD(P.frames) - frames0 == 100 && pull_holding,
+          "after the miss: %llu frames rendered up to the bound, hold %d",
+          (unsigned long long)(P_LOAD(P.frames) - frames0), pull_holding);
+    ico_audio_sdl_game_step(RATE); /* level again for what follows */
+    pull_frozen(dev);
 }
 
 int main(void)
@@ -771,6 +886,7 @@ int main(void)
     test_ramp();
     test_summary_and_mode();
     test_hold();
+    test_hold_film();
 
     SDL_DestroyAudioStream(stream);
     stream = NULL;

@@ -435,6 +435,11 @@ void ico_audio_sdl_game_step(int frames)
     (void)frames;
 }
 
+void ico_audio_sdl_film(int on)
+{
+    (void)on;
+}
+
 /* No SDL output (the headless build): no devices to choose from
    (audio_host.h). */
 int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)

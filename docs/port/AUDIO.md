@@ -742,38 +742,61 @@ stays queued after each take, through `spu2_render` and the mirror swap
   (`ico_audio_sdl_game_step`). The callback keeps how far its render is ahead of them, taking off
   the game's frames since its last call and never going below 0 (a game ahead of the device, or a
   device clock slower than the system's, counts as level), and renders at most up to the bound
-  (`pull_allow`). What the bound cuts from SDL's request is silence ramped like a miss's; once held
-  back the callback renders nothing, and takes no lock, until the lead is 40 ms under the bound
-  (`LEAD_HOLD_FRAMES`, about a vsync of the game's frames and a callback's, so the hold is one gap,
-  not a gap at every callback). 120 ms is the pacer's 100 ms of lag before it drops time
-  (`port/platform/window_host.c` (`RESYNC_NS`)) and about a period and a lead: the render's own
-  lead over the game is 0 to about 30 ms in a steady run, so a game running late by less than
-  about 90 ms is not held back, and one the pacer drops time for is. So a short stall of the game (a stage load's slow
-  step, a first-use pipeline under 120 ms) is not a stall of the sound, which plays on from the
-  SPU2's state; a longer one, or time the pacer drops, is a gap of the same length less the bound,
-  as on the game's clock. A stream voice's 16 KB SPU ring, whose other half the driver refills as
+  (`pull_allow`). What the bound cuts from SDL's request is silence ramped like a miss's; the hold
+  is latched by the callback that rendered up to the bound (or had nothing left to render), never
+  by one that missed the lock, and once held back the callback renders nothing, and takes no lock,
+  until the lead is back to the steady lead the callbacks run at, two device periods (one period
+  queued after a take and that period's render ahead of the game's frames; at most a period under
+  the bound: `pull_release`), so the hold is one gap, not a gap at every callback, and after it the
+  sound is as far ahead of the game as before. 120 ms is the pacer's 100 ms of lag before it drops
+  time (`port/platform/window_host.c` (`RESYNC_NS`)) and about a period and a lead. While a film's
+  PCM channels are open the bound is 60 ms (`LEAD_FILM_FRAMES`; `ico_audio_sdl_film`, called by
+  `port/audio/stream.c` (`st_pcm_init`, `st_pcm_quit`) under the audio lock, read by the callback
+  before it takes the lock). Either bound is at least the steady lead and 20 ms (`pull_bound`), so
+  a device with long periods is not held back at every callback. The slack before a hold is the
+  bound less the steady lead, so it depends on the device's period:
+
+  | device period | steady lead | late before a hold | with a film's PCM open |
+  | --- | --- | --- | --- |
+  | 10 ms | 20 ms | about 100 ms | about 40 ms |
+  | 21 ms | 42 ms | about 78 ms | 20 ms (the bound 62 ms) |
+  | 40 ms | 80 ms | about 40 ms | 20 ms (the bound 100 ms) |
+
+  So a short stall of the game (a stage load's slow step, a first-use pipeline under the slack) is
+  not a stall of the sound, which plays on from the SPU2's state; a longer one, or time the pacer
+  drops, is a gap of the same length less the slack, as on the game's clock, ended when the game
+  has caught up to the steady lead.
+- A game that steps slower than real time for long (frame rate Original on a renderer that cannot
+  keep up, or a step bound by the CPU; elsewhere the window's late-present skip usually keeps it at
+  speed, [DISPLAY.md](DISPLAY.md#pacing)) cannot be followed without silence: the SPU2 renders only
+  the game's frames, so a share of the time equal to one less the game's rate is silent, and the
+  bound decides how it is cut up. At 45.3 Hz simulated on a 10 ms device the game adds 36,276
+  frames a second and the device takes 48,000, so the lead grows by about 117 frames a callback,
+  from the steady 960 frames to the bound's 5,760: about 410 ms of sound, then a hold until the
+  game has added 4,800 frames, about 132 ms of ramped silence; about 1.8 gaps a second, a quarter
+  of the time silent. With a film's 60 ms bound, about 164 ms of sound and 53 ms gaps. A rate
+  ratio that played slower instead (a pitch drop in place of gaps) is not done. A stream voice's 16 KB SPU ring, whose other half the driver refills as
   its read position crosses the middle (`port/audio/stream.c` (`schedule`)), holds about 300 ms
   before stale data would play, so a stream never reaches it.
 - A device clock faster than the system's would creep up to the bound (at 50 ppm, 3 ms a minute)
   and then hold back a gap every few minutes; past 64 ms ahead of the game (`TRIM_ON_FRAMES`) the
   stream plays `ICO_AUDIO_TRIM` (0.25 %) slower on top of the rate ratio until the lead is under
-  32 ms (`TRIM_OFF_FRAMES`) (`ico_audio_sdl_game_step`). The same trim brings the lead back down
-  after a hold.
+  32 ms (`TRIM_OFF_FRAMES`) (`ico_audio_sdl_game_step`). A hold ends at the steady lead, so after a
+  stall the lead is down already; a lead raised by a stall the bound did not reach (a run-on under
+  the slack) the trim brings back.
 - A film's PCM ring is 24,576 bytes, read 0x400 bytes for every 256 output frames (the two
   channels' 512-byte blocks): 128 ms. The movie player refills it once a vsync to 1 KB behind the
   read address the tick reported (`port/fmv/movie.c` (`audio_send`)), so after a refill it is
   122.7 ms ahead of that address, less what the device rendered between the tick and the refill
   (a callback at most, about 10 to 20 ms), and a vsync (16.7 ms) less again by the next refill:
   when the game stops, the reader has about 86 to 123 ms of fresh data ahead of it. The reader can
-  run on past the game's last step by the bound less the lead the SPU2 already had (0 to about
-  30 ms in a steady run, more after a hold or while the trim drains it). When it runs on less than
-  the fresh data, the film's sound leads its picture by that much (at most 120 ms), and the trim
-  takes it back to within about 32 ms. In the worst phase (no lead, 86 ms of fresh data) it can
-  pass the writer by up to 34 ms: the ring's stale part then plays once (up to about 114 ms of
-  repeated sound), the writer stays one lap behind, and the film's sound trails its picture by
-  about the ring's length less the run-on, about 100 ms once the trim has brought the lead down,
-  for the rest of the film. A bound under 86 ms while a film plays would rule that out. On the
-  game's clock both sides stop with the game.
+  run on past the game's last step by the bound less the lead the SPU2 already had (the steady
+  lead, two device periods, in a steady run). With the film's 60 ms bound that is at most about
+  40 ms at 10 ms periods (20 ms at 21 and 40 ms periods, where the bound is the floor), under the
+  86 ms of fresh data in every phase, so the reader never passes the writer; the film's sound
+  leads its picture by the run-on during the stall, and the hold that follows ends at the steady
+  lead, so after the stall it is as far ahead of the picture as before the stall. On the game's clock
+  both sides stop with the game.
 - The callback counts and never logs: callbacks, frames rendered, the longest lock wait, the misses,
   the callbacks that came more than two periods after the one before (SDL's own thread ran late, so
   the device may have run dry), the silence, the part of it the bound held back, and the most it

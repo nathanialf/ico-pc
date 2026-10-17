@@ -433,16 +433,16 @@ would show a picture twice. A step a slot or more behind (a slow GPU, a 30 ms st
 the guard costs at most one slot (`port/platform/pace_policy.c` (`pace_lock_vsync`, `lastBlocked`)).
 `pace_fifo_hold` is not used under the lock.
 
-**The late-present skip under the lock.** Without it a new frame was always presented, so presents
-slower than the frames kept the game below real time until the resync below. Before each present
+**The late-present skip under the lock.** A lock that presents every new frame keeps the game below
+real time on presents slower than the frames, until the resync below. Before each present
 the lock asks `pace_late_skip` with the next step's due time as the deadline and the slow arm off: a
 frame not presented yet while the next step is a whole period or more late is left unpresented
 (`PaceLock.skippedLate`), never two frames in a row (`pace_skipped_last` on the lock's count of
 closes, `PaceLock.frames`; a present closes it, `skipOpen`), the same frame again while that holds
 and presented once the step is less than a period late. On presents of 39 ms against a 30 frames
 a second game (two 2.4 ms steps a frame) more than half the frames are presented, never two in a
-row left out, and no lag is dropped, where every frame was presented before and the game fell
-behind by about 10 ms a frame (43.8 ms of work against 33.4) until a resync
+row left out, and no lag is dropped, where presenting every frame falls behind by about 10 ms a
+frame (43.8 ms of work against 33.4) until a resync
 (`port/platform/test/pace_loop_test.c` (`testLateSkipLock`), which prints the counts). The window
 adds the lock's count to the first stats line's `late` (`pace_log`).
 

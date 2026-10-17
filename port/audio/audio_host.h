@@ -154,6 +154,12 @@ void ico_audio_sdl_push(const int16_t *frames, int count);
    ahead the stream plays ICO_AUDIO_TRIM slower until it is under 32 ms
    (out_sdl.c, the file comment).  Never under the audio lock. */
 void ico_audio_sdl_game_step(int frames);
+/* A film's PCM channels opened (1) or closed (0) (stream.c st_pcm_init and
+   st_pcm_quit, under the audio lock): while open the pull path keeps the
+   SPU2 at most 60 ms past the game's frames instead of 120 (out_sdl.c
+   pull_bound), so the film's sound leads its picture by less after a
+   stall.  Nothing without the SDL output or on the sync path. */
+void ico_audio_sdl_film(int on);
 /* Whether an output stream is open (0 without the SDL output). */
 int ico_audio_sdl_active(void);
 /* The audio queued on the stream in milliseconds, -1 when no stream is
