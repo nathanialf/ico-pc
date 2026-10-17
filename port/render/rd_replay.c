@@ -2241,7 +2241,7 @@ static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const 
         cb.tex[1] = (float)tc->th;
         cb.tex[2] = 1.0f / (float)tc->tw;
         cb.tex[3] = 1.0f / (float)tc->th;
-        rhi_cmd_set_pipeline(s_cl, pipe);
+        rd__set_pipeline(s_cl, pipe, &k);
         rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(
@@ -4734,7 +4734,7 @@ static void doFog(Replay *r, const RdFrame *f, const RdCmd *c)
             }
         }
         dstPassMode(r, &dp[i].key); /* a storage pass for a storage destination read */
-        rhi_cmd_set_pipeline(s_cl, pipe);
+        rd__set_pipeline(s_cl, pipe, &dp[i].key);
         rd__bind_uniform(s_cl, 0, frame);
         rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
         rhi_cmd_set_bind_group(s_cl, 2, g2);
