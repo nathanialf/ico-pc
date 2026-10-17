@@ -1414,6 +1414,11 @@ int main(int argc, char **argv)
                "above 1x\n",
                dump, pr->dstDraws, pr->storagePasses, pr->dstSwitches, pr->glowPasses,
                pr->snapshots, pr->snapSwaps, pr->a1xDraws);
+        /* the GS-level textures' two filters and the UINT view's blur sprites
+         * (RdPerfRecord.texaDraws, gridDraws, uintDraws) */
+        printf("%s: stats: texa draws %u (TEXA per texel), %u GS-level draws on the GS's grid; "
+               "%u staticBlur sprites through the UINT views\n",
+               dump, pr->texaDraws, pr->gridDraws, pr->uintDraws);
         /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): each mesh and grid
          * vertex once, before the lists */
         printf("%s: stats: VU pre-pass %s: %u passes, %u vertices in %u draws; %u mesh and grid "

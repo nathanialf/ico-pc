@@ -2053,7 +2053,8 @@ static bool snapEnsure(RdTargetRec *tc)
          * staticBlur sprite that covers the whole target draws into it and
          * the two change places (blurSwapTarget) */
         const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC |
-                               RHI_TEX_COPY_DST | rd__dst_target_usage(tc->format, NULL);
+                               RHI_TEX_COPY_DST | rd__dst_target_usage(tc->format, NULL) |
+                               (tc->uintView ? (uint32_t)RHI_TEX_UINT_VIEW : 0u);
         tc->snap = rhi_create_texture(
             &(RhiTextureDesc){tc->tw, tc->th, 1, tc->format, usage, "rd snap", 0});
         tc->snapState = RHI_STATE_UNDEFINED;
@@ -2623,7 +2624,10 @@ static bool prepareDraw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
 /* A texture with GS levels: the level is the shader's (DF_GS_LOD, given to
  * SampleLevel), the sampler the TEX1 filters within a level, linear between
  * levels for MMIN 3 and 5 (RD_SAMPLER_SET_MIP_LINEAR), nearest for the
- * others (RD_SAMPLER_SET_MIP_NEAREST), never the Enhanced filter's. */
+ * others (RD_SAMPLER_SET_MIP_NEAREST), never the Enhanced filter's.  In the
+ * Original preset (rd__gs_filter_int) always nearest between levels: the
+ * shader samples each level on the GS's grid and blends the two itself
+ * (ICO_DF_GS_BILINEAR_GRID), or loads the texels (the TEXA entries). */
 static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds);
 
 /* Full pixel: a draw that samples a render target (a screen-space lookup,
@@ -2830,8 +2834,9 @@ static void dstBind(Replay *r, const RdPipeKeyInt *k)
 static RhiSampler gsLodSampler(const Replay *r, const DrawSetup *ds)
 {
     const uint32_t mmin = RD_TEX1_MMIN(r->st.tex1Lod);
-    const int set =
-        mmin == 3u || mmin == 5u ? RD_SAMPLER_SET_MIP_LINEAR : RD_SAMPLER_SET_MIP_NEAREST;
+    const int set = (mmin == 3u || mmin == 5u) && !rd__gs_filter_int(&r->st)
+                        ? RD_SAMPLER_SET_MIP_LINEAR
+                        : RD_SAMPLER_SET_MIP_NEAREST;
     const int i = (r->st.ds.magFilter ? 1 : 0) | (r->st.ds.minFilter ? 2 : 0) |
                   (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.s, 0) ? 4 : 0) |
                   (drawWrap(r, ds, (RdWrap)r->st.ds.wrap.t, 1) ? 8 : 0);
@@ -2918,10 +2923,19 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
         }
     }
     cb->mode[1] = r->st.ds.texa | (ds->tfmt << 8);
-    if (dp->key.fs == RD_FS_SPRITE_TEXA || dp->key.fs == RD_FS_VU_TEXA ||
-        (dp->key.fs == RD_FS_SPRITE_STQ && rd__gs_filter_int(&r->st))) {
+    /* GS levels filtered as the GS filters (rd__gs_filter_int): per texel
+     * where TEXA changes the texels first (rd__texa_per_texel: the TEXA
+     * entries, and sprite_stq_ps through the same four-tap filter), else
+     * the sampler on the GS's grid (common.hlsli gs_sample_gs_bilinear) */
+    const int gsInt = ds->textured && ds->gsLevels && rd__gs_filter_int(&r->st);
+    const int fs = dp->key.fs;
+    const int stqTexa = (fs == RD_FS_SPRITE_STQ || fs == RD_FS_SPRITE_STQ_PLANES) &&
+                        rd__gs_filter_int(&r->st) && rd__texa_per_texel(&r->st);
+    const int perTexel = fs == RD_FS_SPRITE_TEXA || fs == RD_FS_VU_TEXA ||
+                         fs == RD_FS_SPRITE_TEXA_PLANES || fs == RD_FS_VU_LEGACY_TEXA || stqTexa;
+    if (perTexel) {
         /* the sampler state the TEXA shaders' four-tap filter reproduces
-         * (and sprite_stq_ps's, for GS levels: rd__gs_filter_int);
+         * (and sprite_stq_ps's, for GS levels under such a TEXA);
          * minified pixels of a texture texSampler upgrades (the Enhanced
          * trilinear or anisotropic filter) keep the sampler */
         const RdDrawState *d = &r->st.ds;
@@ -2937,6 +2951,20 @@ static void fillDrawCB(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
     if (ds->textured && ds->gsLevels) {
         cb->mode[0] |= ICO_DF_GS_LOD;
         cb->blend[3] = gsLodWord(r, ds);
+    }
+    if (gsInt && !perTexel) {
+        static bool logged;
+        cb->mode[0] |= ICO_DF_GS_BILINEAR_GRID;
+        g_rdPerf.gridDraws++;
+        if (!logged) {
+            logged = true;
+            rd__log("GS levels (Original): a texture without TEXA per texel is sampled on the "
+                    "GS's 12.4 grid of each level, nearest between levels, the two levels "
+                    "blended in 256ths (reported once)");
+        }
+    }
+    if (perTexel && ds->textured) {
+        g_rdPerf.texaDraws++;
     }
     if (ds->textured && !ds->replacement && r->st.ds.magFilter == RD_FILTER_NEAREST &&
         r->st.ds.minFilter == RD_FILTER_NEAREST) {
@@ -5027,6 +5055,66 @@ static uint32_t blurAbove1xSteps(const RdTargetRec *tc, const RdTargetRec *src, 
     return leaves ? sx * 4096u + sy : 0;
 }
 
+/* fx_sprite_u_ps's texture group: t1 and t2 through their RGBA8_UINT views
+ * (RHI_ASPECT_UINT), the sampler slot filled and unused; one per pair of
+ * textures and bind epoch, as rd__tex_group_date caches its own */
+static RhiBindGroup blurUintGroup(RhiTexture t1, RhiTexture t2)
+{
+    static struct {
+        uint32_t epoch, t1, t2;
+        RhiBindGroup group;
+    } cache[16];
+
+    const uint32_t h = ((t1.id * 2654435761u) ^ (t2.id * 2246822519u)) >> 28;
+    if (cache[h].epoch == s_bindEpoch && cache[h].t1 == t1.id && cache[h].t2 == t2.id) {
+        return cache[h].group;
+    }
+    RhiBinding b[3];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = t1;
+    b[0].aspect = RHI_ASPECT_UINT;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = g_rd.samplers[0];
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = t2;
+    b[2].aspect = RHI_ASPECT_UINT;
+    const RhiBindGroup g = bindGroup(g_rd.layoutTex, b, 3);
+    if (g.id) {
+        cache[h].epoch = s_bindEpoch;
+        cache[h].t1 = t1.id;
+        cache[h].t2 = t2.id;
+        cache[h].group = g;
+    }
+    return g;
+}
+
+/* fx_sprite_ps's DrawCB.aux1 from the fields doBlurSpriteDraw filled
+ * (fx_sprite.hlsl): x, y the UV divides' reciprocals 1 / (x1 - x0),
+ * 1 / (y1 - y0) as float bits, correctly rounded (IEEE single, round to
+ * nearest: gs_math.hlsli gs_div_trunc_rcp), 0 for an empty span, which
+ * covers no pixel; z, w fx_texel's REPEAT and CLAMP size,
+ * max(1, round(TEX0 size * t1's scale)) with the shader's float product and
+ * its round half to even (DXC's RoundEven, D3D's round_ne), so the same
+ * integers the shader computed per pixel. */
+static void blurAux1(IcoDrawCB *cb)
+{
+    const int32_t dx = (int32_t)cb->param[2] - (int32_t)cb->param[0];
+    const int32_t dy = (int32_t)cb->param[3] - (int32_t)cb->param[1];
+    const float rx = dx > 0 ? 1.0f / (float)dx : 0.0f;
+    const float ry = dy > 0 ? 1.0f / (float)dy : 0.0f;
+    memcpy(&cb->aux1[0], &rx, sizeof(rx));
+    memcpy(&cb->aux1[1], &ry, sizeof(ry));
+    for (int k = 0; k < 2; k++) {
+        const float sc = cb->scale[k] > 0.0f ? cb->scale[k] : 1.0f;
+        const float l = rintf(cb->tex[k] * sc);
+        cb->aux1[2 + k] = l >= 1.0f ? (uint32_t)l : 1u;
+    }
+}
+
 static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     RdPostRec p;
@@ -5082,7 +5170,7 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     int useDepth = 0;
     const RdPipeKeyInt key =
-        rd__blur_key(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth);
+        rd__blur_key(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth, 0);
     if (d->test.ate && d->test.atst != RD_ATST_ALWAYS && d->test.afail == RD_AFAIL_FB_ONLY &&
         useDepth && d->zwrite == RD_ZWRITE_ON) {
         rd__log_once(RD_ONCE_BLUR, "staticBlur sprite with AFAIL FB_ONLY and Z write: failing "
@@ -5164,6 +5252,17 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
             srcTex = src->color;
         }
     }
+    /* fx_sprite_u_ps when every texture the sprite reads has the RGBA8_UINT
+     * view (RdTargetRec.uintView): its source target, or the snapshot it
+     * samples itself through, and the snapshot it reads the destination
+     * from; an image never has it.  The same bytes as fx_sprite_ps */
+    const int srcView = textured && src && (selfSample ? tc->uintView : src->uintView);
+    const int useUint =
+        (textured || dstRead) && (!textured || srcView) && (!dstRead || tc->uintView);
+    const RdPipeKeyInt pkey =
+        useUint
+            ? rd__blur_key(&r->st, tc->format, td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN, &useDepth, 1)
+            : key;
 
     DrawSetup ds;
     memset(&ds, 0, sizeof(ds));
@@ -5176,11 +5275,18 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     ds.th = th;
     ds.textured = textured;
     ds.screenCopy = 1; /* a post sprite: target texels onto screen pixels */
-    const RhiBindGroup g2 = bindDraw(r, &ds);
+    if (useUint) {
+        ds.tex = ds.dateTex = g_rd.dummy; /* bindDraw's group unused: the UINT one */
+    }
+    RhiBindGroup g2 = bindDraw(r, &ds);
+    if (g2.id && useUint) {
+        const RhiTexture t1 = textured ? srcTex : tc->snap;
+        g2 = blurUintGroup(t1, dstRead ? tc->snap : t1);
+    }
     if (!g2.id) {
         return;
     }
-    RhiPipeline pipe = rd__get_pipeline(&key);
+    RhiPipeline pipe = rd__get_pipeline(&pkey);
     if (!pipe.id) {
         return;
     }
@@ -5214,7 +5320,11 @@ static void doBlurSpriteDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     cb.scale[3] = (float)steps; /* below 2^24: exact */
     memcpy(cb.param, p.rect, sizeof(cb.param));
-    rhi_cmd_set_pipeline(s_cl, pipe);
+    blurAux1(&cb);
+    if (useUint) {
+        g_rdPerf.uintDraws++;
+    }
+    rd__set_pipeline(s_cl, pipe, &pkey);
     rd__bind_uniform(s_cl, 0, r->frameBG);
     rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(s_cl, 2, g2);

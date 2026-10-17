@@ -814,6 +814,32 @@ bool rd__target_create_gpu(RdTargetRec *t, const char *name)
     uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST;
     /* the exact blend's destination read (rd_dst_read.c) */
     usage |= rd__dst_target_usage(t->format, &t->dstUsage);
+    /* the RGBA8_UINT view fx_sprite_u_ps reads (rd_replay.c
+     * doBlurSpriteDraw): the work class under the profile's uintViewWork,
+     * the scene class under uintViewScene, on a device with the view */
+    {
+        static int8_t logged = -1;
+        const int slot = t->named && t >= g_rd.targets && t < g_rd.targets + RD_TARGET_COUNT
+                             ? (int)(t - g_rd.targets)
+                             : -1;
+        const bool work = rd__work_class(t), scene = slot >= 0 && sceneClass(slot);
+        const bool device = rhi_limits()->uintView && g_rd.fs[RD_FS_FX_SPRITE_UINT].id != 0;
+        t->uintView =
+            t->format == RHI_FMT_RGBA8_UNORM && device &&
+            ((work && g_rd.profile.uintViewWork) || (scene && g_rd.profile.uintViewScene));
+        if (t->uintView) {
+            usage |= RHI_TEX_UINT_VIEW;
+        }
+        const int8_t state = (int8_t)((g_rd.profile.uintViewWork ? 1 : 0) |
+                                      (g_rd.profile.uintViewScene ? 2 : 0) | (device ? 4 : 0));
+        if (logged != state) {
+            logged = state;
+            rd__log("UINT view: work targets %s, scene targets %s (the profile); the device's "
+                    "view and fx_sprite_u_ps %s",
+                    g_rd.profile.uintViewWork ? "on" : "off",
+                    g_rd.profile.uintViewScene ? "on" : "off", device ? "present" : "absent");
+        }
+    }
     t->color = rhi_create_texture(&(RhiTextureDesc){t->tw, t->th, 1, t->format, usage, name, 0});
     t->colorState = RHI_STATE_UNDEFINED;
     if (t->withDepth) {

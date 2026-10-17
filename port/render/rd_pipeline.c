@@ -368,12 +368,19 @@ int rd__plan_screen_draw_ex(const RdStateBlock *s, uint8_t prim, int aa1, uint8_
 }
 
 /* A linear-filtered texture with GS levels drawn at the GS's level
- * (DF_GS_LOD) in the Original preset: the four-tap integer filter of the
- * TEXA entries (gs_texa_texture_lod: the GS's 4-bit fractions, gs_bilerp,
- * the two levels blended by the LOD's fraction) instead of the sampler's
- * float filter, which rounds where the GS truncates.  PCSX2's per-draw
- * dumps of the opening's mist (fog1, list 5) had the sampler's version
- * about 5 % brighter (forest: +19.5 against +18.6 levels). */
+ * (DF_GS_LOD) in the Original preset: filtered as the GS filters, not by
+ * the sampler's own LOD and level blend.  PCSX2's per-draw dumps of the
+ * opening's mist (fog1, list 5) had the sampler's version about 5 %
+ * brighter (forest: +19.5 against +18.6 levels): its fraction between
+ * levels (4 to 8 bits on a device) and its texel weights off the GS's
+ * 12.4 grid.  Two forms: a texture whose TEXA changes texels before the
+ * filter (rd__texa_per_texel) takes the TEXA entries' four-tap integer
+ * filter (gs_texa_texture_lod); every other one the sampler at the GS's
+ * grid point of each level, nearest between levels, the two levels
+ * blended in 256ths as the GS does (common.hlsli gs_sample_gs_bilinear,
+ * rd_replay.c fillDrawCB's ICO_DF_GS_BILINEAR_GRID and gsLodSampler),
+ * within 2 levels of the GS's truncating steps (docs/port/RENDER.md,
+ * "Textures"). */
 int rd__gs_filter_int(const RdStateBlock *s)
 {
     const RdDrawState *d = &s->ds;
@@ -387,12 +394,14 @@ int rd__gs_filter_int(const RdStateBlock *s)
            ((tr->gsLevels > 1 && tr->gsChain) || tr->mipLevels > 1);
 }
 
+/* TEXA before the filter: a 24- or 16-bit source (or CLUT) under a TEXA
+ * whose alpha depends on the texel (AEM, or TA0 != TA1: the two modes
+ * other than 80/80) with a linear filter.  An RGBA32 texture and TEXA
+ * 80/80 give the same texels before and after the filter, and take the
+ * sampler (with GS levels on the GS's grid: rd__gs_filter_int). */
 int rd__texa_per_texel(const RdStateBlock *s)
 {
     const RdDrawState *d = &s->ds;
-    if (rd__gs_filter_int(s)) {
-        return 1;
-    }
     if (!d->texEnabled || d->texa == RD_TEXA_80_80) {
         return 0; /* TEXA 80/80 gives every texel alpha 0x80: no order to keep */
     }
@@ -2514,11 +2523,13 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
  * itself on integers, so the key keeps only what the hardware does: the
  * colour mask (FRAME.FBMSK) and, with a depth target, the Z test and Z
  * write.  A Z test of ALWAYS without Z write needs no depth target and
- * binds none. */
+ * binds none.  uintSrc: fx_sprite_u_ps, the twin that reads its textures
+ * through their RGBA8_UINT views (rd_replay.c doBlurSpriteDraw). */
 RdPipeKeyInt rd__blur_key(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
-                          int *useDepth)
+                          int *useDepth, int uintSrc)
 {
-    RdPipeKeyInt k = rd__post_key(RD_VS_FX_RECT, RD_FS_FX_SPRITE, colorFmt);
+    RdPipeKeyInt k =
+        rd__post_key(RD_VS_FX_RECT, uintSrc ? RD_FS_FX_SPRITE_UINT : RD_FS_FX_SPRITE, colorFmt);
     k.gs.colorMask = s->ds.colorMask;
     const uint8_t ztst = s->ds.test.zte ? s->ds.test.ztst : RD_ZTST_ALWAYS;
     const int depth =
@@ -2543,13 +2554,20 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
     RdStateBlock s;
     rd__reset_state_block(&s);
     s.ds.colorMask = 0xF;
+    /* the UINT twins where a target can have the view (rd_core.c
+     * rd__target_create_gpu: the profile's flags, the device's view) */
+    const int twins = (g_rd.profile.uintViewWork || g_rd.profile.uintViewScene) && g_rd.hasDevice &&
+                      rhi_limits()->uintView && g_rd.fs[RD_FS_FX_SPRITE_UINT].id != 0;
     for (int zw = 0; zw < 2; zw++) {
         for (int z = 0; z < 3; z++) {
             s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
             s.ds.test.ztst = kZ[z];
             s.ds.zwrite = zw ? RD_ZWRITE_ON : RD_ZWRITE_OFF;
-            const RdPipeKeyInt k = rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL);
-            n = rd__add_pipe_key(out, max, n, &k);
+            for (int u = 0; u <= twins; u++) {
+                const RdPipeKeyInt k =
+                    rd__blur_key(&s, RHI_FMT_RGBA8_UNORM, RHI_FMT_D32F_S8, NULL, u);
+                n = rd__add_pipe_key(out, max, n, &k);
+            }
         }
     }
     return n;

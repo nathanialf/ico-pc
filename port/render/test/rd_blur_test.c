@@ -94,6 +94,13 @@
  *      SCENE the GS's bilinear at the finer grid, no B-spline.  Every
  *      comparison of a run at scale 1 (all the others) finds no sprite
  *      flagged.
+ *   u  the RGBA8_UINT views: the work and scene-class targets made again
+ *      with them (RdProfile.uintViewWork, uintViewScene), post modes 1..7
+ *      as e runs them, every target against the CPU model exactly (so the
+ *      bytes fx_sprite_ps writes), the sprites reading targets drawn
+ *      through fx_sprite_u_ps (RdPerfRecord.uintDraws) and every pipeline
+ *      created enumerated; then the targets made again without the views
+ *      (skipped where the device has no view).
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -3391,6 +3398,46 @@ static void checkMotionBlurWide(void)
     systemStatus[0] = status0;
 }
 
+static void checkPipelines(void);
+
+/* ============================================== (u) the UINT views */
+
+static void checkUintView(void)
+{
+    if (!rhi_limits()->uintView || !g_rd.fs[RD_FS_FX_SPRITE_UINT].id) {
+        printf("  (u) the UINT views: skipped (no RGBA8_UINT view)\n");
+        return;
+    }
+    g_rd.profile.uintViewWork = g_rd.profile.uintViewScene = true;
+    rd_reset_scene(W, H);
+    int views = 0;
+    for (size_t k = 0; k < sizeof(kCompared) / sizeof(kCompared[0]); k++) {
+        const RdTargetRec *t = rd__target_rec(rd_target((RdTargetId)kCompared[k]).id);
+        views += t && t->uintView;
+    }
+    CHECK(views == (int)(sizeof(kCompared) / sizeof(kCompared[0])),
+          "(u) %d of the compared targets made with the UINT view", views);
+    InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
+    uint32_t sprites = 0;
+    int worst = 0;
+    for (int post = 1; post <= 7; post++) {
+        const int d = effectsFrame(post, post == 1);
+        worst = d > worst ? d : worst;
+        sprites += g_rdPerf.uintDraws; /* the frame's replay (runFrame) */
+    }
+    InitializeStaticBlur(); /* sun off */
+    CHECK(sprites > 0, "(u) no sprite drew through fx_sprite_u_ps");
+    printf("  (u) the UINT views: %u sprites through fx_sprite_u_ps, max difference %d\n", sprites,
+           worst);
+    checkPipelines(); /* the twins enumerated while the views are on */
+    CHECK(rhi_vk_validation_error_count() == 0, "(u) %u validation errors",
+          rhi_vk_validation_error_count());
+    g_rd.profile.uintViewWork = g_rd.profile.uintViewScene = false;
+    rd_reset_scene(W, H);
+    rhi_wait_idle();
+    rd__pipeline_cache_clear(); /* the twins are outside the reachable set again */
+}
+
 static void checkPipelines(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -3422,6 +3469,7 @@ static const IcoShardCase k_cases[] = {
     {"cut_presents", 1},
     {"motion_blur_presents", 40},
     {"fix128_skip", 1},
+    {"uint_view", 2},
     {"queen_mirage", 10},
     {"queen_presents", 1},
     {"motion_blur_presents_scaled", 41},
@@ -3546,6 +3594,9 @@ int main(int argc, char **argv)
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
+    if (ico_shard_take("uint_view")) {
+        checkUintView(); /* makes the targets again, with the views and without */
+    }
     if (ico_shard_take("queen_mirage")) {
         checkQueenMirage(); /* re-initialises rd (NTSC, 1x, 4x) */
     }

@@ -1896,6 +1896,16 @@ typedef struct RdPerfRecord {
      * draw can count twice; 0 at scale 1.  A work buffer drawn onto the
      * frame is never among them (rd_internal.h rd__work_class) */
     uint32_t a1xDraws;
+    /* texaDraws: the draw passes through the per-texel TEXA filter
+     * (sprite_texa_ps, vu_texa_ps, sprite_stq_ps's four taps: a 24- or
+     * 16-bit texture under a TEXA with AEM and a linear filter,
+     * rd_pipeline.c rd__texa_per_texel); gridDraws: those with GS levels in
+     * the Original preset drawn through the sampler on the GS's grid
+     * instead (ICO_DF_GS_BILINEAR_GRID: RGBA32 and TEXA 80/80 textures,
+     * rd__gs_filter_int).  Counted per planned pass as a1xDraws (fillDrawCB).
+     * uintDraws: the staticBlur sprites drawn through fx_sprite_u_ps (the
+     * UINT views, rd_replay.c doBlurSpriteDraw) */
+    uint32_t texaDraws, gridDraws, uintDraws;
     /* The VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass; docs/port/RENDER.md,
      * "The vertex pre-pass"): vuPrePasses its render passes (0 or 1),
      * vuPreVertices the vertices it recorded, vuPreDraws its draws (a VU

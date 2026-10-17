@@ -397,6 +397,10 @@ typedef struct RdTargetRec {
     /* the destination reads the colour texture was made for
      * (rd__dst_target_usage: 1 storage, 2 input attachment), 0 none */
     uint8_t dstUsage;
+    /* the colour texture (and its snapshot) has the RGBA8_UINT view
+     * (RHI_TEX_UINT_VIEW: rd_core.c rd__target_create_gpu, under
+     * RdProfile.uintViewWork / uintViewScene), which fx_sprite_u_ps reads */
+    uint8_t uintView;
     /* a render-to-texture block rd_block_target made (rd_water.c: the
      * reflections of puddle.c and pool.c, the queen barrier's copy of the
      * frame, the dark volume's scene-sized block): one that is not
@@ -1276,9 +1280,11 @@ const struct IcoSpritePlaneVertex *rd__screen_planes(const void *vb, uint32_t st
  * draws whose bilinear edges depend on TEXA coming before the filter; the
  * planners give them sprite_texa_ps / vu_texa_ps. */
 int rd__texa_per_texel(const RdStateBlock *s);
-/* Whether a draw under this state takes the TEXA entries' integer filter
- * because it samples GS levels at the GS's LOD in the Original preset
- * (rd_pipeline.c); rd__texa_per_texel includes it. */
+/* Whether a draw under this state samples GS levels at the GS's LOD in the
+ * Original preset with a linear filter, filtered as the GS filters
+ * (rd_pipeline.c): through the TEXA entries' integer filter where
+ * rd__texa_per_texel, else the sampler on the GS's grid
+ * (ICO_DF_GS_BILINEAR_GRID). */
 int rd__gs_filter_int(const RdStateBlock *s);
 RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The present's box blit with the effects depth: blit_vs and
@@ -1457,7 +1463,7 @@ void rd__shadow_shutdown(void); /* frees the reduced shadow count */
  * else none), whether it binds the depth target (*useDepth), and the
  * enumeration of the keys staticBlur.c's states reach. */
 RdPipeKeyInt rd__blur_key(const RdStateBlock *s, RhiFormat colorFmt, RhiFormat depthFmt,
-                          int *useDepth);
+                          int *useDepth, int uintSrc);
 uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t n);
 /* The CRT filter's pipelines (the two RGBA16F glow passes, the
  * composite on the headless output and the swapchain) */

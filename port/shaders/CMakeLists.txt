@@ -163,4 +163,7 @@ endif()
 # ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
 # ---- X2 end ----
 # ---- X3 pixel cuts (fx_sprite_u_ps) ----
+# fx_sprite_ps reading its textures through their RGBA8_UINT views
+# (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)
+ico_add_shader(fx_sprite_u_ps fx_sprite.hlsl fx_sprite_ps fragment DEFINES ICO_UINT_SRC=1)
 # ---- X3 end ----

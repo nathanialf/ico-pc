@@ -314,6 +314,37 @@ time it is needed and keeps it until the content changes (`port/render/rd_tex.h`
   kept for alpha-tested textures (`port/render/rd_upload.c` (`uploadMips`);
   `port/render/rd_tex.h` (`rdtex_build_mip_chain`, `rdtex_keep_alpha_coverage`)).
 
+**Sampling at the GS's level in the Original preset.** A linear-filtered draw of an image with
+GS levels (`DF_GS_LOD`) is filtered as the GS filters, in one of two forms
+(`port/render/rd_pipeline.c` (`rd__gs_filter_int`, `rd__texa_per_texel`)):
+
+- **TEXA per texel**: a 24- or 16-bit source (or CLUT) under a TEXA whose alpha depends on the
+  texel (AEM, or TA0 and TA1 apart: every mode but 80/80) goes through the TEXA entries
+  (`sprite_texa_ps`, `vu_texa_ps`, and `sprite_stq_ps`'s four taps), whose integer filter loads
+  the four texels of each level, expands TEXA, blends them with the GS's 4-bit weights across
+  then down, each step truncated, and blends the two levels in 256ths (`port/shaders/common.hlsli`
+  (`gs_texa_texture_lod`)).
+- **The sampler on the GS's grid**: every other one (an RGBA32 texture; TEXA 80/80, which gives
+  every texel the same alpha) takes the sampler (`ICO_DF_GS_BILINEAR_GRID`, `common.hlsli`
+  (`gs_sample_gs_bilinear`, `gs_grid_level`)). Per level the coordinate is rounded to the GS's
+  12.4 grid, `q = floor(uv * size * 16 + 0.5)`, as the integer filter rounds it, and handed to
+  `SampleLevel` as `q / 16 / size`, exact in float for the power-of-two sizes of a TIM2 picture,
+  so the sampler's texel pair and weight are the GS's (`(q - 8) >> 4` and `(q - 8) & 15`, four
+  fraction bits, which every device's sub-texel precision holds); the sampler is nearest between
+  levels (`port/render/rd_replay.c` (`gsLodSampler`)), and for MMIN 3 and 5 the shader samples
+  the two levels and blends them by the LOD's fraction in 256ths, truncated, as the GS does. What
+  is left is the GS's truncation after each of its three steps against the sampler's one rounded
+  sum: the sampler's value is 0 to 2 levels above the GS's, never below, on a device whose filter
+  is exact to within a level (`shaders_pixel`'s grid check, over every pair of 4-bit weights and
+  texel values in steps of 17: 21 % of the samples +0, 74 % +1, 4 % +2; a flat area is +0, so the
+  difference is a systematic half to one level where texels differ), and the blend of two levels
+  keeps the bound. `rd_pixel`'s gs grid case checks it
+  through the replay against the GS's arithmetic.
+
+The replay counts both: `rd_replay_tool --stats` prints `texa draws N (TEXA per texel), M
+GS-level draws on the GS's grid` (`RdPerfRecord` `texaDraws`, `gridDraws`, per planned pass, as
+`a1xDraws`), and the first grid draw of a run logs `rd: GS levels (Original): ...` once.
+
 ## The replay
 
 `rd__replay_frame` records one RHI command list per replay. The lists are walked in order 0..12
@@ -1370,8 +1401,8 @@ standard deviation of 0.58 texel against the bilinear's 0.41, so the penumbra is
 without the bilinear's corners along a diagonal; `rd_shadow_test` checks each composite at 4x
 against the CPU B-spline and that a row across the shadow falls and rises once
 (`port/render/test/rd_shadow_test.c` (`checkComposite4x`)). The GS
-levels' integer filter of the Original preset (`rd__gs_filter_int`) is for images only, so it never
-meets the flag (`port/render/rd_pipeline.c` (`rd__gs_filter_int`)). The flag is never set when the
+levels' filter of the Original preset (`rd__gs_filter_int`: [Textures](#textures)) is for images
+only, so it never meets the flag (`port/render/rd_pipeline.c` (`rd__gs_filter_int`)). The flag is never set when the
 two scales are equal, nor on the reduction at the GS's filter, so never at scale 1;
 `rd_present_test`'s full height 1x case checks no draw is flagged there and that the frame is byte
 for byte the one with the reduction flagged (`rd__set_a1x_gs_keep` off), whose shader takes the GS's
@@ -1885,14 +1916,32 @@ one of them a float divide), no `OpSRem` on a power-of-two size, no float divide
 
 ### Performance notes
 
+**The UINT views of the RGBA8 targets.** `fx_sprite_ps` reads each texel as a float and turns
+it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`), which gives the stored byte
+for every byte. A target made with `RHI_TEX_UINT_VIEW` has an `RGBA8_UINT` view of the same image
+as well (Vulkan: `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` with the two formats listed and a second,
+sampled-only view, `port/rhi/vk/vk_resource.c` (`vkr_create_uint_view`); D3D12: the RGBA8 resources
+are typeless already and the view is a UINT SRV, `port/rhi/d3d12/d3d12_pipeline.c`;
+`RhiLimits.uintView` on both), bound with `RHI_ASPECT_UINT`. Which targets have it is the
+profile's (`port/render/rd_core.c` (`rd__target_create_gpu`)): the work class under
+`RdProfile.uintViewWork`, the scene class under `uintViewScene` (a tiler's driver may give up its
+compression on a mutable-format image, so a frame-sized target takes it only where the profile
+says), the snapshot as its target (`port/render/rd_replay.c` (`snapEnsure`)). A staticBlur sprite
+whose every texture has the view draws through `fx_sprite_u_ps` (`ICO_UINT_SRC=1`: `Texture2D<uint4>`
+loads), the same bytes (`port/render/rd_replay.c` (`doBlurSpriteDraw`, `blurUintGroup`);
+`port/render/rd_pipeline.c` (`rd__blur_key`, whose six enumerated keys get their twins while a
+target can have the view)). The start line `rd: UINT view: work targets on|off, scene targets
+on|off (the profile); the device's view and fx_sprite_u_ps present|absent` says what is in force,
+`--stats` counts the sprites (`... staticBlur sprites through the UINT views`), and `rd_blur`'s
+u case and `rd_pixel`'s uint case check the bytes against the CPU model with the views on.
+
+**The blur sprite's per-draw constants.** `fx_sprite_ps` takes its UV step's divides from the
+reciprocals the CPU rounds once a draw (`gs_div_trunc_rcp`, [SHADERS.md](SHADERS.md#integer-forms))
+and `fx_texel`'s wrap size as integers (`DrawCB.aux1`, `port/render/rd_replay.c` (`blurAux1`)), the
+same values the shader computed per pixel.
+
 Measured or worked out, not done:
 
-- **A UINT view of the UNORM targets.** `fx_sprite_ps` and the TEXA paths read each texel as a
-  float and turn it back into an integer (`floor(x * 255 + 0.5)` a channel, `fx_load`,
-  `gs_texa_load`). An `RGBA8_UINT` view of the same `RGBA8_UNORM` image would hand the integer
-  over directly, exactly, but needs images made with a mutable format (Vulkan's
-  `VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT` and a view format list; a typeless resource on D3D12),
-  which the RHI does not make ([RHI.md](RHI.md)).
 - **One pass for a constant-alpha lerp without dual-source blending.** On such a device a LERP
   is two passes (`rd__expand_no_dual`). Where As is the same over the draw (untextured;
   textured with TCC RGB; a mesh whose vertex alphas are all equal) the blend factors could be

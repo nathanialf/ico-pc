@@ -1752,7 +1752,7 @@ static void vkr_fill_limits(void)
     o->vendorId = g_vkr.props.vendorID;
     o->dynamicDepth = false;
     o->dynamicBlend = false;
-    o->uintView = false;
+    o->uintView = true; /* mutable-format images, core in 1.2 (vk_resource.c) */
     /* the VU shader variants' device table (kVuPlainOnly) and the
      * compiler's line, for the renderer's log (rd__vu_policy_init) */
     vkr_vu_plain_only();

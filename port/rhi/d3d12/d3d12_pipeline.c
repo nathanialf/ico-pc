@@ -287,6 +287,13 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
         /* depth formats are always viewed as depth (plane 0), whatever the
          * aspect: stencil is never sampled (rhi.h) */
         v.Format = t->swapchain ? t->resFormat : fm->view;
+        if (b->aspect == RHI_ASPECT_UINT && !t->swapchain && t->rhiFormat == RHI_FMT_RGBA8_UNORM &&
+            (t->usage & RHI_TEX_UINT_VIEW)) {
+            /* the RGBA8_UINT view: the resource is R8G8B8A8_TYPELESS
+             * (dx_formatMap), so an SRV of the UINT format reads the same
+             * bytes as integers (Texture2D<uint4>) */
+            v.Format = DXGI_FORMAT_R8G8B8A8_UINT;
+        }
         v.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
         if (t->samples > 1u) {
             /* Texture2DMS in the shader (Load at a sample) */
