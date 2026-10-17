@@ -264,6 +264,11 @@ static struct {
     unsigned gpuN;
     PerfBlock ph;        /* the CPU phases (perf_block.h) */
     unsigned slowLogged; /* slow-replay lines logged in the block */
+    /* the block's longest replay over a refresh, the vsync it was drained
+       at, and whether its line was written (slow_replay_longest) */
+    RdPerfRecord longest;
+    unsigned longestVsync;
+    int longestShown;
     double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent;
     double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
     unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
@@ -3455,16 +3460,13 @@ static void auto_res_sample(const RdPerfRecord *r)
 
 /* A replay over a refresh (it cannot fit a slot): where its time went,
    with its own counters; at most SLOW_REPLAY_LINES a block (the block's
-   first line counts them all).  The records arrive two replays late
-   (rd_perf.c), so the vsync is the one the record was drained at. */
-static void slow_replay(const RdPerfRecord *r)
+   first line counts them all), and the block's longest at its end when the
+   cap kept it out (slow_replay_longest).  The records arrive two replays
+   late (rd_perf.c), so the vsync is the one the record was drained at. */
+static void slow_replay_line(const RdPerfRecord *r, unsigned vsync, const char *note)
 {
     char gpu[32] = "no GPU timestamps";
 
-    if (s_perf.slowLogged >= SLOW_REPLAY_LINES) {
-        return;
-    }
-    s_perf.slowLogged++;
     if (r->gpuValid) {
         snprintf(gpu, sizeof(gpu), "GPU %.1f ms", r->gpuMs);
     }
@@ -3473,12 +3475,44 @@ static void slow_replay(const RdPerfRecord *r)
             "%.1f, wait %.1f (fence %.1f), acquire %.1f, upload %.1f, walk %.1f, bind %.1f, "
             "submit %.1f, present %.1f; %u textures and %u meshes (%u KB) uploaded (%u KB in "
             "all), %u pipelines created, %u allocations, %u buffers and %u textures created, %u "
-            "DATE snapshots; %s\n",
-            r->totalMs, r->replay, r->frame, (double)r->alpha, ico_host_vsync_count(), r->interpMs,
-            r->waitMs, r->fenceWaitMs, r->acquireMs, r->uploadMs, r->walkMs, r->bindMs, r->submitMs,
+            "DATE snapshots; %s%s\n",
+            r->totalMs, r->replay, r->frame, (double)r->alpha, vsync, r->interpMs, r->waitMs,
+            r->fenceWaitMs, r->acquireMs, r->uploadMs, r->walkMs, r->bindMs, r->submitMs,
             r->presentMs, r->textureUploads, r->meshUploads, (unsigned)(r->meshUploadBytes / 1024u),
             (unsigned)(r->uploadBytes / 1024u), r->pipelineCreates, r->memoryAllocs,
-            r->buffersCreated, r->texturesCreated, r->dateSnapshots, gpu);
+            r->buffersCreated, r->texturesCreated, r->dateSnapshots, gpu, note);
+}
+
+static void slow_replay(const RdPerfRecord *r)
+{
+    const int longest = r->totalMs > s_perf.longest.totalMs;
+
+    if (longest) {
+        s_perf.longest = *r;
+        s_perf.longestVsync = ico_host_vsync_count();
+        s_perf.longestShown = 0;
+    }
+    if (s_perf.slowLogged >= SLOW_REPLAY_LINES) {
+        return;
+    }
+    s_perf.slowLogged++;
+    if (longest) {
+        s_perf.longestShown = 1;
+    }
+    slow_replay_line(r, ico_host_vsync_count(), "");
+}
+
+/* At the block's end: its longest replay over a refresh, when the cap of
+   SLOW_REPLAY_LINES kept its line out */
+static void slow_replay_longest(void)
+{
+    if (s_perf.longest.totalMs > 0.0 && !s_perf.longestShown) {
+        char note[64];
+
+        snprintf(note, sizeof(note), "; the block's longest, past its %d lines", SLOW_REPLAY_LINES);
+        slow_replay_line(&s_perf.longest, s_perf.longestVsync, note);
+        s_perf.longestShown = 1;
+    }
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -3877,6 +3911,7 @@ static void pace_log(Uint64 now)
         return;
     }
     perf_drain(); /* the block's last records, for its replays over a refresh */
+    slow_replay_longest();
     const double sec = (double)(now - s_pres.statAt) / 1e9;
     uint32_t replays = 0;
     const double maxMs = rd_replay_time_max(1, &replays);

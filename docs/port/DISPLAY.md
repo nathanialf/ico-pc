@@ -288,8 +288,12 @@ with the process's memory (`perf_log`).
 (`window: slow replay T ms (replay R, frame F, alpha A, about vsync V): ...`) is logged for a replay
 over the display's refresh, at most `SLOW_REPLAY_LINES` (5) a block: its phases with the fence wait
 inside `wait`, its uploads, pipeline creations, allocations, buffers and textures created and DATE
-snapshots, and its GPU time. The records arrive two replays late, so the vsync is the one the record
-was drained at (`port/platform/window_host.c` (`slow_replay`, `perf_drain`)). `[dev] slow_step_ms`
+snapshots, and its GPU time. When the cap kept the block's longest replay out, its line is written
+at the block's end, before the first stats line, ending `; the block's longest, past its 5 lines`
+(`slow_replay_longest`), so a stall never goes unexplained behind five earlier lines. The records
+arrive two replays late, so the vsync is the one the record was drained at
+(`port/platform/window_host.c` (`slow_replay`, `perf_drain`)). A walk over 500 ms also gets the
+renderer's `rd: slow walk` line ([RENDER.md](RENDER.md#the-start-up-set)). `[dev] slow_step_ms`
 (default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
 the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
 (`slow_step`).

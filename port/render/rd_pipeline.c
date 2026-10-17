@@ -1173,6 +1173,49 @@ static void lazyCount(const RdPipeKeyInt *k, float ms)
     s_lazy.tLast = now;
 }
 
+/* the start-up set ran (rd_precreate_pipelines): a pipeline made at first
+ * use afterwards is a key it did not hold */
+static bool s_startupSet;
+/* pipelines made at first use (rd__get_pipeline): their time in all, ms
+ * (the replay's walk breakdown, rd__pipeline_create_ms), and their count
+ * after the start-up set (the line's limiter) */
+static double s_createMs;
+static uint32_t s_firstUse;
+
+double rd__pipeline_create_ms(void)
+{
+    return s_createMs;
+}
+
+/* A pipeline the start-up set did not hold, made when a draw first needed
+ * it: the key, its modules, the list the replay was in and the time, the
+ * first 8 then every 100th (the host's rate limiter's rule; the renderer
+ * does not link it).  On a driver that takes seconds a pipeline (up to
+ * 3.4 s for a VU one on a PowerVR DXT-48-1536) this is the replay's
+ * stall. */
+static void firstUseLine(const RdPipeKeyInt *k, float ms)
+{
+    char key[160], vs[48], fs[48], where[40];
+    const int list = rd__replay_list();
+
+    s_firstUse++;
+    if (s_firstUse > 8u && s_firstUse % 100u != 0u) {
+        return;
+    }
+    keyWords(k, key, sizeof(key));
+    keyVsName(k, vs, sizeof(vs));
+    keyFsName(k, fs, sizeof(fs));
+    if (list >= 0) {
+        snprintf(where, sizeof(where), "list %d", list);
+    } else {
+        snprintf(where, sizeof(where), "no draw list (the present, a check)");
+    }
+    rd__log("pipelines: made on first use in %s: %s (%s + %s) in %.1f ms (not in the start-up "
+            "set; %u so far%s)",
+            where, key, vs, fs, (double)ms, s_firstUse,
+            s_firstUse == 8u ? "; from here every 100th is written" : "");
+}
+
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
 {
     RdPipeKeyInt tmp;
@@ -1193,8 +1236,12 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     activityCreating(k);
     const double t0 = rd__now_ms();
     RhiPipeline p = createPipeline(k);
+    const float ms = (float)(rd__now_ms() - t0);
+    s_createMs += ms;
     if (s_lazy.on) {
-        lazyCount(k, (float)(rd__now_ms() - t0));
+        lazyCount(k, ms);
+    } else if (s_startupSet) {
+        firstUseLine(k, ms);
     }
     activityDone();
     keepPipeline(k, p, at);
@@ -1655,6 +1702,7 @@ uint32_t rd_precreate_pipelines(void)
                 c.stoppedAt, m);
     }
     const double ms = rd__now_ms() - t0;
+    s_startupSet = true;
     rd__log("pipelines: %u of the reachable set's %u created at start-up in %.1f ms (%u failed); "
             "%u compiled on %u thread%s, the longest %.2f s",
             s_count - before, n, ms, c.failed, c.compiled, c.threads, c.threads == 1 ? "" : "s",

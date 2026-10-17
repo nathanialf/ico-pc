@@ -409,7 +409,18 @@ VkrBuffer *vkr_get_buffer(RhiBuffer b)
     return vkr_pool_get(&g_vkr.buffers, b.id);
 }
 
+static RhiBuffer createBuffer(const RhiBufferDesc *desc);
+
+/* timed into RhiStats.createNs */
 RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
+{
+    const uint64_t t0 = vkr_now_ns();
+    const RhiBuffer b = createBuffer(desc);
+    g_vkr.stats.createNs += vkr_now_ns() - t0;
+    return b;
+}
+
+static RhiBuffer createBuffer(const RhiBufferDesc *desc)
 {
     RhiBuffer out = {0};
     if (!desc || desc->size == 0) {
@@ -548,7 +559,18 @@ void vkr_test_fail_texels_above(uint64_t texels)
     s_failTexelsAbove = texels;
 }
 
+static RhiTexture createTexture(const RhiTextureDesc *desc);
+
+/* timed into RhiStats.createNs */
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
+{
+    const uint64_t t0 = vkr_now_ns();
+    const RhiTexture t = createTexture(desc);
+    g_vkr.stats.createNs += vkr_now_ns() - t0;
+    return t;
+}
+
+static RhiTexture createTexture(const RhiTextureDesc *desc)
 {
     RhiTexture out = {0};
     if (!desc || desc->format <= RHI_FMT_UNKNOWN || desc->format >= RHI_FMT_COUNT ||

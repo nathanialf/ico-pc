@@ -69,6 +69,8 @@ typedef struct RdPassReplay {
  * list being walked */
 void rd__passring_frame(uint32_t replay, uint32_t frame, int keep);
 void rd__passring_list(int list);
+/* the list rd__passring_list last named in this replay, -1 none */
+int rd__passring_list_now(void);
 /* an entry; the marker returned is its sequence number as a pointer (what
  * rhi_cmd_checkpoint is given) */
 const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,

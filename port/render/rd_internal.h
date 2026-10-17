@@ -1204,6 +1204,13 @@ void rd__pipeline_cache_clear(void);
 void rd__pipeline_gather(bool on);
 uint32_t rd__pipeline_create_gathered(bool *stopped);
 uint32_t rd__pipeline_count(void);
+/* The time the pipelines made at first use took, in all, ms
+ * (rd__get_pipeline; the replay's walk breakdown). */
+double rd__pipeline_create_ms(void);
+/* The draw list the replay is walking (0 .. RD_LIST_COUNT - 1), -1 outside
+ * the lists (the present, outside a replay) (rd_perf.c, from the lists'
+ * timestamps and rd__passring_list). */
+int rd__replay_list(void);
 /* rd_pipelines_lazy was called (the summary's pipelines part) */
 bool rd__pipelines_lazy_on(void);
 const RdPipeKeyInt *rd__pipeline_key_at(uint32_t i);

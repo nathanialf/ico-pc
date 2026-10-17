@@ -169,7 +169,10 @@ The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocat
 the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
 `rhi_present`); `port/rhi/d3d12/d3d12_device.c` (`rhi_get_stats`); `port/rhi/d3d12/d3d12_cmd.c`
-(`dx_wait_fence`, the draw, pass, bind and copy calls)). `window: per replay N draws, ...` therefore
+(`dx_wait_fence`, the draw, pass, bind and copy calls)). `createNs` is the CPU time in
+`rhi_create_buffer` and `rhi_create_texture`, the memory allocation and the object's creation, on
+both backends (`port/rhi/vk/vk_resource.c`, `port/rhi/d3d12/d3d12_resource.c`); the renderer's
+slow-walk line reads it ([RENDER.md](RENDER.md#the-start-up-set)). `window: per replay N draws, ...` therefore
 reads real numbers on both backends.
 
 **Timestamps.** `RHI_MAX_TIMESTAMPS` (32) a [frame slot](ARCHITECTURE.md#terms);

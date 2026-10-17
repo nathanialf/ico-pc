@@ -12,9 +12,15 @@
  * The timestamps a replay writes, in the order it wrote them, and for each
  * the picture effect (rd__perf_post) whose work it ends, travel with the
  * record; the collection walks them in that order, so a list's time is the
- * sum of its stretches and each stretch also counts for its effect. */
+ * sum of its stretches and each stretch also counts for its effect.
+ *
+ * The lists' timestamps also mark the walk: RD_PERF_TS_LISTS its start,
+ * the last list's its end, so rd__replay_list says which list a draw is
+ * recorded in, and a walk over WALK_SLOW_MS gets the line of what took its
+ * time (walkBreakdown). */
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_passring.h"
 
 RdPerfRecord g_rdPerf;
 
@@ -38,6 +44,14 @@ static double s_interpMs, s_readbackMs, s_t0;
 static uint32_t s_replay;
 
 static uint32_t s_pipelineCreates;
+
+/* the walk (RD_PERF_TS_LISTS to the last list's stamp): inside it, and at
+   its start the pipelines' time and count and the RHI's counters
+   (walkBreakdown) */
+static bool s_inLists;
+static double s_walkPipeMs;
+static uint32_t s_walkPipes;
+static RhiStats s_walkStats;
 
 /* the timestamps of one replay: their indices in the order written, and for
    each index the effect (RD_PERF_POST_*, -1 none) of the stretch it ends */
@@ -222,6 +236,39 @@ double rd_last_replay_ms(void)
     return g_rdPerf.totalMs;
 }
 
+int rd__replay_list(void)
+{
+    return s_inLists ? rd__passring_list_now() : -1;
+}
+
+/* A walk over WALK_SLOW_MS: what in it took the time, one line, the first
+ * 8 then every 100th (the host's rate limiter's rule; the renderer does
+ * not link it): the pipelines made at first use (rd__get_pipeline), the
+ * textures and buffers made (the RHI's createNs: memory and objects, from
+ * the lists' start to the replay's end, so the submit and the present
+ * too) and the rest.  Texture decodes run in the game's step and the
+ * replay's texture and mesh uploads in its upload phase, before the walk. */
+#define WALK_SLOW_MS 500.0
+
+static void walkBreakdown(const RdPerfRecord *r, const RhiStats *s)
+{
+    static uint32_t s_slow;
+    const double pipeMs = rd__pipeline_create_ms() - s_walkPipeMs;
+    const double createMs = (double)(s->createNs - s_walkStats.createNs) / 1e6;
+    const double rest = r->walkMs - pipeMs - createMs;
+
+    if (++s_slow > 8u && s_slow % 100u != 0u) {
+        return;
+    }
+    rd__log("slow walk %.1f ms (replay %u, frame %u): pipelines made %.1f ms (%u), textures and "
+            "buffers made %.1f ms (%llu and %llu), the rest %.1f ms (%u so far%s)",
+            r->walkMs, r->replay, r->frame, pipeMs, g_rd.stats.pipelineCreates - s_walkPipes,
+            createMs, (unsigned long long)(s->texturesCreated - s_walkStats.texturesCreated),
+            (unsigned long long)(s->buffersCreated - s_walkStats.buffersCreated),
+            rest > 0.0 ? rest : 0.0, s_slow,
+            s_slow == 8u ? "; from here every 100th is written" : "");
+}
+
 void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
@@ -249,8 +296,12 @@ void rd__perf_end(void)
         r->readbacks = D(readbacks);
 #undef D
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
+        if (r->walkMs > WALK_SLOW_MS) {
+            walkBreakdown(r, &s);
+        }
         s_last = s;
     }
+    s_inLists = false;
     const uint32_t slot = rhi_frame_slot();
     if (s_pendingValid[slot]) {
         push(&s_pending[slot]); /* its timestamps never came: queued without */
@@ -281,6 +332,17 @@ void rd__perf_stamp(RhiCommandList cl, uint32_t index)
 {
     stamp(cl, index);
     s_post = -1;
+    if (index == RD_PERF_TS_LISTS) {
+        /* the walk starts */
+        s_inLists = true;
+        s_walkPipeMs = rd__pipeline_create_ms();
+        s_walkPipes = g_rd.stats.pipelineCreates;
+        if (g_rd.hasDevice) {
+            rhi_get_stats(&s_walkStats);
+        }
+    } else if (index == RD_PERF_TS_LIST0 + RD_LIST_COUNT - 1) {
+        s_inLists = false; /* the last list done: the present's draws follow */
+    }
 }
 
 void rd__perf_post(RhiCommandList cl, int post)

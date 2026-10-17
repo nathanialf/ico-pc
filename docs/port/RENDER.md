@@ -638,6 +638,30 @@ on the thread that draws, the frame waiting for its compile (`rd__get_pipeline`)
 renderer part ends with `pipelines the start-up set` or `pipelines on first use (no start-up set)`
 (`rd_summary_text`).
 
+With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
+that draws while the replay waits; on a driver that takes seconds a pipeline (up to 3.4 s for a VU
+one on a PowerVR DXT-48-1536) that is a stall of the picture and of the game behind it. Each such
+key is logged once (the cache keeps it), the first 8 and then every 100th, with the draw list the
+replay was in and the time it took (`port/render/rd_pipeline.c` (`firstUseLine`)):
+
+    rd: pipelines: made on first use in list 0: program 1 blend 4 vs 5 fs 19 fmt 1/8 msaa 0 dst 0 ext 1 (vu_lit_vs + vu_texa_ps) in 2630.1 ms (not in the start-up set; 1 so far)
+
+`no draw list (the present, a check)` stands for the list outside the replay's lists. The key is the
+one `rd__enumerate_reachable` would need to hold. A replay whose walk (recording its lists, the
+`walk` phase of the [slow replay line](DISPLAY.md#the-stats-lines)) takes over 500 ms gets one line,
+the first 8 and then every 100th, saying where that time went: the pipelines made at first use, the
+textures and buffers made (the RHI's `createNs`: their memory and objects, counted from the lists'
+start to the replay's end, so the submit and the present too; [RHI.md](RHI.md#the-interface)) and
+the rest. The lists' timestamps mark the walk (`RD_PERF_TS_LISTS` its start, the last list's its
+end), which also gives the list in the first-use line (`port/render/rd_perf.c` (`walkBreakdown`,
+`rd__replay_list`)):
+
+    rd: slow walk 2639.5 ms (replay 3402, frame 2431): pipelines made 2630.1 ms (1), textures and buffers made 3.2 ms (4 and 0), the rest 6.2 ms (1 so far)
+
+(the numbers in both lines show the fields, not a measurement). Texture decodes run in the game's
+step (the `slow step` line's `texture decodes`) and the replay's texture and mesh uploads in its
+`upload` phase, before the walk, so neither is in it.
+
 | the set is skipped | `<why>` in the line |
 | --- | --- |
 | on a device of the table (`RhiLimits.lazyPipelines`, the lazy column of `kVuPlainOnly` in `port/rhi/vk/vk_device.c`); `[dev] pipeline_set = "full"` does not override it (a `window:` line says so) | `on this device (Adreno 740, issues 93 and 107)` |

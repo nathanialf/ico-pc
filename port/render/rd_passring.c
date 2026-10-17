@@ -32,6 +32,11 @@ void rd__passring_list(int list)
     s_curList = list >= 0 && list < 255 ? (uint8_t)list : 255;
 }
 
+int rd__passring_list_now(void)
+{
+    return s_curList == 255 ? -1 : (int)s_curList;
+}
+
 const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint32_t ch,
                               uint32_t depth, uint32_t dw, uint32_t dh, int storage, int post)
 {

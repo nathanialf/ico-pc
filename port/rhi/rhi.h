@@ -885,12 +885,15 @@ bool rhi_readback_texture(RhiTexture t, RhiViewAspect aspect, void *dst, size_t 
 
 /* ------------------------------------------------------------- performance
  * Counters since rhi_init, cumulative: the caller takes differences
- * (rd_core's per-replay records).  D3D12: only swapchains, presents,
- * presentNs, acquireNs (the wait on the frame latency object), fenceWaits
- * and fenceWaitNs are counted; every other field reads 0.  The
- * *Ns fields are CPU time blocked in the backend: fenceWaitNs on GPU
+ * (rd_core's per-replay records).  D3D12 keeps the counts at the Vulkan
+ * backend's points (d3d12_device.c rhi_get_stats; its bind group counts
+ * differ, docs/port/RHI.md) and reads 0 in the memory gauges,
+ * memoryAllocs, memoryFrees, memoryFallbacks and orderBarriers.  The
+ * *Ns fields are CPU time in the backend: fenceWaitNs blocked on GPU
  * completion (rhi_wait_frame, rhi_wait_idle, readbacks), acquireNs in the
- * swapchain acquire, presentNs in the present call. */
+ * swapchain acquire, presentNs in the present call, createNs in
+ * rhi_create_buffer and rhi_create_texture (the memory allocation and the
+ * object's creation). */
 typedef struct RhiStats {
     uint64_t buffersCreated, buffersDestroyed;
     uint64_t texturesCreated, texturesDestroyed;
@@ -903,6 +906,7 @@ typedef struct RhiStats {
     uint64_t fenceWaits, fenceWaitNs;
     uint64_t waitIdles, readbacks;
     uint64_t acquireNs, presentNs;
+    uint64_t createNs;
     /* swapchains made (rhi_resize_swapchain, a surface made again, a
      * rebuild a present found necessary): the first present on a new one
      * carries its warm-up (window_host.c, pace_first_present_pause) */
