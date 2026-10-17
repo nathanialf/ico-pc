@@ -490,6 +490,12 @@ static const struct {
        diagnostics */
     {"dev.blend", "blend"},
     {"dev.fog_path", "fog_path"},
+    /* the device profile's flags, one at a time (port/render/rd_profile.c):
+       DATE's path, the depth store plan, the folded blur, the UINT views */
+    {"dev.date_path", "date_path"},
+    {"dev.store_plan", "store_plan"},
+    {"dev.blur_fold", "blur_fold"},
+    {"dev.uint_view", "uint_view"},
     {"dev.gpu_checkpoints", "gpu_checkpoints"},
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
@@ -525,8 +531,13 @@ static const struct {
     const char *key;
     const char *env;
 } dev_env[] = {
-    {"blend", "ICO_RD_BLEND"},                     /* port/render/rd_dst_read.c rd__dst_init */
-    {"fog_path", "ICO_RD_FOG_PATH"},               /* port/render/rd_fog_path.c rd__fog_path_init */
+    {"blend", "ICO_RD_BLEND"},       /* port/render/rd_dst_read.c rd__dst_init */
+    {"fog_path", "ICO_RD_FOG_PATH"}, /* port/render/rd_fog_path.c rd__fog_path_init */
+    /* port/render/rd_profile.c rd__profile_init: the profile's flags */
+    {"date_path", "ICO_RD_DATE_PATH"},
+    {"store_plan", "ICO_RD_STORE_PLAN"},
+    {"blur_fold", "ICO_RD_BLUR_FOLD"},
+    {"uint_view", "ICO_RD_UINT_VIEW"},
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */
@@ -581,21 +592,29 @@ const char *ico_dev_env_value(const char *key, const char *value)
 {
     static const char *const on[] = {"1", "true", "on", "yes", NULL};
     static const char *const off[] = {"0", "false", "off", "no", NULL};
-    static const char *const paths[] = {"inplace", "copy", "buffer", NULL};
-    static const char *const blends[] = {"fixed", "attachment", "storage", NULL};
+    static const char *const paths[] = {"local", "inplace", "copy", "buffer", NULL};
+    static const char *const blends[] = {"fixed", "attachment", "storage", "exact", NULL};
+    static const char *const datePaths[] = {"stencil", "snapshot", NULL};
     static const char *const sets[] = {"full", "lazy", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
     }
     if (strcmp(key, "blend") == 0) {
-        /* exact is the default (the best exact path the device has that
-           passes its self-test); fixed, attachment or storage force one
-           (rd_dst_read.c rd__dst_init) */
+        /* fixed is the default (the fixed-function blend on every device);
+           attachment or storage opt into that exact blend, exact (the old
+           default's word) into the best exact mode the device has
+           (rd_dst_read.c rd__dst_asked_env, rd__dst_init) */
         return value_is(value, blends) ? value : NULL;
     }
     if (strcmp(key, "fog_path") == 0) {
         return value_is(value, paths) ? value : NULL;
+    }
+    if (strcmp(key, "date_path") == 0) {
+        return value_is(value, datePaths) ? value : NULL;
+    }
+    if (strcmp(key, "uint_view") == 0 && strcmp(value, "work") == 0) {
+        return "work"; /* the work buffers' view only; true both, false none */
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;
@@ -628,6 +647,11 @@ const char *ico_dev_env_export_value(const char *key, const char *value, const c
        startup_retry_value_no_prepass): its pictures are the same */
     if (key != NULL && strcmp(key, "vu_prepass") == 0 && startup_retry_value_no_prepass(retry)) {
         return "0";
+    }
+    /* ... and the loss order's robust step draws with robust access on
+       (startup_retry.h startup_retry_value_robust) */
+    if (key != NULL && strcmp(key, "gpu_robust") == 0 && startup_retry_value_robust(retry)) {
+        return "1";
     }
     return ico_dev_env_value(key, value);
 }
@@ -783,7 +807,8 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
        draws with the fixed-function
        blend: ICO_RD_BLEND=fixed over the ini's blend= and the environment,
        with or without an ini (ico_dev_env_export_value); and one at a step
-       that draws without the VU vertex pre-pass gets ICO_RD_VU_PREPASS=0 */
+       that draws without the VU vertex pre-pass gets ICO_RD_VU_PREPASS=0,
+       one at the loss order's robust step ICO_GPU_ROBUST=1 */
     {
         const char *v = ico_dev_env_export_value("blend", NULL, getenv(STARTUP_RETRY_ENV));
 
@@ -794,6 +819,11 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
         v = ico_dev_env_export_value("vu_prepass", NULL, getenv(STARTUP_RETRY_ENV));
         if (v != NULL) {
             put_env("ICO_RD_VU_PREPASS", v);
+        }
+        /* ICO_GPU_ROBUST=1 at the loss order's robust step */
+        v = ico_dev_env_export_value("gpu_robust", NULL, getenv(STARTUP_RETRY_ENV));
+        if (v != NULL) {
+            put_env("ICO_GPU_ROBUST", v);
         }
     }
 }

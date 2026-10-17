@@ -28,7 +28,12 @@
  *               backend with the fixed-function blend (ICO_RD_BLEND=fixed,
  *               host_config.c ico_ini_export, as the loss steps), which
  *               creates no such pipeline; skipped when the player chose
- *               the blending (blend= / [dev] blend, or ICO_RD_BLEND);
+ *               the blending (blend= / [dev] blend, or ICO_RD_BLEND).
+ *               The fixed-function blend is the default on every device
+ *               (the exact blend is an opt-in, [dev] blend), so a run
+ *               reaches this step only after the player opted in, and then
+ *               blendExplicit skips it: the step stays for a run whose
+ *               blend was not the player's choice;
  *   d3d12       a build with the D3D12 backend, whose player did not
  *               choose a backend (backend= / [video] backend): Direct3D
  *               12 (its own blending, not the fixed one); when it cannot
@@ -61,26 +66,39 @@
  * taken only when the run before lost the device:
  *   lossnoprepass  the same backend without the VU vertex pre-pass
  *            (ICO_RD_VU_PREPASS=0), when the losing run drew with it;
+ *   robust   the same backend with robust buffer and image access
+ *            (ICO_GPU_ROBUST=1, host_config.c ico_ini_export;
+ *            port/rhi/vk/vk_device.c), when the losing run drew with it
+ *            off by default (robustOffDefault: the caller's to set, where
+ *            the robust access default is off and the player did not set
+ *            gpu_robust; no caller sets it yet, see the note below);
  *   blend    the same backend with the fixed-function blend
  *            (ICO_RD_BLEND=fixed, port/render/rd_dst_read.c rd__dst_init:
  *            no destination-read passes, so no fragment shader interlock
  *            or rasterizer-ordered views), skipped
  *            when the losing run already drew with it or the player chose
- *            the blending (blend= / [dev] blend, or ICO_RD_BLEND);
+ *            the blending (blend= / [dev] blend, or ICO_RD_BLEND): with the
+ *            fixed-function blend the default, only a run whose exact blend
+ *            was not the player's reaches it;
  *   backend  the other backend (Direct3D 12 from Vulkan, Vulkan from
  *            Direct3D 12) with the fixed-function blend, in a build with
  *            both and when the player chose neither the backend nor a
  *            blending other than fixed; when Direct3D 12 cannot start, that
  *            run goes on with Vulkan itself (window_host.c).
  * After backend there is nothing left: the device-loss box is shown.
- * Every loss step's run draws without the pre-pass, and blend and backend
- * with the fixed-function blend.  A
+ * Every loss step's run draws without the pre-pass, robust with robust
+ * access on, and blend and backend with the fixed-function blend.  A
  * loss restart follows a crash step too (lazy, then blend; fixedblend,
  * whose run already draws with the fixed-function blend, then backend):
  * the step only grows, so a chain always ends.  The restarted run starts at the title as
  * a fresh launch: what was not saved was lost with the card, as at a quit.
  *
  * Android and iOS cannot start the game again (canRelaunch false): the box.
+ * So the robust step, whose reason is the Android default (robust access
+ * off there since the VU index values are dense), is never reached on
+ * Android through this order: a run there would need the next start to
+ * take it (diag_host.h's start-up activity file, as the lazy pipeline
+ * set), which is not built.
  *
  * Pure functions: no I/O, no allocation (the crash handler calls them).
  */
@@ -102,6 +120,7 @@ typedef enum {
     STARTUP_RETRY_D3D12,
     STARTUP_RETRY_LAZY,
     STARTUP_RETRY_LOSS_NO_PREPASS, /* "lossnoprepass": the loss order's first */
+    STARTUP_RETRY_LOSS_ROBUST,     /* "robust": robust access on (ICO_GPU_ROBUST=1) */
     STARTUP_RETRY_LOSS_BLEND,
     STARTUP_RETRY_LOSS_BACKEND,
 } StartupRetry;
@@ -127,14 +146,16 @@ typedef struct {
     bool prepassPipeline;    /* a crash: its note names a pipeline of the VU vertex
                                 pre-pass (startup_retry_note_has_vu_pre) */
     bool prepassWasOn;       /* the run drew with the VU vertex pre-pass */
+    bool robustOffDefault;   /* a loss: the run drew with robust access off by the
+                                platform's default (not gpu_robust): the robust step */
     const char *backendName; /* the run's backend; NULL or "": vulkan */
 } StartupRetryRun;
 
 /* the loss steps */
 static inline bool startup_retry_is_loss(StartupRetry step)
 {
-    return step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_BLEND ||
-           step == STARTUP_RETRY_LOSS_BACKEND;
+    return step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_ROBUST ||
+           step == STARTUP_RETRY_LOSS_BLEND || step == STARTUP_RETRY_LOSS_BACKEND;
 }
 
 /* value starts with the step name name and a ':' */
@@ -149,13 +170,22 @@ static inline bool startup_retry_value_names(const char *value, const char *name
 }
 
 /* Whether a value of ICO_STARTUP_RETRY (startup_retry_value) names a loss
- * step: "lossnoprepass:...", "blend:..." or "backend:...".  Inline, so
+ * step: "lossnoprepass:...", "robust:...", "blend:..." or "backend:...".  Inline, so
  * host_config.c, which some programs compile without the platform library,
  * can ask. */
 static inline bool startup_retry_value_is_loss(const char *value)
 {
     return startup_retry_value_names(value, "lossnoprepass") ||
+           startup_retry_value_names(value, "robust") ||
            startup_retry_value_names(value, "blend") || startup_retry_value_names(value, "backend");
+}
+
+/* Whether a value of ICO_STARTUP_RETRY names the loss order's robust step,
+ * whose run draws with robust access on (ICO_GPU_ROBUST=1 set by
+ * host_config.c ico_ini_export).  Inline, as startup_retry_value_is_loss. */
+static inline bool startup_retry_value_robust(const char *value)
+{
+    return startup_retry_value_names(value, "robust");
 }
 
 /* The steps whose runs draw with the fixed-function blend
@@ -190,8 +220,8 @@ static inline bool startup_retry_draws_no_prepass(StartupRetry step)
  * startup_retry_value_is_loss. */
 static inline bool startup_retry_value_no_prepass(const char *value)
 {
-    static const char *const names[] = {"noprepass",     "fixedblend", "d3d12",  "lazy",
-                                        "lossnoprepass", "blend",      "backend"};
+    static const char *const names[] = {"noprepass",     "fixedblend", "d3d12", "lazy",
+                                        "lossnoprepass", "robust",     "blend", "backend"};
     size_t i;
     for (i = 0; i < sizeof names / sizeof names[0]; i++) {
         if (startup_retry_value_names(value, names[i])) {
@@ -243,7 +273,7 @@ bool startup_retry_note_has_vu_pre(const char *note);
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen);
 
 /* "cache", "noprepass", "fixedblend", "d3d12", "lazy", "lossnoprepass",
- * "blend", "backend"; "" for NONE */
+ * "robust", "blend", "backend"; "" for NONE */
 const char *startup_retry_name(StartupRetry step);
 
 /* The variable's value for the run after a crash or loss on backendName

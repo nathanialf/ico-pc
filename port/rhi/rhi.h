@@ -639,9 +639,11 @@ typedef struct RhiLimits {
      * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
     bool moltenvk;
     /* v0.7.10 (docs/port/RENDER.md, the device profile).  localRead: Vulkan
-     * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read or
-     * Vulkan 1.4), whatever the destination read says: a pass's own
-     * attachments can be read as input attachments after
+     * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
+     * VkPhysicalDeviceVulkan14Features on a 1.4 device without the
+     * extension), enabled wherever offered, whatever the destination read
+     * says (vk_device.c; the device line's "local read yes|no"): a pass's
+     * own attachments can be read as input attachments after
      * rhi_cmd_local_read_barrier.  vendorId: the PCI vendor id (0 where
      * unknown).  dynamicDepth: pipelines may leave the depth test, write and
      * compare to rhi_cmd_set_depth_state (Vulkan 1.3 or
@@ -690,8 +692,10 @@ typedef struct RhiLimits {
      * NULL where unknown: driverText, the device line's driver part
      * ("device 10de:1b81; driver NVIDIA 566.36, version 566.36.0.0";
      * D3D12 "driver version 32.0.15.8157"); robustText, the robust access
-     * in force (Vulkan: "on, buffers (robustness2) ... (gpu_robust)" or
-     * "off"; D3D12 NULL: its own bounds rules always apply). */
+     * in force (Vulkan: "off (the default; gpu_robust = true turns it on)",
+     * the default on every platform, "off (gpu_robust)", or "on, buffers
+     * (robustness2) ... (gpu_robust)"; D3D12 NULL: its own bounds rules
+     * always apply). */
     const char *driverText;
     const char *robustText;
 } RhiLimits;

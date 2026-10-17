@@ -22,7 +22,8 @@ static void run_host(void *user)
 
 int main(int argc, char **argv)
 {
-    /* the blend path: MoltenVK's default (fixed-function), port/render/rd_dst_read.c */
+    /* the blend path: the fixed-function blend, the default everywhere
+       (port/render/rd_dst_read.c); nothing to set here */
     MainArgs args = {argc, argv, 1};
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");

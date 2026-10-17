@@ -351,6 +351,11 @@ typedef void (*RdWalkFn)(void *user, int list, uint32_t index, const RdCmd *cmd,
                          const RdStateBlock *state);
 void rd__walk(const RdFrame *f, int keep, RdStateBlock *state, RdWalkFn fn, void *user);
 
+/* RdTargetRec.dstUsage's bits (rd__dst_target_usage) */
+#define RD_DST_USAGE_STORAGE 1u    /* the exact blend's storage read */
+#define RD_DST_USAGE_ATTACHMENT 2u /* the exact blend's attachment read */
+#define RD_DST_USAGE_LOCAL_DATE 4u /* DATE's local read of the colour (not the blend) */
+
 /* ------------------------------------------------------------- targets
  * Ids: named target n (RdTargetId) is n + 1; temporary targets are
  * (generation << 16) | (slot + 1) with slot >= RD_TARGET_COUNT. */
@@ -394,8 +399,10 @@ typedef struct RdTargetRec {
      * (rd_upload.c rd__clear_new_targets: colour 0, depth 1.0) at the next replay
      * (clearPending) */
     uint8_t parked, clearPending;
-    /* the destination reads the colour texture was made for
-     * (rd__dst_target_usage: 1 storage, 2 input attachment), 0 none */
+    /* the reads the colour texture was made for (rd__dst_target_usage):
+     * RD_DST_USAGE_STORAGE and RD_DST_USAGE_ATTACHMENT the exact blend's
+     * (only the mode [dev] blend opted into), RD_DST_USAGE_LOCAL_DATE
+     * DATE's local read (RdProfile.dateStencil); 0 none */
     uint8_t dstUsage;
     /* the colour texture (and its snapshot) has the RGBA8_UINT view
      * (RHI_TEX_UINT_VIEW: rd_core.c rd__target_create_gpu, under
@@ -959,14 +966,35 @@ typedef struct RdProfile {
     bool uintViewWork;  /* the work-class targets get the RGBA8_UINT view */
     bool uintViewScene; /* SCENE, WORK2 and DISPLAY too (immediate-mode GPUs) */
     bool carefulSet;    /* the start-up set under RdPipelineSetPolicy's careful values */
-    char text[256];     /* the start line's and the summary's words, as in force */
+    /* rd_profile.c: the device class's name for the lines; per flag
+     * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
+     * turned it off (rd__profile_self_test_off) */
+    char cls[96];
+    uint16_t devSet, selfTestOff;
+    char text[256]; /* the summary's words, as in force */
 } RdProfile;
+
+/* RdProfile's flags, for its marks (devSet, selfTestOff) */
+enum {
+    RD_PROFILE_FOG_LOCAL = 1u << 0,
+    RD_PROFILE_DATE_STENCIL = 1u << 1,
+    RD_PROFILE_STORE_PLAN = 1u << 2,
+    RD_PROFILE_BLUR_FOLD = 1u << 3,
+    RD_PROFILE_UINT_WORK = 1u << 4,
+    RD_PROFILE_UINT_SCENE = 1u << 5,
+};
 
 /* fills g_rd.profile from the device (rd_profile.c); called by rd_init after
  * rd__gpu_init, before the self-tests; logs "rd: profile: ..." */
 void rd__profile_init(void);
-/* the profile's words for the summary line ("profile tiler: fog local, ...") */
+/* the profile's words for the summary line ("tile-based GPU (Imagination,
+ * Vulkan): fog local, DATE stencil, ...") */
 const char *rd__profile_text(void);
+/* A self-test that found its mechanism wrong on this device turns the
+ * flag (one RD_PROFILE_* bit) off: the flag false, "(self-test)" after it
+ * in the summary's words, and one line "rd: profile: <flag> off
+ * (self-test)". */
+void rd__profile_self_test_off(unsigned flag);
 
 /* ------------------------------------------------------------ pipelines */
 typedef enum RdVsId {
@@ -1207,10 +1235,12 @@ bool rd__fs_has_no_dual(uint8_t fs);
 
 /* ------------------------------------------------ the exact blend
  * rd_dst_read.c (the design is at its top).  rd__dst_init at rd_init
- * picks g_rd.dstMode (RdBlendExact) from the device and ICO_RD_BLEND and
+ * sets g_rd.dstMode (RdBlendExact): the fixed-function blend unless
+ * ICO_RD_BLEND ([dev] blend) opted into an exact mode the device has, and
  * logs it.  rd__dst_target_usage: the RhiTextureUsage bits a colour
- * target of format fmt is made with (the destination reads the device has)
- * and *dstUsage its RdTargetRec.dstUsage.  rd__fs_has_dst: whether entry fs
+ * target of format fmt is made with (the opted-in destination read, DATE's
+ * local read) and *dstUsage its RdTargetRec.dstUsage (RD_DST_USAGE_*).
+ * rd__fs_has_dst: whether entry fs
  * has the _dstrov / _dstatt twins (the gs_dual_out entries).
  * rd__expand_dst: the passes in[0..n) as drawn under destination read
  * mode (RdBlendExact; RD_BLEND_EXACT_OFF copies them), into out (at most 2
@@ -1226,10 +1256,14 @@ void rd__dst_init(void);
 /* The mode ICO_RD_BLEND asked for when the device has it (kept by
  * rd_blend_selftest whatever its result), -1 when none was asked. */
 int rd__dst_asked(void);
-/* true when the platform default (MoltenVK) took the fixed-function blend
- * from a device that has an exact mode: the self-test still runs, the
- * default stays (rd_dst_read.c) */
-bool rd__dst_platform_fixed(void);
+/* ICO_RD_BLEND ([dev] blend) as read before the modules exist (rd__gpu_init
+ * makes only the asked mode's layout and twins): RD_BLEND_EXACT_OFF for
+ * fixed (off, 0), RD_BLEND_EXACT_STORAGE for storage (interlock, rov),
+ * RD_BLEND_EXACT_ATTACHMENT for attachment, the device's best exact mode for
+ * exact (the attachment read, else the storage read: needs rhi_init), -1
+ * when unset or another word.  Whether the device has it is rd__dst_init's
+ * check. */
+int rd__dst_asked_env(void);
 /* rd__fog_scene_remade: a new SCENE size runs the blend's self-test again
  * once rd_blend_selftest has run; rd__gpu_shutdown frees its objects. */
 void rd__blend_scene_remade(void);

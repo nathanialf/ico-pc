@@ -637,7 +637,8 @@ void rd_index_span_text(char *out, size_t size);
 bool rd_fog_selftest(void);
 /* What the renderer decided at its start, for the window's summary line
  * (diag_host.h ico_diag_set_summary): "blend <mode> (self-test: ...);
- * index values dense (marks in the stream); fog <path> (self-test: ...);
+ * profile <device class>: fog local, DATE stencil, ... (rd_profile.c, the
+ * flags as in force); index values dense (marks in the stream); fog <path> (self-test: ...);
  * VU shaders plain only (issue 107)" or "VU shaders plain and extended" (the
  * policy rd_init chose, rd__vu_policy_init), and ", pass split every N" when
  * on, then "; VU pre-pass on (self-test: ok)" or "off (self-test: <reason>)"
@@ -645,28 +646,25 @@ bool rd_fog_selftest(void);
  * pipelines the start-up set" or "; pipelines on first use (no start-up
  * set)" (rd_pipelines_lazy). */
 void rd_summary_text(char *out, size_t size);
-/* The exact blend's self-test (rd_blend_selftest.c): a frame of its own
+/* The blend's self-test (rd_blend_selftest.c): a frame of its own
  * (never recorded, never presented) draws on SCENE at its real size and
- * scale, without MSAA, what the destination read must get right: the
- * forest's tint sprite over eight cells of known colours (PCSX2's
- * pixels), a textured LERP quad whose clear texels must leave the colour
- * behind them, two overlapping LERP draws (the second must read the
- * first's result) and a glyph through the text sheet's shader.  It is
- * drawn with the fixed-function blend first (the reference; within 2
- * levels of the GS arithmetic, the two-pass fallback tried when the
- * dual-source blend is not), then with each exact mode the device has in
- * rd_init's order (attachment read, then interlock or ROV), stopping at
- * the first whose pixels are within 1 level of the GS arithmetic and of
- * the reference's glyph; that mode is the one in force from then on, none
- * passing leaves the fixed-function blend.  An ICO_RD_BLEND attachment or
- * storage is kept whatever its result (logged); ICO_RD_BLEND=fixed and a
- * device without an exact mode run nothing.  One log line, "blend: <mode>
- * (self-test: ...)", names the choice with every result, and a failing
- * mode's worst sample gets a line of its own.  ICO_RD_BLEND_SABOTAGE=
- * attachment,storage,fixed (tests) makes those modes' read-back white.
- * The window calls it before rd_precreate_pipelines (the set made is the
- * chosen mode's); after that it runs again whenever SCENE is made at a new
- * size.  Waits for the GPU.  Returns whether the mode in force passed. */
+ * scale, without MSAA, what the blend must get right: the forest's tint
+ * sprite over eight cells of known colours (PCSX2's pixels), a textured
+ * LERP quad whose clear texels must leave the colour behind them, two
+ * overlapping LERP draws (the second must read the first's result) and a
+ * glyph through the text sheet's shader.  It runs on every device: the
+ * fixed-function blend first (the reference and the default; within 2
+ * levels of the GS arithmetic, the two-pass fallback tried and kept when
+ * the dual-source blend is not), then, only when ICO_RD_BLEND ([dev]
+ * blend) opted into an exact mode the device has, that mode (within 1
+ * level of the GS arithmetic and of the reference's glyph), kept whatever
+ * its result.  One log line, "blend: <mode> (self-test: ...)", names the
+ * blend in force with every result, and a failing entry's worst sample
+ * gets a line of its own.  ICO_RD_BLEND_SABOTAGE=attachment,storage,fixed,
+ * twopass (tests) makes those entries' read-back white.  The window calls
+ * it before rd_precreate_pipelines (the set made is the blend's in force);
+ * after that it runs again whenever SCENE is made at a new size.  Waits
+ * for the GPU.  Returns whether the blend in force passed. */
 bool rd_blend_selftest(void);
 /* The VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): a frame of
  * its own (never recorded, never presented) draws three meshes made for it
@@ -842,12 +840,13 @@ bool rd_no_dual(void);
  * (the LERPs, Cd*FIX + Cs, the Ad forms, Cd*As + Cd, PABE on the
  * premultiplied forms) computed in the fragment shader from the
  * destination, as the GS computes them, through the device's destination
- * read.  rd_init picks the mode from the device (RhiLimits) and logs it:
- * "blend: exact (attachment read)", "exact (interlock)", "exact (rov)" or
- * "fixed-function (rounds up)"; ICO_RD_BLEND=fixed|storage|attachment
- * overrides the choice (one the device lacks is refused and logged).
- * rd_blend_selftest then checks the choice on the device and may fall back
- * to the next mode.
+ * read.  The fixed-function blend is the default on every device: rd_init
+ * logs "blend: fixed-function (the default; ...)", and only
+ * ICO_RD_BLEND=storage|attachment ([dev] blend; exact: the device's best)
+ * opts into "exact (interlock)", "exact (rov)" or "exact (attachment
+ * read)" where the device has it (one it lacks is refused and logged;
+ * the renderer then makes nothing of the other mode).
+ * rd_blend_selftest then checks the blend in force on the device.
  * rd_set_blend_exact switches it for the next draws (tests: the same frame
  * both ways) and returns false for a mode the device or its targets lack. */
 typedef enum RdBlendExact {

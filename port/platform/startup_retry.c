@@ -45,6 +45,9 @@ static StartupRetry crash_next(const StartupRetryRun *run, const char *name, boo
                  name);
         return STARTUP_RETRY_NO_PREPASS;
     }
+    /* the fixed-function blend is the default (port/render/rd_dst_read.c):
+       a destination-read pipeline exists only where the player opted into
+       the exact blend, which blendExplicit then keeps */
     if (step < STARTUP_RETRY_CRASH_BLEND && run->dstPipeline && !run->blendExplicit &&
         !run->blendWasFixed) {
         snprintf(reason, reasonLen,
@@ -86,6 +89,15 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
                  name);
         return STARTUP_RETRY_LOSS_NO_PREPASS;
     }
+    if (step < STARTUP_RETRY_LOSS_ROBUST && run->robustOffDefault) {
+        snprintf(reason, reasonLen,
+                 "the next run on %s checks the bounds of every buffer and image read (robust "
+                 "access)",
+                 name);
+        return STARTUP_RETRY_LOSS_ROBUST;
+    }
+    /* skipped by default: blendWasFixed is true unless the player opted
+       into the exact blend, and then blendExplicit is */
     if (step < STARTUP_RETRY_LOSS_BLEND && !run->blendWasFixed && !run->blendExplicit) {
         snprintf(reason, reasonLen, "the next run on %s draws with the simpler blending", name);
         return STARTUP_RETRY_LOSS_BLEND;
@@ -233,6 +245,8 @@ const char *startup_retry_name(StartupRetry step)
         return "lazy";
     case STARTUP_RETRY_LOSS_NO_PREPASS:
         return "lossnoprepass";
+    case STARTUP_RETRY_LOSS_ROBUST:
+        return "robust";
     case STARTUP_RETRY_LOSS_BLEND:
         return "blend";
     case STARTUP_RETRY_LOSS_BACKEND:
@@ -261,10 +275,10 @@ int startup_retry_value(StartupRetry next, const char *backendName, char *out, s
 
 int startup_retry_parse(const char *value, StartupRetry *step, char *backend, size_t size)
 {
-    static const StartupRetry steps[] = {STARTUP_RETRY_CACHE,       STARTUP_RETRY_NO_PREPASS,
-                                         STARTUP_RETRY_CRASH_BLEND, STARTUP_RETRY_D3D12,
-                                         STARTUP_RETRY_LAZY,        STARTUP_RETRY_LOSS_NO_PREPASS,
-                                         STARTUP_RETRY_LOSS_BLEND,  STARTUP_RETRY_LOSS_BACKEND};
+    static const StartupRetry steps[] = {
+        STARTUP_RETRY_CACHE,       STARTUP_RETRY_NO_PREPASS, STARTUP_RETRY_CRASH_BLEND,
+        STARTUP_RETRY_D3D12,       STARTUP_RETRY_LAZY,       STARTUP_RETRY_LOSS_NO_PREPASS,
+        STARTUP_RETRY_LOSS_ROBUST, STARTUP_RETRY_LOSS_BLEND, STARTUP_RETRY_LOSS_BACKEND};
     const char *colon;
     size_t i, n;
     *step = STARTUP_RETRY_NONE;
@@ -304,8 +318,10 @@ const char *startup_retry_what(StartupRetry step)
     case STARTUP_RETRY_NO_PREPASS:
         return "this run draws without the 3D vertex pre-pass on the same graphics backend";
     case STARTUP_RETRY_CRASH_BLEND:
-        return "this run draws with the simpler blending on the same graphics backend, without "
-               "the 3D vertex pre-pass";
+        /* reached only by a run whose exact blend was not the player's
+           choice: the fixed-function blend is the default */
+        return "this run draws with the simpler blending (the graphics card's own, the "
+               "default) on the same graphics backend, without the 3D vertex pre-pass";
     case STARTUP_RETRY_D3D12:
         return "this run uses Direct3D 12, without the 3D vertex pre-pass";
     case STARTUP_RETRY_LAZY:
@@ -315,10 +331,15 @@ const char *startup_retry_what(StartupRetry step)
         return "this run draws without the 3D vertex pre-pass on the same graphics backend; it "
                "starts at the title as a fresh launch (what was not saved was lost when the "
                "card stopped)";
+    case STARTUP_RETRY_LOSS_ROBUST:
+        return "this run checks the bounds of every buffer and image read (robust access) on the "
+               "same graphics backend, without the 3D vertex pre-pass; it starts at the title as "
+               "a fresh launch (what was not saved was lost when the card stopped)";
     case STARTUP_RETRY_LOSS_BLEND:
-        return "this run draws with the simpler blending on the same graphics backend, without "
-               "the 3D vertex pre-pass; it starts at the title as a fresh launch (what was not "
-               "saved was lost when the card stopped)";
+        return "this run draws with the simpler blending (the graphics card's own, the "
+               "default) on the same graphics backend, without the 3D vertex pre-pass; it starts "
+               "at the title as a fresh launch (what was not saved was lost when the card "
+               "stopped)";
     case STARTUP_RETRY_LOSS_BACKEND:
         return "this run uses the other graphics backend with the simpler blending, without "
                "the 3D vertex pre-pass; it starts at the title as a fresh launch (what was not "

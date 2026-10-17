@@ -1088,6 +1088,12 @@ static bool vkr_create_device(void)
      *                (VK_EXT_ or VK_ARM_rasterization_order_attachment_access,
      *                the same structure) and VK_KHR_dynamic_rendering_local_read
      *                (input attachments under dynamic rendering).
+     * Local read itself (RhiLimits.localRead: a pass's own attachments read
+     * as input attachments) is enabled wherever the device offers it,
+     * whatever the destination read: VK_KHR_dynamic_rendering_local_read, or
+     * on a Vulkan 1.4 device without the extension
+     * VkPhysicalDeviceVulkan14Features.dynamicRenderingLocalRead (core; the
+     * effective version is capped by the instance's, s_instanceApi).
      * ICO_VK_FAKE_NO_DST=1 leaves both off, as on a device without them.
      * The attachment read is not offered on Qualcomm's own driver (below;
      * RhiLimits.rasterOrderOff). */
@@ -1116,6 +1122,9 @@ static bool vkr_create_device(void)
                                VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
         const bool extLocal =
             vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
+        const bool core14 = !extLocal && g_vkr.apiVersion >= VK_API_VERSION_1_4;
+        VkPhysicalDeviceVulkan14Features q14 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
         void *chain = NULL;
         if (extInterlock) {
             qInterlock.pNext = chain;
@@ -1128,6 +1137,10 @@ static bool vkr_create_device(void)
         if (extLocal) {
             qLocal.pNext = chain;
             chain = &qLocal;
+        }
+        if (core14) {
+            q14.pNext = chain;
+            chain = &q14;
         }
         if (chain) {
             VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
@@ -1163,11 +1176,12 @@ static bool vkr_create_device(void)
                      fakeAdreno ? "(ICO_VK_FAKE_ADRENO)" : g_vkr.driverVersion);
         }
         g_vkr.rasterOrder = hasOrder && g_vkr.rasterOrderOff[0] == '\0';
-        /* local read for the attachment read, and with the interlock for
-         * the barriers a pass may record between draws (vk_cmd.c
-         * vkr_dst_order) */
-        g_vkr.localRead =
-            extLocal && qLocal.dynamicRenderingLocalRead && (g_vkr.rasterOrder || g_vkr.interlock);
+        /* local read whenever offered (the attachment read needs it, the
+         * interlock's barriers between draws use it, vk_cmd.c
+         * vkr_dst_order, and the renderer's profile reads it,
+         * port/render/rd_profile.c); ICO_VK_FAKE_NO_DST leaves it off too */
+        g_vkr.localRead = !fake && ((extLocal && qLocal.dynamicRenderingLocalRead) ||
+                                    (core14 && q14.dynamicRenderingLocalRead));
         /* the interlock and the rasterization-order access order a
          * destination read after the pass's earlier draws, so no barrier
          * is needed between them; the validation layer's synchronisation
@@ -1176,22 +1190,25 @@ static bool vkr_create_device(void)
          * before such a draw */
         {
             const char *sb = getenv("ICO_VK_STORAGE_BARRIERS");
-            g_vkr.storageBarriers =
-                g_vkr.localRead && (g_vkr.validationOn || (sb && sb[0] && sb[0] != '0'));
+            g_vkr.storageBarriers = g_vkr.localRead && (g_vkr.rasterOrder || g_vkr.interlock) &&
+                                    (g_vkr.validationOn || (sb && sb[0] && sb[0] != '0'));
         }
+        const char *localSay = !g_vkr.localRead ? "no" : extLocal ? "yes" : "yes (Vulkan 1.4)";
         if (g_vkr.rasterOrderOff[0]) {
             VKR_LOG("destination read: interlock %s, rasterization-order attachment read off on "
                     "this driver (Qualcomm driver %s%s: wrong results on Adreno; "
-                    "ICO_VK_ATTACHMENT_READ=1 tries it)",
+                    "ICO_VK_ATTACHMENT_READ=1 tries it); local read %s",
                     g_vkr.interlock ? "yes" : "no", g_vkr.driverVersion,
-                    fakeAdreno ? ", ICO_VK_FAKE_ADRENO" : "");
+                    fakeAdreno ? ", ICO_VK_FAKE_ADRENO" : "", localSay);
         } else {
-            VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s",
+            VKR_LOG("destination read: interlock %s, rasterization-order attachment read %s%s%s; "
+                    "local read %s",
                     g_vkr.interlock ? "yes" : "no", g_vkr.rasterOrder ? "yes" : "no",
                     fake              ? " (ICO_VK_FAKE_NO_DST)"
                     : fakeNoInterlock ? " (ICO_VK_FAKE_NO_INTERLOCK)"
                                       : "",
-                    hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "");
+                    hasOrder && qualcomm ? " (Qualcomm driver: ICO_VK_ATTACHMENT_READ=1)" : "",
+                    localSay);
         }
         /* only what is used is enabled; the queries' structures become the
          * enables, everything else in them off */
@@ -1213,7 +1230,8 @@ static bool vkr_create_device(void)
                                    ? VK_EXT_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME
                                    : VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME;
         }
-        if (g_vkr.localRead) {
+        if (g_vkr.localRead && extLocal) {
+            /* core on a 1.4 device without it: the feature structure alone */
             exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME;
         }
     }
@@ -1302,7 +1320,7 @@ static bool vkr_create_device(void)
     }
 
     /* GPU loss diagnostics (VkrState): the fault report whenever offered;
-     * robust access under gpu_robust (on by default on Android);
+     * robust access under gpu_robust (off by default everywhere);
      * checkpoints and the address binding report under gpu_checkpoints.
      * Queried, then the queries' structures become the enables with only
      * what is used on. */
@@ -1313,22 +1331,20 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceAddressBindingReportFeaturesEXT qBind = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
     {
-        /* robust access: on by default on Android, where a Mali GPU reads
-         * storage buffers through plain pointers and an out-of-range read
-         * loses the device (issue 95); off by default on the desktop, whose
-         * GPUs bound their descriptors in hardware.  gpu_robust overrides
-         * either way (ico-pc.ini [dev], exported as ICO_GPU_ROBUST;
-         * gpu_robust=false turns it all off).  Wherever robust access is on,
+        /* robust access: off by default on every platform.  Android had it
+         * on, because a Mali GPU reads storage buffers through plain
+         * pointers and an out-of-range read lost the device (issue 95); that
+         * read is gone since the VU index values are dense (marks in the
+         * stream), and the bounds checks cost every StructuredBuffer read of
+         * the VU path.  gpu_robust = true turns it on (ico-pc.ini [dev],
+         * exported as ICO_GPU_ROBUST=1; the loss order's robust step,
+         * port/platform/startup_retry.h, exports it for its run).  Wherever robust access is on,
          * VK_EXT_robustness2's robustBufferAccess2 and robustImageAccess2 go
          * with it when the device offers them (reads past a range give zero,
          * on every descriptor kind); nullDescriptor only when gpu_robust
          * asks */
         const int robustSaid = vkr_env_switch("ICO_GPU_ROBUST");
-#ifdef __ANDROID__
-        const bool robustDefault = true;
-#else
         const bool robustDefault = false;
-#endif
         const bool wantRobust = robustSaid >= 0 ? robustSaid == 1 : robustDefault;
         const bool wantCheck = vkr_env_on("ICO_GPU_CHECKPOINTS");
         const bool extFault = vkr_device_has_ext(g_vkr.phys, VK_EXT_DEVICE_FAULT_EXTENSION_NAME);
@@ -1393,16 +1409,20 @@ static bool vkr_create_device(void)
         /* what is on, and whether gpu_robust named it or it is the
            platform's default */
         char robustSay[160];
+        const char *retry = getenv("ICO_STARTUP_RETRY");
+        const bool robustRetry = retry != NULL && strncmp(retry, "robust:", 7) == 0;
         if (!g_vkr.robust) {
             snprintf(robustSay, sizeof robustSay, "%s",
                      wantRobust        ? "asked for, not offered"
                      : robustSaid == 0 ? "off (gpu_robust)"
-                                       : "off");
+                                       : "off (the default; gpu_robust = true turns it on)");
         } else {
             snprintf(robustSay, sizeof robustSay, "on, buffers%s%s%s (%s)",
                      buffer2 ? " (robustness2)" : "", image2 ? " and images (robustness2)" : "",
                      nullDesc ? ", null descriptors" : "",
-                     robustSaid == 1 ? "gpu_robust" : "the Android default");
+                     robustRetry       ? "the restart after the graphics card stopped responding"
+                     : robustSaid == 1 ? "gpu_robust"
+                                       : "the default");
         }
         snprintf(s_robustText, sizeof s_robustText, "%s", robustSay);
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "

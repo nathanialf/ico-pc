@@ -208,10 +208,14 @@ bool rd__gpu_init(void *sdlWindow)
               g_rd.layoutVu.id;
     /* the exact blend's group 3 (rd_dst_read.c): the target as a storage
      * texture (interlock, ROV) or as the pass's input attachment; made only
-     * where the device has the destination read (a missing piece leaves
-     * that mode out, rd__dst_init, never the renderer) */
-    const bool dstStorage = lim->fragmentInterlock || lim->rov;
-    const bool dstAttach = lim->rasterOrderAttachment;
+     * for the mode [dev] blend / ICO_RD_BLEND opted into, where the device
+     * has that destination read (the default fixed-function blend makes
+     * neither; a missing piece leaves the mode out, rd__dst_init, never the
+     * renderer) */
+    const int dstAsked = rd__dst_asked_env();
+    const bool dstStorage =
+        dstAsked == RD_BLEND_EXACT_STORAGE && (lim->fragmentInterlock || lim->rov);
+    const bool dstAttach = dstAsked == RD_BLEND_EXACT_ATTACHMENT && lim->rasterOrderAttachment;
     if (dstStorage) {
         static const RhiBindSlot sd[1] = {{0, RHI_BIND_STORAGE_TEXTURE, FS}};
         g_rd.layoutDstStorage = makeLayout(sd, 1, "rd dst storage");
@@ -260,8 +264,8 @@ bool rd__gpu_init(void *sdlWindow)
         /* without dual-source blending the gs_dual_out entries are not
          * created (their second output needs the feature); their *_nodual
          * twins always are (rd_set_no_dual) */
-        /* the exact blend's twins (rd_dst_read.c), for the destination
-         * reads the device has; their absence only leaves the mode out */
+        /* the exact blend's twins (rd_dst_read.c), for the opted-in
+         * destination read alone; their absence only leaves the mode out */
         if (rd__fs_has_dst((uint8_t)i)) {
             char name[64];
             if (dstStorage) {

@@ -278,8 +278,8 @@ typedef struct VkrState {
      * vkr_lost_report, printed once at the first VK_ERROR_DEVICE_LOST):
      *   robust       robustBufferAccess (+ VK_EXT_robustness2's
      *                robustImageAccess2 and nullDescriptor when offered),
-     *                ICO_GPU_ROBUST=1 (ico-pc.ini gpu_robust), on by
-     *                default on Android (ICO_GPU_ROBUST=0 turns it off);
+     *                ICO_GPU_ROBUST=1 (ico-pc.ini gpu_robust, or the loss
+     *                order's robust step), off by default everywhere;
      *   deviceFault  VK_EXT_device_fault enabled (whenever offered):
      *                vkGetDeviceFaultInfoEXT's addresses and description;
      *   checkpoints  VK_NV_device_diagnostic_checkpoints enabled,
