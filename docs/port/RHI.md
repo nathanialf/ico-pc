@@ -61,7 +61,10 @@ carries out every deferred destroy (`port/rhi/rhi.h`, commands).
 D32F_S8 (the scene's depth-stencil; the Vulkan backend may back it with D24S8,
 `RhiLimits.depthStencilFormatName`), BGRA8 (the swapchain), BC1/2/3/7 (texture packs, only with
 `RhiLimits.bcTextures`, copy-destination and sampled only), R32 UINT (the scene depth's bits for the
-fog). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
+fog), RGBA32 UINT (the VU vertex pre-pass's record planes, a colour target and copy source: a
+colour attachment and sampled on every Vulkan device by the specification's required format
+support, a render target at Direct3D 12 feature level 11_0; D3D12 makes it typeless, viewed UINT,
+[RENDER.md](RENDER.md#the-vertex-pre-pass)). Vertex formats are F32x1..4, U8x4 UNORM and UINT, U16x2 UINT, U32x1 (`port/rhi/rhi.h`,
 formats).
 
 **Resources.** Buffers have a usage mask and a memory kind: DEVICE (static meshes), UPLOAD (the
@@ -76,11 +79,17 @@ resources).
 sampleable; a stencil-only writer uses DEPTH_WRITE with `depthWrite` false), SHADER_READ, COPY_SRC,
 COPY_DST, PRESENT, STORAGE and RENDER_TARGET_READ. A barrier is needed only when a texture changes
 state: two writes in the same state are ordered by the backend. Buffers have no barriers: a buffer
-copy is made visible to every later read and waits for every earlier read of its destination
-(`port/rhi/rhi.h`, commands).
+copy is made visible to every later read and waits for every earlier read of its destination, and
+so is a texture-to-buffer copy into a device buffer a shader reads (one made for vertex, index,
+uniform or storage reads: the pre-pass's record buffer). The Vulkan backend folds that copy's wait
+into the copy's own hazard barrier and holds its visibility back as a memory barrier the next pass,
+copy or command issues with its own (`VkrCmdList.pendMemDst`); D3D12 moves the buffer to
+COPY_DEST and back to GENERIC_READ around the copy (`port/rhi/rhi.h`, commands
+(`rhi_cmd_copy_texture_to_buffer`); `port/rhi/vk/vk_cmd.c` (`vkr_hz_copy`, `vkr_flush_barriers`)).
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
-1 the per-draw uniforms (b1; the VU programs' b2, b3) and the VU vertex stream (t0), group 2 the
+1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the vertex
+pre-pass's record (t4), group 2 the
 textures t1..t4 and samplers s1..s4. Backends map these onto descriptor sets or root parameters; rd
 never sees the mapping. Binding types: uniform buffer, storage buffer, sampled texture, sampler, a
 dynamic uniform buffer whose offset is given at bind time (`rhi_cmd_set_bind_group_offsets`, at most
@@ -90,7 +99,8 @@ current frame only (`port/rhi/rhi.h`, bind groups).
 
 **Pipelines and passes.** `RhiPipelineDesc` carries the two shaders, the layouts, vertex bindings
 and attributes, topology (triangle list or strip, line list, point list), up to
-`RHI_MAX_COLOR_TARGETS` (2) blend states with dual-source factors (`RHI_BF_SRC1_*`, only with
+`RHI_MAX_COLOR_TARGETS` (3: the VU vertex pre-pass draws its record's three planes; every other
+pass one target) blend states with dual-source factors (`RHI_BF_SRC1_*`, only with
 `RhiLimits.dualSourceBlend`), the depth-stencil state (depth grows with GS Z: GS GEQUAL is GEQUAL),
 colour and depth formats, a sample count and `dstRead`: NONE, STORAGE (the target bound as a
 rasterizer-ordered storage texture, no colour target) or ATTACHMENT (colour attachment 0 read as an
@@ -132,8 +142,10 @@ tile-based phone GPU: Qualcomm, ARM, Imagination, Samsung, Apple, Broadcom or an
 false on D3D12), the MSAA counts every renderer target supports and sample-rate shading, and the
 destination read's three bits: `fragmentInterlock` (Vulkan), `rov` (D3D12) and
 `rasterOrderAttachment` (Vulkan), and `rasterOrderOff`, why the attachment read is off on a device
-that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise) (`port/rhi/rhi.h`
-(`RhiLimits`)).
+that has it (`attachment read off: Qualcomm driver <version>`, NULL otherwise), and
+`colorBytesPerPixel`, the bytes one pixel of a pass's colour targets may take together: 0 (no
+bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image block (below)
+(`port/rhi/rhi.h` (`RhiLimits`)).
 
 **Device and swapchain.** `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
 [vsync](ARCHITECTURE.md#terms), debug layers and the app name. `rhi_device_lost` turns true once the
@@ -521,6 +533,14 @@ vendor 0x106B with the id unknown under `ICO_RHI_MOLTENVK`) and is logged as `; 
 `rhi_vk:` device line. The renderer reads it for its default blend: fixed-function, because the
 exact blend's pass switching costs 3 to 4 times the frame there
 ([RENDER.md](RENDER.md#destination-reads-and-blend-paths), issue 102).
+
+`RhiLimits.colorBytesPerPixel` under MoltenVK is the Metal family's "Maximum implicit image block
+size, per pixel, per sample, when using multiple color render targets" (Metal Feature Set Tables)
+for the Apple GPU the device name gives (`rhi_metal_color_bytes`: `Apple A9 GPU` and `Apple A10 GPU`
+32 bytes, A11 to A13 64, A14 and later and the M-series 128; an Intel or AMD GPU of a Mac 0, no
+bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on an A9 or A10
+([RENDER.md](RENDER.md#the-vertex-pre-pass); `port/rhi/rhi_driver_version.c`;
+`port/rhi/vk/vk_device.c` (`vkr_fill_limits`)).
 
 ## Tests
 

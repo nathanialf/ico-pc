@@ -593,8 +593,10 @@ iOS) and logs its path (`port/platform/host_config.c` (`ico_host_logs_dir`)). Th
 `RdPerfRecord`: the replay and frame numbers, interpolated, keep, presented, the total and each CPU
 phase in ms, the backend's fence wait, the creation, bind, draw, barrier, copy and upload counts,
 the upload bytes, `gpu_valid`, the GPU total, uploads, each list `gpu_list<N>_ms`, the present, the
-replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms` and
-`gpu_effects_partial` (`port/platform/window_host.c` (`perf_csv_open`, `perf_csv_line`)). The file
+replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
+`gpu_effects_partial`, and the VU vertex pre-pass's `gpu_prepass_ms`, `vu_pre_vertices`,
+`vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](RENDER.md#the-vertex-pre-pass))
+(`port/platform/window_host.c` (`perf_csv_open`, `perf_csv_line`)). The file
 is flushed after each drain, every vsync (`perf_drain`).
 
 ## Tests

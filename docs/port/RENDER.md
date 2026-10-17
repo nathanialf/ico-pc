@@ -17,7 +17,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
-| `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
+| `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex pre-pass; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -399,6 +399,8 @@ bones for a skinned draw, and sets the draw's flags: a chain clip plane, the fre
 here and marks every triangle of a grid of two strips or more joined, as the draw's own mark
 (`port/render/rd_replay_vu.c` (`rd__replay_vu`, `doVuDraw`); `port/render/rd_pipeline.c` (`rd__vu_extended`)). At start the renderer logs `rd: VU
 index values: dense (marks in the stream)`.
+A mesh or grid command the vertex pre-pass recorded draws its triangles through `vu_tri_vs` over
+that record ([The vertex pre-pass](#the-vertex-pre-pass)).
 What the flags do is [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule). `ICO_RD_VU_OFFGRID=1`, a
 developer switch, lets the [VU1](ARCHITECTURE.md#terms) programs output X and Y off the GS's 1/16
 grid on a scaled target under the Enhanced preset; otherwise every preset keeps the GS's
@@ -423,7 +425,8 @@ way of reading the multisampled depth passed the fog's self-test, rd draws witho
 
 The replay notes what it gives the GPU in a ring of the last 2048 entries, always on (a few stores
 each): every render pass (`beginPass`), target copy (`doCopy`), snapshot copy (`takeSnap`), exact
-blend (`doExact`), the upload batch before the lists and the present. An entry holds its sequence
+blend (`doExact`), the upload batch before the lists, the VU vertex pre-pass
+(`rd_replay_vu.c` `rd__vu_prepass`) and the present. An entry holds its sequence
 number, the replay number (the performance record's, `g_rdPerf.replay`) and frame number, the keep
 flag, the list being walked, the colour and depth target ids and sizes (a copy's source and
 destination; the present's DISPLAY and window sizes), the storage-pass flag, the picture effect
@@ -762,8 +765,8 @@ two steps of the region rule that only a picture other than the PS2's out of the
 card test (`VU_F_EXTENDED`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)) and the two tick
 cameras (`VU_F_TICKS`, the interpolation's pictures between two ticks); every other line is the
 same code, so a draw with neither flag gives the same picture through either. The plain modules
-are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
-([SHADERS.md](SHADERS.md#the-variants)).
+are 6,216 to 23,199 words, the extended ones 10,044 to 51,132 (the vertex pre-pass's triangle
+stage 19,519 and 47,637) ([SHADERS.md](SHADERS.md#the-variants)).
 
 - **The key.** `RdPipeKeyInt.vuExt` is 1 for the extended variant, 0 for the plain one and for
   every key without a VU vertex shader. `vuDraw` takes the plain one unless the draw has
@@ -782,18 +785,23 @@ are 6,183 to 23,305 words, the extended ones 10,011 to 51,238
   that wants them creates them as the frames first need them. That holds the other way too, and
   is accepted: a start with the Enhanced preset, a wide frame or a scene scale above 1 compiles no
   plain VU keys, so a switch in the game to the Original preset at 4:3 and 1x makes the plain ones
-  as the frames first need them, up to 176 pipelines (220 with the exact blend), a short pause
+  as the frames first need them, up to 42 pipelines with the vertex pre-pass (50 with the exact
+  blend; 176 and 220 without it, [The vertex pre-pass](#the-vertex-pre-pass)), a short pause
   here and there in the first minutes after the switch; the pipeline cache keeps them for the
   next start. The set is ordered: every 2D key
   first, then the plain VU keys, then the extended ones (`orderSet`), and a batch never mixes
   extended VU keys with others, so the activity note's ` ext 1` field names a batch of them.
-  With the fixed-function blend (the phones' usual path) the set is 351 2D keys and 176 plain VU
-  keys, 527 in all (as before: the VU keys were the extended shaders), and 703 with both
+  Without the vertex pre-pass (`[dev] vu_prepass = false`) and with the fixed-function blend (the
+  phones' usual path) the set is 351 2D keys and 176 plain VU keys, 527 in all, and 703 with both
   variants (the interpolation at the Original preset, 4:3 and 1x); with the exact blend 438 and
-  220, 658 in all, and 878 with both (`RD_PIPELINE_REACHABLE_MAX`, 1024). Each variant has as
-  many keys (176, 220 with the exact blend), so a set with the extended ones alone has as many VU
-  keys as the Original 4:3 set. With the interpolation on at 4:3 and 1x a still
-  camera's draw has neither flag and takes the plain ones, so that state compiles both.
+  220, 658 in all, and 878 with both (`RD_PIPELINE_REACHABLE_MAX`, 1024): eleven VU vertex
+  shaders, 16 keys each (20 with the exact blend). With the pre-pass (the default) a variant has
+  `vu_tri_vs`'s and `vu_particle_vs`'s keys, 32 (40), and the ten pre-pass keys join the plain
+  ones' class, so the set is 134 keys smaller with one variant (170 with the exact blend) and 278
+  (350) with both (`rd_state_test` prints both counts, `testEnumerationPrepass`). Each variant has as many keys, so a set
+  with the extended ones alone has as many VU keys as the Original 4:3 set. With the
+  interpolation on at 4:3 and 1x a still camera's draw has neither flag and takes the plain ones,
+  so that state compiles both.
 - **The device table** (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, `RhiLimits.vuPlainOnly`): a
   device whose driver cannot build the extended ones draws every VU draw with the plain ones,
   logged once as `rd: VU shaders: plain only on this device (Adreno 740, issue 107): the
@@ -854,7 +862,7 @@ three matrix products, the lighting, the divide, the conversions), and a VU comm
 (the AFAIL split, the two passes without dual-source blending) or as two draws a batch (the scissor
 batches' fans and kicks) evaluated them again in each draw. The pre-pass evaluates each vertex of
 a VU command once, before the lists, into a record; the triangle stage reads its three corners
-back and runs the triangle math on them unchanged (`port/render/rd_replay.c` (`vuPrepass`,
+back and runs the triangle math on them unchanged (`port/render/rd_replay_vu.c` (`rd__vu_prepass`,
 `doVuDraw`); `port/shaders/vu_common.hlsli` (`vu_pre_out`, `vu_rec_vertex`);
 `port/shaders/vu_tri.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`) and the grids (`RDC_GRID`)
 take it; the particles (six invocations a sprite, a few hundred sprites a frame) keep
@@ -875,7 +883,7 @@ computed. GS X and Y are not stored: the triangle stage takes them from `p` as `
 `base + v`, 1024 texels a row (`ICO_VU_REC_W`); `VuVtx` carries the clip-space flags (`clipf`)
 instead of the clip-space position, which only `vu_clipw` read.
 
-**The pass.** After the uploads and the first clears, before list 0, `vuPrepass` walks the
+**The pass.** After the uploads and the first clears, before list 0, `rd__vu_prepass` walks the
 replayed lists' mesh and grid commands. For each it sets up what `doVuDraw` binds (the stream in
 the mesh arena or the ring, VuCB's VU memory, the bones and card bits in VuBoneCB: `vuSource`,
 shared by both, kept for the command's draws), finds the vertices its index range reads (the
@@ -889,8 +897,18 @@ record buffer, plane after plane (`rhi_cmd_copy_texture_to_buffer`, which makes 
 to the vertex shaders that read the buffer: [RHI.md](RHI.md#the-interface)). A frame slot has its
 own buffer, so a replay never rewrites what the GPU may still read for the previous one; the
 textures are shared, ordered by their barriers. Both grow by powers of two, from 16 rows (16,384
-vertices) to 1,024; a command past that, or one whose pre-pass pipeline is missing, is drawn the
-old way (`vuPrepass`).
+vertices) to 1,024, every slot's buffer at once (so the replays after the one that grew them
+create nothing), logged as `rd: VU pre-pass: the record holds 32768 vertices (32 rows, 1536 KB a
+frame slot)`; group 1 binds the record at t4, and a 256-byte buffer before there is one. A
+command past the record, or one whose pre-pass pipeline is missing, is drawn the old way through
+its program's entry, and so is a draw whose `vu_tri_vs` pipeline cannot be made, each logged
+once (`rd: VU pre-pass: a frame of N vertices past the record's M ...`, `... the pipeline of
+vu_X_pre_vs could not be made ...`, `... a pipeline of vu_tri_vs could not be made ...`) and
+counted (`vuPreFallbacks`); while the loss bisect only names the keys a frame needs
+(`rd__pipeline_gathering`) a missing pipeline is not a fallback, so the pre-pass's and the
+triangle stage's keys are the ones named. The pass ring holds the pass as `VU pre-pass, N
+vertices into the record (1024xR)` with its pipeline ([The pass ring](#the-pass-ring);
+`port/render/rd_replay_vu.c` (`rd__vu_prepass`, `vuSource`, `vuPreRange`, `recEnsure`)).
 
 **The triangle stage.** `vu_tri_vs` (and `vu_tri_plain_vs`, [The VU shader
 variants](#the-vu-shader-variants)) serves every mesh program: it reads the record buffer (t4 in
@@ -926,8 +944,13 @@ on Direct3D 12). The one bound the record meets is Metal's: a pixel's colour tar
 bytes together on Apple A9 and A10 GPUs, 64 on A11 to A13 and 128 from A14 and M1 (Metal Feature
 Set Tables, "Maximum implicit image block size, per pixel, per sample, when using multiple color
 render targets"); the record's 48 bytes do not fit the first, so under MoltenVK on an A9 or A10
-the pre-pass is off (`RhiLimits.colorBytesPerPixel`, `rhi_metal_color_bytes`) and the log says
-so once.
+the pre-pass is off (`RhiLimits.colorBytesPerPixel`; `port/rhi/rhi_driver_version.c`
+(`rhi_metal_color_bytes`), from the Metal device's name) and the log says so once. At start the
+renderer logs `rd: VU pre-pass: on: each mesh and grid vertex evaluated once before the lists, 48
+bytes a vertex in 3 RGBA32_UINT targets; [dev] vu_prepass = false draws the old way`, or `rd: VU
+pre-pass: off by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0): ...` or `off on
+this device (its colour targets hold 32 bytes a pixel together, the record 48: an Apple A9 or A10
+GPU): ...` (`port/render/rd_replay_vu.c` (`rd__vu_prepass_init`)).
 
 **Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
 source with the same `precise` operations, so each recorded word is the value the old entry
@@ -945,10 +968,14 @@ every case both ways, probe and pictures, and compares them byte for byte
 ([TESTING.md](TESTING.md#portshaderstest)).
 
 **The saving.** Each vertex function runs once a vertex a command instead of three times an index
-of each of its draws, and an invocation keeps the triangle math and nine loads. The replay's
-record counts the pre-pass (`RdPerfRecord.vuPreVertices`, `vuPreDraws`, `vuPrePasses`,
-`vuPreFallbacks`, `gpuPrepassMs`); the window's 10 s lines and the replay tool's `--stats` print
-them, so a log shows the pre-pass's own GPU time next to the lists' ([Performance
+of each of the command's draws, and an invocation keeps the triangle math and nine loads. By the
+modules' size (`tools/check_spirv.py --sizes`, instructions) a vertex function with its packing is
+416 (`vu_grid_pre_vs`) to 627 (`vu_skin_debug_pre_vs`) instructions in 29 to 36 blocks, three of
+which an invocation of a program entry ran; `vu_tri_vs` is 10,091 instructions against
+`vu_prelit_vs`'s 10,727 ([SHADERS.md](SHADERS.md#the-variants)). The replay's record counts the
+pre-pass (`RdPerfRecord.vuPreVertices`, `vuPreDraws`, `vuPrePasses`, `vuPreFallbacks`,
+`gpuPrepassMs`); the window's 10 s lines and the replay tool's `--stats` print them, so a log
+shows the pre-pass's own GPU time next to the lists' ([Performance
 records](#performance-records)).
 
 ## Destination reads and blend paths
@@ -1587,7 +1614,9 @@ continuity: `turnFind`, `turnRecall`, `turnRecallGap`, `turnKeep`, `blendTurn`, 
 A record (`RdPerfRecord`) is filled while a replay runs (its CPU phases and counts), closed with the
 RHI's counters, and then waits in a slot per frame in flight until its GPU timestamps can be read
 without waiting. The timestamps carry the effect whose work they end, so the record has a GPU time
-per list, for the uploads, for the present, and per picture effect (`RD_PERF_POST_*`: reduction,
+per list, for the uploads, for the VU vertex pre-pass (`gpuPrepassMs`, from `RD_PERF_TS_PREPASS`
+after the uploads to list 0: its pass and its copies), for the present, and per picture effect
+(`RD_PERF_POST_*`: reduction,
 fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve)
 (`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). An effect is the
 one the colour target in force belongs to (the softening's and the aura's targets) or the one the
@@ -1613,14 +1642,18 @@ box, the B-spline, the fog's table between its entries: [Above 1x](#above-1x)), 
 window's per-replay line carries them after the exact blends:
 
 ```
-window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact blends, 412 destination-read draws, 28 storage passes, 27 pass switches for the exact blend, glow 40 passes, 6.0 snapshots copied and 4.0 swapped, 3.0 draws resampled above 1x; in the block ...
+window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact blends, 412 destination-read draws, 28 storage passes, 27 pass switches for the exact blend, glow 40 passes, 6.0 snapshots copied and 4.0 swapped, 3.0 draws resampled above 1x, VU pre-pass 5120 vertices in 180 draws (0.0 draws the old way); in the block ...
 ```
 
 (the numbers there show the fields, not a measurement). The GPU line before it carries the glow,
 fog and the other effects' milliseconds; the two together say what a slow card spends its replay
 on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-read draws, S
 storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped;
-A draws resampled above 1x`
+A draws resampled above 1x`, and the VU vertex pre-pass as a third, `<dump>: stats: VU pre-pass
+on: 1 passes, V vertices in D draws; F mesh and grid draws the old way` (`vuPrePasses`,
+`vuPreVertices`, `vuPreDraws`, `vuPreFallbacks`, [The vertex pre-pass](#the-vertex-pre-pass));
+the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
+`gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
 
 ### The pixel cuts' records

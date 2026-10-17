@@ -325,7 +325,9 @@ program under an environment switch ([Environment switches](#environment-switche
   both forward the long way; the ride of `box.c` (0.5 a tick of push, 0.98 friction, radius 10)
   up to 125 degrees a tick blended every pair, then a camera cut, and each pair after it forward.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).
-- `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded); the
+- `rd_mesh_test.c`: the mesh path from `Packet.c` to the VU shaders (`rd_mesh`, sharded), each
+  device case's frame replayed again with the VU vertex pre-pass switched, the picture byte for
+  byte the same, and every pipeline created in the set of either setting (`gpuCase`); the
   content table's four sandstorm sheets and the tiles appended to them (`sheetTableChecks`), one
   sheet on the device at 4:3 byte for byte the same with and without the tiles and at 16:9 the
   columns beside it drawn (`sheetPixels`), and the `photo_veil` shard: the veil's two layers at
@@ -335,8 +337,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
-  replays printed (the last three, whole at 430 passes a replay), the line format and the loss
-  bisect's line; pure (`rd_passring`).
+  replays printed (the last three, whole at 430 passes a replay), the line format (the VU
+  vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; pure
+  (`rd_passring`).
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`).
 - `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths
   (`rd_native`).
@@ -346,7 +349,11 @@ program under an environment switch ([Environment switches](#environment-switche
   counters (`RdPerfRecord.dstDraws`, `storagePasses`, `dstSwitches`) under each blend path the
   device has (none under the fixed-function blend, no storage pass or switch under the attachment
   read) and, under the storage read, the storage pass merge's DISPLAY bytes equal to the unmerged
-  ones with no more passes or switches (`rd_perf`, `rd_perf_mali`).
+  ones with no more passes or switches; the replay and record phases run without the VU vertex
+  pre-pass (their barrier counts), a `prepass` phase replays the frame with it (nothing created
+  after two replays, one pre-pass a replay with the same vertices, every mesh command through it,
+  steady barriers, DISPLAY byte for byte the picture without it), and the reachable set is made
+  with it (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
@@ -384,7 +391,8 @@ program under an environment switch ([Environment switches](#environment-switche
   bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
-  nothing, `testAlphaMerge`), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
+  nothing, `testAlphaMerge`), the start-up set's VU keys by variant and with the VU vertex
+  pre-pass (`testEnumerationVu`, `testEnumerationPrepass`), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it) cases, each in a child process; the symbolizer, the report file and `ico_log_limited` (above)
 - `rd_tex_test.c`: the texture cache and `Texture.c` on synthetic TIM2 files, and a text texture
   that could not be uploaded named once in the log, the game's own textures never
@@ -411,8 +419,11 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_driver_version_test.c`: the driver version text of the adapter line
-  (`port/rhi/rhi_driver_version.c`) for each vendor's packing (`rhi_driver_version`).
-- `rhi_vk_enum_test.c`: every `rhi.h` enumeration has a Vulkan mapping (`rhi_vk_enum`).
+  (`port/rhi/rhi_driver_version.c`) for each vendor's packing, the Qualcomm and MoltenVK rules and
+  the colour bytes a pixel of each Apple GPU family (`rhi_metal_color_bytes`)
+  (`rhi_driver_version`).
+- `rhi_vk_enum_test.c`: every `rhi.h` enumeration has a Vulkan mapping, `RGBA32_UINT` among them
+  (`rhi_vk_enum`).
 - `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer
   (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
@@ -425,8 +436,8 @@ program under an environment switch ([Environment switches](#environment-switche
 
 ### port/shaders/test
 
-- `shaders_table_test.c`: every embedded entry compiled for SPIR-V and signed DXIL
-  (`shaders_table`).
+- `shaders_table_test.c`: every embedded entry compiled for SPIR-V and signed DXIL, the vertex
+  pre-pass's among them (`expectedPrepass`) (`shaders_table`).
 - `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas,
   and its integer forms against the operators they replace ([SHADERS.md](SHADERS.md#integer-forms))
   (`gs_math`); `hlsl_shim.h` makes it compile.
@@ -436,7 +447,10 @@ program under an environment switch ([Environment switches](#environment-switche
   axes and the separable combine, and the fog's `gs_fog_channel` (`checkAbove1xKernels`).
 - `vu1_test.c`: the [VU1](ARCHITECTURE.md#terms) program shaders against their CPU references and
   hand traces, the card verdicts handed over as the renderer does, and the CPU's card test against
-  the reference (`vu1`, `vu1_mali`).
+  the reference; the vertex pre-pass: every mesh case's vertices through its pre-pass entry into
+  the record, and its probe and pictures through `vu_tri_vs` and `vu_tri_plain_vs` byte for byte
+  the program entry's, the probe within the CPU reference's bounds (part b (4)) (`vu1`,
+  `vu1_mali`).
 
 ### port/test
 
@@ -570,6 +584,7 @@ switches the tests and their registrations use:
 | `ICO_RD_BLEND_SABOTAGE` | `rd_blend_selftest.c` | makes named blend modes read white in the blend's self-test (`rd_blend_selftest_sabotage*`) |
 | `ICO_RD_VU_PLAIN` | `rd_pipeline.c` | 1: every VU draw with the VU vertex shaders' plain variants, as on a device of the table (`kVuPlainOnly`); the replay tool's pictures at a wide aspect then show the plain-only picture ([RENDER.md](RENDER.md#the-vu-shader-variants)) |
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
+| `ICO_RD_VU_PREPASS` | `rd_replay_vu.c` | 0: no VU vertex pre-pass, every VU draw the old way (`[dev] vu_prepass = false`); the tests switch it with `rd__set_vu_prepass` ([RENDER.md](RENDER.md#the-vertex-pre-pass)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |
@@ -669,7 +684,8 @@ logical-not-equal or an undefined value named), every module stays within its st
 in words, no module carries an array as a value (a whole-array load, store, construct, insert,
 phi, select or copy) and no vertex shader keeps a local array
 ([SHADERS.md](SHADERS.md#the-envelope)); the log lists each module's words, instructions, blocks,
-phis, loops, dot products, vector comparisons, boolean selects and `any()`. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
+phis, loops, dot products, vector comparisons, boolean selects and `any()`. The vertex pre-pass's
+entries (`vu_*_pre_vs`) need no plain variant and take the plain budget. `python3 -I tools/check_spirv.py --sizes <build>/shaders` runs it by
 hand.
 
 ## Which tests a change needs

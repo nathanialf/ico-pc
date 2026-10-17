@@ -143,10 +143,12 @@ strip flag (`ST.w < 1`), the three indices `ICO_VU_INDEX(K, corner) = K * 4 + co
 (`port/shaders/shader_consts.h` (`ICO_VU_INDEX`)). The values are dense: nothing but the kick and the
 corner, so a draw's values span about four times its mesh's vertices, far below 2^24 - 1, the
 largest index value every Vulkan device takes (`maxDrawIndexedIndexValue` without
-`fullDrawIndexUint32`). Each shader invocation evaluates all three
+`fullDrawIndexUint32`). Each shader invocation has all three
 vertices of its triangle, so the per-triangle decisions (region test, scissor) are the same in all
 three (`port/render/rd_mesh.h` (`rd_create_vu_mesh`); `port/shaders/vu_common.hlsli`, header
-comment). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
+comment): the vertex pre-pass evaluates each vertex once into a record the triangle stage reads
+its three corners from, or without it the program's entry evaluates all three
+([RENDER.md](RENDER.md#the-vertex-pre-pass)). The morph path rewrites a mesh's stream each [tick](ARCHITECTURE.md#terms)
 (`rd_update_vu_mesh`), and a mesh no frame drew for a while may be evicted, which tells the seki
 side to build it again (`rd_vu_mesh_valid`) (`port/render/rd_mesh.h`).
 
