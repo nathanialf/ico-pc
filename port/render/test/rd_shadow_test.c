@@ -11,8 +11,8 @@
  *      the register writes of their packets as rd state, the reset and the
  *      resolve, and the volume's eight triangles with the signs of the RGBAQ
  *      the packet carries (compared with the packet words Shadow.c wrote),
- *      each vertex tagged with its triangle's place; at a work scale
- *      of 2 the blur levels keep 256, 128 and 64 texels.  The same on a
+ *      each vertex tagged with its triangle's place; at a scene scale
+ *      of 2 the blur levels keep 256, 128 and 64 texels, WORK0 256.  The same on a
  *      frame 1376 wide (32:9): the count 1376 x H, the levels the PS2's
  *      sizes per 512 columns (688 x 256, 344 x 128, 172 x 64: the named
  *      targets and every FRAME, rect and UV of the chain), the composites'
@@ -40,9 +40,10 @@
  *   s  above 1x at scene scale 4: each composite against above1x_ref.c's
  *      B-spline of its level within 2 LSB (3 on the fixed-function
  *      blender), a row across the shadow falling
- *      and rising once; the softening's AA0 (at the work scale 2) the area
- *      box of SCENE byte for byte and its composite back the B-spline within
- *      2; the passes counted (g_rd.above1xDraws), none in the 1x run.
+ *      and rising once; the softening's AA0 (at its GS size) the area box
+ *      of SCENE byte for byte and its composite back the sampler's bilinear
+ *      between the same texels within 2, not counted above 1x; the passes
+ *      counted (g_rd.above1xDraws), none in the 1x run.
  * Every pipeline created is enumerated; no validation errors. */
 #include <math.h>
 #include <stdarg.h>
@@ -978,12 +979,13 @@ static void checkPipelines(void)
     printf("  pipelines: %u created, %u reachable\n", rd__pipeline_count(), n);
 }
 
-/* At a work scale of 2 (Enhanced, 896 lines and up) the blur levels
- * keep the PS2 sizes, whose texels are the shadow's blur; WORK0 scales */
+/* At a scene scale of 2 (Enhanced, 896 lines and up) the blur levels
+ * keep the PS2 sizes, whose texels are the shadow's blur, and so does
+ * WORK0 (every work buffer: rd_core.c rd__target_scale_of); SCENE scales */
 static void checkLevelScale(void)
 {
-    const float keep = g_rd.workScale;
-    g_rd.workScale = 2.0f;
+    const float keepX = g_rd.sceneSx, keepY = g_rd.sceneSy;
+    g_rd.sceneSx = g_rd.sceneSy = 2.0f;
 
     static const struct {
         int id;
@@ -991,17 +993,24 @@ static void checkLevelScale(void)
     } k[4] = {{RD_TARGET_SHADOW0, 256},
               {RD_TARGET_SHADOW1, 128},
               {RD_TARGET_SHADOW2, 64},
-              {RD_TARGET_WORK0, 512}};
+              {RD_TARGET_WORK0, 256}};
 
     for (int i = 0; i < 4; i++) {
         RdTargetRec t;
         memset(&t, 0, sizeof(t));
-        t.w = t.h = k[i].id == RD_TARGET_WORK0 ? 256 : k[i].w;
+        t.w = t.h = k[i].w;
         rd__target_scale_of(&t, k[i].id);
-        CHECK(t.tw == k[i].w, "work scale 2: target %d is %u texels wide (%u)", k[i].id, t.tw,
-              k[i].w);
+        CHECK(t.tw == k[i].w && t.sx == 1.0f, "scene scale 2: target %d is %u texels wide (%u)",
+              k[i].id, t.tw, k[i].w);
     }
-    g_rd.workScale = keep;
+    RdTargetRec sc;
+    memset(&sc, 0, sizeof(sc));
+    sc.w = 512;
+    sc.h = 448;
+    rd__target_scale_of(&sc, RD_TARGET_SCENE);
+    CHECK(sc.tw == 1024 && sc.sx == 2.0f, "scene scale 2: SCENE is %u texels wide (1024)", sc.tw);
+    g_rd.sceneSx = keepX;
+    g_rd.sceneSy = keepY;
 }
 
 /* ----------------------------------------------- (s) above 1x at 4x
@@ -1015,9 +1024,11 @@ static void checkLevelScale(void)
  * a row across the shadow falls and rises once (no bump the bilinear's
  * corners would leave across a diagonal, no overshoot).  Then the
  * softening's passes (rd_post.c AA_DOWNSAMPLE and AA_COMPOSITE: SCENE at 4
- * into AA0 at 2, a step of 4 texels, the area box; AA0 back over SCENE, a
- * quarter texel, the B-spline) against the same reference: AA0 within 1
- * LSB of the box, SCENE within 2 of the composite. */
+ * into AA0 at its GS size, a step of 8 texels, the area box, exact; AA0
+ * back over SCENE, an eighth of a texel a texel, read as at 1x: the
+ * sampler's bilinear between the same texels at each texel's GS sample
+ * point, rd_internal.h rd__work_class, within 2 LSB), the composite not
+ * counted above 1x. */
 #define S4 4
 #define S4W (W * S4)
 #define S4H (H * S4)
@@ -1183,7 +1194,7 @@ static void checkSoftening4x(void)
         return;
     }
     const RdTargetRec *aa = rd__target_rec(rd_target(RD_TARGET_AA0).id);
-    CHECK(aa && aa->sx == 2.0f, "(s) AA0 at the work scale 2 (%.2f)", aa ? (double)aa->sx : 0.0);
+    CHECK(aa && aa->sx == 1.0f, "(s) AA0 at its GS size (%.2f)", aa ? (double)aa->sx : 0.0);
     const uint32_t before = g_rd.above1xDraws;
     drawPicture();
     RdPostParams pp;
@@ -1195,26 +1206,27 @@ static void checkSoftening4x(void)
     pp.rgba[0] = 64;
     rd_post(RD_POST_AA_COMPOSITE, &pp);
     dl_Swap();
-    static uint8_t aa0[(W / 2) * 2 * 256 * 2 * 4];
-    const int aw = W / 2 * 2, ah = 256 * 2;
+    static uint8_t aa0[(W / 2) * 256 * 4];
+    const int aw = W / 2, ah = 256;
     if (!readTarget(rd_target(RD_TARGET_AA0), aa0, (uint32_t)aw, (uint32_t)ah) ||
         !readTarget(rd_target(RD_TARGET_SCENE), s_big, S4W, S4H)) {
         return;
     }
-    CHECK(g_rd.above1xDraws >= before + 2, "(s) softening: %u passes drawn above 1x",
+    CHECK(g_rd.above1xDraws == before + 1,
+          "(s) softening: %u passes drawn above 1x (the downsample alone)",
           g_rd.above1xDraws - before);
     /* AA0: the sprite spans GS -0.25 .. W / 2 - 0.25 with U 0.25 .. W +
-     * 0.25 (rd_post.c postAaDownsample), the box of 4 SCENE texels about
+     * 0.25 (rd_post.c postAaDownsample), the box of 8 SCENE texels about
      * each texel's sample point */
     const A1xImg pic = {s_pic, S4W, S4H};
     int worstA = 0, ax = 0, ay = 0;
     for (int y = 0; y < ah; y++) {
         for (int x = 0; x < aw; x++) {
-            const double gx = gsAt(x, 2), gy = gsAt(y, 2);
+            const double gx = gsAt(x, 1), gy = gsAt(y, 1);
             const double u = 0.25 + (gx + 0.25) * 2.0, v = 0.25 + (gy + 0.25) * 2.0;
             uint32_t t[4];
             a1x_resample(a1xFetch, (void *)&pic, (int)lrint(u * 16.0 * S4),
-                         (int)lrint(v * 16.0 * S4), 32u * 2u * S4 / 2u, 32u * 2u * S4 / 2u, 1, t);
+                         (int)lrint(v * 16.0 * S4), 32u * 2u * S4, 32u * 2u * S4, 1, t);
             const uint8_t *g = &aa0[((size_t)y * aw + x) * 4];
             for (int c = 0; c < 4; c++) {
                 const int d = abs((int)g[c] - (int)t[c]);
@@ -1224,22 +1236,22 @@ static void checkSoftening4x(void)
             }
         }
     }
-    /* SCENE: AA0 (texels at 2; the sprite spans GS -0.25 .. W - 0.25 with
-     * U 0.25 .. W / 2 + 0.25, rd_post.c postAaComposite) at a quarter
-     * texel a texel, LERP_FIX 64 over the picture */
-    const A1xImg a0 = {aa0, aw, ah};
+    /* SCENE: AA0 (texels at 1; the sprite spans GS -0.25 .. W - 0.25 with
+     * U 0.25 .. W / 2 + 0.25, rd_post.c postAaComposite) at an eighth of a
+     * texel a texel, the bilinear between the same texels, LERP_FIX 64 over
+     * the picture */
     int worstS = 0, sx = 0, sy = 0;
     for (int y = 0; y < S4H; y++) {
         for (int x = 0; x < S4W; x++) {
             const double gx = gsAt(x, S4), gy = gsAt(y, S4);
             const double u = 0.25 + (gx + 0.25) * 0.5, v = 0.25 + (gy + 0.25) * 0.5;
-            uint32_t t[4];
-            a1x_resample(a1xFetch, (void *)&a0, (int)lrint(u * 32.0), (int)lrint(v * 32.0),
-                         32u * 2u / S4 / 2u, 32u * 2u / S4 / 2u, 1, t);
+            float t[4];
+            bilinear(aa0, aw, ah, (float)u, (float)v, t);
             const uint8_t *g = &s_big[((size_t)y * S4W + x) * 4];
             const uint8_t *p = &s_pic[((size_t)y * S4W + x) * 4];
             for (int c = 0; c < 3; c++) {
-                const int want = ((((int)t[c] - (int)p[c]) * 64) >> 7) + (int)p[c];
+                const int tc = (int)floorf(t[c] + 0.5f);
+                const int want = (((tc - (int)p[c]) * 64) >> 7) + (int)p[c];
                 const int d = abs((int)g[c] - want);
                 if (d > worstS) {
                     worstS = d, sx = x, sy = y;
@@ -1247,8 +1259,8 @@ static void checkSoftening4x(void)
             }
         }
     }
-    printf("  (s) 4x softening: AA0 (at 2) max %d LSB from the box (at %d,%d), SCENE max %d from "
-           "the B-spline composite (at %d,%d)\n",
+    printf("  (s) 4x softening: AA0 (at 1) max %d LSB from the box (at %d,%d), SCENE max %d from "
+           "the bilinear composite (at %d,%d)\n",
            worstA, ax, ay, worstS, sx, sy);
     CHECK(worstA == 0, "(s) AA0 at 4x: max difference %d from the box at (%d,%d)", worstA, ax, ay);
     CHECK(worstS <= 2, "(s) SCENE at 4x: max difference %d from the composite at (%d,%d)", worstS,

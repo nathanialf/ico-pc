@@ -623,17 +623,17 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
     if (*w == 0) {
         *w = 1; /* a test's frame narrower than 8 pixels */
     }
-    /* the work buffers' resolution scale (rd.h rd_work_target_scale) applies
-     * to the texture, not to the GS size: rd__target_scale_of */
+    /* the scene's scale applies to a scene-class target's texture, not to
+     * the GS size: rd__target_scale_of */
 }
 
 /* The scene-class targets, which take the Enhanced scene resolution: the
  * frame-sized buffers (SCENE, WORK2, AURA_WORK, the DATE snapshot), DISPLAY
  * and its held copy.  Their GS width is the native frame's (g_rd.gsW: the
  * frame head's gsW, GsBase.c gsFrame.w), so a wide picture has more GS
- * pixels, not wider ones.  The other named targets are the work buffers,
- * as wide as the frame per 512 columns (namedTargetDesc), scaled by
- * rd_work_target_scale. */
+ * pixels, not wider ones.  The other named targets are the work buffers and
+ * the shadow levels, as wide as the frame per 512 columns
+ * (namedTargetDesc), at those GS sizes (the PS2's) at every scale. */
 static int sceneClass(int id)
 {
     return id == RD_TARGET_SCENE || id == RD_TARGET_DISPLAY || id == RD_TARGET_WORK2 ||
@@ -652,14 +652,25 @@ static int displayClass(int id)
  * GS sizes, namedTargetDesc).  The shadow's blur is not a GS distance there
  * but the levels' resolution itself (each level a bilinear half of the one
  * before, 256, 128 and 64 texels over 512 screen columns, composited back
- * with bilinear magnification), so levels at the work scale would halve the
- * penumbra: at 4x the softest level would need a further Gaussian of about 4
- * GS pixels to match the Original preset's.  On a wide frame the levels are
- * as much wider as the frame, so the penumbra is the same number of screen
- * pixels at every aspect. */
+ * with bilinear magnification).  On a wide frame the levels are as much
+ * wider as the frame, so the penumbra is the same number of screen pixels
+ * at every aspect.  Their composites into a scaled SCENE take the above-1x
+ * B-spline (rd_replay.c spriteAbove1x); the work buffers' draws onto the
+ * frame do not (rd__work_class). */
 static int shadowLevel(int id)
 {
     return id == RD_TARGET_SHADOW0 || id == RD_TARGET_SHADOW1 || id == RD_TARGET_SHADOW2;
+}
+
+/* rd__work_class (rd_internal.h): a named target that is neither
+ * scene-class nor a shadow level */
+bool rd__work_class(const RdTargetRec *t)
+{
+    if (!t || !t->named || t < g_rd.targets || t >= g_rd.targets + RD_TARGET_COUNT) {
+        return false;
+    }
+    const int id = (int)(t - g_rd.targets);
+    return !sceneClass(id) && !shadowLevel(id);
 }
 
 static uint32_t scaled(uint32_t n, float k)
@@ -684,10 +695,9 @@ static uint32_t scaled(uint32_t n, float k)
  * both ways as SCENE has it, so its picture has the scene's texels per GS
  * pixel; its depth buffer is made at the same texture size, and the
  * grids and sprites that sample it address it in GS texels (the scale is
- * the texture's alone).  The work scale is not used: it stops at 2x
- * (rd_work_target_scale), which at 4K would leave the reflection at less
- * than half the scene's resolution.  With the option off nothing here
- * changes. */
+ * the texture's alone).  With the option off nothing here changes.  Every
+ * other named target (the work buffers, the shadow levels) is at its GS
+ * size, the PS2's, at every scale. */
 void rd__target_scale_of(RdTargetRec *t, int named)
 {
     float sx = 1.0f, sy = 1.0f;
@@ -701,8 +711,6 @@ void rd__target_scale_of(RdTargetRec *t, int named)
     } else if (named < 0 && t->block && g_rd.settings.waterSharp) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
-    } else if (named >= 0 && g_rd.workScale > 1.0f && !shadowLevel(named)) {
-        sx = sy = g_rd.workScale;
     }
     t->sx = sx;
     t->sy = sy;
@@ -734,15 +742,6 @@ void rd__target_scale_of(RdTargetRec *t, int named)
             t->tw = cw;
         }
     }
-}
-
-float rd_work_target_scale(uint32_t sceneHeight)
-{
-    if (sceneHeight <= 448) {
-        return 1.0f; /* the GS height (1x): the literal PS2 sizes */
-    }
-    float k = (float)sceneHeight / 448.0f;
-    return k < 1.0f ? 1.0f : (k > 2.0f ? 2.0f : k);
 }
 
 static const char *const s_targetNames[RD_TARGET_COUNT] = {
@@ -1595,9 +1594,6 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.settings.waterSharp) {
         rd__log("water reflections: sharp (the scene's scale)");
     }
-    if (g_rd.settings.glowOriginal) {
-        rd__log("glow size: original (the work buffers at the PS2's sizes)");
-    }
     createNamedTargets();
     readDumpConfig();
     return true;
@@ -1916,7 +1912,6 @@ void rd_begin_frame(void)
         const bool modelsChanged = g_rd.settings.modelPack != g_rd.pendingSettings.modelPack;
         const bool dumpChanged = g_rd.settings.dumpModels != g_rd.pendingSettings.dumpModels;
         const bool waterChanged = g_rd.settings.waterSharp != g_rd.pendingSettings.waterSharp;
-        const bool glowChanged = g_rd.settings.glowOriginal != g_rd.pendingSettings.glowOriginal;
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {
@@ -1933,18 +1928,12 @@ void rd_begin_frame(void)
             rd__log("water reflections: %s", g_rd.settings.waterSharp ? "sharp (the scene's scale)"
                                                                       : "original (their GS size)");
         }
-        if (glowChanged) {
-            /* the work scale (rd__apply_display) remakes the targets below */
-            rd__log("glow size: %s", g_rd.settings.glowOriginal
-                                         ? "original (the work buffers at the PS2's sizes)"
-                                         : "scaled (the work scale)");
-        }
         /* the Settings menu applies here; a change of the
          * targets' scales recreates them (their content is lost: the next
          * frame redraws SCENE; DISPLAY's motion-blur history restarts) */
         if (rd__apply_display() && g_rd.hasDevice) {
-            rd__log("display: targets recreated at scene %gx%g, work %g", (double)g_rd.sceneSx,
-                    (double)g_rd.sceneSy, (double)g_rd.workScale);
+            rd__log("display: targets recreated at scene %gx%g", (double)g_rd.sceneSx,
+                    (double)g_rd.sceneSy);
             rd__on_host(recreateTargets, NULL);
             /* the retained frames' history is dropped: the frame opened
              * now and the next are the first pair interpolated */

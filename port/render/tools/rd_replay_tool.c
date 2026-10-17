@@ -53,11 +53,6 @@
  *                         (rd_core.c rd__target_scale_of); without it they are
  *                         drawn at their GS size, the PS2's.  A dump from before
  *                         the option marks no block and replays as without it
- *   --glow-original       Glow size: Original: the work buffers (the glow's,
- *                         the depth of field's, the softening's) at the PS2's
- *                         sizes, work scale 1, at every resolution
- *                         (RdSettings.glowOriginal); without it they take the
- *                         work scale (rd_work_target_scale: 2 at 2x and above)
  *   --filter F            original, trilinear or anisotropic
  *   --mirror              the mirror mode: UI prims flipped at replay, the
  *                         present flipped (any preset)
@@ -116,7 +111,8 @@
  *                         draws one per command and merged; a second line:
  *                         the exact blend's destination-read draws, storage
  *                         passes and pass switches, the glow's passes, the
- *                         target snapshots copied and swapped (rd.h
+ *                         target snapshots copied and swapped, the draws
+ *                         through the above-1x kernels (rd.h
  *                         RdPerfRecord); on a device
  *                         with GPU timestamps, after the picture is written,
  *                         the frame is replayed RHI_FRAMES_IN_FLIGHT + 2
@@ -966,7 +962,7 @@ int main(int argc, char **argv)
         fprintf(stderr,
                 "usage: %s <dump> <out.png> [--target NAME] [--present WxH] [--enhanced] "
                 "[--aspect A] [--resolution WxH|Nx] [--full-height] [--full-pixel] "
-                "[--border-mask] [--water-sharp] [--glow-original] [--filter F] "
+                "[--border-mask] [--water-sharp] [--filter F] "
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12] [--list] [--nop L:A[-B]] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-dump DIR] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject]]\n"
@@ -1032,8 +1028,6 @@ int main(int argc, char **argv)
             s.borderMask = 1;
         } else if (strcmp(argv[i], "--water-sharp") == 0) {
             s.waterSharp = 1;
-        } else if (strcmp(argv[i], "--glow-original") == 0) {
-            s.glowOriginal = 1;
         } else if (strcmp(argv[i], "--mirror") == 0) {
             s.mirror = 1;
         } else if (strcmp(argv[i], "--pass-dump") == 0 && i + 1 < argc) {
@@ -1404,9 +1398,10 @@ int main(int argc, char **argv)
                (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
                pr->screenDraws);
         printf("%s: stats: %u destination-read draws, %u storage passes, %u pass switches for the "
-               "exact blend; glow %u passes; snapshots %u copied, %u swapped\n",
+               "exact blend; glow %u passes; snapshots %u copied, %u swapped; %u draws resampled "
+               "above 1x\n",
                dump, pr->dstDraws, pr->storagePasses, pr->dstSwitches, pr->glowPasses,
-               pr->snapshots, pr->snapSwaps);
+               pr->snapshots, pr->snapSwaps, pr->a1xDraws);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

@@ -391,16 +391,6 @@ typedef struct RdSettings {
      * drawn at their own GS size, as on the PS2 (and as before this
      * option; the replay tool's --water-sharp sets it) */
     uint8_t waterSharp;
-    /* Glow size: Original ([video] effect_glow_size = "original", issue
-     * 103).  The work buffers (WORK0..3, AA0/AA1, FEED128, AURA_TAP: the
-     * glow, the depth of field, the softening, the aura) keep the PS2's
-     * sizes, work scale 1, at every resolution, instead of
-     * rd_work_target_scale's (2 at 2x and above): a coarser glow above 1x,
-     * about a quarter of its GPU work at 2x.  0 in a zeroed RdSettings: the
-     * work scale (Scaled, the default; the replay tool's --glow-original
-     * sets it).  A change remakes the targets at the next frame
-     * (rd__apply_display), as a resolution change does. */
-    uint8_t glowOriginal;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the
@@ -1479,14 +1469,6 @@ void rd_post(RdPostKind kind, const RdPostParams *params);
  *   lines    TEX0.TFX: 0 MODULATE, 1 DECAL, 2 HIGHLIGHT, 3 HIGHLIGHT2
  *   exactInt 1 */
 
-/* The resolution scale of the work buffers (WORK0..3,
- * AURA_*, AA0/1, FEED128, SHADOW0..2) for a scene sceneHeight texels high
- * (the 448-line frame at the scene's vertical scale): 1 at the GS height
- * or below (the literal PS2 sizes), else sceneHeight / 448, at most 2, so
- * blur radii stay a constant fraction of the screen.  rd__apply_display
- * reads it, whatever the preset. */
-float rd_work_target_scale(uint32_t sceneHeight);
-
 /* ------------------------------------------- frame lifecycle and camera */
 
 /* The flip (gsb_UpdateGSSystem -> sceGsSwapDBuff)
@@ -1792,6 +1774,12 @@ typedef struct RdPerfRecord {
      * into the snapshot texture, swapped with the target's, instead of a
      * copy (rd_replay.c doBlurSpriteDraw, blurSwapTarget) */
     uint32_t glowPasses, snapshots, snapSwaps;
+    /* a1xDraws: the draws that took the above-1x kernels (the area box,
+     * the B-spline, the fog's table read between its entries: rd_replay.c
+     * spriteAbove1x, blurAbove1xSteps, doFog), g_rd.above1xDraws counted
+     * per replay; 0 at scale 1.  A work buffer drawn onto the frame is
+     * never among them (rd_internal.h rd__work_class) */
+    uint32_t a1xDraws;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

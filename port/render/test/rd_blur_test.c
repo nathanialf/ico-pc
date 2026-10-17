@@ -81,12 +81,19 @@
  *      DISPLAY's 4:3 columns the 512 run's byte for byte (frames + 2
  *      pixels in from their edges).
  *   x  above 1x: the aura's modes 1, 2 and 3 at Enhanced 4x (NTSC: SCENE
- *      4x, the work buffers 2x), every target against the CPU model at its
- *      own scale exactly, the decimations (SCENE and AURA_WORK into FEED128
- *      and WORK0) the area box and the magnifications (FEED128 and
- *      AURA_TAP over the frame) the B-spline of above1x_ref.c; the replay
- *      flags as many sprites as the model resamples.  Every comparison of
- *      a run at scale 1 (all the others) finds no sprite flagged.
+ *      4x, the work buffers at their GS sizes, as at every scale), every
+ *      target against the CPU model at its own scale exactly, the
+ *      decimations (SCENE and AURA_WORK into FEED128 and WORK0) the area
+ *      box of above1x_ref.c and the magnifications (WORK0, FEED128 and
+ *      AURA_TAP over the frame) the GS's own bilinear at each SCENE
+ *      texel's GS position, never the B-spline; the replay flags as many
+ *      sprites as the model resamples.
+ *   g  the glow above 1x: post modes 1..7 as e runs them at Enhanced 2x
+ *      (PAL), every target against the CPU model exactly: the flare's and
+ *      the bloom's paste WORK3 -> SCENE and the depth of field's WORK0 ->
+ *      SCENE the GS's bilinear at the finer grid, no B-spline.  Every
+ *      comparison of a run at scale 1 (all the others) finds no sprite
+ *      flagged.
  * Tolerance 0 everywhere (but q's scaled runs).  Every pipeline created is enumerated; no
  * validation errors; no stubbed command replayed. */
 #include <math.h>
@@ -1119,8 +1126,20 @@ static int alphaPass(uint32_t atst, uint32_t aref, uint32_t a)
 }
 
 /* (above1x) the sprites the model drew with the above-1x kernels, and
- * their axes' kernels (A1X_GS, A1X_BOX, A1X_BSPLINE) */
-static int s_a1xSprites, s_a1xKinds[3];
+ * their axes' kernels (A1X_GS, A1X_BOX, A1X_BSPLINE); the sprites that read
+ * a work buffer onto a scaled target with the GS's own filter */
+static int s_a1xSprites, s_a1xKinds[3], s_a1xWorkGs;
+
+/* the work buffers, at their GS sizes at every scale (rd_core.c
+ * rd__work_class): a sprite reading one onto a scaled target takes the
+ * GS's own filter at that target's finer grid, never a kernel
+ * (rd_internal.h rd__work_class) */
+static int workBuffer(int n)
+{
+    return n == RD_TARGET_WORK0 || n == RD_TARGET_WORK1 || n == RD_TARGET_WORK3 ||
+           n == RD_TARGET_AA0 || n == RD_TARGET_AA1 || n == RD_TARGET_FEED128 ||
+           n == RD_TARGET_AURA_TAP || n == RD_TARGET_WORK2_PAD || n == RD_TARGET_FEED_HELD;
+}
 
 /* (above1x) the distinct resampled passes: source, destination, the axes'
  * kernels and steps */
@@ -1164,8 +1183,10 @@ static void cpuFetch(void *user, int x, int y, uint32_t out[4])
  * in 12.4 (rounded), and is covered when its GS pixel (floor(p / s)) is;
  * a target texture is read at its own scale (U times its scale, 12.4), and
  * with a scaled target involved and an axis past the GS's filter
- * (a1x_kind) the texel is above1x_ref's resampling.  At scale 1 every one
- * of these is the GS's own formula. */
+ * (a1x_kind) the texel is above1x_ref's resampling, but for a work buffer
+ * (workBuffer), which is always read with the GS's own bilinear or nearest
+ * at each texel's 12.4 GS position.  At scale 1 every one of these is the
+ * GS's own formula. */
 static void cpuSprite(const RdStateBlock *s, const RdPostRec *r)
 {
     CpuT *tc = cpuT(s->color);
@@ -1201,7 +1222,11 @@ static void cpuSprite(const RdStateBlock *s, const RdPostRec *r)
                 }
                 ssx = sr->sx;
                 ssy = sr->sy;
-                if (tsx != 1.0f || tsy != 1.0f || ssx != 1.0f || ssy != 1.0f) {
+                if (workBuffer(named(tr->target))) {
+                    /* the GS's bilinear or nearest below, at each texel's
+                     * GS position (X, Y) */
+                    s_a1xWorkGs += tsx != 1.0f || tsy != 1.0f;
+                } else if (tsx != 1.0f || tsy != 1.0f || ssx != 1.0f || ssy != 1.0f) {
                     stepX = a1x_step32(r->uv[2] - r->uv[0], r->rect[2] - r->rect[0], ssx, tsx);
                     stepY = a1x_step32(r->uv[3] - r->uv[1], r->rect[3] - r->rect[1], ssy, tsy);
                     const int lin = d->magFilter == RD_FILTER_LINEAR;
@@ -2348,7 +2373,7 @@ static void checkMotionBlurPresents(void)
  * and with the full-height scene: SCENE at every GS pixel centre against
  * the 1x model's, exactly where the mask is 0 within 16 GS pixels and
  * within 4 LSB where it is one value within 16 (its edges are finer at a
- * scale: the work buffers are). */
+ * scale: AURA_WORK's mask is at the scene's scale). */
 #define QH 448
 #define Q_FRAMES 12
 #define Q_Z_FACE (0x00C00000u)
@@ -2491,14 +2516,15 @@ static void qInit(const char *what, int preset, float scale, int fullHeight)
 
 /* ============================================= (x) above 1x
  *
- * Enhanced 4x (NTSC, SCENE 4x, the work buffers 2x): the aura's three
- * feedback modes over a picture with a nearer band, every target against
- * the CPU model at its own scale (cpuSprite), 0 LSB: the GS's sprites
- * where no target is scaled or no axis leaves the GS's filter, and
- * above1x_ref's kernels where the replay sets FXF_ABOVE1X (SCENE into
- * FEED128 and AURA_WORK into WORK0, decimations: the box; WORK0 and
- * FEED128 back over the frame, magnifications: the B-spline).  The replay
- * flagged as many sprites as the model resampled, both kernels ran. */
+ * Enhanced 4x (NTSC, SCENE 4x, the work buffers at their GS sizes): the
+ * aura's three feedback modes over a picture with a nearer band, every
+ * target against the CPU model at its own scale (cpuSprite), 0 LSB: the
+ * GS's sprites where no target is scaled or no axis leaves the GS's filter,
+ * above1x_ref's box where the replay sets FXF_ABOVE1X (SCENE into FEED128
+ * and AURA_WORK into WORK0, decimations), and the GS's own bilinear at each
+ * SCENE texel's GS position where a work buffer is drawn back over the
+ * frame (WORK0, FEED128 and AURA_TAP, magnifications).  The replay flagged
+ * as many sprites as the model resampled; the box ran, the B-spline never. */
 #define X_FRAMES 3
 
 static void checkAbove1x(void)
@@ -2517,11 +2543,12 @@ static void checkAbove1x(void)
     qInit("Enhanced 4x", RD_PRESET_ENHANCED, 4.0f, 0);
     const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     const RdTargetRec *fb = rd__target_rec(rd_target(RD_TARGET_FEED128).id);
-    CHECK(sc && fb && sc->sx == 4.0f && fb->sx == 2.0f, "(x) SCENE at 4x, FEED128 at 2x");
+    CHECK(sc && fb && sc->sx == 4.0f && fb->sx == 1.0f, "(x) SCENE at 4x, FEED128 at its GS size");
     cpuInit();
     s_scaledRun = 1;
     clearAll();
     s_a1xSprites = 0;
+    s_a1xWorkGs = 0;
     s_a1xNPass = 0;
     memset(s_a1xKinds, 0, sizeof(s_a1xKinds));
     int worst = 0;
@@ -2550,9 +2577,10 @@ static void checkAbove1x(void)
     }
     rhi_wait_idle();
     printf("  (x) %d aura frames at Enhanced 4x: max difference %d LSB; %d sprites resampled "
-           "(the replay flagged %u), axes: %d GS, %d box, %d B-spline\n",
+           "(the replay flagged %u), axes: %d GS, %d box, %d B-spline; %d work buffer reads "
+           "onto the frame with the GS's filter\n",
            3 * X_FRAMES, worst, s_a1xSprites, g_rd.above1xDraws, s_a1xKinds[A1X_GS],
-           s_a1xKinds[A1X_BOX], s_a1xKinds[A1X_BSPLINE]);
+           s_a1xKinds[A1X_BOX], s_a1xKinds[A1X_BSPLINE], s_a1xWorkGs);
     static const char *const kKind[3] = {"GS", "box", "B-spline"};
     for (int i = 0; i < s_a1xNPass; i++) {
         printf("      %s -> %s: across %s at %.3f texels, down %s at %.3f\n",
@@ -2563,15 +2591,88 @@ static void checkAbove1x(void)
     CHECK(s_a1xSprites > 0 && (uint32_t)s_a1xSprites == g_rd.above1xDraws,
           "(x) the replay flagged %u sprites, the model resampled %d", g_rd.above1xDraws,
           s_a1xSprites);
-    CHECK(s_a1xKinds[A1X_BOX] > 0 && s_a1xKinds[A1X_BSPLINE] > 0,
-          "(x) both kernels ran: box %d, B-spline %d", s_a1xKinds[A1X_BOX],
-          s_a1xKinds[A1X_BSPLINE]);
+    CHECK(s_a1xKinds[A1X_BOX] > 0 && s_a1xKinds[A1X_BSPLINE] == 0 && s_a1xWorkGs > 0,
+          "(x) the box ran (%d), the B-spline did not (%d), the work buffers went back over "
+          "the frame through the GS's filter (%d)",
+          s_a1xKinds[A1X_BOX], s_a1xKinds[A1X_BSPLINE], s_a1xWorkGs);
     CHECK(rhi_vk_validation_error_count() == 0, "(x) %u validation errors",
           rhi_vk_validation_error_count());
     s_scaledRun = 0;
     rd_shutdown();
     ScreenHeight = screenHeight;
     systemStatus[0] = status0;
+}
+
+/* ======================================== (g) the glow above 1x
+ *
+ * Enhanced 2x (PAL, SCENE 2x, the work buffers at their GS sizes): one
+ * frame of each post mode 1..7 as (e) runs them (the flare's and the
+ * bloom's chains and their paste WORK3 -> SCENE, the depth of field's four
+ * pastes WORK0 -> SCENE, the eye blur with the sun), every target against
+ * the CPU model at its own scale, 0 LSB: each paste the GS's bilinear at
+ * every SCENE texel's 12.4 GS position (cpuSprite, workBuffer), the
+ * decimations from SCENE and WORK2 into the work buffers the box.  The
+ * B-spline never ran; the replay flagged as many sprites as the model
+ * resampled. */
+static void checkEffectsScaled(void)
+{
+    rd_shutdown();
+    for (int i = 0; i < RD_TARGET_COUNT; i++) {
+        free(s_cpu[i].c);
+        free(s_cpu[i].z);
+    }
+    memset(s_cpu, 0, sizeof(s_cpu));
+    free(s_old);
+    s_old = NULL;
+    RdSettings st;
+    memset(&st, 0, sizeof(st));
+    st.preset = RD_PRESET_ENHANCED;
+    st.aspect = gsFrame.aspect;
+    st.outputWidth = 640;
+    st.outputHeight = 480;
+    st.sceneScale = 2.0f;
+    if (!rd_init(W, H, &st, NULL)) {
+        CHECK(0, "(g) rd_init at Enhanced 2x");
+        return;
+    }
+    gif_HostForgetTextures();
+    gif_HostFrameReset();
+    dl_Clear();
+    makeImage(1, 0);
+    s_imgTex = rd_create_texture(W, H, s_img, RD_TEXA_80_80, "rd_blur_test image");
+    const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+    const RdTargetRec *w3 = rd__target_rec(rd_target(RD_TARGET_WORK3).id);
+    CHECK(sc && w3 && sc->sx == 2.0f && w3->sx == 1.0f && w3->tw == 256 && w3->th == 128,
+          "(g) SCENE at 2x, WORK3 256 x 128");
+    cpuInit();
+    s_scaledRun = 1;
+    s_a1xSprites = 0;
+    s_a1xWorkGs = 0;
+    s_a1xNPass = 0;
+    memset(s_a1xKinds, 0, sizeof(s_a1xKinds));
+    InitStaticBlur(0, (float[4]){0.3f, -0.2f, -1.0f, 0.0f});
+    int worst = 0;
+    for (int post = 1; post <= 7 && failures <= 20; post++) {
+        const int d = effectsFrame(post, post == 1);
+        worst = d > worst ? d : worst;
+    }
+    InitializeStaticBlur(); /* sun off */
+    rhi_wait_idle();
+    printf("  (g) post modes 1..7 at Enhanced 2x: max difference %d LSB; %d work buffer reads "
+           "onto SCENE with the GS's filter; %d sprites resampled (the replay flagged %u), "
+           "axes: %d GS, %d box, %d B-spline\n",
+           worst, s_a1xWorkGs, s_a1xSprites, g_rd.above1xDraws, s_a1xKinds[A1X_GS],
+           s_a1xKinds[A1X_BOX], s_a1xKinds[A1X_BSPLINE]);
+    CHECK(s_a1xWorkGs > 0 && s_a1xKinds[A1X_BSPLINE] == 0,
+          "(g) the pastes through the GS's filter (%d), no B-spline (%d)", s_a1xWorkGs,
+          s_a1xKinds[A1X_BSPLINE]);
+    CHECK((uint32_t)s_a1xSprites == g_rd.above1xDraws,
+          "(g) the replay flagged %u sprites, the model resampled %d", g_rd.above1xDraws,
+          s_a1xSprites);
+    CHECK(rhi_vk_validation_error_count() == 0, "(g) %u validation errors",
+          rhi_vk_validation_error_count());
+    s_scaledRun = 0;
+    rd_shutdown();
 }
 
 static void checkQueenMirage(void)
@@ -3328,6 +3429,7 @@ static const IcoShardCase k_cases[] = {
     {"shrinks_wide_device", 3},
     {"motion_blur_wide", 4},
     {"above1x", 38},
+    {"effects_scaled", 4},
 };
 
 int main(int argc, char **argv)
@@ -3464,6 +3566,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("above1x")) {
         checkAbove1x(); /* re-initialises rd (NTSC, Enhanced 4x) */
+    }
+    if (ico_shard_take("effects_scaled")) {
+        checkEffectsScaled(); /* re-initialises rd (PAL, Enhanced 2x) */
     }
     if (ico_shard_finish() != 0) {
         return 1;

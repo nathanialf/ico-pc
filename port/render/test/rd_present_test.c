@@ -20,7 +20,8 @@
  *             constants are ico_frame.h's
  *   scales    rd__apply_display: the Original rows 1, the options under the
  *             Original flag, its zero-size fallback; 2x, WxH, the window's
- *             box, the 4K cap, the work buffers' scale, full height
+ *             box, the 4K cap, the work buffers and shadow levels at their
+ *             GS sizes at every scale, full height
  *   boxes     rd__present_box at 4:3 and 16:9 in 4:3, 16:9 and 5:4 outputs
  *   coverage  rdtex_keep_alpha_coverage keeps an alpha-tested texture's share;
  *             a lattice (wires alpha 0x80, black holes alpha 0)
@@ -1222,6 +1223,26 @@ static void frameFor(float aspect)
     g_rd.gsW = (uint32_t)ico_frame_width_for(aspect);
 }
 
+/* every work buffer and shadow level at its GS size, scale 1, whatever the
+   scene's scale (rd__target_scale_of): the PS2's sizes at every resolution */
+static int workAtGsSize(void)
+{
+    static const int kIds[] = {RD_TARGET_WORK0,    RD_TARGET_WORK1,     RD_TARGET_WORK3,
+                               RD_TARGET_AA0,      RD_TARGET_AA1,       RD_TARGET_FEED128,
+                               RD_TARGET_AURA_TAP, RD_TARGET_WORK2_PAD, RD_TARGET_FEED_HELD,
+                               RD_TARGET_SHADOW0,  RD_TARGET_SHADOW1,   RD_TARGET_SHADOW2};
+    int ok = 1;
+    for (size_t i = 0; i < sizeof(kIds) / sizeof(kIds[0]); i++) {
+        RdTargetRec t;
+        memset(&t, 0, sizeof(t));
+        t.w = 256;
+        t.h = 128;
+        rd__target_scale_of(&t, kIds[i]);
+        ok &= t.tw == 256 && t.th == 128 && t.sx == 1.0f && t.sy == 1.0f;
+    }
+    return ok;
+}
+
 static void checkScales(void)
 {
     const RdSettings saved = g_rd.settings;
@@ -1229,7 +1250,7 @@ static void checkScales(void)
     RdSettings s = originalSettings();
     frameFor(4.0f / 3.0f);
     applyWith(&s);
-    CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && g_rd.workScale == 1.0f &&
+    CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && workAtGsSize() &&
               g_rd.outAspect == 4.0f / 3.0f && !g_rd.fullHeight && !g_rd.filterUpgrade,
           "scales: the Original rows are 1");
     /* the options apply under the Original flag too; at 16:9 the frame is
@@ -1239,10 +1260,11 @@ static void checkScales(void)
     s.aspect = 16.0f / 9.0f;
     frameFor(s.aspect);
     applyWith(&s);
-    CHECK(g_rd.gsW == 688 && g_rd.sceneSx == 3.0f && g_rd.sceneSy == 3.0f &&
-              g_rd.workScale == 2.0f && near(g_rd.outAspect, 16.0f / 9.0f),
-          "scales: 3x at 16:9 under the Original flag (%g, %g, work %g; frame %u)", g_rd.sceneSx,
-          g_rd.sceneSy, g_rd.workScale, g_rd.gsW);
+    CHECK(g_rd.gsW == 688 && g_rd.sceneSx == 3.0f && g_rd.sceneSy == 3.0f && workAtGsSize() &&
+              near(g_rd.outAspect, 16.0f / 9.0f),
+          "scales: 3x at 16:9 under the Original flag (%g, %g; frame %u), the work buffers at "
+          "their GS sizes",
+          g_rd.sceneSx, g_rd.sceneSy, g_rd.gsW);
     {
         RhiRect b;
         rd__present_box(1920, 1080, g_rd.outAspect, &b);
@@ -1257,7 +1279,7 @@ static void checkScales(void)
     s.outputWidth = 1920;
     s.outputHeight = 1080;
     applyWith(&s);
-    CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && g_rd.workScale == 1.0f,
+    CHECK(g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f && workAtGsSize(),
           "scales: the Original flag with scale 0 and no size is 1x");
     s.outputWidth = 960;
     s.outputHeight = 720;
@@ -1265,8 +1287,9 @@ static void checkScales(void)
     s.aspect = 4.0f / 3.0f;
     s.sceneScale = 2.0f;
     applyWith(&s);
-    CHECK(g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f && g_rd.workScale == 2.0f,
-          "scales: 2x at 4:3 (%g, %g, work %g)", g_rd.sceneSx, g_rd.sceneSy, g_rd.workScale);
+    CHECK(g_rd.sceneSx == 2.0f && g_rd.sceneSy == 2.0f && workAtGsSize(),
+          "scales: 2x at 4:3 (%g, %g), the work buffers at their GS sizes", g_rd.sceneSx,
+          g_rd.sceneSy);
     s.aspect = 16.0f / 9.0f;
     frameFor(s.aspect);
     applyWith(&s);
@@ -1279,18 +1302,8 @@ static void checkScales(void)
     s.sceneWidth = 1920;
     s.sceneHeight = 1440;
     applyWith(&s);
-    CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && g_rd.workScale == 2.0f,
-          "scales: 1920x1440");
-    /* Glow size: Original (RdSettings.glowOriginal): the scene as it was,
-     * the work buffers at the PS2's sizes (work scale 1) */
-    s.glowOriginal = 1;
-    applyWith(&s);
-    CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && g_rd.workScale == 1.0f,
-          "scales: 1920x1440 with Glow size Original (work %g)", (double)g_rd.workScale);
-    s.glowOriginal = 0;
-    applyWith(&s);
-    CHECK(g_rd.workScale == 2.0f, "scales: Glow size Scaled again (work %g)",
-          (double)g_rd.workScale);
+    CHECK(g_rd.sceneSx == 3.75f && g_rd.sceneSy == 2.8125f && workAtGsSize(),
+          "scales: 1920x1440, the work buffers at their GS sizes");
     /* the window's box at 16:9: the box's exact width (682.67 of the 688
      * columns) over 1920, one texel an output pixel, the PS2's pixel shape
      * kept, with Full pixel off (the game's: the border mask over the same
@@ -1401,7 +1414,8 @@ static void checkScales(void)
     CHECK(t.tw == 256 && t.sx == 1.0f, "scales: other temporary targets stay");
     t.w = t.h = 128;
     rd__target_scale_of(&t, RD_TARGET_FEED128);
-    CHECK(t.tw == 256 && t.th == 256, "scales: the work buffers by the work scale");
+    CHECK(t.tw == 128 && t.th == 128 && t.sx == 1.0f,
+          "scales: the work buffers at their GS sizes at 2x");
     /* at 16:9 2x: a block the game sizes as the frame (688 x 512) is
      * scene-class, 2x both ways; a 256 x 256 reflection block is drawn at
      * its own size, whatever the aspect (no widening) */
@@ -1446,14 +1460,14 @@ static void checkScales(void)
     t.h = 512;
     rd__target_scale_of(&t, -1);
     CHECK(t.tw == 1376 && t.th == 1024, "scales: water Sharp: a frame-sized block is as SCENE");
-    /* the scene's scale, not the work scale (which stops at 2x) */
+    /* the scene's scale at 4x too, while the work buffers keep their GS
+     * sizes */
     s.sceneScale = 4.0f;
     applyWith(&s);
     t.w = t.h = 256;
     rd__target_scale_of(&t, -1);
-    CHECK(g_rd.workScale == 2.0f && t.tw == 1024 && t.th == 1024 && t.sx == 4.0f,
-          "scales: water Sharp at 4x: the block is 1024 x 1024, past the work scale %g (%ux%u)",
-          (double)g_rd.workScale, t.tw, t.th);
+    CHECK(workAtGsSize() && t.tw == 1024 && t.th == 1024 && t.sx == 4.0f,
+          "scales: water Sharp at 4x: the block is 1024 x 1024 (%ux%u)", t.tw, t.th);
     /* at 1x both are the GS size */
     s.sceneScale = 1.0f;
     for (int sharp = 0; sharp <= 1; sharp++) {

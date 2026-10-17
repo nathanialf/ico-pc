@@ -52,6 +52,8 @@ static bool s_inLists;
 static double s_walkPipeMs;
 static uint32_t s_walkPipes;
 static RhiStats s_walkStats;
+/* g_rd.above1xDraws at the replay's start (RdPerfRecord.a1xDraws) */
+static uint32_t s_a1xDraws;
 
 /* the timestamps of one replay: their indices in the order written, and for
    each index the effect (RD_PERF_POST_*, -1 none) of the stretch it ends */
@@ -175,6 +177,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
         s_haveLast = true;
     }
     s_pipelineCreates = g_rd.stats.pipelineCreates;
+    s_a1xDraws = g_rd.above1xDraws;
     memset(&s_stamps, 0, sizeof(s_stamps));
     s_post = -1;
     s_nextTs = RD_PERF_TS_COUNT;
@@ -274,6 +277,7 @@ void rd__perf_end(void)
     RdPerfRecord *r = &g_rdPerf;
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
     r->pipelineCreates = g_rd.stats.pipelineCreates - s_pipelineCreates;
+    r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;
     if (g_rd.hasDevice) {
         RhiStats s;
         rhi_get_stats(&s);

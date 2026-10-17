@@ -2967,9 +2967,8 @@ static void sheetParam(const RdTexRec *t, float param[4])
  * or sprite_stq_ps whose texture is a colour view of a target, both filters
  * linear, no GS levels, the texture's scale not the bound target's: the
  * shadow levels (scale 1) composited into SCENE, the softening's SCENE into
- * AA0 and AA0 or AA1 back (when the scene's scale is above the work
- * targets'), a work target drawn into SCENE, the reduction's fallback
- * sprite when an axis leaves the GS's filter (a1xGs).  The shadow chain's
+ * AA0, the reduction's fallback sprite when an axis leaves the GS's filter
+ * (a1xGs); never a work buffer.  The shadow chain's
  * first level reads the count already box-averaged to its GS size
  * (shadowReduce), at scale 1 as the levels are.  The scales are equal for
  * every target at scale 1 but DISPLAY's rows at full height (sy 2), which
@@ -2989,7 +2988,7 @@ static int spriteAbove1x(const Replay *r, const RdDrawPass *dp, const DrawSetup 
         return 0;
     }
     const RdTargetRec *src = rd__target_rec(t->target);
-    if (!src) {
+    if (!src || rd__work_class(src)) {
         return 0;
     }
     /* the shadow count at its GS size (resolveTexture) is at scale 1 */
@@ -5632,12 +5631,13 @@ void rd__set_a1x_gs_keep(bool on)
  * texel in 1/32 (rounded), packed step32x * 4096 + step32y for
  * DrawCB.scale[3].  0, and the flag left off, when every scale is 1 (the
  * GS's own arithmetic, whatever the step: the PS2's 4:1 and 3.5:1 chain
- * steps stay its point samples) or when neither axis leaves the GS's
- * filter (RD_FX_BOX_MIN32, RD_FX_BSPLINE_MAX32). */
+ * steps stay its point samples), when neither axis leaves the GS's
+ * filter (RD_FX_BOX_MIN32, RD_FX_BSPLINE_MAX32) or src is a work buffer. */
 static uint32_t blurAbove1xSteps(const RdTargetRec *tc, const RdTargetRec *src, const float uv[4],
                                  const float rect[4], int linear)
 {
-    if (!src || (tc->sx == 1.0f && tc->sy == 1.0f && src->sx == 1.0f && src->sy == 1.0f)) {
+    if (!src || (tc->sx == 1.0f && tc->sy == 1.0f && src->sx == 1.0f && src->sy == 1.0f) ||
+        rd__work_class(src)) {
         return 0;
     }
     const double dx = fabs((double)rect[2] - (double)rect[0]);

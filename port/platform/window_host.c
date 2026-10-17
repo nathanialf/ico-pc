@@ -277,6 +277,8 @@ static struct {
     /* the exact blend's draws and passes, the glow's passes, the target
        snapshots copied and swapped (rd.h RdPerfRecord, issue 103) */
     uint64_t dstDraws, storagePasses, dstSwitches, glowPasses, snapshots, snapSwaps;
+    /* the draws through the above-1x kernels (rd.h RdPerfRecord.a1xDraws) */
+    uint64_t a1xDraws;
     uint64_t msaaResolves;
     /* draws that read a water block at a scale other than the scene's
        (rd.h RdPerfRecord.blockOtherScaleReads, issue 106) */
@@ -342,8 +344,6 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->borderMask = (uint8_t)(o.fullPixel == 0);
     /* Water reflections: Sharp, in either preset (at 1x it changes nothing) */
     rs->waterSharp = (uint8_t)(o.effectWaterSharp != 0);
-    /* Glow size: Original, in either preset (at 1x it changes nothing) */
-    rs->glowOriginal = (uint8_t)(o.effectGlowOriginal != 0);
     /* off under the Original preset (ico_video_anti_alias); the renderer
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
@@ -3581,6 +3581,7 @@ static void perf_drain(void)
         s_perf.glowPasses += r.glowPasses;
         s_perf.snapshots += r.snapshots;
         s_perf.snapSwaps += r.snapSwaps;
+        s_perf.a1xDraws += r.a1xDraws;
         s_perf.pipeCreates += r.pipelineCreates;
         s_perf.msaaResolves += r.msaaResolves;
         if (r.msaaSamples > s_perf.msaaSamples) {
@@ -3686,16 +3687,16 @@ static void perf_log(void)
             "%.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
             "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
             "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
-            "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped; in "
-            "the block %llu buffers and %llu textures created, %llu and %llu destroyed, %llu "
-            "memory allocations, %llu pipelines created, %llu fence waits, %llu wait-idles, %llu "
-            "readbacks\n",
+            "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped, %.1f draws "
+            "resampled above 1x; in the block %llu buffers and %llu textures created, %llu and "
+            "%llu destroyed, %llu memory allocations, %llu pipelines created, %llu fence waits, "
+            "%llu wait-idles, %llu readbacks\n",
             s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
             s_perf.groups / n, s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
             s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
             s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
             s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n,
-            s_perf.snapSwaps / n, (unsigned long long)s_perf.bufCreated,
+            s_perf.snapSwaps / n, s_perf.a1xDraws / n, (unsigned long long)s_perf.bufCreated,
             (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
             (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
             (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,

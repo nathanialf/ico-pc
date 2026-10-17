@@ -451,6 +451,19 @@ float rd__depth_unorm_steps(void);
 float rd__gs_depth(uint32_t z, float scale);
 
 RdTargetRec *rd__target_rec(uint32_t id);
+/* Whether t is a work buffer: WORK0, WORK1, WORK3, AA0, AA1, FEED128,
+ * AURA_TAP, WORK2_PAD or FEED_HELD (a named target neither scene-class nor
+ * a shadow level: rd_core.c rd__target_scale_of).  They keep the PS2's
+ * sizes at every scale, and a draw that reads one onto a scaled target
+ * reads it with the GS's own filter at that target's finer grid, as the
+ * PS2 magnifies it onto its frame, never an above-1x kernel: the glow's,
+ * the depth of field's and the aura's pastes into SCENE take
+ * fx_sprite_ps's bilinear or nearest at each texel's GS position
+ * (rd_replay.c blurAbove1xSteps), the softening's AA0 and AA1 back over
+ * SCENE sprite_ps's own sampling (spriteAbove1x).  The game's draws from a
+ * work buffer onto the frame all magnify (half a texel a GS pixel or
+ * less); draws from SCENE, WORK2 or AURA_WORK into one keep the box */
+bool rd__work_class(const RdTargetRec *t);
 /* a target's name: SCENE, DISPLAY, ... for a named one, "block" for a
  * render-to-texture block, "temporary" for another temporary, "gone" */
 const char *rd__target_name(uint32_t id);
@@ -1790,11 +1803,11 @@ typedef struct RdContext {
     uint8_t textQuads;
     bool deferText;
     /* the Enhanced display options as applied (rd_present.c
-     * rd__apply_display from settings): the scene-class targets' scale, the
-     * fixed work buffers' scale, the aspect option (the present box's when
-     * no frame says otherwise: rd__frame_wexact), and the texture filter
-     * upgrade in force */
-    float sceneSx, sceneSy, workScale, outAspect;
+     * rd__apply_display from settings): the scene-class targets' scale (the
+     * work buffers and the shadow levels keep their GS sizes), the aspect
+     * option (the present box's when no frame says otherwise:
+     * rd__frame_wexact), and the texture filter upgrade in force */
+    float sceneSx, sceneSy, outAspect;
     /* the last replayed frame's exact width (RdFrame.wExact, from its head:
      * GsBase.c gsFrame.wExact) and its camera's display aspect
      * (RdCamera.aspect, rd__set_replay_camera); 0 before one: the frame's
@@ -2158,7 +2171,7 @@ bool rd__border_mask(const RhiRect *box, float cols, uint32_t gsH, RhiRect *inne
  * (rd_present.c); the UI box, the deferred text and the CRT grid (rd_crt.c
  * rd__crt_crop) take the same width. */
 float rd__frame_wexact(void);
-/* g_rd.settings -> g_rd.sceneSx/Sy, workScale,
+/* g_rd.settings -> g_rd.sceneSx/Sy,
  * outAspect, filterUpgrade, fullHeight (and the swapchain's vsync).  True
  * when a target scale changed (the caller recreates the named targets). */
 bool rd__apply_display(void);

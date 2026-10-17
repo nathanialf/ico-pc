@@ -412,9 +412,6 @@ bool rd__apply_display(void)
     }
     const float sx = w / gw < 1.0f ? 1.0f : w / gw;
     const float sy = h / gh < 1.0f ? 1.0f : h / gh;
-    /* Glow size: Original (RdSettings.glowOriginal): the PS2's sizes */
-    const float work =
-        st->glowOriginal ? 1.0f : rd_work_target_scale((uint32_t)(sy * 448.0f + 0.5f));
     uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
     if (g_rd.hasDevice && !rhi_limits()->textureMips) {
         filter = 0;
@@ -424,7 +421,7 @@ bool rd__apply_display(void)
     /* compared with what the options asked for last time, not with what the
      * allocation fallback (createNamedTargets) settled on, so an unrelated
      * change does not recreate the targets just to fail the same way again */
-    const bool changed = sx != g_rd.sceneReqSx || sy != g_rd.sceneReqSy || work != g_rd.workScale ||
+    const bool changed = sx != g_rd.sceneReqSx || sy != g_rd.sceneReqSy ||
                          full != g_rd.fullHeight || cropWe != g_rd.frameCropWe;
     /* one line when what the options give differs from what was in force:
      * this runs on a settings change or a resize (rd_begin_frame's
@@ -445,10 +442,10 @@ bool rd__apply_display(void)
         const float sceneW = (cropWe > 0.0f ? cropWe : gw) * sx;
         /* MSAA is asked for here; the fog's self-test settles it later
          * (rd__fog_aa_reconcile) and logs "msaa: off" when the device cannot */
-        rd__log("display: scene %gx%g (%.0fx%.0f)%s, work %g, aspect %.3f, filter %u, %s height, "
+        rd__log("display: scene %gx%g (%.0fx%.0f)%s, aspect %.3f, filter %u, %s height, "
                 "full pixel %s, vsync %s%s%s%s",
                 (double)sx, (double)sy, floor((double)sceneW + 0.5), floor((double)(gh * sy) + 0.5),
-                crtLock ? " (CRT: 1x)" : "", (double)work, (double)aspect, (unsigned)filter,
+                crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
                 rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote);
@@ -461,7 +458,6 @@ bool rd__apply_display(void)
         g_rd.sceneSy = sy;
         g_rd.sceneFellBack = false;
     }
-    g_rd.workScale = work;
     g_rd.ssaa = ssaa;
     g_rd.outAspect = aspect;
     g_rd.filterUpgrade = filter;
