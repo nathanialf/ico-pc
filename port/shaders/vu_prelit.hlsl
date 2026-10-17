@@ -2,8 +2,12 @@
 // (no test) and 36 (scissor), chosen by vu_draw.z's clip mode. Vertex: pos,
 // ST, colour (pac_makeNormalStrip). vu_prelit_pre_vs: its vertices for the
 // vertex pre-pass (vu_common.hlsli vu_pre_out). Also vu_ps, the pixel
-// shader of every mesh program (vu_texa_ps for the 24- and 16-bit textures
-// under AEM), and vu_probe_ps, the tests' probe output.
+// shader of every VU draw through the main vertex shaders (vu_texa_ps for
+// the 24- and 16-bit textures under AEM: vu_tri.hlsl vu_main_vs,
+// vu_particle.hlsl vu_particle_main_vs; VuVSOut2, the planes read from the
+// record), vu_legacy_ps and vu_legacy_texa_ps, the same for the programs'
+// own entries (VuVSOut, the planes as flat varyings: the fallback,
+// rd_replay_vu.c vuDraw), and vu_probe_ps, the tests' probe output.
 #include "vu_common.hlsli"
 
 // One vertex of START_NORMAL_C / _NOCLIP (normal_c.vsm:135-269) or
@@ -59,19 +63,39 @@ VuPreOut vu_prelit_pre_vs(uint id : SV_VertexID)
     return vu_pre_out(id, vu_prelit_vertex(vu_rec.z + id, vu_draw.z & VU_CLIP_MASK));
 }
 
-GS_PS_ATTR GS_PS_OUT vu_ps(VuVSOut i)
+GS_PS_ATTR GS_PS_OUT vu_ps(VuVSOut2 i)
+{
+    const uint4 col = vu_pixel(vu_record_in(i));
+    GS_RETURN(col, i.pos);
+}
+
+GS_PS_ATTR GS_PS_OUT vu_texa_ps(VuVSOut2 i)
+{
+    const uint4 col = vu_pixel_texa(vu_record_in(i));
+    GS_RETURN(col, i.pos);
+}
+
+// the fallback's: a program's entry, its planes in VuVSOut
+GS_PS_ATTR GS_PS_OUT vu_legacy_ps(VuVSOut i)
 {
     const uint4 col = vu_pixel(i);
     GS_RETURN(col, i.pos);
 }
 
-GS_PS_ATTR GS_PS_OUT vu_texa_ps(VuVSOut i)
+GS_PS_ATTR GS_PS_OUT vu_legacy_texa_ps(VuVSOut i)
 {
     const uint4 col = vu_pixel_texa(i);
     GS_RETURN(col, i.pos);
 }
 
-uint4 vu_probe_ps(VuVSOut i) : SV_Target0
+// The probe's input: the position and the colour (location 0 of VuVSOut
+// and of VuVSOut2 alike, so one probe shader serves both)
+struct VuProbeIn {
+    float4 pos : SV_Position;
+    VK_LOC(0) noperspective float4 col : COLOR0;
+};
+
+uint4 vu_probe_ps(VuProbeIn i) : SV_Target0
 {
     uint v = uint(i.col.x + 0.5) | (uint(i.col.y + 0.5) << 16);
     return uint4(v & 255u, (v >> 8) & 255u, (v >> 16) & 255u, v >> 24);

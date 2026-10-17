@@ -7,12 +7,18 @@
 // to GS screen (vf01..vf04), vu_mem[20..23] = the screen matrix
 // (vf05..vf08). Drawn non-indexed, six vertices per particle: a GS sprite
 // (PRIM 0xD6: TME, ABE, AA1) between the two corners, ST from (u, v) to
-// (u + du, v + dv) with Q = 1, flat colour.
+// (u + du, v + dv) with Q = 1, flat colour.  vu_particle_vs draws a sprite
+// whole in each of its six invocations; with the record (vu_common.hlsli,
+// the record stages) vu_particle_pre_vs makes its verdict and planes once
+// and vu_particle_main_vs draws it from them (with vu_ps).
 #include "vu_common.hlsli"
 
 struct VuSprite {
-    int3 c0; // ftoi4 of corner 0 (x - e, y - e) and Z
-    int3 c1; // corner 1 (x + e, y + e)
+    // ftoi4 of corner 0 (x - e, y - e) and Z, of corner 1 (x + e, y + e)
+    // (scalars: no vector built whole whose lane nothing reads, which the
+    // optimiser leaves undefined: vu_particle_pre_vs reads no Z)
+    int c0x, c0y, c0z;
+    int c1x, c1y, c1z;
     uint4 rgba;
     float4 st;  // u0, v0, u1, v1
     bool drawn; // the VU's test: alpha non-zero and both corners inside the clip window
@@ -35,13 +41,16 @@ VuSprite vu_particle(uint i)
     float4 e = vu_matm(20u, float4(sz, sz, 0.0, 1.0), 1.0);
     // :108 div; :116-121 corners h -/+ e on xy, xyz divided, w stays h.w
     float q = vu_rcp(h.w);
-    precise float3 p0 = float3(h.xy - e.xy, h.z) * q;
-    precise float3 p1 = float3(h.xy + e.xy, h.z) * q;
+    // (Z apart: a vector lane nothing reads is left undefined by the
+    // optimiser, and vu_particle_pre_vs reads no Z; the same products)
+    precise float2 p0 = (h.xy - e.xy) * q;
+    precise float2 p1 = (h.xy + e.xy) * q;
+    precise float pz = h.z * q;
     // :125-133 both corners strictly inside the window on x, y and w;
     // :100-105 a zero alpha skips the particle
     bool alphaZero = (asuint(b.w) & 0x7F800000u) == 0u;
-    o.drawn = !alphaZero && vu_inside(p0.xy, h.w, clipMin, clipMax) != 0u &&
-              vu_inside(p1.xy, h.w, clipMin, clipMax) != 0u;
+    o.drawn = !alphaZero && vu_inside(p0, h.w, clipMin, clipMax) != 0u &&
+              vu_inside(p1, h.w, clipMin, clipMax) != 0u;
     // Out of the box the PS2's test; beside the picture and outside the
     // out-of-the-box state drawn (vu_particle_vs; docs/port/VU1_PROGRAMS.md,
     // "The region rule").
@@ -54,8 +63,12 @@ VuSprite vu_particle(uint i)
     // inside it at 60:9, where a sprite with a corner past it would vanish
     // whole.
     o.shown = !alphaZero && clipMin.w < h.w && h.w < clipMax.w;
-    o.c0 = int3(vu_ftoi4(p0.x), vu_ftoi4(p0.y), vu_ftoi4(p0.z));
-    o.c1 = int3(vu_ftoi4(p1.x), vu_ftoi4(p1.y), vu_ftoi4(p1.z));
+    o.c0x = vu_ftoi4(p0.x);
+    o.c0y = vu_ftoi4(p0.y);
+    o.c0z = vu_ftoi4(pz);
+    o.c1x = vu_ftoi4(p1.x);
+    o.c1y = vu_ftoi4(p1.y);
+    o.c1z = vu_ftoi4(pz);
     // :118-124 RGBA = ftoi0(grey, grey, grey, alpha)
     o.rgba = vu_rgba(float4(b.z, b.z, b.z, b.w));
     // :106-123 ST0 = (u, v, 1), ST1 = (u + du, v + dv, 1)
@@ -68,15 +81,15 @@ uint vu_particle_probe(VuSprite s, uint field)
 {
     uint r = 0u;
     if (field == 0u) {
-        r = asuint(s.c0.x);
+        r = asuint(s.c0x);
     } else if (field == 1u) {
-        r = asuint(s.c0.y);
+        r = asuint(s.c0y);
     } else if (field == 2u) {
-        r = asuint(s.c1.x);
+        r = asuint(s.c1x);
     } else if (field == 3u) {
-        r = asuint(s.c1.y);
+        r = asuint(s.c1y);
     } else if (field == 4u) {
-        r = asuint(s.c0.z);
+        r = asuint(s.c0z);
     } else if (field == 5u) {
         r = s.rgba.x | (s.rgba.y << 8) | (s.rgba.z << 16) | (s.rgba.w << 24);
     } else if (field == 6u) {
@@ -90,7 +103,7 @@ uint vu_particle_probe(VuSprite s, uint field)
     } else if (field == 10u) {
         r = s.drawn ? 1u : 0u;
     } else if (field == 11u) {
-        r = asuint(s.c1.z);
+        r = asuint(s.c1z);
     } else if (field == 12u) {
         r = s.shown ? 1u : 0u;
     }
@@ -165,8 +178,8 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     // when a tick showed it (vu_particle_tick_shown), as a triangle the
     // region rule drops at the blended camera is (vu_region_rule).
     if (!s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED)) == 0u) {
-        float2 p0 = vu_ndc(float2(s.c0.xy) * (1.0 / 16.0));
-        float2 p1 = vu_ndc(float2(s.c1.xy) * (1.0 / 16.0));
+        float2 p0 = vu_ndc(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
+        float2 p1 = vu_ndc(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
 #ifdef ICO_VU_PLAIN
         // the plain variant: no tick cameras (vu_common.hlsli)
         if (vu_rect_reaches_picture(min(p0, p1), max(p0, p1))) {
@@ -184,8 +197,8 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     // (made before the sprite's own values, so none of them is a value
     // chosen after it is computed)
     if (g_vp.x != 0.0) {
-        float2 p0 = vu_texel_offset_px(float2(s.c0.xy) * (1.0 / 16.0));
-        float2 p1 = vu_texel_offset_px(float2(s.c1.xy) * (1.0 / 16.0));
+        float2 p0 = vu_texel_offset_px(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
+        float2 p1 = vu_texel_offset_px(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
         float4 col = float4(s.rgba);
         o = vu_attr_planes_at(o, p0, float2(p1.x, p0.y), float2(p0.x, p1.y), col, col, col,
                               float3(s.st.xy, 1.0), float3(s.st.z, s.st.y, 1.0),
@@ -195,8 +208,87 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     uint c = vid % 6u;
     bool right = c == 1u || c == 4u || c == 5u;
     bool down = c == 2u || c == 3u || c == 5u;
-    o.pos = vu_gs_position(right ? s.c1.x : s.c0.x, down ? s.c1.y : s.c0.y, s.c1.z, false);
+    o.pos = vu_gs_position(right ? s.c1x : s.c0x, down ? s.c1y : s.c0y, s.c1z, false);
     o.col = float4(s.rgba);
     o.stq = float3(right ? s.st.z : s.st.x, down ? s.st.w : s.st.y, 1.0);
+    return o;
+}
+
+// ------------------------------------------- the record (vu_common.hlsli)
+
+// The vertex pre-pass's sprite stage: sprite id's drop verdict and planes
+// as vu_particle_vs makes them, once a sprite; drawn twice, vu_tri.w 0
+// writing slot A (vu_tri.x + id: the flags, the colour, r.xy; x1; y1) and 1
+// slot B (vu_tri.y + id: a1; x0; y0).  The flags: VU_TF_KEPT the sprite is
+// drawn, VU_TF_EXACT its planes hold (the exact viewport)
+VuPreOut vu_particle_pre_vs(uint id : SV_VertexID)
+{
+    VuSprite s = vu_particle(id);
+    uint kept = s.shown ? 1u : 0u;
+    // vu_particle_vs's drop
+    if (kept != 0u && !s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED)) == 0u) {
+        float2 p0 = vu_ndc(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
+        float2 p1 = vu_ndc(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
+        if (vu_rect_reaches_picture(min(p0, p1), max(p0, p1)) &&
+            ((vu_draw.z & VU_F_TICKS) == 0u || !vu_particle_tick_shown(id))) {
+            kept = 0u;
+        }
+    }
+    // vu_particle_vs's planes
+    VuVSOut o = vu_out_init();
+    if (g_vp.x != 0.0) {
+        float2 p0 = vu_texel_offset_px(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
+        float2 p1 = vu_texel_offset_px(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
+        float4 col = float4(s.rgba);
+        o = vu_attr_planes_at(o, p0, float2(p1.x, p0.y), float2(p0.x, p1.y), col, col, col,
+                              float3(s.st.xy, 1.0), float3(s.st.z, s.st.y, 1.0),
+                              float3(s.st.x, s.st.w, 1.0));
+    }
+    uint f = (kept != 0u ? VU_TF_KEPT : 0u) | (g_vp.x != 0.0 ? VU_TF_EXACT : 0u);
+    uint4 a0 = uint4(f, vu_rec_pack_rgba(o.a0), asuint(o.r.x), asuint(o.r.y));
+    uint4 a1 = asuint(o.x1), a2 = asuint(o.y1);
+    uint4 b0 = asuint(o.a1), b1 = asuint(o.x0), b2 = asuint(o.y0);
+    // slot A or B, chosen value by value
+    bool sb = vu_tri.w != 0u;
+    uint4 r0, r1, r2;
+    r0.x = sb ? b0.x : a0.x;
+    r0.y = sb ? b0.y : a0.y;
+    r0.z = sb ? b0.z : a0.z;
+    r0.w = sb ? b0.w : a0.w;
+    r1.x = sb ? b1.x : a1.x;
+    r1.y = sb ? b1.y : a1.y;
+    r1.z = sb ? b1.z : a1.z;
+    r1.w = sb ? b1.w : a1.w;
+    r2.x = sb ? b2.x : a2.x;
+    r2.y = sb ? b2.y : a2.y;
+    r2.z = sb ? b2.z : a2.z;
+    r2.w = sb ? b2.w : a2.w;
+    return vu_rec_point_out((sb ? vu_tri.y : vu_tri.x) + id, r0, r1, r2);
+}
+
+// Sprite vid / 6 as vu_particle_vs draws it, its drop verdict and planes
+// from its record (slot A's flags; vu_ps reads the planes)
+VuVSOut2 vu_particle_main_vs(uint vid : SV_VertexID)
+{
+    // the particle, or the tests' probe particle
+    bool probe = (vu_draw.z & VU_F_PROBE) != 0u;
+    VuSprite s = vu_particle(probe ? vu_probe_vertex(vid) : vid / 6u);
+    if (probe) {
+        return vu_out2(vu_probe_out(vid, vu_particle_probe(s, (vid / 3u) % VU_PROBE_FIELDS)), 0u);
+    }
+    uint i = vid / 6u;
+    VuVSOut2 o = vu_out2_init(i);
+    uint f = vu_rec_buf[vu_tri.x + i].x;
+    if ((f & VU_TF_KEPT) == 0u) {
+        return o;
+    }
+    // corners of the two triangles: (0,0) (1,0) (0,1), (0,1) (1,0) (1,1)
+    uint c = vid % 6u;
+    bool right = c == 1u || c == 4u || c == 5u;
+    bool down = c == 2u || c == 3u || c == 5u;
+    o.pos = vu_gs_position(right ? s.c1x : s.c0x, down ? s.c1y : s.c0y, s.c1z, false);
+    o.col = float4(s.rgba);
+    o.stq = float3(right ? s.st.z : s.st.x, down ? s.st.w : s.st.y, 1.0);
+    o.tri = (f & VU_TF_EXACT) != 0u ? i | VU_TF_EXACT_BIT : i;
     return o;
 }

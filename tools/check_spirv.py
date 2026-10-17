@@ -63,10 +63,12 @@ Gates:
              (46,470 words and up): the plain variant is what such a
              device compiles, so it stays well inside the size that
              built (docs/port/SHADERS.md, The size history).
-             The vertex pre-pass's entries (vu_*_pre_vs: a program's
-             vertex function alone, no triangle, no card test, no tick
-             cameras; docs/port/RENDER.md, The vertex pre-pass) are held
-             to VS_PLAIN_BUDGET too: every device compiles them.
+             The vertex and triangle pre-passes' entries (vu_*_pre_vs: a
+             program's vertex function alone, or one record stage of a
+             triangle or sprite; docs/port/RENDER.md, The vertex and
+             triangle pre-passes) and the main vertex shaders drawing from
+             their record (vu_*_main_vs) are held to VS_PLAIN_BUDGET too:
+             every device compiles them.
              The VU vertex shaders by release (git archive <tag>
              port/shaders, this DXC and flags; words, and vu_prelit_vs's
              instructions / blocks), and the Adreno 740 with them:
@@ -75,11 +77,12 @@ Gates:
                v0.7.5  10,840 to 49,256 (11,826 / 1,837)       hung (issue 93)
                v0.7.6  10,840 to 93,407 (19,920 / 2,431)       hung (issue 107)
                v0.7.7  10,000 to 51,005 (10,692 / 861)         hung (issue 107)
-  variants   every VU vertex shader vu_X_vs in the directories given has
-             its plain variant vu_X_plain_vs beside it (only when a
-             directory, not single files, is given); a pre-pass entry
-             vu_X_pre_vs has none (the variants differ only in the triangle
-             rule, which it does not hold).
+  variants   every mesh program's entry vu_X_vs (PROGRAM_ENTRIES: the
+             fallback's vertex shaders, docs/port/SHADERS.md, The variants)
+             in the directories given has its plain variant vu_X_plain_vs
+             beside it (only when a directory, not single files, is given);
+             the pre-passes' entries and the main shaders have none (one
+             module for every device).
   aggregate  no instruction produces or stores a whole array: no OpLoad,
              OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi,
              OpSelect, OpCopyObject or OpCopyLogical whose type is an array
@@ -172,6 +175,10 @@ OTHER_NAMES = {77: "OpVectorExtractDynamic", 78: "OpVectorInsertDynamic", 126: "
                173: "OpSGreaterThan", 177: "OpSLessThan", 178: "OpULessThanEqual",
                179: "OpSLessThanEqual", 195: "OpShiftRightArithmetic", 198: "OpBitwiseXor",
                200: "OpNot", 252: "OpKill"}
+# the mesh programs' entries, each built in both variants (the variants gate)
+PROGRAM_ENTRIES = ("vu_prelit_vs", "vu_lit_vs", "vu_lit_spec_vs", "vu_reflect_vs", "vu_skin_vs",
+                   "vu_skin_spec_vs", "vu_skin_debug_vs", "vu_grid_vs", "vu_grid_lit_vs",
+                   "vu_grid_spec_vs")
 VS_BUDGET = 56000
 VS_PLAIN_BUDGET = 25700
 PS_BUDGET = 78560
@@ -250,7 +257,8 @@ def check(path, sizes=None):
         if other:
             out.append("envelope: opcodes outside the vertex-shader set: " + other)
     plain = os.path.basename(path).endswith("_plain_vs.spv")
-    pre = os.path.basename(path).endswith("_pre_vs.spv")
+    pre = (os.path.basename(path).endswith("_pre_vs.spv") or
+           os.path.basename(path).endswith("_main_vs.spv"))
     budget = (VS_PLAIN_BUDGET if plain or pre else VS_BUDGET) if vertex else PS_BUDGET
     if nwords > budget:
         out.append("size: %d words, over the %s budget of %d" %
@@ -262,7 +270,15 @@ def check(path, sizes=None):
                      (os.path.basename(path), "vs" if vertex else "ps", nwords, len(insts),
                       census.get(OP_LABEL, 0), census.get(OP_PHI, 0),
                       census.get(OP_LOOP_MERGE, 0), census.get(OP_DOT, 0), vcmp, bsel, anyall))
+        klass = ("plain vertex" if (plain or pre) else "vertex") if vertex else "pixel"
+        best = LARGEST.get(klass)
+        if best is None or nwords > best[0]:
+            LARGEST[klass] = (nwords, os.path.basename(path), budget)
     return out
+
+
+# the largest module of each budget class (--sizes' last lines)
+LARGEST = {}
 
 
 def main(argv):
@@ -287,18 +303,20 @@ def main(argv):
         for text in check(f, sizes):
             print("%s: %s" % (f, text))
             findings += 1
-    # every VU vertex shader has its plain variant (only over directories)
+    # every mesh program's entry has its plain variant (only over directories)
     if all(not os.path.isfile(d) for d in args):
         names = {os.path.basename(f) for f in files}
-        for n in sorted(names):
-            if (n.startswith("vu_") and n.endswith("_vs.spv") and
-                    not n.endswith("_plain_vs.spv") and not n.endswith("_pre_vs.spv") and
-                    n[:-len("_vs.spv")] + "_plain_vs.spv" not in names):
-                print("%s: variants: no plain variant %s" %
-                      (n, n[:-len("_vs.spv")] + "_plain_vs.spv"))
+        for e in PROGRAM_ENTRIES:
+            n = e + ".spv"
+            if n in names and e[:-len("_vs")] + "_plain_vs.spv" not in names:
+                print("%s: variants: no plain variant %s" % (n, e[:-len("_vs")] + "_plain_vs.spv"))
                 findings += 1
     if show:
         print("\n".join(sizes))
+        for klass in ("vertex", "plain vertex", "pixel"):
+            if klass in LARGEST:
+                w, n, budget = LARGEST[klass]
+                print("largest %-12s %7d words of %d (%s)" % (klass, w, budget, n))
     print("check_spirv: %d modules, %d findings" % (len(files), findings))
     return 1 if findings else 0
 

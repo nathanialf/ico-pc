@@ -157,6 +157,23 @@ endif()
 # ---- G1 record stages (vu_main_vs, vu_particle_main_vs, vu_tri_rule_pre_vs,
 #      vu_tri_tick_pre_vs, vu_tri_planes_pre_vs, vu_particle_pre_vs,
 #      vu_legacy_ps, vu_legacy_texa_ps and their twins) ----
+# the triangle pre-pass's record stages and the sprites' (docs/port/RENDER.md,
+# "The vertex and triangle pre-passes"; rd_replay_vu.c rd__vu_prepass), the
+# main vertex shaders drawing from the record, and the programs' entries'
+# pixel shader for the fallback (VuVSOut's planes as flat varyings), with its
+# no-dual and destination-read twins
+ico_add_shader(vu_main_vs vu_tri.hlsl vu_main_vs vertex)
+ico_add_shader(vu_tri_rule_pre_vs vu_tri.hlsl vu_tri_rule_pre_vs vertex)
+ico_add_shader(vu_tri_tick_pre_vs vu_tri.hlsl vu_tri_tick_pre_vs vertex)
+ico_add_shader(vu_tri_planes_pre_vs vu_tri.hlsl vu_tri_planes_pre_vs vertex)
+ico_add_shader(vu_particle_main_vs vu_particle.hlsl vu_particle_main_vs vertex)
+ico_add_shader(vu_particle_pre_vs vu_particle.hlsl vu_particle_pre_vs vertex)
+foreach(_e vu_legacy_ps vu_legacy_texa_ps)
+    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment)
+    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_NO_DUAL=1 SUFFIX _nodual)
+    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=1 SUFFIX _dstrov)
+    ico_add_shader(${_e} vu_prelit.hlsl ${_e} fragment DEFINES ICO_DST_READ=2 SUFFIX _dstatt)
+endforeach()
 # ---- G1 end ----
 # ---- G2 2D varying diet (sprite_*_ps_planes and their twins) ----
 # ---- G2 end ----

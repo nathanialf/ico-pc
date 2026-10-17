@@ -12,8 +12,10 @@
 //   b2  VuCB       the VU1 data memory 0..35 the program reads (see below)
 //   b3  VuBoneCB   cluster: VU memory 16..255, the bones; every mesh
 //                  program: the card bits after them (vu_strip_card)
-//   t4  vu_rec_buf the vertex pre-pass's record (vu_rec_vertex), read by
-//                  the triangle stage (vu_tri.hlsl)
+//   t4  vu_rec_buf the record: the vertex pre-pass's vertices
+//                  (vu_rec_vertex) and the triangle pre-pass's triangles and
+//                  sprites (the record stages below), read by the main
+//                  vertex shaders and, for the attribute planes, vu_ps
 //
 // Drawing: the mesh programs are drawn as an indexed triangle list whose
 // index value (SV_VertexID; vertexOffset / BaseVertexLocation must be 0) is
@@ -24,13 +26,19 @@
 // decisions (region test, scissor) come out the same in all three. The
 // particle program is drawn non-indexed, six vertices per particle.
 //
-// The vertex pre-pass (docs/port/RENDER.md, "The vertex pre-pass";
-// rd_replay_vu.c rd__vu_prepass): a mesh program's vu_X_pre_vs evaluates each
-// vertex of a draw once, its VuVtx written as a record (vu_pre_out) one
-// point a vertex into three RGBA32_UINT targets, which the replay copies
-// into the record buffer; vu_tri.hlsl vu_tri_vs then draws the triangles
-// of every mesh program with the three corners read back (vu_rec_vertex)
-// through vu_mesh_out, as the program's entry above does.
+// The vertex and triangle pre-passes (docs/port/RENDER.md, "The vertex
+// and triangle pre-passes"; rd_replay_vu.c rd__vu_prepass): a mesh
+// program's vu_X_pre_vs evaluates each vertex of a draw once, its VuVtx
+// written as a record (vu_pre_out) one point a vertex into three
+// RGBA32_UINT targets, which the replay copies into the record buffer
+// (pass V, with the sprites' records of vu_particle_pre_vs); the record
+// stages of vu_tri.hlsl then make each triangle's record once from the
+// three corners read back (vu_rec_vertex): its verdict and its attribute
+// planes (pass T, the record stages below).  vu_main_vs draws the
+// triangles of every mesh program from the two, vu_particle_main_vs the
+// sprites; vu_ps reads the planes by the triangle (VuVSOut2.tri).  The
+// program's entry above, with vu_legacy_ps, is the fallback (vu_mesh_out
+// whole in every corner's invocation).
 //
 // The forms (docs/port/SHADERS.md, The envelope): the vertex shaders are
 // written as v0.5.2's, the last set that built on every device the port
@@ -422,6 +430,20 @@ struct VuVSOut {
     VK_LOC(7) nointerpolation float4 y0 : TEXCOORD6;
     VK_LOC(8) nointerpolation float4 y1 : TEXCOORD7;
     VK_LOC(9) nointerpolation float4 r : TEXCOORD8;
+};
+
+// The main vertex shaders' output (vu_main_vs, vu_particle_main_vs): what
+// the GPU interpolates (col, stq, plane, as VuVSOut's) and the triangle's
+// record (the record stages below): tri = its kick (a sprite: its index)
+// in bits 0..30, bit 31 set when its attribute planes hold (VuVSOut.r.z
+// 1), which vu_ps then reads from the record (vu_record_in) instead of 28
+// flat varyings
+struct VuVSOut2 {
+    float4 pos : SV_Position;
+    VK_LOC(0) noperspective float4 col : COLOR0;
+    VK_LOC(1) noperspective float3 stq : TEXCOORD0;
+    VK_LOC(2) noperspective float plane : TEXCOORD1;
+    VK_LOC(3) nointerpolation uint tri : TEXCOORD2;
 };
 
 // GS pixels (XYOFFSET-relative window coordinates / 16) to clip space;
@@ -1597,11 +1619,156 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
     return o;
 }
 
+// ------------------------------------------------- the record stages
+// The triangle pre-pass (docs/port/RENDER.md, "The vertex and triangle
+// pre-passes"): after the vertex records are copied into the record buffer
+// a second pass of point draws (vu_tri.hlsl's _pre_vs stages, through
+// vu_pre_ps) writes one record a triangle into the same three planes at
+// rows of their own, which the replay copies too.  A triangle of kick k
+// owns slot A (texel vu_tri.x + k of each plane), slot B (vu_tri.y + k)
+// and, under VU_F_TICKS, slot C (vu_tri.z + k); a sprite i of the particle
+// program slots A and B (vu_tri.x + i, vu_tri.y + i; vu_particle_pre_vs in
+// the vertex pass).  Every word is a value the program's entry computes in
+// each corner's invocation (vu_mesh_out, vu_particle_vs), computed here
+// once by the same functions on the same record bits, the floats as their
+// bits:
+//   A0  x the flags (VU_TF_*), y the anchor's RGBA (VuVSOut.a0, a byte a
+//       channel, R lowest: the values are integers 0..255), z, w r.xy
+//   A1  x1 (S, T, Q's change across; w the plane distance's)
+//   A2  y1 (their change down; w the plane distance's)
+//   B0  a1 (S, T, Q at the anchor; w the plane distance there)
+//   B1  x0 (the colour's change across)
+//   B2  y0 (the colour's change down)
+// (each stage takes both halves of the gradient basis, vu_grad_basis: a
+// lane of it nothing reads would be left undefined, OpUndef)
+//   C0  x tick 0's vu_tick_shown, y tick 1's (vu_tri_tick_pre_vs: one a draw,
+//       under the colour mask R or G)
+// The flags: bits 0..1 the region rule at the blended camera up to the
+// ticks (vu_region_rule without its tick tail: VU_RULE_*), bits 2..3 the
+// scissor mode's corner code (vu_triangle_out_pos's at: 0 culled, 1 the GS
+// position, 2 the cut position) without the draw's CUT_ONLY / KICK_ONLY,
+// and the bits below; the anchor (vu_plane_anchor) in bits 10..11.
+#define VU_TF_RULE_MASK 3u
+#define VU_TF_AT_SHIFT 2u
+#define VU_TF_EXACT 16u     // the planes hold (scissor: before the draw's filter; none: VU_TF_WRAP)
+#define VU_TF_CUT 32u       // scissor: a corner has a clip flag (VU_F_CUT_ONLY's triangles)
+#define VU_TF_CARD 64u      // the card test's verdict (vu_rule_card: DROP for VU_RULE_STRIP)
+#define VU_TF_PAST 128u     // the chain plane: all three corners past it (vu_plane_out)
+#define VU_TF_LATER 256u    // vu_later_out's bias applies (the mark, three GS positions, Z)
+#define VU_TF_HIDDEN 512u   // the content table's mark under VU_TRI_HIDE (drawn nowhere)
+#define VU_TF_ANCHOR_SHIFT 10u
+#define VU_TF_GSPOS 4096u   // every corner at its GS position (vu_has_gs_position)
+#define VU_TF_WRAP 8192u    // clip mode none: no corner's X or Y changed by the 16-bit wrap
+#define VU_TF_KEPT 16384u   // a sprite the port draws (vu_particle_vs's drop verdict)
+#define VU_TF_EXACT_BIT 0x80000000u // VuVSOut2.tri: the planes hold
+
+// A record stage's point: texel t of the three planes (vu_pre_out's mapping)
+VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)
+{
+    VuPreOut o;
+    float rows = float(vu_rec.y >> VU_REC_SHIFT);
+    float px = float(t & (VU_REC_W - 1u)) + 0.5;
+    float py = float(t >> VU_REC_SHIFT) + 0.5;
+    o.pos = float4(px * (2.0 / float(VU_REC_W)) - 1.0, 1.0 - py * 2.0 / rows, 0.0, 1.0);
+    o.r0 = r0;
+    o.r1 = r1;
+    o.r2 = r2;
+#ifdef __spirv__
+    o.size = 1.0;
+#endif
+    return o;
+}
+
+// The anchor's RGBA (VuVSOut.a0: integers 0..255) as bytes, R lowest
+uint vu_rec_pack_rgba(float4 c)
+{
+    uint4 u = uint4(c);
+    return u.x | (u.y << 8) | (u.z << 16) | (u.w << 24);
+}
+
+// The main vertex shaders' culled output (vu_out_init's values)
+VuVSOut2 vu_out2_init(uint tri)
+{
+    VuVSOut2 o;
+    o.pos = VU_CULLED;
+    o.col = float4(0.0, 0.0, 0.0, 0.0);
+    o.stq = float3(0.0, 0.0, 1.0);
+    o.plane = 1.0;
+    o.tri = tri;
+    return o;
+}
+
+// A VuVSOut's interpolated values (the tests' probe output)
+VuVSOut2 vu_out2(VuVSOut i, uint tri)
+{
+    VuVSOut2 o;
+    o.pos = i.pos;
+    o.col = i.col;
+    o.stq = i.stq;
+    o.plane = i.plane;
+    o.tri = tri;
+    return o;
+}
+
+// vu_triangle_out_pos's position of the corner me by its code at (0 culled,
+// 1 pme, 2 cme, 3 the wrapped GS position), the same statements: each
+// position the corner can take computed once and the one chosen value by
+// value
+float4 vu_corner_position(VuVtx me, uint mode, uint at)
+{
+    float4 pme = vu_vtx_position(me);
+    float4 cme = vu_cut_position_of(me, pme);
+    float4 wme = pme;
+    if (mode == VU_CLIP_NONE) {
+        wme = vu_gs_position(me.gx, me.gy, me.gz, true);
+    }
+    float4 pos;
+    pos.x = at == 1u ? pme.x : (at == 2u ? cme.x : (at == 3u ? wme.x : VU_CULLED.x));
+    pos.y = at == 1u ? pme.y : (at == 2u ? cme.y : (at == 3u ? wme.y : VU_CULLED.y));
+    pos.z = at == 1u ? pme.z : (at == 2u ? cme.z : (at == 3u ? wme.z : VU_CULLED.z));
+    pos.w = at == 1u ? pme.w : (at == 2u ? cme.w : (at == 3u ? wme.w : VU_CULLED.w));
+    return pos;
+}
+
 // ------------------------------------------------------------ pixel side
 
 Texture2D<float4> g_texture : register(t1, space2);
 SamplerState g_sampler : register(s1, space2);
 Texture2D<float> g_dateSnap : register(t2, space2);
+
+// The pixel shader's VuVSOut from a main vertex shader's VuVSOut2: the
+// interpolated values, and where the triangle's planes hold (tri's bit 31)
+// the six plane texels of its record read by its kick (a sprite: its
+// index), the very words the record stages wrote (vu_attr_planes'
+// a0, a1, x0, x1, y0, y1 and r; r.z 1), as the program's entry hands them
+// over as flat varyings; else r.z 0 (vu_pixel_attrs keeps the GPU's)
+VuVSOut vu_record_in(VuVSOut2 i)
+{
+    VuVSOut o;
+    o.pos = i.pos;
+    o.col = i.col;
+    o.stq = i.stq;
+    o.plane = i.plane;
+    o.a0 = o.a1 = o.x0 = o.x1 = o.y0 = o.y1 = o.r = float4(0.0, 0.0, 0.0, 0.0);
+    if ((i.tri & VU_TF_EXACT_BIT) != 0u) {
+        uint n = i.tri & 0x7FFFFFFFu;
+        uint ta = vu_tri.x + n, tb = vu_tri.y + n;
+        uint4 a0 = vu_rec_buf[ta];
+        uint4 a1 = vu_rec_buf[vu_rec.y + ta];
+        uint4 a2 = vu_rec_buf[vu_rec.y * 2u + ta];
+        uint4 b0 = vu_rec_buf[tb];
+        uint4 b1 = vu_rec_buf[vu_rec.y + tb];
+        uint4 b2 = vu_rec_buf[vu_rec.y * 2u + tb];
+        o.a0 = float4(uint4(a0.y & 255u, (a0.y >> 8) & 255u, (a0.y >> 16) & 255u, a0.y >> 24));
+        o.r = float4(asfloat(a0.z), asfloat(a0.w), 1.0, 0.0);
+        o.x1 = asfloat(a1);
+        o.y1 = asfloat(a2);
+        o.a1 = asfloat(b0);
+        o.x0 = asfloat(b1);
+        o.y0 = asfloat(b2);
+    }
+    return o;
+}
 
 // S/Q, T/Q: the texture's normalised UV.  On a Full pixel crop of the
 // frame (g_scale.z set, rd_replay.c fillDrawCB) the STs, normalised to the
