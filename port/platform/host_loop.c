@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../audio/audio_host.h"
+#include "../game/options.h"
 #include "../data/cdvd_host.h"
 #include "../game/achievements.h"
 #include "../include/ico_credits.h"
@@ -65,7 +66,9 @@ void ico_host_init(void)
        so into the heap partition and the allocation they came from. */
     fprintf(stderr, "ico_pc: EE RAM arena at %p\n", (void *)ico_arena_base());
     ico_diag_name_func((void *)boot_main, "boot (the game's main)");
-    /* the SPU2 and the SNDN2DRV host, before the game binds to it */
+    /* the SPU2 and the SNDN2DRV host, before the game binds to it; mirror
+       mode handed over first (the audio library reads no option itself) */
+    ico_audio_host_set_mirror(ico_opt_mirror());
     ico_audio_host_init();
     gallery_engine_install();
     ico_credits_engine_install();
@@ -111,6 +114,7 @@ void ico_host_step(void)
        ico_sched_run below, and its writes take effect from the next block.
        On the device's clock nothing is rendered here (audio_host.h) */
     ico_audio_host_set_stage(stage_no);
+    ico_audio_host_set_mirror(ico_opt_mirror());
     ico_audio_host_vsync(ico_host_vsync_hz());
     profile.audioMs = ms_since(&t);
     /* the audio push is an SDL call */

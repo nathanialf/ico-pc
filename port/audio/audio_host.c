@@ -15,7 +15,6 @@
 #include "audio_lock.h"
 #include "diag_host.h"
 #include "mix_gain.h"
-#include "options.h"
 #include "sndn2_host.h"
 #include "spu2.h"
 #include "stream_watch.h"
@@ -38,12 +37,11 @@ static const char *mode_why = ""; /* the sync path's reason (ico_audio_pick_mode
 #ifdef ICO_AUDIO_SDL
 static int sdl_open;
 static unsigned int pull_seen_vsync; /* the last vsync the device was not silent too long */
-/* mirror mode for the device's render: ico_opt_mirror read on the main
-   thread (at init before the device opens, then every vsync), since its
-   first read looks the option up in the config; the device's thread reads
-   this copy */
-static int mirror_now;
 #endif
+/* mirror mode: the host's copy of the option (ico_audio_host_set_mirror, set
+   by the host loop before the device opens and every step), so this library
+   reads no option itself and the device's thread reads an atomic copy */
+static int mirror_now;
 static unsigned int vsync_index;
 static int16_t out[MAX_FRAMES_PER_VSYNC * 2];
 
@@ -70,6 +68,11 @@ int ico_audio_host_frames(int hz, unsigned int i)
 void ico_audio_host_set_stage(int stage)
 {
     stage_now = stage;
+}
+
+void ico_audio_host_set_mirror(int on)
+{
+    __atomic_store_n(&mirror_now, on ? 1 : 0, __ATOMIC_RELAXED);
 }
 
 /* The samples a release at rate 0 takes from `level` to 0 (spu2.c
@@ -332,9 +335,8 @@ void ico_audio_host_init(void)
     if (enable != NULL && strcmp(enable, "0") == 0) {
         fprintf(stderr, "audio: audio=0: no audio device (the driver still runs)\n");
     } else {
-        /* the pull path: the device's thread renders (device_render), with
-           mirror mode read here first */
-        __atomic_store_n(&mirror_now, ico_opt_mirror(), __ATOMIC_RELAXED);
+        /* the pull path: the device's thread renders (device_render) with
+           the mirror copy the host set before this init */
         sdl_open =
             ico_audio_sdl_open(mode == ICO_AUDIO_MODE_PULL ? device_render : NULL, mode_why) == 0;
         if (!sdl_open) {
@@ -378,7 +380,6 @@ void ico_audio_host_vsync(int hz)
        at most (out_sdl.c) */
     ico_audio_sdl_game_step(frames);
 #ifdef ICO_AUDIO_SDL
-    __atomic_store_n(&mirror_now, ico_opt_mirror(), __ATOMIC_RELAXED);
     if (mode == ICO_AUDIO_MODE_PULL && sdl_open && !pull_watch(hz)) {
         /* the device's thread renders (out_sdl.c pull_cb) */
         cut_line(hz);
@@ -389,7 +390,7 @@ void ico_audio_host_vsync(int hz)
     spu2_render(out, frames);
     /* mirror mode: left and right swapped where the stereo output is
        produced, for the device and the dump alike; the SPU2 is untouched */
-    ico_audio_pan_mirror(out, frames, ico_opt_mirror());
+    ico_audio_pan_mirror(out, frames, __atomic_load_n(&mirror_now, __ATOMIC_RELAXED));
     if (wav != NULL) {
         int i;
 

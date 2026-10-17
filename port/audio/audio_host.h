@@ -91,6 +91,12 @@ int ico_audio_host_frames(int hz, unsigned int vsync_index);
    and the shutdown the run's count and loudest. */
 void ico_audio_host_set_stage(int stage);
 
+/* Mirror mode's value, set by the host (port/game/options.c ico_opt_mirror)
+   before ico_audio_host_init and at every step: this library reads no
+   option itself, so its tests link without the config.  Read atomically by
+   the device's thread (the pull path's render) and by the sync path. */
+void ico_audio_host_set_mirror(int on);
+
 /* Mirror mode: the option is port/game/options.c's (ico_opt_mirror).  While
    it is on left and right are swapped in each rendered block (by
    ico_audio_host_vsync on the sync path, by the pull path's render):
