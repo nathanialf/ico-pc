@@ -14,13 +14,23 @@
  * is 0: top left and bottom right take the sprites' colours, the other two
  * keep the cells'.  The frame is replayed through the stencil bit and
  * through the R8 snapshot, and the four quadrants' centres are read back
- * each time and compared with that, every channel exactly.
+ * each time and compared with that, every channel exactly.  Both replays
+ * run with MSAA held off (g_rd.msaaBlocked, as rd_blend_selftest.c holds
+ * it): the stencil bit is never taken inside the MSAA epoch
+ * (rd_replay.c dateStencilFor), so it is checked as it draws, whatever
+ * the anti-aliasing asked for; and the stencil replay must have taken the
+ * bit (g_rdPerf.dateStencilTakes), else its samples say nothing of it:
  *   DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...
  *   DATE: snapshot path (self-test: stencil fail 2 at sample 1: 28C850FF
  *         for 28C85000, snapshot ok 4) on SCENE ...
+ *   DATE: snapshot path (self-test: stencil not run (no draw took the
+ *         stencil bit), snapshot ok 4) on SCENE ...
  * The stencil path stays only with its four right; otherwise the profile's
  * flag goes off (rd__profile_self_test_off: "(self-test)" in the profile's
- * words) and the snapshot draws DATE.  ICO_RD_DATE_PATH=stencil ([dev]
+ * words) and the snapshot draws DATE.  ICO_RD_DATE_SABOTAGE=1 makes the
+ * setup write 0 into the bit where the alpha's MSB is 1 (rd_replay_tiler.c
+ * rd__date_sabotaged; ctest rd_date_selftest_sabotage), so the failure
+ * path runs.  ICO_RD_DATE_PATH=stencil ([dev]
  * date_path) keeps the stencil whatever it finds ("kept by [dev]
  * date_path").  Where the profile has the snapshot nothing runs. */
 #include <stdio.h>
@@ -124,11 +134,13 @@ static struct {
 /* One replay of f; *ok the samples equal to the GS's, *bad the first that
  * is not (-1 none) and got its RGBA.  False when the replay or the readback
  * could not be done. */
-static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got[4])
+static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got[4],
+                uint32_t *takes)
 {
     if (!rd__replay_frame(f, 0, false)) {
         return false;
     }
+    *takes = g_rdPerf.dateStencilTakes; /* the replay's own record (rd__perf_begin) */
     if (!s_read.tex.id) {
         s_read.tex = rhi_create_texture(&(RhiTextureDesc){DT_SAMPLES, 1, 1, t->format,
                                                           RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC,
@@ -170,12 +182,17 @@ static bool run(const RdFrame *f, RdTargetRec *t, int *ok, int *bad, uint8_t got
     return true;
 }
 
-/* "ok 4", "fail 2 at sample 1: 28C850FF for 28C85000" or "error" */
-static void result(char *out, size_t size, bool done, int ok, int bad, const uint8_t got[4],
-                   const RdTargetRec *t)
+/* "ok 4", "fail 2 at sample 1: 28C850FF for 28C85000", "error" or, for
+ * the stencil replay that took no bit, "not run (...)" */
+static void result(char *out, size_t size, bool done, bool ran, int ok, int bad,
+                   const uint8_t got[4], const RdTargetRec *t)
 {
     if (!done) {
         snprintf(out, size, "error");
+        return;
+    }
+    if (!ran) {
+        snprintf(out, size, "not run (no draw took the stencil bit)");
         return;
     }
     if (bad < 0) {
@@ -206,23 +223,32 @@ bool rd_date_selftest(void)
         rd__log("DATE: self-test: could not build its frame");
         return false;
     }
+    if (rd__date_sabotaged()) {
+        rd__log("DATE: ICO_RD_DATE_SABOTAGE: the setup writes 0 into the stencil bit where the "
+                "alpha's MSB is 1");
+    }
     int okS = 0, badS = -1, okN = 0, badN = -1;
     uint8_t gotS[4] = {0}, gotN[4] = {0};
-    const bool doneS = run(&f, t, &okS, &badS, gotS);
+    uint32_t takesS = 0, takesN = 0;
+    const bool wasBlocked = g_rd.msaaBlocked;
+    g_rd.msaaBlocked = true; /* no MSAA epoch: the stencil bit's own draws */
+    const bool doneS = run(&f, t, &okS, &badS, gotS, &takesS);
     g_rd.profile.dateStencil = false; /* the snapshot's replay */
-    const bool doneN = run(&f, t, &okN, &badN, gotN);
+    const bool doneN = run(&f, t, &okN, &badN, gotN, &takesN);
     g_rd.profile.dateStencil = true;
+    g_rd.msaaBlocked = wasBlocked;
     rd__frame_free(&f);
     if (s_read.tex.id) {
         rhi_destroy_texture(s_read.tex);
     }
     s_read.tex = (RhiTexture){0};
     t->clearPending = 1; /* the next replay starts SCENE from its clear */
-    const bool passed = doneS && badS < 0;
+    const bool ranS = takesS > 0;
+    const bool passed = doneS && ranS && badS < 0;
     const bool kept = (g_rd.profile.devSet & RD_PROFILE_DATE_STENCIL) != 0;
     char rs[96], rn[96];
-    result(rs, sizeof rs, doneS, okS, badS, gotS, t);
-    result(rn, sizeof rn, doneN, okN, badN, gotN, t);
+    result(rs, sizeof rs, doneS, ranS, okS, badS, gotS, t);
+    result(rn, sizeof rn, doneN, true, okN, badN, gotN, t);
     if (!passed && !kept) {
         rd__profile_self_test_off(RD_PROFILE_DATE_STENCIL);
     }

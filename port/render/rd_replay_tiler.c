@@ -7,6 +7,7 @@
  * they replace draw.  The replay's own helpers come through rd_replay.h
  * (rd__replay_*, each rd_replay.c's function named beside it). */
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "rd_replay.h"
@@ -14,6 +15,16 @@
 static int32_t floorDiv16(int32_t v)
 {
     return v >= 0 ? v / 16 : -((-v + 15) / 16);
+}
+
+bool rd__date_sabotaged(void)
+{
+    static int s_sab = -1; /* read once */
+    if (s_sab < 0) {
+        const char *e = getenv("ICO_RD_DATE_SABOTAGE");
+        s_sab = e && strcmp(e, "1") == 0;
+    }
+    return s_sab == 1;
 }
 
 /* DATE through the stencil bit, in the draw's own pass (begun readable,
@@ -94,7 +105,8 @@ bool rd__replay_date_take(Replay *r, const DrawSetup *ds)
     rd__bind_uniform(cl, 0, rd__frame_group(tc->tw, tc->th, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, gl);
-    rhi_cmd_set_stencil_ref(cl, RD_DATE_STENCIL_BIT);
+    /* ICO_RD_DATE_SABOTAGE: the wrong bit, 0 where the MSB is 1 */
+    rhi_cmd_set_stencil_ref(cl, rd__date_sabotaged() ? 0u : RD_DATE_STENCIL_BIT);
     rd__replay_draw(cl, 3, 0, 1);
     rhi_cmd_local_read_barrier(cl, RHI_LOCAL_READ_BACK);
     g_rdPerf.dateStencilTakes++; /* the draws after it set their own scissor */
@@ -384,8 +396,12 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
     /* pass 2's state from here (the loop's as it would have been) */
     r->st = q.st;
     r->halfAdded = q.halfAdded;
-    r->perfPost = q.perfPost;
     r->perfTargetEffect = q.perfTargetEffect;
+    /* the effect pass 2's POST_STUB sets in the loop (the glow), not the
+     * WORK0 target's (none): the folded pass is begun and timed as the
+     * effect's, so the glow pass count and the effect timings stay true */
+    const int post2 = rd__perf_post_of_kind(s_loop.cmds[i2].b[0]);
+    r->perfPost = post2 >= 0 ? post2 : q.perfPost;
     s_loop.skip = i2 - s_loop.index;
     rd__replay_perf_post(r, r->perfPost);
     RdTargetRec *tc = p2.tc;

@@ -168,6 +168,8 @@ bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area);
 int rd__replay_perf_target_post(const Replay *r, const RdCmd *c);
 void rd__replay_perf_post(Replay *r, int post);
 bool rd__replay_blur_fix128_skip(void);
+/* the target's passes readable for the exact blend's attachment read (exactReadable) */
+bool rd__replay_exact_readable(uint32_t target);
 /* rd_replay_tiler.c (docs/port/RENDER.md, "The replay").
  * rd__replay_date_take  DATE's stencil bit written in the draw's pass
  *                       (bindDrawEx, a draw with DrawSetup.dateStencil);

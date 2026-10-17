@@ -7,6 +7,9 @@
 #   exactly once.
 # -DTOOL=<rd_fog_selftest_test> -DPATH=<stencil|snapshot>
 # -DRESULTS=<regex of the self-test's results>
+# -DEXTRA=, -DEXTRA2=<regex> (optional: each must match the log at least once;
+#   rd_date_selftest_sabotage's switch line and "profile: DATE stencil off
+#   (self-test)")
 execute_process(COMMAND "${TOOL}" inplace RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
 message(STATUS "${out}")
 if(rc EQUAL 77)
@@ -23,4 +26,13 @@ if(NOT nlines EQUAL 1)
   message(FATAL_ERROR "${nlines} \"DATE: ${PATH} path (self-test: ${RESULTS})\" lines, 1 "
                       "expected:\n${err}")
 endif()
+foreach(_x EXTRA EXTRA2)
+  if(${_x})
+    string(REGEX MATCHALL "${${_x}}" xs "${err}")
+    list(LENGTH xs nx)
+    if(nx EQUAL 0)
+      message(FATAL_ERROR "no \"${${_x}}\" line:\n${err}")
+    endif()
+  endif()
+endforeach()
 message(STATUS "rd_date_selftest ${PATH}: the path and the self-test's results logged")

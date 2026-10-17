@@ -1344,3 +1344,34 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_date_selftest PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                      ENVIRONMENT "${_env_date_stencil}")
 endif()
+# ---- FIXT: the tiler self-tests' failure paths ----
+# Under the MoltenVK report (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the
+# device profile, fogLocal and dateStencil on as the profile's own, not
+# [dev]'s), each self-test made to fail by its sabotage switch: DATE's
+# setup writes 0 into the stencil bit (ICO_RD_DATE_SABOTAGE=1), so the
+# stencil replay fails, the snapshot draws DATE and the profile's flag goes
+# off (the fog in place, ICO_RD_FOG_PATH=inplace, so the tool's path
+# check holds); the fog's local read gives 0 (ICO_RD_FOG_SABOTAGE=local),
+# so local fails, the copy is taken, fogLocal goes off, and the run after
+# the new scene size tries the local order without local (copy first).
+if(ICO_RUN_TESTS)
+    add_test(NAME rd_date_selftest_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DPATH=snapshot
+                     "-DRESULTS=stencil fail [1-4] at sample [0-3]: [0-9A-F]+ for [0-9A-F]+, snapshot ok 4"
+                     "-DEXTRA=profile: DATE stencil off \\(self-test\\)"
+                     "-DEXTRA2=DATE: ICO_RD_DATE_SABOTAGE: "
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_date_selftest.cmake")
+    set_tests_properties(rd_date_selftest_sabotage
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FOG_PATH=inplace;ICO_RD_DATE_SABOTAGE=1")
+    add_test(NAME rd_fog_selftest_local_sabotage
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DFOG_PATH=copy
+                     "-DRESULTS=(local fail [0-9]+, )?copy ok [0-2], inplace not tried, buffer not tried"
+                     "-DEXTRA=local fail [0-9]+, copy ok [0-2]"
+                     "-DEXTRA2=profile: fog local off \\(self-test\\)"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_fog_selftest.cmake")
+    set_tests_properties(rd_fog_selftest_local_sabotage
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FOG_SABOTAGE=local")
+endif()
+# ---- FIXT end ----

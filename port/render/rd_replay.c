@@ -6256,3 +6256,9 @@ bool rd__replay_blur_fix128_skip(void)
 {
     return s_blurFix128Skip;
 }
+
+bool rd__replay_exact_readable(uint32_t target)
+{
+    const RdTargetRec *c = rd__target_rec(target);
+    return c && exactReadable(c);
+}

@@ -665,7 +665,12 @@ without `--loss-bisect`, `--draws` and `--mask-marks` shape a replay's picture.
 pass and begins it again, both targets loaded, after every N VU draws, as the exact blend begins a
 pass again (the scissor taken back), so a GPU that runs a pass's draws as one job gets jobs of N:
 the fallback if a device still faults on a pass of many VU draws. It is refused, logged once, in a
-multisampled pass, a storage pass or a readable one (the exact blend's), and its passes are not
+multisampled pass, a storage pass, a pass the exact blend's attachment read made readable
+(`port/render/rd_replay.c` (`rd__replay_exact_readable`)), and inside a draw that takes DATE
+through the stencil bit (`Replay.dateStNow`: the bit lives in its pass only). A pass readable only
+for DATE's stencil bit or the fog's local read (every SCENE pass on a tile-based profile) is split:
+it is begun again readable, and the next DATE draw takes the bit again in it
+(`port/render/rd_replay_tiler.c` (`rd__replay_date_take`)). Its passes are not
 passes of the loss bisect's window. The picture is the same byte for byte
 (`rd_replay_tool_pass_split`) (`port/render/rd_replay_vu.c` (`passSplit`); `port/render/rd_core.c`
 (`rd_init`)).
@@ -1867,7 +1872,15 @@ differs, read back and compared with the GS arithmetic, for each path in the pla
 it is offered, and left out of the line where not). The first that passes is the path from then
 on, and one log line `fog: depth path` names it with every result (`rd: fog: depth path local
 (self-test: local ok 0, copy not tried, inplace not tried, buffer not tried) on SCENE ...`); a
-local read that fails turns `fogLocal` off (`(self-test)`). It runs
+local read that fails turns `fogLocal` off (`(self-test)`), and the order is then the local one
+without it (copy, inplace, buffer). The local trial counts only where the fog drew through the
+local read (`g_rdPerf.fogLocalDraws`). Under MSAA it never does (`port/render/rd_replay.c`
+(`fogLocalFor`): the epoch), and the path draws its MSAA fallback there (the per-sample fog or the
+copy), which is what the trial measured: the line says `local not measured (MSAA: its fallback ok
+0)`, nothing it finds turns `fogLocal` off, and when the samples drop to 1 the self-test runs
+again and measures the local read itself (`port/render/rd_fog_path.c` (`rd__fog_aa_reconcile`)).
+Without MSAA a local trial that drew no local fog is `local not run`, a failure.
+`ICO_RD_FOG_SABOTAGE=local` makes the local read give 0 (`rd_fog_selftest_local_sabotage`). It runs
 after `rd_precreate_pipelines` and again whenever SCENE is made at a new size. `ICO_RD_FOG_PATH`
 or `ICO_RD_DEPTH_COPY` names a path to try first; `ICO_RD_FOG_PATH=test` tries every path
 (`port/render/rd_fog_path.c`; `port/render/rd.h` (`rd_fog_selftest`)). The probe logs five
@@ -1882,11 +1895,18 @@ Its first run runs DATE's self-test first, where the profile has `dateStencil`
 draws a cell of alpha 0x80 on the left half and one of alpha 0 on the right, then a DATE sprite
 with DATM 1 over the top half and one with DATM 0 over the bottom, through the stencil bit and
 through the snapshot; the quadrants' centres are read back and compared with the GS's outcome,
-every channel exactly. The stencil bit stays only with its four right, else `dateStencil` goes off
-(`(self-test)`) and the snapshot draws DATE; `ICO_RD_DATE_PATH=stencil` keeps it whatever it
-finds. One line: `rd: DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...`, or
-`rd: DATE: snapshot path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot
-ok 4) ...`.
+every channel exactly. Both replays run with MSAA held off (`g_rd.msaaBlocked`): the stencil bit
+is never taken inside the MSAA epoch (`port/render/rd_replay.c` (`dateStencilFor`)), so it is
+checked as it draws whatever the anti-aliasing setting, and the result holds when MSAA is turned
+off later. The stencil replay must have taken the bit (`g_rdPerf.dateStencilTakes` above 0), else
+it reports `stencil not run (no draw took the stencil bit)`, a failure. The stencil bit stays only
+with its four right, else `dateStencil` goes off (`rd: profile: DATE stencil off (self-test)`) and
+the snapshot draws DATE; `ICO_RD_DATE_PATH=stencil` keeps it whatever it finds. One line: `rd:
+DATE: stencil path (self-test: stencil ok 4, snapshot ok 4) on SCENE ...`, or `rd: DATE: snapshot
+path (self-test: stencil fail 2 at sample 1: 28C85000 for FAFA0A40, snapshot ok 4) ...`.
+`ICO_RD_DATE_SABOTAGE=1` makes the setup write 0 into the bit where the alpha's MSB is 1 (logged:
+`rd: DATE: ICO_RD_DATE_SABOTAGE: ...`; `port/render/rd_replay_tiler.c` (`rd__date_sabotaged`);
+`rd_date_selftest_sabotage`).
 
 ## Content tables
 

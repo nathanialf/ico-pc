@@ -190,6 +190,10 @@ static inline int rd__cmd_is_state(uint8_t type)
  * 0-5 only (RD_SHADOW_STENCIL_MASK) and its resolve reads no other, so bit
  * 6 is free; bit 7 is unused. */
 #define RD_DATE_STENCIL_BIT 0x40u
+/* ICO_RD_DATE_SABOTAGE=1 (a test's switch, read once): DATE's setup writes 0
+ * into the bit where the alpha's MSB is 1, so the self-test's failure path
+ * runs (rd_replay_tiler.c rd__replay_date_take; rd_date_selftest.c). */
+bool rd__date_sabotaged(void);
 /* rd_shadow_tris tags every vertex with the place (1-based) its triangle
  * had in the call, in RdScreenVtx.rgba (little-endian; the volume draw
  * writes no colour), since the split into increments and decrements loses

@@ -267,8 +267,12 @@ static uint8_t vuVs(uint8_t prog, uint8_t code)
  * pass's draws in one job gets them in jobs of N.  Not a pass of the loss
  * bisect's window (g_rdWin.noCount).  Refused, logged once, in a pass the
  * split would change the picture or the exact blend of: a multisampled
- * one (the MSAA epoch), a storage pass or a readable one (the exact
- * blend's). */
+ * one (the MSAA epoch), a storage pass, one the exact blend's attachment
+ * read made readable, or inside a draw taking DATE through the stencil bit
+ * (r->dateStNow: its bit lives in this pass only).  A pass readable for
+ * DATE's stencil bit or the fog's local read alone is split: the pass
+ * begun again is readable as before, and the next DATE draw takes the bit
+ * again in it (rd__replay_date_take's per-pass rule). */
 static uint32_t s_splitSerial, s_splitCount;
 
 static void passSplit(Replay *r)
@@ -284,12 +288,14 @@ static void passSplit(Replay *r)
         return;
     }
     s_splitCount = 0;
-    if (r->passStorage || r->passReadable || g_rd.passSamples > 1 || rd__replay_msaa_want() > 1u) {
+    if (r->passStorage || (r->passReadable && rd__replay_exact_readable(r->passColor)) ||
+        r->dateStNow || g_rd.passSamples > 1 || rd__replay_msaa_want() > 1u) {
         static bool logged; /* once a run */
         if (!logged) {
             logged = true;
-            rd__log("pass split: not in a multisampled, storage or readable pass (those are "
-                    "drawn whole)");
+            rd__log("pass split: not in a multisampled or storage pass, the exact blend's "
+                    "readable one or a DATE draw through the stencil bit (those are drawn "
+                    "whole)");
         }
         return;
     }

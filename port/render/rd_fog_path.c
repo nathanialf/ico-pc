@@ -44,8 +44,20 @@
  *   fog: depth path <name> (self-test: inplace ok 0, copy ok 0, buffer ok 0)
  * A path the profile does not offer (local on a desktop GPU) is left out of
  * the line.  The local path failing turns the profile's fogLocal off
- * ("(self-test)", rd__profile_self_test_off).  The first run runs DATE's
- * self-test (rd_date_selftest.c) before its own.
+ * ("(self-test)", rd__profile_self_test_off); the order is then the
+ * local one without it (copy, inplace, buffer), so a later run picks what
+ * this one did.  The local trial counts only where the fog drew through
+ * the local read (g_rdPerf.fogLocalDraws): under MSAA it never does
+ * (rd_replay.c fogLocalFor: the epoch), and the path then draws its MSAA
+ * fallback (the per-sample fog or the copy), which is what the trial
+ * measured; the line says so,
+ *   fog: depth path local (self-test: local not measured (MSAA: its
+ *        fallback ok 0), copy not tried, ...)
+ * no failure there turns fogLocal off, and when the samples drop to 1
+ * the self-test runs again (rd__fog_aa_reconcile) and measures the local
+ * read itself.  Without MSAA a local trial that drew no local fog is
+ * "local not run", a failure.  The first run runs DATE's self-test
+ * (rd_date_selftest.c) before its own.
  */
 #include <math.h>
 #include <stdio.h>
@@ -98,6 +110,7 @@ static struct {
     bool armed;       /* rd_fog_selftest ran: a new SCENE size runs it again */
     bool running;     /* its replays: no probe */
     uint32_t samples; /* the MSAA sample count it last ran under (1: none) */
+    bool localMsaa;   /* its local trial measured the MSAA fallback, not the local read */
     uint32_t w, h, tw, th;
 } s_st;
 
@@ -155,8 +168,10 @@ static const uint8_t *platformOrder(void)
     if (rd__fog_local_offered()) {
         return kOrderLocal;
     }
+    /* the local order without local, once its self-test turned it off */
+    const bool localOff = (g_rd.profile.selfTestOff & RD_PROFILE_FOG_LOCAL) != 0;
     const bool tiler = g_rd.hasDevice && rhi_limits()->tiler;
-    return tiler || depthIs24() ? kOrderTiler : kOrderDesktop;
+    return localOff || tiler || depthIs24() ? kOrderTiler : kOrderDesktop;
 }
 
 static int pathOf(const char *s, size_t n)
@@ -736,11 +751,12 @@ static struct {
 /* One replay of f on the path in force; *maxErr the largest channel
  * difference from the model at the sample points.  False when the replay
  * or the readback could not be done. */
-static bool stRun(const RdFrame *f, RdTargetRec *t, int *maxErr, int *worst)
+static bool stRun(const RdFrame *f, RdTargetRec *t, int *maxErr, int *worst, bool *drewLocal)
 {
     if (!rd__replay_frame(f, 0, false)) {
         return false;
     }
+    *drewLocal = g_rdPerf.fogLocalDraws > 0; /* the replay's own record (rd__perf_begin) */
     if (!s_stRead.tex.id) {
         s_stRead.tex = rhi_create_texture(&(RhiTextureDesc){ST_SAMPLES, 1, 1, t->format,
                                                             RHI_TEX_COPY_DST | RHI_TEX_COPY_SRC,
@@ -857,13 +873,14 @@ static bool runSelftest(void)
     }
     const int before = g_rd.fogPath;
 
-    enum { ST_NOT_TRIED, ST_UNSUPPORTED, ST_ERROR, ST_FAIL, ST_OK };
+    enum { ST_NOT_TRIED, ST_UNSUPPORTED, ST_ERROR, ST_NOT_RUN, ST_FAIL, ST_OK };
 
     /* the paths in order up to the first that passes: a path past it is
        not tried (each one copies the depth its own way, and a device need
        not run a way it does not use), unless ICO_RD_FOG_PATH=test */
     int result[RD_FOG_PATH_COUNT], err[RD_FOG_PATH_COUNT], worst[RD_FOG_PATH_COUNT];
     bool found = false;
+    bool localMsaa = false;
     s_st.running = true;
     for (int i = 0; i < RD_FOG_PATH_COUNT; i++) {
         const int p = order[i];
@@ -877,14 +894,22 @@ static bool runSelftest(void)
             continue;
         }
         rd__set_fog_path(p);
-        if (!stRun(&f, t, &err[p], &worst[p])) {
+        bool drewLocal = false;
+        if (!stRun(&f, t, &err[p], &worst[p], &drewLocal)) {
             result[p] = ST_ERROR;
         } else {
             result[p] = err[p] <= ST_TOLERANCE ? ST_OK : ST_FAIL;
+            if (p == RD_FOG_LOCAL && !drewLocal) {
+                /* under MSAA the fallback the path draws there was measured;
+                 * without, the local read did not run: a failure */
+                localMsaa = s_st.samples > 1u;
+                result[p] = localMsaa ? result[p] : ST_NOT_RUN;
+            }
         }
         found = found || result[p] == ST_OK;
     }
     s_st.running = false;
+    s_st.localMsaa = localMsaa;
     rd__frame_free(&f);
     if (s_stRead.tex.id) {
         rhi_destroy_texture(s_stRead.tex);
@@ -909,8 +934,9 @@ static bool runSelftest(void)
     /* the local read wrong on this device (and not forced): the profile's
      * flag off, so no pass binds its depth readable from now on */
     const bool localOffered = rd__fog_local_offered();
-    if (localOffered && chosen != RD_FOG_LOCAL &&
-        (result[RD_FOG_LOCAL] == ST_FAIL || result[RD_FOG_LOCAL] == ST_ERROR)) {
+    if (localOffered && chosen != RD_FOG_LOCAL && !localMsaa &&
+        (result[RD_FOG_LOCAL] == ST_FAIL || result[RD_FOG_LOCAL] == ST_ERROR ||
+         result[RD_FOG_LOCAL] == ST_NOT_RUN)) {
         rd__profile_self_test_off(RD_PROFILE_FOG_LOCAL);
     }
     /* the reconciliation: the sampled paths were tried first on the MSAA
@@ -928,6 +954,12 @@ static bool runSelftest(void)
             continue; /* not offered on this device: not a result */
         }
         const char *sep = shown++ ? ", " : "";
+        if (p == RD_FOG_LOCAL && localMsaa && result[p] >= ST_FAIL) {
+            n += (size_t)snprintf(res + n, sizeof(res) - n,
+                                  "%slocal not measured (MSAA: its fallback %s %d)", sep,
+                                  result[p] == ST_OK ? "ok" : "fail", err[p]);
+            continue;
+        }
         switch (result[p]) {
         case ST_OK:
             n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s ok %d", sep, rd__fog_path_name(p),
@@ -943,6 +975,10 @@ static bool runSelftest(void)
             break;
         case ST_NOT_TRIED:
             n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s not tried", sep,
+                                  rd__fog_path_name(p));
+            break;
+        case ST_NOT_RUN:
+            n += (size_t)snprintf(res + n, sizeof(res) - n, "%s%s not run", sep,
                                   rd__fog_path_name(p));
             break;
         default:
@@ -1001,9 +1037,13 @@ void rd__fog_aa_reconcile(void)
     }
     if (n <= 1u) {
         /* no MSAA asked for: nothing to read multisampled; the path in force
-           stays */
+           stays, but a local read the MSAA run could not measure (its
+           fallback drew) is measured now, before the fog draws through it */
         g_rd.msaaBlocked = false;
         s_st.samples = n;
+        if (s_st.localMsaa && rd__fog_local_offered()) {
+            (void)runSelftest();
+        }
         return;
     }
     (void)runSelftest();

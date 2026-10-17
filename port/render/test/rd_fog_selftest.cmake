@@ -12,6 +12,8 @@
 # -DTOOL=<rd_fog_selftest_test> -DFOG_PATH=<inplace|copy|buffer>
 # -DARGS=<w|h|scale|aa> (optional: the scene's GS size, scale and RdAntiAlias)
 # -DRESULTS=<regex of the self-test's results>
+# -DEXTRA=, -DEXTRA2=<regex> (optional: each must match the log at least once;
+#   the sabotage tests' failed result and the profile's "(self-test)" line)
 if(ARGS)
   string(REPLACE "|" ";" ARGS "${ARGS}")
 endif()
@@ -41,5 +43,14 @@ if(NOT nprobes EQUAL 2)
   message(FATAL_ERROR "${nprobes} \"fog: probe ${FOG_PATH} ... idx=<centre>,0,15,240,255\" lines, "
                       "2 expected:\n${err}")
 endif()
+foreach(_x EXTRA EXTRA2)
+  if(${_x})
+    string(REGEX MATCHALL "${${_x}}" xs "${err}")
+    list(LENGTH xs nx)
+    if(nx EQUAL 0)
+      message(FATAL_ERROR "no \"${${_x}}\" line:\n${err}")
+    endif()
+  endif()
+endforeach()
 message(STATUS "rd_fog_selftest ${FOG_PATH}: the path, the self-test's results and the probe "
                "logged")
