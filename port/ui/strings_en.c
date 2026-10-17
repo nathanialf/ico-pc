@@ -473,10 +473,6 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_SHARP] = "Sharp",
     [UI_STR_EFFECT_WATER_NOTE] =
         "Sharp draws the reflections in water at the resolution you chose; Original keeps the PS2’s softer reflections.",
-    [UI_STR_OPT_EFFECT_GLOW_SIZE] = "Glow size",
-    [UI_STR_VAL_SCALED] = "Scaled",
-    [UI_STR_EFFECT_GLOW_SIZE_NOTE] =
-        "Original draws the glow at the PlayStation 2’s size: coarser above 1x, much lighter on the graphics card.",
     [UI_STR_OPT_EFFECT_CINEMATIC_BARS] = "Cinematic bars",
     [UI_STR_OPT_FULL_PIXEL] = "Full pixel (exact screen pixels)",
     /* Settings > Graphics driver (Android), Quit game */

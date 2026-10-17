@@ -87,7 +87,6 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->effectFog = 1;
     o->effectCinematicBars = 1;
     o->effectWaterSharp = 0;
-    o->effectGlowOriginal = 0;
     o->effectsDepth = 1;
 }
 
@@ -416,7 +415,6 @@ static void sanitize(IcoVideoOptions *o)
     o->effectFog = !!o->effectFog;
     o->effectCinematicBars = !!o->effectCinematicBars;
     o->effectWaterSharp = !!o->effectWaterSharp;
-    o->effectGlowOriginal = !!o->effectGlowOriginal;
     o->effectsDepth = !!o->effectsDepth;
 }
 
@@ -521,9 +519,6 @@ static void read_config(void)
     o.effectFog = ico_config_get_bool("video.effect_fog", 1);
     o.effectCinematicBars = ico_config_get_bool("video.effect_cinematic_bars", 1);
     o.effectWaterSharp = ico_config_get_bool("video.effect_water_sharp", 0);
-    /* Glow size: "original" or "scaled" (no key, or anything else) */
-    s = ico_config_get_string("video.effect_glow_size", "scaled");
-    o.effectGlowOriginal = s != NULL && lower_eq(s, "original");
     /* the depth handed to an effects program (ReShade) */
     o.effectsDepth = ico_config_get_bool("video.effects_depth", 1);
     /* the preset is a shortcut over the four rows: only "enhanced" and
@@ -647,8 +642,6 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.effect_fog", o.effectFog);
     r |= ico_config_set_bool("video.effect_cinematic_bars", o.effectCinematicBars);
     r |= ico_config_set_bool("video.effect_water_sharp", o.effectWaterSharp);
-    r |= ico_config_set_string("video.effect_glow_size",
-                               o.effectGlowOriginal ? "original" : "scaled");
     /* file-only, so only when not at its default, or to keep a key the
        file already has in step (2: no key) */
     if (!o.effectsDepth || ico_config_get_bool("video.effects_depth", 2) != 2) {
@@ -768,14 +761,6 @@ int ico_video_effect_water_sharp(void)
         read_config();
     }
     return s_opt.effectWaterSharp;
-}
-
-int ico_video_effect_glow_original(void)
-{
-    if (!s_read) {
-        read_config();
-    }
-    return s_opt.effectGlowOriginal;
 }
 
 int ico_video_effects_depth(void)

@@ -451,44 +451,27 @@ static void test_video_effects(const char *dir)
     CHECK(o.effectWaterSharp == 1 && ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
     ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
     CHECK(o.effectWaterSharp == 1);
-    /* Glow size: Scaled (0) by default and with no key, "original" read,
-       sanitized, saved as the word and read back; a word it does not know
-       is Scaled; outside the preset as Water reflections */
-    ico_video_defaults(&d);
-    CHECK(d.effectGlowOriginal == 0);
+    /* the Glow size key an older version wrote (effect_glow_size) is read
+       by nothing: a file holding it loads as one without it (every effect
+       on, the preset Original), and a save of a file without it does not
+       write it */
     f = fopen(path, "wb");
     if (f != NULL) {
-        fputs("[video]\neffect_glow_size = \"Original\"\n", f);
+        fputs("[video]\neffect_glow_size = \"scaled\"\n", f);
         fclose(f);
     }
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
     ico_video_get(&o);
-    CHECK(o.effectGlowOriginal == 1 && ico_video_effect_glow_original() == 1);
-    f = fopen(path, "wb");
-    if (f != NULL) {
-        fputs("[video]\neffect_glow_size = \"huge\"\n", f);
-        fclose(f);
-    }
+    CHECK(effects_are(&o, 1, 1, 1, 1, 1, 1) && o.effectWaterSharp == 0 &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    remove(path);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_video_reload();
-    ico_video_get(&o);
-    CHECK(o.effectGlowOriginal == 0 && ico_video_effect_glow_original() == 0);
-    o.effectGlowOriginal = 5;
-    ico_video_set(&o);
-    ico_video_get(&o);
-    CHECK(o.effectGlowOriginal == 1 && ico_video_effect_glow_original() == 1);
     CHECK(ico_video_save() == 0);
     text = read_text(path);
-    CHECK(text != NULL && strstr(text, "effect_glow_size = \"original\"") != NULL);
-    ico_config_reset(path, "/nonexistent/options_test.ini");
-    ico_video_reload();
-    ico_video_get(&o);
-    CHECK(o.effectGlowOriginal == 1);
-    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
-    CHECK(o.effectGlowOriginal == 1);
-    ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
-    CHECK(o.effectGlowOriginal == 1);
+    CHECK(text != NULL && strstr(text, "effect_glow =") != NULL &&
+          strstr(text, "effect_glow_size") == NULL);
     remove(path);
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_video_reload();

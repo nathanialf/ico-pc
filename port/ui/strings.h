@@ -602,10 +602,6 @@ typedef enum UiStrId {
     UI_STR_OPT_EFFECT_WATER,
     UI_STR_VAL_SHARP,
     UI_STR_EFFECT_WATER_NOTE,
-    /* Effects > Glow size: Scaled or Original (UI_STR_VAL_ORIGINAL) */
-    UI_STR_OPT_EFFECT_GLOW_SIZE,
-    UI_STR_VAL_SCALED,
-    UI_STR_EFFECT_GLOW_SIZE_NOTE,
     UI_STR_COUNT
 } UiStrId;
 

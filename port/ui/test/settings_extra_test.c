@@ -160,7 +160,7 @@ static void testCinematicBars(void)
 
 /* Effects > Water reflections: Original by default, a step makes it Sharp
    (the getter at once, [video] effect_water_sharp true when saved), its note
-   on the page, and the page's rows fit from the pause menu */
+   on the page, and the page's fourteen rows fit from the pause menu */
 static void testWaterReflections(void)
 {
     char p[1100];
@@ -189,52 +189,6 @@ static void testWaterReflections(void)
     ui_settings_step(UI_OPT_EFFECT_WATER, -1);
     CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_WATER), "Original") == 0,
           "water: Original again");
-    useConfig("version = 1\n");
-}
-
-/* Effects > Glow size: the row right after Glow, Scaled by default, a step
-   makes it Original (the getter at once, [video] effect_glow_size
-   "original" when saved), its note, Glow untouched, and the page's fifteen
-   rows fit from the pause menu */
-static void testGlowSize(void)
-{
-    char p[1100];
-    int rows[16], opts[16];
-
-    useConfig("version = 1\n");
-    const int mainL = enterMain(0);
-    openPage(mainL, 1, UI_PAGE_EFFECTS);
-    const int n = ui_settings_page_rows(UI_PAGE_EFFECTS, rows, opts, NULL, 16);
-    int at = -1;
-    for (int i = 0; i < n; i++) {
-        if (opts[i] == UI_OPT_EFFECT_GLOW_SIZE) {
-            at = i;
-        }
-    }
-    CHECK(at > 0 && opts[at - 1] == UI_OPT_EFFECT_GLOW, "glow size: the row after Glow (%d)", at);
-    CHECK(noteStarting(UI_PAGE_EFFECTS, "Original draws the glow") >= 0, "glow size: the note");
-    checkPageFits(UI_PAGE_EFFECTS, "Effects with Glow size (pause)");
-    press(0x10);
-    CHECK(settle(mainL, 60), "glow size: back from Effects");
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SIZE), "Scaled") == 0,
-          "glow size: Scaled by default");
-    CHECK(ico_video_effect_glow_original() == 0, "glow size: the getter reads Scaled");
-    ui_settings_step(UI_OPT_EFFECT_GLOW_SIZE, 1);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SIZE), "Original") == 0,
-          "glow size: Original");
-    CHECK(ico_video_effect_glow_original() == 1, "glow size: the getter reads Original at once");
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW), "On") == 0,
-          "glow size: Glow untouched");
-    CHECK(ui_settings_save() == 0, "glow size: save");
-    path(p, sizeof(p), "settings_test.toml");
-    IcoToml *t = ico_toml_load(p);
-    const char *v = ico_toml_get(t, "video.effect_glow_size");
-    CHECK(t != NULL && v != NULL && strcmp(v, "original") == 0,
-          "glow size: [video] effect_glow_size \"original\"");
-    ico_toml_free(t);
-    ui_settings_step(UI_OPT_EFFECT_GLOW_SIZE, -1);
-    CHECK(strcmp(ui_settings_value_text(UI_OPT_EFFECT_GLOW_SIZE), "Scaled") == 0,
-          "glow size: Scaled again");
     useConfig("version = 1\n");
 }
 
@@ -2245,8 +2199,6 @@ int main(int argc, char **argv)
     testCinematicBars();
     /* Effects > Water reflections */
     testWaterReflections();
-    /* Effects > Glow size */
-    testGlowSize();
     /* the select callback's argument */
     testItemSelectArg();
     /* Settings > Graphics driver, the Quit game label */

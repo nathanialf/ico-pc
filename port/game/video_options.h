@@ -63,12 +63,6 @@
  *                                       the queen's barrier) at the scene's resolution;
  *                                       false keeps the PS2's size (Water reflections:
  *                                       Original)
- *   [video] effect_glow_size
- *                           "scaled"    "scaled" | "original": the glow (and the other
- *                                       effects' work buffers: depth of field, softening)
- *                                       at the work scale above 1x, or at the PS2's
- *                                       buffer sizes at every resolution (Glow size:
- *                                       Original: coarser, much lighter on the GPU)
  *   [video] effects_depth   true        config only: the scene's depth beside
  *                                       the picture for an effects program (ReShade's depth
  *                                       effects), drawn only when one is loaded; not with
@@ -186,9 +180,6 @@ typedef struct IcoVideoOptions {
        picture at the scene's resolution (rd.h RdSettings.waterSharp);
        0 = Original, the PS2's size: the one effect row whose default is 0 */
     int effectWaterSharp;
-    /* Glow size (rd.h RdSettings.glowOriginal): 0 = Scaled, the work
-       scale above 1x (the default); 1 = Original, the PS2's buffer sizes */
-    int effectGlowOriginal;
     /* an output-size depth buffer in the presentation for an
        effects program (rd.h RdSettings.effectsDepth); 1 = on */
     int effectsDepth;
@@ -292,9 +283,6 @@ int ico_video_effect_cinematic_bars(void);
 /* [video] effect_water_sharp, 1 (Sharp) or 0 (Original): the host hands it
    to the renderer (window_host.c video_settings, RdSettings.waterSharp) */
 int ico_video_effect_water_sharp(void);
-/* [video] effect_glow_size, 1 ("original") or 0 ("scaled"): the host hands
-   it to the renderer (window_host.c video_settings, RdSettings.glowOriginal) */
-int ico_video_effect_glow_original(void);
 /* [video] effects_depth, 1 or 0 */
 int ico_video_effects_depth(void);
 /* The anti-aliasing in force, ICO_AA_*: the anti_aliasing option, except

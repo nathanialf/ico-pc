@@ -41,7 +41,6 @@ static void testBuild(void)
                                  UI_OPT_CRT,
                                  UI_OPT_CRT_STRENGTH,
                                  UI_OPT_EFFECT_GLOW,
-                                 UI_OPT_EFFECT_GLOW_SIZE,
                                  UI_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_OPT_EFFECT_SOFTENING,
                                  UI_OPT_EFFECT_MOTION_BLUR,
@@ -56,7 +55,6 @@ static void testBuild(void)
                                  UI_STR_OPT_CRT,
                                  UI_STR_OPT_CRT_STRENGTH,
                                  UI_STR_OPT_EFFECT_GLOW,
-                                 UI_STR_OPT_EFFECT_GLOW_SIZE,
                                  UI_STR_OPT_EFFECT_DEPTH_OF_FIELD,
                                  UI_STR_OPT_EFFECT_SOFTENING,
                                  UI_STR_OPT_EFFECT_MOTION_BLUR,
@@ -131,7 +129,7 @@ static void testBuild(void)
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 13), "main page rows");
-    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 15), "effects rows");
+    CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 14), "effects rows");
     {
         /* Characters (a link), then Add to Steam (hidden without a host
            handler) before Back */

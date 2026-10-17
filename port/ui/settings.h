@@ -276,8 +276,6 @@ typedef enum UiSettingsOpt {
     UI_OPT_EFFECT_MOTION_BLUR,
     UI_OPT_EFFECT_FOG,
     UI_OPT_EFFECT_WATER, /* [video] effect_water_sharp: Original/Sharp, default Original */
-    /* [video] effect_glow_size: Scaled/Original, default Scaled; the row after Glow */
-    UI_OPT_EFFECT_GLOW_SIZE,
     UI_OPT_EFFECT_CINEMATIC_BARS,
     UI_OPT_FULL_PIXEL, /* [video] full_pixel; On/Off, last Effects row, outside the preset */
     /* Audio */
