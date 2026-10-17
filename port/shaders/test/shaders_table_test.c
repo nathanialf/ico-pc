@@ -24,9 +24,26 @@ static const char *const expected[] = {
 };
 
 /* the screen-prim triangles with their colour and STQ planes
- * (rd_screen_planes.c, sprite.hlsl) */
-static const char *const expectedPlanes[] = {"sprite_plane_ui_vs", "sprite_plane_world_vs",
-                                             "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs"};
+ * (rd_screen_planes.c, sprite.hlsl's planes build ICO_SPRITE_PLANES): the
+ * vertex entries and the pixel entries built again, with their twins */
+static const char *const expectedPlanes[] = {
+    "sprite_plane_ui_vs",
+    "sprite_plane_world_vs",
+    "sprite_stq_plane_ui_vs",
+    "sprite_stq_plane_world_vs",
+    "sprite_ps_planes",
+    "sprite_ps_planes_nodual",
+    "sprite_ps_planes_dstrov",
+    "sprite_ps_planes_dstatt",
+    "sprite_texa_ps_planes",
+    "sprite_texa_ps_planes_nodual",
+    "sprite_texa_ps_planes_dstrov",
+    "sprite_texa_ps_planes_dstatt",
+    "sprite_stq_ps_planes",
+    "sprite_stq_ps_planes_nodual",
+    "sprite_stq_ps_planes_dstrov",
+    "sprite_stq_ps_planes_dstatt",
+};
 
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */

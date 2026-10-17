@@ -27,18 +27,24 @@ static IcoSpritePlaneVertex *s_pl;
 
 static uint32_t s_plCap;
 
+/* the pass's vertex and fragment shaders with the planes: sprite.hlsl's
+ * planes build (ICO_SPRITE_PLANES), whose SpriteVSOut carries them; the
+ * plain sprite entries' outputs and inputs are the position, colour and
+ * uv or stq alone */
 int rd__plane_pass(RdDrawPass *dp)
 {
     RdPipeKeyInt *k = &dp->key;
     if ((k->fs == RD_FS_SPRITE || k->fs == RD_FS_SPRITE_TEXA) &&
         (k->vs == RD_VS_SPRITE_UI || k->vs == RD_VS_SPRITE_WORLD)) {
         k->vs = k->vs == RD_VS_SPRITE_WORLD ? RD_VS_SPRITE_PLANE_WORLD : RD_VS_SPRITE_PLANE_UI;
+        k->fs = k->fs == RD_FS_SPRITE_TEXA ? RD_FS_SPRITE_TEXA_PLANES : RD_FS_SPRITE_PLANES;
         return 1;
     }
     if (k->fs == RD_FS_SPRITE_STQ &&
         (k->vs == RD_VS_SPRITE_STQ_UI || k->vs == RD_VS_SPRITE_STQ_WORLD)) {
         k->vs = k->vs == RD_VS_SPRITE_STQ_WORLD ? RD_VS_SPRITE_STQ_PLANE_WORLD
                                                 : RD_VS_SPRITE_STQ_PLANE_UI;
+        k->fs = RD_FS_SPRITE_STQ_PLANES;
         return 1;
     }
     return 0;

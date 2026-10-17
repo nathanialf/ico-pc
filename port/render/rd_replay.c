@@ -2918,7 +2918,8 @@ static int spriteAbove1x(const Replay *r, const RdDrawPass *dp, const DrawSetup 
     if (r->a1xGs || !ds->textured || !d->texEnabled || ds->gsLevels || ds->replacement || !ds->tc ||
         d->magFilter != RD_FILTER_LINEAR || d->minFilter != RD_FILTER_LINEAR ||
         (dp->key.fs != RD_FS_SPRITE && dp->key.fs != RD_FS_SPRITE_AA1 &&
-         dp->key.fs != RD_FS_SPRITE_STQ)) {
+         dp->key.fs != RD_FS_SPRITE_STQ && dp->key.fs != RD_FS_SPRITE_PLANES &&
+         dp->key.fs != RD_FS_SPRITE_STQ_PLANES)) {
         return 0;
     }
     const RdTexRec *t = rd__tex_rec(r->st.tex);

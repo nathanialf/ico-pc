@@ -20,6 +20,15 @@
 //                               without perspective; ICO_AA1_INTERIOR (2.0)
 //                               on a triangle's own vertices
 // and sprite_aa1_ps takes the coverage as the fragment's alpha.
+//
+// The planes build (ICO_SPRITE_PLANES=1, port/shaders/CMakeLists.txt):
+// SpriteVSOut and SpriteStqVSOut carry the triangle's planes
+// (SPRITE_PLANES) only there. sprite_plane_*_vs and sprite_stq_plane_*_vs
+// exist only in it, and sprite_ps, sprite_texa_ps and sprite_stq_ps are
+// built again with it as sprite_ps_planes, sprite_texa_ps_planes and
+// sprite_stq_ps_planes (rd_screen_planes.c rd__plane_pass pairs them).
+// Every other entry is the plain build: pos, colour and uv or stq, the
+// layout font.hlsl, fog_lut.hlsl and raw_wrap.hlsl read too.
 #include "common.hlsli"
 
 struct SpriteVSIn {
@@ -38,7 +47,8 @@ struct SpriteVSIn {
 // interpolates from the pixel's place in the target, which moves the
 // Gouraud colours of the 4:3 columns by a step with the frame width; the
 // planes are evaluated at the pixel's offset from the corner, the same
-// numbers at every width.
+// numbers at every width.  The planes build alone (ICO_SPRITE_PLANES).
+#ifdef ICO_SPRITE_PLANES
 #define SPRITE_PLANES                                                                              \
     VK_LOC(2) nointerpolation float4 p0 : TEXCOORD3;                                               \
     VK_LOC(3) nointerpolation float4 p1 : TEXCOORD4;                                               \
@@ -46,6 +56,9 @@ struct SpriteVSIn {
     VK_LOC(5) nointerpolation float4 p3 : TEXCOORD6;                                               \
     VK_LOC(6) nointerpolation float4 p4 : TEXCOORD7;                                               \
     VK_LOC(7) nointerpolation float4 p5 : TEXCOORD8;
+#else
+#define SPRITE_PLANES
+#endif
 
 struct SpriteVSOut {
     float4 pos : SV_Position;
@@ -60,10 +73,13 @@ SpriteVSOut sprite_vertex(SpriteVSIn i)
     o.pos = float4(gs_xy_to_ndc(i.xy), gs_depth(i.z), 1.0);
     o.col = float4(i.col);
     o.uv = gs_uv_norm(i.uv);
+#ifdef ICO_SPRITE_PLANES
     o.p0 = o.p1 = o.p2 = o.p3 = o.p4 = o.p5 = float4(0.0, 0.0, 0.0, 0.0);
+#endif
     return o;
 }
 
+#ifdef ICO_SPRITE_PLANES
 // The vertex of sprite_plane_*_vs and sprite_stq_plane_*_vs
 // (IcoSpritePlaneVertex): SpriteVSIn, Q, and the triangle's planes per GS
 // pixel (shader_consts.h)
@@ -129,8 +145,13 @@ SpriteVSOut sprite_plane_world_vs(SpritePlaneVSIn i)
 {
     return sprite_plane_vertex(i);
 }
+#endif
 
-// The pixel's colour and S, T, Q from the planes (p5.w 1), else the GPU's
+// The pixel's colour and S, T, Q from the planes (p5.w 1), else the GPU's;
+// the plain build has no planes: the GPU's
+#ifdef ICO_SPRITE_PLANES
+#define SPRITE_PLANE_ATTRS(i, col, stq)                                                            \
+    sprite_plane_attrs(i.pos, i.p0, i.p1, i.p2, i.p3, i.p4, i.p5, col, stq)
 void sprite_plane_attrs(float4 pos, float4 p0, float4 p1, float4 p2, float4 p3, float4 p4,
                         float4 p5, inout float4 col, inout float3 stq)
 {
@@ -143,6 +164,9 @@ void sprite_plane_attrs(float4 pos, float4 p0, float4 p1, float4 p2, float4 p3, 
     col = c;
     stq = s;
 }
+#else
+#define SPRITE_PLANE_ATTRS(i, col, stq)
+#endif
 
 SpriteVSOut sprite_ui_vs(SpriteVSIn i)
 {
@@ -223,7 +247,7 @@ bool sprite_above1x(float2 uv, out uint4 t)
 GS_PS_ATTR GS_PS_OUT sprite_ps(SpriteVSOut i)
 {
     float3 st = float3(i.uv, 1.0);
-    sprite_plane_attrs(i.pos, i.p0, i.p1, i.p2, i.p3, i.p4, i.p5, i.col, st);
+    SPRITE_PLANE_ATTRS(i, i.col, st);
     i.uv = st.xy;
     if ((g_mode.x & DF_DATE) != 0u) {
         if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
@@ -256,7 +280,7 @@ GS_PS_ATTR GS_PS_OUT sprite_ps(SpriteVSOut i)
 GS_PS_ATTR GS_PS_OUT sprite_texa_ps(SpriteVSOut i)
 {
     float3 st = float3(i.uv, 1.0);
-    sprite_plane_attrs(i.pos, i.p0, i.p1, i.p2, i.p3, i.p4, i.p5, i.col, st);
+    SPRITE_PLANE_ATTRS(i, i.col, st);
     i.uv = st.xy;
     if ((g_mode.x & DF_DATE) != 0u) {
         if (gs_date_discard(g_mode.x, g_dateSnap.Load(int3(int2(i.pos.xy), 0)))) {
@@ -391,10 +415,13 @@ SpriteStqVSOut sprite_stq_vertex(SpriteStqVSIn i)
     o.pos = float4(gs_xy_to_ndc(i.xy), gs_depth(i.z), 1.0);
     o.col = float4(i.col);
     o.stq = gs_stq_norm(i.uv, i.q);
+#ifdef ICO_SPRITE_PLANES
     o.p0 = o.p1 = o.p2 = o.p3 = o.p4 = o.p5 = float4(0.0, 0.0, 0.0, 0.0);
+#endif
     return o;
 }
 
+#ifdef ICO_SPRITE_PLANES
 // sprite_stq_vertex with the triangle's planes (IcoSpritePlaneVertex)
 SpriteStqVSOut sprite_stq_plane_vertex(SpritePlaneVSIn i)
 {
@@ -415,6 +442,7 @@ SpriteStqVSOut sprite_stq_plane_world_vs(SpritePlaneVSIn i)
 {
     return sprite_stq_plane_vertex(i);
 }
+#endif
 
 SpriteStqVSOut sprite_stq_ui_vs(SpriteStqVSIn i)
 {
@@ -428,7 +456,7 @@ SpriteStqVSOut sprite_stq_world_vs(SpriteStqVSIn i)
 
 GS_PS_ATTR GS_PS_OUT sprite_stq_ps(SpriteStqVSOut i)
 {
-    sprite_plane_attrs(i.pos, i.p0, i.p1, i.p2, i.p3, i.p4, i.p5, i.col, i.stq);
+    SPRITE_PLANE_ATTRS(i, i.col, i.stq);
     uint4 col = sprite_colour(i.pos, i.col, i.stq.xy / i.stq.z, i.stq.z);
     if (gs_alpha_discard(g_mode.z, g_mode.w, col.a)) {
         GS_DISCARD;

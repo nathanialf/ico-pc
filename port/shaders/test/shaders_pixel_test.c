@@ -12,6 +12,11 @@
  *           a lerp with As 0x7F writes Cs unblended, a LERP_FIX with As
  *           0x90 blends by FIX, Cd*FIX + Cs with As 0x10 writes Cs; FBA: a
  *           lerp with As 0x40 blends by 0x40 and stores alpha 0xC0
+ *   planes  pass 1 again into another target with sprite.hlsl's planes
+ *           build (ICO_SPRITE_PLANES: sprite_plane_ui_vs,
+ *           sprite_plane_world_vs, sprite_ps_planes, the IcoSpritePlaneVertex
+ *           layout, Q 1, no exact viewport so no planes): byte for byte the
+ *           plain build's picture, the two builds being one source
  *   pass 2  blit_ps: identity tint copy of pass 1 (exact), then tinted
  *   pass 3  blend_int_ps: three GS blends on RGBA8_UINT textures (exact)
  *   above1x (CPU, before the device) common.hlsli's above-1x kernels
@@ -32,7 +37,8 @@
  *           over every pair of 4-bit weights and texel values in steps of
  *           17: 0 to 2 levels above, never below, the histogram printed
  *
- * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual,
+ * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual (and
+ * sprite_ps_planes_nodual for the planes pass),
  * and the draws that read the second output (the lerps, Cd*FIX + Cs, the
  * plain additive) drawn as rd_pipeline.c's two-pass fallback draws them: a
  * colour pass (ICO_DF_NODUAL_FACTOR, SRC_ALPHA factors, mask RGB), then an
@@ -112,6 +118,8 @@ static RhiShader makeShader(const char *name)
 
 static const RhiBlendState kOpaque = {.writeMask = 0xF};
 
+/* sprite: 0 no vertex input, 1 IcoSpriteVertex, 2 IcoSpritePlaneVertex (the
+ * layout rd_pipeline.c gives sprite_plane_*_vs) */
 static RhiPipeline makePipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLayout *layouts,
                                 int sprite, RhiFormat fmt, const RhiBlendState *blend,
                                 const char *name)
@@ -123,16 +131,35 @@ static RhiPipeline makePipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLa
         {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
         {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
     };
+    static const RhiVertexBinding vbPlane = {0, sizeof(IcoSpritePlaneVertex), false};
+    static const RhiVertexAttr vaPlane[11] = {
+        {0, 0, RHI_VTX_U16x2_UINT, offsetof(IcoSpriteVertex, x)},
+        {1, 0, RHI_VTX_U32x1, offsetof(IcoSpriteVertex, z)},
+        {2, 0, RHI_VTX_U8x4_UINT, offsetof(IcoSpriteVertex, rgba)},
+        {3, 0, RHI_VTX_F32x2, offsetof(IcoSpriteVertex, u)},
+        {4, 0, RHI_VTX_F32x1, offsetof(IcoSpriteStqVertex, q)},
+        {5, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, c0)},
+        {6, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, cx)},
+        {7, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, cy)},
+        {8, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, s0)},
+        {9, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sx)},
+        {10, 0, RHI_VTX_F32x4, offsetof(IcoSpritePlaneVertex, sy)},
+    };
     RhiPipelineDesc d = {0};
     d.vertex = vs;
     d.fragment = ps;
     d.layouts = layouts;
     d.layoutCount = 3;
-    if (sprite) {
+    if (sprite == 1) {
         d.vertexBindings = &vb;
         d.vertexBindingCount = 1;
         d.vertexAttrs = va;
         d.vertexAttrCount = 4;
+    } else if (sprite == 2) {
+        d.vertexBindings = &vbPlane;
+        d.vertexBindingCount = 1;
+        d.vertexAttrs = vaPlane;
+        d.vertexAttrCount = 11;
     }
     d.topology = RHI_TOPO_TRIANGLE_LIST;
     d.cullNone = true;
@@ -425,6 +452,75 @@ static void checkGridBilinear(void)
     }
 }
 
+/* pass 1's pipelines for one build of sprite.hlsl: layout 1 the plain
+ * build's vertex (IcoSpriteVertex), 2 the planes build's
+ * (IcoSpritePlaneVertex) */
+typedef struct SpritePipes {
+    RhiPipeline opaque, lerp, add, addPremul, lerpWorld, dstFix, alpha, alphaWorld;
+} SpritePipes;
+
+static SpritePipes makeSpritePipes(RhiShader vsUi, RhiShader vsWorld, RhiShader ps,
+                                   const RhiBindGroupLayout *layA, int layout, int nodual)
+{
+    const RhiBlendState lerp = {true,
+                                RHI_BF_SRC1_COLOR,
+                                RHI_BF_ONE_MINUS_SRC1_COLOR,
+                                RHI_BO_ADD,
+                                RHI_BF_ONE,
+                                RHI_BF_ZERO,
+                                RHI_BO_ADD,
+                                0xF};
+    const RhiBlendState add = {true,       RHI_BF_SRC1_COLOR, RHI_BF_ONE, RHI_BO_ADD,
+                               RHI_BF_ONE, RHI_BF_ZERO,       RHI_BO_ADD, 0xF};
+    const RhiBlendState addOne = {true,       RHI_BF_ONE,  RHI_BF_ONE, RHI_BO_ADD,
+                                  RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD, 0xF};
+    /* Cd*FIX + Cs (rd_pipeline.c RD_BP_DST_FIX) */
+    const RhiBlendState dstFix = {true,       RHI_BF_ONE,  RHI_BF_SRC1_COLOR, RHI_BO_ADD,
+                                  RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,        0xF};
+    /* --nodual: the colour passes (the factor in c0.a, mask RGB) and the
+     * alpha pass (the stored alpha, no blending) */
+    const RhiBlendState lerpC = {true,
+                                 RHI_BF_SRC_ALPHA,
+                                 RHI_BF_ONE_MINUS_SRC_ALPHA,
+                                 RHI_BO_ADD,
+                                 RHI_BF_ONE,
+                                 RHI_BF_ZERO,
+                                 RHI_BO_ADD,
+                                 0x7};
+    const RhiBlendState addC = {true,       RHI_BF_SRC_ALPHA, RHI_BF_ONE, RHI_BO_ADD,
+                                RHI_BF_ONE, RHI_BF_ZERO,      RHI_BO_ADD, 0x7};
+    const RhiBlendState dstFixC = {true,       RHI_BF_ONE,  RHI_BF_SRC_ALPHA, RHI_BO_ADD,
+                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,       0x7};
+    const RhiBlendState alphaOnly = {.writeMask = 0x8};
+    const RhiFormat f = RHI_FMT_RGBA8_UNORM;
+    const int pl = layout == 2;
+    SpritePipes o;
+    memset(&o, 0, sizeof(o));
+    o.opaque = makePipeline(vsUi, ps, layA, layout, f, &kOpaque, pl ? "planes opaque" : "opaque");
+    o.addPremul =
+        makePipeline(vsUi, ps, layA, layout, f, &addOne, pl ? "planes addPremul" : "addPremul");
+    if (!nodual) {
+        o.lerp = makePipeline(vsUi, ps, layA, layout, f, &lerp, pl ? "planes lerp" : "lerp");
+        o.add = makePipeline(vsUi, ps, layA, layout, f, &add, pl ? "planes add" : "add");
+        o.lerpWorld = makePipeline(vsWorld, ps, layA, layout, f, &lerp,
+                                   pl ? "planes lerpWorld" : "lerpWorld");
+        o.dstFix =
+            makePipeline(vsUi, ps, layA, layout, f, &dstFix, pl ? "planes dstFix" : "dstFix");
+    } else {
+        o.lerp = makePipeline(vsUi, ps, layA, layout, f, &lerpC, pl ? "planes lerpC" : "lerpC");
+        o.add = makePipeline(vsUi, ps, layA, layout, f, &addC, pl ? "planes addC" : "addC");
+        o.lerpWorld = makePipeline(vsWorld, ps, layA, layout, f, &lerpC,
+                                   pl ? "planes lerpWorldC" : "lerpWorldC");
+        o.dstFix =
+            makePipeline(vsUi, ps, layA, layout, f, &dstFixC, pl ? "planes dstFixC" : "dstFixC");
+        o.alpha =
+            makePipeline(vsUi, ps, layA, layout, f, &alphaOnly, pl ? "planes alpha" : "alpha");
+        o.alphaWorld = makePipeline(vsWorld, ps, layA, layout, f, &alphaOnly,
+                                    pl ? "planes alphaWorld" : "alphaWorld");
+    }
+    return o;
+}
+
 int main(int argc, char **argv)
 {
     const int nodual = argc > 1 && strcmp(argv[1], "--nodual") == 0;
@@ -464,65 +560,15 @@ int main(int argc, char **argv)
 
     RhiShader svsUi = makeShader("sprite_ui_vs"), svsWorld = makeShader("sprite_world_vs");
     RhiShader sps = makeShader(nodual ? "sprite_ps_nodual" : "sprite_ps");
+    /* the planes build (ICO_SPRITE_PLANES) */
+    RhiShader pvsUi = makeShader("sprite_plane_ui_vs"),
+              pvsWorld = makeShader("sprite_plane_world_vs");
+    RhiShader pps = makeShader(nodual ? "sprite_ps_planes_nodual" : "sprite_ps_planes");
     RhiShader bvs = makeShader("blit_vs"), bps = makeShader("blit_ps");
     RhiShader nvs = makeShader("blend_int_vs"), nps = makeShader("blend_int_ps");
 
-    const RhiBlendState lerp = {true,
-                                RHI_BF_SRC1_COLOR,
-                                RHI_BF_ONE_MINUS_SRC1_COLOR,
-                                RHI_BO_ADD,
-                                RHI_BF_ONE,
-                                RHI_BF_ZERO,
-                                RHI_BO_ADD,
-                                0xF};
-    const RhiBlendState add = {true,       RHI_BF_SRC1_COLOR, RHI_BF_ONE, RHI_BO_ADD,
-                               RHI_BF_ONE, RHI_BF_ZERO,       RHI_BO_ADD, 0xF};
-    RhiPipeline pOpaque =
-        makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &kOpaque, "opaque");
-    RhiPipeline pLerp = {0}, pAdd = {0}, pLerpWorld = {0}, pDstFix = {0};
-    if (!nodual) {
-        pLerp = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerp");
-        pAdd = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &add, "add");
-    }
-    const RhiBlendState addOne = {true,       RHI_BF_ONE,  RHI_BF_ONE, RHI_BO_ADD,
-                                  RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD, 0xF};
-    RhiPipeline pAddPremul =
-        makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &addOne, "addPremul");
-    if (!nodual) {
-        pLerpWorld = makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerp, "lerpWorld");
-    }
-    /* Cd*FIX + Cs (rd_pipeline.c RD_BP_DST_FIX) */
-    const RhiBlendState dstFix = {true,       RHI_BF_ONE,  RHI_BF_SRC1_COLOR, RHI_BO_ADD,
-                                  RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,        0xF};
-    if (!nodual) {
-        pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFix, "dstFix");
-    }
-    /* --nodual: the colour passes (the factor in c0.a, mask RGB) and the
-     * alpha pass (the stored alpha, no blending) */
-    const RhiBlendState lerpC = {true,
-                                 RHI_BF_SRC_ALPHA,
-                                 RHI_BF_ONE_MINUS_SRC_ALPHA,
-                                 RHI_BO_ADD,
-                                 RHI_BF_ONE,
-                                 RHI_BF_ZERO,
-                                 RHI_BO_ADD,
-                                 0x7};
-    const RhiBlendState addC = {true,       RHI_BF_SRC_ALPHA, RHI_BF_ONE, RHI_BO_ADD,
-                                RHI_BF_ONE, RHI_BF_ZERO,      RHI_BO_ADD, 0x7};
-    const RhiBlendState dstFixC = {true,       RHI_BF_ONE,  RHI_BF_SRC_ALPHA, RHI_BO_ADD,
-                                   RHI_BF_ONE, RHI_BF_ZERO, RHI_BO_ADD,       0x7};
-    const RhiBlendState alphaOnly = {.writeMask = 0x8};
-    RhiPipeline pAlpha = {0}, pAlphaWorld = {0};
-    if (nodual) {
-        pLerp = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerpC, "lerpC");
-        pAdd = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &addC, "addC");
-        pLerpWorld =
-            makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &lerpC, "lerpWorldC");
-        pDstFix = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &dstFixC, "dstFixC");
-        pAlpha = makePipeline(svsUi, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &alphaOnly, "alpha");
-        pAlphaWorld =
-            makePipeline(svsWorld, sps, layA, 1, RHI_FMT_RGBA8_UNORM, &alphaOnly, "alphaWorld");
-    }
+    SpritePipes sp = makeSpritePipes(svsUi, svsWorld, sps, layA, 1, nodual);
+    SpritePipes pp = makeSpritePipes(pvsUi, pvsWorld, pps, layA, 2, nodual);
     RhiPipeline pBlit = makePipeline(bvs, bps, layA, 0, RHI_FMT_RGBA8_UNORM, &kOpaque, "blit");
     RhiPipeline pInt = makePipeline(nvs, nps, layB, 0, RHI_FMT_RGBA8_UINT, &kOpaque, "blendInt");
     if (failures) {
@@ -545,6 +591,15 @@ int main(int argc, char **argv)
     cellQuad(&verts[Q_FBA * 6], 10, 200, 100, 50, 0x40, 0, 0);
     cellQuad(&verts[Q_PABE_DSTFIX * 6], 11, 90, 90, 90, 0x10, 0, 0);
 
+    /* the planes build's vertices: the same, Q 1, the planes 0 (FrameCB's
+     * viewport is 0, not the exact viewport, so sprite_planes writes none) */
+    static IcoSpritePlaneVertex pverts[Q_COUNT * 6];
+    memset(pverts, 0, sizeof(pverts));
+    for (int i = 0; i < Q_COUNT * 6; i++) {
+        pverts[i].s.v = verts[i];
+        pverts[i].s.q = 1.0f;
+    }
+
     static const uint8_t texels[4][4] = {
         {200, 100, 50, 0xFF}, {10, 20, 30, 0x80}, {255, 255, 255, 0x40}, {0, 129, 127, 0}};
 
@@ -563,7 +618,10 @@ int main(int argc, char **argv)
 
     /* ---- resources ---- */
     const uint64_t offVerts = 0, offTex = 4096, offSrc = 4608, offDst = 5120, offUbo = 8192;
-    const uint64_t ringSize = 8192 + 64 * 512; /* DrawCBs at 512: D_COUNT and their alpha twins */
+    /* DrawCBs at 512: D_COUNT and their alpha twins; then the planes
+     * build's vertices */
+    const uint64_t offPlane = 8192 + 64 * 512;
+    const uint64_t ringSize = offPlane + sizeof(pverts);
     RhiBuffer ring = rhi_create_buffer(&(RhiBufferDesc){
         ringSize, RHI_BUF_VERTEX | RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "ring"});
     uint8_t *map = rhi_map_buffer(ring);
@@ -576,6 +634,8 @@ int main(int argc, char **argv)
     RhiTexture A = rhi_create_texture(
         &(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT | RHI_TEX_SAMPLED, "A", 0});
     RhiTexture B = rhi_create_texture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "B", 0});
+    RhiTexture AP =
+        rhi_create_texture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "A planes", 0});
     RhiTexture C = rhi_create_texture(&(RhiTextureDesc){W, H, 1, RHI_FMT_RGBA8_UNORM, RT, "C", 0});
     RhiTexture tex = rhi_create_texture(&(RhiTextureDesc){
         2, 2, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "tex2x2", 0});
@@ -590,7 +650,8 @@ int main(int argc, char **argv)
     RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
                                                           RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
                                                           RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
-    if (!A.id || !B.id || !C.id || !tex.id || !usrc.id || !udst.id || !uout[2].id || !smp.id) {
+    if (!A.id || !AP.id || !B.id || !C.id || !tex.id || !usrc.id || !udst.id || !uout[2].id ||
+        !smp.id) {
         printf("FAIL resources\n");
         rhi_shutdown();
         return 1;
@@ -679,6 +740,7 @@ int main(int argc, char **argv)
     for (int frame = 0; frame < 2; frame++) {
         rhi_wait_frame();
         memcpy(map + offVerts, verts, sizeof(verts));
+        memcpy(map + offPlane, pverts, sizeof(pverts));
         memcpy(map + offTex, texels, sizeof(texels));
         memcpy(map + offSrc, srcInt, sizeof(srcInt));
         memcpy(map + offDst, dstInt, sizeof(dstInt));
@@ -755,57 +817,62 @@ int main(int argc, char **argv)
             {uout[1], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
         };
         rhi_cmd_barrier(cl, pre, 8);
-        RhiTextureBarrier pre2 = {uout[2], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
-        rhi_cmd_barrier(cl, &pre2, 1);
+        RhiTextureBarrier pre2[2] = {{uout[2], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET},
+                                     {AP, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET}};
+        rhi_cmd_barrier(cl, pre2, 2);
 
         /* pass 1: the sprite cells; the clear (64,64,64,64) shows through
-         * where nothing is drawn */
-        RhiRenderPassDesc rp = {0};
-        rp.color[0] = (RhiColorAttachment){A,
-                                           RHI_LOAD_CLEAR,
-                                           {64 / 255.f, 64 / 255.f, 64 / 255.f, 64 / 255.f},
-                                           RHI_STORE_STORE,
-                                           false};
-        rp.colorCount = 1;
-        rp.width = W;
-        rp.height = H;
-        rhi_cmd_begin_render_pass(cl, &rp);
-        rhi_cmd_set_vertex_buffer(cl, 0, ring, offVerts);
-        rhi_cmd_set_bind_group(cl, 0, g0);
-        rhi_cmd_set_bind_group(cl, 2, g2tex);
+         * where nothing is drawn; then the same into AP with the planes
+         * build */
+        for (int build = 0; build < 2; build++) {
+            const SpritePipes *P = build ? &pp : &sp;
+            RhiRenderPassDesc rp = {0};
+            rp.color[0] = (RhiColorAttachment){build ? AP : A,
+                                               RHI_LOAD_CLEAR,
+                                               {64 / 255.f, 64 / 255.f, 64 / 255.f, 64 / 255.f},
+                                               RHI_STORE_STORE,
+                                               false};
+            rp.colorCount = 1;
+            rp.width = W;
+            rp.height = H;
+            rhi_cmd_begin_render_pass(cl, &rp);
+            rhi_cmd_set_vertex_buffer(cl, 0, ring, build ? offPlane : offVerts);
+            rhi_cmd_set_bind_group(cl, 0, g0);
+            rhi_cmd_set_bind_group(cl, 2, g2tex);
 
-        /* pa: --nodual's alpha pass after the colour pass (0: one pass) */
-        const RhiPipeline none = {0}, pa = nodual ? pAlpha : none;
+            /* pa: --nodual's alpha pass after the colour pass (0: one pass) */
+            const RhiPipeline none = {0}, pa = nodual ? P->alpha : none;
 
-        struct {
-            int q, d;
-            RhiPipeline p, pa;
-        } draws[Q_COUNT] = {
-            {Q_UNTEX, D_UNTEX, pOpaque, none},
-            {Q_TEX, D_TEX, pOpaque, none},
-            {Q_ATEST_FAIL, D_ATEST_FAIL, pOpaque, none},
-            {Q_ATEST_PASS, D_ATEST_PASS, pOpaque, none},
-            {Q_LERP80, D_LERP80, pLerp, pa},
-            {Q_LERP40, D_LERP40, pLerp, pa},
-            {Q_ADD_FF, D_ADD_FF, pAddPremul, none},
-            {Q_PABE, D_PABE, pLerpWorld, nodual ? pAlphaWorld : none},
-            {Q_ADD_PLAIN, D_ADD_PLAIN, pAdd, pa},
-            {Q_PABE_ON, D_PABE_ON, pLerp, pa},
-            {Q_FBA, D_FBA, pLerp, pa},
-            {Q_PABE_DSTFIX, D_PABE_DSTFIX, pDstFix, pa},
-        };
+            struct {
+                int q, d;
+                RhiPipeline p, pa;
+            } draws[Q_COUNT] = {
+                {Q_UNTEX, D_UNTEX, P->opaque, none},
+                {Q_TEX, D_TEX, P->opaque, none},
+                {Q_ATEST_FAIL, D_ATEST_FAIL, P->opaque, none},
+                {Q_ATEST_PASS, D_ATEST_PASS, P->opaque, none},
+                {Q_LERP80, D_LERP80, P->lerp, pa},
+                {Q_LERP40, D_LERP40, P->lerp, pa},
+                {Q_ADD_FF, D_ADD_FF, P->addPremul, none},
+                {Q_PABE, D_PABE, P->lerpWorld, nodual ? P->alphaWorld : none},
+                {Q_ADD_PLAIN, D_ADD_PLAIN, P->add, pa},
+                {Q_PABE_ON, D_PABE_ON, P->lerp, pa},
+                {Q_FBA, D_FBA, P->lerp, pa},
+                {Q_PABE_DSTFIX, D_PABE_DSTFIX, P->dstFix, pa},
+            };
 
-        for (int i = 0; i < Q_COUNT; i++) {
-            rhi_cmd_set_pipeline(cl, draws[i].p);
-            rhi_cmd_set_bind_group(cl, 1, g1[draws[i].d]);
-            rhi_cmd_draw(cl, 6, (uint32_t)draws[i].q * 6, 1);
-            if (draws[i].pa.id) {
-                rhi_cmd_set_pipeline(cl, draws[i].pa);
-                rhi_cmd_set_bind_group(cl, 1, g1a[draws[i].d]);
+            for (int i = 0; i < Q_COUNT; i++) {
+                rhi_cmd_set_pipeline(cl, draws[i].p);
+                rhi_cmd_set_bind_group(cl, 1, g1[draws[i].d]);
                 rhi_cmd_draw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+                if (draws[i].pa.id) {
+                    rhi_cmd_set_pipeline(cl, draws[i].pa);
+                    rhi_cmd_set_bind_group(cl, 1, g1a[draws[i].d]);
+                    rhi_cmd_draw(cl, 6, (uint32_t)draws[i].q * 6, 1);
+                }
             }
+            rhi_cmd_end_render_pass(cl);
         }
-        rhi_cmd_end_render_pass(cl);
         RhiTextureBarrier aRead = {A, RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ};
         rhi_cmd_barrier(cl, &aRead, 1);
 
@@ -842,6 +909,8 @@ int main(int argc, char **argv)
             rhi_cmd_draw(cl, 3, 0, 1);
             rhi_cmd_end_render_pass(cl);
         }
+        RhiTextureBarrier apRead = {AP, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &apRead, 1);
         RhiTextureBarrier post[6] = {{A, RHI_STATE_SHADER_READ, RHI_STATE_COPY_SRC},
                                      {B, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
                                      {C, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
@@ -853,14 +922,36 @@ int main(int argc, char **argv)
         rhi_submit(cl);
 
         /* ---- checks ---- */
-        static uint8_t imgA[W * H * 4], imgB[W * H * 4], imgC[W * H * 4];
-        uint32_t pitch = 0;
+        static uint8_t imgA[W * H * 4], imgAP[W * H * 4], imgB[W * H * 4], imgC[W * H * 4];
+        uint32_t pitch = 0, pitchAP = 0;
         if (!rhi_readback_texture(A, RHI_ASPECT_COLOR, imgA, sizeof(imgA), &pitch) ||
+            !rhi_readback_texture(AP, RHI_ASPECT_COLOR, imgAP, sizeof(imgAP), &pitchAP) ||
             !rhi_readback_texture(B, RHI_ASPECT_COLOR, imgB, sizeof(imgB), &pitch) ||
             !rhi_readback_texture(C, RHI_ASPECT_COLOR, imgC, sizeof(imgC), &pitch)) {
             printf("FAIL readback\n");
             failures++;
             break;
+        }
+        /* the planes build: pass 1's picture byte for byte */
+        {
+            int differ = 0;
+            for (int y = 0; y < H; y++) {
+                for (int x = 0; x < W; x++) {
+                    const uint8_t *s = imgA + (size_t)y * pitch + (size_t)x * 4;
+                    const uint8_t *t = imgAP + (size_t)y * pitchAP + (size_t)x * 4;
+                    if (memcmp(s, t, 4) != 0) {
+                        if (differ++ == 0) {
+                            const int want[4] = {s[0], s[1], s[2], s[3]};
+                            failf("planes build", x, y, t, want);
+                        }
+                    }
+                }
+            }
+            if (frame == 0) {
+                printf("  planes build (sprite_plane_*_vs + %s): %d of %d pixels differ from "
+                       "the plain build's\n",
+                       nodual ? "sprite_ps_planes_nodual" : "sprite_ps_planes", differ, W * H);
+            }
         }
         expectCell("untextured", imgA, pitch, 0, 0x80, 0x40, 0x20, 0x80, 0);
         /* textured: the 2x2 texture over 8x8, texel = 4x4 pixels */

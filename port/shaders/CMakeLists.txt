@@ -92,11 +92,6 @@ ico_add_shader(wrap_resolve_ps raw_wrap.hlsl wrap_resolve_ps fragment)
 ico_add_shader(sprite_stq_ui_vs sprite.hlsl sprite_stq_ui_vs vertex)
 ico_add_shader(sprite_stq_world_vs sprite.hlsl sprite_stq_world_vs vertex)
 ico_add_shader(sprite_stq_ps sprite.hlsl sprite_stq_ps fragment)
-# the screen-prim triangles with their planes (rd_screen_planes.c)
-ico_add_shader(sprite_plane_ui_vs sprite.hlsl sprite_plane_ui_vs vertex)
-ico_add_shader(sprite_plane_world_vs sprite.hlsl sprite_plane_world_vs vertex)
-ico_add_shader(sprite_stq_plane_ui_vs sprite.hlsl sprite_stq_plane_ui_vs vertex)
-ico_add_shader(sprite_stq_plane_world_vs sprite.hlsl sprite_stq_plane_world_vs vertex)
 # the CRT filter (port/render/rd_crt.c)
 ico_add_shader(crt_vs crt.hlsl crt_vs vertex)
 ico_add_shader(crt_bloom_ps crt.hlsl crt_bloom_ps fragment)
@@ -170,6 +165,25 @@ foreach(_e vu_legacy_ps vu_legacy_texa_ps)
 endforeach()
 # ---- G1 end ----
 # ---- G2 2D varying diet (sprite_*_ps_planes and their twins) ----
+# the screen-prim triangles with their planes (rd_screen_planes.c): the
+# planes build of sprite.hlsl (ICO_SPRITE_PLANES), whose SpriteVSOut and
+# SpriteStqVSOut carry the planes; every other sprite entry is the plain
+# build (pos, colour, uv or stq)
+foreach(_e sprite_plane_ui_vs sprite_plane_world_vs sprite_stq_plane_ui_vs
+        sprite_stq_plane_world_vs)
+    ico_add_shader(${_e} sprite.hlsl ${_e} vertex DEFINES ICO_SPRITE_PLANES=1)
+endforeach()
+# their pixel shaders (rd__plane_pass), with the _nodual, _dstrov and
+# _dstatt twins of the plain entries
+foreach(_e sprite_ps sprite_texa_ps sprite_stq_ps)
+    ico_add_shader(${_e}_planes sprite.hlsl ${_e} fragment DEFINES ICO_SPRITE_PLANES=1)
+    ico_add_shader(${_e}_planes sprite.hlsl ${_e} fragment
+                   DEFINES ICO_SPRITE_PLANES=1 ICO_NO_DUAL=1 SUFFIX _nodual)
+    ico_add_shader(${_e}_planes sprite.hlsl ${_e} fragment
+                   DEFINES ICO_SPRITE_PLANES=1 ICO_DST_READ=1 SUFFIX _dstrov)
+    ico_add_shader(${_e}_planes sprite.hlsl ${_e} fragment
+                   DEFINES ICO_SPRITE_PLANES=1 ICO_DST_READ=2 SUFFIX _dstatt)
+endforeach()
 # ---- G2 end ----
 # ---- X2 tiler passes (fog_lut_local_ps, fx_blur2_ps, date_clear_ps, date_stencil_ps) ----
 # ---- X2 end ----

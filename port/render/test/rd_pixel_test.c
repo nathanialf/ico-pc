@@ -147,7 +147,10 @@
  *            with the VU programs, fewer than RD_PIPELINE_REACHABLE_MAX)
  *            (the set with the two-pass fallback too, also under
  *            RD_PIPELINE_REACHABLE_MAX; a created key is in the set of its
- *            mode)
+ *            mode); a triangle pass with the planes (rd__plane_pass)
+ *            takes the planes build of both shaders (sprite_plane_*_vs
+ *            with sprite_ps_planes, sprite_texa_ps_planes or
+ *            sprite_stq_ps_planes), enumerated, with their twins listed
  *
  *   aura     the mirage's mask as list 8 draws it into
  *            AURA_WORK with SCENE's depth (TEST 0x5346D, ALPHA 0x44, ABE, Z
@@ -3334,6 +3337,29 @@ static void testPipelines(void)
                        (the exact viewport, rd_screen_planes.c) */
                     RdDrawPass pl = dp[i];
                     CHECK(prim || rd__plane_pass(&pl), "a UI triangle pass takes the planes");
+                    /* the planes build on both sides (sprite.hlsl
+                       ICO_SPRITE_PLANES): sprite_plane_ui_vs with
+                       sprite_ps_planes */
+                    CHECK(prim || (pl.key.vs == RD_VS_SPRITE_PLANE_UI &&
+                                   pl.key.fs == RD_FS_SPRITE_PLANES),
+                          "a UI triangle pass with the planes draws sprite_plane_ui_vs + "
+                          "sprite_ps_planes (vs %u fs %u)",
+                          pl.key.vs, pl.key.fs);
+                    if (!prim) {
+                        RdDrawPass kt = dp[i];
+                        kt.key.fs = RD_FS_SPRITE_TEXA;
+                        CHECK(rd__plane_pass(&kt) && kt.key.fs == RD_FS_SPRITE_TEXA_PLANES,
+                              "a TEXA triangle pass with the planes draws sprite_texa_ps_planes");
+                        found = 0;
+                        for (uint32_t j = 0; j < ns; j++) {
+                            found |= rd__pipe_key_equal(&kt.key, &keys[j]);
+                        }
+                        CHECK(found,
+                              "TEXA UI triangle pass with the planes (depth %d) is not "
+                              "enumerated",
+                              dz);
+                        found = 0;
+                    }
                     for (uint32_t j = 0; j < ns; j++) {
                         found |= rd__pipe_key_equal(&pl.key, &keys[j]);
                     }
@@ -3365,6 +3391,20 @@ static void testPipelines(void)
                 int found = 0;
                 CHECK(rd__stq_pass(&dp[i]) && rd__plane_pass(&dp[i]),
                       "a plain world sprite pass takes the STQ shaders and the planes");
+                CHECK(dp[i].key.vs == RD_VS_SPRITE_STQ_PLANE_WORLD &&
+                          dp[i].key.fs == RD_FS_SPRITE_STQ_PLANES,
+                      "an STQ world triangle pass with the planes draws sprite_stq_plane_world_vs "
+                      "+ sprite_stq_ps_planes (vs %u fs %u)",
+                      dp[i].key.vs, dp[i].key.fs);
+                /* the planes build's pixel shaders have the plain ones'
+                   twins (rd_replay.c rd__gpu_init) */
+                CHECK(rd__fs_has_no_dual(RD_FS_SPRITE_STQ_PLANES) &&
+                          rd__fs_has_no_dual(RD_FS_SPRITE_PLANES) &&
+                          rd__fs_has_no_dual(RD_FS_SPRITE_TEXA_PLANES) &&
+                          rd__fs_has_dst(RD_FS_SPRITE_STQ_PLANES) &&
+                          rd__fs_has_dst(RD_FS_SPRITE_PLANES) &&
+                          rd__fs_has_dst(RD_FS_SPRITE_TEXA_PLANES),
+                      "the planes build's pixel shaders without their _nodual or _dst twins");
                 for (uint32_t j = 0; j < ns; j++) {
                     found |= rd__pipe_key_equal(&dp[i].key, &keys[j]);
                 }
