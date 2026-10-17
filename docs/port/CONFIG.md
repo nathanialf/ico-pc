@@ -284,6 +284,7 @@ under the same name (below). Read through the store:
 | `store_plan` | bool | (the device profile's) | |
 | `blur_fold` | bool | (the device profile's) | |
 | `uint_view` | bool or `work` | (the device profile's) | |
+| `dynamic_state` | bool or `depth` | `true` | |
 | `gpu_checkpoints` | bool | `false` | |
 | `gpu_robust` | bool | `false` | |
 | `pass_split` | int | `0` | |
@@ -335,6 +336,7 @@ store (`backend`, `unlock_credits`):
 | `store_plan` | `true` / `false`: the device profile's `storePlan` (store-op DONT_CARE for depth and targets nothing reads later) on or off (exported as `ICO_RD_STORE_PLAN=1` / `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
 | `blur_fold` | `true` / `false`: the device profile's `blurFold` (the staticBlur passes folded in pairs) on or off (exported as `ICO_RD_BLUR_FOLD=1` / `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
 | `uint_view` | `true`: the RGBA8_UINT views of the work buffers and the scene-class targets; `work`: the work buffers' only; `false`: none; only where the backend has the view (exported as `ICO_RD_UINT_VIEW=1`, `work` or `0`) ([RENDER.md](RENDER.md#the-device-profile)) |
+| `dynamic_state` | Vulkan: `true`, the default, the dynamic depth (test, write, compare) and blend (enable, equation, write mask) state where the device offers it; `depth`: the depth dynamic, the blend static; `false`: both static, every pipeline with its depth and blend compiled in (exported as `ICO_VK_FAKE_NO_DYNAMIC=0`, `blend` or `1`; the `rhi_vk: dynamic state:` start line says `no ([dev] dynamic_state = false, ICO_VK_FAKE_NO_DYNAMIC=1)` or `no ([dev] dynamic_state = depth, ICO_VK_FAKE_NO_DYNAMIC=blend)` for a group it turned off) ([RHI.md](RHI.md#dynamic-state)) |
 | `gpu_checkpoints` | `true`: GPU checkpoints, resource addresses (Vulkan) and DRED (D3D12) for the device-loss report (exported as `ICO_GPU_CHECKPOINTS=1`) ([RHI.md](RHI.md#device-loss)) |
 | `gpu_robust` | `true`: robust buffer and image access (Vulkan; `VK_EXT_robustness2` where offered; exported as `ICO_GPU_ROBUST=1`), with null descriptors; `false`, the default on every platform, exports `0`. The device-loss order's `robust` step exports `1` for its run whatever the key says. With the key unset, Android's next start after a device loss exports `1` for that start, and the game writes `true` to `config.toml` itself after the second loss in a row (`port/platform/window_host.c` (`gpu_robust_persist`)); with the key set, it writes nothing ([RHI.md](RHI.md#device-loss), [PLATFORM.md](PLATFORM.md#diagnostics)) |
 | `pass_split` | N: a render pass of VU draws ends and begins again after every N of them, the picture the same (exported as `ICO_RD_PASS_SPLIT`; 0 or `off`, the default: none); not in a multisampled pass, a storage pass, the exact blend's readable pass or a DATE draw through the stencil bit ([RENDER.md](RENDER.md#the-loss-bisect)) |

@@ -735,8 +735,10 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
  * renderer takes has), and driverVersion decoded the vendor's way
  * (rhi_driver_version.h) */
 static char s_driverText[600];
-/* the robust access in force, for RhiLimits.robustText */
+/* the robust access in force, for RhiLimits.robustText, and whether it is
+   off by the default (RhiLimits.robustDefaultOff) */
 static char s_robustText[160];
+static bool s_robustDefaultOff;
 
 static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDeviceProperties *p)
 {
@@ -1429,6 +1431,7 @@ static bool vkr_create_device(void)
                                        : "the default");
         }
         snprintf(s_robustText, sizeof s_robustText, "%s", robustSay);
+        s_robustDefaultOff = !g_vkr.robust && !wantRobust && robustSaid != 0;
         VKR_LOG("loss diagnostics: fault report %s; checkpoints %s; resource addresses %s; robust "
                 "access %s",
                 g_vkr.deviceFault ? "on" : "not offered",
@@ -1452,7 +1455,9 @@ static bool vkr_create_device(void)
      *          extendedDynamicState3ColorBlendEquation and
      *          extendedDynamicState3ColorWriteMask, only those enabled.
      * ICO_VK_FAKE_NO_DYNAMIC=1 leaves both off, =blend the blend alone (the
-     * A/B of the same frames with every state static). */
+     * A/B of the same frames with every state static); [dev] dynamic_state =
+     * false or depth exports it (host_config.c dev_env), so the line names
+     * the setting with the variable. */
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT qEds = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
     VkPhysicalDeviceExtendedDynamicState3FeaturesEXT qEds3 = {
@@ -1489,10 +1494,13 @@ static bool vkr_create_device(void)
         g_vkr.dynBlend = !fakeBlend && eds3;
         const char *depthSay =
             g_vkr.dynDepth ? (core13 ? "yes (Vulkan 1.3)" : "yes (VK_EXT_extended_dynamic_state)")
-            : fakeAll      ? "no (ICO_VK_FAKE_NO_DYNAMIC)"
+            : fakeAll      ? "no ([dev] dynamic_state = false, ICO_VK_FAKE_NO_DYNAMIC=1)"
                            : "no";
         const char *blendSay = g_vkr.dynBlend      ? "yes (VK_EXT_extended_dynamic_state3)"
-                               : fakeBlend && eds3 ? "no (ICO_VK_FAKE_NO_DYNAMIC)"
+                               : fakeBlend && eds3 ? (fakeAll ? "no ([dev] dynamic_state = false, "
+                                                                "ICO_VK_FAKE_NO_DYNAMIC=1)"
+                                                              : "no ([dev] dynamic_state = depth, "
+                                                                "ICO_VK_FAKE_NO_DYNAMIC=blend)")
                                : hasEds3 ? "no (VK_EXT_extended_dynamic_state3 without the three "
                                            "features)"
                                          : "no";
@@ -1877,6 +1885,7 @@ static void vkr_fill_limits(void)
     /* the summary line's (s_driverText starts "; ") */
     o->driverText = s_driverText[0] == ';' ? s_driverText + 2 : NULL;
     o->robustText = s_robustText[0] ? s_robustText : NULL;
+    o->robustDefaultOff = s_robustDefaultOff;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;
     /* multisampling (vkr_msaa_counts, at device creation) */

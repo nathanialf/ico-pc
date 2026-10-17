@@ -442,10 +442,11 @@ static int env_is(const char *name, const char *want)
    other than the executable's own: the export block alone) */
 static void test_dev_env(void)
 {
-    static const char *const vars[] = {
-        "ICO_RD_BLEND",      "ICO_RD_FOG_PATH",        "ICO_GPU_CHECKPOINTS",
-        "ICO_GPU_ROBUST",    "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
-        "ICO_RD_STORE_PLAN", "ICO_RD_BLUR_FOLD",       "ICO_RD_UINT_VIEW"};
+    static const char *const vars[] = {"ICO_RD_BLEND",           "ICO_RD_FOG_PATH",
+                                       "ICO_GPU_CHECKPOINTS",    "ICO_GPU_ROBUST",
+                                       "ICO_VK_ATTACHMENT_READ", "ICO_RD_DATE_PATH",
+                                       "ICO_RD_STORE_PLAN",      "ICO_RD_BLUR_FOLD",
+                                       "ICO_RD_UINT_VIEW",       "ICO_VK_FAKE_NO_DYNAMIC"};
     IcoIni ini;
     size_t i;
 
@@ -569,6 +570,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("uint_view", "work"), "work") == 0);
     CHECK(ico_dev_env_value("uint_view", "scene") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.uint_view"), "uint_view") == 0);
+    /* dynamic_state: the variable names what is static (vk_device.c) */
+    CHECK(strcmp(ico_dev_env_name("dynamic_state"), "ICO_VK_FAKE_NO_DYNAMIC") == 0);
+    CHECK(strcmp(ico_dev_env_value("dynamic_state", "true"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("dynamic_state", "false"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("dynamic_state", "depth"), "blend") == 0);
+    CHECK(ico_dev_env_value("dynamic_state", "blend") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.dynamic_state"), "dynamic_state") == 0);
     /* audio_sync: the audio on the game's clock (port/audio/audio_host.h) */
     CHECK(strcmp(ico_dev_env_name("audio_sync"), "ICO_AUDIO_SYNC") == 0);
     CHECK(strcmp(ico_dev_env_value("audio_sync", "true"), "1") == 0);
@@ -636,11 +644,13 @@ static void test_dev_env(void)
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }
-    ico_ini_parse(&ini, "date_path=snapshot\nuint_view=false\nstore_plan=maybe\n");
+    ico_ini_parse(&ini, "date_path=snapshot\nuint_view=false\nstore_plan=maybe\n"
+                        "dynamic_state=depth\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_DATE_PATH", "snapshot"));
     CHECK(env_is("ICO_RD_UINT_VIEW", "0"));
     CHECK(env_is("ICO_RD_STORE_PLAN", NULL));
+    CHECK(env_is("ICO_VK_FAKE_NO_DYNAMIC", "blend"));
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);
     }

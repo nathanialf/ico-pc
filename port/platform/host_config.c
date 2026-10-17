@@ -496,6 +496,10 @@ static const struct {
     {"dev.store_plan", "store_plan"},
     {"dev.blur_fold", "blur_fold"},
     {"dev.uint_view", "uint_view"},
+    /* the Vulkan dynamic depth and blend state: true (the default) as the
+       device offers it, depth the depth alone, false neither (every
+       pipeline static; port/rhi/vk/vk_device.c) */
+    {"dev.dynamic_state", "dynamic_state"},
     {"dev.gpu_checkpoints", "gpu_checkpoints"},
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
@@ -540,6 +544,9 @@ static const struct {
     {"store_plan", "ICO_RD_STORE_PLAN"},
     {"blur_fold", "ICO_RD_BLUR_FOLD"},
     {"uint_view", "ICO_RD_UINT_VIEW"},
+    /* port/rhi/vk/vk_device.c (the dynamic state): 1 both static, blend the
+       blend static, 0 as the device offers */
+    {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */
@@ -624,6 +631,14 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "uint_view") == 0 && strcmp(value, "work") == 0) {
         return "work"; /* the work buffers' view only; true both, false none */
+    }
+    if (strcmp(key, "dynamic_state") == 0) {
+        /* the variable says what is turned off: true (on) exports 0, false
+           1 (depth and blend static), depth "blend" (the blend static) */
+        if (strcmp(value, "depth") == 0) {
+            return "blend";
+        }
+        return value_is(value, on) ? "0" : value_is(value, off) ? "1" : NULL;
     }
     if (strcmp(key, "pipeline_set") == 0) {
         return value_is(value, sets) ? value : NULL;

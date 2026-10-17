@@ -263,7 +263,9 @@ pipeline's own values and is logged once (`rhi_vk: dynamic state: a draw with it
 left unset since the bind ...`). The device's line: `rhi_vk: dynamic state: depth test, write and
 compare yes (Vulkan 1.3); blend enable, equation and write mask yes
 (VK_EXT_extended_dynamic_state3)` (or `no`, with why). `ICO_VK_FAKE_NO_DYNAMIC=1` reports both
-false, `=blend` the blend alone, for an A/B of the same frames (`rhi_vk_test`'s dynamic cell draws
+false, `=blend` the blend alone, for an A/B of the same frames; `[dev] dynamic_state = false` or
+`depth` exports them ([CONFIG.md](CONFIG.md#dev)), and the line then says `no ([dev] dynamic_state =
+false, ICO_VK_FAKE_NO_DYNAMIC=1)` or `no ([dev] dynamic_state = depth, ICO_VK_FAKE_NO_DYNAMIC=blend)` (`rhi_vk_test`'s dynamic cell draws
 the renderer's depth tests, blends and masks static and dynamic, texel-equal; [Tests](#tests)).
 
 ### Local read
