@@ -51,16 +51,24 @@
  *           (vu1ref_particle_draw): the reference image gets the sprites
  *           the port adds whole (wholly beside the camera's picture, the
  *           free camera; field 12 of the probe: alpha and the w window).
- *           (4) the vertex pre-pass (docs/port/RENDER.md, "The vertex
- *           pre-pass"): every mesh case's vertices drawn once through its
- *           program's pre-pass entry (vu_X_pre_vs, vu_pre_ps) into the
- *           three RGBA32_UINT record textures, copied into a record
- *           buffer, and the case's probe and pictures drawn again through
- *           the triangle stage (vu_tri_vs, and vu_tri_plain_vs where the
- *           plain variant applies) with VuCB's vu_rec, vu_lo and vu_hi as
- *           rd_replay_vu.c sets them (triRule): byte for byte the program
- *           entry's probe and pictures, and the probe within (1)'s bounds
- *           of the CPU reference.
+ *           (4) the vertex and triangle pre-passes (docs/port/RENDER.md,
+ *           "The vertex and triangle pre-passes"): every mesh case's
+ *           vertices drawn once through its program's pre-pass entry
+ *           (vu_X_pre_vs, vu_pre_ps) into row 0 of the three RGBA32_UINT
+ *           record textures, copied into a record buffer, its triangles'
+ *           records through the record stages (vu_tri_rule_pre_vs,
+ *           vu_tri_tick_pre_vs twice under the masks R and G for a case
+ *           under the tick cameras, vu_tri_planes_pre_vs) into row 1,
+ *           copied after it; a particle case's sprites through
+ *           vu_particle_pre_vs (slots A and B) into row 0; then the case's
+ *           probe and pictures drawn again through vu_main_vs (or
+ *           vu_particle_main_vs) and vu_ps with VuCB's vu_rec, vu_lo, vu_hi
+ *           and vu_tri as rd_replay_vu.c sets them (triRule): byte for byte
+ *           the program entry's probe and pictures (with vu_legacy_ps), and
+ *           the probe within (1)'s bounds of the CPU reference; the counts
+ *           of mesh, particle and tick-camera cases printed, none may be
+ *           zero.  The plain variants are compared with the extended ones
+ *           for the mesh programs' entries (the fallback's).
  *   part c  RdVuCommon (rd.h) against the VU parameter block:
  *           the qword map,
  *           and the VuCB mirror.
@@ -2413,10 +2421,11 @@ static void preName(const char *vs, char *out, size_t size)
     snprintf(out, size, "%.*s_pre_vs", (int)(n - 3), vs);
 }
 
-/* The pre-pass's pipeline: points into the three RGBA32_UINT record
- * targets, no depth, no blend (rd_pipeline.c pipelineDesc's) */
+/* The pre-passes' pipeline: points into the three RGBA32_UINT record
+ * targets, no depth, no blend, the colour mask (the tick stage's R or G;
+ * rd_pipeline.c pipelineDesc's) */
 static RhiPipeline makePrePipeline(RhiShader vs, RhiShader ps, const RhiBindGroupLayout *layouts,
-                                   const char *name)
+                                   uint8_t mask, const char *name)
 {
     RhiPipelineDesc d = {0};
     d.vertex = vs;
@@ -2426,7 +2435,7 @@ static RhiPipeline makePrePipeline(RhiShader vs, RhiShader ps, const RhiBindGrou
     d.topology = RHI_TOPO_POINT_LIST;
     d.cullNone = true;
     for (uint32_t i = 0; i < ICO_VU_REC_PLANES; i++) {
-        d.blend[i] = (RhiBlendState){.writeMask = 0xF};
+        d.blend[i] = (RhiBlendState){.writeMask = mask};
         d.colorFormats[i] = RHI_FMT_RGBA32_UINT;
     }
     d.colorCount = ICO_VU_REC_PLANES;
@@ -2482,11 +2491,12 @@ static int gpuTests(void)
     const uint32_t FS = 1u << RHI_STAGE_FRAGMENT, VS = 1u << RHI_STAGE_VERTEX;
     static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER, 3}};
     /* slot 4: the vertex pre-pass's record (vu_common.hlsli vu_rec_buf) */
+    /* VuCB and the record to the pixel side too: vu_ps reads the planes */
     const RhiBindSlot s1[5] = {{0, RHI_BIND_STORAGE_BUFFER, VS},
                                {1, RHI_BIND_UNIFORM_BUFFER, VS | FS},
-                               {2, RHI_BIND_UNIFORM_BUFFER, VS},
+                               {2, RHI_BIND_UNIFORM_BUFFER, VS | FS},
                                {3, RHI_BIND_UNIFORM_BUFFER, VS},
-                               {4, RHI_BIND_STORAGE_BUFFER, VS}};
+                               {4, RHI_BIND_STORAGE_BUFFER, VS | FS}};
     const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},
                                {1, RHI_BIND_SAMPLER, FS},
                                {2, RHI_BIND_SAMPLED_TEXTURE, FS}};
@@ -2496,27 +2506,35 @@ static int gpuTests(void)
     RhiBindGroupLayout l2 = rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s2, 3, "tex"});
     const RhiBindGroupLayout lay[3] = {l0, l1, l2};
 
-    RhiShader probePs = makeShader("vu_probe_ps"), vuPs = makeShader("vu_ps");
+    /* the programs' entries draw with vu_legacy_ps (VuVSOut's planes), the
+     * main shaders with vu_ps (the record's) */
+    RhiShader probePs = makeShader("vu_probe_ps"), legacyPs = makeShader("vu_legacy_ps");
+    RhiShader vuPs = makeShader("vu_ps");
     RhiShader spriteVs = makeShader("sprite_world_vs"), spritePs = makeShader("sprite_ps");
     RhiPipeline pSprite =
         makePipeline(spriteVs, spritePs, lay, 1, RHI_FMT_RGBA8_UNORM, "ref sprite");
     RhiPipeline pProbe[NCASES], pDraw[NCASES];
-    /* and with each shader's plain variant (vu_common.hlsli ICO_VU_PLAIN,
-     * issue 107) */
+    /* and with each mesh program entry's plain variant (vu_common.hlsli
+     * ICO_VU_PLAIN, issue 107: the fallback's on a device of the table) */
     RhiPipeline pProbePlain[NCASES], pDrawPlain[NCASES];
     for (int i = 0; i < NCASES; i++) {
         RhiShader vs = makeShader(kCases[i].vs);
         pProbe[i] = makePipeline(vs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
-        pDraw[i] = makePipeline(vs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
-        char pn[64];
-        plainName(kCases[i].vs, pn, sizeof(pn));
-        RhiShader vsp = makeShader(pn);
-        pProbePlain[i] = makePipeline(vsp, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
-        pDrawPlain[i] = makePipeline(vsp, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        pDraw[i] = makePipeline(vs, legacyPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        pProbePlain[i] = pDrawPlain[i] = (RhiPipeline){0};
+        if (kCases[i].prog != P_PARTICLE) {
+            char pn[64];
+            plainName(kCases[i].vs, pn, sizeof(pn));
+            RhiShader vsp = makeShader(pn);
+            pProbePlain[i] = makePipeline(vsp, probePs, lay, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
+            pDrawPlain[i] =
+                makePipeline(vsp, legacyPs, lay, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        }
     }
     int plainCases = 0; /* the cases the plain variant drew, byte for byte the extended's */
-    /* the vertex pre-pass: each mesh case's pre-pass entry, and the
-     * triangle stage of every mesh program (both variants) */
+    /* the vertex pre-pass: each mesh case's pre-pass entry; the triangle
+     * pre-pass's record stages (the tick stage under the masks R and G) and
+     * the sprites'; the main shaders */
     RhiPipeline pPre[NCASES];
     RhiShader prePs = makeShader("vu_pre_ps");
     for (int i = 0; i < NCASES; i++) {
@@ -2524,19 +2542,31 @@ static int gpuTests(void)
         if (kCases[i].prog != P_PARTICLE) {
             char pn[64];
             preName(kCases[i].vs, pn, sizeof(pn));
-            pPre[i] = makePrePipeline(makeShader(pn), prePs, lay, kCases[i].name);
+            pPre[i] = makePrePipeline(makeShader(pn), prePs, lay, 0xF, kCases[i].name);
         }
     }
-    RhiShader triVs = makeShader("vu_tri_vs"), triVsPlain = makeShader("vu_tri_plain_vs");
-    RhiPipeline pTriProbe = makePipeline(triVs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, "tri probe");
-    RhiPipeline pTriDraw = makePipeline(triVs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, "tri");
-    RhiPipeline pTriProbePlain =
-        makePipeline(triVsPlain, probePs, lay, 0, RHI_FMT_RGBA8_UINT, "tri plain probe");
-    RhiPipeline pTriDrawPlain =
-        makePipeline(triVsPlain, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, "tri plain");
-    int triCases = 0, triPlainCases = 0; /* the cases the pre-pass drew, byte for byte */
-    /* the record: MAXV vertices fit one row of ICO_VU_REC_W texels */
-    const uint32_t recRows = 1, recPlane = ICO_VU_REC_W * recRows;
+    RhiShader ruleVs = makeShader("vu_tri_rule_pre_vs"), tickVs = makeShader("vu_tri_tick_pre_vs");
+    RhiShader planesVs = makeShader("vu_tri_planes_pre_vs");
+    RhiShader spriteStageVs = makeShader("vu_particle_pre_vs");
+    RhiPipeline pRule = makePrePipeline(ruleVs, prePs, lay, 0xF, "rule stage");
+    RhiPipeline pTick0 = makePrePipeline(tickVs, prePs, lay, 0x1, "tick stage R");
+    RhiPipeline pTick1 = makePrePipeline(tickVs, prePs, lay, 0x2, "tick stage G");
+    RhiPipeline pPlanes = makePrePipeline(planesVs, prePs, lay, 0xF, "planes stage");
+    RhiPipeline pSpriteStage = makePrePipeline(spriteStageVs, prePs, lay, 0xF, "sprite stage");
+    RhiShader mainVs = makeShader("vu_main_vs"), spriteMainVs = makeShader("vu_particle_main_vs");
+    RhiPipeline pMainProbe =
+        makePipeline(mainVs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, "main probe");
+    RhiPipeline pMainDraw = makePipeline(mainVs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, "main");
+    RhiPipeline pSpriteMainProbe =
+        makePipeline(spriteMainVs, probePs, lay, 0, RHI_FMT_RGBA8_UINT, "sprite main probe");
+    RhiPipeline pSpriteMainDraw =
+        makePipeline(spriteMainVs, vuPs, lay, 0, RHI_FMT_RGBA8_UNORM, "sprite main");
+    /* the cases the record drew byte for byte as the programs' entries: the
+     * mesh cases, the particle cases, those under the tick cameras */
+    int recMeshCases = 0, recSpriteCases = 0, recTickCases = 0;
+    /* the record: row 0 the vertices (MAXV) or a particle case's slots A and
+     * B, row 1 the triangles' slots A, B and C (3 (MAXV - 2) texels) */
+    const uint32_t recRows = 2, recPlane = ICO_VU_REC_W * recRows;
     RhiTexture recTex[ICO_VU_REC_PLANES];
     RhiState stRec[ICO_VU_REC_PLANES];
     for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
@@ -2841,7 +2871,7 @@ static int gpuTests(void)
          * without interpolation: what rd_replay_vu.c vuDraw gives the plain
          * one): its probe, its exact triangles and the others, byte for
          * byte the extended variant's */
-        if ((vcb.draw[2] & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u) {
+        if ((vcb.draw[2] & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u && pDrawPlain[ci].id) {
             static uint8_t qimg[ICO_VU_PROBE_FIELDS * MAXV * 4], qa[RT * RT * 4], qpa[RT * RT * 4];
             RhiCommandList ql = rhi_begin_commands();
             RhiTextureBarrier qpre[3] = {{probe, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
@@ -2900,34 +2930,54 @@ static int gpuTests(void)
             }
             plainCases++;
         }
-        /* (4) the vertex pre-pass: the case's vertices once into the
-         * record, then its probe and pictures through the triangle stage,
-         * byte for byte the program entry's */
-        if (c->prog != P_PARTICLE && pPre[ci].id) {
+        /* (4) the vertex and triangle pre-passes: the case's vertices (a
+         * particle case's sprites, slots A and B) once into the record's row
+         * 0, a mesh case's triangles' slots A, B and C into row 1 over them,
+         * then its probe and pictures through the main shader and vu_ps,
+         * byte for byte the program entry's with vu_legacy_ps */
+        if (c->prog == P_PARTICLE || pPre[ci].id) {
+            const int sprite = c->prog == P_PARTICLE;
+            const uint32_t kicks = sprite || nvert < 3 ? 0u : (uint32_t)nvert - 2u;
+            const int ticks = (vcb.draw[2] & ICO_VU_TICKS) != 0u;
             IcoVuCB pre = vcb, tri = vcb;
             pre.rec[0] = 0; /* vertex v at texel v */
             pre.rec[1] = recPlane;
             pre.rec[2] = 0;
             pre.rec[3] = 0;
             triRule(c, &tri, recPlane);
+            if (sprite) {
+                /* sprite i's slots A and B at texels i and vpb + i of row 0 */
+                tri.tri[0] = 0;
+                tri.tri[1] = (uint32_t)c->vpb;
+                tri.tri[2] = ~0u;
+            } else {
+                /* kick k's slots at row 1: A k - 2, B kicks + k - 2, C 2 kicks
+                   + k - 2 (rd_replay_vu.c vuPreRecord) */
+                tri.tri[0] = ICO_VU_REC_W - 2u;
+                tri.tri[1] = ICO_VU_REC_W + kicks - 2u;
+                tri.tri[2] = ticks ? ICO_VU_REC_W + 2u * kicks - 2u : ~0u;
+            }
+            tri.tri[3] = 0;
+            IcoVuCB tri1 = tri;
+            tri1.tri[3] = 1; /* the tick stage's tick 1, the sprite stage's slot B */
             IcoVuCB triProbe = tri, triCut = tri, triKick = tri;
             triProbe.draw[2] |= ICO_VU_PROBE;
             triCut.draw[2] |= ICO_VU_CUT_ONLY;
             triKick.draw[2] |= ICO_VU_KICK_ONLY;
-            const IcoVuCB *tubo[5] = {&pre, &tri, &triProbe, &triCut, &triKick};
-            RhiBindGroup tg[5];
-            for (int i = 0; i < 5; i++) {
+            const IcoVuCB *tubo[6] = {&pre, &tri, &triProbe, &triCut, &triKick, &tri1};
+            RhiBindGroup tg[6];
+            for (int i = 0; i < 6; i++) {
                 memcpy(map + OFF_UBO + (size_t)(8 + i) * UBO_SLOT, tubo[i], sizeof(IcoVuCB));
                 b1[2].offset = OFF_UBO + (uint64_t)(8 + i) * UBO_SLOT;
                 tg[i] = rhi_create_bind_group(&(RhiBindGroupDesc){l1, b1, 5});
             }
             static uint8_t timg[ICO_VU_PROBE_FIELDS * MAXV * 4], ta[RT * RT * 4], tpa[RT * RT * 4];
             uint32_t tp = 0;
-            /* the extended triangle stage, then the plain one where the
-             * case draws without VU_F_EXTENDED and VU_F_TICKS */
-            const int rounds = (vcb.draw[2] & (ICO_VU_EXTENDED | ICO_VU_TICKS)) == 0u ? 2 : 1;
-            for (int round = 0; round < rounds; round++) {
-                RhiCommandList tl = rhi_begin_commands();
+            RhiCommandList tl = rhi_begin_commands();
+            /* pass V and, for a mesh case, pass T: each its row of the
+             * record's targets (load DONT_CARE: the row before was copied),
+             * then copied into the buffer at the row's place */
+            for (uint32_t row = 0; row < (kicks ? 2u : 1u); row++) {
                 RhiTextureBarrier rb[ICO_VU_REC_PLANES];
                 for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
                     rb[k] = (RhiTextureBarrier){recTex[k], stRec[k], RHI_STATE_RENDER_TARGET};
@@ -2946,13 +2996,38 @@ static int gpuTests(void)
                 const RhiViewport rv = {0.0f,           0.0f, (float)ICO_VU_REC_W,
                                         (float)recRows, 0.0f, 1.0f};
                 rhi_cmd_set_viewport(tl, &rv);
-                const RhiRect rs = {0, 0, ICO_VU_REC_W, recRows};
+                const RhiRect rs = {0, (int32_t)row, ICO_VU_REC_W, 1};
                 rhi_cmd_set_scissor(tl, &rs);
-                rhi_cmd_set_pipeline(tl, pPre[ci]);
-                rhi_cmd_set_bind_group(tl, 0, g0Probe);
-                rhi_cmd_set_bind_group(tl, 1, tg[0]);
+                /* the pictures' FrameCB: the record stages evaluate the
+                   triangles as the draws' vertex shader does (rd_replay_vu.c
+                   binds each command's draws' FrameCB) */
+                rhi_cmd_set_bind_group(tl, 0, g0Draw);
                 rhi_cmd_set_bind_group(tl, 2, g2);
-                rhi_cmd_draw(tl, (uint32_t)nvert, 0, 1);
+                if (row == 0 && sprite) {
+                    rhi_cmd_set_pipeline(tl, pSpriteStage);
+                    rhi_cmd_set_bind_group(tl, 1, tg[1]);
+                    rhi_cmd_draw(tl, (uint32_t)c->vpb, 0, 1);
+                    rhi_cmd_set_bind_group(tl, 1, tg[5]);
+                    rhi_cmd_draw(tl, (uint32_t)c->vpb, 0, 1);
+                } else if (row == 0) {
+                    rhi_cmd_set_pipeline(tl, pPre[ci]);
+                    rhi_cmd_set_bind_group(tl, 1, tg[0]);
+                    rhi_cmd_draw(tl, (uint32_t)nvert, 0, 1);
+                } else {
+                    rhi_cmd_set_bind_group(tl, 1, tg[1]);
+                    rhi_cmd_set_pipeline(tl, pRule);
+                    rhi_cmd_draw(tl, kicks, 0, 1);
+                    if (ticks) {
+                        rhi_cmd_set_pipeline(tl, pTick0);
+                        rhi_cmd_draw(tl, kicks, 0, 1);
+                        rhi_cmd_set_pipeline(tl, pTick1);
+                        rhi_cmd_set_bind_group(tl, 1, tg[5]);
+                        rhi_cmd_draw(tl, kicks, 0, 1);
+                        rhi_cmd_set_bind_group(tl, 1, tg[1]);
+                    }
+                    rhi_cmd_set_pipeline(tl, pPlanes);
+                    rhi_cmd_draw(tl, kicks, 0, 1);
+                }
                 rhi_cmd_end_render_pass(tl);
                 for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
                     rb[k] =
@@ -2962,74 +3037,72 @@ static int gpuTests(void)
                 rhi_cmd_barrier(tl, rb, ICO_VU_REC_PLANES);
                 for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
                     rhi_cmd_copy_texture_to_buffer(
-                        tl, recTex[k], RHI_ASPECT_COLOR, (RhiRect){0, 0, ICO_VU_REC_W, recRows},
-                        recBuf, (uint64_t)k * recPlane * 16u, ICO_VU_REC_W * 16u);
-                }
-                RhiTextureBarrier tpre[3] = {
-                    {probe, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
-                    {imgVu, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
-                    {imgPort, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET}};
-                rhi_cmd_barrier(tl, tpre, 3);
-                rhi_cmd_begin_render_pass(tl, &rp);
-                rhi_cmd_set_pipeline(tl, round ? pTriProbePlain : pTriProbe);
-                rhi_cmd_set_bind_group(tl, 0, g0Probe);
-                rhi_cmd_set_bind_group(tl, 1, tg[2]);
-                rhi_cmd_set_bind_group(tl, 2, g2);
-                rhi_cmd_draw(tl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
-                rhi_cmd_end_render_pass(tl);
-                const RhiPipeline pt = round ? pTriDrawPlain : pTriDraw;
-                for (int pass = 0; pass < 2; pass++) {
-                    RhiRenderPassDesc dp = {0};
-                    dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
-                                                       RHI_LOAD_CLEAR,
-                                                       {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
-                                                       RHI_STORE_STORE,
-                                                       false};
-                    dp.colorCount = 1;
-                    dp.width = dp.height = RT;
-                    rhi_cmd_begin_render_pass(tl, &dp);
-                    rhi_cmd_set_bind_group(tl, 0, g0Draw);
-                    rhi_cmd_set_bind_group(tl, 1, tg[1]);
-                    rhi_cmd_set_bind_group(tl, 2, g2);
-                    const int scissor = c->clip == ICO_VU_CLIP_SCISSOR;
-                    if (pass == 0) {
-                        drawCase(tl, pt, c, ring, tg[3], tg[4], 0, scissor ? nidx : nkept, scissor);
-                    } else if (nidx > nkept) {
-                        drawCase(tl, pt, c, ring, tg[3], tg[4], nkept, nidx - nkept, 0);
-                    }
-                    rhi_cmd_end_render_pass(tl);
-                }
-                RhiTextureBarrier tpost[3] = {
-                    {probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
-                    {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
-                    {imgPort, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
-                rhi_cmd_barrier(tl, tpost, 3);
-                rhi_end_commands(tl);
-                rhi_submit(tl);
-                uint32_t tq = 0;
-                if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, timg, sizeof(timg), &tp) ||
-                    !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, ta, sizeof(ta), &tq) ||
-                    !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, tpa, sizeof(tpa), &tq)) {
-                    FAILF("%s pre-pass readback\n", c->name);
-                    break;
-                }
-                if (memcmp(timg, pimg, sizeof(timg)) != 0 || memcmp(ta, a, sizeof(ta)) != 0 ||
-                    memcmp(tpa, pa, sizeof(tpa)) != 0) {
-                    FAILF("%s: the vertex pre-pass and %s differ from the program's entry "
-                          "(probe %s, exact %s, the others %s)\n",
-                          c->name, round ? "vu_tri_plain_vs" : "vu_tri_vs",
-                          memcmp(timg, pimg, sizeof(timg)) ? "differs" : "same",
-                          memcmp(ta, a, sizeof(ta)) ? "differs" : "same",
-                          memcmp(tpa, pa, sizeof(tpa)) ? "differs" : "same");
-                }
-                if (round == 0) {
-                    /* the record's fields against the CPU reference, as (1) */
-                    compareProbe(c, &cr, timg, tp);
-                    triCases++;
-                } else {
-                    triPlainCases++;
+                        tl, recTex[k], RHI_ASPECT_COLOR,
+                        (RhiRect){0, (int32_t)row, ICO_VU_REC_W, 1}, recBuf,
+                        ((uint64_t)k * recPlane + (uint64_t)row * ICO_VU_REC_W) * 16u,
+                        ICO_VU_REC_W * 16u);
                 }
             }
+            RhiTextureBarrier tpre[3] = {{probe, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                                         {imgVu, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                                         {imgPort, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET}};
+            rhi_cmd_barrier(tl, tpre, 3);
+            rhi_cmd_begin_render_pass(tl, &rp);
+            rhi_cmd_set_pipeline(tl, sprite ? pSpriteMainProbe : pMainProbe);
+            rhi_cmd_set_bind_group(tl, 0, g0Probe);
+            rhi_cmd_set_bind_group(tl, 1, tg[2]);
+            rhi_cmd_set_bind_group(tl, 2, g2);
+            rhi_cmd_draw(tl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
+            rhi_cmd_end_render_pass(tl);
+            const RhiPipeline pt = sprite ? pSpriteMainDraw : pMainDraw;
+            for (int pass = 0; pass < 2; pass++) {
+                RhiRenderPassDesc dp = {0};
+                dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
+                                                   RHI_LOAD_CLEAR,
+                                                   {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                                                   RHI_STORE_STORE,
+                                                   false};
+                dp.colorCount = 1;
+                dp.width = dp.height = RT;
+                rhi_cmd_begin_render_pass(tl, &dp);
+                rhi_cmd_set_bind_group(tl, 0, g0Draw);
+                rhi_cmd_set_bind_group(tl, 1, tg[1]);
+                rhi_cmd_set_bind_group(tl, 2, g2);
+                const int scissor = c->clip == ICO_VU_CLIP_SCISSOR;
+                if (pass == 0) {
+                    drawCase(tl, pt, c, ring, tg[3], tg[4], 0, scissor ? nidx : nkept, scissor);
+                } else if (nidx > nkept) {
+                    drawCase(tl, pt, c, ring, tg[3], tg[4], nkept, nidx - nkept, 0);
+                }
+                rhi_cmd_end_render_pass(tl);
+            }
+            RhiTextureBarrier tpost[3] = {{probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                          {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                                          {imgPort, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
+            rhi_cmd_barrier(tl, tpost, 3);
+            rhi_end_commands(tl);
+            rhi_submit(tl);
+            uint32_t tq = 0;
+            if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, timg, sizeof(timg), &tp) ||
+                !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, ta, sizeof(ta), &tq) ||
+                !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, tpa, sizeof(tpa), &tq)) {
+                FAILF("%s pre-pass readback\n", c->name);
+                break;
+            }
+            if (memcmp(timg, pimg, sizeof(timg)) != 0 || memcmp(ta, a, sizeof(ta)) != 0 ||
+                memcmp(tpa, pa, sizeof(tpa)) != 0) {
+                FAILF("%s: the record and %s differ from the program's entry (probe %s, exact "
+                      "%s, the others %s)\n",
+                      c->name, sprite ? "vu_particle_main_vs" : "vu_main_vs",
+                      memcmp(timg, pimg, sizeof(timg)) ? "differs" : "same",
+                      memcmp(ta, a, sizeof(ta)) ? "differs" : "same",
+                      memcmp(tpa, pa, sizeof(tpa)) ? "differs" : "same");
+            }
+            /* the record's fields against the CPU reference, as (1) */
+            compareProbe(c, &cr, timg, tp);
+            recMeshCases += !sprite;
+            recSpriteCases += sprite;
+            recTickCases += ticks;
         }
         int before = failures;
         compareProbe(c, &cr, pimg, ppitch);
@@ -3179,12 +3252,13 @@ static int gpuTests(void)
     if (plainCases == 0) {
         FAILF("the plain variants: no case without VU_F_EXTENDED and VU_F_TICKS\n");
     }
-    printf("  the vertex pre-pass: %d cases through vu_tri_vs and %d through vu_tri_plain_vs, byte "
-           "for byte the programs' entries\n",
-           triCases, triPlainCases);
-    if (triCases == 0 || triPlainCases == 0) {
-        FAILF("the vertex pre-pass: %d cases through vu_tri_vs, %d through vu_tri_plain_vs\n",
-              triCases, triPlainCases);
+    printf("  the record: %d mesh cases through vu_main_vs and %d particle cases through "
+           "vu_particle_main_vs (%d under the tick cameras), byte for byte the programs' "
+           "entries\n",
+           recMeshCases, recSpriteCases, recTickCases);
+    if (recMeshCases == 0 || recSpriteCases == 0 || recTickCases == 0) {
+        FAILF("the record: %d mesh cases, %d particle cases, %d under the tick cameras\n",
+              recMeshCases, recSpriteCases, recTickCases);
     }
     if (portIn == 0 || portDropped == 0) {
         FAILF("triangles past the region window: %d pixels drawn clipped, %d triangles dropped "

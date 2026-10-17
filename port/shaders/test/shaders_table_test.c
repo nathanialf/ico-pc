@@ -28,22 +28,40 @@ static const char *const expected[] = {
 static const char *const expectedPlanes[] = {"sprite_plane_ui_vs", "sprite_plane_world_vs",
                                              "sprite_stq_plane_ui_vs", "sprite_stq_plane_world_vs"};
 
-/* the VU vertex shaders' plain variants (ICO_VU_PLAIN, vu_common.hlsli) */
+/* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
+ * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
-    "vu_prelit_plain_vs",     "vu_lit_plain_vs",      "vu_lit_spec_plain_vs",
-    "vu_reflect_plain_vs",    "vu_skin_plain_vs",     "vu_skin_spec_plain_vs",
-    "vu_skin_debug_plain_vs", "vu_grid_plain_vs",     "vu_grid_lit_plain_vs",
-    "vu_grid_spec_plain_vs",  "vu_particle_plain_vs", "vu_tri_plain_vs",
+    "vu_prelit_plain_vs",     "vu_lit_plain_vs",  "vu_lit_spec_plain_vs",
+    "vu_reflect_plain_vs",    "vu_skin_plain_vs", "vu_skin_spec_plain_vs",
+    "vu_skin_debug_plain_vs", "vu_grid_plain_vs", "vu_grid_lit_plain_vs",
+    "vu_grid_spec_plain_vs",
 };
 
-/* the vertex pre-pass (vu_tri.hlsl; docs/port/RENDER.md "The vertex
- * pre-pass"): each mesh program's pre-pass entry, its pixel shader and the
- * triangle stage */
+/* the vertex and triangle pre-passes (vu_tri.hlsl, vu_particle.hlsl;
+ * docs/port/RENDER.md "The vertex and triangle pre-passes"): each mesh
+ * program's pre-pass entry, the pixel shader of the record, the triangles'
+ * and sprites' record stages, the main shaders drawing from the record and
+ * the triangle stage of the vertex records alone */
 static const char *const expectedPrepass[] = {
-    "vu_prelit_pre_vs",     "vu_lit_pre_vs",  "vu_lit_spec_pre_vs",
-    "vu_reflect_pre_vs",    "vu_skin_pre_vs", "vu_skin_spec_pre_vs",
-    "vu_skin_debug_pre_vs", "vu_grid_pre_vs", "vu_grid_lit_pre_vs",
-    "vu_grid_spec_pre_vs",  "vu_pre_ps",      "vu_tri_vs",
+    "vu_prelit_pre_vs",     "vu_lit_pre_vs",      "vu_lit_spec_pre_vs",
+    "vu_reflect_pre_vs",    "vu_skin_pre_vs",     "vu_skin_spec_pre_vs",
+    "vu_skin_debug_pre_vs", "vu_grid_pre_vs",     "vu_grid_lit_pre_vs",
+    "vu_grid_spec_pre_vs",  "vu_pre_ps",          "vu_tri_vs",
+    "vu_tri_rule_pre_vs",   "vu_tri_tick_pre_vs", "vu_tri_planes_pre_vs",
+    "vu_particle_pre_vs",   "vu_main_vs",         "vu_particle_main_vs",
+};
+
+/* the programs' entries' pixel shaders (vu_prelit.hlsl vu_legacy_ps: the
+ * planes as flat varyings, the fallback) with their twins */
+static const char *const expectedLegacy[] = {
+    "vu_legacy_ps",
+    "vu_legacy_ps_nodual",
+    "vu_legacy_ps_dstrov",
+    "vu_legacy_ps_dstatt",
+    "vu_legacy_texa_ps",
+    "vu_legacy_texa_ps_nodual",
+    "vu_legacy_texa_ps_dstrov",
+    "vu_legacy_texa_ps_dstatt",
 };
 
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
@@ -181,6 +199,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nLegacy = sizeof(expectedLegacy) / sizeof(expectedLegacy[0]);
+    for (size_t i = 0; i < nLegacy; i++) {
+        if (!ico_find_shader(expectedLegacy[i])) {
+            printf("FAIL %s: not in the table\n", expectedLegacy[i]);
+            failures++;
+        }
+    }
     const size_t nDst = sizeof(expectedDst) / sizeof(expectedDst[0]);
     for (size_t i = 0; i < nDst; i++) {
         if (!ico_find_shader(expectedDst[i])) {
@@ -189,7 +214,7 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
-                        nPlanes + nPlain + nPrepass;
+                        nPlanes + nPlain + nPrepass + nLegacy;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

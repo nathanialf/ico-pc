@@ -301,7 +301,8 @@ static void stripWalk(const AuditDraw *d, Audit *a, uint32_t k)
 static void auditDraw(const AuditDraw *d, Audit *a)
 {
     if (d->prog == RD_PROG_PARTICLE) {
-        /* vu_particle(vid / 6): base + 3 .. 5, base + 6 + 2i, base + 7 + 2i */
+        /* vu_particle(vid / 6): base + 3 .. 5, base + 6 + 2i, base + 7 + 2i;
+         * vu_particle_pre_vs and vu_particle_main_vs read the same */
         for (uint32_t i = 0; i < d->particles; i++) {
             readQw(d, a, 3u, i);
             readQw(d, a, 4u, i);
@@ -339,6 +340,34 @@ static void auditDraw(const AuditDraw *d, Audit *a)
         if (d->stripHi != 0u) {
             stripWalk(d, a, kick);
         }
+    }
+    /* the vertex and triangle pre-passes (rd_replay_vu.c vuPreRange,
+     * vu_tri.hlsl): every vertex from the lowest kick less 2 to the highest
+     * is evaluated (vu_X_pre_vs), and every kick between them has a triangle
+     * record, the kicks the list does not draw included (strip starts): its
+     * marks (vu_kick_marks) and its three vertices' qword 0
+     * (vu_plane_distance), read here as whole vertices (a superset); the
+     * main shader reads its corner's qword 0 only, and the stages' and the
+     * main shader's record texels lie in the slots vuPrepassRun gave the
+     * command (in range by construction: the record's rows are counted
+     * before it is drawn) */
+    uint32_t lo = UINT32_MAX, hi = 0;
+    for (uint32_t i = 0; i < d->indexCount; i++) {
+        const uint32_t kick = d->index[i] >> 2;
+        lo = kick < lo ? kick : lo;
+        hi = kick > hi ? kick : hi;
+    }
+    if (lo == UINT32_MAX || lo < 2u) {
+        return; /* no record: the draw takes its program's entry */
+    }
+    for (uint32_t kick = lo; kick <= hi; kick++) {
+        if (d->markQw) {
+            const uint32_t q = kick >> 4;
+            readQw(d, a, d->markBase + (q < d->markQw - 1u ? q : d->markQw - 1u), kick);
+        }
+        readVertex(d, a, kick - 2u);
+        readVertex(d, a, kick - 1u);
+        readVertex(d, a, kick);
     }
 }
 
