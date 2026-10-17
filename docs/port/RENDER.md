@@ -1020,7 +1020,9 @@ nothing reads would be left undefined (`OpUndef`, which the envelope refuses).
 
 **The passes.** After the uploads and the first clears, before list 0, `rd__vu_prepass` walks
 the replayed lists. It follows the state block as the walk does (`rd__apply_state` from the
-frame's start state) and gives each VU command the FrameCB its draws will bind
+frame's start state, and after a TARGET command the field's half pixel the walk adds to a later
+SCENE target set with the screen offset: `port/render/rd_replay.c` (`sceneKeepsHalf`,
+`rd__replay_scene_keeps_half`)) and gives each VU command the FrameCB its draws will bind
 (`port/render/rd_replay.c` (`rd__replay_vu_frame`, frameRefresh's: the target, its GS size and
 offset, the depth's Z scale, the command's camera picture)), which the record stages read; it
 sets up what `doVuDraw` binds (the stream in the mesh arena or the ring, VuCB's VU memory, the
@@ -1055,7 +1057,10 @@ KB a frame slot) could not be made twice; ...`), so no replay asks for it again 
 `s_recFails`). A command past the record's rows (`rd: VU pre-pass: a frame past the record's 1024
 rows: N of its M VU commands are drawn the old way`), one of whose pipelines is missing (its
 pre-pass entry's or a record stage's: `... the pipeline of <entry> could not be made ...`), one
-whose target has no texture, or a draw whose main shader's pipeline cannot be made (`... a
+whose target has no texture, one whose state at its draw (target, depth, GS size, offset, camera
+picture) is not the one the pre-pass's walk made its FrameCB from (`... a command's state at its
+draw is not the pre-pass's ...`: the stages and the draw would place its planes half a pixel
+apart), or a draw whose main shader's pipeline cannot be made (`... a
 pipeline of vu_main_vs could not be made ...`) is drawn the old way, each logged once and counted
 (`vuPreFallbacks`); while the loss bisect only names the keys a frame needs
 (`rd__pipeline_gathering`) a missing pipeline is not a fallback, so the pre-passes' and the main

@@ -129,6 +129,12 @@ const void *rd__replay_pass_push(RdPassKind kind, uint32_t color, uint32_t cw, u
  * to evaluate a command's triangles as its draw's vertex shader would; id
  * 0 when the target has no texture */
 RdUniform rd__replay_vu_frame(const RdStateBlock *st, uint32_t picture);
+/* rd_replay.c sceneHeadHalf and sceneKeepsHalf, for a walk of the lists
+ * outside replayFrame (rd_replay_vu.c rd__vu_prepass): the frame head's
+ * half offset on SCENE, and after a TARGET command the half pixel the walk
+ * adds to a later SCENE target set with the screen offset (1: added) */
+uint32_t rd__replay_scene_head_half(const RdFrame *f);
+int rd__replay_scene_keeps_half(RdStateBlock *st, int list, uint32_t headHalf);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

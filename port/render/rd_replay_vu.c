@@ -679,8 +679,11 @@ typedef struct VuPre {
     uint8_t ticks;         /* ICO_VU_TICKS: slot C, the tick stage's draws */
     uint8_t rec;           /* drawn into the record */
     /* the FrameCB its draws bind (rd__replay_vu_frame: the walk's state
-     * at the command), which the record stages read too */
+     * at the command), which the record stages read too, and the walk's
+     * (target, depth, GS size, offset, picture) it was made from: the
+     * draw's own must be the same (doVuDraw) */
     RdUniform frame;
+    uint32_t frameKey[6];
 } VuPre;
 
 static VuPre *s_pre;
@@ -969,9 +972,11 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     /* 1. every mesh, grid and particle command: its source, its vertices
      * or sprites, the FrameCB of its draws (the state block followed as
      * the walk does, replayFrame: rd__apply_state from the frame's start
-     * state; consecutive commands of one target, size, offset, depth and
-     * picture share one) */
+     * state, and after a TARGET command the half pixel the walk adds to a
+     * later SCENE target, rd__replay_scene_keeps_half; consecutive commands
+     * of one target, size, offset, depth and picture share one) */
     RdStateBlock st = f->startState;
+    const uint32_t headHalf = rd__replay_scene_head_half(f);
     RdUniform frame = {{0}, 0};
     uint32_t frameKey[6];
     memset(frameKey, 0xFF, sizeof(frameKey));
@@ -980,6 +985,9 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         for (uint32_t i = 0; i < list->count; i++) {
             const RdCmd *c = &list->cmds[i];
             if (rd__apply_state(&st, c)) {
+                if (c->type == RDC_TARGET) {
+                    rd__replay_scene_keeps_half(&st, l, headHalf);
+                }
                 continue;
             }
             if (c->type != RDC_MESH && c->type != RDC_SKINNED && c->type != RDC_GRID &&
@@ -1009,6 +1017,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 memcpy(frameKey, fk, sizeof(fk));
             }
             e->frame = frame;
+            memcpy(e->frameKey, fk, sizeof(fk));
             if (c->type == RDC_PARTICLES) {
                 e->particle = 1;
                 e->count = e->src.p.vertsPerBatch;
@@ -1373,6 +1382,23 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     IcoVuCB vcb = src->vcb;
     const uint8_t progVs = src->vs;
     uint8_t vs = progVs;
+    if (pre && pre->rec) {
+        /* the record's stages ran under the FrameCB of the pre-pass's walk:
+         * a draw under another state (a walk that did not follow
+         * replayFrame's) takes the old way, counted and logged once */
+        const uint32_t fk[6] = {r->st.color, r->st.depth,     r->st.gsW,
+                                r->st.gsH,   r->st.useOffset, r->picture};
+        if (memcmp(fk, pre->frameKey, sizeof(fk)) != 0) {
+            static bool logged; /* once a run */
+            if (!logged) {
+                logged = true;
+                rd__log("VU pre-pass: a command's state at its draw is not the pre-pass's "
+                        "(target %u/%u, offset %u/%u): drawn the old way (reported once)",
+                        r->st.color, pre->frameKey[0], r->st.useOffset, pre->frameKey[4]);
+            }
+            pre = NULL;
+        }
+    }
     if (pre && pre->rec) {
         /* the main shaders over the pre-passes' record */
         vuPreRecord(pre, &vcb);

@@ -3359,6 +3359,16 @@ static int sceneKeepsHalf(RdStateBlock *st, int list, uint32_t headHalf)
     return 0;
 }
 
+uint32_t rd__replay_scene_head_half(const RdFrame *f)
+{
+    return sceneHeadHalf(f);
+}
+
+int rd__replay_scene_keeps_half(RdStateBlock *st, int list, uint32_t headHalf)
+{
+    return sceneKeepsHalf(st, list, headHalf);
+}
+
 /* The effect a TARGET command's pass belongs to by its colour target: the
    screen softening's AA0 and AA1 and its composite (the pass into SCENE
    that follows them, rd_post.c AA_COMPOSITE), the aura's own targets;
