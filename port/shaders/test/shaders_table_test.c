@@ -45,6 +45,9 @@ static const char *const expectedPlanes[] = {
     "sprite_stq_ps_planes_dstatt",
 };
 
+/* the staticBlur sprites' UINT-view twin (fx_sprite.hlsl ICO_UINT_SRC; rd_replay.c doBlurSpriteDraw) */
+static const char *const expectedUint[] = {"fx_sprite_u_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -202,6 +205,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nUint = sizeof(expectedUint) / sizeof(expectedUint[0]);
+    for (size_t i = 0; i < nUint; i++) {
+        if (!ico_find_shader(expectedUint[i])) {
+            printf("FAIL %s: not in the table\n", expectedUint[i]);
+            failures++;
+        }
+    }
     const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
     for (size_t i = 0; i < nPlain; i++) {
         if (!ico_find_shader(expectedPlain[i])) {
@@ -231,7 +241,7 @@ int main(void)
         }
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
-                        nPlanes + nPlain + nPrepass + nLegacy;
+                        nUint + nPlanes + nPlain + nPrepass + nLegacy;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

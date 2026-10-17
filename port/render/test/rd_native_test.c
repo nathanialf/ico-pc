@@ -116,8 +116,13 @@ static int failures;
  *     edge: 58 pixel-centre ties on the edges of the triangles reaching
  *     past it go to the unclipped triangle's side) and the attribute
  *     planes (23 pixels one colour step apart from the GPU's
- *     interpolation). */
-static const uint64_t kExpect[2] = {0xd7c36bf58c6091f6ull, 0x410c22223b5aa4baull};
+ *     interpolation);
+ *   - the fixed-function blend, the default (rd_dst_read.c): the LERP
+ *     channels round to nearest where the GS truncates.  Under
+ *     ICO_RD_BLEND=attachment the hashes are d7c36bf58c6091f6 and
+ *     410c22223b5aa4ba (the exact blend's, pinned before it became an
+ *     opt-in). */
+static const uint64_t kExpect[2] = {0xcc48e18e4a69dc60ull, 0x745beacc83e806f3ull};
 
 static const int kWidths[] = {512, 688, 1376, 2048, 2560};
 #define NWIDTHS ((int)(sizeof(kWidths) / sizeof(kWidths[0])))

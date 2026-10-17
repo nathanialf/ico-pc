@@ -1059,7 +1059,10 @@ static void checkPipelines(void)
      * two-pass blend fallback (rd_fog_nodual), with either fragment shader
      * the paths case d replayed took; the exact blend (rd_dst_read.c)
      * computes it in the shader in one pass either way */
-    const int wantFog = rd_no_dual() && rd_blend_exact() == RD_BLEND_EXACT_OFF ? 2 : 1;
+    /* with dynamic blend state the two passes share one pipeline
+     * (rd__key_dynamic_normalise): one fog pipeline then too */
+    const int wantFog =
+        rd_no_dual() && rd_blend_exact() == RD_BLEND_EXACT_OFF && !g_rd.dynBlend ? 2 : 1;
     const bool sampled =
         rd__fog_path_supported(RD_FOG_INPLACE) || rd__fog_path_supported(RD_FOG_COPY);
     CHECK(fog == (sampled ? wantFog : 0), "%d fog pipeline(s), %d expected", fog, wantFog);
