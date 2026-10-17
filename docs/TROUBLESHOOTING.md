@@ -150,9 +150,6 @@ most (Options):
 
 - **Frame rate** Original draws one picture per game step, as on the PS2,
   instead of also drawing the pictures in between: about half the work.
-- **Glow size** Original (on the Effects page) draws the glow at the
-  PlayStation 2's size: a little coarser above 1x, much lighter on the
-  graphics card. The rest of the picture keeps your resolution.
 - **Resolution** 1x is the PS2's own sharpness and the lightest of all.
 
 On a Mac the game runs fast with anti-aliasing on or off: it draws with

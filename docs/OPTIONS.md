@@ -56,9 +56,10 @@ How the picture looks.
   [Why](FAQ.md#why-does-the-crt-filter-switch-the-picture-back-to-the-original-resolution).
   The menus' lettering follows it too: from 2x up to 4x it is drawn that
   much finer, so it stays crisp, in the same style. Above 1x, the game's
-  glow, blur, shadow and fog effects are drawn to suit the finer picture,
-  so they look soft instead of showing a grid; at 1x they are the PS2's
-  exactly.
+  glow and blur effects keep the PS2's size and are spread over the finer
+  picture the way the console spreads them, and its shadow and fog effects
+  are drawn to suit the finer picture, so none of them shows a grid; at 1x
+  they are the PS2's exactly.
 - **Aspect ratio** is the picture's shape: 4:3 (the PS2's), 16:10, 16:9,
   21:9, 32:9 or 48:9. **Auto** follows the shape of your window or screen,
   up to 60:9.
@@ -141,18 +142,14 @@ The picture's finish, the CRT filter and the game's own picture effects.
   still show through it. To adjust a style's details, see
   [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
 
-The game's own effects are each On or Off (Glow size is Scaled or
-Original, Water reflections is Original or Sharp). All On, with Water
-reflections at Original, is the picture the PS2 gives you, and that is how
-the game starts.
+The game's own effects are each On or Off (Water reflections is Original
+or Sharp). All On, with Water reflections at Original, is the picture the
+PS2 gives you, and that is how the game starts.
 
 - **Glow:** the soft glow around bright light, and the flare of the sun.
-- **Glow size:** Scaled or Original. Scaled draws the glow, the blur on
-  far things and the screen softening as finely as the rest of the
-  picture. Original draws them at the PlayStation 2's size: coarser when
-  Resolution is above the PS2's (1x), and much lighter on the graphics
-  card. Try Original if the game is slow on an older graphics card. At 1x
-  the two look the same. Scaled is how the game starts.
+  It is drawn at the PlayStation 2's size at every Resolution and spread
+  over the picture the way the console spreads it: as soft as on the PS2,
+  and light on the graphics card.
 - **Depth of field:** the blur on things far away.
 - **Screen softening:** a slight blur over the whole picture that smooths
   jagged edges.
@@ -466,7 +463,6 @@ Under `[video]`:
 | `window_mode = "windowed"` | The Window mode row: `"windowed"`, `"borderless"` or `"fullscreen"`. If the file has no `window_mode` line, the game reads its `fullscreen =` line instead: `true` is Fullscreen, `false` is Windowed. |
 | `effect_glow = true` and the five other `effect_` lines | The six switches of the Effects page. |
 | `effect_water_sharp = false` | Water reflections on the Effects page: `false` is Original, `true` is Sharp. |
-| `effect_glow_size = "scaled"` | Glow size on the Effects page: `"scaled"` or `"original"`. |
 | `crt = false`, `crt_mode = "consumer"`, `crt_strength = 1.0` | The CRT filter and CRT strength rows. `crt_mode` is `"scanlines"`, `"consumer"`, `"trinitron"`, `"pvm"` or `"shadow"`. `crt_strength` goes from `0.0` to `1.0`. |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom` | Fine tuning of the CRT filter, each from `0.0` to `1.0`: how strong the dark lines are, how strong the fine pattern of dots or stripes is, how much glow surrounds bright spots and how much bright areas spread softly. A line that is missing, or a negative number, keeps the chosen style's own value. |
 | `crt_curvature` | How much the screen bulges, from `0.0` to `0.25`. Missing keeps the style's own value. |

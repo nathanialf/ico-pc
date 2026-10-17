@@ -202,10 +202,10 @@ covers on the PS2 at every aspect (`port/render/rd_core.c` (`namedTargetDesc`, `
 | FEED_HELD, DISPLAY_HELD | as FEED128, DISPLAY | host only: a [tick](ARCHITECTURE.md#terms)'s first present's copy |
 
 **Scale.** A scene-class target's texture is its GS size times the scene scale; the work buffers
-take `rd_work_target_scale` (1 at the GS height, else the scene height over 448, at most 2), the
-shadow levels none (`port/render/rd_core.c` (`rd__target_scale_of`, `rd_work_target_scale`)). A
-temporary target of any other size is drawn at its GS size, except a render-to-texture block under
-Water reflections: Sharp ([below](#water-and-render-to-texture-blocks)). Under
+and the shadow levels keep their GS sizes, the PS2's, at every scale ([below](#the-glow-size);
+`port/render/rd_core.c` (`rd__target_scale_of`)). A temporary target of any other size is drawn
+at its GS size, except a render-to-texture block under Water reflections: Sharp
+([below](#water-and-render-to-texture-blocks)). Under
 [Full pixel](ARCHITECTURE.md#terms) a frame-wide scene target holds the frame's exact visible width
 plus `RD_FULL_PIXEL_GUARD` texels each side, centred, so the window's pixels are its texels
 (`port/render/rd_core.c` (`rd__target_scale_of`)). [Scene scale](ARCHITECTURE.md#terms) and the
@@ -230,20 +230,56 @@ updates the VU image of all 13 lists; `rd__fill_camera_cb` puts the frame camera
 
 ### The glow size
 
-Glow size (`[video] effect_glow_size`, `RdSettings.glowOriginal`, Options > Effects, issue 103) is
-the player's choice of the work buffers' scale. `"scaled"`, the default, is the work scale above:
-the 256-wide post buffers are a kernel width in screen terms, so they are sized with the frame
-(at 2x WORK0..3, AA0/AA1, FEED128 and AURA_TAP hold four times the PS2's texels, and every glow
-sprite above 1x resamples through `fx_sprite_ps`'s kernels). `"original"` keeps them at the PS2's
-sizes at every resolution (work scale 1): the glow, the depth of field's blur and the softening
-are the 1x passes, magnified onto the scaled SCENE by the composite sprites, coarser than Scaled's
-above 1x and about a quarter of the glow chain's pixels at 2x. At 1x (and in Original, whose
-scene is 1x) the two are the same picture. The option is outside the preset: the default keeps
-every preset's picture byte for byte. A change remakes the targets at the next frame, as a
-resolution change does, and logs `rd: glow size: original (the work buffers at the PS2's sizes)`
-(or `scaled (the work scale)`); the display line's `work` field shows the scale in force
-(`port/render/rd_present.c` (`rd__apply_display`); `port/render/rd_core.c`; the replay tool's
-`--glow-original`).
+The work buffers (WORK0, WORK1, WORK3, AA0, AA1, FEED128, AURA_TAP, WORK2_PAD, FEED_HELD: the
+glow's, the depth of field's, the softening's and the aura's chains) are the PS2's sizes at every
+resolution, so each chain runs the PS2's passes on the PS2's texels, and a pass that draws a work
+buffer back onto the scaled frame reads it with the GS's own filter at the frame's finer grid
+(`port/render/rd_core.c` (`rd__target_scale_of`, `rd__work_class`); `port/render/rd_replay.c`
+(`blurAbove1xSteps`, `spriteAbove1x`)). The filter is the one the game sets: the glow's paste WORK3 -> SCENE
+(`ico2/sugipon/src/staticBlur.c` (`pasteFullScreenFlare`); the title dump's 7:367) and the depth
+of field's four pastes WORK0 -> SCENE (`pasteToFB`) draw under TEX1 0x60, MMAG and MMIN both
+LINEAR (written by `eyeBlur` and `pasteToFB`; the dump's `FILTER 1 1` at 7:341), and the eye
+blur's subtract into SCENE under 0x40, MMAG NEAREST, a single texel (`eyeBlur`). Above 1x each
+SCENE texel therefore takes the GS's U and V at its own GS position (12.4, the texel's centre:
+[Post passes](#post-passes)'s scaled-target rule in `fx_sprite_ps`) and the GS's 4-bit bilinear
+between the same four work texels the PS2 blends there (`gs_bilerp`): the PS2's 256 x 128 glow
+magnified as the GS magnifies it, sampled more finely; at 1x it is the GS's picture byte for byte.
+The softening's AA0 and AA1 back over SCENE (`sprite_ps`) take the draw's own sampler, as at 1x
+(`spriteAbove1x`). The draws from SCENE, WORK2 or AURA_WORK into a work buffer keep the area box
+([Above 1x](#above-1x)). `rd_blur_test`'s `effects_scaled` and `above1x` cases compare every
+target with a CPU model of that arithmetic at 2x and 4x to the bit, and `rd_shadow_test`'s 4x
+softening the composite with the bilinear between AA0's texels
+(`port/render/test/rd_blur_test.c` (`checkEffectsScaled`, `checkAbove1x`, `workBuffer`);
+`port/render/test/rd_shadow_test.c` (`checkSoftening4x`)).
+
+The glow's cost per frame on the issue 95 title dump (`loss-20261015-100428-lost.rddump`, 512 x
+448 at 4:3): 33 `fx_sprite_ps` draws and two sprites drawn as clears (`blurSpriteClears`: the
+WORK2_PAD band and WORK2's fill) in 35 render passes (`--stats`: `glow 35 passes` at every
+scale). Four draws cover the frame (the two of `cleanUpFB` into SCENE, the alpha
+mask SCENE -> WORK2, the paste), 29 a 256 x 128 work buffer (the reduction WORK2 -> WORK0, the 20
+blur passes, the eye blur's five, its shrink, tint and `pasteWork0ToFB`). The fragments are the
+frame-sized draws' texels plus the work draws'; the paste's texel loads are its texels times its
+taps: the GS's bilinear four, against the tool of 2130df09c's work scale (2 at 2x and above) with
+the B-spline down (and across at 3x) or, with its `--glow-original`, the work buffers at their GS
+sizes and the B-spline both ways (16). GPU milliseconds of the glow effect, lavapipe (Mesa
+25.0.7, `ICO_RD_BLEND=fixed`, the fastest of three serial runs of `rd_replay_tool DUMP out.png
+--stats [--enhanced --resolution Nx --present 1376x896]`):
+
+| scale | fragments: work scale; GS sizes | paste loads (taps): work scale; `--glow-original`; the GS's filter | glow ms: work scale; `--glow-original` | glow ms, the GS's filter |
+| --- | --- | --- | --- | --- |
+| 1x | 1.87 M; the same | 0.92 M (4) in all three | 46.7; the same | the same draws |
+| 2x | 7.47 M; 4.62 M | 7.34 M (8); 14.68 M (16); 3.67 M (4) | 225.0; 181.4 | |
+| 3x | 12.06 M; 9.21 M | 33.03 M (16); 33.03 M (16); 8.26 M (4) | 440.7; 372.0 | |
+
+The work scale and `--glow-original` columns are the tool of 2130df09c; the last is the tool with
+the work buffers at their GS sizes and the GS's filter at the paste. In one series on the same
+host the 2130df09c tool's glow is 42.6 ms at 1x and 35.5 with the paste turned off (`--nop
+7:367`), 175.6 and 68.4 at 2x with `--glow-original`, and 113.6 without the paste at 3x with it:
+the 1x paste (the GS's bilinear over 229,376 texels and SCENE's snapshot) costs 7.1 ms, so at the
+GS's filter it costs about 28 ms at 2x and 64 at 3x there, the glow about 97 ms at 2x and 178 at
+3x against 225 and 441 at the work scale.
+The other costs above 1x are the frame-sized draws (four, at the scene's scale) and the reduction
+WORK2 -> WORK0, a box of 4 x 8 texels at 2x (`blurAbove1xSteps`).
 
 ## Textures
 
@@ -1042,7 +1078,9 @@ coordinates (`port/shaders/common.hlsli` (`gs_bayer8`)).
 
 **The staticBlur sprites.** `doBlurSpriteDraw` sets `RD_FXF_ABOVE1X` on a sprite that samples a
 target when the bound target or the source has a scale other than 1 (the predicate
-`rd__blur_screen_fallback` takes) and an axis leaves the GS's filter: its steps, computed on the
+`rd__blur_screen_fallback` takes), the source is not a work buffer (a work buffer drawn onto the
+frame takes the GS's own filter: [The glow size](#the-glow-size)) and an axis leaves the GS's
+filter: its steps, computed on the
 CPU from the rectangle and UV extents and the two scales, rounded to 1/32 texel, go to the shader in
 `DrawCB.scale[3]` as `step32x * 4096 + step32y` (`port/render/rd_replay.c` (`blurAbove1xSteps`,
 `doBlurSpriteDraw`), `port/render/rd_internal.h` (`RD_FX_BOX_MIN32`, `RD_FX_BSPLINE_MAX32`)).
@@ -1058,20 +1096,19 @@ filter (`port/render/rd_replay.c` (`blurSnapArea`, `blurKernelReach`)). `g_rd.ab
 the flagged sprites since `rd_init`
 (`port/render/rd_internal.h` (`RdContext`)).
 
-At Enhanced 4x (NTSC: SCENE 4x, the work buffers 2x) the aura's chain takes the box for SCENE and
-AURA_WORK into FEED128 (8 texels across, 8 or 7 down) and AURA_WORK into WORK0 (4 across, 8 down),
-and the B-spline for FEED128 and AURA_TAP back over the frame (1/8 to 5/32 texel a pixel);
-`rd_blur_test`'s `above1x` case compares every target with a CPU model at scale to the bit, and
-every comparison at scale 1 finds no sprite flagged (`port/render/test/rd_blur_test.c`
-(`checkAbove1x`, `compareAll`)).
+At Enhanced 4x (NTSC: SCENE 4x, the work buffers at their GS sizes) the aura's chain takes the box
+for SCENE and AURA_WORK into FEED128 (16 texels across, 14 down) and AURA_WORK into WORK0 (8
+across, 16 down), and the GS's bilinear at each SCENE texel's GS position for the work buffers
+back over the frame (the GS's step divided by 4); `rd_blur_test`'s `above1x` case compares every target with a
+CPU model at scale to the bit, and every comparison at scale 1 finds no sprite flagged
+(`port/render/test/rd_blur_test.c` (`checkAbove1x`, `compareAll`)).
 
 **The sprite passes over targets.** `fillDrawCB` sets `DF_ABOVE1X` (`ICO_DF_ABOVE1X`, bit 25) on a
 pass of `sprite_ps`, `sprite_aa1_ps` or `sprite_stq_ps` whose texture is a colour view of a target,
 both filters linear, no GS levels, and the texture's scale is not the bound target's, with the
 draw's wrap in `DF_TEXA_CLAMP_S/T` (`port/render/rd_replay.c` (`spriteAbove1x`, `fillDrawCB`)).
 These are the shadow composites (the levels at scale 1 into SCENE, 1/2s to 1/8s texel a pixel), the
-softening's SCENE into AA0 and AA0 or AA1 back over SCENE when the scene's scale is above the work
-targets' (above 2x), a work target drawn into SCENE, and the reduction's fallback sprite (SCENE
+softening's SCENE into AA0 (a box), and the reduction's fallback sprite (SCENE
 into DISPLAY on a scaled target, `rd__blur_screen_fallback`) when an axis leaves the GS's filter at
 its steps as `blurAbove1xSteps` computes them; at full height and scale 1 DISPLAY has twice the GS's
 rows (sy 2) and the reduction steps one SCENE row a DISPLAY row, the GS's filter on both axes, so
@@ -1089,7 +1126,8 @@ of several sprites gets each one's own step), in 1/32 texel (`port/shaders/sprit
   combines them, exact;
 - otherwise the pass samples as before (`gs_sample`).
 
-The B-spline serves the shadow composites as well as the glows: it spreads a level texel with a
+The B-spline serves the shadow composites (a work buffer never meets it: [The glow
+size](#the-glow-size)): it spreads a level texel with a
 standard deviation of 0.58 texel against the bilinear's 0.41, so the penumbra is a little softer,
 without the bilinear's corners along a diagonal; `rd_shadow_test` checks each composite at 4x
 against the CPU B-spline and that a row across the shadow falls and rises once
@@ -1100,7 +1138,8 @@ two scales are equal, nor on the reduction at the GS's filter, so never at scale
 `rd_present_test`'s full height 1x case checks no draw is flagged there and that the frame is byte
 for byte the one with the reduction flagged (`rd__set_a1x_gs_keep` off), whose shader takes the GS's
 path at every pixel (`port/render/test/rd_present_test.c` (`checkFullHeight1x`)).
-`g_rd.above1xDraws` counts these passes too.
+`g_rd.above1xDraws` counts these passes too, and each replay's record their number
+(`RdPerfRecord.a1xDraws`, [Performance records](#performance-records)).
 
 **The fog.** `doFog` sets `DrawCB.param[3]` to 1 when SCENE or the depth target is scaled, with
 the bound target's centre texel (its texture size halved, rounded down: the native frame's centre,
@@ -1124,7 +1163,8 @@ an axis (a fixed resolution above the window's) is box-averaged to the box first
 anti-aliasing does, since the box blit's one bilinear tap would skip texels there
 (`port/render/rd_present.c` (`reduceRecord`)). Never at scale 1.
 
-**Left as they are.** The reduction SCENE to DISPLAY is never above 2:1 in texels
+**Left as they are.** The work buffers' chains run at the PS2's sizes and their draws back onto the
+frame take the GS's filter ([The glow size](#the-glow-size)). The reduction SCENE to DISPLAY is never above 2:1 in texels
 (`port/render/rd_blur.c` (`rd__blur_screen_fallback`)), where the GS's bilinear is already the area
 average, so it keeps the GS's filter. The shadow levels stay at scale 1 (their resolution is the
 penumbra, `port/render/rd_core.c` (`shadowLevel`)), and the first level reads the count already
@@ -1178,8 +1218,7 @@ reflection (`bw x 256`, `ico2/sugipon/src/puddle.c` (`puddleHostBlockBegin`), `p
 `ico2/ito/src/queen_barrier_disp.c` (`barrierHostBlock`)), is drawn at its own GS size under
 Original, the PS2's texels and the default, so above 1x the reflection is softer than the scene
 around it. Under Sharp such a block takes the scene's scale, both ways as SCENE has it
-(`sceneSx`, `sceneSy`), not the work scale, which stops at 2x and would leave a 4K reflection at
-under half the scene's texels (`port/render/rd_core.c` (`rd__target_scale_of`)). Its depth buffer
+(`sceneSx`, `sceneSy`) (`port/render/rd_core.c` (`rd__target_scale_of`)). Its depth buffer
 is made at the same texture size, the clears and scissors are in GS pixels through the target's
 `sx`/`sy` as on any scaled target, and what samples it (the reflecting grid's GS-texel STs, pool.c's
 screen STs normalised by the screen size, the barrier mesh's UVs, the copy sprites) addresses it
@@ -1461,17 +1500,19 @@ without the colour attached; `dstSwitches`, the passes ended and begun again on 
 to change between a storage pass and one with the colour (`dstPassMode`; 0 on the attachment read
 and the fixed-function blend); `glowPasses`, the render passes begun while the glow (flare, bloom,
 the sun's eye blur) draws; `snapshots` and `snapSwaps`, target snapshots copied and the staticBlur
-sprites' swaps ([above](#post-passes)). The window's per-replay line carries them after the exact
-blends:
+sprites' swaps ([above](#post-passes)); `a1xDraws`, the draws that took the above-1x kernels (the
+box, the B-spline, the fog's table between its entries: [Above 1x](#above-1x)), 0 at scale 1. The
+window's per-replay line carries them after the exact blends:
 
 ```
-window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact blends, 412 destination-read draws, 28 storage passes, 27 pass switches for the exact blend, glow 40 passes, 6.0 snapshots copied and 4.0 swapped; in the block ...
+window: per replay 1803 draws, 61 passes, ..., 0.0 DATE snapshots, 0.0 exact blends, 412 destination-read draws, 28 storage passes, 27 pass switches for the exact blend, glow 40 passes, 6.0 snapshots copied and 4.0 swapped, 3.0 draws resampled above 1x; in the block ...
 ```
 
 (the numbers there show the fields, not a measurement). The GPU line before it carries the glow,
 fog and the other effects' milliseconds; the two together say what a slow card spends its replay
 on. `--stats` prints the counts as a second line, `<dump>: stats: D destination-read draws, S
-storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped`
+storage passes, P pass switches for the exact blend; glow N passes; snapshots C copied, W swapped;
+A draws resampled above 1x`
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
 
 ### The pixel cuts' records
@@ -1497,7 +1538,7 @@ sprite on both sides.
 | title, `--enhanced --resolution 2x --present 1376x896` | 467.9; 47.1, 55.5, 30.1, 308.3, 8.2; 277.9, 30.0 | 416.0; 45.4, 63.2, 24.2, 257.2, 7.4; 234.3, 24.2 |
 | Mac, Original 1x | 284.9; 77.6, 15.3, 67.9, 68.4, 36.3; 57.3, 67.9 | 247.0; 90.4, 14.8, 39.6, 51.0, 36.7; 43.2, 39.6 |
 | Mac, `--enhanced --resolution 2x --present 1376x896` | 809.2; 89.5, 70.7, 120.2, 343.1, 141.3; 303.1, 120.2 | 686.6; 74.7, 75.0, 72.1, 290.6, 132.8; 250.3, 72.0 |
-| Mac, the same with `--glow-original` | 771.8; 77.5, 71.6, 124.0, 322.7, 135.1; 283.6, 123.9 | 666.7; 79.6, 77.0, 70.2, 260.4, 134.4; 229.2, 70.1 |
+| Mac, the same with `--glow-original` (those tools' work buffers at their GS sizes) | 771.8; 77.5, 71.6, 124.0, 322.7, 135.1; 283.6, 123.9 | 666.7; 79.6, 77.0, 70.2, 260.4, 134.4; 229.2, 70.1 |
 
 On this proxy the glow chain (list 7) runs 16 to 25 percent shorter, the fog's list 4 (the fog
 sprite and the depth copy's read) 20 to 45 percent, the whole frame 5 to 15 percent; the 3D
@@ -1597,7 +1638,7 @@ it headless (`port/render/tools/rd_replay_tool.c`, usage comment):
 | `--dump-temps DIR` | writes every per-frame temp target (the water blocks among them: puddle.c's 344x256 reflection block with its depth) to `DIR/temp-<n>-<w>x<h>.png` right after the replay, before the frame's end frees them |
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
-| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--glow-original` (Glow size: Original), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
+| `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
 | `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](#water-and-render-to-texture-blocks)) |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures` |
 | `--nop L:A[-B]` | turns commands into NOPs, to find the draw behind a pixel |

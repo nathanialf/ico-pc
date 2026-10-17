@@ -178,9 +178,8 @@ program under an environment switch ([Environment switches](#environment-switche
 - `model_viewer_headless.cmake` with `model_viewer_pad.txt`: the headless game driven from boot to
   the first model, an animation and back (`model_viewer_headless`).
 - `options_test.c`: the gameplay options' defaults and setters, the video effects' keys (Water
-  reflections' `effect_water_sharp` off by default, saved, outside the preset; Glow size's
-  `effect_glow_size` `"scaled"` by default, `"original"` read in any case, an unknown word read as
-  Scaled, saved as the word, outside the preset), and
+  reflections' `effect_water_sharp` off by default, saved, outside the preset; a leftover
+  `effect_glow_size` read by nothing and not written), and
   `eBrainGetTarget` with Yorda safe off and on (`options`).
 - `photo_test.c`: photo mode's state and both cameras, identity, moves, limits; the Film effect's
   cycle off, 1 to 4, Deja vu (5), off, `film_effect = 5` read back as Deja vu and a value past it
@@ -280,8 +279,11 @@ program under an environment switch ([Environment switches](#environment-switche
   (`modelpack`).
 - `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); the
   `above1x` shard runs the aura's chain at Enhanced 4x against the CPU model with the above-1x
-  kernels (`above1x_ref.c`), and every scale-1 comparison checks that no sprite took them
-  (`checkAbove1x`, `compareAll`).
+  box (`above1x_ref.c`) for the decimations and the GS's bilinear at the finer grid for the work
+  buffers drawn back over the frame, the `effects_scaled` shard the seven post modes (the glow's
+  and the depth of field's pastes) at Enhanced 2x the same way, no B-spline in either, and every
+  scale-1 comparison checks that no sprite took a kernel (`checkAbove1x`, `checkEffectsScaled`,
+  `compareAll`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -348,8 +350,9 @@ program under an environment switch ([Environment switches](#environment-switche
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`).
 - `rd_present_test.c`: the display options through `GsBase.c` and the presenter (`rd_present`);
-  the targets' scales include Water reflections' block: its GS size under Original, the scene's
-  scale under Sharp (past the work scale at 4x), both the GS size at 1x (`checkScales`).
+  the targets' scales include the work buffers and shadow levels at their GS sizes at every scale
+  and Water reflections' block: its GS size under Original, the scene's scale under Sharp (4x at
+  4x), both the GS size at 1x (`checkScales`).
 - `rd_raw_test.c`: the raw packet builders outside `seki` (`rd_raw`).
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
@@ -377,8 +380,8 @@ program under an environment switch ([Environment switches](#environment-switche
   and through a buffer, SCENE byte for byte the same (`rd_fog_depth_copy_dump`, `_d24s8`).
 - `rd_shadow_test.c`: the shadow count on the stencil (`rd_shadow`); at scene scale 4 each
   composite against the CPU B-spline within 2 LSB and a row across the shadow falling and rising
-  once, the softening's AA0 (work scale 2) the area box of SCENE and its composite back the
-  B-spline (`checkComposite4x`, `checkSoftening4x`).
+  once, the softening's AA0 (at its GS size) the area box of SCENE and its composite back the
+  bilinear between AA0's texels, not counted above 1x (`checkComposite4x`, `checkSoftening4x`).
 - `rd_state_test.c`: the recording half of rd without a GPU: list order, defaults, state leakage,
   the alpha test's plan for every Z write, AFAIL, ATE and alpha mask (one draw where the test decides
   nothing, `testAlphaMerge`), and a dump's menu text sheets loading as the renderer makes them, a sheet with its halo made on
@@ -459,9 +462,7 @@ program under an environment switch ([Environment switches](#environment-switche
   fake tables, CPU only (`settings`, `settings_extra`, `settings_extras`); `settings_test.c` also
   presses Right in photo mode through Deja vu and checks the popup's words (`ui__photo_film_word`);
   `settings_extra_test.c` steps Effects > Water reflections between Original and Sharp, checks its
-  note, its key and the page's rows (`testWaterReflections`), and Effects > Glow size between
-  Scaled and Original: the row after Glow, its note, its key and the page's fifteen rows
-  (`testGlowSize`).
+  note, its key and the page's fourteen rows (`testWaterReflections`).
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).

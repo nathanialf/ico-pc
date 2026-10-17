@@ -107,11 +107,9 @@ flag, so a zeroed `RdSettings` stays the GS size); otherwise the GS size. The CR
 Supersampling multiplies the scale by the factor the picture still lacks (`ceil(factor / t)`, `t`
 the texels an output pixel on the sparser axis), then both axes are held to the GPU's largest render
 target (4096 on a tile-based GPU) with the shape kept; MSAA on a tile-based GPU halves the scale
-until the multisampled pair fits `RD_MSAA_TILER_BUDGET`. The work buffers' scale (the line's
-`work`) follows the scene's height, at most 2, unless Glow size is Original
-(`[video] effect_glow_size = "original"`, `RdSettings.glowOriginal`), which holds it at 1: the
-PS2's post buffers at every resolution ([RENDER.md](RENDER.md#the-glow-size)). A change logs one
-`display: scene ...` line (`port/render/rd_present.c` (`rd__apply_display`)).
+until the multisampled pair fits `RD_MSAA_TILER_BUDGET`. The work buffers keep the PS2's sizes
+at every scale ([RENDER.md](RENDER.md#the-glow-size)). A change logs one `display: scene ...`
+line (`port/render/rd_present.c` (`rd__apply_display`)).
 
 ## Video options and presets
 
